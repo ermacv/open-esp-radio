@@ -25,7 +25,8 @@ fn the_esp32s31_capability_table_starts_every_channel_at_the_highest_level() {
     let caps = oer_espressif_ieee802154_engine::capabilities::capabilities(
         oer_espressif_ieee802154_engine::capabilities::portable_tx_power_levels(
             ESP32S31_TX_POWER_LEVELS,
-        ),
+        )
+        .unwrap(),
         false,
     );
     let power = caps

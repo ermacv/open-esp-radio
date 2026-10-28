@@ -14,8 +14,7 @@
 //! Addresses, PAN identifiers and ACK timeout are written directly.
 
 use oer_espressif_ieee802154_mac_values::{
-    IEEE802154_MIN_CHANNEL, Ieee802154CcaMode, Ieee802154Channel, Ieee802154MultipanIndex,
-    Ieee802154TxPowerLevels,
+    Ieee802154CcaMode, Ieee802154Channel, Ieee802154MultipanIndex, Ieee802154TxPowerLevels,
 };
 use oer_ieee802154_port::AutoPendingMode;
 use oer_ieee802154_port::CcaThresholdError;
@@ -167,10 +166,6 @@ pub struct Ieee802154Pib {
     active_pending_mode: [AutoPendingMode; INTERFACE_COUNT],
 }
 
-const fn channel_slot(channel: Ieee802154Channel) -> usize {
-    (channel.number() - IEEE802154_MIN_CHANNEL) as usize
-}
-
 impl Ieee802154Pib {
     /// `ieee802154_pib_init`: auto-ACK in both directions with enhanced ACK
     /// timing, promiscuous, not a coordinator, receiver off when idle, the
@@ -257,7 +252,7 @@ impl Ieee802154Pib {
         &self,
         interface: Ieee802154MultipanIndex,
     ) -> AutoPendingMode {
-        self.active_pending_mode[interface.value() as usize]
+        *interface.select(&self.active_pending_mode)
     }
 
     fn replace<T: PartialEq>(pending: &mut bool, slot: &mut T, value: T) {
@@ -299,14 +294,14 @@ impl Ieee802154Pib {
 
     /// `ieee802154_pib_get_power_with_channel`.
     pub const fn power_for_channel(&self, channel: Ieee802154Channel) -> i8 {
-        self.power_dbm[channel_slot(channel)]
+        *channel.select(&self.power_dbm)
     }
 
     /// `ieee802154_pib_set_power_with_channel`.
     pub fn set_power_for_channel(&mut self, channel: Ieee802154Channel, power_dbm: i8) {
         Self::replace(
             &mut self.pending,
-            &mut self.power_dbm[channel_slot(channel)],
+            channel.select_mut(&mut self.power_dbm),
             power_dbm,
         );
     }
@@ -400,7 +395,7 @@ impl Ieee802154Pib {
 
     /// `ieee802154_pib_get_pending_mode`.
     pub const fn pending_mode(&self, interface: Ieee802154MultipanIndex) -> AutoPendingMode {
-        self.pending_mode[interface.value() as usize]
+        *interface.select(&self.pending_mode)
     }
 
     /// `ieee802154_pib_set_pending_mode`; applied at the next safe RX point.
@@ -411,7 +406,7 @@ impl Ieee802154Pib {
     ) {
         Self::replace(
             &mut self.rx_pending,
-            &mut self.pending_mode[interface.value() as usize],
+            interface.select_mut(&mut self.pending_mode),
             mode,
         );
     }
@@ -429,4 +424,10 @@ impl Ieee802154Pib {
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::disallowed_macros,
+    clippy::arithmetic_side_effects,
+    clippy::unreachable,
+    reason = "test assertions and reference fixtures"
+)]
 mod tests;

@@ -19,12 +19,8 @@ use crate::pib::CCA_THRESHOLD_RANGE_DBM;
 /// Convert a validated chip level set into the portable port's vocabulary.
 pub const fn portable_tx_power_levels(
     levels: oer_espressif_ieee802154_mac_values::Ieee802154TxPowerLevels<'static>,
-) -> TransmitPowerLevels {
-    // Both validations accept a non-empty, non-decreasing sequence.
-    match TransmitPowerLevels::new(levels.levels_dbm()) {
-        Ok(levels) => levels,
-        Err(_) => unreachable!(),
-    }
+) -> Result<TransmitPowerLevels, oer_ieee802154_port::TransmitPowerLevelsError> {
+    TransmitPowerLevels::new(levels.levels_dbm())
 }
 
 /// The portable operations a radio over this engine implements.
@@ -105,4 +101,10 @@ pub const fn capabilities(levels: TransmitPowerLevels, multipan: bool) -> Ieee80
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::disallowed_macros,
+    clippy::arithmetic_side_effects,
+    clippy::unreachable,
+    reason = "test assertions and reference fixtures"
+)]
 mod tests;

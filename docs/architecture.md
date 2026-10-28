@@ -603,10 +603,12 @@ its model and conformance case.
   engine's LL contract over HAL's owned polling transactions and retains the
   engine with its placed DMA storage through detach/rebind. The family owner's
   borrowed `service` returns `Fault` with the complete source observation and
-  entry state before acknowledgement or dispatch. The S31 driver's consuming
+  entry state before acknowledgement or dispatch for unsupported samples. Supported
+  samples retain their completed dispatch prefix, current state and typed invariant
+  reason on failure, without replay or rollback. The S31 driver's consuming
   ISR entry quarantines the MAC and DMA owners without release or reuse;
   the engine owns neither quarantine nor retained/reset policy. PHY HIL owns the
-  12-byte fault codec, retained slot and safe `fatal::reset_recording` call,
+  44-byte fault codec, retained slot and safe `fatal::reset_recording` call,
   reporting the previous fault on the next boot and retaining it on output refusal.
   HAL owns PAC access, startup discard, DMA allocation and projection; its
   normal dependency closure contains neither engine nor driver. Chip knowledge

@@ -38,7 +38,9 @@ use oer_ieee802154_port::RadioOperation;
 use oer_ieee802154_port::{PendingTable, ack_pending};
 use oer_ieee802154_wire::{FrameAddress, FrameType, FrameVersion, PhrFrame};
 
+mod rx_index;
 mod settings;
+use rx_index::RxIndex;
 mod statistics;
 
 use oer_espressif_ieee802154_mac_values::{
@@ -48,9 +50,10 @@ use oer_espressif_ieee802154_mac_values::{
 pub mod fault;
 pub mod owner;
 pub use fault::Fault;
+use fault::{ServiceError, ServiceProgress, ServiceStage};
 pub use statistics::{
     Ieee802154RxAbortStatistics, Ieee802154RxStatistics, Ieee802154TxAbortStatistics,
-    Ieee802154TxRxStatistics, Ieee802154TxStatistics,
+    Ieee802154TxRxStatistics, Ieee802154TxStatistics, StatisticsCounter, StatisticsOverflow,
 };
 
 /// Pending-table entries per address kind (`CONFIG_IEEE802154_PENDING_TABLE_SIZE`).
@@ -167,6 +170,7 @@ impl Default for Ieee802154FrameInfo {
 pub struct Ieee802154Interfaces(u8);
 
 impl Ieee802154Interfaces {
+    const SINGLE: Self = Self(1);
     /// Multi-PAN with `count` interfaces, one through four.
     pub const fn new(count: u8) -> Option<Self> {
         if count >= 1 && count <= Ieee802154MultipanIndex::COUNT {
@@ -182,19 +186,21 @@ impl Ieee802154Interfaces {
     }
 
     fn indices(self) -> impl Iterator<Item = Ieee802154MultipanIndex> {
-        (0..self.0).filter_map(Ieee802154MultipanIndex::new)
+        Ieee802154MultipanIndex::ALL
+            .into_iter()
+            .take(usize::from(self.0))
     }
 }
 
 /// A receive-ring slot the upper layer holds until
 /// [`Ieee802154Engine::receive_handle_done`].
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub struct Ieee802154RxSlot(u8);
+pub struct Ieee802154RxSlot(RxIndex);
 
 impl Ieee802154RxSlot {
     /// The ring index.
     pub const fn index(self) -> usize {
-        self.0 as usize
+        self.0.value() as usize
     }
 }
 
@@ -277,10 +283,14 @@ pub enum Ieee802154EnhancedAck {
     },
 }
 
-/// A frame given to [`Ieee802154Engine::transmit`] is not a `[PHR, PSDU...]`
-/// image that fits one DMA frame.
+/// A transmit request refused before new DMA publication or completion notification.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct Ieee802154FrameImageError;
+pub enum Ieee802154FrameImageError {
+    /// Empty or oversized DMA frame image.
+    InvalidImage,
+    /// Diagnostic counting refused before transmit work or notifications.
+    Statistics(statistics::StatisticsOverflow),
+}
 
 /// A refused transmit-security configuration; no security register was written.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -289,6 +299,25 @@ pub enum Ieee802154SecurityFrameError {
     SecurityDisabled,
     /// Address, auxiliary security, IE or command bytes exceed the MAC extent.
     MalformedHeader,
+}
+
+/// Invalid Multi-PAN API input; no configuration write or operation change occurs.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum MultipanError {
+    /// The selected interface is absent from this engine configuration.
+    Interface {
+        /// Requested interface.
+        index: Ieee802154MultipanIndex,
+        /// Configured interface count.
+        count: u8,
+    },
+    /// The enable state includes an unconfigured interface.
+    Enable {
+        /// Requested enable state.
+        enable: Ieee802154MultipanEnableState,
+        /// Configured interface count.
+        count: u8,
+    },
 }
 
 /// A slot outside the receive ring (`ieee802154_receive_handle_done` failure).
@@ -305,12 +334,11 @@ enum TxSource {
 /// A pending timer callback (`ieee802154_timer*_set_callback`).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum TimerAction {
-    AckTimeout,
     StartReceiveAt { stop_time: u32 },
     FinishReceiveAt,
 }
 
-const STUB: u8 = RX_BUFFER_COUNT as u8;
+const STUB: RxIndex = RxIndex::Stub;
 
 fn event_mask(events: &[Ieee802154Event]) -> Ieee802154EventMask {
     events
@@ -320,14 +348,17 @@ fn event_mask(events: &[Ieee802154Event]) -> Ieee802154EventMask {
         })
 }
 
-/// `IEEE802154_ASSERT`: a violated vendor invariant stops the radio.
-macro_rules! vendor_assert {
-    ($condition:expr) => {
-        assert!(
-            $condition,
-            concat!("IEEE802154_ASSERT(", stringify!($condition), ")")
-        )
-    };
+fn frame_metadata(image: &[u8; FRAME_SIZE], length: u8) -> Result<(i8, u8), ServiceError> {
+    let rssi_index = length
+        .checked_sub(1)
+        .ok_or(ServiceError::FrameMetadata(length))?;
+    let rssi = *image
+        .get(usize::from(rssi_index))
+        .ok_or(ServiceError::FrameMetadata(length))? as i8;
+    let lqi = *image
+        .get(usize::from(length))
+        .ok_or(ServiceError::FrameMetadata(length))?;
+    Ok((rssi, lqi))
 }
 
 /// Hardware and environment borrowed for one engine entry.
@@ -351,8 +382,8 @@ pub struct Ieee802154Engine<'storage, Address: Copy + Eq> {
     state: Ieee802154State,
     tx: TxSource,
     rx_info: [Ieee802154FrameInfo; RX_BUFFER_COUNT + 1],
-    rx_index: u8,
-    recent_rx_info_index: u8,
+    rx_index: RxIndex,
+    recent_rx_info_index: RxIndex,
     needs_next_operation: bool,
     pending_rx_stop: bool,
     rx_armed: bool,
@@ -361,7 +392,7 @@ pub struct Ieee802154Engine<'storage, Address: Copy + Eq> {
     operation_active: bool,
     /// TX/RX statistics while collected (`CONFIG_IEEE802154_TXRX_STATISTIC`).
     statistics: Option<Ieee802154TxRxStatistics>,
-    timer0: Option<TimerAction>,
+    timer0: Option<()>,
     timer1: Option<TimerAction>,
     coexistence: Ieee802154Coexistence,
 }
@@ -392,8 +423,8 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
             state: Ieee802154State::Disable,
             tx: TxSource::Frame,
             rx_info: [Ieee802154FrameInfo::default(); RX_BUFFER_COUNT + 1],
-            rx_index: 0,
-            recent_rx_info_index: 0,
+            rx_index: RxIndex::Slot0,
+            recent_rx_info_index: RxIndex::Slot0,
             needs_next_operation: false,
             pending_rx_stop: false,
             rx_armed: false,
@@ -448,11 +479,13 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
         self.multipan
     }
 
-    /// `IEEE802154_ASSERT(index < CONFIG_IEEE802154_INTERFACE_NUM)`: without
-    /// multi-PAN only interface zero exists.
-    fn assert_interface(&self, index: Ieee802154MultipanIndex) {
+    fn validate_interface(&self, index: Ieee802154MultipanIndex) -> Result<(), MultipanError> {
         let count = self.multipan.map_or(1, Ieee802154Interfaces::count);
-        vendor_assert!(index.value() < count);
+        if index.value() < count {
+            Ok(())
+        } else {
+            Err(MultipanError::Interface { index, count })
+        }
     }
 
     /// `ieee802154_get_state`.
@@ -531,17 +564,19 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
         env: &mut E,
         index: Ieee802154MultipanIndex,
         mode: oer_ieee802154_port::AutoPendingMode,
-    ) where
+    ) -> Result<(), MultipanError>
+    where
         L: Ieee802154LowLevel<Address = Address> + ?Sized,
         E: Ieee802154Environment + ?Sized,
     {
-        self.assert_interface(index);
+        self.validate_interface(index)?;
         self.update_pib(ll, env, |pib| pib.set_pending_mode(index, mode));
+        Ok(())
     }
 
     /// The frame-pending table of interface zero.
     pub fn pending_table(&mut self) -> &mut PendingTable<PENDING_TABLE_SIZE> {
-        self.pending_table_for(Ieee802154MultipanIndex::CONTEXT0)
+        Ieee802154MultipanIndex::CONTEXT0.select_mut(&mut self.pending_tables)
     }
 
     /// The frame-pending table of one interface
@@ -549,9 +584,9 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
     pub fn pending_table_for(
         &mut self,
         index: Ieee802154MultipanIndex,
-    ) -> &mut PendingTable<PENDING_TABLE_SIZE> {
-        self.assert_interface(index);
-        &mut self.pending_tables[usize::from(index.value())]
+    ) -> Result<&mut PendingTable<PENDING_TABLE_SIZE>, MultipanError> {
+        self.validate_interface(index)?;
+        Ok(index.select_mut(&mut self.pending_tables))
     }
 
     /// `esp_ieee802154_set_multipan_panid`.
@@ -560,10 +595,11 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
         ll: &mut L,
         index: Ieee802154MultipanIndex,
         panid: u16,
-    ) {
-        self.assert_interface(index);
+    ) -> Result<(), MultipanError> {
+        self.validate_interface(index)?;
         self.settings.identity(ll, index).panid = panid;
         ll.set_multipan_panid(index, panid);
+        Ok(())
     }
 
     /// `esp_ieee802154_get_multipan_panid`.
@@ -571,9 +607,9 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
         &mut self,
         ll: &mut L,
         index: Ieee802154MultipanIndex,
-    ) -> u16 {
-        self.assert_interface(index);
-        ll.multipan_panid(index)
+    ) -> Result<u16, MultipanError> {
+        self.validate_interface(index)?;
+        Ok(ll.multipan_panid(index))
     }
 
     /// `esp_ieee802154_set_multipan_short_address`.
@@ -582,10 +618,11 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
         ll: &mut L,
         index: Ieee802154MultipanIndex,
         address: u16,
-    ) {
-        self.assert_interface(index);
+    ) -> Result<(), MultipanError> {
+        self.validate_interface(index)?;
         self.settings.identity(ll, index).short_address = address;
         ll.set_multipan_short_address(index, address);
+        Ok(())
     }
 
     /// `esp_ieee802154_get_multipan_short_address`.
@@ -593,9 +630,9 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
         &mut self,
         ll: &mut L,
         index: Ieee802154MultipanIndex,
-    ) -> u16 {
-        self.assert_interface(index);
-        ll.multipan_short_address(index)
+    ) -> Result<u16, MultipanError> {
+        self.validate_interface(index)?;
+        Ok(ll.multipan_short_address(index))
     }
 
     /// `esp_ieee802154_set_multipan_extended_address` in frame byte order.
@@ -604,10 +641,11 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
         ll: &mut L,
         index: Ieee802154MultipanIndex,
         address: [u8; 8],
-    ) {
-        self.assert_interface(index);
+    ) -> Result<(), MultipanError> {
+        self.validate_interface(index)?;
         self.settings.identity(ll, index).extended_address = address;
         ll.set_multipan_extended_address(index, address);
+        Ok(())
     }
 
     /// `esp_ieee802154_get_multipan_extended_address`.
@@ -615,9 +653,9 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
         &mut self,
         ll: &mut L,
         index: Ieee802154MultipanIndex,
-    ) -> [u8; 8] {
-        self.assert_interface(index);
-        ll.multipan_extended_address(index)
+    ) -> Result<[u8; 8], MultipanError> {
+        self.validate_interface(index)?;
+        Ok(ll.multipan_extended_address(index))
     }
 
     /// `esp_ieee802154_set_multipan_enable`: the enabled interfaces must
@@ -626,10 +664,11 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
         &mut self,
         ll: &mut L,
         enable: Ieee802154MultipanEnableState,
-    ) {
-        self.assert_enable(enable);
+    ) -> Result<(), MultipanError> {
+        self.validate_enable(enable)?;
         self.settings.enable = Some(enable);
         ll.set_multipan_enable(enable);
+        Ok(())
     }
 
     /// `esp_ieee802154_get_multipan_enable`.
@@ -640,14 +679,17 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
         ll.multipan_enable()
     }
 
-    /// `IEEE802154_ASSERT(mask < (1 << CONFIG_IEEE802154_INTERFACE_NUM))`.
-    fn assert_enable(&self, enable: Ieee802154MultipanEnableState) {
+    fn validate_enable(&self, enable: Ieee802154MultipanEnableState) -> Result<(), MultipanError> {
         let count = self.multipan.map_or(1, Ieee802154Interfaces::count);
-        vendor_assert!(
-            (count..Ieee802154MultipanIndex::COUNT)
-                .filter_map(Ieee802154MultipanIndex::new)
-                .all(|index| !enable.contains(index))
-        );
+        if Ieee802154MultipanIndex::ALL
+            .into_iter()
+            .skip(usize::from(count))
+            .all(|index| !enable.contains(index))
+        {
+            Ok(())
+        } else {
+            Err(MultipanError::Enable { enable, count })
+        }
     }
 
     /// `esp_ieee802154_multipan_receive`: enable `index`, then receive.
@@ -656,39 +698,51 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
         ll: &mut L,
         env: &mut E,
         index: Ieee802154MultipanIndex,
-    ) where
-        L: Ieee802154LowLevel<Address = Address> + ?Sized,
-        E: Ieee802154Environment + ?Sized,
-    {
-        self.assert_interface(index);
-        let enable = ll.multipan_enable().with(index);
-        self.assert_enable(enable);
-        self.settings.enable = Some(enable);
-        ll.set_multipan_enable(enable);
-        self.receive(ll, env);
-    }
-
-    /// `esp_ieee802154_multipan_sleep`: disable `index`; the last disabled
-    /// interface puts the radio to sleep.
-    pub fn multipan_sleep<L, E>(&mut self, ll: &mut L, env: &mut E, index: Ieee802154MultipanIndex)
+    ) -> Result<(), MultipanError>
     where
         L: Ieee802154LowLevel<Address = Address> + ?Sized,
         E: Ieee802154Environment + ?Sized,
     {
-        self.assert_interface(index);
+        self.validate_interface(index)?;
+        let enable = ll.multipan_enable().with(index);
+        self.validate_enable(enable)?;
+        self.settings.enable = Some(enable);
+        ll.set_multipan_enable(enable);
+        self.receive(ll, env);
+        Ok(())
+    }
+
+    /// `esp_ieee802154_multipan_sleep`: disable `index`; the last disabled
+    /// interface puts the radio to sleep.
+    pub fn multipan_sleep<L, E>(
+        &mut self,
+        ll: &mut L,
+        env: &mut E,
+        index: Ieee802154MultipanIndex,
+    ) -> Result<(), MultipanError>
+    where
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
+        E: Ieee802154Environment + ?Sized,
+    {
+        self.validate_interface(index)?;
         let enable = ll.multipan_enable().without(index);
-        self.assert_enable(enable);
+        self.validate_enable(enable)?;
         self.settings.enable = Some(enable);
         ll.set_multipan_enable(enable);
         if enable == Ieee802154MultipanEnableState::NONE {
             self.sleep(ll, env);
         }
+        Ok(())
     }
 
     /// `esp_ieee802154_multipan_set_rx_when_idle`: receive when idle while
     /// any interface asks for it.
-    pub fn multipan_set_rx_when_idle(&mut self, index: Ieee802154MultipanIndex, enable: bool) {
-        self.assert_interface(index);
+    pub fn multipan_set_rx_when_idle(
+        &mut self,
+        index: Ieee802154MultipanIndex,
+        enable: bool,
+    ) -> Result<(), MultipanError> {
+        self.validate_interface(index)?;
         if enable {
             self.rx_when_idle_mask |= 1 << index.value();
             self.pib.set_rx_when_idle(true);
@@ -698,6 +752,7 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
                 self.pib.set_rx_when_idle(false);
             }
         }
+        Ok(())
     }
 
     /// `esp_ieee802154_set_panid`: PAN ID of interface zero.
@@ -706,7 +761,10 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
         ll: &mut L,
         panid: u16,
     ) {
-        self.set_multipan_panid(ll, Ieee802154MultipanIndex::CONTEXT0, panid);
+        self.settings
+            .identity(ll, Ieee802154MultipanIndex::CONTEXT0)
+            .panid = panid;
+        ll.set_multipan_panid(Ieee802154MultipanIndex::CONTEXT0, panid);
     }
 
     /// `esp_ieee802154_get_panid`.
@@ -720,7 +778,10 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
         ll: &mut L,
         address: u16,
     ) {
-        self.set_multipan_short_address(ll, Ieee802154MultipanIndex::CONTEXT0, address);
+        self.settings
+            .identity(ll, Ieee802154MultipanIndex::CONTEXT0)
+            .short_address = address;
+        ll.set_multipan_short_address(Ieee802154MultipanIndex::CONTEXT0, address);
     }
 
     /// `esp_ieee802154_get_short_address`.
@@ -738,7 +799,10 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
         ll: &mut L,
         address: [u8; 8],
     ) {
-        self.set_multipan_extended_address(ll, Ieee802154MultipanIndex::CONTEXT0, address);
+        self.settings
+            .identity(ll, Ieee802154MultipanIndex::CONTEXT0)
+            .extended_address = address;
+        ll.set_multipan_extended_address(Ieee802154MultipanIndex::CONTEXT0, address);
     }
 
     /// `esp_ieee802154_get_extended_address`.
@@ -796,14 +860,14 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
 
     /// `ieee802154_get_recent_lqi`.
     pub fn recent_lqi(&self) -> u8 {
-        self.rx_info[usize::from(self.recent_rx_info_index)].lqi
+        self.recent_rx_info_index.select(&self.rx_info).lqi
     }
 
     /// The image and metadata of a slot the upper layer holds.
     pub fn rx_frame(&self, slot: Ieee802154RxSlot) -> ([u8; FRAME_SIZE], Ieee802154FrameInfo) {
         (
-            self.buffers.rx_frames()[slot.index()].read(),
-            self.rx_info[slot.index()],
+            slot.0.select(self.buffers.rx_frames()).read(),
+            *slot.0.select(&self.rx_info),
         )
     }
 
@@ -824,10 +888,13 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
     /// models that release the frame they delivered.
     #[cfg(not(target_arch = "riscv32"))]
     pub fn model_rx_slot(&self, address: Address) -> Option<Ieee802154RxSlot> {
-        self.addresses.rx[..RX_BUFFER_COUNT]
+        self.addresses
+            .rx
             .iter()
+            .take(RX_BUFFER_COUNT)
             .position(|candidate| *candidate == address)
-            .map(|index| Ieee802154RxSlot(index as u8))
+            .and_then(|index| RxIndex::from_raw(index as u8))
+            .map(Ieee802154RxSlot)
     }
 
     /// The address the engine publishes for its transmit buffer, for host
@@ -886,7 +953,7 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
         self.clear_txrx_statistics();
         ll::mac_init_registers(ll, &self.coexistence);
         self.settings
-            .restore(ll, self.multipan.map_or(1, Ieee802154Interfaces::count));
+            .restore(ll, self.multipan.unwrap_or(Ieee802154Interfaces::SINGLE));
         self.pib.invalidate();
         self.pib.update(ll, self.levels);
         self.rx_buffer_clear();
@@ -929,8 +996,8 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
             frame.write(&[]);
         }
         self.rx_info = [Ieee802154FrameInfo::default(); RX_BUFFER_COUNT + 1];
-        self.rx_index = 0;
-        self.recent_rx_info_index = 0;
+        self.rx_index = RxIndex::Slot0;
+        self.recent_rx_info_index = RxIndex::Slot0;
         self.needs_next_operation = false;
         self.pending_rx_stop = false;
     }
@@ -943,7 +1010,7 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
         if slot.index() >= RX_BUFFER_COUNT {
             return Err(Ieee802154SlotError);
         }
-        self.rx_info[slot.index()].process = false;
+        slot.0.select_mut(&mut self.rx_info).process = false;
         Ok(())
     }
 
@@ -962,7 +1029,7 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
         E: Ieee802154Environment + ?Sized,
     {
         if frame.is_empty() || frame.len() > FRAME_SIZE {
-            return Err(Ieee802154FrameImageError);
+            return Err(Ieee802154FrameImageError::InvalidImage);
         }
         let mut cx = Cx { ll, env };
         if (self.state == Ieee802154State::Rx && cx.ll.is_current_rx_frame())
@@ -974,16 +1041,24 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
             } else {
                 Ieee802154TxError::Abort
             };
+            if let Some(statistics) = self.statistics.as_mut() {
+                statistics::add(
+                    &mut statistics.tx.deferred_nums,
+                    1,
+                    StatisticsCounter::Deferred,
+                    0,
+                )
+                .map_err(Ieee802154FrameImageError::Statistics)?;
+            }
             let mut image = [0; FRAME_SIZE];
-            image[..frame.len()].copy_from_slice(frame);
+            for (destination, source) in image.iter_mut().zip(frame) {
+                *destination = *source;
+            }
             cx.env.transmit_failed(&image, error);
             ll::sec_clear(cx.ll);
-            if let Some(statistics) = self.statistics.as_mut() {
-                statistics.tx.deferred_nums += 1;
-            }
             return Ok(());
         }
-        self.tx_init(&mut cx, frame);
+        self.tx_init(&mut cx, frame)?;
         ll::set_txrx_pti(cx.ll, &self.coexistence, RadioOperation::Tx);
         if cca {
             cx.ll.set_ed_duration(CCA_DETECTION_TIME);
@@ -1012,10 +1087,10 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
         E: Ieee802154Environment + ?Sized,
     {
         if frame.is_empty() || frame.len() > FRAME_SIZE {
-            return Err(Ieee802154FrameImageError);
+            return Err(Ieee802154FrameImageError::InvalidImage);
         }
         let mut cx = Cx { ll, env };
-        self.tx_init(&mut cx, frame);
+        self.tx_init(&mut cx, frame)?;
         ll::set_txrx_pti(cx.ll, &self.coexistence, RadioOperation::TxAt);
         if cca {
             cx.ll.set_ed_duration(CCA_DETECTION_TIME);
@@ -1131,9 +1206,10 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
     /// vendor order and start the next operation.
     ///
     /// # Errors
-    /// An unsupported event retains the complete observation and entry state.
-    /// No acknowledgement or dispatch occurs; quarantine the MAC and storage
-    /// and record/reset through the image's terminal fault path.
+    /// Unsupported events retain the complete observation and entry state before
+    /// acknowledgement. A service invariant retains the actual acknowledged and
+    /// completed prefix. Quarantine the MAC and storage without replay or rollback;
+    /// the image owns the terminal record/reset policy.
     pub fn isr<L, E>(&mut self, ll: &mut L, env: &mut E) -> Result<(), Fault>
     where
         L: Ieee802154LowLevel<Address = Address> + ?Sized,
@@ -1155,127 +1231,186 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
                 state: self.state,
             });
         }
+        let entry_state = self.state;
         let mut events = events;
+        let mut progress = ServiceProgress {
+            acknowledged: false,
+            completed: Ieee802154EventMask::NONE,
+            rx_abort_phase_done: false,
+            coexistence_break_notified: false,
+            statistics_completed: false,
+            stage: ServiceStage::Statistics,
+        };
         let rx_abort_reason = cx.ll.rx_abort_reason();
         let tx_abort_reason = cx.ll.tx_abort_reason();
-        if let Some(statistics) = self.statistics.as_mut() {
-            statistics.record(cx.ll, events);
-        }
-        cx.ll.clear_events(events);
+        let result = (|| -> Result<(), ServiceError> {
+            if let Some(statistics) = self.statistics.as_mut() {
+                statistics
+                    .record(cx.ll, events)
+                    .map_err(ServiceError::Statistics)?;
+                progress.statistics_completed = true;
+            }
+            cx.ll.clear_events(events);
+            progress.acknowledged = true;
+            progress.stage = ServiceStage::Dispatch;
 
-        if events.contains(Ieee802154Event::RxAbort) {
-            self.isr_rx_phase_rx_abort(&mut cx, rx_abort_reason);
-        }
-        if events.contains(Ieee802154Event::RxSfdDone) {
-            vendor_assert!(matches!(
-                self.state,
-                Ieee802154State::Rx
-                    | Ieee802154State::RxAck
-                    | Ieee802154State::Tx
-                    | Ieee802154State::TxCca
-                    | Ieee802154State::TxEnhAck
-            ));
-            self.rx_info[usize::from(self.rx_index)].timestamp = cx.env.now_micros();
-            cx.env.receive_sfd_done();
-            events = events.difference(Ieee802154Event::RxSfdDone.mask());
-        }
-        if events.contains(Ieee802154Event::TxSfdDone) {
-            vendor_assert!(matches!(
-                self.state,
-                Ieee802154State::Tx
-                    | Ieee802154State::TxCca
-                    | Ieee802154State::TxEnhAck
-                    | Ieee802154State::TxAck
-            ));
-            let original = self.tx_frame().read();
-            let mut frame = original;
-            cx.env.transmit_sfd_done(&mut frame);
-            self.tx_frame_mut().patch(&original, &frame);
-            events = events.difference(Ieee802154Event::TxSfdDone.mask());
-        }
-        if events.contains(Ieee802154Event::TxDone) {
-            vendor_assert!(matches!(
-                self.state,
-                Ieee802154State::Tx | Ieee802154State::TxCca
-            ));
-            self.isr_tx_done(&mut cx);
-            events = events.difference(Ieee802154Event::TxDone.mask());
-        }
-        if events.contains(Ieee802154Event::RxDone) {
-            vendor_assert!(self.state == Ieee802154State::Rx);
-            self.isr_rx_done(&mut cx);
-            events = events.difference(Ieee802154Event::RxDone.mask());
-        }
-        if events.contains(Ieee802154Event::AckTxDone) {
-            vendor_assert!(matches!(
-                self.state,
-                Ieee802154State::TxAck | Ieee802154State::Rx | Ieee802154State::TxEnhAck
-            ));
-            ll::sec_clear(cx.ll);
-            self.receive_done(&mut cx);
-            self.needs_next_operation = true;
-            events = events.difference(Ieee802154Event::AckTxDone.mask());
-        }
-        if events.contains(Ieee802154Event::AckRxDone) {
-            vendor_assert!(matches!(
-                self.state,
-                Ieee802154State::RxAck
-                    | Ieee802154State::Tx
-                    | Ieee802154State::TxCca
-                    | Ieee802154State::TxEnhAck
-            ));
-            self.timer_stop(&mut cx, Ieee802154Timer::Timer0);
-            cx.ll.clear_events(Ieee802154Event::Timer0Overflow.mask());
-            cx.ll.disable_event(Ieee802154Event::Timer0Overflow);
-            self.rx_frame_info_update(&mut cx);
-            self.transmit_done(&mut cx, true);
-            self.needs_next_operation = true;
-            events = events.difference(Ieee802154Event::AckRxDone.mask());
-        }
-        if events.contains(Ieee802154Event::RxAbort) {
-            self.isr_tx_ack_phase_rx_abort(&mut cx, rx_abort_reason);
-            events = events.difference(Ieee802154Event::RxAbort.mask());
-        }
-        if events.contains(Ieee802154Event::TxAbort) {
-            self.isr_tx_abort(&mut cx, tx_abort_reason);
-            events = events.difference(Ieee802154Event::TxAbort.mask());
-        }
-        if events.contains(Ieee802154Event::EdDone) {
-            vendor_assert!(matches!(
-                self.state,
-                Ieee802154State::Ed | Ieee802154State::Cca
-            ));
-            if self.state == Ieee802154State::Cca {
-                let busy = cx.ll.cca_busy();
-                cx.env.cca_done(busy);
-            } else if self.state == Ieee802154State::Ed {
-                let power = cx.ll.ed_rss().wrapping_add(RSSI_COMPENSATION);
-                cx.env.energy_detect_done(power);
+            let rx_abort = if events.contains(Ieee802154Event::RxAbort) {
+                progress.stage = ServiceStage::RxAbort;
+                let reason = self.isr_rx_phase_rx_abort(&mut cx, rx_abort_reason)?;
+                progress.rx_abort_phase_done = true;
+                progress.stage = ServiceStage::Dispatch;
+                Some(reason)
+            } else {
+                None
+            };
+            if events.contains(Ieee802154Event::RxSfdDone) {
+                if !matches!(
+                    self.state,
+                    Ieee802154State::Rx
+                        | Ieee802154State::RxAck
+                        | Ieee802154State::Tx
+                        | Ieee802154State::TxCca
+                        | Ieee802154State::TxEnhAck
+                ) {
+                    return Err(ServiceError::EventState(Ieee802154Event::RxSfdDone));
+                }
+                self.rx_index.select_mut(&mut self.rx_info).timestamp = cx.env.now_micros();
+                cx.env.receive_sfd_done();
+                progress.completed = progress.completed.with(Ieee802154Event::RxSfdDone);
+                events = events.difference(Ieee802154Event::RxSfdDone.mask());
             }
-            self.needs_next_operation = true;
-            events = events.difference(Ieee802154Event::EdDone.mask());
-        }
-        if events.contains(Ieee802154Event::Timer0Overflow) {
-            vendor_assert!(self.state == Ieee802154State::RxAck);
-            let action = self.timer0.take();
-            if let Some(action) = action {
-                self.run_timer_action(&mut cx, action);
+            if events.contains(Ieee802154Event::TxSfdDone) {
+                if !matches!(
+                    self.state,
+                    Ieee802154State::Tx
+                        | Ieee802154State::TxCca
+                        | Ieee802154State::TxEnhAck
+                        | Ieee802154State::TxAck
+                ) {
+                    return Err(ServiceError::EventState(Ieee802154Event::TxSfdDone));
+                }
+                let original = self.tx_frame().read();
+                let mut frame = original;
+                cx.env.transmit_sfd_done(&mut frame);
+                self.tx_frame_mut().patch(&original, &frame);
+                progress.completed = progress.completed.with(Ieee802154Event::TxSfdDone);
+                events = events.difference(Ieee802154Event::TxSfdDone.mask());
             }
-            events = events.difference(Ieee802154Event::Timer0Overflow.mask());
-        }
-        if events.contains(Ieee802154Event::Timer1Overflow) {
-            self.rx_armed = false;
-            let action = self.timer1.take();
-            if let Some(action) = action {
-                self.run_timer_action(&mut cx, action);
+            if events.contains(Ieee802154Event::TxDone) {
+                if !matches!(self.state, Ieee802154State::Tx | Ieee802154State::TxCca) {
+                    return Err(ServiceError::EventState(Ieee802154Event::TxDone));
+                }
+                self.isr_tx_done(&mut cx);
+                progress.completed = progress.completed.with(Ieee802154Event::TxDone);
+                events = events.difference(Ieee802154Event::TxDone.mask());
             }
-        }
-        if self.needs_next_operation {
-            self.next_operation(&mut cx);
-            self.needs_next_operation = false;
-        }
-        self.publish_rx_when_safe(&mut cx);
-        Ok(())
+            if events.contains(Ieee802154Event::RxDone) {
+                if self.state != Ieee802154State::Rx {
+                    return Err(ServiceError::EventState(Ieee802154Event::RxDone));
+                }
+                progress.stage = ServiceStage::RxDone;
+                self.isr_rx_done(&mut cx)?;
+                progress.stage = ServiceStage::Dispatch;
+                progress.completed = progress.completed.with(Ieee802154Event::RxDone);
+                events = events.difference(Ieee802154Event::RxDone.mask());
+            }
+            if events.contains(Ieee802154Event::AckTxDone) {
+                if !matches!(
+                    self.state,
+                    Ieee802154State::TxAck | Ieee802154State::Rx | Ieee802154State::TxEnhAck
+                ) {
+                    return Err(ServiceError::EventState(Ieee802154Event::AckTxDone));
+                }
+                ll::sec_clear(cx.ll);
+                self.receive_done(&mut cx);
+                self.needs_next_operation = true;
+                progress.completed = progress.completed.with(Ieee802154Event::AckTxDone);
+                events = events.difference(Ieee802154Event::AckTxDone.mask());
+            }
+            if events.contains(Ieee802154Event::AckRxDone) {
+                if !matches!(
+                    self.state,
+                    Ieee802154State::RxAck
+                        | Ieee802154State::Tx
+                        | Ieee802154State::TxCca
+                        | Ieee802154State::TxEnhAck
+                ) {
+                    return Err(ServiceError::EventState(Ieee802154Event::AckRxDone));
+                }
+                self.timer_stop(&mut cx, Ieee802154Timer::Timer0);
+                cx.ll.clear_events(Ieee802154Event::Timer0Overflow.mask());
+                cx.ll.disable_event(Ieee802154Event::Timer0Overflow);
+                progress.stage = ServiceStage::AckRxDone;
+                self.rx_frame_info_update(&mut cx)?;
+                progress.stage = ServiceStage::Dispatch;
+                self.transmit_done(&mut cx, true);
+                self.needs_next_operation = true;
+                progress.completed = progress.completed.with(Ieee802154Event::AckRxDone);
+                events = events.difference(Ieee802154Event::AckRxDone.mask());
+            }
+            if let Some(reason) = rx_abort {
+                self.isr_tx_ack_phase_rx_abort(&mut cx, reason, &mut progress);
+                progress.stage = ServiceStage::Dispatch;
+                progress.completed = progress.completed.with(Ieee802154Event::RxAbort);
+                events = events.difference(Ieee802154Event::RxAbort.mask());
+            }
+            if events.contains(Ieee802154Event::TxAbort) {
+                progress.stage = ServiceStage::TxAbort;
+                self.isr_tx_abort(&mut cx, tx_abort_reason, &mut progress)?;
+                progress.stage = ServiceStage::Dispatch;
+                progress.completed = progress.completed.with(Ieee802154Event::TxAbort);
+                events = events.difference(Ieee802154Event::TxAbort.mask());
+            }
+            if events.contains(Ieee802154Event::EdDone) {
+                if !matches!(self.state, Ieee802154State::Ed | Ieee802154State::Cca) {
+                    return Err(ServiceError::EventState(Ieee802154Event::EdDone));
+                }
+                if self.state == Ieee802154State::Cca {
+                    let busy = cx.ll.cca_busy();
+                    cx.env.cca_done(busy);
+                } else if self.state == Ieee802154State::Ed {
+                    let power = cx.ll.ed_rss().wrapping_add(RSSI_COMPENSATION);
+                    cx.env.energy_detect_done(power);
+                }
+                self.needs_next_operation = true;
+                progress.completed = progress.completed.with(Ieee802154Event::EdDone);
+                events = events.difference(Ieee802154Event::EdDone.mask());
+            }
+            if events.contains(Ieee802154Event::Timer0Overflow) {
+                if self.state != Ieee802154State::RxAck {
+                    return Err(ServiceError::EventState(Ieee802154Event::Timer0Overflow));
+                }
+                if self.timer0.take().is_some() {
+                    self.transmit_failed(&mut cx, Ieee802154TxError::NoAck);
+                    self.needs_next_operation = true;
+                }
+                progress.completed = progress.completed.with(Ieee802154Event::Timer0Overflow);
+                events = events.difference(Ieee802154Event::Timer0Overflow.mask());
+            }
+            if events.contains(Ieee802154Event::Timer1Overflow) {
+                self.rx_armed = false;
+                let action = self.timer1.take();
+                if let Some(action) = action {
+                    self.run_timer_action(&mut cx, action);
+                }
+                progress.completed = progress.completed.with(Ieee802154Event::Timer1Overflow);
+            }
+            if self.needs_next_operation {
+                self.next_operation(&mut cx);
+                self.needs_next_operation = false;
+            }
+            self.publish_rx_when_safe(&mut cx);
+            Ok(())
+        })();
+        result.map_err(|reason| Fault::Service {
+            reason,
+            observation,
+            entry_state,
+            state: self.state,
+            rx_abort: rx_abort_reason,
+            tx_abort: tx_abort_reason,
+            progress,
+        })
     }
 
     // ---- buffers and notifications -------------------------------------
@@ -1295,7 +1430,7 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
     }
 
     fn current_rx(&self) -> &DmaFrame {
-        &self.buffers.rx_frames()[usize::from(self.rx_index)]
+        self.rx_index.select(self.buffers.rx_frames())
     }
 
     /// `ieee802154_receive_done` of the current slot: the stub buffer drops
@@ -1308,14 +1443,14 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
         if self.rx_index == STUB {
             return;
         }
-        let index = usize::from(self.rx_index);
-        self.buffers.rx_frames_mut()[index].mask_length();
-        self.rx_info[index].process = true;
-        let frame = self.buffers.rx_frames()[index].read();
+        let index = self.rx_index;
+        index.select_mut(self.buffers.rx_frames_mut()).mask_length();
+        index.select_mut(&mut self.rx_info).process = true;
+        let frame = index.select(self.buffers.rx_frames()).read();
         cx.env.receive_done(
             Ieee802154RxSlot(self.rx_index),
             &frame,
-            &self.rx_info[index],
+            index.select(&self.rx_info),
         );
     }
 
@@ -1335,15 +1470,15 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
             cx.env.transmit_failed(&frame, Ieee802154TxError::NoAck);
             return;
         }
-        let index = usize::from(self.rx_index);
-        self.rx_info[index].process = true;
-        let ack = self.buffers.rx_frames()[index].read();
+        let index = self.rx_index;
+        index.select_mut(&mut self.rx_info).process = true;
+        let ack = index.select(self.buffers.rx_frames()).read();
         cx.env.transmit_done(
             &frame,
             Some(Ieee802154ReceivedAck {
                 slot: Ieee802154RxSlot(self.rx_index),
                 frame: &ack,
-                info: &self.rx_info[index],
+                info: index.select(&self.rx_info),
             }),
         );
     }
@@ -1358,34 +1493,36 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
     }
 
     /// `ieee802154_rx_frame_info_update`.
-    fn rx_frame_info_update<L, E>(&mut self, cx: &mut Cx<'_, L, E>)
+    fn rx_frame_info_update<L, E>(&mut self, cx: &mut Cx<'_, L, E>) -> Result<(), ServiceError>
     where
         L: Ieee802154LowLevel<Address = Address> + ?Sized,
         E: Ieee802154Environment + ?Sized,
     {
-        let index = usize::from(self.rx_index);
-        let image = self.buffers.rx_frames()[index].read();
-        let length = image[0] & 0x7f;
-        let info = &mut self.rx_info[index];
+        let index = self.rx_index;
+        let image = index.select(self.buffers.rx_frames()).read();
+        let [phr, ..] = image;
+        let length = phr & 0x7f;
+        let info = index.select_mut(&mut self.rx_info);
         if length < FRAME_MIN_LEN {
             info.channel = 0;
             info.rssi = 0;
             info.lqi = 0;
-            return;
+            return Ok(());
         }
-        let rssi = image[usize::from(length) - 1] as i8;
-        let lqi = image[usize::from(length)];
+        let (rssi, lqi) = frame_metadata(&image, length)?;
         if let Some(interfaces) = self.multipan {
             let interface = Self::match_interface(cx, &image, interfaces);
-            self.rx_info[index].mpf_index = interface;
+            index.select_mut(&mut self.rx_info).mpf_index = interface;
         }
-        let channel = Ieee802154Channel::from_frequency_code(cx.ll.frequency_code());
-        vendor_assert!(channel.is_some());
-        let info = &mut self.rx_info[index];
-        info.channel = channel.map_or(0, Ieee802154Channel::number);
+        let code = cx.ll.frequency_code();
+        let channel = Ieee802154Channel::from_frequency_code(code)
+            .ok_or(ServiceError::FrequencyCode(code))?;
+        let info = index.select_mut(&mut self.rx_info);
+        info.channel = channel.number();
         info.rssi = rssi.wrapping_add(RSSI_COMPENSATION);
         info.lqi = lqi;
         self.recent_rx_info_index = self.rx_index;
+        Ok(())
     }
 
     /// `update_mpf_index`: the first interface whose PAN ID (when the frame
@@ -1447,34 +1584,34 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
         L: Ieee802154LowLevel<Address = Address> + ?Sized,
         E: Ieee802154Environment + ?Sized,
     {
-        let current_free =
-            self.rx_index != STUB && !self.rx_info[usize::from(self.rx_index)].process;
+        let current_free = self.rx_index != STUB && !self.rx_index.select(&self.rx_info).process;
         if !current_free {
-            let next = (1..=RX_BUFFER_COUNT)
-                .map(|step| (step + usize::from(self.rx_index)) % RX_BUFFER_COUNT)
-                .find(|&index| !self.rx_info[index].process);
-            self.rx_index = next.map_or(STUB, |index| index as u8);
+            let mut candidate = self.rx_index;
+            self.rx_index = STUB;
+            for _ in 0..RX_BUFFER_COUNT {
+                candidate = candidate.next();
+                if !candidate.select(&self.rx_info).process {
+                    self.rx_index = candidate;
+                    break;
+                }
+            }
         }
-        let address = self.addresses.rx[usize::from(self.rx_index)];
+        let address = *self.rx_index.select(&self.addresses.rx);
         cx.ll.set_rx_address(address);
     }
 
     // ---- timers --------------------------------------------------------
 
-    fn timer_slot(&mut self, timer: Ieee802154Timer) -> &mut Option<TimerAction> {
-        match timer {
-            Ieee802154Timer::Timer0 => &mut self.timer0,
-            Ieee802154Timer::Timer1 => &mut self.timer1,
-        }
-    }
-
-    /// `ieee802154_timer*_stop`: drop the callback, then stop the timer.
+    /// Drop the callback before stopping its hardware timer.
     fn timer_stop<L, E>(&mut self, cx: &mut Cx<'_, L, E>, timer: Ieee802154Timer)
     where
         L: Ieee802154LowLevel<Address = Address> + ?Sized,
         E: Ieee802154Environment + ?Sized,
     {
-        *self.timer_slot(timer) = None;
+        match timer {
+            Ieee802154Timer::Timer0 => self.timer0 = None,
+            Ieee802154Timer::Timer1 => self.timer1 = None,
+        }
         cx.ll.stop_timer(timer);
     }
 
@@ -1505,12 +1642,6 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
         E: Ieee802154Environment + ?Sized,
     {
         match action {
-            // `ieee802154_rx_ack_timeout_callback`.
-            TimerAction::AckTimeout => {
-                vendor_assert!(self.state == Ieee802154State::RxAck);
-                self.transmit_failed(cx, Ieee802154TxError::NoAck);
-                self.needs_next_operation = true;
-            }
             // `ieee802154_start_receive_at`.
             TimerAction::StartReceiveAt { stop_time } => {
                 self.timer1 = Some(TimerAction::FinishReceiveAt);
@@ -1531,13 +1662,18 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
 
     // ---- operation starts ------------------------------------------------
 
-    fn tx_init<L, E>(&mut self, cx: &mut Cx<'_, L, E>, frame: &[u8])
+    fn tx_init<L, E>(
+        &mut self,
+        cx: &mut Cx<'_, L, E>,
+        frame: &[u8],
+    ) -> Result<(), Ieee802154FrameImageError>
     where
         L: Ieee802154LowLevel<Address = Address> + ?Sized,
         E: Ieee802154Environment + ?Sized,
     {
         if let Some(statistics) = self.statistics.as_mut() {
-            statistics.tx.nums += 1;
+            statistics::add(&mut statistics.tx.nums, 1, StatisticsCounter::Transmit, 0)
+                .map_err(Ieee802154FrameImageError::Statistics)?;
         }
         // The vendor points `s_tx_frame` at the new frame before stopping the
         // current operation, so a stopped transmission reports the new frame.
@@ -1549,6 +1685,7 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
         if PhrFrame::new(frame).ack_required() {
             self.set_next_rx_buffer(cx);
         }
+        Ok(())
     }
 
     fn rx_init<L, E>(&mut self, cx: &mut Cx<'_, L, E>)
@@ -1757,7 +1894,7 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
                 // SOURCE: hw8-20261026-radio-local-05, PR #689.
                 cx.ll.clear_events(Ieee802154Event::Timer0Overflow.mask());
                 let now = cx.env.now_micros() as u32;
-                self.timer0 = Some(TimerAction::AckTimeout);
+                self.timer0 = Some(());
                 self.timer_fire_at(
                     cx,
                     Ieee802154Timer::Timer0,
@@ -1771,41 +1908,41 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
         }
     }
 
-    fn isr_rx_done<L, E>(&mut self, cx: &mut Cx<'_, L, E>)
+    fn isr_rx_done<L, E>(&mut self, cx: &mut Cx<'_, L, E>) -> Result<(), ServiceError>
     where
         L: Ieee802154LowLevel<Address = Address> + ?Sized,
         E: Ieee802154Environment + ?Sized,
     {
         self.event_end_process(cx);
-        self.rx_frame_info_update(cx);
+        self.rx_frame_info_update(cx)?;
         let image = self.current_rx().read();
         let frame = PhrFrame::new(&image);
         if !frame.frame_type().is_supported() {
             cx.ll.set_command(Ieee802154MacCommand::Stop);
             self.receive_done(cx);
             self.needs_next_operation = true;
-            return;
+            return Ok(());
         }
         if self.state != Ieee802154State::Rx {
-            return;
+            return Ok(());
         }
-        let index = usize::from(self.rx_index);
+        let index = self.rx_index;
         if frame.ack_required()
             && matches!(frame.version(), FrameVersion::V2003 | FrameVersion::V2006)
             && cx.ll.tx_auto_ack()
         {
-            self.rx_info[index].pending = self.ack_config_pending_bit(cx, frame);
+            index.select_mut(&mut self.rx_info).pending = self.ack_config_pending_bit(cx, frame);
             self.set_state(Ieee802154State::TxAck);
             self.needs_next_operation = false;
         } else if frame.ack_required()
             && frame.version() == FrameVersion::V2015
             && cx.ll.tx_enhanced_ack()
         {
-            self.rx_info[index].pending = self.ack_config_pending_bit(cx, frame);
+            index.select_mut(&mut self.rx_info).pending = self.ack_config_pending_bit(cx, frame);
             let mut ack = [0; FRAME_SIZE];
-            let generated = cx
-                .env
-                .generate_enhanced_ack(&image, &self.rx_info[index], &mut ack);
+            let generated =
+                cx.env
+                    .generate_enhanced_ack(&image, index.select(&self.rx_info), &mut ack);
             let generated = match generated {
                 Ieee802154EnhancedAck::Secured { key } => {
                     let address = cx
@@ -1839,6 +1976,7 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
             self.receive_done(cx);
             self.needs_next_operation = true;
         }
+        Ok(())
     }
 
     /// `ieee802154_ack_config_pending_bit`.
@@ -1848,7 +1986,7 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
         E: Ieee802154Environment + ?Sized,
     {
         let interface = if self.multipan.is_some() {
-            match self.rx_info[usize::from(self.rx_index)].mpf_index {
+            match self.rx_index.select(&self.rx_info).mpf_index {
                 Some(interface) => interface,
                 // An unmatched frame gets no pending decision, not even on
                 // the hardware ACK.
@@ -1859,7 +1997,7 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
         };
         let enhanced_lookup = cx.ll.pending_mode();
         let mode = self.pib.active_pending_mode(interface);
-        let table = &self.pending_tables[usize::from(interface.value())];
+        let table = interface.select(&self.pending_tables);
         let decision = ack_pending(frame, enhanced_lookup, mode, table);
         if decision.set_to_hardware {
             cx.ll.set_pending_bit(decision.pending);
@@ -1871,7 +2009,8 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
         &mut self,
         cx: &mut Cx<'_, L, E>,
         reason: Ieee802154RxAbortReasonObservation,
-    ) where
+    ) -> Result<Ieee802154RxAbortReason, ServiceError>
+    where
         L: Ieee802154LowLevel<Address = Address> + ?Sized,
         E: Ieee802154Environment + ?Sized,
     {
@@ -1879,10 +2018,10 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
         self.event_end_process(cx);
         let status = cx.ll.rx_status();
         let Ieee802154RxAbortReasonObservation::Named(reason) = reason else {
-            panic!("IEEE802154_ASSERT(false): unclassified RX abort reason");
+            return Err(ServiceError::RxAbortUnclassified(status));
         };
         match reason {
-            Reason::RxStop | Reason::TxAckStop | Reason::EdStop => return,
+            Reason::RxStop | Reason::TxAckStop | Reason::EdStop => return Ok(reason),
             Reason::SfdTimeout
             | Reason::CrcError
             | Reason::InvalidLength
@@ -1891,28 +2030,31 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
             | Reason::UnexpectedAck
             | Reason::RxRestart
             | Reason::CoexistenceBreak => {
-                vendor_assert!(self.state == Ieee802154State::Rx);
+                if self.state != Ieee802154State::Rx {
+                    return Err(ServiceError::RxAbortState(status));
+                }
             }
             Reason::EdAbort | Reason::EdCoexistenceReject => {
-                vendor_assert!(matches!(
-                    self.state,
-                    Ieee802154State::Ed | Ieee802154State::Cca
-                ));
+                if !matches!(self.state, Ieee802154State::Ed | Ieee802154State::Cca) {
+                    return Err(ServiceError::RxAbortState(status));
+                }
                 cx.env.ed_failed(status);
             }
             Reason::TxAckTimeout
             | Reason::TxAckCoexistenceBreak
             | Reason::EnhancedAckSecurityError => {
-                return;
+                return Ok(reason);
             }
         }
         self.needs_next_operation = true;
+        Ok(reason)
     }
 
     fn isr_tx_ack_phase_rx_abort<L, E>(
         &mut self,
         cx: &mut Cx<'_, L, E>,
-        reason: Ieee802154RxAbortReasonObservation,
+        reason: Ieee802154RxAbortReason,
+        progress: &mut ServiceProgress,
     ) where
         L: Ieee802154LowLevel<Address = Address> + ?Sized,
         E: Ieee802154Environment + ?Sized,
@@ -1920,9 +2062,6 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
         use Ieee802154RxAbortReason as Reason;
         ll::sec_clear(cx.ll);
         self.event_end_process(cx);
-        let Ieee802154RxAbortReasonObservation::Named(reason) = reason else {
-            panic!("IEEE802154_ASSERT(false): unclassified RX abort reason");
-        };
         match reason {
             Reason::TxAckStop
             | Reason::RxStop
@@ -1940,6 +2079,7 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
             Reason::TxAckCoexistenceBreak => {
                 if matches!(self.coexistence, Ieee802154Coexistence::Software(_)) {
                     cx.env.coexistence_break();
+                    progress.coexistence_break_notified = true;
                 }
                 self.receive_done(cx);
             }
@@ -1952,7 +2092,9 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
         &mut self,
         cx: &mut Cx<'_, L, E>,
         reason: Ieee802154TxAbortReasonObservation,
-    ) where
+        progress: &mut ServiceProgress,
+    ) -> Result<(), ServiceError>
+    where
         L: Ieee802154LowLevel<Address = Address> + ?Sized,
         E: Ieee802154Environment + ?Sized,
     {
@@ -1960,7 +2102,7 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
         ll::sec_clear(cx.ll);
         self.event_end_process(cx);
         let Ieee802154TxAbortReasonObservation::Named(reason) = reason else {
-            panic!("IEEE802154_ASSERT(false): unclassified TX abort reason");
+            return Err(ServiceError::TxAbortUnclassified);
         };
         match reason {
             Reason::RxAckStop | Reason::TxStop => {}
@@ -1972,12 +2114,16 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
             | Reason::RxAckCoexistenceBreak
             | Reason::RxAckTypeNotAck
             | Reason::RxAckRestart => {
-                vendor_assert!(self.state == Ieee802154State::RxAck);
+                if self.state != Ieee802154State::RxAck {
+                    return Err(ServiceError::EventState(Ieee802154Event::TxAbort));
+                }
                 self.transmit_failed(cx, Ieee802154TxError::InvalidAck);
                 self.needs_next_operation = false;
             }
             Reason::RxAckTimeout => {
-                vendor_assert!(self.state == Ieee802154State::RxAck);
+                if self.state != Ieee802154State::RxAck {
+                    return Err(ServiceError::EventState(Ieee802154Event::TxAbort));
+                }
                 // event_end_process stopped TIMER0 before this sample.
                 cx.ll.clear_events(Ieee802154Event::Timer0Overflow.mask());
                 cx.ll.disable_event(Ieee802154Event::Timer0Overflow);
@@ -1985,16 +2131,22 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
                 self.needs_next_operation = true;
             }
             Reason::TxCoexistenceBreak | Reason::TxSecurityError => {
-                vendor_assert!(matches!(
-                    self.state,
-                    Ieee802154State::Tx | Ieee802154State::TxCca
-                ));
+                if !matches!(self.state, Ieee802154State::Tx | Ieee802154State::TxCca) {
+                    return Err(ServiceError::EventState(Ieee802154Event::TxAbort));
+                }
                 let error = if reason == Reason::TxCoexistenceBreak {
                     if matches!(self.coexistence, Ieee802154Coexistence::Software(_)) {
                         cx.env.coexistence_break();
+                        progress.coexistence_break_notified = true;
                     }
                     if let Some(statistics) = self.statistics.as_mut() {
-                        statistics.tx.abort.tx_coex_break += 1;
+                        statistics::add(
+                            &mut statistics.tx.abort.tx_coex_break,
+                            1,
+                            StatisticsCounter::TxCoexistenceBreak,
+                            0,
+                        )
+                        .map_err(ServiceError::Statistics)?;
                     }
                     Ieee802154TxError::Coexist
                 } else {
@@ -2004,7 +2156,9 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
                 self.needs_next_operation = true;
             }
             Reason::CcaFailed | Reason::CcaBusy => {
-                vendor_assert!(self.state == Ieee802154State::TxCca);
+                if self.state != Ieee802154State::TxCca {
+                    return Err(ServiceError::EventState(Ieee802154Event::TxAbort));
+                }
                 let error = if reason == Reason::CcaFailed {
                     Ieee802154TxError::Abort
                 } else {
@@ -2014,10 +2168,25 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
                 self.needs_next_operation = true;
             }
         }
+        Ok(())
     }
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::disallowed_macros,
+    clippy::disallowed_methods,
+    clippy::arithmetic_side_effects,
+    clippy::unreachable,
+    reason = "test assertions and reference fixtures"
+)]
 mod multipan_tests;
 #[cfg(test)]
+#[allow(
+    clippy::disallowed_macros,
+    clippy::disallowed_methods,
+    clippy::arithmetic_side_effects,
+    clippy::unreachable,
+    reason = "test assertions and reference fixtures"
+)]
 pub(crate) mod tests;

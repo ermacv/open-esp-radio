@@ -1138,12 +1138,12 @@ fn a_full_ring_drops_frames_until_a_slot_is_released() {
     bench.interrupt(&[Ieee802154Event::RxDone]);
     assert_eq!(bench.take_notes(), []);
 
-    let slot = Ieee802154RxSlot(5);
+    let slot = Ieee802154RxSlot(super::RxIndex::from_raw(5).unwrap());
     bench.engine.receive_handle_done(slot).unwrap();
     assert_eq!(
-        bench
-            .engine
-            .receive_handle_done(Ieee802154RxSlot(RX_BUFFER_COUNT as u8)),
+        bench.engine.receive_handle_done(Ieee802154RxSlot(
+            super::RxIndex::from_raw(RX_BUFFER_COUNT as u8).unwrap()
+        )),
         Err(Ieee802154SlotError)
     );
     bench.deliver(&DATA_NO_ACK);
@@ -1770,7 +1770,9 @@ fn delivered_slot_keeps_epoch_owned_until_returned() {
         .notes
         .iter()
         .find_map(|note| match note {
-            Note::ReceiveDone { slot, .. } => Some(Ieee802154RxSlot(*slot as u8)),
+            Note::ReceiveDone { slot, .. } => Some(Ieee802154RxSlot(
+                super::RxIndex::from_raw(*slot as u8).unwrap(),
+            )),
             _ => None,
         })
         .expect("one delivered slot");
@@ -2097,4 +2099,484 @@ fn tx_coexistence_break_uses_the_same_environment_notification() {
             }
         }
     }
+}
+
+#[test]
+fn incompatible_events_return_the_sample_without_dispatch() {
+    use super::fault::{ServiceError, ServiceStage};
+    for event in [
+        Ieee802154Event::RxSfdDone,
+        Ieee802154Event::TxSfdDone,
+        Ieee802154Event::TxDone,
+        Ieee802154Event::RxDone,
+        Ieee802154Event::AckTxDone,
+        Ieee802154Event::AckRxDone,
+        Ieee802154Event::EdDone,
+        Ieee802154Event::Timer0Overflow,
+    ] {
+        let mut bench = Bench::enabled();
+        bench.hw.events = event.mask();
+        bench.hw.enabled_events = Ieee802154EventMask::NAMED;
+        let fault = bench.engine.isr(&mut bench.hw, &mut bench.env).unwrap_err();
+        let super::Fault::Service {
+            reason,
+            observation,
+            entry_state,
+            state,
+            progress,
+            ..
+        } = fault
+        else {
+            panic!("service fault");
+        };
+        assert_eq!(reason, ServiceError::EventState(event));
+        assert_eq!(
+            observation,
+            Ieee802154EventObservation::from_parts(event.mask(), false, false)
+        );
+        assert_eq!(
+            (entry_state, state),
+            (Ieee802154State::Idle, Ieee802154State::Idle)
+        );
+        assert!(progress.acknowledged);
+        assert_eq!(progress.completed, Ieee802154EventMask::NONE);
+        assert_eq!(progress.stage, ServiceStage::Dispatch);
+        assert_eq!(
+            bench.hw.calls,
+            [
+                Call::Events,
+                Call::RxAbortReason,
+                Call::TxAbortReason,
+                Call::ClearEvents(event.mask())
+            ]
+        );
+        assert!(bench.env.notes.is_empty());
+    }
+}
+
+#[test]
+fn a_later_fault_retains_the_completed_tx_and_ack_wait() {
+    let mut bench = Bench::enabled();
+    bench.transmit(&DATA_WITH_ACK, false);
+    bench.hw.events = mask(&[
+        Ieee802154Event::TxSfdDone,
+        Ieee802154Event::TxDone,
+        Ieee802154Event::RxDone,
+    ]);
+    let super::Fault::Service {
+        entry_state,
+        state,
+        reason,
+        progress,
+        ..
+    } = bench.engine.isr(&mut bench.hw, &mut bench.env).unwrap_err()
+    else {
+        panic!("service fault");
+    };
+    assert_eq!(entry_state, Ieee802154State::Tx);
+    assert_eq!(state, Ieee802154State::RxAck);
+    assert_eq!(
+        reason,
+        super::fault::ServiceError::EventState(Ieee802154Event::RxDone)
+    );
+    assert_eq!(
+        progress.completed,
+        mask(&[Ieee802154Event::TxSfdDone, Ieee802154Event::TxDone])
+    );
+    assert!(bench.engine.timer0.is_some());
+    assert_eq!(
+        bench
+            .env
+            .notes
+            .iter()
+            .filter(|note| matches!(note, Note::TransmitSfd))
+            .count(),
+        1
+    );
+}
+
+#[test]
+fn unclassified_aborts_and_incompatible_rx_abort_states_are_typed() {
+    use super::fault::{ServiceError, ServiceStage};
+    for reason in [
+        Ieee802154RxAbortReasonObservation::Unclassified,
+        Ieee802154RxAbortReason::CrcError.into(),
+        Ieee802154RxAbortReason::EdAbort.into(),
+    ] {
+        let mut bench = Bench::enabled();
+        bench.hw.rx_abort = reason;
+        let status = bench.hw.rx_status();
+        bench.hw.calls.clear();
+        bench.hw.events = Ieee802154Event::RxAbort.mask();
+        let super::Fault::Service {
+            reason: error,
+            rx_abort,
+            progress,
+            ..
+        } = bench.engine.isr(&mut bench.hw, &mut bench.env).unwrap_err()
+        else {
+            panic!("service fault");
+        };
+        assert_eq!(rx_abort, reason);
+        assert_eq!(
+            error,
+            if reason == Ieee802154RxAbortReasonObservation::Unclassified {
+                ServiceError::RxAbortUnclassified(status)
+            } else {
+                ServiceError::RxAbortState(status)
+            }
+        );
+        assert_eq!(progress.stage, ServiceStage::RxAbort);
+        assert!(!progress.rx_abort_phase_done);
+        assert_subsequence(
+            &bench.hw.calls,
+            &[
+                Call::ClearEvents(Ieee802154Event::RxAbort.mask()),
+                Call::StopTimer(Ieee802154Timer::Timer0),
+                Call::StopTimer(Ieee802154Timer::Timer1),
+                Call::RxStatus,
+            ],
+        );
+        assert!(bench.env.notes.is_empty());
+    }
+    let mut bench = Bench::enabled();
+    bench.hw.events = Ieee802154Event::TxAbort.mask();
+    let super::Fault::Service {
+        reason,
+        tx_abort,
+        progress,
+        ..
+    } = bench.engine.isr(&mut bench.hw, &mut bench.env).unwrap_err()
+    else {
+        panic!("service fault");
+    };
+    assert_eq!(reason, ServiceError::TxAbortUnclassified);
+    assert_eq!(tx_abort, Ieee802154TxAbortReasonObservation::Unclassified);
+    assert_eq!(progress.stage, ServiceStage::TxAbort);
+    assert_subsequence(
+        &bench.hw.calls,
+        &[
+            Call::SetTransmitSecurity(false),
+            Call::StopTimer(Ieee802154Timer::Timer0),
+            Call::StopTimer(Ieee802154Timer::Timer1),
+        ],
+    );
+}
+
+#[test]
+fn each_tx_abort_invariant_rejects_an_incompatible_state() {
+    for reason in [
+        Ieee802154TxAbortReason::RxAckCrcError,
+        Ieee802154TxAbortReason::RxAckTimeout,
+        Ieee802154TxAbortReason::TxCoexistenceBreak,
+        Ieee802154TxAbortReason::TxSecurityError,
+        Ieee802154TxAbortReason::CcaFailed,
+        Ieee802154TxAbortReason::CcaBusy,
+    ] {
+        let mut bench = Bench::enabled();
+        bench.hw.tx_abort = reason.into();
+        bench.hw.events = Ieee802154Event::TxAbort.mask();
+        let super::Fault::Service {
+            reason: error,
+            tx_abort,
+            progress,
+            ..
+        } = bench.engine.isr(&mut bench.hw, &mut bench.env).unwrap_err()
+        else {
+            panic!("service fault");
+        };
+        assert_eq!(
+            error,
+            super::fault::ServiceError::EventState(Ieee802154Event::TxAbort)
+        );
+        assert_eq!(tx_abort, reason.into());
+        assert!(progress.completed.is_empty());
+        assert!(bench.env.notes.is_empty());
+    }
+}
+
+#[test]
+fn invalid_frequency_retains_the_metadata_stage_and_does_not_deliver() {
+    for ack in [false, true] {
+        let mut bench = Bench::enabled();
+        if ack {
+            bench.transmit(&DATA_WITH_ACK, false);
+        } else {
+            bench.receive();
+        }
+        bench.deliver(&DATA_NO_ACK);
+        bench.hw.frequency_code = 255;
+        bench.hw.events = if ack {
+            Ieee802154Event::AckRxDone.mask()
+        } else {
+            Ieee802154Event::RxDone.mask()
+        };
+        let super::Fault::Service {
+            reason, progress, ..
+        } = bench.engine.isr(&mut bench.hw, &mut bench.env).unwrap_err()
+        else {
+            panic!("service fault");
+        };
+        assert_eq!(reason, super::fault::ServiceError::FrequencyCode(255));
+        assert_eq!(
+            progress.stage,
+            if ack {
+                super::fault::ServiceStage::AckRxDone
+            } else {
+                super::fault::ServiceStage::RxDone
+            }
+        );
+        assert!(bench.env.notes.is_empty());
+        assert!(!bench.engine.rx_index.select(&bench.engine.rx_info).process);
+    }
+    assert_eq!(
+        super::frame_metadata(&[0; FRAME_SIZE], 0),
+        Err(super::fault::ServiceError::FrameMetadata(0))
+    );
+    assert_eq!(
+        super::frame_metadata(&[0; FRAME_SIZE], 255),
+        Err(super::fault::ServiceError::FrameMetadata(255))
+    );
+}
+
+#[test]
+fn invalid_multipan_api_input_has_no_writes_or_state_changes() {
+    use super::MultipanError;
+    for index in [
+        Ieee802154MultipanIndex::CONTEXT1,
+        Ieee802154MultipanIndex::CONTEXT2,
+        Ieee802154MultipanIndex::CONTEXT3,
+    ] {
+        let mut bench = Bench::enabled();
+        let error = Err(MultipanError::Interface { index, count: 1 });
+        assert_eq!(
+            bench.engine.set_pending_mode(
+                &mut bench.hw,
+                &mut bench.env,
+                index,
+                oer_ieee802154_port::AutoPendingMode::Enable
+            ),
+            error
+        );
+        assert_eq!(bench.engine.pending_table_for(index).err(), error.err());
+        assert_eq!(
+            bench.engine.set_multipan_panid(&mut bench.hw, index, 1),
+            error
+        );
+        assert_eq!(
+            bench.engine.multipan_panid(&mut bench.hw, index),
+            error.map(|()| 0)
+        );
+        assert_eq!(
+            bench
+                .engine
+                .set_multipan_short_address(&mut bench.hw, index, 1),
+            error
+        );
+        assert_eq!(
+            bench.engine.multipan_short_address(&mut bench.hw, index),
+            error.map(|()| 0)
+        );
+        assert_eq!(
+            bench
+                .engine
+                .set_multipan_extended_address(&mut bench.hw, index, [1; 8]),
+            error
+        );
+        assert_eq!(
+            bench.engine.multipan_extended_address(&mut bench.hw, index),
+            error.map(|()| [0; 8])
+        );
+        assert_eq!(
+            bench
+                .engine
+                .multipan_receive(&mut bench.hw, &mut bench.env, index),
+            error
+        );
+        assert_eq!(
+            bench
+                .engine
+                .multipan_sleep(&mut bench.hw, &mut bench.env, index),
+            error
+        );
+        assert_eq!(bench.engine.multipan_set_rx_when_idle(index, true), error);
+        let enable = Ieee802154MultipanEnableState::NONE.with(index);
+        assert_eq!(
+            bench.engine.set_multipan_enable(&mut bench.hw, enable),
+            Err(MultipanError::Enable { enable, count: 1 })
+        );
+        assert!(bench.hw.calls.is_empty());
+        assert!(bench.env.notes.is_empty());
+        assert_eq!(bench.engine.state(), Ieee802154State::Idle);
+        assert!(!bench.engine.pib().rx_when_idle());
+    }
+}
+
+#[test]
+fn statistics_overflow_preserves_drained_prefix_and_refuses_transmit_before_publication() {
+    use super::{StatisticsCounter as Counter, StatisticsOverflow};
+    for counter in [Counter::Transmit, Counter::Deferred] {
+        let mut bench = Bench::enabled();
+        bench.engine.set_txrx_statistics(true);
+        if counter == Counter::Deferred {
+            bench.receive();
+            bench.hw.current_rx_frame = true;
+        }
+        let stats = bench.engine.statistics.as_mut().unwrap();
+        if counter == Counter::Transmit {
+            stats.tx.nums = u64::MAX;
+        } else {
+            stats.tx.deferred_nums = u64::MAX;
+        }
+        bench.hw.calls.clear();
+        assert_eq!(
+            bench
+                .engine
+                .transmit(&mut bench.hw, &mut bench.env, &DATA_WITH_ACK, false),
+            Err(super::Ieee802154FrameImageError::Statistics(
+                StatisticsOverflow {
+                    counter,
+                    accumulated: u64::MAX,
+                    increment: 1,
+                    drained: 0
+                }
+            ))
+        );
+        assert!(bench.env.notes.is_empty());
+        assert!(
+            !bench
+                .hw
+                .calls
+                .iter()
+                .any(|call| matches!(call, Call::TxAddress(_) | Call::Command(_)))
+        );
+    }
+    for event in [Ieee802154Event::TxDone, Ieee802154Event::RxDone] {
+        let mut bench = Bench::enabled();
+        bench.engine.set_txrx_statistics(true);
+        let stats = bench.engine.statistics.as_mut().unwrap();
+        if event == Ieee802154Event::TxDone {
+            stats.tx.done_nums = u64::MAX;
+        } else {
+            stats.rx.done_nums = u64::MAX;
+        }
+        bench.hw.events = event.mask();
+        let super::Fault::Service {
+            reason, progress, ..
+        } = bench.engine.isr(&mut bench.hw, &mut bench.env).unwrap_err()
+        else {
+            panic!("service fault");
+        };
+        assert!(matches!(reason, super::fault::ServiceError::Statistics(_)));
+        assert!(!progress.acknowledged);
+        assert_eq!(bench.hw.events, event.mask());
+    }
+    let mut bench = Bench::enabled();
+    bench.engine.set_txrx_statistics(true);
+    bench
+        .engine
+        .statistics
+        .as_mut()
+        .unwrap()
+        .tx
+        .abort
+        .tx_security_error = u64::MAX;
+    bench.hw.debug_counters[debug_slot(Ieee802154DebugCounter::CcaBusy)] = 3;
+    bench.hw.debug_counters[debug_slot(Ieee802154DebugCounter::TxSecurityError)] = 2;
+    bench.hw.events = Ieee802154Event::RxDone.mask();
+    let super::Fault::Service {
+        reason, progress, ..
+    } = bench.engine.isr(&mut bench.hw, &mut bench.env).unwrap_err()
+    else {
+        panic!("service fault");
+    };
+    assert_eq!(
+        reason,
+        super::fault::ServiceError::Statistics(StatisticsOverflow {
+            counter: Counter::Hardware(Ieee802154DebugCounter::TxSecurityError),
+            accumulated: u64::MAX,
+            increment: 2,
+            drained: 1
+        })
+    );
+    assert!(!progress.acknowledged);
+    assert_eq!(bench.engine.statistics.unwrap().tx.abort.cca_busy, 3);
+    assert_eq!(bench.engine.statistics.unwrap().rx.done_nums, 1);
+    assert_eq!(
+        bench.hw.debug_counters[debug_slot(Ieee802154DebugCounter::CcaBusy)],
+        0
+    );
+    assert_eq!(
+        bench.hw.debug_counters[debug_slot(Ieee802154DebugCounter::TxSecurityError)],
+        2
+    );
+}
+
+#[test]
+fn tx_coexistence_counter_overflow_reports_the_notification_and_completed_statistics() {
+    let mut bench = Bench::enabled();
+    bench.transmit(&DATA_WITH_ACK, false);
+    bench
+        .engine
+        .set_coexistence(Ieee802154Coexistence::Software(vendor_priorities()));
+    bench.engine.set_txrx_statistics(true);
+    bench
+        .engine
+        .statistics
+        .as_mut()
+        .unwrap()
+        .tx
+        .abort
+        .tx_coex_break = u64::MAX;
+    bench.hw.tx_abort = Ieee802154TxAbortReason::TxCoexistenceBreak.into();
+    bench.hw.events = Ieee802154Event::TxAbort.mask();
+    let super::Fault::Service {
+        reason, progress, ..
+    } = bench.engine.isr(&mut bench.hw, &mut bench.env).unwrap_err()
+    else {
+        panic!("service fault");
+    };
+    assert_eq!(
+        reason,
+        super::fault::ServiceError::Statistics(super::StatisticsOverflow {
+            counter: super::StatisticsCounter::TxCoexistenceBreak,
+            accumulated: u64::MAX,
+            increment: 1,
+            drained: 0
+        })
+    );
+    assert!(
+        progress.acknowledged
+            && progress.statistics_completed
+            && progress.coexistence_break_notified
+    );
+    assert_eq!(bench.env.notes, [Note::CoexistenceBreak]);
+}
+
+#[test]
+fn a_tx_abort_fault_retains_a_preceding_ack_coexistence_notification_and_delivery() {
+    let mut bench = Bench::enabled();
+    bench
+        .engine
+        .set_coexistence(Ieee802154Coexistence::Software(vendor_priorities()));
+    bench.receive();
+    bench.deliver(&DATA_WITH_ACK);
+    bench.interrupt(&[Ieee802154Event::RxDone]);
+    bench.env.notes.clear();
+    bench.hw.rx_abort = Ieee802154RxAbortReason::TxAckCoexistenceBreak.into();
+    bench.hw.events = mask(&[Ieee802154Event::RxAbort, Ieee802154Event::TxAbort]);
+    let super::Fault::Service {
+        reason, progress, ..
+    } = bench.engine.isr(&mut bench.hw, &mut bench.env).unwrap_err()
+    else {
+        panic!("service fault");
+    };
+    assert_eq!(reason, super::fault::ServiceError::TxAbortUnclassified);
+    assert!(progress.coexistence_break_notified && progress.rx_abort_phase_done);
+    assert_eq!(progress.completed, Ieee802154Event::RxAbort.mask());
+    assert!(matches!(
+        &bench.env.notes[..],
+        [Note::CoexistenceBreak, Note::ReceiveDone { .. }]
+    ));
+    assert!(bench.engine.rx_index.select(&bench.engine.rx_info).process);
 }

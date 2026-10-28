@@ -35,7 +35,7 @@ impl RetainedSettings {
         ll: &mut L,
         index: Ieee802154MultipanIndex,
     ) -> &mut Identity {
-        let slot = &mut self.identities[usize::from(index.value())];
+        let slot = index.select_mut(&mut self.identities);
         if self.captured & (1 << index.value()) == 0 {
             *slot = Identity {
                 panid: ll.multipan_panid(index),
@@ -47,14 +47,17 @@ impl RetainedSettings {
         slot
     }
 
-    pub fn restore<L: Ieee802154LowLevel + ?Sized>(&mut self, ll: &mut L, count: u8) {
+    pub fn restore<L: Ieee802154LowLevel + ?Sized>(
+        &mut self,
+        ll: &mut L,
+        interfaces: Ieee802154Interfaces,
+    ) {
         // Capture the first hardware epoch's identity, including any cold
         // policy. Later epochs write the shadow even when all registers lost
         // their state; no reset value or power-domain retention is assumed.
         let enable = *self.enable.get_or_insert_with(|| ll.multipan_enable());
         let timeout = *self.ack_timeout.get_or_insert_with(|| ll.ack_timeout());
-        for number in 0..count {
-            let index = Ieee802154MultipanIndex::new(number).expect("configured interface exists");
+        for index in interfaces.indices() {
             let identity = *self.identity(ll, index);
             ll.set_multipan_panid(index, identity.panid);
             ll.set_multipan_short_address(index, identity.short_address);
