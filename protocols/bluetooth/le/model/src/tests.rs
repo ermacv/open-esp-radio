@@ -6,6 +6,7 @@ use core::{
     task::{Context, Poll, Waker},
 };
 use oer_bluetooth_le_port::*;
+use oer_bluetooth_le_wire::{TestChannel, TestPayloadType};
 use oer_time::Duration;
 
 pub(super) fn run<F: Future>(future: F) -> F::Output {
@@ -21,7 +22,7 @@ pub(super) fn run<F: Future>(future: F) -> F::Output {
     panic!("virtual fixture did not finish within its finite poll budget");
 }
 fn power() -> TxPower {
-    use oer_bluetooth_le_radio::{LeBand, LeTxCeiling};
+    use oer_bluetooth_le_port::{LeBand, LeTxCeiling};
     use oer_radio_regulatory::*;
     let band = TEST_DOMAIN.permit(LeBand).expect("test LE band permitted");
     let ceiling = band.tx_ceiling(PowerLimits {

@@ -8,10 +8,8 @@ repository.workspace = true
 description = "ESP32-S31 Bluetooth hardware engine: controller HAL and time, BLE PHY, interrupts and scheduler primitives"
 
 [dependencies]
-oer-bluetooth-hci = { path = "../../../../protocols/bluetooth/hci" }
-oer-bluetooth-le-radio = { path = "../../../../protocols/bluetooth/le/radio" }
+oer-bluetooth-le-wire = { path = "../../../../protocols/bluetooth/le/wire" }
 oer-bluetooth-le-port = { path = "../../../../protocols/bluetooth/le/port" }
-oer-bluetooth-le-ll = { path = "../../../../protocols/bluetooth/le/ll" }
 oer-radio-port = { path = "../../../../protocols/radio/port" }
 oer-memory = { path = "../../../../portable/memory" }
 oer-sync = { path = "../../../../portable/sync" }

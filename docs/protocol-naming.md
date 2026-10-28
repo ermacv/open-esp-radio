@@ -19,7 +19,7 @@ complete standard implementation or certification.
 | WPAN | Wireless personal area network | A broader category, not a replacement name for the 802.15.4 backend |
 | Bluetooth | Bluetooth SIG family, including BR/EDR and LE | `bluetooth`, with implemented LE procedures under `le` |
 | HCI | Host–Controller commands, events and data transport | `bluetooth/hci`; neither an on-air protocol nor a complete Host stack |
-| LE Link Layer | LE on-air PDUs and Link Layer procedures | `bluetooth/le/ll` |
+| LE Link Layer | LE on-air PDUs and Link Layer procedures | `bluetooth/le/wire`, `bluetooth/le/ll` |
 
 IEEE 802.15.4 does not itself provide Thread or Zigbee. HCI also applies to
 BR/EDR and must not be named as if it were exclusively LE Link Layer.
@@ -56,7 +56,7 @@ do not establish the same ownership here.
 
 Use path context instead of repeating a chip/protocol prefix on every private
 type. For example, portable Bluetooth LE procedures live under
-`bluetooth/le/ll/{advertising,scanning,connection}`; the chip IRQ and scheduler
+`bluetooth/le/ll/{scanning,connection,control}`; the chip IRQ and scheduler
 remain in the hardware engine, outside those procedure modules. Each procedure
 retains its own lifecycle owner.
 

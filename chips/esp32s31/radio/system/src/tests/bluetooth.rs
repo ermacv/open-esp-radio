@@ -96,7 +96,7 @@ fn join() -> BluetoothJoin {
     BluetoothJoin::new(
         Permission::new(
             oer_radio_regulatory::TEST_DOMAIN
-                .permit(oer_bluetooth_le_radio::LeBand)
+                .permit(oer_bluetooth_le_port::LeBand)
                 .expect("LE test band"),
             oer_radio_regulatory::PowerLimits {
                 antenna_gain_mbm: 0,

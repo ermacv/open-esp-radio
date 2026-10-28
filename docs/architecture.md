@@ -45,8 +45,9 @@ platform             Espressif staged boot, interrupt table, panic record, linke
 ```
 
 Wi-Fi is split into `wire` (over-the-air formats), `port` (the backend
-contract), sans-IO cores and a `runtime`; Bluetooth LE and IEEE 802.15.4 have
-their port, model and protocol crates and grow the same split. A backend
+contract), sans-IO cores and a `runtime`. Bluetooth LE has wire formats, a
+backend port, LL/controller cores and a reference model. IEEE 802.15.4 grows
+the same split. A backend
 depends on its protocol's port, its wire formats and `cipher` only.
 
 Protocol cores are **sans-IO**: frames, completed operations and the current
@@ -530,6 +531,11 @@ its model and conformance case.
   role; ESP-NOW and FTM are clients of the lower-MAC port. A STA+AP pair keeps
   the access point running when the upstream cannot rejoin.
 - **Bluetooth LE** (`protocols/bluetooth`, driver `chips/esp32s31/bluetooth`).
+  Wire formats carry no protocol state or clock domain. The port owns radio
+  vocabulary and the shared DTM window calculation; backends autonomously
+  progress the admitted test with the Core Part F interval grid and 5 ms RX
+  windows. Public backend identity crosses as an explicit wire value with
+  named canonical/air byte order; the driver depends on neither LL nor HCI.
   HCI is the world boundary. Among conflicting connections the one closest to
   its supervision timeout wins; Host backpressure withholds acknowledgement
   instead of dropping the link. Controller memory is generated layouts with a

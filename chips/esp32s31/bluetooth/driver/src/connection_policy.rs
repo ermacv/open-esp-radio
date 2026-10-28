@@ -15,7 +15,7 @@
 
 use core::num::NonZeroU64;
 
-use oer_bluetooth_le_radio::{ConnectionAllowances, LeRadio, NonZeroRadioDuration, RadioDuration};
+use oer_bluetooth_le_port::{ConnectionAllowances, LeRadio, NonZeroRadioDuration, RadioDuration};
 
 // Source-owned S31 connection-event policy. The provenance of each term is
 // the recurring-event section of

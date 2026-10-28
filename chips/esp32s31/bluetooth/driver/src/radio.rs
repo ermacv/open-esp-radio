@@ -70,7 +70,7 @@ pub struct ControllerLifecycle<
     runtime: Option<ControllerRuntimeResources<'static, MT, X>>,
     cells: &'static ControllerEventCells<X>,
     gate: BluetoothInterruptGate<ChipGate, X, R>,
-    address: oer_bluetooth_hci::BluetoothPublicDeviceAddress,
+    address: oer_bluetooth_le_wire::LePublicDeviceAddress,
     installation: Option<u32>,
     state: State<E, X, M, MT>,
 }
@@ -112,7 +112,7 @@ impl<F, E, X: SignalExecutor + 'static, M: ControllerMemory, R, const MT: usize>
         runtime: ControllerRuntimeResources<'static, MT, X>,
         cells: &'static ControllerEventCells<X>,
         gate: BluetoothInterruptGate<ChipGate, X, R>,
-        address: oer_bluetooth_hci::BluetoothPublicDeviceAddress,
+        address: oer_bluetooth_le_wire::LePublicDeviceAddress,
     ) -> Self
     where
         F: ControllerFactory<M, Error = E>,

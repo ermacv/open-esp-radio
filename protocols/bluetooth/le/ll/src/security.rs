@@ -8,7 +8,9 @@
 //! retained by that radio owner and never calls
 //! [`LePeripheralAclEncryption::encrypt_new_packet`] again.
 
-use oer_wire::PrefixLength;
+use oer_bluetooth_le_wire::encryption::{
+    LeEncryptionControlResponse, LeEncryptionRequest, LeLongTermKeyRequest,
+};
 
 use aes::{
     Aes128,
@@ -88,41 +90,6 @@ impl LePeripheralEncryptionRandom {
             session_key_diversifier,
             initialization_vector,
         }
-    }
-}
-
-/// Rand and EDIV copied from one admitted Central `LL_ENC_REQ`.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct LeLongTermKeyRequest {
-    random_number: [u8; 8],
-    encrypted_diversifier: u16,
-}
-
-impl LeLongTermKeyRequest {
-    pub const fn random_number(self) -> [u8; 8] {
-        self.random_number
-    }
-
-    pub const fn encrypted_diversifier(self) -> u16 {
-        self.encrypted_diversifier
-    }
-}
-
-/// One retained LL Control response owned by the encryption procedure.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct LeEncryptionControlResponse {
-    bytes: [u8; 13],
-    len: PrefixLength<13>,
-    encrypted: bool,
-}
-
-impl LeEncryptionControlResponse {
-    pub fn as_bytes(&self) -> &[u8] {
-        self.len.borrow(&self.bytes)
-    }
-
-    pub const fn is_encrypted(self) -> bool {
-        self.encrypted
     }
 }
 
@@ -259,34 +226,18 @@ impl LePeripheralEncryptionProcedure {
             LePeripheralEncryptionState::RestartEncryptionRequestExpected => true,
             _ => return Err(LePeripheralEncryptionProcedureError::Busy),
         };
-        let request: &[u8; 23] = match request.try_into() {
-            Ok(request) => request,
-            Err(_) if restart => {
-                self.state = LePeripheralEncryptionState::Failed;
-                return Err(LePeripheralEncryptionProcedureError::UnexpectedPhysicalChannelPdu);
-            }
-            Err(_) => {
-                return Err(LePeripheralEncryptionProcedureError::MalformedEncryptionRequest);
-            }
-        };
-        if request[0] != 0x03 {
+        let Some(request) = LeEncryptionRequest::decode(request) else {
             if restart {
                 self.state = LePeripheralEncryptionState::Failed;
                 return Err(LePeripheralEncryptionProcedureError::UnexpectedPhysicalChannelPdu);
             }
             return Err(LePeripheralEncryptionProcedureError::MalformedEncryptionRequest);
-        }
-        let random_number = [
-            request[1], request[2], request[3], request[4], request[5], request[6], request[7],
-            request[8],
-        ];
-        let encrypted_diversifier = u16::from_le_bytes([request[9], request[10]]);
+        };
         let mut diversifier = [0; 16];
         for (slot, byte) in diversifier.iter_mut().zip(
             request
+                .diversifier
                 .iter()
-                .skip(11)
-                .take(8)
                 .chain(random.session_key_diversifier.iter()),
         ) {
             *slot = *byte;
@@ -294,18 +245,15 @@ impl LePeripheralEncryptionProcedure {
         let mut initialization_vector = [0; 8];
         for (slot, byte) in initialization_vector.iter_mut().zip(
             request
+                .initialization_vector
                 .iter()
-                .skip(19)
                 .chain(random.initialization_vector.iter()),
         ) {
             *slot = *byte;
         }
         self.state = LePeripheralEncryptionState::EncryptionResponsePending(
             LePeripheralEncryptionMaterial {
-                request: LeLongTermKeyRequest {
-                    random_number,
-                    encrypted_diversifier,
-                },
+                request: request.key,
                 diversifier,
                 initialization_vector,
                 restart,
@@ -317,28 +265,15 @@ impl LePeripheralEncryptionProcedure {
 
     /// Current response, retained until the radio graph accepts it.
     pub fn pending_response(&self) -> Option<LeEncryptionControlResponse> {
-        let mut response = LeEncryptionControlResponse {
-            bytes: [0; 13],
-            len: PrefixLength::constant::<0>(),
-            encrypted: false,
-        };
         match &self.state {
             LePeripheralEncryptionState::EncryptionResponsePending(material) => {
-                response.bytes[0] = 0x04;
-                for (slot, byte) in response.bytes.iter_mut().skip(1).zip(
-                    material
-                        .diversifier
-                        .iter()
-                        .skip(8)
-                        .chain(material.initialization_vector.iter().skip(4)),
-                ) {
-                    *slot = *byte;
-                }
-                response.len = PrefixLength::constant::<13>();
+                Some(LeEncryptionControlResponse::encryption_response(
+                    material.diversifier,
+                    material.initialization_vector,
+                ))
             }
             LePeripheralEncryptionState::StartRequestPending { .. } => {
-                response.bytes[0] = 0x05;
-                response.len = PrefixLength::constant::<1>();
+                Some(LeEncryptionControlResponse::start_request())
             }
             LePeripheralEncryptionState::StartResponsePending {
                 response: encrypted,
@@ -347,21 +282,12 @@ impl LePeripheralEncryptionProcedure {
             | LePeripheralEncryptionState::PauseResponsePending {
                 response: encrypted,
                 ..
-            } => {
-                for (slot, byte) in response.bytes.iter_mut().zip(encrypted) {
-                    *slot = *byte;
-                }
-                response.len = PrefixLength::constant::<5>();
-                response.encrypted = true;
-            }
+            } => Some(LeEncryptionControlResponse::encrypted_response(*encrypted)),
             LePeripheralEncryptionState::RejectPending => {
-                response.bytes[0] = 0x0d;
-                response.bytes[1] = 0x06;
-                response.len = PrefixLength::constant::<2>();
+                Some(LeEncryptionControlResponse::missing_key_reject())
             }
-            _ => return None,
+            _ => None,
         }
-        Some(response)
     }
 
     /// Transfer the current response to the reliable radio TX graph once.
@@ -1192,10 +1118,10 @@ mod tests {
         procedure.observe_transmission_completion(true);
         assert_eq!(
             procedure.long_term_key_request(),
-            Some(LeLongTermKeyRequest {
-                random_number: [0x90, 0x78, 0x56, 0x34, 0x12, 0xef, 0xcd, 0xab],
-                encrypted_diversifier: 0x2474,
-            })
+            Some(LeLongTermKeyRequest::new(
+                [0x90, 0x78, 0x56, 0x34, 0x12, 0xef, 0xcd, 0xab],
+                0x2474
+            ))
         );
         assert!(procedure.take_long_term_key_request().is_some());
         assert_eq!(procedure.take_long_term_key_request(), None);

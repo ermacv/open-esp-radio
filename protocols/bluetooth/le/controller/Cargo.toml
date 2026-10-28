@@ -8,11 +8,11 @@ repository.workspace = true
 description = "Portable Bluetooth LE Controller: HCI DTM service, event geometry and authenticated PDU receive"
 
 [dependencies]
+oer-bluetooth-le-wire = { path = "../wire" }
 oer-bluetooth-hci = { path = "../../hci" }
 oer-bluetooth-le-port = { path = "../port" }
 oer-radio-port = { path = "../../../radio/port" }
 oer-bluetooth-le-ll = { path = "../ll" }
-oer-bluetooth-le-radio = { path = "../radio" }
 
 [dev-dependencies]
 oer-test-ui-cases = { path = "../../../../tools/test/ui-cases" }

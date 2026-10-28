@@ -36,6 +36,6 @@ pub fn new<'p, 'e>(
         ControllerRuntimeResources::new(&irq::CELLS),
         &irq::CELLS,
         gate,
-        oer_bluetooth_hci::BluetoothPublicDeviceAddress::from_canonical_bytes(address),
+        oer_bluetooth_le_wire::LePublicDeviceAddress::from_canonical_bytes(address),
     )
 }

@@ -5,47 +5,14 @@
 //! This module does not own SN/NESN, encryption, ACL delivery or LL teardown.
 //! Optional features are deliberately absent until their procedures are closed.
 
-use oer_wire::PrefixLength;
-
-use crate::connection::{
-    LeConnectionTiming, LeDataChannelMap, LePeripheralChannelMapUpdateError,
-    LePeripheralConnectionUpdateError,
+use oer_bluetooth_le_wire::control::{
+    LeChannelMapUpdate, LeConnectionUpdate, LeControlResponse, LePduDecodeError,
+    LePeripheralDataFragment, LePeripheralPdu, LeVersionInformation, decode_peripheral_pdu,
 };
-use crate::data_length::{LeDataLength, LeDataLengthProcedure, LeDataLengths};
 
-/// Controller identity supplied by the product; independent of the radio vendor.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct LeVersionInformation([u8; 5]);
-
-impl LeVersionInformation {
-    pub const fn new(version: u8, company_identifier: u16, subversion: u16) -> Self {
-        let company = company_identifier.to_le_bytes();
-        let subversion = subversion.to_le_bytes();
-        Self([
-            version,
-            company[0],
-            company[1],
-            subversion[0],
-            subversion[1],
-        ])
-    }
-    pub const fn version(self) -> u8 {
-        self.0[0]
-    }
-    pub const fn company_identifier(self) -> u16 {
-        u16::from_le_bytes([self.0[1], self.0[2]])
-    }
-    pub const fn subversion(self) -> u16 {
-        u16::from_le_bytes([self.0[3], self.0[4]])
-    }
-}
-
-/// Payload of one response, excluding the hardware-owned data-channel header.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct LeControlResponse {
-    bytes: [u8; 9],
-    len: PrefixLength<9>,
-}
+use crate::connection::{LePeripheralChannelMapUpdateError, LePeripheralConnectionUpdateError};
+use crate::data_length::LeDataLengthProcedure;
+use oer_bluetooth_le_wire::data_length::{LeDataLength, LeDataLengths};
 
 /// Page-zero feature result produced by one Host-initiated procedure.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -84,12 +51,6 @@ pub enum LeRemoteVersionAdmission {
     LocalIdentityUnavailable,
 }
 
-impl LeControlResponse {
-    pub fn as_bytes(&self) -> &[u8] {
-        self.len.borrow(&self.bytes)
-    }
-}
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum LePeripheralControlError {
     MalformedPdu,
@@ -99,6 +60,15 @@ pub enum LePeripheralControlError {
     MandatoryProcedureUnavailable { opcode: u8 },
     ChannelMapUpdate(LePeripheralChannelMapUpdateError),
     ConnectionUpdate(LePeripheralConnectionUpdateError),
+}
+
+impl From<LePduDecodeError> for LePeripheralControlError {
+    fn from(error: LePduDecodeError) -> Self {
+        match error {
+            LePduDecodeError::MalformedPdu => Self::MalformedPdu,
+            LePduDecodeError::UnsupportedHeader => Self::UnsupportedHeader,
+        }
+    }
 }
 
 impl LePeripheralControlError {
@@ -127,57 +97,6 @@ impl LePeripheralControlError {
     }
 }
 
-/// One accepted unencrypted LE-U payload borrowed from its completed RX batch.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct LePeripheralDataFragment<'a> {
-    payload: &'a [u8],
-    continuing: bool,
-}
-
-/// Validated Channel Map Update carried by `LL_CHANNEL_MAP_IND`.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct LeChannelMapUpdate {
-    channel_map: LeDataChannelMap,
-    instant: u16,
-}
-
-/// Validated Connection Update carried by `LL_CONNECTION_UPDATE_IND`.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct LeConnectionUpdate {
-    timing: LeConnectionTiming,
-    instant: u16,
-}
-
-impl LeConnectionUpdate {
-    pub const fn timing(self) -> LeConnectionTiming {
-        self.timing
-    }
-
-    pub const fn instant(self) -> u16 {
-        self.instant
-    }
-}
-
-impl LeChannelMapUpdate {
-    pub const fn channel_map(self) -> LeDataChannelMap {
-        self.channel_map
-    }
-
-    pub const fn instant(self) -> u16 {
-        self.instant
-    }
-}
-
-impl<'a> LePeripheralDataFragment<'a> {
-    pub const fn payload(self) -> &'a [u8] {
-        self.payload
-    }
-
-    pub const fn is_continuing(self) -> bool {
-        self.continuing
-    }
-}
-
 /// Semantic disposition of one accepted data-channel PDU.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum LePeripheralReceive<'a> {
@@ -185,33 +104,6 @@ pub enum LePeripheralReceive<'a> {
     Control,
     ChannelMapUpdate(LeChannelMapUpdate),
     ConnectionUpdate(LeConnectionUpdate),
-}
-
-enum LePeripheralPdu<'a> {
-    Data(LePeripheralDataFragment<'a>),
-    Control(&'a [u8]),
-}
-
-fn decode_peripheral_pdu(pdu: &[u8]) -> Result<LePeripheralPdu<'_>, LePeripheralControlError> {
-    use LePeripheralControlError as Error;
-    let [header, length, payload @ ..] = pdu else {
-        return Err(Error::MalformedPdu);
-    };
-    if payload.len() != usize::from(*length) {
-        return Err(Error::MalformedPdu);
-    }
-    // CTE is outside this profile. RFU bits are ignored as required by LL.
-    if *header & 0x20 != 0 {
-        return Err(Error::UnsupportedHeader);
-    }
-    match *header & 3 {
-        llid @ (1 | 2) => Ok(LePeripheralPdu::Data(LePeripheralDataFragment {
-            payload,
-            continuing: llid == 1,
-        })),
-        3 if !payload.is_empty() => Ok(LePeripheralPdu::Control(payload)),
-        _ => Err(Error::MalformedPdu),
-    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -314,10 +206,7 @@ impl LePeripheralControl {
         if self.data_length_request.is_none()
             && let Some(pdu) = self.data_length.queued_request()
         {
-            self.data_length_request = Some(LeControlResponse {
-                bytes: pdu,
-                len: PrefixLength::constant::<9>(),
-            });
+            self.data_length_request = Some(LeControlResponse::from_length_pdu(pdu));
         }
     }
 
@@ -361,28 +250,20 @@ impl LePeripheralControl {
         let Some((&opcode, body)) = payload.split_first() else {
             return Err(Error::MalformedPdu);
         };
-        let mut response = LeControlResponse {
-            bytes: [0; 9],
-            len: PrefixLength::constant::<2>(),
-        };
+        let response;
         match opcode {
             0x08 => {
                 let peer: [u8; 8] = body.try_into().map_err(|_| Error::MalformedPdu)?;
                 self.peer_features = Some(peer);
                 let local = le_peripheral_supported_features();
-                response.bytes[0] = 0x09;
-                for (slot, (peer, local)) in response
-                    .bytes
-                    .iter_mut()
-                    .skip(1)
-                    .zip(peer.into_iter().zip(local))
-                {
+                let mut features = [0; 8];
+                for (slot, (peer, local)) in features.iter_mut().zip(peer.into_iter().zip(local)) {
                     *slot = peer & local;
                 }
-                response.len = PrefixLength::constant::<9>();
+                response = LeControlResponse::features(0x09, features);
             }
             0x0c => {
-                self.peer_version = Some(LeVersionInformation(
+                self.peer_version = Some(LeVersionInformation::from_wire_bytes(
                     body.try_into().map_err(|_| Error::MalformedPdu)?,
                 ));
                 if matches!(self.local_version_request, LocalVersionRequest::Transmitted) {
@@ -396,11 +277,7 @@ impl LePeripheralControl {
                 }
                 let version =
                     local_version.ok_or(Error::MandatoryProcedureUnavailable { opcode })?;
-                response.bytes[0] = 0x0c;
-                for (slot, byte) in response.bytes.iter_mut().skip(1).zip(version.0) {
-                    *slot = byte;
-                }
-                response.len = PrefixLength::constant::<6>();
+                response = LeControlResponse::version(version);
             }
             0x02 => {
                 let Ok(payload) = <&[u8; 2]>::try_from(payload) else {
@@ -409,17 +286,9 @@ impl LePeripheralControl {
                 return Err(Error::PeerTermination { reason: payload[1] });
             }
             0x01 => {
-                let Ok(payload) = <&[u8; 8]>::try_from(payload) else {
-                    return Err(Error::MalformedPdu);
-                };
-                let channel_map = LeDataChannelMap::new([
-                    payload[1], payload[2], payload[3], payload[4], payload[5],
-                ])
-                .map_err(|_| Error::MalformedPdu)?;
-                return Ok(LePeripheralReceive::ChannelMapUpdate(LeChannelMapUpdate {
-                    channel_map,
-                    instant: u16::from_le_bytes([payload[6], payload[7]]),
-                }));
+                return Ok(LePeripheralReceive::ChannelMapUpdate(
+                    LeChannelMapUpdate::decode(payload)?,
+                ));
             }
             // Do not turn a response into another request/response loop.
             0x07 => {
@@ -446,8 +315,7 @@ impl LePeripheralControl {
                     .data_length
                     .receive_request(body)
                     .map_err(|_| Error::MalformedPdu)?;
-                response.bytes = pdu;
-                response.len = PrefixLength::constant::<9>();
+                response = LeControlResponse::from_length_pdu(pdu);
             }
             0x15 => {
                 self.data_length
@@ -504,8 +372,7 @@ impl LePeripheralControl {
                 let [] = body else {
                     return Err(Error::MalformedPdu);
                 };
-                response.bytes[0] = 0x13;
-                response.len = PrefixLength::constant::<1>();
+                response = LeControlResponse::ping_response();
             }
             // A response never starts another Ping exchange.
             0x13 => {
@@ -516,27 +383,15 @@ impl LePeripheralControl {
             }
             // Never claim an unsupported mandatory connection transition ran.
             0x00 => {
-                let Ok(payload) = <&[u8; 12]>::try_from(payload) else {
-                    return Err(Error::MalformedPdu);
-                };
-                let timing = LeConnectionTiming::new(
-                    payload[1],
-                    u16::from_le_bytes([payload[2], payload[3]]),
-                    u16::from_le_bytes([payload[4], payload[5]]),
-                    u16::from_le_bytes([payload[6], payload[7]]),
-                    u16::from_le_bytes([payload[8], payload[9]]),
-                )
-                .map_err(|_| Error::MalformedPdu)?;
-                return Ok(LePeripheralReceive::ConnectionUpdate(LeConnectionUpdate {
-                    timing,
-                    instant: u16::from_le_bytes([payload[10], payload[11]]),
-                }));
+                return Ok(LePeripheralReceive::ConnectionUpdate(
+                    LeConnectionUpdate::decode(payload)?,
+                ));
             }
             _ => {
-                response.bytes[0] = 0x07; // LL_UNKNOWN_RSP for unsupported LLCP.
-                response.bytes[1] = opcode;
+                response = LeControlResponse::unknown(opcode);
             }
         }
+
         let slot = self
             .responses
             .iter_mut()
@@ -647,14 +502,7 @@ impl LePeripheralControl {
             self.local_version_request = LocalVersionRequest::None;
             return Some(version);
         }
-        let mut request = LeControlResponse {
-            bytes: [0; 9],
-            len: PrefixLength::constant::<6>(),
-        };
-        request.bytes[0] = 0x0c;
-        for (slot, byte) in request.bytes.iter_mut().skip(1).zip(version.0) {
-            *slot = byte;
-        }
+        let request = LeControlResponse::version(version);
         self.local_version_request = LocalVersionRequest::Queued(request);
         None
     }
@@ -702,20 +550,7 @@ impl LePeripheralControl {
                 Some(response) => Some(response),
                 None if matches!(self.local_feature_request, LocalFeatureRequest::Queued) => {
                     const FEATURES: [u8; 8] = le_peripheral_supported_features();
-                    const REQUEST: LeControlResponse = LeControlResponse {
-                        bytes: [
-                            0x0e,
-                            FEATURES[0],
-                            FEATURES[1],
-                            FEATURES[2],
-                            FEATURES[3],
-                            FEATURES[4],
-                            FEATURES[5],
-                            FEATURES[6],
-                            FEATURES[7],
-                        ],
-                        len: PrefixLength::constant::<9>(),
-                    };
+                    const REQUEST: LeControlResponse = LeControlResponse::features(0x0e, FEATURES);
                     Some(&REQUEST)
                 }
                 None => match &self.local_version_request {
@@ -743,12 +578,7 @@ impl LePeripheralControl {
         if !matches!(self.local_termination, LocalTermination::None) {
             return;
         }
-        let mut response = LeControlResponse {
-            bytes: [0; 9],
-            len: PrefixLength::constant::<2>(),
-        };
-        response.bytes[0] = 0x02;
-        response.bytes[1] = reason;
+        let response = LeControlResponse::terminate(reason);
         self.termination = Some(response);
         self.local_termination = LocalTermination::Queued { reason, host };
     }

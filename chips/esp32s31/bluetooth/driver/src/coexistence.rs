@@ -8,7 +8,7 @@
 //! LE radio's operation, whose reason the LE Controller's `coexistence`
 //! module names (`notes/bluetooth/le-coexistence-priorities.md`).
 
-use oer_bluetooth_le_radio::{AdvertisingEventKind, ConnectionEventKind};
+use oer_bluetooth_le_port::{AdvertisingEventKind, ConnectionEventKind};
 use oer_esp32s31_hal::bluetooth::engine::{
     AdvertisingCoexistencePriorities, ConnectionCoexistencePriorities,
     LegacyScanCoexistencePriorities, PeripheralConnectionCoexistenceProtection,

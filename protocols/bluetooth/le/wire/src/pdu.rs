@@ -184,3 +184,11 @@ mod tests {
         assert_eq!(TestPayloadType::new(8), Err(PduError::OutOfRange));
     }
 }
+
+/// Access Address octets in air order.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct AccessAddress(pub [u8; 4]);
+
+/// CRC initialization octets in air order.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct CrcInit(pub [u8; 3]);

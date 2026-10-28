@@ -1,4 +1,4 @@
-use oer_bluetooth_le_radio::{AdvertisingEventKind, ConnectionEventKind};
+use oer_bluetooth_le_port::{AdvertisingEventKind, ConnectionEventKind};
 
 use super::{
     CoexistenceProfile, advertising_priorities, connection_priorities, connection_protection,

@@ -1,19 +1,25 @@
-warning: unused imports: `Command`, `DtmCommand`, `LeOperationId`, `LePhase`, `Receive`, `Request`, `Supported`, `TestChannel`, and `TestPhy`
+warning: unused imports: `Command`, `DtmCommand`, `LeOperationId`, `LePhase`, `Receive`, `Request`, `Supported`, and `TestPhy`
  --> tests/ui/private_authority.rs:2:29
   |
-2 | use oer_bluetooth_le_port::{Command, DtmCommand, LeOperationId, LePhase, Receive, Request, Supported, TestChannel, TestPhy};
-  |                             ^^^^^^^  ^^^^^^^^^^  ^^^^^^^^^^^^^  ^^^^^^^  ^^^^^^^  ^^^^^^^  ^^^^^^^^^  ^^^^^^^^^^^  ^^^^^^^
+2 | use oer_bluetooth_le_port::{Command, DtmCommand, LeOperationId, LePhase, Receive, Request, Supported, TestPhy};
+  |                             ^^^^^^^  ^^^^^^^^^^  ^^^^^^^^^^^^^  ^^^^^^^  ^^^^^^^  ^^^^^^^  ^^^^^^^^^  ^^^^^^^
   |
   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
 
-warning: unused import: `PortContext`
- --> tests/ui/private_authority.rs:3:22
+warning: unused import: `TestChannel`
+ --> tests/ui/private_authority.rs:3:29
   |
-3 | use oer_radio_port::{PortContext, SlotIdentity};
+3 | use oer_bluetooth_le_wire::{TestChannel};
+  |                             ^^^^^^^^^^^
+
+warning: unused import: `PortContext`
+ --> tests/ui/private_authority.rs:4:22
+  |
+4 | use oer_radio_port::{PortContext, SlotIdentity};
   |                      ^^^^^^^^^^^
 
 error[E0616]: field `view` of struct `ModelPhase` is private
- --> tests/ui/private_authority.rs:6:23
+ --> tests/ui/private_authority.rs:7:23
   |
-6 |     let _loan = phase.view.loan; // ui-error: E0616
+7 |     let _loan = phase.view.loan; // ui-error: E0616
   |                       ^^^^ private field

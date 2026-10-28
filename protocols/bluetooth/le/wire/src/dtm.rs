@@ -49,7 +49,8 @@ impl DtmPayloadPattern {
         self.radio_payload_type().value()
     }
 
-    pub(super) const fn radio_payload_type(self) -> oer_bluetooth_le_radio::TestPayloadType {
+    /// The validated LE Test PDU payload type.
+    pub const fn radio_payload_type(self) -> crate::TestPayloadType {
         match self {
             Self::Prbs9 => constant_payload_type::<0>(),
             Self::Repeated11110000 => constant_payload_type::<1>(),
@@ -77,9 +78,9 @@ impl DtmPayloadPattern {
     }
 }
 
-const fn constant_payload_type<const VALUE: u8>() -> oer_bluetooth_le_radio::TestPayloadType {
+const fn constant_payload_type<const VALUE: u8>() -> crate::TestPayloadType {
     const {
-        let value = match oer_bluetooth_le_radio::TestPayloadType::new(VALUE) {
+        let value = match crate::TestPayloadType::new(VALUE) {
             Ok(value) => Some(value),
             Err(_) => None,
         };
@@ -107,3 +108,11 @@ fn fill_prbs<const WIDTH: u32, const FIRST_TAP: u32, const SECOND_TAP: u32>(payl
         *output = image;
     }
 }
+
+#[cfg(test)]
+#[allow(
+    clippy::arithmetic_side_effects,
+    clippy::disallowed_macros,
+    clippy::disallowed_methods
+)]
+mod tests;

@@ -8,6 +8,7 @@ repository.workspace = true
 publish.workspace = true
 build = "build.rs"
 [dependencies]
+oer-bluetooth-le-wire = { path = "../../../protocols/bluetooth/le/wire" }
 bytemuck = { version = "1.25.2", default-features = false, features = ["derive"] }
 oer-bluetooth-hci = { path = "../../../protocols/bluetooth/hci" }
 
@@ -28,7 +29,6 @@ static_cell = "2.1.1"
 oer-espressif-usb-serial-jtag.workspace = true
 oer-esp32s31-phy = { path = "../../../chips/esp32s31/phy" }
 oer-bluetooth-le-port = { path = "../../../protocols/bluetooth/le/port" }
-oer-bluetooth-le-radio = { path = "../../../protocols/bluetooth/le/radio" }
 oer-bluetooth-le-controller = { path = "../../../protocols/bluetooth/le/controller" }
 oer-radio-port = { path = "../../../protocols/radio/port" }
 oer-radio-regulatory = { path = "../../../protocols/radio/regulatory" }

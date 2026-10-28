@@ -5,7 +5,7 @@
 
 use core::convert::Infallible;
 
-use oer_bluetooth_le_radio::{LeBand, TxPower};
+use oer_bluetooth_le_port::{LeBand, TxPower};
 use oer_esp32s31_hal::bluetooth::engine::LeTxPower;
 use oer_radio_regulatory::{Initiate, Permitted, PowerLimits, TxCeiling};
 

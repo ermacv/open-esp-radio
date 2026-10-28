@@ -11,7 +11,7 @@ use oer_espressif_interrupt_table::signal::SignalExecutor;
 #[cfg(target_arch = "riscv32")]
 use crate::{low_power::ControllerLowPowerHardwareInitialized, resources::InterruptBankOwner};
 #[cfg(target_arch = "riscv32")]
-use oer_bluetooth_hci::BluetoothPublicDeviceAddress;
+use oer_bluetooth_le_wire::LePublicDeviceAddress;
 #[cfg(target_arch = "riscv32")]
 use oer_esp32s31_hal::bluetooth::ControllerPublicAddress;
 #[cfg(target_arch = "riscv32")]
@@ -216,7 +216,7 @@ impl<'cells, const MODEM_TIMER_CAPACITY: usize, X: SignalExecutor, M: Controller
     pub fn initialize_ble_phy_engine<B: PlatformClockBackend>(
         mut self,
         ready: oer_esp32s31_phy::bluetooth_client::BluetoothRfReady<'_, B>,
-        public_address: BluetoothPublicDeviceAddress,
+        public_address: LePublicDeviceAddress,
     ) -> Result<
         ControllerBlePhyEngineInitialized<'cells, MODEM_TIMER_CAPACITY, X, M>,
         ControllerBlePhyInitializationFailure<'cells, MODEM_TIMER_CAPACITY, X, M>,
