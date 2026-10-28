@@ -39,7 +39,9 @@ the portable runtime drives role services over that port.
 | `upper-mac/src/qos.rs` | Ethernet traffic classification, DSCP mapping and admission downgrade |
 | `upper-mac/src/vif.rs` | Receive routing for one same-channel STA plus SoftAP pair |
 | `upper-mac/src/monitor.rs` | The frames a monitor keeps and the channels it visits |
-| `esp-now/src/configuration.rs` | The requested owner topology against a backend's service description |
+| `arbiter/src/interface.rs` | Virtual-interface identities and their channel-context bindings |
+| `arbiter/src/configuration.rs` | The requested owner topology against a backend's service description |
+| `esp-now/src/configuration.rs` | Exclusive station-address topology for standalone ESP-NOW |
 | `sta/src/port.rs` | The station's tokens on a lower-MAC port and its numbered pairwise key |
 | `wire/src/channel.rs` | Validated 2.4/5 GHz channels and 20/40 MHz geometry |
 | `wire/src/channel_switch.rs` | Channel Switch Announcement parsing and encoding |
@@ -75,8 +77,9 @@ beacon or Association Response carries neither a DSSS Parameter Set nor ERP,
 and a beacon refuses a 5 GHz advertisement containing a DSSS rate. Chip AP
 profiles supply their own advertisement values.
 
-[`arbiter`](arbiter/src/coordinator.rs) decides the channel of a port shared
-by a station and an access point. The upstream BSS chooses it; the AP follows
+[`arbiter`](arbiter/README.md) owns one radio's VIF identities and
+capability-checked station, AP and monitor topology, and decides the channel
+of a port shared by a station and an access point. The upstream BSS chooses it; the AP follows
 within `ApFollowPolicy`, or `ApUnservable` selects which role stops. The
 coordinator turns upstream channel switches into AP announcements and one
 port retune. Its search policy schedules upstream searches between AP TBTTs.
@@ -105,8 +108,9 @@ role. Espressif policy parameters live in
 `esp-now/src/extensions/espressif/esp_now/protocol.rs` owns ESP-NOW peers and
 protocol state. Its `security.rs` sibling owns secrets and generations; each
 peer's packet numbers and replay frontier are `upper-mac`'s CCMP owners. Both use the wire codecs, the interface identities of
-`esp-now/src/interface.rs` and the PHY requests of
-`esp-now/src/extensions/espressif/phy.rs`.
+`arbiter/src/interface.rs` and the PHY requests of
+`esp-now/src/extensions/espressif/phy.rs`. ESP-NOW's `configuration` narrows
+the arbiter's checked `WifiPlan` to exclusive standalone ESP-NOW ownership.
 
 The [`runtime`](runtime/README.md) is the asynchronous glue: it waits on
 port events, deadlines and commands, hands each input to the cores and

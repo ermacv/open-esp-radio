@@ -1,7 +1,23 @@
-# IEEE 802.11 channel arbiter
+# IEEE 802.11 topology and channel arbiter
 
-`oer-ieee80211-arbiter` is the arbiter of the channel one radio's station
-and access point share, the third sans-IO machine of their loop.
+`oer-ieee80211-arbiter` owns one radio's virtual-interface topology and
+arbitrates the channel its station and access point share. It is sans-IO,
+forbids unsafe code and neither waits nor performs I/O.
+
+`interface` defines `VifId`, `VirtualInterface`, `VifChannelBinding` and
+`BoundVirtualInterface`. VIF identity is distinct from `ChannelContextId`:
+the station and access point have separate VIFs even when they share one
+physical tuning context.
+
+`configuration` validates a requested `WifiConfig` against the backend's
+complete `MacServiceCapabilities`. It checks interface addresses, role and
+monitor support, assigns deterministic VIF IDs and binds them to the primary
+channel context. `WifiPlan` retains the checked station, AP and monitor
+configuration; `standalone_monitor` narrows it to an exclusive monitor plan.
+Credentials, scan policy, DMA storage and executor resources belong to the
+service or composition. Monitor filters remain upper-MAC policy. ESP-NOW's
+exclusive station-address plan belongs to `oer-ieee80211-esp-now`, which
+consumes the arbiter's checked topology.
 
 The arbiter carries the lower-MAC `GateOpen<'id>` and `GateClosed<'id>`
 directly. Both own the install's one `GatePlace`; only the backend's

@@ -32,8 +32,11 @@
     )
 )]
 
-//! The arbiter of the channel one radio's station and access point share:
-//! the third sans-IO machine of their loop.
+//! Wi-Fi virtual-interface topology and shared-channel arbitration.
+//!
+//! [`configuration`] validates the requested station, access-point and
+//! monitor topology against backend capabilities. [`interface`] defines VIF
+//! identities and their bindings to a radio's channel context.
 //!
 //! Only the arbiter changes the port's channel: it closes the transmit
 //! gate, retunes the port and opens the gate again, one gate's cycle at a
@@ -166,7 +169,9 @@
 extern crate std;
 
 pub mod channel;
+pub mod configuration;
 pub mod coordinator;
+pub mod interface;
 
 use core::{fmt::Debug, marker::PhantomData};
 

@@ -12,7 +12,7 @@ Embassy time (`cargo test -p oer-test-layers`).
 `station_service` is the station's service; `monitor` holds the capture and
 injection handoffs of a monitor. The frames a monitor keeps and the channels
 it visits are `oer-ieee80211-upper-mac`'s `monitor`; the requested owner
-topology is checked by `oer-ieee80211-esp-now`'s `configuration`.
+topology is checked by `oer-ieee80211-arbiter`'s `configuration`.
 
 Host tests use the allocating in-memory backend from `oer-ieee80211-model`
 as a dev-dependency. The model's fixtures run the shared conformance cases in

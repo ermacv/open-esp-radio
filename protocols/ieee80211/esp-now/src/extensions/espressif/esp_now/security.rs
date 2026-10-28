@@ -34,7 +34,7 @@ use {
 use crate::extensions::espressif::esp_now::protocol::{
     ESP_NOW_DEFAULT_PEER_CAPACITY, EspNowConfig, EspNowPeerSecurity,
 };
-use crate::interface::BoundVirtualInterface;
+use oer_ieee80211_arbiter::interface::BoundVirtualInterface;
 use oer_ieee80211_port::ChannelContextId;
 
 pub const ESP_NOW_KEY_LEN: usize = 16;
