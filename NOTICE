@@ -7,8 +7,11 @@ Apache-2.0 only. It contains material derived from the third-party works
 listed here. Each derived file names its source and pinned revision beside
 the code; docs/source-policy.md says how a new one is recorded.
 
-Packages depending on the shared IEEE 802.15.4 MAC dictionary declare Apache-2.0 as their
-effective license in Cargo metadata. Their own source attribution is retained.
+Workspace packages with a direct or transitive normal dependency on an
+Apache-2.0-only crate declare Apache-2.0 as their effective license in Cargo
+metadata. This includes optional and target-specific normal dependencies;
+build and development dependencies do not determine the effective license.
+Each package retains its own source attribution.
 
 The vendor libraries below are read for facts and never committed.
 
