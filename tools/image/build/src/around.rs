@@ -94,7 +94,7 @@ pub fn esp_idf(
     crate::encode::require_partition_table(&read(partition_table)?)
         .map_err(|error| format!("partition table {}: {error}", partition_table.display()))?;
     let staging = crate::exclusion::Staging::begin(output)?;
-    let mut bundle = ImageBundle::from_parts(
+    let bundle = ImageBundle::from_parts(
         staging.directory(),
         chip.id,
         chip.rust_target,
