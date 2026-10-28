@@ -57,14 +57,16 @@ pub enum Ieee802154TxPowerLevelsError {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Ieee802154TxPowerLevels<'levels> {
     levels_dbm: &'levels [i8],
+    lowest_dbm: i8,
+    highest_dbm: i8,
 }
 
 impl<'levels> Ieee802154TxPowerLevels<'levels> {
     /// Validate one externally supplied level sequence without copying it.
     pub const fn new(levels_dbm: &'levels [i8]) -> Result<Self, Ieee802154TxPowerLevelsError> {
-        if levels_dbm.is_empty() {
+        let Some((&lowest_dbm, mut remaining)) = levels_dbm.split_first() else {
             return Err(Ieee802154TxPowerLevelsError::Empty);
-        }
+        };
         if levels_dbm.len() > MAX_PROVIDER_LEVEL_COUNT {
             return Err(Ieee802154TxPowerLevelsError::TooLong {
                 length: levels_dbm.len(),
@@ -72,19 +74,24 @@ impl<'levels> Ieee802154TxPowerLevels<'levels> {
             });
         }
 
-        let mut index = 1;
-        while index < levels_dbm.len() {
-            if levels_dbm[index] < levels_dbm[index - 1] {
+        let mut highest_dbm = lowest_dbm;
+        while let Some((&current_dbm, rest)) = remaining.split_first() {
+            if current_dbm < highest_dbm {
                 return Err(Ieee802154TxPowerLevelsError::Descending {
-                    index,
-                    previous_dbm: levels_dbm[index - 1],
-                    current_dbm: levels_dbm[index],
+                    index: levels_dbm.len().abs_diff(remaining.len()),
+                    previous_dbm: highest_dbm,
+                    current_dbm,
                 });
             }
-            index += 1;
+            highest_dbm = current_dbm;
+            remaining = rest;
         }
 
-        Ok(Self { levels_dbm })
+        Ok(Self {
+            levels_dbm,
+            lowest_dbm,
+            highest_dbm,
+        })
     }
 
     /// Borrow the validated provider levels without changing their lifetime.
@@ -99,12 +106,12 @@ impl<'levels> Ieee802154TxPowerLevels<'levels> {
 
     /// Return the first, lowest provider level.
     pub const fn lowest_dbm(self) -> i8 {
-        self.levels_dbm[0]
+        self.lowest_dbm
     }
 
     /// Return the final, highest provider level (`IEEE802154_TXPOWER_VALUE_MAX`).
     pub const fn highest_dbm(self) -> i8 {
-        self.levels_dbm[self.levels_dbm.len() - 1]
+        self.highest_dbm
     }
 
     /// A validated provider level set is never empty.
@@ -125,24 +132,34 @@ impl<'levels> Ieee802154TxPowerLevels<'levels> {
         channel: Ieee802154Channel,
         requested_dbm: i8,
     ) -> Ieee802154ResolvedTxPower<'levels> {
-        let last_index = self.levels_dbm.len() - 1;
-        let selected_index = if requested_dbm <= self.levels_dbm[0] {
-            0
-        } else if requested_dbm >= self.levels_dbm[last_index] {
-            last_index
-        } else {
-            let mut index = last_index;
-            while index != 0 && self.levels_dbm[index] > requested_dbm {
-                index -= 1;
+        // The validated nonempty set carries its lowest level. Starting with
+        // that level preserves the vendor's first-branch precedence when all
+        // levels are equal, without indexing or inventing a missing value.
+        let mut selected_index = 0;
+        let mut effective_dbm = self.lowest_dbm;
+        if requested_dbm > self.lowest_dbm {
+            if requested_dbm >= self.highest_dbm {
+                selected_index = self.levels_dbm.len().abs_diff(1) as u8;
+                effective_dbm = self.highest_dbm;
+            } else {
+                let mut remaining = self.levels_dbm;
+                while let Some((&level_dbm, rest)) = remaining.split_last() {
+                    if level_dbm <= requested_dbm {
+                        // Validation bounds the slice to at most 255 entries.
+                        selected_index = rest.len() as u8;
+                        effective_dbm = level_dbm;
+                        break;
+                    }
+                    remaining = rest;
+                }
             }
-            index
-        };
+        }
 
         Ieee802154ResolvedTxPower {
             channel,
             requested_dbm,
-            effective_dbm: self.levels_dbm[selected_index],
-            field_code: Ieee802154TxPowerCode(selected_index as u8),
+            effective_dbm,
+            field_code: Ieee802154TxPowerCode(selected_index),
             _levels: PhantomData,
         }
     }
@@ -235,4 +252,9 @@ impl Ieee802154ResolvedTxPower<'_> {
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::arithmetic_side_effects,
+    clippy::disallowed_macros,
+    reason = "tests assert behavior and compare with reference arithmetic"
+)]
 mod tests;

@@ -4,7 +4,12 @@
     clippy::expect_used,
     clippy::panic,
     clippy::todo,
-    clippy::unimplemented
+    clippy::unimplemented,
+    clippy::unreachable,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    clippy::disallowed_macros,
+    clippy::disallowed_methods
 )]
 //! Closed typed IEEE 802.15.4 MAC values and transactions shared between
 //! chips.
@@ -39,4 +44,9 @@ pub use tx_power::*;
 pub use values::*;
 
 #[cfg(test)]
+#[allow(
+    clippy::arithmetic_side_effects,
+    clippy::disallowed_macros,
+    reason = "tests assert behavior and compare with reference arithmetic"
+)]
 mod tests;

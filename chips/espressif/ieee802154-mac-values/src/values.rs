@@ -3,30 +3,40 @@
 
 /// One of the four source-confirmed MAC PAN contexts.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct Ieee802154MultipanIndex(u8);
+pub struct Ieee802154MultipanIndex(MultipanContext);
+
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+enum MultipanContext {
+    Context0,
+    Context1,
+    Context2,
+    Context3,
+}
 
 impl Ieee802154MultipanIndex {
     pub const COUNT: u8 = 4;
-    pub const CONTEXT0: Self = Self(0);
-    pub const CONTEXT1: Self = Self(1);
-    pub const CONTEXT2: Self = Self(2);
-    pub const CONTEXT3: Self = Self(3);
+    pub const CONTEXT0: Self = Self(MultipanContext::Context0);
+    pub const CONTEXT1: Self = Self(MultipanContext::Context1);
+    pub const CONTEXT2: Self = Self(MultipanContext::Context2);
+    pub const CONTEXT3: Self = Self(MultipanContext::Context3);
 
     pub const fn new(value: u8) -> Option<Self> {
-        if value < Self::COUNT {
-            Some(Self(value))
-        } else {
-            None
+        match value {
+            0 => Some(Self::CONTEXT0),
+            1 => Some(Self::CONTEXT1),
+            2 => Some(Self::CONTEXT2),
+            3 => Some(Self::CONTEXT3),
+            _ => None,
         }
     }
 
     pub const fn value(self) -> u8 {
-        self.0
+        self.0 as u8
     }
 
     #[doc(hidden)]
     pub const fn as_usize(self) -> usize {
-        self.0 as usize
+        self.value() as usize
     }
 }
 
@@ -58,19 +68,31 @@ impl Ieee802154MultipanEnableState {
     }
 
     pub const fn contains(self, index: Ieee802154MultipanIndex) -> bool {
-        self.0[index.as_usize()]
+        let [context0, context1, context2, context3] = self.0;
+        match index.0 {
+            MultipanContext::Context0 => context0,
+            MultipanContext::Context1 => context1,
+            MultipanContext::Context2 => context2,
+            MultipanContext::Context3 => context3,
+        }
     }
 
     pub const fn with(self, index: Ieee802154MultipanIndex) -> Self {
-        let mut enabled = self.0;
-        enabled[index.as_usize()] = true;
-        Self(enabled)
+        self.set(index, true)
     }
 
     pub const fn without(self, index: Ieee802154MultipanIndex) -> Self {
-        let mut enabled = self.0;
-        enabled[index.as_usize()] = false;
-        Self(enabled)
+        self.set(index, false)
+    }
+
+    const fn set(self, index: Ieee802154MultipanIndex, enabled: bool) -> Self {
+        let [context0, context1, context2, context3] = self.0;
+        match index.0 {
+            MultipanContext::Context0 => Self([enabled, context1, context2, context3]),
+            MultipanContext::Context1 => Self([context0, enabled, context2, context3]),
+            MultipanContext::Context2 => Self([context0, context1, enabled, context3]),
+            MultipanContext::Context3 => Self([context0, context1, context2, enabled]),
+        }
     }
 }
 
@@ -256,3 +278,11 @@ impl Ieee802154PanIdentity {
         self.extended_address
     }
 }
+
+#[cfg(test)]
+#[allow(
+    clippy::arithmetic_side_effects,
+    clippy::disallowed_macros,
+    reason = "tests assert behavior and compare with reference arithmetic"
+)]
+mod tests;

@@ -48,7 +48,18 @@ impl Ieee802154AckTimeout {
     /// Convert microseconds with the source-confirmed `(micros + 15) / 16`
     /// rule, expressed without an overflowing addition.
     pub const fn from_microseconds(microseconds: u32) -> Result<Self, Ieee802154AckTimeoutError> {
-        let units = microseconds.div_ceil(IEEE802154_ACK_TIMEOUT_QUANTUM_MICROSECONDS);
+        let Some(rounded) =
+            microseconds.checked_add(const { IEEE802154_ACK_TIMEOUT_QUANTUM_MICROSECONDS - 1 })
+        else {
+            return Err(Ieee802154AckTimeoutError {
+                attempted_microseconds: microseconds,
+            });
+        };
+        let Some(units) = rounded.checked_div(IEEE802154_ACK_TIMEOUT_QUANTUM_MICROSECONDS) else {
+            return Err(Ieee802154AckTimeoutError {
+                attempted_microseconds: microseconds,
+            });
+        };
 
         if units <= u16::MAX as u32 {
             Ok(Self {
@@ -68,11 +79,22 @@ impl Ieee802154AckTimeout {
 
     /// Return the effective, upward-quantized timeout in microseconds.
     pub const fn effective_microseconds(self) -> u32 {
-        self.units as u32 * IEEE802154_ACK_TIMEOUT_QUANTUM_MICROSECONDS
+        const SHIFT: u32 = IEEE802154_ACK_TIMEOUT_QUANTUM_MICROSECONDS.trailing_zeros();
+        const {
+            if !IEEE802154_ACK_TIMEOUT_QUANTUM_MICROSECONDS.is_power_of_two() || SHIFT > 16 {
+                panic!("ACK timeout units must fit u32 after scaling a u16 field");
+            }
+        }
+        (self.units as u32) << SHIFT
     }
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::arithmetic_side_effects,
+    clippy::disallowed_macros,
+    reason = "tests assert behavior and compare with reference arithmetic"
+)]
 mod ack_timeout_tests;
 
 /// Complete `RX_STATUS` observation (`ieee802154_ll_get_rx_status`).

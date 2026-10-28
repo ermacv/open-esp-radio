@@ -45,3 +45,33 @@ fn unnamed_lanes_remain_distinct_with_and_without_named_events() {
         }
     }
 }
+
+#[test]
+fn event_multiplicity_is_exact_for_every_named_subset() {
+    let events = [
+        Ieee802154Event::TxDone,
+        Ieee802154Event::RxDone,
+        Ieee802154Event::AckTxDone,
+        Ieee802154Event::AckRxDone,
+        Ieee802154Event::RxAbort,
+        Ieee802154Event::TxAbort,
+        Ieee802154Event::EdDone,
+        Ieee802154Event::Timer0Overflow,
+        Ieee802154Event::Timer1Overflow,
+        Ieee802154Event::ClockCountMatch,
+        Ieee802154Event::TxSfdDone,
+        Ieee802154Event::RxSfdDone,
+    ];
+    const MULTIPLE: bool = Ieee802154EventMask::NAMED.has_multiple();
+    const EMPTY: bool = Ieee802154EventMask::NONE.has_multiple();
+    assert_eq!((MULTIPLE, EMPTY), (true, false));
+    for bits in 0u16..(1 << events.len()) {
+        let mut mask = Ieee802154EventMask::NONE;
+        for (index, event) in events.into_iter().enumerate() {
+            if bits & (1 << index) != 0 {
+                mask = mask.with(event);
+            }
+        }
+        assert_eq!(mask.has_multiple(), bits.count_ones() > 1);
+    }
+}

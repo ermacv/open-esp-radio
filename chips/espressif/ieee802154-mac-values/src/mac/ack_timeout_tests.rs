@@ -45,3 +45,12 @@ fn timeout_boundaries_and_complete_field_domain_are_honest() {
         );
     }
 }
+
+#[test]
+fn rounding_addition_overflow_returns_the_original_timeout_request() {
+    for microseconds in (u32::MAX - 14)..=u32::MAX {
+        let error = Ieee802154AckTimeout::from_microseconds(microseconds)
+            .expect_err("rounding overflow must reject without a panic");
+        assert_eq!(error.attempted_microseconds(), microseconds);
+    }
+}
