@@ -1803,6 +1803,7 @@ dependencies = [
  "ccm",
  "oer-bluetooth-le-radio",
  "oer-radio-regulatory",
+ "oer-wire",
  "zeroize",
 ]
 

@@ -83,14 +83,24 @@ impl LeDataLength {
     }
 
     /// The longest LE 1M payload this length allows, with or without a MIC.
-    pub const fn payload_octets(self, mic_octets: u16) -> u16 {
-        let by_time = (self.time_micros / 8).saturating_sub(10 + mic_octets);
-        if by_time < self.octets {
+    pub const fn payload_octets(self, mic_octets: u16) -> Result<u16, LeDataLengthError> {
+        let Some(overhead) = mic_octets.checked_add(10) else {
+            return Err(LeDataLengthError::MicLengthOverflow { mic_octets });
+        };
+        let by_time = (self.time_micros / 8).saturating_sub(overhead);
+        Ok(if by_time < self.octets {
             by_time
         } else {
             self.octets
-        }
+        })
     }
+}
+
+/// Invalid arithmetic input to a data length calculation.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum LeDataLengthError {
+    /// The MIC and fixed packet overhead do not fit the input's octet domain.
+    MicLengthOverflow { mic_octets: u16 },
 }
 
 /// The lengths of both directions of one connection end.
@@ -279,10 +289,17 @@ impl LeDataLengthProcedure {
     fn pdu(&self, opcode: u8) -> [u8; 9] {
         let mut pdu = [0; 9];
         pdu[0] = opcode;
-        pdu[1..].copy_from_slice(&self.local.wire());
+        for (slot, byte) in pdu.iter_mut().skip(1).zip(self.local.wire()) {
+            *slot = byte;
+        }
         pdu
     }
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::arithmetic_side_effects,
+    clippy::disallowed_macros,
+    clippy::disallowed_methods
+)]
 mod tests;

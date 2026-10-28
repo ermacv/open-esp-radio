@@ -707,3 +707,36 @@ fn connection_update_handles_same_event_past_instant_and_procedure_collisions() 
         Err(LePeripheralConnectionUpdateError::ProcedureAlreadyPending)
     );
 }
+
+#[test]
+fn sparse_channel_maps_remap_ranks_cyclically_without_selecting_unused_channels() {
+    for first in 0..37 {
+        for second in first + 1..37 {
+            let mut bytes = [0; 5];
+            bytes[first / 8] |= 1 << (first % 8);
+            bytes[second / 8] |= 1 << (second % 8);
+            let map = LeDataChannelMap::new(bytes).unwrap();
+            assert_eq!(map.wire_bytes(), bytes);
+            assert_eq!(map.used_channel_count(), 2);
+            for rank in 0..=u8::MAX {
+                let selected = map.remap(rank);
+                assert_eq!(
+                    usize::from(selected.get()),
+                    if rank % 2 == 0 { first } else { second }
+                );
+                assert!(map.contains(selected));
+            }
+        }
+    }
+}
+
+#[test]
+fn maximum_admitted_connection_timing_keeps_widened_arithmetic_exact() {
+    let timing = LeConnectionTiming::new(8, 3200, 3200, 0, 3200).unwrap();
+    assert_eq!(timing.interval_micros(), 4_000_000);
+    assert_eq!(timing.supervision_timeout_micros(), 32_000_000);
+    assert_eq!(timing.first_window_start_micros(), 4_001_250);
+    assert_eq!(timing.first_window_end_micros(), 4_011_250);
+    assert!(LeConnectionTiming::new(8, 3200, 3200, 499, 3200).is_err());
+    assert!(LeConnectionTiming::new(1, 0, 6, 499, 3200).is_ok());
+}

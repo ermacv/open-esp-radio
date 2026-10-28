@@ -107,3 +107,35 @@ fn malformed_or_trailing_pdu_input_fails_closed() {
         })
     );
 }
+
+#[test]
+fn every_owned_prefix_matches_its_borrowed_source_and_rejects_over_capacity() {
+    let source = [0x5a; LEGACY_ADVERTISING_DATA_CAPACITY + 1];
+    for length in 0..=LEGACY_ADVERTISING_DATA_CAPACITY {
+        let owned = LegacyAdvertisingData::new_owned(&source[..length]).unwrap();
+        assert_eq!(owned.as_bytes(), &source[..length]);
+        assert_eq!(owned.len(), length);
+        let borrowed = LegacyAdvertisingData::new(&source[..length]).unwrap();
+        let mut a = [0; LEGACY_ADVERTISING_PDU_CAPACITY];
+        let mut b = [0; LEGACY_ADVERTISING_PDU_CAPACITY];
+        let address = sample_advertisement(&[]).advertiser();
+        let owned = LegacyNonconnectableAdvertisement::new(
+            LegacyNonconnectableKind::NonScannable,
+            address,
+            owned,
+        );
+        let borrowed = LegacyNonconnectableAdvertisement::new(
+            LegacyNonconnectableKind::NonScannable,
+            address,
+            borrowed,
+        );
+        assert_eq!(owned.encode(&mut a), borrowed.encode(&mut b));
+        assert_eq!(a, b);
+    }
+    assert_eq!(
+        LegacyAdvertisingData::new_owned(&source),
+        Err(super::LegacyAdvertisingDataError::TooLong {
+            length: source.len()
+        })
+    );
+}

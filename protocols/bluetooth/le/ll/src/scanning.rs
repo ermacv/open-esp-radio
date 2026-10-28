@@ -3,6 +3,8 @@
 //! This module understands Bluetooth air-interface fields only. It contains no
 //! ESP32 descriptor layout, MMIO, HCI packet framing, executor, or allocator.
 
+use oer_wire::PrefixLength;
+
 use crate::{LeDeviceAddress, LeDeviceAddressKind};
 
 /// Largest legacy advertising data after the advertiser address.
@@ -41,7 +43,7 @@ pub struct LegacyAdvertisingReport {
     advertiser: LeDeviceAddress,
     directed_target: Option<LeDeviceAddress>,
     data: [u8; LEGACY_SCAN_DATA_CAPACITY],
-    data_len: u8,
+    data_len: PrefixLength<LEGACY_SCAN_DATA_CAPACITY>,
     channel: PrimaryScanChannel,
     rssi_dbm: i8,
 }
@@ -59,8 +61,8 @@ impl LegacyAdvertisingReport {
         self.directed_target
     }
 
-    pub const fn data(&self) -> &[u8] {
-        self.data.split_at(self.data_len as usize).0
+    pub fn data(&self) -> &[u8] {
+        self.data_len.borrow(&self.data)
     }
 
     pub const fn channel(&self) -> PrimaryScanChannel {
@@ -77,7 +79,7 @@ impl LegacyAdvertisingReport {
             advertiser: self.advertiser,
             directed_target: self.directed_target,
             data: self.data,
-            data_len: self.data_len,
+            data_len: self.data_len.get() as u8,
         }
     }
 }
@@ -98,21 +100,21 @@ pub const fn parse_legacy_advertising_report(
     channel: PrimaryScanChannel,
     rssi_dbm: i8,
 ) -> Result<LegacyAdvertisingReport, LegacyAdvertisingReportParseError> {
-    if pdu.len() < LEGACY_HEADER_BYTES {
+    let Some((header_bytes, payload)) = pdu.split_first_chunk::<LEGACY_HEADER_BYTES>() else {
         return Err(LegacyAdvertisingReportParseError::HeaderTruncated);
-    }
-    let payload_len = (pdu[1] & PAYLOAD_LENGTH_MASK) as usize;
+    };
+    let [header, length] = *header_bytes;
+    let payload_len = (length & PAYLOAD_LENGTH_MASK) as usize;
     if payload_len > MAX_LEGACY_PAYLOAD_BYTES {
         return Err(LegacyAdvertisingReportParseError::LegacyPayloadTooLong);
     }
-    if pdu.len() != LEGACY_HEADER_BYTES + payload_len {
+    if pdu.len() != LEGACY_HEADER_BYTES.saturating_add(payload_len) {
         return Err(LegacyAdvertisingReportParseError::DeclaredLengthMismatch);
     }
     if payload_len < DEVICE_ADDRESS_BYTES {
         return Err(LegacyAdvertisingReportParseError::AdvertiserAddressMissing);
     }
 
-    let header = pdu[0];
     let kind = match header & PDU_TYPE_MASK {
         0 => LegacyAdvertisingReportKind::ConnectableUndirected,
         1 => LegacyAdvertisingReportKind::ConnectableDirected,
@@ -129,8 +131,11 @@ pub const fn parse_legacy_advertising_report(
         return Err(LegacyAdvertisingReportParseError::DirectedAddressLengthInvalid);
     }
 
+    let Some((address, remaining)) = payload.split_first_chunk::<DEVICE_ADDRESS_BYTES>() else {
+        return Err(LegacyAdvertisingReportParseError::AdvertiserAddressMissing);
+    };
     let advertiser = LeDeviceAddress::from_wire_bytes(
-        copy_address(pdu, LEGACY_HEADER_BYTES),
+        *address,
         if header & TX_ADD_RANDOM == 0 {
             LeDeviceAddressKind::Public
         } else {
@@ -138,8 +143,11 @@ pub const fn parse_legacy_advertising_report(
         },
     );
     let directed_target = if matches!(kind, LegacyAdvertisingReportKind::ConnectableDirected) {
+        let Some(address) = remaining.first_chunk::<DEVICE_ADDRESS_BYTES>() else {
+            return Err(LegacyAdvertisingReportParseError::DirectedAddressLengthInvalid);
+        };
         Some(LeDeviceAddress::from_wire_bytes(
-            copy_address(pdu, LEGACY_HEADER_BYTES + DEVICE_ADDRESS_BYTES),
+            *address,
             if header & RX_ADD_RANDOM == 0 {
                 LeDeviceAddressKind::Public
             } else {
@@ -149,38 +157,34 @@ pub const fn parse_legacy_advertising_report(
     } else {
         None
     };
-    let data_start = LEGACY_HEADER_BYTES + DEVICE_ADDRESS_BYTES;
-    let data_len = if directed_target.is_some() {
-        0
+    let source = if directed_target.is_some() {
+        &[]
     } else {
-        pdu.len() - data_start
+        remaining
+    };
+    let Some(data_len) = PrefixLength::new(source.len()) else {
+        return Err(LegacyAdvertisingReportParseError::LegacyPayloadTooLong);
     };
     let mut data = [0; LEGACY_SCAN_DATA_CAPACITY];
-    let mut index = 0;
-    while index < data_len {
-        data[index] = pdu[data_start + index];
-        index += 1;
+    let mut source = source;
+    let mut destination = data.as_mut_slice();
+    while let Some((byte, rest)) = source.split_first() {
+        let Some((slot, tail)) = destination.split_first_mut() else {
+            return Err(LegacyAdvertisingReportParseError::LegacyPayloadTooLong);
+        };
+        *slot = *byte;
+        source = rest;
+        destination = tail;
     }
     Ok(LegacyAdvertisingReport {
         kind,
         advertiser,
         directed_target,
         data,
-        data_len: data_len as u8,
+        data_len,
         channel,
         rssi_dbm,
     })
-}
-
-const fn copy_address(pdu: &[u8], start: usize) -> [u8; DEVICE_ADDRESS_BYTES] {
-    [
-        pdu[start],
-        pdu[start + 1],
-        pdu[start + 2],
-        pdu[start + 3],
-        pdu[start + 4],
-        pdu[start + 5],
-    ]
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -196,14 +200,12 @@ struct LegacyAdvertisingDuplicateIdentity {
 /// not affect identity; changed advertising data does.
 pub struct LegacyAdvertisingDuplicateFilter<const CAPACITY: usize> {
     entries: [Option<LegacyAdvertisingDuplicateIdentity>; CAPACITY],
-    replacement: usize,
 }
 
 impl<const CAPACITY: usize> LegacyAdvertisingDuplicateFilter<CAPACITY> {
     pub const fn new() -> Self {
         Self {
             entries: [None; CAPACITY],
-            replacement: 0,
         }
     }
 
@@ -218,16 +220,17 @@ impl<const CAPACITY: usize> LegacyAdvertisingDuplicateFilter<CAPACITY> {
         {
             return false;
         }
-        if CAPACITY != 0 {
-            self.entries[self.replacement] = Some(identity);
-            self.replacement = (self.replacement + 1) % CAPACITY;
+        // Newest first, oldest last: the same FIFO eviction without a cursor
+        // whose range or wrap must be checked. A zero-capacity cache stores nothing.
+        let mut next = Some(identity);
+        for slot in &mut self.entries {
+            core::mem::swap(slot, &mut next);
         }
         true
     }
 
     pub fn clear(&mut self) {
         self.entries.fill(None);
-        self.replacement = 0;
     }
 }
 
@@ -238,4 +241,9 @@ impl<const CAPACITY: usize> Default for LegacyAdvertisingDuplicateFilter<CAPACIT
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::arithmetic_side_effects,
+    clippy::disallowed_macros,
+    clippy::disallowed_methods
+)]
 mod tests;

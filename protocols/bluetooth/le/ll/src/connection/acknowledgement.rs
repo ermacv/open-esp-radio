@@ -275,4 +275,9 @@ impl Acknowledgement {
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::arithmetic_side_effects,
+    clippy::disallowed_macros,
+    clippy::disallowed_methods
+)]
 mod tests;
