@@ -36,18 +36,42 @@ pub struct ImageKeySet<'a> {
     keys: &'a [Key],
 }
 
-impl<'a> ImageKeySet<'a> {
-    /// `keys` must come from [`sorted_keys`].
-    pub const fn new(keys: &'a [Key]) -> Self {
-        let mut index = 1;
-        while index < keys.len() {
-            assert!(
-                keys[index - 1].to_u64() < keys[index].to_u64(),
-                "capability keys must be sorted and distinct"
-            );
-            index += 1;
+/// Invalid capability-set input. No keys are discarded or reordered by validation.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ImageKeySetError {
+    /// The wire count cannot represent this set.
+    Length { length: usize },
+    /// Adjacent keys are not strictly ascending.
+    Order { previous: Key, current: Key },
+}
+
+impl<'a> From<&'a crate::feature_keys::ImageKeys> for ImageKeySet<'a> {
+    fn from(keys: &'a crate::feature_keys::ImageKeys) -> Self {
+        Self {
+            keys: keys.as_slice(),
         }
-        Self { keys }
+    }
+}
+
+impl<'a> ImageKeySet<'a> {
+    /// Validates the strictly ascending keys and their representable wire count.
+    pub const fn new(keys: &'a [Key]) -> Result<Self, ImageKeySetError> {
+        if keys.len() > u16::MAX as usize {
+            return Err(ImageKeySetError::Length { length: keys.len() });
+        }
+        let mut remaining = keys;
+        while let Some((previous, rest)) = remaining.split_first() {
+            if let Some((current, _)) = rest.split_first()
+                && previous.to_u64() >= current.to_u64()
+            {
+                return Err(ImageKeySetError::Order {
+                    previous: *previous,
+                    current: *current,
+                });
+            }
+            remaining = rest;
+        }
+        Ok(Self { keys })
     }
 
     pub fn contains(&self, key: crate::Key) -> bool {
@@ -64,13 +88,23 @@ impl<'a> ImageKeySet<'a> {
     }
 
     pub fn page(&self, first: u16) -> ImageKeyPage {
-        let start = usize::from(first).min(self.keys.len());
-        let end = (start + IMAGE_KEYS_PER_PAGE).min(self.keys.len());
+        let length = self
+            .keys
+            .len()
+            .saturating_sub(usize::from(first))
+            .min(IMAGE_KEYS_PER_PAGE);
+        let mut keys = heapless::Vec::from_array([Key([0; 8]); IMAGE_KEYS_PER_PAGE]);
+        for (slot, key) in keys
+            .iter_mut()
+            .zip(self.keys.iter().skip(usize::from(first)))
+        {
+            *slot = *key;
+        }
+        keys.truncate(length);
         ImageKeyPage {
             first,
             total: self.keys.len() as u16,
-            keys: heapless::Vec::from_slice(&self.keys[start..end])
-                .expect("a page holds at most its capacity"),
+            keys,
         }
     }
 }
@@ -87,16 +121,65 @@ pub fn digest(keys: &[Key]) -> u64 {
 
 /// `keys` in the ascending order [`ImageKeySet`] requires, at compile time.
 pub const fn sorted_keys<const N: usize>(mut keys: [Key; N]) -> [Key; N] {
-    let mut index = 1;
-    while index < N {
-        let mut at = index;
-        while at > 0 && keys[at - 1].to_u64() > keys[at].to_u64() {
-            let swap = keys[at - 1];
-            keys[at - 1] = keys[at];
-            keys[at] = swap;
-            at -= 1;
+    let mut remaining = keys.as_mut_slice();
+    while let Some((first, rest)) = remaining.split_first_mut() {
+        let mut candidates = &mut *rest;
+        while let Some((candidate, tail)) = candidates.split_first_mut() {
+            if first.to_u64() > candidate.to_u64() {
+                core::mem::swap(first, candidate);
+            }
+            candidates = tail;
         }
-        index += 1;
+        remaining = rest;
     }
     keys
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rejects_unsorted_and_duplicate_keys_without_losing_observations() {
+        for keys in [[Key([2; 8]), Key([1; 8])], [Key([1; 8]); 2]] {
+            assert_eq!(
+                ImageKeySet::new(&keys).unwrap_err(),
+                ImageKeySetError::Order {
+                    previous: keys[0],
+                    current: keys[1]
+                }
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_counts_that_the_wire_cannot_represent() {
+        let keys = [Key([0; 8]); u16::MAX as usize + 1];
+        assert_eq!(
+            ImageKeySet::new(&keys).unwrap_err(),
+            ImageKeySetError::Length { length: keys.len() }
+        );
+    }
+
+    #[test]
+    fn sorting_retains_duplicate_keys_and_empty_and_singleton_inputs() {
+        assert_eq!(sorted_keys([]), []);
+        assert_eq!(sorted_keys([Key([1; 8])]), [Key([1; 8])]);
+        assert_eq!(
+            sorted_keys([Key([3; 8]), Key([1; 8]), Key([3; 8]), Key([2; 8])]),
+            [Key([1; 8]), Key([2; 8]), Key([3; 8]), Key([3; 8])]
+        );
+    }
+
+    #[test]
+    fn page_beyond_the_set_keeps_its_requested_first_and_is_empty() {
+        let keys = sorted_keys([Key([2; 8]), Key([1; 8])]);
+        let set = ImageKeySet::new(&keys).unwrap();
+        for first in [2, 3, u16::MAX] {
+            let page = set.page(first);
+            assert_eq!((page.first, page.total), (first, 2));
+            assert!(page.keys.is_empty());
+        }
+        assert!(ImageKeySet::new(&[]).unwrap().page(0).keys.is_empty());
+    }
 }

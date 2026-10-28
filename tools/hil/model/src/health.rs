@@ -104,7 +104,10 @@ impl Snapshot {
             || finished.identity.observation != started.observation
             || finished.identity.epoch == 0
             || window.finished_micros < window.started_micros
-            || finished.counts.total() > usize::from(started.capacity)
+            || finished
+                .counts
+                .total()
+                .is_none_or(|total| total > usize::from(started.capacity))
             || counters.len() != usize::from(finished.counts.counters)
             || signals.len() != usize::from(finished.counts.signals)
             || tracking.len() != usize::from(finished.counts.tracking)

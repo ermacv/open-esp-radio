@@ -17,7 +17,14 @@ pub const FRAMING_VERSION: u8 = 2;
 /// magic 4, framing 1, kind 1, boot 8, sequence 4, session 8, request 4,
 /// key 8, payload length 2.
 pub const WIRE_HEADER_BYTES: usize = 40;
+const _: () = {
+    if WIRE_HEADER_BYTES != 4 + 1 + 1 + 8 + 4 + 8 + 4 + 8 + 2 {
+        panic!("the header must hold every fixed-width field");
+    }
+};
+#[cfg(test)]
 const KEY_RANGE: core::ops::Range<usize> = 30..38;
+#[cfg(test)]
 const LENGTH_RANGE: core::ops::Range<usize> = 38..40;
 const CHECKSUM_BYTES: usize = size_of::<u32>();
 const MAX_RAW_FRAME_BYTES: usize = WIRE_HEADER_BYTES + MAX_POSTCARD_BYTES + CHECKSUM_BYTES;
@@ -131,7 +138,9 @@ impl FrameEncoder {
     pub fn encode<M: Message>(&mut self, message: &Envelope<M>) -> Result<&[u8], EncodeError> {
         let payload_length = postcard::to_slice(
             &message.body,
-            &mut self.raw[WIRE_HEADER_BYTES..WIRE_HEADER_BYTES + MAX_POSTCARD_BYTES],
+            self.raw
+                .get_mut(WIRE_HEADER_BYTES..WIRE_HEADER_BYTES + MAX_POSTCARD_BYTES)
+                .ok_or(EncodeError::Serialize)?,
         )
         .map_err(|_| EncodeError::Serialize)?
         .len();
@@ -154,8 +163,16 @@ impl FrameEncoder {
         message: &Outbound,
     ) -> Result<&[u8], EncodeError> {
         let payload_length = message.payload.len();
-        self.raw[WIRE_HEADER_BYTES..WIRE_HEADER_BYTES + payload_length]
-            .copy_from_slice(&message.payload);
+        let end = WIRE_HEADER_BYTES
+            .checked_add(payload_length)
+            .ok_or(EncodeError::Serialize)?;
+        let destination = self
+            .raw
+            .get_mut(WIRE_HEADER_BYTES..end)
+            .ok_or(EncodeError::Serialize)?;
+        for (byte, source) in destination.iter_mut().zip(&message.payload) {
+            *byte = *source;
+        }
         let header = Header {
             kind: message.kind,
             key: message.key,
@@ -169,35 +186,64 @@ impl FrameEncoder {
 
     /// Completes the frame whose payload `raw` already holds.
     fn frame(&mut self, header: &Header, payload_length: usize) -> Result<&[u8], EncodeError> {
-        self.raw[..4].copy_from_slice(&WIRE_MAGIC);
-        self.raw[4] = FRAMING_VERSION;
-        self.raw[5] = header.kind as u8;
-        self.raw[6..14].copy_from_slice(&header.boot_id.to_le_bytes());
-        self.raw[14..18].copy_from_slice(&header.message_sequence.to_le_bytes());
-        self.raw[18..26].copy_from_slice(&header.session_id.to_le_bytes());
-        self.raw[26..30].copy_from_slice(&header.request_id.to_le_bytes());
-        self.raw[KEY_RANGE].copy_from_slice(&header.key.0);
-        self.raw[LENGTH_RANGE].copy_from_slice(
-            &u16::try_from(payload_length)
-                .map_err(|_| EncodeError::Serialize)?
-                .to_le_bytes(),
-        );
-        let protected_length = WIRE_HEADER_BYTES + payload_length;
-        let checksum = CRC32C.checksum(&self.raw[..protected_length]);
-        self.raw[protected_length..protected_length + CHECKSUM_BYTES]
-            .copy_from_slice(&checksum.to_le_bytes());
+        let payload_length_u16 =
+            u16::try_from(payload_length).map_err(|_| EncodeError::Serialize)?;
+        let boot = header.boot_id.to_le_bytes();
+        let sequence = header.message_sequence.to_le_bytes();
+        let session = header.session_id.to_le_bytes();
+        let request = header.request_id.to_le_bytes();
+        let length = payload_length_u16.to_le_bytes();
+        let fields = [
+            WIRE_MAGIC.as_slice(),
+            &[FRAMING_VERSION, header.kind as u8],
+            &boot,
+            &sequence,
+            &session,
+            &request,
+            &header.key.0,
+            &length,
+        ];
+        let destination = self
+            .raw
+            .first_chunk_mut::<WIRE_HEADER_BYTES>()
+            .ok_or(EncodeError::Serialize)?;
+        for (byte, source) in destination.iter_mut().zip(fields.into_iter().flatten()) {
+            *byte = *source;
+        }
+        let protected_length = WIRE_HEADER_BYTES
+            .checked_add(payload_length)
+            .ok_or(EncodeError::Serialize)?;
+        let raw_length = protected_length
+            .checked_add(CHECKSUM_BYTES)
+            .ok_or(EncodeError::Serialize)?;
+        let protected = self
+            .raw
+            .get(..protected_length)
+            .ok_or(EncodeError::Serialize)?;
+        let checksum = CRC32C.checksum(protected).to_le_bytes();
+        let checksum_bytes = self
+            .raw
+            .get_mut(protected_length..raw_length)
+            .and_then(<[u8]>::first_chunk_mut::<CHECKSUM_BYTES>)
+            .ok_or(EncodeError::Serialize)?;
+        *checksum_bytes = checksum;
 
         // Two leading delimiters recover even when arbitrary pre-protocol
         // binary output contained a zero and made the decoder enter a false
         // frame. In the normal case both simply keep it armed for a body.
-        self.wire[0] = 0;
-        self.wire[1] = 0;
-        let encoded_length = cobs::encode(
-            &self.raw[..protected_length + CHECKSUM_BYTES],
-            &mut self.wire[2..2 + MAX_COBS_FRAME_BYTES],
-        );
-        self.wire[2 + encoded_length] = 0;
-        Ok(&self.wire[..encoded_length + 3])
+        let [first, second, body @ ..] = &mut self.wire;
+        *first = 0;
+        *second = 0;
+        let encoded = body
+            .first_chunk_mut::<MAX_COBS_FRAME_BYTES>()
+            .ok_or(EncodeError::Serialize)?;
+        let raw = self.raw.get(..raw_length).ok_or(EncodeError::Serialize)?;
+        let encoded_length = cobs::try_encode(raw, encoded).map_err(|_| EncodeError::Serialize)?;
+        *body.get_mut(encoded_length).ok_or(EncodeError::Serialize)? = 0;
+        let wire_length = encoded_length
+            .checked_add(3)
+            .ok_or(EncodeError::Serialize)?;
+        self.wire.get(..wire_length).ok_or(EncodeError::Serialize)
     }
 }
 
@@ -244,10 +290,7 @@ impl Outbound {
         request_id: u32,
         body: &M,
     ) -> Result<Self, EncodeError> {
-        let mut payload = heapless::Vec::new();
-        payload
-            .resize_default(MAX_POSTCARD_BYTES)
-            .expect("the buffer holds its capacity");
+        let mut payload = heapless::Vec::from_array([0; MAX_POSTCARD_BYTES]);
         let length = postcard::to_slice(body, &mut payload)
             .map_err(|_| EncodeError::Serialize)?
             .len();
@@ -362,27 +405,35 @@ impl FrameDecoder {
                     Ok(frame) => receive(Ok(frame)),
                     Err(error) => receive(Err(error)),
                 }
-                self.encoded[..length].zeroize();
+                self.encoded.zeroize();
                 continue;
             }
 
             if self.discard_until_delimiter || !self.inside_frame {
                 continue;
             }
-            if self.length == self.encoded.len() {
+            if let Some((slot, next_length)) = self
+                .encoded
+                .get_mut(self.length)
+                .zip(self.length.checked_add(1))
+            {
+                *slot = byte;
+                self.length = next_length;
+            } else {
                 self.counters.overflows = self.counters.overflows.saturating_add(1);
-                self.encoded[..self.length].zeroize();
+                self.encoded.zeroize();
                 self.discard_until_delimiter = true;
                 self.length = 0;
-                continue;
             }
-            self.encoded[self.length] = byte;
-            self.length += 1;
         }
     }
 
     fn decode(&mut self, kind: WireKind, length: usize) -> Result<Frame<'_>, DecodeError> {
-        let decoded_length = cobs::decode_in_place(&mut self.encoded[..length]).map_err(|_| {
+        let encoded = self
+            .encoded
+            .get_mut(..length)
+            .ok_or(DecodeError::TooShort)?;
+        let decoded_length = cobs::decode_in_place(encoded).map_err(|_| {
             self.counters.cobs_errors = self.counters.cobs_errors.saturating_add(1);
             DecodeError::Cobs
         })?;
@@ -390,66 +441,68 @@ impl FrameDecoder {
             self.counters.too_short = self.counters.too_short.saturating_add(1);
             return Err(DecodeError::TooShort);
         }
-        if self.encoded[..4] != WIRE_MAGIC {
+        let decoded = encoded.get(..decoded_length).ok_or(DecodeError::Cobs)?;
+        let mut remaining = decoded;
+        if take::<4>(&mut remaining)? != WIRE_MAGIC {
             self.counters.header_errors = self.counters.header_errors.saturating_add(1);
             return Err(DecodeError::Magic);
         }
-        if self.encoded[4] != FRAMING_VERSION {
+        let [version] = take(&mut remaining)?;
+        if version != FRAMING_VERSION {
             self.counters.framing_version_errors =
                 self.counters.framing_version_errors.saturating_add(1);
             return Err(DecodeError::FramingVersion);
         }
-        if self.encoded[5] != kind as u8 {
+        let [direction] = take(&mut remaining)?;
+        if direction != kind as u8 {
             self.counters.message_kind_errors = self.counters.message_kind_errors.saturating_add(1);
             return Err(DecodeError::MessageKind);
         }
-        let payload_length = usize::from(u16::from_le_bytes(
-            self.encoded[LENGTH_RANGE]
-                .try_into()
-                .expect("header range is fixed"),
-        ));
-        let protected_length = WIRE_HEADER_BYTES + payload_length;
-        if protected_length + CHECKSUM_BYTES != decoded_length {
+        let boot_id = u64::from_le_bytes(take(&mut remaining)?);
+        let message_sequence = u32::from_le_bytes(take(&mut remaining)?);
+        let session_id = u64::from_le_bytes(take(&mut remaining)?);
+        let request_id = u32::from_le_bytes(take(&mut remaining)?);
+        let key = Key(take(&mut remaining)?);
+        let payload_length = usize::from(u16::from_le_bytes(take(&mut remaining)?));
+        let Some((payload, checksum)) = remaining.split_at_checked(payload_length) else {
             self.counters.payload_length_errors =
                 self.counters.payload_length_errors.saturating_add(1);
             return Err(DecodeError::PayloadLength);
-        }
-        let expected = u32::from_le_bytes(
-            self.encoded[protected_length..decoded_length]
-                .try_into()
-                .expect("checksum length is fixed"),
-        );
-        if CRC32C.checksum(&self.encoded[..protected_length]) != expected {
+        };
+        let Ok(checksum) = <[u8; CHECKSUM_BYTES]>::try_from(checksum) else {
+            self.counters.payload_length_errors =
+                self.counters.payload_length_errors.saturating_add(1);
+            return Err(DecodeError::PayloadLength);
+        };
+        let protected_length = WIRE_HEADER_BYTES
+            .checked_add(payload_length)
+            .ok_or(DecodeError::PayloadLength)?;
+        let protected = decoded
+            .get(..protected_length)
+            .ok_or(DecodeError::PayloadLength)?;
+        if CRC32C.checksum(protected) != u32::from_le_bytes(checksum) {
             self.counters.checksum_errors = self.counters.checksum_errors.saturating_add(1);
             return Err(DecodeError::Checksum);
         }
         self.counters.frames = self.counters.frames.saturating_add(1);
-        let field = |range: core::ops::Range<usize>| &self.encoded[range];
-        let u64_at = |at: usize| {
-            u64::from_le_bytes(
-                field(at..at + 8)
-                    .try_into()
-                    .expect("header fields are fixed"),
-            )
-        };
-        let u32_at = |at: usize| {
-            u32::from_le_bytes(
-                field(at..at + 4)
-                    .try_into()
-                    .expect("header fields are fixed"),
-            )
-        };
         Ok(Frame {
-            boot_id: u64_at(6),
-            message_sequence: u32_at(14),
-            session_id: u64_at(18),
-            request_id: u32_at(26),
-            key: Key(field(KEY_RANGE)
-                .try_into()
-                .expect("header fields are fixed")),
-            payload: &self.encoded[WIRE_HEADER_BYTES..protected_length],
+            boot_id,
+            message_sequence,
+            session_id,
+            request_id,
+            key,
+            payload,
         })
     }
+}
+
+/// Consumes an entire fixed-width field, retaining its width in the type.
+fn take<const N: usize>(remaining: &mut &[u8]) -> Result<[u8; N], DecodeError> {
+    let (field, rest) = remaining
+        .split_first_chunk::<N>()
+        .ok_or(DecodeError::TooShort)?;
+    *remaining = rest;
+    Ok(*field)
 }
 
 /// One intact frame: its header and its still encoded payload. The key

@@ -88,7 +88,9 @@ impl UdpSessionPayloadIdentity {
         let Some(bytes) = payload.get_mut(4..12) else {
             return false;
         };
-        bytes.copy_from_slice(&self.0.to_be_bytes());
+        for (byte, value) in bytes.iter_mut().zip(self.0.to_be_bytes()) {
+            *byte = value;
+        }
         true
     }
 
@@ -172,7 +174,8 @@ pub struct SessionConfig {
 
 impl SessionConfig {
     pub const fn primary_flow(self) -> Option<SessionFlowConfig> {
-        self.flows[0]
+        let [first, ..] = self.flows;
+        first
     }
 
     pub fn active_flow_count(self) -> usize {
@@ -186,7 +189,7 @@ impl SessionConfig {
     /// rules as embedded admission.
     pub fn structurally_valid(self, maximum_payload_bytes: u16, udp_multi_flow: bool) -> bool {
         let flow_count = self.active_flow_count();
-        if flow_count == 0 || self.flows[0].is_none() {
+        if flow_count == 0 || self.primary_flow().is_none() {
             return false;
         }
         let mut saw_empty = false;
@@ -211,25 +214,15 @@ impl SessionConfig {
                     .pacing_group_datagrams
                     .is_none_or(|datagrams| datagrams != 0 && flow.offered_rate_bps.is_some())
         };
-        let identities_valid = self
-            .flows
-            .iter()
-            .flatten()
-            .enumerate()
-            .all(|(index, flow)| {
-                self.flows[..index]
-                    .iter()
-                    .flatten()
-                    .all(|earlier| earlier.flow_id != flow.flow_id)
-                    && flow.peer.is_none_or(|peer| {
-                        peer.port != 0
-                            && self.flows[..index]
-                                .iter()
-                                .flatten()
-                                .filter_map(|earlier| earlier.peer)
-                                .all(|earlier| earlier != peer)
-                    })
-            });
+        let mut remaining = self.flows.iter().flatten();
+        let mut identities_valid = true;
+        while let Some(flow) = remaining.next() {
+            identities_valid &= flow.peer.is_none_or(|peer| peer.port != 0)
+                && remaining.clone().all(|other| {
+                    other.flow_id != flow.flow_id
+                        && (flow.peer.is_none() || other.peer != flow.peer)
+                });
+        }
         let pacing_valid = self.flows.iter().flatten().all(|flow| {
             flow.target_rx
                 .is_none_or(|rx| rx.pacing_group_datagrams.is_none())

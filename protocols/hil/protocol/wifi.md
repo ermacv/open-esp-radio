@@ -204,3 +204,18 @@ prove that the peer failed to receive an MPDU. They are neither UDP sequence
 accounting nor a radio-drain barrier. The host retains them independently in
 `station-tx-terminal.json`; aggregate publication/completion counters retain
 their earlier per-publication meanings.
+
+## Credential storage
+
+Credential lengths are private bounded array variants. Each variant owns its
+exact-length active prefix and its entire inactive tail; `ssid()` and
+`passphrase()` borrow their prefix without indexing or further bounds checks.
+Creation and binary decoding reject invalid lengths with
+`NetworkCredentialsError`. A cleared owner is not a valid new station request.
+
+The wire remains the complete 32-byte SSID array, its one-byte logical length,
+and the bounded passphrase sequence. Inactive SSID bytes survive a decode and
+encode unchanged. The wire schema is independent of the in-memory variants.
+Explicit erasure zeroizes both arrays of the active variant before replacing
+it with the empty variant. Clearing a passphrase preserves every SSID byte;
+erasing or dropping the credential owner zeroizes both complete stores.

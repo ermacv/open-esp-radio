@@ -6,8 +6,11 @@
     clippy::todo,
     clippy::unimplemented,
     clippy::indexing_slicing,
-    clippy::arithmetic_side_effects
+    clippy::arithmetic_side_effects,
+    clippy::disallowed_macros,
+    clippy::disallowed_methods
 )]
+#![cfg_attr(test, allow(clippy::disallowed_macros, clippy::disallowed_methods))]
 //! The header every HIL conformance trace starts with.
 //!
 //! A port's conformance crate owns its bounds as a type (`struct Bounds`
@@ -76,6 +79,8 @@ pub enum RunHeaderError {
     Generation { case: usize },
     /// A restarting case went back to an older generation.
     GenerationBack { case: usize },
+    /// An input iterator has more cases than a case index can represent.
+    CaseIndexOverflow,
 }
 
 /// Checks the headers of one run's cases, in order: one set of bounds and
@@ -84,12 +89,20 @@ pub enum RunHeaderError {
 pub fn check_run<'a, B: PartialEq + 'a>(
     cases: impl IntoIterator<Item = (&'a TraceHeader<B>, Restart)>,
 ) -> Result<(), RunHeaderError> {
-    let mut cases = cases.into_iter().enumerate();
-    let Some((_, (first, _))) = cases.next() else {
+    check_run_indices(cases, 1..=usize::MAX)
+}
+
+fn check_run_indices<'a, B: PartialEq + 'a>(
+    cases: impl IntoIterator<Item = (&'a TraceHeader<B>, Restart)>,
+    mut indices: core::ops::RangeInclusive<usize>,
+) -> Result<(), RunHeaderError> {
+    let mut cases = cases.into_iter();
+    let Some((first, _)) = cases.next() else {
         return Err(RunHeaderError::NoTrace);
     };
     let mut generation = first.clock.generation;
-    for (case, (header, restart)) in cases {
+    for (header, restart) in cases {
+        let case = indices.next().ok_or(RunHeaderError::CaseIndexOverflow)?;
         if header.bounds != first.bounds {
             return Err(RunHeaderError::Bounds { case });
         }
@@ -118,6 +131,33 @@ mod tests {
             bounds: bound,
             clock: ClockDomain { clock, generation },
         }
+    }
+
+    #[test]
+    fn an_exhausted_case_index_is_an_error_and_the_last_index_is_valid() {
+        let a = header(800, Clock::Model, 3);
+        assert_eq!(
+            check_run_indices(
+                [(&a, Restart::No), (&a, Restart::No)],
+                usize::MAX..=usize::MAX
+            ),
+            Ok(())
+        );
+        assert_eq!(
+            check_run_indices(
+                [(&a, Restart::No), (&a, Restart::No), (&a, Restart::No)],
+                usize::MAX..=usize::MAX
+            ),
+            Err(RunHeaderError::CaseIndexOverflow)
+        );
+        let different = header(900, Clock::Model, 3);
+        assert_eq!(
+            check_run_indices(
+                [(&a, Restart::No), (&different, Restart::No)],
+                usize::MAX..=usize::MAX
+            ),
+            Err(RunHeaderError::Bounds { case: usize::MAX })
+        );
     }
 
     #[test]

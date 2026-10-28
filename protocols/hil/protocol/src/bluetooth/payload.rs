@@ -22,16 +22,19 @@ pub const fn bluetooth_peripheral_acl_payload_for_sequence(
     sequence: u8,
 ) -> [u8; BLUETOOTH_PERIPHERAL_ACL_PAYLOAD_BYTES] {
     let mut payload = [0; BLUETOOTH_PERIPHERAL_ACL_PAYLOAD_BYTES];
-    let l2cap_payload = (BLUETOOTH_PERIPHERAL_ACL_PAYLOAD_BYTES - 4) as u16;
-    let length = l2cap_payload.to_le_bytes();
-    payload[0] = length[0];
-    payload[1] = length[1];
-    payload[2] = 0xff;
-    payload[3] = 0xff;
-    let mut index = 4;
-    while index < payload.len() {
-        payload[index] = (((index as u16 * 73 + 19) & 0xff) as u8) ^ sequence;
-        index += 1;
+    const L2CAP_PAYLOAD: u16 = (BLUETOOTH_PERIPHERAL_ACL_PAYLOAD_BYTES - 4) as u16;
+    let [length_low, length_high] = L2CAP_PAYLOAD.to_le_bytes();
+    let [low, high, cid_low, cid_high, tail @ ..] = &mut payload;
+    *low = length_low;
+    *high = length_high;
+    *cid_low = 0xff;
+    *cid_high = 0xff;
+    let mut remaining = tail.as_mut_slice();
+    let mut index = 4_u8;
+    while let Some((byte, rest)) = remaining.split_first_mut() {
+        *byte = index.wrapping_mul(73).wrapping_add(19) ^ sequence;
+        index = index.wrapping_add(1);
+        remaining = rest;
     }
     payload
 }
@@ -178,6 +181,17 @@ impl BluetoothDtmEvidence {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn sequenced_payload_preserves_every_byte_for_all_sequence_values() {
+        for sequence in 0..=u8::MAX {
+            let payload = bluetooth_peripheral_acl_payload_for_sequence(sequence);
+            assert_eq!(&payload[..4], &[247, 0, 255, 255]);
+            for (index, byte) in payload.iter().enumerate().skip(4) {
+                assert_eq!(*byte, ((index as u16 * 73 + 19) & 0xff) as u8 ^ sequence);
+            }
+        }
+    }
+
     #[test]
     fn removed_power_off_variant_is_not_decodable() {
         assert!(postcard::from_bytes::<BluetoothPeripheralTermination>(&[4]).is_err());

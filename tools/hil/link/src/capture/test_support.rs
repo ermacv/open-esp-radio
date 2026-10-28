@@ -37,6 +37,6 @@ pub fn hello(boot_id: u64, message_sequence: u32) -> Envelope<Hello> {
         message_sequence,
         0,
         0,
-        ImageKeySet::new(&capability_keys()).hello(1),
+        ImageKeySet::new(&capability_keys()).unwrap().hello(1),
     )
 }

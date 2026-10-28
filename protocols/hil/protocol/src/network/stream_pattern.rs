@@ -2,17 +2,17 @@
 
 const STREAM_PATTERN_PERIOD: usize = 256;
 
-const fn stream_pattern_period() -> [u8; STREAM_PATTERN_PERIOD] {
+const STREAM_PATTERN: [u8; STREAM_PATTERN_PERIOD] = {
     let mut pattern = [0; STREAM_PATTERN_PERIOD];
-    let mut index = 0;
-    while index < pattern.len() {
-        pattern[index] = stream_pattern_byte(index as u64);
-        index += 1;
+    let mut remaining = pattern.as_mut_slice();
+    let mut phase = 0_u8;
+    while let Some((byte, rest)) = remaining.split_first_mut() {
+        *byte = stream_pattern_byte(phase as u64);
+        phase = phase.wrapping_add(1);
+        remaining = rest;
     }
     pattern
-}
-
-const STREAM_PATTERN: [u8; STREAM_PATTERN_PERIOD] = stream_pattern_period();
+};
 
 /// Return the byte expected at one absolute stream offset.
 ///
@@ -25,28 +25,25 @@ pub const fn stream_pattern_byte(offset: u64) -> u8 {
 }
 
 pub fn fill_stream_pattern(buffer: &mut [u8], offset: u64) {
-    let mut written = 0;
-    let mut phase = offset as usize % STREAM_PATTERN_PERIOD;
-    while written < buffer.len() {
-        let length = (STREAM_PATTERN_PERIOD - phase).min(buffer.len() - written);
-        buffer[written..written + length].copy_from_slice(&STREAM_PATTERN[phase..phase + length]);
-        written += length;
-        phase = 0;
+    for (byte, expected) in buffer.iter_mut().zip(pattern_at(offset)) {
+        *byte = expected;
     }
 }
 
 pub fn stream_pattern_matches(buffer: &[u8], offset: u64) -> bool {
-    let mut compared = 0;
-    let mut phase = offset as usize % STREAM_PATTERN_PERIOD;
-    while compared < buffer.len() {
-        let length = (STREAM_PATTERN_PERIOD - phase).min(buffer.len() - compared);
-        if buffer[compared..compared + length] != STREAM_PATTERN[phase..phase + length] {
-            return false;
-        }
-        compared += length;
-        phase = 0;
-    }
-    true
+    buffer
+        .iter()
+        .copied()
+        .zip(pattern_at(offset))
+        .all(|(byte, expected)| byte == expected)
+}
+
+fn pattern_at(offset: u64) -> impl Iterator<Item = u8> {
+    STREAM_PATTERN
+        .iter()
+        .copied()
+        .cycle()
+        .skip(usize::from(offset as u8))
 }
 
 #[cfg(test)]

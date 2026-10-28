@@ -361,7 +361,7 @@ mod tests {
             .expect("window");
         let result = store.finish(identity, true).expect("freeze");
         assert_eq!(result.dropped, 1);
-        assert_eq!(result.counts.total(), MAX_RECORDS);
+        assert_eq!(result.counts.total(), Some(MAX_RECORDS));
         assert!(!result.complete());
         store.push(record()).unwrap();
         assert_eq!(
