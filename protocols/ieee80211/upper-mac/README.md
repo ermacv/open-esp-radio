@@ -16,7 +16,7 @@ plans and reports leave as values, and nothing waits.
 | `rate_control` | The first rate of a peer's MPDUs and A-MPDUs, one controller per peer (a station's access point, each station of an access point), learning from each exchange, starting from the `LinkMetric` (signal over the noise floor, required) of the frame that made the link | `RatePeer`, `TxReport` outcomes |
 | `rate_selection` | The retry plan of each frame an interface sends, by what it is for (`FrameRates`: probe, control, data), learning from each terminal and from the association with its peer; `RateSelection` is the seam a service drives, over the port's receive metadata and ACK evidence | `RatePeer`, `SingleOutcome` |
 | `protection` | RTS/CTS or CTS-to-self and the control-frame rate for each PPDU, as the port's `Protection`, with the BSS facts it reads (`BssProtection`, `BasicRates`) | `BssProtection`, dot11RTSThreshold, an `HeTxopRtsBudget` |
-| `block_ack` | What a `BlockAckReport` acknowledges, under both starting-sequence conventions; agreement negotiation and receive reordering | `BlockAckReport` |
+| `block_ack` | What a `BlockAckReport` acknowledges, under both starting-sequence conventions; agreement negotiation, an association's receive agreements and their reordering | `BlockAckReport`, received ADDBA, DELBA and BlockAckReq frames |
 | `management` | The attempt budget of a management frame: seven for unicast (dot11ShortRetryLimit), one for broadcast | a legacy rate |
 | `phy_mode` | The PHY mode of one association and the capability elements its request carries (`AssociationPhy`) | a `ScanRecord`, `AssociationCapabilities` |
 | `tx` | `TxPlanner`: the next `TxAttemptPlan` (rate, protection, power, coexistence, content and Retry bits) of an MPDU or A-MPDU exchange, and its `TxReport` | `TxRequest`, `PublicationReport`, `RadioInstant` |
@@ -110,15 +110,28 @@ The crate uses the canonical strict lint block.
 
 ## Protocol state
 
-`block_ack` owns session negotiation, the originator window and receive
-reordering. `ccmp` owns transmit PN allocation and receive replay frontiers;
+`block_ack` owns session negotiation, the originator window and the receive
+agreements: `recipient` negotiates one agreement (ADDBA parameters, typed
+refusals, inactivity and the reorder gap) and `banks` owns an association's
+agreements, their retained frames and the replies they owe. `banks` parses
+ADDBA, DELBA and the Compressed BlockAckReq and selects the QoS Data it
+reorders with the wire codecs; it calls the port only through the caller's
+`RxBlockAckPort` (install an agreement, end one, return a frame), which the
+runtime implements over its phase. A credit stays free to close a reorder
+gap, and a management Action whose reply would find no place waits retained. `ccmp` owns transmit PN allocation and receive replay frontiers;
 key material, headers and PN values are wire vocabulary. `duplicate` owns
 receive duplicate history, `fragmentation` bounded MSDU reassembly and its
 reassembly refusals (`OpenDataReassemblyError`, over the wire's frame
 refusals), and `receive` the replay commit boundary. `ccmp`'s
 `CcmpPacketNumberStep` is how far a key's transmit PN advances per MPDU.
 `qos` classifies outgoing Ethernet frames into user priorities and access
-categories and downgrades an access category under admission control. These owners accept decoded wire
+categories and downgrades an access category under admission control.
+`rate_selection::RateSelection::learn` routes a terminal's sample to the
+record of its frame class (probe, control, data), only for a current link's
+completion that carries one. `monitor` selects the frames a monitor keeps and
+the channels it visits, and revalidates a retained injection request; `vif`
+routes a received MPDU of a same-channel station and SoftAP pair to its
+interface from its public header fields. These owners accept decoded wire
 values and retain no executor, HAL or chip dependency.
 
 Each TX Block Ack session tracks delivery and expiry in two 64-bit masks,
@@ -150,8 +163,7 @@ caller's.
 aggregate retry state; `block_ack::batch` returns each retained MPDU exactly
 once. Its `next_completion` returns a typed `MissingCompletion` with the
 unchanged completing owner if a retained entry is absent; the caller keeps
-that owner and its remaining frames. `block_ack::banks` pools receive
-reorder state across interfaces. Reorder admission resolves the incoming
+that owner and its remaining frames. Reorder admission resolves the incoming
 frame's array position before any state changes and returns `InvalidPosition`
 with its position and capacity if that internal proof fails.
 The family rate controller selects rates above the backend. Protection

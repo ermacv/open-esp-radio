@@ -1,6 +1,7 @@
 //! Checked Ethernet-II storage at the network queue boundary.
 
 use oer_ieee80211_wire::data::{ETHERNET_HEADER_LEN, EthernetFrameParts};
+use oer_ieee80211_wire::qos::WmmUserPriority;
 
 /// Maximum Ethernet-II payload stored by one network queue slot.
 pub const MAX_ETHERNET_PAYLOAD_LEN: usize = 1500;
@@ -22,7 +23,7 @@ pub struct FrameTooLong {
 ///
 /// ```
 /// use oer_ieee80211_wire::data::EthernetFrameParts;
-/// use oer_ieee80211_runtime::station_service::EthernetFrame;
+/// use oer_ieee80211_sta::data::EthernetFrame;
 /// let parts = EthernetFrameParts {
 ///     destination: [0xff; 6], source: [2, 0, 0, 0, 0, 1],
 ///     ether_type: 0x0800, payload: &[1, 2, 3],
@@ -34,17 +35,17 @@ pub struct FrameTooLong {
 /// Test fixture parsing and serialization are absent from the product API:
 ///
 /// ```compile_fail,E0599
-/// use oer_ieee80211_runtime::station_service::EthernetFrame;
+/// use oer_ieee80211_sta::data::EthernetFrame;
 /// let frame = EthernetFrame::new(&[0; 14]);
 /// ```
 ///
 /// ```compile_fail,E0599
-/// use oer_ieee80211_runtime::station_service::EthernetFrame;
+/// use oer_ieee80211_sta::data::EthernetFrame;
 /// fn bytes(frame: &EthernetFrame) { let _bytes = frame.bytes(); }
 /// ```
 ///
 /// ```compile_fail,E0599
-/// use oer_ieee80211_runtime::station_service::EthernetFrame;
+/// use oer_ieee80211_sta::data::EthernetFrame;
 /// fn copy(frame: &EthernetFrame, output: &mut [u8]) {
 ///     let _copied = frame.copy_to(output);
 /// }
@@ -88,6 +89,14 @@ impl EthernetFrame {
     }
 }
 
+/// One checked, owned Ethernet frame with its user priority, as the network
+/// stack hands it to the station's data path.
+#[derive(Debug)]
+pub struct TxMsdu {
+    pub priority: WmmUserPriority,
+    pub frame: EthernetFrame,
+}
+
 /// A test's serialization destination cannot hold the complete frame.
 #[cfg(test)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -98,7 +107,7 @@ struct CopyError {
 
 #[cfg(test)]
 impl EthernetFrame {
-    pub(super) fn bytes(&self) -> impl Iterator<Item = u8> + '_ {
+    pub(crate) fn bytes(&self) -> impl Iterator<Item = u8> + '_ {
         self.header.iter().chain(self.payload.iter()).copied()
     }
 

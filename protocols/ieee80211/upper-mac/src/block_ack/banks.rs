@@ -1,200 +1,638 @@
-//! Receive reorder banks with caller-selected geometry and interface identity.
+//! The receive Block Ack agreements of one association: ADDBA negotiation,
+//! reorder, BlockAckReq, inactivity, DELBA and the replies they owe.
+//!
+//! The owner holds the integration's affine bank slots and retained-frame
+//! owners and decides every agreement edge. It never touches a port itself:
+//! each bank and frame transition is one call of the caller's
+//! [`RxBlockAckPort`], which carries it out. Retained frames are the port's
+//! receive owners; their payloads are never copied. A receive credit stays
+//! free to close a reorder hole.
 
-use super::{RxReorderBuffer, RxReorderError, RxReorderRelease};
-use oer_ieee80211_wire::sequence::SequenceNumber;
+use super::{
+    AddbaResponse, AddbaStatus, RxAddbaRequest, RxBlockAckNegotiation, RxBlockAckSession,
+    RxReorderMpdu, RxReorderRelease,
+};
+use oer_ieee80211_port::{
+    Ieee80211Capabilities, RxBuffer, RxCryptoStatus, RxEvidence, RxMetadata, SupportedBlockAck, Tid,
+};
+use oer_ieee80211_wire::{
+    address::Bssid,
+    block_ack::frame::{
+        ADDBA_ACTION_BODY_LEN, BlockAckAction, encode_delba, parse_compressed_block_ack_request,
+    },
+    frame::{DecodedHeader, QosControl},
+    sequence::{SequenceControl, SequenceNumber},
+    status::reason_code,
+};
+use oer_time::{Duration, Instant};
 
-/// Identity of one receive ordering space, independent of hardware registers.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct RxReorderIdentity<I> {
-    pub bank: u8,
-    pub interface: I,
-    pub peer: [u8; 6],
-    pub tid: u8,
+/// The most frames one agreement retains, and the most in-order releases
+/// waiting for delivery. The station's frame/token bank admits at most eight
+/// in flight; the image chooses the number of banks independently.
+pub const RX_BLOCK_ACK_WINDOW: usize = 8;
+const WINDOW: usize = RX_BLOCK_ACK_WINDOW;
+/// Encoded replies waiting for a control transmit credit.
+const PENDING: usize = 8;
+/// The Action subtype of a non-data frame.
+/// SOURCE: IEEE Std 802.11-2020, 9.2.4.1.3, Table 9-1 (Action is subtype 13).
+const ACTION_SUBTYPE: u16 = 13;
+
+/// The owners an integration lends the receive agreements.
+pub trait RxBlockAckTypes {
+    /// A free receive agreement slot of the port.
+    type Slot;
+    /// An agreement installed in a slot.
+    type Running;
+    /// A received MPDU's owner.
+    type Frame: RxBuffer;
+    /// Its receive metadata.
+    type Meta: RxMetadata;
 }
 
-/// The sequence window admitted by the receive agreement owner.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct RxReorderAgreement<I> {
-    pub identity: RxReorderIdentity<I>,
-    pub window: u16,
-    pub starting_sequence: SequenceNumber,
+/// The port calls that carry out the owner's decisions, in the order made.
+pub trait RxBlockAckPort<T: RxBlockAckTypes> {
+    /// The capabilities that bound an agreement's TID and window.
+    type Caps: Ieee80211Capabilities;
+    /// Install `agreement` in `slot`.
+    fn add(&mut self, slot: T::Slot, agreement: SupportedBlockAck<Self::Caps>) -> T::Running;
+    /// End `running`, returning its slot.
+    fn remove(&mut self, running: T::Running) -> T::Slot;
+    /// Return a retained frame's receive owner.
+    fn recycle(&mut self, frame: T::Frame);
 }
 
-impl<I: Copy> RxReorderAgreement<I> {
-    pub const fn identity(self) -> RxReorderIdentity<I> {
-        self.identity
-    }
+type Session<T> = RxBlockAckSession<<T as RxBlockAckTypes>::Running, WINDOW, WINDOW>;
+type Retained<T> = (<T as RxBlockAckTypes>::Frame, <T as RxBlockAckTypes>::Meta);
+
+struct Bank<T: RxBlockAckTypes> {
+    free: Option<T::Slot>,
+    active: Option<Session<T>>,
+    response: bool,
 }
 
-/// Receive agreement edges delivered to the independent reorder owner.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum RxReorderCommand<I> {
-    Start(RxReorderAgreement<I>),
-    Stop(RxReorderIdentity<I>),
-    StopInterface(I),
+struct Header<E> {
+    association: Option<(E, Bssid)>,
+    pending: heapless::Deque<[u8; ADDBA_ACTION_BODY_LEN], PENDING>,
+    ready: [u8; WINDOW],
+    ready_len: u8,
+    // Slot reuse must not reorder management CCMP packet numbers.
+    deferred: heapless::Deque<u8, WINDOW>,
+    failed: bool,
+    gap_timeout: Duration,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum RxReorderCommandError<I> {
-    Full(RxReorderCommand<I>),
+/// Placed backing selected by an image: `BANKS` agreement slots and `FRAMES`
+/// retained-frame owners of association identity `E`. Frame storage contains
+/// owners and metadata, never copies of MPDU payloads.
+pub struct RxBlockAckStorage<T: RxBlockAckTypes, E, const BANKS: usize, const FRAMES: usize> {
+    header: Header<E>,
+    banks: [Bank<T>; BANKS],
+    frames: [Option<Retained<T>>; FRAMES],
 }
 
-/// Role-neutral owner of a bounded set of software reorder sequence spaces.
-///
-/// Hardware-bank identity and its reorder state cannot be updated separately.
-/// Frame backing and gap timers deliberately remain outside this type because
-/// they belong to the executor/integration memory policy.
-pub struct RxReorderBanks<I: Copy + Eq, const BANKS: usize, const WINDOW: usize, const SLOTS: usize>
+impl<T: RxBlockAckTypes, E: Copy + Eq, const BANKS: usize, const FRAMES: usize>
+    RxBlockAckStorage<T, E, BANKS, FRAMES>
 {
-    identities: [Option<RxReorderIdentity<I>>; BANKS],
-    states: [Option<RxReorderBuffer<WINDOW, SLOTS>>; BANKS],
-}
-
-impl<I: Copy + Eq, const BANKS: usize, const WINDOW: usize, const SLOTS: usize>
-    RxReorderBanks<I, BANKS, WINDOW, SLOTS>
-{
-    pub const fn new() -> Self {
+    pub fn new(slots: [T::Slot; BANKS], gap_timeout: Duration) -> Self {
+        const {
+            if FRAMES == 0 || FRAMES > WINDOW {
+                panic!("RX storage must reserve one to eight existing frame credits");
+            }
+        }
         Self {
-            identities: [None; BANKS],
-            states: [const { None }; BANKS],
+            header: Header {
+                association: None,
+                pending: heapless::Deque::new(),
+                ready: [0; WINDOW],
+                ready_len: 0,
+                deferred: heapless::Deque::new(),
+                failed: false,
+                gap_timeout,
+            },
+            banks: slots.map(|slot| Bank {
+                free: Some(slot),
+                active: None,
+                response: false,
+            }),
+            frames: [const { None }; FRAMES],
         }
     }
 
-    #[inline(always)]
-    pub fn find(&self, interface: I, peer: [u8; 6], tid: u8) -> Option<usize> {
-        self.identities
-            .iter()
-            .enumerate()
-            .find_map(|(bank, identity)| {
-                identity
-                    .is_some_and(|identity| {
-                        identity.interface == interface
-                            && identity.peer == peer
-                            && identity.tid == tid
-                    })
-                    .then_some(bank)
-            })
+    pub fn view(&mut self) -> RxBlockAckView<'_, T, E> {
+        RxBlockAckView {
+            header: &mut self.header,
+            banks: &mut self.banks,
+            frames: &mut self.frames,
+        }
     }
 
-    pub fn identity(&self, bank: usize) -> Option<RxReorderIdentity<I>> {
-        self.identities.get(bank).copied().flatten()
+    /// Construct directly in the image's placed storage. The complete owner
+    /// is bounded by the image's explicit memory budget; no retained payload
+    /// allocation is constructed here.
+    pub fn init_in_place(
+        storage: &mut core::mem::MaybeUninit<Self>,
+        slots: [T::Slot; BANKS],
+        gap_timeout: Duration,
+    ) -> &mut Self {
+        storage.write(Self::new(slots, gap_timeout))
+    }
+}
+
+/// The loans a service carries, including through stop and restart.
+pub struct RxBlockAckView<'a, T: RxBlockAckTypes, E> {
+    header: &'a mut Header<E>,
+    banks: &'a mut [Bank<T>],
+    frames: &'a mut [Option<Retained<T>>],
+}
+
+/// Where the reply [`RxBlockAckView::next_reply`] returned waits.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ReplyPlace {
+    Queued,
+    Bank(usize),
+}
+
+/// One reply the association owes: an ADDBA Response or a DELBA body.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct RxBlockAckReplyBody<E> {
+    pub place: ReplyPlace,
+    pub association: E,
+    pub bssid: Bssid,
+    pub body: [u8; ADDBA_ACTION_BODY_LEN],
+}
+
+/// What becomes of one received MPDU.
+pub enum RxDisposition<T: RxBlockAckTypes> {
+    /// Deliver it now, in order.
+    Deliver(Retained<T>),
+    /// The owner retains it: reordering, or a management Action deferred
+    /// until a reply place is free.
+    Retained,
+    /// Return its receive owner without delivery.
+    Recycle(T::Frame),
+    /// No retained-frame credit remains: a capacity fault.
+    Capacity(T::Frame),
+}
+
+/// No reply place or bank remains for an admitted request.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct RxBlockAckCapacity;
+
+impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
+    fn queue(&mut self, response: [u8; ADDBA_ACTION_BODY_LEN]) -> bool {
+        self.header.pending.push_back(response).is_ok()
     }
 
-    pub fn state(&self, bank: usize) -> Option<&RxReorderBuffer<WINDOW, SLOTS>> {
-        self.states.get(bank).and_then(Option::as_ref)
+    /// Whether a management Action can be handled now: its reply has a place.
+    pub fn can_receive_management(&self) -> bool {
+        !self.header.pending.is_full()
     }
 
-    pub fn state_mut(&mut self, bank: usize) -> Option<&mut RxReorderBuffer<WINDOW, SLOTS>> {
-        self.states.get_mut(bank).and_then(Option::as_mut)
+    /// A release overflowed its delivery order: the service must stop.
+    pub fn failed(&self) -> bool {
+        self.header.failed
     }
 
-    /// Replace the sequence space assigned to the negotiated physical bank.
-    /// Any frames retained by the previous generation are returned to their
-    /// integration owner before the new identity becomes observable.
-    pub fn start(
-        &mut self,
-        agreement: RxReorderAgreement<I>,
-    ) -> Result<Option<RxReorderRelease<WINDOW>>, RxReorderError> {
-        let bank = usize::from(agreement.identity.bank);
-        let state = RxReorderBuffer::new(agreement.starting_sequence, agreement.window)?;
-        let (Some(identity), Some(destination)) =
-            (self.identities.get_mut(bank), self.states.get_mut(bank))
-        else {
-            return Err(RxReorderError::InvalidBank(agreement.identity.bank));
-        };
-        let released = destination.take().map(|mut previous| previous.stop());
-        *identity = Some(agreement.identity());
-        *destination = Some(state);
-        Ok(released)
+    fn release<const N: usize>(&mut self, release: RxReorderRelease<N>) {
+        for frame in release.iter() {
+            if let Some(place) = self
+                .header
+                .ready
+                .get_mut(usize::from(self.header.ready_len))
+            {
+                *place = frame.slot;
+                self.header.ready_len = self.header.ready_len.saturating_add(1);
+            } else {
+                // Every released slot still owns its frame in `frames`.
+                // A capacity violation poisons the service rather than
+                // losing an owner or delivering outside sequence order.
+                self.header.failed = true;
+            }
+        }
     }
 
-    /// Stop only the identified peer/TID on its interface. A teardown for a
-    /// different identity cannot stop a replacement occupying the bank.
-    pub fn stop(&mut self, identity: RxReorderIdentity<I>) -> Option<RxReorderRelease<WINDOW>> {
-        let bank = usize::from(identity.bank);
-        if self.identity(bank) != Some(identity) {
+    /// The next frame released in sequence order.
+    pub fn pop_ready(&mut self) -> Option<Retained<T>> {
+        let (first, rest) = self.header.ready.split_first_mut()?;
+        if self.header.ready_len == 0 {
             return None;
         }
-        self.stop_bank(bank)
+        let slot = usize::from(*first);
+        let mut previous = first;
+        for next in rest {
+            *previous = *next;
+            previous = next;
+        }
+        self.header.ready_len = self.header.ready_len.saturating_sub(1);
+        self.frames.get_mut(slot)?.take()
     }
 
-    pub fn stop_bank(&mut self, bank: usize) -> Option<RxReorderRelease<WINDOW>> {
-        *self.identities.get_mut(bank)? = None;
-        self.states
-            .get_mut(bank)?
-            .take()
-            .map(|mut state| state.stop())
+    fn defer(&mut self, frame: T::Frame, meta: T::Meta) -> Result<(), Retained<T>> {
+        let Some((slot, place)) = self
+            .frames
+            .iter_mut()
+            .enumerate()
+            .find(|(_, place)| place.is_none())
+        else {
+            return Err((frame, meta));
+        };
+        let Ok(slot) = u8::try_from(slot) else {
+            return Err((frame, meta));
+        };
+        if self.header.deferred.push_back(slot).is_err() {
+            return Err((frame, meta));
+        }
+        *place = Some((frame, meta));
+        Ok(())
     }
 
-    pub fn occupied(&self) -> u32 {
-        self.states
+    /// A deferred management frame, once its reply has a place.
+    pub fn pop_deferred(&mut self) -> Option<Retained<T>> {
+        if !self.can_receive_management() {
+            return None;
+        }
+        let slot = self.header.deferred.pop_front()?;
+        self.frames.get_mut(usize::from(slot))?.take()
+    }
+
+    /// The earliest inactivity or reorder-gap deadline.
+    pub fn deadline(&self) -> Option<Instant> {
+        self.banks
             .iter()
-            .flatten()
-            .map(RxReorderBuffer::occupied)
-            .sum()
+            .filter_map(|bank| bank.active.as_ref()?.deadline())
+            .min()
     }
-}
 
-impl<I: Copy + Eq, const BANKS: usize, const WINDOW: usize, const SLOTS: usize> Default
-    for RxReorderBanks<I, BANKS, WINDOW, SLOTS>
-{
-    fn default() -> Self {
-        Self::new()
+    /// End only this role's agreements; every bank and retained frame returns
+    /// through the same port before a healthy Stop; temporary absences keep them.
+    pub fn clear(&mut self, port: &mut impl RxBlockAckPort<T>) {
+        for bank in self.banks.iter_mut() {
+            if let Some(active) = bank.active.take() {
+                let (running, _released) = active.stop();
+                bank.free = Some(port.remove(running));
+            }
+            bank.response = false;
+        }
+        for frame in self.frames.iter_mut().filter_map(Option::take) {
+            port.recycle(frame.0);
+        }
+        self.header.association = None;
+        self.header.pending.clear();
+        self.header.ready_len = 0;
+        self.header.deferred.clear();
+        self.header.failed = false;
+    }
+
+    /// The association the agreements belong to.
+    pub fn association(&self) -> Option<E> {
+        self.header.association.map(|(association, _)| association)
+    }
+
+    /// Take one Block Ack Action the station validated for `association`
+    /// with `bssid`; `supported` is whether the station admits agreements.
+    /// A new association first ends every agreement of the previous one.
+    #[inline(never)]
+    pub fn offer<P: RxBlockAckPort<T>>(
+        &mut self,
+        now: Instant,
+        association: E,
+        bssid: Bssid,
+        action: BlockAckAction,
+        supported: bool,
+        port: &mut P,
+    ) -> Result<(), RxBlockAckCapacity> {
+        if self.association() != Some(association) {
+            self.clear(port);
+            self.header.association = Some((association, bssid));
+        }
+        match action {
+            BlockAckAction::Delba { .. } => {
+                let found = self.banks.iter().position(|bank| {
+                    bank.active
+                        .as_ref()
+                        .is_some_and(|active| active.peer_delba(action))
+                });
+                if let Some(index) = found {
+                    self.stop(index, port);
+                }
+                return Ok(());
+            }
+            BlockAckAction::AddbaResponse { .. } => return Ok(()),
+            BlockAckAction::AddbaRequest { .. } => {}
+        }
+        let Some(parsed) = RxAddbaRequest::from_action(action) else {
+            return Ok(());
+        };
+        if let Some((index, response)) = self.banks.iter().enumerate().find_map(|(index, bank)| {
+            bank.active
+                .as_ref()?
+                .repeated_request(parsed)
+                .map(|response| (index, response))
+        }) {
+            if response.status == AddbaStatus::Success {
+                if let Some(bank) = self.banks.get_mut(index) {
+                    bank.response = true;
+                }
+                return Ok(());
+            }
+            return self.queue_response(response);
+        }
+        let BlockAckAction::AddbaRequest { tid, .. } = action else {
+            return Ok(());
+        };
+        let existing = self.banks.iter().position(|bank| {
+            bank.active
+                .as_ref()
+                .is_some_and(|active| active.tid() == tid)
+        });
+        let available = existing.or_else(|| self.banks.iter().position(|bank| bank.free.is_some()));
+        let reserved: usize = self
+            .banks
+            .iter()
+            .enumerate()
+            .filter(|(index, _)| Some(*index) != existing)
+            .filter_map(|(_, bank)| bank.active.as_ref())
+            .map(|active| usize::from(active.window()).saturating_sub(1))
+            .sum();
+        let capacity = self.frames.len().saturating_sub(reserved).min(WINDOW);
+        let capacity = u16::try_from(capacity)
+            .unwrap_or(u16::MAX)
+            .min(P::Caps::CAPS.rx_block_ack_max_window);
+        let negotiation = match RxBlockAckNegotiation::request(
+            parsed,
+            P::Caps::CAPS.rx_block_ack_max_tid,
+            capacity,
+            available.is_some() && supported,
+            now,
+        ) {
+            Ok(negotiation) => negotiation,
+            Err(response) => return self.queue_response(response),
+        };
+        let response = negotiation.response();
+        let Some(agreement) = Tid::new(response.tid).and_then(|tid| {
+            SupportedBlockAck::<P::Caps>::new(
+                bssid.individual(),
+                tid,
+                negotiation.starting_sequence(),
+                response.window,
+            )
+        }) else {
+            return self.queue_response(AddbaResponse {
+                status: AddbaStatus::RequestDeclined,
+                ..response
+            });
+        };
+        let Some(index) = available else {
+            return Err(RxBlockAckCapacity);
+        };
+        if existing.is_some() {
+            self.stop(index, port);
+        }
+        let Some(bank) = self.banks.get_mut(index) else {
+            return Err(RxBlockAckCapacity);
+        };
+        let Some(slot) = bank.free.take() else {
+            return Err(RxBlockAckCapacity);
+        };
+        let running = port.add(slot, agreement);
+        match RxBlockAckSession::activate(negotiation, running) {
+            Ok(active) => {
+                bank.active = Some(active);
+                bank.response = true;
+                Ok(())
+            }
+            Err((running, _)) => {
+                bank.free = Some(port.remove(running));
+                self.queue_response(AddbaResponse {
+                    status: AddbaStatus::RequestDeclined,
+                    ..response
+                })
+            }
+        }
+    }
+
+    fn queue_response(&mut self, response: AddbaResponse) -> Result<(), RxBlockAckCapacity> {
+        match response.encode().filter(|body| self.queue(*body)) {
+            Some(_) => Ok(()),
+            None => Err(RxBlockAckCapacity),
+        }
+    }
+
+    fn stop(&mut self, index: usize, port: &mut impl RxBlockAckPort<T>) {
+        if let Some(bank) = self.banks.get_mut(index) {
+            bank.response = false;
+            if let Some(active) = bank.active.take() {
+                let (running, released) = active.stop();
+                bank.free = Some(port.remove(running));
+                self.release(released);
+            }
+        }
+    }
+
+    /// The next reply the association owes, until [`Self::sent`] retires it.
+    pub fn next_reply(&self) -> Option<RxBlockAckReplyBody<E>> {
+        let (association, bssid) = self.header.association?;
+        if let Some(body) = self.header.pending.front().copied() {
+            return Some(RxBlockAckReplyBody {
+                place: ReplyPlace::Queued,
+                association,
+                bssid,
+                body,
+            });
+        }
+        self.banks.iter().enumerate().find_map(|(index, bank)| {
+            if !bank.response {
+                return None;
+            }
+            let body = bank.active.as_ref()?.response().encode()?;
+            Some(RxBlockAckReplyBody {
+                place: ReplyPlace::Bank(index),
+                association,
+                bssid,
+                body,
+            })
+        })
+    }
+
+    /// The reply at `place` left, or will never be owed again.
+    pub fn sent(&mut self, place: ReplyPlace) {
+        match place {
+            ReplyPlace::Queued => {
+                let _sent = self.header.pending.pop_front();
+            }
+            ReplyPlace::Bank(index) => {
+                if let Some(bank) = self.banks.get_mut(index) {
+                    bank.response = false;
+                }
+            }
+        }
+    }
+
+    /// Expire inactive agreements, each with a DELBA, and reorder gaps.
+    #[inline(never)]
+    pub fn tick(&mut self, now: Instant, port: &mut impl RxBlockAckPort<T>) {
+        for index in 0..self.banks.len() {
+            let Some(active) = self.banks.get(index).and_then(|bank| bank.active.as_ref()) else {
+                continue;
+            };
+            if active.expired(now) {
+                if !self.can_receive_management() {
+                    continue;
+                }
+                let tid = active.tid();
+                self.stop(index, port);
+                if let Ok(delba) = encode_delba(tid, false, reason_code::TIMEOUT) {
+                    // The reply queue holds ADDBA-sized bodies; the DELBA
+                    // fills its prefix.
+                    let mut body = [0; ADDBA_ACTION_BODY_LEN];
+                    for (target, source) in body.iter_mut().zip(delba) {
+                        *target = source;
+                    }
+                    let _queued = self.queue(body);
+                }
+            } else if let Some(active) = self
+                .banks
+                .get_mut(index)
+                .and_then(|bank| bank.active.as_mut())
+            {
+                match active.expire_gap(now, self.header.gap_timeout) {
+                    Ok(Some(release)) => self.release(release),
+                    Ok(None) => {}
+                    Err(_) => self.stop(index, port),
+                }
+            }
+        }
+    }
+
+    /// Take one received MPDU for the station whose own address is `local`
+    /// (`None` before it has a link). A management Action whose reply would
+    /// find no place waits retained until [`Self::pop_deferred`].
+    #[inline(never)]
+    pub fn receive(
+        &mut self,
+        now: Instant,
+        local: Option<[u8; 6]>,
+        frame: T::Frame,
+        meta: T::Meta,
+    ) -> RxDisposition<T> {
+        let action = DecodedHeader::decode(frame.bytes()).is_some_and(|header| {
+            !header.control().is_data() && header.control().subtype() == ACTION_SUBTYPE
+        });
+        if action && !self.can_receive_management() {
+            return match self.defer(frame, meta) {
+                Ok(()) => RxDisposition::Retained,
+                Err((frame, _)) => RxDisposition::Capacity(frame),
+            };
+        }
+        match local {
+            Some(local) => self.ingest(now, local, frame, meta),
+            None => RxDisposition::Deliver((frame, meta)),
+        }
+    }
+
+    fn ingest(
+        &mut self,
+        now: Instant,
+        local: [u8; 6],
+        frame: T::Frame,
+        meta: T::Meta,
+    ) -> RxDisposition<T> {
+        if let Some((tid, sequence)) = self.bar(frame.bytes(), local) {
+            if let Some(active) = self
+                .banks
+                .iter_mut()
+                .find_map(|bank| bank.active.as_mut().filter(|active| active.tid() == tid))
+                && let Ok(Some(release)) =
+                    active.block_ack_request(now, sequence, self.header.gap_timeout)
+            {
+                self.release(release);
+            }
+            return RxDisposition::Recycle(frame);
+        }
+        let key = DecodedHeader::decode(frame.bytes()).and_then(|header| {
+            let (_, bssid) = self.header.association?;
+            let control = header.control();
+            let fragment =
+                SequenceControl::from_bytes(header.sequence_control().to_le_bytes()).fragment();
+            // QoS Data subtypes 8 to 11 from the DS (IEEE Std 802.11-2020,
+            // 9.2.4.1.3, Table 9-1).
+            if !control.is_data()
+                || control.ds() != 2
+                || control.more_fragments()
+                || fragment != 0
+                || header.transmitter() != bssid.get()
+                || header.receiver() != local
+                || !matches!(control.subtype(), 8..=11)
+                || (control.protected()
+                    && !matches!(
+                        meta.common().crypto,
+                        RxEvidence::HardwareObserved(RxCryptoStatus::DecryptedAndIntegrityVerified)
+                            | RxEvidence::ProtocolValidated(
+                                RxCryptoStatus::DecryptedAndIntegrityVerified
+                            )
+                    ))
+            {
+                return None;
+            }
+            let tid = QosControl::from_bytes(header.qos()?.to_le_bytes())
+                .tid()
+                .get();
+            let index = self.banks.iter().position(|bank| {
+                bank.active
+                    .as_ref()
+                    .is_some_and(|active| active.tid() == tid)
+            })?;
+            Some((
+                index,
+                SequenceNumber::from_sequence_control(header.sequence_control()),
+            ))
+        });
+        let Some((bank_index, sequence)) = key else {
+            return RxDisposition::Deliver((frame, meta));
+        };
+        let Some(slot) = self.frames.iter().position(Option::is_none) else {
+            return RxDisposition::Capacity(frame);
+        };
+        let Some(active) = self
+            .banks
+            .get_mut(bank_index)
+            .and_then(|bank| bank.active.as_mut())
+        else {
+            return RxDisposition::Deliver((frame, meta));
+        };
+        let slot_id = match u8::try_from(slot) {
+            Ok(slot) => slot,
+            Err(_) => return RxDisposition::Deliver((frame, meta)),
+        };
+        let release = active.ingest(
+            now,
+            RxReorderMpdu {
+                sequence,
+                slot: slot_id,
+            },
+            self.header.gap_timeout,
+        );
+        match release {
+            Ok(release) if release.rejected.is_none() => {
+                if let Some(place) = self.frames.get_mut(slot) {
+                    *place = Some((frame, meta));
+                }
+                self.release(release);
+                RxDisposition::Retained
+            }
+            _ => RxDisposition::Recycle(frame),
+        }
+    }
+
+    fn bar(&self, bytes: &[u8], local: [u8; 6]) -> Option<(u8, SequenceNumber)> {
+        let (_, bssid) = self.header.association?;
+        let request = parse_compressed_block_ack_request(bytes)?;
+        if request.receiver != local || request.transmitter != bssid.get() {
+            return None;
+        }
+        Some((request.tid, request.starting_sequence))
     }
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::block_ack::RxReorderMpdu;
-    use oer_ieee80211_port::VifRole;
-
-    fn agreement(interface: VifRole, peer: u8, bank: u8) -> RxReorderAgreement<VifRole> {
-        RxReorderAgreement {
-            identity: RxReorderIdentity {
-                bank,
-                interface,
-                peer: [peer; 6],
-                tid: 0,
-            },
-            window: 8,
-            starting_sequence: SequenceNumber::new(10).unwrap(),
-        }
-    }
-
-    #[test]
-    fn replacement_returns_retained_frames_and_teardown_checks_interface_and_peer() {
-        let mut banks = RxReorderBanks::<_, 2, 64, 34>::new();
-        let old = agreement(VifRole::Station, 2, 0);
-        let replacement = agreement(VifRole::AccessPoint, 2, 0);
-        banks.start(old).unwrap();
-        let frame = RxReorderMpdu {
-            sequence: SequenceNumber::new(12).unwrap(),
-            slot: 3,
-        };
-        assert!(banks.state_mut(0).unwrap().ingest(frame).unwrap().buffered);
-        let returned = banks.start(replacement).unwrap().unwrap();
-        assert_eq!(returned.iter().collect::<std::vec::Vec<_>>(), [frame]);
-        assert!(banks.stop(old.identity).is_none());
-        assert_eq!(banks.find(VifRole::Station, [2; 6], 0), None);
-        assert_eq!(banks.find(VifRole::AccessPoint, [2; 6], 0), Some(0));
-        assert!(banks.stop(replacement.identity).is_some());
-        assert_eq!(banks.occupied(), 0);
-    }
-
-    #[test]
-    fn an_external_bank_index_never_panics_or_changes_another_window() {
-        let mut banks = RxReorderBanks::<_, 2, 64, 34>::new();
-        let active = agreement(VifRole::Station, 2, 0);
-        banks.start(active).unwrap();
-        assert!(matches!(
-            banks.start(agreement(VifRole::AccessPoint, 4, 255)),
-            Err(RxReorderError::InvalidBank(255))
-        ));
-        assert!(banks.state(usize::MAX).is_none());
-        assert!(banks.state_mut(usize::MAX).is_none());
-        assert!(banks.identity(usize::MAX).is_none());
-        assert!(banks.stop_bank(usize::MAX).is_none());
-        assert_eq!(banks.identity(0), Some(active.identity));
-    }
-}
+mod tests;

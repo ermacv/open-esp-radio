@@ -22,6 +22,8 @@ use oer_firmware_apps_w3::{
     report::{Lease, Report},
 };
 use oer_ieee80211_runtime::station_service::*;
+use oer_ieee80211_sta::data::{EthernetFrame, TxMsdu};
+use oer_memory::{WakingSpscReceiver, WakingSpscSender};
 use oer_ieee80211_sta::machine::{StaCommandCredits, StaRequest};
 use oer_radio_port::PoolPath;
 use oer_time::{Clock, Duration, Timer};
@@ -54,9 +56,9 @@ pub fn workload<'a, 'id: 'a, Path: PoolPath + 'a>(
     address: [u8; 6],
     seed: u64,
     credits: StaCommandCredits<'id, Path>,
-    commands: MsduSender<'a, ServiceCommand<'id, crate::radio::Caps, Path>, 2>,
-    tx: MsduSender<'a, TxMsdu, 2>,
-    rx: MsduReceiver<'a, EthernetFrame, RX>,
+    commands: WakingSpscSender<'a, ServiceCommand<'id, crate::radio::Caps, Path>, 2>,
+    tx: WakingSpscSender<'a, TxMsdu, 2>,
+    rx: WakingSpscReceiver<'a, EthernetFrame, RX>,
     link: &'a Cell<bool>,
     disconnected: &'a Cell<bool>,
     failed: &'a Cell<bool>,
@@ -90,9 +92,9 @@ fn workload_future<'a, 'id: 'a, Path: PoolPath + 'a>(
     address: [u8; 6],
     seed: u64,
     credits: StaCommandCredits<'id, Path>,
-    mut commands: MsduSender<'a, ServiceCommand<'id, crate::radio::Caps, Path>, 2>,
-    tx: MsduSender<'a, TxMsdu, 2>,
-    rx: MsduReceiver<'a, EthernetFrame, RX>,
+    mut commands: WakingSpscSender<'a, ServiceCommand<'id, crate::radio::Caps, Path>, 2>,
+    tx: WakingSpscSender<'a, TxMsdu, 2>,
+    rx: WakingSpscReceiver<'a, EthernetFrame, RX>,
     link: &'a Cell<bool>,
     disconnected: &'a Cell<bool>,
     failed: &'a Cell<bool>,
@@ -175,7 +177,7 @@ async fn application<'id, Path: PoolPath>(
     config: W3Config,
     address: [u8; 6],
     credits: StaCommandCredits<'id, Path>,
-    commands: &mut MsduSender<'_, ServiceCommand<'id, crate::radio::Caps, Path>, 2>,
+    commands: &mut WakingSpscSender<'_, ServiceCommand<'id, crate::radio::Caps, Path>, 2>,
     iface: Iface<'_, Device>,
     socket: &RawSocket<'_, Device>,
     observations: &RefCell<Observations>,

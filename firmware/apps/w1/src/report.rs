@@ -15,7 +15,7 @@ use oer_esp32s31_ieee80211_driver::rx::{
     receive::RELOAD_SETTLE_LIMIT,
 };
 use oer_espressif_executor::poll_timing::CycleHistogram;
-use oer_ieee80211_runtime::survey::{BssTally, Survey};
+use crate::survey::{BssTally, Survey};
 use oer_ieee80211_wire::address::Bssid;
 
 use crate::{

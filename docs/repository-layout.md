@@ -96,7 +96,7 @@ Each radio protocol has these layers in `protocols/<protocol>/`:
 | `cipher` | frame protection transforms — CCMP, BIP; no state, no time | `wire` |
 | `port` | the contract with a backend: commands, events, resources, errors | `wire` |
 | cores | the sans-IO state machines (station, access point, RSN, an LE connection, the 802.15.4 MAC) | `port`, `wire`, `cipher` |
-| `runtime` | the async loop over the port: awaits port events and deadlines, feeds the cores, executes their actions | `port`, `wire`, cores, portable time and signals |
+| `runtime` | the async loop over the port: awaits port events and deadlines, feeds the cores, executes their actions; parses and builds no frame | `port`, cores, portable time and signals |
 
 A backend implements the port and depends on `port`, `wire` and `cipher` only,
 never on a core: the chip backend in `chips/<chip>/`, the reference model in
@@ -133,8 +133,9 @@ helper) sets that name with `[[bin]] name`.
 
 `cargo test -p oer-test-layers` checks the names, the unsafe boundary
 ([unsafe](unsafe.md)), protocol core/runtime isolation from backends and
-models through normal dependencies, and the reviewed raw-waker inventory
-([notifications](execution-wakes.md)).
+models through normal dependencies, the IEEE 802.11 layer table (the cipher,
+port, model and runtime dependencies) and its cores that never wait, and the
+reviewed raw-waker inventory ([notifications](execution-wakes.md)).
 
 ## One workspace
 

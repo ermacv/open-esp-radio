@@ -5,10 +5,15 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Executor-independent cooperative admission for timer-driven hardware futures"
+description = "Executor-independent cooperative admission for timer-driven hardware futures and finite task-group shutdown"
 
 [dependencies]
+embassy-futures = "0.1.2"
+embassy-sync = "0.8.0"
 oer-time = { path = "../time" }
+
+[dev-dependencies]
+oer-time-virtual = { path = "../time-virtual" }
 
 [lints]
 workspace = true

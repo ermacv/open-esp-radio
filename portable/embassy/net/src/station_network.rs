@@ -130,4 +130,5 @@ where
 }
 
 #[cfg(test)]
+#[allow(clippy::disallowed_macros, clippy::arithmetic_side_effects)]
 mod tests;

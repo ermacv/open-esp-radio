@@ -32,6 +32,8 @@
 //! that survives a reset, one holder at a time.
 //! [`init_in_place!`] initializes a complete struct directly in borrowed
 //! storage, cleaning up its initialized fields if construction stops early.
+//! [`WakingSpscQueue`] wakes the sole consumer and producer task of an
+//! affine SPSC queue through ordinary atomic wakers.
 //! [`StaticPlace`] reserves static backing for short-lived values and pinned
 //! futures without extending their input loans.
 
@@ -62,6 +64,7 @@ mod static_place;
 mod static_ref;
 mod volatile;
 mod volatile_cell;
+mod waking_spsc;
 pub mod zeroed;
 
 pub use request_slot::{
@@ -103,6 +106,9 @@ pub use static_place::{PlacedFuture, StaticPlace};
 pub use static_ref::StaticRef;
 pub use volatile::{read_volatile, write_volatile};
 pub use volatile_cell::VolatileCell;
+pub use waking_spsc::{
+    WakingSpscQueue, WakingSpscReceiver, WakingSpscSendPermit, WakingSpscSender,
+};
 
 /// Authority to prepare registers for one retained, software-owned TX chain.
 ///

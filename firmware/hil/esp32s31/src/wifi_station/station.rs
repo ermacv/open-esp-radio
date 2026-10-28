@@ -13,6 +13,8 @@ use oer_hil_protocol::wifi::{StationLinkState, StationServiceEnd};
 use oer_ieee80211_port::*;
 use oer_ieee80211_rsn::{Pmk, nonce::SNonceSource, sae::SaePassword};
 use oer_ieee80211_runtime::station_service::*;
+use oer_ieee80211_sta::data::{EthernetFrame, TxMsdu};
+use oer_memory::{WakingSpscQueue, WakingSpscSender};
 use oer_ieee80211_sta::{
     data::StaData,
     epoch::{EpochContext, LinkEpochSource},
@@ -50,9 +52,9 @@ impl Composition for ImageComposition {
 pub struct StationComposition<Id: SlotIdentity>(PhantomData<Id>);
 const TERMINALS: usize = <Family<radio::slot::Id> as PhaseTypes<'static>>::TERMINAL_CAPACITY;
 const MANAGEMENT: u8 = 4;
-static NETWORK_RX: ConstStaticCell<MsduQueue<EthernetFrame, { super::network::RX }>> =
-    ConstStaticCell::new(MsduQueue::new());
-static NETWORK_TX: ConstStaticCell<MsduQueue<TxMsdu, 2>> = ConstStaticCell::new(MsduQueue::new());
+static NETWORK_RX: ConstStaticCell<WakingSpscQueue<EthernetFrame, { super::network::RX }>> =
+    ConstStaticCell::new(WakingSpscQueue::new());
+static NETWORK_TX: ConstStaticCell<WakingSpscQueue<TxMsdu, 2>> = ConstStaticCell::new(WakingSpscQueue::new());
 
 impl<Id: SlotIdentity> StationPort for StationComposition<Id> {
     type Backend = Backend<Id>;
@@ -434,7 +436,7 @@ impl<Id: SlotIdentity> rp::PortBody<Id, Backend<Id>> for Body {
     {
         let (address, seed, attempt) = (self.address, self.seed, self.attempt);
         let (service, credits) = initialize_service::<Id>(self, resources);
-        let mut commands = MsduQueue::<ServiceCommand<'id, Caps, Child<Root<Id>, 8>>, 2>::new();
+        let mut commands = WakingSpscQueue::<ServiceCommand<'id, Caps, Child<Root<Id>, 8>>, 2>::new();
         let tx = NETWORK_TX.take();
         let rx = NETWORK_RX.take();
         let (command_send, command_receive) = commands.split();
@@ -536,7 +538,7 @@ fn channels(
     channels
 }
 async fn reconnect<'a, 'id: 'a, Path: rp::PoolPath>(
-    mut commands: MsduSender<'a, ServiceCommand<'id, Caps, Path>, 2>,
+    mut commands: WakingSpscSender<'a, ServiceCommand<'id, Caps, Path>, 2>,
     retry: &core::cell::Cell<bool>,
     ready: &core::cell::Cell<Option<machine::StaRequest<'id, Path>>>,
     attempt: Attempt,

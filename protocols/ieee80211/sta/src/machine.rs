@@ -100,7 +100,9 @@ use oer_ieee80211_rsn::{
     },
 };
 use oer_ieee80211_upper_mac::protection::HePacketPadding;
+use oer_ieee80211_upper_mac::rate_selection::{FrameRates, RateSelection};
 use oer_ieee80211_wire::address::{Bssid, IndividualAddress, OwnAddress};
+use oer_ieee80211_wire::qos::WmmAccessCategory;
 use {
     crate::{
         scan::ScanTable,
@@ -604,6 +606,16 @@ impl<Path: PoolPath> StaTxContext<'_, Path> {
             TxPurpose::Probe | TxPurpose::Connected(Sending::Probe)
         )
     }
+
+    /// The rate record whose selection this operation's completion teaches:
+    /// a probe's, or the control frames'.
+    pub const fn frame_rates(&self) -> FrameRates {
+        if self.is_probe() {
+            FrameRates::Probe
+        } else {
+            FrameRates::Control
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -651,6 +663,89 @@ pub enum StaRatePlan {
     /// [`NULL_TRANSMISSIONS`](crate::power_save::NULL_TRANSMISSIONS)
     /// transmissions at the BSS's lowest basic rate.
     Null,
+}
+
+impl StaFrameClass {
+    /// The coexistence class the port gives the frame: the connection's
+    /// setup and keys go first, any other frame at its access category.
+    pub const fn coex_operation(self) -> oer_ieee80211_port::TxOperation {
+        match self {
+            Self::Connection(frame) => oer_ieee80211_port::TxOperation::Connection(frame),
+            Self::Normal => oer_ieee80211_port::TxOperation::Data,
+        }
+    }
+}
+
+impl StaRatePlan {
+    /// The retry plan of an individual frame at this plan's rates, as
+    /// `rates` select them; `carried` turns a rate into the phase's. `None`
+    /// when no stage of the selection is carried.
+    pub fn individual<R, M: RxMetadata, A>(
+        self,
+        rates: &impl RateSelection<M, A>,
+        carried: impl Fn(oer_ieee80211_port::PhyRate) -> Option<R>,
+    ) -> Option<oer_ieee80211_port::RetryPlan<R>> {
+        match self {
+            // A Null's retries are its plan's.
+            Self::Null => rates
+                .plan(FrameRates::Control, carried)
+                .map(|plan| plan.limit(crate::power_save::NULL_TRANSMISSIONS)),
+            Self::Management | Self::Group => rates.plan(FrameRates::Control, carried),
+        }
+    }
+
+    /// The one rate of a group frame: the first stage of the probe record.
+    pub fn group<R, M: RxMetadata, A>(
+        rates: &impl RateSelection<M, A>,
+        carried: impl Fn(oer_ieee80211_port::PhyRate) -> Option<R>,
+    ) -> Option<R> {
+        rates
+            .plan(FrameRates::Probe, carried)
+            .map(|plan| plan.into_first().rate)
+    }
+}
+
+impl<K: Ieee80211Capabilities, C> StaFrame<K, C> {
+    /// The frame on the phase's channel at the rates of `plan`, as `rates`
+    /// select them; `carried` turns a rate into the phase's. `None` when no
+    /// stage of the selection is carried: the frame does not go.
+    pub fn rated<'p, 'id, M: RxMetadata, A>(
+        self,
+        plan: StaRatePlan,
+        rates: &impl RateSelection<M, A>,
+        carried: impl Fn(
+            oer_ieee80211_port::PhyRate,
+        ) -> Option<oer_ieee80211_port::PhaseRate<'p, 'id, K>>,
+    ) -> Option<oer_ieee80211_port::ClassFrame<'p, 'id, C, K>> {
+        match self {
+            Self::Individual(frame) => plan
+                .individual(rates, carried)
+                .map(|plan| oer_ieee80211_port::ClassFrame::individual(frame, plan)),
+            Self::Group(frame) => StaRatePlan::group(rates, carried)
+                .map(|rate| oer_ieee80211_port::ClassFrame::group(frame, rate)),
+        }
+    }
+}
+
+impl<T: StaTokens, K: Ieee80211Capabilities> StaTransmit<'_, T, K> {
+    /// Station frames contend in the Voice queue.
+    pub const ACCESS_CATEGORY: WmmAccessCategory = WmmAccessCategory::Voice;
+    /// A station frame goes without an RTS/CTS or CTS-to-self exchange.
+    pub const PROTECTION: oer_ieee80211_port::Protection = oer_ieee80211_port::Protection::None;
+    /// A station frame goes at the port's calibrated power.
+    pub const POWER: oer_ieee80211_port::SupportedPower<K> = calibrated_power::<K>();
+}
+
+/// The calibrated power every station attempt takes, which its port must
+/// offer: checked when the service's type is built, so a port without it
+/// builds no station.
+pub const fn calibrated_power<K: Ieee80211Capabilities>() -> oer_ieee80211_port::SupportedPower<K> {
+    const {
+        match oer_ieee80211_port::SupportedPower::new(oer_ieee80211_port::TxPower::Calibrated) {
+            Some(power) => power,
+            None => panic!("a station's port sends at its calibrated power"),
+        }
+    }
 }
 
 /// A frame refused by admission or by the authenticated RSN protocol.

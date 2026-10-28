@@ -17,6 +17,8 @@ use oer_esp32s31_ieee80211_driver::port::{self, device::Composition};
 use oer_espressif_ieee80211_policy::rate_selection::EspressifRateSelection;
 use oer_ieee80211_port::*;
 use oer_ieee80211_runtime::station_service::*;
+use oer_ieee80211_sta::data::{EthernetFrame, TxMsdu};
+use oer_memory::WakingSpscQueue;
 use oer_ieee80211_sta::{
     data::StaData,
     epoch::{EpochContext, LinkEpochSource},
@@ -60,9 +62,9 @@ pub static LAST_BEACON_MS: core::sync::atomic::AtomicU32 = core::sync::atomic::A
 pub static DEPARTING: AtomicBool = AtomicBool::new(false);
 pub static DEAUTH: AtomicBool = AtomicBool::new(false);
 static NETWORK_RX: ConstStaticCell<
-    MsduQueue<EthernetFrame, { oer_firmware_apps_w3::policy::RX_DEPTH }>,
-> = ConstStaticCell::new(MsduQueue::new());
-static NETWORK_TX: ConstStaticCell<MsduQueue<TxMsdu, 2>> = ConstStaticCell::new(MsduQueue::new());
+    WakingSpscQueue<EthernetFrame, { oer_firmware_apps_w3::policy::RX_DEPTH }>,
+> = ConstStaticCell::new(WakingSpscQueue::new());
+static NETWORK_TX: ConstStaticCell<WakingSpscQueue<TxMsdu, 2>> = ConstStaticCell::new(WakingSpscQueue::new());
 
 fn observe_terminal<'id, Id: SlotIdentity + 'id>(terminal: &LowerMacTerminal<'id, Family<Id>>) {
     if let LowerMacTerminal::TxCompleted(TxCompleted::Single(completed)) = terminal
@@ -460,7 +462,7 @@ impl<Id: SlotIdentity> rp::PortBody<Id, Backend<Id>> for Body {
         'id: 'p,
     {
         let (service, credits) = initialize_service::<Id>(&self, resources);
-        let mut commands = MsduQueue::<ServiceCommand<'id, Caps, Child<Root<Id>, 8>>, 2>::new();
+        let mut commands = WakingSpscQueue::<ServiceCommand<'id, Caps, Child<Root<Id>, 8>>, 2>::new();
         let tx = NETWORK_TX.take();
         let rx = NETWORK_RX.take();
         let (command_send, command_receive) = commands.split();

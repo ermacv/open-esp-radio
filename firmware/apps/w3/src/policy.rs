@@ -32,8 +32,9 @@ mod tests {
     extern crate std;
     use self::std::boxed::Box;
     use oer_embassy_net::{NetworkInterfaceId, NoopRawMutex, OwnedEndpointResources};
-    use oer_ieee80211_runtime::station_service::{EthernetFrame, MsduQueue};
+    use oer_ieee80211_sta::data::EthernetFrame;
     use oer_ieee80211_wire::data::EthernetFrameParts;
+    use oer_memory::WakingSpscQueue;
     use xarxa_driver::{PacketPool, PacketPoolStorage};
 
     #[test]
@@ -49,7 +50,7 @@ mod tests {
             .split(NetworkInterfaceId::new(0), destination, pool)
             .expect("endpoint split");
         radio.link_controller().set_link_up(true);
-        let mut queue = MsduQueue::<EthernetFrame, RX_DEPTH>::new();
+        let mut queue = WakingSpscQueue::<EthernetFrame, RX_DEPTH>::new();
         let (sender, receiver) = queue.split();
 
         // The service may accept eight frames in one poll. Neither the bridge

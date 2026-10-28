@@ -19,8 +19,9 @@ chip PHY and the runtimes take as an `oer_time::Timer`; chip PHY remains
 executor-independent.
 
 Final memory profiles, static claims, IRQ binding and whole-radio lifecycles
-belong to the integrating firmware (`firmware/apps`). Portable Wi-Fi execution
-primitives (monitor handoffs, task shutdown, station network ownership) are
-runtime code in [`ieee80211/runtime`](../../protocols/ieee80211/runtime/), not executor
-bindings. An executor-free service never depends on an adapter. The
+belong to the integrating firmware (`firmware/apps`). Station network ownership
+across associations is `net/`'s `station_network`; finite task-group shutdown is
+[`oer-cooperate`](../cooperate/)'s `connected_tasks`; monitor handoffs are runtime
+code in [`ieee80211/runtime`](../../protocols/ieee80211/runtime/). None of them is an
+executor binding. An executor-free service never depends on an adapter. The
 [architecture](../../docs/architecture.md) defines the ownership direction.

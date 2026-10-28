@@ -46,7 +46,7 @@ pub fn counters() -> StationCounters {
 #[inline(never)]
 pub fn arp(
     attempt: super::Attempt,
-    frame: oer_ieee80211_runtime::station_service::ArpFrameObservation,
+    frame: oer_ieee80211_sta::data::ArpFrameObservation,
 ) {
     use owned_embassy_net::wire::{ArpHardware, ArpOperation, ArpPacket, EthernetProtocol};
     let mut payload = frame.payload;

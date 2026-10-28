@@ -1,4 +1,4 @@
-//! Chip-independent finite shutdown for tasks attached to a Wi-Fi epoch.
+//! Chip-independent finite shutdown for tasks attached to one epoch.
 //!
 //! A radio runner can return while an executor task still owns protocol
 //! scratch or queue leases. This module provides a split ownership contract:
@@ -370,4 +370,9 @@ where
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::disallowed_macros,
+    clippy::disallowed_methods,
+    clippy::arithmetic_side_effects
+)]
 mod tests;

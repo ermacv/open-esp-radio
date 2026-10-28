@@ -56,9 +56,9 @@ fn an_encoder_refusal_returns_the_reply_and_every_credit_without_marking_tx_busy
         let reply = RxBlockAckReply::for_association(
             world.station.epoch.unwrap(),
             Bssid::new(IndividualAddress::new(BSSID).unwrap()).unwrap(),
-            crate::block_ack::AddbaResponse {
+            oer_ieee80211_upper_mac::block_ack::AddbaResponse {
                 dialog_token: 17,
-                status: crate::block_ack::AddbaStatus::RequestDeclined,
+                status: oer_ieee80211_upper_mac::block_ack::AddbaStatus::RequestDeclined,
                 tid: 0,
                 window: 8,
                 timeout_tu: 0,

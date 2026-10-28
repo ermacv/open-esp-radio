@@ -9,7 +9,8 @@ use oer_embassy_net::{
 use oer_embassy_time::EmbassyClock;
 use oer_firmware_apps_w3::{icmp, observation::Observations, report::Lease};
 use oer_hil_protocol::wifi::StationProbeFinished;
-use oer_ieee80211_runtime::station_service::*;
+use oer_ieee80211_sta::data::{EthernetFrame, TxMsdu};
+use oer_memory::{WakingSpscReceiver, WakingSpscSender};
 use oer_ieee80211_wire::{data::EthernetFrameParts, qos::WmmUserPriority};
 use oer_time::{Clock, Duration, Timer};
 use owned_embassy_net::{
@@ -59,8 +60,8 @@ static RUNNING: ConstStaticCell<oer_memory::StaticPlace<Running<'static>>> =
 pub fn run<'a>(
     address: [u8; 6],
     seed: u64,
-    tx: MsduSender<'a, TxMsdu, 2>,
-    rx: MsduReceiver<'a, EthernetFrame, RX>,
+    tx: WakingSpscSender<'a, TxMsdu, 2>,
+    rx: WakingSpscReceiver<'a, EthernetFrame, RX>,
     link: &'a Cell<bool>,
     attempt: Attempt,
 ) -> oer_memory::PlacedFuture<'a, Running<'a>> {
@@ -74,8 +75,8 @@ pub fn run<'a>(
 fn running_future<'a>(
     address: [u8; 6],
     seed: u64,
-    tx: MsduSender<'a, TxMsdu, 2>,
-    rx: MsduReceiver<'a, EthernetFrame, RX>,
+    tx: WakingSpscSender<'a, TxMsdu, 2>,
+    rx: WakingSpscReceiver<'a, EthernetFrame, RX>,
     link: &'a Cell<bool>,
     attempt: Attempt,
 ) -> Running<'a> {
@@ -240,8 +241,8 @@ async fn probes(
 
 async fn bridge(
     radio: Runner,
-    mut tx: MsduSender<'_, TxMsdu, 2>,
-    mut rx: MsduReceiver<'_, EthernetFrame, RX>,
+    mut tx: WakingSpscSender<'_, TxMsdu, 2>,
+    mut rx: WakingSpscReceiver<'_, EthernetFrame, RX>,
     link: &Cell<bool>,
     observations: &RefCell<Observations>,
 ) -> ! {

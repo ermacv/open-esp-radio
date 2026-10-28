@@ -38,6 +38,8 @@ use {
 };
 
 use super::*;
+use oer_ieee80211_wire::qos::{WmmAccessCategory, WmmUserPriority};
+use oer_memory::WakingSpscQueue;
 
 mod block_ack;
 mod contracts;
@@ -405,9 +407,9 @@ struct World<'b> {
     drop_stopped_service: Cell<bool>,
     restart_stopped_service: Cell<Option<bool>>,
     /// The network stack's end of the transmit queue.
-    stack: RefCell<MsduSender<'b, TxMsdu, 2>>,
+    stack: RefCell<WakingSpscSender<'b, TxMsdu, 2>>,
     /// The network stack's end of the receive queue.
-    delivered: RefCell<MsduReceiver<'b, EthernetFrame, 8>>,
+    delivered: RefCell<WakingSpscReceiver<'b, EthernetFrame, 8>>,
 }
 
 /// Observe the operation class supplied by the service, independently of
@@ -583,7 +585,8 @@ impl<'id, Id: SlotIdentity + 'id> CommandCredits<'id, Id> {
 /// The outer world's observations own no command permission.
 struct Application<'a, 'b, 'id, Id: SlotIdentity + 'id> {
     world: &'a World<'b>,
-    commands: Cell<Option<MsduSender<'a, ServiceCommand<'id, ModelCaps24, CommandPath<Id>>, 4>>>,
+    commands:
+        Cell<Option<WakingSpscSender<'a, ServiceCommand<'id, ModelCaps24, CommandPath<Id>>, 4>>>,
     credits: RefCell<CommandCredits<'id, Id>>,
 }
 impl<'b, Id: SlotIdentity> core::ops::Deref for Application<'_, 'b, '_, Id> {
@@ -688,7 +691,12 @@ impl<'id, Id: SlotIdentity + 'id> Application<'_, '_, 'id, Id> {
         let delivered = self.delivered.borrow();
         let mut frames = Vec::new();
         while let Some(msdu) = delivered.try_receive() {
-            frames.push(msdu.bytes().collect());
+            let parts = msdu.parts();
+            let mut bytes = Vec::from(parts.destination);
+            bytes.extend_from_slice(&parts.source);
+            bytes.extend_from_slice(&parts.ether_type.to_be_bytes());
+            bytes.extend_from_slice(parts.payload);
+            frames.push(bytes);
         }
         frames
     }
@@ -796,8 +804,8 @@ impl<'id, Id: SlotIdentity + 'id> Application<'_, '_, 'id, Id> {
 /// The body that runs the service beside the test's script.
 struct Body<'w, 'b, S, const GROUPS: usize> {
     world: &'w World<'b>,
-    transmit: MsduReceiver<'b, TxMsdu, 2>,
-    receive: MsduSender<'b, EthernetFrame, 8>,
+    transmit: WakingSpscReceiver<'b, TxMsdu, 2>,
+    receive: WakingSpscSender<'b, EthernetFrame, 8>,
     config: TestConfig,
     script: S,
     refuse_initial_enable: bool,
@@ -922,7 +930,7 @@ where
                 )))
                 .view(),
             );
-            let mut command_queue = MsduQueue::<
+            let mut command_queue = WakingSpscQueue::<
                 ServiceCommand<'id, ModelCaps24, CommandPath<LocalId<'scope>>>,
                 4,
             >::new();
@@ -1247,8 +1255,8 @@ where
             ],
             clock.clone(),
         );
-        let mut transmit = MsduQueue::<TxMsdu, 2>::new();
-        let mut receive = MsduQueue::<EthernetFrame, 8>::new();
+        let mut transmit = WakingSpscQueue::<TxMsdu, 2>::new();
+        let mut receive = WakingSpscQueue::<EthernetFrame, 8>::new();
         let (stack, transmit) = transmit.split();
         let (receive, delivered) = receive.split();
         let world = World {

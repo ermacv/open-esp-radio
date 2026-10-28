@@ -28,7 +28,9 @@ protocol state machines they drive never wait.
 
 | Module | Responsibility |
 | --- | --- |
-| `ieee80211/runtime/src/{monitor,connected_tasks,station_network}` | Portable capture/injection handoffs, task shutdown and association-scoped network ownership |
+| `ieee80211/runtime/src/monitor` | Portable capture/injection handoffs |
+| `portable/cooperate/src/connected_tasks.rs` | Finite shutdown of the tasks attached to one epoch |
+| `portable/embassy/net/src/station_network.rs` | Association-scoped network ownership |
 
 Hardware transactions and finite chip state remain below these packages. A
 runtime retains their affine owners across borrowed waits, returns the same
@@ -41,7 +43,7 @@ published `TerminalRejected` and finished its hardware stop normally, and
 uninstall returned `Uninstalled::TerminalsQuarantined` with only the
 undelivered terminals, their queue and pending permits quarantined.
 
-The portable Wi-Fi station service uses `MsduQueue` for application commands
+The portable Wi-Fi station service uses `oer_memory::WakingSpscQueue` for application commands
 as well as network frames. Each queue has one affine sender and receiver;
 waiting for readiness borrows its endpoint exclusively without removing a
 value. The service handles a ready port event before taking a command, so a

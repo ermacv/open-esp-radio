@@ -12,6 +12,8 @@ description = "W3: open station association, DHCP and bidirectional ICMP accepta
 oer-diagnostics = { path = "../../../portable/diagnostics" }
 oer-ieee80211-wire = { path = "../../../protocols/ieee80211/wire" }
 oer-ieee80211-runtime = { path = "../../../protocols/ieee80211/runtime", features = ["placement"] }
+oer-ieee80211-sta = { path = "../../../protocols/ieee80211/sta" }
+oer-memory = { path = "../../../portable/memory" }
 oer-embassy-net = { path = "../../../portable/embassy/net" }
 embassy-futures = "0.1.2"
 oer-ieee80211-arbiter = { path = "../../../protocols/ieee80211/arbiter" }
@@ -24,7 +26,6 @@ heapless = "0.9.3"
 static_cell = { workspace = true }
 xarxa-driver = { git = "https://github.com/ermacv/xarxa.git", rev = "6f5ae91f9269ec3151d1aa61d0cfe0f3ae1b0798", features = ["async"] }
 oer-radio-port = { path = "../../../protocols/radio/port" }
-oer-ieee80211-sta = { path = "../../../protocols/ieee80211/sta" }
 oer-espressif-ieee80211-policy = { path = "../../../chips/espressif/ieee80211-policy" }
 oer-ieee80211-upper-mac = { path = "../../../protocols/ieee80211/upper-mac" }
 oer-ieee80211-port = { path = "../../../protocols/ieee80211/port" }
@@ -34,7 +35,6 @@ oer-espressif-executor = { path = "../../../chips/espressif/executor", features 
 oer-espressif-usb-serial-jtag.workspace = true
 oer-embassy-time = { path = "../../../portable/embassy/time" }
 oer-espressif-interrupt-table = { path = "../../../chips/espressif/interrupt-table" }
-oer-memory = { path = "../../../portable/memory" }
 oer-esp32s31-hal = { path = "../../../chips/esp32s31/hal" }
 oer-esp32s31-phy = { path = "../../../chips/esp32s31/phy" }
 oer-esp32s31-radio-client = { path = "../../../chips/esp32s31/radio/client" }

@@ -18,8 +18,11 @@
 //! [`extensions`] retains peer tables, security, duplicate detection and
 //! bounded v2 reassembly above the wire codecs and lower-MAC port, and the
 //! Espressif PHY request of an ESP-NOW peer. [`interface`] names a virtual
-//! interface and binds it to a channel context.
+//! interface and binds it to a channel context; [`configuration`] checks a
+//! requested owner topology against a backend's service description and
+//! assigns those interfaces.
 
+pub mod configuration;
 pub mod extensions;
 pub mod interface;
 

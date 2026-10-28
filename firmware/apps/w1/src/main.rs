@@ -24,5 +24,7 @@ include!("entry.rs");
 #[cfg(all(test, not(target_arch = "riscv32")))]
 #[path = "own/crc32.rs"]
 mod crc32;
+#[cfg(all(test, not(target_arch = "riscv32")))]
+mod survey;
 #[cfg(not(target_arch = "riscv32"))]
 fn main() {}

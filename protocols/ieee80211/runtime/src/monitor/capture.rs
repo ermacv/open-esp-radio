@@ -4,22 +4,17 @@
 //! storage and performs only a non-blocking channel publication. It therefore
 //! never retains a DMA descriptor and never waits for a slow sniffer. The
 //! capture pool is ordinary CPU memory and may be placed in external RAM when
-//! the selected chip can access that memory; the Embassy channel stores only
-//! leases and metadata, not frame-sized arrays.
+//! the selected chip can access that memory; the lock-free SPSC queue stores
+//! only leases and metadata, not frame-sized arrays.
 
-use core::future::Future;
-
-use embassy_sync::{
-    blocking_mutex::raw::RawMutex,
-    channel::{Channel, Receiver, Sender, TrySendError},
+use oer_ieee80211_port::{
+    ChannelContextId, MacRxMetadata, MonitorDropReason, MonitorFrame,
+    MonitorInjectionChannelBinding, MonitorPublishOutcome, MonitorSink, MonitorTapPoint,
+    WifiChannel,
 };
-use oer_memory::{RxHandoffPool, RxNetworkLease};
-use {
-    oer_ieee80211_port::{
-        ChannelContextId, MacRxMetadata, MonitorDropReason, MonitorFrame,
-        MonitorInjectionChannelBinding, MonitorPublishOutcome, MonitorSink, MonitorTapPoint,
-    },
-    oer_ieee80211_wire::channel::WifiChannel,
+use oer_memory::{
+    AffineSpscTrySendError, RxHandoffPool, RxNetworkLease, WakingSpscQueue, WakingSpscReceiver,
+    WakingSpscSender,
 };
 
 /// Metadata copied alongside one independently retained monitor frame.
@@ -185,24 +180,23 @@ impl<const CAPACITY: usize, const SLOTS: usize> Default for MonitorCapturePool<C
     }
 }
 
-/// Embassy queue and capture-pool binding for one monitor epoch.
+/// Lock-free queue and capture-pool binding for one monitor epoch.
 ///
 /// `DEPTH` is a retained-frame limit, never a processing batch size. It may
 /// not exceed the number of independently owned capture slots.
 pub struct MonitorCaptureResources<
     'pool,
-    M: RawMutex,
     Rate,
     const DEPTH: usize,
     const CAPACITY: usize,
     const SLOTS: usize,
 > {
     pool: &'pool MonitorCapturePool<CAPACITY, SLOTS>,
-    frames: Channel<M, MonitorCaptureFrame<'pool, Rate, CAPACITY>, DEPTH>,
+    frames: WakingSpscQueue<MonitorCaptureFrame<'pool, Rate, CAPACITY>, DEPTH>,
 }
 
-impl<'pool, M: RawMutex, Rate, const DEPTH: usize, const CAPACITY: usize, const SLOTS: usize>
-    MonitorCaptureResources<'pool, M, Rate, DEPTH, CAPACITY, SLOTS>
+impl<'pool, Rate, const DEPTH: usize, const CAPACITY: usize, const SLOTS: usize>
+    MonitorCaptureResources<'pool, Rate, DEPTH, CAPACITY, SLOTS>
 {
     pub const fn new(pool: &'pool MonitorCapturePool<CAPACITY, SLOTS>) -> Self {
         const {
@@ -215,43 +209,39 @@ impl<'pool, M: RawMutex, Rate, const DEPTH: usize, const CAPACITY: usize, const 
         };
         Self {
             pool,
-            frames: Channel::new(),
+            frames: WakingSpscQueue::new(),
         }
     }
 
     /// Split one monitor epoch into non-blocking radio and async consumer
-    /// capabilities. Endpoints can be reconstructed only after the previous
-    /// epoch has stopped and its retained frames have been dropped.
+    /// capabilities. The exclusive borrow lets endpoints be reconstructed only
+    /// after the previous epoch's endpoints are gone; frames it left queued
+    /// reach the next receiver unless [`Self::discard_queued`] drops them.
     pub fn split(
-        &self,
+        &mut self,
     ) -> (
-        MonitorCaptureSink<'_, 'pool, M, Rate, DEPTH, CAPACITY, SLOTS>,
-        MonitorCaptureReceiver<'_, 'pool, M, Rate, DEPTH, CAPACITY>,
+        MonitorCaptureSink<'_, 'pool, Rate, DEPTH, CAPACITY, SLOTS>,
+        MonitorCaptureReceiver<'_, 'pool, Rate, DEPTH, CAPACITY>,
     ) {
+        let (sender, receiver) = self.frames.split();
         (
             MonitorCaptureSink {
                 pool: self.pool,
-                sender: self.frames.sender(),
+                sender,
                 generation: 0,
                 channel: None,
                 channel_epoch: 0,
                 injection_binding_valid: true,
                 snapshot_length: None,
             },
-            MonitorCaptureReceiver {
-                receiver: self.frames.receiver(),
-            },
+            MonitorCaptureReceiver { receiver },
         )
     }
 
     /// Drop captures which were queued by a completed monitor generation.
-    pub fn discard_queued(&self) -> usize {
-        let mut discarded = 0_usize;
-        while let Ok(frame) = self.frames.try_receive() {
-            drop(frame);
-            discarded = discarded.saturating_add(1);
-        }
-        discarded
+    pub fn discard_queued(&mut self) -> usize {
+        let (_sender, receiver) = self.frames.split();
+        MonitorCaptureReceiver::<Rate, DEPTH, CAPACITY> { receiver }.discard_queued()
     }
 }
 
@@ -259,14 +249,13 @@ impl<'pool, M: RawMutex, Rate, const DEPTH: usize, const CAPACITY: usize, const 
 pub struct MonitorCaptureSink<
     'queue,
     'pool,
-    M: RawMutex,
     Rate,
     const DEPTH: usize,
     const CAPACITY: usize,
     const SLOTS: usize,
 > {
     pool: &'pool MonitorCapturePool<CAPACITY, SLOTS>,
-    sender: Sender<'queue, M, MonitorCaptureFrame<'pool, Rate, CAPACITY>, DEPTH>,
+    sender: WakingSpscSender<'queue, MonitorCaptureFrame<'pool, Rate, CAPACITY>, DEPTH>,
     generation: u32,
     channel: Option<WifiChannel>,
     channel_epoch: u32,
@@ -274,8 +263,8 @@ pub struct MonitorCaptureSink<
     snapshot_length: Option<usize>,
 }
 
-impl<M: RawMutex, Rate, const DEPTH: usize, const CAPACITY: usize, const SLOTS: usize>
-    MonitorCaptureSink<'_, '_, M, Rate, DEPTH, CAPACITY, SLOTS>
+impl<Rate, const DEPTH: usize, const CAPACITY: usize, const SLOTS: usize>
+    MonitorCaptureSink<'_, '_, Rate, DEPTH, CAPACITY, SLOTS>
 {
     /// Bind a reusable sink to one supervisor generation and capture policy.
     pub fn configure(&mut self, generation: u32, snapshot_length: Option<usize>) {
@@ -287,8 +276,8 @@ impl<M: RawMutex, Rate, const DEPTH: usize, const CAPACITY: usize, const SLOTS: 
     }
 }
 
-impl<M: RawMutex, Rate, const DEPTH: usize, const CAPACITY: usize, const SLOTS: usize>
-    MonitorSink<Rate> for MonitorCaptureSink<'_, '_, M, Rate, DEPTH, CAPACITY, SLOTS>
+impl<Rate, const DEPTH: usize, const CAPACITY: usize, const SLOTS: usize> MonitorSink<Rate>
+    for MonitorCaptureSink<'_, '_, Rate, DEPTH, CAPACITY, SLOTS>
 {
     fn begin_channel_epoch(&mut self, channel: WifiChannel) {
         self.channel = Some(channel);
@@ -317,7 +306,7 @@ impl<M: RawMutex, Rate, const DEPTH: usize, const CAPACITY: usize, const SLOTS: 
         // Avoid an otherwise pointless frame-sized copy after a slow consumer
         // has already filled the queue. A concurrent receive may make this a
         // conservative best-effort drop, which is valid for a monitor tap.
-        if self.sender.is_full() {
+        if self.sender.free_capacity() == 0 {
             return MonitorPublishOutcome::Dropped(MonitorDropReason::Full);
         }
         let captured = match self.pool.try_capture(
@@ -333,7 +322,7 @@ impl<M: RawMutex, Rate, const DEPTH: usize, const CAPACITY: usize, const SLOTS: 
         };
         match self.sender.try_send(captured) {
             Ok(()) => MonitorPublishOutcome::Published,
-            Err(TrySendError::Full(_captured)) => {
+            Err(AffineSpscTrySendError(_captured)) => {
                 // Dropping the returned frame restores the pool credit.
                 MonitorPublishOutcome::Dropped(MonitorDropReason::Full)
             }
@@ -342,26 +331,25 @@ impl<M: RawMutex, Rate, const DEPTH: usize, const CAPACITY: usize, const SLOTS: 
 }
 
 /// Consumer-side async capture endpoint.
-pub struct MonitorCaptureReceiver<
-    'queue,
-    'pool,
-    M: RawMutex,
-    Rate,
-    const DEPTH: usize,
-    const CAPACITY: usize,
-> {
-    receiver: Receiver<'queue, M, MonitorCaptureFrame<'pool, Rate, CAPACITY>, DEPTH>,
+pub struct MonitorCaptureReceiver<'queue, 'pool, Rate, const DEPTH: usize, const CAPACITY: usize> {
+    receiver: WakingSpscReceiver<'queue, MonitorCaptureFrame<'pool, Rate, CAPACITY>, DEPTH>,
 }
 
-impl<'queue, 'pool, M: RawMutex, Rate, const DEPTH: usize, const CAPACITY: usize>
-    MonitorCaptureReceiver<'queue, 'pool, M, Rate, DEPTH, CAPACITY>
+impl<'pool, Rate, const DEPTH: usize, const CAPACITY: usize>
+    MonitorCaptureReceiver<'_, 'pool, Rate, DEPTH, CAPACITY>
 {
     pub fn try_receive(&self) -> Option<MonitorCaptureFrame<'pool, Rate, CAPACITY>> {
-        self.receiver.try_receive().ok()
+        self.receiver.try_receive()
     }
 
-    pub fn receive(&self) -> impl Future<Output = MonitorCaptureFrame<'pool, Rate, CAPACITY>> + '_ {
-        self.receiver.receive()
+    /// Wait for the next capture. Cancellation leaves it queued.
+    pub async fn receive(&mut self) -> MonitorCaptureFrame<'pool, Rate, CAPACITY> {
+        loop {
+            self.receiver.ready().await;
+            if let Some(frame) = self.receiver.try_receive() {
+                return frame;
+            }
+        }
     }
 
     pub fn len(&self) -> usize {
@@ -378,7 +366,7 @@ impl<'queue, 'pool, M: RawMutex, Rate, const DEPTH: usize, const CAPACITY: usize
     /// reusing the same resources for another epoch.
     pub fn discard_queued(&self) -> usize {
         let mut discarded = 0_usize;
-        while let Ok(frame) = self.receiver.try_receive() {
+        while let Some(frame) = self.receiver.try_receive() {
             drop(frame);
             discarded = discarded.saturating_add(1);
         }

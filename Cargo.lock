@@ -1876,7 +1876,10 @@ dependencies = [
 name = "oer-cooperate"
 version = "0.1.0"
 dependencies = [
+ "embassy-futures",
+ "embassy-sync",
  "oer-time",
+ "oer-time-virtual",
 ]
 
 [[package]]
@@ -2392,13 +2395,14 @@ dependencies = [
  "oer-espressif-staged-runtime",
  "oer-espressif-usb-serial-jtag",
  "oer-ieee80211-port",
- "oer-ieee80211-runtime",
+ "oer-ieee80211-sta",
  "oer-ieee80211-wire",
  "oer-memory",
  "oer-radio-regulatory",
  "oer-sort",
  "oer-sync",
  "oer-time",
+ "oer-time-virtual",
  "static_cell",
 ]
 
@@ -3098,7 +3102,6 @@ dependencies = [
 name = "oer-ieee80211-runtime"
 version = "0.1.0"
 dependencies = [
- "atomic-waker",
  "critical-section",
  "embassy-futures",
  "embassy-sync",
@@ -3109,7 +3112,6 @@ dependencies = [
  "oer-ieee80211-model",
  "oer-ieee80211-port",
  "oer-ieee80211-rsn",
- "oer-ieee80211-softmac",
  "oer-ieee80211-sta",
  "oer-ieee80211-upper-mac",
  "oer-ieee80211-wire",
@@ -3127,6 +3129,7 @@ version = "0.1.0"
 dependencies = [
  "oer-ieee80211-port",
  "oer-ieee80211-sta",
+ "oer-ieee80211-upper-mac",
  "oer-ieee80211-wire",
  "oer-time",
  "zeroize",
@@ -3155,10 +3158,12 @@ dependencies = [
 name = "oer-ieee80211-upper-mac"
 version = "0.1.0"
 dependencies = [
+ "heapless",
  "oer-ieee80211-port",
  "oer-ieee80211-wire",
  "oer-test-ui-cases",
  "oer-time",
+ "oer-time-virtual",
 ]
 
 [[package]]
@@ -3350,6 +3355,7 @@ dependencies = [
 name = "oer-memory"
 version = "0.1.0"
 dependencies = [
+ "atomic-waker",
  "bytemuck",
  "oer-sync",
  "oer-test-ui-cases",

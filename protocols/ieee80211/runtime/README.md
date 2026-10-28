@@ -1,16 +1,18 @@
 # Wi-Fi runtime
 
-`oer-ieee80211-runtime`: portable Wi-Fi execution primitives — monitor
-handoffs, task shutdown, station network ownership and poll boundaries.
+`oer-ieee80211-runtime`: the asynchronous glue between the lower-MAC port
+and the sans-IO cores. It selects over port events, `oer-time::Timer`
+deadlines and application commands, hands each input to the cores and
+carries out their actions through the port. It decides no protocol question
+and neither parses nor builds frames: its normal dependencies are the port,
+the cores (`sta`, `upper-mac`, `arbiter`) and portable support, never
+`oer-ieee80211-wire`, `oer-ieee80211-cipher`, a chip crate, an executor or
+Embassy time (`cargo test -p oer-test-layers`).
 
-`configuration` checks a requested Wi-Fi owner topology (station, access
-point, monitor) against a backend's `MacServiceCapabilities` and assigns its
-virtual-interface identities; `WifiPlan::standalone_monitor` and
-`standalone_esp_now` narrow it to an exclusive monitor or ESP-NOW station.
-`monitor::policy` holds the bounded `MonitorFilter` a monitor applies to
-tapped frames and its channel policy (fixed or a hopping sequence). `vif`
-routes one received MPDU of a same-channel station and SoftAP pair to its
-interface from its public header fields.
+`station_service` is the station's service; `monitor` holds the capture and
+injection handoffs of a monitor. The frames a monitor keeps and the channels
+it visits are `oer-ieee80211-upper-mac`'s `monitor`; the requested owner
+topology is checked by `oer-ieee80211-softmac`'s `configuration`.
 
 Host tests use the allocating in-memory backend from `oer-ieee80211-model`
 as a dev-dependency. The model's fixtures run the shared conformance cases in
@@ -26,17 +28,31 @@ identity. The radio and lower-MAC port contracts remain the common boundary.
 its resource bank across stop/restart. `ServiceIo` borrows a concrete
 `ServiceOutputSink`; closures implement that trait without erasing their type.
 Each output still transfers its original command or frame owner by value.
+Commands and network frames travel through `oer_memory::WakingSpscQueue`.
 
-The image lends `StationService` a placed `RxBlockAckStorage`. Its const generic
-bank count selects existing shared RX BA slot owners; retained frames borrow
-the port's RX buffers without copying payloads. Negotiation bounds each window
-by the remaining frame credits and reserves one credit to close a reorder gap.
-The service keeps pending responses while control TX is busy, reorders QoS data,
-advances a window on a matching compressed BAR, and releases frames and bank
-owners on peer DELBA, inactivity, disconnection or healthy Stop. The BAR,
-DELBA and ADDBA formats are `oer-ieee80211-wire`'s. ADDBA refusal
-uses an explicit status when the parameters or available resources cannot admit
-an agreement. The image supplies the reorder gap duration.
+Every transmission's parameters come from the cores: a station frame's rate
+plan, coexistence class, access category, protection exchange and power from
+`sta`'s action, its CCMP packet number from the station's pairwise key, and a
+data MPDU's from `sta::data`. The service prepares the port's source in the
+buffer pool, submits it and routes each terminal back; a terminal's rate
+sample reaches `RateSelection::learn` with its frame class.
+
+The image lends `StationService` a placed `RxBlockAckStorage`, the upper
+MAC's receive Block Ack owner bound to this port's RX owners, bank slots and
+the station's link epoch. Its const generic bank count selects existing shared
+RX BA slot owners; retained frames borrow the port's RX buffers without
+copying payloads. The owner decides every agreement edge; the service hands
+it the station's validated Block Ack actions and received frames, executes
+its bank and frame transitions on the phase (`RxBlockAckPort`), delivers the
+frames it releases in order and sends the replies it owes through the
+station's control credits. The image supplies the reorder gap duration.
+
+The monitor handoffs take no lock. A capture moves a frame copied into the
+caller's pool through an SPSC queue; an injection request moves its bytes by
+value through one, and its completion back through another. The active
+dwell's binding sits in a `ClaimCell`: a side that finds it lent to the other
+at that instant is refused with a typed result (`DwellChanging`,
+`BindingBusy`) and retries.
 
 ## Known defects
 
@@ -50,5 +66,5 @@ an agreement. The image supplies the reorder gap duration.
 - **No bound on a gate cycle or a drain.** `drain_port_error` has no
   deadline for a gate that never closes, and `MAX_INPUT_STEPS_PER_BATCH`
   only yields instead of raising a contract fault.
-- **Low:** retired-service fields `_pending`, `_arbiter`, `_places` and the
-  `MsduQueue` name remain in `station_service.rs`.
+- **Low:** retired-service fields `_pending`, `_arbiter` and `_places` remain
+  in `station_service.rs`.

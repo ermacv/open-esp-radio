@@ -95,7 +95,10 @@ pub mod tx;
 mod management;
 pub use management::ManagementTxPlan;
 
-pub use oer_ieee80211_wire::channel::{Band, Channel, ChannelError, ChannelWidth};
+// Vocabulary the port's signatures carry, so a runtime over the port names
+// it without depending on the air formats.
+pub use oer_ieee80211_wire::ccmp::GroupKeyId;
+pub use oer_ieee80211_wire::channel::{Band, Channel, ChannelError, ChannelWidth, WifiChannel};
 pub use oer_ieee80211_wire::phy::PhyRate;
 
 /// The clock domain of the IEEE 802.11 lower-MAC port: its instants never

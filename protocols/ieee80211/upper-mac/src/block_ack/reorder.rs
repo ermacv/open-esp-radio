@@ -55,10 +55,6 @@ pub enum RxReorderError {
     InvalidWindow(u16),
     /// A slot outside the caller's `SLOT_CAPACITY` domain.
     InvalidSlot(u8),
-    /// An agreement names a reorder bank outside its owner's fixed set. The
-    /// buffer itself never returns it; an owner of several buffers keyed by
-    /// bank reports it through the same type.
-    InvalidBank(u8),
     /// The sequence is already buffered.
     DuplicateSequence(SequenceNumber),
     /// The slot already holds a buffered MPDU.
