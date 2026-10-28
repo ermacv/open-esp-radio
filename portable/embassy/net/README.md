@@ -13,6 +13,9 @@ would wake a different task, then explicitly drop it; a matching Waker is
 only dropped. Separate fixed-slot wake-by-reference and drop calls preserve
 the DWARF method scopes the stack analyzer uses to prove Waker targets.
 
+`station_network` consumes a network device once to start the IP stack and
+retains that stack and the radio-side runner across station associations.
+
 RX frames are copied into the endpoint's packet pool before publication.
 The adapter accepts packet-pool owners and forbids unsafe code; it does not
 adopt detached DMA storage.

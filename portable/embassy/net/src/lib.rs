@@ -19,6 +19,8 @@
 //! and the radio. It contains no Wi-Fi scheduling, physical SRAM allocator or
 //! compatibility implementation of the released Embassy driver API. RX frames
 //! are copied into packet-pool storage before publication to the network stack.
+//! [`station_network`] retains the network stack and its radio-side runner
+//! across station associations.
 
 pub use embassy_sync::blocking_mutex::raw::{NoopRawMutex, RawMutex};
 pub use embassy_sync::signal::Signal;
@@ -27,6 +29,7 @@ pub use oer_network::{
 };
 
 mod owned;
+pub mod station_network;
 
 pub use owned::{
     EndpointSplitError, OwnedEndpointResources, OwnedLinkController, OwnedNetworkDevice,

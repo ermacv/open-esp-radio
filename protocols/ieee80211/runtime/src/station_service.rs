@@ -82,7 +82,7 @@
 //! a port fault leaves a simultaneously ready command in its queue. A received
 //! MSDU the network's full queue cannot take is dropped, as an Ethernet
 //! receiver drops one.
-//! `MsduQueue::split` exclusively borrows its storage. Both endpoints retain
+//! `WakingSpscQueue::split` exclusively borrows its storage. Both endpoints retain
 //! that borrow, so no second pair can coexist. After the pair returns, queued
 //! values remain owned by the queue and reach the next receiver in order.
 //! [`EthernetFrame`] retains its fixed header and bounded payload. Construction
@@ -124,6 +124,7 @@ use oer_ieee80211_sta::{
 };
 use oer_ieee80211_upper_mac::rate_selection::{FrameRates, RateSelection};
 use oer_ieee80211_wire::qos::{WmmAccessCategory, WmmUserPriority};
+use oer_memory::{WakingSpscReceiver, WakingSpscSender};
 use oer_radio_port::Slot;
 use oer_radio_port::{
     Disabled, Enabled, Ended, EventEnd, FailStopRequested, Failed, Owner, PoisonedOwner,
@@ -515,9 +516,7 @@ pub use custody::{
 mod arp_observation;
 pub use arp_observation::ArpFrameObservation;
 mod ethernet;
-mod msdu_queue;
 pub use ethernet::{EthernetFrame, FrameTooLong, MAX_ETHERNET_PAYLOAD_LEN};
-pub use msdu_queue::{MsduQueue, MsduReceiver, MsduSender, SendPermit};
 
 /// One checked, owned Ethernet frame with its user priority.
 #[derive(Debug)]
@@ -661,11 +660,11 @@ impl<'id, K, Path: oer_radio_port::PoolPath, F: FnMut(ServiceOutput<'id, K, Path
 /// ```compile_fail,E0308
 /// use embassy_sync::{blocking_mutex::raw::NoopRawMutex, channel::Channel};
 /// use oer_ieee80211_runtime::station_service::{
-///     EthernetFrame, MsduQueue, ServiceCommand, ServiceIo, ServiceOutput, TxMsdu,
+///     EthernetFrame, WakingSpscQueue, ServiceCommand, ServiceIo, ServiceOutput, TxMsdu,
 /// };
 /// let commands = Channel::<NoopRawMutex, ServiceCommand<()>, 1>::new();
-/// let mut tx = MsduQueue::<TxMsdu, 1>::new();
-/// let mut rx = MsduQueue::<EthernetFrame, 1>::new();
+/// let mut tx = WakingSpscQueue::<TxMsdu, 1>::new();
+/// let mut rx = WakingSpscQueue::<EthernetFrame, 1>::new();
 /// let (_, transmit) = tx.split();
 /// let (receive, _) = rx.split();
 /// let mut output = |_: ServiceOutput<()>| {};
@@ -678,11 +677,11 @@ impl<'id, K, Path: oer_radio_port::PoolPath, F: FnMut(ServiceOutput<'id, K, Path
 ///
 /// ```
 /// use oer_ieee80211_runtime::station_service::{
-///     EthernetFrame, MsduQueue, ServiceCommand, ServiceIo, ServiceOutput, TxMsdu,
+///     EthernetFrame, WakingSpscQueue, ServiceCommand, ServiceIo, ServiceOutput, TxMsdu,
 /// };
-/// let mut commands = MsduQueue::<ServiceCommand<()>, 1>::new();
-/// let mut tx = MsduQueue::<TxMsdu, 1>::new();
-/// let mut rx = MsduQueue::<EthernetFrame, 1>::new();
+/// let mut commands = WakingSpscQueue::<ServiceCommand<()>, 1>::new();
+/// let mut tx = WakingSpscQueue::<TxMsdu, 1>::new();
+/// let mut rx = WakingSpscQueue::<EthernetFrame, 1>::new();
 /// let (application, commands) = commands.split();
 /// let (_, transmit) = tx.split();
 /// let (receive, _) = rx.split();
@@ -703,11 +702,11 @@ pub struct ServiceIo<
 > {
     /// The application's exclusive command receiver. Readiness does not
     /// remove a command; a simultaneous port fault leaves it in this queue.
-    pub commands: MsduReceiver<'c, ServiceCommand<'id, K, Path>, COMMAND_DEPTH>,
+    pub commands: WakingSpscReceiver<'c, ServiceCommand<'id, K, Path>, COMMAND_DEPTH>,
     /// The MSDUs the network stack sends.
-    pub transmit: MsduReceiver<'c, TxMsdu, TX_DEPTH>,
+    pub transmit: WakingSpscReceiver<'c, TxMsdu, TX_DEPTH>,
     /// The MSDUs the station received for the network stack.
-    pub receive: MsduSender<'c, EthernetFrame, RX_DEPTH>,
+    pub receive: WakingSpscSender<'c, EthernetFrame, RX_DEPTH>,
     /// What the service tells the application.
     pub output: &'c mut O,
 }

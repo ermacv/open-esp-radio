@@ -6,7 +6,8 @@ use core::{
     task::Poll,
 };
 use oer_embassy_net::{NoopRawMutex, OwnedNetworkRunner};
-use oer_ieee80211_runtime::station_service::{EthernetFrame, MsduReceiver, MsduSender, TxMsdu};
+use oer_ieee80211_runtime::station_service::{EthernetFrame, TxMsdu};
+use oer_memory::{WakingSpscReceiver, WakingSpscSender};
 use oer_ieee80211_wire::{data::EthernetFrameParts, qos::WmmUserPriority};
 use oer_time::{Clock, Duration, Timer};
 
@@ -37,8 +38,8 @@ impl Counters {
 /// A full downstream queue keeps its source owner queued and arms its wake.
 pub async fn run<const RX: usize, const TX: usize, T: Clock + Timer>(
     radio: OwnedNetworkRunner<'_, NoopRawMutex, RX, TX>,
-    mut tx: MsduSender<'_, TxMsdu, 2>,
-    mut rx: MsduReceiver<'_, EthernetFrame, RX>,
+    mut tx: WakingSpscSender<'_, TxMsdu, 2>,
+    mut rx: WakingSpscReceiver<'_, EthernetFrame, RX>,
     observations: &RefCell<Observations>,
     link: &Cell<bool>,
     clock: &T,
@@ -75,8 +76,8 @@ pub async fn run<const RX: usize, const TX: usize, T: Clock + Timer>(
 #[allow(clippy::too_many_arguments)]
 fn drain_step<const RX: usize, const TX: usize, T: Clock>(
     radio: &OwnedNetworkRunner<'_, NoopRawMutex, RX, TX>,
-    tx: &mut MsduSender<'_, TxMsdu, 2>,
-    rx: &mut MsduReceiver<'_, EthernetFrame, RX>,
+    tx: &mut WakingSpscSender<'_, TxMsdu, 2>,
+    rx: &mut WakingSpscReceiver<'_, EthernetFrame, RX>,
     observations: &RefCell<Observations>,
     link: &Cell<bool>,
     state: &mut bool,
@@ -183,7 +184,7 @@ mod tests {
     use super::*;
     use core::{future::Future, task::Context};
     use oer_embassy_net::{NetworkInterfaceId, OwnedEndpointResources};
-    use oer_ieee80211_runtime::station_service::MsduQueue;
+    use oer_memory::WakingSpscQueue;
     use oer_time_virtual::VirtualClock;
     use std::boxed::Box;
     use xarxa_driver::{PacketBufAllocator, PacketPool, PacketPoolStorage};
@@ -217,12 +218,12 @@ mod tests {
         let retained = device.receive().unwrap();
         device.transmit(retained).unwrap();
         assert!(!pool.has_available());
-        let mut input = MsduQueue::<EthernetFrame, 8>::new();
+        let mut input = WakingSpscQueue::<EthernetFrame, 8>::new();
         let (source, receiver) = input.split();
         for marker in 0..8 {
             source.try_send(frame(marker)).unwrap();
         }
-        let mut output = MsduQueue::<TxMsdu, 2>::new();
+        let mut output = WakingSpscQueue::<TxMsdu, 2>::new();
         let (sender, sink) = output.split();
         let observations = RefCell::new(Observations::new(7));
         let link = Cell::new(true);
@@ -285,12 +286,12 @@ mod tests {
         packet.set_len(15);
         packet.fill(2);
         device.transmit(packet).unwrap();
-        let mut input = MsduQueue::<EthernetFrame, 8>::new();
+        let mut input = WakingSpscQueue::<EthernetFrame, 8>::new();
         let (source, receiver) = input.split();
         for marker in 0..8 {
             source.try_send(frame(marker)).unwrap();
         }
-        let mut output = MsduQueue::<TxMsdu, 2>::new();
+        let mut output = WakingSpscQueue::<TxMsdu, 2>::new();
         let (sender, sink) = output.split();
         let observations = RefCell::new(Observations::new(7));
         let link = Cell::new(true);
@@ -324,12 +325,12 @@ mod tests {
         packet.set_len(15);
         packet.fill(2);
         device.transmit(packet).unwrap();
-        let mut input = MsduQueue::<EthernetFrame, RX>::new();
+        let mut input = WakingSpscQueue::<EthernetFrame, RX>::new();
         let (source, receiver) = input.split();
         for marker in 0..RX as u8 {
             source.try_send(frame(marker)).unwrap();
         }
-        let mut output = MsduQueue::<TxMsdu, 2>::new();
+        let mut output = WakingSpscQueue::<TxMsdu, 2>::new();
         let (sender, sink) = output.split();
         let observations = RefCell::new(Observations::new(7));
         let link = Cell::new(true);
@@ -395,12 +396,12 @@ mod tests {
             .expect("endpoint split");
         radio.link_controller().set_link_up(true);
         let general = allocator::<{ TX + 1 }>();
-        let mut input = MsduQueue::<EthernetFrame, RX>::new();
+        let mut input = WakingSpscQueue::<EthernetFrame, RX>::new();
         let (source, receiver) = input.split();
         for marker in 0..RX as u8 {
             source.try_send(frame(marker)).unwrap();
         }
-        let mut output = MsduQueue::<TxMsdu, 2>::new();
+        let mut output = WakingSpscQueue::<TxMsdu, 2>::new();
         let (sender, sink) = output.split();
         let observations = RefCell::new(Observations::new(7));
         let link = Cell::new(true);
@@ -475,9 +476,9 @@ mod tests {
             p
         };
         device.transmit(packet(2)).unwrap();
-        let mut input = MsduQueue::<EthernetFrame, 1>::new();
+        let mut input = WakingSpscQueue::<EthernetFrame, 1>::new();
         let (source, receiver) = input.split();
-        let mut output = MsduQueue::<TxMsdu, 2>::new();
+        let mut output = WakingSpscQueue::<TxMsdu, 2>::new();
         let (sender, sink) = output.split();
         for marker in [100, 101] {
             sender

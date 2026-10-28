@@ -1877,7 +1877,10 @@ dependencies = [
 name = "oer-cooperate"
 version = "0.1.0"
 dependencies = [
+ "embassy-futures",
+ "embassy-sync",
  "oer-time",
+ "oer-time-virtual",
 ]
 
 [[package]]
@@ -2393,13 +2396,14 @@ dependencies = [
  "oer-espressif-staged-runtime",
  "oer-espressif-usb-serial-jtag",
  "oer-ieee80211-port",
- "oer-ieee80211-runtime",
+ "oer-ieee80211-sta",
  "oer-ieee80211-wire",
  "oer-memory",
  "oer-radio-regulatory",
  "oer-sort",
  "oer-sync",
  "oer-time",
+ "oer-time-virtual",
  "static_cell",
 ]
 
@@ -3351,6 +3355,7 @@ dependencies = [
 name = "oer-memory"
 version = "0.1.0"
 dependencies = [
+ "atomic-waker",
  "bytemuck",
  "oer-sync",
  "oer-test-ui-cases",

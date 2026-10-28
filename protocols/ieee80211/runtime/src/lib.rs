@@ -47,17 +47,14 @@
 //! task assembly belong to the chip backend and its integration.
 //!
 //! The station's SPSC sender waits through `ready(&mut self)`, returning a
-//! [`station_service::SendPermit`] that holds its exclusive producer borrow.
+//! `oer_memory::WakingSpscSendPermit` that holds its exclusive producer borrow.
 //! `send` publishes without a fallible second capacity check. Cancelling the
 //! wait or dropping the permit consumes neither a value nor queue capacity;
 //! the receiver may run on another thread.
 //!
 pub mod configuration;
-pub mod connected_tasks;
 pub mod monitor;
-pub mod station_network;
 pub mod station_service;
-pub mod survey;
 pub mod vif;
 
 pub use monitor::injection as monitor_injection;

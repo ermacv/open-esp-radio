@@ -50,5 +50,5 @@ an agreement. The image supplies the reorder gap duration.
 - **No bound on a gate cycle or a drain.** `drain_port_error` has no
   deadline for a gate that never closes, and `MAX_INPUT_STEPS_PER_BATCH`
   only yields instead of raising a contract fault.
-- **Low:** retired-service fields `_pending`, `_arbiter`, `_places` and the
-  `MsduQueue` name remain in `station_service.rs`.
+- **Low:** retired-service fields `_pending`, `_arbiter` and `_places` remain
+  in `station_service.rs`.

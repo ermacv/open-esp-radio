@@ -18,6 +18,14 @@
 //! binding accounts for ready tasks, interrupt facts awaiting delivery, and
 //! the current task poll's execution guard. Drivers do not inspect a run queue
 //! or bind to a particular executor. There is no default no-peer policy.
+//!
+//! [`connected_tasks`] coordinates the finite cooperative shutdown of the
+//! tasks attached to one epoch.
+
+pub mod connected_tasks;
+
+#[cfg(test)]
+extern crate std;
 
 /// A timer whose executor can admit another bounded hardware atom.
 ///

@@ -8,6 +8,7 @@ mod irq;
 mod measure;
 mod own;
 mod report;
+mod survey;
 mod usb;
 
 use core::convert::Infallible;
@@ -43,7 +44,7 @@ use oer_espressif_executor::{
     Doorbell, Executor, InterruptExecutor, Spawner, timer_observation::Window,
 };
 use oer_espressif_staged_runtime::{panic, stacks};
-use oer_ieee80211_runtime::survey::Survey;
+use crate::survey::Survey;
 use oer_ieee80211_wire::{
     address::{Bssid, IndividualAddress},
     channel::{Channel, WifiChannel, WifiChannelWidth},
