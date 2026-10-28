@@ -66,8 +66,9 @@ oer_espressif_executor::tasks! {
         rtc_watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) = feed_rtc_watchdog;
     }
 }
+const CONTROL_REQUEST: u32 = 0x100;
 static DOORBELL: RequestDoorbell = RequestDoorbell::new();
-static SLOT: RequestSlot<Request, Answer> = RequestSlot::new(&DOORBELL, 1);
+static SLOT: RequestSlot<Request, Answer> = RequestSlot::new(&DOORBELL, 1, CONTROL_REQUEST);
 use services::Request;
 enum Answer {
     Prepared(Prepared),
@@ -292,10 +293,9 @@ async fn dispatch(mut poster: Poster<Request, Answer>) {
     loop {
         let (id, request) = REQUESTS.receive().await;
         let mut pending = poster.post(request);
-        let (returned, answer) = poll_fn(|cx| pending.poll_answer(cx)).await.unwrap_or_else(|_| {
-            oer_espressif_staged_runtime::panic::reset_fault(
-                oer_espressif_staged_runtime::panic::FaultReason::RequestUnanswered, [0; 4])
-        });
+        let (returned, answer) = poll_fn(|cx| pending.poll_answer(cx))
+            .await
+            .unwrap_or_else(oer_espressif_staged_runtime::panic::reset_request);
         poster = returned;
         match answer {
             Answer::Prepared(value) => {

@@ -45,7 +45,48 @@ const QUARANTINED: u8 = 4;
 /// The server abandoned its response; the seat remains permanently claimed.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RequestError {
-    Unanswered,
+    Unanswered {
+        /// Caller-assigned request kind or site, stable within the image.
+        kind: u32,
+        /// Index of the slot's doorbell bit.
+        slot: u32,
+        /// Caller's epoch, when the client has one; otherwise zero.
+        epoch: u32,
+        /// Wrapping per-slot post number, starting at one.
+        sequence: u32,
+    },
+}
+
+impl RequestError {
+    /// Retained observation layout: request kind/site, client slot, epoch,
+    /// and per-slot sequence. Keep this conversion shared by every image.
+    pub const fn observations(self) -> [u32; 4] {
+        match self {
+            Self::Unanswered {
+                kind,
+                slot,
+                epoch,
+                sequence,
+            } => [kind, slot, epoch, sequence],
+        }
+    }
+
+    /// Attach the epoch held by the client to the original request identity.
+    pub const fn with_epoch(self, epoch: u32) -> Self {
+        match self {
+            Self::Unanswered {
+                kind,
+                slot,
+                sequence,
+                ..
+            } => Self::Unanswered {
+                kind,
+                slot,
+                epoch,
+                sequence,
+            },
+        }
+    }
 }
 
 /// Owners retained after a request lost its mandatory response. Dropping or
@@ -61,6 +102,14 @@ impl<T> RequestQuarantine<T> {
             reason,
             _owners: ManuallyDrop::new(owners),
         }
+    }
+}
+
+// Extracting the diagnostic consumes only the wrapper. Its ManuallyDrop
+// payload remains quarantined, including when reset takes the error by value.
+impl<T> From<RequestQuarantine<T>> for RequestError {
+    fn from(quarantine: RequestQuarantine<T>) -> Self {
+        quarantine.reason
     }
 }
 
@@ -104,6 +153,7 @@ pub struct ByValue {
     client: PriorityWaker,
     doorbell: &'static Doorbell,
     bit: u32,
+    kind: u32,
 }
 
 /// In-place processing with external notifications and no stored wakers.
@@ -138,8 +188,9 @@ pub struct RequestSlot<Req, Ans, Mode = ByValue> {
 unsafe impl<Req: Send, Ans: Send, Mode: Sync> Sync for RequestSlot<Req, Ans, Mode> {}
 
 impl<Req, Ans> RequestSlot<Req, Ans> {
-    /// A slot that rings `bit` of `doorbell`.
-    pub const fn new(doorbell: &'static Doorbell, bit: u32) -> Self {
+    /// A slot that rings `bit` of `doorbell`. `kind` identifies the request
+    /// type or posting site in retained abandonment diagnostics.
+    pub const fn new(doorbell: &'static Doorbell, bit: u32, kind: u32) -> Self {
         Self {
             claimed: AtomicBool::new(false),
             state: AtomicU8::new(IDLE),
@@ -149,6 +200,7 @@ impl<Req, Ans> RequestSlot<Req, Ans> {
                 client: PriorityWaker::new(),
                 doorbell,
                 bit,
+                kind,
             },
         }
     }
@@ -163,7 +215,10 @@ impl<Req, Ans> RequestSlot<Req, Ans> {
         if self.claimed.swap(true, Ordering::AcqRel) {
             return None;
         }
-        Some(Poster { slot: self })
+        Some(Poster {
+            slot: self,
+            sequence: 0,
+        })
     }
 
     /// Take a posted request and the duty to answer it.
@@ -176,10 +231,10 @@ impl<Req, Ans> RequestSlot<Req, Ans> {
     }
 
     /// The answer, once the server gave it; the slot is `IDLE` again.
-    fn poll_answer(&self, cx: &mut Context<'_>) -> Poll<Result<Ans, RequestError>> {
+    fn poll_answer(&self, cx: &mut Context<'_>) -> Poll<Result<Ans, ()>> {
         self.mode.client.register(cx.waker());
         if self.state.load(Ordering::Acquire) == QUARANTINED {
-            return Poll::Ready(Err(RequestError::Unanswered));
+            return Poll::Ready(Err(()));
         }
         if self
             .state
@@ -354,6 +409,7 @@ impl<Req> InPlaceServer<Req> {
 #[must_use = "the poster is the client's only way to the server"]
 pub struct Poster<Req: 'static, Ans: 'static> {
     slot: &'static RequestSlot<Req, Ans>,
+    sequence: u32,
 }
 
 impl<Req, Ans> Poster<Req, Ans> {
@@ -364,6 +420,7 @@ impl<Req, Ans> Poster<Req, Ans> {
         self.slot.mode.doorbell.ring(self.slot.mode.bit);
         Awaiting {
             slot: Some(self.slot),
+            sequence: self.sequence.wrapping_add(1),
         }
     }
 }
@@ -382,6 +439,7 @@ impl<Req, Ans> core::fmt::Debug for Poster<Req, Ans> {
 #[must_use = "the poster returns only with the answer"]
 pub struct Awaiting<Req: 'static, Ans: 'static> {
     slot: Option<&'static RequestSlot<Req, Ans>>,
+    sequence: u32,
 }
 
 impl<Req, Ans> Awaiting<Req, Ans> {
@@ -395,7 +453,24 @@ impl<Req, Ans> Awaiting<Req, Ans> {
         };
         let answer = core::task::ready!(slot.poll_answer(cx));
         self.slot = None;
-        Poll::Ready(answer.map(|answer| (Poster { slot }, answer)))
+        Poll::Ready(
+            answer
+                .map(|answer| {
+                    (
+                        Poster {
+                            slot,
+                            sequence: self.sequence,
+                        },
+                        answer,
+                    )
+                })
+                .map_err(|()| RequestError::Unanswered {
+                    kind: slot.mode.kind,
+                    slot: slot.mode.bit.trailing_zeros(),
+                    epoch: 0,
+                    sequence: self.sequence,
+                }),
+        )
     }
 }
 

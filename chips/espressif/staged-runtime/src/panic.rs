@@ -253,6 +253,19 @@ pub fn reset_fault<P: oer_espressif_platform_port::Platform>(
     })
 }
 
+/// Preserve an unanswered request's source identity before resetting. The
+/// image retains its dependent owners; `RequestQuarantine` never releases them.
+#[cfg(all(target_arch = "riscv32", feature = "esp32s31"))]
+pub fn reset_request<T>(error: impl Into<oer_memory::RequestError>) -> T {
+    let (reason, observations) = request_fault(error.into());
+    reset_fault(reason, observations)
+}
+
+#[cfg(any(test, all(target_arch = "riscv32", feature = "esp32s31")))]
+fn request_fault(error: oer_memory::RequestError) -> (FaultReason, [u32; 4]) {
+    (FaultReason::RequestUnanswered, error.observations())
+}
+
 // The guard is the current boot's first-writer election: it stays held until
 // reset. A fresh claim may replace any retained bytes from an earlier boot,
 // even when that image never consumed the previous record.
@@ -783,6 +796,56 @@ mod fault_tests {
     use super::*;
 
     use core::cell::RefCell;
+
+    #[test]
+    fn every_unanswered_request_kind_round_trips_through_the_retained_record() {
+        use core::task::{Context, Poll, Waker};
+        use std::boxed::Box;
+        let mut seen = std::collections::BTreeSet::new();
+        // Radio join/track/retune/leave and the image-local request sites.
+        for kind in [1, 2, 3, 4, 0x100, 0x101, 0x102] {
+            for index in [0, 1] {
+                let doorbell = Box::leak(Box::new(oer_memory::Doorbell::new()));
+                let requests = Box::leak(Box::new(oer_memory::RequestSlot::<(), ()>::new(
+                    doorbell,
+                    1 << index,
+                    kind,
+                )));
+                let mut pending = requests.claim().unwrap().post(());
+                drop(requests.take_request().unwrap().1);
+                let Poll::Ready(Err(error)) =
+                    pending.poll_answer(&mut Context::from_waker(Waker::noop()))
+                else {
+                    panic!("unanswered request");
+                };
+                let (reason, words) = request_fault(error.with_epoch(0xfedc_ba98));
+                assert_eq!(words, [kind, index, 0xfedc_ba98, 1]);
+                assert!(seen.insert(words));
+                let storage = RefCell::new(Slot::EMPTY);
+                let retained =
+                    record_named_fault_in(storage.try_borrow_mut().ok(), reason, words).unwrap();
+                // The bytes survive the reset, while the ordinary-RAM claim does not.
+                let mut reboot = *retained;
+                assert_eq!(reboot.named_fault(), Some(("RequestUnanswered", words)));
+                assert_eq!(report_named_fault(&mut reboot, |_, _| Err(())), Err(()));
+                assert_eq!(reboot.named_fault(), Some(("RequestUnanswered", words)));
+                report_named_fault(&mut reboot, |name, observations| {
+                    assert_eq!(name, "RequestUnanswered");
+                    assert_eq!(observations, words);
+                    Ok::<_, ()>(())
+                })
+                .unwrap();
+                assert_eq!(reboot.named_fault(), None);
+                assert!(
+                    pending
+                        .poll_answer(&mut Context::from_waker(Waker::noop()))
+                        .is_pending()
+                );
+                assert!(requests.claim().is_none());
+            }
+        }
+        assert_eq!(seen.len(), 14);
+    }
 
     #[test]
     fn named_fault_reuses_the_slot_and_preserves_the_current_boot_claim() {

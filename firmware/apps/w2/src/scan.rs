@@ -211,10 +211,8 @@ async fn run(
         },
         start,
     )
-    .await.unwrap_or_else(|_| {
-        oer_espressif_staged_runtime::panic::reset_fault(
-            oer_espressif_staged_runtime::panic::FaultReason::RequestUnanswered, [0; 4])
-    });
+    .await
+    .unwrap_or_else(oer_espressif_staged_runtime::panic::reset_request);
     cell = returned;
     let stopped = started.map_err(|_| oer_diagnostics::name!("bringup"; 32))?;
     let profile = stopped.start_report().track.tx_power;
@@ -283,7 +281,10 @@ async fn run(
             .await
             .map_err(|_| oer_diagnostics::name!("rx-pause"; 32))?;
         let stopped = owner.into_stopped(registers, ()).wifi;
-        let (returned, tuned) = stopped.retune(cell, channel, limit).await;
+        let (returned, tuned) = stopped
+            .retune(cell, channel, limit)
+            .await
+            .unwrap_or_else(oer_espressif_staged_runtime::panic::reset_request);
         cell = returned;
         let (stopped, tuned) = tuned.map_err(|_| oer_diagnostics::name!("retune"; 32))?;
         let parts = materialize_esp32s31_wifi_role(stopped, ());
@@ -362,7 +363,10 @@ async fn run(
         .map_err(|_| oer_diagnostics::name!("rx-pause-unicast"; 32))?;
     let stopped = owner.into_stopped(registers, ()).wifi;
     let limit = ceiling(initial, config);
-    let (returned, tuned) = stopped.retune(cell, initial, limit).await;
+    let (returned, tuned) = stopped
+        .retune(cell, initial, limit)
+        .await
+        .unwrap_or_else(oer_espressif_staged_runtime::panic::reset_request);
     cell = returned;
     let (stopped, tuned) = tuned.map_err(|_| oer_diagnostics::name!("retune-unicast"; 32))?;
     let parts = materialize_esp32s31_wifi_role(stopped, ());
@@ -434,10 +438,10 @@ async fn run(
         .await
         .map_err(|_| oer_diagnostics::name!("rx-final-stop"; 32))?;
     let stopped = owner.into_stopped(registers, ()).wifi;
-    let (_cell, released) = stopped.release(cell).await.unwrap_or_else(|_| {
-        oer_espressif_staged_runtime::panic::reset_fault(
-            oer_espressif_staged_runtime::panic::FaultReason::RequestUnanswered, [0; 4])
-    });
+    let (_cell, released) = stopped
+        .release(cell)
+        .await
+        .unwrap_or_else(oer_espressif_staged_runtime::panic::reset_request);
     released.map_err(|_| oer_diagnostics::name!("release"; 32))?;
     Ok(())
 }

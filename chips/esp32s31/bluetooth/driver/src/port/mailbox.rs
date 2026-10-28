@@ -101,7 +101,7 @@ impl ClockState {
         let request = pending.request;
         let (poster, answer) = match core::task::ready!(pending.awaiting.poll_answer(cx)) {
             Ok(answer) => answer,
-            Err(oer_memory::RequestError::Unanswered) => {
+            Err(oer_memory::RequestError::Unanswered { .. }) => {
                 self.pending = None;
                 let fault = self.fail(Fault::Accounting);
                 return Poll::Ready(ClockAnswer {
@@ -381,7 +381,7 @@ impl<T> MailboxDevice<T> {
         .await;
         let answer = match answer {
             Ok(answer) => answer,
-            Err(oer_memory::RequestError::Unanswered) => {
+            Err(oer_memory::RequestError::Unanswered { .. }) => {
                 self.pending = None;
                 return Err(self.fail(Fault::Accounting));
             }

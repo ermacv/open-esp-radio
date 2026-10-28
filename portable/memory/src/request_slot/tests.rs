@@ -10,7 +10,7 @@ use super::*;
 
 fn slot() -> &'static RequestSlot<u32, u64> {
     let doorbell: &'static Doorbell = Box::leak(Box::new(Doorbell::new()));
-    Box::leak(Box::new(RequestSlot::new(doorbell, 1 << 3)))
+    Box::leak(Box::new(RequestSlot::new(doorbell, 1 << 3, 17)))
 }
 
 fn noop() -> Context<'static> {
@@ -161,7 +161,12 @@ fn an_unanswered_responder_wakes_the_client_and_permanently_quarantines_the_seat
     assert!(flag.0.load(Ordering::SeqCst));
     assert!(matches!(
         awaiting.poll_answer(&mut cx),
-        Poll::Ready(Err(RequestError::Unanswered))
+        Poll::Ready(Err(RequestError::Unanswered {
+            kind: 17,
+            slot: 3,
+            epoch: 0,
+            sequence: 1
+        }))
     ));
     assert!(awaiting.poll_answer(&mut cx).is_pending());
     assert_eq!(slot.state.load(Ordering::Acquire), QUARANTINED);
@@ -376,8 +381,62 @@ fn dropping_a_quarantine_does_not_release_its_original_owners() {
         }
     }
     let drops = core::cell::Cell::new(0);
-    let quarantine = RequestQuarantine::new(RequestError::Unanswered, Owner(&drops));
-    assert_eq!(quarantine.reason, RequestError::Unanswered);
+    let quarantine = RequestQuarantine::new(
+        RequestError::Unanswered {
+            kind: 17,
+            slot: 3,
+            epoch: 9,
+            sequence: 12,
+        },
+        Owner(&drops),
+    );
+    assert_eq!(quarantine.reason.observations(), [17, 3, 9, 12]);
     drop(quarantine);
+    assert_eq!(drops.get(), 0);
+}
+
+#[test]
+fn abandonment_preserves_the_slot_kind_index_and_wrapping_post_sequence() {
+    for (previous, expected) in [(0, 2), (u32::MAX - 1, 0)] {
+        let slot = slot();
+        let mut poster = slot.claim().unwrap();
+        poster.sequence = previous;
+        let mut first = poster.post(1);
+        slot.take_request().unwrap().1.answer(10);
+        let Poll::Ready(Ok((poster, 10))) = first.poll_answer(&mut noop()) else {
+            panic!("first request answered");
+        };
+        let mut second = poster.post(2);
+        drop(slot.take_request().unwrap().1);
+        let Poll::Ready(Err(error)) = second.poll_answer(&mut noop()) else {
+            panic!("second request abandoned");
+        };
+        assert_eq!(error.observations(), [17, 3, 0, expected]);
+        assert_eq!(
+            error.with_epoch(u32::MAX).observations(),
+            [17, 3, u32::MAX, expected]
+        );
+        assert!(second.poll_answer(&mut noop()).is_pending());
+        assert!(slot.claim().is_none());
+    }
+}
+
+#[test]
+fn extracting_a_quarantined_error_preserves_its_observations_and_retains_owners() {
+    struct Owner<'a>(&'a core::cell::Cell<u32>);
+    impl Drop for Owner<'_> {
+        fn drop(&mut self) {
+            self.0.set(self.0.get() + 1);
+        }
+    }
+    let drops = core::cell::Cell::new(0);
+    let source = RequestError::Unanswered {
+        kind: 4,
+        slot: 1,
+        epoch: 0xfedc_ba98,
+        sequence: 27,
+    };
+    let error = RequestError::from(RequestQuarantine::new(source, Owner(&drops)));
+    assert_eq!(error.observations(), [4, 1, 0xfedc_ba98, 27]);
     assert_eq!(drops.get(), 0);
 }

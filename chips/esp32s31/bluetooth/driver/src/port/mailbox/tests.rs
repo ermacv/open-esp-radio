@@ -54,8 +54,8 @@ struct Fixture {
 impl Fixture {
     fn new() -> (Self, MailboxDevice<TestTimer>) {
         let bell = Box::leak(Box::new(Doorbell::new()));
-        let commands = Box::leak(Box::new(Commands::new(bell, 1)));
-        let clocks = Box::leak(Box::new(ClockRequests::new(bell, 2)));
+        let commands = Box::leak(Box::new(Commands::new(bell, 1, 0x101)));
+        let clocks = Box::leak(Box::new(ClockRequests::new(bell, 2, 0x102)));
         let cancel = Box::leak(Box::new(AtomicBool::new(false)));
         let state = Box::leak(Box::new(ClockStorage::new()));
         let value = Box::leak(Box::new(ClockState::new(

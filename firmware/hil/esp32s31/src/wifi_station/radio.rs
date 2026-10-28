@@ -127,13 +127,14 @@ impl RadioCoexPriorities for Coex {
     }
 }
 type Front = radio::SlotFrontend<'static, slot::Id, Backend<slot::Id>>;
+const FRONTEND_REQUEST: u32 = 0x100;
 static READY_BELL: oer_memory::Doorbell = oer_memory::Doorbell::new();
 type ReadySlot = oer_memory::RequestSlot<(), Result<Front, &'static str>>;
 pub struct DriverChannel(&'static ReadySlot);
 pub struct FrontendChannel(oer_memory::Poster<(), Result<Front, &'static str>>);
 pub fn channels() -> (DriverChannel, FrontendChannel) {
     static SLOT: StaticCell<ReadySlot> = StaticCell::new();
-    let slot = SLOT.init_with(|| ReadySlot::new(&READY_BELL, 1));
+    let slot = SLOT.init_with(|| ReadySlot::new(&READY_BELL, 1, FRONTEND_REQUEST));
     (
         DriverChannel(slot),
         FrontendChannel(slot.claim().expect("one station frontend")),
@@ -177,10 +178,9 @@ pub async fn drive(boot: Boot, channel: DriverChannel) {
 }
 pub async fn serve(channel: FrontendChannel, body: super::station::Body) {
     let mut pending = channel.0.post(());
-    let (_, front) = poll_fn(|cx| pending.poll_answer(cx)).await.unwrap_or_else(|_| {
-            oer_espressif_staged_runtime::panic::reset_fault(
-                oer_espressif_staged_runtime::panic::FaultReason::RequestUnanswered, [0; 4])
-        });
+    let (_, front) = poll_fn(|cx| pending.poll_answer(cx))
+        .await
+        .unwrap_or_else(oer_espressif_staged_runtime::panic::reset_request);
     match front {
         Ok(front) => {
             let mut running = core::pin::pin!(radio::run_port(front, body));
@@ -227,10 +227,8 @@ async fn install(boot: Boot, config: RadioConfig) -> Result<PortParts<Device, TX
         },
         start,
     )
-    .await.unwrap_or_else(|_| {
-        oer_espressif_staged_runtime::panic::reset_fault(
-            oer_espressif_staged_runtime::panic::FaultReason::RequestUnanswered, [0; 4])
-    });
+    .await
+    .unwrap_or_else(oer_espressif_staged_runtime::panic::reset_request);
     let stopped = stopped.map_err(|_| "radio start")?;
     let power = stopped.start_report().track.tx_power;
     let arena = irq::RX.take().ok_or("RX claimed")?;

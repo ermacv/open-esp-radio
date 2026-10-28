@@ -99,8 +99,10 @@ oer_espressif_executor::tasks! {
     }
 }
 static RADIO: StaticCell<radio::Radio> = StaticCell::new();
+const PHY_REQUEST: u32 = 0x100;
+const HEALTH_REQUEST: u32 = 0x101;
 static DOORBELL: Doorbell = Doorbell::new();
-static SLOT: RequestSlot<Request, Answer> = RequestSlot::new(&DOORBELL, 1);
+static SLOT: RequestSlot<Request, Answer> = RequestSlot::new(&DOORBELL, 1, PHY_REQUEST);
 
 // P1 publishes the wire response before releasing P2's sealed registration.
 enum Request {
@@ -304,10 +306,9 @@ async fn dispatch(mut poster: Poster<Request, Answer>) {
     loop {
         let (id, request) = REQUESTS.receive().await;
         let mut pending = poster.post(request);
-        let (returned, answer) = poll_fn(|cx| pending.poll_answer(cx)).await.unwrap_or_else(|_| {
-            oer_espressif_staged_runtime::panic::reset_fault(
-                oer_espressif_staged_runtime::panic::FaultReason::RequestUnanswered, [0; 4])
-        });
+        let (returned, answer) = poll_fn(|cx| pending.poll_answer(cx))
+            .await
+            .unwrap_or_else(oer_espressif_staged_runtime::panic::reset_request);
         poster = returned;
         macro_rules! send {
             ($value:expr) => {
@@ -371,10 +372,9 @@ async fn dispatch(mut poster: Poster<Request, Answer>) {
                 transport::receiver_limit(fault);
             }
             let mut pending = poster.post(Request::Proceed);
-            let (returned, _answer) = poll_fn(|cx| pending.poll_answer(cx)).await.unwrap_or_else(|_| {
-            oer_espressif_staged_runtime::panic::reset_fault(
-                oer_espressif_staged_runtime::panic::FaultReason::RequestUnanswered, [0; 4])
-        });
+            let (returned, _answer) = poll_fn(|cx| pending.poll_answer(cx))
+                .await
+                .unwrap_or_else(oer_espressif_staged_runtime::panic::reset_request);
             poster = returned;
         }
     }
@@ -445,4 +445,5 @@ type IntakeRequest = Request;
 #[cfg(feature = "diagnostic-radio-health")]
 type IntakeRequest = oer_hil_agent::base::Either<Request, health::Request>;
 #[cfg(feature = "diagnostic-radio-health")]
-static HEALTH_SLOT: RequestSlot<health::Request, health::Answer> = RequestSlot::new(&DOORBELL, 1);
+static HEALTH_SLOT: RequestSlot<health::Request, health::Answer> =
+    RequestSlot::new(&DOORBELL, 1, HEALTH_REQUEST);

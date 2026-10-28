@@ -41,6 +41,8 @@ pub enum FaultReason {
     /// request ID, acknowledgement sequence, session ID low/high words.
     HilRequested = 33,
     /// A software request lost its mandatory response; no hardware claim.
+    /// Observations: request kind/site, doorbell slot index, caller epoch (or zero
+    /// when no epoch is held), wrapping per-slot post sequence.
     RequestUnanswered = 34,
     BindingRefused = 256,
     BindingStorageClaimed = 257,

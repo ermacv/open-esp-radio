@@ -193,10 +193,9 @@ pub async fn serve(
     let mut reset = None;
     loop {
         let mut request = poster.post(joined.take());
-        let (next, frontend) = poll_fn(|cx| request.poll_answer(cx)).await.unwrap_or_else(|_| {
-            oer_espressif_staged_runtime::panic::reset_fault(
-                oer_espressif_staged_runtime::panic::FaultReason::RequestUnanswered, [0; 4])
-        });
+        let (next, frontend) = poll_fn(|cx| request.poll_answer(cx))
+            .await
+            .unwrap_or_else(oer_espressif_staged_runtime::panic::reset_request);
         poster = next;
         let frontend = match frontend {
             Ok(frontend) => frontend,
