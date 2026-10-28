@@ -309,20 +309,6 @@ default-members = [
     "chips/esp32s31/layout",
 ]
 resolver = "3"
-# ESP32-C5 code stays in the tree outside the workspace and CI.
-exclude = [
-    "chips/esp32c5/board",
-    "chips/esp32c5/esp-hal-soc",
-    "chips/esp32c5/hal",
-    "chips/esp32c5/layout",
-    "chips/esp32c5/pac",
-    "firmware/bootstrap/esp32c5",
-    "firmware/hil/esp32c5",
-    "firmware/probes/esp32c5-radio",
-    "firmware/probes/esp32c5-register",
-    "tools/vendor/scenarios-esp32c5",
-    "tools/vendor/scenarios-esp32c5-cli",
-]
 
 [workspace.package]
 version = "0.1.0"

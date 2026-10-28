@@ -115,7 +115,7 @@ The chip profile's boot kind selects the pipeline:
 | Boot | Module | Bootloader and partition table |
 | --- | --- | --- |
 | `staged` (esp32s31) | `staged` | The ROM-readable DIO bootloader from the `espflash` library's resources, the partition table of the flash map's CSV, the `ota_0` selection |
-| `esp-idf-bootloader` (an ESP-IDF catalog image) | `esp_idf` | The catalog project's own bootloader and partition table, built against the pinned ESP-IDF (`esp_idf::catalog`, `esp_idf::idf`); its `flasher_args.json` must place them at the flash map's offsets |
+| `esp-idf-bootloader` (an ESP-IDF catalog image) | `esp_idf` | The catalog project's own bootloader and partition table, built against the pinned ESP-IDF (`esp_idf::catalog`, `esp_idf::idf`); its `flasher_args.json` must place them at the flash map's offsets; the flash map is the chip profile's, or for an ESP-IDF peer chip without a profile (`esp32c5`) its `chips/<chip>/platform/flash.toml` |
 
 An application package may declare instrumentation classes in its manifest,
 `[package.metadata.open-radio] instrumentation = ["trace"]`: `trace` (what
@@ -209,7 +209,7 @@ Each chip's `chips/<chip>/platform/chip.toml` `[flash]` table
 with the flash size of the chip's module) holds the
 bootloader, partition-table, application and OTA-data offsets and the
 partition-table CSV path (`chips/<chip>/platform/partitions/`). The S31
-uses staged boot; its profile supplies the staged flash map. The flash map is host data: no target code reads it (the
+uses staged boot; its profile supplies the staged flash map. An ESP-IDF peer chip without a profile (`esp32c5`) names the same map in `chips/<chip>/platform/flash.toml`; a chip has one or the other. The flash map is host data: no target code reads it (the
 bootstrap finds its payload through the flash MMU). The staged pipeline
 refuses a flash map whose application or OTA-data offset is not the
 partition table's.

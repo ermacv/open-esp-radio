@@ -64,15 +64,13 @@ fn implementations(tokens: TokenStream) -> usize {
     count
 }
 
-fn sources(directory: &Path, excluded: &[PathBuf], files: &mut Vec<PathBuf>) {
+fn sources(directory: &Path, files: &mut Vec<PathBuf>) {
     for entry in std::fs::read_dir(directory).expect("source tree is readable") {
         let entry = entry.expect("source entry is readable");
         let path = entry.path();
         if path.is_dir() {
-            if !["target", ".git"].contains(&entry.file_name().to_string_lossy().as_ref())
-                && !excluded.contains(&path)
-            {
-                sources(&path, excluded, files);
+            if !["target", ".git"].contains(&entry.file_name().to_string_lossy().as_ref()) {
+                sources(&path, files);
             }
         } else if path.extension().is_some_and(|extension| extension == "rs") {
             files.push(path);
@@ -81,18 +79,8 @@ fn sources(directory: &Path, excluded: &[PathBuf], files: &mut Vec<PathBuf>) {
 }
 
 fn violations(root: &Path, exceptions: &[(&str, usize)]) -> Vec<String> {
-    let manifest = std::fs::read_to_string(root.join("Cargo.toml")).expect("workspace manifest");
-    let manifest: toml::Value = toml::from_str(&manifest).expect("manifest parses");
-    let excluded = manifest
-        .get("workspace")
-        .and_then(|workspace| workspace.get("exclude"))
-        .and_then(toml::Value::as_array)
-        .into_iter()
-        .flatten()
-        .map(|path| root.join(path.as_str().expect("excluded package path")))
-        .collect::<Vec<_>>();
     let mut files = Vec::new();
-    sources(root, &excluded, &mut files);
+    sources(root, &mut files);
     let mut actual = BTreeMap::new();
     for path in files {
         let owner = path
@@ -240,21 +228,6 @@ fn memory_ownership_does_not_extend_to_other_packages_even_in_tests() {
             );
         }
     }
-}
-
-#[test]
-fn excluded_c5_packages_are_not_scanned() {
-    let root = fixture(
-        "chips/esp32c5/hal",
-        "src/lib.rs",
-        "unsafe impl Sync for Cell {}",
-    );
-    std::fs::write(
-        root.path().join("Cargo.toml"),
-        "[workspace]\nexclude = ['chips/esp32c5/hal']\n",
-    )
-    .expect("workspace excludes");
-    assert_sync_impl_boundary(root.path(), &[]);
 }
 
 #[test]

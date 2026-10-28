@@ -627,8 +627,7 @@ pub enum Ieee802154OperationRxAbortEnableObservation {
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct Ieee802154EventObservation {
     events: Ieee802154EventMask,
-    // SOURCE: chips/esp32s31/registers/types/ieee802154.toml, EVENT_STATUS;
-    // chips/esp32c5/pac/src/ieee802154/ownership.rs, Ieee802154EventReadback.
+    // SOURCE: chips/esp32s31/registers/types/ieee802154.toml, EVENT_STATUS.
     // Neither lane is assigned a hardware meaning.
     events_7: bool,
     events_13: bool,

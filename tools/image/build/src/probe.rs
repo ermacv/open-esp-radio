@@ -258,7 +258,7 @@ mod tests {
     use super::*;
 
     fn chips() -> Vec<String> {
-        vec!["esp32s31".into(), "esp32c5".into()]
+        vec!["esp32s31".into(), "esp32x9".into()]
     }
 
     #[test]
@@ -269,8 +269,8 @@ mod tests {
             "esp32s31"
         );
         assert_eq!(
-            chip_of("oer-firmware-probes-esp32c5-radio", &chips).unwrap(),
-            "esp32c5"
+            chip_of("oer-firmware-probes-esp32x9-radio", &chips).unwrap(),
+            "esp32x9"
         );
         assert!(chip_of("oer-firmware-apps-w1", &chips).is_err());
         assert!(chip_of("oer-firmware-probes-esp32s3-probe", &chips).is_err());

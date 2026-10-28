@@ -22,8 +22,7 @@ identical statement in another context remains unobserved.
 
 The probe compiler is a host build tool; it owns no production behavior and
 does not depend on Blobray's executor. The
-[ESP32-S31](../../../firmware/probes/esp32s31.md) and
-[ESP32-C5](../../../firmware/probes/esp32c5.md) probe packages consume it. A chip's
+[ESP32-S31](../../../firmware/probes/esp32s31.md) probe packages consume it. A chip's
 scenario crate installs its `Chip` description into the engine and keeps its
 addresses, pins and reviewed decisions; the
 [ESP32-S31 probes](../../../firmware/probes/esp32s31.md) describe the inputs.

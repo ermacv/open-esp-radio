@@ -190,13 +190,31 @@ impl ImageBundle {
     /// An empty bundle of `profile`'s chip in `directory`, which a pipeline
     /// fills: no files yet, no gate run.
     pub fn new(directory: &Path, profile: &oer_chip_profile::Profile, flash: FlashMap) -> Self {
+        Self::from_parts(
+            directory,
+            &profile.facts.id,
+            &profile.facts.rust_target,
+            profile.facts.boot,
+            flash,
+        )
+    }
+
+    /// An empty bundle of the chip `chip` in `directory`, which a pipeline
+    /// fills: no files yet, no gate run.
+    pub fn from_parts(
+        directory: &Path,
+        chip: &str,
+        rust_target: &str,
+        boot: Boot,
+        flash: FlashMap,
+    ) -> Self {
         Self {
             schema: SCHEMA,
             purpose: Purpose::Flash,
             directory: directory.to_owned(),
-            chip: profile.facts.id.clone(),
-            rust_target: profile.facts.rust_target.clone(),
-            boot: profile.facts.boot,
+            chip: chip.to_owned(),
+            rust_target: rust_target.to_owned(),
+            boot,
             flash,
             staged: None,
             otadata: false,

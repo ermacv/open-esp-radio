@@ -13,8 +13,7 @@ module's PSRAM, `runtime-psram` after the family's bootstrap probe page, what
 the boot chain keeps and what the ROM of the chip's revision uses of the
 internal SRAM. The application's SRAM is the internal SRAM below the boot
 chain's reserve, clear of the ROM's data. The
-[S31](../chips/esp32s31/layout/src/lib.rs) and
-[C5](../chips/esp32c5/layout/src/lib.rs) layout crates generate their
+[S31 layout crate](../chips/esp32s31/layout/src/lib.rs) generates its
 `LAYOUT`, and through it the linker scripts' `--defsym` values, from those
 facts at build time; the host checks read the same facts.
 
@@ -23,7 +22,7 @@ facts at build time; the host checks read the same facts.
 | SRAM | The complete bootstrap code and ordinary constants; runtime strict and hot code, interrupt stacks, critical state and DMA storage: [runtime sections](../chips/espressif/staged-layout/linker/runtime/sections.x). |
 | PSRAM | Ordinary runtime code, data and the per-hart task stacks: [runtime sections](../chips/espressif/staged-layout/linker/runtime/sections.x). |
 | Flash XIP | Explicit bootstrap metadata, stage-two payload and tuning-reference data: [bootstrap sections](../chips/espressif/staged-layout/linker/bootstrap/sections.x). |
-| ROM | Chip routines available to the images: [S31 ROM facts](../chips/esp32s31/platform/rom-rev0.toml) generate its ROM script in the layout build directory; [C5 ROM symbols](../chips/esp32c5/layout/linker/rom/esp32c5-eco2.x). |
+| ROM | Chip routines available to the images: [S31 ROM facts](../chips/esp32s31/platform/rom-rev0.toml) generate its ROM script in the layout build directory. |
 | RTC retained | Reset-retained records in `.rtc_fast.persistent`, below the reserved tail: [runtime sections](../chips/espressif/staged-layout/linker/runtime/sections.x). |
 
 ## Code placement
@@ -101,8 +100,7 @@ contracts: [Hardware memory](hardware-memory.md).
   A bound change above 64 bytes fails the build. See the
   [image linker](../tools/image/linker/README.md).
 - Task-stack roots, storage and free-space reserves are policy inputs:
-  [S31 policy](../chips/esp32s31/platform/stack.toml) and
-  [C5 policy](../chips/esp32c5/platform/stack.toml).
+  [S31 policy](../chips/esp32s31/platform/stack.toml).
 - Static bounds and their assumptions are described in [execution in the
   architecture](architecture.md#execution) and the
   [RV32 stack analyzer](../tools/analysis/riscv-stack/README.md).

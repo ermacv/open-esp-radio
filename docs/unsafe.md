@@ -115,8 +115,7 @@ host. Generated PAC code has no crate-root unsafe attribute.
 
 ## The boundary
 
-Below it are, by directory (`/` ends a domain), for the S31 workspace.
-C5 code lies outside the workspace and its checks:
+Below it are, by directory (`/` ends a domain), for the S31 workspace:
 
 | Kind | Directories |
 | --- | --- |

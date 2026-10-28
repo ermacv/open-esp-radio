@@ -305,16 +305,13 @@ pub fn families(root: &Path) -> Result<BTreeMap<String, String>> {
         .collect())
 }
 
-/// Ids of the chips with a chip layer, sorted; the chips of
-/// [`oer_espressif_facts::tracked::UNTRACKED`] are not supported.
+/// Ids of the chips with a chip layer, sorted.
 pub fn supported(root: &Path) -> Result<Vec<String>> {
     let mut ids = Vec::new();
     for entry in std::fs::read_dir(root.join(CHIPS))? {
         let entry = entry?;
         let id = entry.file_name().to_string_lossy().into_owned();
-        if !oer_espressif_facts::tracked::UNTRACKED.contains(&id.as_str())
-            && root.join(oer_espressif_facts::chip_file(&id)).is_file()
-        {
+        if root.join(oer_espressif_facts::chip_file(&id)).is_file() {
             ids.push(id);
         }
     }
@@ -513,11 +510,6 @@ mod tests {
         std::fs::create_dir_all(&platform).unwrap();
         std::fs::write(platform.join("chip.toml"), standalone("esp32x9", "f")).unwrap();
         std::fs::create_dir_all(root.path().join(platform_dir("no-profile"))).unwrap();
-        // A chip outside the workspace has a layer and is not supported.
-        let untracked = root.path().join(platform_dir("esp32c5"));
-        std::fs::create_dir_all(&untracked).unwrap();
-        std::fs::write(untracked.join("chip.toml"), standalone("esp32c5", "f")).unwrap();
-        assert!(Profile::load(root.path(), "esp32c5").is_err());
         let error = Profile::load(root.path(), "esp32s2")
             .unwrap_err()
             .to_string();

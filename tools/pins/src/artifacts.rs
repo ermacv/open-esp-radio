@@ -567,16 +567,8 @@ pub(crate) fn repository() -> tempfile::TempDir {
             include_str!("../../../chips/esp32s31/vendor/artifacts.toml"),
         ),
         (
-            "chips/esp32c5/vendor/facts/provenance.toml",
-            include_str!("../../../chips/esp32c5/vendor/facts/provenance.toml"),
-        ),
-        (
             "chips/esp32s31/vendor/facts/provenance.toml",
             include_str!("../../../chips/esp32s31/vendor/facts/provenance.toml"),
-        ),
-        (
-            "chips/esp32c5/platform/partitions/applications.csv",
-            include_str!("../../../chips/esp32c5/platform/partitions/applications.csv"),
         ),
         (
             "chips/esp32s31/platform/partitions/applications.csv",
@@ -585,14 +577,6 @@ pub(crate) fn repository() -> tempfile::TempDir {
         (
             "tools/analysis/cli/tests/riscv_conformance/inputs.toml",
             include_str!("../../analysis/cli/tests/riscv_conformance/inputs.toml"),
-        ),
-        (
-            "tools/vendor/scenarios-esp32c5/Cargo.toml",
-            include_str!("../../vendor/scenarios-esp32c5/Cargo.toml"),
-        ),
-        (
-            "tools/vendor/scenarios-esp32c5-cli/Cargo.toml",
-            include_str!("../../vendor/scenarios-esp32c5-cli/Cargo.toml"),
         ),
         (
             "tools/vendor/scenarios-esp32s31/Cargo.toml",
@@ -608,6 +592,5 @@ pub(crate) fn repository() -> tempfile::TempDir {
         std::fs::write(path, text).unwrap();
     }
     std::fs::create_dir_all(root.join("tools/vendor/scenarios-esp32s31/src/decisions")).unwrap();
-    std::fs::create_dir_all(root.join("tools/vendor/scenarios-esp32c5/src/decisions")).unwrap();
     directory
 }

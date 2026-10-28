@@ -1,6 +1,0 @@
-# The board layer: the ESP32-C5 devkit and the module it carries.
-schema = 2
-extends = "../modules/esp32-c5-wroom-1-n16r8.toml"
-
-[board]
-name = "ESP32-C5 devkit"

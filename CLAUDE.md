@@ -1,8 +1,8 @@
 # open-esp-radio
 
-Rust 2024 `no_std` radio stack for the Espressif ESP32-S31 (the ESP32-C5 code
-lies in the tree outside the Cargo workspace and CI): Wi-Fi, Bluetooth LE and
-IEEE 802.15.4, without vendor radio binaries.
+Rust 2024 `no_std` radio stack for the Espressif ESP32-S31: Wi-Fi, Bluetooth LE
+and IEEE 802.15.4, without vendor radio binaries. The ESP32-C5 appears in the
+repository only as the stand's ESP-IDF peers; it has no Rust code.
 Read [docs/architecture.md](docs/architecture.md) before any task: it is the
 system these rules serve.
 
@@ -25,10 +25,9 @@ system these rules serve.
   or bridges. Host `espflash` and its transitive image-format dependency are
   host tools. The PAC's single `take()` claims the chip; the HAL's
   `Root::take` splits it through `into_bootstrap` or `into_runtime`.
-  Only these owned partitions grant register access. C5 stays outside the
-  workspace. C5 never blocks S31 work: migrate mechanically obvious uses
-  of changed APIs without building C5, leave its infrastructure alone and
-  report any remaining C5 migration in the PR. Do not preserve an API for C5.
+  Only these owned partitions grant register access. The repository holds
+  no Rust code for the ESP32-C5: its ESP-IDF peers (`firmware/peers`,
+  `firmware/vendor/esp32c5`), their pins and their flash map are all of it.
 - **Compile time first.** Every check that can run at compile time runs there.
   A `const fn` alone does not enforce this: fixed values use const items or
   blocks, and generic geometry uses inline const checks at monomorphization.

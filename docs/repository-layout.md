@@ -39,14 +39,16 @@ chips/      everything about Espressif hardware
                 executor, the chip facts model (facts/) and the
                 family and ISA fact layers (platform/); registers/ and notes/
                 shared by the chips
-  esp32s31/ esp32c5/   (esp32c5 lies outside the Cargo workspace and CI)
-                PAC, HAL, PHY, drivers, radio system, board, memory layout,
+  esp32s31/     PAC, HAL, PHY, drivers, radio system, board, memory layout,
                 chip knowledge, and the chip's data:
                 platform/   chip, module and board fact layers, partitions, ROM
                             functions, stack budgets
                 registers/  block types, layouts, chip root, evidence and ownership policy
                 notes/      recovered facts and research notes
                 vendor/     the vendor pins and generated facts
+  esp32c5/      only the data of the ESP-IDF peers: vendor/artifacts.toml
+                (the pins) and platform/ (flash.toml, the flash map of the
+                peer board, and the partition table); no Rust code
 firmware/   images for a chip: apps/ bootstrap/ hil/ probes/, ESP-IDF peers/ and vendor/
 tools/      everything that runs on the developer's machine, by domain:
   os/ test/ analysis/ chip/ pins/ regulatory/ registers/ probe/ image/ lab/ hil/ vendor/

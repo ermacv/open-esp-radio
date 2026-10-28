@@ -11,10 +11,6 @@ use alloc::{
 
 use crate::{Result, Source};
 
-/// Chips whose directory lies in the tree outside the workspace and CI: they
-/// have no tracked layer files and no tool supports them.
-pub const UNTRACKED: &[&str] = &["esp32c5"];
-
 /// Every tracked layer file (the ROM's of each revision included) and each
 /// chip's stack policy
 /// (`chips/<id>/platform/stack.toml`, whose default task stack the layout
@@ -129,11 +125,8 @@ mod tests {
         toml_files(&chips.join("espressif/platform"), &mut found);
         for entry in std::fs::read_dir(&chips).expect("chips/ is readable") {
             let entry = entry.expect("a readable entry").path();
-            let untracked = entry
-                .file_name()
-                .is_some_and(|name| UNTRACKED.iter().any(|chip| name == *chip));
             let platform = entry.join("platform");
-            if !untracked && platform.join("chip.toml").is_file() {
+            if platform.join("chip.toml").is_file() {
                 let chip = std::fs::read_to_string(platform.join("chip.toml"))
                     .expect("a readable chip layer");
                 let chip: toml::Table = toml::from_str(&chip).expect("a TOML chip layer");

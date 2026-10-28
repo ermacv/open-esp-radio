@@ -47,10 +47,7 @@ the data path and the workload are validated by the family.
 
 A scenario names no chip. It runs on every chip whose HIL agent builds its
 image class: the esp32s31, whose staged boot flow builds every class its
-runtime declares, and a chip the ESP-IDF bootloader starts whose
-`chips/<chip>/platform/chip.toml` names its flash layout and whose
-`firmware/hil/<chip>` runtime declares the class's features (the esp32c5
-builds `boot-smoke` and `system-watchdog`). A run takes the chip
+runtime declares. A run takes the chip
 `cargo hil run --chip CHIP` names, or the only chip that builds every selected
 image; when several can, it refuses and names them. It uses that chip's device
 under test from the stand file.
