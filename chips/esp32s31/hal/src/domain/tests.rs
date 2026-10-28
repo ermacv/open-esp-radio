@@ -13,6 +13,86 @@ fn radio_domain() -> RadioDomain<crate::power::test_clocks::CountingBackend> {
     )
 }
 
+fn refuse_poisoned_clock_changes(
+    mut radio: RadioDomain<crate::power::test_clocks::CountingBackend>,
+) -> RadioDomain<crate::power::test_clocks::CountingBackend> {
+    let platform = crate::power::test_clocks::CountingPlatformClocks::logging(|_| {
+        panic!("a poisoned domain must not change platform clocks")
+    });
+    let RadioPartitions { wifi, .. } = RadioPartitions::for_host_test();
+    let wifi = WifiRadioRegisters::new(wifi.into_parts().0);
+    assert!(radio.state().clocks.any_held());
+    assert_eq!(
+        radio.enable_slot(0, ModemClockModule::Phy, &platform),
+        Err(ModemClockError::Poisoned)
+    );
+    assert_eq!(radio.disable_slot(0), Err(ModemClockError::Poisoned));
+    assert_eq!(
+        radio.set_wifi_initialized(&wifi, true),
+        Err(ModemClockError::Poisoned)
+    );
+    let Err((radio, error)) = radio.into_parts() else {
+        panic!("the poisoned planner must retain its domain")
+    };
+    assert_eq!(error, RadioDomainReleaseError::ModemClocksHeld);
+    radio
+}
+
+#[test]
+fn poisoned_acquire_keeps_its_failed_edge_through_refused_changes_and_release() {
+    let mut radio = radio_domain();
+    let identity = ModemClockPlannerIdentity::new().expect("identity capacity");
+    let prepared = ModemClockPlanner::managed(identity)
+        .prepare_acquire(ModemClockModule::Phy.dependencies())
+        .unwrap();
+    let mut edges = 0;
+    let poisoned = oer_espressif_modem_clock::execute_acquire(prepared, |_| {
+        edges += 1;
+        if edges == 2 { Err(()) } else { Ok(()) }
+    })
+    .err()
+    .expect("the second acquire edge failed");
+    let failed = poisoned.dependency();
+    assert_eq!(poisoned.completed_edges(), 1);
+    radio.state_mut().clocks = ModemClocks::AcquirePoisoned { _owner: poisoned };
+
+    let radio = refuse_poisoned_clock_changes(radio);
+    let ModemClocks::AcquirePoisoned { _owner: retained } = &radio.state().clocks else {
+        panic!("the failed acquire owner must remain quarantined")
+    };
+    assert_eq!(retained.dependency(), failed);
+    assert_eq!(retained.completed_edges(), 1);
+}
+
+#[test]
+fn poisoned_release_keeps_its_failed_edge_through_refused_changes_and_release() {
+    let mut radio = radio_domain();
+    let identity = ModemClockPlannerIdentity::new().expect("identity capacity");
+    let prepared = ModemClockPlanner::managed(identity)
+        .prepare_acquire(ModemClockModule::Phy.dependencies())
+        .unwrap();
+    let (planner, lease) =
+        oer_espressif_modem_clock::execute_acquire(prepared, |_| Ok::<(), ()>(())).unwrap();
+    let prepared = planner.prepare_release(lease).unwrap();
+    let mut edges = 0;
+    let poisoned = oer_espressif_modem_clock::execute_release(prepared, |_| {
+        edges += 1;
+        if edges == 2 { Err(()) } else { Ok(()) }
+    })
+    .err()
+    .expect("the second release edge failed");
+    let failed = poisoned.dependency();
+    assert_eq!(poisoned.completed_edges(), 1);
+    radio.state_mut().clocks = ModemClocks::ReleasePoisoned { _owner: poisoned };
+
+    let radio = refuse_poisoned_clock_changes(radio);
+    let ModemClocks::ReleasePoisoned { _owner: retained } = &radio.state().clocks else {
+        panic!("the failed release owner must remain quarantined")
+    };
+    assert_eq!(retained.dependency(), failed);
+    assert_eq!(retained.completed_edges(), 1);
+}
+
 #[test]
 fn registration_epoch_persists_in_the_domain() {
     use crate::owner::PhyInitializationAccess;
