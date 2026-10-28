@@ -1,4 +1,7 @@
 fn main() {
+    if std::env::var("CARGO_CFG_TARGET_ARCH").as_deref() != Ok("riscv32") {
+        return;
+    }
     println!("cargo:rerun-if-env-changed=PSRAM_RUNTIME_BIN");
     assert!(
         std::env::var_os("PSRAM_RUNTIME_BIN").is_some(),
