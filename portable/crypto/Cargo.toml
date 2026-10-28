@@ -1,0 +1,25 @@
+[package]
+name = "oer-crypto"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Owned cryptographic operation contracts and mode algorithms over a synchronous block primitive"
+
+[features]
+default = []
+# The shared engine conformance cases.
+test-support = []
+
+[dependencies]
+zeroize = { version = "1.9.0", default-features = false, features = ["derive"] }
+
+[dev-dependencies]
+aes = { version = "0.8.4", default-features = false, features = ["zeroize"] }
+
+[lints]
+workspace = true
+
+[package.metadata.open-radio]
+test-feature-sets = ["test-support"]

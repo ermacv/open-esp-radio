@@ -1883,6 +1883,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-crypto"
+version = "0.1.0"
+dependencies = [
+ "aes",
+ "zeroize",
+]
+
+[[package]]
 name = "oer-diagnostics"
 version = "0.1.0"
 dependencies = [
