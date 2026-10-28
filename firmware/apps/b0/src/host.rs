@@ -91,7 +91,7 @@ impl Transport for Io {
             .map_err(|_| Fault::Hardware)
     }
 }
-struct Installed<'o, 'a, 'p>(&'o mut rp::Owner<'a, 'p, Id, Backend, rp::Enabled>);
+struct Installed<'o, 'a, 'p: 'a>(&'o mut rp::Owner<'a, 'p, Id, Backend, rp::Enabled>);
 impl<'p> host::ControllerPort<'p, rp::Root<Id>> for Installed<'_, '_, 'p> {
     type Caps = DtmCaps;
     type Fault = Fault;
