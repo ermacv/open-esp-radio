@@ -1,6 +1,14 @@
 extern crate std;
 
 use super::*;
+
+const DATA: u16 = 0x0008;
+const QOS_DATA: u16 = 0x0088;
+const TO_DS: u16 = 0x0100;
+const FROM_DS: u16 = 0x0200;
+const MORE_FRAGMENTS: u16 = 0x0400;
+const RETRY: u16 = 0x0800;
+const QOS_AMSDU_PRESENT: u8 = 0x80;
 use oer_time::{Duration, Instant};
 
 fn at(micros: u64) -> Instant {
@@ -158,7 +166,7 @@ fn changed_address_cannot_splice_an_active_sequence() {
             at(2),
             |_| ()
         ),
-        Err(OpenDataFragmentError::IdentityMismatch)
+        Err(OpenDataReassemblyError::IdentityMismatch)
     );
     assert!(matches!(
         state.ingest(parsed(DataInterfaceRole::Station, &last, 1), at(3), |_| ()),
@@ -192,7 +200,7 @@ fn retry_out_of_order_timeout_and_oldest_eviction_are_bounded() {
     );
     assert_eq!(
         state.ingest(parsed(DataInterfaceRole::Station, &third, 1), at(3), |_| ()),
-        Err(OpenDataFragmentError::OutOfOrder {
+        Err(OpenDataReassemblyError::OutOfOrder {
             expected: 1,
             observed: 2,
         })
@@ -286,7 +294,7 @@ fn protected_amsdu_overflow_and_lifecycle_edges_fail_closed() {
             at(2),
             |_| ()
         ),
-        Err(OpenDataFragmentError::ReassembledTooLarge { capacity: 10 })
+        Err(OpenDataReassemblyError::ReassembledTooLarge { capacity: 10 })
     );
     assert_eq!(state.active_contexts(), 0);
 
@@ -369,7 +377,7 @@ fn clock_wrap_expires_retained_bytes_before_sequence_reuse() {
             at(1),
             |_| (),
         ),
-        Err(OpenDataFragmentError::Orphan { fragment_number: 1 })
+        Err(OpenDataReassemblyError::Orphan { fragment_number: 1 })
     );
     assert_eq!(state.active_contexts(), 0);
 }
@@ -460,7 +468,7 @@ fn a_same_key_id_reinstallation_cannot_complete_or_retry_an_old_fragment_train()
             at(2),
             |_| panic!("mixed keys delivered")
         ),
-        Err(OpenDataFragmentError::IdentityMismatch)
+        Err(OpenDataReassemblyError::IdentityMismatch)
     );
     assert_eq!(
         state.ingest_in_epoch(
@@ -469,7 +477,7 @@ fn a_same_key_id_reinstallation_cannot_complete_or_retry_an_old_fragment_train()
             at(3),
             |_| panic!("old retry delivered")
         ),
-        Err(OpenDataFragmentError::IdentityMismatch)
+        Err(OpenDataReassemblyError::IdentityMismatch)
     );
     assert!(matches!(
         state.ingest_in_epoch(
@@ -503,7 +511,7 @@ fn a_ccmp_fragment_retry_keeps_its_original_pn_and_bytes() {
         state.ingest_in_epoch(ccmp_parsed(&retry, &llc, 11), epoch, at(3), |_| panic!(
             "changed retry delivered"
         )),
-        Err(OpenDataFragmentError::RetryPacketNumberMismatch { .. })
+        Err(OpenDataReassemblyError::RetryPacketNumberMismatch { .. })
     ));
     assert!(matches!(
         state.ingest_in_epoch(

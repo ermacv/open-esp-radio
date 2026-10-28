@@ -14,12 +14,16 @@
 //! due at the next TBTT; the access point's owner moves the port and the
 //! template is written again for the new channel ([`ApBeacon::rewrite`]).
 
-use oer_ieee80211_wire::beacon::dtim;
+use oer_ieee80211_wire::beacon::{
+    BeaconTemplateError, dtim, insert_after_tim, remove_elements, write_channel_switch_count,
+};
 use oer_ieee80211_wire::channel_switch::{
     CHANNEL_SWITCH_ELEMENT_ID, ChannelSwitch, EXTENDED_CHANNEL_SWITCH_ELEMENT_ID,
     SECONDARY_CHANNEL_OFFSET_ELEMENT_ID,
 };
+use oer_ieee80211_wire::frame::write_sequence_control;
 use oer_ieee80211_wire::sequence::SequenceNumber;
+use oer_ieee80211_wire::tsf::time_units_micros;
 
 use oer_ieee80211_wire::{
     ap::profile::Advertisement,
@@ -29,11 +33,11 @@ use oer_ieee80211_wire::{
     },
     channel::Channel,
     protection::ApBssProtection,
-    security::ApSecurityPolicy,
     ssid::WifiSsid,
-    tbtt::next_tbtt,
 };
 use oer_time::{Duration, Instant};
+
+use crate::{security_policy::ApSecurityPolicy, tbtt::next_tbtt};
 
 mod publication;
 pub use publication::{ApBeaconPublication, ApBeaconTxContext, ApBeaconTxOutcome, ApDtimRelease};
@@ -74,9 +78,12 @@ pub enum ApChannelSwitchError {
     Full,
 }
 
-/// The fixed part of a beacon: the management header, the timestamp, the
-/// beacon interval and the capability information.
-const FIXED_BEACON_LENGTH: usize = 24 + 8 + 2 + 2;
+const fn template_error(error: BeaconTemplateError) -> ApChannelSwitchError {
+    match error {
+        BeaconTemplateError::Malformed => ApChannelSwitchError::MalformedTemplate,
+        BeaconTemplateError::Full => ApChannelSwitchError::Full,
+    }
+}
 
 impl<'storage> ApBeacon<'storage> {
     /// The beacon's body, which a probe response repeats.
@@ -124,13 +131,13 @@ impl<'storage> ApBeacon<'storage> {
             beacon_interval_tu,
             dtim_period,
             management_sequence,
-            security,
+            security.advertisement(),
             ApBssProtection::default(),
         )?;
         Ok(Self {
             storage,
             len,
-            interval: Duration::from_micros(u64::from(beacon_interval_tu) << 10),
+            interval: Duration::from_micros(time_units_micros(beacon_interval_tu)),
             next_publication: None,
             channel_switch: None,
         })
@@ -163,10 +170,10 @@ impl<'storage> ApBeacon<'storage> {
             beacon_interval_tu,
             dtim_period,
             management_sequence,
-            security,
+            security.advertisement(),
             ApBssProtection::default(),
         )?;
-        self.interval = Duration::from_micros(u64::from(beacon_interval_tu) << 10);
+        self.interval = Duration::from_micros(time_units_micros(beacon_interval_tu));
         self.channel_switch = None;
         Ok(())
     }
@@ -186,50 +193,8 @@ impl<'storage> ApBeacon<'storage> {
             .encode_elements(&mut elements)
             .ok_or(ApChannelSwitchError::Full)?;
         self.remove_channel_switch_elements()?;
-        let (tim, _, _) = dtim(
-            self.storage
-                .get(..self.len)
-                .ok_or(ApChannelSwitchError::MalformedTemplate)?,
-        )
-        .ok_or(ApChannelSwitchError::MalformedTemplate)?;
-        let header = self
-            .storage
-            .get(tim..)
-            .and_then(|bytes| bytes.first_chunk::<2>())
-            .ok_or(ApChannelSwitchError::MalformedTemplate)?;
-        let at = tim
-            .checked_add(2)
-            .and_then(|offset| offset.checked_add(usize::from(header[1])))
-            .ok_or(ApChannelSwitchError::MalformedTemplate)?;
-        let end = self
-            .len
-            .checked_add(added)
-            .filter(|end| *end <= self.storage.len())
-            .ok_or(ApChannelSwitchError::Full)?;
-        if at > self.len {
-            return Err(ApChannelSwitchError::MalformedTemplate);
-        }
-        for source in (at..self.len).rev() {
-            let destination = source
-                .checked_add(added)
-                .ok_or(ApChannelSwitchError::Full)?;
-            let byte = *self
-                .storage
-                .get(source)
-                .ok_or(ApChannelSwitchError::MalformedTemplate)?;
-            *self
-                .storage
-                .get_mut(destination)
-                .ok_or(ApChannelSwitchError::Full)? = byte;
-        }
-        for (destination, byte) in self
-            .storage
-            .iter_mut()
-            .skip(at)
-            .zip(elements.iter().take(added))
-        {
-            *destination = *byte;
-        }
+        let elements = elements.get(..added).ok_or(ApChannelSwitchError::Full)?;
+        let end = insert_after_tim(self.storage, self.len, elements).map_err(template_error)?;
         self.len = end;
         self.channel_switch = Some(switch);
         Ok(())
@@ -248,67 +213,22 @@ impl<'storage> ApBeacon<'storage> {
 
     /// Take the announcement's elements out of the template.
     fn remove_channel_switch_elements(&mut self) -> Result<(), ApChannelSwitchError> {
-        let mut offset = FIXED_BEACON_LENGTH;
-        while let Some([id, length]) = self
-            .storage
-            .get(offset..self.len)
-            .and_then(|bytes| bytes.first_chunk::<2>())
-            .copied()
-        {
-            let length = usize::from(length)
-                .checked_add(2)
-                .ok_or(ApChannelSwitchError::MalformedTemplate)?;
-            let end = offset
-                .checked_add(length)
-                .filter(|end| *end <= self.len)
-                .ok_or(ApChannelSwitchError::MalformedTemplate)?;
-            if matches!(
-                id,
-                CHANNEL_SWITCH_ELEMENT_ID
-                    | EXTENDED_CHANNEL_SWITCH_ELEMENT_ID
-                    | SECONDARY_CHANNEL_OFFSET_ELEMENT_ID
-            ) {
-                for (destination, source) in (offset..self.len).zip(end..self.len) {
-                    let byte = *self
-                        .storage
-                        .get(source)
-                        .ok_or(ApChannelSwitchError::MalformedTemplate)?;
-                    *self
-                        .storage
-                        .get_mut(destination)
-                        .ok_or(ApChannelSwitchError::MalformedTemplate)? = byte;
-                }
-                let previous = self.len;
-                self.len = self
-                    .len
-                    .checked_sub(length)
-                    .ok_or(ApChannelSwitchError::MalformedTemplate)?;
-                self.storage
-                    .get_mut(self.len..previous)
-                    .ok_or(ApChannelSwitchError::MalformedTemplate)?
-                    .fill(0);
-            } else {
-                offset = end;
-            }
-        }
+        self.len = remove_elements(
+            self.storage,
+            self.len,
+            &[
+                CHANNEL_SWITCH_ELEMENT_ID,
+                EXTENDED_CHANNEL_SWITCH_ELEMENT_ID,
+                SECONDARY_CHANNEL_OFFSET_ELEMENT_ID,
+            ],
+        )
+        .map_err(template_error)?;
         Ok(())
     }
 
     /// Write the beacons left into the announcement's count.
     fn write_channel_switch_count(&mut self, count: u8) -> Option<()> {
-        let mut remaining = self.storage.get_mut(FIXED_BEACON_LENGTH..self.len)?;
-        while let Some(([id, length], rest)) = remaining.split_first_chunk_mut::<2>() {
-            let (body, tail) = rest.split_at_mut_checked(usize::from(*length))?;
-            if matches!(
-                (*id, *length),
-                (CHANNEL_SWITCH_ELEMENT_ID, 3) | (EXTENDED_CHANNEL_SWITCH_ELEMENT_ID, 4)
-            ) {
-                *body.last_mut()? = count;
-                return Some(());
-            }
-            remaining = tail;
-        }
-        None
+        write_channel_switch_count(self.storage, self.len, count)
     }
 
     /// A beacon over a template already written into `storage`.
@@ -326,7 +246,7 @@ impl<'storage> ApBeacon<'storage> {
         Ok(Self {
             storage,
             len,
-            interval: Duration::from_micros((beacon_interval_tu as u64) << 10),
+            interval: Duration::from_micros(time_units_micros(beacon_interval_tu)),
             next_publication: None,
             channel_switch: None,
         })
@@ -360,8 +280,7 @@ impl<'storage> ApBeacon<'storage> {
             now.as_micros(),
             buffered_group_frames != 0,
         )?;
-        *self.storage.get_mut(22..)?.first_chunk_mut::<2>()? =
-            management_sequence.sequence_control().to_le_bytes();
+        write_sequence_control(self.storage, management_sequence.sequence_control())?;
         self.len = write_tim_partial_virtual_bitmap(self.storage, self.len, unicast_tim_bitmap)?;
         if let Some(count) = self.channel_switch.map(|switch| switch.count) {
             self.write_channel_switch_count(count)?;

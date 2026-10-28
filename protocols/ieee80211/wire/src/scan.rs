@@ -18,8 +18,6 @@ use crate::address::{Bssid, IndividualAddress};
 use crate::ht::{
     HT_CAPABILITY_IE_LEN, HT_OPERATION_IE_LEN, HtPeerCapabilities, ht_peer_capabilities,
 };
-use crate::security::LinkProtection;
-use oer_time::Instant;
 
 pub const RSN_IE_CAPACITY: usize = 64;
 pub const RSNXE_CAPACITY: usize = 16;
@@ -97,12 +95,7 @@ pub struct ScanRecord {
     pub information_elements_truncated: bool,
     pub capability_info: u16,
     /// The access point's TSF when it sent this beacon or probe response.
-    pub timestamp: crate::tsf::TsfInstant,
-    /// The receiver's monotonic time of this frame's reception, from its
-    /// receive timestamp; a station advances `timestamp` by the time since
-    /// to set its own TSF. `None` when the receiver had no reception time
-    /// for the frame.
-    pub received_at: Option<Instant>,
+    pub timestamp: crate::tsf::TsfTimestamp,
     pub beacon_interval_tu: u16,
     supported_rates: [u8; 8],
     supported_rates_len: oer_wire::PrefixLength<8>,
@@ -141,8 +134,7 @@ impl ScanRecord {
             legacy_wpa: false,
             information_elements_truncated: false,
             capability_info: 0,
-            timestamp: crate::tsf::TsfInstant::from_micros(0),
-            received_at: None,
+            timestamp: crate::tsf::TsfTimestamp::from_micros(0),
             beacon_interval_tu: 0,
             supported_rates: [0; 8],
             supported_rates_len: oer_wire::PrefixLength::ZERO,
@@ -172,33 +164,6 @@ impl ScanRecord {
 
     pub fn ssid_bytes(&self) -> &[u8] {
         front(&self.ssid, self.ssid_len)
-    }
-
-    /// Whether this observation matches one exact requested security mode.
-    ///
-    /// Mixed WPA/WPA2 advertisements are intentionally rejected. Open means
-    /// that the Privacy capability is clear and neither RSN nor legacy WPA
-    /// was observed; WPA2 means a Privacy-marked, RSN-only BSS. Full WPA2
-    /// suite validation remains at association encoding.
-    pub const fn matches_security(&self, mode: LinkProtection) -> bool {
-        match mode {
-            LinkProtection::Open => {
-                !self.information_elements_truncated
-                    && !self.privacy
-                    && !self.rsn
-                    && self.rsn_ie_count == 0
-                    && !self.legacy_wpa
-                    && self.rsn_ie_len.get() == 0
-            }
-            LinkProtection::Ccmp => {
-                !self.information_elements_truncated
-                    && self.privacy
-                    && self.rsn
-                    && self.rsn_ie_count == 1
-                    && !self.legacy_wpa
-                    && self.rsn_ie_len.get() != 0
-            }
-        }
     }
 
     pub fn supported_rates_bytes(&self) -> &[u8] {
@@ -391,8 +356,7 @@ pub fn parse_management(frame: &[u8], fallback_channel: u8, rssi: i8) -> Option<
 
     let bssid = Bssid::new(IndividualAddress::new([b0, b1, b2, b3, b4, b5])?)?;
     let mut record = ScanRecord::new(bssid, fallback_channel, rssi);
-    record.timestamp =
-        crate::tsf::TsfInstant::from_micros(u64::from_le_bytes([t0, t1, t2, t3, t4, t5, t6, t7]));
+    record.timestamp = crate::tsf::TsfTimestamp::from_bytes([t0, t1, t2, t3, t4, t5, t6, t7]);
     record.beacon_interval_tu = u16::from_le_bytes([i0, i1]);
     record.capability_info = u16::from_le_bytes([c0, c1]);
     record.privacy =

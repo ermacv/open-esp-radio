@@ -12,6 +12,7 @@ readme = "README.md"
 test-support = []
 
 [dependencies]
+oer-wire = { path = "../../../portable/wire" }
 heapless = { version = "0.9.3", features = ["zeroize"] }
 # Erase the stream wrapper's buffered keystream as well as the ChaCha core.
 cipher = { version = "0.5", default-features = false, features = ["zeroize"] }

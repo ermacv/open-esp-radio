@@ -3,11 +3,23 @@
 //! Raw ESF, descriptor, and node layouts remain in the target adapter. This
 //! module contains only finite decisions which can be verified on the host.
 
-pub const ETHER_TYPE_IPV4: u16 = 0x0008;
-pub const ETHER_TYPE_ARP: u16 = 0x0608;
-pub const ETHER_TYPE_EAPOL: u16 = 0x8e88;
-pub const ETHER_TYPE_WAPI: u16 = 0xb488;
-pub const ETHER_TYPE_IPV6: u16 = 0xdd86;
+use oer_ieee80211_wire::{
+    ethertype,
+    qos::{DsField, Ipv6HeaderPrefix},
+};
+
+/// The classifier's protocol word: the EtherType octets as they lie in the
+/// frame, read as a little-endian `u16`.
+const fn protocol_word(ether_type: u16) -> u16 {
+    u16::from_le_bytes(ether_type.to_be_bytes())
+}
+
+pub const ETHER_TYPE_IPV4: u16 = protocol_word(ethertype::ETHER_TYPE_IPV4);
+pub const ETHER_TYPE_ARP: u16 = protocol_word(ethertype::ETHER_TYPE_ARP);
+pub const ETHER_TYPE_EAPOL: u16 = protocol_word(ethertype::ETHER_TYPE_EAPOL);
+pub const ETHER_TYPE_WAPI: u16 = protocol_word(ethertype::ETHER_TYPE_WAPI);
+pub const ETHER_TYPE_IPV6: u16 = protocol_word(ethertype::ETHER_TYPE_IPV6);
+/// The vendor classifier's private priority marker.
 pub const ETHER_TYPE_VENDOR_PRIORITY: u16 = 0xeeee;
 
 pub const fn uses_fixed_per_packet_rate(
@@ -35,14 +47,14 @@ pub const fn uses_fixed_per_packet_rate(
 pub const fn user_priority(protocol: u16, ipv4_tos: Option<u8>, ipv6_prefix: Option<u32>) -> u32 {
     match protocol {
         ETHER_TYPE_IPV4 => match ipv4_tos {
-            Some(tos) => crate::qos::DsField::from_bytes([tos]).class_selector() as u32,
+            Some(tos) => DsField::from_bytes([tos]).class_selector() as u32,
             None => 0,
         },
         ETHER_TYPE_IPV6 => match ipv6_prefix {
             Some(prefix) => {
                 let [first, second, ..] = prefix.to_be_bytes();
-                let header = crate::qos::Ipv6HeaderPrefix::from_bytes([first, second]);
-                crate::qos::DsField::from_bytes([header.traffic_class()]).class_selector() as u32
+                let header = Ipv6HeaderPrefix::from_bytes([first, second]);
+                DsField::from_bytes([header.traffic_class()]).class_selector() as u32
             }
             None => 0,
         },

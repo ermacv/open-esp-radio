@@ -24,6 +24,42 @@ pub struct StaDataFrame<'a> {
 
 impl StaDataFrame<'_> {
     pub fn encode(self, output: &mut [u8]) -> Result<usize, StationFrameError> {
+        StaOpenDataFrame {
+            source: self.source,
+            bssid: self.bssid,
+            destination: self.destination,
+            sequence_number: self.sequence_number,
+            priority: WmmUserPriority::UP7,
+            peer_qos: false,
+            ether_type: self.ether_type,
+            payload: self.payload,
+        }
+        .encode(output)
+    }
+}
+
+/// One unprotected data MPDU sent by a station through its AP, QoS data
+/// when the access point negotiated QoS.
+///
+/// SOURCE: IEEE Std 802.11-2020, 9.3.2.1 (Data frame format: To DS set,
+/// Address 1 the BSSID, Address 2 the source, Address 3 the destination,
+/// QoS Control carrying the TID) and 5.1.4 (RFC 1042 LLC/SNAP encapsulation).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct StaOpenDataFrame<'a> {
+    pub source: OwnAddress,
+    pub bssid: Bssid,
+    pub destination: [u8; 6],
+    pub sequence_number: SequenceNumber,
+    /// The TID of a QoS data MPDU; unused without QoS.
+    pub priority: WmmUserPriority,
+    pub peer_qos: bool,
+    pub ether_type: u16,
+    pub payload: &'a [u8],
+}
+
+impl StaOpenDataFrame<'_> {
+    /// Write the MPDU without FCS; returns its length.
+    pub fn encode(self, output: &mut [u8]) -> Result<usize, StationFrameError> {
         validate_peer(self.bssid.get())?;
         let ethernet = ethernet_header(self.destination, self.source.get(), self.ether_type);
         let plan = plan_data_encapsulation(
@@ -31,8 +67,8 @@ impl StaDataFrame<'_> {
             self.bssid.get(),
             self.source.get(),
             ethernet,
-            WmmUserPriority::UP7,
-            false,
+            self.priority,
+            self.peer_qos,
             false,
         );
         let mut header = plan.header;

@@ -2,7 +2,7 @@ use super::*;
 use oer_ieee80211_wire::station_beacon::StaBeaconProtection;
 
 const BEACON: StaBeaconObservation = StaBeaconObservation {
-    timestamp_tsf: oer_ieee80211_wire::tsf::TsfInstant::from_micros(10),
+    timestamp_tsf: oer_ieee80211_wire::tsf::TsfTimestamp::from_micros(10),
     interval_tu: 100,
     capability_information: 0,
     tim: None,

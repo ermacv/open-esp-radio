@@ -5,7 +5,7 @@ fn entry(last: u8, ssid: &[u8]) -> StaPmksa {
         bssid([2, 0, 0, 0, 0, last]),
         heapless::Vec::from_slice(ssid).unwrap(),
         Pmk::from_bytes([last; 32]),
-        [last; STA_PMKID_LEN],
+        [last; RSN_PMKID_LEN],
     )
 }
 
@@ -17,7 +17,7 @@ fn an_association_resumes_only_for_its_access_point_and_ssid() {
         cache
             .resume(bssid([2, 0, 0, 0, 0, 1]), b"lab")
             .map(StaPmksa::pmkid),
-        Some([1; STA_PMKID_LEN])
+        Some([1; RSN_PMKID_LEN])
     );
     assert!(cache.resume(bssid([2, 0, 0, 0, 0, 2]), b"lab").is_none());
     // The same access point under another SSID flushes its entry.

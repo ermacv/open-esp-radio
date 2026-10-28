@@ -58,6 +58,7 @@ pub mod monitor;
 pub mod station_network;
 pub mod station_service;
 pub mod survey;
+pub mod vif;
 
 pub use monitor::injection as monitor_injection;
 pub use monitor::{

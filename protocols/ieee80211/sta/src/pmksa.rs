@@ -16,19 +16,18 @@
 //! entry only for the same BSSID, SSID and AKM and flushes it otherwise).
 
 use oer_ieee80211_rsn::Pmk;
+use oer_ieee80211_wire::security::rsn::RSN_PMKID_LEN;
 use oer_ieee80211_wire::{address::Bssid, management::MAX_SSID_LEN};
 
 /// Entries the vendor's PMKSA cache holds.
 pub const STA_PMKSA_CAPACITY: usize = 10;
-/// The PMKID length.
-pub const STA_PMKID_LEN: usize = 16;
 
 /// One cached SAE security association.
 pub struct StaPmksa {
     bssid: Bssid,
     ssid: heapless::Vec<u8, MAX_SSID_LEN>,
     pmk: Pmk,
-    pmkid: [u8; STA_PMKID_LEN],
+    pmkid: [u8; RSN_PMKID_LEN],
 }
 
 impl StaPmksa {
@@ -37,7 +36,7 @@ impl StaPmksa {
         bssid: Bssid,
         ssid: heapless::Vec<u8, MAX_SSID_LEN>,
         pmk: Pmk,
-        pmkid: [u8; STA_PMKID_LEN],
+        pmkid: [u8; RSN_PMKID_LEN],
     ) -> Self {
         Self {
             bssid,
@@ -53,7 +52,7 @@ impl StaPmksa {
     }
 
     /// The identifier advertised in the association request's RSN element.
-    pub const fn pmkid(&self) -> [u8; STA_PMKID_LEN] {
+    pub const fn pmkid(&self) -> [u8; RSN_PMKID_LEN] {
         self.pmkid
     }
 

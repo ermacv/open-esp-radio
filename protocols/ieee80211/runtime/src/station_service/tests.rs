@@ -421,8 +421,8 @@ struct RecordingRates<'a> {
 }
 
 impl RateSelection<ModelRxMeta, ModelAck> for RecordingRates<'_> {
-    fn packet_number_step(&self) -> oer_ieee80211_wire::ccmp::CcmpPacketNumberStep {
-        oer_ieee80211_wire::ccmp::CcmpPacketNumberStep::ONE
+    fn packet_number_step(&self) -> oer_ieee80211_upper_mac::ccmp::CcmpPacketNumberStep {
+        oer_ieee80211_upper_mac::ccmp::CcmpPacketNumberStep::ONE
     }
 
     fn plan<R>(

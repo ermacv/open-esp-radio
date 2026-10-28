@@ -5,6 +5,7 @@ const TEST_HT_CAPABILITIES: crate::ht::HtLocalCapabilities =
 
 use super::*;
 use crate::protection::ApBssProtection;
+use crate::security::test_elements;
 use crate::sequence::seq;
 
 #[test]
@@ -633,7 +634,7 @@ fn complete_response_encoders_own_addresses_sequence_and_status() {
         seq(8),
         crate::channel::Channel::ghz2_4(6, crate::channel::ChannelWidth::Mhz20).unwrap(),
         None,
-        ApSecurityPolicy::Wpa2Personal,
+        test_elements::WPA2_PERSONAL,
         ApBssProtection::default(),
     )
     .unwrap();

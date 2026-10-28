@@ -2,6 +2,7 @@
 
 use core::fmt;
 use oer_ieee80211_cipher::aes::{SoftwareAesKeyWrapError, software_aes128_key_wrap};
+use oer_ieee80211_wire::security::rsn::RSN_PMKID_LEN;
 use oer_ieee80211_wire::security::spp::SppScope;
 use oer_ieee80211_wire::sequence::SequenceNumber;
 
@@ -26,7 +27,8 @@ pub use crate::limits::{
 
 use oer_ieee80211_wire::ap::{ApAssociationSecurityObservation, ApPowerSaveObservation};
 
-use crate::pmksa::{AP_PMKID_LEN, ApPmksa, ApPmksaCache};
+use crate::pmksa::{ApPmksa, ApPmksaCache};
+use crate::security_policy::ApSecurityPolicy;
 use oer_ieee80211_rsn::{
     AssociationSecurityBinding, OwnedEapolFrame, Pmk, Ptk, PtkContext,
     element::{ValidatedRsnElement, validate_rsn_element},
@@ -45,8 +47,8 @@ use oer_ieee80211_wire::protection::{
     ApBssProtection, ErpProtection, HtOperationProtection, HtProtectionMode,
 };
 use oer_ieee80211_wire::security::{
-    ApSecurityPolicy, AssociationAkm, AssociationSecurity, GroupManagementCipher, LinkProtection,
-    RsnAssociation, SaePwe, rsn::Akm,
+    AssociationAkm, AssociationSecurity, GroupManagementCipher, LinkProtection, RsnAssociation,
+    SaePwe, rsn::Akm,
 };
 use {
     oer_ieee80211_upper_mac::block_ack::{
@@ -57,13 +59,6 @@ use {
     oer_ieee80211_wire::block_ack::BlockAckAction,
 };
 
-pub const AP_STATUS_SUCCESS: u16 = 0;
-pub const AP_STATUS_TOO_MANY_STATIONS: u16 = 17;
-pub const AP_STATUS_UNSUPPORTED_RATES: u16 = 18;
-pub const AP_STATUS_INVALID_RSN: u16 = 40;
-/// Status 53: the station named no PMKID of a security association this
-/// access point holds for it.
-pub const AP_STATUS_INVALID_PMKID: u16 = 53;
 pub const AP_ASSOCIATION_DEADLINE: oer_time::Duration = oer_time::Duration::from_secs(15);
 /// AP-owned response window for each four-way-handshake publication.
 ///
@@ -437,7 +432,7 @@ struct ApPeer {
     /// cached one its association resumed.
     pmk: Option<Pmk>,
     /// The PMKID of `pmk`.
-    pmkid: Option<[u8; AP_PMKID_LEN]>,
+    pmkid: Option<[u8; RSN_PMKID_LEN]>,
     association_security_binding: Option<AssociationSecurityBinding>,
     pending_ptk: Option<Ptk>,
     wpa2_retry: RsnRetry,

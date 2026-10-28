@@ -22,7 +22,10 @@ impl<const N: usize> RsnTxFrame<N> {
             RsnInterface::AccessPoint,
             peer,
             2,
-            KEY_INFO_PAIRWISE | KEY_INFO_ACK | u16::from(akm.key_descriptor_version()),
+            KeyInformation::EMPTY
+                .with_descriptor_version(akm.key_descriptor_version())
+                .with_pairwise(true)
+                .with_ack(true),
             RSN_GTK_LEN as u16,
             replay_counter,
             authenticator_nonce,
@@ -53,7 +56,10 @@ impl<const N: usize> RsnTxFrame<N> {
             RsnInterface::Station,
             peer,
             1,
-            KEY_INFO_PAIRWISE | KEY_INFO_MIC | u16::from(akm.key_descriptor_version()),
+            KeyInformation::EMPTY
+                .with_descriptor_version(akm.key_descriptor_version())
+                .with_pairwise(true)
+                .with_mic(true),
             0,
             replay_counter,
             supplicant_nonce,
@@ -77,13 +83,14 @@ impl<const N: usize> RsnTxFrame<N> {
             RsnInterface::AccessPoint,
             peer,
             2,
-            KEY_INFO_PAIRWISE
-                | KEY_INFO_INSTALL
-                | KEY_INFO_ACK
-                | KEY_INFO_MIC
-                | KEY_INFO_SECURE
-                | KEY_INFO_ENCRYPTED_KEY_DATA
-                | u16::from(akm.key_descriptor_version()),
+            KeyInformation::EMPTY
+                .with_descriptor_version(akm.key_descriptor_version())
+                .with_pairwise(true)
+                .with_install(true)
+                .with_ack(true)
+                .with_mic(true)
+                .with_secure(true)
+                .with_encrypted_key_data(true),
             RSN_GTK_LEN as u16,
             replay_counter,
             authenticator_nonce,
@@ -97,10 +104,11 @@ impl<const N: usize> RsnTxFrame<N> {
             RsnInterface::Station,
             peer,
             1,
-            KEY_INFO_PAIRWISE
-                | KEY_INFO_MIC
-                | KEY_INFO_SECURE
-                | u16::from(akm.key_descriptor_version()),
+            KeyInformation::EMPTY
+                .with_descriptor_version(akm.key_descriptor_version())
+                .with_pairwise(true)
+                .with_mic(true)
+                .with_secure(true),
             0,
             replay_counter,
             [0; 32],
@@ -119,7 +127,10 @@ impl<const N: usize> RsnTxFrame<N> {
             RsnInterface::Station,
             peer,
             1,
-            KEY_INFO_MIC | KEY_INFO_SECURE | u16::from(akm.key_descriptor_version()),
+            KeyInformation::EMPTY
+                .with_descriptor_version(akm.key_descriptor_version())
+                .with_mic(true)
+                .with_secure(true),
             0,
             replay_counter,
             [0; 32],
@@ -144,11 +155,12 @@ impl<const N: usize> RsnTxFrame<N> {
             RsnInterface::AccessPoint,
             peer,
             2,
-            KEY_INFO_ACK
-                | KEY_INFO_MIC
-                | KEY_INFO_SECURE
-                | KEY_INFO_ENCRYPTED_KEY_DATA
-                | u16::from(akm.key_descriptor_version()),
+            KeyInformation::EMPTY
+                .with_descriptor_version(akm.key_descriptor_version())
+                .with_ack(true)
+                .with_mic(true)
+                .with_secure(true)
+                .with_encrypted_key_data(true),
             RSN_GTK_LEN as u16,
             replay_counter,
             [0; 32],
@@ -162,16 +174,14 @@ impl<const N: usize> RsnTxFrame<N> {
         interface: RsnInterface,
         peer: [u8; 6],
         protocol_version: u8,
-        key_info: u16,
+        key_info: KeyInformation,
         key_length: u16,
         replay_counter: u64,
         nonce: [u8; 32],
         key_rsc: [u8; 8],
         key_data: &[u8],
     ) -> Result<Self, RsnFrameError> {
-        if key_info & (KEY_INFO_PAIRWISE | KEY_INFO_ACK) == (KEY_INFO_PAIRWISE | KEY_INFO_ACK)
-            && nonce.iter().all(|byte| *byte == 0)
-        {
+        if key_info.pairwise() && key_info.ack() && nonce.iter().all(|byte| *byte == 0) {
             return Err(RsnFrameError::ZeroNonce);
         }
         let len = EAPOL_KEY_PACKET_LEN
@@ -193,7 +203,7 @@ impl<const N: usize> RsnTxFrame<N> {
             &[protocol_version, EAPOL_PACKET_TYPE_KEY][..],
             &(body_len as u16).to_be_bytes(),
             &[RSN_KEY_DESCRIPTOR_TYPE],
-            &key_info.to_be_bytes(),
+            &key_info.to_bytes(),
             &key_length.to_be_bytes(),
             &replay_counter.to_be_bytes(),
             &nonce,
@@ -366,7 +376,7 @@ impl<const N: usize> RsnEthernetFrame<N> {
         for field in [
             eapol.peer().as_slice(),
             local.as_slice(),
-            EAPOL_ETHERTYPE.as_slice(),
+            ETHER_TYPE_EAPOL.to_be_bytes().as_slice(),
             eapol.as_bytes(),
         ] {
             bytes

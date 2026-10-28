@@ -6,6 +6,12 @@
 )]
 use super::*;
 
+const KEY_INFO_PAIRWISE: u16 = KeyInformation::EMPTY.with_pairwise(true).raw();
+const KEY_INFO_INSTALL: u16 = KeyInformation::EMPTY.with_install(true).raw();
+const KEY_INFO_ACK: u16 = KeyInformation::EMPTY.with_ack(true).raw();
+const KEY_INFO_MIC: u16 = KeyInformation::EMPTY.with_mic(true).raw();
+const KEY_INFO_SECURE: u16 = KeyInformation::EMPTY.with_secure(true).raw();
+
 fn key_packet(key_info: u16, replay_counter: u64) -> [u8; EAPOL_KEY_PACKET_LEN] {
     let mut packet = [0; EAPOL_KEY_PACKET_LEN];
     packet[0] = 2;

@@ -1,6 +1,10 @@
 //! Fixed WPA2-CCMP EAPOL frame construction and GTK key-data parsing.
 
-use oer_ieee80211_wire::security::rsn::{RSN_ELEMENT_ID, RSN_OUI};
+use oer_ieee80211_wire::{
+    eapol::{GTK_KDE_TYPE, IGTK_KDE_TYPE, KDE_ELEMENT_ID, KeyInformation},
+    ethertype::ETHER_TYPE_EAPOL,
+    security::rsn::{RSN_ELEMENT_ID, RSNXE_ELEMENT_ID},
+};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::state::{RsnApState, RsnStaState, RsnTransmit, RsnTxMessage};
@@ -20,20 +24,8 @@ pub const RSN_PLAIN_KEY_DATA_CAPACITY: usize = 128;
 pub const RSN_TX_EAPOL_CAPACITY: usize = 512;
 pub const RSN_TX_ETHERNET_CAPACITY: usize = RSN_TX_EAPOL_CAPACITY + 14;
 
-const RSNXE_ELEMENT_ID: u8 = 0xf4;
-const VENDOR_ELEMENT_ID: u8 = 0xdd;
-const GTK_KDE_TYPE: u8 = 1;
 /// IGTK KDE: key id (2), IPN (6) and IGTK (16) after the OUI and type.
-const IGTK_KDE_TYPE: u8 = 9;
 const IGTK_KDE_LEN: usize = 2 + 4 + 2 + RSN_IPN_LEN + RSN_IGTK_LEN;
-const EAPOL_ETHERTYPE: [u8; 2] = [0x88, 0x8e];
-
-const KEY_INFO_PAIRWISE: u16 = 1 << 3;
-const KEY_INFO_INSTALL: u16 = 1 << 6;
-const KEY_INFO_ACK: u16 = 1 << 7;
-const KEY_INFO_MIC: u16 = 1 << 8;
-const KEY_INFO_SECURE: u16 = 1 << 9;
-const KEY_INFO_ENCRYPTED_KEY_DATA: u16 = 1 << 12;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RsnFrameError {

@@ -36,9 +36,15 @@
 
 use oer_ieee80211_rsn::sae::{
     SAE_ANTI_CLOGGING_TOKEN_LEN, SAE_COMMIT_LEN, SAE_CONFIRM_LEN, SAE_GROUP_P256, SAE_KEY_LEN,
-    SAE_PMKID_LEN, SAE_PRIME_LEN, SaeComebackTokens, SaeCommit, SaeCommitRefusal, SaeCommitValues,
-    SaeError, SaeKeys, SaePassword, SaePasswordElement, SaePasswordToken, SaeReceivedCommit,
+    SAE_PRIME_LEN, SaeComebackTokens, SaeCommit, SaeCommitRefusal, SaeCommitValues, SaeError,
+    SaeKeys, SaePassword, SaePasswordElement, SaePasswordToken, SaeReceivedCommit,
 };
+use oer_ieee80211_wire::sae::{
+    anti_clogging_token_container_header, finite_cyclic_group, send_confirm,
+};
+use oer_ieee80211_wire::security::rsn::RSN_PMKID_LEN;
+use oer_ieee80211_wire::station::{SAE_COMMIT_TRANSACTION, SAE_CONFIRM_TRANSACTION};
+use oer_ieee80211_wire::status::status_code;
 
 use crate::limits::AP_MAX_CLIENTS;
 
@@ -49,18 +55,6 @@ pub const AP_SAE_ANTI_CLOGGING_THRESHOLD: usize = 2;
 const AP_SAE_SYNC: u8 = 0;
 /// The vendor's bound on drawing SAE rand and mask.
 const SAE_SCALAR_DRAWS: u8 = 100;
-
-const COMMIT_TRANSACTION: u16 = 1;
-const CONFIRM_TRANSACTION: u16 = 2;
-
-/// Status codes of SAE Authentication frames.
-pub const AP_SAE_STATUS_SUCCESS: u16 = 0;
-pub const AP_SAE_STATUS_UNSPECIFIED_FAILURE: u16 = 1;
-pub const AP_SAE_STATUS_CHALLENGE_FAILURE: u16 = 15;
-pub const AP_SAE_STATUS_UNABLE_TO_HANDLE_NEW_STA: u16 = 17;
-pub const AP_SAE_STATUS_ANTI_CLOGGING_TOKEN_REQUIRED: u16 = 76;
-pub const AP_SAE_STATUS_UNSUPPORTED_GROUP: u16 = 77;
-pub const AP_SAE_STATUS_HASH_TO_ELEMENT: u16 = 126;
 
 /// The longest body this responder sends: its Commit.
 pub const AP_SAE_REPLY_BODY_CAPACITY: usize = SAE_COMMIT_LEN;
@@ -179,7 +173,7 @@ pub enum ApSaeResult {
     /// The station's Confirm verified: the session is Accepted.
     Accepted {
         pmk: [u8; SAE_KEY_LEN],
-        pmkid: [u8; SAE_PMKID_LEN],
+        pmkid: [u8; RSN_PMKID_LEN],
     },
     /// The exchange failed with `status`. The vendor deauthenticates a
     /// station without an association with this status as the reason.
@@ -325,10 +319,10 @@ impl ApSaeResponder {
             body,
         } = frame;
         match transaction {
-            COMMIT_TRANSACTION => {
+            SAE_COMMIT_TRANSACTION => {
                 self.receive_commit(peer, status, body, now, queued_commits, random)
             }
-            CONFIRM_TRANSACTION => self.receive_confirm(peer, status, body),
+            SAE_CONFIRM_TRANSACTION => self.receive_confirm(peer, status, body),
             _ => ApSaeOutput::new(),
         }
     }
@@ -376,8 +370,8 @@ impl ApSaeResponder {
                 let Some(slot) = self.sessions.iter().position(Option::is_none) else {
                     return ApSaeOutput::reply(ApSaeReply::new(
                         peer,
-                        COMMIT_TRANSACTION,
-                        AP_SAE_STATUS_UNABLE_TO_HANDLE_NEW_STA,
+                        SAE_COMMIT_TRANSACTION,
+                        status_code::DENIED_NO_MORE_STAS,
                         ReplyBody::Empty,
                     ));
                 };
@@ -390,11 +384,11 @@ impl ApSaeResponder {
         };
         if !matches!(
             status,
-            AP_SAE_STATUS_SUCCESS | AP_SAE_STATUS_HASH_TO_ELEMENT
+            status_code::SUCCESS | status_code::SAE_HASH_TO_ELEMENT
         ) {
             return output;
         }
-        let group_offered = body.first_chunk::<2>() == Some(&SAE_GROUP_P256.to_le_bytes());
+        let group_offered = finite_cyclic_group(body) == Some(SAE_GROUP_P256);
         let Some(session) = self.sessions.get_mut(slot).and_then(Option::as_mut) else {
             return ApSaeOutput::fault(ApSaeFault::MissingSession { slot });
         };
@@ -407,16 +401,16 @@ impl ApSaeResponder {
                 session.clear_exchange();
             }
         }
-        let h2e = status == AP_SAE_STATUS_HASH_TO_ELEMENT;
+        let h2e = status == status_code::SAE_HASH_TO_ELEMENT;
         let commit = match SaeReceivedCommit::parse(body, h2e) {
             Ok(commit) => commit,
             Err(SaeCommitRefusal::UnsupportedGroup) => {
                 return ApSaeOutput::failure(
                     peer,
-                    COMMIT_TRANSACTION,
-                    AP_SAE_STATUS_UNSUPPORTED_GROUP,
-                    ReplyBody::Group(match body.first_chunk::<2>() {
-                        Some(group) => *group,
+                    SAE_COMMIT_TRANSACTION,
+                    status_code::UNSUPPORTED_FINITE_CYCLIC_GROUP,
+                    ReplyBody::Group(match finite_cyclic_group(body) {
+                        Some(group) => group.to_le_bytes(),
                         None => return ApSaeOutput::fault(session.fault()),
                     }),
                 );
@@ -424,8 +418,8 @@ impl ApSaeResponder {
             Err(SaeCommitRefusal::Unspecified) => {
                 return ApSaeOutput::failure(
                     peer,
-                    COMMIT_TRANSACTION,
-                    AP_SAE_STATUS_UNSPECIFIED_FAILURE,
+                    SAE_COMMIT_TRANSACTION,
+                    status_code::UNSPECIFIED_FAILURE,
                     ReplyBody::Empty,
                 );
             }
@@ -435,8 +429,8 @@ impl ApSaeResponder {
         {
             return ApSaeOutput::failure(
                 peer,
-                COMMIT_TRANSACTION,
-                AP_SAE_STATUS_UNSPECIFIED_FAILURE,
+                SAE_COMMIT_TRANSACTION,
+                status_code::UNSPECIFIED_FAILURE,
                 ReplyBody::Empty,
             );
         }
@@ -453,15 +447,15 @@ impl ApSaeResponder {
         {
             let mut output = output;
             output.result = ApSaeResult::Failed {
-                status: AP_SAE_STATUS_UNSPECIFIED_FAILURE,
+                status: status_code::UNSPECIFIED_FAILURE,
             };
             return output;
         }
         if commit.rejects_offered_group() {
             return ApSaeOutput::failure(
                 peer,
-                COMMIT_TRANSACTION,
-                AP_SAE_STATUS_UNSPECIFIED_FAILURE,
+                SAE_COMMIT_TRANSACTION,
+                status_code::UNSPECIFIED_FAILURE,
                 ReplyBody::Empty,
             );
         }
@@ -477,14 +471,15 @@ impl ApSaeResponder {
             });
             let group = SAE_GROUP_P256.to_le_bytes();
             let reply_body = if h2e {
+                const CONTAINER: [u8; 3] =
+                    match anti_clogging_token_container_header(SAE_ANTI_CLOGGING_TOKEN_LEN) {
+                        Some(header) => header,
+                        None => panic!("the anti-clogging token fits its container"),
+                    };
                 let mut request = [0; 5 + SAE_ANTI_CLOGGING_TOKEN_LEN];
-                let header = [
-                    group[0],
-                    group[1],
-                    255,
-                    const { 1 + SAE_ANTI_CLOGGING_TOKEN_LEN as u8 },
-                    93,
-                ];
+                let [g0, g1] = group;
+                let [c0, c1, c2] = CONTAINER;
+                let header = [g0, g1, c0, c1, c2];
                 for (destination, source) in
                     request.iter_mut().zip(header.iter().chain(token.iter()))
                 {
@@ -502,8 +497,8 @@ impl ApSaeResponder {
             };
             return ApSaeOutput::reply(ApSaeReply::new(
                 peer,
-                COMMIT_TRANSACTION,
-                AP_SAE_STATUS_ANTI_CLOGGING_TOKEN_REQUIRED,
+                SAE_COMMIT_TRANSACTION,
+                status_code::ANTI_CLOGGING_TOKEN_REQUIRED,
                 reply_body,
             ));
         }
@@ -532,14 +527,14 @@ impl ApSaeResponder {
         let Some(session) = self.sessions.get_mut(slot).and_then(Option::as_mut) else {
             return ApSaeOutput::fault(ApSaeFault::MissingSession { slot });
         };
-        if status != AP_SAE_STATUS_SUCCESS {
+        if status != status_code::SUCCESS {
             return output;
         }
-        let Some(send_confirm) = body.first_chunk::<2>().copied().map(u16::from_le_bytes) else {
+        let Some(send_confirm) = send_confirm(body) else {
             return ApSaeOutput::failure(
                 peer,
-                CONFIRM_TRANSACTION,
-                AP_SAE_STATUS_UNSPECIFIED_FAILURE,
+                SAE_CONFIRM_TRANSACTION,
+                status_code::UNSPECIFIED_FAILURE,
                 ReplyBody::Empty,
             );
         };
@@ -550,7 +545,7 @@ impl ApSaeResponder {
                 output.replies = [
                     Some(ApSaeReply::new(
                         peer,
-                        CONFIRM_TRANSACTION,
+                        SAE_CONFIRM_TRANSACTION,
                         0,
                         ReplyBody::Confirm(confirm),
                     )),
@@ -566,8 +561,8 @@ impl ApSaeResponder {
         if !verified {
             return ApSaeOutput::failure(
                 peer,
-                CONFIRM_TRANSACTION,
-                AP_SAE_STATUS_CHALLENGE_FAILURE,
+                SAE_CONFIRM_TRANSACTION,
+                status_code::CHALLENGE_FAILURE,
                 ReplyBody::Empty,
             );
         }
@@ -604,7 +599,7 @@ impl ApSaeResponder {
             output.replies = [
                 Some(ApSaeReply::new(
                     peer,
-                    CONFIRM_TRANSACTION,
+                    SAE_CONFIRM_TRANSACTION,
                     0,
                     ReplyBody::Confirm(confirm),
                 )),
@@ -673,8 +668,8 @@ fn commit_step_with(
             Err(_) => {
                 return ApSaeOutput::failure(
                     peer,
-                    COMMIT_TRANSACTION,
-                    AP_SAE_STATUS_UNSPECIFIED_FAILURE,
+                    SAE_COMMIT_TRANSACTION,
+                    status_code::UNSPECIFIED_FAILURE,
                     ReplyBody::Empty,
                 );
             }
@@ -697,13 +692,13 @@ fn commit_step_with(
         return ApSaeOutput::fault(ApSaeFault::CommitLength { length: len });
     }
     let commit_status = if session.h2e {
-        AP_SAE_STATUS_HASH_TO_ELEMENT
+        status_code::SAE_HASH_TO_ELEMENT
     } else {
-        AP_SAE_STATUS_SUCCESS
+        status_code::SUCCESS
     };
     let commit_reply = ApSaeReply::new(
         peer,
-        COMMIT_TRANSACTION,
+        SAE_COMMIT_TRANSACTION,
         commit_status,
         ReplyBody::Commit(body),
     );
@@ -723,13 +718,13 @@ fn commit_step_with(
                     Some(commit_reply),
                     Some(ApSaeReply::new(
                         peer,
-                        COMMIT_TRANSACTION,
-                        AP_SAE_STATUS_UNSPECIFIED_FAILURE,
+                        SAE_COMMIT_TRANSACTION,
+                        status_code::UNSPECIFIED_FAILURE,
                         ReplyBody::Empty,
                     )),
                 ],
                 result: ApSaeResult::Failed {
-                    status: AP_SAE_STATUS_UNSPECIFIED_FAILURE,
+                    status: status_code::UNSPECIFIED_FAILURE,
                 },
             };
         }

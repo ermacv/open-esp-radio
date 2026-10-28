@@ -19,6 +19,11 @@
 
 use core::ops::{Mul, Neg};
 use hmac::Mac;
+use oer_ieee80211_wire::sae::{
+    ANTI_CLOGGING_TOKEN_CONTAINER_EXTENSION_ID, ELEMENT_ID_EXTENSION,
+    PASSWORD_IDENTIFIER_EXTENSION_ID, REJECTED_GROUPS_EXTENSION_ID,
+};
+use oer_ieee80211_wire::security::rsn::RSN_PMKID_LEN;
 use p256::{
     AffinePoint, FieldBytes, FieldElement, ProjectivePoint, Scalar,
     elliptic_curve::{
@@ -46,15 +51,7 @@ pub const SAE_COMMIT_LEN: usize = 2 + SAE_PRIME_LEN + 2 * SAE_PRIME_LEN;
 pub const SAE_CONFIRM_LEN: usize = 2 + 32;
 /// Octets of the KCK and of the PMK of group 19.
 pub const SAE_KEY_LEN: usize = 32;
-pub const SAE_PMKID_LEN: usize = 16;
 
-const EXTENSION_ELEMENT_ID: u8 = 255;
-/// Element ID Extension of the Rejected Groups element.
-const REJECTED_GROUPS_ELEMENT: u8 = 92;
-/// Element ID Extension of the Anti-Clogging Token Container element.
-const ANTI_CLOGGING_TOKEN_ELEMENT: u8 = 93;
-/// Element ID Extension of the Password Identifier element.
-const PASSWORD_IDENTIFIER_ELEMENT: u8 = 33;
 /// Octets of an anti-clogging token: its index and an HMAC-SHA256 tail.
 pub const SAE_ANTI_CLOGGING_TOKEN_LEN: usize = 32;
 
@@ -460,7 +457,7 @@ impl SaeCommitValues {
             if !h2e {
                 return Err(SaeError::Malformed);
             }
-            let [EXTENSION_ELEMENT_ID, length, extension, ..] = *rest else {
+            let [ELEMENT_ID_EXTENSION, length, extension, ..] = *rest else {
                 return Err(SaeError::Malformed);
             };
             let Some((whole, tail)) = rest.split_at_checked(
@@ -474,7 +471,7 @@ impl SaeCommitValues {
                 return Err(SaeError::Malformed);
             };
             match extension {
-                REJECTED_GROUPS_ELEMENT
+                REJECTED_GROUPS_EXTENSION_ID
                     if value.len().is_multiple_of(2) && !contains_offered_group(value) => {}
                 _ => return Err(SaeError::Malformed),
             }
@@ -518,9 +515,9 @@ impl SaeCommitValues {
             put(
                 &mut output,
                 &[
-                    EXTENSION_ELEMENT_ID,
+                    ELEMENT_ID_EXTENSION,
                     container_length,
-                    ANTI_CLOGGING_TOKEN_ELEMENT,
+                    ANTI_CLOGGING_TOKEN_CONTAINER_EXTENSION_ID,
                 ],
             )?;
             put(&mut output, token)?;
@@ -617,19 +614,21 @@ impl<'a> SaeReceivedCommit<'a> {
             password_identifier: false,
             rejected_groups: None,
         };
-        if let Some((_, tail)) = extension_element(rest, PASSWORD_IDENTIFIER_ELEMENT, 1) {
+        if let Some((_, tail)) = extension_element(rest, PASSWORD_IDENTIFIER_EXTENSION_ID, 1) {
             commit.password_identifier = true;
             rest = tail;
         }
         if h2e {
-            if let Some((value, tail)) = extension_element(rest, REJECTED_GROUPS_ELEMENT, 2) {
+            if let Some((value, tail)) = extension_element(rest, REJECTED_GROUPS_EXTENSION_ID, 2) {
                 if !value.len().is_multiple_of(2) {
                     return Err(SaeCommitRefusal::Unspecified);
                 }
                 commit.rejected_groups = Some(value);
                 rest = tail;
             }
-            if let Some((value, _)) = extension_element(rest, ANTI_CLOGGING_TOKEN_ELEMENT, 1) {
+            if let Some((value, _)) =
+                extension_element(rest, ANTI_CLOGGING_TOKEN_CONTAINER_EXTENSION_ID, 1)
+            {
                 commit.token = Some(value);
             }
         }
@@ -772,7 +771,7 @@ impl Default for SaeComebackTokens {
     clippy::arithmetic_side_effects
 )]
 fn extension_element(bytes: &[u8], extension: u8, minimum_length: u8) -> Option<(&[u8], &[u8])> {
-    let [EXTENSION_ELEMENT_ID, length, id, ..] = *bytes else {
+    let [ELEMENT_ID_EXTENSION, length, id, ..] = *bytes else {
         return None;
     };
     if id != extension || length < minimum_length {
@@ -818,9 +817,9 @@ pub fn anti_clogging_token(body: &[u8], h2e: bool) -> Result<&[u8], SaeError> {
         return Ok(rest);
     }
     let [
-        EXTENSION_ELEMENT_ID,
+        ELEMENT_ID_EXTENSION,
         length,
-        ANTI_CLOGGING_TOKEN_ELEMENT,
+        ANTI_CLOGGING_TOKEN_CONTAINER_EXTENSION_ID,
         ..,
     ] = *rest
     else {
@@ -858,7 +857,7 @@ pub struct SaeCommit {
 pub struct SaeKeys {
     kck: [u8; SAE_KEY_LEN],
     pmk: [u8; SAE_KEY_LEN],
-    pmkid: [u8; SAE_PMKID_LEN],
+    pmkid: [u8; RSN_PMKID_LEN],
     #[zeroize(skip)]
     own: SaeCommitValues,
     #[zeroize(skip)]
@@ -939,7 +938,7 @@ impl SaeCommit {
             .to_bytes()
             .into();
         const {
-            if !(2 * SAE_KEY_LEN == 64 && SAE_PMKID_LEN <= SAE_PRIME_LEN) {
+            if !(2 * SAE_KEY_LEN == 64 && RSN_PMKID_LEN <= SAE_PRIME_LEN) {
                 panic!("SAE derived key geometry");
             }
         }
@@ -949,7 +948,7 @@ impl SaeCommit {
         let mut derived = SaeKeys {
             kck: [0; SAE_KEY_LEN],
             pmk: [0; SAE_KEY_LEN],
-            pmkid: [0; SAE_PMKID_LEN],
+            pmkid: [0; RSN_PMKID_LEN],
             own: self.own,
             peer,
         };
@@ -971,7 +970,7 @@ impl SaeKeys {
     pub const fn pmk(&self) -> &[u8; SAE_KEY_LEN] {
         &self.pmk
     }
-    pub const fn pmkid(&self) -> &[u8; SAE_PMKID_LEN] {
+    pub const fn pmkid(&self) -> &[u8; RSN_PMKID_LEN] {
         &self.pmkid
     }
 

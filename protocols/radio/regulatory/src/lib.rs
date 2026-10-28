@@ -97,6 +97,36 @@ impl FrequencySpan {
     }
 }
 
+/// The 5 GHz spans radar shares: a transmitter whose channel overlaps one
+/// must detect radar before and while it initiates there (dynamic frequency
+/// selection), in every domain that allocates them.
+///
+/// SOURCE: ETSI EN 301 893 V2.1.1 (2017-05), 4.2.6 (DFS applies in
+/// 5 250 MHz to 5 350 MHz and 5 470 MHz to 5 725 MHz); 47 CFR 15.407(h)(2)
+/// (U-NII-2A 5.25-5.35 GHz and U-NII-2C 5.47-5.725 GHz).
+pub const RADAR_SPANS: [FrequencySpan; 2] = [
+    FrequencySpan {
+        low_khz: 5_250_000,
+        high_khz: 5_350_000,
+    },
+    FrequencySpan {
+        low_khz: 5_470_000,
+        high_khz: 5_725_000,
+    },
+];
+
+/// Whether `span` overlaps a span radar shares ([`RADAR_SPANS`]).
+pub const fn radar_detection_required(span: FrequencySpan) -> bool {
+    let mut radar: &[FrequencySpan] = &RADAR_SPANS;
+    while let [shared, rest @ ..] = radar {
+        if span.low_khz < shared.high_khz && shared.low_khz < span.high_khz {
+            return true;
+        }
+        radar = rest;
+    }
+    false
+}
+
 /// What a rule restricts besides power.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
 pub struct RuleFlags(u8);

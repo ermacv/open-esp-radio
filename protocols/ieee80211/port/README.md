@@ -324,6 +324,9 @@ the `BeaconWindow` it asks the air for as `Operation::BeaconWindow`) and `Monito
 `TbttEvent`, `TsfSample`, `VifTsf`, `MonitorCapabilities`) are in
 `extensions`. The backend that writes an interface's TSF keeps that TSF's
 relation to the radio clock and stamps each sample with its generation.
+The TSF clock domain (`tsf::TsfInstant`, `TsfDuration`, `time_units`) is the
+port's: a received beacon's Timestamp field (the wire's `TsfTimestamp`)
+becomes a `TsfInstant` through `tsf::timestamp_instant`.
 
 Parametric limits of what a backend has are its capabilities
 (`LowerMacCapabilities`), and a value outside them has no checked type. Why

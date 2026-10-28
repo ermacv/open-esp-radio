@@ -8,8 +8,10 @@ use oer_ieee80211_upper_mac::block_ack::{
     RxReorderBuffer, RxReorderError, RxReorderMpdu, RxReorderRelease,
 };
 use oer_ieee80211_wire::{
-    block_ack::frame::{AddbaParameters, BlockAckAction},
+    block_ack::frame::{ADDBA_ACTION_BODY_LEN, BlockAckAction, encode_addba_response},
     sequence::SequenceNumber,
+    status::status_code,
+    tsf::time_units_micros,
 };
 use oer_time::{Duration, Instant};
 
@@ -17,9 +19,9 @@ use oer_time::{Duration, Instant};
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u16)]
 pub enum AddbaStatus {
-    Success = 0,
-    RequestDeclined = 37,
-    InvalidParameters = 38,
+    Success = status_code::SUCCESS,
+    RequestDeclined = status_code::REQUEST_DECLINED,
+    InvalidParameters = status_code::INVALID_PARAMETERS,
 }
 
 /// Fixed fields of one parsed ADDBA Request, without another action variant.
@@ -71,18 +73,16 @@ pub struct AddbaResponse {
 }
 
 impl AddbaResponse {
-    pub fn encode(self) -> Option<[u8; 9]> {
-        let parameters = AddbaParameters::from_bytes([0; 2])
-            .with_immediate(true)
-            .with_amsdu(self.amsdu)
-            .with_tid(self.tid)
-            .ok()?
-            .with_window(self.window)
-            .ok()?;
-        let [s0, s1] = (self.status as u16).to_le_bytes();
-        let [p0, p1] = parameters.to_bytes();
-        let [t0, t1] = self.timeout_tu.to_le_bytes();
-        Some([3, 1, self.dialog_token, s0, s1, p0, p1, t0, t1])
+    pub fn encode(self) -> Option<[u8; ADDBA_ACTION_BODY_LEN]> {
+        encode_addba_response(
+            self.dialog_token,
+            self.status as u16,
+            self.tid,
+            self.window,
+            self.timeout_tu,
+            self.amsdu,
+        )
+        .ok()
     }
 }
 
@@ -365,7 +365,7 @@ fn gap_deadline(now: Instant, timeout: Duration) -> Result<NonZeroU64, RxBlockAc
 }
 
 fn inactivity_duration(timeout_tu: u16) -> Duration {
-    Duration::from_micros(u64::from(timeout_tu).saturating_mul(1024))
+    Duration::from_micros(time_units_micros(timeout_tu))
 }
 
 #[cfg(test)]

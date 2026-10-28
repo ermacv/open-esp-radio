@@ -22,18 +22,21 @@ pub const RSN_MIC_LEN: usize = 16;
 /// The per-suite key hierarchy and EAPOL-Key integrity of an [`Akm`].
 pub(crate) trait AkmKeys {
     /// Key Information descriptor version carried by every EAPOL-Key frame.
-    fn key_descriptor_version(self) -> u8;
+    fn key_descriptor_version(self) -> oer_wire::U8<3>;
     /// Expand a PMK over the canonical address/nonce context into a PTK.
     fn expand_ptk(self, pmk: &[u8; 32], context: &[u8; 76], output: &mut [u8; RSN_PTK_LEN]);
     fn mic(self, kck: &[u8; RSN_KCK_LEN]) -> EapolMic;
 }
 
 impl AkmKeys for Akm {
-    fn key_descriptor_version(self) -> u8 {
+    fn key_descriptor_version(self) -> oer_wire::U8<3> {
+        // SOURCE: IEEE Std 802.11-2020, 12.7.2 (Key Descriptor Version: 2 for
+        // HMAC-SHA-1-128 with AES key wrap, 3 for AES-128-CMAC, 0 when the
+        // AKM defines the algorithms).
         match self {
-            Self::Psk => 2,
-            Self::PskSha256 => 3,
-            Self::Sae => 0,
+            Self::Psk => oer_wire::U8::constant::<2>(),
+            Self::PskSha256 => oer_wire::U8::constant::<3>(),
+            Self::Sae => oer_wire::U8::ZERO,
         }
     }
 
@@ -186,7 +189,7 @@ mod tests {
             0x81, 0xc5, 0xac, 0xb1, 0x5c, 0xf9,
         ];
         assert_eq!(expanded(Akm::PskSha256, &pmk, &context), expected);
-        assert_eq!(Akm::PskSha256.key_descriptor_version(), 3);
+        assert_eq!(Akm::PskSha256.key_descriptor_version().get(), 3);
 
         // Computed independently with Python's cryptography CMAC.
         let mut mic = Akm::PskSha256.mic(&[7; RSN_KCK_LEN]);
@@ -207,7 +210,7 @@ mod tests {
             Some(Akm::Sae)
         );
         assert_eq!(Akm::Sae.suite_selector(), [0x00, 0x0f, 0xac, 8]);
-        assert_eq!(Akm::Sae.key_descriptor_version(), 0);
+        assert_eq!(Akm::Sae.key_descriptor_version().get(), 0);
         let pmk: [u8; 32] = core::array::from_fn(|index| index as u8);
         let context: [u8; 76] = core::array::from_fn(|index| 100 + index as u8);
         assert_eq!(

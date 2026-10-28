@@ -1141,8 +1141,8 @@ pub use extensions::{
     AggregateRefused, AggregateState, AirReservationPhase, AmpduPhase, AmpduRate,
     BeaconTimingPhase, BeaconWindow, CheckedPoolAggregate, ClassSubframe, EmptyAggregate,
     InterfaceAggregate, InterfaceAggregateAttempt, InterfaceAggregateSubmission,
-    InterfaceProtection, MAX_RESERVATION_MICROS, MonitorPhase, MpduStartSpacing, NonEmptyAggregate,
-    NonEmptyState, PhaseAggregate, PoolSubframe, SubframeSource, TbttPlan,
+    InterfaceProtection, MonitorPhase, MpduStartSpacing, NonEmptyAggregate, NonEmptyState,
+    PhaseAggregate, PoolSubframe, SubframeSource, TbttPlan,
 };
 
 #[cfg(test)]

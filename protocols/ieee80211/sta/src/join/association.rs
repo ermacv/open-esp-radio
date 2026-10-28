@@ -2,6 +2,8 @@
 
 use oer_ieee80211_wire::address::{Bssid, OwnAddress};
 use oer_ieee80211_wire::sequence::SequenceNumber;
+use oer_ieee80211_wire::status::status_code;
+use oer_ieee80211_wire::tsf::MICROS_PER_TIME_UNIT;
 use {
     crate::sequence::StaSequenceCounter,
     oer_ieee80211_wire::{
@@ -170,15 +172,10 @@ impl RequestEpoch {
     }
 }
 
-/// Status of a temporary association refusal: the access point protects the
-/// management frames of an association it still holds and first confirms
-/// it with an SA Query.
-const REJECTED_TEMPORARILY: u16 = 30;
 /// The longest comeback time the vendor waits for.
 const MAXIMUM_COMEBACK_TU: u32 = 5_000;
 /// The vendor comes back this many TUs after the named comeback time.
 const COMEBACK_MARGIN_TU: u32 = 100;
-const MICROS_PER_TU: u64 = 1_024;
 
 impl StaAssociationRuntime {
     pub const fn new(
@@ -277,7 +274,7 @@ impl StaAssociationRuntime {
         else {
             return StaAssociationEvent::Irrelevant(self);
         };
-        if response.status_code == REJECTED_TEMPORARILY
+        if response.status_code == status_code::REFUSED_TEMPORARILY
             && let Some(comeback_tu) = response.association_comeback_tu
         {
             return self.come_back(comeback_tu, now);
@@ -318,7 +315,7 @@ impl StaAssociationRuntime {
         let wait = Duration::from_micros(
             u64::from(comeback_tu)
                 .saturating_add(u64::from(COMEBACK_MARGIN_TU))
-                .saturating_mul(MICROS_PER_TU),
+                .saturating_mul(MICROS_PER_TIME_UNIT),
         );
         let Some(until) = now.checked_add(wait) else {
             return self.fail(StaAssociationFailure::DeadlineOverflow);

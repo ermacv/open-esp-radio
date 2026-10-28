@@ -273,6 +273,21 @@ oer_wire::bitfield! {
         pub spacing, with_spacing: (u8) = 2..5;
     }
 }
+impl HtAmpduParameters {
+    /// The Maximum A-MPDU Length the exponent names: `2^(13 + exponent) - 1`
+    /// octets.
+    ///
+    /// SOURCE: IEEE Std 802.11-2020, 9.4.2.55.3 (A-MPDU Parameters field).
+    pub const fn max_ampdu_length(self) -> u32 {
+        match self.exponent().get() {
+            0 => (1 << 13) - 1,
+            1 => (1 << 14) - 1,
+            2 => (1 << 15) - 1,
+            _ => (1 << 16) - 1,
+        }
+    }
+}
+
 oer_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.4.2.56 (HT Operation element).
     pub struct HtOperationInfo[1] (little) {

@@ -58,9 +58,10 @@ pub mod block_ack;
 pub mod ccmp;
 pub mod channel;
 pub mod channel_switch;
-pub mod classification;
 pub mod data;
+pub mod eapol;
 mod encoding;
+pub mod ethertype;
 pub mod extensions;
 pub mod qos;
 
@@ -75,6 +76,7 @@ pub mod ndpa;
 pub mod phy;
 pub mod protection;
 pub mod rates;
+pub mod sae;
 pub mod scan;
 pub mod security;
 pub mod sequence;
@@ -83,11 +85,10 @@ pub mod ssid;
 pub mod station;
 pub mod station_beacon;
 pub mod station_power_save;
-pub mod tbtt;
+pub mod status;
 pub mod trigger;
 pub mod tsf;
 pub mod twt;
-pub mod vif;
 
 /// Checked management/data headers and receive admission.
 pub mod frame;

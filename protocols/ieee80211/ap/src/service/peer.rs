@@ -2,7 +2,9 @@
 //! Every method borrows the same service and peer storage; no second owner exists.
 
 use super::*;
+use oer_ieee80211_wire::security::rsn::RSN_PMKID_LEN;
 use oer_ieee80211_wire::sequence::SequenceNumber;
+use oer_ieee80211_wire::status::status_code;
 
 impl<'peers, S: SppScope> AccessPointService<'peers, S> {
     pub fn next_management_sequence(&mut self) -> SequenceNumber {
@@ -62,7 +64,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
         &mut self,
         peer: [u8; 6],
         pmk: Pmk,
-        pmkid: [u8; AP_PMKID_LEN],
+        pmkid: [u8; RSN_PMKID_LEN],
         now: oer_time::Instant,
     ) -> Result<u16, ApServiceError> {
         if self.security_policy() != ApSecurityPolicy::Wpa3Personal {
@@ -72,7 +74,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
         self.storage_mut()
             .pmksa
             .insert(ApPmksa::new(peer, pmk.duplicate(), pmkid));
-        if status == AP_STATUS_SUCCESS {
+        if status == status_code::SUCCESS {
             let existing = self.checked_peer_mut(peer)?;
             existing.pmk = Some(pmk);
             existing.pmkid = Some(pmkid);
@@ -89,7 +91,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
     ) -> Result<u16, ApServiceError> {
         let existing = self.peer_index(peer).is_some();
         if !existing && self.occupied_count() >= self.client_limit.get() {
-            return Ok(AP_STATUS_TOO_MANY_STATIONS);
+            return Ok(status_code::DENIED_NO_MORE_STAS);
         }
         let generation = self
             .storage()
@@ -110,7 +112,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
                 }
             })
         else {
-            return Ok(AP_STATUS_TOO_MANY_STATIONS);
+            return Ok(status_code::DENIED_NO_MORE_STAS);
         };
         let association_id = entry
             .as_ref()
@@ -120,7 +122,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
         *replay = management::ApManagementReplay::inactive();
         storage.generation = generation;
         self.revise_status();
-        Ok(AP_STATUS_SUCCESS)
+        Ok(status_code::SUCCESS)
     }
 
     /// Admit an association into an RSN epoch. A WPA3 station uses the PMK of
@@ -154,7 +156,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
                     error.peer_rejection()?;
                     return Ok(ApMlmeAction::AssociationResponse {
                         peer,
-                        status: AP_STATUS_INVALID_RSN,
+                        status: status_code::INVALID_ELEMENT,
                         association_id: None,
                     });
                 }
@@ -172,7 +174,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
                 None => {
                     return Ok(ApMlmeAction::AssociationResponse {
                         peer,
-                        status: AP_STATUS_INVALID_PMKID,
+                        status: status_code::INVALID_PMKID,
                         association_id: None,
                     });
                 }
@@ -194,7 +196,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
         if capabilities.maximum_legacy_rate_500kbps == 0 {
             return Ok(ApMlmeAction::AssociationResponse {
                 peer,
-                status: AP_STATUS_UNSUPPORTED_RATES,
+                status: status_code::DENIED_RATES,
                 association_id: None,
             });
         }
@@ -222,7 +224,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
         self.revise_status();
         Ok(ApMlmeAction::AssociationResponse {
             peer,
-            status: AP_STATUS_SUCCESS,
+            status: status_code::SUCCESS,
             association_id: Some(association_id),
         })
     }
@@ -233,8 +235,8 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
     fn resume_sae_pmk(
         &self,
         peer: [u8; 6],
-        mut pmkids: impl Iterator<Item = [u8; AP_PMKID_LEN]>,
-    ) -> Result<Option<(Pmk, [u8; AP_PMKID_LEN])>, ApServiceError> {
+        mut pmkids: impl Iterator<Item = [u8; RSN_PMKID_LEN]>,
+    ) -> Result<Option<(Pmk, [u8; RSN_PMKID_LEN])>, ApServiceError> {
         if self.security_policy() != ApSecurityPolicy::Wpa3Personal {
             return Err(ApServiceError::SecurityModeMismatch);
         }
@@ -285,14 +287,14 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
         if !security_matches {
             return Ok(ApMlmeAction::AssociationResponse {
                 peer,
-                status: AP_STATUS_INVALID_RSN,
+                status: status_code::INVALID_ELEMENT,
                 association_id: None,
             });
         }
         if capabilities.maximum_legacy_rate_500kbps == 0 {
             return Ok(ApMlmeAction::AssociationResponse {
                 peer,
-                status: AP_STATUS_UNSUPPORTED_RATES,
+                status: status_code::DENIED_RATES,
                 association_id: None,
             });
         }
@@ -314,7 +316,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
         self.revise_status();
         Ok(ApMlmeAction::AssociationResponse {
             peer,
-            status: AP_STATUS_SUCCESS,
+            status: status_code::SUCCESS,
             association_id: Some(association_id),
         })
     }

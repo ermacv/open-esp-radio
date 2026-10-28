@@ -3086,6 +3086,7 @@ dependencies = [
  "oer-ieee80211-wire",
  "oer-test-ui-cases",
  "oer-time",
+ "oer-wire",
  "p256",
  "pbkdf2",
  "sha1",
@@ -3167,7 +3168,6 @@ version = "0.1.0"
 dependencies = [
  "oer-radio-regulatory",
  "oer-test-ui-cases",
- "oer-time",
  "oer-wire",
  "tempfile",
  "zeroize",

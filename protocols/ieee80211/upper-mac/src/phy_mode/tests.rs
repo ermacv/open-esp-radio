@@ -1,7 +1,11 @@
 use super::PhyMode;
 use crate::seq;
 use oer_ieee80211_wire::station::association::AssociationPhy;
-use oer_ieee80211_wire::{scan::ScanRecord, security::StaSecurityPolicy, station::*};
+use oer_ieee80211_wire::{
+    scan::ScanRecord,
+    security::{AssociationAkm, Spp},
+    station::*,
+};
 const LOCAL: [u8; 6] = [0x02, 0, 0, 0x12, 0x34, 0x56];
 const BSSID: [u8; 6] = [0x30, 0x05, 0x5c, 0x11, 0x22, 0x33];
 const SELECTED_RSN_IE_LEN: usize = 22;
@@ -29,8 +33,10 @@ fn non_he_modes_refuse_he_power_elements() {
     }
 }
 
-fn wpa2_rsn(record: &ScanRecord) -> SelectedRsn {
-    select_association_rsn(record, StaSecurityPolicy::Wpa2Personal).unwrap()
+/// The selection a WPA2-Personal station makes for a PSK access point
+/// without RSN capabilities.
+fn wpa2_rsn() -> SelectedRsn {
+    SelectedRsn::personal(AssociationAkm::Psk, Spp::NotNegotiated, false)
 }
 
 fn access_point_with_rsn(akms: &[[u8; 4]], capabilities: u16) -> ScanRecord {
@@ -89,7 +95,7 @@ fn association_request_contains_selected_rsn() {
         sequence_number: seq(2),
         listen_interval: 1,
         phy: PhyMode::Legacy,
-        security: &wpa2_rsn(&record),
+        security: &wpa2_rsn(),
         power_capability: None,
         he_ul_mu_power: None,
     }
@@ -118,7 +124,7 @@ fn ht20_request_fails_closed_when_the_ap_did_not_advertise_ht() {
             sequence_number: seq(2),
             listen_interval: 1,
             phy: PhyMode::Ht20,
-            security: &wpa2_rsn(&record),
+            security: &wpa2_rsn(),
             power_capability: None,
             he_ul_mu_power: None,
         }
@@ -143,7 +149,7 @@ fn association_encoder_uses_the_explicit_local_profile() {
         sequence_number: seq(2),
         listen_interval: 1,
         phy: PhyMode::Ht20,
-        security: &wpa2_rsn(&record),
+        security: &wpa2_rsn(),
         power_capability: None,
         he_ul_mu_power: None,
     }

@@ -7,6 +7,7 @@ use oer_ieee80211_upper_mac::phy_mode::PhyMode;
 use oer_ieee80211_upper_mac::protection::{
     BasicRates, BssProtection, HePacketPadding, HeTxopDurationRtsThreshold,
 };
+use oer_ieee80211_wire::management::CapabilityInformation;
 
 /// Caller policy applied before constructing one STA association request.
 ///
@@ -112,9 +113,6 @@ pub enum StaAssociatedPeerError {
     HePeer(oer_ieee80211_wire::he::HeElementError),
 }
 
-/// Capability Information Short Preamble bit.
-const CAPABILITY_SHORT_PREAMBLE: u16 = 1 << 5;
-
 impl StaAssociatedPeer {
     /// What the station's rate control knows of its access point.
     pub const fn rate_peer(&self) -> oer_ieee80211_upper_mac::rate_control::RatePeer {
@@ -196,7 +194,10 @@ impl StaAssociatedPeer {
                     access_point.supported_rates_bytes(),
                     access_point.extended_supported_rates_bytes(),
                 ),
-                short_preamble: access_point.capability_info & CAPABILITY_SHORT_PREAMBLE != 0,
+                short_preamble: CapabilityInformation::from_bytes(
+                    access_point.capability_info.to_le_bytes(),
+                )
+                .short_preamble(),
             },
             edca,
         })

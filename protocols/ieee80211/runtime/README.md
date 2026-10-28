@@ -8,7 +8,9 @@ point, monitor) against a backend's `MacServiceCapabilities` and assigns its
 virtual-interface identities; `WifiPlan::standalone_monitor` and
 `standalone_esp_now` narrow it to an exclusive monitor or ESP-NOW station.
 `monitor::policy` holds the bounded `MonitorFilter` a monitor applies to
-tapped frames and its channel policy (fixed or a hopping sequence).
+tapped frames and its channel policy (fixed or a hopping sequence). `vif`
+routes one received MPDU of a same-channel station and SoftAP pair to its
+interface from its public header fields.
 
 Host tests use the allocating in-memory backend from `oer-ieee80211-model`
 as a dev-dependency. The model's fixtures run the shared conformance cases in
@@ -31,7 +33,8 @@ the port's RX buffers without copying payloads. Negotiation bounds each window
 by the remaining frame credits and reserves one credit to close a reorder gap.
 The service keeps pending responses while control TX is busy, reorders QoS data,
 advances a window on a matching compressed BAR, and releases frames and bank
-owners on peer DELBA, inactivity, disconnection or healthy Stop. ADDBA refusal
+owners on peer DELBA, inactivity, disconnection or healthy Stop. The BAR,
+DELBA and ADDBA formats are `oer-ieee80211-wire`'s. ADDBA refusal
 uses an explicit status when the parameters or available resources cannot admit
 an agreement. The image supplies the reorder gap duration.
 

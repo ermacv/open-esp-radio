@@ -1,8 +1,8 @@
 //! The relation of an interface's TSF to the port's radio clock across the
 //! TSF writes the backend makes.
 
+use oer_ieee80211_port::tsf::{TsfDuration, TsfInstant};
 use oer_ieee80211_port::{Ieee80211Instant, TSF_DRIFT_PPM, TsfGeneration};
-use oer_ieee80211_wire::tsf::{TsfDuration, TsfInstant};
 
 /// The relation of one interface's TSF to the radio clock across TSF sets:
 /// its generation and its last sample, the value the TSF was last set to.

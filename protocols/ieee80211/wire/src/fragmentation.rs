@@ -135,6 +135,8 @@ impl<'frame> OpenDataFragment<'frame> {
     }
 }
 
+/// Why a received data MPDU is not an admissible fragment of an Open or
+/// CCMP data MSDU: the frame-format refusals of one MPDU.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum OpenDataFragmentError {
     Truncated,
@@ -149,33 +151,4 @@ pub enum OpenDataFragmentError {
     InvalidTransmitter,
     AmsduUnsupported,
     EmptyPayload,
-    ClockUnavailable,
-    KeyEpochRequired,
-    NoReassemblyContexts,
-    Orphan {
-        fragment_number: u8,
-    },
-    IdentityMismatch,
-    MoreFragmentsMismatch,
-    RetryPacketNumberMismatch {
-        fragment_number: u8,
-        expected: CcmpPacketNumber,
-        observed: CcmpPacketNumber,
-    },
-    RetryPayloadMismatch {
-        fragment_number: u8,
-    },
-    PacketNumberNotSequential {
-        previous: CcmpPacketNumber,
-        observed: CcmpPacketNumber,
-    },
-    OutOfOrder {
-        expected: u8,
-        observed: u8,
-    },
-    TooManyFragments,
-    ReassembledTooLarge {
-        capacity: usize,
-    },
-    InvalidLlcSnap,
 }

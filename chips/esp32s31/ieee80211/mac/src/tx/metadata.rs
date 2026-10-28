@@ -6,7 +6,9 @@
 
 use oer_esp32s31_hal::layouts::WifiTxDescriptorPrefixPriority;
 use oer_ieee80211_wire::{
+    address::AddressFlags,
     data::{DataEncapPlan, IEEE80211_QOS_DATA_HEADER_LEN},
+    frame::FrameControlFields,
     qos::{WmmAccessCategory, WmmUserPriority},
 };
 
@@ -15,6 +17,12 @@ use oer_ieee80211_wire::{
 pub struct DataTxMetadata {
     pub queue_class: u8,
     pub packet_type: u8,
+    /// The descriptor's multicast mark: an access point's group-addressed
+    /// data MPDU.
+    pub descriptor_multicast: bool,
+    /// The DMA prefix before the plaintext or CCMP payload: the encoded
+    /// 802.11 header.
+    pub dma_header_len: usize,
 }
 
 impl DataTxMetadata {
@@ -26,9 +34,13 @@ impl DataTxMetadata {
         } else {
             0
         };
+        let [f0, f1, _, _, a0, ..] = plan.header;
+        let from_access_point = FrameControlFields::from_bytes([f0, f1]).from_ds();
         Self {
             queue_class,
             packet_type: 10 + packet_class,
+            descriptor_multicast: from_access_point && AddressFlags::from_bytes([a0]).group(),
+            dma_header_len: plan.header_len as usize,
         }
     }
 }

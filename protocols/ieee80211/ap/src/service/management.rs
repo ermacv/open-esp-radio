@@ -4,6 +4,7 @@
 
 use super::*;
 use oer_ieee80211_cipher::bip::MANAGEMENT_MIC_ELEMENT_LEN;
+use oer_ieee80211_wire::management::ManagementHeader;
 use oer_ieee80211_wire::{
     ap::ApManagementSubtype, ccmp::CcmpPacketNumber, management_protection::SaQuery,
 };
@@ -186,23 +187,13 @@ impl<S: SppScope> AccessPointService<'_, S> {
             .ok_or(ApGroupManagementError::InvalidFrame)?;
         let subtype =
             ApManagementSubtype::parse(packet).ok_or(ApGroupManagementError::InvalidFrame)?;
-        let Some((&[_, flags, _, _, destination, ..], _)) = packet.split_first_chunk::<24>() else {
-            return Err(ApGroupManagementError::InvalidFrame);
-        };
-        let transmitter = packet
-            .get(10..16)
-            .ok_or(ApGroupManagementError::InvalidFrame)?;
-        let bssid = packet
-            .get(16..22)
-            .ok_or(ApGroupManagementError::InvalidFrame)?;
-        let body = packet
-            .get(24..)
-            .ok_or(ApGroupManagementError::InvalidFrame)?;
+        let (header, body) =
+            ManagementHeader::split(packet).ok_or(ApGroupManagementError::InvalidFrame)?;
         if body.len() < 2
-            || flags & 0x40 != 0
-            || destination & 1 == 0
-            || transmitter != self.address
-            || bssid != self.address
+            || header.frame_control.protected()
+            || !header.group_receiver()
+            || header.transmitter != self.address
+            || header.bssid != self.address
             || !subtype.is_robust(body)
         {
             return Err(ApGroupManagementError::InvalidFrame);

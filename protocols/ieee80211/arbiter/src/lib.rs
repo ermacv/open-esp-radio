@@ -185,7 +185,8 @@ use coordinator::{
 
 /// The longest air reservation: the Duration field's limit, in
 /// microseconds.
-pub const MAX_RESERVATION: Duration = Duration::from_micros(32_767);
+pub const MAX_RESERVATION: Duration =
+    Duration::from_micros(oer_ieee80211_wire::frame::MAX_DURATION_MICROS as u64);
 
 type Brand<'id, Path> = PhantomData<fn(&'id (), Path) -> (&'id (), Path)>;
 

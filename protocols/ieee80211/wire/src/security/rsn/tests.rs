@@ -211,3 +211,55 @@ fn rsn_element_parse_never_panics_on_received_bytes() {
 fn rsn_element_parse_never_panics_on_received_bytes_full() {
     rsn_element_parse_never_panics(crate::fuzz::FULL);
 }
+
+#[test]
+fn single_suite_elements_round_trip_through_the_parser() {
+    let element = rsn_single_suite_element(
+        RSN_CIPHER_CCMP,
+        RSN_CIPHER_CCMP,
+        RSN_AKM_PSK,
+        RSN_CAPABILITY_MFPC,
+    );
+    let parsed = RsnElement::parse(&element).unwrap();
+    assert_eq!(parsed.group_data_cipher(), ieee_suite(RSN_CIPHER_CCMP));
+    assert_eq!(parsed.pairwise_ciphers().len(), 1);
+    assert!(
+        parsed
+            .pairwise_ciphers()
+            .contains(ieee_suite(RSN_CIPHER_CCMP))
+    );
+    assert_eq!(parsed.akm_suites().len(), 1);
+    assert!(parsed.akm_suites().contains(ieee_suite(RSN_AKM_PSK)));
+    assert_eq!(parsed.capabilities(), Some(RSN_CAPABILITY_MFPC));
+    assert_eq!(parsed.pmkid_count(), None);
+    assert_eq!(parsed.group_management_cipher(), None);
+
+    let element = rsn_group_management_element(
+        RSN_CIPHER_CCMP,
+        RSN_CIPHER_CCMP,
+        RSN_AKM_SAE,
+        RSN_CAPABILITY_MFPC | RSN_CAPABILITY_MFPR,
+        RSN_CIPHER_BIP_CMAC_128,
+    );
+    let parsed = RsnElement::parse(&element).unwrap();
+    assert!(parsed.akm_suites().contains(ieee_suite(RSN_AKM_SAE)));
+    assert_eq!(parsed.pmkid_count(), Some(0));
+    assert_eq!(
+        parsed.group_management_cipher(),
+        Some(ieee_suite(RSN_CIPHER_BIP_CMAC_128))
+    );
+    // A truncated element is refused.
+    assert_eq!(
+        RsnElement::parse(&element[..element.len() - 1]).map(|_| ()),
+        Err(RsnSyntaxError::Malformed)
+    );
+}
+
+#[test]
+fn a_one_octet_rsnxe_round_trips_and_a_short_one_is_refused() {
+    let element = rsnx_element(RsnExtendedCapabilities::from_bytes([0]).with_sae_h2e(true));
+    assert_eq!(element, [244, 1, 0x20]);
+    assert!(rsnx_capabilities(&element).unwrap().sae_h2e());
+    assert!(!rsnx_capabilities(&[244, 1, 0]).unwrap().sae_h2e());
+    assert_eq!(rsnx_capabilities(&element[..2]), None);
+}

@@ -26,7 +26,7 @@ fn decodes_dtim_group_and_partial_virtual_bitmap_for_local_aid() {
     assert_eq!(
         parse_sta_beacon(&frame, BSSID, 17),
         Ok(StaBeaconObservation {
-            timestamp_tsf: crate::tsf::TsfInstant::from_micros(0x0102_0304_0506_0708),
+            timestamp_tsf: crate::tsf::TsfTimestamp::from_micros(0x0102_0304_0506_0708),
             interval_tu: 100,
             capability_information: 0x0431,
             tim: Some(StaTimObservation {

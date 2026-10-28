@@ -116,7 +116,7 @@ pub enum FrameRates {
 /// measurement, an ACK's SNR) is not one for that port.
 pub trait RateSelection<M: RxMetadata, A> {
     /// Packet-number step of this transmit policy, retained by each installed key.
-    fn packet_number_step(&self) -> oer_ieee80211_wire::ccmp::CcmpPacketNumberStep;
+    fn packet_number_step(&self) -> crate::ccmp::CcmpPacketNumberStep;
 
     /// The retry plan of the next frame for `frame`, in the rates the
     /// port's channel carries: `carried` turns a rate into the phase's, or

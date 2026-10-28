@@ -35,8 +35,6 @@ pub enum BipError {
     MissingManagementMic,
     /// The MIC element names another IGTK.
     UnknownKeyId,
-    /// The IPN does not exceed the last accepted one.
-    Replay,
     /// The MIC does not verify.
     InvalidMic,
 }

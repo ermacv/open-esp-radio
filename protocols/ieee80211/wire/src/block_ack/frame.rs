@@ -10,14 +10,18 @@
     clippy::arithmetic_side_effects
 )]
 
-use crate::frame::QosControl;
-use crate::sequence::SequenceNumber;
+use crate::frame::{ControlSubtype, FrameControlFields, QosControl};
+use crate::sequence::{SequenceControl, SequenceNumber};
 
 pub const BLOCK_ACK_CATEGORY: u8 = 3;
 pub const ADDBA_REQUEST_ACTION: u8 = 0;
 pub const ADDBA_RESPONSE_ACTION: u8 = 1;
 pub const DELBA_ACTION: u8 = 2;
 pub const ADDBA_ACTION_BODY_LEN: usize = 9;
+/// Category, Block Ack Action, DELBA Parameter Set and Reason Code.
+///
+/// SOURCE: IEEE Std 802.11-2020, 9.6.5.5 (DELBA frame format).
+pub const DELBA_ACTION_BODY_LEN: usize = 6;
 
 /// A field that cannot be represented by an immediate ADDBA request.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -221,7 +225,7 @@ pub fn write_successful_addba_response(
 }
 
 /// IEEE 802.11 status 37: the recipient cannot accept this agreement.
-pub const ADDBA_STATUS_REQUEST_DECLINED: u16 = 37;
+pub const ADDBA_STATUS_REQUEST_DECLINED: u16 = crate::status::status_code::REQUEST_DECLINED;
 
 /// Write a finite rejection for a syntactically parsed ADDBA request.
 ///
@@ -258,6 +262,122 @@ pub fn write_declined_addba_response(
         .map_err(|_| RxAddbaResponseError::InvalidWindow(requested_window))?;
     crate::encoding::write_array::<5, _, _>(body, &parameters.to_bytes());
     Ok(())
+}
+
+/// Encode one immediate-policy ADDBA Response action body.
+///
+/// SOURCE: IEEE Std 802.11-2020, 9.6.5.3 (ADDBA Response frame format:
+/// Category, Block Ack Action, Dialog Token, Status Code, Block Ack
+/// Parameter Set and Block Ack Timeout Value).
+///
+/// # Errors
+///
+/// A TID wider than four bits or a window wider than ten bits.
+pub fn encode_addba_response(
+    dialog_token: u8,
+    status: u16,
+    tid: u8,
+    window: u16,
+    timeout_tu: u16,
+    amsdu: bool,
+) -> Result<[u8; ADDBA_ACTION_BODY_LEN], RxAddbaResponseError> {
+    let parameters = AddbaParameters::from_bytes([0; 2])
+        .with_immediate(true)
+        .with_amsdu(amsdu)
+        .with_tid(tid)
+        .map_err(|_| RxAddbaResponseError::InvalidTid(tid))?
+        .with_window(window)
+        .map_err(|_| RxAddbaResponseError::InvalidWindow(window))?;
+    let [s0, s1] = status.to_le_bytes();
+    let [p0, p1] = parameters.to_bytes();
+    let [t0, t1] = timeout_tu.to_le_bytes();
+    Ok([
+        BLOCK_ACK_CATEGORY,
+        ADDBA_RESPONSE_ACTION,
+        dialog_token,
+        s0,
+        s1,
+        p0,
+        p1,
+        t0,
+        t1,
+    ])
+}
+
+/// Encode one DELBA action body tearing down `tid`'s agreement.
+///
+/// SOURCE: IEEE Std 802.11-2020, 9.6.5.5 (DELBA frame format).
+///
+/// # Errors
+///
+/// A TID wider than four bits.
+pub fn encode_delba(
+    tid: u8,
+    initiator: bool,
+    reason: u16,
+) -> Result<[u8; DELBA_ACTION_BODY_LEN], AddbaRequestError> {
+    let parameters = DelbaParameters::from_bytes([0; 2])
+        .with_tid(tid)
+        .map_err(|_| AddbaRequestError::InvalidTid(tid))?
+        .with_initiator(initiator);
+    let [p0, p1] = parameters.to_bytes();
+    let [r0, r1] = reason.to_le_bytes();
+    Ok([BLOCK_ACK_CATEGORY, DELBA_ACTION, p0, p1, r0, r1])
+}
+
+/// One received Compressed BlockAckReq: a single-TID request whose bitmap
+/// answer is compressed.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CompressedBlockAckRequest {
+    pub receiver: [u8; 6],
+    pub transmitter: [u8; 6],
+    pub tid: u8,
+    pub starting_sequence: SequenceNumber,
+}
+
+/// BAR Type of a Compressed BlockAckReq.
+///
+/// SOURCE: IEEE Std 802.11-2020, 9.3.1.7.1, Table 9-24 (BlockAckReq frame
+/// variant encoding: 2 is Compressed).
+pub const COMPRESSED_BAR_TYPE: u8 = 2;
+
+/// Parse a Compressed BlockAckReq of protocol version 0.
+///
+/// `None` for another frame, a frame with To/From DS, Protected, More
+/// Fragments or Order set, another BAR variant, a starting sequence with a
+/// nonzero fragment number or a frame shorter than the request.
+///
+/// SOURCE: IEEE Std 802.11-2020, 9.3.1.7 (BlockAckReq frame format) and
+/// 9.3.1.7.1 (BAR Control field).
+pub fn parse_compressed_block_ack_request(frame: &[u8]) -> Option<CompressedBlockAckRequest> {
+    let (&[f0, f1, _, _], rest) = frame.split_first_chunk::<4>()?;
+    let control = FrameControlFields::from_bytes([f0, f1]);
+    if control.version() != 0
+        || !control.is_control(ControlSubtype::BlockAckRequest)
+        || control.ds() != 0
+        || control.protected()
+        || control.more_fragments()
+        || control.order()
+    {
+        return None;
+    }
+    let (&receiver, rest) = rest.split_first_chunk::<6>()?;
+    let (&transmitter, rest) = rest.split_first_chunk::<6>()?;
+    let (&[c0, c1, s0, s1], _) = rest.split_first_chunk::<4>()?;
+    let parameters = crate::trigger::BarControlFields::from_bytes([c0, c1]);
+    if parameters.bar_type() != COMPRESSED_BAR_TYPE {
+        return None;
+    }
+    let sequence = SequenceControl::from_bytes([s0, s1]);
+    if sequence.fragment() != 0 {
+        return None;
+    }
+    Some(CompressedBlockAckRequest {
+        receiver,
+        transmitter,
+        tid: parameters.tid().get(),
+        starting_sequence: SequenceNumber::from_sequence_control(u16::from_le_bytes([s0, s1])),
+    })
 }
 
 oer_wire::bitfield! {

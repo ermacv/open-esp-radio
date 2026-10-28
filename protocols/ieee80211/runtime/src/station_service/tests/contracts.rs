@@ -241,7 +241,7 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps24, ServiceContext
                     sample: oer_ieee80211_port::TsfSample {
                         tsf: oer_ieee80211_port::VifTsf::new(
                             VifRole::Station,
-                            oer_ieee80211_wire::tsf::TsfInstant::from_micros(0),
+                            oer_ieee80211_port::tsf::TsfInstant::from_micros(0),
                         ),
                         local: oer_ieee80211_port::Ieee80211Stamp {
                             at: oer_ieee80211_port::Ieee80211Instant::from_micros(0),

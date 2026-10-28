@@ -25,7 +25,11 @@ pub const FTM_REQUEST_PREFIX_LEN: usize = 3;
 pub const FTM_INITIAL_REQUEST_BODY_LEN: usize = FTM_REQUEST_PREFIX_LEN + FTM_PARAMETERS_ELEMENT_LEN;
 pub const FTM_MEASUREMENT_PREFIX_LEN: usize = 20;
 
-const FTM_TIMESTAMP_MASK: u64 = (1_u64 << 48) - 1;
+/// The 48 bits of an FTM TOD or TOA timestamp.
+///
+/// SOURCE: IEEE Std 802.11-2020, 9.6.7.33 (Fine Timing Measurement frame
+/// format: TOD and TOA are 48-bit fields in units of picoseconds).
+pub const FTM_TIMESTAMP_MASK: u64 = (1_u64 << 48) - 1;
 const MAX_UNAMBIGUOUS_PARTIAL_TSF: u16 = 63_487;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

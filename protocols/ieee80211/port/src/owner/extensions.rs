@@ -19,7 +19,7 @@
 //!   point's air for an absence of the station beside it.
 //! - [`MonitorPhase`]: monitor reception, a radio-wide setting.
 
-use oer_ieee80211_wire::tsf::{TsfDuration, TsfInstant};
+use crate::tsf::{TsfDuration, TsfInstant};
 use oer_radio_port::{Poisoned, PoolPath, Root, Slot};
 
 use super::{Ieee80211Capabilities, PhaseRate, SupportedPower, Tid};
@@ -562,7 +562,7 @@ pub trait AirReservationPhase<'p, 'id: 'p>: LowerMacPhase<'p, 'id> {
     /// published attempts end, before
     /// [`LowerMacTerminal::GateClosed`](crate::LowerMacTerminal::GateClosed),
     /// send the access point's CTS-to-self reserving the air until `until`:
-    /// its Duration is `min(until − now, MAX_RESERVATION)` when it goes,
+    /// its Duration is `min(until − now, MAX_DURATION_MICROS)` when it goes,
     /// and no frame goes once no time is left.
     fn close_gate_reserving(
         &mut self,
@@ -570,9 +570,6 @@ pub trait AirReservationPhase<'p, 'id: 'p>: LowerMacPhase<'p, 'id> {
         until: crate::Ieee80211Instant,
     );
 }
-
-/// The longest reservation a CTS-to-self's Duration field carries.
-pub const MAX_RESERVATION_MICROS: u16 = 32_767;
 
 /// A phase that receives as a monitor.
 pub trait MonitorPhase<'p, 'id: 'p>: LowerMacPhase<'p, 'id> {

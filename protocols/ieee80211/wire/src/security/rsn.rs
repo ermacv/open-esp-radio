@@ -288,6 +288,154 @@ impl<'a> RsnReader<'a> {
     }
 }
 
+/// Element ID of the RSN Extension element (RSNXE).
+///
+/// SOURCE: IEEE Std 802.11-2020, 9.4.2.241 and Table 9-92 (Element IDs).
+pub const RSNXE_ELEMENT_ID: u8 = 244;
+
+/// Length of an RSN element naming one group data cipher, one pairwise
+/// cipher, one AKM suite and the RSN Capabilities, without the optional
+/// PMKID list and group management cipher.
+pub const RSN_SINGLE_SUITE_ELEMENT_LEN: usize = 22;
+/// [`RSN_SINGLE_SUITE_ELEMENT_LEN`] followed by an empty PMKID list and a
+/// group management cipher suite.
+pub const RSN_GROUP_MANAGEMENT_ELEMENT_LEN: usize = 28;
+/// Length of an RSNXE with one Extended RSN Capabilities octet.
+pub const RSNXE_ONE_OCTET_LEN: usize = 3;
+
+/// The RSN element of one group data cipher, one pairwise cipher, one AKM
+/// and `capabilities`, each suite under the IEEE 802.11 OUI.
+///
+/// SOURCE: IEEE Std 802.11-2020, 9.4.2.24.1 (RSNE format: Element ID,
+/// Length, Version, Group Data Cipher Suite, Pairwise Cipher Suite Count and
+/// List, AKM Suite Count and List, RSN Capabilities).
+pub const fn rsn_single_suite_element(
+    group_data_cipher: u8,
+    pairwise_cipher: u8,
+    akm: u8,
+    capabilities: u16,
+) -> [u8; RSN_SINGLE_SUITE_ELEMENT_LEN] {
+    const BODY_LEN: u8 = (RSN_SINGLE_SUITE_ELEMENT_LEN - 2) as u8;
+    let [v0, v1] = RSN_VERSION.to_le_bytes();
+    let [o0, o1, o2] = RSN_OUI;
+    let [n0, n1] = 1_u16.to_le_bytes();
+    let [c0, c1] = capabilities.to_le_bytes();
+    [
+        RSN_ELEMENT_ID,
+        BODY_LEN,
+        v0,
+        v1,
+        o0,
+        o1,
+        o2,
+        group_data_cipher,
+        n0,
+        n1,
+        o0,
+        o1,
+        o2,
+        pairwise_cipher,
+        n0,
+        n1,
+        o0,
+        o1,
+        o2,
+        akm,
+        c0,
+        c1,
+    ]
+}
+
+/// [`rsn_single_suite_element`] followed by an empty PMKID list and the
+/// group management cipher suite.
+///
+/// SOURCE: IEEE Std 802.11-2020, 9.4.2.24.1 (PMKID Count, PMKID List and
+/// Group Management Cipher Suite follow RSN Capabilities in this order).
+pub const fn rsn_group_management_element(
+    group_data_cipher: u8,
+    pairwise_cipher: u8,
+    akm: u8,
+    capabilities: u16,
+    group_management_cipher: u8,
+) -> [u8; RSN_GROUP_MANAGEMENT_ELEMENT_LEN] {
+    const BODY_LEN: u8 = (RSN_GROUP_MANAGEMENT_ELEMENT_LEN - 2) as u8;
+    let [
+        id,
+        _,
+        v0,
+        v1,
+        g0,
+        g1,
+        g2,
+        g3,
+        p0,
+        p1,
+        p2,
+        p3,
+        p4,
+        p5,
+        a0,
+        a1,
+        a2,
+        a3,
+        a4,
+        a5,
+        c0,
+        c1,
+    ] = rsn_single_suite_element(group_data_cipher, pairwise_cipher, akm, capabilities);
+    let [o0, o1, o2] = RSN_OUI;
+    let [k0, k1] = 0_u16.to_le_bytes();
+    [
+        id,
+        BODY_LEN,
+        v0,
+        v1,
+        g0,
+        g1,
+        g2,
+        g3,
+        p0,
+        p1,
+        p2,
+        p3,
+        p4,
+        p5,
+        a0,
+        a1,
+        a2,
+        a3,
+        a4,
+        a5,
+        c0,
+        c1,
+        k0,
+        k1,
+        o0,
+        o1,
+        o2,
+        group_management_cipher,
+    ]
+}
+
+/// An RSNXE carrying one Extended RSN Capabilities octet whose Field Length
+/// subfield is zero.
+///
+/// SOURCE: IEEE Std 802.11-2020, 9.4.2.241 (RSN Extension element: the
+/// low four bits of the first octet are the field length minus one).
+pub const fn rsnx_element(capabilities: RsnExtendedCapabilities) -> [u8; RSNXE_ONE_OCTET_LEN] {
+    const BODY_LEN: u8 = (RSNXE_ONE_OCTET_LEN - 2) as u8;
+    let [octet] = capabilities.to_bytes();
+    [RSNXE_ELEMENT_ID, BODY_LEN, octet]
+}
+
+/// The Extended RSN Capabilities of an RSNXE, or `None` for an element
+/// shorter than its first capability octet.
+pub fn rsnx_capabilities(element: &[u8]) -> Option<RsnExtendedCapabilities> {
+    let mut reader = oer_wire::Reader::new(element);
+    let [_, _, octet] = *reader.array::<RSNXE_ONE_OCTET_LEN>().ok()?;
+    Some(RsnExtendedCapabilities::from_bytes([octet]))
+}
+
 oer_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.4.2.24 (RSN Capabilities field).
     pub struct RsnCapabilities[2] (little) {

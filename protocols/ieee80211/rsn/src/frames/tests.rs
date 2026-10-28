@@ -192,7 +192,7 @@ fn parser_validates_authenticator_rsnxe_without_ignoring_unknown_elements() {
     with_rsnxe[..22].copy_from_slice(&source[..22]);
     with_rsnxe[22..26].copy_from_slice(&rsnxe);
     with_rsnxe[26..50].copy_from_slice(&source[22..46]);
-    with_rsnxe[50] = VENDOR_ELEMENT_ID;
+    with_rsnxe[50] = KDE_ELEMENT_ID;
 
     let parsed = parse_gtk_key_data(&with_rsnxe, rsn.as_bytes(), &rsnxe, false)
         .map(|keys| keys.gtk)

@@ -1,4 +1,4 @@
-//! Fact-only receive routing for one same-channel STA plus SoftAP pair.
+//! Receive routing for one same-channel STA plus SoftAP pair.
 //!
 //! The classifier interprets only public IEEE 802.11 header fields. It does
 //! not infer association, authorization, key ownership or hardware policy;
@@ -14,17 +14,10 @@
     clippy::arithmetic_side_effects
 )]
 
-use crate::frame::{FrameControlFields, FrameType};
-
-#[cfg(test)]
-const CONTROL_FRAME: u16 = 0x0004;
-#[cfg(test)]
-const DATA_FRAME: u16 = 0x0008;
-#[cfg(test)]
-const TO_DS: u16 = 0x0100;
-#[cfg(test)]
-const FROM_DS: u16 = 0x0200;
-const PROBE_REQUEST_SUBTYPE: u16 = 4;
+use oer_ieee80211_wire::{
+    address::AddressFlags,
+    frame::{FrameControlFields, FrameType, ManagementSubtype},
+};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct StaApRxAddresses {
@@ -54,18 +47,14 @@ pub enum StaApRxRoute {
 /// exception: a connected station does not own active-scan requests, while a
 /// SoftAP must receive them before it can answer.
 pub fn classify_sta_ap_rx(mpdu: &[u8], addresses: StaApRxAddresses) -> StaApRxRoute {
-    let mut reader = oer_wire::Reader::new(mpdu);
-    let Ok(&[fc0, fc1]) = reader.array::<2>() else {
+    // Frame Control, Duration and Address 1 (IEEE 802.11-2020 9.2.3).
+    let Some((&[fc0, fc1, _, _], rest)) = mpdu.split_first_chunk::<4>() else {
         return StaApRxRoute::Malformed;
     };
     let frame_control = u16::from_le_bytes([fc0, fc1]);
-    if reader.array::<2>().is_err() {
-        return StaApRxRoute::Malformed;
-    }
-    let Ok(&receiver) = reader.array::<6>() else {
+    let Some((&receiver, rest)) = rest.split_first_chunk::<6>() else {
         return StaApRxRoute::Malformed;
     };
-    let rest = reader.remaining();
     match FrameControlFields::from_raw(frame_control).kind() {
         FrameType::Control => select(
             receiver == addresses.station,
@@ -79,11 +68,8 @@ pub fn classify_sta_ap_rx(mpdu: &[u8], addresses: StaApRxAddresses) -> StaApRxRo
 
 /// Address 2 and address 3, which follow the receiver address.
 fn second_and_third(after_receiver: &[u8]) -> Option<([u8; 6], [u8; 6])> {
-    let mut reader = oer_wire::Reader::new(after_receiver);
-    let &second = reader.array::<6>().ok()?;
-    let rest = reader.remaining();
-    let mut reader = oer_wire::Reader::new(rest);
-    let &third = reader.array::<6>().ok()?;
+    let (&second, rest) = after_receiver.split_first_chunk::<6>()?;
+    let (&third, _) = rest.split_first_chunk::<6>()?;
     Some((second, third))
 }
 
@@ -97,13 +83,14 @@ fn classify_management(
         return StaApRxRoute::Malformed;
     };
     let group_receiver = is_group(receiver);
-    let subtype = FrameControlFields::from_raw(frame_control).subtype();
+    let probe_request =
+        FrameControlFields::from_raw(frame_control).is_management(ManagementSubtype::ProbeRequest);
     let station = receiver == addresses.station
         || group_receiver
             && (transmitter == addresses.station_bssid || bssid == addresses.station_bssid);
     let access_point = receiver == addresses.access_point
         || bssid == addresses.access_point
-        || group_receiver && is_group(bssid) && subtype == PROBE_REQUEST_SUBTYPE;
+        || group_receiver && is_group(bssid) && probe_request;
     select(station, access_point)
 }
 
@@ -147,7 +134,8 @@ const fn select(station: bool, access_point: bool) -> StaApRxRoute {
 }
 
 const fn is_group(address: [u8; 6]) -> bool {
-    crate::address::AddressFlags::from_bytes([address[0]]).group()
+    let [first, ..] = address;
+    AddressFlags::from_bytes([first]).group()
 }
 
 #[cfg(test)]

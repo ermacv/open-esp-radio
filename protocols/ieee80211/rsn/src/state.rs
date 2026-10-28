@@ -6,19 +6,22 @@
 
 use crate::AkmKeys;
 use crate::{Akm, DEFAULT_EAPOL_FRAME_CAPACITY, EapolKeyMessage, OwnedEapolFrame, RsnInterface};
+use oer_ieee80211_wire::eapol::KeyInformation;
 
 pub const RSN_NONCE_LEN: usize = 32;
 
 const RSN_CCMP_TEMPORAL_KEY_LEN: u16 = 16;
 /// Key Information of an authenticator pairwise Message 3 for `akm`.
 fn pairwise_message3_key_info(akm: Akm) -> u16 {
-    akm.key_descriptor_version() as u16
-        | (1 << 3) // Pairwise.
-        | (1 << 6) // Install.
-        | (1 << 7) // ACK.
-        | (1 << 8) // MIC.
-        | (1 << 9) // Secure.
-        | (1 << 12) // Encrypted Key Data.
+    KeyInformation::EMPTY
+        .with_descriptor_version(akm.key_descriptor_version())
+        .with_pairwise(true)
+        .with_install(true)
+        .with_ack(true)
+        .with_mic(true)
+        .with_secure(true)
+        .with_encrypted_key_data(true)
+        .raw()
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

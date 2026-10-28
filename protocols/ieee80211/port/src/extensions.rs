@@ -3,7 +3,7 @@
 //! and monitor reception, with their parametric limits. Why a backend
 //! lacks a feature is recorded in its documentation, not in code.
 
-use oer_ieee80211_wire::tsf::{TsfDuration, TsfInstant};
+use crate::tsf::{TsfDuration, TsfInstant};
 
 use crate::{
     capabilities::PhyFormatSet,

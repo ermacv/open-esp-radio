@@ -96,7 +96,7 @@ fn observe_scan_takes_the_configured_channel_without_a_ds_element() {
     let record = scan.records().next().unwrap();
     assert_eq!(record.channel, 6);
     assert_eq!(record.rssi, -40);
-    assert_eq!(record.received_at, Some(now));
+    assert_eq!(scan.observations().next().unwrap().received_at, Some(now));
     assert_eq!(record.ssid_bytes(), b"test");
 
     // With a DS Parameter Set the element names the channel.

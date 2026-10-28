@@ -15,7 +15,9 @@ crate implements `RadioChannel` for its own channel type and receives a
   tune, install, scan and transmission of the three radios takes one.
 - A channel in a rule marked NO-IR is permitted for listening only
   (`Initiate::PassiveOnly`); a channel in a DFS rule is refused until radar
-  detection exists.
+  detection exists. `RADAR_SPANS` names the 5 GHz spans radar shares in every
+  domain that allocates them, and `radar_detection_required` whether a span
+  overlaps one.
 - `Permitted::tx_ceiling` combines the rule's EIRP, the board's antenna gain,
   the chip's maximum and an optional owner cap into one `TxCeiling`.
 - A domain is fixed for an installation: a country change is a reinstall.

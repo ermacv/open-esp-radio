@@ -6,17 +6,29 @@
 //! stack has no radar detection, so an access point serves no such
 //! channel.
 
-use oer_ieee80211_wire::channel::{Band, Channel};
+use oer_ieee80211_wire::channel::Channel;
+use oer_radio_regulatory::{FrequencySpan, radar_detection_required};
 
-/// Whether an access point on `channel` must detect radar: the 5 GHz
-/// channels 52 through 144.
+/// Half the width of a 20 MHz primary channel, in kHz.
+const PRIMARY_HALF_WIDTH_KHZ: u32 = 10_000;
+
+/// Whether an access point on `channel` must detect radar: its 20 MHz
+/// primary channel overlaps a span radar shares (the 5 GHz channels 52
+/// through 144).
 pub const fn requires_radar_detection(channel: Channel) -> bool {
-    matches!(channel.band(), Band::Ghz5) && matches!(channel.number(), 52..=144)
+    let primary_khz = (channel.primary_frequency_mhz() as u32).saturating_mul(1_000);
+    match FrequencySpan::new(
+        primary_khz.saturating_sub(PRIMARY_HALF_WIDTH_KHZ),
+        primary_khz.saturating_add(PRIMARY_HALF_WIDTH_KHZ),
+    ) {
+        Some(primary) => radar_detection_required(primary),
+        None => false,
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use oer_ieee80211_wire::channel::ChannelWidth;
+    use oer_ieee80211_wire::channel::{Band, ChannelWidth};
 
     use super::*;
 
@@ -31,8 +43,18 @@ mod tests {
             (Band::Ghz5, 100, true),
             (Band::Ghz5, 144, true),
             (Band::Ghz5, 149, false),
+            (Band::Ghz5, 165, false),
         ] {
             assert_eq!(requires_radar_detection(channel(band, number)), radar);
         }
+        // The primary channel decides, whatever the width: a 40 MHz pair
+        // whose primary is channel 48 stays outside, one whose primary is
+        // channel 52 inside.
+        let wide = |number, width| Channel::new(Band::Ghz5, number, width).unwrap();
+        assert!(!requires_radar_detection(wide(
+            48,
+            ChannelWidth::Mhz40Below
+        )));
+        assert!(requires_radar_detection(wide(52, ChannelWidth::Mhz40Above)));
     }
 }

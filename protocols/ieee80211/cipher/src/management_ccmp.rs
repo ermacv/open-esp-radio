@@ -37,8 +37,6 @@ pub enum ManagementCcmpError {
     NotProtected,
     /// The CCMP header lacks its Extended IV bit.
     MissingExtendedIv,
-    /// The packet number does not exceed the last accepted one.
-    Replay,
     /// The MIC does not verify.
     InvalidMic,
 }

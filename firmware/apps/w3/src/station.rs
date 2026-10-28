@@ -181,7 +181,7 @@ impl<Id: SlotIdentity> StationPort for StationComposition<Id> {
 
 struct Rates(EspressifRateSelection<Caps>);
 impl<M: SignalMetadata> RateSelection<M, port::Ack> for Rates {
-    fn packet_number_step(&self) -> oer_ieee80211_wire::ccmp::CcmpPacketNumberStep {
+    fn packet_number_step(&self) -> oer_ieee80211_upper_mac::ccmp::CcmpPacketNumberStep {
         <EspressifRateSelection<Caps> as RateSelection<M, port::Ack>>::packet_number_step(&self.0)
     }
     fn plan<R>(

@@ -11,6 +11,49 @@ pub use reassembly::{
     OpenDataFragmentPreflight, OpenDataUnfragmentedAdmission, OpenReassembledData,
 };
 
+/// Why a fragment cannot join or complete its reassembly: a frame refusal
+/// of the MPDU, or the state of the reassembly it would join.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum OpenDataReassemblyError {
+    /// The MPDU is not an admissible data fragment.
+    Frame(OpenDataFragmentError),
+    ClockUnavailable,
+    KeyEpochRequired,
+    NoReassemblyContexts,
+    Orphan {
+        fragment_number: u8,
+    },
+    IdentityMismatch,
+    MoreFragmentsMismatch,
+    RetryPacketNumberMismatch {
+        fragment_number: u8,
+        expected: CcmpPacketNumber,
+        observed: CcmpPacketNumber,
+    },
+    RetryPayloadMismatch {
+        fragment_number: u8,
+    },
+    PacketNumberNotSequential {
+        previous: CcmpPacketNumber,
+        observed: CcmpPacketNumber,
+    },
+    OutOfOrder {
+        expected: u8,
+        observed: u8,
+    },
+    TooManyFragments,
+    ReassembledTooLarge {
+        capacity: usize,
+    },
+    InvalidLlcSnap,
+}
+
+impl From<OpenDataFragmentError> for OpenDataReassemblyError {
+    fn from(error: OpenDataFragmentError) -> Self {
+        Self::Frame(error)
+    }
+}
+
 /// The local lifetime admitted with a fragment train. CCMP callers must use
 /// the installation generation of the authenticated key, including across a
 /// same-KeyID rekey; an association generation or wire KeyID is insufficient.
@@ -21,11 +64,11 @@ pub enum FragmentAdmissionEpoch {
 }
 
 impl FragmentAdmissionEpoch {
-    fn validate(self, protection: DataFragmentProtection) -> Result<(), OpenDataFragmentError> {
+    fn validate(self, protection: DataFragmentProtection) -> Result<(), OpenDataReassemblyError> {
         match (self, protection) {
             (Self::OpenAssociation(_), DataFragmentProtection::Open)
             | (Self::CcmpKeyInstallation(_), DataFragmentProtection::Ccmp) => Ok(()),
-            _ => Err(OpenDataFragmentError::KeyEpochRequired),
+            _ => Err(OpenDataReassemblyError::KeyEpochRequired),
         }
     }
 }
@@ -41,21 +84,6 @@ pub const OPEN_DATA_REASSEMBLY_CAPACITY: usize = 1_500 + LLC_SNAP_HEADER_LEN;
 /// a finite host-owned eviction policy used only when a runtime clock sample
 /// accompanies the received fragment.
 pub const OPEN_DATA_FRAGMENT_TIMEOUT: oer_time::Duration = oer_time::Duration::from_secs(1);
-
-#[cfg(test)]
-const DATA: u16 = 0x0008;
-#[cfg(test)]
-const QOS_DATA: u16 = 0x0088;
-#[cfg(test)]
-const TO_DS: u16 = 0x0100;
-#[cfg(test)]
-const FROM_DS: u16 = 0x0200;
-#[cfg(test)]
-const MORE_FRAGMENTS: u16 = 0x0400;
-#[cfg(test)]
-const RETRY: u16 = 0x0800;
-#[cfg(test)]
-const QOS_AMSDU_PRESENT: u8 = 0x80;
 
 #[cfg(test)]
 mod tests;

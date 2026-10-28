@@ -1882,7 +1882,7 @@ trait IntoCoreKey: Sized {
         CoreKey {
             backend: self,
             packet_numbers: core::cell::RefCell::new(TestPacketNumbers::new(
-                oer_ieee80211_wire::ccmp::CcmpPacketNumberStep::ONE,
+                oer_ieee80211_upper_mac::ccmp::CcmpPacketNumberStep::ONE,
             )),
         }
     }
@@ -1912,7 +1912,7 @@ impl<K> CoreKey<K> {
     }
     fn set_last(&self, last: u64) {
         *self.packet_numbers.borrow_mut() = TestPacketNumbers::continuing_after(
-            oer_ieee80211_wire::ccmp::CcmpPacketNumberStep::ONE,
+            oer_ieee80211_upper_mac::ccmp::CcmpPacketNumberStep::ONE,
             oer_ieee80211_wire::ccmp::CcmpPacketNumber::new(last).unwrap(),
         );
     }
@@ -1924,14 +1924,14 @@ impl<K> CoreKey<K> {
 /// Scripted packet-number inputs for backend tests, independent of core policy.
 struct TestPacketNumbers {
     last: Cell<oer_ieee80211_wire::ccmp::CcmpPacketNumber>,
-    step: oer_ieee80211_wire::ccmp::CcmpPacketNumberStep,
+    step: oer_ieee80211_upper_mac::ccmp::CcmpPacketNumberStep,
 }
 impl TestPacketNumbers {
-    fn new(step: oer_ieee80211_wire::ccmp::CcmpPacketNumberStep) -> Self {
+    fn new(step: oer_ieee80211_upper_mac::ccmp::CcmpPacketNumberStep) -> Self {
         Self::continuing_after(step, oer_ieee80211_wire::ccmp::CcmpPacketNumber::ZERO)
     }
     fn continuing_after(
-        step: oer_ieee80211_wire::ccmp::CcmpPacketNumberStep,
+        step: oer_ieee80211_upper_mac::ccmp::CcmpPacketNumberStep,
         last: oer_ieee80211_wire::ccmp::CcmpPacketNumber,
     ) -> Self {
         Self {

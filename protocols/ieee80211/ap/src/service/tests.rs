@@ -5,16 +5,17 @@ mod storage;
 mod transmit;
 
 use super::*;
+use crate::security_policy::AP_WPA2_PERSONAL_RSN_ELEMENT;
 use oer_ieee80211_cipher::aes::software_aes128_key_unwrap;
 use oer_ieee80211_rsn::{
     EapolKeyMessage, OwnedEapolFrame, PtkContext, RsnInterface,
     frames::{OwnedAssociationSecurityIes, OwnedRsnIe, RsnGtk, RsnTxFrame, parse_gtk_key_data},
     state::{RsnApAction, RsnTicket},
 };
+use oer_ieee80211_wire::status::status_code;
 use oer_ieee80211_wire::{
     channel::WifiChannel,
     ht::{ht_capability_ie, ht_peer_capabilities},
-    security::AP_WPA2_PERSONAL_RSN_ELEMENT,
 };
 
 const AP: [u8; 6] = [0x02, 0, 0, 0, 0, 1];
@@ -147,7 +148,7 @@ fn runtime_limit_is_enforced_before_hardware_moves() {
             .unwrap(),
         ApMlmeAction::AuthenticationResponse {
             peer: PEER,
-            status: AP_STATUS_SUCCESS,
+            status: status_code::SUCCESS,
         }
     );
     assert_eq!(
@@ -156,7 +157,7 @@ fn runtime_limit_is_enforced_before_hardware_moves() {
             .unwrap(),
         ApMlmeAction::AuthenticationResponse {
             peer: OTHER,
-            status: AP_STATUS_SUCCESS,
+            status: status_code::SUCCESS,
         }
     );
     let third = [0x02, 0, 0, 0, 0, 4];
@@ -166,7 +167,7 @@ fn runtime_limit_is_enforced_before_hardware_moves() {
             .unwrap(),
         ApMlmeAction::AuthenticationResponse {
             peer: third,
-            status: AP_STATUS_TOO_MANY_STATIONS,
+            status: status_code::DENIED_NO_MORE_STAS,
         }
     );
     assert_eq!(service.associated_count(), 0);
@@ -624,7 +625,7 @@ fn association_owns_a_bounded_wpa2_state() {
             .unwrap(),
         ApMlmeAction::AssociationResponse {
             peer: PEER,
-            status: AP_STATUS_SUCCESS,
+            status: status_code::SUCCESS,
             association_id: Some(1),
         }
     );
@@ -676,7 +677,7 @@ fn association_rejects_a_peer_without_a_common_legacy_rate() {
             .unwrap(),
         ApMlmeAction::AssociationResponse {
             peer: PEER,
-            status: AP_STATUS_UNSUPPORTED_RATES,
+            status: status_code::DENIED_RATES,
             association_id: None,
         }
     );
@@ -1103,7 +1104,7 @@ fn invalid_rsn_does_not_open_the_controlled_port() {
         ),
         Ok(ApMlmeAction::AssociationResponse {
             peer: PEER,
-            status: AP_STATUS_INVALID_RSN,
+            status: status_code::INVALID_ELEMENT,
             association_id: None,
         })
     );
@@ -1161,7 +1162,7 @@ fn all_fifteen_aids_are_stable_and_reused_after_removal() {
                 .unwrap(),
             ApMlmeAction::AuthenticationResponse {
                 peer,
-                status: AP_STATUS_SUCCESS,
+                status: status_code::SUCCESS,
             }
         );
         assert_eq!(
@@ -1180,7 +1181,7 @@ fn all_fifteen_aids_are_stable_and_reused_after_removal() {
                 )
                 .unwrap(),
             ApMlmeAction::AssociationResponse {
-                status: AP_STATUS_SUCCESS,
+                status: status_code::SUCCESS,
                 association_id: Some(_),
                 ..
             }
@@ -1194,7 +1195,7 @@ fn all_fifteen_aids_are_stable_and_reused_after_removal() {
             .unwrap(),
         ApMlmeAction::AuthenticationResponse {
             peer: overflow,
-            status: AP_STATUS_TOO_MANY_STATIONS,
+            status: status_code::DENIED_NO_MORE_STAS,
         }
     );
     let released = [0x02, 0, 0, 0, 1, 7];
@@ -1205,7 +1206,7 @@ fn all_fifteen_aids_are_stable_and_reused_after_removal() {
             .unwrap(),
         ApMlmeAction::AuthenticationResponse {
             peer: overflow,
-            status: AP_STATUS_SUCCESS,
+            status: status_code::SUCCESS,
         }
     );
     assert_eq!(service.peer_status(overflow).unwrap().association_id, 7);
@@ -1703,7 +1704,7 @@ fn a_wpa3_handshake_uses_the_sae_pmk_and_delivers_the_igtk() {
             SAE_PMKID,
             oer_time::Instant::from_micros(0)
         ),
-        Ok(AP_STATUS_SUCCESS)
+        Ok(status_code::SUCCESS)
     );
     let action = service
         .associate_rsn(
@@ -1715,7 +1716,7 @@ fn a_wpa3_handshake_uses_the_sae_pmk_and_delivers_the_igtk() {
             oer_time::Instant::from_micros(1),
         )
         .unwrap();
-    assert_eq!(association_status(action), AP_STATUS_SUCCESS);
+    assert_eq!(association_status(action), status_code::SUCCESS);
     let message1 = service.begin_wpa2_frame::<512>(PEER).unwrap();
     let (_frame, context) = message1.into_parts();
     service
@@ -1753,8 +1754,8 @@ fn a_wpa3_handshake_uses_the_sae_pmk_and_delivers_the_igtk() {
         .expect("AP wrapped its Message 3 key data");
     let keys = parse_gtk_key_data(
         plaintext.as_bytes(),
-        &oer_ieee80211_wire::security::AP_WPA3_PERSONAL_RSN_ELEMENT,
-        &oer_ieee80211_wire::security::AP_SAE_H2E_RSNX_ELEMENT,
+        &crate::security_policy::AP_WPA3_PERSONAL_RSN_ELEMENT,
+        &crate::security_policy::AP_SAE_H2E_RSNX_ELEMENT,
         true,
     )
     .unwrap();
@@ -1791,11 +1792,11 @@ fn a_wpa3_association_resumes_only_a_known_pmkid() {
         .unwrap();
     assert_eq!(
         associate(&mut service, &SAE_STATION_RSN),
-        AP_STATUS_INVALID_PMKID
+        status_code::INVALID_PMKID
     );
     assert_eq!(
         associate(&mut service, &sae_station_rsn_with_pmkid(SAE_PMKID)),
-        AP_STATUS_INVALID_PMKID
+        status_code::INVALID_PMKID
     );
 
     // An SAE exchange caches the association; Open System then resumes it.
@@ -1812,11 +1813,11 @@ fn a_wpa3_association_resumes_only_a_known_pmkid() {
         .unwrap();
     assert_eq!(
         associate(&mut service, &sae_station_rsn_with_pmkid([0x11; 16])),
-        AP_STATUS_INVALID_PMKID
+        status_code::INVALID_PMKID
     );
     assert_eq!(
         associate(&mut service, &sae_station_rsn_with_pmkid(SAE_PMKID)),
-        AP_STATUS_SUCCESS
+        status_code::SUCCESS
     );
 }
 
@@ -1857,7 +1858,7 @@ fn a_wpa3_access_point_refuses_psk_and_stations_without_protection() {
                 )
                 .unwrap()
         ),
-        AP_STATUS_INVALID_RSN
+        status_code::INVALID_ELEMENT
     );
 }
 
@@ -1881,7 +1882,7 @@ fn begin_management_handshake(
             now,
         )
         .unwrap();
-    assert_eq!(association_status(action), AP_STATUS_SUCCESS);
+    assert_eq!(association_status(action), status_code::SUCCESS);
     let ptk = Pmk::from_bytes(SAE_PMK).derive_ptk(
         oer_ieee80211_wire::security::rsn::Akm::Sae,
         PtkContext {
@@ -2076,8 +2077,8 @@ fn the_bss_owns_one_monotonic_bip_frontier_and_refuses_invalid_group_frames() {
         software_aes128_key_unwrap(ptk.kek(), message3.key_frame().unwrap().key_data()).unwrap();
     let keys = parse_gtk_key_data(
         plaintext.as_bytes(),
-        &oer_ieee80211_wire::security::AP_WPA3_PERSONAL_RSN_ELEMENT,
-        &oer_ieee80211_wire::security::AP_SAE_H2E_RSNX_ELEMENT,
+        &crate::security_policy::AP_WPA3_PERSONAL_RSN_ELEMENT,
+        &crate::security_policy::AP_SAE_H2E_RSNX_ELEMENT,
         true,
     )
     .unwrap();
@@ -2086,7 +2087,7 @@ fn the_bss_owns_one_monotonic_bip_frontier_and_refuses_invalid_group_frames() {
     let mut new_peer = BipReceiver::new(&delivered);
     assert_eq!(
         new_peer.verify(&second[..protected]),
-        Err(oer_ieee80211_cipher::bip::BipError::Replay)
+        Err(oer_ieee80211_rsn::bip::BipReceiveError::Replay)
     );
     service
         .observe_wpa2_transmit(message3_context, true, oer_time::Instant::from_micros(10))
@@ -2200,7 +2201,7 @@ fn interface_scoped_ap_sends_refusal_for_required_spp_without_admitting_peer() {
                 action,
                 ApMlmeAction::AssociationResponse {
                     peer: PEER,
-                    status: AP_STATUS_INVALID_RSN,
+                    status: status_code::INVALID_ELEMENT,
                     association_id: None
                 }
             );
@@ -2214,7 +2215,7 @@ fn interface_scoped_ap_sends_refusal_for_required_spp_without_admitting_peer() {
                 action,
                 ApMlmeAction::AssociationResponse {
                     peer: PEER,
-                    status: AP_STATUS_SUCCESS,
+                    status: status_code::SUCCESS,
                     association_id: Some(1)
                 }
             );

@@ -326,3 +326,17 @@ fn power_rounding_matches_euclidean_division_at_boundaries() {
         assert_eq!(TxCeiling(mbm).dbm(), expected(100), "{mbm}");
     }
 }
+
+#[test]
+fn radar_spans_are_the_5_ghz_dfs_bands_with_open_edges() {
+    let span = |low, high| FrequencySpan::new(low, high).unwrap();
+    // 5 GHz channels 48, 52, 64, 100, 144 and 149 at 20 MHz.
+    assert!(!radar_detection_required(span(5_230_000, 5_250_000)));
+    assert!(radar_detection_required(span(5_250_000, 5_270_000)));
+    assert!(radar_detection_required(span(5_310_000, 5_330_000)));
+    assert!(!radar_detection_required(span(5_350_000, 5_470_000)));
+    assert!(radar_detection_required(span(5_490_000, 5_510_000)));
+    assert!(radar_detection_required(span(5_710_000, 5_730_000)));
+    assert!(!radar_detection_required(span(5_735_000, 5_755_000)));
+    assert!(!radar_detection_required(span(2_426_000, 2_446_000)));
+}

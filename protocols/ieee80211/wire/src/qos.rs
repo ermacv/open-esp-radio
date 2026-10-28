@@ -1,8 +1,9 @@
-//! Portable IEEE 802.11 priority values and Ethernet traffic classification.
+//! Portable IEEE 802.11 priority values and the network header fields that
+//! carry traffic intent.
 //!
-//! UP-to-AC and DSCP mappings describe traffic intent. The WMM vendor element
-//! parser lives in `extensions::wmm`; the transmitter still owns admission and
-//! queue selection using these values.
+//! The UP-to-AC mapping is the standard's (IEEE 802.11-2020 Table 10-1). The
+//! WMM vendor element parser lives in `extensions::wmm`; the upper MAC owns
+//! classification, admission and queue selection using these values.
 //! Checked priorities and categories select cells of exact eight- and
 //! four-cell arrays. The selector retains the bounded value and needs no
 //! numeric indexing or repeat validation in a caller.
@@ -49,28 +50,6 @@ impl WmmAccessCategory {
             Self::Background => bk,
             Self::Video => vi,
             Self::Voice => vo,
-        }
-    }
-
-    /// Next lower access category used when the requested AC requires an
-    /// admission which the station does not own.
-    pub const fn downgrade(self) -> Option<Self> {
-        match self {
-            Self::Voice => Some(Self::Video),
-            Self::Video => Some(Self::BestEffort),
-            Self::BestEffort => Some(Self::Background),
-            Self::Background => None,
-        }
-    }
-
-    /// Canonical user priority used when ACM policy downgrades into this AC.
-    pub const fn canonical_user_priority(self) -> WmmUserPriority {
-        match self {
-            Self::Voice => WmmUserPriority::UP7,
-            // The recovered station classifier enters VI at UP5.
-            Self::Video => WmmUserPriority::UP5,
-            Self::BestEffort => WmmUserPriority::UP0,
-            Self::Background => WmmUserPriority::UP1,
         }
     }
 }
@@ -166,18 +145,6 @@ impl WmmUserPriority {
             UserPriority::Up6 | UserPriority::Up7 => WmmAccessCategory::Voice,
         }
     }
-    const fn from_code(value: u8) -> Self {
-        match value {
-            0 => Self::UP0,
-            1 => Self::UP1,
-            2 => Self::UP2,
-            3 => Self::UP3,
-            4 => Self::UP4,
-            5 => Self::UP5,
-            6 => Self::UP6,
-            _ => Self::UP7,
-        }
-    }
 }
 
 /// Valid six-bit IPv4/IPv6 Differentiated Services Code Point.
@@ -196,140 +163,17 @@ impl Dscp {
         self.0.get()
     }
 
-    /// Widely deployed default mapping based on the three DSCP MSBs.
-    pub const fn default_user_priority(self) -> WmmUserPriority {
-        let field = DsField::from_bytes([0]).with_dscp(self.0);
-        WmmUserPriority::from_code(field.class_selector())
+    /// The codepoint a Differentiated Services field carries.
+    pub const fn from_field(value: oer_wire::U8<6>) -> Self {
+        Self(value)
     }
 
-    /// RFC 8325 station-safe DSCP mapping.
+    /// The three most significant bits: the Class Selector codepoint.
     ///
-    /// Only the standardized service-class codepoints receive elevated
-    /// priority. Unknown codepoints and endpoint-sourced CS6/CS7 are bleached
-    /// to UP0, preventing an application marking from acquiring the reserved
-    /// network-control priority. RFC 8622's Lower Effort codepoint joins CS1
-    /// in the background category.
-    pub const fn station_user_priority(self) -> WmmUserPriority {
-        match self.value() {
-            // Lower Effort and CS1.
-            1 | 8 => WmmUserPriority::UP1,
-            // AF2x low-latency data.
-            18 | 20 | 22 => WmmUserPriority::UP3,
-            // AF3x, CS3, AF4x and CS4 video classes.
-            24 | 26 | 28 | 30 | 32 | 34 | 36 | 38 => WmmUserPriority::UP4,
-            // CS5 signaling.
-            40 => WmmUserPriority::UP5,
-            // VOICE-ADMIT and EF telephony.
-            44 | 46 => WmmUserPriority::UP6,
-            // DF, OAM, AF1x, CS6/CS7 and unassigned values fail closed to BE.
-            _ => WmmUserPriority::UP0,
-        }
+    /// SOURCE: RFC 2474, 4.2.2 (Class Selector Codepoints).
+    pub const fn class_selector(self) -> u8 {
+        DsField::from_bytes([0]).with_dscp(self.0).class_selector()
     }
-}
-
-/// Header field which selected one network frame's WMM class.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum WmmClassificationSource {
-    /// Untagged non-IP traffic or a truncated network header.
-    #[default]
-    Unmarked,
-    /// The outer IEEE 802.1Q/802.1ad priority-code-point field.
-    Ieee8021d(WmmUserPriority),
-    /// IPv4 or IPv6 DSCP mapped with the station-safe policy.
-    Dscp(Dscp),
-}
-
-/// Complete portable WMM classification for one network frame.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct WmmTrafficClass {
-    pub user_priority: WmmUserPriority,
-    pub access_category: WmmAccessCategory,
-    pub source: WmmClassificationSource,
-}
-
-impl WmmTrafficClass {
-    pub const BEST_EFFORT: Self = Self {
-        user_priority: WmmUserPriority::UP0,
-        access_category: WmmAccessCategory::BestEffort,
-        source: WmmClassificationSource::Unmarked,
-    };
-
-    pub const fn from_user_priority(
-        user_priority: WmmUserPriority,
-        source: WmmClassificationSource,
-    ) -> Self {
-        Self {
-            user_priority,
-            access_category: user_priority.access_category(),
-            source,
-        }
-    }
-}
-
-const ETHERNET_HEADER_LEN: usize = 14;
-const ETHER_TYPE_IPV4: u16 = 0x0800;
-const ETHER_TYPE_VLAN: u16 = 0x8100;
-const ETHER_TYPE_PROVIDER_VLAN: u16 = 0x88a8;
-const ETHER_TYPE_IPV6: u16 = 0x86dd;
-
-/// Classify an Ethernet frame from an outer 802.1D PCP or an IP DSCP.
-///
-/// An explicit VLAN PCP takes precedence over an encapsulated DSCP. Untagged
-/// non-IP and truncated headers remain best effort. The function never
-/// invents priority from transport ports or payload bytes.
-#[deny(
-    clippy::indexing_slicing,
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::unreachable,
-    clippy::arithmetic_side_effects
-)]
-pub fn classify_ethernet_wmm(ethernet: &[u8]) -> WmmTrafficClass {
-    let mut reader = oer_wire::Reader::new(ethernet);
-    let Ok(&[.., ether_type_high, ether_type_low]) = reader.array::<ETHERNET_HEADER_LEN>() else {
-        return WmmTrafficClass::BEST_EFFORT;
-    };
-    let payload = reader.remaining();
-
-    let ether_type = u16::from_be_bytes([ether_type_high, ether_type_low]);
-    if matches!(ether_type, ETHER_TYPE_VLAN | ETHER_TYPE_PROVIDER_VLAN) {
-        let Some(&[tci_high, tci_low, _, _]) = payload.first_chunk::<4>() else {
-            return WmmTrafficClass::BEST_EFFORT;
-        };
-        let tci = VlanTci::from_bytes([tci_high, tci_low]);
-        let user_priority = WmmUserPriority::from_code(tci.pcp());
-        // The explicit outer PCP is authoritative even when it is zero.
-        return WmmTrafficClass::from_user_priority(
-            user_priority,
-            WmmClassificationSource::Ieee8021d(user_priority),
-        );
-    }
-
-    let dscp = match ether_type {
-        ETHER_TYPE_IPV4 => {
-            let Some(&[version_and_length, services]) = payload.first_chunk::<2>() else {
-                return WmmTrafficClass::BEST_EFFORT;
-            };
-            if Ipv4VersionIhl::from_bytes([version_and_length]).version() != 4 {
-                return WmmTrafficClass::BEST_EFFORT;
-            }
-            Dscp(DsField::from_bytes([services]).dscp())
-        }
-        ETHER_TYPE_IPV6 => {
-            let Some(&[version_and_class, class_and_label]) = payload.first_chunk::<2>() else {
-                return WmmTrafficClass::BEST_EFFORT;
-            };
-            let prefix = Ipv6HeaderPrefix::from_bytes([version_and_class, class_and_label]);
-            if prefix.version() != 6 {
-                return WmmTrafficClass::BEST_EFFORT;
-            }
-            Dscp(DsField::from_bytes([prefix.traffic_class()]).dscp())
-        }
-        _ => return WmmTrafficClass::BEST_EFFORT,
-    };
-    let user_priority = dscp.station_user_priority();
-    WmmTrafficClass::from_user_priority(user_priority, WmmClassificationSource::Dscp(dscp))
 }
 
 oer_wire::bitfield! {

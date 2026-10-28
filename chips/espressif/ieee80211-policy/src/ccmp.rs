@@ -1,6 +1,6 @@
 //! The Espressif CCMP transmit packet-number step.
 
-use oer_ieee80211_wire::ccmp::CcmpPacketNumberStep;
+use oer_ieee80211_upper_mac::ccmp::CcmpPacketNumberStep;
 
 /// How far the Espressif `net80211` stack advances a key's transmit packet
 /// number per MPDU.

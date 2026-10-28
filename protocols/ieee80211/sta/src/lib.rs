@@ -75,6 +75,7 @@ pub mod epoch;
 pub mod sequence;
 
 pub mod scan;
+pub mod security;
 
 /// A literal test sequence number; panics outside twelve bits.
 #[cfg(test)]

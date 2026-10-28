@@ -60,7 +60,6 @@ fn hardware_bsr_sets_order_without_moving_dma_payload() {
     .unwrap();
     assert_eq!(&plan.header[..2], &[0x88, 0x81]);
     assert_eq!(plan.header_len, IEEE80211_QOS_DATA_HEADER_LEN as u8);
-    assert_eq!(plan.dma_header_len(), IEEE80211_QOS_DATA_HEADER_LEN);
     assert_eq!(plan.he_control.inserted_air_len(), IEEE80211_HE_CONTROL_LEN);
     assert_eq!(
         plan.he_control,

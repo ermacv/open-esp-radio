@@ -53,6 +53,8 @@
 //! - [`he_txop`]: the HE TXOP duration byte budget, as a portable
 //!   `HeTxopRtsBudget`;
 //! - [`ccmp`]: the transmit packet-number step;
+//! - [`classification`]: the TX classifier's fixed-rate, priority and WMM
+//!   admission decisions;
 //! - [`connection_coex`]: the coexistence events and priorities of the
 //!   station's connection frames under the reconnect policy;
 //! - [`block_ack`]: the TIDs the station negotiates TX Block Ack for and
@@ -63,6 +65,7 @@
 
 pub mod block_ack;
 pub mod ccmp;
+pub mod classification;
 pub mod connection_coex;
 pub mod he_txop;
 pub mod lmac;

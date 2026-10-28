@@ -201,3 +201,13 @@ fn the_highest_receive_mcs_is_the_top_bit_of_the_bitmap() {
     stream.extend_from_slice(&record);
     assert!(ht_peer_capabilities(&stream).is_some());
 }
+
+#[test]
+fn ampdu_parameters_name_the_maximum_length_and_spacing() {
+    let lengths: [u32; 4] = [8_191, 16_383, 32_767, 65_535];
+    for (exponent, length) in lengths.into_iter().enumerate() {
+        let parameters = HtAmpduParameters::from_bytes([exponent as u8 | 6 << 2]);
+        assert_eq!(parameters.max_ampdu_length(), length);
+        assert_eq!(parameters.spacing().get(), 6);
+    }
+}

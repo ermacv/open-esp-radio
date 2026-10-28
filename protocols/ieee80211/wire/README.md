@@ -1,13 +1,25 @@
 # IEEE 802.11 wire formats
 
 `oer-ieee80211-wire`: allocation-free IEEE 802.11 frame formats, parsers, encoders
-and shared values. Fixed-width fields use `oer-wire::bitfield!` declarations
-with standard-clause sources; bounded readers and writers handle byte streams.
-Mutable exchange state belongs to upper-mac, station
-and SoftMAC cores. The lower-MAC port's codecs live here: the data and
-management MAC header (`frame::MacHeader`) with its QoS Control field, the
-legacy rates of the Supported Rates elements (`rates`) and the header
-geometry of a monitor-injected MPDU (`monitor_injection`).
+and the constants of the standard. Fixed-width fields use `oer-wire::bitfield!`
+declarations with standard-clause sources; bounded readers and writers handle
+byte streams. The crate holds no time, policy or state: it has no normal
+dependency on `oer-time` or on an IEEE 802.11 crate above it
+(`oer-test-layers`). Mutable exchange state, timing and selection policy belong
+to upper-mac, the role cores and the runtime. The lower-MAC port's codecs live
+here: the data and management MAC header (`frame::MacHeader`) with its QoS
+Control field, the legacy rates of the Supported Rates elements (`rates`) and
+the header geometry of a monitor-injected MPDU (`monitor_injection`).
+
+Besides the frame bodies of the roles, the formats include the Frame Control
+field with named management and control subtypes, the management MAC header
+(`management::ManagementHeader`), Sequence Control access, the Block Ack
+Action and Compressed BlockAckReq codecs, the Timestamp field and the time
+unit (`tsf`), status and reason codes (`status`), EtherType values
+(`ethertype`), the EAPOL-Key Key Information field and KDEs (`eapol`), SAE
+body fields and extension element IDs (`sae`), RSN element and RSNXE
+encoders, beacon template element edits and the HE-SIG-B user field codecs.
+The chip's RX-report SIG-B streams live in the S31 MAC.
 
 Production code forbids unsafe and denies every sans-IO panic lint, including
 `disallowed_methods` and `disallowed_macros`. Its local Clippy configuration

@@ -26,7 +26,7 @@ impl CoreGroupNumbers {
         } else {
             self.0.push((
                 key.identity.clone(),
-                TestPacketNumbers::new(oer_ieee80211_wire::ccmp::CcmpPacketNumberStep::ONE),
+                TestPacketNumbers::new(oer_ieee80211_upper_mac::ccmp::CcmpPacketNumberStep::ONE),
             ));
             self.0.len() - 1
         };
@@ -38,7 +38,7 @@ impl CoreGroupNumbers {
         last: u64,
     ) {
         let counter = TestPacketNumbers::continuing_after(
-            oer_ieee80211_wire::ccmp::CcmpPacketNumberStep::ONE,
+            oer_ieee80211_upper_mac::ccmp::CcmpPacketNumberStep::ONE,
             oer_ieee80211_wire::ccmp::CcmpPacketNumber::new(last).unwrap(),
         );
         let _ = self.counter(key);

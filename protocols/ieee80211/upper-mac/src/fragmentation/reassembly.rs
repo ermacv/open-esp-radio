@@ -14,8 +14,8 @@ use super::FragmentAdmissionEpoch;
 use oer_ieee80211_wire::data::{EthernetFrameParts, LLC_SNAP_HEADER_LEN, rfc1042_ether_type};
 
 use super::{
-    CcmpPacketNumber, DataFragmentProtection, OpenDataFragment, OpenDataFragmentError,
-    OpenDataFragmentIdentity,
+    CcmpPacketNumber, DataFragmentProtection, OpenDataFragment, OpenDataFragmentIdentity,
+    OpenDataReassemblyError,
 };
 use oer_time::{Duration, Instant};
 
@@ -91,7 +91,7 @@ impl<'frame, const CONTEXTS: usize, const CAPACITY: usize>
     pub fn ingest<R>(
         self,
         complete: impl FnOnce(OpenReassembledData<'_>) -> R,
-    ) -> Result<OpenDataDefragmentation<R>, OpenDataFragmentError> {
+    ) -> Result<OpenDataDefragmentation<R>, OpenDataReassemblyError> {
         self.owner.ingest_admitted(
             self.fragment,
             self.admission_epoch,
@@ -158,53 +158,53 @@ impl<const CAPACITY: usize> ReassemblySlot<CAPACITY> {
     }
 
     /// The record of fragment `number`.
-    fn fragment(&self, number: u8) -> Result<&RetainedFragment, OpenDataFragmentError> {
+    fn fragment(&self, number: u8) -> Result<&RetainedFragment, OpenDataReassemblyError> {
         self.fragments
             .get(usize::from(number))
-            .ok_or(OpenDataFragmentError::TooManyFragments)
+            .ok_or(OpenDataReassemblyError::TooManyFragments)
     }
 
     /// The retained bytes of every fragment so far.
-    fn retained(&self) -> Result<&[u8], OpenDataFragmentError> {
+    fn retained(&self) -> Result<&[u8], OpenDataReassemblyError> {
         self.bytes
             .get(..self.length)
-            .ok_or(OpenDataFragmentError::ReassembledTooLarge { capacity: CAPACITY })
+            .ok_or(OpenDataReassemblyError::ReassembledTooLarge { capacity: CAPACITY })
     }
 
     fn is_active(&self) -> bool {
         self.identity.is_some() && !self.completed
     }
 
-    fn verify_retry(&self, fragment: OpenDataFragment<'_>) -> Result<(), OpenDataFragmentError> {
+    fn verify_retry(&self, fragment: OpenDataFragment<'_>) -> Result<(), OpenDataReassemblyError> {
         let final_fragment = if self.completed {
             self.final_fragment
         } else {
             self.expected_fragment.saturating_sub(1)
         };
         if fragment.fragment_number() > final_fragment {
-            return Err(OpenDataFragmentError::OutOfOrder {
+            return Err(OpenDataReassemblyError::OutOfOrder {
                 expected: self.expected_fragment,
                 observed: fragment.fragment_number(),
             });
         }
         let expected_more = fragment.fragment_number() < final_fragment || !self.completed;
         if fragment.more_fragments() != expected_more {
-            return Err(OpenDataFragmentError::MoreFragmentsMismatch);
+            return Err(OpenDataReassemblyError::MoreFragmentsMismatch);
         }
         let retained = self.fragment(fragment.fragment_number())?;
         match (retained.packet_number, fragment.packet_number()) {
             (Some(expected), Some(observed)) if expected != observed => {
-                return Err(OpenDataFragmentError::RetryPacketNumberMismatch {
+                return Err(OpenDataReassemblyError::RetryPacketNumberMismatch {
                     fragment_number: fragment.fragment_number(),
                     expected,
                     observed,
                 });
             }
             (None, None) | (Some(_), Some(_)) => {}
-            _ => return Err(OpenDataFragmentError::IdentityMismatch),
+            _ => return Err(OpenDataReassemblyError::IdentityMismatch),
         }
         if self.bytes.get(retained.start..retained.end) != Some(fragment.payload()) {
-            return Err(OpenDataFragmentError::RetryPayloadMismatch {
+            return Err(OpenDataReassemblyError::RetryPayloadMismatch {
                 fragment_number: fragment.fragment_number(),
             });
         }
@@ -280,7 +280,7 @@ impl<const CONTEXTS: usize, const CAPACITY: usize> OpenDataDefragmenter<CONTEXTS
         identity: OpenDataFragmentIdentity,
         retry: bool,
         now: Option<Instant>,
-    ) -> Result<OpenDataUnfragmentedAdmission, OpenDataFragmentError> {
+    ) -> Result<OpenDataUnfragmentedAdmission, OpenDataReassemblyError> {
         self.admit_unfragmented_in_epoch(
             identity,
             FragmentAdmissionEpoch::OpenAssociation(0),
@@ -296,7 +296,7 @@ impl<const CONTEXTS: usize, const CAPACITY: usize> OpenDataDefragmenter<CONTEXTS
         admission_epoch: FragmentAdmissionEpoch,
         retry: bool,
         now: Option<Instant>,
-    ) -> Result<OpenDataUnfragmentedAdmission, OpenDataFragmentError> {
+    ) -> Result<OpenDataUnfragmentedAdmission, OpenDataReassemblyError> {
         admission_epoch.validate(identity.protection())?;
         let relevant_active = self.slots.iter().any(|slot| {
             slot.is_active()
@@ -314,7 +314,7 @@ impl<const CONTEXTS: usize, const CAPACITY: usize> OpenDataDefragmenter<CONTEXTS
         let expired = match now {
             Some(now) => self.expire(now),
             None if relevant_active || relevant_completed => {
-                return Err(OpenDataFragmentError::ClockUnavailable);
+                return Err(OpenDataReassemblyError::ClockUnavailable);
             }
             None => 0,
         };
@@ -323,7 +323,7 @@ impl<const CONTEXTS: usize, const CAPACITY: usize> OpenDataDefragmenter<CONTEXTS
                 && slot.identity == Some(identity)
                 && slot.admission_epoch == admission_epoch
         }) {
-            return Err(OpenDataFragmentError::MoreFragmentsMismatch);
+            return Err(OpenDataReassemblyError::MoreFragmentsMismatch);
         }
         if self.slots.iter().any(|slot| {
             slot.is_active()
@@ -331,7 +331,7 @@ impl<const CONTEXTS: usize, const CAPACITY: usize> OpenDataDefragmenter<CONTEXTS
                     .identity
                     .is_some_and(|active| active.same_sequence_space(identity))
         }) {
-            return Err(OpenDataFragmentError::IdentityMismatch);
+            return Err(OpenDataReassemblyError::IdentityMismatch);
         }
         if retry
             && self.slots.iter().any(|slot| {
@@ -344,7 +344,7 @@ impl<const CONTEXTS: usize, const CAPACITY: usize> OpenDataDefragmenter<CONTEXTS
                 DataFragmentProtection::Open => {
                     Ok(OpenDataUnfragmentedAdmission::Duplicate { expired })
                 }
-                DataFragmentProtection::Ccmp => Err(OpenDataFragmentError::MoreFragmentsMismatch),
+                DataFragmentProtection::Ccmp => Err(OpenDataReassemblyError::MoreFragmentsMismatch),
             };
         }
         if retry
@@ -355,7 +355,7 @@ impl<const CONTEXTS: usize, const CAPACITY: usize> OpenDataDefragmenter<CONTEXTS
                         .is_some_and(|entry| entry.same_sequence_space(identity))
             })
         {
-            return Err(OpenDataFragmentError::IdentityMismatch);
+            return Err(OpenDataReassemblyError::IdentityMismatch);
         }
         if !retry {
             // A fresh ordinary MPDU supersedes a retained fragment-completion
@@ -388,7 +388,7 @@ impl<const CONTEXTS: usize, const CAPACITY: usize> OpenDataDefragmenter<CONTEXTS
         fragment: OpenDataFragment<'_>,
         now: Instant,
         complete: impl FnOnce(OpenReassembledData<'_>) -> R,
-    ) -> Result<OpenDataDefragmentation<R>, OpenDataFragmentError> {
+    ) -> Result<OpenDataDefragmentation<R>, OpenDataReassemblyError> {
         self.ingest_in_epoch(
             fragment,
             FragmentAdmissionEpoch::OpenAssociation(0),
@@ -409,7 +409,7 @@ impl<const CONTEXTS: usize, const CAPACITY: usize> OpenDataDefragmenter<CONTEXTS
         admission_epoch: FragmentAdmissionEpoch,
         now: Instant,
         complete: impl FnOnce(OpenReassembledData<'_>) -> R,
-    ) -> Result<OpenDataDefragmentation<R>, OpenDataFragmentError> {
+    ) -> Result<OpenDataDefragmentation<R>, OpenDataReassemblyError> {
         match self.preflight_in_epoch(fragment, admission_epoch, now)? {
             OpenDataFragmentPreflight::Duplicate { expired } => {
                 Ok(OpenDataDefragmentation::Duplicate { expired })
@@ -425,11 +425,13 @@ impl<const CONTEXTS: usize, const CAPACITY: usize> OpenDataDefragmenter<CONTEXTS
         fragment: OpenDataFragment<'frame>,
         admission_epoch: FragmentAdmissionEpoch,
         now: Instant,
-    ) -> Result<OpenDataFragmentPreflight<'owner, 'frame, CONTEXTS, CAPACITY>, OpenDataFragmentError>
-    {
+    ) -> Result<
+        OpenDataFragmentPreflight<'owner, 'frame, CONTEXTS, CAPACITY>,
+        OpenDataReassemblyError,
+    > {
         admission_epoch.validate(fragment.identity().protection())?;
         if CONTEXTS == 0 {
-            return Err(OpenDataFragmentError::NoReassemblyContexts);
+            return Err(OpenDataReassemblyError::NoReassemblyContexts);
         }
         let expired = self.expire(now);
         let identity = fragment.identity();
@@ -449,7 +451,7 @@ impl<const CONTEXTS: usize, const CAPACITY: usize> OpenDataDefragmenter<CONTEXTS
                         .identity
                         .is_some_and(|entry| entry.same_sequence_space(identity))
             }) {
-                return Err(OpenDataFragmentError::IdentityMismatch);
+                return Err(OpenDataReassemblyError::IdentityMismatch);
             }
         }
 
@@ -474,7 +476,7 @@ impl<const CONTEXTS: usize, const CAPACITY: usize> OpenDataDefragmenter<CONTEXTS
                         .is_some_and(|active| active.same_sequence_space(identity))
             })
         {
-            return Err(OpenDataFragmentError::IdentityMismatch);
+            return Err(OpenDataReassemblyError::IdentityMismatch);
         }
         if fragment.fragment_number() != 0 {
             let Some(slot) = exact else {
@@ -484,9 +486,9 @@ impl<const CONTEXTS: usize, const CAPACITY: usize> OpenDataDefragmenter<CONTEXTS
                             .identity
                             .is_some_and(|active| active.same_sequence_space(identity))
                 }) {
-                    return Err(OpenDataFragmentError::IdentityMismatch);
+                    return Err(OpenDataReassemblyError::IdentityMismatch);
                 }
-                return Err(OpenDataFragmentError::Orphan {
+                return Err(OpenDataReassemblyError::Orphan {
                     fragment_number: fragment.fragment_number(),
                 });
             };
@@ -495,13 +497,13 @@ impl<const CONTEXTS: usize, const CAPACITY: usize> OpenDataDefragmenter<CONTEXTS
                 return Ok(OpenDataFragmentPreflight::Duplicate { expired });
             }
             if fragment.fragment_number() != slot.expected_fragment {
-                return Err(OpenDataFragmentError::OutOfOrder {
+                return Err(OpenDataReassemblyError::OutOfOrder {
                     expected: slot.expected_fragment,
                     observed: fragment.fragment_number(),
                 });
             }
             if fragment.more_fragments() && fragment.fragment_number() == 15 {
-                return Err(OpenDataFragmentError::TooManyFragments);
+                return Err(OpenDataReassemblyError::TooManyFragments);
             }
         }
         Ok(OpenDataFragmentPreflight::Admitted(
@@ -522,7 +524,7 @@ impl<const CONTEXTS: usize, const CAPACITY: usize> OpenDataDefragmenter<CONTEXTS
         now: Instant,
         expired: u8,
         complete: impl FnOnce(OpenReassembledData<'_>) -> R,
-    ) -> Result<OpenDataDefragmentation<R>, OpenDataFragmentError> {
+    ) -> Result<OpenDataDefragmentation<R>, OpenDataReassemblyError> {
         let identity = fragment.identity();
         let is_exact = |slot: &ReassemblySlot<CAPACITY>| {
             slot.is_active()
@@ -531,7 +533,7 @@ impl<const CONTEXTS: usize, const CAPACITY: usize> OpenDataDefragmenter<CONTEXTS
         };
         if fragment.fragment_number() != 0 {
             let Some(slot) = self.slots.iter_mut().find(|slot| is_exact(slot)) else {
-                return Err(OpenDataFragmentError::Orphan {
+                return Err(OpenDataReassemblyError::Orphan {
                     fragment_number: fragment.fragment_number(),
                 });
             };
@@ -555,7 +557,7 @@ impl<const CONTEXTS: usize, const CAPACITY: usize> OpenDataDefragmenter<CONTEXTS
                 .and_then(|(llc, payload)| Some((rfc1042_ether_type(*llc)?, payload)));
             let Some((ether_type, payload)) = msdu else {
                 slot.clear();
-                return Err(OpenDataFragmentError::InvalidLlcSnap);
+                return Err(OpenDataReassemblyError::InvalidLlcSnap);
             };
             let value = complete(OpenReassembledData {
                 identity,
@@ -597,7 +599,7 @@ impl<const CONTEXTS: usize, const CAPACITY: usize> OpenDataDefragmenter<CONTEXTS
                 .min_by_key(|(index, slot)| (slot.started_at, *index))
                 .map(|(index, _)| index)
             else {
-                return Err(OpenDataFragmentError::NoReassemblyContexts);
+                return Err(OpenDataReassemblyError::NoReassemblyContexts);
             };
             (index, true)
         };
@@ -633,10 +635,10 @@ impl<const CONTEXTS: usize, const CAPACITY: usize> OpenDataDefragmenter<CONTEXTS
     fn slot_mut(
         &mut self,
         index: usize,
-    ) -> Result<&mut ReassemblySlot<CAPACITY>, OpenDataFragmentError> {
+    ) -> Result<&mut ReassemblySlot<CAPACITY>, OpenDataReassemblyError> {
         self.slots
             .get_mut(index)
-            .ok_or(OpenDataFragmentError::NoReassemblyContexts)
+            .ok_or(OpenDataReassemblyError::NoReassemblyContexts)
     }
 
     fn expire(&mut self, now: Instant) -> u8 {
@@ -654,7 +656,7 @@ impl<const CONTEXTS: usize, const CAPACITY: usize> OpenDataDefragmenter<CONTEXTS
 fn append_fragment<const CAPACITY: usize>(
     slot: &mut ReassemblySlot<CAPACITY>,
     fragment: OpenDataFragment<'_>,
-) -> Result<(), OpenDataFragmentError> {
+) -> Result<(), OpenDataReassemblyError> {
     if let Some(previous_number) = fragment.fragment_number().checked_sub(1)
         && let (Some(previous), Some(observed)) = (
             slot.fragment(previous_number)?.packet_number,
@@ -662,22 +664,22 @@ fn append_fragment<const CAPACITY: usize>(
         )
         && previous.value().checked_add(1) != Some(observed.value())
     {
-        return Err(OpenDataFragmentError::PacketNumberNotSequential { previous, observed });
+        return Err(OpenDataReassemblyError::PacketNumberNotSequential { previous, observed });
     }
     let payload = fragment.payload();
     let start = slot.length;
     let end = start
         .checked_add(payload.len())
-        .ok_or(OpenDataFragmentError::ReassembledTooLarge { capacity: CAPACITY })?;
+        .ok_or(OpenDataReassemblyError::ReassembledTooLarge { capacity: CAPACITY })?;
     let Some(destination) = slot.bytes.get_mut(start..end) else {
-        return Err(OpenDataFragmentError::ReassembledTooLarge { capacity: CAPACITY });
+        return Err(OpenDataReassemblyError::ReassembledTooLarge { capacity: CAPACITY });
     };
     // The checked range length is exactly payload.len(); resolve the fragment
     // record before copying so a refusal changes neither bytes nor metadata.
     let retained = slot
         .fragments
         .get_mut(usize::from(fragment.fragment_number()))
-        .ok_or(OpenDataFragmentError::TooManyFragments)?;
+        .ok_or(OpenDataReassemblyError::TooManyFragments)?;
     for (to, from) in destination.iter_mut().zip(payload) {
         *to = *from;
     }
@@ -711,7 +713,7 @@ mod bounds_tests {
         for number in [16, u8::MAX] {
             assert!(matches!(
                 slot.fragment(number),
-                Err(OpenDataFragmentError::TooManyFragments)
+                Err(OpenDataReassemblyError::TooManyFragments)
             ));
         }
         assert!(slot.fragment(15).is_ok());
@@ -725,7 +727,7 @@ mod bounds_tests {
             slot.length = length;
             assert_eq!(
                 slot.retained(),
-                Err(OpenDataFragmentError::ReassembledTooLarge { capacity: 8 })
+                Err(OpenDataReassemblyError::ReassembledTooLarge { capacity: 8 })
             );
             assert_eq!(slot.bytes, [42; 8]);
             assert_eq!(slot.length, length);
@@ -740,7 +742,7 @@ mod bounds_tests {
         for index in [1, usize::MAX] {
             assert!(matches!(
                 owner.slot_mut(index),
-                Err(OpenDataFragmentError::NoReassemblyContexts)
+                Err(OpenDataReassemblyError::NoReassemblyContexts)
             ));
         }
         assert!(owner.slot_mut(0).is_ok());

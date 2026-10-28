@@ -85,6 +85,11 @@ fn portable_data_intent_preserves_every_existing_s31_queue_and_packet_profile() 
             assert_eq!(plan.header_len, header_len);
             let metadata = DataTxMetadata::from_encapsulation(&plan);
             assert_eq!(metadata.queue_class, queue);
+            assert_eq!(
+                metadata.descriptor_multicast,
+                multicast && role == DataInterfaceRole::AccessPoint
+            );
+            assert_eq!(metadata.dma_header_len, usize::from(header_len));
             let expected_packet_type = if frame_control[0] == 0x88 {
                 assert_eq!(plan.header[24], priority as u8);
                 qos_packet_type

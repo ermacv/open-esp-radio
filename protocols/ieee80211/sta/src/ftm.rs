@@ -13,14 +13,14 @@ use core::num::NonZeroU8;
 use heapless::Vec;
 use oer_ieee80211_wire::address::IndividualAddress;
 use oer_ieee80211_wire::ftm::{
-    FTM_INITIAL_REQUEST_BODY_LEN, FtmBurstDuration, FtmFormatAndBandwidth, FtmMeasurement,
-    FtmRequestParameters, FtmResponseParameters, FtmResponseStatus, FtmTimestampPs, FtmToaError,
-    FtmTodError, encode_initial_request,
+    FTM_INITIAL_REQUEST_BODY_LEN, FTM_TIMESTAMP_MASK, FtmBurstDuration, FtmFormatAndBandwidth,
+    FtmMeasurement, FtmRequestParameters, FtmResponseParameters, FtmResponseStatus, FtmTimestampPs,
+    FtmToaError, FtmTodError, encode_initial_request,
 };
 use oer_time::{Duration, Instant};
 
-const FTM_TIMESTAMP_MASK: u64 = (1_u64 << 48) - 1;
-const FTM_TIMESTAMP_HALF_RANGE: u64 = 1_u64 << 47;
+/// Half the timestamp space: the horizon of modular timestamp differences.
+const FTM_TIMESTAMP_HALF_RANGE: u64 = FTM_TIMESTAMP_MASK / 2 + 1;
 const MAX_REQUEST_ATTEMPTS: u8 = 8;
 const MAX_TRACKED_INFORMATION_ELEMENTS_LEN: usize = 64;
 
