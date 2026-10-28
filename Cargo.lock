@@ -3129,6 +3129,7 @@ name = "oer-ieee80211-sta"
 version = "0.1.0"
 dependencies = [
  "heapless",
+ "oer-crypto",
  "oer-ieee80211-arbiter",
  "oer-ieee80211-cipher",
  "oer-ieee80211-port",

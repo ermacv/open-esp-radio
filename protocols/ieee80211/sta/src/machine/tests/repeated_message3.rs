@@ -609,15 +609,15 @@ fn damaged_deferred_eapol_disconnects_on_both_rx_and_tx_terminal_paths() {
                         RsnConnectedSupplicantError::StaleReplayCounter
                     ))
                 );
+                // The damaged frame waits for its unwrap; issuing it finds
+                // the damage.
                 let State::Connected(connected) = &world.station.state else {
                     panic!()
                 };
-                assert_eq!(
-                    connected.rsn.as_ref().unwrap().fault,
-                    Some(StaDisconnectReason::InvalidEapol(
-                        oer_ieee80211_rsn::EapolParseError::Truncated
-                    ))
-                );
+                assert!(matches!(
+                    connected.rsn.as_ref().unwrap().rekey,
+                    Rekey::Unwrap(..)
+                ));
             } else {
                 world.outcomes.push_back((ended(End::Delivered), true));
             }
@@ -660,6 +660,17 @@ fn retained_security_ies_are_terminal_without_counting_a_peer_drop() {
             .station
             .receive(at(50), &retry_message3(&ptk, 3, 0x99), meta(), |_| {})
             .unwrap();
+        let Some(StaAction::UnwrapKeyData { id, request }) = world.station.poll_action(at(50))
+        else {
+            panic!("the authenticated M3 asks for its key data")
+        };
+        world.station.input(
+            at(50),
+            StaInput::KeyDataUnwrapped {
+                id,
+                result: super::unwrap(request),
+            },
+        );
         assert_eq!(security_drops(&world), before);
         let State::Connected(connected) = &world.station.state else {
             panic!()
