@@ -1,5 +1,6 @@
-//! Structural rules read from package manifests: names, the unsafe boundary
-//! and protocol core/runtime isolation from backends.
+//! Structural rules read from package manifests and sources: names, the
+//! unsafe boundary, layer roles and their dependencies, protocol core/runtime
+//! isolation from backends, and the HAL's atoms (`README.md`).
 
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -708,36 +709,26 @@ fn the_ieee802154_boundary_rejects_the_indirect_knowledge_path() {
     assert!(forbidden_paths(&graph, "unrelated", ieee802154_execution).is_empty());
 }
 
-/// The shared RF owner consumes client contracts, never protocol drivers,
-/// including optional, target-specific and transitive normal dependencies.
+/// The shared RF owner consumes client contracts, never the chip adapters of
+/// the protocols, including optional, target-specific and transitive normal
+/// dependencies.
 #[test]
 fn radio_systems_do_not_reach_protocol_drivers() {
-    let root = root();
-    let workspace = read_toml(&root.join("Cargo.toml"));
-    let packages = packages(&root);
-    let drivers: BTreeSet<_> = packages
+    let graph = workspace_dependency_graph();
+    let roles = workspace_roles();
+    let services = roles
         .iter()
-        .filter(|(path, _)| path.starts_with("chips/") && path.ends_with("/driver"))
-        .map(|(_, manifest)| manifest["package"]["name"].as_str().expect("name"))
-        .collect();
-    let graph = packages
-        .values()
-        .map(|manifest| {
-            (
-                manifest["package"]["name"]
-                    .as_str()
-                    .expect("name")
-                    .to_owned(),
-                normal_dependencies(manifest, &workspace["workspace"]),
-            )
-        })
-        .collect();
-    for (_, manifest) in packages
-        .iter()
-        .filter(|(path, _)| path.starts_with("chips/") && path.ends_with("/radio/system"))
-    {
-        let owner = manifest["package"]["name"].as_str().expect("name");
-        let violations = forbidden_paths(&graph, owner, |name| drivers.contains(name));
+        .filter(|(_, role)| **role == Role::Service)
+        .map(|(name, _)| name.as_str())
+        .collect::<Vec<_>>();
+    assert!(
+        !services.is_empty(),
+        "the radio system has the service role"
+    );
+    for owner in services {
+        let violations = forbidden_paths(&graph, owner, |name| {
+            roles.get(name) == Some(&Role::ChipAdapter)
+        });
         assert!(violations.is_empty(), "{owner}: {violations:?}");
     }
 }
@@ -773,7 +764,15 @@ build-driver = "1"
         ),
         ("allowed".into(), BTreeSet::from(["hal".into()])),
     ]);
-    let driver = |name: &str| name.ends_with("-driver");
+    let roles = BTreeMap::from([
+        ("bluetooth-driver", Role::ChipAdapter),
+        ("wifi-driver", Role::ChipAdapter),
+        ("ieee802154-driver", Role::ChipAdapter),
+        ("client", Role::ServiceClient),
+        ("phy", Role::HardwareDriver),
+        ("hal", Role::Hal),
+    ]);
+    let driver = |name: &str| roles.get(name) == Some(&Role::ChipAdapter);
     assert_eq!(
         forbidden_paths(&graph, "system", driver),
         [
@@ -803,6 +802,8 @@ fn protocol_role(path: &str) -> Option<ProtocolRole> {
         return None;
     }
     Some(match protocol.rsplit('/').next()? {
+        // An event vocabulary and a HIL binding are no protocol layer.
+        "instrumentation" | "hil" => return None,
         "wire" => ProtocolRole::Wire,
         "cipher" => ProtocolRole::Cipher,
         "port" => ProtocolRole::Port,
@@ -812,88 +813,336 @@ fn protocol_role(path: &str) -> Option<ProtocolRole> {
     })
 }
 
+/// The layer of a workspace package (`docs/architecture.md`, Layers). Chip
+/// and HIL packages take theirs from [`ROLES`], never from a path suffix; the
+/// other packages follow their root and, in `protocols/`, their leaf.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum ChipRole {
-    Backend,
+enum Role {
+    /// Values, tables and pure functions about the hardware, without access
+    /// to it.
+    Facts,
+    /// The generated register model and its one claim.
+    Pac,
+    /// Owners, partitions, typestate and single hardware atoms over the PAC.
+    Hal,
+    /// The operations of a block or subsystem: sequences, waits, errors and
+    /// recovery, over a register port or HAL atoms. Family or chip.
+    HardwareDriver,
+    /// A chip's implementation of a protocol port or a family engine contract
+    /// over its HAL: the protocol's backend on this chip.
+    ChipAdapter,
+    /// Family policy that sits above the backend with the protocol cores.
     CoreSidePolicy,
+    /// The client contract of a chip service.
+    ServiceClient,
+    /// The one owner of a shared resource for its clients.
+    Service,
+    /// Family platform contracts that the HAL implements or names: the
+    /// platform port, the interrupt table and the staged layout.
+    PlatformContract,
+    /// Startup order, staging, entry, executor and the board's platform data.
+    Platform,
+    /// The chip's side of an image: it may assemble runtimes and backends.
+    Composition,
+    /// A product facade over a protocol runtime and its chip backend.
+    Facade,
+    /// An instrumentation event vocabulary: values, no owner.
+    ObservationContract,
+    /// The HIL framing, envelope and message skeleton.
+    HilProtocol,
+    /// The device-side HIL library: transport, services, lifecycle.
+    HilAgent,
+    /// The HIL dictionary beside one facade.
+    HilBinding,
+    /// A HIL test image.
+    HilImage,
+    Protocol(ProtocolRole),
+    /// `protocols/radio/*` and `protocols/network`: vocabulary shared by the
+    /// protocols.
+    SharedVocabulary,
+    Portable,
+    /// `portable/embassy/*`, the adapters of protocol boundaries.
+    EmbassyAdapter,
+    /// `portable/mmio` and `portable/riscv`: volatile register access and
+    /// architectural instructions.
+    HardwareAccess,
+    Image,
+    Tool,
 }
 
-fn chip_role(path: &str) -> Option<ChipRole> {
-    if !path.starts_with("chips/") {
+/// The role of every chip and HIL package. A package under `chips/`,
+/// `protocols/hil/` or `firmware/hil/`, or a `hil` leaf, is listed here.
+const ROLES: &[(&str, Role)] = &[
+    ("chips/espressif/facts", Role::Facts),
+    ("chips/espressif/efuse", Role::Facts),
+    ("chips/espressif/ieee802154-mac-values", Role::Facts),
+    ("chips/esp32s31/knowledge", Role::Facts),
+    ("chips/esp32s31/pac", Role::Pac),
+    ("chips/esp32s31/hal", Role::Hal),
+    ("chips/espressif/analog", Role::HardwareDriver),
+    ("chips/espressif/boot", Role::HardwareDriver),
+    ("chips/espressif/coex", Role::HardwareDriver),
+    ("chips/espressif/ieee802154-engine", Role::HardwareDriver),
+    ("chips/espressif/modem-clock", Role::HardwareDriver),
+    ("chips/espressif/usb-serial-jtag", Role::HardwareDriver),
+    ("chips/espressif/watchdog", Role::HardwareDriver),
+    ("chips/esp32s31/phy", Role::HardwareDriver),
+    ("chips/esp32s31/bluetooth/driver", Role::ChipAdapter),
+    ("chips/esp32s31/ieee80211/driver", Role::ChipAdapter),
+    ("chips/esp32s31/ieee80211/mac", Role::ChipAdapter),
+    ("chips/esp32s31/ieee802154/driver", Role::ChipAdapter),
+    // docs/repository-layout.md: "Wi-Fi upper-MAC and the family policy
+    // select each attempt's rate and protection" places this family policy
+    // above the backend with the cores.
+    ("chips/espressif/ieee80211-policy", Role::CoreSidePolicy),
+    ("chips/esp32s31/radio/client", Role::ServiceClient),
+    ("chips/esp32s31/radio/system", Role::Service),
+    ("chips/espressif/interrupt-table", Role::PlatformContract),
+    ("chips/espressif/platform-port", Role::PlatformContract),
+    ("chips/espressif/staged-layout", Role::PlatformContract),
+    ("chips/espressif/executor", Role::Platform),
+    ("chips/espressif/staged-bootstrap", Role::Platform),
+    ("chips/espressif/staged-runtime", Role::Platform),
+    ("chips/esp32s31/board", Role::Platform),
+    ("chips/esp32s31/layout", Role::Platform),
+    ("chips/esp32s31/compose", Role::Composition),
+    ("protocols/hil/protocol", Role::HilProtocol),
+    ("protocols/hil/agent", Role::HilAgent),
+    ("firmware/hil/esp32s31", Role::HilImage),
+    ("firmware/hil/esp32s31-lower-mac", Role::HilImage),
+    ("firmware/hil/esp32s31-phy", Role::HilImage),
+];
+
+/// Roles fixed before their package exists, with what creates it. When the
+/// package joins the workspace its entry moves to [`ROLES`].
+const AWAITED_ROLES: &[(&str, Role, &str)] = &[(
+    "chips/esp32s31/wifi",
+    Role::Facade,
+    "the IEEE 802.11 facade (#844)",
+)];
+
+/// Whether `path` is a package that [`ROLES`] must name.
+fn listed_role_required(path: &str) -> bool {
+    path.starts_with("chips/")
+        || path.starts_with("protocols/hil/")
+        || path.starts_with("firmware/hil/")
+        || path.rsplit('/').next() == Some("hil")
+}
+
+fn role(path: &str) -> Option<Role> {
+    if let Some(role) = ROLES
+        .iter()
+        .copied()
+        .chain(AWAITED_ROLES.iter().map(|(path, role, _)| (*path, *role)))
+        .find_map(|(listed, role)| (listed == path).then_some(role))
+    {
+        return Some(role);
+    }
+    if listed_role_required(path) {
         return None;
     }
-    // docs/repository-layout.md#a-protocol-wire-port-cores-backends:
-    // "Wi-Fi upper-MAC and the family policy select each attempt's rate and
-    // protection" places this family policy above the backend with the cores.
-    Some(if path == "chips/espressif/ieee80211-policy" {
-        ChipRole::CoreSidePolicy
-    } else {
-        ChipRole::Backend
+    let mut parts = path.split('/');
+    Some(match (parts.next(), parts.next()) {
+        (Some("protocols"), _) if path.ends_with("/instrumentation") => Role::ObservationContract,
+        (Some("protocols"), Some("radio" | "network")) => Role::SharedVocabulary,
+        (Some("protocols"), _) => Role::Protocol(protocol_role(path)?),
+        (Some("portable"), Some("mmio" | "riscv")) => Role::HardwareAccess,
+        (Some("portable"), Some("embassy")) => Role::EmbassyAdapter,
+        (Some("portable"), _) => Role::Portable,
+        (Some("firmware"), _) => Role::Image,
+        (Some("tools"), _) => Role::Tool,
+        _ => return None,
     })
+}
+
+/// Whether a package of role `from` may take a direct normal dependency on
+/// the workspace package at `to_path` of role `to`. Roles outside `chips/`
+/// and HIL keep their own rules and are not limited here.
+fn role_allows(from: Role, to: Role, to_path: &str) -> bool {
+    use ProtocolRole::{Cipher, Core, Port, Runtime, Wire};
+    let family_driver = to == Role::HardwareDriver && to_path.starts_with("chips/espressif/");
+    // What a driver, an adapter or a service stands on.
+    let below_a_driver = matches!(
+        to,
+        Role::Hal
+            | Role::HardwareDriver
+            | Role::PlatformContract
+            | Role::Facts
+            | Role::ObservationContract
+            | Role::SharedVocabulary
+            | Role::Portable
+            | Role::Protocol(Wire | Port | Cipher)
+    );
+    // Everything a composition may assemble: runtimes and backends together.
+    let assembled = matches!(
+        to,
+        Role::Hal
+            | Role::HardwareDriver
+            | Role::ChipAdapter
+            | Role::CoreSidePolicy
+            | Role::ServiceClient
+            | Role::Service
+            | Role::PlatformContract
+            | Role::Platform
+            | Role::Facts
+            | Role::ObservationContract
+            | Role::Protocol(_)
+            | Role::SharedVocabulary
+            | Role::Portable
+            | Role::EmbassyAdapter
+            | Role::HardwareAccess
+    );
+    match from {
+        Role::Facts => matches!(
+            to,
+            Role::Facts | Role::SharedVocabulary | Role::Portable | Role::Protocol(Wire)
+        ),
+        Role::ObservationContract => matches!(
+            to,
+            Role::ObservationContract
+                | Role::Facts
+                | Role::SharedVocabulary
+                | Role::Portable
+                | Role::Protocol(Wire | Port)
+        ),
+        Role::Pac => matches!(to, Role::Facts | Role::Portable | Role::HardwareAccess),
+        Role::PlatformContract => matches!(
+            to,
+            Role::PlatformContract | Role::Facts | Role::Portable | Role::HardwareAccess
+        ),
+        // The HAL implements the register ports of the family drivers; it
+        // runs no chip driver and no protocol.
+        Role::Hal => {
+            family_driver
+                || matches!(
+                    to,
+                    Role::Pac
+                        | Role::PlatformContract
+                        | Role::Facts
+                        | Role::Portable
+                        | Role::HardwareAccess
+                )
+        }
+        Role::HardwareDriver | Role::ServiceClient => below_a_driver,
+        Role::ChipAdapter => {
+            below_a_driver || matches!(to, Role::ChipAdapter | Role::ServiceClient)
+        }
+        Role::Service => below_a_driver || to == Role::ServiceClient,
+        Role::CoreSidePolicy => matches!(
+            to,
+            Role::Protocol(Wire | Port | Cipher | Core)
+                | Role::Facts
+                | Role::ObservationContract
+                | Role::SharedVocabulary
+                | Role::Portable
+        ),
+        // The platform reaches the chip only through its contracts.
+        Role::Platform => {
+            family_driver
+                || matches!(
+                    to,
+                    Role::Platform
+                        | Role::PlatformContract
+                        | Role::Facts
+                        | Role::SharedVocabulary
+                        | Role::Portable
+                        | Role::HardwareAccess
+                )
+        }
+        Role::Composition => assembled,
+        Role::Facade => assembled || to == Role::Composition,
+        Role::HilProtocol => to == Role::Portable,
+        Role::HilAgent => matches!(to, Role::HilProtocol | Role::Portable),
+        // A binding is a dictionary without a clock: no time crate.
+        Role::HilBinding => {
+            matches!(
+                to,
+                Role::HilProtocol
+                    | Role::HilAgent
+                    | Role::Facade
+                    | Role::ObservationContract
+                    | Role::SharedVocabulary
+                    | Role::Protocol(Wire | Port | Runtime)
+            ) || (to == Role::Portable
+                && !["portable/time", "portable/time-virtual"].contains(&to_path))
+        }
+        // An image composes: it declares its interrupt table, entry, tasks
+        // and observation collectors and never bypasses the facade.
+        Role::HilImage => matches!(
+            to,
+            Role::Composition
+                | Role::Facade
+                | Role::ObservationContract
+                | Role::HilBinding
+                | Role::HilAgent
+                | Role::HilProtocol
+                | Role::Platform
+                | Role::PlatformContract
+                | Role::Portable
+                | Role::EmbassyAdapter
+        ),
+        Role::Protocol(_)
+        | Role::SharedVocabulary
+        | Role::Portable
+        | Role::EmbassyAdapter
+        | Role::HardwareAccess
+        | Role::Image
+        | Role::Tool => true,
+    }
+}
+
+/// Whether a package of `role` keeps the backend rule: no normal path to a
+/// protocol core or runtime. Only a composition and a facade assemble them.
+fn keeps_the_backend_rule(role: Role) -> bool {
+    matches!(
+        role,
+        Role::Facts
+            | Role::Pac
+            | Role::Hal
+            | Role::HardwareDriver
+            | Role::ChipAdapter
+            | Role::ServiceClient
+            | Role::Service
+            | Role::PlatformContract
+            | Role::Platform
+            | Role::ObservationContract
+            | Role::Protocol(ProtocolRole::Model)
+    )
+}
+
+fn core_or_runtime(role: Role) -> bool {
+    matches!(
+        role,
+        Role::Protocol(ProtocolRole::Core | ProtocolRole::Runtime) | Role::CoreSidePolicy
+    )
+}
+
+/// Each workspace package's name and role.
+fn workspace_roles() -> BTreeMap<String, Role> {
+    workspace_package_paths()
+        .into_iter()
+        .filter_map(|(name, path)| Some((name, role(&path)?)))
+        .collect()
 }
 
 fn backend_core_paths(
     graph: &BTreeMap<String, BTreeSet<String>>,
-    roles: &BTreeMap<String, ProtocolRole>,
+    roles: &BTreeMap<String, Role>,
     start: &str,
 ) -> Vec<String> {
     forbidden_paths(graph, start, |name| {
-        matches!(
-            roles.get(name),
-            Some(ProtocolRole::Core | ProtocolRole::Runtime)
-        )
+        roles.get(name).copied().is_some_and(core_or_runtime)
     })
 }
 
 #[test]
 fn backends_and_models_do_not_reach_protocol_cores_or_runtimes() {
-    let root = root();
-    let workspace = read_toml(&root.join("Cargo.toml"));
-    let packages = packages(&root);
-    let roles = packages
+    let graph = workspace_dependency_graph();
+    let roles = workspace_roles();
+    let violations = roles
         .iter()
-        .filter_map(|(path, manifest)| {
-            protocol_role(path)
-                .or_else(|| {
-                    (chip_role(path) == Some(ChipRole::CoreSidePolicy))
-                        .then_some(ProtocolRole::Core)
-                })
-                .map(|role| {
-                    (
-                        manifest["package"]["name"]
-                            .as_str()
-                            .expect("name")
-                            .to_owned(),
-                        role,
-                    )
-                })
-        })
-        .collect();
-    let graph = packages
-        .values()
-        .map(|manifest| {
-            (
-                manifest["package"]["name"]
-                    .as_str()
-                    .expect("name")
-                    .to_owned(),
-                normal_dependencies(manifest, &workspace["workspace"]),
-            )
-        })
-        .collect();
-    let violations = packages
-        .iter()
-        .filter(|(path, _)| {
-            chip_role(path) == Some(ChipRole::Backend)
-                || protocol_role(path) == Some(ProtocolRole::Model)
-        })
-        .flat_map(|(_, manifest)| {
-            backend_core_paths(
-                &graph,
-                &roles,
-                manifest["package"]["name"].as_str().expect("name"),
-            )
-        })
+        .filter(|(_, role)| keeps_the_backend_rule(**role))
+        .flat_map(|(name, _)| backend_core_paths(&graph, &roles, name))
         .collect::<Vec<_>>();
     assert!(
         violations.is_empty(),
@@ -903,13 +1152,48 @@ fn backends_and_models_do_not_reach_protocol_cores_or_runtimes() {
 }
 
 #[test]
-fn protocol_roles_and_core_side_family_policy_follow_the_layout() {
+fn every_chip_and_hil_package_has_a_listed_role() {
+    let paths = workspace_package_paths()
+        .into_values()
+        .collect::<BTreeSet<_>>();
+    let unlisted = paths
+        .iter()
+        .filter(|path| role(path).is_none())
+        .cloned()
+        .collect::<Vec<_>>();
+    assert!(unlisted.is_empty(), "packages without a role: {unlisted:?}");
+    let stale = ROLES
+        .iter()
+        .map(|(path, _)| *path)
+        .filter(|path| !paths.contains(*path))
+        .collect::<Vec<_>>();
+    assert!(stale.is_empty(), "roles of no package: {stale:?}");
+    let arrived = AWAITED_ROLES
+        .iter()
+        .map(|(path, _, _)| *path)
+        .filter(|path| paths.contains(*path))
+        .collect::<Vec<_>>();
+    assert!(arrived.is_empty(), "move into ROLES: {arrived:?}");
+    let listed = ROLES
+        .iter()
+        .map(|(path, _)| *path)
+        .chain(AWAITED_ROLES.iter().map(|(path, _, _)| *path))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        listed.len(),
+        listed.iter().collect::<BTreeSet<_>>().len(),
+        "a package is listed twice"
+    );
+}
+
+#[test]
+fn protocol_roles_and_the_explicit_chip_roles_follow_the_layout() {
     for prefix in [
         "protocols/ieee802154",
         "protocols/bluetooth/le",
         "protocols/example",
     ] {
-        for (directory, role) in [
+        for (directory, protocol) in [
             ("wire", ProtocolRole::Wire),
             ("cipher", ProtocolRole::Cipher),
             ("port", ProtocolRole::Port),
@@ -918,8 +1202,15 @@ fn protocol_roles_and_core_side_family_policy_follow_the_layout() {
             ("mac", ProtocolRole::Core),
             ("controller", ProtocolRole::Core),
         ] {
-            assert_eq!(protocol_role(&format!("{prefix}/{directory}")), Some(role));
+            let path = format!("{prefix}/{directory}");
+            assert_eq!(protocol_role(&path), Some(protocol));
+            assert_eq!(role(&path), Some(Role::Protocol(protocol)));
         }
+        assert_eq!(
+            role(&format!("{prefix}/instrumentation")),
+            Some(Role::ObservationContract)
+        );
+        assert_eq!(role(&format!("{prefix}/hil")), None);
     }
     assert_eq!(
         protocol_role("protocols/bluetooth/hci"),
@@ -934,27 +1225,47 @@ fn protocol_roles_and_core_side_family_policy_follow_the_layout() {
     ] {
         assert_eq!(protocol_role(path), None, "{path}");
     }
-    assert_eq!(
-        chip_role("chips/espressif/ieee80211-policy"),
-        Some(ChipRole::CoreSidePolicy)
-    );
-    assert_eq!(
-        chip_role("chips/esp32s31/ieee80211/driver"),
-        Some(ChipRole::Backend)
-    );
-    assert_eq!(chip_role("protocols/ieee802154/model"), None);
+    for (path, expected) in [
+        ("protocols/radio/port", Some(Role::SharedVocabulary)),
+        ("protocols/network", Some(Role::SharedVocabulary)),
+        ("protocols/hil/protocol", Some(Role::HilProtocol)),
+        ("protocols/hil/agent", Some(Role::HilAgent)),
+        ("protocols/hil/new", None),
+        ("portable/wire", Some(Role::Portable)),
+        ("portable/memory", Some(Role::Portable)),
+        ("portable/mmio", Some(Role::HardwareAccess)),
+        ("portable/riscv", Some(Role::HardwareAccess)),
+        ("portable/embassy/net", Some(Role::EmbassyAdapter)),
+        (
+            "chips/espressif/ieee80211-policy",
+            Some(Role::CoreSidePolicy),
+        ),
+        ("chips/esp32s31/ieee80211/driver", Some(Role::ChipAdapter)),
+        ("chips/esp32s31/radio/system", Some(Role::Service)),
+        ("chips/esp32s31/compose", Some(Role::Composition)),
+        ("chips/esp32s31/wifi", Some(Role::Facade)),
+        // A new chip package has no role until it is listed, whatever its
+        // directory says.
+        ("chips/esp32s31/new/driver", None),
+        ("firmware/hil/esp32s31", Some(Role::HilImage)),
+        ("firmware/hil/new", None),
+        ("firmware/apps/w1", Some(Role::Image)),
+        ("tools/hil/cli", Some(Role::Tool)),
+    ] {
+        assert_eq!(role(path), expected, "{path}");
+    }
 }
 
 #[test]
 fn backend_rule_rejects_transitive_cross_protocol_and_model_paths() {
     let roles = BTreeMap::from([
-        ("wire".into(), ProtocolRole::Wire),
-        ("port".into(), ProtocolRole::Port),
-        ("cipher".into(), ProtocolRole::Cipher),
-        ("core".into(), ProtocolRole::Core),
-        ("other-core".into(), ProtocolRole::Core),
-        ("family-policy".into(), ProtocolRole::Core),
-        ("runtime".into(), ProtocolRole::Runtime),
+        ("wire".into(), Role::Protocol(ProtocolRole::Wire)),
+        ("port".into(), Role::Protocol(ProtocolRole::Port)),
+        ("cipher".into(), Role::Protocol(ProtocolRole::Cipher)),
+        ("core".into(), Role::Protocol(ProtocolRole::Core)),
+        ("other-core".into(), Role::Protocol(ProtocolRole::Core)),
+        ("family-policy".into(), Role::CoreSidePolicy),
+        ("runtime".into(), Role::Protocol(ProtocolRole::Runtime)),
     ]);
     let graph = BTreeMap::from([
         ("backend".into(), BTreeSet::from(["hal".into()])),
@@ -1009,10 +1320,10 @@ build-core = "1"
             .expect("workspace");
     let graph = BTreeMap::from([("backend".into(), normal_dependencies(&manifest, &workspace))]);
     let roles = BTreeMap::from([
-        ("core".into(), ProtocolRole::Core),
-        ("runtime".into(), ProtocolRole::Runtime),
-        ("build-core".into(), ProtocolRole::Core),
-        ("model".into(), ProtocolRole::Model),
+        ("core".into(), Role::Protocol(ProtocolRole::Core)),
+        ("runtime".into(), Role::Protocol(ProtocolRole::Runtime)),
+        ("build-core".into(), Role::Protocol(ProtocolRole::Core)),
+        ("model".into(), Role::Protocol(ProtocolRole::Model)),
     ]);
     assert_eq!(
         backend_core_paths(&graph, &roles, "backend"),
@@ -1032,10 +1343,22 @@ fn bluetooth_backend_core_edges_have_no_exemption() {
         ]),
     )]);
     let roles = BTreeMap::from([
-        ("oer-bluetooth-le-ll".into(), ProtocolRole::Core),
-        ("oer-bluetooth-hci".into(), ProtocolRole::Core),
-        ("oer-bluetooth-le-port".into(), ProtocolRole::Port),
-        ("oer-bluetooth-le-wire".into(), ProtocolRole::Wire),
+        (
+            "oer-bluetooth-le-ll".into(),
+            Role::Protocol(ProtocolRole::Core),
+        ),
+        (
+            "oer-bluetooth-hci".into(),
+            Role::Protocol(ProtocolRole::Core),
+        ),
+        (
+            "oer-bluetooth-le-port".into(),
+            Role::Protocol(ProtocolRole::Port),
+        ),
+        (
+            "oer-bluetooth-le-wire".into(),
+            Role::Protocol(ProtocolRole::Wire),
+        ),
     ]);
     assert_eq!(
         backend_core_paths(&graph, &roles, "oer-esp32s31-bluetooth-driver"),
@@ -1463,9 +1786,22 @@ fn path_attribute(attribute: &TokenStream) -> Option<String> {
     }
 }
 
+/// Whether an identifier marks waiting or sequencing for a scan.
+type Marker = dyn Fn(&str) -> bool;
+
 /// Production tokens of one module body: items configured for tests are
 /// skipped; out-of-line production modules are followed from `directory`.
-fn production_waiting(tokens: TokenStream, directory: &Path, file: &Path, found: &mut Vec<String>) {
+/// A `#[path]` at the top of a file is relative to the file's own directory,
+/// inside an inline module to that module's directory. Each identifier that
+/// `marker` accepts is reported with its file.
+fn production_markers(
+    tokens: TokenStream,
+    directory: &Path,
+    file: &Path,
+    top_level: bool,
+    marker: &Marker,
+    found: &mut Vec<String>,
+) {
     let tokens = tokens.into_iter().collect::<Vec<_>>();
     let mut index = 0;
     let mut attributes = Vec::new();
@@ -1480,6 +1816,15 @@ fn production_waiting(tokens: TokenStream, directory: &Path, file: &Path, found:
                     index += 1;
                     continue;
                 }
+            }
+            // A visibility keeps the item's attributes: `#[cfg(test)] pub mod`.
+            TokenTree::Ident(word) if word == "pub" => {
+                if let Some(TokenTree::Group(scope)) = tokens.get(index)
+                    && scope.delimiter() == Delimiter::Parenthesis
+                {
+                    index += 1;
+                }
+                continue;
             }
             TokenTree::Ident(word) if word == "mod" => {
                 let test = attributes.iter().any(test_only);
@@ -1496,22 +1841,27 @@ fn production_waiting(tokens: TokenStream, directory: &Path, file: &Path, found:
                 }
                 match body {
                     TokenTree::Group(inline) if inline.delimiter() == Delimiter::Brace => {
-                        production_waiting(
+                        production_markers(
                             inline.stream(),
                             &directory.join(name.to_string()),
                             file,
+                            false,
+                            marker,
                             found,
                         );
                     }
                     _ => {
                         let child = match path {
+                            Some(path) if top_level => {
+                                file.parent().unwrap_or(directory).join(path)
+                            }
                             Some(path) => directory.join(path),
                             None if directory.join(format!("{name}.rs")).is_file() => {
                                 directory.join(format!("{name}.rs"))
                             }
                             None => directory.join(name.to_string()).join("mod.rs"),
                         };
-                        production_file_waiting(&child, found);
+                        production_file_markers(&child, marker, found);
                     }
                 }
                 continue;
@@ -1534,27 +1884,22 @@ fn production_waiting(tokens: TokenStream, directory: &Path, file: &Path, found:
             continue;
         }
         attributes.clear();
-        waiting_tokens(token, file, found);
-    }
-}
-
-fn waiting_tokens(token: &TokenTree, file: &Path, found: &mut Vec<String>) {
-    match token {
-        TokenTree::Ident(word) if WAITING.contains(&word.to_string().as_str()) => {
-            found.push(format!("{}: {word}", file.display()));
-        }
-        TokenTree::Group(group) => {
-            for token in group.stream() {
-                waiting_tokens(&token, file, found);
+        match token {
+            TokenTree::Ident(word) if marker(&word.to_string()) => {
+                found.push(format!("{}: {word}", file.display()));
             }
+            // Item bodies (`impl`, `fn`, blocks) skip their test-only items too.
+            TokenTree::Group(group) => {
+                production_markers(group.stream(), directory, file, false, marker, found);
+            }
+            _ => {}
         }
-        _ => {}
     }
 }
 
 /// A module file: `lib.rs` and `mod.rs` own their directory; another file
 /// `name.rs` owns `name/`.
-fn production_file_waiting(file: &Path, found: &mut Vec<String>) {
+fn production_file_markers(file: &Path, marker: &Marker, found: &mut Vec<String>) {
     let tokens = std::fs::read_to_string(file)
         .ok()
         .and_then(|source| source.parse::<TokenStream>().ok());
@@ -1569,7 +1914,11 @@ fn production_file_waiting(file: &Path, found: &mut Vec<String>) {
     } else {
         parent.join(stem.as_ref())
     };
-    production_waiting(tokens, &directory, file, found);
+    production_markers(tokens, &directory, file, true, marker, found);
+}
+
+fn waiting(word: &str) -> bool {
+    WAITING.contains(&word)
 }
 
 #[test]
@@ -1580,7 +1929,7 @@ fn ieee80211_cores_never_wait_outside_their_tests() {
     for core in IEEE80211_SANS_IO_CORES {
         let manifest = packages.get(core).expect("the core is a workspace member");
         for crate_root in crate_roots(&root.join(core), manifest) {
-            production_file_waiting(&crate_root, &mut found);
+            production_file_markers(&crate_root, &waiting, &mut found);
         }
     }
     assert!(found.is_empty(), "a core waits: {found:?}");
@@ -1608,19 +1957,25 @@ pub const NAME: &str = "async";
     .expect("root");
     std::fs::write(
         source.join("machine.rs"),
-        "pub struct StaTxContext;\nmod inner { pub async fn wait() {} }\n",
+        "pub struct StaTxContext;\nmod inner { pub async fn wait() {} }\n#[path = \"beside.rs\"]\npub(crate) mod beside;\n#[cfg(test)]\npub mod checks { async fn f() {} }\nimpl StaTxContext {\n    #[cfg(test)]\n    pub(crate) fn fixture() { loop {} }\n    pub fn live(&self) -> Poll { todo!() }\n}\n",
     )
     .expect("module");
+    std::fs::write(source.join("beside.rs"), "pub fn poll_beside() -> Poll {}")
+        .expect("module beside its parent");
     std::fs::write(
         source.join("tests.rs"),
         "fn poll() -> core::task::Poll<()> { core::task::Poll::Pending }",
     )
     .expect("tests");
     let mut found = Vec::new();
-    production_file_waiting(&source.join("lib.rs"), &mut found);
+    production_file_markers(&source.join("lib.rs"), &waiting, &mut found);
     assert_eq!(
         found,
-        [format!("{}: async", source.join("machine.rs").display())]
+        [
+            format!("{}: async", source.join("machine.rs").display()),
+            format!("{}: Poll", source.join("beside.rs").display()),
+            format!("{}: Poll", source.join("machine.rs").display()),
+        ]
     );
 }
 
@@ -2011,5 +2366,1208 @@ fn a_deviation_list_fails_on_a_new_edge_and_on_an_edge_that_is_gone() {
     assert_eq!(
         deviation_differences(&BTreeSet::from([edge("a", "b"), edge("e", "f")]), known),
         ["new: e -> f", "gone, drop the entry: c -> d"]
+    );
+}
+
+/// A chip or HIL package's direct normal dependency that its role does not
+/// allow ([`role_allows`]). A package without a role fails
+/// `every_chip_and_hil_package_has_a_listed_role` instead.
+fn outside_its_role(from: &Member, to: &Member) -> bool {
+    match (role(&from.path), role(&to.path)) {
+        (Some(from_role), Some(to_role)) => !role_allows(from_role, to_role, &to.path),
+        _ => false,
+    }
+}
+
+/// Direct normal edges against [`role_allows`], with what removes each.
+const OUTSIDE_THE_ROLES: &[Deviation] = &[
+    (
+        "chips/esp32s31/hal",
+        "protocols/radio/coex",
+        "radio/coex merges into the HAL (#848)",
+    ),
+    (
+        "chips/esp32s31/ieee80211/driver",
+        "chips/espressif/staged-runtime",
+        "driver trace through the observer contract (#848)",
+    ),
+    (
+        "chips/esp32s31/ieee802154/driver",
+        "portable/mmio",
+        "IEEE 802.15.4 lifecycle out of the HAL (#848)",
+    ),
+    (
+        "chips/esp32s31/pac",
+        "chips/espressif/analog",
+        "analog-I2C model types out of the family driver (#848)",
+    ),
+    (
+        "firmware/hil/esp32s31",
+        "chips/esp32s31/hal",
+        "the Wi-Fi station image on the facade and compose (#848)",
+    ),
+    (
+        "firmware/hil/esp32s31",
+        "chips/esp32s31/ieee80211/driver",
+        "the Wi-Fi station image on the facade and compose (#848)",
+    ),
+    (
+        "firmware/hil/esp32s31",
+        "chips/esp32s31/ieee80211/mac",
+        "the Wi-Fi station image on the facade and compose (#848)",
+    ),
+    (
+        "firmware/hil/esp32s31",
+        "chips/esp32s31/phy",
+        "the Wi-Fi station image on the facade and compose (#848)",
+    ),
+    (
+        "firmware/hil/esp32s31",
+        "chips/esp32s31/radio/client",
+        "the Wi-Fi station image on the facade and compose (#848)",
+    ),
+    (
+        "firmware/hil/esp32s31",
+        "chips/esp32s31/radio/system",
+        "the Wi-Fi station image on the facade and compose (#848)",
+    ),
+    (
+        "firmware/hil/esp32s31",
+        "chips/espressif/coex",
+        "the Wi-Fi station image on the facade and compose (#848)",
+    ),
+    (
+        "firmware/hil/esp32s31",
+        "chips/espressif/ieee80211-policy",
+        "the Wi-Fi station image on the facade and compose (#848)",
+    ),
+    (
+        "firmware/hil/esp32s31",
+        "chips/espressif/usb-serial-jtag",
+        "the Wi-Fi station image on the facade and compose (#848)",
+    ),
+    (
+        "firmware/hil/esp32s31",
+        "firmware/apps/w3",
+        "the Wi-Fi station image on the facade and compose (#848)",
+    ),
+    (
+        "firmware/hil/esp32s31",
+        "portable/riscv",
+        "the Wi-Fi station image on the facade and compose (#848)",
+    ),
+    (
+        "firmware/hil/esp32s31",
+        "protocols/ieee80211/arbiter",
+        "the Wi-Fi station image on the facade and compose (#848)",
+    ),
+    (
+        "firmware/hil/esp32s31",
+        "protocols/ieee80211/cipher",
+        "the Wi-Fi station image on the facade and compose (#848)",
+    ),
+    (
+        "firmware/hil/esp32s31",
+        "protocols/ieee80211/port",
+        "the Wi-Fi station image on the facade and compose (#848)",
+    ),
+    (
+        "firmware/hil/esp32s31",
+        "protocols/ieee80211/rsn",
+        "the Wi-Fi station image on the facade and compose (#848)",
+    ),
+    (
+        "firmware/hil/esp32s31",
+        "protocols/ieee80211/runtime",
+        "the Wi-Fi station image on the facade and compose (#848)",
+    ),
+    (
+        "firmware/hil/esp32s31",
+        "protocols/ieee80211/sta",
+        "the Wi-Fi station image on the facade and compose (#848)",
+    ),
+    (
+        "firmware/hil/esp32s31",
+        "protocols/ieee80211/upper-mac",
+        "the Wi-Fi station image on the facade and compose (#848)",
+    ),
+    (
+        "firmware/hil/esp32s31",
+        "protocols/ieee80211/wire",
+        "the Wi-Fi station image on the facade and compose (#848)",
+    ),
+    (
+        "firmware/hil/esp32s31",
+        "protocols/radio/port",
+        "the Wi-Fi station image on the facade and compose (#848)",
+    ),
+    (
+        "firmware/hil/esp32s31",
+        "protocols/radio/regulatory",
+        "the Wi-Fi station image on the facade and compose (#848)",
+    ),
+    (
+        "firmware/hil/esp32s31-lower-mac",
+        "chips/esp32s31/hal",
+        "the lower-MAC conformance image (#848)",
+    ),
+    (
+        "firmware/hil/esp32s31-lower-mac",
+        "chips/esp32s31/ieee80211/driver",
+        "the lower-MAC conformance image (#848)",
+    ),
+    (
+        "firmware/hil/esp32s31-lower-mac",
+        "chips/esp32s31/ieee80211/mac",
+        "the lower-MAC conformance image (#848)",
+    ),
+    (
+        "firmware/hil/esp32s31-lower-mac",
+        "chips/esp32s31/phy",
+        "the lower-MAC conformance image (#848)",
+    ),
+    (
+        "firmware/hil/esp32s31-lower-mac",
+        "chips/esp32s31/radio/client",
+        "the lower-MAC conformance image (#848)",
+    ),
+    (
+        "firmware/hil/esp32s31-lower-mac",
+        "chips/esp32s31/radio/system",
+        "the lower-MAC conformance image (#848)",
+    ),
+    (
+        "firmware/hil/esp32s31-lower-mac",
+        "chips/espressif/coex",
+        "the lower-MAC conformance image (#848)",
+    ),
+    (
+        "firmware/hil/esp32s31-lower-mac",
+        "chips/espressif/ieee80211-policy",
+        "the lower-MAC conformance image (#848)",
+    ),
+    (
+        "firmware/hil/esp32s31-lower-mac",
+        "chips/espressif/usb-serial-jtag",
+        "the lower-MAC conformance image (#848)",
+    ),
+    (
+        "firmware/hil/esp32s31-lower-mac",
+        "protocols/ieee80211/port",
+        "the lower-MAC conformance image (#848)",
+    ),
+    (
+        "firmware/hil/esp32s31-lower-mac",
+        "protocols/ieee80211/runtime",
+        "the lower-MAC conformance image (#848)",
+    ),
+    (
+        "firmware/hil/esp32s31-lower-mac",
+        "protocols/ieee80211/upper-mac",
+        "the lower-MAC conformance image (#848)",
+    ),
+    (
+        "firmware/hil/esp32s31-lower-mac",
+        "protocols/ieee80211/wire",
+        "the lower-MAC conformance image (#848)",
+    ),
+    (
+        "firmware/hil/esp32s31-lower-mac",
+        "protocols/radio/port",
+        "the lower-MAC conformance image (#848)",
+    ),
+    (
+        "firmware/hil/esp32s31-lower-mac",
+        "protocols/radio/regulatory",
+        "the lower-MAC conformance image (#848)",
+    ),
+    (
+        "firmware/hil/esp32s31-phy",
+        "chips/esp32s31/hal",
+        "the PHY capture probe and instrumentation (#848)",
+    ),
+    (
+        "firmware/hil/esp32s31-phy",
+        "chips/esp32s31/ieee80211/driver",
+        "the PHY capture probe and instrumentation (#848)",
+    ),
+    (
+        "firmware/hil/esp32s31-phy",
+        "chips/esp32s31/ieee80211/mac",
+        "the PHY capture probe and instrumentation (#848)",
+    ),
+    (
+        "firmware/hil/esp32s31-phy",
+        "chips/esp32s31/ieee802154/driver",
+        "the PHY capture probe and instrumentation (#848)",
+    ),
+    (
+        "firmware/hil/esp32s31-phy",
+        "chips/esp32s31/knowledge",
+        "the PHY capture probe and instrumentation (#848)",
+    ),
+    (
+        "firmware/hil/esp32s31-phy",
+        "chips/esp32s31/phy",
+        "the PHY capture probe and instrumentation (#848)",
+    ),
+    (
+        "firmware/hil/esp32s31-phy",
+        "chips/espressif/ieee802154-engine",
+        "the PHY capture probe and instrumentation (#848)",
+    ),
+    (
+        "firmware/hil/esp32s31-phy",
+        "chips/espressif/ieee802154-mac-values",
+        "the PHY capture probe and instrumentation (#848)",
+    ),
+    (
+        "firmware/hil/esp32s31-phy",
+        "chips/espressif/usb-serial-jtag",
+        "the PHY capture probe and instrumentation (#848)",
+    ),
+    (
+        "firmware/hil/esp32s31-phy",
+        "portable/riscv",
+        "the PHY capture probe and instrumentation (#848)",
+    ),
+    (
+        "firmware/hil/esp32s31-phy",
+        "protocols/ieee80211/wire",
+        "the PHY capture probe and instrumentation (#848)",
+    ),
+    (
+        "firmware/hil/esp32s31-phy",
+        "protocols/radio/regulatory",
+        "the PHY capture probe and instrumentation (#848)",
+    ),
+    (
+        "protocols/hil/protocol",
+        "protocols/ieee80211/port",
+        "dictionaries move into their bindings (#848)",
+    ),
+    (
+        "protocols/hil/protocol",
+        "protocols/ieee80211/wire",
+        "dictionaries move into their bindings (#848)",
+    ),
+];
+
+#[test]
+fn every_chip_and_hil_package_depends_only_on_what_its_role_allows() {
+    let found = forbidden_edges(&workspace_members(), outside_its_role);
+    let differences = deviation_differences(&found, OUTSIDE_THE_ROLES);
+    assert!(differences.is_empty(), "{}", differences.join("\n"));
+}
+
+/// A role's allowed and forbidden direct dependencies: `(dependency role,
+/// dependency path, allowed)`.
+type RoleCases = &'static [(Role, &'static str, bool)];
+
+fn assert_role_cases(from: Role, cases: RoleCases) {
+    for (to, path, allowed) in cases {
+        assert_eq!(
+            role_allows(from, *to, path),
+            *allowed,
+            "{from:?} -> {to:?} ({path})"
+        );
+    }
+}
+
+const PROTOCOL_CORE: Role = Role::Protocol(ProtocolRole::Core);
+const PROTOCOL_RUNTIME: Role = Role::Protocol(ProtocolRole::Runtime);
+const PROTOCOL_PORT: Role = Role::Protocol(ProtocolRole::Port);
+const PROTOCOL_WIRE: Role = Role::Protocol(ProtocolRole::Wire);
+
+#[test]
+fn facts_pac_and_platform_contracts_stand_on_values_alone() {
+    assert_role_cases(
+        Role::Facts,
+        &[
+            (Role::Facts, "chips/espressif/facts", true),
+            (Role::SharedVocabulary, "protocols/radio/regulatory", true),
+            (Role::Portable, "portable/memory", true),
+            (Role::Hal, "chips/esp32s31/hal", false),
+            (Role::HardwareDriver, "chips/espressif/analog", false),
+            (PROTOCOL_PORT, "protocols/ieee802154/port", false),
+        ],
+    );
+    assert_role_cases(
+        Role::Pac,
+        &[
+            (Role::HardwareAccess, "portable/mmio", true),
+            (Role::Facts, "chips/esp32s31/knowledge", true),
+            (Role::HardwareDriver, "chips/espressif/analog", false),
+            (Role::Hal, "chips/esp32s31/hal", false),
+        ],
+    );
+    assert_role_cases(
+        Role::PlatformContract,
+        &[
+            (Role::HardwareAccess, "portable/riscv", true),
+            (
+                Role::PlatformContract,
+                "chips/espressif/staged-layout",
+                true,
+            ),
+            (Role::Platform, "chips/espressif/staged-runtime", false),
+            (Role::Hal, "chips/esp32s31/hal", false),
+        ],
+    );
+}
+
+#[test]
+fn the_hal_implements_family_ports_and_runs_no_chip_driver_or_protocol() {
+    assert_role_cases(
+        Role::Hal,
+        &[
+            (Role::Pac, "chips/esp32s31/pac", true),
+            (
+                Role::PlatformContract,
+                "chips/espressif/platform-port",
+                true,
+            ),
+            (Role::HardwareDriver, "chips/espressif/boot", true),
+            (Role::HardwareDriver, "chips/esp32s31/phy", false),
+            (Role::ChipAdapter, "chips/esp32s31/ieee80211/driver", false),
+            (Role::Service, "chips/esp32s31/radio/system", false),
+            (Role::Platform, "chips/espressif/staged-runtime", false),
+            (Role::SharedVocabulary, "protocols/radio/coex", false),
+            (PROTOCOL_PORT, "protocols/ieee80211/port", false),
+        ],
+    );
+}
+
+#[test]
+fn drivers_and_adapters_stand_on_the_hal_and_the_port_never_above_it() {
+    let below = [
+        (Role::Hal, "chips/esp32s31/hal", true),
+        (Role::HardwareDriver, "chips/espressif/analog", true),
+        (
+            Role::PlatformContract,
+            "chips/espressif/interrupt-table",
+            true,
+        ),
+        (
+            Role::ObservationContract,
+            "protocols/ieee80211/instrumentation",
+            true,
+        ),
+        (PROTOCOL_PORT, "protocols/ieee80211/port", true),
+        (PROTOCOL_WIRE, "protocols/ieee80211/wire", true),
+        (PROTOCOL_CORE, "protocols/ieee80211/sta", false),
+        (PROTOCOL_RUNTIME, "protocols/ieee80211/runtime", false),
+        (
+            Role::CoreSidePolicy,
+            "chips/espressif/ieee80211-policy",
+            false,
+        ),
+        (Role::Pac, "chips/esp32s31/pac", false),
+        (Role::HardwareAccess, "portable/mmio", false),
+        (Role::Platform, "chips/espressif/staged-runtime", false),
+        (Role::Service, "chips/esp32s31/radio/system", false),
+        (Role::Composition, "chips/esp32s31/compose", false),
+        (Role::Facade, "chips/esp32s31/wifi", false),
+        (Role::HilAgent, "protocols/hil/agent", false),
+    ];
+    for from in [
+        Role::HardwareDriver,
+        Role::ChipAdapter,
+        Role::ServiceClient,
+        Role::Service,
+    ] {
+        for (to, path, allowed) in below {
+            assert_eq!(role_allows(from, to, path), allowed, "{from:?} -> {path}");
+        }
+    }
+    for (from, allowed) in [
+        (Role::HardwareDriver, false),
+        (Role::ChipAdapter, true),
+        (Role::ServiceClient, false),
+        (Role::Service, true),
+    ] {
+        assert_eq!(
+            role_allows(from, Role::ServiceClient, "chips/esp32s31/radio/client"),
+            allowed,
+            "{from:?}"
+        );
+    }
+    assert!(role_allows(
+        Role::ChipAdapter,
+        Role::ChipAdapter,
+        "chips/esp32s31/ieee80211/mac"
+    ));
+    assert!(!role_allows(
+        Role::Service,
+        Role::ChipAdapter,
+        "chips/esp32s31/ieee80211/driver"
+    ));
+}
+
+#[test]
+fn core_side_policy_stays_with_the_cores_and_the_platform_reaches_no_chip_hal() {
+    assert_role_cases(
+        Role::CoreSidePolicy,
+        &[
+            (PROTOCOL_CORE, "protocols/ieee80211/upper-mac", true),
+            (PROTOCOL_RUNTIME, "protocols/ieee80211/runtime", false),
+            (Role::Hal, "chips/esp32s31/hal", false),
+        ],
+    );
+    assert_role_cases(
+        Role::Platform,
+        &[
+            (
+                Role::PlatformContract,
+                "chips/espressif/platform-port",
+                true,
+            ),
+            (Role::HardwareDriver, "chips/espressif/boot", true),
+            (Role::HardwareDriver, "chips/esp32s31/phy", false),
+            (Role::Hal, "chips/esp32s31/hal", false),
+            (Role::ChipAdapter, "chips/esp32s31/ieee80211/driver", false),
+            (PROTOCOL_PORT, "protocols/ieee80211/port", false),
+        ],
+    );
+}
+
+#[test]
+fn only_a_composition_and_a_facade_assemble_runtimes_and_backends() {
+    for from in [Role::Composition, Role::Facade] {
+        assert_role_cases(
+            from,
+            &[
+                (PROTOCOL_RUNTIME, "protocols/ieee80211/runtime", true),
+                (PROTOCOL_CORE, "protocols/ieee80211/sta", true),
+                (Role::ChipAdapter, "chips/esp32s31/ieee80211/driver", true),
+                (Role::Service, "chips/esp32s31/radio/system", true),
+                (Role::Platform, "chips/espressif/executor", true),
+                (Role::Pac, "chips/esp32s31/pac", false),
+                (Role::HilAgent, "protocols/hil/agent", false),
+                (Role::HilImage, "firmware/hil/esp32s31", false),
+                (Role::Image, "firmware/apps/w3", false),
+            ],
+        );
+        assert!(!keeps_the_backend_rule(from), "{from:?}");
+    }
+    assert!(role_allows(
+        Role::Facade,
+        Role::Composition,
+        "chips/esp32s31/compose"
+    ));
+    assert!(!role_allows(
+        Role::Composition,
+        Role::Facade,
+        "chips/esp32s31/wifi"
+    ));
+    for keeps in [
+        Role::Facts,
+        Role::Pac,
+        Role::Hal,
+        Role::HardwareDriver,
+        Role::ChipAdapter,
+        Role::ServiceClient,
+        Role::Service,
+        Role::PlatformContract,
+        Role::Platform,
+        Role::ObservationContract,
+        Role::Protocol(ProtocolRole::Model),
+    ] {
+        assert!(keeps_the_backend_rule(keeps), "{keeps:?}");
+    }
+    let roles = BTreeMap::from([
+        ("adapter".into(), Role::ChipAdapter),
+        ("driver".into(), Role::HardwareDriver),
+        ("facade".into(), Role::Facade),
+        ("runtime".into(), PROTOCOL_RUNTIME),
+    ]);
+    let graph = BTreeMap::from([
+        ("adapter".into(), BTreeSet::from(["driver".into()])),
+        ("driver".into(), BTreeSet::from(["runtime".into()])),
+        (
+            "facade".into(),
+            BTreeSet::from(["adapter".into(), "runtime".into()]),
+        ),
+    ]);
+    let violations = roles
+        .iter()
+        .filter(|(_, role)| keeps_the_backend_rule(**role))
+        .flat_map(|(name, _)| backend_core_paths(&graph, &roles, name))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        violations,
+        ["adapter -> driver -> runtime", "driver -> runtime"]
+    );
+}
+
+#[test]
+fn an_observation_contract_names_values_and_no_owner() {
+    assert_role_cases(
+        Role::ObservationContract,
+        &[
+            (Role::Portable, "portable/trace", true),
+            (PROTOCOL_WIRE, "protocols/ieee80211/wire", true),
+            (PROTOCOL_CORE, "protocols/ieee80211/sta", false),
+            (PROTOCOL_RUNTIME, "protocols/ieee80211/runtime", false),
+            (Role::Hal, "chips/esp32s31/hal", false),
+            (Role::ChipAdapter, "chips/esp32s31/ieee80211/driver", false),
+            (Role::Platform, "chips/espressif/staged-runtime", false),
+        ],
+    );
+}
+
+#[test]
+fn hil_roles_keep_radio_out_of_the_framework_and_images_behind_the_facade() {
+    assert_role_cases(
+        Role::HilProtocol,
+        &[
+            (Role::Portable, "portable/memory", true),
+            (PROTOCOL_PORT, "protocols/ieee80211/port", false),
+            (Role::EmbassyAdapter, "portable/embassy/net", false),
+            (Role::Hal, "chips/esp32s31/hal", false),
+        ],
+    );
+    assert_role_cases(
+        Role::HilAgent,
+        &[
+            (Role::HilProtocol, "protocols/hil/protocol", true),
+            (Role::Portable, "portable/diagnostics", true),
+            (PROTOCOL_WIRE, "protocols/ieee80211/wire", false),
+            (Role::ChipAdapter, "chips/esp32s31/ieee80211/driver", false),
+            (Role::HardwareAccess, "portable/mmio", false),
+        ],
+    );
+    assert_role_cases(
+        Role::HilBinding,
+        &[
+            (Role::HilAgent, "protocols/hil/agent", true),
+            (Role::Facade, "chips/esp32s31/wifi", true),
+            (PROTOCOL_RUNTIME, "protocols/ieee80211/runtime", true),
+            (Role::Portable, "portable/memory", true),
+            (Role::Portable, "portable/time", false),
+            (Role::EmbassyAdapter, "portable/embassy/time", false),
+            (Role::Hal, "chips/esp32s31/hal", false),
+            (Role::ChipAdapter, "chips/esp32s31/ieee80211/driver", false),
+        ],
+    );
+    assert_role_cases(
+        Role::HilImage,
+        &[
+            (Role::Composition, "chips/esp32s31/compose", true),
+            (Role::Facade, "chips/esp32s31/wifi", true),
+            (Role::HilBinding, "protocols/ieee80211/hil", true),
+            (Role::Platform, "chips/espressif/executor", true),
+            (Role::EmbassyAdapter, "portable/embassy/net", true),
+            (
+                Role::ObservationContract,
+                "protocols/ieee80211/instrumentation",
+                true,
+            ),
+            (Role::Hal, "chips/esp32s31/hal", false),
+            (Role::Pac, "chips/esp32s31/pac", false),
+            (Role::HardwareDriver, "chips/esp32s31/phy", false),
+            (Role::ChipAdapter, "chips/esp32s31/ieee80211/driver", false),
+            (Role::Service, "chips/esp32s31/radio/system", false),
+            (PROTOCOL_CORE, "protocols/ieee80211/sta", false),
+            (PROTOCOL_PORT, "protocols/ieee80211/port", false),
+            (PROTOCOL_WIRE, "protocols/ieee80211/wire", false),
+            (Role::Image, "firmware/apps/w3", false),
+        ],
+    );
+}
+
+#[test]
+fn the_role_rule_judges_listed_packages_by_their_optional_target_and_aliased_edges() {
+    let manifest = |dependencies: &str| -> BTreeSet<String> {
+        let manifest: toml::Value = toml::from_str(dependencies).expect("manifest");
+        let workspace: toml::Value = toml::from_str("[dependencies]").expect("workspace");
+        normal_dependencies(&manifest, &workspace)
+    };
+    let members = [
+        Member {
+            dependencies: manifest(
+                r#"
+[dependencies]
+pac = { package = "oer-esp32s31-pac", version = "1" }
+[target.'cfg(target_arch = "riscv32")'.dependencies]
+phy = { package = "oer-esp32s31-phy", version = "1", optional = true }
+[dev-dependencies]
+adapter = { package = "oer-esp32s31-ieee80211-driver", version = "1" }
+"#,
+            ),
+            ..member("chips/esp32s31/hal", "oer-esp32s31-hal", false, &[])
+        },
+        member("chips/esp32s31/pac", "oer-esp32s31-pac", false, &[]),
+        member("chips/esp32s31/phy", "oer-esp32s31-phy", false, &[]),
+        member(
+            "chips/esp32s31/ieee80211/driver",
+            "oer-esp32s31-ieee80211-driver",
+            false,
+            &["oer-ieee80211-runtime", "oer-esp32s31-phy"],
+        ),
+        member(
+            "protocols/ieee80211/runtime",
+            "oer-ieee80211-runtime",
+            false,
+            &[],
+        ),
+        member(
+            "chips/esp32s31/wifi",
+            "oer-esp32s31-wifi",
+            false,
+            &["oer-ieee80211-runtime", "oer-esp32s31-ieee80211-driver"],
+        ),
+        member(
+            "firmware/hil/esp32s31",
+            "oer-firmware-hil-esp32s31",
+            true,
+            &["oer-esp32s31-wifi", "oer-esp32s31-hal"],
+        ),
+        // A package without a listed role is the completeness rule's failure,
+        // not an allowed edge.
+        member(
+            "chips/esp32s31/unlisted",
+            "oer-esp32s31-unlisted",
+            false,
+            &["oer-ieee80211-runtime"],
+        ),
+    ];
+    let edge = |from: &str, to: &str| (from.to_owned(), to.to_owned());
+    assert_eq!(
+        forbidden_edges(&members, outside_its_role),
+        BTreeSet::from([
+            edge("chips/esp32s31/hal", "chips/esp32s31/phy"),
+            edge(
+                "chips/esp32s31/ieee80211/driver",
+                "protocols/ieee80211/runtime"
+            ),
+            edge("firmware/hil/esp32s31", "chips/esp32s31/hal"),
+        ])
+    );
+}
+
+/// The host HIL families and the vendor PHY tools, which link no HAL and no
+/// PAC (`docs/repository-layout.md`, HIL).
+fn host_family(path: &str) -> bool {
+    path.starts_with("tools/hil/family-") || path.starts_with("tools/vendor/phy")
+}
+
+fn hal_or_pac(roles: &BTreeMap<String, Role>, name: &str) -> bool {
+    matches!(roles.get(name), Some(Role::Hal | Role::Pac))
+}
+
+#[test]
+fn host_families_link_no_hal_or_pac() {
+    let graph = workspace_dependency_graph();
+    let roles = workspace_roles();
+    let families = workspace_package_paths()
+        .into_iter()
+        .filter(|(_, path)| host_family(path))
+        .collect::<Vec<_>>();
+    assert!(!families.is_empty(), "the host families are read");
+    let violations = families
+        .iter()
+        .flat_map(|(name, _)| forbidden_paths(&graph, name, |name| hal_or_pac(&roles, name)))
+        .collect::<Vec<_>>();
+    assert!(violations.is_empty(), "{violations:?}");
+}
+
+#[test]
+fn the_host_family_rule_finds_a_transitive_hal() {
+    let roles = BTreeMap::from([
+        ("oer-esp32s31-hal".into(), Role::Hal),
+        ("oer-esp32s31-knowledge".into(), Role::Facts),
+    ]);
+    let graph = BTreeMap::from([
+        (
+            "family".into(),
+            BTreeSet::from(["helper".into(), "oer-esp32s31-knowledge".into()]),
+        ),
+        ("helper".into(), BTreeSet::from(["oer-esp32s31-hal".into()])),
+    ]);
+    assert_eq!(
+        forbidden_paths(&graph, "family", |name| hal_or_pac(&roles, name)),
+        ["family -> helper -> oer-esp32s31-hal"]
+    );
+    assert!(host_family("tools/hil/family-wifi"));
+    assert!(host_family("tools/vendor/phy-esp32s31"));
+    assert!(!host_family("tools/hil/runner"));
+}
+
+/// A source file outside `firmware/` that includes an image source through
+/// `#[path]`: the including file and the included file, below the root.
+type Inclusion = (String, String);
+
+/// Each `#[path = "..."]` in the tokens of `file` that resolves into
+/// `firmware/` below `root`, at any nesting depth.
+fn firmware_paths(tokens: TokenStream, root: &Path, file: &Path, found: &mut BTreeSet<Inclusion>) {
+    let mut previous_hash = false;
+    for token in tokens {
+        let hash = matches!(&token, TokenTree::Punct(hash) if hash.as_char() == '#');
+        let after_hash = core::mem::replace(&mut previous_hash, hash);
+        let TokenTree::Group(group) = token else {
+            continue;
+        };
+        let attribute = after_hash && group.delimiter() == Delimiter::Bracket;
+        if let Some(path) = attribute.then(|| path_attribute(&group.stream())).flatten() {
+            let mut resolved = PathBuf::new();
+            for component in file.parent().unwrap_or(root).join(&path).components() {
+                match component {
+                    std::path::Component::ParentDir => {
+                        resolved.pop();
+                    }
+                    std::path::Component::CurDir => {}
+                    other => resolved.push(other),
+                }
+            }
+            if let (Ok(including), Ok(included)) = (
+                file.strip_prefix(root),
+                resolved.strip_prefix(root.join("firmware")),
+            ) {
+                found.insert((
+                    including.display().to_string(),
+                    Path::new("firmware").join(included).display().to_string(),
+                ));
+            }
+        } else {
+            firmware_paths(group.stream(), root, file, found);
+        }
+    }
+}
+
+/// The inclusions of image sources in the Rust files below `directory`; an
+/// unreadable entry or a file that does not tokenize is an error.
+fn firmware_inclusions(
+    root: &Path,
+    directory: &Path,
+    found: &mut BTreeSet<Inclusion>,
+) -> Result<(), String> {
+    let entries = std::fs::read_dir(directory)
+        .map_err(|error| format!("{}: {error}", directory.display()))?;
+    for entry in entries {
+        let path = entry
+            .map_err(|error| format!("{}: {error}", directory.display()))?
+            .path();
+        let name = path
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned());
+        if path.is_dir() {
+            if ![".git", "target"].contains(&name.as_deref().unwrap_or_default()) {
+                firmware_inclusions(root, &path, found)?;
+            }
+            continue;
+        }
+        if path.extension().is_none_or(|extension| extension != "rs") {
+            continue;
+        }
+        let source = std::fs::read_to_string(&path)
+            .map_err(|error| format!("{}: {error}", path.display()))?;
+        if !source.contains("firmware") {
+            continue;
+        }
+        let tokens = source
+            .parse::<TokenStream>()
+            .map_err(|error| format!("{} does not tokenize: {error}", path.display()))?;
+        firmware_paths(tokens, root, &path, found);
+    }
+    Ok(())
+}
+
+/// Image sources that a package outside `firmware/` includes through
+/// `#[path]`, with what removes each.
+const FIRMWARE_SOURCES_INCLUDED: &[Deviation] = &[
+    (
+        "tools/image/cli/src/main.rs",
+        "firmware/apps/w1/src/own/crc32.rs",
+        "the W1 image removal (#848)",
+    ),
+    (
+        "tools/vendor/phy/tests/hold_observer.rs",
+        "firmware/hil/esp32s31-phy/src/hold/metrics.rs",
+        "hold and cache modules out of the PHY image (#848)",
+    ),
+    (
+        "tools/vendor/phy/tests/hold_observer.rs",
+        "firmware/hil/esp32s31-phy/src/hold/notes.rs",
+        "hold and cache modules out of the PHY image (#848)",
+    ),
+    (
+        "tools/vendor/phy/tests/hold_observer.rs",
+        "firmware/hil/esp32s31-phy/src/hold/observer.rs",
+        "hold and cache modules out of the PHY image (#848)",
+    ),
+    (
+        "tools/vendor/phy/tests/hold_observer.rs",
+        "firmware/hil/esp32s31-phy/src/hold/recorder.rs",
+        "hold and cache modules out of the PHY image (#848)",
+    ),
+    (
+        "tools/vendor/phy/tests/hold_observer.rs",
+        "firmware/hil/esp32s31-phy/src/hold/sar_tails.rs",
+        "hold and cache modules out of the PHY image (#848)",
+    ),
+    (
+        "tools/vendor/phy/tests/hold_recorder.rs",
+        "firmware/hil/esp32s31-phy/src/hold/recorder.rs",
+        "hold and cache modules out of the PHY image (#848)",
+    ),
+    (
+        "tools/vendor/phy/tests/target_cache.rs",
+        "firmware/hil/esp32s31-phy/src/cache.rs",
+        "hold and cache modules out of the PHY image (#848)",
+    ),
+];
+
+#[test]
+fn no_package_outside_firmware_includes_an_image_source() {
+    let root = root();
+    let mut found = BTreeSet::new();
+    for directory in ["protocols", "portable", "chips", "tools"] {
+        firmware_inclusions(&root, &root.join(directory), &mut found)
+            .expect("the sources are readable");
+    }
+    let differences = deviation_differences(&found, FIRMWARE_SOURCES_INCLUDED);
+    assert!(differences.is_empty(), "{}", differences.join("\n"));
+}
+
+#[test]
+fn the_inclusion_scan_resolves_nested_path_attributes_into_firmware() {
+    let directory = tempfile::tempdir().expect("temporary directory");
+    let root = directory.path();
+    let tests = root.join("tools/example/tests");
+    std::fs::create_dir_all(&tests).expect("test directory");
+    std::fs::write(
+        tests.join("cases.rs"),
+        r##"
+#[path = "../../../firmware/hil/image/src/cache.rs"]
+mod cache;
+mod nested {
+    #[path = "../../../firmware/apps/w1/src/crc.rs"]
+    mod crc;
+}
+#[path = "../src/helper.rs"]
+mod helper;
+// #[path = "../../../firmware/apps/w1/src/comment.rs"]
+const TEXT: &str = "#[path = \"../../../firmware/apps/w1/src/string.rs\"]";
+"##,
+    )
+    .expect("source");
+    let mut found = BTreeSet::new();
+    firmware_inclusions(root, &root.join("tools"), &mut found).expect("the sources are readable");
+    let inclusion = |included: &str| {
+        (
+            "tools/example/tests/cases.rs".to_owned(),
+            included.to_owned(),
+        )
+    };
+    assert_eq!(
+        found,
+        BTreeSet::from([
+            inclusion("firmware/apps/w1/src/crc.rs"),
+            inclusion("firmware/hil/image/src/cache.rs"),
+        ])
+    );
+}
+
+/// Whether an identifier in HAL production code marks waiting or
+/// sequencing: an asynchronous item, task polling, an unconditional `loop`,
+/// a spin, a deadline, a boot wait or a time instant. `while` is not a
+/// marker: const functions iterate with it.
+fn hal_sequence_marker(word: &str) -> bool {
+    [
+        "async",
+        "await",
+        "Poll",
+        "Waker",
+        "poll_fn",
+        "loop",
+        "spin_loop",
+        "Instant",
+        "BootWait",
+    ]
+    .contains(&word)
+        || word.to_ascii_lowercase().contains("deadline")
+}
+
+/// The HAL production files that still hold driver code, with their exact
+/// marker counts. The list only shrinks: a lower count lowers its entry, and
+/// a file without markers leaves it. No new file belongs here.
+const HAL_SEQUENCES: &[(&str, usize)] = &[
+    ("chips/esp32s31/hal/src/bluetooth.rs", 10),
+    ("chips/esp32s31/hal/src/bluetooth/engine/lease.rs", 4),
+    ("chips/esp32s31/hal/src/bluetooth/engine/live.rs", 27),
+    ("chips/esp32s31/hal/src/bluetooth/engine/owner.rs", 6),
+    (
+        "chips/esp32s31/hal/src/bluetooth/engine/scheduler/hardware.rs",
+        13,
+    ),
+    (
+        "chips/esp32s31/hal/src/bluetooth/engine/scheduler/hardware/live.rs",
+        17,
+    ),
+    (
+        "chips/esp32s31/hal/src/bluetooth/engine/scheduler/interrupt.rs",
+        45,
+    ),
+    (
+        "chips/esp32s31/hal/src/bluetooth/engine/scheduler/timing.rs",
+        1,
+    ),
+    (
+        "chips/esp32s31/hal/src/bluetooth/registers/modem_timer.rs",
+        10,
+    ),
+    (
+        "chips/esp32s31/hal/src/bluetooth/scheduler_execution_lock.rs",
+        11,
+    ),
+    (
+        "chips/esp32s31/hal/src/bluetooth/scheduler_execution_modify.rs",
+        26,
+    ),
+    ("chips/esp32s31/hal/src/bluetooth/scheduler_stop.rs", 12),
+    ("chips/esp32s31/hal/src/boot.rs", 19),
+    ("chips/esp32s31/hal/src/boot/brownout.rs", 7),
+    ("chips/esp32s31/hal/src/boot/clock/lp_fast.rs", 10),
+    ("chips/esp32s31/hal/src/boot/psram.rs", 3),
+    ("chips/esp32s31/hal/src/boot/soc.rs", 7),
+    ("chips/esp32s31/hal/src/ieee80211/init.rs", 5),
+    ("chips/esp32s31/hal/src/ieee80211/init/cold/handshake.rs", 8),
+    ("chips/esp32s31/hal/src/phy/delay.rs", 1),
+    ("chips/esp32s31/hal/src/phy/i2c.rs", 5),
+    ("chips/esp32s31/hal/src/platform.rs", 2),
+];
+
+/// The change that moves the driver code out of each HAL module, by path
+/// prefix below `chips/esp32s31/hal/src/`.
+const HAL_SEQUENCE_REMOVAL: &[(&str, &str)] = &[
+    (
+        "bluetooth",
+        "Bluetooth controller driver out of the HAL (#848)",
+    ),
+    (
+        "boot",
+        "boot block drivers and the cold-start sequence (#848)",
+    ),
+    (
+        "ieee80211",
+        "Wi-Fi hardware engine out of the HAL (#844, #848)",
+    ),
+    ("phy", "PHY analog bus and delays in the PHY driver (#848)"),
+    ("platform.rs", "the entropy read gap in a driver (#848)"),
+];
+
+/// HAL files whose markers a review found to be atoms, not waits or
+/// sequences, with the exact count and what each marker is. A changed count
+/// fails like a sequence; a new file never joins without that review.
+const HAL_MARKERS_IN_ATOMS: &[(&str, usize, &str)] = &[
+    (
+        "chips/esp32s31/hal/src/cores.rs",
+        4,
+        "a terminal halt after the fatal path requested reset",
+    ),
+    (
+        "chips/esp32s31/hal/src/phy/prelude.rs",
+        2,
+        "the SDM deadline counter register, sampled",
+    ),
+    (
+        "chips/esp32s31/hal/src/phy/registers.rs",
+        1,
+        "the SDM deadline counter register, sampled",
+    ),
+    (
+        "chips/esp32s31/hal/src/phy/sequence.rs",
+        1,
+        "the SDM deadline counter register, sampled",
+    ),
+    (
+        "chips/esp32s31/hal/src/platform/system_timer.rs",
+        3,
+        "the SYSTIMER counter's `Clock::now` instant",
+    ),
+    (
+        "chips/esp32s31/hal/src/watchdog.rs",
+        9,
+        "the family watchdog driver's deadline types over the HAL's register port",
+    ),
+];
+
+/// Marker counts of the production files reachable from `crate_root`, by
+/// path below `root`.
+fn marker_counts(root: &Path, crate_root: &Path, marker: &Marker) -> BTreeMap<String, usize> {
+    let mut found = Vec::new();
+    production_file_markers(crate_root, marker, &mut found);
+    let unreadable = found
+        .iter()
+        .filter(|entry| entry.ends_with(": unreadable module"))
+        .collect::<Vec<_>>();
+    assert!(unreadable.is_empty(), "{unreadable:?}");
+    let mut counts = BTreeMap::new();
+    for entry in found {
+        let file = entry
+            .rsplit_once(": ")
+            .map_or(entry.as_str(), |(file, _)| file);
+        let file = Path::new(file)
+            .strip_prefix(root)
+            .map_or_else(|_| file.to_owned(), |file| file.display().to_string());
+        *counts.entry(file).or_insert(0) += 1;
+    }
+    counts
+}
+
+/// Compares marker counts with a known list: a new file, a changed count and
+/// an entry whose file has no markers all fail.
+fn count_differences(found: &BTreeMap<String, usize>, known: &[(&str, usize)]) -> Vec<String> {
+    let known = known
+        .iter()
+        .map(|(file, count)| ((*file).to_owned(), *count))
+        .collect::<BTreeMap<_, _>>();
+    let mut differences = Vec::new();
+    for (file, count) in found {
+        match known.get(file) {
+            None => differences.push(format!("new: {file} ({count})")),
+            Some(known) if known < count => {
+                differences.push(format!("grew: {file} ({known} -> {count})"));
+            }
+            Some(known) if known > count => {
+                differences.push(format!("lower the entry: {file} ({known} -> {count})"));
+            }
+            Some(_) => {}
+        }
+    }
+    for file in known.keys().filter(|file| !found.contains_key(*file)) {
+        differences.push(format!("gone, drop the entry: {file}"));
+    }
+    differences
+}
+
+#[test]
+fn hal_production_code_gains_no_waits_or_sequences() {
+    let root = root();
+    let package = "chips/esp32s31/hal";
+    let manifest = packages(&root)
+        .remove(package)
+        .expect("the HAL is a workspace member");
+    let mut found = BTreeMap::new();
+    for crate_root in crate_roots(&root.join(package), &manifest) {
+        found.extend(marker_counts(&root, &crate_root, &hal_sequence_marker));
+    }
+    let known = HAL_SEQUENCES
+        .iter()
+        .copied()
+        .chain(
+            HAL_MARKERS_IN_ATOMS
+                .iter()
+                .map(|(file, count, _)| (*file, *count)),
+        )
+        .collect::<Vec<_>>();
+    let files = known.iter().map(|(file, _)| *file).collect::<BTreeSet<_>>();
+    assert_eq!(files.len(), known.len(), "a HAL file is listed twice");
+    let differences = count_differences(&found, &known);
+    assert!(differences.is_empty(), "{}", differences.join("\n"));
+    let unassigned = HAL_SEQUENCES
+        .iter()
+        .map(|(file, _)| *file)
+        .filter(|file| {
+            !HAL_SEQUENCE_REMOVAL.iter().any(|(prefix, _)| {
+                file.strip_prefix("chips/esp32s31/hal/src/")
+                    .is_some_and(|below| below.starts_with(prefix))
+            })
+        })
+        .collect::<Vec<_>>();
+    assert!(unassigned.is_empty(), "no removing series: {unassigned:?}");
+}
+
+#[test]
+fn hal_markers_name_waits_and_leave_settles_and_const_iteration() {
+    for word in [
+        "async",
+        "await",
+        "Poll",
+        "poll_fn",
+        "loop",
+        "spin_loop",
+        "Instant",
+        "BootWait",
+        "BootDeadline",
+        "deadline",
+        "DeadlineLease",
+    ] {
+        assert!(hal_sequence_marker(word), "{word}");
+    }
+    for word in [
+        "while", "for", "settle", "Settle", "write", "modify", "Timer",
+    ] {
+        assert!(!hal_sequence_marker(word), "{word}");
+    }
+    let directory = tempfile::tempdir().expect("temporary directory");
+    let source = directory.path().join("src");
+    std::fs::create_dir_all(source.join("boot")).expect("module directory");
+    std::fs::write(
+        source.join("lib.rs"),
+        "pub mod boot;\npub mod atoms;\n#[cfg(test)]\nmod tests;\n",
+    )
+    .expect("root");
+    std::fs::write(
+        source.join("boot.rs"),
+        "pub mod wait;\npub fn select(deadline: &BootDeadline) { loop {} }\n",
+    )
+    .expect("boot");
+    std::fs::write(
+        source.join("boot/wait.rs"),
+        "pub async fn ready() { poll().await }\n",
+    )
+    .expect("wait");
+    std::fs::write(
+        source.join("atoms.rs"),
+        "pub const fn mask(v: &[u8]) { let mut i = 0; while i < v.len() { i += 1; } }\n",
+    )
+    .expect("atoms");
+    std::fs::write(source.join("tests.rs"), "async fn fixture() {}").expect("tests");
+    assert_eq!(
+        marker_counts(
+            directory.path(),
+            &source.join("lib.rs"),
+            &hal_sequence_marker
+        ),
+        BTreeMap::from([("src/boot.rs".into(), 3), ("src/boot/wait.rs".into(), 2)])
+    );
+}
+
+#[test]
+fn the_hal_ratchet_fails_on_a_new_file_a_changed_count_and_a_gone_entry() {
+    let found = BTreeMap::from([
+        ("same.rs".to_owned(), 2),
+        ("grown.rs".to_owned(), 3),
+        ("lowered.rs".to_owned(), 1),
+        ("new.rs".to_owned(), 1),
+    ]);
+    let known = [
+        ("same.rs", 2),
+        ("grown.rs", 2),
+        ("lowered.rs", 4),
+        ("gone.rs", 1),
+    ];
+    assert_eq!(
+        count_differences(&found, &known),
+        [
+            "grew: grown.rs (2 -> 3)",
+            "lower the entry: lowered.rs (4 -> 1)",
+            "new: new.rs (1)",
+            "gone, drop the entry: gone.rs",
+        ]
+    );
+    assert!(
+        count_differences(
+            &found,
+            &[
+                ("same.rs", 2),
+                ("grown.rs", 3),
+                ("lowered.rs", 1),
+                ("new.rs", 1)
+            ]
+        )
+        .is_empty()
     );
 }

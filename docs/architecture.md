@@ -35,15 +35,54 @@ application          credentials, network stack (embassy-net), sockets
   protocols          sans-IO state machines: frames, MAC, RSN, station, AP,
                      BLE link layer and HCI, IEEE 802.15.4 MAC
   radio port         lifecycle and capacity vocabulary shared by the ports
-  chip drivers       ESP32-S31 Wi-Fi, BLE and IEEE 802.15.4 drivers
-  radio system       one owner of the shared RF front-end
-  PHY                calibration, tracking, channel, TX power (Rust port of libphy)
-  HAL                register logic over the PAC: root, sequences, polls,
-                     routing, clocks, power, resets, DMA engines
+image                interrupt table, tasks, chosen facades and engines
+  service / facade   radio system (one owner of the shared RF front-end),
+                     protocol facades, the chip's composition (`compose`)
+  chip adapters      ESP32-S31 Wi-Fi, BLE and IEEE 802.15.4 backends
+  drivers            block and subsystem operations: PHY (calibration,
+                     tracking, channel, TX power; Rust port of libphy), boot
+                     blocks, watchdog, console, coexistence, family engines
+  platform           startup order, staged boot, entry and traps, interrupt
+                     table, executor, panic record, linker layout
+  HAL                owners and hardware atoms over the PAC: root,
+                     partitions, typestate, routing, the DMA memory core
   PAC                the exact hardware model, generated: blocks, field
                      accessors, value domains, DMA pointers, ownership parts
-platform             Espressif platform port, staged boot, interrupt table, panic record, linker layout
+  facts              chip, module and board facts, the register model,
+                     hardware-free knowledge
 ```
+
+Every chip and HIL package has one explicit role in `oer-test-layers`, never
+derived from its path; the role names the level and its allowed direct
+dependencies ([layer tests](../tools/test/layers/README.md)).
+
+| Level | Roles | May | May not |
+| --- | --- | --- | --- |
+| Facts | `Facts` | values, tables and pure functions with their `SOURCE:` | hardware access, waits, operation order |
+| PAC | `Pac` | generated accessors, the one claim, owned parts | hand-written sequences, polls, policy |
+| HAL | `Hal` | the root and its partitions, owners, typestate, routing; atoms; implementations of the family drivers' register ports and of the platform contracts; the DMA memory core | waits, polls, deadlines, `async`, retries, error policy, reference counts and membership, algorithms, startup order; chip drivers, services, protocols |
+| Driver | `HardwareDriver`, `ChipAdapter` | sequences over register ports or HAL atoms, waits that yield to the executor (named boot waits before it), typed errors, stop and recovery, calibration and scheduling algorithms | the PAC, raw pointers, protocol cores and runtimes, the platform runtime |
+| Platform | `PlatformContract`, `Platform` | startup order, the boot deadline, staging, handoff and adoption, entry and trap ABI, interrupt table, executor, fatal policy | register access past the HAL; chip knowledge past the platform port |
+| Service / facade | `ServiceClient`, `Service`, `Composition`, `Facade` | one owner of a resource for its clients; a composition or facade assembles a protocol runtime with its backend | the PAC, a second claim, diagnostic counters in a product API |
+| Image | firmware | profile, board, interrupt table, tasks, chosen facades, instrumentation cfgs | copies of driver or platform logic |
+
+A HAL atom is one field or word access through a PAC accessor, one sampled
+acknowledgement or trigger, a typestate transition matching one such write,
+or a fixed, sourced vendor write series without a wait, a branch on a read
+value or an error. A loop on status, a deadline, a retry, `async`, a
+reference count, membership or a decision on a read value is driver code.
+A family `HardwareDriver` declares its register port and the chip's HAL
+implements it; a `ChipAdapter` implements a protocol port or a family engine
+contract over the HAL. Family policy chosen with the cores is
+`CoreSidePolicy` and counts as a core; an instrumentation event vocabulary
+is an `ObservationContract` and depends on no owner. No other chip role
+except `Composition` and `Facade` reaches a protocol core or runtime by any
+normal path. HIL has `HilProtocol` (framing and message skeleton), `HilAgent` (the
+device library), `HilBinding` (the dictionary beside one facade) and
+`HilImage`, which composes the chip's composition, facades, observation
+collectors, bindings and the agent. HAL files whose production code waits are a per-file list in the
+layer tests that only shrinks; the HAL also still holds driver code without
+a waiting marker ([HAL](../chips/esp32s31/hal/README.md)).
 
 Wi-Fi is split into `wire` (over-the-air formats), `port` (the backend
 contract), sans-IO cores and a `runtime`. Bluetooth LE has wire formats, a
@@ -435,9 +474,10 @@ release a secondary hart.
   the few policy items accessors cannot express (whole-word images, masked
   acknowledgements, interrupt snapshots, pointer ORs). Its hardware API is
   generated; `src/lib.rs` exposes it and the single `take()` claim.
-  Register sets, phased sequencing, polls, retries, interrupt routing and
-  lifecycle policy belong to the HAL, each vendor step with its
-  `SOURCE:` ([PAC](../chips/esp32s31/pac/README.md),
+  Register atoms, fixed vendor write series and interrupt routing belong to
+  the HAL, each vendor step with its `SOURCE:`; phased sequencing, polls,
+  retries and lifecycle policy belong to drivers (Layers)
+  ([PAC](../chips/esp32s31/pac/README.md),
   [the thin PAC](../tools/registers/model/README.md#the-thin-pac)).
 - **Radio access.** The HAL root returns one `RadioHardware` by value.
   Its split gives the radio system the shared `RadioDomain` and each

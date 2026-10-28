@@ -6,7 +6,8 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 publish = false
-description = "The naming rule and the unsafe boundary, checked from every Cargo.toml"
+description = "Workspace structure rules: names, the unsafe boundary, layer roles and HAL atoms"
+readme = "README.md"
 
 [dev-dependencies]
 proc-macro2 = "=1.0.107"

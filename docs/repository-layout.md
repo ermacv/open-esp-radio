@@ -101,6 +101,15 @@ Rust imports replace hyphens with underscores. A program called by name,
 such as the image linker or a privileged helper, sets its binary name
 with `[[bin]] name`.
 
+## Layer roles
+
+Each package under `chips/`, `protocols/hil/` and `firmware/hil/` has one
+role in `oer-test-layers` that names its level
+([architecture](architecture.md#layers)); a directory name such as `driver`
+grants nothing. `chips/esp32s31/wifi` has the facade role before it exists.
+A protocol leaf named `instrumentation` is an observation contract; a leaf
+named `hil` takes its role from the list.
+
 ## Known deviations
 
 - `protocols/ieee80211/runtime` has a dev-dependency on
@@ -113,8 +122,21 @@ with `[[bin]] name`.
   `tools/image/cli/src/main.rs` includes the W1 CRC implementation;
   `tools/vendor/phy/tests/` includes cache and hold modules of
   `firmware/hil/esp32s31-phy`.
+- Normal dependencies outside their role:
+  `chips/esp32s31/pac` renders the analog-I2C model types of
+  `chips/espressif/analog`; `chips/esp32s31/hal` depends on
+  `protocols/radio/coex`; `chips/esp32s31/ieee80211/driver` depends on
+  `chips/espressif/staged-runtime` for its trace recorder;
+  `chips/esp32s31/ieee802154/driver` depends on `portable/mmio` for
+  `Placement`; `protocols/hil/protocol` depends on
+  `protocols/ieee80211/{port, wire}` for its Wi-Fi dictionaries; the three
+  HIL images depend directly on the HAL, drivers, chip adapters, the radio
+  system, chip facts, family policy, protocol crates and `portable/riscv`
+  instead of a facade.
+- HAL production files that wait or poll are listed with exact counts:
+  modules of `bluetooth`, `boot`, `ieee80211` and `phy`, and `platform.rs`.
 
-The layer tests enforce the normal and build dependency exceptions in their
-own deviation lists. The family-to-chip normal/build deviation list is
-empty. Development dependencies and source-file inclusions above are
-separate from those lists.
+The layer tests enforce the normal and build dependency exceptions, the
+source-file inclusions and the HAL files in their own deviation lists. The
+family-to-chip normal/build deviation list is empty. Development
+dependencies above are separate from those lists.
