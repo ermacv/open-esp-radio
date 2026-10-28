@@ -10,6 +10,7 @@ use oer_esp32s31_hal::{
     power::PlatformClockBackend,
 };
 use oer_esp32s31_phy::{bluetooth_client::BluetoothRfReady, concurrent::ConcurrentPhy};
+use oer_esp32s31_radio_client::bluetooth::{ControllerFault, PreparationFailure, RadioController};
 use oer_espressif_interrupt_table::signal::SignalExecutor;
 
 use crate::{
@@ -23,30 +24,6 @@ use crate::{
     scheduler::SchedulerInitializationFailure,
     shutdown::{ControllerRetired, ControllerShutdownFailure},
 };
-
-/// Narrow controller operations performed only by the shared actor.
-pub trait RadioController<B: PlatformClockBackend> {
-    fn can_prepare(&self) -> bool;
-    fn prepare(&mut self, clocked: ClockedOwner) -> Result<u32, PreparationFailure>;
-    fn task_owner(&self) -> Option<&TaskOwner>;
-    fn initialize_phy(&mut self, ready: BluetoothRfReady<'_, B>) -> Result<(), ControllerFault>;
-    fn is_retired(&self, installation: u32) -> bool;
-    /// Reset the retired Controller, then take its timer from the timer's
-    /// interrupt handler, which gives it up only after the reset.
-    fn reset(
-        &mut self,
-        radio: &mut RadioDomain<B, ConcurrentPhy>,
-    ) -> impl core::future::Future<Output = Result<ClockedOwner, ControllerFault>>;
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct ControllerFault;
-
-/// Preflight returns the untouched clocked owner; a started failure retains
-/// the owner inside the controller lifecycle instead.
-pub struct PreparationFailure {
-    pub returned: Option<ClockedOwner>,
-}
 
 /// A concrete, consuming factory for one branded Controller installation.
 /// Its named type can live in a placed async task without opaque closure

@@ -6,10 +6,39 @@
 use core::convert::Infallible;
 
 use oer_bluetooth_le_port::{LeBand, TxPower};
-use oer_esp32s31_hal::bluetooth::engine::LeTxPower;
+use oer_esp32s31_hal::{
+    bluetooth::{ClockedOwner, TaskOwner, engine::LeTxPower},
+    domain::RadioDomain,
+    power::PlatformClockBackend,
+};
+use oer_esp32s31_phy::{bluetooth_client::BluetoothRfReady, concurrent::ConcurrentPhy};
 use oer_radio_regulatory::{Initiate, Permitted, PowerLimits, TxCeiling};
 
 use crate::{Client, PhyPreparation, sealed};
+
+/// Narrow controller operations performed only by the shared actor.
+pub trait RadioController<B: PlatformClockBackend> {
+    fn can_prepare(&self) -> bool;
+    fn prepare(&mut self, clocked: ClockedOwner) -> Result<u32, PreparationFailure>;
+    fn task_owner(&self) -> Option<&TaskOwner>;
+    fn initialize_phy(&mut self, ready: BluetoothRfReady<'_, B>) -> Result<(), ControllerFault>;
+    fn is_retired(&self, installation: u32) -> bool;
+    /// Reset the retired Controller, then take its timer from the timer's
+    /// interrupt handler, which gives it up only after the reset.
+    fn reset(
+        &mut self,
+        radio: &mut RadioDomain<B, ConcurrentPhy>,
+    ) -> impl core::future::Future<Output = Result<ClockedOwner, ControllerFault>>;
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ControllerFault;
+
+/// Preflight returns the untouched clocked owner; a started failure retains
+/// the owner inside the controller lifecycle instead.
+pub struct PreparationFailure {
+    pub returned: Option<ClockedOwner>,
+}
 
 pub const BIT: u32 = 1 << 1;
 

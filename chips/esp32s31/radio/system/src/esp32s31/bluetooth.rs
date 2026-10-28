@@ -1,6 +1,5 @@
 //! Bluetooth's shared-domain steps, serialized with Wi-Fi by the one actor.
 
-use oer_esp32s31_bluetooth_driver::radio::RadioController;
 use oer_esp32s31_hal::{
     bluetooth::{ClockedOwner, ColdOwner, PoweredOwner},
     domain::{BluetoothClient, CoexAbsent, Coexisting, CommonPower, PlatformClockProvider},
@@ -16,7 +15,9 @@ use oer_esp32s31_phy::{
 use oer_esp32s31_radio_client::{
     DomainHealth, Failed, Failure, LpClock, PhyPreparation, Poison, PoisonCause, RcSlow,
     RequestKind,
-    bluetooth::{BluetoothJoin, BluetoothJoined, BluetoothLeft, Installation, Permission},
+    bluetooth::{
+        BluetoothJoin, BluetoothJoined, BluetoothLeft, Installation, Permission, RadioController,
+    },
 };
 
 use super::Esp32s31Radio;

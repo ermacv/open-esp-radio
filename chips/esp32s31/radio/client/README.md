@@ -26,5 +26,8 @@ PHY domain, without the actor itself.
   backend retains membership and controller memory. `Permission` derives the
   ceiling from the exact LE band, rejects transmission under passive-only
   authority, and rounds permitted TxPower down to a provider level.
+  `bluetooth::RadioController` and its failure types define the narrow
+  controller lifecycle contract implemented by the driver and used by the
+  shared actor, without a radio-system dependency on the driver.
 - `ACTOR_STEP_BOUND` is the provisional 50 µs bound of one actor poll; the
   request bounds follow from measurements.
