@@ -8,7 +8,9 @@
     clippy::todo,
     clippy::unimplemented,
     clippy::indexing_slicing,
-    clippy::arithmetic_side_effects
+    clippy::arithmetic_side_effects,
+    clippy::disallowed_macros,
+    clippy::disallowed_methods
 )]
 
 //! The vocabulary every radio protocol and backend shares for one RF path.
@@ -68,6 +70,10 @@ pub trait Operation: Copy {
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::disallowed_macros,
+    reason = "tests assert the radio vocabulary"
+)]
 mod tests {
     use super::*;
 
