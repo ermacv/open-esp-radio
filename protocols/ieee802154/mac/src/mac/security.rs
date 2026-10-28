@@ -112,9 +112,9 @@ impl MacKeys {
         let (key_index, key_id) = (i16::from(key_index), i16::from(self.key_id));
         if key_index == key_id {
             Some(self.current)
-        } else if key_index == key_id - 1 {
+        } else if Some(key_index) == key_id.checked_sub(1) {
             Some(self.previous)
-        } else if key_index == key_id + 1 {
+        } else if Some(key_index) == key_id.checked_add(1) {
             Some(self.next)
         } else {
             None
@@ -179,18 +179,23 @@ fn write_security_header(
         return None;
     }
     let offset = usize::from(frame.security_header_offset()?);
-    let control = *image.get(offset)?;
+    let (_, header) = image.split_at_mut_checked(offset)?;
+    let (control, rest) = header.split_first_chunk_mut::<SECURITY_CONTROL_SIZE>()?;
+    let [control] = *control;
     let mode_1 = control & KEY_ID_MODE_MASK == KEY_ID_MODE_1;
-    let key_index = offset + SECURITY_CONTROL_SIZE + FRAME_COUNTER_SIZE;
-    if image.len() <= key_index - 1 + usize::from(mode_1) {
-        return None;
+    let (counter, rest) = rest.split_first_chunk_mut::<FRAME_COUNTER_SIZE>()?;
+    // Admit every field before writing either, preserving refusal atomicity.
+    let index = if mode_1 {
+        Some(rest.first_mut()?)
+    } else {
+        None
+    };
+    if let Some(value) = frame_counter {
+        *counter = value.to_le_bytes();
     }
-    if let Some(counter) = frame_counter {
-        image[offset + SECURITY_CONTROL_SIZE..key_index].copy_from_slice(&counter.to_le_bytes());
-    }
-    if mode_1 {
+    if let Some(index) = index {
         if let Some(key_id) = key_id {
-            image[key_index] = key_id;
+            *index = key_id;
         }
         Some(KeyIdMode::Index)
     } else {

@@ -80,18 +80,28 @@ const INVALID_RSSI: i8 = 127;
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
 pub struct ProbingData {
     bytes: [u8; ENH_ACK_PROBING_DATA_CAPACITY],
-    len: usize,
+    len: ProbingLength,
+}
+
+// At most two metrics are selected by construction, in protocol order.
+// usize representation preserves ProbingData's existing storage layout.
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+#[repr(usize)]
+enum ProbingLength {
+    #[default]
+    Empty,
+    One,
+    Two,
 }
 
 impl ProbingData {
     /// The data bytes.
     pub fn bytes(&self) -> &[u8] {
-        &self.bytes[..self.len]
-    }
-
-    fn push(&mut self, byte: u8) {
-        self.bytes[self.len] = byte;
-        self.len += 1;
+        match self.len {
+            ProbingLength::Empty => &[],
+            ProbingLength::One => &self.bytes[..1],
+            ProbingLength::Two => &self.bytes,
+        }
     }
 
     /// Write the enhanced-ACK probing IE carrying the data into `dest`, as
@@ -99,17 +109,36 @@ impl ProbingData {
     /// Nothing is written, and zero returned, for empty data or a `dest`
     /// shorter than the IE.
     pub fn write_ie(&self, dest: &mut [u8]) -> usize {
-        let content = 4 + self.len;
-        let length = 2 + content;
-        if self.len == 0 || dest.len() < length {
-            return 0;
+        let [oui0, oui1, oui2, _] = THREAD_OUI.to_le_bytes();
+        let [first, second] = self.bytes;
+        match self.len {
+            ProbingLength::Empty => 0,
+            ProbingLength::One => {
+                let Some((target, _)) = dest.split_first_chunk_mut::<7>() else {
+                    return 0;
+                };
+                let [low, high] = (5_u16 | VENDOR_IE_ID << 7).to_le_bytes();
+                *target = [low, high, oui0, oui1, oui2, ENH_ACK_PROBING_SUBTYPE, first];
+                7
+            }
+            ProbingLength::Two => {
+                let Some((target, _)) = dest.split_first_chunk_mut::<8>() else {
+                    return 0;
+                };
+                let [low, high] = (6_u16 | VENDOR_IE_ID << 7).to_le_bytes();
+                *target = [
+                    low,
+                    high,
+                    oui0,
+                    oui1,
+                    oui2,
+                    ENH_ACK_PROBING_SUBTYPE,
+                    first,
+                    second,
+                ];
+                8
+            }
         }
-        let descriptor = content as u16 | VENDOR_IE_ID << 7;
-        dest[..2].copy_from_slice(&descriptor.to_le_bytes());
-        dest[2..5].copy_from_slice(&THREAD_OUI.to_le_bytes()[..3]);
-        dest[5] = ENH_ACK_PROBING_SUBTYPE;
-        dest[6..length].copy_from_slice(self.bytes());
-        length
     }
 }
 
@@ -150,17 +179,33 @@ impl Initiator {
     /// [0, 130] and the RSSI scaled from [-130, 0] to [0, 255], at most two
     /// bytes, in that fixed order.
     fn data(&self, lqi: u8, rssi: i8, noise_floor: i8) -> ProbingData {
-        let mut data = ProbingData::default();
-        if self.metrics.lqi {
-            data.push(lqi);
+        // Every intermediate fits in i32: margin <= 127 and rssi + 130 is
+        // in 2..=257. Saturating operations are exact on these typed inputs;
+        // the final u8 cast retains OpenThread's eight-bit result.
+        let lqi = self.metrics.lqi.then_some(lqi);
+        let margin = self
+            .metrics
+            .link_margin
+            .then(|| (i32::from(link_margin(noise_floor, rssi)).saturating_mul(255) / 130) as u8);
+        let rssi = self
+            .metrics
+            .rssi
+            .then(|| (i32::from(rssi).saturating_add(130).saturating_mul(255) / 130) as u8);
+        match (lqi, margin, rssi) {
+            (Some(first), Some(second), _)
+            | (Some(first), None, Some(second))
+            | (None, Some(first), Some(second)) => ProbingData {
+                bytes: [first, second],
+                len: ProbingLength::Two,
+            },
+            (Some(first), None, None) | (None, Some(first), None) | (None, None, Some(first)) => {
+                ProbingData {
+                    bytes: [first, 0],
+                    len: ProbingLength::One,
+                }
+            }
+            (None, None, None) => ProbingData::default(),
         }
-        if self.metrics.link_margin {
-            data.push((i32::from(link_margin(noise_floor, rssi)) * 255 / 130) as u8);
-        }
-        if data.len < ENH_ACK_PROBING_DATA_CAPACITY && self.metrics.rssi {
-            data.push(((i32::from(rssi) + 130) * 255 / 130) as u8);
-        }
-        data
     }
 }
 
@@ -216,14 +261,18 @@ impl<const N: usize> EnhAckProbing<N> {
         extended: [u8; 8],
         metrics: LinkMetrics,
     ) -> Result<(), ProbingError> {
-        let position = self
-            .initiators
-            .iter()
-            .position(|entry| entry.is_some_and(|initiator| initiator.short == short));
         if metrics.is_clear() {
-            let position = position.ok_or(ProbingError::NotFound)?;
-            self.initiators[position..].rotate_left(1);
-            self.initiators[N - 1] = None;
+            let position = self
+                .initiators
+                .iter()
+                .position(|entry| entry.is_some_and(|initiator| initiator.short == short))
+                .ok_or(ProbingError::NotFound)?;
+            // Carry the cleared tail backwards; the removed entry is the
+            // final carry, and every other initiator retains its order.
+            let mut removed = None;
+            for entry in self.initiators.iter_mut().skip(position).rev() {
+                core::mem::swap(entry, &mut removed);
+            }
             return Ok(());
         }
         let initiator = Initiator {
@@ -231,15 +280,24 @@ impl<const N: usize> EnhAckProbing<N> {
             short,
             extended,
         };
-        if let Some(position) = position {
-            self.initiators[position] = Some(initiator);
+        if let Some(entry) = self
+            .initiators
+            .iter_mut()
+            .flatten()
+            .find(|entry| entry.short == short)
+        {
+            *entry = initiator;
             return Ok(());
         }
         if self.initiators.last().is_none_or(Option::is_some) {
             return Err(ProbingError::NoBufs);
         }
-        self.initiators.rotate_right(1);
-        self.initiators[0] = Some(initiator);
+        // Admission proves the last carry is an empty slot, so insertion
+        // shifts every occupied entry without dropping one.
+        let mut incoming = Some(initiator);
+        for entry in &mut self.initiators {
+            core::mem::swap(entry, &mut incoming);
+        }
         Ok(())
     }
 

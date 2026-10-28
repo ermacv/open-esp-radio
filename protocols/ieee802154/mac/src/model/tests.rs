@@ -115,7 +115,7 @@ fn accounting_quarantine_does_not_prevent_a_confirmed_hardware_stop() {
                 }
                 assert_eq!(
                     parts.events.held.in_flight(),
-                    Some((Interface::new(0), token.id()))
+                    Ok(Some((Interface::new(0), token.id())))
                 );
                 assert!(poll_once(pin!(client.operation(&mut seat))).is_pending());
                 assert_eq!(self.0.0.borrow().events.len(), 2);
@@ -1417,7 +1417,11 @@ fn work_permit_moves_into_admission_and_only_its_terminal_releases_it() {
         drop(permits.guard(token));
         let token = ready(permits.pool().take(&mut second));
         let id = RequestId::new(41);
-        permits.admit(Interface::new(1), id, permits.guard(token));
+        assert!(
+            permits
+                .admit(Interface::new(1), id, permits.guard(token))
+                .is_ok()
+        );
         {
             let mut waiting = core::pin::pin!(permits.pool().take(&mut first));
             assert!(
@@ -1428,11 +1432,11 @@ fn work_permit_moves_into_admission_and_only_its_terminal_releases_it() {
             );
         }
         let mismatch = match permits.complete(RequestId::new(42)) {
-            Err(mismatch) => mismatch,
-            Ok(_) => panic!("another terminal cannot release the held operation"),
+            Err(crate::owner::CompletionError::Mismatch(mismatch)) => mismatch,
+            _ => panic!("another terminal cannot release the held operation"),
         };
         assert_eq!(mismatch.held, Some((Interface::new(1), id)));
-        assert_eq!(permits.in_flight(), mismatch.held);
+        assert_eq!(permits.in_flight(), Ok(mismatch.held));
         let completed = permits.complete(id).expect("matching terminal");
         assert_eq!(completed.id(), id);
         assert_eq!(completed.interface(), Interface::new(1));

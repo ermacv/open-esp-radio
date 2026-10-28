@@ -333,19 +333,35 @@ impl<'image> PhrFrame<'image> {
     }
 
     const fn address_offset(self) -> u8 {
-        PHR_SIZE + FCF_SIZE + if self.dsn_present() { DSN_SIZE } else { 0 }
+        if self.dsn_present() {
+            const { PHR_SIZE + FCF_SIZE + DSN_SIZE }
+        } else {
+            const { PHR_SIZE + FCF_SIZE }
+        }
     }
 
     const fn address_size(self) -> Option<u8> {
         if !self.valid_modes() {
             return None;
         }
-        let mut size = self.destination_mode().size() + self.source_mode().size();
+        let Some(mut size) = self
+            .destination_mode()
+            .size()
+            .checked_add(self.source_mode().size())
+        else {
+            return None;
+        };
         if self.destination_panid_present() {
-            size += PANID_SIZE;
+            let Some(end) = size.checked_add(PANID_SIZE) else {
+                return None;
+            };
+            size = end;
         }
         if self.source_panid_present() {
-            size += PANID_SIZE;
+            let Some(end) = size.checked_add(PANID_SIZE) else {
+                return None;
+            };
+            size = end;
         }
         Some(size)
     }
@@ -374,13 +390,19 @@ impl<'image> PhrFrame<'image> {
         let security_header = SecurityControl::from_bytes([security_header]);
         let mut length = SECURITY_HEADER_SIZE;
         if !security_header.suppress_counter() {
-            length += FRAME_COUNTER_SIZE;
+            let Some(end) = length.checked_add(FRAME_COUNTER_SIZE) else {
+                return None;
+            };
+            length = end;
         }
-        length += match security_header.key_mode() {
+        let identifier = match security_header.key_mode() {
             1 => 1,
             2 => 5,
             3 => 9,
             _ => 0,
+        };
+        let Some(length) = length.checked_add(identifier) else {
+            return None;
         };
         if self.mac_bytes(offset, length).is_none() {
             return None;
@@ -420,7 +442,10 @@ impl<'image> PhrFrame<'image> {
         let Some(end) = self.length().checked_add(PHR_SIZE) else {
             return None;
         };
-        let Some(end) = end.checked_sub(FCS_SIZE + self.mic_len()) else {
+        let Some(footer) = FCS_SIZE.checked_add(self.mic_len()) else {
+            return None;
+        };
+        let Some(end) = end.checked_sub(footer) else {
             return None;
         };
         let Some(length) = end.checked_sub(offset) else {
@@ -496,7 +521,10 @@ impl<'image> PhrFrame<'image> {
         };
         if self.security_enabled() {
             match self.security_field_len() {
-                Some(length) => offset += length,
+                Some(length) => match offset.checked_add(length) {
+                    Some(end) => offset = end,
+                    None => return None,
+                },
                 None => return None,
             }
         }
@@ -530,7 +558,7 @@ impl<'image> PhrFrame<'image> {
                 None => return None,
             }
         }
-        Some(offset - 1)
+        offset.checked_sub(PHR_SIZE)
     }
 
     /// `ieee802154_is_data_request`: a command frame whose command identifier
@@ -546,23 +574,19 @@ impl<'image> PhrFrame<'image> {
     }
 
     const fn copy_address(self, offset: u8, mode: AddressMode) -> Option<FrameAddress> {
+        let Some(bytes) = self.mac_bytes(offset, mode.size()) else {
+            return None;
+        };
+        let mut reader = Reader::new(bytes);
         match mode {
-            AddressMode::Short => match (self.byte(offset), self.byte(offset + 1)) {
-                (Some(low), Some(high)) => Some(FrameAddress::Short([low, high])),
-                _ => None,
+            AddressMode::Short => match reader.read() {
+                Ok(address) => Some(FrameAddress::Short(address)),
+                Err(_) => None,
             },
-            AddressMode::Extended => {
-                let mut address = [0; 8];
-                let mut index = 0;
-                while index < 8 {
-                    match self.byte(offset + index) {
-                        Some(byte) => address[index as usize] = byte,
-                        None => return None,
-                    }
-                    index += 1;
-                }
-                Some(FrameAddress::Extended(address))
-            }
+            AddressMode::Extended => match reader.read() {
+                Ok(address) => Some(FrameAddress::Extended(address)),
+                Err(_) => None,
+            },
             AddressMode::None | AddressMode::Reserved => None,
         }
     }
@@ -580,7 +604,10 @@ impl<'image> PhrFrame<'image> {
         }
         let mut offset = self.address_offset();
         if self.destination_panid_present() {
-            offset += PANID_SIZE;
+            let Some(end) = offset.checked_add(PANID_SIZE) else {
+                return Err(());
+            };
+            offset = end;
         }
         match (mode, self.copy_address(offset, mode)) {
             (AddressMode::None, _) => Ok(None),
@@ -602,11 +629,20 @@ impl<'image> PhrFrame<'image> {
         }
         let mut offset = self.address_offset();
         if self.destination_panid_present() {
-            offset += PANID_SIZE;
+            let Some(end) = offset.checked_add(PANID_SIZE) else {
+                return Err(());
+            };
+            offset = end;
         }
-        offset += self.destination_mode().size();
+        let Some(end) = offset.checked_add(self.destination_mode().size()) else {
+            return Err(());
+        };
+        offset = end;
         if self.source_panid_present() {
-            offset += PANID_SIZE;
+            let Some(end) = offset.checked_add(PANID_SIZE) else {
+                return Err(());
+            };
+            offset = end;
         }
         match (mode, self.copy_address(offset, mode)) {
             (AddressMode::None, _) => Ok(None),
@@ -621,9 +657,12 @@ impl<'image> PhrFrame<'image> {
             return None;
         }
         let offset = self.address_offset();
-        match (self.byte(offset), self.byte(offset + 1)) {
-            (Some(low), Some(high)) => Some([low, high]),
-            _ => None,
+        let Some(bytes) = self.mac_bytes(offset, PANID_SIZE) else {
+            return None;
+        };
+        match Reader::new(bytes).read() {
+            Ok(pan) => Some(pan),
+            Err(_) => None,
         }
     }
 
@@ -634,12 +673,21 @@ impl<'image> PhrFrame<'image> {
         }
         let mut offset = self.address_offset();
         if self.destination_panid_present() {
-            offset += PANID_SIZE;
+            let Some(end) = offset.checked_add(PANID_SIZE) else {
+                return None;
+            };
+            offset = end;
         }
-        offset += self.destination_mode().size();
-        match (self.byte(offset), self.byte(offset + 1)) {
-            (Some(low), Some(high)) => Some([low, high]),
-            _ => None,
+        let Some(end) = offset.checked_add(self.destination_mode().size()) else {
+            return None;
+        };
+        offset = end;
+        let Some(bytes) = self.mac_bytes(offset, PANID_SIZE) else {
+            return None;
+        };
+        match Reader::new(bytes).read() {
+            Ok(pan) => Some(pan),
+            Err(_) => None,
         }
     }
 }

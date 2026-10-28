@@ -78,7 +78,7 @@ impl<'frame> FrameView<'frame> {
     /// requests therefore cannot carry a second caller-selected value that
     /// disagrees with this bit.
     pub const fn acknowledgement_requested(self) -> bool {
-        self.bytes[0] & ACKNOWLEDGEMENT_REQUEST_BIT != 0
+        matches!(self.bytes, [control, ..] if *control & ACKNOWLEDGEMENT_REQUEST_BIT != 0)
     }
 }
 
@@ -107,7 +107,9 @@ impl Frame {
     pub fn try_from_bytes(bytes: &[u8]) -> Result<Self, FrameError> {
         let view = FrameView::new(bytes)?;
         let mut storage = [0; MAX_MAC_FRAME_LEN];
-        storage[..view.len()].copy_from_slice(view.bytes());
+        for (source, destination) in view.bytes().iter().zip(&mut storage) {
+            *destination = *source;
+        }
         Ok(Self {
             bytes: storage,
             length: view.len() as u8,
@@ -119,14 +121,23 @@ impl Frame {
     pub fn replace(&mut self, bytes: &[u8]) -> Result<(), FrameError> {
         let view = FrameView::new(bytes)?;
         self.bytes.fill(0);
-        self.bytes[..view.len()].copy_from_slice(view.bytes());
+        for (source, destination) in view.bytes().iter().zip(&mut self.bytes) {
+            *destination = *source;
+        }
         self.length = view.len() as u8;
         Ok(())
     }
 
     /// Borrow the complete MAC bytes.
     pub fn as_bytes(&self) -> &[u8] {
-        &self.bytes[..usize::from(self.length)]
+        // FrameView admission proves length <= MAX_MAC_FRAME_LEN. Trim only
+        // the unused tail, preserving the compact u8 length representation.
+        let mut prefix = self.bytes.iter();
+        let mut unused = usize::from(self.length)..MAX_MAC_FRAME_LEN;
+        if unused.next().is_some() {
+            prefix.nth_back(unused.len());
+        }
+        prefix.as_slice()
     }
 
     /// Borrow a validated portable view.

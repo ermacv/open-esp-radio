@@ -44,14 +44,44 @@ pub enum RetryStart {
 impl RetryStart {
     /// The random delay before the retry in microseconds, drawn from the
     /// uniform word `random` as `SubMac::StartTimerForBackoff` draws it.
-    pub const fn delay_micros(self, random: u32) -> u32 {
+    /// Returns an error for an unrepresentable API-supplied window or delay.
+    pub const fn delay_micros(self, random: u32) -> Result<u32, RetryDelayError> {
         match self {
             Self::AfterDelay { exponent } => {
-                random % (1 << exponent) * UNIT_BACKOFF_PERIOD_SYMBOLS * SYMBOL_MICROS
+                let Some(window) = 1_u32.checked_shl(exponent as u32) else {
+                    return Err(RetryDelayError::ExponentOutOfRange { exponent });
+                };
+                let Some(periods) = random.checked_rem(window) else {
+                    return Err(RetryDelayError::ExponentOutOfRange { exponent });
+                };
+                let Some(symbols) = periods.checked_mul(UNIT_BACKOFF_PERIOD_SYMBOLS) else {
+                    return Err(RetryDelayError::DurationOverflow { exponent, random });
+                };
+                match symbols.checked_mul(SYMBOL_MICROS) {
+                    Some(micros) => Ok(micros),
+                    None => Err(RetryDelayError::DurationOverflow { exponent, random }),
+                }
             }
-            Self::Now => 0,
+            Self::Now => Ok(0),
         }
     }
+}
+
+/// An API-supplied retry delay cannot be represented in microseconds.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RetryDelayError {
+    /// The power-of-two random window does not fit in u32.
+    ExponentOutOfRange {
+        /// Rejected window exponent.
+        exponent: u8,
+    },
+    /// The selected delay exceeds u32 microseconds.
+    DurationOverflow {
+        /// Requested window exponent.
+        exponent: u8,
+        /// Random word selecting the delay.
+        random: u32,
+    },
 }
 
 /// The retransmission state of one frame.
@@ -83,12 +113,12 @@ impl FrameRetries {
         if self.retries >= self.max_frame_retries {
             return None;
         }
-        self.retries += 1;
+        self.retries = self.retries.saturating_add(1);
         Some(match failure {
             AttemptFailure::NoAcknowledgement => {
                 let exponent = self.delay_exponent;
                 self.delay_exponent = if exponent < RETX_DELAY_MAX_BACKOFF_EXPONENT {
-                    exponent + 1
+                    exponent.saturating_add(1)
                 } else {
                     RETX_DELAY_MAX_BACKOFF_EXPONENT
                 };

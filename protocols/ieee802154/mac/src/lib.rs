@@ -6,7 +6,21 @@
     clippy::expect_used,
     clippy::panic,
     clippy::todo,
-    clippy::unimplemented
+    clippy::unimplemented,
+    clippy::unreachable,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    clippy::disallowed_macros,
+    clippy::disallowed_methods
+)]
+#![cfg_attr(
+    test,
+    allow(
+        clippy::disallowed_macros,
+        clippy::disallowed_methods,
+        clippy::arithmetic_side_effects,
+        clippy::unreachable
+    )
 )]
 
 //! Hardware-independent IEEE 802.15.4 radio boundary.
@@ -77,7 +91,7 @@ pub use mac::link_metrics::{
     ProbingData, ProbingError, ProbingInitiator, link_margin,
 };
 pub use mac::pending::{AckPending, AutoPendingMode, PendingTable, PendingTableFull, ack_pending};
-pub use mac::retransmission::{AttemptFailure, FrameRetries, RetryStart};
+pub use mac::retransmission::{AttemptFailure, FrameRetries, RetryDelayError, RetryStart};
 pub use mac::security::{MacKeys, TransmitSecurity};
 pub use mac::time_sync::TimeSync;
 pub use oer_radio_port::ClockRelation;

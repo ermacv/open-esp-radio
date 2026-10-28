@@ -38,12 +38,33 @@ pub const CSL_IE_TEMPLATE: [u8; 6] = {
 /// the time to the sample instant modulo the period, rounded down, plus
 /// one. `None` without a period.
 pub const fn csl_phase(now: u32, sample_time: u32, period: u16) -> Option<u16> {
-    if period == 0 {
+    // u16 periods fit in u32 microseconds; each remainder is below that
+    // period, so the intermediate sum fits and the phase is <= period.
+    let Some(period_us) = (period as u32).checked_mul(CSL_UNIT_MICROS) else {
         return None;
+    };
+    let Some(now_phase) = now.checked_rem(period_us) else {
+        return None;
+    };
+    let Some(sample_phase) = sample_time.checked_rem(period_us) else {
+        return None;
+    };
+    let Some(diff) = period_us.checked_sub(now_phase) else {
+        return None;
+    };
+    let Some(diff) = diff.checked_add(sample_phase) else {
+        return None;
+    };
+    let Some(diff) = diff.checked_rem(period_us) else {
+        return None;
+    };
+    let Some(phase) = diff.checked_div(CSL_UNIT_MICROS) else {
+        return None;
+    };
+    match phase.checked_add(1) {
+        Some(phase) => Some(phase as u16),
+        None => None,
     }
-    let period_us = period as u32 * CSL_UNIT_MICROS;
-    let diff = (period_us - now % period_us + sample_time % period_us) % period_us;
-    Some((diff / CSL_UNIT_MICROS + 1) as u16)
 }
 
 /// Write `period` and `phase` into the CSL IE of the `[PHR, MAC...]` image
@@ -53,12 +74,18 @@ pub fn write_csl_ie(image: &mut [u8], period: u16, phase: u16) -> bool {
     let Some(offset) = PhrFrame::new(image).header_ie(CSL_IE_ID) else {
         return false;
     };
-    let content = usize::from(offset) + 2;
-    let Some(target) = image.get_mut(content..content + usize::from(CSL_IE_CONTENT)) else {
+    let Some((_, content)) = image.split_at_mut_checked(usize::from(offset)) else {
         return false;
     };
-    target[..2].copy_from_slice(&phase.to_le_bytes());
-    target[2..].copy_from_slice(&period.to_le_bytes());
+    let Some((_, content)) = content.split_first_chunk_mut::<2>() else {
+        return false;
+    };
+    let Some((target, _)) = content.split_first_chunk_mut::<4>() else {
+        return false;
+    };
+    let [phase_low, phase_high] = phase.to_le_bytes();
+    let [period_low, period_high] = period.to_le_bytes();
+    *target = [phase_low, phase_high, period_low, period_high];
     true
 }
 
