@@ -3,20 +3,15 @@
 //! This module understands Bluetooth air-interface fields only. It contains no
 //! ESP32 descriptor layout, MMIO, HCI packet framing, executor, or allocator.
 
-use oer_wire::PrefixLength;
+use oer_wire::{PrefixLength, Reader};
 
-use crate::{LeDeviceAddress, LeDeviceAddressKind};
+use crate::advertising_header::{ADVERTISING_HEADER_LENGTH, AdvertisingHeader, AdvertisingPduType};
+use crate::{LE_DEVICE_ADDRESS_LENGTH, LeDeviceAddress, LeDeviceAddressKind};
 
 /// Largest legacy advertising data after the advertiser address.
 pub const LEGACY_SCAN_DATA_CAPACITY: usize = 31;
 
-const LEGACY_HEADER_BYTES: usize = 2;
-const DEVICE_ADDRESS_BYTES: usize = 6;
-const MAX_LEGACY_PAYLOAD_BYTES: usize = DEVICE_ADDRESS_BYTES + LEGACY_SCAN_DATA_CAPACITY;
-const PDU_TYPE_MASK: u8 = 0x0f;
-const TX_ADD_RANDOM: u8 = 1 << 6;
-const RX_ADD_RANDOM: u8 = 1 << 7;
-const PAYLOAD_LENGTH_MASK: u8 = 0x3f;
+const MAX_LEGACY_PAYLOAD_BYTES: usize = LE_DEVICE_ADDRESS_LENGTH + LEGACY_SCAN_DATA_CAPACITY;
 
 /// Primary advertising channel a report was received on.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -90,55 +85,53 @@ pub const fn parse_legacy_advertising_report(
     channel: PrimaryScanChannel,
     rssi_dbm: i8,
 ) -> Result<LegacyAdvertisingReport, LegacyAdvertisingReportParseError> {
-    let Some((header_bytes, payload)) = pdu.split_first_chunk::<LEGACY_HEADER_BYTES>() else {
-        return Err(LegacyAdvertisingReportParseError::HeaderTruncated);
+    let mut reader = Reader::new(pdu);
+    let header = match reader.read::<ADVERTISING_HEADER_LENGTH>() {
+        Ok(bytes) => AdvertisingHeader::from_bytes(bytes),
+        Err(_) => return Err(LegacyAdvertisingReportParseError::HeaderTruncated),
     };
-    let [header, length] = *header_bytes;
-    let payload_len = (length & PAYLOAD_LENGTH_MASK) as usize;
+    let payload_len = header.legacy_length() as usize;
     if payload_len > MAX_LEGACY_PAYLOAD_BYTES {
         return Err(LegacyAdvertisingReportParseError::LegacyPayloadTooLong);
     }
-    if pdu.len() != LEGACY_HEADER_BYTES.saturating_add(payload_len) {
+    if pdu.len() != ADVERTISING_HEADER_LENGTH.saturating_add(payload_len) {
         return Err(LegacyAdvertisingReportParseError::DeclaredLengthMismatch);
     }
-    if payload_len < DEVICE_ADDRESS_BYTES {
+    if payload_len < LE_DEVICE_ADDRESS_LENGTH {
         return Err(LegacyAdvertisingReportParseError::AdvertiserAddressMissing);
     }
 
-    let kind = match header & PDU_TYPE_MASK {
-        0 => LegacyAdvertisingReportKind::ConnectableUndirected,
-        1 => LegacyAdvertisingReportKind::ConnectableDirected,
-        2 => LegacyAdvertisingReportKind::NonconnectableUndirected,
-        4 => LegacyAdvertisingReportKind::ScanResponse,
-        6 => LegacyAdvertisingReportKind::ScannableUndirected,
+    let kind = match header.pdu_type() {
+        AdvertisingPduType::AdvInd => LegacyAdvertisingReportKind::ConnectableUndirected,
+        AdvertisingPduType::AdvDirectInd => LegacyAdvertisingReportKind::ConnectableDirected,
+        AdvertisingPduType::AdvNonconnInd => LegacyAdvertisingReportKind::NonconnectableUndirected,
+        AdvertisingPduType::ScanRsp => LegacyAdvertisingReportKind::ScanResponse,
+        AdvertisingPduType::AdvScanInd => LegacyAdvertisingReportKind::ScannableUndirected,
         unsupported => {
             return Err(LegacyAdvertisingReportParseError::UnsupportedPduType(
-                unsupported,
+                unsupported.encoding(),
             ));
         }
     };
-    if matches!(kind, LegacyAdvertisingReportKind::ConnectableDirected) && payload_len != 12 {
+    if matches!(kind, LegacyAdvertisingReportKind::ConnectableDirected)
+        && payload_len != 2 * LE_DEVICE_ADDRESS_LENGTH
+    {
         return Err(LegacyAdvertisingReportParseError::DirectedAddressLengthInvalid);
     }
 
-    let Some((address, remaining)) = payload.split_first_chunk::<DEVICE_ADDRESS_BYTES>() else {
-        return Err(LegacyAdvertisingReportParseError::AdvertiserAddressMissing);
+    let address = match reader.read::<LE_DEVICE_ADDRESS_LENGTH>() {
+        Ok(bytes) => bytes,
+        Err(_) => return Err(LegacyAdvertisingReportParseError::AdvertiserAddressMissing),
     };
-    let advertiser = LeDeviceAddress::from_wire_bytes(
-        *address,
-        if header & TX_ADD_RANDOM == 0 {
-            LeDeviceAddressKind::Public
-        } else {
-            LeDeviceAddressKind::Random
-        },
-    );
+    let advertiser = header.advertiser(address);
+    let remaining = reader.remaining();
     let directed_target = if matches!(kind, LegacyAdvertisingReportKind::ConnectableDirected) {
-        let Some(address) = remaining.first_chunk::<DEVICE_ADDRESS_BYTES>() else {
+        let Some(address) = remaining.first_chunk::<LE_DEVICE_ADDRESS_LENGTH>() else {
             return Err(LegacyAdvertisingReportParseError::DirectedAddressLengthInvalid);
         };
         Some(LeDeviceAddress::from_wire_bytes(
             *address,
-            if header & RX_ADD_RANDOM == 0 {
+            if !header.rx_add_random() {
                 LeDeviceAddressKind::Public
             } else {
                 LeDeviceAddressKind::Random

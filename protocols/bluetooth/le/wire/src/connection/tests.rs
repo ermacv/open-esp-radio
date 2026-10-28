@@ -7,12 +7,7 @@ pub(super) fn connection_request(
     channel_selection_two: bool,
 ) -> [u8; LEGACY_CONNECT_IND_PDU_BYTES] {
     let mut pdu = [0; LEGACY_CONNECT_IND_PDU_BYTES];
-    pdu[0] = CONNECT_IND_TYPE
-        | if channel_selection_two {
-            CHANNEL_SELECTION_TWO
-        } else {
-            0
-        };
+    pdu[0] = if channel_selection_two { 0x25 } else { 0x05 };
     pdu[1] = LEGACY_CONNECT_IND_PAYLOAD_BYTES as u8;
     pdu[2..8].copy_from_slice(&INITIATOR);
     pdu[8..14].copy_from_slice(&ADVERTISER);
@@ -66,7 +61,7 @@ fn every_sleep_clock_accuracy_class_exposes_its_worst_case_ppm() {
 #[test]
 fn malformed_request_fails_before_connection_ownership_exists() {
     let mut pdu = connection_request(false);
-    pdu[0] |= HEADER_RESERVED;
+    pdu[0] = 0x15;
     assert_eq!(
         LeLegacyConnectionRequest::decode(&pdu),
         Err(LeLegacyConnectionRequestError::ReservedHeaderBitsSet)
@@ -144,4 +139,61 @@ fn maximum_admitted_connection_timing_keeps_widened_arithmetic_exact() {
     assert_eq!(timing.first_window_end_micros(), 4_011_250);
     assert!(LeConnectionTiming::new(8, 3200, 3200, 499, 3200).is_err());
     assert!(LeConnectionTiming::new(1, 0, 6, 499, 3200).is_ok());
+}
+
+#[test]
+fn connect_ind_preserves_all_header_and_length_errors_before_payload_admission() {
+    for octet in u8::MIN..=u8::MAX {
+        for length in u8::MIN..=u8::MAX {
+            let mut pdu = connection_request(false);
+            pdu[0] = octet;
+            pdu[1] = length;
+            let result = LeLegacyConnectionRequest::decode(&pdu);
+            if octet % 16 != 5 {
+                assert_eq!(
+                    result,
+                    Err(LeLegacyConnectionRequestError::UnexpectedPduType)
+                );
+            } else if (octet / 16) % 2 != 0 || length >= 64 {
+                assert_eq!(
+                    result,
+                    Err(LeLegacyConnectionRequestError::ReservedHeaderBitsSet)
+                );
+            } else if length != 34 {
+                assert_eq!(result, Err(LeLegacyConnectionRequestError::LengthMismatch));
+            } else {
+                let request = result.unwrap();
+                assert_eq!(
+                    request.initiator(),
+                    LeDeviceAddress::from_wire_bytes(
+                        INITIATOR,
+                        if (octet / 64) % 2 == 0 {
+                            LeDeviceAddressKind::Public
+                        } else {
+                            LeDeviceAddressKind::Random
+                        }
+                    )
+                );
+                assert_eq!(
+                    request.advertiser(),
+                    LeDeviceAddress::from_wire_bytes(
+                        ADVERTISER,
+                        if octet < 128 {
+                            LeDeviceAddressKind::Public
+                        } else {
+                            LeDeviceAddressKind::Random
+                        }
+                    )
+                );
+                assert_eq!(
+                    request.channel_selection(),
+                    if (octet / 32) % 2 == 0 {
+                        LeChannelSelectionAlgorithm::AlgorithmOne
+                    } else {
+                        LeChannelSelectionAlgorithm::AlgorithmTwo
+                    }
+                );
+            }
+        }
+    }
 }

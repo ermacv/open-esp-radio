@@ -1929,7 +1929,6 @@ dependencies = [
  "oer-test-ui-cases",
  "oer-time",
  "oer-time-virtual",
- "oer-wire",
  "tempfile",
 ]
 

@@ -139,3 +139,91 @@ fn every_owned_prefix_matches_its_borrowed_source_and_rejects_over_capacity() {
         })
     );
 }
+
+#[test]
+fn all_nonconnectable_encodings_match_the_previous_wire_bytes_without_partial_writes() {
+    for (kind, public_octet, random_octet) in [
+        (LegacyNonconnectableKind::NonScannable, 0x02, 0x42),
+        (LegacyNonconnectableKind::Scannable, 0x06, 0x46),
+    ] {
+        for (class, octet) in [
+            (LeDeviceAddressKind::Public, public_octet),
+            (LeDeviceAddressKind::Random, random_octet),
+        ] {
+            for length in 0..=31 {
+                let data = [0x5a; 31];
+                let advertisement = LegacyNonconnectableAdvertisement::new(
+                    kind,
+                    LeDeviceAddress::from_wire_bytes([1, 2, 3, 4, 5, 6], class),
+                    LegacyAdvertisingData::new(&data[..length]).unwrap(),
+                );
+                let mut expected = [0x5a; 39];
+                expected[..8].copy_from_slice(&[octet, (6 + length) as u8, 1, 2, 3, 4, 5, 6]);
+                let mut encoded = [0xa5; 40];
+                assert_eq!(advertisement.encode(&mut encoded), Ok(8 + length));
+                assert_eq!(&encoded[..8 + length], &expected[..8 + length]);
+                assert!(encoded[8 + length..].iter().all(|byte| *byte == 0xa5));
+                for available in 0..8 + length {
+                    let mut short = [0xa5; 39];
+                    assert_eq!(
+                        advertisement.encode(&mut short[..available]),
+                        Err(LegacyAdvertisingEncodeError::DestinationTooSmall {
+                            required: 8 + length,
+                            available
+                        })
+                    );
+                    assert_eq!(short, [0xa5; 39]);
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn nonconnectable_decoding_preserves_every_header_and_length_decision() {
+    for octet in u8::MIN..=u8::MAX {
+        for length in u8::MIN..=u8::MAX {
+            let pdu = [octet, length, 1, 2, 3, 4, 5, 6];
+            let result = LegacyNonconnectableAdvertisement::decode(&pdu);
+            let code = octet % 16;
+            if code != 2 && code != 6 {
+                assert_eq!(
+                    result,
+                    Err(LegacyAdvertisingDecodeError::UnexpectedPduType { pdu_type: code })
+                );
+            } else if ![0x02, 0x42, 0x06, 0x46].contains(&octet) {
+                assert_eq!(
+                    result,
+                    Err(LegacyAdvertisingDecodeError::ReservedHeaderBitsSet)
+                );
+            } else if !(6..=37).contains(&length) {
+                assert_eq!(
+                    result,
+                    Err(LegacyAdvertisingDecodeError::InvalidPayloadLength {
+                        length: usize::from(length)
+                    })
+                );
+            } else if length != 6 {
+                assert_eq!(
+                    result,
+                    Err(LegacyAdvertisingDecodeError::LengthMismatch {
+                        declared: 2 + usize::from(length),
+                        available: 8
+                    })
+                );
+            } else {
+                let decoded = result.unwrap();
+                assert_eq!(
+                    decoded.kind(),
+                    if code == 2 {
+                        LegacyNonconnectableKind::NonScannable
+                    } else {
+                        LegacyNonconnectableKind::Scannable
+                    }
+                );
+                assert_eq!(decoded.advertiser().wire_bytes(), [1, 2, 3, 4, 5, 6]);
+                assert!(decoded.data().is_empty());
+            }
+        }
+    }
+}

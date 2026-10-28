@@ -172,7 +172,12 @@ impl AdvertisingImageBuilder<'_> {
         pool: &mut LegacyAdvertisingPool<'pool, 'epoch, N>,
         lease: &SchedulerRoleInstance<'pool, 'epoch>,
     ) -> Result<LegacyAdvertisingEvent, LegacyAdvertisingError> {
-        let address = legacy_advertising_event_image::own_address_from_pdu(self.pdu)
+        let advertisement =
+            oer_bluetooth_le_wire::advertising_header::LegacyAdvertisingPduPrefix::decode(self.pdu)
+                .map_err(|_| {
+                    LegacyAdvertisingError::Pdu(LegacyAdvertisingPduError::MissingAdvertiserAddress)
+                })?;
+        let address = legacy_advertising_event_image::own_address_for_advertisement(advertisement)
             .map_err(LegacyAdvertisingError::Pdu)?;
         pool.prepare_packet(lease, self.pdu)?;
         pool.reset_link_state(lease, self.power, address, ROLE_PRIORITY)?;

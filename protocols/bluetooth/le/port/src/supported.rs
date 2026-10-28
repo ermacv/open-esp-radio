@@ -9,18 +9,11 @@ use crate::{
     LeRadioCapabilities, LeWindow, OutsideEpoch, RadioDuration, RadioTiming, ScanFilterPolicy,
     ScanType, ScanWindow, ScannerConfiguration, TestReceive, TestTransmit, TxPower,
 };
-use oer_bluetooth_le_wire::DataPdu;
+use oer_bluetooth_le_wire::{
+    DataPdu,
+    advertising_header::{AdvertisingPduType, LegacyAdvertisingPduPrefix},
+};
 
-/// Header type of `ADV_IND`.
-const ADV_IND: u8 = 0x0;
-/// Header type of `ADV_DIRECT_IND`.
-const ADV_DIRECT_IND: u8 = 0x1;
-/// Header type of `ADV_NONCONN_IND`.
-const ADV_NONCONN_IND: u8 = 0x2;
-/// Header type of `ADV_SCAN_IND`.
-const ADV_SCAN_IND: u8 = 0x6;
-/// The header bits a legacy advertising PDU keeps clear: the RFU bit.
-const RESERVED_HEADER_BITS: u8 = 0x10;
 /// The highest connection event scheduling priority.
 const MAX_PRIORITY: u8 = 15;
 /// The longest LE Test packet payload.
@@ -207,19 +200,24 @@ impl Untimed for AdvertisingConfiguration<'_> {}
 
 impl Capability for AdvertisingConfiguration<'_> {
     fn supported(&self, caps: &LeRadioCapabilities) -> bool {
-        let header = self.pdu.header();
-        let kind = match (header & 0x0f, self.reception) {
-            (ADV_NONCONN_IND, AdvertisingReception::None) => caps.legacy_advertising.nonconnectable,
+        let Ok(advertisement) = LegacyAdvertisingPduPrefix::decode(self.pdu.bytes()) else {
+            return false;
+        };
+        let header = advertisement.header;
+        let kind = match (header.pdu_type(), self.reception) {
+            (AdvertisingPduType::AdvNonconnInd, AdvertisingReception::None) => {
+                caps.legacy_advertising.nonconnectable
+            }
             (
-                ADV_IND | ADV_SCAN_IND,
+                AdvertisingPduType::AdvInd | AdvertisingPduType::AdvScanInd,
                 AdvertisingReception::ScanResponse(_) | AdvertisingReception::Report,
             )
-            | (ADV_DIRECT_IND, AdvertisingReception::Report) => caps.legacy_advertising.responsive,
+            | (AdvertisingPduType::AdvDirectInd, AdvertisingReception::Report) => {
+                caps.legacy_advertising.responsive
+            }
             _ => false,
         };
-        kind && header & RESERVED_HEADER_BITS == 0
-            && caps.phys.contains(self.phy)
-            && self.tx_power.supported(caps)
+        kind && !header.reserved() && caps.phys.contains(self.phy) && self.tx_power.supported(caps)
     }
 }
 
