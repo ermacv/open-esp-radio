@@ -37,6 +37,9 @@ pub enum FaultReason {
     HilHealthCount = 30,
     RouteWrongClass = 31,
     RouteHandlerCellMismatch = 32,
+    /// Explicit host-requested HIL reset, not a hardware fault. Observations:
+    /// request ID, acknowledgement sequence, session ID low/high words.
+    HilRequested = 33,
     BindingRefused = 256,
     BindingStorageClaimed = 257,
     BindingHandlerOccupied = 258,
@@ -79,6 +82,7 @@ impl FaultReason {
             30 => Some(Self::HilHealthCount),
             31 => Some(Self::RouteWrongClass),
             32 => Some(Self::RouteHandlerCellMismatch),
+            33 => Some(Self::HilRequested),
             256 => Some(Self::BindingRefused),
             257 => Some(Self::BindingStorageClaimed),
             258 => Some(Self::BindingHandlerOccupied),
@@ -123,6 +127,7 @@ impl FaultReason {
             Self::HilHealthCount => "HilHealthCount",
             Self::RouteWrongClass => "RouteWrongClass",
             Self::RouteHandlerCellMismatch => "RouteHandlerCellMismatch",
+            Self::HilRequested => "HilRequested",
             Self::BindingRefused => "BindingRefused",
             Self::BindingStorageClaimed => "BindingStorageClaimed",
             Self::BindingHandlerOccupied => "BindingHandlerOccupied",

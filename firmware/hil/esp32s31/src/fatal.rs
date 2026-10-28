@@ -14,9 +14,9 @@
 
 use oer_diagnostics::Note;
 use oer_esp32s31_hal::platform::interrupt_controller::{self, LineObservation};
-use oer_espressif_interrupt_table::Trigger;
 use oer_espressif_staged_runtime::fatal::{StopError, StopTheWorld};
 use oer_espressif_staged_runtime::trap::{self, TrapRegisters};
+use oer_riscv::clic::Trigger;
 
 const MAGIC: u32 = u32::from_le_bytes(*b"OFTL");
 #[cfg(feature = "panic-hook")]
@@ -281,7 +281,7 @@ fn line_word(observed: LineObservation) -> u32 {
             state.trigger,
             Trigger::PositiveEdge | Trigger::NegativeEdge
         )) << 2
-        | u32::from(state.control) << 8
+        | u32::from(state.control.bits()) << 8
 }
 
 /// Set `source`'s bit, without an index whose bounds check could fail: a

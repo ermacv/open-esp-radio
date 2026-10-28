@@ -243,9 +243,10 @@ pub(crate) fn with_invalid_hart_record<R>(raw: u32, reset: impl FnOnce() -> R) -
     reset()
 }
 
-/// Retain a named fault in the existing panic slot, holding its claim until
-/// reset. The four words are the caller's exact source observations. No owner
-/// is released, no cached reason text is read, and no retained allocation is added.
+/// Retain a named fault or explicit reset request in the existing panic slot,
+/// holding its claim until reset. The four words are the caller's exact source
+/// observations. No owner is released, no cached reason text is read, and no
+/// retained allocation is added.
 #[cfg(all(target_arch = "riscv32", feature = "esp32s31"))]
 pub fn reset_fault(reason: FaultReason, observations: [u32; 4]) -> ! {
     crate::fatal::reset_recording(|_| {
@@ -911,6 +912,7 @@ mod fault_tests {
             (FaultReason::HilCheckpoint, "HilCheckpoint"),
             (FaultReason::HilRateOverflow, "HilRateOverflow"),
             (FaultReason::HilHealthCount, "HilHealthCount"),
+            (FaultReason::HilRequested, "HilRequested"),
         ] {
             let mut slot = Slot::EMPTY;
             let observations = [u32::MAX, 0, 16, 1];
