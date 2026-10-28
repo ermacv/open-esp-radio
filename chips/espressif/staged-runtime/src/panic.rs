@@ -225,7 +225,10 @@ fn report_invalid_hart<E>(
     emit: impl FnOnce(&oer_diagnostics::Note<'_>) -> Result<(), E>,
 ) -> Result<(), E> {
     if let Some(raw) = slot.invalid_hart() {
-        emit(&oer_diagnostics::Note::fatal_fail(raw, "InvalidHart"))?;
+        emit(&oer_diagnostics::Note::fatal_fail(
+            raw,
+            oer_diagnostics::name!("InvalidHart"),
+        ))?;
         slot.magic = 0;
     }
     Ok(())

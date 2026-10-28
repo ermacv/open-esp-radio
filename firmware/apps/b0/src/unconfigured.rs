@@ -18,7 +18,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     };
     let runtime = match root.into_runtime() {
         Ok(runtime) => runtime,
-        Err(error) => fail(error.name()),
+        Err(error) => fail(error.name().as_str()),
     };
     let (_psram, _adopted) = match handoff.adopt(
         INTERRUPT_TABLE,
@@ -26,7 +26,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         oer_esp32s31_board::BootstrapPsram,
     ) {
         Ok(adopted) => adopted,
-        Err(error) => fail(error.name()),
+        Err(error) => fail(error.name().as_str()),
     };
     gate_fault::report_previous();
     release_fault::report_previous();

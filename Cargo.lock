@@ -1864,6 +1864,7 @@ dependencies = [
 name = "oer-diagnostics"
 version = "0.1.0"
 dependencies = [
+ "oer-test-ui-cases",
  "oer-trace",
 ]
 

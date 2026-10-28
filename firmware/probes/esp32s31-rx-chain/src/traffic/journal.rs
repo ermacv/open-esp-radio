@@ -35,27 +35,32 @@ impl<const N: usize, const W: usize> Journal<N, W> {
         mut row: [u32; WIDTH],
         phase: u32,
         force: bool,
-    ) -> Result<(), &'static str> {
+    ) -> Result<(), oer_diagnostics::Name<32>> {
         let changed = self.previous.get(1).copied() != Some(phase)
             || [
                 4, 6, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 25, 26, 27, 29,
             ]
             .iter()
             .any(|i| self.previous.get(*i) != row.get(*i));
-        *row.get_mut(0).ok_or("traffic-ordinal")? = self.scans;
-        *row.get_mut(1).ok_or("traffic-phase")? = phase;
+        *row.get_mut(0)
+            .ok_or(oer_diagnostics::name!("traffic-ordinal"; 32))? = self.scans;
+        *row.get_mut(1)
+            .ok_or(oer_diagnostics::name!("traffic-phase"; 32))? = phase;
         self.scans = self.scans.saturating_add(1);
         self.previous = row;
         if force || changed {
-            *self.rows.get_mut(self.used).ok_or("traffic-journal-full")? = row;
+            *self
+                .rows
+                .get_mut(self.used)
+                .ok_or(oer_diagnostics::name!("traffic-journal-full"; 32))? = row;
             self.used = self.used.saturating_add(1);
         }
         Ok(())
     }
 
-    pub(super) fn admit_live(&self) -> Result<(), &'static str> {
+    pub(super) fn admit_live(&self) -> Result<(), oer_diagnostics::Name<32>> {
         if self.used >= CAPACITY.saturating_sub(16) {
-            Err("traffic-live-full")
+            Err(oer_diagnostics::name!("traffic-live-full"; 32))
         } else {
             Ok(())
         }

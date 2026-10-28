@@ -11,6 +11,9 @@ description = "Typed boot diagnostics over the line console, without target form
 [dependencies]
 oer-trace = { path = "../trace" }
 
+[dev-dependencies]
+oer-test-ui-cases = { path = "../../tools/test/ui-cases" }
+
 [features]
 # The host's text for notes; firmware never enables it.
 render = []

@@ -21,8 +21,10 @@ those bytes. It reports `Truncated`, `UnknownRecord` or `Payload` for an
 incomplete record, unknown tag/kind, invalid fields/UTF-8 or trailing bytes.
 The containing transport owns integrity and message order. The encoder's
 previous-panic fields must fit the retained limits of 48 file bytes and 64
-message bytes; invalid caller input is rejected by assertions before emitting
-a record. Encoding calls no formatter.
+message bytes. Invalid caller input returns `EncodeError::Input` with the
+field and observed byte length before emitting any bytes; `EncodeError::Sink`
+preserves the sink failure. A rejected panic consumes no local console
+sequence. Encoding calls no formatter.
 
 | Raw record field | Bytes |
 | --- | ---: |
@@ -56,6 +58,16 @@ Each topic has a constructor on `Note` whose arguments the compiler checks
 text. The words are 32-bit values in the topic's field order (a 64-bit value
 is two words, low first), and a name is static text of a variant or register
 (at most 8 words, 6 names, 64 bytes a name and 96 bytes of names in a note).
+Fixed names use `Name<BYTES>`, a transparent static string whose byte budget
+is part of its type. `name!("literal")` constructs it in a const block with
+its exact UTF-8 byte length; `name!("literal"; 32)` gives variants a common
+budget. `Name::from_static` accepts only an associated-constant text source
+and checks it in an inline const block even when called at runtime. No
+arbitrary runtime string can enter this type. Each topic constructor
+const-checks the sum of its fixed-name budgets against 96 bytes. Terminal
+reason producers return these bounded values, so terminal diagnostics are
+infallible. The decoder continues to borrow and validate arbitrary wire text.
+
 Payload: topic u16, word count u8, name count u8 (top bit: the path
 overflowed), the words, then each name as a length u8 and its bytes. The
 decoder accepts exactly the counts of the topic's layout and, for a topic that

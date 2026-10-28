@@ -54,9 +54,9 @@ pub fn note(note: &Note<'_>, out: &mut impl Write) -> fmt::Result {
                 let mut left = length;
                 for _ in 0..words {
                     for byte in next()?.to_be_bytes() {
-                        if left > 0 {
+                        if let Some(remaining) = left.checked_sub(1) {
                             write!(out, "{byte:02x}")?;
-                            left -= 1;
+                            left = remaining;
                         }
                     }
                 }
@@ -124,14 +124,16 @@ pub fn note(note: &Note<'_>, out: &mut impl Write) -> fmt::Result {
             }
             Field::Indices => {
                 let count = next()? as usize;
-                let mut packed = [0_u8; 16];
-                for chunk in packed.chunks_exact_mut(4) {
-                    chunk.copy_from_slice(&next()?.to_be_bytes());
-                }
+                let packed = [
+                    next()?.to_be_bytes(),
+                    next()?.to_be_bytes(),
+                    next()?.to_be_bytes(),
+                    next()?.to_be_bytes(),
+                ];
                 if count == 0 {
                     out.write_str("-")?;
                 }
-                for (position, index) in packed.iter().take(count).enumerate() {
+                for (position, index) in packed.as_flattened().iter().take(count).enumerate() {
                     if position > 0 {
                         out.write_char(',')?;
                     }
@@ -144,20 +146,19 @@ pub fn note(note: &Note<'_>, out: &mut impl Write) -> fmt::Result {
             Field::IndexDash => match next()? {
                 0 => out.write_str("-")?,
                 1 => out.write_str("x")?,
-                value => write!(out, "{}", value - 2)?,
+                value => write!(out, "{}", value.checked_sub(2).ok_or(fmt::Error)?)?,
             },
             Field::DiscardsLow | Field::DiscardsHigh => {
                 let high = matches!(*field, Field::DiscardsHigh);
                 let mut separate = high && next()? != 0;
                 let (first, count) = if high { (8, 7) } else { (0, 8) };
-                for index in first..first + count {
+                for reason in crate::note::DISCARDS.iter().skip(first).take(count) {
                     let value = next()?;
                     if value != 0 {
                         if separate {
                             out.write_char(',')?;
                         }
                         separate = true;
-                        let reason = crate::note::DISCARDS.get(index).ok_or(fmt::Error)?;
                         write!(out, "{reason}:{value}")?;
                     }
                 }
@@ -178,18 +179,17 @@ pub fn note(note: &Note<'_>, out: &mut impl Write) -> fmt::Result {
             Field::Signed => write!(out, "{}", next()? as i32)?,
             Field::Optional => match next()? {
                 0 => out.write_str("None")?,
-                value => write!(out, "Some({})", value - 1)?,
+                value => write!(out, "Some({})", value.checked_sub(1).ok_or(fmt::Error)?)?,
             },
             Field::Name => out.write_str(names.next().ok_or(fmt::Error)?)?,
             Field::Path => {
                 // Nested like the value's own `Debug`: `Err(Failed(Run(..)))`.
-                let mut depth = 0;
-                for name in names.by_ref() {
-                    if depth > 0 {
+                let depth = names.len();
+                for (index, name) in names.by_ref().enumerate() {
+                    if index > 0 {
                         out.write_char('(')?;
                     }
                     out.write_str(name)?;
-                    depth += 1;
                 }
                 for _ in 1..depth {
                     out.write_char(')')?;

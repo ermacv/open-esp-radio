@@ -11,7 +11,7 @@ oer_espressif_staged_runtime::entry!(main);
 fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     let previous = panic::take_previous();
     let Some(root) = Root::take() else {
-        fail("root-taken");
+        fail(oer_diagnostics::name!("root-taken"; 32));
     };
     let runtime = match root.into_runtime() {
         Ok(runtime) => runtime,
@@ -42,7 +42,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     oer_espressif_staged_runtime::idle()
 }
 
-fn fail(reason: &'static str) -> ! {
+fn fail<const B: usize>(reason: oer_diagnostics::Name<B>) -> ! {
     oer_espressif_staged_runtime::fatal_halt(|_| {
         let _ = usb_serial_jtag::fatal_note(&oer_diagnostics::Note::runtime_fail(reason));
     })

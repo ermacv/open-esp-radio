@@ -8,6 +8,12 @@ pub const MAX_PATH_NAMES: usize = 6;
 /// Most numbers one path keeps.
 pub const MAX_PATH_WORDS: usize = 4;
 
+const _: () = {
+    if MAX_PATH_NAMES > u8::MAX as usize || MAX_PATH_WORDS > u8::MAX as usize {
+        panic!("path capacities fit their counters");
+    }
+};
+
 /// What a value contributes to a note's path.
 pub trait DiagnosticPath {
     /// Pushes this value's variant name, then whatever its payload adds.
@@ -62,7 +68,8 @@ impl DiagPath {
         match self.names.get_mut(usize::from(self.name_count)) {
             Some(slot) => {
                 *slot = name;
-                self.name_count += 1;
+                // A successful slot lookup bounds the count by MAX_PATH_NAMES.
+                self.name_count = self.name_count.wrapping_add(1);
             }
             None => self.overflow = true,
         }
@@ -72,7 +79,8 @@ impl DiagPath {
         match self.words.get_mut(usize::from(self.word_count)) {
             Some(slot) => {
                 *slot = word;
-                self.word_count += 1;
+                // A successful slot lookup bounds the count by MAX_PATH_WORDS.
+                self.word_count = self.word_count.wrapping_add(1);
             }
             None => self.overflow = true,
         }

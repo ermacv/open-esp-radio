@@ -25,11 +25,14 @@ fn decode(bytes: &[u8]) -> Result<Note<'_>, DecodeError> {
 fn every_topic_round_trips_with_a_full_set_of_values() {
     for &topic in ALL_TOPICS {
         let mut note = Note::new(topic);
-        for index in 0..topic.word_count() {
-            note = note.word(0x1000_0000 + index as u32);
+        note.count = topic.word_count() as u8;
+        for (index, word) in note.words.iter_mut().take(topic.word_count()).enumerate() {
+            *word = 0x1000_0000 + index as u32;
         }
-        for _ in 0..topic.name_count() {
-            note = note.named("Name");
+        note.name_count = topic.name_count() as u8;
+        note.name_bytes = (topic.name_count() * 4) as u8;
+        for name in note.names.iter_mut().take(topic.name_count()) {
+            *name = "Name";
         }
         let bytes = encode(&note);
         assert_eq!(decode(&bytes), Ok(note), "{topic:?}");
@@ -49,11 +52,20 @@ fn every_topic_round_trips_with_a_full_set_of_values() {
 
 #[test]
 fn a_typed_constructor_keeps_each_value_in_its_field() {
-    let note = Note::cca_checkpoint("RingSample", Some(3), u64::MAX - 1, true, false, 1, 2, 3);
+    let note = Note::cca_checkpoint(
+        crate::name!("RingSample"),
+        Some(3),
+        u64::MAX - 1,
+        true,
+        false,
+        1,
+        2,
+        3,
+    );
     assert_eq!(note.topic, Topic::CcaCheckpoint);
     assert_eq!(note.names(), ["RingSample"]);
     assert_eq!(note.words(), [4, u32::MAX - 1, u32::MAX, 1, 0, 1, 2, 3]);
-    let none = Note::cca_checkpoint("BeforeRx", None, 0, false, false, 0, 0, 0);
+    let none = Note::cca_checkpoint(crate::name!("BeforeRx"), None, 0, false, false, 0, 0, 0);
     assert_eq!(none.words()[0], 0);
 }
 
@@ -86,7 +98,10 @@ fn a_value_that_keeps_less_than_it_has_marks_its_path() {
 #[test]
 fn a_count_past_the_note_arrays_is_refused_when_read() {
     // Seven names declared, six sent: the count alone is refused.
-    let mut bytes = encode(&Note::cca_rx_fail("step", &DiagPath::of(&Pair(&["A"]))));
+    let mut bytes = encode(&Note::cca_rx_fail(
+        crate::name!("step"),
+        &DiagPath::of(&Pair(&["A"])),
+    ));
     bytes[4] = 1 + MAX_PATH_NAMES as u8;
     for _ in 0..MAX_NAMES - 1 {
         bytes.extend([1, b'x']);
@@ -243,16 +258,32 @@ mod render {
     #[test]
     fn a_sampled_point_prints_its_number_on_every_line_of_the_point() {
         assert_eq!(
-            text(&Note::cca_enable("RingSample", Some(3), 1, 0, 1)),
+            text(&Note::cca_enable(
+                crate::name!("RingSample"),
+                Some(3),
+                1,
+                0,
+                1
+            )),
             "OPEN_RADIO_HIL phy=cca-enable point=RingSample sample=Some(3) force=1 aux_force=0 mac_active=1"
         );
         assert!(
-            text(&Note::cca_enable_register("Settled", Some(2), "R", 0x10))
-                .contains("point=Settled sample=Some(2) name=R")
+            text(&Note::cca_enable_register(
+                crate::name!("Settled"),
+                Some(2),
+                crate::name!("R"),
+                0x10
+            ))
+            .contains("point=Settled sample=Some(2) name=R")
         );
         assert!(
-            text(&Note::cca_register("RingSample", Some(0), "R", 0x10))
-                .contains("point=RingSample sample=Some(0) name=R")
+            text(&Note::cca_register(
+                crate::name!("RingSample"),
+                Some(0),
+                crate::name!("R"),
+                0x10
+            ))
+            .contains("point=RingSample sample=Some(0) name=R")
         );
     }
 
@@ -268,21 +299,21 @@ mod render {
         );
         assert_eq!(
             text(&Note::cca_register(
-                "BeforeRx",
+                crate::name!("BeforeRx"),
                 None,
-                "PHY_AGC_ORACLE.RX_11B_PATH_CONTROL_0",
+                crate::name!("PHY_AGC_ORACLE.RX_11B_PATH_CONTROL_0"),
                 0xabc
             )),
             "OPEN_RADIO_HIL phy=cca-register point=BeforeRx sample=None \
              name=PHY_AGC_ORACLE.RX_11B_PATH_CONTROL_0 raw=0x00000abc"
         );
         assert_eq!(
-            text(&Note::sar2_checkpoint("AfterRfWake", 0x2a, 9)),
+            text(&Note::sar2_checkpoint(crate::name!("AfterRfWake"), 0x2a, 9)),
             "OPEN_RADIO_HIL phy=sar2-checkpoint point=AfterRfWake raw=0x2a init=9"
         );
         assert_eq!(
             text(&Note::tx_rate_checkpoint(
-                "AfterWifiCommonPower",
+                crate::name!("AfterWifiCommonPower"),
                 1,
                 2,
                 0x30
@@ -291,7 +322,7 @@ mod render {
         );
         assert_eq!(
             text(&Note::cca_checkpoint(
-                "Settled",
+                crate::name!("Settled"),
                 Some(2),
                 5_000_000_000,
                 true,
@@ -385,7 +416,7 @@ mod reports {
             "w2.basic supported=- extended=010203040506070809"
         );
         assert_eq!(
-            text(&Note::w2_stats(0, 0, 0, 0, 16000, "-")),
+            text(&Note::w2_stats(0, 0, 0, 0, 16000, crate::name!("-"))),
             "w2.stats timeouts=0 collisions=0 colors=0 errors=0 irq_free=16000 error=-"
         );
     }
@@ -425,7 +456,7 @@ mod w1 {
         );
         assert_eq!(
             line(&[
-                Note::w1_bss_a(0, "stand", [0xBB, 0xD3], 100, 13, 40, 2, 0),
+                Note::w1_bss_a(0, crate::name!("stand"), [0xBB, 0xD3], 100, 13, 40, 2, 0),
                 Note::w1_bss_b(Some((-70, -42)), 3, 1, 150_000, 4),
                 Note::w1_bss_c(Some((10, 900)), 3, true, Some(4_000_000)),
                 Note::w1_bss_d(None),
@@ -436,7 +467,7 @@ mod w1 {
         );
         assert_eq!(
             line(&[
-                Note::w1_bss_a(1, "other", [1, 2], 0, 1, 0, 0, 0),
+                Note::w1_bss_a(1, crate::name!("other"), [1, 2], 0, 1, 0, 0, 0),
                 Note::w1_bss_b(None, 0, 0, 0, 0),
                 Note::w1_bss_c(None, 0, false, None),
                 Note::w1_bss_d(Some(7)),
@@ -451,7 +482,7 @@ mod w1 {
     fn dashes_hex_flags_and_indices_read_as_the_firmware_formatted_them() {
         assert_eq!(
             line(&[
-                Note::w1_hold_a(1, 40, 3, 6, true, "full", 9, 2, 5),
+                Note::w1_hold_a(1, 40, 3, 6, true, crate::name!("full"), 9, 2, 5),
                 Note::w1_hold_b(1, Some(3), None, Some(0)),
                 Note::w1_hold_c(Some(1), None, Some(2), Some(0x17000)),
                 Note::w1_hold_d(None),
@@ -518,7 +549,7 @@ mod w1 {
     fn over_p2_and_the_result_read_as_the_check_parses_them() {
         assert_eq!(
             line(&[
-                Note::w1_p2_a("hold", 10, 9, 8, 7),
+                Note::w1_p2_a(crate::name!("hold"), 10, 9, 8, 7),
                 Note::w1_p2_b((3, 3), 6, 5),
                 Note::w1_p2_c(4, 3),
             ]),
@@ -533,10 +564,10 @@ mod w1 {
         assert_eq!(
             line(&[
                 Note::w1_fail_begin(),
-                Note::w1_fail_gate("walker_restart"),
-                Note::w1_fail_reason("received-while-held"),
+                Note::w1_fail_gate(crate::name!("walker_restart")),
+                Note::w1_fail_reason(crate::name!("received-while-held")),
                 Note::w1_fail_separator(),
-                Note::w1_fail_gate("ownership"),
+                Note::w1_fail_gate(crate::name!("ownership")),
                 Note::w1_fail_not_exercised(),
                 Note::w1_fail_end(),
             ]),
@@ -544,10 +575,26 @@ mod w1 {
         );
         assert_eq!(
             line(&[
-                Note::w1_gate_name("walker_restart"),
-                Note::w1_gate_fail("held"),
+                Note::w1_gate_name(crate::name!("walker_restart")),
+                Note::w1_gate_fail(crate::name!("held")),
             ]),
             "w1.gate name=walker_restart result=fail reason=held"
         );
     }
+}
+
+#[test]
+fn maximum_fixed_name_budgets_keep_every_utf8_byte() {
+    let note = Note::cca_register(
+        crate::name!("éééééééééééééééééééééééééééééééé"),
+        Some(u8::MAX),
+        crate::name!("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"),
+        u32::MAX,
+    );
+    assert_eq!(
+        note.names().iter().map(|name| name.len()).sum::<usize>(),
+        MAX_NAME_BYTES
+    );
+    assert!(!note.overflowed());
+    assert_eq!(decode(&encode(&note)), Ok(note));
 }

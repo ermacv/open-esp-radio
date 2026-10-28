@@ -119,22 +119,22 @@ pub enum BootError {
 
 impl BootError {
     /// The boot-failure reason carried by the image's diagnostic record.
-    pub const fn name(self) -> &'static str {
+    pub const fn name(self) -> oer_diagnostics::Name<32> {
         match self {
-            Self::WrongHart { .. } => "interrupt-hart",
-            Self::NoInterruptStack { .. } => "interrupt-stack",
-            Self::InvalidStackGuard { .. } => "interrupt-stack-guard",
-            Self::ForeignVectors => "interrupt-vectors",
+            Self::WrongHart { .. } => oer_diagnostics::name!("interrupt-hart"; 32),
+            Self::NoInterruptStack { .. } => oer_diagnostics::name!("interrupt-stack"; 32),
+            Self::InvalidStackGuard { .. } => oer_diagnostics::name!("interrupt-stack-guard"; 32),
+            Self::ForeignVectors => oer_diagnostics::name!("interrupt-vectors"; 32),
             Self::InterruptController(oer_espressif_interrupt_table::Error::WrongControlBits {
                 ..
-            }) => "interrupt-control-bits",
+            }) => oer_diagnostics::name!("interrupt-control-bits"; 32),
             Self::InterruptController(
                 oer_espressif_interrupt_table::Error::WrongInterruptCount { .. },
-            ) => "interrupt-count",
+            ) => oer_diagnostics::name!("interrupt-count"; 32),
             Self::InterruptController(oer_espressif_interrupt_table::Error::WrongLevelBits {
                 ..
-            }) => "interrupt-level-bits",
-            Self::InterruptController(_) => "interrupt-table",
+            }) => oer_diagnostics::name!("interrupt-level-bits"; 32),
+            Self::InterruptController(_) => oer_diagnostics::name!("interrupt-table"; 32),
         }
     }
 }

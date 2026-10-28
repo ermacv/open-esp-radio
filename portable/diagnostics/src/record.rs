@@ -53,23 +53,39 @@ pub enum Record<'a> {
     Note(Note<'a>),
 }
 
-/// Maximum encoded record: its tag and the largest previous-panic payload.
+/// Maximum encoded record: its tag and the largest note payload.
 pub const MAX_RECORD_BYTES: usize = 1 + MAX_PAYLOAD;
+
+/// Invalid arbitrary retained-text input. Lengths are UTF-8 byte counts.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PanicTextError {
+    FileTooLong { bytes: usize },
+    MessageTooLong { bytes: usize },
+}
+
+/// An invalid input is refused before writing; a sink failure is preserved.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum EncodeError<E> {
+    Input(PanicTextError),
+    Sink(E),
+}
 
 /// Emit exactly one tagged record as raw bytes, without sequence, CRC,
 /// escaping or any transport header. The sink must accept the complete slice
 /// or return its own error. HIL consumers can collect these bytes in their
 /// existing bounded payload buffer; the line console streams them directly.
-///
-/// # Panics
-/// A previous panic must fit the platform's retained field limits (48 file
-/// bytes and 64 message bytes), just as the retained record itself does.
+/// Invalid retained-text input is rejected before calling the sink.
 #[inline]
-pub fn encode<E>(record: &Record<'_>, write: impl FnMut(&[u8]) -> Result<(), E>) -> Result<(), E> {
+pub fn encode<E>(
+    record: &Record<'_>,
+    write: impl FnMut(&[u8]) -> Result<(), E>,
+) -> Result<(), EncodeError<E>> {
     match record {
         Record::PreviousPanic(panic) => encode_previous_panic(panic, write),
-        Record::Event { kind, words } => encode_event_words(*kind, || *words, write),
-        Record::Note(note) => encode_note(note, write),
+        Record::Event { kind, words } => {
+            encode_event_words(*kind, || *words, write).map_err(EncodeError::Sink)
+        }
+        Record::Note(note) => encode_note(note, write).map_err(EncodeError::Sink),
     }
 }
 
@@ -80,8 +96,9 @@ pub fn encode<E>(record: &Record<'_>, write: impl FnMut(&[u8]) -> Result<(), E>)
 pub(super) fn encode_previous_panic<E>(
     panic: &PreviousPanic<'_>,
     mut write: impl FnMut(&[u8]) -> Result<(), E>,
-) -> Result<(), E> {
-    validate_previous_panic(panic);
+) -> Result<(), EncodeError<E>> {
+    validate_previous_panic(panic).map_err(EncodeError::Input)?;
+    let mut write = |bytes: &[u8]| write(bytes).map_err(EncodeError::Sink);
     write(&[1])?;
     let flags = u8::from(panic.in_interrupt)
         | (u8::from(panic.interrupted_pc.is_some()) << 1)
@@ -145,9 +162,20 @@ fn encode_event_words<E>(
 }
 
 #[inline]
-pub(super) fn validate_previous_panic(panic: &PreviousPanic<'_>) {
-    assert!(panic.file.len() <= 48);
-    assert!(panic.message.is_none_or(|message| message.len() <= 64));
+pub(super) fn validate_previous_panic(panic: &PreviousPanic<'_>) -> Result<(), PanicTextError> {
+    if panic.file.len() > 48 {
+        return Err(PanicTextError::FileTooLong {
+            bytes: panic.file.len(),
+        });
+    }
+    if let Some(message) = panic.message
+        && message.len() > 64
+    {
+        return Err(PanicTextError::MessageTooLong {
+            bytes: message.len(),
+        });
+    }
+    Ok(())
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -212,8 +240,18 @@ pub fn decode(bytes: &[u8]) -> Result<Record<'_>, DecodeError> {
                 (0, 0)
             };
             // The topics' const checks keep both ranges inside the arrays.
-            if !(topic.word_count()..=topic.word_count() + extra_words).contains(&words)
-                || !(topic.name_count()..=topic.name_count() + extra_names).contains(&names)
+            if !(topic.word_count()
+                ..=topic
+                    .word_count()
+                    .checked_add(extra_words)
+                    .ok_or(DecodeError::Payload)?)
+                .contains(&words)
+                || !(topic.name_count()
+                    ..=topic
+                        .name_count()
+                        .checked_add(extra_names)
+                        .ok_or(DecodeError::Payload)?)
+                    .contains(&names)
                 || words > MAX_WORDS
                 || names > MAX_NAMES
                 || (overflow && !topic.has_path())
@@ -225,22 +263,27 @@ pub fn decode(bytes: &[u8]) -> Result<Record<'_>, DecodeError> {
                 *word = u32::from_le_bytes(fields.array()?);
             }
             let mut names = [""; MAX_NAMES];
-            let mut name_bytes = 0;
+            let mut name_bytes = 0_usize;
             for name in names.iter_mut().take(usize::from(name_count)) {
                 let [length] = fields.array()?;
-                name_bytes += usize::from(length);
+                name_bytes = name_bytes
+                    .checked_add(usize::from(length))
+                    .ok_or(DecodeError::Payload)?;
                 if usize::from(length) > MAX_NAME || name_bytes > MAX_NAME_BYTES {
                     return Err(DecodeError::Payload);
                 }
                 *name = core::str::from_utf8(fields.bytes(usize::from(length))?)
                     .map_err(|_| DecodeError::Payload)?;
             }
-            Record::Note(Note::from_parts(
+            Record::Note(Note {
                 topic,
-                words.get(..usize::from(count)).unwrap_or(&[]),
-                names.get(..usize::from(name_count)).unwrap_or(&[]),
+                words,
+                count,
+                names,
+                name_count,
+                name_bytes: name_bytes as u8,
                 overflow,
-            ))
+            })
         }
         _ => return Err(DecodeError::UnknownRecord),
     };

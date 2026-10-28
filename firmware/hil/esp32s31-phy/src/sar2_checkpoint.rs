@@ -18,11 +18,11 @@ pub enum Point {
 }
 
 impl Point {
-    const fn name(&self) -> &'static str {
+    const fn name(&self) -> oer_diagnostics::Name<32> {
         match self {
-            Self::AfterPhyRegistration => "AfterPhyRegistration",
-            Self::BeforeRfClose => "BeforeRfClose",
-            Self::AfterRfWake => "AfterRfWake",
+            Self::AfterPhyRegistration => oer_diagnostics::name!("AfterPhyRegistration"; 32),
+            Self::BeforeRfClose => oer_diagnostics::name!("BeforeRfClose"; 32),
+            Self::AfterRfWake => oer_diagnostics::name!("AfterRfWake"; 32),
         }
     }
 }

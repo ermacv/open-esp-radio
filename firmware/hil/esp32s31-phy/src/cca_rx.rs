@@ -48,7 +48,7 @@ pub struct Prepared {
     stopped: RxRingStopped<'static, COUNT>,
 }
 
-fn failure(step: &'static str, error: RxRingError) -> RejectReason {
+fn failure<const B: usize>(step: oer_diagnostics::Name<B>, error: RxRingError) -> RejectReason {
     crate::transport::CONSOLE.note_immediately(&Note::cca_rx_fail(step, &DiagPath::of(&error)));
     RejectReason::Internal
 }
@@ -76,7 +76,7 @@ async fn prepare_inner<B: PlatformClockBackend, T>(
         runtime.wifi_mac_hal().reopen_mac_core(&stopped);
         let stopped = storage
             .prepare_halted(stopped.into_halted(), runtime.rx_dma())
-            .map_err(|(_, error)| failure("reprepare", error))?;
+            .map_err(|(_, error)| failure(oer_diagnostics::name!("reprepare"; 32), error))?;
         Prepared { storage, stopped }
     } else {
         let placed = Storage::place(STORAGE.take().ok_or(RejectReason::Internal)?)
@@ -84,11 +84,11 @@ async fn prepare_inner<B: PlatformClockBackend, T>(
         let storage = placed.storage();
         let memory = placed
             .prepare_ring(runtime.rx_dma())
-            .map_err(|error| failure("prepare", error))?;
+            .map_err(|error| failure(oer_diagnostics::name!("prepare"; 32), error))?;
         let stopped = runtime
             .prepare_mac_runtime(memory)
             .publish(runtime.rx_dma())
-            .map_err(|error| failure("publish", error))?;
+            .map_err(|error| failure(oer_diagnostics::name!("publish"; 32), error))?;
         Prepared { storage, stopped }
     };
     observe_running(domain, runtime, Point::CapturePrepared).await?;
@@ -148,7 +148,7 @@ async fn experiment<B: PlatformClockBackend, T>(
         Ok(ring) => ring,
         Err((_, error)) => {
             deactivate_promiscuous_receive(runtime);
-            return Err(failure("start", error));
+            return Err(failure(oer_diagnostics::name!("start"; 32), error));
         }
     };
     runtime.start_mac_runtime(&ring);
@@ -183,8 +183,10 @@ async fn experiment<B: PlatformClockBackend, T>(
     while runtime.mac_runtime_active_state() != 0 {
         if EmbassyClock.now() >= deadline {
             ring.require_reset();
-            crate::transport::CONSOLE
-                .note_immediately(&Note::cca_rx_fail("mac-idle", &DiagPath::new()));
+            crate::transport::CONSOLE.note_immediately(&Note::cca_rx_fail(
+                oer_diagnostics::name!("mac-idle"),
+                &DiagPath::new(),
+            ));
             return Err(RejectReason::Internal);
         }
         EmbassyClock
@@ -193,14 +195,14 @@ async fn experiment<B: PlatformClockBackend, T>(
     }
     let halted = ring
         .try_stop(runtime.rx_dma())
-        .map_err(|(_, error)| failure("stop", error))?;
+        .map_err(|(_, error)| failure(oer_diagnostics::name!("stop"; 32), error))?;
     let closed = match observe_running(domain, runtime, Point::RingClosed).await {
         Ok(()) => observe_enables(domain, runtime, Point::RingClosed).await,
         Err(error) => Err(error),
     };
     let stopped = storage
         .prepare_halted(halted, runtime.rx_dma())
-        .map_err(|(_, error)| failure("reclaim", error))?;
+        .map_err(|(_, error)| failure(oer_diagnostics::name!("reclaim"; 32), error))?;
     let returned = !runtime.receive_dma_snapshot().walker_enabled
         && storage.detached_buffer_count() == 0
         && stopped.topology_snapshot().valid;
@@ -238,10 +240,10 @@ async fn sample<B: PlatformClockBackend, T>(
                 let engine = runtime.rx_dma();
                 let cursor = ring
                     .freeze_cursor(engine)
-                    .map_err(|error| failure("cursor", error))?;
+                    .map_err(|error| failure(oer_diagnostics::name!("cursor"; 32), error))?;
                 let Some(unit) = storage
                     .take_completed_unit(ring, cursor)
-                    .map_err(|error| failure("take", error))?
+                    .map_err(|error| failure(oer_diagnostics::name!("take"; 32), error))?
                 else {
                     break;
                 };
@@ -283,12 +285,12 @@ async fn sample<B: PlatformClockBackend, T>(
                 let credit = unit.retain_discard().ok_or(RejectReason::Internal)?;
                 credit
                     .append(engine)
-                    .map_err(|error| failure("return", error))?;
+                    .map_err(|error| failure(oer_diagnostics::name!("return"; 32), error))?;
                 ring.complete_pending_reload(
                     engine,
                     Settle::new(RELOAD_SETTLE_LIMIT, &EmbassyClock),
                 )
-                .map_err(|error| failure("reload", error))?;
+                .map_err(|error| failure(oer_diagnostics::name!("reload"; 32), error))?;
             }
             EmbassyClock
                 .wait_until(
@@ -317,8 +319,10 @@ async fn sample<B: PlatformClockBackend, T>(
             .await;
     }
     if beacons == 0 {
-        crate::transport::CONSOLE
-            .note_immediately(&Note::cca_rx_fail("no-beacons", &DiagPath::new()));
+        crate::transport::CONSOLE.note_immediately(&Note::cca_rx_fail(
+            oer_diagnostics::name!("no-beacons"),
+            &DiagPath::new(),
+        ));
         return Err(RejectReason::Internal);
     }
     Ok(())

@@ -109,10 +109,10 @@ fn workload_future<'a, 'id: 'a, Path: PoolPath + 'a>(
             .split(NetworkInterfaceId::new(0), address, receive)
             .unwrap_or_else(|error| match error {
                 oer_embassy_net::EndpointSplitError::AlreadySplit => {
-                    crate::fail("network-endpoint-already-split")
+                    crate::fail(oer_diagnostics::name!("network-endpoint-already-split"; 32))
                 }
                 oer_embassy_net::EndpointSplitError::RxWaiterUnavailable => {
-                    crate::fail("network-rx-waiter-unavailable")
+                    crate::fail(oer_diagnostics::name!("network-rx-waiter-unavailable"; 32))
                 }
             });
         let (stack, mut runner) = Stack::new(STACK.init_with(StackStorage::new), seed, general);

@@ -104,7 +104,7 @@ oer_espressif_staged_runtime::entry!(main);
 fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     let previous = oer_espressif_staged_runtime::panic::take_previous();
     let Some(root) = Root::take() else {
-        fail("root-taken");
+        fail(oer_diagnostics::name!("root-taken"; 32));
     };
     let runtime = root
         .into_runtime()
@@ -188,7 +188,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     let entropy = rng.random();
     let (driver_channel, frontend_channel) = radio::channels();
     if RadioTasks::radio_actor(&radio, actor).is_err() {
-        fail("task-start");
+        fail(oer_diagnostics::name!("task-start"; 32));
     }
     if RadioTasks::driver(
         &radio,
@@ -207,10 +207,10 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     )
     .is_err()
     {
-        fail("task-start");
+        fail(oer_diagnostics::name!("task-start"; 32));
     }
     let Ok((console, pads)) = usb::open(adopted.router(), interrupts.console_usb) else {
-        fail("console");
+        fail(oer_diagnostics::name!("console"; 32));
     };
     let executor = Executor::<0>::new(software.line0);
     let (mut router, hart) = match adopted.enable_interrupts() {
@@ -231,7 +231,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
                         .is_err()
                     || AppTasks::rtc_watchdog(spawner, watchdog).is_err()
                 {
-                    fail("task-start");
+                    fail(oer_diagnostics::name!("task-start"; 32));
                 }
             },
         )
@@ -247,7 +247,7 @@ async fn feed_rtc_watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) {
 
 /// Halt the image on a failed boot step, its reason on the console while
 /// no one holds the block.
-fn fail(reason: &'static str) -> ! {
+fn fail<const B: usize>(reason: oer_diagnostics::Name<B>) -> ! {
     oer_espressif_staged_runtime::fatal_halt(|_path| {
         let _note = oer_esp32s31_hal::usb_serial_jtag::fatal_note(
             &oer_diagnostics::Note::runtime_fail(reason),

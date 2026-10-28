@@ -6,7 +6,7 @@ pub use oer_diagnostics::{BootSmokePassed, Console};
 pub fn previous_panic<F, E>(
     console: &mut Console<F>,
     record: &crate::panic::PanicRecord,
-) -> Result<(), E>
+) -> Result<(), oer_diagnostics::record::EncodeError<E>>
 where
     F: FnMut(&[u8]) -> Result<(), E>,
 {
@@ -23,7 +23,10 @@ where
 
 /// Writes the retained panic as one frame of the shared note sequence, for an
 /// image that writes its other diagnostics with [`oer_diagnostics::emit_note`].
-pub fn emit_previous_panic<F, E>(write: F, record: &crate::panic::PanicRecord) -> Result<(), E>
+pub fn emit_previous_panic<F, E>(
+    write: F,
+    record: &crate::panic::PanicRecord,
+) -> Result<(), oer_diagnostics::record::EncodeError<E>>
 where
     F: FnMut(&[u8]) -> Result<(), E>,
 {

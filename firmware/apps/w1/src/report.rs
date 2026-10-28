@@ -316,14 +316,14 @@ pub struct Run<'a> {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Outcome {
     Pass,
-    Fail(&'static str),
-    Unexercised(&'static str),
+    Fail(oer_diagnostics::Name<32>),
+    Unexercised(oer_diagnostics::Name<32>),
 }
 
 /// One gate.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Gate {
-    pub name: &'static str,
+    pub name: oer_diagnostics::Name<32>,
     pub outcome: Outcome,
 }
 
@@ -378,23 +378,26 @@ fn beacons(run: &Run<'_>) -> (Verdict, Outcome) {
     };
     let Some((bi_tu, ssid_ok, tally)) = stand(run) else {
         let reason = if run.survey.counters().table_full > 0 {
-            "stand-not-tracked"
+            oer_diagnostics::name!("stand-not-tracked"; 32)
         } else {
-            "stand-absent"
+            oer_diagnostics::name!("stand-absent"; 32)
         };
         return (unidentified, Outcome::Fail(reason));
     };
     // The stand BSSID heard without the stand's SSID is another network.
     if !ssid_ok {
-        return (unidentified, Outcome::Fail("stand-mismatch"));
+        return (
+            unidentified,
+            Outcome::Fail(oer_diagnostics::name!("stand-mismatch"; 32)),
+        );
     }
     let beacons = u64::from(tally.beacons.saturating_sub(tally.duplicates));
     let bi_us = u64::from(bi_tu) * TU_US;
     let required = required_beacons(run.window_us, bi_us);
     let outcome = match required {
-        None => Outcome::Fail("zero-interval"),
+        None => Outcome::Fail(oer_diagnostics::name!("zero-interval"; 32)),
         Some(required) if beacons >= required => Outcome::Pass,
-        Some(_) => Outcome::Fail("beacons"),
+        Some(_) => Outcome::Fail(oer_diagnostics::name!("beacons"; 32)),
     };
     (
         Verdict {
@@ -407,7 +410,7 @@ fn beacons(run: &Run<'_>) -> (Verdict, Outcome) {
     )
 }
 
-fn check(pass: bool, reason: &'static str) -> Outcome {
+fn check(pass: bool, reason: oer_diagnostics::Name<32>) -> Outcome {
     if pass {
         Outcome::Pass
     } else {
@@ -435,11 +438,11 @@ fn ownership(cycles: &[Cycle]) -> Outcome {
             || cycle.release_mismatch > 0
             || cycle.chained > 0
     }) {
-        Outcome::Fail("foreign-write")
+        Outcome::Fail(oer_diagnostics::name!("foreign-write"; 32))
     } else if cycles.iter().any(|cycle| !cycle.exercised()) {
-        Outcome::Unexercised("pool-not-exhausted")
+        Outcome::Unexercised(oer_diagnostics::name!("pool-not-exhausted"; 32))
     } else if cycles.iter().any(|cycle| cycle.first_drop.is_none()) {
-        Outcome::Unexercised("ring-order")
+        Outcome::Unexercised(oer_diagnostics::name!("ring-order"; 32))
     } else {
         Outcome::Pass
     }
@@ -456,80 +459,95 @@ pub fn gates(run: &Run<'_>) -> (Verdict, [Gate; GATES]) {
     // report-only.
     let first = &run.cycles[0];
     let walker_restart = if !first.full.held() {
-        Outcome::Unexercised("pool-not-exhausted")
+        Outcome::Unexercised(oer_diagnostics::name!("pool-not-exhausted"; 32))
     } else if first.hold.units > 0 {
-        Outcome::Fail("received-while-held")
+        Outcome::Fail(oer_diagnostics::name!("received-while-held"; 32))
     } else {
-        check(first.frames_after_release > 0, "no-frames-after-release")
+        check(
+            first.frames_after_release > 0,
+            oer_diagnostics::name!("no-frames-after-release"; 32),
+        )
     };
     let gates = [
         Gate {
-            name: "beacons",
+            name: oer_diagnostics::name!("beacons"; 32),
             outcome: beacons,
         },
         Gate {
-            name: "channel",
-            outcome: check(run.applied_channel == run.channel, "channel-mismatch"),
-        },
-        Gate {
-            name: "exit",
+            name: oer_diagnostics::name!("channel"; 32),
             outcome: check(
-                run.exit.cause == WifiRxCause::StopRequested && run.exit.end == WifiRxEnd::Halted,
-                "not-stopped",
+                run.applied_channel == run.channel,
+                oer_diagnostics::name!("channel-mismatch"; 32),
             ),
         },
         Gate {
-            name: "walker_restart",
+            name: oer_diagnostics::name!("exit"; 32),
+            outcome: check(
+                run.exit.cause == WifiRxCause::StopRequested && run.exit.end == WifiRxEnd::Halted,
+                oer_diagnostics::name!("not-stopped"; 32),
+            ),
+        },
+        Gate {
+            name: oer_diagnostics::name!("walker_restart"; 32),
             outcome: walker_restart,
         },
         Gate {
-            name: "ownership",
+            name: oer_diagnostics::name!("ownership"; 32),
             outcome: ownership(run.cycles),
         },
         Gate {
-            name: "service_errors",
-            outcome: check(run.rx.service_errors == 0, "service-errors"),
-        },
-        Gate {
-            name: "unserviced",
+            name: oer_diagnostics::name!("service_errors"; 32),
             outcome: check(
-                run.unserviced_mac.saturating_add(run.unserviced_pwr) == 0,
-                "unserviced-interrupts",
+                run.rx.service_errors == 0,
+                oer_diagnostics::name!("service-errors"; 32),
             ),
         },
         Gate {
-            name: "timer_wake",
-            outcome: check(!woke_early(), "woke-early"),
+            name: oer_diagnostics::name!("unserviced"; 32),
+            outcome: check(
+                run.unserviced_mac.saturating_add(run.unserviced_pwr) == 0,
+                oer_diagnostics::name!("unserviced-interrupts"; 32),
+            ),
+        },
+        Gate {
+            name: oer_diagnostics::name!("timer_wake"; 32),
+            outcome: check(!woke_early(), oer_diagnostics::name!("woke-early"; 32)),
         },
         // The epoch wrote BASE once: the cold publication of the reserved
         // descriptor; every later publication went through the doorbell.
         Gate {
-            name: "base_writes",
-            outcome: check(run.rx.reload.base_writes == 1, "base-writes"),
+            name: oer_diagnostics::name!("base_writes"; 32),
+            outcome: check(
+                run.rx.reload.base_writes == 1,
+                oer_diagnostics::name!("base-writes"; 32),
+            ),
         },
         // At most the epoch's first frame landed in the reserved
         // descriptor, and nothing after the walker reached the ring.
         Gate {
-            name: "reserved",
+            name: oer_diagnostics::name!("reserved"; 32),
             outcome: check(
                 run.rx.reload.reserved_landings <= 1 && run.rx.reload.reserved_late_landings == 0,
-                "reserved-landing",
+                oer_diagnostics::name!("reserved-landing"; 32),
             ),
         },
         // Every held lease's descriptor carried the owner bit clear.
         Gate {
-            name: "owner_bit",
+            name: oer_diagnostics::name!("owner_bit"; 32),
             outcome: check(
                 run.cycles.iter().all(|cycle| {
                     usize::try_from(cycle.owner_clear).is_ok_and(|clear| clear == cycle.held)
                 }),
-                "owner-bit-set",
+                oer_diagnostics::name!("owner-bit-set"; 32),
             ),
         },
         // No NEXT read named a detached descriptor.
         Gate {
-            name: "walker_on_detached",
-            outcome: check(run.rx.reload.walker_on_detached == 0, "walker-on-detached"),
+            name: oer_diagnostics::name!("walker_on_detached"; 32),
+            outcome: check(
+                run.rx.reload.walker_on_detached == 0,
+                oer_diagnostics::name!("walker-on-detached"; 32),
+            ),
         },
     ];
     (verdict, gates)
@@ -577,54 +595,54 @@ fn mac_tail(bssid: Bssid) -> [u8; 2] {
 }
 
 /// The exit cause as one token.
-pub const fn cause(cause: WifiRxCause) -> &'static str {
+pub const fn cause(cause: WifiRxCause) -> oer_diagnostics::Name<32> {
     match cause {
-        WifiRxCause::StopRequested => "StopRequested",
-        WifiRxCause::Prepare(_) => "Prepare",
-        WifiRxCause::LineRefused => "LineRefused",
-        WifiRxCause::Start(_) => "Start",
-        WifiRxCause::Service(_) => "Service",
-        WifiRxCause::ForeignExecutor => "ForeignExecutor",
+        WifiRxCause::StopRequested => oer_diagnostics::name!("StopRequested"; 32),
+        WifiRxCause::Prepare(_) => oer_diagnostics::name!("Prepare"; 32),
+        WifiRxCause::LineRefused => oer_diagnostics::name!("LineRefused"; 32),
+        WifiRxCause::Start(_) => oer_diagnostics::name!("Start"; 32),
+        WifiRxCause::Service(_) => oer_diagnostics::name!("Service"; 32),
+        WifiRxCause::ForeignExecutor => oer_diagnostics::name!("ForeignExecutor"; 32),
     }
 }
 
 /// The exit end as one token.
-pub const fn end_name(end: WifiRxEnd) -> &'static str {
+pub const fn end_name(end: WifiRxEnd) -> oer_diagnostics::Name<64> {
     match end {
-        WifiRxEnd::Halted => "Halted",
-        WifiRxEnd::NotStarted => "NotStarted",
+        WifiRxEnd::Halted => oer_diagnostics::name!("Halted"; 64),
+        WifiRxEnd::NotStarted => oer_diagnostics::name!("NotStarted"; 64),
         WifiRxEnd::Quarantined {
             reason: WifiRxQuarantine::Fault,
             walker_stopped: true,
-        } => "Quarantined:Fault:walker-stopped",
+        } => oer_diagnostics::name!("Quarantined:Fault:walker-stopped"; 64),
         WifiRxEnd::Quarantined {
             reason: WifiRxQuarantine::Fault,
             walker_stopped: false,
-        } => "Quarantined:Fault:walker-live",
+        } => oer_diagnostics::name!("Quarantined:Fault:walker-live"; 64),
         WifiRxEnd::Quarantined {
             reason: WifiRxQuarantine::MaskTimeout,
             walker_stopped: true,
-        } => "Quarantined:MaskTimeout:walker-stopped",
+        } => oer_diagnostics::name!("Quarantined:MaskTimeout:walker-stopped"; 64),
         WifiRxEnd::Quarantined {
             reason: WifiRxQuarantine::MaskTimeout,
             walker_stopped: false,
-        } => "Quarantined:MaskTimeout:walker-live",
+        } => oer_diagnostics::name!("Quarantined:MaskTimeout:walker-live"; 64),
         WifiRxEnd::Quarantined {
             reason: WifiRxQuarantine::DrainTimeout,
             walker_stopped: true,
-        } => "Quarantined:DrainTimeout:walker-stopped",
+        } => oer_diagnostics::name!("Quarantined:DrainTimeout:walker-stopped"; 64),
         WifiRxEnd::Quarantined {
             reason: WifiRxQuarantine::DrainTimeout,
             walker_stopped: false,
-        } => "Quarantined:DrainTimeout:walker-live",
+        } => oer_diagnostics::name!("Quarantined:DrainTimeout:walker-live"; 64),
         WifiRxEnd::Quarantined {
             reason: WifiRxQuarantine::StopRefused(_),
             walker_stopped: true,
-        } => "Quarantined:StopRefused:walker-stopped",
+        } => oer_diagnostics::name!("Quarantined:StopRefused:walker-stopped"; 64),
         WifiRxEnd::Quarantined {
             reason: WifiRxQuarantine::StopRefused(_),
             walker_stopped: false,
-        } => "Quarantined:StopRefused:walker-live",
+        } => oer_diagnostics::name!("Quarantined:StopRefused:walker-live"; 64),
     }
 }
 
@@ -666,9 +684,9 @@ async fn block_lines<E, F: AsyncFnMut(&Note<'_>) -> Result<(), E>>(
     );
     for (index, (record, tally)) in run.survey.entries().enumerate() {
         let who = if record.bssid == run.stand {
-            "stand"
+            oer_diagnostics::name!("stand"; 32)
         } else {
-            "other"
+            oer_diagnostics::name!("other"; 32)
         };
         line!(
             block,

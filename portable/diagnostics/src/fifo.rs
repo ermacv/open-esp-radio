@@ -108,8 +108,8 @@ impl<'a, F: Fifo> FifoWriter<'a, F> {
         // What is in the FIFO must be on its way to the host before room can
         // appear.
         self.fifo.flush();
-        while self.budget > 0 {
-            self.budget -= 1;
+        while let Some(remaining) = self.budget.checked_sub(1) {
+            self.budget = remaining;
             if self.fifo.has_room() {
                 return true;
             }
@@ -120,15 +120,18 @@ impl<'a, F: Fifo> FifoWriter<'a, F> {
     /// Writes `bytes` as far as the FIFO has room and returns how many it
     /// dropped. Does not flush and does not count.
     fn push_all(&mut self, bytes: &[u8]) -> usize {
-        let mut dropped = 0;
-        for &byte in bytes {
-            if self.fifo.has_room() || self.wait_for_room() {
-                self.fifo.push(byte);
-            } else {
-                dropped += 1;
-            }
-        }
-        dropped
+        // count cannot overflow: the iterator visits at most bytes.len() items.
+        bytes
+            .iter()
+            .filter(|&&byte| {
+                if self.fifo.has_room() || self.wait_for_room() {
+                    self.fifo.push(byte);
+                    false
+                } else {
+                    true
+                }
+            })
+            .count()
     }
 
     /// Writes `bytes` and flushes, counting what did not fit: for text that
@@ -156,9 +159,10 @@ impl<'a, F: Fifo> FifoWriter<'a, F> {
     /// Emits `note` and returns the bytes dropped.
     fn emit(&mut self, note: &Note<'_>) -> usize {
         self.budget = self.patience.0;
-        let mut dropped = 0;
+        let mut dropped = 0_usize;
         let Ok(()) = emit_note(note, |bytes: &[u8]| {
-            dropped += self.push_all(bytes);
+            // One emission has at most MAX_NOTE_LINE bytes, so this sum fits.
+            dropped = dropped.wrapping_add(self.push_all(bytes));
             Ok::<(), Infallible>(())
         });
         dropped

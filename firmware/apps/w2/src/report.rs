@@ -40,7 +40,7 @@ pub struct Report {
     pub supported_len: usize,
     pub extended: [u8; 16],
     pub extended_len: usize,
-    pub error: Option<&'static str>,
+    pub error: Option<oer_diagnostics::Name<32>>,
 }
 impl Report {
     pub fn new(config: crate::W2Config, station: [u8; 6]) -> Self {
@@ -171,10 +171,19 @@ impl Report {
             self.colors,
             self.errors,
             self.irq_free as u32,
-            self.error.unwrap_or("-"),
+            self.error.unwrap_or(oer_diagnostics::name!("-"; 32)),
         ))
         .await?;
-        for (name, pass) in ["a", "b", "c", "d", "e"].into_iter().zip(gates) {
+        for (name, pass) in [
+            oer_diagnostics::name!("a"; 32),
+            oer_diagnostics::name!("b"; 32),
+            oer_diagnostics::name!("c"; 32),
+            oer_diagnostics::name!("d"; 32),
+            oer_diagnostics::name!("e"; 32),
+        ]
+        .into_iter()
+        .zip(gates)
+        {
             emit(&Note::w2_gate(name, pass)).await?;
         }
         emit(&Note::w2_end(self.count as u32 + 9)).await?;

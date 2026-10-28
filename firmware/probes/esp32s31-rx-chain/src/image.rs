@@ -55,8 +55,9 @@ struct DirectOutput {
     _clocks: oer_esp32s31_hal::ieee80211::client::WifiClocksOn,
 }
 static DIRECT_OUTPUT: StaticCell<DirectOutput> = StaticCell::new();
-static DIRECT_READY: oer_memory::ClaimCell<Result<&'static mut DirectOutput, &'static str>> =
-    oer_memory::ClaimCell::new();
+static DIRECT_READY: oer_memory::ClaimCell<
+    Result<&'static mut DirectOutput, oer_diagnostics::Name<32>>,
+> = oer_memory::ClaimCell::new();
 oer_esp32s31_hal::dma_static! { static RX: Storage = zeroed in ".dma.bss.rx_chain_probe"; }
 
 use crate::phy_pilot;
@@ -97,7 +98,7 @@ oer_esp32s31_hal::phy_fault_reporter!(oer_espressif_staged_runtime::phy_fault::r
 oer_espressif_staged_runtime::entry!(main);
 fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     let Some(root) = Root::take() else {
-        fail("root");
+        fail(oer_diagnostics::name!("root"; 32));
     };
     let runtime = root
         .into_runtime()
@@ -111,7 +112,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         Err(error) => fail(error.name()),
     };
     let Some(interrupts) = Interrupts::take() else {
-        fail("interrupts");
+        fail(oer_diagnostics::name!("interrupts"; 32));
     };
     crate::diagnostic::report_previous();
     crate::diagnostic::phase(1);
@@ -128,7 +129,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         oer_espressif_staged_runtime::phy_fault::identity(),
     );
     let Some(lp) = LpClock::<RcSlow>::claim() else {
-        fail("claim");
+        fail(oer_diagnostics::name!("claim"; 32));
     };
     let phy_pilot = crate::phy_pilot::init(runtime.timg0_alarm, adopted.router(), interrupts.phy);
     let backend = Esp32s31Radio::new(
@@ -141,7 +142,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         phy_pilot,
     );
     let Some(backend) = DIRECT_BACKEND.try_init(backend) else {
-        fail("direct-backend");
+        fail(oer_diagnostics::name!("direct-backend"; 32));
     };
     let timer = runtime.system_timer;
     oer_espressif_executor::init::<2, _, _>(
@@ -172,7 +173,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         .unwrap_or_else(|failure| failure.reset());
     let rng = Rng::new(runtime.entropy, EmbassyClock);
     if RadioTasks::direct(&radio, backend, lp, partitions.wifi, rng, station, ap).is_err() {
-        fail("direct-task");
+        fail(oer_diagnostics::name!("direct-task"; 32));
     }
     let (console, pads) = match usb::open(adopted.router(), interrupts.console_usb) {
         Ok(value) => value,
@@ -199,20 +200,21 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
                 if AppTasks::capture(spawner, boot).is_err()
                     || AppTasks::watchdog(spawner, runtime.watchdogs.rtc).is_err()
                 {
-                    fail("task");
+                    fail(oer_diagnostics::name!("task"; 32));
                 }
             },
         )
         .unwrap_or_else(|failure| failure.reset()) {}
 }
-fn fail(reason: &'static str) -> ! {
+fn fail<const B: usize>(reason: oer_diagnostics::Name<B>) -> ! {
     oer_espressif_staged_runtime::fatal_halt(|_| {
         let _ = oer_esp32s31_hal::usb_serial_jtag::fatal_note(
             &oer_diagnostics::Note::runtime_fail(reason),
         );
     })
 }
-type DirectRun = impl core::future::Future<Output = Result<DirectOutput, &'static str>>;
+type DirectRun =
+    impl core::future::Future<Output = Result<DirectOutput, oer_diagnostics::Name<32>>>;
 type DirectPrepare<'a> = impl core::future::Future<
         Output = Result<
             oer_esp32s31_radio_client::PhyPreparation,
@@ -245,16 +247,20 @@ fn track_future(
 #[inline(never)]
 fn placed_prepare(
     backend: &mut Backend,
-) -> Result<oer_memory::PlacedFuture<'_, DirectPrepare<'_>>, &'static str> {
-    let place = PREPARE.try_take().ok_or("direct-prepare-place")?;
+) -> Result<oer_memory::PlacedFuture<'_, DirectPrepare<'_>>, oer_diagnostics::Name<32>> {
+    let place = PREPARE
+        .try_take()
+        .ok_or(oer_diagnostics::name!("direct-prepare-place"; 32))?;
     Ok(place.future(|| prepare_future(backend)))
 }
 #[inline(never)]
 fn placed_track(
     backend: &mut Backend,
     request: oer_esp32s31_radio_client::wifi::WifiTrack,
-) -> Result<oer_memory::PlacedFuture<'_, DirectTrack<'_>>, &'static str> {
-    let place = TRACK.try_take().ok_or("direct-track-place")?;
+) -> Result<oer_memory::PlacedFuture<'_, DirectTrack<'_>>, oer_diagnostics::Name<32>> {
+    let place = TRACK
+        .try_take()
+        .ok_or(oer_diagnostics::name!("direct-track-place"; 32))?;
     Ok(place.future(|| track_future(backend, request)))
 }
 static DIRECT_RUN: static_cell::ConstStaticCell<oer_memory::StaticPlace<DirectRun>> =
@@ -273,19 +279,21 @@ fn direct_future(
         use oer_esp32s31_radio_client::wifi::{WifiJoin, WifiTrack};
         use oer_esp32s31_radio_system::ClientBackend;
         let channel = WifiChannel::new_2_4_ghz(CHANNEL, WifiChannelWidth::Mhz20)
-            .map_err(|_| "direct-channel")?;
+            .map_err(|_| oer_diagnostics::name!("direct-channel"; 32))?;
         let domain = Country::new(*b"DE")
             .ok()
             .and_then(RegulatoryDomain::of)
-            .ok_or("direct-domain")?;
-        let channel = domain.permit(channel).map_err(|_| "direct-permit")?;
+            .ok_or(oer_diagnostics::name!("direct-domain"; 32))?;
+        let channel = domain
+            .permit(channel)
+            .map_err(|_| oer_diagnostics::name!("direct-permit"; 32))?;
         let tx_ceiling = channel.tx_ceiling(board::wifi_power_limits(
             i32::from(PhyConfig::production().highest_target_power_quarter_dbm()) * 25,
             Some(1000),
         ));
         let phy = placed_prepare(backend)?
             .await
-            .map_err(|_| "direct-prepare")?;
+            .map_err(|_| oer_diagnostics::name!("direct-prepare"; 32))?;
         let joined = backend
             .enter(
                 WifiJoin {
@@ -295,7 +303,7 @@ fn direct_future(
                 &lp,
             )
             .await
-            .map_err(|_| "direct-enter")?;
+            .map_err(|_| oer_diagnostics::name!("direct-enter"; 32))?;
         let mut platform = Platform { rng };
         let tracked = placed_track(
             backend,
@@ -313,7 +321,7 @@ fn direct_future(
             },
         )?
         .await
-        .map_err(|_| "direct-track")?;
+        .map_err(|_| oer_diagnostics::name!("direct-track"; 32))?;
         let (access, clocks) = tracked.wifi.into_running();
         Ok(DirectOutput {
             access,
@@ -331,7 +339,7 @@ fn placed_direct(
     ap: [u8; 6],
 ) -> oer_memory::PlacedFuture<'static, DirectRun> {
     let Some(place) = DIRECT_RUN.try_take() else {
-        fail("direct-future-claimed");
+        fail(oer_diagnostics::name!("direct-future-claimed"; 32));
     };
     place.future(|| direct_future(backend, lp, wifi, rng, station, ap))
 }
@@ -344,11 +352,13 @@ async fn direct_start(
     ap: [u8; 6],
 ) {
     let result = match placed_direct(backend, lp, wifi, rng, station, ap).await {
-        Ok(output) => DIRECT_OUTPUT.try_init(output).ok_or("direct-output"),
+        Ok(output) => DIRECT_OUTPUT
+            .try_init(output)
+            .ok_or(oer_diagnostics::name!("direct-output"; 32)),
         Err(reason) => Err(reason),
     };
     if DIRECT_READY.install(result).is_err() {
-        fail("direct-publish");
+        fail(oer_diagnostics::name!("direct-publish"; 32));
     }
 }
 async fn feed_watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) {
@@ -391,13 +401,15 @@ fn read_word(
     descriptor: &RxDescriptor,
     expected: u32,
     offset: usize,
-) -> Result<u32, &'static str> {
+) -> Result<u32, oer_diagnostics::Name<32>> {
     let address = descriptor.buffer_address();
     let base = core::ptr::from_ref(storage).addr();
     let limit = base
         .checked_add(core::mem::size_of::<Storage>())
-        .ok_or("arena-end")?;
-    let end = (address as usize).checked_add(BUFFER).ok_or("buffer-end")?;
+        .ok_or(oer_diagnostics::name!("arena-end"; 32))?;
+    let end = (address as usize)
+        .checked_add(BUFFER)
+        .ok_or(oer_diagnostics::name!("buffer-end"; 32))?;
     if !offset.is_multiple_of(4)
         || offset.checked_add(4).is_none_or(|end| end > BUFFER)
         || address != expected
@@ -406,7 +418,7 @@ fn read_word(
         || end > limit
         || usize::from(descriptor.word0().size()) != BUFFER
     {
-        return Err("buffer-binding");
+        return Err(oer_diagnostics::name!("buffer-binding"; 32));
     }
     // SAFETY: production placement/preparation published expected from this
     // permanent arena before RX started. Address identity, u32 alignment and
@@ -431,9 +443,9 @@ fn pattern(index: usize, word: usize) -> u32 {
     unsafe_code,
     reason = "probe-only initialization before DMA publication"
 )]
-fn prepare_patterns(storage: &Storage) -> Result<(), &'static str> {
+fn prepare_patterns(storage: &Storage) -> Result<(), oer_diagnostics::Name<32>> {
     for index in 0..NODES {
-        let descriptor = node(storage, index).ok_or("node")?;
+        let descriptor = node(storage, index).ok_or(oer_diagnostics::name!("node"; 32))?;
         let address = descriptor.buffer_address();
         // Reuse the observation's complete arena/alignment/capacity checks.
         let _ = read_word(storage, descriptor, address, 0)?;
@@ -462,7 +474,7 @@ async fn capture(boot: Boot) {
     usb::text(&mut console, b"RXCHAIN boot\n").await;
     let result = run_direct(&mut console, traffic, mac_irq).await;
     if let Err(reason) = result {
-        usb::text(&mut console, reason.as_bytes()).await;
+        usb::text(&mut console, reason.as_str().as_bytes()).await;
         usb::text(&mut console, b"\nOER-RESULT: fail rx-chain\n").await;
     } else {
         usb::text(&mut console, b"OER-RESULT: pass rx-chain\n").await;
@@ -472,43 +484,46 @@ async fn run_direct(
     console: &mut usb::Console,
     trace: &mut traffic::Trace,
     mut mac_irq: oer_esp32s31_hal::owner::MacInterruptRegisters,
-) -> Result<(), &'static str> {
+) -> Result<(), oer_diagnostics::Name<32>> {
     let deadline = EmbassyClock
         .now()
         .checked_add(Duration::from_secs(5))
-        .ok_or("direct-deadline")?;
+        .ok_or(oer_diagnostics::name!("direct-deadline"; 32))?;
     let output = loop {
         if let Ok(result) = DIRECT_READY.take() {
             break result?;
         }
         if EmbassyClock.now() >= deadline {
-            return Err("direct-ready-timeout");
+            return Err(oer_diagnostics::name!("direct-ready-timeout"; 32));
         }
         EmbassyClock
             .wait_until(
                 EmbassyClock
                     .now()
                     .checked_add(Duration::from_millis(1))
-                    .ok_or("direct-wait")?,
+                    .ok_or(oer_diagnostics::name!("direct-wait"; 32))?,
             )
             .await;
     };
     let access = &mut output.access;
     traffic::checkpoint(trace, 201, 0, &mac_irq)?;
-    let placed = RxDmaStorage::place(RX.take().ok_or("rx-claimed")?).map_err(|_| "rx-place")?;
+    let placed = RxDmaStorage::place(RX.take().ok_or(oer_diagnostics::name!("rx-claimed"; 32))?)
+        .map_err(|_| oer_diagnostics::name!("rx-place"; 32))?;
     let storage = placed.storage();
     let prepared = placed
         .prepare_ring(access.rx_dma())
-        .map_err(|_| "rx-prepare")?;
+        .map_err(|_| oer_diagnostics::name!("rx-prepare"; 32))?;
     prepare_patterns(storage)?;
     let ready = access.wifi_mac_hal().prepare_mac_runtime(prepared);
-    let stopped_ring = ready.publish(access.rx_dma()).map_err(|_| "rx-publish")?;
+    let stopped_ring = ready
+        .publish(access.rx_dma())
+        .map_err(|_| oer_diagnostics::name!("rx-publish"; 32))?;
     let mut ring = stopped_ring
         .try_start(access.rx_dma())
-        .map_err(|_| "rx-start")?;
+        .map_err(|_| oer_diagnostics::name!("rx-start"; 32))?;
     let stale = mac_irq.mac_interrupt_raw();
     if stale.fatal_assertion_raw().is_some() {
-        return Err("traffic-initial-fatal");
+        return Err(oer_diagnostics::name!("traffic-initial-fatal"; 32));
     }
     mac_irq.acknowledge_mac_interrupt_raw(stale);
     access.wifi_mac_hal().configure_open_promiscuous_receive();
@@ -524,23 +539,23 @@ async fn run_direct(
     let deadline = EmbassyClock
         .now()
         .checked_add(Duration::from_millis(50))
-        .ok_or("traffic-stop-deadline")?;
+        .ok_or(oer_diagnostics::name!("traffic-stop-deadline"; 32))?;
     while access.wifi_mac_hal().channel_active_state() != 0 {
         if EmbassyClock.now() >= deadline {
-            return Err("traffic-mac-stop");
+            return Err(oer_diagnostics::name!("traffic-mac-stop"; 32));
         }
         EmbassyClock
             .wait_until(
                 EmbassyClock
                     .now()
                     .checked_add(Duration::from_millis(1))
-                    .ok_or("traffic-stop-wait")?,
+                    .ok_or(oer_diagnostics::name!("traffic-stop-wait"; 32))?,
             )
             .await;
     }
     let stopped = ring
         .try_stop(access.rx_dma())
-        .map_err(|_| "traffic-walker-stop");
+        .map_err(|_| oer_diagnostics::name!("traffic-walker-stop"; 32));
     let clear = traffic::clears(trace, &mut mac_irq);
     traffic::dump(trace, console).await?;
     observation?;

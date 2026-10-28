@@ -9,14 +9,20 @@ use crate::concurrent::{ConcurrentAcquire, ConcurrentPhyError, JoinRefused};
 use crate::ieee802154_client::Ieee802154PhyClientError;
 use crate::state::client::{PhyClientAcquireError, PhyPllTrackClass, PhyTrackTimeError};
 
+impl PhyCalibrationPath {
+    pub const fn name(self) -> oer_diagnostics::Name<32> {
+        match self {
+            Self::FullUncached => oer_diagnostics::name!("FullUncached"; 32),
+            Self::FullForCache => oer_diagnostics::name!("FullForCache"; 32),
+            Self::FullAfterRejectedCache => oer_diagnostics::name!("FullAfterRejectedCache"; 32),
+            Self::PartialFromCache => oer_diagnostics::name!("PartialFromCache"; 32),
+        }
+    }
+}
+
 impl DiagnosticPath for PhyCalibrationPath {
     fn push_path(&self, path: &mut DiagPath) {
-        path.name(match self {
-            Self::FullUncached => "FullUncached",
-            Self::FullForCache => "FullForCache",
-            Self::FullAfterRejectedCache => "FullAfterRejectedCache",
-            Self::PartialFromCache => "PartialFromCache",
-        });
+        path.name(self.name().as_str());
     }
 }
 

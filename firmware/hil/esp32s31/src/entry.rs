@@ -115,7 +115,8 @@ const PROFILE_CODE_START: u32 = oer_esp32s31_layout::LAYOUT
 const PROFILE_CODE_END: u32 = oer_esp32s31_layout::LAYOUT.psram.end();
 const PROFILE_DATA_START: u32 = oer_esp32s31_layout::LAYOUT.psram.origin();
 const PROFILE_DATA_END: u32 = oer_esp32s31_layout::LAYOUT.psram.end();
-const PROFILE_NAME: &str = "psram-code-psram-data-psram-stack";
+const PROFILE_NAME: oer_diagnostics::Name<64> =
+    oer_diagnostics::name!("psram-code-psram-data-psram-stack"; 64);
 
 #[cfg(feature = "boot-smoke")]
 oer_espressif_executor::tasks! {

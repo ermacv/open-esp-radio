@@ -507,7 +507,8 @@ pub struct AwaitWatchdog {
 
 /// The reason the console's fatal note gives for a reset left to the
 /// watchdog.
-pub const RESET_UNPREPARED: &str = "reset-unprepared";
+pub const RESET_UNPREPARED: oer_diagnostics::Name<32> =
+    oer_diagnostics::name!("reset-unprepared"; 32);
 
 /// Reset the chip from `fatal`'s path, as the boot ROM expects it: UART0's
 /// clock restored, no boot address for hart 1, the other hart reset and

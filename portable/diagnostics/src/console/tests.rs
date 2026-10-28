@@ -287,3 +287,63 @@ fn the_longest_note_fits_the_line_bound() {
     assert!(line.len() <= MAX_NOTE_LINE);
     assert!(line.starts_with(b"\r\nOER-DIAG:01") && line.ends_with(b"\r\n"));
 }
+
+#[test]
+fn invalid_retained_text_writes_nothing_and_preserves_the_local_sequence() {
+    use crate::record::{EncodeError, PanicTextError};
+    let mut bytes = Vec::new();
+    let mut console = Console::starting_at(
+        |chunk: &[u8]| {
+            bytes.extend_from_slice(chunk);
+            Ok::<_, ()>(())
+        },
+        42,
+    );
+    let mut panic = PreviousPanic {
+        hart: 0,
+        in_interrupt: false,
+        interrupted_pc: None,
+        line: 1,
+        column: 1,
+        file: "valid.rs",
+        message: None,
+    };
+    let file = "f".repeat(49);
+    panic.file = &file;
+    assert_eq!(
+        console.previous_panic(&panic),
+        Err(EncodeError::Input(PanicTextError::FileTooLong {
+            bytes: 49
+        }))
+    );
+    panic.file = "valid.rs";
+    let message = "m".repeat(65);
+    panic.message = Some(&message);
+    assert_eq!(
+        console.previous_panic(&panic),
+        Err(EncodeError::Input(PanicTextError::MessageTooLong {
+            bytes: 65
+        }))
+    );
+    assert_eq!(console.sequence, 42);
+    assert!(bytes.is_empty());
+}
+
+#[test]
+fn a_panic_sink_error_retains_its_value_and_consumes_the_sequence() {
+    let mut console = Console::starting_at(|_: &[u8]| Err("sink"), u32::MAX);
+    let panic = PreviousPanic {
+        hart: 0,
+        in_interrupt: false,
+        interrupted_pc: None,
+        line: 1,
+        column: 1,
+        file: "valid.rs",
+        message: None,
+    };
+    assert_eq!(
+        console.previous_panic(&panic),
+        Err(record::EncodeError::Sink("sink"))
+    );
+    assert_eq!(console.sequence, 0);
+}

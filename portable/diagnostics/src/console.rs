@@ -4,7 +4,7 @@
 use core::sync::atomic::{AtomicU32, Ordering};
 
 use crate::note::Note;
-use crate::record::{self, MAX_PAYLOAD, PreviousPanic, Record};
+use crate::record::{self, EncodeError, MAX_PAYLOAD, PreviousPanic, Record};
 use oer_trace::Event;
 
 pub const PREFIX: &[u8] = b"OER-DIAG:01";
@@ -26,7 +26,8 @@ pub fn emit_note<E>(note: &Note<'_>, write: impl FnMut(&[u8]) -> Result<(), E>) 
 pub fn emit_previous_panic<E>(
     panic: &PreviousPanic<'_>,
     write: impl FnMut(&[u8]) -> Result<(), E>,
-) -> Result<(), E> {
+) -> Result<(), EncodeError<E>> {
+    record::validate_previous_panic(panic).map_err(EncodeError::Input)?;
     Console::starting_at(write, next_sequence()).previous_panic(panic)
 }
 
@@ -63,12 +64,12 @@ where
         self.end(crc)
     }
 
-    pub fn previous_panic(&mut self, panic: &PreviousPanic<'_>) -> Result<(), E> {
+    pub fn previous_panic(&mut self, panic: &PreviousPanic<'_>) -> Result<(), EncodeError<E>> {
         // Preserve validation before starting a line or consuming a sequence.
-        record::validate_previous_panic(panic);
-        let mut crc = self.begin()?;
+        record::validate_previous_panic(panic).map_err(EncodeError::Input)?;
+        let mut crc = self.begin().map_err(EncodeError::Sink)?;
         record::encode_previous_panic(panic, |bytes| self.hex(bytes, &mut crc))?;
-        self.end(crc)
+        self.end(crc).map_err(EncodeError::Sink)
     }
 
     pub fn event<T: Event>(&mut self, event: &T) -> Result<(), E> {
@@ -88,29 +89,38 @@ where
         Ok(crc)
     }
 
-    fn hex(&mut self, bytes: &[u8], crc: &mut u16) -> Result<(), E> {
-        let mut escaped = [0; 16];
-        for chunk in bytes.chunks(escaped.len() / 2) {
-            for (&byte, [high, low]) in chunk.iter().zip(escaped.as_chunks_mut::<2>().0) {
-                *crc = checksum(*crc, byte);
-                let digit = |nibble: u8| {
-                    if nibble < 10 {
-                        b'0'.wrapping_add(nibble)
-                    } else {
-                        b'a'.wrapping_add(nibble.wrapping_sub(10))
-                    }
-                };
-                *high = digit(byte >> 4);
-                *low = digit(byte & 15);
-            }
-            // Each input chunk is at most eight bytes; the paired iterator
-            // above filled exactly twice that many output bytes. Checked
-            // access avoids retaining a console bounds-panic source location.
-            if let Some(encoded) = escaped.get(..chunk.len() * 2) {
-                (self.write)(encoded)?;
+    fn hex(&mut self, mut bytes: &[u8], crc: &mut u16) -> Result<(), E> {
+        loop {
+            match bytes {
+                [a, b, c, d, e, f, g, h, rest @ ..] => {
+                    self.hex_chunk([*a, *b, *c, *d, *e, *f, *g, *h], crc)?;
+                    bytes = rest;
+                }
+                [a, b, c, d, e, f, g] => return self.hex_chunk([*a, *b, *c, *d, *e, *f, *g], crc),
+                [a, b, c, d, e, f] => return self.hex_chunk([*a, *b, *c, *d, *e, *f], crc),
+                [a, b, c, d, e] => return self.hex_chunk([*a, *b, *c, *d, *e], crc),
+                [a, b, c, d] => return self.hex_chunk([*a, *b, *c, *d], crc),
+                [a, b, c] => return self.hex_chunk([*a, *b, *c], crc),
+                [a, b] => return self.hex_chunk([*a, *b], crc),
+                [a] => return self.hex_chunk([*a], crc),
+                [] => return Ok(()),
             }
         }
-        Ok(())
+    }
+
+    fn hex_chunk<const N: usize>(&mut self, bytes: [u8; N], crc: &mut u16) -> Result<(), E> {
+        let escaped = bytes.map(|byte| {
+            *crc = checksum(*crc, byte);
+            let digit = |nibble: u8| {
+                if nibble < 10 {
+                    b'0'.wrapping_add(nibble)
+                } else {
+                    b'a'.wrapping_add(nibble.wrapping_sub(10))
+                }
+            };
+            [digit(byte >> 4), digit(byte & 15)]
+        });
+        (self.write)(escaped.as_flattened())
     }
 
     fn end(&mut self, crc: u16) -> Result<(), E> {
@@ -157,16 +167,19 @@ pub fn decode<'a>(
     let raw = scratch
         .get_mut(..hex.len() / 2)
         .ok_or(DecodeError::Payload)?;
-    for (byte, pair) in raw.iter_mut().zip(hex.chunks_exact(2)) {
-        let [high, low] = pair else {
-            return Err(DecodeError::Truncated);
-        };
+    let mut pairs = hex.iter().copied();
+    for byte in raw.iter_mut() {
+        let high = pairs.next().ok_or(DecodeError::Truncated)?;
+        let low = pairs.next().ok_or(DecodeError::Truncated)?;
         let digit = |byte| match byte {
-            b'0'..=b'9' => Ok(byte - b'0'),
-            b'a'..=b'f' => Ok(byte - b'a' + 10),
+            b'0'..=b'9' => byte.checked_sub(b'0').ok_or(DecodeError::Hex),
+            b'a'..=b'f' => byte
+                .checked_sub(b'a')
+                .and_then(|value| value.checked_add(10))
+                .ok_or(DecodeError::Hex),
             _ => Err(DecodeError::Hex),
         };
-        *byte = digit(*high)? * 16 + digit(*low)?;
+        *byte = digit(high)? << 4 | digit(low)?;
     }
     let (protected, crc) = raw.split_last_chunk::<2>().ok_or(DecodeError::Truncated)?;
     let expected = protected

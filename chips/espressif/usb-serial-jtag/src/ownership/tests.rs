@@ -125,7 +125,7 @@ fn a_record_before_the_parts_are_installed_is_dropped_and_counted() {
     assert_eq!(early.take_lost(), 5, "the record is counted");
     assert_eq!(early.retire().err(), Some(RetireError::Empty));
     assert!(
-        !early.write_fatal(&Note::runtime_fail("early")),
+        !early.write_fatal(&Note::runtime_fail(oer_diagnostics::name!("early"))),
         "the caller keeps the note elsewhere"
     );
 }
@@ -304,7 +304,7 @@ fn the_fatal_path_never_takes_the_block_from_the_driver() {
     let early = installed(&block);
     let _driver = early.retire().expect("a free block retires");
     assert!(
-        !early.write_fatal(&Note::runtime_fail("entropy")),
+        !early.write_fatal(&Note::runtime_fail(oer_diagnostics::name!("entropy"))),
         "the caller keeps the note elsewhere"
     );
     assert!(
@@ -324,11 +324,11 @@ fn a_fatal_note_during_a_record_and_a_second_one_are_refused() {
     let early = Ownership::new();
     assert!(early.install(Parts(Counting::default())).is_ok());
     assert!(early.write(|writer| {
-        assert!(!early.write_fatal(&Note::runtime_fail("a")));
+        assert!(!early.write_fatal(&Note::runtime_fail(oer_diagnostics::name!("a"))));
         writer.text(b"record");
     }));
-    assert!(early.write_fatal(&Note::runtime_fail("b")));
-    assert!(!early.write_fatal(&Note::runtime_fail("c")));
+    assert!(early.write_fatal(&Note::runtime_fail(oer_diagnostics::name!("b"))));
+    assert!(!early.write_fatal(&Note::runtime_fail(oer_diagnostics::name!("c"))));
     assert_eq!(
         early.take_lost(),
         0,
@@ -341,7 +341,7 @@ fn a_fatal_note_during_a_record_and_a_second_one_are_refused() {
 fn a_fatal_note_before_the_driver_writes_and_keeps_the_block() {
     let block = Shared::default();
     let early = installed(&block);
-    assert!(early.write_fatal(&Note::runtime_fail("layout")));
+    assert!(early.write_fatal(&Note::runtime_fail(oer_diagnostics::name!("layout"))));
     assert!(!sent(&block).is_empty(), "the note went out");
     assert_eq!(early.take_lost(), 0);
     assert_eq!(early.retire().err(), Some(RetireError::Taken));
@@ -357,7 +357,7 @@ fn fatal_notes_of_two_harts_and_the_driver_never_hold_the_block_together() {
         std::thread::scope(|scope| {
             for _ in 0..2 {
                 scope.spawn(|| {
-                    if early.write_fatal(&Note::runtime_fail("x")) {
+                    if early.write_fatal(&Note::runtime_fail(oer_diagnostics::name!("x"))) {
                         written.fetch_add(1, Ordering::SeqCst);
                     }
                 });

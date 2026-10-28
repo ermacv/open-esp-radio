@@ -72,11 +72,11 @@ pub enum InitError {
 
 impl InitError {
     /// The stable reason used by an image's boot-failure record.
-    pub const fn name(self) -> &'static str {
+    pub const fn name(self) -> oer_diagnostics::Name<32> {
         match self {
-            Self::ConsoleInstalled => "console-installed",
-            Self::MonotonicStuck => "monotonic",
-            Self::CoreControlInstalled => "core-control-installed",
+            Self::ConsoleInstalled => oer_diagnostics::name!("console-installed"; 32),
+            Self::MonotonicStuck => oer_diagnostics::name!("monotonic"; 32),
+            Self::CoreControlInstalled => oer_diagnostics::name!("core-control-installed"; 32),
         }
     }
 }

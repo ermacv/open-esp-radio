@@ -3,6 +3,8 @@
 //! (argument count and kinds are checked by the compiler); the host looks the
 //! topic up in the `render` feature's layout and prints the text.
 
+use crate::Name;
+
 /// How a topic's text joins the console line it belongs to: a long line is
 /// several notes, and the host prints their texts as one line.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -46,6 +48,17 @@ pub const MAX_NAMES: usize = 6;
 pub const MAX_NAME: usize = 64;
 /// Most name bytes in one note, all names together.
 pub const MAX_NAME_BYTES: usize = 96;
+
+// Counts are encoded as bytes; the top name-count bit marks path overflow.
+const _: () = {
+    if MAX_WORDS > u8::MAX as usize
+        || MAX_NAMES > 0x7f
+        || MAX_NAME_BYTES > u8::MAX as usize
+        || MAX_NAME > u8::MAX as usize
+    {
+        panic!("note capacities fit their wire counters");
+    }
+};
 
 /// A topic's value, as the host prints it.
 #[cfg(feature = "render")]
@@ -121,12 +134,12 @@ pub enum Field {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Note<'a> {
     pub topic: Topic,
-    words: [u32; MAX_WORDS],
-    count: u8,
-    names: [&'a str; MAX_NAMES],
-    name_count: u8,
-    name_bytes: u8,
-    overflow: bool,
+    pub(crate) words: [u32; MAX_WORDS],
+    pub(crate) count: u8,
+    pub(crate) names: [&'a str; MAX_NAMES],
+    pub(crate) name_count: u8,
+    pub(crate) name_bytes: u8,
+    pub(crate) overflow: bool,
 }
 
 impl<'a> Note<'a> {
@@ -142,24 +155,6 @@ impl<'a> Note<'a> {
         }
     }
 
-    /// The note a decoder read: the caller checked the counts.
-    pub(crate) fn from_parts(
-        topic: Topic,
-        words: &[u32],
-        names: &[&'a str],
-        overflow: bool,
-    ) -> Self {
-        let mut note = Self::new(topic);
-        note.overflow = overflow;
-        for &word in words {
-            note = note.word(word);
-        }
-        for &name in names {
-            note = note.named(name);
-        }
-        note
-    }
-
     /// The words, in the topic's field order.
     pub fn words(&self) -> &[u32] {
         self.words.get(..usize::from(self.count)).unwrap_or(&[])
@@ -172,99 +167,36 @@ impl<'a> Note<'a> {
             .unwrap_or(&[])
     }
 
-    fn word(mut self, value: u32) -> Self {
-        let slot = self.words.get_mut(usize::from(self.count));
-        assert!(slot.is_some(), "a note's words fit MAX_WORDS");
-        if let Some(slot) = slot {
-            *slot = value;
-            self.count += 1;
-        }
-        self
-    }
-
-    /// A length word and `words` words of the bytes, first byte in the high
-    /// byte of the first word; at most `4 * words` bytes are kept.
-    fn byte_words(self, bytes: &[u8], words: usize) -> Self {
-        let kept = bytes.get(..bytes.len().min(4 * words)).unwrap_or(&[]);
-        let mut note = self.word(kept.len() as u32);
-        for index in 0..words {
-            let mut word = [0; 4];
-            for (slot, byte) in word.iter_mut().zip(kept.iter().skip(4 * index)) {
-                *slot = *byte;
-            }
-            note = note.word(u32::from_be_bytes(word));
-        }
-        note
-    }
-
-    /// A count word and the first sixteen indices, a byte each, four to a
-    /// word with the first in the high byte; an unknown index is 255. An
-    /// index past 254 or an entry past sixteen would not fit and is kept as
-    /// unknown: the ring is smaller than that.
-    fn index_words(self, indices: &[Option<usize>]) -> Self {
-        let kept = indices.get(..indices.len().min(16)).unwrap_or(&[]);
-        let mut note = self.word(kept.len() as u32);
-        for chunk in 0..4 {
-            let mut word = [0xff; 4];
-            for (slot, index) in word.iter_mut().zip(kept.iter().skip(4 * chunk)) {
-                *slot = match index {
-                    Some(index) if *index < 255 => *index as u8,
-                    _ => 255,
-                };
-            }
-            note = note.word(u32::from_be_bytes(word));
-        }
-        note
-    }
-
-    /// `count` discard counts of `counts` from `first`.
-    fn discard_words(mut self, counts: &[u32; 15], first: usize, count: usize) -> Self {
-        for index in first..first + count {
-            self = self.word(counts.get(index).copied().unwrap_or(0));
-        }
-        self
-    }
-
-    fn wide(self, value: u64) -> Self {
-        self.word(value as u32).word((value >> 32) as u32)
-    }
-
-    fn named(mut self, name: &'a str) -> Self {
-        let slot = self.names.get_mut(usize::from(self.name_count));
-        assert!(
-            name.len() <= MAX_NAME
-                && usize::from(self.name_bytes) + name.len() <= MAX_NAME_BYTES
-                && slot.is_some(),
-            "a note's names fit MAX_NAME, MAX_NAME_BYTES and MAX_NAMES"
-        );
-        if let Some(slot) = slot {
-            *slot = name;
-            self.name_count += 1;
-            self.name_bytes += name.len() as u8;
-        }
-        self
-    }
-
     /// Appends the path's names and numbers. What does not fit the note's
     /// name budget makes the note say it overflowed; nothing else is lost.
     fn pathed(mut self, path: &crate::DiagPath) -> Self {
         self.overflow |= path.overflowed();
         for &name in path.names() {
-            if name.len() > MAX_NAME
-                || self.name_bytes as usize + name.len() > MAX_NAME_BYTES
-                || self.name_count as usize >= MAX_NAMES
-            {
+            let Some(bytes) = usize::from(self.name_bytes).checked_add(name.len()) else {
+                self.overflow = true;
+                break;
+            };
+            let Some(slot) = self.names.get_mut(usize::from(self.name_count)) else {
+                self.overflow = true;
+                break;
+            };
+            if name.len() > MAX_NAME || bytes > MAX_NAME_BYTES {
                 self.overflow = true;
                 break;
             }
-            self = self.named(name);
+            *slot = name;
+            // The slot and byte-budget checks bound both counters below 256.
+            self.name_count = self.name_count.wrapping_add(1);
+            self.name_bytes = bytes as u8;
         }
         for &word in path.words() {
-            if self.count as usize >= MAX_WORDS {
+            let Some(slot) = self.words.get_mut(usize::from(self.count)) else {
                 self.overflow = true;
                 break;
-            }
-            self = self.word(word);
+            };
+            *slot = word;
+            // A successful slot lookup bounds count by MAX_WORDS.
+            self.count = self.count.wrapping_add(1);
         }
         self
     }
@@ -276,7 +208,6 @@ impl<'a> Note<'a> {
 }
 
 macro_rules! argument {
-    (path) => { &crate::DiagPath };
     (dec) => { u32 };
     (signed) => { i32 };
     (opt) => { Option<u8> };
@@ -302,134 +233,214 @@ macro_rules! argument {
     (indexdash) => { Option<Option<usize>> };
     (discards_lo) => { &[u32; 15] };
     (discards_hi) => { (&[u32; 15], bool) };
-    (phrase) => { &'a str };
     (i8x4) => { [i8; 4] };
     (bytes8) => { &[u8] };
     (bytes16) => { &[u8] };
     (wide) => { u64 };
-    (name) => { &'a str };
 }
 
-macro_rules! push {
-    ($note:ident, $value:ident, path) => {
-        $note.pathed($value)
+// Each fixed field supplies an array of its exact word count. The topic's
+// const geometry check proves the chained arrays fit before we zip them into
+// the note; no fallible insertion or runtime assertion is needed.
+fn packed_bytes<const N: usize>(bytes: &[u8]) -> (u32, [u32; N]) {
+    let capacity = const { N * 4 };
+    let kept = bytes.len().min(capacity);
+    let mut bytes = bytes.iter().take(kept);
+    let words = core::array::from_fn(|_| {
+        let value = core::array::from_fn(|_| bytes.next().copied().unwrap_or(0));
+        u32::from_be_bytes(value)
+    });
+    (kept as u32, words)
+}
+
+fn packed_indices(indices: &[Option<usize>]) -> [u32; 5] {
+    let count = indices.len().min(16);
+    let mut indices = indices.iter().take(count);
+    let [a, b, c, d] = core::array::from_fn(|_| {
+        let bytes = core::array::from_fn(|_| match indices.next() {
+            Some(Some(index)) => u8::try_from(*index).unwrap_or(255),
+            _ => 255,
+        });
+        u32::from_be_bytes(bytes)
+    });
+    [count as u32, a, b, c, d]
+}
+
+macro_rules! field_words {
+    ($value:ident, path) => {
+        [] as [u32; 0]
     };
-    ($note:ident, $value:ident, dec) => {
-        $note.word($value)
+    ($value:ident, name) => {
+        [] as [u32; 0]
     };
-    ($note:ident, $value:ident, signed) => {
-        $note.word($value as u32)
+    ($value:ident, phrase) => {
+        [] as [u32; 0]
     };
-    ($note:ident, $value:ident, opt) => {
-        $note.word(match $value {
-            Some(value) => value as u32 + 1,
+    ($value:ident, signed) => {
+        [$value as u32]
+    };
+    ($value:ident, opt) => {
+        [match $value {
+            // Option<u8> widens to at most 256, without modular overflow.
+            Some(value) => u32::from(value).wrapping_add(1),
             None => 0,
-        })
+        }]
     };
-    ($note:ident, $value:ident, hex8) => {
-        $note.word($value)
+    ($value:ident, flag) => {
+        [u32::from($value)]
     };
-    ($note:ident, $value:ident, hex2) => {
-        $note.word($value)
+    ($value:ident, bit) => {
+        [u32::from($value)]
     };
-    ($note:ident, $value:ident, hexa) => {
-        $note.word($value)
+    ($value:ident, mactail) => {
+        [u32::from(u16::from_be_bytes($value))]
     };
-    ($note:ident, $value:ident, hexa4) => {
-        $note.word($value)
+    ($value:ident, ascii2) => {
+        [u32::from(u16::from_be_bytes($value))]
     };
-    ($note:ident, $value:ident, hexa10) => {
-        $note.word($value)
+    ($value:ident, ipv4) => {
+        [u32::from_be_bytes($value)]
     };
-    ($note:ident, $value:ident, flag) => {
-        $note.word($value as u32)
+    ($value:ident, i8x4) => {
+        [u32::from_be_bytes($value.map(|byte| byte as u8))]
     };
-    ($note:ident, $value:ident, bit) => {
-        $note.word($value as u32)
+    ($value:ident, dash) => {
+        [u32::from($value.is_some()), $value.unwrap_or(0)]
     };
-    ($note:ident, $value:ident, mactail) => {
-        $note.word(u32::from(u16::from_be_bytes($value)))
+    ($value:ident, hexdash) => {
+        field_words!($value, dash)
     };
-    ($note:ident, $value:ident, ipv4) => {
-        $note.word(u32::from_be_bytes($value))
+    ($value:ident, sdash) => {
+        [u32::from($value.is_some()), $value.unwrap_or(0) as u32]
     };
-    ($note:ident, $value:ident, dash) => {
-        $note
-            .word($value.is_some() as u32)
-            .word($value.unwrap_or(0))
-    };
-    ($note:ident, $value:ident, hexdash) => {
-        $note
-            .word($value.is_some() as u32)
-            .word($value.unwrap_or(0))
-    };
-    ($note:ident, $value:ident, sdash) => {
-        $note
-            .word($value.is_some() as u32)
-            .word($value.unwrap_or(0) as u32)
-    };
-    ($note:ident, $value:ident, bitdash) => {
-        $note.word(match $value {
+    ($value:ident, bitdash) => {
+        [match $value {
             None => 0,
             Some(false) => 1,
             Some(true) => 2,
-        })
+        }]
     };
-    ($note:ident, $value:ident, range) => {
-        $note
-            .word($value.is_some() as u32)
-            .word($value.map_or(0, |range| range.0))
-            .word($value.map_or(0, |range| range.1))
+    ($value:ident, range) => {
+        [
+            u32::from($value.is_some()),
+            $value.map_or(0, |v| v.0),
+            $value.map_or(0, |v| v.1),
+        ]
     };
-    ($note:ident, $value:ident, srange) => {
-        $note
-            .word($value.is_some() as u32)
-            .word($value.map_or(0, |range| range.0) as u32)
-            .word($value.map_or(0, |range| range.1) as u32)
+    ($value:ident, srange) => {
+        [
+            u32::from($value.is_some()),
+            $value.map_or(0, |v| v.0) as u32,
+            $value.map_or(0, |v| v.1) as u32,
+        ]
     };
-    ($note:ident, $value:ident, over) => {
-        $note.wide($value.0).wide($value.1)
+    ($value:ident, over) => {
+        [
+            $value.0 as u32,
+            ($value.0 >> 32) as u32,
+            $value.1 as u32,
+            ($value.1 >> 32) as u32,
+        ]
     };
-    ($note:ident, $value:ident, by) => {
-        $note.word($value.0).word($value.1)
+    ($value:ident, by) => {
+        [$value.0, $value.1]
     };
-    ($note:ident, $value:ident, indices) => {
-        $note.index_words($value)
+    ($value:ident, indices) => {
+        packed_indices($value)
     };
-    ($note:ident, $value:ident, indexdash) => {
-        $note.word(match $value {
+    ($value:ident, indexdash) => {
+        [match $value {
             None => 0,
             Some(None) => 1,
             Some(Some(index)) => (index as u32).saturating_add(2),
-        })
+        }]
     };
-    ($note:ident, $value:ident, discards_lo) => {
-        $note.discard_words($value, 0, 8)
+    ($value:ident, discards_lo) => {{
+        let [a, b, c, d, e, f, g, h, ..] = *$value;
+        [a, b, c, d, e, f, g, h]
+    }};
+    ($value:ident, discards_hi) => {{
+        let [_, _, _, _, _, _, _, _, a, b, c, d, e, f, g] = *$value.0;
+        [u32::from($value.1), a, b, c, d, e, f, g]
+    }};
+    ($value:ident, bytes8) => {{
+        let (n, [a, b]) = packed_bytes::<2>($value);
+        [n, a, b]
+    }};
+    ($value:ident, bytes16) => {{
+        let (n, [a, b, c, d]) = packed_bytes::<4>($value);
+        [n, a, b, c, d]
+    }};
+    ($value:ident, wide) => {
+        [$value as u32, ($value >> 32) as u32]
     };
-    ($note:ident, $value:ident, discards_hi) => {
-        $note.word($value.1 as u32).discard_words($value.0, 8, 7)
+    ($value:ident, $kind:ident) => {
+        [$value]
     };
-    ($note:ident, $value:ident, phrase) => {
-        $note.named($value)
+}
+
+// Filter the text fields into const generics, leaving each public argument in
+// its original position. Their summed budgets are checked at monomorphization.
+macro_rules! constructor {
+    (@scan [$($meta:tt)*] $ctor:ident $variant:ident
+        [$($original:tt)*] [$($args:tt)*] [$($bounds:ident)*]
+        [$($names:ident)*] [$($paths:ident)*] [$($supply:ident)*] ;) => {
+        $(#[$meta])*
+        #[allow(clippy::too_many_arguments)]
+        pub fn $ctor<$(const $bounds: usize),*>($($args)*) -> Note<'a> {
+            const { let bytes: usize = 0 $(+ $bounds)*; if bytes > MAX_NAME_BYTES {
+                panic!("a note's name budgets fit MAX_NAME_BYTES");
+            } }
+            constructor!(@build $variant [$($original)*] [$($names)*] [$($paths)*])
+        }
     };
-    ($note:ident, $value:ident, ascii2) => {
-        $note.word(u32::from(u16::from_be_bytes($value)))
+    (@scan [$($meta:tt)*] $ctor:ident $variant:ident
+        [$($original:tt)*] [$($args:tt)*] [$($bounds:ident)*]
+        [$($names:ident)*] [$($paths:ident)*] [$head:ident $($tail:ident)*]
+        ; $field:ident: name, $($rest:tt)*) => {
+        constructor!(@scan [$($meta)*] $ctor $variant [$($original)*]
+            [$($args)* $field: Name<$head>,] [$($bounds)* $head]
+            [$($names)* $field] [$($paths)*] [$($tail)*]; $($rest)*);
     };
-    ($note:ident, $value:ident, i8x4) => {
-        $note.word(u32::from_be_bytes($value.map(|byte| byte as u8)))
+    (@scan [$($meta:tt)*] $ctor:ident $variant:ident
+        [$($original:tt)*] [$($args:tt)*] [$($bounds:ident)*]
+        [$($names:ident)*] [$($paths:ident)*] [$($supply:ident)*]
+        ; $field:ident: phrase, $($rest:tt)*) => {
+        constructor!(@scan [$($meta)*] $ctor $variant [$($original)*]
+            [$($args)*] [$($bounds)*] [$($names)*] [$($paths)*] [$($supply)*]; $field: name, $($rest)*);
     };
-    ($note:ident, $value:ident, bytes8) => {
-        $note.byte_words($value, 2)
+    (@scan [$($meta:tt)*] $ctor:ident $variant:ident
+        [$($original:tt)*] [$($args:tt)*] [$($bounds:ident)*]
+        [$($names:ident)*] [$($paths:ident)*] [$($supply:ident)*]
+        ; $field:ident: path, $($rest:tt)*) => {
+        constructor!(@scan [$($meta)*] $ctor $variant [$($original)*]
+            [$($args)* $field: &crate::DiagPath,] [$($bounds)*]
+            [$($names)*] [$($paths)* $field] [$($supply)*]; $($rest)*);
     };
-    ($note:ident, $value:ident, bytes16) => {
-        $note.byte_words($value, 4)
+    (@scan [$($meta:tt)*] $ctor:ident $variant:ident
+        [$($original:tt)*] [$($args:tt)*] [$($bounds:ident)*]
+        [$($names:ident)*] [$($paths:ident)*] [$($supply:ident)*]
+        ; $field:ident: $kind:ident, $($rest:tt)*) => {
+        constructor!(@scan [$($meta)*] $ctor $variant [$($original)*]
+            [$($args)* $field: argument!($kind),] [$($bounds)*]
+            [$($names)*] [$($paths)*] [$($supply)*]; $($rest)*);
     };
-    ($note:ident, $value:ident, wide) => {
-        $note.wide($value)
-    };
-    ($note:ident, $value:ident, name) => {
-        $note.named($value)
-    };
+    (@build $variant:ident [$($field:ident: $kind:ident,)*] [$($name:ident)*] [$($path:ident)*]) => {{
+        let mut note = Note::new(Topic::$variant);
+        let words = core::iter::empty::<u32>()$(.chain({
+            let field: [u32; words_of!($kind)] = field_words!($field, $kind);
+            field
+        }))*;
+        for (slot, value) in note.words.iter_mut().zip(words) { *slot = value; }
+        note.count = Topic::$variant.word_count() as u8;
+        let names: [&str; Topic::$variant.name_count()] = [$($name.as_str()),*];
+        for (slot, value) in note.names.iter_mut().zip(names) { *slot = value; }
+        note.name_count = Topic::$variant.name_count() as u8;
+        // The const sum above bounds this sum by MAX_NAME_BYTES (96).
+        note.name_bytes = 0_u8$(.wrapping_add($name.as_str().len() as u8))*;
+        $(let note = note.pathed($path);)*
+        note
+    }};
 }
 
 macro_rules! words_of {
@@ -668,13 +679,8 @@ macro_rules! topics {
 
         impl<'a> Note<'a> {
             $(
-                $(#[$meta])*
-                #[allow(clippy::too_many_arguments)]
-                pub fn $constructor($($field: argument!($kind)),*) -> Note<'a> {
-                    let note = Note::new(Topic::$variant);
-                    $(let note = push!(note, $field, $kind);)*
-                    note
-                }
+                constructor!(@scan [$($meta)*] $constructor $variant
+                    [$($field: $kind,)*] [] [] [] [] [A B C D E F]; $($field: $kind,)*);
             )*
         }
 
@@ -683,8 +689,8 @@ macro_rules! topics {
         $(const _: () = {
             let words: usize = 0 $(+ words_of!($kind))*;
             let names: usize = 0 $(+ names_of!($kind))*;
-            assert!(words <= MAX_WORDS, "a topic's words fit MAX_WORDS");
-            assert!(names <= MAX_NAMES, "a topic's names fit MAX_NAMES");
+            if words > MAX_WORDS { panic!("a topic's words fit MAX_WORDS"); }
+            if names > MAX_NAMES { panic!("a topic's names fit MAX_NAMES"); }
         };)*
 
         #[cfg(test)]

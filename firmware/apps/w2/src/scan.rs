@@ -36,6 +36,7 @@ use oer_esp32s31_radio_client::{
     MembershipCell,
     wifi::{ProbePriority, Wifi},
 };
+use oer_espressif_interrupt_table::Bound;
 use oer_ieee80211_port::backend_protection::BasicRates;
 use oer_ieee80211_port::{Band, ManagementTxPlan};
 use oer_ieee80211_upper_mac::rate_selection::management_rate;
@@ -46,7 +47,6 @@ use oer_ieee80211_wire::{
     scan::parse_management,
     sequence::SequenceNumber,
 };
-use oer_espressif_interrupt_table::Bound;
 use oer_memory::AffineSpscSender;
 use oer_radio_regulatory::{Country, Initiate, RegulatoryDomain, TxCeiling};
 use oer_time::{Clock, Duration, Instant, Timer};
@@ -147,8 +147,8 @@ fn retuned_tx(
     tx: &mut Option<Tx>,
     profile: PhyTxTargetPowerProfile,
     limit: TxCeiling,
-    busy: &'static str,
-) -> Result<(), &'static str> {
+    busy: oer_diagnostics::Name<32>,
+) -> Result<(), oer_diagnostics::Name<32>> {
     let previous = tx
         .take()
         .expect("the scanner retains its transmitter between retunes");
@@ -177,23 +177,27 @@ async fn run(
     bound: Bound<crate::WifiToken>,
     bell: irq::ImageDoorbell,
     report: &mut Report,
-) -> Result<(), &'static str> {
-    let domain = RegulatoryDomain::of(Country::new(config.country).map_err(|_| "country")?)
-        .ok_or("domain")?;
+) -> Result<(), oer_diagnostics::Name<32>> {
+    let domain = RegulatoryDomain::of(
+        Country::new(config.country).map_err(|_| oer_diagnostics::name!("country"; 32))?,
+    )
+    .ok_or(oer_diagnostics::name!("domain"; 32))?;
     let initial = domain
         .permit(
             WifiChannel::new_2_4_ghz(config.channel, WifiChannelWidth::Mhz20)
-                .map_err(|_| "channel")?,
+                .map_err(|_| oer_diagnostics::name!("channel"; 32))?,
         )
-        .map_err(|_| "lab-channel-refused")?;
+        .map_err(|_| oer_diagnostics::name!("lab-channel-refused"; 32))?;
     let start = RadioStartConfig::new(
         WifiColdStartConfig::new(initial, ceiling(initial, config)),
         WifiMacStartConfig::new(
             MAC_COLD_HANDSHAKE_DEADLINE,
-            IndividualAddress::for_interface(station).map_err(|_| "station-mac")?,
-            IndividualAddress::for_interface(ap).map_err(|_| "ap-mac")?,
+            IndividualAddress::for_interface(station)
+                .map_err(|_| oer_diagnostics::name!("station-mac"; 32))?,
+            IndividualAddress::for_interface(ap)
+                .map_err(|_| oer_diagnostics::name!("ap-mac"; 32))?,
         )
-        .map_err(|_| "mac-address")?,
+        .map_err(|_| oer_diagnostics::name!("mac-address"; 32))?,
     );
     let (returned, started) = start_esp32s31_radio(
         cell,
@@ -206,7 +210,7 @@ async fn run(
     )
     .await;
     cell = returned;
-    let stopped = started.map_err(|_| "bringup")?;
+    let stopped = started.map_err(|_| oer_diagnostics::name!("bringup"; 32))?;
     let profile = stopped.start_report().track.tx_power;
 
     let WifiRoleMaterialized {
@@ -215,9 +219,14 @@ async fn run(
         ..
     } = materialize_esp32s31_wifi_role(stopped, ());
     let (mut platform, context) = owner.into_runtime_parts();
-    let rng = platform.rng.take().ok_or("entropy")?;
+    let rng = platform
+        .rng
+        .take()
+        .ok_or(oer_diagnostics::name!("entropy"; 32))?;
     let mut owner = WifiRoleOwner::from_runtime_parts(platform, context);
-    let arena = irq::RX.take().ok_or("rx-claimed")?;
+    let arena = irq::RX
+        .take()
+        .ok_or(oer_diagnostics::name!("rx-claimed"; 32))?;
     let (
         parts,
         _stop,
@@ -232,12 +241,16 @@ async fn run(
             power: &irq::POWER_SIGNAL,
         },
     )
-    .map_err(|_| "rx-bind")?;
-    let mut session =
-        Rx::new(parts, bound, &mut registers, &irq::LINE).map_err(|_| "rx-session")?;
+    .map_err(|_| oer_diagnostics::name!("rx-bind"; 32))?;
+    let mut session = Rx::new(parts, bound, &mut registers, &irq::LINE)
+        .map_err(|_| oer_diagnostics::name!("rx-session"; 32))?;
     let publisher = QueueSink::new(sender, &CLOCK);
-    let dma = TxDmaStorage::pin::<ChipDma>(irq::TX_DMA.take().ok_or("tx-claimed")?)
-        .map_err(|_| "tx-bind")?;
+    let dma = TxDmaStorage::pin::<ChipDma>(
+        irq::TX_DMA
+            .take()
+            .ok_or(oer_diagnostics::name!("tx-claimed"; 32))?,
+    )
+    .map_err(|_| oer_diagnostics::name!("tx-bind"; 32))?;
     let slot = irq::TX_SLOT.init(TxSlot::from_dma(dma));
     let mut tx = Some(OrdinaryTxOwner::new_legacy(WifiTxResources {
         slot: Pin::new(slot),
@@ -251,10 +264,10 @@ async fn run(
     session
         .start(&mut registers, &CLOCK, &bell)
         .await
-        .map_err(|_| "rx-start")?;
+        .map_err(|_| oer_diagnostics::name!("rx-start"; 32))?;
     for number in 1..=13 {
-        let channel =
-            WifiChannel::new_2_4_ghz(number, WifiChannelWidth::Mhz20).map_err(|_| "channel")?;
+        let channel = WifiChannel::new_2_4_ghz(number, WifiChannelWidth::Mhz20)
+            .map_err(|_| oer_diagnostics::name!("channel"; 32))?;
         let Ok(channel) = domain.permit(channel) else {
             continue;
         };
@@ -262,24 +275,30 @@ async fn run(
         session
             .pause(&mut registers, &bell, &CLOCK, &publisher)
             .await
-            .map_err(|_| "rx-pause")?;
+            .map_err(|_| oer_diagnostics::name!("rx-pause"; 32))?;
         let stopped = owner.into_stopped(registers, ()).wifi;
         let (returned, tuned) = stopped.retune(cell, channel, limit).await;
         cell = returned;
-        let (stopped, tuned) = tuned.map_err(|_| "retune")?;
+        let (stopped, tuned) = tuned.map_err(|_| oer_diagnostics::name!("retune"; 32))?;
         let parts = materialize_esp32s31_wifi_role(stopped, ());
         owner = parts.owner;
         registers = parts.registers;
         session.reattach();
-        retuned_tx(&mut tx, tuned.tx_power, limit, "tx-active-on-retune")?;
+        retuned_tx(
+            &mut tx,
+            tuned.tx_power,
+            limit,
+            oer_diagnostics::name!("tx-active-on-retune"; 32),
+        )?;
         let priority = tuned.probe_priority;
         session
             .start(&mut registers, &CLOCK, &bell)
             .await
-            .map_err(|_| "rx-restart")?;
+            .map_err(|_| oer_diagnostics::name!("rx-restart"; 32))?;
         let index = report.count;
         report.count += 1;
-        let rate = management_rate(Band::Ghz2_4, None).ok_or("group-rate")?;
+        let rate =
+            management_rate(Band::Ghz2_4, None).ok_or(oer_diagnostics::name!("group-rate"; 32))?;
         report.visits[index].channel = number;
         report.visits[index].sequence = sequence.get();
         report.visits[index].allowed = channel.initiate() == Initiate::Allowed;
@@ -334,23 +353,31 @@ async fn run(
     session
         .pause(&mut registers, &bell, &CLOCK, &publisher)
         .await
-        .map_err(|_| "rx-pause-unicast")?;
+        .map_err(|_| oer_diagnostics::name!("rx-pause-unicast"; 32))?;
     let stopped = owner.into_stopped(registers, ()).wifi;
     let limit = ceiling(initial, config);
     let (returned, tuned) = stopped.retune(cell, initial, limit).await;
     cell = returned;
-    let (stopped, tuned) = tuned.map_err(|_| "retune-unicast")?;
+    let (stopped, tuned) = tuned.map_err(|_| oer_diagnostics::name!("retune-unicast"; 32))?;
     let parts = materialize_esp32s31_wifi_role(stopped, ());
     owner = parts.owner;
     registers = parts.registers;
     session.reattach();
-    retuned_tx(&mut tx, tuned.tx_power, limit, "tx-active-before-unicast")?;
+    retuned_tx(
+        &mut tx,
+        tuned.tx_power,
+        limit,
+        oer_diagnostics::name!("tx-active-before-unicast"; 32),
+    )?;
     session
         .start(&mut registers, &CLOCK, &bell)
         .await
-        .map_err(|_| "rx-start-unicast")?;
-    let rate = management_rate(Band::Ghz2_4, Some(&basic.ok_or("lab-basic-rates")?))
-        .ok_or("unicast-rate")?;
+        .map_err(|_| oer_diagnostics::name!("rx-start-unicast"; 32))?;
+    let rate = management_rate(
+        Band::Ghz2_4,
+        Some(&basic.ok_or(oer_diagnostics::name!("lab-basic-rates"; 32))?),
+    )
+    .ok_or(oer_diagnostics::name!("unicast-rate"; 32))?;
     report.unicast_rate = rate.kbps();
     report.unicast_sequence = sequence.get();
     report.unicast_ceiling = limit.dbm();
@@ -399,10 +426,10 @@ async fn run(
     session
         .pause(&mut registers, &bell, &CLOCK, &publisher)
         .await
-        .map_err(|_| "rx-final-stop")?;
+        .map_err(|_| oer_diagnostics::name!("rx-final-stop"; 32))?;
     let stopped = owner.into_stopped(registers, ()).wifi;
     let (_cell, released) = stopped.release(cell).await;
-    released.map_err(|_| "release")?;
+    released.map_err(|_| oer_diagnostics::name!("release"; 32))?;
     Ok(())
 }
 
@@ -420,9 +447,9 @@ fn begin_probe(
     rate: oer_ieee80211_wire::phy::LegacyRate,
     sequence: SequenceNumber,
     priority: ProbePriority,
-) -> Result<(), &'static str> {
+) -> Result<(), oer_diagnostics::Name<32>> {
     if channel.initiate() != Initiate::Allowed {
-        return Err("probe-no-ir");
+        return Err(oer_diagnostics::name!("probe-no-ir"; 32));
     }
     let management = if destination == BROADCAST_ADDRESS {
         ManagementTxPlan::broadcast(rate)
@@ -430,7 +457,7 @@ fn begin_probe(
         ManagementTxPlan::unicast(rate)
     };
     let OrdinaryTxAccess::Idle(mut idle) = tx.access() else {
-        return Err("tx-not-idle");
+        return Err(oer_diagnostics::name!("tx-not-idle"; 32));
     };
     let length = ProbeRequest {
         destination,
@@ -443,9 +470,9 @@ fn begin_probe(
     .encode(
         idle.buffer_mut()
             .get_mut(TX_METADATA_SIZE..)
-            .ok_or("tx-buffer")?,
+            .ok_or(oer_diagnostics::name!("tx-buffer"; 32))?,
     )
-    .map_err(|_| "probe-encode")?;
+    .map_err(|_| oer_diagnostics::name!("probe-encode"; 32))?;
     let plan = OrdinaryTxPlan {
         frame_length: length,
         descriptor_capacity: None,
@@ -463,7 +490,7 @@ fn begin_probe(
         priority_count: 1,
     };
     idle.start_management(&mut registers.wifi_mac_hal(), plan, management)
-        .map_err(|_| "tx-start")?;
+        .map_err(|_| oer_diagnostics::name!("tx-start"; 32))?;
     Ok(())
 }
 
@@ -481,7 +508,7 @@ async fn drive(
     report: &mut Report,
     visit: Option<usize>,
     deadline: Instant,
-) -> Result<(), &'static str> {
+) -> Result<(), oer_diagnostics::Name<32>> {
     loop {
         if CLOCK.now() >= deadline && !tx.active() {
             while let Some(held) = frames.try_next() {
@@ -509,7 +536,7 @@ async fn drive(
                 drop(held);
             }
             Either3::Second(batch) => {
-                let batch = batch.map_err(|_| "irq-context")?;
+                let batch = batch.map_err(|_| oer_diagnostics::name!("irq-context"; 32))?;
                 let mut rx = batch.rx_capacity_returned();
                 let mut events = 0;
                 for work in batch {
@@ -537,14 +564,14 @@ async fn drive(
                                 &mut registers.wifi_mac_hal(),
                                 WifiTxWake::Interrupt { events },
                             )
-                            .map_err(|_| "tx-irq")?;
+                            .map_err(|_| oer_diagnostics::name!("tx-irq"; 32))?;
                     }
                 }
                 if rx {
                     session
                         .drain(registers, bell, &CLOCK, publisher)
                         .await
-                        .map_err(|_| "rx-drain")?;
+                        .map_err(|_| oer_diagnostics::name!("rx-drain"; 32))?;
                 }
             }
             Either3::Third(()) => {
@@ -553,7 +580,7 @@ async fn drive(
                 {
                     active
                         .service(&mut registers.wifi_mac_hal(), WifiTxWake::Deadline)
-                        .map_err(|_| "tx-deadline")?;
+                        .map_err(|_| oer_diagnostics::name!("tx-deadline"; 32))?;
                 }
             }
         }
