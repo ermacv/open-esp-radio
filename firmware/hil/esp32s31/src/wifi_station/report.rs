@@ -168,6 +168,7 @@ fn contract(violation: BackendContractViolation) -> StationContractViolation {
                 StationKeyContractViolation::MissingAssociation
             }
         }),
+        V::StationKeyUnwrap => W::StationKeyUnwrap,
     }
 }
 

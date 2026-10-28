@@ -10,7 +10,6 @@
 //! mutated real frames) and, `#[ignore]`d, with [`FULL`]. The SAE exchange,
 //! a scalar multiplication per accepted commit, runs a tenth as many.
 
-
 use oer_ieee80211_cipher::ccmp_mpdu::CcmpAssociation;
 use oer_ieee80211_wire::management_ccmp_vector::management_wire;
 

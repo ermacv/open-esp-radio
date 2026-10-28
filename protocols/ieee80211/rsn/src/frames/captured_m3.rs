@@ -71,8 +71,7 @@ fn recorded_message3_authenticates_and_retains_its_gtk_wire_id() {
         },
     );
     assert!(frame.verify_mic(&ptk));
-    let plain =
-        crate::test_unwrap_bytes(ptk.kek(), frame.key_data()).unwrap();
+    let plain = crate::test_unwrap_bytes(ptk.kek(), frame.key_data()).unwrap();
     let keys = parse_gtk_key_data(plain.as_bytes(), &RSN_IE, &[], true).unwrap();
     assert_eq!(keys.gtk.key_id().get(), 1);
     assert_eq!(keys.gtk.key(), &GTK);

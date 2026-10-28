@@ -782,8 +782,13 @@ impl<'id, const G: usize> World<'id, G> {
                         if self.hold_unwraps {
                             self.pending_unwraps.push((id, request));
                         } else {
-                            self.station
-                                .input(now, StaInput::KeyDataUnwrapped { id, result: unwrap(request) });
+                            self.station.input(
+                                now,
+                                StaInput::KeyDataUnwrapped {
+                                    id,
+                                    result: unwrap(request),
+                                },
+                            );
                         }
                     }
                 }

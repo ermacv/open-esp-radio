@@ -77,8 +77,7 @@ fn the_handshake_waits_for_its_unwrap_and_ignores_a_repeated_message3() {
 }
 
 #[test]
-fn a_response_after_the_handshake_left_returns_only_its_ticket_and_a_new_handshake_waits_for_it()
-{
+fn a_response_after_the_handshake_left_returns_only_its_ticket_and_a_new_handshake_waits_for_it() {
     installed(|mint| {
         let (mut world, ptk) = wpa2_associated::<2>(mint);
         world.hold_unwraps = true;
@@ -144,9 +143,12 @@ fn a_group_rekey_waits_for_its_unwrap_and_takes_the_next_frame_after_its_respons
         // The same frame again is stale while its unwrap is out; a newer one
         // waits in the deferred place.
         assert_eq!(
-            world
-                .station
-                .receive(at(51), &group_message1_at(&ptk, 3, 2, 4), verified_meta(), |_| {}),
+            world.station.receive(
+                at(51),
+                &group_message1_at(&ptk, 3, 2, 4),
+                verified_meta(),
+                |_| {}
+            ),
             Err(StaRxError::Security(RsnConnectedProcessError::Supplicant(
                 RsnConnectedSupplicantError::StaleReplayCounter
             )))

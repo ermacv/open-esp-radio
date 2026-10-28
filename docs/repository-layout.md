@@ -30,6 +30,8 @@ protocols/  sans-IO protocols and their vocabularies (no_std)
   hil/          the HIL protocol, with the conformance trace header
 portable/   generic support no protocol or chip owns (no_std)
   time/ time-virtual/ memory/ sync/ trace/ wire/
+  crypto/       owned operation contracts (key unwrap) and mode algorithms
+                (RFC 3394) over a synchronous block primitive, with conformance
   riscv/        architectural RISC-V constants and instructions
   embassy/      bindings to Embassy (time; net, with the radio TX datapath
                 contracts)
@@ -104,10 +106,10 @@ Each radio protocol has these layers in `protocols/<protocol>/`:
 | Layer | Holds | Depends on |
 |---|---|---|
 | `wire` | the over-the-air formats: parsing and building frames and PDUs, information elements; no state, no time | portable support |
-| `cipher` | frame protection transforms — CCMP, BIP; no state, no time | `wire` |
+| `cipher` | frame protection transforms — CCMP, BIP — and the protocol's software block primitive under `oer-crypto`'s mode algorithms; no state, no time | `wire`, `oer-crypto` |
 | `port` | the contract with a backend: commands, events, resources, errors | `wire` |
 | cores | the sans-IO state machines (station, access point, RSN, an LE connection, the 802.15.4 MAC) | `port`, `wire`, `cipher` |
-| `runtime` | the async loop over the port: awaits port events and deadlines, feeds the cores, executes their actions; parses and builds no frame | `port`, cores, portable time and signals |
+| `runtime` | the async loop over the port: awaits port events and deadlines, feeds the cores, executes their actions; parses and builds no frame | `port`, cores, portable time, signals and `oer-crypto` contracts |
 
 A backend implements the port and depends on `port`, `wire` and `cipher` only,
 never on a core: the chip backend in `chips/<chip>/`, the reference model in

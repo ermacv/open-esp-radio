@@ -112,7 +112,8 @@ The [`runtime`](runtime/README.md) is the asynchronous glue: it waits on
 port events, deadlines and commands, hands each input to the cores and
 carries out their actions through the port. It decides no protocol question
 and neither parses nor builds frames; it depends on neither `wire` nor
-`cipher`. The cores never wait. `cargo test -p oer-test-layers` checks both,
+`cipher`, and runs the station's RSN key-data unwrap in the engine the image
+supplies through the `oer-crypto` contract. The cores never wait. `cargo test -p oer-test-layers` checks both,
 and that `cipher`, `port` and `model` take only the layers below them.
 
 The [RSN crate](rsn/README.md) separates secret ownership and derivation

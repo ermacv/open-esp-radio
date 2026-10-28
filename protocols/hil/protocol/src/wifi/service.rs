@@ -62,6 +62,8 @@ pub enum StationContractViolation {
     GroupTerminalKindMismatch,
     TxContextBufferMismatch,
     StationKeyBank(StationKeyContractViolation),
+    /// The station asked for a second key-data unwrap while one was waiting.
+    StationKeyUnwrap,
 }
 
 /// A key resource returned against the station's key bank contract.

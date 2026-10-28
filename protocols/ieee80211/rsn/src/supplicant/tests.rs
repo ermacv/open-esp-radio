@@ -29,8 +29,7 @@ fn process(
 ) -> Result<RsnStaReady<512>, RsnStaProcessError<oer_crypto::KeyUnwrapError>> {
     match supplicant.on_frame(frame, pmk)? {
         RsnStaSupplicantAction::UnwrapKeyData(request) => {
-            let unwrapped =
-                crate::test_unwrap(request.key_unwrap().unwrap());
+            let unwrapped = crate::test_unwrap(request.key_unwrap().unwrap());
             supplicant.complete_key_data_unwrap(request, unwrapped)
         }
         RsnStaSupplicantAction::Ready(action) => Ok(action),

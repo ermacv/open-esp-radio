@@ -57,6 +57,7 @@ wifi-station = [
     "dep:oer-ieee80211-wire",
     "dep:oer-radio-regulatory",
     "dep:oer-ieee80211-runtime",
+    "dep:oer-ieee80211-cipher",
     "dep:oer-ieee80211-rsn",
     "dep:owned-embassy-net",
     "oer-espressif-executor/port-slots",
@@ -88,6 +89,7 @@ oer-esp32s31-ieee80211-mac = { path = "../../../chips/esp32s31/ieee80211/mac", o
 oer-ieee80211-wire = { path = "../../../protocols/ieee80211/wire", optional = true }
 oer-radio-regulatory = { path = "../../../protocols/radio/regulatory", optional = true }
 oer-ieee80211-runtime = { path = "../../../protocols/ieee80211/runtime", features = ["placement"], optional = true }
+oer-ieee80211-cipher = { path = "../../../protocols/ieee80211/cipher", optional = true }
 oer-ieee80211-rsn = { path = "../../../protocols/ieee80211/rsn", optional = true }
 owned-embassy-net = { package = "embassy-net", git = "https://github.com/ermacv/embassy.git", rev = "17f796c8ddb90ff510d995e24c2dcb758a97e8f8", optional = true, features = ["medium-ethernet", "ipv4", "dhcpv4", "raw-ip", "icmp-ping-reply"] }
 oer-memory = { path = "../../../portable/memory" }

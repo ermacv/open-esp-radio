@@ -11,6 +11,7 @@ description = "W3: open station association, DHCP and bidirectional ICMP accepta
 [dependencies]
 oer-diagnostics = { path = "../../../portable/diagnostics" }
 oer-ieee80211-wire = { path = "../../../protocols/ieee80211/wire" }
+oer-ieee80211-cipher = { path = "../../../protocols/ieee80211/cipher" }
 oer-ieee80211-runtime = { path = "../../../protocols/ieee80211/runtime", features = ["placement"] }
 oer-ieee80211-sta = { path = "../../../protocols/ieee80211/sta" }
 oer-memory = { path = "../../../portable/memory" }

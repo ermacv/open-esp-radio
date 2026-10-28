@@ -52,6 +52,18 @@ runtime and a reference model. IEEE 802.15.4 has `wire`, `port`, the `mac`
 core and a separate host reference `model`. A backend depends on its
 protocol's port, wire formats and implemented `cipher` only.
 
+Cryptographic operations shared by protocols have one contract each in
+`portable/crypto` (`oer-crypto`). One operation is one request: the request
+owns its key and buffers and moves by value into an engine, which moves itself
+into the operation and returns with the response and the same buffers; there
+is no busy refusal, and consuming the request erases the key. Mode algorithms
+(RFC 3394) have one copy there, as resumable machines over a synchronous block
+primitive; a protocol's software primitive lives in its `cipher`. The image
+chooses the engine as a static type. A core asks for an operation as an action and takes its response as an
+input, holding no future; the runtime runs the engine in one slot of its
+select. An engine whose hardware may still reach a request's buffers keeps
+them until it confirmed the stop.
+
 Protocol cores are **sans-IO**: frames, completed operations and the current
 time enter as values; actions and the next deadline leave as values. They
 never await, so they run under any executor and in host tests with virtual

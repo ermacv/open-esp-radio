@@ -28,6 +28,14 @@ pub struct KeyUnwrapId {
     sequence: u32,
 }
 
+impl KeyUnwrapId {
+    /// A ticket of no station, for a service test's engine.
+    #[cfg(any(test, feature = "test-support"))]
+    pub const fn for_test() -> Self {
+        Self { sequence: 0 }
+    }
+}
+
 /// Where the ticket is: home, or out with one request.
 pub(super) struct KeyUnwrapLane {
     held: Option<KeyUnwrapId>,

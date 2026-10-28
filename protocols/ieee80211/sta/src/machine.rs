@@ -158,9 +158,9 @@ pub use commands::{
     StaCommandRefused, StaCommandTerminal, StaRequest,
 };
 pub use deferred_eapol::{DeferredEapol, PendingGroupM1, PendingM3};
+use group_keys::{GroupKeys, GroupPlace, Installed as InstalledGroup, Replay as GroupReplay};
 use key_unwrap::KeyUnwrapLane;
 pub use key_unwrap::{KEY_DATA_CAPACITY, KeyUnwrapId, StaKeyUnwrapRequest, StaKeyUnwrapResponse};
-use group_keys::{GroupKeys, GroupPlace, Installed as InstalledGroup, Replay as GroupReplay};
 use management::{ManagementEvent, ManagementProtection};
 
 use crate::join::{
@@ -5165,27 +5165,28 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
         sequence: u32,
         response: StaKeyUnwrapResponse,
     ) -> Change<T, K> {
-        let (request, protection) = match core::mem::replace(&mut handshake.step, HandshakeStep::Await) {
-            HandshakeStep::AwaitUnwrap {
-                sequence: issued,
-                request,
-                protection,
-            } if issued == sequence => (request, protection),
-            // The ticket came home with another request's response: issue
-            // this one again.
-            HandshakeStep::AwaitUnwrap {
-                request,
-                protection,
-                ..
-            } => {
-                handshake.step = HandshakeStep::Unwrap(request, protection);
-                return Change::Keep;
-            }
-            step => {
-                handshake.step = step;
-                return Change::Keep;
-            }
-        };
+        let (request, protection) =
+            match core::mem::replace(&mut handshake.step, HandshakeStep::Await) {
+                HandshakeStep::AwaitUnwrap {
+                    sequence: issued,
+                    request,
+                    protection,
+                } if issued == sequence => (request, protection),
+                // The ticket came home with another request's response: issue
+                // this one again.
+                HandshakeStep::AwaitUnwrap {
+                    request,
+                    protection,
+                    ..
+                } => {
+                    handshake.step = HandshakeStep::Unwrap(request, protection);
+                    return Change::Keep;
+                }
+                step => {
+                    handshake.step = step;
+                    return Change::Keep;
+                }
+            };
         let action = match handshake
             .supplicant()
             .map_err(oer_ieee80211_rsn::supplicant::RsnStaProcessError::from)
