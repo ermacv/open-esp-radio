@@ -2,18 +2,18 @@
 //! radio domain: each lends the domain to the production core or timer
 //! sequence and compares the registers it leaves.
 
-use oer_esp32s31_hal::coex::{CoexPolicyTimer, CoexTimerBank};
+use oer_esp32s31_hal::coex::{CoexPolicyTimer, CoexPolicyTimerBank};
 use oer_esp32s31_radio_coex::{
     CoexClockSelector, CoexCore, CoexDomainPorts, CoexError, CoexEventId,
 };
 
 use crate::session;
 
-fn with_timer(index: u32, operation: impl FnOnce(&mut CoexTimerBank<'_>, CoexPolicyTimer)) {
+fn with_timer(index: u32, operation: impl FnOnce(&mut CoexPolicyTimerBank<'_>, CoexPolicyTimer)) {
     let Some(timer) = u8::try_from(index).ok().and_then(CoexPolicyTimer::new) else {
         return;
     };
-    let _ = session::with(|session| operation(&mut session.radio_mut().coex_timer_bank(), timer));
+    let _ = session::with(|session| operation(&mut session.radio_mut().coex_ports().0, timer));
 }
 
 pub fn enable_timer(index: u32) {
@@ -36,9 +36,9 @@ pub fn unforce_timer(index: u32) {
 pub fn core_release(event: CoexEventId) -> Option<Result<(), CoexError>> {
     let mut core = CoexCore::new();
     session::with(|session| {
-        let ports = CoexDomainPorts::new(session.radio_mut());
-        let (mut timer, _) = ports.ports();
-        core.release(&mut timer, event).map(|_| ())
+        let mut ports = CoexDomainPorts::new(session.radio_mut());
+        let (timer, _) = ports.ports();
+        core.release(timer, event).map(|_| ())
     })
 }
 
@@ -54,7 +54,9 @@ pub fn set_timer_clock(selector: u32, divisor: u32) -> bool {
         _ => return false,
     };
     session::with(|session| {
-        CoexDomainPorts::new(session.radio_mut()).set_timer_clock(selector, divisor)
+        CoexDomainPorts::new(session.radio_mut())
+            .set_timer_clock(selector, divisor)
+            .is_ok()
     })
     .unwrap_or(false)
 }

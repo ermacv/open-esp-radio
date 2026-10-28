@@ -65,7 +65,7 @@ const fn output(length: u32) -> Domain {
 }
 
 // SOURCE: firmware/probes/esp32s31-radio/src/coex.rs::with_domain lends
-// RadioHardware::for_probe().split(()) directly; hal/src/coex.rs::CoexTimerBank
+// RadioHardware::for_probe().split(()) directly; hal/src/coex.rs::CoexPolicyTimerBank
 // borrows those owned registers without a lease or a release fence. These
 // leaves compare all effects exactly, including any unexpected fence.
 

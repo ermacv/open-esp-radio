@@ -347,7 +347,7 @@ pub(crate) fn fields() -> Vec<OutputField> {
     CALIBRATION
         .into_iter()
         .chain(PARENT)
-        .chain(committed(CALIBRATION_BYTES + PARENT_BYTES))
+        .chain(committed::<{ CALIBRATION_BYTES + PARENT_BYTES }>())
         .filter(|f| f.name != TRACKING_PROGRESS_FIELD)
         .collect()
 }
@@ -1031,7 +1031,7 @@ mod tests {
         assert!(fields().iter().all(|f| f.name != TRACKING_PROGRESS_FIELD));
         assert_eq!(
             fields().len(),
-            CALIBRATION.len() + PARENT.len() + committed(0).len() - 1
+            CALIBRATION.len() + PARENT.len() + committed::<0>().len() - 1
         );
     }
 

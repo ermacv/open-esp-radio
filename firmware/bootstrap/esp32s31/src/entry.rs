@@ -25,7 +25,19 @@ static RUNTIME_PAYLOAD: [u8; include_bytes!(env!("PSRAM_RUNTIME_BIN")).len()] =
 // SAFETY: a disjoint, cold flash span, never executed or read after tuning.
 #[used]
 #[unsafe(link_section = ".flash.tuning.reference")]
-static FLASH_TUNING_REFERENCE: [u32; FLASH_TUNING_REFERENCE_WORDS] = flash_tuning_reference();
+static FLASH_TUNING_REFERENCE: [u32; FLASH_TUNING_REFERENCE_WORDS] = const {
+    let mut words = [0_u32; FLASH_TUNING_REFERENCE_WORDS];
+    let mut state = 0x31a5_c33c_u32;
+    let mut index = 0_usize;
+    let mut remaining: &mut [u32] = &mut words;
+    while let [word, rest @ ..] = remaining {
+        state = state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+        *word = state ^ (index as u32).rotate_left((index & 31) as u32);
+        remaining = rest;
+        index += 1;
+    }
+    words
+};
 
 // The full-page sweep reference is owned static SRAM, never the boot stack.
 static FLASH_TUNING_SCRATCH: ConstStaticCell<[u32; flash::TUNING_SCRATCH_WORDS]> =
@@ -151,16 +163,4 @@ extern "C" fn bootstrap_main() -> ! {
 
 fn checked<T>(result: Result<T, BootFailure>) -> T {
     result.unwrap_or_else(|error| staged::fail_boot(error))
-}
-
-const fn flash_tuning_reference() -> [u32; FLASH_TUNING_REFERENCE_WORDS] {
-    let mut words = [0_u32; FLASH_TUNING_REFERENCE_WORDS];
-    let mut state = 0x31a5_c33c_u32;
-    let mut index = 0;
-    while index < words.len() {
-        state = state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
-        words[index] = state ^ (index as u32).rotate_left((index & 31) as u32);
-        index += 1;
-    }
-    words
 }

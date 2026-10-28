@@ -270,3 +270,18 @@ fn a_held_host_test_grant_protect_is_owned_by_the_domain() {
         Err(PhyGrantProtectError::AlreadyProtected)
     );
 }
+
+#[test]
+fn split_coex_ports_borrow_the_actual_domain_priority_table() {
+    let mut radio = radio_domain();
+    let event = CoexEventId::new(5).unwrap();
+    let priority = CoexPti::new(9).unwrap();
+    radio.set_coex_pti(event, priority);
+    {
+        let (timers, _clock) = radio.coex_ports();
+        assert_eq!(timers.pti(event), priority);
+    }
+    radio.set_coex_pti(event, CoexPti::new(3).unwrap());
+    let (timers, _clock) = radio.coex_ports();
+    assert_eq!(timers.pti(event).value(), 3);
+}

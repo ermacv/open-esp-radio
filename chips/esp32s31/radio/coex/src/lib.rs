@@ -1,13 +1,26 @@
-#![no_std]
-#![forbid(unsafe_code)]
 #![deny(
     clippy::unwrap_used,
+    clippy::expect_used,
     clippy::panic,
     clippy::unreachable,
     clippy::todo,
     clippy::unimplemented,
-    clippy::indexing_slicing
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    clippy::disallowed_macros,
+    clippy::disallowed_methods
 )]
+#![cfg_attr(
+    test,
+    allow(
+        clippy::disallowed_macros,
+        clippy::disallowed_methods,
+        clippy::arithmetic_side_effects,
+        clippy::unreachable
+    )
+)]
+#![no_std]
+#![forbid(unsafe_code)]
 
 //! The ESP32-S31 binding of the Espressif coexistence policy.
 //!
@@ -32,4 +45,4 @@ pub use oer_espressif_coex::{
     CoexStatusWords, CoexTimerClock, CoexTimerHardware, CoexTimerIndex, NoRequestKind,
     program_timer, timer_index, wifi_status,
 };
-pub use ports::{CoexDomainClock, CoexDomainPorts, CoexDomainTimer};
+pub use ports::{CoexDomainClock, CoexDomainPorts, CoexDomainTimer, TimerClockError};

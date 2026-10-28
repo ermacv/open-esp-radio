@@ -104,13 +104,13 @@ where
                 return out;
             }
             let mut served = false;
-            if let Some((request, responder)) = self.actor.inbox.take() {
+            if let Some(request) = self.actor.inbox.take() {
                 // Same receiver/backend type as a Wi-Fi-only composition.
-                responder.answer(Boundary::new(self.actor.serve(request)).await);
+                Boundary::new(self.actor.serve(request)).await;
                 served = true;
             }
-            if let Some((request, responder)) = self.inbox.take() {
-                responder.answer(Boundary::new(self.serve(request)).await);
+            if let Some(request) = self.inbox.take() {
+                Boundary::new(self.serve(request)).await;
                 served = true;
             }
             if served {
@@ -127,17 +127,17 @@ where
             }
         }
     }
-    async fn serve(&mut self, request: Request<Bluetooth>) -> Answer<Bluetooth> {
+    async fn serve(&mut self, request: Request<Bluetooth>) {
         match request {
-            Request::Join(join) => {
+            Request::Join(join, responder) => {
                 if let Some(poison) = self.actor.core.poisoned() {
-                    return Answer::Join(Err(Failed {
+                    return responder.answer(Err(Failed {
                         returned: join,
                         cause: Failure::Poisoned(poison),
                     }));
                 }
                 if !self.attachment.admits(&self.actor.backend, &join) {
-                    return Answer::Join(Err(Failed {
+                    return responder.answer(Err(Failed {
                         returned: join,
                         cause: Failure::Refused,
                     }));
@@ -149,7 +149,7 @@ where
                             origin: PoisonOrigin::Prepare,
                             cause,
                         });
-                        return Answer::Join(Err(Failed {
+                        return responder.answer(Err(Failed {
                             returned: join,
                             cause: Failure::Poisoned(poison),
                         }));
@@ -168,7 +168,7 @@ where
                     ));
                     entering.await
                 };
-                Answer::Join(match entered {
+                responder.answer(match entered {
                     Ok(payload) => {
                         self.actor.core.joined();
                         Ok(Joined {
@@ -188,9 +188,9 @@ where
                     }
                 })
             }
-            Request::Track(member, installation) => {
+            Request::Track(member, installation, responder) => {
                 if let Some(poison) = self.actor.core.poisoned() {
-                    return Answer::Track(Err(Failed {
+                    return responder.answer(Err(Failed {
                         returned: (member, installation),
                         cause: Failure::Poisoned(poison),
                     }));
@@ -201,7 +201,7 @@ where
                     );
                     tracking.await
                 };
-                Answer::Track(match tracked {
+                responder.answer(match tracked {
                     Ok(payload) => {
                         self.actor.core.tracked();
                         Ok(TrackedMember {
@@ -218,8 +218,8 @@ where
                     }
                 })
             }
-            Request::Retune(_, never) => match never {},
-            Request::Leave(member, installation) => {
+            Request::Retune(_, never, _) => match never {},
+            Request::Leave(member, installation, responder) => {
                 self.actor
                     .core
                     .leaving(matches!(member, Leaving::Tracked(_)));
@@ -233,7 +233,7 @@ where
                 if matches!(self.actor.core.exited(exit), Action::CloseRf) {
                     Boundary::new(self.actor.close_rf()).await;
                 }
-                Answer::Leave(Left {
+                responder.answer(Left {
                     payload,
                     domain: self.actor.core.health(),
                 })

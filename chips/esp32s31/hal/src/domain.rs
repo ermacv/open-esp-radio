@@ -32,7 +32,8 @@ pub use crate::clock::{
 #[cfg(test)]
 use crate::coex::PhyGrantProtectError;
 use crate::coex::{
-    CoexEventId, CoexPti, CoexPtiTable, CoexTimerBank, PHY_GRANT_PROTECT_EVENT, PhyGrantProtect,
+    CoexClockPort, CoexEventId, CoexPolicyTimerBank, CoexPti, CoexPtiTable,
+    PHY_GRANT_PROTECT_EVENT, PhyGrantProtect,
 };
 use crate::coex_participation::CoexParticipants;
 pub use crate::coex_participation::{CoexAbsent, Coexisting, ExternalCoexistence};
@@ -1109,9 +1110,26 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
         self.state().phy_grant_protected
     }
 
-    /// Borrow the coexistence timer bank for one policy transaction.
-    pub fn coex_timer_bank(&mut self) -> CoexTimerBank<'_> {
-        CoexTimerBank::from_owned(&mut self.state_mut().registers)
+    /// Lend disjoint policy-timer and clock owners for one coexistence transaction.
+    /// Timer 5 remains reserved for PHY grant protection and cannot be selected
+    /// through the policy port. Both loans prevent any other domain access.
+    ///
+    /// ```compile_fail,E0499
+    /// use oer_esp32s31_hal::{domain::RadioDomain, power::PlatformClockBackend};
+    /// fn overlap<B: PlatformClockBackend, T>(radio: &mut RadioDomain<B, T>) {
+    ///     let (mut timers, mut clock) = radio.coex_ports();
+    ///     let _other = radio.coex_ports();
+    ///     let _ = clock.sample_low_power_clock();
+    ///     timers.enable(oer_esp32s31_hal::coex::CoexPolicyTimer::Timer0);
+    /// }
+    /// ```
+    pub fn coex_ports(&mut self) -> (CoexPolicyTimerBank<'_>, CoexClockPort<'_>) {
+        let state = self.state_mut();
+        let (phy, timers) = state.registers.radio_phy_and_coex_timers_mut();
+        (
+            CoexPolicyTimerBank::new(timers, &state.coex_pti),
+            CoexClockPort::new(phy),
+        )
     }
 
     /// Borrow the upper layer's attachment.

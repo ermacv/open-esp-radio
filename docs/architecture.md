@@ -499,7 +499,10 @@ typestate (`Untracked`, `Tracked`, `Suspended`). It owns the HAL's
   family's table (`oer-espressif-coex`). Each MAC's PTI registers belong to
   its driver. Windows shorter than a grant are enforced by PTI alone and
   reported as blackouts. The runtime that combines the policy and the
-  schedule does not exist yet.
+  schedule does not exist yet. `RadioDomain::coex_ports` lends disjoint
+  policy-timer and clock owners through exclusive borrows. The policy port
+  cannot select reserved timer 5; each clock sample performs fresh reads.
+  The family coexistence traits remain independent of these HAL owners.
 - **Low-power clock** is a type (`LpClock<RcSlow | Xtal32k>`).
 
 ## Radio ports

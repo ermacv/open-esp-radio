@@ -112,15 +112,25 @@ pub const PARENT: [OutputField; 7] = [
     field("rfpll-reference", RFPLL_REFERENCE, 166, 2, 1),
 ];
 
-/// Fields of the committed state words starting at output byte `start`.
-pub const fn committed(start: u32) -> [OutputField; 5] {
-    [
-        field("dcode", DCODE, start, 1, 8),
-        field("calibration-status", CALIBRATION_STATUS, start + 8, 1, 2),
-        field("rx-table-last-indices", SHARED_LAST_INDEX, start + 10, 1, 2),
-        field(TRACKING_PROGRESS_FIELD, TRACKING_PROGRESS, start + 12, 2, 1),
-        field("sensor-index", SENSOR_INDEX, start + 14, 1, 1),
-    ]
+/// Fields of the committed state words starting at output byte `START`.
+/// Fixed projection geometry is evaluated at compile time.
+///
+/// ```compile_fail,E0080
+/// let _ = oer_esp32s31_knowledge::phy_relation::committed::committed::<{u32::MAX}>();
+/// ```
+pub fn committed<const START: u32>() -> [OutputField; 5] {
+    const {
+        if START > u32::MAX - 14 {
+            panic!("committed output offsets must fit u32");
+        }
+        [
+            field("dcode", DCODE, START, 1, 8),
+            field("calibration-status", CALIBRATION_STATUS, START + 8, 1, 2),
+            field("rx-table-last-indices", SHARED_LAST_INDEX, START + 10, 1, 2),
+            field(TRACKING_PROGRESS_FIELD, TRACKING_PROGRESS, START + 12, 2, 1),
+            field("sensor-index", SENSOR_INDEX, START + 14, 1, 1),
+        ]
+    }
 }
 
 /// One output field of `count` elements of `width` bytes, from `phy_param`

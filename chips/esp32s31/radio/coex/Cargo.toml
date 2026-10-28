@@ -8,6 +8,7 @@ repository.workspace = true
 description = "ESP32-S31 binding of the Espressif coexistence policy to the radio domain"
 
 [dependencies]
+oer-mmio = { path = "../../../../portable/mmio" }
 oer-esp32s31-hal = { path = "../../hal" }
 oer-espressif-coex = { path = "../../../espressif/coex" }
 

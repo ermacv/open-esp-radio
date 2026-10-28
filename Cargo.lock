@@ -2098,6 +2098,7 @@ version = "0.1.0"
 dependencies = [
  "oer-esp32s31-hal",
  "oer-espressif-coex",
+ "oer-mmio",
 ]
 
 [[package]]

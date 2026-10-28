@@ -300,7 +300,7 @@ fn run<F: Future<Output = ()>>(
     clock: &'static VirtualClock,
     client: impl FnOnce(ClientCells) -> F,
 ) {
-    let (end, cells) = claim_for_host_test();
+    let (end, cells) = claim_for_host_test().expect("fresh radio client cells");
     let lp = LpClock::<RcSlow>::for_host_test();
     let mut actor = RadioSystem::new(end, model.clone(), clock, lp);
     match block_on(select(actor.run(), client(cells))) {
@@ -346,7 +346,7 @@ const REGISTERED: Event = Event::Prepare(Ok(REGISTRATION));
 #[test]
 fn a_borrowed_run_keeps_membership_when_polled_again() {
     let model = model(Script::default());
-    let (end, cells) = claim_for_host_test();
+    let (end, cells) = claim_for_host_test().expect("fresh radio client cells");
     let lp = LpClock::<RcSlow>::for_host_test();
     let mut actor = RadioSystem::new(end, model.clone(), clock(), lp);
     let Either::Second((cell, joined)) = block_on(select(
@@ -843,7 +843,7 @@ fn a_rung_doorbell_wins_over_an_already_due_tracking_deadline() {
     };
     let model = model(Script::default());
     let clock = clock();
-    let (end, cells) = claim_for_host_test();
+    let (end, cells) = claim_for_host_test().expect("fresh radio client cells");
     let actor = RadioSystem::new(end, model, clock, LpClock::<RcSlow>::for_host_test());
     let mut join = pin!(cells.wifi.join(WifiJoin { wifi: cold() }));
     let mut cx = Context::from_waker(Waker::noop());
@@ -862,7 +862,7 @@ fn no_tracking_deadline_waits_only_for_a_posted_request() {
     };
     let model = model(Script::default());
     let clock = clock();
-    let (end, cells) = claim_for_host_test();
+    let (end, cells) = claim_for_host_test().expect("fresh radio client cells");
     let actor = RadioSystem::new(end, model, clock, LpClock::<RcSlow>::for_host_test());
     let mut wait = pin!(actor.wait(None));
     let mut cx = Context::from_waker(Waker::noop());

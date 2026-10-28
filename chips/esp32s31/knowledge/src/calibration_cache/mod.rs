@@ -194,11 +194,10 @@ record! {
 impl CalibrationIdentity {
     /// Canonical identity bytes for an opaque transport/file key.
     pub fn encode(self) -> [u8; 12] {
-        let mut bytes = [0; 12];
-        bytes[..4].copy_from_slice(&self.rf_cal_version.to_le_bytes());
-        bytes[4..10].copy_from_slice(&self.base_mac_address);
-        bytes[10..].copy_from_slice(&self.mac_extension.to_le_bytes());
-        bytes
+        let [v0, v1, v2, v3] = self.rf_cal_version.to_le_bytes();
+        let [m0, m1, m2, m3, m4, m5] = self.base_mac_address;
+        let [e0, e1] = self.mac_extension.to_le_bytes();
+        [v0, v1, v2, v3, m0, m1, m2, m3, m4, m5, e0, e1]
     }
 }
 
@@ -252,7 +251,9 @@ macro_rules! integer {
                 let width = core::mem::size_of::<Self>();
                 let bytes = core::mem::take(output);
                 let (head, tail) = bytes.split_at_mut_checked(width).ok_or(CodecError::Length)?;
-                head.copy_from_slice(&self.to_le_bytes());
+                let head: &mut [u8; core::mem::size_of::<$ty>()] =
+                    head.try_into().map_err(|_| CodecError::Length)?;
+                *head = self.to_le_bytes();
                 *output = tail;
                 Ok(())
             }
