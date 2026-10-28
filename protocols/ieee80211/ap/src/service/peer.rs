@@ -150,7 +150,8 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
                 Self::validated_association_security(policy, security)
             } {
                 Ok(admitted) => admitted,
-                Err(_) => {
+                Err(error) => {
+                    error.peer_rejection()?;
                     return Ok(ApMlmeAction::AssociationResponse {
                         peer,
                         status: AP_STATUS_INVALID_RSN,
@@ -275,7 +276,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
         if self.link_protection() != LinkProtection::Open {
             return Err(ApServiceError::SecurityModeMismatch);
         }
-        let security_matches = self.matches_association_security(security);
+        let security_matches = self.matches_association_security(security)?;
         let inactive_timeout = self.inactive_timeout.duration();
         let existing = self.checked_peer_mut(peer)?;
         if existing.phase != ApPeerPhase::Authenticated {

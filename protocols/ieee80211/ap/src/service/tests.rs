@@ -1633,13 +1633,21 @@ fn a_station_resuming_a_pmksa_is_refused_by_an_access_point_without_a_cache() {
         storage.lend(),
     )
     .unwrap();
-    assert!(service.matches_association_security(association_security(&WPA2_RSN)));
+    assert!(
+        service
+            .matches_association_security(association_security(&WPA2_RSN))
+            .unwrap()
+    );
     let mut resuming = [0_u8; 40];
     resuming[..22].copy_from_slice(&WPA2_RSN);
     resuming[1] = 38;
     resuming[22..24].copy_from_slice(&1_u16.to_le_bytes());
     resuming[24..40].copy_from_slice(&[0x5a; 16]);
-    assert!(!service.matches_association_security(association_security(&resuming)));
+    assert!(
+        !service
+            .matches_association_security(association_security(&resuming))
+            .unwrap()
+    );
 }
 
 const SAE_STATION_RSN: [u8; 22] = [
@@ -1824,10 +1832,18 @@ fn a_wpa3_access_point_refuses_psk_and_stations_without_protection() {
             oer_time::Instant::from_micros(0),
         )
         .unwrap();
-    assert!(!service.matches_association_security(association_security(&WPA2_RSN)));
+    assert!(
+        !service
+            .matches_association_security(association_security(&WPA2_RSN))
+            .unwrap()
+    );
     let mut unprotected = SAE_STATION_RSN;
     unprotected[20] = 0;
-    assert!(!service.matches_association_security(association_security(&unprotected)));
+    assert!(
+        !service
+            .matches_association_security(association_security(&unprotected))
+            .unwrap()
+    );
     assert_eq!(
         association_status(
             service

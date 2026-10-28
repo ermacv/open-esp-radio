@@ -105,6 +105,11 @@ impl EapolMic {
 
 /// IEEE 802.11 PRF-384 with HMAC-SHA1 and the pairwise expansion label.
 fn prf_sha1(pmk: &[u8; 32], context: &[u8; 76], ptk: &mut [u8; RSN_PTK_LEN]) {
+    const {
+        if !(3 * 20 >= RSN_PTK_LEN && 2 * 20 < RSN_PTK_LEN) {
+            panic!("PRF-384 SHA-1 block geometry");
+        }
+    }
     let mut remaining = ptk.iter_mut();
     for counter in 0_u8..3 {
         let mut mac = crate::mac::sha1(pmk);

@@ -113,6 +113,8 @@ pub enum RsnStaSupplicantError {
     State(RsnStateError),
     Frame(RsnFrameError),
     InvalidFrame(crate::EapolParseError),
+    /// A previously validated local security-IE owner lost its invariant.
+    RetainedSecurityIes(RsnFrameError),
     /// The station's own Association RSN element names no supported suite.
     Element(RsnElementError),
     MissingPtk,
@@ -128,7 +130,8 @@ impl RsnStaSupplicantError {
         match self {
             Self::State(error) => error.is_peer_input_rejection(),
             Self::InvalidMessage3Mic => true,
-            Self::InvalidFrame(_)
+            Self::RetainedSecurityIes(_)
+            | Self::InvalidFrame(_)
             | Self::Frame(_)
             | Self::Element(_)
             | Self::MissingPtk
@@ -305,12 +308,20 @@ pub enum RsnConnectedSupplicantError {
     InstallFailed,
     Frame(RsnFrameError),
     InvalidFrame(crate::EapolParseError),
+    /// A previously validated local security-IE owner lost its invariant.
+    RetainedSecurityIes(RsnFrameError),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RsnConnectedProcessError<E> {
     Supplicant(RsnConnectedSupplicantError),
     KeyUnwrap(E),
+}
+
+impl<E> From<RsnConnectedSupplicantError> for RsnConnectedProcessError<E> {
+    fn from(error: RsnConnectedSupplicantError) -> Self {
+        Self::Supplicant(error)
+    }
 }
 
 impl From<crate::EapolParseError> for RsnConnectedSupplicantError {
@@ -375,6 +386,11 @@ pub struct RsnGroupKeyDataRequest<const N: usize> {
 }
 
 impl<const N: usize> RsnGroupKeyDataRequest<N> {
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn invalidate_frame_for_test(&mut self) {
+        self.frame.invalidate_for_test();
+    }
+
     /// Key-encryption key of the connected association.
     pub const fn kek(&self) -> &[u8; RSN_KEK_LEN] {
         self.kek.as_bytes()
@@ -502,6 +518,11 @@ pub struct RsnConnectedSupplicant {
 }
 
 impl RsnConnectedSupplicant {
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn invalidate_security_ies_for_test(&mut self) {
+        self.authenticator_security_ies.invalidate_for_test();
+    }
+
     pub const fn replay_counter(&self) -> u64 {
         self.replay_counter
     }
@@ -636,10 +657,9 @@ impl RsnConnectedSupplicant {
         let RsnGroupKeyDataRequest {
             frame,
             kek,
-            replay_counter: _,
+            replay_counter,
         } = request;
         drop(kek);
-        let replay_counter = frame.key_frame()?.replay_counter();
         if replay_counter <= self.replay_counter {
             return Err(RsnConnectedProcessError::Supplicant(
                 RsnConnectedSupplicantError::StaleCompletion,
@@ -660,8 +680,12 @@ impl RsnConnectedSupplicant {
             crate::EapolKeyMessage::PairwiseMessage3 => (
                 parse_gtk_key_data(
                     plain.as_bytes(),
-                    self.authenticator_security_ies.rsn_ie()?,
-                    self.authenticator_security_ies.rsnxe()?,
+                    self.authenticator_security_ies
+                        .rsn_ie()
+                        .map_err(RsnConnectedSupplicantError::RetainedSecurityIes)?,
+                    self.authenticator_security_ies
+                        .rsnxe()
+                        .map_err(RsnConnectedSupplicantError::RetainedSecurityIes)?,
                     self.management_protection,
                 ),
                 RsnCompletedKeyMessage::Pairwise(RsnCompletedMessage3::capture(key)),
@@ -739,6 +763,11 @@ pub struct RsnStaSupplicant {
 }
 
 impl RsnStaSupplicant {
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn invalidate_security_ies_for_test(&mut self) {
+        self.authenticator_security_ies.invalidate_for_test();
+    }
+
     pub fn try_new(
         local: [u8; 6],
         authenticator: [u8; 6],
@@ -995,8 +1024,12 @@ impl RsnStaSupplicant {
         let plain_key_data_len = plain_key_data.len();
         let RsnGroupKeys { gtk, igtk } = match parse_gtk_key_data(
             plain_key_data,
-            self.authenticator_security_ies.rsn_ie()?,
-            self.authenticator_security_ies.rsnxe()?,
+            self.authenticator_security_ies
+                .rsn_ie()
+                .map_err(RsnStaSupplicantError::RetainedSecurityIes)?,
+            self.authenticator_security_ies
+                .rsnxe()
+                .map_err(RsnStaSupplicantError::RetainedSecurityIes)?,
             self.management_protection,
         ) {
             Ok(keys) => keys,

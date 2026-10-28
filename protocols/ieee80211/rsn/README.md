@@ -114,8 +114,11 @@ the final invariant validity is converted to `SaeError::Crypto` at the public
 operation boundary; intermediate values never cause a secret-dependent early
 return. Commit secrets retain validated scalar types. Point conversion uses
 `DecompressPoint` and checked field coordinates without the SEC1 tag parser.
+Encoding a commit reconstructs y with a field square root, adding one exponentiation.
 The comeback table selects and updates its slot with `ConditionallySelectable`.
-Tests retain local allowances for assertions and fixture construction.
+Tests retain local allowances for assertions and fixture construction. The
+`test-support` feature exposes owned-buffer invalidation only for caller
+regressions; production owners have no such mutator.
 
 ## Known defects
 

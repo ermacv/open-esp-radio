@@ -107,6 +107,11 @@ embedded-io-async = "0.7.0"
 oer-esp32s31-layout = { path = "../../../chips/esp32s31/layout" }
 static_cell.workspace = true
 
+[dev-dependencies]
+oer-hil-protocol = { workspace = true, features = ["wifi"] }
+oer-ieee80211-rsn = { path = "../../../protocols/ieee80211/rsn" }
+oer-ieee80211-wire = { path = "../../../protocols/ieee80211/wire" }
+
 [lints]
 workspace = true
 

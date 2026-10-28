@@ -46,6 +46,11 @@ pub struct OwnedAssociationSecurityIes<const N: usize = RSN_ASSOC_SECURITY_IES_C
 }
 
 impl<const N: usize> OwnedAssociationSecurityIes<N> {
+    #[cfg(any(test, feature = "test-support"))]
+    pub(crate) fn invalidate_for_test(&mut self) {
+        self.bytes.clear();
+    }
+
     /// Copy the exact RSN IE plus optional RSNXE emitted by Association.
     pub fn try_copy_bytes(bytes: &[u8]) -> Result<Self, RsnFrameError> {
         let Some(&[id, length]) = bytes.first_chunk::<2>() else {

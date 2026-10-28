@@ -420,21 +420,29 @@ fn processing_failure_keeps_both_the_commit_and_failure_reply_in_order() {
 }
 
 #[test]
-fn a_crypto_invariant_fault_keeps_the_cause_and_prepared_replies() {
-    let reply = ApSaeReply::new(
-        ACCESS_POINT,
-        1,
-        AP_SAE_STATUS_SUCCESS,
-        ReplyBody::Group([19, 0]),
+fn a_commit_curve_fault_retains_peer_and_stage_without_replies_or_phase_advance() {
+    let station = Station::new(STATION, PASSWORD, true);
+    let mut session = Session::new(STATION);
+    let output = commit_step_with(
+        &mut session,
+        station.commit.values(),
+        true,
+        false,
+        |peer, h2e| {
+            assert_eq!(peer, STATION);
+            assert!(h2e);
+            Err(SaeError::Crypto)
+        },
     );
-    let output = ApSaeOutput::reply(reply);
-    let fault = output.with_crypto_fault(SaeError::Crypto);
     assert_eq!(
-        fault.result,
-        ApSaeResult::Fault(ApSaeFault::Crypto(SaeError::Crypto))
+        output.result,
+        ApSaeResult::Fault(ApSaeFault::Crypto {
+            peer: STATION,
+            stage: ApSaeCryptoStage::DrawCommit
+        })
     );
-    assert_eq!(
-        fault.replies().copied().collect::<std::vec::Vec<_>>(),
-        [reply]
-    );
+    assert_eq!(output.replies().count(), 0);
+    assert_eq!(session.phase, ApSaePhase::Nothing);
+    assert!(session.own.is_none());
+    assert!(session.keys.is_none());
 }

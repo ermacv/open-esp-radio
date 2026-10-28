@@ -180,6 +180,11 @@ fn hmac_sha256(key: &[u8], parts: &[&[u8]]) -> [u8; 32] {
 
 /// The larger address first, then the smaller.
 fn max_min(first: [u8; 6], second: [u8; 6]) -> [u8; 12] {
+    const {
+        if 12 != 2 * core::mem::size_of::<[u8; 6]>() {
+            panic!("SAE address context geometry");
+        }
+    }
     let (high, low) = if first > second {
         (first, second)
     } else {
@@ -270,7 +275,7 @@ impl SaePasswordElement {
 
 /// u = value mod p for a 48-octet H2E value.
 fn reduce_wide(value: &[u8; H2E_PWD_VALUE_LEN]) -> CtOption<FieldElement> {
-    let reduced = U384::from_be_slice(value).rem(&WIDE_MODULUS).to_be_bytes();
+    let reduced = U384::from_be_bytes(*value).rem(&WIDE_MODULUS).to_be_bytes();
     let mut low = [0; SAE_PRIME_LEN];
     for (target, source) in low.iter_mut().rev().zip(reduced.iter().rev()) {
         *target = *source;
@@ -350,7 +355,7 @@ impl SaePasswordToken {
     pub fn password_element(&self, local: [u8; 6], peer: [u8; 6]) -> SaePasswordElement {
         let hash = hmac_sha256(&[0; 32], &[&max_min(local, peer)]);
 
-        let value = U256::from_be_slice(&hash)
+        let value = U256::from_be_bytes(hash)
             .rem(&ORDER_MINUS_ONE)
             .wrapping_add(&U256::ONE);
         SaePasswordElement(self.0.mul(<Scalar as Reduce<U256>>::reduce(value)))
@@ -933,7 +938,12 @@ impl SaeCommit {
         let context: [u8; SAE_PRIME_LEN] = core::ops::Add::add(own_scalar, peer_scalar)
             .to_bytes()
             .into();
-        let mut keys = [0_u8; 2 * SAE_KEY_LEN];
+        const {
+            if !(2 * SAE_KEY_LEN == 64 && SAE_PMKID_LEN <= SAE_PRIME_LEN) {
+                panic!("SAE derived key geometry");
+            }
+        }
+        let mut keys = [0_u8; 64];
         kdf_sha256(&keyseed, b"SAE KCK and PMK", &context, &mut keys);
         keyseed.zeroize();
         let mut derived = SaeKeys {
@@ -985,6 +995,11 @@ impl SaeKeys {
 
     /// This station's confirm body.
     pub fn own_confirm(&self, send_confirm: u16) -> [u8; SAE_CONFIRM_LEN] {
+        const {
+            if SAE_CONFIRM_LEN != core::mem::size_of::<u16>() + 32 {
+                panic!("SAE confirm geometry");
+            }
+        }
         let mut body = [0; SAE_CONFIRM_LEN];
         for (target, source) in body.iter_mut().zip(
             send_confirm

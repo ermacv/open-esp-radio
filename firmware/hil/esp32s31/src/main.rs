@@ -6,3 +6,7 @@
 include!("entry.rs");
 #[cfg(not(target_arch = "riscv32"))]
 fn main() {}
+
+#[cfg(test)]
+#[path = "wifi_station/security_report.rs"]
+mod security_report;

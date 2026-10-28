@@ -73,6 +73,15 @@ impl Pmk {
 
     /// Derive the pairwise transient key with the association's suite.
     pub fn derive_ptk(&self, akm: Akm, context: PtkContext) -> Ptk {
+        const {
+            if !(RSN_PTK_LEN == 3 * 16
+                && RSN_PTK_LEN == RSN_KCK_LEN + RSN_KEK_LEN + 16
+                && core::mem::size_of::<[u8; 76]>()
+                    == 2 * (core::mem::size_of::<[u8; 6]>() + core::mem::size_of::<[u8; 32]>()))
+            {
+                panic!("PTK expansion geometry");
+            }
+        }
         let mut canonical = [0; 76];
         let (first_address, second_address) =
             ordered(&context.authenticator_address, &context.supplicant_address);

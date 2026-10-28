@@ -165,9 +165,14 @@ impl<const N: usize> RsnPlainKeyData<N> {
 const GTK_KDE_LEN: usize = 24;
 
 fn gtk_kde_bytes(gtk: &RsnGtk) -> [u8; GTK_KDE_LEN] {
+    const {
+        if GTK_KDE_LEN != 8 + RSN_GTK_LEN {
+            panic!("GTK KDE geometry");
+        }
+    }
     let [o0, o1, o2] = RSN_OUI;
     let mut kde = [0; GTK_KDE_LEN];
-    let header = [
+    let header: [u8; 8] = [
         VENDOR_ELEMENT_ID,
         (GTK_KDE_LEN - 2) as u8,
         o0,
@@ -184,10 +189,15 @@ fn gtk_kde_bytes(gtk: &RsnGtk) -> [u8; GTK_KDE_LEN] {
 }
 
 fn igtk_kde_bytes(igtk: &RsnIgtk) -> [u8; IGTK_KDE_LEN] {
+    const {
+        if IGTK_KDE_LEN != 8 + RSN_IPN_LEN + RSN_IGTK_LEN {
+            panic!("IGTK KDE geometry");
+        }
+    }
     let [o0, o1, o2] = RSN_OUI;
     let [id0, id1] = u16::from(igtk.key_id()).to_le_bytes();
     let mut kde = [0; IGTK_KDE_LEN];
-    let header = [
+    let header: [u8; 8] = [
         VENDOR_ELEMENT_ID,
         (IGTK_KDE_LEN - 2) as u8,
         o0,

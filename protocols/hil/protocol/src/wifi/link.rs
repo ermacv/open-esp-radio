@@ -42,7 +42,9 @@ pub enum StationDisconnectReason {
     /// The application asked the station to leave.
     LocalRequest,
     /// The access point deauthenticated or disassociated the station.
-    Peer { reason_code: u16 },
+    Peer {
+        reason_code: u16,
+    },
     /// The access point refused or never answered the authentication.
     AuthenticationFailed,
     /// The SAE exchange ended with this cause.
@@ -51,7 +53,9 @@ pub enum StationDisconnectReason {
     AssociationFailed,
     /// No access point of the network answered the scan; `partial` when the
     /// scan ended early after cancelled absences.
-    NotFound { partial: bool },
+    NotFound {
+        partial: bool,
+    },
     /// The four-way or a group key handshake failed or timed out.
     HandshakeFailed,
     /// The peer did not confirm its protected association within the SA
@@ -73,6 +77,7 @@ pub enum StationDisconnectReason {
     RadioFailure,
     /// An owned EAPOL frame failed its retained parse invariant.
     InvalidEapol(StationEapolParseError),
+    RetainedSecurityIes(StationRsnFrameError),
 }
 
 /// The cause an SAE exchange ended with.
@@ -90,6 +95,11 @@ pub enum StationSaeFailure {
     },
     Protocol(StationSaeError),
     TokenTooLong,
+    /// Local curve invariant, with the derivation inputs identifying its owner.
+    Crypto {
+        peer: [u8; 6],
+        pwe: StationSaePwe,
+    },
 }
 
 /// The management frame by which the access point ended the relationship.
@@ -174,4 +184,40 @@ pub enum StationEapolParseError {
     LengthMismatch,
     NotKeyPacket,
     NotRsnKeyDescriptor,
+}
+
+/// Source of a retained RSN security-IE invariant failure.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub enum StationRsnFrameError {
+    CapacityExceeded,
+    InvalidRsnIe,
+    InvalidRsnxe,
+    InvalidKeyId,
+    ZeroNonce,
+    EmptyKeyData,
+    MalformedKeyData,
+    UnsupportedKeyData,
+    DuplicateRsnIe,
+    DuplicateRsnxe,
+    DuplicateGtk,
+    DuplicateIgtk,
+    MissingRsnIe,
+    MissingRsnxe,
+    UnexpectedRsnxe,
+    MissingGtk,
+    /// Management frame protection is negotiated but no IGTK KDE came.
+    MissingIgtk,
+    /// An IGTK KDE came although management frame protection is not
+    /// negotiated.
+    UnexpectedIgtk,
+    RsnIeMismatch,
+    RsnxeMismatch,
+    UnexpectedTransmitAction,
+}
+
+/// Password-element derivation used by the local SAE owner.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub enum StationSaePwe {
+    HuntingAndPecking,
+    HashToElement,
 }

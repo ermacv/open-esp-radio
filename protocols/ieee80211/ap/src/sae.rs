@@ -138,11 +138,21 @@ impl ApSaeReply {
     }
 }
 
+/// The local operation whose curve invariant failed.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ApSaeCryptoStage {
+    DrawCommit,
+    Encode(SaeError),
+}
+
 /// A responder invariant failure, retaining its source observations.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ApSaeFault {
     /// An RSN field or curve conversion failed its mathematical invariant.
-    Crypto(SaeError),
+    Crypto {
+        peer: [u8; 6],
+        stage: ApSaeCryptoStage,
+    },
     MissingSession {
         slot: usize,
     },
@@ -154,7 +164,6 @@ pub enum ApSaeFault {
         keys: bool,
         sync: u8,
     },
-    Encoding(SaeError),
     CommitLength {
         length: usize,
     },
@@ -201,11 +210,6 @@ impl ApSaeOutput {
             replies: [Some(reply), None],
             result: ApSaeResult::Continue,
         }
-    }
-
-    fn with_crypto_fault(mut self, error: SaeError) -> Self {
-        self.result = ApSaeResult::Fault(ApSaeFault::Crypto(error));
-        self
     }
 
     fn fault(fault: ApSaeFault) -> Self {
@@ -621,6 +625,19 @@ fn commit_step<R: ApSaeRandom>(
     allow_reuse: bool,
     random: &mut R,
 ) -> ApSaeOutput {
+    commit_step_with(session, peer_commit, h2e, allow_reuse, |peer, use_token| {
+        draw_commit(local, peer, credential, use_token, random)
+    })
+}
+
+// Keep the impossible curve result injectable without a production corruption API.
+fn commit_step_with(
+    session: &mut Session,
+    peer_commit: SaeCommitValues,
+    h2e: bool,
+    allow_reuse: bool,
+    draw: impl FnOnce([u8; 6], bool) -> Result<SaeCommit, SaeError>,
+) -> ApSaeOutput {
     let mut output = ApSaeOutput::new();
     let peer = session.peer;
     let refresh = match session.phase {
@@ -645,9 +662,14 @@ fn commit_step<R: ApSaeRandom>(
     };
     if refresh || session.own.is_none() {
         let use_token = session.password_identifier || h2e;
-        match draw_commit(local, peer, credential, use_token, random) {
+        match draw(peer, use_token) {
             Ok(own) => session.own = Some(own),
-            Err(error @ SaeError::Crypto) => return output.with_crypto_fault(error),
+            Err(SaeError::Crypto) => {
+                return ApSaeOutput::fault(ApSaeFault::Crypto {
+                    peer,
+                    stage: ApSaeCryptoStage::DrawCommit,
+                });
+            }
             Err(_) => {
                 return ApSaeOutput::failure(
                     peer,
@@ -664,7 +686,12 @@ fn commit_step<R: ApSaeRandom>(
     let mut body = [0_u8; SAE_COMMIT_LEN];
     let len = match own.values().encode(None, session.h2e, &mut body) {
         Ok(len) => len,
-        Err(error) => return ApSaeOutput::fault(ApSaeFault::Encoding(error)),
+        Err(error) => {
+            return ApSaeOutput::fault(ApSaeFault::Crypto {
+                peer,
+                stage: ApSaeCryptoStage::Encode(error),
+            });
+        }
     };
     if len != SAE_COMMIT_LEN {
         return ApSaeOutput::fault(ApSaeFault::CommitLength { length: len });
@@ -690,7 +717,6 @@ fn commit_step<R: ApSaeRandom>(
             session.keys = Some(keys);
             session.peer_commit = Some(peer_commit);
         }
-        Err(error @ SaeError::Crypto) => return output.with_crypto_fault(error),
         Err(_) => {
             return ApSaeOutput {
                 replies: [

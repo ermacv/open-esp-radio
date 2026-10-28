@@ -904,3 +904,60 @@ fn failed_group_key_data_unwrap_returns_the_error_and_releases_the_supplicant() 
         Ok(RsnConnectedAction::UnwrapGroupKeyData(_))
     ));
 }
+
+#[test]
+fn retained_authenticator_ies_fail_locally_during_initial_key_install() {
+    let (mut supplicant, message3, pmk, _) = awaiting_encrypted_message3();
+    let RsnStaSupplicantAction::UnwrapKeyData(request) =
+        supplicant.on_frame(message3, &pmk).unwrap()
+    else {
+        panic!()
+    };
+    let plain = software_aes128_key_unwrap(request.kek(), request.wrapped_key_data().unwrap());
+    supplicant.invalidate_security_ies_for_test();
+    let error = supplicant
+        .complete_key_data_unwrap(request, plain)
+        .err()
+        .unwrap();
+    assert_eq!(
+        error,
+        RsnStaProcessError::Supplicant(RsnStaSupplicantError::RetainedSecurityIes(
+            RsnFrameError::InvalidRsnIe
+        ))
+    );
+    assert!(!error.is_peer_input_rejection());
+}
+
+#[test]
+fn retained_authenticator_ies_fail_locally_during_connected_key_install() {
+    let (mut supplicant, message3, pmk, ptk) = awaiting_encrypted_message3();
+    let RsnStaReady::InstallKeys(request) = process(&mut supplicant, message3, &pmk).unwrap()
+    else {
+        panic!()
+    };
+    let _ = supplicant
+        .complete_key_install::<512>(request, true)
+        .unwrap();
+    let mut connected = supplicant.into_connected().unwrap();
+    let rsn = OwnedRsnIe::<64>::try_copy(&RSN).unwrap();
+    let gtk = RsnGtk::new(
+        oer_ieee80211_wire::ccmp::GroupKeyId::new(2).unwrap(),
+        false,
+        &[0x5a; 16],
+    );
+    let plain = RsnPlainKeyData::<64>::build(rsn.as_bytes(), &gtk, None).unwrap();
+    let message3 = encrypted_message3(&ptk, [0; 8], plain.as_bytes());
+    let retry = resign_eapol_key_variant(&message3, &ptk, true, |bytes| bytes[16] = 3);
+    let RsnConnectedAction::UnwrapGroupKeyData(request) = connected.on_message3(retry).unwrap()
+    else {
+        panic!()
+    };
+    let plain = software_aes128_key_unwrap(request.kek(), request.wrapped_key_data().unwrap());
+    connected.invalidate_security_ies_for_test();
+    assert!(matches!(
+        connected.complete_group_key_data_unwrap(request, plain),
+        Err(RsnConnectedProcessError::Supplicant(
+            RsnConnectedSupplicantError::RetainedSecurityIes(RsnFrameError::InvalidRsnIe)
+        ))
+    ));
+}

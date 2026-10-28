@@ -8,7 +8,18 @@ use oer_ieee80211_wire::security::{SppCapability, SppError};
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ApAssociationSecurityError {
     InvalidElements,
+    RetainedElement(oer_ieee80211_wire::security::rsn::RsnSyntaxError),
     Spp(SppError),
+}
+
+impl ApAssociationSecurityError {
+    /// Peer policy rejections may become a response; a retained invariant may not.
+    pub(super) fn peer_rejection(self) -> Result<(), ApServiceError> {
+        match self {
+            Self::RetainedElement(error) => Err(ApServiceError::InvalidAssociationSecurity(error)),
+            Self::InvalidElements | Self::Spp(_) => Ok(()),
+        }
+    }
 }
 
 impl<'peers, S: SppScope> AccessPointService<'peers, S> {
@@ -17,8 +28,11 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
     pub fn matches_association_security(
         &self,
         security: ApAssociationSecurityObservation<'_>,
-    ) -> bool {
-        admit_association_security::<S>(self.security_policy(), security).is_ok()
+    ) -> Result<bool, ApServiceError> {
+        match admit_association_security::<S>(self.security_policy(), security) {
+            Ok(_) => Ok(true),
+            Err(error) => error.peer_rejection().map(|()| false),
+        }
     }
 
     /// The station's validated Association security elements under this
@@ -61,7 +75,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
             ApSecurityPolicy::Wpa2Personal
                 if rsn
                     .lists_akm(Akm::Psk)
-                    .map_err(|_| ApAssociationSecurityError::InvalidElements)?
+                    .map_err(ApAssociationSecurityError::RetainedElement)?
                     && rsn.pmkid_count() == 0 =>
             {
                 AssociationAkm::Psk
@@ -74,7 +88,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
             ApSecurityPolicy::Wpa3Personal
                 if rsn
                     .lists_akm(Akm::Sae)
-                    .map_err(|_| ApAssociationSecurityError::InvalidElements)? =>
+                    .map_err(ApAssociationSecurityError::RetainedElement)? =>
             {
                 AssociationAkm::Sae(if security.rsnxe.is_some_and(announces_sae_h2e) {
                     SaePwe::HashToElement
@@ -644,4 +658,28 @@ fn announces_sae_h2e(rsnxe: &[u8]) -> bool {
     rsnxe
         .get(2)
         .is_some_and(|capabilities| capabilities & (1 << 5) != 0)
+}
+
+#[cfg(test)]
+mod invariant_tests {
+    #![allow(clippy::disallowed_macros)]
+    use super::*;
+    use oer_ieee80211_wire::security::rsn::RsnSyntaxError;
+
+    #[test]
+    fn retained_syntax_failures_cannot_become_peer_responses() {
+        for source in [
+            RsnSyntaxError::Malformed,
+            RsnSyntaxError::UnsupportedVersion,
+        ] {
+            assert_eq!(
+                ApAssociationSecurityError::RetainedElement(source).peer_rejection(),
+                Err(ApServiceError::InvalidAssociationSecurity(source))
+            );
+        }
+        assert_eq!(
+            ApAssociationSecurityError::InvalidElements.peer_rejection(),
+            Ok(())
+        );
+    }
 }

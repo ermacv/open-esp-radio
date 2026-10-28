@@ -391,13 +391,15 @@ fn failed_h2e_maps_return_crypto_errors_after_evaluating_both_elements() {
 fn invalid_curve_coordinates_keep_their_validity_bit() {
     let invalid = point(&FieldElement::ZERO, &FieldElement::ZERO);
     assert!(bool::from(invalid.is_none()));
-    let mut evaluated = false;
-    let result = invalid.map(|point| {
-        evaluated = true;
-        point
-    });
-    assert!(evaluated);
-    assert!(Option::<ProjectivePoint>::from(result).is_none());
+    assert!(peer_element(&[0; 2 * SAE_PRIME_LEN]).is_none());
+    let pwe = SaePasswordToken::derive(b"ssid", PASSWORD, None)
+        .unwrap()
+        .password_element(ADDR1, ADDR2);
+    let encoded = element_bytes(&pwe.0.to_affine()).unwrap();
+    assert!(peer_element(&encoded).is_some());
+    let mut changed = encoded;
+    changed[2 * SAE_PRIME_LEN - 1] ^= 2;
+    assert!(peer_element(&changed).is_none());
     for value in [
         FieldElement::ZERO,
         FieldElement::ONE,

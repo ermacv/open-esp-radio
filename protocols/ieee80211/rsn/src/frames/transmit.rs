@@ -272,7 +272,21 @@ impl<const N: usize> RsnTxFrame<N> {
     }
 
     fn set_mic(&mut self, mic: &[u8; RSN_MIC_LEN]) {
-        for (target, source) in self.bytes.iter_mut().skip(81).take(RSN_MIC_LEN).zip(mic) {
+        use crate::eapol::{EAPOL_KEY_MIC_END, EAPOL_KEY_MIC_START, EAPOL_KEY_PACKET_LEN};
+        const {
+            if !(EAPOL_KEY_MIC_END - EAPOL_KEY_MIC_START == RSN_MIC_LEN
+                && EAPOL_KEY_MIC_END <= EAPOL_KEY_PACKET_LEN)
+            {
+                panic!("EAPOL MIC geometry");
+            }
+        }
+        for (target, source) in self
+            .bytes
+            .iter_mut()
+            .skip(EAPOL_KEY_MIC_START)
+            .take(RSN_MIC_LEN)
+            .zip(mic)
+        {
             *target = *source;
         }
     }
