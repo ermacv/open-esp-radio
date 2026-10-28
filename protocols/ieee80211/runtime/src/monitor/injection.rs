@@ -10,7 +10,7 @@
 //! preserving already queued bytes and completion capacity.
 
 use core::{
-    cell::RefCell,
+    cell::{Cell, RefCell},
     sync::atomic::{AtomicU32, Ordering},
 };
 
@@ -89,6 +89,10 @@ pub enum MonitorInjectionBackpressure {
     },
     QueueFull,
     RequestIdExhausted,
+    /// A retained payload is already borrowed by an overlapping operation.
+    PayloadBorrowed {
+        slot: usize,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -102,6 +106,11 @@ pub enum MonitorInjectionMailboxInvariantError {
     MissingPayloadSlot,
     CorruptStoredFrame(MonitorInjectionFrameError),
     CompletionQueueFull,
+    /// The exact retained payload is already being written.
+    PayloadBorrowed {
+        ticket: MonitorInjectionTicket,
+        slot: usize,
+    },
 }
 
 #[derive(Clone, Copy)]
@@ -113,15 +122,17 @@ struct MonitorInjectionSlotHeader {
 }
 
 struct MonitorInjectionSlot<const FRAME_CAPACITY: usize> {
-    header: Option<MonitorInjectionSlotHeader>,
-    bytes: [u8; FRAME_CAPACITY],
+    header: Cell<Option<MonitorInjectionSlotHeader>>,
+    bytes: RefCell<[u8; FRAME_CAPACITY]>,
 }
 
 impl<const FRAME_CAPACITY: usize> MonitorInjectionSlot<FRAME_CAPACITY> {
-    const EMPTY: Self = Self {
-        header: None,
-        bytes: [0; FRAME_CAPACITY],
-    };
+    const fn new() -> Self {
+        Self {
+            header: Cell::new(None),
+            bytes: RefCell::new([0; FRAME_CAPACITY]),
+        }
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -146,8 +157,8 @@ pub struct MonitorInjectionMailboxResources<
     next_request: AtomicU32,
     outstanding: AtomicU32,
     publishers: AtomicU32,
-    active_binding: BlockingMutex<M, RefCell<Option<MonitorInjectionChannelBinding>>>,
-    slots: BlockingMutex<M, RefCell<[MonitorInjectionSlot<FRAME_CAPACITY>; CAPACITY]>>,
+    active_binding: BlockingMutex<M, Cell<Option<MonitorInjectionChannelBinding>>>,
+    slots: BlockingMutex<M, [MonitorInjectionSlot<FRAME_CAPACITY>; CAPACITY]>,
 }
 
 impl<M: RawMutex, const CAPACITY: usize, const FRAME_CAPACITY: usize>
@@ -161,10 +172,8 @@ impl<M: RawMutex, const CAPACITY: usize, const FRAME_CAPACITY: usize>
             next_request: AtomicU32::new(0),
             outstanding: AtomicU32::new(0),
             publishers: AtomicU32::new(0),
-            active_binding: BlockingMutex::new(RefCell::new(None)),
-            slots: BlockingMutex::new(RefCell::new(
-                [const { MonitorInjectionSlot::EMPTY }; CAPACITY],
-            )),
+            active_binding: BlockingMutex::new(Cell::new(None)),
+            slots: BlockingMutex::new([const { MonitorInjectionSlot::new() }; CAPACITY]),
         }
     }
 
@@ -205,8 +214,8 @@ impl<M: RawMutex, const CAPACITY: usize, const FRAME_CAPACITY: usize>
         let completions = self.completions.receiver();
         while requests.try_receive().is_ok() {}
         while completions.try_receive().is_ok() {}
-        for slot in self.slots.get_mut().get_mut() {
-            slot.header = None;
+        for slot in self.slots.get_mut() {
+            slot.header.set(None);
         }
         *self.active_binding.get_mut().get_mut() = None;
         self.next_request.store(0, Ordering::Release);
@@ -273,8 +282,8 @@ pub struct MonitorInjectionHandle<
     next_request: &'resources AtomicU32,
     outstanding: &'resources AtomicU32,
     publishers: &'resources AtomicU32,
-    active_binding: &'resources BlockingMutex<M, RefCell<Option<MonitorInjectionChannelBinding>>>,
-    slots: &'resources BlockingMutex<M, RefCell<[MonitorInjectionSlot<FRAME_CAPACITY>; CAPACITY]>>,
+    active_binding: &'resources BlockingMutex<M, Cell<Option<MonitorInjectionChannelBinding>>>,
+    slots: &'resources BlockingMutex<M, [MonitorInjectionSlot<FRAME_CAPACITY>; CAPACITY]>,
     epoch: u32,
 }
 
@@ -287,7 +296,7 @@ impl<M: RawMutex, const CAPACITY: usize, const FRAME_CAPACITY: usize>
 
     /// Currently published monitor dwell, if admission is open.
     pub fn active_binding(&self) -> Option<MonitorInjectionChannelBinding> {
-        self.active_binding.lock(|binding| *binding.borrow())
+        self.active_binding.lock(Cell::get)
     }
 
     /// Validate and copy one no-FCS request into caller-provisioned storage.
@@ -335,26 +344,38 @@ impl<M: RawMutex, const CAPACITY: usize, const FRAME_CAPACITY: usize>
             request: request_id,
         };
         let slot = self.slots.lock(|slots| {
-            let mut slots = slots.borrow_mut();
             let (index, slot) = slots
-                .iter_mut()
+                .iter()
                 .enumerate()
-                .find(|(_, slot)| slot.header.is_none())?;
-            let output = slot.bytes.split_at_mut_checked(requested_length)?.0;
+                .find(|(_, slot)| slot.header.get().is_none())
+                .ok_or(MonitorInjectionBackpressure::QueueFull)?;
+            let mut bytes = slot
+                .bytes
+                .try_borrow_mut()
+                .map_err(|_| MonitorInjectionBackpressure::PayloadBorrowed { slot: index })?;
+            let output = bytes.get_mut(..requested_length).ok_or(
+                MonitorInjectionBackpressure::FrameTooLong {
+                    requested: requested_length,
+                    capacity: FRAME_CAPACITY,
+                },
+            )?;
             for (to, from) in output.iter_mut().zip(request.mpdu().bytes()) {
                 *to = *from;
             }
-            slot.header = Some(MonitorInjectionSlotHeader {
+            slot.header.set(Some(MonitorInjectionSlotHeader {
                 ticket,
                 binding: request.binding(),
                 rate: request.rate(),
                 length: requested_length,
-            });
-            Some(index)
+            }));
+            Ok(index)
         });
-        let Some(slot) = slot else {
-            self.outstanding.fetch_sub(1, Ordering::AcqRel);
-            return Err(MonitorInjectionBackpressure::QueueFull);
+        let slot = match slot {
+            Ok(slot) => slot,
+            Err(error) => {
+                self.outstanding.fetch_sub(1, Ordering::AcqRel);
+                return Err(error);
+            }
         };
         match self
             .requests
@@ -403,13 +424,13 @@ impl<M: RawMutex, const CAPACITY: usize, const FRAME_CAPACITY: usize>
 
     fn release_slot(&self, queued: QueuedMonitorInjection) {
         self.slots.lock(|slots| {
-            let mut slots = slots.borrow_mut();
-            if let Some(slot) = slots.get_mut(queued.slot)
+            if let Some(slot) = slots.get(queued.slot)
                 && slot
                     .header
+                    .get()
                     .is_some_and(|header| header.ticket == queued.ticket)
             {
-                slot.header = None;
+                slot.header.set(None);
             }
         });
     }
@@ -451,8 +472,8 @@ pub struct MonitorInjectionMailboxOwner<
     completions: Sender<'resources, M, MonitorInjectionCompletion, CAPACITY>,
     generation: &'resources AtomicU32,
     publishers: &'resources AtomicU32,
-    active_binding: &'resources BlockingMutex<M, RefCell<Option<MonitorInjectionChannelBinding>>>,
-    slots: &'resources BlockingMutex<M, RefCell<[MonitorInjectionSlot<FRAME_CAPACITY>; CAPACITY]>>,
+    active_binding: &'resources BlockingMutex<M, Cell<Option<MonitorInjectionChannelBinding>>>,
+    slots: &'resources BlockingMutex<M, [MonitorInjectionSlot<FRAME_CAPACITY>; CAPACITY]>,
     epoch: u32,
     // Proved representable by begin_epoch before the binding can open.
     closed_epoch: u32,
@@ -521,11 +542,10 @@ impl<M: RawMutex, const CAPACITY: usize, const FRAME_CAPACITY: usize>
             return Err(MonitorInjectionMailboxInvariantError::PendingFromEarlierDwell);
         }
         self.active_binding.lock(|active| {
-            let mut active = active.borrow_mut();
-            if active.is_some() {
+            if active.get().is_some() {
                 return Err(MonitorInjectionMailboxInvariantError::DwellAlreadyActive);
             }
-            *active = Some(binding);
+            active.set(Some(binding));
             Ok(())
         })
     }
@@ -534,8 +554,7 @@ impl<M: RawMutex, const CAPACITY: usize, const FRAME_CAPACITY: usize>
     /// An active physical TX must reach its IRQ/deadline terminal edge before
     /// this succeeds, which makes a caller's following retune safe.
     pub fn end_dwell(&mut self) -> Result<u32, MonitorInjectionMailboxInvariantError> {
-        self.active_binding
-            .lock(|active| *active.borrow_mut() = None);
+        self.active_binding.lock(|active| active.set(None));
         if self.publishers_in_flight() != 0 {
             return Err(MonitorInjectionMailboxInvariantError::PublisherInFlight);
         }
@@ -557,7 +576,7 @@ impl<M: RawMutex, const CAPACITY: usize, const FRAME_CAPACITY: usize>
                 return Ok(None);
             };
             let binding = self.header(queued)?.binding;
-            let active = self.active_binding.lock(|active| *active.borrow());
+            let active = self.active_binding.lock(Cell::get);
             if active != Some(binding) {
                 if let Err(error) = self.publish_queued(
                     queued,
@@ -584,17 +603,26 @@ impl<M: RawMutex, const CAPACITY: usize, const FRAME_CAPACITY: usize>
             .active
             .ok_or(MonitorInjectionMailboxInvariantError::MissingPayloadSlot)?;
         self.slots.lock(|slots| {
-            let slots = slots.borrow();
             let slot = slots
                 .get(active.slot)
                 .ok_or(MonitorInjectionMailboxInvariantError::MissingPayloadSlot)?;
             let header = slot
                 .header
+                .get()
                 .ok_or(MonitorInjectionMailboxInvariantError::MissingPayloadSlot)?;
-            if header.ticket != active.ticket || header.length > FRAME_CAPACITY {
+            if header.ticket != active.ticket {
                 return Err(MonitorInjectionMailboxInvariantError::MissingPayloadSlot);
             }
-            let mpdu = MonitorInjectionMpdu::from_no_fcs(&slot.bytes[..header.length])
+            let bytes = slot.bytes.try_borrow().map_err(|_| {
+                MonitorInjectionMailboxInvariantError::PayloadBorrowed {
+                    ticket: active.ticket,
+                    slot: active.slot,
+                }
+            })?;
+            let frame = bytes
+                .get(..header.length)
+                .ok_or(MonitorInjectionMailboxInvariantError::MissingPayloadSlot)?;
+            let mpdu = MonitorInjectionMpdu::from_no_fcs(frame)
                 .map_err(MonitorInjectionMailboxInvariantError::CorruptStoredFrame)?;
             Ok(use_request(MonitorInjectionRequest::new(
                 header.binding,
@@ -637,8 +665,7 @@ impl<M: RawMutex, const CAPACITY: usize, const FRAME_CAPACITY: usize>
     }
 
     fn finish_close(&mut self) {
-        self.active_binding
-            .lock(|binding| *binding.borrow_mut() = None);
+        self.active_binding.lock(|binding| binding.set(None));
         self.open = false;
     }
 
@@ -688,10 +715,9 @@ impl<M: RawMutex, const CAPACITY: usize, const FRAME_CAPACITY: usize>
         queued: QueuedMonitorInjection,
     ) -> Result<MonitorInjectionSlotHeader, MonitorInjectionMailboxInvariantError> {
         self.slots.lock(|slots| {
-            let slots = slots.borrow();
             let header = slots
                 .get(queued.slot)
-                .and_then(|slot| slot.header)
+                .and_then(|slot| slot.header.get())
                 .ok_or(MonitorInjectionMailboxInvariantError::MissingPayloadSlot)?;
             if header.ticket != queued.ticket {
                 return Err(MonitorInjectionMailboxInvariantError::MissingPayloadSlot);
@@ -706,12 +732,12 @@ impl<M: RawMutex, const CAPACITY: usize, const FRAME_CAPACITY: usize>
         terminal: MonitorInjectionTerminal,
     ) -> Result<(), MonitorInjectionMailboxInvariantError> {
         self.slots.lock(|slots| {
-            let mut slots = slots.borrow_mut();
             let slot = slots
-                .get_mut(queued.slot)
+                .get(queued.slot)
                 .ok_or(MonitorInjectionMailboxInvariantError::MissingPayloadSlot)?;
             let header = slot
                 .header
+                .get()
                 .filter(|header| header.ticket == queued.ticket)
                 .ok_or(MonitorInjectionMailboxInvariantError::MissingPayloadSlot)?;
             self.completions
@@ -723,7 +749,7 @@ impl<M: RawMutex, const CAPACITY: usize, const FRAME_CAPACITY: usize>
                 .map_err(|TrySendError::Full(_)| {
                     MonitorInjectionMailboxInvariantError::CompletionQueueFull
                 })?;
-            slot.header = None;
+            slot.header.set(None);
             Ok(())
         })
     }

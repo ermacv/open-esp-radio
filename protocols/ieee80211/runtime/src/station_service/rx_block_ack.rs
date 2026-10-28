@@ -62,13 +62,9 @@ impl<'id, Ty: PhaseTypes<'id>, const BANKS: usize, const FRAMES: usize>
 {
     pub fn new(slots: [PhaseBlockAckSlot<'id, Ty>; BANKS], gap_timeout: Duration) -> Self {
         const {
-            #[expect(clippy::panic, reason = "evaluated at build")]
-            const fn check(frames: usize) {
-                if frames == 0 || frames > WINDOW {
-                    panic!("RX storage must reserve one to eight existing frame credits");
-                }
+            if FRAMES == 0 || FRAMES > WINDOW {
+                panic!("RX storage must reserve one to eight existing frame credits");
             }
-            check(FRAMES);
         }
         Self {
             header: Header {

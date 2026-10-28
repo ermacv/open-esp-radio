@@ -2699,7 +2699,10 @@ fn stopped_service_returns_drained_rx_before_the_disabled_owner() {
 
 #[test]
 fn stopped_service_reconnects_and_sends_data_on_the_same_installation() {
-    for protected in [false, true] {
+    for (protected, placed) in [(false, false), (true, false)]
+        .into_iter()
+        .chain(cfg!(feature = "placement").then_some((false, true)))
+    {
         let security = if protected {
             StaSecurity::Personal {
                 password: oer_ieee80211_rsn::sae::SaePassword::new(b"password").unwrap(),
@@ -2708,26 +2711,31 @@ fn stopped_service_reconnects_and_sends_data_on_the_same_installation() {
         } else {
             StaSecurity::Open
         };
-        run(security, |world| {
-            Box::pin(async move {
-                let mut seen = 0;
-                world.associate(&mut seen, protected).await;
-                if protected {
-                    world.handshake(&mut seen).await;
-                } else {
-                    world
-                        .notice(StaNotice::Connected {
-                            bssid: oer_ieee80211_wire::address::Bssid::new(
-                                IndividualAddress::new(BSSID).unwrap(),
-                            )
-                            .unwrap(),
-                            channel: 6,
-                        })
-                        .await;
-                }
-                world.restart_stopped_service.set(Some(protected));
-            })
-        });
+        run_case_with_placement::<_, 2>(
+            config(security),
+            |world| {
+                Box::pin(async move {
+                    let mut seen = 0;
+                    world.associate(&mut seen, protected).await;
+                    if protected {
+                        world.handshake(&mut seen).await;
+                    } else {
+                        world
+                            .notice(StaNotice::Connected {
+                                bssid: oer_ieee80211_wire::address::Bssid::new(
+                                    IndividualAddress::new(BSSID).unwrap(),
+                                )
+                                .unwrap(),
+                                channel: 6,
+                            })
+                            .await;
+                    }
+                    world.restart_stopped_service.set(Some(protected));
+                })
+            },
+            false,
+            placed,
+        );
     }
 }
 

@@ -349,6 +349,23 @@ fn missed_beacons_round_the_tsf_periods() {
     );
 }
 
+#[test]
+fn missed_beacons_round_odd_intervals_without_overflowing_the_half() {
+    for (interval, elapsed, expected) in [
+        (1, 2, 2),
+        (3, 3, 0),
+        (3, 4, 1),
+        (3, 7, 2),
+        (u64::MAX, u64::MAX, 0),
+        (u64::MAX - 1, u64::MAX, 0),
+    ] {
+        assert_eq!(
+            missed_beacons(elapsed, NonZeroU64::new(interval).unwrap()),
+            expected
+        );
+    }
+}
+
 fn survey_never_panics(count: usize) {
     use oer_ieee80211_wire::fuzz::{XorShift, inputs};
     let mut htc = beacon(STAND, BI);
