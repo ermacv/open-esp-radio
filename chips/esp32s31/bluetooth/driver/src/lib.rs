@@ -28,8 +28,6 @@
 extern crate std;
 
 pub mod ble_phy;
-pub mod coex_status;
-pub mod coexistence;
 pub mod connection_policy;
 /// Controller HAL component initialization after clock setup.
 #[cfg(any(target_arch = "riscv32", test))]

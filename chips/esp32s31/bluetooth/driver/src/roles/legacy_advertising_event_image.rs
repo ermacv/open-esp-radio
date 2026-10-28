@@ -3,10 +3,21 @@ use oer_esp32s31_hal::bluetooth::engine::{
     AdvertisingEventImage, AdvertisingItemImage, LegacyAdvertisingOwnAddress,
     LegacyAdvertisingPduError, LegacyAdvertisingPrimaryChannel, SchedulerEventPriority,
 };
-const ADV_NONCONN_IND_TYPE: u8 = 0x02;
-const TX_ADD_RANDOM: u8 = 1 << 6;
-const RESERVED_HEADER_BITS: u8 = (1 << 4) | (1 << 5) | (1 << 7);
-const DEVICE_ADDRESS_BYTES: usize = 6;
+use oer_wire::Reader;
+
+oer_wire::bitfield! {
+    /// SOURCE: Bluetooth Core 6.0, Vol 6, Part B, sections 2.3.1 and 2.3.1.3.
+    struct NonconnectableHeader[1] (little) {
+        /// PDU Type, section 2.3.1.
+        pdu_type, with_pdu_type: u8 = 0..4;
+        /// RFU and ChSel, unused in ADV_NONCONN_IND, section 2.3.1 (RFU/ChSel).
+        unused, with_unused: u8 = 4..6;
+        /// Advertiser address class, section 2.3.1.3.
+        random, with_random: bool = 6..7;
+        /// RxAdd, unused in ADV_NONCONN_IND, sections 2.3.1/2.3.1.3.
+        rx_add, with_rx_add: bool = 7..8;
+    }
+}
 
 /// Canonical non-empty primary-channel plan for one hardware event.
 ///
@@ -60,25 +71,28 @@ impl LegacyAdvertisingPrimaryChannelPlan {
 pub(super) fn own_address_from_pdu(
     pdu: &[u8],
 ) -> Result<LegacyAdvertisingOwnAddress, LegacyAdvertisingPduError> {
-    if pdu.len() < 2 + DEVICE_ADDRESS_BYTES {
-        return Err(LegacyAdvertisingPduError::MissingAdvertiserAddress);
-    }
-    let header = pdu[0];
-    if header & 0x0f != ADV_NONCONN_IND_TYPE {
+    // Read the address before classifying the header to preserve error precedence.
+    let mut reader = Reader::new(pdu);
+    let [header, _length] = reader
+        .read::<2>()
+        .map_err(|_| LegacyAdvertisingPduError::MissingAdvertiserAddress)?;
+    let address = reader
+        .read::<6>()
+        .map_err(|_| LegacyAdvertisingPduError::MissingAdvertiserAddress)?;
+    let header = NonconnectableHeader::from_bytes([header]);
+    if header.pdu_type() != 2 {
         return Err(LegacyAdvertisingPduError::UnsupportedPduType);
     }
-    if header & RESERVED_HEADER_BITS != 0 {
+    if header.unused() != 0 || header.rx_add() {
         return Err(LegacyAdvertisingPduError::UnsupportedHeaderFlags);
     }
-
-    if header & TX_ADD_RANDOM == 0 {
-        Ok(LegacyAdvertisingOwnAddress::Public)
-    } else {
-        let mut address = [0; DEVICE_ADDRESS_BYTES];
-        address.copy_from_slice(&pdu[2..2 + DEVICE_ADDRESS_BYTES]);
+    if header.random() {
         Ok(LegacyAdvertisingOwnAddress::Random(address))
+    } else {
+        Ok(LegacyAdvertisingOwnAddress::Public)
     }
 }
+
 impl LegacyAdvertisingPrimaryChannelPlan {
     pub fn image(self, start: u32, duration: u32, sequence_lead: u32) -> AdvertisingEventImage {
         let priority = const { SchedulerEventPriority::new(1).expect("reviewed priority fits") };

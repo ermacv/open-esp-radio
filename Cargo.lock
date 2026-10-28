@@ -1779,6 +1779,7 @@ name = "oer-bluetooth-hci"
 version = "0.1.0"
 dependencies = [
  "bt-hci",
+ "oer-wire",
 ]
 
 [[package]]
@@ -1928,6 +1929,7 @@ dependencies = [
  "oer-test-ui-cases",
  "oer-time",
  "oer-time-virtual",
+ "oer-wire",
  "tempfile",
 ]
 

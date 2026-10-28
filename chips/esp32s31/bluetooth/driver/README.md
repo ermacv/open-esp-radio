@@ -4,10 +4,9 @@ This crate owns chip hardware sequencing and affine radio publication states
 below the Link Layer: Controller HAL and time, the BLE PHY, interrupts,
 the modem low-power timer and the hardware scheduler with its event executor,
 list-zero hardware execution and finished lists. Role value builders select
-the physical profiles through typed HAL operations. It also
-keeps the vendor Controller's event policy as pure values: coexistence
-priorities, the coexistence schedule status bits and the connection-event
-allowances. `port::runner` lowers the portable DTM values onto this executor.
+the physical profiles through typed HAL operations and report the
+backend's connection-event timing allowances. `port::runner` lowers the
+portable DTM values onto this executor.
 The generic port queue adapter and physical runner have separate ownership;
 there is no connected hardware HCI transport.
 
@@ -32,9 +31,7 @@ limitations.
 | `runtime_resources` | Interrupt-shared event cells reused by every epoch, and the task and timer workers of one powered epoch; the HAL owns physical list publications and receive-chain graphs |
 | `shutdown` | Retirement of a drained epoch and Controller output, followed by the actor-ordered Controller reset that returns the clocked client and the complete arena |
 | `roles` | Detached value builders for DTM, advertising, scanning and connection events, and role-to-list selection |
-| `coexistence` | The vendor's per-lane PTI coexistence priorities of advertising, passive scan and connection events (`coexAdv`, `coexScan`, `coexConn`) |
-| `coex_status` | The vendor's Bluetooth LE coexistence schedule status bits (`coexHook`) and the change between two activities |
-| `connection_policy` | Connection-event allowances and span (`ble_28.o`, `ble_3.o`) and the vendor Direct Test Mode notes |
+| `connection_policy` | Connection-event timing allowances (`ble_28.o`) and the vendor Direct Test Mode notes |
 
 The driver enables the HAL's `bluetooth-engine` feature. Its
 `*_event_image` modules select DTM role/PHY/phase, advertising channel order
@@ -217,11 +214,9 @@ Start:
 The interrupt table binds the handler's part once per boot, before any
 epoch; its storage stays reserved for every later epoch.
 
-While it runs, every change of the active roles moves the Bluetooth LE
-coexistence status bits ([`coex_status`](src/coex_status.rs)), and
-`coex_register_ble_cb`'s start and stop callbacks tell the Controller whether
-another radio shares the antenna, which selects the coexistence priorities
-([`coexistence`](src/coexistence.rs)).
+Role builders accept caller-selected PTI values. The driver does not map
+active roles to coexistence schedule status or select shared-antenna priority
+policy; the chip-family coexistence vocabulary lives in `oer-espressif-coex`.
 
 Stop:
 

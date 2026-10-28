@@ -8,6 +8,7 @@ repository.workspace = true
 description = "Allocation-free, sans-IO HCI packets and codecs for open ESP radio Bluetooth controllers"
 
 [dependencies]
+oer-wire = { path = "../../../portable/wire" }
 bt-hci = "=0.10.1"
 
 [lints]
