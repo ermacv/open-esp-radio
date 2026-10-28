@@ -2,7 +2,8 @@
 
 `oer-bluetooth-le-ll` owns allocation-free LE protocol state: connection and
 channel progression, duplicate filtering, control, Data Length Update and
-encryption procedures. AES-CCM transforms and zeroizing key material live here.
+encryption procedures and packet counters. Stateless AES-CCM transforms and
+zeroizing key material live in `oer-bluetooth-le-cipher`.
 Air-format values and codecs are in `oer-bluetooth-le-wire`; DTM backend window
 geometry is in `oer-bluetooth-le-port`.
 

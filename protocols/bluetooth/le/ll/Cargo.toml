@@ -9,9 +9,7 @@ description = "Allocation-free Bluetooth LE Link Layer protocol and role state"
 
 [dependencies]
 oer-bluetooth-le-wire = { path = "../wire" }
-zeroize = { version = "1.9.0", default-features = false, features = ["derive"] }
-ccm = { version = "=0.5.0", default-features = false }
-aes = { version = "0.8.4", default-features = false, features = ["zeroize"] }
+oer-bluetooth-le-cipher = { path = "../cipher" }
 
 [lints]
 workspace = true

@@ -1,0 +1,17 @@
+[package]
+name = "oer-bluetooth-le-cipher"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Stateless Bluetooth LE AES-CCM frame protection and session-key transforms"
+
+[dependencies]
+oer-bluetooth-le-wire = { path = "../wire" }
+zeroize = { version = "1.9.0", default-features = false, features = ["derive"] }
+ccm = { version = "=0.5.0", default-features = false }
+aes = { version = "0.8.4", default-features = false, features = ["zeroize"] }
+
+[lints]
+workspace = true

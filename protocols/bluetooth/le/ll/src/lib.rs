@@ -16,10 +16,11 @@
 //! Hardware-independent Bluetooth Low Energy Link Layer building blocks.
 //!
 //! This crate owns connection/channel progression, duplicate filtering,
-//! control and data-length procedures, encryption state and AES-CCM transforms.
+//! control and data-length procedures, encryption procedures and packet counters.
 //! Over-the-air fields and codecs live in `oer-bluetooth-le-wire`; shared DTM
 //! window geometry belongs to `oer-bluetooth-le-port`. A Controller composes
-//! these pieces without HCI, MMIO, DMA or executor dependencies in this core.
+//! these pieces with `oer-bluetooth-le-cipher` for AES-CCM. This core has no
+//! HCI, MMIO, DMA or executor dependencies.
 
 #[cfg(test)]
 extern crate std;
@@ -29,16 +30,3 @@ pub mod control;
 pub mod data_length;
 pub mod scanning;
 pub mod security;
-
-#[cfg(test)]
-mod key_schedule_tests {
-    #[test]
-    fn aes_key_schedules_zeroize_on_drop() {
-        fn assert_zeroize_on_drop<T: zeroize::ZeroizeOnDrop>() {}
-        assert_zeroize_on_drop::<super::security::LeLongTermKey>();
-        assert_zeroize_on_drop::<super::security::LeAclSessionKey>();
-        assert_zeroize_on_drop::<aes::Aes128>();
-        assert_zeroize_on_drop::<aes::Aes192>();
-        assert_zeroize_on_drop::<aes::Aes256>();
-    }
-}

@@ -1782,10 +1782,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-bluetooth-le-cipher"
+version = "0.1.0"
+dependencies = [
+ "aes",
+ "ccm",
+ "oer-bluetooth-le-wire",
+ "zeroize",
+]
+
+[[package]]
 name = "oer-bluetooth-le-controller"
 version = "0.1.0"
 dependencies = [
  "oer-bluetooth-hci",
+ "oer-bluetooth-le-cipher",
  "oer-bluetooth-le-ll",
  "oer-bluetooth-le-model",
  "oer-bluetooth-le-port",
@@ -1800,10 +1811,8 @@ dependencies = [
 name = "oer-bluetooth-le-ll"
 version = "0.1.0"
 dependencies = [
- "aes",
- "ccm",
+ "oer-bluetooth-le-cipher",
  "oer-bluetooth-le-wire",
- "zeroize",
 ]
 
 [[package]]
