@@ -459,8 +459,8 @@ pub fn run(root: &Path, chip: &str, budget: &Budget) -> Result<()> {
     // whatever its section flags say.
     let read_only = match oer_chip_profile::Profile::load(root, chip)?.facts.memory {
         Some(memory) => vec![ReadOnlyWindow {
-            start: memory.flash_xip.origin,
-            length: u64::from(memory.flash_xip.length),
+            start: memory.flash_xip.origin(),
+            length: u64::from(memory.flash_xip.length()),
         }],
         None if images.is_empty() => vec![],
         None => {

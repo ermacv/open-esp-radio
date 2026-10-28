@@ -135,7 +135,7 @@ pub fn capture(point: Kind, fill: impl FnOnce(&mut SnapshotWriter<'_>)) {
 macro_rules! trace_clock {
     ($now_micros:path) => {
         $crate::__memory::link_fn! {
-            define fn __oer_trace_now_micros() -> u64 = $now_micros;
+            define $crate::__memory::TraceClockSlot => fn __oer_trace_now_micros() -> u64 = $now_micros;
         }
     };
 }

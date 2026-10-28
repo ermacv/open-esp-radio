@@ -16,11 +16,18 @@ fn trace<const E: usize, const S: usize, const W: usize>() -> (&'static Retained
 
 /// The test binary's clock; records these tests write carry explicit stamps.
 #[cfg(oer_trace)]
-fn no_clock() -> u64 {
-    0
+fn test_clock() -> u64 {
+    0x1_2345_6789
 }
 #[cfg(oer_trace)]
-crate::trace_clock!(no_clock);
+crate::trace_clock!(test_clock);
+
+#[cfg(oer_trace)]
+#[test]
+fn record_timestamps_use_the_low_word_of_the_linked_image_clock() {
+    let (_, trace) = trace::<1, 0, 0>();
+    assert_eq!(trace.now_us(), 0x2345_6789);
+}
 
 fn record(trace: &Trace, step: u32) -> bool {
     trace.record(STEP, [step, 0], step * 10)
