@@ -66,7 +66,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
         let status = self.authenticate(peer, now)?;
         self.storage_mut()
             .pmksa
-            .insert(ApPmksa::new(peer, pmk.duplicate(), pmkid));
+            .insert(Pmksa::new(peer, (), pmk.duplicate(), pmkid));
         if status == status_code::SUCCESS {
             let existing = self.checked_peer_mut(peer)?;
             existing.pmk = Some(pmk);

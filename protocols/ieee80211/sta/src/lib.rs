@@ -56,7 +56,6 @@ pub mod join;
 pub mod link_monitor;
 pub mod machine;
 pub mod modem_sleep;
-mod pmksa;
 mod pool;
 pub mod power_save;
 pub mod receive;

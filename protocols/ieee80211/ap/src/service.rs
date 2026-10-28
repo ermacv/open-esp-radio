@@ -28,7 +28,7 @@ pub use crate::limits::{
 
 use oer_ieee80211_wire::ap::{ApAssociationSecurityObservation, ApPowerSaveObservation};
 
-use crate::pmksa::{ApPmksa, ApPmksaCache};
+use oer_ieee80211_rsn::pmksa::{Pmksa, PmksaCache};
 use crate::security_policy::ApSecurityPolicy;
 use oer_ieee80211_rsn::{
     AssociationSecurityBinding, OwnedEapolFrame, Pmk, Ptk, PtkContext,
@@ -470,7 +470,7 @@ pub struct AccessPointPeerStorage {
     message3_management_ipns: [[u8; 6]; AP_MAX_CLIENTS],
     generation: u32,
     /// The security associations a WPA3 epoch's stations may resume.
-    pmksa: ApPmksaCache,
+    pmksa: PmksaCache<[u8; 6]>,
 }
 
 impl AccessPointPeerStorage {
@@ -481,7 +481,7 @@ impl AccessPointPeerStorage {
                 AP_MAX_CLIENTS],
             message3_management_ipns: [[0; 6]; AP_MAX_CLIENTS],
             generation: 0,
-            pmksa: ApPmksaCache::new(),
+            pmksa: PmksaCache::new(),
         }
     }
 
@@ -517,7 +517,7 @@ impl AccessPointPeerStorage {
         self.management_replay
             .iter_mut()
             .for_each(|replay| *replay = management::ApManagementReplay::inactive());
-        self.pmksa = ApPmksaCache::new();
+        self.pmksa = PmksaCache::new();
     }
 }
 

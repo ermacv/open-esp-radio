@@ -133,7 +133,10 @@ use oer_time::{Duration, Instant};
 
 use crate::epoch::{LinkEpoch, LinkEpochSource};
 use crate::join::sae::{StaSaeAuthentication, StaSaeEvent, StaSaeFailure, StaSaeTransmission};
-use crate::pmksa::{StaPmksa, StaPmksaCache};
+use oer_ieee80211_rsn::pmksa::{Pmksa, PmksaCache};
+
+/// The station's PMKSA cache: per access point and SSID.
+type StaPmksaCache = PmksaCache<Bssid, heapless::Vec<u8, MAX_SSID_LEN>>;
 use crate::pool::Pool;
 use crate::request::StationListenInterval;
 use oer_ieee80211_port::ConfigurePermission;
@@ -4337,7 +4340,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
             },
             StaSaeEvent::Authenticated(keys) => {
                 let bssid = join.access_point.bssid;
-                self.pmksa.insert(StaPmksa::new(
+                self.pmksa.insert(Pmksa::new(
                     bssid,
                     self.config.ssid.clone(),
                     keys.pmk.duplicate(),

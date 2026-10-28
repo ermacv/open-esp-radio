@@ -41,6 +41,7 @@ pub mod keys;
 mod mac;
 pub mod management_ccmp;
 pub mod nonce;
+pub mod pmksa;
 pub mod retry;
 pub mod sae;
 pub mod state;
