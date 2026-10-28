@@ -35,7 +35,7 @@ use super::{
 fn trouble_no_security_bootstrap_and_conservative_extensions_are_supported() {
     let public_address = BluetoothPublicDeviceAddress::from_canonical_bytes([1, 2, 3, 4, 5, 6]);
     let config = LeControllerBootstrapConfig::new(public_address, 251, 4).unwrap();
-    let mut bootstrap = LeControllerBootstrap::new(config);
+    let mut bootstrap = LeControllerBootstrap::new(config).unwrap();
     let random_address = BdAddr::new([0xc6, 5, 4, 3, 2, 1]);
     let event_mask = EventMask::new()
         .enable_le_meta(true)
@@ -133,10 +133,10 @@ fn trouble_no_security_bootstrap_and_conservative_extensions_are_supported() {
 
     assert_success(round_trip(&mut bootstrap, &Reset::new()), &[]);
     // Reset restores the specification defaults.
-    assert_eq!(bootstrap.event_mask(), default_event_mask());
+    assert_eq!(bootstrap.event_mask(), default_event_mask().unwrap());
     assert!(!bootstrap.event_mask().is_le_meta_enabled());
     assert!(bootstrap.event_mask().is_disconnection_complete_enabled());
-    assert_eq!(bootstrap.le_event_mask(), default_le_event_mask());
+    assert_eq!(bootstrap.le_event_mask(), default_le_event_mask().unwrap());
     assert!(bootstrap.le_event_mask().is_le_adv_report_enabled());
     assert!(
         bootstrap
@@ -165,14 +165,17 @@ fn read_bd_addr_converts_canonical_identity_at_the_hci_boundary() {
         [1, 2, 3, 4, 5, 6]
     );
 
-    let mut bootstrap = LeControllerBootstrap::new(config);
+    let mut bootstrap = LeControllerBootstrap::new(config).unwrap();
     assert_eq!(
         bootstrap
             .dispatch(OwnedBootstrapCommand::Reset, false)
+            .unwrap()
             .status(),
         Status::SUCCESS
     );
-    let response = bootstrap.dispatch(OwnedBootstrapCommand::ReadBdAddr, false);
+    let response = bootstrap
+        .dispatch(OwnedBootstrapCommand::ReadBdAddr, false)
+        .unwrap();
     assert_eq!(response.status(), Status::SUCCESS);
     assert_eq!(&response.as_bytes()[6..], &[6, 5, 4, 3, 2, 1]);
 }
@@ -185,10 +188,11 @@ fn known_commands_are_disallowed_before_reset_and_malformed_input_never_mutates(
         1,
     )
     .unwrap();
-    let mut bootstrap = LeControllerBootstrap::new(config);
+    let mut bootstrap = LeControllerBootstrap::new(config).unwrap();
 
-    let before_reset =
-        bootstrap.dispatch(OwnedBootstrapCommand::SetEventMask(EventMask::new()), false);
+    let before_reset = bootstrap
+        .dispatch(OwnedBootstrapCommand::SetEventMask(EventMask::new()), false)
+        .unwrap();
     assert_eq!(before_reset.status(), HciError::CMD_DISALLOWED.to_status());
     assert_eq!(bootstrap.phase(), BootstrapPhase::AwaitingReset);
 
@@ -203,6 +207,7 @@ fn known_commands_are_disallowed_before_reset_and_malformed_input_never_mutates(
     assert_eq!(
         bootstrap
             .dispatch(OwnedBootstrapCommand::Reset, false)
+            .unwrap()
             .status(),
         Status::SUCCESS
     );
@@ -214,7 +219,7 @@ fn known_commands_are_disallowed_before_reset_and_malformed_input_never_mutates(
         malformed_mask.status(),
         HciError::INVALID_HCI_PARAMETERS.to_status()
     );
-    assert_eq!(bootstrap.event_mask(), default_event_mask());
+    assert_eq!(bootstrap.event_mask(), default_event_mask().unwrap());
 
     let sync_host_buffers = [0xff, 0x00, 1, 1, 0, 1, 0];
     assert_eq!(
@@ -276,15 +281,18 @@ fn supported_commands_report_matches_the_closed_operational_inventory() {
         4,
     )
     .unwrap();
-    let mut bootstrap = LeControllerBootstrap::new(config);
+    let mut bootstrap = LeControllerBootstrap::new(config).unwrap();
     assert_eq!(
         bootstrap
             .dispatch(OwnedBootstrapCommand::Reset, false)
+            .unwrap()
             .status(),
         Status::SUCCESS
     );
 
-    let response = bootstrap.dispatch(OwnedBootstrapCommand::ReadLocalSupportedCommands, false);
+    let response = bootstrap
+        .dispatch(OwnedBootstrapCommand::ReadLocalSupportedCommands, false)
+        .unwrap();
     assert_eq!(response.opcode(), ReadLocalSupportedCmds::OPCODE);
     assert_eq!(response.status(), Status::SUCCESS);
     assert_eq!(response.as_bytes().len(), 70);
@@ -335,12 +343,18 @@ fn a_profile_with_a_filter_accept_list_reports_its_size_and_commands() {
     )
     .unwrap();
     for (config, size) in [(without, 0), (without.with_filter_accept_list_size(12), 12)] {
-        let mut bootstrap = LeControllerBootstrap::new(config);
-        bootstrap.dispatch(OwnedBootstrapCommand::Reset, false);
-        let response = bootstrap.dispatch(OwnedBootstrapCommand::LeReadFilterAcceptListSize, false);
+        let mut bootstrap = LeControllerBootstrap::new(config).unwrap();
+        bootstrap
+            .dispatch(OwnedBootstrapCommand::Reset, false)
+            .unwrap();
+        let response = bootstrap
+            .dispatch(OwnedBootstrapCommand::LeReadFilterAcceptListSize, false)
+            .unwrap();
         assert_eq!(response.status(), Status::SUCCESS);
         assert_eq!(response.as_bytes()[6..], [size]);
-        let response = bootstrap.dispatch(OwnedBootstrapCommand::ReadLocalSupportedCommands, false);
+        let response = bootstrap
+            .dispatch(OwnedBootstrapCommand::ReadLocalSupportedCommands, false)
+            .unwrap();
         let mask = <&CmdMask>::from_hci_bytes_complete(&response.as_bytes()[6..]).unwrap();
         assert!(mask.le_read_filter_accept_list_size());
         assert_eq!(mask.le_clear_filter_accept_list(), size > 0);
@@ -459,7 +473,9 @@ fn dispatch_test_packet(
         LeControllerCommandClassification::MalformedDataLength(response) => {
             command_error(response.opcode(), HciError::UNKNOWN_CMD)
         }
-        LeControllerCommandClassification::Bootstrap(command) => bootstrap.dispatch(command, false),
+        LeControllerCommandClassification::Bootstrap(command) => {
+            bootstrap.dispatch(command, false).unwrap()
+        }
         LeControllerCommandClassification::MalformedBootstrap(response) => response,
         LeControllerCommandClassification::Dtm(command) => {
             command_error(command.kind().opcode(), HciError::UNKNOWN_CMD)

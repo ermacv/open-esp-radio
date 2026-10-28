@@ -1,6 +1,7 @@
 //! Bounded Command Complete encoding for the closed bootstrap subset.
 
 use super::*;
+use crate::encoding::Length;
 
 /// Maximum complete HCI Event body emitted by the bootstrap state machine.
 ///
@@ -13,7 +14,7 @@ pub const BOOTSTRAP_COMMAND_COMPLETE_EVENT_CAPACITY: usize = 70;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct BootstrapCommandCompleteEvent {
     bytes: [u8; BOOTSTRAP_COMMAND_COMPLETE_EVENT_CAPACITY],
-    length: usize,
+    length: Length<usize, BOOTSTRAP_COMMAND_COMPLETE_EVENT_CAPACITY>,
     opcode: Opcode,
     status: Status,
 }
@@ -21,7 +22,7 @@ pub struct BootstrapCommandCompleteEvent {
 impl BootstrapCommandCompleteEvent {
     /// Complete HCI Event bytes, without an H4 packet indicator.
     pub fn as_bytes(&self) -> &[u8] {
-        &self.bytes[..self.length]
+        self.length.borrow(&self.bytes)
     }
 
     /// Opcode copied into the Command Complete event.
@@ -40,19 +41,21 @@ impl BootstrapCommandCompleteEvent {
         command_error(opcode, error)
     }
 
-    fn new(opcode: Opcode, status: Status, return_parameters: &[u8]) -> Self {
-        let length = 6 + return_parameters.len();
-        assert!(
-            length <= BOOTSTRAP_COMMAND_COMPLETE_EVENT_CAPACITY,
-            "bootstrap Command Complete exceeded its closed response profile"
-        );
+    fn new<const N: usize>(opcode: Opcode, status: Status, return_parameters: &[u8; N]) -> Self {
+        let length =
+            Length::<usize, BOOTSTRAP_COMMAND_COMPLETE_EVENT_CAPACITY>::with_header::<6, N>();
         let mut bytes = [0; BOOTSTRAP_COMMAND_COMPLETE_EVENT_CAPACITY];
         bytes[0] = 0x0e;
-        bytes[1] = (4 + return_parameters.len()) as u8;
+        bytes[1] = const { (4 + N) as u8 };
         bytes[2] = 1;
-        bytes[3..5].copy_from_slice(&opcode.to_raw().to_le_bytes());
+        let [low, high] = opcode.to_raw().to_le_bytes();
+        bytes[3] = low;
+        bytes[4] = high;
         bytes[5] = status.into_inner();
-        bytes[6..length].copy_from_slice(return_parameters);
+        // The const length proof admits every returned octet into this tail.
+        for (destination, source) in bytes.iter_mut().skip(6).zip(return_parameters) {
+            *destination = *source;
+        }
         Self {
             bytes,
             length,
@@ -62,7 +65,10 @@ impl BootstrapCommandCompleteEvent {
     }
 }
 
-pub(super) fn command_success(opcode: Opcode, parameters: &[u8]) -> BootstrapCommandCompleteEvent {
+pub(super) fn command_success<const N: usize>(
+    opcode: Opcode,
+    parameters: &[u8; N],
+) -> BootstrapCommandCompleteEvent {
     BootstrapCommandCompleteEvent::new(opcode, Status::SUCCESS, parameters)
 }
 

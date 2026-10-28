@@ -7,6 +7,7 @@
 //! the ranges of Core Vol 4 Part E 7.8.33 and 7.8.35; the Link Layer limits
 //! them to what it supports.
 
+use crate::encoding::Length;
 use bt_hci::{
     PacketKind,
     cmd::{
@@ -100,7 +101,7 @@ impl LeDataLengthCommand {
             }
             let transmit = LeDataLengthParameters::decode(rest).ok_or_else(malformed)?;
             Ok(Self::Set {
-                handle: ConnHandle::new(handle),
+                handle: ConnHandle(handle),
                 transmit,
             })
         } else if opcode == LeReadSuggestedDefaultDataLength::OPCODE {
@@ -133,25 +134,29 @@ pub(crate) enum LeDataLengthDecodeError {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct LeDataLengthCommandCompleteEvent {
     bytes: [u8; LE_DATA_LENGTH_COMMAND_COMPLETE_EVENT_CAPACITY],
-    length: u8,
+    length: Length<u8, LE_DATA_LENGTH_COMMAND_COMPLETE_EVENT_CAPACITY>,
     opcode: Opcode,
 }
 
 impl LeDataLengthCommandCompleteEvent {
-    fn new(opcode: Opcode, status: Status, returned: &[u8]) -> Self {
+    fn new<const N: usize>(opcode: Opcode, status: Status, returned: &[u8; N]) -> Self {
         let mut bytes = [0; LE_DATA_LENGTH_COMMAND_COMPLETE_EVENT_CAPACITY];
         let [low, high] = opcode.to_raw().to_le_bytes();
-        let length = 6 + returned.len();
+        let length =
+            Length::<u8, LE_DATA_LENGTH_COMMAND_COMPLETE_EVENT_CAPACITY>::with_header::<6, N>();
         bytes[0] = EventKind::CommandComplete.0;
-        bytes[1] = (length - 2) as u8;
+        bytes[1] = const { (4 + N) as u8 };
         bytes[2] = 1;
         bytes[3] = low;
         bytes[4] = high;
         bytes[5] = status.into_inner();
-        bytes[6..length].copy_from_slice(returned);
+        // The const length proof admits every source octet.
+        for (destination, source) in bytes.iter_mut().skip(6).zip(returned) {
+            *destination = *source;
+        }
         Self {
             bytes,
-            length: length as u8,
+            length,
             opcode,
         }
     }
@@ -159,7 +164,7 @@ impl LeDataLengthCommandCompleteEvent {
     fn invalid_parameters(opcode: Opcode) -> Self {
         let status = HciError::INVALID_HCI_PARAMETERS.to_status();
         if opcode == LeSetDataLength::OPCODE {
-            Self::set(status, ConnHandle::new(0))
+            Self::set(status, ConnHandle(0))
         } else if opcode == LeReadSuggestedDefaultDataLength::OPCODE {
             Self::new(opcode, status, &[0; 4])
         } else if opcode == LeReadMaxDataLength::OPCODE {
@@ -190,9 +195,9 @@ impl LeDataLengthCommandCompleteEvent {
 
     /// The longest supported transmit and receive lengths.
     pub fn maximum(transmit: LeDataLengthParameters, receive: LeDataLengthParameters) -> Self {
-        let mut returned = [0; 8];
-        returned[..4].copy_from_slice(&transmit.wire());
-        returned[4..].copy_from_slice(&receive.wire());
+        let [a, b, c, d] = transmit.wire();
+        let [e, f, g, h] = receive.wire();
+        let returned = [a, b, c, d, e, f, g, h];
         Self::new(LeReadMaxDataLength::OPCODE, Status::SUCCESS, &returned)
     }
 
@@ -202,7 +207,7 @@ impl LeDataLengthCommandCompleteEvent {
 
     /// Complete HCI Event body without an H4 indicator.
     pub fn as_bytes(&self) -> &[u8] {
-        &self.bytes[..usize::from(self.length)]
+        self.length.borrow(&self.bytes)
     }
 }
 
@@ -228,13 +233,24 @@ impl LeDataLengthChangeEvent {
         transmit: LeDataLengthParameters,
         receive: LeDataLengthParameters,
     ) -> Self {
-        let mut bytes = [0; LE_DATA_LENGTH_CHANGE_EVENT_CAPACITY];
-        bytes[0] = EventKind::Le.0;
-        bytes[1] = (LE_DATA_LENGTH_CHANGE_EVENT_CAPACITY - 2) as u8;
-        bytes[2] = 0x07;
-        bytes[3..5].copy_from_slice(&handle.raw().to_le_bytes());
-        bytes[5..9].copy_from_slice(&transmit.wire());
-        bytes[9..13].copy_from_slice(&receive.wire());
+        let [low, high] = handle.raw().to_le_bytes();
+        let [a, b, c, d] = transmit.wire();
+        let [e, f, g, h] = receive.wire();
+        let bytes = [
+            EventKind::Le.0,
+            (LE_DATA_LENGTH_CHANGE_EVENT_CAPACITY - 2) as u8,
+            0x07,
+            low,
+            high,
+            a,
+            b,
+            c,
+            d,
+            e,
+            f,
+            g,
+            h,
+        ];
         Self { bytes }
     }
 

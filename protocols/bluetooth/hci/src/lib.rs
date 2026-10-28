@@ -1,10 +1,25 @@
 #![no_std]
 #![forbid(unsafe_code)]
 #![deny(
-    clippy::unwrap_used,
     clippy::panic,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::unreachable,
     clippy::todo,
-    clippy::unimplemented
+    clippy::unimplemented,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    clippy::disallowed_macros,
+    clippy::disallowed_methods
+)]
+#![cfg_attr(
+    test,
+    allow(
+        clippy::arithmetic_side_effects,
+        clippy::disallowed_macros,
+        clippy::disallowed_methods,
+        clippy::unreachable
+    )
 )]
 
 //! Sans-IO HCI packet values and codecs for an LE Controller.
@@ -41,10 +56,28 @@ mod test_support;
 mod controller;
 
 pub use controller::random::{LeRandCommand, LeRandCommandCompleteEvent};
+mod encoding;
 mod transport;
 mod wire;
 
 pub use bt_hci;
+
+/// Why an API value cannot form the requested HCI packet or ACL transition.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum HciBuildError {
+    /// An admitted ACL fragment still awaits acknowledgement.
+    AclFragmentInFlight { end: u8 },
+    /// A fragment must be nonempty and fit the unacknowledged packet suffix.
+    InvalidAclFragmentLength {
+        length: usize,
+        acknowledged: u16,
+        packet_length: u16,
+    },
+    /// Number Of Completed Packets must return at least one Host credit.
+    ZeroCompletedPackets,
+    /// The standard codec rejected a reset-default event mask.
+    InvalidResetEventMask(bt_hci::FromHciBytesError),
+}
 pub use controller::bootstrap::{
     BOOTSTRAP_COMMAND_COMPLETE_EVENT_CAPACITY, BluetoothPublicDeviceAddress, BootstrapCommand,
     BootstrapCommandCompleteEvent, BootstrapConfigError, BootstrapHostBuffers, BootstrapPhase,

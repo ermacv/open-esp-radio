@@ -6,6 +6,7 @@
 //! It does not start a Link Layer event or claim scheduler, SRAM, radio, or
 //! on-air progress.
 
+use crate::encoding::Length;
 use bt_hci::{
     FromHciBytes, PacketKind,
     cmd::{
@@ -198,30 +199,30 @@ impl LeLegacyAdvertisingParameters {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct LeLegacyAdvertisingData {
     bytes: [u8; LE_LEGACY_ADVERTISING_DATA_CAPACITY],
-    length: u8,
+    length: Length<u8, LE_LEGACY_ADVERTISING_DATA_CAPACITY>,
 }
 
 /// Owned, length-checked scan-response data from LE Set Scan Response Data.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct LeLegacyScanResponseData {
     bytes: [u8; LE_LEGACY_ADVERTISING_DATA_CAPACITY],
-    length: u8,
+    length: Length<u8, LE_LEGACY_ADVERTISING_DATA_CAPACITY>,
 }
 
 impl LeLegacyScanResponseData {
     /// Borrow only the Host-declared scan-response prefix.
     pub fn as_bytes(&self) -> &[u8] {
-        &self.bytes[..usize::from(self.length)]
+        self.length.borrow(&self.bytes)
     }
 
     /// Number of meaningful scan-response octets.
     pub const fn len(&self) -> usize {
-        self.length as usize
+        self.length.get() as usize
     }
 
     /// Whether the Host selected an empty scan response.
     pub const fn is_empty(&self) -> bool {
-        self.length == 0
+        self.length.get() == 0
     }
 }
 
@@ -229,22 +230,22 @@ impl LeLegacyAdvertisingData {
     /// No advertising data.
     pub const EMPTY: Self = Self {
         bytes: [0; LE_LEGACY_ADVERTISING_DATA_CAPACITY],
-        length: 0,
+        length: Length::<u8, LE_LEGACY_ADVERTISING_DATA_CAPACITY>::with_header::<0, 0>(),
     };
 
     /// Borrow only the Host-declared advertising-data prefix.
     pub fn as_bytes(&self) -> &[u8] {
-        &self.bytes[..usize::from(self.length)]
+        self.length.borrow(&self.bytes)
     }
 
     /// Number of meaningful advertising-data octets.
     pub const fn len(&self) -> usize {
-        self.length as usize
+        self.length.get() as usize
     }
 
     /// Whether the Host selected an empty advertising-data value.
     pub const fn is_empty(&self) -> bool {
-        self.length == 0
+        self.length.get() == 0
     }
 }
 
@@ -474,11 +475,11 @@ impl LeLegacyAdvertisingConfiguration {
             },
             data: LeLegacyAdvertisingData {
                 bytes: [0; LE_LEGACY_ADVERTISING_DATA_CAPACITY],
-                length: 0,
+                length: Length::<u8, LE_LEGACY_ADVERTISING_DATA_CAPACITY>::with_header::<0, 0>(),
             },
             scan_response_data: LeLegacyScanResponseData {
                 bytes: [0; LE_LEGACY_ADVERTISING_DATA_CAPACITY],
-                length: 0,
+                length: Length::<u8, LE_LEGACY_ADVERTISING_DATA_CAPACITY>::with_header::<0, 0>(),
             },
         }
     }
@@ -604,7 +605,10 @@ impl LeLegacyAdvertisingCommand {
                 }
                 Ok(Self::SetData(LeLegacyAdvertisingData {
                     bytes: parameters.data,
-                    length: parameters.data_len,
+                    length: Length::<u8, LE_LEGACY_ADVERTISING_DATA_CAPACITY>::new(
+                        parameters.data_len,
+                    )
+                    .ok_or(LeLegacyAdvertisingDecodeError::InvalidParameters { command: kind })?,
                 }))
             }
             LeLegacyAdvertisingCommandKind::SetScanResponseData => {
@@ -620,7 +624,10 @@ impl LeLegacyAdvertisingCommand {
                 }
                 Ok(Self::SetScanResponseData(LeLegacyScanResponseData {
                     bytes: parameters.data,
-                    length: parameters.data_len,
+                    length: Length::<u8, LE_LEGACY_ADVERTISING_DATA_CAPACITY>::new(
+                        parameters.data_len,
+                    )
+                    .ok_or(LeLegacyAdvertisingDecodeError::InvalidParameters { command: kind })?,
                 }))
             }
             LeLegacyAdvertisingCommandKind::SetEnable => {
@@ -676,18 +683,12 @@ impl LeLegacyAdvertisingCommand {
         let peer = if peer_addr_kind == AddrKind::PUBLIC {
             LeLegacyAdvertisingPeer {
                 random: false,
-                address: peer_addr
-                    .raw()
-                    .try_into()
-                    .expect("a device address has six octets"),
+                address: peer_addr.into_inner(),
             }
         } else if peer_addr_kind == AddrKind::RANDOM {
             LeLegacyAdvertisingPeer {
                 random: true,
-                address: peer_addr
-                    .raw()
-                    .try_into()
-                    .expect("a device address has six octets"),
+                address: peer_addr.into_inner(),
             }
         } else if matches!(
             role,
@@ -697,10 +698,7 @@ impl LeLegacyAdvertisingCommand {
         } else {
             LeLegacyAdvertisingPeer {
                 random: false,
-                address: peer_addr
-                    .raw()
-                    .try_into()
-                    .expect("a device address has six octets"),
+                address: peer_addr.into_inner(),
             }
         };
 
@@ -838,6 +836,32 @@ impl HciControllerResponse for LeLegacyAdvertisingCommandCompleteEvent {
 
     fn as_bytes(&self) -> &[u8] {
         self.as_bytes()
+    }
+}
+
+impl LeLegacyAdvertisingCommand {
+    pub(crate) fn into_classification(self) -> crate::LeControllerCommandClassification {
+        use crate::LeControllerCommandClassification as Classification;
+        match self {
+            LeLegacyAdvertisingCommand::SetParameters(parameters) => {
+                Classification::LegacyAdvertisingConfiguration(
+                    LeLegacyAdvertisingConfigurationCommand::SetParameters(parameters),
+                )
+            }
+            LeLegacyAdvertisingCommand::SetData(data) => {
+                Classification::LegacyAdvertisingConfiguration(
+                    LeLegacyAdvertisingConfigurationCommand::SetData(data),
+                )
+            }
+            LeLegacyAdvertisingCommand::SetScanResponseData(data) => {
+                Classification::LegacyAdvertisingConfiguration(
+                    LeLegacyAdvertisingConfigurationCommand::SetScanResponseData(data),
+                )
+            }
+            LeLegacyAdvertisingCommand::SetEnable(enable) => {
+                Classification::LegacyAdvertisingEnable(LeLegacyAdvertisingEnableCommand { enable })
+            }
+        }
     }
 }
 

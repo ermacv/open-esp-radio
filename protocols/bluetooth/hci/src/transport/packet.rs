@@ -21,6 +21,8 @@ fn validate_declared_length(
     kind: PacketKind,
     bytes: &[u8],
 ) -> Result<(), ControllerToHostPacketError> {
+    let invalid_size =
+        || ControllerToHostPacketError::InvalidPacket(FromHciBytesError::InvalidSize);
     let declared = match kind {
         PacketKind::Cmd => return Err(ControllerToHostPacketError::InvalidDirection),
         PacketKind::Event => {
@@ -29,15 +31,19 @@ fn validate_declared_length(
                     FromHciBytesError::InvalidSize,
                 ));
             };
-            2 + usize::from(*length)
+            2_usize
+                .checked_add(usize::from(*length))
+                .ok_or_else(invalid_size)?
         }
         PacketKind::AclData => {
-            let Some(length) = bytes.get(2..4) else {
+            let Some((length, _)) = bytes.get(2..).and_then(<[u8]>::split_first_chunk::<2>) else {
                 return Err(ControllerToHostPacketError::InvalidPacket(
                     FromHciBytesError::InvalidSize,
                 ));
             };
-            4 + usize::from(u16::from_le_bytes([length[0], length[1]]))
+            4_usize
+                .checked_add(usize::from(u16::from_le_bytes(*length)))
+                .ok_or_else(invalid_size)?
         }
         PacketKind::SyncData => {
             let Some(length) = bytes.get(2) else {
@@ -45,16 +51,20 @@ fn validate_declared_length(
                     FromHciBytesError::InvalidSize,
                 ));
             };
-            3 + usize::from(*length)
+            3_usize
+                .checked_add(usize::from(*length))
+                .ok_or_else(invalid_size)?
         }
         PacketKind::IsoData => {
-            let Some(length) = bytes.get(2..4) else {
+            let Some((length, _)) = bytes.get(2..).and_then(<[u8]>::split_first_chunk::<2>) else {
                 return Err(ControllerToHostPacketError::InvalidPacket(
                     FromHciBytesError::InvalidSize,
                 ));
             };
-            let image = u16::from_le_bytes([length[0], length[1]]);
-            4 + usize::from(image & 0x3fff)
+            let image = u16::from_le_bytes(*length);
+            4_usize
+                .checked_add(usize::from(image & 0x3fff))
+                .ok_or_else(invalid_size)?
         }
     };
 

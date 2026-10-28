@@ -221,44 +221,22 @@ pub fn classify_le_controller_command(
         Err(LeLongTermKeyCommandDecodeError::Unsupported) => {}
     }
 
-    if LeLegacyAdvertisingCommandKind::from_opcode(command.opcode()).is_some() {
-        return match LeLegacyAdvertisingCommand::decode(command) {
-            Ok(command) => match LeLegacyAdvertisingConfigurationCommand::from_command(command) {
-                Ok(command) => {
-                    LeControllerCommandClassification::LegacyAdvertisingConfiguration(command)
-                }
-                Err(command) => LeControllerCommandClassification::LegacyAdvertisingEnable(
-                    LeLegacyAdvertisingEnableCommand::from_command(command)
-                        .expect("the non-configuration advertising command is Enable"),
-                ),
-            },
-            Err(error) => LeControllerCommandClassification::MalformedLegacyAdvertising(
-                error
-                    .into_command_complete()
-                    .expect("a claimed advertising opcode must build an exact completion"),
-            ),
-        };
+    match LeLegacyAdvertisingCommand::decode(command) {
+        Ok(command) => return command.into_classification(),
+        Err(error) => {
+            if let Ok(response) = error.into_command_complete() {
+                return LeControllerCommandClassification::MalformedLegacyAdvertising(response);
+            }
+        }
     }
 
-    if LeLegacyScanningCommandKind::from_opcode(command.opcode()).is_some() {
-        return match LeLegacyScanningCommand::decode(command) {
-            Ok(command) => match LeLegacyScanningConfigurationCommand::from_command(command) {
-                Ok(command) => {
-                    LeControllerCommandClassification::LegacyScanningConfiguration(command)
-                }
-                Err(LeLegacyScanningCommand::SetEnable(command)) => {
-                    LeControllerCommandClassification::LegacyScanningEnable(command)
-                }
-                Err(LeLegacyScanningCommand::SetParameters(_)) => {
-                    unreachable!("Set Parameters refines into scanning configuration")
-                }
-            },
-            Err(error) => LeControllerCommandClassification::MalformedLegacyScanning(
-                error
-                    .into_command_complete()
-                    .expect("a claimed scanning opcode must build an exact completion"),
-            ),
-        };
+    match LeLegacyScanningCommand::decode(command) {
+        Ok(command) => return command.into_classification(),
+        Err(error) => {
+            if let Ok(response) = error.into_command_complete() {
+                return LeControllerCommandClassification::MalformedLegacyScanning(response);
+            }
+        }
     }
 
     match LeDtmCommand::decode(command) {
