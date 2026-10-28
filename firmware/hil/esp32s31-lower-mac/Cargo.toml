@@ -47,6 +47,10 @@ oer-ieee80211-wire = { path = "../../../protocols/ieee80211/wire" }
 oer-radio-regulatory = { path = "../../../protocols/radio/regulatory" }
 oer-ieee80211-runtime = { path = "../../../protocols/ieee80211/runtime" }
 
+[target.'cfg(not(target_arch = "riscv32"))'.dev-dependencies]
+oer-hil-agent = { path = "../../../protocols/hil/agent" }
+oer-hil-protocol = { path = "../../../protocols/hil/protocol", default-features = false, features = ["lower-mac"] }
+
 [build-dependencies]
 oer-esp32s31-layout = { workspace = true, features = ["build"] }
 

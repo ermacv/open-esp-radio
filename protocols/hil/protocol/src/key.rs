@@ -106,8 +106,8 @@ pub fn decode_json<M: Message>(payload: &[u8]) -> Option<serde_json::Value> {
     serde_json::to_value(message).ok()
 }
 
-/// Declares a module's messages: their paths, how they are used, and (with
-/// the `registry` feature) the module's `MESSAGES` list.
+/// Declares a module's messages: their paths, how they are used, the
+/// module's `KEYS` and (with the `registry` feature) its `MESSAGES` list.
 ///
 /// ```ignore
 /// messages! {
@@ -123,6 +123,10 @@ pub fn decode_json<M: Message>(payload: &[u8]) -> Option<serde_json::Value> {
 macro_rules! messages {
     ($($(#[$meta:meta])* $kind:ident $name:ident = $path:literal $(=> $response:ty)?;)*) => {
         $($crate::__message!($(#[$meta])* $kind $name = $path $(=> $response)?);)*
+
+        /// The keys of this module's messages, in declaration order.
+        #[allow(unused_doc_comments)]
+        pub const KEYS: &[$crate::Key] = &[$($(#[$meta])* <$name as $crate::Message>::KEY,)*];
 
         /// This module's messages.
         #[cfg(feature = "registry")]

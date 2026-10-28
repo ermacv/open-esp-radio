@@ -2,6 +2,7 @@
 compile_error!("build the diagnostic-lower-mac image class through cargo hil");
 mod irq;
 mod suite;
+mod services;
 mod transport;
 use oer_esp32s31_compose::Esp32s31;
 use core::future::poll_fn;
@@ -70,7 +71,7 @@ oer_espressif_executor::tasks! {
 }
 static DOORBELL: RequestDoorbell = RequestDoorbell::new();
 static SLOT: RequestSlot<Request, Answer> = RequestSlot::new(&DOORBELL, 1);
-oer_hil_agent::requests! { enum Request(sessions = false) { Prepare(Prepare), Run(RunCase), } }
+use services::Request;
 enum Answer {
     Prepared(Prepared),
     Trace(CaseTrace),
@@ -271,9 +272,7 @@ async fn radio_actor(actor: &'static mut Actor) {
     match actor.run().await {}
 }
 async fn console(usb: transport::Usb, boot: u64, chip: transport::Chip) {
-    let keys =
-        oer_hil_protocol::feature_keys::image_keys(&|feature| feature == "diagnostic-lower-mac");
-    let intake = Intake::new(boot, keys.as_set(), 0);
+    let intake = Intake::new(boot, services::KEYS, 0);
     let failure = transport::CONSOLE
         .run(usb, intake, &chip, |id, request: Request| {
             if REQUESTS.try_send((id, request)).is_err() {

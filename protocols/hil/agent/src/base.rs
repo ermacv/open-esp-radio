@@ -7,10 +7,11 @@
 
 use oer_hil_protocol::base::{
     BootEvidence, GetBootStatus, GetHello, GetImageKeys, GetLinkHealth, GetPostMortemCheckpoints,
-    Hello, ImageKeySet, LinkHealth, PostMortemCheckpoints, RejectReason,
+    Hello, ImageKeySet, LinkHealth, PostMortemCheckpoints, RejectReason, Rejected,
 };
 use oer_hil_protocol::{
-    DecodeCounters, DecodeError, Frame, FrameDecoder, Message, RequestIdentity, WireKind,
+    DecodeCounters, DecodeError, Endpoint, Frame, FrameDecoder, Key, Message, RequestIdentity,
+    WireKind,
 };
 
 /// What the base module reads from the platform.
@@ -28,6 +29,34 @@ pub trait Requests: Sized {
     /// `frame` as one of the image's requests: `None` when its key is none
     /// of them.
     fn decode(frame: &Frame<'_>) -> Option<Result<Self, DecodeError>>;
+}
+
+/// What a mounted service puts on the wire: the keys of the endpoints it
+/// serves, of their responses, of the topics it publishes and of its
+/// properties. An image's key set is the union of its services' keys
+/// ([`image_keys!`](crate::image_keys)).
+pub trait Service {
+    const KEYS: &'static [Key];
+}
+
+/// The base module the intake serves for every image: discovery, image
+/// keys, boot status, post-mortem checkpoints, link health and refusal.
+pub enum Base {}
+
+impl Service for Base {
+    const KEYS: &'static [Key] = &[
+        GetHello::KEY,
+        <GetHello as Endpoint>::Response::KEY,
+        GetImageKeys::KEY,
+        <GetImageKeys as Endpoint>::Response::KEY,
+        GetBootStatus::KEY,
+        <GetBootStatus as Endpoint>::Response::KEY,
+        GetPostMortemCheckpoints::KEY,
+        <GetPostMortemCheckpoints as Endpoint>::Response::KEY,
+        GetLinkHealth::KEY,
+        <GetLinkHealth as Endpoint>::Response::KEY,
+        Rejected::KEY,
+    ];
 }
 
 /// An image that serves the base module alone.
@@ -225,8 +254,10 @@ fn serve(frame: &Frame<'_>, boot_id: u64, hello: Hello) -> Option<Served> {
     Some(answer.map_or(Served::PayloadError, Served::Answer))
 }
 
-/// Declares an image's requests: an enum with one variant per endpoint it
-/// serves, decoded by key.
+/// Declares a service's requests: an enum with one variant per endpoint it
+/// serves, decoded by key, and the service's [`Service::KEYS`]: each
+/// endpoint's key, its response's key and the key of every message in its
+/// optional `publishes` list (unsolicited topics and properties).
 ///
 /// ```ignore
 /// oer_hil_agent::requests! {
@@ -236,11 +267,12 @@ fn serve(frame: &Frame<'_>, boot_id: u64, hello: Hello) -> Option<Served> {
 ///         #[cfg(feature = "system-panic-reset")]
 ///         Panic(oer_hil_protocol::system::InjectPanic),
 ///     }
+///     publishes [oer_hil_protocol::system::UsbDisabled]
 /// }
 /// ```
 ///
 /// `sessions` says whether a request may belong to a session; a variant
-/// takes `#[cfg(...)]` attributes only.
+/// and a published message take `#[cfg(...)]` attributes only.
 #[macro_export]
 macro_rules! requests {
     (
@@ -248,6 +280,7 @@ macro_rules! requests {
         $vis:vis enum $name:ident (sessions = $sessions:literal) {
             $($(#[cfg($cfg:meta)])* $variant:ident($ty:ty)),* $(,)?
         }
+        $(publishes [$($(#[cfg($published_cfg:meta)])* $published:ty),* $(,)?])?
     ) => {
         $(#[$meta])*
         $vis enum $name {
@@ -269,6 +302,63 @@ macro_rules! requests {
                 None
             }
         }
+
+        impl $crate::base::Service for $name {
+            const KEYS: &'static [$crate::__protocol::Key] = &[
+                $(
+                    $(#[cfg($cfg)])*
+                    <$ty as $crate::__protocol::Message>::KEY,
+                    $(#[cfg($cfg)])*
+                    <<$ty as $crate::__protocol::Endpoint>::Response as $crate::__protocol::Message>::KEY,
+                )*
+                $($(
+                    $(#[cfg($published_cfg)])*
+                    <$published as $crate::__protocol::Message>::KEY,
+                )*)?
+            ];
+        }
+    };
+}
+
+/// Declares an image's key set: the union of the keys of the [`Base`]
+/// service and of every service the image mounts, sorted, as a constant
+/// [`ImageKeySet`]. Its length, order and wire bound are checked at compile
+/// time; a key two services share counts once.
+///
+/// ```ignore
+/// oer_hil_agent::image_keys! {
+///     /// What the watchdog image serves.
+///     pub(crate) KEYS = [WatchdogRequest, PanicRequest]
+/// }
+/// ```
+#[macro_export]
+macro_rules! image_keys {
+    ($(#[$meta:meta])* $vis:vis $name:ident = [$($service:ty),* $(,)?]) => {
+        $(#[$meta])*
+        $vis const $name: $crate::__protocol::base::ImageKeySet<'static> = {
+            use $crate::__protocol::{Key, base};
+            const GROUPS: &[&[Key]] = &[
+                <$crate::base::Base as $crate::base::Service>::KEYS,
+                $(<$service as $crate::base::Service>::KEYS,)*
+            ];
+            const LENGTH: usize = match base::keys_len(GROUPS) {
+                Some(length) => length,
+                None => panic!("the image's services hold more keys than a usize counts"),
+            };
+            const SORTED: [Key; LENGTH] = match base::concat_keys(GROUPS) {
+                Some(keys) => base::sorted_keys(keys),
+                None => panic!("the image key array holds every service key"),
+            };
+            const DISTINCT: [Key; base::distinct_len(&SORTED)] =
+                match base::distinct_keys(&SORTED) {
+                    Some(keys) => keys,
+                    None => panic!("the image's distinct keys ascend"),
+                };
+            match base::ImageKeySet::new(&DISTINCT) {
+                Ok(set) => set,
+                Err(_) => panic!("the image key set must be sorted, distinct and wire-bounded"),
+            }
+        };
     };
 }
 

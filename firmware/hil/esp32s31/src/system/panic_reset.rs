@@ -48,6 +48,7 @@ async fn run(usb: crate::transport::Usb, boot: u64) {
     crate::transport::serve(
         usb,
         boot,
+        crate::services::PANIC_RESET_KEYS,
         0,
         |request, PanicRequest::Inject(InjectPanic)| super::panic::queue(request),
     )

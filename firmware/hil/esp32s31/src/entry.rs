@@ -88,7 +88,7 @@ mod fatal;
     feature = "system-panic-reset",
     feature = "wifi-station"
 ))]
-mod image_features;
+mod services;
 #[cfg(any(
     feature = "system-watchdog",
     feature = "system-panic-reset",

@@ -28,6 +28,7 @@ mod radio;
 const PHY_CLOCK: oer_espressif_executor::Cooperative<Esp32s31, oer_embassy_time::EmbassyClock> =
     oer_espressif_executor::Cooperative::<Esp32s31, _>::new(oer_embassy_time::EmbassyClock);
 mod sar2_checkpoint;
+mod services;
 mod transport;
 mod tx_rate_checkpoint;
 
@@ -50,6 +51,7 @@ use oer_hil_protocol::{
     phy::*,
 };
 use oer_memory::{Doorbell, Poster, RequestSlot};
+use services::WireRequest;
 use static_cell::StaticCell;
 
 // The IEEE 802.15.4 MAC's source has no entry: the radio task polls the
@@ -102,17 +104,6 @@ oer_espressif_executor::tasks! {
 static RADIO: StaticCell<radio::Radio> = StaticCell::new();
 static DOORBELL: Doorbell = Doorbell::new();
 static SLOT: RequestSlot<Request, Answer> = RequestSlot::new(&DOORBELL, 1);
-
-oer_hil_agent::requests! {
-    enum WireRequest(sessions = false) {
-        CacheIdentity(GetCalibrationCacheIdentity), Start(StartCalibration),
-        CacheWrite(WriteCalibrationCachePage), CacheComplete(CompleteCalibrationCache),
-        CacheStatus(GetCalibrationStartStatus), CacheRead(ReadCalibrationSnapshot),
-        Restart(RestartCaptureRadio), Stop(StopCapture),
-        HoldStart(StartTrackingHold), HoldGet(GetTrackingHold), HoldStop(StopTrackingHold),
-        Calibration(ReadCalibrationProjection), Registers(ReadRegisterImage), Analog(ReadAnalogImage),
-    }
-}
 
 // P1 publishes the wire response before releasing P2's sealed registration.
 enum Request {
@@ -293,8 +284,7 @@ async fn feed_rtc_watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) {
 
 #[cfg(not(feature = "diagnostic-radio-health"))]
 async fn console(usb: transport::Usb, boot: u64, chip: transport::Chip) {
-    let keys = oer_hil_protocol::feature_keys::image_keys(&|feature| feature == "diagnostic-phy");
-    let intake = Intake::new(boot, keys.as_set(), 0);
+    let intake = Intake::new(boot, services::PHY_KEYS, 0);
     let failure = transport::CONSOLE
         .run(usb, intake, &chip, |id, request: WireRequest| {
             if REQUESTS.try_send((id, Request::Wire(request))).is_err() {

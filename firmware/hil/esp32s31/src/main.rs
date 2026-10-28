@@ -8,6 +8,9 @@ include!("entry.rs");
 #[cfg(not(target_arch = "riscv32"))]
 fn main() {}
 
+#[cfg(all(test, not(target_arch = "riscv32")))]
+mod services;
+
 #[cfg(test)]
 #[path = "system/panic.rs"]
 mod requested_reset;

@@ -5,7 +5,7 @@
 use oer_hil_agent::base::{Intake, Platform, Requests};
 use oer_hil_agent::console::{Console, Immediate};
 use oer_hil_protocol::RequestIdentity;
-use oer_hil_protocol::base::{BootEvidence, PostMortemCheckpoints};
+use oer_hil_protocol::base::{BootEvidence, ImageKeySet, PostMortemCheckpoints};
 
 const NOTES: usize = 8;
 const MESSAGES: usize = 8;
@@ -49,14 +49,11 @@ pub(crate) type Usb = crate::usb::Console;
 pub(crate) async fn serve<C: Requests>(
     usb: Usb,
     boot: u64,
+    keys: ImageKeySet<'static>,
     maximum_payload_bytes: u16,
     serve: impl FnMut(RequestIdentity, C),
 ) -> ! {
-    let intake = Intake::new(
-        boot,
-        crate::image_features::keys().as_set(),
-        maximum_payload_bytes,
-    );
+    let intake = Intake::new(boot, keys, maximum_payload_bytes);
     let failure = CONSOLE.run(usb, intake, &Chip, serve).await;
     console_fault(failure.cause)
 }

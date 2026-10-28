@@ -86,6 +86,7 @@ async fn run(usb: crate::transport::Usb, boot: u64) {
     crate::transport::serve(
         usb,
         boot,
+        crate::services::WATCHDOG_KEYS,
         0,
         |request, decoded: Either<WatchdogRequest, PanicRequest>| match decoded {
             Either::First(test) => queue_test(request, test),
@@ -101,6 +102,7 @@ async fn run(usb: crate::transport::Usb, boot: u64) {
     crate::transport::serve(
         usb,
         boot,
+        crate::services::USB_JTAG_OFF_KEYS,
         0,
         |request, decoded: Either<Either<WatchdogRequest, UsbRequest>, PanicRequest>| match decoded
         {

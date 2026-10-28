@@ -8,13 +8,7 @@ pub use oer_hil_agent::health::Store;
 use oer_hil_protocol::{RequestIdentity, health::*};
 use oer_time::Clock;
 
-oer_hil_agent::requests! {
-    pub enum Request(sessions = false) {
-        Begin(BeginHealth), Window(RunHealthWindow), Finish(FinishHealth),
-        Counters(ReadHealthCounters), Signals(ReadHealthSignals), Tracking(ReadHealthTracking),
-        Measurements(ReadHealthMeasurements), Release(ReleaseHealth),
-    }
-}
+pub use crate::services::HealthRequest as Request;
 pub enum Answer {
     Rejected(oer_hil_protocol::base::RejectReason),
     Started(HealthStarted),
