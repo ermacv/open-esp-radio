@@ -9,12 +9,12 @@ use oer_esp32s31_pac::ieee802154::{Ieee802154MacIrq, event_status};
 
 use oer_espressif_ieee802154_mac_values::{
     Ieee802154Event, Ieee802154EventMask, Ieee802154EventObservation,
-    Ieee802154RxAbortReasonObservation, Ieee802154RxStateCode, Ieee802154StateSnapshot,
+    Ieee802154RxAbortReasonObservation, Ieee802154StateSnapshot,
     Ieee802154TxAbortReasonObservation, Ieee802154TxStateCode,
 };
 use oer_mmio::Placement;
 
-use super::{Ieee802154InterruptOwner, Ieee802154InterruptSetupOwner, task::byte};
+use super::{Ieee802154InterruptOwner, Ieee802154InterruptSetupOwner, codes, task::byte};
 
 /// The named events of one `EVENT_STATUS` read, and whether one of the two
 /// unnamed event bits was set.
@@ -80,7 +80,7 @@ fn retain(snapshot: event_status::Snapshot, mask: Ieee802154EventMask) -> event_
 /// The receive and transmit state fields, each read once.
 fn state_snapshot<P: Placement>(mac: &Ieee802154MacIrq<P>) -> Ieee802154StateSnapshot {
     Ieee802154StateSnapshot::new(
-        Ieee802154RxStateCode::from_field(byte(mac.read_rx_status().state())),
+        codes::rx_state(mac.read_rx_status().state()),
         Ieee802154TxStateCode::from_field(byte(mac.read_tx_status().state())),
     )
 }
@@ -117,16 +117,12 @@ impl<P: Placement> Ieee802154InterruptOwner<P> {
 
     /// `ieee802154_ll_get_rx_abort_reason`.
     pub(crate) fn rx_abort_reason(&self) -> Ieee802154RxAbortReasonObservation {
-        Ieee802154RxAbortReasonObservation::from_field(byte(
-            self.mac.read_rx_status().abort_reason(),
-        ))
+        codes::rx_abort_reason(self.mac.read_rx_status().abort_reason_variant())
     }
 
     /// `ieee802154_ll_get_tx_abort_reason`.
     pub(crate) fn tx_abort_reason(&self) -> Ieee802154TxAbortReasonObservation {
-        Ieee802154TxAbortReasonObservation::from_field(byte(
-            self.mac.read_tx_status().abort_reason(),
-        ))
+        codes::tx_abort_reason(self.mac.read_tx_status().abort_reason_variant())
     }
 
     /// `ieee802154_ll_get_ed_rss`: the signed energy-detection result.

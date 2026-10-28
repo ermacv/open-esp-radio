@@ -111152,6 +111152,39 @@ pub mod ieee802154 {
         /// Positioned bits of `STATE`.
         pub const STATE_MASK: u32 = 0x70000;
 
+        /// The declared values of the `STATE` field.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        #[allow(
+            clippy::enum_variant_names,
+            reason = "the variants are the model's value names"
+        )]
+        pub enum State {
+            ReceiveSfd = 0x1,
+        }
+
+        impl State {
+            /// The value's field bits.
+            #[inline]
+            pub const fn bits(self) -> u32 {
+                self as u32
+            }
+
+            /// The value positioned in its register.
+            #[inline]
+            pub const fn register_bits(self) -> u32 {
+                self.bits() << 16
+            }
+
+            /// The declared value `bits`, if it is one.
+            #[inline]
+            pub const fn from_bits(bits: u32) -> Option<Self> {
+                match bits {
+                    0x1 => Some(Self::ReceiveSfd),
+                    _ => None,
+                }
+            }
+        }
+
         /// Width of `CURRENT_CHANNEL_INDEX` in bits.
         pub const CURRENT_CHANNEL_INDEX_WIDTH: u32 = 1;
         /// Greatest unsigned image of `CURRENT_CHANNEL_INDEX`.
@@ -111196,10 +111229,16 @@ pub mod ieee802154 {
                 AbortReason::from_bits((self.0 >> 4) & 0x1f)
             }
 
-            /// Three-bit receive state. The public LL only establishes that value one is RECEIVE_SFD and tests for later states with a greater-than comparison.
+            /// Three-bit receive state. Only RECEIVE_SFD is named; the public LL tests for later states with a greater-than comparison. SOURCE: esp-idf-7b9cc1ac-ieee802154-common-ll, IEEE802154_RX_STATUS_RECEIVE_SFD and ieee802154_ll_is_current_rx_frame.
             #[inline]
             pub const fn state(self) -> oer_mmio::Bits<3> {
                 oer_mmio::Bits::truncate(self.0 >> 16)
+            }
+
+            /// The `STATE` field as its declared value, if it is one.
+            #[inline]
+            pub const fn state_variant(self) -> Option<State> {
+                State::from_bits((self.0 >> 16) & 0x7)
             }
 
             /// The `CURRENT_CHANNEL_INDEX` field.

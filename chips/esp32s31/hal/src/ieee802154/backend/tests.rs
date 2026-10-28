@@ -45,8 +45,12 @@ impl FakeRegisters {
         Self {
             operations: Vec::new(),
             state: Ieee802154StateSnapshot::new(
-                Ieee802154RxStateCode::for_host_test(rx).expect("three-bit RX state"),
-                Ieee802154TxStateCode::for_host_test(tx).expect("four-bit TX state"),
+                Ieee802154RxStateCode::from_parts(
+                    rx,
+                    u32::from(rx)
+                        .cmp(&oer_esp32s31_pac::ieee802154::rx_status::State::ReceiveSfd.bits()),
+                ),
+                Ieee802154TxStateCode::from_field(tx),
             ),
             foundation: Ieee802154FoundationSnapshot::new(
                 true,

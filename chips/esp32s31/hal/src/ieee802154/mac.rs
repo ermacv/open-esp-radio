@@ -48,6 +48,7 @@ use oer_espressif_ieee802154_mac_values::{
 use oer_espressif_interrupt_table::{Bound, Silent};
 use oer_mmio::{Fixed, Placement};
 
+mod codes;
 mod etm;
 mod interrupt;
 mod task;

@@ -204,7 +204,7 @@ impl Ieee802154LowLevel for Hw {
         Ieee802154RxStatus::new(
             0,
             self.rx_abort,
-            Ieee802154RxStateCode::new(0).unwrap(),
+            Ieee802154RxStateCode::from_parts(0, core::cmp::Ordering::Less),
             false,
             false,
         )

@@ -477,30 +477,6 @@ pub enum Ieee802154RxAbortReason {
     EdCoexistenceReject,
 }
 
-impl Ieee802154RxAbortReason {
-    const fn from_code(code: u8) -> Option<Self> {
-        match code {
-            1 => Some(Self::RxStop),
-            2 => Some(Self::SfdTimeout),
-            3 => Some(Self::CrcError),
-            4 => Some(Self::InvalidLength),
-            5 => Some(Self::FilterFail),
-            6 => Some(Self::NoRss),
-            7 => Some(Self::CoexistenceBreak),
-            8 => Some(Self::UnexpectedAck),
-            9 => Some(Self::RxRestart),
-            16 => Some(Self::TxAckTimeout),
-            17 => Some(Self::TxAckStop),
-            18 => Some(Self::TxAckCoexistenceBreak),
-            19 => Some(Self::EnhancedAckSecurityError),
-            24 => Some(Self::EdAbort),
-            25 => Some(Self::EdStop),
-            26 => Some(Self::EdCoexistenceReject),
-            _ => None,
-        }
-    }
-}
-
 /// One source-confirmed transmit-abort reason.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum Ieee802154TxAbortReason {
@@ -536,29 +512,6 @@ pub enum Ieee802154TxAbortReason {
     CcaBusy,
 }
 
-impl Ieee802154TxAbortReason {
-    const fn from_code(code: u8) -> Option<Self> {
-        match code {
-            1 => Some(Self::RxAckStop),
-            2 => Some(Self::RxAckSfdTimeout),
-            3 => Some(Self::RxAckCrcError),
-            4 => Some(Self::RxAckInvalidLength),
-            5 => Some(Self::RxAckFilterFail),
-            6 => Some(Self::RxAckNoRss),
-            7 => Some(Self::RxAckCoexistenceBreak),
-            8 => Some(Self::RxAckTypeNotAck),
-            9 => Some(Self::RxAckRestart),
-            16 => Some(Self::RxAckTimeout),
-            17 => Some(Self::TxStop),
-            18 => Some(Self::TxCoexistenceBreak),
-            19 => Some(Self::TxSecurityError),
-            24 => Some(Self::CcaFailed),
-            25 => Some(Self::CcaBusy),
-            _ => None,
-        }
-    }
-}
-
 /// Semantic classification of one sampled RX-abort reason field.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum Ieee802154RxAbortReasonObservation {
@@ -566,17 +519,6 @@ pub enum Ieee802154RxAbortReasonObservation {
     Named(Ieee802154RxAbortReason),
     /// The field value has no reviewed semantic identity.
     Unclassified,
-}
-
-impl Ieee802154RxAbortReasonObservation {
-    /// Classify one sampled reason field.
-    #[doc(hidden)]
-    pub const fn from_field(code: u8) -> Self {
-        match Ieee802154RxAbortReason::from_code(code) {
-            Some(reason) => Self::Named(reason),
-            None => Self::Unclassified,
-        }
-    }
 }
 
 impl From<Ieee802154RxAbortReason> for Ieee802154RxAbortReasonObservation {
@@ -592,17 +534,6 @@ pub enum Ieee802154TxAbortReasonObservation {
     Named(Ieee802154TxAbortReason),
     /// The field value has no reviewed semantic identity.
     Unclassified,
-}
-
-impl Ieee802154TxAbortReasonObservation {
-    /// Classify one sampled reason field.
-    #[doc(hidden)]
-    pub const fn from_field(code: u8) -> Self {
-        match Ieee802154TxAbortReason::from_code(code) {
-            Some(reason) => Self::Named(reason),
-            None => Self::Unclassified,
-        }
-    }
 }
 
 impl From<Ieee802154TxAbortReason> for Ieee802154TxAbortReasonObservation {

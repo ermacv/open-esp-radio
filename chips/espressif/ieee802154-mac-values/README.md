@@ -19,8 +19,11 @@ observation. A chip without a lane supplies `false` for it.
 
 The crate owns no registers, DMA storage, engine or protocol policy. Chip PACs
 own register geometry and raw access. HALs translate the shared semantic values
-into their PAC's field values and perform the transactions. Interrupt arming
-and deactivation execute through the narrow transition port. The driver's LL
+into their PAC's field values and perform the transactions. Abort, security,
+CCA and sampling-rate encodings live only in chip register models. A receive
+state retains its diagnostic image and the HAL's comparison to the generated
+`RECEIVE_SFD` value; the dictionary assigns no numeric state codes or bounds.
+Interrupt arming and deactivation execute through the narrow transition port. The driver's LL
 trait and hardware helpers remain in `oer-espressif-ieee802154-engine`.
 
 The engine adapts validated chip power levels into portable MAC capability

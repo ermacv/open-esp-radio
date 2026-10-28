@@ -7,10 +7,6 @@ license = "Apache-2.0"
 repository.workspace = true
 description = "Closed typed IEEE 802.15.4 MAC values and transactions shared between chips"
 
-[features]
-# Host-test constructors of fictitious observations.
-test-support = []
-
 [dependencies]
 oer-radio-regulatory = { path = "../../../protocols/radio/regulatory" }
 

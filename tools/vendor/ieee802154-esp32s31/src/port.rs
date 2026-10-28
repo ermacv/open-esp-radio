@@ -374,7 +374,7 @@ impl Ieee802154LowLevel for PortLl {
         Ieee802154RxStatus::new(
             0,
             Ieee802154RxAbortReasonObservation::Unclassified,
-            Ieee802154RxStateCode::new(0).expect("zero is a state code"),
+            Ieee802154RxStateCode::from_parts(0, core::cmp::Ordering::Less),
             false,
             false,
         )

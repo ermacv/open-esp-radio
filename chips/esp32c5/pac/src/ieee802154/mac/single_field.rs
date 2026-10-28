@@ -9,7 +9,6 @@ use super::{
     Ieee802154EdSampleMode, Ieee802154Event, Ieee802154FrequencyCode, Ieee802154MultipanIndex,
     Ieee802154RegisterLease, Ieee802154RxAbortEnableSet, Ieee802154RxAbortReasonObservation,
     Ieee802154RxStateCode, Ieee802154SecurityPayloadOffset, Ieee802154TxAbortEnableSet,
-    Ieee802154TxAbortReasonObservation, Ieee802154TxSecurityErrorObservation,
     Ieee802154TxStateCode, Ieee802154TxStatus, mac_source_authority, multipan_register_index,
 };
 use crate::ieee802154::ownership::{RawDebugCounter, RawEvent};
@@ -313,9 +312,11 @@ impl Ieee802154RegisterLease<'_> {
         let status = self.registers.rx_status();
         Ieee802154RxStatus {
             filter_fail_reason: crate::field_byte(status.filter_fail_reason),
-            abort_reason: Ieee802154RxAbortReasonObservation::from_field(crate::field_byte(
-                status.abort_reason,
-            )),
+            abort_reason: super::codes::rx_abort_reason(
+                crate::generated::ieee802154_mac::rx_status::AbortReason::from_bits(
+                    status.abort_reason.get(),
+                ),
+            ),
             state: Ieee802154RxStateCode::from_field(crate::field_byte(status.state)),
             preamble_match: status.preamble_match,
             sfd_match: status.sfd_match,
@@ -327,10 +328,17 @@ impl Ieee802154RegisterLease<'_> {
         let status = self.registers.tx_status();
         Ieee802154TxStatus::new(
             Ieee802154TxStateCode::from_field(crate::field_byte(status.state)),
-            Ieee802154TxAbortReasonObservation::from_field(crate::field_byte(status.abort_reason)),
-            Ieee802154TxSecurityErrorObservation::from_field(crate::field_byte(
-                status.security_error,
-            )),
+            super::codes::tx_abort_reason(
+                crate::generated::ieee802154_mac::tx_status::AbortReason::from_bits(
+                    status.abort_reason.get(),
+                ),
+            ),
+            super::codes::tx_security_error(
+                crate::generated::ieee802154_mac::tx_status::SecurityError::from_bits(
+                    status.security_error.get(),
+                ),
+                status.security_error.get() == 0,
+            ),
         )
     }
 

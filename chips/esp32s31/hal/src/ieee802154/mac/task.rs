@@ -15,13 +15,12 @@ use oer_espressif_ieee802154_engine::ll::COEX_DISABLED_PTI;
 use oer_espressif_ieee802154_mac_values::{
     Ieee802154AckTimeout, Ieee802154CcaMode, Ieee802154Channel, Ieee802154DebugCounter,
     Ieee802154EdSampleMode, Ieee802154Event, Ieee802154MacControl, Ieee802154MultipanEnableState,
-    Ieee802154MultipanIndex, Ieee802154PanIdentity, Ieee802154RxAbortEnableSet,
-    Ieee802154RxAbortReasonObservation, Ieee802154RxStateCode, Ieee802154RxStatus,
-    Ieee802154TxAbortEnableSet,
+    Ieee802154MultipanIndex, Ieee802154PanIdentity, Ieee802154RxAbortEnableSet, Ieee802154RxStatus,
+    Ieee802154TxAbortEnableSet, Ieee802154TxStateCode, Ieee802154TxStatus,
 };
 use oer_mmio::{Bits, Index, Placement};
 
-use super::Ieee802154TaskOwner;
+use super::{Ieee802154TaskOwner, codes};
 use crate::{ieee802154::policy::Ieee802154MacPolicySnapshot, layouts::DmaWindowAddress};
 
 /// The transmit-on delay `ieee802154_txon_delay_set` writes.
@@ -879,11 +878,23 @@ impl<P: Placement, E: Placement, B: Placement> Ieee802154TaskOwner<P, E, B> {
         let status = self.mac.read_rx_status();
         Ieee802154RxStatus::new(
             byte(status.filter_fail_reason()),
-            Ieee802154RxAbortReasonObservation::from_field(byte(status.abort_reason())),
-            Ieee802154RxStateCode::new(byte(status.state()))
-                .expect("the receive state field is three bits"),
+            codes::rx_abort_reason(status.abort_reason_variant()),
+            codes::rx_state(status.state()),
             status.preamble_match(),
             status.sfd_match(),
+        )
+    }
+
+    /// `ieee802154_ll_get_tx_status`, field by field.
+    pub fn tx_status(&self) -> Ieee802154TxStatus {
+        let status = self.mac.read_tx_status();
+        Ieee802154TxStatus::new(
+            Ieee802154TxStateCode::from_field(byte(status.state())),
+            codes::tx_abort_reason(status.abort_reason_variant()),
+            codes::tx_security_error(
+                status.security_error_variant(),
+                status.security_error().get() == 0,
+            ),
         )
     }
 

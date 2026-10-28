@@ -1,41 +1,33 @@
 // SPDX-License-Identifier: Apache-2.0
-use super::{
-    Ieee802154RxStateCode, Ieee802154TxSecurityError, Ieee802154TxSecurityErrorObservation,
-};
+use core::cmp::Ordering;
+
+use super::{Ieee802154RxStateCode, Ieee802154StateSnapshot, Ieee802154TxStateCode};
 
 #[test]
-fn transmit_security_error_uses_the_public_ll_reasons() {
-    assert_eq!(
-        Ieee802154TxSecurityErrorObservation::from_field(0),
-        Ieee802154TxSecurityErrorObservation::None
-    );
-    for (value, reason) in [
-        (1, Ieee802154TxSecurityError::FrameControlNotSet),
-        (2, Ieee802154TxSecurityError::ReservedSecurityLevel),
-        (3, Ieee802154TxSecurityError::HeaderParse),
-        (4, Ieee802154TxSecurityError::PayloadError),
-        (5, Ieee802154TxSecurityError::FrameCounterSuppression),
+fn receive_predicates_use_the_chip_classification_and_keep_the_diagnostic_image() {
+    // A fictitious chip can assign RECEIVE_SFD any image. The shared values
+    // retain the adapter's classification without knowing a hardware code.
+    for (relation, at_sfd, after_sfd) in [
+        (Ordering::Less, false, false),
+        (Ordering::Equal, true, false),
+        (Ordering::Greater, false, true),
     ] {
-        assert_eq!(
-            Ieee802154TxSecurityErrorObservation::from_field(value),
-            Ieee802154TxSecurityErrorObservation::Named(reason)
-        );
-    }
-    for value in 6..=0x0f {
-        assert_eq!(
-            Ieee802154TxSecurityErrorObservation::from_field(value),
-            Ieee802154TxSecurityErrorObservation::Unclassified
-        );
+        let state = Ieee802154RxStateCode::from_parts(200, relation);
+        assert_eq!(state.is_receive_sfd(), at_sfd);
+        assert_eq!(state.is_after_receive_sfd(), after_sfd);
+        assert_eq!(state.value(), 200);
     }
 }
 
-/// `ieee802154_ll_is_current_rx_frame` is `rx_state > RECEIVE_SFD`.
 #[test]
-fn a_frame_is_in_progress_only_after_the_sfd_state() {
-    for state in 0..=Ieee802154RxStateCode::MAX {
-        assert_eq!(
-            Ieee802154RxStateCode::from_field(state).is_after_receive_sfd(),
-            state > Ieee802154RxStateCode::RECEIVE_SFD
+fn zero_observations_test_only_the_numeric_images() {
+    for (rx, tx, all_zero) in [(0, 0, true), (0, 1, false), (1, 0, false), (1, 1, false)] {
+        let state = Ieee802154StateSnapshot::new(
+            Ieee802154RxStateCode::from_parts(rx, Ordering::Greater),
+            Ieee802154TxStateCode::from_field(tx),
         );
+        assert_eq!(state.all_codes_zero(), all_zero);
+        assert_eq!(state.rx().value(), rx);
+        assert_eq!(state.tx().value(), tx);
     }
 }
