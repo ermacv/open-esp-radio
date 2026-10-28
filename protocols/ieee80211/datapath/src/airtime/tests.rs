@@ -224,3 +224,48 @@ fn bulk_retirement_keeps_in_flight_old_generation_until_settled() {
     let replacement = scheduler.reserve([candidate(3, 100)]).unwrap().unwrap();
     scheduler.cancel(replacement).unwrap();
 }
+
+#[test]
+fn unfunded_internal_demand_returns_a_named_fault_with_its_cursor() {
+    // Fault injection at the old `choose(...).expect(...)` boundary: no
+    // funded owner is fabricated and the source account remains intact.
+    let mut accounts = [Some(Account {
+        key: 7,
+        balance: 2,
+        minimum: 3,
+        retired: false,
+    })];
+    assert!(matches!(
+        funded_account(&mut accounts, 0),
+        Err(AirtimeError::UnfundedDemand { cursor: 0 })
+    ));
+    let account = accounts[0].unwrap();
+    assert_eq!((account.key, account.balance, account.minimum), (7, 2, 3));
+}
+
+#[test]
+fn arithmetic_boundaries_leave_ledgers_and_completion_owners_unchanged_on_error() {
+    let mut storage = AirtimeStorage::<_, 2>::new(us(u32::MAX));
+    let mut scheduler = storage.scheduler();
+    let reservation = scheduler
+        .reserve([candidate(1, u32::MAX)])
+        .unwrap()
+        .unwrap();
+    assert_eq!(reservation.budget_micros(), us(u32::MAX));
+    scheduler.state.accounts[0].as_mut().unwrap().balance = i64::MAX;
+    let (error, reservation) = scheduler.cancel(reservation).unwrap_err();
+    assert_eq!(error, AirtimeError::ArithmeticOverflow);
+    assert_eq!(scheduler.balance_micros(1), Some(i64::MAX));
+    assert_eq!(scheduler.state.pending.iter().flatten().count(), 1);
+    scheduler.state.accounts[0].as_mut().unwrap().balance = 0;
+    scheduler.cancel(reservation).unwrap();
+    scheduler.state.accounts[0].as_mut().unwrap().balance = i64::MIN;
+    let before = scheduler.state.next_id;
+    assert_eq!(
+        scheduler.reserve([candidate(1, 1), candidate(2, 1)]),
+        Err(AirtimeError::ArithmeticOverflow)
+    );
+    assert_eq!(scheduler.state.next_id, before);
+    assert_eq!(scheduler.balance_micros(1), Some(i64::MIN));
+    assert_eq!(scheduler.balance_micros(2), None);
+}

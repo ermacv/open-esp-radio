@@ -114,3 +114,20 @@ fn exhaustion_and_queue_destruction_return_every_owner_exactly_once() {
     drop(selected);
     assert_eq!(drops.load(Ordering::Relaxed), 3);
 }
+
+#[test]
+fn externally_supplied_cursor_wraps_without_overflow_and_slot_reuse_keeps_order() {
+    let mut queues = TxQueues::<_, _, 3>::new();
+    queues.push(1, 10).unwrap();
+    queues.push(2, 20).unwrap();
+    queues.push(3, 30).unwrap();
+    let mut cursor = usize::MAX;
+    let expected = [1, 2, 3][usize::MAX % 3];
+    assert_eq!(queues.next_key(&mut cursor), Some(expected));
+    assert_eq!(queues.pop(2), Some(20));
+    queues.push(4, 40).unwrap();
+    cursor = 0;
+    assert_eq!(queues.next_key(&mut cursor), Some(1));
+    assert_eq!(queues.next_key(&mut cursor), Some(4));
+    assert_eq!(queues.next_key(&mut cursor), Some(3));
+}

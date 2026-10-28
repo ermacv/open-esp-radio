@@ -290,6 +290,13 @@ impl BeaconInterval {
     pub const fn as_micros(self) -> u64 {
         self.0.get()
     }
+    // Both operands are nonzero in the division; zero elapsed time needs no interval.
+    pub(crate) const fn intervals_covering(self, micros: u64) -> u64 {
+        match NonZeroU64::new(micros) {
+            Some(micros) => micros.div_ceil(self.0).get(),
+            None => 0,
+        }
+    }
     pub const fn duration(self) -> Duration {
         Duration::from_micros(self.as_micros())
     }
@@ -344,14 +351,14 @@ pub struct ApSchedule<K> {
 impl<K> ApSchedule<K> {
     /// The access point's TBTTs before `instant`, from the next one on.
     fn beacons_before(self, instant: Instant) -> u64 {
-        let interval = self.beacon_interval.as_micros();
         if instant <= self.next_tbtt {
             return 0;
         }
-        instant
-            .saturating_duration_since(self.next_tbtt)
-            .as_micros()
-            .div_ceil(interval)
+        self.beacon_interval.intervals_covering(
+            instant
+                .saturating_duration_since(self.next_tbtt)
+                .as_micros(),
+        )
     }
 
     /// When a switch announced at `now` in the next `count` beacons is

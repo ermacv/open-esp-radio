@@ -389,3 +389,18 @@ fn every_nonzero_follow_count_reaches_both_move_paths_unchanged() {
         );
     }
 }
+
+#[test]
+fn nonzero_beacon_division_covers_boundaries_without_overflow() {
+    for (interval, elapsed, expected) in [
+        (1, 0, 0),
+        (1, u64::MAX, u64::MAX),
+        (100, 100, 1),
+        (100, 101, 2),
+        (u64::MAX, u64::MAX, 1),
+        (u64::MAX, 1, 1),
+    ] {
+        let interval = BeaconInterval::new(Duration::from_micros(interval)).unwrap();
+        assert_eq!(interval.intervals_covering(elapsed), expected);
+    }
+}

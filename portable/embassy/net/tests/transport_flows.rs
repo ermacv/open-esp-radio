@@ -51,23 +51,29 @@ fn sparse_transport_flow_shares_the_peer_burst_without_draining_bulk() {
     let sparse_address = sparse.as_ptr();
     device.transmit(sparse).unwrap();
     device.transmit(udp(pool, 6, 100, 100)).unwrap();
-    let first = radio.try_take_for([4; 6]).unwrap();
+    let first = radio.try_take_for([4; 6]).unwrap().unwrap();
     assert_eq!(first.ethernet()[42], 0);
-    let sparse = radio.try_take_for([4; 6]).unwrap();
+    let sparse = radio.try_take_for([4; 6]).unwrap().unwrap();
     assert_eq!(sparse.ethernet()[42], 99);
     assert_eq!(sparse.ethernet().as_ptr(), sparse_address);
     assert_eq!(
-        radio.pending_for([4; 6]),
+        radio.pending_for([4; 6]).unwrap(),
         13,
         "other flows still fill the selected peer's burst"
     );
-    assert_eq!(radio.pending_for([6; 6]), 1);
+    assert_eq!(radio.pending_for([6; 6]).unwrap(), 1);
     assert!(!device.can_transmit(), "selected owners retain admission");
     drop((first, sparse));
     for n in 1..14 {
-        assert_eq!(radio.try_take_for([4; 6]).unwrap().ethernet()[42], n);
+        assert_eq!(
+            radio.try_take_for([4; 6]).unwrap().unwrap().ethernet()[42],
+            n
+        );
     }
-    assert_eq!(radio.try_take_for([6; 6]).unwrap().ethernet()[42], 100);
+    assert_eq!(
+        radio.try_take_for([6; 6]).unwrap().unwrap().ethernet()[42],
+        100
+    );
 }
 
 #[test]
@@ -84,26 +90,32 @@ fn outer_destination_turns_are_independent_of_transport_flow_count() {
     for port in 1..7 {
         device.transmit(udp(pool, 4, port, port as u8)).unwrap();
     }
-    let first = radio.next_head_after(None).unwrap().0;
+    let first = radio.next_head_after(None).unwrap().unwrap().0;
     assert_eq!(first, [4; 6]);
-    drop(radio.try_take_for([4; 6]));
-    drop(radio.try_take_for([4; 6]));
-    let second = radio.next_head_after(Some(first)).unwrap().0;
+    drop(radio.try_take_for([4; 6]).unwrap());
+    drop(radio.try_take_for([4; 6]).unwrap());
+    let second = radio.next_head_after(Some(first)).unwrap().unwrap().0;
     assert_eq!(second, [6; 6]);
-    assert_eq!(radio.next_head_after(Some(second)).unwrap().0, [4; 6]);
+    assert_eq!(
+        radio.next_head_after(Some(second)).unwrap().unwrap().0,
+        [4; 6]
+    );
     while let Some(owner) = radio.try_receive_tx() {
         drop(owner);
     }
-    assert!(radio.next_head_after(Some(second)).is_none());
+    assert!(radio.next_head_after(Some(second)).unwrap().is_none());
     device.transmit(udp(pool, 6, 1, 99)).unwrap();
     device.transmit(udp(pool, 2, 1, 98)).unwrap();
     for _ in 0..3 {
-        let (destination, head) = radio.next_head_after(Some([6; 6])).unwrap();
+        let (destination, head) = radio.next_head_after(Some([6; 6])).unwrap().unwrap();
         assert_eq!(destination, [2; 6]);
         assert_eq!((head.ethernet_bytes, head.pending_frames), (43, 1));
     }
-    assert_eq!(radio.try_take_for([2; 6]).unwrap().ethernet()[42], 98);
-    drop(radio.try_take_for([6; 6]));
+    assert_eq!(
+        radio.try_take_for([2; 6]).unwrap().unwrap().ethernet()[42],
+        98
+    );
+    drop(radio.try_take_for([6; 6]).unwrap());
 }
 
 #[derive(Default)]
@@ -133,14 +145,17 @@ fn aggregate_readiness_sums_flows_without_waking_for_another_destination() {
     device.transmit(udp(pool, 6, 1, 0)).unwrap();
     device.transmit(udp(pool, 4, 2, 0)).unwrap();
     for _ in 0..4 {
-        let head = radio.head_for([4; 6]).unwrap();
+        let head = radio.head_for([4; 6]).unwrap().unwrap();
         assert_eq!((head.ethernet_bytes, head.pending_frames), (43, 2));
-        assert!(radio.head_for([8; 6]).is_none());
+        assert!(radio.head_for([8; 6]).unwrap().is_none());
     }
     assert_eq!(wakes.0.load(Ordering::Relaxed), 0);
     device.transmit(udp(pool, 4, 3, 0)).unwrap();
     assert_eq!(wakes.0.load(Ordering::Relaxed), 1);
-    assert_eq!(radio.poll_ready_for([4; 6], 3, &mut cx), Poll::Ready(()));
+    assert_eq!(
+        radio.poll_ready_for([4; 6], 3, &mut cx),
+        Poll::Ready(Ok(()))
+    );
     while let Some(owner) = radio.try_receive_tx() {
         drop(owner);
     }
@@ -172,24 +187,25 @@ fn head_inspection_preserves_flow_rotation_packet_owners_and_admission() {
         for _ in 0..4 {
             // Exercise the object-safe boundary used by the radio, not an
             // adapter-internal shortcut around its synchronization.
-            let queues: &dyn DestinationTxQueues<Frame = _> = &radio;
-            let head = queues.head_for([4; 6]).unwrap();
+            let queues: &dyn DestinationTxQueues<Frame = _, Error = core::convert::Infallible> =
+                &radio;
+            let head = queues.head_for([4; 6]).unwrap().unwrap();
             assert_eq!(
                 (head.ethernet_bytes, head.pending_frames),
                 (length, pending)
             );
-            assert_eq!(queues.head_for([6; 6]).unwrap().pending_frames, 1);
+            assert_eq!(queues.head_for([6; 6]).unwrap().unwrap().pending_frames, 1);
             assert!(!device.can_transmit());
             assert!(pool.try_alloc().is_none());
             assert_eq!(wakes.0.load(Ordering::Relaxed), 0);
         }
-        let frame = radio.try_take_for([4; 6]).unwrap();
+        let frame = radio.try_take_for([4; 6]).unwrap().unwrap();
         assert_eq!(frame.ethernet().len(), length);
         assert_eq!(frame.ethernet()[42], sequence);
         assert_eq!(frame.ethernet().as_ptr(), addresses[address_index]);
         claimed.push(frame);
     }
-    assert!(radio.head_for([4; 6]).is_none());
+    assert!(radio.head_for([4; 6]).unwrap().is_none());
     assert!(
         !device.can_transmit(),
         "dequeued owners still occupy admission"
@@ -198,5 +214,5 @@ fn head_inspection_preserves_flow_rotation_packet_owners_and_admission() {
     assert!(device.can_transmit());
     assert_eq!(wakes.0.load(Ordering::Relaxed), 1);
     drop(claimed);
-    drop(radio.try_take_for([6; 6]));
+    drop(radio.try_take_for([6; 6]).unwrap());
 }

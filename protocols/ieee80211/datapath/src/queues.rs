@@ -1,42 +1,28 @@
 //! Hierarchical queues sharing one bounded owner arena.
 //!
+//! Packet and inner-flow metadata live together: an occupied entry always
+//! owns its value. Outer key slots retain selection order, without links
+//! to separately optional owners.
 //! The caller selects an outer key; each take serves the next inner flow.
-//! Flow count cannot multiply outer scheduling turns. Synchronization,
-//! classification and radio eligibility belong to the caller.
+//! Operations scan the bounded arena, without inspecting packet bytes.
 
-struct Entry<T> {
-    value: Option<T>,
-    next: Option<usize>,
-}
-
-#[derive(Clone, Copy)]
-struct Queue<K> {
+struct Entry<K, T, F> {
     key: K,
-    head: usize,
-    tail: usize,
-    len: usize,
-}
-
-struct Flow<F> {
-    key: F,
-    queue: usize,
-    head: usize,
-    tail: usize,
-    next: Option<usize>,
+    flow: F,
+    value: T,
+    turn: usize,
+    first: bool,
 }
 
 /// One owner arena, with outer queues of round-robin inner FIFOs.
 ///
 /// A free owner slot always permits publication, including a new outer key
-/// or flow. Neither level reserves payload capacity. Default `F = ()` gives
-/// one FIFO per key; explicit flow keys enable inner packet round-robin.
+/// or flow. Default `F = ()` gives one FIFO per key. Entries remain in
+/// admission order; bounded flow ranks select the next inner FIFO.
 /// This policy does not account for bytes, airtime or admission fairness.
 pub struct TxQueues<K, T, const CAPACITY: usize, F = ()> {
-    entries: [Entry<T>; CAPACITY],
-    queues: [Option<Queue<K>>; CAPACITY],
-    flows: [Option<Flow<F>>; CAPACITY],
-    free: Option<usize>,
-    len: usize,
+    entries: [Option<Entry<K, T, F>>; CAPACITY],
+    keys: [Option<K>; CAPACITY],
 }
 
 impl<K: Copy + Eq, T, const CAPACITY: usize, F: Copy + Eq> TxQueues<K, T, CAPACITY, F> {
@@ -48,200 +34,180 @@ impl<K: Copy + Eq, T, const CAPACITY: usize, F: Copy + Eq> TxQueues<K, T, CAPACI
     /// ```
     pub const fn new() -> Self {
         const {
-            assert!(CAPACITY > 0, "TX queues need at least one owner slot");
-        }
-        let mut entries = [const {
-            Entry {
-                value: None,
-                next: None,
+            if CAPACITY == 0 {
+                panic!("TX queues need at least one owner slot");
             }
-        }; CAPACITY];
-        let mut index = 0;
-        while index + 1 < CAPACITY {
-            entries[index].next = Some(index + 1);
-            index += 1;
         }
         Self {
-            entries,
-            queues: [const { None }; CAPACITY],
-            flows: [const { None }; CAPACITY],
-            free: Some(0),
-            len: 0,
+            entries: [const { None }; CAPACITY],
+            keys: [None; CAPACITY],
         }
     }
 
-    pub const fn len(&self) -> usize {
-        self.len
+    pub fn len(&self) -> usize {
+        self.entries.iter().flatten().count()
     }
-    pub const fn is_empty(&self) -> bool {
-        self.len == 0
+    pub fn is_empty(&self) -> bool {
+        self.entries.iter().all(Option::is_none)
     }
-    pub const fn is_full(&self) -> bool {
-        self.len == CAPACITY
-    }
-
-    fn queue_index(&self, key: K) -> Option<usize> {
-        self.queues
-            .iter()
-            .position(|q| q.as_ref().is_some_and(|q| q.key == key))
+    pub fn is_full(&self) -> bool {
+        self.entries.iter().all(Option::is_some)
     }
 
     /// Total frames across every flow of the selected outer key.
     pub fn len_for(&self, key: K) -> usize {
-        self.queue_index(key)
-            .map_or(0, |i| self.queues[i].as_ref().expect("occupied queue").len)
+        self.entries
+            .iter()
+            .flatten()
+            .filter(|entry| entry.key == key)
+            .count()
     }
 
     /// Append to one flow, returning the unchanged owner on exhaustion.
-    /// Only metadata is inspected; queued packet bytes are never revisited.
-    pub fn push_flow(&mut self, key: K, flow_key: F, value: T) -> Result<(), T> {
-        let Some(index) = self.free else {
+    /// Stable queue slots preserve outer cursor order across packet removal.
+    pub fn push_flow(&mut self, key: K, flow: F, value: T) -> Result<(), T> {
+        let Some(queue_slot) = self
+            .keys
+            .iter_mut()
+            .filter(|slot| slot.is_none_or(|existing| existing == key))
+            .min_by_key(|slot| slot.is_none())
+        else {
             return Err(value);
         };
-        let queue_index = self.queue_index(key).unwrap_or_else(|| {
-            self.queues
-                .iter()
-                .position(Option::is_none)
-                .expect("a free owner slot guarantees outer metadata")
+        let existing = self
+            .entries
+            .iter()
+            .flatten()
+            .find(|entry| entry.key == key && entry.flow == flow);
+        let first = existing.is_none();
+        // One first marker per flow; new flows follow every existing turn.
+        let turn = existing.map_or_else(
+            || {
+                self.entries
+                    .iter()
+                    .flatten()
+                    .filter(|entry| entry.key == key && entry.first)
+                    .count()
+            },
+            |entry| entry.turn,
+        );
+        let Some(slot) = self.entries.iter_mut().find(|slot| slot.is_none()) else {
+            return Err(value);
+        };
+        *queue_slot = Some(key);
+        *slot = Some(Entry {
+            key,
+            flow,
+            value,
+            turn,
+            first,
         });
-        let existing = self.flows.iter().position(|f| {
-            f.as_ref()
-                .is_some_and(|f| f.queue == queue_index && f.key == flow_key)
-        });
-        let flow_index = existing.unwrap_or_else(|| {
-            self.flows
-                .iter()
-                .position(Option::is_none)
-                .expect("a free owner slot guarantees flow metadata")
-        });
-        self.free = self.entries[index].next.take();
-        self.entries[index].value = Some(value);
-        if let Some(flow) = self.flows[flow_index].as_mut() {
-            self.entries[flow.tail].next = Some(index);
-            flow.tail = index;
-        } else {
-            self.flows[flow_index] = Some(Flow {
-                key: flow_key,
-                queue: queue_index,
-                head: index,
-                tail: index,
-                next: None,
-            });
-            if let Some(queue) = self.queues[queue_index].as_mut() {
-                self.flows[queue.tail]
-                    .as_mut()
-                    .expect("outer tail owns a flow")
-                    .next = Some(flow_index);
-                queue.tail = flow_index;
-            } else {
-                self.queues[queue_index] = Some(Queue {
-                    key,
-                    head: flow_index,
-                    tail: flow_index,
-                    len: 0,
-                });
-            }
-        }
-        self.queues[queue_index]
-            .as_mut()
-            .expect("published outer queue")
-            .len += 1;
-        self.len += 1;
         Ok(())
     }
 
-    /// Serve one frame of the next flow, preserving FIFO within that flow.
-    /// Other outer keys are untouched. Nonempty flows rotate to the tail;
-    /// empty flow metadata is immediately reusable by any outer key.
+    /// Serve the oldest packet of the next flow, then rotate that flow.
+    /// Shifting the remaining slots preserves admission order for every key.
     pub fn pop(&mut self, key: K) -> Option<T> {
-        let queue_index = self.queue_index(key)?;
-        let queue = self.queues[queue_index].as_mut().expect("occupied queue");
-        let flow_index = queue.head;
-        let mut flow = self.flows[flow_index]
-            .take()
-            .expect("outer head owns a flow");
-        let index = flow.head;
-        queue.len -= 1;
-        if let Some(next) = self.entries[index].next {
-            flow.head = next;
-            if let Some(next_flow) = flow.next.take() {
-                queue.head = next_flow;
-                self.flows[queue.tail]
-                    .as_mut()
-                    .expect("outer tail owns a flow")
-                    .next = Some(flow_index);
-                queue.tail = flow_index;
-            }
-            self.flows[flow_index] = Some(flow);
-        } else if let Some(next_flow) = flow.next {
-            queue.head = next_flow;
-        } else {
-            self.queues[queue_index] = None;
-        }
-        let value = self.entries[index]
-            .value
-            .take()
-            .expect("flow owns its entry");
-        self.entries[index].next = self.free;
-        self.free = Some(index);
-        self.len -= 1;
-        Some(value)
-    }
-
-    /// Inspect the next packet of each outer queue without rotating a flow or
-    /// taking an owner. Radio admission can estimate a minimum useful grant
-    /// before reserving airtime or DMA. Each outer key appears exactly once,
-    /// regardless of its number of transport flows.
-    pub fn heads(&self) -> impl Iterator<Item = (K, &T)> {
-        self.queues
+        let turn = self
+            .entries
             .iter()
             .flatten()
-            .map(|queue| (queue.key, self.head_packet(queue)))
+            .filter(|entry| entry.key == key)
+            .map(|entry| entry.turn)
+            .min()?;
+        let flow_count = self
+            .entries
+            .iter()
+            .flatten()
+            .filter(|entry| entry.key == key && entry.first)
+            .count();
+        let mut slots = self.entries.iter_mut();
+        let mut hole = slots.find(|slot| {
+            slot.as_ref()
+                .is_some_and(|entry| entry.key == key && entry.turn == turn)
+        })?;
+        let entry = hole.take()?;
+        for next in slots {
+            core::mem::swap(hole, next);
+            hole = next;
+        }
+        if let Some(next) = self
+            .entries
+            .iter_mut()
+            .flatten()
+            .find(|next| next.key == key && next.flow == entry.flow)
+        {
+            next.first = true;
+        }
+        for next in self
+            .entries
+            .iter_mut()
+            .flatten()
+            .filter(|next| next.key == key)
+        {
+            if next.flow == entry.flow {
+                // The selected entry proves flow_count >= 1. Ranks remain
+                // below the number of flows, which cannot exceed CAPACITY.
+                next.turn = flow_count.saturating_sub(1);
+            } else if next.turn > turn {
+                // This is a bounded rank decrement, never a truncated value.
+                next.turn = next.turn.saturating_sub(1);
+            }
+        }
+        if !self.entries.iter().flatten().any(|next| next.key == key)
+            && let Some(slot) = self.keys.iter_mut().find(|slot| **slot == Some(key))
+        {
+            *slot = None;
+        }
+        Some(entry.value)
+    }
+
+    /// Inspect each outer queue once, in stable metadata-slot order.
+    pub fn heads(&self) -> impl Iterator<Item = (K, &T)> {
+        self.keys
+            .iter()
+            .flatten()
+            .filter_map(|key| self.head(*key).map(|(value, _)| (*key, value)))
     }
 
     /// Borrow the next selected inner-flow packet and total outer backlog.
-    /// This does not rotate either scheduling level or transfer ownership.
     pub fn head(&self, key: K) -> Option<(&T, usize)> {
-        let queue = self.queues[self.queue_index(key)?].as_ref()?;
-        Some((self.head_packet(queue), queue.len))
-    }
-
-    fn head_packet(&self, queue: &Queue<K>) -> &T {
-        let flow = self.flows[queue.head]
-            .as_ref()
-            .expect("queue owns its head flow");
-        self.entries[flow.head]
-            .value
-            .as_ref()
-            .expect("flow owns its head packet")
+        let entry = self
+            .entries
+            .iter()
+            .flatten()
+            .filter(|entry| entry.key == key)
+            .min_by_key(|entry| entry.turn)?;
+        Some((&entry.value, self.len_for(key)))
     }
 
     /// First nonempty key strictly after `after`, wrapping to the lowest key.
-    /// The order is independent of metadata-slot reuse and inner flow count.
-    /// Inspection does not advance a cursor or claim an owner.
     pub fn next_head_after(&self, after: Option<K>) -> Option<(K, &T, usize)>
     where
         K: Ord,
     {
-        let queue = self
-            .queues
-            .iter()
-            .flatten()
-            .min_by_key(|queue| (after.is_some_and(|after| queue.key <= after), queue.key))?;
-        Some((queue.key, self.head_packet(queue), queue.len))
+        let entry = self.entries.iter().flatten().min_by_key(|entry| {
+            (
+                after.is_some_and(|after| entry.key <= after),
+                entry.key,
+                entry.turn,
+            )
+        })?;
+        Some((entry.key, &entry.value, self.len_for(entry.key)))
     }
 
     /// Enumerate outer keys, once per key regardless of its inner flow count.
-    /// Only the caller decides when to advance to another outer queue.
     pub fn next_key(&self, cursor: &mut usize) -> Option<K> {
-        for offset in 0..CAPACITY {
-            let index = (*cursor % CAPACITY + offset) % CAPACITY;
-            if let Some(queue) = self.queues[index].as_ref() {
-                *cursor = (index + 1) % CAPACITY;
-                return Some(queue.key);
-            }
-        }
-        None
+        let start = cursor.checked_rem(CAPACITY)?;
+        let (slot, key) = self
+            .keys
+            .iter()
+            .enumerate()
+            .filter_map(|(slot, key)| key.map(|key| (slot, key)))
+            .min_by_key(|(slot, _)| (*slot < start, *slot))?;
+        // The cursor is modular, including externally supplied values.
+        *cursor = slot.wrapping_add(1).checked_rem(CAPACITY)?;
+        Some(key)
     }
 }
 
@@ -258,4 +224,9 @@ impl<K: Copy + Eq, T, const CAPACITY: usize, F: Copy + Eq> Default for TxQueues<
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::disallowed_methods,
+    clippy::disallowed_macros,
+    clippy::arithmetic_side_effects
+)]
 mod tests;

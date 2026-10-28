@@ -5,7 +5,12 @@
     clippy::panic,
     clippy::unreachable,
     clippy::todo,
-    clippy::unimplemented
+    clippy::unimplemented,
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    clippy::disallowed_macros,
+    clippy::disallowed_methods
 )]
 
 //! Radio-owned boundary between durable software backlog and physical TX.
@@ -35,7 +40,39 @@ pub type FramePair<Frame> = (Frame, Frame);
 
 /// Result of atomically materializing two software-owned frames.
 pub type MaterializedPairResult<SoftwareFrame, PhysicalFrame> =
-    Result<FramePair<PhysicalFrame>, FramePair<SoftwareFrame>>;
+    Result<FramePair<PhysicalFrame>, MaterializationPairError<SoftwareFrame, PhysicalFrame>>;
+
+/// A refusal returns both source owners. A broken batch contract retains
+/// every owner still present, together with the implementation's reported result.
+#[derive(Debug, Eq, PartialEq)]
+pub enum MaterializationPairError<S, P> {
+    Refused(FramePair<S>),
+    ContractViolation {
+        reported_success: bool,
+        sources: [Option<S>; 2],
+        destinations: [Option<P>; 2],
+    },
+}
+
+fn finish_pair<S, P>(
+    reported_success: bool,
+    sources: [Option<S>; 2],
+    destinations: [Option<P>; 2],
+) -> MaterializedPairResult<S, P> {
+    match (reported_success, sources, destinations) {
+        (false, [Some(first), Some(second)], [None, None]) => {
+            Err(MaterializationPairError::Refused((first, second)))
+        }
+        (true, [None, None], [Some(first), Some(second)]) => Ok((first, second)),
+        (reported_success, sources, destinations) => {
+            Err(MaterializationPairError::ContractViolation {
+                reported_success,
+                sources,
+                destinations,
+            })
+        }
+    }
+}
 
 /// Diagnostic snapshot of the bounded physical materialization horizon.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -202,6 +239,7 @@ impl<M: SelectedBurstMaterializer> TxRequestSource for M {
 /// unchanged. No method may wait for another executor/core while holding a
 /// physical credit.
 pub trait SelectedBurstMaterializer {
+    type QueueError;
     type SoftwareFrame: SoftwareTxFrame;
     type PhysicalFrame: MaterializedTxFrame;
 
@@ -213,7 +251,10 @@ pub trait SelectedBurstMaterializer {
 
     /// Optional direct access to queues classified before radio selection.
     /// FIFO-only compatibility adapters leave this unavailable.
-    fn destination_queues(&self) -> Option<&dyn DestinationTxQueues<Frame = Self::SoftwareFrame>> {
+    fn destination_queues(
+        &self,
+    ) -> Option<&dyn DestinationTxQueues<Frame = Self::SoftwareFrame, Error = Self::QueueError>>
+    {
         None
     }
 
@@ -245,20 +286,8 @@ pub trait SelectedBurstMaterializer {
     ) -> MaterializedPairResult<Self::SoftwareFrame, Self::PhysicalFrame> {
         let mut sources = [Some(first), Some(second)];
         let mut destinations = [const { None }; 2];
-        if !self.try_materialize_batch(&mut sources, &mut destinations) {
-            return Err((
-                sources[0].take().expect("failed pair retains first owner"),
-                sources[1].take().expect("failed pair retains second owner"),
-            ));
-        }
-        Ok((
-            destinations[0]
-                .take()
-                .expect("successful pair publishes first owner"),
-            destinations[1]
-                .take()
-                .expect("successful pair publishes second owner"),
-        ))
+        let published = self.try_materialize_batch(&mut sources, &mut destinations);
+        finish_pair(published, sources, destinations)
     }
 }
 
@@ -271,36 +300,44 @@ pub trait SelectedBurstMaterializer {
 /// Current AP producers use TID 0; this interface does not assign additional
 /// TIDs. A missing match leaves every other destination untouched.
 pub trait DestinationTxQueues {
+    type Error;
     type Frame: SoftwareTxFrame;
 
     /// Inspect the first destination strictly after `after` in address order,
     /// wrapping to the lowest address. None means the source is empty. The
     /// radio can merge this candidate with retained demand in the same order,
     /// without depending on either source's metadata slots or moving owners.
-    fn next_head_after(&self, after: Option<[u8; 6]>) -> Option<([u8; 6], DestinationTxHead)>;
+    fn next_head_after(
+        &self,
+        after: Option<[u8; 6]>,
+    ) -> Result<Option<([u8; 6], DestinationTxHead)>, Self::Error>;
     /// Read one coherent next-packet length/backlog snapshot. Inspection must
     /// not dequeue, rotate transport flows, return credits or alter any wait.
     /// The implementation's queue lock, if any, ends before this call returns.
     /// This is demand metadata, not a reservation: link teardown, another
     /// consumer or later publication may change the next dequeue. The radio
     /// must revalidate the claimed frame before encoding or publication.
-    fn head_for(&self, destination: [u8; 6]) -> Option<DestinationTxHead>;
-    fn pending_for(&self, destination: [u8; 6]) -> usize {
-        self.head_for(destination)
-            .map_or(0, |head| head.pending_frames)
+    fn head_for(&self, destination: [u8; 6]) -> Result<Option<DestinationTxHead>, Self::Error>;
+    fn pending_for(&self, destination: [u8; 6]) -> Result<usize, Self::Error> {
+        Ok(self
+            .head_for(destination)?
+            .map_or(0, |head| head.pending_frames))
     }
-    fn try_take_for(&self, destination: [u8; 6]) -> Option<Self::Frame>;
+    fn try_take_for(&self, destination: [u8; 6]) -> Result<Option<Self::Frame>, Self::Error>;
     /// Register and check, atomically with publication, that any destination
     /// has a frame: the wait of a radio that selects among destinations
     /// itself, whichever one becomes ready.
-    fn poll_ready_any(&self, context: &mut core::task::Context<'_>) -> core::task::Poll<()>;
+    fn poll_ready_any(
+        &self,
+        context: &mut core::task::Context<'_>,
+    ) -> core::task::Poll<Result<(), Self::Error>>;
     /// Register and check the selected queue atomically with publication.
     fn poll_ready_for(
         &self,
         destination: [u8; 6],
         minimum: usize,
         context: &mut core::task::Context<'_>,
-    ) -> core::task::Poll<()>;
+    ) -> core::task::Poll<Result<(), Self::Error>>;
 }
 
 /// CPU-only demand metadata, with no packet address or ownership transfer.
@@ -312,3 +349,11 @@ pub struct DestinationTxHead {
     /// Total packets across all transport flows of this destination.
     pub pending_frames: usize,
 }
+
+#[cfg(test)]
+#[allow(
+    clippy::disallowed_macros,
+    clippy::disallowed_methods,
+    clippy::arithmetic_side_effects
+)]
+mod tests;

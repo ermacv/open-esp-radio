@@ -27,7 +27,7 @@ impl<K: Copy + Eq, const PEERS: usize, const RESERVATIONS: usize>
 {
     pub(super) fn observe(
         &self,
-        index: usize,
+        account: Account<K>,
         action: AirtimeAction,
         grant_micros: u32,
         charged_micros: u32,
@@ -35,9 +35,6 @@ impl<K: Copy + Eq, const PEERS: usize, const RESERVATIONS: usize>
         let Some(observer) = self.observer else {
             return;
         };
-        let account = self.state.accounts[index]
-            .as_ref()
-            .expect("observed account exists");
         let mut event = AirtimeObservation {
             key: account.key,
             action,
@@ -52,10 +49,14 @@ impl<K: Copy + Eq, const PEERS: usize, const RESERVATIONS: usize>
             .pending
             .iter()
             .flatten()
-            .filter(|p| p.account == index)
+            .filter(|p| p.key == account.key)
         {
-            event.outstanding += 1;
-            event.outstanding_micros += u64::from(pending.budget);
+            // Storage's const capacity bound proves these never saturate:
+            // at most u32::MAX reservations, each with a u32 budget.
+            event.outstanding = event.outstanding.saturating_add(1);
+            event.outstanding_micros = event
+                .outstanding_micros
+                .saturating_add(u64::from(pending.budget));
         }
         observer(event);
     }

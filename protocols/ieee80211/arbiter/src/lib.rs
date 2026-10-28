@@ -11,7 +11,8 @@
     clippy::unreachable,
     clippy::todo,
     clippy::unimplemented,
-    clippy::disallowed_macros
+    clippy::disallowed_macros,
+    clippy::disallowed_methods
 )]
 #![cfg_attr(
     test,
@@ -27,6 +28,7 @@
         clippy::todo,
         clippy::unimplemented,
         clippy::disallowed_macros,
+        clippy::disallowed_methods,
     )
 )]
 
@@ -2334,7 +2336,7 @@ fn slot<K>(schedule: ApSchedule<K>, earliest: Instant, guard: Duration) -> Optio
     }
     let late = earliest.checked_duration_since(first)?.as_micros();
     let interval = schedule.beacon_interval.as_micros();
-    let steps = late.div_ceil(interval);
+    let steps = schedule.beacon_interval.intervals_covering(late);
     let offset = steps.checked_mul(interval)?;
     first.checked_add(Duration::from_micros(offset))
 }
