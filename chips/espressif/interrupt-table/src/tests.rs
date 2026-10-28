@@ -1,14 +1,7 @@
-use crate::{Entry, Error, LineState, Router, Trigger, line_control};
+use crate::{Entry, Error, Router};
+use oer_riscv::clic::{Control, LineState, Trigger};
 
 crate::__fake_table!();
-
-#[test]
-fn a_line_s_control_byte_holds_its_level_in_the_top_bits() {
-    let controls: std::vec::Vec<u8> = (1..=8).map(|level| line_control(level, 3)).collect();
-    assert_eq!(controls, [0x1f, 0x3f, 0x5f, 0x7f, 0x9f, 0xbf, 0xdf, 0xff]);
-    assert_eq!(line_control(1, 4), 0x0f);
-    assert_eq!(line_control(16, 4), 0xff);
-}
 
 #[test]
 fn install_silences_every_source_and_disables_every_line_before_it_checks() {
@@ -47,18 +40,18 @@ fn verify_refuses_a_foreign_route_a_wrong_line_and_a_stray_enabled_line() {
     let mut router = fake_router(0);
     // The timer's source on its own line, but the line at another level.
     router.controller.routes[3] = Some(16);
-    router.controller.lines[16] = LineState::bound(2, 3);
+    router.controller.lines[16] = LineState::vectored(Control::level::<2, 3>());
     assert_eq!(
         router.verify(),
         Err(Error::WrongLine {
             line: 16,
-            state: LineState::bound(2, 3),
-            expected: LineState::bound(1, 3),
+            state: LineState::vectored(Control::level::<2, 3>()),
+            expected: LineState::vectored(Control::level::<1, 3>()),
         })
     );
     router.controller.lines[16] = LineState {
         trigger: Trigger::PositiveEdge,
-        ..LineState::bound(1, 3)
+        ..LineState::vectored(Control::level::<1, 3>())
     };
     assert!(matches!(
         router.verify(),
@@ -77,12 +70,12 @@ fn verify_refuses_a_foreign_route_a_wrong_line_and_a_stray_enabled_line() {
     );
 
     let mut router = fake_router(0);
-    router.controller.lines[40] = LineState::bound(3, 3);
+    router.controller.lines[40] = LineState::vectored(Control::level::<3, 3>());
     assert_eq!(
         router.verify(),
         Err(Error::WrongLine {
             line: 40,
-            state: LineState::bound(3, 3),
+            state: LineState::vectored(Control::level::<3, 3>()),
             expected: LineState::DISABLED,
         })
     );
@@ -197,7 +190,7 @@ fn a_binding_places_the_part_then_writes_the_line_then_the_route() {
         [
             Write::Line {
                 line: 16,
-                state: LineState::bound(1, 3)
+                state: LineState::vectored(Control::level::<1, 3>())
             },
             Write::Route {
                 source: 3,
@@ -229,7 +222,7 @@ fn a_binding_places_the_part_then_writes_the_line_then_the_route() {
         [
             Write::Line {
                 line: 18,
-                state: LineState::bound(1, 3)
+                state: LineState::vectored(Control::level::<1, 3>())
             },
             Write::Route {
                 source: 4,
@@ -263,7 +256,10 @@ fn a_binding_places_the_part_then_writes_the_line_then_the_route() {
     let mut one = fake_router(1);
     let _bound = one.bind(token, radio_part).unwrap();
     assert_eq!(one.controller.routes[5], Some(17));
-    assert_eq!(one.controller.lines[17], LineState::bound(2, 3));
+    assert_eq!(
+        one.controller.lines[17],
+        LineState::vectored(Control::level::<2, 3>())
+    );
     one.verify().unwrap();
 }
 

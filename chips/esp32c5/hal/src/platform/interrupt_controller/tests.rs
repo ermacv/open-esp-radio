@@ -1,10 +1,9 @@
+use oer_riscv::clic::{Control, LineState, Trigger};
 use std::vec;
 use std::vec::Vec;
 
 use oer_esp32c5_pac::platform::{Clic, InterruptCore0, clic, interrupt_core0};
-use oer_espressif_interrupt_table::{
-    Binding, Class, Controller, Error, LineState, Lines, Router, Table, Trigger, line_control,
-};
+use oer_espressif_interrupt_table::{Binding, Class, Controller, Error, Lines, Router, Table};
 use oer_mmio::{Bits, Host, Index, InterruptSource};
 
 use super::{InterruptController, LEVEL_BITS};
@@ -169,19 +168,19 @@ fn a_line_reads_back_as_written_and_keeps_its_pending_bit_and_mode() {
             enabled: false,
             vectored: true,
             trigger,
-            control: 0x5f,
+            control: Control::from_bits(0x5f),
         };
         controller
             .set_line(30, state)
             .expect("line 30 is the CLIC's");
         assert_eq!(controller.line(30), state);
     }
-    let bound = LineState::bound(3, LEVEL_BITS);
+    let bound = LineState::vectored(Control::level::<3, LEVEL_BITS>());
     controller
         .set_line(30, bound)
         .expect("line 30 is the CLIC's");
     assert_eq!(controller.line(30), bound);
-    assert_eq!(bound.control, line_control(3, 3));
+    assert_eq!(bound.control, Control::level::<3, 3>());
     drop(controller);
     let word = memory.clic().read_ctrl(line(30));
     assert!(word.ip(), "the pending bit stays");
@@ -194,7 +193,7 @@ fn a_line_reads_back_as_written_and_keeps_its_pending_bit_and_mode() {
                 enabled: true,
                 vectored: true,
                 trigger: Trigger::NegativeEdge,
-                control: 0xff,
+                control: Control::from_bits(0xff),
             },
         )
         .expect("line 30 is the CLIC's");
@@ -212,14 +211,14 @@ fn a_line_another_writer_left_edge_triggered_reads_as_such() {
         word.set_ie(true)
             .set_attr_shv(true)
             .set_attr_trig(Bits::constant::<0b01>())
-            .set_ctl(line_control(3, 3));
+            .set_ctl(Control::level::<3, 3>().bits());
     });
     let controller = memory.controller();
     let state = controller.line(20);
     assert_eq!(state.trigger, Trigger::PositiveEdge);
     assert_ne!(
         state,
-        LineState::bound(3, LEVEL_BITS),
+        LineState::vectored(Control::level::<3, LEVEL_BITS>()),
         "the router's check sees the line differ from a binding"
     );
 }
@@ -262,7 +261,10 @@ fn the_router_silences_boot_leftovers_then_binds_the_mac_on_its_line_and_level()
         }
         for number in 0..InterruptController::<Host<'_>, Host<'_>>::LINES {
             controller
-                .set_line(number, LineState::bound(1, LEVEL_BITS))
+                .set_line(
+                    number,
+                    LineState::vectored(Control::level::<1, LEVEL_BITS>()),
+                )
                 .expect("every line of the CLIC takes a binding");
         }
     }
@@ -283,7 +285,7 @@ fn the_router_silences_boot_leftovers_then_binds_the_mac_on_its_line_and_level()
     }
     for number in 0..InterruptController::<Host<'_>, Host<'_>>::LINES {
         let expected = if number == 20 {
-            LineState::bound(3, LEVEL_BITS)
+            LineState::vectored(Control::level::<3, LEVEL_BITS>())
         } else {
             LineState::DISABLED
         };
@@ -295,7 +297,7 @@ fn the_router_silences_boot_leftovers_then_binds_the_mac_on_its_line_and_level()
     }
     let state = controller.line(20);
     assert!(state.vectored && state.trigger == Trigger::PositiveLevel);
-    assert_eq!(state.control, line_control(3, 3));
+    assert_eq!(state.control, Control::level::<3, 3>());
 }
 
 extern "C" fn no_handler() {}

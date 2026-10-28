@@ -70,7 +70,7 @@
 mod binding;
 pub use binding::{BindError, BindFault, BindFaultCode, BindFaultKind, Quarantined};
 mod router;
-pub use router::{Bound, Controller, Error, EventAuthority, LineState, Router, Silent, Trigger};
+pub use router::{Bound, Controller, Error, EventAuthority, Router, Silent};
 
 pub mod signal;
 
@@ -133,20 +133,6 @@ const _: () = {
 
 /// An image's table.
 pub type Table = [Binding];
-
-/// The control byte of a line at `level` (1 for the lowest) of a controller
-/// with `level_bits` level bits: the level, less one, in the top bits, every
-/// lower bit one (the CLIC's `clicintctl`; level `n` of three bits is
-/// `0x1f | (n - 1) << 5`).
-///
-/// SOURCE: RISC-V CLIC specification (`clicintctl`, `mnlbits`); ESP-IDF
-/// 4d59230d `riscv/include/riscv/csr_clic.h` (`NLBITS` 3 on the ESP32-S31
-/// and ESP32-C5).
-#[must_use]
-pub const fn line_control(level: u8, level_bits: u8) -> u8 {
-    let low = 8 - level_bits;
-    ((level - 1) << low) | ((1u16 << low) - 1) as u8
-}
 
 /// The token of one table entry: the only way to bind its part.
 ///
@@ -1032,16 +1018,24 @@ macro_rules! __fake_controller {
         /// One write of the fake controller.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub enum Write {
-            Route { source: u16, line: u8 },
-            Silence { source: u16 },
-            Line { line: u8, state: $crate::LineState },
+            Route {
+                source: u16,
+                line: u8,
+            },
+            Silence {
+                source: u16,
+            },
+            Line {
+                line: u8,
+                state: ::oer_riscv::clic::LineState,
+            },
         }
 
         /// Eight sources, 48 lines, three level bits; the writes it took.
         pub struct FakeController {
             pub hart: u8,
             pub routes: [Option<u8>; 8],
-            pub lines: [$crate::LineState; 48],
+            pub lines: [::oer_riscv::clic::LineState; 48],
             pub writes: ::std::vec::Vec<Write>,
         }
 
@@ -1052,7 +1046,9 @@ macro_rules! __fake_controller {
                 Self {
                     hart,
                     routes: [Some(20); 8],
-                    lines: [$crate::LineState::bound(1, 3); 48],
+                    lines: [::oer_riscv::clic::LineState::vectored(
+                        ::oer_riscv::clic::Control::level::<1, 3>(),
+                    ); 48],
                     writes: ::std::vec::Vec::new(),
                 }
             }
@@ -1061,7 +1057,8 @@ macro_rules! __fake_controller {
         impl $crate::Controller for FakeController {
             const SOURCES: u16 = 8;
             const LINES: u8 = 48;
-            const LEVEL_BITS: u8 = 3;
+            const LEVEL_BITS: ::oer_riscv::clic::LevelBits =
+                ::oer_riscv::clic::LevelBits::constant::<3>();
             fn hart(&self) -> u8 {
                 self.hart
             }
@@ -1093,7 +1090,7 @@ macro_rules! __fake_controller {
             fn set_line(
                 &mut self,
                 line: u8,
-                state: $crate::LineState,
+                state: ::oer_riscv::clic::LineState,
             ) -> Result<(), $crate::Error> {
                 *self
                     .lines
@@ -1102,7 +1099,7 @@ macro_rules! __fake_controller {
                 self.writes.push(Write::Line { line, state });
                 Ok(())
             }
-            fn line(&self, line: u8) -> $crate::LineState {
+            fn line(&self, line: u8) -> ::oer_riscv::clic::LineState {
                 self.lines[usize::from(line)]
             }
         }

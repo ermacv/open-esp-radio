@@ -87,39 +87,8 @@ pub mod machine {
     }
 }
 
-/// The Core-Local Interrupt Controller's CSRs.
-pub mod clic {
-    /// `mtvt`: base of the table of hardware-vectored handler addresses.
-    ///
-    /// SOURCE: RISC-V Core-Local Interrupt Controller (CLIC) specification,
-    /// "CLIC CSRs", `mtvt` (CSR 0x307).
-    pub const MTVT: u16 = 0x307;
-
-    /// `mnxti`: takes the next pending interrupt above the current level (a
-    /// write form lowers `mintstatus.mil` to that interrupt's level).
-    ///
-    /// SOURCE: RISC-V CLIC specification, "CLIC CSRs", `mnxti` (CSR 0x345).
-    pub const MNXTI: u16 = 0x345;
-
-    /// `mintstatus`: read-only machine interrupt status (`mil`).
-    ///
-    /// SOURCE: RISC-V CLIC specification, "CLIC CSRs", `mintstatus`
-    /// (CSR 0xFB1).
-    pub const MINTSTATUS: u16 = 0xfb1;
-
-    /// `mintstatus.mil`, bits 31:24: the machine interrupt level the hart
-    /// runs at, 0 outside every interrupt handler.
-    ///
-    /// SOURCE: RISC-V CLIC specification, "CLIC CSRs", `mintstatus` (field
-    /// `mil`, bits 31:24).
-    pub const MINTSTATUS_MIL_SHIFT: u32 = 24;
-
-    /// `mintthresh`: machine interrupt-level threshold.
-    ///
-    /// SOURCE: RISC-V CLIC specification, "CLIC CSRs", `mintthresh`
-    /// (CSR 0x347).
-    pub const MINTTHRESH: u16 = 0x347;
-}
+/// Core-Local Interrupt Controller CSRs and typed line encodings.
+pub mod clic;
 
 /// The debug-trigger module's CSRs and the `mcontrol` trigger encoding.
 pub mod trigger {

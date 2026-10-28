@@ -11,12 +11,12 @@ error[E0277]: `*mut ()` cannot be shared between threads safely
   | |_____^ `*mut ()` cannot be shared between threads safely
   |
   = help: the trait `Sync` is not implemented for `*mut ()`
-  = note: required for `oer_memory::context_cell::ContextCell<signal::Owned<HostTask, oer_memory::execution_context::HostContext>, oer_memory::execution_context::Entered<oer_memory::execution_context::HostContext>>` to implement `Sync`
-note: required because it appears within the type `signal::SignalCore<HostTask, oer_memory::execution_context::HostContext>`
- --> src/signal.rs
+  = note: required for `oer_memory::context_cell::ContextCell<oer_memory::signal::Owned<HostTask, oer_memory::execution_context::HostContext>, oer_memory::execution_context::Entered<oer_memory::execution_context::HostContext>>` to implement `Sync`
+note: required because it appears within the type `oer_memory::signal::SignalCore<HostTask, oer_memory::execution_context::HostContext>`
+ --> $WORKSPACE/portable/memory/src/signal.rs
   |
-  | struct SignalCore<T: 'static, X: ExecutionContext> {
-  |        ^^^^^^^^^^
+  | pub struct SignalCore<T: 'static, X: ExecutionContext> {
+  |            ^^^^^^^^^^
 note: required because it appears within the type `IrqSignal<Deferred>`
  --> src/signal.rs
   |

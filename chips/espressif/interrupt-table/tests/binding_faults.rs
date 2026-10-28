@@ -1,7 +1,8 @@
 //! Each injected fault owns its own entry, allocation and counter.
 use oer_espressif_interrupt_table::{
-    BindError, BindFault, BindFaultCode, BindFaultKind, Controller, Entry, Error, LineState, Router,
+    BindError, BindFault, BindFaultCode, BindFaultKind, Controller, Entry, Error, Router,
 };
+use oer_riscv::clic::{Control, LevelBits, LineState};
 use std::sync::{
     Arc, Mutex,
     atomic::{AtomicUsize, Ordering},
@@ -49,7 +50,7 @@ struct Injected {
 impl Controller for Injected {
     const SOURCES: u16 = FakeController::SOURCES;
     const LINES: u8 = FakeController::LINES;
-    const LEVEL_BITS: u8 = FakeController::LEVEL_BITS;
+    const LEVEL_BITS: LevelBits = FakeController::LEVEL_BITS;
     fn hart(&self) -> u8 {
         self.inner.lock().unwrap().hart()
     }
@@ -195,14 +196,14 @@ fn diagnostic_keeps_both_line_states_and_full_entry_identity() {
     let state = LineState {
         enabled: true,
         vectored: false,
-        trigger: oer_espressif_interrupt_table::Trigger::NegativeEdge,
-        control: 0xfe,
+        trigger: oer_riscv::clic::Trigger::NegativeEdge,
+        control: Control::from_bits(0xfe),
     };
     let expected = LineState {
         enabled: false,
         vectored: true,
-        trigger: oer_espressif_interrupt_table::Trigger::NegativeLevel,
-        control: 0xfd,
+        trigger: oer_riscv::clic::Trigger::NegativeLevel,
+        control: Control::from_bits(0xfd),
     };
     let fault = BindFault {
         source: u16::MAX,

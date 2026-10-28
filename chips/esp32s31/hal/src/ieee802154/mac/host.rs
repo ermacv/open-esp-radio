@@ -71,7 +71,9 @@ pub(crate) struct NoRoutes;
 impl oer_espressif_interrupt_table::Controller for NoRoutes {
     const SOURCES: u16 = 256;
     const LINES: u8 = crate::platform::interrupt_controller::facts::LINES.count;
-    const LEVEL_BITS: u8 = crate::platform::interrupt_controller::facts::LEVEL_BITS;
+    const LEVEL_BITS: oer_riscv::clic::LevelBits = oer_riscv::clic::LevelBits::constant::<
+        { crate::platform::interrupt_controller::facts::LEVEL_BITS },
+    >();
     fn verify_configuration(&self) -> Result<(), oer_espressif_interrupt_table::Error> {
         Ok(())
     }
@@ -94,12 +96,12 @@ impl oer_espressif_interrupt_table::Controller for NoRoutes {
     fn set_line(
         &mut self,
         _line: u8,
-        _state: oer_espressif_interrupt_table::LineState,
+        _state: oer_riscv::clic::LineState,
     ) -> Result<(), oer_espressif_interrupt_table::Error> {
         Ok(())
     }
-    fn line(&self, _line: u8) -> oer_espressif_interrupt_table::LineState {
-        oer_espressif_interrupt_table::LineState::DISABLED
+    fn line(&self, _line: u8) -> oer_riscv::clic::LineState {
+        oer_riscv::clic::LineState::DISABLED
     }
 }
 

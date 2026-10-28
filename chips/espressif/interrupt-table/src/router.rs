@@ -11,57 +11,9 @@
 
 use oer_mmio::{InterruptSource, InterruptSources};
 
-use crate::{
-    BindError, BindFault, BindFaultKind, Binding, Entry, Quarantined, Table, line_control,
-};
+use crate::{BindError, BindFault, BindFaultKind, Binding, Entry, Quarantined, Table};
 
-/// The trigger of a CPU line (the CLIC's `clicintattr.trig`).
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum Trigger {
-    /// Positive level: the line follows its source. The only trigger the
-    /// table binds, so that a write of the line's word that keeps its
-    /// pending bit neither loses nor invents an interrupt.
-    PositiveLevel,
-    PositiveEdge,
-    NegativeLevel,
-    NegativeEdge,
-}
-
-/// One CPU line as its controller holds it (the CLIC's `clicintie`,
-/// `clicintattr.shv`, `clicintattr.trig` and `clicintctl`).
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct LineState {
-    /// The line's interrupt enable.
-    pub enabled: bool,
-    /// Hardware vectoring: the hart enters through the line's vector.
-    pub vectored: bool,
-    pub trigger: Trigger,
-    /// The level and priority control byte.
-    pub control: u8,
-}
-
-impl LineState {
-    /// A disabled line.
-    pub const DISABLED: Self = Self {
-        enabled: false,
-        vectored: false,
-        trigger: Trigger::PositiveLevel,
-        control: 0,
-    };
-
-    /// The line of a bound entry at `level`, of a controller with
-    /// `level_bits` level bits: enabled, hardware-vectored,
-    /// positive-level-triggered, holding the level.
-    #[must_use]
-    pub const fn bound(level: u8, level_bits: u8) -> Self {
-        Self {
-            enabled: true,
-            vectored: true,
-            trigger: Trigger::PositiveLevel,
-            control: line_control(level, level_bits),
-        }
-    }
-}
+use oer_riscv::clic::{LevelBits, LineState};
 
 /// A hart's interrupt matrix bank and CLIC, as the table writes them. The
 /// chip implements it on its typed blocks; each method is a few word reads
@@ -74,7 +26,7 @@ pub trait Controller {
     /// The CPU lines of the hart's CLIC: `0..LINES`, at most 64.
     const LINES: u8;
     /// The level bits of a line's control byte (`CLIC_INT_CONFIG.MNLBITS`).
-    const LEVEL_BITS: u8;
+    const LEVEL_BITS: LevelBits;
 
     /// The hart whose bank and CLIC this controller writes.
     fn hart(&self) -> u8;
@@ -333,7 +285,7 @@ impl<C: Controller> Router<C> {
                 "the entry's line is no line of the controller"
             );
             assert!(
-                E::LEVEL >= 1 && E::LEVEL as u32 <= 1u32 << C::LEVEL_BITS,
+                E::LEVEL >= 1 && E::LEVEL as u16 <= C::LEVEL_BITS.levels(),
                 "the entry's level is no level of the controller's lines"
             );
         };
@@ -403,10 +355,17 @@ impl<C: Controller> Router<C> {
                 place,
             )));
         }
-        if let Err(error) = self
-            .controller
-            .set_line(E::LINE, LineState::bound(E::LEVEL, C::LEVEL_BITS))
-        {
+        if let Err(error) = self.controller.set_line(
+            E::LINE,
+            LineState::vectored(
+                const {
+                    match C::LEVEL_BITS.control(E::LEVEL as u16) {
+                        Ok(control) => control,
+                        Err(_) => panic!("the entry's level is no level of the controller"),
+                    }
+                },
+            ),
+        ) {
             return Err(BindError::Fault(Quarantined::installed(
                 fault(source, BindFaultKind::LineRefused(error)),
                 token,
@@ -468,7 +427,7 @@ impl<C: Controller> Router<C> {
         if line >= C::LINES {
             return Err(Error::NoSuchLine { line });
         }
-        if level == 0 || u32::from(level) > 1u32 << C::LEVEL_BITS {
+        if level == 0 || u16::from(level) > C::LEVEL_BITS.levels() {
             return Err(Error::NoSuchLevel { level });
         }
         Ok(())
@@ -498,7 +457,12 @@ impl<C: Controller> Router<C> {
                 return Err(Error::ForeignRoute { source, line });
             };
             routed_lines |= 1u64.checked_shl(u32::from(line)).unwrap_or(0);
-            let expected = LineState::bound(binding.level, C::LEVEL_BITS);
+            let control = C::LEVEL_BITS
+                .control(u16::from(binding.level))
+                .map_err(|_| Error::NoSuchLevel {
+                    level: binding.level,
+                })?;
+            let expected = LineState::vectored(control);
             let state = self.controller.line(line);
             if state != expected {
                 return Err(Error::WrongLine {

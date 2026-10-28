@@ -1,10 +1,11 @@
 use core::{marker::PhantomData, task::Context};
+use oer_memory::signal::SignalList;
 
 use crate::urgent_sources::UrgentSources;
 use crate::{Failure, Fault};
 use oer_espressif_interrupt_table::{
     Entry,
-    signal::{ContextToken, ForeignTask, IrqSignal, SignalExecutor, SignalList},
+    signal::{ContextToken, ForeignTask, IrqSignal, SignalExecutor},
 };
 use oer_espressif_staged_runtime::Hart;
 use oer_memory::{ExecutionContext, OnceValue};

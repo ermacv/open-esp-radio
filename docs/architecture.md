@@ -187,9 +187,12 @@ release a secondary hart.
   one part list a source twice, and a binding when its entry lies outside
   the chip's interrupt controller.
 - `chips/espressif/interrupt-table` (`oer-espressif-interrupt-table`) owns
-  the Espressif interrupt matrix contract, CLIC encodings, vector ABI and
-  staged-runtime symbol names. Chip crates and firmware use it directly;
-  portable support and protocol cores do not depend on it.
+  the Espressif interrupt matrix contract, vector ABI and staged-runtime
+  symbol names. Architectural CLIC line values live in `oer-riscv::clic`;
+  chip facts select line geometry and MNLBITS. Signal task cells, atomic
+  facts and intrusive lists live in `oer-memory::signal`. Chip crates and
+  firmware use interrupt-table directly; portable support and protocol cores
+  do not depend on it.
 - A signal's constructor declares its receiving executor entry and all its
   raising contexts. An ordinary `FromHandler` is strictly above that executor,
   or the raiser is a task of a lower context; thread-mode tasks are at level
