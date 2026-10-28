@@ -1,6 +1,6 @@
 //! Validated association-scoped receive BA management and its control TX.
 use super::*;
-use crate::block_ack::{AddbaResponse, AddbaStatus};
+use oer_ieee80211_upper_mac::block_ack::{AddbaResponse, AddbaStatus};
 use oer_ieee80211_wire::block_ack::frame::{BlockAckAction, parse_block_ack_action};
 
 #[must_use = "a parsed ADDBA request needs a response from the receive bank owner"]

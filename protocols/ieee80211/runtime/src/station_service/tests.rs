@@ -38,6 +38,7 @@ use {
 };
 
 use super::*;
+use oer_memory::WakingSpscQueue;
 
 mod block_ack;
 mod contracts;

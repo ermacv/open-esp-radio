@@ -3160,10 +3160,12 @@ dependencies = [
 name = "oer-ieee80211-upper-mac"
 version = "0.1.0"
 dependencies = [
+ "heapless",
  "oer-ieee80211-port",
  "oer-ieee80211-wire",
  "oer-test-ui-cases",
  "oer-time",
+ "oer-time-virtual",
 ]
 
 [[package]]

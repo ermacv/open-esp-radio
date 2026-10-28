@@ -25,6 +25,7 @@ pub const fn acknowledges(report: BlockAckReport, sequence: SequenceNumber) -> b
 
 pub mod banks;
 pub mod originator;
+pub mod recipient;
 pub mod reorder;
 pub mod session;
 
@@ -32,6 +33,14 @@ pub use originator::{
     TX_BLOCK_ACK_MAX_TIDS, TxBlockAckOriginator, TxBlockAckOriginatorConfig,
     TxBlockAckOriginatorError, TxBlockAckOriginatorPolicy, TxBlockAckOriginatorResponse,
     TxBlockAckResponseDisposition, TxBlockAckRetry, next_nonzero_dialog_token,
+};
+pub use banks::{
+    RX_BLOCK_ACK_WINDOW, ReplyPlace, RxBlockAckCapacity, RxBlockAckPort, RxBlockAckReplyBody,
+    RxBlockAckStorage, RxBlockAckTypes, RxBlockAckView, RxDisposition,
+};
+pub use recipient::{
+    AddbaResponse, AddbaStatus, RxAddbaRequest, RxBlockAckError, RxBlockAckNegotiation,
+    RxBlockAckSession,
 };
 pub use reorder::{
     MAX_RX_REORDER_WINDOW, RxReorderBuffer, RxReorderError, RxReorderMpdu, RxReorderRelease,

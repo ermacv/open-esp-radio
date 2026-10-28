@@ -4,9 +4,7 @@
 //! This module allocates no frame backing and never reads a clock.
 
 use core::num::NonZeroU64;
-use oer_ieee80211_upper_mac::block_ack::{
-    RxReorderBuffer, RxReorderError, RxReorderMpdu, RxReorderRelease,
-};
+use super::{RxReorderBuffer, RxReorderError, RxReorderMpdu, RxReorderRelease};
 use oer_ieee80211_wire::{
     block_ack::frame::{ADDBA_ACTION_BODY_LEN, BlockAckAction, encode_addba_response},
     sequence::SequenceNumber,
@@ -257,10 +255,14 @@ impl<A, const WINDOW: usize, const SLOTS: usize> RxBlockAckSession<A, WINDOW, SL
     }
 
     pub fn deadline(&self) -> Option<Instant> {
-        crate::time::earliest(
-            self.inactivity.map(|at| Instant::from_micros(at.get())),
-            self.gap.map(|at| Instant::from_micros(at.get())),
-        )
+        // Both deadlines are nonzero microsecond instants; the sooner wins.
+        match (self.inactivity, self.gap) {
+            (Some(inactivity), Some(gap)) => Some(Instant::from_micros(inactivity.min(gap).get())),
+            (Some(deadline), None) | (None, Some(deadline)) => {
+                Some(Instant::from_micros(deadline.get()))
+            }
+            (None, None) => None,
+        }
     }
 
     pub fn expired(&self, now: Instant) -> bool {
