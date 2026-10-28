@@ -854,28 +854,20 @@ struct Rules<K>(PhantomData<fn() -> K>);
 impl<K: Ieee80211Capabilities> Rules<K> {
     /// The network's frames alone.
     const MEMBER: SupportedFilter<K, StationRole> = {
-        #[cfg_attr(not(test), expect(clippy::panic, reason = "evaluated at build"))]
-        const fn checked<K: Ieee80211Capabilities>() -> SupportedFilter<K, StationRole> {
-            match SupportedFilter::new(ReceiveFilter::BSS_MEMBER) {
-                Some(filter) => filter,
-                None => panic!("a station's port receives its network's frames"),
-            }
+        match SupportedFilter::new(ReceiveFilter::BSS_MEMBER) {
+            Some(filter) => filter,
+            None => panic!("a station's port receives its network's frames"),
         }
-        checked::<K>()
     };
     /// The network's frames and the other networks' management frames:
     /// the network's own channel in a background scan.
     const WIDENED: SupportedFilter<K, StationRole> = {
-        #[cfg_attr(not(test), expect(clippy::panic, reason = "evaluated at build"))]
-        const fn checked<K: Ieee80211Capabilities>() -> SupportedFilter<K, StationRole> {
-            match SupportedFilter::new(
-                ReceiveFilter::BSS_MEMBER.union(ReceiveFilter::OTHER_BSS_MANAGEMENT),
-            ) {
-                Some(filter) => filter,
-                None => panic!("a station's port hears the other networks beside its own"),
-            }
+        match SupportedFilter::new(
+            ReceiveFilter::BSS_MEMBER.union(ReceiveFilter::OTHER_BSS_MANAGEMENT),
+        ) {
+            Some(filter) => filter,
+            None => panic!("a station's port hears the other networks beside its own"),
         }
-        checked::<K>()
     };
 }
 
@@ -1210,6 +1202,56 @@ where
     }
 }
 
+type BankParts<P, G> = oer_ieee80211_port::association::KeyBankParts<P, G, KEY_BANK_CAPACITY>;
+
+/// A refused bank retains all owners, including the element which did not fit.
+enum KeyBankReunionError<P, G> {
+    Incomplete {
+        _parts: BankParts<P, G>,
+    },
+    Capacity {
+        _parts: BankParts<P, G>,
+        _pairwise: [Option<P>; KEY_BANK_CAPACITY],
+        _group: [[Option<G>; KEY_BANK_CAPACITY]; 2],
+    },
+}
+
+fn assemble_key_bank<P, G>(
+    slot: P,
+    mut pairwise: [Option<P>; KEY_BANK_CAPACITY],
+    mut group: [[Option<G>; KEY_BANK_CAPACITY]; 2],
+) -> Result<BankParts<P, G>, KeyBankReunionError<P, G>> {
+    let mut parts = BankParts {
+        pairwise: heapless::Vec::from_array([slot]),
+        group: heapless::Vec::new(),
+    };
+    for source in &mut pairwise {
+        if let Some(item) = source.take()
+            && let Err(item) = parts.pairwise.push(item)
+        {
+            *source = Some(item);
+            return Err(KeyBankReunionError::Capacity {
+                _parts: parts,
+                _pairwise: pairwise,
+                _group: group,
+            });
+        }
+    }
+    for source in group.iter_mut().flatten() {
+        if let Some(item) = source.take()
+            && let Err(item) = parts.group.push(item)
+        {
+            *source = Some(item);
+            return Err(KeyBankReunionError::Capacity {
+                _parts: parts,
+                _pairwise: pairwise,
+                _group: group,
+            });
+        }
+    }
+    Ok(parts)
+}
+
 /// The state of a key cell, independent of the protocol's current state.
 enum KeyCell<T: StaTokens> {
     Free(VacantPairwise<T>),
@@ -1219,11 +1261,7 @@ enum KeyCell<T: StaTokens> {
     /// Backend contract violation: every returned owner remains in custody.
     UnreturnedBank {
         _association: T::Association,
-        _parts: oer_ieee80211_port::association::KeyBankParts<
-            T::PairwiseSlot,
-            T::GroupSlot,
-            KEY_BANK_CAPACITY,
-        >,
+        _error: KeyBankReunionError<T::PairwiseSlot, T::GroupSlot>,
     },
 }
 
@@ -1248,7 +1286,7 @@ struct VacantPairwise<T: StaTokens> {
 struct Keys<T: StaTokens> {
     pairwise: KeyCell<T>,
     spare_pairwise: heapless::Vec<T::PairwiseSlot, KEY_BANK_CAPACITY>,
-    spare_group: heapless::Vec<T::GroupSlot, KEY_BANK_CAPACITY>,
+    spare_group: Pool<T::GroupSlot>,
     group_slots: GroupSlots<T>,
     group_permission: Option<T::GroupPermission>,
     groups: GroupKeys<T::GroupKey>,
@@ -1263,29 +1301,22 @@ type PairwiseAdmission<'id, T> = (
 impl<T: StaTokens> Keys<T> {
     fn new<const N: usize>(vacant: T::VacantAssociation, permission: T::GroupPermission) -> Self {
         const {
-            #[cfg_attr(not(test), expect(clippy::panic, reason = "evaluated at build time"))]
-            const fn check(active: usize, selected: usize, group: usize, pairwise: usize) {
-                if active != selected
-                    || active > group
-                    || group > KEY_BANK_CAPACITY
-                    || pairwise == 0
-                    || pairwise > KEY_BANK_CAPACITY
-                {
-                    panic!("station collections must retain the complete key bank");
-                }
+            if N != T::GROUP_SLOTS
+                || N > T::TOTAL_GROUP_SLOTS
+                || T::TOTAL_GROUP_SLOTS > KEY_BANK_CAPACITY
+                || T::PAIRWISE_SLOTS == 0
+                || T::PAIRWISE_SLOTS > KEY_BANK_CAPACITY
+            {
+                panic!("station collections must retain the complete key bank");
             }
-            check(N, T::GROUP_SLOTS, T::TOTAL_GROUP_SLOTS, T::PAIRWISE_SLOTS);
         }
         let (association, slot, parts) = T::split_vacant(vacant);
-        let mut groups = parts.group.into_iter();
-        let free = groups.by_ref().take(N).collect();
+        let (free, spare_group) = Pool::partition(parts.group, N);
         Self {
             pairwise: KeyCell::Free(VacantPairwise { slot, association }),
             spare_pairwise: parts.pairwise,
-            spare_group: groups.collect(),
-            group_slots: GroupSlots {
-                free: Pool::from_collection(free),
-            },
+            spare_group,
+            group_slots: GroupSlots { free },
             group_permission: Some(permission),
             groups: GroupKeys::new(),
         }
@@ -1767,14 +1798,10 @@ struct Handshake<T: StaTokens, K> {
 }
 
 impl<T: StaTokens, K> Handshake<T, K> {
-    #[expect(
-        clippy::expect_used,
-        reason = "only the synchronous confirm transition consumes the supplicant"
-    )]
-    fn supplicant(&mut self) -> &mut RsnStaSupplicant {
+    fn supplicant(&mut self) -> Result<&mut RsnStaSupplicant, RsnStaSupplicantError> {
         self.supplicant
             .as_mut()
-            .expect("handshake retains its supplicant until confirm")
+            .ok_or(RsnStaSupplicantError::UnexpectedAction)
     }
 }
 
@@ -2336,13 +2363,9 @@ impl<const GROUPS: usize> GroupCapacity<GROUPS> {
     )]
     pub const fn new() -> Self {
         const {
-            #[cfg_attr(not(test), expect(clippy::panic, reason = "evaluated at build"))]
-            const fn check(groups: usize) {
-                if groups == 0 {
-                    panic!("a protected station needs at least one group slot");
-                }
+            if GROUPS == 0 {
+                panic!("a protected station needs at least one group slot");
             }
-            check(GROUPS);
         }
         Self { _proof: () }
     }
@@ -2559,16 +2582,12 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
         resources: StationResources<'id, T, TICKETS, BUFFERS, GROUPS>,
     ) -> (Self, StaCommandCredits<'id, T::ConfigurationPath>) {
         const {
-            #[cfg_attr(not(test), expect(clippy::panic, reason = "evaluated at build"))]
-            const fn check(tickets: usize, buffers: usize) {
-                if tickets < 1 {
-                    panic!("a station needs at least one TX ticket");
-                }
-                if buffers < 1 {
-                    panic!("a station needs at least one small buffer");
-                }
+            if TICKETS < 1 {
+                panic!("a station needs at least one TX ticket");
             }
-            check(TICKETS, BUFFERS);
+            if BUFFERS < 1 {
+                panic!("a station needs at least one small buffer");
+            }
             let _: (
                 SupportedFilter<K, StationRole>,
                 SupportedFilter<K, StationRole>,
@@ -2618,16 +2637,12 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
         resources: StationResources<'id, T, TICKETS, BUFFERS, GROUPS>,
     ) -> (&'a mut Self, StaCommandCredits<'id, T::ConfigurationPath>) {
         const {
-            #[cfg_attr(not(test), expect(clippy::panic, reason = "evaluated at build"))]
-            const fn check(tickets: usize, buffers: usize) {
-                if tickets < 1 {
-                    panic!("a station needs at least one TX ticket");
-                }
-                if buffers < 1 {
-                    panic!("a station needs at least one small buffer");
-                }
+            if TICKETS < 1 {
+                panic!("a station needs at least one TX ticket");
             }
-            check(TICKETS, BUFFERS);
+            if BUFFERS < 1 {
+                panic!("a station needs at least one small buffer");
+            }
             let _: (
                 SupportedFilter<K, StationRole>,
                 SupportedFilter<K, StationRole>,
@@ -3269,34 +3284,33 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                 return;
             }
             StaInput::PairwiseKeyRemoved { slot, association } => {
-                // A complete initial bank and affine returns bound these
-                // collections by the same const capacities checked in Keys::new.
-                let spare = core::mem::take(&mut self.keys.spare_pairwise);
-                let parts = oer_ieee80211_port::association::KeyBankParts {
-                    pairwise: core::iter::once(slot).chain(spare).collect(),
-                    group: self
-                        .keys
-                        .group_slots
-                        .free
-                        .take_all()
-                        .into_iter()
-                        .chain(core::mem::take(&mut self.keys.spare_group))
-                        .collect(),
-                };
-                match T::collect_key_bank(parts) {
+                let mut spare =
+                    Pool::from_collection(core::mem::take(&mut self.keys.spare_pairwise));
+                let parts = assemble_key_bank(
+                    slot,
+                    spare.take_all(),
+                    [
+                        self.keys.group_slots.free.take_all(),
+                        self.keys.spare_group.take_all(),
+                    ],
+                )
+                .and_then(|parts| {
+                    T::collect_key_bank(parts)
+                        .map_err(|parts| KeyBankReunionError::Incomplete { _parts: parts })
+                });
+                match parts {
                     Ok(bank) => {
                         let (association, slot, parts) = T::end_association(association, bank);
                         self.keys.pairwise = KeyCell::Free(VacantPairwise { association, slot });
                         self.keys.spare_pairwise = parts.pairwise;
-                        let mut groups = parts.group.into_iter();
-                        self.keys.group_slots.free =
-                            Pool::from_collection(groups.by_ref().take(T::GROUP_SLOTS).collect());
-                        self.keys.spare_group = groups.collect();
+                        let (free, spare) = Pool::partition(parts.group, T::GROUP_SLOTS);
+                        self.keys.group_slots.free = free;
+                        self.keys.spare_group = spare;
                     }
-                    Err(parts) => {
+                    Err(error) => {
                         self.keys.pairwise = KeyCell::UnreturnedBank {
                             _association: association,
-                            _parts: parts,
+                            _error: error,
                         };
                     }
                 }
@@ -4485,7 +4499,15 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                 }
             }
             State::Handshake(handshake) => {
-                let disconnect = if handshake.supplicant().management_protection() {
+                let protected = match handshake.supplicant() {
+                    Ok(supplicant) => supplicant.management_protection(),
+                    Err(_) => {
+                        let change = leave_handshake(handshake, REASON_UNSPECIFIED);
+                        state.apply(change);
+                        return;
+                    }
+                };
+                let disconnect = if protected {
                     handshake.management.as_mut().and_then(|management| {
                         match management.receive(frame, self.config.address, handshake.bssid) {
                             Some(ManagementEvent::Disconnect(reason)) => Some(reason),
@@ -4851,7 +4873,8 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                     software_aes128_key_unwrap(request.kek(), request.wrapped_key_data());
                 match handshake
                     .supplicant()
-                    .complete_key_data_unwrap(request, unwrapped)
+                    .map_err(oer_ieee80211_rsn::supplicant::RsnStaProcessError::from)
+                    .and_then(|supplicant| supplicant.complete_key_data_unwrap(request, unwrapped))
                 {
                     Ok(action) => action,
                     Err(_) => return leave_handshake(handshake, REASON_UNSPECIFIED),
@@ -4911,6 +4934,15 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                 }
             }
             HandshakeStep::Install(request, protection) => {
+                let protected = match handshake.supplicant() {
+                    Ok(supplicant) => supplicant.management_protection(),
+                    Err(_) => {
+                        return (
+                            leave_handshake(handshake, REASON_UNSPECIFIED),
+                            ActionProgress::Transition,
+                        );
+                    }
+                };
                 let Ok(replay) =
                     CcmpRxReplayEpoch::pairwise(*request.pairwise().receive_sequence())
                 else {
@@ -4926,9 +4958,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                     Some((association, slot, pending)) => {
                         let (pairwise, group) = request.into_parts();
                         let key = pairwise.into_key();
-                        if handshake.supplicant().management_protection()
-                            && handshake.management.is_none()
-                        {
+                        if protected && handshake.management.is_none() {
                             handshake.management =
                                 Some(ManagementProtection::new(Ccmp128Key::new(key.as_bytes())));
                         }
@@ -6200,10 +6230,9 @@ fn finish_handshake_install<T: StaTokens, K>(
     if let (Some(management), Some(igtk)) = (&mut handshake.management, request.igtk()) {
         management.install_igtk(igtk);
     }
-    match handshake
-        .supplicant()
-        .complete_retry_install::<DEFAULT_EAPOL_FRAME_CAPACITY>(request, true)
-    {
+    match handshake.supplicant().and_then(|supplicant| {
+        supplicant.complete_retry_install::<DEFAULT_EAPOL_FRAME_CAPACITY>(request, true)
+    }) {
         Ok(RsnStaReady::Transmit(message)) => Change::Confirm {
             replay,
             response: EapolResponse {

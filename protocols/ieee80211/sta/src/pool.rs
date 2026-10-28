@@ -15,13 +15,9 @@ impl<X> Pool<X> {
     /// time, so no granted token is ever lost.
     pub(crate) fn new<const N: usize>(items: [X; N]) -> Self {
         const {
-            #[cfg_attr(not(test), expect(clippy::panic, reason = "evaluated at build"))]
-            const fn checked<const N: usize>() {
-                if N > POOL_CAPACITY {
-                    panic!("a station holds at most 8 tokens of a kind");
-                }
+            if N > POOL_CAPACITY {
+                panic!("a station holds at most 8 tokens of a kind");
             }
-            checked::<N>();
         };
         let mut pool = Self {
             items: [const { None }; POOL_CAPACITY],
@@ -41,9 +37,23 @@ impl<X> Pool<X> {
         }
     }
 
-    /// Drain the bounded resource collection; each element vacates its credit.
-    pub(crate) fn take_all(&mut self) -> heapless::Vec<X, POOL_CAPACITY> {
-        self.items.iter_mut().filter_map(Option::take).collect()
+    /// Partition a bounded bank without collecting through a panicking Vec iterator.
+    pub(crate) fn partition(items: heapless::Vec<X, POOL_CAPACITY>, active: usize) -> (Self, Self) {
+        let mut items = items.into_iter();
+        let free = Self {
+            items: core::array::from_fn(|index| if index < active { items.next() } else { None }),
+            lost: crate::Counter::ZERO,
+        };
+        let spare = Self {
+            items: core::array::from_fn(|_| items.next()),
+            lost: crate::Counter::ZERO,
+        };
+        (free, spare)
+    }
+
+    /// Drain into the same fixed capacity, retaining vacant cells as values.
+    pub(crate) fn take_all(&mut self) -> [Option<X>; POOL_CAPACITY] {
+        self.items.each_mut().map(Option::take)
     }
 
     pub(crate) fn take(&mut self) -> Option<X> {
@@ -187,5 +197,36 @@ mod tests {
                 .insert_by(Owned(7), |a, b| a.0 < b.0)
                 .is_err()
         );
+    }
+}
+
+#[cfg(test)]
+mod partition_tests {
+    use super::*;
+
+    #[test]
+    fn partition_preserves_all_owners_and_order_at_every_boundary() {
+        struct Owner(u8);
+        for active in [0, 3, POOL_CAPACITY, usize::MAX] {
+            let values =
+                heapless::Vec::from_array(core::array::from_fn::<_, POOL_CAPACITY, _>(|i| {
+                    Owner(i as u8)
+                }));
+            let (mut free, mut spare) = Pool::partition(values, active);
+            assert_eq!(free.len(), active.min(POOL_CAPACITY));
+            let values: std::vec::Vec<_> = free
+                .take_all()
+                .into_iter()
+                .chain(spare.take_all())
+                .flatten()
+                .map(|owner| owner.0)
+                .collect();
+            assert_eq!(
+                values,
+                (0..POOL_CAPACITY as u8).collect::<std::vec::Vec<_>>()
+            );
+            assert!(free.is_empty());
+            assert!(spare.is_empty());
+        }
     }
 }

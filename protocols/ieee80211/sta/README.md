@@ -199,12 +199,13 @@ The PM owner retains a NonZero beacon period through its divisions. Listen
 intervals and TBTT periods keep their full `u64` value. Monotonic arithmetic
 is checked: a short slice emits `Due`, and a future slice or preemption uses
 an absolute `ArmAt` deadline, so delayed execution cannot extend it. Fallible
-clock inputs return `PmScheduleError` without changing state or publishing
-effects. It validates a transition on a value-only copy and commits that
+clock inputs and interval products return `PmScheduleError` without changing
+state or publishing effects. It validates a transition on a value-only copy and commits that
 copy; the transition has a finite effect bound and no allocation. Relative
 timers are validated against one captured clock before a consumer applies the
 batch; a backend must also reject intervals its hardware cannot represent.
-Only the activity presence counter retains intentional modular rollover.
+`ModemSleep::start` returns a fallible batch as well. Only the activity
+presence counter retains intentional modular rollover.
 Each modem-sleep input returns a fresh `PmActions` batch. Before changing
 state, its helpers receive fixed arrays of affine effect places: writing
 consumes a place, so neither overflow nor overwriting another effect is
@@ -443,6 +444,11 @@ retained material preserves its installation age and replay frontier.
 Leave removes all installed owners, with each terminal returning the
 permission for the next removal.
 
+A refused key-bank reunion retains the partial collection and every remaining
+slot in quarantine. `Station::poll_action` returns the existing
+`ContractViolation(IncompleteBank)` action, so the service follows its normal
+contract-fault path without discarding or reusing any slot.
+
 A correctly authenticated repeated M3, including a larger replay counter,
 retains PTK. Its GTK follows that same material/slot policy. `RsnStaRetryInstall`
 contains only group work, so a completed handshake cannot grant another PTK
@@ -567,10 +573,8 @@ configuration replies.
   credits prevent a second request from overwriting that cell or its terminal.
 - **`machine.rs::Owed` variants carry no proof**; they re-read `self.lease`
   and `self.keys.pairwise` behind `_ =>` arms.
-- **Silent losses and hidden panics:** `pool.rs::Pool::put` drops and
-  counts; public `Station::lost_tokens`; unreachable `data.rs` `overflowed`
-  sites; `StaInput::PairwiseKeyRemoved` collects into a `heapless` vector,
-  which panics on overflow.
+- **Silent losses:** `pool.rs::Pool::put` drops and counts; public
+  `Station::lost_tokens`; unreachable `data.rs` `overflowed` sites.
 - **Authentication attempts matched by number:**
   `machine.rs::TxPurpose::Authentication { attempt: u16 }`, with
   `join/authentication.rs::begin_attempt` using `saturating_add`.

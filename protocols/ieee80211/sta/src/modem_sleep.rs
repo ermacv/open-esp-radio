@@ -59,14 +59,10 @@ pub const NULL_RETRY_LIMIT: u8 = 15;
 /// Beacon interval assumed until the access point advertises one.
 pub const DEFAULT_BEACON_INTERVAL_MICROS: u32 = 0x19_000;
 const DEFAULT_BEACON_PERIOD: core::num::NonZeroU32 = {
-    #[cfg_attr(not(test), expect(clippy::panic, reason = "evaluated at build"))]
-    const fn checked() -> core::num::NonZeroU32 {
-        match core::num::NonZeroU32::new(DEFAULT_BEACON_INTERVAL_MICROS) {
-            Some(period) => period,
-            None => panic!("the default beacon interval is positive"),
-        }
+    match core::num::NonZeroU32::new(DEFAULT_BEACON_INTERVAL_MICROS) {
+        Some(period) => period,
+        None => panic!("the default beacon interval is positive"),
     }
-    checked()
 };
 
 /// Zero TU already means the default interval in the recovered PM policy.
@@ -165,6 +161,12 @@ pub enum PmTimer {
 pub enum PmScheduleError {
     /// A phase percentage is outside 0 through 100.
     InvalidSharePercent(u8),
+    /// A relative interval cannot fit in the monotonic duration domain.
+    IntervalOverflow { periods: u64, period_micros: u64 },
+    /// Rounding the scaled beacon count to a DTIM multiple exceeds u64.
+    ListenIntervalOverflow { beacons: u64, dtim_period: u8 },
+    /// An invalid slice would consume more than its complete cycle.
+    SliceExceedsCycle { slice: u64, cycle: u64 },
     /// An absolute deadline is outside the monotonic clock's range.
     DeadlineOverflow,
     /// The supplied clock precedes this association's cycle anchor.
@@ -278,7 +280,7 @@ pub const PM_ACTION_CAPACITY: usize = 24;
 /// use oer_ieee80211_wire::tsf::TsfInstant;
 /// let mut pm = ModemSleep::new(SleepType::None);
 /// let beacon = PmBeacon { timestamp_tsf: TsfInstant::from_micros(0), interval_tu: 100, tim: None };
-/// let start = pm.start(beacon, CoexView::INACTIVE);
+/// let start = pm.start(beacon, CoexView::INACTIVE).unwrap();
 /// assert!(!start.is_empty());
 /// let stop = pm.stop(CoexView::INACTIVE);
 /// assert!(!stop.is_empty());
@@ -356,6 +358,7 @@ type Places<'a, const N: usize> = [EffectPlace<'a>; N];
 
 struct PhaseTiming {
     slice_end: u64,
+    cycle_remainder: u64,
     duration_micros: u32,
     deadline: Option<u64>,
 }
@@ -397,15 +400,15 @@ impl CoexView {
     }
 
     /// One schedule cycle, in microseconds.
-    #[cfg_attr(
-        not(test),
-        expect(clippy::arithmetic_side_effects, reason = "u8 * u32 * 100 fits u64")
-    )]
-    const fn cycle_micros(self) -> u64 {
+    fn cycle_micros(self) -> Result<u64, PmScheduleError> {
         // u8 * u32 * 100 is at most 109_521_666_022_500.
-        (self.overall_period() as u64)
-            * (self.interval as u64)
-            * (SCHEDULE_INTERVAL_UNIT_MICROS as u64)
+        interval_product(
+            u64::from(self.overall_period()),
+            interval_product(
+                u64::from(self.interval),
+                u64::from(SCHEDULE_INTERVAL_UNIT_MICROS),
+            )?,
+        )
     }
 }
 
@@ -704,14 +707,26 @@ impl ModemSleep {
     /// point's last beacon or probe response before the association; its
     /// timestamp places the first TBTT schedule, as the vendor passes its
     /// node timestamp without a TIM.
-    pub fn start(&mut self, join_beacon: PmBeacon, coex: CoexView) -> PmActions {
-        self.transition(|this, [a, b, c, d, e, f, g, h, ..]| {
+    pub fn start(
+        &mut self,
+        join_beacon: PmBeacon,
+        coex: CoexView,
+    ) -> Result<PmActions, PmScheduleError> {
+        let mut next = self.clone();
+        let (result, actions) = next.transition(|this, [a, b, c, d, e, f, g, h, ..]| {
             this.start_into(join_beacon, coex, [a, b, c, d, e, f, g, h])
-        })
-        .1
+        });
+        result?;
+        *self = next;
+        Ok(actions)
     }
 
-    fn start_into(&mut self, join_beacon: PmBeacon, coex: CoexView, places: Places<'_, 8>) {
+    fn start_into(
+        &mut self,
+        join_beacon: PmBeacon,
+        coex: CoexView,
+        places: Places<'_, 8>,
+    ) -> Result<(), PmScheduleError> {
         let [
             interval,
             scale,
@@ -723,7 +738,7 @@ impl ModemSleep {
             active1,
         ] = places;
         if self.started {
-            return;
+            return Ok(());
         }
         self.active_null_in_flight = false;
         self.power_save_null_in_flight = false;
@@ -735,7 +750,7 @@ impl ModemSleep {
             )));
         }
         self.dtim_period = 1;
-        self.scale_listen_interval(coex, [scale]);
+        self.scale_listen_interval(coex, [scale])?;
         self.coex_pwr_update(coex, [power]);
         self.coex_was_active = coex.active;
         self.update_tbtt_at_next_beacon = true;
@@ -747,7 +762,7 @@ impl ModemSleep {
             },
             coex,
             [tbtt],
-        );
+        )?;
         priority.write(PmAction::RxBeaconPriority(true));
         time.write(PmAction::RxBeaconTime {
             window_micros: self.beacon_window_micros,
@@ -756,6 +771,7 @@ impl ModemSleep {
         self.enable_active_timer([active0, active1]);
         self.started = true;
         self.preempted = false;
+        Ok(())
     }
 
     /// `pm_stop`: the association ends.
@@ -865,13 +881,6 @@ impl ModemSleep {
 
     /// `pm_coex_recalculate_wifi_time_slice`: place the station in the cycle
     /// counted from the TBTT anchor and re-arm the slice-end timer.
-    #[cfg_attr(
-        not(test),
-        expect(
-            clippy::arithmetic_side_effects,
-            reason = "bounded u8/u32 products fit u64; offset <= now and validated share <= cycle"
-        )
-    )]
     fn recalculate_slice(
         &mut self,
         clock: PmClock,
@@ -897,15 +906,18 @@ impl ModemSleep {
             ));
         }
         let cycle =
-            core::num::NonZeroU64::new(coex.cycle_micros()).ok_or(PmScheduleError::ZeroCycle)?;
+            core::num::NonZeroU64::new(coex.cycle_micros()?).ok_or(PmScheduleError::ZeroCycle)?;
         let offset = now
             .checked_sub(self.cycle_anchor)
             .ok_or(PmScheduleError::ClockBeforeCycleAnchor)?
             % cycle;
-        let slice = u64::from(coex.phase0_share_percent)
-            * u64::from(coex.interval)
-            * u64::from(coex.current_period);
-        self.slice_end = (now - offset)
+        let slice = interval_product(
+            u64::from(coex.phase0_share_percent),
+            interval_product(u64::from(coex.interval), u64::from(coex.current_period))?,
+        )?;
+        self.slice_end = now
+            .checked_sub(offset)
+            .ok_or(PmScheduleError::ClockBeforeCycleAnchor)?
             .checked_add(slice)
             .ok_or(PmScheduleError::DeadlineOverflow)?;
         let margin = if self.started {
@@ -913,7 +925,7 @@ impl ModemSleep {
         } else {
             u64::from(IDLE_SLICE_MARGIN_MICROS)
         };
-        self.cycle_remainder = cycle.get() - slice;
+        self.cycle_remainder = slice_remainder(cycle.get(), slice)?;
         disarm.write(PmAction::Disarm(PmTimer::SliceEnd));
         match self.slice_end.checked_sub(margin) {
             Some(deadline) if deadline > now => {
@@ -1283,19 +1295,12 @@ impl ModemSleep {
             traffic,
             [c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12],
         )?;
-        self.set_next_tbtt(coex, [next]);
+        self.set_next_tbtt(coex, [next])?;
         self.update_params(clock, coex, traffic, [u0, u1, u2, u3, u4, u5, u6, u7])?;
         Ok(())
     }
 
     /// `pm_coex_tbtt_process`.
-    #[cfg_attr(
-        not(test),
-        expect(
-            clippy::arithmetic_side_effects,
-            reason = "u8 period * u32 beacon interval fits u64; absolute time uses checked_add"
-        )
-    )]
     fn coex_tbtt(
         &mut self,
         clock: PmClock,
@@ -1324,9 +1329,10 @@ impl ModemSleep {
             self.slice_deadline = clock
                 .now
                 .as_micros()
-                .checked_add(
-                    u64::from(coex.overall_period()) * u64::from(self.beacon_interval_micros.get()),
-                )
+                .checked_add(interval_product(
+                    u64::from(coex.overall_period()),
+                    u64::from(self.beacon_interval_micros.get()),
+                )?)
                 .ok_or(PmScheduleError::DeadlineOverflow)?;
             interval.write(PmAction::Coex(PmCoexAction::SetInterval(
                 self.beacon_interval_micros.get() / SCHEDULE_INTERVAL_UNIT_MICROS,
@@ -1357,34 +1363,26 @@ impl ModemSleep {
     }
 
     /// `pm_set_next_tbtt`: follow a changed schedule period.
-    #[cfg_attr(
-        not(test),
-        expect(
-            clippy::arithmetic_side_effects,
-            reason = "u8 period * u32 beacon interval fits u64"
-        )
-    )]
-    fn set_next_tbtt(&mut self, coex: CoexView, places: Places<'_, 1>) {
+    fn set_next_tbtt(
+        &mut self,
+        coex: CoexView,
+        places: Places<'_, 1>,
+    ) -> Result<(), PmScheduleError> {
         let [interval] = places;
         let period = coex.overall_period();
         if !coex.active || self.tbtt_period == period {
-            return;
+            return Ok(());
         }
         self.tbtt_period = period;
-        interval.write(PmAction::SetTbttInterval(
-            u64::from(period) * u64::from(self.beacon_interval_micros.get()),
-        ));
+        interval.write(PmAction::SetTbttInterval(interval_product(
+            u64::from(period),
+            u64::from(self.beacon_interval_micros.get()),
+        )?));
         self.update_tbtt_at_next_beacon = true;
+        Ok(())
     }
 
     /// `pm_update_params`.
-    #[cfg_attr(
-        not(test),
-        expect(
-            clippy::arithmetic_side_effects,
-            reason = "u8 * u32 fits u64; the two fixed wake leads sum to at most 5000"
-        )
-    )]
     fn update_params(
         &mut self,
         clock: PmClock,
@@ -1395,7 +1393,10 @@ impl ModemSleep {
         let [set_ahead, w0, w1, w2, w3, w4, w5, w6] = places;
         let (active_timeout, ahead) = if coex.active {
             (
-                u64::from(coex.overall_period()) * u64::from(self.beacon_interval_micros.get()),
+                interval_product(
+                    u64::from(coex.overall_period()),
+                    u64::from(self.beacon_interval_micros.get()),
+                )?,
                 SHARED_TBTT_AHEAD_MICROS,
             )
         } else {
@@ -1407,7 +1408,7 @@ impl ModemSleep {
             self.tbtt_window_micros = TBTT_WAKE_WINDOW_MICROS;
             set_ahead.write(PmAction::SetTbttAhead {
                 ahead_micros: ahead,
-                wake_ahead_micros: TBTT_WAKE_WINDOW_MICROS + ahead,
+                wake_ahead_micros: wake_ahead(coex.active),
             });
         }
         if coex.active != self.coex_was_active {
@@ -1476,8 +1477,8 @@ impl ModemSleep {
         if !self.started {
             return Ok(());
         }
-        self.parse_beacon(beacon, coex, [p0, p1, p2]);
-        self.update_next_tbtt(beacon, coex, [tbtt]);
+        self.parse_beacon(beacon, coex, [p0, p1, p2])?;
+        self.update_next_tbtt(beacon, coex, [tbtt])?;
         self.beacon_expected_at_slice_end = false;
         self.beacon_expected = false;
         let tim = beacon.tim;
@@ -1497,7 +1498,12 @@ impl ModemSleep {
     }
 
     /// `pm_parse_beacon`.
-    fn parse_beacon(&mut self, beacon: PmBeacon, coex: CoexView, places: Places<'_, 3>) {
+    fn parse_beacon(
+        &mut self,
+        beacon: PmBeacon,
+        coex: CoexView,
+        places: Places<'_, 3>,
+    ) -> Result<(), PmScheduleError> {
         let [scale, set_interval, dtim] = places;
         let interval = beacon_period(beacon.interval_tu);
         let dtim_period = beacon
@@ -1506,7 +1512,7 @@ impl ModemSleep {
         if !self.beacon_parsed {
             self.beacon_interval_micros = interval;
             self.dtim_period = dtim_period;
-            self.scale_listen_interval(coex, [scale]);
+            self.scale_listen_interval(coex, [scale])?;
             if coex.active {
                 set_interval.write(PmAction::Coex(PmCoexAction::SetInterval(
                     interval.get() / SCHEDULE_INTERVAL_UNIT_MICROS,
@@ -1514,11 +1520,11 @@ impl ModemSleep {
             }
             self.beacon_parsed = true;
             self.update_tbtt_at_next_beacon = true;
-            return;
+            return Ok(());
         }
         if self.beacon_interval_micros != interval {
             self.beacon_interval_micros = interval;
-            self.scale_listen_interval(coex, [scale]);
+            self.scale_listen_interval(coex, [scale])?;
             if coex.active {
                 set_interval.write(PmAction::Coex(PmCoexAction::SetInterval(
                     interval.get() / SCHEDULE_INTERVAL_UNIT_MICROS,
@@ -1528,11 +1534,12 @@ impl ModemSleep {
         }
         if self.dtim_period != dtim_period {
             self.dtim_period = dtim_period;
-            self.scale_listen_interval(coex, [dtim]);
+            self.scale_listen_interval(coex, [dtim])?;
             if self.sleep_type != SleepType::None {
                 self.update_tbtt_at_next_beacon = true;
             }
         }
+        Ok(())
     }
 
     /// `pm_scale_listen_interval`: the configured listen interval, counted
@@ -1572,38 +1579,40 @@ impl ModemSleep {
     /// script only provides (not checked against the pinned script). The
     /// ROM's beacon parser, which calls through such tables, is not
     /// reviewed.
-    fn scale_listen_interval(&mut self, coex: CoexView, places: Places<'_, 1>) {
+    fn scale_listen_interval(
+        &mut self,
+        coex: CoexView,
+        places: Places<'_, 1>,
+    ) -> Result<(), PmScheduleError> {
         let [power] = places;
         let scaled = scaled_listen_interval(
             self.sleep_type.listen_interval().get(),
             self.beacon_interval_micros,
             self.dtim_period,
-        );
+        )?;
         if scaled == self.listen_interval_beacons {
-            return;
+            return Ok(());
         }
         self.listen_interval_beacons = scaled;
         if matches!(self.sleep_type, SleepType::MaxModem(_)) {
             self.update_tbtt_at_next_beacon = true;
             self.coex_pwr_update(coex, [power]);
         }
+        Ok(())
     }
 
     /// `pm_handle_tbtt_interval`: a TBTT interval of `beacons` beacon
     /// intervals kept in step with the DTIM. When the DTIM is not yet
     /// aligned with that period, the interval first runs up to the DTIM
     /// and is re-derived at the next beacon.
-    #[cfg_attr(
-        not(test),
-        expect(
-            clippy::arithmetic_side_effects,
-            reason = "private callers pass at most u16::MAX * 102400 + 255 beacons; their u32-period product fits u64"
-        )
-    )]
-    fn handle_tbtt_interval(&mut self, beacons: u64, tim: Option<PmTim>) -> u64 {
+    fn handle_tbtt_interval(
+        &mut self,
+        beacons: u64,
+        tim: Option<PmTim>,
+    ) -> Result<u64, PmScheduleError> {
         let Some(tim) = tim else {
             self.update_tbtt_at_next_beacon = true;
-            return u64::from(self.beacon_interval_micros.get());
+            return Ok(u64::from(self.beacon_interval_micros.get()));
         };
         let beacons = core::num::NonZeroU64::new(beacons).unwrap_or(core::num::NonZeroU64::MIN);
         let period = u64::from(tim.dtim_period.max(1));
@@ -1611,24 +1620,22 @@ impl ModemSleep {
             beacons.get().is_multiple_of(period) || period.is_multiple_of(beacons.get());
         let offset = u64::from(tim.dtim_count) % beacons;
         if !compatible || offset == 0 {
-            return beacons.get() * u64::from(self.beacon_interval_micros.get());
+            return interval_product(beacons.get(), u64::from(self.beacon_interval_micros.get()));
         }
         self.update_tbtt_at_next_beacon = true;
-        offset * u64::from(self.beacon_interval_micros.get())
+        interval_product(offset, u64::from(self.beacon_interval_micros.get()))
     }
 
     /// `pm_update_next_tbtt`: program the TBTT schedule from this beacon.
-    #[cfg_attr(
-        not(test),
-        expect(
-            clippy::arithmetic_side_effects,
-            reason = "the two fixed wake leads sum to at most 5000"
-        )
-    )]
-    fn update_next_tbtt(&mut self, beacon: PmBeacon, coex: CoexView, places: Places<'_, 1>) {
+    fn update_next_tbtt(
+        &mut self,
+        beacon: PmBeacon,
+        coex: CoexView,
+        places: Places<'_, 1>,
+    ) -> Result<(), PmScheduleError> {
         let [tbtt] = places;
         if !self.update_tbtt_at_next_beacon {
-            return;
+            return Ok(());
         }
         self.update_tbtt_at_next_beacon = false;
         let ahead = if coex.active {
@@ -1639,14 +1646,14 @@ impl ModemSleep {
         self.tbtt_ahead_micros = ahead;
         self.tbtt_window_micros = TBTT_WAKE_WINDOW_MICROS;
         let interval = if coex.active {
-            self.handle_tbtt_interval(u64::from(coex.overall_period()), beacon.tim)
+            self.handle_tbtt_interval(u64::from(coex.overall_period()), beacon.tim)?
         } else {
             match self.sleep_type {
                 SleepType::MinModem => {
-                    self.handle_tbtt_interval(u64::from(self.dtim_period), beacon.tim)
+                    self.handle_tbtt_interval(u64::from(self.dtim_period), beacon.tim)?
                 }
                 SleepType::MaxModem(_) => {
-                    self.handle_tbtt_interval(self.listen_interval_beacons, beacon.tim)
+                    self.handle_tbtt_interval(self.listen_interval_beacons, beacon.tim)?
                 }
                 SleepType::None => u64::from(self.beacon_interval_micros.get()),
             }
@@ -1657,18 +1664,12 @@ impl ModemSleep {
             first_tbtt: TsfInstant::from_micros(timestamp.saturating_sub(phase)),
             interval_micros: interval,
             ahead_micros: ahead,
-            wake_ahead_micros: TBTT_WAKE_WINDOW_MICROS + ahead,
+            wake_ahead_micros: wake_ahead(coex.active),
         }));
+        Ok(())
     }
 
     /// `pm_process_tim`.
-    #[cfg_attr(
-        not(test),
-        expect(
-            clippy::arithmetic_side_effects,
-            reason = "the branch establishes slice_end > now before subtraction"
-        )
-    )]
     fn process_tim(
         &mut self,
         unicast: bool,
@@ -1694,12 +1695,11 @@ impl ModemSleep {
                         self.receiving = true;
                         self.enable_dream_timer([c, d]);
                         let now = clock.now.as_micros();
-                        if now < self.slice_end {
+                        if let Some(remaining @ 1..) = self.slice_end.checked_sub(now) {
                             // The beacon-window bound fits u32; cap the physical
                             // request to that window before projecting it.
-                            let remaining = (self.slice_end - now)
-                                .min(u64::from(self.beacon_window_micros))
-                                as u32;
+                            let remaining =
+                                remaining.min(u64::from(self.beacon_window_micros)) as u32;
                             e.write(PmAction::Coex(PmCoexAction::Request {
                                 event: PmCoexEvent::GroupTraffic,
                                 duration_micros: remaining.min(self.beacon_window_micros),
@@ -1869,13 +1869,6 @@ impl ModemSleep {
 
     /// `pm_coex_schm_process`: the schedule entered a phase that notifies
     /// Wi-Fi.
-    #[cfg_attr(
-        not(test),
-        expect(
-            clippy::arithmetic_side_effects,
-            reason = "validated percentage <= 100 times u8 and u32 fits u64"
-        )
-    )]
     pub fn coex_phase(
         &mut self,
         phase: CoexPhaseView,
@@ -1887,9 +1880,12 @@ impl ModemSleep {
         if phase.share_percent > 100 {
             return Err(PmScheduleError::InvalidSharePercent(phase.share_percent));
         }
-        let slice = u64::from(phase.share_percent)
-            * u64::from(coex.interval)
-            * u64::from(coex.current_period);
+        let slice = interval_product(
+            u64::from(phase.share_percent),
+            interval_product(u64::from(coex.interval), u64::from(coex.current_period))?,
+        )?;
+        let cycle = coex.cycle_micros()?;
+        let cycle_remainder = slice_remainder(cycle, slice)?;
         let slice_end = clock
             .now
             .as_micros()
@@ -1911,9 +1907,9 @@ impl ModemSleep {
                 this.coex_phase_into(
                     phase,
                     clock,
-                    coex,
                     PhaseTiming {
                         slice_end,
+                        cycle_remainder,
                         duration_micros,
                         deadline,
                     },
@@ -1922,30 +1918,21 @@ impl ModemSleep {
             })
             .1)
     }
-
-    #[cfg_attr(
-        not(test),
-        expect(
-            clippy::arithmetic_side_effects,
-            reason = "validated share <= 100 and current_period <= overall_period establish slice <= cycle"
-        )
-    )]
     fn coex_phase_into(
         &mut self,
         phase: CoexPhaseView,
         clock: PmClock,
-        coex: CoexView,
         timing: PhaseTiming,
         places: Places<'_, 6>,
     ) {
         let [request, unblock, disarm, arm, shared, block] = places;
         let PhaseTiming {
             slice_end,
+            cycle_remainder,
             duration_micros,
             deadline,
         } = timing;
         let now = clock.now.as_micros();
-        let slice = u64::from(duration_micros);
         if phase.wifi & CoexPhaseView::WIFI_SLICE != 0 {
             request.write(PmAction::Coex(PmCoexAction::Request {
                 event: PmCoexEvent::Slice,
@@ -1954,7 +1941,7 @@ impl ModemSleep {
             self.in_slice = true;
             self.slice_end = slice_end;
             // share <= 100 and current_period <= overall_period.
-            self.cycle_remainder = coex.cycle_micros() - slice;
+            self.cycle_remainder = cycle_remainder;
             if !self.is_sleeping() {
                 unblock.write(PmAction::UnblockTx);
             }
@@ -2178,27 +2165,17 @@ impl ModemSleep {
     }
 
     /// Request the slice until its end when it has not ended.
-    #[cfg_attr(
-        not(test),
-        expect(
-            clippy::arithmetic_side_effects,
-            reason = "the branch establishes slice_end > now before subtraction"
-        )
-    )]
     fn request_slice_until_end(
         &mut self,
         now: u64,
         places: Places<'_, 1>,
     ) -> Result<(), PmScheduleError> {
         let [request] = places;
-        if now < self.slice_end {
+        if let Some(micros @ 1..) = self.slice_end.checked_sub(now) {
             request.write(PmAction::Coex(PmCoexAction::Request {
                 event: PmCoexEvent::Slice,
-                duration_micros: u32::try_from(self.slice_end - now).map_err(|_| {
-                    PmScheduleError::RequestDurationOutOfRange {
-                        micros: self.slice_end - now,
-                    }
-                })?,
+                duration_micros: u32::try_from(micros)
+                    .map_err(|_| PmScheduleError::RequestDurationOutOfRange { micros })?,
             }));
         }
         Ok(())
@@ -2207,27 +2184,31 @@ impl ModemSleep {
 
 /// `pm_scale_listen_interval`'s arithmetic: `listen_interval` 100-TU units
 /// in beacons of `beacon_interval_micros`, rounded to the DTIM period.
-#[cfg_attr(
-    not(test),
-    expect(
-        clippy::arithmetic_side_effects,
-        reason = "u16 * 102400 + u8 fits u64; divisor is nonzero; down <= beacons <= up"
-    )
-)]
 fn scaled_listen_interval(
     listen_interval: u16,
     beacon_interval_micros: core::num::NonZeroU32,
     dtim_period: u8,
-) -> u64 {
+) -> Result<u64, PmScheduleError> {
     // The configured u16 count is in 100 TU units. Keep the product and
     // the rounded beacon count wide, even with a one-microsecond divisor.
-    let raw = u64::from(listen_interval) * 102_400 / u64::from(beacon_interval_micros.get());
-    let beacons = raw.max(1);
+    let raw = interval_product(u64::from(listen_interval), 102_400)?
+        / core::num::NonZeroU64::from(beacon_interval_micros);
+    rounded_listen_interval(raw.max(1), dtim_period)
+}
+
+fn rounded_listen_interval(beacons: u64, dtim_period: u8) -> Result<u64, PmScheduleError> {
     let dtim =
         core::num::NonZeroU64::new(u64::from(dtim_period)).unwrap_or(core::num::NonZeroU64::MIN);
     let (down, up) = if beacons >= dtim.get() {
-        let down = beacons.saturating_sub(beacons % dtim);
-        (down, down + dtim.get())
+        let down = beacons.abs_diff(beacons % dtim);
+        (
+            down,
+            down.checked_add(dtim.get())
+                .ok_or(PmScheduleError::ListenIntervalOverflow {
+                    beacons,
+                    dtim_period,
+                })?,
+        )
     } else {
         let up = (beacons..=dtim.get())
             .find(|divisor| dtim.get().checked_rem(*divisor) == Some(0))
@@ -2238,10 +2219,34 @@ fn scaled_listen_interval(
             .unwrap_or(1);
         (down, up)
     };
-    if beacons.saturating_sub(down) < up - beacons {
+    Ok(if beacons.abs_diff(down) < up.abs_diff(beacons) {
         down
     } else {
         up
+    })
+}
+
+fn slice_remainder(cycle: u64, slice: u64) -> Result<u64, PmScheduleError> {
+    cycle
+        .checked_sub(slice)
+        .ok_or(PmScheduleError::SliceExceedsCycle { slice, cycle })
+}
+
+/// Non-modular interval arithmetic reports both source operands.
+fn interval_product(periods: u64, period_micros: u64) -> Result<u64, PmScheduleError> {
+    periods
+        .checked_mul(period_micros)
+        .ok_or(PmScheduleError::IntervalOverflow {
+            periods,
+            period_micros,
+        })
+}
+
+const fn wake_ahead(shared: bool) -> u16 {
+    if shared {
+        const { TBTT_WAKE_WINDOW_MICROS + SHARED_TBTT_AHEAD_MICROS }
+    } else {
+        const { TBTT_WAKE_WINDOW_MICROS + TBTT_AHEAD_MICROS }
     }
 }
 

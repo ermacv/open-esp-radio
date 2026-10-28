@@ -101,9 +101,10 @@ impl StaPmksaCache {
             Some(slot) => *slot = Some(entry),
             // Full: the oldest goes, the new entry takes the last place.
             None => {
-                self.entries.rotate_left(1);
-                let [_, _, _, _, _, _, _, _, _, last] = &mut self.entries;
-                *last = Some(entry);
+                let mut carry = Some(entry);
+                for slot in self.entries.iter_mut().rev() {
+                    core::mem::swap(slot, &mut carry);
+                }
             }
         }
     }

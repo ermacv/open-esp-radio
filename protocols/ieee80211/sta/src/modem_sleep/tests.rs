@@ -72,7 +72,7 @@ fn run(step: impl FnOnce() -> PmActions) -> Vec<PmAction> {
 
 fn started(sleep_type: SleepType, coex: CoexView) -> ModemSleep {
     let mut pm = ModemSleep::new(sleep_type);
-    let _ = run(|| pm.start(beacon(BI as u64 * 7 + 1_234, None), coex));
+    let _ = run(|| pm.start(beacon(BI as u64 * 7 + 1_234, None), coex).unwrap());
     pm
 }
 
@@ -82,7 +82,7 @@ fn every_start_and_stop_keeps_its_complete_ordered_effects() {
     let coex = shared();
     let mut actions = Vec::new();
     for _ in 0..6 {
-        actions.extend(pm.start(beacon(0, None), coex));
+        actions.extend(pm.start(beacon(0, None), coex).unwrap());
         assert!(pm.is_started());
         actions.extend(pm.stop(coex));
         assert!(!pm.is_started());
@@ -146,7 +146,7 @@ fn a_tbtt_keeps_wake_slice_and_parameter_effects_in_order() {
     let (hold, _) = pm
         .tx_data(
             true,
-            clock(coex.cycle_micros() - 1_000),
+            clock(coex.cycle_micros().unwrap() - 1_000),
             coex,
             PmTraffic::IDLE,
         )
@@ -155,7 +155,7 @@ fn a_tbtt_keeps_wake_slice_and_parameter_effects_in_order() {
 
     let actions = pm
         .tbtt(
-            clock(coex.cycle_micros() * 2),
+            clock(coex.cycle_micros().unwrap() * 2),
             coex,
             PmTraffic {
                 tx_pending: true,
@@ -186,7 +186,7 @@ fn a_tbtt_keeps_wake_slice_and_parameter_effects_in_order() {
             PmAction::ArmAt {
                 timer: PmTimer::SliceEnd,
                 deadline: Instant::from_micros(
-                    coex.cycle_micros() * 2 + coex.cycle_micros() / 2
+                    coex.cycle_micros().unwrap() * 2 + coex.cycle_micros().unwrap() / 2
                         - u64::from(SLEEP_DELAY_MICROS)
                 )
             },
@@ -244,7 +244,10 @@ fn a_tx_wake_has_the_same_effects_and_state_as_an_acknowledged_active_null() {
 #[test]
 fn start_places_the_first_tbtt_on_the_last_beacon_boundary() {
     let mut pm = ModemSleep::new(SleepType::None);
-    let actions = run(|| pm.start(beacon(BI as u64 * 7 + 1_234, None), CoexView::INACTIVE));
+    let actions = run(|| {
+        pm.start(beacon(BI as u64 * 7 + 1_234, None), CoexView::INACTIVE)
+            .unwrap()
+    });
     assert!(pm.is_started());
     assert_eq!(pm.state(), PmState::Awake);
     assert!(actions.contains(&PmAction::StartTbtt(PmTbttSchedule {
@@ -268,7 +271,7 @@ fn start_places_the_first_tbtt_on_the_last_beacon_boundary() {
 #[test]
 fn a_shared_start_sets_the_schedule_interval_from_the_beacon_interval() {
     let mut pm = ModemSleep::new(SleepType::None);
-    let actions = run(|| pm.start(beacon(0, None), shared()));
+    let actions = run(|| pm.start(beacon(0, None), shared()).unwrap());
     assert!(actions.contains(&PmAction::Coex(PmCoexAction::SetInterval(BI / 100))));
     assert!(actions.iter().any(|action| matches!(
         action,
@@ -403,7 +406,7 @@ fn a_frame_offered_outside_the_slice_waits_for_the_next_one() {
     let mut pm = started(SleepType::None, coex);
     let _ = run(|| pm.slice_end_timer(coex, PmTraffic::IDLE));
     // Late in the cycle, far from the Wi-Fi slice at its start.
-    let late = coex.cycle_micros() - 1_000;
+    let late = coex.cycle_micros().unwrap() - 1_000;
     let (hold, actions) = pm
         .tx_data(true, clock(late), coex, PmTraffic::IDLE)
         .unwrap();
@@ -429,20 +432,32 @@ fn the_tbtt_interval_keeps_step_with_the_dtim() {
         })
     };
     // Six beacons against a DTIM period of four: incompatible.
-    assert_eq!(pm.handle_tbtt_interval(6, tim(0, 4)), u64::from(6 * BI));
+    assert_eq!(
+        pm.handle_tbtt_interval(6, tim(0, 4)).unwrap(),
+        u64::from(6 * BI)
+    );
     // Compatible and aligned with the DTIM: the whole period.
     pm.update_tbtt_at_next_beacon = false;
-    assert_eq!(pm.handle_tbtt_interval(3, tim(0, 3)), u64::from(3 * BI));
+    assert_eq!(
+        pm.handle_tbtt_interval(3, tim(0, 3)).unwrap(),
+        u64::from(3 * BI)
+    );
     assert!(!pm.update_tbtt_at_next_beacon);
     // A DTIM every beacon keeps a TBTT every beacon.
-    assert_eq!(pm.handle_tbtt_interval(1, tim(0, 1)), u64::from(BI));
+    assert_eq!(
+        pm.handle_tbtt_interval(1, tim(0, 1)).unwrap(),
+        u64::from(BI)
+    );
     assert!(!pm.update_tbtt_at_next_beacon);
     // Compatible, but the DTIM is not aligned yet: run up to it, then
     // re-derive the interval at the next beacon.
-    assert_eq!(pm.handle_tbtt_interval(3, tim(1, 3)), u64::from(BI));
+    assert_eq!(
+        pm.handle_tbtt_interval(3, tim(1, 3)).unwrap(),
+        u64::from(BI)
+    );
     assert!(pm.update_tbtt_at_next_beacon);
     // No TIM: one beacon interval, resynchronized at the next beacon.
-    assert_eq!(pm.handle_tbtt_interval(6, None), u64::from(BI));
+    assert_eq!(pm.handle_tbtt_interval(6, None).unwrap(), u64::from(BI));
 }
 
 #[test]
@@ -520,7 +535,8 @@ fn the_listen_interval_scales_to_beacons_rounded_to_the_dtim() {
             10,
             core::num::NonZeroU32::new(BI).unwrap_or(core::num::NonZeroU32::MIN),
             3
-        ),
+        )
+        .unwrap(),
         9
     );
     assert_eq!(
@@ -528,7 +544,8 @@ fn the_listen_interval_scales_to_beacons_rounded_to_the_dtim() {
             11,
             core::num::NonZeroU32::new(BI).unwrap_or(core::num::NonZeroU32::MIN),
             3
-        ),
+        )
+        .unwrap(),
         12
     );
     assert_eq!(
@@ -536,7 +553,8 @@ fn the_listen_interval_scales_to_beacons_rounded_to_the_dtim() {
             10,
             core::num::NonZeroU32::new(BI).unwrap_or(core::num::NonZeroU32::MIN),
             4
-        ),
+        )
+        .unwrap(),
         12
     );
     assert_eq!(
@@ -544,7 +562,8 @@ fn the_listen_interval_scales_to_beacons_rounded_to_the_dtim() {
             10,
             core::num::NonZeroU32::new(BI).unwrap_or(core::num::NonZeroU32::MIN),
             1
-        ),
+        )
+        .unwrap(),
         10
     );
     // Below one DTIM: the nearest divisor of it, a tie up.
@@ -553,7 +572,8 @@ fn the_listen_interval_scales_to_beacons_rounded_to_the_dtim() {
             3,
             core::num::NonZeroU32::new(BI).unwrap_or(core::num::NonZeroU32::MIN),
             10
-        ),
+        )
+        .unwrap(),
         2
     );
     assert_eq!(
@@ -561,7 +581,8 @@ fn the_listen_interval_scales_to_beacons_rounded_to_the_dtim() {
             4,
             core::num::NonZeroU32::new(BI).unwrap_or(core::num::NonZeroU32::MIN),
             10
-        ),
+        )
+        .unwrap(),
         5
     );
     assert_eq!(
@@ -569,7 +590,8 @@ fn the_listen_interval_scales_to_beacons_rounded_to_the_dtim() {
             3,
             core::num::NonZeroU32::new(BI).unwrap_or(core::num::NonZeroU32::MIN),
             8
-        ),
+        )
+        .unwrap(),
         4
     );
     // The listen interval counts 100-TU units: at 200 TU beacons ten units
@@ -579,7 +601,8 @@ fn the_listen_interval_scales_to_beacons_rounded_to_the_dtim() {
             10,
             core::num::NonZeroU32::new(2 * BI).unwrap_or(core::num::NonZeroU32::MIN),
             1
-        ),
+        )
+        .unwrap(),
         5
     );
     // Fewer than one beacon is one.
@@ -588,7 +611,8 @@ fn the_listen_interval_scales_to_beacons_rounded_to_the_dtim() {
             1,
             core::num::NonZeroU32::new(4 * BI).unwrap_or(core::num::NonZeroU32::MIN),
             1
-        ),
+        )
+        .unwrap(),
         1
     );
 }
@@ -674,7 +698,7 @@ fn slice_margins_are_due_at_the_boundary_and_future_deadlines_are_absolute() {
                 };
                 let mut pm = ModemSleep::new(SleepType::MinModem);
                 if started {
-                    let _ = pm.start(beacon(0, None), coex);
+                    let _ = pm.start(beacon(0, None), coex).unwrap();
                 }
                 let actions = pm
                     .coex_phase(
@@ -821,7 +845,7 @@ fn the_maximum_listen_interval_survives_scaling_and_tbtt_scheduling() {
     for (tu, expected_beacons) in [(100, 65_535), (1, 6_553_500)] {
         let period = core::num::NonZeroU32::new(u32::from(tu) * 1024).unwrap();
         assert_eq!(
-            scaled_listen_interval(u16::MAX, period, 1),
+            scaled_listen_interval(u16::MAX, period, 1).unwrap(),
             expected_beacons
         );
         let mut pm = ModemSleep::new(SleepType::MaxModem(listen));
@@ -830,7 +854,7 @@ fn the_maximum_listen_interval_survives_scaling_and_tbtt_scheduling() {
             interval_tu: tu,
             tim: None,
         };
-        let _ = pm.start(joined, CoexView::INACTIVE);
+        let _ = pm.start(joined, CoexView::INACTIVE).unwrap();
         let actions = pm
             .beacon(
                 PmBeacon {
@@ -853,4 +877,79 @@ fn the_maximum_listen_interval_survives_scaling_and_tbtt_scheduling() {
         });
         assert_eq!(interval, Some(6_710_784_000));
     }
+}
+
+#[test]
+fn interval_overflow_returns_its_operands_instead_of_panicking() {
+    let mut pm = ModemSleep::new(SleepType::MinModem);
+    assert_eq!(
+        pm.handle_tbtt_interval(
+            u64::MAX,
+            Some(PmTim {
+                dtim_count: 0,
+                ..quiet_tim()
+            })
+        ),
+        Err(PmScheduleError::IntervalOverflow {
+            periods: u64::MAX,
+            period_micros: u64::from(DEFAULT_BEACON_INTERVAL_MICROS),
+        })
+    );
+    assert_eq!(
+        interval_product(u64::MAX, 2),
+        Err(PmScheduleError::IntervalOverflow {
+            periods: u64::MAX,
+            period_micros: 2,
+        })
+    );
+    assert_eq!(interval_product(u64::MAX, 1), Ok(u64::MAX));
+    assert_eq!(
+        slice_remainder(10, 11),
+        Err(PmScheduleError::SliceExceedsCycle {
+            slice: 11,
+            cycle: 10,
+        })
+    );
+    assert_eq!(slice_remainder(10, 10), Ok(0));
+}
+
+#[test]
+fn a_refused_tbtt_interval_keeps_state_and_emits_no_effects() {
+    let mut pm = started(
+        SleepType::MaxModem(crate::request::StationListenInterval::DEFAULT),
+        CoexView::INACTIVE,
+    );
+    pm.listen_interval_beacons = u64::MAX;
+    pm.update_tbtt_at_next_beacon = true;
+    pm.beacon_parsed = true;
+    pm.dtim_period = quiet_tim().dtim_period;
+    let before = pm.clone();
+    assert!(matches!(
+        pm.beacon(
+            beacon(
+                100,
+                Some(PmTim {
+                    dtim_count: 0,
+                    ..quiet_tim()
+                })
+            ),
+            clock(100),
+            CoexView::INACTIVE,
+            PmTraffic::IDLE
+        ),
+        Err(PmScheduleError::IntervalOverflow { .. })
+    ));
+    assert_eq!(pm, before);
+}
+
+#[test]
+fn dtim_rounding_overflow_returns_the_original_count() {
+    assert_eq!(
+        rounded_listen_interval(u64::MAX, 2),
+        Err(PmScheduleError::ListenIntervalOverflow {
+            beacons: u64::MAX,
+            dtim_period: 2,
+        })
+    );
+    assert_eq!(rounded_listen_interval(u64::MAX - 2, 2), Ok(u64::MAX - 1));
 }

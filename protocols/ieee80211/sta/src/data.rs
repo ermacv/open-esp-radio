@@ -641,15 +641,9 @@ impl<'id, D: StaDataTokens, K: oer_ieee80211_port::Ieee80211Capabilities, const 
         depth: core::num::NonZeroU8,
     ) -> Self {
         const {
-            #[cfg_attr(not(test), expect(clippy::panic, reason = "evaluated at build"))]
-            const fn checked<const TICKETS: usize, const CAP: usize>() {
-                if TICKETS > CAP {
-                    panic!(
-                        "each MPDU a data queue holds takes a ticket: the queues hold every ticket"
-                    );
-                }
+            if TICKETS > CAP {
+                panic!("each MPDU a data queue holds takes a ticket: the queues hold every ticket");
             }
-            checked::<TICKETS, CAP>();
         };
         Self {
             tickets: Pool::new(tickets),
@@ -676,15 +670,9 @@ impl<'id, D: StaDataTokens, K: oer_ieee80211_port::Ieee80211Capabilities, const 
         depth: core::num::NonZeroU8,
     ) -> &mut Self {
         const {
-            #[cfg_attr(not(test), expect(clippy::panic, reason = "evaluated at build"))]
-            const fn checked<const TICKETS: usize, const CAP: usize>() {
-                if TICKETS > CAP {
-                    panic!(
-                        "each MPDU a data queue holds takes a ticket: the queues hold every ticket"
-                    );
-                }
+            if TICKETS > CAP {
+                panic!("each MPDU a data queue holds takes a ticket: the queues hold every ticket");
             }
-            checked::<TICKETS, CAP>();
         };
         oer_memory::init_in_place!(storage, Self {
             tickets: Pool::new(tickets),

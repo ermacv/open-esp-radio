@@ -20,14 +20,10 @@ use oer_ieee80211_wire::station_power_save::StaPowerManagement;
 /// The transmissions a Null's retry plan makes: the vendor's limit of
 /// Null retries, plus the first.
 pub const NULL_TRANSMISSIONS: NonZeroU8 = {
-    #[cfg_attr(not(test), expect(clippy::panic, reason = "evaluated at build"))]
-    const fn checked() -> NonZeroU8 {
-        match NonZeroU8::MIN.checked_add(crate::modem_sleep::NULL_RETRY_LIMIT) {
-            Some(count) => count,
-            None => panic!("a Null's retry limit plus its first transmission must fit"),
-        }
+    match NonZeroU8::MIN.checked_add(crate::modem_sleep::NULL_RETRY_LIMIT) {
+        Some(count) => count,
+        None => panic!("a Null's retry limit plus its first transmission must fit"),
     }
-    checked()
 };
 
 /// What the Null's completed retry plan established.
