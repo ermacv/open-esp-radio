@@ -27,6 +27,9 @@ the portable runtime drives role services over that port.
 | `wire/src/channel.rs` | Validated 2.4/5 GHz channels and 20/40 MHz geometry |
 | `wire/src/channel_switch.rs` | Channel Switch Announcement parsing and encoding |
 | `wire/src/phy.rs` | Validated non-HT, HT and HE SU rates |
+| `wire/src/rates.rs` | Legacy rates of the (Extended) Supported Rates elements |
+| `wire/src/frame.rs` | Frame Control, the data/management MAC header codec and the QoS Control field |
+| `wire/src/monitor_injection.rs` | Header geometry of a monitor-injected MPDU |
 | `wire/src/extensions/wmm.rs` | WMM AC parameters and vendor IE parsing |
 | `wire/src/extensions/espressif/esp_now.rs` | ESP-NOW framing and protected-envelope validation |
 | `softmac/src/extensions/espressif/esp_now/reassembly.rs` | Caller-owned ESP-NOW v2 datagram storage |
@@ -59,12 +62,15 @@ coordinator turns upstream channel switches into AP announcements and one
 port retune. Its search policy schedules upstream searches between AP TBTTs.
 It takes facts and returns actions for the port owner to execute.
 
-[`port`](port/README.md) owns lifecycle, VIF configuration, monitor contracts,
-operation ownership, capabilities, resource limits and normalized statuses.
-One submission is one hardware attempt. The backend draws EDCA contention
-below the port using `port/src/edca.rs`; an attempt carries no backoff.
-[`upper-mac`](upper-mac/README.md) owns retry ladders, Retry bits, aggregate
-retry selection, protection and the attempt planner. Its
+[`port`](port/README.md) holds only the peripheral boundary: lifecycle, VIF
+configuration, the monitor tap, operation ownership, capabilities, the
+backend's service description and normalized statuses. One submission is one
+hardware attempt. The backend draws EDCA contention below the port (the S31
+MAC's `edca::contention`); an attempt carries no backoff. The port depends on
+no core. [`upper-mac`](upper-mac/README.md) owns retry ladders, Retry bits,
+aggregate retry selection, the reading of a BlockAck, protection and the BSS
+basic rates, management budgets, the association PHY mode and the attempt
+planner. Its
 `block_ack/reorder.rs` owns receive reordering and `ccmp/replay.rs` checks
 receive replay; its packet-number allocator serves the backend, which
 numbers protected MPDUs below the port. Espressif policy parameters live in
@@ -72,7 +78,13 @@ numbers protected MPDUs below the port. Espressif policy parameters live in
 
 `softmac/src/extensions/espressif/esp_now/protocol.rs` owns ESP-NOW peers and
 protocol state. Its `security.rs` sibling owns secrets, generations and replay
-state. Both use the wire codecs.
+state. Both use the wire codecs, the interface identities of
+`softmac/src/interface.rs` and the PHY requests of
+`softmac/src/extensions/espressif/phy.rs`.
+
+`runtime/src/configuration.rs` checks the requested Wi-Fi owner topology
+against a backend's service description; `runtime/src/monitor/policy.rs`
+selects the frames a monitor keeps and the channels it visits.
 
 The [RSN crate](rsn/README.md) separates secret ownership and derivation
 (`crypto`), packet views and MIC handling (`eapol`), wire formats (`frames`)

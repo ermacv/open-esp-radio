@@ -15,8 +15,9 @@
 //! A snapshot neither changes this owner's generation nor proves hardware
 //! insertion of a beacon/probe-response timestamp on air.
 
+use crate::tsf_relation::TsfRelation;
 use oer_esp32s31_hal::{ieee80211::mac::WifiMacHal, owner::RadioAccess};
-use oer_ieee80211_port::{TsfGeneration, TsfRelation};
+use oer_ieee80211_port::TsfGeneration;
 use oer_ieee80211_wire::tsf::TsfInstant;
 
 /// The uncertainty of an access-point TSF sample: a count of the timer's

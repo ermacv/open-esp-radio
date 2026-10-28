@@ -1027,3 +1027,85 @@ fn bluetooth_backend_core_edges_have_no_exemption() {
         ]
     );
 }
+
+/// The IEEE 802.11 cores above the lower-MAC port.
+const IEEE80211_CORES: [&str; 7] = [
+    "oer-ieee80211-upper-mac",
+    "oer-ieee80211-rsn",
+    "oer-ieee80211-sta",
+    "oer-ieee80211-ap",
+    "oer-ieee80211-arbiter",
+    "oer-ieee80211-softmac",
+    "oer-ieee80211-runtime",
+];
+
+fn ieee80211_core(name: &str) -> bool {
+    IEEE80211_CORES.contains(&name)
+}
+
+/// The lower-MAC port holds only the peripheral boundary, so no normal
+/// dependency of it, optional, target-specific or transitive, reaches a core.
+#[test]
+fn the_ieee80211_port_reaches_no_core() {
+    let root = root();
+    let workspace = read_toml(&root.join("Cargo.toml"));
+    let graph: BTreeMap<String, BTreeSet<String>> = packages(&root)
+        .values()
+        .map(|manifest| {
+            (
+                manifest["package"]["name"]
+                    .as_str()
+                    .expect("name")
+                    .to_owned(),
+                normal_dependencies(manifest, &workspace["workspace"]),
+            )
+        })
+        .collect();
+    for name in IEEE80211_CORES.iter().chain(&["oer-ieee80211-port"]) {
+        assert!(graph.contains_key(*name), "{name} is a workspace package");
+    }
+    let violations = forbidden_paths(&graph, "oer-ieee80211-port", ieee80211_core);
+    assert!(violations.is_empty(), "port reaches a core: {violations:?}");
+}
+
+#[test]
+fn the_ieee80211_port_rule_rejects_direct_and_transitive_core_paths() {
+    let manifest: toml::Value = toml::from_str(
+        r#"
+[dependencies]
+wire = { package = "oer-ieee80211-wire", version = "1" }
+[target.'cfg(target_arch = "riscv32")'.dependencies]
+policy = { package = "oer-ieee80211-sta", version = "1", optional = true }
+[dev-dependencies]
+model = { package = "oer-ieee80211-upper-mac", version = "1" }
+"#,
+    )
+    .expect("manifest");
+    let workspace: toml::Value = toml::from_str("[dependencies]").expect("workspace");
+    let graph = BTreeMap::from([
+        (
+            "oer-ieee80211-port".into(),
+            normal_dependencies(&manifest, &workspace),
+        ),
+        (
+            "oer-ieee80211-wire".into(),
+            BTreeSet::from(["helper".into()]),
+        ),
+        (
+            "helper".into(),
+            BTreeSet::from(["oer-ieee80211-runtime".into()]),
+        ),
+    ]);
+    assert_eq!(
+        forbidden_paths(&graph, "oer-ieee80211-port", ieee80211_core),
+        [
+            "oer-ieee80211-port -> oer-ieee80211-sta",
+            "oer-ieee80211-port -> oer-ieee80211-wire -> helper -> oer-ieee80211-runtime",
+        ]
+    );
+    let clean = BTreeMap::from([(
+        "oer-ieee80211-port".into(),
+        BTreeSet::from(["oer-ieee80211-wire".into(), "oer-radio-port".into()]),
+    )]);
+    assert!(forbidden_paths(&clean, "oer-ieee80211-port", ieee80211_core).is_empty());
+}

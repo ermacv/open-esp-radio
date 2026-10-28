@@ -57,9 +57,11 @@ use oer_ieee80211_port::conformance;
 //! publishes them. The services it performs autonomously are its
 //! [`LowerMacCapabilities::services`].
 //!
-//! The values its backends' cores take (attempts, settings, key installs,
-//! A-MPDU and beacon timing values) live beside it ([`tx`], [`control`],
-//! [`extensions`]).
+//! The values that cross the port (attempts, settings, key installs,
+//! A-MPDU and beacon timing values, outcomes and the backend's service
+//! description) live beside it ([`tx`], [`control`], [`extensions`],
+//! [`contract`], [`monitor`]). Codecs, policy, vendor records and chip
+//! models live in the layers that own them.
 //!
 //! The PHY and channel values the port carries ([`Channel`], [`PhyRate`])
 //! are the portable ones of `oer-ieee80211-wire`. This package only declares
@@ -78,8 +80,8 @@ pub mod capabilities;
 pub mod conformance;
 mod layout;
 pub use layout::{
-    CheckedAggregate, CheckedSubframe, CheckedTxSource, FreshSource, FreshSubframe, HeaderLayout,
-    LaidOut, LayoutError, LayoutRefused, MpduKind, MpduLayout, MpduProtection,
+    CheckedAggregate, CheckedSubframe, CheckedTxSource, FreshSource, FreshSubframe, LaidOut,
+    LayoutError, LayoutRefused, MpduKind, MpduLayout, MpduProtection,
 };
 pub mod control;
 pub mod extensions;
@@ -127,8 +129,8 @@ pub use capabilities::{
 pub use control::{ReceiveFilter, VifRole, VifRoleSet};
 pub use extensions::{
     AmpduCapabilities, BeaconTimingCapabilities, MonitorCapabilities, TSF_DRIFT_PPM, TSF_RELATION,
-    TbttEvent, TsfArithmeticError, TsfGeneration, TsfProjectionError, TsfRelation, TsfSample,
-    TsfSetKind, TsfTimingError, TsfVifMismatch, VifTsf,
+    TbttEvent, TsfArithmeticError, TsfGeneration, TsfProjectionError, TsfSample, TsfVifMismatch,
+    VifTsf,
 };
 pub use oer_radio_port::{
     ClockInfo, ClockRelation, EventsLost, Generation, GenerationSource, Poisoned, PortResult,
@@ -138,9 +140,9 @@ pub use operation::{ConnectionFrame, Operation, TxOperation};
 pub use owner::{
     AccessPoint, AckHeader, AddressSetup, BssColor, FrameHeader, GroupAddress, HeaderSpec,
     Ieee80211Capabilities, InterfaceRole, LegacyPhaseRate, LowerMacBackend, LowerMacSetup,
-    MpduLength, NoAckHeader, PhaseRate, QosAckPolicy, QosControl, ReceiverAddress, ResponseHeader,
-    SizedFrame, Station, StationReceive, SupportedBlockAck, SupportedChannel, SupportedEdca,
-    SupportedFilter, SupportedNoAck, SupportedPower, Tid, TxFrame,
+    MpduLength, NoAckHeader, PhaseRate, QosControl, ReceiverAddress, ResponseHeader, SizedFrame,
+    Station, StationReceive, SupportedBlockAck, SupportedChannel, SupportedEdca, SupportedFilter,
+    SupportedNoAck, SupportedPower, Tid, TxFrame,
 };
 pub use owner::{
     AdmittedAggregate, AdmittedAggregateParts, AggregateAttempt, AggregatePushResult,
@@ -186,11 +188,6 @@ pub use owner::CheckedPoolAggregate;
     missing_docs,
     reason = "preserve the carried service vocabulary's documentation coverage"
 )]
-pub mod configuration;
-#[allow(
-    missing_docs,
-    reason = "preserve the carried service vocabulary's documentation coverage"
-)]
 pub mod contract;
 #[allow(
     missing_docs,
@@ -201,59 +198,20 @@ pub mod edca;
     missing_docs,
     reason = "preserve the carried service vocabulary's documentation coverage"
 )]
-pub mod interface;
-#[allow(
-    missing_docs,
-    reason = "preserve the carried service vocabulary's documentation coverage"
-)]
 pub mod monitor;
-#[allow(
-    missing_docs,
-    reason = "preserve the carried service vocabulary's documentation coverage"
-)]
-pub mod tx_cost;
-#[allow(
-    missing_docs,
-    reason = "preserve the carried service vocabulary's documentation coverage"
-)]
-pub mod tx_work;
 
-pub use configuration::{
-    WifiAccessPointConfig, WifiConfig, WifiConfigError, WifiMonitorConfig, WifiPlan,
-    WifiStandaloneEspNowPlan, WifiStandaloneMonitorPlan, WifiStationConfig,
-};
 pub use contract::{
-    MacAmpduTxResult, MacAmpduTxStatus, MacIndividualRetries, MacInterfaceCapabilities,
-    MacOperationOwner, MacOperationOwnership, MacResourceLimits, MacRxMetadata,
-    MacServiceCapabilities, MacTxPlan, MacTxQueueState, MacTxResult, MacTxStatus,
+    MacInterfaceCapabilities, MacOperationOwner, MacOperationOwnership, MacResourceLimits,
+    MacRxMetadata, MacServiceCapabilities, MacTxResult, MacTxStatus,
 };
-pub use edca::{BackoffEntropy, EdcaAcParameters, EdcaContention, EdcaParameterSet, draw_backoff};
+pub use edca::{EdcaAcParameters, EdcaParameterSet};
 pub use monitor::{
-    MONITOR_CHANNEL_SEQUENCE_CAPACITY, MonitorChannelPolicy, MonitorChannelSequence,
-    MonitorChannelSequenceError, MonitorDropReason, MonitorFilter, MonitorFrame, MonitorFrameType,
-    MonitorFrameTypeMask, MonitorInjectionBindingError, MonitorInjectionChannelBinding,
-    MonitorInjectionFrameError, MonitorInjectionFrameType, MonitorInjectionMpdu,
-    MonitorInjectionRate, MonitorInjectionRequest, MonitorPublishOutcome, MonitorSink,
+    ChannelContextId, MonitorDropReason, MonitorFrame, MonitorInjectionBindingError,
+    MonitorInjectionChannelBinding, MonitorInjectionRate, MonitorInjectionRequest,
+    MonitorPublishOutcome, MonitorSink, MonitorTapPoint,
 };
-pub use tx_work::MacTxWork;
-
-/// Association PHY mode and caller preference.
-pub mod phy;
-pub use phy::{PhyMode, Preference};
-
-/// A literal test sequence number; panics outside twelve bits.
-#[cfg(test)]
-pub(crate) const fn seq(value: u16) -> oer_ieee80211_wire::sequence::SequenceNumber {
-    match oer_ieee80211_wire::sequence::SequenceNumber::new(value) {
-        Some(sequence) => sequence,
-        None => panic!("test sequence number exceeds twelve bits"),
-    }
-}
-
-pub mod espressif;
 
 pub mod backend;
-pub mod backend_protection;
 
 pub mod backend_aggregate;
 

@@ -27,7 +27,7 @@ use oer_esp32s31_hal::types::{
     MacTxCompletionObservation, MacTxDetachOutcome, MacTxDetachReason, MacTxQueueDetached,
 };
 use oer_espressif_ieee80211_policy::backend::EspressifAmpduRetryState as AmpduRetryState;
-use oer_ieee80211_port::backend_aggregate::{AmpduRetryDecision, AmpduRetryPolicy};
+use oer_ieee80211_port::backend_aggregate::AmpduRetryDecision;
 use oer_memory::{HardwareOwnedTxDma, PinnedDmaTxPool, PinnedDmaTxRadioLease, PreparedTxDma};
 
 struct CompletionHardware {
@@ -585,12 +585,10 @@ fn retained_dma_owner_preserves_backing_identity_through_selective_retry() {
     let mut retry = AmpduRetryState::<4>::new(
         SequenceNumber::new(0).unwrap(),
         4,
-        AmpduRetryPolicy {
-            lifetime: oer_time::Duration::from_micros(
-                oer_espressif_ieee80211_policy::lmac::AMPDU_MSDU_LIFETIME_MICROS as u64,
-            ),
-            retain_single_mpdu: true,
-        },
+        oer_time::Duration::from_micros(
+            oer_espressif_ieee80211_policy::lmac::AMPDU_MSDU_LIFETIME_MICROS as u64,
+        ),
+        true,
     )
     .unwrap();
     let mut hardware = DetachingCompletionHardware::with_bitmap(0b0101);
@@ -1541,28 +1539,57 @@ fn basic_ht_assembly_rejects_he_bar_ampdu_and_bad_lengths_before_mutation() {
     );
 }
 
+use oer_ieee80211_upper_mac::block_ack::acknowledges;
+
 #[test]
 fn block_ack_bitmap_handles_sequence_wrap() {
     let ack = TxBlockAckBitmap::new(SequenceNumber::new(0x0ffe).unwrap(), 0b1101);
-    assert!(ack.acknowledges(SequenceNumber::new(0x0ffe).unwrap()));
-    assert!(!ack.acknowledges(SequenceNumber::new(0x0fff).unwrap()));
-    assert!(ack.acknowledges(SequenceNumber::new(0).unwrap()));
-    assert!(ack.acknowledges(SequenceNumber::new(1).unwrap()));
-    assert!(!ack.acknowledges(SequenceNumber::new(2).unwrap()));
+    assert!(acknowledges(
+        ack.report(),
+        SequenceNumber::new(0x0ffe).unwrap()
+    ));
+    assert!(!acknowledges(
+        ack.report(),
+        SequenceNumber::new(0x0fff).unwrap()
+    ));
+    assert!(acknowledges(ack.report(), SequenceNumber::new(0).unwrap()));
+    assert!(acknowledges(ack.report(), SequenceNumber::new(1).unwrap()));
+    assert!(!acknowledges(ack.report(), SequenceNumber::new(2).unwrap()));
 }
 
 #[test]
 fn block_ack_bitmap_accepts_only_bounded_sequences_left_of_an_advanced_ssn() {
     let ack = TxBlockAckBitmap::new(SequenceNumber::new(105).unwrap(), 0b1);
-    assert!(ack.acknowledges(SequenceNumber::new(105).unwrap()));
-    assert!(ack.acknowledges(SequenceNumber::new(104).unwrap()));
-    assert!(ack.acknowledges(SequenceNumber::new(100).unwrap()));
-    assert!(!ack.acknowledges(SequenceNumber::new(106).unwrap()));
-    assert!(!ack.acknowledges(SequenceNumber::new(40).unwrap()));
+    assert!(acknowledges(
+        ack.report(),
+        SequenceNumber::new(105).unwrap()
+    ));
+    assert!(acknowledges(
+        ack.report(),
+        SequenceNumber::new(104).unwrap()
+    ));
+    assert!(acknowledges(
+        ack.report(),
+        SequenceNumber::new(100).unwrap()
+    ));
+    assert!(!acknowledges(
+        ack.report(),
+        SequenceNumber::new(106).unwrap()
+    ));
+    assert!(!acknowledges(
+        ack.report(),
+        SequenceNumber::new(40).unwrap()
+    ));
 
     let wrapped = TxBlockAckBitmap::new(SequenceNumber::new(0).unwrap(), 0b1);
-    assert!(wrapped.acknowledges(SequenceNumber::new(0x0fff).unwrap()));
-    assert!(!wrapped.acknowledges(SequenceNumber::new(65).unwrap()));
+    assert!(acknowledges(
+        wrapped.report(),
+        SequenceNumber::new(0x0fff).unwrap()
+    ));
+    assert!(!acknowledges(
+        wrapped.report(),
+        SequenceNumber::new(65).unwrap()
+    ));
 }
 
 mod work;

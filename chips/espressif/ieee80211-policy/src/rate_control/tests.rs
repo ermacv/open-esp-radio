@@ -564,7 +564,7 @@ mod seam {
         AmpduUnavailable, MpduOutcome, RateControl, RatePeer,
     };
     use {
-        oer_ieee80211_port::PhyMode,
+        oer_ieee80211_upper_mac::phy_mode::PhyMode,
         oer_ieee80211_wire::{
             ht::ht_peer_capabilities,
             phy::{HtMcs, HtRate, PhyRate, PpduBandwidth},
@@ -847,4 +847,5 @@ fn the_last_record_of_every_table_is_the_slowest() {
     }
 }
 
-use oer_ieee80211_port::backend::{RateScheduleKind, RateScheduleRef};
+use crate::rate_record::RateScheduleRef;
+use oer_ieee80211_port::backend::RateScheduleKind;

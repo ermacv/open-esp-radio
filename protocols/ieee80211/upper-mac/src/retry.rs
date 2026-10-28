@@ -19,8 +19,30 @@
 //! Backend faults are carried by Poisoned and do not enter this policy.
 
 use oer_ieee80211_port::TxStatus;
-use oer_ieee80211_port::backend::{FrameClass, RetryCounters};
+use oer_ieee80211_port::backend::RetryCounters;
 use oer_ieee80211_wire::phy::PhyRate;
+
+/// Which retry counter a collision of the frame advances: IEEE 802.11
+/// classifies a frame as long when it is longer than dot11RTSThreshold.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum FrameClass {
+    #[default]
+    /// Frame within dot11RTSThreshold.
+    Short,
+    /// Frame exceeding dot11RTSThreshold.
+    Long,
+}
+
+/// Failures that walk the rate ladder: every ACK timeout and every failure
+/// the short counter records. A long-frame collision leaves the rate where
+/// it is.
+pub const fn ladder_step(counters: RetryCounters) -> u8 {
+    if counters.mpdu > counters.short {
+        counters.mpdu
+    } else {
+        counters.short
+    }
+}
 
 /// How an ACK timeout is counted.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -146,7 +168,7 @@ impl MpduRetryState {
     /// rate for the current step.
     pub fn rate(&self, ladder: &impl RateLadder, initial: PhyRate, previous: PhyRate) -> PhyRate {
         ladder
-            .rate(initial, self.counters.ladder_step())
+            .rate(initial, ladder_step(self.counters))
             .unwrap_or(previous)
     }
 
@@ -218,7 +240,7 @@ pub fn select_ordinary_retry_rate(
     counters: RetryCounters,
     ladder: &impl RateLadder,
 ) -> Option<PhyRate> {
-    match ladder.rate(initial, counters.ladder_step()) {
+    match ladder.rate(initial, ladder_step(counters)) {
         Some(rate) => Some(rate),
         None if matches!(initial, PhyRate::Ht(_) | PhyRate::He(_)) => Some(initial),
         None => None,

@@ -216,7 +216,7 @@ impl TxAmpduBatch<BatchCompleting> {
         let disposition = if self
             .phase
             .0
-            .is_some_and(|ack| ack.acknowledges(mpdu.sequence))
+            .is_some_and(|ack| crate::block_ack::acknowledges(ack, mpdu.sequence))
         {
             TxAmpduDisposition::Acknowledged
         } else {

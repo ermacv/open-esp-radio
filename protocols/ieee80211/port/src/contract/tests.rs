@@ -56,17 +56,17 @@ fn implemented_roles_and_monitor_taps_are_explicit() {
     assert!(
         CAPABILITIES
             .interfaces
-            .supports_role(interface::VifRole::Station)
+            .supports_role(crate::VifRole::Station)
     );
     assert!(
         !CAPABILITIES
             .interfaces
-            .supports_role(interface::VifRole::AccessPoint)
+            .supports_role(crate::VifRole::AccessPoint)
     );
     assert!(
         !CAPABILITIES
             .interfaces
-            .supports_monitor_tap(interface::MonitorTapPoint::Raw)
+            .supports_monitor_tap(crate::MonitorTapPoint::Raw)
     );
 }
 
@@ -82,19 +82,6 @@ fn terminal_status_distinguishes_an_exchange_from_one_attempt() {
     };
     assert_eq!(status.attempts, 3);
     assert_eq!(status.result, MacTxResult::Transmitted);
-}
-
-#[test]
-fn tx_plan_contains_protocol_policy_but_no_hardware_queue_encoding() {
-    let plan = MacTxPlan {
-        access_category: WmmAccessCategory::Video,
-        initial_rate: 7_u8,
-        publication_limit: 4,
-        publication_timeout: oer_time::Duration::from_micros(250_000),
-    };
-    assert_eq!(plan.access_category, WmmAccessCategory::Video);
-    assert_eq!(plan.initial_rate, 7);
-    assert_eq!(plan.publication_limit, 4);
 }
 
 #[test]
@@ -126,40 +113,6 @@ fn receive_metadata_keeps_absence_and_provenance_distinct() {
     );
     assert_eq!(validated.ampdu, RxEvidence::Unavailable);
     assert_eq!(validated.amsdu, RxEvidence::ProtocolValidated(false));
-}
-
-#[test]
-fn ampdu_status_joins_block_ack_and_individual_retries() {
-    let status = MacAmpduTxStatus {
-        result: MacAmpduTxResult::Delivered,
-        original_subframes: 3,
-        aggregate_attempts: 2,
-        aggregate_rate: 7_u8,
-        block_acknowledged_subframes: 2,
-        individual_retries: MacIndividualRetries::NONE,
-        ack_snr_db: None,
-    };
-    assert_eq!(status.delivered_subframes(), 2);
-    assert!(!status.fully_delivered());
-
-    let mut delivered = MacAmpduTxStatus {
-        original_subframes: 4,
-        ..status
-    };
-    for attempts in [2, 1] {
-        delivered.individual_retries.record(MacTxStatus {
-            result: MacTxResult::Transmitted,
-            attempts,
-            final_rate: 5,
-            acknowledged: Some(true),
-            ack_snr_db: Some(12),
-            airtime_micros: None,
-        });
-    }
-    assert_eq!(delivered.delivered_subframes(), 4);
-    assert_eq!(delivered.total_publication_attempts(), 5);
-    assert_eq!(delivered.individual_retries.final_rate, Some(5));
-    assert!(delivered.fully_delivered());
 }
 
 #[test]

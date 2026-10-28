@@ -12,6 +12,10 @@ oer-ieee80211-port = { path = "../port" }
 oer-memory = { path = "../../../portable/memory" }
 oer-network = { path = "../../network" }
 
+[dev-dependencies]
+# The airtime tests price their receipts with the S31 MAC's cost model.
+oer-esp32s31-ieee80211-mac = { path = "../../../chips/esp32s31/ieee80211/mac" }
+
 [features]
 default = []
 # `memory::MemoryTxQueues`: a host model of a network's TX source.

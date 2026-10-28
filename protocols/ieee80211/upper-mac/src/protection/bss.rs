@@ -1,9 +1,10 @@
 //! Protection inputs and decisions shared by upper-MAC and the family policy.
-use crate::Protection;
 use core::num::NonZeroU16;
+use oer_ieee80211_port::Protection;
 use oer_ieee80211_wire::{
-    phy::{DsssPreamble, LegacyRate, PhyRate},
+    phy::{LegacyRate, PhyRate},
     protection::{ErpProtection, HtProtectionMode},
+    rates::{LEGACY_RATES, LegacyRateSet, RateSelection},
 };
 
 /// Finite HE TXOP Duration RTS Threshold in the element's native 32-µs
@@ -56,76 +57,48 @@ impl HePacketPadding {
 
 /// Non-HT rates in one BSSBasicRateSet.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct BasicRates(u16);
+pub struct BasicRates(LegacyRateSet);
 
 impl BasicRates {
-    /// The rates in 500-kb/s units with their long-preamble form; bit `i`
-    /// of the set is entry `i`.
-    pub const ORDER: [(u8, LegacyRate); 12] = [
-        (2, LegacyRate::Dsss1M),
-        (4, LegacyRate::Dsss2M(DsssPreamble::Long)),
-        (11, LegacyRate::Cck5M5(DsssPreamble::Long)),
-        (22, LegacyRate::Cck11M(DsssPreamble::Long)),
-        (12, LegacyRate::Ofdm6M),
-        (18, LegacyRate::Ofdm9M),
-        (24, LegacyRate::Ofdm12M),
-        (36, LegacyRate::Ofdm18M),
-        (48, LegacyRate::Ofdm24M),
-        (72, LegacyRate::Ofdm36M),
-        (96, LegacyRate::Ofdm48M),
-        (108, LegacyRate::Ofdm54M),
-    ];
-
     /// No rate.
-    pub const EMPTY: Self = Self(0);
+    pub const EMPTY: Self = Self(LegacyRateSet::EMPTY);
 
     /// Rates that every ERP station supports when a BSS names no usable
     /// rate: 1, 2, 5.5, 11, 6, 12 and 24 Mb/s.
-    pub const ERP_MANDATORY: Self = Self(0b0000_0001_0101_1111);
+    pub const ERP_MANDATORY: Self = Self(LegacyRateSet::from_bits(0b0000_0001_0101_1111));
 
     /// Lowest mandatory ERP control rate.
     pub const ERP_MANDATORY_HEAD: LegacyRate = {
-        let [(_, first), ..] = Self::ORDER;
+        let [(_, first), ..] = LEGACY_RATES;
         first
     };
 }
 
 // The mandatory set's first entry is present and eligible both with and
 // without ERP protection, so its iterator has this head before skip(1).
-const _: [(); 1] = [(); (BasicRates::ERP_MANDATORY.0 & 1 != 0
+const _: [(); 1] = [(); (BasicRates::ERP_MANDATORY.0.bits() & 1 != 0
     && matches!(BasicRates::ERP_MANDATORY_HEAD, LegacyRate::Dsss1M))
     as usize];
 
 impl BasicRates {
-    /// Collect rates marked basic (bit seven) in Supported Rates and
-    /// Extended Supported Rates element bodies, in 500-kb/s units.
+    /// Collect rates marked basic in Supported Rates and Extended Supported
+    /// Rates element bodies.
     pub fn from_rate_elements(supported: &[u8], extended: &[u8]) -> Self {
-        let mut mask = 0;
-        for encoded in supported.iter().chain(extended) {
-            if encoded & 0x80 == 0 {
-                continue;
-            }
-            for (index, (units, _)) in Self::ORDER.iter().enumerate() {
-                if encoded & 0x7f == *units {
-                    mask |= 1 << index;
-                }
-            }
-        }
-        Self(mask)
+        Self(LegacyRateSet::from_rate_elements(
+            supported,
+            extended,
+            RateSelection::Basic,
+        ))
     }
 
     /// Whether no requirement or rate is present.
     pub const fn is_empty(self) -> bool {
-        self.0 == 0
+        self.0.is_empty()
     }
 
     /// The rates of the set, each with its long preamble.
     pub fn rates(self) -> impl Iterator<Item = LegacyRate> {
-        Self::ORDER
-            .into_iter()
-            .enumerate()
-            .filter(move |(index, _)| self.0 & (1 << index) != 0)
-            .map(|(_, (_, rate))| rate)
+        self.0.rates()
     }
 }
 
@@ -264,47 +237,11 @@ impl TxProtectionReasons {
     }
 }
 
-/// The control exchange that precedes one PPDU and its control-frame rate.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum TxProtection {
-    /// No additional packet padding or protection exchange.
-    None,
-    /// Protect the PPDU with CTS-to-self.
-    CtsToSelf {
-        #[doc = "PHY rate of the PPDU or preceding control frame."]
-        rate: LegacyRate,
-    },
-    /// Protect the PPDU with an RTS/CTS exchange.
-    RtsCts {
-        #[doc = "PHY rate of the PPDU or preceding control frame."]
-        rate: LegacyRate,
-    },
-}
-
-impl TxProtection {
-    /// Transmit rate of the protection frame, if any.
-    pub const fn control_rate(self) -> Option<LegacyRate> {
-        match self {
-            Self::None => None,
-            Self::CtsToSelf { rate } | Self::RtsCts { rate } => Some(rate),
-        }
-    }
-
-    /// The exchange and control-frame rate a lower-MAC attempt requests.
-    pub const fn port_protection(self) -> Protection {
-        match self {
-            Self::None => Protection::None,
-            Self::CtsToSelf { rate } => Protection::CtsToSelf { rate },
-            Self::RtsCts { rate } => Protection::RtsCts { rate },
-        }
-    }
-}
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 /// Selected exchange together with every applicable requirement.
 pub struct TxProtectionDecision {
     /// Control exchange selected by the profile.
-    pub protection: TxProtection,
+    pub protection: Protection,
     /// Requirements that selected this exchange.
     pub reasons: TxProtectionReasons,
 }
@@ -312,7 +249,7 @@ pub struct TxProtectionDecision {
 impl TxProtectionDecision {
     /// No preceding control exchange or applicable reason.
     pub const UNPROTECTED: Self = Self {
-        protection: TxProtection::None,
+        protection: Protection::None,
         reasons: TxProtectionReasons(0),
     };
 }

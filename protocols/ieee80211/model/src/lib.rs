@@ -148,6 +148,7 @@ mod fixture;
 #[cfg(any(test, feature = "test-support"))]
 use fixture::plain_context;
 
+mod contention;
 mod loan;
 mod owned;
 use owned::*;
@@ -164,6 +165,7 @@ use alloc::{
     rc::{Rc, Weak},
     vec::Vec,
 };
+use contention::ModelWindow;
 use core::{
     cell::Cell,
     future::{Future, poll_fn},
@@ -171,7 +173,7 @@ use core::{
     num::NonZeroU16,
     task::{Poll, Waker},
 };
-use oer_ieee80211_port::{EdcaAcParameters, EdcaContention, EdcaParameterSet};
+use oer_ieee80211_port::{EdcaAcParameters, EdcaParameterSet};
 use oer_ieee80211_port::{
     association,
     association::{
@@ -1660,7 +1662,7 @@ pub struct ModelContention {
 
 struct ModelEdca {
     parameters: [EdcaParameterSet; 2],
-    queues: [EdcaContention; 4],
+    queues: [ModelWindow; 4],
     heads: [Option<VifRole>; 4],
     entropy: u32,
     draws: Vec<ModelContention>,
@@ -1670,7 +1672,7 @@ impl Default for ModelEdca {
         Self {
             parameters: [EdcaParameterSet::STANDARD_DEFAULT; 2],
             queues: WmmAccessCategory::ALL.map(|ac| {
-                EdcaContention::from_wmm(EdcaParameterSet::STANDARD_DEFAULT.access_category(ac).wmm)
+                ModelWindow::from_wmm(EdcaParameterSet::STANDARD_DEFAULT.access_category(ac).wmm)
             }),
             heads: [None; 4],
             entropy: 0,
@@ -1705,7 +1707,7 @@ impl ModelEdca {
             access_category,
             parameters,
             window_slots: queue.cw(),
-            backoff_slots: queue.draw(&mut || self.entropy),
+            backoff_slots: queue.draw(self.entropy),
         });
     }
     fn failure(&mut self, ac: WmmAccessCategory) {

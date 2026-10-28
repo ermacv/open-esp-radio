@@ -4,7 +4,10 @@
 and shared values. Fixed-width fields use `oer-wire::bitfield!` declarations
 with standard-clause sources; bounded readers and writers handle byte streams.
 Mutable exchange state belongs to upper-mac, station
-and SoftMAC cores.
+and SoftMAC cores. The lower-MAC port's codecs live here: the data and
+management MAC header (`frame::MacHeader`) with its QoS Control field, the
+legacy rates of the Supported Rates elements (`rates`) and the header
+geometry of a monitor-injected MPDU (`monitor_injection`).
 
 Production code forbids unsafe and denies every sans-IO panic lint, including
 `disallowed_methods` and `disallowed_macros`. Its local Clippy configuration

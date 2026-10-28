@@ -27,7 +27,7 @@ fn a_peer_without_ht_is_legacy_whatever_the_preference() {
 }
 
 mod associated_peer {
-    use oer_ieee80211_port::backend_protection::{BasicRates, HePacketPadding};
+    use oer_ieee80211_upper_mac::protection::{BasicRates, HePacketPadding};
 
     use oer_ieee80211_wire::{
         ht::{HT_CAPABILITY_IE_LEN, HT_OPERATION_IE_LEN},

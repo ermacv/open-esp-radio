@@ -167,7 +167,9 @@
 
 use core::marker::PhantomData;
 use oer_ieee80211_wire::address::IndividualAddress;
-use oer_ieee80211_wire::frame::FrameControl;
+use oer_ieee80211_wire::frame::{
+    FrameControl, MacHeader, QosAckPolicy, QosControl as QosControlField,
+};
 
 use crate::EdcaParameterSet;
 use oer_ieee80211_wire::sequence::SequenceNumber;
@@ -618,15 +620,6 @@ impl Tid {
     }
 }
 
-/// The on-wire acknowledgement policy chosen by a checked response header.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum QosAckPolicy {
-    /// The addressed receiver acknowledges this frame.
-    Normal,
-    /// No acknowledgement is solicited.
-    NoAck,
-}
-
 /// The QoS Control field of a QoS data frame, but its Ack Policy: the
 /// backend writes that from the frame's response
 /// (its [`TxFrame`] kind), the one source of it.
@@ -644,23 +637,31 @@ pub struct QosControl {
 
 impl QosControl {
     /// The field, with the policy derived from its checked response header.
-    pub const fn encode(self, policy: QosAckPolicy) -> u16 {
-        self.tid.get() as u16
-            | (self.end_of_service_period as u16) << 4
-            | match policy {
-                QosAckPolicy::Normal => 0,
-                QosAckPolicy::NoAck => 1 << 5,
-            }
-            | (self.amsdu_present as u16) << 7
-            | (self.high as u16) << 8
+    pub const fn field(self, policy: QosAckPolicy) -> QosControlField {
+        QosControlField::new(
+            oer_wire::U8::from_low_bits(self.tid.get()),
+            self.end_of_service_period,
+            policy,
+            self.amsdu_present,
+            self.high,
+        )
+    }
+
+    /// The values of a received field; its Ack Policy is the response's.
+    pub const fn from_field(field: QosControlField) -> Self {
+        Self {
+            tid: Tid(field.tid().get()),
+            end_of_service_period: field.eosp(),
+            amsdu_present: field.amsdu(),
+            high: field.upper(),
+        }
     }
 }
 
 /// The MAC header of a data or management frame, addressed to `A`
 /// ([`IndividualAddress`] or [`GroupAddress`]). Its fields agree with its
-/// Frame Control: a fourth address exactly when To DS and From DS are both
-/// set, a QoS Control exactly in a QoS data frame, an HT Control exactly
-/// when the Order bit is set in a QoS data or management frame.
+/// Frame Control ([`MacHeader`]); its QoS Control carries no Ack Policy
+/// until a response header encodes it.
 ///
 /// Only preparation derives Protected from the operation's protection:
 ///
@@ -676,10 +677,9 @@ impl QosControl {
 /// supplies Protected from `TxProtection` when constructing a fresh MPDU.
 ///
 /// ```
-/// use oer_ieee80211_port::{AckHeader, HeaderLayout, LayoutError};
-/// fn encode(header: AckHeader, out: &mut [u8]) -> Result<(), LayoutError> {
-///     HeaderLayout::new(header, out)?.encode();
-///     Ok(())
+/// use oer_ieee80211_port::{AckHeader, LayoutError, ResponseHeader};
+/// fn encode(header: AckHeader, out: &mut [u8]) -> Result<usize, LayoutError> {
+///     header.encode(out)
 /// }
 /// ```
 ///
@@ -696,15 +696,8 @@ impl QosControl {
 /// ```
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct HeaderSpec<A> {
-    frame_control: FrameControl,
-    duration: u16,
+    header: MacHeader,
     receiver: A,
-    transmitter: [u8; 6],
-    address3: [u8; 6],
-    sequence_control: u16,
-    address4: Option<[u8; 6]>,
-    qos: Option<QosControl>,
-    ht_control: Option<[u8; 4]>,
 }
 
 /// A receiver address of a header: [`IndividualAddress`] or
@@ -729,7 +722,10 @@ impl ReceiverAddress for GroupAddress {
 impl<A: ReceiverAddress> HeaderSpec<A> {
     /// QoS fields, when this is a QoS data header.
     pub const fn qos(&self) -> Option<QosControl> {
-        self.qos
+        match self.header.qos() {
+            Some(field) => Some(QosControl::from_field(field)),
+            None => None,
+        }
     }
     /// Receiver of this checked header.
     pub const fn receiver(&self) -> A {
@@ -737,16 +733,20 @@ impl<A: ReceiverAddress> HeaderSpec<A> {
     }
     /// Derive the Protected bit from the preparation's sole protection value.
     pub(crate) fn with_protection(mut self, protection: crate::MpduProtection) -> Self {
-        self.frame_control = self
-            .frame_control
+        self.header = self
+            .header
             .with_protected(matches!(protection, crate::MpduProtection::Ccmp));
         self
     }
     /// Encode a fresh aggregate subframe with its builder's receiver and TID.
-    /// `ClassSubframe` retains the proven QoS value through this write.
+    /// `ClassSubframe` admits only a QoS data header, so the header keeps
+    /// its QoS Control field.
     pub(crate) fn in_aggregate(mut self, receiver: A, qos: QosControl) -> Self {
+        let header = self.header.with_address1(receiver.address());
         self.receiver = receiver;
-        self.qos = Some(qos);
+        self.header = header
+            .with_qos(qos.field(QosAckPolicy::Normal))
+            .unwrap_or(header);
         self
     }
     /// The header, when its fields agree with its Frame Control.
@@ -762,165 +762,48 @@ impl<A: ReceiverAddress> HeaderSpec<A> {
         qos: Option<QosControl>,
         ht_control: Option<[u8; 4]>,
     ) -> Option<Self> {
-        (address4.is_some() == frame_control.is_four_address()
-            && qos.is_some() == frame_control.is_qos_data()
-            && ht_control.is_some() == frame_control.has_ht_control())
-        .then_some(Self {
+        let header = MacHeader::new(
             frame_control,
             duration,
-            receiver,
+            receiver.address(),
             transmitter,
             address3,
             sequence_control,
             address4,
-            qos,
+            qos.map(|qos| qos.field(QosAckPolicy::Normal)),
             ht_control,
-        })
+        )?;
+        Some(Self { header, receiver })
     }
 
-    /// Decode a data or management header, checking its receiver's kind.
-    pub fn decode(frame: &[u8], receiver: impl FnOnce([u8; 6]) -> Option<A>) -> Option<Self> {
-        let header = oer_ieee80211_wire::frame::DecodedHeader::decode(frame)?;
-        let qos = header.qos().map(|field| QosControl {
-            tid: Tid((field & 15) as u8),
-            end_of_service_period: field & 0x10 != 0,
-            amsdu_present: field & 0x80 != 0,
-            high: (field >> 8) as u8,
-        });
+    /// The decoded header of a data or management frame, checking its
+    /// receiver's kind. Its QoS Control keeps no Ack Policy.
+    pub fn from_mac_header(
+        header: MacHeader,
+        receiver: impl FnOnce([u8; 6]) -> Option<A>,
+    ) -> Option<Self> {
         Self::new(
             header.control(),
             header.duration(),
-            receiver(header.receiver())?,
-            header.transmitter(),
+            receiver(header.address1())?,
+            header.address2(),
             header.address3(),
             header.sequence_control(),
             header.address4(),
-            qos,
+            header.qos().map(QosControl::from_field),
             header.ht_control(),
         )
     }
 
     /// The header's length in octets.
-    pub fn header_len(&self) -> usize {
-        match (
-            self.address4.is_some(),
-            self.qos.is_some(),
-            self.ht_control.is_some(),
-        ) {
-            (false, false, false) => 24,
-            (false, true, false) => 26,
-            (false, false, true) => 28,
-            (false, true, true) | (true, false, false) => 30,
-            (true, true, false) => 32,
-            (true, false, true) => 34,
-            (true, true, true) => 36,
-        }
+    pub const fn header_len(&self) -> usize {
+        self.header.header_len()
     }
 
-    pub(crate) fn encoder(self, policy: QosAckPolicy) -> HeaderLength<A> {
-        let [f0, f1] = self.frame_control.get().to_le_bytes();
-        let [d0, d1] = self.duration.to_le_bytes();
-        let [r0, r1, r2, r3, r4, r5] = self.receiver.address();
-        let [t0, t1, t2, t3, t4, t5] = self.transmitter;
-        let [a0, a1, a2, a3, a4, a5] = self.address3;
-        let [s0, s1] = self.sequence_control.to_le_bytes();
-        // Every arm constructs its exact wire array. No caller can select N
-        // independently of these fields, and encoding copies the entire array.
-        match (
-            self.address4,
-            self.qos.map(|qos| qos.encode(policy).to_le_bytes()),
-            self.ht_control,
-        ) {
-            (None, None, None) => HeaderLength::L24(HeaderEncoder::new([
-                f0, f1, d0, d1, r0, r1, r2, r3, r4, r5, t0, t1, t2, t3, t4, t5, a0, a1, a2, a3, a4,
-                a5, s0, s1,
-            ])),
-            (None, Some([q0, q1]), None) => HeaderLength::L26(HeaderEncoder::new([
-                f0, f1, d0, d1, r0, r1, r2, r3, r4, r5, t0, t1, t2, t3, t4, t5, a0, a1, a2, a3, a4,
-                a5, s0, s1, q0, q1,
-            ])),
-            (None, None, Some([h0, h1, h2, h3])) => HeaderLength::L28(HeaderEncoder::new([
-                f0, f1, d0, d1, r0, r1, r2, r3, r4, r5, t0, t1, t2, t3, t4, t5, a0, a1, a2, a3, a4,
-                a5, s0, s1, h0, h1, h2, h3,
-            ])),
-            (None, Some([q0, q1]), Some([h0, h1, h2, h3])) => {
-                HeaderLength::L30(HeaderEncoder::new([
-                    f0, f1, d0, d1, r0, r1, r2, r3, r4, r5, t0, t1, t2, t3, t4, t5, a0, a1, a2, a3,
-                    a4, a5, s0, s1, q0, q1, h0, h1, h2, h3,
-                ]))
-            }
-            (Some([b0, b1, b2, b3, b4, b5]), None, None) => {
-                HeaderLength::L30(HeaderEncoder::new([
-                    f0, f1, d0, d1, r0, r1, r2, r3, r4, r5, t0, t1, t2, t3, t4, t5, a0, a1, a2, a3,
-                    a4, a5, s0, s1, b0, b1, b2, b3, b4, b5,
-                ]))
-            }
-            (Some([b0, b1, b2, b3, b4, b5]), Some([q0, q1]), None) => {
-                HeaderLength::L32(HeaderEncoder::new([
-                    f0, f1, d0, d1, r0, r1, r2, r3, r4, r5, t0, t1, t2, t3, t4, t5, a0, a1, a2, a3,
-                    a4, a5, s0, s1, b0, b1, b2, b3, b4, b5, q0, q1,
-                ]))
-            }
-            (Some([b0, b1, b2, b3, b4, b5]), None, Some([h0, h1, h2, h3])) => {
-                HeaderLength::L34(HeaderEncoder::new([
-                    f0, f1, d0, d1, r0, r1, r2, r3, r4, r5, t0, t1, t2, t3, t4, t5, a0, a1, a2, a3,
-                    a4, a5, s0, s1, b0, b1, b2, b3, b4, b5, h0, h1, h2, h3,
-                ]))
-            }
-            (Some([b0, b1, b2, b3, b4, b5]), Some([q0, q1]), Some([h0, h1, h2, h3])) => {
-                HeaderLength::L36(HeaderEncoder::new([
-                    f0, f1, d0, d1, r0, r1, r2, r3, r4, r5, t0, t1, t2, t3, t4, t5, a0, a1, a2, a3,
-                    a4, a5, s0, s1, b0, b1, b2, b3, b4, b5, q0, q1, h0, h1, h2, h3,
-                ]))
-            }
-        }
+    /// The frame's Frame Control field.
+    pub const fn frame_control(&self) -> FrameControl {
+        self.header.control()
     }
-}
-
-/// An encoder for one header shape, selected by the portable layout
-/// constructor. Its private construction proves that its fields fill N bytes.
-///
-/// ```compile_fail,E0308
-/// use oer_ieee80211_wire::address::IndividualAddress;
-/// use oer_ieee80211_port::{owner::HeaderEncoder};
-/// fn short(encoder: HeaderEncoder<IndividualAddress, 24>) {
-///     encoder.encode(&mut [0; 23]);
-/// }
-/// ```
-///
-/// ```
-/// use oer_ieee80211_wire::address::IndividualAddress;
-/// use oer_ieee80211_port::{owner::HeaderEncoder};
-/// fn sized(encoder: HeaderEncoder<IndividualAddress, 24>) {
-///     encoder.encode(&mut [0; 24]);
-/// }
-/// ```
-pub struct HeaderEncoder<A, const N: usize> {
-    bytes: [u8; N],
-    receiver: PhantomData<A>,
-}
-impl<A: ReceiverAddress, const N: usize> HeaderEncoder<A, N> {
-    fn new(bytes: [u8; N]) -> Self {
-        Self {
-            bytes,
-            receiver: PhantomData,
-        }
-    }
-
-    /// Write this header into exactly its storage. This operation cannot fail.
-    pub fn encode(self, out: &mut [u8; N]) {
-        *out = self.bytes;
-    }
-}
-
-pub(crate) enum HeaderLength<A> {
-    L24(HeaderEncoder<A, 24>),
-    L26(HeaderEncoder<A, 26>),
-    L28(HeaderEncoder<A, 28>),
-    L30(HeaderEncoder<A, 30>),
-    L32(HeaderEncoder<A, 32>),
-    L34(HeaderEncoder<A, 34>),
-    L36(HeaderEncoder<A, 36>),
 }
 
 /// A rate of the phase that carries an individual frame without an ACK,
@@ -957,7 +840,7 @@ pub struct AckHeader(HeaderSpec<IndividualAddress>);
 impl AckHeader {
     /// `header`, when it is not an Action No Ack frame.
     pub fn new(header: HeaderSpec<IndividualAddress>) -> Option<Self> {
-        (!header.frame_control.is_action_no_ack()).then_some(Self(header))
+        (!header.frame_control().is_action_no_ack()).then_some(Self(header))
     }
 
     /// The header.
@@ -980,7 +863,7 @@ pub struct NoAckHeader(HeaderSpec<IndividualAddress>);
 impl NoAckHeader {
     /// `header`, when it is a QoS data or an Action No Ack frame.
     pub fn new(header: HeaderSpec<IndividualAddress>) -> Option<Self> {
-        let frame_control = header.frame_control;
+        let frame_control = header.frame_control();
         (frame_control.is_qos_data() || frame_control.is_action_no_ack()).then_some(Self(header))
     }
 
@@ -1001,6 +884,39 @@ mod response_header {
 /// A header whose response policy is fixed by its type. Only `AckHeader`,
 /// `NoAckHeader` and a group-addressed `HeaderSpec` implement this sealed
 /// contract; a raw individually addressed header has no response proof.
+///
+/// A caller cannot replace the header's acknowledgement policy at encoding:
+///
+/// ```compile_fail,E0061
+/// use oer_ieee80211_port::{AckHeader, ResponseHeader};
+/// fn policy(header: AckHeader, out: &mut [u8]) { let _ = header.encode(out, true); }
+/// ```
+///
+/// An individual header must have a checked response kind:
+///
+/// ```compile_fail,E0599
+/// use oer_ieee80211_port::{HeaderSpec, ResponseHeader};
+/// use oer_ieee80211_wire::address::IndividualAddress;
+/// fn raw(header: HeaderSpec<IndividualAddress>, out: &mut [u8]) {
+///     let _ = header.encode(out);
+/// }
+/// ```
+///
+/// Each accepted header type carries its own response policy:
+///
+/// ```
+/// use oer_ieee80211_port::{
+///     AckHeader, GroupAddress, HeaderSpec, LayoutError, NoAckHeader, ResponseHeader,
+/// };
+/// fn typed(
+///     ack: AckHeader, no_ack: NoAckHeader, group: HeaderSpec<GroupAddress>, out: &mut [u8],
+/// ) -> Result<(), LayoutError> {
+///     ack.encode(out)?;
+///     no_ack.encode(out)?;
+///     group.encode(out)?;
+///     Ok(())
+/// }
+/// ```
 pub trait ResponseHeader: response_header::Sealed {
     /// Its receiver's checked address type.
     type Address: ReceiverAddress;
@@ -1008,6 +924,25 @@ pub trait ResponseHeader: response_header::Sealed {
     const ACK_POLICY: QosAckPolicy;
     /// Consume the response proof into its fields for encoding.
     fn into_header(self) -> HeaderSpec<Self::Address>;
+
+    /// Write the header, with the Ack Policy of its response, at the start
+    /// of `out` and return its length. A shorter `out` is refused before
+    /// any octet is written.
+    fn encode(self, out: &mut [u8]) -> Result<usize, crate::LayoutError>
+    where
+        Self: Sized,
+    {
+        let header = self.into_header().header;
+        let header = match header.qos() {
+            Some(qos) => header
+                .with_qos(qos.with_ack_policy(Self::ACK_POLICY.field()))
+                .unwrap_or(header),
+            None => header,
+        };
+        header
+            .encode(out)
+            .map_err(|_| crate::LayoutError::StorageTooShort)
+    }
 }
 
 impl response_header::Sealed for AckHeader {}

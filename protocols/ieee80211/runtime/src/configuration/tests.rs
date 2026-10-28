@@ -1,5 +1,5 @@
 use super::*;
-use crate::{
+use oer_ieee80211_port::{
     MacInterfaceCapabilities, MacOperationOwner, MacOperationOwnership, MacResourceLimits,
 };
 use oer_ieee80211_wire::address::IndividualAddressError;

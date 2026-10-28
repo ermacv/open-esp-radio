@@ -3,8 +3,8 @@
 
 use core::num::NonZeroU64;
 
-use oer_ieee80211_port::backend_protection::{HePacketPadding, HeTxopDurationRtsThreshold};
 use oer_ieee80211_upper_mac::HeTxopRtsBudget;
+use oer_ieee80211_upper_mac::protection::{HePacketPadding, HeTxopDurationRtsThreshold};
 use oer_ieee80211_wire::phy::{HeGiLtf, HeRate};
 
 /// The nominal packet padding code the vendor stores from the peer's HE

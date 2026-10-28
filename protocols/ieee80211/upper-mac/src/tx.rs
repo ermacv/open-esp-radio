@@ -28,14 +28,13 @@
 //! completion back. A retransmission carries the bytes first encoded, so
 //! its sequence number and CCMP packet number repeat.
 
-use oer_ieee80211_port::backend::FrameClass;
-use oer_ieee80211_port::backend_protection::{
-    ProtectedPpdu, TxProtection, TxProtectionDecision, TxPsdu, TxReceiver,
-};
+use crate::protection::{ProtectedPpdu, TxProtectionDecision, TxPsdu, TxReceiver};
+use crate::retry::FrameClass;
 use oer_ieee80211_port::{BlockAckReport, TxOperation, TxPower, TxResponse, TxStatus};
-use oer_ieee80211_port::{
-    MacAmpduTxResult, MacAmpduTxStatus, MacIndividualRetries, MacTxResult, MacTxStatus,
-};
+use oer_ieee80211_port::{MacTxResult, MacTxStatus};
+
+mod ampdu_status;
+pub use ampdu_status::{MacAmpduTxResult, MacAmpduTxStatus, MacIndividualRetries};
 use oer_ieee80211_wire::{phy::PhyRate, qos::WmmAccessCategory, sequence::SequenceNumber};
 use oer_time::Instant;
 
@@ -962,12 +961,15 @@ impl<B: HeTxopRtsBudget> TxPlanner<B> {
 impl TxAttemptPlan {
     /// The protection exchange of the attempt as the port requests it.
     pub const fn port_protection(&self) -> oer_ieee80211_port::Protection {
-        self.protection.protection.port_protection()
+        self.protection.protection
     }
 
     /// Whether the attempt is protected by a control exchange.
     pub const fn is_protected(&self) -> bool {
-        !matches!(self.protection.protection, TxProtection::None)
+        !matches!(
+            self.protection.protection,
+            oer_ieee80211_port::Protection::None
+        )
     }
 }
 
@@ -976,7 +978,7 @@ impl TxAttemptPlan {
 pub fn acknowledged_subframes(request: &AmpduRequest, report: BlockAckReport) -> u64 {
     let mut acknowledged = 0_u64;
     for index in 0..request.subframes {
-        if report.acknowledges(request.sequence(index)) {
+        if crate::block_ack::acknowledges(report, request.sequence(index)) {
             acknowledged |= 1 << index;
         }
     }

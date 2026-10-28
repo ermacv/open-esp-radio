@@ -13,7 +13,7 @@ use core::num::NonZeroU16;
 use oer_ieee80211_port::{BlockAckSnr, LinkMetric};
 use oer_time::Instant;
 use {
-    oer_ieee80211_port::PhyMode,
+    crate::phy_mode::PhyMode,
     oer_ieee80211_wire::{
         he::{He20Capabilities, He20PeerState},
         ht::HtPeerCapabilities,

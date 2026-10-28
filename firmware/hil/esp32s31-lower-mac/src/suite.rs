@@ -46,11 +46,10 @@ use oer_hil_protocol::{
     lower_mac::{CaseTrace, OutcomeTrace, Prepare, Prepared, outcome_trace},
 };
 use oer_ieee80211_port::{
-    backend_protection::BasicRates,
     conformance::{MpduState, catalog, outcomes},
     *,
 };
-use oer_ieee80211_upper_mac::rate_selection::management_rate;
+use oer_ieee80211_upper_mac::{protection::BasicRates, rate_selection::management_rate};
 use oer_ieee80211_wire::{
     address::IndividualAddress,
     channel::{WifiChannel, WifiChannelWidth},

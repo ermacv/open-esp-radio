@@ -1,12 +1,14 @@
 //! Owned EDCA contention state for the four ordinary TX queues.
 //!
-//! The contention window of each queue is the portable
-//! `oer_ieee80211_port::EdcaContention`; its cold values are the
-//! standard non-AP EDCA defaults. This
+//! The contention window of each queue is [`contention::EdcaContention`];
+//! its cold values are the standard non-AP EDCA defaults. This
 //! module adds what the S31 queue imposes: a ten-bit slot field and the
 //! validated AIFSN, ACM and TXOP policy of each queue.
 
-use oer_ieee80211_port::{EdcaAcParameters, EdcaContention, EdcaParameterSet};
+pub mod contention;
+
+use contention::EdcaContention;
+use oer_ieee80211_port::{EdcaAcParameters, EdcaParameterSet};
 use oer_ieee80211_wire::extensions::wmm::WmmAcParameters;
 use oer_ieee80211_wire::qos::WmmAccessCategory;
 
@@ -193,7 +195,7 @@ impl EdcaBackoffState {
         // SOURCE: complete `libpp[lmac.o]::lmacSetAcParam`.
         // It replaces AIFSN/min/max, clamps current down to a lower new max,
         // clamps it up to a higher new min, and otherwise retains it: the
-        // portable `EdcaContention::reconfigure`.
+        // `EdcaContention::reconfigure`.
         self.policy.contention = parameters;
         self.contention
             .reconfigure(parameters.minimum_exponent, parameters.maximum_exponent);

@@ -23,15 +23,23 @@ impl<const CAPACITY: usize> EspressifAmpduRetryState<CAPACITY> {
     }
 
     /// Start a bounded aggregate owner with the Espressif retry limits.
+    ///
+    /// `lifetime` runs from an MSDU's admission; after it the MPDU is aged
+    /// and discarded instead of retried. `retain_single_mpdu` keeps one
+    /// missing MPDU in the aggregate: the recovered HE path requires it,
+    /// because converting a one-member HE A-MPDU to the ordinary queue first
+    /// needs the distinct `ppHEAMPDU2Normal` metadata transition, while the
+    /// HT path sends one remaining MPDU through its ordinary retry owner.
     pub fn new(
         first: oer_ieee80211_wire::sequence::SequenceNumber,
         subframes: u8,
-        policy: oer_ieee80211_port::backend_aggregate::AmpduRetryPolicy,
+        lifetime: oer_time::Duration,
+        retain_single_mpdu: bool,
     ) -> Result<Self, oer_ieee80211_port::backend_aggregate::AmpduRetryError> {
         oer_ieee80211_upper_mac::backend_aggregate::BoundedAmpduRetryState::new(
             first,
             subframes,
-            crate::lmac::ampdu_retry_policy(policy.lifetime, policy.retain_single_mpdu),
+            crate::lmac::ampdu_retry_policy(lifetime, retain_single_mpdu),
         )
         .map(Self)
     }

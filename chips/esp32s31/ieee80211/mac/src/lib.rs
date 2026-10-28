@@ -36,7 +36,12 @@ pub mod rx;
 mod sniffer;
 pub mod sta_ap_registers;
 mod sta_link_policy;
+pub mod tsf_relation;
 pub mod tx;
+/// Predicted cost of one transmission: PPDU timing, response and protection.
+pub mod tx_cost;
+/// Submitted publication work of one exchange.
+pub mod tx_work;
 
 /// Rate selection, receive observations and scheduling policy.
 pub mod rate;

@@ -363,9 +363,7 @@ fn interleaved_returns_keep_the_original_tid_order_and_admission_count() {
         );
         let spec = operation.context.frame().frame().header().header();
         let mut header = [0; 26];
-        oer_ieee80211_port::HeaderLayout::new(AckHeader::new(*spec).unwrap(), &mut header)
-            .unwrap()
-            .encode();
+        AckHeader::new(*spec).unwrap().encode(&mut header).unwrap();
         assert_eq!(tid_and_sequence(&header), (tid, sequence));
         data.returned(DataReturn::TxDone {
             context: operation.context,
@@ -405,9 +403,7 @@ fn repeated_unpublished_returns_keep_the_checked_frame_and_payload() {
         assert_eq!(operation.context.frame().frame().len().get(), len);
         let spec = operation.context.frame().frame().header().header();
         let mut header = [0; 26];
-        oer_ieee80211_port::HeaderLayout::new(AckHeader::new(*spec).unwrap(), &mut header)
-            .unwrap()
-            .encode();
+        AckHeader::new(*spec).unwrap().encode(&mut header).unwrap();
         assert_eq!(tid_and_sequence(&header), (6, 0));
         assert_eq!(&memory(&operation.buffer)[34..len], payload.as_slice());
     }

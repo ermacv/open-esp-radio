@@ -6,8 +6,8 @@
 //! secrets, peer generations, packet numbers and replay state, but never
 //! claims to produce or authenticate encrypted on-air bytes.
 
+use crate::extensions::espressif::phy::EspNowPhyMode;
 use core::{array, fmt};
-use oer_ieee80211_port::espressif::EspNowPhyMode;
 use oer_ieee80211_wire::sequence::SequenceNumber;
 
 use zeroize::{Zeroize, ZeroizeOnDrop};
@@ -26,7 +26,8 @@ use {
 use crate::extensions::espressif::esp_now::protocol::{
     ESP_NOW_DEFAULT_PEER_CAPACITY, EspNowConfig, EspNowPeerSecurity,
 };
-use oer_ieee80211_port::interface::{BoundVirtualInterface, ChannelContextId};
+use crate::interface::BoundVirtualInterface;
+use oer_ieee80211_port::ChannelContextId;
 
 pub const ESP_NOW_KEY_LEN: usize = 16;
 pub const ESP_NOW_RX_REPLAY_WINDOW_BITS: u32 = 64;

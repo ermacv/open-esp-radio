@@ -11,7 +11,7 @@ use oer_ieee80211_port::{
     ReceiveFilter, WidthSet,
 };
 use {
-    oer_ieee80211_port::PhyMode,
+    oer_ieee80211_upper_mac::phy_mode::PhyMode,
     oer_ieee80211_wire::{
         ht::ht_peer_capabilities,
         phy::{HeMcs, HtMcs},

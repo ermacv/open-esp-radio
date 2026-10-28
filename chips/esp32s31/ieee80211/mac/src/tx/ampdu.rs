@@ -7,7 +7,7 @@
 
 #![forbid(unsafe_code)]
 
-use oer_ieee80211_port::MacTxWork;
+use crate::tx_work::MacTxWork;
 use oer_ieee80211_wire::sequence::SequenceNumber;
 
 use core::{marker::PhantomPinned, pin::Pin};
@@ -171,7 +171,8 @@ impl From<AmpduRetryError> for RetainedAmpduRetryCompletionError {
 }
 
 impl HtAmpduTxCompletion {
-    /// Return whether a completed A-MPDU positively acknowledges one MPDU.
+    /// The BlockAck the completion carries, when its bitmap is usable; `None`
+    /// when the bitmap words are stale.
     ///
     /// The ordinary TX status does not decide whether the BlockAck bitmap is
     /// usable for a non-trigger A-MPDU. The vendor A-MPDU completion path reads
@@ -194,17 +195,6 @@ impl HtAmpduTxCompletion {
     /// SOURCE: complete `libpp[lmac.o]::lmacEndFrameExchangeSequence`
     /// status-five A-MPDU branch calls `libpp[hal_mac_tx.o]::hal_mac_tx_get_blockack`, publishes the
     /// result through `libpp[pp.o]::ppTxqUpdateBitmap`, and then enters `libpp[pp.o]::ppResortTxAMPDU`.
-    pub const fn acknowledges(self, sequence: SequenceNumber) -> bool {
-        match self.valid_block_ack() {
-            Some(block_ack) => block_ack.acknowledges(sequence),
-            None => false,
-        }
-    }
-
-    /// The BlockAck the completion carries, under the validity rule of
-    /// [`Self::acknowledges`]: the hardware result bit is set, and a
-    /// Trigger-flow completion counts only with status zero. `None` when the
-    /// bitmap words are stale.
     pub const fn valid_block_ack(self) -> Option<block_ack::TxBlockAckBitmap> {
         if (!self.tx.is_trigger_flow() || self.tx.status() == 0) && self.block_ack_received {
             Some(self.block_ack.block_ack)

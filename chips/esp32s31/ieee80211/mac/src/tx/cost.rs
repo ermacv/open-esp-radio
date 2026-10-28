@@ -1,7 +1,7 @@
 //! Mapping the published S31 PHY format to portable timing facts.
 use super::{HtChannelWidth, HtGuardInterval, HtRate, LegacyRate, TxPhyRate};
+use crate::tx_cost::{PpduTiming, TxCost, TxProtectionTiming, TxResponse};
 use core::num::{NonZeroU16, NonZeroU32};
-use oer_ieee80211_port::tx_cost::{PpduTiming, TxCost, TxProtection, TxResponse};
 
 impl HtRate {
     /// Byte ceiling for one unprotected HT aggregate plus compressed BlockAck.
@@ -28,7 +28,7 @@ impl HtRate {
                 timing: block_ack_timing,
                 psdu_bytes: const { NonZeroU16::new(32).expect("compressed BlockAck includes FCS") },
             },
-            TxProtection::None,
+            TxProtectionTiming::None,
         )?;
         NonZeroU16::new(
             budget

@@ -78,7 +78,6 @@ use oer_ieee80211_arbiter::{
     AbsenceAnswer, AbsencePlace, Answer, ChannelRequest, Lease, LeaseId, LeasePlace, LeaveReason,
     Purpose, Refusal, StationNotice, StationPlaceReturns, StationPlaces, UpstreamFact,
 };
-use oer_ieee80211_port::backend_protection::HePacketPadding;
 use oer_ieee80211_port::{
     AckHeader, ConnectionFrame, GroupAddress, HeaderSpec, Ieee80211Capabilities, MpduLength,
     ReceiveFilter, ReturnedMpdu, RxMetadata, SingleEnd, SingleOutcome, SizedFrame,
@@ -97,10 +96,11 @@ use oer_ieee80211_rsn::{
         RsnStaRetryInstall, RsnStaSupplicant, RsnStaSupplicantAction, RsnStaSupplicantError,
     },
 };
+use oer_ieee80211_upper_mac::protection::HePacketPadding;
 use oer_ieee80211_wire::address::{Bssid, IndividualAddress, OwnAddress};
 use {
     crate::{scan::ScanTable, sequence::StaSequenceCounter},
-    oer_ieee80211_port::PhyMode,
+    oer_ieee80211_upper_mac::phy_mode::PhyMode,
     oer_ieee80211_wire::{
         management::{MAX_SSID_LEN, ProbeRequest},
         scan::ScanRecord,
@@ -6078,12 +6078,18 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
             let bytes = buffer.bytes_mut().split_at_checked(len)?.0;
             let length = MpduLength::new(len)?;
             if matches!(plan, StaRatePlan::Group) {
-                let header = HeaderSpec::decode(bytes, GroupAddress::new)?;
+                let header = HeaderSpec::from_mac_header(
+                    oer_ieee80211_wire::frame::MacHeader::decode(bytes)?,
+                    GroupAddress::new,
+                )?;
                 oer_ieee80211_port::ClassSizedFrame::new(SizedFrame::new(header, length)?)
                     .ok()
                     .map(StaFrame::Group)
             } else {
-                let header = HeaderSpec::decode(bytes, IndividualAddress::new)?;
+                let header = HeaderSpec::from_mac_header(
+                    oer_ieee80211_wire::frame::MacHeader::decode(bytes)?,
+                    IndividualAddress::new,
+                )?;
                 oer_ieee80211_port::ClassSizedFrame::new(SizedFrame::new(
                     AckHeader::new(header)?,
                     length,

@@ -24,9 +24,8 @@ const RATE_SCHEDULE_KINDS: [RateScheduleKind; 9] = [
     RateScheduleKind::P2pDot11N,
 ];
 
-use oer_ieee80211_port::backend::{
-    RATE_SCHEDULE_RECORD_SIZE, RateScheduleKind, RateScheduleRecordState, RateScheduleRef,
-};
+use crate::rate_record::{RATE_SCHEDULE_RECORD_SIZE, RateScheduleRecordState, RateScheduleRef};
+use oer_ieee80211_port::backend::RateScheduleKind;
 
 #[repr(C, align(4))]
 struct ScheduleArena<const RECORDS: usize>([[u8; RATE_SCHEDULE_RECORD_SIZE]; RECORDS]);

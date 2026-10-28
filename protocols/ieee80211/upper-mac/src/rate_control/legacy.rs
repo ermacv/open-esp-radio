@@ -1,15 +1,15 @@
 //! The nonempty legacy-rate set carried from association into rate selection.
 
 use oer_ieee80211_wire::phy::LegacyRate;
+use oer_ieee80211_wire::rates::{LegacyRateSet, RateSelection};
 
-use oer_ieee80211_port::backend_protection::BasicRates;
-
-/// All legacy rates admitted by an association. Unlike `BasicRates`, this
+/// All legacy rates admitted by an association. Unlike
+/// [`BasicRates`](crate::protection::BasicRates), this
 /// includes rates without the basic bit. Construction requires at least one
 /// recognized rate; an empty advertisement cannot imply OFDM support.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct NegotiatedLegacyRates {
-    mask: u16,
+    set: LegacyRateSet,
     /// Always a member, so selection never needs an out-of-set fallback.
     first: LegacyRate,
 }
@@ -19,31 +19,16 @@ impl NegotiatedLegacyRates {
     /// The caller supplies the association's common rates. Entries naming
     /// membership selectors or unsupported encodings do not name legacy rates.
     pub fn from_rate_elements(supported: &[u8], extended: &[u8]) -> Option<Self> {
-        let mut mask = 0;
-        let mut first = None;
-        for (index, (units, rate)) in BasicRates::ORDER.into_iter().enumerate() {
-            if supported
-                .iter()
-                .chain(extended)
-                .any(|encoded| encoded & 0x7f == units)
-            {
-                mask |= 1 << index;
-                first.get_or_insert(rate);
-            }
-        }
+        let set = LegacyRateSet::from_rate_elements(supported, extended, RateSelection::All);
         Some(Self {
-            mask,
-            first: first?,
+            set,
+            first: set.rates().next()?,
         })
     }
 
     /// Every admitted rate, with the long preamble for DSSS/CCK.
     pub fn rates(self) -> impl Iterator<Item = LegacyRate> {
-        BasicRates::ORDER
-            .into_iter()
-            .enumerate()
-            .filter(move |(index, _)| self.mask & (1 << index) != 0)
-            .map(|(_, (_, rate))| rate)
+        self.set.rates()
     }
 
     /// Support is independent of the separately negotiated DSSS preamble.

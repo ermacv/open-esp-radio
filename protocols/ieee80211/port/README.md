@@ -2,9 +2,13 @@
 
 `oer-ieee80211-port` declares the radio port between portable Wi-Fi MAC
 logic and the backend that puts frames on the air, on the owner shape of
-[the architecture](../../../docs/architecture.md#radio-port), with the
-values its backends' cores take. It is sans-IO: it declares the port and its
-values and never waits on it.
+[the architecture](../../../docs/architecture.md#radio-port). It holds only
+the interaction with the peripheral and the representation of the data that
+crosses it: typestate wrappers, outcomes and facts. Wire codecs live in
+`oer-ieee80211-wire`, policy in the cores above the port, vendor records in
+`oer-espressif-ieee80211-policy` and chip models in the chip's MAC; no normal
+dependency of the port reaches an ieee80211 core (`oer-test-layers`). It is
+sans-IO: it declares the port and its values and never waits on it.
 
 ## The phase
 
@@ -56,12 +60,11 @@ back; its operations are synchronous and never wait:
 - **Preparation and submission.** `TxBufferPool::prepare` checks a source
   where its buffer class is concrete and returns a closed `Prepared` value.
   `TxSource::check` first consumes the raw source into `CheckedTxSource`;
-  layout errors return the source before entering the backend. `HeaderLayout`
-  accepts an `AckHeader`, `NoAckHeader` or group-addressed header; this type
-  selects QoS Ack Policy, with no separate flag at encoding. It
-  obtains exactly sized arrays with `split_first_chunk_mut`. Each
-  `HeaderLength` variant carries an encoder built from an exact wire array;
-  encoding assigns the whole `[u8; N]` to its destination. Storage
+  layout errors return the source before entering the backend. Only a
+  `ResponseHeader` (`AckHeader`, `NoAckHeader` or a group-addressed
+  `HeaderSpec`) encodes; its type selects the QoS Ack Policy, with no
+  separate flag at encoding. The octets are the wire `MacHeader` codec's,
+  which refuses short storage before writing. Storage
   shortage, CCMP shortage and body overlap are `LayoutError`; backend
   `PreparationError` contains retransmission identity/kind, aggregate capacity
   and Block Ack window refusals.
@@ -123,10 +126,11 @@ back; its operations are synchronous and never wait:
   bodies; each fresh subframe returns its own body. `renew` returns memory
   and body explicitly.
 - **Management plans.** `ManagementTxPlan` carries a legacy rate derived
-  above the driver and a constructor-owned budget: `unicast(rate)` admits
-  at most seven attempts (dot11ShortRetryLimit), `broadcast(rate)` one.
-  Every attempt keeps the selected rate. The S31 direct W2 path consumes
-  this contract without parsing a BSS or using vendor control schedules.
+  above the driver and a nonzero attempt budget; every attempt keeps the
+  selected rate. `oer-ieee80211-upper-mac` `management` chooses the budget:
+  seven attempts (dot11ShortRetryLimit) for a unicast frame, one for a
+  broadcast. The S31 direct W2 path consumes this contract without parsing
+  a BSS or using vendor control schedules.
 - **Retry plans.** An individual frame carries its `RetryPlan`, a sequence
   of rates with their transmissions and protection (including each control
   frame's legacy rate), as mac80211's rate
@@ -317,8 +321,9 @@ Extension traits of the phase: `AmpduPhase` (one attempt sends one A-MPDU,
 each subframe in a buffer of its own), `BeaconTimingPhase` (an interface's
 TSF, its samples and its TBTT plan with the wake lead and the beacon window
 the `BeaconWindow` it asks the air for as `Operation::BeaconWindow`) and `MonitorPhase`. Their values (`AmpduCapabilities`,
-`TbttEvent`, `TsfSample`, `TsfRelation`, `VifTsf`, `MonitorCapabilities`)
-are in `extensions`.
+`TbttEvent`, `TsfSample`, `VifTsf`, `MonitorCapabilities`) are in
+`extensions`. The backend that writes an interface's TSF keeps that TSF's
+relation to the radio clock and stamps each sample with its generation.
 
 Parametric limits of what a backend has are its capabilities
 (`LowerMacCapabilities`), and a value outside them has no checked type. Why
@@ -329,12 +334,18 @@ documentation, not in code.
 The PHY and channel values come from
 [`oer-ieee80211-wire`](../wire/src/phy.rs): `Channel` (2.4 GHz and 5 GHz with
 20 MHz and 40 MHz geometry) and `PhyRate` (non-HT, HT and HE SU).
-`RxEvidence` and `RxCryptoStatus` describe receive provenance. Backend-facing
-service values, including `MacTxResult`, `MacRxMetadata`, `MacResourceLimits`,
-configuration, monitor admission and `EdcaContention`, live in this port.
-`MacOperationOwnership::hardware_services` turns a service description into
-`HardwareServices`. Association `PhyMode` and `Preference` also belong here;
-wire encoding obtains selected capability elements through `AssociationPhy`.
+`RxEvidence` and `RxCryptoStatus` describe receive provenance. The values a
+backend and the layers above it share live here (`contract`): the service a
+backend describes (`MacServiceCapabilities`, `MacOperationOwnership`,
+`MacResourceLimits`, `MacInterfaceCapabilities`), its receive metadata
+(`MacRxMetadata`) and the terminal status of one logical MPDU exchange
+(`MacTxStatus`, `MacTxResult`), which both the S31 direct ordinary path and
+the upper MAC's planner report. `MacOperationOwnership::hardware_services`
+turns a service description into `HardwareServices`. A VIF's EDCA table is
+an `EdcaParameterSet`; the backend keeps each queue's contention window.
+The monitor boundary (`monitor`) carries the tap point, the channel
+context, the observed frame, the sink and the injection request; the
+injected MPDU's geometry is the wire's `monitor_injection`.
 
 ## Above the port
 
@@ -347,15 +358,23 @@ PN with the installed key ID.
 | Work | Owner |
 | --- | --- |
 | The retry plan of an MPDU and the rate control that chooses it | `oer-ieee80211-upper-mac` |
-| Which A-MPDU subframes the next aggregate resends after a `BlockAckReport` (`BlockAckReport::acknowledges`), the BlockAckReq, aging | `oer-ieee80211-upper-mac` `ampdu` |
-| RTS/CTS or CTS-to-self and the control-frame rate | `oer-ieee80211-upper-mac` `protection` |
+| What a `BlockAckReport` acknowledges | `oer-ieee80211-upper-mac` `block_ack::acknowledges` |
+| Which A-MPDU subframes the next aggregate resends after a `BlockAckReport`, the BlockAckReq, aging | `oer-ieee80211-upper-mac` `ampdu` |
+| RTS/CTS or CTS-to-self, the control-frame rate and the BSS basic rates | `oer-ieee80211-upper-mac` `protection` |
+| The retry counter a frame's class advances and the ladder step of its failures | `oer-ieee80211-upper-mac` `retry` |
+| The attempt budget of a management frame | `oer-ieee80211-upper-mac` `management` |
+| The PHY mode of an association | `oer-ieee80211-upper-mac` `phy_mode`, chosen by `oer-ieee80211-sta` `association` |
 | Transmit packet-number allocation and receive replay | `oer-ieee80211-upper-mac` `ccmp` |
 | Receive Block Ack reordering | `oer-ieee80211-upper-mac` `block_ack::reorder` |
 | The station's lifecycle, from its scan to its disconnect | `oer-ieee80211-sta` `machine` |
+| The Wi-Fi owner topology checked against a backend's service, and which frames a monitor keeps | `oer-ieee80211-runtime` `configuration`, `monitor::policy` |
+| Virtual-interface identities and ESP-NOW PHY requests | `oer-ieee80211-softmac` `interface`, `extensions::espressif::phy` |
 
 Limits, rate ladders and duration estimates in which implementations differ
 are parameters of those algorithms; the Espressif values recovered from the
-vendor stack are the family package `oer-espressif-ieee80211-policy`.
+vendor stack, including the opaque rate-schedule records and the default
+contention of each access category, are the family package
+`oer-espressif-ieee80211-policy`.
 
 ## Implementers
 
@@ -396,13 +415,14 @@ selects BSS protection or a protection control-frame rate. The S31 queue
 adapter receives the exact control-frame rate through each `RetryPlan`
 stage's `Protection` value. EDCA backoff and MSDU age remain backend work.
 
-`backend` carries immutable rate-record identities and observation values
-used by the family rate controller, with no backend retry owner, static TX
-profile or protection selectors. `backend_aggregate` carries detached
-BlockAck facts and aggregate retry commands. `espressif` contains LR and ESP-NOW PHY requests;
-ESP-NOW preparation, peers and protocol state remain in softmac.
-
-
+`backend` carries the values a backend shares with the family policy and
+the retry owner: a rate-schedule record's format family (`RateScheduleKind`)
+and a frame's retry counters (`RetryCounters`). `backend_aggregate` carries
+detached BlockAck facts, the aggregate retry decision a backend executes and
+the trait through which it asks the core's retry owner. A chip's
+contention, transmit-cost model and publication work are its own, as the
+S31 MAC's `edca::contention`, `tx_cost` and `tx_work`; its direct ordinary
+path takes a `MacTxPlan` from the S31 driver's `ordinary_tx`.
 
 ## Shared backend conformance
 

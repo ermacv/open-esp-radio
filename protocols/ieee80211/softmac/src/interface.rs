@@ -1,9 +1,11 @@
-//! Portable identity and topology types at the SoftMAC/backend boundary.
+//! Virtual-interface identity and its binding to a channel context.
 //!
 //! A virtual interface is protocol state, while a channel context represents
 //! one hardware radio tuning context. Keeping their identities distinct is
 //! required for STA/AP concurrency: two VIFs may share one channel context
 //! even when the hardware cannot tune two channels simultaneously.
+
+use oer_ieee80211_port::{ChannelContextId, VifRole};
 
 /// Stable identity of one virtual Wi-Fi interface within a radio owner.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -22,13 +24,6 @@ impl VifId {
     }
 }
 
-/// Protocol role implemented by one virtual interface.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum VifRole {
-    Station,
-    AccessPoint,
-}
-
 /// Value-only definition of one virtual interface.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct VirtualInterface {
@@ -40,23 +35,6 @@ pub struct VirtualInterface {
 impl VirtualInterface {
     pub const fn new(id: VifId, role: VifRole, address: [u8; 6]) -> Self {
         Self { id, role, address }
-    }
-}
-
-/// Stable identity of one hardware channel context within a radio owner.
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
-#[repr(transparent)]
-pub struct ChannelContextId(u8);
-
-impl ChannelContextId {
-    pub const PRIMARY: Self = Self(0);
-
-    pub const fn new(index: u8) -> Self {
-        Self(index)
-    }
-
-    pub const fn index(self) -> u8 {
-        self.0
     }
 }
 
@@ -99,19 +77,6 @@ impl BoundVirtualInterface {
     }
 }
 
-/// Observation point for a passive monitor consumer.
-///
-/// Monitor is a tap rather than a protocol VIF: a slow observer must not own
-/// the normal RX path or force STA/AP protocol state into a synthetic role.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum MonitorTapPoint {
-    /// Raw DMA frame and chip RX status before normalization.
-    Raw,
-    /// Frame and portable metadata after backend normalization.
-    Normalized,
-    /// Frame after HMAC validation, decryption and reorder.
-    ProtocolValidated,
-}
-
 #[cfg(test)]
+#[allow(clippy::disallowed_macros)]
 mod tests;

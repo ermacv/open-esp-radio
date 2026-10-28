@@ -1210,7 +1210,6 @@ fn check_management_transmissions(
 #[test]
 fn management_unicast_keeps_its_rate_for_seven_attempts() {
     use ManagementObservation::*;
-    use oer_ieee80211_port::ManagementTxPlan;
     for rate in [LegacyRate::Ofdm6M, LegacyRate::Ofdm12M] {
         for failures in [
             [AckTimeout; 7],
@@ -1227,16 +1226,23 @@ fn management_unicast_keeps_its_rate_for_seven_attempts() {
                 AckTimeout,
             ],
         ] {
-            check_management_transmissions(PEER, ManagementTxPlan::unicast(rate), &failures);
+            check_management_transmissions(
+                PEER,
+                oer_ieee80211_upper_mac::management::unicast(rate),
+                &failures,
+            );
         }
-        check_management_transmissions(PEER, ManagementTxPlan::unicast(rate), &[Delivered]);
+        check_management_transmissions(
+            PEER,
+            oer_ieee80211_upper_mac::management::unicast(rate),
+            &[Delivered],
+        );
     }
 }
 
 #[test]
 fn management_retries_preserve_retry_bit_counters_and_reset_edca_at_success_or_timeout() {
     use ManagementObservation::*;
-    use oer_ieee80211_port::ManagementTxPlan;
     for observations in [
         &[AckTimeout, Delivered][..],
         &[CtsTimeout, Delivered],
@@ -1249,7 +1255,7 @@ fn management_retries_preserve_retry_bit_counters_and_reset_edca_at_success_or_t
     ] {
         check_management_transmissions(
             PEER,
-            ManagementTxPlan::unicast(LegacyRate::Ofdm12M),
+            oer_ieee80211_upper_mac::management::unicast(LegacyRate::Ofdm12M),
             observations,
         );
     }
@@ -1258,7 +1264,6 @@ fn management_retries_preserve_retry_bit_counters_and_reset_edca_at_success_or_t
 #[test]
 fn management_broadcast_never_retries() {
     use ManagementObservation::*;
-    use oer_ieee80211_port::ManagementTxPlan;
     for rate in [LegacyRate::Ofdm6M, LegacyRate::Ofdm12M] {
         for completion in [
             Delivered,
@@ -1270,7 +1275,7 @@ fn management_broadcast_never_retries() {
         ] {
             check_management_transmissions(
                 [0xff; 6],
-                ManagementTxPlan::broadcast(rate),
+                oer_ieee80211_upper_mac::management::broadcast(rate),
                 &[completion],
             );
         }

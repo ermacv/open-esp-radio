@@ -3,10 +3,27 @@
 //! The hardware profile decides eligibility, including supported MCS and width.
 //! This policy neither advertises capabilities nor encodes a PHY channel command.
 
-use oer_ieee80211_port::backend_protection::{
+use oer_ieee80211_upper_mac::phy_mode::PhyMode;
+use oer_ieee80211_upper_mac::protection::{
     BasicRates, BssProtection, HePacketPadding, HeTxopDurationRtsThreshold,
 };
-use oer_ieee80211_port::{PhyMode, Preference};
+
+/// Caller policy applied before constructing one STA association request.
+///
+/// These are preferences rather than unchecked PHY claims. `PreferHe20`
+/// still falls back when the peer does not advertise the complete HE20 MCS9
+/// contract; `ForceHt20` is retained as the diagnostic negative-control mode
+/// and may subsequently be rejected by
+/// [`AssociationRequest::encode`](oer_ieee80211_wire::station::AssociationRequest::encode).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Preference {
+    /// Select among the mutually supported modes.
+    Automatic,
+    /// Prefer HE20 when the peer admits it.
+    PreferHe20,
+    /// Require the diagnostic HT20 selection.
+    ForceHt20,
+}
 
 /// Choose a mode after the caller has intersected local and peer capabilities.
 /// A peer without HT is legacy; HT20 is the baseline of one with HT; a later
@@ -74,7 +91,7 @@ pub struct StaAssociatedPeer {
     /// The BSS color of the access point's HE Operation, zero without one.
     pub he_bss_color: u8,
     /// The protection facts of the BSS the transmitter's planner applies.
-    pub protection: oer_ieee80211_port::backend_protection::BssProtection,
+    pub protection: oer_ieee80211_upper_mac::protection::BssProtection,
     /// The EDCA parameters the station's interface contends with: those
     /// of the Association Response's WMM Parameter element, else those the
     /// scan heard, else the standard defaults of a QoS BSS, or the DCF's
@@ -118,7 +135,7 @@ impl StaAssociatedPeer {
         access_point: &oer_ieee80211_wire::scan::ScanRecord,
         response: &oer_ieee80211_wire::station::AssociationResponse,
         phy: PhyMode,
-        he_packet_padding: impl FnOnce(&[u8]) -> oer_ieee80211_port::backend_protection::HePacketPadding,
+        he_packet_padding: impl FnOnce(&[u8]) -> oer_ieee80211_upper_mac::protection::HePacketPadding,
     ) -> Result<Self, StaAssociatedPeerError> {
         use oer_ieee80211_wire::{
             extensions::wmm::WmmParameterSet,

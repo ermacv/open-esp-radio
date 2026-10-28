@@ -1,9 +1,9 @@
 use super::*;
 use crate::TxQueues;
 use core::num::NonZeroU16;
-use oer_ieee80211_port::{
-    MacTxWork,
-    tx_cost::{PpduTiming, TxCost, TxProtection, TxResponse},
+use oer_esp32s31_ieee80211_mac::{
+    tx_cost::{PpduTiming, TxCost, TxProtectionTiming, TxResponse},
+    tx_work::MacTxWork,
 };
 
 fn data_phy(peer: u8) -> PpduTiming {
@@ -74,7 +74,7 @@ fn ht_grants_limit_bursts_and_retry_receipts_equalize_service_not_packet_counts(
                 Some(data_phy(key)),
                 10,
                 reply(key),
-                TxProtection::None,
+                TxProtectionTiming::None,
                 None,
             )
             .exchange_micros()
@@ -88,7 +88,7 @@ fn ht_grants_limit_bursts_and_retry_receipts_equalize_service_not_packet_counts(
             Some(data_phy(key)),
             10,
             reply(key),
-            TxProtection::None,
+            TxProtectionTiming::None,
         )
         .unwrap()
         .get();
@@ -106,7 +106,7 @@ fn ht_grants_limit_bursts_and_retry_receipts_equalize_service_not_packet_counts(
             // The same peer owns retransmission work; no new scheduler turn.
             receipt.record_publication(bytes, frames, None, Some(data_phy(key)), None);
         }
-        let overhead = TxCost::estimate(0, None, 10, reply(key), TxProtection::None, None)
+        let overhead = TxCost::estimate(0, None, 10, reply(key), TxProtectionTiming::None, None)
             .response_micros
             .unwrap();
         let charge = receipt.estimated_exchange_micros(overhead).unwrap();

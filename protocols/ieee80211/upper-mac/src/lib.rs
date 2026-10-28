@@ -44,6 +44,9 @@
 //! - [`ampdu`]: which subframes of an A-MPDU the next attempt resends after
 //!   a BlockAck, with their Retry bit, and when the aggregate ends;
 //! - [`protection`]: RTS/CTS or CTS-to-self before each PPDU;
+//! - [`management`]: the transmission budget of a management frame;
+//! - [`phy_mode`]: the PHY mode of one association and the elements its
+//!   request carries;
 //! - [`rate_control`]: the seam of a peer's data rates, which learns from
 //!   its exchanges;
 //! - [`tx`]: the [`TxPlanner`], which combines them into one attempt at a
@@ -68,6 +71,8 @@ extern crate std;
 
 pub mod aggregate;
 pub mod ampdu;
+pub mod management;
+pub mod phy_mode;
 pub mod protection;
 pub mod rate_control;
 pub mod rate_selection;

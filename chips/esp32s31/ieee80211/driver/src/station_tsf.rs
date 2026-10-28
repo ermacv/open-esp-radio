@@ -2,13 +2,14 @@
 //!
 //! The MAC's interface-zero timer counts the station's TSF. Every write to
 //! it goes through [`StationTsf`], which records the write in the
-//! portable [`TsfRelation`]: a follow within the drift since the last sample
+//! [`TsfRelation`]: a follow within the drift since the last sample
 //! keeps the relation's generation, a jump starts a new one. The hardware
 //! write takes a [`StationTsfWrite`] that only this module constructs, so a
 //! backend implements [`StationTsfHardware`] but no caller writes the timer
 //! around the owner.
 
-use oer_ieee80211_port::{TsfGeneration, TsfRelation, TsfSetKind, TsfTimingError};
+use oer_esp32s31_ieee80211_mac::tsf_relation::{TsfRelation, TsfSetKind, TsfTimingError};
+use oer_ieee80211_port::TsfGeneration;
 use oer_ieee80211_wire::tsf::TsfInstant;
 
 /// The uncertainty of a station TSF sample: the set value and the reading

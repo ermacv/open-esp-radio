@@ -126,7 +126,7 @@ pub enum TxResponse {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum TxProtection {
+pub enum TxProtectionTiming {
     None,
     CtsToSelf(PpduTiming),
     RtsCts { rts: PpduTiming, cts: PpduTiming },
@@ -172,7 +172,7 @@ impl TxCost {
         phy: Option<PpduTiming>,
         sifs_micros: u16,
         response: TxResponse,
-        protection: TxProtection,
+        protection: TxProtectionTiming,
     ) -> Option<NonZeroU16> {
         let overhead = Self::estimate(0, None, sifs_micros, response, protection, None);
         let ppdu_budget = exchange_micros
@@ -186,7 +186,7 @@ impl TxCost {
         phy: Option<PpduTiming>,
         sifs_micros: u16,
         response: TxResponse,
-        protection: TxProtection,
+        protection: TxProtectionTiming,
         access: Option<TxAccess>,
     ) -> Self {
         let sifs = u32::from(sifs_micros);
@@ -202,13 +202,13 @@ impl TxCost {
                 TxResponse::Unknown => None,
             },
             protection_micros: match protection {
-                TxProtection::None => Some(0),
-                TxProtection::CtsToSelf(phy) => phy.duration_micros(14).checked_add(sifs),
-                TxProtection::RtsCts { rts, cts } => rts
+                TxProtectionTiming::None => Some(0),
+                TxProtectionTiming::CtsToSelf(phy) => phy.duration_micros(14).checked_add(sifs),
+                TxProtectionTiming::RtsCts { rts, cts } => rts
                     .duration_micros(20)
                     .checked_add(cts.duration_micros(14))
                     .and_then(|duration| duration.checked_add(sifs.checked_mul(2)?)),
-                TxProtection::Unknown => None,
+                TxProtectionTiming::Unknown => None,
             },
             access_micros: access.and_then(|access| {
                 u32::from(access.contention.aifsn)

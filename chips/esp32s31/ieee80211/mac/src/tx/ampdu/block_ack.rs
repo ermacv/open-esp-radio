@@ -47,19 +47,6 @@ impl TxBlockAckBitmap {
         }
     }
 
-    /// Return whether the transmitter must consider `sequence` complete.
-    ///
-    /// Peers use both standard-compliant SSN conventions: some retain the
-    /// oldest possible sequence and describe it with the bitmap, while others
-    /// advance SSN to the first not-yet-acknowledged sequence. In the latter
-    /// form an MPDU immediately left of the new window is already complete
-    /// even though it no longer has a bitmap bit. Only a bounded predecessor
-    /// is admitted; a sequence beyond either side of the 64-entry BA window
-    /// remains unacknowledged so a stale result cannot release new traffic.
-    pub const fn acknowledges(self, sequence: SequenceNumber) -> bool {
-        self.report().acknowledges(sequence)
-    }
-
     /// The portable BlockAck of the lower-MAC port.
     pub const fn report(self) -> BlockAckReport {
         BlockAckReport {

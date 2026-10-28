@@ -37,6 +37,8 @@
 //! These async ownership contracts bind no executor. Waiting on time uses
 //! `oer_time::Timer`; bounded channels and task signals use `embassy-sync`.
 //!
+//! [`configuration`] validates the requested Wi-Fi owner topology against a
+//! backend's MAC service capabilities.
 //! [`monitor`] provides bounded capture and injection handoffs. [`connected_tasks`]
 //! coordinates finite task shutdown, and [`station_network`] retains network
 //! ownership across station associations.
@@ -50,6 +52,7 @@
 //! wait or dropping the permit consumes neither a value nor queue capacity;
 //! the receiver may run on another thread.
 //!
+pub mod configuration;
 pub mod connected_tasks;
 pub mod monitor;
 pub mod station_network;

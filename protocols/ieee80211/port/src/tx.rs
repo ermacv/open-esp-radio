@@ -72,6 +72,16 @@ pub enum Protection {
     },
 }
 
+impl Protection {
+    /// The legacy rate of the protection frame, if the attempt has one.
+    pub const fn control_rate(self) -> Option<oer_ieee80211_wire::phy::LegacyRate> {
+        match self {
+            Self::None => None,
+            Self::RtsCts { rate } | Self::CtsToSelf { rate } => Some(rate),
+        }
+    }
+}
+
 /// Transmit power of one attempt.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum TxPower {
@@ -121,25 +131,6 @@ impl BlockAckReport {
 
     /// Positions of the 64-bit bitmap.
     pub const BITMAP_BITS: u16 = 64;
-
-    /// Whether the transmitter may consider `sequence` delivered.
-    ///
-    /// Recipients use both standard-compliant starting-sequence conventions:
-    /// some keep the oldest possible sequence and describe it with the
-    /// bitmap, others advance the start to the first sequence not yet
-    /// received. In the latter form an MPDU just before the window is
-    /// already delivered although it has no bitmap bit. Only a bounded
-    /// predecessor, at most one bitmap width behind the start, counts; a
-    /// sequence beyond either side of the window stays unacknowledged, so a
-    /// stale report cannot release newer traffic.
-    pub const fn acknowledges(self, sequence: SequenceNumber) -> bool {
-        let distance = self.start_sequence.forward_distance(sequence);
-        if distance < Self::BITMAP_BITS {
-            self.bitmap & (1_u64 << distance) != 0
-        } else {
-            sequence.forward_distance(self.start_sequence) <= Self::BITMAP_BITS
-        }
-    }
 }
 
 /// Why an admitted attempt was returned without publishing it again.

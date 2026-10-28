@@ -19,6 +19,8 @@ use oer_ieee80211_sta::{
     machine::{self, StaConfig, Station, StationResources},
 };
 use oer_ieee80211_upper_mac::{
+    phy_mode::PhyMode,
+    protection::HePacketPadding,
     rate_control::RatePeer,
     rate_selection::{FrameRates, RateSelection},
 };
@@ -217,8 +219,8 @@ impl machine::StaCallbacks for Callbacks {
             .next_nonce()
             .expect("SNonce stream exhausted; reset required")
     }
-    fn he_packet_padding(&self, _: &[u8]) -> backend_protection::HePacketPadding {
-        backend_protection::HePacketPadding::None
+    fn he_packet_padding(&self, _: &[u8]) -> HePacketPadding {
+        HePacketPadding::None
     }
 }
 

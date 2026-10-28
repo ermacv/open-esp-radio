@@ -1,6 +1,27 @@
 //! Block Ack negotiation and receive reorder owners.
 
+use oer_ieee80211_port::BlockAckReport;
 use oer_ieee80211_wire::block_ack::{BlockAckAction, parse_block_ack_action};
+use oer_ieee80211_wire::sequence::SequenceNumber;
+
+/// Whether the transmitter may consider `sequence` delivered by `report`.
+///
+/// Recipients use both standard-compliant starting-sequence conventions:
+/// some keep the oldest possible sequence and describe it with the
+/// bitmap, others advance the start to the first sequence not yet
+/// received. In the latter form an MPDU just before the window is
+/// already delivered although it has no bitmap bit. Only a bounded
+/// predecessor, at most one bitmap width behind the start, counts; a
+/// sequence beyond either side of the window stays unacknowledged, so a
+/// stale report cannot release newer traffic.
+pub const fn acknowledges(report: BlockAckReport, sequence: SequenceNumber) -> bool {
+    let distance = report.start_sequence.forward_distance(sequence);
+    if distance < BlockAckReport::BITMAP_BITS {
+        report.bitmap & (1_u64 << distance) != 0
+    } else {
+        sequence.forward_distance(report.start_sequence) <= BlockAckReport::BITMAP_BITS
+    }
+}
 
 pub mod banks;
 pub mod originator;
@@ -22,3 +43,6 @@ pub use session::{
 };
 
 pub mod batch;
+
+#[cfg(test)]
+mod tests;

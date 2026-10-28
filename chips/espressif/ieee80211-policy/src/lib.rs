@@ -68,6 +68,7 @@ pub mod he_txop;
 pub mod lmac;
 pub mod rate_code;
 pub mod rate_control;
+pub mod rate_record;
 pub mod rate_schedule;
 pub mod rate_selection;
 pub mod retry_ladder;

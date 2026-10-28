@@ -70,8 +70,16 @@ pub const fn ampdu_retry_policy(lifetime: Duration, retain_single_mpdu: bool) ->
     }
 }
 
-use oer_ieee80211_port::backend::DefaultContention;
-
+/// Initial AIFS and contention exponents supplied by the family policy.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct DefaultContention {
+    /// AIFS in slot units after SIFS.
+    pub aifsn: u8,
+    /// Minimum contention exponent.
+    pub ecw_min: u8,
+    /// Maximum contention exponent.
+    pub ecw_max: u8,
+}
 /// The contention an access category starts with before a BSS advertises
 /// EDCA parameters.
 ///

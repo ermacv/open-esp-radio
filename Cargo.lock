@@ -1989,6 +1989,7 @@ dependencies = [
  "oer-espressif-interrupt-table",
  "oer-espressif-staged-runtime",
  "oer-ieee80211-port",
+ "oer-ieee80211-upper-mac",
  "oer-ieee80211-wire",
  "oer-memory",
  "oer-radio-port",
@@ -2017,6 +2018,7 @@ dependencies = [
  "oer-test-ui-cases",
  "oer-time",
  "oer-time-virtual",
+ "oer-wire",
  "pin-project",
  "subtle",
  "zeroize",
@@ -3030,6 +3032,7 @@ dependencies = [
 name = "oer-ieee80211-datapath"
 version = "0.1.0"
 dependencies = [
+ "oer-esp32s31-ieee80211-mac",
  "oer-ieee80211-port",
  "oer-memory",
  "oer-network",
@@ -3106,6 +3109,7 @@ dependencies = [
  "oer-ieee80211-model",
  "oer-ieee80211-port",
  "oer-ieee80211-rsn",
+ "oer-ieee80211-softmac",
  "oer-ieee80211-sta",
  "oer-ieee80211-upper-mac",
  "oer-ieee80211-wire",

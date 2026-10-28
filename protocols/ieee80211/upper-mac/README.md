@@ -10,19 +10,22 @@ plans and reports leave as values, and nothing waits.
 
 | Module | Decides | Inputs |
 | --- | --- | --- |
-| `retry` | Whether an MPDU is sent again, whether that attempt sets the Retry bit, and the rate of each attempt; a backend drawing its own contention derives the window's reset or doubling from that `RetryDecision` | `TxStatus`, `RetryLimits`, a `RateLadder` |
+| `retry` | Whether an MPDU is sent again, whether that attempt sets the Retry bit, the counter a frame's class advances (`FrameClass`), the ladder step of its failures (`ladder_step`) and the rate of each attempt; a backend drawing its own contention derives the window's reset or doubling from that `RetryDecision` | `TxStatus`, `RetryCounters`, `RetryLimits`, a `RateLadder` |
 | `aggregate` | How many queued frames one A-MPDU carries: the agreement's window, the port's capabilities, the recipient's Maximum A-MPDU Length and Minimum MPDU Start Spacing, and the TXOP limit with its BlockAck | `AmpduLimits` |
 | `ampdu` | Which subframes of an A-MPDU the next attempt resends after its BlockAck, republication after a failed protection exchange, the BlockAckReq after repeated failures, individual retries, aging and the end of the exchange | `BlockAckReport`, `AmpduRetryPolicy` |
 | `rate_control` | The first rate of a peer's MPDUs and A-MPDUs, one controller per peer (a station's access point, each station of an access point), learning from each exchange, starting from the `LinkMetric` (signal over the noise floor, required) of the frame that made the link | `RatePeer`, `TxReport` outcomes |
 | `rate_selection` | The retry plan of each frame an interface sends, by what it is for (`FrameRates`: probe, control, data), learning from each terminal and from the association with its peer; `RateSelection` is the seam a service drives, over the port's receive metadata and ACK evidence | `RatePeer`, `SingleOutcome` |
-| `protection` | RTS/CTS or CTS-to-self and the control-frame rate for each PPDU | `BssProtection`, dot11RTSThreshold, an `HeTxopRtsBudget` |
+| `protection` | RTS/CTS or CTS-to-self and the control-frame rate for each PPDU, as the port's `Protection`, with the BSS facts it reads (`BssProtection`, `BasicRates`) | `BssProtection`, dot11RTSThreshold, an `HeTxopRtsBudget` |
+| `block_ack` | What a `BlockAckReport` acknowledges, under both starting-sequence conventions; agreement negotiation and receive reordering | `BlockAckReport` |
+| `management` | The attempt budget of a management frame: seven for unicast (dot11ShortRetryLimit), one for broadcast | a legacy rate |
+| `phy_mode` | The PHY mode of one association and the capability elements its request carries (`AssociationPhy`) | a `ScanRecord`, `AssociationCapabilities` |
 | `tx` | `TxPlanner`: the next `TxAttemptPlan` (rate, protection, power, coexistence, content and Retry bits) of an MPDU or A-MPDU exchange, and its `TxReport` | `TxRequest`, `PublicationReport`, `RadioInstant` |
 
 The planner draws no backoff: the lower-MAC port carries none, and a backend
-draws its queues' contention below the port with `oer-ieee80211-port`'s
-`EdcaContention`, resetting the window when `MpduRetryState` ends a frame and
-doubling it when it retries one. Reports are the port's service contract's
-`MacTxStatus` and `MacAmpduTxStatus`. The checked `WmmAccessCategory` of a
+draws its queues' contention below the port, resetting the window when
+`MpduRetryState` ends a frame and doubling it when it retries one. Reports
+are the port's `MacTxStatus` for an MPDU and this package's
+`MacAmpduTxStatus` for an A-MPDU. The checked `WmmAccessCategory` of a
 request passes through to each `TxAttemptPlan::access_category`.
 
 `TxExchange` retains its immutable request context once. The current phase
@@ -46,8 +49,10 @@ management/group rate above the driver: the lowest advertised basic rate
 the band admits. Without a known BSS it selects DSSS 1 Mb/s in 2.4 GHz or
 OFDM 6 Mb/s in 5 GHz. A supplied empty or incompatible set refuses TX;
 6 Mb/s is selected before 11 Mb/s CCK when both are basic. The caller wraps
-the result in lower-MAC's `ManagementTxPlan::unicast` (at most seven
-attempts) or `broadcast` (one), keeping that rate for every attempt.
+the result in `management::unicast` (at most seven attempts) or
+`management::broadcast` (one), a port `ManagementTxPlan` that keeps that rate
+for every attempt. `BasicRates` reads the wire's Supported Rates codec
+(`oer_ieee80211_wire::rates`), as `NegotiatedLegacyRates` does.
 
 ## Parameters and profiles
 
