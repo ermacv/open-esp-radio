@@ -27,6 +27,7 @@ compile_error!("system-panic-reset requires an exclusive image with the product 
 ))]
 compile_error!("wifi-station requires an exclusive image");
 
+use oer_esp32s31_compose::Esp32s31;
 use core::ops::Range;
 use core::sync::atomic::{AtomicU32, Ordering};
 use oer_diagnostics::Note;
@@ -47,18 +48,18 @@ oer_espressif_staged_runtime::interrupt_table! {
     contexts { app_wake: 1; radio_executor: 2; radio: 3; }
     #[cfg(not(feature = "wifi-station"))]
     /// Wakes the core-0 executor.
-    wake: ExecutorWake = FromCpu0Irq => oer_espressif_executor::wake_handler::<0, FromCpu0Irq>, line 16, context app_wake, hart 0, Hardware;
+    wake: ExecutorWake = FromCpu0Irq => oer_espressif_executor::wake_handler::<Esp32s31, 0, FromCpu0Irq>, line 16, context app_wake, hart 0, Hardware;
     #[cfg(feature = "wifi-station")]
-    wake: ExecutorWake = FromCpu0Irq => oer_espressif_executor::wake_handler::<0, FromCpu0Irq>, line 40, context app_wake, hart 0, Hardware;
+    wake: ExecutorWake = FromCpu0Irq => oer_espressif_executor::wake_handler::<Esp32s31, 0, FromCpu0Irq>, line 40, context app_wake, hart 0, Hardware;
     #[cfg(not(feature = "wifi-station"))]
     /// The Embassy time driver's alarm (system timer comparator 0).
-    alarm: TimeAlarm = SystimerAlarm0 => oer_espressif_executor::alarm_interrupt::<0, SystimerAlarm0>, line 17, context app_wake, hart 0, Hardware;
+    alarm: TimeAlarm = SystimerAlarm0 => oer_espressif_executor::alarm_interrupt::<Esp32s31, 0, SystimerAlarm0>, line 17, context app_wake, hart 0, Hardware;
     #[cfg(feature = "wifi-station")]
     /// The application executor's alarm (system timer comparator 1).
-    alarm: TimeAlarm = SystimerAlarm1 => oer_espressif_executor::alarm_interrupt::<1, SystimerAlarm1>, line 41, context app_wake, hart 0, Hardware;
+    alarm: TimeAlarm = SystimerAlarm1 => oer_espressif_executor::alarm_interrupt::<Esp32s31, 1, SystimerAlarm1>, line 41, context app_wake, hart 0, Hardware;
     #[cfg(feature = "wifi-station")]
     /// The radio executor's alarm (system timer comparator 0).
-    radio_alarm: RadioAlarmToken = SystimerAlarm0 => oer_espressif_executor::alarm_interrupt::<0, SystimerAlarm0>, line 19, context radio, hart 0, Hardware;
+    radio_alarm: RadioAlarmToken = SystimerAlarm0 => oer_espressif_executor::alarm_interrupt::<Esp32s31, 0, SystimerAlarm0>, line 19, context radio, hart 0, Hardware;
     #[cfg(feature = "wifi-station")]
     // SOURCE: family.toml [interrupts] highest-line; HW23_S31_P2_ARBITRATION_20261027
     // measures only this P2 pair on S31: FROM_CPU2 line17 before TIMG0 line16.
@@ -121,7 +122,7 @@ const PROFILE_NAME: oer_diagnostics::Name<64> =
 #[cfg(feature = "boot-smoke")]
 oer_espressif_executor::tasks! {
     /// The boot smoke's task.
-    BootSmokeTasks: Executor<0> {
+    BootSmokeTasks: Executor<Esp32s31, 0> {
         boot_smoke(console: boot_smoke_console::BootSmokeConsole) = boot_smoke;
         rtc_watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) = feed_rtc_watchdog;
     }
@@ -228,7 +229,7 @@ fn system_main(
         fail(fatal::Failure::InterruptTable);
     };
     let timer = runtime.system_timer;
-    oer_espressif_executor::init::<0, _, _>(
+    oer_espressif_executor::init::<Esp32s31, 0, _, _>(
         oer_espressif_executor::systimer::SystemTimer {
             comparators: timer.comparators,
             counter: timer.counter,
@@ -240,7 +241,7 @@ fn system_main(
     .unwrap_or_else(|failure| failure.reset());
     let console = usb::open(adopted.router(), interrupts.console_usb);
     let software = runtime.software_interrupts;
-    let executor = Executor::<0>::new(software.line0);
+    let executor = Executor::<Esp32s31, 0>::new(software.line0);
     let (mut router, hart) = match adopted.enable_interrupts() {
         Ok(router) => router,
         Err(error) => crate::fail(crate::fatal::Failure::from_boot(error)),

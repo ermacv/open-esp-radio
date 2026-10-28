@@ -2,6 +2,7 @@
 //! the gate's queues, the doorbell's lowering half, the workers' signals and
 //! the scheduler channel. The part is bound once at boot and serves every
 //! epoch; the task opens and closes each epoch through the gate.
+use oer_esp32s31_compose::Esp32s31;
 use super::*;
 use core::sync::atomic::AtomicBool;
 use oer_esp32s31_bluetooth_driver::interrupt::{
@@ -18,7 +19,7 @@ use oer_espressif_interrupt_table::{
 };
 
 /// The doorbell's lowering half, which the handler's part holds.
-pub struct Ack(DoorbellAcknowledger<3>);
+pub struct Ack(DoorbellAcknowledger<Esp32s31, 3>);
 
 impl DoorbellLine for Ack {
     fn acknowledge(&mut self) {
@@ -34,13 +35,13 @@ pub type Interrupts = BluetoothInterrupts<X, Ack>;
 pub struct Bell<
     E: oer_espressif_interrupt_table::Entry = crate::BtToken,
     R: oer_espressif_interrupt_table::Entry = crate::RadioToken,
->(Doorbell<3, E, R>);
+>(Doorbell<Esp32s31, 3, E, R>);
 
 impl<E: oer_espressif_interrupt_table::Entry, R: oer_espressif_interrupt_table::Entry> RadioDoorbell
     for &Bell<E, R>
 {
-    const HANDLER: oer_espressif_interrupt_table::Context = Doorbell::<3, E, R>::HANDLER;
-    const EXECUTOR: oer_espressif_interrupt_table::Context = Doorbell::<3, E, R>::EXECUTOR;
+    const HANDLER: oer_espressif_interrupt_table::Context = Doorbell::<Esp32s31, 3, E, R>::HANDLER;
+    const EXECUTOR: oer_espressif_interrupt_table::Context = Doorbell::<Esp32s31, 3, E, R>::EXECUTOR;
     fn ring(&self) {
         self.0.ring();
     }
@@ -98,7 +99,7 @@ pub fn bind<C: Controller>(
     irq: FromCpu3Irq,
     status: oer_esp32s31_hal::bluetooth::ModemLpTimerStatus,
 ) -> Result<Bound, BindError> {
-    let (line, ack) = oer_espressif_executor::DoorbellLine::<3>::split(line);
+    let (line, ack) = oer_espressif_executor::DoorbellLine::<Esp32s31, 3>::split(line);
     let storage = STORAGE
         .try_init(BluetoothInterruptStorage::new())
         .ok_or(BindError::Storage)?;

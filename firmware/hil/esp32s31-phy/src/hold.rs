@@ -116,7 +116,11 @@ pub async fn report_preparation(
 
 #[cfg(oer_profile)]
 #[inline(never)]
-pub async fn report_timer(window: Option<oer_espressif_executor::timer_observation::Window>) {
+pub async fn report_timer(
+    window: Option<
+        oer_espressif_executor::timer_observation::Window<oer_esp32s31_compose::Esp32s31>,
+    >,
+) {
     let Some(window) = window else {
         return;
     };

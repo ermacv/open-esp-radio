@@ -6,6 +6,7 @@
 //! state machine, not a lock. The runner binds the arena on P2, where it
 //! runs, and sends the application its ends of the epoch.
 
+use oer_esp32s31_compose::Esp32s31;
 use core::sync::atomic::{AtomicU32, Ordering};
 
 use oer_embassy_time::EmbassyClock;
@@ -51,7 +52,7 @@ pub const STORAGE: usize = BUFFER;
 /// Staging leases.
 pub const SLOTS: usize = 32;
 
-pub type RadioExecutor = InterruptExecutor<2>;
+pub type RadioExecutor = InterruptExecutor<Esp32s31, 2>;
 
 type Arena = WifiRxArena<COUNT, BUFFER, STORAGE, SLOTS, RadioExecutor>;
 /// The arena and its RX DMA storage, placed together.
@@ -79,13 +80,13 @@ oer_espressif_staged_runtime::placed_static! {
     pub static UNSERVICED_PWR: AtomicU32 = AtomicU32::new(0), in critical_data "w1";
     /// The MAC facts the P3 line raises for the receive runner on the
     /// radio executor (P2).
-    static MAC_SIGNAL: IrqSignal<RadioExecutor> = IrqSignal::new::<(FromHandler<crate::WifiToken>, FromTask<oer_espressif_executor::Executor<0>, crate::WakeToken>), crate::RadioToken>(), in critical_data "w1";
+    static MAC_SIGNAL: IrqSignal<RadioExecutor> = IrqSignal::new::<(FromHandler<crate::WifiToken>, FromTask<oer_espressif_executor::Executor<Esp32s31, 0>, crate::WakeToken>), crate::RadioToken>(), in critical_data "w1";
     /// The WDEVPWR facts the P3 line raises for the receive runner.
     static POWER_SIGNAL: IrqSignal<RadioExecutor> = IrqSignal::new::<FromHandler<crate::WifiToken>, crate::RadioToken>(), in critical_data "w1";
 }
 
 /// The doorbell's lowering half, which the radio handler's part holds.
-pub struct Lower(pub DoorbellAcknowledger<3>);
+pub struct Lower(pub DoorbellAcknowledger<Esp32s31, 3>);
 
 impl DoorbellAcknowledge for Lower {
     fn acknowledge(&mut self) {
@@ -139,13 +140,13 @@ pub fn radio_executor(part: &mut FromCpu2Irq) {
 pub struct ImageDoorbell<
     E: oer_espressif_interrupt_table::Entry = crate::WifiToken,
     X: oer_espressif_interrupt_table::Entry = crate::RadioToken,
->(pub Doorbell<3, E, X>);
+>(pub Doorbell<Esp32s31, 3, E, X>);
 
 impl<E: oer_espressif_interrupt_table::Entry, X: oer_espressif_interrupt_table::Entry> RadioDoorbell
     for ImageDoorbell<E, X>
 {
-    const HANDLER: oer_espressif_interrupt_table::Context = Doorbell::<3, E, X>::HANDLER;
-    const EXECUTOR: oer_espressif_interrupt_table::Context = Doorbell::<3, E, X>::EXECUTOR;
+    const HANDLER: oer_espressif_interrupt_table::Context = Doorbell::<Esp32s31, 3, E, X>::HANDLER;
+    const EXECUTOR: oer_espressif_interrupt_table::Context = Doorbell::<Esp32s31, 3, E, X>::EXECUTOR;
     fn ring(&self) {
         // The handler takes the stamp; a ring before it took the last one
         // keeps the earlier stamp.

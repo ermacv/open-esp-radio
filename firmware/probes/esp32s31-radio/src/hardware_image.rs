@@ -1,5 +1,6 @@
 //! Staged, no-traffic executor for the comparison session's silicon sheets.
 use oer_embassy_time::EmbassyClock;
+use oer_esp32s31_compose::Esp32s31;
 use oer_esp32s31_hal::{
     platform::{FactoryIdentity, FromCpu0Irq, FromCpu2Irq, SystimerAlarm0, SystimerAlarm1},
     power::ChipClocks,
@@ -12,16 +13,16 @@ use oer_time::{Clock, Duration, Timer};
 
 oer_espressif_staged_runtime::interrupt_table! {
     contexts { app: 1; radio_exec: 2; radio_irq: 3; }
-    wake: WakeToken = FromCpu0Irq => oer_espressif_executor::wake_handler::<0, FromCpu0Irq>, line 16, context app, hart 0, Hardware;
+    wake: WakeToken = FromCpu0Irq => oer_espressif_executor::wake_handler::<Esp32s31, 0, FromCpu0Irq>, line 16, context app, hart 0, Hardware;
     radio: RadioToken = FromCpu2Irq => oer_espressif_executor::interrupt_handler::<RadioTasks, FromCpu2Irq>, line 17, context radio_exec, hart 0, Executor;
-    radio_alarm: RadioAlarm = SystimerAlarm0 => oer_espressif_executor::alarm_interrupt::<0, SystimerAlarm0>, line 18, context radio_irq, hart 0, Hardware;
-    app_alarm: AppAlarm = SystimerAlarm1 => oer_espressif_executor::alarm_interrupt::<1, SystimerAlarm1>, line 20, context app, hart 0, Hardware;
+    radio_alarm: RadioAlarm = SystimerAlarm0 => oer_espressif_executor::alarm_interrupt::<Esp32s31, 0, SystimerAlarm0>, line 18, context radio_irq, hart 0, Hardware;
+    app_alarm: AppAlarm = SystimerAlarm1 => oer_espressif_executor::alarm_interrupt::<Esp32s31, 1, SystimerAlarm1>, line 20, context app, hart 0, Hardware;
 }
 oer_espressif_executor::tasks! {
-    RadioTasks: InterruptExecutor<2> { sheets(boot: Boot) = sheets; }
+    RadioTasks: InterruptExecutor<Esp32s31, 2> { sheets(boot: Boot) = sheets; }
 }
 oer_espressif_executor::tasks! {
-    AppTasks: Executor<0> { watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) = feed_watchdog; }
+    AppTasks: Executor<Esp32s31, 0> { watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) = feed_watchdog; }
 }
 struct Boot {
     hardware: RadioHardware,
@@ -63,7 +64,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
         mac_extension: factory.mac_extension(),
     };
     let timer = runtime.system_timer;
-    oer_espressif_executor::init::<2, _, _>(
+    oer_espressif_executor::init::<Esp32s31, 2, _, _>(
         oer_espressif_executor::systimer::SystemTimer {
             comparators: timer.comparators,
             counter: timer.counter,
@@ -73,11 +74,15 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
         timer.alarm0,
     )
     .unwrap_or_else(|failure| failure.reset());
-    oer_espressif_executor::bind::<0, _, _>(adopted.router(), interrupts.app_alarm, timer.alarm1)
-        .unwrap_or_else(|failure| failure.reset());
+    oer_espressif_executor::bind::<Esp32s31, 0, _, _>(
+        adopted.router(),
+        interrupts.app_alarm,
+        timer.alarm1,
+    )
+    .unwrap_or_else(|failure| failure.reset());
     let software = runtime.software_interrupts;
     let (hart, router) = adopted.parts();
-    let radio = InterruptExecutor::<2>::new(software.line2)
+    let radio = InterruptExecutor::<Esp32s31, 2>::new(software.line2)
         .start(hart, router, interrupts.radio, software.irq2, ())
         .unwrap_or_else(|failure| failure.reset());
     let (mut router, hart) = match adopted.enable_interrupts() {
@@ -92,7 +97,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
     if RadioTasks::sheets(&radio, boot).is_err() {
         fail(oer_diagnostics::name!("radio-task"; 32));
     }
-    match Executor::<0>::new(software.line0)
+    match Executor::<Esp32s31, 0>::new(software.line0)
         .run(
             &hart,
             &mut router,
@@ -133,7 +138,7 @@ async fn sheets(boot: Boot) {
     crate::est_freq::clear();
     crate::est_freq::emit(150, oer_riscv::cycle32(), 0, 0);
     crate::est_freq::status(0x1950_0002);
-    let timer = oer_espressif_executor::Cooperative::new(EmbassyClock);
+    let timer = oer_espressif_executor::Cooperative::<Esp32s31, _>::new(EmbassyClock);
     let started = oer_riscv::cycle32();
     let Some(place) = CALIBRATION.try_take() else {
         fail(oer_diagnostics::name!("calibration-place"; 32));

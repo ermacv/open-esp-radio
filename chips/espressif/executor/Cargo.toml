@@ -12,17 +12,13 @@ default = []
 # Nominal static radio-slot declarations. Images without a port slot retain
 # their dependency graph and linked bytes.
 port-slots = ["dep:oer-radio-port"]
-# An image selects its chip.
-esp32s31 = [
-    "chip",
-    "dep:oer-esp32s31-hal",
-    "dep:oer-espressif-staged-runtime",
-]
-# The executor and time driver, which a chip feature selects.
+# The executor and time driver over a chip binding (`bind!`), which the
+# chip's composition crate selects together with the HAL's chip.
 chip = [
     "dep:embassy-time-driver",
     "dep:portable-atomic",
     "dep:oer-espressif-interrupt-table",
+    "dep:oer-espressif-staged-runtime",
     "dep:oer-riscv",
     "dep:oer-mmio",
 ]
@@ -41,7 +37,6 @@ portable-atomic = { version = "1.11", default-features = false, optional = true 
 oer-espressif-interrupt-table = { path = "../interrupt-table", optional = true }
 oer-riscv = { path = "../../../portable/riscv", optional = true }
 oer-mmio = { path = "../../../portable/mmio", optional = true }
-oer-esp32s31-hal = { path = "../../esp32s31/hal", optional = true }
 oer-espressif-staged-runtime = { path = "../staged-runtime", optional = true }
 
 [target.'cfg(not(target_os = "none"))'.dev-dependencies]
@@ -51,7 +46,6 @@ oer-test-ui-cases = { path = "../../../tools/test/ui-cases" }
 [dev-dependencies]
 oer-riscv = { path = "../../../portable/riscv" }
 oer-radio-port = { path = "../../../protocols/radio/port", features = ["test-support"] }
-oer-esp32s31-hal = { path = "../../esp32s31/hal" }
 oer-espressif-staged-runtime = { path = "../staged-runtime" }
 oer-espressif-interrupt-table = { path = "../interrupt-table", features = ["host-signal"] }
 oer-time-virtual = { path = "../../../portable/time-virtual" }
@@ -67,8 +61,3 @@ required-features = ["port-slots"]
 # Chip APIs exist only for the chip target; document them there alone.
 default-target = "riscv32imafc-unknown-none-elf"
 targets = []
-
-[package.metadata.open-radio]
-# An image selects exactly one chip; each profile builds for its
-# chip's target only.
-supported-feature-profiles = ["esp32s31"]

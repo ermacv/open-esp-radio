@@ -1,3 +1,4 @@
+use oer_esp32s31_compose::Esp32s31;
 use oer_esp32s31_hal::usb_serial_jtag::{
     ConsoleEndpoint, ConsoleInterrupt, UsbPads, retire_early_writer,
 };
@@ -21,7 +22,7 @@ impl Immediate for EarlyUsb {
 oer_espressif_staged_runtime::placed_static! {
     pub(crate) static CONSOLE: Console<8, 8, EarlyUsb> = Console::new(), in critical_data "logging";
     /// The console's interrupt: the endpoint's signal.
-    static USB_INTERRUPT: Interrupt<Executor<0>, ConsoleInterrupt> = Interrupt::new::<crate::ConsoleUsb, crate::WakeToken>(), in critical_data "console_usb";
+    static USB_INTERRUPT: Interrupt<Executor<Esp32s31, 0>, ConsoleInterrupt> = Interrupt::new::<crate::ConsoleUsb, crate::WakeToken>(), in critical_data "console_usb";
 }
 
 /// The console's `Hardware` interrupt handler, over the part its entry
@@ -58,7 +59,7 @@ impl oer_hil_agent::base::Platform for Chip {
 }
 
 /// The console's endpoint, polled by the core-0 executor's console task.
-pub type Usb = Endpoint<Executor<0>, ConsoleEndpoint>;
+pub type Usb = Endpoint<Executor<Esp32s31, 0>, ConsoleEndpoint>;
 
 /// Opens the console over the block the early writer retires: the router
 /// moves the interrupt's part to its handler and routes it. The image never

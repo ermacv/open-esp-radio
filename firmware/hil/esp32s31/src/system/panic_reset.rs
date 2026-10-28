@@ -1,5 +1,6 @@
 //! The panic-reset image: the HIL console serving a host-requested reset
 //! through the platform's retained `HilRequested` path.
+use oer_esp32s31_compose::Esp32s31;
 use oer_hil_agent::base::PanicRequest;
 use oer_hil_protocol::system::InjectPanic;
 
@@ -7,7 +8,7 @@ use crate::transport::CONSOLE;
 
 oer_espressif_executor::tasks! {
     /// The panic-reset image's tasks.
-    PanicResetTasks: Executor<0> {
+    PanicResetTasks: Executor<Esp32s31, 0> {
         reset_on_request() = super::panic::reset_on_request;
         run(usb: crate::transport::Usb, boot: u64) = run;
         rtc_watchdog(watchdog: RtcWatchdog) = crate::feed_rtc_watchdog;
@@ -19,7 +20,7 @@ type RtcWatchdog =
     oer_esp32s31_hal::watchdog::ArmedRtcWatchdog<oer_esp32s31_hal::watchdog::RwdtRegisters>;
 
 pub(crate) fn start<C: oer_espressif_interrupt_table::Controller>(
-    executor: crate::Executor<0>,
+    executor: crate::Executor<Esp32s31, 0>,
     hart: &oer_espressif_staged_runtime::Hart<{ oer_espressif_staged_runtime::BOOT_HART }>,
     router: &mut oer_espressif_interrupt_table::Router<C>,
     (wake, line): (crate::ExecutorWake, oer_esp32s31_hal::platform::FromCpu0Irq),

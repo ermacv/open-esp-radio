@@ -46,7 +46,8 @@ chips/      everything about Espressif hardware
                 shared by the chips
   esp32s31/     PAC, HAL, PHY, drivers, radio system, board, memory layout,
                 chip knowledge, the chip's side of an image's platform
-                over the staged runtime (compose/), and the chip's data:
+                over the staged runtime and executor (compose/), and the
+                chip's data:
                 platform/   chip, module and board fact layers, partitions, ROM
                             functions, stack budgets
                 registers/  block types, layouts, chip root, evidence and ownership policy
@@ -78,8 +79,8 @@ depends on no `chips/<chip>` package, through a normal or a build dependency:
 a chip's HAL implements the family's platform contracts
 (`chips/espressif/platform-port`) on its own types and selects its chip
 through the port's chip feature, and `chips/<chip>/compose` holds what needs
-both the chip's HAL and the family's staged runtime (the chip's retained fault
-records). `portable` depends on no protocol and no
+both the chip's HAL and the family's staged runtime or executor (the
+executor's chip binding, `bind!`, and the chip's retained fault records). `portable` depends on no protocol and no
 chip; only `portable/embassy` adapts protocol boundaries. The layer tests check
 normal transitive dependencies, including optional and target-specific
 declarations: backends and reference models do not reach protocol cores or
@@ -191,8 +192,6 @@ The tree does not yet follow these rules in these places:
   `chips/espressif/ieee80211-policy`.
 - `firmware/hil/esp32s31` -> `firmware/apps/w3` (removed by the IEEE 802.11
   facade, #844).
-- `chips/espressif/executor` -> `chips/esp32s31/hal` (optional, feature
-  `esp32s31`; removed by the executor over a chip binding, #848, B1).
 
 The layer test lists each of these edges; an edge that is gone must leave the
 list, and the list gains no entry.

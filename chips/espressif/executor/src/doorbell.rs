@@ -28,14 +28,14 @@ use oer_espressif_interrupt_table::{
     Bound, Class, Context, Entry, InterruptSource, InterruptSources, request_direction,
 };
 
-use crate::chip::{Line, platform, software_interrupt_source};
+use crate::chip::{Binding, Line, Line0, Line1, Line2, Line3, PortOf, software_interrupt_source};
 use crate::software_line::SoftwareLine;
 use crate::urgent_sources::UrgentSource;
 
-/// The radio doorbell on software interrupt `SWI` (`FROM_CPU_INTR<SWI>`):
-/// the ringing half.
-pub struct Doorbell<const SWI: u8, E: Entry, X: Entry> {
-    line: Line,
+/// The radio doorbell of chip binding `B` on software interrupt `SWI`
+/// (`FROM_CPU_INTR<SWI>`): the ringing half.
+pub struct Doorbell<B: Binding, const SWI: u8, E: Entry, X: Entry> {
+    line: Line<PortOf<B>>,
     entries: PhantomData<fn() -> (E, X)>,
 }
 
@@ -43,8 +43,8 @@ pub struct Doorbell<const SWI: u8, E: Entry, X: Entry> {
 /// source of: it rings nothing until [`Doorbell::new`] takes the binding's
 /// proof.
 #[must_use = "the line rings only through the doorbell its binding makes"]
-pub struct DoorbellLine<const SWI: u8> {
-    line: Line,
+pub struct DoorbellLine<B: Binding, const SWI: u8> {
+    line: Line<PortOf<B>>,
 }
 
 /// Whether `source` is one of `sources`, at compile time.
@@ -61,14 +61,14 @@ const fn holds(sources: &[u16], source: u16) -> bool {
 
 macro_rules! impl_doorbell {
     ($number:literal, $block:ident, $take:ident) => {
-        impl DoorbellLine<$number> {
+        impl<B: Binding> DoorbellLine<B, $number> {
             /// Move the line's block from the reset root and lower a stale
             /// raise: the lowering half for the handler's part, and the line
             /// that rings once the part is bound.
             pub fn split(
-                interrupt: platform::$block,
-            ) -> (DoorbellLine<$number>, DoorbellAcknowledger<$number>) {
-                let line = crate::chip::$take(interrupt);
+                interrupt: $block<B>,
+            ) -> (DoorbellLine<B, $number>, DoorbellAcknowledger<B, $number>) {
+                let line = crate::chip::$take::<B>(interrupt);
                 line.lower();
                 (
                     DoorbellLine { line },
@@ -81,12 +81,12 @@ macro_rules! impl_doorbell {
     };
 }
 
-impl_doorbell!(0, FromCpu0, own_line_0);
-impl_doorbell!(1, FromCpu1, own_line_1);
-impl_doorbell!(2, FromCpu2, own_line_2);
-impl_doorbell!(3, FromCpu3, own_line_3);
+impl_doorbell!(0, Line0, own_line_0);
+impl_doorbell!(1, Line1, own_line_1);
+impl_doorbell!(2, Line2, own_line_2);
+impl_doorbell!(3, Line3, own_line_3);
 
-impl<const SWI: u8, E: Entry, X: Entry> Doorbell<SWI, E, X> {
+impl<B: Binding, const SWI: u8, E: Entry, X: Entry> Doorbell<B, SWI, E, X> {
     /// The handler and requester selected by this doorbell's constructor.
     pub const HANDLER: Context = E::CONTEXT;
     pub const EXECUTOR: Context = X::CONTEXT;
@@ -98,31 +98,27 @@ impl<const SWI: u8, E: Entry, X: Entry> Doorbell<SWI, E, X> {
     /// [`InterruptSources`]).
     ///
     /// A member that is not the line, or that the bound part does not hold,
-    /// fails to compile (the constant's assertion, `E0080`). `X` is the
+    /// fails to compile (the constant's check, `E0080`). `X` is the
     /// requesting executor's entry; `E` must be above it on the same hart.
     /// The accompanying urgent source retains that same `Member` type for
     /// executor admission; it cannot name another software line.
-    pub fn new<Member>(line: DoorbellLine<SWI>, bound: &Bound<E>) -> (Self, UrgentSource<Member>)
+    pub fn new<Member>(line: DoorbellLine<B, SWI>, bound: &Bound<E>) -> (Self, UrgentSource<Member>)
     where
         Member: InterruptSource,
     {
         const {
-            assert!(
-                matches!(X::CLASS, Class::Executor),
-                "the doorbell requester must be an executor entry"
-            );
-            assert!(
-                request_direction(E::CONTEXT, X::CONTEXT),
-                "a request handler must be above its executor on the same hart"
-            );
-            assert!(
-                Member::SOURCE == software_interrupt_source(SWI),
-                "the member is not the doorbell's software interrupt"
-            );
-            assert!(
-                holds(<E::Part as InterruptSources>::SOURCES, Member::SOURCE),
-                "the bound part does not hold the doorbell's software interrupt"
-            );
+            if !matches!(X::CLASS, Class::Executor) {
+                panic!("the doorbell requester must be an executor entry");
+            }
+            if !request_direction(E::CONTEXT, X::CONTEXT) {
+                panic!("a request handler must be above its executor on the same hart");
+            }
+            if Member::SOURCE != software_interrupt_source::<PortOf<B>>(SWI) {
+                panic!("the member is not the doorbell's software interrupt");
+            }
+            if !holds(<E::Part as InterruptSources>::SOURCES, Member::SOURCE) {
+                panic!("the bound part does not hold the doorbell's software interrupt");
+            }
         };
         let _bound = bound;
         (
@@ -144,11 +140,11 @@ impl<const SWI: u8, E: Entry, X: Entry> Doorbell<SWI, E, X> {
 }
 
 /// The one lowering half of software interrupt line `SWI`, for its handler.
-pub struct LineAcknowledger<const SWI: u8> {
-    line: Line,
+pub struct LineAcknowledger<B: Binding, const SWI: u8> {
+    line: Line<PortOf<B>>,
 }
 
-impl<const SWI: u8> LineAcknowledger<SWI> {
+impl<B: Binding, const SWI: u8> LineAcknowledger<B, SWI> {
     /// Lower the line before taking the requests its raises announced: a
     /// ring after this raises the line again and is not lost.
     #[inline(always)]
@@ -160,15 +156,15 @@ impl<const SWI: u8> LineAcknowledger<SWI> {
 /// The doorbell's lowering half, which its handler's part holds: inside a
 /// part of several sources, or as the part of the line alone, whose source
 /// it names.
-pub struct DoorbellAcknowledger<const SWI: u8> {
-    line: LineAcknowledger<SWI>,
+pub struct DoorbellAcknowledger<B: Binding, const SWI: u8> {
+    line: LineAcknowledger<B, SWI>,
 }
 
-impl<const SWI: u8> InterruptSource for DoorbellAcknowledger<SWI> {
-    const SOURCE: u16 = software_interrupt_source(SWI);
+impl<B: Binding, const SWI: u8> InterruptSource for DoorbellAcknowledger<B, SWI> {
+    const SOURCE: u16 = software_interrupt_source::<PortOf<B>>(SWI);
 }
 
-impl<const SWI: u8> DoorbellAcknowledger<SWI> {
+impl<B: Binding, const SWI: u8> DoorbellAcknowledger<B, SWI> {
     /// Lower the line before taking requests. Only the handler owns this half.
     #[inline(always)]
     pub fn acknowledge(&mut self) {

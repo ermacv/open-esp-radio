@@ -105,15 +105,22 @@ staged-bootstrap, staged-runtime and executor depend on the platform.
 `oer-espressif-platform-port` holds the family's platform contracts (the
 early console writer, the fatal path's mask, stop of the other harts and
 software reset, and the executor's sources, reads and owned blocks) and the
-hart geometry of the chip its HAL selects; the chip's HAL implements the
-contracts on its own types, and the staged bootstrap and staged runtime reach
-the chip only through them. The staged runtime's vectors come from the facts
-of the chip the port names in its build metadata, and an image names its
-platform (the HAL's port type) once, in the runtime's `entry!`, which also
-defines its panic handler and, as a parameter, its panic hook.
-`oer-esp32s31-compose` is the chip's side of an image's platform: the PHY
-transaction and Wi-Fi fault records, which need both the HAL's types and the
-runtime's retained memory and fatal path.
+hart geometry of the chip its HAL selects. The family sits above the port
+and the chip implements it: the chip's HAL implements the contracts on its
+own types, and the staged bootstrap, staged runtime and executor reach the
+chip only through them; no family crate depends on a chip crate. The staged
+runtime's vectors come from the facts of the chip the port names in its build
+metadata, and an image names its platform (the HAL's port type) once, in the
+runtime's `entry!`, which also defines its panic handler and, as a parameter,
+its panic hook. The executor is generic over a chip binding `B` whose port is
+the HAL's; Rust has no generic statics, so the binding's `bind!` declares its
+statics once in the chip's composition crate: the storage of the port's owned
+blocks, the one waker vtable and the Embassy time driver's symbols.
+`oer-esp32s31-compose` is the chip's side of an image's platform: the
+executor's binding `Esp32s31`, which images name in every executor type
+(`Executor<Esp32s31, 0>`), and the PHY transaction and Wi-Fi fault records,
+which need both the HAL's types and the runtime's retained memory and fatal
+path.
 These crates are outside the sans-IO layer. `oer-espressif-watchdog` is
 also a platform owner: it owns hardware reset arming and the affine
 system-deadline lease. `oer-time::deadline` contains only the deadline policy,
@@ -370,12 +377,13 @@ release a secondary hart.
   run on the typed interrupt controller. Each table entry moves its part
   through `Router::bind`; the executor receives owned software lines and
   timer blocks. Source identities come from the platform port's
-  `ExecutorPlatform` contract, which the HAL's `Port` implements, and
-  architectural CSR access and waits from `oer-riscv`.
+  `ExecutorPlatform` contract, which the HAL's `Port` implements and the
+  image's executor binding names, and architectural CSR access and waits
+  from `oer-riscv`.
   `embassy-sync`, `embassy-futures`, `embassy-net` and `embassy-time` stay;
   tasks run on the static executor (`chips/espressif/executor`), in static
-  slots, polled by direct calls, with one waker vtable whose data names the
-  executor and task.
+  slots, polled by direct calls, with one waker vtable, the binding's, whose
+  data names the executor and task.
 - **Hart topology.** ESP32-S31's `[interrupts] harts` in
   `chips/esp32s31/platform/chip.toml` is the sole HP-hart cardinality;
   `boot-hart` is required and names primary initialization. Facts derive the

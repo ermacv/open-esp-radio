@@ -1,4 +1,5 @@
 //! Image binding of the SAR/PWDET pilot to the measured P2 line pair.
+use oer_esp32s31_compose::Esp32s31;
 use crate::pilot_timing::{Queue, Reader, Sample, Sender};
 use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use oer_esp32s31_hal::domain::transaction::{Fault, FaultReason, SarSetupFault, SarSetupStorage};
@@ -12,7 +13,7 @@ use oer_espressif_interrupt_table::{
 use oer_memory::HandlerCell;
 use static_cell::StaticCell;
 
-type X = InterruptExecutor<2>;
+type X = InterruptExecutor<Esp32s31, 2>;
 pub(crate) type Client =
     sar_pilot::Client<oer_espressif_interrupt_table::Bound<crate::PhyToken>, X>;
 struct Handler {

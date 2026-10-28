@@ -1,4 +1,5 @@
 use core::{marker::PhantomData, task::Context};
+use oer_espressif_platform_port::ExecutorPlatform;
 use oer_memory::signal::SignalList;
 
 use crate::urgent_sources::UrgentSources;
@@ -11,12 +12,14 @@ use oer_espressif_staged_runtime::Hart;
 use oer_memory::{ExecutionContext, OnceValue};
 use portable_atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 
+use crate::binding::Binding;
 use crate::chip::{
-    SOFTWARE_INTERRUPT_COUNT, current_core, install_line, interrupt_level, platform,
-    raise_interrupt, serve_interrupt, software_interrupt_source,
+    PortOf, SOFTWARE_INTERRUPT_COUNT, current_core, install_line, interrupt_level, raise_interrupt,
+    serve_interrupt, software_interrupt_source,
 };
 pub(crate) use crate::context::NO_EXECUTOR;
 use crate::context::Running;
+use crate::poll_stamp::ChipStamp;
 use crate::task::{Current, Interrupt as InterruptMode, Ready, Spawner, TaskId, Tasks, Thread};
 
 use oer_espressif_platform_port::HARTS;
@@ -91,10 +94,18 @@ static INTERRUPT_MODE: [AtomicBool; SOFTWARE_INTERRUPT_COUNT] =
 
 /// The executor whose context the caller runs in: [`NO_EXECUTOR`] outside
 /// every executor and in a hardware interrupt that preempts one.
-pub(crate) fn running() -> u8 {
-    crate::chip::current_hart()
+pub(crate) fn running<B: Binding>() -> u8 {
+    crate::chip::current_hart::<B>()
         .at(&RUNNING)
         .at(interrupt_level())
+}
+
+/// [`running`] for the execution contexts, which name no binding: an
+/// architectural ID that names no hart runs no executor's context. Every
+/// round enters its context through [`as_running`], whose hart check
+/// records that ID and resets first.
+fn running_context() -> u8 {
+    crate::chip::checked_hart().map_or(NO_EXECUTOR, |hart| hart.at(&RUNNING).at(interrupt_level()))
 }
 
 /// Executor `executor`'s ready mask.
@@ -108,100 +119,101 @@ pub(crate) fn ready(executor: u8) -> Option<&'static Ready> {
 /// reasons to yield and must be checked by their owner.
 ///
 /// Outside a started polling context, records `OutsideExecutor` and resets.
-pub fn ready_peers() -> bool {
+pub fn ready_peers<B: Binding>() -> bool {
     READY
-        .get(usize::from(running()))
+        .get(usize::from(running::<B>()))
         .unwrap_or_else(|| {
             Fault::OutsideExecutor {
-                running: running(),
+                running: running::<B>(),
                 level: interrupt_level(),
             }
-            .reset()
+            .reset::<PortOf<B>>()
         })
         .any()
 }
 
 // Keep the clock and timestamp publication out of the poll round.
 #[inline(never)]
-fn stamp_poll(swi: u8) {
+fn stamp_poll<B: Binding>(swi: u8) {
     let state = &EXECUTOR_CORE[usize::from(swi)];
-    let now = crate::chip::now();
+    let now = crate::chip::now::<B>();
     state.store(
-        crate::poll_stamp::poll_stamp(state.load(Ordering::Relaxed), now),
+        ChipStamp::poll_stamp(state.load(Ordering::Relaxed), now),
         Ordering::Release,
     );
 }
 
 // Admission is shared by the task wrapper and all PHY leaf boundaries.
 #[inline(never)]
-pub(crate) fn should_yield() -> bool {
-    let swi = usize::from(running());
+pub(crate) fn should_yield<B: Binding>() -> bool {
+    let swi = usize::from(running::<B>());
     let state = EXECUTOR_CORE.get(swi).unwrap_or_else(|| {
         Fault::OutsideExecutor {
-            running: running(),
+            running: running::<B>(),
             level: interrupt_level(),
         }
-        .reset()
+        .reset::<PortOf<B>>()
     });
     READY[swi].any()
-        || crate::chip::is_pending(software_interrupt_source(swi as u8))
-        || URGENT[swi]
-            .get()
-            .is_some_and(|sources| crate::urgent_sources::pending(sources, crate::chip::is_pending))
-        || signal_pending(swi)
+        || crate::chip::is_pending::<B>(software_interrupt_source::<PortOf<B>>(swi as u8))
+        || URGENT[swi].get().is_some_and(|sources| {
+            crate::urgent_sources::pending(sources, crate::chip::is_pending::<B>)
+        })
+        || signal_pending::<B>(swi)
         || {
-            let now = crate::chip::now();
-            crate::poll_stamp::poll_elapsed(state.load(Ordering::Acquire), now)
+            let now = crate::chip::now::<B>();
+            ChipStamp::poll_elapsed(state.load(Ordering::Acquire), now)
                 >= crate::poll_stamp::POLL_ADMISSION_MICROS
         }
 }
-fn signal_pending(swi: usize) -> bool {
+fn signal_pending<B: Binding>(swi: usize) -> bool {
+    use oer_espressif_interrupt_table::signal::has_pending;
     let interrupt_mode = INTERRUPT_MODE[swi].load(Ordering::Acquire);
     let pending = match (interrupt_mode, swi) {
-        (true, 0) => oer_espressif_interrupt_table::signal::has_pending::<InterruptExecutor<0>>(),
-        (true, 1) => oer_espressif_interrupt_table::signal::has_pending::<InterruptExecutor<1>>(),
-        (true, 2) => oer_espressif_interrupt_table::signal::has_pending::<InterruptExecutor<2>>(),
-        (true, _) => oer_espressif_interrupt_table::signal::has_pending::<InterruptExecutor<3>>(),
-        (false, 0) => oer_espressif_interrupt_table::signal::has_pending::<Executor<0>>(),
-        (false, 1) => oer_espressif_interrupt_table::signal::has_pending::<Executor<1>>(),
-        (false, 2) => oer_espressif_interrupt_table::signal::has_pending::<Executor<2>>(),
-        (false, _) => oer_espressif_interrupt_table::signal::has_pending::<Executor<3>>(),
+        (true, 0) => has_pending::<InterruptExecutor<B, 0>>(),
+        (true, 1) => has_pending::<InterruptExecutor<B, 1>>(),
+        (true, 2) => has_pending::<InterruptExecutor<B, 2>>(),
+        (true, _) => has_pending::<InterruptExecutor<B, 3>>(),
+        (false, 0) => has_pending::<Executor<B, 0>>(),
+        (false, 1) => has_pending::<Executor<B, 1>>(),
+        (false, 2) => has_pending::<Executor<B, 2>>(),
+        (false, _) => has_pending::<Executor<B, 3>>(),
     };
     match pending {
         Ok(pending) => pending,
         Err(_) => Fault::SignalContext {
             executor: swi as u8,
-            running: running(),
+            running: running::<B>(),
         }
-        .reset(),
+        .reset::<PortOf<B>>(),
     }
 }
 
 /// Run `poll` as executor `swi`'s context, at the caller's interrupt level,
 /// and restore the preempted one.
-fn as_running(swi: u8, poll: impl FnOnce()) {
-    crate::chip::current_hart()
+fn as_running<B: Binding>(swi: u8, poll: impl FnOnce()) {
+    crate::chip::current_hart::<B>()
         .at(&RUNNING)
         .enter(swi, interrupt_level(), poll);
 }
 
 /// One poll round of executor `T::EXECUTOR`, in its context: whether a task
 /// is ready again.
-fn poll_tasks<T: Tasks>() -> bool {
+fn poll_tasks<B: Binding, T: Tasks<Binding = B>>() -> bool {
     let swi = T::EXECUTOR;
     crate::task::poll_round::<T>(&READY[usize::from(swi)], &CURRENT[usize::from(swi)], || {
-        stamp_poll(swi)
+        stamp_poll::<B>(swi)
     })
 }
 
 /// Claim executor `swi` for the current core.
 ///
 /// A duplicate claim records its original poll stamp and resets.
-fn claim_core(swi: u8) {
+fn claim_core<B: Binding>(swi: u8) {
     EXECUTOR_CORE[usize::from(swi)]
         .compare_exchange(
             UNASSIGNED_CORE,
-            current_core(),
+            current_core::<B>(),
             Ordering::AcqRel,
             Ordering::Acquire,
         )
@@ -210,23 +222,25 @@ fn claim_core(swi: u8) {
                 executor: swi,
                 stamp,
             }
-            .reset()
+            .reset::<PortOf<B>>()
         });
 }
 
-/// Scheduler-free thread-mode executor.
+/// Scheduler-free thread-mode executor of the chip binding `B`.
 ///
 /// One software interrupt is reserved per executor; its task wakers remain
 /// on the hart that owns it.
-pub struct Executor<const SWI: u8> {
+pub struct Executor<B, const SWI: u8> {
     not_send: PhantomData<*mut ()>,
+    binding: PhantomData<fn() -> B>,
 }
 
-impl<const SWI: u8> Executor<SWI> {
+impl<B: Binding, const SWI: u8> Executor<B, SWI> {
     /// Run the tasks `T` on the calling core, woken through the executor's
     /// software interrupt: `wake` is that source's token of the image's
-    /// interrupt table, whose entry names [`wake_handler::<SWI>`](wake_handler)
-    /// on this core. `init` starts the first tasks.
+    /// interrupt table, whose entry names
+    /// [`wake_handler::<B, SWI, _>`](wake_handler) on this core. `init`
+    /// starts the first tasks.
     /// `urgent` comes from the composition's doorbell constructor, or `()`
     /// when it has no urgent sources.
     ///
@@ -241,42 +255,47 @@ impl<const SWI: u8> Executor<SWI> {
         part: W::Part,
         _urgent: U,
         init: impl FnOnce(&Spawner<T>),
-    ) -> Result<core::convert::Infallible, Failure<oer_espressif_interrupt_table::BindError<W>>>
+    ) -> Result<
+        core::convert::Infallible,
+        Failure<PortOf<B>, oer_espressif_interrupt_table::BindError<W>>,
+    >
     where
         Self: SignalExecutor,
-        T: Tasks<Mode = Thread>,
+        T: Tasks<Binding = B, Mode = Thread>,
         W: Entry,
         W::Part: oer_espressif_interrupt_table::InterruptSource,
         C: oer_espressif_interrupt_table::Controller,
     {
         const {
-            assert!(
-                <W::Part as oer_espressif_interrupt_table::InterruptSource>::SOURCE
-                    == software_interrupt_source(SWI) as u16,
-                "the token is not this executor's software interrupt"
-            );
-            assert!(T::EXECUTOR == SWI, "the tasks are another executor's");
+            if <W::Part as oer_espressif_interrupt_table::InterruptSource>::SOURCE
+                != software_interrupt_source::<PortOf<B>>(SWI)
+            {
+                panic!("the token is not this executor's software interrupt");
+            }
+            if T::EXECUTOR != SWI {
+                panic!("the tasks are another executor's");
+            }
         };
         crate::hart_binding::check::<H, W>();
-        let _ = self.not_send;
+        let _ = (self.not_send, self.binding);
         let _bound = router
             .bind(wake, part)
             .map_err(|refused| Failure::new(Fault::binding(SWI, &refused), refused))?;
-        claim_core(SWI);
+        claim_core::<B>(SWI);
         URGENT[usize::from(SWI)]
             .set(U::SOURCES)
-            .unwrap_or_else(|_| Fault::UrgentPublished { executor: SWI }.reset());
+            .unwrap_or_else(|_| Fault::UrgentPublished { executor: SWI }.reset::<PortOf<B>>());
         init(&Spawner::new());
         loop {
             WORK_PENDING.0[usize::from(SWI)].store(0, Ordering::Release);
-            as_running(SWI, || {
-                crate::time_driver::service(SWI);
+            as_running::<B>(SWI, || {
+                crate::time_driver::service::<B>(SWI);
                 // Raised signals wake their tasks before the round; a signal
                 // raised meanwhile marks the work flag again.
                 oer_espressif_interrupt_table::signal::service::<Self>();
-                let _ = poll_tasks::<T>();
+                let _ = poll_tasks::<B, T>();
             });
-            wait_for_work::<SWI>();
+            wait_for_work::<B, SWI>();
         }
     }
 }
@@ -284,28 +303,38 @@ impl<const SWI: u8> Executor<SWI> {
 /// Whether the caller runs in the interrupt-mode executor `SWI`'s context:
 /// its handler's poll on this core, not a hardware interrupt preempting it.
 fn signal_context<const SWI: u8>() -> bool {
-    running() == SWI
+    running_context() == SWI
         && INTERRUPT_MODE
             .get(usize::from(SWI))
             .is_some_and(|interrupt_mode| interrupt_mode.load(Ordering::Acquire))
 }
 
-/// Executor polled in its software interrupt's handler, at that interrupt's
-/// level: the radio executor (P2) on `FROM_CPU` line 2.
+/// Executor of the chip binding `B` polled in its software interrupt's
+/// handler, at that interrupt's level: the radio executor (P2) on
+/// `FROM_CPU` line 2.
 ///
 /// Its handler preempts lower levels; a higher level preempts it. Its tasks
 /// may start from another context than the one that polls them, so their
 /// starts are `Send`; it makes each task's future in its own context.
-pub struct InterruptExecutor<const SWI: u8> {
-    _line: (),
+pub struct InterruptExecutor<B, const SWI: u8> {
+    _line: PhantomData<fn() -> B>,
 }
+
+/// The memory context of the interrupt-mode executor on software interrupt
+/// `SWI`, whatever its binding: an image links one binding, so its signal
+/// list is one static.
+pub struct InterruptContext<const SWI: u8>(());
+
+/// The memory context of the thread-mode executor on software interrupt
+/// `SWI`, whatever its binding.
+pub struct ThreadContext<const SWI: u8>(());
 
 #[allow(unsafe_code, reason = "the executor's signal context contract")]
 // SAFETY: signal_context is true only during this executor's polling
-// handler on its claimed hart. running() excludes preempting higher-level
-// handlers and other harts; the handler cannot reenter itself. Each concrete
-// SWI type therefore admits one non-concurrent memory context.
-unsafe impl<const SWI: u8> ExecutionContext for InterruptExecutor<SWI> {
+// handler on its claimed hart. running_context() excludes preempting
+// higher-level handlers and other harts; the handler cannot reenter itself.
+// Each concrete SWI type therefore admits one non-concurrent memory context.
+unsafe impl<const SWI: u8> ExecutionContext for InterruptContext<SWI> {
     type Sharing = ();
     fn running() -> bool {
         signal_context::<SWI>()
@@ -315,7 +344,7 @@ unsafe impl<const SWI: u8> ExecutionContext for InterruptExecutor<SWI> {
 /// Whether the caller runs in the thread-mode executor `SWI`'s context: its
 /// run loop on its core, at thread level, not an interrupt preempting it.
 fn thread_context<const SWI: u8>() -> bool {
-    running() == SWI
+    running_context() == SWI
         && INTERRUPT_MODE
             .get(usize::from(SWI))
             .is_some_and(|interrupt_mode| !interrupt_mode.load(Ordering::Acquire))
@@ -323,19 +352,20 @@ fn thread_context<const SWI: u8>() -> bool {
 
 #[allow(unsafe_code, reason = "the executor's signal context contract")]
 // SAFETY: thread_context is true only in this executor's run loop on
-// its claimed hart. running() excludes preempting handlers, other executors
-// and other harts. One owned software line starts this one non-concurrent
-// polling context; no scheduling assumption supplies its memory exclusion.
-unsafe impl<const SWI: u8> ExecutionContext for Executor<SWI> {
+// its claimed hart. running_context() excludes preempting handlers, other
+// executors and other harts. One owned software line starts this one
+// non-concurrent polling context; no scheduling assumption supplies its
+// memory exclusion.
+unsafe impl<const SWI: u8> ExecutionContext for ThreadContext<SWI> {
     type Sharing = ();
     fn running() -> bool {
         thread_context::<SWI>()
     }
 }
 
-impl<const SWI: u8> InterruptExecutor<SWI> {
+impl<B: Binding, const SWI: u8> InterruptExecutor<B, SWI> {
     /// Start polling the tasks `T` in the handler of `wake`'s source, whose
-    /// table entry names [`interrupt_handler::<T>`](interrupt_handler) on
+    /// table entry names [`interrupt_handler::<T, _>`](interrupt_handler) on
     /// this core. Signal declarations and request bindings check their
     /// direction from the table entries. The spawner starts `T`'s tasks.
     /// `urgent` comes from the composition's doorbell constructor, or `()`
@@ -351,27 +381,29 @@ impl<const SWI: u8> InterruptExecutor<SWI> {
         wake: W,
         part: W::Part,
         _urgent: U,
-    ) -> Result<Spawner<T>, Failure<oer_espressif_interrupt_table::BindError<W>>>
+    ) -> Result<Spawner<T>, Failure<PortOf<B>, oer_espressif_interrupt_table::BindError<W>>>
     where
-        T: Tasks<Mode = InterruptMode>,
+        T: Tasks<Binding = B, Mode = InterruptMode>,
         W: Entry,
         W::Part: oer_espressif_interrupt_table::InterruptSource,
         C: oer_espressif_interrupt_table::Controller,
     {
         const {
-            assert!(
-                <W::Part as oer_espressif_interrupt_table::InterruptSource>::SOURCE
-                    == software_interrupt_source(SWI) as u16,
-                "the token is not this executor's software interrupt"
-            );
-            assert!(T::EXECUTOR == SWI, "the tasks are another executor's");
+            if <W::Part as oer_espressif_interrupt_table::InterruptSource>::SOURCE
+                != software_interrupt_source::<PortOf<B>>(SWI)
+            {
+                panic!("the token is not this executor's software interrupt");
+            }
+            if T::EXECUTOR != SWI {
+                panic!("the tasks are another executor's");
+            }
         };
         crate::hart_binding::check::<H, W>();
         let _ = self._line;
-        claim_core(SWI);
+        claim_core::<B>(SWI);
         URGENT[usize::from(SWI)]
             .set(U::SOURCES)
-            .unwrap_or_else(|_| Fault::UrgentPublished { executor: SWI }.reset());
+            .unwrap_or_else(|_| Fault::UrgentPublished { executor: SWI }.reset::<PortOf<B>>());
         // Published before the source is enabled, so the first handler polls
         // and a pend raises its interrupt.
         INTERRUPT_MODE[usize::from(SWI)].store(true, Ordering::Release);
@@ -384,88 +416,94 @@ impl<const SWI: u8> InterruptExecutor<SWI> {
 
 macro_rules! impl_executor_constructors {
     ($number:literal, $block:ident, $take:ident) => {
-        impl SignalExecutor for InterruptExecutor<$number> {
+        impl<B: Binding> SignalExecutor for InterruptExecutor<B, $number> {
             type Task = TaskId;
-            type Context = Self;
-            const SOURCE: u16 = software_interrupt_source($number);
+            type Context = InterruptContext<$number>;
+            const SOURCE: u16 = software_interrupt_source::<PortOf<B>>($number);
             const INTERRUPT_MODE: bool = true;
             fn pend(_: &'static IrqSignal<Self>) {
-                raise_interrupt($number);
+                raise_interrupt::<B>($number);
             }
             fn list() -> &'static SignalList<TaskId, Self::Context> {
-                static LIST: SignalList<TaskId, InterruptExecutor<$number>> = SignalList::new();
+                static LIST: SignalList<TaskId, InterruptContext<$number>> = SignalList::new();
                 &LIST
             }
             fn current(
                 cx: &Context<'_>,
                 _: &ContextToken<Self::Context>,
             ) -> Result<TaskId, ForeignTask> {
-                crate::task::signal_current(&CURRENT[$number], $number, cx)
+                crate::task::signal_current::<B>(&CURRENT[$number], $number, cx)
             }
             fn wake(task: TaskId, _: &ContextToken<Self::Context>) {
                 crate::task::signal_wake(task);
             }
         }
-        impl SignalExecutor for Executor<$number> {
+        impl<B: Binding> SignalExecutor for Executor<B, $number> {
             type Task = TaskId;
-            type Context = Self;
-            const SOURCE: u16 = software_interrupt_source($number);
+            type Context = ThreadContext<$number>;
+            const SOURCE: u16 = software_interrupt_source::<PortOf<B>>($number);
             const INTERRUPT_MODE: bool = false;
             fn pend(_: &'static IrqSignal<Self>) {
-                pend($number);
+                pend::<B>($number);
             }
             fn list() -> &'static SignalList<TaskId, Self::Context> {
-                static LIST: SignalList<TaskId, Executor<$number>> = SignalList::new();
+                static LIST: SignalList<TaskId, ThreadContext<$number>> = SignalList::new();
                 &LIST
             }
             fn current(
                 cx: &Context<'_>,
                 _: &ContextToken<Self::Context>,
             ) -> Result<TaskId, ForeignTask> {
-                crate::task::signal_current(&CURRENT[$number], $number, cx)
+                crate::task::signal_current::<B>(&CURRENT[$number], $number, cx)
             }
             fn wake(task: TaskId, _: &ContextToken<Self::Context>) {
                 crate::task::signal_wake(task);
             }
         }
-        impl Executor<$number> {
+        impl<B: Binding> Executor<B, $number> {
             /// The executor on software interrupt line `SWI`: it consumes
             /// the line's typed block from the reset root.
-            pub fn new(interrupt: platform::$block) -> Self {
-                install_line($number, crate::chip::$take(interrupt));
+            pub fn new(interrupt: <PortOf<B> as ExecutorPlatform>::$block) -> Self {
+                install_line::<B>($number, crate::chip::$take::<B>(interrupt));
                 Self {
                     not_send: PhantomData,
+                    binding: PhantomData,
                 }
             }
         }
 
-        impl InterruptExecutor<$number> {
+        impl<B: Binding> InterruptExecutor<B, $number> {
             /// The executor on software interrupt line `SWI`: it consumes
             /// the line's typed block from the reset root.
-            pub fn new(interrupt: platform::$block) -> Self {
-                install_line($number, crate::chip::$take(interrupt));
-                Self { _line: () }
+            pub fn new(interrupt: <PortOf<B> as ExecutorPlatform>::$block) -> Self {
+                install_line::<B>($number, crate::chip::$take::<B>(interrupt));
+                Self { _line: PhantomData }
             }
         }
     };
 }
 
-impl_executor_constructors!(0, FromCpu0, own_line_0);
-impl_executor_constructors!(1, FromCpu1, own_line_1);
-impl_executor_constructors!(2, FromCpu2, own_line_2);
-impl_executor_constructors!(3, FromCpu3, own_line_3);
+impl_executor_constructors!(0, Line0, own_line_0);
+impl_executor_constructors!(1, Line1, own_line_1);
+impl_executor_constructors!(2, Line2, own_line_2);
+impl_executor_constructors!(3, Line3, own_line_3);
 
 /// The interrupt-table handler of a thread-mode executor's software interrupt
 /// (`FROM_CPU_INTR<SWI>`), which holds the line's interrupt part: it lowers
 /// the line, which wakes the executor's core from its wait.
-pub fn wake_handler<const SWI: u8, P: oer_espressif_interrupt_table::InterruptSource>(_: &mut P) {
+pub fn wake_handler<
+    B: Binding,
+    const SWI: u8,
+    P: oer_espressif_interrupt_table::InterruptSource,
+>(
+    _: &mut P,
+) {
     const {
-        assert!(
-            P::SOURCE == software_interrupt_source(SWI),
-            "the part is another line's"
-        );
+        if P::SOURCE != software_interrupt_source::<PortOf<B>>(SWI) {
+            panic!("the part is another line's");
+        }
     };
-    serve_interrupt(SWI, || ());
+    serve_interrupt::<B, _>(SWI, || ());
 }
 
 /// The interrupt-table handler of the interrupt-mode executor of the tasks
@@ -477,75 +515,78 @@ pub fn interrupt_handler<
     P: oer_espressif_interrupt_table::InterruptSource,
 >(
     _: &mut P,
-) {
+) where
+    T::Binding: Binding,
+{
     let swi = T::EXECUTOR;
     // The line is lowered before the round takes its work: a pend during the
     // round raises it again and runs another round.
-    serve_interrupt(swi, || round::<T>(swi));
+    serve_interrupt::<T::Binding, _>(swi, || round::<T::Binding, T>(swi));
 }
 
 /// One round of the interrupt-mode executor `swi`.
-fn round<T: Tasks<Mode = InterruptMode>>(swi: u8) {
+fn round<B: Binding, T: Tasks<Binding = B, Mode = InterruptMode>>(swi: u8) {
+    use oer_espressif_interrupt_table::signal::service;
     if !INTERRUPT_MODE[usize::from(swi)].load(Ordering::Acquire) {
         return;
     }
-    as_running(swi, || {
-        crate::time_driver::service(swi);
+    as_running::<B>(swi, || {
+        crate::time_driver::service::<B>(swi);
         // Raised signals wake their tasks here, in this context, before
         // the poll; a signal raised meanwhile raises this interrupt again.
         match swi {
-            0 => oer_espressif_interrupt_table::signal::service::<InterruptExecutor<0>>(),
-            1 => oer_espressif_interrupt_table::signal::service::<InterruptExecutor<1>>(),
-            2 => oer_espressif_interrupt_table::signal::service::<InterruptExecutor<2>>(),
-            _ => oer_espressif_interrupt_table::signal::service::<InterruptExecutor<3>>(),
+            0 => service::<InterruptExecutor<B, 0>>(),
+            1 => service::<InterruptExecutor<B, 1>>(),
+            2 => service::<InterruptExecutor<B, 2>>(),
+            _ => service::<InterruptExecutor<B, 3>>(),
         }
         // A task woken during the round is polled in the next run of this
         // handler, after the timers and signals.
-        if poll_tasks::<T>() {
-            raise_interrupt(swi);
+        if poll_tasks::<B, T>() {
+            raise_interrupt::<B>(swi);
         }
     });
 }
 
 /// Make executor `swi` run again: a thread-mode executor sees its work flag
 /// at its next wake, an interrupt-mode executor's handler runs.
-pub(crate) fn pend(swi: u8) {
+pub(crate) fn pend<B: Binding>(swi: u8) {
     let index = usize::from(swi);
     let (Some(mode), Some(work), Some(core)) = (
         INTERRUPT_MODE.get(index),
         WORK_PENDING.0.get(index),
         EXECUTOR_CORE.get(index),
     ) else {
-        Fault::InvalidExecutor { executor: swi }.reset();
+        Fault::InvalidExecutor { executor: swi }.reset::<PortOf<B>>();
     };
     if mode.load(Ordering::Acquire) {
-        raise_interrupt(swi);
+        raise_interrupt::<B>(swi);
         return;
     }
     work.store(1, Ordering::Release);
-    let target_core = crate::poll_stamp::assigned_core(core.load(Ordering::Acquire));
-    if target_core.is_some_and(|core| core != current_core()) {
-        raise_interrupt(swi);
+    let target_core = ChipStamp::assigned_core(core.load(Ordering::Acquire));
+    if target_core.is_some_and(|core| core != current_core::<B>()) {
+        raise_interrupt::<B>(swi);
     }
 }
 
 /// Pend executor `swi` for a task its ready mask holds. In the executor's
 /// own context the round's end sees the mask and needs no pend.
-pub(crate) fn pend_task(swi: u8) {
-    if running() != swi {
-        pend(swi);
+pub(crate) fn pend_task<B: Binding>(swi: u8) {
+    if running::<B>() != swi {
+        pend::<B>(swi);
     }
 }
 
-fn wait_for_work<const SWI: u8>() {
+fn wait_for_work<B: Binding, const SWI: u8>() {
     oer_riscv::interrupt_free(|| {
         if WORK_PENDING.0[usize::from(SWI)].load(Ordering::Acquire) == 0
             && !READY[usize::from(SWI)].any()
         {
             #[cfg(oer_profile)]
-            crate::idle_accounting::add_wait(usize::from(SWI));
+            crate::idle_accounting::add_wait::<B>(usize::from(SWI));
             #[cfg(not(oer_profile))]
-            crate::chip::wait_for_interrupt();
+            crate::chip::wait_for_interrupt::<B>();
         }
     });
 }
@@ -554,14 +595,14 @@ fn wait_for_work<const SWI: u8>() {
 #[cfg(oer_profile)]
 pub(crate) fn executor_core(executor: usize) -> Option<usize> {
     let core = EXECUTOR_CORE[executor].load(Ordering::Acquire);
-    crate::poll_stamp::assigned_core(core)
+    ChipStamp::assigned_core(core)
 }
 
 /// Raise the software interrupt of the running executor `executor`, waking
 /// its core from its wait.
 #[cfg(oer_profile)]
-pub(crate) fn raise(executor: usize) {
+pub(crate) fn raise<B: Binding>(executor: usize) {
     if executor_core(executor).is_some() {
-        raise_interrupt(executor as u8);
+        raise_interrupt::<B>(executor as u8);
     }
 }

@@ -993,7 +993,7 @@ impl<X: SignalExecutor + 'static> BluetoothInterruptEnds<ChipGate, X> {
     /// Complete the task's ends once `_bound` proves the interrupt table
     /// binds the handler's part, with the doorbell's ringing half `ring`,
     /// which the same binding makes
-    /// (`Doorbell::<3, HandlerEntry, ExecutorEntry>::new::<FromCpu3Irq>(line, &bound)`).
+    /// (`Doorbell::<Esp32s31, 3, HandlerEntry, ExecutorEntry>::new::<FromCpu3Irq>(line, &bound)`).
     pub fn attach<E, B, R: RadioDoorbell + Clone>(
         self,
         _bound: &Bound<E>,

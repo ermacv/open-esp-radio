@@ -21,6 +21,6 @@ table!(Hardware);
 table!(Executor);
 
 pub fn make(bound: &Bound<IrqToken>) {
-    let (line, _ack) = doorbell::DoorbellLine::<3>::split(chip::platform::FromCpu3);
-    let _bell = doorbell::Doorbell::<3, _, ExecutorToken>::new::<TimerIrq>(line, bound); // ui-error@outside: E0080: evaluation panicked: the doorbell requester must be an executor entry
+    let (line, _ack) = doorbell::DoorbellLine::<chip::Fake, 3>::split(chip::platform::FromCpu3);
+    let _bell = doorbell::Doorbell::<chip::Fake, 3, _, ExecutorToken>::new::<TimerIrq>(line, bound); // ui-error@outside: E0080: evaluation panicked: the doorbell requester must be an executor entry
 }

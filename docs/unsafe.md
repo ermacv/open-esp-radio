@@ -246,7 +246,10 @@ geometry as the vectors. Pending and debug reads take the PAC's checked `Hart`;
 they do not claim registers or grant execution authority. The executor validates
 the architectural ID before selecting its running-context slot or these reads.
 An invalid ID follows the retained `InvalidHart` reset path, releasing
-no owner. These selections use no unsafe code.
+no owner. The signal context checks name no binding and so no fatal path: they
+treat an invalid ID as no executor's context and refuse with `ForeignContext`;
+every executor round enters its context through the reset path first. These
+selections use no unsafe code.
 
 `Doorbell::new::<Member>` returns a typed `UrgentSource<Member>` beside its
 ringing owner only after its const member/line/binding checks. The observation
@@ -255,7 +258,7 @@ to observe the same urgent source. A sealed `UrgentSources` contract accepts
 that observation or `()`; executor startup cannot take a raw numeric list.
 
 Executor and time-driver setup return route or counter-latch refusals through
-`Result`. Each `Failure<T>` holds its inputs in `ManuallyDrop`; dropping a
+`Result`. Each `Failure<P, T>` holds its inputs in `ManuallyDrop`; dropping a
 refusal cannot release those owners or authorize retry. Internal invariant
 failures carry a named `Fault` with the original observations. The terminal
 path masks execution through `fatal::reset_recording` and keeps all static,
@@ -667,7 +670,9 @@ cell with `None`, without invoking the closure or changing payload; borrowing
 another cell is permitted. A guard ends the borrow on return or unwind.
 Signal reads and registration report refusal through `ForeignContext`;
 service leaves unvisited facts pending. `SignalExecutor` is safe; each
-executor's existing unsafe implementation proves `ExecutionContext` instead.
+executor's context type (`ThreadContext<SWI>`, `InterruptContext<SWI>`, which
+name no binding, so each signal list stays one static) carries the existing
+unsafe implementation that proves `ExecutionContext` instead.
 Timer registration wakes the task to register after the enclosing access
 ends; timer service leaves its alarm state untouched when refused. No
 interrupt masking, waiting or lock is used.

@@ -6,7 +6,7 @@ rust-version.workspace = true
 license = "Apache-2.0"
 repository.workspace = true
 publish = false
-description = "The ESP32-S31 side of an image's platform over the Espressif staged runtime: the chip's retained fault records"
+description = "The ESP32-S31 side of an image's platform over the Espressif staged runtime and executor: the executor's chip binding and the chip's retained fault records"
 
 [features]
 ## Shared retained Wi-Fi fatal assertion record, reset and next-boot
@@ -17,6 +17,10 @@ wifi-fault = []
 bytemuck = { version = "1.25.2", default-features = false, features = ["derive"] }
 oer-esp32s31-hal = { path = "../hal" }
 oer-espressif-staged-runtime.workspace = true
+
+# The executor runs on the chip target only.
+[target.'cfg(target_arch = "riscv32")'.dependencies]
+oer-espressif-executor = { path = "../../espressif/executor", features = ["chip"] }
 
 [lints]
 workspace = true

@@ -94,6 +94,7 @@ mod chip {
     use portable_atomic::{AtomicBool, AtomicU32, Ordering, fence};
 
     use super::{EXECUTORS, Report, Sample};
+    use crate::binding::Binding;
 
     /// Attempts a sampler makes for a waiting core to add its wait, and for
     /// a consistent read of a counter.
@@ -172,11 +173,11 @@ mod chip {
     /// its idle counter. Called with interrupts masked, on the executor's
     /// core only.
     #[inline(always)]
-    pub fn add_wait(executor: usize) {
+    pub fn add_wait<B: Binding>(executor: usize) {
         let counter = &IDLE.0[executor];
         counter.waiting.store(true, Ordering::Release);
         let before = oer_riscv::cycle64();
-        crate::chip::wait_for_interrupt();
+        crate::chip::wait_for_interrupt::<B>();
         let after = oer_riscv::cycle64();
         // Cleared before the update, so a sampler that sees the wait
         // always sees the update that ends it.
@@ -185,13 +186,13 @@ mod chip {
     }
 
     /// Every running executor's idle counter now.
-    fn sample() -> [Option<Sample>; EXECUTORS] {
+    fn sample<B: Binding>() -> [Option<Sample>; EXECUTORS] {
         core::array::from_fn(|executor| {
             let core = crate::executor::executor_core(executor)?;
             let counter = &IDLE.0[executor];
             let sequence = counter.sequence.load(Ordering::Acquire);
             if counter.waiting.load(Ordering::Acquire) {
-                crate::executor::raise(executor);
+                crate::executor::raise::<B>(executor);
                 let mut answered = false;
                 for _ in 0..ATTEMPTS {
                     if counter.sequence.load(Ordering::Acquire) != sequence {
@@ -211,18 +212,19 @@ mod chip {
         })
     }
 
-    /// An open idle-accounting window. It cannot move to another executor or
-    /// core: the window's length is the opening core's `mcycle`.
-    pub struct Window {
+    /// An open idle-accounting window over the executors of chip binding
+    /// `B`. It cannot move to another executor or core: the window's length
+    /// is the opening core's `mcycle`.
+    pub struct Window<B> {
         started_cycle: u64,
         start: [Option<Sample>; EXECUTORS],
-        _local: PhantomData<*mut ()>,
+        _local: PhantomData<(*mut (), fn() -> B)>,
     }
 
-    impl Window {
+    impl<B: Binding> Window<B> {
         /// Open a window now. Call it from a task, never from an interrupt.
         pub fn begin() -> Self {
-            let start = sample();
+            let start = sample::<B>();
             Self {
                 started_cycle: oer_riscv::cycle64(),
                 start,
@@ -233,7 +235,7 @@ mod chip {
         /// Close the window now.
         pub fn finish(self) -> Report {
             let ended_cycle = oer_riscv::cycle64();
-            Report::between(self.started_cycle, self.start, ended_cycle, sample())
+            Report::between(self.started_cycle, self.start, ended_cycle, sample::<B>())
         }
     }
 }

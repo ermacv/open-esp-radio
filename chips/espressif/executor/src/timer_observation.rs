@@ -274,31 +274,32 @@ fn record(timing: &mut Timing, start: u64, end: u64, invalid: &mut bool) {
         .is_none();
 }
 
-/// Exclusive diagnostic window. Drop stops recording, including cancellation.
-/// It cannot move to another executor/core. Hardware timer ownership is unchanged.
+/// Exclusive diagnostic window of an executor of chip binding `B`. Drop
+/// stops recording, including cancellation. It cannot move to another
+/// executor/core. Hardware timer ownership is unchanged.
 #[cfg(feature = "chip")]
-pub struct Window {
+pub struct Window<B: crate::Binding> {
     active: bool,
-    _local: core::marker::PhantomData<*mut ()>,
+    _local: core::marker::PhantomData<(*mut (), fn() -> B)>,
 }
 #[cfg(feature = "chip")]
-impl Window {
+impl<B: crate::Binding> Window<B> {
     pub fn begin() -> Option<Self> {
-        crate::time_driver::begin_observation().then(|| Self {
+        crate::time_driver::begin_observation::<B>().then(|| Self {
             active: true,
             _local: core::marker::PhantomData,
         })
     }
     pub fn finish(mut self) -> Report {
         self.active = false;
-        crate::time_driver::finish_observation()
+        crate::time_driver::finish_observation::<B>()
     }
 }
 #[cfg(feature = "chip")]
-impl Drop for Window {
+impl<B: crate::Binding> Drop for Window<B> {
     fn drop(&mut self) {
         if self.active {
-            let _ = crate::time_driver::finish_observation();
+            let _ = crate::time_driver::finish_observation::<B>();
         }
     }
 }
