@@ -11,11 +11,11 @@ description = "Owned-packet boundary for the optimized open ESP radio Embassy/Xa
 embassy-sync = "0.8.0"
 oer-network = { path = "../../../protocols/network" }
 oer-ieee80211-datapath = { path = "../../../protocols/ieee80211/datapath" }
-xarxa-driver = { git = "https://github.com/ermacv/xarxa.git", rev = "ed9bf37f25c610566033e31abd14d7eb5096d93f", features = ["async"] }
+xarxa-driver = { git = "https://github.com/ermacv/xarxa.git", rev = "6f5ae91f9269ec3151d1aa61d0cfe0f3ae1b0798", features = ["async"] }
 
 [dev-dependencies]
 critical-section = { version = "1.2.0", features = ["std"] }
-owned-embassy-net = { package = "embassy-net", git = "https://github.com/ermacv/embassy.git", rev = "0c018c843303508300cbb15fb3be0ee7d58862ab", features = ["medium-ethernet", "ipv4", "ipv4-fragmentation", "ipv4-reassembly", "udp"] }
+owned-embassy-net = { package = "embassy-net", git = "https://github.com/ermacv/embassy.git", rev = "17f796c8ddb90ff510d995e24c2dcb758a97e8f8", features = ["medium-ethernet", "ipv4", "ipv4-fragmentation", "ipv4-reassembly", "udp"] }
 
 [lints]
 workspace = true

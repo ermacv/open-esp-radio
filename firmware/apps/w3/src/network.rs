@@ -156,7 +156,10 @@ fn workload_future<'a, 'id: 'a, Path: PoolPath + 'a>(
         )
         .await
         {
-            Either::First(report) => report,
+            Either::First(mut report) => {
+                report.stack = Some(stack.statistics());
+                report
+            },
             Either::Second(_) => unreachable!("permanent network runners do not return"),
         }
     }

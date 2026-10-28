@@ -26,6 +26,8 @@ pub struct Report {
     pub malformed_ip: u32,
     pub queue_drops: u32,
     pub bridge: crate::bridge::Counters,
+    pub loss: crate::loss::Counters,
+    pub stack: Option<owned_embassy_net::Statistics>,
     pub probes: crate::probe::ProbeCounters,
     pub service_rx_queue_full: u32,
     pub service_rx_rejected: u32,
@@ -54,6 +56,8 @@ impl Report {
             malformed_ip: 0,
             queue_drops: 0,
             bridge: crate::bridge::Counters::new(),
+            loss: crate::loss::Counters::new(),
+            stack: None,
             probes: crate::probe::ProbeCounters {
                 socket_errors: 0,
                 timeouts: 0,
@@ -120,6 +124,32 @@ impl Report {
                 self.bridge.turns,
                 self.bridge.rx_frames,
                 self.bridge.rx_max,
+            ))
+            .await?;
+        }
+        if self.loss.queue_samples != 0 {
+            emit(&Note::w3_queue(
+                self.loss.queue_samples,
+                self.loss.queue_sum,
+                self.loss.queue_max,
+                self.loss.publisher_blocked,
+                self.loss.published,
+            ))
+            .await?;
+            emit(&Note::w3_echo(
+                self.loss.echo_requests,
+                self.loss.echo_replies,
+            ))
+            .await?;
+        }
+        if let Some(stack) = self.stack {
+            emit(&Note::w3_stack(
+                stack.rx_frames,
+                stack.icmpv4_echo_requests,
+                stack.icmpv4_echo_replies,
+                stack.tx_frames,
+                stack.tx_refused,
+                stack.icmpv4_echo_refused,
             ))
             .await?;
         }
@@ -282,6 +312,29 @@ mod tests {
         assert!(text.starts_with("w3.probes socket_errors=1 timeouts=2 last_socket_error=Some(Unaddressable)\r\nOER-W3-BEGIN v=1\r\n"));
         assert!(text.contains("w3.departure deauth_sent=1"));
         assert!(text.ends_with("OER-W3-END lines=12\r\nOER-RESULT: fail w3\r\n"));
+    }
+
+    #[test]
+    fn loss_notes_are_typed_and_leave_the_v1_gates_unchanged() {
+        let mut report = passed();
+        report.loss.sample_queue(8);
+        report.loss.echo_requests = 12;
+        report.loss.echo_replies = 9;
+        report.stack = Some(owned_embassy_net::Statistics {
+            rx_frames: 13,
+            icmpv4_echo_requests: 12,
+            icmpv4_echo_replies: 12,
+            tx_frames: 14,
+            tx_refused: 3,
+            icmpv4_echo_refused: 3,
+        });
+        let text = text(&report);
+        assert!(text.contains("w3.queue samples=1 sum=8 max=8 publisher_blocked=0 published=0"));
+        assert!(text.contains("w3.echo requests=12 replies=9"));
+        assert!(text.contains(
+            "w3.stack rx=13 echo_requests=12 echo_replies=12 tx=14 tx_refused=3 echo_refused=3"
+        ));
+        assert!(text.ends_with("OER-W3-END lines=12\r\nOER-RESULT: pass w3\r\n"));
     }
 
     #[test]

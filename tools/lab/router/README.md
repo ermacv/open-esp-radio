@@ -418,3 +418,9 @@ interface without a channel.
 
 [linux-bluetooth.md](linux-bluetooth.md): adapter ownership, DTM,
 connection and pairing quirks of a Linux host as the BLE peer.
+
+The optional W3 `--load-1ms` recipe runs the pinned #486 fping 5.3 source
+from a temporary extraction, without installing packages or changing the
+W3 AP profile. The caller holds the board/router/air leases across source
+preparation, capture, flood, recovery and cleanup. Its AP capture keeps numeric
+ICMP observations only; saturation counters come from the target's typed notes.

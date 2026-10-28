@@ -247,10 +247,17 @@ fn stand_router(
     Ok((lock, config))
 }
 
-pub fn run(root: &Path, image: &str, selector: &str, timeout: Duration) -> Result<ExitCode> {
+pub fn run(
+    root: &Path,
+    image: &str,
+    selector: &str,
+    timeout: Duration,
+    load_1ms: bool,
+) -> Result<ExitCode> {
+    let load = oer_lab_router::w3::load::Plan::select(image, load_1ms)?;
     #[cfg(target_os = "linux")]
     if image == crate::w3::IMAGE {
-        return crate::w3::firmware::run(root, selector, timeout);
+        return crate::w3::firmware::run(root, selector, timeout, load);
     }
     let (stand, board) = board(selector)?;
     // Acquire the laptop/air lease before the router lock to keep HIL's lock order.

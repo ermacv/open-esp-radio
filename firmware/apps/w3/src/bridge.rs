@@ -87,6 +87,7 @@ fn drain_step<const RX: usize, const TX: usize, T: Clock>(
         *state = link.get();
         radio.link_controller().set_link_up(*state);
     }
+    observations.borrow_mut().loss.sample_queue(rx.len() as u32);
     let publisher = radio.rx_publisher();
     let mut received = 0u32;
     for _ in 0..RX {
@@ -94,7 +95,12 @@ fn drain_step<const RX: usize, const TX: usize, T: Clock>(
             let mut ready = core::pin::pin!(rx.ready());
             ready.as_mut().poll(cx).is_ready()
         };
-        if !input_ready || publisher.poll_ready(cx).is_pending() {
+        if !input_ready {
+            break;
+        }
+        if publisher.poll_ready(cx).is_pending() {
+            let mut o = observations.borrow_mut();
+            o.loss.publisher_blocked = o.loss.publisher_blocked.saturating_add(1);
             break;
         }
         let Some(frame) = rx.try_receive() else {
@@ -112,6 +118,9 @@ fn drain_step<const RX: usize, const TX: usize, T: Clock>(
         {
             let mut o = observations.borrow_mut();
             o.queue_drops = o.queue_drops.saturating_add(1);
+        } else {
+            let mut o = observations.borrow_mut();
+            o.loss.published = o.loss.published.saturating_add(1);
         }
     }
     observations.borrow_mut().bridge.record(received);
@@ -295,6 +304,8 @@ mod tests {
         assert!(source.try_send(frame(8)).is_ok());
         assert!(source.try_send(frame(9)).is_err());
         assert_eq!(observations.borrow().queue_drops, 0);
+        assert_eq!(observations.borrow().loss.publisher_blocked, 1);
+        assert_eq!(observations.borrow().loss.published, 1);
         assert!(general.try_alloc().is_some());
     }
 
@@ -345,6 +356,11 @@ mod tests {
             }
         );
         assert_eq!(o.queue_drops, 0);
+        assert_eq!(o.loss.queue_samples, 1);
+        assert_eq!(o.loss.queue_sum, RX as u64);
+        assert_eq!(o.loss.queue_max, RX as u32);
+        assert_eq!(o.loss.published, RX as u32);
+        assert_eq!(o.loss.publisher_blocked, 0);
         let mut report = crate::report::Report::new(6, [2; 6], [4; 6]);
         o.report(&mut report);
         let mut recorded = false;

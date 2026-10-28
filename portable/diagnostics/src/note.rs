@@ -777,6 +777,15 @@ topics! {
     W3Bridge = 115, w3_bridge, "w3.bridge"
         ("turns" turns: dec, "rx_frames" rx_frames: dec, "rx_max" rx_max: dec);
 
+    W3Queue = 116, w3_queue, "w3.queue"
+        ("samples" samples: dec, "sum" sum: wide, "max" max: dec,
+         "publisher_blocked" publisher_blocked: dec, "published" published: dec);
+    W3Stack = 117, w3_stack, "w3.stack"
+        ("rx" rx: dec, "echo_requests" echo_requests: dec, "echo_replies" echo_replies: dec,
+         "tx" tx: dec, "tx_refused" tx_refused: dec, "echo_refused" echo_refused: dec);
+    W3Echo = 118, w3_echo, "w3.echo"
+        ("requests" requests: dec, "replies" replies: dec);
+
     /// W2 console block.
     W2Begin = 120, w2_begin, "OER-W2-BEGIN v=1" ();
     W2Config = 121, w2_config, "w2.config"

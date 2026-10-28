@@ -255,3 +255,9 @@ image configuration. See the [refresh workflow](../build/README.md#pr-size-table
 For W1, the host additionally reads the built runtime ELF and checks that
 `w1.stack` reports its actual capacity and an observed depth no greater than
 its proven IRQ bound. This replaces the fixed 4096-byte `irq_stack` gate.
+
+W3's `cargo fw run w3 --board s31-b --load-1ms` selects the #486 flood and
+recovery recipe under the normal W3 leases and unchanged AP profile. Its
+separate load verdict, complete AP echo observations and loss accounting are
+saved beside the unchanged version-1 console report. See
+[the W3 contract](../../../firmware/apps/w3/README.md).

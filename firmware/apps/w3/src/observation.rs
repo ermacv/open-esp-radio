@@ -12,6 +12,7 @@ pub struct Observations {
     pub malformed: u32,
     pub queue_drops: u32,
     pub bridge: crate::bridge::Counters,
+    pub loss: crate::loss::Counters,
     pub cadence_ok: bool,
     identifier: u16,
     last_request_us: Option<u64>,
@@ -26,6 +27,7 @@ impl Observations {
             malformed: 0,
             queue_drops: 0,
             bridge: crate::bridge::Counters::new(),
+            loss: crate::loss::Counters::new(),
             cadence_ok: true,
             identifier,
             last_request_us: None,
@@ -69,8 +71,10 @@ impl Observations {
         {
             self.station.reply(echo.identifier, echo.sequence);
         } else if router_to_station && !outgoing && !echo.reply {
+            self.loss.echo_requests = self.loss.echo_requests.saturating_add(1);
             self.peer.request(echo.identifier, echo.sequence);
         } else if station_to_router && outgoing && echo.reply {
+            self.loss.echo_replies = self.loss.echo_replies.saturating_add(1);
             self.peer.reply(echo.identifier, echo.sequence);
         }
     }
@@ -85,6 +89,7 @@ impl Observations {
         report.malformed_ip = self.malformed;
         report.queue_drops = self.queue_drops;
         report.bridge = self.bridge;
+        report.loss = self.loss;
         report.sent = self.station.requests();
         report.received = self.station.replies();
         report.peer_requests = self.peer.requests();
@@ -133,6 +138,13 @@ mod tests {
             observations.observe(0x800, &answer, true, at);
             clock.advance(Duration::from_secs(1)).expect("virtual time");
         }
+        assert_eq!(
+            (
+                observations.loss.echo_requests,
+                observations.loss.echo_replies
+            ),
+            (100, 100)
+        );
         assert!(observations.complete());
         assert!(observations.cadence_ok);
         assert_eq!(observations.station.replies(), 100);

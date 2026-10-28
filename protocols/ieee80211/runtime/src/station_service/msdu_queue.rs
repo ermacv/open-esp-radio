@@ -166,6 +166,15 @@ pub struct MsduReceiver<'a, T, const DEPTH: usize> {
 }
 
 impl<T, const DEPTH: usize> MsduReceiver<'_, T, DEPTH> {
+    /// Current queued owners, observed without consuming one or changing wakes.
+    pub fn len(&self) -> usize {
+        self.receiver.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.receiver.is_empty()
+    }
+
     #[must_use]
     pub fn try_receive(&self) -> Option<T> {
         let value = self.receiver.try_receive().ok()?;
@@ -229,6 +238,21 @@ mod tests {
         fn wake_by_ref(self: &Arc<Self>) {
             self.0.fetch_add(1, Ordering::Relaxed);
         }
+    }
+
+    #[test]
+    fn occupancy_observations_preserve_owners_and_fifo() {
+        let mut queue = MsduQueue::<u8, 2>::new();
+        let (sender, receiver) = queue.split();
+        assert!(receiver.is_empty());
+        sender.try_send(1).unwrap();
+        sender.try_send(2).unwrap();
+        assert_eq!(receiver.len(), 2);
+        assert_eq!(receiver.len(), 2);
+        assert_eq!(receiver.try_receive(), Some(1));
+        assert_eq!(receiver.len(), 1);
+        assert_eq!(receiver.try_receive(), Some(2));
+        assert!(receiver.is_empty());
     }
 
     #[test]
