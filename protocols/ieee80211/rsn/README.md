@@ -96,10 +96,21 @@ check the committed replay frontier, so an overtaken request cannot roll it
 back. The station owns the bounded deferred-frame policy and TX ordering.
 
 
-`BipTransmitter` refuses a frame when its 48-bit IPN space is exhausted, or
-when the output has no room for the MMIE; refusal consumes no IPN and leaves
-the frame unchanged. The IGTK epoch's owner retains this state across an AP
-restart or channel move rather than reusing IPNs under the same key.
+`BipTransmitter` retains the last protected `BipPacketNumber`, a distinct
+48-bit domain from a CCMP PN. It returns `BipTransmitError::Exhausted` when
+no larger IPN remains (the IGTK must be replaced), or `InvalidFrame` for an
+invalid length or insufficient output capacity. Refusal consumes no IPN and
+leaves the frame unchanged. `BipReceiver` rejects repeats and rollbacks and
+commits its frontier only after MIC verification; repeated delivery of the
+same IGTK can only raise that frontier. Both use upper-MAC's typed
+`packet_number` mechanism, shared with CCMP. The IPN frontiers are public
+values and are not zeroized; IGTK material still zeroizes on drop. The IGTK
+epoch's owner retains its transmit state across an AP restart or channel
+move rather than reusing IPNs under the same key.
+
+IEEE Std 802.11-2020 9.4.2.54 defines the MME's six-octet IPN;
+12.5.4.4-.6 require strictly increasing 48-bit IPNs and rejection of a
+received IPN at or below the frontier.
 
 The implemented suites are PSK (`00-0F-AC:2`), PSK-SHA256 (`00-0F-AC:6`) and
 SAE (`00-0F-AC:8`). The MAC package names them and the negotiated

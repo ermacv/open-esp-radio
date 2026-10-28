@@ -6,7 +6,8 @@
 //! over the frame's additional authentication data and its body with the MIC
 //! field zeroed, and its IGTK packet number must exceed every earlier one.
 //!
-//! SOURCE: IEEE 802.11-2016 12.5.4 (BIP), 9.4.2.55 (Management MIC element).
+//! SOURCE: IEEE 802.11-2020 12.5.4.4-.6 (BIP replay, transmission and
+//! reception), 9.4.2.54 (Management MIC element, six-octet IPN).
 //!
 //! Received frames reach [`BipReceiver::verify`]; nothing here panics on them.
 #![deny(
@@ -20,15 +21,40 @@
 
 use crate::frames::{RSN_IGTK_LEN, RSN_IPN_LEN, RsnIgtk};
 use oer_ieee80211_cipher::bip::{self, BipError, BipFrame};
+use oer_ieee80211_upper_mac::packet_number::{PacketNumber48, PacketNumberFrontier};
 use zeroize::{Zeroize, ZeroizeOnDrop};
+
+/// A six-octet BIP IPN. This value cannot be used as a CCMP PN.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct BipPacketNumber(u64);
+
+impl BipPacketNumber {
+    pub const fn from_bytes(bytes: [u8; RSN_IPN_LEN]) -> Self {
+        let [b0, b1, b2, b3, b4, b5] = bytes;
+        Self(u64::from_le_bytes([b0, b1, b2, b3, b4, b5, 0, 0]))
+    }
+
+    pub const fn to_bytes(self) -> [u8; RSN_IPN_LEN] {
+        let [b0, b1, b2, b3, b4, b5, _, _] = self.0.to_le_bytes();
+        [b0, b1, b2, b3, b4, b5]
+    }
+}
+
+impl PacketNumber48 for BipPacketNumber {
+    fn checked_add(self, distance: u64) -> Option<Self> {
+        let next = self.0.checked_add(distance)?;
+        (next <= Self::from_bytes([0xff; RSN_IPN_LEN]).0).then_some(Self(next))
+    }
+}
 
 /// The receive state of one IGTK: its key and the last accepted IPN.
 #[derive(Zeroize, ZeroizeOnDrop)]
 pub struct BipReceiver {
     key_id: u8,
     key: [u8; RSN_IGTK_LEN],
-    /// The last accepted IPN, as a 48-bit integer.
-    last_packet_number: u64,
+    /// IPNs are public; only the key material needs erasure.
+    #[zeroize(skip)]
+    replay: PacketNumberFrontier<BipPacketNumber>,
 }
 
 impl BipReceiver {
@@ -37,7 +63,7 @@ impl BipReceiver {
         Self {
             key_id: igtk.key_id(),
             key: *igtk.key(),
-            last_packet_number: packet_number(igtk.packet_number()),
+            replay: PacketNumberFrontier::new(BipPacketNumber::from_bytes(igtk.packet_number())),
         }
     }
 
@@ -49,9 +75,11 @@ impl BipReceiver {
     /// this IGTK keeps the higher of its replay states, so a retransmitted
     /// key never reopens packet numbers already accepted.
     pub fn rekey(&mut self, igtk: &RsnIgtk) {
-        let delivered = packet_number(igtk.packet_number());
+        let delivered = BipPacketNumber::from_bytes(igtk.packet_number());
         if igtk.key_id() == self.key_id && *igtk.key() == self.key {
-            self.last_packet_number = self.last_packet_number.max(delivered);
+            if let Ok(candidate) = self.replay.prepare(delivered) {
+                candidate.commit();
+            }
         } else {
             *self = Self::new(igtk);
         }
@@ -62,12 +90,14 @@ impl BipReceiver {
     /// state when it verifies.
     pub fn verify(&mut self, frame: &[u8]) -> Result<(), BipReceiveError> {
         let frame = BipFrame::parse(frame, self.key_id)?;
-        let received = frame.packet_number();
-        if received <= self.last_packet_number {
-            return Err(BipReceiveError::Replay);
-        }
+        // BipFrame::parse decodes exactly six octets, so this is already bounded.
+        let received = BipPacketNumber(frame.packet_number());
+        let candidate = self
+            .replay
+            .prepare(received)
+            .map_err(|_| BipReceiveError::Replay)?;
         frame.verify(&self.key)?;
-        self.last_packet_number = received;
+        candidate.commit();
         Ok(())
     }
 }
@@ -91,8 +121,18 @@ impl From<BipError> for BipReceiveError {
 pub struct BipTransmitter {
     key_id: u8,
     key: [u8; RSN_IGTK_LEN],
-    /// The IPN of the next protected frame, as a 48-bit integer.
-    next_packet_number: u64,
+    /// The last successfully protected IPN, kept in its bounded domain.
+    #[zeroize(skip)]
+    packet_numbers: PacketNumberFrontier<BipPacketNumber>,
+}
+
+/// Why a group-addressed management frame could not be protected.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum BipTransmitError {
+    /// No larger 48-bit IPN remains; replace the IGTK before sending again.
+    Exhausted,
+    /// The supplied length or output capacity cannot hold the frame and MMIE.
+    InvalidFrame,
 }
 
 impl BipTransmitter {
@@ -102,36 +142,34 @@ impl BipTransmitter {
         Self {
             key_id: igtk.key_id(),
             key: *igtk.key(),
-            // A 48-bit packet number plus one fits.
-            next_packet_number: packet_number(igtk.packet_number()).wrapping_add(1),
+            packet_numbers: PacketNumberFrontier::new(BipPacketNumber::from_bytes(
+                igtk.packet_number(),
+            )),
         }
     }
 
     pub fn packet_number(&self) -> [u8; RSN_IPN_LEN] {
-        ipn_bytes(self.next_packet_number.wrapping_sub(1))
+        self.packet_numbers.highest().to_bytes()
     }
 
-    pub fn protect(&mut self, frame: &mut [u8], length: usize) -> Option<usize> {
+    /// Protect once and commit its IPN only on success. Every refusal leaves
+    /// both the IPN frontier and the output unchanged.
+    pub fn protect(&mut self, frame: &mut [u8], length: usize) -> Result<usize, BipTransmitError> {
+        let candidate = self
+            .packet_numbers
+            .prepare_next(core::num::NonZeroU8::MIN)
+            .map_err(|_| BipTransmitError::Exhausted)?;
         let protected = bip::protect(
             self.key_id,
             &self.key,
-            self.next_packet_number,
+            candidate.packet_number().0,
             frame,
             length,
-        )?;
-        self.next_packet_number = self.next_packet_number.wrapping_add(1);
-        Some(protected)
+        )
+        .ok_or(BipTransmitError::InvalidFrame)?;
+        candidate.commit();
+        Ok(protected)
     }
-}
-
-fn ipn_bytes(value: u64) -> [u8; RSN_IPN_LEN] {
-    let [b0, b1, b2, b3, b4, b5, _, _] = value.to_le_bytes();
-    [b0, b1, b2, b3, b4, b5]
-}
-
-fn packet_number(bytes: [u8; RSN_IPN_LEN]) -> u64 {
-    let [b0, b1, b2, b3, b4, b5] = bytes;
-    u64::from_le_bytes([b0, b1, b2, b3, b4, b5, 0, 0])
 }
 
 #[cfg(test)]

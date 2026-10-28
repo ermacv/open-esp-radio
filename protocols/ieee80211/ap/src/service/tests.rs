@@ -2275,3 +2275,46 @@ fn an_inconsistent_bip_owner_returns_no_management_key_without_mutating_the_fram
         [0; 6]
     );
 }
+
+#[test]
+fn group_management_reports_ipn_exhaustion_and_keeps_the_announced_frontier() {
+    use oer_ieee80211_rsn::bip::BipTransmitter;
+    use oer_ieee80211_wire::ap::{ApManagementFrame, ApManagementSubtype};
+
+    let mut storage = AccessPointPeerStorage::new();
+    let mut service = wpa3_service(&mut storage);
+    let AccessPointSecurityMaterial::Wpa3Personal { igtk, .. } = &mut service.security else {
+        panic!("fixture must have an IGTK");
+    };
+    *igtk = RsnIgtk::new(
+        igtk.key_id(),
+        [0xfe, 0xff, 0xff, 0xff, 0xff, 0xff],
+        igtk.key(),
+    )
+    .unwrap();
+    service.group_management = Some(BipTransmitter::new(igtk));
+    let mut frame = [0; 64];
+    let length = ApManagementFrame {
+        subtype: ApManagementSubtype::Action,
+        access_point: AP,
+        peer: [0xff; 6],
+        sequence_number: SequenceNumber::ZERO,
+        body: &[0, 4],
+    }
+    .encode(&mut frame)
+    .unwrap();
+
+    service
+        .protect_group_management(&mut frame, length)
+        .unwrap();
+    assert_eq!(service.igtk().unwrap().packet_number(), [0xff; 6]);
+    let saved = frame;
+    for _ in 0..2 {
+        assert_eq!(
+            service.protect_group_management(&mut frame, length),
+            Err(ApGroupManagementError::PacketNumbersExhausted)
+        );
+        assert_eq!(frame, saved);
+        assert_eq!(service.igtk().unwrap().packet_number(), [0xff; 6]);
+    }
+}

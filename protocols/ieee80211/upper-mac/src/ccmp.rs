@@ -5,6 +5,8 @@ use oer_ieee80211_wire::ccmp::CCMP_PACKET_NUMBER_MAX;
 
 use core::num::NonZeroU8;
 
+use crate::packet_number::{PacketNumberCandidate, PacketNumberFrontier, advance};
+
 use oer_ieee80211_wire::ccmp::{
     CCMP_HEADER_LEN, CcmpHeader, CcmpKeyId, CcmpPacketNumber, CcmpReceiveSequenceError, GroupKeyId,
 };
@@ -167,16 +169,8 @@ impl CcmpTxPacketNumber {
 
     /// Allocate the PN of the next MPDU.
     pub fn allocate(&self) -> Result<CcmpPacketNumber, CcmpTxPacketNumberError> {
-        // `last` is at most CCMP_PACKET_NUMBER_MAX (2^48 - 1) and the step at
-        // most 255, so the sum stays far below u64::MAX.
-        let next = self
-            .last
-            .get()
-            .value()
-            .saturating_add(u64::from(self.step.get()));
-        let Some(next) = CcmpPacketNumber::new(next) else {
-            return Err(CcmpTxPacketNumberError::Exhausted);
-        };
+        let next = advance(self.last.get(), u64::from(self.step.get()))
+            .map_err(|_| CcmpTxPacketNumberError::Exhausted)?;
         self.last.set(next);
         Ok(next)
     }
@@ -190,18 +184,14 @@ impl CcmpTxPacketNumber {
         let distance = count
             .checked_mul(u64::from(self.step.get()))
             .ok_or(CcmpTxPacketNumberError::Exhausted)?;
-        let final_number = self
-            .last
-            .get()
-            .value()
-            .checked_add(distance)
-            .and_then(CcmpPacketNumber::new)
-            .ok_or(CcmpTxPacketNumberError::Exhausted)?;
+        let final_number =
+            advance(self.last.get(), distance).map_err(|_| CcmpTxPacketNumberError::Exhausted)?;
         let mut numbers = [CcmpPacketNumber::ZERO; N];
-        let mut current = self.last.get().value();
+        let mut current = self.last.get();
         for number in &mut numbers {
-            current = current.saturating_add(u64::from(self.step.get()));
-            *number = CcmpPacketNumber::new(current).ok_or(CcmpTxPacketNumberError::Exhausted)?;
+            current = advance(current, u64::from(self.step.get()))
+                .map_err(|_| CcmpTxPacketNumberError::Exhausted)?;
+            *number = current;
         }
         self.last.set(final_number);
         Ok(numbers)
@@ -257,13 +247,15 @@ impl CcmpReplayLane {
 /// a new frontier from its receive sequence, so a frontier never moves back.
 #[derive(Debug, Eq, PartialEq)]
 pub struct CcmpReplayFrontier {
-    highest: CcmpPacketNumber,
+    frontier: PacketNumberFrontier<CcmpPacketNumber>,
 }
 
 impl CcmpReplayFrontier {
     /// A frontier whose highest accepted packet number is `initial`.
     pub const fn new(initial: CcmpPacketNumber) -> Self {
-        Self { highest: initial }
+        Self {
+            frontier: PacketNumberFrontier::new(initial),
+        }
     }
 
     /// Check `packet_number` and lend this frontier until commit or
@@ -274,16 +266,14 @@ impl CcmpReplayFrontier {
         &mut self,
         packet_number: CcmpPacketNumber,
     ) -> Result<CcmpReplayCandidate<'_>, CcmpReplayed> {
-        let highest = self.highest;
-        if packet_number <= highest {
-            return Err(CcmpReplayed {
-                packet_number,
-                highest,
-            });
-        }
         Ok(CcmpReplayCandidate {
-            frontier: &mut self.highest,
-            packet_number,
+            candidate: self
+                .frontier
+                .prepare(packet_number)
+                .map_err(|replayed| CcmpReplayed {
+                    packet_number: replayed.packet_number,
+                    highest: replayed.highest,
+                })?,
         })
     }
 
@@ -299,7 +289,7 @@ impl CcmpReplayFrontier {
 
     /// The highest accepted packet number.
     pub const fn highest(&self) -> CcmpPacketNumber {
-        self.highest
+        self.frontier.highest()
     }
 }
 
@@ -325,19 +315,18 @@ pub struct CcmpReplayed {
 #[derive(Debug)]
 #[must_use = "commit before publication, or drop to cancel admission"]
 pub struct CcmpReplayCandidate<'a> {
-    frontier: &'a mut CcmpPacketNumber,
-    packet_number: CcmpPacketNumber,
+    candidate: PacketNumberCandidate<'a, CcmpPacketNumber>,
 }
 
 impl CcmpReplayCandidate<'_> {
     /// The already checked packet number.
     pub const fn packet_number(&self) -> CcmpPacketNumber {
-        self.packet_number
+        self.candidate.packet_number()
     }
     /// Publish once, advancing only the originally borrowed frontier.
     /// No other check or key replacement can have made this token stale.
     pub fn commit(self) {
-        *self.frontier = self.packet_number;
+        self.candidate.commit();
     }
 }
 

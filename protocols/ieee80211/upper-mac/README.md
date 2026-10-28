@@ -149,6 +149,13 @@ window start. Both originator methods return that frame for the caller to
 submit once; the backend only reports outcomes. Sequence arithmetic wraps
 through zero, and stale reports cannot move the window again.
 
+`packet_number` supplies checked 48-bit advancement and a borrowed commit
+frontier to both CCMP and RSN's BIP owners. Its value parameter keeps
+`CcmpPacketNumber` and `BipPacketNumber` distinct; a candidate cannot outlive
+or be transplanted to another frontier. Cancelling a candidate advances
+nothing. BIP transmit candidates commit only after frame protection succeeds;
+receive candidates commit only after authentication.
+
 ## What stays outside
 
 The planner holds no frame bytes. The caller encodes each MPDU's sequence
