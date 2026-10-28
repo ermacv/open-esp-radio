@@ -15,10 +15,14 @@ checks each frame before the driver creates the shared engine. A refused
 placement returns both affine inputs. Detach/rebind keeps the same permanent
 storage across quiescent MAC epochs; active operations refuse detach.
 
-ISR service retains the existing consuming engine `Quarantined` result.
-Unsupported events keep hardware and frame owners quarantined; the image
-records the fault and resets. Fault values, retained record format and reset
-policy remain in their existing engine/image owners.
+The driver's consuming `isr` calls the family owner's borrowed `service`.
+Unsupported events retain their complete observation and entry state in `Fault`,
+while the driver keeps the MAC and placed DMA storage in absorbing `Quarantined`
+custody. Neither dropping quarantine nor reading its fault releases an owner;
+there is no detach, rebind or operational access. Explicit mutable entries keep
+the family service inaccessible through the driver's shared `Deref`.
+The PHY HIL image owns the unchanged 12-byte retained codec, its storage and the
+safe `fatal::reset_recording` call. The driver does not record or reset.
 
 `tx_power::ESP32S31_TX_POWER_LEVELS` selects from hardware-free chip knowledge.
 The PHY HIL image composes this driver in its existing P2 polling context.

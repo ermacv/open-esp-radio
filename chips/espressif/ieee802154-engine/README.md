@@ -18,7 +18,7 @@ All MAC semantic values come directly from
 values, ACK timeout, RX status, diagnostic counters, ETM, events, abort reasons
 and Multi-PAN. Frame storage, its dimensions and opaque DMA address tables also belong to
 mac-values. The engine does not re-export that vocabulary. Unnamed event
-lanes 7 and 13 remain separate through fault capture and retained decoding.
+lanes 7 and 13 remain separate in the returned fault observation.
 `capabilities::portable_tx_power_levels` adapts the chip level set to the
 portable protocol vocabulary. The engine retains its own FSM, environment
 completion types, PIB, coexistence policy and storage/owner contracts.
@@ -145,11 +145,14 @@ not prove that every hardware producer drained.
 
 Engine interrupt service rejects a sample containing an unnamed lane (7 or 13)
 or the unsupported clock-match event (10) with `Fault::UnhandledEvents` before acknowledgement
-or dispatch, preserving the complete event sample and entry state. The combined
-MAC/engine owner consumes itself into absorbing `Quarantined` storage with no
-recovery operations. The S31 PHY HIL image calls `fatal::reset_recording` with
-those owners retained. Its new 12-byte versioned/checksummed record reports the
-original fault at the next boot and survives console refusal.
+or dispatch, preserving the complete event sample and entry state. The family
+owner's `service(&mut self, env) -> Result<(), Fault>` borrows its MAC and
+returns the original observations without consuming owners or deciding terminal
+policy. The engine has no quarantine, retained codec or reset entry.
+The S31 driver's consuming `isr` holds the MAC and placed DMA storage in its own
+absorbing `Quarantined` value. The PHY HIL image owns the 12-byte
+versioned/checksummed codec, retained storage and `fatal::reset_recording` call;
+it reports the original fault at the next boot and retains it on console refusal.
 SOURCE: `hw8-20261026-radio-local-05`, `ieee-timers.json`,
 [PR #689](https://github.com/ermacv/open-esp-radio/pull/689): masking hides
 timer0/timer1 status while retaining pending; a positive sample captured

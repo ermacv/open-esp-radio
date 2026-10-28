@@ -44,26 +44,6 @@ use static_cell::StaticCell;
 
 type Result<T> = core::result::Result<T, RejectReason>;
 
-// Only this image uses the hardware engine; retain its source observations
-// without adding a record to unrelated staged images.
-oer_espressif_staged_runtime::retained_static! {
-    static EVENT_FAULT: oer_espressif_ieee802154_engine::engine::fault::FaultRecord;
-}
-
-fn reset_fault(fault: oer_espressif_ieee802154_engine::engine::Fault) -> ! {
-    oer_espressif_staged_runtime::fatal::reset_recording(|_stop| {
-        if let Some(mut record) = EVENT_FAULT.try_lock() {
-            record.record(fault);
-        }
-    })
-}
-
-pub fn report_previous_fault() {
-    if let Some(mut record) = EVENT_FAULT.try_lock() {
-        let _reported = record.report(oer_esp32s31_hal::usb_serial_jtag::early_text);
-    }
-}
-
 // The MAC's source is routed nowhere: the radio task (P2) polls the running
 // engine's events and makes every other engine entry, so none preempts
 // another. No borrow crosses await; P1 and P3 never enter this cell.
@@ -111,7 +91,7 @@ pub fn poll() {
         if let Some(Running { engine, mut env }) = running.take() {
             let engine = match engine.isr(&mut env) {
                 Ok(engine) => engine,
-                Err(quarantine) => reset_fault(quarantine.fault()),
+                Err(quarantine) => crate::ieee802154_fault::reset(quarantine.fault()),
             };
             *running = Some(Running { engine, env });
         }
