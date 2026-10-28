@@ -20,8 +20,8 @@ pub enum SystemScenario {
     BootSmoke {},
     /// SoC watchdog reset on its exclusive radio-free image.
     Watchdog {},
-    /// The product panic entry records an intentional panic and resets the
-    /// chip on its exclusive radio-free image.
+    /// A host-requested reset retains HilRequested on its exclusive radio-free
+    /// image, and the next boot reports the acknowledged request's identity.
     PanicReset {},
     /// The stand brings back a board whose image switched its USB
     /// Serial/JTAG off: its reset ladder and its download entry.

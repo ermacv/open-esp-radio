@@ -1,5 +1,5 @@
-//! The panic-reset image: the HIL console serving one intentional panic,
-//! which the platform's product panic entry records and resets on.
+//! The panic-reset image: the HIL console serving a host-requested reset
+//! through the platform's retained `HilRequested` path.
 use oer_hil_agent::base::PanicRequest;
 use oer_hil_protocol::system::InjectPanic;
 
@@ -8,7 +8,7 @@ use crate::transport::CONSOLE;
 oer_espressif_executor::tasks! {
     /// The panic-reset image's tasks.
     PanicResetTasks: Executor<0> {
-        panic_on_request() = super::panic::panic_on_request;
+        reset_on_request() = super::panic::reset_on_request;
         run(usb: crate::transport::Usb, boot: u64) = run;
         rtc_watchdog(watchdog: RtcWatchdog) = crate::feed_rtc_watchdog;
     }
@@ -34,7 +34,7 @@ pub(crate) fn start<C: oer_espressif_interrupt_table::Controller>(
     CONSOLE.start(boot);
     match executor
         .run(hart, router, wake, line, (), |spawner| {
-            PanicResetTasks::panic_on_request(spawner).expect("panic-reset task");
+            PanicResetTasks::reset_on_request(spawner).expect("requested-reset task");
             PanicResetTasks::run(spawner, usb, boot).expect("system console task");
             if PanicResetTasks::rtc_watchdog(spawner, watchdog).is_err() {
                 crate::fail(crate::fatal::Failure::TaskAllocation);

@@ -1,5 +1,5 @@
 //! The system module: SoC diagnostics independent of any radio: the
-//! watchdog, the panic and USB-off injections and stack high-water marks.
+//! watchdog, requested reset and USB-off injections and stack high-water marks.
 
 use postcard_schema::Schema;
 use serde::{Deserialize, Serialize};
@@ -40,12 +40,13 @@ pub enum WatchdogTestMode {
     LateRestoration,
 }
 
-/// Diagnostic: panic in thread context once the acknowledgement is out, so
-/// the platform's panic entry records the panic and resets the chip.
+/// Diagnostic: request a reset once the acknowledgement is out. On S31 the
+/// staged runtime retains `HilRequested`; this is not a hardware fault and
+/// does not invoke the panic hook.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub struct InjectPanic;
 
-/// The panic follows this acknowledgement.
+/// The requested reset follows this acknowledgement.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub struct PanicInjected;
 

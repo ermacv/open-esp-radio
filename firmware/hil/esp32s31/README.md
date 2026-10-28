@@ -73,9 +73,17 @@ stay outside the small task shells.
 
 The agent's panic hook, which the platform's panic entry calls through its
 `panic-hook` feature, runs in every image but `system-panic-reset` (the
-agent's `panic-hook` feature, which each image's base feature enables); that
-image runs the product panic entry alone, so the `system-panic-reset`
-scenario exercises the product's record-and-reset path. The hook and the
+agent's `panic-hook` feature, which each image's base feature enables).
+`InjectPanic` requests a reset through the staged runtime's retained path
+after its `PanicInjected` acknowledgement has been written. It records
+`FaultReason::HilRequested`, an explicit host-requested reset, not a hardware
+fault, and does not call the panic entry or the HIL panic hook. The existing
+slot's four observation words retain the request ID, acknowledgement sequence
+and session ID low/high words without adding retained memory. The next boot
+prints `previous fault HilRequested:` with those words; both the
+`system-panic-reset` scenario and the requested-reset step of `system-watchdog`
+require that report for the acknowledged request and a software reset.
+The hook for unexpected panics and the
 exception entry format nothing: they record the post-mortem fault and the
 hart's trap registers, the vector it took and the sources pending and routed
 to it (`agent/src/fatal.rs`) in RTC fast memory and reset, and the next boot

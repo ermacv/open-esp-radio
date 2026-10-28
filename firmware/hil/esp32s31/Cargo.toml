@@ -22,8 +22,8 @@ system-watchdog = [
 # The system image that, on request, switches its USB Serial/JTAG off its
 # pads: the board leaves USB, as a stand recovery must handle.
 usb-jtag-off = ["system-watchdog"]
-# The product panic entry alone: a panic records itself and resets the chip,
-# and the next boot reports the record.
+# Host-requested resets use the product's retained path without a panic hook;
+# the next boot reports HilRequested.
 system-panic-reset = [
     "dep:oer-hil-protocol",
     "dep:embassy-sync",

@@ -1,5 +1,5 @@
 //! The radio-free SoC diagnostic image: the HIL console serving the SoC
-//! deadline watchdog, an intentional panic through the HIL panic hook and,
+//! deadline watchdog, an explicit host-requested retained reset and,
 //! in the `usb-jtag-off` image, the switch of the USB Serial/JTAG off its
 //! pads.
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel};
@@ -29,7 +29,7 @@ oer_espressif_executor::tasks! {
     /// The watchdog image's tasks.
     WatchdogTasks: Executor<0> {
         test_watchdog(service: DeadlineWatchdog) = test_watchdog;
-        panic_on_request() = super::panic::panic_on_request;
+        reset_on_request() = super::panic::reset_on_request;
         #[cfg(feature = "usb-jtag-off")]
         disable_on_request(pads: Pads) = usb_off::disable_on_request;
         run(usb: crate::transport::Usb, boot: u64) = run;
@@ -56,7 +56,7 @@ pub(crate) fn start<C: oer_espressif_interrupt_table::Controller>(
     match executor
         .run(hart, router, wake, line, (), |spawner| {
             WatchdogTasks::test_watchdog(spawner, service).expect("system watchdog test task");
-            WatchdogTasks::panic_on_request(spawner).expect("panic task");
+            WatchdogTasks::reset_on_request(spawner).expect("requested-reset task");
             #[cfg(feature = "usb-jtag-off")]
             WatchdogTasks::disable_on_request(spawner, pads).expect("USB switch task");
             WatchdogTasks::run(spawner, usb, boot).expect("system console task");
