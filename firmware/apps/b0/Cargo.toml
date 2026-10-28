@@ -30,6 +30,7 @@ oer-espressif-usb-serial-jtag.workspace = true
 oer-esp32s31-phy = { path = "../../../chips/esp32s31/phy" }
 oer-bluetooth-le-port = { path = "../../../protocols/bluetooth/le/port" }
 oer-bluetooth-le-controller = { path = "../../../protocols/bluetooth/le/controller" }
+oer-bluetooth-le-runtime = { path = "../../../protocols/bluetooth/le/runtime" }
 oer-radio-port = { path = "../../../protocols/radio/port" }
 oer-radio-regulatory = { path = "../../../protocols/radio/regulatory" }
 oer-esp32s31-radio-client = { path = "../../../chips/esp32s31/radio/client", features = ["bluetooth"] }

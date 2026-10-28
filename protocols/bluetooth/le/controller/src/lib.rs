@@ -14,7 +14,8 @@
 )]
 
 //! Portable Bluetooth LE Controller services and pure protocol pieces.
-//! No transport, executor, clock implementation, scheduler or hardware is owned here.
+//! All production transitions are synchronous. No transport, executor, clock
+//! implementation, scheduler or hardware is owned here; LE runtime awaits port IO.
 //!
 //! - [`timing`]: connection-event geometry over the backend's
 //!   [`ConnectionAllowances`](oer_bluetooth_le_port::ConnectionAllowances)
