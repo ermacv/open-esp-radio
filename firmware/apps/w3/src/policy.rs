@@ -45,7 +45,9 @@ mod tests {
         ));
         let destination = [2, 0, 0, 0, 0, 1];
         let source = [2, 0, 0, 0, 0, 2];
-        let (mut device, radio) = endpoint.split(NetworkInterfaceId::new(0), destination, pool);
+        let (mut device, radio) = endpoint
+            .split(NetworkInterfaceId::new(0), destination, pool)
+            .expect("endpoint split");
         radio.link_controller().set_link_up(true);
         let mut queue = MsduQueue::<EthernetFrame, RX_DEPTH>::new();
         let (sender, receiver) = queue.split();

@@ -1,14 +1,16 @@
 #![no_std]
 #![forbid(unsafe_code)]
 #![deny(
+    clippy::panic,
     clippy::unwrap_used,
     clippy::expect_used,
-    clippy::panic,
     clippy::unreachable,
     clippy::todo,
     clippy::unimplemented,
     clippy::indexing_slicing,
-    clippy::arithmetic_side_effects
+    clippy::arithmetic_side_effects,
+    clippy::disallowed_macros,
+    clippy::disallowed_methods
 )]
 
 //! The image's monotonic time on the `embassy-time` driver.
@@ -75,4 +77,5 @@ impl Timer for EmbassyClock {
 }
 
 #[cfg(test)]
+#[allow(clippy::disallowed_macros, clippy::disallowed_methods)]
 mod tests;

@@ -1,3 +1,5 @@
+#![allow(clippy::disallowed_macros, clippy::disallowed_methods)]
+
 //! Real packet owners through publication, nested selection and readiness.
 
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
@@ -38,7 +40,9 @@ fn udp(pool: PacketBufAllocator, destination: u8, port: u16, sequence: u8) -> Pa
 fn sparse_transport_flow_shares_the_peer_burst_without_draining_bulk() {
     let pool = allocator::<16>();
     let mut resources = OwnedEndpointResources::<NoopRawMutex, 1, 16>::new();
-    let (mut device, radio) = resources.split(NetworkInterfaceId::new(0), [2; 6], allocator::<1>());
+    let (mut device, radio) = resources
+        .split(NetworkInterfaceId::new(0), [2; 6], allocator::<1>())
+        .expect("endpoint split");
     radio.link_controller().set_link_up(true);
     for n in 0..14 {
         device.transmit(udp(pool, 4, 100, n)).unwrap();
@@ -70,7 +74,9 @@ fn sparse_transport_flow_shares_the_peer_burst_without_draining_bulk() {
 fn outer_destination_turns_are_independent_of_transport_flow_count() {
     let pool = allocator::<8>();
     let mut resources = OwnedEndpointResources::<NoopRawMutex, 1, 8>::new();
-    let (mut device, radio) = resources.split(NetworkInterfaceId::new(0), [2; 6], allocator::<1>());
+    let (mut device, radio) = resources
+        .split(NetworkInterfaceId::new(0), [2; 6], allocator::<1>())
+        .expect("endpoint split");
     radio.link_controller().set_link_up(true);
     // Insert the larger address first: public selection must not expose the
     // adapter's allocation order to a scheduler merging several sources.
@@ -115,7 +121,9 @@ impl Wake for Wakes {
 fn aggregate_readiness_sums_flows_without_waking_for_another_destination() {
     let pool = allocator::<4>();
     let mut resources = OwnedEndpointResources::<NoopRawMutex, 1, 4>::new();
-    let (mut device, radio) = resources.split(NetworkInterfaceId::new(0), [2; 6], allocator::<1>());
+    let (mut device, radio) = resources
+        .split(NetworkInterfaceId::new(0), [2; 6], allocator::<1>())
+        .expect("endpoint split");
     radio.link_controller().set_link_up(true);
     let wakes = Arc::new(Wakes::default());
     let waker = Waker::from(wakes.clone());
@@ -142,7 +150,9 @@ fn aggregate_readiness_sums_flows_without_waking_for_another_destination() {
 fn head_inspection_preserves_flow_rotation_packet_owners_and_admission() {
     let pool = allocator::<4>();
     let mut resources = OwnedEndpointResources::<NoopRawMutex, 1, 4>::new();
-    let (mut device, radio) = resources.split(NetworkInterfaceId::new(0), [2; 6], allocator::<1>());
+    let (mut device, radio) = resources
+        .split(NetworkInterfaceId::new(0), [2; 6], allocator::<1>())
+        .expect("endpoint split");
     radio.link_controller().set_link_up(true);
     let mut addresses = Vec::new();
     for (port, length, sequence) in [(1, 100, 1), (1, 200, 2), (2, 800, 3)] {

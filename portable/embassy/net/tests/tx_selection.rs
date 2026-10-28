@@ -1,3 +1,5 @@
+#![allow(clippy::disallowed_macros, clippy::disallowed_methods)]
+
 use oer_embassy_net::{NetworkInterfaceId, NoopRawMutex, OwnedEndpointResources};
 use oer_ieee80211_datapath::DestinationTxQueues;
 use std::{
@@ -40,7 +42,9 @@ fn sparse_destination_is_directly_available_behind_a_large_bulk_backlog() {
     let resources = Box::leak(Box::new(
         OwnedEndpointResources::<NoopRawMutex, 1, 128>::new(),
     ));
-    let (mut device, radio) = resources.split(NetworkInterfaceId::new(0), [2; 6], allocator::<1>());
+    let (mut device, radio) = resources
+        .split(NetworkInterfaceId::new(0), [2; 6], allocator::<1>())
+        .expect("endpoint split");
     radio.link_controller().set_link_up(true);
     for n in 0..127 {
         device.transmit(packet(pool, 2, n)).unwrap();
@@ -67,7 +71,9 @@ fn sparse_destination_is_directly_available_behind_a_large_bulk_backlog() {
 fn selected_wait_ignores_other_backlog_and_wakes_for_matching_publication() {
     let pool = allocator::<4>();
     let resources = Box::leak(Box::new(OwnedEndpointResources::<NoopRawMutex, 1, 4>::new()));
-    let (mut device, radio) = resources.split(NetworkInterfaceId::new(0), [2; 6], allocator::<1>());
+    let (mut device, radio) = resources
+        .split(NetworkInterfaceId::new(0), [2; 6], allocator::<1>())
+        .expect("endpoint split");
     radio.link_controller().set_link_up(true);
     device.transmit(packet(pool, 2, 1)).unwrap();
     let wakes = Arc::new(Wakes::default());
@@ -96,7 +102,9 @@ fn selected_wait_ignores_other_backlog_and_wakes_for_matching_publication() {
 fn selected_dequeue_cannot_retarget_owners_across_link_epochs() {
     let pool = allocator::<4>();
     let resources = Box::leak(Box::new(OwnedEndpointResources::<NoopRawMutex, 1, 4>::new()));
-    let (mut device, radio) = resources.split(NetworkInterfaceId::new(0), [2; 6], allocator::<1>());
+    let (mut device, radio) = resources
+        .split(NetworkInterfaceId::new(0), [2; 6], allocator::<1>())
+        .expect("endpoint split");
     let link = radio.link_controller();
     link.set_link_up(true);
     device.transmit(packet(pool, 2, 1)).unwrap();
@@ -125,7 +133,9 @@ fn selected_dequeue_cannot_retarget_owners_across_link_epochs() {
 fn an_any_destination_wait_wakes_for_the_first_publication_to_any_destination() {
     let pool = allocator::<4>();
     let resources = Box::leak(Box::new(OwnedEndpointResources::<NoopRawMutex, 1, 4>::new()));
-    let (mut device, radio) = resources.split(NetworkInterfaceId::new(0), [2; 6], allocator::<1>());
+    let (mut device, radio) = resources
+        .split(NetworkInterfaceId::new(0), [2; 6], allocator::<1>())
+        .expect("endpoint split");
     radio.link_controller().set_link_up(true);
     let wakes = Arc::new(Wakes::default());
     let waker = Waker::from(wakes.clone());

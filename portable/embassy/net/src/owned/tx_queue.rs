@@ -1,27 +1,36 @@
 //! Cross-core synchronization for destination/transport queues of owners.
 
 use core::{
-    cell::RefCell,
+    cell::Cell,
     task::{Context, Poll, Waker},
 };
 
-use embassy_sync::{
-    blocking_mutex::{Mutex, raw::RawMutex},
-    waitqueue::WakerRegistration,
-};
+use embassy_sync::blocking_mutex::{Mutex, raw::RawMutex};
 use oer_ieee80211_datapath::{DestinationTxHead, TxQueues};
 use oer_network::TransportFlow;
 
 use super::{
     QueuedPacket,
     tx_budget::{TxBudget, TxCredit},
+    wake_replaced,
 };
 
 struct State<const N: usize> {
     queues: TxQueues<[u8; 6], QueuedPacket, N, TransportFlow>,
-    receiver_waker: WakerRegistration,
+    receiver_waker: Option<Waker>,
     receiver_wait: Option<ReceiverWait>,
     radio_cursor: usize,
+}
+
+impl<const N: usize> State<N> {
+    const fn new() -> Self {
+        Self {
+            queues: TxQueues::new(),
+            receiver_waker: None,
+            receiver_wait: None,
+            radio_cursor: 0,
+        }
+    }
 }
 
 /// What the radio waits for.
@@ -34,7 +43,7 @@ enum ReceiverWait {
 }
 
 pub(super) struct TxQueue<M: RawMutex, const N: usize> {
-    state: Mutex<M, RefCell<State<N>>>,
+    state: Mutex<M, Cell<State<N>>>,
     budget: TxBudget<M>,
 }
 
@@ -42,13 +51,19 @@ impl<M: RawMutex, const N: usize> TxQueue<M, N> {
     pub(super) const fn new() -> Self {
         Self {
             budget: TxBudget::new(N),
-            state: Mutex::new(RefCell::new(State {
-                queues: TxQueues::new(),
-                receiver_waker: WakerRegistration::new(),
-                receiver_wait: None,
-                radio_cursor: 0,
-            })),
+            state: Mutex::new(Cell::new(State::new())),
         }
+    }
+
+    // The queue-owning State<N> is a stack temporary for this synchronous
+    // closure. No owner is dropped and no Waker callback runs until restored.
+    fn with_state<R>(&self, action: impl FnOnce(&mut State<N>) -> R) -> R {
+        self.state.lock(|cell| {
+            let mut state = cell.replace(State::new());
+            let result = action(&mut state);
+            cell.set(state);
+            result
+        })
     }
 
     pub(super) fn register_sender(&self, waker: &Waker) {
@@ -56,7 +71,7 @@ impl<M: RawMutex, const N: usize> TxQueue<M, N> {
     }
 
     pub(super) fn len(&self) -> usize {
-        self.state.lock(|state| state.borrow().queues.len())
+        self.with_state(|state| state.queues.len())
     }
 
     pub(super) fn is_empty(&self) -> bool {
@@ -79,9 +94,11 @@ impl<M: RawMutex, const N: usize> TxQueue<M, N> {
         if !self.budget.try_admit() {
             return Err(packet);
         }
-        let result = self.state.lock(|state| {
-            let mut state = state.borrow_mut();
-            state.queues.push_flow(destination, flow, packet)?;
+        let (result, wake) = self.with_state(|state| {
+            if let Err(packet) = state.queues.push_flow(destination, flow, packet) {
+                return (Err(packet), None);
+            }
+            let mut wake = None;
             if state.receiver_wait.is_some_and(|wait| match wait {
                 ReceiverWait::Destination(selected, minimum) => {
                     destination == selected && state.queues.len_for(selected) >= minimum
@@ -89,10 +106,13 @@ impl<M: RawMutex, const N: usize> TxQueue<M, N> {
                 ReceiverWait::Any => true,
             }) {
                 state.receiver_wait = None;
-                state.receiver_waker.wake();
+                wake = state.receiver_waker.take();
             }
-            Ok(())
+            (Ok(()), wake)
         });
+        if let Some(wake) = wake {
+            wake.wake();
+        }
         if result.is_err() {
             // Queue insertion normally cannot fail: queued owners are a subset
             // of the shared budget. Keep failure ownership explicit nonetheless.
@@ -107,39 +127,46 @@ impl<M: RawMutex, const N: usize> TxQueue<M, N> {
         minimum: usize,
         context: &mut Context<'_>,
     ) -> Poll<()> {
-        self.state.lock(|state| {
-            let mut state = state.borrow_mut();
-            if state.queues.len_for(destination) >= minimum.max(1) {
-                state.receiver_wait = None;
-                Poll::Ready(())
-            } else {
-                state.receiver_wait = Some(ReceiverWait::Destination(destination, minimum.max(1)));
-                state.receiver_waker.register(context.waker());
-                Poll::Pending
-            }
-        })
+        self.poll_ready(
+            ReceiverWait::Destination(destination, minimum.max(1)),
+            context,
+        )
     }
 
     pub(super) fn poll_ready_any(&self, context: &mut Context<'_>) -> Poll<()> {
-        self.state.lock(|state| {
-            let mut state = state.borrow_mut();
-            if state.queues.is_empty() {
-                state.receiver_wait = Some(ReceiverWait::Any);
-                state.receiver_waker.register(context.waker());
-                Poll::Pending
-            } else {
+        self.poll_ready(ReceiverWait::Any, context)
+    }
+
+    fn poll_ready(&self, wait: ReceiverWait, context: &mut Context<'_>) -> Poll<()> {
+        // Clone before taking state; even a custom clone callback may reenter.
+        let mut next = Some(context.waker().clone());
+        let (ready, previous) = self.with_state(|state| {
+            let ready = match wait {
+                ReceiverWait::Destination(destination, minimum) => {
+                    state.queues.len_for(destination) >= minimum
+                }
+                ReceiverWait::Any => !state.queues.is_empty(),
+            };
+            if ready {
                 state.receiver_wait = None;
-                Poll::Ready(())
+                (Poll::Ready(()), None)
+            } else {
+                state.receiver_wait = Some(wait);
+                let previous = core::mem::replace(&mut state.receiver_waker, next.take());
+                (Poll::Pending, previous)
             }
-        })
+        });
+        wake_replaced(previous, context.waker());
+        // An unused clone (already ready) also drops outside the lock.
+        drop(next);
+        ready
     }
 
     pub(super) fn next_head_after(
         &self,
         after: Option<[u8; 6]>,
     ) -> Option<([u8; 6], DestinationTxHead)> {
-        self.state.lock(|state| {
-            let state = state.borrow();
+        self.with_state(|state| {
             let (destination, head, pending_frames) = state.queues.next_head_after(after)?;
             Some((
                 destination,
@@ -152,8 +179,7 @@ impl<M: RawMutex, const N: usize> TxQueue<M, N> {
     }
 
     pub(super) fn head_for(&self, destination: [u8; 6]) -> Option<DestinationTxHead> {
-        self.state.lock(|state| {
-            let state = state.borrow();
+        self.with_state(|state| {
             let (head, pending_frames) = state.queues.head(destination)?;
             Some(DestinationTxHead {
                 ethernet_bytes: head.packet.len(),
@@ -166,9 +192,7 @@ impl<M: RawMutex, const N: usize> TxQueue<M, N> {
         &self,
         destination: Option<[u8; 6]>,
     ) -> Option<(QueuedPacket, TxCredit<'_, M>)> {
-        let packet = self.state.lock(|state| {
-            let mut state = state.borrow_mut();
-            let state = &mut *state;
+        let packet = self.with_state(|state| {
             let destination =
                 destination.or_else(|| state.queues.next_key(&mut state.radio_cursor))?;
             let packet = state.queues.pop(destination)?;
