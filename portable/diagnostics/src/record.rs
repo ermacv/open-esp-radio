@@ -16,7 +16,12 @@ pub struct BootSmokePassed;
 
 impl Event for BootSmokePassed {
     const KIND: Kind = Kind::new(Domain::Platform, 2);
-    const CHANNEL: Channel = Channel::new(Domain::Platform, 0);
+    const CHANNEL: Channel = const {
+        match Channel::new(Domain::Platform, 0) {
+            Ok(channel) => channel,
+            Err(_) => panic!("invalid trace channel"),
+        }
+    };
 
     fn encode(&self) -> [u32; 2] {
         [0, 0]

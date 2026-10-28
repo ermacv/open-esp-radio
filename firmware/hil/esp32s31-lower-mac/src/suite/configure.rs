@@ -50,7 +50,7 @@ pub(super) async fn run<'p, 'id, Id: radio::SlotIdentity + 'id>(
     case: Case,
 ) -> Ended<Id, Backend<Id>, Result<Trace, &'static str>> {
     ownership::DROPS.store(0, Ordering::Relaxed);
-    oer_trace::start(port::trace::Publication::CHANNEL.mask());
+    oer_espressif_staged_runtime::trace::start(port::trace::Publication::CHANNEL.mask());
     let station = Witness::Station;
     let ap = Witness::AccessPoint;
     let mut admitted = [

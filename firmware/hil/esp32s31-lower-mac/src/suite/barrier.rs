@@ -164,7 +164,7 @@ async fn exercise<'p, 'id: 'p, Id: radio::SlotIdentity + 'id>(
     ));
     irq::hold_completion(true);
     phase.debug_hold_completion(true);
-    oer_trace::start(port::trace::Publication::CHANNEL.mask());
+    oer_espressif_staged_runtime::trace::start(port::trace::Publication::CHANNEL.mask());
     let mut tickets = resources.tickets.into_iter();
     let mut buffers = resources.buffers.into_iter();
     let mut identities = [0; 2];

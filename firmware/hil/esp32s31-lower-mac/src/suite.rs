@@ -115,9 +115,9 @@ type Caps = Esp32s31Caps<TX>;
 static SHARED: StaticCell<PortSharedStorage<TX>> = StaticCell::new();
 static STORAGE: StaticCell<PortStorage<Device, TX>> = StaticCell::new();
 static DEVICE: StaticCell<Device> = StaticCell::new();
-static RETAINED: oer_trace::Retained<256, 4, 33> = oer_trace::Retained::new();
-static TRACE: oer_trace::Trace = oer_trace::Trace::new(&RETAINED);
-oer_trace::clock!(oer_embassy_time::now_micros);
+static RETAINED: oer_espressif_staged_runtime::trace::Retained<256, 4, 33> = oer_espressif_staged_runtime::trace::Retained::new();
+static TRACE: oer_espressif_staged_runtime::trace::Trace = oer_espressif_staged_runtime::trace::Trace::new(&RETAINED);
+oer_espressif_staged_runtime::trace_clock!(oer_embassy_time::now_micros);
 
 pub struct Boot {
     pub cell: MembershipCell<Wifi>,
@@ -481,7 +481,7 @@ async fn install(boot: Boot, config: Prepare) -> Result<PortParts<Device, TX>, &
         access_point_address: IndividualAddress::for_interface(boot.ap).map_err(|_| "AP")?,
         coex: &Coex,
     };
-    let _ = oer_trace::install(&TRACE);
+    let _ = oer_espressif_staged_runtime::trace::install(&TRACE);
     Ok(parts)
 }
 struct Discover {
@@ -729,7 +729,7 @@ async fn exchange<'p, 'id: 'p, Id: radio::SlotIdentity + 'id>(
     let source =
         <Family<Id> as TxBufferPool<'id, BufferClass<TX>>>::prepare::<Station, Caps>(source)
             .map_err(|_| "prepare")?;
-    oer_trace::start(port::trace::Publication::CHANNEL.mask());
+    oer_espressif_staged_runtime::trace::start(port::trace::Publication::CHANNEL.mask());
     phase
         .station()
         .submit(

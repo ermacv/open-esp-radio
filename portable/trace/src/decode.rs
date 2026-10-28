@@ -33,11 +33,8 @@ impl fmt::Display for Described<'_> {
             Some(kind) => write!(f, "{kind}")?,
             None => write!(f, "kind {:#06x}", self.record.kind)?,
         }
-        write!(
-            f,
-            " [{:#010x}, {:#010x}]",
-            self.record.words[0], self.record.words[1]
-        )
+        let [first, second] = self.record.words;
+        write!(f, " [{first:#010x}, {second:#010x}]")
     }
 }
 

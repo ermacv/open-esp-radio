@@ -181,7 +181,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Held<'_, 'id, Id, D, B
             self.storage.poison(Fault::Capacity);
         } else {
             #[cfg(all(oer_trace, oer_debug_control))]
-            oer_trace::emit(&trace::TerminalPosted);
+            oer_espressif_staged_runtime::trace::emit(&trace::TerminalPosted);
         }
         self.storage.shared.wake_body();
     }

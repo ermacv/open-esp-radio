@@ -89,7 +89,7 @@ async fn admit<'p, 'id: 'p, Id: radio::SlotIdentity + 'id>(
         },
         permission: permission.index(),
     };
-    oer_trace::start(port::trace::Publication::CHANNEL.mask());
+    oer_espressif_staged_runtime::trace::start(port::trace::Publication::CHANNEL.mask());
     let now = EmbassyClock.now();
     match mutation {
         Mutation::Install => phase.station().install_group_key(

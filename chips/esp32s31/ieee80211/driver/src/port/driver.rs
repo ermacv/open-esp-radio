@@ -922,7 +922,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Driver<'id, Id, D, B> 
             return Err(Fault::Capacity);
         }
         #[cfg(all(oer_trace, oer_debug_control))]
-        oer_trace::emit(&publication);
+        oer_espressif_staged_runtime::trace::emit(&publication);
         let _ = held;
         Ok(())
     }
@@ -1160,7 +1160,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Driver<'id, Id, D, B> 
                         ..
                     }) = &self.pending_command
                     {
-                        oer_trace::emit(&trace::GroupRollback {
+                        oer_espressif_staged_runtime::trace::emit(&trace::GroupRollback {
                             owners: [key.identity.slot, permission.index()],
                             previous_key_id: key.identity.key_id.get(),
                             attempted_key_id: key_id.get(),

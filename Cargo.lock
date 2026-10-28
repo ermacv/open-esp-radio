@@ -1969,6 +1969,7 @@ dependencies = [
  "oer-esp32s31-radio-coex",
  "oer-espressif-ieee80211-policy",
  "oer-espressif-interrupt-table",
+ "oer-espressif-staged-runtime",
  "oer-ieee80211-port",
  "oer-ieee80211-softmac",
  "oer-ieee80211-wire",
@@ -2219,6 +2220,7 @@ dependencies = [
  "oer-espressif-staged-layout",
  "oer-memory",
  "oer-riscv",
+ "oer-trace",
  "tempfile",
 ]
 
@@ -3750,9 +3752,6 @@ dependencies = [
 [[package]]
 name = "oer-trace"
 version = "0.1.0"
-dependencies = [
- "oer-memory",
-]
 
 [[package]]
 name = "oer-vendor-ieee802154-esp32s31"

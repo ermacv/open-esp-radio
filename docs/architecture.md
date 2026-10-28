@@ -573,6 +573,15 @@ its model and conformance case.
 
 ## Instrumentation and probes
 
+`oer-trace` contains only event values, encoding, decoding and ordering of
+caller-owned record slices. `oer-espressif-staged-runtime::trace` owns the
+retained recorder, commit/clear protocol, global installation and previous-boot
+policy. The image places its retained storage and recorder and supplies its
+clock with `trace_clock!`. The platform preserves OETR layout 1: the six-word
+header, 16-byte entries, three-word snapshot headers and snapshot payload words.
+Retained storage uses plain atomic loads/stores; the recorder's read-modify-write
+counters and global pointer/mask stay in ordinary atomic RAM.
+
 `trace` (what happened), `profile` (what it costs) and `debug-control`
 (knobs that force paths) are separate classes, each under its own cfg
 (`oer_trace`, `oer_profile`, `oer_debug_control`) that only `cargo fw` sets

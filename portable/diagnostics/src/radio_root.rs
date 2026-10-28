@@ -22,7 +22,12 @@ pub enum RadioRoot {
 
 impl Event for RadioRoot {
     const KIND: Kind = Kind::new(Domain::Platform, 1);
-    const CHANNEL: Channel = Channel::new(Domain::Platform, 0);
+    const CHANNEL: Channel = const {
+        match Channel::new(Domain::Platform, 0) {
+            Ok(channel) => channel,
+            Err(_) => panic!("invalid trace channel"),
+        }
+    };
 
     fn encode(&self) -> [u32; 2] {
         let clock = |clock| match clock {

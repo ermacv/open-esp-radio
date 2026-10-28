@@ -65,13 +65,24 @@ impl Kind {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Channel(u8);
 
+/// An index outside the selected domain's channel range.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct InvalidChannel {
+    pub domain: Domain,
+    pub index: u8,
+}
+
 impl Channel {
-    /// The `index`th channel of `domain`; fails to compile in a constant
-    /// when the domain's range has no such channel.
-    pub const fn new(domain: Domain, index: u8) -> Self {
+    /// The `index`th channel of `domain`, or the rejected input.
+    pub const fn new(domain: Domain, index: u8) -> Result<Self, InvalidChannel> {
         let (first, count) = domain.channels();
-        assert!(index < count, "the domain has no such trace channel");
-        Self(first + index)
+        if index >= count {
+            return Err(InvalidChannel { domain, index });
+        }
+        match first.checked_add(index) {
+            Some(bit) if bit < 64 => Ok(Self(bit)),
+            _ => Err(InvalidChannel { domain, index }),
+        }
     }
 
     /// The mask bit of this channel.
@@ -81,14 +92,6 @@ impl Channel {
 
     pub const fn mask(self) -> u64 {
         1 << self.0
-    }
-
-    pub(crate) const fn word(self) -> usize {
-        (self.0 / 32) as usize
-    }
-
-    pub(crate) const fn bit(self) -> u32 {
-        1 << (self.0 % 32)
     }
 }
 
