@@ -49,6 +49,7 @@ pub mod diagnostics;
 pub mod fatal;
 #[cfg(feature = "esp32s31")]
 pub mod phy_fault;
+pub mod trace;
 /// Shared retained/reset path selected only by staged Wi-Fi images.
 #[cfg(feature = "wifi-fault")]
 pub mod wifi_fault;

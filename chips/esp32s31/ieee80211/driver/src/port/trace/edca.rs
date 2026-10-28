@@ -116,26 +116,26 @@ pub(crate) fn contention<X: oer_ieee80211_port::backend::BackendTxProfile>(
     ac: WmmAccessCategory,
     backoff: u16,
 ) {
-    if !oer_trace::enabled(Publication::CHANNEL) {
+    if !oer_espressif_staged_runtime::trace::enabled(Publication::CHANNEL) {
         return;
     }
     for role in [VifRole::Station, VifRole::AccessPoint] {
         let set = policy.debug_edca(role);
         let wmm = set.wmm();
-        oer_trace::emit(&EdcaTable {
+        oer_espressif_staged_runtime::trace::emit(&EdcaTable {
             role,
             count: wmm.parameter_set_count,
             uapsd: wmm.uapsd,
         });
         for category in WmmAccessCategory::ALL {
-            oer_trace::emit(&EdcaRecord {
+            oer_espressif_staged_runtime::trace::emit(&EdcaRecord {
                 role,
                 category,
                 parameters: set.access_category(category),
             });
         }
     }
-    oer_trace::emit(&EdcaDraw {
+    oer_espressif_staged_runtime::trace::emit(&EdcaDraw {
         role: head,
         category: ac,
         exponent: policy.contention_exponent(LegacyTxQueue::from_access_category(ac)),

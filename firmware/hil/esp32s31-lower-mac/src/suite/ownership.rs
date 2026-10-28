@@ -323,7 +323,7 @@ pub(super) async fn run<'p, 'id, Id: radio::SlotIdentity + 'id>(
         let mut buffers = resources.buffers.into_iter();
         let mut phase = owner.phase();
         phase.debug_hold_publication(WmmAccessCategory::BestEffort, true);
-        oer_trace::start(port::trace::Publication::CHANNEL.mask());
+        oer_espressif_staged_runtime::trace::start(port::trace::Publication::CHANNEL.mask());
         for operation in conformance::OPERATIONS {
             let ticket = tickets.next().ok_or("ownership ticket")?;
             let mut buffer = buffers.next().ok_or("ownership buffer")?;
@@ -521,7 +521,7 @@ fn terminal_return<'id, Id: radio::SlotIdentity + 'id>(
             )
         }
         LowerMacTerminal::GateClosed(_) => {
-            oer_trace::emit(&GateClosed);
+            oer_espressif_staged_runtime::trace::emit(&GateClosed);
             Ok(())
         }
         _ => Err("ownership terminal kind"),

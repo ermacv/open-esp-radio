@@ -152,7 +152,7 @@ async fn exchange<'p, 'id: 'p, Id: radio::SlotIdentity + 'id>(
     let [first, second, last, ..] = resources.tickets;
     let [a, b, c, ..] = resources.buffers;
     let admitted = [first.index(), second.index(), last.index()];
-    oer_trace::start(port::trace::Publication::CHANNEL.mask());
+    oer_espressif_staged_runtime::trace::start(port::trace::Publication::CHANNEL.mask());
     for (ticket, buffer, role) in [
         (first, a, VifRole::Station),
         (second, b, VifRole::AccessPoint),

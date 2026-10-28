@@ -74,7 +74,7 @@ async fn exchange<'p, 'id: 'p, Id: radio::SlotIdentity + 'id>(
     .map_err(|_| "group prepare")?;
     irq::hold_completion(true);
     phase.debug_hold_completion(true);
-    oer_trace::start(port::trace::Publication::CHANNEL.mask());
+    oer_espressif_staged_runtime::trace::start(port::trace::Publication::CHANNEL.mask());
     phase
         .access_point()
         .submit(

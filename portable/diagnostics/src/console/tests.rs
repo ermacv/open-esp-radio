@@ -187,7 +187,12 @@ fn line_frames_remain_byte_identical_to_the_saved_stand_records() {
     struct PlatformEvent([u32; 2]);
     impl Event for PlatformEvent {
         const KIND: Kind = Kind::new(Domain::Platform, 1);
-        const CHANNEL: Channel = Channel::new(Domain::Platform, 0);
+        const CHANNEL: Channel = const {
+            match Channel::new(Domain::Platform, 0) {
+                Ok(channel) => channel,
+                Err(_) => panic!("invalid trace channel"),
+            }
+        };
         fn encode(&self) -> [u32; 2] {
             self.0
         }

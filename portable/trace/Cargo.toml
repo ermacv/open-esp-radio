@@ -5,17 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Typed, reset-retained event trace and snapshot slots for open ESP radio drivers"
-
-# Events are recorded under `cfg(oer_trace)`, the trace class. Without it
-# `emit`, `freeze` and `capture` compile to nothing, while the event types
-# stay available to host decoders.
-
-[dependencies]
-oer-memory = { path = "../memory" }
+description = "Typed trace events, decoding and caller-owned record buffers"
 
 [lints]
 workspace = true
-
-[package.metadata.docs.rs]
-rustdoc-args = ["--cfg", "oer_trace"]

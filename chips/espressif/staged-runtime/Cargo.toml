@@ -19,6 +19,7 @@ panic-hook = []
 wifi-fault = ["esp32s31"]
 
 [dependencies]
+oer-trace = { path = "../../../portable/trace" }
 bytemuck = { version = "1.25.2", default-features = false, features = ["derive"] }
 oer-diagnostics = { path = "../../../portable/diagnostics" }
 oer-espressif-staged-layout.workspace = true

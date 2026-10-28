@@ -50,7 +50,7 @@ mod trace_clock {
     fn now() -> u64 {
         0
     }
-    oer_trace::clock!(now);
+    oer_espressif_staged_runtime::trace_clock!(now);
 }
 
 pub mod ampdu_tx;

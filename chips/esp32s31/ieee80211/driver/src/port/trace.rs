@@ -12,7 +12,12 @@ pub struct Publication {
 }
 impl Event for Publication {
     const KIND: Kind = Kind::new(Domain::Ieee80211, 100);
-    const CHANNEL: Channel = Channel::new(Domain::Ieee80211, 19);
+    const CHANNEL: Channel = const {
+        match Channel::new(Domain::Ieee80211, 19) {
+            Ok(channel) => channel,
+            Err(_) => panic!("invalid trace channel"),
+        }
+    };
     fn encode(&self) -> [u32; 2] {
         [u32::from(self.ticket), u32::from(self.buffer)]
     }
@@ -77,8 +82,8 @@ pub const ENCODED_MPDU: Kind = Kind::new(Domain::Ieee80211, 101);
 #[cfg(oer_trace)]
 #[inline(always)]
 pub(crate) fn encoded_mpdu(bytes: &[u8]) {
-    if oer_trace::enabled(Publication::CHANNEL) {
-        oer_trace::capture(ENCODED_MPDU, |snapshot| {
+    if oer_espressif_staged_runtime::trace::enabled(Publication::CHANNEL) {
+        oer_espressif_staged_runtime::trace::capture(ENCODED_MPDU, |snapshot| {
             snapshot.push(bytes.len() as u32);
             for chunk in bytes.chunks(4) {
                 let mut word = [0; 4];
