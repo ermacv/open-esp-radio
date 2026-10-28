@@ -139,36 +139,9 @@ pub(in crate::image) fn overflow_rate(s: &mut Session<'_>) {
 // Emit every modeled lane separately: no hand-written register packing.
 fn enables(s: &Session<'_>, tag: u32) {
     let a = s.ble.bank.read_irq_enable_0();
-    emit(
-        tag,
-        u32::from(a.source_0()),
-        u32::from(a.source_1()),
-        u32::from(a.source_8()),
-    );
-    emit(
-        tag + 1,
-        u32::from(a.source_13()),
-        u32::from(a.source_15()),
-        u32::from(a.source_16()),
-    );
-    emit(
-        tag + 2,
-        u32::from(a.source_21()),
-        a.sources_27_28().get(),
-        a.bits_2_7_opaque().get(),
-    );
-    emit(
-        tag + 3,
-        a.bits_9_12_opaque().get(),
-        u32::from(a.bit_14_opaque()),
-        a.bits_17_20_opaque().get(),
-    );
-    emit(
-        tag + 4,
-        a.bits_22_26_opaque().get(),
-        a.bits_29_31_opaque().get(),
-        0,
-    );
+    for (offset, [a, b, c]) in super::enable_records::bank0(a).into_iter().enumerate() {
+        emit(tag + offset as u32, a, b, c);
+    }
     let b = s.ble.bank.read_irq_enable_1();
     emit(
         tag + 5,

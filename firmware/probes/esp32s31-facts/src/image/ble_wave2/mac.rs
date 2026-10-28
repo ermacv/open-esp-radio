@@ -1,6 +1,7 @@
 //! Positive digital controller-time causes, with bounded source observations.
 use super::{Bits, LIMIT, Session, emit, pac, setup, window};
 
+mod enable_records;
 mod natural;
 mod overflow;
 pub(in crate::image) use natural::{natural_ready, natural_wrap};
@@ -43,7 +44,8 @@ fn all_mask(s: &mut Session<'_>) {
             .set_source_16(false)
             .set_source_21(false)
             .set_sources_27_28(Bits::constant::<0>())
-            .set_bits_2_7_opaque(Bits::constant::<0>())
+            .set_iso_cig_reset_source(false)
+            .set_bits_3_7_opaque(Bits::constant::<0>())
             .set_bits_9_12_opaque(Bits::constant::<0>())
             .set_bit_14_opaque(false)
             .set_bits_17_20_opaque(Bits::constant::<0>())

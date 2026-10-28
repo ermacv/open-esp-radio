@@ -264,7 +264,10 @@ is bounded by 40,000,000 cycles and requests one real wrap; ordinary windows
 use 4096 cycles. Primary records hold the two raw status images and matrix
 bank3, then NRT images and matrix bank4. Following records encode selected
 enables explicitly; they are not raw enable words. Task enable17 is sampled
-separately. LP records hold counter/status/matrix3, bytes24/2c/matrix4,
+separately. Selection 104's ENA0 records report `iso_cig_reset_source` in
+the third value at enable-record offset 2 and `bits_3_7_opaque` in the
+third value at offset 4; every other field retains its position.
+LP records hold counter/status/matrix3, bytes24/2c/matrix4,
 bytes1c/20/task17, and mode58/target64/target6c. No gated peripheral read
 qualifies output-low; the matrix remains the clock-off observation.
 
