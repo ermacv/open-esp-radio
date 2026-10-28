@@ -13,7 +13,7 @@ use oer_os_process::owned::Child;
 use crate::{
     mac::Mac,
     router::quote,
-    ssh::{CommandObservation, Result, Ssh, Stderr, read_stderr},
+    ssh::{CommandObservation, Remote, Result, Ssh, Stderr, read_stderr},
 };
 
 pub struct Capture {
@@ -21,16 +21,17 @@ pub struct Capture {
     output: Option<JoinHandle<Result<String>>>,
     diagnostics: Option<JoinHandle<(bool, Stderr)>>,
     count: u16,
+    stop: Option<(Ssh, String)>,
     command: Option<CommandObservation>,
 }
 
-fn bounded(reader: impl Read) -> Result<String> {
+fn bounded(reader: impl Read, limit: usize) -> Result<String> {
     let mut bytes = Vec::new();
     reader
-        .take(128 * 1024 + 1)
+        .take(limit as u64 + 1)
         .read_to_end(&mut bytes)
         .map_err(|_| "cannot read router observation")?;
-    if bytes.len() > 128 * 1024 {
+    if bytes.len() > limit {
         return Err("router observation exceeded memory bound".to_owned());
     }
     String::from_utf8(bytes).map_err(|_| "router observation is not UTF-8".to_owned())
@@ -43,7 +44,29 @@ impl Capture {
         address: std::net::Ipv4Addr,
         count: u16,
     ) -> Result<Self> {
-        if !matches!(count, 10 | 100) {
+        Self::begin(ssh, interface, address, count, None)
+    }
+
+    pub(crate) fn start_load(
+        ssh: &Ssh,
+        interface: &str,
+        address: std::net::Ipv4Addr,
+        directory: &str,
+    ) -> Result<Self> {
+        Self::begin(ssh, interface, address, 10000, Some(directory))
+    }
+
+    fn begin(
+        ssh: &Ssh,
+        interface: &str,
+        address: std::net::Ipv4Addr,
+        count: u16,
+        directory: Option<&str>,
+    ) -> Result<Self> {
+        if !matches!(
+            (count, directory.is_some()),
+            (10 | 100, false) | (10000, true)
+        ) {
             return Err("invalid station echo count".to_owned());
         }
         if !super::usable_address(address) {
@@ -56,11 +79,30 @@ impl Capture {
             quote(interface)?,
             quote(&format!("icmp and host {address}"))?
         );
+        let (script, stop) = if let Some(directory) = directory {
+            let pid = quote(&format!("{directory}/capture.pid"))?;
+            let script = format!(
+                "printf '%s\\n' \"$$\" > {pid}; exec tcpdump -n -tt -l -i {} {}",
+                quote(interface)?,
+                quote(&format!("icmp and host {address}"))?
+            );
+            (
+                script,
+                Some((ssh.parallel(), format!("kill -INT \"$(cat {pid})\""))),
+            )
+        } else {
+            (script, None)
+        };
+        let limit = if stop.is_some() {
+            4 * 1024 * 1024
+        } else {
+            128 * 1024
+        };
         let mut child = ssh.start(&script)?;
         let stdout = child.take_stdout().ok_or("capture has no stdout")?;
         let stderr = child.take_stderr().ok_or("capture has no stderr")?;
         let (ready, readiness) = mpsc::sync_channel(1);
-        let output = std::thread::spawn(move || bounded(stdout));
+        let output = std::thread::spawn(move || bounded(stdout, limit));
         let diagnostics = std::thread::spawn(move || {
             let mut listening = false;
             let mut dropped = false;
@@ -89,6 +131,7 @@ impl Capture {
             output: Some(output),
             diagnostics: Some(diagnostics),
             count,
+            stop,
             command: Some(ssh.observe(&script)),
         };
         if readiness.recv_timeout(Duration::from_secs(10)).is_err() {
@@ -104,6 +147,12 @@ impl Capture {
         // Let tcpdump deliver its final buffered packet batch and statistics.
         // Killing SSH as soon as ping reports completion can truncate seq 100.
         // Incomplete/failed captures remain failures after this bounded drain.
+        let load = self.stop.is_some();
+        let stopped = self
+            .stop
+            .take()
+            .map(|(mut ssh, script)| ssh.run(&script))
+            .transpose();
         let waited = self.child.wait_timeout(Some(Duration::from_secs(10)));
         let status = self.child.try_wait().ok().flatten();
         let (complete, diagnostics) = self
@@ -124,6 +173,14 @@ impl Capture {
             .ok_or("missing capture reader")?
             .join()
             .map_err(|_| "capture reader panicked")??;
+        stopped?;
+        if load {
+            let echoes = super::parse_echoes_bounded(&text, 4 * 1024 * 1024, 21000)?;
+            return Ok((
+                echoes,
+                waited.is_ok_and(|status| status.success()) && complete,
+            ));
+        }
         completed_observation(
             &text,
             waited.is_ok_and(|status| status.success()),
@@ -135,6 +192,10 @@ impl Capture {
 
 impl Drop for Capture {
     fn drop(&mut self) {
+        if let Some((mut ssh, script)) = self.stop.take() {
+            let _ = ssh.run(&script);
+        }
+
         let _ = self.child.kill();
         if let Some(command) = self.command.take() {
             let diagnostics = self
@@ -414,6 +475,20 @@ mod tests {
         let oversized = vec![b'x'; 128 * 1024 + 1];
         assert!(departure_output(&oversized[..], ready).is_err());
     }
+    #[test]
+    fn load_capture_bounds_do_not_relax_the_standard_console_observation() {
+        let text = "1.000000 IP 192.0.2.1 > 192.0.2.8: ICMP echo request, id 7, seq 1, length 64\n"
+            .repeat(401);
+        assert!(super::super::parse_echoes(&text).is_err());
+        assert_eq!(
+            super::super::parse_echoes_bounded(&text, 4 * 1024 * 1024, 21000)
+                .unwrap()
+                .len(),
+            401
+        );
+        assert!(bounded(&b"oversized"[..], 2).is_err());
+    }
+
     #[test]
     fn natural_completion_retains_the_last_echo_pair_and_requires_all_400_rows() {
         let text = (1..=100).flat_map(|sequence| {

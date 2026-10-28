@@ -38,7 +38,16 @@ unchanged version 1 console block; missing probes still fail gate c. The
 normal final deauthentication and gate f remain required. A `w3.bridge`
 diagnostic records whole-workload turns (including empty RX phases), total RX
 frames dequeued and the maximum RX batch; the host derives the mean from the
-sum and turn count. Probe and bridge diagnostics are typed notes like the
+sum and turn count. `w3.queue` samples the service input occupancy once per
+bridge turn (including empty turns): `samples`, `sum`, `max`, turns with a
+ready input but blocked publisher (`publisher_blocked`), and successful
+publications (`published`). Its mean is `sum / samples`, not the mean batch
+size. `w3.echo` counts all router-to-station echo requests seen by the bridge
+and replies admitted to the service TX queue, independent of the version-1
+100-pair window. `w3.stack` snapshots whole-stack RX owners, validated IPv4
+echo requests, formed echo replies, TX attempts, TX refusals and refused
+IPv4 echo replies. Counters saturate and never change admission or retry.
+Probe, bridge and loss diagnostics are typed notes like the
 version 1 report and do not format text on the target.
 
 It uses no power save, hardware AID or fixed PHY rate. A software beacon-loss
@@ -46,6 +55,29 @@ deadline disconnects after six seconds without a matching BSS beacon.
 
 ```sh
 cargo fw run w3 --board s31-a
+```
+
+The additional `--load-1ms` mode uses the same leases, generated W3 AP profile
+and single configured build. The host prepares a temporary, hash-checked
+OpenWrt fping 5.3 extraction without installation; the router sends the #486
+56-byte, 1 ms × 10,000-request flood after two consecutive 5/5 readiness
+batches. Recovery batches are 5/5 at +0/1/5/15/30 s. A ready AP tcpdump stream
+covers the complete echo workload and must report zero kernel drops.
+The mode records its own load result and a loss table in `report.json`; the
+ordinary version-1 console block remains unchanged. Flood/recovery identities
+are separate from its 100-pair peer gate. All AP-initiated echoes, including
+warmup and recovery, are conserved across the bridge, stack, TX refusal,
+service TX and AP reply boundaries; the flood is also counted independently
+by identifier. A mismatch refuses the accounting instead of assigning losses.
+The AP-to-bridge residual includes service queue-full and any earlier loss;
+the aggregate service queue-full count also includes non-ICMP traffic.
+The preflash load gate requires a complete P1 bound <=42,192 bytes and zero
+unresolved sites; memory growth is reported. The source extraction is removed
+before releasing the lease. Loss measurements use AP evidence and make no
+claim about an independent over-the-air observation.
+
+```sh
+cargo fw run w3 --board s31-b --load-1ms
 ```
 
 The command obtains exclusive board, router and air ownership, applies the

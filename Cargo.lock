@@ -850,7 +850,7 @@ checksum = "dc2d050bdc5c21e0862a89256ed8029ae6c290a93aecefc73084b3002cdebb01"
 [[package]]
 name = "embassy-net"
 version = "0.9.1"
-source = "git+https://github.com/ermacv/embassy.git?rev=0c018c843303508300cbb15fb3be0ee7d58862ab#0c018c843303508300cbb15fb3be0ee7d58862ab"
+source = "git+https://github.com/ermacv/embassy.git?rev=d5d5d7d2110a383a8ff35f0409b83eee222ae94d#d5d5d7d2110a383a8ff35f0409b83eee222ae94d"
 dependencies = [
  "document-features",
  "embassy-futures",
@@ -4965,7 +4965,7 @@ dependencies = [
 [[package]]
 name = "xarxa"
 version = "0.1.0"
-source = "git+https://github.com/ermacv/xarxa.git?rev=ed9bf37f25c610566033e31abd14d7eb5096d93f#ed9bf37f25c610566033e31abd14d7eb5096d93f"
+source = "git+https://github.com/ermacv/xarxa.git?rev=f8693d5c22f98988f46d158b91dd27b9da44f671#f8693d5c22f98988f46d158b91dd27b9da44f671"
 dependencies = [
  "bitflags 2.13.1",
  "bytemuck",
@@ -4978,7 +4978,7 @@ dependencies = [
 [[package]]
 name = "xarxa-driver"
 version = "0.1.0"
-source = "git+https://github.com/ermacv/xarxa.git?rev=ed9bf37f25c610566033e31abd14d7eb5096d93f#ed9bf37f25c610566033e31abd14d7eb5096d93f"
+source = "git+https://github.com/ermacv/xarxa.git?rev=f8693d5c22f98988f46d158b91dd27b9da44f671#f8693d5c22f98988f46d158b91dd27b9da44f671"
 dependencies = [
  "atomic-waker",
  "document-features",

@@ -9,6 +9,7 @@ use oer_lab_router::w3::{Evidence, Ping, echo_gate, usable_address};
 pub mod ax211;
 #[cfg(target_os = "linux")]
 pub mod firmware;
+mod loss;
 
 type Result<T> = std::result::Result<T, String>;
 type Fields<'a> = BTreeMap<&'a str, &'a str>;

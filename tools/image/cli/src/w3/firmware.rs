@@ -35,11 +35,18 @@ struct RunReport {
     source_dirty: bool,
     phase: &'static str,
     observations: Option<Evidence>,
+    load: Option<w3::load::Report>,
+    loss_accounting: Option<Vec<super::loss::Row>>,
     gates: Option<[bool; 5]>,
     workload_error: Option<String>,
     passed: bool,
 }
-pub fn run(root: &Path, selector: &str, timeout: Duration) -> Result<ExitCode> {
+pub fn run(
+    root: &Path,
+    selector: &str,
+    timeout: Duration,
+    load: Option<w3::load::Plan>,
+) -> Result<ExitCode> {
     let _signals = process::install_signal_handlers()?;
     let stand = oer_lab_model::Stand::load(&oer_lab_model::path()?)?;
     let selected = stand.board(selector).ok_or("unknown W3 board")?;
@@ -100,11 +107,14 @@ pub fn run(root: &Path, selector: &str, timeout: Duration) -> Result<ExitCode> {
         source_dirty: !dirty.stdout.is_empty(),
         phase: "profile",
         observations: None,
+        load: None,
+        loss_accounting: None,
         gates: None,
         workload_error: None,
         passed: false,
     };
     let result = (|| -> Result<()> {
+        let source = load.map(|_| w3::load::Source::prepare(&ssh)).transpose()?;
         let interface = config.wireless_interface.expose();
         let ssid = credentials::ssid("oer-w3")?;
         let profile = router::Profile::w3(
@@ -135,6 +145,25 @@ pub fn run(root: &Path, selector: &str, timeout: Duration) -> Result<ExitCode> {
             oer_image_checks::Enforced::Only([oer_image_checks::Check::Interrupts].into()),
             None,
         )?;
+        if load.is_some() {
+            let summary: oer_image_build::sizes::Summary = serde_json::from_slice(&fs::read(
+                bundle.directory.join(oer_image_build::sizes::FILE),
+            )?)?;
+            let runtime = summary
+                .elfs
+                .get("runtime")
+                .ok_or("missing runtime size observations")?;
+            let bound = runtime
+                .bounds
+                .get("CPU0 task stack")
+                .ok_or("missing W3 P1 bound")?;
+            load_stack_admission(bound.bytes, bound.complete, bound.holes.len())?;
+            eprintln!(
+                "fw: W3 load preflash P1={} limit=42192 unresolved={}",
+                bound.bytes,
+                bound.holes.len()
+            );
+        }
         // Start the bounded subscription after compilation, while the old
         // image is still selected. It must cover flash, the workload and
         // departure, without spending its lifetime on the image build.
@@ -209,7 +238,10 @@ pub fn run(root: &Path, selector: &str, timeout: Duration) -> Result<ExitCode> {
                 process::sleep(Duration::from_millis(100))?;
             };
             let router_address=ssh.run(&format!("set -e\nip -4 route get {} | awk '{{for(i=1;i<NF;i++) if($i==\"src\") print $(i+1)}}'",lease.address))?.trim().parse().map_err(|_|"ambiguous W3 router route source")?;
-            let capture = Capture::start(&ssh, interface, lease.address, 100)?;
+            let capture = match &source {
+                Some(source) => source.capture(interface, lease.address)?,
+                None => Capture::start(&ssh, interface, lease.address, 100)?,
+            };
             report.observations = Some(Evidence {
                 schema: 1,
                 target: target.masked(),
@@ -230,7 +262,17 @@ pub fn run(root: &Path, selector: &str, timeout: Duration) -> Result<ExitCode> {
             });
             report.phase = "ping";
             eprintln!("fw: W3 lease observed; router ping and capture started");
-            let ping = w3::ping(&mut ssh, lease.address, 100)?;
+            let ping = if let (Some(source), Some(plan)) = (&source, load) {
+                report.load = Some(source.run(lease.address, plan)?);
+                let flood = report.load.as_ref().ok_or("missing W3 load report")?.flood;
+                Ping {
+                    sent: flood.sent,
+                    received: flood.received,
+                    interval_ms: plan.interval_ms,
+                }
+            } else {
+                w3::ping(&mut ssh, lease.address, 100)?
+            };
             let text = console.join().map_err(|_| "W3 console reader panicked")??;
             let (echoes, complete) = capture.finish()?;
             let evidence = report
@@ -240,6 +282,9 @@ pub fn run(root: &Path, selector: &str, timeout: Duration) -> Result<ExitCode> {
             evidence.router_ping = ping;
             evidence.echoes = echoes;
             evidence.capture_complete = complete;
+            if let Some(load) = &mut report.load {
+                load.observe(&evidence.echoes, lease.address, router_address, complete)?;
+            }
             Ok(text)
         })?;
         report.phase = "departure";
@@ -261,10 +306,43 @@ pub fn run(root: &Path, selector: &str, timeout: Duration) -> Result<ExitCode> {
             serde_json::to_vec_pretty(evidence)?,
         )?;
         let parsed = super::parse(&console).map_err(|_| "malformed W3 firmware report")?;
-        let checked = super::check(&parsed, evidence)
-            .map_err(|_| "W3 report contradicts router observations")?;
-        report.gates = Some(checked.gates);
-        report.passed = checked.passed();
+        if let Some(load) = &report.load {
+            if !evidence.capture_complete {
+                return Err("incomplete AP load capture".into());
+            }
+            report.loss_accounting = Some(super::loss::account(
+                &console,
+                load.ap_requests,
+                load.ap_replies,
+            )?);
+            let gates = [
+                parsed.authenticated && parsed.associated && evidence.joined.joined(),
+                parsed.acquired
+                    && evidence.lease.is_some_and(|lease| {
+                        lease.address == parsed.address && lease.remaining_seconds > 0
+                    })
+                    && parsed.router == evidence.router_address,
+                parsed.ping.passed(),
+                load.passed(),
+                parsed.deauth_sent
+                    && parsed.tx_timeout == 0
+                    && parsed.queue_collision == 0
+                    && evidence.disconnect_event
+                    && evidence.after == Station::default(),
+            ];
+            // The load recipe has its own peer identities and acceptance; the
+            // standard version-1 report and its claims are retained verbatim.
+            report.passed = gates[0] && gates[1] && gates[3] && gates[4];
+            report.gates = Some(gates);
+        } else {
+            let checked = super::check(&parsed, evidence)
+                .map_err(|_| "W3 report contradicts router observations")?;
+            report.gates = Some(checked.gates);
+            report.passed = checked.passed();
+        }
+        if let Some(source) = source {
+            source.finish()?;
+        }
         report.phase = "complete";
         Ok(())
     })();
@@ -283,4 +361,25 @@ pub fn run(root: &Path, selector: &str, timeout: Duration) -> Result<ExitCode> {
     }
     println!("fw: W3 report {}", directory.join("report.json").display());
     Ok(ExitCode::from(u8::from(!report.passed)))
+}
+
+// The image owner's limit in firmware/apps/w3/README.md. Memory growth is a report.
+fn load_stack_admission(bytes: u64, complete: bool, unresolved: usize) -> Result<()> {
+    if !complete || unresolved != 0 || bytes > 42_192 {
+        return Err(
+            "W3 load requires a complete P1 bound <=42192 and zero unresolved sites".into(),
+        );
+    }
+    Ok(())
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn load_preflash_enforces_the_owner_bound_and_requires_resolved_paths() {
+        assert!(load_stack_admission(42192, true, 0).is_ok());
+        assert!(load_stack_admission(42193, true, 0).is_err());
+        assert!(load_stack_admission(38768, false, 0).is_err());
+        assert!(load_stack_admission(38768, true, 1).is_err());
+    }
 }

@@ -11,6 +11,7 @@ use crate::{
     ssh::{Remote, Result, Ssh},
 };
 
+pub mod load;
 pub mod network;
 pub mod stream;
 
@@ -256,7 +257,11 @@ pub fn parse_ping(text: &str) -> Result<Ping> {
 /// Decode only numeric IPv4 ICMP echo rows. No raw packet or identifiers are
 /// retained. A truncated, foreign or unsupported line refuses the observation.
 pub fn parse_echoes(text: &str) -> Result<Vec<Echo>> {
-    if text.len() > 128 * 1024 {
+    parse_echoes_bounded(text, 128 * 1024, 400)
+}
+
+pub(crate) fn parse_echoes_bounded(text: &str, bytes: usize, rows: usize) -> Result<Vec<Echo>> {
+    if text.len() > bytes {
         return Err("oversized ICMP observation".to_owned());
     }
     let mut echoes = Vec::new();
@@ -317,7 +322,7 @@ pub fn parse_echoes(text: &str) -> Result<Vec<Echo>> {
             identifier: parse_u16(id)?,
             sequence: parse_u16(sequence)?,
         });
-        if echoes.len() > 400 {
+        if echoes.len() > rows {
             return Err("too many ICMP observations".to_owned());
         }
     }

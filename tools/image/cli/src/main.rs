@@ -100,6 +100,9 @@ enum Command {
     /// for w1, 3 on a missing, malformed or contradicted report. For w1 the
     /// stand router is first brought to the W1 profile over SSH.
     Run {
+        /// W3 only: the #486 one-millisecond load and recovery recipe.
+        #[arg(long)]
+        load_1ms: bool,
         image: String,
         #[arg(long)]
         board: String,
@@ -222,9 +225,10 @@ fn main() -> ExitCode {
                 image,
                 board,
                 timeout,
+                load_1ms,
             } => {
                 let timeout = timeout.unwrap_or_else(|| image::run_timeout(&image));
-                return command::run(&root, &image, &board, timeout);
+                return command::run(&root, &image, &board, timeout, load_1ms);
             }
             Command::Monitor { board } => command::monitor(&root, &board)?,
             Command::Router => command::router_ready()?,
@@ -318,6 +322,33 @@ mod tests {
             }
         ));
         assert!(parse("fw sizes-refresh saved").is_err());
+    }
+
+    #[test]
+    fn w3_load_flag_and_plan_are_explicit() {
+        let Command::Run {
+            image, load_1ms, ..
+        } = parse("fw run w3 --board s31-b --load-1ms").unwrap().command
+        else {
+            panic!("run command");
+        };
+        assert!(load_1ms);
+        assert_eq!(
+            oer_lab_router::w3::load::Plan::select(&image, load_1ms)
+                .unwrap()
+                .unwrap()
+                .count,
+            10000
+        );
+        assert!(oer_lab_router::w3::load::Plan::select("w0", true).is_err());
+        assert!(matches!(
+            parse("fw run w3 --board s31-b").unwrap().command,
+            Command::Run {
+                load_1ms: false,
+                ..
+            }
+        ));
+        assert!(parse("fw build w3 --load-1ms").is_err());
     }
 
     #[test]
