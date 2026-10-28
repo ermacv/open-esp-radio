@@ -221,19 +221,31 @@ impl Ieee802154EventMask {
 
     /// Return whether the set contains more than one semantic event.
     pub const fn has_multiple(self) -> bool {
-        self.tx_done as u8
-            + self.rx_done as u8
-            + self.ack_tx_done as u8
-            + self.ack_rx_done as u8
-            + self.rx_abort as u8
-            + self.tx_abort as u8
-            + self.ed_done as u8
-            + self.timer0_overflow as u8
-            + self.timer1_overflow as u8
-            + self.clock_count_match as u8
-            + self.tx_sfd_done as u8
-            + self.rx_sfd_done as u8
-            > 1
+        let mut remaining: &[bool] = &[
+            self.tx_done,
+            self.rx_done,
+            self.ack_tx_done,
+            self.ack_rx_done,
+            self.rx_abort,
+            self.tx_abort,
+            self.ed_done,
+            self.timer0_overflow,
+            self.timer1_overflow,
+            self.clock_count_match,
+            self.tx_sfd_done,
+            self.rx_sfd_done,
+        ];
+        let mut seen = false;
+        while let Some((&present, rest)) = remaining.split_first() {
+            if present {
+                if seen {
+                    return true;
+                }
+                seen = true;
+            }
+            remaining = rest;
+        }
+        false
     }
 
     /// Collapse this named set into the closed diagnostic vocabulary.
@@ -690,4 +702,9 @@ impl Ieee802154EventObservation {
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::arithmetic_side_effects,
+    clippy::disallowed_macros,
+    reason = "tests assert behavior and compare with reference arithmetic"
+)]
 mod tests;

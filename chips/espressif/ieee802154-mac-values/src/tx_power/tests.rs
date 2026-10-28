@@ -133,3 +133,29 @@ fn duplicated_boundary_levels_follow_public_branch_precedence() {
     assert_eq!(maximum.selected_provider_index(), 4);
     assert_eq!(maximum.effective_dbm(), 42);
 }
+
+#[test]
+fn validated_extrema_and_storage_are_preserved() {
+    for raw in [&[i8::MIN][..], &[-5, -5, 0, 12, 12], &[i8::MAX]] {
+        let levels = Ieee802154TxPowerLevels::new(raw).unwrap();
+        assert_eq!(levels.levels_dbm(), raw);
+        assert_eq!(levels.lowest_dbm(), raw[0]);
+        assert_eq!(levels.highest_dbm(), raw[raw.len() - 1]);
+    }
+}
+
+#[test]
+fn every_descending_position_retains_the_original_observations() {
+    for index in 1..MAX_PROVIDER_LEVEL_COUNT {
+        let mut raw = [0; MAX_PROVIDER_LEVEL_COUNT];
+        raw[index] = -1;
+        assert_eq!(
+            Ieee802154TxPowerLevels::new(&raw),
+            Err(Ieee802154TxPowerLevelsError::Descending {
+                index,
+                previous_dbm: 0,
+                current_dbm: -1,
+            })
+        );
+    }
+}
