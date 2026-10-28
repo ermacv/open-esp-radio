@@ -1042,5 +1042,10 @@ fn sized<K: oer_ieee80211_port::Ieee80211Capabilities, C: oer_ieee80211_port::Tx
     .ok()
 }
 
+mod arp;
+mod ethernet;
+pub use arp::ArpFrameObservation;
+pub use ethernet::{EthernetFrame, FrameTooLong, MAX_ETHERNET_PAYLOAD_LEN, TxMsdu};
+
 #[cfg(test)]
 mod tests;

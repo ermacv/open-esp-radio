@@ -1,4 +1,5 @@
-//! ARP bytes remain local to the application sink. The public SN/PN lets an
+//! An observation of one ARP MSDU on the protected link, for an
+//! application's diagnostics. ARP bytes remain local to the application sink. The public SN/PN lets an
 //! application correlate an observed ARP with encrypted air traffic without
 //! exporting any traffic key. No IP or EAPOL payload is projected.
 use oer_ieee80211_wire::{
@@ -32,7 +33,7 @@ impl core::fmt::Debug for ArpFrameObservation {
 }
 impl ArpFrameObservation {
     #[inline(never)]
-    pub(super) fn transmit(bytes: &[u8], pn: CcmpPacketNumber) -> Option<Self> {
+    pub fn transmit(bytes: &[u8], pn: CcmpPacketNumber) -> Option<Self> {
         let header = DecodedHeader::decode(bytes)?;
         let body = header.body().get(CCMP_HEADER_LEN..)?;
         let (llc, payload) = body.split_first_chunk::<LLC_SNAP_HEADER_LEN>()?;
@@ -49,7 +50,7 @@ impl ArpFrameObservation {
         })
     }
     #[inline(never)]
-    pub(super) fn receive(bytes: &[u8], parts: &EthernetFrameParts<'_>) -> Option<Self> {
+    pub fn receive(bytes: &[u8], parts: &EthernetFrameParts<'_>) -> Option<Self> {
         if parts.ether_type != ETHER_TYPE_ARP {
             return None;
         }

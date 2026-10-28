@@ -85,10 +85,8 @@
 //! `WakingSpscQueue::split` exclusively borrows its storage. Both endpoints retain
 //! that borrow, so no second pair can coexist. After the pair returns, queued
 //! values remain owned by the queue and reach the next receiver in order.
-//! [`EthernetFrame`] retains its fixed header and bounded payload. Construction
-//! from checked Ethernet parts returns [`FrameTooLong`] for a payload exceeding
-//! [`MAX_ETHERNET_PAYLOAD_LEN`]; received payloads are never clipped. Raw-byte
-//! fixture parsing and serialization do not belong to the product API.
+//! Network frames are the data machine's checked [`EthernetFrame`]s; a
+//! received payload too long for one is refused, never clipped.
 
 use core::marker::PhantomData;
 use oer_ieee80211_port::TxBufferMemory as _;
@@ -111,7 +109,10 @@ use oer_ieee80211_port::{
 use oer_ieee80211_sta::port::{PortDataTokens, PortStaTokens, StationPairwiseKey};
 use oer_ieee80211_sta::{
     data,
-    data::{DataInput, DataProtection, DataRefusal, DataReturn, DataTxContext, Msdu, StaData},
+    data::{
+        ArpFrameObservation, DataInput, DataProtection, DataRefusal, DataReturn, DataTxContext,
+        EthernetFrame, FrameTooLong, Msdu, StaData, TxMsdu,
+    },
     machine::{
         Peer, RxBlockAckReply, StaAction, StaCallbacks, StaCommandRefused, StaCommandTerminal,
         StaInput, StaNotice, StaRequest, StaTokens, StaTransmit, StaTxContext, Station,
@@ -119,7 +120,6 @@ use oer_ieee80211_sta::{
 };
 use oer_ieee80211_upper_mac::block_ack::RxDisposition;
 use oer_ieee80211_upper_mac::rate_selection::{FrameRates, RateSelection};
-use oer_ieee80211_wire::qos::WmmUserPriority;
 use oer_memory::{WakingSpscReceiver, WakingSpscSender};
 use oer_radio_port::Slot;
 use oer_radio_port::{
@@ -382,17 +382,6 @@ pub use custody::{
     QuarantinedTerminals, RejectedTerminal, TerminalCustody, TerminalStorage, UnroutedTx,
 };
 
-mod arp_observation;
-pub use arp_observation::ArpFrameObservation;
-mod ethernet;
-pub use ethernet::{EthernetFrame, FrameTooLong, MAX_ETHERNET_PAYLOAD_LEN};
-
-/// One checked, owned Ethernet frame with its user priority.
-#[derive(Debug)]
-pub struct TxMsdu {
-    pub priority: WmmUserPriority,
-    pub frame: EthernetFrame,
-}
 
 /// What the application asks of the service.
 #[derive(Debug, Eq, PartialEq)]
@@ -444,7 +433,7 @@ pub enum ServiceOutput<
     /// A correlated successful hardware group-key installation. This carries
     /// the public CCMP KeyID only; it contains no key material.
     GroupKeyChanged {
-        key_id: oer_ieee80211_wire::ccmp::GroupKeyId,
+        key_id: oer_ieee80211_port::GroupKeyId,
         replaced: bool,
     },
     /// A request refused synchronously, with its original correlation.
@@ -528,9 +517,8 @@ impl<'id, K, Path: oer_radio_port::PoolPath, F: FnMut(ServiceOutput<'id, K, Path
 ///
 /// ```compile_fail,E0308
 /// use embassy_sync::{blocking_mutex::raw::NoopRawMutex, channel::Channel};
-/// use oer_ieee80211_runtime::station_service::{
-///     EthernetFrame, ServiceCommand, ServiceIo, ServiceOutput, TxMsdu,
-/// };
+/// use oer_ieee80211_runtime::station_service::{ServiceCommand, ServiceIo, ServiceOutput};
+/// use oer_ieee80211_sta::data::{EthernetFrame, TxMsdu};
 /// use oer_memory::WakingSpscQueue;
 /// let commands = Channel::<NoopRawMutex, ServiceCommand<()>, 1>::new();
 /// let mut tx = WakingSpscQueue::<TxMsdu, 1>::new();
@@ -546,9 +534,8 @@ impl<'id, K, Path: oer_radio_port::PoolPath, F: FnMut(ServiceOutput<'id, K, Path
 /// The composition moves one receiver into the service and retains its sole sender:
 ///
 /// ```
-/// use oer_ieee80211_runtime::station_service::{
-///     EthernetFrame, ServiceCommand, ServiceIo, ServiceOutput, TxMsdu,
-/// };
+/// use oer_ieee80211_runtime::station_service::{ServiceCommand, ServiceIo, ServiceOutput};
+/// use oer_ieee80211_sta::data::{EthernetFrame, TxMsdu};
 /// use oer_memory::WakingSpscQueue;
 /// let mut commands = WakingSpscQueue::<ServiceCommand<()>, 1>::new();
 /// let mut tx = WakingSpscQueue::<TxMsdu, 1>::new();
@@ -1001,7 +988,7 @@ struct PendingActions<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id> {
 
 struct PendingGroup<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id> {
     slot: <<B::Types<'id> as PhaseTypes<'id>>::StationKeys as KeyTypes<'id>>::GroupSlotIdentity,
-    key_id: Option<oer_ieee80211_wire::ccmp::GroupKeyId>,
+    key_id: Option<oer_ieee80211_port::GroupKeyId>,
     action: PendingGroupAction<'id, <B::Types<'id> as PhaseTypes<'id>>::EpochPath>,
 }
 
@@ -2250,7 +2237,7 @@ impl<
             if let Some(observation) = ArpFrameObservation::receive(bytes, &parts) {
                 io.output.emit(ServiceOutput::ArpFrame(observation));
             }
-            Self::queue_received(counters, io, parts);
+            Self::queue_received(counters, io, EthernetFrame::from_parts(parts));
         });
         if let Err(reason) = result {
             self.counters.rx_frames_dropped.increment();
@@ -2271,9 +2258,9 @@ impl<
             COMMAND_DEPTH,
             <B::Types<'id> as PhaseTypes<'id>>::StationCommandPath,
         >,
-        parts: oer_ieee80211_wire::data::EthernetFrameParts<'_>,
+        frame: Result<EthernetFrame, FrameTooLong>,
     ) {
-        match EthernetFrame::from_parts(parts) {
+        match frame {
             Ok(frame) => {
                 if io.receive.try_send(frame).is_err() {
                     counters.rx_msdus_queue_full.increment();

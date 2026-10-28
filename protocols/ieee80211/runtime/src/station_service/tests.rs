@@ -38,7 +38,7 @@ use {
 };
 
 use super::*;
-use oer_ieee80211_wire::qos::WmmAccessCategory;
+use oer_ieee80211_wire::qos::{WmmAccessCategory, WmmUserPriority};
 use oer_memory::WakingSpscQueue;
 
 mod block_ack;
@@ -690,7 +690,12 @@ impl<'id, Id: SlotIdentity + 'id> Application<'_, '_, 'id, Id> {
         let delivered = self.delivered.borrow();
         let mut frames = Vec::new();
         while let Some(msdu) = delivered.try_receive() {
-            frames.push(msdu.bytes().collect());
+            let parts = msdu.parts();
+            let mut bytes = Vec::from(parts.destination);
+            bytes.extend_from_slice(&parts.source);
+            bytes.extend_from_slice(&parts.ether_type.to_be_bytes());
+            bytes.extend_from_slice(parts.payload);
+            frames.push(bytes);
         }
         frames
     }
