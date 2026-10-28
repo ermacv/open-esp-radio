@@ -25,12 +25,13 @@ mod ieee802154;
 mod projection;
 mod radio;
 
-const PHY_CLOCK: oer_espressif_executor::Cooperative<oer_embassy_time::EmbassyClock> =
-    oer_espressif_executor::Cooperative::new(oer_embassy_time::EmbassyClock);
+const PHY_CLOCK: oer_espressif_executor::Cooperative<Esp32s31, oer_embassy_time::EmbassyClock> =
+    oer_espressif_executor::Cooperative::<Esp32s31, _>::new(oer_embassy_time::EmbassyClock);
 mod sar2_checkpoint;
 mod transport;
 mod tx_rate_checkpoint;
 
+use oer_esp32s31_compose::Esp32s31;
 use core::future::poll_fn;
 use oer_esp32s31_hal::{
     ieee802154::mac::Ieee802154InterruptOwner,
@@ -60,23 +61,23 @@ mod pilot_timing;
 oer_espressif_staged_runtime::interrupt_table! {
     contexts { app_wake: 1; radio_executor: 2; radio: 3; }
     /// The application executor's wake (thread mode).
-    wake: WakeToken = FromCpu0Irq => oer_espressif_executor::wake_handler::<0, FromCpu0Irq>, line 40, context app_wake, hart 0, Hardware;
+    wake: WakeToken = FromCpu0Irq => oer_espressif_executor::wake_handler::<Esp32s31, 0, FromCpu0Irq>, line 40, context app_wake, hart 0, Hardware;
     // SOURCE: family.toml [interrupts] highest-line; HW23_S31_P2_ARBITRATION_20261027
     // measures only this P2 pair on S31: FROM_CPU2 line17 before TIMG0 line16.
     phy: PhyToken = oer_esp32s31_hal::platform::timg0_alarm::Timg0AlarmInterrupt => phy_pilot::interrupt, line 16, context radio_executor, hart 0, Exempt(ExecutorLevel, "SAR/PWDET steps between radio executor rounds");
     /// The radio executor (P2), polled in its handler.
     radio: RadioToken = FromCpu2Irq => oer_espressif_executor::interrupt_handler::<RadioTasks, FromCpu2Irq>, line 17, context radio_executor, hart 0, Executor;
     /// The radio executor's timer alarm; it only acknowledges and pends.
-    radio_alarm: RadioAlarmToken = SystimerAlarm0 => oer_espressif_executor::alarm_interrupt::<0, SystimerAlarm0>, line 18, context radio, hart 0, Hardware;
+    radio_alarm: RadioAlarmToken = SystimerAlarm0 => oer_espressif_executor::alarm_interrupt::<Esp32s31, 0, SystimerAlarm0>, line 18, context radio, hart 0, Hardware;
     /// The application executor's timer alarm.
-    app_alarm: AppAlarmToken = SystimerAlarm1 => oer_espressif_executor::alarm_interrupt::<1, SystimerAlarm1>, line 41, context app_wake, hart 0, Hardware;
+    app_alarm: AppAlarmToken = SystimerAlarm1 => oer_espressif_executor::alarm_interrupt::<Esp32s31, 1, SystimerAlarm1>, line 41, context app_wake, hart 0, Hardware;
     /// The console's USB Serial/JTAG interrupt; it raises the endpoint's signal.
     console_usb: ConsoleUsb = ConsoleInterrupt => crate::transport::usb_interrupt, line 42, context app_wake, hart 0, Hardware;
 }
 
 oer_espressif_executor::tasks! {
     /// The radio executor's tasks (P2).
-    RadioTasks: InterruptExecutor<2> {
+    RadioTasks: InterruptExecutor<Esp32s31, 2> {
         #[cfg(not(feature = "diagnostic-radio-health"))]
         serve_radio(radio: &'static mut radio::Radio) = serve_radio;
         #[cfg(feature = "diagnostic-radio-health")]
@@ -86,7 +87,7 @@ oer_espressif_executor::tasks! {
 
 oer_espressif_executor::tasks! {
     /// The application executor's tasks.
-    AppTasks: Executor<0> {
+    AppTasks: Executor<Esp32s31, 0> {
         #[cfg(not(feature = "diagnostic-radio-health"))]
         console(usb: transport::Usb, boot: u64, chip: transport::Chip) = console;
         #[cfg(feature = "diagnostic-radio-health")]
@@ -197,7 +198,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
         });
     // RNG's inter-read settle needs an advancing clock before executor startup.
     let timer = runtime.system_timer;
-    oer_espressif_executor::init::<2, _, _>(
+    oer_espressif_executor::init::<Esp32s31, 2, _, _>(
         oer_espressif_executor::systimer::SystemTimer {
             comparators: timer.comparators,
             counter: timer.counter,
@@ -227,11 +228,11 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
     );
     #[cfg(feature = "diagnostic-radio-health")]
     radio.set_health_boot(boot);
-    oer_espressif_executor::bind::<0, _, _>(adopted.router(), interrupts.app_alarm, timer.alarm1)
+    oer_espressif_executor::bind::<Esp32s31, 0, _, _>(adopted.router(), interrupts.app_alarm, timer.alarm1)
         .unwrap_or_else(|failure| failure.reset());
     let software = runtime.software_interrupts;
     let (hart, router) = adopted.parts();
-    let radio_spawner = InterruptExecutor::<2>::new(software.line2)
+    let radio_spawner = InterruptExecutor::<Esp32s31, 2>::new(software.line2)
         .start(hart, router, interrupts.radio, software.irq2, ())
         .unwrap_or_else(|failure| failure.reset());
     if RadioTasks::serve_radio(&radio_spawner, radio).is_err() {
@@ -252,7 +253,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
         Err(error) => fail(error.name()),
     };
     let watchdog = runtime.watchdogs.rtc;
-    match Executor::<0>::new(software.line0)
+    match Executor::<Esp32s31, 0>::new(software.line0)
         .run(
             &hart,
             &mut router,

@@ -22,7 +22,7 @@ oer-esp32s31-hal = { path = "../../../chips/esp32s31/hal", features = ["bluetoot
 oer-esp32s31-bluetooth-driver = { path = "../../../chips/esp32s31/bluetooth/driver" }
 oer-espressif-staged-runtime = { path = "../../../chips/espressif/staged-runtime" }
 oer-esp32s31-compose = { path = "../../../chips/esp32s31/compose" }
-oer-espressif-executor = { path = "../../../chips/espressif/executor", features = ["esp32s31", "port-slots"] }
+oer-espressif-executor = { path = "../../../chips/espressif/executor", features = ["port-slots"] }
 oer-embassy-time = { path = "../../../portable/embassy/time" }
 oer-espressif-interrupt-table = { path = "../../../chips/espressif/interrupt-table" }
 oer-memory = { path = "../../../portable/memory" }

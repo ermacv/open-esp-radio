@@ -11,9 +11,9 @@
 //!   takes the mask once and polls each ready task once, by a direct call
 //!   through [`Tasks::poll`]; a task woken during the round waits for the
 //!   next round, which its executor is pended for.
-//! - Every waker is one vtable's: its data is the executor and the task's
-//!   index, never a pointer, and waking it sets the task's bit and pends its
-//!   executor.
+//! - Every waker is one vtable's, the binding's ([`Wakes`]): its data is
+//!   the executor and the task's index, never a pointer, and waking it sets
+//!   the task's bit and pends its executor.
 //!
 //! A start may run in a lower context than the executor that polls the task
 //! (the radio executor's tasks start from the application). The starter
@@ -91,9 +91,22 @@ pub const fn once<M: FnOnce() -> F, F: Future<Output = ()>>(start: M) -> M {
     start
 }
 
+/// How the wakers of a chip binding reach its executors: the binding's one
+/// waker vtable, which its declaration makes from [`waker_vtable`], and the
+/// pend of an executor for a task its ready mask holds. Every executor
+/// binding has it.
+pub trait Wakes: 'static {
+    /// The binding's one waker vtable.
+    fn vtable() -> &'static RawWakerVTable;
+    /// Pend executor `executor` for a ready task.
+    fn pend_task(executor: u8);
+}
+
 /// The tasks of one executor, declared by [`tasks!`](crate::tasks), which
 /// implements this trait.
 pub trait Tasks: Sized + 'static {
+    /// The chip binding of the executor.
+    type Binding: Wakes;
     /// [`Thread`] or [`Interrupt`].
     type Mode;
     /// The executor's software interrupt.
@@ -149,7 +162,7 @@ impl<T: Tasks> Spawner<T> {
         T::Mode: Admits<M>,
     {
         task.claim()?.publish(start);
-        crate::task::wake(TaskId {
+        wake::<T::Binding>(TaskId {
             executor: T::EXECUTOR,
             index: task.index,
         });
@@ -367,39 +380,42 @@ impl TaskId {
         }
     }
 
-    /// The task `waker` wakes, when it is one of the executor's wakers.
-    pub(crate) fn of(waker: &Waker) -> Option<Self> {
-        core::ptr::eq(waker.vtable(), &VTABLE).then(|| Self::from_data(waker.data()))
+    /// The task `waker` wakes, when it is one of binding `W`'s wakers.
+    pub(crate) fn of<W: Wakes>(waker: &Waker) -> Option<Self> {
+        core::ptr::eq(waker.vtable(), W::vtable()).then(|| Self::from_data(waker.data()))
     }
 
     /// The task's waker.
-    pub(crate) fn waker(self) -> Waker {
-        // SAFETY: the vtable's functions keep the `RawWaker` contract: the
-        // data is a plain value, so cloning copies it and dropping does
-        // nothing, and waking only sets an atomic bit and pends the
-        // executor, from any context.
-        unsafe { Waker::new(self.data(), &VTABLE) }
+    pub(crate) fn waker<W: Wakes>(self) -> Waker {
+        // SAFETY: the binding's vtable is `waker_vtable::<W>()`, whose
+        // functions keep the `RawWaker` contract: the data is a plain value,
+        // so cloning copies it and dropping does nothing, and waking only
+        // sets an atomic bit and pends the executor, from any context.
+        unsafe { Waker::new(self.data(), W::vtable()) }
     }
 }
 
-/// The executor's one waker vtable.
-static VTABLE: RawWakerVTable = RawWakerVTable::new(clone, wake_data, wake_data, drop_data);
-
-fn clone(data: *const ()) -> RawWaker {
-    RawWaker::new(data, &VTABLE)
+/// The waker vtable of binding `W`, which its declaration holds as its one
+/// `static`: the image checks find exactly one waker vtable.
+pub const fn waker_vtable<W: Wakes>() -> RawWakerVTable {
+    RawWakerVTable::new(clone::<W>, wake_data::<W>, wake_data::<W>, drop_data)
 }
 
-fn wake_data(data: *const ()) {
-    wake(TaskId::from_data(data));
+fn clone<W: Wakes>(data: *const ()) -> RawWaker {
+    RawWaker::new(data, W::vtable())
+}
+
+fn wake_data<W: Wakes>(data: *const ()) {
+    wake::<W>(TaskId::from_data(data));
 }
 
 fn drop_data(_: *const ()) {}
 
 /// Mark `task` ready and pend its executor.
-pub(crate) fn wake(task: TaskId) {
+pub(crate) fn wake<W: Wakes>(task: TaskId) {
     if let Some(ready) = ready(task.executor) {
         ready.mark(task.index);
-        pend(task.executor);
+        W::pend_task(task.executor);
     }
 }
 
@@ -441,22 +457,22 @@ impl Current {
     }
 
     /// The task polled now, when `waker` is its waker.
-    pub(crate) fn matching(&self, executor: u8, waker: &Waker) -> Option<TaskId> {
+    pub(crate) fn matching<W: Wakes>(&self, executor: u8, waker: &Waker) -> Option<TaskId> {
         let current = self.0.load(Ordering::Relaxed);
-        TaskId::of(waker).filter(|task| task.executor == executor && task.index == current)
+        TaskId::of::<W>(waker).filter(|task| task.executor == executor && task.index == current)
     }
 }
 
 /// The signal side of an executor (`oer_espressif_interrupt_table::signal`): the task
 /// its `current` names, when `cx`'s waker is the waker of the task
 /// executor `executor` polls now.
-pub(crate) fn signal_current(
+pub(crate) fn signal_current<W: Wakes>(
     current: &Current,
     executor: u8,
     cx: &Context<'_>,
 ) -> Result<TaskId, oer_espressif_interrupt_table::signal::ForeignTask> {
     current
-        .matching(executor, cx.waker())
+        .matching::<W>(executor, cx.waker())
         .ok_or(oer_espressif_interrupt_table::signal::ForeignTask)
 }
 
@@ -488,7 +504,7 @@ pub(crate) fn poll_round<T: Tasks>(
             executor: T::EXECUTOR,
             index,
         }
-        .waker();
+        .waker::<T::Binding>();
         T::poll(index, &token, &mut Context::from_waker(&waker));
         current.0.store(NO_TASK, Ordering::Relaxed);
     }
@@ -501,14 +517,19 @@ fn ready(executor: u8) -> Option<&'static Ready> {
     crate::executor::ready(executor)
 }
 
-/// Pend executor `executor` for a ready task.
 #[cfg(feature = "chip")]
-fn pend(executor: u8) {
-    crate::executor::pend_task(executor);
+impl<B: crate::Binding> Wakes for B {
+    #[inline(always)]
+    fn vtable() -> &'static RawWakerVTable {
+        B::waker_vtable()
+    }
+    fn pend_task(executor: u8) {
+        crate::executor::pend_task::<B>(executor);
+    }
 }
 
 #[cfg(all(test, not(feature = "chip")))]
-use tests::{pend, ready};
+use tests::ready;
 
 /// Declare the tasks of one executor.
 ///
@@ -523,7 +544,7 @@ use tests::{pend, ready};
 /// ```ignore
 /// oer_espressif_executor::tasks! {
 ///     /// The radio executor's tasks (P2).
-///     pub(crate) RadioTasks: InterruptExecutor<2> {
+///     pub(crate) RadioTasks: InterruptExecutor<Esp32s31, 2> {
 ///         /// The radio system's actor.
 ///         radio_actor(actor: &'static mut Actor) = radio_actor;
 ///         #[cfg(feature = "timers")]
@@ -533,25 +554,25 @@ use tests::{pend, ready};
 /// RadioTasks::radio_actor(&radio, actor)?;
 /// ```
 ///
-/// The set's executor is `InterruptExecutor<N>` or `Executor<N>`; its
-/// interrupt handler is `interrupt_handler::<Set>`, its run is
-/// `Executor::<N>::run::<Set, _>`.
+/// The set's executor is `InterruptExecutor<B, N>` or `Executor<B, N>` of
+/// the chip binding `B`; its interrupt handler is
+/// `interrupt_handler::<Set, _>`, its run is `Executor::<B, N>::run::<Set, …>`.
 #[macro_export]
 macro_rules! tasks {
     (
         $(#[$set_attr:meta])*
-        $vis:vis $set:ident : InterruptExecutor < $executor:literal > { $($tasks:tt)* }
+        $vis:vis $set:ident : InterruptExecutor < $binding:ty, $executor:literal > { $($tasks:tt)* }
     ) => {
-        $crate::tasks!(@set [$(#[$set_attr])*] [$vis] $set [$crate::task::Interrupt] $executor { $($tasks)* });
+        $crate::tasks!(@set [$(#[$set_attr])*] [$vis] $set [$binding] [$crate::task::Interrupt] $executor { $($tasks)* });
     };
     (
         $(#[$set_attr:meta])*
-        $vis:vis $set:ident : Executor < $executor:literal > { $($tasks:tt)* }
+        $vis:vis $set:ident : Executor < $binding:ty, $executor:literal > { $($tasks:tt)* }
     ) => {
-        $crate::tasks!(@set [$(#[$set_attr])*] [$vis] $set [$crate::task::Thread] $executor { $($tasks)* });
+        $crate::tasks!(@set [$(#[$set_attr])*] [$vis] $set [$binding] [$crate::task::Thread] $executor { $($tasks)* });
     };
     (
-        @set [$($set_attr:tt)*] [$vis:vis] $set:ident [$mode:ty] $executor:literal {
+        @set [$($set_attr:tt)*] [$vis:vis] $set:ident [$binding:ty] [$mode:ty] $executor:literal {
             $(
                 $(#[$attr:meta])*
                 $name:ident ( $($argument:ident : $type:ty),* $(,)? ) = $body:path;
@@ -564,6 +585,7 @@ macro_rules! tasks {
         }
 
         impl $crate::task::Tasks for $set {
+            type Binding = $binding;
             type Mode = $mode;
             const EXECUTOR: u8 = $executor;
             const COUNT: u8 = 0 $(+ { let _ = stringify!($name); 1 })*;

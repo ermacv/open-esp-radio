@@ -3,6 +3,7 @@ mod report;
 mod scan;
 mod usb;
 
+use oer_esp32s31_compose::Esp32s31;
 use oer_embassy_time::EmbassyClock;
 use oer_esp32s31_board as board;
 use oer_esp32s31_hal::platform::{
@@ -39,7 +40,7 @@ mod phy_pilot;
 oer_espressif_staged_runtime::interrupt_table! {
     contexts { app_wake: 1; radio_executor: 2; radio: 3; }
     /// The application executor's wake (thread mode).
-    wake: WakeToken = FromCpu0Irq => oer_espressif_executor::wake_handler::<0, FromCpu0Irq>, line 40, context app_wake, hart 0, Hardware;
+    wake: WakeToken = FromCpu0Irq => oer_espressif_executor::wake_handler::<Esp32s31, 0, FromCpu0Irq>, line 40, context app_wake, hart 0, Hardware;
     // SOURCE: family.toml [interrupts] highest-line; HW23_S31_P2_ARBITRATION_20261027
     // measures only this P2 pair on S31: FROM_CPU2 line17 before TIMG0 line16.
     phy: PhyToken = oer_esp32s31_hal::platform::timg0_alarm::Timg0AlarmInterrupt => phy_pilot::interrupt, line 16, context radio_executor, hart 0, Exempt(ExecutorLevel, "SAR/PWDET steps between radio executor rounds");
@@ -48,9 +49,9 @@ oer_espressif_staged_runtime::interrupt_table! {
     /// The radio handler (P3): both MAC banks and the doorbell.
     wifi: WifiToken = WifiIrqPart<irq::Lower> => crate::irq::on_wifi, line 18, context radio, hart 0, Hardware;
     /// The radio executor's timer alarm; it only acknowledges and pends.
-    radio_alarm: RadioAlarmToken = SystimerAlarm0 => oer_espressif_executor::alarm_interrupt::<0, SystimerAlarm0>, line 19, context radio, hart 0, Hardware;
+    radio_alarm: RadioAlarmToken = SystimerAlarm0 => oer_espressif_executor::alarm_interrupt::<Esp32s31, 0, SystimerAlarm0>, line 19, context radio, hart 0, Hardware;
     /// The application executor's timer alarm.
-    app_alarm: AppAlarmToken = SystimerAlarm1 => oer_espressif_executor::alarm_interrupt::<1, SystimerAlarm1>, line 41, context app_wake, hart 0, Hardware;
+    app_alarm: AppAlarmToken = SystimerAlarm1 => oer_espressif_executor::alarm_interrupt::<Esp32s31, 1, SystimerAlarm1>, line 41, context app_wake, hart 0, Hardware;
     /// The console's USB Serial/JTAG interrupt; it raises the endpoint's signal.
     console_usb: ConsoleUsb = ConsoleInterrupt => crate::usb::interrupt, line 42, context app_wake, hart 0, Hardware;
 }
@@ -59,7 +60,7 @@ use usb::Console;
 
 oer_espressif_executor::tasks! {
     /// The radio executor's tasks (P2).
-    RadioTasks: InterruptExecutor<2> {
+    RadioTasks: InterruptExecutor<Esp32s31, 2> {
         radio_actor(actor: &'static mut Actor) = radio_actor;
         scanner(boot: scan::Boot) = scan::scanner;
     }
@@ -67,7 +68,7 @@ oer_espressif_executor::tasks! {
 
 oer_espressif_executor::tasks! {
     /// The application executor's tasks.
-    AppTasks: Executor<0> {
+    AppTasks: Executor<Esp32s31, 0> {
         reporting(
             console: Console,
             pads: oer_esp32s31_hal::usb_serial_jtag::UsbPads,
@@ -84,7 +85,7 @@ type Actor = RadioSystem<
     RcSlow,
     Esp32s31Radio<
         ChipClocks,
-        oer_espressif_executor::Cooperative<EmbassyClock>,
+        oer_espressif_executor::Cooperative<Esp32s31, EmbassyClock>,
         NoopPhyTargetObserver,
         crate::phy_pilot::Client,
     >,
@@ -149,14 +150,14 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
         domain,
         partitions.wifi_coex,
         runtime.clocks,
-        oer_espressif_executor::Cooperative::new(EmbassyClock),
+        oer_espressif_executor::Cooperative::<Esp32s31, _>::new(EmbassyClock),
         NoopPhyTargetObserver,
         PhyRegisterConfig::new(identity),
         phy_pilot,
     );
     let actor = ACTOR.init_with(|| RadioSystem::new(end, backend, EmbassyClock, lp));
     let timer = runtime.system_timer;
-    oer_espressif_executor::init::<2, _, _>(
+    oer_espressif_executor::init::<Esp32s31, 2, _, _>(
         oer_espressif_executor::systimer::SystemTimer {
             comparators: timer.comparators,
             counter: timer.counter,
@@ -166,12 +167,12 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
         timer.alarm0,
     )
     .unwrap_or_else(|failure| failure.reset());
-    oer_espressif_executor::bind::<0, _, _>(adopted.router(), interrupts.app_alarm, timer.alarm1)
+    oer_espressif_executor::bind::<Esp32s31, 0, _, _>(adopted.router(), interrupts.app_alarm, timer.alarm1)
         .unwrap_or_else(|failure| failure.reset());
     let software = runtime.software_interrupts;
     // The radio handler's part holds both MAC banks and the doorbell's
     // lowering half; its binding makes the doorbell's ringing half.
-    let (line, ack) = oer_espressif_executor::DoorbellLine::<3>::split(software.line3);
+    let (line, ack) = oer_espressif_executor::DoorbellLine::<Esp32s31, 3>::split(software.line3);
     let bound = adopted
         .router()
         .bind(
@@ -187,7 +188,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
     let (bell, urgent) = Doorbell::new::<FromCpu3Irq>(line, &bound);
     let bell = irq::ImageDoorbell(bell);
     let (hart, router) = adopted.parts();
-    let radio = InterruptExecutor::<2>::new(software.line2)
+    let radio = InterruptExecutor::<Esp32s31, 2>::new(software.line2)
         .start(hart, router, interrupts.radio, software.irq2, urgent)
         .unwrap_or_else(|failure| failure.reset());
     let (sender, receiver) = REPORT.init(AffineSpscQueue::new()).split();
@@ -212,7 +213,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
         fail(oer_diagnostics::name!("scanner-start"; 32));
     }
     let (console, pads) = usb::open(adopted.router(), interrupts.console_usb);
-    let executor = Executor::<0>::new(software.line0);
+    let executor = Executor::<Esp32s31, 0>::new(software.line0);
     let (mut router, hart) = match adopted.enable_interrupts() {
         Ok(router) => router,
         Err(error) => fail(error.name()),

@@ -1,4 +1,5 @@
 //! Permanent physical P2 worker. Only ordinary graph return admits another epoch.
+use oer_esp32s31_compose::Esp32s31;
 use super::*;
 use core::future::{pending, poll_fn};
 use embassy_futures::select::{Either, select};
@@ -44,7 +45,7 @@ use oer_time::{Clock, Duration, Timer};
 
 type Shared = Esp32s31Radio<
     ChipClocks,
-    oer_espressif_executor::Cooperative<EmbassyClock>,
+    oer_espressif_executor::Cooperative<Esp32s31, EmbassyClock>,
     NoopPhyTargetObserver,
     crate::phy_pilot::Client,
 >;
@@ -55,7 +56,7 @@ oer_esp32s31_hal::dma_static! {static ARENA:Arena=zeroed in ".dma.bss.bluetooth.
 
 oer_espressif_executor::tasks! {
     /// The radio executor's tasks (P2).
-    pub(crate) RadioTasks: InterruptExecutor<2> {
+    pub(crate) RadioTasks: InterruptExecutor<Esp32s31, 2> {
         driver(boot: &'static mut Boot) = task::driver;
         supervisor() = bridge::supervisor;
     }
@@ -63,7 +64,7 @@ oer_espressif_executor::tasks! {
 
 oer_espressif_executor::tasks! {
     /// The application executor's tasks.
-    pub(crate) AppTasks: Executor<0> {
+    pub(crate) AppTasks: Executor<Esp32s31, 0> {
         serve(
             console: host::Console,
             pads: oer_esp32s31_hal::usb_serial_jtag::UsbPads,
@@ -206,14 +207,14 @@ pub fn boot(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::pla
         domain,
         parts.wifi_coex,
         runtime.clocks,
-        oer_espressif_executor::Cooperative::new(EmbassyClock),
+        oer_espressif_executor::Cooperative::<Esp32s31, _>::new(EmbassyClock),
         NoopPhyTargetObserver,
         PhyRegisterConfig::new(identity),
         phy_pilot,
     );
     let actor = RadioSystem::new(end, backend, EmbassyClock, lp);
     let timer = runtime.system_timer;
-    oer_espressif_executor::init::<2, _, _>(
+    oer_espressif_executor::init::<Esp32s31, 2, _, _>(
         oer_espressif_executor::systimer::SystemTimer {
             comparators: timer.comparators,
             counter: timer.counter,
@@ -223,7 +224,7 @@ pub fn boot(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::pla
         timer.alarm0,
     )
     .unwrap_or_else(|failure| failure.reset());
-    oer_espressif_executor::bind::<0, _, _>(adopted.router(), tokens.app_alarm, timer.alarm1)
+    oer_espressif_executor::bind::<Esp32s31, 0, _, _>(adopted.router(), tokens.app_alarm, timer.alarm1)
         .unwrap_or_else(|failure| failure.reset());
     let software = runtime.software_interrupts;
     let Ok(bound) = irq::bind(
@@ -272,7 +273,7 @@ pub fn boot(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::pla
         crate::fail("radio-tasks");
     }
     let (console, pads) = usb::open(adopted.router(), tokens.console_usb);
-    let app = Executor::<0>::new(software.line0);
+    let app = Executor::<Esp32s31, 0>::new(software.line0);
     let (mut router, hart) = match adopted.enable_interrupts() {
         Ok(router) => router,
         Err(error) => crate::fail(error.name().as_str()),

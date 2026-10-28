@@ -1957,6 +1957,7 @@ version = "0.1.0"
 dependencies = [
  "bytemuck",
  "oer-esp32s31-hal",
+ "oer-espressif-executor",
  "oer-espressif-staged-runtime",
 ]
 
@@ -2164,7 +2165,6 @@ dependencies = [
  "bytemuck",
  "embassy-time-driver",
  "oer-cooperate",
- "oer-esp32s31-hal",
  "oer-espressif-interrupt-table",
  "oer-espressif-platform-port",
  "oer-espressif-staged-runtime",

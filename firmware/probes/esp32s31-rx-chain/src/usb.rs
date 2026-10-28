@@ -2,6 +2,7 @@
 //! opens, then the duplex endpoint of the core-0 executor and its interrupt,
 //! which raises the endpoint's static signal.
 
+use oer_esp32s31_compose::Esp32s31;
 use oer_esp32s31_hal::usb_serial_jtag::{
     ConsoleEndpoint, ConsoleInterrupt, RetireError, UsbPads, retire_early_writer,
 };
@@ -10,11 +11,11 @@ use oer_espressif_interrupt_table::{Controller, Router};
 use oer_espressif_usb_serial_jtag::{Endpoint, Interrupt};
 
 /// The console's endpoint, polled by the core-0 executor's task.
-pub(crate) type Console = Endpoint<Executor<0>, ConsoleEndpoint>;
+pub(crate) type Console = Endpoint<Executor<Esp32s31, 0>, ConsoleEndpoint>;
 
 oer_espressif_staged_runtime::placed_static! {
     /// The console's interrupt: the endpoint's signal.
-    static INTERRUPT: Interrupt<Executor<0>, ConsoleInterrupt> = Interrupt::new::<crate::ConsoleUsb, crate::WakeToken>(), in critical_data "console_usb";
+    static INTERRUPT: Interrupt<Executor<Esp32s31, 0>, ConsoleInterrupt> = Interrupt::new::<crate::ConsoleUsb, crate::WakeToken>(), in critical_data "console_usb";
 }
 
 /// The console's `Hardware` interrupt handler, over the part its entry

@@ -2,6 +2,7 @@
 use crate::usb;
 use oer_embassy_time::EmbassyClock;
 use oer_esp32s31_board as board;
+use oer_esp32s31_compose::Esp32s31;
 use oer_esp32s31_hal::{
     ieee80211::{
         dma::{descriptor::RxDescriptor, rx_storage::RxDmaStorage},
@@ -45,7 +46,7 @@ type Storage = RxDmaStorage<COUNT, BUFFER, BUFFER>;
 type Rng = oer_esp32s31_hal::platform::Entropy<EmbassyClock>;
 type Backend = Esp32s31Radio<
     ChipClocks,
-    oer_espressif_executor::Cooperative<EmbassyClock>,
+    oer_espressif_executor::Cooperative<Esp32s31, EmbassyClock>,
     NoopPhyTargetObserver,
     crate::phy_pilot::Client,
 >;
@@ -68,22 +69,22 @@ oer_espressif_interrupt_table::interrupt_table! {
     lines: oer_espressif_staged_runtime::interrupts::LINES,
     handler_attributes: [#[unsafe(link_section = ".hot.text.rx_chain_vectors")]];
     contexts { app: 1; radio_exec: 2; radio_irq: 3; }
-    wake: WakeToken = FromCpu0Irq => oer_espressif_executor::wake_handler::<0, FromCpu0Irq>, line 40, context app, hart 0, Hardware;
+    wake: WakeToken = FromCpu0Irq => oer_espressif_executor::wake_handler::<Esp32s31, 0, FromCpu0Irq>, line 40, context app, hart 0, Hardware;
     // SOURCE: family.toml [interrupts]; HW23_S31_P2_ARBITRATION_20261027:
     // only P2 line17 before16 is measured on S31.
     phy: PhyToken = oer_esp32s31_hal::platform::timg0_alarm::Timg0AlarmInterrupt => phy_pilot::interrupt, line 16, context radio_exec, hart 0, Exempt(ExecutorLevel, "SAR/PWDET steps between radio executor rounds");
     radio: RadioToken = FromCpu2Irq => oer_espressif_executor::interrupt_handler::<RadioTasks, FromCpu2Irq>, line 17, context radio_exec, hart 0, Executor;
-    radio_alarm: RadioAlarm = SystimerAlarm0 => oer_espressif_executor::alarm_interrupt::<0, SystimerAlarm0>, line 18, context radio_irq, hart 0, Hardware;
+    radio_alarm: RadioAlarm = SystimerAlarm0 => oer_espressif_executor::alarm_interrupt::<Esp32s31, 0, SystimerAlarm0>, line 18, context radio_irq, hart 0, Hardware;
     console_usb: ConsoleUsb = ConsoleInterrupt => crate::usb::interrupt, line 41, context app, hart 0, Hardware;
-    app_alarm: AppAlarm = SystimerAlarm1 => oer_espressif_executor::alarm_interrupt::<1, SystimerAlarm1>, line 42, context app, hart 0, Hardware;
+    app_alarm: AppAlarm = SystimerAlarm1 => oer_espressif_executor::alarm_interrupt::<Esp32s31, 1, SystimerAlarm1>, line 42, context app, hart 0, Hardware;
 }
 oer_espressif_executor::tasks! {
-    RadioTasks: InterruptExecutor<2> {
+    RadioTasks: InterruptExecutor<Esp32s31, 2> {
         direct(backend: &'static mut Backend, lp: LpClock<RcSlow>, wifi: oer_esp32s31_hal::root::WifiPartition, rng: Rng, station: [u8;6], ap: [u8;6]) = direct_start;
     }
 }
 oer_espressif_executor::tasks! {
-    AppTasks: Executor<0> {
+    AppTasks: Executor<Esp32s31, 0> {
         capture(boot: Boot) = capture;
         watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) = feed_watchdog;
     }
@@ -148,7 +149,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
         domain,
         partitions.wifi_coex,
         runtime.clocks,
-        oer_espressif_executor::Cooperative::new(EmbassyClock),
+        oer_espressif_executor::Cooperative::<Esp32s31, _>::new(EmbassyClock),
         NoopPhyTargetObserver,
         PhyRegisterConfig::new(identity),
         phy_pilot,
@@ -157,7 +158,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
         fail(oer_diagnostics::name!("direct-backend"; 32));
     };
     let timer = runtime.system_timer;
-    oer_espressif_executor::init::<2, _, _>(
+    oer_espressif_executor::init::<Esp32s31, 2, _, _>(
         oer_espressif_executor::systimer::SystemTimer {
             comparators: timer.comparators,
             counter: timer.counter,
@@ -167,8 +168,12 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
         timer.alarm0,
     )
     .unwrap_or_else(|failure| failure.reset());
-    oer_espressif_executor::bind::<0, _, _>(adopted.router(), interrupts.app_alarm, timer.alarm1)
-        .unwrap_or_else(|failure| failure.reset());
+    oer_espressif_executor::bind::<Esp32s31, 0, _, _>(
+        adopted.router(),
+        interrupts.app_alarm,
+        timer.alarm1,
+    )
+    .unwrap_or_else(|failure| failure.reset());
     // No Wi-Fi interrupt consumer is installed: this experiment polls only.
     // The MAC bank stays with the polling task; no CPU route is installed.
     let mut wifi_irqs = runtime.wifi_interrupts;
@@ -180,7 +185,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
     }
     let software = runtime.software_interrupts;
     let (hart, router) = adopted.parts();
-    let radio = InterruptExecutor::<2>::new(software.line2)
+    let radio = InterruptExecutor::<Esp32s31, 2>::new(software.line2)
         .start(hart, router, interrupts.radio, software.irq2, ())
         .unwrap_or_else(|failure| failure.reset());
     let rng = Rng::new(runtime.entropy, EmbassyClock);
@@ -201,7 +206,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
         mac_irq: wifi_irqs.mac,
         traffic,
     };
-    match Executor::<0>::new(software.line0)
+    match Executor::<Esp32s31, 0>::new(software.line0)
         .run(
             &hart,
             &mut router,

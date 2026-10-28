@@ -100,7 +100,7 @@ bytemuck = { version = "1.25.2", default-features = false, features = ["derive"]
 embassy-sync = { workspace = true, optional = true }
 embassy-time.workspace = true
 critical-section = "1.2.0"
-oer-espressif-executor = { workspace = true, features = ["esp32s31"] }
+oer-espressif-executor.workspace = true
 oer-hil-protocol = { workspace = true, optional = true, features = ["async-io"] }
 oer-hil-agent = { path = "../../../protocols/hil/agent", optional = true, default-features = false }
 oer-espressif-staged-runtime = { path = "../../../chips/espressif/staged-runtime" }

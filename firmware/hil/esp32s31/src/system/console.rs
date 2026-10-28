@@ -2,6 +2,7 @@
 //! deadline watchdog, an explicit host-requested retained reset and,
 //! in the `usb-jtag-off` image, the switch of the USB Serial/JTAG off its
 //! pads.
+use oer_esp32s31_compose::Esp32s31;
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel};
 use oer_esp32s31_hal::watchdog::{
     ArmedRtcWatchdog, DeadlineBudget, MainWatchdog, Mwdt1Registers, RwdtRegisters,
@@ -27,7 +28,7 @@ type Pads = oer_esp32s31_hal::usb_serial_jtag::UsbPads;
 
 oer_espressif_executor::tasks! {
     /// The watchdog image's tasks.
-    WatchdogTasks: Executor<0> {
+    WatchdogTasks: Executor<Esp32s31, 0> {
         test_watchdog(service: DeadlineWatchdog) = test_watchdog;
         reset_on_request() = super::panic::reset_on_request;
         #[cfg(feature = "usb-jtag-off")]
@@ -38,7 +39,7 @@ oer_espressif_executor::tasks! {
 }
 
 pub(crate) fn start<C: oer_espressif_interrupt_table::Controller>(
-    executor: crate::Executor<0>,
+    executor: crate::Executor<Esp32s31, 0>,
     hart: &oer_espressif_staged_runtime::Hart<{ oer_espressif_staged_runtime::BOOT_HART }>,
     router: &mut oer_espressif_interrupt_table::Router<C>,
     (wake, line): (crate::ExecutorWake, oer_esp32s31_hal::platform::FromCpu0Irq),

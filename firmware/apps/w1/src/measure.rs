@@ -9,6 +9,7 @@
 //! is taken. The writers stop recording once the phase is
 //! [`Phase::Report`], so the report reads settled values.
 
+use oer_esp32s31_compose::Esp32s31;
 use core::{
     future::{Future, poll_fn},
     pin::Pin,
@@ -473,7 +474,7 @@ pub const P1_STRESS_PERIOD: Duration = Duration::from_micros(113);
 /// sent to the application.
 pub async fn p2_timers(lines: AffineSpscSender<'static, TimerLine, 2>) {
     if reached(Phase::Window).await == Phase::Window {
-        let window = Window::begin();
+        let window = Window::<Esp32s31>::begin();
         reached(Phase::Stress).await;
         if let Some(window) = window {
             let _full = lines.try_send(TimerLine {
@@ -484,7 +485,7 @@ pub async fn p2_timers(lines: AffineSpscSender<'static, TimerLine, 2>) {
         }
     }
     if phase() == Phase::Stress {
-        let window = Window::begin();
+        let window = Window::<Esp32s31>::begin();
         while phase() == Phase::Stress {
             wait_until(
                 P2_COMPARATOR,

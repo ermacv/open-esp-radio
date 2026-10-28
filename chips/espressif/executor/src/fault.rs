@@ -1,6 +1,6 @@
 //! Executor failures retain their observations and quarantine every owner.
 
-use core::mem::ManuallyDrop;
+use core::{marker::PhantomData, mem::ManuallyDrop};
 use oer_espressif_interrupt_table::Error;
 use oer_espressif_staged_runtime::panic::FaultReason;
 use oer_riscv::clic::LineState;
@@ -59,6 +59,7 @@ pub enum Fault {
 }
 
 impl Fault {
+    #[cfg(feature = "chip")]
     pub(crate) fn binding<E: oer_espressif_interrupt_table::Entry>(
         executor: u8,
         error: &oer_espressif_interrupt_table::BindError<E>,
@@ -134,47 +135,53 @@ impl Fault {
     }
 
     /// Mask execution, keep all interrupted/static owners quarantined, retain
-    /// this reason and reset. The next staged boot reports the same words.
-    pub fn reset(self) -> ! {
+    /// this reason and reset through platform `P`'s fatal path. The next
+    /// staged boot reports the same words.
+    #[cfg(feature = "chip")]
+    pub fn reset<P: oer_espressif_platform_port::Platform>(self) -> ! {
         #[cfg(target_arch = "riscv32")]
         {
             let (reason, observations) = self.diagnostic();
-            oer_espressif_staged_runtime::panic::reset_fault::<oer_esp32s31_hal::platform::Port>(
-                reason,
-                observations,
-            )
+            oer_espressif_staged_runtime::panic::reset_fault::<P>(reason, observations)
         }
+        // Host type checks have no reset hardware or retained boot record.
         #[cfg(not(target_arch = "riscv32"))]
-        oer_esp32s31_hal::cores::fatal(|_| ())
+        P::fatal(|_| ())
     }
 }
 
 /// A refused setup keeps its inputs permanently quarantined, even if the
 /// caller drops the failure. No retry or owner-recovery authority is issued.
-pub struct Failure<T> {
+/// `P` is the platform whose fatal path [`Failure::reset`] takes.
+pub struct Failure<P, T> {
     pub fault: Fault,
     owners: ManuallyDrop<T>,
+    platform: PhantomData<fn() -> P>,
 }
 
-impl<T> Failure<T> {
+impl<P, T> Failure<P, T> {
     pub(crate) fn new(fault: Fault, owners: T) -> Self {
         Self {
             fault,
             owners: ManuallyDrop::new(owners),
+            platform: PhantomData,
         }
     }
 
-    pub(crate) fn map_owners<U>(self, map: impl FnOnce(T) -> U) -> Failure<U> {
+    pub(crate) fn map_owners<U>(self, map: impl FnOnce(T) -> U) -> Failure<P, U> {
         Failure::new(self.fault, map(ManuallyDrop::into_inner(self.owners)))
-    }
-
-    /// The image terminates setup while retaining every refused input.
-    pub fn reset(self) -> ! {
-        self.fault.reset()
     }
 }
 
-impl<T> core::fmt::Debug for Failure<T> {
+#[cfg(feature = "chip")]
+impl<P: oer_espressif_platform_port::Platform, T> Failure<P, T> {
+    /// The image terminates setup while retaining every refused input.
+    pub fn reset(self) -> ! {
+        self.fault.reset::<P>()
+    }
+}
+
+impl<P, T> core::fmt::Debug for Failure<P, T> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("Failure")
             .field("fault", &self.fault)
@@ -268,7 +275,7 @@ mod tests {
             }
         }
         let drops = Cell::new(0);
-        let failure = Failure::new(Fault::CounterLatchStuck, Owner(&drops));
+        let failure = Failure::<(), _>::new(Fault::CounterLatchStuck, Owner(&drops));
         let failure = failure.map_owners(|owner| (owner, 7));
         assert_eq!(failure.fault, Fault::CounterLatchStuck);
         drop(failure);

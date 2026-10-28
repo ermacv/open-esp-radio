@@ -191,7 +191,9 @@ impl Rx {
                 &mut uart,
             );
             #[cfg(oer_profile)]
-            let timer_window = oer_espressif_executor::timer_observation::Window::begin();
+            let timer_window = oer_espressif_executor::timer_observation::Window::<
+                oer_esp32s31_compose::Esp32s31,
+            >::begin();
             let result = {
                 let mut platform = ();
                 let domain = require_radio(domain_slot.take(), fault);

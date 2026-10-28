@@ -75,7 +75,7 @@ pub trait RadioDoorbell {
 }
 
 /// The doorbell's lowering half, which the handler holds in its part
-/// (the executor's `DoorbellAcknowledger<3>` on the chip).
+/// (the executor's `DoorbellAcknowledger<Esp32s31, 3>` on the chip).
 pub trait DoorbellAcknowledge {
     /// Lower the doorbell before the requests are taken. Never waits.
     fn acknowledge(&mut self);

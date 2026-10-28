@@ -22,7 +22,7 @@ mod tests {
         // must publish the clock before RNG's second read waits on that clock.
         let entry = include_str!("entry.rs");
         let publish = entry
-            .find("oer_espressif_executor::init::<2")
+            .find("oer_espressif_executor::init::<Esp32s31, 2")
             .expect("the image publishes its system counter");
         let sample = entry
             .find("rng.random()")

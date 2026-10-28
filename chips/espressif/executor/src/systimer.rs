@@ -1,31 +1,35 @@
 //! The executor's system timer: the comparator owner, which the time
 //! driver's writer executor holds, over the platform port's comparators,
-//! and the shared counter latch published for [`crate::chip`]'s clock. Each
-//! comparator's alarm part stays with its interrupt table entry's handler.
+//! and the shared counter latch published in the binding's storage for
+//! the executor's clock. Each comparator's alarm part stays with its
+//! interrupt table entry's handler.
 
-use crate::chip::{Comparators as Owner, Counter};
-use oer_espressif_platform_port::Comparators as _;
+use crate::binding::Binding;
+use crate::chip::{Comparators as Owner, Counter, PortOf};
+use oer_espressif_platform_port::{Comparators as _, ExecutorPlatform};
 
 pub use oer_espressif_platform_port::{AlarmPart, Comparator};
 
-/// The running timer's comparator and counter owners, moved from the reset
-/// root; the alarm parts go to their table entries.
-pub struct SystemTimer {
-    pub comparators: Owner,
-    pub counter: Counter,
+/// The running timer's comparator and counter owners of port `P`, moved
+/// from the reset root; the alarm parts go to their table entries.
+pub struct SystemTimer<P: ExecutorPlatform> {
+    pub comparators: Owner<P>,
+    pub counter: Counter<P>,
 }
 
 /// The sole writer of comparator configuration, held by the writer executor.
-pub struct ComparatorWriter {
-    timer: Owner,
+pub struct ComparatorWriter<P: ExecutorPlatform> {
+    timer: Owner<P>,
 }
 
-impl ComparatorWriter {
+impl<P: ExecutorPlatform> ComparatorWriter<P> {
     /// Consume the running timer without resetting its counter or clock:
-    /// publish the counter latch and return the comparator owner, which
-    /// cannot be cloned or obtained a second time.
-    pub fn adopt(systimer: SystemTimer) -> Result<Self, crate::Failure<SystemTimer>> {
-        crate::chip::install_counter(systimer).map(|timer| Self { timer })
+    /// publish the counter latch in binding `B`'s storage and return the
+    /// comparator owner, which cannot be cloned or obtained a second time.
+    pub fn adopt<B: Binding<Port = P>>(
+        systimer: SystemTimer<P>,
+    ) -> Result<Self, crate::Failure<PortOf<B>, SystemTimer<P>>> {
+        crate::chip::install_counter::<B>(systimer).map(|timer| Self { timer })
     }
 
     /// Bind `alarm`'s comparator in one-shot mode before its handler's

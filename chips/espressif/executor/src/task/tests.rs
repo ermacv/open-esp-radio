@@ -22,12 +22,28 @@ pub(crate) fn ready(executor: u8) -> Option<&'static Ready> {
     READY.with(|ready| ready.get(usize::from(executor)))
 }
 
-pub(crate) fn pend(executor: u8) {
+fn pend(executor: u8) {
     PENDS.with(|pends| {
         let mut counts = pends.get();
         counts[usize::from(executor)] += 1;
         pends.set(counts);
     });
+}
+
+/// The tests' binding: its one waker vtable and a pend each test thread
+/// counts.
+pub(crate) struct TestBinding;
+
+/// The tests' one waker vtable.
+static TEST_VTABLE: RawWakerVTable = waker_vtable::<TestBinding>();
+
+impl Wakes for TestBinding {
+    fn vtable() -> &'static RawWakerVTable {
+        &TEST_VTABLE
+    }
+    fn pend_task(executor: u8) {
+        pend(executor);
+    }
 }
 
 fn pends(executor: u8) -> u32 {
@@ -70,7 +86,7 @@ impl Future for Probe {
         seen.polls.set(seen.polls.get() + 1);
         seen.argument.set(Some(self.argument));
         seen.current
-            .set(self.current.matching(EXECUTOR, cx.waker()));
+            .set(self.current.matching::<TestBinding>(EXECUTOR, cx.waker()));
         if seen.wake_self.get() {
             cx.waker().wake_by_ref();
         }
@@ -110,6 +126,7 @@ macro_rules! probe_set {
             }
         }
         impl Tasks for $set {
+            type Binding = TestBinding;
             type Mode = $mode;
             const EXECUTOR: u8 = EXECUTOR;
             const COUNT: u8 = 3;
@@ -193,13 +210,13 @@ fn the_polled_task_is_current_and_its_waker_names_it() {
         executor: EXECUTOR,
         index: 1,
     }
-    .waker();
-    assert_eq!(current.matching(EXECUTOR, &waker), None);
-    assert_eq!(TaskId::of(Waker::noop()), None);
-    let named = TaskId::of(&waker).expect("the executor's waker");
+    .waker::<TestBinding>();
+    assert_eq!(current.matching::<TestBinding>(EXECUTOR, &waker), None);
+    assert_eq!(TaskId::of::<TestBinding>(Waker::noop()), None);
+    let named = TaskId::of::<TestBinding>(&waker).expect("the executor's waker");
     assert_eq!((named.executor(), named.index()), (EXECUTOR, 1));
     assert_eq!(
-        TaskId::of(&waker.clone()),
+        TaskId::of::<TestBinding>(&waker.clone()),
         Some(TaskId {
             executor: EXECUTOR,
             index: 1
@@ -220,7 +237,7 @@ fn a_waker_marks_its_task_ready_and_pends_its_executor() {
         executor: EXECUTOR,
         index: 2,
     }
-    .waker();
+    .waker::<TestBinding>();
     let before = pends(EXECUTOR);
     // A clone wakes as the waker does; dropping either does nothing.
     let clone = waker.clone();
@@ -318,7 +335,7 @@ fn a_start_preempted_by_its_executor_is_polled_only_once_published() {
     // P1 resumes: it publishes the future with its arguments, then marks it.
     claim.publish(Box::new(move || Recorder { argument: 7, seen }));
     assert_eq!(seen.1.load(Ordering::Relaxed), 0);
-    wake(TaskId {
+    wake::<TestBinding>(TaskId {
         executor: EXECUTOR,
         index: 1,
     });
@@ -407,6 +424,7 @@ impl Future for Local {
 struct LocalSet;
 static LOCAL_TASK: Task<fn() -> Local, LocalSet> = Task::new(0);
 impl Tasks for LocalSet {
+    type Binding = TestBinding;
     type Mode = Interrupt;
     const EXECUTOR: u8 = EXECUTOR;
     const COUNT: u8 = 1;
@@ -457,7 +475,7 @@ mod declared {
 
     crate::tasks! {
         /// A set with a task its build leaves out.
-        pub(super) Declared: InterruptExecutor<2> {
+        pub(super) Declared: InterruptExecutor<super::TestBinding, 2> {
             #[cfg(any())]
             absent(value: u32) = no_such_body;
             /// The first declared task.
@@ -497,7 +515,7 @@ fn declared_tasks_start_once_with_their_arguments_and_poll_by_index() {
 }
 
 /// A thread-mode executor's signal side on the test thread, made of the same
-/// parts as the chip's `Executor<SWI>`: the core's running context
+/// parts as the chip's `Executor<B, SWI>`: the core's running context
 /// ([`crate::context::Running`]) at the level the test thread runs at, the
 /// task the round polls now naming the polling task, and a wake marking it
 /// ready for the next round.
@@ -557,7 +575,7 @@ mod thread_signals {
             cx: &Context<'_>,
             _: &ContextToken<Self::Context>,
         ) -> Result<TaskId, ForeignTask> {
-            CURRENT.with(|current| signal_current(current, EXECUTOR, cx))
+            CURRENT.with(|current| signal_current::<TestBinding>(current, EXECUTOR, cx))
         }
         fn wake(task: TaskId, _: &ContextToken<Self::Context>) {
             signal_wake(task);

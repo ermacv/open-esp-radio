@@ -1,3 +1,4 @@
+use oer_esp32s31_compose::Esp32s31;
 use oer_embassy_time::EmbassyClock;
 use oer_esp32s31_board as board;
 use oer_esp32s31_hal::platform::{FromCpu0Irq, SystimerAlarm0};
@@ -11,14 +12,14 @@ use oer_espressif_staged_runtime::panic;
 oer_espressif_staged_runtime::interrupt_table! {
     contexts { app_wake: 1; }
     /// The executor's wake (thread mode).
-    wake: WakeToken = FromCpu0Irq => oer_espressif_executor::wake_handler::<0, FromCpu0Irq>, line 16, context app_wake, hart 0, Hardware;
+    wake: WakeToken = FromCpu0Irq => oer_espressif_executor::wake_handler::<Esp32s31, 0, FromCpu0Irq>, line 16, context app_wake, hart 0, Hardware;
     /// The executor's timer alarm; it only acknowledges and pends.
-    alarm: AlarmToken = SystimerAlarm0 => oer_espressif_executor::alarm_interrupt::<0, SystimerAlarm0>, line 17, context app_wake, hart 0, Hardware;
+    alarm: AlarmToken = SystimerAlarm0 => oer_espressif_executor::alarm_interrupt::<Esp32s31, 0, SystimerAlarm0>, line 17, context app_wake, hart 0, Hardware;
 }
 
 oer_espressif_executor::tasks! {
     /// The executor's one task.
-    Tasks: Executor<0> {
+    Tasks: Executor<Esp32s31, 0> {
         rtc_watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) = feed_rtc_watchdog;
     }
 }
@@ -60,7 +61,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
         fail(oer_diagnostics::name!("interrupt-table"; 32));
     };
     let timer = runtime.system_timer;
-    oer_espressif_executor::init::<0, _, _>(
+    oer_espressif_executor::init::<Esp32s31, 0, _, _>(
         oer_espressif_executor::systimer::SystemTimer {
             comparators: timer.comparators,
             counter: timer.counter,
@@ -71,7 +72,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
     )
     .unwrap_or_else(|failure| failure.reset());
     let software = runtime.software_interrupts;
-    let executor = Executor::<0>::new(software.line0);
+    let executor = Executor::<Esp32s31, 0>::new(software.line0);
     let (mut router, hart) = match adopted.enable_interrupts() {
         Ok(router) => router,
         Err(error) => fail(error.name()),
