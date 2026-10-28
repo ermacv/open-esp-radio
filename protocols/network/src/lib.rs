@@ -7,7 +7,10 @@
     clippy::unreachable,
     clippy::todo,
     clippy::unimplemented,
-    clippy::arithmetic_side_effects
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    clippy::disallowed_macros,
+    clippy::disallowed_methods
 )]
 
 //! Adapter-neutral values at the network/radio ownership boundary.
