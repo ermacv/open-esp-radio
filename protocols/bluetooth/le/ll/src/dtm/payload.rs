@@ -46,25 +46,29 @@ impl DtmPayloadPattern {
 
     /// The LE Test PDU payload type field, which equals the HCI selector.
     pub const fn payload_type(self) -> u8 {
+        self.radio_payload_type().value()
+    }
+
+    pub(super) const fn radio_payload_type(self) -> oer_bluetooth_le_radio::TestPayloadType {
         match self {
-            Self::Prbs9 => 0,
-            Self::Repeated11110000 => 1,
-            Self::Repeated10101010 => 2,
-            Self::Prbs15 => 3,
-            Self::RepeatedAllOnes => 4,
-            Self::RepeatedAllZeros => 5,
-            Self::Repeated00001111 => 6,
-            Self::Repeated01010101 => 7,
+            Self::Prbs9 => constant_payload_type::<0>(),
+            Self::Repeated11110000 => constant_payload_type::<1>(),
+            Self::Repeated10101010 => constant_payload_type::<2>(),
+            Self::Prbs15 => constant_payload_type::<3>(),
+            Self::RepeatedAllOnes => constant_payload_type::<4>(),
+            Self::RepeatedAllZeros => constant_payload_type::<5>(),
+            Self::Repeated00001111 => constant_payload_type::<6>(),
+            Self::Repeated01010101 => constant_payload_type::<7>(),
         }
     }
 
     /// Fill `payload` with the pattern from its first byte.
     pub fn fill(self, payload: &mut [u8]) {
         match self {
-            Self::Prbs9 => fill_prbs(payload, 9, 0, 4),
+            Self::Prbs9 => fill_prbs::<9, 0, 4>(payload),
             Self::Repeated11110000 => payload.fill(0x0f),
             Self::Repeated10101010 => payload.fill(0x55),
-            Self::Prbs15 => fill_prbs(payload, 15, 6, 10),
+            Self::Prbs15 => fill_prbs::<15, 6, 10>(payload),
             Self::RepeatedAllOnes => payload.fill(0xff),
             Self::RepeatedAllZeros => payload.fill(0x00),
             Self::Repeated00001111 => payload.fill(0xf0),
@@ -73,14 +77,32 @@ impl DtmPayloadPattern {
     }
 }
 
-fn fill_prbs(payload: &mut [u8], width: u32, first_tap: u32, second_tap: u32) {
-    let mut state = (1_u16 << width) - 1;
+const fn constant_payload_type<const VALUE: u8>() -> oer_bluetooth_le_radio::TestPayloadType {
+    const {
+        let value = match oer_bluetooth_le_radio::TestPayloadType::new(VALUE) {
+            Ok(value) => Some(value),
+            Err(_) => None,
+        };
+        if !value.is_some() {
+            panic!("invalid constant payload type");
+        }
+        value.unwrap()
+    }
+}
+
+fn fill_prbs<const WIDTH: u32, const FIRST_TAP: u32, const SECOND_TAP: u32>(payload: &mut [u8]) {
+    let mut state = const {
+        if !(WIDTH > 0 && WIDTH < 16 && FIRST_TAP < WIDTH && SECOND_TAP < WIDTH) {
+            panic!("invalid PRBS geometry");
+        }
+        (1_u16 << WIDTH) - 1
+    };
     for output in payload {
         let mut image = 0_u8;
         for output_bit in 0..8 {
             image |= ((state & 1) as u8) << output_bit;
-            let feedback = ((state >> first_tap) ^ (state >> second_tap)) & 1;
-            state = (state >> 1) | (feedback << (width - 1));
+            let feedback = ((state >> FIRST_TAP) ^ (state >> SECOND_TAP)) & 1;
+            state = (state >> 1) | (feedback << const { WIDTH - 1 });
         }
         *output = image;
     }

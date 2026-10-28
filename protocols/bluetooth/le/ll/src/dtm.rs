@@ -12,8 +12,7 @@ use core::num::NonZeroU64;
 
 use oer_bluetooth_le_radio::{
     EventResult, LeInstant, LeRadio, LeWindow, NonZeroRadioDuration, OutsideEpoch, RadioDuration,
-    RadioTiming, TestChannel, TestPayloadType, TestPhy, TestReceive, TestReport, TestTransmit,
-    TxPower,
+    RadioTiming, TestChannel, TestPhy, TestReceive, TestReport, TestTransmit, TxPower,
 };
 
 mod payload;
@@ -21,7 +20,7 @@ mod payload;
 pub use payload::DtmPayloadPattern;
 
 /// Longest LE Test packet payload.
-pub const DTM_MAX_PAYLOAD: usize = 255;
+pub const DTM_MAX_PAYLOAD: usize = u8::MAX as usize;
 
 /// One planned test event, for the caller to check against its backend's
 /// capabilities and submit.
@@ -115,8 +114,8 @@ pub struct DtmCounters {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Phase {
     Idle,
-    Running(DtmTest),
-    Ending(DtmTest),
+    Running(DtmTest, WindowGeometry),
+    Ending(DtmTest, WindowGeometry),
 }
 
 /// Plans the events of one Direct Test Mode test.
@@ -198,12 +197,8 @@ impl DtmSession {
         if self.is_active() {
             return Err(DtmStartError::Active);
         }
-        if let DtmTest::Transmit { phy, length, .. } = test
-            && transmit_air_time(phy, length).is_none()
-        {
-            return Err(DtmStartError::UnsupportedPhy);
-        }
-        self.phase = Phase::Running(test);
+        let geometry = WindowGeometry::new(test).ok_or(DtmStartError::UnsupportedPhy)?;
+        self.phase = Phase::Running(test, geometry);
         self.last = None;
         self.recurring = false;
         self.counters = DtmCounters::default();
@@ -212,13 +207,13 @@ impl DtmSession {
 
     /// Stop planning. An event in progress must end first.
     pub fn end(&mut self) -> DtmStop {
-        let test = match self.phase {
+        let (test, geometry) = match self.phase {
             Phase::Idle => return DtmStop::Stopped { received: 0 },
-            Phase::Running(test) | Phase::Ending(test) => test,
+            Phase::Running(test, geometry) | Phase::Ending(test, geometry) => (test, geometry),
         };
         match self.in_progress {
             true => {
-                self.phase = Phase::Ending(test);
+                self.phase = Phase::Ending(test, geometry);
                 DtmStop::Draining
             }
             false => {
@@ -240,17 +235,16 @@ impl DtmSession {
         timing: RadioTiming,
         payload: &'payload mut [u8; DTM_MAX_PAYLOAD],
     ) -> Result<Option<DtmEvent<'payload>>, DtmEpochExhausted> {
-        let Phase::Running(test) = self.phase else {
+        let Phase::Running(test, geometry) = self.phase else {
             return Ok(None);
         };
         if self.in_progress {
             return Ok(None);
         }
-        let window = match next_window(test, now, timing, self.last) {
-            Ok(window) => window,
-            Err(DtmWindowError::OutsideEpoch(error)) => return Err(error),
-            Err(DtmWindowError::UnsupportedPhy) => unreachable!("start validated transmitter PHY"),
-        };
+        let admitted = admitted_anchor(now, timing).ok_or(DtmEpochExhausted {
+            calculation: DtmCalculation::Admission,
+        })?;
+        let window = plan_window(geometry, admitted, timing, self.last)?;
         // All geometry is validated before payload or history state changes.
         let request = match test {
             DtmTest::Transmit {
@@ -259,15 +253,21 @@ impl DtmSession {
                 pattern,
                 length,
             } => {
-                let bytes = &mut payload[..usize::from(length)];
+                // A u8 length is bounded by the 255-byte array. Trim exactly
+                // its unused tail, retaining the prefix as a mutable slice.
+                let mut bytes = payload.iter_mut();
+                let mut unused = usize::from(length)..DTM_MAX_PAYLOAD;
+                if unused.next().is_some() {
+                    bytes.nth_back(unused.len());
+                }
+                let bytes = bytes.into_slice();
                 pattern.fill(bytes);
                 DtmEvent::Transmit(TestTransmit {
                     channel,
                     phy,
                     window,
                     tx_power: self.tx_power,
-                    payload_type: TestPayloadType::new(pattern.payload_type())
-                        .expect("every pattern has a test payload type"),
+                    payload_type: pattern.radio_payload_type(),
                     payload: bytes,
                 })
             }
@@ -293,32 +293,42 @@ impl DtmSession {
     }
 
     /// Count the receiver report of the event in progress.
-    pub fn report(&mut self, report: TestReport) {
+    pub fn report(&mut self, report: TestReport) -> Result<(), DtmCounterExhausted> {
         if !self.in_progress {
-            return;
+            return Ok(());
         }
         match report {
-            TestReport::Nothing => self.counters.empty += 1,
-            TestReport::Received { .. } => self.counters.received += 1,
-            TestReport::Failed => self.counters.failed += 1,
+            TestReport::Nothing => increment(&mut self.counters.empty, DtmCounter::Empty)?,
+            TestReport::Received { .. } => {
+                increment(&mut self.counters.received, DtmCounter::Received)?
+            }
+            TestReport::Failed => increment(&mut self.counters.failed, DtmCounter::Failed)?,
         }
+        Ok(())
     }
 
     /// Count how the event in progress ended; the session may plan the next.
-    pub fn ended(&mut self, result: EventResult) {
+    pub fn ended(&mut self, result: EventResult) -> Result<(), DtmCounterExhausted> {
         if !self.in_progress {
-            return;
+            return Ok(());
         }
         match result {
-            EventResult::Executed { .. } => self.counters.executed += 1,
-            EventResult::NotExecuted => self.counters.not_executed += 1,
-            EventResult::Aborted => self.counters.aborted += 1,
-            EventResult::Indeterminate => self.counters.indeterminate += 1,
+            EventResult::Executed { .. } => {
+                increment(&mut self.counters.executed, DtmCounter::Executed)?
+            }
+            EventResult::NotExecuted => {
+                increment(&mut self.counters.not_executed, DtmCounter::NotExecuted)?
+            }
+            EventResult::Aborted => increment(&mut self.counters.aborted, DtmCounter::Aborted)?,
+            EventResult::Indeterminate => {
+                increment(&mut self.counters.indeterminate, DtmCounter::Indeterminate)?
+            }
         }
         self.in_progress = false;
-        if let Phase::Ending(_) = self.phase {
+        if let Phase::Ending(..) = self.phase {
             self.phase = Phase::Idle;
         }
+        Ok(())
     }
 
     /// The receiver count once an ending test has drained.
@@ -348,14 +358,53 @@ pub fn next_window(
     timing: RadioTiming,
     previous: Option<LeWindow>,
 ) -> Result<LeWindow, DtmWindowError> {
+    let admitted =
+        admitted_anchor(now, timing).ok_or(DtmWindowError::OutsideEpoch(DtmEpochExhausted {
+            calculation: DtmCalculation::Admission,
+        }))?;
+    let geometry = WindowGeometry::new(test).ok_or(DtmWindowError::UnsupportedPhy)?;
+    plan_window(geometry, admitted, timing, previous).map_err(DtmWindowError::OutsideEpoch)
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum WindowGeometry {
+    Transmit {
+        air: NonZeroRadioDuration<LeRadio>,
+        interval: RadioDuration<LeRadio>,
+    },
+    Receive,
+}
+
+impl WindowGeometry {
+    fn new(test: DtmTest) -> Option<Self> {
+        match test {
+            DtmTest::Transmit { phy, length, .. } => Some(Self::Transmit {
+                air: transmit_air_time(phy, length)?,
+                // Evaluating I(L) over the bounded u8 length gives these
+                // exact grid intervals; coded TX is refused above.
+                interval: RadioDuration::from_micros(match (phy, length) {
+                    (TestPhy::Le1M, 0..=37) | (TestPhy::Le2M, 0..=83) => 625,
+                    (TestPhy::Le1M, 38..=115) | (TestPhy::Le2M, 84..=239) => 1_250,
+                    (TestPhy::Le1M, 116..=193) | (TestPhy::Le2M, 240..=255) => 1_875,
+                    (TestPhy::Le1M, 194..=255) => 2_500,
+                    (TestPhy::LeCodedS8 | TestPhy::LeCodedS2, _) => return None,
+                }),
+            }),
+            DtmTest::Receive { .. } => Some(Self::Receive),
+        }
+    }
+}
+
+fn plan_window(
+    geometry: WindowGeometry,
+    admitted: LeInstant,
+    timing: RadioTiming,
+    previous: Option<LeWindow>,
+) -> Result<LeWindow, DtmEpochExhausted> {
     use DtmCalculation as C;
-    let at = |calculation| DtmWindowError::OutsideEpoch(DtmEpochExhausted { calculation });
-    let admitted = admitted_anchor(now, timing).ok_or(at(C::Admission))?;
-    let window = match test {
-        DtmTest::Transmit { phy, length, .. } => {
-            // Start admits only transmitter PHYs with a bounded airtime.
-            let air = transmit_air_time(phy, length).ok_or(DtmWindowError::UnsupportedPhy)?;
-            let interval = packet_interval(air.get());
+    let at = |calculation| DtmEpochExhausted { calculation };
+    let window = match geometry {
+        WindowGeometry::Transmit { air, interval } => {
             let anchor = match previous {
                 None => admitted
                     .checked_add(DTM_PLANNING_SLACK)
@@ -373,7 +422,8 @@ pub fn next_window(
                     match reachable.checked_duration_since(first) {
                         None => first,
                         Some(late) => {
-                            let slots = late.as_micros().div_ceil(interval.as_micros());
+                            let slots = ceil_div(late.as_micros(), interval.as_micros())
+                                .ok_or(at(C::SlotAlignment))?;
                             interval
                                 .checked_mul(slots)
                                 .and_then(|skipped| first.checked_add(skipped))
@@ -384,7 +434,7 @@ pub fn next_window(
             };
             LeWindow::nonempty(anchor, air).ok_or(at(C::AirWindow))?
         }
-        DtmTest::Receive { .. } => {
+        WindowGeometry::Receive => {
             let earliest = admitted
                 .checked_add(DTM_PLANNING_SLACK)
                 .ok_or(at(C::InitialAnchor))?;
@@ -420,19 +470,50 @@ fn transmit_air_time(phy: TestPhy, length: u8) -> Option<NonZeroRadioDuration<Le
         TestPhy::Le2M => (const { NonZeroU64::new((2 + 4 + 2 + 3) * 4).unwrap() }, 4),
         TestPhy::LeCodedS8 | TestPhy::LeCodedS2 => return None,
     };
-    // A u8 payload keeps the sum below 2,200 us: it never saturates.
+    // A u8 payload keeps the exact sum below 2,200 us.
     Some(NonZeroRadioDuration::from_micros(
-        overhead.saturating_add(u64::from(length) * byte),
+        overhead.checked_add(u64::from(length).checked_mul(byte)?)?,
     ))
 }
 
-/// `I(L) = ceil((L + 249) / 625) * 625` microseconds for a packet of `L`
-/// microseconds.
-fn packet_interval(air: RadioDuration<LeRadio>) -> RadioDuration<LeRadio> {
-    // Only the LE 1M/2M airtime of a u8 payload reaches this scalar formula:
-    // air <= (1 + 4 + 2 + 255 + 3) * 8 = 2120 us; the interval is <= 2500 us.
-    RadioDuration::from_micros((air.as_micros() + 249).div_ceil(625) * 625)
+fn ceil_div(value: u64, divisor: u64) -> Option<u64> {
+    value
+        .checked_div(divisor)?
+        .checked_add(u64::from(value.checked_rem(divisor)? != 0))
+}
+
+/// The diagnostic counter whose next observation could not be retained.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DtmCounter {
+    Executed,
+    NotExecuted,
+    Aborted,
+    Indeterminate,
+    Empty,
+    Failed,
+    Received,
+}
+
+/// A DTM observation would exceed its counter. The session and observation's
+/// current counter remain unchanged; the caller retains the rejected input.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct DtmCounterExhausted {
+    pub counter: DtmCounter,
+    pub value: u32,
+}
+
+fn increment(value: &mut u32, counter: DtmCounter) -> Result<(), DtmCounterExhausted> {
+    *value = value.checked_add(1).ok_or(DtmCounterExhausted {
+        counter,
+        value: *value,
+    })?;
+    Ok(())
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::arithmetic_side_effects,
+    clippy::disallowed_macros,
+    clippy::disallowed_methods
+)]
 mod tests;

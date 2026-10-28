@@ -10,7 +10,7 @@
 //! the acknowledgement and flow control of a backend that runs them in
 //! software.
 
-use core::num::NonZeroU16;
+use core::num::{NonZeroU8, NonZeroU16, NonZeroU64};
 
 use crate::{LeDeviceAddress, LeDeviceAddressKind};
 
@@ -73,13 +73,15 @@ impl LeUncodedAccessAddress {
 
 const fn longest_run(value: u32) -> u8 {
     let mut longest = 1;
-    let mut current = 1;
+    // At most 32 bits are visited; neither u8 run length nor u32 cursor can
+    // reach saturation for any Access Address.
+    let mut current = 1_u8;
     let mut previous = value & 1;
-    let mut bit = 1;
+    let mut bit = 1_u32;
     while bit < 32 {
         let next = (value >> bit) & 1;
         if next == previous {
-            current += 1;
+            current = current.saturating_add(1);
             if current > longest {
                 longest = current;
             }
@@ -87,7 +89,7 @@ const fn longest_run(value: u32) -> u8 {
             current = 1;
             previous = next;
         }
-        bit += 1;
+        bit = bit.saturating_add(1);
     }
     longest
 }
@@ -145,63 +147,63 @@ impl LeDataChannelIndex {
 /// Validated map containing at least two used data channels.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct LeDataChannelMap {
-    bytes: [u8; 5],
-    used: u8,
+    mask: NonZeroU64,
+    used: NonZeroU8,
 }
 
 impl LeDataChannelMap {
     pub const fn new(bytes: [u8; 5]) -> Result<Self, LeDataChannelMapError> {
-        if bytes[4] & 0xe0 != 0 {
+        let [a, b, c, d, e] = bytes;
+        if e & 0xe0 != 0 {
             return Err(LeDataChannelMapError::ReservedBitsSet);
         }
-        let used = bytes[0].count_ones()
-            + bytes[1].count_ones()
-            + bytes[2].count_ones()
-            + bytes[3].count_ones()
-            + bytes[4].count_ones();
-        if used < 2 {
+        let mask = u64::from_le_bytes([a, b, c, d, e, 0, 0, 0]);
+        if mask.count_ones() < 2 {
             return Err(LeDataChannelMapError::FewerThanTwoUsedChannels);
         }
-        Ok(Self {
-            bytes,
-            used: used as u8,
-        })
+        let (Some(mask), Some(used)) = (
+            NonZeroU64::new(mask),
+            NonZeroU8::new(mask.count_ones() as u8),
+        ) else {
+            return Err(LeDataChannelMapError::FewerThanTwoUsedChannels);
+        };
+        Ok(Self { mask, used })
     }
 
     pub const fn all() -> Self {
         Self {
-            bytes: [0xff, 0xff, 0xff, 0xff, 0x1f],
-            used: 37,
+            mask: const { NonZeroU64::new((1 << 37) - 1).unwrap() },
+            used: const { NonZeroU8::new(37).unwrap() },
         }
     }
 
     pub const fn wire_bytes(self) -> [u8; 5] {
-        self.bytes
+        let [a, b, c, d, e, _, _, _] = self.mask.get().to_le_bytes();
+        [a, b, c, d, e]
     }
 
     pub const fn used_channel_count(self) -> u8 {
-        self.used
+        self.used.get()
     }
 
     pub const fn contains(self, channel: LeDataChannelIndex) -> bool {
-        let index = channel.get() as usize;
-        self.bytes[index / 8] & (1 << (index % 8)) != 0
+        self.mask.get() & (1 << channel.get()) != 0
     }
 
+    /// Select a rank in the cyclic sequence of used channels. The nonempty
+    /// mask makes each step total, including the last-to-first transition.
     const fn remap(self, index: u8) -> LeDataChannelIndex {
+        let mut channels = self.mask;
         let mut remaining = index;
-        let mut channel = 0;
-        while channel < 37 {
-            let candidate = LeDataChannelIndex(channel);
-            if self.contains(candidate) {
-                if remaining == 0 {
-                    return candidate;
-                }
-                remaining -= 1;
-            }
-            channel += 1;
+        while remaining != 0 {
+            let rest = channels.get() & channels.get().wrapping_sub(1);
+            channels = match NonZeroU64::new(rest) {
+                Some(rest) => rest,
+                None => self.mask,
+            };
+            remaining = remaining.saturating_sub(1);
         }
-        unreachable!()
+        LeDataChannelIndex(channels.trailing_zeros() as u8)
     }
 }
 
@@ -220,25 +222,53 @@ pub enum LeChannelSelectionAlgorithm {
 
 /// Worst-case sleep-clock accuracy class supplied by the Central.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct LeSleepClockAccuracy(u8);
+pub enum LeSleepClockAccuracy {
+    Ppm500,
+    Ppm250,
+    Ppm150,
+    Ppm100,
+    Ppm75,
+    Ppm50,
+    Ppm30,
+    Ppm20,
+}
 
 impl LeSleepClockAccuracy {
-    pub const fn encoded(self) -> u8 {
-        self.0
+    const fn from_three_bits(bits: u8) -> Self {
+        match bits & 7 {
+            0 => Self::Ppm500,
+            1 => Self::Ppm250,
+            2 => Self::Ppm150,
+            3 => Self::Ppm100,
+            4 => Self::Ppm75,
+            5 => Self::Ppm50,
+            6 => Self::Ppm30,
+            _ => Self::Ppm20,
+        }
     }
-
+    pub const fn encoded(self) -> u8 {
+        match self {
+            Self::Ppm500 => 0,
+            Self::Ppm250 => 1,
+            Self::Ppm150 => 2,
+            Self::Ppm100 => 3,
+            Self::Ppm75 => 4,
+            Self::Ppm50 => 5,
+            Self::Ppm30 => 6,
+            Self::Ppm20 => 7,
+        }
+    }
     /// Worst-case Central sleep-clock error represented by this SCA class.
     pub const fn worst_case_ppm(self) -> u16 {
-        match self.0 {
-            0 => 500,
-            1 => 250,
-            2 => 150,
-            3 => 100,
-            4 => 75,
-            5 => 50,
-            6 => 30,
-            7 => 20,
-            _ => unreachable!(),
+        match self {
+            Self::Ppm500 => 500,
+            Self::Ppm250 => 250,
+            Self::Ppm150 => 150,
+            Self::Ppm100 => 100,
+            Self::Ppm75 => 75,
+            Self::Ppm50 => 50,
+            Self::Ppm30 => 30,
+            Self::Ppm20 => 20,
         }
     }
 }
@@ -276,7 +306,11 @@ impl LeConnectionTiming {
         if supervision_timeout < 10 || supervision_timeout > 3200 {
             return Err(LeConnectionTimingError::SupervisionTimeoutOutsideRange);
         }
-        if supervision_timeout as u32 * 4 <= interval as u32 * (peripheral_latency as u32 + 1) {
+        // The admitted ranges bound the products to 12,800 and 1,600,000.
+        // Saturating operations are exact here; invalid inputs returned above.
+        if (supervision_timeout as u32).saturating_mul(4)
+            <= (interval as u32).saturating_mul((peripheral_latency as u32).saturating_add(1))
+        {
             return Err(LeConnectionTimingError::SupervisionTimeoutTooShort);
         }
         Ok(Self {
@@ -300,8 +334,9 @@ impl LeConnectionTiming {
         self.interval
     }
 
+    // Validated protocol bounds keep these widened calculations exact.
     pub const fn interval_micros(self) -> u32 {
-        self.interval as u32 * 1_250
+        (self.interval as u32).saturating_mul(1_250)
     }
 
     pub const fn peripheral_latency(self) -> u16 {
@@ -313,18 +348,19 @@ impl LeConnectionTiming {
     }
 
     pub const fn supervision_timeout_micros(self) -> u32 {
-        self.supervision_timeout as u32 * 10_000
+        (self.supervision_timeout as u32).saturating_mul(10_000)
     }
 
     /// Earliest first anchor relative to the end of the `CONNECT_IND` packet.
     pub const fn first_window_start_micros(self) -> u32 {
-        1_250 + self.window_offset as u32 * 1_250
+        1_250_u32.saturating_add((self.window_offset as u32).saturating_mul(1_250))
     }
 
     /// Exclusive upper edge of the first transmit window relative to the end
     /// of the `CONNECT_IND` packet.
     pub const fn first_window_end_micros(self) -> u32 {
-        self.first_window_start_micros() + self.window_size as u32 * 1_250
+        self.first_window_start_micros()
+            .saturating_add((self.window_size as u32).saturating_mul(1_250))
     }
 }
 
@@ -412,23 +448,27 @@ pub struct LeLegacyConnectionRequest {
 impl LeLegacyConnectionRequest {
     /// Decode and validate exactly one complete legacy `CONNECT_IND` PDU.
     pub const fn decode(pdu: &[u8]) -> Result<Self, LeLegacyConnectionRequestError> {
-        if pdu.len() < 2 {
+        let Some((header, _)) = pdu.split_first_chunk::<2>() else {
             return Err(LeLegacyConnectionRequestError::HeaderTruncated);
-        }
-        if pdu[0] & PDU_TYPE_MASK != CONNECT_IND_TYPE {
+        };
+        if header[0] & PDU_TYPE_MASK != CONNECT_IND_TYPE {
             return Err(LeLegacyConnectionRequestError::UnexpectedPduType);
         }
-        if pdu[0] & HEADER_RESERVED != 0 || pdu[1] & PAYLOAD_LENGTH_RESERVED != 0 {
+        if header[0] & HEADER_RESERVED != 0 || header[1] & PAYLOAD_LENGTH_RESERVED != 0 {
             return Err(LeLegacyConnectionRequestError::ReservedHeaderBitsSet);
         }
-        let declared = (pdu[1] & PAYLOAD_LENGTH_MASK) as usize;
+        let declared = (header[1] & PAYLOAD_LENGTH_MASK) as usize;
         if declared != LEGACY_CONNECT_IND_PAYLOAD_BYTES || pdu.len() != LEGACY_CONNECT_IND_PDU_BYTES
         {
             return Err(LeLegacyConnectionRequestError::LengthMismatch);
         }
 
+        let Some((pdu, _)) = pdu.split_first_chunk::<LEGACY_CONNECT_IND_PDU_BYTES>() else {
+            return Err(LeLegacyConnectionRequestError::LengthMismatch);
+        };
+
         let initiator = LeDeviceAddress::from_wire_bytes(
-            copy_six(pdu, 2),
+            [pdu[2], pdu[3], pdu[4], pdu[5], pdu[6], pdu[7]],
             if pdu[0] & TX_ADD_RANDOM == 0 {
                 LeDeviceAddressKind::Public
             } else {
@@ -436,18 +476,19 @@ impl LeLegacyConnectionRequest {
             },
         );
         let advertiser = LeDeviceAddress::from_wire_bytes(
-            copy_six(pdu, 8),
+            [pdu[8], pdu[9], pdu[10], pdu[11], pdu[12], pdu[13]],
             if pdu[0] & RX_ADD_RANDOM == 0 {
                 LeDeviceAddressKind::Public
             } else {
                 LeDeviceAddressKind::Random
             },
         );
-        let access_address =
-            match LeUncodedAccessAddress::new(u32::from_le_bytes(copy_four(pdu, 14))) {
-                Ok(value) => value,
-                Err(error) => return Err(LeLegacyConnectionRequestError::AccessAddress(error)),
-            };
+        let access_address = match LeUncodedAccessAddress::new(u32::from_le_bytes([
+            pdu[14], pdu[15], pdu[16], pdu[17],
+        ])) {
+            Ok(value) => value,
+            Err(error) => return Err(LeLegacyConnectionRequestError::AccessAddress(error)),
+        };
         let crc_initialization = LeCrcInitialization::from_wire_bytes([pdu[18], pdu[19], pdu[20]]);
         let timing = match LeConnectionTiming::new(
             pdu[21],
@@ -476,7 +517,7 @@ impl LeLegacyConnectionRequest {
             timing,
             channel_map,
             hop_increment,
-            sleep_clock_accuracy: LeSleepClockAccuracy(pdu[35] >> 5),
+            sleep_clock_accuracy: LeSleepClockAccuracy::from_three_bits(pdu[35] >> 5),
             channel_selection: if pdu[0] & CHANNEL_SELECTION_TWO == 0 {
                 LeChannelSelectionAlgorithm::AlgorithmOne
             } else {
@@ -528,26 +569,6 @@ impl LeLegacyConnectionRequest {
     }
 }
 
-const fn copy_four(source: &[u8], start: usize) -> [u8; 4] {
-    [
-        source[start],
-        source[start + 1],
-        source[start + 2],
-        source[start + 3],
-    ]
-}
-
-const fn copy_six(source: &[u8], start: usize) -> [u8; 6] {
-    [
-        source[start],
-        source[start + 1],
-        source[start + 2],
-        source[start + 3],
-        source[start + 4],
-        source[start + 5],
-    ]
-}
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum LeLegacyConnectionRequestError {
     HeaderTruncated,
@@ -580,21 +601,24 @@ impl LeChannelSelectionAlgorithmTwo {
 
     pub const fn select(self, event_counter: u16) -> LeDataChannelIndex {
         let mut pseudo_random = event_counter ^ self.channel_identifier;
-        let mut round = 0;
+        // Three rounds fit the u8 cursor without saturation.
+        let mut round = 0_u8;
         while round < 3 {
             pseudo_random = permute(pseudo_random);
             pseudo_random = pseudo_random
                 .wrapping_mul(17)
                 .wrapping_add(self.channel_identifier);
-            round += 1;
+            round = round.saturating_add(1);
         }
         pseudo_random ^= self.channel_identifier;
         let unmapped = LeDataChannelIndex((pseudo_random % 37) as u8);
         if self.channel_map.contains(unmapped) {
             unmapped
         } else {
-            let remapping_index =
-                ((self.channel_map.used_channel_count() as u32 * pseudo_random as u32) >> 16) as u8;
+            // At most 37 * 65,535, so the widened product is exact.
+            let remapping_index = (((self.channel_map.used_channel_count() as u32)
+                .saturating_mul(pseudo_random as u32))
+                >> 16) as u8;
             self.channel_map.remap(remapping_index)
         }
     }
@@ -645,12 +669,13 @@ impl ConnectionChannelSelector {
                 hop_increment,
                 last_unmapped,
             } => {
-                let unmapped = (last_unmapped + hop_increment) % 37;
+                // A previous channel is <= 36 and the admitted hop is <= 16.
+                let unmapped = last_unmapped.saturating_add(hop_increment) % 37;
                 let candidate = LeDataChannelIndex(unmapped);
                 let selected = if channel_map.contains(candidate) {
                     candidate
                 } else {
-                    channel_map.remap(unmapped % channel_map.used_channel_count())
+                    channel_map.remap(unmapped)
                 };
                 (selected, unmapped)
             }
@@ -681,11 +706,12 @@ impl ConnectionChannelSelector {
                 hop_increment,
                 last_unmapped,
             } => {
-                let hop_distance = (hop_increment as u16 * (event_count % 37)) % 37;
+                // At most 16 * 36; the following channel sum is at most 72.
+                let hop_distance = (hop_increment as u16).saturating_mul(event_count % 37) % 37;
                 Self::One {
                     channel_map,
                     hop_increment,
-                    last_unmapped: ((last_unmapped as u16 + hop_distance) % 37) as u8,
+                    last_unmapped: ((last_unmapped as u16).saturating_add(hop_distance) % 37) as u8,
                 }
             }
             Self::Two(selector) => Self::Two(selector),
@@ -796,7 +822,8 @@ impl LePeripheralConnectionEventDelta {
     }
 
     pub const fn skipped(self) -> u16 {
-        self.get() - 1
+        // NonZeroU16 makes subtraction exact, including delta one.
+        self.get().saturating_sub(1)
     }
 }
 
@@ -1280,8 +1307,8 @@ impl LePeripheralConnectionEventCompleted {
                 // The instant is `offset + 1` events after the completed one,
                 // within the `skipped + 1` of the step: `offset <= skipped`.
                 Some(LeConnectionTimingIntervals {
-                    before: offset + 1,
-                    after: skipped - offset,
+                    before: offset.saturating_add(1),
+                    after: skipped.saturating_sub(offset),
                 }),
             ),
             None => (None, None),
@@ -1397,6 +1424,11 @@ impl LePeripheralConnectionRecurringEventProvisional {
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::arithmetic_side_effects,
+    clippy::disallowed_macros,
+    clippy::disallowed_methods
+)]
 mod tests;
 
 pub mod acknowledgement;

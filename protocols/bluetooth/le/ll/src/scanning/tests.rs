@@ -39,3 +39,37 @@ fn exact_duplicate_filter_ignores_channel_and_rssi_but_not_data() {
     filter.clear();
     assert!(filter.accept(first));
 }
+
+#[test]
+fn duplicate_eviction_is_fifo_and_zero_capacity_retains_nothing() {
+    let report = |value| {
+        let mut pdu = ADV_NONCONN;
+        pdu[10] = value;
+        parse_legacy_advertising_report(&pdu, PrimaryScanChannel::Channel37, -50).unwrap()
+    };
+    let mut filter = LegacyAdvertisingDuplicateFilter::<2>::new();
+    assert!(filter.accept(report(1)));
+    assert!(filter.accept(report(2)));
+    assert!(!filter.accept(report(1)));
+    assert!(filter.accept(report(3)));
+    assert!(!filter.accept(report(2)));
+    assert!(!filter.accept(report(3)));
+    assert!(filter.accept(report(1)));
+    assert!(filter.accept(report(2)));
+    let mut empty = LegacyAdvertisingDuplicateFilter::<0>::new();
+    assert!(empty.accept(report(1)));
+    assert!(empty.accept(report(1)));
+}
+
+#[test]
+fn every_legacy_report_prefix_retains_its_exact_data() {
+    for length in 0..=super::LEGACY_SCAN_DATA_CAPACITY {
+        let mut pdu = [0x5a; 39];
+        pdu[0] = 2;
+        pdu[1] = (6 + length) as u8;
+        let report =
+            parse_legacy_advertising_report(&pdu[..8 + length], PrimaryScanChannel::Channel37, -50)
+                .unwrap();
+        assert_eq!(report.data(), &pdu[8..8 + length]);
+    }
+}

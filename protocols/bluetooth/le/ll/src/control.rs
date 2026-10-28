@@ -5,6 +5,8 @@
 //! This module does not own SN/NESN, encryption, ACL delivery or LL teardown.
 //! Optional features are deliberately absent until their procedures are closed.
 
+use oer_wire::PrefixLength;
+
 use crate::connection::{
     LeConnectionTiming, LeDataChannelMap, LePeripheralChannelMapUpdateError,
     LePeripheralConnectionUpdateError,
@@ -42,7 +44,7 @@ impl LeVersionInformation {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct LeControlResponse {
     bytes: [u8; 9],
-    len: u8,
+    len: PrefixLength<9>,
 }
 
 /// Page-zero feature result produced by one Host-initiated procedure.
@@ -84,7 +86,7 @@ pub enum LeRemoteVersionAdmission {
 
 impl LeControlResponse {
     pub fn as_bytes(&self) -> &[u8] {
-        &self.bytes[..usize::from(self.len)]
+        self.len.borrow(&self.bytes)
     }
 }
 
@@ -192,19 +194,22 @@ enum LePeripheralPdu<'a> {
 
 fn decode_peripheral_pdu(pdu: &[u8]) -> Result<LePeripheralPdu<'_>, LePeripheralControlError> {
     use LePeripheralControlError as Error;
-    if pdu.len() < 2 || pdu.len() != usize::from(pdu[1]) + 2 {
+    let [header, length, payload @ ..] = pdu else {
+        return Err(Error::MalformedPdu);
+    };
+    if payload.len() != usize::from(*length) {
         return Err(Error::MalformedPdu);
     }
     // CTE is outside this profile. RFU bits are ignored as required by LL.
-    if pdu[0] & 0x20 != 0 {
+    if *header & 0x20 != 0 {
         return Err(Error::UnsupportedHeader);
     }
-    match pdu[0] & 3 {
+    match *header & 3 {
         llid @ (1 | 2) => Ok(LePeripheralPdu::Data(LePeripheralDataFragment {
-            payload: &pdu[2..],
+            payload,
             continuing: llid == 1,
         })),
-        3 if pdu.len() >= 3 => Ok(LePeripheralPdu::Control(&pdu[2..])),
+        3 if !payload.is_empty() => Ok(LePeripheralPdu::Control(payload)),
         _ => Err(Error::MalformedPdu),
     }
 }
@@ -228,7 +233,7 @@ enum LocalFeatureRequest {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum LocalVersionRequest {
     None,
-    Admitted,
+    Admitted(LeVersionInformation),
     Queued(LeControlResponse),
     Transmitted,
 }
@@ -309,13 +314,24 @@ impl LePeripheralControl {
         if self.data_length_request.is_none()
             && let Some(pdu) = self.data_length.queued_request()
         {
-            self.data_length_request = Some(LeControlResponse { bytes: pdu, len: 9 });
+            self.data_length_request = Some(LeControlResponse {
+                bytes: pdu,
+                len: PrefixLength::constant::<9>(),
+            });
         }
     }
 
     /// Bind the Controller identity used for local and peer-requested version exchange.
     pub const fn with_local_version(mut self, version: Option<LeVersionInformation>) -> Self {
         self.local_version = version;
+        // An admitted request owns its last configured identity even when
+        // later requests lose that configuration. Explicit replacements update
+        // both the configuration and this request.
+        if let (Some(version), LocalVersionRequest::Admitted(_)) =
+            (version, self.local_version_request)
+        {
+            self.local_version_request = LocalVersionRequest::Admitted(version);
+        }
         self
     }
 
@@ -342,32 +358,32 @@ impl LePeripheralControl {
             LePeripheralPdu::Data(fragment) => return Ok(LePeripheralReceive::Data(fragment)),
             LePeripheralPdu::Control(payload) => payload,
         };
-        let opcode = payload[0];
+        let Some((&opcode, body)) = payload.split_first() else {
+            return Err(Error::MalformedPdu);
+        };
         let mut response = LeControlResponse {
             bytes: [0; 9],
-            len: 2,
+            len: PrefixLength::constant::<2>(),
         };
         match opcode {
             0x08 => {
-                if payload.len() != 9 {
-                    return Err(Error::MalformedPdu);
-                }
-                let mut peer = [0; 8];
-                peer.copy_from_slice(&payload[1..]);
+                let peer: [u8; 8] = body.try_into().map_err(|_| Error::MalformedPdu)?;
                 self.peer_features = Some(peer);
                 let local = le_peripheral_supported_features();
                 response.bytes[0] = 0x09;
-                for index in 0..local.len() {
-                    response.bytes[index + 1] = peer[index] & local[index];
+                for (slot, (peer, local)) in response
+                    .bytes
+                    .iter_mut()
+                    .skip(1)
+                    .zip(peer.into_iter().zip(local))
+                {
+                    *slot = peer & local;
                 }
-                response.len = 9;
+                response.len = PrefixLength::constant::<9>();
             }
             0x0c => {
-                if payload.len() != 6 {
-                    return Err(Error::MalformedPdu);
-                }
                 self.peer_version = Some(LeVersionInformation(
-                    payload[1..].try_into().expect("validated version length"),
+                    body.try_into().map_err(|_| Error::MalformedPdu)?,
                 ));
                 if matches!(self.local_version_request, LocalVersionRequest::Transmitted) {
                     self.local_version_request = LocalVersionRequest::None;
@@ -381,19 +397,21 @@ impl LePeripheralControl {
                 let version =
                     local_version.ok_or(Error::MandatoryProcedureUnavailable { opcode })?;
                 response.bytes[0] = 0x0c;
-                response.bytes[1..6].copy_from_slice(&version.0);
-                response.len = 6;
+                for (slot, byte) in response.bytes.iter_mut().skip(1).zip(version.0) {
+                    *slot = byte;
+                }
+                response.len = PrefixLength::constant::<6>();
             }
             0x02 => {
-                if payload.len() != 2 {
+                let Ok(payload) = <&[u8; 2]>::try_from(payload) else {
                     return Err(Error::MalformedPdu);
-                }
+                };
                 return Err(Error::PeerTermination { reason: payload[1] });
             }
             0x01 => {
-                if payload.len() != 8 {
+                let Ok(payload) = <&[u8; 8]>::try_from(payload) else {
                     return Err(Error::MalformedPdu);
-                }
+                };
                 let channel_map = LeDataChannelMap::new([
                     payload[1], payload[2], payload[3], payload[4], payload[5],
                 ])
@@ -405,9 +423,9 @@ impl LePeripheralControl {
             }
             // Do not turn a response into another request/response loop.
             0x07 => {
-                if payload.len() != 2 {
+                let Ok(payload) = <&[u8; 2]>::try_from(payload) else {
                     return Err(Error::MalformedPdu);
-                }
+                };
                 if payload[1] == 0x0e
                     && matches!(self.local_feature_request, LocalFeatureRequest::Transmitted)
                 {
@@ -426,21 +444,21 @@ impl LePeripheralControl {
             0x14 => {
                 let pdu = self
                     .data_length
-                    .receive_request(&payload[1..])
+                    .receive_request(body)
                     .map_err(|_| Error::MalformedPdu)?;
                 response.bytes = pdu;
-                response.len = 9;
+                response.len = PrefixLength::constant::<9>();
             }
             0x15 => {
                 self.data_length
-                    .receive_response(&payload[1..])
+                    .receive_response(body)
                     .map_err(|_| Error::MalformedPdu)?;
                 return Ok(LePeripheralReceive::Control);
             }
             0x0d => {
-                if payload.len() != 2 {
+                let Ok(payload) = <&[u8; 2]>::try_from(payload) else {
                     return Err(Error::MalformedPdu);
-                }
+                };
                 if matches!(self.local_feature_request, LocalFeatureRequest::Transmitted) {
                     self.local_feature_request = LocalFeatureRequest::None;
                     self.remote_features_result =
@@ -453,9 +471,9 @@ impl LePeripheralControl {
                 return Ok(LePeripheralReceive::Control);
             }
             0x11 => {
-                if payload.len() != 3 {
+                let Ok(payload) = <&[u8; 3]>::try_from(payload) else {
                     return Err(Error::MalformedPdu);
-                }
+                };
                 if payload[1] == 0x0e
                     && matches!(self.local_feature_request, LocalFeatureRequest::Transmitted)
                 {
@@ -474,12 +492,8 @@ impl LePeripheralControl {
                 return Ok(LePeripheralReceive::Control);
             }
             0x09 => {
-                if payload.len() != 9 {
-                    return Err(Error::MalformedPdu);
-                }
+                let peer: [u8; 8] = body.try_into().map_err(|_| Error::MalformedPdu)?;
                 if matches!(self.local_feature_request, LocalFeatureRequest::Transmitted) {
-                    let mut peer = [0; 8];
-                    peer.copy_from_slice(&payload[1..]);
                     self.peer_features = Some(peer);
                     self.local_feature_request = LocalFeatureRequest::None;
                     self.remote_features_result = Some(LeRemoteFeaturesResult::Success(peer));
@@ -487,24 +501,24 @@ impl LePeripheralControl {
                 return Ok(LePeripheralReceive::Control);
             }
             0x12 => {
-                if payload.len() != 1 {
+                let [] = body else {
                     return Err(Error::MalformedPdu);
-                }
+                };
                 response.bytes[0] = 0x13;
-                response.len = 1;
+                response.len = PrefixLength::constant::<1>();
             }
             // A response never starts another Ping exchange.
             0x13 => {
-                if payload.len() != 1 {
+                let [] = body else {
                     return Err(Error::MalformedPdu);
-                }
+                };
                 return Ok(LePeripheralReceive::Control);
             }
             // Never claim an unsupported mandatory connection transition ran.
             0x00 => {
-                if payload.len() != 12 {
+                let Ok(payload) = <&[u8; 12]>::try_from(payload) else {
                     return Err(Error::MalformedPdu);
-                }
+                };
                 let timing = LeConnectionTiming::new(
                     payload[1],
                     u16::from_le_bytes([payload[2], payload[3]]),
@@ -615,33 +629,32 @@ impl LePeripheralControl {
         if let Some(version) = self.peer_version {
             return LeRemoteVersionAdmission::Cached(version);
         }
-        if self.local_version.is_none() {
+        let Some(version) = self.local_version else {
             return LeRemoteVersionAdmission::LocalIdentityUnavailable;
-        }
+        };
         if self.version_queued || self.local_procedure_pending() {
             return LeRemoteVersionAdmission::Busy;
         }
-        self.local_version_request = LocalVersionRequest::Admitted;
+        self.local_version_request = LocalVersionRequest::Admitted(version);
         LeRemoteVersionAdmission::Admitted
     }
 
     pub fn activate_remote_version_request(&mut self) -> Option<LeVersionInformation> {
-        if !matches!(self.local_version_request, LocalVersionRequest::Admitted) {
+        let LocalVersionRequest::Admitted(version) = self.local_version_request else {
             return self.peer_version;
-        }
+        };
         if let Some(version) = self.peer_version {
             self.local_version_request = LocalVersionRequest::None;
             return Some(version);
         }
-        let version = self
-            .local_version
-            .expect("an admitted local version request retains its identity");
         let mut request = LeControlResponse {
             bytes: [0; 9],
-            len: 6,
+            len: PrefixLength::constant::<6>(),
         };
         request.bytes[0] = 0x0c;
-        request.bytes[1..6].copy_from_slice(&version.0);
+        for (slot, byte) in request.bytes.iter_mut().skip(1).zip(version.0) {
+            *slot = byte;
+        }
         self.local_version_request = LocalVersionRequest::Queued(request);
         None
     }
@@ -701,7 +714,7 @@ impl LePeripheralControl {
                             FEATURES[6],
                             FEATURES[7],
                         ],
-                        len: 9,
+                        len: PrefixLength::constant::<9>(),
                     };
                     Some(&REQUEST)
                 }
@@ -732,7 +745,7 @@ impl LePeripheralControl {
         }
         let mut response = LeControlResponse {
             bytes: [0; 9],
-            len: 2,
+            len: PrefixLength::constant::<2>(),
         };
         response.bytes[0] = 0x02;
         response.bytes[1] = reason;
@@ -822,8 +835,46 @@ impl Default for LePeripheralControl {
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::arithmetic_side_effects,
+    clippy::disallowed_macros,
+    clippy::disallowed_methods
+)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn admitted_version_request_retains_identity_when_the_configuration_is_removed() {
+        let version = LeVersionInformation::new(0x0e, 0x1234, 0x5678);
+        let mut control = LePeripheralControl::new().with_local_version(Some(version));
+        assert_eq!(
+            control.admit_remote_version_request(),
+            LeRemoteVersionAdmission::Admitted
+        );
+        control = control.with_local_version(None);
+        assert_eq!(control.activate_remote_version_request(), None);
+        assert_eq!(
+            control.pending_response().unwrap().as_bytes(),
+            &[0x0c, 0x0e, 0x34, 0x12, 0x78, 0x56]
+        );
+    }
+
+    #[test]
+    fn replacing_the_configured_identity_updates_an_admitted_version_request() {
+        let original = LeVersionInformation::new(0x0d, 0, 0);
+        let replacement = LeVersionInformation::new(0x0e, 0x1234, 0x5678);
+        let mut control = LePeripheralControl::new().with_local_version(Some(original));
+        assert_eq!(
+            control.admit_remote_version_request(),
+            LeRemoteVersionAdmission::Admitted
+        );
+        control = control.with_local_version(Some(replacement));
+        control.activate_remote_version_request();
+        assert_eq!(
+            control.pending_response().unwrap().as_bytes(),
+            &[0x0c, 0x0e, 0x34, 0x12, 0x78, 0x56]
+        );
+    }
 
     const FEATURE_REQ: [u8; 11] = [3, 9, 8, 255, 255, 255, 255, 255, 255, 255, 255];
 

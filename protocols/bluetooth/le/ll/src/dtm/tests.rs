@@ -106,7 +106,9 @@ fn transmitter_packets_stay_on_the_interval_grid() {
                 .unwrap()
                 .is_none()
         );
-        session.ended(EventResult::Executed { anchor: None });
+        session
+            .ended(EventResult::Executed { anchor: None })
+            .unwrap();
         // The next plan happens after the packet: late grid points are skipped.
         now = end + 900;
     }
@@ -143,7 +145,9 @@ fn a_later_le_2m_packet_takes_the_next_admitted_slot() {
         first.window.start().as_micros(),
         first.window.end().as_micros(),
     );
-    session.ended(EventResult::Executed { anchor: None });
+    session
+        .ended(EventResult::Executed { anchor: None })
+        .unwrap();
     // Planned 150 us after the packet, the next slot is still reachable
     // (150 + 107 + 40 + 100 = 397 us < 433 us): the planning slack of the
     // first packet does not push it one interval later.
@@ -154,7 +158,9 @@ fn a_later_le_2m_packet_takes_the_next_admitted_slot() {
         panic!("the second packet")
     };
     assert_eq!(second.window.start().as_micros(), start + 625);
-    session.ended(EventResult::Executed { anchor: None });
+    session
+        .ended(EventResult::Executed { anchor: None })
+        .unwrap();
     // Planned too late for the next slot, the packet takes the one after.
     let Some(DtmEvent::Transmit(third)) = session
         .next_request(
@@ -192,8 +198,10 @@ fn a_receiver_counts_packets_and_drains_before_it_stops() {
             panic!("a receiver plans its next window")
         };
         recurring.push(test.recurring);
-        session.report(report);
-        session.ended(EventResult::Executed { anchor: None });
+        session.report(report).unwrap();
+        session
+            .ended(EventResult::Executed { anchor: None })
+            .unwrap();
     }
     assert_eq!(recurring, [false, true, true]);
     let Some(DtmEvent::Receive(_)) = session
@@ -210,7 +218,7 @@ fn a_receiver_counts_packets_and_drains_before_it_stops() {
             .unwrap()
             .is_none()
     );
-    session.ended(EventResult::NotExecuted);
+    session.ended(EventResult::NotExecuted).unwrap();
     assert_eq!(session.drained(), Some(2));
     assert!(!session.is_active());
     assert_eq!(session.counters().empty, 1);
@@ -338,7 +346,7 @@ fn uncertain_events_are_counted_apart_and_the_next_test_event_follows() {
         else {
             panic!("receiver event")
         };
-        session.ended(result);
+        session.ended(result).unwrap();
         assert_eq!(
             session.counters.aborted,
             u32::from(result == EventResult::Aborted)
@@ -369,8 +377,12 @@ fn reports_without_an_event_in_progress_count_nothing() {
             phy: TestPhy::Le1M,
         })
         .unwrap();
-    session.report(TestReport::Received { rssi_dbm: -40 });
-    session.ended(EventResult::Executed { anchor: None });
+    session
+        .report(TestReport::Received { rssi_dbm: -40 })
+        .unwrap();
+    session
+        .ended(EventResult::Executed { anchor: None })
+        .unwrap();
     assert_eq!(session.counters(), super::DtmCounters::default());
     let mut payload = [0; DTM_MAX_PAYLOAD];
     assert!(
@@ -394,4 +406,147 @@ fn detached_coded_tx_window_is_refused_without_a_session_or_payload() {
         next_window(test, LeInstant::from_micros(0), RadioTiming::MINIMAL, None),
         Err(DtmWindowError::UnsupportedPhy)
     );
+}
+
+#[test]
+fn every_report_counter_overflow_retains_the_session_and_rejected_observation() {
+    use super::{DtmCounter, DtmCounterExhausted};
+    for (report, counter) in [
+        (TestReport::Nothing, DtmCounter::Empty),
+        (TestReport::Received { rssi_dbm: -40 }, DtmCounter::Received),
+        (TestReport::Failed, DtmCounter::Failed),
+    ] {
+        let mut session = DtmSession::new(power(0));
+        session
+            .start(DtmTest::Receive {
+                channel: TestChannel::new(0).unwrap(),
+                phy: TestPhy::Le1M,
+            })
+            .unwrap();
+        let mut payload = [0; DTM_MAX_PAYLOAD];
+        session
+            .next_request(LeInstant::from_micros(0), TIMING, &mut payload)
+            .unwrap();
+        session.counters.empty = u32::MAX;
+        session.counters.received = u32::MAX;
+        session.counters.failed = u32::MAX;
+        let before = session.counters();
+        let phase = session.phase;
+        let last = session.last;
+        assert_eq!(
+            session.report(report),
+            Err(DtmCounterExhausted {
+                counter,
+                value: u32::MAX
+            })
+        );
+        assert_eq!(session.counters(), before);
+        assert_eq!(session.phase, phase);
+        assert_eq!(session.last, last);
+        assert!(session.in_progress());
+        assert_eq!(session.end(), DtmStop::Draining);
+        session.ended(EventResult::NotExecuted).unwrap();
+        assert!(!session.is_active());
+    }
+}
+
+#[test]
+fn every_completion_counter_overflow_keeps_the_ending_event_owned() {
+    use super::{DtmCounter, DtmCounterExhausted};
+    for (result, counter) in [
+        (EventResult::Executed { anchor: None }, DtmCounter::Executed),
+        (EventResult::NotExecuted, DtmCounter::NotExecuted),
+        (EventResult::Aborted, DtmCounter::Aborted),
+        (EventResult::Indeterminate, DtmCounter::Indeterminate),
+    ] {
+        let mut session = DtmSession::new(power(0));
+        session.start(transmit()).unwrap();
+        let mut payload = [0; DTM_MAX_PAYLOAD];
+        session
+            .next_request(LeInstant::from_micros(0), TIMING, &mut payload)
+            .unwrap();
+        assert_eq!(session.end(), DtmStop::Draining);
+        session.counters.executed = u32::MAX;
+        session.counters.not_executed = u32::MAX;
+        session.counters.aborted = u32::MAX;
+        session.counters.indeterminate = u32::MAX;
+        let before = session.counters();
+        let phase = session.phase;
+        let last = session.last;
+        assert_eq!(
+            session.ended(result),
+            Err(DtmCounterExhausted {
+                counter,
+                value: u32::MAX
+            })
+        );
+        assert_eq!(session.counters(), before);
+        assert_eq!(session.phase, phase);
+        assert_eq!(session.last, last);
+        assert!(session.in_progress());
+        assert!(session.is_active());
+        assert_eq!(session.drained(), None);
+    }
+}
+
+#[test]
+fn every_transmit_length_has_the_specified_airtime_interval_and_exact_payload_prefix() {
+    for phy in [TestPhy::Le1M, TestPhy::Le2M] {
+        for length in 0..=u8::MAX {
+            let mut session = DtmSession::new(power(0));
+            session
+                .start(DtmTest::Transmit {
+                    channel: TestChannel::new(0).unwrap(),
+                    phy,
+                    pattern: DtmPayloadPattern::RepeatedAllOnes,
+                    length,
+                })
+                .unwrap();
+            let mut payload = [0x5a; DTM_MAX_PAYLOAD];
+            let Some(DtmEvent::Transmit(first)) = session
+                .next_request(LeInstant::from_micros(0), TIMING, &mut payload)
+                .unwrap()
+            else {
+                panic!("transmit request");
+            };
+            let air = match phy {
+                TestPhy::Le1M => (10 + u64::from(length)) * 8,
+                _ => (11 + u64::from(length)) * 4,
+            };
+            assert_eq!(first.window.duration().as_micros(), air);
+            assert_eq!(
+                first.payload_type.value(),
+                DtmPayloadPattern::RepeatedAllOnes.payload_type()
+            );
+            assert_eq!(first.payload.len(), usize::from(length));
+            assert!(first.payload.iter().all(|byte| *byte == 0xff));
+            let anchor = first.window.start().as_micros();
+            assert!(
+                payload[usize::from(length)..]
+                    .iter()
+                    .all(|byte| *byte == 0x5a)
+            );
+            session
+                .ended(EventResult::Executed { anchor: None })
+                .unwrap();
+            let Some(DtmEvent::Transmit(second)) = session
+                .next_request(LeInstant::from_micros(0), TIMING, &mut payload)
+                .unwrap()
+            else {
+                panic!("transmit request");
+            };
+            assert_eq!(
+                second.window.start().as_micros() - anchor,
+                (air + 249).div_ceil(625) * 625
+            );
+        }
+    }
+}
+
+#[test]
+fn slot_rounding_handles_maximum_lateness_and_refuses_zero_division() {
+    assert_eq!(super::ceil_div(u64::MAX, 625), Some(u64::MAX / 625 + 1));
+    assert_eq!(super::ceil_div(u64::MAX, 1), Some(u64::MAX));
+    assert_eq!(super::ceil_div(0, 625), Some(0));
+    assert_eq!(super::ceil_div(1, 0), None);
 }

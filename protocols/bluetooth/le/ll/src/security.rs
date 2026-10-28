@@ -8,13 +8,15 @@
 //! retained by that radio owner and never calls
 //! [`LePeripheralAclEncryption::encrypt_new_packet`] again.
 
+use oer_wire::PrefixLength;
+
 use aes::{
     Aes128,
-    cipher::{BlockEncrypt, KeyInit, generic_array::GenericArray},
+    cipher::{BlockEncrypt, KeyInit},
 };
 
 use ccm::{
-    Ccm, Nonce, Tag,
+    Ccm,
     aead::AeadInPlace,
     consts::{U4, U13},
 };
@@ -43,7 +45,7 @@ impl LeLongTermKey {
     pub fn derive_session_key(&self, diversifier: LeSessionKeyDiversifier) -> LeAclSessionKey {
         let mut aes_key = Zeroizing::new(self.0);
         aes_key.reverse();
-        let cipher = Aes128::new(GenericArray::from_slice(aes_key.as_ref()));
+        let cipher = Aes128::new((&*aes_key).into());
         let mut key = Zeroizing::new(diversifier.0);
         key.reverse();
         encrypt_block(&cipher, &mut key);
@@ -110,13 +112,13 @@ impl LeLongTermKeyRequest {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct LeEncryptionControlResponse {
     bytes: [u8; 13],
-    len: u8,
+    len: PrefixLength<13>,
     encrypted: bool,
 }
 
 impl LeEncryptionControlResponse {
     pub fn as_bytes(&self) -> &[u8] {
-        &self.bytes[..usize::from(self.len)]
+        self.len.borrow(&self.bytes)
     }
 
     pub const fn is_encrypted(self) -> bool {
@@ -274,15 +276,30 @@ impl LePeripheralEncryptionProcedure {
             }
             return Err(LePeripheralEncryptionProcedureError::MalformedEncryptionRequest);
         }
-        let mut random_number = [0; 8];
-        random_number.copy_from_slice(&request[1..9]);
+        let random_number = [
+            request[1], request[2], request[3], request[4], request[5], request[6], request[7],
+            request[8],
+        ];
         let encrypted_diversifier = u16::from_le_bytes([request[9], request[10]]);
         let mut diversifier = [0; 16];
-        diversifier[..8].copy_from_slice(&request[11..19]);
-        diversifier[8..].copy_from_slice(&random.session_key_diversifier);
+        for (slot, byte) in diversifier.iter_mut().zip(
+            request
+                .iter()
+                .skip(11)
+                .take(8)
+                .chain(random.session_key_diversifier.iter()),
+        ) {
+            *slot = *byte;
+        }
         let mut initialization_vector = [0; 8];
-        initialization_vector[..4].copy_from_slice(&request[19..23]);
-        initialization_vector[4..].copy_from_slice(&random.initialization_vector);
+        for (slot, byte) in initialization_vector.iter_mut().zip(
+            request
+                .iter()
+                .skip(19)
+                .chain(random.initialization_vector.iter()),
+        ) {
+            *slot = *byte;
+        }
         self.state = LePeripheralEncryptionState::EncryptionResponsePending(
             LePeripheralEncryptionMaterial {
                 request: LeLongTermKeyRequest {
@@ -302,19 +319,26 @@ impl LePeripheralEncryptionProcedure {
     pub fn pending_response(&self) -> Option<LeEncryptionControlResponse> {
         let mut response = LeEncryptionControlResponse {
             bytes: [0; 13],
-            len: 0,
+            len: PrefixLength::constant::<0>(),
             encrypted: false,
         };
         match &self.state {
             LePeripheralEncryptionState::EncryptionResponsePending(material) => {
                 response.bytes[0] = 0x04;
-                response.bytes[1..9].copy_from_slice(&material.diversifier[8..]);
-                response.bytes[9..13].copy_from_slice(&material.initialization_vector[4..]);
-                response.len = 13;
+                for (slot, byte) in response.bytes.iter_mut().skip(1).zip(
+                    material
+                        .diversifier
+                        .iter()
+                        .skip(8)
+                        .chain(material.initialization_vector.iter().skip(4)),
+                ) {
+                    *slot = *byte;
+                }
+                response.len = PrefixLength::constant::<13>();
             }
             LePeripheralEncryptionState::StartRequestPending { .. } => {
                 response.bytes[0] = 0x05;
-                response.len = 1;
+                response.len = PrefixLength::constant::<1>();
             }
             LePeripheralEncryptionState::StartResponsePending {
                 response: encrypted,
@@ -324,13 +348,16 @@ impl LePeripheralEncryptionProcedure {
                 response: encrypted,
                 ..
             } => {
-                response.bytes[..encrypted.len()].copy_from_slice(encrypted);
-                response.len = encrypted.len() as u8;
+                for (slot, byte) in response.bytes.iter_mut().zip(encrypted) {
+                    *slot = *byte;
+                }
+                response.len = PrefixLength::constant::<5>();
                 response.encrypted = true;
             }
             LePeripheralEncryptionState::RejectPending => {
-                response.bytes[..2].copy_from_slice(&[0x0d, 0x06]);
-                response.len = 2;
+                response.bytes[0] = 0x0d;
+                response.bytes[1] = 0x06;
+                response.len = PrefixLength::constant::<2>();
             }
             _ => return None,
         }
@@ -498,7 +525,7 @@ impl LePeripheralEncryptionProcedure {
         let length = encryption
             .decrypt_new_packet(header, packet)
             .map_err(map_acl_receive_error)?;
-        if header & 0x03 != 0x03 || length != 1 || packet[0] != 0x06 {
+        if header & 0x03 != 0x03 || length != 1 || packet.first().copied() != Some(0x06) {
             return Err(LePeripheralEncryptionProcedureError::UnexpectedPhysicalChannelPdu);
         }
         let mut response = [0; 5];
@@ -529,7 +556,7 @@ impl LePeripheralEncryptionProcedure {
         let length = encryption
             .decrypt_new_packet(header, packet)
             .map_err(map_acl_receive_error)?;
-        if length != 1 || packet[0] != 0x0a {
+        if length != 1 || packet.first().copied() != Some(0x0a) {
             return Err(LePeripheralEncryptionProcedureError::UnexpectedPhysicalChannelPdu);
         }
         let mut response = [0; 5];
@@ -560,7 +587,7 @@ impl LePeripheralEncryptionProcedure {
         let length = encryption
             .decrypt_new_packet(header, packet)
             .map_err(map_acl_receive_error)?;
-        if header & 0x03 == 0x03 && length == 1 && packet[0] == 0x0a {
+        if header & 0x03 == 0x03 && length == 1 && packet.first().copied() == Some(0x0a) {
             let mut response = [0; 5];
             response[0] = 0x0b;
             encryption
@@ -718,7 +745,7 @@ impl LePeripheralAclEncryption {
         if plaintext_len == 0 {
             return empty_pdu_length(header);
         }
-        validate_encrypt_buffer(packet.len(), plaintext_len)?;
+        let encrypted_len = validate_encrypt_buffer(packet.len(), plaintext_len)?;
         let counter = self.peripheral_transmit_counter.current()?;
         encrypt_ccm(
             &self.session_key.0,
@@ -730,7 +757,7 @@ impl LePeripheralAclEncryption {
             plaintext_len,
         )?;
         self.peripheral_transmit_counter.commit(counter);
-        Ok(plaintext_len + LE_ACL_MIC_BYTES)
+        Ok(encrypted_len)
     }
 
     /// Authenticate and decrypt one new Central-to-Peripheral PDU in place.
@@ -751,7 +778,9 @@ impl LePeripheralAclEncryption {
         if encrypted_len <= LE_ACL_MIC_BYTES {
             return Err(LeAclEncryptionError::BufferTooSmall);
         }
-        let plaintext_len = encrypted_len - LE_ACL_MIC_BYTES;
+        let plaintext_len = encrypted_len
+            .checked_sub(LE_ACL_MIC_BYTES)
+            .ok_or(LeAclEncryptionError::BufferTooSmall)?;
         if plaintext_len > LE_ENCRYPTED_PLAINTEXT_BYTES {
             return Err(LeAclEncryptionError::PayloadTooLong);
         }
@@ -768,7 +797,10 @@ impl LePeripheralAclEncryption {
             packet.zeroize();
             return Err(error);
         }
-        packet[plaintext_len..].fill(0);
+        packet
+            .get_mut(plaintext_len..)
+            .ok_or(LeAclEncryptionError::BufferTooSmall)?
+            .fill(0);
         self.central_transmit_counter.commit(counter);
         Ok(plaintext_len)
     }
@@ -793,25 +825,27 @@ fn empty_pdu_length(header: u8) -> Result<usize, LeAclEncryptionError> {
 fn validate_encrypt_buffer(
     buffer_len: usize,
     plaintext_len: usize,
-) -> Result<(), LeAclEncryptionError> {
+) -> Result<usize, LeAclEncryptionError> {
     if plaintext_len > LE_ENCRYPTED_PLAINTEXT_BYTES {
         return Err(LeAclEncryptionError::PayloadTooLong);
     }
-    if buffer_len < plaintext_len + LE_ACL_MIC_BYTES {
+    let encrypted_len = plaintext_len
+        .checked_add(LE_ACL_MIC_BYTES)
+        .ok_or(LeAclEncryptionError::PayloadTooLong)?;
+    if buffer_len < encrypted_len {
         return Err(LeAclEncryptionError::BufferTooSmall);
     }
-    Ok(())
+    Ok(encrypted_len)
 }
 
 fn nonce(initialization_vector: &[u8; 8], counter: u64, central: bool) -> [u8; 13] {
-    let mut nonce = [0; 13];
-    nonce[..5].copy_from_slice(&counter.to_le_bytes()[..5]);
-    nonce[4] &= 0x7f;
+    let [a, b, c, d, mut e, _, _, _] = counter.to_le_bytes();
+    e &= 0x7f;
     if central {
-        nonce[4] |= 0x80;
+        e |= 0x80;
     }
-    nonce[5..].copy_from_slice(initialization_vector);
-    nonce
+    let [f, g, h, i, j, k, l, m] = *initialization_vector;
+    [a, b, c, d, e, f, g, h, i, j, k, l, m]
 }
 
 fn aad(header: u8) -> u8 {
@@ -833,17 +867,17 @@ fn encrypt_ccm(
     let (plaintext, tail) = packet
         .split_at_mut_checked(plaintext_len)
         .ok_or(LeAclEncryptionError::BufferTooSmall)?;
-    let mic = tail
-        .get_mut(..LE_ACL_MIC_BYTES)
+    let (mic, _) = tail
+        .split_first_chunk_mut::<LE_ACL_MIC_BYTES>()
         .ok_or(LeAclEncryptionError::BufferTooSmall)?;
     let mut aes_key = Zeroizing::new(*key);
     aes_key.reverse();
-    let cipher = LeAclCcm::new(GenericArray::from_slice(aes_key.as_ref()));
+    let cipher = LeAclCcm::new((&*aes_key).into());
     let nonce = nonce(initialization_vector, counter, central);
     let tag = cipher
-        .encrypt_in_place_detached(Nonce::<U13>::from_slice(&nonce), &[aad(header)], plaintext)
+        .encrypt_in_place_detached((&nonce).into(), &[aad(header)], plaintext)
         .map_err(|_| LeAclEncryptionError::PayloadTooLong)?;
-    mic.copy_from_slice(&tag);
+    *mic = tag.into();
     Ok(())
 }
 
@@ -864,24 +898,24 @@ fn decrypt_ccm(
         .ok_or(LeAclEncryptionError::BufferTooSmall)?;
     let mut aes_key = Zeroizing::new(*key);
     aes_key.reverse();
-    let cipher = LeAclCcm::new(GenericArray::from_slice(aes_key.as_ref()));
+    let cipher = LeAclCcm::new((&*aes_key).into());
     let nonce = nonce(initialization_vector, counter, central);
     // RustCrypto compares the complete detached MIC in constant time.
     cipher
-        .decrypt_in_place_detached(
-            Nonce::<U13>::from_slice(&nonce),
-            &[aad(header)],
-            plaintext,
-            Tag::<U4>::from_slice(mic),
-        )
+        .decrypt_in_place_detached((&nonce).into(), &[aad(header)], plaintext, mic.into())
         .map_err(|_| LeAclEncryptionError::MicMismatch)
 }
 
 fn encrypt_block(cipher: &Aes128, block: &mut [u8; 16]) {
-    cipher.encrypt_block(GenericArray::from_mut_slice(block));
+    cipher.encrypt_block(block.into());
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::arithmetic_side_effects,
+    clippy::disallowed_macros,
+    clippy::disallowed_methods
+)]
 mod tests {
     use super::*;
 
