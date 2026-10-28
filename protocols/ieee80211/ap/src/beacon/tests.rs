@@ -323,7 +323,7 @@ fn an_announced_switch_counts_down_in_each_beacon_until_it_is_due() {
     );
     beacon.announce_channel_switch(switch).unwrap();
     // A probe response repeats the announcement.
-    assert_eq!(announced(beacon.advertisement()), Some(switch));
+    assert_eq!(announced(beacon.advertisement().unwrap()), Some(switch));
 
     let sequence = SequenceNumber::new(4).unwrap();
     let mut counts = [0_u8; 2];
@@ -386,4 +386,38 @@ fn an_announced_switch_counts_down_in_each_beacon_until_it_is_due() {
         .position(|window| window[0] == 3 && window[1] == 1)
         .unwrap();
     assert_eq!(frame[36 + ds + 2], 1);
+}
+
+#[test]
+fn initialized_template_refuses_lengths_outside_its_storage() {
+    for length in [AP_BEACON_CAPACITY + 1, usize::MAX] {
+        let mut storage = [0; AP_BEACON_CAPACITY];
+        assert_eq!(
+            ApBeacon::from_initialized(&mut storage, length, 100).err(),
+            Some(ApBeaconLengthError {
+                length,
+                capacity: AP_BEACON_CAPACITY
+            })
+        );
+    }
+    for length in [0, AP_BEACON_CAPACITY] {
+        let mut storage = [0; AP_BEACON_CAPACITY];
+        let beacon = ApBeacon::from_initialized(&mut storage, length, u16::MAX).unwrap();
+        assert_eq!(beacon.advertisement().unwrap().len(), length);
+        assert_eq!(beacon.interval().as_micros(), u64::from(u16::MAX) * 1024);
+    }
+}
+
+#[test]
+fn a_truncated_channel_switch_count_is_refused_without_writing_outside_the_template() {
+    let mut storage = [0; AP_BEACON_CAPACITY];
+    storage[AP_BEACON_CAPACITY - 2] = CHANNEL_SWITCH_ELEMENT_ID;
+    storage[AP_BEACON_CAPACITY - 1] = 3;
+    let mut beacon = ApBeacon::from_initialized(&mut storage, AP_BEACON_CAPACITY, 100).unwrap();
+    // Skip well-formed zero-length elements until the final truncated one.
+    assert_eq!(beacon.write_channel_switch_count(2), None);
+    assert_eq!(
+        beacon.remove_channel_switch_elements(),
+        Err(ApChannelSwitchError::MalformedTemplate)
+    );
 }

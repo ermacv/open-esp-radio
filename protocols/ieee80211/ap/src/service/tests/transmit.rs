@@ -5,7 +5,9 @@ fn begin(
     nonce: [u8; 32],
     replay: u64,
 ) -> ApEapolTransmit<512> {
-    service.authenticate_open(PEER, oer_time::Instant::from_micros(0));
+    service
+        .authenticate_open(PEER, oer_time::Instant::from_micros(0))
+        .unwrap();
     service
         .associate_rsn(
             PEER,
@@ -113,7 +115,9 @@ fn another_peer_authenticating_keeps_the_original_publication_current() {
     let mut storage = AccessPointPeerStorage::new();
     let mut service = service(&mut storage);
     let (_message1, context) = begin(&mut service, [7; 32], 9).into_parts();
-    service.authenticate_open(OTHER, oer_time::Instant::from_micros(10));
+    service
+        .authenticate_open(OTHER, oer_time::Instant::from_micros(10))
+        .unwrap();
     assert_eq!(
         service.observe_wpa2_transmit(context, true, oer_time::Instant::from_micros(20)),
         Ok(ApEapolTxCompletion::WindowArmed),

@@ -317,3 +317,102 @@ fn a_full_responder_refuses_a_new_station_and_forgets_a_removed_one() {
     );
     assert_eq!(only_reply(&output).status, AP_SAE_STATUS_SUCCESS);
 }
+
+#[test]
+fn maximal_queued_commit_count_still_requests_an_anti_clogging_token() {
+    let mut access_point = responder();
+    let mut random = Counter(0);
+    let station = Station::new(STATION, PASSWORD, true);
+    let (commit, len) = station.commit_body(None);
+    access_point.receive(
+        frame(STATION, 1, station.status(), &commit[..len]),
+        oer_time::Instant::from_micros(0),
+        0,
+        &mut random,
+    );
+    // The existing Committed session contributes one to the open count.
+    let other = [2, 0, 0, 0, 0, 3];
+    let output = access_point.receive(
+        frame(other, 1, station.status(), &commit[..len]),
+        oer_time::Instant::from_micros(0),
+        usize::MAX,
+        &mut random,
+    );
+    assert_eq!(
+        only_reply(&output).status,
+        AP_SAE_STATUS_ANTI_CLOGGING_TOKEN_REQUIRED
+    );
+    assert_eq!(output.result, ApSaeResult::Continue);
+}
+
+#[test]
+fn missing_confirm_and_accept_keys_return_the_session_fault_without_advancing_it() {
+    for phase in [
+        ApSaePhase::Nothing,
+        ApSaePhase::Committed,
+        ApSaePhase::Confirmed,
+        ApSaePhase::Accepted,
+    ] {
+        let mut session = Session::new(STATION);
+        session.phase = phase;
+        session.send_confirm = 7;
+        let expected = session.fault();
+        assert_eq!(store_confirm(&mut session), Err(expected));
+        assert_eq!(accept(&mut session), Err(expected));
+        assert_eq!(session.phase, phase);
+        assert_eq!(session.send_confirm, 7);
+        assert!(session.stored_confirm.is_none());
+        assert!(session.accepted_scalar.is_none());
+    }
+}
+
+#[test]
+fn an_unreset_committed_step_returns_observations_instead_of_panicking() {
+    let access_point = responder();
+    let station = Station::new(STATION, PASSWORD, true);
+    let mut session = Session::new(STATION);
+    session.phase = ApSaePhase::Committed;
+    let fault = session.fault();
+    let output = commit_step(
+        ACCESS_POINT,
+        &access_point.credential,
+        &mut session,
+        station.commit.values(),
+        true,
+        false,
+        &mut Counter(0),
+    );
+    assert_eq!(output.result, ApSaeResult::Fault(fault));
+    assert_eq!(output.replies().count(), 0);
+    assert_eq!(session.phase, ApSaePhase::Committed);
+}
+
+#[test]
+fn processing_failure_keeps_both_the_commit_and_failure_reply_in_order() {
+    let access_point = responder();
+    let mut session = Session::new(STATION);
+    let peer_commit = SaeCommitValues {
+        scalar: [0; SAE_PRIME_LEN],
+        element: [0; 2 * SAE_PRIME_LEN],
+    };
+    let output = commit_step(
+        ACCESS_POINT,
+        &access_point.credential,
+        &mut session,
+        peer_commit,
+        true,
+        false,
+        &mut Counter(0),
+    );
+    let replies: std::vec::Vec<_> = output.replies().collect();
+    assert_eq!(replies.len(), 2);
+    assert_eq!(replies[0].body().len(), SAE_COMMIT_LEN);
+    assert!(replies[1].body().is_empty());
+    assert_eq!(replies[1].status, AP_SAE_STATUS_UNSPECIFIED_FAILURE);
+    assert_eq!(
+        output.result,
+        ApSaeResult::Failed {
+            status: AP_SAE_STATUS_UNSPECIFIED_FAILURE
+        }
+    );
+}

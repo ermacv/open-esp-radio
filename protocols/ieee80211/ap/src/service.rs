@@ -344,6 +344,12 @@ pub enum ApMlmeAction {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ApServiceError {
     UnknownPeer,
+    /// The next identity would reuse the storage's exhausted u32 frontier.
+    GenerationExhausted,
+    /// A peer index did not resolve the equally sized companion storage.
+    PeerStorageInvariant {
+        index: usize,
+    },
     WrongPeerPhase,
     SecurityModeMismatch,
     AssociationIdMismatch,
@@ -580,8 +586,8 @@ impl ApPeer {
         association_id: u16,
         association_epoch: u32,
         now: oer_time::Instant,
-    ) -> Self {
-        Self {
+    ) -> Result<Self, ApServiceError> {
+        Ok(Self {
             address,
             association_id,
             association_epoch,
@@ -600,13 +606,13 @@ impl ApPeer {
             ht: None,
             qos_supported: false,
             next_qos_sequences: [SequenceNumber::ZERO; 8],
-            tx_block_ack: new_ap_tx_block_ack(),
+            tx_block_ack: new_ap_tx_block_ack()?,
             power_state: ApPeerPowerState::Active,
             buffered_unicast_frames: 0,
             buffered_release_in_flight: false,
             last_activity: now,
             deadline: now.saturating_add(AP_ASSOCIATION_DEADLINE),
-        }
+        })
     }
 
     const fn association_identity(&self) -> ApAssociationIdentity {
@@ -643,8 +649,8 @@ const AP_TX_BLOCK_ACK_POLICY: TxBlockAckOriginatorPolicy = TxBlockAckOriginatorP
     next_dialog_token: next_nonzero_dialog_token,
 };
 
-fn new_ap_tx_block_ack() -> TxBlockAckOriginator<1> {
-    match TxBlockAckOriginator::new(
+fn new_ap_tx_block_ack() -> Result<TxBlockAckOriginator<1>, ApServiceError> {
+    TxBlockAckOriginator::new(
         AP_TX_BLOCK_ACK_POLICY,
         TxBlockAckOriginatorConfig {
             window: AP_TX_BLOCK_ACK_WINDOW,
@@ -655,20 +661,20 @@ fn new_ap_tx_block_ack() -> TxBlockAckOriginator<1> {
             // response.
             amsdu_tids: 1 << AP_TX_BLOCK_ACK_TID,
         },
-    ) {
-        Ok(originator) => originator,
-        Err(_) => panic!("valid AP TX BlockAck policy"),
-    }
+    )
+    .map_err(ApServiceError::BlockAck)
 }
 
 const fn new_ap_wpa2_retry() -> RsnRetry {
-    match RsnRetry::new(RsnRetryConfig {
-        first_interval: AP_WPA2_FIRST_RETRY_INTERVAL,
-        subsequent_interval: AP_WPA2_SUBSEQUENT_RETRY_INTERVAL,
-        attempts: AP_WPA2_RETRY_ATTEMPTS,
-    }) {
-        Ok(retry) => retry,
-        Err(_) => panic!("valid AP WPA2 retry policy"),
+    const {
+        match RsnRetry::new(RsnRetryConfig {
+            first_interval: AP_WPA2_FIRST_RETRY_INTERVAL,
+            subsequent_interval: AP_WPA2_SUBSEQUENT_RETRY_INTERVAL,
+            attempts: AP_WPA2_RETRY_ATTEMPTS,
+        }) {
+            Ok(retry) => retry,
+            Err(_) => panic!("valid AP WPA2 retry policy"),
+        }
     }
 }
 
@@ -764,7 +770,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
         client_limit: AccessPointClientLimit,
         inactive_timeout: AccessPointInactiveTimeout,
         peer_storage: AccessPointPeers<'peers>,
-    ) -> Self {
+    ) -> Result<Self, ApServiceError> {
         Self::with_security(
             address,
             AccessPointSecurityMaterial::Wpa2Personal { pmk, gtk },
@@ -783,7 +789,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
         client_limit: AccessPointClientLimit,
         inactive_timeout: AccessPointInactiveTimeout,
         peer_storage: AccessPointPeers<'peers>,
-    ) -> Self {
+    ) -> Result<Self, ApServiceError> {
         Self::with_security(
             address,
             AccessPointSecurityMaterial::Wpa3Personal { gtk, igtk },
@@ -798,7 +804,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
         client_limit: AccessPointClientLimit,
         inactive_timeout: AccessPointInactiveTimeout,
         peer_storage: AccessPointPeers<'peers>,
-    ) -> Self {
+    ) -> Result<Self, ApServiceError> {
         Self::with_security(
             address,
             AccessPointSecurityMaterial::Open,
@@ -814,13 +820,14 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
         client_limit: AccessPointClientLimit,
         inactive_timeout: AccessPointInactiveTimeout,
         peer_storage: AccessPointPeers<'peers>,
-    ) -> Self {
-        peer_storage.storage.clear();
-        peer_storage.storage.generation = peer_storage
+    ) -> Result<Self, ApServiceError> {
+        let generation = peer_storage
             .storage
             .generation
             .checked_add(1)
-            .expect("AP peer generation space is not reusable");
+            .ok_or(ApServiceError::GenerationExhausted)?;
+        peer_storage.storage.clear();
+        peer_storage.storage.generation = generation;
         let group_management = match &security {
             AccessPointSecurityMaterial::Wpa3Personal { igtk, .. } => {
                 Some(oer_ieee80211_rsn::bip::BipTransmitter::new(igtk))
@@ -828,7 +835,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
             AccessPointSecurityMaterial::Open
             | AccessPointSecurityMaterial::Wpa2Personal { .. } => None,
         };
-        Self {
+        Ok(Self {
             spp_scope: core::marker::PhantomData,
             address,
             security,
@@ -845,7 +852,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
             buffered_group_release_generation: 0,
             buffered_group_release_in_flight: false,
             operational_tx_block_ack: false,
-        }
+        })
     }
 
     /// The security this BSS offers.
@@ -882,7 +889,6 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
     /// use [`Self::bound_peer_status`] instead of rescanning the table.
     pub fn bind_peer(&self, address: [u8; 6]) -> Option<ApPeerBinding> {
         let index = self.peer_index(address)?;
-        self.storage().peers[index].as_ref()?;
         Some(ApPeerBinding {
             index: u8::try_from(index).ok()?,
             generation: self.storage().generation,
@@ -1025,16 +1031,20 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
     }
 
     fn checked_peer(&self, peer: [u8; 6]) -> Result<&ApPeer, ApServiceError> {
-        let index = self.peer_index(peer).ok_or(ApServiceError::UnknownPeer)?;
-        self.storage().peers[index]
-            .as_ref()
+        self.storage()
+            .peers
+            .iter()
+            .flatten()
+            .find(|existing| existing.address == peer)
             .ok_or(ApServiceError::UnknownPeer)
     }
 
     fn checked_peer_mut(&mut self, peer: [u8; 6]) -> Result<&mut ApPeer, ApServiceError> {
-        let index = self.peer_index(peer).ok_or(ApServiceError::UnknownPeer)?;
-        self.storage_mut().peers[index]
-            .as_mut()
+        self.storage_mut()
+            .peers
+            .iter_mut()
+            .flatten()
+            .find(|existing| existing.address == peer)
             .ok_or(ApServiceError::UnknownPeer)
     }
 
@@ -1105,15 +1115,6 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
             .get_mut(usize::from(binding.index))?
             .as_mut()
             .filter(|peer| peer.address == binding.address)
-    }
-
-    fn advance_peer_generation(&mut self) {
-        let generation = self
-            .storage()
-            .generation
-            .checked_add(1)
-            .expect("AP peer generation space is not reusable");
-        self.storage_mut().generation = generation;
     }
 
     fn occupied_count(&self) -> u8 {

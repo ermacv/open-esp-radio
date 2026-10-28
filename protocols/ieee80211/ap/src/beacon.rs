@@ -38,6 +38,13 @@ use oer_time::{Duration, Instant};
 mod publication;
 pub use publication::{ApBeaconPublication, ApBeaconTxContext, ApBeaconTxOutcome, ApDtimRelease};
 
+/// An initialized template length outside its fixed storage.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ApBeaconLengthError {
+    pub length: usize,
+    pub capacity: usize,
+}
+
 pub struct ApBeacon<'storage> {
     storage: &'storage mut [u8; AP_BEACON_CAPACITY],
     len: usize,
@@ -73,8 +80,11 @@ const FIXED_BEACON_LENGTH: usize = 24 + 8 + 2 + 2;
 
 impl<'storage> ApBeacon<'storage> {
     /// The beacon's body, which a probe response repeats.
-    pub fn advertisement(&self) -> &[u8] {
-        &self.storage[..self.len]
+    pub fn advertisement(&self) -> Result<&[u8], ApBeaconLengthError> {
+        self.storage.get(..self.len).ok_or(ApBeaconLengthError {
+            length: self.len,
+            capacity: AP_BEACON_CAPACITY,
+        })
     }
 
     /// Replace the template's ERP and HT Operation protection fields.
@@ -82,7 +92,12 @@ impl<'storage> ApBeacon<'storage> {
         &mut self,
         protection: ApBssProtection,
     ) -> Result<(), ApBeaconProtectionError> {
-        update_bss_protection(&mut self.storage[..self.len], protection)
+        update_bss_protection(
+            self.storage
+                .get_mut(..self.len)
+                .ok_or(ApBeaconProtectionError::MalformedElement)?,
+            protection,
+        )
     }
 
     #[expect(
@@ -115,7 +130,7 @@ impl<'storage> ApBeacon<'storage> {
         Ok(Self {
             storage,
             len,
-            interval: Duration::from_micros(u64::from(beacon_interval_tu) * 1_024),
+            interval: Duration::from_micros(u64::from(beacon_interval_tu) << 10),
             next_publication: None,
             channel_switch: None,
         })
@@ -151,7 +166,7 @@ impl<'storage> ApBeacon<'storage> {
             security,
             ApBssProtection::default(),
         )?;
-        self.interval = Duration::from_micros(u64::from(beacon_interval_tu) * 1_024);
+        self.interval = Duration::from_micros(u64::from(beacon_interval_tu) << 10);
         self.channel_switch = None;
         Ok(())
     }
@@ -171,15 +186,50 @@ impl<'storage> ApBeacon<'storage> {
             .encode_elements(&mut elements)
             .ok_or(ApChannelSwitchError::Full)?;
         self.remove_channel_switch_elements()?;
-        let (tim, _, _) =
-            dtim(&self.storage[..self.len]).ok_or(ApChannelSwitchError::MalformedTemplate)?;
-        let at = tim + 2 + usize::from(self.storage[tim + 1]);
-        let end = self.len + added;
-        if end > self.storage.len() {
-            return Err(ApChannelSwitchError::Full);
+        let (tim, _, _) = dtim(
+            self.storage
+                .get(..self.len)
+                .ok_or(ApChannelSwitchError::MalformedTemplate)?,
+        )
+        .ok_or(ApChannelSwitchError::MalformedTemplate)?;
+        let header = self
+            .storage
+            .get(tim..)
+            .and_then(|bytes| bytes.first_chunk::<2>())
+            .ok_or(ApChannelSwitchError::MalformedTemplate)?;
+        let at = tim
+            .checked_add(2)
+            .and_then(|offset| offset.checked_add(usize::from(header[1])))
+            .ok_or(ApChannelSwitchError::MalformedTemplate)?;
+        let end = self
+            .len
+            .checked_add(added)
+            .filter(|end| *end <= self.storage.len())
+            .ok_or(ApChannelSwitchError::Full)?;
+        if at > self.len {
+            return Err(ApChannelSwitchError::MalformedTemplate);
         }
-        self.storage.copy_within(at..self.len, at + added);
-        self.storage[at..at + added].copy_from_slice(&elements[..added]);
+        for source in (at..self.len).rev() {
+            let destination = source
+                .checked_add(added)
+                .ok_or(ApChannelSwitchError::Full)?;
+            let byte = *self
+                .storage
+                .get(source)
+                .ok_or(ApChannelSwitchError::MalformedTemplate)?;
+            *self
+                .storage
+                .get_mut(destination)
+                .ok_or(ApChannelSwitchError::Full)? = byte;
+        }
+        for (destination, byte) in self
+            .storage
+            .iter_mut()
+            .skip(at)
+            .zip(elements.iter().take(added))
+        {
+            *destination = *byte;
+        }
         self.len = end;
         self.channel_switch = Some(switch);
         Ok(())
@@ -199,22 +249,46 @@ impl<'storage> ApBeacon<'storage> {
     /// Take the announcement's elements out of the template.
     fn remove_channel_switch_elements(&mut self) -> Result<(), ApChannelSwitchError> {
         let mut offset = FIXED_BEACON_LENGTH;
-        while offset + 2 <= self.len {
-            let length = 2 + usize::from(self.storage[offset + 1]);
-            if offset + length > self.len {
-                return Err(ApChannelSwitchError::MalformedTemplate);
-            }
+        while let Some([id, length]) = self
+            .storage
+            .get(offset..self.len)
+            .and_then(|bytes| bytes.first_chunk::<2>())
+            .copied()
+        {
+            let length = usize::from(length)
+                .checked_add(2)
+                .ok_or(ApChannelSwitchError::MalformedTemplate)?;
+            let end = offset
+                .checked_add(length)
+                .filter(|end| *end <= self.len)
+                .ok_or(ApChannelSwitchError::MalformedTemplate)?;
             if matches!(
-                self.storage[offset],
+                id,
                 CHANNEL_SWITCH_ELEMENT_ID
                     | EXTENDED_CHANNEL_SWITCH_ELEMENT_ID
                     | SECONDARY_CHANNEL_OFFSET_ELEMENT_ID
             ) {
-                self.storage.copy_within(offset + length..self.len, offset);
-                self.len -= length;
-                self.storage[self.len..self.len + length].fill(0);
+                for (destination, source) in (offset..self.len).zip(end..self.len) {
+                    let byte = *self
+                        .storage
+                        .get(source)
+                        .ok_or(ApChannelSwitchError::MalformedTemplate)?;
+                    *self
+                        .storage
+                        .get_mut(destination)
+                        .ok_or(ApChannelSwitchError::MalformedTemplate)? = byte;
+                }
+                let previous = self.len;
+                self.len = self
+                    .len
+                    .checked_sub(length)
+                    .ok_or(ApChannelSwitchError::MalformedTemplate)?;
+                self.storage
+                    .get_mut(self.len..previous)
+                    .ok_or(ApChannelSwitchError::MalformedTemplate)?
+                    .fill(0);
             } else {
-                offset += length;
+                offset = end;
             }
         }
         Ok(())
@@ -222,21 +296,17 @@ impl<'storage> ApBeacon<'storage> {
 
     /// Write the beacons left into the announcement's count.
     fn write_channel_switch_count(&mut self, count: u8) -> Option<()> {
-        let mut offset = FIXED_BEACON_LENGTH;
-        while offset + 2 <= self.len {
-            // The count is the last field of either announcement.
-            match (self.storage[offset], self.storage[offset + 1]) {
-                (CHANNEL_SWITCH_ELEMENT_ID, 3) => {
-                    self.storage[offset + 4] = count;
-                    return Some(());
-                }
-                (EXTENDED_CHANNEL_SWITCH_ELEMENT_ID, 4) => {
-                    self.storage[offset + 5] = count;
-                    return Some(());
-                }
-                _ => {}
+        let mut remaining = self.storage.get_mut(FIXED_BEACON_LENGTH..self.len)?;
+        while let Some(([id, length], rest)) = remaining.split_first_chunk_mut::<2>() {
+            let (body, tail) = rest.split_at_mut_checked(usize::from(*length))?;
+            if matches!(
+                (*id, *length),
+                (CHANNEL_SWITCH_ELEMENT_ID, 3) | (EXTENDED_CHANNEL_SWITCH_ELEMENT_ID, 4)
+            ) {
+                *body.last_mut()? = count;
+                return Some(());
             }
-            offset += 2 + usize::from(self.storage[offset + 1]);
+            remaining = tail;
         }
         None
     }
@@ -246,14 +316,20 @@ impl<'storage> ApBeacon<'storage> {
         storage: &'storage mut [u8; AP_BEACON_CAPACITY],
         len: usize,
         beacon_interval_tu: u16,
-    ) -> Self {
-        Self {
+    ) -> Result<Self, ApBeaconLengthError> {
+        if len > AP_BEACON_CAPACITY {
+            return Err(ApBeaconLengthError {
+                length: len,
+                capacity: AP_BEACON_CAPACITY,
+            });
+        }
+        Ok(Self {
             storage,
             len,
-            interval: Duration::from_micros(beacon_interval_tu as u64 * 1_024),
+            interval: Duration::from_micros((beacon_interval_tu as u64) << 10),
             next_publication: None,
             channel_switch: None,
-        }
+        })
     }
 
     /// Stamp one frame using `now` and advance its TBTT schedule.
@@ -280,21 +356,22 @@ impl<'storage> ApBeacon<'storage> {
             return None;
         }
         stamp(
-            &mut self.storage[..self.len],
+            self.storage.get_mut(..self.len)?,
             now.as_micros(),
             buffered_group_frames != 0,
         )?;
-        self.storage[22..24].copy_from_slice(&management_sequence.sequence_control().to_le_bytes());
+        *self.storage.get_mut(22..)?.first_chunk_mut::<2>()? =
+            management_sequence.sequence_control().to_le_bytes();
         self.len = write_tim_partial_virtual_bitmap(self.storage, self.len, unicast_tim_bitmap)?;
         if let Some(count) = self.channel_switch.map(|switch| switch.count) {
             self.write_channel_switch_count(count)?;
             if let Some(switch) = &mut self.channel_switch {
-                switch.count -= 1;
+                switch.count = switch.count.checked_sub(1)?;
             }
         }
         let schedule_base = self.next_publication.unwrap_or(now);
         self.next_publication = Some(next_tbtt(schedule_base, self.interval, now)?);
-        let frame = &mut self.storage[..self.len];
+        let frame = self.storage.get_mut(..self.len)?;
         let (_, dtim_count, _) = dtim(frame)?;
         Some(ApBeaconPublication::new(
             frame,
@@ -357,11 +434,11 @@ impl<'storage> ApBeacon<'storage> {
             return (0, Duration::ZERO);
         };
         let interval = self.interval.as_micros();
-        if interval == 0 {
-            return (0, Duration::ZERO);
-        }
         let lateness = now.saturating_duration_since(next);
-        (lateness.as_micros() / interval, lateness)
+        let Some(skipped) = lateness.as_micros().checked_div(interval) else {
+            return (0, Duration::ZERO);
+        };
+        (skipped, lateness)
     }
 
     pub fn into_storage(self) -> &'storage mut [u8; AP_BEACON_CAPACITY] {

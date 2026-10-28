@@ -32,8 +32,13 @@ impl ApManagementReplay {
         let Some(highest) = self.0 else {
             return false;
         };
-        let next = core::num::NonZeroU64::new(packet_number.value() + 1)
-            .expect("48-bit packet number plus one is nonzero");
+        let Some(next) = packet_number
+            .value()
+            .checked_add(1)
+            .and_then(core::num::NonZeroU64::new)
+        else {
+            return false;
+        };
         if next <= highest {
             return false;
         }
@@ -86,6 +91,7 @@ pub enum ApGroupManagementError {
     NoManagementKey,
     OutputTooSmall,
     PacketNumbers,
+    InvalidKey(RsnFrameError),
 }
 
 impl<S: SppScope> AccessPointService<'_, S> {
@@ -110,7 +116,8 @@ impl<S: SppScope> AccessPointService<'_, S> {
         }
         if self
             .peer_index(peer)
-            .is_some_and(|index| self.storage().management_replay[index].active())
+            .and_then(|index| self.storage().management_replay.get(index))
+            .is_some_and(ApManagementReplay::active)
         {
             ApManagementProtection::Pairwise
         } else {
@@ -135,7 +142,8 @@ impl<S: SppScope> AccessPointService<'_, S> {
         let robust = subtype.is_robust(body);
         let protected_peer = self
             .peer_index(peer)
-            .is_some_and(|index| self.storage().management_replay[index].active());
+            .and_then(|index| self.storage().management_replay.get(index))
+            .is_some_and(ApManagementReplay::active);
         match protection {
             ApManagementRxProtection::Plaintext if robust && protected_peer => {
                 return ApManagementRx::Rejected(ApManagementRejection::Unprotected);
@@ -144,8 +152,10 @@ impl<S: SppScope> AccessPointService<'_, S> {
                 if !protected_peer || !robust {
                     return ApManagementRx::Rejected(ApManagementRejection::UnexpectedProtection);
                 }
-                let index = self.peer_index(peer).expect("protected peer exists");
-                if !self.storage_mut().management_replay[index].accept(packet_number) {
+                let replay = self
+                    .peer_index(peer)
+                    .and_then(|index| self.storage_mut().management_replay.get_mut(index));
+                if !replay.is_some_and(|replay| replay.accept(packet_number)) {
                     return ApManagementRx::Rejected(ApManagementRejection::Replay);
                 }
             }
@@ -176,18 +186,33 @@ impl<S: SppScope> AccessPointService<'_, S> {
             .ok_or(ApGroupManagementError::InvalidFrame)?;
         let subtype =
             ApManagementSubtype::parse(packet).ok_or(ApGroupManagementError::InvalidFrame)?;
-        if packet.len() < 26
-            || packet[1] & 0x40 != 0
-            || packet[4] & 1 == 0
-            || packet[10..16] != self.address
-            || packet[16..22] != self.address
-            || !subtype.is_robust(&packet[24..])
+        let Some((&[_, flags, _, _, destination, ..], _)) = packet.split_first_chunk::<24>() else {
+            return Err(ApGroupManagementError::InvalidFrame);
+        };
+        let transmitter = packet
+            .get(10..16)
+            .ok_or(ApGroupManagementError::InvalidFrame)?;
+        let bssid = packet
+            .get(16..22)
+            .ok_or(ApGroupManagementError::InvalidFrame)?;
+        let body = packet
+            .get(24..)
+            .ok_or(ApGroupManagementError::InvalidFrame)?;
+        if body.len() < 2
+            || flags & 0x40 != 0
+            || destination & 1 == 0
+            || transmitter != self.address
+            || bssid != self.address
+            || !subtype.is_robust(body)
         {
             return Err(ApGroupManagementError::InvalidFrame);
         }
         if frame.len().saturating_sub(length) < MANAGEMENT_MIC_ELEMENT_LEN {
             return Err(ApGroupManagementError::OutputTooSmall);
         }
+        let AccessPointSecurityMaterial::Wpa3Personal { igtk, .. } = &mut self.security else {
+            return Err(ApGroupManagementError::NoManagementKey);
+        };
         let sender = self
             .group_management
             .as_mut()
@@ -198,11 +223,8 @@ impl<S: SppScope> AccessPointService<'_, S> {
         // New associations receive the current frontier in Message 3,
         // so old group frames cannot replay under the unchanged IGTK.
         let packet_number = sender.packet_number();
-        let AccessPointSecurityMaterial::Wpa3Personal { igtk, .. } = &mut self.security else {
-            unreachable!("a BIP transmitter belongs to a WPA3 security epoch");
-        };
         *igtk = RsnIgtk::new(igtk.key_id(), packet_number, igtk.key())
-            .expect("the existing IGTK key identifier is valid");
+            .map_err(ApGroupManagementError::InvalidKey)?;
         Ok(protected)
     }
 }
