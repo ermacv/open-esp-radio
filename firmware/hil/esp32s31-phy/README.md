@@ -163,6 +163,8 @@ cannot be read here: the IRQ owner holds only RAW/ST/CLR; the separate program
 owner inside the PHY bundle holds counter/alarm registers. No production PHY
 hooks or additional register access are introduced.
 
+Measured on s31-a, run `1793149122405-001ccfd4`: corrected IRQ-entry-to-service median 0.244 µs; inclusive step-service median 17.5 µs / maximum 22.7 µs (observation only, no gate).
+
 Stop retires the hold id and restores the saved policy; StopCapture then closes
 RF. Overflow, reversed time, failed/missing/duplicate edges, incomplete branches,
 cancellation or missing cleanup invalidate evidence. Parent and child intervals
