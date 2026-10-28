@@ -10,8 +10,6 @@ description = "Sans-IO IEEE 802.15.4 MAC policy and state machines"
 [dependencies]
 oer-ieee802154-wire = { path = "../wire" }
 oer-ieee802154-port = { path = "../port" }
-[dev-dependencies]
-oer-radio-port = { path = "../../radio/port", features = ["test-support"] }
 
 [lints]
 workspace = true
