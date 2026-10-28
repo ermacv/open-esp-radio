@@ -1,21 +1,18 @@
 //! Legacy advertising data and the non-connectable `ADV_NONCONN_IND` and
 //! `ADV_SCAN_IND` PDUs.
 
-use oer_wire::PrefixLength;
+use oer_wire::{PrefixLength, Reader, U8};
 
-use crate::{LeDeviceAddress, LeDeviceAddressKind};
+use crate::advertising_header::{
+    ADVERTISING_HEADER_LENGTH, AdvertisingHeader, AdvertisingPduType, encode_legacy_pdu,
+};
+use crate::{LE_DEVICE_ADDRESS_LENGTH, LeDeviceAddress, LeDeviceAddressKind};
 
 /// Maximum Host advertising data carried by a legacy advertising PDU.
 pub const LEGACY_ADVERTISING_DATA_CAPACITY: usize = 31;
 /// Complete encoded capacity of a legacy advertising PDU header, AdvA and data.
-pub const LEGACY_ADVERTISING_PDU_CAPACITY: usize = 39;
-
-const ADVERTISING_HEADER_LENGTH: usize = 2;
-const DEVICE_ADDRESS_LENGTH: usize = 6;
-const ADV_NONCONN_IND_TYPE: u8 = 0b0010;
-const ADV_SCAN_IND_TYPE: u8 = 0b0110;
-const TX_ADD_RANDOM: u8 = 1 << 6;
-const NONCONNECTABLE_RESERVED_HEADER_BITS: u8 = (1 << 4) | (1 << 5) | (1 << 7);
+pub const LEGACY_ADVERTISING_PDU_CAPACITY: usize =
+    ADVERTISING_HEADER_LENGTH + LE_DEVICE_ADDRESS_LENGTH + LEGACY_ADVERTISING_DATA_CAPACITY;
 
 /// Borrowed or internally owned legacy advertising data with a checked limit.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -114,10 +111,10 @@ pub enum LegacyNonconnectableKind {
 }
 
 impl LegacyNonconnectableKind {
-    const fn pdu_type(self) -> u8 {
+    const fn header(self) -> AdvertisingHeader {
         match self {
-            Self::NonScannable => ADV_NONCONN_IND_TYPE,
-            Self::Scannable => ADV_SCAN_IND_TYPE,
+            Self::NonScannable => AdvertisingHeader::ADV_NONCONN_IND,
+            Self::Scannable => AdvertisingHeader::ADV_SCAN_IND,
         }
     }
 }
@@ -162,7 +159,7 @@ impl<'a> LegacyNonconnectableAdvertisement<'a> {
 
     /// Required encoded PDU length.
     pub const fn encoded_len(self) -> usize {
-        (ADVERTISING_HEADER_LENGTH + DEVICE_ADDRESS_LENGTH).saturating_add(self.data.len())
+        (ADVERTISING_HEADER_LENGTH + LE_DEVICE_ADDRESS_LENGTH).saturating_add(self.data.len())
     }
 
     /// Encode the complete Link Layer PDU into caller-owned bounded storage.
@@ -171,55 +168,47 @@ impl<'a> LegacyNonconnectableAdvertisement<'a> {
     /// outside this codec: the chip backend must state which of those operations
     /// are performed by hardware.
     pub fn encode(self, destination: &mut [u8]) -> Result<usize, LegacyAdvertisingEncodeError> {
-        let required = self.encoded_len();
-        if destination.len() < required {
-            return Err(LegacyAdvertisingEncodeError::DestinationTooSmall {
-                required,
-                available: destination.len(),
-            });
-        }
-
-        let tx_add = match self.advertiser.kind() {
-            LeDeviceAddressKind::Public => 0,
-            LeDeviceAddressKind::Random => TX_ADD_RANDOM,
-        };
-        // The admitted data has at most 31 bytes, so both sums are exact.
-        let bytes = [
-            self.kind.pdu_type() | tx_add,
-            DEVICE_ADDRESS_LENGTH.saturating_add(self.data.len()) as u8,
-        ]
-        .into_iter()
-        .chain(self.advertiser.wire_bytes())
-        .chain(self.data.as_bytes().iter().copied());
-        for (byte, slot) in bytes.zip(destination.iter_mut()) {
-            *slot = byte;
-        }
-        Ok(required)
+        let header = self
+            .kind
+            .header()
+            .with_tx_add_random(matches!(
+                self.advertiser.kind(),
+                LeDeviceAddressKind::Random
+            ))
+            .with_length(U8::from_low_bits(
+                LE_DEVICE_ADDRESS_LENGTH.saturating_add(self.data.len()) as u8,
+            ));
+        encode_legacy_pdu(
+            header,
+            &[&self.advertiser.wire_bytes(), self.data.as_bytes()],
+            destination,
+        )
     }
 
     /// Decode one exact `ADV_NONCONN_IND` or `ADV_SCAN_IND` PDU.
     pub fn decode(source: &'a [u8]) -> Result<Self, LegacyAdvertisingDecodeError> {
-        let Some((header_bytes, payload)) = source.split_first_chunk::<ADVERTISING_HEADER_LENGTH>()
-        else {
-            return Err(LegacyAdvertisingDecodeError::TruncatedHeader {
-                available: source.len(),
-            });
-        };
-
-        let [header, payload_length] = *header_bytes;
-        let kind = match header & 0x0f {
-            ADV_NONCONN_IND_TYPE => LegacyNonconnectableKind::NonScannable,
-            ADV_SCAN_IND_TYPE => LegacyNonconnectableKind::Scannable,
-            pdu_type => {
-                return Err(LegacyAdvertisingDecodeError::UnexpectedPduType { pdu_type });
+        let mut reader = Reader::new(source);
+        let header =
+            AdvertisingHeader::from_bytes(reader.read::<ADVERTISING_HEADER_LENGTH>().map_err(
+                |_| LegacyAdvertisingDecodeError::TruncatedHeader {
+                    available: source.len(),
+                },
+            )?);
+        let kind = match header.pdu_type() {
+            AdvertisingPduType::AdvNonconnInd => LegacyNonconnectableKind::NonScannable,
+            AdvertisingPduType::AdvScanInd => LegacyNonconnectableKind::Scannable,
+            other => {
+                return Err(LegacyAdvertisingDecodeError::UnexpectedPduType {
+                    pdu_type: other.encoding(),
+                });
             }
         };
-        if header & NONCONNECTABLE_RESERVED_HEADER_BITS != 0 {
+        if header.reserved() || header.channel_selection_two() || header.rx_add_random() {
             return Err(LegacyAdvertisingDecodeError::ReservedHeaderBitsSet);
         }
 
-        let payload_length = payload_length as usize;
-        if !(DEVICE_ADDRESS_LENGTH..=DEVICE_ADDRESS_LENGTH + LEGACY_ADVERTISING_DATA_CAPACITY)
+        let payload_length = header.length().get() as usize;
+        if !(LE_DEVICE_ADDRESS_LENGTH..=LE_DEVICE_ADDRESS_LENGTH + LEGACY_ADVERTISING_DATA_CAPACITY)
             .contains(&payload_length)
         {
             return Err(LegacyAdvertisingDecodeError::InvalidPayloadLength {
@@ -234,26 +223,18 @@ impl<'a> LegacyNonconnectableAdvertisement<'a> {
             });
         }
 
-        let Some((wire_bytes, data)) = payload.split_first_chunk::<DEVICE_ADDRESS_LENGTH>() else {
-            return Err(LegacyAdvertisingDecodeError::InvalidPayloadLength {
+        let wire_bytes = reader.read::<LE_DEVICE_ADDRESS_LENGTH>().map_err(|_| {
+            LegacyAdvertisingDecodeError::InvalidPayloadLength {
                 length: payload_length,
-            });
-        };
-        let address_kind = if header & TX_ADD_RANDOM == 0 {
-            LeDeviceAddressKind::Public
-        } else {
-            LeDeviceAddressKind::Random
-        };
+            }
+        })?;
+        let data = reader.remaining();
         let data = LegacyAdvertisingData::new(data).map_err(|_| {
             LegacyAdvertisingDecodeError::InvalidPayloadLength {
                 length: payload_length,
             }
         })?;
-        Ok(Self::new(
-            kind,
-            LeDeviceAddress::from_wire_bytes(*wire_bytes, address_kind),
-            data,
-        ))
+        Ok(Self::new(kind, header.advertiser(wire_bytes), data))
     }
 }
 

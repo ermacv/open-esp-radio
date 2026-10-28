@@ -38,6 +38,11 @@ The driver enables the HAL's `bluetooth-engine` feature. Its
 and windows, and scanner filter, active/passive and start policy. They pass
 detached values through closed HAL operations. A builder never borrows a
 controller layout; HAL checks binding anchors before committing a value.
+The detached `AdvertisingImageBuilder` receives encoded bytes directly from
+its caller. The port runner currently executes DTM only. Advertising address
+and header decoding belongs to `le/wire`; the builder selects the supported
+`ADV_NONCONN_IND` hardware profile from the decoded type, flags and address
+before HAL admits the packet extent.
 Affine pool and epoch scopes prevent foreign and stale leases, and release
 consumes its lease. Hardware heads resolve to logical identities inside HAL.
 

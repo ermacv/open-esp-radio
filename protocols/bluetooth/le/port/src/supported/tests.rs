@@ -397,3 +397,43 @@ fn a_power_above_the_regulatory_ceiling_is_not_requestable() {
         })
     );
 }
+
+#[test]
+fn advertising_capability_policy_preserves_every_header_and_reception_decision() {
+    use super::Capability;
+    let response = AdvertisingPdu::new(&SCAN_RSP).unwrap();
+    for octet in u8::MIN..=u8::MAX {
+        let bytes = [octet, 6, 1, 2, 3, 4, 5, 6];
+        for reception in [
+            AdvertisingReception::None,
+            AdvertisingReception::Report,
+            AdvertisingReception::ScanResponse(response),
+        ] {
+            let configuration = AdvertisingConfiguration {
+                set: AdvertisingSetId::new(0),
+                pdu: AdvertisingPdu::new(&bytes).unwrap(),
+                reception,
+                tx_power: power(0),
+                phy: LePhy::Le1M,
+            };
+            let rfu_clear = (octet / 16) % 2 == 0;
+            let code = octet % 16;
+            let nonconnectable = code == 2 && matches!(reception, AdvertisingReception::None);
+            let responsive = matches!(
+                (code, reception),
+                (
+                    0 | 6,
+                    AdvertisingReception::Report | AdvertisingReception::ScanResponse(_)
+                ) | (1, AdvertisingReception::Report)
+            );
+            assert_eq!(
+                configuration.supported(&Peripheral::CAPS),
+                rfu_clear && nonconnectable
+            );
+            assert_eq!(
+                configuration.supported(&Responsive::CAPS),
+                rfu_clear && responsive
+            );
+        }
+    }
+}

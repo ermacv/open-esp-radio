@@ -1,9 +1,12 @@
 //! Legacy CONNECT_IND fields and validation (Core Vol 6 Part B 2.3.3.1).
 
+use crate::advertising_header::{ADVERTISING_HEADER_LENGTH, AdvertisingHeader, AdvertisingPduType};
 use crate::{LeDeviceAddress, LeDeviceAddressKind};
 use core::num::{NonZeroU8, NonZeroU64};
+use oer_wire::Reader;
 
-pub const LEGACY_CONNECT_IND_PDU_BYTES: usize = 36;
+pub const LEGACY_CONNECT_IND_PDU_BYTES: usize =
+    ADVERTISING_HEADER_LENGTH + LEGACY_CONNECT_IND_PAYLOAD_BYTES;
 pub const LEGACY_CONNECT_IND_PAYLOAD_BYTES: usize = 34;
 /// Complete on-air duration of a legacy `CONNECT_IND` on LE 1M.
 ///
@@ -13,14 +16,6 @@ pub const LEGACY_CONNECT_IND_PAYLOAD_BYTES: usize = 34;
 pub const LEGACY_CONNECT_IND_LE_1M_AIRTIME_MICROS: u32 =
     (1 + 4 + LEGACY_CONNECT_IND_PDU_BYTES as u32 + 3) * 8;
 
-const CONNECT_IND_TYPE: u8 = 0b0101;
-const PDU_TYPE_MASK: u8 = 0x0f;
-const HEADER_RESERVED: u8 = 1 << 4;
-const CHANNEL_SELECTION_TWO: u8 = 1 << 5;
-const TX_ADD_RANDOM: u8 = 1 << 6;
-const RX_ADD_RANDOM: u8 = 1 << 7;
-const PAYLOAD_LENGTH_MASK: u8 = 0x3f;
-const PAYLOAD_LENGTH_RESERVED: u8 = 0xc0;
 const ADVERTISING_ACCESS_ADDRESS: u32 = 0x8e89_bed6;
 
 /// Intrinsically valid Access Address for one LE ACL connection on an uncoded PHY.
@@ -385,16 +380,18 @@ pub struct LeLegacyConnectionRequest {
 impl LeLegacyConnectionRequest {
     /// Decode and validate exactly one complete legacy `CONNECT_IND` PDU.
     pub const fn decode(pdu: &[u8]) -> Result<Self, LeLegacyConnectionRequestError> {
-        let Some((header, _)) = pdu.split_first_chunk::<2>() else {
-            return Err(LeLegacyConnectionRequestError::HeaderTruncated);
+        let mut reader = Reader::new(pdu);
+        let header = match reader.read::<ADVERTISING_HEADER_LENGTH>() {
+            Ok(bytes) => AdvertisingHeader::from_bytes(bytes),
+            Err(_) => return Err(LeLegacyConnectionRequestError::HeaderTruncated),
         };
-        if header[0] & PDU_TYPE_MASK != CONNECT_IND_TYPE {
+        if !matches!(header.pdu_type(), AdvertisingPduType::ConnectInd) {
             return Err(LeLegacyConnectionRequestError::UnexpectedPduType);
         }
-        if header[0] & HEADER_RESERVED != 0 || header[1] & PAYLOAD_LENGTH_RESERVED != 0 {
+        if header.reserved() || header.legacy_length_reserved() != 0 {
             return Err(LeLegacyConnectionRequestError::ReservedHeaderBitsSet);
         }
-        let declared = (header[1] & PAYLOAD_LENGTH_MASK) as usize;
+        let declared = header.legacy_length() as usize;
         if declared != LEGACY_CONNECT_IND_PAYLOAD_BYTES || pdu.len() != LEGACY_CONNECT_IND_PDU_BYTES
         {
             return Err(LeLegacyConnectionRequestError::LengthMismatch);
@@ -406,7 +403,7 @@ impl LeLegacyConnectionRequest {
 
         let initiator = LeDeviceAddress::from_wire_bytes(
             [pdu[2], pdu[3], pdu[4], pdu[5], pdu[6], pdu[7]],
-            if pdu[0] & TX_ADD_RANDOM == 0 {
+            if !header.tx_add_random() {
                 LeDeviceAddressKind::Public
             } else {
                 LeDeviceAddressKind::Random
@@ -414,7 +411,7 @@ impl LeLegacyConnectionRequest {
         );
         let advertiser = LeDeviceAddress::from_wire_bytes(
             [pdu[8], pdu[9], pdu[10], pdu[11], pdu[12], pdu[13]],
-            if pdu[0] & RX_ADD_RANDOM == 0 {
+            if !header.rx_add_random() {
                 LeDeviceAddressKind::Public
             } else {
                 LeDeviceAddressKind::Random
@@ -455,7 +452,7 @@ impl LeLegacyConnectionRequest {
             channel_map,
             hop_increment,
             sleep_clock_accuracy: LeSleepClockAccuracy::from_three_bits(pdu[35] >> 5),
-            channel_selection: if pdu[0] & CHANNEL_SELECTION_TWO == 0 {
+            channel_selection: if !header.channel_selection_two() {
                 LeChannelSelectionAlgorithm::AlgorithmOne
             } else {
                 LeChannelSelectionAlgorithm::AlgorithmTwo

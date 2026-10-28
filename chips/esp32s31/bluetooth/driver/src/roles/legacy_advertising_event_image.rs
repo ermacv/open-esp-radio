@@ -1,23 +1,12 @@
 //! Pure channel planning, timing and PDU address policy for advertising.
+use oer_bluetooth_le_wire::{
+    LeDeviceAddressKind,
+    advertising_header::{AdvertisingPduType, LegacyAdvertisingPduPrefix},
+};
 use oer_esp32s31_hal::bluetooth::engine::{
     AdvertisingEventImage, AdvertisingItemImage, LegacyAdvertisingOwnAddress,
     LegacyAdvertisingPduError, LegacyAdvertisingPrimaryChannel, SchedulerEventPriority,
 };
-use oer_wire::Reader;
-
-oer_wire::bitfield! {
-    /// SOURCE: Bluetooth Core 6.0, Vol 6, Part B, sections 2.3.1 and 2.3.1.3.
-    struct NonconnectableHeader[1] (little) {
-        /// PDU Type, section 2.3.1.
-        pdu_type, with_pdu_type: u8 = 0..4;
-        /// RFU and ChSel, unused in ADV_NONCONN_IND, section 2.3.1 (RFU/ChSel).
-        unused, with_unused: u8 = 4..6;
-        /// Advertiser address class, section 2.3.1.3.
-        random, with_random: bool = 6..7;
-        /// RxAdd, unused in ADV_NONCONN_IND, sections 2.3.1/2.3.1.3.
-        rx_add, with_rx_add: bool = 7..8;
-    }
-}
 
 /// Canonical non-empty primary-channel plan for one hardware event.
 ///
@@ -68,28 +57,22 @@ impl LegacyAdvertisingPrimaryChannelPlan {
     }
 }
 
-pub(super) fn own_address_from_pdu(
-    pdu: &[u8],
+/// Select the hardware address source from an already decoded advertisement.
+pub(super) fn own_address_for_advertisement(
+    advertisement: LegacyAdvertisingPduPrefix,
 ) -> Result<LegacyAdvertisingOwnAddress, LegacyAdvertisingPduError> {
-    // Read the address before classifying the header to preserve error precedence.
-    let mut reader = Reader::new(pdu);
-    let [header, _length] = reader
-        .read::<2>()
-        .map_err(|_| LegacyAdvertisingPduError::MissingAdvertiserAddress)?;
-    let address = reader
-        .read::<6>()
-        .map_err(|_| LegacyAdvertisingPduError::MissingAdvertiserAddress)?;
-    let header = NonconnectableHeader::from_bytes([header]);
-    if header.pdu_type() != 2 {
+    let header = advertisement.header;
+    if !matches!(header.pdu_type(), AdvertisingPduType::AdvNonconnInd) {
         return Err(LegacyAdvertisingPduError::UnsupportedPduType);
     }
-    if header.unused() != 0 || header.rx_add() {
+    if header.reserved() || header.channel_selection_two() || header.rx_add_random() {
         return Err(LegacyAdvertisingPduError::UnsupportedHeaderFlags);
     }
-    if header.random() {
-        Ok(LegacyAdvertisingOwnAddress::Random(address))
-    } else {
-        Ok(LegacyAdvertisingOwnAddress::Public)
+    match advertisement.advertiser.kind() {
+        LeDeviceAddressKind::Random => Ok(LegacyAdvertisingOwnAddress::Random(
+            advertisement.advertiser.wire_bytes(),
+        )),
+        LeDeviceAddressKind::Public => Ok(LegacyAdvertisingOwnAddress::Public),
     }
 }
 

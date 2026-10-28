@@ -2,23 +2,18 @@
 //! Algorithm #2 capability and the matching `SCAN_RSP`, and the directed
 //! `ADV_DIRECT_IND`.
 
+use oer_wire::{Reader, U8};
+
 use crate::{
-    LeDeviceAddress, LeDeviceAddressKind,
+    LE_DEVICE_ADDRESS_LENGTH, LeDeviceAddress, LeDeviceAddressKind,
     advertising::{
         LegacyAdvertisingData, LegacyAdvertisingDataError, LegacyAdvertisingEncodeError,
     },
 };
 
-const ADVERTISING_HEADER_LENGTH: usize = 2;
-const DEVICE_ADDRESS_LENGTH: usize = 6;
-const ADV_IND_TYPE: u8 = 0;
-const ADV_DIRECT_IND_TYPE: u8 = 1;
-const RX_ADD_RANDOM: u8 = 1 << 7;
-const SCAN_RSP_TYPE: u8 = 4;
-const PDU_TYPE_MASK: u8 = 0x0f;
-const RESERVED_HEADER_BITS: u8 = (1 << 4) | (1 << 7);
-const CHANNEL_SELECTION_TWO: u8 = 1 << 5;
-const TX_ADD_RANDOM: u8 = 1 << 6;
+use crate::advertising_header::{
+    ADVERTISING_HEADER_LENGTH, AdvertisingHeader, AdvertisingPduType, encode_legacy_pdu,
+};
 
 /// Whether this advertiser may negotiate Channel Selection Algorithm #2.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -61,60 +56,53 @@ impl<'a> LegacyConnectableAdvertisement<'a> {
     }
 
     pub const fn encoded_len(self) -> usize {
-        (ADVERTISING_HEADER_LENGTH + DEVICE_ADDRESS_LENGTH).saturating_add(self.data.len())
+        (ADVERTISING_HEADER_LENGTH + LE_DEVICE_ADDRESS_LENGTH).saturating_add(self.data.len())
     }
 
     /// Encode the complete Link Layer PDU into bounded caller storage.
     pub fn encode(self, destination: &mut [u8]) -> Result<usize, LegacyAdvertisingEncodeError> {
-        let required = self.encoded_len();
-        if destination.len() < required {
-            return Err(LegacyAdvertisingEncodeError::DestinationTooSmall {
-                required,
-                available: destination.len(),
-            });
-        }
-
-        let header = match self.advertiser.kind() {
-            LeDeviceAddressKind::Public => 0,
-            LeDeviceAddressKind::Random => TX_ADD_RANDOM,
-        } | match self.channel_selection_two {
-            LeChannelSelectionAlgorithmTwoSupport::Unsupported => 0,
-            LeChannelSelectionAlgorithmTwoSupport::Supported => CHANNEL_SELECTION_TWO,
-        };
-        let bytes = [
+        let header = AdvertisingHeader::ADV_IND
+            .with_tx_add_random(matches!(
+                self.advertiser.kind(),
+                LeDeviceAddressKind::Random
+            ))
+            .with_channel_selection_two(matches!(
+                self.channel_selection_two,
+                LeChannelSelectionAlgorithmTwoSupport::Supported
+            ))
+            .with_length(U8::from_low_bits(
+                LE_DEVICE_ADDRESS_LENGTH.saturating_add(self.data.len()) as u8,
+            ));
+        encode_legacy_pdu(
             header,
-            DEVICE_ADDRESS_LENGTH.saturating_add(self.data.len()) as u8,
-        ]
-        .into_iter()
-        .chain(self.advertiser.wire_bytes())
-        .chain(self.data.as_bytes().iter().copied());
-        for (byte, slot) in bytes.zip(destination.iter_mut()) {
-            *slot = byte;
-        }
-        Ok(required)
+            &[&self.advertiser.wire_bytes(), self.data.as_bytes()],
+            destination,
+        )
     }
 
     /// Decode one exact legacy `ADV_IND` PDU.
     pub fn decode(source: &'a [u8]) -> Result<Self, LegacyConnectableAdvertisementDecodeError> {
-        let Some((header_bytes, payload)) = source.split_first_chunk::<ADVERTISING_HEADER_LENGTH>()
-        else {
-            return Err(LegacyConnectableAdvertisementDecodeError::TruncatedHeader {
-                available: source.len(),
-            });
-        };
-
-        let [header, payload_length] = *header_bytes;
-        let pdu_type = header & PDU_TYPE_MASK;
-        if pdu_type != ADV_IND_TYPE {
-            return Err(LegacyConnectableAdvertisementDecodeError::UnexpectedPduType { pdu_type });
+        let mut reader = Reader::new(source);
+        let header =
+            AdvertisingHeader::from_bytes(reader.read::<ADVERTISING_HEADER_LENGTH>().map_err(
+                |_| LegacyConnectableAdvertisementDecodeError::TruncatedHeader {
+                    available: source.len(),
+                },
+            )?);
+        if !matches!(header.pdu_type(), AdvertisingPduType::AdvInd) {
+            return Err(
+                LegacyConnectableAdvertisementDecodeError::UnexpectedPduType {
+                    pdu_type: header.pdu_type().encoding(),
+                },
+            );
         }
-        if header & RESERVED_HEADER_BITS != 0 {
+        if header.reserved() || header.rx_add_random() {
             return Err(LegacyConnectableAdvertisementDecodeError::ReservedHeaderBitsSet);
         }
 
-        let payload_length = payload_length as usize;
-        if !(DEVICE_ADDRESS_LENGTH
-            ..=DEVICE_ADDRESS_LENGTH + crate::advertising::LEGACY_ADVERTISING_DATA_CAPACITY)
+        let payload_length = header.length().get() as usize;
+        if !(LE_DEVICE_ADDRESS_LENGTH
+            ..=LE_DEVICE_ADDRESS_LENGTH + crate::advertising::LEGACY_ADVERTISING_DATA_CAPACITY)
             .contains(&payload_length)
         {
             return Err(
@@ -131,29 +119,21 @@ impl<'a> LegacyConnectableAdvertisement<'a> {
             });
         }
 
-        let Some((address, data)) = payload.split_first_chunk::<DEVICE_ADDRESS_LENGTH>() else {
-            return Err(
-                LegacyConnectableAdvertisementDecodeError::InvalidPayloadLength {
-                    length: payload_length,
-                },
-            );
-        };
+        let address = reader.read::<LE_DEVICE_ADDRESS_LENGTH>().map_err(|_| {
+            LegacyConnectableAdvertisementDecodeError::InvalidPayloadLength {
+                length: payload_length,
+            }
+        })?;
+        let data = reader.remaining();
         let data = LegacyAdvertisingData::new(data).map_err(|_| {
             LegacyConnectableAdvertisementDecodeError::InvalidPayloadLength {
                 length: payload_length,
             }
         })?;
         Ok(Self::new(
-            LeDeviceAddress::from_wire_bytes(
-                *address,
-                if header & TX_ADD_RANDOM == 0 {
-                    LeDeviceAddressKind::Public
-                } else {
-                    LeDeviceAddressKind::Random
-                },
-            ),
+            header.advertiser(address),
             data,
-            if header & CHANNEL_SELECTION_TWO == 0 {
+            if !header.channel_selection_two() {
                 LeChannelSelectionAlgorithmTwoSupport::Unsupported
             } else {
                 LeChannelSelectionAlgorithmTwoSupport::Supported
@@ -194,39 +174,27 @@ impl LegacyDirectedAdvertisement {
     }
 
     pub const fn encoded_len(self) -> usize {
-        ADVERTISING_HEADER_LENGTH + 2 * DEVICE_ADDRESS_LENGTH
+        ADVERTISING_HEADER_LENGTH + 2 * LE_DEVICE_ADDRESS_LENGTH
     }
 
     /// Encode the complete Link Layer PDU into bounded caller storage.
     pub fn encode(self, destination: &mut [u8]) -> Result<usize, LegacyAdvertisingEncodeError> {
-        let required = self.encoded_len();
-        if destination.len() < required {
-            return Err(LegacyAdvertisingEncodeError::DestinationTooSmall {
-                required,
-                available: destination.len(),
-            });
-        }
-        let header = ADV_DIRECT_IND_TYPE
-            | match self.advertiser.kind() {
-                LeDeviceAddressKind::Public => 0,
-                LeDeviceAddressKind::Random => TX_ADD_RANDOM,
-            }
-            | match self.target.kind() {
-                LeDeviceAddressKind::Public => 0,
-                LeDeviceAddressKind::Random => RX_ADD_RANDOM,
-            }
-            | match self.channel_selection_two {
-                LeChannelSelectionAlgorithmTwoSupport::Unsupported => 0,
-                LeChannelSelectionAlgorithmTwoSupport::Supported => CHANNEL_SELECTION_TWO,
-            };
-        let bytes = [header, (2 * DEVICE_ADDRESS_LENGTH) as u8]
-            .into_iter()
-            .chain(self.advertiser.wire_bytes())
-            .chain(self.target.wire_bytes());
-        for (byte, slot) in bytes.zip(destination.iter_mut()) {
-            *slot = byte;
-        }
-        Ok(required)
+        let header = AdvertisingHeader::ADV_DIRECT_IND
+            .with_tx_add_random(matches!(
+                self.advertiser.kind(),
+                LeDeviceAddressKind::Random
+            ))
+            .with_rx_add_random(matches!(self.target.kind(), LeDeviceAddressKind::Random))
+            .with_channel_selection_two(matches!(
+                self.channel_selection_two,
+                LeChannelSelectionAlgorithmTwoSupport::Supported
+            ))
+            .with_length(U8::constant::<{ (2 * LE_DEVICE_ADDRESS_LENGTH) as u8 }>());
+        encode_legacy_pdu(
+            header,
+            &[&self.advertiser.wire_bytes(), &self.target.wire_bytes()],
+            destination,
+        )
     }
 }
 
@@ -265,29 +233,16 @@ impl<'a> LegacyScanResponseData<'a> {
         advertiser: LeDeviceAddress,
         destination: &mut [u8],
     ) -> Result<usize, LegacyAdvertisingEncodeError> {
-        let length = (ADVERTISING_HEADER_LENGTH + DEVICE_ADDRESS_LENGTH).saturating_add(self.len());
-        if destination.len() < length {
-            return Err(LegacyAdvertisingEncodeError::DestinationTooSmall {
-                required: length,
-                available: destination.len(),
-            });
-        }
-        let header = SCAN_RSP_TYPE
-            | match advertiser.kind() {
-                LeDeviceAddressKind::Public => 0,
-                LeDeviceAddressKind::Random => TX_ADD_RANDOM,
-            };
-        let bytes = [
+        let header = AdvertisingHeader::SCAN_RSP
+            .with_tx_add_random(matches!(advertiser.kind(), LeDeviceAddressKind::Random))
+            .with_length(U8::from_low_bits(
+                LE_DEVICE_ADDRESS_LENGTH.saturating_add(self.len()) as u8,
+            ));
+        encode_legacy_pdu(
             header,
-            DEVICE_ADDRESS_LENGTH.saturating_add(self.len()) as u8,
-        ]
-        .into_iter()
-        .chain(advertiser.wire_bytes())
-        .chain(self.as_bytes().iter().copied());
-        for (byte, slot) in bytes.zip(destination.iter_mut()) {
-            *slot = byte;
-        }
-        Ok(length)
+            &[&advertiser.wire_bytes(), self.as_bytes()],
+            destination,
+        )
     }
 }
 

@@ -21,6 +21,7 @@ extern crate std;
 
 mod address;
 pub mod advertising;
+pub mod advertising_header;
 mod channel;
 pub mod connectable_advertising;
 pub mod connection;
@@ -29,7 +30,9 @@ pub mod dtm;
 mod pdu;
 pub mod scanning;
 
-pub use address::{LeDeviceAddress, LeDeviceAddressKind, LePublicDeviceAddress};
+pub use address::{
+    LE_DEVICE_ADDRESS_LENGTH, LeDeviceAddress, LeDeviceAddressKind, LePublicDeviceAddress,
+};
 pub use channel::{
     AdvertisingChannel, AdvertisingChannels, ChannelError, DataChannel, TestChannel,
 };

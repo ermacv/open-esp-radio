@@ -1,5 +1,11 @@
 //! Complete Link Layer PDUs crossing the radio boundary.
 
+use crate::{
+    LE_DEVICE_ADDRESS_LENGTH,
+    advertising::LEGACY_ADVERTISING_DATA_CAPACITY,
+    advertising_header::{ADVERTISING_HEADER_LENGTH, AdvertisingHeader},
+};
+
 /// Why bytes do not form the required PDU.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PduError {
@@ -14,9 +20,8 @@ pub enum PduError {
 }
 
 /// Maximum payload of a legacy advertising PDU.
-pub(crate) const ADVERTISING_PAYLOAD_MAX: usize = 37;
-/// Advertiser address that starts every legacy advertising payload.
-pub(crate) const ADVERTISER_ADDRESS_BYTES: usize = 6;
+pub(crate) const ADVERTISING_PAYLOAD_MAX: usize =
+    LE_DEVICE_ADDRESS_LENGTH + LEGACY_ADVERTISING_DATA_CAPACITY;
 /// Maximum payload of a data channel PDU on air: 251 octets of data and an
 /// encrypted packet's 4-octet MIC.
 pub(crate) const DATA_PAYLOAD_MAX: usize = 255;
@@ -33,21 +38,23 @@ pub struct AdvertisingPdu<'pdu> {
 impl<'pdu> AdvertisingPdu<'pdu> {
     /// Check the extent of one encoded PDU.
     pub const fn new(bytes: &'pdu [u8]) -> Result<Self, PduError> {
-        let [header, length, payload @ ..] = bytes else {
+        let Some((header, payload)) = bytes.split_first_chunk::<ADVERTISING_HEADER_LENGTH>() else {
             return Err(PduError::TooShort);
         };
-        if payload.len() < ADVERTISER_ADDRESS_BYTES {
+        let [first, _] = *header;
+        let header = AdvertisingHeader::from_bytes(*header);
+        if payload.len() < LE_DEVICE_ADDRESS_LENGTH {
             return Err(PduError::TooShort);
         }
         if payload.len() > ADVERTISING_PAYLOAD_MAX {
             return Err(PduError::TooLong);
         }
-        if *length as usize != payload.len() {
+        if header.length().get() as usize != payload.len() {
             return Err(PduError::LengthMismatch);
         }
         Ok(Self {
             bytes,
-            header: *header,
+            header: first,
         })
     }
 

@@ -1,5 +1,8 @@
 //! LE device addresses at the air-interface boundary.
 
+/// Device address octets (Bluetooth Core Vol 6, Part B, 1.3/2.3.1).
+pub const LE_DEVICE_ADDRESS_LENGTH: usize = 6;
+
 /// Address class carried by the TxAdd or RxAdd field of an advertising PDU.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum LeDeviceAddressKind {
@@ -16,13 +19,16 @@ pub enum LeDeviceAddressKind {
 /// their own boundary.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct LeDeviceAddress {
-    wire_bytes: [u8; 6],
+    wire_bytes: [u8; LE_DEVICE_ADDRESS_LENGTH],
     kind: LeDeviceAddressKind,
 }
 
 impl LeDeviceAddress {
     /// Construct an address from the six octets in air-interface PDU order.
-    pub const fn from_wire_bytes(wire_bytes: [u8; 6], kind: LeDeviceAddressKind) -> Self {
+    pub const fn from_wire_bytes(
+        wire_bytes: [u8; LE_DEVICE_ADDRESS_LENGTH],
+        kind: LeDeviceAddressKind,
+    ) -> Self {
         Self { wire_bytes, kind }
     }
 
@@ -32,7 +38,7 @@ impl LeDeviceAddress {
     }
 
     /// Return the six octets in air-interface PDU order.
-    pub const fn wire_bytes(self) -> [u8; 6] {
+    pub const fn wire_bytes(self) -> [u8; LE_DEVICE_ADDRESS_LENGTH] {
         self.wire_bytes
     }
 }

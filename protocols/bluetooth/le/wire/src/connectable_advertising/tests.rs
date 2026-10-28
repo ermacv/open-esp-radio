@@ -23,7 +23,7 @@ fn connection_request(
     channel_selection_two: bool,
 ) -> [u8; LEGACY_CONNECT_IND_PDU_BYTES] {
     let mut pdu = [0; LEGACY_CONNECT_IND_PDU_BYTES];
-    pdu[0] = 0b0101 | (1 << 7) | if channel_selection_two { 1 << 5 } else { 0 };
+    pdu[0] = if channel_selection_two { 0xa5 } else { 0x85 };
     pdu[1] = LEGACY_CONNECT_IND_PAYLOAD_BYTES as u8;
     pdu[2..8].copy_from_slice(&[1, 2, 3, 4, 5, 6]);
     pdu[8..14].copy_from_slice(&advertiser);
@@ -88,25 +88,7 @@ fn a_directed_advertisement_carries_both_addresses_and_their_kinds() {
     let mut encoded = [0; 14];
     assert_eq!(directed.encode(&mut encoded), Ok(14));
     // ADV_DIRECT_IND, ChSel, public TxAdd, random RxAdd.
-    assert_eq!(
-        encoded,
-        [
-            0x01 | 0x20 | 0x80,
-            12,
-            1,
-            2,
-            3,
-            4,
-            5,
-            6,
-            7,
-            8,
-            9,
-            10,
-            11,
-            0xcc
-        ]
-    );
+    assert_eq!(encoded, [0xa1, 12, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 0xcc]);
     assert_eq!(
         directed.encode(&mut [0; 13]),
         Err(LegacyAdvertisingEncodeError::DestinationTooSmall {
@@ -114,4 +96,151 @@ fn a_directed_advertisement_carries_both_addresses_and_their_kinds() {
             available: 13,
         })
     );
+}
+
+#[test]
+fn connectable_and_scan_response_encodings_match_previous_wire_bytes() {
+    for (class, adv_octets, scan_octet) in [
+        (LeDeviceAddressKind::Public, [0x00, 0x20], 0x04),
+        (LeDeviceAddressKind::Random, [0x40, 0x60], 0x44),
+    ] {
+        let address = LeDeviceAddress::from_wire_bytes(ADVERTISER_BYTES, class);
+        for (support, octet) in [
+            LeChannelSelectionAlgorithmTwoSupport::Unsupported,
+            LeChannelSelectionAlgorithmTwoSupport::Supported,
+        ]
+        .into_iter()
+        .zip(adv_octets)
+        {
+            for length in 0..=31 {
+                let data = [0x5a; 31];
+                let advertisement = LegacyConnectableAdvertisement::new(
+                    address,
+                    LegacyAdvertisingData::new(&data[..length]).unwrap(),
+                    support,
+                );
+                let response = LegacyScanResponseData::new(&data[..length]).unwrap();
+                let mut expected = [0x5a; 39];
+                expected[1] = (6 + length) as u8;
+                expected[2..8].copy_from_slice(&ADVERTISER_BYTES);
+                let mut encoded = [0xa5; 40];
+                expected[0] = octet;
+                assert_eq!(advertisement.encode(&mut encoded), Ok(8 + length));
+                assert_eq!(&encoded[..8 + length], &expected[..8 + length]);
+                assert_eq!(
+                    LegacyConnectableAdvertisement::decode(&encoded[..8 + length]),
+                    Ok(advertisement)
+                );
+                assert!(encoded[8 + length..].iter().all(|byte| *byte == 0xa5));
+                expected[0] = scan_octet;
+                assert_eq!(response.encode(address, &mut encoded), Ok(8 + length));
+                assert_eq!(&encoded[..8 + length], &expected[..8 + length]);
+                for available in 0..8 + length {
+                    let mut short = [0xa5; 39];
+                    let error = Err(LegacyAdvertisingEncodeError::DestinationTooSmall {
+                        required: 8 + length,
+                        available,
+                    });
+                    assert_eq!(advertisement.encode(&mut short[..available]), error);
+                    assert_eq!(short, [0xa5; 39]);
+                    assert_eq!(response.encode(address, &mut short[..available]), error);
+                    assert_eq!(short, [0xa5; 39]);
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn directed_encodings_match_all_previous_address_and_channel_selection_flags() {
+    for (advertiser_kind, octets) in [
+        (LeDeviceAddressKind::Public, [0x01, 0x21, 0x81, 0xa1]),
+        (LeDeviceAddressKind::Random, [0x41, 0x61, 0xc1, 0xe1]),
+    ] {
+        let mut octets = octets.into_iter();
+        for target_kind in [LeDeviceAddressKind::Public, LeDeviceAddressKind::Random] {
+            for support in [
+                LeChannelSelectionAlgorithmTwoSupport::Unsupported,
+                LeChannelSelectionAlgorithmTwoSupport::Supported,
+            ] {
+                let octet = octets.next().unwrap();
+                let directed = LegacyDirectedAdvertisement::new(
+                    LeDeviceAddress::from_wire_bytes([1, 2, 3, 4, 5, 6], advertiser_kind),
+                    LeDeviceAddress::from_wire_bytes([7, 8, 9, 10, 11, 12], target_kind),
+                    support,
+                );
+                let mut encoded = [0xa5; 15];
+                assert_eq!(directed.encode(&mut encoded), Ok(14));
+                assert_eq!(
+                    encoded,
+                    [octet, 12, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 0xa5]
+                );
+                for available in 0..14 {
+                    let mut short = [0xa5; 14];
+                    assert_eq!(
+                        directed.encode(&mut short[..available]),
+                        Err(LegacyAdvertisingEncodeError::DestinationTooSmall {
+                            required: 14,
+                            available
+                        })
+                    );
+                    assert_eq!(short, [0xa5; 14]);
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn connectable_decoding_preserves_every_header_and_length_decision() {
+    for octet in u8::MIN..=u8::MAX {
+        for length in u8::MIN..=u8::MAX {
+            let pdu = [octet, length, 1, 2, 3, 4, 5, 6];
+            let result = LegacyConnectableAdvertisement::decode(&pdu);
+            let code = octet % 16;
+            if code != 0 {
+                assert_eq!(
+                    result,
+                    Err(
+                        LegacyConnectableAdvertisementDecodeError::UnexpectedPduType {
+                            pdu_type: code
+                        }
+                    )
+                );
+            } else if ![0x00, 0x20, 0x40, 0x60].contains(&octet) {
+                assert_eq!(
+                    result,
+                    Err(LegacyConnectableAdvertisementDecodeError::ReservedHeaderBitsSet)
+                );
+            } else if !(6..=37).contains(&length) {
+                assert_eq!(
+                    result,
+                    Err(
+                        LegacyConnectableAdvertisementDecodeError::InvalidPayloadLength {
+                            length: usize::from(length)
+                        }
+                    )
+                );
+            } else if length != 6 {
+                assert_eq!(
+                    result,
+                    Err(LegacyConnectableAdvertisementDecodeError::LengthMismatch {
+                        declared: 2 + usize::from(length),
+                        available: 8
+                    })
+                );
+            } else {
+                let decoded = result.unwrap();
+                assert_eq!(decoded.advertiser().wire_bytes(), [1, 2, 3, 4, 5, 6]);
+                assert_eq!(
+                    decoded.channel_selection_two(),
+                    if [0x20, 0x60].contains(&octet) {
+                        LeChannelSelectionAlgorithmTwoSupport::Supported
+                    } else {
+                        LeChannelSelectionAlgorithmTwoSupport::Unsupported
+                    }
+                );
+            }
+        }
+    }
 }

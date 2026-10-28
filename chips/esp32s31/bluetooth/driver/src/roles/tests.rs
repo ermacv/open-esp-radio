@@ -2,6 +2,15 @@ use super::*;
 use oer_esp32s31_hal::dma_static::Placed;
 use std::boxed::Box;
 
+// Exercise the same wire decode and typed hardware policy as AdvertisingImageBuilder.
+fn decode_advertising_address(
+    pdu: &[u8],
+) -> Result<LegacyAdvertisingOwnAddress, LegacyAdvertisingPduError> {
+    let prefix = oer_bluetooth_le_wire::advertising_header::LegacyAdvertisingPduPrefix::decode(pdu)
+        .map_err(|_| LegacyAdvertisingPduError::MissingAdvertiserAddress)?;
+    super::legacy_advertising_event_image::own_address_for_advertisement(prefix)
+}
+
 #[test]
 fn a_role_recipe_cannot_overwrite_an_already_prepared_event() {
     let storage = Box::leak(Box::new(SchedulerRolePoolStorage::<DtmStorage, 1>::new()));
@@ -62,37 +71,35 @@ fn advertising_policy_orders_selected_channels_and_marks_only_followers_flexible
 
 #[test]
 fn advertising_pdu_policy_selects_the_host_address_and_rejects_unsupported_headers() {
-    use super::legacy_advertising_event_image::own_address_from_pdu;
     assert_eq!(
-        own_address_from_pdu(&[2, 0]),
+        decode_advertising_address(&[2, 0]),
         Err(LegacyAdvertisingPduError::MissingAdvertiserAddress)
     );
     assert_eq!(
-        own_address_from_pdu(&[0, 6, 1, 2, 3, 4, 5, 6]),
+        decode_advertising_address(&[0, 6, 1, 2, 3, 4, 5, 6]),
         Err(LegacyAdvertisingPduError::UnsupportedPduType)
     );
     assert_eq!(
-        own_address_from_pdu(&[0x12, 6, 1, 2, 3, 4, 5, 6]),
+        decode_advertising_address(&[0x12, 6, 1, 2, 3, 4, 5, 6]),
         Err(LegacyAdvertisingPduError::UnsupportedHeaderFlags)
     );
     assert_eq!(
-        own_address_from_pdu(&[2, 6, 1, 2, 3, 4, 5, 6]),
+        decode_advertising_address(&[2, 6, 1, 2, 3, 4, 5, 6]),
         Ok(LegacyAdvertisingOwnAddress::Public)
     );
     assert_eq!(
-        own_address_from_pdu(&[0x42, 6, 1, 2, 3, 4, 5, 6]),
+        decode_advertising_address(&[0x42, 6, 1, 2, 3, 4, 5, 6]),
         Ok(LegacyAdvertisingOwnAddress::Random([1, 2, 3, 4, 5, 6]))
     );
 }
 
 #[test]
 fn advertising_address_decoding_preserves_all_header_and_truncation_decisions() {
-    use super::legacy_advertising_event_image::own_address_from_pdu;
     for header in u8::MIN..=u8::MAX {
         let pdu = [header, 6, 1, 2, 3, 4, 5, 6];
         for length in 0..pdu.len() {
             assert_eq!(
-                own_address_from_pdu(&pdu[..length]),
+                decode_advertising_address(&pdu[..length]),
                 Err(LegacyAdvertisingPduError::MissingAdvertiserAddress)
             );
         }
@@ -103,11 +110,11 @@ fn advertising_address_decoding_preserves_all_header_and_truncation_decisions() 
             | 0xe2 | 0xf2 => Err(LegacyAdvertisingPduError::UnsupportedHeaderFlags),
             _ => Err(LegacyAdvertisingPduError::UnsupportedPduType),
         };
-        assert_eq!(own_address_from_pdu(&pdu), expected);
+        assert_eq!(decode_advertising_address(&pdu), expected);
     }
     // Packet extent validation belongs to prepare_packet, after address selection.
     assert_eq!(
-        own_address_from_pdu(&[0x42, 0, 1, 2, 3, 4, 5, 6, 9]),
+        decode_advertising_address(&[0x42, 0, 1, 2, 3, 4, 5, 6, 9]),
         Ok(LegacyAdvertisingOwnAddress::Random([1, 2, 3, 4, 5, 6]))
     );
 }
