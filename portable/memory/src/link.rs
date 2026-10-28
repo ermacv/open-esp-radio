@@ -80,8 +80,9 @@ pub enum SlotKind {
 /// permitted definition. Function pointers include the ABI and complete
 /// signature. No other slot or foreign contract may assign another kind or
 /// type to any name in this slot's family. Definitions have no extra caller
-/// preconditions. The name belongs to this owner and cannot replace compiler
-/// or runtime symbols. Every foreign reader must be sound for any safe
+/// preconditions. The name belongs to this owner, including any weak default
+/// of that ABI; it cannot replace compiler or language-runtime symbols.
+/// Every foreign reader must be sound for any safe
 /// definition of `Value`; additional memory-safety obligations must be enforced
 /// by its typed API. The linker rejects duplicate strong definitions.
 // SAFETY: implementations must attest the unique external name/kind/type
