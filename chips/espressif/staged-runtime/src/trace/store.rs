@@ -199,7 +199,7 @@ pub struct Trace {
 
 #[cfg(oer_trace)]
 oer_memory::link_fn! {
-    declare
+    declare oer_memory::TraceClockSlot =>
     /// The image's monotonic time in microseconds, which stamps records:
     /// every image that records declares it once with [`trace_clock!`](crate::trace_clock).
     fn __oer_trace_now_micros() -> u64;
