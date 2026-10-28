@@ -3,7 +3,7 @@ name = "oer-espressif-staged-bootstrap"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-license.workspace = true
+license = "Apache-2.0"
 publish = false
 description = "The chip-neutral steps of the Espressif staged-boot bootstrap: stage-two validation, relocation into PSRAM and handoff"
 

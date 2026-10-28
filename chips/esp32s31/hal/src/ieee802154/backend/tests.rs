@@ -1,21 +1,16 @@
+use oer_espressif_ieee802154_mac_values::{
+    Ieee802154AckTimeout, Ieee802154CcaMode, Ieee802154Channel, Ieee802154MacControl,
+    Ieee802154MultipanEnableState, Ieee802154PanIdentity, Ieee802154RxStateCode,
+    Ieee802154TxStateCode,
+};
 use std::vec::Vec;
-
-use crate::root::RadioPartitions;
-use oer_espressif_ieee802154_engine::types::Ieee802154MultipanEnableState;
-use oer_espressif_ieee802154_mac_values::{Ieee802154RxStateCode, Ieee802154TxStateCode};
 
 use super::{
     Ieee802154FoundationSnapshot, Ieee802154Hal, Ieee802154MacHal, Ieee802154Pti,
     Ieee802154RegisterBackend, Ieee802154StateSnapshot,
 };
-use crate::ieee802154::{
-    lifecycle::Ieee802154Channel,
-    mac,
-    policy::{
-        Ieee802154AckTimeout, Ieee802154CcaMode, Ieee802154MacControl, Ieee802154MacPolicySnapshot,
-        Ieee802154PanIdentity,
-    },
-};
+use crate::ieee802154::{mac, policy::Ieee802154MacPolicySnapshot};
+use crate::root::RadioPartitions;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Operation {

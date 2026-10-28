@@ -1,8 +1,10 @@
 //! Unsupported-event observations and their retained diagnostic codec.
 
 use super::Ieee802154State;
-use crate::types::{Ieee802154Event, Ieee802154EventMask, Ieee802154EventObservation};
 use core::fmt::{self, Write};
+use oer_espressif_ieee802154_mac_values::{
+    Ieee802154Event, Ieee802154EventMask, Ieee802154EventObservation,
+};
 
 /// Impossible hardware input; no selected event has been acknowledged or dispatched.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -98,7 +100,7 @@ impl FaultRecord {
                 }
             },
         );
-        let observation = Ieee802154EventObservation::new(
+        let observation = Ieee802154EventObservation::from_parts(
             events,
             self.raw & (1 << 12) != 0,
             self.raw & (1 << 13) != 0,
@@ -154,7 +156,9 @@ mod tests {
                     Ieee802154Event::RxDone.mask()
                 };
                 let fault = Fault::UnhandledEvents {
-                    observation: Ieee802154EventObservation::new(events, events_7, events_13),
+                    observation: Ieee802154EventObservation::from_parts(
+                        events, events_7, events_13,
+                    ),
                     state,
                 };
                 let mut record: FaultRecord = bytemuck::Zeroable::zeroed();
@@ -181,7 +185,11 @@ mod tests {
     fn corrupt_record_is_not_reported() {
         let mut record: FaultRecord = bytemuck::Zeroable::zeroed();
         record.record(Fault::UnhandledEvents {
-            observation: Ieee802154EventObservation::new(Ieee802154EventMask::NONE, true, false),
+            observation: Ieee802154EventObservation::from_parts(
+                Ieee802154EventMask::NONE,
+                true,
+                false,
+            ),
             state: Ieee802154State::Rx,
         });
         record.raw ^= 1 << 13;
@@ -204,7 +212,7 @@ mod tests {
                 },
             );
             let fault = Fault::UnhandledEvents {
-                observation: Ieee802154EventObservation::new(
+                observation: Ieee802154EventObservation::from_parts(
                     events,
                     flags & (1 << 12) != 0,
                     flags & (1 << 13) != 0,

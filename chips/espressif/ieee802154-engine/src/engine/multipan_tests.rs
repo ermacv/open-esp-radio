@@ -4,10 +4,13 @@
 
 use crate::ll::model::Ieee802154LlModel;
 use crate::ll::model::ModelAddress;
-use crate::{tx_power::*, types::*};
+use oer_espressif_ieee802154_mac_values::{
+    Ieee802154AckTimeout, Ieee802154CcaMode, Ieee802154Event, Ieee802154MultipanEnableState,
+    Ieee802154MultipanIndex, Ieee802154RxStatus, Ieee802154TxPowerLevels,
+};
 use std::{boxed::Box, vec, vec::Vec};
 
-use crate::pib::{AutoPendingMode, Ieee802154MultipanIndex, Ieee802154PibDefaults};
+use crate::pib::{AutoPendingMode, Ieee802154PibDefaults};
 use oer_ieee802154_mac::FrameAddress;
 
 use super::{
@@ -275,7 +278,7 @@ fn settings_survive_disable_enable_and_complete_register_loss() {
     engine.set_multipan_enable(hw, Ieee802154MultipanEnableState::NONE.with(IF1));
     engine.set_ack_timeout(
         hw,
-        crate::types::AckTimeout::new(200).expect("bounded timeout"),
+        Ieee802154AckTimeout::from_microseconds(200).expect("bounded timeout"),
     );
     let priorities = crate::engine::tests::vendor_priorities();
     engine.set_coexistence(crate::coex::Ieee802154Coexistence::Software(priorities));

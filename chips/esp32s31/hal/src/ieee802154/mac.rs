@@ -161,7 +161,7 @@ pub struct Ieee802154InterruptSetupOwner<P: Placement = MacPlacement> {
 /// use oer_espressif_interrupt_table::{BindError, Bound, Router};
 /// # const LINES: oer_espressif_interrupt_table::Lines =
 /// #     oer_espressif_interrupt_table::Lines { first: 16, count: 48, levels: 8, harts: oer_esp32s31_pac::HARTS as u8, tie_break: oer_espressif_interrupt_table::TieBreak::HighestLine };
-/// use oer_espressif_ieee802154_engine::types::Ieee802154EventMask;
+/// use oer_espressif_ieee802154_mac_values::Ieee802154EventMask;
 /// pub fn on_ieee802154(mac: &mut Ieee802154InterruptOwner) {
 ///     // Acknowledge the sampled named events; latch them for the task.
 ///     let snapshot = mac.events();

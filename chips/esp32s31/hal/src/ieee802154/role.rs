@@ -17,8 +17,10 @@
 #![deny(unsafe_code)]
 
 use crate::power::PlatformClockBackend;
-
 use core::fmt;
+use oer_espressif_ieee802154_mac_values::{
+    Ieee802154AckTimeout, Ieee802154CcaMode, Ieee802154MacControl, Ieee802154PanIdentity,
+};
 
 use crate::phy::RadioPhyRegisters;
 
@@ -41,10 +43,9 @@ use crate::{
             Ieee802154TaskOwner,
         },
         policy::{
-            Ieee802154AckTimeout, Ieee802154CcaMode, Ieee802154MacControl, Ieee802154MacPolicy,
-            Ieee802154MacPolicyBackend, Ieee802154MacPolicyCheckpoint,
+            Ieee802154MacPolicy, Ieee802154MacPolicyBackend, Ieee802154MacPolicyCheckpoint,
             Ieee802154MacPolicyFailure as EngineMacPolicyFailure, Ieee802154MacPolicyReadback,
-            Ieee802154MacPolicyWrites, Ieee802154PanIdentity, configure_ieee802154_mac_policy,
+            Ieee802154MacPolicyWrites, configure_ieee802154_mac_policy,
         },
     },
     root::Ieee802154RadioPartition,
@@ -319,7 +320,7 @@ pub struct Ieee802154FoundationConfigured {
 }
 
 impl Ieee802154MacPolicyWrites for Ieee802154FoundationConfigured {
-    fn set_channel(&mut self, channel: crate::ieee802154::Ieee802154Channel) {
+    fn set_channel(&mut self, channel: oer_espressif_ieee802154_mac_values::Ieee802154Channel) {
         self.inner.backend_mut().mac_hal().set_channel(channel);
     }
 

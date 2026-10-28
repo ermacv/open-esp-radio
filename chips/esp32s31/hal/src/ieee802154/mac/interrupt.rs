@@ -6,12 +6,11 @@
 //! masked timer status is hidden; a saved positive sample clears under mask.
 
 use oer_esp32s31_pac::ieee802154::{Ieee802154MacIrq, event_status};
-use oer_espressif_ieee802154_engine::types::{
-    Ieee802154Event, Ieee802154EventMask, Ieee802154EventObservation,
-    Ieee802154RxAbortReasonObservation, Ieee802154TxAbortReasonObservation,
-};
+
 use oer_espressif_ieee802154_mac_values::{
-    Ieee802154RxStateCode, Ieee802154StateSnapshot, Ieee802154TxStateCode,
+    Ieee802154Event, Ieee802154EventMask, Ieee802154EventObservation,
+    Ieee802154RxAbortReasonObservation, Ieee802154RxStateCode, Ieee802154StateSnapshot,
+    Ieee802154TxAbortReasonObservation, Ieee802154TxStateCode,
 };
 use oer_mmio::Placement;
 
@@ -40,7 +39,7 @@ pub(super) fn observation(status: &event_status::Snapshot) -> Ieee802154EventObs
         .fold(Ieee802154EventMask::NONE, |events, (_, event)| {
             events.with(event)
         });
-    Ieee802154EventObservation::new(events, status.events_7(), status.events_13())
+    Ieee802154EventObservation::from_parts(events, status.events_7(), status.events_13())
 }
 
 /// One affine event sample, retained across changes to the enable mask.

@@ -3,7 +3,7 @@ name = "oer-firmware-hil-esp32s31"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-license.workspace = true
+license = "Apache-2.0"
 publish.workspace = true
 build = "build.rs"
 

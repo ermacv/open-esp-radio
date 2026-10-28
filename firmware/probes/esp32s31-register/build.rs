@@ -1,4 +1,7 @@
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    if std::env::var("CARGO_CFG_TARGET_ARCH").as_deref() != Ok("riscv32") {
+        return Ok(());
+    }
     // Cargo can reuse this compiled build script after the package is moved.
     // Resolve the current invocation's manifest directory, not its build path.
     let directory = std::env::var_os("CARGO_MANIFEST_DIR")

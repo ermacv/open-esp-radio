@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Interrupt activation and teardown, ordered once for every chip.
 
 use crate::Ieee802154InterruptActivationPlan;

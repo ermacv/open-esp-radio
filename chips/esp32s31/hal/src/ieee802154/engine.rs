@@ -11,9 +11,8 @@ use oer_espressif_ieee802154_engine::{
     },
     ll::Ieee802154LowLevel,
     pib::{Ieee802154Permit, Ieee802154PibDefaults},
-    tx_power::Ieee802154TxPowerLevels,
 };
-
+use oer_espressif_ieee802154_mac_values::Ieee802154TxPowerLevels;
 crate::dma_static! {
     #[allow(unsafe_code, reason = "DMA storage is placed through the HAL macro")]
     static BUFFERS: Ieee802154EngineBuffers = zeroed in ".dma.bss.ieee802154";

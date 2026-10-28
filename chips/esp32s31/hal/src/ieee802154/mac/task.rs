@@ -12,25 +12,17 @@ use oer_esp32s31_pac::ieee802154::{
 };
 use oer_espressif_ieee802154_engine::coex::CoexPti;
 use oer_espressif_ieee802154_engine::ll::COEX_DISABLED_PTI;
-use oer_espressif_ieee802154_engine::types::{
-    Ieee802154CcaMode, Ieee802154DebugCounter, Ieee802154EdSampleMode, Ieee802154Event,
-    Ieee802154MultipanEnableState, Ieee802154MultipanIndex, Ieee802154RxAbortEnableSet,
+use oer_espressif_ieee802154_mac_values::{
+    Ieee802154AckTimeout, Ieee802154CcaMode, Ieee802154Channel, Ieee802154DebugCounter,
+    Ieee802154EdSampleMode, Ieee802154Event, Ieee802154MacControl, Ieee802154MultipanEnableState,
+    Ieee802154MultipanIndex, Ieee802154PanIdentity, Ieee802154RxAbortEnableSet,
     Ieee802154RxAbortReasonObservation, Ieee802154RxStateCode, Ieee802154RxStatus,
     Ieee802154TxAbortEnableSet,
 };
 use oer_mmio::{Bits, Index, Placement};
 
 use super::Ieee802154TaskOwner;
-use crate::{
-    ieee802154::{
-        lifecycle::Ieee802154Channel,
-        policy::{
-            Ieee802154AckTimeout, Ieee802154MacControl, Ieee802154MacPolicySnapshot,
-            Ieee802154PanIdentity,
-        },
-    },
-    layouts::DmaWindowAddress,
-};
+use crate::{ieee802154::policy::Ieee802154MacPolicySnapshot, layouts::DmaWindowAddress};
 
 /// The transmit-on delay `ieee802154_txon_delay_set` writes.
 ///

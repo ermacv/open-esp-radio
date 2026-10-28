@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 #![deny(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -21,14 +22,20 @@
 #[cfg(test)]
 extern crate std;
 
+mod channel;
 mod events;
+mod mac;
 mod status;
 mod transition;
+mod tx_power;
 mod values;
 
+pub use channel::*;
 pub use events::*;
+pub use mac::*;
 pub use status::*;
 pub use transition::*;
+pub use tx_power::*;
 pub use values::*;
 
 #[cfg(test)]

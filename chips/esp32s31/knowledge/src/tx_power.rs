@@ -2,9 +2,9 @@
 //! IEEE 802.15.4 and Bluetooth LE select from.
 //!
 //! The IEEE 802.15.4 resolution itself is chip-neutral
-//! ([`oer_espressif_ieee802154_engine::tx_power`]).
+//! ([`oer_espressif_ieee802154_mac_values`]).
 
-use oer_espressif_ieee802154_engine::tx_power::Ieee802154TxPowerLevels;
+use oer_espressif_ieee802154_mac_values::Ieee802154TxPowerLevels;
 
 /// The BTBB provider's transmit-power levels, in dBm.
 ///

@@ -3,10 +3,22 @@
 
 use crate::ll::model::ModelAddress;
 use crate::ll::model::{DEBUG_COUNTERS, debug_slot};
-use crate::{channel::*, coex::*, ll::*, tx_power::*, types::*};
+use crate::{
+    coex::{CoexPti, Ieee802154CoexPriorities, Ieee802154Coexistence},
+    ll::*,
+};
+use oer_espressif_ieee802154_mac_values::{
+    Ieee802154AckTimeout, Ieee802154CcaMode, Ieee802154Channel, Ieee802154DebugCounter,
+    Ieee802154EdSampleMode, Ieee802154EtmChannel, Ieee802154EtmRoute, Ieee802154Event,
+    Ieee802154EventMask, Ieee802154EventObservation, Ieee802154MacCommand,
+    Ieee802154MultipanEnableState, Ieee802154MultipanIndex, Ieee802154ResolvedTxPower,
+    Ieee802154RxAbortEnableSet, Ieee802154RxAbortReason, Ieee802154RxAbortReasonObservation,
+    Ieee802154RxStateCode, Ieee802154RxStatus, Ieee802154Timer, Ieee802154TxAbortEnableSet,
+    Ieee802154TxAbortReason, Ieee802154TxAbortReasonObservation, Ieee802154TxPowerLevels,
+};
 use std::{boxed::Box, vec, vec::Vec};
 
-use crate::pib::{Ieee802154MultipanIndex, Ieee802154PibDefaults};
+use crate::pib::Ieee802154PibDefaults;
 
 use super::{
     FRAME_SIZE, Ieee802154Engine, Ieee802154EngineBuffers, Ieee802154EnhancedAck,
@@ -20,7 +32,7 @@ static LEVELS: [i8; 4] = [-9, -3, 4, 10];
 /// Recorded register accessor.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum Call {
-    Command(Ieee802154LlCommand),
+    Command(Ieee802154MacCommand),
     Events,
     ClearEvents(Ieee802154EventMask),
     RxAbortReason,
@@ -167,12 +179,12 @@ fn etm_index(channel: Ieee802154EtmChannel) -> usize {
 
 impl Ieee802154LowLevel for Hw {
     type Address = ModelAddress;
-    fn set_command(&mut self, command: Ieee802154LlCommand) {
+    fn set_command(&mut self, command: Ieee802154MacCommand) {
         self.calls.push(Call::Command(command));
     }
     fn events(&mut self) -> Ieee802154EventObservation {
         self.calls.push(Call::Events);
-        Ieee802154EventObservation::new(self.visible_events(), self.events_7, self.events_13)
+        Ieee802154EventObservation::from_parts(self.visible_events(), self.events_7, self.events_13)
     }
     fn clear_events(&mut self, mask: Ieee802154EventMask) {
         self.calls.push(Call::ClearEvents(mask));
@@ -514,6 +526,7 @@ impl Ieee802154Environment for Env {
 const DATA_WITH_ACK: [u8; 13] = [
     0x0c, 0x61, 0x98, 0x01, 0x34, 0x12, 0xff, 0xff, 0x78, 0x56, 0xaa, 0x00, 0x00,
 ];
+
 /// 2006 data frame without an ACK request.
 const DATA_NO_ACK: [u8; 13] = [
     0x0c, 0x41, 0x98, 0x02, 0x34, 0x12, 0xff, 0xff, 0x78, 0x56, 0xbb, 0x00, 0x00,
@@ -696,7 +709,7 @@ fn software_coexistence_publishes_each_scene_priority() {
         &bench.hw.calls,
         &[
             Call::SetTxrxPti(3),
-            Call::Command(Ieee802154LlCommand::RxStart),
+            Call::Command(Ieee802154MacCommand::Receive),
         ],
     );
 
@@ -706,7 +719,7 @@ fn software_coexistence_publishes_each_scene_priority() {
         &bench.hw.calls,
         &[
             Call::SetTxrxPti(3),
-            Call::Command(Ieee802154LlCommand::TxStart),
+            Call::Command(Ieee802154MacCommand::Transmit),
         ],
     );
 
@@ -766,10 +779,10 @@ fn transmit_with_ack_reports_the_received_ack() {
             Call::EtmEnabled(Ieee802154EtmChannel::Channel1),
             Call::StopTimer(Ieee802154Timer::Timer0),
             Call::StopTimer(Ieee802154Timer::Timer1),
-            Call::Command(Ieee802154LlCommand::Stop),
+            Call::Command(Ieee802154MacCommand::Stop),
             Call::TxAddress(tx),
             Call::RxAddress(rx0),
-            Call::Command(Ieee802154LlCommand::TxStart),
+            Call::Command(Ieee802154MacCommand::Transmit),
         ],
     );
     assert_eq!(bench.engine.state(), Ieee802154State::Tx);
@@ -801,7 +814,7 @@ fn transmit_with_ack_reports_the_received_ack() {
             Call::StopTimer(Ieee802154Timer::Timer0),
             Call::DisableEvent(Ieee802154Event::Timer0Overflow),
             Call::FrequencyCode,
-            Call::Command(Ieee802154LlCommand::Stop),
+            Call::Command(Ieee802154MacCommand::Stop),
         ],
     );
     assert_eq!(
@@ -866,7 +879,7 @@ fn a_crc_abort_restarts_receive_into_the_same_buffer() {
             Call::RxStatus,
             Call::SetTransmitSecurity(false),
             Call::RxAddress(rx0),
-            Call::Command(Ieee802154LlCommand::RxStart),
+            Call::Command(Ieee802154MacCommand::Receive),
         ],
     );
     assert_eq!(bench.take_notes(), []);
@@ -909,7 +922,7 @@ fn an_auto_acked_frame_is_delivered_after_its_ack() {
         &[
             Call::SetTransmitSecurity(false),
             Call::RxAddress(rx1),
-            Call::Command(Ieee802154LlCommand::RxStart),
+            Call::Command(Ieee802154MacCommand::Receive),
         ],
     );
     assert_eq!(
@@ -1027,7 +1040,7 @@ fn energy_detection_and_cca_report_their_sample() {
         &[
             Call::EnableEvent(Ieee802154Event::EdDone),
             Call::EdDuration(8),
-            Call::Command(Ieee802154LlCommand::EdStart),
+            Call::Command(Ieee802154MacCommand::EnergyDetection),
         ],
     );
     assert_eq!(bench.engine.state(), Ieee802154State::Ed);
@@ -1041,7 +1054,7 @@ fn energy_detection_and_cca_report_their_sample() {
         &bench.hw.calls,
         &[
             Call::EdDuration(8),
-            Call::Command(Ieee802154LlCommand::EdStart),
+            Call::Command(Ieee802154MacCommand::EnergyDetection),
         ],
     );
     bench.hw.cca_busy = true;
@@ -1166,7 +1179,7 @@ fn a_timed_transmission_starts_through_etm_channel_zero() {
             !bench
                 .hw
                 .calls
-                .contains(&Call::Command(Ieee802154LlCommand::TxStart))
+                .contains(&Call::Command(Ieee802154MacCommand::Transmit))
         );
     }
 }
@@ -1211,7 +1224,7 @@ fn a_timed_receive_window_closes_without_a_frame() {
         &bench.hw.calls,
         &[
             Call::IsCurrentRxFrame,
-            Call::Command(Ieee802154LlCommand::Stop),
+            Call::Command(Ieee802154MacCommand::Stop),
         ],
     );
     assert_eq!(bench.take_notes(), [Note::ReceiveAtDone]);
@@ -1278,7 +1291,7 @@ fn identity_and_ack_timeout_address_interface_zero() {
     engine.set_extended_address(hw, [1, 2, 3, 4, 5, 6, 7, 8]);
     engine.set_ack_timeout(
         hw,
-        crate::types::AckTimeout::new(200).expect("bounded timeout"),
+        Ieee802154AckTimeout::from_microseconds(200).expect("bounded timeout"),
     );
     assert_eq!(
         hw.calls,
@@ -1452,11 +1465,11 @@ fn listening_publishes_rx_settings_without_publishing_transmit_settings() {
     assert_subsequence(
         &bench.hw.calls,
         &[
-            Call::Command(Ieee802154LlCommand::Stop),
+            Call::Command(Ieee802154MacCommand::Stop),
             Call::SetTxAutoAck(false),
             Call::SetCoordinator(true),
             Call::SetPendingMode(true),
-            Call::Command(Ieee802154LlCommand::RxStart),
+            Call::Command(Ieee802154MacCommand::Receive),
         ],
     );
     assert!(!bench.hw.calls.iter().any(|call| matches!(
@@ -1474,7 +1487,7 @@ fn listening_publishes_rx_settings_without_publishing_transmit_settings() {
             Call::SetChannel(20),
             Call::SetTxPower(0),
             Call::SetCcaMode(Ieee802154CcaMode::Carrier),
-            Call::Command(Ieee802154LlCommand::TxStart),
+            Call::Command(Ieee802154MacCommand::Transmit),
         ],
     );
 }
@@ -1516,7 +1529,7 @@ fn rx_settings_wait_for_the_current_frame_and_its_ack() {
             Call::SetCoordinator(true),
             Call::SetPromiscuous(true),
             Call::SetPendingMode(true),
-            Call::Command(Ieee802154LlCommand::RxStart),
+            Call::Command(Ieee802154MacCommand::Receive),
         ],
     );
     assert!(!bench.engine.pib().is_rx_pending());
@@ -1547,7 +1560,7 @@ fn a_latched_receive_terminal_still_belongs_to_its_frame() {
         !bench
             .hw
             .calls
-            .contains(&Call::Command(Ieee802154LlCommand::Stop))
+            .contains(&Call::Command(Ieee802154MacCommand::Stop))
     );
     bench.interrupt(&[Ieee802154Event::RxDone]);
     bench.interrupt(&[Ieee802154Event::AckTxDone]);
@@ -1634,7 +1647,7 @@ fn settings_before_first_enable_are_kept_including_disabled_pib_edits() {
     engine.set_panid(&mut hw, 0x1234);
     engine.set_ack_timeout(
         &mut hw,
-        crate::types::AckTimeout::new(200).expect("bounded timeout"),
+        Ieee802154AckTimeout::from_microseconds(200).expect("bounded timeout"),
     );
     hw.calls.clear();
     engine.update_pib(&mut hw, &mut env, |pib| {
@@ -1885,7 +1898,8 @@ fn unhandled_7_10_13_fault_before_ack_or_any_simultaneous_dispatch() {
         bench.hw.events_7 = events_7;
         bench.hw.events_13 = events_13;
         bench.hw.calls.clear();
-        let observation = Ieee802154EventObservation::new(bench.hw.events, events_7, events_13);
+        let observation =
+            Ieee802154EventObservation::from_parts(bench.hw.events, events_7, events_13);
         assert_eq!(
             bench.engine.isr(&mut bench.hw, &mut bench.env),
             Err(super::Fault::UnhandledEvents {
@@ -2025,7 +2039,7 @@ fn malformed_generated_security_ack_is_refused_before_dma_publication() {
             bench
                 .hw
                 .calls
-                .contains(&Call::Command(Ieee802154LlCommand::Stop))
+                .contains(&Call::Command(Ieee802154MacCommand::Stop))
         );
         assert!(!bench.hw.calls.iter().any(|call| matches!(
             call,

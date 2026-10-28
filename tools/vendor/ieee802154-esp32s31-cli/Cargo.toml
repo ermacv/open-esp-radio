@@ -3,7 +3,7 @@ name = "oer-tool-vendor-ieee802154-esp32s31-cli"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-license.workspace = true
+license = "Apache-2.0"
 publish.workspace = true
 description = "The IEEE 802.15.4 host stand's program: list, run and compare the catalog scenarios, one per process,"
 

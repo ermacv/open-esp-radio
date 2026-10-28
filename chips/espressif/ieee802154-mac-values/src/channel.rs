@@ -1,4 +1,10 @@
+// SPDX-License-Identifier: Apache-2.0
 //! IEEE 802.15.4 2.4 GHz channels and their MAC frequency codes.
+//!
+//! Ported from ESP-IDF `7b9cc1ac79f865983f59bb8ff3ff43eb74ff1dbe`
+//! `components/ieee802154/driver` and its public MAC low-level vocabulary
+//! (Copyright Espressif Systems (Shanghai) Co Ltd, Apache-2.0)
+//! and modified by Vladislav Ermachenkov; see the root `NOTICE`.
 
 /// Lowest IEEE 802.15.4 channel supported by the 2.4 GHz PHY.
 pub const IEEE802154_MIN_CHANNEL: u8 = 11;

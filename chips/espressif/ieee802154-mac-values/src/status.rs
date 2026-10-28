@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Receive and transmit state observations and the public LL enable sets.
 
 use crate::Ieee802154TxAbortReasonObservation;

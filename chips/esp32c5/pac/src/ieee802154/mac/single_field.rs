@@ -6,14 +6,14 @@
 //! the accessor sequence the vendor driver issues.
 
 use super::{
-    Ieee802154AckTimeoutUnits, Ieee802154EdSampleMode, Ieee802154Event, Ieee802154FrequencyCode,
-    Ieee802154MultipanIndex, Ieee802154RegisterLease, Ieee802154RxAbortEnableSet,
-    Ieee802154RxAbortReasonObservation, Ieee802154RxStateCode, Ieee802154SecurityPayloadOffset,
-    Ieee802154TxAbortEnableSet, Ieee802154TxAbortReasonObservation,
-    Ieee802154TxSecurityErrorObservation, Ieee802154TxStateCode, Ieee802154TxStatus,
-    mac_source_authority, multipan_register_index,
+    Ieee802154EdSampleMode, Ieee802154Event, Ieee802154FrequencyCode, Ieee802154MultipanIndex,
+    Ieee802154RegisterLease, Ieee802154RxAbortEnableSet, Ieee802154RxAbortReasonObservation,
+    Ieee802154RxStateCode, Ieee802154SecurityPayloadOffset, Ieee802154TxAbortEnableSet,
+    Ieee802154TxAbortReasonObservation, Ieee802154TxSecurityErrorObservation,
+    Ieee802154TxStateCode, Ieee802154TxStatus, mac_source_authority, multipan_register_index,
 };
 use crate::ieee802154::ownership::{RawDebugCounter, RawEvent};
+use oer_espressif_ieee802154_mac_values::Ieee802154AckTimeout;
 use oer_espressif_interrupt_table::EventAuthority;
 use oer_mmio::InterruptSource;
 
@@ -195,8 +195,8 @@ impl Ieee802154RegisterLease<'_> {
     }
 
     /// `ieee802154_ll_get_ack_timeout`.
-    pub fn ack_timeout(&self) -> Ieee802154AckTimeoutUnits {
-        Ieee802154AckTimeoutUnits::new(self.registers.ack_timeout())
+    pub fn ack_timeout(&self) -> Ieee802154AckTimeout {
+        Ieee802154AckTimeout::from_units(self.registers.ack_timeout())
     }
 
     /// `ieee802154_ll_set_multipan_panid`.

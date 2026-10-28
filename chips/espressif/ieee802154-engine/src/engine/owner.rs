@@ -259,7 +259,10 @@ impl<'storage, Ll: Ieee802154LowLevel> Ieee802154EngineOwner<'storage, Ll> {
     }
 
     /// [`Ieee802154Engine::set_ack_timeout`], using this owner's MAC.
-    pub fn set_ack_timeout(&mut self, timeout: crate::types::AckTimeout) {
+    pub fn set_ack_timeout(
+        &mut self,
+        timeout: oer_espressif_ieee802154_mac_values::Ieee802154AckTimeout,
+    ) {
         self.engine.set_ack_timeout(&mut self.ll, timeout)
     }
 

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Events, abort reasons and their enable and observation vocabularies.
 
 /// One source-confirmed IEEE 802.15.4 MAC event.
@@ -677,38 +678,55 @@ pub enum Ieee802154OperationRxAbortEnableObservation {
 /// Copyable semantic `EVENT_ENABLE` or `EVENT_STATUS` observation.
 ///
 /// Unlike [`Ieee802154EventEnableState`], this type preserves unnamed physical
-/// bits because observations must not erase unexpected hardware state. It has
-/// no public constructor and cannot be passed to a write. W1C acknowledgement
-/// consumes a separate affine snapshot.
+/// lanes separately because observations must not erase unexpected hardware
+/// state. Construction grants no write authority. W1C acknowledgement consumes
+/// a separate affine snapshot.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct Ieee802154EventObservation {
     events: Ieee802154EventMask,
-    has_unclassified: bool,
+    // SOURCE: chips/esp32s31/registers/types/ieee802154.toml, EVENT_STATUS;
+    // chips/esp32c5/pac/src/ieee802154/ownership.rs, Ieee802154EventReadback.
+    // Neither lane is assigned a hardware meaning.
+    events_7: bool,
+    events_13: bool,
 }
 
 impl Ieee802154EventObservation {
-    /// An observation of the named `events` and whether an unnamed physical
-    /// event was set.
-    #[doc(hidden)]
-    pub const fn from_parts(events: Ieee802154EventMask, has_unclassified: bool) -> Self {
+    /// Combine named events with the individual observations of lanes 7 and 13.
+    /// A chip without a lane supplies `false` for that lane.
+    ///
+    /// The lanes are retained independently without assigning either a meaning.
+    /// Constructing this value grants no acknowledgement or write authority.
+    pub const fn from_parts(events: Ieee802154EventMask, lane_7: bool, lane_13: bool) -> Self {
         Self {
             events,
-            has_unclassified,
+            events_7: lane_7,
+            events_13: lane_13,
         }
     }
 
     /// An observation of exactly the named `events`, as a register model
     /// reports it. Observations grant no write authority.
     pub const fn from_named(events: Ieee802154EventMask) -> Self {
-        Self {
-            events,
-            has_unclassified: false,
-        }
+        Self::from_parts(events, false, false)
     }
 
     /// Return whether the complete observed event field is clear.
     pub const fn is_clear(self) -> bool {
-        self.events.is_empty() && !self.has_unclassified
+        match self.classification() {
+            Ok(named) => named.is_empty(),
+            Err(_) => false,
+        }
+    }
+
+    /// Observed presence of unnamed lane 7.
+    pub const fn events_7(self) -> bool {
+        self.events_7
+    }
+
+    /// Observed presence of unnamed lane 13.
+    pub const fn events_13(self) -> bool {
+        self.events_13
     }
 
     /// Return whether every named event in `required` was observed.
@@ -724,7 +742,7 @@ impl Ieee802154EventObservation {
     pub const fn classification(
         self,
     ) -> Result<Ieee802154EventMask, Ieee802154EventObservationError> {
-        if self.has_unclassified {
+        if self.events_7 || self.events_13 {
             Err(Ieee802154EventObservationError)
         } else {
             Ok(self.events)
@@ -739,3 +757,6 @@ impl Ieee802154EventObservation {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;

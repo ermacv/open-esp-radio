@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Configuration values, commands and identities of the IEEE 802.15.4 MAC.
 
 /// One of the four source-confirmed MAC PAN contexts.
@@ -173,23 +174,6 @@ impl Ieee802154CcaMode {
             3 => Self::CarrierAndEnergyDetection,
             _ => unreachable!(),
         }
-    }
-}
-
-/// Sixteen-bit ACK-timeout field value.
-///
-/// The PAC deliberately does not assign physical units. The HAL owns the
-/// source-confirmed conversion between microseconds and this field.
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct Ieee802154AckTimeoutUnits(u16);
-
-impl Ieee802154AckTimeoutUnits {
-    pub const fn new(value: u16) -> Self {
-        Self(value)
-    }
-
-    pub const fn value(self) -> u16 {
-        self.0
     }
 }
 

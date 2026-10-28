@@ -3,7 +3,7 @@ name = "oer-esp32s31-bluetooth-driver"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-license.workspace = true
+license = "Apache-2.0"
 repository.workspace = true
 description = "ESP32-S31 Bluetooth hardware engine: controller HAL and time, BLE PHY, interrupts and scheduler primitives"
 

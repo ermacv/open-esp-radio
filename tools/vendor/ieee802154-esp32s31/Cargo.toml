@@ -9,7 +9,7 @@ name = "oer-vendor-ieee802154-esp32s31"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-license.workspace = true
+license = "Apache-2.0"
 publish.workspace = true
 description = "Host stand that runs the pinned public ESP-IDF IEEE 802.15.4 driver against recorded register and platform boundaries"
 build = "build.rs"
@@ -17,6 +17,7 @@ links = "oer_esp32s31_ieee802154_vendor"
 
 
 [dependencies]
+oer-espressif-ieee802154-mac-values = { path = "../../../chips/espressif/ieee802154-mac-values" }
 hex = "=0.4.3"
 oer-esp32s31-knowledge = { path = "../../../chips/esp32s31/knowledge" }
 oer-espressif-coex = { path = "../../../chips/espressif/coex" }

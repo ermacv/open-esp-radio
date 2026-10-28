@@ -43,7 +43,10 @@ fn private_grants_follow_the_actual_ring_boundaries() {
         ])
         .arg(manifest.join("Cargo.toml"))
         .arg("--target-dir")
-        .arg(&build);
+        .arg(&build)
+        // Intermediate artifacts must stay in this fixture's private build.
+        .arg("--config")
+        .arg(format!("build.build-dir={build:?}"));
     if cfg!(feature = "bluetooth-engine") {
         cargo.args(["--features", "bluetooth-engine"]);
     }

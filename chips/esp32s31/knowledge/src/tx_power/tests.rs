@@ -1,5 +1,5 @@
 use super::*;
-use oer_espressif_ieee802154_engine::channel::Ieee802154Channel;
+use oer_espressif_ieee802154_mac_values::Ieee802154Channel;
 
 fn channel() -> Ieee802154Channel {
     Ieee802154Channel::new(20).expect("standard channel")
@@ -23,7 +23,9 @@ fn the_esp32s31_provider_levels_resolve_every_request() {
 #[test]
 fn the_esp32s31_capability_table_starts_every_channel_at_the_highest_level() {
     let caps = oer_espressif_ieee802154_engine::capabilities::capabilities(
-        ESP32S31_TX_POWER_LEVELS.portable(),
+        oer_espressif_ieee802154_engine::capabilities::portable_tx_power_levels(
+            ESP32S31_TX_POWER_LEVELS,
+        ),
         false,
     );
     let power = caps

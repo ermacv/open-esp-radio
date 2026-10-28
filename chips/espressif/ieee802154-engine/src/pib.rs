@@ -13,14 +13,15 @@
 //! reception masks ACK flags without replacing the configured values.
 //! Addresses, PAN identifiers and ACK timeout are written directly.
 
-pub use crate::types::Ieee802154MultipanIndex;
+use oer_espressif_ieee802154_mac_values::{
+    IEEE802154_MIN_CHANNEL, Ieee802154CcaMode, Ieee802154Channel, Ieee802154MultipanIndex,
+    Ieee802154TxPowerLevels,
+};
 pub use oer_ieee802154_mac::AutoPendingMode;
 use oer_ieee802154_mac::CcaThresholdError;
 
-use crate::channel::{IEEE802154_MIN_CHANNEL, Ieee802154Channel};
 use crate::ll::Ieee802154LowLevel;
-use crate::tx_power::Ieee802154TxPowerLevels;
-use crate::types::Ieee802154CcaMode;
+
 use oer_radio_regulatory::{Permitted, TxCeiling};
 
 const CHANNEL_COUNT: usize = 16;

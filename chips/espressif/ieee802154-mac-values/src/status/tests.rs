@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 use super::{
     Ieee802154RxStateCode, Ieee802154TxSecurityError, Ieee802154TxSecurityErrorObservation,
 };

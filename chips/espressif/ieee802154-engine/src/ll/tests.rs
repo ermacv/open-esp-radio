@@ -1,9 +1,20 @@
 //! Accessor sequences are independent expectations read from the pinned
 //! ESP-IDF driver sources, not snapshots of this module's output.
 
+use oer_espressif_ieee802154_mac_values::{
+    Ieee802154CcaMode, Ieee802154Channel, Ieee802154DebugCounter, Ieee802154EdSampleMode,
+    Ieee802154EtmChannel, Ieee802154EtmRoute, Ieee802154Event, Ieee802154EventMask,
+    Ieee802154EventObservation, Ieee802154MacCommand, Ieee802154MultipanEnableState,
+    Ieee802154MultipanIndex, Ieee802154ResolvedTxPower, Ieee802154RxAbortEnableSet,
+    Ieee802154RxAbortReasonObservation, Ieee802154RxStatus, Ieee802154Timer,
+    Ieee802154TxAbortEnableSet, Ieee802154TxAbortReasonObservation,
+};
 use std::{vec, vec::Vec};
 
-use crate::{channel::*, coex::*, ll::*, tx_power::*, types::*};
+use crate::{
+    coex::{CoexPti, Ieee802154CoexPriorities, Ieee802154Coexistence, RadioOperation},
+    ll::*,
+};
 
 /// One recorded accessor call.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -57,7 +68,7 @@ macro_rules! unused {
 impl Ieee802154LowLevel for Recorder {
     type Address = crate::ll::model::ModelAddress;
     unused! {
-        set_command(Ieee802154LlCommand);
+        set_command(Ieee802154MacCommand);
         events() -> Ieee802154EventObservation;
         clear_events(Ieee802154EventMask);
         rx_abort_reason() -> Ieee802154RxAbortReasonObservation;

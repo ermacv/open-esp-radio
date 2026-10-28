@@ -1,8 +1,11 @@
 //! PIB behavior read from the pinned `esp_ieee802154_pib.c`.
-use crate::{channel::*, tx_power::*, types::*};
+
+use oer_espressif_ieee802154_mac_values::{
+    Ieee802154CcaMode, Ieee802154Channel, Ieee802154MultipanIndex, Ieee802154TxPowerLevels,
+};
 use std::vec::Vec;
 
-use super::{AutoPendingMode, Ieee802154MultipanIndex, Ieee802154Pib, Ieee802154PibDefaults};
+use super::{AutoPendingMode, Ieee802154Pib, Ieee802154PibDefaults};
 
 use crate::engine::tests::{Call, Hw};
 
@@ -145,7 +148,10 @@ fn defaults_hold_a_threshold_of_the_kconfig_range() {
 /// The port publishes the provider levels it resolves power through.
 #[test]
 fn provider_levels_are_published_as_the_port_levels() {
-    assert_eq!(levels().portable().levels_dbm(), &LEVELS);
+    assert_eq!(
+        crate::capabilities::portable_tx_power_levels(levels()).levels_dbm(),
+        &LEVELS
+    );
 }
 
 fn permit_with_ceiling(
