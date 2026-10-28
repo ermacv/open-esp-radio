@@ -50,7 +50,7 @@ pub struct PreAdmission<const H: u8> {
 impl<const H: u8> PreAdmission<H> {
     /// Called only while wrapping the entry's unique handoff proof.
     pub(crate) const fn new() -> Self {
-        const { assert!((H as usize) < crate::vectors::HARTS) };
+        const { assert!((H as usize) < oer_espressif_platform_port::HARTS) };
         Self {
             hart: Hart {
                 _local: PhantomData,

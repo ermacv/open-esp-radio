@@ -27,7 +27,7 @@ oer-time = { path = "../../../../portable/time" }
 oer-espressif-interrupt-table = { path = "../../../espressif/interrupt-table" }
 
 [target.'cfg(oer_debug_control)'.dependencies]
-oer-espressif-staged-runtime = { path = "../../../espressif/staged-runtime", features = ["esp32s31"] }
+oer-espressif-staged-runtime = { path = "../../../espressif/staged-runtime" }
 oer-trace = { path = "../../../../portable/trace" }
 
 [features]

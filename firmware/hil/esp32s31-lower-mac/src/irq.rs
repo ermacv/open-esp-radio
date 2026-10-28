@@ -74,7 +74,7 @@ pub fn on_wifi(part: &mut WifiIrqPart<Lower>) {
     if !match service_wifi_line(&LINE, part) {
         Ok(installed) => installed,
         Err(oer_esp32s31_ieee80211_mac::irq::Fault::FatalAssertion { raw }) => {
-            oer_espressif_staged_runtime::wifi_fault::reset(raw)
+            oer_esp32s31_compose::wifi_fault::reset(raw)
         }
     } {
         ERRORS.fetch_add(1, Ordering::Relaxed);

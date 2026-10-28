@@ -118,12 +118,14 @@ pub(crate) fn reset<T>(owner: &mut T, fault: EngineOutputReleaseError) -> ! {
         Ok(record) => record,
         Err(policy) => crate::gate_fault::reset_interrupt_policy(policy),
     };
-    oer_espressif_staged_runtime::fatal::reset_recording(|_stop| {
-        if let Some(mut slot) = RECORD.try_lock() {
-            *slot = record;
-            core::mem::forget(slot);
-        }
-    })
+    oer_espressif_staged_runtime::fatal::reset_recording::<oer_esp32s31_hal::platform::Port>(
+        |_stop| {
+            if let Some(mut slot) = RECORD.try_lock() {
+                *slot = record;
+                core::mem::forget(slot);
+            }
+        },
+    )
 }
 
 #[cfg(target_arch = "riscv32")]

@@ -55,8 +55,12 @@ pub(crate) fn open<C: Controller>(
     let Ok((endpoint, interrupt, pads)) = retire_early_writer() else {
         crate::fail(oer_diagnostics::name!("console-retire"; 32))
     };
-    let bound = router
-        .bind(token, interrupt)
-        .unwrap_or_else(|error| oer_espressif_staged_runtime::interrupts::reset_binding(error));
+    let bound =
+        router.bind(token, interrupt).unwrap_or_else(|error| {
+            oer_espressif_staged_runtime::interrupts::reset_binding::<
+                oer_esp32s31_hal::platform::Port,
+                _,
+            >(error)
+        });
     (Endpoint::new(endpoint, INTERRUPT.signal(), &bound), pads)
 }

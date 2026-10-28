@@ -49,9 +49,9 @@ pub struct Sections {
     pub dma_data: Range<usize>,
     pub dma_bss: Range<usize>,
     /// Each hart's SRAM interrupt stack.
-    pub irq_stacks: [Range<usize>; crate::vectors::HARTS],
+    pub irq_stacks: [Range<usize>; oer_espressif_platform_port::HARTS],
     /// Each hart's PSRAM task stack; an unused range is empty.
-    pub task_stacks: [Range<usize>; crate::vectors::HARTS],
+    pub task_stacks: [Range<usize>; oer_espressif_platform_port::HARTS],
 }
 
 fn range(start: *const [u8; 0], end: *const [u8; 0]) -> Range<usize> {
@@ -93,6 +93,6 @@ pub(crate) struct HartStacks {
     pub guard: usize,
 }
 
-pub(crate) fn stack_symbols() -> [HartStacks; crate::vectors::HARTS] {
+pub(crate) fn stack_symbols() -> [HartStacks; oer_espressif_platform_port::HARTS] {
     stack_addresses!()
 }

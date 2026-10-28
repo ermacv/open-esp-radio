@@ -62,7 +62,7 @@ pub(crate) fn checkpoint(name: &str, arg: u32) {
     let now = uptime_ms();
     with_record(|record| {
         if let Err(fault) = record.checkpoint(name, arg, now, hart()) {
-            oer_espressif_staged_runtime::panic::reset_fault(
+            oer_espressif_staged_runtime::panic::reset_fault::<oer_esp32s31_hal::platform::Port>(
                 oer_espressif_staged_runtime::panic::FaultReason::HilCheckpoint,
                 [fault.head, fault.len, arg, now],
             );
@@ -71,7 +71,7 @@ pub(crate) fn checkpoint(name: &str, arg: u32) {
     critical_section::with(|cs| {
         let mut rate = RATE.borrow_ref_mut(cs);
         if let Err(fault) = rate.record(now) {
-            oer_espressif_staged_runtime::panic::reset_fault(
+            oer_espressif_staged_runtime::panic::reset_fault::<oer_esp32s31_hal::platform::Port>(
                 oer_espressif_staged_runtime::panic::FaultReason::HilRateOverflow,
                 [fault.second, fault.count, now, 0],
             );

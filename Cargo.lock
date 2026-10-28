@@ -1944,6 +1944,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-esp32s31-compose"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "oer-esp32s31-hal",
+ "oer-espressif-staged-runtime",
+]
+
+[[package]]
 name = "oer-esp32s31-hal"
 version = "0.1.0"
 dependencies = [
@@ -2256,9 +2265,9 @@ dependencies = [
  "bytemuck",
  "critical-section",
  "oer-diagnostics",
- "oer-esp32s31-hal",
  "oer-espressif-facts",
  "oer-espressif-interrupt-table",
+ "oer-espressif-platform-port",
  "oer-espressif-staged-layout",
  "oer-memory",
  "oer-riscv",
@@ -2299,6 +2308,7 @@ dependencies = [
  "oer-embassy-time",
  "oer-esp32s31-bluetooth-driver",
  "oer-esp32s31-board",
+ "oer-esp32s31-compose",
  "oer-esp32s31-hal",
  "oer-esp32s31-layout",
  "oer-esp32s31-phy",
@@ -2323,6 +2333,7 @@ dependencies = [
  "oer-diagnostics",
  "oer-embassy-time",
  "oer-esp32s31-board",
+ "oer-esp32s31-compose",
  "oer-esp32s31-hal",
  "oer-esp32s31-layout",
  "oer-espressif-executor",
@@ -2337,6 +2348,7 @@ dependencies = [
  "oer-diagnostics",
  "oer-embassy-time",
  "oer-esp32s31-board",
+ "oer-esp32s31-compose",
  "oer-esp32s31-hal",
  "oer-esp32s31-layout",
  "oer-espressif-executor",
@@ -2351,6 +2363,7 @@ dependencies = [
  "oer-diagnostics",
  "oer-embassy-time",
  "oer-esp32s31-board",
+ "oer-esp32s31-compose",
  "oer-esp32s31-hal",
  "oer-esp32s31-ieee80211-driver",
  "oer-esp32s31-ieee80211-mac",
@@ -2381,6 +2394,7 @@ dependencies = [
  "oer-diagnostics",
  "oer-embassy-time",
  "oer-esp32s31-board",
+ "oer-esp32s31-compose",
  "oer-esp32s31-hal",
  "oer-esp32s31-ieee80211-driver",
  "oer-esp32s31-ieee80211-mac",
@@ -2390,6 +2404,7 @@ dependencies = [
  "oer-esp32s31-radio-system",
  "oer-espressif-executor",
  "oer-espressif-interrupt-table",
+ "oer-espressif-platform-port",
  "oer-espressif-staged-runtime",
  "oer-espressif-usb-serial-jtag",
  "oer-ieee80211-port",
@@ -2414,6 +2429,7 @@ dependencies = [
  "oer-diagnostics",
  "oer-embassy-time",
  "oer-esp32s31-board",
+ "oer-esp32s31-compose",
  "oer-esp32s31-hal",
  "oer-esp32s31-ieee80211-driver",
  "oer-esp32s31-ieee80211-mac",
@@ -2449,6 +2465,7 @@ dependencies = [
  "oer-embassy-net",
  "oer-embassy-time",
  "oer-esp32s31-board",
+ "oer-esp32s31-compose",
  "oer-esp32s31-hal",
  "oer-esp32s31-ieee80211-driver",
  "oer-esp32s31-ieee80211-mac",
@@ -2506,6 +2523,7 @@ dependencies = [
  "oer-embassy-net",
  "oer-embassy-time",
  "oer-esp32s31-board",
+ "oer-esp32s31-compose",
  "oer-esp32s31-hal",
  "oer-esp32s31-ieee80211-driver",
  "oer-esp32s31-ieee80211-mac",
@@ -2549,6 +2567,7 @@ dependencies = [
  "oer-diagnostics",
  "oer-embassy-time",
  "oer-esp32s31-board",
+ "oer-esp32s31-compose",
  "oer-esp32s31-hal",
  "oer-esp32s31-ieee80211-driver",
  "oer-esp32s31-ieee80211-mac",
@@ -2587,6 +2606,7 @@ dependencies = [
  "oer-diagnostics",
  "oer-embassy-time",
  "oer-esp32s31-board",
+ "oer-esp32s31-compose",
  "oer-esp32s31-hal",
  "oer-esp32s31-ieee80211-driver",
  "oer-esp32s31-ieee80211-mac",
@@ -2630,6 +2650,7 @@ dependencies = [
  "oer-diagnostics",
  "oer-embassy-time",
  "oer-esp32s31-board",
+ "oer-esp32s31-compose",
  "oer-esp32s31-hal",
  "oer-esp32s31-ieee80211-mac",
  "oer-esp32s31-layout",
@@ -2669,6 +2690,7 @@ dependencies = [
  "oer-diagnostics",
  "oer-embassy-time",
  "oer-esp32s31-board",
+ "oer-esp32s31-compose",
  "oer-esp32s31-hal",
  "oer-esp32s31-ieee80211-driver",
  "oer-esp32s31-layout",

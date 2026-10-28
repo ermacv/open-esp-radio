@@ -41,7 +41,10 @@ pub(crate) async fn reset_on_request() {
     if let Err(fault) = CONSOLE.written(sequence).await {
         crate::system::receiver_limit(fault);
     }
-    reset_fault(FaultReason::HilRequested, observations(request, sequence));
+    reset_fault::<oer_esp32s31_hal::platform::Port>(
+        FaultReason::HilRequested,
+        observations(request, sequence),
+    );
 }
 
 /// The retained report correlates the request and its written acknowledgement.

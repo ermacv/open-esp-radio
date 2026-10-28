@@ -5,7 +5,7 @@
 /// The CPU lines of the chip's CLIC and its harts, generated from the chip
 /// facts' interrupt contract (`[interrupts] lines`, `first-source-line`,
 /// `control-bits`, `level-bits` and `harts`).
-#[cfg(feature = "esp32s31")]
+#[cfg(chip_vectors)]
 pub const LINES: oer_espressif_interrupt_table::Lines = crate::vectors::LINES;
 
 /// Declare the image's interrupt table, once per image, and hand its
@@ -41,12 +41,16 @@ macro_rules! interrupt_table {
 }
 
 /// Retain a binding refusal or invariant fault and reset with every setup,
-/// handler and interrupted owner held. No owner recovery or retry is issued.
-#[cfg(all(target_arch = "riscv32", feature = "esp32s31"))]
-pub fn reset_binding<E: oer_espressif_interrupt_table::Entry>(
+/// handler and interrupted owner held, through the image's platform `P`. No
+/// owner recovery or retry is issued.
+#[cfg(all(target_arch = "riscv32", chip_vectors))]
+pub fn reset_binding<
+    P: oer_espressif_platform_port::Platform,
+    E: oer_espressif_interrupt_table::Entry,
+>(
     error: oer_espressif_interrupt_table::BindError<E>,
 ) -> ! {
     let held = core::mem::ManuallyDrop::new(error);
     let (code, observations) = held.diagnostic();
-    crate::panic::reset_fault(code.into(), observations)
+    crate::panic::reset_fault::<P>(code.into(), observations)
 }

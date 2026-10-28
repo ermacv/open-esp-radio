@@ -68,7 +68,9 @@ pub(crate) fn read_reset_causes(registers: oer_esp32s31_hal::platform::ResetCaus
 /// Take the previous boot's platform panic record; before the first boot
 /// evidence is served.
 pub(crate) fn take_platform_panic() {
-    let _ = PLATFORM_PANIC.init(oer_espressif_staged_runtime::panic::take_previous());
+    let _ = PLATFORM_PANIC.init(oer_espressif_staged_runtime::panic::take_previous::<
+        oer_esp32s31_hal::platform::Port,
+    >());
 }
 
 /// Checkpoints `first..` of the previous boot's post-mortem.
@@ -87,7 +89,7 @@ pub(super) fn post_mortem_checkpoints(first: u8) -> oer_hil_protocol::base::Post
 /// Keep the terminal operation's owners in the caller frame until reset.
 pub(crate) fn receiver_limit(fault: oer_hil_agent::console::progress::ReceiverLimit) -> ! {
     use oer_espressif_staged_runtime::panic::{FaultReason, reset_fault};
-    reset_fault(
+    reset_fault::<oer_esp32s31_hal::platform::Port>(
         FaultReason::HilReceiverLimit,
         [
             fault.sequence,

@@ -36,7 +36,9 @@ pub struct Bell<
     R: oer_espressif_interrupt_table::Entry = crate::RadioToken,
 >(Doorbell<3, E, R>);
 
-impl<E: oer_espressif_interrupt_table::Entry, R: oer_espressif_interrupt_table::Entry> RadioDoorbell for &Bell<E, R> {
+impl<E: oer_espressif_interrupt_table::Entry, R: oer_espressif_interrupt_table::Entry> RadioDoorbell
+    for &Bell<E, R>
+{
     const HANDLER: oer_espressif_interrupt_table::Context = Doorbell::<3, E, R>::HANDLER;
     const EXECUTOR: oer_espressif_interrupt_table::Context = Doorbell::<3, E, R>::EXECUTOR;
     fn ring(&self) {
@@ -110,9 +112,13 @@ pub fn bind<C: Controller>(
             fault: &GATE_FAULT,
         },
     );
-    let bound = router
-        .bind(token, part)
-        .unwrap_or_else(|error| oer_espressif_staged_runtime::interrupts::reset_binding(error));
+    let bound =
+        router.bind(token, part).unwrap_or_else(|error| {
+            oer_espressif_staged_runtime::interrupts::reset_binding::<
+                oer_esp32s31_hal::platform::Port,
+                _,
+            >(error)
+        });
     let (doorbell, urgent) = Doorbell::new::<FromCpu3Irq>(line, &bound);
     let doorbell = BELL.try_init(Bell(doorbell)).ok_or(BindError::Storage)?;
     let ring: &Bell = doorbell;

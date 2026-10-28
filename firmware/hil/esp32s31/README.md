@@ -71,9 +71,10 @@ stay outside the small task shells.
 
 ## Panic and exception records
 
-The agent's panic hook, which the platform's panic entry calls through its
-`panic-hook` feature, runs in every image but `system-panic-reset` (the
-agent's `panic-hook` feature, which each image's base feature enables).
+The agent's panic hook, which the platform's panic entry calls because the
+image names it in its entry (`entry!(main, Port, hook = panic_hook)`), runs
+in every image but `system-panic-reset` (the agent's `panic-hook` feature,
+which each image's base feature enables, selects that entry).
 `InjectPanic` requests a reset through the staged runtime's retained path
 after its `PanicInjected` acknowledgement has been written. It records
 `FaultReason::HilRequested`, an explicit host-requested reset, not a hardware

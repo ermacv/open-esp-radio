@@ -25,17 +25,21 @@
 //! the bootstrap's PSRAM mapping through its board and takes its hart's
 //! routes and lines ([`Handoff::adopt`]), binds its interrupts through the
 //! [`Router`](oer_espressif_interrupt_table::Router) it gets back and enables
-//! interrupts ([`Adopted::enable_interrupts`]). A chip feature selects the
-//! chip, and the build generates the vector tables, every hart's line
-//! entries, each line's default handler and the interrupt table's lines
-//! from its facts (`oer-espressif-facts`): its harts and CLIC lines.
+//! interrupts ([`Adopted::enable_interrupts`]). The chip HAL selects the
+//! chip through the platform port (`oer-espressif-platform-port`), whose
+//! metadata names it to the build; the build generates the vector tables,
+//! every hart's line entries, each line's default handler and the interrupt
+//! table's lines from its facts (`oer-espressif-facts`): its harts and CLIC
+//! lines. The hart geometry is the port's, and the image names its platform
+//! (the HAL's port type) once, in [`entry!`].
 //!
 //! The runtime owns the traps ([`stacks`]: the vector tables, every entry
 //! and the checked exit; the common entry and exit are `vectors.s`), the
 //! image's `critical-section` (`critical`), the panic record ([`panic`]) and
-//! the fatal paths (`fatal`: the end of a hart and the chip's reset, which
-//! lend the chip HAL's fatal-path proof); the interrupt table's router writes
-//! the routes and the CLIC lines through the chip's controller.
+//! the fatal paths (`fatal`: the end of a hart and the chip's reset, over the
+//! port's [`Platform`](oer_espressif_platform_port::Platform), which lends
+//! the chip HAL's fatal-path proof); the interrupt table's router writes the
+//! routes and the CLIC lines through the chip's controller.
 #[allow(unsafe_code, reason = "the critical-section implementation contract")]
 mod critical;
 #[cfg(target_arch = "riscv32")]
@@ -45,29 +49,26 @@ mod critical;
 )]
 mod default_handlers;
 pub mod diagnostics;
-#[cfg(feature = "esp32s31")]
+#[cfg(chip_vectors)]
 pub mod fatal;
-#[cfg(feature = "esp32s31")]
-pub mod phy_fault;
 pub mod trace;
-/// Shared retained/reset path selected only by staged Wi-Fi images.
-#[cfg(feature = "wifi-fault")]
-pub mod wifi_fault;
-#[cfg(all(target_arch = "riscv32", feature = "esp32s31"))]
+#[cfg(all(target_arch = "riscv32", chip_vectors))]
 pub use fatal::{fatal_halt, reset, reset_recording};
 #[cfg(target_arch = "riscv32")]
 #[allow(unsafe_code, reason = "the stage-two reset entry is assembly")]
 mod entry;
-#[cfg(feature = "esp32s31")]
+#[cfg(chip_vectors)]
 mod hart;
 pub mod interrupts;
-#[cfg(feature = "esp32s31")]
+#[cfg(chip_vectors)]
 pub use hart::{Hart, PreAdmission};
-#[cfg(feature = "esp32s31")]
-pub use vectors::BOOT_HART;
-/// The chip's CPU lines, harts and vector-table words, which the build
-/// generates from its facts.
-#[cfg(feature = "esp32s31")]
+/// The boot hart, as the parameter of its [`Hart`] token: the port's
+/// [`BOOT_HART`](oer_espressif_platform_port::BOOT_HART), from the chip facts.
+#[cfg(chip_vectors)]
+pub const BOOT_HART: u8 = oer_espressif_platform_port::BOOT_HART as u8;
+/// The chip's CPU lines and vector-table words, which the build generates
+/// from its facts.
+#[cfg(chip_vectors)]
 mod vectors {
     include!(concat!(env!("OUT_DIR"), "/vectors.rs"));
 }
@@ -89,6 +90,9 @@ pub mod trap;
 
 #[doc(hidden)]
 pub use oer_espressif_interrupt_table as __interrupt_table;
+
+#[doc(hidden)]
+pub use oer_espressif_platform_port as __port;
 
 /// The image's interrupt table as [`interrupt_table!`] declares it.
 pub type InterruptTable = oer_espressif_interrupt_table::Table;
@@ -147,31 +151,36 @@ impl From<oer_espressif_interrupt_table::Error> for BootError {
 
 /// The image's control at the runtime's entry: stage two runs on the boot hart right
 /// after `_runtime_start`, with interrupts disabled and the bootstrap's
-/// mapping intact. [`entry!`] gives it once, to the image's `main`.
+/// mapping intact. [`entry!`] gives it once, to the image's `main`, with the
+/// image's platform `P` (the chip HAL's port type).
 #[must_use = "the handoff adopts the bootstrap's mapping"]
-pub struct Handoff {
+pub struct Handoff<P> {
     proof: oer_espressif_staged_layout::handoff::StageTwoHandoff,
-    #[cfg(feature = "esp32s31")]
+    #[cfg(chip_vectors)]
     admission: PreAdmission<BOOT_HART>,
+    _platform: core::marker::PhantomData<fn() -> P>,
 }
 
-impl Handoff {
+impl<P> Handoff<P> {
     #[doc(hidden)]
     /// Wrap the proof minted by [`entry!`].
     pub const fn from_proof(proof: oer_espressif_staged_layout::handoff::StageTwoHandoff) -> Self {
         Self {
             proof,
-            #[cfg(feature = "esp32s31")]
+            #[cfg(chip_vectors)]
             admission: PreAdmission::new(),
+            _platform: core::marker::PhantomData,
         }
     }
 
     /// Borrow the boot hart's stack-install authority before adoption.
-    #[cfg(feature = "esp32s31")]
+    #[cfg(chip_vectors)]
     pub fn pre_admission(&mut self) -> &mut PreAdmission<BOOT_HART> {
         &mut self.admission
     }
+}
 
+impl<P: oer_espressif_platform_port::EarlyText> Handoff<P> {
     /// Adopt the bootstrap's PSRAM mapping through `board` and install the
     /// stage-two interrupt context of the boot hart: its SRAM interrupt stack and
     /// vectors, the task-stack watchpoint, and the hart's routes and lines,
@@ -183,6 +192,11 @@ impl Handoff {
     /// disables every line of the hart, so from here a source is routed only
     /// by binding its entry.
     ///
+    /// Before the mapping is adopted, the previous boot's named fault and
+    /// invalid-hart records are reported through `P`'s early writer, then
+    /// `previous_records` reports the image's own retained records (the chip
+    /// composition's, e.g. the PHY transaction record).
+    ///
     /// # Errors
     ///
     /// A wrong hart, missing interrupt stack, invalid stack guard, or controller
@@ -193,12 +207,13 @@ impl Handoff {
         interrupt_table: &'static InterruptTable,
         controller: C,
         board: B,
+        previous_records: impl FnOnce(),
     ) -> Result<(B::Mapping, Adopted<C>), BootError> {
-        panic::report_previous_fault();
-        phy_fault::report_previous();
+        panic::report_previous_fault::<P>();
+        previous_records();
         let mapping = board.adopt(&self.proof);
         let actual = usize::from(controller.hart());
-        let expected = oer_esp32s31_hal::platform::BOOT_HART.get();
+        let expected = oer_espressif_platform_port::BOOT_HART.get();
         if actual != expected {
             return Err(BootError::WrongHart { actual, expected });
         }
@@ -206,7 +221,7 @@ impl Handoff {
         let router = oer_espressif_interrupt_table::Router::install(controller, interrupt_table)?;
         // Interrupts are disabled and trigger 0 is the runtime's;
         // the generated table names this checked hart's word-aligned task bottom.
-        let hart = oer_esp32s31_hal::platform::BOOT_HART;
+        let hart = oer_espressif_platform_port::BOOT_HART;
         stacks::watch_task_stack(hart.at(&layout::stack_symbols()).task.start)?;
         Ok((
             mapping,
@@ -223,13 +238,13 @@ impl Handoff {
 #[must_use = "interrupts stay disabled until `enable_interrupts`"]
 pub struct Adopted<C: oer_espressif_interrupt_table::Controller> {
     router: oer_espressif_interrupt_table::Router<C>,
-    #[cfg(feature = "esp32s31")]
+    #[cfg(chip_vectors)]
     admission: PreAdmission<BOOT_HART>,
 }
 
 impl<C: oer_espressif_interrupt_table::Controller> Adopted<C> {
     /// Borrow the local execution identity and router together before admission.
-    #[cfg(feature = "esp32s31")]
+    #[cfg(chip_vectors)]
     pub fn parts(
         &mut self,
     ) -> (
@@ -285,16 +300,28 @@ pub fn halt() -> ! {
     idle()
 }
 
-/// The image's entry: `runtime_main`, which `_runtime_start` calls once on
-/// the boot hart, gives `$main` the one [`Handoff`].
+/// The image's entry and its one panic entry, for the image's platform
+/// `$platform` (the chip HAL's port type, a
+/// [`Platform`](oer_espressif_platform_port::Platform)): `runtime_main`,
+/// which `_runtime_start` calls once on the boot hart, gives `$main` the one
+/// [`Handoff`], and the panic handler records the panic and resets
+/// ([`panic`]).
+///
+/// With `hook = $hook`, the panic entry calls the image's hook after its
+/// record, in the fatal path with the hart masked and the other hart stopped
+/// (or why it is not), before it resets the chip: `$hook` records more of the
+/// image's state, formats nothing and returns. It is exported as
+/// `oer_platform_panic_hook`, which the image linker places with its strict
+/// callees in SRAM and the image checks analyse as a panic path.
 ///
 /// ```ignore
-/// oer_espressif_staged_runtime::entry!(main);
-/// fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! { … }
+/// // `Port`: the chip HAL's implementation of the platform port.
+/// oer_espressif_staged_runtime::entry!(main, Port);
+/// fn main(handoff: oer_espressif_staged_runtime::Handoff<Port>) -> ! { … }
 /// ```
 #[macro_export]
 macro_rules! entry {
-    ($main:path) => {
+    (@runtime_main $main:path, $platform:ty) => {
         // SAFETY: `_runtime_start` calls this one image entry with the C ABI;
         // defining a second `runtime_main` fails the link.
         #[unsafe(no_mangle)]
@@ -303,8 +330,37 @@ macro_rules! entry {
             // after initializing the SRAM sections, with interrupts disabled
             // and the bootstrap's mapping intact; this is its first statement.
             let proof = unsafe { $crate::__StageTwoHandoff::new() };
-            let handoff = $crate::Handoff::from_proof(proof);
+            let handoff = $crate::Handoff::<$platform>::from_proof(proof);
             $main(handoff)
+        }
+    };
+    ($main:path, $platform:ty) => {
+        $crate::entry!(@runtime_main $main, $platform);
+        #[cfg(target_arch = "riscv32")]
+        #[panic_handler]
+        fn __oer_panic(info: &::core::panic::PanicInfo<'_>) -> ! {
+            $crate::panic::handle::<$platform>(info, |_details, _stop| ())
+        }
+    };
+    ($main:path, $platform:ty, hook = $hook:path) => {
+        $crate::entry!(@runtime_main $main, $platform);
+        #[cfg(target_arch = "riscv32")]
+        #[unsafe(no_mangle)]
+        fn oer_platform_panic_hook(
+            details: &$crate::panic::PanicDetails<'_>,
+            stop: ::core::result::Result<
+                &<$platform as $crate::__port::Platform>::Stop<'_>,
+                <$platform as $crate::__port::Platform>::StopError,
+            >,
+        ) {
+            $hook(details, stop)
+        }
+        #[cfg(target_arch = "riscv32")]
+        #[panic_handler]
+        fn __oer_panic(info: &::core::panic::PanicInfo<'_>) -> ! {
+            $crate::panic::handle::<$platform>(info, |details, stop| {
+                oer_platform_panic_hook(details, stop)
+            })
         }
     };
 }

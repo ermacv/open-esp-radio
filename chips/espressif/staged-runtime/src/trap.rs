@@ -48,7 +48,7 @@ pub const TRAP_FRAME_BYTES: usize = core::mem::size_of::<TrapFrame>();
 const _: () = assert!(TRAP_FRAME_BYTES.is_multiple_of(16));
 
 /// Vectors of a hart's CLIC vector table (MTVT) that hold an entry.
-#[cfg(feature = "esp32s31")]
+#[cfg(chip_vectors)]
 pub const VECTORS: usize = crate::interrupts::LINES.count as usize;
 
 /// The current hart's trap CSRs.

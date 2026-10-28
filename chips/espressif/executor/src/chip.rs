@@ -38,7 +38,9 @@ pub(crate) fn current_hart() -> Hart {
             // no executor or register owner is released on this path.
             #[cfg(target_arch = "riscv32")]
             {
-                oer_espressif_staged_runtime::fatal::reset_recording(|_| ())
+                oer_espressif_staged_runtime::fatal::reset_recording::<
+                    oer_esp32s31_hal::platform::Port,
+                >(|_| ())
             }
             // Host type checks have no reset hardware or retained boot record.
             #[cfg(not(target_arch = "riscv32"))]

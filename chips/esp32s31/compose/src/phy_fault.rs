@@ -4,7 +4,9 @@ use oer_esp32s31_hal::domain::transaction::FaultRecord;
 use oer_esp32s31_hal::domain::transaction::TransactionSeat;
 #[cfg(target_arch = "riscv32")]
 use oer_esp32s31_hal::domain::transaction::{Fault, FaultReason, PhyIdentity};
-crate::retained_static! { static PHY_FAULT: FaultRecord; }
+#[cfg(target_arch = "riscv32")]
+use oer_esp32s31_hal::platform::Port;
+oer_espressif_staged_runtime::retained_static! { static PHY_FAULT: FaultRecord; }
 #[cfg(target_arch = "riscv32")]
 static SEAT: TransactionSeat = TransactionSeat::new();
 
@@ -20,7 +22,7 @@ pub fn identity() -> PhyIdentity {
 }
 #[cfg(target_arch = "riscv32")]
 pub fn reset(fault: Fault) -> ! {
-    crate::fatal::reset_recording(|_stop| {
+    oer_espressif_staged_runtime::fatal::reset_recording::<Port>(|_stop| {
         if let Some(mut record) = PHY_FAULT.try_lock() {
             record.record(fault);
         }

@@ -42,7 +42,7 @@ oer-espressif-interrupt-table = { path = "../interrupt-table", optional = true }
 oer-riscv = { path = "../../../portable/riscv", optional = true }
 oer-mmio = { path = "../../../portable/mmio", optional = true }
 oer-esp32s31-hal = { path = "../../esp32s31/hal", optional = true }
-oer-espressif-staged-runtime = { path = "../staged-runtime", features = ["esp32s31"], optional = true }
+oer-espressif-staged-runtime = { path = "../staged-runtime", optional = true }
 
 [target.'cfg(not(target_os = "none"))'.dev-dependencies]
 tempfile = "=3.27.0"

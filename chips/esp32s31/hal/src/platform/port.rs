@@ -1,5 +1,7 @@
 //! The family platform contracts on this chip (`oer-espressif-platform-port`),
-//! implemented by [`Port`]: the early console writer, the source identities
+//! implemented by [`Port`]: the early console writer, the fatal path
+//! ([`crate::cores`]: the mask and its proof, the stop of the other hart and
+//! the software reset), the source identities
 //! of the software interrupt lines and the system timer's comparators from
 //! the PAC's interrupt parts, the owned executor blocks, and pending/debug
 //! reads selected by a checked hart identity.
@@ -9,6 +11,7 @@ use oer_espressif_platform_port as port;
 use oer_memory::zeroed::ZeroedOnce;
 use oer_mmio::InterruptSource;
 
+use crate::cores;
 use crate::platform::{
     FromCpu0, FromCpu0Irq, FromCpu1, FromCpu1Irq, FromCpu2, FromCpu2Irq, FromCpu3, FromCpu3Irq,
     Hart, SystimerAlarm0, SystimerAlarm1, SystimerAlarm2, SystimerComparators, SystimerCounter,
@@ -51,6 +54,43 @@ impl port::EarlyText for Port {
     #[inline(always)]
     fn text(bytes: &[u8]) -> bool {
         crate::usb_serial_jtag::early_text(bytes)
+    }
+}
+
+/// The port's identity of a checked PAC hart; like [`hart`], it type-checks
+/// only while both geometries hold the same hart count.
+#[inline(always)]
+fn port_hart(hart: Hart) -> port::Hart {
+    *hart.at(&port::Hart::ALL)
+}
+
+impl port::Platform for Port {
+    type Fatal<'a> = cores::Fatal<'a>;
+    type Stop<'a> = cores::StopTheWorld<'a>;
+    type StopError = cores::StopError;
+
+    #[inline(always)]
+    fn fatal(path: impl for<'a> FnOnce(Self::Fatal<'a>)) -> ! {
+        cores::fatal(path)
+    }
+
+    #[inline(always)]
+    fn fatal_hart(fatal: &Self::Fatal<'_>) -> Result<port::Hart, port::InvalidHart> {
+        fatal
+            .hart()
+            .map(port_hart)
+            .map_err(|cores::Fault::InvalidHart { raw }| port::InvalidHart { raw })
+    }
+
+    #[inline(always)]
+    fn stop_the_world<'a>(fatal: &Self::Fatal<'a>) -> Result<Self::Stop<'a>, Self::StopError> {
+        cores::stop_the_world(fatal)
+    }
+
+    #[inline(always)]
+    fn software_reset(fatal: Self::Fatal<'_>) -> port::AwaitWatchdog<Self::StopError> {
+        let cores::AwaitWatchdog { reason } = cores::software_reset(fatal);
+        port::AwaitWatchdog { reason }
     }
 }
 
@@ -169,6 +209,7 @@ mod tests {
             .zip(crate::platform::Hart::ALL)
         {
             assert_eq!(super::hart(port), pac);
+            assert_eq!(super::port_hart(pac), port);
             assert_eq!(port.get(), pac.get());
         }
     }

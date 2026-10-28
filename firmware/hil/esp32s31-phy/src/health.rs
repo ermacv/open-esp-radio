@@ -453,7 +453,7 @@ pub(crate) mod startup;
 /// An impossible exact-count overflow keeps the recording owner's borrow
 /// alive through the image's retained reset.
 pub(crate) fn count_fault(fault: oer_hil_agent::health::CountOverflow) -> ! {
-    oer_espressif_staged_runtime::panic::reset_fault(
+    oer_espressif_staged_runtime::panic::reset_fault::<oer_esp32s31_hal::platform::Port>(
         oer_espressif_staged_runtime::panic::FaultReason::HilHealthCount,
         [
             fault.kind as u32,

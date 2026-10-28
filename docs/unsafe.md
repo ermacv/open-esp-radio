@@ -632,7 +632,8 @@ epoch. Pointers from a foreign reunion remain session diagnostics, not retained
 owner identities.
 The HAL declares the direct `link_fn!` binding and exports
 `phy_fault_reporter!` to define that exact signature. Staged images bind it
-to `fatal::reset_recording`. Their four-word (16-byte), versioned/checksummed
+to `oer-esp32s31-compose`'s `phy_fault::reset`, which calls
+`fatal::reset_recording`. Their four-word (16-byte), versioned/checksummed
 record retains reason/operation and epoch and is cleared only after successful
 next-boot output. The address of the image's owner is not stored.
 Isolated comparison probes supply their own reporter through the same HAL
@@ -869,10 +870,11 @@ The platform crates (the boards and `chips/espressif/staged-*`), the bootstrap i
 target ABI and placement, so they hold unsafe code that no crate above them
 needs:
 
-- The staged runtime defines the image entry (`entry!`, the `Handoff` and
-  `Adopted::enable_interrupts`), the sections the linker script maps
-  (`placed_static!`, `retained_static!`), the panic hook and
-  exception handler symbols (`panic_hook!`, `exception_handler!`), trap
+- The staged runtime defines the image entry and its panic handler (`entry!`,
+  whose optional `hook` parameter exports the image's panic hook symbol, the
+  `Handoff` and `Adopted::enable_interrupts`), the sections the linker script
+  maps (`placed_static!`, `retained_static!`), the exception handler symbol
+  (`exception_handler!`), trap
   snapshots and vector-table reads (`trap`), and the linked sections (`layout`).
   Images and HIL agents reach these through safe APIs and forbid unsafe code.
   The critical section masks its executing hart only. Firmware packages depending
@@ -1054,8 +1056,9 @@ The port lifecycle's fault flag is separate and carries no gate fault.
 The Wi-Fi source120 fatal-assertion path keeps the full sampled RAW as
 an opaque diagnostic. It quarantines both interrupt banks before returning a
 named `irq::Fault` to the image. The image retains the preempted DMA owners and
-the handler's register owners through the runtime's never-returning shared
-`wifi_fault::reset`, which calls `fatal::reset_recording`,
+the handler's register owners through the chip composition's
+(`oer-esp32s31-compose`) never-returning shared `wifi_fault::reset`, which
+calls the runtime's `fatal::reset_recording`,
 writes a twelve-byte record through the existing safe retained-cell API, and
 reports it at the next boot. The `wifi-fault` feature selects the one record
 for staged Wi-Fi images; no image defines a second copy. Every epoch clear

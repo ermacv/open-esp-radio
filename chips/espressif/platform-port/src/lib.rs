@@ -19,11 +19,14 @@
 //! build script then generates the chip's hart geometry ([`HARTS`],
 //! [`BOOT_HART`], the checked [`Hart`]) with the PAC's generator over the
 //! same facts and publishes the id as this package's `chip` metadata. A
-//! build without a chip has no geometry and no [`ExecutorPlatform`].
+//! build without a chip has no geometry, no [`Platform`] and no
+//! [`ExecutorPlatform`].
 //!
 //! The contracts:
 //!
 //! - [`EarlyText`]: the early console writer;
+//! - [`Platform`]: the fatal path's mask and proof, the stop of every other
+//!   hart and the chip's software reset;
 //! - [`ExecutorPlatform`]: the executor's source identities, its pending and
 //!   debugger reads and its owned blocks: the software interrupt lines
 //!   ([`SoftwareLine`]), the counter ([`SystemCounter`]), the comparators
@@ -127,6 +130,54 @@ pub trait Comparators {
     /// Load `comparator`'s target `ticks` and enable it; `None` only
     /// disables the comparator.
     fn program(&mut self, comparator: Comparator, ticks: Option<u64>);
+}
+
+/// A fatal path that could not prepare the chip's reset: its hart halts,
+/// masked, until an armed watchdog resets the chip.
+#[must_use = "the path halts its masked hart until a watchdog resets the chip"]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct AwaitWatchdog<E> {
+    /// Why the reset could not be prepared.
+    pub reason: E,
+}
+
+/// The fatal path's primitives: the mask of the failing hart and its proof,
+/// the stop of every other hart and the chip's software reset. The family's
+/// staged runtime keeps the policy (what a path records and when it resets);
+/// the chip HAL holds the proof and the owned words.
+#[cfg(chip_geometry)]
+pub trait Platform: EarlyText + 'static {
+    /// Proof that this hart runs a fatal path with its interrupts masked;
+    /// it stays on its hart and in the closure it is lent to.
+    type Fatal<'a>;
+    /// Every other hart stopped for the chip's reset, under a fatal path.
+    type Stop<'a>;
+    /// Why a fatal path did not stop the world.
+    type StopError: Copy;
+
+    /// Mask this hart's interrupts, lend `path` its proof, then halt if it
+    /// returns.
+    fn fatal(path: impl for<'a> FnOnce(Self::Fatal<'a>)) -> !;
+
+    /// The hart that fails, or the raw identity that names no hart.
+    ///
+    /// # Errors
+    ///
+    /// [`InvalidHart`] when the architectural identity is outside the
+    /// chip's geometry.
+    fn fatal_hart(fatal: &Self::Fatal<'_>) -> Result<Hart, InvalidHart>;
+
+    /// Stop every other hart before the chip's reset and confirm it.
+    ///
+    /// # Errors
+    ///
+    /// [`Self::StopError`] when the stop could not be taken or confirmed;
+    /// the path records and resets all the same.
+    fn stop_the_world<'a>(fatal: &Self::Fatal<'a>) -> Result<Self::Stop<'a>, Self::StopError>;
+
+    /// Reset the chip from `fatal`'s path. It returns only when the reset
+    /// could not be prepared and is left to the armed watchdog.
+    fn software_reset(fatal: Self::Fatal<'_>) -> AwaitWatchdog<Self::StopError>;
 }
 
 /// The executor's platform: the source identities of the software

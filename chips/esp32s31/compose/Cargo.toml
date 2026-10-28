@@ -1,0 +1,22 @@
+[package]
+name = "oer-esp32s31-compose"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0"
+repository.workspace = true
+publish = false
+description = "The ESP32-S31 side of an image's platform over the Espressif staged runtime: the chip's retained fault records"
+
+[features]
+## Shared retained Wi-Fi fatal assertion record, reset and next-boot
+## reporting; images without Wi-Fi leave it out.
+wifi-fault = []
+
+[dependencies]
+bytemuck = { version = "1.25.2", default-features = false, features = ["derive"] }
+oer-esp32s31-hal = { path = "../hal" }
+oer-espressif-staged-runtime.workspace = true
+
+[lints]
+workspace = true
