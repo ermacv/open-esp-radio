@@ -61,18 +61,27 @@ impl CoexTimerClock {
                 }
             }
             CoexClockSelector::Selector4 => {
-                if self.xtal_mhz == 0 {
-                    return Err(CoexError::UnsupportedClock);
-                }
-                (524_288_u64 * 1_000_000 * divider) / (u64::from(self.xtal_mhz) * 1_000_000)
+                let numerator = 524_288_000_000_u64
+                    .checked_mul(divider)
+                    .ok_or(CoexError::UnsupportedClock)?;
+                let denominator = u64::from(self.xtal_mhz)
+                    .checked_mul(1_000_000)
+                    .ok_or(CoexError::UnsupportedClock)?;
+                numerator
+                    .checked_div(denominator)
+                    .ok_or(CoexError::UnsupportedClock)?
             }
-            CoexClockSelector::Selector2 => (524_288_u64 * 1_000_000 * divider) / 20_000_000,
+            CoexClockSelector::Selector2 => 524_288_000_000_u64
+                .checked_mul(divider)
+                .and_then(|numerator| numerator.checked_div(20_000_000))
+                .ok_or(CoexError::UnsupportedClock)?,
             CoexClockSelector::Selector1 => 1,
         };
-        if scale == 0 {
-            return Err(CoexError::UnsupportedClock);
-        }
-        Ok((numerator / scale) as u32)
+        // The vendor publishes the low 32 bits of the quotient to the timer.
+        numerator
+            .checked_div(scale)
+            .map(|ticks| ticks as u32)
+            .ok_or(CoexError::UnsupportedClock)
     }
 }
 

@@ -1,3 +1,9 @@
+#![allow(
+    clippy::disallowed_macros,
+    clippy::disallowed_methods,
+    clippy::arithmetic_side_effects
+)]
+
 use super::{CoexEventId, CoexPti, CoexPtiTable};
 
 fn event(value: u8) -> CoexEventId {
@@ -30,4 +36,36 @@ fn setting_a_priority_changes_only_its_event() {
     );
     assert_eq!(table.pti(event(47)).value(), 3);
     assert_eq!(table.pti(event(48)).value(), 15);
+}
+
+#[test]
+fn every_raw_event_and_priority_is_admitted_exactly_within_its_domain() {
+    for value in 0..=u8::MAX {
+        assert_eq!(CoexEventId::new(value).is_some(), value < 49);
+        if let Some(event) = CoexEventId::new(value) {
+            assert_eq!(event.value(), value);
+        }
+        assert_eq!(CoexPti::new(value).is_some(), value < 16);
+    }
+}
+
+#[test]
+fn every_event_projects_to_its_own_priority_entry() {
+    for value in 0..49 {
+        for priority in 0..16 {
+            let mut table = CoexPtiTable::VENDOR;
+            table.set(event(value), CoexPti::new(priority).unwrap());
+            assert_eq!(table.pti(event(value)).value(), priority);
+            for (other, (&before, &after)) in CoexPtiTable::VENDOR
+                .as_bytes()
+                .iter()
+                .zip(table.as_bytes())
+                .enumerate()
+            {
+                if other != usize::from(value) {
+                    assert_eq!(after, before);
+                }
+            }
+        }
+    }
 }

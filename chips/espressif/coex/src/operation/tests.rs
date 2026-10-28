@@ -1,3 +1,9 @@
+#![allow(
+    clippy::disallowed_macros,
+    clippy::disallowed_methods,
+    clippy::arithmetic_side_effects
+)]
+
 use super::{ieee802154_event, wifi_event};
 use crate::{CoexPtiTable, wifi_events};
 use oer_ieee80211_port::{ConnectionFrame, Operation, TxOperation};

@@ -1,3 +1,9 @@
+#![allow(
+    clippy::disallowed_macros,
+    clippy::disallowed_methods,
+    clippy::arithmetic_side_effects
+)]
+
 use std::{cell::RefCell, rc::Rc};
 
 use super::*;
@@ -313,4 +319,70 @@ fn recovered_status_bits_and_wifi_events_keep_their_vendor_values() {
         assert_eq!(event.value(), value);
         assert_eq!(CoexEventId::new(value), Some(event));
     }
+}
+
+#[test]
+fn clock_conversion_rejects_zero_divisors_and_preserves_boundary_images() {
+    let no_xtal = CoexTimerClock::from_hardware_fields(CoexClockSelector::Selector4, 0, 0, true);
+    assert_eq!(
+        no_xtal.tick_image(u32::MAX),
+        Err(CoexError::UnsupportedClock)
+    );
+    let zero_scale =
+        CoexTimerClock::from_hardware_fields(CoexClockSelector::Selector4, 0, u32::MAX, true);
+    assert_eq!(zero_scale.tick_image(1), Err(CoexError::UnsupportedClock));
+
+    let slow =
+        CoexTimerClock::from_hardware_fields(CoexClockSelector::Selector1, u16::MAX, 0, true);
+    assert_eq!(slow.tick_image(0), Ok(0));
+    assert_eq!(
+        slow.tick_image(8192),
+        Ok(0),
+        "the timer image keeps its low 32 bits"
+    );
+    assert_eq!(slow.tick_image(u32::MAX), Ok(0xfff8_0000));
+    let crystal =
+        CoexTimerClock::from_hardware_fields(CoexClockSelector::Selector4, u16::MAX, 40, true);
+    let fixed =
+        CoexTimerClock::from_hardware_fields(CoexClockSelector::Selector2, u16::MAX, 0, true);
+    assert_eq!(crystal.tick_image(u32::MAX), Ok(2_621_440));
+    assert_eq!(fixed.tick_image(u32::MAX), Ok(1_310_720));
+}
+
+#[test]
+fn every_policy_timer_retires_its_own_request() {
+    let mut core = CoexCore::new();
+    let mut hardware = TimerModel::default();
+    let mut clock = ClockModel {
+        clock: CoexTimerClock::from_hardware_fields(CoexClockSelector::Selector8, 0, 40, true),
+        samples: 0,
+        operations: OperationTrace::default(),
+    };
+    core.enable();
+    for event in [1, 2, 38, 45, 36] {
+        core.request_wifi(
+            &mut hardware,
+            &mut clock,
+            CoexClientRequest {
+                event: CoexEventId::new(event).unwrap(),
+                latency: 0,
+                duration: 1,
+            },
+        )
+        .unwrap();
+    }
+    assert_eq!(core.status().active_timers, 0x1f);
+    core.release(&mut hardware, CoexEventId::new(38).unwrap())
+        .unwrap();
+    assert_eq!(core.status().active_timers, 0x1b);
+    core.disable(&mut hardware).unwrap();
+    assert_eq!(
+        core.status(),
+        CoexStatus {
+            enabled: false,
+            active_timers: 0,
+            uncertain_timers: 0
+        }
+    );
+    assert_eq!(hardware.disabled, 0x1f);
 }

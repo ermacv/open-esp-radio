@@ -61,15 +61,66 @@ impl CoexPhase {
     }
 }
 
+/// The phase counts present in the recovered catalogue. Fixed arrays prove
+/// that every scheme has a first phase and at most five phases.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum CoexPhases {
+    One(&'static [CoexPhase; 1]),
+    Two(&'static [CoexPhase; 2]),
+    Three(&'static [CoexPhase; 3]),
+    Five(&'static [CoexPhase; 5]),
+}
+
+impl CoexPhases {
+    const fn as_slice(self) -> &'static [CoexPhase] {
+        match self {
+            Self::One(phases) => phases,
+            Self::Two(phases) => phases,
+            Self::Three(phases) => phases,
+            Self::Five(phases) => phases,
+        }
+    }
+
+    const fn first(self) -> CoexPhase {
+        match self {
+            Self::One(phases) => phases[0],
+            Self::Two(phases) => phases[0],
+            Self::Three(phases) => phases[0],
+            Self::Five(phases) => phases[0],
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum PhaseIndex {
+    First,
+    Second,
+    Third,
+    Fourth,
+    Fifth,
+}
+
+impl PhaseIndex {
+    const fn next(self) -> Option<Self> {
+        match self {
+            Self::First => Some(Self::Second),
+            Self::Second => Some(Self::Third),
+            Self::Third => Some(Self::Fourth),
+            Self::Fourth => Some(Self::Fifth),
+            Self::Fifth => None,
+        }
+    }
+}
+
 /// One recovered scheme: its period multiplier and its phases.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct CoexScheme {
     period: u8,
-    phases: &'static [CoexPhase],
+    phases: CoexPhases,
 }
 
 impl CoexScheme {
-    pub(crate) const fn new(period: u8, phases: &'static [CoexPhase]) -> Self {
+    pub(crate) const fn new(period: u8, phases: CoexPhases) -> Self {
         Self { period, phases }
     }
 
@@ -79,11 +130,7 @@ impl CoexScheme {
     }
 
     pub const fn phases(&self) -> &'static [CoexPhase] {
-        self.phases
-    }
-
-    const fn last_phase(&self) -> u8 {
-        self.phases.len() as u8 - 1
+        self.phases.as_slice()
     }
 }
 
@@ -183,26 +230,24 @@ impl CoexStatusWords {
     /// `coex_schm_status_bitmap_get` test of `coex_status_get` with the
     /// radio's own bit masked out.
     pub const fn others_publish(&self, radio: CoexStatusType) -> bool {
-        let mut index = 0;
-        while index < CoexStatusType::ALL.len() {
-            let other = CoexStatusType::ALL[index];
-            if other as u8 != radio as u8 && self.word(other) != 0 {
-                return true;
-            }
-            index += 1;
-        }
-        false
+        (!matches!(radio, CoexStatusType::Wifi) && self.wifi != 0)
+            || (!matches!(radio, CoexStatusType::Ble) && self.ble != 0)
+            || (!matches!(radio, CoexStatusType::Bt) && self.bt != 0)
+            || (!matches!(radio, CoexStatusType::ExternalCoex) && self.external_coex != 0)
+            || (!matches!(radio, CoexStatusType::Ieee802154) && self.ieee802154 != 0)
     }
 
     /// `coex_schm_is_loop_allowed`: the phases loop only while at least two
     /// of Wi-Fi, Bluetooth (BLE or classic), external coexistence and
     /// IEEE 802.15.4 publish status.
     pub const fn loop_allowed(&self) -> bool {
-        let groups = (self.wifi != 0) as u8
-            + (self.ble != 0 || self.bt != 0) as u8
-            + (self.external_coex != 0) as u8
-            + (self.ieee802154 != 0) as u8;
-        groups >= 2
+        let wifi = self.wifi != 0;
+        let bluetooth = self.ble != 0 || self.bt != 0;
+        let external = self.external_coex != 0;
+        let ieee802154 = self.ieee802154 != 0;
+        (wifi && (bluetooth || external || ieee802154))
+            || (bluetooth && (external || ieee802154))
+            || (external && ieee802154)
     }
 
     /// Whether Wi-Fi scans, connects or only keeps a connectionless window:
@@ -470,7 +515,7 @@ pub enum CoexScheduleIdle {
 pub struct CoexSchedule {
     status: CoexStatusWords,
     scheme: CoexSchemeId,
-    phase_index: u8,
+    phase_index: PhaseIndex,
     interval: u32,
     flexible_period: u8,
 }
@@ -487,7 +532,7 @@ impl CoexSchedule {
                 ieee802154: 0,
             },
             scheme: CoexSchemeId::AllDefault,
-            phase_index: 0,
+            phase_index: PhaseIndex::First,
             interval: 0,
             flexible_period: 0,
         }
@@ -508,7 +553,7 @@ impl CoexSchedule {
 
     /// `coex_schm_curr_phase_idx_get`.
     pub const fn phase_index(&self) -> u8 {
-        self.phase_index
+        self.phase_index as u8
     }
 
     /// `coex_schm_curr_phase_get`: `None` when the index lies beyond a
@@ -516,14 +561,18 @@ impl CoexSchedule {
     pub fn current_phase(&self) -> Option<CoexPhase> {
         self.scheme
             .scheme()
-            .phases
-            .get(usize::from(self.phase_index))
+            .phases()
+            .get(usize::from(self.phase_index()))
             .copied()
     }
 
     /// `coex_schm_get_phase_by_idx`.
     pub fn phase_by_index(&self, index: u8) -> Option<CoexPhase> {
-        self.scheme.scheme().phases.get(usize::from(index)).copied()
+        self.scheme
+            .scheme()
+            .phases()
+            .get(usize::from(index))
+            .copied()
     }
 
     /// `coex_schm_curr_period_get`.
@@ -566,7 +615,7 @@ impl CoexSchedule {
         *word |= bits;
         self.scheme = self.status.select();
         if !looped && self.status.loop_allowed() && self.status.wifi_loops_on_timer() {
-            return self.change_phase(true).ok();
+            return Some(self.restart());
         }
         None
     }
@@ -583,13 +632,10 @@ impl CoexSchedule {
     }
 
     /// `coex_schm_process_restart`: begin the phases again at phase 0.
-    ///
-    /// # Errors
-    ///
-    /// Never: a restart always takes a step. The result type matches
-    /// [`Self::timeout`].
-    pub fn restart(&mut self) -> Result<CoexPhaseStep, CoexScheduleIdle> {
-        self.change_phase(true)
+    /// Every scheme contains a first phase, so a restart always steps.
+    pub fn restart(&mut self) -> CoexPhaseStep {
+        let first = self.scheme.scheme().phases.first();
+        self.enter_phase(PhaseIndex::First, first)
     }
 
     /// `coex_schm_timeout_process`: the phase timer expired.
@@ -599,36 +645,41 @@ impl CoexSchedule {
     /// The last phase stays current because the phases do not loop in this
     /// state; the timer stays disarmed and nobody is notified.
     pub fn timeout(&mut self) -> Result<CoexPhaseStep, CoexScheduleIdle> {
-        self.change_phase(false)
+        let scheme = self.scheme.scheme();
+        if let Some(index) = self.phase_index.next()
+            && let Some(phase) = scheme.phases().get(index as usize)
+        {
+            return Ok(self.enter_phase(index, *phase));
+        }
+        if self.status.wifi_loops_on_timer() && self.status.loop_allowed() {
+            Ok(self.restart())
+        } else {
+            Err(CoexScheduleIdle::LastPhase)
+        }
     }
 
-    /// `coex_schm_change_phase`.
-    fn change_phase(&mut self, restart: bool) -> Result<CoexPhaseStep, CoexScheduleIdle> {
+    /// Publish an existing phase; the index is bounded by the catalogue's
+    /// largest fixed array, while a scheme change can leave it beyond a
+    /// shorter scheme until the next restart.
+    fn enter_phase(&mut self, index: PhaseIndex, phase: CoexPhase) -> CoexPhaseStep {
         let scheme = self.scheme.scheme();
-        let last = scheme.last_phase();
-        let mut restart = restart;
-        if !restart && self.phase_index >= last {
-            if !self.status.wifi_loops_on_timer() || !self.status.loop_allowed() {
-                return Err(CoexScheduleIdle::LastPhase);
-            }
-            restart = true;
-        }
-        let index = if restart { 0 } else { self.phase_index + 1 };
         self.phase_index = index;
-        let phase = scheme.phases[usize::from(index)];
-        let arm =
-            index != last || (self.status.wifi_loops_on_timer() && self.status.loop_allowed());
+        let has_next = index
+            .next()
+            .and_then(|next| scheme.phases().get(next as usize))
+            .is_some();
+        let arm = has_next || (self.status.wifi_loops_on_timer() && self.status.loop_allowed());
         let timer_micros = arm.then(|| {
             u32::from(scheme.period)
                 .wrapping_mul(self.interval)
                 .wrapping_mul(u32::from(phase.share_percent))
         });
-        Ok(CoexPhaseStep {
+        CoexPhaseStep {
             phase,
             timer_micros,
             notify_wifi: phase.notifies_wifi(),
             notify_bluetooth: phase.notifies_bluetooth(),
-        })
+        }
     }
 }
 

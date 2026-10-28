@@ -4,18 +4,6 @@ use crate::CoexEventId;
 
 pub const COEX_TIMER_COUNT: usize = 5;
 
-// Complete `coex_core_timer_idx_get` switch image of esp-coex-lib
-// fa152b3b6b2e3c5e3a57e55fcf4b005a4e28cef9 (`esp32s31/libcoexist.a` sha256
-// 01c1b4f2b86cbc3024a2b51f3f104ea7937fc721a4ee57b53146fea6608836bb,
-// `coexist_core.o` `.rodata.CSWTCH.31`). Element zero corresponds to event
-// one; 0xff means that the event has no hardware timer. Event 48 selects
-// timer 5, which the radio arbiter reserves for the PHY grant-protect request.
-const REVIEWED_TIMER_MAP: [u8; 48] = [
-    0x00, 0x01, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-    0xff, 0xff, 0xff, 0x04, 0xff, 0x02, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x03, 0x03, 0xff, 0x05,
-];
-
 // Complete `g_coex_param` initializer. `coex_core_event_duration_get` maps
 // these entries to events 4, 7, 9, 45 and 46 respectively.
 const REVIEWED_EVENT_DURATIONS: [u32; 5] = [25_000, 20_000, 5_000, 25_000, 50_000];
@@ -35,16 +23,17 @@ pub enum CoexError {
 /// The policy timer a vendor core request for `event` programs, or `None`
 /// for an event without a timer and for the arbiter's grant-protect event 48.
 pub const fn timer_index(event: CoexEventId) -> Option<CoexTimerIndex> {
-    let value = event.value();
-    if value == 0 || value as usize > REVIEWED_TIMER_MAP.len() {
-        return None;
-    }
-    match REVIEWED_TIMER_MAP[(value - 1) as usize] {
-        0 => Some(CoexTimerIndex::Timer0),
-        1 => Some(CoexTimerIndex::Timer1),
-        2 => Some(CoexTimerIndex::Timer2),
-        3 => Some(CoexTimerIndex::Timer3),
-        4 => Some(CoexTimerIndex::Timer4),
+    // Complete `coex_core_timer_idx_get` switch of esp-coex-lib
+    // fa152b3b6b2e3c5e3a57e55fcf4b005a4e28cef9 (`esp32s31/libcoexist.a`
+    // sha256 01c1b4f2b86cbc3024a2b51f3f104ea7937fc721a4ee57b53146fea6608836bb,
+    // `coexist_core.o` `.rodata.CSWTCH.31`). All other events have no
+    // policy timer; event 48 selects the arbiter's reserved timer 5.
+    match event.value() {
+        1 => Some(CoexTimerIndex::Timer0),
+        2 => Some(CoexTimerIndex::Timer1),
+        36 => Some(CoexTimerIndex::Timer4),
+        38 => Some(CoexTimerIndex::Timer2),
+        45 | 46 => Some(CoexTimerIndex::Timer3),
         _ => None,
     }
 }
@@ -58,15 +47,15 @@ impl CoexEventDurations {
     }
 
     pub const fn duration(self, event: CoexEventId) -> Option<u32> {
-        let index = match event.value() {
-            4 => 0,
-            7 => 1,
-            9 => 2,
-            45 => 3,
-            46 => 4,
-            _ => return None,
-        };
-        Some(self.0[index])
+        let [event4, event7, event9, event45, event46] = self.0;
+        match event.value() {
+            4 => Some(event4),
+            7 => Some(event7),
+            9 => Some(event9),
+            45 => Some(event45),
+            46 => Some(event46),
+            _ => None,
+        }
     }
 
     pub const fn as_words(&self) -> &[u32; 5] {
@@ -104,6 +93,26 @@ impl CoexTimerIndex {
         }
     }
 
+    pub(crate) const fn entry<T>(self, entries: &[T; COEX_TIMER_COUNT]) -> &T {
+        match self {
+            Self::Timer0 => &entries[0],
+            Self::Timer1 => &entries[1],
+            Self::Timer2 => &entries[2],
+            Self::Timer3 => &entries[3],
+            Self::Timer4 => &entries[4],
+        }
+    }
+
+    pub(crate) fn entry_mut<T>(self, entries: &mut [T; COEX_TIMER_COUNT]) -> &mut T {
+        match self {
+            Self::Timer0 => &mut entries[0],
+            Self::Timer1 => &mut entries[1],
+            Self::Timer2 => &mut entries[2],
+            Self::Timer3 => &mut entries[3],
+            Self::Timer4 => &mut entries[4],
+        }
+    }
+
     pub const fn value(self) -> u8 {
         self as u8
     }
@@ -130,7 +139,11 @@ impl CoexClient {
     /// The timer client field value `coex_core_request` programs for this
     /// radio's requests.
     pub const fn timer_client_value(self) -> u8 {
-        REVIEWED_TIMER_CLIENT_MAP[self as usize]
+        let [bluetooth, wifi, _, _, _] = REVIEWED_TIMER_CLIENT_MAP;
+        match self {
+            Self::Bluetooth => bluetooth,
+            Self::Wifi => wifi,
+        }
     }
 
     /// The request kind of a portable client, or `None` for IEEE 802.15.4,

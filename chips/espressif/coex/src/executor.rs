@@ -90,10 +90,8 @@ impl CoexScheduleExecutor {
 
     /// Begin the phases again at phase 0 ([`CoexSchedule::restart`]).
     pub fn restart(&mut self) -> CoexPhaseChange {
-        match self.schedule.restart() {
-            Ok(step) => self.change(step),
-            Err(CoexScheduleIdle::LastPhase) => unreachable!("a restart always takes a step"),
-        }
+        let step = self.schedule.restart();
+        self.change(step)
     }
 
     /// The phase timer of `generation` fired.
