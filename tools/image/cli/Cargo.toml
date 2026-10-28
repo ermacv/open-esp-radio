@@ -13,7 +13,7 @@ name = "fw"
 path = "src/main.rs"
 
 [dependencies]
-oer-firmware-apps-b0 = { path = "../../../firmware/apps/b0" }
+oer-bluetooth-hci = { path = "../../../protocols/bluetooth/hci" }
 oer-diagnostics = { path = "../../../portable/diagnostics", features = ["render"] }
 oer-trace = { path = "../../../portable/trace" }
 jiff = { version = "=0.2.37", default-features = false, features = ["std"] }

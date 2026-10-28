@@ -7,6 +7,7 @@ use bt_hci::{
     cmd::SyncCmd,
     event::{CommandCompleteWithStatus, Event},
 };
+use oer_bluetooth_hci::h4;
 use oer_os_process::linux_socket::HciAddress;
 use rustix::{
     event::{PollFd, PollFlags, Timespec, poll},
@@ -96,18 +97,14 @@ impl Socket {
     }
 
     pub(super) fn send_command<C: bt_hci::cmd::Cmd>(&self, command: &C) -> Result<()> {
-        let mut bytes = vec![0; 1 + bt_hci::WriteHci::size(command)];
-        bytes[0] = 1;
-        bt_hci::WriteHci::write_hci(command, &mut bytes[1..])
-            .map_err(|error| format!("HCI encode: {error:?}"))?;
+        let bytes = h4_frame(bt_hci::PacketKind::Cmd, command)
+            .map_err(|error| format!("HCI encode: {error}"))?;
         self.send(&bytes)
     }
 
     pub(super) fn send_acl(&self, packet: &bt_hci::data::AclPacket<'_>) -> Result<()> {
-        let mut bytes = vec![0; 1 + bt_hci::WriteHci::size(packet)];
-        bytes[0] = bt_hci::PacketKind::AclData as u8;
-        bt_hci::WriteHci::write_hci(packet, &mut bytes[1..])
-            .map_err(|error| format!("HCI ACL encode: {error:?}"))?;
+        let bytes = h4_frame(bt_hci::PacketKind::AclData, packet)
+            .map_err(|error| format!("HCI ACL encode: {error}"))?;
         self.send(&bytes)
     }
 
@@ -158,11 +155,28 @@ impl Socket {
 /// Retain only the last event's identity, never its payload: this socket also
 /// carries pairing keys and ACL data. Unrelated traffic cannot grow diagnostic
 /// storage or extend the original command deadline.
-fn command_event_summary(packet: &[u8]) -> String {
-    if packet.first() != Some(&4) {
-        return format!("non-event H4 kind {:?}", packet.first());
+/// The H4 frame of an encodable packet: the indicator of `kind` and the packet.
+fn h4_frame(kind: bt_hci::PacketKind, packet: &impl bt_hci::WriteHci) -> Result<Vec<u8>> {
+    let mut bytes = vec![0; 1 + bt_hci::WriteHci::size(packet)];
+    let (indicator, body) = bytes.split_first_mut().ok_or("empty H4 frame")?;
+    *indicator = h4::indicator(kind);
+    bt_hci::WriteHci::write_hci(packet, body).map_err(|error| format!("{error:?}"))?;
+    Ok(bytes)
+}
+
+/// The HCI event after the H4 event indicator; `None` for any other frame.
+pub(super) fn event_body(packet: &[u8]) -> Option<&[u8]> {
+    match h4::split(packet) {
+        Ok((bt_hci::PacketKind::Event, body)) => Some(body),
+        _ => None,
     }
-    match Event::from_hci_bytes(&packet[1..]) {
+}
+
+fn command_event_summary(packet: &[u8]) -> String {
+    let Some(body) = event_body(packet) else {
+        return format!("non-event H4 kind {:?}", packet.first());
+    };
+    match Event::from_hci_bytes(body) {
         Ok((Event::CommandComplete(event), _)) => {
             format!("CommandComplete {:?}", event.cmd_opcode)
         }
@@ -174,11 +188,9 @@ fn command_event_summary(packet: &[u8]) -> String {
 }
 
 fn completion<C: SyncCmd>(packet: &[u8]) -> Result<Option<C::Return>> {
-    if packet.first() != Some(&4) {
-        return Err("unexpected non-event HCI packet".into());
-    }
-    let (event, rest) = Event::from_hci_bytes(&packet[1..])
-        .map_err(|error| format!("invalid HCI event: {error:?}"))?;
+    let body = event_body(packet).ok_or("unexpected non-event HCI packet")?;
+    let (event, rest) =
+        Event::from_hci_bytes(body).map_err(|error| format!("invalid HCI event: {error:?}"))?;
     if !rest.is_empty() {
         return Err("trailing HCI event bytes".into());
     }

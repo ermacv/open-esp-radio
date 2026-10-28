@@ -3,7 +3,7 @@
 use core::{future::poll_fn, pin::pin, task::Poll};
 
 use embedded_io_async::Write;
-use oer_bluetooth_hci::HciControllerResponse;
+use oer_bluetooth_hci::{HciControllerResponse, h4};
 
 /// The longest frame: the H4 indicator, an event's two header bytes and its
 /// 255 parameter bytes.
@@ -14,11 +14,8 @@ pub struct Failed;
 
 /// The response as one H4 frame, or `None` when it outgrows [`MAX_FRAME`].
 fn frame(response: &impl HciControllerResponse) -> Option<([u8; MAX_FRAME], usize)> {
-    let body = response.as_bytes();
-    let length = 1 + body.len();
     let mut frame = [0; MAX_FRAME];
-    *frame.first_mut()? = response.kind() as u8;
-    frame.get_mut(1..length)?.copy_from_slice(body);
+    let length = h4::write(response.kind(), response.as_bytes(), &mut frame).ok()?;
     Some((frame, length))
 }
 

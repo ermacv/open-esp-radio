@@ -565,8 +565,10 @@ its model and conformance case.
   HCI is the world boundary. The controller's DTM service owns correlation,
   command credit, pending commands, session leases and retained faulty terminals
   without IO. The LE runtime awaits capacity and terminals and runs the HCI
-  service loop over composition-owned transport and port traits. Firmware owns
-  framing, HAL entropy, installation/shutdown and task spawning. The LL
+  service loop over composition-owned transport and port traits. The H4
+  packet-indicator codec is one module of HCI; firmware owns the transport
+  (the serial port, the gap that ends an unfinished command), HAL entropy,
+  installation/shutdown and task spawning. The LL
   exposes per-connection progression; arbitration between conflicting
   connections and Host receive backpressure are not implemented. Controller
   memory is generated layouts with a HAL handover engine; no controller
