@@ -33,6 +33,7 @@ extern crate std;
 mod fuzz;
 
 pub mod akm;
+pub mod authenticator;
 pub mod bip;
 pub mod element;
 pub mod frames;

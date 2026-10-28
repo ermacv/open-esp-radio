@@ -128,27 +128,23 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
         Ok(ApMlmeAction::BeginWpa2 { peer })
     }
 
-    pub fn wpa2_mut(&mut self, peer: [u8; 6]) -> Result<&mut RsnApState, ApServiceError> {
+    /// The authenticator state of `peer`'s handshake.
+    pub fn wpa2(&self, peer: [u8; 6]) -> Result<&RsnApState, ApServiceError> {
         if self.link_protection() != LinkProtection::Ccmp {
             return Err(ApServiceError::SecurityModeMismatch);
         }
-        let existing = self.checked_peer_mut(peer)?;
-        existing.wpa2.as_mut().ok_or(ApServiceError::WrongPeerPhase)
+        Ok(self.authenticator(peer)?.state())
     }
 
     pub fn wpa2_authorized(&self, peer: [u8; 6]) -> Result<bool, ApServiceError> {
         let existing = self.checked_peer(peer)?;
-        Ok(existing.wpa2.as_ref().map(RsnApState::phase) == Some(RsnApPhase::Authorized))
+        Ok(existing.authenticator.as_ref().map(RsnAuthenticator::phase)
+            == Some(RsnApPhase::Authorized))
     }
 
     /// Derive a peer's PTK with the suite its Association selected.
     pub fn derive_ptk(&self, peer: [u8; 6], context: PtkContext) -> Result<Ptk, ApServiceError> {
-        let akm = self
-            .checked_peer(peer)?
-            .wpa2
-            .as_ref()
-            .ok_or(ApServiceError::WrongPeerPhase)?
-            .akm();
+        let akm = self.authenticator(peer)?.state().akm();
         Ok(self.peer_pmk(peer)?.derive_ptk(akm, context))
     }
 
@@ -161,18 +157,8 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
         if self.link_protection() != LinkProtection::Ccmp {
             return Err(ApServiceError::SecurityModeMismatch.into());
         }
-        let existing = self.checked_peer(peer)?;
-        let state = existing
-            .wpa2
-            .as_ref()
-            .ok_or(ApServiceError::WrongPeerPhase)?;
-        let RsnApAction::Transmit(transmit) = state.message1(false)? else {
-            return Err(ApWpa2Error::UnexpectedAction);
-        };
-        self.bind_eapol(
-            build_ap_action_frame(state, transmit, [0; 8], &[])?,
-            transmit,
-        )
+        let (frame, transmit) = self.authenticator(peer)?.message1()?;
+        self.bind_eapol(frame, transmit)
     }
 
     /// Bind a terminal EAPOL-Key TX completion to the generic finite retry
@@ -200,9 +186,10 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
             return Ok(ApEapolTxCompletion::Superseded);
         }
         let state = existing
-            .wpa2
+            .authenticator
             .as_ref()
-            .ok_or(ApServiceError::WrongPeerPhase)?;
+            .ok_or(ApServiceError::WrongPeerPhase)?
+            .state();
         if state.phase() == RsnApPhase::Authorized || state.phase() == RsnApPhase::Failed {
             return Ok(ApEapolTxCompletion::Superseded);
         }
@@ -270,21 +257,12 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
             RsnRetryAction::Transmit { frame, next_alarm } => {
                 self.checked_peer_mut(peer_address)?.wpa2_retry_alarm = Some(next_alarm);
                 let frame = match frame.message {
-                    oer_ieee80211_rsn::state::RsnTxMessage::PairwiseMessage1 => {
-                        let state = self
-                            .checked_peer(peer_address)?
-                            .wpa2
-                            .as_ref()
-                            .ok_or(ApServiceError::WrongPeerPhase)?;
-                        self.bind_eapol(build_ap_action_frame(state, frame, [0; 8], &[])?, frame)?
-                    }
+                    oer_ieee80211_rsn::state::RsnTxMessage::PairwiseMessage1 => self.bind_eapol(
+                        self.authenticator(peer_address)?.message1_frame(frame)?,
+                        frame,
+                    )?,
                     oer_ieee80211_rsn::state::RsnTxMessage::PairwiseMessage3 => {
-                        let ApWpa2Progress::Transmit(frame) =
-                            self.build_pending_transmit(peer_address, frame)?
-                        else {
-                            return Err(ApWpa2Error::UnexpectedAction);
-                        };
-                        frame
+                        self.message3_transmit(peer_address, frame)?
                     }
                     _ => return Err(ApWpa2Error::UnexpectedAction),
                 };
@@ -305,11 +283,11 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
         }
     }
 
-    /// Advance the bounded authenticator state through Message 2 or Message 4.
+    /// Advance the bounded authenticator through Message 2 or Message 4.
     ///
     /// PTK derivation, MIC verification and GTK wrapping are pure bounded
-    /// operations here. Hardware key installation remains an explicit later
-    /// edge in the chip AP engine.
+    /// operations of `oer-ieee80211-rsn`. Hardware key installation remains an
+    /// explicit later edge in the chip AP engine.
     pub fn on_eapol<const N: usize>(
         &mut self,
         peer: [u8; 6],
@@ -318,195 +296,113 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
         if self.link_protection() != LinkProtection::Ccmp {
             return Err(ApServiceError::SecurityModeMismatch.into());
         }
-        let action = match self
-            .checked_peer_mut(peer)?
-            .wpa2
-            .as_mut()
-            .ok_or(ApServiceError::WrongPeerPhase)?
-            .on_frame(frame)
-        {
-            Ok(action) => action,
-            Err(error) if error.is_peer_input_rejection() => {
-                // Unsupported, stale and otherwise unauthenticated EAPOL is
-                // a peer-local receive reject, not a role-control failure.
-                return Ok(ApWpa2Progress::None);
-            }
+        let (authenticator, pmk) = self.authenticator_and_pmk(peer)?;
+        let step = match authenticator.on_frame(pmk, frame) {
+            Ok(step) => step,
+            // Unsupported, stale and otherwise unauthenticated EAPOL is a
+            // peer-local receive reject, not a role-control failure.
+            Err(RsnAuthenticatorError::Rejected(_)) => return Ok(ApWpa2Progress::None),
             Err(error) => return Err(error.into()),
         };
-        match action {
-            RsnApAction::None => Ok(ApWpa2Progress::None),
-            RsnApAction::DerivePtk {
-                ticket,
-                context,
-                message2,
-            } => self.complete_message2(peer, ticket, context, message2),
-            RsnApAction::VerifyMessage4Mic { ticket, message4 } => {
-                let valid = {
-                    let ptk = self
-                        .checked_peer(peer)?
-                        .pending_ptk
-                        .as_ref()
-                        .ok_or(ApWpa2Error::MissingPairwiseKey)?;
-                    message4
-                        .key_frame()
-                        .map_err(RsnStateError::from)?
-                        .verify_mic(ptk)
-                };
-                let action = self
-                    .checked_peer_mut(peer)?
-                    .wpa2
+        match step {
+            RsnAuthenticatorStep::None => Ok(ApWpa2Progress::None),
+            RsnAuthenticatorStep::PrepareMessage3(preparation) => {
+                let index = self.peer_index(peer).ok_or(ApServiceError::UnknownPeer)?;
+                let management_ipn = self.igtk().map_or([0; 6], RsnIgtk::packet_number);
+                *self
+                    .storage_mut()
+                    .message3_management_ipns
+                    .get_mut(index)
+                    .ok_or(ApServiceError::PeerStorageInvariant { index })? = management_ipn;
+                let plain = self.message3_key_data(peer)?;
+                let existing = self.checked_peer_mut(peer)?;
+                let (frame, transmit) = existing
+                    .authenticator
                     .as_mut()
                     .ok_or(ApServiceError::WrongPeerPhase)?
-                    .complete_message4_mic(ticket, message4, valid)?;
-                match action {
-                    RsnApAction::AuthorizePeer => {
-                        let existing = self.checked_peer_mut(peer)?;
-                        existing.wpa2_retry.cancel();
-                        existing.wpa2_retry_alarm = None;
-                        Ok(ApWpa2Progress::AuthorizePeer)
-                    }
-                    RsnApAction::None => Ok(ApWpa2Progress::None),
-                    RsnApAction::DeauthenticatePeer => Ok(ApWpa2Progress::DeauthenticatePeer),
-                    _ => Err(ApWpa2Error::UnexpectedAction),
-                }
+                    .complete_message3(preparation, &plain)?;
+                // Valid M2 closes the Message-1 response window. Message 3
+                // receives a fresh schedule only after its own terminal TX
+                // completion.
+                existing.wpa2_retry.cancel();
+                existing.wpa2_retry_alarm = None;
+                Ok(ApWpa2Progress::Transmit(self.bind_eapol(frame, transmit)?))
             }
-            RsnApAction::Transmit(transmit) => self.build_pending_transmit(peer, transmit),
-            RsnApAction::DeauthenticatePeer => Ok(ApWpa2Progress::DeauthenticatePeer),
-            _ => Err(ApWpa2Error::UnexpectedAction),
+            RsnAuthenticatorStep::Retransmit(transmit) => Ok(ApWpa2Progress::Transmit(
+                self.message3_transmit(peer, transmit)?,
+            )),
+            RsnAuthenticatorStep::Authorized => {
+                let existing = self.checked_peer_mut(peer)?;
+                existing.wpa2_retry.cancel();
+                existing.wpa2_retry_alarm = None;
+                Ok(ApWpa2Progress::AuthorizePeer)
+            }
+            RsnAuthenticatorStep::Deauthenticate => Ok(ApWpa2Progress::DeauthenticatePeer),
         }
     }
 
-    fn complete_message2<const N: usize>(
-        &mut self,
-        peer: [u8; 6],
-        ticket: oer_ieee80211_rsn::state::RsnTicket,
-        context: Wpa2StatePtkContext,
-        message2: OwnedEapolFrame<N>,
-    ) -> Result<ApWpa2Progress<N>, ApWpa2Error> {
-        let ptk = self.derive_ptk(
-            peer,
-            PtkContext {
-                authenticator_address: context.authenticator_address,
-                supplicant_address: context.supplicant_address,
-                authenticator_nonce: context.authenticator_nonce,
-                supplicant_nonce: context.supplicant_nonce,
-            },
-        )?;
-        let action = self
-            .checked_peer_mut(peer)?
-            .wpa2
-            .as_mut()
-            .ok_or(ApServiceError::WrongPeerPhase)?
-            .complete_ptk(ticket, message2, true)?;
-        let RsnApAction::VerifyMessage2Mic { ticket, message2 } = action else {
-            return Err(ApWpa2Error::UnexpectedAction);
-        };
-        let key_frame = message2.key_frame().map_err(RsnStateError::from)?;
-        let valid = key_frame.verify_mic(&ptk);
-        // The association commitment is an authenticated semantic binding.
-        // Do not let attacker-controlled Key Data decide peer teardown until
-        // this exact M2 has passed its PTK-derived MIC.
-        let association_security_ies_match = valid
-            && self
-                .checked_peer(peer)?
-                .association_security_binding
-                .as_ref()
-                .is_some_and(|binding| {
-                    self.peer_pmk(peer)
-                        .is_ok_and(|pmk| binding.matches(pmk, key_frame.key_data()))
-                });
-        let action = self
-            .checked_peer_mut(peer)?
-            .wpa2
-            .as_mut()
-            .ok_or(ApServiceError::WrongPeerPhase)?
-            .complete_message2_mic(ticket, message2, valid)?;
-        let ticket = match action {
-            RsnApAction::PrepareMessage3 { ticket } => ticket,
-            RsnApAction::None => return Ok(ApWpa2Progress::None),
-            RsnApAction::DeauthenticatePeer => {
-                return Ok(ApWpa2Progress::DeauthenticatePeer);
-            }
-            _ => return Err(ApWpa2Error::UnexpectedAction),
-        };
-
-        if !association_security_ies_match {
-            let action = self
-                .checked_peer_mut(peer)?
-                .wpa2
-                .as_mut()
-                .ok_or(ApServiceError::WrongPeerPhase)?
-                .complete_message3_preparation::<N>(ticket, false)?;
-            return match action {
-                RsnApAction::DeauthenticatePeer => Ok(ApWpa2Progress::DeauthenticatePeer),
-                _ => Err(ApWpa2Error::UnexpectedAction),
-            };
-        }
-
-        let index = self.peer_index(peer).ok_or(ApServiceError::UnknownPeer)?;
-        let management_ipn = self.igtk().map_or([0; 6], RsnIgtk::packet_number);
-        *self
-            .storage_mut()
-            .message3_management_ipns
-            .get_mut(index)
-            .ok_or(ApServiceError::PeerStorageInvariant { index })? = management_ipn;
-        let plain = self.message3_key_data(peer)?;
-        let wrapped = software_aes128_key_wrap(ptk.kek(), plain.as_bytes())?;
-        let action = self
-            .checked_peer_mut(peer)?
-            .wpa2
-            .as_mut()
-            .ok_or(ApServiceError::WrongPeerPhase)?
-            .complete_message3_preparation::<N>(ticket, true)?;
-        let RsnApAction::Transmit(transmit) = action else {
-            return Err(ApWpa2Error::UnexpectedAction);
-        };
-        let state = self
-            .checked_peer(peer)?
-            .wpa2
-            .as_ref()
-            .ok_or(ApServiceError::WrongPeerPhase)?;
-        let response =
-            build_ap_action_frame(state, transmit, [0; 8], wrapped.as_bytes())?.authenticate(&ptk);
-        let existing = self.checked_peer_mut(peer)?;
-        existing.pending_ptk = Some(ptk);
-        // Valid M2 closes the Message-1 response window. Message 3 receives a
-        // fresh schedule only after its own terminal TX completion.
-        existing.wpa2_retry.cancel();
-        existing.wpa2_retry_alarm = None;
-        Ok(ApWpa2Progress::Transmit(
-            self.bind_eapol(response, transmit)?,
-        ))
-    }
-
-    fn build_pending_transmit<const N: usize>(
+    /// The pending Message 3 of `transmit`, with the key data of its first
+    /// publication.
+    fn message3_transmit<const N: usize>(
         &self,
         peer: [u8; 6],
         transmit: oer_ieee80211_rsn::state::RsnTransmit,
-    ) -> Result<ApWpa2Progress<N>, ApWpa2Error> {
-        let existing = self.checked_peer(peer)?;
-        let state = existing
-            .wpa2
-            .as_ref()
-            .ok_or(ApServiceError::WrongPeerPhase)?;
-        let ptk = existing
-            .pending_ptk
-            .as_ref()
-            .ok_or(ApWpa2Error::MissingPairwiseKey)?;
+    ) -> Result<ApEapolTransmit<N>, ApWpa2Error> {
+        if self.authenticator(peer)?.pending_ptk().is_none() {
+            return Err(ApWpa2Error::MissingPairwiseKey);
+        }
         let plain = self.message3_key_data(peer)?;
-        let wrapped = software_aes128_key_wrap(ptk.kek(), plain.as_bytes())?;
-        let response =
-            build_ap_action_frame(state, transmit, [0; 8], wrapped.as_bytes())?.authenticate(ptk);
-        Ok(ApWpa2Progress::Transmit(
-            self.bind_eapol(response, transmit)?,
-        ))
+        let frame = self.authenticator(peer)?.message3(transmit, &plain)?;
+        self.bind_eapol(frame, transmit)
     }
 
     pub fn pending_ptk(&self, peer: [u8; 6]) -> Result<&Ptk, ApServiceError> {
+        self.authenticator(peer)?
+            .pending_ptk()
+            .ok_or(ApServiceError::WrongPeerPhase)
+    }
+
+    fn authenticator(&self, peer: [u8; 6]) -> Result<&RsnAuthenticator, ApServiceError> {
         self.checked_peer(peer)?
-            .pending_ptk
+            .authenticator
             .as_ref()
             .ok_or(ApServiceError::WrongPeerPhase)
+    }
+
+    /// `peer`'s authenticator and the PMK of its association, borrowed
+    /// together: the BSS's for WPA2-Personal, the station's own for
+    /// WPA3-Personal.
+    fn authenticator_and_pmk(
+        &mut self,
+        peer: [u8; 6],
+    ) -> Result<(&mut RsnAuthenticator, &Pmk), ApServiceError> {
+        let Self {
+            security,
+            peer_storage,
+            ..
+        } = self;
+        let ApPeer {
+            authenticator,
+            pmk: station_pmk,
+            ..
+        } = peer_storage
+            .storage
+            .peers
+            .iter_mut()
+            .flatten()
+            .find(|existing| existing.address == peer)
+            .ok_or(ApServiceError::UnknownPeer)?;
+        let pmk = match security {
+            AccessPointSecurityMaterial::Open => Err(ApServiceError::SecurityModeMismatch),
+            AccessPointSecurityMaterial::Wpa2Personal { pmk, .. } => Ok(&*pmk),
+            AccessPointSecurityMaterial::Wpa3Personal { .. } => {
+                station_pmk.as_ref().ok_or(ApServiceError::WrongPeerPhase)
+            }
+        }?;
+        let authenticator = authenticator
+            .as_mut()
+            .ok_or(ApServiceError::WrongPeerPhase)?;
+        Ok((authenticator, pmk))
     }
 
     pub fn gtk(&self) -> Result<&RsnGtk, ApServiceError> {
@@ -579,12 +475,15 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
         let management_protection = self.security_policy().management_protection().required();
         let index = self.peer_index(peer).ok_or(ApServiceError::UnknownPeer)?;
         let existing = self.checked_peer_mut(peer)?;
-        if existing.wpa2.as_ref().map(RsnApState::phase) != Some(RsnApPhase::Authorized) {
+        let Some(authenticator) = existing
+            .authenticator
+            .as_mut()
+            .filter(|authenticator| authenticator.phase() == RsnApPhase::Authorized)
+        else {
             return Err(ApServiceError::WrongPeerPhase);
-        }
+        };
+        authenticator.forget_handshake_keys();
         existing.phase = ApPeerPhase::Authorized;
-        existing.association_security_binding = None;
-        existing.pending_ptk = None;
         existing.wpa2_retry.cancel();
         existing.wpa2_retry_alarm = None;
         existing.last_activity = now;

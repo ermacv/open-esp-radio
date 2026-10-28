@@ -34,7 +34,7 @@
 //! (`sae_write_confirm`) and `esp_supplicant/src/esp_wpa3.c`
 //! (`wpa3_process_rx_commit`, `wpa3_process_rx_confirm`).
 
-use oer_ieee80211_rsn::sae::{
+use crate::sae::{
     SAE_ANTI_CLOGGING_TOKEN_LEN, SAE_COMMIT_LEN, SAE_CONFIRM_LEN, SAE_GROUP_P256, SAE_KEY_LEN,
     SAE_PRIME_LEN, SaeComebackTokens, SaeCommit, SaeCommitRefusal, SaeCommitValues, SaeError,
     SaeKeys, SaePassword, SaePasswordElement, SaePasswordToken, SaeReceivedCommit,
@@ -46,7 +46,6 @@ use oer_ieee80211_wire::security::rsn::RSN_PMKID_LEN;
 use oer_ieee80211_wire::station::{SAE_COMMIT_TRANSACTION, SAE_CONFIRM_TRANSACTION};
 use oer_ieee80211_wire::status::status_code;
 
-use crate::limits::AP_MAX_CLIENTS;
 
 /// Sessions awaiting a Confirm, with queued Commits, beyond which a Commit
 /// must carry an anti-clogging token.
@@ -284,21 +283,22 @@ impl Session {
     }
 }
 
-/// The SAE sessions of one access point epoch.
-pub struct ApSaeResponder {
+/// The SAE sessions of one access point epoch, one for each of at most `N`
+/// stations: the access point's client limit.
+pub struct ApSaeResponder<const N: usize> {
     local: [u8; 6],
     credential: ApSaeCredential,
     comeback: SaeComebackTokens,
-    sessions: [Option<Session>; AP_MAX_CLIENTS],
+    sessions: [Option<Session>; N],
 }
 
-impl ApSaeResponder {
+impl<const N: usize> ApSaeResponder<N> {
     pub fn new(local: [u8; 6], credential: ApSaeCredential) -> Self {
         Self {
             local,
             credential,
             comeback: SaeComebackTokens::new(),
-            sessions: [const { None }; AP_MAX_CLIENTS],
+            sessions: [const { None }; N],
         }
     }
 

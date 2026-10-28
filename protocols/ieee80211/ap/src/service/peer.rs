@@ -175,14 +175,14 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
         } else {
             None
         };
-        let association_security_binding = Some(match &resumed {
+        let association_security_binding = match &resumed {
             Some((pmk, _)) => {
                 pmk.bind_association_security_ies(association_security.ies.as_bytes())
             }
             None => self
                 .peer_pmk(peer)?
                 .bind_association_security_ies(association_security.ies.as_bytes()),
-        });
+        };
         let access_point = self.address;
         let inactive_timeout = self.inactive_timeout.duration();
         let existing = self.checked_peer_mut(peer)?;
@@ -201,12 +201,11 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
             initial_replay_counter,
         )?;
         existing.phase = ApPeerPhase::Securing;
-        existing.wpa2 = Some(wpa2);
+        existing.authenticator = Some(RsnAuthenticator::new(wpa2, association_security_binding));
         if let Some((pmk, pmkid)) = resumed {
             existing.pmk = Some(pmk);
             existing.pmkid = Some(pmkid);
         }
-        existing.association_security_binding = association_security_binding;
         existing.maximum_legacy_rate_500kbps = capabilities.maximum_legacy_rate_500kbps;
         existing.short_preamble = capabilities.short_preamble;
         existing.ht = capabilities.ht;
@@ -292,9 +291,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
             });
         }
         existing.phase = ApPeerPhase::Authorized;
-        existing.wpa2 = None;
-        existing.association_security_binding = None;
-        existing.pending_ptk = None;
+        existing.authenticator = None;
         existing.maximum_legacy_rate_500kbps = capabilities.maximum_legacy_rate_500kbps;
         existing.short_preamble = capabilities.short_preamble;
         existing.ht = capabilities.ht;

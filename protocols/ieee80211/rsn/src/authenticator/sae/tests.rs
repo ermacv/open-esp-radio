@@ -1,6 +1,13 @@
+#![allow(
+    clippy::disallowed_macros,
+    clippy::disallowed_methods,
+    clippy::arithmetic_side_effects,
+    clippy::unreachable
+)]
+
 use super::*;
 
-use oer_ieee80211_rsn::sae::anti_clogging_token;
+use crate::sae::anti_clogging_token;
 use oer_ieee80211_wire::status::status_code;
 
 const ACCESS_POINT: [u8; 6] = [2, 0, 0, 0, 0, 1];
@@ -29,7 +36,10 @@ fn frame(peer: [u8; 6], transaction: u16, status: u16, body: &[u8]) -> ApSaeFram
     }
 }
 
-fn responder() -> ApSaeResponder {
+/// The access point's client limit.
+const CLIENTS: usize = 15;
+
+fn responder() -> ApSaeResponder<CLIENTS> {
     ApSaeResponder::new(
         ACCESS_POINT,
         ApSaeCredential::derive(SSID, SaePassword::new(PASSWORD).unwrap()).unwrap(),
@@ -289,7 +299,7 @@ fn a_reflected_commit_is_dropped() {
 fn a_full_responder_refuses_a_new_station_and_forgets_a_removed_one() {
     let mut access_point = responder();
     let mut random = Counter(4);
-    for index in 0..AP_MAX_CLIENTS as u8 {
+    for index in 0..CLIENTS as u8 {
         let peer = [2, 0, 0, 0, 1, index];
         access_point.receive(
             frame(peer, 1, 7, &[]),

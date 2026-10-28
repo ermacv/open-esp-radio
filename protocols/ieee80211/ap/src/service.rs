@@ -1,7 +1,7 @@
 //! Bounded multi-peer AP MLME and security ownership.
 
 use core::fmt;
-use oer_ieee80211_cipher::aes::{SoftwareAesKeyWrapError, software_aes128_key_wrap};
+use oer_ieee80211_cipher::aes::SoftwareAesKeyWrapError;
 use oer_ieee80211_wire::security::rsn::RSN_PMKID_LEN;
 use oer_ieee80211_wire::security::spp::SppScope;
 use oer_ieee80211_upper_mac::sequence::SequenceCounter;
@@ -31,16 +31,15 @@ use oer_ieee80211_wire::ap::{ApAssociationSecurityObservation, ApPowerSaveObserv
 use oer_ieee80211_rsn::pmksa::{Pmksa, PmksaCache};
 use crate::security_policy::ApSecurityPolicy;
 use oer_ieee80211_rsn::{
-    AssociationSecurityBinding, OwnedEapolFrame, Pmk, Ptk, PtkContext,
+    OwnedEapolFrame, Pmk, Ptk, PtkContext,
+    authenticator::{RsnAuthenticator, RsnAuthenticatorError, RsnAuthenticatorStep},
     element::{ValidatedRsnElement, validate_rsn_element},
     frames::{
         OwnedAssociationSecurityIes, RSN_PLAIN_KEY_DATA_CAPACITY, RsnFrameError, RsnGtk, RsnIgtk,
-        RsnPlainKeyData, RsnTxFrame, build_ap_action_frame,
+        RsnPlainKeyData, RsnTxFrame,
     },
     retry::{RsnRetry, RsnRetryAction, RsnRetryAlarm, RsnRetryConfig, RsnRetryError},
-    state::{
-        PtkContext as Wpa2StatePtkContext, RsnApAction, RsnApPhase, RsnApState, RsnStateError,
-    },
+    state::{RsnApPhase, RsnApState, RsnStateError},
 };
 use oer_ieee80211_wire::beacon::{TimAssociationId, TimBitmapError, TimVirtualBitmap};
 use oer_ieee80211_wire::ht::HtPeerCapabilities;
@@ -404,6 +403,20 @@ impl From<SoftwareAesKeyWrapError> for ApWpa2Error {
     }
 }
 
+impl From<RsnAuthenticatorError> for ApWpa2Error {
+    fn from(error: RsnAuthenticatorError) -> Self {
+        match error {
+            RsnAuthenticatorError::Rejected(error) | RsnAuthenticatorError::State(error) => {
+                error.into()
+            }
+            RsnAuthenticatorError::Frame(error) => Self::Frame(error),
+            RsnAuthenticatorError::KeyWrap(error) => Self::KeyWrap(error),
+            RsnAuthenticatorError::MissingPairwiseKey => Self::MissingPairwiseKey,
+            RsnAuthenticatorError::UnexpectedAction => Self::UnexpectedAction,
+        }
+    }
+}
+
 pub enum ApWpa2Progress<const N: usize> {
     None,
     Transmit(ApEapolTransmit<N>),
@@ -428,14 +441,13 @@ struct ApPeer {
     association_id: u16,
     association_epoch: u32,
     phase: ApPeerPhase,
-    wpa2: Option<RsnApState>,
+    /// The four-way handshake of an RSN association.
+    authenticator: Option<RsnAuthenticator>,
     /// The PMK of a WPA3 station: from its accepted SAE exchange, or the
     /// cached one its association resumed.
     pmk: Option<Pmk>,
     /// The PMKID of `pmk`.
     pmkid: Option<[u8; RSN_PMKID_LEN]>,
-    association_security_binding: Option<AssociationSecurityBinding>,
-    pending_ptk: Option<Ptk>,
     wpa2_retry: RsnRetry,
     wpa2_retry_alarm: Option<RsnRetryAlarm>,
     maximum_legacy_rate_500kbps: u8,
@@ -589,11 +601,9 @@ impl ApPeer {
             association_id,
             association_epoch,
             phase: ApPeerPhase::Authenticated,
-            wpa2: None,
+            authenticator: None,
             pmk: None,
             pmkid: None,
-            association_security_binding: None,
-            pending_ptk: None,
             wpa2_retry: new_ap_wpa2_retry(),
             wpa2_retry_alarm: None,
             // Authentication precedes rate negotiation. Keep the universally
