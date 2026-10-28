@@ -3,7 +3,8 @@
 use std::time::Duration;
 
 use oer_hil_link::SerialCapture;
-use oer_hil_protocol::{DeviceImageKeys, Message};
+use oer_hil_protocol::Message;
+use oer_hil_registry::DeviceImageKeys;
 
 use crate::workload::Result;
 

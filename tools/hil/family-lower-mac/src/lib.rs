@@ -35,7 +35,7 @@ impl ScenarioFamily for LowerMacScenario {
         plan
     }
     fn required_keys(&self) -> &'static [oer_hil_protocol::Key] {
-        oer_hil_protocol::lower_mac::KEYS
+        oer_ieee80211_conformance_control::KEYS
     }
     fn forbidden_keys(&self) -> &'static [oer_hil_protocol::Key] {
         &[]

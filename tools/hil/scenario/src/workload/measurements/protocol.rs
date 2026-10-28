@@ -1,11 +1,10 @@
 //! Projection of decoded protocol values into the host measurement vocabulary.
 
 use oer_hil_link::Received;
-use oer_hil_protocol::{
-    base::LinkHealth, network::EvidenceRecord, network::TransportEvidence, system::StackUsage,
-};
+use oer_hil_protocol::{base::LinkHealth, system::StackUsage};
 use oer_hil_runs::format::run::Measurement;
 use oer_hil_runs::format::run::MeasurementUnit as Unit;
+use oer_network_control::{EvidenceRecord, TransportEvidence};
 use std::collections::BTreeMap;
 
 pub(super) fn observations(
@@ -34,24 +33,23 @@ pub(super) fn observations(
         if let Some(value) = message.decode::<LinkHealth>() {
             link(&mut records, &request, value);
         }
-        if let Some(oer_hil_protocol::network::Evidence(EvidenceRecord::Transport(value))) =
+        if let Some(oer_network_control::Evidence(EvidenceRecord::Transport(value))) =
             message.decode()
         {
             transport(&mut records, &session, value)
-        } else if let Some(oer_hil_protocol::network::Evidence(EvidenceRecord::FlowTransport(
-            value,
-        ))) = message.decode()
+        } else if let Some(oer_network_control::Evidence(EvidenceRecord::FlowTransport(value))) =
+            message.decode()
         {
             transport(
                 &mut records,
                 &format!("{session}.flow-{}", value.flow_id),
                 value.as_session_total(),
             );
-        } else if let Some(oer_hil_protocol::network::Evidence(EvidenceRecord::Stack(value))) =
+        } else if let Some(oer_network_control::Evidence(EvidenceRecord::Stack(value))) =
             message.decode()
         {
             stack(&mut records, &session, value);
-        } else if let Some(oer_hil_protocol::network::Evidence(EvidenceRecord::Link(value))) =
+        } else if let Some(oer_network_control::Evidence(EvidenceRecord::Link(value))) =
             message.decode()
         {
             link(&mut records, &session, value);

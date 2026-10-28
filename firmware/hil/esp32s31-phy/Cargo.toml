@@ -18,16 +18,19 @@ bytemuck = { version = "1.25.2", default-features = false, features = ["derive"]
 
 [features]
 diagnostic-phy = []
-diagnostic-radio-health = ["diagnostic-phy", "oer-hil-protocol/health", "oer-hil-agent/health", "oer-esp32s31-phy/radio-health"]
+diagnostic-radio-health = ["diagnostic-phy", "dep:oer-esp32s31-instrumentation", "dep:oer-esp32s31-instrumentation-hil", "oer-esp32s31-phy/radio-health"]
 
 [target.'cfg(target_arch = "riscv32")'.dependencies]
+oer-esp32s31-instrumentation = { path = "../../../chips/esp32s31/instrumentation", optional = true }
+oer-esp32s31-instrumentation-hil = { path = "../../../chips/esp32s31/instrumentation-hil", optional = true }
+oer-esp32s31-phy-probe = { path = "../../../chips/esp32s31/phy-probe" }
 oer-esp32s31-ieee802154-driver = { path = "../../../chips/esp32s31/ieee802154/driver" }
 oer-memory = { path = "../../../portable/memory" }
 oer-riscv = { path = "../../../portable/riscv" }
 oer-diagnostics = { path = "../../../portable/diagnostics" }
 heapless = { version = "0.9.3", features = ["serde"] }
 embassy-sync = "0.8.0"
-oer-hil-protocol = { path = "../../../protocols/hil/protocol", default-features = false, features = ["phy", "async-io"] }
+oer-hil-protocol = { path = "../../../protocols/hil/protocol", default-features = false, features = ["async-io"] }
 oer-hil-agent = { path = "../../../protocols/hil/agent" }
 static_cell = { workspace = true }
 oer-esp32s31-board = { path = "../../../chips/esp32s31/board" }
@@ -50,13 +53,16 @@ oer-esp32s31-knowledge = { path = "../../../chips/esp32s31/knowledge" }
 oer-radio-regulatory = { path = "../../../protocols/radio/regulatory" }
 
 [target.'cfg(not(target_arch = "riscv32"))'.dev-dependencies]
+oer-esp32s31-instrumentation = { path = "../../../chips/esp32s31/instrumentation" }
+oer-esp32s31-instrumentation-hil = { path = "../../../chips/esp32s31/instrumentation-hil" }
+oer-esp32s31-phy-probe = { path = "../../../chips/esp32s31/phy-probe" }
 oer-espressif-ieee802154-engine = { path = "../../../chips/espressif/ieee802154-engine" }
 oer-espressif-ieee802154-mac-values = { path = "../../../chips/espressif/ieee802154-mac-values" }
 oer-memory = { path = "../../../portable/memory" }
 oer-esp32s31-knowledge = { path = "../../../chips/esp32s31/knowledge" }
 oer-esp32s31-phy = { path = "../../../chips/esp32s31/phy" }
 oer-hil-agent = { path = "../../../protocols/hil/agent" }
-oer-hil-protocol = { path = "../../../protocols/hil/protocol", default-features = false, features = ["phy", "health", "async-io"] }
+oer-hil-protocol = { path = "../../../protocols/hil/protocol", default-features = false, features = ["async-io"] }
 oer-time = { path = "../../../portable/time" }
 oer-time-virtual = { path = "../../../portable/time-virtual" }
 

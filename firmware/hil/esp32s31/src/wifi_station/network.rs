@@ -8,10 +8,10 @@ use oer_embassy_net::{
 };
 use oer_embassy_time::EmbassyClock;
 use oer_firmware_apps_w3::{icmp, observation::Observations, report::Lease};
-use oer_hil_protocol::wifi::StationProbeFinished;
+use oer_ieee80211_control::StationProbeFinished;
 use oer_ieee80211_sta::data::{EthernetFrame, TxMsdu};
-use oer_memory::{WakingSpscReceiver, WakingSpscSender};
 use oer_ieee80211_wire::{data::EthernetFrameParts, qos::WmmUserPriority};
+use oer_memory::{WakingSpscReceiver, WakingSpscSender};
 use oer_time::{Clock, Duration, Timer};
 use owned_embassy_net::{
     Stack, StackStorage,
@@ -87,11 +87,10 @@ fn running_future<'a>(
         let receive = RX_POOL
             .init_with(|| PacketPool::new(RX_STORAGE.take()))
             .allocator();
-        let (device, radio) =
-            ENDPOINT
-                .init_with(Endpoint::new)
-                .split(NetworkInterfaceId::new(0), address, receive)
-                .unwrap_or_else(|_| crate::fail(crate::fatal::Failure::RootInitialization));
+        let (device, radio) = ENDPOINT
+            .init_with(Endpoint::new)
+            .split(NetworkInterfaceId::new(0), address, receive)
+            .unwrap_or_else(|_| crate::fail(crate::fatal::Failure::RootInitialization));
         let (stack, mut runner) = Stack::new(STACK.init_with(StackStorage::new), seed, general);
         runner.set_poll_budget(owned_embassy_net::PollBudget::new(4, 8));
         let iface = stack
@@ -126,18 +125,16 @@ fn running_future<'a>(
                                         prefix: lease.address.prefix_len(),
                                     });
                                 crate::transport::CONSOLE.publish(
-                            attempt.request.session_id,
-                            attempt.request.request_id,
-                            &oer_hil_protocol::network::Ready(
-                                oer_hil_protocol::network::NetworkInfo {
-                                    network_interface:
-                                        oer_hil_protocol::network::WifiNetworkInterface::Station,
-                                    address: lease.address.address().octets(),
-                                    prefix_length: lease.address.prefix_len(),
-                                    gateway: lease.router.map(|router| router.octets()),
-                                },
-                            ),
-                        );
+                                    attempt.request.session_id,
+                                    attempt.request.request_id,
+                                    &oer_network_control::Ready(oer_network_control::NetworkInfo {
+                                        network_interface:
+                                            oer_network_control::WifiNetworkInterface::Station,
+                                        address: lease.address.address().octets(),
+                                        prefix_length: lease.address.prefix_len(),
+                                        gateway: lease.router.map(|router| router.octets()),
+                                    }),
+                                );
                             }
                             previous = current;
                         }
@@ -179,7 +176,7 @@ async fn probes(
         reset_observations(observations, probe.identifier, lease);
         super::emit(
             request,
-            &oer_hil_protocol::wifi::StationProbeReady {
+            &oer_ieee80211_control::StationProbeReady {
                 epoch,
                 identifier: probe.identifier,
                 count: probe.count,

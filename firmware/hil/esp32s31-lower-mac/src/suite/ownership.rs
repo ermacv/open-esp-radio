@@ -1,7 +1,7 @@
 //! Two affine image-owned subpools backed by real S31 DMA allocations.
 use super::*;
 use core::sync::atomic::{AtomicU32, Ordering};
-use oer_hil_protocol::lower_mac::{Trace, ownership_trace};
+use oer_ieee80211_conformance_control::{Trace, ownership_trace};
 use oer_ieee80211_port::conformance::{self, Class, End, Operation, Resources, Scenario};
 use oer_ieee80211_wire::qos::WmmAccessCategory;
 

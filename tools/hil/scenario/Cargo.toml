@@ -13,6 +13,8 @@ description = "HIL scenarios: the family-independent envelope, catalog, campaign
 test-support = []
 
 [dependencies]
+oer-hil-registry = { path = "../registry" }
+oer-network-control = { path = "../../../protocols/network-control" }
 oer-os-durable = { path = "../../os/durable" }
 oer-hil-protocol = { path = "../../../protocols/hil/protocol", features = ["registry"] }
 oer-hil-model = { path = "../model" }

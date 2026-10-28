@@ -5,7 +5,7 @@ use oer_diagnostics::Note;
 use oer_esp32s31_phy::tracking::observation::{
     EngineTiming, Event, GainTiming, Operation, ReadinessTrace, RfpllEngineTrace, RxGainExecution,
 };
-use oer_hil_protocol::phy::{HoldOperation, HoldPolls};
+use oer_esp32s31_phy_probe::{HoldOperation, HoldPolls};
 use oer_time::Clock;
 
 pub struct Observer<'a, C, W> {

@@ -32,8 +32,8 @@ mod services;
 mod transport;
 mod tx_rate_checkpoint;
 
-use oer_esp32s31_compose::Esp32s31;
 use core::future::poll_fn;
+use oer_esp32s31_compose::Esp32s31;
 use oer_esp32s31_hal::{
     ieee802154::mac::Ieee802154InterruptOwner,
     platform::{FromCpu0Irq, FromCpu2Irq, SystimerAlarm0, SystimerAlarm1},
@@ -43,13 +43,10 @@ use oer_esp32s31_hal::{
     watchdog::{ArmedRtcWatchdog, RTC_WATCHDOG_FEED_PERIOD_MS, RwdtRegisters},
 };
 use oer_esp32s31_phy::{PhyCalibrationIdentity, concurrent::ConcurrentPhy, phy_get_rf_cal_version};
+use oer_esp32s31_phy_probe::*;
 use oer_espressif_executor::{Executor, InterruptExecutor};
 use oer_hil_agent::base::Intake;
-use oer_hil_protocol::{
-    RequestIdentity,
-    base::{RejectReason, Rejected},
-    phy::*,
-};
+use oer_hil_protocol::{RequestIdentity, base::RejectReason, base::Rejected};
 use oer_memory::{Doorbell, Poster, RequestSlot};
 use services::WireRequest;
 use static_cell::StaticCell;
@@ -219,8 +216,12 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
     );
     #[cfg(feature = "diagnostic-radio-health")]
     radio.set_health_boot(boot);
-    oer_espressif_executor::bind::<Esp32s31, 0, _, _>(adopted.router(), interrupts.app_alarm, timer.alarm1)
-        .unwrap_or_else(|failure| failure.reset());
+    oer_espressif_executor::bind::<Esp32s31, 0, _, _>(
+        adopted.router(),
+        interrupts.app_alarm,
+        timer.alarm1,
+    )
+    .unwrap_or_else(|failure| failure.reset());
     let software = runtime.software_interrupts;
     let (hart, router) = adopted.parts();
     let radio_spawner = InterruptExecutor::<Esp32s31, 2>::new(software.line2)

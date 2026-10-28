@@ -1,6 +1,6 @@
 //! Manually selected idle hold; associated Wi-Fi traffic is a separate workload.
 use crate::Result;
-use oer_hil_protocol::phy::*;
+use oer_esp32s31_phy_probe::*;
 use oer_hil_scenario::workload::context::Context;
 use std::{
     path::Path,

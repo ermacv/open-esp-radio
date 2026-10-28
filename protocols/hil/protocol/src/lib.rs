@@ -48,17 +48,9 @@ pub use io::{WriteFrameError, write_frame};
 #[cfg(feature = "registry")]
 pub use key::MessageInfo;
 
-// The host's view of what an image serves, assembled from its Hello and
-// image key pages.
-#[cfg(feature = "registry")]
-mod image_keys;
-#[cfg(feature = "registry")]
-pub use image_keys::DeviceImageKeys;
-
-/// The reviewed wire of this revision: the framing version and every
-/// message's path, key and kind, one per line. The registry test keeps it
-/// equal to the registry; two revisions whose locks are equal speak the same
-/// protocol, so one's runner drives the other's images.
+/// This crate's reviewed framing version, message paths, keys and kinds.
+/// The host registry combines it with the domain owners' locks and checks
+/// the complete wire contract against their descriptors.
 #[cfg(feature = "registry")]
 pub const MESSAGES_LOCK: &str = include_str!("../messages.lock");
 pub use envelope::{Envelope, WireKind};
@@ -66,30 +58,15 @@ pub use key::{Endpoint, Key, Kind, Message};
 
 // The modules: each is a path prefix and a directory.
 pub mod base;
-pub mod bluetooth;
-pub mod lower_mac;
-pub mod network;
-pub mod phy;
 pub mod system;
 pub mod telemetry;
-pub mod wifi;
 
-/// Every module's messages, for a host that decodes any frame.
+/// The framework's descriptors; the host composes radio dictionaries separately.
 #[cfg(feature = "registry")]
 pub fn registry() -> impl Iterator<Item = &'static MessageInfo> {
-    [
-        base::MESSAGES,
-        system::MESSAGES,
-        network::MESSAGES,
-        bluetooth::MESSAGES,
-        telemetry::MESSAGES,
-        phy::MESSAGES,
-        lower_mac::MESSAGES,
-        health::MESSAGES,
-        wifi::MESSAGES,
-    ]
-    .into_iter()
-    .flatten()
+    [base::MESSAGES, system::MESSAGES, telemetry::MESSAGES]
+        .into_iter()
+        .flatten()
 }
 
 #[cfg(feature = "registry")]
@@ -101,6 +78,3 @@ pub use postcard_schema as __postcard_schema;
 pub use postcard_schema::Schema as __Schema;
 #[doc(hidden)]
 pub use postcard_schema::Schema as __SchemaDerive;
-
-#[cfg(feature = "health")]
-pub mod health;

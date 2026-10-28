@@ -21,7 +21,7 @@ use oer_diagnostics::Note;
 use oer_esp32s31_phy::tracking::observation::{
     EngineTiming, Event, GainTiming, Operation, ReadinessTrace, RxGainExecution,
 };
-use oer_hil_protocol::phy::HoldPolls;
+use oer_esp32s31_phy_probe::HoldPolls;
 use oer_time::{Clock, Duration};
 use oer_time_virtual::VirtualClock;
 

@@ -416,7 +416,7 @@ pub fn runner_provenance() -> Result<RunnerProvenance> {
         package: runner.package.to_owned(),
         version: runner.version.to_owned(),
         messages_lock_sha256: oer_os_durable::sha256_bytes(
-            oer_hil_protocol::MESSAGES_LOCK.as_bytes(),
+            oer_hil_registry::messages_lock()?.as_bytes(),
         ),
         host_os: std::env::consts::OS.to_owned(),
         host_arch: std::env::consts::ARCH.to_owned(),

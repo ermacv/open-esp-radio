@@ -7,14 +7,11 @@ use oer_hil_lab::{
     config::StationFixtureConfig,
 };
 use oer_hil_link::{CommandHandle, SerialCapture};
-use oer_hil_protocol::{
-    network::{Ready, WifiNetworkInterface},
-    wifi::*,
-};
 use oer_hil_scenario::{
     Result,
     workload::{context::Context, require_keys},
 };
+use oer_ieee80211_control::*;
 use oer_lab_router::{
     credentials,
     mac::Mac,
@@ -26,6 +23,7 @@ use oer_lab_router::{
     },
     w4,
 };
+use oer_network_control::{Ready, WifiNetworkInterface};
 use std::{
     net::Ipv4Addr,
     path::Path,
@@ -191,7 +189,7 @@ pub(super) fn network(
     capture: &SerialCapture,
     start: CommandHandle,
     connected: &Connected,
-) -> Result<oer_hil_protocol::network::NetworkInfo> {
+) -> Result<oer_network_control::NetworkInfo> {
     let (_, Ready(info)) = capture
         .wait_for_after::<Ready>(
             start.first_event(),

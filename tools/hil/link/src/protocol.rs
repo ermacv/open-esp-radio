@@ -6,7 +6,7 @@ use oer_hil_protocol::base::{
 use oer_hil_protocol::{Endpoint, Message};
 
 use super::*;
-use oer_hil_protocol::DeviceImageKeys;
+use oer_hil_registry::DeviceImageKeys;
 
 #[derive(serde::Serialize)]
 pub struct Observation {
@@ -22,8 +22,8 @@ impl SerialCapture {
         let boot_id = self
             .latest_boot_id()
             .ok_or("discovery omitted the target boot identity")?;
-        let oer_hil_protocol::network::Status(operation) =
-            self.request(0, oer_hil_protocol::network::GetStatus, timeout)?;
+        let oer_network_control::Status(operation) =
+            self.request(0, oer_network_control::GetStatus, timeout)?;
         let link = self.query_link_health(timeout)?;
         Ok(Observation {
             boot_id,
@@ -307,10 +307,10 @@ impl SerialCapture {
         let message = self
             .wait_for_message_after(handle.first_event, timeout, |message| {
                 handle.correlates(message)
-                    && (message.is::<M>() || message.is::<oer_hil_protocol::network::Failed>())
+                    && (message.is::<M>() || message.is::<oer_network_control::Failed>())
             })?
             .ok_or_else(|| format!("device did not complete {} with {}", handle.path, M::PATH))?;
-        if let Some(oer_hil_protocol::network::Failed(reason)) = message.decode() {
+        if let Some(oer_network_control::Failed(reason)) = message.decode() {
             return Err(format!(
                 "target operation {} ({}) failed: {reason:?}",
                 handle.request_id, handle.path
@@ -495,7 +495,7 @@ impl SerialCapture {
             .rev()
             .filter(|message| message.boot_id == boot_id)
             .find_map(|message| match message.decode() {
-                Some(oer_hil_protocol::network::Ready(network))
+                Some(oer_network_control::Ready(network))
                     if network.network_interface == network_interface =>
                 {
                     Some(Ipv4Addr::from(network.address))

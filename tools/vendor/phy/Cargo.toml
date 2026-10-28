@@ -10,6 +10,9 @@ description = "PHY HIL workloads: the vendor-versus-production calibration cross
 readme = "README.md"
 
 [dependencies]
+oer-esp32s31-instrumentation = { path = "../../../chips/esp32s31/instrumentation" }
+oer-esp32s31-instrumentation-hil = { path = "../../../chips/esp32s31/instrumentation-hil" }
+oer-esp32s31-phy-probe = { path = "../../../chips/esp32s31/phy-probe" }
 oer-hil-runs = { path = "../../hil/runs" }
 oer-cooperate = { path = "../../../portable/cooperate" }
 heapless = { version = "0.9.3", features = ["serde"] }

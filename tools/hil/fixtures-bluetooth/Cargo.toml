@@ -9,6 +9,7 @@ publish = false
 description = "The Linux Bluetooth fixture over BlueZ: DTM peer check, discovery, ATT parameters and the secure GATT agent"
 
 [dependencies]
+oer-bluetooth-control = { path = "../../../protocols/bluetooth/control" }
 oer-os-durable = { path = "../../os/durable" }
 oer-os-process = { path = "../../os/process", features = ["linux-socket"] }
 oer-hil-protocol = { path = "../../../protocols/hil/protocol" }

@@ -9,12 +9,15 @@ publish = false
 description = "Wi-Fi station HIL workloads and independently recomputed acceptance"
 
 [dependencies]
+oer-ieee80211-conformance-control = { path = "../../../protocols/ieee80211/conformance-control" }
+oer-network-control = { path = "../../../protocols/network-control" }
+oer-ieee80211-control = { path = "../../../protocols/ieee80211/control" }
 oer-hil-runs = { path = "../runs" }
 oer-hil-family-lower-mac = { path = "../family-lower-mac" }
 oer-ieee80211-port = { path = "../../../protocols/ieee80211/port" }
 oer-hil-model = { path = "../model" }
 oer-hil-scenario = { path = "../scenario" }
-oer-hil-protocol = { path = "../../../protocols/hil/protocol", features = ["wifi", "network", "lower-mac"] }
+oer-hil-protocol = { path = "../../../protocols/hil/protocol" }
 oer-hil-link = { path = "../link" }
 oer-hil-lab = { path = "../lab" }
 oer-lab-router = { path = "../../lab/router" }

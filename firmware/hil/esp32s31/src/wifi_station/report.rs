@@ -16,8 +16,8 @@ use oer_esp32s31_radio_client::{
     CalibrationTrackingFailure, CalibrationTrackingFault, Failure, PhyFault, Poison, PoisonCause,
     PoisonOrigin, RegistrationFailure, RegistrationFault, RequestKind,
 };
-use oer_hil_protocol::wifi::*;
 use oer_ieee80211_arbiter::{LeaveReason, Refusal};
+use oer_ieee80211_control::*;
 use oer_ieee80211_port::{LayoutError, PreparationError};
 use oer_ieee80211_rsn::sae::SaeError;
 use oer_ieee80211_runtime::station_service::{

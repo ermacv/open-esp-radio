@@ -2,8 +2,8 @@
 //! a latest PASS or reuse of an image's gate flag.
 use crate::evidence::KeyEvidence;
 use oer_hil_model::schema::{image::ImageClass, run::RunState};
-use oer_hil_protocol::lower_mac::{CaseTrace, Prepared};
 use oer_hil_scenario::Result;
+use oer_ieee80211_conformance_control::{CaseTrace, Prepared};
 use oer_ieee80211_port::conformance::{BarrierCase, Execution, catalog::Case};
 
 pub const INPUT: &str = "OER_W4_KEY_CONFORMANCE_RUN";

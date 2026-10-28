@@ -1,13 +1,13 @@
 #[cfg(not(feature = "diagnostic-lower-mac"))]
 compile_error!("build the diagnostic-lower-mac image class through cargo hil");
 mod irq;
-mod suite;
 mod services;
+mod suite;
 mod transport;
-use oer_esp32s31_compose::Esp32s31;
 use core::future::poll_fn;
 use oer_embassy_time::EmbassyClock;
 use oer_esp32s31_board as board;
+use oer_esp32s31_compose::Esp32s31;
 use oer_esp32s31_hal::{
     platform::{FromCpu0Irq, FromCpu2Irq, FromCpu3Irq, SystimerAlarm0, SystimerAlarm1},
     power::ChipClocks,
@@ -24,11 +24,8 @@ use oer_esp32s31_radio_client::{LpClock, RcSlow, claim};
 use oer_esp32s31_radio_system::{Esp32s31Radio, RadioSystem};
 use oer_espressif_executor::{Doorbell, Executor, InterruptExecutor};
 use oer_hil_agent::base::Intake;
-use oer_hil_protocol::{
-    RequestIdentity,
-    base::{RejectReason, Rejected},
-    lower_mac::*,
-};
+use oer_hil_protocol::{RequestIdentity, base::RejectReason, base::Rejected};
+use oer_ieee80211_conformance_control::*;
 use oer_memory::{Doorbell as RequestDoorbell, Poster, RequestSlot};
 use static_cell::StaticCell;
 mod phy_pilot;
@@ -171,8 +168,12 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
         timer.alarm0,
     )
     .unwrap_or_else(|failure| failure.reset());
-    oer_espressif_executor::bind::<Esp32s31, 0, _, _>(adopted.router(), interrupts.app_alarm, timer.alarm1)
-        .unwrap_or_else(|failure| failure.reset());
+    oer_espressif_executor::bind::<Esp32s31, 0, _, _>(
+        adopted.router(),
+        interrupts.app_alarm,
+        timer.alarm1,
+    )
+    .unwrap_or_else(|failure| failure.reset());
     let software = runtime.software_interrupts;
     let (line, ack) = oer_espressif_executor::DoorbellLine::<Esp32s31, 3>::split(software.line3);
     let bound = adopted

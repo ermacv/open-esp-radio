@@ -1,7 +1,7 @@
 //! Opaque affine context tags and actual FIFO returns, including disable drain.
 use super::*;
 use core::sync::atomic::Ordering;
-use oer_hil_protocol::lower_mac::{Trace, configure_trace};
+use oer_ieee80211_conformance_control::{Trace, configure_trace};
 use oer_ieee80211_port::conformance::interface_commands::{
     self as contract, Case, Drain, Identity,
 };

@@ -2,9 +2,9 @@
 //! timing, zero-copy holding and the stack watermarks the target reports.
 
 use oer_hil_link::Result;
-use oer_hil_protocol::{
-    network::{RxRadioEvidence, RxZeroCopyEvidence, TxAggregateTimingEvidence, TxRadioEvidence},
-    system::StackUsage,
+use oer_hil_protocol::system::StackUsage;
+use oer_network_control::{
+    RxRadioEvidence, RxZeroCopyEvidence, TxAggregateTimingEvidence, TxRadioEvidence,
 };
 
 use crate::SessionEvidence;

@@ -14,6 +14,9 @@ description = "HIL host/target link: one session with the board under test (UART
 test-support = []
 
 [dependencies]
+oer-hil-registry = { path = "../registry" }
+oer-network-control = { path = "../../../protocols/network-control" }
+oer-ieee80211-control = { path = "../../../protocols/ieee80211/control" }
 oer-diagnostics = { path = "../../../portable/diagnostics", features = ["render"] }
 oer-lab-board = { path = "../../lab/board" }
 oer-os-durable = { path = "../../os/durable" }

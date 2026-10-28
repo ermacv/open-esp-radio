@@ -10,7 +10,6 @@ firmware links.
 | Feature | Modules |
 | --- | --- |
 | none | `base`, `console`, `postmortem` |
-| `health` | `health` diagnostic storage |
 
 ## Image keys
 
@@ -37,7 +36,7 @@ watchdog, panic-injection or radio-release action after a failed barrier.
 
 `Console::run` returns a `RunFault` owning the endpoint on an invalid read length
 or counter-borrow conflict. `link_health` reports counter-borrow conflicts as a
-`ConsoleFault`. Checkpoint, rate and health category count overflows return typed
+`ConsoleFault`. Checkpoint and rate count overflows return typed
 faults before mutation; images retain their observations and reset.
 
 The retained record is a value codec; placement and reset belong to the image.
@@ -51,3 +50,5 @@ Run the tests:
 ```console
 cargo test -p oer-hil-agent
 ```
+
+Radio-health page messages and capture storage belong to `oer-esp32s31-instrumentation-hil`; the agent has no radio dictionary dependency.

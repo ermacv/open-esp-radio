@@ -35,10 +35,10 @@ other `portable/` support, firmware images and tools.
 | `Platform` | `espressif/{executor,staged-bootstrap,staged-runtime}`, `esp32s31/{board,layout}` | platform, platform contracts, family hardware drivers, facts, shared vocabulary, portable, hardware access |
 | `Composition` | `esp32s31/compose` | every chip role but PAC, composition and facade, every protocol role, portable, Embassy adapters, hardware access; no HIL |
 | `Facade` | `esp32s31/wifi` (awaited) | as a composition, and the composition |
-| `ObservationContract` | `protocols/*/instrumentation` | observation contracts, facts, shared vocabulary, portable, wire, port |
+| `ObservationContract` | `protocols/*/instrumentation`, `chips/esp32s31/instrumentation` | observation contracts, facts, shared vocabulary, portable, wire, port |
 | `HilProtocol` | `protocols/hil/protocol` | portable |
 | `HilAgent` | `protocols/hil/agent` | HIL protocol, portable |
-| `HilBinding` | none yet | HIL protocol and agent, facades, observation contracts, shared vocabulary, wire, port, runtime, portable without `portable/time{,-virtual}` |
+| `HilBinding` | Wi-Fi, network, Bluetooth, conformance, PHY probe and radio-health dictionaries | HIL protocol and agent, facades, observation contracts, shared vocabulary, wire, port, runtime, portable without `portable/time{,-virtual}` |
 | `HilImage` | `firmware/hil/*` | composition, facades, observation contracts, HIL bindings, agent and protocol, platform, platform contracts, portable, Embassy adapters |
 
 Roles outside this table keep their own rules. The backend rule holds for

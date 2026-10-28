@@ -9,13 +9,12 @@ use embassy_futures::select::{Either, select};
 use oer_embassy_time::EmbassyClock;
 use oer_esp32s31_ieee80211_driver::port::{self, device::Composition};
 use oer_espressif_ieee80211_policy::rate_selection::EspressifRateSelection;
-use oer_hil_protocol::wifi::{StationLinkState, StationServiceEnd};
+use oer_ieee80211_cipher::aes::{SoftwareAes128, SoftwareKeyUnwrap};
+use oer_ieee80211_control::{StationLinkState, StationServiceEnd};
 use oer_ieee80211_port::*;
 use oer_ieee80211_rsn::{Pmk, nonce::SNonceSource, sae::SaePassword};
 use oer_ieee80211_runtime::station_service::*;
-use oer_ieee80211_cipher::aes::{SoftwareAes128, SoftwareKeyUnwrap};
 use oer_ieee80211_sta::data::{EthernetFrame, TxMsdu};
-use oer_memory::{WakingSpscQueue, WakingSpscSender};
 use oer_ieee80211_sta::{
     data::StaData,
     epoch::{EpochContext, LinkEpochSource},
@@ -33,6 +32,7 @@ use oer_ieee80211_wire::{
     station::AssociationCapabilities,
 };
 use oer_memory::{Placed, PlacedFuture, StaticPlace};
+use oer_memory::{WakingSpscQueue, WakingSpscSender};
 use oer_radio_port::{self as rp, Child, PortBackend, Root, SlotIdentity};
 use oer_time::{Duration, Instant};
 use static_cell::ConstStaticCell;
@@ -55,7 +55,8 @@ const TERMINALS: usize = <Family<radio::slot::Id> as PhaseTypes<'static>>::TERMI
 const MANAGEMENT: u8 = 4;
 static NETWORK_RX: ConstStaticCell<WakingSpscQueue<EthernetFrame, { super::network::RX }>> =
     ConstStaticCell::new(WakingSpscQueue::new());
-static NETWORK_TX: ConstStaticCell<WakingSpscQueue<TxMsdu, 2>> = ConstStaticCell::new(WakingSpscQueue::new());
+static NETWORK_TX: ConstStaticCell<WakingSpscQueue<TxMsdu, 2>> =
+    ConstStaticCell::new(WakingSpscQueue::new());
 
 impl<Id: SlotIdentity> StationPort for StationComposition<Id> {
     type Backend = Backend<Id>;
@@ -258,8 +259,7 @@ impl<'id, Path: rp::PoolPath> ServiceOutputSink<'id, Caps, Path> for Output<'_, 
 }
 /// The observer of the station, its data machine and its service.
 type Observed = super::observation::StationObserver;
-type Service<'id, Id> =
-    StationService<'id, StationComposition<Id>, Callbacks, Rates, 1, Observed>;
+type Service<'id, Id> = StationService<'id, StationComposition<Id>, Callbacks, Rates, 1, Observed>;
 type Completed<'p, 'id, Id> =
     ServiceCompleted<'p, 'id, StationComposition<Id>, Callbacks, Rates, 1, Observed>;
 type Io<'c, 'id, Id> =
@@ -438,7 +438,8 @@ impl<Id: SlotIdentity> rp::PortBody<Id, Backend<Id>> for Body {
     {
         let (address, seed, attempt) = (self.address, self.seed, self.attempt);
         let (service, credits) = initialize_service::<Id>(self, resources);
-        let mut commands = WakingSpscQueue::<ServiceCommand<'id, Caps, Child<Root<Id>, 8>>, 2>::new();
+        let mut commands =
+            WakingSpscQueue::<ServiceCommand<'id, Caps, Child<Root<Id>, 8>>, 2>::new();
         let tx = NETWORK_TX.take();
         let rx = NETWORK_RX.take();
         let (command_send, command_receive) = commands.split();
@@ -500,7 +501,7 @@ impl<Id: SlotIdentity> rp::PortBody<Id, Backend<Id>> for Body {
         let ended = oer_memory::match_placed!(end, ServiceEnd {
             Stopped(owner) => {
                 if let Some(request)=stopped.get() {
-                    super::emit(request,&oer_hil_protocol::wifi::StationStopped(super::observation::counters()));
+                    super::emit(request,&oer_ieee80211_control::StationStopped(super::observation::counters()));
                 }
                 rp::Ended::uninstall(owner.read(), (), ())
             },

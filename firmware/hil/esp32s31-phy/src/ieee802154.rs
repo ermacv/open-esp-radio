@@ -181,7 +181,7 @@ impl Rx {
         let member = joined.membership;
         if due {
             let mut trace = oer_esp32s31_phy::tracking::observation::ReadinessTrace::default();
-            let mut polls = oer_hil_protocol::phy::HoldPolls::default();
+            let mut polls = oer_esp32s31_phy_probe::HoldPolls::default();
             let mut uart = crate::hold::Uart;
             let mut observer = crate::hold::Observer::new(
                 0,

@@ -317,7 +317,7 @@ pub(super) fn connect_reset(
     adapter: Adapter,
     peer: super::model::PeerAddress,
     hold_ms: u16,
-    termination: oer_hil_protocol::bluetooth::BluetoothPeripheralTermination,
+    termination: oer_bluetooth_control::BluetoothPeripheralTermination,
     report: &mut super::model::ConnectionReset,
 ) -> Result<()> {
     if hold_ms > 5_000 {

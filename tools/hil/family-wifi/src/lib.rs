@@ -45,7 +45,7 @@ impl ScenarioFamily for WifiScenario {
         vec![AirUse::WifiLink]
     }
     fn required_keys(&self) -> &'static [oer_hil_protocol::Key] {
-        oer_hil_protocol::wifi::KEYS
+        oer_ieee80211_control::KEYS
     }
 }
 impl Workload for WifiScenario {

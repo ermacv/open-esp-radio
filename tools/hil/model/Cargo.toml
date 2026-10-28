@@ -9,6 +9,8 @@ publish = false
 description = "The HIL scenario model: a scenario's typed specification and pure verdict, derived waits and the stand profile, repetition statistics, resources, target capabilities and tier budgets"
 
 [dependencies]
+oer-esp32s31-instrumentation = { path = "../../../chips/esp32s31/instrumentation" }
+oer-esp32s31-instrumentation-hil = { path = "../../../chips/esp32s31/instrumentation-hil" }
 hex = "=0.4.3"
 oer-time = { path = "../../../portable/time" }
 serde = { version = "1.0", features = ["derive"] }

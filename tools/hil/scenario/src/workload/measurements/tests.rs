@@ -18,11 +18,9 @@ fn event<M: oer_hil_protocol::Message>(
         body,
     ))
 }
-use oer_hil_protocol::{
-    network::EvidenceRecord, network::FlowTransportEvidence, network::TransportEvidence,
-};
 use oer_hil_runs::format::run::Comparison;
 use oer_hil_runs::format::run::MeasurementUnit;
+use oer_network_control::{EvidenceRecord, FlowTransportEvidence, TransportEvidence};
 
 fn transport(bytes: u64, elapsed_micros: u64) -> TransportEvidence {
     TransportEvidence {
@@ -49,18 +47,14 @@ fn replay_does_not_duplicate_or_replace_the_first_observation() {
                 10,
                 3,
                 1,
-                oer_hil_protocol::network::Evidence(EvidenceRecord::Transport(transport(
-                    125, 1_000,
-                ))),
+                oer_network_control::Evidence(EvidenceRecord::Transport(transport(125, 1_000))),
             ),
             event(
                 7,
                 11,
                 3,
                 2,
-                oer_hil_protocol::network::Evidence(EvidenceRecord::Transport(transport(
-                    999, 1_000,
-                ))),
+                oer_network_control::Evidence(EvidenceRecord::Transport(transport(999, 1_000))),
             ),
         ],
         200,
@@ -98,7 +92,7 @@ fn boot_scopes_and_concurrent_flows_keep_distinct_measurements() {
                     1,
                     1,
                     1,
-                    oer_hil_protocol::network::Evidence(EvidenceRecord::FlowTransport(
+                    oer_network_control::Evidence(EvidenceRecord::FlowTransport(
                         FlowTransportEvidence::from_session_total(0, transport(value, 100)),
                     )),
                 ),
@@ -107,7 +101,7 @@ fn boot_scopes_and_concurrent_flows_keep_distinct_measurements() {
                     2,
                     1,
                     1,
-                    oer_hil_protocol::network::Evidence(EvidenceRecord::FlowTransport(
+                    oer_network_control::Evidence(EvidenceRecord::FlowTransport(
                         FlowTransportEvidence::from_session_total(1, transport(value + 1, 100)),
                     )),
                 ),
@@ -137,7 +131,7 @@ fn zero_elapsed_time_does_not_invent_a_rate_and_host_gates_remain_explicit() {
             1,
             1,
             1,
-            oer_hil_protocol::network::Evidence(EvidenceRecord::Transport(transport(100, 0))),
+            oer_network_control::Evidence(EvidenceRecord::Transport(transport(100, 0))),
         )],
         10,
     );

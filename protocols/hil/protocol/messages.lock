@@ -3,14 +3,8 @@
 framing 2
 [modules]
 base
-bluetooth base system
-health
-lower-mac
-network base system
-phy
 system
 telemetry
-wifi base
 [messages]
 base/accepted 1ac686128bebf3dd topic
 base/boot 472a6c8ee83e5591 topic
@@ -24,103 +18,6 @@ base/link-health/get 0dd30f36b23d5822 endpoint
 base/post-mortem 8fb903806319fddc topic
 base/post-mortem/get f38ae4a399d00557 endpoint
 base/rejected 00baffc41eab75e2 topic
-bluetooth/dtm dd1a149b13f19aea property
-bluetooth/dtm/result 17a74c1cc443c957 topic
-bluetooth/dtm/run a0360c5cd980786a endpoint
-bluetooth/gatt 3baf52b29a3c1fdb property
-bluetooth/gatt/get 2b9030162a84d0ee endpoint
-bluetooth/gatt/state fedccde5556d064e topic
-bluetooth/hci 7f96e7fbcb5e2f2b property
-bluetooth/hci/exchange cf3f377fd51db876 endpoint
-bluetooth/hci/response 638f5bc4bfa0329b topic
-bluetooth/secure-gatt 60dd851aa141d13f property
-bluetooth/secure-gatt/confirm 6f01f85ff04bab22 endpoint
-bluetooth/secure-gatt/decision-recorded 6da4adf8780e060d topic
-bluetooth/secure-gatt/fail-next-bond-load 201d649f0d46600d endpoint
-bluetooth/secure-gatt/fail-reset-read 188ba3fa6c7e3873 endpoint
-bluetooth/secure-gatt/get f5579bf2e39fd802 endpoint
-bluetooth/secure-gatt/reset-read-gate 250714b9c2e59972 endpoint
-bluetooth/secure-gatt/restart 9893ab9bb04be571 endpoint
-bluetooth/secure-gatt/state 11fc2307ae9cffe5 topic
-bluetooth/trace d89efc9fa6f1b45c property
-health/begin 7f6fb6caa4502b2d endpoint
-health/counters 5faa1e1be6011ae7 topic
-health/counters/read 42aaa115ed31c9a9 endpoint
-health/finish 036e41ddd127f1ba endpoint
-health/finished 1f6135da617ad3f3 topic
-health/measurements 3a66090ba588beda topic
-health/measurements/read 21bc5b95598d4d29 endpoint
-health/release 9780e20f2c149390 endpoint
-health/released 48a6b75e9f1b6516 topic
-health/signals 8ad8eb2ad2e7d1b4 topic
-health/signals/read 433cec6237230699 endpoint
-health/started 74496e1a05141ab5 topic
-health/tracking baa7bf571d1f309b topic
-health/tracking/read ed83d4e71fad3e45 endpoint
-health/window 9b76a03610638ae5 endpoint
-health/window-finished 7cad69d1fb60899b topic
-lower-mac/case/run 7ce548b6cbb39f2d endpoint
-lower-mac/case/trace d7ba2c357a57c0ff topic
-lower-mac/prepare 335dfabb22e2b8f9 endpoint
-lower-mac/prepared 52e0cc98b6729aeb topic
-network/bidirectional b6817e1d148a8246 property
-network/data-plane-placement 880e961aa58a91dc property
-network/ready d57982baa9a27831 topic
-network/runtime-configuration 80d9410d4730af36 property
-network/rx 4fe48d19d7020c71 property
-network/rx-delivery-evidence 7c45c7e5d5c356ac property
-network/scheduler-evidence 759210e7665d74d4 property
-network/service/ready 8f749642585cb71a topic
-network/session/arm cc0e3f4201755cd8 endpoint
-network/session/cancel 8b66718b41b66b3a endpoint
-network/session/configure 9bb753b11758b09e endpoint
-network/session/evidence c318c8cd3bed6980 topic
-network/session/failed d8f73091a4e96394 topic
-network/session/finished 143d79baf65edd89 topic
-network/session/ready 2b5a9e3b088969ad topic
-network/session/recover ea5843933f6840c6 endpoint
-network/session/result/acknowledge e253374962713a76 endpoint
-network/session/result/replay 286d8210c080c3f9 endpoint
-network/session/start aa6a7ac468793596 endpoint
-network/session/state 9a8b61f6c982e0a0 topic
-network/session/status 0265fde1b70e5f46 topic
-network/session/status/get e9b466ccda5dc44b endpoint
-network/session/udp-rx-started a11ae7c56b7473e9 topic
-network/structured-evidence e380cec1338cf48a property
-network/tcp adc6e3d733d9a41e property
-network/tx 3defbb19cca99df7 property
-network/udp ccf606e215dfb376 property
-network/udp-multi-flow 8bb6cec70ec1525d property
-phy/cache/complete d779f3f0214b9ead endpoint
-phy/cache/completed f7be27bd7392ea62 topic
-phy/cache/host ee53c3b7ccc58141 property
-phy/cache/identity 920fd5e776ac5f85 topic
-phy/cache/identity/get fdf8202c8b4188b0 endpoint
-phy/cache/read ed770dd0fb84c68d endpoint
-phy/cache/requested c3af7e416e4e3477 topic
-phy/cache/snapshot 28f602654df98f52 topic
-phy/cache/write 68c366934c8d1d03 endpoint
-phy/cache/written 1df833a3d4fc266f topic
-phy/calibration/start 1920e0613a13d92e endpoint
-phy/calibration/started dd68874e45c26fc9 topic
-phy/calibration/status 60b5756f77111b78 topic
-phy/calibration/status/get 989cb0e82c6026eb endpoint
-phy/capture/analog 0ba9dbc8e27179fb topic
-phy/capture/analog/read 5774a605a42871c0 endpoint
-phy/capture/calibration 95d3b73dc049939d topic
-phy/capture/calibration/read d929b1fefdd84698 endpoint
-phy/capture/registers f69234aab9349af3 topic
-phy/capture/registers/read 540674e601e83e72 endpoint
-phy/capture/restart dbbf5f4c42b84170 endpoint
-phy/capture/restarted e7ea04a7256db356 topic
-phy/capture/stop e6c7bef66d566ea9 endpoint
-phy/capture/stopped 59d750279ee5996a topic
-phy/hold/get 33acac6117f7ad0b endpoint
-phy/hold/samples 46e294bd3b284a92 topic
-phy/hold/start 94c64378f7be62cc endpoint
-phy/hold/started 74936cb235e4a50e topic
-phy/hold/stop 545074692870df14 endpoint
-phy/hold/stopped 76c5b6b89328ab1a topic
 system/panic-hook 65d7eff2b42a4745 property
 system/panic/inject 4a8069a58696abc1 endpoint
 system/panic/injected 9f469405c60e21be topic
@@ -134,17 +31,3 @@ telemetry/profile/control ae68ada13f2e14ba endpoint
 telemetry/profile/samples afa02b2ba450762d topic
 telemetry/profile/samples/get 118d9de14439dfd5 endpoint
 telemetry/profile/state d074cf5350d6d74e topic
-wifi/station ad7cdfe0a7c257e4 property
-wifi/station/arp-frame 7c17039e1f1d0df0 topic
-wifi/station/counters 3435d1c1f6700713 topic
-wifi/station/counters/get c3c4a743d084a9bb endpoint
-wifi/station/group-key 27ab2647264945bc topic
-wifi/station/link cdfbc45e12fa8807 topic
-wifi/station/probe e37fc052d9ec85e9 endpoint
-wifi/station/probe/finished e156497f15ad8e46 topic
-wifi/station/probe/ready 940908ee7694d30f topic
-wifi/station/receive-drop 71f137fcccb01e28 topic
-wifi/station/service-ended 540f1846cb5b2961 topic
-wifi/station/start 0bded670f6ef9188 endpoint
-wifi/station/stop 82add8a7b5f872f9 endpoint
-wifi/station/stopped 3704030980b827e2 topic

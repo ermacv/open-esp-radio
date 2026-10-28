@@ -41,7 +41,7 @@ fn traffic(count: u16, begin: u64) -> Traffic {
 }
 pub(super) fn full() -> Evidence {
     use oer_ieee80211_port::conformance::{BarrierCase, Execution, catalog::Case};
-    let prepared = oer_hil_protocol::lower_mac::Prepared {
+    let prepared = oer_ieee80211_conformance_control::Prepared {
         ampdu: false,
         basic_rates: [0x8c; 16],
         basic_rates_len: 1,
@@ -52,13 +52,15 @@ pub(super) fn full() -> Evidence {
             matches!(case, Case::Group(_) | Case::Barrier(BarrierCase::RemoveKey))
                 && case.execution() == Execution::Hardware
         })
-        .map(|(index, case)| oer_hil_protocol::lower_mac::CaseTrace {
-            case: oer_hil_protocol::lower_mac::RunCase(
-                u8::try_from(index).expect("catalog ordinal"),
-            ),
-            trace: oer_hil_family_lower_mac::model_trace(case, &prepared, 6)
-                .expect("reference trace"),
-        })
+        .map(
+            |(index, case)| oer_ieee80211_conformance_control::CaseTrace {
+                case: oer_ieee80211_conformance_control::RunCase(
+                    u8::try_from(index).expect("catalog ordinal"),
+                ),
+                trace: oer_hil_family_lower_mac::model_trace(case, &prepared, 6)
+                    .expect("reference trace"),
+            },
+        )
         .collect();
     let joined = Station {
         present: true,
@@ -263,7 +265,7 @@ fn arp(transmitted: bool, at: u64) -> ArpObservation {
     ArpObservation {
         received_us: at + 1000,
         air_us: Some(at),
-        frame: oer_hil_protocol::wifi::StationArpFrame {
+        frame: oer_ieee80211_control::StationArpFrame {
             epoch: 1,
             generation: 2,
             transmitted,

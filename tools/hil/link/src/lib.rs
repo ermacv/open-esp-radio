@@ -25,10 +25,8 @@ use std::{
     time::{Duration, Instant},
 };
 
-use oer_hil_protocol::{
-    DecodeCounters, Envelope, FrameDecoder, FrameEncoder, base::LinkHealth,
-    network::OperationStatus, network::WifiNetworkInterface,
-};
+use oer_hil_protocol::{DecodeCounters, Envelope, FrameDecoder, FrameEncoder, base::LinkHealth};
+use oer_network_control::{OperationStatus, WifiNetworkInterface};
 use zeroize::Zeroizing;
 
 mod target;

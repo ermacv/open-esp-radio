@@ -4,11 +4,10 @@ use crate::{
     calibration_capture::{space::Space, vendor},
     comparison::{Comparison, HealthRegister},
 };
+use oer_esp32s31_instrumentation::health::*;
+use oer_esp32s31_instrumentation_hil::*;
+use oer_esp32s31_phy_probe::{CaptureRadio, PrepareCapture};
 use oer_hil_model::health::{Pages, Snapshot};
-use oer_hil_protocol::{
-    health::*,
-    phy::{CaptureRadio, PrepareCapture},
-};
 use oer_hil_scenario::workload::context::Context;
 use oer_image_build::esp_idf::catalog;
 use std::{

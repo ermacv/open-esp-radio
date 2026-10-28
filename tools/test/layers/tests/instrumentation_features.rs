@@ -46,23 +46,11 @@ const INSTRUMENTATION_WORDS: &[&str] = &[
 /// it. The list only shrinks.
 type Deviation = (&'static str, &'static str, &'static str);
 
-const KNOWN_INSTRUMENTATION_FEATURES: &[Deviation] = &[
-    (
-        "chips/esp32s31/phy",
-        "radio-health",
-        "PHY observations move to the observer (#848, instrumentation PHY stage)",
-    ),
-    (
-        "protocols/hil/agent",
-        "health",
-        "health records move to the agent's trace capture service (#848, instrumentation I1)",
-    ),
-    (
-        "protocols/hil/protocol",
-        "health",
-        "health messages move to the agent's trace capture service (#848, instrumentation I1)",
-    ),
-];
+const KNOWN_INSTRUMENTATION_FEATURES: &[Deviation] = &[(
+    "chips/esp32s31/phy",
+    "radio-health",
+    "PHY observations move to the observer (#848, instrumentation PHY stage)",
+)];
 
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))

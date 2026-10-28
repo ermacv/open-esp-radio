@@ -3,7 +3,7 @@
 //! Compatibility belongs to the target's format/schema/algorithm/profile;
 //! physical replay validation remains the firmware's responsibility.
 use crate::Result;
-use oer_hil_protocol::phy::*;
+use oer_esp32s31_phy_probe::*;
 use oer_lab_model::DeviceId;
 use oer_os_process::lock::{FileLock, Mode};
 use serde::{Deserialize, Serialize};

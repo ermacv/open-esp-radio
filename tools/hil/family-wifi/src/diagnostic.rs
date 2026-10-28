@@ -4,11 +4,11 @@ use oer_hil_lab::{
     air::{AirCapture, station::Direction},
     config::StationFixtureConfig,
 };
-use oer_hil_protocol::{network::Ready, wifi::*};
 use oer_hil_scenario::{
     Result,
     workload::{context::Context, require_keys},
 };
+use oer_ieee80211_control::*;
 use oer_lab_router::{
     credentials,
     mac::Mac,
@@ -16,6 +16,7 @@ use oer_lab_router::{
     ssh::{CommandLog, CommandObservation, Ssh, Stderr, read_stderr},
     w4,
 };
+use oer_network_control::Ready;
 use std::{path::Path, time::Duration};
 
 pub(crate) struct Observer {

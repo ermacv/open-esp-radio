@@ -4,7 +4,8 @@ mod adapter;
 
 use oer_esp32s31_knowledge::calibration_cache as codec;
 use oer_esp32s31_phy::{PhyCalibrationCache, PhyCalibrationIdentity, PhyCalibrationSnapshot};
-use oer_hil_protocol::{base::RejectReason, phy::*};
+use oer_esp32s31_phy_probe::*;
+use oer_hil_protocol::base::RejectReason;
 use oer_time::{Duration, Instant};
 
 type Result<T> = core::result::Result<T, RejectReason>;

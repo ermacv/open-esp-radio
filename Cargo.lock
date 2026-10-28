@@ -1775,6 +1775,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-bluetooth-control"
+version = "0.1.0"
+dependencies = [
+ "heapless",
+ "oer-hil-protocol",
+ "postcard",
+ "postcard-schema",
+ "serde",
+]
+
+[[package]]
 name = "oer-bluetooth-hci"
 version = "0.1.0"
 dependencies = [
@@ -2063,6 +2074,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-esp32s31-instrumentation"
+version = "0.1.0"
+dependencies = [
+ "postcard-schema",
+ "serde",
+]
+
+[[package]]
+name = "oer-esp32s31-instrumentation-hil"
+version = "0.1.0"
+dependencies = [
+ "heapless",
+ "oer-esp32s31-instrumentation",
+ "oer-hil-protocol",
+ "oer-memory",
+ "postcard",
+ "postcard-schema",
+ "serde",
+]
+
+[[package]]
 name = "oer-esp32s31-knowledge"
 version = "0.1.0"
 
@@ -2097,6 +2129,18 @@ dependencies = [
  "oer-time",
  "oer-time-virtual",
  "pin-project-lite",
+]
+
+[[package]]
+name = "oer-esp32s31-phy-probe"
+version = "0.1.0"
+dependencies = [
+ "crc",
+ "heapless",
+ "oer-hil-protocol",
+ "postcard",
+ "postcard-schema",
+ "serde",
 ]
 
 [[package]]
@@ -2553,6 +2597,7 @@ dependencies = [
  "oer-hil-protocol",
  "oer-ieee80211-arbiter",
  "oer-ieee80211-cipher",
+ "oer-ieee80211-control",
  "oer-ieee80211-instrumentation",
  "oer-ieee80211-port",
  "oer-ieee80211-rsn",
@@ -2561,6 +2606,7 @@ dependencies = [
  "oer-ieee80211-upper-mac",
  "oer-ieee80211-wire",
  "oer-memory",
+ "oer-network-control",
  "oer-radio-port",
  "oer-radio-regulatory",
  "oer-riscv",
@@ -2597,6 +2643,7 @@ dependencies = [
  "oer-espressif-usb-serial-jtag",
  "oer-hil-agent",
  "oer-hil-protocol",
+ "oer-ieee80211-conformance-control",
  "oer-ieee80211-port",
  "oer-ieee80211-runtime",
  "oer-ieee80211-upper-mac",
@@ -2625,9 +2672,12 @@ dependencies = [
  "oer-esp32s31-ieee80211-driver",
  "oer-esp32s31-ieee80211-mac",
  "oer-esp32s31-ieee802154-driver",
+ "oer-esp32s31-instrumentation",
+ "oer-esp32s31-instrumentation-hil",
  "oer-esp32s31-knowledge",
  "oer-esp32s31-layout",
  "oer-esp32s31-phy",
+ "oer-esp32s31-phy-probe",
  "oer-espressif-executor",
  "oer-espressif-ieee802154-engine",
  "oer-espressif-ieee802154-mac-values",
@@ -2778,6 +2828,7 @@ dependencies = [
  "oer-hil-model",
  "oer-hil-protocol",
  "oer-hil-scenario",
+ "oer-ieee80211-conformance-control",
  "oer-ieee80211-model",
  "oer-ieee80211-port",
  "oer-ieee80211-upper-mac",
@@ -2816,8 +2867,11 @@ dependencies = [
  "oer-hil-protocol",
  "oer-hil-runs",
  "oer-hil-scenario",
+ "oer-ieee80211-conformance-control",
+ "oer-ieee80211-control",
  "oer-ieee80211-port",
  "oer-lab-router",
+ "oer-network-control",
  "oer-os-durable",
  "oer-os-process",
  "serde",
@@ -2832,6 +2886,7 @@ dependencies = [
  "async-channel",
  "async-io",
  "futures-lite",
+ "oer-bluetooth-control",
  "oer-hil-lab",
  "oer-hil-protocol",
  "oer-hil-runs",
@@ -2853,6 +2908,7 @@ dependencies = [
  "hex",
  "oer-analysis-elf",
  "oer-chip-profile",
+ "oer-esp32s31-phy-probe",
  "oer-hil-link",
  "oer-hil-model",
  "oer-hil-protocol",
@@ -2878,7 +2934,10 @@ dependencies = [
  "mio",
  "oer-diagnostics",
  "oer-hil-protocol",
+ "oer-hil-registry",
+ "oer-ieee80211-control",
  "oer-lab-board",
+ "oer-network-control",
  "oer-os-durable",
  "oer-os-process",
  "postcard",
@@ -2895,6 +2954,8 @@ version = "0.1.0"
 dependencies = [
  "hex",
  "oer-chip-profile",
+ "oer-esp32s31-instrumentation",
+ "oer-esp32s31-instrumentation-hil",
  "oer-hil-protocol",
  "oer-os-durable",
  "oer-time",
@@ -2911,6 +2972,7 @@ dependencies = [
  "oer-hil-link",
  "oer-hil-protocol",
  "oer-lab-fixture",
+ "oer-network-control",
  "oer-os-process",
  "rustix",
  "serde",
@@ -2937,8 +2999,6 @@ dependencies = [
  "crc",
  "embedded-io-async",
  "heapless",
- "oer-ieee80211-port",
- "oer-ieee80211-wire",
  "postcard",
  "postcard-schema",
  "serde",
@@ -2947,11 +3007,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-hil-registry"
+version = "0.1.0"
+dependencies = [
+ "oer-bluetooth-control",
+ "oer-esp32s31-instrumentation-hil",
+ "oer-esp32s31-phy-probe",
+ "oer-hil-protocol",
+ "oer-ieee80211-conformance-control",
+ "oer-ieee80211-control",
+ "oer-network-control",
+ "postcard-schema",
+ "serde",
+]
+
+[[package]]
 name = "oer-hil-run"
 version = "0.1.0"
 dependencies = [
  "clap",
  "oer-chip-profile",
+ "oer-esp32s31-instrumentation-hil",
+ "oer-esp32s31-phy-probe",
  "oer-espressif-facts",
  "oer-hil-analysis",
  "oer-hil-family-lower-mac",
@@ -2961,8 +3038,11 @@ dependencies = [
  "oer-hil-link",
  "oer-hil-model",
  "oer-hil-protocol",
+ "oer-hil-registry",
  "oer-hil-runs",
  "oer-hil-scenario",
+ "oer-ieee80211-conformance-control",
+ "oer-ieee80211-control",
  "oer-image-build",
  "oer-image-bundle",
  "oer-image-checks",
@@ -2988,6 +3068,7 @@ dependencies = [
  "flate2",
  "oer-hil-model",
  "oer-hil-protocol",
+ "oer-hil-registry",
  "oer-hil-scenario",
  "oer-os-durable",
  "oer-os-process",
@@ -3006,9 +3087,11 @@ dependencies = [
  "oer-hil-link",
  "oer-hil-model",
  "oer-hil-protocol",
+ "oer-hil-registry",
  "oer-hil-runs",
  "oer-image-bundle",
  "oer-lab-board",
+ "oer-network-control",
  "oer-os-durable",
  "oer-os-process",
  "rustix",
@@ -3054,6 +3137,30 @@ dependencies = [
  "oer-ieee80211-wire",
  "oer-test-ui-cases",
  "subtle",
+ "zeroize",
+]
+
+[[package]]
+name = "oer-ieee80211-conformance-control"
+version = "0.1.0"
+dependencies = [
+ "oer-hil-protocol",
+ "oer-ieee80211-port",
+ "oer-ieee80211-wire",
+ "postcard-schema",
+ "serde",
+]
+
+[[package]]
+name = "oer-ieee80211-control"
+version = "0.1.0"
+dependencies = [
+ "heapless",
+ "oer-hil-protocol",
+ "postcard",
+ "postcard-schema",
+ "serde",
+ "serde_json",
  "zeroize",
 ]
 
@@ -3374,6 +3481,7 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "libc",
+ "oer-bluetooth-control",
  "oer-hil-protocol",
  "oer-ieee80211-wire",
  "oer-os-durable",
@@ -3437,6 +3545,18 @@ dependencies = [
 [[package]]
 name = "oer-network"
 version = "0.1.0"
+
+[[package]]
+name = "oer-network-control"
+version = "0.1.0"
+dependencies = [
+ "crc",
+ "heapless",
+ "oer-hil-protocol",
+ "postcard",
+ "postcard-schema",
+ "serde",
+]
 
 [[package]]
 name = "oer-os-command-tree"
@@ -3668,6 +3788,7 @@ dependencies = [
  "oer-hil-lab",
  "oer-hil-model",
  "oer-hil-observer",
+ "oer-hil-registry",
  "oer-hil-run",
  "oer-hil-runs",
  "oer-image-build",
@@ -3700,6 +3821,7 @@ dependencies = [
  "embedded-io 0.7.1",
  "embedded-io-async",
  "libc",
+ "oer-bluetooth-control",
  "oer-bluetooth-hci",
  "oer-hil-protocol",
  "oer-lab-fixture",
@@ -3930,8 +4052,11 @@ dependencies = [
  "oer-analysis-elf",
  "oer-cooperate",
  "oer-diagnostics",
+ "oer-esp32s31-instrumentation",
+ "oer-esp32s31-instrumentation-hil",
  "oer-esp32s31-knowledge",
  "oer-esp32s31-phy",
+ "oer-esp32s31-phy-probe",
  "oer-hil-lab",
  "oer-hil-link",
  "oer-hil-model",

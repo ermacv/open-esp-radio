@@ -1,7 +1,7 @@
 // Compile the actual image-local clock-free recorder on the host.
 #[path = "../../../../firmware/hil/esp32s31-phy/src/hold/recorder.rs"]
 mod recorder;
-use oer_hil_protocol::phy::{HOLD_INTERVALS, HoldOperation as Op};
+use oer_esp32s31_phy_probe::{HOLD_INTERVALS, HoldOperation as Op};
 use oer_time::{Clock, Duration};
 use oer_time_virtual::VirtualClock;
 use recorder::Recorder;

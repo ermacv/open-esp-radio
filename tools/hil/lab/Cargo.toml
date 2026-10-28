@@ -13,6 +13,7 @@ description = "HIL run-level stand operation: the laboratory configuration, the 
 test-support = []
 
 [dependencies]
+oer-esp32s31-phy-probe = { path = "../../../chips/esp32s31/phy-probe" }
 hex = "=0.4.3"
 oer-lab-router = { path = "../../lab/router" }
 oer-lab-board = { path = "../../lab/board" }

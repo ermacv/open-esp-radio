@@ -145,6 +145,9 @@ fn the_boundary_is_named_by_package_or_domain() {
 
 // The metadata-derived Espressif value/algorithm crates in docs/architecture.md.
 const ESPRESSIF_SANS_IO: &[&str] = &[
+    "chips/esp32s31/phy-probe",
+    "chips/esp32s31/instrumentation-hil",
+    "chips/esp32s31/instrumentation",
     "chips/espressif/analog",
     "chips/espressif/boot",
     "chips/espressif/coex",
@@ -797,6 +800,12 @@ enum ProtocolRole {
 }
 
 fn protocol_role(path: &str) -> Option<ProtocolRole> {
+    if ROLES
+        .iter()
+        .any(|(listed, role)| *listed == path && *role == Role::HilBinding)
+    {
+        return None;
+    }
     let protocol = path.strip_prefix("protocols/")?;
     if ["radio", "network", "hil"].contains(&protocol.split('/').next()?) {
         return None;
@@ -908,6 +917,13 @@ const ROLES: &[(&str, Role)] = &[
     ("chips/esp32s31/compose", Role::Composition),
     ("protocols/hil/protocol", Role::HilProtocol),
     ("protocols/hil/agent", Role::HilAgent),
+    ("protocols/ieee80211/control", Role::HilBinding),
+    ("protocols/network-control", Role::HilBinding),
+    ("protocols/bluetooth/control", Role::HilBinding),
+    ("protocols/ieee80211/conformance-control", Role::HilBinding),
+    ("chips/esp32s31/phy-probe", Role::HilBinding),
+    ("chips/esp32s31/instrumentation-hil", Role::HilBinding),
+    ("chips/esp32s31/instrumentation", Role::ObservationContract),
     ("firmware/hil/esp32s31", Role::HilImage),
     ("firmware/hil/esp32s31-lower-mac", Role::HilImage),
     ("firmware/hil/esp32s31-phy", Role::HilImage),
@@ -2640,16 +2656,6 @@ const OUTSIDE_THE_ROLES: &[Deviation] = &[
         "firmware/hil/esp32s31-phy",
         "protocols/radio/regulatory",
         "the PHY capture probe and instrumentation (#848)",
-    ),
-    (
-        "protocols/hil/protocol",
-        "protocols/ieee80211/port",
-        "dictionaries move into their bindings (#848)",
-    ),
-    (
-        "protocols/hil/protocol",
-        "protocols/ieee80211/wire",
-        "dictionaries move into their bindings (#848)",
     ),
 ];
 

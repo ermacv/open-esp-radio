@@ -7,7 +7,7 @@ use oer_hil_protocol::{Envelope, Frame, Key, Message, MessageInfo};
 
 /// Every message this host knows, by key.
 static REGISTRY: LazyLock<HashMap<Key, &'static MessageInfo>> = LazyLock::new(|| {
-    oer_hil_protocol::registry()
+    oer_hil_registry::registry()
         .map(|message| (message.key, message))
         .collect()
 });
