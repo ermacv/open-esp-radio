@@ -20,7 +20,7 @@ fn domain_channel_ranges_partition_the_mask() {
     assert_eq!(next, 64);
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 struct Wake(u32);
 
 impl crate::Event for Wake {
@@ -144,4 +144,134 @@ fn caller_owned_record_buffers_keep_the_legacy_cyclic_order() {
             }
         }
     }
+}
+
+/// Keeps how many observations it received and the words of the last one.
+#[derive(Default)]
+struct Keeping {
+    count: core::cell::Cell<u32>,
+    last: core::cell::Cell<Option<(Kind, [u32; 2])>>,
+}
+
+impl crate::Observer for Keeping {
+    fn event<E: crate::Event + Copy + 'static>(&self, event: E) {
+        self.count.set(self.count.get() + 1);
+        self.last.set(Some((E::KIND, event.encode())));
+    }
+}
+
+/// An owner that reports one event per step through its observer field.
+struct Owner<O: crate::Observer = crate::Noop> {
+    observer: O,
+    steps: u32,
+}
+
+impl<O: crate::Observer> Owner<O> {
+    /// Advances the owner; `evaluated` counts evaluations of the event, so
+    /// it is read only inside the observation point.
+    #[cfg_attr(not(oer_trace), allow(unused_variables))]
+    fn step(&mut self, evaluated: &core::cell::Cell<u32>) -> u32 {
+        self.steps = self.steps.wrapping_add(1);
+        crate::observe!(self.observer, {
+            evaluated.set(evaluated.get() + 1);
+            Wake(self.steps)
+        });
+        self.steps
+    }
+}
+
+/// A child that receives its parent's observer by reference.
+struct Child<'a, O: crate::Observer>(&'a O);
+
+impl<O: crate::Observer> Child<'_, O> {
+    #[cfg_attr(not(oer_trace), allow(unused_variables))]
+    fn report(&self, evaluated: &core::cell::Cell<u32>) {
+        crate::observe!(self.0, {
+            evaluated.set(evaluated.get() + 1);
+            Wake(40)
+        });
+    }
+}
+
+#[test]
+fn the_noop_observer_adds_nothing_to_its_owner() {
+    use core::mem::{align_of, needs_drop, size_of};
+    assert_eq!(size_of::<crate::Noop>(), 0);
+    assert_eq!(align_of::<crate::Noop>(), 1);
+    assert!(!needs_drop::<crate::Noop>());
+    assert_eq!(size_of::<Owner>(), size_of::<u32>());
+    assert_eq!(align_of::<Owner>(), align_of::<u32>());
+    let evaluated = core::cell::Cell::new(0);
+    let mut owner = Owner {
+        observer: crate::Noop,
+        steps: 0,
+    };
+    assert_eq!(owner.step(&evaluated), 1);
+    Child(&owner.observer).report(&evaluated);
+}
+
+#[test]
+fn observers_by_reference_forward_to_the_owner_observer() {
+    use crate::Observer;
+    fn forward<O: Observer>(observer: O) {
+        observer.event(Wake(3));
+    }
+    let keeping = Keeping::default();
+    forward(&keeping);
+    assert_eq!(keeping.count.get(), 1);
+    assert_eq!(
+        keeping.last.get(),
+        Some((Kind::new(Domain::Phy, 4), [3, 0]))
+    );
+}
+
+#[cfg(not(oer_trace))]
+#[test]
+fn a_point_without_the_trace_cfg_evaluates_no_argument_and_reports_nothing() {
+    let evaluated = core::cell::Cell::new(0);
+    let mut owner = Owner {
+        observer: Keeping::default(),
+        steps: 0,
+    };
+    assert_eq!(owner.step(&evaluated), 1);
+    assert_eq!(owner.step(&evaluated), 2);
+    Child(&owner.observer).report(&evaluated);
+    let binding = &owner.observer;
+    crate::observe!(binding, {
+        evaluated.set(evaluated.get() + 1);
+        Wake(50)
+    });
+    assert_eq!(evaluated.get(), 0);
+    assert_eq!(owner.observer.count.get(), 0);
+    assert_eq!(owner.observer.last.get(), None);
+}
+
+#[cfg(oer_trace)]
+#[test]
+fn a_point_with_the_trace_cfg_evaluates_its_event_once_and_reports_it() {
+    let evaluated = core::cell::Cell::new(0);
+    let mut owner = Owner {
+        observer: Keeping::default(),
+        steps: 0,
+    };
+    assert_eq!(owner.step(&evaluated), 1);
+    assert_eq!(owner.step(&evaluated), 2);
+    assert_eq!(evaluated.get(), 2);
+    assert_eq!(owner.observer.count.get(), 2);
+    assert_eq!(
+        owner.observer.last.get(),
+        Some((Kind::new(Domain::Phy, 4), [2, 0]))
+    );
+    Child(&owner.observer).report(&evaluated);
+    let binding = &owner.observer;
+    crate::observe!(binding, {
+        evaluated.set(evaluated.get() + 1);
+        Wake(50)
+    });
+    assert_eq!(evaluated.get(), 4);
+    assert_eq!(owner.observer.count.get(), 4);
+    assert_eq!(
+        owner.observer.last.get(),
+        Some((Kind::new(Domain::Phy, 4), [50, 0]))
+    );
 }

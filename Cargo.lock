@@ -3872,6 +3872,9 @@ dependencies = [
 [[package]]
 name = "oer-trace"
 version = "0.1.0"
+dependencies = [
+ "tempfile",
+]
 
 [[package]]
 name = "oer-vendor-ieee802154-esp32s31"
