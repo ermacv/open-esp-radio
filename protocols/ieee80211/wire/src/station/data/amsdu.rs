@@ -143,7 +143,10 @@ impl<'a> StaProtectedAmsduFrame<'a> {
         );
         plan.set_protected(true);
         plan.set_amsdu(true);
-        plan.header[22..24].copy_from_slice(&self.sequence_number.sequence_control().to_le_bytes());
+        crate::encoding::write_array::<22, _, _>(
+            &mut plan.header,
+            &self.sequence_number.sequence_control().to_le_bytes(),
+        );
         let body =
             crate::encoding::AmsduBody::checked(self.ethernet_frames, HT_AMSDU_BASELINE_MAX_LEN)
                 .map_err(amsdu_error)?;

@@ -95,11 +95,14 @@ pub fn write_response(
         return Err(ResponseError::OutputTooSmall { required });
     }
     let mut fixed = *fixed;
-    fixed[..2].copy_from_slice(&[0x50, 0]);
+    crate::encoding::write_array::<0, _, _>(&mut fixed, &[0x50, 0]);
     fixed[2..4].fill(0);
-    fixed[4..10].copy_from_slice(&peer);
-    fixed[22..24].copy_from_slice(&sequence.sequence_control().to_le_bytes());
-    fixed[24..32].copy_from_slice(&timestamp_micros.to_le_bytes());
+    crate::encoding::write_array::<4, _, _>(&mut fixed, &peer);
+    crate::encoding::write_array::<22, _, _>(
+        &mut fixed,
+        &sequence.sequence_control().to_le_bytes(),
+    );
+    crate::encoding::write_array::<24, _, _>(&mut fixed, &timestamp_micros.to_le_bytes());
     let mut writer = oer_wire::Writer::new(output);
     let too_small = |_| ResponseError::OutputTooSmall { required };
     writer.write(&fixed).map_err(too_small)?;

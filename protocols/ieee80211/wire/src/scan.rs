@@ -501,7 +501,9 @@ fn replace<const N: usize>(
     };
     let value_length = oer_wire::PrefixLength::new(value.len()).ok_or(too_long)?;
     buffer.fill(0);
-    value_length.borrow_mut(buffer).copy_from_slice(value);
+    oer_wire::Writer::new(value_length.borrow_mut(buffer))
+        .write(value)
+        .map_err(|_| too_long)?;
     *length = value_length;
     Ok(())
 }
@@ -513,7 +515,9 @@ fn store_value<const N: usize>(
     value: &[u8],
 ) -> Option<oer_wire::PrefixLength<N>> {
     let length = oer_wire::PrefixLength::new(value.len())?;
-    length.borrow_mut(buffer).copy_from_slice(value);
+    oer_wire::Writer::new(length.borrow_mut(buffer))
+        .write(value)
+        .ok()?;
     Some(length)
 }
 
@@ -527,7 +531,7 @@ fn store_element<const N: usize>(
     let length = oer_wire::PrefixLength::new(value.len().checked_add(2)?)?;
     let (stored_header, stored_value) = length.borrow_mut(buffer).split_first_chunk_mut::<2>()?;
     *stored_header = header;
-    stored_value.copy_from_slice(value);
+    oer_wire::Writer::new(stored_value).write(value).ok()?;
     Some(length)
 }
 
@@ -539,6 +543,6 @@ fn exact_element<const N: usize>(header: [u8; 2], value: &[u8]) -> Option<[u8; N
         return None;
     }
     *stored_header = header;
-    stored_value.copy_from_slice(value);
+    oer_wire::Writer::new(stored_value).write(value).ok()?;
     Some(element)
 }

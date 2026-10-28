@@ -1,5 +1,59 @@
 //! A frame's immutable parts are its sizing and writing authority.
 
+mod fixed;
+pub(crate) use fixed::write_array;
+
+/// Admit both ranges before moving overlapping bytes. The borrowed enclosing
+/// region proves every read/write boundary; each split separates one output
+/// byte from its still-unmodified source. No scratch payload is needed.
+pub(crate) fn move_within(
+    storage: &mut [u8],
+    source: core::ops::Range<usize>,
+    destination: usize,
+) -> Result<(), oer_wire::Error> {
+    let length = source
+        .end
+        .checked_sub(source.start)
+        .ok_or(oer_wire::Error::ValueOutOfRange)?;
+    let destination_end = destination
+        .checked_add(length)
+        .ok_or(oer_wire::Error::LengthOverflow)?;
+    let required = source.end.max(destination_end);
+    let remaining = storage.len();
+    let mut region = storage
+        .get_mut(source.start.min(destination)..required)
+        .ok_or(oer_wire::Error::Truncated {
+            required,
+            remaining,
+        })?;
+    if destination > source.start {
+        // Positive separation; subtracting one selects a source in `rest`,
+        // which excludes the destination byte just split off.
+        let gap = destination
+            .abs_diff(source.start)
+            .checked_sub(1)
+            .ok_or(oer_wire::Error::ValueOutOfRange)?;
+        while let Some((output, rest)) = region.split_last_mut() {
+            let Some(&input) = rest.iter().rev().nth(gap) else {
+                break;
+            };
+            *output = input;
+            region = rest;
+        }
+    } else if destination < source.start {
+        let gap = destination
+            .abs_diff(source.start)
+            .checked_sub(1)
+            .ok_or(oer_wire::Error::ValueOutOfRange)?;
+        while let Some((output, rest)) = region.split_first_mut() {
+            let Some(&input) = rest.get(gap) else { break };
+            *output = input;
+            region = rest;
+        }
+    }
+    Ok(())
+}
+
 /// The parts retain every byte through capacity admission and publication.
 /// There is no independent length or final-offset field to disagree with the
 /// frame. Empty optional elements contribute neither bytes nor capacity.
@@ -122,7 +176,9 @@ impl<'a> AmsduBody<'a> {
                 // Admission proves payload + LLC <= u16::MAX. Neither this
                 // sum nor the subframe sum below can saturate.
                 const {
-                    assert!(usize::MAX - ETHERNET_HEADER_LEN >= u16::MAX as usize);
+                    if !(usize::MAX - ETHERNET_HEADER_LEN >= u16::MAX as usize) {
+                        panic!("invalid fixed wire geometry");
+                    };
                 }
                 let msdu_length = payload.len().saturating_add(LLC_SNAP_HEADER_LEN);
                 let padding: &[u8] = if Some(index) == count.checked_sub(1) {
@@ -152,7 +208,9 @@ impl<'a> AmsduBody<'a> {
 /// panicking split or second admission; the immutable source cannot shrink.
 fn admitted_prefix<const N: usize>(bytes: &[u8]) -> (&[u8], &[u8]) {
     const {
-        assert!(N > 0);
+        if !(N > 0) {
+            panic!("invalid fixed wire geometry");
+        };
     }
     let mut rest = bytes.iter();
     rest.nth(const { N - 1 });
@@ -168,6 +226,57 @@ fn admitted_prefix<const N: usize>(bytes: &[u8]) -> (&[u8], &[u8]) {
 #[cfg(test)]
 mod tests {
     use super::FrameParts;
+
+    #[test]
+    fn overlapping_moves_match_memmove_and_refuse_invalid_ranges_without_writes() {
+        use super::move_within;
+        // Every overlap, direction, empty range and endpoint in a small owner.
+        let original = [0, 1, 2, 3, 4, 5, 6, 7];
+        for start in 0..=9 {
+            for end in 0..=9 {
+                for destination in 0..=9 {
+                    let mut actual = original;
+                    let result = move_within(&mut actual, start..end, destination);
+                    if start <= end
+                        && end <= original.len()
+                        && destination + (end - start) <= original.len()
+                    {
+                        let mut expected = original;
+                        expected.copy_within(start..end, destination);
+                        assert_eq!(result, Ok(()));
+                        assert_eq!(actual, expected, "{start}..{end} -> {destination}");
+                    } else {
+                        assert!(result.is_err(), "{start}..{end} -> {destination}");
+                        assert_eq!(actual, original);
+                    }
+                }
+            }
+        }
+        let mut storage = original;
+        assert_eq!(
+            move_within(&mut storage, 0..1, usize::MAX),
+            Err(oer_wire::Error::LengthOverflow)
+        );
+        assert_eq!(
+            move_within(&mut storage, core::ops::Range { start: 5, end: 3 }, 0),
+            Err(oer_wire::Error::ValueOutOfRange)
+        );
+        assert_eq!(
+            move_within(&mut storage, 0..9, 0),
+            Err(oer_wire::Error::Truncated {
+                required: 9,
+                remaining: 8
+            })
+        );
+        assert_eq!(
+            move_within(&mut storage, 0..2, 7),
+            Err(oer_wire::Error::Truncated {
+                required: 9,
+                remaining: 8
+            })
+        );
+        assert_eq!(storage, original);
+    }
 
     #[test]
     fn capacity_admission_precedes_writing_and_preserves_the_unused_tail() {

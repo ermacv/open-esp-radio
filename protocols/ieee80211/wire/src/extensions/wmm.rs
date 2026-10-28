@@ -242,7 +242,9 @@ pub fn parse_wmm_parameter_element(element: &[u8]) -> Option<WmmParameterSet> {
 
     let mut access_categories = [WmmAcParameters::default(); 4];
     let mut seen = 0_u8;
-    for &[aci_aifsn, ecw, txop_low, txop_high] in records.as_chunks::<4>().0 {
+    let mut records = oer_wire::Reader::new(&records);
+    while !records.is_empty() {
+        let [aci_aifsn, ecw, txop_low, txop_high] = records.read::<4>().ok()?;
         let fields = AcRecord::from_bytes([aci_aifsn, ecw, txop_low, txop_high]);
         let aci = fields.aci().get();
         let category = WmmAccessCategory::from_aci(aci)?;

@@ -36,7 +36,10 @@ impl StaDataFrame<'_> {
             false,
         );
         let mut header = plan.header;
-        header[22..24].copy_from_slice(&self.sequence_number.sequence_control().to_le_bytes());
+        crate::encoding::write_array::<22, _, _>(
+            &mut header,
+            &self.sequence_number.sequence_control().to_le_bytes(),
+        );
         let mut reader = oer_wire::Reader::new(&header);
         let header = reader.take(usize::from(plan.header_len)).map_err(|_| {
             StationFrameError::OutputTooSmall {
@@ -112,7 +115,10 @@ impl StaProtectedDataFrame<'_> {
         // CCMP key selection.
         plan.set_protected(true);
         let mut header = plan.header;
-        header[22..24].copy_from_slice(&self.sequence_number.sequence_control().to_le_bytes());
+        crate::encoding::write_array::<22, _, _>(
+            &mut header,
+            &self.sequence_number.sequence_control().to_le_bytes(),
+        );
         let mut reader = oer_wire::Reader::new(&header);
         let header = reader.take(usize::from(plan.header_len)).map_err(|_| {
             StationFrameError::OutputTooSmall {
@@ -250,13 +256,16 @@ impl StaProtectedEthernetFrame {
             },
         )?;
         let length = frame.len();
-        plan.header[22..24].copy_from_slice(&self.sequence_number.sequence_control().to_le_bytes());
+        crate::encoding::write_array::<22, _, _>(
+            &mut plan.header,
+            &self.sequence_number.sequence_control().to_le_bytes(),
+        );
         let header: &[u8] = if self.peer_qos {
             &plan.header
         } else {
-            plan.header
-                .split_at(const { crate::data::IEEE80211_LEGACY_DATA_HEADER_LEN })
-                .0
+            let [legacy @ .., _, _] = &plan.header;
+            let legacy: &[u8; crate::data::IEEE80211_LEGACY_DATA_HEADER_LEN] = legacy;
+            legacy
         };
         crate::encoding::FrameParts([header, &self.ccmp_header, &plan.llc_snap])
             .write(frame)
@@ -349,20 +358,27 @@ impl StaProtectedEthernetFrame {
 
         // A station A-MSDU always owns the complete fixed-size QoS header.
         let mut header = plan.header;
-        header[22..24].copy_from_slice(&self.sequence_number.sequence_control().to_le_bytes());
+        crate::encoding::write_array::<22, _, _>(
+            &mut header,
+            &self.sequence_number.sequence_control().to_le_bytes(),
+        );
         const FIRST_PREFIX_LENGTH: usize = crate::data::IEEE80211_QOS_DATA_HEADER_LEN
             + CCMP_HEADER_LEN
             + AMSDU_SUBFRAME_HEADER_LEN
             + LLC_SNAP_HEADER_LEN;
         let first_prefix_length = FIRST_PREFIX_LENGTH;
-        storage.copy_within(
+        crate::encoding::move_within(
+            storage,
             ethernet_offset
                 .checked_add(ETHERNET_HEADER_LEN)
                 .ok_or(StationFrameError::LengthOverflow)?..ethernet_end,
             frame_offset
                 .checked_add(first_prefix_length)
                 .ok_or(StationFrameError::LengthOverflow)?,
-        );
+        )
+        .map_err(|_| StationFrameError::OutputTooSmall {
+            required: frame_end,
+        })?;
 
         // Disjoint slices retain the moved first payload while the two
         // fragment plans write only its prefix and the following subframe.
@@ -372,8 +388,16 @@ impl StaProtectedEthernetFrame {
                 .ok_or(StationFrameError::OutputTooSmall {
                     required: frame_end,
                 })?;
-        let (first_prefix, body) = frame.split_at_mut(first_prefix_length);
-        let (_, following) = body.split_at_mut(first_payload_length);
+        let (first_prefix, body) = frame.split_first_chunk_mut::<FIRST_PREFIX_LENGTH>().ok_or(
+            StationFrameError::OutputTooSmall {
+                required: frame_end,
+            },
+        )?;
+        let (_, following) = body.split_at_mut_checked(first_payload_length).ok_or(
+            StationFrameError::OutputTooSmall {
+                required: frame_end,
+            },
+        )?;
         let first_msdu_length = LLC_SNAP_HEADER_LEN
             .checked_add(first_payload_length)
             .ok_or(StationFrameError::LengthOverflow)?;

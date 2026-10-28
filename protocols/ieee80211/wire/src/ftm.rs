@@ -268,7 +268,7 @@ impl FtmRequestParameters {
         element[3] = fields.to_bytes()[1];
         element[4] = self.min_delta_ftm_100us;
         let partial_tsf = self.partial_tsf_timer.unwrap_or(0).to_le_bytes();
-        element[5..7].copy_from_slice(&partial_tsf);
+        crate::encoding::write_array::<5, _, _>(&mut element, &partial_tsf);
         fields = fields
             .with_no_partial_tsf(self.partial_tsf_timer.is_none())
             .with_asap(self.asap);
@@ -278,7 +278,10 @@ impl FtmRequestParameters {
             self.format_and_bandwidth.wire(),
         ));
         element[8] = fields.to_bytes()[6];
-        element[9..11].copy_from_slice(&self.burst_period_100ms.to_le_bytes());
+        crate::encoding::write_array::<9, _, _>(
+            &mut element,
+            &self.burst_period_100ms.to_le_bytes(),
+        );
         element
     }
 
@@ -407,7 +410,10 @@ impl FtmResponseParameters {
         fields = fields.with_duration(oer_wire::U8::from_low_bits(self.burst_duration.wire()));
         element[3] = fields.to_bytes()[1];
         element[4] = self.min_delta_ftm_100us;
-        element[5..7].copy_from_slice(&self.partial_tsf_timer.to_le_bytes());
+        crate::encoding::write_array::<5, _, _>(
+            &mut element,
+            &self.partial_tsf_timer.to_le_bytes(),
+        );
         fields = fields
             .with_asap_capable(self.asap_capable)
             .with_asap(self.asap);
@@ -417,7 +423,10 @@ impl FtmResponseParameters {
             self.format_and_bandwidth.wire(),
         ));
         element[8] = fields.to_bytes()[6];
-        element[9..11].copy_from_slice(&self.burst_period_100ms.to_le_bytes());
+        crate::encoding::write_array::<9, _, _>(
+            &mut element,
+            &self.burst_period_100ms.to_le_bytes(),
+        );
         Self::decode_element(&element)?;
         Ok(element)
     }
@@ -703,7 +712,9 @@ pub fn encode_measurement(
         g0,
         g1,
     ];
-    elements.copy_from_slice(information_elements);
+    oer_wire::Writer::new(elements)
+        .write(information_elements)
+        .map_err(|_| FtmWireError::OutputTooShort)?;
     FTM_MEASUREMENT_PREFIX_LEN
         .checked_add(information_elements.len())
         .ok_or(FtmWireError::OutputTooShort)

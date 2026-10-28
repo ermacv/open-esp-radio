@@ -64,11 +64,17 @@ impl ProbeRequest<'_> {
         let extended_rates = reader.remaining();
         let extended_rates_len = extended_rates.len();
         let mut header = [0; MANAGEMENT_HEADER_LEN];
-        header[0..2].copy_from_slice(&PROBE_REQUEST_FRAME_CONTROL.to_le_bytes());
-        header[4..10].copy_from_slice(&self.destination);
-        header[10..16].copy_from_slice(&self.source);
-        header[16..22].copy_from_slice(&self.bssid);
-        header[22..24].copy_from_slice(&self.sequence_number.sequence_control().to_le_bytes());
+        crate::encoding::write_array::<0, _, _>(
+            &mut header,
+            &PROBE_REQUEST_FRAME_CONTROL.to_le_bytes(),
+        );
+        crate::encoding::write_array::<4, _, _>(&mut header, &self.destination);
+        crate::encoding::write_array::<10, _, _>(&mut header, &self.source);
+        crate::encoding::write_array::<16, _, _>(&mut header, &self.bssid);
+        crate::encoding::write_array::<22, _, _>(
+            &mut header,
+            &self.sequence_number.sequence_control().to_le_bytes(),
+        );
         let extended_header = [
             EXTENDED_SUPPORTED_RATES_ELEMENT_ID,
             extended_rates_len as u8,

@@ -91,9 +91,9 @@ impl ApDataFrame<'_> {
             return Err(ApDataFrameError::InvalidAccessPoint);
         }
         let mut ethernet = [0; ETHERNET_HEADER_LEN];
-        ethernet[..6].copy_from_slice(&self.destination);
-        ethernet[6..12].copy_from_slice(&self.access_point);
-        ethernet[12..14].copy_from_slice(&self.ether_type.to_be_bytes());
+        crate::encoding::write_array::<0, _, _>(&mut ethernet, &self.destination);
+        crate::encoding::write_array::<6, _, _>(&mut ethernet, &self.access_point);
+        crate::encoding::write_array::<12, _, _>(&mut ethernet, &self.ether_type.to_be_bytes());
         let plan = plan_data_encapsulation(
             DataInterfaceRole::AccessPoint,
             self.access_point,
@@ -104,7 +104,10 @@ impl ApDataFrame<'_> {
             false,
         );
         let mut header = plan.header;
-        header[22..24].copy_from_slice(&self.sequence_number.sequence_control().to_le_bytes());
+        crate::encoding::write_array::<22, _, _>(
+            &mut header,
+            &self.sequence_number.sequence_control().to_le_bytes(),
+        );
         let mut reader = oer_wire::Reader::new(&header);
         let header = reader.take(usize::from(plan.header_len)).map_err(|_| {
             ApDataFrameError::OutputTooSmall {
@@ -162,7 +165,10 @@ impl ApUnprotectedDataFrame<'_> {
             plan.set_more_data(true);
         }
         let mut header = plan.header;
-        header[22..24].copy_from_slice(&self.sequence_number.sequence_control().to_le_bytes());
+        crate::encoding::write_array::<22, _, _>(
+            &mut header,
+            &self.sequence_number.sequence_control().to_le_bytes(),
+        );
         let mut reader = oer_wire::Reader::new(&header);
         let header = reader.take(usize::from(plan.header_len)).map_err(|_| {
             ApDataFrameError::OutputTooSmall {
@@ -240,7 +246,10 @@ impl ApProtectedDataFrame<'_> {
             plan.set_more_data(true);
         }
         let mut header = plan.header;
-        header[22..24].copy_from_slice(&self.sequence_number.sequence_control().to_le_bytes());
+        crate::encoding::write_array::<22, _, _>(
+            &mut header,
+            &self.sequence_number.sequence_control().to_le_bytes(),
+        );
         let mut reader = oer_wire::Reader::new(&header);
         let header = reader.take(usize::from(plan.header_len)).map_err(|_| {
             ApDataFrameError::OutputTooSmall {
@@ -365,7 +374,10 @@ impl ApAmsduFrame<'_> {
         plan.set_amsdu(true);
 
         let mut header = plan.header;
-        header[22..24].copy_from_slice(&self.sequence_number.sequence_control().to_le_bytes());
+        crate::encoding::write_array::<22, _, _>(
+            &mut header,
+            &self.sequence_number.sequence_control().to_le_bytes(),
+        );
         crate::encoding::FrameParts([
             header.as_slice(),
             self.ccmp_header
@@ -450,7 +462,10 @@ impl ApProtectedDataFrame<'_> {
                     required: prefix_end,
                 })?;
         let mut header = plan.header;
-        header[22..24].copy_from_slice(&self.sequence_number.sequence_control().to_le_bytes());
+        crate::encoding::write_array::<22, _, _>(
+            &mut header,
+            &self.sequence_number.sequence_control().to_le_bytes(),
+        );
         crate::encoding::FrameParts([header.as_slice(), &self.ccmp_header, &plan.llc_snap])
             .write(frame)
             .map_err(|required| ApDataFrameError::OutputTooSmall { required })?;
@@ -972,12 +987,10 @@ pub fn write_ht_association_response_frame_for_security(
             required: AP_ASSOCIATION_RESPONSE_LEN,
         })?;
     frame.fill(0);
-    frame[..MANAGEMENT_HEADER_LEN].copy_from_slice(&management_header(
-        0x0010,
-        access_point,
-        peer,
-        management_sequence,
-    ));
+    crate::encoding::write_array::<0, _, _>(
+        frame,
+        &management_header(0x0010, access_point, peer, management_sequence),
+    );
     let Some(body) =
         frame[MANAGEMENT_HEADER_LEN..].first_chunk_mut::<AP_ASSOCIATION_RESPONSE_BODY_LEN>()
     else {
@@ -995,7 +1008,8 @@ pub fn write_ht_association_response_frame_for_security(
         protection,
     )?;
     if security == ApSecurityPolicy::Open {
-        body[..2].copy_from_slice(
+        crate::encoding::write_array::<0, _, _>(
+            body,
             &profile
                 .capabilities(security.link_protection())
                 .to_le_bytes(),
@@ -1032,11 +1046,14 @@ fn management_header(
     management_sequence: SequenceNumber,
 ) -> [u8; MANAGEMENT_HEADER_LEN] {
     let mut frame = [0; MANAGEMENT_HEADER_LEN];
-    frame[..2].copy_from_slice(&frame_control.to_le_bytes());
-    frame[4..10].copy_from_slice(&peer);
-    frame[10..16].copy_from_slice(&access_point);
-    frame[16..22].copy_from_slice(&access_point);
-    frame[22..24].copy_from_slice(&management_sequence.sequence_control().to_le_bytes());
+    crate::encoding::write_array::<0, _, _>(&mut frame, &frame_control.to_le_bytes());
+    crate::encoding::write_array::<4, _, _>(&mut frame, &peer);
+    crate::encoding::write_array::<10, _, _>(&mut frame, &access_point);
+    crate::encoding::write_array::<16, _, _>(&mut frame, &access_point);
+    crate::encoding::write_array::<22, _, _>(
+        &mut frame,
+        &management_sequence.sequence_control().to_le_bytes(),
+    );
     frame
 }
 

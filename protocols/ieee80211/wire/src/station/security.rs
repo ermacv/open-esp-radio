@@ -75,10 +75,14 @@ impl SelectedRsn {
         reader.array::<SELECTED_RSN_IE_LEN>().ok()?;
         let rsnxe = reader.remaining();
         resumed.bytes[1] = resumed.bytes[1].checked_add(PMKID_LIST_LEN as u8)?;
-        resumed.bytes[SELECTED_RSN_IE_LEN..SELECTED_RSN_IE_LEN + 2]
-            .copy_from_slice(&1_u16.to_le_bytes());
-        resumed.bytes[SELECTED_RSN_IE_LEN + 2..SELECTED_RSN_IE_LEN + PMKID_LIST_LEN]
-            .copy_from_slice(&pmkid.0);
+        crate::encoding::write_array::<SELECTED_RSN_IE_LEN, _, _>(
+            &mut resumed.bytes,
+            &1_u16.to_le_bytes(),
+        );
+        crate::encoding::write_array::<{ SELECTED_RSN_IE_LEN + 2 }, _, _>(
+            &mut resumed.bytes,
+            &pmkid.0,
+        );
         let rsnxe_start = SELECTED_RSN_IE_LEN + PMKID_LIST_LEN;
         oer_wire::Writer::new(resumed.bytes.get_mut(rsnxe_start..)?)
             .write(rsnxe)
@@ -202,37 +206,39 @@ fn select_personal_rsn(
         management: management_protection.then_some(GroupManagementCipher::BipCmac128),
         pmkid: None,
     });
-    selected.bytes[..SELECTED_RSN_IE_LEN].copy_from_slice(&[
-        48,
-        20,
-        1,
-        0,
-        0x00,
-        0x0f,
-        0xac,
-        RSN_CIPHER_CCMP,
-        1,
-        0,
-        0x00,
-        0x0f,
-        0xac,
-        RSN_CIPHER_CCMP,
-        1,
-        0,
-        0x00,
-        0x0f,
-        0xac,
-        akm_type,
-        station_capabilities as u8,
-        station_capabilities.to_le_bytes()[1],
-    ]);
+    crate::encoding::write_array::<0, _, _>(
+        &mut selected.bytes,
+        &[
+            48,
+            20,
+            1,
+            0,
+            0x00,
+            0x0f,
+            0xac,
+            RSN_CIPHER_CCMP,
+            1,
+            0,
+            0x00,
+            0x0f,
+            0xac,
+            RSN_CIPHER_CCMP,
+            1,
+            0,
+            0x00,
+            0x0f,
+            0xac,
+            akm_type,
+            station_capabilities as u8,
+            station_capabilities.to_le_bytes()[1],
+        ],
+    );
     selected.length = oer_wire::PrefixLength::constant::<SELECTED_RSN_IE_LEN>();
     if matches!(akm, AssociationAkm::Sae(_)) {
-        selected.bytes[SELECTED_RSN_IE_LEN..SELECTED_RSN_IE_LEN + 3].copy_from_slice(&[
-            RSNXE_ELEMENT_ID,
-            1,
-            RSNXE_SAE_H2E,
-        ]);
+        crate::encoding::write_array::<SELECTED_RSN_IE_LEN, _, _>(
+            &mut selected.bytes,
+            &[RSNXE_ELEMENT_ID, 1, RSNXE_SAE_H2E],
+        );
         selected.length = oer_wire::PrefixLength::constant::<{ SELECTED_RSN_IE_LEN + 3 }>();
     }
     Ok(selected)

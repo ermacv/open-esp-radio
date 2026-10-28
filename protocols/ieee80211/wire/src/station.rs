@@ -128,11 +128,14 @@ fn management_header(
     sequence_number: SequenceNumber,
 ) -> [u8; MANAGEMENT_HEADER_LEN] {
     let mut frame = [0; MANAGEMENT_HEADER_LEN];
-    frame[0..2].copy_from_slice(&frame_control.to_le_bytes());
-    frame[4..10].copy_from_slice(&destination);
-    frame[10..16].copy_from_slice(&source);
-    frame[16..22].copy_from_slice(&bssid);
-    frame[22..24].copy_from_slice(&sequence_number.sequence_control().to_le_bytes());
+    crate::encoding::write_array::<0, _, _>(&mut frame, &frame_control.to_le_bytes());
+    crate::encoding::write_array::<4, _, _>(&mut frame, &destination);
+    crate::encoding::write_array::<10, _, _>(&mut frame, &source);
+    crate::encoding::write_array::<16, _, _>(&mut frame, &bssid);
+    crate::encoding::write_array::<22, _, _>(
+        &mut frame,
+        &sequence_number.sequence_control().to_le_bytes(),
+    );
     frame
 }
 

@@ -4,8 +4,9 @@
 //! returns borrowed views of it. It applies no suite or capability policy:
 //! station candidate selection and the RSN authenticator/supplicant apply
 //! their own acceptance rules to the same parsed element.
-//! Counted suite and PMKID lists retain array slices after parsing: each
-//! element's width is proved once, so iteration cannot omit a partial entry.
+//! Counted suite and PMKID lists retain complete byte spans after parsing.
+//! Their private construction proves an exact multiple of the entry width;
+//! iteration reads fixed arrays and cannot omit a partial entry.
 //!
 //! Received bytes reach this module; nothing here panics on them.
 #![deny(
@@ -116,20 +117,20 @@ pub enum RsnSyntaxError {
 /// A counted list of four-byte suite selectors.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct RsnSuiteList<'a> {
-    suites: &'a [[u8; SUITE_LEN]],
+    suites: CountedArrays<'a, SUITE_LEN>,
 }
 
 impl<'a> RsnSuiteList<'a> {
     pub const fn len(&self) -> usize {
-        self.suites.len()
+        self.suites.bytes.len() / SUITE_LEN
     }
 
     pub const fn is_empty(&self) -> bool {
-        self.suites.is_empty()
+        self.suites.bytes.is_empty()
     }
 
     pub fn iter(&self) -> impl Iterator<Item = [u8; 4]> + 'a {
-        self.suites.iter().copied()
+        self.suites.iter()
     }
 
     pub fn contains(&self, suite: [u8; 4]) -> bool {
@@ -144,7 +145,7 @@ pub struct RsnElement<'a> {
     pairwise_ciphers: RsnSuiteList<'a>,
     akm_suites: RsnSuiteList<'a>,
     capabilities: Option<u16>,
-    pmkids: Option<&'a [[u8; RSN_PMKID_LEN]]>,
+    pmkids: Option<CountedArrays<'a, RSN_PMKID_LEN>>,
     group_management_cipher: Option<[u8; 4]>,
 }
 
@@ -170,15 +171,7 @@ impl<'a> RsnElement<'a> {
         let pairwise_ciphers = reader.suite_list()?;
         let akm_suites = reader.suite_list()?;
         let capabilities = reader.optional(RsnReader::u16)?;
-        let pmkids = reader.optional(|reader| {
-            let count = reader.u16()?;
-            let length = usize::from(count)
-                .checked_mul(RSN_PMKID_LEN)
-                .ok_or(RsnSyntaxError::Malformed)?;
-            // take accepted exactly count complete PMKIDs; the remainder of
-            // this array view is empty by the length calculation above.
-            Ok(reader.take(length)?.as_chunks::<RSN_PMKID_LEN>().0)
-        })?;
+        let pmkids = reader.optional(|reader| reader.counted_arrays::<RSN_PMKID_LEN>())?;
         let group_management_cipher = reader.optional(RsnReader::suite)?;
         if !reader.0.is_empty() {
             return Err(RsnSyntaxError::Malformed);
@@ -215,18 +208,39 @@ impl<'a> RsnElement<'a> {
     pub const fn pmkid_count(&self) -> Option<u16> {
         match self.pmkids {
             // Parsing took exactly the u16 count carried by the element.
-            Some(pmkids) => Some(pmkids.len() as u16),
+            Some(pmkids) => Some((pmkids.bytes.len() / RSN_PMKID_LEN) as u16),
             None => None,
         }
     }
 
     /// The listed PMKIDs, in order.
     pub fn pmkids(&self) -> impl Iterator<Item = [u8; RSN_PMKID_LEN]> + use<'a> {
-        self.pmkids.unwrap_or(&[]).iter().copied()
+        self.pmkids.unwrap_or(CountedArrays { bytes: &[] }).iter()
     }
 
     pub const fn group_management_cipher(&self) -> Option<[u8; 4]> {
         self.group_management_cipher
+    }
+}
+
+/// A complete counted span. Only RsnReader::counted_arrays constructs it,
+/// after admitting exactly count * N bytes. The representation retains one
+/// borrowed slice; no count, allocation or partial entry is stored.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct CountedArrays<'a, const N: usize> {
+    bytes: &'a [u8],
+}
+
+impl<'a, const N: usize> CountedArrays<'a, N> {
+    fn iter(self) -> impl Iterator<Item = [u8; N]> + use<'a, N> {
+        let mut bytes = self.bytes;
+        core::iter::from_fn(move || {
+            // Construction admitted complete entries and N > 0. Thus None
+            // means the list is exhausted, never that an entry was dropped.
+            let (entry, rest) = bytes.split_first_chunk::<N>()?;
+            bytes = rest;
+            Some(*entry)
+        })
     }
 }
 
@@ -243,14 +257,22 @@ impl<'a> RsnReader<'a> {
         self.0.read().map_err(|_| RsnSyntaxError::Malformed)
     }
 
-    fn suite_list(&mut self) -> Result<RsnSuiteList<'a>, RsnSyntaxError> {
+    fn counted_arrays<const N: usize>(&mut self) -> Result<CountedArrays<'a, N>, RsnSyntaxError> {
+        const {
+            if N == 0 {
+                panic!("a counted entry must be nonempty");
+            }
+        }
         let count = usize::from(self.u16()?);
-        let length = count
-            .checked_mul(SUITE_LEN)
-            .ok_or(RsnSyntaxError::Malformed)?;
+        let length = count.checked_mul(N).ok_or(RsnSyntaxError::Malformed)?;
+        Ok(CountedArrays {
+            bytes: self.take(length)?,
+        })
+    }
+
+    fn suite_list(&mut self) -> Result<RsnSuiteList<'a>, RsnSyntaxError> {
         Ok(RsnSuiteList {
-            // Exactly count complete selectors; no remainder can be lost.
-            suites: self.take(length)?.as_chunks::<SUITE_LEN>().0,
+            suites: self.counted_arrays::<SUITE_LEN>()?,
         })
     }
 

@@ -1,4 +1,5 @@
 #![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
+#![allow(clippy::disallowed_macros, reason = "test assertions")]
 
 use core::mem::MaybeUninit;
 use oer_ieee80211_wire::ccmp::Ccmp128Key;

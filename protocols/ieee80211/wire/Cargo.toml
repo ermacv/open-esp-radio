@@ -19,6 +19,7 @@ oer-time = { path = "../../../portable/time" }
 zeroize = { version = "1.9.0", default-features = false, features = ["derive"] }
 
 [dev-dependencies]
+tempfile = "=3.27.0"
 oer-test-ui-cases = { path = "../../../tools/test/ui-cases" }
 
 [lints]

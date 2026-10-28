@@ -3124,6 +3124,7 @@ dependencies = [
  "oer-test-ui-cases",
  "oer-time",
  "oer-wire",
+ "tempfile",
  "zeroize",
 ]
 

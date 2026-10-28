@@ -325,10 +325,11 @@ impl<'payload> EspNowV1Payload<'payload> {
 
 // The admitted wire maximum proves both retained lengths fit in u16.
 const _: () = {
-    assert!(
-        ESP_NOW_MANAGEMENT_HEADER_LEN + ESP_NOW_V1_ACTION_OVERHEAD + ESP_NOW_V1_MAX_PAYLOAD_LEN
-            <= u16::MAX as usize
-    );
+    if !(ESP_NOW_MANAGEMENT_HEADER_LEN + ESP_NOW_V1_ACTION_OVERHEAD + ESP_NOW_V1_MAX_PAYLOAD_LEN
+        <= u16::MAX as usize)
+    {
+        panic!("invalid fixed wire geometry");
+    };
 };
 
 /// Strictly validated ESP-NOW v1 vendor Action body.
@@ -1000,6 +1001,36 @@ oer_wire::bitfield! {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn v2_element_boundaries_preserve_every_admitted_payload_length() {
+        let payload: std::vec::Vec<_> = (0..ESP_NOW_V2_MAX_PAYLOAD_LEN)
+            .map(|index| index as u8)
+            .collect();
+        for length in 0..=payload.len() {
+            let input = &payload[..length];
+            let action = EspNowV2Action::new(EspNowRandomValue::new([1, 2, 3, 4]), input).unwrap();
+            let elements: std::vec::Vec<_> = action.elements().collect();
+            assert_eq!(elements.len(), action.element_count());
+            assert_eq!(elements.len(), length.div_ceil(250).max(1));
+            assert!(
+                elements
+                    .iter()
+                    .flat_map(|element| element.payload())
+                    .copied()
+                    .eq(input.iter().copied())
+            );
+            let mut copied = std::vec![0xa5; length + 1];
+            assert_eq!(action.copy_payload(&mut copied), Ok(length));
+            assert_eq!(&copied[..length], input);
+            assert_eq!(copied[length], 0xa5);
+            if length > 0 {
+                let mut short = std::vec![0xa5; length - 1];
+                assert!(action.copy_payload(&mut short).is_err());
+                assert!(short.iter().all(|byte| *byte == 0xa5));
+            }
+        }
+    }
 
     fn source() -> EspNowUnicastAddress {
         EspNowUnicastAddress::new([2, 0, 0, 0, 0, 1]).unwrap()

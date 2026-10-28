@@ -57,7 +57,7 @@ impl HeUlMuPowerCapability {
         element[0] = 255;
         element[1] = 12;
         element[2] = HE_UL_MU_POWER_CAPABILITY_EXTENSION_ID;
-        element[3..12].copy_from_slice(&self.relative_to_rate_16);
+        crate::encoding::write_array::<3, _, _>(&mut element, &self.relative_to_rate_16);
         element
     }
 }
@@ -217,13 +217,16 @@ impl<P: AssociationPhy> AssociationRequest<'_, P> {
             self.he_ul_mu_power,
         )?;
         let mut fixed = [0; MANAGEMENT_HEADER_LEN + ASSOCIATION_FIXED_BODY_LEN];
-        fixed[..MANAGEMENT_HEADER_LEN].copy_from_slice(&management_header(
-            ASSOCIATION_REQUEST_FRAME_CONTROL,
-            self.access_point.bssid.get(),
-            self.source.get(),
-            self.access_point.bssid.get(),
-            self.sequence_number,
-        ));
+        crate::encoding::write_array::<0, _, _>(
+            &mut fixed,
+            &management_header(
+                ASSOCIATION_REQUEST_FRAME_CONTROL,
+                self.access_point.bssid.get(),
+                self.source.get(),
+                self.access_point.bssid.get(),
+                self.sequence_number,
+            ),
+        );
         // Privacy comes from the selected security mode, not an untrusted
         // scan record, even if that record bypassed candidate admission.
         let advertised = crate::management::CapabilityInformation::from_bytes(
@@ -237,8 +240,8 @@ impl<P: AssociationPhy> AssociationRequest<'_, P> {
                 self.security.security().link_protection(),
                 LinkProtection::Ccmp
             ));
-        fixed[24..26].copy_from_slice(&capability.to_bytes());
-        fixed[26..28].copy_from_slice(&self.listen_interval.to_le_bytes());
+        crate::encoding::write_array::<24, _, _>(&mut fixed, &capability.to_bytes());
+        crate::encoding::write_array::<26, _, _>(&mut fixed, &self.listen_interval.to_le_bytes());
         let mut rates = [0; MAX_SUPPORTED_RATES_LEN];
         let rates = rates
             .get_mut(..rates_len)
