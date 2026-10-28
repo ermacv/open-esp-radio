@@ -22,7 +22,27 @@ pub struct Store {
     window: Option<HealthWindow>,
     finished: Option<HealthFinished>,
 }
-const _: () = assert!(core::mem::size_of::<Store>() <= PSRAM_BUDGET);
+const _: () = const {
+    if core::mem::size_of::<Store>() > PSRAM_BUDGET || MAX_RECORDS > u16::MAX as usize {
+        panic!("health storage must fit its budget and protocol counters");
+    }
+};
+
+/// Refused before appending: the exact category count cannot represent a record.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CountOverflow {
+    pub kind: CountKind,
+    pub count: u16,
+    pub stored: usize,
+}
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CountKind {
+    Counter,
+    Signal,
+    Tracking,
+    Measurement,
+}
+
 impl Default for Store {
     fn default() -> Self {
         Self::new()
@@ -148,21 +168,33 @@ impl Store {
             self.failed = true;
         }
     }
-    pub fn push(&mut self, record: Record) {
+    pub fn push(&mut self, record: Record) -> core::result::Result<(), CountOverflow> {
         if !matches!(self.state, State::Armed | State::Capturing) {
-            return;
+            return Ok(());
         }
-        let count = match record {
-            Record::Counter(_) => &mut self.counts.counters,
-            Record::Signal(_) => &mut self.counts.signals,
-            Record::Tracking(_) => &mut self.counts.tracking,
-            Record::Measurement(_) => &mut self.counts.measurements,
+        let (kind, count) = match record {
+            Record::Counter(_) => (CountKind::Counter, &mut self.counts.counters),
+            Record::Signal(_) => (CountKind::Signal, &mut self.counts.signals),
+            Record::Tracking(_) => (CountKind::Tracking, &mut self.counts.tracking),
+            Record::Measurement(_) => (CountKind::Measurement, &mut self.counts.measurements),
+        };
+        // A full store has the existing counted-loss policy. Otherwise check
+        // the category count before committing either the record or its count.
+        let next = if self.records.is_full() {
+            *count
+        } else {
+            count.checked_add(1).ok_or(CountOverflow {
+                kind,
+                count: *count,
+                stored: self.records.len(),
+            })?
         };
         if self.records.push(record).is_err() {
             self.dropped = self.dropped.saturating_add(1);
         } else {
-            *count += 1;
+            *count = next;
         }
+        Ok(())
     }
     /// Call after the already-started operation and RF cleanup have returned, even on failure.
     pub fn finish(&mut self, identity: HealthIdentity, rf_closed: bool) -> Result<HealthFinished> {
@@ -316,7 +348,7 @@ mod tests {
         };
         assert!(store.tracking(page).is_err());
         for _ in 0..MAX_RECORDS + 1 {
-            store.push(record());
+            store.push(record()).unwrap();
         }
         store
             .window_finished(HealthWindow {
@@ -331,7 +363,7 @@ mod tests {
         assert_eq!(result.dropped, 1);
         assert_eq!(result.counts.total(), MAX_RECORDS);
         assert!(!result.complete());
-        store.push(record());
+        store.push(record()).unwrap();
         assert_eq!(
             store.tracking(page).expect("read").total,
             MAX_RECORDS as u16
@@ -364,5 +396,21 @@ mod tests {
             .expect("failure evidence");
         assert_eq!(result.identity.epoch, 0);
         assert!(!result.complete());
+    }
+    #[test]
+    fn category_overflow_refuses_before_mutating_storage() {
+        let mut store = Store::new();
+        store.begin(config(), 7).unwrap();
+        store.counts.tracking = u16::MAX;
+        assert_eq!(
+            store.push(record()),
+            Err(CountOverflow {
+                kind: CountKind::Tracking,
+                count: u16::MAX,
+                stored: 0
+            })
+        );
+        assert!(store.records.is_empty());
+        assert_eq!(store.counts.tracking, u16::MAX);
     }
 }

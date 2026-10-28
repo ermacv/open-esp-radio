@@ -2,8 +2,19 @@
 
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, watch::Watch};
 
+const RECEIVERS: usize = 16;
+
+/// An impossible terminal-barrier fan-out. The image retains these observations
+/// and resets without performing the action guarded by the failed barrier.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ReceiverLimit {
+    pub sequence: u32,
+    pub next: Option<u32>,
+    pub capacity: usize,
+}
+
 pub struct SerializedEvents {
-    next: Watch<CriticalSectionRawMutex, u32, 16>,
+    next: Watch<CriticalSectionRawMutex, u32, RECEIVERS>,
 }
 
 impl Default for SerializedEvents {
@@ -23,13 +34,18 @@ impl SerializedEvents {
         self.next.sender().send(next);
     }
 
-    pub async fn wait_for(&self, sequence: u32) {
+    pub async fn wait_for(&self, sequence: u32) -> Result<(), ReceiverLimit> {
         let target = sequence.wrapping_add(1);
-        let mut receiver = self.next.receiver().expect("bounded Wi-Fi event producers");
+        let mut receiver = self.next.receiver().ok_or_else(|| ReceiverLimit {
+            sequence,
+            next: self.next.try_get(),
+            capacity: RECEIVERS,
+        })?;
         // The writer can serialize several events before this producer runs.
         // Sequence order is unambiguous within the bounded in-flight window.
         receiver
             .get_and(|next| next.wrapping_sub(target) < (1 << 31))
             .await;
+        Ok(())
     }
 }

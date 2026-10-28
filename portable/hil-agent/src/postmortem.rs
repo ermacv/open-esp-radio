@@ -41,7 +41,7 @@ const FAULT_PANIC: u32 = 2;
 const PANIC_FILE_BYTES: usize = 48;
 const PANIC_MESSAGE_BYTES: usize = 96;
 
-#[derive(Clone, Copy, bytemuck::Zeroable, bytemuck::Pod)]
+#[derive(Clone, Copy, bytemuck::AnyBitPattern)]
 #[repr(C)]
 struct RawCheckpoint {
     name: [u8; CHECKPOINT_NAME_BYTES],
@@ -52,13 +52,36 @@ struct RawCheckpoint {
 }
 
 impl RawCheckpoint {
-    const EMPTY: Self = Self {
-        name: [0; CHECKPOINT_NAME_BYTES],
-        arg: 0,
-        uptime_ms: 0,
-        hart: 0,
-        crc: 0,
-    };
+    fn from_words([a, b, c, d, arg, uptime_ms, hart, crc]: [u32; 8]) -> Self {
+        let mut name = [0; CHECKPOINT_NAME_BYTES];
+        for (to, from) in name
+            .iter_mut()
+            .zip([a, b, c, d].into_iter().flat_map(u32::to_ne_bytes))
+        {
+            *to = from;
+        }
+        Self {
+            name,
+            arg,
+            uptime_ms,
+            hart,
+            crc,
+        }
+    }
+
+    fn into_words(self) -> [u32; 8] {
+        let [a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p] = self.name;
+        [
+            u32::from_ne_bytes([a, b, c, d]),
+            u32::from_ne_bytes([e, f, g, h]),
+            u32::from_ne_bytes([i, j, k, l]),
+            u32::from_ne_bytes([m, n, o, p]),
+            self.arg,
+            self.uptime_ms,
+            self.hart,
+            self.crc,
+        ]
+    }
 
     fn digest(&self) -> u32 {
         let mut digest = CRC.digest();
@@ -85,7 +108,7 @@ impl RawCheckpoint {
 /// The fault that ended a boot, a hang or a panic, in reset-retained
 /// memory. Any bit pattern is a fault record; an invalid one reports
 /// nothing.
-#[derive(Clone, Copy, bytemuck::Zeroable, bytemuck::Pod)]
+#[derive(Clone, Copy, bytemuck::AnyBitPattern)]
 #[repr(C)]
 pub struct FaultRecord {
     kind: u32,
@@ -175,7 +198,8 @@ impl FaultRecord {
                 stalled_task: match self.stalled_task {
                     0 => None,
                     position => Some(TaskStall {
-                        slot: *TaskSlot::ALL.get(usize::try_from(position - 1).ok()?)?,
+                        slot: *TaskSlot::ALL
+                            .get(usize::try_from(position.checked_sub(1)?).ok()?)?,
                         pending_ms: self.task_pending_ms,
                     }),
                 },
@@ -207,10 +231,12 @@ impl FaultRecord {
             }),
             samples: hang.samples,
             stalled_task: hang.stalled_task.map_or(0, |stall| {
-                TaskSlot::ALL
-                    .iter()
-                    .position(|slot| *slot == stall.slot)
-                    .map_or(0, |position| position as u32 + 1)
+                // Exhaustive over the protocol's two task slots: no missing
+                // position can silently erase a stall.
+                match stall.slot {
+                    TaskSlot::Console => 1,
+                    TaskSlot::SessionEvidence => 2,
+                }
             }),
             task_pending_ms: hang.stalled_task.map_or(0, |stall| stall.pending_ms),
             ..FaultRecord::EMPTY
@@ -241,7 +267,7 @@ impl FaultRecord {
 
 /// The checkpoint ring in reset-retained memory. Any bit pattern is a
 /// record; an invalid one reports nothing.
-#[derive(Clone, Copy, bytemuck::Zeroable, bytemuck::Pod)]
+#[derive(Clone, Copy, bytemuck::AnyBitPattern)]
 #[repr(C)]
 pub struct Record {
     magic: u32,
@@ -252,7 +278,55 @@ pub struct Record {
     /// Checkpoints written, at most the ring's size.
     len: u32,
     header_crc: u32,
-    checkpoints: [RawCheckpoint; POST_MORTEM_CHECKPOINTS],
+    // Primitive words retain exactly the same bytes and alignment. Arrays of
+    // user structs do not inherit bytemuck's AnyBitPattern without Pod.
+    checkpoints: [[u32; 8]; POST_MORTEM_CHECKPOINTS],
+}
+
+const RING_SIZE: u32 = POST_MORTEM_CHECKPOINTS as u32;
+const _: () = const {
+    if POST_MORTEM_CHECKPOINTS == 0 || POST_MORTEM_CHECKPOINTS > u8::MAX as usize {
+        panic!("checkpoint ring must be nonempty and fit its protocol count");
+    }
+    if CHECKPOINT_NAME_BYTES != 16
+        || core::mem::size_of::<RawCheckpoint>() != 32
+        || core::mem::align_of::<RawCheckpoint>() != 4
+        || core::mem::offset_of!(RawCheckpoint, arg) != 16
+        || core::mem::offset_of!(RawCheckpoint, crc) != 28
+    {
+        panic!("checkpoint layout changed");
+    }
+    if core::mem::size_of::<FaultRecord>() != 284
+        || core::mem::align_of::<FaultRecord>() != 4
+        || core::mem::offset_of!(FaultRecord, harts) != 12
+        || core::mem::offset_of!(FaultRecord, samples) != 60
+        || core::mem::offset_of!(FaultRecord, stalled_task) != 124
+        || core::mem::offset_of!(FaultRecord, panic_file) != 136
+        || core::mem::offset_of!(FaultRecord, panic_message) != 184
+        || core::mem::offset_of!(FaultRecord, crc) != 280
+    {
+        panic!("fault record layout changed");
+    }
+    if core::mem::size_of::<Record>() != 24 + 32 * POST_MORTEM_CHECKPOINTS
+        || core::mem::align_of::<Record>() != 4
+        || core::mem::offset_of!(Record, checkpoints) != 24
+    {
+        panic!("checkpoint record layout changed");
+    }
+};
+
+/// A checkpoint refused without changing its source record.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CheckpointFault {
+    pub head: u32,
+    pub len: u32,
+}
+
+/// An exact per-second count cannot represent another checkpoint.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct RateOverflow {
+    pub second: u32,
+    pub count: u32,
 }
 
 /// What the previous boot left behind.
@@ -297,7 +371,7 @@ impl Record {
         head: 0,
         len: 0,
         header_crc: 0,
-        checkpoints: [RawCheckpoint::EMPTY; POST_MORTEM_CHECKPOINTS],
+        checkpoints: [[0; 8]; POST_MORTEM_CHECKPOINTS],
     };
 
     fn header_digest(&self) -> u32 {
@@ -331,14 +405,17 @@ impl Record {
     pub fn begin_boot(&mut self, fault: &mut FaultRecord) -> Option<Previous> {
         let previous = self.header_valid().then(|| {
             let len = self.len as usize;
-            let first =
-                (self.head as usize + POST_MORTEM_CHECKPOINTS - len) % POST_MORTEM_CHECKPOINTS;
+            // The validated head and length describe modular ring positions.
+            let first = self.head.wrapping_add(RING_SIZE).wrapping_sub(self.len) % RING_SIZE;
             Previous {
                 boot_count: self.boot_count,
-                checkpoints: (0..len)
-                    .filter_map(|offset| {
-                        self.checkpoints[(first + offset) % POST_MORTEM_CHECKPOINTS].decode()
-                    })
+                checkpoints: self
+                    .checkpoints
+                    .iter()
+                    .cycle()
+                    .skip(first as usize)
+                    .take(len)
+                    .filter_map(|raw| RawCheckpoint::from_words(*raw).decode())
                     .collect(),
                 fault: fault.decode(),
             }
@@ -357,7 +434,20 @@ impl Record {
 
     /// Append a checkpoint, replacing the oldest once the ring is full. A
     /// name longer than a checkpoint holds is cut at a character boundary.
-    pub fn checkpoint(&mut self, name: &str, arg: u32, uptime_ms: u32, hart: u8) {
+    pub fn checkpoint(
+        &mut self,
+        name: &str,
+        arg: u32,
+        uptime_ms: u32,
+        hart: u8,
+    ) -> Result<(), CheckpointFault> {
+        let fault = CheckpointFault {
+            head: self.head,
+            len: self.len,
+        };
+        let len = self.len.checked_add(1).ok_or(fault)?.min(RING_SIZE);
+        let head = self.head % RING_SIZE;
+        let slot = self.checkpoints.get_mut(head as usize).ok_or(fault)?;
         let mut raw = RawCheckpoint {
             name: bytes(name),
             arg,
@@ -366,11 +456,11 @@ impl Record {
             crc: 0,
         };
         raw.crc = raw.digest();
-        let head = self.head as usize % POST_MORTEM_CHECKPOINTS;
-        self.checkpoints[head] = raw;
-        self.head = ((head + 1) % POST_MORTEM_CHECKPOINTS) as u32;
-        self.len = (self.len + 1).min(POST_MORTEM_CHECKPOINTS as u32);
+        *slot = raw.into_words();
+        self.head = head.wrapping_add(1) % RING_SIZE;
+        self.len = len;
         self.seal_header();
+        Ok(())
     }
 }
 
@@ -392,8 +482,8 @@ fn bytes<const N: usize>(text: &str) -> [u8; N] {
 
 /// The zero-padded text in `raw`; `None` when it is not UTF-8.
 fn text<const N: usize>(raw: &[u8]) -> Option<heapless::String<N>> {
-    let end = raw.iter().position(|&byte| byte == 0).unwrap_or(raw.len());
-    heapless::String::try_from(core::str::from_utf8(&raw[..end]).ok()?).ok()
+    let prefix = raw.split(|&byte| byte == 0).next()?;
+    heapless::String::try_from(core::str::from_utf8(prefix).ok()?).ok()
 }
 
 /// Checkpoints per second above which a caller is misusing checkpoints.
@@ -417,15 +507,18 @@ impl RateMonitor {
 
     /// Count a checkpoint at `uptime_ms`; returns the previous second's count
     /// when that second exceeded the limit.
-    pub fn record(&mut self, uptime_ms: u32) -> Option<u32> {
+    pub fn record(&mut self, uptime_ms: u32) -> Result<Option<u32>, RateOverflow> {
         let second = uptime_ms / 1000;
         if second == self.second {
-            self.count += 1;
-            return None;
+            self.count = self.count.checked_add(1).ok_or(RateOverflow {
+                second: self.second,
+                count: self.count,
+            })?;
+            return Ok(None);
         }
         let previous = core::mem::replace(&mut self.count, 1);
         self.second = second;
-        (previous > CHECKPOINT_RATE_LIMIT).then_some(previous)
+        Ok((previous > CHECKPOINT_RATE_LIMIT).then_some(previous))
     }
 }
 
@@ -504,8 +597,8 @@ mod tests {
     fn the_next_boot_reports_checkpoints_and_the_fault_once() {
         let (mut record, mut fault) = (Record::EMPTY, FaultRecord::EMPTY);
         record.begin_boot(&mut fault);
-        record.checkpoint("wifi.start", 1, 10, 0);
-        record.checkpoint("coex.grant", 2, 20, 1);
+        record.checkpoint("wifi.start", 1, 10, 0).unwrap();
+        record.checkpoint("coex.grant", 2, 20, 1).unwrap();
         fault.record_hang(&hang());
         let previous = record.begin_boot(&mut fault).unwrap();
         assert_eq!(previous.boot_count, 1);
@@ -548,7 +641,7 @@ mod tests {
         let (mut record, mut fault) = (Record::EMPTY, FaultRecord::EMPTY);
         record.begin_boot(&mut fault);
         for index in 0..(POST_MORTEM_CHECKPOINTS as u32 + 5) {
-            record.checkpoint("step", index, index, 0);
+            record.checkpoint("step", index, index, 0).unwrap();
         }
         let previous = record.begin_boot(&mut fault).unwrap();
         let args = previous
@@ -577,15 +670,15 @@ mod tests {
     fn a_corrupted_part_is_dropped_and_the_rest_reported() {
         let (mut record, mut fault) = (Record::EMPTY, FaultRecord::EMPTY);
         record.begin_boot(&mut fault);
-        record.checkpoint("kept", 1, 1, 0);
-        record.checkpoint("damaged", 2, 2, 0);
+        record.checkpoint("kept", 1, 1, 0).unwrap();
+        record.checkpoint("damaged", 2, 2, 0).unwrap();
         fault.record_panic("src/main.rs", 42, "boom");
-        record.checkpoints[1].arg ^= 1;
+        record.checkpoints[1][4] ^= 1;
         let previous = record.begin_boot(&mut fault).unwrap();
         assert_eq!(previous.checkpoints.len(), 1);
         assert_eq!(previous.checkpoints[0].name.as_str(), "kept");
         assert!(matches!(previous.fault, Some(Fault::Panic(ref panic)) if panic.line == 42));
-        record.checkpoint("x", 0, 0, 0);
+        record.checkpoint("x", 0, 0, 0).unwrap();
         fault.record_panic("f", 1, "m");
         fault.panic_line ^= 1;
         assert_eq!(record.begin_boot(&mut fault).unwrap().fault, None);
@@ -595,7 +688,9 @@ mod tests {
     fn long_texts_are_cut_at_a_character_boundary() {
         let (mut record, mut fault) = (Record::EMPTY, FaultRecord::EMPTY);
         record.begin_boot(&mut fault);
-        record.checkpoint("ieee802154.receive.frame", 0, 0, 0);
+        record
+            .checkpoint("ieee802154.receive.frame", 0, 0, 0)
+            .unwrap();
         fault.record_panic(&"é".repeat(40), 7, &"x".repeat(200));
         let previous = record.begin_boot(&mut fault).unwrap();
         assert_eq!(previous.checkpoints[0].name.as_str(), "ieee802154.recei");
@@ -610,9 +705,103 @@ mod tests {
     fn a_second_with_too_many_checkpoints_is_reported_once_it_ends() {
         let mut monitor = RateMonitor::default();
         for index in 0..=CHECKPOINT_RATE_LIMIT {
-            assert_eq!(monitor.record(index % 1000), None);
+            assert_eq!(monitor.record(index % 1000), Ok(None));
         }
-        assert_eq!(monitor.record(1_000), Some(CHECKPOINT_RATE_LIMIT + 1));
-        assert_eq!(monitor.record(2_000), None);
+        assert_eq!(monitor.record(1_000), Ok(Some(CHECKPOINT_RATE_LIMIT + 1)));
+        assert_eq!(monitor.record(2_000), Ok(None));
+    }
+    #[test]
+    fn checkpoint_count_overflow_preserves_the_source_record() {
+        let (mut record, mut fault) = (Record::EMPTY, FaultRecord::EMPTY);
+        record.begin_boot(&mut fault);
+        record.checkpoint("kept", 1, 2, 0).unwrap();
+        record.len = u32::MAX;
+        let before = record;
+        assert_eq!(
+            record.checkpoint("refused", 3, 4, 1),
+            Err(CheckpointFault {
+                head: 1,
+                len: u32::MAX
+            })
+        );
+        assert_eq!(record.checkpoints, before.checkpoints);
+        assert_eq!(
+            (record.head, record.len, record.header_crc),
+            (before.head, before.len, before.header_crc)
+        );
+    }
+
+    #[test]
+    fn rate_overflow_retains_the_exact_count_for_the_owner() {
+        let mut monitor = RateMonitor {
+            second: 7,
+            count: u32::MAX,
+        };
+        assert_eq!(
+            monitor.record(7_001),
+            Err(RateOverflow {
+                second: 7,
+                count: u32::MAX
+            })
+        );
+        assert_eq!((monitor.second, monitor.count), (7, u32::MAX));
+        assert_eq!(monitor.record(8_000), Ok(Some(u32::MAX)));
+    }
+
+    #[test]
+    fn every_task_slot_round_trips_and_out_of_range_positions_are_refused() {
+        for slot in TaskSlot::ALL {
+            let hang = HangFault {
+                stalled_task: Some(TaskStall {
+                    slot,
+                    pending_ms: 17,
+                }),
+                ..hang()
+            };
+            let mut fault = FaultRecord::EMPTY;
+            fault.record_hang(&hang);
+            assert_eq!(fault.decode(), Some(Fault::Hang(hang)));
+            fault.stalled_task = u32::MAX;
+            fault = fault.seal();
+            assert_eq!(fault.decode(), None);
+        }
+    }
+    #[test]
+    fn the_existing_native_checkpoint_encoding_survives_the_next_boot() {
+        let (mut record, mut fault) = (Record::EMPTY, FaultRecord::EMPTY);
+        record.begin_boot(&mut fault);
+        let name = *b"legacy.capture\0\0";
+        let mut digest = CRC.digest();
+        digest.update(&name);
+        for word in [17_u32, 100, 1] {
+            digest.update(&word.to_le_bytes());
+        }
+        let encoded = [
+            u32::from_ne_bytes(*b"lega"),
+            u32::from_ne_bytes(*b"cy.c"),
+            u32::from_ne_bytes(*b"aptu"),
+            u32::from_ne_bytes(*b"re\0\0"),
+            17,
+            100,
+            1,
+            digest.finalize(),
+        ];
+        record.checkpoints[0] = encoded;
+        record.head = 1;
+        record.len = 1;
+        record.seal_header();
+        let previous = record.begin_boot(&mut fault).unwrap();
+        let checkpoint = previous.checkpoints.first().unwrap();
+        assert_eq!(
+            (
+                checkpoint.name.as_str(),
+                checkpoint.arg,
+                checkpoint.uptime_ms,
+                checkpoint.hart
+            ),
+            ("legacy.capture", 17, 100, 1)
+        );
+        record.checkpoint("legacy.capture", 17, 100, 1).unwrap();
+        assert_eq!(record.checkpoints[0], encoded);
     }
 }

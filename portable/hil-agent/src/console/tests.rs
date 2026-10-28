@@ -160,7 +160,7 @@ fn run_until(
         panic!("the console did not finish: {:?}", host.frames());
     };
     match block_on(select(run, watch)) {
-        Either::First(never) => never,
+        Either::First(failure) => panic!("console failed: {:?}", failure.cause),
         Either::Second(()) => {}
     }
 }
@@ -251,7 +251,7 @@ fn a_full_queue_drops_and_counts_instead_of_blocking() {
         );
     }
     assert_eq!(console.publish(0, 8, &GetBootStatus), None);
-    assert_eq!(console.link_health().tx_dropped, 1);
+    assert_eq!(console.link_health().unwrap().tx_dropped, 1);
 }
 
 fn rearm(step: u32) -> Note<'static> {
@@ -310,7 +310,7 @@ fn an_immediate_note_is_dropped_and_counted_when_the_queue_is_full() {
     assert_eq!(console.dropped_notes(), 0);
     console.note_immediately(&rearm(9));
     assert_eq!(console.dropped_notes(), 1);
-    assert_eq!(console.link_health().notes_dropped, 1);
+    assert_eq!(console.link_health().unwrap().notes_dropped, 1);
 }
 
 #[test]
@@ -452,6 +452,128 @@ fn a_control_reply_is_not_written_until_the_entire_frame_and_trailer_reach_the_e
     assert_eq!(written.as_mut().poll(&mut context), Poll::Pending);
     gate.signal(());
     assert_eq!(writing.as_mut().poll(&mut context), Poll::Ready(()));
-    assert_eq!(written.as_mut().poll(&mut context), Poll::Ready(()));
+    assert_eq!(written.as_mut().poll(&mut context), Poll::Ready(Ok(())));
     assert_eq!(host.frames(), [(9, sequence, WatchdogArmed::KEY)]);
+}
+
+#[test]
+fn failed_terminal_barrier_propagates_without_performing_the_terminal_action() {
+    use core::future::Future;
+    use core::task::{Context, Poll, Waker};
+    let console = console();
+    let mut cx = Context::from_waker(Waker::noop());
+    let mut waiting: Vec<_> = (0..16).map(|_| Box::pin(console.written(10))).collect();
+    for future in &mut waiting {
+        assert_eq!(future.as_mut().poll(&mut cx), Poll::Pending);
+    }
+    let acted = core::cell::Cell::new(false);
+    let mut terminal = core::pin::pin!(async {
+        console.written(20).await?;
+        acted.set(true);
+        Ok(())
+    });
+    assert_eq!(
+        terminal.as_mut().poll(&mut cx),
+        Poll::Ready(Err(progress::ReceiverLimit {
+            sequence: 20,
+            next: Some(0),
+            capacity: 16,
+        }))
+    );
+    assert!(!acted.get());
+}
+
+struct BrokenRead {
+    length: usize,
+    dropped: Rc<core::cell::Cell<bool>>,
+}
+impl embedded_io_async::ErrorType for BrokenRead {
+    type Error = core::convert::Infallible;
+}
+impl Read for BrokenRead {
+    async fn read(&mut self, _: &mut [u8]) -> Result<usize, Self::Error> {
+        Ok(self.length)
+    }
+}
+impl Write for BrokenRead {
+    async fn write(&mut self, bytes: &[u8]) -> Result<usize, Self::Error> {
+        Ok(bytes.len())
+    }
+    async fn flush(&mut self) -> Result<(), Self::Error> {
+        Ok(())
+    }
+}
+impl Drop for BrokenRead {
+    fn drop(&mut self) {
+        self.dropped.set(true);
+    }
+}
+
+#[test]
+fn invalid_read_length_returns_the_transport_without_releasing_it() {
+    for length in [RX_CHUNK + 1, usize::MAX] {
+        let console = console();
+        let dropped = Rc::new(core::cell::Cell::new(false));
+        let intake = Intake::new(BOOT, ImageKeySet::new(&SERVED), 0);
+        let failure = block_on(console.run(
+            BrokenRead {
+                length,
+                dropped: dropped.clone(),
+            },
+            intake,
+            &Chip,
+            |_, _: crate::base::NoRequests| {},
+        ));
+        assert_eq!(
+            failure.cause,
+            ConsoleFault::ReadLength {
+                length,
+                capacity: RX_CHUNK
+            }
+        );
+        assert!(!dropped.get(), "the fault retains the hardware owner");
+        drop(failure);
+        assert!(dropped.get());
+    }
+}
+
+#[test]
+fn counter_borrow_conflicts_return_typed_faults() {
+    let console = console();
+    console.received.lock(|received| {
+        let _exclusive = received.borrow_mut();
+        assert_eq!(
+            console.link_health(),
+            Err(ConsoleFault::CountersBorrowed { writing: false })
+        );
+    });
+    let dropped = Rc::new(core::cell::Cell::new(false));
+    let failure = console.received.lock(|received| {
+        let _reader = received.borrow();
+        let intake = Intake::new(BOOT, ImageKeySet::new(&SERVED), 0);
+        block_on(console.run(
+            BrokenRead {
+                length: 0,
+                dropped: dropped.clone(),
+            },
+            intake,
+            &Chip,
+            |_, _: crate::base::NoRequests| {},
+        ))
+    });
+    assert_eq!(
+        failure.cause,
+        ConsoleFault::CountersBorrowed { writing: true }
+    );
+    assert!(!dropped.get());
+    assert!(console.link_health().is_ok());
+}
+
+#[test]
+fn note_length_overflow_refuses_the_whole_line() {
+    let mut line = NoteLine::new();
+    line.length = usize::MAX;
+    line.encode(&Note::diag_lost(1));
+    assert!(line.framed().is_empty());
+    assert_eq!(line.bytes, [0; MAX_NOTE_LINE + 1]);
 }

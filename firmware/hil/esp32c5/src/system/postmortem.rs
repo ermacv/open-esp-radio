@@ -54,7 +54,14 @@ pub(crate) fn previous<T>(read: impl FnOnce(Option<&Previous>) -> T) -> T {
 /// single hart is 0.
 pub(crate) fn checkpoint(name: &str, arg: u32) {
     let now = uptime_ms();
-    with_record(|record| record.checkpoint(name, arg, now, 0));
+    with_record(|record| {
+        if let Err(fault) = record.checkpoint(name, arg, now, 0) {
+            oer_espressif_staged_runtime::panic::reset_fault(
+                oer_espressif_staged_runtime::panic::FaultReason::HilCheckpoint,
+                [fault.head, fault.len, arg, now],
+            );
+        }
+    });
 }
 
 /// Record the panic being handled, from the platform's panic entry. The

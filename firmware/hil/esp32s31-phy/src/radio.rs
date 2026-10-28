@@ -1111,18 +1111,20 @@ impl Radio {
                             (TrackingOperation::Common, 2),
                             (TrackingOperation::Transmit, 4),
                         ] {
-                            self.health.push(Record::Tracking(Tracking {
-                                condition: None,
-                                operation,
-                                due: Due::Unknown,
-                                disposition: if committed & bit != 0 {
-                                    Disposition::Ran
-                                } else {
-                                    Disposition::Skipped
-                                },
-                                at_micros: at,
-                                committed,
-                            }));
+                            self.health
+                                .push(Record::Tracking(Tracking {
+                                    condition: None,
+                                    operation,
+                                    due: Due::Unknown,
+                                    disposition: if committed & bit != 0 {
+                                        Disposition::Ran
+                                    } else {
+                                        Disposition::Skipped
+                                    },
+                                    at_micros: at,
+                                    committed,
+                                }))
+                                .unwrap_or_else(|fault| crate::health::count_fault(fault));
                         }
                         (Due::Due, Disposition::Ran, committed, false)
                     }
@@ -1131,14 +1133,16 @@ impl Radio {
                         (Due::Unknown, Disposition::Failed, 0, true)
                     }
                 };
-                self.health.push(Record::Tracking(Tracking {
-                    condition: None,
-                    operation: TrackingOperation::Tick,
-                    due,
-                    disposition,
-                    at_micros: at,
-                    committed,
-                }));
+                self.health
+                    .push(Record::Tracking(Tracking {
+                        condition: None,
+                        operation: TrackingOperation::Tick,
+                        due,
+                        disposition,
+                        at_micros: at,
+                        committed,
+                    }))
+                    .unwrap_or_else(|fault| crate::health::count_fault(fault));
                 if let Ok(state) = require_radio(self.domain.as_ref(), self.radio_fault)
                     .attachment()
                     .phy_state()

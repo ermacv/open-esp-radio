@@ -120,6 +120,18 @@ pub(crate) async fn run(mut console: Console) {
     );
     // Keep the large console future in its final storage; joining pinned
     // references avoids moving it into another future on the task stack.
+    let serving = async {
+        let failure = serving.await;
+        use oer_hil_agent::console::ConsoleFault;
+        let observations = match failure.cause {
+            ConsoleFault::ReadLength { length, capacity } => [0, length as u32, capacity as u32, 0],
+            ConsoleFault::CountersBorrowed { writing } => [1, u32::from(writing), 0, 0],
+        };
+        oer_espressif_staged_runtime::panic::reset_fault(
+            oer_espressif_staged_runtime::panic::FaultReason::HilConsole,
+            observations,
+        )
+    };
     let serving = core::pin::pin!(serving);
     let testing = core::pin::pin!(test_watchdog(console.service));
     let panicking = core::pin::pin!(super::panic::panic_on_request());
@@ -155,7 +167,9 @@ async fn test_watchdog(mut service: DeadlineWatchdog) -> ! {
                 .publish_reliably(request.session_id, request.request_id, &armed)
                 .await;
             // The host must see the acknowledgement before the reset.
-            CONSOLE.written(sequence).await;
+            if let Err(fault) = CONSOLE.written(sequence).await {
+                crate::system::receiver_limit(fault);
+            }
             super::watchdog::inject(mode, lease).await;
         }
     }

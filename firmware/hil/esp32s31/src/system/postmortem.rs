@@ -60,9 +60,23 @@ pub(crate) fn previous<T>(read: impl FnOnce(Option<&Previous>) -> T) -> T {
 #[allow(dead_code, reason = "each image checkpoints its own phases")]
 pub(crate) fn checkpoint(name: &str, arg: u32) {
     let now = uptime_ms();
-    with_record(|record| record.checkpoint(name, arg, now, hart()));
-    let excess = critical_section::with(|cs| RATE.borrow_ref_mut(cs).record(now));
-    let _ = excess;
+    with_record(|record| {
+        if let Err(fault) = record.checkpoint(name, arg, now, hart()) {
+            oer_espressif_staged_runtime::panic::reset_fault(
+                oer_espressif_staged_runtime::panic::FaultReason::HilCheckpoint,
+                [fault.head, fault.len, arg, now],
+            );
+        }
+    });
+    critical_section::with(|cs| {
+        let mut rate = RATE.borrow_ref_mut(cs);
+        if let Err(fault) = rate.record(now) {
+            oer_espressif_staged_runtime::panic::reset_fault(
+                oer_espressif_staged_runtime::panic::FaultReason::HilRateOverflow,
+                [fault.second, fault.count, now, 0],
+            );
+        }
+    });
 }
 
 /// Record the panic being handled. The other hart may hold the critical
