@@ -25,12 +25,15 @@ fn keys_as_paths<S: serde::Serializer>(
     keys: &BTreeSet<Key>,
     serializer: S,
 ) -> Result<S::Ok, S::Error> {
-    serializer.collect_seq(keys.iter().map(|key| {
-        match crate::registry().find(|info| info.key == *key) {
-            Some(info) => String::from(info.path),
-            None => alloc::format!("{key}"),
-        }
-    }))
+    serializer.collect_seq(keys.iter().map(|key| path_of(*key)))
+}
+
+/// The registry path of `key`, or the key itself when no message has it.
+fn path_of(key: Key) -> String {
+    match crate::registry().find(|info| info.key == key) {
+        Some(info) => String::from(info.path),
+        None => alloc::format!("{key}"),
+    }
 }
 
 impl DeviceImageKeys {
@@ -59,7 +62,7 @@ impl DeviceImageKeys {
         })
     }
 
-    /// A set of `keys`, for image classes the host derives.
+    /// A set of `keys`, for a host test's stand-in image.
     pub fn of_keys(keys: impl IntoIterator<Item = Key>) -> Self {
         Self {
             keys: keys.into_iter().collect(),
@@ -83,6 +86,24 @@ impl DeviceImageKeys {
         }
     }
 
+    /// Every key of `required` the image has; otherwise the error names the
+    /// paths of those it lacks.
+    pub fn require_all(&self, required: &[Key]) -> Result<(), String> {
+        let missing: Vec<String> = required
+            .iter()
+            .filter(|key| !self.keys.contains(key))
+            .map(|key| path_of(*key))
+            .collect();
+        if missing.is_empty() {
+            Ok(())
+        } else {
+            Err(alloc::format!(
+                "the image does not serve `{}`",
+                missing.join("`, `")
+            ))
+        }
+    }
+
     pub fn keys(&self) -> &BTreeSet<Key> {
         &self.keys
     }
@@ -90,5 +111,29 @@ impl DeviceImageKeys {
     /// Whether the image reports the same keys as `other`.
     pub fn same_keys(&self, other: &Self) -> bool {
         self.keys == other.keys
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::system::{DisableUsb, WatchdogTest};
+
+    #[test]
+    fn a_required_key_the_image_lacks_is_named_by_its_path() {
+        let image = DeviceImageKeys::of_keys([WatchdogTest::KEY]);
+        assert_eq!(image.require_all(&[WatchdogTest::KEY]), Ok(()));
+        assert_eq!(image.require_all(&[]), Ok(()));
+        let error = image
+            .require_all(&[WatchdogTest::KEY, DisableUsb::KEY, Key([7; 8])])
+            .unwrap_err();
+        assert_eq!(
+            error,
+            alloc::format!(
+                "the image does not serve `{}`, `{}`",
+                DisableUsb::PATH,
+                Key([7; 8])
+            )
+        );
     }
 }

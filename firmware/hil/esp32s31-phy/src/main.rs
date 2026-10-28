@@ -11,6 +11,8 @@ mod cache;
 mod completion;
 #[cfg(all(test, not(target_arch = "riscv32")))]
 mod pilot_timing;
+#[cfg(all(test, not(target_arch = "riscv32")))]
+mod services;
 #[cfg(not(target_arch = "riscv32"))]
 fn main() {}
 

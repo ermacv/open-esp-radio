@@ -55,7 +55,8 @@ oer-espressif-ieee802154-mac-values = { path = "../../../chips/espressif/ieee802
 oer-memory = { path = "../../../portable/memory" }
 oer-esp32s31-knowledge = { path = "../../../chips/esp32s31/knowledge" }
 oer-esp32s31-phy = { path = "../../../chips/esp32s31/phy" }
-oer-hil-protocol = { path = "../../../protocols/hil/protocol", default-features = false, features = ["phy", "async-io"] }
+oer-hil-agent = { path = "../../../protocols/hil/agent" }
+oer-hil-protocol = { path = "../../../protocols/hil/protocol", default-features = false, features = ["phy", "health", "async-io"] }
 oer-time = { path = "../../../portable/time" }
 oer-time-virtual = { path = "../../../portable/time-virtual" }
 

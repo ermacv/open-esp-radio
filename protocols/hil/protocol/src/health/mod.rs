@@ -142,23 +142,3 @@ crate::messages! {
 }
 #[cfg(test)]
 mod tests;
-
-use crate::Message;
-pub const KEYS: &[crate::Key] = &[
-    BeginHealth::KEY,
-    HealthStarted::KEY,
-    RunHealthWindow::KEY,
-    HealthWindow::KEY,
-    FinishHealth::KEY,
-    HealthFinished::KEY,
-    ReadHealthCounters::KEY,
-    CounterPage::KEY,
-    ReadHealthSignals::KEY,
-    SignalPage::KEY,
-    ReadHealthTracking::KEY,
-    TrackingPage::KEY,
-    ReadHealthMeasurements::KEY,
-    MeasurementPage::KEY,
-    ReleaseHealth::KEY,
-    HealthReleased::KEY,
-];

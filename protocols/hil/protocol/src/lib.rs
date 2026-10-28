@@ -31,7 +31,6 @@
 //! vendor ABI versions, or target-specific register layouts. Those belong to
 //! the firmware adapter.
 
-pub mod feature_keys;
 pub mod trace_header;
 
 // The framework: message identity, framing and the envelope.

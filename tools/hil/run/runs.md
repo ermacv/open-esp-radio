@@ -311,8 +311,9 @@ is a repository revision (`rev=`, HEAD when omitted). After `;`, a variant may a
 runtime features of every image class it builds, `features=+usb-jtag-off,-panic-hook`:
 its runs build with `cargo hil run --features`, which only an experiment
 accepts, the build record keeps the delta, the preflight accepts the flashed
-image by the image keys of its class's features with the delta applied (an arm
-without an instrument reports fewer keys than its class), and `report
+image when its reported keys hold every key the scenario's family requires
+(an arm without an instrument reports fewer keys and is refused only when the
+family drives what it removed), and `report
 verify` checks the image's features against it. Each arm's revision is
 checked out in a worktree below `target/hil/ab/<id>/`, which this checkout's
 runner builds the arm's images from (`run --source`) and runs, so both

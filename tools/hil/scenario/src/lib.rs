@@ -110,12 +110,11 @@ pub trait ScenarioFamily: Clone + Debug + Eq + Serialize + DeserializeOwned {
         self.plan().requirements
     }
 
-    /// Whether an image of the planned class that reports `capabilities` can
-    /// run this scenario. The class alone suffices unless the family names
-    /// a role the class's image may omit.
-    fn served_by(&self, _capabilities: &oer_hil_protocol::DeviceImageKeys) -> bool {
-        true
-    }
+    /// The image keys a flashed image must report to run this scenario: the
+    /// endpoints and messages the family drives. The runner accepts an image
+    /// whose key set holds all of them; a scenario on the boot smoke image,
+    /// which speaks no protocol, requires none.
+    fn required_keys(&self) -> &'static [oer_hil_protocol::Key];
 
     /// The catalog image the reference peer board must carry, when the
     /// scenario uses the peer.

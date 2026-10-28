@@ -18,16 +18,29 @@ pub fn received<M: Message>(message: Envelope<M>) -> Received {
     received.unwrap()
 }
 
+/// The keys of the fake target's image: the base module and the system
+/// watchdog image's services.
 pub fn capability_keys() -> Vec<Key> {
-    let capabilities = oer_hil_model::image_class::agent_chips()
-        .find_map(|chip| {
-            oer_hil_model::image_class::image_keys_on(
-                oer_hil_model::schema::image::ImageClass::SystemWatchdog,
-                chip,
-            )
-        })
-        .expect("a chip's HIL agent builds the Bluetooth GATT image");
-    capabilities.keys().iter().copied().collect()
+    use oer_hil_protocol::{base, system};
+    let mut keys = vec![
+        base::GetHello::KEY,
+        base::Hello::KEY,
+        base::GetImageKeys::KEY,
+        base::ImageKeyPage::KEY,
+        base::Rejected::KEY,
+        base::GetBootStatus::KEY,
+        base::BootEvidence::KEY,
+        base::GetPostMortemCheckpoints::KEY,
+        base::PostMortemCheckpoints::KEY,
+        base::GetLinkHealth::KEY,
+        base::LinkHealth::KEY,
+        system::WatchdogTest::KEY,
+        system::WatchdogArmed::KEY,
+        system::InjectPanic::KEY,
+        system::PanicInjected::KEY,
+    ];
+    keys.sort();
+    keys
 }
 
 /// The fake target's boot `Hello`, announcing [`capability_keys`].

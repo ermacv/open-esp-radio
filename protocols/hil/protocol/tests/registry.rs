@@ -124,7 +124,6 @@ const SOURCES: &[(&str, &str)] = &[
         include_str!("../src/bluetooth/secure_gatt.rs"),
     ),
     ("envelope.rs", include_str!("../src/envelope.rs")),
-    ("feature_keys.rs", include_str!("../src/feature_keys.rs")),
     ("framing.rs", include_str!("../src/framing.rs")),
     ("image_keys.rs", include_str!("../src/image_keys.rs")),
     ("io.rs", include_str!("../src/io.rs")),

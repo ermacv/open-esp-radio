@@ -25,7 +25,9 @@ separate HIL responsibility.
 Each image enables only the HIL protocol families it serves
 ([radio families](../../../protocols/hil/protocol/README.md#radio-families)): the radio-free
 `system-watchdog`, `diagnostic-usb-jtag-off` and `system-panic-reset` images
-read only the shared core, `system` module included.
+read only the shared core, `system` module included. `src/services.rs`
+declares the services each image mounts and its key set
+([image keys](../../../protocols/hil/agent/README.md#image-keys)).
 
 ## Personal station
 

@@ -32,7 +32,7 @@ The runner implementation is `tools/hil/run/src/`: `command.rs` owns
 startup and dispatch; `execution/orchestration.rs` owns selection and the
 suite/scenario/repetition lifecycle; `execution/firmware.rs` coordinates
 build or replay publication; `execution/preflight.rs` checks selection and
-image compatibility; `execution/doctor.rs` reports prerequisites. The thin
+that the flashed image reports every key the scenario's family requires; `execution/doctor.rs` reports prerequisites. The thin
 `tools/hil/runner/src/main.rs` embeds the build identity.
 
 `tools/hil/run/src/scenario.rs` composes system, lower-MAC, Wi-Fi and PHY

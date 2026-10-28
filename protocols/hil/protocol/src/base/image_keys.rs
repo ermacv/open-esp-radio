@@ -45,14 +45,6 @@ pub enum ImageKeySetError {
     Order { previous: Key, current: Key },
 }
 
-impl<'a> From<&'a crate::feature_keys::ImageKeys> for ImageKeySet<'a> {
-    fn from(keys: &'a crate::feature_keys::ImageKeys) -> Self {
-        Self {
-            keys: keys.as_slice(),
-        }
-    }
-}
-
 impl<'a> ImageKeySet<'a> {
     /// Validates the strictly ascending keys and their representable wire count.
     pub const fn new(keys: &'a [Key]) -> Result<Self, ImageKeySetError> {
@@ -72,6 +64,11 @@ impl<'a> ImageKeySet<'a> {
             remaining = rest;
         }
         Ok(Self { keys })
+    }
+
+    /// The keys, ascending.
+    pub const fn keys(&self) -> &'a [Key] {
+        self.keys
     }
 
     pub fn contains(&self, key: crate::Key) -> bool {
@@ -135,6 +132,97 @@ pub const fn sorted_keys<const N: usize>(mut keys: [Key; N]) -> [Key; N] {
     keys
 }
 
+/// The total number of keys in `groups`; `None` when it overflows.
+pub const fn keys_len(groups: &[&[Key]]) -> Option<usize> {
+    let mut total = 0_usize;
+    let mut remaining = groups;
+    while let Some((group, rest)) = remaining.split_first() {
+        let Some(sum) = total.checked_add(group.len()) else {
+            return None;
+        };
+        total = sum;
+        remaining = rest;
+    }
+    Some(total)
+}
+
+/// `groups` one after another, at compile time; `None` unless they hold
+/// exactly `N` keys.
+pub const fn concat_keys<const N: usize>(groups: &[&[Key]]) -> Option<[Key; N]> {
+    let mut keys = [Key([0; 8]); N];
+    let mut destination = keys.as_mut_slice();
+    let mut remaining = groups;
+    while let Some((group, rest)) = remaining.split_first() {
+        let mut source = *group;
+        while let Some((key, tail)) = source.split_first() {
+            let Some((slot, free)) = destination.split_first_mut() else {
+                return None;
+            };
+            *slot = *key;
+            destination = free;
+            source = tail;
+        }
+        remaining = rest;
+    }
+    if destination.is_empty() {
+        Some(keys)
+    } else {
+        None
+    }
+}
+
+/// How many distinct keys ascending `keys` holds: each run of equal keys
+/// counts once.
+pub const fn distinct_len(keys: &[Key]) -> usize {
+    let mut count = 0_usize;
+    let mut previous: Option<u64> = None;
+    let mut remaining = keys;
+    while let Some((key, rest)) = remaining.split_first() {
+        let value = key.to_u64();
+        let repeated = match previous {
+            Some(last) => last == value,
+            None => false,
+        };
+        if !repeated {
+            count = count.saturating_add(1);
+        }
+        previous = Some(value);
+        remaining = rest;
+    }
+    count
+}
+
+/// The distinct keys of ascending `keys`, at compile time: the union of
+/// key groups that may share a key (two endpoints with one response).
+/// `None` unless `keys` ascend and hold exactly `N` distinct keys.
+pub const fn distinct_keys<const N: usize>(keys: &[Key]) -> Option<[Key; N]> {
+    let mut distinct = [Key([0; 8]); N];
+    let mut destination = distinct.as_mut_slice();
+    let mut previous: Option<u64> = None;
+    let mut remaining = keys;
+    while let Some((key, rest)) = remaining.split_first() {
+        let value = key.to_u64();
+        match previous {
+            Some(last) if last == value => {}
+            Some(last) if last > value => return None,
+            _ => {
+                let Some((slot, free)) = destination.split_first_mut() else {
+                    return None;
+                };
+                *slot = *key;
+                destination = free;
+            }
+        }
+        previous = Some(value);
+        remaining = rest;
+    }
+    if destination.is_empty() {
+        Some(distinct)
+    } else {
+        None
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -169,6 +257,33 @@ mod tests {
             sorted_keys([Key([3; 8]), Key([1; 8]), Key([3; 8]), Key([2; 8])]),
             [Key([1; 8]), Key([2; 8]), Key([3; 8]), Key([3; 8])]
         );
+    }
+
+    #[test]
+    fn groups_concatenate_only_into_their_exact_length() {
+        let groups: &[&[Key]] = &[&[Key([2; 8])], &[], &[Key([1; 8]), Key([2; 8])]];
+        assert_eq!(keys_len(groups), Some(3));
+        assert_eq!(
+            concat_keys::<3>(groups),
+            Some([Key([2; 8]), Key([1; 8]), Key([2; 8])])
+        );
+        assert_eq!(concat_keys::<2>(groups), None);
+        assert_eq!(concat_keys::<4>(groups), None);
+        assert_eq!(keys_len(&[]), Some(0));
+    }
+
+    #[test]
+    fn shared_keys_merge_once_and_unsorted_input_is_refused() {
+        let sorted = sorted_keys([Key([2; 8]), Key([1; 8]), Key([2; 8]), Key([3; 8])]);
+        assert_eq!(distinct_len(&sorted), 3);
+        assert_eq!(
+            distinct_keys::<3>(&sorted),
+            Some([Key([1; 8]), Key([2; 8]), Key([3; 8])])
+        );
+        assert_eq!(distinct_keys::<2>(&sorted), None);
+        assert_eq!(distinct_keys::<4>(&sorted), None);
+        assert_eq!(distinct_keys::<2>(&[Key([2; 8]), Key([1; 8])]), None);
+        assert_eq!(distinct_len(&[]), 0);
     }
 
     #[test]

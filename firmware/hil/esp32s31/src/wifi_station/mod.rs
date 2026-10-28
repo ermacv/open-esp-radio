@@ -5,6 +5,7 @@ mod observation;
 mod radio;
 mod report;
 mod station;
+use crate::services::StationRequests as Requests;
 use oer_esp32s31_compose::Esp32s31;
 use crate::transport::CONSOLE;
 use oer_hil_protocol::{
@@ -322,14 +323,6 @@ type Controls<T> = embassy_sync::channel::Channel<
 >;
 static PROBES: Controls<(RequestIdentity, oer_hil_protocol::wifi::ProbeStation)> = Controls::new();
 static STOPS: Controls<RequestIdentity> = Controls::new();
-oer_hil_agent::requests! {
-    pub enum Requests (sessions = false) {
-        Start(oer_hil_protocol::wifi::StartStation),
-        Probe(oer_hil_protocol::wifi::ProbeStation),
-        Counters(oer_hil_protocol::wifi::GetStationCounters),
-        Stop(oer_hil_protocol::wifi::StopStation)
-    }
-}
 type ConsoleWork = impl core::future::Future<Output = ()>;
 static CONSOLE_WORK: ConstStaticCell<StaticPlace<ConsoleWork>> =
     ConstStaticCell::new(StaticPlace::new());
@@ -345,7 +338,12 @@ async fn console_work(usb: crate::transport::Usb, boot: u64) {
     use oer_hil_protocol::base::{Accepted, RejectReason, Rejected};
     let mut configured = false;
     let mut stopping = false;
-    crate::transport::serve(usb, boot, 0, move |request, command: Requests| {
+    crate::transport::serve(
+        usb,
+        boot,
+        crate::services::STATION_KEYS,
+        0,
+        move |request, command: Requests| {
         let reason = match command {
             Requests::Counters(_) => {
                 emit(request, &observation::counters());

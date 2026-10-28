@@ -12,6 +12,17 @@ firmware links.
 | none | `base`, `console`, `postmortem` |
 | `health` | `health` diagnostic storage |
 
+## Image keys
+
+A service is a `requests!` declaration: its enum decodes the endpoints it
+serves, and its `Service::KEYS` holds each endpoint's key, the key of that
+endpoint's response and the keys of the topics and properties in its
+`publishes [...]` list. `image_keys!` declares an image's `ImageKeySet` from
+the `Base` service (the intake's own module) and the services the image
+mounts. The set is sorted, deduplicated (a response two endpoints share
+counts once) and checked against the wire bound at compile time; the intake
+announces it in `Hello` and pages it out.
+
 Terminal completion waits are bounded to sixteen receivers. Exhaustion returns
 `ReceiverLimit` with the requested sequence, last published position and capacity.
 The image retains this impossible-state fault through its existing fatal record,

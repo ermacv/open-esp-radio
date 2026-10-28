@@ -7,7 +7,7 @@ use oer_hil_scenario::ScenarioFamily as _;
 use crate::{Result, fixture, scenario::Scenario};
 use oer_hil_lab::config::LabConfig;
 use oer_hil_link::SerialCapture;
-use oer_hil_model::schema::image::{FeatureDelta, ImageClass};
+use oer_hil_model::schema::image::ImageClass;
 use oer_hil_protocol::DeviceImageKeys;
 use oer_hil_runs::format::run::Failure;
 
@@ -22,7 +22,6 @@ pub(crate) fn scenario_failure(lab: &LabConfig, selected: &Scenario) -> Option<F
 pub(crate) fn validate_flashed_image(
     lab: &LabConfig,
     selected: &Scenario,
-    features: &FeatureDelta,
     output: &Path,
     device: Option<&oer_lab_board::lock::DeviceAccess>,
 ) -> Result<()> {
@@ -32,7 +31,7 @@ pub(crate) fn validate_flashed_image(
     let preflight = output.join("image-preflight");
     let error = match image_keys_of(lab, &preflight) {
         Ok(image_keys) => {
-            return check_flashed_image_keys(lab.chip(), selected, features, &image_keys);
+            return check_flashed_image_keys(selected, &image_keys);
         }
         Err(error) => error,
     };
@@ -65,7 +64,7 @@ pub(crate) fn validate_flashed_image(
                 "hil: {:?} cleared the boot loop",
                 escalation.ladder.steps.last().map(|step| step.step)
             );
-            check_flashed_image_keys(lab.chip(), selected, features, &image_keys)
+            check_flashed_image_keys(selected, &image_keys)
         }
         None => Err(format!(
             "{error}; the bootloader reset in a loop ({}) and {} did not clear it: {} (see {})",
@@ -89,44 +88,18 @@ pub(crate) fn validate_flashed_image(
     }
 }
 
-/// How the host recognizes an image of a class once it boots.
-#[derive(Debug, Eq, PartialEq)]
-enum Recognition {
-    /// By the image keys its protocol reports.
-    ImageKeys,
-    /// The boot smoke image speaks no protocol: by its console's pass line.
-    BootSmokeLine,
-}
-
-fn recognition(class: ImageClass) -> Recognition {
-    if class == ImageClass::BootSmoke {
-        Recognition::BootSmokeLine
-    } else {
-        Recognition::ImageKeys
-    }
-}
-
-/// Whether the device, reset, answers as an image of `class`; why not
-/// otherwise.
-pub(crate) fn answers_as(
+/// Whether the device, reset, answers as the boot smoke recovery image: by
+/// its console's pass line, as it speaks no protocol; why not otherwise.
+pub(crate) fn answers_as_boot_smoke(
     lab: &LabConfig,
-    class: ImageClass,
     directory: &Path,
 ) -> std::result::Result<(), String> {
-    if recognition(class) == Recognition::BootSmokeLine {
-        return SerialCapture::start_with_reset(lab, directory)
-            .and_then(|capture| {
-                let passed = capture.wait_for_boot_smoke(Duration::from_secs(10));
-                capture.finish_with(passed)
-            })
-            .map_err(|error| error.to_string());
-    }
-    let image_keys = image_keys_of(lab, directory).map_err(|error| error.to_string())?;
-    match oer_hil_model::image_class::classify_flashed(lab.chip(), &image_keys) {
-        Some(found) if found == class => Ok(()),
-        Some(found) => Err(format!("it answers as {} instead", found.id())),
-        None => Err(String::from("its image keys name no image class")),
-    }
+    SerialCapture::start_with_reset(lab, directory)
+        .and_then(|capture| {
+            let passed = capture.wait_for_boot_smoke(Duration::from_secs(10));
+            capture.finish_with(passed)
+        })
+        .map_err(|error| error.to_string())
 }
 
 /// Reset the device and ask its image for its image keys, capturing the
@@ -137,48 +110,63 @@ fn image_keys_of(lab: &LabConfig, directory: &Path) -> Result<DeviceImageKeys> {
     capture.finish_with(image_keys)
 }
 
-/// Accept a flashed image only when it is the scenario's class, built with
-/// the run's experiment `features` delta when it has one, and reports every
-/// role the scenario drives. An experiment's image is not its class's: it
-/// reports the keys of the class's features with the delta applied.
-fn check_flashed_image_keys(
-    chip: &str,
-    selected: &Scenario,
-    features: &FeatureDelta,
-    image_keys: &DeviceImageKeys,
-) -> Result<()> {
-    let expected = selected.image();
-    let observed = if features.is_empty() {
-        oer_hil_model::image_class::classify_flashed(chip, image_keys).ok_or_else(|| {
-            format!("the flashed image reports image keys no {chip} image class builds")
-        })?
-    } else {
-        let keys = oer_hil_model::image_class::image_keys_with(expected, chip, features)
-            .ok_or_else(|| format!("{chip} builds no `{}` image", expected.id()))?;
-        if !keys.same_keys(image_keys) {
-            return Err(format!(
-                "the flashed image does not report the image keys of `{}` with features `{features}`",
-                expected.id()
+/// Accept a flashed image only when it reports every key the scenario's
+/// family requires. What the image serves is its own report; the host
+/// derives no expected set from the class's features, so an experiment's
+/// image with a feature delta passes when it still serves the scenario.
+fn check_flashed_image_keys(selected: &Scenario, image_keys: &DeviceImageKeys) -> Result<()> {
+    image_keys
+        .require_all(selected.family.required_keys())
+        .map_err(|missing| {
+            format!(
+                "flashed `{}` image does not serve scenario `{}`: {missing}",
+                selected.image().id(),
+                selected.id()
             )
-            .into());
-        }
-        expected
-    };
-    if observed != expected {
-        return Err(format!(
-            "scenario requires `{}` image but flashed target advertises the image keys of `{}`",
-            expected.id(),
-            observed.id()
+            .into()
+        })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use oer_hil_protocol::{Key, Message, base, system};
+
+    fn scenario(kind: &str) -> Scenario {
+        Scenario::from_toml(
+            &format!(
+                "schema = 5\nid = \"t\"\ndescription = \"t\"\nrole = \"investigation\"\n\
+                 repetitions = 1\n\n[system]\nkind = \"{kind}\"\n"
+            ),
+            Path::new("t.toml"),
         )
-        .into());
+        .unwrap()
     }
-    if !selected.family.served_by(image_keys) {
-        return Err(format!(
-            "flashed `{}` image does not declare a role scenario `{}` drives",
-            observed.id(),
-            selected.id()
-        )
-        .into());
+
+    fn image(keys: &[Key]) -> DeviceImageKeys {
+        DeviceImageKeys::of_keys(keys.iter().copied().chain([base::Hello::KEY]))
     }
-    Ok(())
+
+    #[test]
+    fn an_image_serving_the_family_s_keys_is_accepted_with_further_services() {
+        let watchdog = scenario("watchdog");
+        let keys = [
+            system::WatchdogTest::KEY,
+            system::WatchdogArmed::KEY,
+            system::DisableUsb::KEY,
+            system::UsbDisabled::KEY,
+        ];
+        check_flashed_image_keys(&watchdog, &image(&keys)).unwrap();
+    }
+
+    #[test]
+    fn an_image_lacking_a_required_key_is_refused_by_its_path() {
+        let recovery = scenario("stand-recovery");
+        let keys = [system::WatchdogTest::KEY, system::WatchdogArmed::KEY];
+        let error = check_flashed_image_keys(&recovery, &image(&keys))
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains(system::DisableUsb::PATH), "{error}");
+        assert!(error.contains("diagnostic-usb-jtag-off"), "{error}");
+    }
 }

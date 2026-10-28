@@ -91,7 +91,7 @@ pub fn chip_profile(chip: &str) -> Result<oer_chip_profile::Profile> {
 /// Whether the runner builds and flashes `class` for `chip`: the chip's
 /// runtime declares every feature of the class.
 pub fn builds_on(_root: &Path, chip: &str, class: ImageClass) -> Result<bool> {
-    Ok(oer_hil_model::image_class::enabled_features_on(class, chip).is_some())
+    Ok(oer_hil_model::image_class::builds(class, chip))
 }
 
 /// Whether `chip`'s HIL agent at `root` builds `class`: the agent declares

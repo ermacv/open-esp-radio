@@ -12,7 +12,7 @@ use std::{fmt, marker::PhantomData, path::Path, sync::Arc};
 use crate::{AirUse, PeerImage, Plan, ScenarioFamily};
 use oer_hil_lab::config::LabConfig;
 use oer_hil_model::catalog::requirements::Requirements;
-use oer_hil_protocol::DeviceImageKeys;
+use oer_hil_protocol::Key;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 use crate::workload::{Result, context::Context, fixture::Fixtures};
@@ -96,7 +96,7 @@ pub trait Registry: 'static {
 pub trait Erased: fmt::Debug + Send + Sync {
     fn validate(&self) -> Result<()>;
     fn plan(&self) -> Plan;
-    fn served_by(&self, capabilities: &DeviceImageKeys) -> bool;
+    fn required_keys(&self) -> &'static [Key];
     fn peer_image(&self) -> Option<PeerImage>;
     fn air_use(&self) -> Vec<AirUse>;
     fn precondition(&self, lab: &LabConfig) -> Result<()>;
@@ -111,8 +111,8 @@ impl<T: Workload> Erased for T {
     fn plan(&self) -> Plan {
         ScenarioFamily::plan(self)
     }
-    fn served_by(&self, capabilities: &DeviceImageKeys) -> bool {
-        ScenarioFamily::served_by(self, capabilities)
+    fn required_keys(&self) -> &'static [Key] {
+        ScenarioFamily::required_keys(self)
     }
     fn peer_image(&self) -> Option<PeerImage> {
         ScenarioFamily::peer_image(self)
@@ -237,8 +237,8 @@ impl<R: Registry> ScenarioFamily for AnyFamily<R> {
     fn plan(&self) -> Plan {
         self.table.plan()
     }
-    fn served_by(&self, capabilities: &DeviceImageKeys) -> bool {
-        self.table.served_by(capabilities)
+    fn required_keys(&self) -> &'static [Key] {
+        self.table.required_keys()
     }
     fn peer_image(&self) -> Option<PeerImage> {
         self.table.peer_image()

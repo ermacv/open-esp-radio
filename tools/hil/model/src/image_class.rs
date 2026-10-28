@@ -1,15 +1,13 @@
-//! HIL image classes: each class's identity, the Cargo features it is
-//! built with, and the keys an image of it reports on each chip.
+//! HIL image classes: each class's identity and the Cargo features it is
+//! built with on each chip.
 //!
-//! A scenario names the class it needs; the image builder builds a class
-//! from these recipes, and the runner identifies a flashed image by the keys
-//! it reports.
+//! A scenario names the class it needs and the image builder builds a class
+//! from these recipes. The runner accepts a flashed image by the keys it
+//! reports: they must hold every key the scenario's family requires.
 
-mod keys;
+mod recipe;
 
-pub use keys::{
-    agent_chips, classify_flashed, declares, enabled_features_on, image_keys_on, image_keys_with,
-};
+pub use recipe::builds;
 
 use crate::schema::image::ImageClass;
 
@@ -26,7 +24,7 @@ pub const NETWORK_FEATURE: &str = "owned-network";
 /// where the chip's runtime declares [`NETWORK_FEATURE`] and the class links
 /// a network, `None` otherwise.
 pub fn network_on(class: ImageClass, chip: &str) -> Option<&'static str> {
-    (keys::declares_for(class, chip, NETWORK_FEATURE)
+    (recipe::declares_for(class, chip, NETWORK_FEATURE)
         && class.build_features(NETWORK_FEATURE) != class.runtime_features())
     .then_some(NETWORK)
 }

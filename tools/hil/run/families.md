@@ -13,8 +13,9 @@ Each owns a scenario table and its executable workload.
 ## Family contract
 
 A family's table implements `oer_hil_scenario::ScenarioFamily` (validation,
-plan, requirements, image keys, peer image and air use) and
+plan, requirements, the image keys it requires, peer image and air use) and
 `oer_hil_scenario::workload::family::Workload` (precondition and execution).
+The runner refuses a flashed image whose reported keys lack a required one.
 It exports a `FAMILY: Kind`, listed once in the runner's `Families` registry.
 The workload receives its repetition `Context` and `Fixtures`.
 

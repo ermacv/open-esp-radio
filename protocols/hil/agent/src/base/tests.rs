@@ -158,3 +158,48 @@ fn every_request_of_one_chunk_is_handed_over_in_order() {
     });
     assert_eq!(seen, [(3, 1), (4, 2)]);
 }
+
+crate::requests! {
+    #[expect(dead_code, reason = "the test mounts the service for its keys alone")]
+    enum Mounted (sessions = false) {
+        Watchdog(WatchdogTest),
+        #[cfg(any())]
+        Absent(oer_hil_protocol::system::DisableUsb),
+    }
+    publishes [oer_hil_protocol::system::PanicInjected, #[cfg(any())] oer_hil_protocol::system::UsbDisabled]
+}
+
+crate::requests! {
+    enum Sharing (sessions = false) {
+        Panic(InjectPanic),
+    }
+    publishes [oer_hil_protocol::system::PanicInjected]
+}
+
+crate::image_keys! {
+    MOUNTED = [Mounted, Sharing]
+}
+
+#[test]
+fn a_service_reports_its_endpoints_their_responses_and_what_it_publishes() {
+    use oer_hil_protocol::system::{PanicInjected, WatchdogArmed};
+    assert_eq!(
+        Mounted::KEYS,
+        [WatchdogTest::KEY, WatchdogArmed::KEY, PanicInjected::KEY]
+    );
+}
+
+#[test]
+fn an_image_reports_the_base_module_and_each_shared_key_once() {
+    use oer_hil_protocol::system::{PanicInjected, WatchdogArmed};
+    let mut expected: Vec<Key> = Base::KEYS.to_vec();
+    expected.extend([
+        WatchdogTest::KEY,
+        WatchdogArmed::KEY,
+        InjectPanic::KEY,
+        PanicInjected::KEY,
+    ]);
+    expected.sort();
+    assert_eq!(MOUNTED.keys(), expected.as_slice());
+    assert!(!MOUNTED.contains(oer_hil_protocol::system::DisableUsb::KEY));
+}

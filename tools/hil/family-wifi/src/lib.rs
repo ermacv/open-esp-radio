@@ -41,10 +41,8 @@ impl ScenarioFamily for WifiScenario {
     fn air_use(&self) -> Vec<AirUse> {
         vec![AirUse::WifiLink]
     }
-    fn served_by(&self, keys: &oer_hil_protocol::DeviceImageKeys) -> bool {
-        keys.has::<oer_hil_protocol::wifi::StartStation>()
-            && keys.has::<oer_hil_protocol::wifi::ProbeStation>()
-            && keys.has::<oer_hil_protocol::wifi::StopStation>()
+    fn required_keys(&self) -> &'static [oer_hil_protocol::Key] {
+        oer_hil_protocol::wifi::KEYS
     }
 }
 impl Workload for WifiScenario {

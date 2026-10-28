@@ -30,9 +30,13 @@ complete a USB transfer whose final packet is full.
 
 A boot's first frame is its `base::Hello`: how many keys the image serves, a
 digest of them and its payload limits. The host pages the sorted keys with
-`base::GetImageKeys` and checks them against the digest. An image serves
-the base module's endpoints and the endpoints of its own request set; any
-other key is refused as unsupported.
+`base::GetImageKeys` and checks them against the digest. The set is the union
+of the keys of the services the image mounts, base module included: each
+endpoint, its response and every topic and property the service publishes.
+The image computes it at compile time
+([`oer_hil_agent::image_keys!`](../agent/README.md#image-keys)); a request
+with any other key is refused as unsupported. The host accepts an image for a
+scenario when the set holds every key the scenario's family requires.
 
 ## Discovery and boot identity
 
