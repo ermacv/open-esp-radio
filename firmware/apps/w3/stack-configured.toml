@@ -1,5 +1,5 @@
 schema = 6
-extends = "stack.toml"
+extends = "../../../chips/esp32s31/platform/stack.toml"
 
 # Configured W3 only: the unconfigured image does not link these implementations.
 # The ceilings are the measured frames; changes are checked against sizes.json.

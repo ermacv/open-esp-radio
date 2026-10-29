@@ -749,6 +749,61 @@ mod tests {
     }
 
     #[test]
+    fn staged_image_policies_keep_the_platform_bootstrap_contract() {
+        let directory = tempfile::tempdir().unwrap();
+        let root = directory.path();
+        let policies = [
+            (
+                "chips/esp32s31/platform/stack.toml",
+                include_str!("../../../../chips/esp32s31/platform/stack.toml"),
+            ),
+            (
+                "firmware/apps/w3/stack.toml",
+                include_str!("../../../../firmware/apps/w3/stack.toml"),
+            ),
+            (
+                "firmware/hil/esp32s31-lower-mac/stack.toml",
+                include_str!("../../../../firmware/hil/esp32s31-lower-mac/stack.toml"),
+            ),
+            (
+                "firmware/apps/w3/stack-configured.toml",
+                include_str!("../../../../firmware/apps/w3/stack-configured.toml"),
+            ),
+        ];
+        for (path, source) in policies {
+            let path = root.join(path);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, source).unwrap();
+        }
+        let platform = StackPolicy::load(&root.join(policies[0].0)).unwrap();
+        let w3 = StackPolicy::load(&root.join(policies[1].0)).unwrap();
+        let lower_mac = StackPolicy::load(&root.join(policies[2].0)).unwrap();
+        let configured_w3 = StackPolicy::load(&root.join(policies[3].0)).unwrap();
+        assert_eq!(
+            platform.bootstrap_stack.as_ref().unwrap().root,
+            "bootstrap_main"
+        );
+        assert_eq!(w3.bootstrap_stack, platform.bootstrap_stack);
+        assert_eq!(w3.core, platform.core);
+        assert_eq!(configured_w3.bootstrap_stack, platform.bootstrap_stack);
+        assert_eq!(configured_w3.core, platform.core);
+        assert!(!configured_w3.frame_exceptions.runtime.is_empty());
+        assert_eq!(
+            w3.default_task_stack_bytes,
+            platform.default_task_stack_bytes
+        );
+        assert_eq!(lower_mac.bootstrap_stack, platform.bootstrap_stack);
+        assert_eq!(
+            lower_mac.core[&0]
+                .interrupt_stack
+                .used()
+                .unwrap()
+                .allocation_bytes,
+            Some(65536)
+        );
+    }
+
+    #[test]
     fn tracked_loads_record_the_chip_and_both_policy_files_at_their_reads() {
         let directory = tempfile::tempdir().unwrap();
         let root = directory.path();
@@ -839,7 +894,7 @@ mod tests {
     #[test]
     fn a_handoff_belongs_to_the_bootstrap_stack_alone() {
         let bootstrap = |handoff: Option<&str>| TaskStack {
-            root: "_start_rust".into(),
+            root: "bootstrap_main".into(),
             storage_symbol: None,
             bottom_symbol: Some("_stack_end".into()),
             top_symbol: Some("_stack_start".into()),

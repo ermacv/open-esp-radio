@@ -1,13 +1,6 @@
 //! Physical B0 procedure over the product's H4 boundary and pinned DTM peer.
 use crate::{command, image};
-use oer_bluetooth_hci::{
-    VendorShutdownObservationEvent,
-    bt_hci::{
-        PacketKind,
-        cmd::{Opcode, OpcodeGroup},
-    },
-    h4,
-};
+use oer_bluetooth_hci::{Opcode, OpcodeGroup, PacketKind, VendorShutdownObservationEvent, h4};
 use oer_hil_link::peer::{Expected, PeerConsole, SerialLink};
 use oer_image_build::{Check, Enforced, Result, esp_idf::catalog};
 use oer_lab_arbiter::{Arbiter, Request, claims::Claim};
