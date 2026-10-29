@@ -2,6 +2,7 @@
 use super::Attempt;
 use oer_embassy_net::ip::{Configuration, Ipv4Status, Resources};
 use oer_esp32s31_wifi::Network;
+#[cfg(oer_trace)]
 use owned_embassy_net::wire::{ArpHardware, ArpOperation, ArpPacket, EthernetProtocol};
 use static_cell::{ConstStaticCell, StaticCell};
 
@@ -73,12 +74,17 @@ fn running_future(
                 }
             },
             |p| {
+                #[cfg(oer_trace)]
                 if p.destination == [0xff; 6] && p.ether_type == 0x0806 && valid_arp(p.payload) {
-                    observations.record(oer_ieee80211_control::collector::NetworkArp);
+                    oer_trace::observe!(observations, oer_ieee80211_control::collector::NetworkArp);
                 }
+                let _ = p;
             },
             |_| {
-                observations.record(oer_ieee80211_control::collector::NetworkRefused);
+                oer_trace::observe!(
+                    observations,
+                    oer_ieee80211_control::collector::NetworkRefused
+                );
             },
             |_| {},
         );
@@ -92,6 +98,7 @@ fn running_future(
     }
 }
 
+#[cfg(oer_trace)]
 fn valid_arp(payload: &[u8]) -> bool {
     let Some(mut bytes) = payload.first_chunk::<28>().copied() else {
         return false;

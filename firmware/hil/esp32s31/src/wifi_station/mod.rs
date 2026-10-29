@@ -622,10 +622,17 @@ static COUNTERS: oer_hil_agent::capture::collector::Collector<37> = const {
         <oer_esp32s31_instrumentation::wifi::GroupRollback as oer_trace::Event>::KIND,
         <oer_ieee80211_control::collector::NetworkArp as oer_trace::Event>::KIND,
         <oer_ieee80211_control::collector::NetworkRefused as oer_trace::Event>::KIND,
-    ]) { Ok(bank) => bank, Err(_) => panic!("unique image event kinds") }
+    ]) {
+        Ok(bank) => bank,
+        Err(_) => panic!("unique image event kinds"),
+    }
 };
 static OBSERVATIONS: ConstStaticCell<ObservationStorage> = ConstStaticCell::new(Observations::new(
-    &COUNTERS, oer_hil_protocol::capture::Identity { capture: 1, epoch: 0 },
+    &COUNTERS,
+    oer_hil_protocol::capture::Identity {
+        capture: 1,
+        epoch: 0,
+    },
 ));
 #[derive(Default)]
 pub struct DriverObserver;

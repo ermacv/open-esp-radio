@@ -340,6 +340,7 @@ async fn exercise<'p, 'id: 'p, Id: SlotIdentity + 'id>(
         before_result,
         just_before_timeout: None,
         publications_at_barrier,
+        publications: body.air.sent().len(),
         events,
         retry_terminal,
     })
@@ -376,6 +377,7 @@ mod tests {
                 core::num::NonZeroU8::new(budget).expect("nonzero retry budget"),
             ))
             .expect("actual model trace");
+            assert_eq!(trace.publications, 1 + usize::from(budget));
             let Some(BarrierEvent::Tx {
                 ticket,
                 state: MpduState::Sent,

@@ -267,6 +267,7 @@ impl Work for DuringPublication {
                 before_result,
                 just_before_timeout,
                 publications_at_barrier,
+                publications: air.sent().len(),
                 events,
                 retry_terminal,
             });

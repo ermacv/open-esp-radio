@@ -259,6 +259,7 @@ fn barrier_verification_accepts_count_samples_and_terminal_arrays() {
         before_result: snapshot(),
         just_before_timeout: None,
         publications_at_barrier: 1,
+        publications: 2,
         events: [
             BarrierEvent::<(), ()>::Tx {
                 ticket: 1,

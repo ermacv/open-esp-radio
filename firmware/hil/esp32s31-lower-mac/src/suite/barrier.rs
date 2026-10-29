@@ -283,7 +283,6 @@ async fn exercise<'p, 'id: 'p, Id: radio::SlotIdentity + 'id>(
                 _ => return Err("unexpected retry event"),
             }
         }
-
     }
     let trace = BarrierTrace {
         tickets: identities,
@@ -291,6 +290,7 @@ async fn exercise<'p, 'id: 'p, Id: radio::SlotIdentity + 'id>(
         before_result,
         just_before_timeout: None,
         publications_at_barrier,
+        publications: publications(),
         events,
         retry_terminal,
     };

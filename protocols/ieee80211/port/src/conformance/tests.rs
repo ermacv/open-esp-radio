@@ -16,6 +16,7 @@ fn retry_trace() -> TestBarrierTrace {
         },
         just_before_timeout: None,
         publications_at_barrier: 1,
+        publications: 2,
         events: vec![
             BarrierEvent::Tx {
                 ticket: 1,
@@ -41,6 +42,22 @@ fn changed_ticket_identity_is_an_owner_violation() {
         verify_barrier(BarrierCase::GateRetry, trace),
         Err(Violation::Owners)
     );
+}
+
+#[test]
+fn sent_retry_requires_an_additional_publication_count() {
+    assert_eq!(
+        verify_barrier(BarrierCase::GateRetry, retry_trace()),
+        Ok(())
+    );
+    for publications in [0, 1] {
+        let mut trace = retry_trace();
+        trace.publications = publications;
+        assert_eq!(
+            verify_barrier(BarrierCase::GateRetry, trace),
+            Err(Violation::Publication)
+        );
+    }
 }
 
 fn poisoned_trace() -> Trace<Vec<Returned>, Vec<ReturnEvidence>, Vec<PublicationEvent>> {

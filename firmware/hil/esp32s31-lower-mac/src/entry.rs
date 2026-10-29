@@ -313,19 +313,42 @@ async fn console(usb: transport::Usb, boot: u64, chip: transport::Chip) {
     let failure = transport::CONSOLE
         .run(usb, intake, &chip, |id, request: Request| {
             use oer_hil_agent::capture::Reader;
-            let reader = suite::COUNTERS.reader(oer_hil_protocol::capture::Identity { capture: 1, epoch: 0 });
+            let reader = suite::COUNTERS.reader(oer_hil_protocol::capture::Identity {
+                capture: 1,
+                epoch: 0,
+            });
             match request {
                 Request::Describe(_) => match reader.describe() {
-                    Ok(value) => { transport::CONSOLE.publish(id.session_id, id.request_id, &value); },
-                    Err(error) => { transport::CONSOLE.publish(id.session_id, id.request_id, &oer_hil_protocol::capture::Refused(error)); },
+                    Ok(value) => {
+                        transport::CONSOLE.publish(id.session_id, id.request_id, &value);
+                    }
+                    Err(error) => {
+                        transport::CONSOLE.publish(
+                            id.session_id,
+                            id.request_id,
+                            &oer_hil_protocol::capture::Refused(error),
+                        );
+                    }
                 },
                 Request::Counters(value) => match reader.counters(value.0) {
-                    Ok(value) => { transport::CONSOLE.publish(id.session_id, id.request_id, &value); },
-                    Err(error) => { transport::CONSOLE.publish(id.session_id, id.request_id, &oer_hil_protocol::capture::Refused(error)); },
+                    Ok(value) => {
+                        transport::CONSOLE.publish(id.session_id, id.request_id, &value);
+                    }
+                    Err(error) => {
+                        transport::CONSOLE.publish(
+                            id.session_id,
+                            id.request_id,
+                            &oer_hil_protocol::capture::Refused(error),
+                        );
+                    }
                 },
                 request => {
                     if REQUESTS.try_send((id, request)).is_err() {
-                        transport::CONSOLE.publish(id.session_id, id.request_id, &Rejected(RejectReason::Busy));
+                        transport::CONSOLE.publish(
+                            id.session_id,
+                            id.request_id,
+                            &Rejected(RejectReason::Busy),
+                        );
                     }
                 }
             }

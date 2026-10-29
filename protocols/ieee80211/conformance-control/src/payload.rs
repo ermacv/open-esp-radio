@@ -218,6 +218,7 @@ pub struct BarrierTrace {
     pub before_request: HeldSnapshot,
     pub before_result: HeldSnapshot,
     pub publications_at_barrier: u16,
+    pub publications: u16,
     pub events: [Option<BarrierEvent>; 8],
     pub retry_terminal: Option<BarrierEvent>,
 }
@@ -288,6 +289,7 @@ pub fn barrier_trace<A, D, E: AsRef<[conformance::BarrierEvent<A, D>]>>(
         before_request: snapshot(raw.before_request)?,
         before_result: snapshot(raw.before_result)?,
         publications_at_barrier: raw.publications_at_barrier.try_into().ok()?,
+        publications: raw.publications.try_into().ok()?,
         events,
         retry_terminal: raw.retry_terminal.as_ref().map(barrier_event),
     })
@@ -466,6 +468,7 @@ mod tests {
             },
             just_before_timeout: None,
             publications_at_barrier: 1,
+            publications: 3,
             events: [conformance::BarrierEvent::<(), core::convert::Infallible>::GateClosed],
             retry_terminal: Some(conformance::BarrierEvent::Tx {
                 ticket: 0,

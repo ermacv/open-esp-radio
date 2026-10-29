@@ -81,13 +81,26 @@ fn submit<'p, 'id: 'p, Id: radio::SlotIdentity + 'id>(
     Ok(())
 }
 fn captured(admitted: [u8; 3], completed: [u8; 3]) -> Result<EdcaTrace, &'static str> {
-    use oer_esp32s31_instrumentation::wifi::{Publication, EdcaTable, EdcaRecord, EdcaDraw};
+    use oer_esp32s31_instrumentation::wifi::{EdcaDraw, EdcaRecord, EdcaTable, Publication};
     Ok(EdcaTrace {
-        publications: COUNTERS.count::<Publication>().try_into().map_err(|_| "publication count")?,
-        tables: COUNTERS.count::<EdcaTable>().try_into().map_err(|_| "table count")?,
-        records: COUNTERS.count::<EdcaRecord>().try_into().map_err(|_| "record count")?,
-        draws: COUNTERS.count::<EdcaDraw>().try_into().map_err(|_| "draw count")?,
-        admitted, completed,
+        publications: COUNTERS
+            .count::<Publication>()
+            .try_into()
+            .map_err(|_| "publication count")?,
+        tables: COUNTERS
+            .count::<EdcaTable>()
+            .try_into()
+            .map_err(|_| "table count")?,
+        records: COUNTERS
+            .count::<EdcaRecord>()
+            .try_into()
+            .map_err(|_| "record count")?,
+        draws: COUNTERS
+            .count::<EdcaDraw>()
+            .try_into()
+            .map_err(|_| "draw count")?,
+        admitted,
+        completed,
         held_draws: None,
     })
 }

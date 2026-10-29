@@ -450,9 +450,12 @@ pub(super) async fn run<'p, 'id, Id: radio::SlotIdentity + 'id>(
             returned: seen.rows,
             contexts_dropped: DROPS.load(Ordering::Relaxed) as usize,
             before_teardown_dropped: DROPS.load(Ordering::Relaxed) as usize,
-            publications: COUNTERS.count::<oer_esp32s31_instrumentation::wifi::Publication>() as usize,
+            publications: COUNTERS.count::<oer_esp32s31_instrumentation::wifi::Publication>()
+                as usize,
             terminal_evidence: seen.pointers,
-            publication_events: core::iter::empty::<oer_ieee80211_port::conformance::PublicationEvent>(),
+            publication_events: core::iter::empty::<
+                oer_ieee80211_port::conformance::PublicationEvent,
+            >(),
         })
         .map(Trace::Ownership)
         .ok_or("ownership trace extent"),
@@ -485,9 +488,7 @@ fn terminal_return<'id, Id: radio::SlotIdentity + 'id>(
                 seen,
             )
         }
-        LowerMacTerminal::GateClosed(_) => {
-            Ok(())
-        }
+        LowerMacTerminal::GateClosed(_) => Ok(()),
         _ => Err("ownership terminal kind"),
     }
 }

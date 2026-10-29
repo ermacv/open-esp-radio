@@ -5,6 +5,6 @@ framing 2
 lower-mac
 [messages]
 lower-mac/case/run 7ce548b6cbb39f2d endpoint
-lower-mac/case/trace dccd53bfb56e1da3 topic
+lower-mac/case/trace 18e4184a64fd8f9b topic
 lower-mac/prepare 335dfabb22e2b8f9 endpoint
 lower-mac/prepared 52e0cc98b6729aeb topic

@@ -54,9 +54,6 @@ impl<'a, const K: usize> Observations<'a, K> {
             irq_free,
         }
     }
-    pub fn record<E: Event + Copy + 'static>(&self, event: E) {
-        self.collector.event(event);
-    }
     pub fn event<E: Event + Copy + 'static>(
         &self,
         event: E,
@@ -64,7 +61,7 @@ impl<'a, const K: usize> Observations<'a, K> {
         epoch: u32,
         output: &impl Publish,
     ) {
-        self.record(event);
+        Observer::event(self, event);
         match observation::Observation::of(&event) {
             Some(observation::Observation::StationAssociated(_)) => output.publish(
                 request,
@@ -169,6 +166,11 @@ impl<'a, const K: usize> Observations<'a, K> {
         }
     }
 }
+impl<const K: usize> Observer for Observations<'_, K> {
+    fn event<E: Event + Copy + 'static>(&self, event: E) {
+        self.collector.event(event);
+    }
+}
 impl<const K: usize> Reader for Observations<'_, K> {
     fn describe(&self) -> Result<Description, Error> {
         self.collector.reader(self.identity).describe()
@@ -243,7 +245,7 @@ mod tests {
             session_id: 0,
             request_id: 1,
         };
-        observed.record(NetworkArp);
+        Observer::event(&observed, NetworkArp);
         observed.event(
             observation::GroupKeyInstalled {
                 key_id: 1,
@@ -253,12 +255,12 @@ mod tests {
             2,
             &Output,
         );
-        observed.record(NetworkArp);
-        observed.record(NetworkRefused);
-        observed.record(observation::ControlDelivered);
+        Observer::event(&observed, NetworkArp);
+        Observer::event(&observed, NetworkRefused);
+        Observer::event(&observed, observation::ControlDelivered);
         observed.departing();
-        observed.record(observation::ControlDelivered);
-        observed.record(observation::TxHardwareTimeout);
+        Observer::event(&observed, observation::ControlDelivered);
+        Observer::event(&observed, observation::TxHardwareTimeout);
         let counters = observed.counters(2, 3, 4);
         assert_eq!(counters.group_arp_received, 1);
         assert_eq!(counters.group_generation, 1);

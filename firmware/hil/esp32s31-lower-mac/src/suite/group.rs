@@ -145,16 +145,21 @@ pub(super) async fn run<'p, 'id, Id: radio::SlotIdentity + 'id>(
             };
             let completed = EmbassyClock.now();
             let bound = Backend::<Id>::GROUP_COMMAND_BOUND;
-            Ok(Trace::Group(oer_ieee80211_conformance_control::GroupTrace {
-                rollback: COUNTERS.count::<oer_esp32s31_instrumentation::wifi::GroupRollback>() == 1,
-                admitted: [admitted.slot, admitted.permission],
-                within_bound: completed.checked_duration_since(timing.admitted_at).is_some_and(|elapsed| elapsed <= bound),
-                events: [None, None, None, None],
-                poisoned,
-                deadline_woke: false,
-                published: None,
-                blocked_while_published: false,
-            }))
+            Ok(Trace::Group(
+                oer_ieee80211_conformance_control::GroupTrace {
+                    rollback: COUNTERS.count::<oer_esp32s31_instrumentation::wifi::GroupRollback>()
+                        == 1,
+                    admitted: [admitted.slot, admitted.permission],
+                    within_bound: completed
+                        .checked_duration_since(timing.admitted_at)
+                        .is_some_and(|elapsed| elapsed <= bound),
+                    events: [None, None, None, None],
+                    poisoned,
+                    deadline_woke: false,
+                    published: None,
+                    blocked_while_published: false,
+                },
+            ))
         }
         .await;
         return match owner
@@ -169,8 +174,7 @@ pub(super) async fn run<'p, 'id, Id: radio::SlotIdentity + 'id>(
         ProgressCase::Disable { mutation, applied } => {
             let setup = admit(&mut owner.phase(), resources, mutation).await;
             if applied && setup.is_ok() {
-                while COUNTERS.count::<oer_esp32s31_instrumentation::wifi::TerminalPosted>() == 0
-                {
+                while COUNTERS.count::<oer_esp32s31_instrumentation::wifi::TerminalPosted>() == 0 {
                     barrier::progress().await;
                 }
             }

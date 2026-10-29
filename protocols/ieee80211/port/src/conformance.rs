@@ -176,6 +176,8 @@ pub struct BarrierTrace<E, T> {
     pub just_before_timeout: Option<HeldSnapshot>,
     /// Publication count when the barrier terminal was delivered.
     pub publications_at_barrier: usize,
+    /// Final publication count, including any post-barrier Sent retry.
+    pub publications: usize,
     /// Events captured from the actual backend event stream.
     pub events: E,
     /// The actual terminal of the post-barrier Sent submission, if any.
@@ -286,7 +288,12 @@ pub fn verify_barrier<A, D, E: AsRef<[BarrierEvent<A, D>]>>(
     if !correct_head {
         return Err(Violation::TerminalKind);
     }
-
+    if match case {
+        BarrierCase::GateRetry => trace.publications <= trace.publications_at_barrier,
+        _ => trace.publications != trace.publications_at_barrier,
+    } {
+        return Err(Violation::Publication);
+    }
     Ok(())
 }
 

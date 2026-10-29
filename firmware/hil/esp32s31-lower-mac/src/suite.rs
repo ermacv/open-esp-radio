@@ -23,6 +23,7 @@ use oer_esp32s31_hal::{
     },
     root::WifiPartition,
 };
+use oer_esp32s31_ieee80211_driver::mac::tx::{TxSlot, runtime::WifiTxRuntimePolicy};
 use oer_esp32s31_ieee80211_driver::{
     lower_mac::{ConnectionFramePriorities, LowerMacConfig, RadioCoexPriorities},
     ordinary_tx::{OrdinaryTxOwner, WifiTxEntropy},
@@ -37,7 +38,6 @@ use oer_esp32s31_ieee80211_driver::{
     },
     tx::{CappedTxPowerProfile, WifiTxResources},
 };
-use oer_esp32s31_ieee80211_driver::mac::tx::{TxSlot, runtime::WifiTxRuntimePolicy};
 use oer_esp32s31_phy::{PhyConfig, PhyTxTargetPowerProfile};
 use oer_esp32s31_radio_client::{MembershipCell, wifi::Wifi};
 use oer_hil_protocol::base::RejectReason;
@@ -116,9 +116,16 @@ static DEVICE: StaticCell<Device> = StaticCell::new();
 pub(crate) static COUNTERS: oer_hil_agent::capture::collector::Collector<6> = const {
     use oer_esp32s31_instrumentation::wifi::*;
     match oer_hil_agent::capture::collector::Collector::new([
-        Publication::KIND, TerminalPosted::KIND, EdcaTable::KIND,
-        EdcaRecord::KIND, EdcaDraw::KIND, GroupRollback::KIND,
-    ]) { Ok(collector) => collector, Err(_) => panic!("unique image event kinds") }
+        Publication::KIND,
+        TerminalPosted::KIND,
+        EdcaTable::KIND,
+        EdcaRecord::KIND,
+        EdcaDraw::KIND,
+        GroupRollback::KIND,
+    ]) {
+        Ok(collector) => collector,
+        Err(_) => panic!("unique image event kinds"),
+    }
 };
 #[derive(Default)]
 struct DriverObserver;
