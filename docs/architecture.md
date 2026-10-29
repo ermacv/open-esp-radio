@@ -246,7 +246,8 @@ runtime's `entry!`, which also defines its panic handler and, as a parameter,
 its panic hook. The executor is generic over a chip binding `B` whose port is
 the HAL's; Rust has no generic statics, so the binding's `bind!` declares its
 statics once in the chip's composition crate: the storage of the port's owned
-blocks, the one waker vtable and the Embassy time driver's symbols.
+blocks and the one waker vtable. Each image declares its Embassy time driver
+and observer through `time_driver!`; the driver's exported ABI remains shared.
 The platform port names the counter owner; the executor binding requires
 `oer-espressif-boot::drivers::system_timer::CounterLatch` on it. HAL supplies
 strobe/VALID/LO/HI atoms, and the family driver owns settling, verification
@@ -1024,10 +1025,14 @@ header, 16-byte entries, three-word snapshot headers and snapshot payload words.
 Retained storage uses plain atomic loads/stores; the recorder's read-modify-write
 counters and global pointer/mask stay in ordinary atomic RAM.
 
-`trace` (what happened), `profile` (what it costs) and `debug-control`
-(knobs that force paths) are separate classes, each under its own cfg
-(`oer_trace`, `oer_profile`, `oer_debug_control`) that only `cargo fw` sets
-for an image declaring it. Comparison probe images (`cargo fw probe`) are built
+`trace` is the single observation mechanism, including execution cost and CPU
+load. Under image cfg `oer_trace`, owners emit event values through `observe!`;
+only image collectors retain measurement counters and window state. Executor
+idle boundaries use the monotonic platform clock with interrupts masked through
+the second reading; whole-hart load is one minus the idle fraction. Executor
+work intervals include preemption and overlap. `debug-control` separately names
+knobs that force paths under `oer_debug_control`; it is not an observer. Only
+`cargo fw` sets these cfgs for an image declaring the corresponding class. Comparison probe images (`cargo fw probe`) are built
 over the production crates' public API alone. The separately admitted
 `firmware/probes/esp32s31-facts` image takes the PAC once for short hardware
 facts experiments, without HAL or production runtime dependencies. The HAL may

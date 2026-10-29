@@ -2,7 +2,7 @@
 //!
 //! Features are additive across one build: a feature one image requests on a
 //! shared library is on for every image built with it. Observation is
-//! switched by the image's `oer_trace`, `oer_profile` and `oer_debug_control`
+//! switched by the image's `oer_trace` and `oer_debug_control`
 //! cfgs (`docs/architecture.md`, Instrumentation and probes), so no library
 //! below `chips/`, `protocols/` or `portable/` declares a feature, explicit or
 //! implied by an optional dependency, whose name carries an instrumentation

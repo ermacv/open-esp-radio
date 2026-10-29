@@ -70,9 +70,9 @@ oer_espressif_staged_runtime::interrupt_table! {
     /// The radio executor (P2), polled in its handler.
     radio: RadioToken = FromCpu2Irq => oer_espressif_executor::interrupt_handler::<RadioTasks, FromCpu2Irq>, line 17, context radio_executor, hart 0, Executor;
     /// The radio executor's timer alarm; it only acknowledges and pends.
-    radio_alarm: RadioAlarmToken = SystimerAlarm0 => oer_espressif_executor::alarm_interrupt::<Esp32s31, 0, SystimerAlarm0>, line 18, context radio, hart 0, Hardware;
+    radio_alarm: RadioAlarmToken = SystimerAlarm0 => oer_espressif_executor::alarm_interrupt::<RadioTasks, 0, SystimerAlarm0>, line 18, context radio, hart 0, Hardware;
     /// The application executor's timer alarm.
-    app_alarm: AppAlarmToken = SystimerAlarm1 => oer_espressif_executor::alarm_interrupt::<Esp32s31, 1, SystimerAlarm1>, line 41, context app_wake, hart 0, Hardware;
+    app_alarm: AppAlarmToken = SystimerAlarm1 => oer_espressif_executor::alarm_interrupt::<AppTasks, 1, SystimerAlarm1>, line 41, context app_wake, hart 0, Hardware;
     /// The console's USB Serial/JTAG interrupt; it raises the endpoint's signal.
     console_usb: ConsoleUsb = ConsoleInterrupt => crate::transport::usb_interrupt, line 42, context app_wake, hart 0, Hardware;
 }
@@ -80,6 +80,7 @@ oer_espressif_staged_runtime::interrupt_table! {
 oer_espressif_executor::tasks! {
     /// The radio executor's tasks (P2).
     RadioTasks: InterruptExecutor<Esp32s31, 2> {
+        @observer: crate::timer_measurements::TimerObserver;
         #[cfg(not(feature = "diagnostic-radio-health"))]
         serve_radio(radio: &'static mut radio::Radio) = serve_radio;
         #[cfg(feature = "diagnostic-radio-health")]
@@ -221,6 +222,10 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
         });
     // RNG's inter-read settle needs an advancing clock before executor startup.
     let timer = runtime_system_timer;
+    #[cfg(oer_trace)]
+    if crate::timer_measurements::install().is_err() {
+        fail(oer_diagnostics::name!("timer-observer"; 32));
+    }
     let mut timer_ready = oer_espressif_executor::init::<Esp32s31, 2, _, _>(
         oer_espressif_executor::systimer::SystemTimer {
             comparators: timer.comparators,
@@ -489,3 +494,5 @@ type IntakeRequest = oer_hil_agent::base::Either<Request, health::Request>;
 #[cfg(feature = "diagnostic-radio-health")]
 static HEALTH_SLOT: RequestSlot<health::Request, health::Reply> =
     RequestSlot::new(&DOORBELL, 1, HEALTH_REQUEST);
+
+oer_espressif_executor::time_driver!(Esp32s31, crate::timer_measurements::TimerObserver);

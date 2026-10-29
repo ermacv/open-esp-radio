@@ -200,6 +200,7 @@ impl<W: Binding, M: SignalMetadata> RateSelection<M, port::Ack> for Rates<W> {
             peer,
             response,
         );
+        oer_trace::observe!(self.1, selected_rate::<M>(&self.0));
     }
     fn disconnected(&mut self) {
         <EspressifRateSelection<Caps> as RateSelection<M, port::Ack>>::disconnected(&mut self.0);
@@ -229,6 +230,25 @@ impl<W: Binding, M: SignalMetadata> RateSelection<M, port::Ack> for Rates<W> {
             frame,
             completion,
         );
+        #[cfg(oer_trace)]
+        if frame == FrameRates::Data {
+            oer_trace::observe!(self.1, selected_rate::<M>(&self.0));
+        }
+    }
+}
+
+#[cfg(oer_trace)]
+fn selected_rate<M: SignalMetadata>(
+    selection: &EspressifRateSelection<Caps>,
+) -> oer_ieee80211_instrumentation::TxRateSelected {
+    use oer_ieee80211_wire::phy::PhyRate;
+    oer_ieee80211_instrumentation::TxRateSelected {
+        kbps: <EspressifRateSelection<Caps> as RateSelection<M, port::Ack>>::plan(
+            selection,
+            FrameRates::Data,
+            Some::<PhyRate>,
+        )
+        .map(|plan| plan.first().rate.nominal_kbps()),
     }
 }
 

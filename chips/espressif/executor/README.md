@@ -40,7 +40,8 @@ comparators and the fatal path; the hart geometry is the port's. Rust has no
 generic statics, so the chip's composition crate declares the binding once
 with `bind!(Esp32s31, Port)` (`chips/esp32s31/compose`): the `Storage` of the
 port's published lines, counter latch and comparator writer, the one
-`static` waker vtable and the Embassy time driver's `_embassy_time_now` and
+`static` waker vtable. The image declares its time driver with `time_driver!`,
+which exports the Embassy time driver's `_embassy_time_now` and
 `_embassy_time_schedule_wake` symbols. The signal lists and memory contexts
 (`ThreadContext<SWI>`, `InterruptContext<SWI>`) name no binding, since an
 image links one.
@@ -127,3 +128,30 @@ no hart is no executor's context. Checked `Entered` proofs admit its
 signal cells; each software line and executor mode has its own typed static
 signal list. Signal task handles are `Send` values, while mutable payload
 access remains confined to the receiving execution context.
+
+## Trace observations
+
+`tasks!` accepts `@observer: image::Observer;` before its task declarations;
+without that entry the observer is `Noop`. `Tasks::observer` supplies the
+image-selected value for each boundary, without an executor counter. Under `oer_trace`, `observation::Activity` reports work and
+idle boundaries with hart, executor, raw CLIC level and wrapping platform
+monotonic microseconds. The event uses platform kind 40, channel 7. No factory,
+clock or context read is compiled into these points without `oer_trace`.
+
+Work brackets timer/signal service and the entire poll round, including
+preemption. Work spans of different executors overlap. Idle brackets WFI with
+interrupts masked; both edges are reported after the wait and before the waking
+handler runs, excluding observer work. A debugger-skipped WFI reports no idle.
+The image owns counters and computes whole-hart busy time as `window - idle`;
+it never sums inclusive work spans. The HIL station's `measurements` collector
+samples on its own hart and refuses windows of zero or at least 2^31 us
+(about 35 minutes). Timestamp and cumulative-counter differences wrap. This
+information has no scheduling policy or acceptance threshold.
+
+Timer events use the same observer and cfg. Each image declares its Embassy
+time driver with `time_driver!(Binding)` (default `Noop`) or
+`time_driver!(Binding, image::Observer)` for a unit-struct observer. Alarm
+handlers name their receiving task set. All observer calls are static, with
+no callback table. The executor retains no measurement totals or window state.
+The PHY diagnostic image owns the timer report collector and its window guard.
+Uninstrumented builds contain no observation clock reads or observer state.

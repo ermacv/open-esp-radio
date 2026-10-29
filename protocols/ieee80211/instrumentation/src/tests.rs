@@ -42,6 +42,39 @@ fn every_event() -> Vec<Observation> {
         Observation::TxQueueCollision(TxQueueCollision),
         Observation::ControlDelivered(ControlDelivered),
     ]);
+    for code in 0..5 {
+        let evidence = Evidence::of_code(code).unwrap();
+        events.push(Observation::RxContainment(RxContainment {
+            ampdu: evidence,
+            s_mpdu: evidence,
+            bytes: Some(u32::MAX),
+        }));
+    }
+    events.extend([
+        Observation::RxContainment(RxContainment {
+            ampdu: Evidence::Unavailable,
+            s_mpdu: Evidence::Unavailable,
+            bytes: None,
+        }),
+        Observation::RxBaStarted(RxBaStarted { tid: 7, window: 64 }),
+        Observation::TxRateSelected(TxRateSelected { kbps: Some(65_000) }),
+        Observation::TxRateSelected(TxRateSelected { kbps: None }),
+    ]);
+    for code in 0..7 {
+        events.push(Observation::RxReorder(RxReorder {
+            tid: 7,
+            cause: ReorderCause::of_code(code).unwrap(),
+            held: 1,
+            released: 8,
+            missing: 2047,
+        }));
+    }
+    for code in 0..5 {
+        events.push(Observation::RxBaStopped(RxBaStopped {
+            tid: 7,
+            reason: BaStop::of_code(code).unwrap(),
+        }));
+    }
     for code in 0..6 {
         events.push(Observation::DataMsduLost(DataMsduLost {
             reason: DataLoss::of_code(code).expect("data loss"),
@@ -116,6 +149,11 @@ fn identity(observation: Observation) -> (oer_trace::Kind, oer_trace::Channel, [
         };
     }
     forward!(
+        RxContainment,
+        RxReorder,
+        RxBaStarted,
+        RxBaStopped,
+        TxRateSelected,
         TokenLost,
         DataMsduLost,
         RsnInputDropped,
@@ -181,7 +219,7 @@ fn every_event_decodes_to_itself_and_kinds_are_unique_below_the_driver_range() {
             assert_eq!(previous, variant, "kind {kind} is used twice");
         }
     }
-    assert_eq!(kinds.len(), 24);
+    assert_eq!(kinds.len(), 29);
 }
 
 #[test]
@@ -201,6 +239,11 @@ fn observation_of_an_event_is_that_event_and_others_are_none() {
             };
         }
         check!(
+            RxContainment,
+            RxReorder,
+            RxBaStarted,
+            RxBaStopped,
+            TxRateSelected,
             TokenLost,
             DataMsduLost,
             RsnInputDropped,
@@ -488,4 +531,17 @@ fn the_recorder_keeps_observations_only_with_the_trace_cfg() {
         assert!(!recorder.overflowed());
     }
     Noop.event(TokenLost);
+}
+
+#[test]
+fn aggregation_encodings_refuse_malformed_words() {
+    assert_eq!(RxContainment::decode([5, 0]), None);
+    assert_eq!(RxContainment::decode([0, 1]), None);
+    assert_eq!(RxContainment::decode([1 << 17, 0]), None);
+    assert_eq!(RxReorder::decode([7 << 8, 0]), None);
+    assert_eq!(RxReorder::decode([0, 65536]), None);
+    assert_eq!(RxBaStarted::decode([256, 1]), None);
+    assert_eq!(RxBaStopped::decode([0, 5]), None);
+    assert_eq!(TxRateSelected::decode([1, 0]), None);
+    assert_eq!(TxRateSelected::decode([1, 2]), None);
 }

@@ -55,3 +55,29 @@ stay below the driver's, malformed words are refused, receive drop codes
 follow the upper MAC's order, ARP parsing accepts only Ethernet/IPv4
 requests and replies, and the recorder keeps observations only with
 `cfg(oer_trace)`.
+
+## Aggregation and rate selection
+
+Kinds 36..=40 on `AGGREGATION` describe `RxContainment`, `RxReorder`,
+`RxBaStarted`, `RxBaStopped` and `TxRateSelected`; all are in `Observation`
+and `StationEvents`. Receive events originate in the upper-MAC BA owner, using
+the caller's temporarily borrowed observer (`view.observed(&observer)`). Its
+placed storage keeps no observer state or diagnostic counters. The runtime
+passes its existing observer to receive, negotiation, deadlines and clear.
+
+Containment retains hardware/protocol/unavailable provenance independently
+for A-MPDU and S-MPDU and the admitted MPDU byte length (explicitly unavailable
+if unrepresentable). It counts admitted MPDUs, not physical aggregates. The S31
+metadata provides no physical aggregate member count. Reorder decisions carry
+held, released and missing counts; gap timeout releases buffered MPDUs and
+skips missing sequences. Clear recycles its buffered owners. Released means
+released by the reorder owner, not application delivery. Buffered duplicates
+and other rejected/stale input are distinct reasons. BA events denote logical
+owner activation/retirement, not confirmation of a hardware register write.
+
+The station rate wrapper reports the selected first data-plan rate in kb/s
+after association and each learned data terminal; an unavailable plan is
+explicit. Computing that diagnostic plan is entirely inside the observation
+point. Image collectors own weighted totals and last-rate state; bounded trace
+history is not the source of those totals. None of these observations enables
+TX A-MPDU: the ordinary S31 station port still submits individual attempts.

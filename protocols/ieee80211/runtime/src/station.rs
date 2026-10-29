@@ -394,6 +394,19 @@ mod rx_block_ack;
 use admissions::Admissions;
 pub use admissions::{ControlTerminal, PendingTerminal};
 use rx_block_ack::PhaseBlockAcks;
+
+// The non-trace branch borrows the original view directly: no observer
+// argument or temporary observer field exists in the product call path.
+macro_rules! rx_ba {
+    ($view:expr, $observer:expr, $method:ident($($argument:expr),* $(,)?)) => {{
+        #[cfg(oer_trace)]
+        let mut receive = $view.observed($observer);
+        #[cfg(not(oer_trace))]
+        let receive = &mut $view;
+        receive.$method($($argument),*)
+    }};
+}
+
 pub use rx_block_ack::{PortRxBlockAck, RxBlockAckStorage, RxBlockAckView};
 
 mod custody;
@@ -1773,7 +1786,11 @@ impl<
                     ServiceCommand::AccessPoint(fact) => arbiter.access_point(now, fact.into()),
                     ServiceCommand::WantAccessPoint => arbiter.want_access_point(),
                     ServiceCommand::Stop => {
-                        self.pending.receive.clear(&mut PhaseBlockAcks::new(phase));
+                        rx_ba!(
+                            self.pending.receive,
+                            &self.observer,
+                            clear(&mut PhaseBlockAcks::new(phase))
+                        );
                         return Served::Stop;
                     }
                 }
@@ -1940,7 +1957,11 @@ impl<
                 return Next::Failed(ServiceFault::RxBlockAckCapacity.into());
             }
             if !self.station.is_connected() && self.pending.receive.association().is_some() {
-                self.pending.receive.clear(&mut PhaseBlockAcks::new(phase));
+                rx_ba!(
+                    self.pending.receive,
+                    &self.observer,
+                    clear(&mut PhaseBlockAcks::new(phase))
+                );
             }
             while let Some(action) = arbiter.poll_action(now) {
                 progress = true;
@@ -1972,6 +1993,8 @@ impl<
                     io,
                     arbiter,
                     &self.rates,
+                    #[cfg(oer_trace)]
+                    &self.observer,
                     &mut self.pending,
                     action,
                 )
@@ -1981,9 +2004,11 @@ impl<
                     return Next::Failed(fault);
                 }
             }
-            self.pending
-                .receive
-                .tick(now, &mut PhaseBlockAcks::new(phase));
+            rx_ba!(
+                self.pending.receive,
+                &self.observer,
+                tick(now, &mut PhaseBlockAcks::new(phase))
+            );
             if let Some(owed) = self.pending.receive.next_reply()
                 && let Some(reply) =
                     RxBlockAckReply::from_body(owed.association, owed.bssid, owed.body)
@@ -1999,6 +2024,8 @@ impl<
                             io,
                             arbiter,
                             &self.rates,
+                            #[cfg(oer_trace)]
+                            &self.observer,
                             &mut self.pending,
                             action,
                         )
@@ -2309,7 +2336,11 @@ impl<
         match event {
             LowerMacEvent::Received { frame, meta } => {
                 let local = self.station.link().map(|link| link.address.get());
-                let (frame, meta) = match self.pending.receive.receive(now, local, frame, meta) {
+                let (frame, meta) = match rx_ba!(
+                    self.pending.receive,
+                    &self.observer,
+                    receive(now, local, frame, meta)
+                ) {
                     RxDisposition::Deliver(received) => received,
                     RxDisposition::Retained => return Ok(None),
                     RxDisposition::Recycle(frame) => return Ok(Some(frame)),
@@ -2851,6 +2882,10 @@ where
 
 /// Carry out one action of the station; an arbiter's answer goes back to
 /// it at once.
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the existing service action inputs also lend their observer"
+)]
 fn station_action<
     'p,
     'id: 'p,
@@ -2874,6 +2909,7 @@ fn station_action<
     >,
     arbiter: &mut PortArbiter<'id, B>,
     rates: &S,
+    #[cfg(oer_trace)] observer: &impl oer_trace::Observer,
     pending_actions: &mut PendingActions<'id, B>,
     action: StaAction<'_, 'id, PortStaTokens<'id, B::Types<'id>, B::Small, GROUPS>, B::Caps>,
 ) -> Result<Follow<'id, B, GROUPS>, ServiceFault<B>>
@@ -2884,9 +2920,10 @@ where
 {
     let input = match action {
         StaAction::BlockAck(request) => {
-            pending_actions
-                .receive
-                .offer(
+            rx_ba!(
+                pending_actions.receive,
+                observer,
+                offer(
                     now,
                     request.epoch(),
                     request.bssid(),
@@ -2894,7 +2931,8 @@ where
                     request.supported(),
                     &mut PhaseBlockAcks::new(phase),
                 )
-                .map_err(|_| ServiceFault::RxBlockAckCapacity)?;
+            )
+            .map_err(|_| ServiceFault::RxBlockAckCapacity)?;
             return Ok(Follow::Nothing);
         }
         StaAction::RequestChannel(request, place) => {

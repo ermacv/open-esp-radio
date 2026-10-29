@@ -441,7 +441,8 @@ mod tests {
     #[test]
     fn an_instrumented_image_compiles_its_cfgs_in_a_cache_of_its_own() {
         use crate::instrumentation::Class;
-        let instrumentation: Instrumentation = [Class::Profile, Class::Trace].into_iter().collect();
+        let instrumentation: Instrumentation =
+            [Class::DebugControl, Class::Trace].into_iter().collect();
         assert_eq!(
             rustflags(Vec::new(), 4096, Path::new("/linker"), &instrumentation)
                 .unwrap()
@@ -449,7 +450,7 @@ mod tests {
             "-Z emit-stack-sizes -Z move-size-limit=4096 -W large-assignments \
              -Z share-generics=y -Zmerge-functions=disabled \
              -Cllvm-args=-enable-machine-outliner=never -C linker=/linker -C linker-flavor=ld.lld \
-             --cfg oer_trace --cfg oer_profile"
+             --cfg oer_trace --cfg oer_debug_control"
         );
         let root = Path::new("/checkout");
         assert_eq!(
@@ -458,7 +459,7 @@ mod tests {
         );
         assert_eq!(
             compile_cache(root, &instrumentation),
-            root.join("target/fw/cargo-trace-profile")
+            root.join("target/fw/cargo-trace-debug-control")
         );
     }
 

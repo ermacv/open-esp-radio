@@ -1010,6 +1010,9 @@ where
                 StaSecurity::Personal { password, pmk } => {
                     Station::new_personal(config, password, pmk, resources, GroupCapacity::new())
                 }
+                StaSecurity::Wpa2Personal { pmk } => {
+                    Station::new_wpa2_personal(config, pmk, resources, GroupCapacity::new())
+                }
             };
             let mut service = Runner::<ServicePort<LocalId<'scope>>, _, _, GROUPS, Observed>::new(
                 (station, credits),

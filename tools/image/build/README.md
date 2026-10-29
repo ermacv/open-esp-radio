@@ -119,11 +119,11 @@ The chip profile's boot kind selects the pipeline:
 
 An application package may declare instrumentation classes in its manifest,
 `[package.metadata.open-radio] instrumentation = ["trace"]`: `trace` (what
-happened: values and events), `profile` (what execution costs: time,
-cycles, load) and `debug-control` (knobs that force execution paths). The
+happened and execution cost: values and events collected by the image) and
+`debug-control` (knobs that force execution paths). The
 pipeline reads the declaration with `cargo metadata` and compiles the
 runtime and the bootstrap with the classes' cfgs (`oer_trace`,
-`oer_profile`, `oer_debug_control`) in a compile cache of their own
+`oer_debug_control`) in a compile cache of their own
 (`target/fw/cargo-<class>-…`); an image that declares none compiles none, in
 `target/fw/cargo`. Probes are no class: `cargo fw probe` sets
 `cfg(oer_probe)` for its own builds alone, no production crate reads it, no

@@ -57,6 +57,7 @@ static ARP_PENDING: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicB
 
 impl oer_trace::Observer for StationObserver {
     fn event<E: oer_trace::Event + Copy + 'static>(&self, event: E) {
+        crate::measurements::RADIO.observe(&event);
         use oer_ieee80211_instrumentation::StationActivity as FacadeObservation;
         match FacadeObservation::of(&event) {
             Some(FacadeObservation::Associated) => self

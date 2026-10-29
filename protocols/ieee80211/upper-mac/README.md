@@ -204,3 +204,10 @@ selection stays here and passes its exact control-frame rate to the port.
 - **Low:** `fragmentation/reassembly.rs::preflight_in_epoch` checks
   `CONTEXTS == 0` at run time (`NoReassemblyContexts`) instead of a const
   assert; `ccmp.rs` has `impl Default for CcmpRxReplayState`.
+
+The receive BA view can be reborrowed with `observed(&observer)` for one
+operation. Its default observer is zero-sized `Noop`; placed backing is
+unchanged. `oer_trace` gates containment classification, release counts and
+BA lifecycle observations in `oer-ieee80211-instrumentation`. The image owns
+all resulting diagnostic counters. No observation changes an agreement,
+receive disposition, gap deadline or frame owner.

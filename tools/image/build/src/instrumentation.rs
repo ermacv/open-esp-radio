@@ -3,8 +3,7 @@
 //!
 //! | Class | Answers | cfg |
 //! | --- | --- | --- |
-//! | `trace` | what happened: values and events | `oer_trace` |
-//! | `profile` | what execution costs: time, cycles, load | `oer_profile` |
+//! | `trace` | events and execution cost, collected by the image | `oer_trace` |
 //! | `debug-control` | knobs that force execution paths | `oer_debug_control` |
 //!
 //! An application package declares them as
@@ -25,18 +24,16 @@ use crate::Result;
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum Class {
     Trace,
-    Profile,
     DebugControl,
 }
 
 impl Class {
-    const ALL: [Self; 3] = [Self::Trace, Self::Profile, Self::DebugControl];
+    const ALL: [Self; 2] = [Self::Trace, Self::DebugControl];
 
     /// The class's name in a manifest.
     pub const fn name(self) -> &'static str {
         match self {
             Self::Trace => "trace",
-            Self::Profile => "profile",
             Self::DebugControl => "debug-control",
         }
     }
@@ -45,7 +42,6 @@ impl Class {
     pub const fn cfg(self) -> &'static str {
         match self {
             Self::Trace => "oer_trace",
-            Self::Profile => "oer_profile",
             Self::DebugControl => "oer_debug_control",
         }
     }
@@ -135,19 +131,19 @@ mod tests {
     #[test]
     fn an_image_builds_with_the_classes_it_declares() {
         let declared = Instrumentation::of_metadata(
-            &metadata(serde_json::json!(["profile", "trace"])),
+            &metadata(serde_json::json!(["debug-control", "trace"])),
             "image",
         )
         .unwrap();
         assert_eq!(
             declared.classes().collect::<Vec<_>>(),
-            [Class::Trace, Class::Profile]
+            [Class::Trace, Class::DebugControl]
         );
         assert_eq!(
             declared.rustflags().collect::<Vec<_>>(),
-            ["--cfg oer_trace", "--cfg oer_profile"]
+            ["--cfg oer_trace", "--cfg oer_debug_control"]
         );
-        assert_eq!(declared.cache_name(), "cargo-trace-profile");
+        assert_eq!(declared.cache_name(), "cargo-trace-debug-control");
         let control =
             Instrumentation::of_metadata(&metadata(serde_json::json!(["debug-control"])), "image")
                 .unwrap();
@@ -170,6 +166,7 @@ mod tests {
     fn a_malformed_declaration_fails_the_build() {
         for (declared, expected) in [
             (serde_json::json!(["probe"]), "no instrumentation class"),
+            (serde_json::json!(["profile"]), "no instrumentation class"),
             (serde_json::json!(["trace", "trace"]), "twice"),
             (serde_json::json!("trace"), "a list of class names"),
         ] {

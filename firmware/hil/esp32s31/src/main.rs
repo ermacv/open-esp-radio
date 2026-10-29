@@ -12,3 +12,6 @@ fn main() {}
 
 #[cfg(all(test, not(target_arch = "riscv32")))]
 mod services;
+
+#[cfg(any(test, all(oer_trace, feature = "wifi-station")))]
+pub mod measurements;
