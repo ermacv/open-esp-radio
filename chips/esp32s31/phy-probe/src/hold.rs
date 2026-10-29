@@ -1,3 +1,10 @@
+//! PHY hold wire values and hardware-free observation collectors.
+
+pub mod metrics;
+pub mod notes;
+pub mod recorder;
+pub mod sar_tails;
+
 use postcard_schema::Schema;
 use serde::{Deserialize, Serialize};
 

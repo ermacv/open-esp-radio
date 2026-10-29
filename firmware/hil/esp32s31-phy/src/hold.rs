@@ -1,18 +1,25 @@
 //! Forced due tracking in the diagnostic image only, with bounded coarse edges.
-pub mod metrics;
-mod notes;
 mod observer;
-mod recorder;
-pub use notes::Notes;
+#[cfg(target_arch = "riscv32")]
 pub use observer::Observer;
-mod sar_tails;
+#[cfg(target_arch = "riscv32")]
 use oer_diagnostics::Note;
+#[cfg(target_arch = "riscv32")]
 use oer_embassy_time::EmbassyClock;
+#[cfg(target_arch = "riscv32")]
 use oer_esp32s31_phy::state::client::DEFAULT_PLL_TRACK_PERIOD_MICROS;
+use oer_esp32s31_phy_probe::hold::metrics::Metrics;
+#[cfg(target_arch = "riscv32")]
+use oer_esp32s31_phy_probe::hold::{notes::Notes, recorder::Recorder};
+#[cfg(target_arch = "riscv32")]
 use oer_esp32s31_phy_probe::*;
+#[cfg(target_arch = "riscv32")]
 use oer_hil_protocol::base::RejectReason;
-use oer_time::{Clock, Duration, Instant};
+use oer_time::Clock;
+#[cfg(target_arch = "riscv32")]
+use oer_time::{Duration, Instant};
 
+#[cfg(target_arch = "riscv32")]
 pub struct Hold {
     pub started: HoldStarted,
     pub samples: heapless::Vec<HoldSample, HOLD_TICKS>,
@@ -22,6 +29,7 @@ pub struct Hold {
     pub saved_debug: [u8; 2],
     pub engine: HoldPolls,
 }
+#[cfg(target_arch = "riscv32")]
 impl Hold {
     pub fn new(started: HoldStarted, saved_debug: [u8; 2]) -> Self {
         Self {
@@ -53,8 +61,9 @@ impl Hold {
 }
 
 /// Publish the completed observation after tracking, outside the task poll frame.
+#[cfg(target_arch = "riscv32")]
 #[inline(never)]
-pub fn finish_sample(hold: &mut Hold, recorder: recorder::Recorder, committed: u8, failed: bool) {
+pub fn finish_sample(hold: &mut Hold, recorder: Recorder, committed: u8, failed: bool) {
     let sample = recorder.finish(committed, failed);
     hold.invalid |= sample.invalid;
     if hold.samples.push(sample).is_err() {
@@ -64,6 +73,7 @@ pub fn finish_sample(hold: &mut Hold, recorder: recorder::Recorder, committed: u
 }
 
 /// Report preparation only after maintenance returns, including failures.
+#[cfg(target_arch = "riscv32")]
 #[inline(never)]
 pub async fn report_preparation(
     trace: &oer_esp32s31_phy::tracking::observation::ReadinessTrace,
@@ -115,7 +125,7 @@ pub async fn report_preparation(
     }
 }
 
-#[cfg(oer_profile)]
+#[cfg(all(target_arch = "riscv32", oer_profile))]
 #[inline(never)]
 pub async fn report_timer(
     window: Option<
@@ -153,17 +163,21 @@ pub async fn report_timer(
 }
 
 /// The diagnostic image's console: the notes go through its queue.
+#[cfg(target_arch = "riscv32")]
 pub struct Uart;
+#[cfg(target_arch = "riscv32")]
 impl Notes for Uart {
     async fn note(&mut self, note: &Note<'static>) {
         crate::transport::CONSOLE.note_reliably(note).await;
     }
 }
 
+#[cfg(target_arch = "riscv32")]
 async fn note(note: &Note<'static>) {
     crate::transport::CONSOLE.note_reliably(note).await;
 }
 
+#[cfg(target_arch = "riscv32")]
 impl<C: Clock, W: Notes> oer_esp32s31_phy::PhyTargetObserver for &mut Observer<'_, C, W> {
     const OBSERVE_ENGINE_POLLS: bool = true;
     fn channel_action_completed(
@@ -214,4 +228,22 @@ impl<C: Clock, W: Notes> oer_esp32s31_phy::PhyTargetObserver for &mut Observer<'
     ) {
         Observer::tracking_operation(self, operation, event);
     }
+}
+
+/// Keep root instrumentation identical for forced and natural policy.
+pub async fn observe<F: core::future::Future, C: Clock>(
+    future: F,
+    clock: &C,
+    metrics: &core::cell::RefCell<Metrics>,
+) -> F::Output {
+    let mut future = core::pin::pin!(future);
+    core::future::poll_fn(|cx| {
+        metrics.borrow_mut().enter(clock.now().as_micros());
+        let result = future.as_mut().poll(cx);
+        metrics
+            .borrow_mut()
+            .exit(clock.now().as_micros(), result.is_pending());
+        result
+    })
+    .await
 }

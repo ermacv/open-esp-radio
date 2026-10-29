@@ -49,3 +49,13 @@ ticks; poll callbacks send no telemetry.
 `StopTrackingHold` reports sample completeness and policy restoration; RF closure
 is reported separately by `StopCapture`. A stale id never accesses a new hold.
 The host binds these messages to the boot identity of the existing transport.
+
+The public `hold` module also owns the hardware-free hold collectors:
+`recorder` pairs bounded coarse edges, `metrics` accumulates root poll and
+suspension costs, `sar_tails` retains the bounded readiness distribution, and
+`notes::Notes` supplies their diagnostic output sink. They accept observations
+as values and own no clock, PHY, register access or console. Invalid edges,
+reversed time and counter overflow make evidence invalid or return a typed
+observation error. Diagnostic notes retain their existing order and fields.
+The image binds these collectors to its PHY observer, clock and queued console;
+its host tests exercise those adapters, including cache admission and mapping.

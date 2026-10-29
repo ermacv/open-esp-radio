@@ -1,27 +1,16 @@
-// Exercise the actual image observer and root wrapper with a virtual clock/UART.
-#[path = "../../../../firmware/hil/esp32s31-phy/src/hold/metrics.rs"]
-mod metrics;
-#[path = "../../../../firmware/hil/esp32s31-phy/src/hold/notes.rs"]
-mod notes;
-#[path = "../../../../firmware/hil/esp32s31-phy/src/hold/observer.rs"]
-mod observer;
-#[path = "../../../../firmware/hil/esp32s31-phy/src/hold/recorder.rs"]
-mod recorder;
-#[path = "../../../../firmware/hil/esp32s31-phy/src/hold/sar_tails.rs"]
-mod sar_tails;
-
+use crate::hold::{observe, observer};
 use core::{
     cell::{Cell, RefCell},
     future::{Future, poll_fn},
     pin::pin,
     task::{Context, Poll, Waker},
 };
-use notes::Notes;
 use oer_diagnostics::Note;
 use oer_esp32s31_phy::tracking::observation::{
     EngineTiming, Event, GainTiming, Operation, ReadinessTrace, RxGainExecution,
 };
 use oer_esp32s31_phy_probe::HoldPolls;
+use oer_esp32s31_phy_probe::hold::{metrics, notes::Notes};
 use oer_time::{Clock, Duration};
 use oer_time_virtual::VirtualClock;
 
@@ -171,7 +160,7 @@ fn check_quiet_root(failed: bool) {
                 _ => Poll::Ready(()),
             }
         });
-        let mut future = pin!(metrics::observe(root, &clock, &metrics));
+        let mut future = pin!(observe(root, &clock, &metrics));
         let mut context = Context::from_waker(Waker::noop());
         assert!(future.as_mut().poll(&mut context).is_pending());
         assert!(bytes.borrow().is_empty());
@@ -254,63 +243,4 @@ fn channel_observation_overflow_invalidates_the_hold_without_early_uart() {
     }
     assert_eq!(output.0, 0);
     assert!(aggregate.invalid);
-}
-
-#[test]
-fn root_suspension_is_attributed_only_to_intervals_active_across_pending() {
-    let clock = VirtualClock::<1>::new();
-    let mut m = metrics::Metrics::default();
-    m.enter(clock.now().as_micros());
-    m.edge(0, true);
-    m.edge(2, true);
-    clock
-        .advance(Duration::from_micros(10))
-        .expect("advance clock");
-    m.exit(clock.now().as_micros(), true);
-    clock
-        .advance(Duration::from_micros(30))
-        .expect("advance clock");
-    m.enter(clock.now().as_micros());
-    m.edge(2, false);
-    m.edge(3, true);
-    clock
-        .advance(Duration::from_micros(10))
-        .expect("advance clock");
-    m.exit(clock.now().as_micros(), true);
-    clock
-        .advance(Duration::from_micros(40))
-        .expect("advance clock");
-    m.enter(clock.now().as_micros());
-    m.edge(3, false);
-    m.edge(0, false);
-    clock
-        .advance(Duration::from_micros(10))
-        .expect("advance clock");
-    m.exit(clock.now().as_micros(), false);
-    assert!(!m.invalid);
-    assert_eq!(
-        (m.rows[0].polls, m.rows[0].pending, m.rows[0].resumes),
-        (3, 2, 2)
-    );
-    assert_eq!(m.rows[0].suspended_us, 70);
-    assert_eq!(m.rows[2].suspended_us, 30);
-    assert_eq!(m.rows[3].suspended_us, 40);
-    assert_eq!((m.poll_us, m.maximum_poll_us), (30, 10));
-}
-#[test]
-fn repeated_baseband_windows_within_a_poll_count_as_one_poll() {
-    let clock = VirtualClock::<1>::new();
-    let mut m = metrics::Metrics::default();
-    m.enter(clock.now().as_micros());
-    m.edge(0, true);
-    for _ in 0..2 {
-        m.edge(4, true);
-        m.edge(4, false);
-    }
-    m.edge(0, false);
-    m.exit(clock.now().as_micros(), false);
-    assert!(!m.invalid);
-    assert_eq!((m.rows[4].polls, m.rows[4].pending), (1, 0));
-    m.exit(clock.now().as_micros(), false);
-    assert!(m.invalid);
 }

@@ -10,6 +10,8 @@ mod cache;
 #[cfg(all(test, not(target_arch = "riscv32")))]
 mod completion;
 #[cfg(all(test, not(target_arch = "riscv32")))]
+mod hold;
+#[cfg(all(test, not(target_arch = "riscv32")))]
 mod pilot_timing;
 #[cfg(all(test, not(target_arch = "riscv32")))]
 mod services;

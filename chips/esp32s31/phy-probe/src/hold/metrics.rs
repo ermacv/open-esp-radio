@@ -24,12 +24,17 @@ pub struct Metrics {
 
 impl Metrics {
     pub fn edge(&mut self, operation: usize, started: bool) {
-        let mask = 1 << operation;
+        let Some(row) = self.rows.get_mut(operation) else {
+            self.invalid = true;
+            return;
+        };
+        // The admitted index is below the five rows, and therefore below u8::BITS.
+        let mask = 1u8.wrapping_shl(operation as u32);
         if started {
             self.invalid |= self.active & mask != 0;
             self.active |= mask;
             if self.entered.is_some() && self.seen & mask == 0 {
-                self.rows[operation].polls += 1;
+                self.invalid |= add_u32(&mut row.polls, 1);
                 self.seen |= mask;
             }
         } else {
@@ -42,12 +47,12 @@ impl Metrics {
         self.invalid |= self.entered.replace(now).is_some();
         self.seen = self.active;
         for (i, row) in self.rows.iter_mut().enumerate() {
-            if self.active & (1 << i) != 0 {
-                row.polls += 1;
+            if self.active & 1u8.wrapping_shl(i as u32) != 0 {
+                self.invalid |= add_u32(&mut row.polls, 1);
                 if let Some(since) = self.pending_since {
                     if let Some(elapsed) = now.checked_sub(since) {
-                        row.resumes += 1;
-                        row.suspended_us += elapsed;
+                        self.invalid |= add_u32(&mut row.resumes, 1);
+                        self.invalid |= add_u64(&mut row.suspended_us, elapsed);
                         row.maximum_suspended_us = row.maximum_suspended_us.max(elapsed);
                     } else {
                         self.invalid = true;
@@ -61,7 +66,7 @@ impl Metrics {
     pub fn exit(&mut self, now: u64, pending: bool) {
         match self.entered.take().and_then(|start| now.checked_sub(start)) {
             Some(elapsed) => {
-                self.poll_us += elapsed;
+                self.invalid |= add_u64(&mut self.poll_us, elapsed);
                 self.maximum_poll_us = self.maximum_poll_us.max(elapsed);
             }
             None => self.invalid = true,
@@ -69,8 +74,8 @@ impl Metrics {
         if pending {
             self.pending_since = Some(now);
             for (i, row) in self.rows.iter_mut().enumerate() {
-                if self.active & (1 << i) != 0 {
-                    row.pending += 1;
+                if self.active & 1u8.wrapping_shl(i as u32) != 0 {
+                    self.invalid |= add_u32(&mut row.pending, 1);
                 }
             }
         } else {
@@ -79,26 +84,30 @@ impl Metrics {
     }
 }
 
-/// Keep root instrumentation identical for forced and natural policy.
-pub async fn observe<F: core::future::Future, C: oer_time::Clock>(
-    future: F,
-    clock: &C,
-    metrics: &core::cell::RefCell<Metrics>,
-) -> F::Output {
-    let mut future = core::pin::pin!(future);
-    core::future::poll_fn(|cx| {
-        metrics.borrow_mut().enter(clock.now().as_micros());
-        let result = future.as_mut().poll(cx);
-        metrics
-            .borrow_mut()
-            .exit(clock.now().as_micros(), result.is_pending());
-        result
-    })
-    .await
+// Preserve the last representable total and invalidate the report on overflow,
+// as HoldPolls::merge does for the engine's aggregate evidence.
+fn add_u32(total: &mut u32, value: u32) -> bool {
+    match total.checked_add(value) {
+        Some(sum) => {
+            *total = sum;
+            false
+        }
+        None => true,
+    }
+}
+
+fn add_u64(total: &mut u64, value: u64) -> bool {
+    match total.checked_add(value) {
+        Some(sum) => {
+            *total = sum;
+            false
+        }
+        None => true,
+    }
 }
 
 /// UART is available only to the caller after the root future returns.
-pub async fn report(tick: u8, metrics: &Metrics, output: &mut impl super::Notes) {
+pub async fn report(tick: u8, metrics: &Metrics, output: &mut impl super::notes::Notes) {
     for (operation, row) in metrics.rows.iter().enumerate() {
         output
             .note(&Note::hold_poll(
@@ -127,3 +136,6 @@ pub async fn report(tick: u8, metrics: &Metrics, output: &mut impl super::Notes)
         ))
         .await;
 }
+
+#[cfg(test)]
+mod tests;

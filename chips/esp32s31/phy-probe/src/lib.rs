@@ -33,8 +33,12 @@ pub use cache::*;
 mod capture;
 pub use capture::*;
 
-mod hold;
-pub use hold::*;
+pub mod hold;
+pub use hold::{
+    GetTrackingHold, HOLD_INTERVALS, HOLD_TICKS, HoldInterval, HoldOperation, HoldPolicy,
+    HoldPolls, HoldSample, HoldStarted, HoldStopped, StartTrackingHold, StopTrackingHold,
+    TrackingHold,
+};
 
 oer_hil_protocol::messages! {
     endpoint GetCalibrationCacheIdentity = "phy/cache/identity/get" => CalibrationCacheIdentity;

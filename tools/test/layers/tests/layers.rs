@@ -3486,48 +3486,11 @@ fn firmware_inclusions(
 
 /// Image sources that a package outside `firmware/` includes through
 /// `#[path]`, with what removes each.
-const FIRMWARE_SOURCES_INCLUDED: &[Deviation] = &[
-    (
-        "tools/image/cli/src/main.rs",
-        "firmware/apps/w1/src/own/crc32.rs",
-        "the W1 image removal (#848)",
-    ),
-    (
-        "tools/vendor/phy/tests/hold_observer.rs",
-        "firmware/hil/esp32s31-phy/src/hold/metrics.rs",
-        "hold and cache modules out of the PHY image (#848)",
-    ),
-    (
-        "tools/vendor/phy/tests/hold_observer.rs",
-        "firmware/hil/esp32s31-phy/src/hold/notes.rs",
-        "hold and cache modules out of the PHY image (#848)",
-    ),
-    (
-        "tools/vendor/phy/tests/hold_observer.rs",
-        "firmware/hil/esp32s31-phy/src/hold/observer.rs",
-        "hold and cache modules out of the PHY image (#848)",
-    ),
-    (
-        "tools/vendor/phy/tests/hold_observer.rs",
-        "firmware/hil/esp32s31-phy/src/hold/recorder.rs",
-        "hold and cache modules out of the PHY image (#848)",
-    ),
-    (
-        "tools/vendor/phy/tests/hold_observer.rs",
-        "firmware/hil/esp32s31-phy/src/hold/sar_tails.rs",
-        "hold and cache modules out of the PHY image (#848)",
-    ),
-    (
-        "tools/vendor/phy/tests/hold_recorder.rs",
-        "firmware/hil/esp32s31-phy/src/hold/recorder.rs",
-        "hold and cache modules out of the PHY image (#848)",
-    ),
-    (
-        "tools/vendor/phy/tests/target_cache.rs",
-        "firmware/hil/esp32s31-phy/src/cache.rs",
-        "hold and cache modules out of the PHY image (#848)",
-    ),
-];
+const FIRMWARE_SOURCES_INCLUDED: &[Deviation] = &[(
+    "tools/image/cli/src/main.rs",
+    "firmware/apps/w1/src/own/crc32.rs",
+    "the W1 image removal (#848)",
+)];
 
 #[test]
 fn no_package_outside_firmware_includes_an_image_source() {

@@ -1,5 +1,5 @@
-//! Image-local coarse boundaries; no clock reads for inner operation callbacks.
-use oer_esp32s31_phy_probe::{HoldInterval, HoldOperation, HoldSample};
+//! Hardware-free coarse boundaries; no clock reads for inner operation callbacks.
+use crate::{HoldInterval, HoldOperation, HoldSample};
 
 pub struct Recorder {
     sample: HoldSample,
@@ -26,7 +26,10 @@ impl Recorder {
             self.sample.invalid = true;
         }
         self.last = now;
-        let slot = &mut self.active[operation as usize];
+        let Some(slot) = self.active.get_mut(operation as usize) else {
+            self.sample.invalid = true;
+            return;
+        };
         if started {
             if slot.is_some() {
                 self.sample.invalid = true;
@@ -54,3 +57,6 @@ impl Recorder {
         self.sample
     }
 }
+
+#[cfg(test)]
+mod tests;

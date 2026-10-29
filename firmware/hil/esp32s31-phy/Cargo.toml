@@ -53,6 +53,8 @@ oer-esp32s31-knowledge = { path = "../../../chips/esp32s31/knowledge" }
 oer-radio-regulatory = { path = "../../../protocols/radio/regulatory" }
 
 [target.'cfg(not(target_arch = "riscv32"))'.dev-dependencies]
+heapless = { version = "0.9.3", features = ["serde"] }
+oer-diagnostics = { path = "../../../portable/diagnostics", features = ["render"] }
 oer-esp32s31-instrumentation = { path = "../../../chips/esp32s31/instrumentation" }
 oer-esp32s31-instrumentation-hil = { path = "../../../chips/esp32s31/instrumentation-hil" }
 oer-esp32s31-phy-probe = { path = "../../../chips/esp32s31/phy-probe" }
