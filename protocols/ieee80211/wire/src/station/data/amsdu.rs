@@ -1,6 +1,7 @@
 //! Protected QoS A-MSDU sizing and encoding from complete Ethernet frames.
 
 use super::*;
+use oer_network::ETHERNET_HEADER_LEN;
 
 /// One protected QoS A-MSDU prepared for backend CCMP encryption.
 ///

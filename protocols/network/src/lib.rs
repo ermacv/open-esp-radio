@@ -13,18 +13,15 @@
     clippy::disallowed_methods
 )]
 
-//! Adapter-neutral values at the network/radio ownership boundary.
+//! Adapter-neutral values and the owned Ethernet device contract at the network/radio ownership boundary.
 //!
-//! This crate intentionally contains no queue, executor, packet allocation or
-//! driver trait. Compatibility and optimized integrations map their external
-//! network-stack types onto these values without making radio policy depend on
-//! either integration.
-//!
-//! [`NetworkInterfaceId`] and [`LinkState`] describe logical publication, not
-//! ownership of an Ethernet buffer. Buffer loans, queue capacity and wakeups
-//! belong to the selected adapter, while DMA-visible storage remains governed
-//! by `oer-memory` and the chip datapath. A successful conversion of these
-//! values therefore does not imply zero-copy transfer or hardware completion.
+//! `NetDevice` transfers Ethernet owners and reports link epochs without an IP
+//! stack, queue implementation, allocator, Wi-Fi type or execution context.
+
+mod device;
+pub use device::{
+    EthernetFrame, EthernetFrameView, LinkSnapshot, NetDevice, TransmitError, TransmitRefused,
+};
 
 mod flow;
 pub use flow::TransportFlow;

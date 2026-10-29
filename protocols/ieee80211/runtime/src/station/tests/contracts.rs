@@ -71,7 +71,7 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps24, ServiceContext
                 group_permission: station_group_permission,
             },
         );
-        let mut service = StationService::<ServicePort<Id>, _, _, 1, Observed>::new(
+        let mut service = Runner::<ServicePort<Id>, _, _, 1, Observed>::new(
             station,
             StaData::new(
                 data_tickets,

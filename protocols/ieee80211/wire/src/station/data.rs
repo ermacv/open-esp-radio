@@ -2,6 +2,7 @@
 
 use super::*;
 use crate::address::{Bssid, OwnAddress};
+use oer_network::ETHERNET_HEADER_LEN;
 
 mod amsdu;
 pub use amsdu::{

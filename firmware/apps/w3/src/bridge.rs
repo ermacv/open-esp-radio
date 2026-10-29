@@ -1,14 +1,12 @@
-//! Capacity-aware, bounded bridge between StationService and the owned endpoint.
+//! Capacity-aware, bounded bridge between `station::Runner` and the owned endpoint.
 use crate::observation::Observations;
 use core::{
-    cell::{Cell, RefCell},
+    cell::RefCell,
     future::{Future, poll_fn},
     task::Poll,
 };
 use oer_embassy_net::OwnedNetworkRunner;
-use oer_ieee80211_sta::data::{EthernetFrame, TxMsdu};
-use oer_ieee80211_wire::{data::EthernetFrameParts, qos::WmmUserPriority};
-use oer_memory::{WakingSpscReceiver, WakingSpscSender};
+use oer_network::{EthernetFrame as _, NetDevice};
 use oer_time::{Clock, Duration, Timer};
 
 /// Aggregate whole-run work, including empty RX phases. The host computes
@@ -41,24 +39,23 @@ pub async fn run<
     const RX: usize,
     const TX: usize,
     T: Clock + Timer,
+    N: NetDevice,
 >(
     mut radio: OwnedNetworkRunner<'_, X, RX, TX>,
-    mut tx: WakingSpscSender<'_, TxMsdu, 2>,
-    mut rx: WakingSpscReceiver<'_, EthernetFrame, RX>,
+    mut net: N,
     observations: &RefCell<Observations>,
-    link: &Cell<bool>,
     clock: &T,
 ) -> Result<core::convert::Infallible, oer_embassy_net::AccessRefused> {
-    let mut state = false;
+    let mut state = oer_network::LinkSnapshot::DOWN;
+    let mut pending = None;
     loop {
         let mut timer = core::pin::pin!(clock.wait_for(Duration::from_millis(1)));
         poll_fn(|cx| {
             match drain_step(
                 &mut radio,
-                &mut tx,
-                &mut rx,
+                &mut net,
+                &mut pending,
                 observations,
-                link,
                 &mut state,
                 clock,
                 cx,
@@ -81,28 +78,32 @@ pub async fn run<
 // otherwise that frame also remains live while the station service is polled.
 #[inline(never)]
 #[allow(clippy::too_many_arguments)]
-fn drain_step<X: oer_memory::ExecutionContext, const RX: usize, const TX: usize, T: Clock>(
-    radio: &mut OwnedNetworkRunner<'_, X, RX, TX>,
-    tx: &mut WakingSpscSender<'_, TxMsdu, 2>,
-    rx: &mut WakingSpscReceiver<'_, EthernetFrame, RX>,
+fn drain_step<
+    'r,
+    X: oer_memory::ExecutionContext,
+    const RX: usize,
+    const TX: usize,
+    T: Clock,
+    N: NetDevice,
+>(
+    radio: &mut OwnedNetworkRunner<'r, X, RX, TX>,
+    net: &mut N,
+    pending: &mut Option<(u64, oer_embassy_net::OwnedNetworkTxFrame<'r>)>,
     observations: &RefCell<Observations>,
-    link: &Cell<bool>,
-    state: &mut bool,
+    state: &mut oer_network::LinkSnapshot,
     clock: &T,
     cx: &mut core::task::Context<'_>,
 ) -> Result<bool, oer_embassy_net::AccessRefused> {
-    if *state != link.get() {
-        *state = link.get();
-        radio.link_controller().set_link_up(*state);
-    }
-    observations.borrow_mut().loss.sample_queue(rx.len() as u32);
+    let _link = net.poll_link(cx);
+    radio.link_controller().follow_device(net, state);
+    observations
+        .borrow_mut()
+        .loss
+        .sample_queue(net.receive_queue_len() as u32);
     let publisher = radio.rx_publisher();
     let mut received = 0u32;
     for _ in 0..RX {
-        let input_ready = {
-            let mut ready = core::pin::pin!(rx.ready());
-            ready.as_mut().poll(cx).is_ready()
-        };
+        let input_ready = net.poll_receive_ready(cx).is_ready();
         if !input_ready {
             break;
         }
@@ -111,18 +112,17 @@ fn drain_step<X: oer_memory::ExecutionContext, const RX: usize, const TX: usize,
             o.loss.publisher_blocked = o.loss.publisher_blocked.saturating_add(1);
             break;
         }
-        let Some(frame) = rx.try_receive() else {
+        let Some(frame) = net.try_receive() else {
             break;
         };
         received += 1;
-        let p = frame.parts();
+        let Ok(p) = frame.view() else {
+            continue;
+        };
         observations
             .borrow_mut()
             .observe(p.ether_type, p.payload, false, clock.now().as_micros());
-        if publisher
-            .try_send_parts(p.destination, p.source, p.ether_type, p.payload)
-            .is_err()
-        {
+        if oer_embassy_net::ethernet::publish(publisher, frame).is_err() {
             let mut o = observations.borrow_mut();
             o.queue_drops = o.queue_drops.saturating_add(1);
         } else {
@@ -133,7 +133,7 @@ fn drain_step<X: oer_memory::ExecutionContext, const RX: usize, const TX: usize,
     observations.borrow_mut().bridge.record(received);
     let mut tx_progress = false;
     for _ in 0..TX {
-        let input_ready = {
+        let input_ready = pending.is_some() || {
             let mut ready = core::pin::pin!(radio.wait_tx_publication());
             match ready.as_mut().poll(cx) {
                 Poll::Ready(result) => {
@@ -146,46 +146,48 @@ fn drain_step<X: oer_memory::ExecutionContext, const RX: usize, const TX: usize,
         if !input_ready {
             break;
         }
-        let mut ready = core::pin::pin!(tx.ready());
-        let Poll::Ready(permit) = ready.as_mut().poll(cx) else {
+        let Poll::Ready(()) = net.poll_transmit_ready(cx) else {
             break;
         };
         // A coalesced publication may outlive its last queued owner. Consume
         // that hint as work too, so the next poll arms a fresh wait before
         // parking; otherwise a later publication would wait for the timer.
         tx_progress = true;
-        let Some(packet) = radio.try_receive_tx()? else {
-            break;
+        let (epoch, packet, first_attempt) = match pending.take() {
+            Some((epoch, packet)) => (epoch, packet, false),
+            None => {
+                let Some(packet) = radio.try_receive_tx()? else {
+                    break;
+                };
+                (net.link().epoch, packet, true)
+            }
         };
-        let bytes = packet.ethernet();
-        if let Some((header, payload)) = bytes.split_first_chunk::<14>() {
-            let [d0, d1, d2, d3, d4, d5, s0, s1, s2, s3, s4, s5, e0, e1] = *header;
-            let ether_type = u16::from_be_bytes([e0, e1]);
-            match EthernetFrame::from_parts(EthernetFrameParts {
-                destination: [d0, d1, d2, d3, d4, d5],
-                source: [s0, s1, s2, s3, s4, s5],
-                ether_type,
-                payload,
-            }) {
-                Ok(frame) => {
-                    observations.borrow_mut().observe(
-                        ether_type,
-                        payload,
-                        true,
-                        clock.now().as_micros(),
-                    );
-                    permit.send(TxMsdu {
-                        priority: WmmUserPriority::UP0,
-                        frame,
-                    });
-                }
-                Err(_) => {
+        if epoch != net.link().epoch {
+            // Like a queued old-generation packet, this retained owner returns
+            // to its original pool instead of entering a later association.
+            drop(packet);
+            continue;
+        }
+        if first_attempt && let Ok(view) = packet.view() {
+            observations.borrow_mut().observe(
+                view.ether_type,
+                view.payload,
+                true,
+                clock.now().as_micros(),
+            );
+        }
+        if let Err(refused) = packet.transmit_to(net) {
+            match refused.reason {
+                oer_network::TransmitError::InvalidLength(_) => {
                     let mut o = observations.borrow_mut();
                     o.queue_drops = o.queue_drops.saturating_add(1);
                 }
+                oer_network::TransmitError::QueueFull | oer_network::TransmitError::LinkDown => {
+                    *pending = Some((epoch, refused.frame));
+                    break;
+                }
             }
         }
-        drop(packet);
     }
     Ok(received != 0 || tx_progress)
 }
@@ -194,6 +196,33 @@ fn drain_step<X: oer_memory::ExecutionContext, const RX: usize, const TX: usize,
 mod tests {
     extern crate std;
     use super::*;
+    use oer_ieee80211_runtime::station::{
+        Control, ServiceCommand, ServiceOutput, ServiceOutputSink, State,
+    };
+    use oer_ieee80211_sta::data::{EthernetFrame, TxMsdu};
+    use oer_ieee80211_wire::{data::EthernetFrameParts, qos::WmmUserPriority};
+    use oer_memory::{WakingSpscReceiver, WakingSpscSender};
+
+    fn net<'a, const RX: usize>(
+        tx: WakingSpscSender<'a, TxMsdu, 2>,
+        rx: WakingSpscReceiver<'a, EthernetFrame, RX>,
+    ) -> oer_ieee80211_runtime::station::Device<'a, 2, RX> {
+        let state = Box::leak(Box::new(State::new()));
+        let commands = Box::leak(Box::new(WakingSpscQueue::<ServiceCommand<()>, 1>::new()));
+        let (sender, _) = commands.split();
+        let (control, _runner) = Control::new(sender, state).unwrap();
+        let mut events = control.events(|_: ServiceOutput<()>| {});
+        events.emit(ServiceOutput::Notice(
+            oer_ieee80211_sta::machine::StaNotice::Connected {
+                bssid: oer_ieee80211_wire::address::Bssid::new(
+                    oer_ieee80211_wire::address::IndividualAddress::new([2; 6]).unwrap(),
+                )
+                .unwrap(),
+                channel: 6,
+            },
+        ));
+        control.device(tx, rx)
+    }
     use core::{future::Future, task::Context};
     use oer_embassy_net::{NetworkInterfaceId, OwnedEndpointResources};
     use oer_memory::{HostContext, WakingSpscQueue};
@@ -238,14 +267,13 @@ mod tests {
         let mut output = WakingSpscQueue::<TxMsdu, 2>::new();
         let (sender, sink) = output.split();
         let observations = RefCell::new(Observations::new(7));
-        let link = Cell::new(true);
         let mut published = 8;
         let mut received = 0;
         let mut transmitted = 0;
         let mut queued_at = Some(clock.now());
         {
             let mut bridge =
-                core::pin::pin!(run(radio, sender, receiver, &observations, &link, &clock));
+                core::pin::pin!(run(radio, net(sender, receiver), &observations, &clock));
             let mut cx = Context::from_waker(core::task::Waker::noop());
             for turn in 0..129 {
                 clock.advance(Duration::from_micros(100)).unwrap();
@@ -306,9 +334,7 @@ mod tests {
         let mut output = WakingSpscQueue::<TxMsdu, 2>::new();
         let (sender, sink) = output.split();
         let observations = RefCell::new(Observations::new(7));
-        let link = Cell::new(true);
-        let mut bridge =
-            core::pin::pin!(run(radio, sender, receiver, &observations, &link, &clock));
+        let mut bridge = core::pin::pin!(run(radio, net(sender, receiver), &observations, &clock));
         let mut cx = Context::from_waker(core::task::Waker::noop());
         assert!(bridge.as_mut().poll(&mut cx).is_pending());
         assert!(sink.try_receive().is_some());
@@ -345,9 +371,7 @@ mod tests {
         let mut output = WakingSpscQueue::<TxMsdu, 2>::new();
         let (sender, sink) = output.split();
         let observations = RefCell::new(Observations::new(7));
-        let link = Cell::new(true);
-        let mut bridge =
-            core::pin::pin!(run(radio, sender, receiver, &observations, &link, &clock));
+        let mut bridge = core::pin::pin!(run(radio, net(sender, receiver), &observations, &clock));
         let mut cx = Context::from_waker(core::task::Waker::noop());
         clock.advance(Duration::from_micros(100)).unwrap();
         assert!(bridge.as_mut().poll(&mut cx).is_pending());
@@ -416,9 +440,7 @@ mod tests {
         let mut output = WakingSpscQueue::<TxMsdu, 2>::new();
         let (sender, sink) = output.split();
         let observations = RefCell::new(Observations::new(7));
-        let link = Cell::new(true);
-        let mut bridge =
-            core::pin::pin!(run(radio, sender, receiver, &observations, &link, &clock));
+        let mut bridge = core::pin::pin!(run(radio, net(sender, receiver), &observations, &clock));
         let mut cx = Context::from_waker(core::task::Waker::noop());
         let mut next_rx = 0u8;
         let mut next_input = RX as u8;
@@ -501,12 +523,10 @@ mod tests {
                 .unwrap();
         }
         let observations = RefCell::new(Observations::new(7));
-        let link = Cell::new(true);
         let wakes = Arc::new(Wakes(AtomicUsize::new(0)));
         let waker = Waker::from(Arc::clone(&wakes));
         let mut cx = Context::from_waker(&waker);
-        let mut bridge =
-            core::pin::pin!(run(radio, sender, receiver, &observations, &link, &clock));
+        let mut bridge = core::pin::pin!(run(radio, net(sender, receiver), &observations, &clock));
         assert!(bridge.as_mut().poll(&mut cx).is_pending());
         assert!(!device.can_transmit());
         assert!(

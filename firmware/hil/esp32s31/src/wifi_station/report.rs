@@ -20,7 +20,7 @@ use oer_ieee80211_arbiter::{LeaveReason, Refusal};
 use oer_ieee80211_control::*;
 use oer_ieee80211_port::{LayoutError, PreparationError};
 use oer_ieee80211_rsn::sae::SaeError;
-use oer_ieee80211_runtime::station_service::{
+use oer_ieee80211_runtime::station::{
     BackendContractViolation, ControlTerminal, PendingTerminal, ServiceFault, StationPort,
 };
 use oer_ieee80211_sta::{

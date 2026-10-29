@@ -9,6 +9,7 @@ publish.workspace = true
 description = "W3: open station association, DHCP and bidirectional ICMP acceptance"
 
 [dependencies]
+oer-network = { path = "../../../protocols/network" }
 oer-diagnostics = { path = "../../../portable/diagnostics" }
 oer-ieee80211-wire = { path = "../../../protocols/ieee80211/wire" }
 oer-ieee80211-cipher = { path = "../../../protocols/ieee80211/cipher" }

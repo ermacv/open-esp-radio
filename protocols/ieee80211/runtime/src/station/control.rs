@@ -1,0 +1,364 @@
+//! Application control, lossless callback events, and the neutral network end.
+
+use super::{ServiceCommand, ServiceOutput, ServiceOutputSink};
+use core::{
+    cell::Cell,
+    fmt,
+    future::Future,
+    task::{Context, Poll},
+};
+use embassy_futures::select::{Either, select};
+use oer_ieee80211_sta::{
+    data::{EthernetFrame, TxMsdu},
+    machine::{self, StaNotice, StaRequest},
+};
+use oer_memory::{WakingSpscReceiver, WakingSpscSender};
+use oer_network::{LinkSnapshot, LinkState, NetDevice, TransmitError, TransmitRefused};
+use oer_radio_port::PoolPath;
+use oer_sync::PriorityWaker;
+use oer_time::connected_tasks::{
+    ConnectedTaskControlError, ConnectedTaskControlResources, ConnectedTaskController,
+    ConnectedTaskEndpoint, ConnectedTaskGroup,
+};
+
+/// Latest product state. Events and command owners still reach the callback once.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Status {
+    pub link: LinkSnapshot,
+    pub notice: Option<StaNotice>,
+    pub stopped: bool,
+}
+
+/// One station's shared state. Keep it for the complete Runner/Control lifetime.
+pub struct State {
+    status: Cell<Status>,
+    tasks: ConnectedTaskControlResources<()>,
+    link_waker: PriorityWaker,
+}
+
+impl State {
+    pub const fn new() -> Self {
+        Self {
+            status: Cell::new(Status {
+                link: LinkSnapshot::DOWN,
+                notice: None,
+                stopped: false,
+            }),
+            tasks: ConnectedTaskControlResources::new(),
+            link_waker: PriorityWaker::new(),
+        }
+    }
+    pub(super) fn split(
+        &self,
+    ) -> Result<(ConnectedTaskController<'_, ()>, RunnerControl<'_>), ConnectedTaskControlError>
+    {
+        let (task, endpoint) = self.tasks.split()?;
+        self.status.set(Status {
+            link: LinkSnapshot::DOWN,
+            notice: None,
+            stopped: false,
+        });
+        Ok((
+            task,
+            RunnerControl {
+                state: self,
+                endpoint: Some(endpoint),
+            },
+        ))
+    }
+    pub(super) fn events<O>(&self, output: O) -> Events<'_, O> {
+        Events {
+            state: self,
+            output,
+        }
+    }
+    pub(super) fn epoch(&self, epoch: u64) {
+        let mut status = self.status.get();
+        status.link.epoch = epoch;
+        self.status.set(status);
+    }
+}
+impl Default for State {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Why a command remains owned by its caller.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ControlError {
+    QueueFull,
+    Stopped,
+}
+
+#[derive(Debug)]
+pub struct ControlRefused<'id, K, Path: PoolPath> {
+    pub command: ServiceCommand<'id, K, Path>,
+    pub reason: ControlError,
+}
+
+/// Construction refused without consuming the original command producer.
+pub struct ControlCreateRefused<'c, 'id, K, Path: PoolPath, const DEPTH: usize> {
+    pub commands: WakingSpscSender<'c, ServiceCommand<'id, K, Path>, DEPTH>,
+    pub reason: ConnectedTaskControlError,
+}
+impl<K, Path: PoolPath, const DEPTH: usize> fmt::Debug
+    for ControlCreateRefused<'_, '_, K, Path, DEPTH>
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.reason.fmt(f)
+    }
+}
+
+/// Sole command producer and cooperative stop capability.
+pub struct Control<'c, 'id, K, Path: PoolPath, const DEPTH: usize> {
+    commands: WakingSpscSender<'c, ServiceCommand<'id, K, Path>, DEPTH>,
+    state: &'c State,
+    task: ConnectedTaskController<'c, ()>,
+}
+
+/// The Runner's affine side of the control connection.
+pub struct RunnerControl<'c> {
+    pub(super) state: &'c State,
+    endpoint: Option<ConnectedTaskEndpoint<'c, ()>>,
+}
+
+impl<'c> RunnerControl<'c> {
+    pub(super) async fn wait_for_stop(&self) {
+        match &self.endpoint {
+            Some(endpoint) => endpoint.wait_for_stop().await,
+            None => core::future::pending().await,
+        }
+    }
+    pub(super) fn complete(&mut self) {
+        let mut status = self.state.status.get();
+        status.stopped = true;
+        status.link.state = LinkState::Down;
+        self.state.status.set(status);
+        self.state.link_waker.wake();
+        if let Some(endpoint) = self.endpoint.take() {
+            // A duplicate completion refuses its unit owner and poisons reuse;
+            // no radio owner is released through this notification.
+            let _completion = endpoint.complete(());
+        }
+    }
+}
+
+impl<'c, 'id, K, Path: PoolPath, const DEPTH: usize> Control<'c, 'id, K, Path, DEPTH> {
+    pub fn new(
+        commands: WakingSpscSender<'c, ServiceCommand<'id, K, Path>, DEPTH>,
+        state: &'c State,
+    ) -> Result<(Self, RunnerControl<'c>), ControlCreateRefused<'c, 'id, K, Path, DEPTH>> {
+        match state.split() {
+            Ok((task, runner)) => Ok((
+                Self {
+                    commands,
+                    state,
+                    task,
+                },
+                runner,
+            )),
+            Err(reason) => Err(ControlCreateRefused { commands, reason }),
+        }
+    }
+    pub fn status(&self) -> Status {
+        self.state.status.get()
+    }
+    /// All events, including affine refusals and command terminals, are
+    /// delivered directly to this concrete recipient. There is no event queue
+    /// whose overflow could discard an owner or coalesce a lifecycle notice.
+    pub fn events<O>(&self, output: O) -> Events<'c, O> {
+        self.state.events(output)
+    }
+    pub fn device<const TX: usize, const RX: usize>(
+        &self,
+        transmit: WakingSpscSender<'c, TxMsdu, TX>,
+        receive: WakingSpscReceiver<'c, EthernetFrame, RX>,
+    ) -> Device<'c, TX, RX> {
+        Device {
+            transmit,
+            receive,
+            state: self.state,
+            observed: LinkSnapshot::DOWN,
+        }
+    }
+    pub fn try_command(
+        &mut self,
+        command: ServiceCommand<'id, K, Path>,
+    ) -> Result<(), ControlRefused<'id, K, Path>> {
+        if self.status().stopped || self.state.tasks.is_poisoned() {
+            return Err(ControlRefused {
+                command,
+                reason: ControlError::Stopped,
+            });
+        }
+        self.commands
+            .try_send(command)
+            .map_err(|error| ControlRefused {
+                command: error.0,
+                reason: ControlError::QueueFull,
+            })
+    }
+    pub async fn command(
+        &mut self,
+        command: ServiceCommand<'id, K, Path>,
+    ) -> Result<(), ControlRefused<'id, K, Path>> {
+        if self.status().stopped || self.state.tasks.is_poisoned() {
+            return Err(ControlRefused {
+                command,
+                reason: ControlError::Stopped,
+            });
+        }
+        match select(self.commands.ready(), self.task.wait_stopped()).await {
+            Either::First(permit) => {
+                permit.send(command);
+                Ok(())
+            }
+            Either::Second(()) => Err(ControlRefused {
+                command,
+                reason: ControlError::Stopped,
+            }),
+        }
+    }
+    pub async fn request(
+        &mut self,
+        request: StaRequest<'id, Path>,
+    ) -> Result<(), ControlRefused<'id, K, Path>> {
+        self.command(ServiceCommand::Station(request)).await
+    }
+    /// Consume the completed control epoch and recover its sole producer.
+    /// A pending result retains the entire control, including partial returns.
+    pub fn try_finish(
+        self,
+    ) -> Result<WakingSpscSender<'c, ServiceCommand<'id, K, Path>, DEPTH>, Self> {
+        let Self {
+            commands,
+            state,
+            task,
+        } = self;
+        match task.try_finish() {
+            Ok(()) => Ok(commands),
+            Err(task) => Err(Self {
+                commands,
+                state,
+                task,
+            }),
+        }
+    }
+    pub async fn connect(
+        &mut self,
+        correlation: u64,
+        credit: machine::StaCommandCredit<'id, Path, machine::ConnectCommand>,
+    ) -> Result<(), ControlRefused<'id, K, Path>> {
+        self.request(StaRequest::new(correlation, credit)).await
+    }
+    pub async fn disconnect(
+        &mut self,
+        correlation: u64,
+        credit: machine::StaCommandCredit<'id, Path, machine::DisconnectCommand>,
+    ) -> Result<(), ControlRefused<'id, K, Path>> {
+        self.request(StaRequest::new(correlation, credit)).await
+    }
+    pub async fn scan(
+        &mut self,
+        correlation: u64,
+        credit: machine::StaCommandCredit<'id, Path, machine::ScanCommand>,
+    ) -> Result<(), ControlRefused<'id, K, Path>> {
+        self.request(StaRequest::new(correlation, credit)).await
+    }
+    pub fn stop(&mut self) {
+        self.task.request_stop();
+    }
+    pub async fn wait_stopped(&mut self) {
+        self.task.wait_stopped().await;
+    }
+}
+
+pub struct Events<'c, O> {
+    state: &'c State,
+    output: O,
+}
+impl<'id, K, Path: PoolPath, O: ServiceOutputSink<'id, K, Path>> ServiceOutputSink<'id, K, Path>
+    for Events<'_, O>
+{
+    fn emit(&mut self, output: ServiceOutput<'id, K, Path>) {
+        if let ServiceOutput::Notice(notice) = &output {
+            let mut status = self.state.status.get();
+            status.notice = Some(*notice);
+            status.link.state = match notice {
+                StaNotice::Connected { .. } => LinkState::Up,
+                StaNotice::Disconnected(_) => LinkState::Down,
+            };
+            self.state.status.set(status);
+            self.state.link_waker.wake();
+        }
+        self.output.emit(output);
+    }
+}
+
+/// The Wi-Fi implementation of the neutral Ethernet contract.
+pub struct Device<'c, const TX: usize, const RX: usize> {
+    transmit: WakingSpscSender<'c, TxMsdu, TX>,
+    receive: WakingSpscReceiver<'c, EthernetFrame, RX>,
+    state: &'c State,
+    observed: LinkSnapshot,
+}
+impl<const TX: usize, const RX: usize> NetDevice for Device<'_, TX, RX> {
+    type RxFrame = EthernetFrame;
+    fn link(&self) -> LinkSnapshot {
+        self.state.status.get().link
+    }
+    fn poll_link(&mut self, cx: &mut Context<'_>) -> Poll<LinkSnapshot> {
+        self.state.link_waker.register(cx.waker());
+        let link = self.link();
+        if link == self.observed {
+            Poll::Pending
+        } else {
+            self.observed = link;
+            Poll::Ready(link)
+        }
+    }
+    fn receive_queue_len(&self) -> usize {
+        self.receive.len()
+    }
+    fn poll_receive_ready(&mut self, cx: &mut Context<'_>) -> Poll<()> {
+        core::pin::pin!(self.receive.ready()).poll(cx)
+    }
+    fn try_receive(&mut self) -> Option<Self::RxFrame> {
+        self.receive.try_receive()
+    }
+    fn poll_transmit_ready(&mut self, cx: &mut Context<'_>) -> Poll<()> {
+        self.state.link_waker.register(cx.waker());
+        if self.link().state == LinkState::Down {
+            return Poll::Pending;
+        }
+        core::pin::pin!(self.transmit.ready()).poll(cx).map(|_| ())
+    }
+    fn try_transmit<F: oer_network::EthernetFrame>(
+        &mut self,
+        frame: F,
+    ) -> Result<(), TransmitRefused<F>> {
+        let result = if self.link().state == LinkState::Down {
+            Err(TransmitError::LinkDown)
+        } else {
+            frame
+                .view()
+                .map_err(TransmitError::InvalidLength)
+                .and_then(|view| {
+                    TxMsdu::from_network(view)
+                        .map_err(|_| {
+                            TransmitError::InvalidLength(oer_network::FrameLengthError::TooLong)
+                        })
+                        .and_then(|packet| {
+                            self.transmit
+                                .try_send(packet)
+                                .map_err(|_| TransmitError::QueueFull)
+                        })
+                })
+        };
+        result.map_err(|reason| TransmitRefused { frame, reason })
+    }
+}
+
+#[cfg(test)]
+mod tests;

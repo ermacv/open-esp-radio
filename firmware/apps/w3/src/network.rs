@@ -19,10 +19,9 @@ use oer_firmware_apps_w3::{
     observation::Observations,
     report::{Lease, Report},
 };
-use oer_ieee80211_runtime::station_service::*;
-use oer_ieee80211_sta::data::{EthernetFrame, TxMsdu};
+use oer_ieee80211_runtime::station::*;
+use oer_ieee80211_runtime::station::Device as StationDevice;
 use oer_ieee80211_sta::machine::{StaCommandCredits, StaRequest};
-use oer_memory::{WakingSpscReceiver, WakingSpscSender};
 use oer_radio_port::PoolPath;
 use oer_time::{Clock, Duration, Timer};
 use owned_embassy_net::{
@@ -54,9 +53,8 @@ pub fn workload<'a, 'id: 'a, Path: PoolPath + 'a>(
     address: [u8; 6],
     seed: u64,
     credits: StaCommandCredits<'id, Path>,
-    commands: WakingSpscSender<'a, ServiceCommand<'id, crate::radio::Caps, Path>, 2>,
-    tx: WakingSpscSender<'a, TxMsdu, 2>,
-    rx: WakingSpscReceiver<'a, EthernetFrame, RX>,
+    commands: Control<'a, 'id, crate::radio::Caps, Path, 2>,
+    net: StationDevice<'a, 2, RX>,
     link: &'a Cell<bool>,
     disconnected: &'a Cell<bool>,
     failed: &'a Cell<bool>,
@@ -68,8 +66,7 @@ pub fn workload<'a, 'id: 'a, Path: PoolPath + 'a>(
             seed,
             credits,
             commands,
-            tx,
-            rx,
+            net,
             link,
             disconnected,
             failed,
@@ -90,9 +87,8 @@ fn workload_future<'a, 'id: 'a, Path: PoolPath + 'a>(
     address: [u8; 6],
     seed: u64,
     credits: StaCommandCredits<'id, Path>,
-    mut commands: WakingSpscSender<'a, ServiceCommand<'id, crate::radio::Caps, Path>, 2>,
-    tx: WakingSpscSender<'a, TxMsdu, 2>,
-    rx: WakingSpscReceiver<'a, EthernetFrame, RX>,
+    mut commands: Control<'a, 'id, crate::radio::Caps, Path, 2>,
+    net: StationDevice<'a, 2, RX>,
     link: &'a Cell<bool>,
     disconnected: &'a Cell<bool>,
     failed: &'a Cell<bool>,
@@ -145,10 +141,8 @@ fn workload_future<'a, 'id: 'a, Path: PoolPath + 'a>(
                 async {
                     match oer_firmware_apps_w3::bridge::run(
                         radio,
-                        tx,
-                        rx,
+                        net,
                         &observations,
-                        link,
                         &EmbassyClock,
                     )
                     .await
@@ -184,7 +178,7 @@ async fn application<'id, Path: PoolPath>(
     config: W3Config,
     address: [u8; 6],
     credits: StaCommandCredits<'id, Path>,
-    commands: &mut WakingSpscSender<'_, ServiceCommand<'id, crate::radio::Caps, Path>, 2>,
+    commands: &mut Control<'_, 'id, crate::radio::Caps, Path, 2>,
     iface: Iface<'_, Device>,
     socket: &RawSocket<'_, Device>,
     observations: &RefCell<Observations>,
@@ -193,7 +187,7 @@ async fn application<'id, Path: PoolPath>(
     failed: &Cell<bool>,
 ) -> Report {
     let mut report = Report::new(config.channel, address, config.stand);
-    let _ = commands.try_send(ServiceCommand::Station(StaRequest::new(1, credits.connect)));
+    let _ = commands.try_command(ServiceCommand::Station(StaRequest::new(1, credits.connect)));
     let deadline = EmbassyClock
         .now()
         .checked_add(Duration::from_secs(30))
@@ -268,7 +262,7 @@ async fn application<'id, Path: PoolPath>(
     observations.borrow().report(&mut report);
     if link.get() {
         DEPARTING.store(true, Ordering::Relaxed);
-        let _ = commands.try_send(ServiceCommand::Station(StaRequest::new(
+        let _ = commands.try_command(ServiceCommand::Station(StaRequest::new(
             2,
             credits.disconnect,
         )));
@@ -281,7 +275,7 @@ async fn application<'id, Path: PoolPath>(
         }
     }
     report.deauth_sent = DEAUTH.load(Ordering::Relaxed);
-    let _ = commands.try_send(ServiceCommand::Stop);
+    commands.stop();
     report
 }
 

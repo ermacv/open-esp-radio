@@ -88,6 +88,12 @@
 //! Network frames are the data machine's checked [`EthernetFrame`]s; a
 //! received payload too long for one is refused, never clipped.
 
+mod control;
+pub use control::{
+    Control, ControlCreateRefused, ControlError, ControlRefused, Device, Events, RunnerControl,
+    State, Status,
+};
+
 use core::marker::PhantomData;
 use oer_trace::{Noop, Observer};
 // The ARP observation reads a prepared buffer's octets.
@@ -520,7 +526,7 @@ impl<'id, K, Path: oer_radio_port::PoolPath, F: FnMut(ServiceOutput<'id, K, Path
 ///
 /// ```compile_fail,E0308
 /// use embassy_sync::{blocking_mutex::raw::NoopRawMutex, channel::Channel};
-/// use oer_ieee80211_runtime::station_service::{ServiceCommand, ServiceIo, ServiceOutput};
+/// use oer_ieee80211_runtime::station::{Control, State, ServiceCommand, ServiceIo, ServiceOutput};
 /// use oer_ieee80211_sta::data::{EthernetFrame, TxMsdu};
 /// use oer_memory::WakingSpscQueue;
 /// let commands = Channel::<NoopRawMutex, ServiceCommand<()>, 1>::new();
@@ -529,15 +535,19 @@ impl<'id, K, Path: oer_radio_port::PoolPath, F: FnMut(ServiceOutput<'id, K, Path
 /// let (_, transmit) = tx.split();
 /// let (receive, _) = rx.split();
 /// let mut output = |_: ServiceOutput<()>| {};
+/// let mut control_queue = WakingSpscQueue::<ServiceCommand<()>, 1>::new();
+/// let (application, _) = control_queue.split();
+/// let state = State::new();
+/// let (_control, control) = Control::new(application, &state).unwrap();
 /// let io = ServiceIo {
-///     commands: commands.dyn_receiver(), transmit, receive, output: &mut output,
+///     commands: commands.dyn_receiver(), transmit, receive, output: &mut output, control,
 /// };
 /// ```
 ///
 /// The composition moves one receiver into the service and retains its sole sender:
 ///
 /// ```
-/// use oer_ieee80211_runtime::station_service::{ServiceCommand, ServiceIo, ServiceOutput};
+/// use oer_ieee80211_runtime::station::{Control, State, ServiceCommand, ServiceIo, ServiceOutput};
 /// use oer_ieee80211_sta::data::{EthernetFrame, TxMsdu};
 /// use oer_memory::WakingSpscQueue;
 /// let mut commands = WakingSpscQueue::<ServiceCommand<()>, 1>::new();
@@ -547,8 +557,10 @@ impl<'id, K, Path: oer_radio_port::PoolPath, F: FnMut(ServiceOutput<'id, K, Path
 /// let (_, transmit) = tx.split();
 /// let (receive, _) = rx.split();
 /// let mut output = |_: ServiceOutput<()>| {};
-/// let io = ServiceIo { commands, transmit, receive, output: &mut output };
-/// assert!(application.try_send(ServiceCommand::Stop).is_ok());
+/// let state = State::new();
+/// let (mut application, control) = Control::new(application, &state).unwrap();
+/// let io = ServiceIo { commands, transmit, receive, output: &mut output, control };
+/// assert!(application.try_command(ServiceCommand::Stop).is_ok());
 /// assert!(matches!(io.commands.try_receive(), Some(ServiceCommand::Stop)));
 /// ```
 pub struct ServiceIo<
@@ -570,6 +582,8 @@ pub struct ServiceIo<
     pub receive: WakingSpscSender<'c, EthernetFrame, RX_DEPTH>,
     /// What the service tells the application.
     pub output: &'c mut O,
+    /// Affine cooperative stop and completion connection to Control.
+    pub control: RunnerControl<'c>,
 }
 
 /// How the service ended.
@@ -742,7 +756,7 @@ pub struct RestartedService<
     O: Observer = Noop,
 > {
     pub owner: Owner<'p, 'id, B::SlotId, B::Backend, Disabled>,
-    pub service: StationService<'id, B, C, S, GROUPS, O>,
+    pub service: Runner<'id, B, C, S, GROUPS, O>,
     pub deferred_eapol: oer_ieee80211_sta::machine::DeferredEapol,
     pub notice: Option<oer_ieee80211_sta::machine::StaNotice>,
 }
@@ -879,7 +893,7 @@ impl<
         }
         Ok(RestartedService {
             owner,
-            service: StationService {
+            service: Runner {
                 arbiter,
                 state: ServiceState {
                     station,
@@ -942,7 +956,7 @@ pub struct RetiredService<
 
 /// The station's service: its machines and the rate selection of its frames.
 /// Disable returns only command terminals; the backend recycles unsolicited RX.
-pub struct StationService<
+pub struct Runner<
     'id,
     B: StationPort<SlotId: 'id, Backend: 'id> + 'id,
     C: StaCallbacks,
@@ -1030,7 +1044,7 @@ impl<
     S: RateSelection<PortRxMeta<'id, B>, PortAck<'id, B>>,
     const GROUPS: usize,
     O: Observer,
-> StationService<'id, B, C, S, GROUPS, O>
+> Runner<'id, B, C, S, GROUPS, O>
 {
     /// The service of the machines the composition built, its frames at
     /// the rates `rates` selects.
@@ -1174,7 +1188,7 @@ impl<
                 pending
             }
         );
-        oer_memory::Placed::init(output, |place| {
+        let completed = oer_memory::Placed::init(output, |place| {
             oer_memory::init_in_place!(place, ServiceCompleted {
                 end => |place| end.init_end(place, custody),
                 retired => |place: &mut core::mem::MaybeUninit<RetiredService<'id, B, C, S, GROUPS, O>>| {
@@ -1209,7 +1223,9 @@ impl<
                     retired.into_mut()
                 },
             })
-        })
+        });
+        io.control.complete();
+        completed
     }
 
     /// Consume the service and run until Stop or port failure. Completion
@@ -1281,6 +1297,7 @@ impl<
                 }
             }
         }
+        io.control.complete();
         ServiceCompleted {
             end,
             retired: RetiredService {
@@ -1642,7 +1659,17 @@ impl<
             let accepting_commands = !self.station.is_reclaiming();
             let (event, command_ready, tick, transmit, unwrapped) = {
                 let event = phase.next_event();
-                let command = io.commands.ready();
+                let command = async {
+                    match embassy_futures::select::select(
+                        io.control.wait_for_stop(),
+                        io.commands.ready(),
+                    )
+                    .await
+                    {
+                        embassy_futures::select::Either::First(()) => true,
+                        embassy_futures::select::Either::Second(()) => false,
+                    }
+                };
                 let alarm = async {
                     match deadline {
                         Some(deadline) => timer.wait_until(deadline).await,
@@ -1659,14 +1686,26 @@ impl<
                         Poll::Ready(event) => Some(event),
                         Poll::Pending => None,
                     };
-                    let command_ready = accepting_commands && command.as_mut().poll(cx).is_ready();
+                    let command_ready = if accepting_commands {
+                        match command.as_mut().poll(cx) {
+                            Poll::Ready(stop) => Some(stop),
+                            Poll::Pending => None,
+                        }
+                    } else {
+                        None
+                    };
                     let tick = alarm.as_mut().poll(cx).is_ready();
                     let transmit = sending && transmit_ready.as_mut().poll(cx).is_ready();
                     let unwrapped = match unwrap.poll_done(cx) {
                         Poll::Ready(done) => Some(done),
                         Poll::Pending => None,
                     };
-                    if event.is_some() || command_ready || tick || transmit || unwrapped.is_some() {
+                    if event.is_some()
+                        || command_ready.is_some()
+                        || tick
+                        || transmit
+                        || unwrapped.is_some()
+                    {
                         Poll::Ready((event, command_ready, tick, transmit, unwrapped))
                     } else {
                         Poll::Pending
@@ -1707,7 +1746,12 @@ impl<
             }
             // A ready command stays in its sole-consumer queue until the
             // event was accepted. An event fault above cannot discard it.
-            if command_ready && let Some(command) = io.commands.try_receive() {
+            let command = match command_ready {
+                Some(true) => Some(ServiceCommand::Stop),
+                Some(false) => io.commands.try_receive(),
+                None => None,
+            };
+            if let Some(command) = command {
                 match command {
                     ServiceCommand::Station(command) => {
                         if let Err(refused) = self.station.command(now, command) {
@@ -2124,9 +2168,17 @@ impl<
                 self.rates
                     .associated(&peer.associated.rate_peer(), &peer.response);
             }
-            Follow::Disconnected => {
-                self.rates.disconnected();
-                self.data.leave();
+            Follow::Notice(notice) => {
+                if let StaNotice::Connected { .. } = notice
+                    && let Some(link) = self.station.link()
+                {
+                    io.control.state.epoch(link.epoch.sequence());
+                }
+                io.output.emit(ServiceOutput::Notice(notice));
+                if let StaNotice::Disconnected(_) = notice {
+                    self.rates.disconnected();
+                    self.data.leave();
+                }
             }
             Follow::Refused {
                 context,
@@ -2662,7 +2714,7 @@ enum Follow<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id, const GROUPS: 
         reason: TxRefusal,
     },
     /// The station left: the rates leave its peer.
-    Disconnected,
+    Notice(StaNotice),
 }
 
 type StationPreparation<'k, 'p, 'id, B> = Result<
@@ -3009,13 +3061,7 @@ where
                 BackendContractViolation::StationKeyBank(reason),
             ));
         }
-        StaAction::Notify(notice) => {
-            io.output.emit(ServiceOutput::Notice(notice));
-            return Ok(match notice {
-                StaNotice::Disconnected(_) => Follow::Disconnected,
-                StaNotice::Connected { .. } => Follow::Nothing,
-            });
-        }
+        StaAction::Notify(notice) => return Ok(Follow::Notice(notice)),
         StaAction::CommandCompleted(terminal) => {
             io.output.emit(ServiceOutput::CommandCompleted(terminal));
             return Ok(Follow::Nothing);

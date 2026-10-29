@@ -19,6 +19,8 @@
 //! and the radio. It contains no Wi-Fi scheduling, physical SRAM allocator or
 //! compatibility implementation of the released Embassy driver API. RX frames
 //! are copied into packet-pool storage before publication to the network stack.
+//! [`ethernet`] consumes the neutral `oer_network::NetDevice` contract; a
+//! refused TX retains its original packet and software credit together.
 //! [`station_network`] retains the network stack and its radio-side runner
 //! across station associations. [`datapath`] holds the software/physical TX
 //! ownership contracts and the destination/flow queue arena between them.
@@ -28,6 +30,7 @@ pub use oer_network::{
 };
 
 pub mod datapath;
+pub mod ethernet;
 mod owned;
 pub mod station_network;
 

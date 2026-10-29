@@ -12,12 +12,14 @@ description = "Wi-Fi async glue between the lower-MAC port and the sans-IO cores
 placement = ["oer-ieee80211-sta/placement"]
 
 [dependencies]
+oer-sync = { path = "../../../portable/sync" }
+oer-network = { path = "../../network" }
 heapless = "0.9.3"
 embassy-futures = "0.1.2"
 oer-memory = { path = "../../../portable/memory" }
 oer-ieee80211-port = { path = "../port" }
 oer-radio-port = { path = "../../radio/port" }
-oer-time = { path = "../../../portable/time" }
+oer-time = { path = "../../../portable/time", features = ["connected-tasks"] }
 oer-ieee80211-arbiter = { path = "../arbiter" }
 oer-ieee80211-sta = { path = "../sta" }
 oer-crypto = { path = "../../../portable/crypto" }

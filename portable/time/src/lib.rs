@@ -53,14 +53,17 @@
 //!
 //! # Features
 //!
-//! The crate has no dependency and no default feature. Two optional
-//! features give [`Duration`] a wire form, for a port's typed bounds that
-//! travel from the firmware to the host:
+//! The crate has no default feature. Its optional features are:
 //!
 //! - `serde`: [`Duration`] serializes transparently as its `u64`
 //!   microseconds, and deserializes from them;
 //! - `schema`: its `postcard_schema::Schema` is that of `u64`, for a host
 //!   protocol's message lock; it enables `serde`.
+//! - `connected-tasks`: finite task-group shutdown with owned notification
+//!   storage, without a mutex or critical section; adds memory, sync and futures.
+
+#[cfg(feature = "connected-tasks")]
+pub mod connected_tasks;
 
 pub mod deadline;
 pub mod settle;

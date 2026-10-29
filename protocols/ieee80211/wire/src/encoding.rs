@@ -1,5 +1,6 @@
 //! A frame's immutable parts are its sizing and writing authority.
 
+use oer_network::ETHERNET_HEADER_LEN;
 mod fixed;
 pub(crate) use fixed::write_array;
 
@@ -130,7 +131,7 @@ pub(crate) enum AmsduError {
 
 impl<'a> AmsduBody<'a> {
     pub(crate) fn checked(frames: &'a [&'a [u8]], maximum: usize) -> Result<Self, AmsduError> {
-        use crate::data::{ETHERNET_HEADER_LEN, LLC_SNAP_HEADER_LEN};
+        use crate::data::LLC_SNAP_HEADER_LEN;
         if frames.is_empty() {
             return Err(AmsduError::Empty);
         }
@@ -161,7 +162,7 @@ impl<'a> AmsduBody<'a> {
     }
 
     fn fragments(&self) -> impl Clone + Iterator<Item = Fragment<'a>> + use<'a> {
-        use crate::data::{ETHERNET_HEADER_LEN, LLC_SNAP_HEADER_LEN, RFC1042_LLC_SNAP_PREFIX};
+        use crate::data::{LLC_SNAP_HEADER_LEN, RFC1042_LLC_SNAP_PREFIX};
         let count = self.frames.len();
         self.frames
             .iter()

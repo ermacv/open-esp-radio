@@ -19,22 +19,38 @@ until the engine finishes; the next run finishes it before serving, and a run
 that ends finishes its own operation before the station retires. The runtime
 depends on `oer-crypto`, not on the software engine in `cipher`.
 
-`station_service` is the station's service; `monitor` holds the capture and
+`station` provides `Control` and the port-generic `Runner`; `monitor` holds the capture and
 injection handoffs of a monitor. The frames a monitor keeps and the channels
 it visits are `oer-ieee80211-upper-mac`'s `monitor`; the requested owner
 topology is checked by `oer-ieee80211-arbiter`'s `configuration`.
+
+`station::Control` owns the command producer and exposes connect, disconnect,
+background scan, product status and a concrete event recipient through `events`.
+Every event and command terminal still transfers its original owner directly;
+there is no lossy event queue. `Control::device` lends the neutral `oer-network`
+Ethernet port. Its publication epoch is the station core's connection epoch,
+unchanged across channel absences. A TX refusal returns the caller's exact
+frame owner. The adapter copies bytes into the existing station queue storage.
+
+`State` retains status and the `oer-time` connected-task connection. `Control::stop`
+requests cooperative Runner shutdown independently of command-queue capacity.
+Runner completion is published only after machine retirement; dropping its
+endpoint poisons reuse. The completed radio/resource banks remain in the
+Runner's owned result. `Control::wait_stopped` observes completion;
+`try_finish` consumes the control epoch and returns its command producer.
+The `connected-tasks` feature is enabled by the runtime, never by a core.
 
 Host tests use the allocating in-memory backend from `oer-ieee80211-model`
 as a dev-dependency. The model's fixtures run the shared conformance cases in
 `oer-ieee80211-port`; runtime tests cover its station service over that model.
 
 `StationPort` is an image-owned composition mapping with a concrete `Backend`,
-`SlotId` and `Caps`. `StationService` owns that backend's lifecycle directly.
+`SlotId` and `Caps`. `station::Runner` owns that backend's lifecycle directly.
 This permits a composition to select station buffers and resource types without
 implementing a foreign trait for a foreign backend or replacing its body-loan
 identity. The radio and lower-MAC port contracts remain the common boundary.
 
-`StationService` retains the station's concrete `StaCallbacks` provider with
+`station::Runner` retains the station's concrete `StaCallbacks` provider with
 its resource bank across stop/restart. It keeps no counters: it takes an
 `O: oer_trace::Observer` (by default `Noop`, the observer of its station and
 data machine too) and reports lost port events, receive drops with their
@@ -54,7 +70,7 @@ data MPDU's from `sta::data`. The service prepares the port's source in the
 buffer pool, submits it and routes each terminal back; a terminal's rate
 sample reaches `RateSelection::learn` with its frame class.
 
-The image lends `StationService` a placed `RxBlockAckStorage`, the upper
+The image lends `station::Runner` a placed `RxBlockAckStorage`, the upper
 MAC's receive Block Ack owner bound to this port's RX owners, bank slots and
 the station's link epoch. Its const generic bank count selects existing shared
 RX BA slot owners; retained frames borrow the port's RX buffers without
@@ -73,7 +89,7 @@ at that instant is refused with a typed result (`DwellChanging`,
 
 ## Known defects
 
-- **`station_service.rs::serve` steps once per loop**, then handles the
+- **`station.rs::serve` steps once per loop**, then handles the
   event, tick, command and transmit in one pass; a later input sees the
   machine before the previous one was stepped.
 - **Queue bounds are not tied to the backend.** `sta`'s `StaData::new`
@@ -84,4 +100,4 @@ at that instant is refused with a typed result (`DwellChanging`,
   deadline for a gate that never closes, and `MAX_INPUT_STEPS_PER_BATCH`
   only yields instead of raising a contract fault.
 - **Low:** retired-service fields `_pending`, `_arbiter` and `_places` remain
-  in `station_service.rs`.
+  in `station.rs`.

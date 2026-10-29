@@ -1,8 +1,8 @@
 error[E0382]: use of moved value: `service`
   --> tests/ui/service_run_owner.rs:18:10
    |
-10 |     service: StationService<'id, B, C, S>,
-   |     ------- move occurs because `service` has type `StationService<'_, B, C, S>`, which does not implement the `Copy` trait
+10 |     service: Runner<'id, B, C, S>,
+   |     ------- move occurs because `service` has type `Runner<'_, B, C, S>`, which does not implement the `Copy` trait
 ...
 16 |     let run = service.run(owner, io, timer, unwrap);
    |                       ----------------------------- `service` moved due to this method call
@@ -10,8 +10,8 @@ error[E0382]: use of moved value: `service`
 18 |     drop(service); // ui-error: E0382
    |          ^^^^^^^ value used here after move
    |
-note: `StationService::<'id, B, C, S, GROUPS, O>::run` takes ownership of the receiver `self`, which moves `service`
-  --> src/station_service.rs
+note: `Runner::<'id, B, C, S, GROUPS, O>::run` takes ownership of the receiver `self`, which moves `service`
+  --> src/station.rs
    |
    |         self,
    |         ^^^^

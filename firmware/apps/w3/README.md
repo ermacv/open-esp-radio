@@ -6,7 +6,7 @@ prints `OER-RESULT: fail w3 unconfigured` and idles with no tasks or interrupt
 bindings. Only the configured composition declares executor task poll records.
 
 The image composes the S31 lower-MAC backend, channel arbiter, open
-`StationService` and Espressif rate selection with the owned Embassy network
+`station::Runner` and Espressif rate selection with the owned Embassy network
 adapter. P2 owns the device and port registration; the station and IP stack run
 on P1 in PSRAM. The linker sizes this image's P1 stack under `stack.toml`, with the platform's
 unchanged interrupt-stack allocation. The image stores the large station future

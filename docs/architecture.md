@@ -119,6 +119,15 @@ from `oer-time`, interrupt signals from `portable/`, no executor,
 `embassy-time`, `embassy-net`, `embassy-sync` or HAL dependency
 (`embassy-futures` is allowed). The firmware composition declares the tasks
 that poll the futures.
+The Wi-Fi station runtime exposes `station::Control` and `station::Runner`.
+Control owns command admission, product status and lossless callback events;
+Runner selects inputs over the generic port and executes the existing cores.
+The neutral `oer-network::NetDevice` transfers Ethernet owners and publishes
+the link epoch. `portable/embassy/net` maps it to the IP stack, retaining a
+refused TX owner. Neither contract exposes a stack packet or Wi-Fi core type.
+Finite connected-task shutdown lives in `oer-time` behind its non-default
+`connected-tasks` feature, without `embassy-sync`; `oer-cooperate` retains only
+hardware-atom admission and its bounds.
 Drivers own hardware and wait; adapters bind executors.
 
 Direct normal dependencies on external async crates follow their role,
@@ -126,7 +135,7 @@ including aliases, optional entries and target-specific entries:
 
 - `embassy-futures` is allowed except in wire, cipher, protocol cores,
   core-side policy, facts, PAC and HAL roles.
-- `embassy-sync` is development-only. Its five remaining normal edges are
+- `embassy-sync` is development-only. Its four remaining normal edges are
   checked against a shrinking [deviation list](repository-layout.md#known-deviations).
   Transitive uses inside `embassy-net` and `bt-hci` do not admit direct uses.
 - `embassy-time` belongs to `portable/embassy/time` and the Embassy time ABI

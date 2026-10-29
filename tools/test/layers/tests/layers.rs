@@ -2134,11 +2134,6 @@ fn external_crate_violations(members: &[Member]) -> Result<BTreeSet<Edge>, Strin
 /// Remaining direct embassy-sync edges and the change that removes them.
 const EXTERNAL_ASYNC_CRATES: &[Deviation] = &[
     (
-        "portable/cooperate",
-        "embassy-sync",
-        "connected_tasks on owned notification cells (#848)",
-    ),
-    (
         "protocols/hil/agent",
         "embassy-sync",
         "console on owned queues and waiter slots (#848)",

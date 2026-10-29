@@ -16,7 +16,7 @@ use oer_embassy_time::EmbassyClock;
 use oer_esp32s31_ieee80211_driver::port::{self, device::Composition};
 use oer_espressif_ieee80211_policy::rate_selection::EspressifRateSelection;
 use oer_ieee80211_port::*;
-use oer_ieee80211_runtime::station_service::*;
+use oer_ieee80211_runtime::station::*;
 use oer_ieee80211_cipher::aes::{SoftwareAes128, SoftwareKeyUnwrap};
 use oer_ieee80211_sta::data::{EthernetFrame, TxMsdu};
 use oer_memory::WakingSpscQueue;
@@ -299,10 +299,10 @@ impl oer_trace::Observer for Observed {
 }
 
 type Service<'id, Id> =
-    StationService<'id, StationComposition<Id>, Callbacks, Rates, 1, Observed>;
+    Runner<'id, StationComposition<Id>, Callbacks, Rates, 1, Observed>;
 type Completed<'p, 'id, Id> =
     ServiceCompleted<'p, 'id, StationComposition<Id>, Callbacks, Rates, 1, Observed>;
-type Io<'c, 'id, Id> = ServiceIo<'c, 'id, Caps, Output<'c>, 2, 8, 2, Child<Root<Id>, 8>>;
+type Io<'c, 'id, Id> = ServiceIo<'c, 'id, Caps, Events<'c, Output<'c>>, 2, 8, 2, Child<Root<Id>, 8>>;
 type Running<'s, 'c: 's, 'p: 's, 'id: 'p, Id: SlotIdentity + 'id> =
     impl Future<Output = Placed<'s, Completed<'p, 'id, Id>>>;
 
@@ -343,7 +343,7 @@ where
     'p: 's,
     'c: 's,
 {
-    StationService::run_placed(service, output, owner, io, &EmbassyClock, unwrap)
+    Runner::run_placed(service, output, owner, io, &EmbassyClock, unwrap)
 }
 
 fn running<'s, 'c, 'p, 'id, Id: SlotIdentity + 'id>(
@@ -405,7 +405,7 @@ fn initialize_service<'id, Id: SlotIdentity + 'id>(
         Duration::from_millis(100),
     )
     .view();
-    let service = StationService::<StationComposition<Id>, _, _, 1, Observed>::init_in_place(
+    let service = Runner::<StationComposition<Id>, _, _, 1, Observed>::init_in_place(
         service_storage,
         |station_storage| {
             let (station, granted) = Station::init_open(
@@ -480,16 +480,21 @@ impl<Id: SlotIdentity> rp::PortBody<Id, Backend<Id>> for Body {
         let (command_send, command_receive) = commands.split();
         let (tx_send, tx_receive) = tx.split();
         let (rx_send, rx_receive) = rx.split();
+        let state = State::new();
+        let (control, connected) = Control::new(command_send, &state)
+            .unwrap_or_else(|_| crate::fail(oer_diagnostics::name!("station-control-active"; 32)));
+        let net = control.device(tx_send, rx_receive);
         let link = core::cell::Cell::new(false);
         let disconnected = core::cell::Cell::new(false);
         let failed = core::cell::Cell::new(false);
-        let mut output = Output {
+        let mut output = control.events(Output {
             link: &link,
             disconnected: &disconnected,
             failed: &failed,
-        };
+        });
         let mut io = ServiceIo {
             commands: command_receive,
+            control: connected,
             transmit: tx_receive,
             receive: rx_send,
             output: &mut output,
@@ -509,9 +514,8 @@ impl<Id: SlotIdentity> rp::PortBody<Id, Backend<Id>> for Body {
             self.address,
             self.seed,
             credits,
-            command_send,
-            tx_send,
-            rx_receive,
+            control,
+            net,
             &link,
             &disconnected,
             &failed

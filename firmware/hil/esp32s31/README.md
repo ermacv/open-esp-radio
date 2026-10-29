@@ -48,7 +48,7 @@ key owner. The `station-pmk` note reports only elapsed microseconds.
 
 The image installs the lab's DE regulatory domain with a 10 dBm owner cap and
 scans permitted HT20 channels 1–13 for the supplied SSID. It uses the existing
-placed StationService, arbiter and owned Embassy/Xarxa DHCP/ICMP stack on P1;
+placed `station::Runner`, arbiter and owned Embassy/Xarxa DHCP/ICMP stack on P1;
 the radio actor, hardware backend and DMA owners run on P2. A single LP TRNG
 source owner supplies a fresh 256-bit ChaCha20 seed before moving to P2. The
 P1 SNonce stream continues across reconnects. Stream or epoch exhaustion stops

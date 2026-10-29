@@ -749,27 +749,37 @@ impl<'id, Id: SlotIdentity + 'id> CommandCredits<'id, Id> {
 
 /// Command transport and credits remain inside the installation which minted them.
 /// The outer world's observations own no command permission.
-struct Application<'a, 'b, 'id, Id: SlotIdentity + 'id> {
+struct Application<'a, 'b, 'q, 'id, Id: SlotIdentity + 'id> {
     world: &'a World<'b>,
-    commands:
-        Cell<Option<WakingSpscSender<'a, ServiceCommand<'id, ModelCaps24, CommandPath<Id>>, 4>>>,
+    commands: Cell<Option<Control<'q, 'id, ModelCaps24, CommandPath<Id>, 4>>>,
     credits: RefCell<CommandCredits<'id, Id>>,
 }
-impl<'b, Id: SlotIdentity> core::ops::Deref for Application<'_, 'b, '_, Id> {
+impl<'b, Id: SlotIdentity> core::ops::Deref for Application<'_, 'b, '_, '_, Id> {
     type Target = World<'b>;
     fn deref(&self) -> &Self::Target {
         self.world
     }
 }
 
-impl<'id, Id: SlotIdentity + 'id> Application<'_, '_, 'id, Id> {
+impl<'id, Id: SlotIdentity + 'id> Application<'_, '_, '_, 'id, Id> {
     async fn station_command(&self, correlation: u64, command: StaCommand) {
         let permission = self.credits.borrow_mut().take(command);
-        self.command(ServiceCommand::Station(StaRequest::new(
-            correlation,
-            permission,
-        )))
-        .await;
+        let mut control = self.commands.take().unwrap();
+        let result = match permission {
+            StaCommandPermission::Connect(credit) => control.connect(correlation, credit).await,
+            StaCommandPermission::BackgroundScan(credit) => control.scan(correlation, credit).await,
+            StaCommandPermission::Disconnect(credit) => {
+                control.disconnect(correlation, credit).await
+            }
+        };
+        assert!(result.is_ok());
+        self.commands.set(Some(control));
+    }
+    fn status(&self) -> Status {
+        let control = self.commands.take().unwrap();
+        let status = control.status();
+        self.commands.set(Some(control));
+        status
     }
     fn record_output(&self, output: ServiceOutput<'id, ModelCaps24, CommandPath<Id>>) {
         let observed = match output {
@@ -903,7 +913,7 @@ impl<'id, Id: SlotIdentity + 'id> Application<'_, '_, 'id, Id> {
             .commands
             .take()
             .expect("one application script owns the sender");
-        sender.ready().await.send(command);
+        assert!(sender.command(command).await.is_ok());
         self.commands.set(Some(sender));
     }
 
@@ -979,7 +989,7 @@ impl<'scope, 'w, 'b, S, const GROUPS: usize>
     PortBody<LocalId<'scope>, ModelBackend<LocalId<'scope>, ModelCaps24, ServiceContexts>>
     for Body<'w, 'b, S, GROUPS>
 where
-    S: for<'a, 'id> FnOnce(&'a Application<'a, 'b, 'id, LocalId<'scope>>) -> Script<'a>,
+    S: for<'a, 'q, 'id> FnOnce(&'a Application<'a, 'b, 'q, 'id, LocalId<'scope>>) -> Script<'a>,
 {
     type Output = ();
     async fn run<'p, 'id>(
@@ -1069,48 +1079,58 @@ where
                     .unwrap();
                 self.world.air.refuse_enable();
             }
-            let service =
-                StationService::<ServicePort<LocalId<'scope>>, _, _, GROUPS, Observed>::new(
-                    station,
-                    StaData::new(
-                        data_tickets,
-                        large,
-                        MODEL_TX_QUEUE_DEPTH,
-                        self.world.observed,
-                    ),
-                    arbiter,
-                    RecordingRates {
-                        inner: EspressifRateSelection::<ModelCaps24>::new(),
-                        completions: &self.world.completions,
-                        refuse_rate: &self.world.refuse_rate,
-                        fail_submission: &self.world.fail_submission,
-                        air: &self.world.air,
-                    },
-                    terminal_access,
-                    Box::leak(Box::new(RxBlockAckStorage::<
-                        _,
-                        2,
-                        { oer_ieee80211_model::MODEL_RX_EVENTS },
-                    >::new(
-                        block_acks, Duration::from_millis(100)
-                    )))
-                    .view(),
+            let service = Runner::<ServicePort<LocalId<'scope>>, _, _, GROUPS, Observed>::new(
+                station,
+                StaData::new(
+                    data_tickets,
+                    large,
+                    MODEL_TX_QUEUE_DEPTH,
                     self.world.observed,
-                );
+                ),
+                arbiter,
+                RecordingRates {
+                    inner: EspressifRateSelection::<ModelCaps24>::new(),
+                    completions: &self.world.completions,
+                    refuse_rate: &self.world.refuse_rate,
+                    fail_submission: &self.world.fail_submission,
+                    air: &self.world.air,
+                },
+                terminal_access,
+                Box::leak(Box::new(RxBlockAckStorage::<
+                    _,
+                    2,
+                    { oer_ieee80211_model::MODEL_RX_EVENTS },
+                >::new(
+                    block_acks, Duration::from_millis(100)
+                )))
+                .view(),
+                self.world.observed,
+            );
             let mut command_queue = WakingSpscQueue::<
                 ServiceCommand<'id, ModelCaps24, CommandPath<LocalId<'scope>>>,
                 4,
             >::new();
             let (application, commands) = command_queue.split();
+            let state = State::new();
+            let (application, control) = Control::new(application, &state).unwrap();
             let application = Application {
                 world: self.world,
                 commands: Cell::new(Some(application)),
                 credits: RefCell::new(credits),
             };
             let world = &application;
-            let mut output = |output| world.record_output(output);
+            let mut output = world
+                .commands
+                .take()
+                .map(|control| {
+                    let output = control.events(|output| world.record_output(output));
+                    world.commands.set(Some(control));
+                    output
+                })
+                .unwrap();
             let mut io = ServiceIo {
                 commands,
+                control,
                 transmit: self.transmit,
                 receive: self.receive,
                 output: &mut output,
@@ -1118,7 +1138,12 @@ where
             let script = self.script;
             let script = async move {
                 script(world).await;
-                world.command(ServiceCommand::Stop).await;
+                let mut control = world.commands.take().unwrap();
+                if let Err(refused) = control.command(ServiceCommand::Stop).await {
+                    assert_eq!(refused.reason, ControlError::Stopped);
+                    assert!(matches!(refused.command, ServiceCommand::Stop));
+                }
+                world.commands.set(Some(control));
             };
             let mut unwrap = KeyUnwrapSlot::new(TestUnwrap { world });
             let completed = match self.placed {
@@ -1130,7 +1155,7 @@ where
                     });
                     let mut completed_storage = core::mem::MaybeUninit::uninit();
                     let (completed, ()) = join(
-                        StationService::run_placed(
+                        Runner::run_placed(
                             service,
                             &mut completed_storage,
                             owner,
@@ -1169,6 +1194,12 @@ where
                 ));
                 assert!(notice.is_none());
                 world.outputs.borrow_mut().clear();
+                let mut control = world.commands.take().unwrap();
+                control.wait_stopped().await;
+                let sender = control.try_finish().ok().unwrap();
+                let (control, next) = Control::new(sender, &state).unwrap();
+                world.commands.set(Some(control));
+                io.control = next;
                 let (completed, ()) = join(
                     service.run(owner, &mut io, &*world.clock, &mut unwrap),
                     async {
@@ -1348,7 +1379,9 @@ where
 /// the access point by `script`.
 fn run<S>(security: StaSecurity, script: S)
 where
-    S: for<'w, 'b, 'id, 'scope> FnOnce(&'w Application<'w, 'b, 'id, LocalId<'scope>>) -> Script<'w>
+    S: for<'w, 'b, 'q, 'id, 'scope> FnOnce(
+            &'w Application<'w, 'b, 'q, 'id, LocalId<'scope>>,
+        ) -> Script<'w>
         + Send,
 {
     run_with(config(security), script);
@@ -1357,7 +1390,9 @@ where
 /// Run the service on a 2.4 GHz model with `config`.
 fn run_with<S>(config: TestConfig, script: S) -> Observed
 where
-    S: for<'w, 'b, 'id, 'scope> FnOnce(&'w Application<'w, 'b, 'id, LocalId<'scope>>) -> Script<'w>
+    S: for<'w, 'b, 'q, 'id, 'scope> FnOnce(
+            &'w Application<'w, 'b, 'q, 'id, LocalId<'scope>>,
+        ) -> Script<'w>
         + Send,
 {
     run_with_groups::<S, 2>(config, script)
@@ -1365,7 +1400,9 @@ where
 
 fn run_with_groups<S, const GROUPS: usize>(config: TestConfig, script: S) -> Observed
 where
-    S: for<'w, 'b, 'id, 'scope> FnOnce(&'w Application<'w, 'b, 'id, LocalId<'scope>>) -> Script<'w>
+    S: for<'w, 'b, 'q, 'id, 'scope> FnOnce(
+            &'w Application<'w, 'b, 'q, 'id, LocalId<'scope>>,
+        ) -> Script<'w>
         + Send,
 {
     run_case::<S, GROUPS>(config, script, false)
@@ -1379,7 +1416,9 @@ fn run_case<S, const GROUPS: usize>(
     refuse_initial_enable: bool,
 ) -> Observed
 where
-    S: for<'w, 'b, 'id, 'scope> FnOnce(&'w Application<'w, 'b, 'id, LocalId<'scope>>) -> Script<'w>
+    S: for<'w, 'b, 'q, 'id, 'scope> FnOnce(
+            &'w Application<'w, 'b, 'q, 'id, LocalId<'scope>>,
+        ) -> Script<'w>
         + Send,
 {
     run_case_with_placement::<S, GROUPS>(config, script, refuse_initial_enable, false)
@@ -1392,7 +1431,9 @@ fn run_case_with_placement<S, const GROUPS: usize>(
     placed: bool,
 ) -> Observed
 where
-    S: for<'w, 'b, 'id, 'scope> FnOnce(&'w Application<'w, 'b, 'id, LocalId<'scope>>) -> Script<'w>
+    S: for<'w, 'b, 'q, 'id, 'scope> FnOnce(
+            &'w Application<'w, 'b, 'q, 'id, LocalId<'scope>>,
+        ) -> Script<'w>
         + Send,
 {
     std::thread::scope(|scope| {
@@ -1414,7 +1455,9 @@ fn run_case_on_this_thread<S, const GROUPS: usize>(
     placed: bool,
 ) -> Observed
 where
-    S: for<'w, 'b, 'id, 'scope> FnOnce(&'w Application<'w, 'b, 'id, LocalId<'scope>>) -> Script<'w>
+    S: for<'w, 'b, 'q, 'id, 'scope> FnOnce(
+            &'w Application<'w, 'b, 'q, 'id, LocalId<'scope>>,
+        ) -> Script<'w>
         + Send,
 {
     block_on(with_local_slot(async |claim| {
@@ -3200,4 +3243,64 @@ fn arp_transmit_observation_matches_the_admitted_mpdu_and_omits_refused_transmit
             })
         },
     );
+}
+
+#[test]
+fn control_and_runner_publish_status_and_distinct_core_epochs_on_reconnect() {
+    run(StaSecurity::Open, |world| {
+        Box::pin(async move {
+            let mut seen = 0;
+            let mut previous = 0;
+            for _ in 0..2 {
+                world.outputs.borrow_mut().clear();
+                assert_eq!(world.status().link.state, oer_network::LinkState::Down);
+                world.associate(&mut seen, false).await;
+                world
+                    .notice(StaNotice::Connected {
+                        bssid: oer_ieee80211_wire::address::Bssid::new(
+                            IndividualAddress::new(BSSID).unwrap(),
+                        )
+                        .unwrap(),
+                        channel: 6,
+                    })
+                    .await;
+                let connected = world.status();
+                assert_eq!(connected.link.state, oer_network::LinkState::Up);
+                assert_ne!(connected.link.epoch, previous);
+                previous = connected.link.epoch;
+                world.station_command(9, StaCommand::Disconnect).await;
+                world
+                    .notice(StaNotice::Disconnected(
+                        oer_ieee80211_sta::machine::StaDisconnectReason::Requested,
+                    ))
+                    .await;
+                assert_eq!(
+                    world.status().link,
+                    oer_network::LinkSnapshot {
+                        state: oer_network::LinkState::Down,
+                        epoch: previous
+                    }
+                );
+            }
+        })
+    });
+}
+
+#[test]
+fn control_cooperative_stop_retires_the_model_runner_and_publishes_the_last_notice() {
+    run(StaSecurity::Open, |world| {
+        Box::pin(async move {
+            let mut seen = 0;
+            world.associate(&mut seen, false).await;
+            let mut control = world.commands.take().unwrap();
+            control.stop();
+            world.commands.set(Some(control));
+            world
+                .notice(StaNotice::Disconnected(
+                    oer_ieee80211_sta::machine::StaDisconnectReason::Requested,
+                ))
+                .await;
+            assert_eq!(world.status().link.state, oer_network::LinkState::Down);
+        })
+    });
 }

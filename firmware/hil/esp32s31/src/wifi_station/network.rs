@@ -3,7 +3,7 @@ use super::Attempt;
 use core::cell::{Cell, RefCell};
 use embassy_futures::{
     join::join3,
-    select::{Either, select},
+    select::select,
     yield_now,
 };
 use oer_embassy_net::{
@@ -12,9 +12,7 @@ use oer_embassy_net::{
 use oer_embassy_time::EmbassyClock;
 use oer_firmware_apps_w3::{icmp, observation::Observations, report::Lease};
 use oer_ieee80211_control::StationProbeFinished;
-use oer_ieee80211_sta::data::{EthernetFrame, TxMsdu};
-use oer_ieee80211_wire::{data::EthernetFrameParts, qos::WmmUserPriority};
-use oer_memory::{WakingSpscReceiver, WakingSpscSender};
+use oer_ieee80211_runtime::station::Device as StationDevice;
 use oer_time::{Clock, Duration, Timer};
 use owned_embassy_net::{
     Stack, StackStorage,
@@ -63,14 +61,13 @@ static RUNNING: ConstStaticCell<oer_memory::StaticPlace<Running<'static>>> =
 pub fn run<'a>(
     address: [u8; 6],
     seed: u64,
-    tx: WakingSpscSender<'a, TxMsdu, 2>,
-    rx: WakingSpscReceiver<'a, EthernetFrame, RX>,
+    net: StationDevice<'a, 2, RX>,
     link: &'a Cell<bool>,
     attempt: Attempt,
 ) -> oer_memory::PlacedFuture<'a, Running<'a>> {
     RUNNING
         .take()
-        .future(|| running_future(address, seed, tx, rx, link, attempt))
+        .future(|| running_future(address, seed, net, link, attempt))
 }
 
 #[define_opaque(Running)]
@@ -78,8 +75,7 @@ pub fn run<'a>(
 fn running_future<'a>(
     address: [u8; 6],
     seed: u64,
-    tx: WakingSpscSender<'a, TxMsdu, 2>,
-    rx: WakingSpscReceiver<'a, EthernetFrame, RX>,
+    net: StationDevice<'a, 2, RX>,
     link: &'a Cell<bool>,
     attempt: Attempt,
 ) -> Running<'a> {
@@ -107,7 +103,7 @@ fn running_future<'a>(
         let observations = observations();
         join3(
             async {
-                match bridge(radio, tx, rx, link, observations).await {
+                match bridge(radio, net, observations).await {
                     Ok(never) => match never {},
                     Err(_) => crate::fail(crate::fatal::Failure::NetworkContextAccessRefused),
                 }
@@ -245,73 +241,27 @@ async fn probes(
 }
 
 async fn bridge(
-    mut radio: Runner,
-    mut tx: WakingSpscSender<'_, TxMsdu, 2>,
-    mut rx: WakingSpscReceiver<'_, EthernetFrame, RX>,
-    link: &Cell<bool>,
+    radio: Runner,
+    net: StationDevice<'_, 2, RX>,
     observations: &RefCell<Observations>,
 ) -> Result<core::convert::Infallible, oer_embassy_net::AccessRefused> {
-    let mut state = false;
+    let mut bridge = oer_embassy_net::ethernet::EthernetBridge::new(radio, net);
     loop {
-        if state != link.get() {
-            state = link.get();
-            radio.link_controller().set_link_up(state);
-        }
-        while let Some(frame) = rx.try_receive() {
-            let p = frame.parts();
-            observations.borrow_mut().observe(
-                p.ether_type,
-                p.payload,
-                false,
-                EmbassyClock.now().as_micros(),
-            );
+        bridge.synchronize_link();
+        bridge.drain_receive(|p| {
+            observations.borrow_mut().observe(p.ether_type, p.payload, false, EmbassyClock.now().as_micros());
             if p.destination == [0xff; 6] && p.ether_type == 0x0806 && valid_arp(p.payload) {
                 super::observation::GROUP_ARP.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
             }
-            if radio
-                .rx_publisher()
-                .try_send_parts(p.destination, p.source, p.ether_type, p.payload)
-                .is_err()
-            {
-                super::observation::RX_REFUSED.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
-            }
-        }
-        if let Some(packet) = radio.try_receive_tx()? {
-            let bytes = packet.ethernet();
-            if let Some((header, payload)) = bytes.split_first_chunk::<14>() {
-                let [d0, d1, d2, d3, d4, d5, s0, s1, s2, s3, s4, s5, e0, e1] = *header;
-                if let Ok(frame) = EthernetFrame::from_parts(EthernetFrameParts {
-                    destination: [d0, d1, d2, d3, d4, d5],
-                    source: [s0, s1, s2, s3, s4, s5],
-                    ether_type: u16::from_be_bytes([e0, e1]),
-                    payload,
-                }) {
-                    tx.ready().await.send(TxMsdu {
-                        priority: WmmUserPriority::UP0,
-                        frame,
-                    });
-                    observations.borrow_mut().observe(
-                        u16::from_be_bytes([e0, e1]),
-                        payload,
-                        true,
-                        EmbassyClock.now().as_micros(),
-                    );
-                }
-            }
-            drop(packet);
+        }, |_| {
+            super::observation::RX_REFUSED.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+        });
+        if bridge.transmit_one(|p| {
+            observations.borrow_mut().observe(p.ether_type, p.payload, true, EmbassyClock.now().as_micros());
+        }).await? {
             yield_now().await;
         } else {
-            let ready = select(
-                rx.ready(),
-                select(
-                    radio.wait_tx_publication(),
-                    EmbassyClock.wait_for(Duration::from_millis(1)),
-                ),
-            )
-            .await;
-            if let Either::Second(Either::First(result)) = ready {
-                result?;
-            }
+            bridge.wait(async { let _timeout = EmbassyClock.wait_for(Duration::from_millis(1)).await; }).await?;
         }
     }
 }

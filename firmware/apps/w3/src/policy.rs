@@ -4,7 +4,7 @@ use oer_ieee80211_arbiter::{
 };
 use oer_time::Duration;
 
-/// Hold a complete StationService input batch before the network task runs.
+/// Hold a complete `station::Runner` input batch before the network task runs.
 /// Both RX handoffs need this capacity; a smaller queue loses a burst even
 /// when the network consumer drains every time it is polled.
 pub const RX_DEPTH: usize = 8;
