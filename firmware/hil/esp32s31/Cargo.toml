@@ -118,6 +118,7 @@ oer-esp32s31-layout = { path = "../../../chips/esp32s31/layout" }
 static_cell.workspace = true
 
 [dev-dependencies]
+oer-diagnostics = { path = "../../../portable/diagnostics", features = ["render"] }
 oer-network-control = { path = "../../../protocols/network-control" }
 oer-ieee80211-control = { path = "../../../protocols/ieee80211/control" }
 oer-hil-agent = { path = "../../../protocols/hil/agent", default-features = false }

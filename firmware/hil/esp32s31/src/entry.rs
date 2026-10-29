@@ -191,18 +191,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
 fn system_main(
     handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platform::Port>,
 ) -> ! {
-    early(&Note::runtime_start(PROFILE_NAME));
-    // Before anything can fail and overwrite it.
-    fatal::report_previous();
-
-    validate_runtime_layout();
-
-    let Some(root) = oer_esp32s31_hal::root::Root::take() else {
-        fail(fatal::Failure::RootTaken);
-    };
-    let runtime = root
-        .into_runtime()
-        .unwrap_or_else(|_| fail(fatal::Failure::RootInitialization));
+    let runtime = initialize_runtime();
     // Before anything records a checkpoint over the previous boot's record.
     #[cfg(feature = "system-watchdog")]
     system::postmortem::begin();
@@ -283,6 +272,24 @@ fn system_main(
             }
         })
         .unwrap_or_else(|failure| failure.reset()) {};
+}
+
+/// Install the console's owned parts before any stage-two diagnostic.
+fn initialize_runtime() -> oer_esp32s31_hal::root::Runtime {
+    startup::initialize(
+        || {
+            let root = oer_esp32s31_hal::root::Root::take().ok_or(fatal::Failure::RootTaken)?;
+            root.into_runtime()
+                .map_err(|_| fatal::Failure::RootInitialization)
+        },
+        || {
+            early(&Note::runtime_start(PROFILE_NAME));
+            // The console exists; report before subsequent boot checks can fail.
+            fatal::report_previous();
+            validate_runtime_layout();
+        },
+    )
+    .unwrap_or_else(|failure| fail(failure))
 }
 
 /// Feed the RTC watchdog for good: the image resets when its executor stops
