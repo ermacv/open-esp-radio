@@ -16,6 +16,7 @@ mod clock;
 mod flash;
 mod mmu;
 mod psram;
+mod soc_drivers;
 mod wait;
 mod watchdog;
 

@@ -9,6 +9,7 @@ publish = false
 description = "Espressif bootstrap sequences over a chip's typed register traits: named boot waits under one deadline below the armed RTC watchdog, the CPU clock profile, cache publication and fetch suspension, the MMU and the boot's watchdogs, each failure a typed boot failure"
 
 [dependencies]
+oer-espressif-analog = { path = "../analog" }
 oer-time = { path = "../../../portable/time" }
 oer-espressif-watchdog = { path = "../watchdog" }
 

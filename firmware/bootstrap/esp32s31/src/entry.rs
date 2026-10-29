@@ -61,19 +61,23 @@ extern "C" fn bootstrap_main() -> ! {
         fail::<Port>("\r\n")
     });
     let deadline = boot::BootDeadline::start(&hardware.monotonic, boot::BOOT_BUDGET);
-    checked(hardware.lp_fast_clock.select(&deadline));
-    hardware
-        .soc
-        .initialize(&deadline)
-        .unwrap_or_else(|_| fail::<Port>("OER_BOOT bootstrap=FAIL reason=soc-init\r\n"));
+    checked(oer_espressif_boot::drivers::clock::select_lp_fast(
+        &mut hardware.lp_fast_clock,
+        oer_esp32s31_boot::LP_FAST,
+        &deadline,
+    ));
+    oer_espressif_boot::drivers::soc::initialize(
+        &mut hardware.soc,
+        &oer_esp32s31_boot::ENTROPY,
+        &deadline,
+    )
+    .unwrap_or_else(|_| fail::<Port>("OER_BOOT bootstrap=FAIL reason=soc-init\r\n"));
     let watchdogs = BootWatchdogs::take_over(
         hardware.main_watchdog0,
         hardware.rtc_watchdog,
         hardware.super_watchdog,
     );
-    hardware
-        .brownout
-        .apply_idf_policy(&deadline)
+    oer_esp32s31_boot::apply_brownout(&mut hardware.brownout, &deadline)
         .unwrap_or_else(|_| fail::<Port>("OER_BOOT bootstrap=FAIL reason=brownout-policy\r\n"));
     print::<Port>("OER_BOOT bootstrap=BROWNOUT\r\n");
 

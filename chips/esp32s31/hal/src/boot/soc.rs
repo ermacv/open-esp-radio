@@ -1,4 +1,4 @@
-//! The bootstrap's SoC initialization, which `esp_hal::init` and the
+//! Register ports for the bootstrap's SoC initialization, which `esp_hal::init` and the
 //! ESP-IDF application startup did before the bootstrap owned the chip:
 //! hart 1 contained, the three APM access-path filters opened, the LP TRNG
 //! running with its health tests. The PMS words and PSRAM PMA7 are the
@@ -15,38 +15,16 @@
 //! record of what the bootstrap must do and what the bootloader left is
 //! `oer-notes/research/s31-soc-init.md`.
 
+use crate::platform::{Hart, SecondaryHart, core_control::CoreControlRegisters};
 use oer_esp32s31_pac::{
     hp_apm::HpApmFilter, hp_mem_apm::HpMemApmFilter, instances, lp_apm::LpApmFilter,
     lp_peri_clkrst::LpPericlkrstRngInit, trng::TrngInit,
 };
-use oer_espressif_boot::wait::{BootDeadline, WaitFailure};
+use oer_espressif_boot::{
+    Access,
+    drivers::{access_control, cores, entropy},
+};
 use oer_mmio::{Bits, Fixed, Placement};
-use oer_time::{Clock, Duration};
-
-use crate::{cores, platform::core_control::CoreControlRegisters};
-
-#[cfg(test)]
-mod tests;
-
-/// The TRNG's noise source and position selectors.
-/// SOURCE: ESP-IDF 4d80c1b2 `rng_ll.h:163-178` (`rng_ll_enable`: 0x10, 0x10).
-const NOISE_SELECT: Bits<5> = Bits::constant::<0x10>();
-/// The repetition-count health test's cutoff.
-/// SOURCE: ESP-IDF 4d80c1b2 `rng_ll.h:163-178` (0x1f).
-const REPETITION_CUTOFF: Bits<9> = Bits::constant::<0x1f>();
-/// The adaptive-proportion health test's cutoff.
-/// SOURCE: ESP-IDF 4d80c1b2 `rng_ll.h:163-178` (0x12).
-const ADAPTIVE_CUTOFF: Bits<9> = Bits::constant::<0x12>();
-/// The startup health test's sample count.
-/// SOURCE: ESP-IDF 4d80c1b2 `rng_ll.h:163-178` (1024).
-const STARTUP_TEST_LIMIT: u16 = 1024;
-
-/// Why the SoC initialization stopped: a typed boot failure.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum SocFailure {
-    /// The boot deadline passed before the initialization.
-    Deadline(WaitFailure),
-}
 
 /// The SoC words the bootstrap initializes: the three APM filters, the LP
 /// TRNG's configuration and clock word, and the core-control words that
@@ -86,124 +64,101 @@ impl Soc {
             cores,
         }
     }
-
-    /// Contain hart 1, open the APM filters and start the TRNG, under
-    /// `deadline`: no step waits.
-    ///
-    /// # Errors
-    ///
-    /// The boot deadline passed before the initialization began.
-    pub fn initialize<C: Clock + ?Sized>(
+}
+impl<P: Placement, Q: Placement, R: Placement, S: Placement, T: Placement> cores::Registers
+    for Soc<P, Q, R, S, T>
+{
+    type Secondary = SecondaryHart;
+    const SECONDARIES: &'static [SecondaryHart] = &Hart::SECONDARIES;
+    fn request_stall(&mut self, _: Access<'_>, hart: SecondaryHart) {
+        self.cores.request_stall(hart.hart());
+    }
+    fn hold(&mut self, _: Access<'_>, hart: SecondaryHart) {
+        self.cores.hold(hart);
+    }
+    fn clear_boot_address(&mut self, _: Access<'_>, hart: SecondaryHart) {
+        self.cores.set_boot_address(hart, 0);
+    }
+}
+impl<P: Placement, Q: Placement, R: Placement, S: Placement, T: Placement> access_control::Registers
+    for Soc<P, Q, R, S, T>
+{
+    fn open_lp_filter(&mut self, _: Access<'_>) {
+        self.lp_apm.modify_func_ctrl(|w| {
+            w.set_m0_func_en(false)
+                .set_m1_func_en(false)
+                .set_m2_func_en(false)
+                .set_m3_func_en(false);
+        });
+    }
+    fn open_hp_filter(&mut self, _: Access<'_>) {
+        self.hp_apm.modify_func_ctrl(|w| {
+            w.set_m0_func_en(false)
+                .set_m1_func_en(false)
+                .set_m2_func_en(false)
+                .set_m3_func_en(false)
+                .set_m4_func_en(false)
+                .set_m5_func_en(false)
+                .set_m6_func_en(false);
+        });
+    }
+    fn open_memory_filter(&mut self, _: Access<'_>) {
+        self.hp_mem_apm.modify_func_ctrl(|w| {
+            w.set_m0_func_en(false)
+                .set_m1_func_en(false)
+                .set_m2_func_en(false)
+                .set_m3_func_en(false)
+                .set_m4_func_en(false)
+                .set_m5_func_en(false);
+        });
+    }
+}
+impl<P: Placement, Q: Placement, R: Placement, S: Placement, T: Placement> entropy::Registers
+    for Soc<P, Q, R, S, T>
+{
+    type Noise = Bits<5>;
+    type Cutoff = Bits<9>;
+    fn open_bus_clock(&mut self, _: Access<'_>) {
+        self.rng_clock.modify_rng_ctrl(|w| {
+            w.set_lp_rng_clk_en(true);
+        });
+    }
+    fn open_clock(&mut self, _: Access<'_>) {
+        self.trng.modify_date(|w| {
+            w.set_clk_en(true);
+        });
+    }
+    fn reset(&mut self, _: Access<'_>, asserted: bool) {
+        self.rng_clock.modify_rng_ctrl(|w| {
+            w.set_lp_rng_rst_en(asserted);
+        });
+    }
+    fn configure_noise(
         &mut self,
-        deadline: &BootDeadline<'_, C>,
-    ) -> Result<(), SocFailure> {
-        if deadline.remaining() == Duration::ZERO {
-            return Err(SocFailure::Deadline(WaitFailure::DeadlineExceeded(
-                "soc-init",
-            )));
-        }
-        let Self {
-            lp_apm,
-            hp_apm,
-            hp_mem_apm,
-            trng,
-            rng_clock,
-            cores,
-        } = self;
-        contain_secondaries(cores);
-        open_apm_filters(lp_apm, hp_apm, hp_mem_apm);
-        start_trng(trng, rng_clock);
-        Ok(())
+        _: Access<'_>,
+        profile: &entropy::Profile<Self::Noise, Self::Cutoff>,
+    ) {
+        self.trng.modify_conf(|w| {
+            w.set_noise_source_sel(profile.noise_source)
+                .set_noise_pos_sel(profile.noise_position)
+                .set_repetition_value_c(profile.repetition_cutoff)
+                .set_adpative_value_c(profile.adaptive_cutoff);
+        });
     }
-}
-
-/// Request hart 1's stall, gate its clocks and hold its reset, then clear
-/// its ROM boot address, so the ROM it may wait in finds no stale entry.
-///
-/// SOURCE: esp-hal 1f646c5 `esp-hal/src/soc/esp32s31/cpu_control.rs:6-96`;
-/// ESP-IDF 4d80c1b2 `components/esp_system/port/soc/esp32s31/system_internal.c:61-100`.
-fn contain_secondaries<U: Placement, V: Placement, W: Placement, X: Placement, Y: Placement>(
-    cores: &mut CoreControlRegisters<U, V, W, X, Y>,
-) {
-    for hart in crate::platform::Hart::SECONDARIES {
-        cores::park(cores, hart);
-        cores.set_boot_address(hart, 0);
+    fn configure_health_test(&mut self, _: Access<'_>, samples: u16) {
+        self.trng.modify_debug_conf(|w| {
+            w.set_startup_test_limit(samples)
+                .set_health_test_bypass(false);
+        });
     }
-}
-
-/// Open the APM access-path filters of every master: each enable written
-/// zero, the other bits kept.
-///
-/// SOURCE: ESP-IDF 4d80c1b2 `hp_apm_reg.h:1947-2013`, `lp_apm_reg.h:987-1026`,
-/// `hp_mem_apm_reg.h:1211-1269` (`FUNC_CTRL`: M0..M6, M0..M3, M0..M5,
-/// read-write, reset one); esp-hal 1f646c5 `esp-hal/src/soc/mod.rs:81-565`.
-fn open_apm_filters<P: Placement, Q: Placement, R: Placement>(
-    lp_apm: &mut LpApmFilter<P>,
-    hp_apm: &mut HpApmFilter<Q>,
-    hp_mem_apm: &mut HpMemApmFilter<R>,
-) {
-    lp_apm.modify_func_ctrl(|w| {
-        w.set_m0_func_en(false)
-            .set_m1_func_en(false)
-            .set_m2_func_en(false)
-            .set_m3_func_en(false);
-    });
-    hp_apm.modify_func_ctrl(|w| {
-        w.set_m0_func_en(false)
-            .set_m1_func_en(false)
-            .set_m2_func_en(false)
-            .set_m3_func_en(false)
-            .set_m4_func_en(false)
-            .set_m5_func_en(false)
-            .set_m6_func_en(false);
-    });
-    hp_mem_apm.modify_func_ctrl(|w| {
-        w.set_m0_func_en(false)
-            .set_m1_func_en(false)
-            .set_m2_func_en(false)
-            .set_m3_func_en(false)
-            .set_m4_func_en(false)
-            .set_m5_func_en(false);
-    });
-}
-
-/// Start the LP TRNG: its clocks open, a reset pulse, the noise source and
-/// health-test cutoffs, the startup test's limit with the health tests on,
-/// sampling and conditioning on, then the startup test started. Nothing
-/// waits for the startup test: the entropy owner reads its status.
-///
-/// SOURCE: ESP-IDF 4d80c1b2 `components/hal/esp32s31/include/hal/rng_ll.h:163-178`
-/// (`rng_ll_enable`), esp-hal 1f646c5 `esp-hal/src/soc/esp32s31/trng.rs`.
-fn start_trng<S: Placement, T: Placement>(
-    trng: &mut TrngInit<S>,
-    clock: &mut LpPericlkrstRngInit<T>,
-) {
-    clock.modify_rng_ctrl(|w| {
-        w.set_lp_rng_clk_en(true);
-    });
-    trng.modify_date(|w| {
-        w.set_clk_en(true);
-    });
-    clock.modify_rng_ctrl(|w| {
-        w.set_lp_rng_rst_en(true);
-    });
-    clock.modify_rng_ctrl(|w| {
-        w.set_lp_rng_rst_en(false);
-    });
-    trng.modify_conf(|w| {
-        w.set_noise_source_sel(NOISE_SELECT)
-            .set_noise_pos_sel(NOISE_SELECT)
-            .set_repetition_value_c(REPETITION_CUTOFF)
-            .set_adpative_value_c(ADAPTIVE_CUTOFF);
-    });
-    trng.modify_debug_conf(|w| {
-        w.set_startup_test_limit(STARTUP_TEST_LIMIT)
-            .set_health_test_bypass(false);
-    });
-    trng.modify_conf(|w| {
-        w.set_random_output_mode(true)
-            .set_noise_crc_en(true)
-            .set_sample_enable(true);
-    });
-    trng.trigger_debug_conf_startup_test_start();
+    fn enable_sampling(&mut self, _: Access<'_>) {
+        self.trng.modify_conf(|w| {
+            w.set_random_output_mode(true)
+                .set_noise_crc_en(true)
+                .set_sample_enable(true);
+        });
+    }
+    fn start_health_test(&mut self, _: Access<'_>) {
+        self.trng.trigger_debug_conf_startup_test_start();
+    }
 }

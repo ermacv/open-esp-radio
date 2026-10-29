@@ -1963,6 +1963,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-esp32s31-boot"
+version = "0.1.0"
+dependencies = [
+ "oer-esp32s31-hal",
+ "oer-espressif-boot",
+ "oer-espressif-facts",
+ "oer-time",
+]
+
+[[package]]
 name = "oer-esp32s31-compose"
 version = "0.1.0"
 dependencies = [
@@ -2183,6 +2193,7 @@ version = "0.1.0"
 name = "oer-espressif-boot"
 version = "0.1.0"
 dependencies = [
+ "oer-espressif-analog",
  "oer-espressif-watchdog",
  "oer-time",
  "oer-time-virtual",
@@ -2552,6 +2563,7 @@ dependencies = [
 name = "oer-firmware-bootstrap-esp32s31"
 version = "0.1.0"
 dependencies = [
+ "oer-esp32s31-boot",
  "oer-esp32s31-hal",
  "oer-esp32s31-layout",
  "oer-espressif-boot",

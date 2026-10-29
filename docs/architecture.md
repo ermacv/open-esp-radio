@@ -52,6 +52,14 @@ image                interrupt table, tasks, chosen facades and engines
                      hardware-free knowledge
 ```
 
+The family's `oer-espressif-boot::drivers` holds LP-fast, brownout,
+secondary containment, access-filter and TRNG startup operations over register
+ports implemented by the HAL's owned boot parts. `oer-esp32s31-boot` supplies
+S31 profiles, including the generated LP-fast source. This chip binding sits
+above HAL and family drivers so neither HAL nor chip knowledge chooses or
+executes those policies. The bootstrap retains its call order and common
+deadline; other boot blocks retain their existing APIs.
+
 Every chip and HIL package has one explicit role in `oer-test-layers`, never
 derived from its path; the role names the level and its allowed direct
 dependencies ([layer tests](../tools/test/layers/README.md)).
