@@ -1,5 +1,5 @@
 error[E0599]: no method named `claim_radio` found for struct `Pin<&mut PinnedDmaTxPool<32, 8, 4, 1>>` in the current scope
-  --> tests/ui/unpinned_tx_radio.rs:15:10
+  --> tests/ui/unpinned_tx_radio.rs:17:10
    |
-15 |     pool.claim_radio(0).unwrap() // ui-error: E0599
+17 |     pool.claim_radio(0).unwrap() // ui-error: E0599
    |          ^^^^^^^^^^^ method not found in `Pin<&mut PinnedDmaTxPool<32, 8, 4, 1>>`

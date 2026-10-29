@@ -7,7 +7,9 @@ pub fn claim(storage: &'static mut Pool) -> PinnedDmaTxRadioLease<'static, 32, 8
     #[cfg(not(ui_reject))]
     let pool = {
         let pool = Pool::pin_static(storage);
-        pool.claim_network(0).unwrap().publish(oer_memory::FrameLen::constant::<0>(), |_| ());
+        pool.claim_network(0)
+            .unwrap()
+            .publish(oer_memory::FrameLen::constant::<0>(), |_| ());
         pool
     };
     #[cfg(ui_reject)]
