@@ -1,5 +1,5 @@
 //! Router actions for WPA2-Personal station runs. Credentials are write-only
-//! through [`crate::router::Profile::w4`]; command evidence uses SSH redaction.
+//! through [`crate::router::Profile::station_wpa2`]; command evidence uses SSH redaction.
 
 use crate::{
     mac::Mac,
@@ -18,7 +18,9 @@ pub fn verify_observation_tools(remote: &mut dyn Remote) -> Result<()> {
     let _hidden = Zeroizing::new(
         remote
             .run("ip -4 neigh show >/dev/null && command -v tcpdump >/dev/null")
-            .map_err(|_| "W4 requires native ip neigh and tcpdump on the managed router")?,
+            .map_err(
+                |_| "WPA2 station requires native ip neigh and tcpdump on the managed router",
+            )?,
     );
     Ok(())
 }
@@ -27,7 +29,7 @@ pub fn verify_observation_tools(remote: &mut dyn Remote) -> Result<()> {
 /// reaches stdout. Configuration keys and passphrases are never read back.
 pub fn verify_runtime(remote: &mut dyn Remote, radio: &str, interface: &str) -> Result<()> {
     if !token(radio) || !token(interface) {
-        return Err("invalid W4 runtime profile selection".to_owned());
+        return Err("invalid WPA2 station runtime profile selection".to_owned());
     }
     let script = format!(
         "set +x\nset -e\nphy=$(ubus call iwinfo phyname {} | jsonfilter -e '@.phyname')\n\
@@ -46,7 +48,7 @@ pub fn verify_runtime(remote: &mut dyn Remote, radio: &str, interface: &str) -> 
     );
     let output = remote
         .run(&script)
-        .map_err(|_| "W4 runtime profile verification failed")?;
+        .map_err(|_| "WPA2 station runtime profile verification failed")?;
     if output.trim() != "1 1 0 0 2 1 1 0" {
         return Err("running BSS is not WPA2-PSK/CCMP HT20 with HE and PMF disabled".to_owned());
     }
@@ -105,8 +107,8 @@ fn neighbor_state(after_flush: bool, output: &std::process::Output) -> NeighborS
 /// Flush the station neighbor (BusyBox `ip` has `flush`, no `del`). Both reads
 /// around the flush are only recorded: router traffic recreates the entry at
 /// once, so its presence proves nothing. Only a missing `ip` or a failing
-/// `flush` (with its stderr) is an error. Gate c carries the proof from air and
-/// target evidence.
+/// `flush` (with its stderr) is an error. The group key change gate carries the proof
+/// from air and target evidence.
 pub fn refresh_neighbor(
     mut execute: impl FnMut(&str) -> Result<std::process::Output>,
     interface: &str,
@@ -114,11 +116,13 @@ pub fn refresh_neighbor(
     mut observe: impl FnMut(&NeighborState),
 ) -> Result<NeighborRefresh> {
     if !token(interface) || !crate::station::usable_address(address) {
-        return Err("invalid W4 ARP selection".to_owned());
+        return Err("invalid WPA2 station ARP selection".to_owned());
     }
     let available = execute("command -v ip")?;
     if !available.status.success() {
-        return Err("W4 native ip command is unavailable; see router command evidence".into());
+        return Err(
+            "WPA2 station native ip command is unavailable; see router command evidence".into(),
+        );
     }
     let show = format!("ip -4 neigh show {address} dev {}", quote(interface)?);
     let before = neighbor_state(false, &execute(&show)?);
@@ -129,7 +133,7 @@ pub fn refresh_neighbor(
     ))?;
     if !flush.status.success() {
         return Err(format!(
-            "W4 neighbor flush failed ({}): {}",
+            "WPA2 station neighbor flush failed ({}): {}",
             flush.status,
             String::from_utf8_lossy(&flush.stderr).trim()
         ));
@@ -205,7 +209,7 @@ mod tests {
         );
         remote.answer = Ok("30\n".into());
         assert_eq!(
-            group_rekey_seconds(&mut remote, "radio1", "phy1-ap0").expect("W4"),
+            group_rekey_seconds(&mut remote, "radio1", "phy1-ap0").expect("WPA2 station"),
             30
         );
         remote.answer = Ok("secret-passphrase".into());
@@ -261,8 +265,9 @@ mod tests {
             process::{ExitStatus, Output},
         };
         let ip = "10.231.0.100".parse().expect("IP");
-        let entry =
-            |state: &str| format!("10.231.0.100 dev br-oer-w3 lladdr 02:00:00:00:00:01 {state}\n");
+        let entry = |state: &str| {
+            format!("10.231.0.100 dev br-oer-station lladdr 02:00:00:00:00:01 {state}\n")
+        };
         // (answers as (exit, stdout, stderr), success, flush attempted,
         // recorded states)
         let cases: Vec<(Vec<(i32, String, &str)>, bool, bool, Vec<Option<&str>>)> = vec![
@@ -334,16 +339,16 @@ mod tests {
                         stderr: stderr.as_bytes().to_vec(),
                     })
                 },
-                "br-oer-w3",
+                "br-oer-station",
                 ip,
                 |state| states.push(state.state.clone()),
             );
             assert_eq!(result.is_ok(), success);
             assert!(answers.is_empty());
             assert_eq!(
-                scripts
-                    .iter()
-                    .any(|script| script.contains(" neigh flush to 10.231.0.100 dev br-oer-w3")),
+                scripts.iter().any(
+                    |script| script.contains(" neigh flush to 10.231.0.100 dev br-oer-station")
+                ),
                 flushed
             );
             assert!(scripts.iter().all(|script| !script.contains("/dev/null")));
@@ -356,7 +361,7 @@ mod tests {
                 assert!(error.contains("RTNETLINK diagnostic"));
             }
         }
-        for interface in ["", "br-oer-w3;opkg", "-i"] {
+        for interface in ["", "br-oer-station;opkg", "-i"] {
             assert!(
                 refresh_neighbor(
                     |_| panic!("invalid input never executes"),

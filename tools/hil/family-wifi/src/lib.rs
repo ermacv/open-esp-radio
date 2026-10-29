@@ -1,9 +1,9 @@
 //! Wi-Fi HIL acceptance computed from secret-free device, router and air observations.
 #![forbid(unsafe_code)]
-mod diagnostic;
 pub mod evidence;
 mod keys;
-mod workload;
+mod observation;
+mod wifi_station;
 use oer_hil_model::{catalog::link::PhyExpectation, schema::image::ImageClass};
 use oer_hil_scenario::{
     AirUse, Plan, Result, ScenarioFamily,
@@ -20,8 +20,7 @@ pub const FAMILY: Kind = Kind::of::<WifiScenario>("wifi");
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum WifiScenario {
-    W4 {},
-    InitialGtkDiagnostic {},
+    WifiStation {},
 }
 impl ScenarioFamily for WifiScenario {
     fn validate(&self) -> Result<()> {
@@ -33,8 +32,7 @@ impl ScenarioFamily for WifiScenario {
         plan.requirements.laptop_air_monitor = true;
         plan.wifi.link = Some(PhyExpectation::Ht20);
         plan.checks = match self {
-            Self::W4 {} => vec!["w4"],
-            Self::InitialGtkDiagnostic {} => vec!["initial-gtk-diagnostic"],
+            Self::WifiStation {} => vec!["wifi-station"],
         };
         plan
     }
@@ -53,14 +51,13 @@ impl Workload for WifiScenario {
         match &lab.station_fixture {
             oer_hil_session::config::StationFixtureConfig::OpenWrt(config) if !config.read_only => {
             }
-            _ => return Err("W4 requires the managed OpenWrt station fixture".into()),
-        }
-        if matches!(self, Self::InitialGtkDiagnostic {}) {
-            return Ok(());
+            _ => return Err("Wi-Fi station requires the managed OpenWrt station fixture".into()),
         }
         let (_, proof) = keys::load(lab)?;
         if !proof.complete() {
-            return Err("W4 key conformance evidence is incomplete or contradictory".into());
+            return Err(
+                "Wi-Fi station key conformance evidence is incomplete or contradictory".into(),
+            );
         }
         // Router tool admission runs with the repetition's command recorder,
         // before any configuration change, so even failures retain stderr.
@@ -68,8 +65,7 @@ impl Workload for WifiScenario {
     }
     fn run(&self, output: &Path, context: &Context<'_>, _: &Fixtures) -> Result<()> {
         match self {
-            Self::W4 {} => workload::run(output, context),
-            Self::InitialGtkDiagnostic {} => diagnostic::run(output, context),
+            Self::WifiStation {} => wifi_station::run(output, context),
         }
     }
 }
@@ -78,11 +74,14 @@ impl Workload for WifiScenario {
 mod tests {
     use super::*;
     #[test]
-    fn w4_has_a_runtime_station_image_and_claims_the_ap_and_passive_monitor() {
-        let scenario: WifiScenario = toml::from_str("kind='w4'").expect("scenario");
+    fn wifi_station_has_a_runtime_station_image_and_claims_the_ap_and_passive_monitor() {
+        let scenario: WifiScenario = toml::from_str("kind='wifi-station'").expect("scenario");
         assert_eq!(scenario.plan().image, ImageClass::WifiStation);
         assert!(scenario.plan().requirements.station_network);
         assert!(scenario.plan().requirements.laptop_air_monitor);
-        assert!(toml::from_str::<WifiScenario>("kind='w4'\npassword='secret-passphrase'").is_err());
+        assert!(
+            toml::from_str::<WifiScenario>("kind='wifi-station'\npassword='secret-passphrase'")
+                .is_err()
+        );
     }
 }

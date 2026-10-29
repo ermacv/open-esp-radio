@@ -254,7 +254,7 @@ pub struct Evidence {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct Gate {
-    pub id: char,
+    pub id: &'static str,
     pub reason: Option<&'static str>,
 }
 impl Gate {
@@ -264,7 +264,7 @@ impl Gate {
 }
 
 pub fn evaluate(e: &Evidence) -> [Gate; 6] {
-    let a = e
+    let station_lifecycle = e
         .baseline
         .as_ref()
         .zip(e.traffic.as_ref())
@@ -290,8 +290,8 @@ pub fn evaluate(e: &Evidence) -> [Gate; 6] {
                 && !b.after.present
                 && b.final_departure_us > 0
         });
-    let b = e.handshake.as_ref().is_some_and(Handshake::within_bound);
-    let c = e
+    let four_way_handshake = e.handshake.as_ref().is_some_and(Handshake::within_bound);
+    let group_key_change = e
         .traffic
         .as_ref()
         .zip(e.rekey.as_ref())
@@ -306,7 +306,7 @@ pub fn evaluate(e: &Evidence) -> [Gate; 6] {
                         && r.old_key_id != r.new_key_id
                 })
         });
-    let d = e
+    let protected_air_traffic = e
         .air
         .as_ref()
         .zip(e.handshake.as_ref())
@@ -324,7 +324,7 @@ pub fn evaluate(e: &Evidence) -> [Gate; 6] {
                 && base.final_departure_us > h.m4_us
                 && air.last_us >= base.final_departure_us
         });
-    let x = e
+    let reconnect = e
         .forced_deauth_us
         .zip(e.handshake.as_ref())
         .zip(e.reconnect.as_ref())
@@ -339,14 +339,14 @@ pub fn evaluate(e: &Evidence) -> [Gate; 6] {
                 && t.window()
                     .is_some_and(|(start, _)| start >= next.connected_us)
         });
-    let f = e.keys.as_ref().is_some_and(KeyEvidence::complete);
+    let key_conformance = e.keys.as_ref().is_some_and(KeyEvidence::complete);
     [
-        ('a', a, "missing or contradictory station association/DHCP/ICMP/departure/statistics evidence"),
-        ('b', b, "missing/contradictory four-way handshake, Connected or router authorization; association to M4 exceeds 1 s"),
-        ('c', c, "missing peer ping 100/100, GTK change or protected broadcast ARP request/station reply on the new key"),
-        ('d', d, "missing/truncated air window, zero protected station frames, capture loss or plaintext data"),
-        ('e', x, "missing forced departure, fresh authorized handshake or peer ping 10/10 after reconnect"),
-        ('f', f, "missing or mismatching required hardware/model key traces"),
+        ("station-lifecycle", station_lifecycle, "missing or contradictory station association/DHCP/ICMP/departure/statistics evidence"),
+        ("four-way-handshake", four_way_handshake, "missing/contradictory four-way handshake, Connected or router authorization; association to M4 exceeds 1 s"),
+        ("group-key-change", group_key_change, "missing peer ping 100/100, GTK change or protected broadcast ARP request/station reply on the new key"),
+        ("protected-air-traffic", protected_air_traffic, "missing/truncated air window, zero protected station frames, capture loss or plaintext data"),
+        ("reconnect", reconnect, "missing forced departure, fresh authorized handshake or peer ping 10/10 after reconnect"),
+        ("key-conformance", key_conformance, "missing or mismatching required hardware/model key traces"),
     ].map(|(id,pass,reason)| Gate { id, reason: (!pass).then_some(reason) })
 }
 

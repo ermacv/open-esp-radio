@@ -24,7 +24,7 @@
 //!    apart: an AP on the profile's channel, 20 MHz wide, with the stand's
 //!    SSID; its `addr` is the stand's BSSID.
 //!
-//! The lower-MAC HIL profile leaves encryption unchanged. W4 sets WPA2-PSK/CCMP without PMF and a short GTK rekey interval.
+//! The lower-MAC HIL profile leaves encryption unchanged. WPA2 station sets WPA2-PSK/CCMP without PMF and a short GTK rekey interval.
 //! Keys are write-only: the generated passphrase reaches `uci batch` on
 //! stdin, never an argument list, and secret buffers are zeroized. Every
 //! read is filtered there by an allowlist, and the host refuses any line
@@ -109,7 +109,7 @@ enum Security {
     Wpa2(Zeroizing<String>),
 }
 
-/// A run's wireless profile; W4 uses the isolated station network.
+/// A run's wireless profile; WPA2 station uses the isolated station network.
 pub struct Profile {
     radio: String,
     ap_section: String,
@@ -177,14 +177,14 @@ impl Profile {
             channel,
             ssid: Zeroizing::new(ssid.to_owned()),
             security: Security::Unchanged,
-            group_rekey_seconds: crate::w4::GROUP_REKEY_SECONDS,
+            group_rekey_seconds: crate::station_wpa2::GROUP_REKEY_SECONDS,
         })
     }
 
-    /// W4's WPA2-Personal/CCMP HT20 profile, with PMF and HE disabled.
+    /// WPA2 station's WPA2-Personal/CCMP HT20 profile, with PMF and HE disabled.
     /// Callers generate the SSID and passphrase with [`crate::credentials`]
     /// for each run. The passphrase is write-only and zeroized on drop.
-    pub fn w4(
+    pub fn station_wpa2(
         radio: &str,
         ap_section: &str,
         interface: &str,
@@ -199,21 +199,6 @@ impl Profile {
         }
         let mut profile = Self::new(radio, ap_section, interface, channel, ssid)?;
         profile.security = Security::Wpa2(Zeroizing::new(passphrase.to_owned()));
-        Ok(profile)
-    }
-
-    /// Investigate initial GTK reception separately from connected rekey.
-    /// This is not the W4 qualification profile.
-    pub fn initial_gtk_diagnostic(
-        radio: &str,
-        ap_section: &str,
-        interface: &str,
-        channel: u8,
-        ssid: &str,
-        passphrase: &str,
-    ) -> Result<Self> {
-        let mut profile = Self::w4(radio, ap_section, interface, channel, ssid, passphrase)?;
-        profile.group_rekey_seconds = 0;
         Ok(profile)
     }
 
@@ -298,8 +283,8 @@ impl Profile {
             // UCI's cli.c::uci_batch returns 0 even on a command error;
             // require empty diagnostics as well, without reading back the key.
             Ok(Zeroizing::new(format!(
-                "set +x\n{{\ndiagnostic=$(uci batch 2>&1 <<'OER_W4_KEY'\n\
-                 set wireless.{}.key={}\nOER_W4_KEY\n)\nbatch_status=$?\n\
+                "set +x\n{{\ndiagnostic=$(uci batch 2>&1 <<'OER_STATION_WPA2_KEY'\n\
+                 set wireless.{}.key={}\nOER_STATION_WPA2_KEY\n)\nbatch_status=$?\n\
                  if test \"$batch_status\" -ne 0 || test -n \"$diagnostic\"; then printf '%s\\n' \"$diagnostic\" >&2; exit 1; fi\n\
                  {}\n}} >/dev/null",
                 self.ap_section,
@@ -331,7 +316,7 @@ pub fn plan() -> Result<Vec<String>> {
         channel: 0,
         ssid: Zeroizing::new("<ssid>".to_owned()),
         security: Security::Unchanged,
-        group_rekey_seconds: crate::w4::GROUP_REKEY_SECONDS,
+        group_rekey_seconds: crate::station_wpa2::GROUP_REKEY_SECONDS,
     };
     Ok(vec![
         CHANGES.to_owned(),
@@ -372,7 +357,7 @@ pub fn apply(remote: &mut dyn Remote, profile: &Profile) -> Result<Applied> {
         // No raw error from a credential-setting run crosses this boundary.
         result.map_err(|error| {
             let _hidden = Zeroizing::new(error);
-            "router: applying or verifying the W4 profile failed".to_owned()
+            "router: applying or verifying the WPA2 station profile failed".to_owned()
         })
     } else {
         result
@@ -774,7 +759,7 @@ impl Wireless {
                 || radio.option("ieee80211ax") != Some("0"))
         {
             return Err(
-                "the committed W4 profile is not WPA2/CCMP with FT, PMF and HE disabled \
+                "the committed WPA2 station profile is not WPA2/CCMP with FT, PMF and HE disabled \
                  and the run's GTK rekey interval"
                     .to_owned(),
             );

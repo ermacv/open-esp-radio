@@ -284,7 +284,7 @@ fn link_events_preserve_epoch_and_typed_disconnect_reason() {
             state,
         });
     }
-    // Reasons the W4 diagnosis could not tell apart decode as distinct values.
+    // Keep receive-drop reasons distinct in the station observations.
     assert_ne!(
         StationDisconnectReason::Arbiter(StationLeaveReason::PortFailed),
         StationDisconnectReason::LocalRequest

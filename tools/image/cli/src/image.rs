@@ -186,7 +186,7 @@ mod tests {
     fn a_saved_bundle_cannot_flash_a_removed_application() {
         let directory = repository();
         let profile = oer_chip_profile::Profile::load(directory.path(), CHIP).unwrap();
-        for image in ["w0", "w1", "w2", "w3", "b0"] {
+        for image in ["retired-wifi-station", "retired-bluetooth-controller"] {
             assert!(package(directory.path(), image).is_err());
             let output = output(directory.path(), image);
             let staging = oer_image_bundle::staging_directory(&output).unwrap();

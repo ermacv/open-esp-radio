@@ -147,7 +147,7 @@ and the host refuses any line outside the allowlist. In order:
 
 4. The profile: the stand's channel, HT 20 MHz, a 100 TU beacon interval,
    the radio enabled; the stand's SSID on the AP section, enabled, not
-   hidden. The lower-MAC profile leaves encryption unchanged. Keys are write-only: W4 sets its generated
+   hidden. The lower-MAC profile leaves encryption unchanged. Keys are write-only: WPA2 station sets its generated
    passphrase through the script on stdin; no configuration read returns it.
 
    ```sh
@@ -179,7 +179,7 @@ run, and a second holder is refused, naming the first.
 
 ## Isolated station network
 
-The neutral `station` module owns the network used by W4. Its deployed UCI,
+The neutral `station` module owns the network used by WPA2 station. Its deployed UCI,
 bridge and lease-file identifiers remain stable across runs.
 
 The station profile assigns the selected BSS to an isolated `10.231.0.0/24` network, with
@@ -193,14 +193,14 @@ wireless radio/BSS. These are the complete settings it owns:
 
 | Section | Settings |
 | --- | --- |
-| `network.oer_w3_device` | Empty bridge, no physical ports, `bridge_empty=1`, IPv6 disabled |
-| `network.oer_w3` | Bridge device, static `10.231.0.1`, netmask `255.255.255.0`, `delegate=0`, `defaultroute=0` |
-| `dhcp.oer_w3_dns` | Dedicated dnsmasq, bound only to station and excluding loopback; `nonwildcard=1`, `port=0`, `localuse=0`, `noresolv=1`, `nohosts=1`, `readethers=0`, `authoritative=1`, lease file `/tmp/oer-w3.leases` |
-| `dhcp.oer_w3` | station interface and dnsmasq instance, start 100, limit 100, lease 15 minutes, `force=1`, `ignore=0`, DHCP option 3 = `10.231.0.1`, option 6 suppressed; RA, DHCPv6 and NDP disabled |
-| `firewall.oer_w3` | station network/bridge only, input REJECT, output ACCEPT, forward REJECT, IPv4/IPv6 masquerade disabled |
-| `firewall.oer_w3_dhcp` | Accept IPv4 UDP 68→67 from station to OpenWrt |
-| `firewall.oer_w3_ping` | Accept IPv4 echo requests from station only to `10.231.0.1` |
-| `firewall.oer_w3_out`, `firewall.oer_w3_in` | Reject all forwarding out of and into station, placed first among configured rules |
+| `network.oer_station_device` | Empty bridge, no physical ports, `bridge_empty=1`, IPv6 disabled |
+| `network.oer_station` | Bridge device, static `10.231.0.1`, netmask `255.255.255.0`, `delegate=0`, `defaultroute=0` |
+| `dhcp.oer_station_dns` | Dedicated dnsmasq, bound only to station and excluding loopback; `nonwildcard=1`, `port=0`, `localuse=0`, `noresolv=1`, `nohosts=1`, `readethers=0`, `authoritative=1`, lease file `/tmp/oer-station.leases` |
+| `dhcp.oer_station` | station interface and dnsmasq instance, start 100, limit 100, lease 15 minutes, `force=1`, `ignore=0`, DHCP option 3 = `10.231.0.1`, option 6 suppressed; RA, DHCPv6 and NDP disabled |
+| `firewall.oer_station` | station network/bridge only, input REJECT, output ACCEPT, forward REJECT, IPv4/IPv6 masquerade disabled |
+| `firewall.oer_station_dhcp` | Accept IPv4 UDP 68→67 from station to OpenWrt |
+| `firewall.oer_station_ping` | Accept IPv4 echo requests from station only to `10.231.0.1` |
+| `firewall.oer_station_out`, `firewall.oer_station_in` | Reject all forwarding out of and into station, placed first among configured rules |
 | Selected radio | Stand channel, HT20, beacon interval 100 TU, enabled, HE disabled |
 | Selected BSS | Generated SSID, enabled, visible, WPA2-CCMP encryption, station network, client isolation enabled |
 
@@ -217,9 +217,9 @@ be unchanged. Generated SSIDs and interface names remain redacted in evidence.
 The DHCP instance uses OpenWrt's [per-instance DHCP
 configuration](https://openwrt.org/docs/guide-user/base-system/dhcp_configuration#multiple_dhcpdns_serverforwarder_instances).
 
-## W4 WPA2 station
+## WPA2 station WPA2 station
 
-`router::Profile::w4` uses the isolated station network above and sets
+`router::Profile::station_wpa2` uses the isolated station network above and sets
 only the selected BSS to `encryption=psk2+ccmp`, `ieee80211r=0` and
 `ieee80211w=0`: WPA2-Personal with CCMP, no SAE/transition, FT or PMF. The
 radio stays at HT20 with HE disabled. It sets `wpa_group_rekey=30` seconds
@@ -234,7 +234,7 @@ then in a quoted heredoc to `uci batch` on stdin. Neither the local SSH
 command nor the remote UCI command receives the key in argv. Shell tracing
 is disabled. The batch must succeed with empty diagnostics, since UCI batch
 mode does not propagate individual command failures; diagnostics are forwarded
-to stderr on failure. W4 records each router command, exit code or terminating
+to stderr on failure. WPA2 station records each router command, exit code or terminating
 signal, stderr and transport/read error through `ssh::CommandLog`. The run's
 generated SSID/passphrase, SSH target, AP interface and station MAC are redacted
 before recording. Configuration stdout is never logged. The profile,
@@ -242,7 +242,7 @@ quoted key, script, generated credentials and random-source buffers are
 zeroized when dropped. Configuration reads admit the security/rekey options
 above and continue to exclude every key option; the key is never read back.
 
-`w4::deauthenticate` takes the selected AP interface and a typed `Mac` for
+`station_wpa2::deauthenticate` takes the selected AP interface and a typed `Mac` for
 the station. It calls the router's own hostapd ubus object
 (`ubus call hostapd.<interface> del_client` with the station address, reason 2,
 `deauth` and `ban_time` 0) through the stdin script; OpenWrt ships no
@@ -250,14 +250,14 @@ the station. It calls the router's own hostapd ubus object
 also use the same redacted command log. Callers hold
 router and exclusive air ownership for the complete run.
 
-`w4::refresh_neighbor` checks native `ip` availability, then reads only the
+`station_wpa2::refresh_neighbor` checks native `ip` availability, then reads only the
 station's neighbor entry on the isolated bridge. An absent entry is already
 the required state and is recorded without deletion. A present entry is
 deleted, then read again: even a nonzero deletion status requires an observed
 absence before success. A missing/unusable command or retained entry stops
 the run with command diagnostics. The ongoing measured ping supplies the
 next broadcast ARP; only a decoded request under the new GTK and its station
-reply correlated to protected air frames satisfy gate c.
+reply correlated to protected air frames satisfy the group key change gate.
 
 Streaming router observers retain stderr and completion status on normal
 finish and early drop. Diagnostics are bounded to 128 KiB; overflow/read or

@@ -5,7 +5,7 @@ pub(crate) mod hold;
 
 pub(crate) mod cache;
 
-/// Every existing R1 investigation requests and verifies a fresh full registration.
+/// Every existing diagnostic PHY investigation requests and verifies a fresh full registration.
 pub(crate) fn full(
     context: &oer_hil_scenario::workload::context::Context<'_>,
     capture: &oer_hil_link::SerialCapture,
@@ -16,7 +16,9 @@ pub(crate) fn full(
         &crate::cache::Link::new(capture),
         &oer_hil_session::calibration_cache::Store::host()?,
         crate::cache::StartRequest {
-            boot_id: capture.latest_boot_id().ok_or("R1 has no boot identity")?,
+            boot_id: capture
+                .latest_boot_id()
+                .ok_or("diagnostic PHY has no boot identity")?,
             session_id: 0,
             chip: context.lab.chip(),
             board: oer_lab_board::DeviceId::parse(&context.lab.dut.mac)?,
@@ -32,7 +34,7 @@ pub(crate) fn full(
         } if ready.full_calibration_performed && ready.path == CalibrationPath::FullForCache => {
             Ok(ready)
         }
-        _ => Err("explicit full R1 request changed its native result contract".into()),
+        _ => Err("explicit full diagnostic PHY request changed its native result contract".into()),
     }
 }
 pub(crate) mod health;

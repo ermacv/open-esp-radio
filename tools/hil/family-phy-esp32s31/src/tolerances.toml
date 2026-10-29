@@ -17,7 +17,7 @@
 schema = 3
 
 # SOURCE: complete rev0 ROM phy_set_cca_cnt / phy_get_cca_cnt (#240), and
-# SOURCE: s31-b E1/E3/E4/E5 (#254), CCA result words vary with the sampled window;
+# SOURCE: s31-b CCA measurement-window observations (#254), CCA result words vary with the sampled window;
 # details: oer-notes/evidence/chips-notes/chips/esp32s31/notes/phy/cca-counter.md.
 # A Wi-Fi baseband reset release restarts the measurement window. The vendor
 # leaves both result words unconsumed; window/control remains compared by value.

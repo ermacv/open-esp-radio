@@ -7,7 +7,7 @@ Each owns a scenario table and its executable workload.
 | --- | --- |
 | `tools/hil/family-system/` | `[system]`: boot smoke, watchdog, panic reset and stand recovery |
 | `tools/hil/family-lower-mac/` | `[lower-mac]`: conformance and ownership-close checks |
-| `tools/hil/family-wifi/` | `[wifi]`: W4 qualification and the initial-GTK investigation |
+| `tools/hil/family-wifi/` | `[wifi]`: WPA2-Personal station qualification |
 | `tools/hil/family-phy-esp32s31/` | `[phy]`: calibration comparison and tracking investigations, composed over `tools/hil/family-phy/` |
 
 ## Family contract
