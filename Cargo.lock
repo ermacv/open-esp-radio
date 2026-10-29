@@ -2222,6 +2222,7 @@ dependencies = [
  "bytemuck",
  "embassy-time-driver",
  "oer-cooperate",
+ "oer-espressif-boot",
  "oer-espressif-interrupt-table",
  "oer-espressif-platform-port",
  "oer-espressif-staged-runtime",

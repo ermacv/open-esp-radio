@@ -10,10 +10,9 @@ use crate::platform::core_control::{
     CoreControlRegisters, HOST_SIZES, UART0_HOST_SIZE, Uart0ClockRegisters,
 };
 
-use super::{
-    CoreState, CoresError, Hart, StopError, Stopped, operate, park, prepare_reset, reset_with,
-    restore_uart0_with, state, stop_with,
-};
+use super::{CoresError, Hart, StopError, operate, reset_with, restore_uart0_with, stop_with};
+
+use oer_espressif_boot::drivers::cores::{CoreState, Stopped, park, prepare_reset, state};
 
 type HostRegisters<'a> = CoreControlRegisters<Host<'a>, Host<'a>, Host<'a>, Host<'a>, Host<'a>>;
 

@@ -29,8 +29,9 @@
 //!   hart and the chip's software reset;
 //! - [`ExecutorPlatform`]: the executor's source identities, its pending and
 //!   debugger reads and its owned blocks: the software interrupt lines
-//!   ([`SoftwareLine`]), the counter ([`SystemCounter`]), the comparators
-//!   ([`Comparators`]) and their alarm parts ([`AlarmPart`]).
+//!   ([`SoftwareLine`]), the counter owner (the binding requires its family
+//!   driver's latch atoms), the comparators ([`Comparators`]) and their alarm
+//!   parts ([`AlarmPart`]).
 
 use oer_mmio::InterruptSource;
 
@@ -59,37 +60,6 @@ pub trait SoftwareLine {
     fn raise(&self);
     /// Lower the line.
     fn lower(&self);
-}
-
-/// The counter's latch did not settle within its bound: a fault of the
-/// system timer.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct LatchStuck;
-
-/// A counter read that preempting strobes kept from verifying.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct Unverified {
-    /// A count no earlier read exceeds and no later read undercuts.
-    pub floor: u64,
-}
-
-/// The system timer's counter, which every context reads.
-pub trait SystemCounter {
-    /// Strobe the latch once and check that it settles within its bound,
-    /// before any context reads the time.
-    ///
-    /// # Errors
-    ///
-    /// [`LatchStuck`] when the latch never turns valid.
-    fn check(&self) -> Result<(), LatchStuck>;
-
-    /// The counter's current value, in ticks, within the read's bounds.
-    ///
-    /// # Errors
-    ///
-    /// [`Unverified`], with its floor, when no bounded round verified a
-    /// count.
-    fn read(&self) -> Result<u64, Unverified>;
 }
 
 /// A system timer comparator; every value names an existing target.
@@ -200,8 +170,9 @@ pub trait ExecutorPlatform {
     type Line2: SoftwareLine + Sync + 'static;
     /// Software interrupt line 3's owner.
     type Line3: SoftwareLine + Sync + 'static;
-    /// The counter's owner, shared by every context.
-    type Counter: SystemCounter + Sync + 'static;
+    /// The counter's owner, shared by every context. The executor binding
+    /// requires its family timer driver's latch port on this owner.
+    type Counter: Sync + 'static;
     /// The comparators' owner, which the time driver's writer holds.
     type Comparators: Comparators;
     /// Whether `source` is pending at `hart`'s interrupt matrix, without

@@ -185,6 +185,13 @@ its panic hook. The executor is generic over a chip binding `B` whose port is
 the HAL's; Rust has no generic statics, so the binding's `bind!` declares its
 statics once in the chip's composition crate: the storage of the port's owned
 blocks, the one waker vtable and the Embassy time driver's symbols.
+The platform port names the counter owner; the executor binding requires
+`oer-espressif-boot::drivers::system_timer::CounterLatch` on it. HAL supplies
+strobe/VALID/LO/HI atoms, and the family driver owns settling, verification
+and the bootstrap's named `Monotonic::start_initial_latch_check` check.
+The core driver likewise owns status, confirmation, peer-stop and reset
+preparation; HAL keeps ownership, fatal election/quarantine and the final
+system-reset trigger.
 `oer-esp32s31-compose` is the chip's side of an image's platform: the
 executor's binding `Esp32s31`, which images name in every executor type
 (`Executor<Esp32s31, 0>`), and the PHY transaction and Wi-Fi fault records,

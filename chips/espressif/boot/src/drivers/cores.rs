@@ -19,3 +19,142 @@ pub fn contain<R: Registers>(registers: &mut R) {
         registers.clear_boot_address(Access::new(), hart);
     }
 }
+
+/// Completed stall-status reads per request. This counts reads, not elapsed
+/// time: ESP-IDF stalls without waiting and waits unboundedly for a run. No
+/// source states hardware latency, and a read that never completes is not
+/// bounded by this budget.
+pub const STALL_POLLS: u32 = 10_000;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Unconfirmed;
+
+/// How a secondary stands, sampled held first and stalled only if not held.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CoreState {
+    Held,
+    Stalled,
+    Released,
+}
+
+/// What confirmed a peer stopped; this grants no peripheral takeover.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Stopped {
+    Held,
+    Stalled,
+}
+
+/// Core-control atoms. The HAL lends these only after its ownership or fatal
+/// election succeeded; this driver owns no election, retained state or reset.
+pub trait RuntimeRegisters: Registers {
+    type Hart: Copy + Eq + 'static;
+    type Stops: Default;
+    const HARTS: &'static [Self::Hart];
+    fn hart(secondary: Self::Secondary) -> Self::Hart;
+    fn save_stop(stops: &mut Self::Stops, hart: Self::Hart, stopped: Stopped);
+    fn fence(&self, access: Access<'_>);
+    fn held(&self, access: Access<'_>, hart: Self::Hart) -> bool;
+    fn is_stalled(&self, access: Access<'_>, hart: Self::Hart) -> bool;
+    fn request_peer_stall(&mut self, access: Access<'_>, hart: Self::Hart);
+    fn request_run(&mut self, access: Access<'_>, hart: Self::Hart);
+    fn reset_core(&mut self, access: Access<'_>, hart: Self::Hart);
+}
+
+/// Wait for exactly the requested status, with fences before sampling and
+/// after confirmation. A failure has no final fence, as in the original order.
+fn confirm<R: RuntimeRegisters>(
+    registers: &R,
+    hart: R::Hart,
+    stalled: bool,
+    polls: u32,
+) -> Result<(), Unconfirmed> {
+    registers.fence(Access::new());
+    for _ in 0..polls {
+        if registers.is_stalled(Access::new(), hart) == stalled {
+            registers.fence(Access::new());
+            return Ok(());
+        }
+    }
+    Err(Unconfirmed)
+}
+
+pub fn stall<R: RuntimeRegisters>(
+    registers: &mut R,
+    hart: R::Hart,
+    polls: u32,
+) -> Result<(), Unconfirmed> {
+    registers.request_peer_stall(Access::new(), hart);
+    confirm(registers, hart, true, polls)
+}
+
+pub fn run<R: RuntimeRegisters>(
+    registers: &mut R,
+    hart: R::Hart,
+    polls: u32,
+) -> Result<(), Unconfirmed> {
+    registers.request_run(Access::new(), hart);
+    confirm(registers, hart, false, polls)
+}
+
+pub fn state<R: RuntimeRegisters>(registers: &R, hart: R::Secondary) -> CoreState {
+    let hart = R::hart(hart);
+    if registers.held(Access::new(), hart) {
+        CoreState::Held
+    } else if registers.is_stalled(Access::new(), hart) {
+        CoreState::Stalled
+    } else {
+        CoreState::Released
+    }
+}
+
+/// Request a secondary's stall, then gate its clocks and hold its reset.
+pub fn park<R: Registers>(registers: &mut R, hart: R::Secondary) {
+    registers.request_stall(Access::new(), hart);
+    registers.hold(Access::new(), hart);
+}
+
+/// Confirm every peer in geometry order, without sampling or stalling self.
+pub fn stop_other<R: RuntimeRegisters>(
+    registers: &mut R,
+    this: R::Hart,
+    polls: u32,
+) -> Result<R::Stops, Unconfirmed> {
+    let mut stopped = R::Stops::default();
+    for &hart in R::HARTS {
+        if hart == this {
+            continue;
+        }
+        let confirmation = if registers.held(Access::new(), hart) {
+            Stopped::Held
+        } else {
+            stall(registers, hart, polls)?;
+            Stopped::Stalled
+        };
+        R::save_stop(&mut stopped, hart, confirmation);
+    }
+    Ok(stopped)
+}
+
+/// Clear every secondary ROM entry before any peer reset pulse. The owner
+/// issues the final fence and system reset; the driver never resets the chip.
+/// SOURCE: ESP-IDF 4d80c1b2 `system_internal.c:61-100`.
+pub fn prepare_reset<R: RuntimeRegisters>(registers: &mut R, this: R::Hart) {
+    clear_boot_addresses(registers);
+    for &hart in R::HARTS {
+        if hart != this {
+            registers.reset_core(Access::new(), hart);
+            registers.request_peer_stall(Access::new(), hart);
+        }
+    }
+}
+
+/// Invalid identities select no peer; their quarantined owner only clears ROM
+/// entries before issuing the system reset.
+pub fn clear_boot_addresses<R: Registers>(registers: &mut R) {
+    for &hart in R::SECONDARIES {
+        registers.clear_boot_address(Access::new(), hart);
+    }
+}
+
+#[cfg(test)]
+mod tests;

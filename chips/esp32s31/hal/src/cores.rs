@@ -53,6 +53,9 @@ use core::{
 };
 
 use oer_diagnostics::Note;
+use oer_espressif_boot::drivers::cores::{
+    self as driver, CoreState, STALL_POLLS, Stopped, Unconfirmed,
+};
 use oer_memory::{Claim, ClaimCell, Held};
 use oer_mmio::Placement;
 
@@ -61,14 +64,6 @@ pub use crate::platform::{BOOT_HART, HARTS, Hart, SecondaryHart};
 
 #[cfg(test)]
 mod tests;
-
-/// Reads of the stall status that a stall or run request waits for its
-/// confirmation; a hart the status does not confirm within them is
-/// reported, not waited for. The budget counts completed reads, not time:
-/// no source states the hardware's latency (ESP-IDF stalls without waiting
-/// and waits without a bound for the run), and a read that never completes
-/// is not bounded by it.
-pub const STALL_POLLS: u32 = 10_000;
 
 /// Keeps a value on the hart that made it: not `Send`.
 type ThisHart = PhantomData<*const ()>;
@@ -122,11 +117,6 @@ fn current_hart() -> Result<Hart, Fault> {
     Hart::new(raw).map_err(|invalid| Fault::InvalidHart { raw: invalid.raw })
 }
 
-/// A stall or run request the hardware did not confirm within
-/// [`STALL_POLLS`].
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct Unconfirmed;
-
 /// Why the cores' owner did not run an operation.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CoresError {
@@ -136,100 +126,6 @@ pub enum CoresError {
     Stopped,
     /// The hardware did not confirm the request within [`STALL_POLLS`].
     Unconfirmed,
-}
-
-/// Wait for the hardware to report `hart` stalled (`stalled`) or running,
-/// within `polls` reads.
-fn confirm<P: Placement, Q: Placement, R: Placement, S: Placement, T: Placement>(
-    words: &CoreControlRegisters<P, Q, R, S, T>,
-    hart: Hart,
-    stalled: bool,
-    polls: u32,
-) -> Result<(), Unconfirmed> {
-    oer_riscv::fence();
-    for _ in 0..polls {
-        if words.is_stalled(hart) == stalled {
-            oer_riscv::fence();
-            return Ok(());
-        }
-    }
-    Err(Unconfirmed)
-}
-
-/// Request that `hart` stall and wait for the hardware to confirm it.
-fn stall<P: Placement, Q: Placement, R: Placement, S: Placement, T: Placement>(
-    words: &mut CoreControlRegisters<P, Q, R, S, T>,
-    hart: Hart,
-    polls: u32,
-) -> Result<(), Unconfirmed> {
-    words.request_stall(hart);
-    confirm(words, hart, true, polls)
-}
-
-/// Request that `hart` run and wait for the hardware to report it no longer
-/// stalled.
-fn run<P: Placement, Q: Placement, R: Placement, S: Placement, T: Placement>(
-    words: &mut CoreControlRegisters<P, Q, R, S, T>,
-    hart: Hart,
-    polls: u32,
-) -> Result<(), Unconfirmed> {
-    words.request_run(hart);
-    confirm(words, hart, false, polls)
-}
-
-/// How a selected peer was found stopped.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum Stopped {
-    /// Core 1 is held in its global reset with its CPU clock gated: it
-    /// executes nothing, and no stall status is defined for it.
-    Held,
-    /// The hardware reports the hart stalled.
-    Stalled,
-}
-
-/// Stop and confirm every peer without selecting a fictitious "other" index.
-fn stop_other<P: Placement, Q: Placement, R: Placement, S: Placement, T: Placement>(
-    words: &mut CoreControlRegisters<P, Q, R, S, T>,
-    this: Hart,
-    polls: u32,
-) -> Result<[Option<Stopped>; HARTS], Unconfirmed> {
-    let mut stopped = [None; HARTS];
-    for hart in Hart::ALL {
-        if hart == this {
-            continue;
-        }
-        *hart.at_mut(&mut stopped) = Some(if words.held(hart) {
-            Stopped::Held
-        } else {
-            stall(words, hart, polls)?;
-            Stopped::Stalled
-        });
-    }
-    Ok(stopped)
-}
-
-/// Prepare the chip's reset on `this` hart, holding the core-control words:
-/// no boot address for hart 1, then the other hart reset and stalled. The
-/// boot address is cleared before the reset pulse, so a running hart 1
-/// that the pulse sends into the ROM finds no entry of this image.
-///
-/// SOURCE: ESP-IDF 4d80c1b2
-/// `components/esp_system/port/soc/esp32s31/system_internal.c:61-100`
-/// (`esp_restart_noos_inner`: clear the APP CPU boot address before
-/// resetting the cores, with the APP CPU stalled on the core-0 path).
-fn prepare_reset<P: Placement, Q: Placement, R: Placement, S: Placement, T: Placement>(
-    words: &mut CoreControlRegisters<P, Q, R, S, T>,
-    this: Hart,
-) {
-    for hart in Hart::SECONDARIES {
-        words.set_boot_address(hart, 0);
-    }
-    for hart in Hart::ALL {
-        if hart != this {
-            words.reset_core(hart);
-            words.request_stall(hart);
-        }
-    }
 }
 
 /// The cores' owner: secondary status, park, stall and run requests. One exists per
@@ -261,7 +157,7 @@ impl Cores {
     /// # Errors
     /// No words are installed, or a fatal path holds them.
     pub fn status(&mut self, hart: SecondaryHart) -> Result<CoreState, CoresError> {
-        self.operate(|words| state(words, hart))
+        self.operate(|words| driver::state(words, hart))
     }
 
     /// Park a secondary hart as ESP-IDF's single-core start does: request its stall,
@@ -270,7 +166,7 @@ impl Cores {
     /// # Errors
     /// No words are installed, or a fatal path holds them.
     pub fn park(&mut self, hart: SecondaryHart) -> Result<(), CoresError> {
-        self.operate(|words| park(words, hart))
+        self.operate(|words| driver::park(words, hart))
     }
 
     /// Stall a secondary hart and wait for the hardware to confirm it.
@@ -279,7 +175,7 @@ impl Cores {
     /// No words are installed, a fatal path holds them, or the hardware did
     /// not confirm the stall within [`STALL_POLLS`].
     pub fn stall(&mut self, hart: SecondaryHart) -> Result<(), CoresError> {
-        self.operate(|words| stall(words, hart.hart(), STALL_POLLS))?
+        self.operate(|words| driver::stall(words, hart.hart(), STALL_POLLS))?
             .map_err(|Unconfirmed| CoresError::Unconfirmed)
     }
 
@@ -290,7 +186,7 @@ impl Cores {
     /// No words are installed, a fatal path holds them, or the hardware did
     /// not confirm the run within [`STALL_POLLS`].
     pub fn run(&mut self, hart: SecondaryHart) -> Result<(), CoresError> {
-        self.operate(|words| run(words, hart.hart(), STALL_POLLS))?
+        self.operate(|words| driver::run(words, hart.hart(), STALL_POLLS))?
             .map_err(|Unconfirmed| CoresError::Unconfirmed)
     }
 }
@@ -304,41 +200,6 @@ fn operate<W, T>(
         Claim::Empty => CoresError::NotInstalled,
         Claim::Lent | Claim::Kept => CoresError::Stopped,
     })
-}
-
-/// How a secondary hart stands.
-fn state<P: Placement, Q: Placement, R: Placement, S: Placement, T: Placement>(
-    words: &CoreControlRegisters<P, Q, R, S, T>,
-    hart: SecondaryHart,
-) -> CoreState {
-    if words.held(hart.hart()) {
-        CoreState::Held
-    } else if words.is_stalled(hart.hart()) {
-        CoreState::Stalled
-    } else {
-        CoreState::Released
-    }
-}
-
-/// Request the secondary hart's stall, then hold it in reset with its clocks gated, as
-/// ESP-IDF's single-core start leaves it.
-pub(crate) fn park<P: Placement, Q: Placement, R: Placement, S: Placement, T: Placement>(
-    words: &mut CoreControlRegisters<P, Q, R, S, T>,
-    hart: SecondaryHart,
-) {
-    words.request_stall(hart.hart());
-    words.hold(hart);
-}
-
-/// How a secondary hart stands.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum CoreState {
-    /// Held in its global reset with its CPU clock gated.
-    Held,
-    /// The hardware reports it stalled.
-    Stalled,
-    /// Neither held nor stalled: it may run code.
-    Released,
 }
 
 /// Proof that this hart runs a fatal path: interrupts were masked at entry,
@@ -485,7 +346,7 @@ fn stop_with<P: Placement, Q: Placement, R: Placement, S: Placement, T: Placemen
     hart: Hart,
     polls: u32,
 ) -> Result<[Option<Stopped>; HARTS], StopError> {
-    match cell.hold(key(hart), |words| stop_other(words, hart, polls)) {
+    match cell.hold(key(hart), |words| driver::stop_other(words, hart, polls)) {
         Ok(Held { value, first: true }) => value.map_err(|Unconfirmed| StopError::Unconfirmed),
         Ok(Held { first: false, .. }) => Err(StopError::Reentered),
         Err(Claim::Empty) => Err(StopError::NotInstalled),
@@ -567,7 +428,7 @@ fn reset_with<P: Placement, Q: Placement, R: Placement, S: Placement, T: Placeme
     hart: Hart,
 ) -> Result<(), StopError> {
     match cell.hold(key(hart), |words| {
-        prepare_reset(words, hart);
+        driver::prepare_reset(words, hart);
         oer_riscv::fence();
         words.request_system_reset();
     }) {
@@ -584,9 +445,7 @@ fn reset_quarantined_with<P: Placement, Q: Placement, R: Placement, S: Placement
     raw: u32,
 ) -> Result<(), StopError> {
     cell.seal(|words| {
-        for hart in Hart::SECONDARIES {
-            words.set_boot_address(hart, 0);
-        }
+        driver::clear_boot_addresses(words);
         oer_riscv::fence();
         words.request_system_reset();
     })

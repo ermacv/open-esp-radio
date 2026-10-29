@@ -86,8 +86,11 @@ reads the line back. The time driver consumes `SystemTimer`, containing
 the running timer's disjoint owners from the reset root: our comparator writer, three alarm
 acknowledgers that each strobe their own bit of the shared
 acknowledgement block, and the shared counter latch, which every context
-reads for the time (`counter.rs`: strobe, a bounded settle until valid, then
-LO/HI/LO until the two LO reads agree; 16 ticks per microsecond). Alarm
+reads through `oer-espressif-boot::drivers::system_timer`: strobe, 64 bounded
+VALID polls per settle, then up to 16 LO/HI/LO rounds, retaining a
+monotonic floor when preempting strobes prevent verification. The binding
+requires the family driver's latch atoms on the platform port's counter owner;
+HAL performs no retry. S31 selects 16 ticks per microsecond. Alarm
 interrupts never borrow the comparator writer or a task's timer queue.
 
 The interrupt table uses numeric levels and harts and each part's

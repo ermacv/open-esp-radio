@@ -33,7 +33,7 @@
 //! }
 //! ```
 //!
-//! - [`drivers`]: LP-fast, brownout, secondary containment, APM and TRNG;
+//! - [`drivers`]: LP-fast, brownout, core control, SYSTIMER reading, APM and TRNG;
 //! - [`clock`]: the CPU clock profile, its PLL calibrated only when the CPU
 //!   does not already run from it, every divider applied by one update;
 //! - [`cache`]: code published to instruction fetch (data written back, the

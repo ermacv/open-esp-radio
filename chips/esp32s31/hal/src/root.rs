@@ -21,6 +21,8 @@
 //! # }
 //! ```
 
+use oer_espressif_boot::drivers::system_timer::{LatchStuck, Monotonic};
+
 use oer_esp32s31_pac::ownership::{
     BootPeripherals, MacLocalTimePeripherals, ModemEtmPeripherals, Partitions, SocPeripherals,
 };
@@ -45,7 +47,7 @@ use crate::{
         entropy::EntropyRegisters,
         reset_cause::ResetCauseRegisters,
         software_interrupt::SoftwareInterrupts,
-        system_timer::{Monotonic, MonotonicStuck, SystemTimer, open_clock},
+        system_timer::{SystemTimer, SystimerCounter, TICKS_PER_MICROSECOND, open_clock},
         timg0_alarm::Timg0AlarmParts,
         usb_serial_jtag::{self, ConsoleRegisters},
         watchdog::{Mwdt0Registers, RwdtRegisters, SwdRegisters, WatchdogRegisters, Watchdogs},
@@ -92,8 +94,8 @@ impl From<usb_serial_jtag::Installed> for InitError {
     }
 }
 
-impl From<MonotonicStuck> for InitError {
-    fn from(_: MonotonicStuck) -> Self {
+impl From<LatchStuck> for InitError {
+    fn from(_: LatchStuck) -> Self {
         Self::MonotonicStuck
     }
 }
@@ -136,7 +138,7 @@ impl Root {
         } = soc;
         open_clock(&mut hp_sys_clkrst_systimer);
         let SystemTimer { counter, .. } = SystemTimer::new(system_timer);
-        let monotonic = Monotonic::new(counter)?;
+        let monotonic = Monotonic::start_initial_latch_check(counter)?;
         let BootPeripherals {
             hp_sys_clkrst_boot_clock,
             lp_aon_clkrst_cpll,
@@ -301,7 +303,7 @@ impl Root {
 #[must_use = "the bootstrap's owners bring the chip up"]
 pub struct Bootstrap {
     /// The boot's monotonic clock, counting before the boot deadline starts.
-    pub monotonic: Monotonic,
+    pub monotonic: Monotonic<SystimerCounter, TICKS_PER_MICROSECOND>,
     /// The SoC initialization.
     pub soc: Soc,
     /// The brownout detector and the analog bus of its threshold.

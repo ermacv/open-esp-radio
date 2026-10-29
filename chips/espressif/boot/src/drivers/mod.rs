@@ -5,3 +5,4 @@ pub mod clock;
 pub mod cores;
 pub mod entropy;
 pub mod soc;
+pub mod system_timer;

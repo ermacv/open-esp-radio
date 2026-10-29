@@ -21,7 +21,16 @@
 //! (`systimer_hal_get_counter_value`: update, wait for valid, LO/HI/LO) and
 //! esp-hal 1f646c5 `timer/systimer.rs` (`Unit::read_count`).
 
-use oer_espressif_platform_port::{LatchStuck, Unverified};
+/// The counter's latch never became valid within its settle bound.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct LatchStuck;
+
+/// A read exhausted its rounds; its floor preserves monotonic time.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Unverified {
+    /// A count no earlier read exceeds and no later read undercuts.
+    pub floor: u64,
+}
 
 /// The counter latch of system timer unit zero, shared by every context.
 pub trait CounterLatch {
@@ -35,28 +44,6 @@ pub trait CounterLatch {
     fn low(&self) -> u32;
 }
 
-impl<P: oer_mmio::Placement> CounterLatch for super::SystimerCounter<P> {
-    #[inline(always)]
-    fn update(&self) {
-        Self::update(self);
-    }
-
-    #[inline(always)]
-    fn valid(&self) -> bool {
-        Self::valid(self)
-    }
-
-    #[inline(always)]
-    fn high(&self) -> u32 {
-        Self::high(self)
-    }
-
-    #[inline(always)]
-    fn low(&self) -> u32 {
-        Self::low(self)
-    }
-}
-
 /// The polls of the valid flag one latch may take: the copy crosses into
 /// the 16 MHz counter domain in a few of its cycles, well inside the 20 µs a
 /// named settle may last at any CPU clock.
@@ -65,7 +52,11 @@ pub const LATCH_SETTLE_POLLS: u32 = 64;
 /// The LO/HI/LO rounds one read may take: each further round needs a strobe
 /// from a preempting context between two of its reads.
 pub const READ_ROUNDS: u32 = 16;
-const _: () = assert!(READ_ROUNDS > 0, "a read takes at least one round");
+const _: () = {
+    if READ_ROUNDS == 0 {
+        panic!("a read takes at least one round");
+    }
+};
 
 /// Wait the latch's settle: whether its value turned valid within the bound.
 fn settle(latch: &impl CounterLatch) -> bool {
@@ -136,3 +127,43 @@ pub fn read(latch: &impl CounterLatch) -> Result<u64, Unverified> {
 
 #[cfg(test)]
 mod tests;
+
+/// Bootstrap time over an owned latch, before the common boot deadline exists.
+pub struct Monotonic<L, const TICKS_PER_MICROSECOND: u64>(L);
+
+impl<L: CounterLatch, const TICKS_PER_MICROSECOND: u64> Monotonic<L, TICKS_PER_MICROSECOND> {
+    /// The initial bounded latch check, before a `BootDeadline` can be started.
+    /// The owner calls this after opening the timer clock.
+    ///
+    /// # Errors
+    /// [`LatchStuck`] when all settle polls see an invalid latch.
+    pub fn start_initial_latch_check(latch: L) -> Result<Self, LatchStuck> {
+        const {
+            if TICKS_PER_MICROSECOND == 0 {
+                panic!("a timer has nonzero tick frequency");
+            }
+        }
+        check(&latch)?;
+        Ok(Self(latch))
+    }
+
+    /// Transfer the same latch to the next time owner, without another check.
+    pub fn into_counter(self) -> L {
+        self.0
+    }
+}
+
+impl<L: CounterLatch, const TICKS_PER_MICROSECOND: u64> oer_time::Clock
+    for Monotonic<L, TICKS_PER_MICROSECOND>
+{
+    fn now(&self) -> oer_time::Instant {
+        let divisor = const {
+            match core::num::NonZeroU64::new(TICKS_PER_MICROSECOND) {
+                Some(divisor) => divisor,
+                None => panic!("a timer has nonzero tick frequency"),
+            }
+        };
+        let ticks = read(&self.0).unwrap_or_else(|unverified| unverified.floor);
+        oer_time::Instant::from_micros(ticks / divisor)
+    }
+}

@@ -24,6 +24,7 @@ chip = [
 ]
 
 [dependencies]
+oer-espressif-boot = { path = "../boot" }
 static_cell = "2.1.1"
 pin-project-lite = "0.2.17"
 oer-cooperate = { path = "../../../portable/cooperate" }

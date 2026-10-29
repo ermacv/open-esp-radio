@@ -245,3 +245,57 @@ impl<'a> Uart0ClockRegisters<oer_mmio::Host<'a>> {
 /// The bytes of host memory UART0's clock block needs.
 #[cfg(any(test, feature = "test-support"))]
 pub const UART0_HOST_SIZE: usize = instances::hp_sys_clkrst::SIZE;
+
+// These implementations expose only the existing typed atoms to family policy;
+// the boot-address port can clear an entry and cannot install a launcher.
+impl<P: Placement, Q: Placement, R: Placement, S: Placement, T: Placement>
+    oer_espressif_boot::drivers::cores::Registers for CoreControlRegisters<P, Q, R, S, T>
+{
+    type Secondary = SecondaryHart;
+    const SECONDARIES: &'static [SecondaryHart] = &Hart::SECONDARIES;
+    fn request_stall(&mut self, _: oer_espressif_boot::Access<'_>, hart: SecondaryHart) {
+        self.request_stall(hart.hart());
+    }
+    fn hold(&mut self, _: oer_espressif_boot::Access<'_>, hart: SecondaryHart) {
+        self.hold(hart);
+    }
+    fn clear_boot_address(&mut self, _: oer_espressif_boot::Access<'_>, hart: SecondaryHart) {
+        self.set_boot_address(hart, 0);
+    }
+}
+
+impl<P: Placement, Q: Placement, R: Placement, S: Placement, T: Placement>
+    oer_espressif_boot::drivers::cores::RuntimeRegisters for CoreControlRegisters<P, Q, R, S, T>
+{
+    type Hart = Hart;
+    type Stops = [Option<oer_espressif_boot::drivers::cores::Stopped>; super::HARTS];
+    const HARTS: &'static [Hart] = &Hart::ALL;
+    fn hart(secondary: SecondaryHart) -> Hart {
+        secondary.hart()
+    }
+    fn save_stop(
+        stops: &mut Self::Stops,
+        hart: Hart,
+        stopped: oer_espressif_boot::drivers::cores::Stopped,
+    ) {
+        *hart.at_mut(stops) = Some(stopped);
+    }
+    fn fence(&self, _: oer_espressif_boot::Access<'_>) {
+        oer_riscv::fence();
+    }
+    fn held(&self, _: oer_espressif_boot::Access<'_>, hart: Hart) -> bool {
+        self.held(hart)
+    }
+    fn is_stalled(&self, _: oer_espressif_boot::Access<'_>, hart: Hart) -> bool {
+        self.is_stalled(hart)
+    }
+    fn request_peer_stall(&mut self, _: oer_espressif_boot::Access<'_>, hart: Hart) {
+        self.request_stall(hart);
+    }
+    fn request_run(&mut self, _: oer_espressif_boot::Access<'_>, hart: Hart) {
+        self.request_run(hart);
+    }
+    fn reset_core(&mut self, _: oer_espressif_boot::Access<'_>, hart: Hart) {
+        self.reset_core(hart);
+    }
+}
