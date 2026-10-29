@@ -419,11 +419,12 @@ release a secondary hart.
   the bug it prevents.
 - DMA-reachable storage is permanent and is released only after a proof that
   DMA stopped; otherwise it is quarantined until reset.
-- A hardware fault describes a proven impossible state, with its primary
-  `SOURCE` and retained observations. Its owners stay quarantined while safe
-  `fatal::reset_recording` retains the reason and resets; the next boot prints
-  it. Watchdog expiry is not the fault transition. API length, range and
-  ownership refusals are typed errors, without a hardware-fault claim.
+- A hardware-impossible fault needs the bounded `SOURCE:` proof below.
+  A type named `Fault` does not establish impossibility. API length, range
+  and ownership refusals are typed errors. An image or HAL owner may choose
+  a terminal decision after a handled error without relabelling it impossible.
+  Unconfirmed hardware/DMA owners stay quarantined through record/reset;
+  watchdog expiry is not an explicit fault transition.
 - Packet pools accept `oer-memory::FrameLen<CAP>` at publication and prefix
   access. Runtime construction validates input; constants are checked at
   monomorphization. A refused consuming range operation returns the original
@@ -438,14 +439,117 @@ release a secondary hart.
   when held, and wrapping per-slot post sequence. Each typed radio
   operation has a distinct kind; successful join answers update the cell's
   epoch. This diagnostic describes software lifecycle, not a hardware fault.
-- A fatal path never takes over a block another owner holds: it keeps its
-  record and resets the chip, and the next boot reports it. Its stop of the
+- A fatal path never takes over a block another owner holds: it attempts
+  record/reset, subject to the limits below. Its stop of the
   other hart (`StopTheWorld`: its hart masked, the other hart confirmed
   stopped by the hardware's stall status or held in reset) only prepares the
   reset; one compare-and-swap elects the fatal hart, so two failing harts
   never stall each other. A takeover needs a documented drain of the
   stopped hart's bus transactions after its stall, or one a stand run
   shows, and a revocation of the old owner's accesses.
+
+## Fatal decisions and reset
+
+A **handled error** is a typed outcome for reachable input or a refused
+operation. A **terminal decision** is the image or HAL owner's decision to
+end execution when safe continuation is not established, including after a
+handled error. It does not make that error impossible and does not use
+`panic!`. A **retained record** is diagnostic data for a later boot, not an
+owner, a recovery authority or proof of the physical reset cause.
+
+An **impossible state** contradicts a stated model under all of its admitted
+preconditions. For hardware, its `SOURCE:` identifies the primary register
+model, document, probe or exhaustive value enumeration, the chip revision,
+initialization and ownership assumptions, producer/acknowledgement/rearm
+order and the exact observation being excluded. Evidence for a field value
+does not prove event ordering, producer shutdown or hidden-pending absence.
+A measurement qualifies its measured setup; missing measurements do not
+prove either impossibility or a counterexample. Software invariants first
+use ownership, typestate or checked ranges. A diagnostic name, a zero status
+read or an existing `Fault` variant is no proof.
+
+An interrupt is asynchronous; a CPU exception is synchronous to an
+instruction; a trap covers both. Masking interrupts does not mask exceptions.
+A physical reset may bypass trap entry entirely.
+
+| Fault class (registry spelling) | Meaning |
+| --- | --- |
+| `hardware-impossible` | Contradiction of a hardware model with the bounded `SOURCE:` proof above. |
+| `unexpected-hardware` | Unexpected or unsupported observation without that proof, including opaque radio causes. |
+| `software-invariant` | A software ownership, lifecycle or range invariant failed. |
+| `configuration-boot` | Image configuration, admission or boot initialization failed. |
+| `exhaustion` | A finite counter, identity, time range or resource was exhausted. |
+| `cancellation` | An operation was abandoned while its owners still had obligations. |
+| `cpu-exception` | CPU exception entry; separate from a Rust panic. |
+| `requested-reset` | An explicit reset request; no fault is implied. |
+| `rust-panic` | An existing Rust panic path, subject to the no-growth rule and zero target. |
+
+Classification describes the cause, not the permission to reset. An error
+first crosses a library boundary as a typed value. Only the image or HAL
+owner chooses reset; sans-IO and ordinary drivers acquire no reset or
+retained-record dependency. The image delegates mechanisms to staged
+runtime/platform and executor owners, HAL core control and the chip's
+composition. Isolated probe reporters belong to their named image.
+The checked registry names those owners explicitly. Shared mechanisms can
+accept several classes; a reason keeps its own class. Neither a reason
+catalogue nor a source-site count measures reachable machine-code panics.
+
+The terminal policy is:
+
+- A reachable handled error may end in an owner-selected record/reset when
+  safe continuation is not established. It uses neither `panic!` nor an
+  impossibility label. Quarantine and the PHY Drop obligations still apply.
+- A debugger does not change product record/reset policy. Stopping after
+  recording requires an explicitly selected debug/probe mode and a checked
+  watchdog policy; a spin alone proves no watchdog freeze.
+- Retained diagnostics use best-effort LP RAM alongside raw, per-hart reset
+  causes. There is no guarantee after power loss. A valid old record need
+  not explain the most recent brownout, watchdog or debugger reset.
+- Repeated boot failure requires a record and explicit reset with the
+  watchdog preserved. An implicit watchdog expiry, diagnostic idle mode or
+  a retained "three failures" counter does not implement this policy.
+
+The current mechanisms have narrower guarantees than the policy:
+
+- `staged-runtime::fatal::reset_recording` masks the local hart, attempts
+  `stop_the_world`, calls the recorder, then requests the HAL software reset.
+  A recorder may write nothing when its slot cannot be claimed. Stop occurs
+  before the callback; a failure before it can prevent capture. The stop
+  establishes neither DMA quiescence nor a drain of old bus transactions.
+  An unavailable core-control owner returns `AwaitWatchdog`; the hart then
+  waits for an already armed watchdog without taking over that owner.
+- Boot terminal paths include `idle`/`fatal_halt` and the bootstrap's halt.
+  HIL's boot reporter records/resets when console output is refused, but
+  halts after successful output. These paths do not implement the explicit
+  repeated-boot-failure policy. The default CPU exception handler spins
+  without capture/reset; HIL and RX-chain supply their own handlers.
+  The ordinary executor idle wait's debugger check is not terminal policy.
+- Runtime panic/named-fault capture holds its boot-zeroed claim until reset;
+  other records have independent claims, some released before reset. There
+  is no common first-event guarantee. A fresh boot can overwrite an
+  unconsumed older record. Named runtime faults, PHY and IEEE 802.15.4
+  clear after successful output; ordinary panic consumption, Wi-Fi, B0
+  gate/release, HIL's separate fatal slot and RX-chain clear before reporting,
+  so output refusal can lose their diagnostics.
+- Session observations need not fit the retained codec. PHY retains only
+  reason/operation and registration epoch in 16 bytes; SAR RAW/ST, queue
+  lengths, invalid delay and foreign-reunion identities are not retained.
+  Wi-Fi retains its full RAW in 12 bytes; B0 gate uses 44 bytes, release
+  16 bytes, and PHY HIL's IEEE 802.15.4 record 44 bytes. HIL exception
+  diagnostics reread trap CSRs after stop; they are not an entry-time frame
+  snapshot of every register.
+- `NOLOAD` prevents startup initialization; it promises no hardware
+  retention. `HW1_S31_RESET_20261026` in the register evidence observes a
+  probe record surviving `SYS_SW_RST`. It establishes no retention for the
+  watchdog's `ResetRtc`, super watchdog, brownout or power loss. Checksums
+  validate stored words, not power-fail atomicity. Raw reset-cause reporting
+  exists in the three HIL images, not uniformly in product images.
+
+[`terminal-sites.toml`](../tools/test/layers/terminal-sites.toml) and its
+[source check](../tools/test/layers/tests/terminal_sites.rs) inventory the
+terminal mechanisms, retained reason catalogues and explicit image panic
+candidates. The [layer-test README](../tools/test/layers/README.md#terminal-site-registry)
+defines the scan's scope and limits.
 
 ## Hardware
 

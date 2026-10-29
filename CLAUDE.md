@@ -55,12 +55,23 @@ system these rules serve.
   `forbid(unsafe_code)`. Other callers retain the no-growth rule.
   Context-local mutable payloads use `oer-memory::ContextCell` with a private
   `ContextProof`; nested access is refused without consuming the payload.
-  A hardware state is impossible only with a `SOURCE:` proof from the register
-  model, a document, a probe or exhaustive value enumeration. Without such
-  proof it returns a handled typed error, not a hardware fault.
+  A hardware state is impossible only with a `SOURCE:` proof naming the
+  model, revision, preconditions, event order and limits; a cited value alone
+  proves no lifecycle invariant. Otherwise return a handled typed error.
   An impossible state returns a named fault retaining its source observations;
   its owners stay quarantined, then the image calls safe `fatal::reset_recording`
   to retain the reason for the next boot to print. A watchdog is not this mechanism.
+  Only the image or HAL owner makes a terminal decision: it may record/reset
+  after a reachable handled error when safe continuation is not established,
+  without `panic!` or an impossibility claim. Keep unconfirmed owners quarantined.
+  Product policy is record+reset even with a debugger; stopping requires an
+  explicit debug/probe mode with checked watchdog policy. Retained LP RAM
+  diagnostics are best effort, read alongside raw reset causes, with no
+  power-loss guarantee. Repeated boot failure requires record+explicit reset
+  with the watchdog preserved, not a retained retry counter or implicit expiry.
+  The [fatal/reset contract](docs/architecture.md#fatal-decisions-and-reset)
+  states implementation limits; `tools/test/layers/terminal-sites.toml`
+  inventories terminal sites, their classes and reset owners.
   IEEE 802.15.4 startup is an affine pre-bind discard: mask delivery,
   issue STOP and both timer stops, then write W1C for all fourteen event
   lanes without a sample through the existing IRQ part. All pre-bind
@@ -85,8 +96,8 @@ system these rules serve.
   the shared clear words ([HAL transactions](chips/esp32s31/hal/README.md)).
   Owned PHY transactions preserve their registration and restore obligations;
   only consuming reunion with the exact affine return owner releases their
-  quarantine guard. Dropping either half records its source observations and
-  resets, without automatic restoration or owner release. The HAL owns both
+  quarantine guard. Dropping either half records reason, operation and epoch
+  and resets, without automatic restoration or owner release. The HAL owns both
   signatures of its fault binding through its exported reporter macro.
   Isolated verifier probes keep their own terminal reporter and first fault
   in session RAM; they do not link the staged runtime.

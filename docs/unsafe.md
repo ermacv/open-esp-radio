@@ -45,8 +45,8 @@ Sans-IO code contains no `unsafe` and no runtime panic paths, including
 `panic!`, `unreachable!`, `todo!`, `unimplemented!`, assertions and debug
 assertions, `vendor_assert!`, `unwrap`/`expect`, indexing or slicing that can
 panic, arithmetic overflow or invalid division, and panicking core methods.
-Those paths return typed errors. HIL completion receiver exhaustion is an
-impossible terminal-barrier state: the image retains the receiver-limit
+Those paths return typed errors. HIL completion receiver exhaustion is a
+terminal-barrier refusal: the image retains the receiver-limit
 observations in the existing named-fault slot, keeps the operation's owners
 quarantined and resets through `fatal::reset_recording`, without executing the
 guarded action. Sans-IO crates do not depend on fatal, reset or retained-record
@@ -516,10 +516,10 @@ Engine interrupt service rejects a sample containing lane 7, 10 or 13 with
 all named events, each unnamed lane and the entry state. The consuming
 engine/MAC owner becomes an absorbing quarantine with no recovery API.
 The PHY HIL image records the fault through safe `fatal::reset_recording`
-without dropping its quarantined owners. The new record adds 12 bytes of
-retained data to the PHY HIL image: magic, a diagnostic word packing all fourteen
-event flags, state and reason, and checksum. It prints at the next boot and
-remains retained on output refusal.
+without dropping its quarantined owners. The 44-byte retained record contains
+magic, all fourteen event flags, entry state, ordered service progress,
+eight detail words and checksum. It prints at the next boot and remains
+retained on output refusal.
 Malformed secured ACK output from the environment is refused as API input.
 The engine issues STOP, reports the typed security error to its environment,
 delivers the received frame without an ACK and selects the next operation.
@@ -631,8 +631,9 @@ stopped/masked it before reply.
 The narrow transaction reporter can report only SAR transfer faults, without
 reunion or register authority. Owners stay quarantined before record/reset;
 the existing retained codec remains 16 bytes and records the named reason and
-epoch. Pointers from a foreign reunion remain session diagnostics, not retained
-owner identities.
+epoch. SAR RAW/ST, request/reply lengths and invalid-delay values remain
+session observations and are not encoded in this record. Pointers from a
+foreign reunion likewise remain session diagnostics, not retained owner identities.
 The HAL declares the direct `link_fn!` binding and exports
 `phy_fault_reporter!` to define that exact signature. Staged images bind it
 to `oer-esp32s31-compose`'s `phy_fault::reset`, which calls
@@ -768,7 +769,9 @@ can write a replacement and publish it with Release. A dropped token leaves
 the cell unavailable. The S31 port's free DMA buffers carry these tokens
 through both execution contexts, so return-on-drop shares no producer or lock.
 
-`retained` holds records in memory that survives a reset. A
+`retained` holds records in memory selected for best-effort reset retention;
+the reset source determines whether bytes survive. `NOLOAD` only excludes
+startup initialization ([fatal/reset limits](architecture.md#fatal-decisions-and-reset)). A
 `RetainedCell<T: bytemuck::AnyBitPattern>` reads what the previous boot left
 as a `T`, so every bit pattern must be a value; `try_lock` hands the record
 to one holder at a time without waiting, and its claim lives in a section
@@ -1075,6 +1078,10 @@ epoch refuses activation.
 BB watchdog reset-enable remains an independent hardware action: initialization
 sets it as the ROM does, preserves interrupt-enable, and its reset extent is
 unmeasured. It supplies no software retained-fault contract.
+Wi-Fi consumes and clears its retained record before console output and
+ignores output refusal; next-boot reporting is best effort, without replay
+after a failed write. Other codecs have their own claim and consumption
+rules ([fatal/reset limits](architecture.md#fatal-decisions-and-reset)).
 
 ## Active-owner lifetime
 

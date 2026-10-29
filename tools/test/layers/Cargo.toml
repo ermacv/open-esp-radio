@@ -10,7 +10,8 @@ description = "Workspace structure rules: names, the unsafe boundary, layer role
 readme = "README.md"
 
 [dev-dependencies]
-proc-macro2 = "=1.0.107"
+proc-macro2 = { version = "=1.0.107", features = ["span-locations"] }
+syn = { version = "=2.0.119", features = ["full", "visit"] }
 tempfile = "=3.27.0"
 toml = "=1.1.4"
 
