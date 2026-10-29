@@ -26,15 +26,8 @@ use oer_time::Clock;
 use oer_embassy_time::EmbassyClock;
 use oer_esp32s31_board as board;
 use oer_esp32s31_hal::peripherals::software_interrupt::FromCpu3Irq;
-use oer_esp32s31_hal::power::ChipClocks;
 use oer_esp32s31_hal::peripherals::watchdog::{ArmedRtcWatchdog, RwdtRegisters};
-use oer_esp32s31_ieee80211_driver::irq::WifiIrqPart;
-use oer_esp32s31_phy::{
-    NoopPhyTargetObserver, PhyCalibrationIdentity, PhyRegisterConfig, concurrent::ConcurrentPhy,
-    phy_get_rf_cal_version,
-};
-use oer_esp32s31_radio_client::{LpClock, RcSlow, claim};
-use oer_esp32s31_radio_system::{Esp32s31Radio, RadioSystem};
+use oer_esp32s31_wifi::{self as wifi, InterruptTypes};
 use oer_espressif_executor::{Doorbell, InterruptExecutor};
 
 use oer_memory::{Placed, StaticPlace};
@@ -59,7 +52,7 @@ oer_espressif_executor::tasks! {
     /// The radio executor's tasks (P2).
     pub(crate) RadioTasks: InterruptExecutor<Esp32s31, 2> {
         radio_actor(actor: &'static mut Actor) = radio_actor;
-        driver(boot: radio::Boot, channel: radio::DriverChannel) = radio::drive;
+        driver(driver: wifi::Driver<radio::binding::Binding>) = radio::drive;
     }
 }
 
@@ -74,17 +67,7 @@ oer_espressif_executor::tasks! {
 
 static ACTOR: StaticCell<Actor> = StaticCell::new();
 
-type Actor = RadioSystem<
-    oer_esp32s31_radio_client::wifi::Wifi,
-    RcSlow,
-    Esp32s31Radio<
-        ChipClocks,
-        oer_espressif_executor::Cooperative<Esp32s31, EmbassyClock>,
-        NoopPhyTargetObserver,
-        crate::phy_pilot::Client,
-    >,
-    EmbassyClock,
->;
+type Actor = wifi::RadioActor<crate::phy_pilot::Client>;
 
 pub(crate) fn start(
     handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platform::Port>,
@@ -118,36 +101,14 @@ pub(crate) fn start(
     let factory = oer_esp32s31_hal::peripherals::efuse::FactoryIdentity::read(runtime.efuse);
     let station = factory.address(oer_esp32s31_hal::peripherals::efuse::Interface::Station);
     let ap = factory.address(oer_esp32s31_hal::peripherals::efuse::Interface::AccessPoint);
-    let identity = PhyCalibrationIdentity {
-        rf_cal_version: phy_get_rf_cal_version(),
-        base_mac_address: factory.base_mac(),
-        mac_extension: factory.mac_extension(),
-    };
-    let (domain, partitions) = runtime
-        .radio
-        .split::<ChipClocks, _>(
-            ConcurrentPhy::new(),
-            oer_esp32s31_compose::phy_fault::identity(),
-        )
-        .unwrap_or_else(|failure| {
-            let fault = failure.fault();
-            let _owners = failure;
-            oer_esp32s31_compose::phy_fault::reset(fault)
-        });
-    let (Some((end, cells)), Some(lp)) = (claim(), LpClock::<RcSlow>::claim()) else {
-        park()
-    };
-    let phy_pilot = crate::phy_pilot::init(runtime.timg0_alarm, adopted.router(), interrupts.phy);
-    let backend = Esp32s31Radio::new(
-        domain,
-        partitions.wifi_coex,
+    let radio_resources = wifi::RadioResources::new::<radio::binding::Binding>(
+        runtime.radio,
         runtime.clocks,
-        oer_espressif_executor::Cooperative::<Esp32s31, _>::new(EmbassyClock),
-        NoopPhyTargetObserver,
-        PhyRegisterConfig::new(identity),
-        phy_pilot,
+        &factory,
     );
-    let actor = ACTOR.init_with(|| RadioSystem::new(end, backend, EmbassyClock, lp));
+    let phy_pilot = crate::phy_pilot::init(runtime.timg0_alarm, adopted.router(), interrupts.phy);
+    let (actor, hardware) = radio_resources.start(phy_pilot);
+    let actor = ACTOR.init(actor);
     // The radio executor writes the system timer; the application executor
     // publishes its deadlines to it.
     let timer = runtime.system_timer;
@@ -175,7 +136,7 @@ pub(crate) fn start(
         .router()
         .bind(
             interrupts.wifi,
-            WifiIrqPart::new(runtime.wifi_interrupts, software.irq3, irq::Lower(lower)),
+            wifi::Interrupts::part(runtime.wifi_interrupts, software.irq3, wifi::Lower(lower)),
         )
         .unwrap_or_else(|error| {
             oer_espressif_staged_runtime::interrupts::reset_binding::<
@@ -184,7 +145,7 @@ pub(crate) fn start(
             >(error)
         });
     let (bell, urgent) = Doorbell::new::<FromCpu3Irq>(line, &bound);
-    let bell = irq::ImageDoorbell(bell);
+    let bell = wifi::Bell(bell);
     let (hart, router) = adopted.parts();
     let radio = InterruptExecutor::<Esp32s31, 2>::new(software.line2)
         .start(hart, router, interrupts.radio, software.irq2, urgent)
@@ -204,26 +165,60 @@ pub(crate) fn start(
     rng.fill(&mut tx_bytes);
     let entropy = u32::from_le_bytes(tx_bytes);
     CONSOLE.start(boot);
-    let (driver_channel, frontend_channel) = radio::channels();
-    if RadioTasks::radio_actor(&radio, actor).is_err() {
-        crate::fail(crate::fatal::Failure::TaskAllocation);
-    }
-    if RadioTasks::driver(
-        &radio,
-        radio::Boot {
-            cell: cells.wifi,
-            wifi: partitions.wifi,
+    let setup = wifi::Config::new(config.channel, config.country, config.cap_dbm, None, true)
+        .unwrap_or_else(|error| radio::failure(error));
+    let (control, net, runners) = wifi::station(
+        wifi::Resources {
+            events: station::ProductEvents,
+            storage: radio::binding::storage(),
+            cell: hardware.cell,
+            wifi: hardware.wifi,
             rng,
-            station,
+            address: station,
             ap,
-            config,
             bound,
             bell,
             entropy,
+            interrupts: &irq::LINE,
+            mac: &irq::MAC_SIGNAL,
+            power: &irq::POWER_SIGNAL,
+            rx: irq::RX
+                .take()
+                .unwrap_or_else(|| radio::failure(wifi::InitializationError::Rx)),
+            tx: [
+                irq::TX0
+                    .take()
+                    .unwrap_or_else(|| radio::failure(wifi::InitializationError::Tx)),
+                irq::TX1
+                    .take()
+                    .unwrap_or_else(|| radio::failure(wifi::InitializationError::Tx)),
+                irq::TX2
+                    .take()
+                    .unwrap_or_else(|| radio::failure(wifi::InitializationError::Tx)),
+                irq::TX3
+                    .take()
+                    .unwrap_or_else(|| radio::failure(wifi::InitializationError::Tx)),
+                irq::TX4
+                    .take()
+                    .unwrap_or_else(|| radio::failure(wifi::InitializationError::Tx)),
+                irq::TX5
+                    .take()
+                    .unwrap_or_else(|| radio::failure(wifi::InitializationError::Tx)),
+                irq::TX6
+                    .take()
+                    .unwrap_or_else(|| radio::failure(wifi::InitializationError::Tx)),
+                irq::TX7
+                    .take()
+                    .unwrap_or_else(|| radio::failure(wifi::InitializationError::Tx)),
+                irq::TX8
+                    .take()
+                    .unwrap_or_else(|| radio::failure(wifi::InitializationError::Tx)),
+            ],
         },
-        driver_channel,
-    )
-    .is_err()
+        setup,
+    );
+    if RadioTasks::radio_actor(&radio, actor).is_err()
+        || RadioTasks::driver(&radio, runners.driver).is_err()
     {
         crate::fail(crate::fatal::Failure::TaskAllocation);
     }
@@ -246,9 +241,9 @@ pub(crate) fn start(
                 if AppTasks::console(spawner, console_work).is_err() {
                     crate::fail(crate::fatal::Failure::TaskAllocation);
                 }
-                let station_work = STATION_WORK
-                    .take()
-                    .future(|| station_work_future(frontend_channel, station, seed, nonces));
+                let station_work = STATION_WORK.take().future(|| {
+                    station_work_future(runners.station, control, net, station, seed, nonces)
+                });
                 if AppTasks::station_task(spawner, station_work).is_err() {
                     crate::fail(crate::fatal::Failure::TaskAllocation);
                 }
@@ -409,15 +404,19 @@ static STATION_WORK: ConstStaticCell<StaticPlace<StationWork>> =
     ConstStaticCell::new(StaticPlace::new());
 #[define_opaque(StationWork)]
 fn station_work_future(
-    channel: radio::FrontendChannel,
+    runner: wifi::StationRunner<radio::binding::Binding>,
+    control: wifi::Control<'static>,
+    net: wifi::Network<'static>,
     address: [u8; 6],
     seed: u64,
     nonces: Placed<'static, SNonceSource>,
 ) -> StationWork {
-    station_work(channel, address, seed, nonces)
+    station_work(runner, control, net, address, seed, nonces)
 }
 async fn station_work(
-    channel: radio::FrontendChannel,
+    runner: wifi::StationRunner<radio::binding::Binding>,
+    control: wifi::Control<'static>,
+    net: wifi::Network<'static>,
     address: [u8; 6],
     seed: u64,
     nonces: Placed<'static, SNonceSource>,
@@ -425,7 +424,8 @@ async fn station_work(
     let (request, mut start) = STARTS.receive().await;
     let attempt = Attempt { request };
     attempt.advance();
-    let ssid = heapless::Vec::from_slice(start.credentials.ssid()).expect("decoded SSID fits");
+    let ssid =
+        heapless::Vec::<u8, 32>::from_slice(start.credentials.ssid()).expect("decoded SSID fits");
     let password =
         SaePassword::new(start.credentials.passphrase()).expect("decoded personal password fits");
     let mut derive = PmkDerivation::new(start.credentials.passphrase(), start.credentials.ssid())
@@ -448,37 +448,18 @@ async fn station_work(
     CONSOLE
         .note_reliably(&oer_diagnostics::Note::station_pmk(elapsed))
         .await;
-    radio::serve(
-        channel,
-        station::Body {
-            address,
-            seed,
-            ssid,
-            password,
-            pmk,
-            nonces,
-            attempt,
-        },
+    let setup = wifi::Config::new(CONFIG.channel, CONFIG.country, CONFIG.cap_dbm, None, true)
+        .unwrap_or_else(|error| radio::failure(error));
+    let profile = wifi::Profile::personal(
+        &setup,
+        address,
+        &ssid,
+        (password, pmk),
+        station::Callbacks(nonces),
+        observation::StationObserver(attempt),
     )
-    .await;
-}
-
-use oer_ieee80211_arbiter::{
-    ArbiterPolicy, ArbiterPolicyError, CheckedArbiterPolicy, NoReservation,
-};
-use oer_time::Duration;
-pub fn arbiter(
-    publication_bound: Duration,
-) -> Result<CheckedArbiterPolicy<NoReservation>, ArbiterPolicyError> {
-    let mut policy = ArbiterPolicy::DEFAULT;
-    let absence = publication_bound
-        .as_micros()
-        .checked_add(policy.retune.as_micros())
-        .and_then(|one| one.checked_mul(2))
-        .and_then(|moves| moves.checked_add(policy.min_listen.as_micros()))
-        .ok_or(ArbiterPolicyError::AbsenceBudgetOverflow)?;
-    policy.absence = Duration::from_micros(absence);
-    policy.checked(publication_bound)
+    .unwrap_or_else(|error| radio::failure(error));
+    station::serve(runner, control, net, profile, address, seed, attempt).await;
 }
 
 // Keep the bounded wire-record constructor out of control/worker poll frames.

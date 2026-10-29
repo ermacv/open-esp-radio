@@ -7,10 +7,7 @@ use core::cell::{Cell, RefCell};
 use core::future::{Future, poll_fn};
 use core::pin::Pin;
 use core::task::{Poll, Waker};
-use oer_ieee80211_sta::machine::{
-    CommandRefusal, ConnectCommand, DisconnectCommand, ScanCommand, StaCommand, StaCommandCredit,
-    StaCommandCredits, StaCommandOutcome, StaCommandPermission,
-};
+use oer_ieee80211_sta::machine::{CommandRefusal, StaCommand, StaCommandOutcome};
 
 use embassy_futures::join::join;
 use oer_espressif_ieee80211_policy::{
@@ -654,15 +651,13 @@ impl RateSelection<ModelRxMeta, ModelAck> for RecordingRates<'_> {
     }
 }
 
-type CommandPath<Id> = oer_radio_port::Child<oer_ieee80211_model::ModelPool<Id, 9>, 1>;
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct ObservedRequest {
     correlation: u64,
     command: StaCommand,
 }
 impl ObservedRequest {
-    fn of<Id: SlotIdentity>(request: &StaRequest<'_, CommandPath<Id>>) -> Self {
+    fn of(request: &Request) -> Self {
         Self {
             correlation: request.correlation(),
             command: request.command(),
@@ -686,9 +681,10 @@ struct ObservedCommandTerminal {
     outcome: StaCommandOutcome,
 }
 enum ObservedOutput {
+    CommandInFlight(ObservedRequest),
     MsduRefused {
-        packet: TxMsdu,
-        reason: DataRefusal,
+        _packet: Box<TxMsdu>,
+        _reason: DataRefusal,
     },
     TxRefused {
         operation: TxOperation,
@@ -700,78 +696,25 @@ enum ObservedOutput {
     AccessPoint(AccessPointCommand<ModelCaps24>),
 }
 
-struct CommandCredits<'id, Id: SlotIdentity + 'id> {
-    connect: Option<StaCommandCredit<'id, CommandPath<Id>, ConnectCommand>>,
-    scan: Option<StaCommandCredit<'id, CommandPath<Id>, ScanCommand>>,
-    disconnect: Option<StaCommandCredit<'id, CommandPath<Id>, DisconnectCommand>>,
-}
-impl<'id, Id: SlotIdentity + 'id> CommandCredits<'id, Id> {
-    fn new(credits: StaCommandCredits<'id, CommandPath<Id>>) -> Self {
-        Self {
-            connect: Some(credits.connect),
-            scan: Some(credits.scan),
-            disconnect: Some(credits.disconnect),
-        }
-    }
-    fn take(&mut self, kind: StaCommand) -> StaCommandPermission<'id, CommandPath<Id>> {
-        match kind {
-            StaCommand::Connect => self
-                .connect
-                .take()
-                .expect("application owns connect credit")
-                .into(),
-            StaCommand::BackgroundScan => self
-                .scan
-                .take()
-                .expect("application owns scan credit")
-                .into(),
-            StaCommand::Disconnect => self
-                .disconnect
-                .take()
-                .expect("application owns disconnect credit")
-                .into(),
-        }
-    }
-    fn restore(&mut self, permission: StaCommandPermission<'id, CommandPath<Id>>) {
-        match permission {
-            StaCommandPermission::Connect(credit) => {
-                assert!(self.connect.replace(credit).is_none())
-            }
-            StaCommandPermission::BackgroundScan(credit) => {
-                assert!(self.scan.replace(credit).is_none())
-            }
-            StaCommandPermission::Disconnect(credit) => {
-                assert!(self.disconnect.replace(credit).is_none())
-            }
-        }
-    }
-}
-
 /// Command transport and credits remain inside the installation which minted them.
 /// The outer world's observations own no command permission.
-struct Application<'a, 'b, 'q, 'id, Id: SlotIdentity + 'id> {
+struct Application<'a, 'b, 'q> {
     world: &'a World<'b>,
-    commands: Cell<Option<Control<'q, 'id, ModelCaps24, CommandPath<Id>, 4>>>,
-    credits: RefCell<CommandCredits<'id, Id>>,
+    commands: Cell<Option<Control<'q, ModelCaps24, 4>>>,
 }
-impl<'b, Id: SlotIdentity> core::ops::Deref for Application<'_, 'b, '_, '_, Id> {
+impl<'b> core::ops::Deref for Application<'_, 'b, '_> {
     type Target = World<'b>;
     fn deref(&self) -> &Self::Target {
         self.world
     }
 }
 
-impl<'id, Id: SlotIdentity + 'id> Application<'_, '_, '_, 'id, Id> {
+impl Application<'_, '_, '_> {
     async fn station_command(&self, correlation: u64, command: StaCommand) {
-        let permission = self.credits.borrow_mut().take(command);
         let mut control = self.commands.take().unwrap();
-        let result = match permission {
-            StaCommandPermission::Connect(credit) => control.connect(correlation, credit).await,
-            StaCommandPermission::BackgroundScan(credit) => control.scan(correlation, credit).await,
-            StaCommandPermission::Disconnect(credit) => {
-                control.disconnect(correlation, credit).await
-            }
-        };
+        let result = control
+            .command(ServiceCommand::Station(Request::new(correlation, command)))
+            .await;
         assert!(result.is_ok());
         self.commands.set(Some(control));
     }
@@ -781,11 +724,15 @@ impl<'id, Id: SlotIdentity + 'id> Application<'_, '_, '_, 'id, Id> {
         self.commands.set(Some(control));
         status
     }
-    fn record_output(&self, output: ServiceOutput<'id, ModelCaps24, CommandPath<Id>>) {
+    fn record_output(&self, output: ServiceOutput<ModelCaps24>) {
         let observed = match output {
-            ServiceOutput::MsduRefused { packet, reason } => {
-                ObservedOutput::MsduRefused { packet, reason }
+            ServiceOutput::CommandInFlight(request) => {
+                ObservedOutput::CommandInFlight(ObservedRequest::of(&request))
             }
+            ServiceOutput::MsduRefused { packet, reason } => ObservedOutput::MsduRefused {
+                _packet: Box::new(packet),
+                _reason: reason,
+            },
             ServiceOutput::TxRefused { operation, reason } => {
                 ObservedOutput::TxRefused { operation, reason }
             }
@@ -793,9 +740,6 @@ impl<'id, Id: SlotIdentity + 'id> Application<'_, '_, '_, 'id, Id> {
             ServiceOutput::AccessPoint(command) => ObservedOutput::AccessPoint(command),
             ServiceOutput::CommandRefused(refused) => {
                 let request = ObservedRequest::of(&refused.request);
-                self.credits
-                    .borrow_mut()
-                    .restore(refused.request.into_parts().1);
                 ObservedOutput::CommandRefused(ObservedCommandRefused {
                     request,
                     reason: refused.reason,
@@ -803,9 +747,6 @@ impl<'id, Id: SlotIdentity + 'id> Application<'_, '_, '_, 'id, Id> {
             }
             ServiceOutput::CommandCompleted(terminal) => {
                 let request = ObservedRequest::of(&terminal.request);
-                self.credits
-                    .borrow_mut()
-                    .restore(terminal.request.into_parts().1);
                 ObservedOutput::CommandCompleted(ObservedCommandTerminal {
                     request,
                     outcome: terminal.outcome,
@@ -908,7 +849,7 @@ impl<'id, Id: SlotIdentity + 'id> Application<'_, '_, '_, 'id, Id> {
         ptk
     }
 
-    async fn command(&self, command: ServiceCommand<'id, ModelCaps24, CommandPath<Id>>) {
+    async fn command(&self, command: ServiceCommand<ModelCaps24>) {
         let mut sender = self
             .commands
             .take()
@@ -989,7 +930,7 @@ impl<'scope, 'w, 'b, S, const GROUPS: usize>
     PortBody<LocalId<'scope>, ModelBackend<LocalId<'scope>, ModelCaps24, ServiceContexts>>
     for Body<'w, 'b, S, GROUPS>
 where
-    S: for<'a, 'q, 'id> FnOnce(&'a Application<'a, 'b, 'q, 'id, LocalId<'scope>>) -> Script<'a>,
+    S: for<'a, 'q> FnOnce(&'a Application<'a, 'b, 'q>) -> Script<'a>,
 {
     type Output = ();
     async fn run<'p, 'id>(
@@ -1063,24 +1004,14 @@ where
                 ),
                 group_permission: station_group_permission,
             };
-            let (mut station, credits) = match security {
+            let (station, credits) = match security {
                 StaSecurity::Open => Station::new_open(config, resources),
                 StaSecurity::Personal { password, pmk } => {
                     Station::new_personal(config, password, pmk, resources, GroupCapacity::new())
                 }
             };
-            let mut credits = CommandCredits::new(credits);
-            if self.refuse_initial_enable {
-                station
-                    .command(
-                        Instant::EPOCH,
-                        StaRequest::new(901, credits.take(StaCommand::Connect)),
-                    )
-                    .unwrap();
-                self.world.air.refuse_enable();
-            }
-            let service = Runner::<ServicePort<LocalId<'scope>>, _, _, GROUPS, Observed>::new(
-                station,
+            let mut service = Runner::<ServicePort<LocalId<'scope>>, _, _, GROUPS, Observed>::new(
+                (station, credits),
                 StaData::new(
                     data_tickets,
                     large,
@@ -1106,17 +1037,27 @@ where
                 .view(),
                 self.world.observed,
             );
-            let mut command_queue = WakingSpscQueue::<
-                ServiceCommand<'id, ModelCaps24, CommandPath<LocalId<'scope>>>,
-                4,
-            >::new();
+            if self.refuse_initial_enable {
+                let request = service
+                    .state
+                    .pending
+                    .commands
+                    .request(Request::new(901, StaCommand::Connect))
+                    .unwrap();
+                service
+                    .state
+                    .station
+                    .command(Instant::EPOCH, request)
+                    .unwrap();
+                self.world.air.refuse_enable();
+            }
+            let mut command_queue = WakingSpscQueue::<ServiceCommand<ModelCaps24>, 4>::new();
             let (application, commands) = command_queue.split();
             let state = State::new();
             let (application, control) = Control::new(application, &state).unwrap();
             let application = Application {
                 world: self.world,
                 commands: Cell::new(Some(application)),
-                credits: RefCell::new(credits),
             };
             let world = &application;
             let mut output = world
@@ -1379,10 +1320,7 @@ where
 /// the access point by `script`.
 fn run<S>(security: StaSecurity, script: S)
 where
-    S: for<'w, 'b, 'q, 'id, 'scope> FnOnce(
-            &'w Application<'w, 'b, 'q, 'id, LocalId<'scope>>,
-        ) -> Script<'w>
-        + Send,
+    S: for<'w, 'b, 'q> FnOnce(&'w Application<'w, 'b, 'q>) -> Script<'w> + Send,
 {
     run_with(config(security), script);
 }
@@ -1390,20 +1328,14 @@ where
 /// Run the service on a 2.4 GHz model with `config`.
 fn run_with<S>(config: TestConfig, script: S) -> Observed
 where
-    S: for<'w, 'b, 'q, 'id, 'scope> FnOnce(
-            &'w Application<'w, 'b, 'q, 'id, LocalId<'scope>>,
-        ) -> Script<'w>
-        + Send,
+    S: for<'w, 'b, 'q> FnOnce(&'w Application<'w, 'b, 'q>) -> Script<'w> + Send,
 {
     run_with_groups::<S, 2>(config, script)
 }
 
 fn run_with_groups<S, const GROUPS: usize>(config: TestConfig, script: S) -> Observed
 where
-    S: for<'w, 'b, 'q, 'id, 'scope> FnOnce(
-            &'w Application<'w, 'b, 'q, 'id, LocalId<'scope>>,
-        ) -> Script<'w>
-        + Send,
+    S: for<'w, 'b, 'q> FnOnce(&'w Application<'w, 'b, 'q>) -> Script<'w> + Send,
 {
     run_case::<S, GROUPS>(config, script, false)
 }
@@ -1416,10 +1348,7 @@ fn run_case<S, const GROUPS: usize>(
     refuse_initial_enable: bool,
 ) -> Observed
 where
-    S: for<'w, 'b, 'q, 'id, 'scope> FnOnce(
-            &'w Application<'w, 'b, 'q, 'id, LocalId<'scope>>,
-        ) -> Script<'w>
-        + Send,
+    S: for<'w, 'b, 'q> FnOnce(&'w Application<'w, 'b, 'q>) -> Script<'w> + Send,
 {
     run_case_with_placement::<S, GROUPS>(config, script, refuse_initial_enable, false)
 }
@@ -1431,10 +1360,7 @@ fn run_case_with_placement<S, const GROUPS: usize>(
     placed: bool,
 ) -> Observed
 where
-    S: for<'w, 'b, 'q, 'id, 'scope> FnOnce(
-            &'w Application<'w, 'b, 'q, 'id, LocalId<'scope>>,
-        ) -> Script<'w>
-        + Send,
+    S: for<'w, 'b, 'q> FnOnce(&'w Application<'w, 'b, 'q>) -> Script<'w> + Send,
 {
     std::thread::scope(|scope| {
         std::thread::Builder::new()
@@ -1455,10 +1381,7 @@ fn run_case_on_this_thread<S, const GROUPS: usize>(
     placed: bool,
 ) -> Observed
 where
-    S: for<'w, 'b, 'q, 'id, 'scope> FnOnce(
-            &'w Application<'w, 'b, 'q, 'id, LocalId<'scope>>,
-        ) -> Script<'w>
-        + Send,
+    S: for<'w, 'b, 'q> FnOnce(&'w Application<'w, 'b, 'q>) -> Script<'w> + Send,
 {
     block_on(with_local_slot(async |claim| {
         let mut slot = claim.place();
@@ -3301,6 +3224,55 @@ fn control_cooperative_stop_retires_the_model_runner_and_publishes_the_last_noti
                 ))
                 .await;
             assert_eq!(world.status().link.state, oer_network::LinkState::Down);
+        })
+    });
+}
+
+#[test]
+fn runner_retains_its_installation_credit_through_a_duplicate_request_and_returns_it_before_the_callback()
+ {
+    run_with(config(StaSecurity::Open), |world| {
+        Box::pin(async move {
+            let mut seen = 0;
+            world.station_command(51, StaCommand::Connect).await;
+            let _probe = world.sent(&mut seen, PROBE_REQUEST).await;
+            world.station_command(52, StaCommand::Connect).await;
+            for _ in 0..16 {
+                yield_now().await;
+            }
+            assert!(
+                world
+                    .outputs
+                    .borrow()
+                    .iter()
+                    .any(|e| matches!(e,ObservedOutput::CommandInFlight(r) if r.correlation()==52))
+            );
+            world.air.receive(&beacon(false), meta());
+            let auth = world.sent(&mut seen, AUTHENTICATION).await;
+            world
+                .air
+                .receive(&authentication_response(&auth.plaintext).unwrap(), meta());
+            let _association = world.sent(&mut seen, ASSOCIATION_REQUEST).await;
+            world.air.receive(&association_response(false), meta());
+            world
+                .notice(StaNotice::Connected {
+                    bssid: oer_ieee80211_wire::address::Bssid::new(
+                        IndividualAddress::new(BSSID).unwrap(),
+                    )
+                    .unwrap(),
+                    channel: 6,
+                })
+                .await;
+            world.station_command(53, StaCommand::Connect).await;
+            for _ in 0..16 {
+                yield_now().await;
+            }
+            let outputs = world.outputs.borrow();
+            assert_eq!(outputs.iter().filter(|e|matches!(e,ObservedOutput::CommandCompleted(t) if t.request.correlation()==51)).count(),1);
+            assert!(!outputs.iter().any(
+                |e| matches!(e,ObservedOutput::CommandCompleted(t) if t.request.correlation()==52)
+            ));
+            assert!(outputs.iter().any(|e|matches!(e,ObservedOutput::CommandRefused(r) if r.request.correlation()==53&&r.reason==CommandRefusal::AlreadyConnected)));
         })
     });
 }

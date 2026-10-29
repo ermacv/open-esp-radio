@@ -361,7 +361,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize> PhaseTypes<'id>
     for Types<Id, D, B>
 {
     const COMMAND_CAPACITY: usize = COMMANDS;
-    const TERMINAL_CAPACITY: usize = TERMINALS;
+    const TERMINAL_CAPACITY: usize = TERMINAL_CAPACITY;
     type StationCommandPath = Part<Id, 8>;
     type AccessPointCommandPath = Part<Id, 9>;
     type StationConfigureContext = D::ConfigureContext<'id, Id>;

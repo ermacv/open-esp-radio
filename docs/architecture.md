@@ -124,8 +124,16 @@ from `oer-time`, interrupt signals from `portable/`, no executor,
 (`embassy-futures` is allowed). The firmware composition declares the tasks
 that poll the futures.
 The Wi-Fi station runtime exposes `station::Control` and `station::Runner`.
-Control owns command admission, product status and lossless callback events;
-Runner selects inputs over the generic port and executes the existing cores.
+Control and the neutral network end are constructed before port installation.
+Commands contain a kind and correlation, with no installation lifetime or pool
+path. Runner receives the station's affine command credits at installation,
+retains each through its refusal or terminal, and restores it before delivering
+the lossless concrete callback. A duplicate in-flight kind has its own typed
+admission refusal. Runner selects inputs over the generic port and executes
+the existing cores. The chip facade `oer-esp32s31-wifi` assembles the S31 backend,
+arbiter, station and runtime as `station(resources, config) -> (Control,
+NetDevice, Runners)`; images select the interrupt entries, callbacks, observers
+and key-unwrap engine and spawn the returned runners.
 The neutral `oer-network::NetDevice` transfers Ethernet owners and publishes
 the link epoch. `portable/embassy/net` maps it to the IP stack, retaining a
 refused TX owner. Neither contract exposes a stack packet or Wi-Fi core type.

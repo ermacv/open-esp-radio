@@ -88,7 +88,10 @@
 //! Network frames are the data machine's checked [`EthernetFrame`]s; a
 //! received payload too long for one is refused, never clipped.
 
+mod commands;
 mod control;
+use commands::CommandCredits;
+pub use commands::{CommandRefused, CommandTerminal, Request};
 pub use control::{
     Control, ControlCreateRefused, ControlError, ControlRefused, Device, Events, RunnerControl,
     State, Status,
@@ -123,9 +126,8 @@ use oer_ieee80211_sta::{
         FrameTooLong, Msdu, StaData, TxMsdu,
     },
     machine::{
-        KEY_DATA_CAPACITY, KeyUnwrapId, Peer, RxBlockAckReply, StaAction, StaCallbacks,
-        StaCommandRefused, StaCommandTerminal, StaInput, StaKeyUnwrapRequest, StaNotice,
-        StaRequest, StaTokens, StaTransmit, StaTxContext, Station,
+        KEY_DATA_CAPACITY, KeyUnwrapId, Peer, RxBlockAckReply, StaAction, StaCallbacks, StaInput,
+        StaKeyUnwrapRequest, StaNotice, StaTokens, StaTransmit, StaTxContext, Station,
     },
 };
 use oer_ieee80211_upper_mac::block_ack::RxDisposition;
@@ -404,13 +406,9 @@ pub use key_unwrap::KeyUnwrapSlot;
 
 /// What the application asks of the service.
 #[derive(Debug, Eq, PartialEq)]
-pub enum ServiceCommand<
-    'id,
-    K,
-    Path: oer_radio_port::PoolPath = oer_radio_port::Root<oer_radio_port::LocalId<'id>>,
-> {
+pub enum ServiceCommand<K> {
     /// A command of the station.
-    Station(StaRequest<'id, Path>),
+    Station(Request),
     /// A fact of the access point beside the station.
     AccessPoint(AccessPointFact<K>),
     /// The access point beside the station is wanted.
@@ -425,11 +423,7 @@ pub enum ServiceCommand<
     clippy::large_enum_variant,
     reason = "a refusal returns the original owned packet without allocation"
 )]
-pub enum ServiceOutput<
-    'id,
-    K,
-    Path: oer_radio_port::PoolPath = oer_radio_port::Root<oer_radio_port::LocalId<'id>>,
-> {
+pub enum ServiceOutput<K> {
     /// The original network operation refused before data admission.
     MsduRefused { packet: TxMsdu, reason: DataRefusal },
     /// An operation refused before admission. Its resources return and the
@@ -443,9 +437,11 @@ pub enum ServiceOutput<
     /// The station's notice.
     Notice(StaNotice),
     /// A request refused synchronously, with its original correlation.
-    CommandRefused(StaCommandRefused<'id, Path>),
+    CommandRefused(CommandRefused),
+    /// A raw producer submitted a second request without the first terminal.
+    CommandInFlight(Request),
     /// The unique terminal of one admitted station request.
-    CommandCompleted(StaCommandTerminal<'id, Path>),
+    CommandCompleted(CommandTerminal),
     /// The arbiter's command to the access point beside the station.
     AccessPoint(AccessPointCommand<K>),
 }
@@ -508,14 +504,12 @@ pub enum ServiceFault<B: StationPort> {
 }
 
 /// A concrete output recipient. Events carry their original owners by value.
-pub trait ServiceOutputSink<'id, K, Path: oer_radio_port::PoolPath> {
-    fn emit(&mut self, output: ServiceOutput<'id, K, Path>);
+pub trait ServiceOutputSink<K> {
+    fn emit(&mut self, output: ServiceOutput<K>);
 }
 
-impl<'id, K, Path: oer_radio_port::PoolPath, F: FnMut(ServiceOutput<'id, K, Path>)>
-    ServiceOutputSink<'id, K, Path> for F
-{
-    fn emit(&mut self, output: ServiceOutput<'id, K, Path>) {
+impl<K, F: FnMut(ServiceOutput<K>)> ServiceOutputSink<K> for F {
+    fn emit(&mut self, output: ServiceOutput<K>) {
         self(output);
     }
 }
@@ -565,17 +559,15 @@ impl<'id, K, Path: oer_radio_port::PoolPath, F: FnMut(ServiceOutput<'id, K, Path
 /// ```
 pub struct ServiceIo<
     'c,
-    'id,
     K,
-    O: ServiceOutputSink<'id, K, Path>,
+    O: ServiceOutputSink<K>,
     const TX_DEPTH: usize,
     const RX_DEPTH: usize,
     const COMMAND_DEPTH: usize,
-    Path: oer_radio_port::PoolPath = oer_radio_port::Root<oer_radio_port::LocalId<'id>>,
 > {
     /// The application's exclusive command receiver. Readiness does not
     /// remove a command; a simultaneous port fault leaves it in this queue.
-    pub commands: WakingSpscReceiver<'c, ServiceCommand<'id, K, Path>, COMMAND_DEPTH>,
+    pub commands: WakingSpscReceiver<'c, ServiceCommand<K>, COMMAND_DEPTH>,
     /// The MSDUs the network stack sends.
     pub transmit: WakingSpscReceiver<'c, TxMsdu, TX_DEPTH>,
     /// The MSDUs the station received for the network stack.
@@ -954,6 +946,15 @@ pub struct RetiredService<
     >,
 }
 
+/// A constructed station and the original permissions issued with it.
+pub type ConstructedStation<'id, B, C, const GROUPS: usize, O> = (
+    PortStation<'id, B, C, GROUPS, O>,
+    oer_ieee80211_sta::machine::StaCommandCredits<
+        'id,
+        <<B as StationPort>::Types<'id> as PhaseTypes<'id>>::StationCommandPath,
+    >,
+);
+
 /// The station's service: its machines and the rate selection of its frames.
 /// Disable returns only command terminals; the backend recycles unsolicited RX.
 pub struct Runner<
@@ -994,6 +995,7 @@ struct ServiceState<
 
 struct PendingActions<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id> {
     receive: RxBlockAckView<'id, B::Types<'id>>,
+    commands: CommandCredits<'id, <B::Types<'id> as PhaseTypes<'id>>::StationCommandPath>,
     admissions: Admissions,
     /// A retune whose disable/enable failed remains owned until retirement.
     retune: Option<
@@ -1049,7 +1051,7 @@ impl<
     /// The service of the machines the composition built, its frames at
     /// the rates `rates` selects.
     pub fn new(
-        station: PortStation<'id, B, C, GROUPS, O>,
+        station: ConstructedStation<'id, B, C, GROUPS, O>,
         data: PortData<'id, B, O>,
         arbiter: PortArbiter<'id, B>,
         rates: S,
@@ -1070,6 +1072,7 @@ impl<
                 panic!("the service retains the backend's complete terminal capacity");
             }
         };
+        let (station, credits) = station;
         Self {
             arbiter,
             state: ServiceState {
@@ -1080,6 +1083,7 @@ impl<
                 observer,
                 pending: PendingActions {
                     receive,
+                    commands: CommandCredits::new(credits),
                     admissions: Admissions::default(),
                     retune: None,
                     group: None,
@@ -1098,7 +1102,13 @@ impl<
         storage: &'s mut core::mem::MaybeUninit<Self>,
         station: impl for<'a> FnOnce(
             &'a mut core::mem::MaybeUninit<PortStation<'id, B, C, GROUPS, O>>,
-        ) -> &'a mut PortStation<'id, B, C, GROUPS, O>,
+        ) -> (
+            &'a mut PortStation<'id, B, C, GROUPS, O>,
+            oer_ieee80211_sta::machine::StaCommandCredits<
+                'id,
+                <B::Types<'id> as PhaseTypes<'id>>::StationCommandPath,
+            >,
+        ),
         data: impl for<'a> FnOnce(
             &'a mut core::mem::MaybeUninit<PortData<'id, B, O>>,
         ) -> &'a mut PortData<'id, B, O>,
@@ -1120,16 +1130,17 @@ impl<
                 panic!("the service retains the backend's complete terminal capacity");
             }
         };
+        let credits = core::cell::Cell::new(CommandCredits::empty());
         oer_memory::Placed::init(storage, |place| {
             oer_memory::init_in_place!(place, Self {
                 arbiter: arbiter,
                 state => |place: &mut core::mem::MaybeUninit<ServiceState<'id, B, C, S, GROUPS, O>>| oer_memory::init_in_place!(place, ServiceState {
-                    station => station,
+                    station => |place| { let (station, granted) = station(place); credits.set(CommandCredits::new(granted)); station },
                     data => data,
                     rates: rates,
                     terminal_access: terminal_access,
                     observer: observer,
-                    pending: PendingActions { receive, admissions: Admissions::default(), retune: None, group: None, unwrap: None },
+                    pending: PendingActions { receive, commands: credits.into_inner(), admissions: Admissions::default(), retune: None, group: None, unwrap: None },
                 }),
             })
         })
@@ -1151,13 +1162,11 @@ impl<
         owner: Owner<'p, 'id, B::SlotId, B::Backend, Disabled>,
         io: &mut ServiceIo<
             '_,
-            'id,
             B::Caps,
-            impl ServiceOutputSink<'id, B::Caps, <B::Types<'id> as PhaseTypes<'id>>::StationCommandPath>,
+            impl ServiceOutputSink<B::Caps>,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
-            <B::Types<'id> as PhaseTypes<'id>>::StationCommandPath,
         >,
         timer: &impl Timer,
         unwrap: &mut KeyUnwrapSlot<impl KeyUnwrap<KEY_DATA_CAPACITY, Operation: Unpin>>,
@@ -1215,7 +1224,7 @@ impl<
                     while let Some(output) = retired.station.poll_output() {
                         match output {
                             oer_ieee80211_sta::machine::StaFinalOutput::CommandCompleted(terminal) =>
-                                io.output.emit(ServiceOutput::CommandCompleted(terminal)),
+                                io.output.emit(ServiceOutput::CommandCompleted(retired._pending.commands.completed(terminal))),
                             oer_ieee80211_sta::machine::StaFinalOutput::Notify(notice) =>
                                 io.output.emit(ServiceOutput::Notice(notice)),
                         }
@@ -1240,13 +1249,11 @@ impl<
         owner: Owner<'p, 'id, B::SlotId, B::Backend, Disabled>,
         io: &mut ServiceIo<
             '_,
-            'id,
             B::Caps,
-            impl ServiceOutputSink<'id, B::Caps, <B::Types<'id> as PhaseTypes<'id>>::StationCommandPath>,
+            impl ServiceOutputSink<B::Caps>,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
-            <B::Types<'id> as PhaseTypes<'id>>::StationCommandPath,
         >,
         timer: &impl Timer,
         unwrap: &mut KeyUnwrapSlot<impl KeyUnwrap<KEY_DATA_CAPACITY, Operation: Unpin>>,
@@ -1273,7 +1280,7 @@ impl<
             data,
             mut rates,
             observer,
-            pending,
+            mut pending,
             terminal_access,
         } = state;
         let (mut station, mut places) = station.finish(reason);
@@ -1290,7 +1297,9 @@ impl<
         while let Some(output) = station.poll_output() {
             match output {
                 oer_ieee80211_sta::machine::StaFinalOutput::CommandCompleted(terminal) => {
-                    io.output.emit(ServiceOutput::CommandCompleted(terminal))
+                    io.output.emit(ServiceOutput::CommandCompleted(
+                        pending.commands.completed(terminal),
+                    ))
                 }
                 oer_ieee80211_sta::machine::StaFinalOutput::Notify(notice) => {
                     io.output.emit(ServiceOutput::Notice(notice))
@@ -1334,13 +1343,11 @@ impl<
         owner: Owner<'p, 'id, B::SlotId, B::Backend, Disabled>,
         io: &mut ServiceIo<
             '_,
-            'id,
             B::Caps,
-            impl ServiceOutputSink<'id, B::Caps, <B::Types<'id> as PhaseTypes<'id>>::StationCommandPath>,
+            impl ServiceOutputSink<B::Caps>,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
-            <B::Types<'id> as PhaseTypes<'id>>::StationCommandPath,
         >,
         timer: &impl Timer,
         unwrap: &mut KeyUnwrapSlot<impl KeyUnwrap<KEY_DATA_CAPACITY, Operation: Unpin>>,
@@ -1461,13 +1468,11 @@ impl<
         >,
         io: &mut ServiceIo<
             '_,
-            'id,
             B::Caps,
-            impl ServiceOutputSink<'id, B::Caps, <B::Types<'id> as PhaseTypes<'id>>::StationCommandPath>,
+            impl ServiceOutputSink<B::Caps>,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
-            <B::Types<'id> as PhaseTypes<'id>>::StationCommandPath,
         >,
         timer: &impl Timer,
     ) -> Result<
@@ -1603,13 +1608,11 @@ impl<
         phase: &mut P,
         io: &mut ServiceIo<
             '_,
-            'id,
             B::Caps,
-            impl ServiceOutputSink<'id, B::Caps, <B::Types<'id> as PhaseTypes<'id>>::StationCommandPath>,
+            impl ServiceOutputSink<B::Caps>,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
-            <B::Types<'id> as PhaseTypes<'id>>::StationCommandPath,
         >,
         timer: &impl Timer,
         unwrap: &mut KeyUnwrapSlot<impl KeyUnwrap<KEY_DATA_CAPACITY, Operation: Unpin>>,
@@ -1754,8 +1757,14 @@ impl<
             if let Some(command) = command {
                 match command {
                     ServiceCommand::Station(command) => {
-                        if let Err(refused) = self.station.command(now, command) {
-                            io.output.emit(ServiceOutput::CommandRefused(refused));
+                        match self.pending.commands.request(command) {
+                            Some(request) => {
+                                if let Err(refused) = self.station.command(now, request) {
+                                    let refused = self.pending.commands.refused(refused);
+                                    io.output.emit(ServiceOutput::CommandRefused(refused));
+                                }
+                            }
+                            None => io.output.emit(ServiceOutput::CommandInFlight(command)),
                         }
                     }
                     ServiceCommand::AccessPoint(fact) => arbiter.access_point(now, fact),
@@ -1855,13 +1864,11 @@ impl<
         now: Instant,
         io: &mut ServiceIo<
             '_,
-            'id,
             B::Caps,
-            impl ServiceOutputSink<'id, B::Caps, <B::Types<'id> as PhaseTypes<'id>>::StationCommandPath>,
+            impl ServiceOutputSink<B::Caps>,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
-            <B::Types<'id> as PhaseTypes<'id>>::StationCommandPath,
         >,
     ) {
         let Some(mut link) = self.station.link() else {
@@ -1911,13 +1918,11 @@ impl<
         phase: &mut P,
         io: &mut ServiceIo<
             '_,
-            'id,
             B::Caps,
-            impl ServiceOutputSink<'id, B::Caps, <B::Types<'id> as PhaseTypes<'id>>::StationCommandPath>,
+            impl ServiceOutputSink<B::Caps>,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
-            <B::Types<'id> as PhaseTypes<'id>>::StationCommandPath,
         >,
     ) -> Next<'id, B>
     where
@@ -2151,13 +2156,11 @@ impl<
         follow: Follow<'id, B, GROUPS>,
         io: &mut ServiceIo<
             '_,
-            'id,
             B::Caps,
-            impl ServiceOutputSink<'id, B::Caps, <B::Types<'id> as PhaseTypes<'id>>::StationCommandPath>,
+            impl ServiceOutputSink<B::Caps>,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
-            <B::Types<'id> as PhaseTypes<'id>>::StationCommandPath,
         >,
     ) -> Result<(), ContractFault<'id, B>> {
         match follow {
@@ -2209,13 +2212,11 @@ impl<
         now: Instant,
         io: &mut ServiceIo<
             '_,
-            'id,
             B::Caps,
-            impl ServiceOutputSink<'id, B::Caps, <B::Types<'id> as PhaseTypes<'id>>::StationCommandPath>,
+            impl ServiceOutputSink<B::Caps>,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
-            <B::Types<'id> as PhaseTypes<'id>>::StationCommandPath,
         >,
     ) {
         while let Some(notice) = arbiter.poll_notice(now) {
@@ -2244,13 +2245,11 @@ impl<
         phase: &mut P,
         io: &mut ServiceIo<
             '_,
-            'id,
             B::Caps,
-            impl ServiceOutputSink<'id, B::Caps, <B::Types<'id> as PhaseTypes<'id>>::StationCommandPath>,
+            impl ServiceOutputSink<B::Caps>,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
-            <B::Types<'id> as PhaseTypes<'id>>::StationCommandPath,
         >,
     ) -> Result<bool, StepFailure<'id, B>>
     where
@@ -2289,13 +2288,11 @@ impl<
         phase: &mut P,
         io: &mut ServiceIo<
             '_,
-            'id,
             B::Caps,
-            impl ServiceOutputSink<'id, B::Caps, <B::Types<'id> as PhaseTypes<'id>>::StationCommandPath>,
+            impl ServiceOutputSink<B::Caps>,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
-            <B::Types<'id> as PhaseTypes<'id>>::StationCommandPath,
         >,
     ) -> Result<Option<<B::Types<'id> as PhaseTypes<'id>>::RxBuffer>, StepFailure<'id, B>>
     where
@@ -2337,13 +2334,11 @@ impl<
         meta: <B::Types<'id> as PhaseTypes<'id>>::RxMeta,
         io: &mut ServiceIo<
             '_,
-            'id,
             B::Caps,
-            impl ServiceOutputSink<'id, B::Caps, <B::Types<'id> as PhaseTypes<'id>>::StationCommandPath>,
+            impl ServiceOutputSink<B::Caps>,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
-            <B::Types<'id> as PhaseTypes<'id>>::StationCommandPath,
         >,
     ) {
         let bytes = frame.bytes();
@@ -2374,13 +2369,11 @@ impl<
         observer: &O,
         io: &mut ServiceIo<
             '_,
-            'id,
             B::Caps,
-            impl ServiceOutputSink<'id, B::Caps, <B::Types<'id> as PhaseTypes<'id>>::StationCommandPath>,
+            impl ServiceOutputSink<B::Caps>,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
-            <B::Types<'id> as PhaseTypes<'id>>::StationCommandPath,
         >,
         frame: Result<EthernetFrame, FrameTooLong>,
     ) {
@@ -2866,13 +2859,11 @@ fn station_action<
     phase: &mut P,
     io: &mut ServiceIo<
         '_,
-        'id,
         B::Caps,
-        impl ServiceOutputSink<'id, B::Caps, <B::Types<'id> as PhaseTypes<'id>>::StationCommandPath>,
+        impl ServiceOutputSink<B::Caps>,
         TX_DEPTH,
         RX_DEPTH,
         COMMAND_DEPTH,
-        <B::Types<'id> as PhaseTypes<'id>>::StationCommandPath,
     >,
     arbiter: &mut PortArbiter<'id, B>,
     rates: &S,
@@ -3063,7 +3054,9 @@ where
         }
         StaAction::Notify(notice) => return Ok(Follow::Notice(notice)),
         StaAction::CommandCompleted(terminal) => {
-            io.output.emit(ServiceOutput::CommandCompleted(terminal));
+            io.output.emit(ServiceOutput::CommandCompleted(
+                pending_actions.commands.completed(terminal),
+            ));
             return Ok(Follow::Nothing);
         }
         StaAction::Associated(peer) => {

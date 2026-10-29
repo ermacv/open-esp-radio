@@ -52,7 +52,7 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps24, ServiceContext
         let data_tickets: [_; 4] = core::array::from_fn(|_| tickets.next().unwrap());
         let (config, _) = config(StaSecurity::Open);
         let observed = config.observer;
-        let (station, _credits) = Station::new_open(
+        let (station, credits) = Station::new_open(
             config,
             StationResources::<_, 4, 4, 1> {
                 configure: station_commands.configure,
@@ -72,7 +72,7 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps24, ServiceContext
             },
         );
         let mut service = Runner::<ServicePort<Id>, _, _, 1, Observed>::new(
-            station,
+            (station, credits),
             StaData::new(
                 data_tickets,
                 <[_; 4]>::try_from(large).ok().unwrap(),

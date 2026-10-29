@@ -94,7 +94,7 @@ fn response(frame: &AirFrame) -> BlockAckAction {
     parse_block_ack_action(&frame.plaintext[24..]).unwrap()
 }
 
-async fn connected<Id: SlotIdentity>(world: &Application<'_, '_, '_, '_, Id>, seen: &mut usize) {
+async fn connected(world: &Application<'_, '_, '_>, seen: &mut usize) {
     world.associate_with(seen, ht_beacon(), false).await;
     world
         .notice(StaNotice::Connected {

@@ -24,13 +24,14 @@ injection handoffs of a monitor. The frames a monitor keeps and the channels
 it visits are `oer-ieee80211-upper-mac`'s `monitor`; the requested owner
 topology is checked by `oer-ieee80211-arbiter`'s `configuration`.
 
-`station::Control` owns the command producer and exposes connect, disconnect,
-background scan, product status and a concrete event recipient through `events`.
-Every event and command terminal still transfers its original owner directly;
-there is no lossy event queue. `Control::device` lends the neutral `oer-network`
-Ethernet port. Its publication epoch is the station core's connection epoch,
-unchanged across channel absences. A TX refusal returns the caller's exact
-frame owner. The adapter copies bytes into the existing station queue storage.
+`station::Control` owns the sole command producer, product status and a
+cooperative stop connection. Control and its neutral network end can exist
+before installation: connect, disconnect and scan submit only a kind and
+correlation. Runner receives the original station command credits during
+construction. It retains them through core refusal/completion and retirement,
+restores them before delivering a concrete callback, and reports a duplicate
+in-flight kind without minting a permission. No installation lifetime or
+pool path crosses the application command boundary.
 
 `State` retains status and the `oer-time` connected-task connection. `Control::stop`
 requests cooperative Runner shutdown independently of command-queue capacity.
@@ -44,7 +45,7 @@ Host tests use the allocating in-memory backend from `oer-ieee80211-model`
 as a dev-dependency. The model's fixtures run the shared conformance cases in
 `oer-ieee80211-port`; runtime tests cover its station service over that model.
 
-`StationPort` is an image-owned composition mapping with a concrete `Backend`,
+`StationPort` is a composition-owned mapping with a concrete `Backend`,
 `SlotId` and `Caps`. `station::Runner` owns that backend's lifecycle directly.
 This permits a composition to select station buffers and resource types without
 implementing a foreign trait for a foreign backend or replacing its body-loan
@@ -60,7 +61,8 @@ correlation of the protected link as events of
 application acts on: notices, command terminals, refusals that return an
 owner, and the arbiter's access-point commands. `ServiceIo` borrows a concrete
 `ServiceOutputSink`; closures implement that trait without erasing their type.
-Each output still transfers its original command or frame owner by value.
+Frame refusals transfer their original frame owner by value. Command events carry
+the original kind and correlation; the affine permission stays with Runner.
 Commands and network frames travel through `oer_memory::WakingSpscQueue`.
 
 Every transmission's parameters come from the cores: a station frame's rate

@@ -11,7 +11,8 @@ pub mod collector;
 pub mod echo;
 pub mod icmp;
 pub mod observation;
-pub mod policy;
+#[cfg(test)]
+mod policy;
 pub mod probe;
 pub mod report;
 

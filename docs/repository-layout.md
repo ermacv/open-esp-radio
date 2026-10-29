@@ -108,7 +108,7 @@ with `[[bin]] name`.
 Each package under `chips/`, `protocols/hil/` and `firmware/hil/` has one
 role in `oer-test-layers` that names its level
 ([architecture](architecture.md#layers)); a directory name such as `driver`
-grants nothing. `chips/esp32s31/wifi` has the facade role before it exists.
+grants nothing. `chips/esp32s31/wifi` assembles the S31 station backend and portable runtime as the Wi-Fi facade.
 A protocol leaf named `instrumentation` is an observation contract; a leaf
 named `hil` takes its role from the list.
 
@@ -119,7 +119,7 @@ named `hil` takes its role from the list.
 - `chips/espressif/ieee80211-policy` has a dev-dependency on
   `chips/esp32s31/ieee80211/mac`.
 - `firmware/hil/esp32s31` has an optional, RISC-V-only normal dependency on
-  `firmware/apps/w3` for its `wifi-station` feature.
+  `firmware/apps/w3` for shared network observation and ICMP helpers in its `wifi-station` feature (the IP adapter extraction, N-d).
 - Host tests include image source files through `#[path]`:
   `tools/image/cli/src/main.rs` includes the W1 CRC implementation;
   `tools/vendor/phy/tests/` includes cache and hold modules of

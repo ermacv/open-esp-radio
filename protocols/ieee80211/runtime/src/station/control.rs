@@ -10,11 +10,10 @@ use core::{
 use embassy_futures::select::{Either, select};
 use oer_ieee80211_sta::{
     data::{EthernetFrame, TxMsdu},
-    machine::{self, StaNotice, StaRequest},
+    machine::{StaCommand, StaNotice},
 };
 use oer_memory::{WakingSpscReceiver, WakingSpscSender};
 use oer_network::{LinkSnapshot, LinkState, NetDevice, TransmitError, TransmitRefused};
-use oer_radio_port::PoolPath;
 use oer_sync::PriorityWaker;
 use oer_time::connected_tasks::{
     ConnectedTaskControlError, ConnectedTaskControlResources, ConnectedTaskController,
@@ -92,27 +91,25 @@ pub enum ControlError {
 }
 
 #[derive(Debug)]
-pub struct ControlRefused<'id, K, Path: PoolPath> {
-    pub command: ServiceCommand<'id, K, Path>,
+pub struct ControlRefused<K> {
+    pub command: ServiceCommand<K>,
     pub reason: ControlError,
 }
 
 /// Construction refused without consuming the original command producer.
-pub struct ControlCreateRefused<'c, 'id, K, Path: PoolPath, const DEPTH: usize> {
-    pub commands: WakingSpscSender<'c, ServiceCommand<'id, K, Path>, DEPTH>,
+pub struct ControlCreateRefused<'c, K, const DEPTH: usize> {
+    pub commands: WakingSpscSender<'c, ServiceCommand<K>, DEPTH>,
     pub reason: ConnectedTaskControlError,
 }
-impl<K, Path: PoolPath, const DEPTH: usize> fmt::Debug
-    for ControlCreateRefused<'_, '_, K, Path, DEPTH>
-{
+impl<K, const DEPTH: usize> fmt::Debug for ControlCreateRefused<'_, K, DEPTH> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.reason.fmt(f)
     }
 }
 
 /// Sole command producer and cooperative stop capability.
-pub struct Control<'c, 'id, K, Path: PoolPath, const DEPTH: usize> {
-    commands: WakingSpscSender<'c, ServiceCommand<'id, K, Path>, DEPTH>,
+pub struct Control<'c, K, const DEPTH: usize> {
+    commands: WakingSpscSender<'c, ServiceCommand<K>, DEPTH>,
     state: &'c State,
     task: ConnectedTaskController<'c, ()>,
 }
@@ -144,11 +141,11 @@ impl<'c> RunnerControl<'c> {
     }
 }
 
-impl<'c, 'id, K, Path: PoolPath, const DEPTH: usize> Control<'c, 'id, K, Path, DEPTH> {
+impl<'c, K, const DEPTH: usize> Control<'c, K, DEPTH> {
     pub fn new(
-        commands: WakingSpscSender<'c, ServiceCommand<'id, K, Path>, DEPTH>,
+        commands: WakingSpscSender<'c, ServiceCommand<K>, DEPTH>,
         state: &'c State,
-    ) -> Result<(Self, RunnerControl<'c>), ControlCreateRefused<'c, 'id, K, Path, DEPTH>> {
+    ) -> Result<(Self, RunnerControl<'c>), ControlCreateRefused<'c, K, DEPTH>> {
         match state.split() {
             Ok((task, runner)) => Ok((
                 Self {
@@ -182,10 +179,7 @@ impl<'c, 'id, K, Path: PoolPath, const DEPTH: usize> Control<'c, 'id, K, Path, D
             observed: LinkSnapshot::DOWN,
         }
     }
-    pub fn try_command(
-        &mut self,
-        command: ServiceCommand<'id, K, Path>,
-    ) -> Result<(), ControlRefused<'id, K, Path>> {
+    pub fn try_command(&mut self, command: ServiceCommand<K>) -> Result<(), ControlRefused<K>> {
         if self.status().stopped || self.state.tasks.is_poisoned() {
             return Err(ControlRefused {
                 command,
@@ -199,10 +193,7 @@ impl<'c, 'id, K, Path: PoolPath, const DEPTH: usize> Control<'c, 'id, K, Path, D
                 reason: ControlError::QueueFull,
             })
     }
-    pub async fn command(
-        &mut self,
-        command: ServiceCommand<'id, K, Path>,
-    ) -> Result<(), ControlRefused<'id, K, Path>> {
+    pub async fn command(&mut self, command: ServiceCommand<K>) -> Result<(), ControlRefused<K>> {
         if self.status().stopped || self.state.tasks.is_poisoned() {
             return Err(ControlRefused {
                 command,
@@ -220,17 +211,9 @@ impl<'c, 'id, K, Path: PoolPath, const DEPTH: usize> Control<'c, 'id, K, Path, D
             }),
         }
     }
-    pub async fn request(
-        &mut self,
-        request: StaRequest<'id, Path>,
-    ) -> Result<(), ControlRefused<'id, K, Path>> {
-        self.command(ServiceCommand::Station(request)).await
-    }
     /// Consume the completed control epoch and recover its sole producer.
     /// A pending result retains the entire control, including partial returns.
-    pub fn try_finish(
-        self,
-    ) -> Result<WakingSpscSender<'c, ServiceCommand<'id, K, Path>, DEPTH>, Self> {
+    pub fn try_finish(self) -> Result<WakingSpscSender<'c, ServiceCommand<K>, DEPTH>, Self> {
         let Self {
             commands,
             state,
@@ -245,26 +228,26 @@ impl<'c, 'id, K, Path: PoolPath, const DEPTH: usize> Control<'c, 'id, K, Path, D
             }),
         }
     }
-    pub async fn connect(
-        &mut self,
-        correlation: u64,
-        credit: machine::StaCommandCredit<'id, Path, machine::ConnectCommand>,
-    ) -> Result<(), ControlRefused<'id, K, Path>> {
-        self.request(StaRequest::new(correlation, credit)).await
+    pub async fn connect(&mut self, correlation: u64) -> Result<(), ControlRefused<K>> {
+        self.command(ServiceCommand::Station(super::Request::new(
+            correlation,
+            StaCommand::Connect,
+        )))
+        .await
     }
-    pub async fn disconnect(
-        &mut self,
-        correlation: u64,
-        credit: machine::StaCommandCredit<'id, Path, machine::DisconnectCommand>,
-    ) -> Result<(), ControlRefused<'id, K, Path>> {
-        self.request(StaRequest::new(correlation, credit)).await
+    pub async fn disconnect(&mut self, correlation: u64) -> Result<(), ControlRefused<K>> {
+        self.command(ServiceCommand::Station(super::Request::new(
+            correlation,
+            StaCommand::Disconnect,
+        )))
+        .await
     }
-    pub async fn scan(
-        &mut self,
-        correlation: u64,
-        credit: machine::StaCommandCredit<'id, Path, machine::ScanCommand>,
-    ) -> Result<(), ControlRefused<'id, K, Path>> {
-        self.request(StaRequest::new(correlation, credit)).await
+    pub async fn scan(&mut self, correlation: u64) -> Result<(), ControlRefused<K>> {
+        self.command(ServiceCommand::Station(super::Request::new(
+            correlation,
+            StaCommand::BackgroundScan,
+        )))
+        .await
     }
     pub fn stop(&mut self) {
         self.task.request_stop();
@@ -278,10 +261,8 @@ pub struct Events<'c, O> {
     state: &'c State,
     output: O,
 }
-impl<'id, K, Path: PoolPath, O: ServiceOutputSink<'id, K, Path>> ServiceOutputSink<'id, K, Path>
-    for Events<'_, O>
-{
-    fn emit(&mut self, output: ServiceOutput<'id, K, Path>) {
+impl<K, O: ServiceOutputSink<K>> ServiceOutputSink<K> for Events<'_, O> {
+    fn emit(&mut self, output: ServiceOutput<K>) {
         if let ServiceOutput::Notice(notice) = &output {
             let mut status = self.state.status.get();
             status.notice = Some(*notice);

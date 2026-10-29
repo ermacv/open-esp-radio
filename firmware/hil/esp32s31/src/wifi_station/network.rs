@@ -1,18 +1,15 @@
 //! P1 DHCP/ICMP stack over the existing owned Ethernet adapter.
 use super::Attempt;
-use core::cell::{Cell, RefCell};
-use embassy_futures::{
-    join::join3,
-    select::select,
-    yield_now,
-};
+use core::cell::RefCell;
+use core::sync::atomic::{AtomicBool, Ordering::Relaxed};
+use embassy_futures::{join::join3, select::select, yield_now};
 use oer_embassy_net::{
     NetworkInterfaceId, OwnedEndpointResources, OwnedNetworkDevice, OwnedNetworkRunner,
 };
 use oer_embassy_time::EmbassyClock;
+use oer_esp32s31_wifi::Network;
 use oer_firmware_apps_w3::{icmp, observation::Observations, report::Lease};
 use oer_ieee80211_control::StationProbeFinished;
-use oer_ieee80211_runtime::station::Device as StationDevice;
 use oer_time::{Clock, Duration, Timer};
 use owned_embassy_net::{
     Stack, StackStorage,
@@ -61,8 +58,8 @@ static RUNNING: ConstStaticCell<oer_memory::StaticPlace<Running<'static>>> =
 pub fn run<'a>(
     address: [u8; 6],
     seed: u64,
-    net: StationDevice<'a, 2, RX>,
-    link: &'a Cell<bool>,
+    net: Network<'a>,
+    link: &'a AtomicBool,
     attempt: Attempt,
 ) -> oer_memory::PlacedFuture<'a, Running<'a>> {
     RUNNING
@@ -75,8 +72,8 @@ pub fn run<'a>(
 fn running_future<'a>(
     address: [u8; 6],
     seed: u64,
-    net: StationDevice<'a, 2, RX>,
-    link: &'a Cell<bool>,
+    net: Network<'a>,
+    link: &'a AtomicBool,
     attempt: Attempt,
 ) -> Running<'a> {
     async move {
@@ -115,7 +112,7 @@ fn running_future<'a>(
                 async {
                     let mut previous = None;
                     loop {
-                        let current = if link.get() {
+                        let current = if link.load(Relaxed) {
                             iface.dhcpv4_lease()
                         } else {
                             None
@@ -163,7 +160,7 @@ async fn probes(
     iface: Iface<'_, Device>,
     socket: &RawSocket<'_, Device>,
     observations: &RefCell<Observations>,
-    link: &Cell<bool>,
+    link: &AtomicBool,
 ) -> ! {
     use core::sync::atomic::Ordering::Relaxed;
     use embassy_futures::select::Either;
@@ -190,7 +187,7 @@ async fn probes(
             let mut next = EmbassyClock.now();
             let deadline = next.saturating_add(Duration::from_secs(u32::from(probe.count) + 15));
             for sequence in 1..=probe.count {
-                if !link.get() || super::EPOCH.load(Relaxed) != epoch {
+                if !link.load(Relaxed) || super::EPOCH.load(Relaxed) != epoch {
                     break;
                 }
                 let _ = EmbassyClock.wait_until(next).await;
@@ -214,7 +211,7 @@ async fn probes(
                         && o.peer.replies() == u32::from(probe.count)
                 };
                 if complete
-                    || !link.get()
+                    || !link.load(Relaxed)
                     || super::EPOCH.load(Relaxed) != epoch
                     || EmbassyClock.now() >= deadline
                 {
@@ -242,26 +239,47 @@ async fn probes(
 
 async fn bridge(
     radio: Runner,
-    net: StationDevice<'_, 2, RX>,
+    net: Network<'_>,
     observations: &RefCell<Observations>,
 ) -> Result<core::convert::Infallible, oer_embassy_net::AccessRefused> {
     let mut bridge = oer_embassy_net::ethernet::EthernetBridge::new(radio, net);
     loop {
         bridge.synchronize_link();
-        bridge.drain_receive(|p| {
-            observations.borrow_mut().observe(p.ether_type, p.payload, false, EmbassyClock.now().as_micros());
-            if p.destination == [0xff; 6] && p.ether_type == 0x0806 && valid_arp(p.payload) {
-                super::observation::GROUP_ARP.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
-            }
-        }, |_| {
-            super::observation::RX_REFUSED.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
-        });
-        if bridge.transmit_one(|p| {
-            observations.borrow_mut().observe(p.ether_type, p.payload, true, EmbassyClock.now().as_micros());
-        }).await? {
+        bridge.drain_receive(
+            |p| {
+                observations.borrow_mut().observe(
+                    p.ether_type,
+                    p.payload,
+                    false,
+                    EmbassyClock.now().as_micros(),
+                );
+                if p.destination == [0xff; 6] && p.ether_type == 0x0806 && valid_arp(p.payload) {
+                    super::observation::GROUP_ARP
+                        .fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+                }
+            },
+            |_| {
+                super::observation::RX_REFUSED.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+            },
+        );
+        if bridge
+            .transmit_one(|p| {
+                observations.borrow_mut().observe(
+                    p.ether_type,
+                    p.payload,
+                    true,
+                    EmbassyClock.now().as_micros(),
+                );
+            })
+            .await?
+        {
             yield_now().await;
         } else {
-            bridge.wait(async { let _timeout = EmbassyClock.wait_for(Duration::from_millis(1)).await; }).await?;
+            bridge
+                .wait(async {
+                    let _timeout = EmbassyClock.wait_for(Duration::from_millis(1)).await;
+                })
+                .await?;
         }
     }
 }
