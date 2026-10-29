@@ -99,7 +99,7 @@ impl crate::OwnedLinkController<'_> {
 mod tests;
 
 /// Ethernet translation for an image whose existing bridge drains RX, serves
-/// one TX, then waits on RX/publication/the image's own polling timer.
+/// one TX per turn. RX, TX publication/capacity and link changes wake it.
 /// The adapter owns every packet and retains a refused TX across readiness
 /// waits. Observations are callbacks owned by the image, never counters here.
 pub struct EthernetBridge<
@@ -112,6 +112,7 @@ pub struct EthernetBridge<
     radio: crate::OwnedNetworkRunner<'r, X, RX, TX>,
     device: D,
     link: oer_network::LinkSnapshot,
+    pending: Option<(u64, OwnedNetworkTxFrame<'r>)>,
 }
 
 impl<'r, X: oer_memory::ExecutionContext, const RX: usize, const TX: usize, D: NetDevice>
@@ -122,69 +123,95 @@ impl<'r, X: oer_memory::ExecutionContext, const RX: usize, const TX: usize, D: N
             radio,
             device,
             link: oer_network::LinkSnapshot::DOWN,
+            pending: None,
         }
     }
-    pub fn synchronize_link(&mut self) {
+    /// One drain/one-TX turn. Always arm link and RX before observing them;
+    /// a blocked TX remains owned here while RX and link keep progressing.
+    /// No timer or time driver is needed to make an idle bridge run again.
+    pub fn poll(
+        &mut self,
+        cx: &mut core::task::Context<'_>,
+        mut received: impl FnMut(EthernetFrameView<'_>),
+        mut refused: impl FnMut(crate::RxEnqueueError),
+        transmitted: impl FnMut(EthernetFrameView<'_>),
+    ) -> core::task::Poll<Result<core::convert::Infallible, crate::AccessRefused>> {
+        use core::task::Poll;
+        let _ = self.device.poll_link(cx);
         self.radio
             .link_controller()
             .follow_device(&self.device, &mut self.link);
-    }
-    pub fn drain_receive(
-        &mut self,
-        mut observe: impl FnMut(EthernetFrameView<'_>),
-        mut refused: impl FnMut(crate::RxEnqueueError),
-    ) {
-        while let Some(frame) = self.device.try_receive() {
+        if self
+            .pending
+            .as_ref()
+            .is_some_and(|(epoch, _)| *epoch != self.link.epoch)
+        {
+            self.pending = None;
+        }
+        // Preserve this bridge's existing drain-and-report-refusal RX policy.
+        // Register even when no frame is available.
+        while self.device.poll_receive_ready(cx).is_ready() {
+            let Some(frame) = self.device.try_receive() else {
+                break;
+            };
             if let Ok(view) = frame.view() {
-                observe(view);
+                received(view);
             }
             if let Err((_owner, reason)) = publish(self.radio.rx_publisher(), frame) {
                 refused(reason);
             }
         }
-    }
-    pub async fn transmit_one(
-        &mut self,
-        mut observe: impl FnMut(EthernetFrameView<'_>),
-    ) -> Result<bool, crate::AccessRefused> {
-        let Some(mut packet) = self.radio.try_receive_tx()? else {
-            return Ok(false);
-        };
-        let epoch = self.device.link().epoch;
-        loop {
-            core::future::poll_fn(|cx| self.device.poll_transmit_ready(cx)).await;
-            if epoch != self.device.link().epoch {
-                return Ok(true);
-            }
-            match packet.transmit_to(&mut self.device, &mut observe) {
-                Ok(()) => return Ok(true),
-                Err(refused) => match refused.reason {
-                    oer_network::TransmitError::InvalidLength(_) => return Ok(true),
-                    oer_network::TransmitError::QueueFull
-                    | oer_network::TransmitError::LinkDown => {
-                        packet = refused.frame;
-                        embassy_futures::yield_now().await;
-                    }
-                },
+        match self.poll_transmit_one(cx, transmitted) {
+            Err(error) => Poll::Ready(Err(error)),
+            Ok(progress) => {
+                if progress {
+                    // A consumed publication hint or packet needs a fresh turn
+                    // to arm the next wait, and yields to other P1 futures.
+                    cx.waker().wake_by_ref();
+                }
+                Poll::Pending
             }
         }
     }
-    pub async fn wait(
+
+    fn poll_transmit_one(
         &mut self,
-        tick: impl core::future::Future<Output = ()>,
-    ) -> Result<(), crate::AccessRefused> {
+        cx: &mut core::task::Context<'_>,
+        mut observe: impl FnMut(EthernetFrameView<'_>),
+    ) -> Result<bool, crate::AccessRefused> {
         use core::{future::Future, task::Poll};
-        let mut tick = core::pin::pin!(tick);
-        let mut publication = core::pin::pin!(self.radio.wait_tx_publication());
-        core::future::poll_fn(|cx| {
-            if self.device.poll_receive_ready(cx).is_ready() {
-                return Poll::Ready(Ok(()));
+        let (epoch, packet) = match self.pending.take() {
+            Some(pending) => pending,
+            None => {
+                {
+                    let mut publication = core::pin::pin!(self.radio.wait_tx_publication());
+                    match publication.as_mut().poll(cx) {
+                        Poll::Pending => return Ok(false),
+                        Poll::Ready(result) => result?,
+                    }
+                }
+                let Some(packet) = self.radio.try_receive_tx()? else {
+                    // The coalesced publication outlived its last packet.
+                    return Ok(true);
+                };
+                (self.link.epoch, packet)
             }
-            if let Poll::Ready(result) = publication.as_mut().poll(cx) {
-                return Poll::Ready(result);
-            }
-            tick.as_mut().poll(cx).map(|()| Ok(()))
-        })
-        .await
+        };
+        if self.device.poll_transmit_ready(cx).is_pending() {
+            self.pending = Some((epoch, packet));
+            return Ok(false);
+        }
+        match packet.transmit_to(&mut self.device, &mut observe) {
+            Ok(()) => Ok(true),
+            Err(refused) => match refused.reason {
+                oer_network::TransmitError::InvalidLength(_) => Ok(true),
+                oer_network::TransmitError::QueueFull | oer_network::TransmitError::LinkDown => {
+                    self.pending = Some((epoch, refused.frame));
+                    // Readiness is only an observation. Rearm after a refusal;
+                    // if credit is already back, schedule another bounded turn.
+                    Ok(self.device.poll_transmit_ready(cx).is_ready())
+                }
+            },
+        }
     }
 }

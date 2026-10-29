@@ -7,7 +7,7 @@ use core::{
 };
 use oer_embassy_net::OwnedNetworkRunner;
 use oer_network::{EthernetFrame as _, NetDevice};
-use oer_time::{Clock, Duration, Timer};
+use oer_time::Clock;
 
 /// Aggregate whole-run work, including empty RX phases. The host computes
 /// mean RX per turn from `rx_frames / turns` without target formatting.
@@ -38,7 +38,7 @@ pub async fn run<
     X: oer_memory::ExecutionContext,
     const RX: usize,
     const TX: usize,
-    T: Clock + Timer,
+    T: Clock,
     N: NetDevice,
 >(
     mut radio: OwnedNetworkRunner<'_, X, RX, TX>,
@@ -48,30 +48,27 @@ pub async fn run<
 ) -> Result<core::convert::Infallible, oer_embassy_net::AccessRefused> {
     let mut state = oer_network::LinkSnapshot::DOWN;
     let mut pending = None;
-    loop {
-        let mut timer = core::pin::pin!(clock.wait_for(Duration::from_millis(1)));
-        poll_fn(|cx| {
-            match drain_step(
-                &mut radio,
-                &mut net,
-                &mut pending,
-                observations,
-                &mut state,
-                clock,
-                cx,
-            ) {
-                Err(error) => Poll::Ready(Err(error)),
-                Ok(true) => {
-                    // Exactly one bounded step per poll; give the other P1 futures
-                    // their turn before retrying work that remains immediately ready.
-                    cx.waker().wake_by_ref();
-                    Poll::Pending
-                }
-                Ok(false) => timer.as_mut().poll(cx).map(|_| Ok(())),
+    poll_fn(|cx| {
+        match drain_step(
+            &mut radio,
+            &mut net,
+            &mut pending,
+            observations,
+            &mut state,
+            clock,
+            cx,
+        ) {
+            Err(error) => Poll::Ready(Err(error)),
+            Ok(true) => {
+                // Exactly one bounded step per poll; give the other P1 futures
+                // their turn before retrying work that remains immediately ready.
+                cx.waker().wake_by_ref();
+                Poll::Pending
             }
-        })
-        .await?;
-    }
+            Ok(false) => Poll::Pending,
+        }
+    })
+    .await
 }
 
 // Keep Ethernet owner/copy temporaries outside the generated parent poll frame;
@@ -94,7 +91,18 @@ fn drain_step<
     clock: &T,
     cx: &mut core::task::Context<'_>,
 ) -> Result<bool, oer_embassy_net::AccessRefused> {
+    // Register before reading the level/epoch, including when both queues are
+    // empty or TX is waiting for capacity. A down/up cycle can coalesce.
+    let _ = net.poll_link(cx);
     radio.link_controller().follow_device(net, state);
+    if pending
+        .as_ref()
+        .is_some_and(|(epoch, _)| *epoch != state.epoch)
+    {
+        // Reclaim before checking TX readiness: the new epoch may be down or
+        // have no TX credit, and must not hold an old association's owner.
+        *pending = None;
+    }
     observations
         .borrow_mut()
         .loss
@@ -145,13 +153,10 @@ fn drain_step<
         if !input_ready {
             break;
         }
-        let Poll::Ready(()) = net.poll_transmit_ready(cx) else {
-            break;
-        };
         // A coalesced publication may outlive its last queued owner. Consume
         // that hint as work too, so the next poll arms a fresh wait before
-        // parking; otherwise a later publication would wait for the timer.
-        tx_progress = true;
+        // parking; otherwise a later publication would have no registered wake.
+        tx_progress |= pending.is_none();
         let (epoch, packet) = match pending.take() {
             Some((epoch, packet)) => (epoch, packet),
             None => {
@@ -165,7 +170,12 @@ fn drain_step<
             // Like a queued old-generation packet, this retained owner returns
             // to its original pool instead of entering a later association.
             drop(packet);
+            tx_progress = true;
             continue;
+        }
+        if net.poll_transmit_ready(cx).is_pending() {
+            *pending = Some((epoch, packet));
+            break;
         }
         if let Err(refused) = packet.transmit_to(net, |view| {
             observations.borrow_mut().observe(
@@ -177,14 +187,18 @@ fn drain_step<
         }) {
             match refused.reason {
                 oer_network::TransmitError::InvalidLength(_) => {
+                    tx_progress = true;
                     let mut o = observations.borrow_mut();
                     o.queue_drops = o.queue_drops.saturating_add(1);
                 }
                 oer_network::TransmitError::QueueFull | oer_network::TransmitError::LinkDown => {
                     *pending = Some((epoch, refused.frame));
+                    tx_progress |= net.poll_transmit_ready(cx).is_ready();
                     break;
                 }
             }
+        } else {
+            tx_progress = true;
         }
     }
     Ok(received != 0 || tx_progress)
@@ -205,6 +219,16 @@ mod tests {
         tx: WakingSpscSender<'a, TxMsdu, 2>,
         rx: WakingSpscReceiver<'a, EthernetFrame, RX>,
     ) -> oer_ieee80211_runtime::station::Device<'a, 2, RX> {
+        net_with_control(tx, rx).1
+    }
+
+    fn net_with_control<'a, const RX: usize>(
+        tx: WakingSpscSender<'a, TxMsdu, 2>,
+        rx: WakingSpscReceiver<'a, EthernetFrame, RX>,
+    ) -> (
+        Control<'a, (), 1>,
+        oer_ieee80211_runtime::station::Device<'a, 2, RX>,
+    ) {
         let state = Box::leak(Box::new(State::new()));
         let commands = Box::leak(Box::new(WakingSpscQueue::<ServiceCommand<()>, 1>::new()));
         let (sender, _) = commands.split();
@@ -219,11 +243,13 @@ mod tests {
                 channel: 6,
             },
         ));
-        control.device(tx, rx)
+        let device = control.device(tx, rx);
+        (control, device)
     }
     use core::{future::Future, task::Context};
     use oer_embassy_net::{NetworkInterfaceId, OwnedEndpointResources};
     use oer_memory::{HostContext, WakingSpscQueue};
+    use oer_time::Duration;
     use oer_time_virtual::VirtualClock;
     use std::boxed::Box;
     use xarxa_driver::{PacketBufAllocator, PacketPool, PacketPoolStorage};
@@ -477,39 +503,184 @@ mod tests {
         assert_eq!(o.queue_drops, 0);
     }
 
-    #[test]
-    fn blocked_step_keeps_owners_and_wakes_on_queue_and_pool_capacity_without_a_timer() {
-        use core::sync::atomic::{AtomicUsize, Ordering};
-        use std::{
-            sync::Arc,
-            task::{Wake, Waker},
-        };
-        struct Wakes(AtomicUsize);
-        impl Wake for Wakes {
-            fn wake(self: Arc<Self>) {
-                self.wake_by_ref();
+    use core::sync::atomic::{AtomicBool, Ordering};
+    use std::{
+        sync::Arc,
+        task::{Wake, Waker},
+    };
+    struct Scheduled(AtomicBool);
+    impl Wake for Scheduled {
+        fn wake(self: Arc<Self>) {
+            self.wake_by_ref();
+        }
+        fn wake_by_ref(self: &Arc<Self>) {
+            self.0.store(true, Ordering::Relaxed);
+        }
+    }
+    fn settle(
+        f: &mut core::pin::Pin<&mut impl Future>,
+        scheduled: &Scheduled,
+        cx: &mut Context<'_>,
+    ) {
+        for _ in 0..32 {
+            if !scheduled.0.swap(false, Ordering::Relaxed) {
+                return;
             }
-            fn wake_by_ref(self: &Arc<Self>) {
-                self.0.fetch_add(1, Ordering::Relaxed);
+            assert!(f.as_mut().poll(cx).is_pending());
+        }
+        assert!(!scheduled.0.load(Ordering::Relaxed), "bridge did not park");
+    }
+
+    #[test]
+    fn event_only_bridge_parks_and_resumes_on_rx_pool_queue_tx_credit_and_link() {
+        // With one pool slot RX blocks on packet return; with two it first
+        // blocks on the endpoint queue slot. Neither may consume input early.
+        fn exercise<const POOL: usize>() {
+            let clock = VirtualClock::<1>::new();
+            let pool = allocator::<POOL>();
+            let general = allocator::<1>();
+            let mut endpoint = OwnedEndpointResources::<HostContext, 1, 1>::new();
+            let (mut device, radio) = endpoint
+                .split(NetworkInterfaceId::new(0), [2; 6], pool)
+                .unwrap();
+            let mut input = WakingSpscQueue::<EthernetFrame, 1>::new();
+            let (source, receiver) = input.split();
+            let mut output = WakingSpscQueue::<TxMsdu, 2>::new();
+            let (sender, sink) = output.split();
+            for marker in [100, 101] {
+                sender
+                    .try_send(TxMsdu {
+                        priority: WmmUserPriority::new(0).unwrap(),
+                        frame: frame(marker),
+                    })
+                    .unwrap();
+            }
+            let (control, net) = net_with_control(sender, receiver);
+            let mut events = control.events(|_: ServiceOutput<()>| {});
+            let observations = RefCell::new(Observations::new(7));
+            let mut bridge = core::pin::pin!(run(radio, net, &observations, &clock));
+            let scheduled = Arc::new(Scheduled(AtomicBool::new(true)));
+            let waker = Waker::from(scheduled.clone());
+            let mut cx = Context::from_waker(&waker);
+            settle(&mut bridge, &scheduled, &mut cx);
+            assert!(device.link_is_up());
+            let packet = |marker| {
+                let mut p = general.try_alloc().unwrap();
+                p.set_len(15);
+                p.fill(marker);
+                p
+            };
+            device.transmit(packet(2)).unwrap();
+            assert!(scheduled.0.load(Ordering::Relaxed));
+            settle(&mut bridge, &scheduled, &mut cx);
+            assert!(!device.can_transmit());
+            assert!(!general.has_available());
+            // RX must keep running while a retained TX waits on radio credit.
+            source.try_send(frame(3)).unwrap();
+            assert!(scheduled.0.load(Ordering::Relaxed));
+            settle(&mut bridge, &scheduled, &mut cx);
+            source.try_send(frame(4)).unwrap();
+            settle(&mut bridge, &scheduled, &mut cx);
+            assert!(source.try_send(frame(5)).is_err());
+            let held = device.receive().unwrap();
+            assert_eq!(held[14], 3);
+            assert!(scheduled.0.load(Ordering::Relaxed), "queue-space event");
+            settle(&mut bridge, &scheduled, &mut cx);
+            if POOL == 1 {
+                assert!(device.receive().is_none());
+                drop(held);
+                assert!(scheduled.0.load(Ordering::Relaxed), "pool-return event");
+                settle(&mut bridge, &scheduled, &mut cx);
+            } else {
+                drop(held);
+            }
+            assert_eq!(device.receive().unwrap()[14], 4);
+            settle(&mut bridge, &scheduled, &mut cx);
+            assert_eq!(clock.next_deadline(), None);
+            clock.advance(Duration::from_secs(60)).unwrap();
+            assert!(
+                !scheduled.0.load(Ordering::Relaxed),
+                "time alone cannot wake the bridge"
+            );
+            assert_eq!(sink.try_receive().unwrap().frame.parts().payload, &[100]);
+            assert!(scheduled.0.load(Ordering::Relaxed), "radio TX credit event");
+            settle(&mut bridge, &scheduled, &mut cx);
+            assert_eq!(sink.try_receive().unwrap().frame.parts().payload, &[101]);
+            assert_eq!(sink.try_receive().unwrap().frame.parts().payload, &[2]);
+            settle(&mut bridge, &scheduled, &mut cx);
+            assert!(general.has_available());
+            // Retire a coalesced publication hint, then publish sparse traffic.
+            device.transmit(packet(5)).unwrap();
+            assert!(scheduled.0.load(Ordering::Relaxed));
+            settle(&mut bridge, &scheduled, &mut cx);
+            assert_eq!(sink.try_receive().unwrap().frame.parts().payload, &[5]);
+            settle(&mut bridge, &scheduled, &mut cx);
+            events.emit(ServiceOutput::Notice(
+                oer_ieee80211_sta::machine::StaNotice::Disconnected(
+                    oer_ieee80211_sta::machine::StaDisconnectReason::Requested,
+                ),
+            ));
+            assert!(scheduled.0.load(Ordering::Relaxed), "idle link event");
+            settle(&mut bridge, &scheduled, &mut cx);
+            assert!(!device.link_is_up());
+            assert_eq!(observations.borrow().queue_drops, 0);
+        }
+        exercise::<1>();
+        exercise::<2>();
+    }
+    #[test]
+    fn changed_epoch_reclaims_retained_and_queued_tx_before_radio_credit_returns() {
+        use oer_network::{EthernetFrame as Frame, LinkSnapshot, TransmitRefused};
+        use std::cell::Cell;
+        struct Epoch<'a, D> {
+            inner: D,
+            epoch: &'a Cell<u64>,
+            wake: &'a RefCell<Option<Waker>>,
+            observed: u64,
+        }
+        impl<D: NetDevice> NetDevice for Epoch<'_, D> {
+            type RxFrame = D::RxFrame;
+            fn link(&self) -> LinkSnapshot {
+                LinkSnapshot {
+                    epoch: self.epoch.get(),
+                    ..self.inner.link()
+                }
+            }
+            fn poll_link(&mut self, cx: &mut Context<'_>) -> Poll<LinkSnapshot> {
+                *self.wake.borrow_mut() = Some(cx.waker().clone());
+                let ready = self.inner.poll_link(cx).is_ready();
+                let link = self.link();
+                if ready || self.observed != link.epoch {
+                    self.observed = link.epoch;
+                    Poll::Ready(link)
+                } else {
+                    Poll::Pending
+                }
+            }
+            fn receive_queue_len(&self) -> usize {
+                self.inner.receive_queue_len()
+            }
+            fn poll_receive_ready(&mut self, cx: &mut Context<'_>) -> Poll<()> {
+                self.inner.poll_receive_ready(cx)
+            }
+            fn try_receive(&mut self) -> Option<Self::RxFrame> {
+                self.inner.try_receive()
+            }
+            fn poll_transmit_ready(&mut self, cx: &mut Context<'_>) -> Poll<()> {
+                self.inner.poll_transmit_ready(cx)
+            }
+            fn try_transmit<F: Frame>(&mut self, frame: F) -> Result<(), TransmitRefused<F>> {
+                self.inner.try_transmit(frame)
             }
         }
-        let clock = VirtualClock::<8>::new();
-        let pool = allocator::<1>();
+        let clock = VirtualClock::<1>::new();
         let general = allocator::<1>();
         let mut endpoint = OwnedEndpointResources::<HostContext, 1, 1>::new();
-        let (mut device, mut radio) = endpoint
-            .split(NetworkInterfaceId::new(0), [2; 6], pool)
-            .expect("endpoint split");
-        radio.link_controller().set_link_up(true);
-        let packet = |marker| {
-            let mut p = general.try_alloc().unwrap();
-            p.set_len(15);
-            p.fill(marker);
-            p
-        };
-        device.transmit(packet(2)).unwrap();
+        let (mut device, radio) = endpoint
+            .split(NetworkInterfaceId::new(0), [2; 6], allocator::<1>())
+            .unwrap();
         let mut input = WakingSpscQueue::<EthernetFrame, 1>::new();
-        let (source, receiver) = input.split();
+        let (_, receiver) = input.split();
         let mut output = WakingSpscQueue::<TxMsdu, 2>::new();
         let (sender, sink) = output.split();
         for marker in [100, 101] {
@@ -520,55 +691,46 @@ mod tests {
                 })
                 .unwrap();
         }
+        let epoch = Cell::new(1);
+        let wake = RefCell::new(None);
+        let net = Epoch {
+            inner: net(sender, receiver),
+            epoch: &epoch,
+            wake: &wake,
+            observed: 0,
+        };
         let observations = RefCell::new(Observations::new(7));
-        let wakes = Arc::new(Wakes(AtomicUsize::new(0)));
-        let waker = Waker::from(Arc::clone(&wakes));
+        let mut bridge = core::pin::pin!(run(radio, net, &observations, &clock));
+        let scheduled = Arc::new(Scheduled(AtomicBool::new(true)));
+        let waker = Waker::from(scheduled.clone());
         let mut cx = Context::from_waker(&waker);
-        let mut bridge = core::pin::pin!(run(radio, net(sender, receiver), &observations, &clock));
-        assert!(bridge.as_mut().poll(&mut cx).is_pending());
-        assert!(!device.can_transmit());
-        assert!(
-            !general.has_available(),
-            "the blocked TX owner stays in its input queue"
-        );
-        let before = wakes.0.load(Ordering::Relaxed);
+        settle(&mut bridge, &scheduled, &mut cx);
+        for retained in [true, false] {
+            let mut packet = general.try_alloc().unwrap();
+            packet.set_len(15);
+            packet.fill(7);
+            device.transmit(packet).unwrap();
+            if retained {
+                settle(&mut bridge, &scheduled, &mut cx);
+            }
+            assert!(!device.can_transmit());
+            epoch.set(epoch.get() + 1);
+            wake.borrow().as_ref().unwrap().wake_by_ref();
+            assert!(scheduled.0.load(Ordering::Relaxed));
+            settle(&mut bridge, &scheduled, &mut cx);
+            assert!(device.link_is_up());
+            assert!(device.can_transmit());
+            assert!(
+                general.has_available(),
+                "epoch event returns the exact retained owner"
+            );
+        }
         assert_eq!(sink.try_receive().unwrap().frame.parts().payload, &[100]);
-        assert!(wakes.0.load(Ordering::Relaxed) > before);
-        assert!(bridge.as_mut().poll(&mut cx).is_pending());
         assert_eq!(sink.try_receive().unwrap().frame.parts().payload, &[101]);
-        assert_eq!(sink.try_receive().unwrap().frame.parts().payload, &[2]);
-        assert!(general.has_available());
-
-        // Retire the old publication hint, then arm both source waits. The
-        // second poll is quiescent; subsequent progress requires a real wake.
-        assert!(bridge.as_mut().poll(&mut cx).is_pending());
-        let before = wakes.0.load(Ordering::Relaxed);
-        assert!(bridge.as_mut().poll(&mut cx).is_pending());
-        assert_eq!(wakes.0.load(Ordering::Relaxed), before);
-        let before = wakes.0.load(Ordering::Relaxed);
-        device.transmit(packet(5)).unwrap();
-        assert!(wakes.0.load(Ordering::Relaxed) > before);
-        assert!(bridge.as_mut().poll(&mut cx).is_pending());
-        assert_eq!(sink.try_receive().unwrap().frame.parts().payload, &[5]);
-        assert!(bridge.as_mut().poll(&mut cx).is_pending());
-        let before = wakes.0.load(Ordering::Relaxed);
-        source.try_send(frame(3)).unwrap();
-        assert!(wakes.0.load(Ordering::Relaxed) > before);
-        assert!(bridge.as_mut().poll(&mut cx).is_pending());
-        let held = device.receive().unwrap();
-        assert_eq!(held[14], 3);
-        source.try_send(frame(4)).unwrap();
-        assert!(bridge.as_mut().poll(&mut cx).is_pending());
-        let before = wakes.0.load(Ordering::Relaxed);
-        drop(held);
-        assert!(wakes.0.load(Ordering::Relaxed) > before);
-        assert!(bridge.as_mut().poll(&mut cx).is_pending());
-        assert_eq!(device.receive().unwrap()[14], 4);
-        assert_eq!(observations.borrow().queue_drops, 0);
-        assert_eq!(
-            clock.now(),
-            oer_time_virtual::START,
-            "no fallback timer fired"
+        assert!(
+            sink.try_receive().is_none(),
+            "no stale packet entered the new epoch"
         );
+        assert_eq!(clock.next_deadline(), None);
     }
 }

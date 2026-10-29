@@ -126,7 +126,9 @@ fn workload_future<'a>(
             failed,
         );
         match select(
-            application,
+            // Poll event producers before the application's value predicates.
+            // They share this task's waker, so a bridge/stack event also polls
+            // the application after the corresponding state update.
             join3(
                 async {
                     match oer_firmware_apps_w3::bridge::run(
@@ -146,14 +148,15 @@ fn workload_future<'a>(
                 runner.run(),
                 drain(&socket),
             ),
+            application,
         )
         .await
         {
-            Either::First(mut report) => {
+            Either::Second(mut report) => {
                 report.stack = Some(stack.statistics());
                 report
             }
-            Either::Second(_) => unreachable!("permanent network runners do not return"),
+            Either::First((_, never, _)) => match never {},
         }
     }
 }
@@ -181,13 +184,12 @@ async fn application(
         .now()
         .checked_add(Duration::from_secs(30))
         .expect("W3 monotonic deadline");
-    while !link.load(Ordering::Relaxed)
-        && !disconnected.load(Ordering::Relaxed)
-        && !failed.load(Ordering::Relaxed)
-        && EmbassyClock.now() < deadline
-    {
-        let _ = EmbassyClock.wait_for(Duration::from_millis(10)).await;
-    }
+    wait_for(deadline, || {
+        link.load(Ordering::Relaxed)
+            || disconnected.load(Ordering::Relaxed)
+            || failed.load(Ordering::Relaxed)
+    })
+    .await;
     report.authenticated = AUTHENTICATED.load(Ordering::Relaxed);
     report.associated = link.load(Ordering::Relaxed);
     LAST_BEACON_MS.store(
@@ -199,7 +201,7 @@ async fn application(
             .now()
             .checked_add(Duration::from_secs(35))
             .expect("W3 monotonic deadline");
-        loop {
+        wait_healthy(deadline, link, failed, || {
             if let Some(lease) = iface.dhcpv4_lease()
                 && let Some(router) = lease.router
             {
@@ -208,13 +210,12 @@ async fn application(
                     router,
                     prefix: lease.address.prefix_len(),
                 });
-                break;
+                true
+            } else {
+                false
             }
-            if !healthy(link, failed) || EmbassyClock.now() >= deadline {
-                break;
-            }
-            let _ = EmbassyClock.wait_for(Duration::from_millis(10)).await;
-        }
+        })
+        .await;
     }
     let lease = observations.borrow().lease;
     if let Some(lease) = lease {
@@ -238,15 +239,16 @@ async fn application(
                 );
                 socket.send(&packet).await
             },
-            || healthy(link, failed),
+            async |next| {
+                wait_healthy(next, link, failed, || false).await;
+                healthy(link, failed)
+            },
         )
         .await;
-        while !observations.borrow().complete()
-            && healthy(link, failed)
-            && EmbassyClock.now() < failure_deadline
-        {
-            let _ = EmbassyClock.wait_for(Duration::from_millis(10)).await;
-        }
+        wait_healthy(failure_deadline, link, failed, || {
+            observations.borrow().complete()
+        })
+        .await;
         // Retire the last queued data transmission before requesting departure.
         if healthy(link, failed) {
             let _ = EmbassyClock.wait_for(Duration::from_secs(2)).await;
@@ -260,13 +262,47 @@ async fn application(
             .now()
             .checked_add(Duration::from_secs(10))
             .expect("W3 monotonic deadline");
-        while !disconnected.load(Ordering::Relaxed) && EmbassyClock.now() < deadline {
-            let _ = EmbassyClock.wait_for(Duration::from_millis(10)).await;
-        }
+        wait_for(deadline, || disconnected.load(Ordering::Relaxed)).await;
     }
     report.deauth_sent = DEAUTH.load(Ordering::Relaxed);
     commands.stop();
     report
+}
+
+// These predicates are polled in the same task, after the bridge, IP runner
+// and station runner. Their RX/TX/link/stack wakers drive the predicates too;
+// the only timers here are application deadlines, including beacon loss.
+async fn wait_for(deadline: oer_time::Instant, mut ready: impl FnMut() -> bool) {
+    let _ = select(
+        core::future::poll_fn(|_| {
+            if ready() {
+                core::task::Poll::Ready(())
+            } else {
+                core::task::Poll::Pending
+            }
+        }),
+        EmbassyClock.wait_until(deadline),
+    )
+    .await;
+}
+
+async fn wait_healthy(
+    deadline: oer_time::Instant,
+    link: &AtomicBool,
+    failed: &AtomicBool,
+    mut ready: impl FnMut() -> bool,
+) {
+    while !ready() && healthy(link, failed) && EmbassyClock.now() < deadline {
+        let now = EmbassyClock.now();
+        let elapsed =
+            ((now.as_micros() / 1000) as u32).wrapping_sub(LAST_BEACON_MS.load(Ordering::Relaxed));
+        let beacon_deadline =
+            now.saturating_add(Duration::from_millis(6000u32.saturating_sub(elapsed)));
+        wait_for(deadline.min(beacon_deadline), || {
+            ready() || !healthy(link, failed)
+        })
+        .await;
+    }
 }
 
 fn healthy(link: &AtomicBool, failed: &AtomicBool) -> bool {

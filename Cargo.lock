@@ -1917,6 +1917,8 @@ dependencies = [
  "oer-memory",
  "oer-network",
  "oer-sync",
+ "oer-time",
+ "oer-time-virtual",
  "xarxa-driver",
 ]
 
