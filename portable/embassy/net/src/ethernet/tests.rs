@@ -7,7 +7,7 @@ use oer_network::{LinkSnapshot, LinkState, TransmitError};
 use std::boxed::Box;
 use xarxa_driver::{PacketPool, PacketPoolStorage};
 
-struct Port(LinkSnapshot);
+struct Port(LinkSnapshot, bool);
 struct Frame;
 impl EthernetFrame for Frame {
     fn view(&self) -> Result<EthernetFrameView<'_>, FrameLengthError> {
@@ -35,10 +35,14 @@ impl NetDevice for Port {
         Poll::Ready(())
     }
     fn try_transmit<F: EthernetFrame>(&mut self, frame: F) -> Result<(), TransmitRefused<F>> {
-        Err(TransmitRefused {
-            frame,
-            reason: TransmitError::QueueFull,
-        })
+        if self.1 {
+            Ok(())
+        } else {
+            Err(TransmitRefused {
+                frame,
+                reason: TransmitError::QueueFull,
+            })
+        }
     }
 }
 
@@ -50,10 +54,13 @@ fn neutral_refusal_retains_the_packet_and_software_credit_and_epoch_change_recla
     let (mut stack, mut radio) = resources
         .split(NetworkInterfaceId::new(0), [2; 6], pool)
         .unwrap();
-    let mut port = Port(LinkSnapshot {
-        state: LinkState::Up,
-        epoch: 1,
-    });
+    let mut port = Port(
+        LinkSnapshot {
+            state: LinkState::Up,
+            epoch: 1,
+        },
+        false,
+    );
     let mut previous = LinkSnapshot::DOWN;
     radio.link_controller().follow_device(&port, &mut previous);
     let mut packet = pool.try_alloc().unwrap();
@@ -62,7 +69,7 @@ fn neutral_refusal_retains_the_packet_and_software_credit_and_epoch_change_recla
     let address = packet.as_ptr();
     assert!(stack.transmit(packet).is_ok());
     let frame = radio.try_receive_tx().unwrap().unwrap();
-    let returned = frame.transmit_to(&mut port).err().unwrap();
+    let returned = frame.transmit_to(&mut port, |_| {}).err().unwrap();
     assert_eq!(returned.reason, TransmitError::QueueFull);
     assert_eq!(returned.frame.ethernet().as_ptr(), address);
     assert!(!stack.can_transmit());
@@ -90,10 +97,13 @@ fn bridge_keeps_a_refused_packet_until_cancellation_without_spinning_or_releasin
     let (mut stack, mut radio) = resources
         .split(NetworkInterfaceId::new(0), [2; 6], pool)
         .unwrap();
-    let port = Port(LinkSnapshot {
-        state: LinkState::Up,
-        epoch: 1,
-    });
+    let port = Port(
+        LinkSnapshot {
+            state: LinkState::Up,
+            epoch: 1,
+        },
+        false,
+    );
     radio.link_controller().set_link_up(true);
     let mut packet = pool.try_alloc().unwrap();
     packet.set_len(18);
@@ -113,6 +123,43 @@ fn bridge_keeps_a_refused_packet_until_cancellation_without_spinning_or_releasin
             assert!(!stack.can_transmit());
         }
     }
+    assert_eq!(observed, 0);
+    assert!(pool.has_available());
+    assert!(stack.can_transmit());
+}
+
+#[test]
+fn successful_tx_is_observed_once_after_admission_and_before_packet_and_credit_return() {
+    let storage = Box::leak(Box::new(PacketPoolStorage::<1>::new()));
+    let pool = Box::leak(Box::new(PacketPool::new(storage))).allocator();
+    let mut resources = OwnedEndpointResources::<HostContext, 1, 1>::new();
+    let (mut stack, mut radio) = resources
+        .split(NetworkInterfaceId::new(0), [2; 6], pool)
+        .unwrap();
+    let mut port = Port(
+        LinkSnapshot {
+            state: LinkState::Up,
+            epoch: 1,
+        },
+        true,
+    );
+    radio.link_controller().set_link_up(true);
+    let mut packet = pool.try_alloc().unwrap();
+    packet.set_len(18);
+    packet.fill(7);
+    assert!(stack.transmit(packet).is_ok());
+    let frame = radio.try_receive_tx().unwrap().unwrap();
+    let mut observed = 0;
+    assert!(
+        frame
+            .transmit_to(&mut port, |view| {
+                assert_eq!(view.payload, &[7; 4]);
+                assert!(!pool.has_available());
+                assert!(!stack.can_transmit());
+                observed += 1;
+            })
+            .is_ok()
+    );
     assert_eq!(observed, 1);
     assert!(pool.has_available());
     assert!(stack.can_transmit());

@@ -152,13 +152,13 @@ fn drain_step<
         // that hint as work too, so the next poll arms a fresh wait before
         // parking; otherwise a later publication would wait for the timer.
         tx_progress = true;
-        let (epoch, packet, first_attempt) = match pending.take() {
-            Some((epoch, packet)) => (epoch, packet, false),
+        let (epoch, packet) = match pending.take() {
+            Some((epoch, packet)) => (epoch, packet),
             None => {
                 let Some(packet) = radio.try_receive_tx()? else {
                     break;
                 };
-                (net.link().epoch, packet, true)
+                (net.link().epoch, packet)
             }
         };
         if epoch != net.link().epoch {
@@ -167,15 +167,14 @@ fn drain_step<
             drop(packet);
             continue;
         }
-        if first_attempt && let Ok(view) = packet.view() {
+        if let Err(refused) = packet.transmit_to(net, |view| {
             observations.borrow_mut().observe(
                 view.ether_type,
                 view.payload,
                 true,
                 clock.now().as_micros(),
             );
-        }
-        if let Err(refused) = packet.transmit_to(net) {
+        }) {
             match refused.reason {
                 oer_network::TransmitError::InvalidLength(_) => {
                     let mut o = observations.borrow_mut();

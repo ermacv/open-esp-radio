@@ -19,11 +19,39 @@ impl EthernetFrame for OwnedNetworkTxFrame<'_> {
     }
 }
 
+/// A projection borrows the packet until admission and its observation finish.
+/// The current neutral TX contract copies into the device's bounded owner.
+struct FrameProjection<'a>(EthernetFrameView<'a>);
+impl EthernetFrame for FrameProjection<'_> {
+    fn view(&self) -> Result<EthernetFrameView<'_>, FrameLengthError> {
+        Ok(self.0)
+    }
+}
+
 impl OwnedNetworkTxFrame<'_> {
     /// Transfer this stack owner into a neutral device. Refusal preserves its
-    /// packet and software credit together; neither is returned early.
-    pub fn transmit_to(self, device: &mut impl NetDevice) -> Result<(), TransmitRefused<Self>> {
-        device.try_transmit(self)
+    /// packet and software credit together; neither is returned early. The
+    /// accepted callback runs only after admission, while that packet and
+    /// credit remain retained, matching the copying bridge's observation point.
+    pub fn transmit_to(
+        self,
+        device: &mut impl NetDevice,
+        accepted: impl FnOnce(EthernetFrameView<'_>),
+    ) -> Result<(), TransmitRefused<Self>> {
+        let result = match self.view() {
+            Ok(view) => match device.try_transmit(FrameProjection(view)) {
+                Ok(()) => {
+                    accepted(view);
+                    Ok(())
+                }
+                Err(refused) => Err(refused.reason),
+            },
+            Err(reason) => Err(oer_network::TransmitError::InvalidLength(reason)),
+        };
+        result.map_err(|reason| TransmitRefused {
+            frame: self,
+            reason,
+        })
     }
 }
 
@@ -123,15 +151,12 @@ impl<'r, X: oer_memory::ExecutionContext, const RX: usize, const TX: usize, D: N
             return Ok(false);
         };
         let epoch = self.device.link().epoch;
-        if let Ok(view) = packet.view() {
-            observe(view);
-        }
         loop {
             core::future::poll_fn(|cx| self.device.poll_transmit_ready(cx)).await;
             if epoch != self.device.link().epoch {
                 return Ok(true);
             }
-            match packet.transmit_to(&mut self.device) {
+            match packet.transmit_to(&mut self.device, &mut observe) {
                 Ok(()) => return Ok(true),
                 Err(refused) => match refused.reason {
                     oer_network::TransmitError::InvalidLength(_) => return Ok(true),
