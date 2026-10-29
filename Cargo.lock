@@ -3736,6 +3736,7 @@ name = "oer-test-ui-cases"
 version = "0.1.0"
 dependencies = [
  "serde_json",
+ "tempfile",
  "trybuild",
 ]
 
