@@ -652,6 +652,9 @@ pub enum TxError {
 ///
 /// SOURCE: complete `libpp[hal_mac_tx.o]::mac_tx_get_rts_rate` (size `0x96`) and the exhaustive reviewed
 /// production reconstruction.
+// Keep this value selection separate from queue publication: combining the
+// rate-policy arms with the register program can produce indirect dispatch.
+#[inline(never)]
 const fn legacy_control_rate(rate: MacLegacyRate) -> MacLegacyRate {
     match rate {
         MacLegacyRate::Dsss1MLong => MacLegacyRate::Dsss1MLong,

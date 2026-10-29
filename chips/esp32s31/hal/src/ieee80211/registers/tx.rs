@@ -8,6 +8,7 @@ use crate::layouts::{DmaRef, WifiTxDmaDescriptor};
 
 use core::marker::PhantomData;
 
+use oer_esp32s31_pac::wifi_mac::plcp1::Rate as PlcpRate;
 use oer_memory::{HardwareOwnedTxDma, PreparedTxDma};
 
 use crate::ieee80211::registers::{
@@ -89,46 +90,33 @@ fn assert_tx_descriptor_head(
 ///
 /// Hardware codes are selected from the generated PAC domain. Callers can
 /// decode observations without maintaining another hardware dictionary.
+/// The selector stores that code, so interrupt TX publication needs no encoder
+/// dispatch to obtain it.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[repr(u8)]
 pub enum MacLegacyRate {
     #[default]
-    Dsss1MLong,
-    Dsss2MLong,
-    Cck5M5Long,
-    Cck11MLong,
-    Dsss2MShort,
-    Cck5M5Short,
-    Cck11MShort,
-    Ofdm48M,
-    Ofdm24M,
-    Ofdm12M,
-    Ofdm6M,
-    Ofdm54M,
-    Ofdm36M,
-    Ofdm18M,
-    Ofdm9M,
+    Dsss1MLong = PlcpRate::Dsss1mLong.bits() as u8,
+    Dsss2MLong = PlcpRate::Dsss2mLong.bits() as u8,
+    Cck5M5Long = PlcpRate::Cck5m5Long.bits() as u8,
+    Cck11MLong = PlcpRate::Cck11mLong.bits() as u8,
+    Dsss2MShort = PlcpRate::Dsss2mShort.bits() as u8,
+    Cck5M5Short = PlcpRate::Cck5m5Short.bits() as u8,
+    Cck11MShort = PlcpRate::Cck11mShort.bits() as u8,
+    Ofdm48M = PlcpRate::Ofdm48m.bits() as u8,
+    Ofdm24M = PlcpRate::Ofdm24m.bits() as u8,
+    Ofdm12M = PlcpRate::Ofdm12m.bits() as u8,
+    Ofdm6M = PlcpRate::Ofdm6m.bits() as u8,
+    Ofdm54M = PlcpRate::Ofdm54m.bits() as u8,
+    Ofdm36M = PlcpRate::Ofdm36m.bits() as u8,
+    Ofdm18M = PlcpRate::Ofdm18m.bits() as u8,
+    Ofdm9M = PlcpRate::Ofdm9m.bits() as u8,
 }
 
 impl MacLegacyRate {
     /// The generated hardware code of this non-HT rate.
     pub const fn code(self) -> u8 {
-        match self {
-            Self::Dsss1MLong => oer_esp32s31_pac::wifi_mac::plcp1::Rate::Dsss1mLong.bits() as u8,
-            Self::Dsss2MLong => oer_esp32s31_pac::wifi_mac::plcp1::Rate::Dsss2mLong.bits() as u8,
-            Self::Cck5M5Long => oer_esp32s31_pac::wifi_mac::plcp1::Rate::Cck5m5Long.bits() as u8,
-            Self::Cck11MLong => oer_esp32s31_pac::wifi_mac::plcp1::Rate::Cck11mLong.bits() as u8,
-            Self::Dsss2MShort => oer_esp32s31_pac::wifi_mac::plcp1::Rate::Dsss2mShort.bits() as u8,
-            Self::Cck5M5Short => oer_esp32s31_pac::wifi_mac::plcp1::Rate::Cck5m5Short.bits() as u8,
-            Self::Cck11MShort => oer_esp32s31_pac::wifi_mac::plcp1::Rate::Cck11mShort.bits() as u8,
-            Self::Ofdm48M => oer_esp32s31_pac::wifi_mac::plcp1::Rate::Ofdm48m.bits() as u8,
-            Self::Ofdm24M => oer_esp32s31_pac::wifi_mac::plcp1::Rate::Ofdm24m.bits() as u8,
-            Self::Ofdm12M => oer_esp32s31_pac::wifi_mac::plcp1::Rate::Ofdm12m.bits() as u8,
-            Self::Ofdm6M => oer_esp32s31_pac::wifi_mac::plcp1::Rate::Ofdm6m.bits() as u8,
-            Self::Ofdm54M => oer_esp32s31_pac::wifi_mac::plcp1::Rate::Ofdm54m.bits() as u8,
-            Self::Ofdm36M => oer_esp32s31_pac::wifi_mac::plcp1::Rate::Ofdm36m.bits() as u8,
-            Self::Ofdm18M => oer_esp32s31_pac::wifi_mac::plcp1::Rate::Ofdm18m.bits() as u8,
-            Self::Ofdm9M => oer_esp32s31_pac::wifi_mac::plcp1::Rate::Ofdm9m.bits() as u8,
-        }
+        self as u8
     }
 
     /// Decode a non-HT observation; unknown and HT codes are refused.
