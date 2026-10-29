@@ -287,7 +287,7 @@ impl<const NOTES: usize, const MESSAGES: usize, P: Immediate> Console<NOTES, MES
         self.running.store(true, Ordering::Release);
         let image_keys = intake.image_keys();
         match Outbound::new(HELLO_SEQUENCE, 0, 0, &intake.hello()) {
-            Ok(hello) => self.write_message(&mut endpoint, &hello).await,
+            Ok(hello) => self.write_message(&mut endpoint, &hello, platform).await,
             Err(_) => self.lose_message(),
         }
         // What the early writer dropped before it gave up the peripheral: a
@@ -305,7 +305,9 @@ impl<const NOTES: usize, const MESSAGES: usize, P: Immediate> Console<NOTES, MES
             )
             .await
             {
-                Either3::First(message) => self.write_message(&mut endpoint, &message).await,
+                Either3::First(message) => {
+                    self.write_message(&mut endpoint, &message, platform).await
+                }
                 Either3::Second(Ok(length)) => {
                     let Some(bytes) = chunk.get(..length) else {
                         return RunFault {
@@ -340,7 +342,7 @@ impl<const NOTES: usize, const MESSAGES: usize, P: Immediate> Console<NOTES, MES
             }
             for _ in 1..DRAIN_BATCH {
                 if let Ok(message) = self.messages.try_receive() {
-                    self.write_message(&mut endpoint, &message).await;
+                    self.write_message(&mut endpoint, &message, platform).await;
                 } else if let Ok(note) = self.notes.try_receive() {
                     self.write_note(&mut endpoint, &note).await;
                 } else {
@@ -351,7 +353,12 @@ impl<const NOTES: usize, const MESSAGES: usize, P: Immediate> Console<NOTES, MES
         }
     }
 
-    async fn write_message(&self, tx: &mut impl Write, message: &Outbound) {
+    async fn write_message(
+        &self,
+        tx: &mut impl Write,
+        message: &Outbound,
+        platform: &impl Platform,
+    ) {
         let mut encoder = self.encoder.lock().await;
         let Ok(frame) = encoder.encode_outbound(self.boot_id(), message) else {
             self.dropped_messages.fetch_add(1, Ordering::Relaxed);
@@ -359,6 +366,9 @@ impl<const NOTES: usize, const MESSAGES: usize, P: Immediate> Console<NOTES, MES
         };
         if tx.write_all(frame).await.is_ok() && tx.write_all(b"\r\n").await.is_ok() {
             self.sent_frames.fetch_add(1, Ordering::Relaxed);
+            if message.key == oer_hil_protocol::base::BootEvidence::KEY {
+                platform.boot_evidence_written();
+            }
             self.written
                 .publish_next(message.message_sequence.wrapping_add(1));
         } else {

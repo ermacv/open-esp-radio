@@ -1,28 +1,20 @@
 //! The post-mortem record a boot leaves in reset-retained memory.
 //!
-//! The runtime places one [`Record`] and one [`FaultRecord`] in memory that
-//! survives software, watchdog, JTAG and brownout resets but not a power-on,
-//! each in its own retained cell: a fault never waits for, nor loses to, a
-//! checkpoint. During a boot the record gets named checkpoints in a ring and,
-//! when the boot ends in a hang or a panic, the fault record the fault. The
-//! next boot calls [`Record::begin_boot`], which returns what the previous
-//! boot left and starts a fresh ring and an empty fault.
+//! The image places a checkpoint [`Record`] and a common diagnostic fault
+//! envelope in best-effort retained memory. This module owns only pure codecs,
+//! not storage, reset policy or hardware retention guarantees. Checkpoint
+//! header/entry CRCs remain independent of fault integrity.
 //!
-//! Every field is an integer or a byte array, so any bit pattern is a value
-//! and the record can be read before anything initialized it. Integrity is
-//! checked piecewise, so a checkpoint costs one small CRC rather than one over
-//! the whole record: the header, each checkpoint and the fault carry their
-//! own CRC, and a part whose CRC fails is dropped. After a power-on the header
-//! fails and nothing is reported, the fault neither.
-//! A fault's CRC-32C uses no lookup table and is inlined into its caller, so
-//! an image's SRAM panic hook can seal a retained fault with caches unavailable.
-//! Checkpoint/header CRCs keep the table-based implementation in thread code.
+//! [`Record::begin_boot`] snapshots the previous ring and decodes the fault
+//! without clearing it. The image acknowledges the fault only after successful
+//! output; starting a new ring is not an output acknowledgement.
 //!
 //! [`Record::checkpoint`] is for named phase transitions, not hot loops: each
 //! call takes the runtime's critical section and computes a CRC.
 //! [`RateMonitor`] reports a caller that checkpoints too often.
 
 use crc::{CRC_32_ISCSI, Crc};
+use oer_diagnostics::fault::{Class, Domain, Error as FaultError, Record as FaultEnvelope};
 use oer_hil_protocol::base::{
     CHECKPOINT_NAME_BYTES, Checkpoint, Fault, HangFault, HartState, POST_MORTEM_CHECKPOINT_PAGE,
     POST_MORTEM_CHECKPOINTS, PanicFault, PostMortemCheckpoints, PostMortemSummary, TaskSlot,
@@ -110,7 +102,7 @@ impl RawCheckpoint {
 /// nothing.
 #[derive(Clone, Copy, bytemuck::AnyBitPattern)]
 #[repr(C)]
-pub struct FaultRecord {
+struct FaultPayload {
     kind: u32,
     detected_uptime_ms: u32,
     stalled_executors: u32,
@@ -123,10 +115,9 @@ pub struct FaultRecord {
     panic_line: u32,
     panic_file: [u8; PANIC_FILE_BYTES],
     panic_message: [u8; PANIC_MESSAGE_BYTES],
-    crc: u32,
 }
 
-impl FaultRecord {
+impl FaultPayload {
     /// No fault, for memory a power-on left undefined.
     pub const EMPTY: Self = Self {
         kind: FAULT_NONE,
@@ -139,47 +130,27 @@ impl FaultRecord {
         panic_line: 0,
         panic_file: [0; PANIC_FILE_BYTES],
         panic_message: [0; PANIC_MESSAGE_BYTES],
-        crc: 0,
     };
 
-    #[inline(always)]
-    fn digest(&self) -> u32 {
-        // A panic hook can run with caches unavailable. Use the same CRC-32C
-        // polynomial as the rest of the record, without a cached lookup table.
-        const POLYNOMIAL: u32 = CRC_32_ISCSI.poly.reverse_bits();
-        let mut digest = u32::MAX;
-        let mut update = |bytes: &[u8]| {
-            for byte in bytes {
-                digest ^= u32::from(*byte);
-                for _ in 0..8 {
-                    digest = (digest >> 1) ^ (0_u32.wrapping_sub(digest & 1) & POLYNOMIAL);
-                }
-            }
-        };
-        for word in [self.kind, self.detected_uptime_ms, self.stalled_executors] {
-            update(&word.to_le_bytes());
+    fn bytes(&self) -> [u8; 280] {
+        let mut bytes = [0; 280];
+        let words = [self.kind, self.detected_uptime_ms, self.stalled_executors]
+            .into_iter()
+            .chain(self.harts.iter().flatten().copied())
+            .chain(self.samples)
+            .chain([self.stalled_task, self.task_pending_ms, self.panic_line]);
+        for (to, from) in bytes.iter_mut().zip(
+            words
+                .flat_map(u32::to_ne_bytes)
+                .chain(self.panic_file)
+                .chain(self.panic_message),
+        ) {
+            *to = from;
         }
-        for word in self.harts.iter().flatten().chain(&self.samples) {
-            update(&word.to_le_bytes());
-        }
-        for word in [self.stalled_task, self.task_pending_ms, self.panic_line] {
-            update(&word.to_le_bytes());
-        }
-        update(&self.panic_file);
-        update(&self.panic_message);
-        !digest
-    }
-
-    #[inline(always)]
-    fn seal(mut self) -> Self {
-        self.crc = self.digest();
-        self
+        bytes
     }
 
     fn decode(&self) -> Option<Fault> {
-        if self.crc != self.digest() {
-            return None;
-        }
         match self.kind {
             FAULT_HANG => Some(Fault::Hang(HangFault {
                 detected_uptime_ms: self.detected_uptime_ms,
@@ -215,7 +186,7 @@ impl FaultRecord {
 
     /// Record that a watchdog found this boot hung; a later fault replaces it.
     pub fn record_hang(&mut self, hang: &HangFault) {
-        *self = FaultRecord {
+        *self = FaultPayload {
             kind: FAULT_HANG,
             detected_uptime_ms: hang.detected_uptime_ms,
             stalled_executors: u32::from(hang.stalled_executors),
@@ -239,15 +210,14 @@ impl FaultRecord {
                 }
             }),
             task_pending_ms: hang.stalled_task.map_or(0, |stall| stall.pending_ms),
-            ..FaultRecord::EMPTY
-        }
-        .seal();
+            ..FaultPayload::EMPTY
+        };
     }
 
     /// Record that this boot panicked, cutting long texts.
     #[inline(always)]
     pub fn record_panic(&mut self, file: &str, line: u32, message: &str) {
-        // Fill in place: copying `FaultRecord::EMPTY` can make the compiler read
+        // Fill in place: copying `FaultPayload::EMPTY` can make the compiler read
         // a constant from cached memory even when the calling hook is in SRAM.
         let fault = self;
         fault.kind = FAULT_PANIC;
@@ -261,8 +231,42 @@ impl FaultRecord {
         fault.panic_line = line;
         fault.panic_file = bytes(file);
         fault.panic_message = bytes(message);
-        fault.crc = fault.digest();
     }
+}
+
+/// Encode a hang snapshot in the same envelope as all other terminal records.
+pub fn encode_hang(hang: &HangFault) -> Result<FaultEnvelope, FaultError> {
+    let mut payload = FaultPayload::EMPTY;
+    payload.record_hang(hang);
+    FaultEnvelope::encode(
+        Class::SoftwareInvariant,
+        Domain::Postmortem,
+        FAULT_HANG,
+        oer_diagnostics::fault::UNKNOWN_HART,
+        0,
+        &payload.bytes(),
+    )
+}
+/// Encode the existing bounded panic text, retaining all 96 message bytes.
+pub fn encode_panic(file: &str, line: u32, message: &str) -> Result<FaultEnvelope, FaultError> {
+    let mut payload = FaultPayload::EMPTY;
+    payload.record_panic(file, line, message);
+    FaultEnvelope::encode(
+        Class::RustPanic,
+        Domain::Postmortem,
+        FAULT_PANIC,
+        oer_diagnostics::fault::UNKNOWN_HART,
+        0,
+        &payload.bytes(),
+    )
+}
+pub fn decode_fault(record: &FaultEnvelope) -> Option<Fault> {
+    record
+        .peek()
+        .ok()?
+        .decode::<FaultPayload>(Domain::Postmortem)
+        .ok()?
+        .decode()
 }
 
 /// The checkpoint ring in reset-retained memory. Any bit pattern is a
@@ -296,16 +300,8 @@ const _: () = const {
     {
         panic!("checkpoint layout changed");
     }
-    if core::mem::size_of::<FaultRecord>() != 284
-        || core::mem::align_of::<FaultRecord>() != 4
-        || core::mem::offset_of!(FaultRecord, harts) != 12
-        || core::mem::offset_of!(FaultRecord, samples) != 60
-        || core::mem::offset_of!(FaultRecord, stalled_task) != 124
-        || core::mem::offset_of!(FaultRecord, panic_file) != 136
-        || core::mem::offset_of!(FaultRecord, panic_message) != 184
-        || core::mem::offset_of!(FaultRecord, crc) != 280
-    {
-        panic!("fault record layout changed");
+    if core::mem::size_of::<FaultPayload>() != 280 {
+        panic!("postmortem observations must fit the common fault envelope");
     }
     if core::mem::size_of::<Record>() != 24 + 32 * POST_MORTEM_CHECKPOINTS
         || core::mem::align_of::<Record>() != 4
@@ -400,9 +396,9 @@ impl Record {
         self.header_crc = self.header_digest();
     }
 
-    /// Start this boot's record: return what the previous boot left, when a
-    /// valid record survived, and clear the ring and `fault`.
-    pub fn begin_boot(&mut self, fault: &mut FaultRecord) -> Option<Previous> {
+    /// Snapshot the previous ring and fault, then start this boot's ring.
+    /// Reading never acknowledges or clears the fault envelope.
+    pub fn begin_boot(&mut self, fault: &FaultEnvelope) -> Option<Previous> {
         let previous = self.header_valid().then(|| {
             let len = self.len as usize;
             // The validated head and length describe modular ring positions.
@@ -417,7 +413,7 @@ impl Record {
                     .take(len)
                     .filter_map(|raw| RawCheckpoint::from_words(*raw).decode())
                     .collect(),
-                fault: fault.decode(),
+                fault: decode_fault(fault),
             }
         });
         let boot_count = previous
@@ -427,7 +423,6 @@ impl Record {
         self.magic = MAGIC;
         self.layout = LAYOUT;
         self.boot_count = boot_count;
-        *fault = FaultRecord::EMPTY.seal();
         self.seal_header();
         previous
     }
@@ -527,35 +522,20 @@ mod tests {
     use super::*;
 
     #[test]
-    fn panic_fault_crc_matches_the_table_based_record_format() {
+    fn panic_text_survives_the_common_envelope_and_output_refusal() {
         for (file, line, message) in [
             ("", 0, ""),
             ("src/agent.rs", 123, "intentional panic"),
             ("путь/пример.rs", u32::MAX, "сообщение"),
         ] {
-            let mut fault = FaultRecord::EMPTY;
-            fault.record_panic(file, line, message);
-            let fault = &fault;
-            let mut expected = CRC.digest();
-            for word in [
-                fault.kind,
-                fault.detected_uptime_ms,
-                fault.stalled_executors,
-            ]
-            .into_iter()
-            .chain(fault.harts.iter().flatten().copied())
-            .chain(fault.samples)
-            .chain([fault.stalled_task, fault.task_pending_ms, fault.panic_line])
-            {
-                expected.update(&word.to_le_bytes());
-            }
-            expected.update(&fault.panic_file);
-            expected.update(&fault.panic_message);
-            assert_eq!(fault.crc, expected.finalize());
-            let mut reused = FaultRecord::EMPTY;
-            reused.record_hang(&hang());
-            reused.record_panic(file, line, message);
-            assert_eq!(reused.crc, fault.crc, "previous hang fields survived");
+            let mut fault = encode_panic(file, line, message).unwrap();
+            assert!(
+                matches!(decode_fault(&fault), Some(Fault::Panic(p)) if p.line == line && p.file.as_str() == file && p.message.as_str() == message)
+            );
+            assert!(fault.report(|_| Err(())).is_err());
+            assert!(decode_fault(&fault).is_some());
+            fault.report(|_| Ok::<_, ()>(())).unwrap();
+            assert!(decode_fault(&fault).is_none());
         }
     }
 
@@ -579,7 +559,7 @@ mod tests {
 
     #[test]
     fn a_power_on_leaves_nothing_to_report() {
-        let (mut record, mut fault) = (Record::EMPTY, FaultRecord::EMPTY);
+        let (mut record, mut fault) = (Record::EMPTY, FaultEnvelope::EMPTY);
         assert_eq!(record.begin_boot(&mut fault), None);
         // Whatever memory a power-on leaves also fails the header, and a
         // fault that happens to check out is not reported without it.
@@ -587,19 +567,21 @@ mod tests {
         random.magic = MAGIC;
         random.layout = LAYOUT;
         random.header_crc = 0x1234_5678;
-        let mut fault = FaultRecord::EMPTY;
-        fault.record_hang(&hang());
+        let mut fault = encode_hang(&hang()).unwrap();
         assert_eq!(random.begin_boot(&mut fault), None);
-        assert_eq!(fault.decode(), None, "the boot clears the fault");
+        assert!(
+            decode_fault(&fault).is_some(),
+            "reading a boot never acknowledges output"
+        );
     }
 
     #[test]
     fn the_next_boot_reports_checkpoints_and_the_fault_once() {
-        let (mut record, mut fault) = (Record::EMPTY, FaultRecord::EMPTY);
+        let (mut record, mut fault) = (Record::EMPTY, FaultEnvelope::EMPTY);
         record.begin_boot(&mut fault);
         record.checkpoint("wifi.start", 1, 10, 0).unwrap();
         record.checkpoint("coex.grant", 2, 20, 1).unwrap();
-        fault.record_hang(&hang());
+        fault = encode_hang(&hang()).unwrap();
         let previous = record.begin_boot(&mut fault).unwrap();
         assert_eq!(previous.boot_count, 1);
         let names = previous
@@ -610,7 +592,8 @@ mod tests {
         assert_eq!(names, ["wifi.start", "coex.grant"]);
         assert_eq!(previous.checkpoints[1].hart, 1);
         assert_eq!(previous.fault, Some(Fault::Hang(hang())));
-        // The boot after reports its own, empty history, not the hang again.
+        // Successful output acknowledges the fault; reading alone never clears it.
+        fault.report(|_| Ok::<_, ()>(())).unwrap();
         let next = record.begin_boot(&mut fault).unwrap();
         assert_eq!(next.boot_count, 2);
         assert!(next.checkpoints.is_empty());
@@ -619,7 +602,7 @@ mod tests {
 
     #[test]
     fn a_task_stall_survives_the_reset() {
-        let (mut record, mut fault) = (Record::EMPTY, FaultRecord::EMPTY);
+        let (mut record, mut fault) = (Record::EMPTY, FaultEnvelope::EMPTY);
         record.begin_boot(&mut fault);
         let stall = HangFault {
             stalled_executors: 0,
@@ -629,7 +612,7 @@ mod tests {
             }),
             ..hang()
         };
-        fault.record_hang(&stall);
+        fault = encode_hang(&stall).unwrap();
         assert_eq!(
             record.begin_boot(&mut fault).unwrap().fault,
             Some(Fault::Hang(stall))
@@ -638,7 +621,7 @@ mod tests {
 
     #[test]
     fn the_ring_keeps_the_newest_checkpoints_in_order() {
-        let (mut record, mut fault) = (Record::EMPTY, FaultRecord::EMPTY);
+        let (mut record, mut fault) = (Record::EMPTY, FaultEnvelope::EMPTY);
         record.begin_boot(&mut fault);
         for index in 0..(POST_MORTEM_CHECKPOINTS as u32 + 5) {
             record.checkpoint("step", index, index, 0).unwrap();
@@ -668,30 +651,29 @@ mod tests {
 
     #[test]
     fn a_corrupted_part_is_dropped_and_the_rest_reported() {
-        let (mut record, mut fault) = (Record::EMPTY, FaultRecord::EMPTY);
+        let (mut record, mut fault) = (Record::EMPTY, FaultEnvelope::EMPTY);
         record.begin_boot(&mut fault);
         record.checkpoint("kept", 1, 1, 0).unwrap();
         record.checkpoint("damaged", 2, 2, 0).unwrap();
-        fault.record_panic("src/main.rs", 42, "boom");
+        fault = encode_panic("src/main.rs", 42, "boom").unwrap();
         record.checkpoints[1][4] ^= 1;
         let previous = record.begin_boot(&mut fault).unwrap();
         assert_eq!(previous.checkpoints.len(), 1);
         assert_eq!(previous.checkpoints[0].name.as_str(), "kept");
         assert!(matches!(previous.fault, Some(Fault::Panic(ref panic)) if panic.line == 42));
         record.checkpoint("x", 0, 0, 0).unwrap();
-        fault.record_panic("f", 1, "m");
-        fault.panic_line ^= 1;
+        fault = FaultEnvelope::EMPTY;
         assert_eq!(record.begin_boot(&mut fault).unwrap().fault, None);
     }
 
     #[test]
     fn long_texts_are_cut_at_a_character_boundary() {
-        let (mut record, mut fault) = (Record::EMPTY, FaultRecord::EMPTY);
+        let (mut record, mut fault) = (Record::EMPTY, FaultEnvelope::EMPTY);
         record.begin_boot(&mut fault);
         record
             .checkpoint("ieee802154.receive.frame", 0, 0, 0)
             .unwrap();
-        fault.record_panic(&"é".repeat(40), 7, &"x".repeat(200));
+        fault = encode_panic(&"é".repeat(40), 7, &"x".repeat(200)).unwrap();
         let previous = record.begin_boot(&mut fault).unwrap();
         assert_eq!(previous.checkpoints[0].name.as_str(), "ieee802154.recei");
         let Some(Fault::Panic(panic)) = previous.fault else {
@@ -712,7 +694,7 @@ mod tests {
     }
     #[test]
     fn checkpoint_count_overflow_preserves_the_source_record() {
-        let (mut record, mut fault) = (Record::EMPTY, FaultRecord::EMPTY);
+        let (mut record, mut fault) = (Record::EMPTY, FaultEnvelope::EMPTY);
         record.begin_boot(&mut fault);
         record.checkpoint("kept", 1, 2, 0).unwrap();
         record.len = u32::MAX;
@@ -758,17 +740,16 @@ mod tests {
                 }),
                 ..hang()
             };
-            let mut fault = FaultRecord::EMPTY;
-            fault.record_hang(&hang);
-            assert_eq!(fault.decode(), Some(Fault::Hang(hang)));
-            fault.stalled_task = u32::MAX;
-            fault = fault.seal();
-            assert_eq!(fault.decode(), None);
+            let mut payload = FaultPayload::EMPTY;
+            payload.record_hang(&hang);
+            assert_eq!(payload.decode(), Some(Fault::Hang(hang)));
+            payload.stalled_task = u32::MAX;
+            assert_eq!(payload.decode(), None);
         }
     }
     #[test]
     fn the_existing_native_checkpoint_encoding_survives_the_next_boot() {
-        let (mut record, mut fault) = (Record::EMPTY, FaultRecord::EMPTY);
+        let (mut record, mut fault) = (Record::EMPTY, FaultEnvelope::EMPTY);
         record.begin_boot(&mut fault);
         let name = *b"legacy.capture\0\0";
         let mut digest = CRC.digest();

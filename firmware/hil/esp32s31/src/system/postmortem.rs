@@ -1,17 +1,21 @@
 //! The ESP32-S31 placement of the post-mortem record.
 //!
-//! The record lives in `.rtc_fast.persistent`, RTC fast memory that no reset
-//! entry initializes, so what one boot writes is there for the next unless
-//! the chip lost power. [`begin`] runs once, early in every boot: it takes
-//! what the previous boot left and starts this boot's ring. The checkpoint
-//! ring and the fault are separate retained cells: checkpoints are written
-//! inside the critical section, the fault by the panic handler, which must
-//! not wait for another hart and so never shares a cell with a checkpoint.
+//! Checkpoints and the common fault envelope use best-effort retained memory;
+//! startup does not initialize them, without a hardware retention guarantee.
+//! [`begin`] snapshots the previous boot and starts a new checkpoint ring.
+//! Only successful output acknowledges the fault. The ring and fault use
+//! separate cells so a panic never waits for a checkpoint writer.
 
 use core::cell::RefCell;
+use oer_espressif_staged_runtime::retained_fault;
+#[cfg(feature = "system-watchdog")]
+use oer_espressif_staged_runtime::retained_fault::Claim;
+use oer_diagnostics::fault::Record as FaultEnvelope;
 
 use critical_section::Mutex;
-use oer_hil_agent::postmortem::{FaultRecord, Previous, RateMonitor, Record};
+#[cfg(feature = "system-watchdog")]
+use oer_hil_agent::postmortem::encode_panic;
+use oer_hil_agent::postmortem::{Previous, RateMonitor, Record};
 
 oer_espressif_staged_runtime::retained_static! {
     /// The checkpoint ring, taken only inside the critical section.
@@ -20,7 +24,7 @@ oer_espressif_staged_runtime::retained_static! {
 oer_espressif_staged_runtime::retained_static! {
     /// The fault, taken by the panic handler without waiting: while the
     /// other hart records its own panic, this one's is skipped.
-    static FAULT: FaultRecord;
+    static FAULT: FaultEnvelope;
 }
 
 static PREVIOUS: Mutex<RefCell<Option<Previous>>> = Mutex::new(RefCell::new(None));
@@ -44,8 +48,8 @@ fn hart() -> u8 {
 #[cfg(feature = "system-watchdog")]
 pub(crate) fn begin() {
     let previous = critical_section::with(|_| {
-        let mut fault = FAULT.try_lock()?;
-        RECORD.try_lock()?.begin_boot(&mut fault)
+        let fault = retained_fault::peek(&FAULT)?;
+        RECORD.try_lock()?.begin_boot(&fault)
     });
     critical_section::with(|cs| *PREVIOUS.borrow_ref_mut(cs) = previous);
 }
@@ -83,8 +87,19 @@ pub(crate) fn checkpoint(name: &str, arg: u32) {
 /// section while this one panics, so the fault is taken without it, from
 /// its own cell that no checkpoint takes.
 #[cfg(feature = "system-watchdog")]
-pub(crate) fn record_panic(details: &oer_espressif_staged_runtime::panic::PanicDetails<'_>) {
-    if let Some(mut fault) = FAULT.try_lock() {
-        fault.record_panic(details.file, details.line, details.message.unwrap_or(""));
+pub(crate) fn record_panic(claim: &Claim<'_>, details: &oer_espressif_staged_runtime::panic::PanicDetails<'_>) {
+    if let Ok(fault) = encode_panic(details.file, details.line, details.message.unwrap_or("")) {
+        let _committed = claim.commit(&FAULT, fault);
+    }
+}
+
+/// The HIL transport calls this only after the full boot evidence was written.
+pub(crate) fn output_succeeded() {
+    let Some(expected) = previous(|previous| previous.and_then(|previous| previous.fault.clone())) else {
+        return;
+    };
+    if let Some(mut fault) = retained_fault::peek(&FAULT)
+        && oer_hil_agent::postmortem::decode_fault(&fault).as_ref() == Some(&expected) {
+        let _reported = fault.report(|_| Ok::<_, ()>(()));
     }
 }

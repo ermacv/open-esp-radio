@@ -52,6 +52,50 @@ pub enum FaultReason {
 }
 
 impl FaultReason {
+    pub const fn class(self) -> oer_diagnostics::fault::Class {
+        match self {
+            Self::ExecutorClaimed => oer_diagnostics::fault::Class::SoftwareInvariant,
+            Self::LinePublished => oer_diagnostics::fault::Class::SoftwareInvariant,
+            Self::InvalidExecutor => oer_diagnostics::fault::Class::SoftwareInvariant,
+            Self::UrgentPublished => oer_diagnostics::fault::Class::SoftwareInvariant,
+            Self::CounterPublished => oer_diagnostics::fault::Class::SoftwareInvariant,
+            Self::CounterLatchStuck => oer_diagnostics::fault::Class::UnexpectedHardware,
+            Self::TimerInstalled => oer_diagnostics::fault::Class::SoftwareInvariant,
+            Self::TimerNotInstalled => oer_diagnostics::fault::Class::SoftwareInvariant,
+            Self::TimerBinding => oer_diagnostics::fault::Class::SoftwareInvariant,
+            Self::TimerBankUnavailable => oer_diagnostics::fault::Class::SoftwareInvariant,
+            Self::AlarmHart => oer_diagnostics::fault::Class::SoftwareInvariant,
+            Self::MissingComparator => oer_diagnostics::fault::Class::SoftwareInvariant,
+            Self::RouteWrongControlBits => oer_diagnostics::fault::Class::ConfigurationBoot,
+            Self::RouteWrongInterruptCount => oer_diagnostics::fault::Class::ConfigurationBoot,
+            Self::RouteWrongLevelBits => oer_diagnostics::fault::Class::ConfigurationBoot,
+            Self::RouteWrongHart => oer_diagnostics::fault::Class::ConfigurationBoot,
+            Self::RouteNotInTable => oer_diagnostics::fault::Class::ConfigurationBoot,
+            Self::RouteForeignRoute => oer_diagnostics::fault::Class::ConfigurationBoot,
+            Self::RouteWrongLine => oer_diagnostics::fault::Class::ConfigurationBoot,
+            Self::RouteNoSuchSource => oer_diagnostics::fault::Class::ConfigurationBoot,
+            Self::RouteNoSuchLine => oer_diagnostics::fault::Class::ConfigurationBoot,
+            Self::RouteNoSuchLevel => oer_diagnostics::fault::Class::ConfigurationBoot,
+            Self::RouteBindable => oer_diagnostics::fault::Class::ConfigurationBoot,
+            Self::HilReceiverLimit => oer_diagnostics::fault::Class::Exhaustion,
+            Self::HilConsole => oer_diagnostics::fault::Class::SoftwareInvariant,
+            Self::HilCheckpoint => oer_diagnostics::fault::Class::SoftwareInvariant,
+            Self::HilRateOverflow => oer_diagnostics::fault::Class::Exhaustion,
+            Self::HilHealthCount => oer_diagnostics::fault::Class::Exhaustion,
+            Self::RouteWrongClass => oer_diagnostics::fault::Class::ConfigurationBoot,
+            Self::RouteHandlerCellMismatch => oer_diagnostics::fault::Class::ConfigurationBoot,
+            Self::HilRequested => oer_diagnostics::fault::Class::RequestedReset,
+            Self::RequestUnanswered => oer_diagnostics::fault::Class::Cancellation,
+            Self::BindingRefused => oer_diagnostics::fault::Class::ConfigurationBoot,
+            Self::BindingStorageClaimed => oer_diagnostics::fault::Class::SoftwareInvariant,
+            Self::BindingHandlerOccupied => oer_diagnostics::fault::Class::SoftwareInvariant,
+            Self::BindingLineRefused => oer_diagnostics::fault::Class::ConfigurationBoot,
+            Self::BindingRouteRefused => oer_diagnostics::fault::Class::ConfigurationBoot,
+            Self::OutsideExecutor => oer_diagnostics::fault::Class::SoftwareInvariant,
+            Self::SignalContext => oer_diagnostics::fault::Class::SoftwareInvariant,
+        }
+    }
+
     pub(super) const fn from_code(code: u32) -> Option<Self> {
         match code {
             1 => Some(Self::OutsideExecutor),

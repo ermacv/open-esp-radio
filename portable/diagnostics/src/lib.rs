@@ -26,6 +26,7 @@
 //! frame; only the host renders text. No storage or transport is installed.
 
 pub mod console;
+pub mod fault;
 pub mod fifo;
 pub mod note;
 pub mod path;

@@ -54,7 +54,7 @@ const REASON_ENUMS: &[(&str, &str)] = &[
 const REASON_DECODERS: &[(&str, &str)] = &[
     (
         "chips/esp32s31/hal/src/domain/transaction/record.rs",
-        "report",
+        "report_fault",
     ),
     ("firmware/apps/b0/src/gate_fault.rs", "report"),
     ("firmware/apps/b0/src/release_fault.rs", "reason_name"),
@@ -403,7 +403,12 @@ impl<'ast> Visit<'ast> for Scanner<'_> {
         {
             self.add(item.sig.ident.span(), "terminal-entry", &item.sig.ident);
         }
+        let decoder = self.decoder;
+        self.decoder = REASON_DECODERS
+            .iter()
+            .any(|&(file, name)| self.file == file && item.sig.ident == name);
         syn::visit::visit_item_fn(self, item);
+        self.decoder = decoder;
     }
 
     fn visit_impl_item_fn(&mut self, item: &'ast syn::ImplItemFn) {
@@ -1133,6 +1138,66 @@ fn module_paths_follow_inline_modules_path_attributes_and_includes() {
             "firmware/apps/fixture/src/main.rs:crate::inline::run:panic-macro:panic:1".into(),
             "firmware/apps/fixture/src/included.rs:crate::outer::named::run:panic-macro:panic:1"
                 .into(),
+        ])
+    );
+}
+
+#[test]
+fn common_retained_classes_match_the_registry_vocabulary() {
+    let source = syn::parse_file(include_str!(
+        "../../../../portable/diagnostics/src/fault.rs"
+    ))
+    .expect("common fault codec parses");
+    let classes = source
+        .items
+        .into_iter()
+        .find_map(|item| match item {
+            syn::Item::Enum(item) if item.ident == "Class" => Some(item),
+            _ => None,
+        })
+        .expect("the common codec declares its classes");
+    let actual: BTreeSet<_> = classes
+        .variants
+        .into_iter()
+        .map(|variant| {
+            let mut spelling = String::new();
+            for (index, ch) in variant.ident.to_string().chars().enumerate() {
+                if index != 0 && ch.is_ascii_uppercase() {
+                    spelling.push('-');
+                }
+                spelling.push(ch.to_ascii_lowercase());
+            }
+            spelling
+        })
+        .collect();
+    assert_eq!(
+        actual,
+        CLASSES
+            .iter()
+            .map(|class| (*class).to_owned())
+            .collect::<BTreeSet<_>>()
+    );
+}
+
+#[test]
+fn free_function_codecs_keep_their_numeric_reason_inventory() {
+    let file = "chips/esp32s31/hal/src/domain/transaction/record.rs";
+    let source = "fn report_fault() { match 2 { 1 => (), 2 => (), _ => () } }";
+    let mut scanner = Scanner {
+        file,
+        source,
+        item: vec!["crate".into()],
+        ordinals: BTreeMap::new(),
+        sites: ScannedSites::new(),
+        decoder: false,
+        aliases: BTreeMap::new(),
+    };
+    scanner.visit_file(&syn::parse_file(source).expect("free codec parses"));
+    assert_eq!(
+        scanner.sites.into_keys().collect::<Sites>(),
+        Sites::from([
+            format!("{file}:crate::report_fault:retained-code:1:1"),
+            format!("{file}:crate::report_fault:retained-code:2:1"),
         ])
     );
 }

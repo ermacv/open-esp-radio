@@ -17,12 +17,18 @@ use oer_espressif_platform_port::{AwaitWatchdog, InvalidHart, Platform};
 /// unless `fatal_path` stopped it. A path on a hart outside the chip's
 /// geometry records the invalid hart and resets instead.
 #[cfg(target_arch = "riscv32")]
-pub fn fatal_halt<P: Platform>(fatal_path: impl for<'a> FnOnce(P::Fatal<'a>)) -> ! {
+pub fn fatal_halt<P: Platform>(
+    fatal_path: impl for<'a> FnOnce(&crate::retained_fault::Claim<'_>, P::Fatal<'a>),
+) -> ! {
     P::fatal(|fatal| {
+        let Ok(claim) = crate::retained_fault::claim() else {
+            let AwaitWatchdog { reason: _ } = P::software_reset(fatal);
+            return;
+        };
         if P::fatal_hart(&fatal).is_err() {
-            reset_recording_with::<P>(fatal, |_| ());
+            reset_claimed_with::<P>(fatal, &claim, |_, _| ());
         } else {
-            fatal_path(fatal);
+            fatal_path(&claim, fatal);
         }
     })
 }
@@ -35,7 +41,10 @@ pub fn fatal_halt<P: Platform>(fatal_path: impl for<'a> FnOnce(P::Fatal<'a>)) ->
 /// holds it.
 #[cfg(target_arch = "riscv32")]
 pub fn reset_recording<P: Platform>(
-    record: impl for<'a, 'b> FnOnce(Result<&'b P::Stop<'a>, P::StopError>),
+    record: impl for<'a, 'b> FnOnce(
+        &crate::retained_fault::Claim<'_>,
+        Result<&'b P::Stop<'a>, P::StopError>,
+    ),
 ) -> ! {
     P::fatal(|fatal| reset_recording_with::<P>(fatal, record))
 }
@@ -43,18 +52,48 @@ pub fn reset_recording<P: Platform>(
 #[cfg(target_arch = "riscv32")]
 fn reset_recording_with<P: Platform>(
     fatal: P::Fatal<'_>,
-    record: impl for<'a, 'b> FnOnce(Result<&'b P::Stop<'a>, P::StopError>),
+    record: impl for<'a, 'b> FnOnce(
+        &crate::retained_fault::Claim<'_>,
+        Result<&'b P::Stop<'a>, P::StopError>,
+    ),
+) {
+    let Ok(claim) = crate::retained_fault::claim() else {
+        let AwaitWatchdog { reason: _ } = P::software_reset(fatal);
+        return;
+    };
+    reset_claimed_with::<P>(fatal, &claim, record);
+}
+
+#[cfg(target_arch = "riscv32")]
+pub(crate) fn reset_claimed<P: Platform>(
+    claim: &crate::retained_fault::Claim<'_>,
+    record: impl for<'a, 'b> FnOnce(
+        &crate::retained_fault::Claim<'_>,
+        Result<&'b P::Stop<'a>, P::StopError>,
+    ),
+) -> ! {
+    P::fatal(|fatal| reset_claimed_with::<P>(fatal, claim, record))
+}
+
+#[cfg(target_arch = "riscv32")]
+fn reset_claimed_with<P: Platform>(
+    fatal: P::Fatal<'_>,
+    claim: &crate::retained_fault::Claim<'_>,
+    record: impl for<'a, 'b> FnOnce(
+        &crate::retained_fault::Claim<'_>,
+        Result<&'b P::Stop<'a>, P::StopError>,
+    ),
 ) {
     let hart = P::fatal_hart(&fatal);
     let reset = || {
         let stop = P::stop_the_world(&fatal);
-        record(stop.as_ref().map_err(|error| *error));
+        record(claim, stop.as_ref().map_err(|error| *error));
         drop(stop);
         let AwaitWatchdog { reason: _ } = P::software_reset(fatal);
     };
     match hart {
         Ok(_) => reset(),
-        Err(InvalidHart { raw }) => crate::panic::with_invalid_hart_record(raw, reset),
+        Err(InvalidHart { raw }) => crate::panic::with_invalid_hart_record(claim, raw, reset),
     }
 }
 
@@ -67,5 +106,5 @@ fn reset_recording_with<P: Platform>(
 /// watchdogs resets the chip.
 #[cfg(target_arch = "riscv32")]
 pub fn reset<P: Platform>() -> ! {
-    reset_recording::<P>(|_stop| ())
+    reset_recording::<P>(|_, _stop| ())
 }

@@ -51,6 +51,11 @@ mod default_handlers;
 pub mod diagnostics;
 #[cfg(chip_vectors)]
 pub mod fatal;
+#[allow(
+    unsafe_code,
+    reason = "terminal election is placed in boot-initialized SRAM"
+)]
+pub mod retained_fault;
 pub mod trace;
 #[cfg(all(target_arch = "riscv32", chip_vectors))]
 pub use fatal::{fatal_halt, reset, reset_recording};
@@ -339,7 +344,7 @@ macro_rules! entry {
         #[cfg(target_arch = "riscv32")]
         #[panic_handler]
         fn __oer_panic(info: &::core::panic::PanicInfo<'_>) -> ! {
-            $crate::panic::handle::<$platform>(info, |_details, _stop| ())
+            $crate::panic::handle::<$platform>(info, |_claim, _details, _stop| ())
         }
     };
     ($main:path, $platform:ty, hook = $hook:path) => {
@@ -347,19 +352,20 @@ macro_rules! entry {
         #[cfg(target_arch = "riscv32")]
         #[unsafe(no_mangle)]
         fn oer_platform_panic_hook(
+            claim: &$crate::retained_fault::Claim<'_>,
             details: &$crate::panic::PanicDetails<'_>,
             stop: ::core::result::Result<
                 &<$platform as $crate::__port::Platform>::Stop<'_>,
                 <$platform as $crate::__port::Platform>::StopError,
             >,
         ) {
-            $hook(details, stop)
+            $hook(claim, details, stop)
         }
         #[cfg(target_arch = "riscv32")]
         #[panic_handler]
         fn __oer_panic(info: &::core::panic::PanicInfo<'_>) -> ! {
-            $crate::panic::handle::<$platform>(info, |details, stop| {
-                oer_platform_panic_hook(details, stop)
+            $crate::panic::handle::<$platform>(info, |claim, details, stop| {
+                oer_platform_panic_hook(claim, details, stop)
             })
         }
     };

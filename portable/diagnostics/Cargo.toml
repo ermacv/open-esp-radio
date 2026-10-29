@@ -9,6 +9,7 @@ publish = false
 description = "Typed boot diagnostics over the line console, without target formatting"
 
 [dependencies]
+bytemuck = { version = "1.25.2", default-features = false, features = ["derive", "min_const_generics"] }
 oer-trace = { path = "../trace" }
 
 [dev-dependencies]

@@ -263,8 +263,8 @@ refusal cannot release those owners or authorize retry. Internal invariant
 failures carry a named `Fault` with the original observations. The terminal
 path masks execution through `fatal::reset_recording` and keeps all static,
 handler and interrupted task owners until reset. A numeric reason code and four
-exact 32-bit observation words reuse the existing 148-byte panic slot under
-tag `NAMED_FAULT = 3`, with its checksum; no retained bytes are added. Capture
+exact 32-bit observation words use the common versioned fault envelope's
+runtime domain, with their registry class and integrity check. Capture
 reads no reason text, including from an interrupt. Adoption decodes the code
 in thread context, prints it through the early console and clears it only after
 successful output. The cell's claim lives in boot-zeroed SRAM and stays held
@@ -516,9 +516,9 @@ Engine interrupt service rejects a sample containing lane 7, 10 or 13 with
 all named events, each unnamed lane and the entry state. The consuming
 engine/MAC owner becomes an absorbing quarantine with no recovery API.
 The PHY HIL image records the fault through safe `fatal::reset_recording`
-without dropping its quarantined owners. The 44-byte retained record contains
-magic, all fourteen event flags, entry state, ordered service progress,
-eight detail words and checksum. It prints at the next boot and remains
+without dropping its quarantined owners. The common fault envelope retains
+all fourteen event flags, entry state, ordered service progress and eight
+detail words, with one version and integrity protocol. It prints at the next boot and remains
 retained on output refusal.
 Malformed secured ACK output from the environment is refused as API input.
 The engine issues STOP, reports the typed security error to its environment,
@@ -630,16 +630,14 @@ future leaves an in-flight alarm quarantined until reset; completion has
 stopped/masked it before reply.
 The narrow transaction reporter can report only SAR transfer faults, without
 reunion or register authority. Owners stay quarantined before record/reset;
-the existing retained codec remains 16 bytes and records the named reason and
-epoch. SAR RAW/ST, request/reply lengths and invalid-delay values remain
-session observations and are not encoded in this record. Pointers from a
-foreign reunion likewise remain session diagnostics, not retained owner identities.
+the common fault envelope records the named reason, operation, epoch, SAR
+RAW/ST, request/reply lengths and invalid-delay values. Numeric foreign-reunion
+identities are observations only, without ownership or dereference authority.
 The HAL declares the direct `link_fn!` binding and exports
 `phy_fault_reporter!` to define that exact signature. Staged images bind it
 to `oer-esp32s31-compose`'s `phy_fault::reset`, which calls
-`fatal::reset_recording`. Their four-word (16-byte), versioned/checksummed
-record retains reason/operation and epoch and is cleared only after successful
-next-boot output. The address of the image's owner is not stored.
+`fatal::reset_recording`. Its common-format record preserves the source
+payload and is cleared only after successful next-boot output.
 Isolated comparison probes supply their own reporter through the same HAL
 macro, preserve their first named fault in session RAM and terminate through
 their own probe halt/panic path. They use verifier linker scripts and
@@ -997,7 +995,7 @@ visible observations. SOURCE: `POLICY_S31_BLE_TERMINAL_NONFAULT_ACK_20261027`.
 Bank1 CC0/CC1/overflow have hardware coverage from
 `hw32-20261027-ble-masked-01` (#757); bank0/NRT and other feature lanes are
 vendor-covered and not hardware-verified. Both named faults quarantine the task/IRQ owners and reach safe
-`fatal::reset_recording`. The same 44-byte BLE gate slot has a reason-tagged
+`fatal::reset_recording`. The common-format BLE gate slot has a reason-tagged
 eight-word payload: seven policy source words and one reserved zero word.
 Next-boot output reports the observed banks. Bank1[0,2] and task17 remain
 opaque with their existing SOURCEs. CTE +0x4c4/+0x4c8/+0x4cc is outside this
@@ -1015,7 +1013,7 @@ word into continuous time. Terminal release masks
 and clears overflow before the bank leaves the handler; CONTROL1/2 alone do
 not silence enabled pending (SOURCE: `HW12_S31_BLE_OVERFLOW_ACK_20261026` and
 `HW9_S31_MAC_RELEASE_20261027`). Exhaustion retains its original count or raw
-word in a named fault. B0 uses the same 44-byte retained slot for these reasons,
+word in a named fault. B0 uses the same common-format retained slot for these reasons,
 without releasing owners, through `fatal::reset_recording`; the next boot
 prints the diagnostic. No additional unsafe sharing is involved.
 

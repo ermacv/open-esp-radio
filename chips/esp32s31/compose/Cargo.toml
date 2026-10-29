@@ -14,6 +14,7 @@ description = "The ESP32-S31 side of an image's platform over the Espressif stag
 wifi-fault = []
 
 [dependencies]
+oer-diagnostics = { path = "../../../portable/diagnostics" }
 bytemuck = { version = "1.25.2", default-features = false, features = ["derive"] }
 oer-esp32s31-hal = { path = "../hal" }
 oer-espressif-staged-runtime.workspace = true

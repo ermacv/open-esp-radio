@@ -62,28 +62,28 @@ conformance is unqualified.
 
 A Bluetooth gate invariant failure quarantines all gate and interrupted task
 owners without returning or dropping them. The handler records a `GateFault`
-through safe `fatal::reset_recording` and resets immediately. The 44-byte retained
+through safe `fatal::reset_recording` and resets immediately. The common-format retained
 record includes the exact reason, entry LP cause, timer phase, NRT words when
 the bank is present, and stopped-timer pending bytes or unexpected status.
 A rejected NRT acknowledgement retains its exact later pair separately from
 the entry observations in the same slot.
 A vacant timer with nonzero LP status follows the same path. The next boot
 prints one `OER-B0-FAULT: bluetooth-gate` line on the early console, before H4
-opens, then consumes the record. The application watchdog does not drive this
+opens, then clears the record only after complete successful output. The application watchdog does not drive this
 fault transition.
 
 Controller-time overflow is counted at P3, independently of P2 scheduler-event
 coalescing. The clock bridge remains continuous over idle gaps spanning multiple
 BTLC wraps. Counter exhaustion and a microsecond projection beyond `u64` retain
-their original inputs in the same 44-byte fault slot and reset with all owners
+their original inputs in the same common-format fault slot and reset with all owners
 quarantined. The next boot prints the reason, count and raw word when present.
 Projection faults use the `OER-B0-FAULT: bluetooth-controller-time` prefix and
 the `overflows`, `raw-ticks` and `scale-shift` labels.
 
 Controller-output release failures from `shutdown::retire` retain the failed
 shutdown owner and reset through `fatal::reset_recording`. Interrupt-policy
-failures use the existing 44-byte gate record, preserving primary enables,
+failures use the common-format gate record, preserving primary enables,
 status, NRT snapshots and task enables. Other output-step and scheduler-channel
-failures use a 16-byte retained record with a named reason, the published list
+failures use a common-format retained record with a named reason, the published list
 index or channel error, and a checksum. The next boot reports that record once
 with the `OER-B0-FAULT: bluetooth-output-release` prefix before H4 opens.

@@ -41,30 +41,31 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 "chips/esp32s31/hal/src/domain/transaction.rs:crate::domain::transaction::FaultReason:retained-reason:FaultReason::SarAlarmWithoutBundle:1" = { owner = "chips/esp32s31/hal", classes = ["unexpected-hardware"] }
 
 # chips/esp32s31/hal/src/domain/transaction/record.rs
-"chips/esp32s31/hal/src/domain/transaction/record.rs:crate::domain::transaction::record::impl FaultRecord::report:retained-code:1:1" = { owner = "chips/esp32s31/hal", classes = ["cancellation"] }
-"chips/esp32s31/hal/src/domain/transaction/record.rs:crate::domain::transaction::record::impl FaultRecord::report:retained-code:2:1" = { owner = "chips/esp32s31/hal", classes = ["cancellation"] }
-"chips/esp32s31/hal/src/domain/transaction/record.rs:crate::domain::transaction::record::impl FaultRecord::report:retained-code:3:1" = { owner = "chips/esp32s31/hal", classes = ["cancellation"] }
-"chips/esp32s31/hal/src/domain/transaction/record.rs:crate::domain::transaction::record::impl FaultRecord::report:retained-code:4:1" = { owner = "chips/esp32s31/hal", classes = ["cancellation"] }
-"chips/esp32s31/hal/src/domain/transaction/record.rs:crate::domain::transaction::record::impl FaultRecord::report:retained-code:5:1" = { owner = "chips/esp32s31/hal", classes = ["cancellation"] }
-"chips/esp32s31/hal/src/domain/transaction/record.rs:crate::domain::transaction::record::impl FaultRecord::report:retained-code:6:1" = { owner = "chips/esp32s31/hal", classes = ["cancellation"] }
-"chips/esp32s31/hal/src/domain/transaction/record.rs:crate::domain::transaction::record::impl FaultRecord::report:retained-code:7:1" = { owner = "chips/esp32s31/hal", classes = ["software-invariant"] }
-"chips/esp32s31/hal/src/domain/transaction/record.rs:crate::domain::transaction::record::impl FaultRecord::report:retained-code:19:1" = { owner = "chips/esp32s31/hal", classes = ["exhaustion"] }
-"chips/esp32s31/hal/src/domain/transaction/record.rs:crate::domain::transaction::record::impl FaultRecord::report:retained-code:8:1" = { owner = "chips/esp32s31/hal", classes = ["software-invariant"] }
-"chips/esp32s31/hal/src/domain/transaction/record.rs:crate::domain::transaction::record::impl FaultRecord::report:retained-code:9:1" = { owner = "chips/esp32s31/hal", classes = ["software-invariant"] }
-"chips/esp32s31/hal/src/domain/transaction/record.rs:crate::domain::transaction::record::impl FaultRecord::report:retained-code:10:1" = { owner = "chips/esp32s31/hal", classes = ["software-invariant"] }
-"chips/esp32s31/hal/src/domain/transaction/record.rs:crate::domain::transaction::record::impl FaultRecord::report:retained-code:11:1" = { owner = "chips/esp32s31/hal", classes = ["software-invariant"] }
-"chips/esp32s31/hal/src/domain/transaction/record.rs:crate::domain::transaction::record::impl FaultRecord::report:retained-code:12:1" = { owner = "chips/esp32s31/hal", classes = ["software-invariant"] }
-"chips/esp32s31/hal/src/domain/transaction/record.rs:crate::domain::transaction::record::impl FaultRecord::report:retained-code:13:1" = { owner = "chips/esp32s31/hal", classes = ["software-invariant"] }
-"chips/esp32s31/hal/src/domain/transaction/record.rs:crate::domain::transaction::record::impl FaultRecord::report:retained-code:14:1" = { owner = "chips/esp32s31/hal", classes = ["software-invariant"] }
-"chips/esp32s31/hal/src/domain/transaction/record.rs:crate::domain::transaction::record::impl FaultRecord::report:retained-code:15:1" = { owner = "chips/esp32s31/hal", classes = ["software-invariant"] }
-"chips/esp32s31/hal/src/domain/transaction/record.rs:crate::domain::transaction::record::impl FaultRecord::report:retained-code:16:1" = { owner = "chips/esp32s31/hal", classes = ["configuration-boot"] }
-"chips/esp32s31/hal/src/domain/transaction/record.rs:crate::domain::transaction::record::impl FaultRecord::report:retained-code:18:1" = { owner = "chips/esp32s31/hal", classes = ["unexpected-hardware"] }
-"chips/esp32s31/hal/src/domain/transaction/record.rs:crate::domain::transaction::record::impl FaultRecord::report:retained-code:1:2" = { owner = "chips/esp32s31/hal", classes = ["software-invariant"] }
-"chips/esp32s31/hal/src/domain/transaction/record.rs:crate::domain::transaction::record::impl FaultRecord::report:retained-code:2:2" = { owner = "chips/esp32s31/hal", classes = ["software-invariant"] }
-"chips/esp32s31/hal/src/domain/transaction/record.rs:crate::domain::transaction::record::impl FaultRecord::report:retained-code:3:2" = { owner = "chips/esp32s31/hal", classes = ["software-invariant"] }
-"chips/esp32s31/hal/src/domain/transaction/record.rs:crate::domain::transaction::record::impl FaultRecord::report:retained-code:4:2" = { owner = "chips/esp32s31/hal", classes = ["software-invariant"] }
-"chips/esp32s31/hal/src/domain/transaction/record.rs:crate::domain::transaction::record::impl FaultRecord::report:retained-code:5:2" = { owner = "chips/esp32s31/hal", classes = ["software-invariant"] }
-"chips/esp32s31/hal/src/domain/transaction/record.rs:crate::domain::transaction::record::impl FaultRecord::report:retained-code:6:2" = { owner = "chips/esp32s31/hal", classes = ["software-invariant"] }
+
+"chips/esp32s31/hal/src/domain/transaction/record.rs:crate::domain::transaction::record::report_fault:retained-code:10:1" = { owner = "chips/esp32s31/hal", classes = ["software-invariant"] }
+"chips/esp32s31/hal/src/domain/transaction/record.rs:crate::domain::transaction::record::report_fault:retained-code:11:1" = { owner = "chips/esp32s31/hal", classes = ["software-invariant"] }
+"chips/esp32s31/hal/src/domain/transaction/record.rs:crate::domain::transaction::record::report_fault:retained-code:12:1" = { owner = "chips/esp32s31/hal", classes = ["software-invariant"] }
+"chips/esp32s31/hal/src/domain/transaction/record.rs:crate::domain::transaction::record::report_fault:retained-code:13:1" = { owner = "chips/esp32s31/hal", classes = ["software-invariant"] }
+"chips/esp32s31/hal/src/domain/transaction/record.rs:crate::domain::transaction::record::report_fault:retained-code:14:1" = { owner = "chips/esp32s31/hal", classes = ["software-invariant"] }
+"chips/esp32s31/hal/src/domain/transaction/record.rs:crate::domain::transaction::record::report_fault:retained-code:15:1" = { owner = "chips/esp32s31/hal", classes = ["software-invariant"] }
+"chips/esp32s31/hal/src/domain/transaction/record.rs:crate::domain::transaction::record::report_fault:retained-code:16:1" = { owner = "chips/esp32s31/hal", classes = ["configuration-boot"] }
+"chips/esp32s31/hal/src/domain/transaction/record.rs:crate::domain::transaction::record::report_fault:retained-code:18:1" = { owner = "chips/esp32s31/hal", classes = ["unexpected-hardware"] }
+"chips/esp32s31/hal/src/domain/transaction/record.rs:crate::domain::transaction::record::report_fault:retained-code:19:1" = { owner = "chips/esp32s31/hal", classes = ["exhaustion"] }
+"chips/esp32s31/hal/src/domain/transaction/record.rs:crate::domain::transaction::record::report_fault:retained-code:1:1" = { owner = "chips/esp32s31/hal", classes = ["cancellation"] }
+"chips/esp32s31/hal/src/domain/transaction/record.rs:crate::domain::transaction::record::report_fault:retained-code:1:2" = { owner = "chips/esp32s31/hal", classes = ["software-invariant"] }
+"chips/esp32s31/hal/src/domain/transaction/record.rs:crate::domain::transaction::record::report_fault:retained-code:2:1" = { owner = "chips/esp32s31/hal", classes = ["cancellation"] }
+"chips/esp32s31/hal/src/domain/transaction/record.rs:crate::domain::transaction::record::report_fault:retained-code:2:2" = { owner = "chips/esp32s31/hal", classes = ["software-invariant"] }
+"chips/esp32s31/hal/src/domain/transaction/record.rs:crate::domain::transaction::record::report_fault:retained-code:3:1" = { owner = "chips/esp32s31/hal", classes = ["cancellation"] }
+"chips/esp32s31/hal/src/domain/transaction/record.rs:crate::domain::transaction::record::report_fault:retained-code:3:2" = { owner = "chips/esp32s31/hal", classes = ["software-invariant"] }
+"chips/esp32s31/hal/src/domain/transaction/record.rs:crate::domain::transaction::record::report_fault:retained-code:4:1" = { owner = "chips/esp32s31/hal", classes = ["cancellation"] }
+"chips/esp32s31/hal/src/domain/transaction/record.rs:crate::domain::transaction::record::report_fault:retained-code:4:2" = { owner = "chips/esp32s31/hal", classes = ["software-invariant"] }
+"chips/esp32s31/hal/src/domain/transaction/record.rs:crate::domain::transaction::record::report_fault:retained-code:5:1" = { owner = "chips/esp32s31/hal", classes = ["cancellation"] }
+"chips/esp32s31/hal/src/domain/transaction/record.rs:crate::domain::transaction::record::report_fault:retained-code:5:2" = { owner = "chips/esp32s31/hal", classes = ["software-invariant"] }
+"chips/esp32s31/hal/src/domain/transaction/record.rs:crate::domain::transaction::record::report_fault:retained-code:6:1" = { owner = "chips/esp32s31/hal", classes = ["cancellation"] }
+"chips/esp32s31/hal/src/domain/transaction/record.rs:crate::domain::transaction::record::report_fault:retained-code:6:2" = { owner = "chips/esp32s31/hal", classes = ["software-invariant"] }
+"chips/esp32s31/hal/src/domain/transaction/record.rs:crate::domain::transaction::record::report_fault:retained-code:7:1" = { owner = "chips/esp32s31/hal", classes = ["software-invariant"] }
+"chips/esp32s31/hal/src/domain/transaction/record.rs:crate::domain::transaction::record::report_fault:retained-code:8:1" = { owner = "chips/esp32s31/hal", classes = ["software-invariant"] }
+"chips/esp32s31/hal/src/domain/transaction/record.rs:crate::domain::transaction::record::report_fault:retained-code:9:1" = { owner = "chips/esp32s31/hal", classes = ["software-invariant"] }
 
 # chips/esp32s31/hal/src/platform/core_control.rs
 "chips/esp32s31/hal/src/platform/core_control.rs:crate::platform::core_control::impl CoreControlRegisters < P , Q , R , S , T >::request_system_reset:reset-trigger:trigger_sys_ctrl_sys_sw_rst:1" = { owner = "chips/esp32s31/hal", classes = ["hardware-impossible", "unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation", "cpu-exception", "requested-reset", "rust-panic"], proof = "invalid-hart" }
@@ -111,12 +112,14 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 
 # chips/espressif/staged-runtime/src/fatal.rs
 "chips/espressif/staged-runtime/src/fatal.rs:crate::fatal::fatal_halt:terminal-entry:fatal_halt:1" = { owner = "chips/espressif/staged-runtime", classes = ["hardware-impossible", "unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation", "cpu-exception", "requested-reset", "rust-panic"], proof = "invalid-hart" }
-"chips/espressif/staged-runtime/src/fatal.rs:crate::fatal::fatal_halt:terminal-reference:reset_recording_with:1" = { owner = "chips/espressif/staged-runtime", classes = ["hardware-impossible", "unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation", "cpu-exception", "requested-reset", "rust-panic"], proof = "invalid-hart" }
 "chips/espressif/staged-runtime/src/fatal.rs:crate::fatal::reset_recording:terminal-entry:reset_recording:1" = { owner = "chips/espressif/staged-runtime", classes = ["hardware-impossible", "unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation", "cpu-exception", "requested-reset", "rust-panic"], proof = "invalid-hart" }
 "chips/espressif/staged-runtime/src/fatal.rs:crate::fatal::reset_recording:terminal-reference:reset_recording_with:1" = { owner = "chips/espressif/staged-runtime", classes = ["hardware-impossible", "unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation", "cpu-exception", "requested-reset", "rust-panic"], proof = "invalid-hart" }
 "chips/espressif/staged-runtime/src/fatal.rs:crate::fatal::reset_recording_with:terminal-reference:software_reset:1" = { owner = "chips/espressif/staged-runtime", classes = ["hardware-impossible", "unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation", "cpu-exception", "requested-reset", "rust-panic"], proof = "invalid-hart" }
 "chips/espressif/staged-runtime/src/fatal.rs:crate::fatal::reset:terminal-entry:reset:1" = { owner = "chips/espressif/staged-runtime", classes = ["hardware-impossible", "unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation", "cpu-exception", "requested-reset", "rust-panic"], proof = "invalid-hart" }
 "chips/espressif/staged-runtime/src/fatal.rs:crate::fatal::reset:terminal-reference:reset_recording:1" = { owner = "chips/espressif/staged-runtime", classes = ["hardware-impossible", "unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation", "cpu-exception", "requested-reset", "rust-panic"], proof = "invalid-hart" }
+"chips/espressif/staged-runtime/src/fatal.rs:crate::fatal::fatal_halt:terminal-reference:software_reset:1" = { owner = "chips/espressif/staged-runtime", classes = ["hardware-impossible", "unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation", "cpu-exception", "requested-reset", "rust-panic"], proof = "invalid-hart" }
+"chips/espressif/staged-runtime/src/fatal.rs:crate::fatal::reset_claimed:terminal-entry:reset_claimed:1" = { owner = "chips/espressif/staged-runtime", classes = ["hardware-impossible", "unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation", "cpu-exception", "requested-reset", "rust-panic"], proof = "invalid-hart" }
+"chips/espressif/staged-runtime/src/fatal.rs:crate::fatal::reset_claimed_with:terminal-reference:software_reset:1" = { owner = "chips/espressif/staged-runtime", classes = ["hardware-impossible", "unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation", "cpu-exception", "requested-reset", "rust-panic"], proof = "invalid-hart" }
 
 # chips/espressif/staged-runtime/src/interrupts.rs
 "chips/espressif/staged-runtime/src/interrupts.rs:crate::interrupts::reset_binding:terminal-entry:reset_binding:1" = { owner = "chips/espressif/staged-runtime", classes = ["configuration-boot", "unexpected-hardware", "software-invariant"] }
@@ -138,7 +141,6 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 "chips/espressif/staged-runtime/src/panic.rs:crate::panic::INVALID_HART:retained-reason:INVALID_HART:1" = { owner = "chips/espressif/staged-runtime", classes = ["hardware-impossible"], proof = "invalid-hart" }
 "chips/espressif/staged-runtime/src/panic.rs:crate::panic::handle:terminal-entry:handle:1" = { owner = "chips/espressif/staged-runtime", classes = ["rust-panic"] }
 "chips/espressif/staged-runtime/src/panic.rs:crate::panic::handle:terminal-reference:reset:1" = { owner = "chips/espressif/staged-runtime", classes = ["rust-panic"] }
-"chips/espressif/staged-runtime/src/panic.rs:crate::panic::handle:terminal-reference:reset_recording:1" = { owner = "chips/espressif/staged-runtime", classes = ["rust-panic"] }
 
 # chips/espressif/staged-runtime/src/panic/fault.rs
 "chips/espressif/staged-runtime/src/panic/fault.rs:crate::panic::fault::FaultReason:retained-reason:FaultReason::ExecutorClaimed:1" = { owner = "chips/espressif/staged-runtime", classes = ["software-invariant"] }
@@ -205,27 +207,26 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 "firmware/apps/b0/src/entry.rs:crate::fail:terminal-entry:fail:1" = { owner = "firmware/apps/b0", classes = ["configuration-boot"] }
 
 # firmware/apps/b0/src/gate_fault.rs
-"firmware/apps/b0/src/gate_fault.rs:crate::gate_fault::impl Record::report:retained-code:1:1" = { owner = "firmware/apps/b0", classes = ["software-invariant"] }
-"firmware/apps/b0/src/gate_fault.rs:crate::gate_fault::impl Record::report:retained-code:2:1" = { owner = "firmware/apps/b0", classes = ["software-invariant"] }
-"firmware/apps/b0/src/gate_fault.rs:crate::gate_fault::impl Record::report:retained-code:3:1" = { owner = "firmware/apps/b0", classes = ["software-invariant"] }
-"firmware/apps/b0/src/gate_fault.rs:crate::gate_fault::impl Record::report:retained-code:4:1" = { owner = "firmware/apps/b0", classes = ["unexpected-hardware"] }
-"firmware/apps/b0/src/gate_fault.rs:crate::gate_fault::impl Record::report:retained-code:5:1" = { owner = "firmware/apps/b0", classes = ["unexpected-hardware"] }
-"firmware/apps/b0/src/gate_fault.rs:crate::gate_fault::impl Record::report:retained-code:6:1" = { owner = "firmware/apps/b0", classes = ["unexpected-hardware"] }
-"firmware/apps/b0/src/gate_fault.rs:crate::gate_fault::impl Record::report:retained-code:7:1" = { owner = "firmware/apps/b0", classes = ["exhaustion"] }
-"firmware/apps/b0/src/gate_fault.rs:crate::gate_fault::impl Record::report:retained-code:8:1" = { owner = "firmware/apps/b0", classes = ["exhaustion"] }
-"firmware/apps/b0/src/gate_fault.rs:crate::gate_fault::impl Record::report:retained-code:9:1" = { owner = "firmware/apps/b0", classes = ["unexpected-hardware"] }
-"firmware/apps/b0/src/gate_fault.rs:crate::gate_fault::impl Record::report:retained-code:10:1" = { owner = "firmware/apps/b0", classes = ["unexpected-hardware"] }
-"firmware/apps/b0/src/gate_fault.rs:crate::gate_fault::impl Record::report:retained-code:11:1" = { owner = "firmware/apps/b0", classes = ["unexpected-hardware"] }
-"firmware/apps/b0/src/gate_fault.rs:crate::gate_fault::impl Record::report:retained-code:0:1" = { owner = "firmware/apps/b0", classes = ["software-invariant"] }
-"firmware/apps/b0/src/gate_fault.rs:crate::gate_fault::impl Record::report:retained-code:1:2" = { owner = "firmware/apps/b0", classes = ["software-invariant"] }
-"firmware/apps/b0/src/gate_fault.rs:crate::gate_fault::impl Record::report:retained-code:2:2" = { owner = "firmware/apps/b0", classes = ["software-invariant"] }
-"firmware/apps/b0/src/gate_fault.rs:crate::gate_fault::impl Record::report:retained-code:3:2" = { owner = "firmware/apps/b0", classes = ["software-invariant"] }
 "firmware/apps/b0/src/gate_fault.rs:crate::gate_fault:retained-slot:retained_static:1" = { owner = "firmware/apps/b0", classes = ["unexpected-hardware", "software-invariant", "exhaustion"] }
 "firmware/apps/b0/src/gate_fault.rs:crate::gate_fault::reset:terminal-entry:reset:1" = { owner = "firmware/apps/b0", classes = ["unexpected-hardware", "software-invariant", "exhaustion"] }
 "firmware/apps/b0/src/gate_fault.rs:crate::gate_fault::reset_controller_time:terminal-entry:reset_controller_time:1" = { owner = "firmware/apps/b0", classes = ["unexpected-hardware", "software-invariant", "exhaustion"] }
-"firmware/apps/b0/src/gate_fault.rs:crate::gate_fault::reset_interrupt_policy:terminal-entry:reset_interrupt_policy:1" = { owner = "firmware/apps/b0", classes = ["unexpected-hardware", "software-invariant", "exhaustion"] }
 "firmware/apps/b0/src/gate_fault.rs:crate::gate_fault::reset_record:terminal-entry:reset_record:1" = { owner = "firmware/apps/b0", classes = ["unexpected-hardware", "software-invariant", "exhaustion"] }
 "firmware/apps/b0/src/gate_fault.rs:crate::gate_fault::reset_record:terminal-reference:reset_recording:1" = { owner = "firmware/apps/b0", classes = ["unexpected-hardware", "software-invariant", "exhaustion"] }
+"firmware/apps/b0/src/gate_fault.rs:crate::gate_fault::impl Payload::report:retained-code:0:1" = { owner = "firmware/apps/b0", classes = ["software-invariant"] }
+"firmware/apps/b0/src/gate_fault.rs:crate::gate_fault::impl Payload::report:retained-code:10:1" = { owner = "firmware/apps/b0", classes = ["unexpected-hardware"] }
+"firmware/apps/b0/src/gate_fault.rs:crate::gate_fault::impl Payload::report:retained-code:11:1" = { owner = "firmware/apps/b0", classes = ["unexpected-hardware"] }
+"firmware/apps/b0/src/gate_fault.rs:crate::gate_fault::impl Payload::report:retained-code:1:1" = { owner = "firmware/apps/b0", classes = ["software-invariant"] }
+"firmware/apps/b0/src/gate_fault.rs:crate::gate_fault::impl Payload::report:retained-code:1:2" = { owner = "firmware/apps/b0", classes = ["software-invariant"] }
+"firmware/apps/b0/src/gate_fault.rs:crate::gate_fault::impl Payload::report:retained-code:2:1" = { owner = "firmware/apps/b0", classes = ["software-invariant"] }
+"firmware/apps/b0/src/gate_fault.rs:crate::gate_fault::impl Payload::report:retained-code:2:2" = { owner = "firmware/apps/b0", classes = ["software-invariant"] }
+"firmware/apps/b0/src/gate_fault.rs:crate::gate_fault::impl Payload::report:retained-code:3:1" = { owner = "firmware/apps/b0", classes = ["software-invariant"] }
+"firmware/apps/b0/src/gate_fault.rs:crate::gate_fault::impl Payload::report:retained-code:3:2" = { owner = "firmware/apps/b0", classes = ["software-invariant"] }
+"firmware/apps/b0/src/gate_fault.rs:crate::gate_fault::impl Payload::report:retained-code:4:1" = { owner = "firmware/apps/b0", classes = ["unexpected-hardware"] }
+"firmware/apps/b0/src/gate_fault.rs:crate::gate_fault::impl Payload::report:retained-code:5:1" = { owner = "firmware/apps/b0", classes = ["unexpected-hardware"] }
+"firmware/apps/b0/src/gate_fault.rs:crate::gate_fault::impl Payload::report:retained-code:6:1" = { owner = "firmware/apps/b0", classes = ["unexpected-hardware"] }
+"firmware/apps/b0/src/gate_fault.rs:crate::gate_fault::impl Payload::report:retained-code:7:1" = { owner = "firmware/apps/b0", classes = ["exhaustion"] }
+"firmware/apps/b0/src/gate_fault.rs:crate::gate_fault::impl Payload::report:retained-code:8:1" = { owner = "firmware/apps/b0", classes = ["exhaustion"] }
+"firmware/apps/b0/src/gate_fault.rs:crate::gate_fault::impl Payload::report:retained-code:9:1" = { owner = "firmware/apps/b0", classes = ["unexpected-hardware"] }
 
 # firmware/apps/b0/src/host.rs
 "firmware/apps/b0/src/host.rs:crate::host::serve:terminal-reference:reset_request:1" = { owner = "firmware/apps/b0", classes = ["cancellation"] }
@@ -275,21 +276,21 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 "firmware/apps/b0/src/release_fault.rs:crate::release_fault:retained-slot:retained_static:1" = { owner = "firmware/apps/b0", classes = ["unexpected-hardware", "software-invariant", "exhaustion", "cancellation"] }
 "firmware/apps/b0/src/release_fault.rs:crate::release_fault::reset:terminal-entry:reset:1" = { owner = "firmware/apps/b0", classes = ["unexpected-hardware", "software-invariant", "exhaustion", "cancellation"] }
 "firmware/apps/b0/src/release_fault.rs:crate::release_fault::reset:terminal-reference:reset_recording:1" = { owner = "firmware/apps/b0", classes = ["unexpected-hardware", "software-invariant", "exhaustion", "cancellation"] }
-"firmware/apps/b0/src/release_fault.rs:crate::release_fault::impl Record::reason_name:retained-code:1,0:1" = { owner = "firmware/apps/b0", classes = ["software-invariant"] }
-"firmware/apps/b0/src/release_fault.rs:crate::release_fault::impl Record::reason_name:retained-code:2,0:1" = { owner = "firmware/apps/b0", classes = ["software-invariant"] }
-"firmware/apps/b0/src/release_fault.rs:crate::release_fault::impl Record::reason_name:retained-code:3,0:1" = { owner = "firmware/apps/b0", classes = ["software-invariant"] }
-"firmware/apps/b0/src/release_fault.rs:crate::release_fault::impl Record::reason_name:retained-code:4,range:1" = { owner = "firmware/apps/b0", classes = ["software-invariant"] }
-"firmware/apps/b0/src/release_fault.rs:crate::release_fault::impl Record::reason_name:retained-code:5,0:1" = { owner = "firmware/apps/b0", classes = ["unexpected-hardware", "software-invariant"] }
-"firmware/apps/b0/src/release_fault.rs:crate::release_fault::impl Record::reason_name:retained-code:6,1:1" = { owner = "firmware/apps/b0", classes = ["software-invariant"] }
-"firmware/apps/b0/src/release_fault.rs:crate::release_fault::impl Record::reason_name:retained-code:6,2:1" = { owner = "firmware/apps/b0", classes = ["software-invariant"] }
-"firmware/apps/b0/src/release_fault.rs:crate::release_fault::impl Record::reason_name:retained-code:6,3:1" = { owner = "firmware/apps/b0", classes = ["cancellation"] }
-"firmware/apps/b0/src/release_fault.rs:crate::release_fault::impl Record::reason_name:retained-code:6,4:1" = { owner = "firmware/apps/b0", classes = ["exhaustion"] }
-"firmware/apps/b0/src/release_fault.rs:crate::release_fault::impl Record::reason_name:retained-code:6,5:1" = { owner = "firmware/apps/b0", classes = ["software-invariant"] }
-"firmware/apps/b0/src/release_fault.rs:crate::release_fault::impl Record::reason_name:retained-code:6,6:1" = { owner = "firmware/apps/b0", classes = ["software-invariant"] }
-"firmware/apps/b0/src/release_fault.rs:crate::release_fault::impl Record::reason_name:retained-code:6,7:1" = { owner = "firmware/apps/b0", classes = ["software-invariant"] }
-"firmware/apps/b0/src/release_fault.rs:crate::release_fault::impl Record::reason_name:retained-code:6,8:1" = { owner = "firmware/apps/b0", classes = ["unexpected-hardware", "software-invariant"] }
-"firmware/apps/b0/src/release_fault.rs:crate::release_fault::impl Record::reason_name:retained-code:6,9:1" = { owner = "firmware/apps/b0", classes = ["software-invariant"] }
-"firmware/apps/b0/src/release_fault.rs:crate::release_fault::impl Record::reason_name:retained-code:6,10:1" = { owner = "firmware/apps/b0", classes = ["software-invariant"] }
+"firmware/apps/b0/src/release_fault.rs:crate::release_fault::impl Payload::reason_name:retained-code:1,0:1" = { owner = "firmware/apps/b0", classes = ["software-invariant"] }
+"firmware/apps/b0/src/release_fault.rs:crate::release_fault::impl Payload::reason_name:retained-code:2,0:1" = { owner = "firmware/apps/b0", classes = ["software-invariant"] }
+"firmware/apps/b0/src/release_fault.rs:crate::release_fault::impl Payload::reason_name:retained-code:3,0:1" = { owner = "firmware/apps/b0", classes = ["software-invariant"] }
+"firmware/apps/b0/src/release_fault.rs:crate::release_fault::impl Payload::reason_name:retained-code:4,range:1" = { owner = "firmware/apps/b0", classes = ["software-invariant"] }
+"firmware/apps/b0/src/release_fault.rs:crate::release_fault::impl Payload::reason_name:retained-code:5,0:1" = { owner = "firmware/apps/b0", classes = ["unexpected-hardware", "software-invariant"] }
+"firmware/apps/b0/src/release_fault.rs:crate::release_fault::impl Payload::reason_name:retained-code:6,10:1" = { owner = "firmware/apps/b0", classes = ["software-invariant"] }
+"firmware/apps/b0/src/release_fault.rs:crate::release_fault::impl Payload::reason_name:retained-code:6,1:1" = { owner = "firmware/apps/b0", classes = ["software-invariant"] }
+"firmware/apps/b0/src/release_fault.rs:crate::release_fault::impl Payload::reason_name:retained-code:6,2:1" = { owner = "firmware/apps/b0", classes = ["software-invariant"] }
+"firmware/apps/b0/src/release_fault.rs:crate::release_fault::impl Payload::reason_name:retained-code:6,3:1" = { owner = "firmware/apps/b0", classes = ["cancellation"] }
+"firmware/apps/b0/src/release_fault.rs:crate::release_fault::impl Payload::reason_name:retained-code:6,4:1" = { owner = "firmware/apps/b0", classes = ["exhaustion"] }
+"firmware/apps/b0/src/release_fault.rs:crate::release_fault::impl Payload::reason_name:retained-code:6,5:1" = { owner = "firmware/apps/b0", classes = ["software-invariant"] }
+"firmware/apps/b0/src/release_fault.rs:crate::release_fault::impl Payload::reason_name:retained-code:6,6:1" = { owner = "firmware/apps/b0", classes = ["software-invariant"] }
+"firmware/apps/b0/src/release_fault.rs:crate::release_fault::impl Payload::reason_name:retained-code:6,7:1" = { owner = "firmware/apps/b0", classes = ["software-invariant"] }
+"firmware/apps/b0/src/release_fault.rs:crate::release_fault::impl Payload::reason_name:retained-code:6,8:1" = { owner = "firmware/apps/b0", classes = ["unexpected-hardware", "software-invariant"] }
+"firmware/apps/b0/src/release_fault.rs:crate::release_fault::impl Payload::reason_name:retained-code:6,9:1" = { owner = "firmware/apps/b0", classes = ["software-invariant"] }
 
 # firmware/apps/b0/src/unconfigured.rs
 "firmware/apps/b0/src/unconfigured.rs:crate:terminal-binding:entry:1" = { owner = "firmware/apps/b0", classes = ["rust-panic"] }
@@ -761,8 +762,6 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 "firmware/probes/esp32s31-rx-chain/src/diagnostic.rs:crate::diagnostic:terminal-binding:exception_handler:1" = { owner = "firmware/probes/esp32s31-rx-chain", classes = ["cpu-exception"] }
 "firmware/probes/esp32s31-rx-chain/src/diagnostic.rs:crate::diagnostic::exception:terminal-entry:exception:1" = { owner = "firmware/probes/esp32s31-rx-chain", classes = ["cpu-exception"] }
 "firmware/probes/esp32s31-rx-chain/src/diagnostic.rs:crate::diagnostic::exception:terminal-reference:reset_recording:1" = { owner = "firmware/probes/esp32s31-rx-chain", classes = ["cpu-exception", "rust-panic"] }
-"firmware/probes/esp32s31-rx-chain/src/diagnostic.rs:crate::diagnostic::exception:retained-code:1:1" = { owner = "firmware/probes/esp32s31-rx-chain", classes = ["cpu-exception"] }
-"firmware/probes/esp32s31-rx-chain/src/diagnostic.rs:crate::diagnostic::panic:retained-code:2:1" = { owner = "firmware/probes/esp32s31-rx-chain", classes = ["rust-panic"] }
 "firmware/probes/esp32s31-rx-chain/src/diagnostic.rs:crate::diagnostic:retained-slot:retained_static:1" = { owner = "firmware/probes/esp32s31-rx-chain", classes = ["configuration-boot", "cpu-exception", "rust-panic"] }
 "firmware/probes/esp32s31-rx-chain/src/diagnostic.rs:crate::diagnostic::report_previous:terminal-reference:fatal_halt:1" = { owner = "firmware/probes/esp32s31-rx-chain", classes = ["cpu-exception", "rust-panic"] }
 

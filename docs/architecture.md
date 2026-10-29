@@ -536,20 +536,30 @@ The current mechanisms have narrower guarantees than the policy:
   repeated-boot-failure policy. The default CPU exception handler spins
   without capture/reset; HIL and RX-chain supply their own handlers.
   The ordinary executor idle wait's debugger check is not terminal policy.
-- Runtime panic/named-fault capture holds its boot-zeroed claim until reset;
-  other records have independent claims, some released before reset. There
-  is no common first-event guarantee. A fresh boot can overwrite an
-  unconsumed older record. Named runtime faults, PHY and IEEE 802.15.4
-  clear after successful output; ordinary panic consumption, Wi-Fi, B0
-  gate/release, HIL's separate fatal slot and RX-chain clear before reporting,
-  so output refusal can lose their diagnostics.
-- Session observations need not fit the retained codec. PHY retains only
-  reason/operation and registration epoch in 16 bytes; SAR RAW/ST, queue
-  lengths, invalid delay and foreign-reunion identities are not retained.
-  Wi-Fi retains its full RAW in 12 bytes; B0 gate uses 44 bytes, release
-  16 bytes, and PHY HIL's IEEE 802.15.4 record 44 bytes. HIL exception
-  diagnostics reread trap CSRs after stop; they are not an entry-time frame
-  snapshot of every register.
+- All staged fault slots store `oer-diagnostics::fault::Record`: layout
+  version 1, payload length, registry class, diagnostic domain/reason, captured
+  hart (or an explicit unavailable sentinel), context, up to 280 observation bytes, checksum and a completion marker.
+  This 316-byte numeric envelope has no previous-layout decoder. The codec is
+  transport-independent; it owns no storage or reset policy.
+- Staged runtime claims one terminal election in boot-initialized SRAM before
+  stopping other harts or running a recorder. Reentry returns `Reentered`;
+  a losing terminal skips the recorder and requests reset without waiting.
+  The winning claim remains held until reset. A panic hook borrows that same
+  claim for its additional observation slots; each committed slot remains held.
+  Commit publishes its completion marker last. A fresh boot may overwrite
+  stale, unconsumed bytes with its first terminal record.
+- Peek does not clear. Each reporter clears only after its complete output
+  succeeds. Ordinary panic renderers acknowledge the exact snapshot; HIL's
+  platform panic and postmortem remain until the complete boot-evidence frame
+  and CRLF reach the transport. A refused output retains the record.
+- Payloads preserve panic text, Wi-Fi RAW, all eight BLE gate words, BLE release
+  detail, IEEE 802.15.4 entry observations and completed service prefix, HIL
+  machine-state observations and postmortem data, and RX-chain observations.
+  PHY retains operation/epoch, SAR RAW/ST, queue lengths, invalid delay and
+  numeric foreign-reunion identities. None of these values grants ownership.
+  HIL exception diagnostics still reread trap CSRs after stop; they are not an
+  entry-time frame snapshot of every register. Trace and checkpoint rings have
+  independent, non-fault formats.
 - `NOLOAD` prevents startup initialization; it promises no hardware
   retention. `HW1_S31_RESET_20261026` in the register evidence observes a
   probe record surviving `SYS_SW_RST`. It establishes no retention for the
@@ -733,7 +743,7 @@ lifecycle operations the actor invokes; the Bluetooth driver implements it.
   Channel selection and retune also hold an owned transaction across every
   wait; their future owns `ChannelTransaction`, whose channel HAL lends
   its registers within that custody. The retained
-  cancellation record is 16 bytes and names the operation and epoch. The
+  cancellation payload names the operation and epoch in the common fault envelope. The
   actor cannot retune while its domain is transferred. `admit_maintenance` checks pending tracking state; it has no hard
   RF-window calendar. The actor enforces no one-period maximum deferral or
   shift counter, and queued requests can postpone a tick. Grant-protect
@@ -868,8 +878,7 @@ its model and conformance case.
   follows. Bank1 CC0/CC1/overflow have hw32 masked-W1C coverage; bank0/NRT
   and other feature lanes have vendor coverage, not hardware verification. The opaque task +0x4bc view is diagnostic-only and is never read by
   production. Both faults retain primary observations and task enables and
-  quarantine owners through `fatal::reset_recording`; B0 reuses its 44-byte
-  BLE gate slot. The separate CTE interrupt bank is outside this policy;
+  quarantine owners through `fatal::reset_recording`; B0 retains all eight gate observation words in the common fault envelope. The separate CTE interrupt bank is outside this policy;
   production has no enabled CTE interrupt consumer. These sequential reads
   neither prove producer shutdown nor name opaque causes.
 - **IEEE 802.15.4** (`protocols/ieee802154`, driver
@@ -882,7 +891,7 @@ its model and conformance case.
   reason on failure, without replay or rollback. The S31 driver's consuming
   ISR entry quarantines the MAC and DMA owners without release or reuse;
   the engine owns neither quarantine nor retained/reset policy. PHY HIL owns the
-  44-byte fault codec, retained slot and safe `fatal::reset_recording` call,
+  fault payload codec, common-format retained slot and safe `fatal::reset_recording` call,
   reporting the previous fault on the next boot and retaining it on output refusal.
   HAL owns PAC access, startup discard, DMA allocation and projection; its
   normal dependency closure contains neither engine nor driver. Chip knowledge

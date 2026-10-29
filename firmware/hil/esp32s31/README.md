@@ -92,7 +92,7 @@ after its `ResetAccepted` acknowledgement has been written. It records
 `FaultReason::HilRequested`, an explicit host-requested reset, not a hardware
 fault, and does not call the panic entry or the HIL panic hook. The existing
 slot's four observation words retain the request ID, acknowledgement sequence
-and session ID low/high words without adding retained memory. The next boot
+and session ID low/high words in the common fault envelope. The next boot
 prints `previous fault HilRequested:` with those words; both the
 `system-panic-reset` scenario and the requested-reset step of `system-watchdog`
 require that report for the acknowledged request and a software reset.
