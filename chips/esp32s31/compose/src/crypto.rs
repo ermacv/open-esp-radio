@@ -1,4 +1,4 @@
-//! The engine selection supplied to the HIL Wi-Fi station facade.
+//! The product engine selection supplied to the Wi-Fi facade and AES HIL.
 use oer_embassy_time::{EmbassyClock, WaitUntil};
 use oer_esp32s31_hal::peripherals::aes::{AesInterrupt, AesParts, AesRegisters};
 use oer_espressif_interrupt_table::Silent;

@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 
 mod payload;
 pub use payload::*;
+mod aes;
+pub use aes::*;
 
 crate::messages! {
     /// The image installs the HIL panic hook in its platform entry.
@@ -16,6 +18,8 @@ crate::messages! {
     topic WatchdogArmed = "system/watchdog/armed";
     endpoint DisableUsb = "system/usb/disable" => crate::system::UsbDisabled;
     topic UsbDisabled = "system/usb/disabled";
+    endpoint AesKeyUnwrap = "system/aes/key-unwrap" => AesKeyUnwrapped;
+    topic AesKeyUnwrapped = "system/aes/key-unwrapped";
 }
 
 /// Arm the SoC deadline watchdog and misbehave as `0` says. Tests the SoC

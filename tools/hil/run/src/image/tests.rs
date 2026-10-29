@@ -2,8 +2,9 @@ use super::*;
 
 #[test]
 fn image_classes_are_stable_and_do_not_use_workload_environment() {
-    assert_eq!(oer_hil_model::schema::image::ImageClass::ALL.len(), 8);
+    assert_eq!(oer_hil_model::schema::image::ImageClass::ALL.len(), 9);
     for (class, features) in [
+        (ImageClass::AesKeyUnwrap, "aes-key-unwrap"),
         (ImageClass::WifiStation, "wifi-station"),
         (ImageClass::SystemWatchdog, "system-watchdog"),
         (

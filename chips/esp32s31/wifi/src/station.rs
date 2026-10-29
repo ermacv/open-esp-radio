@@ -462,10 +462,7 @@ impl<W: Binding> rp::PortBody<W::Id, Backend<W::Id, W>> for Body<W> {
         })
     }
 }
-pub async fn serve<W: Binding>(
-    mut runner: StationRunner<W>,
-    profile: Profile<W>,
-) -> StationExit {
+pub async fn serve<W: Binding>(mut runner: StationRunner<W>, profile: Profile<W>) -> StationExit {
     let mut pending = runner.frontend.post(());
     let (poster, front) = core::future::poll_fn(|cx| pending.poll_answer(cx))
         .await

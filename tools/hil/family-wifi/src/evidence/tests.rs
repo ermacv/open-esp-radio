@@ -214,6 +214,32 @@ fn rekey_timer_or_duplicate_echoes_are_not_successful_traffic_or_rekey() {
         fails(&e, 2);
     }
 }
+
+#[test]
+fn arp_queued_ping_burst_is_a_pacing_failure_even_with_all_replies_and_a_valid_gtk_exchange() {
+    let mut e = full();
+    let t = e.traffic.as_mut().expect("traffic");
+    // Run 1793291035362-0014baa9: after neighbor deletion the PN=0
+    // broadcast was rejected; ARP retry released requests 3 and 4 together.
+    // Keep all 100 identities/replies and the successful GTK/ARP evidence.
+    let begin = t.echoes[0].at_us;
+    t.echoes[6].at_us = begin + 4_079_164;
+    t.echoes[7].at_us = begin + 4_083_954;
+    t.echoes[8].at_us = begin + 4_079_185;
+    t.echoes[9].at_us = begin + 4_086_271;
+    t.echoes.sort_by_key(|echo| echo.at_us);
+    let gates = evaluate(&e);
+    for gate in &gates {
+        if matches!(gate.id, "station-lifecycle" | "group-key-change") {
+            assert_eq!(
+                gate.reason,
+                Some("peer ICMP capture violates one-second request pacing")
+            );
+        } else {
+            assert!(gate.passed(), "{gate:?}");
+        }
+    }
+}
 #[test]
 fn empty_truncated_or_plaintext_air_is_invalid() {
     for mutation in 0..5 {

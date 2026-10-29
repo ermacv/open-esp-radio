@@ -26,6 +26,18 @@ oer_hil_agent::requests! {
     publishes [oer_hil_protocol::system::UsbJtagOff]
 }
 
+#[cfg(any(test, feature = "aes-key-unwrap"))]
+oer_hil_agent::requests! {
+    /// Radio-free product AES requests. Only public test material is sent.
+    pub enum AesRequests (sessions = false) {
+        Unwrap(oer_hil_protocol::system::AesKeyUnwrap),
+    }
+}
+#[cfg(any(test, feature = "aes-key-unwrap"))]
+oer_hil_agent::image_keys! {
+    pub(crate) AES_KEYS = [AesRequests, PanicHook]
+}
+
 /// The image entry's optional HIL panic hook, independent of its requests.
 pub(crate) struct PanicHook;
 
@@ -135,6 +147,7 @@ mod tests {
             (USB_JTAG_OFF_KEYS, true),
             (PANIC_RESET_KEYS, false),
             (STATION_KEYS, false),
+            (AES_KEYS, false),
         ] {
             assert_eq!(
                 keys.contains(system::PanicHook::KEY),
@@ -149,6 +162,10 @@ mod tests {
         assert_eq!(set(WATCHDOG_KEYS), expected(&[WATCHDOG, RESET]));
         assert_eq!(set(USB_JTAG_OFF_KEYS), expected(&[WATCHDOG, USB, RESET]));
         assert_eq!(set(PANIC_RESET_KEYS), expected(&[RESET]));
+        assert_eq!(
+            set(AES_KEYS),
+            expected(&[&[system::AesKeyUnwrap::KEY, system::AesKeyUnwrapped::KEY]])
+        );
         assert_eq!(
             set(STATION_KEYS),
             expected(&[

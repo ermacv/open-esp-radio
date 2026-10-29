@@ -79,6 +79,22 @@ pub struct Traffic {
     pub echoes: Vec<Echo>,
 }
 impl Traffic {
+    fn pacing_gap(&self) -> bool {
+        let mut previous = None;
+        self.echoes
+            .iter()
+            .filter(|e| !e.reply && e.source == self.router && e.destination == self.address)
+            .any(|e| {
+                let bad = previous.is_some_and(|at| {
+                    e.at_us
+                        .checked_sub(at)
+                        .is_none_or(|gap| !(750_000..=1_250_000).contains(&gap))
+                });
+                previous = Some(e.at_us);
+                bad
+            })
+    }
+
     fn pairs(&self, source: Ipv4Addr, destination: Ipv4Addr) -> bool {
         use std::collections::BTreeMap;
         if self.count == 0 || self.address == self.router {
@@ -347,7 +363,12 @@ pub fn evaluate(e: &Evidence) -> [Gate; 6] {
         ("protected-air-traffic", protected_air_traffic, "missing/truncated air window, zero protected station frames, capture loss or plaintext data"),
         ("reconnect", reconnect, "missing forced departure, fresh authorized handshake or peer ping 10/10 after reconnect"),
         ("key-conformance", key_conformance, "missing or mismatching required hardware/model key traces"),
-    ].map(|(id,pass,reason)| Gate { id, reason: (!pass).then_some(reason) })
+    ].map(|(id,pass,reason)| Gate {
+        id,
+        reason: (!pass).then_some(if matches!(id, "station-lifecycle" | "group-key-change") && e.traffic.as_ref().is_some_and(Traffic::pacing_gap) {
+            "peer ICMP capture violates one-second request pacing"
+        } else { reason }),
+    })
 }
 
 #[cfg(test)]

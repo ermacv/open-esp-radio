@@ -191,6 +191,10 @@ mod tests {
                 ImageClass::SystemWatchdog => (&watchdog, Some("watchdog")),
                 ImageClass::SystemPanicReset => (&panic, Some("panic-reset")),
                 ImageClass::DiagnosticUsbJtagOff => (&usb, Some("stand-recovery")),
+                ImageClass::AesKeyUnwrap => (
+                    &[system::AesKeyUnwrap::KEY, system::AesKeyUnwrapped::KEY],
+                    None,
+                ),
                 ImageClass::BootSmoke => (&[], None),
                 ImageClass::WifiStation => (wifi::KEYS, None),
                 ImageClass::DiagnosticPhy => (phy::KEYS, None),

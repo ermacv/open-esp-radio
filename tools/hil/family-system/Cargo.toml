@@ -9,6 +9,8 @@ publish = false
 description = "System HIL workloads: boot smoke, watchdog, panic reset and stand recovery"
 
 [dependencies]
+oer-crypto = { path = "../../../portable/crypto", features = ["test-support"] }
+oer-ieee80211-cipher = { path = "../../../protocols/ieee80211/cipher" }
 oer-lab-board = { path = "../../lab/board" }
 oer-hil-model = { path = "../model" }
 oer-hil-scenario = { path = "../scenario" }
