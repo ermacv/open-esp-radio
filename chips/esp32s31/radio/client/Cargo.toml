@@ -22,7 +22,6 @@ oer-esp32s31-phy = { path = "../../phy" }
 oer-ieee80211-wire = { path = "../../../../protocols/ieee80211/wire" }
 
 [dev-dependencies]
-embassy-futures = "0.1.2"
 oer-esp32s31-hal = { path = "../../hal", features = ["test-support"] }
 
 [lints]

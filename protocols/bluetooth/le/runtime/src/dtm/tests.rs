@@ -2,8 +2,7 @@
 
 use super::*;
 use oer_bluetooth_hci::{
-    self as hci, HciCommandPacket, HciControllerResponse,
-    bt_hci::cmd::{Cmd, Opcode, controller_baseband::Reset as HciReset, le::LeRand},
+    self as hci, Cmd, HciCommandPacket, HciControllerResponse, LeRand, Opcode, Reset as HciReset,
 };
 use oer_bluetooth_le_controller::dtm::Submission;
 use oer_bluetooth_le_controller::dtm::*;

@@ -24,7 +24,6 @@ oer-time = { path = "../../../portable/time" }
 owned-embassy-net = { package = "embassy-net", git = "https://github.com/ermacv/embassy.git", rev = "17f796c8ddb90ff510d995e24c2dcb758a97e8f8", features = ["medium-ethernet", "ipv4", "dhcpv4", "raw-ip", "icmp-ping-reply"] }
 
 [target.'cfg(target_arch = "riscv32")'.dependencies]
-embassy-sync = "0.8.0"
 heapless = "0.9.3"
 static_cell = { workspace = true }
 xarxa-driver = { git = "https://github.com/ermacv/xarxa.git", rev = "6f5ae91f9269ec3151d1aa61d0cfe0f3ae1b0798", features = ["async"] }

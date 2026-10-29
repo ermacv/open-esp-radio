@@ -9,10 +9,7 @@ pub(crate) type Rng = oer_esp32s31_hal::platform::Entropy<EmbassyClock>;
 use oer_bluetooth_hci::{
     CommandCompleteStatusEvent, HardwareErrorEvent, HciControllerResponse,
     VendorShutdownObservationEvent,
-    bt_hci::{
-        cmd::{Opcode, OpcodeGroup},
-        param::Status,
-    },
+    Opcode, OpcodeGroup, Status,
 };
 use oer_bluetooth_le_controller::dtm::{self, Entropy};
 use oer_bluetooth_le_port::{LePhase, TxPower};

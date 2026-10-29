@@ -8,13 +8,7 @@ use core::{
     pin::pin,
     task::{Context, Poll, Waker},
 };
-use oer_bluetooth_hci::{
-    self as hci,
-    bt_hci::{
-        PacketKind,
-        cmd::{OpcodeGroup, controller_baseband::Reset as HciReset},
-    },
-};
+use oer_bluetooth_hci::{self as hci, OpcodeGroup, PacketKind, Reset as HciReset};
 use oer_bluetooth_le_controller::dtm::EntropyUnavailable;
 use oer_bluetooth_le_model::{Backend, Environment, ModelCaps, Resources};
 use oer_radio_port::{conformance::registration::guarded, *};
@@ -190,7 +184,7 @@ impl<Id: SlotIdentity> PortBody<Id, Backend<Id>> for Body {
             Some(Response::Command(
                 hci::LeDtmCommandCompleteEvent::without_return_parameters(
                     HciReset::OPCODE,
-                    hci::bt_hci::param::Status::SUCCESS,
+                    hci::Status::SUCCESS,
                 ),
             ))
         } else {

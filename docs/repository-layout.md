@@ -136,6 +136,10 @@ named `hil` takes its role from the list.
   instead of a facade.
 - HAL production files that wait or poll are listed with exact counts:
   modules of `bluetooth`, `boot`, `ieee80211` and `phy`, and `platform.rs`.
+- Direct normal dependencies on `embassy-sync` remain in
+  `portable/cooperate`, `portable/embassy/net`, `protocols/hil/agent`,
+  `firmware/hil/esp32s31`, `firmware/hil/esp32s31-lower-mac` and
+  `firmware/hil/esp32s31-phy`.
 
 The layer tests enforce the normal and build dependency exceptions, the
 source-file inclusions and the HAL files in their own deviation lists. The

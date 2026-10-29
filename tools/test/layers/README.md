@@ -63,6 +63,30 @@ is gone both fail, so every list only shrinks:
 - `FIRMWARE_SOURCES_INCLUDED`: `#[path]` inclusions of `firmware/` sources
   from any other root;
 - `HAL_SEQUENCES`: HAL files that wait.
+- `EXTERNAL_ASYNC_CRATES`: direct normal `embassy-sync` edges in cooperate,
+  the network adapter, the HIL agent and the three HIL images.
+
+## External async crates
+
+`external_embassy_crates_follow_the_role_table` checks direct normal edges
+by package name, resolving `package =` and workspace inheritance and
+including optional and target-specific entries. Development and build edges
+are outside this rule; it does not inspect third-party dependency closures.
+
+| Package | Allowed home or role |
+| --- | --- |
+| `embassy-futures` | All except wire, cipher, core, core-side policy, facts, PAC and HAL |
+| `embassy-sync` | Development only, with the exact normal-edge deviations above |
+| `embassy-time` | `portable/embassy/time`, `firmware/hil/esp32s31` (time ABI check) |
+| `embassy-time-driver` | `chips/espressif/executor` |
+| `embassy-net`, `xarxa`, `xarxa-driver` | `portable/embassy/net`, `firmware/*` |
+| `trouble-host` | `portable/embassy/trouble`, `firmware/*` |
+| `bt-hci` | `protocols/bluetooth/hci`, `portable/embassy/trouble`, `tools/*` |
+
+`protocols_never_use_the_bt_hci_async_controller` scans Rust tokens in all
+protocol sources, including tests, for `bt_hci::controller` paths and grouped
+imports. Comments and strings do not count. This is a lexical check, not Rust
+name resolution.
 
 ## HAL atoms
 
