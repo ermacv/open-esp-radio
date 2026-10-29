@@ -53,6 +53,7 @@ mod model;
 mod rom;
 pub mod tracked;
 
+pub use irq_stack::IrqStackAllocation;
 pub use layers::{Layers, Source, chain, resolve};
 pub use model::*;
 

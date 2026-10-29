@@ -103,7 +103,10 @@ contracts: [Hardware memory](hardware-memory.md).
   `align16(ceil(bound * (100 + margin) / 100)) + guard`. The contract margin
   is 10%; `irq-stack-bytes` is the maximum, used without a proven bound and
   for diagnostic images. The second link is final: its bound plus margin must fit the
-  allocation minus guard, and its guard and bottom alignment are checked.
+  allocation minus any placed guard. The bound plus margin gates against the
+  maximum without guard bytes; a full guard that does not fit beside it is
+  omitted and reported. Guard frame coverage, unknown frames and guard storage
+  are reported, never gates. Present guards retain their NAPOT bottom alignment.
   A bound change above 64 bytes fails the build. See the
   [image linker](../tools/image/linker/README.md).
 - Task-stack roots, storage and free-space reserves are policy inputs:

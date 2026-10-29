@@ -121,13 +121,12 @@ fn link(
     })?;
     let mut inputs = oer_os_durable::inputs::Inputs::tracked();
     let spec = strict::Spec::read(spec_path, &mut inputs)?;
-    // The chip contract is the only source of per-hart guards, including
-    // the absolute symbols the runtime uses to program its debug trigger.
+    // The analysis-only first ELF reserves the policy maximum without guards.
+    // The final link supplies the selected physical guards from the chip contract.
     let profile = oer_chip_profile::Profile::load_with_inputs(&spec.root, &spec.chip, &mut inputs)?;
     if let Some(interrupts) = &profile.facts.interrupts {
-        for (hart, bytes) in &interrupts.irq_stack_guard_bytes {
-            arguments
-                .push(format!("--defsym=__runtime_cpu{hart}_irq_stack_guard_bytes={bytes}").into());
+        for hart in interrupts.irq_stack_guard_bytes.keys() {
+            arguments.push(format!("--defsym=__runtime_cpu{hart}_irq_stack_guard_bytes=0").into());
         }
     }
     let directory = spec_path
@@ -149,6 +148,11 @@ fn link(
     {
         std::fs::write(directory.join(strict::FRAGMENT), placement.fragment())?;
         for allocation in &placement.irq_stacks {
+            set_defsym(
+                arguments,
+                &format!("__runtime_cpu{}_irq_stack_guard_bytes", allocation.hart),
+                allocation.guard_bytes,
+            );
             set_defsym(
                 arguments,
                 &format!("IRQ_STACK_HART{}_BYTES", allocation.hart),

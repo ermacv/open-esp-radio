@@ -338,7 +338,7 @@ fn a_nonruntime_link_ignores_the_specification_and_writes_no_fragment() {
 }
 
 #[test]
-fn a_runtime_link_gets_each_guard_from_the_chip_contract_before_its_first_pass() {
+fn the_analysis_only_first_pass_omits_guards_until_the_bound_is_known() {
     for (chip, expected) in [("esp32s31", vec![(0, 4096), (1, 1024)])] {
         let directory = tempdir();
         let root = directory.path();
@@ -372,9 +372,9 @@ fn a_runtime_link_gets_each_guard_from_the_chip_contract_before_its_first_pass()
                 .filter(|argument| argument.starts_with("--defsym=__runtime_cpu"))
                 .collect();
             assert_eq!(guards.len(), expected.len());
-            for (hart, bytes) in &expected {
+            for (hart, _) in &expected {
                 assert!(guards.contains(
-                    &format!("--defsym=__runtime_cpu{hart}_irq_stack_guard_bytes={bytes}").as_str()
+                    &format!("--defsym=__runtime_cpu{hart}_irq_stack_guard_bytes=0").as_str()
                 ));
             }
             // Stop here: this test checks the contract handoff before any

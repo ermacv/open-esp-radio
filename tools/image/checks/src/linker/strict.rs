@@ -332,7 +332,7 @@ pub(super) fn analyze(
     Ok(placement)
 }
 
-/// The second link is final: verify its bounds and guards before fingerprinting.
+/// The second link is final: verify its bounds and linked allocations before fingerprinting.
 pub(super) fn verify(
     spec: &Spec,
     output: &Path,

@@ -37,7 +37,7 @@ impl Vectors {
             }
             let _ = writeln!(
                 text,
-                "ASSERT(IRQ_STACK_HART{hart}_BYTES == 0 || (IRQ_STACK_HART{hart}_BYTES > __runtime_cpu{hart}_irq_stack_guard_bytes && (__runtime_cpu{hart}_irq_stack_bottom % __runtime_cpu{hart}_irq_stack_guard_bytes) == 0), \"hart {hart} IRQ stack bottom must be guard aligned with usable storage\")"
+                "ASSERT(IRQ_STACK_HART{hart}_BYTES == 0 || __runtime_cpu{hart}_irq_stack_guard_bytes == 0 ? 1 : (IRQ_STACK_HART{hart}_BYTES > __runtime_cpu{hart}_irq_stack_guard_bytes && (__runtime_cpu{hart}_irq_stack_bottom % __runtime_cpu{hart}_irq_stack_guard_bytes) == 0), \"hart {hart} IRQ stack bottom must be guard aligned with usable storage\")"
             );
             if hart != self.boot_hart {
                 let _ = writeln!(

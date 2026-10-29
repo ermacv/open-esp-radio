@@ -37,9 +37,13 @@ hardware-class or strict-data findings in W0–W3/B0. The selector accounts for
 whole input sections and returns an error when they exceed the remaining SRAM;
 it never omits a handler to fit. Image budgets and limits are unchanged.
 
-The first link uses the contract maximum. A proven product bound selects
+The analysis-only first link uses the contract maximum with zero guards. A proven product bound selects
 `align16(ceil(bound * (100 + margin) / 100)) + guard`, with the 10% margin
-of the family layer (`chips/espressif/platform/family.toml`). A hart whose interrupt stack the image policy declares
+of the family layer (`chips/espressif/platform/family.toml`). The bound plus margin
+must fit the contract maximum without guard bytes. When the full NAPOT guard
+does not fit beside it, the allocation keeps the contract maximum and omits the
+guard. Guard coverage and unknown reachable frames are reported, never gates.
+A hart whose interrupt stack the image policy declares
 unused (`[core.N.interrupt_stack] unused = true`)
 gets 0 bytes in both links and takes no part in the sizing. Partial bounds,
 diagnostic and probe images retain the maximum for each used hart. Existing
@@ -49,9 +53,11 @@ diagnostic-lower-mac's 65536 bytes.
 One second link supplies `IRQ_STACK_HART<N>_BYTES` for each used hart
 alongside `strict-text.x`. Analysis of that final ELF must fit the bound plus
 the rounded-up margin inside its actual allocation minus guard. A lost proof,
-a bound change above 64 bytes, insufficient capacity, or a guard violation
-fails with figures; there is no third link or fallback to the maximum.
-Linker assertions and the checks enforce the NAPOT alignment of each bottom.
+a bound change above 64 bytes or insufficient capacity fails with figures; there is no third link or fallback to the maximum.
+The final ELF carries the actual guard size, including zero; the runtime arms
+only a present guard. Linker assertions and checks enforce the NAPOT alignment
+of each present guard. `Interrupt guards` reports negative spare and unknown frames
+without failing build, run or analysis.
 The first MTVT table requires 256-byte alignment, so `.isr.text` starts on
 that boundary; the gap after `.irq_stacks` is at most 255 bytes and is not
 included in either section.

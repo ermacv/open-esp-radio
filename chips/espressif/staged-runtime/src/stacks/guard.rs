@@ -8,9 +8,31 @@ pub(super) const fn napot_guard(bottom: usize, bytes: usize) -> Result<usize, cr
     Ok(bottom | (bytes / 2 - 1))
 }
 
+/// The linker may omit the IRQ guard to preserve the bound plus margin.
+pub(super) fn arm_interrupt_guard(
+    bottom: usize,
+    bytes: usize,
+    arm: impl FnOnce(usize),
+) -> Result<(), crate::BootError> {
+    if bytes != 0 {
+        arm(napot_guard(bottom, bytes)?);
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::napot_guard;
+
+    #[test]
+    fn an_omitted_interrupt_guard_does_not_arm_a_trigger() -> Result<(), crate::BootError> {
+        let mut armed = None;
+        super::arm_interrupt_guard(0x2000_0000, 0, |value| armed = Some(value))?;
+        assert_eq!(armed, None);
+        super::arm_interrupt_guard(0x2000_0000, 4096, |value| armed = Some(value))?;
+        assert_eq!(armed, Some(napot_guard(0x2000_0000, 4096)?));
+        Ok(())
+    }
 
     #[test]
     fn covers_exactly_the_guard_at_the_stack_bottom() {

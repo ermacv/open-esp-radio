@@ -294,16 +294,18 @@ in cached memory (flash, PSRAM) are listed. It writes all of this, each
 hart's levels and their critical paths to `interrupt-stack.txt`.
 Each hart's exception bound (including its entry frame) plus the largest
 own function frame reached at any of its levels, including the exception
-and executor tasks, must fit that hart's `irq-stack-guard-bytes` in the chip's
+and executor tasks, is compared with that hart's `irq-stack-guard-bytes` in the chip's
 `chip.toml`: S31 hart 0 has 4096 bytes and hart 1 has 1024.
-The image linker exports `__runtime_cpu{hart}_irq_stack_guard_bytes` from
-this contract; the runtime reads that absolute symbol to program its trigger.
+Guard findings are reported, never gates in build, run or analysis. The image
+linker exports the actual physical guard as `__runtime_cpu{hart}_irq_stack_guard_bytes`;
+the runtime reads that absolute symbol and arms a trigger only for a nonzero guard.
 The IRQ stacks occupy a separate NOLOAD section at the start of internal
-SRAM, before ISR code. Linker assertions require each stack bottom to align
-to its guard; the runtime also rejects misalignment and programs the guard
-at that exact bottom.
+SRAM, before ISR code. A placed guard must be NAPOT-aligned at its stack bottom;
+when the full guard cannot fit beside the bound plus margin within the maximum,
+or contiguous stack placement cannot align it, it is omitted and reported.
 There is no shared guard-size constant. `irq-stack-bytes` is a maximum:
-proven product stacks use `align16(ceil(bound * 1.10)) + guard`, with S31
+the bound plus margin must fit without guard bytes. Proven product stacks use
+`align16(ceil(bound * 1.10)) + guard` when the full guard fits, with S31
 hart 0 additionally aligned to hart 1's guard. Partial, diagnostic and probe
 stacks retain the effective contract maximum. `interrupt-stack.txt` reports
 the bound, percentage margin, guard, allocated bytes and source per hart;
@@ -316,8 +318,9 @@ catches a write into the guard, not a change of `sp`: a function may lower
 The report lists the guard, exception bound, largest frame and function,
 their sum and the spare bytes for each hart. A frame on a path other than
 the deepest path still counts: reachability is the union of `Bound::reached`
-at every level and the exception. `Required::Product` rejects a guard violation;
-`Required::Diagnostic` warns, also naming any function whose frame is unknown.
+at every level and the exception. Both `Required::Product` and
+`Required::Diagnostic` report coverage violations and functions with unknown frames;
+negative spare remains visible in the table.
 Its placement summary lines separate strict code in cached memory by hart/level
 from executor task code in PSRAM and name the task roots. A level's class is
 its table entries' (`oer_espressif_interrupt_table::Class`): the level of an `Executor`

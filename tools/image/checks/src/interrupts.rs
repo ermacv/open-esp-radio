@@ -359,7 +359,7 @@ impl InterruptStacks {
                 }
             };
             let percent = self.contract.interrupts.irq_stack_margin_percent;
-            let usable = self.usable_bytes(hart.core);
+            let usable = self.usable_bytes(hart.core)?;
             if self.contract.interrupts.irq_stack_with_margin(bytes)? > u64::from(usable) {
                 return Err(format!(
                     "hart {}'s interrupt stack needs {bytes} bytes and a {}% margin, more than \
@@ -372,15 +372,10 @@ impl InterruptStacks {
                 .into());
             }
             if let Some(problem) = self.guard_problem(hart) {
-                match required {
-                    Required::Product => {
-                        return Err(format!("{problem}:\n{}", self.render()).into());
-                    }
-                    Required::Diagnostic => warnings.push(format!(
-                        "{problem} (diagnostic image, reported only):\n{}",
-                        self.render_guards()
-                    )),
-                }
+                warnings.push(format!(
+                    "{problem} (reported only):\n{}",
+                    self.render_guards()
+                ));
             }
         }
         Ok(warnings)
@@ -603,7 +598,8 @@ impl InterruptStacks {
                 hart.core,
                 hart.bytes
                     .map_or(format!("{} + ?", hart.partial), |bytes| bytes.to_string()),
-                self.usable_bytes(hart.core),
+                self.usable_bytes(hart.core)
+                    .map_or_else(|error| error.to_string(), |bytes| bytes.to_string()),
                 crate::stack::bound_state(
                     hart.bytes,
                     &hart.assumptions(),
@@ -1207,7 +1203,7 @@ fn level_writers(
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     #[test]
     fn a_table_entry_for_a_core_without_an_interrupt_stack_is_refused() {
         let entry = |core| TableEntry {
@@ -1279,7 +1275,7 @@ mod tests {
         }
     }
 
-    pub(super) fn partial(partial: u64) -> InterruptStacks {
+    pub(crate) fn partial(partial: u64) -> InterruptStacks {
         let bound = oer_image_stack::Bound {
             root: 0,
             bytes: None,
@@ -1357,10 +1353,11 @@ mod tests {
             LinkedStack {
                 bottom: u64::from(stacks.contract.memory.sram.origin()),
                 bytes: product.bytes,
+                guard_bytes: product.guard_bytes,
                 from_bound: true,
             },
         );
-        assert_eq!(stacks.usable_bytes(0), 2048);
+        assert_eq!(stacks.usable_bytes(0).ok(), Some(2048));
         assert!(stacks.check(Required::Product).is_ok());
         assert!(
             stacks
@@ -1589,6 +1586,7 @@ mod tests {
             LinkedStack {
                 bottom: 0,
                 bytes: stacks.contract.interrupts.irq_stack_bytes,
+                guard_bytes: 4096,
                 from_bound: true,
             },
         );
