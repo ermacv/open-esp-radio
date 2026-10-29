@@ -58,6 +58,9 @@ system these rules serve.
   A hardware state is impossible only with a `SOURCE:` proof naming the
   model, revision, preconditions, event order and limits; a cited value alone
   proves no lifecycle invariant. Otherwise return a handled typed error.
+  An impossible state returns a named fault retaining its source observations;
+  its owners stay quarantined, then the image calls safe `fatal::reset_recording`
+  to retain the reason for the next boot to print. A watchdog is not this mechanism.
   Only the image or HAL owner makes a terminal decision: it may record/reset
   after a reachable handled error when safe continuation is not established,
   without `panic!` or an impossibility claim. Keep unconfirmed owners quarantined.
