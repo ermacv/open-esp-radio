@@ -45,19 +45,18 @@ impl<W: Binding> Composition for ImageComposition<W> {
 }
 pub struct StationComposition<W: Binding, Id: SlotIdentity>(PhantomData<(W, Id)>);
 const MANAGEMENT: u8 = 4;
+#[cfg(oer_trace)]
 pub(crate) static TARGET: oer_memory::OnceValue<([u8; 6], Option<[u8; 6]>, u8)> =
     oer_memory::OnceValue::new();
+#[cfg(oer_trace)]
 fn observe_terminal<'id, W: Binding, Id: SlotIdentity + 'id>(
     terminal: &LowerMacTerminal<'id, Family<Id, W>>,
 ) {
-    #[cfg(not(oer_trace))]
-    let _ = terminal;
-    #[cfg(oer_trace)]
     if let LowerMacTerminal::TxCompleted(TxCompleted::Single(completed)) = terminal
         && matches!(completed.outcome(), TxOutcome::Indeterminate(_))
     {
         let observer = W::DriverObserver::default();
-        oer_trace::observe!(observer, crate::observation::Observation::Indeterminate);
+        oer_trace::observe!(observer, oer_ieee80211_instrumentation::TxIndeterminate);
     }
 }
 impl<W: Binding, Id: SlotIdentity> StationPort for StationComposition<W, Id> {
@@ -89,6 +88,7 @@ impl<W: Binding, Id: SlotIdentity> StationPort for StationComposition<W, Id> {
         Self: 'id,
         Id: 'id,
     {
+        #[cfg(oer_trace)]
         observe_terminal::<W, Id>(&terminal);
         terminal
     }
@@ -116,6 +116,7 @@ impl<W: Binding, Id: SlotIdentity> StationPort for StationComposition<W, Id> {
         Self: 'id,
         Id: 'id,
     {
+        #[cfg(oer_trace)]
         if let LowerMacEvent::Terminal(terminal) = &event {
             observe_terminal::<W, Id>(terminal);
         }
@@ -133,7 +134,7 @@ impl<W: Binding, Id: SlotIdentity> StationPort for StationComposition<W, Id> {
                         let observer = W::DriverObserver::default();
                         oer_trace::observe!(
                             observer,
-                            crate::observation::Observation::Authenticated
+                            oer_ieee80211_instrumentation::StationAuthenticated
                         );
                     }
                 }
@@ -147,9 +148,9 @@ impl<W: Binding, Id: SlotIdentity> StationPort for StationComposition<W, Id> {
                         let observer = W::DriverObserver::default();
                         oer_trace::observe!(
                             observer,
-                            crate::observation::Observation::Beacon(
-                                (EmbassyClock.now().as_micros() / 1000) as u32
-                            )
+                            oer_ieee80211_instrumentation::StationBeacon {
+                                at_millis: (EmbassyClock.now().as_micros() / 1000) as u32
+                            }
                         );
                     }
                 }
@@ -193,7 +194,7 @@ impl<W: Binding, M: SignalMetadata> RateSelection<M, port::Ack> for Rates<W> {
         <EspressifRateSelection<Caps> as RateSelection<M, port::Ack>>::plan(&self.0, frame, carried)
     }
     fn associated(&mut self, peer: &RatePeer, response: &M) {
-        oer_trace::observe!(self.1, crate::observation::Observation::Associated);
+        oer_trace::observe!(self.1, oer_ieee80211_instrumentation::StationAssociated);
         <EspressifRateSelection<Caps> as RateSelection<M, port::Ack>>::associated(
             &mut self.0,
             peer,
@@ -209,16 +210,18 @@ impl<W: Binding, M: SignalMetadata> RateSelection<M, port::Ack> for Rates<W> {
         frame: FrameRates,
         completion: &SingleOutcome<port::Ack, D>,
     ) {
+        #[cfg(oer_trace)]
         if frame == FrameRates::Control
             && matches!(completion, TxOutcome::Ended(SingleEnd::Delivered { .. }))
         {
-            oer_trace::observe!(self.1, crate::observation::Observation::ControlDelivered);
+            oer_trace::observe!(self.1, oer_ieee80211_instrumentation::ControlDelivered);
         }
+        #[cfg(oer_trace)]
         if matches!(
             completion,
             TxOutcome::Indeterminate(IndeterminateCause::HardwareTimeout)
         ) {
-            oer_trace::observe!(self.1, crate::observation::Observation::HardwareTimeout);
+            oer_trace::observe!(self.1, oer_ieee80211_instrumentation::TxHardwareTimeout);
         }
         <EspressifRateSelection<Caps> as RateSelection<M, port::Ack>>::completed(
             &mut self.0,

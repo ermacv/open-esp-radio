@@ -117,6 +117,7 @@ pub struct Config {
     pub(crate) channel: u8,
     pub(crate) country: [u8; 2],
     pub(crate) cap_dbm: i8,
+    #[cfg(oer_trace)]
     pub(crate) target: Option<[u8; 6]>,
     pub(crate) all_channels: bool,
     pub(crate) domain: RegulatoryDomain,
@@ -127,7 +128,7 @@ impl Config {
         channel: u8,
         country: [u8; 2],
         cap_dbm: i8,
-        target: Option<[u8; 6]>,
+        #[cfg(oer_trace)] target: Option<[u8; 6]>,
         all_channels: bool,
     ) -> Result<Self, InitializationError> {
         let domain =
@@ -145,6 +146,7 @@ impl Config {
             channel,
             country,
             cap_dbm,
+            #[cfg(oer_trace)]
             target,
             all_channels,
             domain,
@@ -378,6 +380,7 @@ pub fn station<W: Binding>(
         .channels
         .split()
         .unwrap_or_else(|_| W::fail(InitializationError::Control));
+    #[cfg(oer_trace)]
     let _ = service::TARGET.set((address, config.target, config.channel));
     let output = control.inner.events(Output { events });
     let ready = storage

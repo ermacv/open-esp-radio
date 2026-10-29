@@ -18,7 +18,7 @@ pub struct Observed;
 impl oer_trace::Observer for Observed {
     fn event<E: oer_trace::Event + Copy + 'static>(&self, event: E) {
         oer_trace::Observer::event(&SERVICE_TALLY, event);
-        use wifi::observation::Observation;
+        use oer_ieee80211_instrumentation::StationActivity as Observation;
         match Observation::of(&event) {
             Some(Observation::Authenticated) => AUTHENTICATED.store(true, Relaxed),
             Some(Observation::Beacon(t)) => LAST_BEACON_MS.store(t, Relaxed),

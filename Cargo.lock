@@ -2929,6 +2929,10 @@ dependencies = [
 name = "oer-ieee80211-instrumentation"
 version = "0.1.0"
 dependencies = [
+ "oer-hil-agent",
+ "oer-hil-protocol",
+ "oer-time",
+ "oer-time-virtual",
  "oer-trace",
 ]
 

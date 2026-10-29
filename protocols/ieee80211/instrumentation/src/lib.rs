@@ -27,6 +27,7 @@
 //! keeps a count of these events, and an image without `cfg(oer_trace)`
 //! compiles none of them into its owners.
 
+mod activity;
 mod arp;
 mod esp_now;
 mod event;
@@ -36,6 +37,10 @@ mod recorder;
 mod service;
 mod station;
 
+pub use activity::{
+    ControlDelivered, StationActivity, StationAssociated, StationAuthenticated, StationBeacon,
+    TxHardwareTimeout, TxIndeterminate, TxQueueCollision,
+};
 pub use arp::{ArpAddresses, ArpOperation, ArpReceived, ArpTransmitted};
 pub use esp_now::{
     EspNowPeerTableChanged, EspNowPeersCleared, EspNowReplay, EspNowTxPacketNumber,

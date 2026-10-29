@@ -15,7 +15,7 @@ these channels:
 | Channel | Owner | Events |
 | --- | --- | --- |
 | `STATION` | station core (`oer-ieee80211-sta`) | `TokenLost`, `DataMsduLost`, `RsnInputDropped`, `ScanBssObserved` |
-| `SERVICE` | station service (`oer-ieee80211-runtime`) | `PortEventsLost`, `RxFrameDropped`, `RxMsduRefused`, `TxUnsent`, `TxMsduTooLong`, `GroupKeyInstalled` |
+| `SERVICE` | station service (`oer-ieee80211-runtime`) and station composition | `PortEventsLost`, `RxFrameDropped`, `RxMsduRefused`, `TxUnsent`, `TxMsduTooLong`, `GroupKeyInstalled`, station activity events (below) |
 | `ARP` | station service | `ArpAddresses` followed by `ArpTransmitted` or `ArpReceived` |
 | `ESP_NOW` | ESP-NOW encrypted peer table | `EspNowPeerTableChanged`, `EspNowPeersCleared`, `EspNowTxPacketNumber`, `EspNowReplay` |
 
@@ -24,6 +24,18 @@ An owner reports with `oer_trace::observe!` to its `O: Observer`, by default
 count of these events: a count is the number of events of a kind, which the
 image's collector keeps. `ArpAddresses::parse` projects the RFC 826 fields of
 an ARP MSDU inside the owner's observation point.
+
+Station activity has independent kinds 22..=28 on `SERVICE`:
+`StationAuthenticated`, `StationBeacon`, `StationAssociated`,
+`TxIndeterminate`, `TxHardwareTimeout`, `TxQueueCollision` and
+`ControlDelivered`. Each is part of `Observation`, `StationEvents` and
+`Recorder`. `StationActivity::of` projects these events for image-local
+correlation without depending on the facade. `TxIndeterminate` denotes every
+unknown single-TX outcome; `TxHardwareTimeout` denotes only a timeout reported
+to rate selection. `TxQueueCollision` denotes one sampled pending EDCA queue.
+A beacon carries wrapping milliseconds from the image's monotonic clock.
+Collectors retain these distinct meanings and own their counts. The generic
+capture service counts each kind independently of filtered or lost history.
 
 ## Collectors and decoders
 

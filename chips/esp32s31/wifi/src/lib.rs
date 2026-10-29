@@ -217,7 +217,6 @@ pub struct Connection<'a> {
 
 #[cfg(target_arch = "riscv32")]
 mod chip;
-pub mod observation;
 pub mod policy;
 #[cfg(target_arch = "riscv32")]
 #[doc(hidden)]
