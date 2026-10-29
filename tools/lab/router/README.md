@@ -179,6 +179,9 @@ run, and a second holder is refused, naming the first.
 
 ## Isolated station network
 
+The neutral `station` module owns the network used by W4. Its deployed UCI,
+bridge and lease-file identifiers remain stable across runs.
+
 The station profile assigns the selected BSS to an isolated `10.231.0.0/24` network, with
 OpenWrt at `10.231.0.1` as DHCP server, DHCP router and the sole ping endpoint.
 The existing LAN, its management address and all other network sections are
@@ -190,14 +193,14 @@ wireless radio/BSS. These are the complete settings it owns:
 
 | Section | Settings |
 | --- | --- |
-| `network.oer_station_device` | Empty bridge, no physical ports, `bridge_empty=1`, IPv6 disabled |
-| `network.oer_station` | Bridge device, static `10.231.0.1`, netmask `255.255.255.0`, `delegate=0`, `defaultroute=0` |
-| `dhcp.oer_station_dns` | Dedicated dnsmasq, bound only to station and excluding loopback; `nonwildcard=1`, `port=0`, `localuse=0`, `noresolv=1`, `nohosts=1`, `readethers=0`, `authoritative=1`, lease file `/tmp/oer-station.leases` |
-| `dhcp.oer_station` | station interface and dnsmasq instance, start 100, limit 100, lease 15 minutes, `force=1`, `ignore=0`, DHCP option 3 = `10.231.0.1`, option 6 suppressed; RA, DHCPv6 and NDP disabled |
-| `firewall.oer_station` | station network/bridge only, input REJECT, output ACCEPT, forward REJECT, IPv4/IPv6 masquerade disabled |
-| `firewall.oer_station_dhcp` | Accept IPv4 UDP 68→67 from station to OpenWrt |
-| `firewall.oer_station_ping` | Accept IPv4 echo requests from station only to `10.231.0.1` |
-| `firewall.oer_station_out`, `firewall.oer_station_in` | Reject all forwarding out of and into station, placed first among configured rules |
+| `network.oer_w3_device` | Empty bridge, no physical ports, `bridge_empty=1`, IPv6 disabled |
+| `network.oer_w3` | Bridge device, static `10.231.0.1`, netmask `255.255.255.0`, `delegate=0`, `defaultroute=0` |
+| `dhcp.oer_w3_dns` | Dedicated dnsmasq, bound only to station and excluding loopback; `nonwildcard=1`, `port=0`, `localuse=0`, `noresolv=1`, `nohosts=1`, `readethers=0`, `authoritative=1`, lease file `/tmp/oer-w3.leases` |
+| `dhcp.oer_w3` | station interface and dnsmasq instance, start 100, limit 100, lease 15 minutes, `force=1`, `ignore=0`, DHCP option 3 = `10.231.0.1`, option 6 suppressed; RA, DHCPv6 and NDP disabled |
+| `firewall.oer_w3` | station network/bridge only, input REJECT, output ACCEPT, forward REJECT, IPv4/IPv6 masquerade disabled |
+| `firewall.oer_w3_dhcp` | Accept IPv4 UDP 68→67 from station to OpenWrt |
+| `firewall.oer_w3_ping` | Accept IPv4 echo requests from station only to `10.231.0.1` |
+| `firewall.oer_w3_out`, `firewall.oer_w3_in` | Reject all forwarding out of and into station, placed first among configured rules |
 | Selected radio | Stand channel, HT20, beacon interval 100 TU, enabled, HE disabled |
 | Selected BSS | Generated SSID, enabled, visible, WPA2-CCMP encryption, station network, client isolation enabled |
 

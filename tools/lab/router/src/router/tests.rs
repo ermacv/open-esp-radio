@@ -384,7 +384,7 @@ fn w4_scripted_router_applies_wpa2_ccmp_ht20_without_pmf_and_short_gtk_rekey() {
         "wireless.lab_ap.wpa_group_rekey=30",
         "wireless.radio9.htmode=HT20",
         "wireless.radio9.ieee80211ax=0",
-        "wireless.lab_ap.network=oer_station",
+        "wireless.lab_ap.network=oer_w3",
         "wireless.lab_ap.isolate=1",
     ] {
         assert!(script.contains(setting));

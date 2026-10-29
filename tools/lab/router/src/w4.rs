@@ -261,9 +261,8 @@ mod tests {
             process::{ExitStatus, Output},
         };
         let ip = "10.231.0.100".parse().expect("IP");
-        let entry = |state: &str| {
-            format!("10.231.0.100 dev br-oer-station lladdr 02:00:00:00:00:01 {state}\n")
-        };
+        let entry =
+            |state: &str| format!("10.231.0.100 dev br-oer-w3 lladdr 02:00:00:00:00:01 {state}\n");
         // (answers as (exit, stdout, stderr), success, flush attempted,
         // recorded states)
         let cases: Vec<(Vec<(i32, String, &str)>, bool, bool, Vec<Option<&str>>)> = vec![
@@ -335,16 +334,16 @@ mod tests {
                         stderr: stderr.as_bytes().to_vec(),
                     })
                 },
-                "br-oer-station",
+                "br-oer-w3",
                 ip,
                 |state| states.push(state.state.clone()),
             );
             assert_eq!(result.is_ok(), success);
             assert!(answers.is_empty());
             assert_eq!(
-                scripts.iter().any(
-                    |script| script.contains(" neigh flush to 10.231.0.100 dev br-oer-station")
-                ),
+                scripts
+                    .iter()
+                    .any(|script| script.contains(" neigh flush to 10.231.0.100 dev br-oer-w3")),
                 flushed
             );
             assert!(scripts.iter().all(|script| !script.contains("/dev/null")));
@@ -357,7 +356,7 @@ mod tests {
                 assert!(error.contains("RTNETLINK diagnostic"));
             }
         }
-        for interface in ["", "br-oer-station;opkg", "-i"] {
+        for interface in ["", "br-oer-w3;opkg", "-i"] {
             assert!(
                 refresh_neighbor(
                     |_| panic!("invalid input never executes"),
