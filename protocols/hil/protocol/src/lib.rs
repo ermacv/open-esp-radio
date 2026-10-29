@@ -58,15 +58,21 @@ pub use key::{Endpoint, Key, Kind, Message};
 
 // The modules: each is a path prefix and a directory.
 pub mod base;
+pub mod lifecycle;
 pub mod system;
 pub mod telemetry;
 
 /// The framework's descriptors; the host composes radio dictionaries separately.
 #[cfg(feature = "registry")]
 pub fn registry() -> impl Iterator<Item = &'static MessageInfo> {
-    [base::MESSAGES, system::MESSAGES, telemetry::MESSAGES]
-        .into_iter()
-        .flatten()
+    [
+        base::MESSAGES,
+        lifecycle::MESSAGES,
+        system::MESSAGES,
+        telemetry::MESSAGES,
+    ]
+    .into_iter()
+    .flatten()
 }
 
 #[cfg(feature = "registry")]

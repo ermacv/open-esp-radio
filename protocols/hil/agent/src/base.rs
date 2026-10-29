@@ -263,11 +263,9 @@ fn serve(frame: &Frame<'_>, boot_id: u64, hello: Hello) -> Option<Served> {
 /// oer_hil_agent::requests! {
 ///     /// The requests this image serves.
 ///     pub enum Request (sessions = false) {
-///         Watchdog(oer_hil_protocol::system::WatchdogTest),
-///         #[cfg(feature = "system-panic-reset")]
-///         Panic(oer_hil_protocol::system::InjectPanic),
+///         Reset(oer_hil_protocol::lifecycle::RequestReset),
 ///     }
-///     publishes [oer_hil_protocol::system::UsbDisabled]
+///     publishes [oer_hil_protocol::base::Hello]
 /// }
 /// ```
 ///
@@ -327,8 +325,8 @@ macro_rules! requests {
 ///
 /// ```ignore
 /// oer_hil_agent::image_keys! {
-///     /// What the watchdog image serves.
-///     pub(crate) KEYS = [WatchdogRequest, PanicRequest]
+///     /// What the reset-capable image serves.
+///     pub(crate) KEYS = [oer_hil_agent::lifecycle::Request]
 /// }
 /// ```
 #[macro_export]
@@ -376,28 +374,6 @@ impl<A: Requests, B: Requests> Requests for Either<A, B> {
         A::decode(frame)
             .map(|request| request.map(Self::First))
             .or_else(|| B::decode(frame).map(|request| request.map(Self::Second)))
-    }
-}
-
-requests! {
-    /// The system watchdog images' one request.
-    pub enum WatchdogRequest (sessions = false) {
-        Test(oer_hil_protocol::system::WatchdogTest),
-    }
-}
-
-requests! {
-    /// The USB Serial/JTAG-off image's request beside the watchdog's.
-    pub enum UsbRequest (sessions = false) {
-        Disable(oer_hil_protocol::system::DisableUsb),
-    }
-    publishes [oer_hil_protocol::system::UsbJtagOff]
-}
-
-requests! {
-    /// The panic-reset image's one request.
-    pub enum PanicRequest (sessions = false) {
-        Inject(oer_hil_protocol::system::InjectPanic),
     }
 }
 

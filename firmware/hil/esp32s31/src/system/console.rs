@@ -12,7 +12,8 @@ use oer_hil_protocol::base::{RejectReason, Rejected};
 use oer_hil_protocol::system::{WatchdogArmed, WatchdogTest, WatchdogTestMode};
 
 use crate::transport::CONSOLE;
-use oer_hil_agent::base::{Either, PanicRequest, WatchdogRequest};
+use oer_hil_agent::{base::Either, lifecycle::Request as ResetRequest};
+use crate::services::WatchdogRequest;
 
 /// The SoC deadline service on timer group 1's main watchdog, measured on
 /// the image clock.
@@ -88,9 +89,9 @@ async fn run(usb: crate::transport::Usb, boot: u64) {
         boot,
         crate::services::WATCHDOG_KEYS,
         0,
-        |request, decoded: Either<WatchdogRequest, PanicRequest>| match decoded {
+        |request, decoded: Either<WatchdogRequest, ResetRequest>| match decoded {
             Either::First(test) => queue_test(request, test),
-            Either::Second(PanicRequest::Inject(_)) => super::panic::queue(request),
+            Either::Second(ResetRequest::Reset(_)) => super::panic::queue(request),
         },
     )
     .await
@@ -98,17 +99,17 @@ async fn run(usb: crate::transport::Usb, boot: u64) {
 
 #[cfg(feature = "usb-jtag-off")]
 async fn run(usb: crate::transport::Usb, boot: u64) {
-    use oer_hil_agent::base::UsbRequest;
+    use crate::services::UsbRequest;
     crate::transport::serve(
         usb,
         boot,
         crate::services::USB_JTAG_OFF_KEYS,
         0,
-        |request, decoded: Either<Either<WatchdogRequest, UsbRequest>, PanicRequest>| match decoded
+        |request, decoded: Either<Either<WatchdogRequest, UsbRequest>, ResetRequest>| match decoded
         {
             Either::First(Either::First(test)) => queue_test(request, test),
             Either::First(Either::Second(UsbRequest::Disable(_))) => usb_off::queue(request),
-            Either::Second(PanicRequest::Inject(_)) => super::panic::queue(request),
+            Either::Second(ResetRequest::Reset(_)) => super::panic::queue(request),
         },
     )
     .await

@@ -798,7 +798,7 @@ the existing HAL owner.
   are compared by hand with `tools/vendor`; a scenario prints its verdict and
   keeps nothing.
 
-HIL framing and lifecycle (`protocols/hil/protocol`) and its device agent depend on no radio dictionary. Domain message codecs live beside their owners; the host registry composes their descriptors and reviewed wire locks. Radio observation values live in `chips/esp32s31/instrumentation`; its sibling `instrumentation-hil` owns the existing bounded radio-health transport and capture store. PHY capture/hold/cache experiment codecs live in `chips/esp32s31/phy-probe`, and lower-MAC conformance codecs beside the port in `protocols/ieee80211/conformance-control`. These host-safe contracts contain no hardware implementation.
+HIL framing and lifecycle (`protocols/hil/protocol`) and its device agent depend on no radio dictionary. The optional agent lifecycle service acknowledges a requested reset and returns its correlation only after the console write completes; the image owns the retained reason and hardware reset. Watchdog fault injections and USB pad switching are image services. Domain message codecs live beside their owners; the host registry composes their descriptors and reviewed wire locks. Radio observation values live in `chips/esp32s31/instrumentation`; its sibling `instrumentation-hil` owns the existing bounded radio-health transport and capture store. PHY capture/hold/cache experiment codecs live in `chips/esp32s31/phy-probe`, and lower-MAC conformance codecs beside the port in `protocols/ieee80211/conformance-control`. These host-safe contracts contain no hardware implementation.
 
 
 ## Topic pages

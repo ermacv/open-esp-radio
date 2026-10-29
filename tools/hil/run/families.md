@@ -33,7 +33,7 @@ property constraints:
 | `stand-recovery` | `system/usb-jtag-off` | none |
 
 The hook property follows the hook actually installed by the image entry,
-independently of `InjectPanic` support. These rules distinguish the watchdog,
+independently of `RequestReset` support. These rules distinguish the watchdog,
 panic-reset and USB-off classes even though they share requested-reset
 support. Boot smoke speaks no protocol and bypasses key discovery.
 

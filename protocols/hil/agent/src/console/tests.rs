@@ -15,6 +15,12 @@ use oer_hil_protocol::{Envelope, FrameDecoder, Key, WireKind};
 use super::*;
 use oer_diagnostics::Note;
 
+crate::requests! {
+    enum WatchdogRequest (sessions = false) {
+        Test(WatchdogTest),
+    }
+}
+
 const BOOT: u64 = 77;
 
 /// The early writer of a test thread: it keeps the words of the notes it
@@ -148,7 +154,7 @@ fn run_until(
         Endpoint(host.clone()),
         intake,
         &Chip,
-        |request, crate::base::WatchdogRequest::Test(own)| served(request, own),
+        |request, WatchdogRequest::Test(own)| served(request, own),
     );
     let watch = async {
         for _ in 0..10_000 {
@@ -454,6 +460,70 @@ fn a_control_reply_is_not_written_until_the_entire_frame_and_trailer_reach_the_e
     assert_eq!(writing.as_mut().poll(&mut context), Poll::Ready(()));
     assert_eq!(written.as_mut().poll(&mut context), Poll::Ready(Ok(())));
     assert_eq!(host.frames(), [(9, sequence, WatchdogArmed::KEY)]);
+}
+
+#[test]
+fn reset_acknowledgement_requires_the_complete_write_and_keeps_correlation() {
+    use core::{
+        future::Future as _,
+        task::{Context, Poll, Waker},
+    };
+    use oer_hil_protocol::lifecycle::ResetAccepted;
+
+    let console = console();
+    console.start(BOOT);
+    let request = RequestIdentity {
+        boot_id: BOOT,
+        request_id: u32::MAX,
+        session_id: 0x89ab_cdef_0123_4567,
+    };
+    let mut acknowledging = core::pin::pin!(crate::lifecycle::acknowledge_reset(console, request));
+    let mut cx = Context::from_waker(Waker::noop());
+    assert!(acknowledging.as_mut().poll(&mut cx).is_pending());
+    let message = console.messages.try_receive().unwrap();
+    let host = Host::default();
+    assert!(host.frames().is_empty());
+    block_on(console.write_message(&mut Endpoint(host.clone()), &message));
+    let Poll::Ready(Ok(acknowledged)) = acknowledging.as_mut().poll(&mut cx) else {
+        panic!("a complete write releases the reset acknowledgement");
+    };
+    assert_eq!(host.frames(), [(u32::MAX, 1, ResetAccepted::KEY)]);
+    assert_eq!(
+        acknowledged.observations(),
+        [u32::MAX, 1, 0x0123_4567, 0x89ab_cdef]
+    );
+}
+
+#[test]
+fn reset_barrier_exhaustion_returns_no_reset_authority() {
+    use core::{
+        future::Future as _,
+        task::{Context, Poll, Waker},
+    };
+    let console = console();
+    console.start(BOOT);
+    let mut cx = Context::from_waker(Waker::noop());
+    let mut waiting: Vec<_> = (0..16).map(|_| Box::pin(console.written(10))).collect();
+    for waiter in &mut waiting {
+        assert!(waiter.as_mut().poll(&mut cx).is_pending());
+    }
+    let request = RequestIdentity {
+        boot_id: BOOT,
+        session_id: 0,
+        request_id: 9,
+    };
+    let mut acknowledging = core::pin::pin!(crate::lifecycle::acknowledge_reset(console, request));
+    let Poll::Ready(Err(fault)) = acknowledging.as_mut().poll(&mut cx) else {
+        panic!("no reset authority after the completion barrier fails");
+    };
+    assert_eq!(
+        fault,
+        progress::ReceiverLimit {
+            sequence: 1,
+            next: Some(0),
+            capacity: 16
+        }
+    );
 }
 
 #[test]

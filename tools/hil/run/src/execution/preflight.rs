@@ -131,6 +131,7 @@ fn check_flashed_image_keys(selected: &Scenario, image_keys: &DeviceImageKeys) -
 #[cfg(test)]
 mod tests {
     use super::*;
+    use oer_hil_protocol::lifecycle;
     use oer_hil_protocol::{Key, Message, base, system};
 
     fn scenario(kind: &str) -> Scenario {
@@ -166,7 +167,7 @@ mod tests {
         use oer_esp32s31_phy_probe as phy;
         use oer_ieee80211_conformance_control as lower_mac;
         use oer_ieee80211_control as wifi;
-        let panic = [system::InjectPanic::KEY, system::PanicInjected::KEY];
+        let panic = [lifecycle::RequestReset::KEY, lifecycle::ResetAccepted::KEY];
         let watchdog: Vec<Key> = panic
             .iter()
             .copied()
@@ -219,8 +220,8 @@ mod tests {
             (
                 "panic-reset",
                 vec![
-                    system::InjectPanic::KEY,
-                    system::PanicInjected::KEY,
+                    lifecycle::RequestReset::KEY,
+                    lifecycle::ResetAccepted::KEY,
                     system::PanicHook::KEY,
                 ],
                 system::PanicHook::PATH,
@@ -238,8 +239,8 @@ mod tests {
             (
                 "panic-reset",
                 vec![
-                    system::InjectPanic::KEY,
-                    system::PanicInjected::KEY,
+                    lifecycle::RequestReset::KEY,
+                    lifecycle::ResetAccepted::KEY,
                     system::UsbJtagOff::KEY,
                 ],
                 system::UsbJtagOff::PATH,

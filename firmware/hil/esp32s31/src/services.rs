@@ -2,11 +2,24 @@
 //! reports: the union of the keys of those services and of the base module.
 
 #[cfg(any(test, feature = "system-watchdog", feature = "system-panic-reset"))]
-use oer_hil_agent::base::PanicRequest;
-#[cfg(any(test, feature = "usb-jtag-off"))]
-use oer_hil_agent::base::UsbRequest;
+use oer_hil_agent::lifecycle::Request as ResetRequest;
+
 #[cfg(any(test, feature = "system-watchdog"))]
-use oer_hil_agent::base::WatchdogRequest;
+oer_hil_agent::requests! {
+    /// The image's watchdog fault injections.
+    pub enum WatchdogRequest (sessions = false) {
+        Test(oer_hil_protocol::system::WatchdogTest),
+    }
+}
+
+#[cfg(any(test, feature = "usb-jtag-off"))]
+oer_hil_agent::requests! {
+    /// The image's USB pad switch.
+    pub enum UsbRequest (sessions = false) {
+        Disable(oer_hil_protocol::system::DisableUsb),
+    }
+    publishes [oer_hil_protocol::system::UsbJtagOff]
+}
 
 /// The image entry's optional HIL panic hook, independent of its requests.
 pub(crate) struct PanicHook;
@@ -45,19 +58,19 @@ oer_hil_agent::requests! {
 #[cfg(any(test, all(feature = "system-watchdog", not(feature = "usb-jtag-off"))))]
 oer_hil_agent::image_keys! {
     /// The watchdog image: watchdog tests, requested reset and panic hook.
-    pub(crate) WATCHDOG_KEYS = [WatchdogRequest, PanicRequest, PanicHook]
+    pub(crate) WATCHDOG_KEYS = [WatchdogRequest, ResetRequest, PanicHook]
 }
 
 #[cfg(any(test, feature = "usb-jtag-off"))]
 oer_hil_agent::image_keys! {
     /// The watchdog image that also switches its USB Serial/JTAG off.
-    pub(crate) USB_JTAG_OFF_KEYS = [WatchdogRequest, UsbRequest, PanicRequest, PanicHook]
+    pub(crate) USB_JTAG_OFF_KEYS = [WatchdogRequest, UsbRequest, ResetRequest, PanicHook]
 }
 
 #[cfg(any(test, feature = "system-panic-reset"))]
 oer_hil_agent::image_keys! {
     /// The panic-reset image: explicit reset through the product retained path.
-    pub(crate) PANIC_RESET_KEYS = [PanicRequest, PanicHook]
+    pub(crate) PANIC_RESET_KEYS = [ResetRequest, PanicHook]
 }
 
 #[cfg(any(test, feature = "wifi-station"))]
@@ -91,7 +104,10 @@ mod tests {
     }
 
     const WATCHDOG: &[Key] = &[system::WatchdogTest::KEY, system::WatchdogArmed::KEY];
-    const PANIC: &[Key] = &[system::InjectPanic::KEY, system::PanicInjected::KEY];
+    const RESET: &[Key] = &[
+        oer_hil_protocol::lifecycle::RequestReset::KEY,
+        oer_hil_protocol::lifecycle::ResetAccepted::KEY,
+    ];
     const USB: &[Key] = &[
         system::DisableUsb::KEY,
         system::UsbDisabled::KEY,
@@ -116,9 +132,9 @@ mod tests {
 
     #[test]
     fn each_image_reports_its_services_and_the_base_module() {
-        assert_eq!(set(WATCHDOG_KEYS), expected(&[WATCHDOG, PANIC]));
-        assert_eq!(set(USB_JTAG_OFF_KEYS), expected(&[WATCHDOG, USB, PANIC]));
-        assert_eq!(set(PANIC_RESET_KEYS), expected(&[PANIC]));
+        assert_eq!(set(WATCHDOG_KEYS), expected(&[WATCHDOG, RESET]));
+        assert_eq!(set(USB_JTAG_OFF_KEYS), expected(&[WATCHDOG, USB, RESET]));
+        assert_eq!(set(PANIC_RESET_KEYS), expected(&[RESET]));
         assert_eq!(
             set(STATION_KEYS),
             expected(&[wifi::KEYS, &[base::Accepted::KEY, network::Ready::KEY],])

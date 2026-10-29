@@ -12,9 +12,5 @@ fn main() {}
 mod services;
 
 #[cfg(test)]
-#[path = "system/panic.rs"]
-mod requested_reset;
-
-#[cfg(test)]
 #[path = "wifi_station/security_report.rs"]
 mod security_report;

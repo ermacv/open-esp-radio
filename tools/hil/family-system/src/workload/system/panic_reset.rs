@@ -4,20 +4,20 @@
 use crate::Result;
 use oer_hil_protocol::{
     base::{BootEvidence, GetBootStatus, ResetReason},
-    system::{InjectPanic, PanicInjected},
+    lifecycle::{RequestReset, ResetAccepted},
 };
 use oer_hil_scenario::workload::{context::Context, require_keys};
 use std::{path::Path, time::Duration};
 
 pub fn run(output: &Path, context: &Context<'_>) -> Result<()> {
     context.with_capture(output, |capture| {
-        require_keys::<InjectPanic>(capture)?;
+        require_keys::<RequestReset>(capture)?;
         // The reset follows the acknowledgement at once; the next Hello
         // comes after the ROM, the bootloader and both boot stages.
         capture.expect_reboot(Duration::from_millis(100), Duration::from_secs(15))?;
         let mark = capture.console_length();
-        let (reply, response) = capture.call_answered(0, InjectPanic, Duration::from_secs(5))?;
-        let PanicInjected = response
+        let (reply, response) = capture.call_answered(0, RequestReset, Duration::from_secs(5))?;
+        let ResetAccepted = response
             .map_err(|reason| format!("device rejected the requested reset: {reason:?}"))?;
         let report = retained_report(reply.request_id, reply.message_sequence, reply.session_id);
         let reboot = capture.wait_expected_reboot()?;

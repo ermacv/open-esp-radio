@@ -1,5 +1,5 @@
 //! The system module: SoC diagnostics independent of any radio: the
-//! watchdog, requested reset and USB-off injections and stack high-water marks.
+//! watchdog and USB-off injections and stack high-water marks.
 
 use postcard_schema::Schema;
 use serde::{Deserialize, Serialize};
@@ -14,8 +14,6 @@ crate::messages! {
     property UsbJtagOff = "system/usb-jtag-off";
     endpoint WatchdogTest = "system/watchdog/test" => WatchdogArmed;
     topic WatchdogArmed = "system/watchdog/armed";
-    endpoint InjectPanic = "system/panic/inject" => crate::system::PanicInjected;
-    topic PanicInjected = "system/panic/injected";
     endpoint DisableUsb = "system/usb/disable" => crate::system::UsbDisabled;
     topic UsbDisabled = "system/usb/disabled";
 }
@@ -43,16 +41,6 @@ pub enum WatchdogTestMode {
     /// Attempt restoration after the hardware deadline.
     LateRestoration,
 }
-
-/// Diagnostic: request a reset once the acknowledgement is out. On S31 the
-/// staged runtime retains `HilRequested`; this is not a hardware fault and
-/// does not invoke the panic hook.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
-pub struct InjectPanic;
-
-/// The requested reset follows this acknowledgement.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
-pub struct PanicInjected;
 
 /// Diagnostic: once the acknowledgement is out, switch the USB Serial/JTAG
 /// off its pads, so the board leaves USB until a reset brings the ROM back.

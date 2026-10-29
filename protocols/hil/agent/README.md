@@ -2,14 +2,14 @@
 
 `oer-hil-agent` holds the HIL target logic that does not
 depend on the chip: the request intake (`base`), console serialization and
-the reset-retained post-mortem record. The
+the lifecycle acknowledgement barrier and the reset-retained post-mortem codec. The
 [esp32s31 HIL agent](../../../firmware/hil/esp32s31/README.md) composes these modules with
 its executor and console. Host tests exercise the same compiled code the
 firmware links.
 
 | Feature | Modules |
 | --- | --- |
-| none | `base`, `console`, `postmortem` |
+| none | `base`, `console`, `lifecycle`, `postmortem` |
 
 ## Image keys
 
@@ -25,8 +25,20 @@ announces it in `Hello` and pages it out.
 An image component with no requests can implement `Service` for its
 properties alone. The ESP32-S31 image's `PanicHook` service reports
 `system::PanicHook` under the same `panic-hook` configuration as its entry.
-It is separate from `PanicRequest`: serving `InjectPanic` does not imply a
-hook. `UsbRequest` includes `system::UsbJtagOff` in its published properties.
+It is independent of the mounted `lifecycle::Request` reset service. The
+image's own `WatchdogRequest` and `UsbRequest` declarations live beside its
+hardware actions; USB pad switching and watchdog fault injection are not
+agent services.
+
+The optional `lifecycle::Request` service advertises `lifecycle/reset` and
+`lifecycle/reset-accepted`. Discovery, key pages, boot evidence and link
+health stay in `base`; Hello is also the reachability check. The image queues
+a reset request; `lifecycle::acknowledge_reset` publishes the acknowledgement
+and returns an affine `AcknowledgedReset` only after its complete frame was
+written. The image consumes its correlation observations in its existing
+retained reset path. A completion-barrier error returns to the image's
+fault policy without performing the requested action. The agent owns no
+hardware reset operation.
 
 Terminal completion waits are bounded to sixteen receivers. Exhaustion returns
 `ReceiverLimit` with the requested sequence, last published position and capacity.

@@ -1,6 +1,7 @@
 //! In-memory wire messages for session and workload tests.
 use super::*;
 use oer_hil_protocol::base::{Hello, ImageKeySet};
+use oer_hil_protocol::lifecycle;
 use oer_hil_protocol::{Key, Message};
 
 /// Encode one message as a wire frame.
@@ -36,8 +37,8 @@ pub fn capability_keys() -> Vec<Key> {
         base::LinkHealth::KEY,
         system::WatchdogTest::KEY,
         system::WatchdogArmed::KEY,
-        system::InjectPanic::KEY,
-        system::PanicInjected::KEY,
+        lifecycle::RequestReset::KEY,
+        lifecycle::ResetAccepted::KEY,
     ];
     keys.sort();
     keys
