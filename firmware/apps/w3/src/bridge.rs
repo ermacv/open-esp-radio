@@ -94,7 +94,6 @@ fn drain_step<
     clock: &T,
     cx: &mut core::task::Context<'_>,
 ) -> Result<bool, oer_embassy_net::AccessRefused> {
-    let _link = net.poll_link(cx);
     radio.link_controller().follow_device(net, state);
     observations
         .borrow_mut()
