@@ -3,7 +3,7 @@ use super::Attempt;
 use core::cell::{Cell, RefCell};
 use embassy_futures::{join::join3, select::select, yield_now};
 use oer_embassy_net::{
-    NetworkInterfaceId, NoopRawMutex, OwnedEndpointResources, OwnedNetworkDevice,
+    NetworkInterfaceId, OwnedEndpointResources, OwnedNetworkDevice,
     OwnedNetworkRunner,
 };
 use oer_embassy_time::EmbassyClock;
@@ -25,9 +25,9 @@ use xarxa_driver::{PacketPool, PacketPoolStorage};
 
 pub const RX: usize = 8;
 const TX: usize = 4;
-type Endpoint = OwnedEndpointResources<NoopRawMutex, RX, TX>;
-type Device = OwnedNetworkDevice<'static, NoopRawMutex, RX, TX>;
-type Runner = OwnedNetworkRunner<'static, NoopRawMutex, RX, TX>;
+type Endpoint = OwnedEndpointResources<oer_espressif_executor::ThreadContext<0>, RX, TX>;
+type Device = OwnedNetworkDevice<'static, oer_espressif_executor::ThreadContext<0>, RX, TX>;
+type Runner = OwnedNetworkRunner<'static, oer_espressif_executor::ThreadContext<0>, RX, TX>;
 static ENDPOINT: StaticCell<Endpoint> = StaticCell::new();
 static DEVICE: StaticCell<Device> = StaticCell::new();
 static STACK: StaticCell<StackStorage<'static, Device>> = StaticCell::new();
@@ -103,7 +103,10 @@ fn running_future<'a>(
             .expect("one station ICMP socket");
         let observations = observations();
         join3(
-            bridge(radio, tx, rx, link, &observations),
+            async { match bridge(radio, tx, rx, link, &observations).await {
+                Ok(never) => match never {},
+                Err(_) => crate::fail(crate::fatal::Failure::NetworkContextAccessRefused),
+            } },
             runner.run(),
             join3(
                 drain(&socket),
@@ -237,12 +240,12 @@ async fn probes(
 }
 
 async fn bridge(
-    radio: Runner,
+    mut radio: Runner,
     mut tx: WakingSpscSender<'_, TxMsdu, 2>,
     mut rx: WakingSpscReceiver<'_, EthernetFrame, RX>,
     link: &Cell<bool>,
     observations: &RefCell<Observations>,
-) -> ! {
+) -> Result<core::convert::Infallible, oer_embassy_net::AccessRefused> {
     let mut state = false;
     loop {
         if state != link.get() {
@@ -268,7 +271,7 @@ async fn bridge(
                 super::observation::RX_REFUSED.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
             }
         }
-        if let Some(packet) = radio.try_receive_tx() {
+        if let Some(packet) = radio.try_receive_tx()? {
             let bytes = packet.ethernet();
             if let Some((header, payload)) = bytes.split_first_chunk::<14>() {
                 let [d0, d1, d2, d3, d4, d5, s0, s1, s2, s3, s4, s5, e0, e1] = *header;
@@ -293,7 +296,7 @@ async fn bridge(
             drop(packet);
             yield_now().await;
         } else {
-            let _ = select(
+            let ready = select(
                 rx.ready(),
                 select(
                     radio.wait_tx_publication(),
@@ -301,6 +304,7 @@ async fn bridge(
                 ),
             )
             .await;
+            if let Either::Second(Either::First(result)) = ready { result?; }
         }
     }
 }

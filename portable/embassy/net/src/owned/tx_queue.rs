@@ -1,16 +1,13 @@
-//! Cross-core synchronization for destination/transport queues of owners.
+//! Destination/transport queues of owners in the endpoint's execution context.
 
-use core::{
-    cell::Cell,
-    task::{Context, Poll, Waker},
-};
+use core::task::{Context, Poll, Waker};
 
 use crate::datapath::{DestinationTxHead, TxQueues};
-use embassy_sync::blocking_mutex::{Mutex, raw::RawMutex};
+use oer_memory::{ContextCell, Entered, ExecutionContext};
 use oer_network::TransportFlow;
 
 use super::{
-    QueuedPacket,
+    AccessRefused, QueuedPacket,
     tx_budget::{TxBudget, TxCredit},
     wake_replaced,
 };
@@ -20,6 +17,7 @@ struct State<const N: usize> {
     receiver_waker: Option<Waker>,
     receiver_wait: Option<ReceiverWait>,
     radio_cursor: usize,
+    publication: Publication,
 }
 
 impl<const N: usize> State<N> {
@@ -29,6 +27,7 @@ impl<const N: usize> State<N> {
             receiver_waker: None,
             receiver_wait: None,
             radio_cursor: 0,
+            publication: Publication::Idle,
         }
     }
 }
@@ -42,49 +41,55 @@ enum ReceiverWait {
     Any,
 }
 
-pub(super) struct TxQueue<M: RawMutex, const N: usize> {
-    state: Mutex<M, Cell<State<N>>>,
-    budget: TxBudget<M>,
+/// Coalesced "a packet was published" hint for the radio's publication wait.
+enum Publication {
+    Idle,
+    Waiting(Waker),
+    Signaled,
 }
 
-impl<M: RawMutex, const N: usize> TxQueue<M, N> {
+pub(super) struct TxQueue<X: ExecutionContext, const N: usize> {
+    state: ContextCell<State<N>, Entered<X>>,
+    budget: TxBudget,
+}
+
+impl<X: ExecutionContext, const N: usize> TxQueue<X, N> {
     pub(super) const fn new() -> Self {
         Self {
             budget: TxBudget::new(N),
-            state: Mutex::new(Cell::new(State::new())),
+            state: ContextCell::new(State::new()),
         }
     }
 
-    // The queue-owning State<N> is a stack temporary for this synchronous
-    // closure. No owner is dropped and no Waker callback runs until restored.
-    fn with_state<R>(&self, action: impl FnOnce(&mut State<N>) -> R) -> R {
-        self.state.lock(|cell| {
-            let mut state = cell.replace(State::new());
-            let result = action(&mut state);
-            cell.set(state);
-            result
-        })
+    // The closure borrows the state in place. No owner is dropped and no
+    // Waker callback runs inside it, so a callback may reenter afterwards.
+    // Outside `X`, or nested inside this borrow, the state stays unchanged.
+    fn with_state<R>(&self, action: impl FnOnce(&mut State<N>) -> R) -> Result<R, AccessRefused> {
+        let proof = Entered::<X>::enter().ok_or(AccessRefused)?;
+        self.state.with(&proof, action).ok_or(AccessRefused)
     }
 
     pub(super) fn register_sender(&self, waker: &Waker) {
         self.budget.register_sender(waker);
     }
 
-    pub(super) fn len(&self) -> usize {
+    pub(super) fn len(&self) -> Result<usize, AccessRefused> {
         self.with_state(|state| state.queues.len())
     }
 
-    pub(super) fn is_empty(&self) -> bool {
-        self.len() == 0
+    pub(super) fn is_empty(&self) -> Result<bool, AccessRefused> {
+        Ok(self.len()? == 0)
     }
 
     pub(super) fn is_full(&self) -> bool {
         self.budget.is_full()
     }
 
+    /// Queue one admitted owner and signal its publication. A full budget, a
+    /// failed insertion or a refused access returns the unchanged owner.
     pub(super) fn push(&self, packet: QueuedPacket) -> Result<(), QueuedPacket> {
-        // Classify once on the producer core, outside the shared metadata
-        // lock. Invalid frames retain ordinary radio rejection.
+        // Classify once on the producer core, outside the queue state.
+        // Invalid frames retain ordinary radio rejection.
         let destination = packet
             .packet
             .get(..6)
@@ -94,11 +99,16 @@ impl<M: RawMutex, const N: usize> TxQueue<M, N> {
         if !self.budget.try_admit() {
             return Err(packet);
         }
-        let (result, wake) = self.with_state(|state| {
+        // A refused access never runs the closure, and a failed insertion puts
+        // the owner back: an empty slot means exactly that the owner is queued.
+        let mut slot = Some(packet);
+        let wakes = self.with_state(|state| {
+            let packet = slot.take()?;
             if let Err(packet) = state.queues.push_flow(destination, flow, packet) {
-                return (Err(packet), None);
+                slot = Some(packet);
+                return None;
             }
-            let mut wake = None;
+            let mut receiver = None;
             if state.receiver_wait.is_some_and(|wait| match wait {
                 ReceiverWait::Destination(selected, minimum) => {
                     destination == selected && state.queues.len_for(selected) >= minimum
@@ -106,19 +116,36 @@ impl<M: RawMutex, const N: usize> TxQueue<M, N> {
                 ReceiverWait::Any => true,
             }) {
                 state.receiver_wait = None;
-                wake = state.receiver_waker.take();
+                receiver = state.receiver_waker.take();
             }
-            (Ok(()), wake)
+            let publication =
+                match core::mem::replace(&mut state.publication, Publication::Signaled) {
+                    Publication::Waiting(waker) => Some(waker),
+                    Publication::Idle | Publication::Signaled => None,
+                };
+            Some((receiver, publication))
         });
-        if let Some(wake) = wake {
-            wake.wake();
+        match slot {
+            Some(packet) => {
+                // Queue insertion normally cannot fail: queued owners are a
+                // subset of the shared budget. A refused access or a failed
+                // insertion returns the owner and its admission explicitly.
+                drop(self.budget.claim());
+                Err(packet)
+            }
+            None => {
+                // Wake the radio only after the state borrow has ended.
+                if let Ok(Some((receiver, publication))) = wakes {
+                    if let Some(wake) = receiver {
+                        wake.wake();
+                    }
+                    if let Some(wake) = publication {
+                        wake.wake();
+                    }
+                }
+                Ok(())
+            }
         }
-        if result.is_err() {
-            // Queue insertion normally cannot fail: queued owners are a subset
-            // of the shared budget. Keep failure ownership explicit nonetheless.
-            drop(self.budget.claim());
-        }
-        result
     }
 
     pub(super) fn poll_ready_for(
@@ -126,21 +153,28 @@ impl<M: RawMutex, const N: usize> TxQueue<M, N> {
         destination: [u8; 6],
         minimum: usize,
         context: &mut Context<'_>,
-    ) -> Poll<()> {
+    ) -> Poll<Result<(), AccessRefused>> {
         self.poll_ready(
             ReceiverWait::Destination(destination, minimum.max(1)),
             context,
         )
     }
 
-    pub(super) fn poll_ready_any(&self, context: &mut Context<'_>) -> Poll<()> {
+    pub(super) fn poll_ready_any(
+        &self,
+        context: &mut Context<'_>,
+    ) -> Poll<Result<(), AccessRefused>> {
         self.poll_ready(ReceiverWait::Any, context)
     }
 
-    fn poll_ready(&self, wait: ReceiverWait, context: &mut Context<'_>) -> Poll<()> {
-        // Clone before taking state; even a custom clone callback may reenter.
+    fn poll_ready(
+        &self,
+        wait: ReceiverWait,
+        context: &mut Context<'_>,
+    ) -> Poll<Result<(), AccessRefused>> {
+        // Clone before borrowing state; even a custom clone callback may reenter.
         let mut next = Some(context.waker().clone());
-        let (ready, previous) = self.with_state(|state| {
+        let outcome = self.with_state(|state| {
             let ready = match wait {
                 ReceiverWait::Destination(destination, minimum) => {
                     state.queues.len_for(destination) >= minimum
@@ -156,8 +190,53 @@ impl<M: RawMutex, const N: usize> TxQueue<M, N> {
                 (Poll::Pending, previous)
             }
         });
-        wake_replaced(previous, context.waker());
-        // An unused clone (already ready) also drops outside the lock.
+        let ready = match outcome {
+            Ok((ready, previous)) => {
+                wake_replaced(previous, context.waker());
+                ready.map(Ok)
+            }
+            Err(refused) => Poll::Ready(Err(refused)),
+        };
+        // An unused clone (ready or refused) also drops outside the borrow.
+        drop(next);
+        ready
+    }
+
+    /// Poll the coalesced publication hint, consuming it when ready.
+    pub(super) fn poll_publication(
+        &self,
+        context: &mut Context<'_>,
+    ) -> Poll<Result<(), AccessRefused>> {
+        // Clone before borrowing state; even a custom clone callback may reenter.
+        let mut next = Some(context.waker().clone());
+        let outcome = self.with_state(|state| {
+            match core::mem::replace(&mut state.publication, Publication::Idle) {
+                Publication::Signaled => (Poll::Ready(()), None),
+                Publication::Waiting(registered) if registered.will_wake(context.waker()) => {
+                    state.publication = Publication::Waiting(registered);
+                    (Poll::Pending, None)
+                }
+                Publication::Waiting(registered) => {
+                    if let Some(waker) = next.take() {
+                        state.publication = Publication::Waiting(waker);
+                    }
+                    (Poll::Pending, Some(registered))
+                }
+                Publication::Idle => {
+                    if let Some(waker) = next.take() {
+                        state.publication = Publication::Waiting(waker);
+                    }
+                    (Poll::Pending, None)
+                }
+            }
+        });
+        let ready = match outcome {
+            Ok((ready, previous)) => {
+                wake_replaced(previous, context.waker());
+                ready.map(Ok)
+            }
+            Err(refused) => Poll::Ready(Err(refused)),
+        };
         drop(next);
         ready
     }
@@ -165,7 +244,7 @@ impl<M: RawMutex, const N: usize> TxQueue<M, N> {
     pub(super) fn next_head_after(
         &self,
         after: Option<[u8; 6]>,
-    ) -> Option<([u8; 6], DestinationTxHead)> {
+    ) -> Result<Option<([u8; 6], DestinationTxHead)>, AccessRefused> {
         self.with_state(|state| {
             let (destination, head, pending_frames) = state.queues.next_head_after(after)?;
             Some((
@@ -178,7 +257,10 @@ impl<M: RawMutex, const N: usize> TxQueue<M, N> {
         })
     }
 
-    pub(super) fn head_for(&self, destination: [u8; 6]) -> Option<DestinationTxHead> {
+    pub(super) fn head_for(
+        &self,
+        destination: [u8; 6],
+    ) -> Result<Option<DestinationTxHead>, AccessRefused> {
         self.with_state(|state| {
             let (head, pending_frames) = state.queues.head(destination)?;
             Some(DestinationTxHead {
@@ -191,14 +273,81 @@ impl<M: RawMutex, const N: usize> TxQueue<M, N> {
     pub(super) fn pop(
         &self,
         destination: Option<[u8; 6]>,
-    ) -> Option<(QueuedPacket, TxCredit<'_, M>)> {
+    ) -> Result<Option<(QueuedPacket, TxCredit<'_>)>, AccessRefused> {
         let packet = self.with_state(|state| {
             let destination =
                 destination.or_else(|| state.queues.next_key(&mut state.radio_cursor))?;
-            let packet = state.queues.pop(destination)?;
-            Some(packet)
+            state.queues.pop(destination)
         })?;
         // Dequeue transfers an existing credit; it does not free admission.
-        Some((packet, self.budget.claim()))
+        Ok(packet.map(|packet| (packet, self.budget.claim())))
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::disallowed_macros, clippy::disallowed_methods)]
+mod tests {
+    extern crate std;
+    use self::std::boxed::Box;
+    use super::*;
+    use oer_memory::{HostContext, Never};
+    use xarxa_driver::{PacketBufAllocator, PacketPool, PacketPoolStorage};
+
+    fn allocator() -> PacketBufAllocator {
+        let storage = Box::leak(Box::new(PacketPoolStorage::<2>::new()));
+        Box::leak(Box::new(PacketPool::new(storage))).allocator()
+    }
+
+    #[test]
+    fn nested_access_retains_queue_input_and_admission() {
+        let pool = allocator();
+        let queue = TxQueue::<HostContext, 2>::new();
+        let packet = pool.try_alloc().unwrap();
+        let address = packet.as_ptr();
+        let returned = queue
+            .with_state(|_| {
+                assert_eq!(queue.len(), Err(AccessRefused));
+                assert!(matches!(queue.pop(None), Err(AccessRefused)));
+                queue.push(QueuedPacket { epoch: 7, packet }).err().unwrap()
+            })
+            .unwrap();
+        assert_eq!(returned.packet.as_ptr(), address);
+        assert_eq!(returned.epoch, 7);
+        assert_eq!(queue.len(), Ok(0));
+        // A refused insertion must have returned its admission too.
+        assert!(queue.push(returned).is_ok());
+        assert!(
+            queue
+                .push(QueuedPacket {
+                    epoch: 7,
+                    packet: pool.try_alloc().unwrap()
+                })
+                .is_ok()
+        );
+        assert!(queue.is_full());
+    }
+
+    #[test]
+    fn unavailable_context_returns_owners_and_typed_refusals() {
+        let pool = allocator();
+        let queue = TxQueue::<Never, 1>::new();
+        let packet = pool.try_alloc().unwrap();
+        let address = packet.as_ptr();
+        let returned = queue.push(QueuedPacket { epoch: 9, packet }).err().unwrap();
+        assert_eq!(returned.packet.as_ptr(), address);
+        assert!(!queue.is_full());
+        assert_eq!(queue.len(), Err(AccessRefused));
+        assert_eq!(queue.head_for([0; 6]), Err(AccessRefused));
+        assert!(matches!(queue.pop(None), Err(AccessRefused)));
+        let waker = core::task::Waker::noop();
+        let mut cx = Context::from_waker(waker);
+        assert_eq!(
+            queue.poll_ready_any(&mut cx),
+            Poll::Ready(Err(AccessRefused))
+        );
+        assert_eq!(
+            queue.poll_publication(&mut cx),
+            Poll::Ready(Err(AccessRefused))
+        );
     }
 }

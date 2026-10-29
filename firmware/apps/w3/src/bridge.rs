@@ -5,7 +5,7 @@ use core::{
     future::{Future, poll_fn},
     task::Poll,
 };
-use oer_embassy_net::{NoopRawMutex, OwnedNetworkRunner};
+use oer_embassy_net::OwnedNetworkRunner;
 use oer_ieee80211_sta::data::{EthernetFrame, TxMsdu};
 use oer_ieee80211_wire::{data::EthernetFrameParts, qos::WmmUserPriority};
 use oer_memory::{WakingSpscReceiver, WakingSpscSender};
@@ -36,20 +36,25 @@ impl Counters {
 
 /// Drain each input queue by at most its capacity per poll, then yield.
 /// A full downstream queue keeps its source owner queued and arms its wake.
-pub async fn run<const RX: usize, const TX: usize, T: Clock + Timer>(
-    radio: OwnedNetworkRunner<'_, NoopRawMutex, RX, TX>,
+pub async fn run<
+    X: oer_memory::ExecutionContext,
+    const RX: usize,
+    const TX: usize,
+    T: Clock + Timer,
+>(
+    mut radio: OwnedNetworkRunner<'_, X, RX, TX>,
     mut tx: WakingSpscSender<'_, TxMsdu, 2>,
     mut rx: WakingSpscReceiver<'_, EthernetFrame, RX>,
     observations: &RefCell<Observations>,
     link: &Cell<bool>,
     clock: &T,
-) -> ! {
+) -> Result<core::convert::Infallible, oer_embassy_net::AccessRefused> {
     let mut state = false;
     loop {
         let mut timer = core::pin::pin!(clock.wait_for(Duration::from_millis(1)));
         poll_fn(|cx| {
-            if drain_step(
-                &radio,
+            match drain_step(
+                &mut radio,
                 &mut tx,
                 &mut rx,
                 observations,
@@ -58,15 +63,17 @@ pub async fn run<const RX: usize, const TX: usize, T: Clock + Timer>(
                 clock,
                 cx,
             ) {
-                // Exactly one bounded step per poll; give the other P1 futures
-                // their turn before retrying work that remains immediately ready.
-                cx.waker().wake_by_ref();
-                Poll::Pending
-            } else {
-                timer.as_mut().poll(cx).map(|_| ())
+                Err(error) => Poll::Ready(Err(error)),
+                Ok(true) => {
+                    // Exactly one bounded step per poll; give the other P1 futures
+                    // their turn before retrying work that remains immediately ready.
+                    cx.waker().wake_by_ref();
+                    Poll::Pending
+                }
+                Ok(false) => timer.as_mut().poll(cx).map(|_| Ok(())),
             }
         })
-        .await;
+        .await?;
     }
 }
 
@@ -74,8 +81,8 @@ pub async fn run<const RX: usize, const TX: usize, T: Clock + Timer>(
 // otherwise that frame also remains live while the station service is polled.
 #[inline(never)]
 #[allow(clippy::too_many_arguments)]
-fn drain_step<const RX: usize, const TX: usize, T: Clock>(
-    radio: &OwnedNetworkRunner<'_, NoopRawMutex, RX, TX>,
+fn drain_step<X: oer_memory::ExecutionContext, const RX: usize, const TX: usize, T: Clock>(
+    radio: &mut OwnedNetworkRunner<'_, X, RX, TX>,
     tx: &mut WakingSpscSender<'_, TxMsdu, 2>,
     rx: &mut WakingSpscReceiver<'_, EthernetFrame, RX>,
     observations: &RefCell<Observations>,
@@ -83,7 +90,7 @@ fn drain_step<const RX: usize, const TX: usize, T: Clock>(
     state: &mut bool,
     clock: &T,
     cx: &mut core::task::Context<'_>,
-) -> bool {
+) -> Result<bool, oer_embassy_net::AccessRefused> {
     if *state != link.get() {
         *state = link.get();
         radio.link_controller().set_link_up(*state);
@@ -112,8 +119,7 @@ fn drain_step<const RX: usize, const TX: usize, T: Clock>(
         observations
             .borrow_mut()
             .observe(p.ether_type, p.payload, false, clock.now().as_micros());
-        if radio
-            .rx_publisher()
+        if publisher
             .try_send_parts(p.destination, p.source, p.ether_type, p.payload)
             .is_err()
         {
@@ -129,7 +135,13 @@ fn drain_step<const RX: usize, const TX: usize, T: Clock>(
     for _ in 0..TX {
         let input_ready = {
             let mut ready = core::pin::pin!(radio.wait_tx_publication());
-            ready.as_mut().poll(cx).is_ready()
+            match ready.as_mut().poll(cx) {
+                Poll::Ready(result) => {
+                    result?;
+                    true
+                }
+                Poll::Pending => false,
+            }
         };
         if !input_ready {
             break;
@@ -142,7 +154,7 @@ fn drain_step<const RX: usize, const TX: usize, T: Clock>(
         // that hint as work too, so the next poll arms a fresh wait before
         // parking; otherwise a later publication would wait for the timer.
         tx_progress = true;
-        let Some(packet) = radio.try_receive_tx() else {
+        let Some(packet) = radio.try_receive_tx()? else {
             break;
         };
         let bytes = packet.ethernet();
@@ -175,7 +187,7 @@ fn drain_step<const RX: usize, const TX: usize, T: Clock>(
         }
         drop(packet);
     }
-    received != 0 || tx_progress
+    Ok(received != 0 || tx_progress)
 }
 
 #[cfg(test)]
@@ -184,7 +196,7 @@ mod tests {
     use super::*;
     use core::{future::Future, task::Context};
     use oer_embassy_net::{NetworkInterfaceId, OwnedEndpointResources};
-    use oer_memory::WakingSpscQueue;
+    use oer_memory::{HostContext, WakingSpscQueue};
     use oer_time_virtual::VirtualClock;
     use std::boxed::Box;
     use xarxa_driver::{PacketBufAllocator, PacketPool, PacketPoolStorage};
@@ -208,8 +220,8 @@ mod tests {
     fn continuous_rx_advances_tx_within_one_turn_even_when_rx_pool_is_held_by_tx() {
         let clock = VirtualClock::<8>::new();
         let pool = allocator::<1>();
-        let mut endpoint = OwnedEndpointResources::<NoopRawMutex, 8, 4>::new();
-        let (mut device, radio) = endpoint
+        let mut endpoint = OwnedEndpointResources::<HostContext, 8, 4>::new();
+        let (mut device, mut radio) = endpoint
             .split(NetworkInterfaceId::new(0), [2; 6], pool)
             .expect("endpoint split");
         radio.link_controller().set_link_up(true);
@@ -276,8 +288,8 @@ mod tests {
     #[test]
     fn a_full_input_batch_keeps_owners_queued_when_only_one_rx_owner_is_free() {
         let clock = VirtualClock::<8>::new();
-        let mut endpoint = OwnedEndpointResources::<NoopRawMutex, 8, 4>::new();
-        let (mut device, radio) = endpoint
+        let mut endpoint = OwnedEndpointResources::<HostContext, 8, 4>::new();
+        let (mut device, mut radio) = endpoint
             .split(NetworkInterfaceId::new(0), [2; 6], allocator::<1>())
             .expect("endpoint split");
         radio.link_controller().set_link_up(true);
@@ -315,8 +327,8 @@ mod tests {
         const RX: usize = 8;
         let clock = VirtualClock::<8>::new();
         let pool = allocator::<RX>();
-        let mut endpoint = OwnedEndpointResources::<NoopRawMutex, RX, 4>::new();
-        let (mut device, radio) = endpoint
+        let mut endpoint = OwnedEndpointResources::<HostContext, RX, 4>::new();
+        let (mut device, mut radio) = endpoint
             .split(NetworkInterfaceId::new(0), [2; 6], pool)
             .expect("endpoint split");
         radio.link_controller().set_link_up(true);
@@ -390,8 +402,8 @@ mod tests {
         const RX: usize = 8;
         const TX: usize = 4;
         let clock = VirtualClock::<8>::new();
-        let mut endpoint = OwnedEndpointResources::<NoopRawMutex, RX, TX>::new();
-        let (mut device, radio) = endpoint
+        let mut endpoint = OwnedEndpointResources::<HostContext, RX, TX>::new();
+        let (mut device, mut radio) = endpoint
             .split(NetworkInterfaceId::new(0), [2; 6], allocator::<RX>())
             .expect("endpoint split");
         radio.link_controller().set_link_up(true);
@@ -464,8 +476,8 @@ mod tests {
         let clock = VirtualClock::<8>::new();
         let pool = allocator::<1>();
         let general = allocator::<1>();
-        let mut endpoint = OwnedEndpointResources::<NoopRawMutex, 1, 1>::new();
-        let (mut device, radio) = endpoint
+        let mut endpoint = OwnedEndpointResources::<HostContext, 1, 1>::new();
+        let (mut device, mut radio) = endpoint
             .split(NetworkInterfaceId::new(0), [2; 6], pool)
             .expect("endpoint split");
         radio.link_controller().set_link_up(true);

@@ -1,7 +1,8 @@
 #![allow(clippy::disallowed_macros, clippy::disallowed_methods)]
 
 use oer_embassy_net::datapath::DestinationTxQueues;
-use oer_embassy_net::{NetworkInterfaceId, NoopRawMutex, OwnedEndpointResources};
+use oer_embassy_net::{NetworkInterfaceId, OwnedEndpointResources};
+use oer_memory::HostContext;
 use std::{
     sync::{
         Arc,
@@ -40,9 +41,9 @@ impl Wake for Wakes {
 fn sparse_destination_is_directly_available_behind_a_large_bulk_backlog() {
     let pool = allocator::<128>();
     let resources = Box::leak(Box::new(
-        OwnedEndpointResources::<NoopRawMutex, 1, 128>::new(),
+        OwnedEndpointResources::<HostContext, 1, 128>::new(),
     ));
-    let (mut device, radio) = resources
+    let (mut device, mut radio) = resources
         .split(NetworkInterfaceId::new(0), [2; 6], allocator::<1>())
         .expect("endpoint split");
     radio.link_controller().set_link_up(true);
@@ -64,14 +65,14 @@ fn sparse_destination_is_directly_available_behind_a_large_bulk_backlog() {
         let bulk = radio.try_take_for([2; 6]).unwrap().unwrap();
         assert_eq!(bulk.ethernet()[14], n);
     }
-    assert_eq!(radio.tx_queue_len(), 0);
+    assert_eq!(radio.tx_queue_len().unwrap(), 0);
 }
 
 #[test]
 fn selected_wait_ignores_other_backlog_and_wakes_for_matching_publication() {
     let pool = allocator::<4>();
-    let resources = Box::leak(Box::new(OwnedEndpointResources::<NoopRawMutex, 1, 4>::new()));
-    let (mut device, radio) = resources
+    let resources = Box::leak(Box::new(OwnedEndpointResources::<HostContext, 1, 4>::new()));
+    let (mut device, mut radio) = resources
         .split(NetworkInterfaceId::new(0), [2; 6], allocator::<1>())
         .expect("endpoint split");
     radio.link_controller().set_link_up(true);
@@ -101,18 +102,17 @@ fn selected_wait_ignores_other_backlog_and_wakes_for_matching_publication() {
 #[test]
 fn selected_dequeue_cannot_retarget_owners_across_link_epochs() {
     let pool = allocator::<4>();
-    let resources = Box::leak(Box::new(OwnedEndpointResources::<NoopRawMutex, 1, 4>::new()));
-    let (mut device, radio) = resources
+    let resources = Box::leak(Box::new(OwnedEndpointResources::<HostContext, 1, 4>::new()));
+    let (mut device, mut radio) = resources
         .split(NetworkInterfaceId::new(0), [2; 6], allocator::<1>())
         .expect("endpoint split");
-    let link = radio.link_controller();
-    link.set_link_up(true);
+    radio.link_controller().set_link_up(true);
     device.transmit(packet(pool, 2, 1)).unwrap();
     device.transmit(packet(pool, 4, 2)).unwrap();
     let old_head = radio.head_for([4; 6]).unwrap().unwrap();
     assert_eq!(old_head.ethernet_bytes, 15);
-    link.set_link_up(false);
-    link.set_link_up(true);
+    radio.link_controller().set_link_up(false);
+    radio.link_controller().set_link_up(true);
     let mut replacement = packet(pool, 4, 3);
     replacement.set_len(60);
     replacement[15..].fill(0);
@@ -126,14 +126,14 @@ fn selected_dequeue_cannot_retarget_owners_across_link_epochs() {
         "a demand snapshot cannot authorize geometry across a link epoch"
     );
     assert!(radio.try_take_for([2; 6]).unwrap().is_none());
-    assert_eq!(radio.tx_queue_len(), 0);
+    assert_eq!(radio.tx_queue_len().unwrap(), 0);
 }
 
 #[test]
 fn an_any_destination_wait_wakes_for_the_first_publication_to_any_destination() {
     let pool = allocator::<4>();
-    let resources = Box::leak(Box::new(OwnedEndpointResources::<NoopRawMutex, 1, 4>::new()));
-    let (mut device, radio) = resources
+    let resources = Box::leak(Box::new(OwnedEndpointResources::<HostContext, 1, 4>::new()));
+    let (mut device, mut radio) = resources
         .split(NetworkInterfaceId::new(0), [2; 6], allocator::<1>())
         .expect("endpoint split");
     radio.link_controller().set_link_up(true);

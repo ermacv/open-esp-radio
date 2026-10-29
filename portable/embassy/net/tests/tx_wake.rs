@@ -1,12 +1,10 @@
 #![allow(clippy::disallowed_macros, clippy::disallowed_methods)]
 
-//! Force a producer handoff between radio queue operations without timing races.
+//! Interleave the sole producer and radio owner without timing races.
 
-use embassy_sync::blocking_mutex::raw::{NoopRawMutex, RawMutex};
 use oer_embassy_net::{NetworkInterfaceId, OwnedEndpointResources};
+use oer_memory::HostContext;
 use std::{
-    cell::{Cell, RefCell},
-    rc::Rc,
     sync::{
         Arc,
         atomic::{AtomicUsize, Ordering},
@@ -14,27 +12,6 @@ use std::{
     task::{Wake, Waker},
 };
 use xarxa_driver::{PacketBuf, PacketBufAllocator, PacketPool, PacketPoolStorage};
-
-std::thread_local! {
-    static AFTER_UNLOCK: RefCell<Option<Box<dyn FnOnce()>>> = RefCell::new(None);
-}
-
-struct HandoffMutex(NoopRawMutex);
-
-// SAFETY: the inner NoopRawMutex keeps this type non-Sync. All access and the
-// simulated producer handoff run on one thread, after the protected call ends.
-unsafe impl RawMutex for HandoffMutex {
-    const INIT: Self = Self(NoopRawMutex::INIT);
-
-    fn lock<R>(&self, action: impl FnOnce() -> R) -> R {
-        let result = self.0.lock(action);
-        let handoff = AFTER_UNLOCK.with(|slot| slot.borrow_mut().take());
-        if let Some(handoff) = handoff {
-            handoff();
-        }
-        result
-    }
-}
 
 #[derive(Default)]
 struct Wakes(AtomicUsize);
@@ -62,42 +39,32 @@ fn packet(allocator: PacketBufAllocator) -> PacketBuf {
 #[test]
 fn producer_filling_budget_during_radio_handoff_waits_for_owner_release() {
     let general = allocator();
-    let resources = Box::leak(Box::new(OwnedEndpointResources::<HandoffMutex, 1, 2>::new()));
-    let (mut device, radio) = resources
+    let resources = Box::leak(Box::new(OwnedEndpointResources::<HostContext, 1, 2>::new()));
+    let (mut device, mut radio) = resources
         .split(NetworkInterfaceId::new(0), [2; 6], allocator())
         .expect("endpoint split");
     radio.link_controller().set_link_up(true);
     let wakes = Arc::new(Wakes::default());
     device.register_waker(&Waker::from(Arc::clone(&wakes)));
     device.transmit(packet(general)).unwrap();
-    let device = Rc::new(RefCell::new(device));
-    let waiting = Rc::new(Cell::new(false));
-    let producer = Rc::clone(&device);
-    let producer_waiting = Rc::clone(&waiting);
-    AFTER_UNLOCK.with(|slot| {
-        *slot.borrow_mut() = Some(Box::new(move || {
-            let mut device = producer.borrow_mut();
-            device.transmit(packet(general)).unwrap();
-            producer_waiting.set(!device.can_transmit());
-        }));
-    });
-
     let claimed = radio
         .try_receive_tx()
+        .unwrap()
         .expect("initial packet remains claimable");
-    assert!(waiting.get());
-    assert!(!device.borrow().can_transmit());
+    // The producer gets its next turn while the first credit is retained.
+    device.transmit(packet(general)).unwrap();
+    assert!(!device.can_transmit());
     assert_eq!(wakes.0.load(Ordering::Relaxed), 0);
     drop(claimed);
-    assert!(device.borrow().can_transmit());
+    assert!(device.can_transmit());
     assert_eq!(wakes.0.load(Ordering::Relaxed), 1);
 }
 
 #[test]
 fn capacity_wake_is_one_full_to_available_edge_and_tracks_the_current_task() {
     let general = allocator();
-    let resources = Box::leak(Box::new(OwnedEndpointResources::<NoopRawMutex, 1, 2>::new()));
-    let (mut device, radio) = resources
+    let resources = Box::leak(Box::new(OwnedEndpointResources::<HostContext, 1, 2>::new()));
+    let (mut device, mut radio) = resources
         .split(NetworkInterfaceId::new(0), [2; 6], allocator())
         .expect("endpoint split");
     radio.link_controller().set_link_up(true);
@@ -113,10 +80,10 @@ fn capacity_wake_is_one_full_to_available_edge_and_tracks_the_current_task() {
     assert!(!device.can_transmit());
     assert_eq!(current.0.load(Ordering::Relaxed), 0);
 
-    drop(radio.try_receive_tx().unwrap());
+    drop(radio.try_receive_tx().unwrap().unwrap());
     assert_eq!(current.0.load(Ordering::Relaxed), 1);
-    drop(radio.try_receive_tx().unwrap());
-    assert!(radio.try_receive_tx().is_none());
+    drop(radio.try_receive_tx().unwrap().unwrap());
+    assert!(radio.try_receive_tx().unwrap().is_none());
     assert_eq!(current.0.load(Ordering::Relaxed), 1);
     assert_eq!(previous.0.load(Ordering::Relaxed), previous_wakes);
 
@@ -125,6 +92,6 @@ fn capacity_wake_is_one_full_to_available_edge_and_tracks_the_current_task() {
     device.transmit(packet(general)).unwrap();
     device.transmit(packet(general)).unwrap();
     assert!(!device.can_transmit());
-    drop(radio.try_receive_tx().unwrap());
+    drop(radio.try_receive_tx().unwrap().unwrap());
     assert_eq!(current.0.load(Ordering::Relaxed), 2);
 }

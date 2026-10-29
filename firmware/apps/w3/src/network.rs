@@ -13,7 +13,7 @@ use embassy_futures::{
     yield_now,
 };
 use oer_embassy_net::{
-    NetworkInterfaceId, NoopRawMutex, OwnedEndpointResources, OwnedNetworkDevice,
+    NetworkInterfaceId, OwnedEndpointResources, OwnedNetworkDevice,
 };
 use oer_embassy_time::EmbassyClock;
 use oer_firmware_apps_w3::{
@@ -38,8 +38,8 @@ use xarxa_driver::{PacketPool, PacketPoolStorage};
 
 const RX: usize = oer_firmware_apps_w3::policy::RX_DEPTH;
 const TX: usize = 4;
-type Endpoint = OwnedEndpointResources<NoopRawMutex, RX, TX>;
-type Device = OwnedNetworkDevice<'static, NoopRawMutex, RX, TX>;
+type Endpoint = OwnedEndpointResources<oer_espressif_executor::ThreadContext<0>, RX, TX>;
+type Device = OwnedNetworkDevice<'static, oer_espressif_executor::ThreadContext<0>, RX, TX>;
 static ENDPOINT: StaticCell<Endpoint> = StaticCell::new();
 static DEVICE: StaticCell<Device> = StaticCell::new();
 static STACK: StaticCell<StackStorage<'static, Device>> = StaticCell::new();
@@ -144,14 +144,17 @@ fn workload_future<'a, 'id: 'a, Path: PoolPath + 'a>(
         match select(
             application,
             join3(
-                oer_firmware_apps_w3::bridge::run(
+                async { match oer_firmware_apps_w3::bridge::run(
                     radio,
                     tx,
                     rx,
                     &observations,
                     link,
                     &EmbassyClock,
-                ),
+                ).await {
+                    Ok(never) => match never {},
+                    Err(_) => crate::fail(oer_diagnostics::name!("network-context-access-refused"; 32)),
+                } },
                 runner.run(),
                 drain(&socket),
             ),

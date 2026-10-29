@@ -23,8 +23,6 @@
 //! across station associations. [`datapath`] holds the software/physical TX
 //! ownership contracts and the destination/flow queue arena between them.
 
-pub use embassy_sync::blocking_mutex::raw::{NoopRawMutex, RawMutex};
-pub use embassy_sync::signal::Signal;
 pub use oer_network::{
     ETHERNET_HEADER_LEN, FrameLengthError, LinkState, NetworkInterfaceId, RxEnqueueError,
 };
@@ -34,11 +32,12 @@ mod owned;
 pub mod station_network;
 
 pub use owned::{
-    EndpointSplitError, OwnedEndpointResources, OwnedLinkController, OwnedNetworkDevice,
-    OwnedNetworkRunner, OwnedNetworkTxFrame, OwnedRxPublisher, OwnedTxFrameSource,
+    AccessRefused, EndpointSplitError, OwnedEndpointResources, OwnedLinkController,
+    OwnedNetworkDevice, OwnedNetworkRunner, OwnedNetworkTxFrame, OwnedRxPublisher,
+    OwnedTxFrameSource,
 };
 
-impl<M: RawMutex> datapath::SoftwareTxFrame for OwnedNetworkTxFrame<'_, M> {
+impl datapath::SoftwareTxFrame for OwnedNetworkTxFrame<'_> {
     fn interface(&self) -> NetworkInterfaceId {
         OwnedNetworkTxFrame::interface(self)
     }
