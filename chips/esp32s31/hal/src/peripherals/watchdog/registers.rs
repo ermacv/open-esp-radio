@@ -140,6 +140,20 @@ impl<P: Placement, Q: Placement> Mwdt1Registers<P, Q> {
     }
 }
 
+impl<P: Placement, Q: Placement> oer_espressif_boot::adoption::Timer0Clock
+    for Mwdt0Registers<P, Q>
+{
+    fn start_timer0_clock(&mut self) {
+        Self::start_timer0_clock(self);
+    }
+}
+
+impl<P: Placement, Q: Placement> oer_espressif_boot::adoption::Main1Clock for Mwdt1Registers<P, Q> {
+    fn start_clock(&mut self) {
+        Self::start_clock(self);
+    }
+}
+
 impl<P: Placement> RwdtRegisters<P> {
     pub(super) fn new(wdt: LpWdt<P>) -> Self {
         Self(wdt)

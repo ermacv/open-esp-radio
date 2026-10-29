@@ -22,7 +22,7 @@ pub use brownout::BrownoutRegisters;
 pub use cache::{CacheMap, CacheRegisters};
 pub use clock::{
     BusDividers, ClockRegisters, CpllDividers, CpuRoot, FlashClockWord, LpFastClock, LpFastSource,
-    MemDivider, PsramSupplyLevel,
+    MemDivider, PsramSupplyLevel, RuntimeCpuClock,
 };
 pub use flash::{FlashRegisters, FlashTimingCandidate, FlashTimingWords};
 pub use oer_espressif_boot::{

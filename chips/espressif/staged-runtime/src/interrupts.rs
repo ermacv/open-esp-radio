@@ -9,7 +9,7 @@
 pub const LINES: oer_espressif_interrupt_table::Lines = crate::vectors::LINES;
 
 /// Declare the image's interrupt table, once per image, and hand its
-/// `INTERRUPT_TABLE` to [`Handoff::adopt`](crate::Handoff::adopt):
+/// `INTERRUPT_TABLE` to [`adoption::run`](crate::adoption::run):
 ///
 /// ```ignore
 /// oer_espressif_staged_runtime::interrupt_table! {

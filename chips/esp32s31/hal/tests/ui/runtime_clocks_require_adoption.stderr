@@ -1,0 +1,7 @@
+error[E0308]: mismatched types
+ --> tests/ui/runtime_clocks_require_adoption.rs:7:57
+  |
+7 |     let _adopted: oer_esp32s31_hal::power::ChipClocks = owners.clocks; // ui-error: E0308
+  |                   -----------------------------------   ^^^^^^^^^^^^^ expected `ChipClocks`, found `ClockParts`
+  |                   |
+  |                   expected due to this

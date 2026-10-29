@@ -192,33 +192,35 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
 fn system_main(
     handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platform::Port>,
 ) -> ! {
-    let runtime = initialize_runtime();
-    // Before anything records a checkpoint over the previous boot's record.
-    #[cfg(feature = "system-watchdog")]
-    system::postmortem::begin();
-    // Before any boot evidence is served: taking it clears the record.
-    #[cfg(any(feature = "system-watchdog", feature = "system-panic-reset"))]
-    system::take_platform_panic();
-    #[cfg(any(feature = "system-watchdog", feature = "system-panic-reset"))]
-    system::read_reset_causes(runtime.reset_cause);
-    // The bootstrap configured PSRAM before entering this separately linked
-    // runtime; stage two adopts the live mapping without reinitializing the
-    // PSRAM device or MMU.
-    let (_psram, mut adopted) = match handoff.adopt(
-        INTERRUPT_TABLE,
-        runtime.interrupts.controller,
-        oer_esp32s31_board::BootstrapPsram,
-        oer_esp32s31_compose::phy_fault::report_previous,
-    ) {
-        Ok(adopted) => adopted,
-        Err(error) => crate::fail(crate::fatal::Failure::from_boot(error)),
-    };
+    let prepared = initialize_runtime();
+    let ((timer, software, watchdogs, entropy), _psram, mut adopted) =
+        match prepared.adopt(
+            handoff,
+            INTERRUPT_TABLE,
+            oer_esp32s31_board::BootstrapPsram,
+            oer_esp32s31_compose::phy_fault::report_previous,
+            |runtime| {
+                // Before anything records a checkpoint over the previous boot's record.
+                #[cfg(feature = "system-watchdog")]
+                system::postmortem::begin();
+                // Before any boot evidence is served: taking it clears the record.
+                #[cfg(any(feature = "system-watchdog", feature = "system-panic-reset"))]
+                system::take_platform_panic();
+                #[cfg(any(feature = "system-watchdog", feature = "system-panic-reset"))]
+                system::read_reset_causes(runtime.reset_cause);
+                (runtime.system_timer, runtime.software_interrupts, runtime.watchdogs, runtime.entropy)
+            },
+        ) {
+            Ok(runtime) => runtime.into_parts(),
+            Err(error) => crate::fail(crate::fatal::Failure::from_boot(error)),
+        };
+    #[cfg(not(any(feature = "system-watchdog", feature = "system-panic-reset")))]
+    let _entropy = entropy;
     exception::report_stack_guard();
 
     let Some(interrupts) = Interrupts::take() else {
         fail(fatal::Failure::InterruptTable);
     };
-    let timer = runtime.system_timer;
     oer_espressif_executor::init::<Esp32s31, 0, _, _>(
         oer_espressif_executor::systimer::SystemTimer {
             comparators: timer.comparators,
@@ -230,14 +232,13 @@ fn system_main(
     )
     .unwrap_or_else(|failure| failure.reset());
     let console = usb::open(adopted.router(), interrupts.console_usb);
-    let software = runtime.software_interrupts;
     let executor = Executor::<Esp32s31, 0>::new(software.line0);
     let (mut router, hart) = match adopted.enable_interrupts() {
         Ok(router) => router,
         Err(error) => crate::fail(crate::fatal::Failure::from_boot(error)),
     };
     let wake = (interrupts.wake, software.irq0);
-    let rtc_watchdog = runtime.watchdogs.rtc;
+    let rtc_watchdog = watchdogs.rtc;
 
     #[cfg(feature = "system-panic-reset")]
     system::panic_reset::start(
@@ -246,7 +247,7 @@ fn system_main(
         &mut router,
         wake,
         console,
-        crate::Rng::new(runtime.entropy, oer_embassy_time::EmbassyClock),
+        crate::Rng::new(entropy, oer_embassy_time::EmbassyClock),
         rtc_watchdog,
     );
 
@@ -257,8 +258,8 @@ fn system_main(
         &mut router,
         wake,
         console,
-        crate::Rng::new(runtime.entropy, oer_embassy_time::EmbassyClock),
-        runtime.watchdogs.main1,
+        crate::Rng::new(entropy, oer_embassy_time::EmbassyClock),
+        watchdogs.main1,
         rtc_watchdog,
     );
 
@@ -276,11 +277,11 @@ fn system_main(
 }
 
 /// Install the console's owned parts before any stage-two diagnostic.
-fn initialize_runtime() -> oer_esp32s31_hal::root::Runtime {
+fn initialize_runtime() -> oer_espressif_staged_runtime::adoption::Prepared<Esp32s31> {
     startup::initialize(
         || {
             let root = oer_esp32s31_hal::root::Root::take().ok_or(fatal::Failure::RootTaken)?;
-            root.into_runtime()
+            oer_espressif_staged_runtime::adoption::prepare::<Esp32s31>(root.into_runtime())
                 .map_err(|_| fatal::Failure::RootInitialization)
         },
         || {

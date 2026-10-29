@@ -102,9 +102,7 @@ fn a_duplicate_console_is_a_typed_root_failure_and_retains_the_first_owner() {
         ConsoleRegisters::host(&mut second, &mut second_pads).unwrap(),
     )
     .unwrap_err();
-    let error = crate::root::InitError::from(error);
-    assert_eq!(error, crate::root::InitError::ConsoleInstalled);
-    assert_eq!(error.name().as_str(), "console-installed");
+    assert_eq!(error, super::Installed);
     let (mut endpoint, _, _) = parts(ownership.retire().unwrap());
     endpoint.push(0x42);
     drop(endpoint);

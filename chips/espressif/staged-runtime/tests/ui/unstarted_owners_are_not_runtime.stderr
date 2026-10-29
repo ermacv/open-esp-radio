@@ -1,0 +1,10 @@
+error[E0308]: mismatched types
+ --> tests/ui/unstarted_owners_are_not_runtime.rs:7:85
+  |
+7 |     let _ready: oer_espressif_staged_runtime::adoption::Runtime<P::Output, C, ()> = owners; // ui-error: E0308
+  |                 -----------------------------------------------------------------   ^^^^^^ expected `Runtime<<P as Port>::Output, C, ()>`, found `Owners<P>`
+  |                 |
+  |                 expected due to this
+  |
+  = note: expected struct `Runtime<<P as Port>::Output, C, ()>`
+             found struct `Owners<P>`

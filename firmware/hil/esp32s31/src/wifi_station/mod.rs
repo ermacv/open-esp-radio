@@ -72,16 +72,19 @@ type Actor = wifi::RadioActor<crate::phy_pilot::Client>;
 pub(crate) fn start(
     handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platform::Port>,
 ) -> ! {
-    let runtime = crate::initialize_runtime();
+    let prepared = crate::initialize_runtime();
     crate::system::take_platform_panic();
-    oer_esp32s31_compose::wifi_fault::report_previous();
-    let (_psram, mut adopted) = match handoff.adopt(
+    let (runtime, _psram, mut adopted) = match prepared.adopt(
+        handoff,
         crate::INTERRUPT_TABLE,
-        runtime.interrupts.controller,
         board::BootstrapPsram,
         oer_esp32s31_compose::phy_fault::report_previous,
+        |hardware| {
+            oer_esp32s31_compose::wifi_fault::report_previous();
+            hardware
+        },
     ) {
-        Ok(adopted) => adopted,
+        Ok(adopted) => adopted.into_parts(),
         Err(error) => crate::fail(crate::fatal::Failure::from_boot(error)),
     };
     crate::exception::report_stack_guard();

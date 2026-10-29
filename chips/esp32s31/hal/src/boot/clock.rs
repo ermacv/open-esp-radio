@@ -143,19 +143,26 @@ pub struct ClockRegisters<
     hp_alive_sys: HpAliveSysPllClock<S>,
 }
 
-impl ClockRegisters {
-    /// Adopt the bootstrap's stable CPU rate before any runtime PHY settle.
-    /// Clock writes remain exclusively in the bootstrap; runtime has no CPU
-    /// clock owner. A fractional or unsupported rate refuses short settles.
-    #[cfg(target_arch = "riscv32")]
-    pub(crate) fn adopt_short_settle_clock(self) {
-        use core::sync::atomic::Ordering;
-        let cpu = self.hp_sys_clkrst.read_cpu_freq_ctrl0();
-        let root = CpuRoot::from_code(self.hp_sys_clkrst.read_soc_clk_sel().reg_soc_clk_sel());
-        let pll = self.lp_aon_clkrst.read_cpll_div();
-        let rate = (cpu.reg_cpu_clk_div_numerator().get() == 0)
-            .then(|| {
-                CpuFrequency::from_dividers(
+/// Read-only adoption authority. Runtime receives no clock-programming port.
+pub struct RuntimeCpuClock(ClockRegisters);
+
+impl RuntimeCpuClock {
+    pub(crate) fn new(clock: ClockRegisters) -> Self {
+        Self(clock)
+    }
+}
+
+impl oer_espressif_boot::adoption::CpuClock for RuntimeCpuClock {
+    fn sample(&self) -> oer_espressif_boot::adoption::CpuRate {
+        #[cfg(target_arch = "riscv32")]
+        {
+            let cpu = self.0.hp_sys_clkrst.read_cpu_freq_ctrl0();
+            let root =
+                CpuRoot::from_code(self.0.hp_sys_clkrst.read_soc_clk_sel().reg_soc_clk_sel());
+            let pll = self.0.lp_aon_clkrst.read_cpll_div();
+            oer_espressif_boot::adoption::CpuRate {
+                fractional: cpu.reg_cpu_clk_div_numerator().get() != 0,
+                integer_hz: CpuFrequency::from_dividers(
                     root,
                     cpu.reg_cpu_clk_div_num(),
                     CpllDividers {
@@ -163,11 +170,24 @@ impl ClockRegisters {
                         reference: pll.cpll_ref_div(),
                     },
                 )
-            })
-            .flatten();
-        RUNTIME_CPU_HZ.store(rate.map_or(0, |rate| rate.0), Ordering::Release);
+                .map(|rate| rate.0),
+            }
+        }
+        #[cfg(not(target_arch = "riscv32"))]
+        oer_espressif_boot::adoption::CpuRate {
+            fractional: false,
+            integer_hz: None,
+        }
     }
+    fn publish(self, rate_hz: Option<u32>) {
+        #[cfg(target_arch = "riscv32")]
+        RUNTIME_CPU_HZ.store(rate_hz.unwrap_or(0), core::sync::atomic::Ordering::Release);
+        #[cfg(not(target_arch = "riscv32"))]
+        let _ = (self.0, rate_hz);
+    }
+}
 
+impl ClockRegisters {
     /// The settle length in machine cycles at the adopted CPU rate.
     #[cfg(target_arch = "riscv32")]
     pub(crate) fn short_settle_cycles(micros: u32) -> Option<u32> {

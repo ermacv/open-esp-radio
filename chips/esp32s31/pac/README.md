@@ -55,7 +55,7 @@ selects XTAL and enables T0 through the watchdog owner's narrow operation,
 which changes only T0's source and gate. MWDT0 retains the clock/reset owner inside
 `StoppedMainWatchdog`, so T0 cannot reset the group and restore flash-boot
 watchdog enable. The HAL exposes the two disjoint parts through
-`Runtime::timg0_alarm`, without arming or acknowledging during adoption.
+`Hardware::timg0_alarm`, without arming or acknowledging during adoption.
 
 `tests/` exercises the generated layouts over host memory; the renderer's
 own tests prove the accessors' behaviour and what they refuse.

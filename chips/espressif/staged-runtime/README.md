@@ -9,9 +9,27 @@ vectors, stack symbols and default handlers.
 `_runtime_start` initializes application data and SRAM interrupt/DMA sections,
 selects the boot hart's PSRAM task stack and calls the image's `runtime_main`.
 `entry!` supplies that entry and the image's single panic handler. The image
-takes the HAL reset root's runtime partition and calls `Handoff::adopt` with
-its interrupt table, controller, board mapping adapter and previous-fault
-reporter. Adoption writes no PSRAM, cache or MMU register.
+passes the HAL reset root's unstarted runtime partition to `adoption::run`,
+with its composition binding, interrupt table, board mapping adapter and
+previous-fault reporter. The runner calls `oer-espressif-boot::adoption::initialize`
+for CPU-rate/clock adoption, console/core/debug installation, runtime watchdog
+arming and interrupt-owner publication. Isolated verifiers call that same driver
+without linking the runtime. The HAL split performs no startup effects.
+
+The optional image work is an explicit ownership projection callback after
+driver initialization and before retained-record reporting and mapping adoption;
+images with no work there pass `core::convert::identity`. Wi-Fi and IEEE 802.15.4
+retained reports, and HIL postmortem/reset-cause reads, keep their original order
+in this callback. The runner then calls the
+family mapping-adoption API and installs the interrupt context. Only a successful
+arm/adopt path constructs `adoption::Runtime`; its constructor and fields are
+private. `into_parts` returns the hardware, mapping and interrupt context together.
+`prepare` exposes the initialized phase as an opaque `Prepared` for image startup
+reporting. Its owners stay private until `Prepared::adopt` completes mapping and
+context adoption. HIL uses this phase to retain its console-before-diagnostics
+startup helper and regression test; `run` uses the same preparation/completion
+implementation.
+Adoption writes no CPU clock, PSRAM, cache or MMU register and repeats no cold boot.
 
 Adoption installs the SRAM interrupt stack and vectors, silences sources and
 disables lines through the interrupt controller. Geometry and level-bit

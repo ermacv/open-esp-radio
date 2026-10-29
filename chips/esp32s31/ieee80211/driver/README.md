@@ -113,7 +113,7 @@ cause alone does not guarantee.
 Staged Wi-Fi images select the `wifi-fault` feature of the chip composition
 (`oer-esp32s31-compose`) and pass the RAW sample to its `wifi_fault::reset`, retaining their interrupt and preempted DMA
 owners. That shared module owns one twelve-byte retained record and calls
-`fatal::reset_recording`; after `Root::into_runtime` installs the early console,
+`fatal::reset_recording`; after the family adoption driver installs the early console,
 its `report_previous` consumes and prints the reason and complete RAW word.
 The ordinary record stores, magic and checksum are not a power-fail commit
 protocol. Policy dispatch uses the PAC's named cause and never decodes the

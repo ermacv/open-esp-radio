@@ -46,9 +46,16 @@ grant notification.
 
 `Root::into_bootstrap` returns unstarted owners without installing the console,
 opening the timer clock or checking its latch. The family cold-start runner
-performs those steps through the S31 boot binding. `into_runtime` retains its
-existing adoption effects and returns `Result` with `root::InitError` for a
-refused console or core-control installation.
+performs those steps through the S31 boot binding. `into_runtime` also returns
+unstarted owners without register access or installation. Its `RuntimePort`
+implements the family boot adoption driver's owned adapters. That driver owns
+clock adoption, installation order and watchdog arming; the compose binding
+connects its `PlatformParts` to the staged runner. `PlatformParts` also serves
+isolated verifier sessions, without a staged handoff or runtime dependency.
+A ready staged `Runtime` exists only after driver arming and board/context adoption.
+The split's `RuntimeCpuClock` exposes only a read/publish adoption port, with no
+CPU-clock programming port. PSRAM controller, cache and MMU owners are retired.
+Refused console and core-control installation keep their existing reason names.
 
 The PSRAM driver owns the controller/MMU adapter and returns affine
 `MappedPsram<PsramRegisters>`. Its physical window comes from the HAL adapter,
@@ -61,7 +68,7 @@ The watchdog owners retain both timer groups' clock/reset words. Runtime
 startup selects XTAL and enables TIMG0 T0 through a private watchdog operation
 that changes only `T0_SRC_SEL/T0_CLK_EN`; it preserves group reset, APB, T1 and
 watchdog clocks. MWDT0 keeps that authority inside `StoppedMainWatchdog`.
-`Runtime::timg0_alarm` adopts two disjoint owners without writes:
+`Hardware::timg0_alarm` adopts two disjoint owners without writes:
 `Timg0AlarmProgram` owns T0 configuration, alarm, load and the whole ENA word;
 `Timg0AlarmInterrupt` owns the whole RAW/ST words and only T0 CLR. Both lack
 group-reset access. The program owner can travel in the actor's transaction
@@ -130,12 +137,12 @@ floor. HAL implements only strobe/VALID/LO/HI atoms. The executor reaches the
 owned counter through `platform-port` and its binding requires the family's
 latch port. The generic `Monotonic::start_initial_latch_check` explicitly
 names the initial bounded check, before a `BootDeadline` exists. The reset
-root calls it after opening the timer clock; the bootstrap starts its common
+bootstrap binding calls it after opening the timer clock; the runner starts its common
 deadline over the returned monotonic clock.
 
 `power::ChipClocks` is the one owner of the platform clock words the radio
 shares with the SoC (`MODEM_LPCON.CLK_CONF`, `HP_SYS_CLKRST.REF_160M_CTRL0`):
-`Root::into_runtime` installs it as `Runtime::clocks`, it counts the
+the family adoption driver installs it through the HAL adapter, it counts the
 references of every user, and a refused acquire or release is the caller's
 typed error.
 

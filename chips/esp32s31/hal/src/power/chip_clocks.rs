@@ -3,8 +3,8 @@
 //! The radio's platform clocks ([`PlatformClock`]) live in words other SoC
 //! users share, so one owner writes each word and counts references for
 //! every user; radio modules hold [`PlatformClockGuard`]s, never fields.
-//! The reset root installs the words once ([`ChipClocks::install`], from
-//! [`Root::into_runtime`](crate::root::Root::into_runtime)) in one
+//! The family adoption driver installs the root's words once through its HAL
+//! adapter ([`ChipClocks::install`]) in one
 //! [`ClaimCell`]; every operation borrows them for a few register accesses
 //! and never waits. The counts are global, so a guard gives its reference
 //! back without a borrow of its provider.
@@ -245,8 +245,7 @@ static CHIP_CLOCKS: ClaimCell<ClockCounts<ClockWords>> = ClaimCell::new();
 /// The chip's platform clock owner: the provider and the backend of every
 /// [`PlatformClockGuard`] of the radio.
 ///
-/// Only the reset root makes it ([`Root::into_runtime`](crate::root::Root::into_runtime)),
-/// once per image. A refused request is the caller's typed error, never a
+/// Only adoption of the reset root's unique clock parts makes it, once per image. A refused request is the caller's typed error, never a
 /// wait: the words are lent to another context now (an operation it
 /// interrupted, or another hart), a release has no reference to give back,
 /// or a count is exhausted.

@@ -54,17 +54,20 @@ pub const fn wifi_power_limits(
 /// handoff adopts it:
 ///
 /// ```ignore
-/// let (psram, adopted) = match handoff.adopt(
+/// let ready = match oer_espressif_staged_runtime::adoption::run::<oer_esp32s31_compose::Esp32s31, _, _>(
+///     handoff,
+///     root.into_runtime(),
 ///     INTERRUPT_TABLE,
-///     controller,
 ///     BootstrapPsram,
 ///     oer_esp32s31_compose::phy_fault::report_previous,
+///     core::convert::identity,
 /// ) {
 ///     Ok(adopted) => adopted,
 ///     Err(error) => fail(error.name()),
 /// };
 /// ```
 ///
+/// The runner calls the shared family driver's mapping adoption API.
 /// Stage two owns no PSRAM controller, cache or MMU register: the root
 /// drops the bootstrap's partitions, so adoption writes nothing.
 pub struct BootstrapPsram;

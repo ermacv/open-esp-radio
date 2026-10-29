@@ -12,6 +12,7 @@ description = "Espressif bootstrap sequences over a chip's typed register traits
 oer-espressif-analog = { path = "../analog" }
 oer-time = { path = "../../../portable/time" }
 oer-espressif-watchdog = { path = "../watchdog" }
+oer-espressif-staged-layout.workspace = true
 
 [dev-dependencies]
 oer-time-virtual = { path = "../../../portable/time-virtual" }

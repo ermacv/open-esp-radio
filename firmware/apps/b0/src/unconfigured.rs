@@ -16,17 +16,15 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
     let Some(root) = Root::take() else {
         fail("root-taken");
     };
-    let runtime = match root.into_runtime() {
-        Ok(runtime) => runtime,
-        Err(error) => fail(error.name().as_str()),
-    };
-    let (_psram, _adopted) = match handoff.adopt(
+    let (_runtime, _psram, _adopted) = match oer_espressif_staged_runtime::adoption::run::<oer_esp32s31_compose::Esp32s31, _, _>(
+        handoff,
+        root.into_runtime(),
         INTERRUPT_TABLE,
-        runtime.interrupts.controller,
         oer_esp32s31_board::BootstrapPsram,
         oer_esp32s31_compose::phy_fault::report_previous,
+        core::convert::identity,
     ) {
-        Ok(adopted) => adopted,
+        Ok(adopted) => adopted.into_parts(),
         Err(error) => fail(error.name().as_str()),
     };
     gate_fault::report_previous();
