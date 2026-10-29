@@ -33,15 +33,29 @@ pub(super) fn run<'a, 'p: 'a, 'e: 'a>(
         let (permission, power) = permission(profile);
         let join = BluetoothJoin::new(permission, Operation::DtmTx, Some(power))
             .expect("build-validated DTM transmit permission");
-        let (cell, joined) = core::pin::pin!(actor.run_until(cell.join(join))).await;
+        let (cell, joined) = core::pin::pin!(actor.run_until(cell.join(join)))
+            .await
+            .unwrap_or_else(
+                oer_espressif_staged_runtime::panic::reset_request::<
+                    oer_esp32s31_hal::platform::Port,
+                    _,
+                >,
+            );
         let joined = match joined {
             Ok(j) => j,
             Err(_) => fail(&mut actor, &mut boot.reply).await,
         };
-        let (cell, tracked) = core::pin::pin!(
-            actor.run_until(cell.track(joined.member, joined.payload.installation))
-        )
-        .await;
+        let (cell, tracked) =
+            core::pin::pin!(
+                actor.run_until(cell.track(joined.member, joined.payload.installation))
+            )
+            .await
+            .unwrap_or_else(
+                oer_espressif_staged_runtime::panic::reset_request::<
+                    oer_esp32s31_hal::platform::Port,
+                    _,
+                >,
+            );
         let tracked = match tracked {
             Ok(t) => t,
             Err(_) => fail(&mut actor, &mut boot.reply).await,
@@ -157,10 +171,17 @@ pub(super) fn run<'a, 'p: 'a, 'e: 'a>(
         {
             fail(&mut retired, &mut boot.reply).await;
         }
-        let (cell, left) = core::pin::pin!(
-            actor.run_until(cell.leave(Leaving::Tracked(tracked.member), tracked.payload))
-        )
-        .await;
+        let (cell, left) =
+            core::pin::pin!(
+                actor.run_until(cell.leave(Leaving::Tracked(tracked.member), tracked.payload))
+            )
+            .await
+            .unwrap_or_else(
+                oer_espressif_staged_runtime::panic::reset_request::<
+                    oer_esp32s31_hal::platform::Port,
+                    _,
+                >,
+            );
         if !left.payload.stopped {
             fail(&mut actor, &mut boot.reply).await;
         }

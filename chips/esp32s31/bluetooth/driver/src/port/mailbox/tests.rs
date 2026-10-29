@@ -54,8 +54,8 @@ struct Fixture {
 impl Fixture {
     fn new() -> (Self, MailboxDevice<TestTimer>) {
         let bell = Box::leak(Box::new(Doorbell::new()));
-        let commands = Box::leak(Box::new(Commands::new(bell, 1)));
-        let clocks = Box::leak(Box::new(ClockRequests::new(bell, 2)));
+        let commands = Box::leak(Box::new(Commands::new(bell, 1, 0x101)));
+        let clocks = Box::leak(Box::new(ClockRequests::new(bell, 2, 0x102)));
         let cancel = Box::leak(Box::new(AtomicBool::new(false)));
         let state = Box::leak(Box::new(ClockStorage::new()));
         let value = Box::leak(Box::new(ClockState::new(
@@ -479,4 +479,40 @@ fn p1_retirement_waits_for_the_abandoned_answer_before_reactivation() {
         now.as_mut().poll(&mut cx),
         Poll::Ready(Ok(Ok(LeInstant::from_micros(456))))
     );
+}
+
+#[test]
+fn an_abandoned_clock_response_reports_accounting_and_keeps_the_seat_claimed() {
+    let (f, mut device) = Fixture::new();
+    let mut clock = device.clock();
+    clock.activate().unwrap();
+    let mut cx = Context::from_waker(Waker::noop());
+    let mut now = pin!(clock.now());
+    assert!(now.as_mut().poll(&mut cx).is_pending());
+    let (_, responder) = f.clocks.take_request().unwrap();
+    drop(responder);
+    assert!(matches!(
+        now.as_mut().poll(&mut cx),
+        Poll::Ready(Err(Poisoned {
+            cause: Fault::Accounting
+        }))
+    ));
+    assert!(f.cancel.load(Ordering::Acquire));
+    assert!(f.clocks.claim().is_none());
+}
+
+#[test]
+fn an_abandoned_command_response_reports_accounting_without_reusing_its_seat() {
+    let (f, mut device) = Fixture::new();
+    let mut cx = Context::from_waker(Waker::noop());
+    let mut start = pin!(device.start(rx()));
+    assert!(start.as_mut().poll(&mut cx).is_pending());
+    let (_, responder) = f.commands.take_request().unwrap();
+    drop(responder);
+    assert!(matches!(
+        start.as_mut().poll(&mut cx),
+        Poll::Ready(Err(Fault::Accounting))
+    ));
+    assert!(f.cancel.load(Ordering::Acquire));
+    assert!(f.commands.claim().is_none());
 }

@@ -3,6 +3,7 @@
 #![deny(
     clippy::unwrap_used,
     clippy::panic,
+    clippy::unreachable,
     clippy::todo,
     clippy::unimplemented
 )]
@@ -48,6 +49,7 @@ mod context_cell;
 mod dma_address;
 mod dma_bytes;
 mod execution_context;
+mod frame_len;
 mod handler_cell;
 mod indexed_custody;
 mod init_in_place;
@@ -68,8 +70,8 @@ mod waking_spsc;
 pub mod zeroed;
 
 pub use request_slot::{
-    Awaiting, ByValue, Doorbell, InPlace, InPlaceClient, InPlaceServer, Poster, RequestSlot,
-    Responder,
+    Awaiting, ByValue, Doorbell, InPlace, InPlaceClient, InPlaceServer, Poster, RequestError,
+    RequestQuarantine, RequestSlot, Responder,
 };
 
 pub use affine_spsc::{
@@ -85,6 +87,7 @@ pub use dma_bytes::DmaBytes;
 #[cfg(any(test, feature = "host-context"))]
 pub use execution_context::HostContext;
 pub use execution_context::{Entered, ExecutionContext, Never};
+pub use frame_len::{FrameLen, FrameLenError, FrameRangeError, PoolError};
 pub use handler_cell::{HandlerCell, Installed};
 pub use indexed_custody::{CustodyDomain, Drained, IndexedCustody, Quarantine, RetainedName};
 #[doc(hidden)]
@@ -98,8 +101,8 @@ pub use pinned_tx::{
 };
 pub use return_bank::{ReturnBank, ReturnToken};
 pub use rx_external_handoff::{
-    ExternalRxAdoption, ExternalRxBuffer, ExternalRxHandoffPool, ExternalRxNetworkLease,
-    ExternalRxRadioLease, ExternalRxReturn, ExternalRxReturnState,
+    ExternalRxAdoption, ExternalRxBuffer, ExternalRxDetachError, ExternalRxHandoffPool,
+    ExternalRxNetworkLease, ExternalRxRadioLease, ExternalRxReturn, ExternalRxReturnState,
 };
 pub use rx_handoff::{RxHandoffPool, RxNetworkLease, RxRadioLease};
 pub use static_place::{PlacedFuture, StaticPlace};

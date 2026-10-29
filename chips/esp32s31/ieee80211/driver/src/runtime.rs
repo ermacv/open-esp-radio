@@ -103,10 +103,13 @@ impl<W> WifiRetuneFailure<W> {
     pub async fn release(
         self,
         cell: MembershipCell<Wifi>,
-    ) -> (
-        MembershipCell<Wifi>,
-        Result<WifiReleased<W>, WifiReleaseFailure<W>>,
-    ) {
+    ) -> Result<
+        (
+            MembershipCell<Wifi>,
+            Result<WifiReleased<W>, WifiReleaseFailure<W>>,
+        ),
+        oer_memory::RequestQuarantine<Option<W>>,
+    > {
         self.stopped.release(cell).await
     }
 }
@@ -132,10 +135,13 @@ impl<W> WifiStopped<W> {
     pub async fn release(
         self,
         cell: MembershipCell<Wifi>,
-    ) -> (
-        MembershipCell<Wifi>,
-        Result<WifiReleased<W>, WifiReleaseFailure<W>>,
-    ) {
+    ) -> Result<
+        (
+            MembershipCell<Wifi>,
+            Result<WifiReleased<W>, WifiReleaseFailure<W>>,
+        ),
+        oer_memory::RequestQuarantine<Option<W>>,
+    > {
         let Self {
             platform,
             registers,
@@ -147,7 +153,7 @@ impl<W> WifiStopped<W> {
         let registers = match registers.try_confirm_phy_stopped() {
             Ok(registers) => registers,
             Err(failure) => {
-                return (
+                return Ok((
                     cell,
                     Err(WifiReleaseFailure {
                         error: failure.error,
@@ -160,25 +166,29 @@ impl<W> WifiStopped<W> {
                             current_channel,
                         },
                     }),
-                );
+                ));
             }
         };
         let wifi = WifiClocked::from_running(registers, clocks);
-        let (cell, left) = cell
+        let (cell, left) = match cell
             .leave(Leaving::Tracked(member), WifiLeave { wifi })
-            .await;
+            .await
+        {
+            Ok(answer) => answer,
+            Err(reason) => return Err(oer_memory::RequestQuarantine::new(reason, Some(platform))),
+        };
         let Left {
             payload: WifiLeft { wifi },
             domain,
         } = left;
-        (
+        Ok((
             cell,
             Ok(WifiReleased {
                 wifi,
                 platform,
                 domain,
             }),
-        )
+        ))
     }
 
     /// Retune through the actor after the role returned its stopped DMA/IRQ
@@ -189,10 +199,13 @@ impl<W> WifiStopped<W> {
         cell: MembershipCell<Wifi>,
         channel: oer_radio_regulatory::Permitted<WifiChannel>,
         tx_ceiling: oer_radio_regulatory::TxCeiling,
-    ) -> (
-        MembershipCell<Wifi>,
-        Result<(Self, oer_esp32s31_radio_client::wifi::RetuneReport), WifiRetuneFailure<W>>,
-    )
+    ) -> Result<
+        (
+            MembershipCell<Wifi>,
+            Result<(Self, oer_esp32s31_radio_client::wifi::RetuneReport), WifiRetuneFailure<W>>,
+        ),
+        oer_memory::RequestQuarantine<Option<W>>,
+    >
     where
         W: crate::startup::WifiMacPlatform,
     {
@@ -469,16 +482,19 @@ pub struct WifiRetunePending<W> {
 }
 impl<W> Unpin for WifiRetunePending<W> {}
 impl<W: crate::startup::WifiMacPlatform> core::future::Future for WifiRetunePending<W> {
-    type Output = (
-        MembershipCell<Wifi>,
-        Result<
-            (
-                WifiStopped<W>,
-                oer_esp32s31_radio_client::wifi::RetuneReport,
-            ),
-            WifiRetuneFailure<W>,
-        >,
-    );
+    type Output = Result<
+        (
+            MembershipCell<Wifi>,
+            Result<
+                (
+                    WifiStopped<W>,
+                    oer_esp32s31_radio_client::wifi::RetuneReport,
+                ),
+                WifiRetuneFailure<W>,
+            >,
+        ),
+        oer_memory::RequestQuarantine<Option<W>>,
+    >;
     fn poll(
         self: core::pin::Pin<&mut Self>,
         cx: &mut core::task::Context<'_>,
@@ -487,12 +503,19 @@ impl<W: crate::startup::WifiMacPlatform> core::future::Future for WifiRetunePend
         use oer_esp32s31_radio_client::{Failed, RetunedMember, wifi::WifiRetuned};
         let this = self.get_mut();
         if let Some(answer) = this.immediate.take() {
-            return Poll::Ready(answer);
+            return Poll::Ready(Ok(answer));
         }
         let Some(pending) = this.pending.as_mut() else {
             return Poll::Pending;
         };
-        let (cell, answer) = core::task::ready!(Pin::new(pending).poll(cx));
+        let (cell, answer) = match core::task::ready!(Pin::new(pending).poll(cx)) {
+            Ok(answer) => answer,
+            Err(reason) => {
+                this.pending = None;
+                let platform = this.context.take().map(|(platform, _, _, _)| platform);
+                return Poll::Ready(Err(oer_memory::RequestQuarantine::new(reason, platform)));
+            }
+        };
         this.pending = None;
         let (mut platform, start_report, current_channel, target) = this
             .context
@@ -524,7 +547,7 @@ impl<W: crate::startup::WifiMacPlatform> core::future::Future for WifiRetunePend
                 current_channel
             },
         };
-        Poll::Ready((
+        Poll::Ready(Ok((
             cell,
             match report {
                 Ok(report) => Ok((stopped, report)),
@@ -533,6 +556,6 @@ impl<W: crate::startup::WifiMacPlatform> core::future::Future for WifiRetunePend
                     stopped,
                 }),
             },
-        ))
+        )))
     }
 }

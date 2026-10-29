@@ -12,8 +12,11 @@ pub type Backend<Id> = port::Backend<Id, rpc::MailboxDevice<EmbassyClock>>;
 oer_espressif_executor::declare_port_slot!(pub slot: super::Backend<Id>);
 pub type Front = rp::SlotFrontend<'static, slot::Id, Backend<slot::Id>>;
 type Ready = RequestSlot<Option<rp::Joined<slot::Id>>, Result<Front, Fault>>;
+const FRONTEND_REQUEST: u32 = 0x100;
+const COMMAND_REQUEST: u32 = 0x101;
+const CLOCK_REQUEST: u32 = 0x102;
 static READY_BELL: Doorbell = Doorbell::new();
-static READY: Ready = Ready::new(&READY_BELL, 1);
+static READY: Ready = Ready::new(&READY_BELL, 1, FRONTEND_REQUEST);
 pub type StopReports =
     oer_memory::AffineSpscReceiver<'static, [u8; 2], 1, oer_memory::CompactSpscCursor>;
 pub type StopReporter =
@@ -47,9 +50,9 @@ pub fn frontend(reports: StopReports) -> FrontendChannel {
 }
 
 static COMMAND_BELL: Doorbell = Doorbell::new();
-pub static COMMANDS: rpc::Commands = rpc::Commands::new(&COMMAND_BELL, 1);
+pub static COMMANDS: rpc::Commands = rpc::Commands::new(&COMMAND_BELL, 1, COMMAND_REQUEST);
 static CLOCK_BELL: Doorbell = Doorbell::new();
-static CLOCKS: rpc::ClockRequests = rpc::ClockRequests::new(&CLOCK_BELL, 1);
+static CLOCKS: rpc::ClockRequests = rpc::ClockRequests::new(&CLOCK_BELL, 1, CLOCK_REQUEST);
 static CLOCK: rpc::ClockStorage = rpc::ClockStorage::new();
 static CLOCK_STORE: StaticCell<rpc::ClockState> = StaticCell::new();
 pub type Response = Responder<'static, rpc::Command, rpc::Answer>;
@@ -178,7 +181,9 @@ pub async fn supervisor() {
                     })
                     .await
                 };
-                match oer_esp32s31_bluetooth_driver::port::Registration::guard_result(slot.register(Backend::new(device))) {
+                match oer_esp32s31_bluetooth_driver::port::Registration::guard_result(
+                    slot.register(Backend::new(device)),
+                ) {
                     Ok(registered) => registered,
                     Err(error) => {
                         // Retain the rejected owner or P2 initialization guard.
@@ -189,16 +194,18 @@ pub async fn supervisor() {
                     }
                 }
             }
-            Some(joined) => match oer_esp32s31_bluetooth_driver::port::Registration::guard_result(slot.reinstall(joined, |vacant| {
-                let device = match vacant.into_device().reinitialize() {
-                    Ok(device) => device,
-                    Err(mut device) => {
-                        device.quarantine();
-                        device
-                    }
-                };
-                Backend::new(device)
-            })) {
+            Some(joined) => match oer_esp32s31_bluetooth_driver::port::Registration::guard_result(
+                slot.reinstall(joined, |vacant| {
+                    let device = match vacant.into_device().reinitialize() {
+                        Ok(device) => device,
+                        Err(mut device) => {
+                            device.quarantine();
+                            device
+                        }
+                    };
+                    Backend::new(device)
+                }),
+            ) {
                 Ok(registered) => registered,
                 Err(error) => {
                     // Initialization faults retain P2 cleanup and their source cause.

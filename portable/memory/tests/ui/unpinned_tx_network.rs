@@ -8,5 +8,5 @@ pub fn claim(storage: &'static mut Pool) -> PinnedDmaTxNetworkLease<'static, 32,
     let pool = Pool::pin_static(storage);
     #[cfg(ui_reject)]
     let pool = Pool::new();
-    pool.claim_network(0) // ui-error: E0599
+    pool.claim_network(0).unwrap() // ui-error: E0599
 }

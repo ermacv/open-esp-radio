@@ -40,6 +40,10 @@ pub enum FaultReason {
     /// Explicit host-requested HIL reset, not a hardware fault. Observations:
     /// request ID, acknowledgement sequence, session ID low/high words.
     HilRequested = 33,
+    /// A software request lost its mandatory response; no hardware claim.
+    /// Observations: request kind/site, doorbell slot index, caller epoch (or zero
+    /// when no epoch is held), wrapping per-slot post sequence.
+    RequestUnanswered = 34,
     BindingRefused = 256,
     BindingStorageClaimed = 257,
     BindingHandlerOccupied = 258,
@@ -83,6 +87,7 @@ impl FaultReason {
             31 => Some(Self::RouteWrongClass),
             32 => Some(Self::RouteHandlerCellMismatch),
             33 => Some(Self::HilRequested),
+            34 => Some(Self::RequestUnanswered),
             256 => Some(Self::BindingRefused),
             257 => Some(Self::BindingStorageClaimed),
             258 => Some(Self::BindingHandlerOccupied),
@@ -128,6 +133,7 @@ impl FaultReason {
             Self::RouteWrongClass => "RouteWrongClass",
             Self::RouteHandlerCellMismatch => "RouteHandlerCellMismatch",
             Self::HilRequested => "HilRequested",
+            Self::RequestUnanswered => "RequestUnanswered",
             Self::BindingRefused => "BindingRefused",
             Self::BindingStorageClaimed => "BindingStorageClaimed",
             Self::BindingHandlerOccupied => "BindingHandlerOccupied",
@@ -146,5 +152,16 @@ impl From<BindFaultCode> for FaultReason {
             BindFaultCode::LineRefused => Self::BindingLineRefused,
             BindFaultCode::RouteRefused => Self::BindingRouteRefused,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::FaultReason;
+    #[test]
+    fn software_request_abandonment_round_trips_its_retained_code() {
+        let reason = FaultReason::RequestUnanswered;
+        assert_eq!(FaultReason::from_code(reason as u32), Some(reason));
+        assert_eq!(reason.name(), "RequestUnanswered");
     }
 }

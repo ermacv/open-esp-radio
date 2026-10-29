@@ -58,7 +58,7 @@ impl Allocation {
         }
     }
 
-    fn detach(&self, length: usize) -> Result<ExternalRxBuffer, ExternalRxReturnState> {
+    fn detach(&self, length: usize) -> Result<ExternalRxBuffer, ExternalRxDetachError> {
         #[allow(
             unsafe_code,
             reason = "test owns one leaked allocation and its return state"
@@ -93,8 +93,11 @@ fn dma_buffer_releases_before_handoff_credit_becomes_free() {
     let Ok(radio) = pool.try_claim_radio(allocation.detach(64).unwrap(), 0) else {
         panic!("fresh handoff slot must accept one buffer");
     };
-    let index = radio.republish(0, 64);
-    let network = pool.claim_network(index);
+    let index = radio
+        .republish(0, crate::FrameLen::constant::<64>())
+        .ok()
+        .expect("valid test range");
+    let network = pool.claim_network(index).unwrap();
     assert_eq!(network.release(), 0);
 
     assert_eq!(allocation.ret.state(), ExternalRxReturnState::Returned);
@@ -110,8 +113,11 @@ fn an_adopted_network_slot_exposes_its_view_and_returns_on_release() {
     let Ok(radio) = pool.try_claim_radio(allocation.detach(48).unwrap(), 0) else {
         panic!("fresh handoff slot must accept one buffer");
     };
-    let index = radio.republish(10, 30);
-    let network = pool.claim_network(index);
+    let index = radio
+        .republish(10, crate::FrameLen::constant::<30>())
+        .ok()
+        .expect("valid test range");
+    let network = pool.claim_network(index).unwrap();
     let view = network.adoption_view();
     assert_eq!(pool.network_slots(), 1);
     assert_eq!(allocation.ret.state(), ExternalRxReturnState::Detached);
@@ -137,7 +143,7 @@ fn an_adopted_network_slot_exposes_its_view_and_returns_on_release() {
     #[allow(unsafe_code, reason = "test returns its one adoption")]
     // SAFETY: the adoption above is released exactly once and not accessed after.
     unsafe {
-        pool.release_adopted(adoption.index)
+        pool.release_adopted(adoption.index).unwrap()
     };
     assert_eq!(allocation.ret.state(), ExternalRxReturnState::Returned);
     assert_eq!(observer.calls(), 1);
@@ -156,8 +162,11 @@ fn a_zeroed_pool_is_free_and_binds_without_releasing_a_previous_buffer() {
     // A free slot holds no buffer, so binding one releases nothing.
     assert_eq!(allocation.ret.state(), ExternalRxReturnState::Detached);
     assert_eq!(observer.calls(), 0);
-    let index = radio.republish(0, 64);
-    assert_eq!(pool.claim_network(index).release(), 0);
+    let index = radio
+        .republish(0, crate::FrameLen::constant::<64>())
+        .ok()
+        .expect("valid test range");
+    assert_eq!(pool.claim_network(index).unwrap().release(), 0);
     assert_eq!(allocation.ret.state(), ExternalRxReturnState::Returned);
     assert_eq!(observer.calls(), 1);
 }
@@ -171,7 +180,10 @@ fn dropping_the_pool_releases_a_published_buffer_once() {
         let Ok(radio) = pool.try_claim_radio(allocation.detach(64).unwrap(), 0) else {
             panic!("a fresh slot must accept one buffer");
         };
-        let _ready = radio.republish(0, 64);
+        let _ready = radio
+            .republish(0, crate::FrameLen::constant::<64>())
+            .ok()
+            .expect("valid test range");
         assert_eq!(allocation.ret.state(), ExternalRxReturnState::Detached);
         assert_eq!(observer.calls(), 0);
     }
@@ -204,8 +216,11 @@ fn network_drop_returns_once_before_freeing_the_slot() {
     let Ok(radio) = pool.try_claim_radio(allocation.detach(64).unwrap(), 0) else {
         panic!("fresh handoff slot must accept one buffer");
     };
-    let index = radio.republish(0, 64);
-    let network = pool.claim_network(index);
+    let index = radio
+        .republish(0, crate::FrameLen::constant::<64>())
+        .ok()
+        .expect("valid test range");
+    let network = pool.claim_network(index).unwrap();
     let view = network.adoption_view();
     assert_eq!(view.length, 64);
     assert_eq!(allocation.ret.state(), ExternalRxReturnState::Detached);
@@ -214,14 +229,6 @@ fn network_drop_returns_once_before_freeing_the_slot() {
     assert_eq!(allocation.ret.state(), ExternalRxReturnState::Returned);
     assert_eq!(observer.calls(), 1);
     assert_eq!(pool.claimed_slots(), 0);
-}
-
-#[test]
-#[should_panic(expected = "detached RX DMA buffer must be released exactly once")]
-fn returning_the_same_state_twice_panics() {
-    let allocation = Allocation::new();
-    drop(allocation.detach(64).unwrap());
-    allocation.ret.return_once();
 }
 
 #[test]
@@ -234,14 +241,18 @@ fn return_state_preserves_the_complete_cycle_and_refuses_live_owners() {
     assert_eq!(ret.state(), ExternalRxReturnState::Detached);
     assert_eq!(
         allocation.detach(64).err(),
-        Some(ExternalRxReturnState::Detached)
+        Some(ExternalRxDetachError::State(
+            ExternalRxReturnState::Detached
+        ))
     );
     assert_eq!(ret.reattach(), Err(ExternalRxReturnState::Detached));
     drop(buffer);
     assert_eq!(ret.state(), ExternalRxReturnState::Returned);
     assert_eq!(
         allocation.detach(64).err(),
-        Some(ExternalRxReturnState::Returned)
+        Some(ExternalRxDetachError::State(
+            ExternalRxReturnState::Returned
+        ))
     );
     assert_eq!(ret.reattach(), Ok(()));
     assert_eq!(ret.state(), ExternalRxReturnState::Attached);
@@ -270,15 +281,64 @@ fn return_state_has_the_atomic_layout_and_zero_is_attached() {
 }
 
 #[test]
-fn an_invalid_return_keeps_the_state_and_reports_static_bytes() {
-    let ret = ExternalRxReturn::new();
-    let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        ret.return_once();
-    }))
-    .expect_err("an attached buffer cannot be returned");
-    assert_eq!(ret.state(), ExternalRxReturnState::Attached);
+fn invalid_lengths_and_ranges_return_the_original_allocation() {
+    let allocation = Allocation::new();
+    assert!(matches!(
+        allocation.detach(65),
+        Err(ExternalRxDetachError::Length(FrameLenError {
+            length: 65,
+            capacity: 64
+        }))
+    ));
+    assert_eq!(allocation.ret.state(), ExternalRxReturnState::Attached);
+    let pool = ExternalRxHandoffPool::<32, 1>::new();
+    let buffer = allocation.detach(48).unwrap();
+    let (buffer, error) = pool
+        .try_claim_radio(buffer, usize::MAX)
+        .err()
+        .expect("profile refused");
     assert_eq!(
-        panic.downcast_ref::<&str>().map(|s| s.as_bytes()),
-        Some(b"detached RX DMA buffer must be released exactly once".as_slice())
+        error,
+        PoolError::Length(FrameLenError {
+            length: 48,
+            capacity: 32
+        })
     );
+    assert_eq!(buffer.length(), 48);
+    assert_eq!(allocation.ret.state(), ExternalRxReturnState::Detached);
+    drop(buffer);
+    allocation.ret.reattach().unwrap();
+    let pool = ExternalRxHandoffPool::<64, 1>::new();
+    let radio = pool
+        .try_claim_radio(allocation.detach(48).unwrap(), usize::MAX)
+        .ok()
+        .unwrap();
+    let (radio, error) = radio
+        .republish(usize::MAX, FrameLen::constant::<1>())
+        .err()
+        .expect("overflow refused");
+    assert_eq!(error.offset, usize::MAX);
+    assert_eq!(radio.frame().len(), 48);
+    let (radio, _) = radio
+        .republish(40, FrameLen::constant::<9>())
+        .err()
+        .expect("uninitialized bytes refused");
+    let index = radio.republish(40, FrameLen::constant::<8>()).ok().unwrap();
+    assert!(pool.claim_network(1).is_err());
+    let network = pool.claim_network(index).unwrap();
+    assert!(pool.claim_network(index).is_err());
+    drop(network);
+    assert_eq!(allocation.ret.state(), ExternalRxReturnState::Returned);
+}
+
+#[test]
+fn invalid_software_state_is_a_typed_refusal_with_its_observation() {
+    let ret = ExternalRxReturn::new();
+    ret.0.store(7, Ordering::Relaxed);
+    assert_eq!(ret.state(), ExternalRxReturnState::Invalid { observed: 7 });
+    assert_eq!(
+        ret.reattach(),
+        Err(ExternalRxReturnState::Invalid { observed: 7 })
+    );
+    assert_eq!(ret.0.load(Ordering::Relaxed), 7);
 }

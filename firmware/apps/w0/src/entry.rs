@@ -4,19 +4,25 @@ compile_error!(
     "w0 declares the trace class: build it with `cargo fw build w0`, check it with RUSTFLAGS=\"--cfg oer_trace\""
 );
 
-use oer_esp32s31_compose::Esp32s31;
 use oer_diagnostics::Note;
 use oer_embassy_time::EmbassyClock;
 use oer_esp32s31_board as board;
+use oer_esp32s31_compose::Esp32s31;
 use oer_esp32s31_hal::ieee80211::init::{
     MAC_COLD_HANDSHAKE_DEADLINE, MacDelayEntropy, MacSlowClockCalibration,
     MacSlowClockCalibrationSource,
 };
-use oer_esp32s31_hal::peripherals::{efuse::{FactoryIdentity, Interface}, software_interrupt::{FromCpu0Irq, FromCpu2Irq}, system_timer::{SystimerAlarm0, SystimerAlarm1}};
+use oer_esp32s31_hal::peripherals::usb_serial_jtag::ConsoleInterrupt;
+use oer_esp32s31_hal::peripherals::watchdog::{
+    ArmedRtcWatchdog, RTC_WATCHDOG_FEED_PERIOD_MS, RwdtRegisters,
+};
+use oer_esp32s31_hal::peripherals::{
+    efuse::{FactoryIdentity, Interface},
+    software_interrupt::{FromCpu0Irq, FromCpu2Irq},
+    system_timer::{SystimerAlarm0, SystimerAlarm1},
+};
 use oer_esp32s31_hal::power::ChipClocks;
 use oer_esp32s31_hal::root::{ProtocolPartitions, Root};
-use oer_esp32s31_hal::peripherals::usb_serial_jtag::ConsoleInterrupt;
-use oer_esp32s31_hal::peripherals::watchdog::{ArmedRtcWatchdog, RTC_WATCHDOG_FEED_PERIOD_MS, RwdtRegisters};
 use oer_esp32s31_ieee80211_driver::startup::{
     RadioStartConfig, RadioStartFailure, WifiColdStartConfig, WifiMacPlatform, WifiMacStartConfig,
     start_esp32s31_radio,
@@ -187,8 +193,12 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
         timer.alarm0,
     )
     .unwrap_or_else(|failure| failure.reset());
-    oer_espressif_executor::bind::<Esp32s31, 0, _, _>(adopted.router(), interrupts.app_alarm, timer.alarm1)
-        .unwrap_or_else(|failure| failure.reset());
+    oer_espressif_executor::bind::<Esp32s31, 0, _, _>(
+        adopted.router(),
+        interrupts.app_alarm,
+        timer.alarm1,
+    )
+    .unwrap_or_else(|failure| failure.reset());
     let software = runtime.software_interrupts;
     let (hart, router) = adopted.parts();
     let radio = InterruptExecutor::<Esp32s31, 2>::new(software.line2)
@@ -309,7 +319,10 @@ async fn run(
         },
         config,
     )
-    .await;
+    .await
+    .unwrap_or_else(
+        oer_espressif_staged_runtime::panic::reset_request::<oer_esp32s31_hal::platform::Port, _>,
+    );
     let mut stopped = match started {
         Ok(stopped) => stopped,
         Err(RadioStartFailure::Join { failed, .. }) => {
@@ -420,7 +433,9 @@ async fn run(
         ),
     )
     .await;
-    let (_cell, released) = stopped.release(cell).await;
+    let (_cell, released) = stopped.release(cell).await.unwrap_or_else(
+        oer_espressif_staged_runtime::panic::reset_request::<oer_esp32s31_hal::platform::Port, _>,
+    );
     match released {
         Ok(released) => {
             let cold = matches!(

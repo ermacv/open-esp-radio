@@ -78,7 +78,7 @@ fn complete<O: sealed::Reply<TestClient>>(
         panic!("the actor's answer makes the pending request ready");
     };
     assert!(Pin::new(&mut pending).poll(&mut cx).is_pending());
-    result
+    result.unwrap()
 }
 
 #[test]
@@ -216,4 +216,113 @@ fn refused_requests_return_the_original_payload_membership_and_cell() {
     assert_eq!(payload, 73);
     let _retry = cell3.retune(member, payload);
     let _retry = cell.join(71);
+}
+
+#[test]
+fn an_abandoned_actor_response_returns_an_error_without_a_new_cell() {
+    let (cell, inbox, _) = client();
+    let mut pending = core::pin::pin!(cell.join(11));
+    let mut cx = Context::from_waker(core::task::Waker::noop());
+    assert!(pending.as_mut().poll(&mut cx).is_pending());
+    let Request::Join(_, responder) = inbox.take().unwrap() else {
+        panic!("join request");
+    };
+    drop(responder);
+    assert!(matches!(
+        pending.as_mut().poll(&mut cx),
+        Poll::Ready(Err(oer_memory::RequestError::Unanswered {
+            kind: 1,
+            slot: 0,
+            epoch: 0,
+            sequence: 1
+        }))
+    ));
+    assert!(pending.as_mut().poll(&mut cx).is_pending());
+    assert!(inbox.take().is_none());
+    assert!(inbox.slot.claim().is_none());
+    assert!(inbox.slot.track.claim().is_none());
+    assert!(inbox.slot.retune.claim().is_none());
+    assert!(inbox.slot.leave.claim().is_none());
+}
+
+fn abandoned<O: sealed::Reply<TestClient>>(
+    pending: Pending<TestClient, O>,
+    inbox: ClientInbox<TestClient>,
+) -> oer_memory::RequestError {
+    let mut pending = core::pin::pin!(pending);
+    let mut cx = Context::from_waker(core::task::Waker::noop());
+    assert!(pending.as_mut().poll(&mut cx).is_pending());
+    match inbox.take().unwrap() {
+        Request::Join(_, responder) => drop(responder),
+        Request::Track(_, _, responder) => drop(responder),
+        Request::Retune(_, _, responder) => drop(responder),
+        Request::Leave(_, _, responder) => drop(responder),
+    }
+    let Poll::Ready(Err(error)) = pending.as_mut().poll(&mut cx) else {
+        panic!("abandoned request must report its source identity");
+    };
+    assert!(pending.as_mut().poll(&mut cx).is_pending());
+    assert!(inbox.slot.claim().is_none());
+    error
+}
+
+#[test]
+fn every_abandoned_radio_kind_and_client_slot_is_distinct_and_keeps_its_epoch() {
+    extern crate std;
+    use std::boxed::Box;
+    let mut observations = std::collections::BTreeSet::new();
+    for index in [0, 1] {
+        for kind in [
+            RequestKind::Join,
+            RequestKind::Track,
+            RequestKind::Retune,
+            RequestKind::Leave,
+        ] {
+            let doorbell = Box::leak(Box::new(Doorbell::new()));
+            let slot = Box::leak(Box::new(ClientSlot::<TestClient>::new(
+                doorbell,
+                1 << index,
+            )));
+            let mut cell = slot.claim().unwrap();
+            let mint = MemberMint::new();
+            let epoch = mint.next_epoch(Some(mint.next_epoch(None)));
+            if kind != RequestKind::Join {
+                let inbox = ClientInbox { slot };
+                let (returned, joined) = complete(cell.join(11), inbox, |request| {
+                    let Request::Join(_, responder) = request else {
+                        panic!("join");
+                    };
+                    responder.answer(Ok(Joined {
+                        member: mint.untracked(),
+                        epoch,
+                        payload: 12,
+                    }));
+                });
+                assert_eq!(joined.unwrap().epoch, epoch);
+                cell = returned;
+            }
+            let inbox = ClientInbox { slot };
+            let error = match kind {
+                RequestKind::Join => abandoned(cell.join(11), inbox),
+                RequestKind::Track => abandoned(cell.track(mint.untracked(), 21), inbox),
+                RequestKind::Retune => {
+                    abandoned(cell.retune(mint.track(mint.untracked()), 31), inbox)
+                }
+                RequestKind::Leave => {
+                    abandoned(cell.leave(Leaving::Untracked(mint.untracked()), 41), inbox)
+                }
+            };
+            let expected_epoch = if kind == RequestKind::Join {
+                0
+            } else {
+                epoch.get()
+            };
+            assert_eq!(
+                error.observations(),
+                [kind.diagnostic_code(), index, expected_epoch, 1]
+            );
+            assert!(observations.insert(error.observations()));
+        }
+    }
+    assert_eq!(observations.len(), 8);
 }

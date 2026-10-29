@@ -222,6 +222,7 @@ enum DriverRequest {
         epoch: u32,
     },
 }
+const DRIVER_REQUEST: u32 = 0x101;
 static DRIVER_DOORBELL: oer_memory::Doorbell = oer_memory::Doorbell::new();
 type DriverSlot = oer_memory::RequestSlot<DriverRequest, Result<Front, RejectReason>>;
 pub struct DriverChannel(&'static DriverSlot);
@@ -229,7 +230,8 @@ pub struct FrontendChannel(oer_memory::Poster<DriverRequest, Result<Front, Rejec
 /// Place both channel endpoints before either executor starts polling them.
 pub fn channels() -> (DriverChannel, FrontendChannel) {
     static REQUEST: StaticCell<DriverSlot> = StaticCell::new();
-    let request = REQUEST.init_with(|| oer_memory::RequestSlot::new(&DRIVER_DOORBELL, 1));
+    let request =
+        REQUEST.init_with(|| oer_memory::RequestSlot::new(&DRIVER_DOORBELL, 1, DRIVER_REQUEST));
     let poster = request.claim().expect("one P1 port requester");
     (DriverChannel(request), FrontendChannel(poster))
 }
@@ -263,7 +265,15 @@ impl Server {
             .take()
             .expect("P1 serializes driver requests")
             .post(request);
-        let (poster, frontend) = poll_fn(|cx| pending.poll_answer(cx)).await;
+        let (poster, frontend) = poll_fn(|cx| pending.poll_answer(cx))
+            .await
+            .map_err(|error| error.with_epoch(self.epoch))
+            .unwrap_or_else(
+                oer_espressif_staged_runtime::panic::reset_request::<
+                    oer_esp32s31_hal::platform::Port,
+                    _,
+                >,
+            );
         self.driver = Some(poster);
         frontend
     }
@@ -433,7 +443,10 @@ async fn install(boot: Boot, config: Prepare) -> Result<PortParts<Device, TX>, &
         },
         start,
     )
-    .await;
+    .await
+    .unwrap_or_else(
+        oer_espressif_staged_runtime::panic::reset_request::<oer_esp32s31_hal::platform::Port, _>,
+    );
     let stopped = stopped.map_err(|_| "radio start")?;
     let power = stopped.start_report().track.tx_power;
     let arena = irq::RX.take().ok_or("RX claimed")?;

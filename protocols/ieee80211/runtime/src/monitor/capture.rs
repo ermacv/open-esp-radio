@@ -146,9 +146,8 @@ impl<const CAPACITY: usize, const SLOTS: usize> MonitorCapturePool<CAPACITY, SLO
         let captured_length = snapshot_length
             .unwrap_or(frame.bytes.len())
             .min(frame.bytes.len());
-        if captured_length > CAPACITY {
-            return Err(MonitorDropReason::TooLong);
-        }
+        let captured_length =
+            oer_memory::FrameLen::new(captured_length).map_err(|_| MonitorDropReason::TooLong)?;
         let mut radio = self
             .storage
             .try_claim_radio()

@@ -11,8 +11,8 @@ mod report;
 mod survey;
 mod usb;
 
-use oer_esp32s31_compose::Esp32s31;
 use core::convert::Infallible;
+use oer_esp32s31_compose::Esp32s31;
 
 use crate::survey::Survey;
 use embassy_futures::select::{Either, select};
@@ -20,11 +20,17 @@ use oer_diagnostics::Note;
 use oer_embassy_time::EmbassyClock;
 use oer_esp32s31_board as board;
 use oer_esp32s31_hal::boot::CpuProfile;
-use oer_esp32s31_hal::peripherals::{efuse::{FactoryIdentity, Interface}, software_interrupt::{FromCpu0Irq, FromCpu2Irq, FromCpu3Irq}, system_timer::{SystimerAlarm0, SystimerAlarm1}};
+use oer_esp32s31_hal::peripherals::usb_serial_jtag::ConsoleInterrupt;
+use oer_esp32s31_hal::peripherals::watchdog::{
+    ArmedRtcWatchdog, RTC_WATCHDOG_FEED_PERIOD_MS, RwdtRegisters,
+};
+use oer_esp32s31_hal::peripherals::{
+    efuse::{FactoryIdentity, Interface},
+    software_interrupt::{FromCpu0Irq, FromCpu2Irq, FromCpu3Irq},
+    system_timer::{SystimerAlarm0, SystimerAlarm1},
+};
 use oer_esp32s31_hal::root::{ProtocolPartitions, Root};
 use oer_esp32s31_hal::types::MacInterruptEnableState;
-use oer_esp32s31_hal::peripherals::usb_serial_jtag::ConsoleInterrupt;
-use oer_esp32s31_hal::peripherals::watchdog::{ArmedRtcWatchdog, RTC_WATCHDOG_FEED_PERIOD_MS, RwdtRegisters};
 use oer_esp32s31_ieee80211_driver::{
     runtime::{WifiRoleMaterialized, materialize_esp32s31_wifi_role},
     rx::{counters::WifiRxCounters, returns::HeldRxFrame, upper::FrameReceiver},
@@ -291,12 +297,17 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
         timer.alarm0,
     )
     .unwrap_or_else(|failure| failure.reset());
-    oer_espressif_executor::bind::<Esp32s31, 0, _, _>(adopted.router(), interrupts.app_alarm, timer.alarm1)
-        .unwrap_or_else(|failure| failure.reset());
+    oer_espressif_executor::bind::<Esp32s31, 0, _, _>(
+        adopted.router(),
+        interrupts.app_alarm,
+        timer.alarm1,
+    )
+    .unwrap_or_else(|failure| failure.reset());
     // The radio handler's part holds both banks and the doorbell's lowering
     // half from the start; the doorbell rings once the part is bound.
     let software = runtime.software_interrupts;
-    let (bell, acknowledger) = oer_espressif_executor::DoorbellLine::<Esp32s31, 3>::split(software.line3);
+    let (bell, acknowledger) =
+        oer_espressif_executor::DoorbellLine::<Esp32s31, 3>::split(software.line3);
     let wifi_bound = adopted
         .router()
         .bind(
@@ -375,7 +386,8 @@ async fn feed_rtc_watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) {
 /// no one holds the block.
 fn fail<const B: usize>(reason: oer_diagnostics::Name<B>) -> ! {
     oer_espressif_staged_runtime::fatal_halt::<oer_esp32s31_hal::platform::Port>(|_path| {
-        let _note = oer_esp32s31_hal::peripherals::usb_serial_jtag::fatal_note(&Note::w1_fail(reason));
+        let _note =
+            oer_esp32s31_hal::peripherals::usb_serial_jtag::fatal_note(&Note::w1_fail(reason));
     })
 }
 
@@ -702,7 +714,10 @@ async fn run(
         },
         start,
     )
-    .await;
+    .await
+    .unwrap_or_else(
+        oer_espressif_staged_runtime::panic::reset_request::<oer_esp32s31_hal::platform::Port, _>,
+    );
     let stopped = match started {
         Ok(stopped) => stopped,
         Err(RadioStartFailure::Join { failed, .. }) => {

@@ -3121,7 +3121,10 @@ impl AmpduBacking for Backings {
 impl AmpduBackingSource for Backings {
     fn backing(&self) -> Option<Backing> {
         let index = self.free.0.borrow_mut().pop()?;
-        self.pool.claim_network(index).publish(BACKING, |_| ());
+        self.pool.claim_network(index).unwrap().publish(
+            oer_memory::FrameLen::new(BACKING).expect("test frame length"),
+            |_| (),
+        );
         Some(ReturningStableDmaBacking::new(
             self.pool.claim_radio(index).expect("ready placed slot"),
             self.free,

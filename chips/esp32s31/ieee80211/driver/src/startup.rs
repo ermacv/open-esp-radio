@@ -155,8 +155,9 @@ impl<W> RadioStartFailure<W> {
 }
 
 /// Bring Wi-Fi up through its membership cell and perform the common MAC
-/// initialization without choosing a Wi-Fi role. The cell comes back with
-/// every outcome.
+/// initialization without choosing a Wi-Fi role. Answered requests return
+/// the cell with their outcome. A lost mandatory response quarantines the
+/// seat and returns the retained platform in `RequestQuarantine`.
 ///
 /// # Cancellation
 ///
@@ -167,22 +168,29 @@ pub async fn start_esp32s31_radio<W: WifiMacPlatform>(
     partition: WifiPartition,
     mut platform: W,
     config: RadioStartConfig,
-) -> (
-    MembershipCell<Wifi>,
-    Result<WifiStopped<W>, RadioStartFailure<W>>,
-) {
-    let (cell, joined) = cell
+) -> Result<
+    (
+        MembershipCell<Wifi>,
+        Result<WifiStopped<W>, RadioStartFailure<W>>,
+    ),
+    oer_memory::RequestQuarantine<Option<W>>,
+> {
+    let (cell, joined) = match cell
         .join(WifiJoin {
             wifi: WifiCold::from_partition(partition),
         })
-        .await;
+        .await
+    {
+        Ok(answer) => answer,
+        Err(reason) => return Err(oer_memory::RequestQuarantine::new(reason, Some(platform))),
+    };
     let Joined {
         member,
         epoch,
         payload: WifiJoined { wifi, phy },
     } = match joined {
         Ok(joined) => joined,
-        Err(failed) => return (cell, Err(RadioStartFailure::Join { failed, platform })),
+        Err(failed) => return Ok((cell, Err(RadioStartFailure::Join { failed, platform }))),
     };
     let request = WifiTrack {
         wifi,
@@ -196,13 +204,16 @@ pub async fn start_esp32s31_radio<W: WifiMacPlatform>(
         slow_clock: platform.mac_slow_clock_calibration(),
         delay_random: platform.mac_delay_random(),
     };
-    let (cell, tracked) = cell.track(member, request).await;
+    let (cell, tracked) = match cell.track(member, request).await {
+        Ok(answer) => answer,
+        Err(reason) => return Err(oer_memory::RequestQuarantine::new(reason, Some(platform))),
+    };
     let TrackedMember {
         member,
         payload: WifiTracked { wifi, report },
     } = match tracked {
         Ok(tracked) => tracked,
-        Err(failed) => return (cell, Err(RadioStartFailure::Track { failed, platform })),
+        Err(failed) => return Ok((cell, Err(RadioStartFailure::Track { failed, platform }))),
     };
     platform.install_phy_tx_power_profile(report.tx_power);
     let report = WifiStartReport {
@@ -211,8 +222,8 @@ pub async fn start_esp32s31_radio<W: WifiMacPlatform>(
         phy,
         track: report,
     };
-    (
+    Ok((
         cell,
         Ok(enter_esp32s31_wifi_runtime(wifi, member, platform, report)),
-    )
+    ))
 }

@@ -40,6 +40,78 @@ const IDLE: u8 = 0;
 const POSTED: u8 = 1;
 const WORKING: u8 = 2;
 const ANSWERED: u8 = 3;
+const QUARANTINED: u8 = 4;
+
+/// The server abandoned its response; the seat remains permanently claimed.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RequestError {
+    Unanswered {
+        /// Caller-assigned request kind or site, stable within the image.
+        kind: u32,
+        /// Index of the slot's doorbell bit.
+        slot: u32,
+        /// Caller's epoch, when the client has one; otherwise zero.
+        epoch: u32,
+        /// Wrapping per-slot post number, starting at one.
+        sequence: u32,
+    },
+}
+
+impl RequestError {
+    /// Retained observation layout: request kind/site, client slot, epoch,
+    /// and per-slot sequence. Keep this conversion shared by every image.
+    pub const fn observations(self) -> [u32; 4] {
+        match self {
+            Self::Unanswered {
+                kind,
+                slot,
+                epoch,
+                sequence,
+            } => [kind, slot, epoch, sequence],
+        }
+    }
+
+    /// Attach the epoch held by the client to the original request identity.
+    pub const fn with_epoch(self, epoch: u32) -> Self {
+        match self {
+            Self::Unanswered {
+                kind,
+                slot,
+                sequence,
+                ..
+            } => Self::Unanswered {
+                kind,
+                slot,
+                epoch,
+                sequence,
+            },
+        }
+    }
+}
+
+/// Owners retained after a request lost its mandatory response. Dropping or
+/// forgetting this diagnostic never releases those owners for reuse.
+pub struct RequestQuarantine<T> {
+    pub reason: RequestError,
+    _owners: ManuallyDrop<T>,
+}
+
+impl<T> RequestQuarantine<T> {
+    pub fn new(reason: RequestError, owners: T) -> Self {
+        Self {
+            reason,
+            _owners: ManuallyDrop::new(owners),
+        }
+    }
+}
+
+// Extracting the diagnostic consumes only the wrapper. Its ManuallyDrop
+// payload remains quarantined, including when reset takes the error by value.
+impl<T> From<RequestQuarantine<T>> for RequestError {
+    fn from(quarantine: RequestQuarantine<T>) -> Self {
+        quarantine.reason
+    }
+}
 
 /// The server's wake source: one bit per slot that has a request posted.
 pub struct Doorbell {
@@ -81,6 +153,7 @@ pub struct ByValue {
     client: PriorityWaker,
     doorbell: &'static Doorbell,
     bit: u32,
+    kind: u32,
 }
 
 /// In-place processing with external notifications and no stored wakers.
@@ -115,8 +188,9 @@ pub struct RequestSlot<Req, Ans, Mode = ByValue> {
 unsafe impl<Req: Send, Ans: Send, Mode: Sync> Sync for RequestSlot<Req, Ans, Mode> {}
 
 impl<Req, Ans> RequestSlot<Req, Ans> {
-    /// A slot that rings `bit` of `doorbell`.
-    pub const fn new(doorbell: &'static Doorbell, bit: u32) -> Self {
+    /// A slot that rings `bit` of `doorbell`. `kind` identifies the request
+    /// type or posting site in retained abandonment diagnostics.
+    pub const fn new(doorbell: &'static Doorbell, bit: u32, kind: u32) -> Self {
         Self {
             claimed: AtomicBool::new(false),
             state: AtomicU8::new(IDLE),
@@ -126,6 +200,7 @@ impl<Req, Ans> RequestSlot<Req, Ans> {
                 client: PriorityWaker::new(),
                 doorbell,
                 bit,
+                kind,
             },
         }
     }
@@ -140,7 +215,10 @@ impl<Req, Ans> RequestSlot<Req, Ans> {
         if self.claimed.swap(true, Ordering::AcqRel) {
             return None;
         }
-        Some(Poster { slot: self })
+        Some(Poster {
+            slot: self,
+            sequence: 0,
+        })
     }
 
     /// Take a posted request and the duty to answer it.
@@ -153,8 +231,11 @@ impl<Req, Ans> RequestSlot<Req, Ans> {
     }
 
     /// The answer, once the server gave it; the slot is `IDLE` again.
-    fn poll_answer(&self, cx: &mut Context<'_>) -> Poll<Ans> {
+    fn poll_answer(&self, cx: &mut Context<'_>) -> Poll<Result<Ans, ()>> {
         self.mode.client.register(cx.waker());
+        if self.state.load(Ordering::Acquire) == QUARANTINED {
+            return Poll::Ready(Err(()));
+        }
         if self
             .state
             .compare_exchange(ANSWERED, IDLE, Ordering::Acquire, Ordering::Relaxed)
@@ -170,7 +251,7 @@ impl<Req, Ans> RequestSlot<Req, Ans> {
         // client is the answer place's only accessor; the server's write
         // happened before its Release store of ANSWERED, which the Acquire
         // CAS observed.
-        Poll::Ready(unsafe { (*self.answer.get()).assume_init_read() })
+        Poll::Ready(Ok(unsafe { (*self.answer.get()).assume_init_read() }))
     }
 }
 
@@ -328,6 +409,7 @@ impl<Req> InPlaceServer<Req> {
 #[must_use = "the poster is the client's only way to the server"]
 pub struct Poster<Req: 'static, Ans: 'static> {
     slot: &'static RequestSlot<Req, Ans>,
+    sequence: u32,
 }
 
 impl<Req, Ans> Poster<Req, Ans> {
@@ -338,6 +420,7 @@ impl<Req, Ans> Poster<Req, Ans> {
         self.slot.mode.doorbell.ring(self.slot.mode.bit);
         Awaiting {
             slot: Some(self.slot),
+            sequence: self.sequence.wrapping_add(1),
         }
     }
 }
@@ -351,30 +434,52 @@ impl<Req, Ans> core::fmt::Debug for Poster<Req, Ans> {
 /// A posted request whose answer has not been taken yet.
 ///
 /// Dropping it while it waits loses nothing: the answer stays in the slot.
-/// Once it gave the answer it is spent and stays pending, so it never takes
-/// the answer of a later request.
+/// Once it gave the answer or reported quarantine it is spent and stays
+/// pending, so it never takes the answer of a later request.
 #[must_use = "the poster returns only with the answer"]
 pub struct Awaiting<Req: 'static, Ans: 'static> {
     slot: Option<&'static RequestSlot<Req, Ans>>,
+    sequence: u32,
 }
 
 impl<Req, Ans> Awaiting<Req, Ans> {
     /// The answer and the returned poster, once the server answered.
-    pub fn poll_answer(&mut self, cx: &mut Context<'_>) -> Poll<(Poster<Req, Ans>, Ans)> {
+    pub fn poll_answer(
+        &mut self,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<(Poster<Req, Ans>, Ans), RequestError>> {
         let Some(slot) = self.slot else {
             return Poll::Pending;
         };
         let answer = core::task::ready!(slot.poll_answer(cx));
         self.slot = None;
-        Poll::Ready((Poster { slot }, answer))
+        Poll::Ready(
+            answer
+                .map(|answer| {
+                    (
+                        Poster {
+                            slot,
+                            sequence: self.sequence,
+                        },
+                        answer,
+                    )
+                })
+                .map_err(|()| RequestError::Unanswered {
+                    kind: slot.mode.kind,
+                    slot: slot.mode.bit.trailing_zeros(),
+                    epoch: 0,
+                    sequence: self.sequence,
+                }),
+        )
     }
 }
 
 /// The server's duty to answer one taken request.
 ///
-/// Dropping it unanswered would leave its client waiting forever, so the drop
-/// panics; [`Responder::answer`] consumes it without dropping.
-#[must_use = "a taken request must be answered, or its client waits forever"]
+/// Dropping it unanswered quarantines the seat and wakes its client with
+/// [`RequestError::Unanswered`]. No poster is returned and the seat is never
+/// reused. [`Responder::answer`] consumes it without running this drop.
+#[must_use = "answer the request or dropping the responder quarantines its seat"]
 pub struct Responder<'s, Req, Ans> {
     slot: &'s RequestSlot<Req, Ans>,
 }
@@ -400,12 +505,9 @@ impl<Req, Ans> Responder<'_, Req, Ans> {
 }
 
 impl<Req, Ans> Drop for Responder<'_, Req, Ans> {
-    #[expect(
-        clippy::unreachable,
-        reason = "internal invariant: `answer` consumes the responder without running this drop, so reaching it means the request was dropped unanswered"
-    )]
     fn drop(&mut self) {
-        unreachable!("a taken request must be answered");
+        self.slot.state.store(QUARANTINED, Ordering::Release);
+        self.slot.mode.client.wake();
     }
 }
 

@@ -1,5 +1,5 @@
 error[E0599]: no method named `claim_network` found for struct `PinnedDmaTxPool<FRAME_CAPACITY, HEADROOM, TRAILER, QUEUE_DEPTH>` in the current scope
   --> tests/ui/unpinned_tx_network.rs:11:10
    |
-11 |     pool.claim_network(0) // ui-error: E0599
+11 |     pool.claim_network(0).unwrap() // ui-error: E0599
    |          ^^^^^^^^^^^^^ method not found in `PinnedDmaTxPool<32, 8, 4, 1>`

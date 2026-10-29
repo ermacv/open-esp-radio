@@ -90,7 +90,11 @@ mod sealed {
         fn reunite(
             poster: super::Poster<Self::Request, Self>,
             idle: Self::Idle,
+            epoch: u32,
         ) -> super::MembershipCell<K>;
+        fn epoch(&self, previous: u32) -> u32 {
+            previous
+        }
     }
 }
 
@@ -276,10 +280,10 @@ struct ClientSlot<K: Client> {
 impl<K: Client> ClientSlot<K> {
     const fn new(doorbell: &'static Doorbell, bit: u32) -> Self {
         Self {
-            join: RequestSlot::new(doorbell, bit),
-            track: RequestSlot::new(doorbell, bit),
-            retune: RequestSlot::new(doorbell, bit),
-            leave: RequestSlot::new(doorbell, bit),
+            join: RequestSlot::new(doorbell, bit, RequestKind::Join.diagnostic_code()),
+            track: RequestSlot::new(doorbell, bit, RequestKind::Track.diagnostic_code()),
+            retune: RequestSlot::new(doorbell, bit, RequestKind::Retune.diagnostic_code()),
+            leave: RequestSlot::new(doorbell, bit, RequestKind::Leave.diagnostic_code()),
         }
     }
 
@@ -289,6 +293,7 @@ impl<K: Client> ClientSlot<K> {
             track: self.track.claim()?,
             retune: self.retune.claim()?,
             leave: self.leave.claim()?,
+            epoch: 0,
         })
     }
 }
@@ -308,6 +313,7 @@ pub struct MembershipCell<K: Client> {
     track: Poster<(Member<K, Untracked>, K::Track), TrackAnswer<K>>,
     retune: Poster<(Member<K, Tracked>, K::Retune), RetuneAnswer<K>>,
     leave: Poster<(Leaving<K>, K::Leave), Left<K>>,
+    epoch: u32,
 }
 
 impl<K: Client> core::fmt::Debug for MembershipCell<K> {
@@ -319,7 +325,11 @@ impl<K: Client> core::fmt::Debug for MembershipCell<K> {
 impl<K: Client> MembershipCell<K> {
     /// Join the PHY domain: register it, or wake closed RF, and enter `K`.
     pub fn join(self, join: K::Join) -> Pending<K, JoinAnswer<K>> {
-        Pending::new(self.join.post(join), (self.track, self.retune, self.leave))
+        Pending::new(
+            self.join.post(join),
+            (self.track, self.retune, self.leave),
+            self.epoch,
+        )
     }
 
     /// Run the member's initial tracking.
@@ -331,6 +341,7 @@ impl<K: Client> MembershipCell<K> {
         Pending::new(
             self.track.post((member, track)),
             (self.join, self.retune, self.leave),
+            self.epoch,
         )
     }
 
@@ -343,6 +354,7 @@ impl<K: Client> MembershipCell<K> {
         Pending::new(
             self.retune.post((member, retune)),
             (self.join, self.track, self.leave),
+            self.epoch,
         )
     }
 
@@ -351,6 +363,7 @@ impl<K: Client> MembershipCell<K> {
         Pending::new(
             self.leave.post((member, leave)),
             (self.join, self.track, self.retune),
+            self.epoch,
         )
     }
 }
@@ -360,16 +373,36 @@ macro_rules! reply {
         impl<K: Client> sealed::Reply<K> for $answer {
             type Request = $request;
             type Idle = ($($idle_type,)+);
-            fn reunite($active: Poster<Self::Request, Self>, ($($idle,)+): Self::Idle) -> MembershipCell<K> {
-                MembershipCell { $active, $($idle,)+ }
+            fn reunite($active: Poster<Self::Request, Self>, ($($idle,)+): Self::Idle, epoch: u32) -> MembershipCell<K> {
+                MembershipCell { $active, $($idle,)+ epoch }
             }
         }
     };
 }
-reply!(JoinAnswer<K>, K::Join, join,
-    track: Poster<(Member<K, Untracked>, K::Track), TrackAnswer<K>>,
-    retune: Poster<(Member<K, Tracked>, K::Retune), RetuneAnswer<K>>,
-    leave: Poster<(Leaving<K>, K::Leave), Left<K>>);
+impl<K: Client> sealed::Reply<K> for JoinAnswer<K> {
+    type Request = K::Join;
+    type Idle = (
+        Poster<(Member<K, Untracked>, K::Track), TrackAnswer<K>>,
+        Poster<(Member<K, Tracked>, K::Retune), RetuneAnswer<K>>,
+        Poster<(Leaving<K>, K::Leave), Left<K>>,
+    );
+    fn reunite(
+        join: Poster<Self::Request, Self>,
+        (track, retune, leave): Self::Idle,
+        epoch: u32,
+    ) -> MembershipCell<K> {
+        MembershipCell {
+            join,
+            track,
+            retune,
+            leave,
+            epoch,
+        }
+    }
+    fn epoch(&self, previous: u32) -> u32 {
+        self.as_ref().map_or(previous, |joined| joined.epoch.get())
+    }
+}
 reply!(TrackAnswer<K>, (Member<K, Untracked>, K::Track), track,
     join: Poster<K::Join, JoinAnswer<K>>,
     retune: Poster<(Member<K, Tracked>, K::Retune), RetuneAnswer<K>>,
@@ -383,32 +416,41 @@ reply!(Left<K>, (Leaving<K>, K::Leave), leave,
     track: Poster<(Member<K, Untracked>, K::Track), TrackAnswer<K>>,
     retune: Poster<(Member<K, Tracked>, K::Retune), RetuneAnswer<K>>);
 
-/// A posted request: a future of its typed answer and the returned cell.
-/// A spent future stays pending and cannot consume a later request's answer.
+/// A posted request: a future of its typed answer and returned cell, or a
+/// typed abandonment terminal without a reusable cell. A spent future stays
+/// pending and cannot consume a later request's answer.
 #[must_use = "the cell returns only with the answer"]
 pub struct Pending<K: Client, O: sealed::Reply<K>> {
     state: Option<(Awaiting<O::Request, O>, O::Idle)>,
     client: PhantomData<fn() -> K>,
+    epoch: u32,
 }
 
 impl<K: Client, O: sealed::Reply<K>> Pending<K, O> {
-    fn new(awaiting: Awaiting<O::Request, O>, idle: O::Idle) -> Self {
+    fn new(awaiting: Awaiting<O::Request, O>, idle: O::Idle, epoch: u32) -> Self {
         Self {
             state: Some((awaiting, idle)),
             client: PhantomData,
+            epoch,
         }
     }
 }
 
 impl<K: Client, O: sealed::Reply<K>> Future for Pending<K, O> {
-    type Output = (MembershipCell<K>, O);
+    type Output = Result<(MembershipCell<K>, O), oer_memory::RequestError>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let Some((mut awaiting, idle)) = self.state.take() else {
             return Poll::Pending;
         };
         match awaiting.poll_answer(cx) {
-            Poll::Ready((poster, answer)) => Poll::Ready((O::reunite(poster, idle), answer)),
+            Poll::Ready(Ok((poster, answer))) => {
+                let epoch = answer.epoch(self.epoch);
+                Poll::Ready(Ok((O::reunite(poster, idle, epoch), answer)))
+            }
+            // Dropped idle posters retain their claimed seats. An abandoned
+            // operation cannot reconstitute any part of the membership cell.
+            Poll::Ready(Err(error)) => Poll::Ready(Err(error.with_epoch(self.epoch))),
             Poll::Pending => {
                 self.state = Some((awaiting, idle));
                 Poll::Pending

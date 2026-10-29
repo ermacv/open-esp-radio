@@ -43,6 +43,18 @@ pub enum RequestKind {
     Leave,
 }
 
+impl RequestKind {
+    /// Stable request-kind word in retained unanswered-request diagnostics.
+    pub const fn diagnostic_code(self) -> u32 {
+        match self {
+            Self::Join => 1,
+            Self::Track => 2,
+            Self::Retune => 3,
+            Self::Leave => 4,
+        }
+    }
+}
+
 /// The step that poisoned the domain.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PoisonCause {

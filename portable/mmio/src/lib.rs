@@ -5,7 +5,10 @@
     clippy::unreachable,
     clippy::todo,
     clippy::unimplemented,
-    clippy::indexing_slicing
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    clippy::disallowed_macros,
+    clippy::disallowed_methods
 )]
 //! The one volatile register-access core under the generated register code.
 //!
@@ -44,6 +47,14 @@
 //!   `Sync`, so one owner in a `static` serves every execution context.
 
 #![no_std]
+#![cfg_attr(
+    test,
+    allow(
+        clippy::arithmetic_side_effects,
+        clippy::disallowed_macros,
+        clippy::disallowed_methods
+    )
+)]
 #![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
 
 #[cfg(test)]
@@ -142,7 +153,7 @@ impl<const BASE: usize> sealed::Sealed for Fixed<BASE> {
 
     #[inline(always)]
     fn word(&self, offset: usize) -> *mut u32 {
-        core::ptr::with_exposed_provenance_mut(BASE + offset)
+        core::ptr::with_exposed_provenance_mut(BASE.wrapping_add(offset))
     }
 
     fn duplicate(&self) -> Self {
@@ -164,7 +175,7 @@ pub struct FixedReading<const BASE: usize>;
 impl<const BASE: usize> sealed::Reading for FixedReading<BASE> {
     #[inline(always)]
     fn word(&self, offset: usize) -> *const u32 {
-        core::ptr::with_exposed_provenance(BASE + offset)
+        core::ptr::with_exposed_provenance(BASE.wrapping_add(offset))
     }
 }
 
@@ -296,14 +307,15 @@ pub trait Claim: sealed::Claimed {}
 impl<const BASE: usize, R: Registers> sealed::Claimed for Block<Fixed<BASE>, R> {
     fn claimed(_promise: &sealed::Promise) -> Self {
         const {
-            assert!(
-                BASE.is_multiple_of(4) && !R::WORDS.is_empty() && ascending(R::WORDS),
-                "a claimed block lists word-aligned words, strictly ascending"
-            );
-            assert!(
-                BASE.checked_add(end(R::WORDS)).is_some(),
-                "a claimed block lies inside the address space"
-            );
+            if !(BASE.is_multiple_of(4) && !R::WORDS.is_empty() && ascending(R::WORDS)) {
+                panic!("a claimed block lists word-aligned words, strictly ascending");
+            };
+            if !(match end(R::WORDS) {
+                Some(end) => BASE.checked_add(end).is_some(),
+                None => false,
+            }) {
+                panic!("a claimed block lies inside the address space");
+            };
         };
         Block {
             place: Fixed {
@@ -388,11 +400,13 @@ impl<'a, R: Registers> Block<Host<'a>, R> {
     /// space fails where it is placed, even in a constant.
     pub const fn host(words: &'a mut [u32]) -> Result<Self, HostTooSmall> {
         let required = const {
-            assert!(
-                ascending(R::WORDS),
-                "a block lists word-aligned words, strictly ascending"
-            );
-            end(R::WORDS)
+            if !(ascending(R::WORDS)) {
+                panic!("a block lists word-aligned words, strictly ascending");
+            };
+            match end(R::WORDS) {
+                Some(end) => end,
+                None => panic!("a block's words lie inside the address space"),
+            }
         };
         let available = words.len().saturating_mul(4);
         if available < required {
@@ -434,23 +448,19 @@ const fn ascending(mut list: &[usize]) -> bool {
 ///
 /// It is evaluated only at compile time: a list whose last word ends past
 /// the address space fails the evaluation instead of wrapping.
-const fn end(list: &[usize]) -> usize {
+const fn end(list: &[usize]) -> Option<usize> {
     match list.last() {
-        Some(last) => {
-            assert!(
-                *last <= usize::MAX - 4,
-                "a block's words lie inside the address space"
-            );
-            *last + 4
-        }
-        None => 0,
+        Some(last) => last.checked_add(4),
+        None => Some(0),
     }
 }
 
 /// Whether the ascending `list` holds `word`.
 const fn listed(mut list: &[usize], word: usize) -> bool {
     while !list.is_empty() {
-        let (low, high) = list.split_at(list.len() / 2);
+        let Some((low, high)) = list.split_at_checked(list.len() / 2) else {
+            return false;
+        };
         let [middle, rest @ ..] = high else {
             return false;
         };
@@ -480,7 +490,7 @@ const fn array_listed(list: &[usize], offset: usize, stride: usize, count: usize
         if !contains(list, word) {
             return false;
         }
-        element += 1;
+        element = element.wrapping_add(1);
     }
     true
 }
@@ -489,14 +499,22 @@ impl<P: Placement, R: Registers> Block<P, R> {
     /// One volatile read of the word at byte `OFFSET`.
     #[inline(always)]
     pub fn read<const OFFSET: usize>(&self) -> u32 {
-        const { assert!(listed(R::WORDS, OFFSET), "the block lists the word") };
+        const {
+            if !(listed(R::WORDS, OFFSET)) {
+                panic!("the block lists the word");
+            }
+        };
         DeviceWord(self.place.word(OFFSET)).load()
     }
 
     /// One volatile write of the whole word at byte `OFFSET`.
     #[inline(always)]
     pub fn write<const OFFSET: usize>(&mut self, value: u32) {
-        const { assert!(listed(R::WORDS, OFFSET), "the block lists the word") };
+        const {
+            if !(listed(R::WORDS, OFFSET)) {
+                panic!("the block lists the word");
+            }
+        };
         DeviceWord(self.place.word(OFFSET)).store(value)
     }
 
@@ -507,12 +525,15 @@ impl<P: Placement, R: Registers> Block<P, R> {
         index: Index<COUNT>,
     ) -> u32 {
         const {
-            assert!(
-                array_listed(R::WORDS, OFFSET, STRIDE, COUNT),
-                "the block lists every element"
-            );
+            if !(array_listed(R::WORDS, OFFSET, STRIDE, COUNT)) {
+                panic!("the block lists every element");
+            };
         };
-        DeviceWord(self.place.word(OFFSET + STRIDE * index.get())).load()
+        DeviceWord(
+            self.place
+                .word(OFFSET.wrapping_add(STRIDE.wrapping_mul(index.get()))),
+        )
+        .load()
     }
 
     /// One volatile write of element `index` of the word array at `OFFSET`.
@@ -523,12 +544,15 @@ impl<P: Placement, R: Registers> Block<P, R> {
         value: u32,
     ) {
         const {
-            assert!(
-                array_listed(R::WORDS, OFFSET, STRIDE, COUNT),
-                "the block lists every element"
-            );
+            if !(array_listed(R::WORDS, OFFSET, STRIDE, COUNT)) {
+                panic!("the block lists every element");
+            };
         };
-        DeviceWord(self.place.word(OFFSET + STRIDE * index.get())).store(value)
+        DeviceWord(
+            self.place
+                .word(OFFSET.wrapping_add(STRIDE.wrapping_mul(index.get()))),
+        )
+        .store(value)
     }
 
     /// Divide the block into a part owning `A`'s words and one owning `B`'s.
@@ -549,18 +573,17 @@ impl<P: Placement, R: Registers> Block<P, R> {
     /// bits, disjoint from every other part's.
     pub fn divide<D: Division>(self) -> D::Parts<P, R> {
         const {
-            assert!(
-                parts_listed(R::WORDS, D::WORDS),
-                "the block lists every word of its parts"
-            );
-            assert!(
-                owned_disjoint(D::WORDS),
-                "the parts of a block own disjoint words"
-            );
-            assert!(
-                triggers_disjoint(D::WORDS),
-                "a shared trigger word is owned by no part and its parts' bits are disjoint"
-            );
+            if !(parts_listed(R::WORDS, D::WORDS)) {
+                panic!("the block lists every word of its parts");
+            };
+            if !(owned_disjoint(D::WORDS)) {
+                panic!("the parts of a block own disjoint words");
+            };
+            if !(triggers_disjoint(D::WORDS)) {
+                panic!(
+                    "a shared trigger word is owned by no part and its parts' bits are disjoint"
+                );
+            };
         };
         D::parts(self.place)
     }
@@ -569,10 +592,9 @@ impl<P: Placement, R: Registers> Block<P, R> {
     /// write: no word the block lists is written again.
     pub fn into_reader<W: Words>(self) -> Reader<P, R, W> {
         const {
-            assert!(
-                all_listed(W::OWNED, R::WORDS) && all_listed(W::OBSERVED, R::WORDS),
-                "the block lists every word of its reader"
-            );
+            if !(all_listed(W::OWNED, R::WORDS) && all_listed(W::OBSERVED, R::WORDS)) {
+                panic!("the block lists every word of its reader");
+            };
         };
         Reader {
             place: self.place.reading(),
@@ -706,7 +728,11 @@ impl<P: Placement, R: SharedRegisters> Block<P, R> {
     /// shared borrow: the write of a shared block, which reads nothing back.
     #[inline(always)]
     pub fn write_shared<const OFFSET: usize>(&self, value: u32) {
-        const { assert!(listed(R::WORDS, OFFSET), "the block lists the word") };
+        const {
+            if !(listed(R::WORDS, OFFSET)) {
+                panic!("the block lists the word");
+            }
+        };
         DeviceWord(self.place.word(OFFSET)).store(value)
     }
 }
@@ -726,10 +752,9 @@ impl<const BASE: usize, R: Registers> Block<Fixed<BASE>, R> {
         second: Part<Fixed<BASE>, R, B>,
     ) -> Self {
         const {
-            assert!(
-                owners_cover(R::WORDS, A::OWNED, B::OWNED),
-                "the joined parts own every word of the block"
-            );
+            if !(owners_cover(R::WORDS, A::OWNED, B::OWNED)) {
+                panic!("the joined parts own every word of the block");
+            };
         };
         let Part { place, .. } = first;
         drop(second);
@@ -757,10 +782,9 @@ impl<'a, R: Registers> Block<Host<'a>, R> {
         second: Part<Host<'a>, R, B>,
     ) -> Result<Self, NotOneSplit<Part<Host<'a>, R, A>, Part<Host<'a>, R, B>>> {
         const {
-            assert!(
-                owners_cover(R::WORDS, A::OWNED, B::OWNED),
-                "the joined parts own every word of the block"
-            );
+            if !(owners_cover(R::WORDS, A::OWNED, B::OWNED)) {
+                panic!("the joined parts own every word of the block");
+            };
         };
         // Each host block borrows its memory mutably, so two blocks with
         // words never share a base: equal bases mean the parts of one split.
@@ -850,10 +874,9 @@ impl<P: Placement, R: Registers, W: Words> Part<P, R, W> {
     #[inline(always)]
     pub fn read<const OFFSET: usize>(&self) -> u32 {
         const {
-            assert!(
-                contains(W::OWNED, OFFSET) || contains(W::OBSERVED, OFFSET),
-                "a part reads only the words it owns or observes"
-            );
+            if !(contains(W::OWNED, OFFSET) || contains(W::OBSERVED, OFFSET)) {
+                panic!("a part reads only the words it owns or observes");
+            };
         };
         DeviceWord(self.place.word(OFFSET)).load()
     }
@@ -862,10 +885,9 @@ impl<P: Placement, R: Registers, W: Words> Part<P, R, W> {
     #[inline(always)]
     pub fn write<const OFFSET: usize>(&mut self, value: u32) {
         const {
-            assert!(
-                contains(W::OWNED, OFFSET),
-                "a part writes only the words it owns"
-            );
+            if !(contains(W::OWNED, OFFSET)) {
+                panic!("a part writes only the words it owns");
+            };
         };
         DeviceWord(self.place.word(OFFSET)).store(value)
     }
@@ -877,13 +899,17 @@ impl<P: Placement, R: Registers, W: Words> Part<P, R, W> {
         index: Index<COUNT>,
     ) -> u32 {
         const {
-            assert!(
-                array_listed(W::OWNED, OFFSET, STRIDE, COUNT)
-                    || array_listed(W::OBSERVED, OFFSET, STRIDE, COUNT),
-                "a part reads only the arrays it owns or observes"
-            );
+            if !(array_listed(W::OWNED, OFFSET, STRIDE, COUNT)
+                || array_listed(W::OBSERVED, OFFSET, STRIDE, COUNT))
+            {
+                panic!("a part reads only the arrays it owns or observes");
+            };
         };
-        DeviceWord(self.place.word(OFFSET + STRIDE * index.get())).load()
+        DeviceWord(
+            self.place
+                .word(OFFSET.wrapping_add(STRIDE.wrapping_mul(index.get()))),
+        )
+        .load()
     }
 
     /// One volatile write of an array element the part owns.
@@ -894,12 +920,15 @@ impl<P: Placement, R: Registers, W: Words> Part<P, R, W> {
         value: u32,
     ) {
         const {
-            assert!(
-                array_listed(W::OWNED, OFFSET, STRIDE, COUNT),
-                "a part writes only the arrays it owns"
-            );
+            if !(array_listed(W::OWNED, OFFSET, STRIDE, COUNT)) {
+                panic!("a part writes only the arrays it owns");
+            };
         };
-        DeviceWord(self.place.word(OFFSET + STRIDE * index.get())).store(value)
+        DeviceWord(
+            self.place
+                .word(OFFSET.wrapping_add(STRIDE.wrapping_mul(index.get()))),
+        )
+        .store(value)
     }
 
     /// One volatile store of the part's bits of the shared write-trigger
@@ -909,7 +938,9 @@ impl<P: Placement, R: Registers, W: Words> Part<P, R, W> {
     pub fn write_trigger<const OFFSET: usize>(&mut self, value: u32) {
         let mask = const {
             let mask = trigger_mask(W::TRIGGERS, OFFSET);
-            assert!(mask != 0, "a part writes only its own trigger words");
+            if !(mask != 0) {
+                panic!("a part writes only its own trigger words");
+            };
             mask
         };
         DeviceWord(self.place.word(OFFSET)).store(value & mask)
@@ -966,10 +997,9 @@ impl<P: Placement, R: Registers, W: Words> Reader<P, R, W> {
     #[inline(always)]
     pub fn read<const OFFSET: usize>(&self) -> u32 {
         const {
-            assert!(
-                contains(W::OWNED, OFFSET) || contains(W::OBSERVED, OFFSET),
-                "a reader reads only the words it lists"
-            );
+            if !(contains(W::OWNED, OFFSET) || contains(W::OBSERVED, OFFSET)) {
+                panic!("a reader reads only the words it lists");
+            };
         };
         DeviceWord(sealed::Reading::word(&self.place, OFFSET).cast_mut()).load()
     }
@@ -981,14 +1011,20 @@ impl<P: Placement, R: Registers, W: Words> Reader<P, R, W> {
         index: Index<COUNT>,
     ) -> u32 {
         const {
-            assert!(
-                array_listed(W::OWNED, OFFSET, STRIDE, COUNT)
-                    || array_listed(W::OBSERVED, OFFSET, STRIDE, COUNT),
-                "a reader reads only the arrays it lists"
-            );
+            if !(array_listed(W::OWNED, OFFSET, STRIDE, COUNT)
+                || array_listed(W::OBSERVED, OFFSET, STRIDE, COUNT))
+            {
+                panic!("a reader reads only the arrays it lists");
+            };
         };
-        DeviceWord(sealed::Reading::word(&self.place, OFFSET + STRIDE * index.get()).cast_mut())
-            .load()
+        DeviceWord(
+            sealed::Reading::word(
+                &self.place,
+                OFFSET.wrapping_add(STRIDE.wrapping_mul(index.get())),
+            )
+            .cast_mut(),
+        )
+        .load()
     }
 }
 
@@ -1013,8 +1049,9 @@ pub mod check {
     /// Whether `first` and `second` together own every word of `block`,
     /// each word exactly once, and nothing else: the two sides of a block.
     pub const fn sides_cover(block: &[usize], first: &[usize], second: &[usize]) -> bool {
-        if block.len() != first.len() + second.len() {
-            return false;
+        match first.len().checked_add(second.len()) {
+            Some(count) if count == block.len() => {}
+            _ => return false,
         }
         let mut words = block;
         while let [word, rest @ ..] = words {
@@ -1050,7 +1087,10 @@ pub mod check {
     ) -> bool {
         let (mut left, mut right) = (first, second);
         while let ([a, left_rest @ ..], [b, right_rest @ ..]) = (left, right) {
-            let (a, b) = (first_base + *a, second_base + *b);
+            let (Some(a), Some(b)) = (first_base.checked_add(*a), second_base.checked_add(*b))
+            else {
+                return false;
+            };
             if a == b {
                 return false;
             }
@@ -1092,7 +1132,11 @@ impl<const COUNT: usize> Index<COUNT> {
 
     /// The index `I`, checked at compile time.
     pub const fn constant<const I: usize>() -> Self {
-        const { assert!(I < COUNT, "the index lies inside the array") };
+        const {
+            if !(I < COUNT) {
+                panic!("the index lies inside the array");
+            }
+        };
         Self(I)
     }
 
@@ -1126,9 +1170,11 @@ pub struct ValueError {
 
 impl<const WIDTH: u32> Bits<WIDTH> {
     /// The largest value.
-    pub const MAX: u32 = {
-        assert!(WIDTH >= 1 && WIDTH <= 32, "a field is 1 to 32 bits wide");
-        u32::MAX >> (32 - WIDTH)
+    pub const MAX: u32 = const {
+        if !(WIDTH >= 1 && WIDTH <= 32) {
+            panic!("a field is 1 to 32 bits wide");
+        };
+        u32::MAX.wrapping_shr(32_u32.wrapping_sub(WIDTH))
     };
 
     /// The value `value`, if it fits `WIDTH` bits.
@@ -1145,7 +1191,11 @@ impl<const WIDTH: u32> Bits<WIDTH> {
 
     /// The value `V`, checked at compile time.
     pub const fn constant<const V: u32>() -> Self {
-        const { assert!(V <= Self::MAX, "the value fits the field") };
+        const {
+            if !(V <= Self::MAX) {
+                panic!("the value fits the field");
+            }
+        };
         Self(V)
     }
 

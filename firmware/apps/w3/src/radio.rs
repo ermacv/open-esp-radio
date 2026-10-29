@@ -129,13 +129,14 @@ impl RadioCoexPriorities for Coex {
     }
 }
 type Front = radio::SlotFrontend<'static, slot::Id, Backend<slot::Id>>;
+const FRONTEND_REQUEST: u32 = 0x100;
 static READY_BELL: oer_memory::Doorbell = oer_memory::Doorbell::new();
 type ReadySlot = oer_memory::RequestSlot<(), Result<Front, &'static str>>;
 pub struct DriverChannel(&'static ReadySlot);
 pub struct FrontendChannel(oer_memory::Poster<(), Result<Front, &'static str>>);
 pub fn channels() -> (DriverChannel, FrontendChannel) {
     static SLOT: StaticCell<ReadySlot> = StaticCell::new();
-    let slot = SLOT.init_with(|| ReadySlot::new(&READY_BELL, 1));
+    let slot = SLOT.init_with(|| ReadySlot::new(&READY_BELL, 1, FRONTEND_REQUEST));
     (
         DriverChannel(slot),
         FrontendChannel(slot.claim().expect("one station frontend")),
@@ -158,15 +159,18 @@ pub async fn drive(boot: Boot, channel: DriverChannel) {
         }
     };
     let backend = Backend::new(parts).ok().expect("validated W3 port parts");
-    let (frontend, registration) = match oer_esp32s31_ieee80211_driver::port::Registration::guard_result(slot.register(backend)) {
-        Ok(registered) => registered,
-        Err(error) => {
-            response.answer(Err("W3 registration failed"));
-            // The rejected owner or initialization guard stays on this P2 frame.
-            drop(error);
-            return;
-        }
-    };
+    let (frontend, registration) =
+        match oer_esp32s31_ieee80211_driver::port::Registration::guard_result(
+            slot.register(backend),
+        ) {
+            Ok(registered) => registered,
+            Err(error) => {
+                response.answer(Err("W3 registration failed"));
+                // The rejected owner or initialization guard stays on this P2 frame.
+                drop(error);
+                return;
+            }
+        };
     response.answer(Ok(frontend));
     if let Ok(completion) = registration.run().await {
         completion.unregistered();
@@ -174,7 +178,9 @@ pub async fn drive(boot: Boot, channel: DriverChannel) {
 }
 pub async fn serve(channel: FrontendChannel, config: W3Config, address: [u8; 6], seed: u64) {
     let mut pending = channel.0.post(());
-    let (_, front) = poll_fn(|cx| pending.poll_answer(cx)).await;
+    let (_, front) = poll_fn(|cx| pending.poll_answer(cx)).await.unwrap_or_else(
+        oer_espressif_staged_runtime::panic::reset_request::<oer_esp32s31_hal::platform::Port, _>,
+    );
     let mut report = match front {
         Ok(front) => {
             let mut running = core::pin::pin!(radio::run_port(
@@ -229,7 +235,10 @@ async fn install(boot: Boot, config: W3Config) -> Result<PortParts<Device, TX>, 
         },
         start,
     )
-    .await;
+    .await
+    .unwrap_or_else(
+        oer_espressif_staged_runtime::panic::reset_request::<oer_esp32s31_hal::platform::Port, _>,
+    );
     let stopped = stopped.map_err(|_| "radio start")?;
     let power = stopped.start_report().track.tx_power;
     let arena = irq::RX.take().ok_or("RX claimed")?;
