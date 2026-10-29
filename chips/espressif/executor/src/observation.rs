@@ -1,5 +1,5 @@
 //! Executor boundaries on the platform monotonic microsecond clock.
-//! Times wrap modulo 2^32, like the trace record's microsecond field. Collectors
+//! Event timestamps wrap modulo 2^32. Duration collectors
 //! sample more often than half that period (about 35 minutes). Work spans include
 //! preemption; only idle spans (bracketed with interrupts masked) measure CPU idle.
 use oer_trace::{Channel, Domain, Event, Kind};
