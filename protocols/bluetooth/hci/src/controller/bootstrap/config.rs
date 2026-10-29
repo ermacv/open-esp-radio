@@ -5,9 +5,11 @@ use super::*;
 /// Invalid immutable parameters for the initial Host/Controller profile.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum BootstrapConfigError {
-    /// Trouble cannot transmit when the Controller reports a zero ACL size.
+    /// This LE-only profile has no shared BR/EDR buffers for the Host to query
+    /// with HCI_Read_Buffer_Size (Core Vol 4, Part E, Section 7.8.2).
     ZeroAclDataPacketLength,
-    /// Trouble cannot acquire link credits when the Controller reports zero.
+    /// Total_Num_LE_ACL_Data_Packets must provide credits for this profile's
+    /// dedicated LE ACL buffers (Core Vol 4, Part E, Section 7.8.2).
     ZeroAclDataPacketCount,
     /// The initial LE data path cannot retain a larger complete Host packet.
     AclDataPacketLengthTooLarge {

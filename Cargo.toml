@@ -412,8 +412,8 @@ debug = 1
 incremental = true
 codegen-units = 16
 
-# The async-platform branch uses register accessor fixes that are
-# still carried by the matching PAC fork.
+# Use one crates.io copy of the Embassy utilities in the network fork and
+# the workspace.
 [patch."https://github.com/ermacv/embassy.git"]
 embassy-futures = { version = "0.1.2", registry = "crates-io" }
 embassy-sync = { version = "0.8.0", registry = "crates-io" }

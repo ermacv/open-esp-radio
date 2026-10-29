@@ -1,8 +1,7 @@
 //! One-credit HCI service loop over a composition-owned transport and port.
 
 use oer_bluetooth_hci::{
-    HardwareErrorEvent, HciCommandPacket, HciControllerResponse,
-    bt_hci::cmd::{Cmd, Opcode, le::LeRand},
+    Cmd, HardwareErrorEvent, HciCommandPacket, HciControllerResponse, LeRand, Opcode,
 };
 use oer_bluetooth_le_controller::dtm::{
     Accepted, Entropy, Reset, Response, Service, SubmitError, Submitted,

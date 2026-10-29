@@ -70,7 +70,7 @@ impl Default for Commands {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oer_bluetooth_hci::bt_hci::cmd::{Cmd, controller_baseband::Reset};
+    use oer_bluetooth_hci::{Cmd, Reset};
 
     #[test]
     fn a_command_is_published_through_the_hci_codec() {

@@ -40,7 +40,7 @@ name does not establish that its task runs on P2.
 | `portable/memory/src/waking_spsc.rs` | W3 network/application/service P1 ↔ P1 | Ordinary AtomicWakers for consumer and producer; both endpoints currently run on P1. The generic queue must not be composed across priorities with an upward wake. |
 | `portable/cooperate/src/connected_tasks.rs` | Parent/worker tasks on the composition's executor | Embassy Signal under the supplied RawMutex. No hardware P1 → P2 composition uses these cells. A composition must not introduce an upward wake through them. |
 | `protocols/ieee80211/runtime/src/monitor/{capture,injection}.rs` | Monitor capture/injection producer → consumer on the composition's executor | `oer_memory::WakingSpscQueue` (ordinary AtomicWakers) and a `ClaimCell` binding; no lock. A composition must not compose them across priorities with an upward wake. |
-| `protocols/hil/agent/src/console.rs`; HIL request/console Channels | Synchronous callers only queue; the sole async console and dispatch run on P1 | Embassy AtomicWaker uses CriticalSectionRawMutex, not the atomic-waker WAKING protocol. Logger waits descend to P1; the blocking critical-section restriction is separate from priority livelock. |
+| `protocols/hil/agent/src/console.rs`; HIL request/console Channels | Synchronous callers only queue; the sole async console and dispatch run on P1 | Embassy Mutex/Channel/Watch use CriticalSectionRawMutex, which masks the hart, including P3, during a P1 operation. Logger waits descend to P1; this remains a checked deviation from the blocking critical-section restriction. |
 | `chips/esp32s31/ieee80211/driver/src/rx/returns.rs`, Wi-Fi MAC/power interrupt consumers | Held-frame return P1 → P2; MAC/power P3 → P2 | `IrqSignal::raise` ORs facts and pends P2 without a waker call. Registration of the polling task's handle and its wake occur only in the bound P2 executor. |
 | `chips/esp32s31/bluetooth/driver/src/interrupt/{halves,wake}.rs`, `modem_lp_timer_queue.rs` | Scheduler request P2 → doorbell P3; scheduler/timer reply P3 → P2 | P2 rings the hardware doorbell; P3 owns scheduler registers and raises typed IrqSignals back. No task waker is invoked on P3. |
 | `chips/espressif/ieee802154-engine` and `protocols/ieee802154/{port,mac}` | Engine events in P3; MAC state advanced by its caller | Synchronous callbacks/polling, no atomic-waker task cell. The model's RefCell wakers belong to its single-threaded host world. |
@@ -55,6 +55,11 @@ existing mutex/owner limitations are documented in its
 valid cross-priority or cross-core composition. W3 selects NoopRawMutex and
 keeps every adapter endpoint on P1. Neither an IRQ nor a P2 task may share
 that NoopRawMutex state.
+
+Direct `embassy-sync` dependencies remain in `portable/cooperate`,
+`portable/embassy/net`, `protocols/hil/agent` and the three HIL images. The
+layer test checks those exact edges against its shrinking deviation list;
+the absence of priority preemption does not admit a new mutex-backed path.
 
 ## Static check
 

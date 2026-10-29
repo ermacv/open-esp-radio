@@ -5,25 +5,14 @@
     clippy::arithmetic_side_effects
 )]
 
-use oer_bluetooth_hci::bt_hci::{
-    ControllerToHostPacket, FromHciBytes, PacketKind,
-    cmd::{
-        Cmd, Opcode, OpcodeGroup,
-        controller_baseband::{
-            HostBufferSize, Reset, SetControllerToHostFlowControl, SetEventMask, SetEventMaskPage2,
-        },
-        info::{ReadBdAddr, ReadLocalSupportedCmds},
-        le::{
-            LeReadBufferSize, LeReadFilterAcceptListSize, LeReadLocalSupportedFeatures,
-            LeSetAdvEnable, LeSetEventMask, LeSetRandomAddr, LeSetScanEnable, LeSetScanParams,
-        },
-    },
-    event::{CommandComplete, CommandCompleteWithStatus, EventKind},
-    param::{
-        BdAddr, CmdMask, ControllerToHostFlowControl, Error as HciError, EventMask, EventMaskPage2,
-        LeEventMask, Status,
-    },
-    transport::PacketToController,
+use oer_bluetooth_hci::{
+    BdAddr, Cmd, CmdMask, CommandComplete, CommandCompleteWithStatus, ControllerToHostFlowControl,
+    ControllerToHostPacket, Error as HciError, EventKind, EventMask, EventMaskPage2, FromHciBytes,
+    HostBufferSize, LeEventMask, LeReadBufferSize, LeReadFilterAcceptListSize,
+    LeReadLocalSupportedFeatures, LeSetAdvEnable, LeSetEventMask, LeSetRandomAddr, LeSetScanEnable,
+    LeSetScanParams, Opcode, OpcodeGroup, PacketKind, PacketToController, ReadBdAddr,
+    ReadLocalSupportedCmds, Reset, SetControllerToHostFlowControl, SetEventMask, SetEventMaskPage2,
+    Status,
 };
 use oer_bluetooth_hci::{
     BluetoothPublicDeviceAddress, BootstrapCommand, BootstrapCommandCompleteEvent,
@@ -35,7 +24,7 @@ use oer_bluetooth_hci::{
 use super::{BootstrapHostBuffers, BootstrapPhase, LeControllerBootstrap};
 
 #[test]
-fn trouble_no_security_bootstrap_and_conservative_extensions_are_supported() {
+fn le_hci_bootstrap_and_conservative_extensions_are_supported() {
     let public_address = BluetoothPublicDeviceAddress::from_canonical_bytes([1, 2, 3, 4, 5, 6]);
     let config = LeControllerBootstrapConfig::new(public_address, 251, 4).unwrap();
     let mut bootstrap = LeControllerBootstrap::new(config).unwrap();

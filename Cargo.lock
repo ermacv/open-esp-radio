@@ -2147,7 +2147,6 @@ dependencies = [
 name = "oer-esp32s31-radio-client"
 version = "0.1.0"
 dependencies = [
- "embassy-futures",
  "oer-bluetooth-le-port",
  "oer-esp32s31-hal",
  "oer-esp32s31-phy",
@@ -2511,7 +2510,6 @@ dependencies = [
  "critical-section",
  "embassy-futures",
  "embassy-net",
- "embassy-sync",
  "heapless",
  "oer-diagnostics",
  "oer-embassy-net",

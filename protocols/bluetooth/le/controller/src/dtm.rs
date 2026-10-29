@@ -12,14 +12,10 @@
 use core::marker::PhantomData;
 
 use oer_bluetooth_hci::{
-    self as hci, HciCommandPacket, HciControllerResponse, LeDtmCommand, LeDtmCommandCompleteEvent,
-    LeDtmCommandKind, LeDtmPhy, LeRandCommandCompleteEvent, LeReceiverTestCommand,
-    LeTestEndCommand, LeTransmitterTestCommand,
-    bt_hci::{
-        PacketKind,
-        cmd::{Cmd, Opcode, controller_baseband::Reset as HciReset, le::LeRand},
-        param::Error as HciError,
-    },
+    self as hci, Cmd, Error as HciError, HciCommandPacket, HciControllerResponse, LeDtmCommand,
+    LeDtmCommandCompleteEvent, LeDtmCommandKind, LeDtmPhy, LeRand, LeRandCommandCompleteEvent,
+    LeReceiverTestCommand, LeTestEndCommand, LeTransmitterTestCommand, Opcode, PacketKind,
+    Reset as HciReset,
 };
 use oer_bluetooth_le_port::{
     self as port, Admitted, Command, Completion, DtmCommand, Event, EventResult, Idle,
@@ -631,7 +627,7 @@ fn payload(value: u8) -> Result<TestPayloadType, HciError> {
 fn status(opcode: Opcode, error: Option<HciError>) -> Response {
     Response::Command(LeDtmCommandCompleteEvent::without_return_parameters(
         opcode,
-        error.map_or(hci::bt_hci::param::Status::SUCCESS, HciError::to_status),
+        error.map_or(hci::Status::SUCCESS, HciError::to_status),
     ))
 }
 

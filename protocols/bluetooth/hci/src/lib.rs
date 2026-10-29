@@ -67,7 +67,28 @@ pub use events::{CommandCompleteStatusEvent, HardwareErrorEvent, VendorShutdownO
 mod transport;
 mod wire;
 
-pub use bt_hci;
+// HCI vocabulary used by the Controller, runtime and transports. The async
+// bt-hci controller implementation is outside this sans-IO boundary.
+pub use bt_hci::{
+    ControllerToHostPacket, FromHciBytes, PacketKind,
+    cmd::{
+        Cmd, Opcode, OpcodeGroup,
+        controller_baseband::{
+            HostBufferSize, Reset, SetControllerToHostFlowControl, SetEventMask, SetEventMaskPage2,
+        },
+        info::{ReadBdAddr, ReadLocalSupportedCmds},
+        le::{
+            LeRand, LeReadBufferSize, LeReadFilterAcceptListSize, LeReadLocalSupportedFeatures,
+            LeSetAdvEnable, LeSetEventMask, LeSetRandomAddr, LeSetScanEnable, LeSetScanParams,
+        },
+    },
+    event::{CommandComplete, CommandCompleteWithStatus, EventKind},
+    param::{
+        BdAddr, CmdMask, ControllerToHostFlowControl, Error, EventMask, EventMaskPage2,
+        LeEventMask, Status,
+    },
+    transport::PacketToController,
+};
 
 /// Why an API value cannot form the requested HCI packet or ACL transition.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

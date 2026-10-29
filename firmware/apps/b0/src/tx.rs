@@ -68,7 +68,7 @@ mod tests {
         task::{Context, Poll, Waker},
     };
     use embedded_io_async::{ErrorKind, ErrorType};
-    use oer_bluetooth_hci::bt_hci::PacketKind;
+    use oer_bluetooth_hci::PacketKind;
     use std::vec::Vec;
 
     struct Response;

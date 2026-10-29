@@ -1,8 +1,10 @@
 # Network boundaries
 
 This directory owns stack-facing contracts; chip radio execution belongs to
-[`exec`](../../chips/espressif/executor/README.md). No ESP32-S31 firmware exists yet to link a
-network stack.
+[`exec`](../../chips/espressif/executor/README.md). W3 and the HIL Wi-Fi station
+image link the pinned Embassy/Xarxa network stack through
+`portable/embassy/net`. Direct normal stack dependencies belong to that
+adapter and firmware, outside the protocol cores and runtimes.
 
 | Path | Responsibility |
 | --- | --- |

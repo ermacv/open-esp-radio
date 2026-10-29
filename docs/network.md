@@ -16,6 +16,10 @@ not take. The driver and socket APIs differ from the released smoltcp-based
 Embassy; package name and version alone do not identify the contract, the
 Git source and revision do.
 
+Direct normal dependencies on `embassy-net`, `xarxa` and `xarxa-driver`
+belong only to `portable/embassy/net` and firmware. The layer tests resolve
+aliases and include optional and target-specific dependencies.
+
 - `embassy-net` is the multi-interface API: `Stack::new` takes the stack
   storage, a seed and the `PacketBufAllocator`; the Wi-Fi device is lent with
   `add_iface_borrowed`, and IP configuration is set on the returned interface.
@@ -36,7 +40,8 @@ Git source and revision do.
 | --- | --- | --- |
 | `oer-network` (`protocols/network`) | logical interfaces, link state, frame and admission errors, `TransportFlow` | queues, allocator, executor, hardware |
 | `oer-embassy-net` (`portable/embassy/net`) | the Xarxa `PacketBuf` handoff, destination/flow TX queues, stack wake registration, RX copying into packet pools; in `datapath`, the software/physical TX ownership traits and `TxQueues` | radio scheduling, DMA descriptors, a concrete physical allocator |
-| `oer-esp32s31-ieee80211-mac` | the TX cost model (`tx_cost`), work receipts (`tx_work`) of its publications and the airtime ledger (`airtime`) | packet storage |
+| `oer-esp32s31-ieee80211-mac` | the TX cost model (`tx_cost`) and work receipts (`tx_work`) of its publications | packet storage |
+| `oer-ieee80211-upper-mac` | the airtime ledger (`airtime`) and affine scheduling reservations | hardware, packet storage |
 | the radio runner (P2) | VIF/peer generations, power-save eligibility, rate and retry state, BA sessions, DMA descriptors, physical credits, terminal TX receipts | sockets, a second stack |
 
 ## TX path
@@ -84,7 +89,7 @@ radio runner (P2)
   Order holds within a FIFO, not across a fragmented and an unfragmented class.
   Packet round-robin is not byte or airtime fairness.
 
-## Airtime ledger (`oer-esp32s31-ieee80211-mac::airtime`)
+## Airtime ledger (`oer-ieee80211-upper-mac::airtime`)
 
 - `AirtimeStorage` holds bounded per-peer deficit accounts apart from packet
   storage; `scheduler()` borrows it exclusively. Tokens of one ledger cannot

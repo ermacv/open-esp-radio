@@ -108,10 +108,29 @@ time enter as values; actions and the next deadline leave as values. They
 never await, so they run under any executor and in host tests with virtual
 time. Only a protocol's runtime awaits, and it binds no executor: time comes
 from `oer-time`, interrupt signals from `portable/`, no executor,
-`embassy-time`, `embassy-net` or HAL dependency (`embassy-sync` and
-`embassy-futures` are allowed). The firmware composition declares the tasks
+`embassy-time`, `embassy-net`, `embassy-sync` or HAL dependency
+(`embassy-futures` is allowed). The firmware composition declares the tasks
 that poll the futures.
 Drivers own hardware and wait; adapters bind executors.
+
+Direct normal dependencies on external async crates follow their role,
+including aliases, optional entries and target-specific entries:
+
+- `embassy-futures` is allowed except in wire, cipher, protocol cores,
+  core-side policy, facts, PAC and HAL roles.
+- `embassy-sync` is development-only. Its six remaining normal edges are
+  checked against a shrinking [deviation list](repository-layout.md#known-deviations).
+  Transitive uses inside `embassy-net` and `bt-hci` do not admit direct uses.
+- `embassy-time` belongs to `portable/embassy/time` and the Embassy time ABI
+  check in `firmware/hil/esp32s31`; `embassy-time-driver` belongs to
+  `chips/espressif/executor`.
+- `embassy-net`, `xarxa` and `xarxa-driver` belong to
+  `portable/embassy/net` and `firmware/*`; `trouble-host` belongs to
+  `portable/embassy/trouble` and `firmware/*`.
+- `bt-hci` belongs to `oer-bluetooth-hci`, `portable/embassy/trouble` and
+  `tools/`. The HCI codec exports selected packet, command and event values,
+  without re-exporting the crate. Protocol sources never use
+  `bt_hci::controller`.
 
 The sans-IO safety and panic rules cover all crates under `protocols/` and
 `portable/`, except the unsafe homes `oer-mmio`, `oer-riscv` and `oer-memory`.
@@ -422,8 +441,9 @@ release a secondary hart.
   `ExecutorPlatform` contract, which the HAL's `Port` implements and the
   image's executor binding names, and architectural CSR access and waits
   from `oer-riscv`.
-  `embassy-sync`, `embassy-futures`, `embassy-net` and `embassy-time` stay;
-  tasks run on the static executor (`chips/espressif/executor`), in static
+  Embassy futures, network and time utilities follow the external-crate
+  homes above; remaining direct `embassy-sync` uses are listed deviations.
+  Tasks run on the static executor (`chips/espressif/executor`), in static
   slots, polled by direct calls, with one waker vtable, the binding's, whose
   data names the executor and task.
 - **Hart topology.** ESP32-S31's `[interrupts] harts` in

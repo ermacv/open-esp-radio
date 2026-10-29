@@ -1,7 +1,7 @@
 //! Reset-scoped Host configuration and bootstrap command admission over the
 //! HCI bootstrap codecs.
 
-use oer_bluetooth_hci::bt_hci::param::{
+use oer_bluetooth_hci::{
     BdAddr, ControllerToHostFlowControl, Error as HciError, EventMask, LeEventMask,
 };
 use oer_bluetooth_hci::{

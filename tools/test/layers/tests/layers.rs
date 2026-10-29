@@ -2086,6 +2086,316 @@ fn member(path: &str, name: &str, executable: bool, dependencies: &[&str]) -> Me
     }
 }
 
+/// Direct normal uses of external async crates. Transitive dependencies of
+/// the network stack and bt-hci are outside this rule; dev dependencies are
+/// outside `Member::dependencies`.
+fn external_crate_allowed(path: &str, role: Role, dependency: &str) -> bool {
+    match dependency {
+        "embassy-futures" => !matches!(
+            role,
+            Role::Facts
+                | Role::Pac
+                | Role::Hal
+                | Role::CoreSidePolicy
+                | Role::Protocol(ProtocolRole::Wire | ProtocolRole::Cipher | ProtocolRole::Core)
+        ),
+        "embassy-sync" => false,
+        "embassy-time" => path == "portable/embassy/time" || path == "firmware/hil/esp32s31",
+        "embassy-time-driver" => path == "chips/espressif/executor",
+        "embassy-net" | "xarxa" | "xarxa-driver" => {
+            path == "portable/embassy/net" || path.starts_with("firmware/")
+        }
+        "trouble-host" => path == "portable/embassy/trouble" || path.starts_with("firmware/"),
+        "bt-hci" => {
+            path == "protocols/bluetooth/hci"
+                || path == "portable/embassy/trouble"
+                || path.starts_with("tools/")
+        }
+        _ => true,
+    }
+}
+
+fn external_crate_violations(members: &[Member]) -> Result<BTreeSet<Edge>, String> {
+    let mut found = BTreeSet::new();
+    for member in members {
+        let role = role(&member.path).ok_or_else(|| format!("no role: {}", member.path))?;
+        found.extend(
+            member
+                .dependencies
+                .iter()
+                .filter(|dependency| !external_crate_allowed(&member.path, role, dependency))
+                .map(|dependency| (member.path.clone(), dependency.clone())),
+        );
+    }
+    Ok(found)
+}
+
+/// Remaining direct embassy-sync edges and the change that removes them.
+const EXTERNAL_ASYNC_CRATES: &[Deviation] = &[
+    (
+        "portable/cooperate",
+        "embassy-sync",
+        "connected_tasks on owned notification cells (#848)",
+    ),
+    (
+        "portable/embassy/net",
+        "embassy-sync",
+        "network adapter on ContextCell and affine endpoints (#848)",
+    ),
+    (
+        "protocols/hil/agent",
+        "embassy-sync",
+        "console on owned queues and waiter slots (#848)",
+    ),
+    (
+        "firmware/hil/esp32s31",
+        "embassy-sync",
+        "HIL image on SPSC and OnceValue (#848)",
+    ),
+    (
+        "firmware/hil/esp32s31-lower-mac",
+        "embassy-sync",
+        "HIL image on SPSC and OnceValue (#848)",
+    ),
+    (
+        "firmware/hil/esp32s31-phy",
+        "embassy-sync",
+        "HIL image on SPSC and OnceValue (#848)",
+    ),
+];
+
+#[test]
+fn external_embassy_crates_follow_the_role_table() {
+    let differences = deviation_differences(
+        &external_crate_violations(&workspace_members()).expect("workspace roles"),
+        EXTERNAL_ASYNC_CRATES,
+    );
+    assert!(differences.is_empty(), "{}", differences.join("\n"));
+}
+
+#[test]
+fn external_crates_reject_aliased_optional_target_and_runtime_stack_edges() {
+    let manifest: toml::Value = toml::from_str(
+        r#"
+[dependencies]
+stack = { package = "embassy-net", version = "1" }
+cooperate = { workspace = true, optional = true }
+[target.'cfg(target_arch = "riscv32")'.dependencies]
+signal = { package = "embassy-sync", version = "1", optional = true }
+host = { package = "trouble-host", version = "1", optional = true }
+clock = { package = "embassy-time", version = "1" }
+driver = { package = "xarxa-driver", version = "1" }
+ip = { package = "xarxa", version = "1" }
+abi = { package = "embassy-time-driver", version = "1" }
+codec = { package = "bt-hci", version = "1" }
+[dev-dependencies]
+embassy-sync = "1"
+[build-dependencies]
+embassy-sync = "1"
+"#,
+    )
+    .expect("manifest");
+    let workspace: toml::Value = toml::from_str(
+        "[dependencies]\ncooperate = { package = 'embassy-futures', version = '1' }",
+    )
+    .expect("workspace");
+    let dependencies = normal_dependencies(&manifest, &workspace);
+    let path = "protocols/ieee80211/runtime";
+    let runtime = Member {
+        dependencies: dependencies.clone(),
+        ..member(path, "oer-ieee80211-runtime", false, &[])
+    };
+    assert_eq!(
+        external_crate_violations(&[runtime]).expect("runtime role"),
+        [
+            "bt-hci",
+            "embassy-net",
+            "embassy-sync",
+            "embassy-time",
+            "embassy-time-driver",
+            "trouble-host",
+            "xarxa",
+            "xarxa-driver",
+        ]
+        .map(|dependency| (path.to_owned(), dependency.to_owned()))
+        .into()
+    );
+    let core = Member {
+        dependencies,
+        ..member("protocols/ieee80211/sta", "oer-ieee80211-sta", false, &[])
+    };
+    assert!(
+        external_crate_violations(&[core])
+            .expect("core role")
+            .contains(&("protocols/ieee80211/sta".into(), "embassy-futures".into(),))
+    );
+    let dev_only: toml::Value =
+        toml::from_str("[dev-dependencies]\nembassy-sync = '1'").expect("dev manifest");
+    assert!(normal_dependencies(&dev_only, &workspace).is_empty());
+    assert!(!external_crate_allowed(
+        path,
+        role(path).unwrap(),
+        "embassy-sync"
+    ));
+}
+
+#[test]
+fn external_crate_homes_and_futures_exclusions_are_explicit() {
+    for (dependency, allowed) in [
+        (
+            "embassy-time",
+            vec!["portable/embassy/time", "firmware/hil/esp32s31"],
+        ),
+        ("embassy-time-driver", vec!["chips/espressif/executor"]),
+        (
+            "embassy-net",
+            vec!["portable/embassy/net", "firmware/apps/w3"],
+        ),
+        (
+            "xarxa",
+            vec!["portable/embassy/net", "firmware/hil/esp32s31"],
+        ),
+        (
+            "xarxa-driver",
+            vec!["portable/embassy/net", "firmware/apps/w3"],
+        ),
+        (
+            "trouble-host",
+            vec!["portable/embassy/trouble", "firmware/apps/b0"],
+        ),
+        (
+            "bt-hci",
+            vec![
+                "protocols/bluetooth/hci",
+                "portable/embassy/trouble",
+                "tools/hil/fixture",
+            ],
+        ),
+    ] {
+        for path in allowed {
+            assert!(
+                external_crate_allowed(path, role(path).unwrap(), dependency),
+                "{path} -> {dependency}"
+            );
+        }
+        for path in [
+            "portable/embassy/other",
+            "protocols/bluetooth/le/runtime",
+            "chips/esp32s31/hal",
+        ] {
+            assert!(
+                !external_crate_allowed(path, role(path).unwrap(), dependency),
+                "{path} -> {dependency}"
+            );
+        }
+    }
+    for (path, allowed) in [
+        ("protocols/bluetooth/le/wire", false),
+        ("protocols/ieee80211/cipher", false),
+        ("protocols/bluetooth/le/controller", false),
+        ("chips/espressif/ieee80211-policy", false),
+        ("chips/espressif/facts", false),
+        ("chips/esp32s31/pac", false),
+        ("chips/esp32s31/hal", false),
+        ("protocols/bluetooth/le/runtime", true),
+        ("protocols/bluetooth/le/port", true),
+        ("protocols/bluetooth/le/model", true),
+        ("portable/cooperate", true),
+        ("portable/embassy/net", true),
+        ("chips/esp32s31/bluetooth/driver", true),
+        ("firmware/apps/b0", true),
+        ("tools/hil/fixture", true),
+    ] {
+        assert_eq!(
+            external_crate_allowed(path, role(path).unwrap(), "embassy-futures"),
+            allowed,
+            "{path}"
+        );
+        assert!(
+            !external_crate_allowed(path, role(path).unwrap(), "embassy-sync"),
+            "{path}"
+        );
+    }
+}
+
+/// Token paths, including a grouped `use bt_hci::{controller::...}`.
+/// Comments and strings do not count as uses of the async Controller API.
+fn bt_hci_controller(tokens: TokenStream, in_bt_hci: bool) -> bool {
+    let tokens = tokens.into_iter().collect::<Vec<_>>();
+    (in_bt_hci
+        && tokens.iter().any(|token| matches!(token, TokenTree::Ident(name) if name == "controller")))
+        || tokens.iter().any(|token| {
+            matches!(token, TokenTree::Group(group) if bt_hci_controller(group.stream(), false))
+        })
+        || tokens.windows(4).any(|path| match path {
+            [TokenTree::Ident(name), TokenTree::Punct(first), TokenTree::Punct(second), next]
+                if name == "bt_hci" && first.as_char() == ':' && second.as_char() == ':' => {
+                match next {
+                    TokenTree::Ident(name) => name == "controller",
+                    TokenTree::Group(group) => bt_hci_controller(group.stream(), true),
+                    _ => false,
+                }
+            }
+            _ => false,
+        })
+}
+
+fn bt_hci_controller_sources(directory: &Path, found: &mut Vec<PathBuf>) -> Result<(), String> {
+    let entries = std::fs::read_dir(directory)
+        .map_err(|error| format!("{}: {error}", directory.display()))?;
+    for entry in entries {
+        let path = entry
+            .map_err(|error| format!("{}: {error}", directory.display()))?
+            .path();
+        if path.is_dir() {
+            bt_hci_controller_sources(&path, found)?;
+        } else if path.extension().is_some_and(|extension| extension == "rs") {
+            let source = std::fs::read_to_string(&path)
+                .map_err(|error| format!("{}: {error}", path.display()))?;
+            let tokens = source
+                .parse::<TokenStream>()
+                .map_err(|error| format!("{} does not tokenize: {error}", path.display()))?;
+            if bt_hci_controller(tokens, false) {
+                found.push(path);
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn protocols_never_use_the_bt_hci_async_controller() {
+    let mut found = Vec::new();
+    bt_hci_controller_sources(&root().join("protocols"), &mut found).expect("protocol sources");
+    assert!(found.is_empty(), "async bt-hci Controller uses: {found:?}");
+}
+
+#[test]
+fn bt_hci_controller_scan_checks_paths_and_grouped_imports_not_comments_or_strings() {
+    for source in [
+        "type Host = bt_hci::controller::ExternalController;",
+        "use ::bt_hci /* comment */ :: controller::{Controller, ExternalController};",
+        "use bt_hci::{cmd::Cmd, controller::{Controller as Host}};",
+        "mod nested { use bt_hci::controller; }",
+    ] {
+        assert!(
+            bt_hci_controller(source.parse().unwrap(), false),
+            "{source}"
+        );
+    }
+    for source in [
+        "// bt_hci::controller::Controller\nuse bt_hci::cmd::Cmd;",
+        "const DOC: &str = \"bt_hci::controller::Controller\";",
+        "use bt_hci::{cmd::{Cmd, Opcode}, param::Status};",
+        "mod controller {} use crate::controller::Command;",
+    ] {
+        assert!(
+            !bt_hci_controller(source.parse().unwrap(), false),
+            "{source}"
+        );
+    }
+}
+
 #[test]
 fn the_name_rule_tells_libraries_from_programs_by_their_binary_targets() {
     let members = [
