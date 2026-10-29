@@ -166,7 +166,7 @@ impl<C: Comparison> ScenarioFamily for PhyScenario<C> {
         const CAPTURE: &[Key] = &[phy::StartCalibration::KEY, phy::ReadAnalogImage::KEY];
         match self {
             Self::HostCalibrationCache { .. } => HOST_CACHE,
-            Self::RadioHealth { .. } => health::KEYS,
+            Self::RadioHealth { .. } => health::REQUIRED_KEYS,
             Self::TrackingHold { .. } | Self::TrackingHoldWifi { .. } => HOLD,
             Self::RecordedCalibration { .. } | Self::VendorCalibration { .. } => CAPTURE,
         }

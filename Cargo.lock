@@ -2095,6 +2095,7 @@ version = "0.1.0"
 dependencies = [
  "heapless",
  "oer-esp32s31-instrumentation",
+ "oer-hil-agent",
  "oer-hil-protocol",
  "oer-memory",
  "postcard",
@@ -2800,6 +2801,8 @@ dependencies = [
  "oer-diagnostics",
  "oer-hil-protocol",
  "oer-memory",
+ "oer-trace",
+ "postcard",
 ]
 
 [[package]]

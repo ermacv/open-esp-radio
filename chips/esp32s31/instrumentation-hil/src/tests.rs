@@ -20,10 +20,27 @@ fn roundtrip<M: Message + Clone + core::fmt::Debug + Eq>(body: M) {
     });
     assert_eq!(decoded, Some(body));
 }
+fn record_page(identity: oer_hil_protocol::capture::Identity, record: Record) {
+    use oer_hil_protocol::capture::*;
+    let mut bytes = [0; RECORD_BYTES];
+    let encoded = postcard::to_slice(&record, &mut bytes).expect("domain record fits capture");
+    let decoded: Record = postcard::from_bytes(encoded).expect("domain schema");
+    assert_eq!(decoded, record);
+    roundtrip(Records {
+        identity,
+        first: u32::MAX,
+        total: u32::MAX,
+        records: heapless::Vec::from_slice(&[
+            EncodedRecord::from_slice(encoded).unwrap(),
+            EncodedRecord::from_slice(encoded).unwrap(),
+        ])
+        .unwrap(),
+    });
+}
 #[test]
-fn maximum_pages_roundtrip_without_enlarging_the_transport() {
-    let identity = HealthIdentity {
-        observation: u32::MAX,
+fn all_record_forms_roundtrip_through_generic_pages() {
+    let identity = oer_hil_protocol::capture::Identity {
+        capture: u32::MAX,
         epoch: u32::MAX,
     };
     let read = Bracket {
@@ -37,12 +54,7 @@ fn maximum_pages_roundtrip_without_enlarging_the_transport() {
         kind: CounterKind::TxTrcts,
         value: CounterValue::SignedScaled40(i32::MIN),
     };
-    roundtrip(CounterPage {
-        identity,
-        first: u16::MAX,
-        total: u16::MAX,
-        records: heapless::Vec::from_slice(&[counter; COUNTER_PAGE]).expect("page"),
-    });
+    record_page(identity, Record::Counter(counter));
     let signal = Signal {
         read,
         channel: u8::MAX,
@@ -52,12 +64,7 @@ fn maximum_pages_roundtrip_without_enlarging_the_transport() {
             acquisition: Acquisition::Window(read),
         }),
     };
-    roundtrip(SignalPage {
-        identity,
-        first: u16::MAX,
-        total: u16::MAX,
-        records: heapless::Vec::from_slice(&[signal; SIGNAL_PAGE]).expect("page"),
-    });
+    record_page(identity, Record::Signal(signal));
     let tracking = Tracking {
         condition: None,
         operation: TrackingOperation::Other(u8::MAX),
@@ -66,12 +73,7 @@ fn maximum_pages_roundtrip_without_enlarging_the_transport() {
         at_micros: u64::MAX,
         committed: u8::MAX,
     };
-    roundtrip(TrackingPage {
-        identity,
-        first: u16::MAX,
-        total: u16::MAX,
-        records: heapless::Vec::from_slice(&[tracking; DETAIL_PAGE]).expect("page"),
-    });
+    record_page(identity, Record::Tracking(tracking));
     let context = MeasurementContext {
         gain: u8::MAX,
         measurement: u8::MAX,
@@ -106,12 +108,7 @@ fn maximum_pages_roundtrip_without_enlarging_the_transport() {
             gain: Some(u16::MAX),
             value,
         };
-        roundtrip(MeasurementPage {
-            identity,
-            first: u16::MAX,
-            total: u16::MAX,
-            records: heapless::Vec::from_slice(&[measurement; DETAIL_PAGE]).expect("page"),
-        });
+        record_page(identity, Record::Measurement(measurement));
     }
 }
 #[test]

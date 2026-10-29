@@ -560,9 +560,9 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 "firmware/hil/esp32s31-phy/src/entry.rs:385:54:terminal-reference:reset_request" = { owner = "firmware/hil/esp32s31-phy", classes = ["cancellation"] }
 
 # firmware/hil/esp32s31-phy/src/health.rs
-"firmware/hil/esp32s31-phy/src/health.rs:264:17:terminal-reference:abort" = { owner = "firmware/hil/esp32s31-phy", classes = ["rust-panic"] }
-"firmware/hil/esp32s31-phy/src/health.rs:451:15:terminal-entry:count_fault" = { owner = "firmware/hil/esp32s31-phy", classes = ["exhaustion"] }
-"firmware/hil/esp32s31-phy/src/health.rs:452:42:terminal-reference:reset_fault" = { owner = "firmware/hil/esp32s31-phy", classes = ["exhaustion"] }
+"firmware/hil/esp32s31-phy/src/health.rs:271:17:terminal-reference:abort" = { owner = "firmware/hil/esp32s31-phy", classes = ["rust-panic"] }
+"firmware/hil/esp32s31-phy/src/health.rs:458:15:terminal-entry:count_fault" = { owner = "firmware/hil/esp32s31-phy", classes = ["exhaustion"] }
+"firmware/hil/esp32s31-phy/src/health.rs:459:42:terminal-reference:reset_fault" = { owner = "firmware/hil/esp32s31-phy", classes = ["exhaustion"] }
 
 # firmware/hil/esp32s31-phy/src/health/startup.rs
 "firmware/hil/esp32s31-phy/src/health/startup.rs:125:54:terminal-reference:reset_request" = { owner = "firmware/hil/esp32s31-phy", classes = ["cancellation"] }

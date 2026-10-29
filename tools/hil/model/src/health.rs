@@ -4,64 +4,6 @@ use oer_esp32s31_instrumentation_hil::*;
 use serde::{Deserialize, Serialize};
 
 type Result<T> = std::result::Result<T, &'static str>;
-#[derive(Clone, Debug)]
-pub struct Pages<T> {
-    identity: HealthIdentity,
-    total: u16,
-    values: Vec<T>,
-}
-impl<T> Pages<T> {
-    pub fn new(identity: HealthIdentity, total: u16) -> Self {
-        Self {
-            identity,
-            total,
-            values: Vec::new(),
-        }
-    }
-    pub fn next(&self, limit: usize) -> Option<HealthPageRequest> {
-        if limit == 0 || limit > usize::from(u8::MAX) {
-            return None;
-        }
-        let remaining = usize::from(self.total).checked_sub(self.values.len())?;
-        (remaining != 0).then_some(HealthPageRequest {
-            identity: self.identity,
-            first: self.values.len() as u16,
-            count: remaining.min(limit) as u8,
-        })
-    }
-    pub fn append(
-        &mut self,
-        identity: HealthIdentity,
-        first: u16,
-        total: u16,
-        values: impl IntoIterator<Item = T>,
-        requested: HealthPageRequest,
-    ) -> Result<()> {
-        if identity != self.identity
-            || requested.identity != self.identity
-            || total != self.total
-            || usize::from(first) != self.values.len()
-            || first != requested.first
-        {
-            return Err("health page identity or continuity changed");
-        }
-        let values: Vec<T> = values.into_iter().collect();
-        if values.len() != usize::from(requested.count)
-            || self.values.len() + values.len() > usize::from(total)
-        {
-            return Err("health page length changed");
-        }
-        self.values.extend(values);
-        Ok(())
-    }
-    pub fn finish(self) -> Result<Vec<T>> {
-        if self.values.len() != usize::from(self.total) {
-            Err("missing health page")
-        } else {
-            Ok(self.values)
-        }
-    }
-}
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct CounterDelta {
     pub kind: CounterKind,
@@ -194,31 +136,6 @@ impl Snapshot {
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[test]
-    fn pages_reject_repeats_skips_stale_epochs_and_false_lengths() {
-        let id = HealthIdentity {
-            observation: 1,
-            epoch: 2,
-        };
-        let mut pages = Pages::<u8>::new(id, 3);
-        assert!(pages.next(0).is_none());
-        assert!(pages.next(256).is_none());
-        let first = pages.next(2).expect("first");
-        assert!(pages.append(id, 1, 3, [1, 2], first).is_err());
-        assert!(
-            pages
-                .append(HealthIdentity { epoch: 3, ..id }, 0, 3, [1, 2], first)
-                .is_err()
-        );
-        assert!(pages.append(id, 0, 3, [1], first).is_err());
-        pages.append(id, 0, 3, [1, 2], first).expect("first page");
-        assert!(pages.append(id, 0, 3, [1, 2], first).is_err());
-        assert!(pages.clone().finish().is_err());
-        let last = pages.next(2).expect("last");
-        pages.append(id, 2, 3, [3], last).expect("last page");
-        assert!(pages.next(2).is_none());
-        assert_eq!(pages.finish(), Ok(vec![1, 2, 3]));
-    }
     #[test]
     fn overflow_cannot_become_complete_when_all_retained_pages_arrive() {
         let identity = HealthIdentity {

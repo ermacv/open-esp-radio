@@ -275,10 +275,22 @@ pub struct Measurement {
     pub gain: Option<u16>,
     pub value: MeasurementValue,
 }
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub enum Record {
     Counter(Counter),
     Signal(Signal),
     Tracking(Tracking),
     Measurement(Measurement),
+}
+
+impl Record {
+    /// Capture aggregate ids follow this dictionary's record categories.
+    pub const fn kind(self) -> u16 {
+        match self {
+            Self::Counter(_) => 0,
+            Self::Signal(_) => 1,
+            Self::Tracking(_) => 2,
+            Self::Measurement(_) => 3,
+        }
+    }
 }

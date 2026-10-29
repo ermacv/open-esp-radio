@@ -22,6 +22,8 @@ pub struct Store {
     failed: bool,
     window: Option<HealthWindow>,
     finished: Option<HealthFinished>,
+    aggregates: [u32; 4],
+    saturated: bool,
 }
 const _: () = const {
     if core::mem::size_of::<Store>() > PSRAM_BUDGET || MAX_RECORDS > u16::MAX as usize {
@@ -67,6 +69,8 @@ impl Store {
                 failed: false,
                 window: None,
                 finished: None,
+                aggregates: [0; 4],
+                saturated: false,
             }
         )
     }
@@ -90,6 +94,8 @@ impl Store {
             failed: false,
             window: None,
             finished: None,
+            aggregates: [0; 4],
+            saturated: false,
         }
     }
     pub fn begin(&mut self, config: BeginHealth, boot: u64) -> Result<HealthStarted> {
@@ -108,6 +114,8 @@ impl Store {
         self.counts = Counts::default();
         self.dropped = 0;
         self.failed = false;
+        self.aggregates = [0; 4];
+        self.saturated = false;
         self.window = None;
         self.finished = None;
         self.config = Some(config);
@@ -190,6 +198,15 @@ impl Store {
                 stored: self.records.len(),
             })?
         };
+        if let Some(aggregate) = self.aggregates.get_mut(usize::from(record.kind())) {
+            match aggregate.checked_add(1) {
+                Some(next) => *aggregate = next,
+                None => {
+                    self.saturated = true;
+                    self.failed = true;
+                }
+            }
+        }
         if self.records.push(record).is_err() {
             self.dropped = self.dropped.saturating_add(1);
         } else {
@@ -213,96 +230,6 @@ impl Store {
         self.state = State::Frozen;
         Ok(result)
     }
-    fn page(
-        &self,
-        request: HealthPageRequest,
-        limit: usize,
-        total: u16,
-    ) -> Result<impl Iterator<Item = &Record>> {
-        if self.state != State::Frozen || request.identity != self.identity {
-            return Err(RejectReason::InvalidState);
-        }
-        request
-            .range(usize::from(total), limit)
-            .ok_or(RejectReason::InvalidConfiguration)?;
-        Ok(self.records.iter())
-    }
-    pub fn counters(&self, request: HealthPageRequest) -> Result<CounterPage> {
-        let values = self.page(request, COUNTER_PAGE, self.counts.counters)?;
-        Ok(CounterPage {
-            identity: self.identity,
-            first: request.first,
-            total: self.counts.counters,
-            records: values
-                .filter_map(|r| {
-                    if let Record::Counter(v) = r {
-                        Some(*v)
-                    } else {
-                        None
-                    }
-                })
-                .skip(usize::from(request.first))
-                .take(usize::from(request.count))
-                .collect(),
-        })
-    }
-    pub fn signals(&self, request: HealthPageRequest) -> Result<SignalPage> {
-        let values = self.page(request, SIGNAL_PAGE, self.counts.signals)?;
-        Ok(SignalPage {
-            identity: self.identity,
-            first: request.first,
-            total: self.counts.signals,
-            records: values
-                .filter_map(|r| {
-                    if let Record::Signal(v) = r {
-                        Some(*v)
-                    } else {
-                        None
-                    }
-                })
-                .skip(usize::from(request.first))
-                .take(usize::from(request.count))
-                .collect(),
-        })
-    }
-    pub fn tracking(&self, request: HealthPageRequest) -> Result<TrackingPage> {
-        let values = self.page(request, DETAIL_PAGE, self.counts.tracking)?;
-        Ok(TrackingPage {
-            identity: self.identity,
-            first: request.first,
-            total: self.counts.tracking,
-            records: values
-                .filter_map(|r| {
-                    if let Record::Tracking(v) = r {
-                        Some(*v)
-                    } else {
-                        None
-                    }
-                })
-                .skip(usize::from(request.first))
-                .take(usize::from(request.count))
-                .collect(),
-        })
-    }
-    pub fn measurements(&self, request: HealthPageRequest) -> Result<MeasurementPage> {
-        let values = self.page(request, DETAIL_PAGE, self.counts.measurements)?;
-        Ok(MeasurementPage {
-            identity: self.identity,
-            first: request.first,
-            total: self.counts.measurements,
-            records: values
-                .filter_map(|r| {
-                    if let Record::Measurement(v) = r {
-                        Some(*v)
-                    } else {
-                        None
-                    }
-                })
-                .skip(usize::from(request.first))
-                .take(usize::from(request.count))
-                .collect(),
-        })
-    }
     pub fn release(&mut self, identity: HealthIdentity) -> Result<HealthReleased> {
         if self.state != State::Frozen || identity != self.identity {
             return Err(RejectReason::InvalidState);
@@ -314,9 +241,111 @@ impl Store {
     }
 }
 
+impl oer_hil_agent::capture::Reader for Store {
+    fn describe(
+        &self,
+    ) -> core::result::Result<
+        oer_hil_protocol::capture::Description,
+        oer_hil_protocol::capture::Error,
+    > {
+        use oer_hil_protocol::capture::{Description, Error, Identity};
+        if self.state == State::Idle {
+            return Err(Error::InvalidState);
+        }
+        Ok(Description {
+            identity: Identity {
+                capture: self.identity.observation,
+                epoch: self.identity.epoch,
+            },
+            schema: RECORD_SCHEMA,
+            frozen: self.state == State::Frozen,
+            records: self.records.len() as u32,
+            counters: 4,
+            dropped: self.dropped,
+            failure: if self.saturated {
+                Some(Error::CounterOverflow)
+            } else if self.dropped != 0 {
+                Some(Error::RecordsFull)
+            } else {
+                None
+            },
+        })
+    }
+    fn records(
+        &self,
+        request: oer_hil_protocol::capture::PageRequest,
+    ) -> core::result::Result<oer_hil_protocol::capture::Records, oer_hil_protocol::capture::Error>
+    {
+        use oer_hil_protocol::capture::{
+            EncodedRecord, Error, RECORD_BYTES, RECORDS_PER_PAGE, Records,
+        };
+        let description = self.describe()?;
+        if request.identity != description.identity {
+            return Err(Error::IdentityMismatch);
+        }
+        if !description.frozen {
+            return Err(Error::InvalidState);
+        }
+        let range = request.range(self.records.len(), RECORDS_PER_PAGE)?;
+        let mut records = heapless::Vec::new();
+        for record in self.records.get(range).ok_or(Error::InvalidRange)? {
+            let mut bytes = [0; RECORD_BYTES];
+            let bytes = postcard::to_slice(record, &mut bytes).map_err(|_| Error::Encoding)?;
+            records
+                .push(EncodedRecord::from_slice(bytes).map_err(|_| Error::Encoding)?)
+                .map_err(|_| Error::InvalidRange)?;
+        }
+        Ok(Records {
+            identity: description.identity,
+            first: request.first,
+            total: description.records,
+            records,
+        })
+    }
+    fn counters(
+        &self,
+        request: oer_hil_protocol::capture::PageRequest,
+    ) -> core::result::Result<oer_hil_protocol::capture::Counters, oer_hil_protocol::capture::Error>
+    {
+        use oer_hil_protocol::capture::{COUNTERS_PER_PAGE, Counter, Counters, Error};
+        let description = self.describe()?;
+        if request.identity != description.identity {
+            return Err(Error::IdentityMismatch);
+        }
+        if !description.frozen {
+            return Err(Error::InvalidState);
+        }
+        let range = request.range(self.aggregates.len(), COUNTERS_PER_PAGE)?;
+        let mut counters = heapless::Vec::new();
+        for (kind, value) in self
+            .aggregates
+            .iter()
+            .enumerate()
+            .skip(range.start)
+            .take(range.len())
+        {
+            counters
+                .push(Counter {
+                    kind: kind as u16,
+                    value: *value,
+                    saturated: self.saturated,
+                })
+                .map_err(|_| Error::InvalidRange)?;
+        }
+        Ok(Counters {
+            identity: description.identity,
+            first: request.first,
+            total: description.counters,
+            counters,
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use oer_hil_agent::capture::Reader;
+    use oer_hil_protocol::capture::{Identity, PageRequest};
     fn config() -> BeginHealth {
         BeginHealth {
             channel: 1,
@@ -342,12 +371,15 @@ mod tests {
         assert!(store.begin(config(), 7).is_err());
         store.bind_epoch(1, 1).expect("epoch");
         let identity = store.identity();
-        let page = HealthPageRequest {
-            identity,
+        let page = PageRequest {
+            identity: Identity {
+                capture: identity.observation,
+                epoch: identity.epoch,
+            },
             first: 0,
             count: 1,
         };
-        assert!(store.tracking(page).is_err());
+        assert!(store.records(page).is_err());
         for _ in 0..MAX_RECORDS + 1 {
             store.push(record()).unwrap();
         }
@@ -364,26 +396,28 @@ mod tests {
         assert_eq!(result.dropped, 1);
         assert_eq!(result.counts.total(), Some(MAX_RECORDS));
         assert!(!result.complete());
-        store.push(record()).unwrap();
+        let aggregate = store.counters(PageRequest { count: 4, ..page }).unwrap();
         assert_eq!(
-            store.tracking(page).expect("read").total,
-            MAX_RECORDS as u16
+            aggregate.counters.get(2).unwrap().value,
+            (MAX_RECORDS as u32).saturating_add(1)
         );
+        assert_eq!(
+            store.describe().unwrap().failure,
+            Some(oer_hil_protocol::capture::Error::RecordsFull)
+        );
+        store.push(record()).unwrap();
+        assert_eq!(store.records(page).expect("read").total, MAX_RECORDS as u32);
+        assert!(store.records(PageRequest { count: 3, ..page }).is_err());
         assert!(
             store
-                .tracking(HealthPageRequest { count: 3, ..page })
-                .is_err()
-        );
-        assert!(
-            store
-                .tracking(HealthPageRequest {
-                    first: MAX_RECORDS as u16,
+                .records(PageRequest {
+                    first: MAX_RECORDS as u32,
                     ..page
                 })
                 .is_err()
         );
         store.release(identity).expect("release");
-        assert!(store.tracking(page).is_err());
+        assert!(store.records(page).is_err());
         assert_eq!(store.begin(config(), 7).expect("next").observation, 2);
         assert!(store.finish(identity, true).is_err());
     }

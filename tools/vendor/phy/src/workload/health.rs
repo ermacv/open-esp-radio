@@ -7,7 +7,7 @@ use crate::{
 use oer_esp32s31_instrumentation::health::*;
 use oer_esp32s31_instrumentation_hil::*;
 use oer_esp32s31_phy_probe::{CaptureRadio, PrepareCapture};
-use oer_hil_model::health::{Pages, Snapshot};
+use oer_hil_model::health::Snapshot;
 use oer_hil_scenario::workload::context::Context;
 use oer_image_build::esp_idf::catalog;
 use std::{
@@ -115,20 +115,31 @@ pub(crate) fn run<C: Comparison>(
             capture.request_boot(boot, 0, FinishHealth(identity), Duration::from_secs(30));
         let finished = finished?;
         context.results.observe("health-finished", &finished);
-        macro_rules! pages {
-            ($field:ident, $request:ident, $limit:ident) => {{
-                let mut pages = Pages::new(identity, finished.counts.$field);
-                while let Some(request) = pages.next($limit) {
-                    let page = capture.request_boot(boot, 0, $request(request), REPLY)?;
-                    pages.append(page.identity, page.first, page.total, page.records, request)?;
-                }
-                pages.finish()?
-            }};
+        let frozen = capture.read_instrumentation(
+            boot,
+            oer_hil_protocol::capture::Identity {
+                capture: identity.observation,
+                epoch: identity.epoch,
+            },
+            RECORD_SCHEMA,
+            REPLY,
+        )?;
+        let records: Vec<Record> = frozen.decode(RECORD_SCHEMA)?;
+        let mut counters = Vec::new();
+        let mut signals = Vec::new();
+        let mut tracking = Vec::new();
+        let mut measurements = Vec::new();
+        for record in records {
+            match record {
+                Record::Counter(value) => counters.push(value),
+                Record::Signal(value) => signals.push(value),
+                Record::Tracking(value) => tracking.push(value),
+                Record::Measurement(value) => measurements.push(value),
+            }
         }
-        let counters = pages!(counters, ReadHealthCounters, COUNTER_PAGE);
-        let signals = pages!(signals, ReadHealthSignals, SIGNAL_PAGE);
-        let tracking = pages!(tracking, ReadHealthTracking, DETAIL_PAGE);
-        let measurements = pages!(measurements, ReadHealthMeasurements, DETAIL_PAGE);
+        if !frozen.complete() && finished.complete() {
+            return Err("health capture transport is incomplete".into());
+        }
         let window = match work {
             Ok(window) => window,
             Err(error) => {

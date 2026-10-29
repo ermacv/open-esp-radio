@@ -365,6 +365,7 @@ mod console_text;
 #[cfg(any(test, feature = "test-support"))]
 pub use capture::test_support;
 pub mod error;
+pub mod instrumentation;
 use error::LinkError;
 mod protocol;
 pub use protocol::latest_boot_id_in;

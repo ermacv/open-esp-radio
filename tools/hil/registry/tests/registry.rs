@@ -1,10 +1,10 @@
-//! The reviewed wire changes only its explicit lifecycle reset exchange.
+//! Only the explicit lifecycle and generic capture migrations change the reviewed wire.
 use oer_hil_protocol::{FRAMING_VERSION, Key, Kind, MessageInfo};
 use oer_hil_registry::{LOCKS, messages_lock, registry};
 use std::collections::{BTreeMap, BTreeSet};
 
 #[test]
-fn lifecycle_migration_preserves_every_other_reviewed_message()
+fn capture_migration_preserves_every_other_reviewed_message()
 -> Result<(), oer_hil_registry::LockError> {
     assert_eq!(messages_lock()?, migrated_wire()?);
     Ok(())
@@ -25,6 +25,34 @@ fn migrated_wire() -> Result<String, oer_hil_registry::LockError> {
             "system/panic/injected 9f469405c60e21be topic",
             &format!("{} {} topic", ResetAccepted::PATH, ResetAccepted::KEY),
         );
+    let previous = previous
+        .lines()
+        .filter(|line| {
+            ![
+                "health/counters ",
+                "health/counters/read ",
+                "health/signals ",
+                "health/signals/read ",
+                "health/tracking ",
+                "health/tracking/read ",
+                "health/measurements ",
+                "health/measurements/read ",
+            ]
+            .iter()
+            .any(|path| line.starts_with(path))
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    let mut previous = previous.replace("[modules]\n", "[modules]\ncapture\n");
+    previous.push('\n');
+    for message in oer_hil_protocol::capture::MESSAGES {
+        let kind = match message.kind {
+            Kind::Endpoint => "endpoint",
+            Kind::Topic => "topic",
+            Kind::Property => "property",
+        };
+        previous.push_str(&format!("{} {} {}\n", message.path, message.key, kind));
+    }
     oer_hil_registry::merge_locks([previous.as_str()])
 }
 

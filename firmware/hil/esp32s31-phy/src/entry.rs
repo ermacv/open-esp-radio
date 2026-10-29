@@ -457,5 +457,5 @@ type IntakeRequest = Request;
 #[cfg(feature = "diagnostic-radio-health")]
 type IntakeRequest = oer_hil_agent::base::Either<Request, health::Request>;
 #[cfg(feature = "diagnostic-radio-health")]
-static HEALTH_SLOT: RequestSlot<health::Request, health::Answer> =
+static HEALTH_SLOT: RequestSlot<health::Request, health::Reply> =
     RequestSlot::new(&DOORBELL, 1, HEALTH_REQUEST);

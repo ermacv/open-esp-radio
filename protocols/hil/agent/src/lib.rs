@@ -27,6 +27,7 @@
 #![cfg_attr(not(test), no_std)]
 
 pub mod base;
+pub mod capture;
 pub mod console;
 pub mod lifecycle;
 pub mod postmortem;

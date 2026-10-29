@@ -9,7 +9,7 @@ firmware links.
 
 | Feature | Modules |
 | --- | --- |
-| none | `base`, `console`, `lifecycle`, `postmortem` |
+| none | `base`, `capture`, `console`, `lifecycle`, `postmortem` |
 
 ## Image keys
 
@@ -63,4 +63,30 @@ Run the tests:
 cargo test -p oer-hil-agent
 ```
 
-Radio-health page messages and capture storage belong to `oer-esp32s31-instrumentation-hil`; the agent has no radio dictionary dependency.
+## Capture service
+
+`capture::Request` advertises `capture/describe`, `capture/records/read`,
+`capture/counters/read` and their replies, including the typed
+`capture/refused` response. An image mounts the service with a `Reader`;
+the agent has no radio dictionary or platform dependency. The image owns
+arming, freezing, release, identity allocation, clock and storage. A page
+can only read an immutable cut. Boot correlation comes from the HIL envelope;
+capture identity, epoch and the full record schema key identify that cut.
+
+`capture::collector::Collector` is caller-owned and implements `oer-trace`'s
+`Observer`. It is not `Sync` and belongs to one image-selected context.
+Observation points remain `observe!`, so a plain image evaluates no event
+arguments. The collector counts each event kind, even with its history
+channel disabled or history full. Its bounded bank lists observed kinds;
+an absent kind is not an advertised supported zero. Full history, bank
+exhaustion, saturation and nested access latch typed capture failures,
+without returning into or changing the observed operation. The host may
+drain incomplete history and still read its independent counts. No capture
+state survives reset.
+
+Pages hold two opaque postcard records of at most 128 bytes, or sixteen
+aggregate counters. Their maximum encodings fit the existing 560-byte
+payload bound. Dictionaries own record schemas and interpretation. The
+ESP32-S31 radio-health binding implements `Reader` over its native storage;
+its RF lifecycle stays in the image. `oer-hil-link::instrumentation` drains
+and validates the generic pages before domain decoding.
