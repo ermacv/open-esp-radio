@@ -3,6 +3,11 @@
 The ESP32-S31 Wi-Fi driver: device composition, the lower-MAC port backend,
 DMA rings, keys and the P3/P2 interrupt path. System context: [architecture](../../../../docs/architecture.md).
 
+The driver's MAC building blocks cover initialization and receive policy,
+EDCA and channel state, DMA ownership, aggregate formatting, local/TSF time
+relations, transmission costs and work receipts. Hardware rate codes come
+from the HAL's register-model domains.
+
 ## Rules
 
 - **Driver core.** The driver owns all four EDCA queues. Its TX forms are a
