@@ -8,12 +8,13 @@ repository.workspace = true
 description = "Owned-packet boundary for the optimized open ESP radio Embassy/Xarxa integration"
 
 [dependencies]
-embassy-sync = "0.8.0"
+oer-sync = { path = "../../sync" }
 oer-network = { path = "../../../protocols/network" }
 oer-memory = { path = "../../memory" }
 xarxa-driver = { git = "https://github.com/ermacv/xarxa.git", rev = "6f5ae91f9269ec3151d1aa61d0cfe0f3ae1b0798", features = ["async"] }
 
 [dev-dependencies]
+oer-memory = { path = "../../memory", features = ["host-context"] }
 critical-section = { version = "1.2.0", features = ["std"] }
 owned-embassy-net = { package = "embassy-net", git = "https://github.com/ermacv/embassy.git", rev = "17f796c8ddb90ff510d995e24c2dcb758a97e8f8", features = ["medium-ethernet", "ipv4", "ipv4-fragmentation", "ipv4-reassembly", "udp"] }
 

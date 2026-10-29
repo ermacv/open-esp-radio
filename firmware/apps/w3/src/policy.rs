@@ -31,10 +31,10 @@ mod tests {
     use super::*;
     extern crate std;
     use self::std::boxed::Box;
-    use oer_embassy_net::{NetworkInterfaceId, NoopRawMutex, OwnedEndpointResources};
+    use oer_embassy_net::{NetworkInterfaceId, OwnedEndpointResources};
     use oer_ieee80211_sta::data::EthernetFrame;
     use oer_ieee80211_wire::data::EthernetFrameParts;
-    use oer_memory::WakingSpscQueue;
+    use oer_memory::{HostContext, WakingSpscQueue};
     use xarxa_driver::{PacketPool, PacketPoolStorage};
 
     #[test]
@@ -42,11 +42,11 @@ mod tests {
         let storage = Box::leak(Box::new(PacketPoolStorage::<RX_DEPTH>::new()));
         let pool = Box::leak(Box::new(PacketPool::new(storage))).allocator();
         let endpoint = Box::leak(Box::new(
-            OwnedEndpointResources::<NoopRawMutex, RX_DEPTH, 4>::new(),
+            OwnedEndpointResources::<HostContext, RX_DEPTH, 4>::new(),
         ));
         let destination = [2, 0, 0, 0, 0, 1];
         let source = [2, 0, 0, 0, 0, 2];
-        let (mut device, radio) = endpoint
+        let (mut device, mut radio) = endpoint
             .split(NetworkInterfaceId::new(0), destination, pool)
             .expect("endpoint split");
         radio.link_controller().set_link_up(true);

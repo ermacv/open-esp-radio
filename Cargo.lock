@@ -1915,9 +1915,9 @@ version = "0.1.0"
 dependencies = [
  "critical-section",
  "embassy-net",
- "embassy-sync",
  "oer-memory",
  "oer-network",
+ "oer-sync",
  "xarxa-driver",
 ]
 

@@ -1,95 +1,67 @@
 //! Admission credit follows a software packet through queueing and radio retention.
 
-use core::{cell::Cell, task::Waker};
+use core::{
+    sync::atomic::{AtomicUsize, Ordering},
+    task::Waker,
+};
 
-use embassy_sync::blocking_mutex::{Mutex, raw::RawMutex};
+use oer_sync::PriorityWaker;
 
-use super::wake_replaced;
-
-struct State {
-    outstanding: usize,
-    sender: Option<Waker>,
-}
-
-impl State {
-    const fn new() -> Self {
-        Self {
-            outstanding: 0,
-            sender: None,
-        }
-    }
-}
-
-pub(super) struct TxBudget<M: RawMutex> {
+/// Lock-free admission count. A credit may be released in any context, so
+/// releasing never depends on the endpoint's execution context.
+pub(super) struct TxBudget {
     capacity: usize,
-    state: Mutex<M, Cell<State>>,
+    outstanding: AtomicUsize,
+    sender: PriorityWaker,
 }
 
-impl<M: RawMutex> TxBudget<M> {
+impl TxBudget {
     pub(super) const fn new(capacity: usize) -> Self {
         Self {
             capacity,
-            state: Mutex::new(Cell::new(State::new())),
+            outstanding: AtomicUsize::new(0),
+            sender: PriorityWaker::new(),
         }
     }
 
-    // Callbacks, including Waker clone/drop, must run outside this closure.
-    fn with_state<R>(&self, action: impl FnOnce(&mut State) -> R) -> R {
-        self.state.lock(|cell| {
-            let mut state = cell.replace(State::new());
-            let result = action(&mut state);
-            cell.set(state);
-            result
-        })
-    }
-
+    /// Bind the next capacity notification to the sole network device's task.
     pub(super) fn register_sender(&self, waker: &Waker) {
-        let next = waker.clone();
-        let previous = self.with_state(|state| state.sender.replace(next));
-        wake_replaced(previous, waker);
+        self.sender.register(waker);
     }
 
     pub(super) fn is_full(&self) -> bool {
-        self.with_state(|state| state.outstanding == self.capacity)
+        self.outstanding.load(Ordering::Acquire) == self.capacity
     }
 
     pub(super) fn try_admit(&self) -> bool {
-        self.with_state(|state| {
-            let Some(next) = state
-                .outstanding
-                .checked_add(1)
-                .filter(|next| *next <= self.capacity)
-            else {
-                return false;
-            };
-            state.outstanding = next;
-            true
-        })
+        self.outstanding
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |outstanding| {
+                outstanding
+                    .checked_add(1)
+                    .filter(|next| *next <= self.capacity)
+            })
+            .is_ok()
     }
 
     /// Transfer one already admitted credit, either from a dequeued packet or
     /// back from a failed insertion. Only these two queue paths mint a credit;
     /// each admitted packet therefore releases exactly once.
-    pub(super) fn claim(&self) -> TxCredit<'_, M> {
+    pub(super) fn claim(&self) -> TxCredit<'_> {
         TxCredit(self)
     }
 }
 
 /// Non-cloneable credit; stored after the packet so packet destruction happens
 /// before the producer is told that another admission is possible.
-pub(super) struct TxCredit<'resources, M: RawMutex>(&'resources TxBudget<M>);
+pub(super) struct TxCredit<'resources>(&'resources TxBudget);
 
-impl<M: RawMutex> Drop for TxCredit<'_, M> {
+impl Drop for TxCredit<'_> {
     fn drop(&mut self) {
-        let wake = self.0.with_state(|state| {
-            let was_full = state.outstanding == self.0.capacity;
-            // Each affine credit discharges a successful admission exactly once.
-            // No API can construct or clone a credit, so this never wraps.
-            state.outstanding = state.outstanding.wrapping_sub(1);
-            if was_full { state.sender.take() } else { None }
-        });
-        if let Some(wake) = wake {
-            wake.wake();
+        // Each affine credit discharges a successful admission exactly once.
+        // No API can construct or clone a credit, so this never wraps.
+        let previous = self.0.outstanding.fetch_sub(1, Ordering::AcqRel);
+        if previous == self.0.capacity {
+            self.0.sender.wake();
         }
     }
 }

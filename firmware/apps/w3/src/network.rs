@@ -12,9 +12,7 @@ use embassy_futures::{
     select::{Either, select},
     yield_now,
 };
-use oer_embassy_net::{
-    NetworkInterfaceId, NoopRawMutex, OwnedEndpointResources, OwnedNetworkDevice,
-};
+use oer_embassy_net::{NetworkInterfaceId, OwnedEndpointResources, OwnedNetworkDevice};
 use oer_embassy_time::EmbassyClock;
 use oer_firmware_apps_w3::{
     icmp,
@@ -23,8 +21,8 @@ use oer_firmware_apps_w3::{
 };
 use oer_ieee80211_runtime::station_service::*;
 use oer_ieee80211_sta::data::{EthernetFrame, TxMsdu};
-use oer_memory::{WakingSpscReceiver, WakingSpscSender};
 use oer_ieee80211_sta::machine::{StaCommandCredits, StaRequest};
+use oer_memory::{WakingSpscReceiver, WakingSpscSender};
 use oer_radio_port::PoolPath;
 use oer_time::{Clock, Duration, Timer};
 use owned_embassy_net::{
@@ -38,8 +36,8 @@ use xarxa_driver::{PacketPool, PacketPoolStorage};
 
 const RX: usize = oer_firmware_apps_w3::policy::RX_DEPTH;
 const TX: usize = 4;
-type Endpoint = OwnedEndpointResources<NoopRawMutex, RX, TX>;
-type Device = OwnedNetworkDevice<'static, NoopRawMutex, RX, TX>;
+type Endpoint = OwnedEndpointResources<oer_espressif_executor::ThreadContext<0>, RX, TX>;
+type Device = OwnedNetworkDevice<'static, oer_espressif_executor::ThreadContext<0>, RX, TX>;
 static ENDPOINT: StaticCell<Endpoint> = StaticCell::new();
 static DEVICE: StaticCell<Device> = StaticCell::new();
 static STACK: StaticCell<StackStorage<'static, Device>> = StaticCell::new();
@@ -144,14 +142,23 @@ fn workload_future<'a, 'id: 'a, Path: PoolPath + 'a>(
         match select(
             application,
             join3(
-                oer_firmware_apps_w3::bridge::run(
-                    radio,
-                    tx,
-                    rx,
-                    &observations,
-                    link,
-                    &EmbassyClock,
-                ),
+                async {
+                    match oer_firmware_apps_w3::bridge::run(
+                        radio,
+                        tx,
+                        rx,
+                        &observations,
+                        link,
+                        &EmbassyClock,
+                    )
+                    .await
+                    {
+                        Ok(never) => match never {},
+                        Err(_) => crate::fail(
+                            oer_diagnostics::name!("network-context-access-refused"; 32),
+                        ),
+                    }
+                },
                 runner.run(),
                 drain(&socket),
             ),
@@ -161,7 +168,7 @@ fn workload_future<'a, 'id: 'a, Path: PoolPath + 'a>(
             Either::First(mut report) => {
                 report.stack = Some(stack.statistics());
                 report
-            },
+            }
             Either::Second(_) => unreachable!("permanent network runners do not return"),
         }
     }

@@ -2,9 +2,9 @@
 
 //! Admission follows the software owner, including time retained by the radio.
 
-use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use oer_embassy_net::datapath::DestinationTxQueues;
 use oer_embassy_net::{NetworkInterfaceId, OwnedEndpointResources};
+use oer_memory::HostContext;
 use std::{
     sync::{
         Arc,
@@ -41,8 +41,8 @@ impl Wake for Wakes {
 fn retained_frames_share_admission_with_queued_frames() {
     let pool = allocator::<4>();
     // Resources deliberately remain borrowed, rather than requiring static placement.
-    let mut resources = OwnedEndpointResources::<CriticalSectionRawMutex, 1, 2>::new();
-    let (mut device, radio) = resources
+    let mut resources = OwnedEndpointResources::<HostContext, 1, 2>::new();
+    let (mut device, mut radio) = resources
         .split(NetworkInterfaceId::new(0), [2; 6], allocator::<1>())
         .expect("endpoint split");
     radio.link_controller().set_link_up(true);
@@ -51,7 +51,7 @@ fn retained_frames_share_admission_with_queued_frames() {
     device.transmit(packet(pool, 2)).unwrap();
     device.transmit(packet(pool, 4)).unwrap();
     let retained = radio.try_take_for([2; 6]).unwrap().unwrap();
-    assert_eq!(radio.tx_queue_len(), 1);
+    assert_eq!(radio.tx_queue_len().unwrap(), 1);
     assert!(
         !device.can_transmit(),
         "dequeue must not admit a second owner for the same credit"
@@ -68,22 +68,22 @@ fn retained_frames_share_admission_with_queued_frames() {
     assert_eq!(wakes.0.load(Ordering::Relaxed), 1);
     device.transmit(rejected).unwrap();
     assert!(!device.can_transmit());
-    drop(radio.try_receive_tx());
-    drop(radio.try_receive_tx());
+    drop(radio.try_receive_tx().unwrap());
+    drop(radio.try_receive_tx().unwrap());
     assert!(device.can_transmit());
 }
 
 #[test]
 fn empty_ingress_remains_full_until_radio_owner_is_released_on_another_thread() {
     let pool = allocator::<2>();
-    let mut resources = OwnedEndpointResources::<CriticalSectionRawMutex, 1, 1>::new();
-    let (mut device, radio) = resources
+    let mut resources = OwnedEndpointResources::<HostContext, 1, 1>::new();
+    let (mut device, mut radio) = resources
         .split(NetworkInterfaceId::new(0), [2; 6], allocator::<1>())
         .expect("endpoint split");
     radio.link_controller().set_link_up(true);
     device.transmit(packet(pool, 2)).unwrap();
-    let retained = radio.try_receive_tx().unwrap();
-    assert_eq!(radio.tx_queue_len(), 0);
+    let retained = radio.try_receive_tx().unwrap().unwrap();
+    assert_eq!(radio.tx_queue_len().unwrap(), 0);
     assert!(!device.can_transmit());
     let wakes = Arc::new(Wakes::default());
     device.register_waker(&Waker::from(wakes.clone()));
@@ -97,18 +97,17 @@ fn empty_ingress_remains_full_until_radio_owner_is_released_on_another_thread() 
 #[test]
 fn stale_queue_disposal_returns_credit_without_revoking_retained_owners() {
     let pool = allocator::<3>();
-    let mut resources = OwnedEndpointResources::<CriticalSectionRawMutex, 1, 2>::new();
-    let (mut device, radio) = resources
+    let mut resources = OwnedEndpointResources::<HostContext, 1, 2>::new();
+    let (mut device, mut radio) = resources
         .split(NetworkInterfaceId::new(0), [2; 6], allocator::<1>())
         .expect("endpoint split");
-    let link = radio.link_controller();
-    link.set_link_up(true);
+    radio.link_controller().set_link_up(true);
     device.transmit(packet(pool, 2)).unwrap();
     device.transmit(packet(pool, 4)).unwrap();
     let retained = radio.try_take_for([2; 6]).unwrap().unwrap();
-    link.set_link_up(false);
-    link.set_link_up(true);
-    assert!(radio.try_receive_tx().is_none());
+    radio.link_controller().set_link_up(false);
+    radio.link_controller().set_link_up(true);
+    assert!(radio.try_receive_tx().unwrap().is_none());
     device.transmit(packet(pool, 6)).unwrap();
     assert!(
         !device.can_transmit(),
@@ -116,7 +115,7 @@ fn stale_queue_disposal_returns_credit_without_revoking_retained_owners() {
     );
     drop(retained);
     assert!(device.can_transmit());
-    drop(radio.try_receive_tx());
+    drop(radio.try_receive_tx().unwrap());
 }
 
 #[test]
@@ -135,15 +134,15 @@ fn admission_notification_observes_the_already_returned_packet_pool_slot() {
         }
     }
     let pool = allocator::<1>();
-    let mut resources = OwnedEndpointResources::<CriticalSectionRawMutex, 1, 1>::new();
-    let (mut device, radio) = resources
+    let mut resources = OwnedEndpointResources::<HostContext, 1, 1>::new();
+    let (mut device, mut radio) = resources
         .split(NetworkInterfaceId::new(0), [2; 6], allocator::<1>())
         .expect("endpoint split");
     radio.link_controller().set_link_up(true);
     device.transmit(packet(pool, 2)).unwrap();
     let wake = Arc::new(PoolWake(pool, AtomicUsize::new(0)));
     device.register_waker(&Waker::from(wake.clone()));
-    let retained = radio.try_receive_tx().unwrap();
+    let retained = radio.try_receive_tx().unwrap().unwrap();
     assert_eq!(wake.1.load(Ordering::Relaxed), 0);
     assert!(pool.try_alloc().is_none());
     drop(retained);

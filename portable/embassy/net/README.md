@@ -11,8 +11,8 @@ The pinned Xarxa fork keeps packet-pool Waker registration in a separate
 typed Waker call scopes for the proven stack analysis without changing the
 register-then-recheck notification protocol.
 
-Displaced TX registrations wake the previous Waker by reference only when it
-would wake a different task, then explicitly drop it; a matching Waker is
+Displaced radio readiness registrations wake the previous Waker by reference
+only when it would wake a different task, then explicitly drop it; a matching Waker is
 only dropped. Separate fixed-slot wake-by-reference and drop calls preserve
 the DWARF method scopes the stack analyzer uses to prove Waker targets.
 
@@ -30,39 +30,34 @@ Queue depths are nonzero compile-time parameters. `split` returns
 or `RxWaiterUnavailable` when another consumer owns the RX pool waiter. A
 refused waiter claim leaves the endpoint available for a later attempt.
 
-TX metadata and admission state use `Cell<State>` inside the existing raw
-mutex. Each synchronous `with_state` closure takes the state into its local
-`state`, updates it, and restores it before leaving the mutex. Waker cloning,
-waking and destruction happen outside that closure. This lets a wake callback
-inspect or drain the restored queue, or immediately spend a returned credit.
-Each dequeued frame retains its unique admission credit until destruction;
-packet destruction precedes the capacity wake.
+TX destination/flow metadata and the coalesced publication hint live in
+`ContextCell<State, Entered<X>>`. The private proof checks the selected
+`ExecutionContext` on every access. State is borrowed in place, without the
+O(TX depth) stack temporary. `AccessRefused` reports a wrong context or nested
+borrow without consuming queued owners; a refused TX publication returns the
+original packet. Queue queries and waits propagate that typed refusal.
 
-For `riscv32imafc-unknown-none-elf`, both current image compositions (W3 and
-HIL `wifi-station`) use RX depth 8 and TX depth 4. `tx_queue::State<4>` is
-436 bytes; `tx_budget::State` is 12 bytes. Their synchronous local values live
-on the P1 `station_task` stack while its network/bridge or stack poll calls TX
-methods. They are not retained across an await. Permanent state remains in
-`ENDPOINT`; taking it requires an O(TX depth) temporary. These are type sizes,
-not full frame sizes or stack bounds: compiler moves/inlining may change the
-actual frames. CI reports memory use and enforces the images' stack proofs.
+The unique network device and radio runner are neither `Clone`, `Copy`,
+`Send` nor `Sync`. The runner stores one RX publisher and one link controller
+and lends each through `&mut`; no accessor can mint a second capability. RX
+uses `oer-memory::WakingSpscQueue` with its affine producer/consumer ends. A
+publisher loan is also local and cannot be cloned. Publication waits retain
+an exclusive runner borrow, so a second outstanding wait cannot replace them.
+Compile-fail examples check these ownership restrictions.
 
-## Known defects
+Admission is an atomic count independent of the metadata borrow. Each dequeued
+frame retains its unique credit through radio retention; destruction returns
+the packet pool slot before releasing the credit and waking the producer.
+Thus dropping a retained packet does not require entering the metadata context.
+Link and capacity notification use `oer_sync::PriorityWaker`; no blocking mutex
+or critical section is introduced. Queue Waker clone, wake and drop callbacks
+run only outside the ContextCell borrow, including displaced registrations.
 
-- **Contract: the RX capability is copyable.** `owned.rs::OwnedRxPublisher`
-  derives `Clone` and `Copy` ("Copyable RX-only capability"), so any number
-  of copies can publish into the endpoint's RX queue, against one owner per
-  resource.
-- **Contract: queues and wakers lock through a blocking mutex.** The RX
-  channel (`embassy_sync` `Sender`/`Receiver`), TX metadata and `OwnedLinkState`'s
-  `GenericAtomicWaker<M>` lock a blocking `Mutex<M: RawMutex>`; the
-  composition picks `M`. W3 uses `NoopRawMutex` and polls the network and
-  station users on P1; tests also use `NoopRawMutex`. With
-  `CriticalSectionRawMutex` every lock masks all
-  interrupts, including the P3 radio handlers, which is directly against the
-  execution rule (no critical section on P2/P3, no lock shared between a
-  handler and a task). `NoopRawMutex` is sound only when every user runs on
-  one executor, which the adapter's types do not enforce.
+W3 and HIL `wifi-station` select `oer_espressif_executor::ThreadContext<0>`:
+their network and station sides remain on the existing P1 executor. Host tests
+use `oer_memory::HostContext`. RX ordinary atomic wakers and the packet-pool
+waiter are still confined to that composition. These types do not admit new
+cross-priority wiring. Timers and polling policy belong to the image.
 
 The current notification directions and priority requirements are in the
 [execution audit](../../../docs/execution-wakes.md).
