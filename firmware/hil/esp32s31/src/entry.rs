@@ -53,6 +53,8 @@ use BootSmokeTasks as SingleExecutorTasks;
 use system::console::WatchdogTasks as SingleExecutorTasks;
 #[cfg(feature = "system-panic-reset")]
 use system::panic_reset::PanicResetTasks as SingleExecutorTasks;
+#[cfg(feature = "aes-key-unwrap")]
+use aes_key_unwrap::AesTasks as SingleExecutorTasks;
 
 #[cfg(feature = "wifi-station")]
 mod phy_pilot;

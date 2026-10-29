@@ -16,7 +16,7 @@ static REQUESTS: Channel<CriticalSectionRawMutex, (RequestIdentity, AesKeyUnwrap
 
 oer_espressif_executor::tasks! {
     /// Separate from all radio tasks: only the console and the product engine.
-    AesTasks: Executor<Esp32s31, 0> {
+    pub(crate) AesTasks: Executor<Esp32s31, 0> {
         console(usb: crate::transport::Usb, boot: u64) = console;
         unwrap(engine: WifiKeyUnwrap) = unwrap;
         watchdog(watchdog: oer_esp32s31_hal::peripherals::watchdog::ArmedRtcWatchdog<oer_esp32s31_hal::peripherals::watchdog::RwdtRegisters>) = crate::feed_rtc_watchdog;
