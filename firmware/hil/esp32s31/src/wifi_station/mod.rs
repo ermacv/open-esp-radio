@@ -248,8 +248,7 @@ pub(crate) fn start(
 }
 
 async fn radio_actor(actor: &'static mut Actor) {
-    let mut running = core::pin::pin!(actor.run());
-    match future::Boundary(running.as_mut()).await {}
+    match actor.run().await {}
 }
 fn park() -> ! {
     oer_espressif_staged_runtime::idle()

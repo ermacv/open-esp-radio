@@ -253,18 +253,14 @@ impl<'a, F: Future> Future for PollPlaced<'a, '_, F> {
         clippy::expect_used,
         reason = "the Future contract: polling after completion may panic, and the wrapper holds the output place once"
     )]
-    // Keep the child's return place out of the enclosing poll's frame.
-    #[inline(never)]
+    #[inline(always)]
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.get_mut();
         let storage = this
             .output
             .take()
             .expect("a completed placed future is not polled again");
-        // SAFETY: storage is exclusive and contains only a previous Pending
-        // or uninitialized bytes. The callee's return place is this storage;
-        // no MaybeUninit::write wrappers move the large output through locals.
-        unsafe { storage.as_mut_ptr().write(this.future.as_mut().poll(cx)) };
+        poll_into(this.future.as_mut(), storage, cx);
         // SAFETY: the poll call initialized the complete value above.
         match unsafe { storage.assume_init_mut() } {
             Poll::Pending => {
@@ -281,6 +277,19 @@ impl<'a, F: Future> Future for PollPlaced<'a, '_, F> {
             }
         }
     }
+}
+
+// Isolate only the large child output, leaving continuation checks in the caller.
+#[inline(never)]
+fn poll_into<F: Future>(
+    future: Pin<&mut F>,
+    storage: &mut MaybeUninit<Poll<F::Output>>,
+    cx: &mut Context<'_>,
+) {
+    // SAFETY: storage is exclusive and contains only a previous Pending
+    // or uninitialized bytes. The callee's return place is this storage;
+    // no MaybeUninit::write wrappers move the large output through locals.
+    unsafe { storage.as_mut_ptr().write(future.poll(cx)) };
 }
 
 #[cfg(test)]

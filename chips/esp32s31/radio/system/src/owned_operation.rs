@@ -32,6 +32,17 @@ pub(super) fn restore<B: PlatformClockBackend, A, R, E>(
     result.read()
 }
 
+/// Consume a terminal tuple outside the caller's poll frame.
+#[inline(never)]
+pub(super) fn restore_owned<B: PlatformClockBackend, A, R, E>(
+    destination: &mut Option<RadioDomain<B, A>>,
+    returned: (RadioDomain<B, A>, Result<R, E>),
+) -> Result<R, E> {
+    let (radio, result) = returned;
+    *destination = Some(radio);
+    result
+}
+
 #[cfg(test)]
 mod tests {
     extern crate std;
@@ -135,5 +146,29 @@ mod tests {
         assert_eq!(drops.get(), 0);
         drop(destination);
         assert_eq!(drops.get(), 1);
+    }
+
+    #[test]
+    fn owned_terminal_returns_its_domain_and_error_without_dropping_either() {
+        let seat = Box::leak(Box::new(TransactionSeat::for_host(report)));
+        let domain_drops = Rc::new(Cell::new(0));
+        let error_drops = Rc::new(Cell::new(0));
+        let (radio, _) = RadioHardware::for_host_test()
+            .split::<TestClockBackend, _>(Payload(domain_drops.clone()), seat.claim().unwrap())
+            .expect("identity capacity");
+        let mut destination = None;
+        let result = restore_owned(
+            &mut destination,
+            (radio, Err::<(), _>(Payload(error_drops.clone()))),
+        );
+        assert!(destination.is_some());
+        assert!(result.is_err());
+        assert_eq!(seat.fault(), None);
+        assert_eq!(domain_drops.get(), 0);
+        assert_eq!(error_drops.get(), 0);
+        drop(result);
+        assert_eq!(error_drops.get(), 1);
+        drop(destination);
+        assert_eq!(domain_drops.get(), 1);
     }
 }

@@ -809,12 +809,8 @@ where
                 channel,
                 &mut observer,
             ));
-            owned_operation::run(
-                operation.as_mut(),
-                &mut self.radio,
-                owned_operation::restore,
-            )
-            .await
+            let returned = operation.as_mut().await;
+            owned_operation::restore_owned(&mut self.radio, returned)
         };
         if let Err(error) = result {
             return Err(Failed {
