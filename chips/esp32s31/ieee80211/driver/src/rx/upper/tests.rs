@@ -13,8 +13,8 @@ use std::{
     vec::Vec,
 };
 
+use crate::mac::irq::consumer::{IrqPublisher, IrqStorage};
 use oer_esp32s31_hal::ieee80211::dma::descriptor::rx_armed_word;
-use oer_esp32s31_ieee80211_mac::irq::consumer::{IrqPublisher, IrqStorage};
 use oer_time::Duration;
 use oer_time_virtual::VirtualClock;
 
@@ -261,7 +261,7 @@ fn malformed_prefix_refusals_are_counted_by_reason() {
 }
 
 mod normalized_handoff {
-    use oer_esp32s31_ieee80211_mac::portable::rx_meta;
+    use crate::mac::portable::rx_meta;
     use oer_ieee80211_port::{Channel, ChannelWidth, RxEvidence};
     use oer_time::Instant;
 

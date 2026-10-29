@@ -7,8 +7,8 @@ use core::{
     task::{Context, Poll},
 };
 
+use crate::mac::rx::{RxRingError, pool::RxStageTransactionError};
 use atomic_waker::AtomicWaker;
-use oer_esp32s31_ieee80211_mac::rx::{RxRingError, pool::RxStageTransactionError};
 use oer_memory::{AffineSpscQueue, AffineSpscReceiver, AffineSpscSender};
 use oer_sync::PriorityWaker;
 

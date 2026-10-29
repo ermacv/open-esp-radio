@@ -16,7 +16,7 @@
 use core::ops::{Deref, DerefMut};
 use oer_espressif_interrupt_table::signal::SignalExecutor;
 
-use oer_esp32s31_ieee80211_mac::{irq::consumer::IrqPublisher, rx::pool::NetworkRxFrame};
+use crate::mac::{irq::consumer::IrqPublisher, rx::pool::NetworkRxFrame};
 
 /// The upper layer's handle: tell the runner a lease came back.
 pub struct RxReturnNotifier<'a, X: SignalExecutor> {

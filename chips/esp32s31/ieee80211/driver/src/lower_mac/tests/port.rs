@@ -146,12 +146,7 @@ struct TestReceive {
     released: Rc<Cell<usize>>,
 }
 impl ReceiveUnit for TestReceive {
-    fn normalized(
-        &self,
-    ) -> Result<
-        oer_esp32s31_ieee80211_mac::rx::NormalizedRxFrame<'_>,
-        oer_esp32s31_ieee80211_mac::rx::RxError,
-    > {
+    fn normalized(&self) -> Result<crate::mac::rx::NormalizedRxFrame<'_>, crate::mac::rx::RxError> {
         Ok(super::normalized(&self.bytes))
     }
     fn bytes(&self) -> &[u8] {
@@ -296,7 +291,7 @@ impl Device<512> for TestDevice {
             );
             self.completed += 1;
             Poll::Ready(Ok(DeviceEvent::Tx(crate::tx::WifiTxWake::Interrupt {
-                events: oer_esp32s31_ieee80211_mac::irq::EVENT_TX_COMPLETE,
+                events: crate::mac::irq::EVENT_TX_COMPLETE,
             })))
         } else {
             Poll::Pending
@@ -326,7 +321,7 @@ impl Device<512> for TestDevice {
     fn abandon(&mut self) -> bool {
         self.assert_driver_context();
         let keys = self.hardware.installed_keys.len();
-        oer_esp32s31_ieee80211_mac::crypto::erase_lower_mac_keys(&mut self.hardware);
+        crate::mac::crypto::erase_lower_mac_keys(&mut self.hardware);
         assert!(self.hardware.installed_keys.is_empty());
         let mut observed = self.observed.borrow_mut();
         let context = observed.context;
@@ -383,7 +378,7 @@ fn installed_with_hardware(
     )));
     let transmitter = crate::ordinary_tx::OrdinaryTxOwner::new(crate::tx::WifiTxResources {
         slot: slot(),
-        policy: oer_esp32s31_ieee80211_mac::tx::runtime::WifiTxRuntimePolicy::vendor_defaults(),
+        policy: crate::mac::tx::runtime::WifiTxRuntimePolicy::vendor_defaults(),
         power: Power,
         entropy: entropy as fn() -> u32,
         timer: timer.clone(),
@@ -1229,7 +1224,7 @@ fn caller_pn_and_external_body_survive_tx_and_a_removed_key_refuses_retransmissi
 
 #[test]
 fn emergency_erasure_reaches_the_last_ap_peer_as_well_as_station_and_group_keys() {
-    use oer_esp32s31_ieee80211_mac::crypto::*;
+    use crate::mac::crypto::*;
     let mut hardware = Hardware::default();
     let station = install_sta_pairwise_ccmp(&mut hardware, BSSID, &[1; 16]).expect("STA PTK");
     let group = install_sta_group_ccmp(

@@ -5,15 +5,15 @@
 
 use std::{boxed::Box, vec, vec::Vec};
 
+use crate::mac::rx::{
+    PUBLIC_HEADER_SIZE, RxBufferFullCounter, RxRingLive,
+    pool::{NetworkRxFrame, RxStagePool},
+};
 use oer_esp32s31_hal::ieee80211::dma::{
     descriptor::rx_landed_word, rx_dma::model::RxWalkerModel, rx_storage::RxDmaStorage,
     space::HostDma,
 };
 use oer_esp32s31_hal::memory::dma_static::Placed;
-use oer_esp32s31_ieee80211_mac::rx::{
-    PUBLIC_HEADER_SIZE, RxBufferFullCounter, RxRingLive,
-    pool::{NetworkRxFrame, RxStagePool},
-};
 
 use super::{
     counters::WifiRxCounters,

@@ -16,15 +16,7 @@ use core::{
 };
 use std::{boxed::Box, vec::Vec};
 
-use oer_esp32s31_hal::ieee80211::dma::{
-    descriptor::{DESCRIPTOR_BYTES, rx_landed_word},
-    rx_dma::model::{RxWalkerJournal, RxWalkerModel, RxWalkerOperation, SharedRxWalker},
-    rx_ring::RxDmaArenaState,
-    rx_storage::RxDmaStorage,
-    space::HostDma,
-};
-use oer_esp32s31_hal::types::{MacInterruptEvents, MacInterruptObservation};
-use oer_esp32s31_ieee80211_mac::{
+use crate::mac::{
     irq::{
         epoch::{EpochState, InterruptEpoch},
         model::{
@@ -33,6 +25,14 @@ use oer_esp32s31_ieee80211_mac::{
     },
     rx::{RxBufferFullCounter, RxRingError, pool::NetworkRxFrame, pool::RxStageTransactionError},
 };
+use oer_esp32s31_hal::ieee80211::dma::{
+    descriptor::{DESCRIPTOR_BYTES, rx_landed_word},
+    rx_dma::model::{RxWalkerJournal, RxWalkerModel, RxWalkerOperation, SharedRxWalker},
+    rx_ring::RxDmaArenaState,
+    rx_storage::RxDmaStorage,
+    space::HostDma,
+};
+use oer_esp32s31_hal::types::{MacInterruptEvents, MacInterruptObservation};
 use oer_time_virtual::VirtualClock;
 
 use super::*;

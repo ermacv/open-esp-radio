@@ -35,7 +35,7 @@ pub enum TransmitKeyScope {
         association_id: u16,
     },
     AccessPointGroup {
-        key_id: oer_esp32s31_ieee80211_mac::crypto::ApGroupKeyId,
+        key_id: crate::mac::crypto::ApGroupKeyId,
     },
 }
 
@@ -78,7 +78,7 @@ pub struct ReceiveKeyHandle<'core, Path: PoolPath = Root<oer_radio_port::LocalId
     pub(super) slot: super::association::VacantKeySlot<'core, Path>,
     pub(super) index: usize,
     pub(super) token: StaGroupCcmpSlot,
-    pub(super) material: oer_esp32s31_ieee80211_mac::crypto::StaGroupCcmpKeyMaterial,
+    pub(super) material: crate::mac::crypto::StaGroupCcmpKeyMaterial,
     pub(super) key_id: oer_ieee80211_wire::ccmp::GroupKeyId,
     pub(super) brand: Installation<'core, Path>,
 }

@@ -87,10 +87,11 @@ fn assert_tx_descriptor_head(
 
 /// Reviewed ESP32-S31 selector for one non-HT transmit rate.
 ///
-/// The numeric encoding is private to this module. Protocol code selects
-/// a named rate and cannot compose the corresponding PLCP field itself.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+/// Hardware codes are selected from the generated PAC domain. Callers can
+/// decode observations without maintaining another hardware dictionary.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum MacLegacyRate {
+    #[default]
     Dsss1MLong,
     Dsss2MLong,
     Cck5M5Long,
@@ -109,7 +110,8 @@ pub enum MacLegacyRate {
 }
 
 impl MacLegacyRate {
-    const fn register_value(self) -> u8 {
+    /// The generated hardware code of this non-HT rate.
+    pub const fn code(self) -> u8 {
         match self {
             Self::Dsss1MLong => oer_esp32s31_pac::wifi_mac::plcp1::Rate::Dsss1mLong.bits() as u8,
             Self::Dsss2MLong => oer_esp32s31_pac::wifi_mac::plcp1::Rate::Dsss2mLong.bits() as u8,
@@ -126,6 +128,29 @@ impl MacLegacyRate {
             Self::Ofdm36M => oer_esp32s31_pac::wifi_mac::plcp1::Rate::Ofdm36m.bits() as u8,
             Self::Ofdm18M => oer_esp32s31_pac::wifi_mac::plcp1::Rate::Ofdm18m.bits() as u8,
             Self::Ofdm9M => oer_esp32s31_pac::wifi_mac::plcp1::Rate::Ofdm9m.bits() as u8,
+        }
+    }
+
+    /// Decode a non-HT observation; unknown and HT codes are refused.
+    pub const fn from_code(code: u8) -> Option<Self> {
+        use oer_esp32s31_pac::wifi_mac::plcp1::Rate;
+        match Rate::from_bits(code as u32) {
+            Some(Rate::Dsss1mLong) => Some(Self::Dsss1MLong),
+            Some(Rate::Dsss2mLong) => Some(Self::Dsss2MLong),
+            Some(Rate::Cck5m5Long) => Some(Self::Cck5M5Long),
+            Some(Rate::Cck11mLong) => Some(Self::Cck11MLong),
+            Some(Rate::Dsss2mShort) => Some(Self::Dsss2MShort),
+            Some(Rate::Cck5m5Short) => Some(Self::Cck5M5Short),
+            Some(Rate::Cck11mShort) => Some(Self::Cck11MShort),
+            Some(Rate::Ofdm48m) => Some(Self::Ofdm48M),
+            Some(Rate::Ofdm24m) => Some(Self::Ofdm24M),
+            Some(Rate::Ofdm12m) => Some(Self::Ofdm12M),
+            Some(Rate::Ofdm6m) => Some(Self::Ofdm6M),
+            Some(Rate::Ofdm54m) => Some(Self::Ofdm54M),
+            Some(Rate::Ofdm36m) => Some(Self::Ofdm36M),
+            Some(Rate::Ofdm18m) => Some(Self::Ofdm18M),
+            Some(Rate::Ofdm9m) => Some(Self::Ofdm9M),
+            _ => None,
         }
     }
 }
@@ -1259,7 +1284,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             queue,
             Plcp1 {
                 legacy_signal: parameters.signal,
-                rate: parameters.rate.register_value(),
+                rate: parameters.rate.code(),
                 key_entry_index: parameters.hardware_key_selector,
                 interface: parameters.interface,
                 vector_format: oer_esp32s31_pac::wifi_mac::plcp1::VectorFormat::Legacy.bits() as u8,
@@ -1269,7 +1294,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         self.clear_trigger_based_enable(queue);
         // The parent's independent PTI-low edge; a legacy PPDU holds no TXOP.
         self.set_txop(queue, false);
-        self.publish_length_control(queue, parameters.control.rate.register_value(), 1);
+        self.publish_length_control(queue, parameters.control.rate.code(), 1);
         // `mac_tx_set_txop_q` of a queue without a granted TXOP slot: the
         // slot `lmacInitAc` leaves (and `lmacReleaseTxopQueue` restores)
         // clears the TXOP count through one fresh-read update.
@@ -1447,7 +1472,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             MacHtTxFormat::SingleMpdu => 0,
             MacHtTxFormat::Ampdu => 1,
         };
-        self.publish_length_control(queue, parameters.control.rate.register_value(), entry_class);
+        self.publish_length_control(queue, parameters.control.rate.code(), entry_class);
         // DATA_LENGTH%s stored from zero (`publish_mac_tx_data_length_fields`).
         self.mac
             .wifi_mac_tx_queue_vector
@@ -1648,7 +1673,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
 
         // HE reaches mac_tx_set_len for LENGTH_CONTROL, but its flag-bit-31
         // branch intentionally skips the non-HE DATA_LENGTH register.
-        self.publish_length_control(queue, parameters.control.rate.register_value(), 1);
+        self.publish_length_control(queue, parameters.control.rate.code(), 1);
         // SOURCE: complete `libpp[hal_mac_tx.o]::hal_mac_tx_set_ppdu` calls complete
         // `libpp[hal_mac_ctl.o]::hal_he_set_htc` immediately after
         // `libpp[hal_mac_tx.o]::mac_tx_set_hesig`. That leaf always publishes the complete word,

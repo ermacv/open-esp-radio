@@ -62,7 +62,7 @@ use {
         MAC_COLD_HANDSHAKE_DEADLINE, MAC_STATION_INTERRUPT_MASK, MacDelayEntropy,
         MacSlowClockCalibration, MacSlowClockCalibrationSource,
     },
-    oer_esp32s31_ieee80211_mac::portable::rx_meta,
+    oer_esp32s31_ieee80211_driver::mac::portable::rx_meta,
 };
 
 use crate::{

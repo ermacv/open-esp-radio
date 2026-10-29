@@ -5,10 +5,8 @@
 //! selected virtual interface and hardware key slot differ between an AP and
 //! a station publication.
 
+use crate::mac::tx::{HtAmpduTxConfig, HtProtectionSpacing, HtRate, TxControlFrame};
 use oer_esp32s31_hal::types::MacInterface;
-use oer_esp32s31_ieee80211_mac::tx::{
-    HtAmpduTxConfig, HtProtectionSpacing, HtRate, TxControlFrame,
-};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct AmpduTxRoleAdapter {

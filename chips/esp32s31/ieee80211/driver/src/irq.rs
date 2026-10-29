@@ -27,7 +27,7 @@
 //!    [`WifiIrqRequest::Close`] (mask and clear both banks), then
 //!    [`WifiIrqRequest::MaskAll`] (mask both, keep the latched events; the
 //!    masked fact is posted once,
-//!    [`IrqBatch::masked`](oer_esp32s31_ieee80211_mac::irq::consumer::IrqBatch::masked)),
+//!    [`IrqBatch::masked`](crate::mac::irq::consumer::IrqBatch::masked)),
 //!    then the activation (clear, then publish the station mask), then
 //!    [`WifiIrqRequest::UnmaskRx`] (restore the RX delivery group of an
 //!    active epoch). An unmask that loses, or reaches a masked or closed
@@ -45,22 +45,22 @@ use core::{
 };
 use oer_espressif_interrupt_table::{Bound, InterruptSources, signal::SignalExecutor};
 
+use crate::mac::irq::{
+    IrqDisposition, MacInterrupt, MacPowerInterrupt, PowerIrqDisposition,
+    consumer::{IrqPublisher, PowerIrqPublisher},
+    epoch::{EpochState, InterruptEpoch, Moderated},
+};
 use oer_esp32s31_hal::{
     ieee80211::init::MAC_STATION_INTERRUPT_MASK,
     owner::{MacInterruptRegisters, MacPowerInterruptRegisters, WifiInterruptBanks},
     peripherals::software_interrupt::FromCpu3Irq,
     types::MacInterruptEnableState,
 };
-use oer_esp32s31_ieee80211_mac::irq::{
-    IrqDisposition, MacInterrupt, MacPowerInterrupt, PowerIrqDisposition,
-    consumer::{IrqPublisher, PowerIrqPublisher},
-    epoch::{EpochState, InterruptEpoch, Moderated},
-};
 use oer_memory::{HandlerCell, Installed};
 
 use crate::rx::counters::WifiRxCounters;
 
-use oer_esp32s31_ieee80211_mac::irq::Fault;
+use crate::mac::irq::Fault;
 
 /// The radio doorbell, as the radio executor sees it: a software interrupt
 /// at the radio interrupt level, one of [`WifiIrqPart`]'s sources.

@@ -14,8 +14,8 @@
 
 use core::sync::atomic::{AtomicU32, Ordering, fence};
 
+use crate::mac::rx::RxError;
 use oer_esp32s31_hal::ieee80211::dma::rx_ring::RxReloadEvidence;
-use oer_esp32s31_ieee80211_mac::rx::RxError;
 use oer_time::Duration;
 
 use super::transaction::Discard;

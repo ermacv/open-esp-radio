@@ -131,15 +131,12 @@ use oer_radio_port::{PoolPath, Root};
 
 use oer_time::Clock;
 
+use crate::mac::tsf_relation::TsfTimingError;
 use oer_esp32s31_hal::types::{MacPti, StaTbttSchedule};
-use oer_esp32s31_ieee80211_mac::tsf_relation::TsfTimingError;
 use oer_ieee80211_port::TsfGeneration;
 use oer_ieee80211_port::tsf::TsfInstant;
 
-use crate::ordinary_tx::MacTxPlan;
-use crate::station_tsf::{StationTsf, StationTsfHardware};
-use oer_esp32s31_ieee80211_mac::{
-    MacInterface,
+use crate::mac::{
     ap_policy::ApRxPolicyHardware,
     ap_tsf::ApTsfHardware,
     capabilities::ESP32S31_MAC_SERVICE_CAPABILITIES,
@@ -164,6 +161,9 @@ use oer_esp32s31_ieee80211_mac::{
         runtime::he_txop_limit,
     },
 };
+use crate::ordinary_tx::MacTxPlan;
+use crate::station_tsf::{StationTsf, StationTsfHardware};
+use oer_esp32s31_hal::types::MacInterface;
 use oer_ieee80211_port::{
     BandSet, BeaconTimingCapabilities, BlockAckReport, Channel, ConnectionFrame, LinkMetric,
     LowerMacCapabilities, PhyFormatSet, PhyRate, Protection, RateSupport, ReceiveFilter,
@@ -348,7 +348,7 @@ pub const fn esp32s31_lower_mac_capabilities(buffer_size: usize) -> LowerMacCapa
         rx_block_ack_max_window: RESOURCES.rx_block_ack_max_window,
         // The bounds `EdcaContentionParameters::new` checks.
         edca_max_aifsn: 0x0f,
-        edca_max_cw_exponent: oer_esp32s31_ieee80211_mac::edca::MAX_HARDWARE_ECW_EXPONENT,
+        edca_max_cw_exponent: crate::mac::edca::MAX_HARDWARE_ECW_EXPONENT,
         edca_max_txop_limit_units_32_us: u16::MAX,
     }
 }
@@ -873,7 +873,7 @@ pub struct LowerMacCore<
     /// The owner of the station TSF writes and its relation.
     station_tsf: StationTsf,
     /// The relation of the access-point TSF, which only restarts.
-    access_point_tsf: oer_esp32s31_ieee80211_mac::ap_tsf::AccessPointTsf,
+    access_point_tsf: crate::mac::ap_tsf::AccessPointTsf,
     /// MSDUs retired for age, separately from hardware attempt outcomes.
     expired_msdus: u32,
     /// The attempt of each ordinary queue, by its hardware index
@@ -922,9 +922,7 @@ where
             monitor: false,
             tbtt: None,
             station_tsf: StationTsf::new(config.tsf_epoch),
-            access_point_tsf: oer_esp32s31_ieee80211_mac::ap_tsf::AccessPointTsf::new(
-                config.tsf_epoch,
-            ),
+            access_point_tsf: crate::mac::ap_tsf::AccessPointTsf::new(config.tsf_epoch),
             queues: [const { None }; LOWER_MAC_TX_QUEUES],
             expired_msdus: 0,
             coex,
@@ -1067,7 +1065,7 @@ where
     pub fn write_ccmp_header(
         &self,
         key: &KeyHandle<'core, Path>,
-        slot: &mut oer_esp32s31_ieee80211_mac::tx::TxSlotFree<'_, BUFFER_SIZE>,
+        slot: &mut crate::mac::tx::TxSlotFree<'_, BUFFER_SIZE>,
         header_len: usize,
         packet_number: oer_ieee80211_wire::ccmp::CcmpPacketNumber,
     ) -> Result<(), CcmpHeaderWriteError> {
@@ -1239,10 +1237,10 @@ where
                 protection: match protection {
                     Protection::None => SingleAttemptProtection::None,
                     Protection::RtsCts { rate } => SingleAttemptProtection::RtsCts {
-                        rate: oer_esp32s31_ieee80211_mac::tx::LegacyRate::from_phy_rate(rate),
+                        rate: crate::mac::portable::legacy_from_phy_rate(rate),
                     },
                     Protection::CtsToSelf { rate } => SingleAttemptProtection::CtsToSelf {
-                        rate: oer_esp32s31_ieee80211_mac::tx::LegacyRate::from_phy_rate(rate),
+                        rate: crate::mac::portable::legacy_from_phy_rate(rate),
                     },
                 },
                 backoff_slots,
@@ -1682,7 +1680,7 @@ where
                 break;
             }
             wake = WifiTxWake::Interrupt {
-                events: oer_esp32s31_ieee80211_mac::irq::EVENT_TX_TIMEOUT,
+                events: crate::mac::irq::EVENT_TX_TIMEOUT,
             };
         }
         Ok(())
@@ -1842,10 +1840,7 @@ where
         &mut self,
         role: VifRole,
         parameters: oer_ieee80211_port::SupportedEdca<K>,
-    ) -> Result<
-        oer_ieee80211_port::SupportedEdca<K>,
-        oer_esp32s31_ieee80211_mac::edca::EdcaParametersError,
-    > {
+    ) -> Result<oer_ieee80211_port::SupportedEdca<K>, crate::mac::edca::EdcaParametersError> {
         self.tx.policy_mut().install_edca(role, parameters.get())?;
         Ok(parameters)
     }
@@ -2002,10 +1997,7 @@ where
             slot,
             index,
             token,
-            material: oer_esp32s31_ieee80211_mac::crypto::StaGroupCcmpKeyMaterial::new(
-                key_id,
-                *temporal_key,
-            ),
+            material: crate::mac::crypto::StaGroupCcmpKeyMaterial::new(key_id, *temporal_key),
             key_id,
             brand: core::marker::PhantomData,
         })
@@ -2021,8 +2013,8 @@ where
         installed: &mut ReceiveKeyHandle<'core, Path>,
         key_id: oer_ieee80211_wire::ccmp::GroupKeyId,
         temporal_key: &[u8; CCMP_128_KEY_BYTES],
-    ) -> Result<(), oer_esp32s31_ieee80211_mac::crypto::StaGroupCcmpReplaceError> {
-        use oer_esp32s31_ieee80211_mac::crypto::{
+    ) -> Result<(), crate::mac::crypto::StaGroupCcmpReplaceError> {
+        use crate::mac::crypto::{
             StaGroupCcmpKeyMaterial, StaGroupCcmpReplaceError, replace_sta_group_ccmp_with_rollback,
         };
         if self.fault.is_some() {
@@ -2418,7 +2410,7 @@ pub enum CheckedKeyScope {
         association_id: u16,
     },
     AccessPointGroup {
-        key_id: oer_esp32s31_ieee80211_mac::crypto::ApGroupKeyId,
+        key_id: crate::mac::crypto::ApGroupKeyId,
     },
 }
 
@@ -2460,7 +2452,7 @@ pub struct MpduValues<'slot, const BUFFER_SIZE: usize> {
     role: VifRole,
     admitted_at: oer_time::Instant,
     /// The slot holding the MPDU after the TX metadata word.
-    slot: oer_esp32s31_ieee80211_mac::tx::TxSlotFree<'slot, BUFFER_SIZE>,
+    slot: crate::mac::tx::TxSlotFree<'slot, BUFFER_SIZE>,
     /// The MPDU's length, without its MIC and FCS.
     len: usize,
     /// An individual frame sent without soliciting its ACK.
@@ -2506,7 +2498,7 @@ pub enum MpduValueError {
 /// Checked construction refuses with the complete, unpublished slot.
 #[must_use = "retain the refused slot"]
 pub struct MpduValuesRefused<'slot, const BUFFER_SIZE: usize> {
-    pub slot: oer_esp32s31_ieee80211_mac::tx::TxSlotFree<'slot, BUFFER_SIZE>,
+    pub slot: crate::mac::tx::TxSlotFree<'slot, BUFFER_SIZE>,
     pub reason: MpduValueError,
 }
 
@@ -2515,7 +2507,7 @@ impl<'slot, const BUFFER_SIZE: usize> MpduValues<'slot, BUFFER_SIZE> {
     /// length, rate or protection fields before submission. Encryption itself
     /// comes from the separately consumed `TxAdmission`, never these values.
     pub fn checked(
-        slot: oer_esp32s31_ieee80211_mac::tx::TxSlotFree<'slot, BUFFER_SIZE>,
+        slot: crate::mac::tx::TxSlotFree<'slot, BUFFER_SIZE>,
         values: MpduParameters,
     ) -> Result<Self, MpduValuesRefused<'slot, BUFFER_SIZE>> {
         let capabilities = esp32s31_lower_mac_capabilities(BUFFER_SIZE);
@@ -2731,9 +2723,9 @@ fn spp_mode(spp: oer_ieee80211_wire::security::Spp) -> oer_esp32s31_hal::types::
 // while an attempt is held here.
 fn queued_free_slot<const N: usize>(
     slot: Pin<&mut TxSlot<N>>,
-) -> oer_esp32s31_ieee80211_mac::tx::TxSlotFree<'_, N> {
+) -> crate::mac::tx::TxSlotFree<'_, N> {
     match slot.access() {
-        oer_esp32s31_ieee80211_mac::tx::TxSlotAccess::Free(free) => free,
+        crate::mac::tx::TxSlotAccess::Free(free) => free,
         _ => panic!("queued publication retains its admitted free slot"),
     }
 }

@@ -1,5 +1,5 @@
 use super::*;
-use oer_esp32s31_ieee80211_mac::tx::{HtChannelWidth, HtGuardInterval, HtMcs};
+use crate::mac::tx::{HtChannelWidth, HtGuardInterval, HtMcs};
 
 #[test]
 fn role_adapter_changes_only_interface_and_key_authority() {
@@ -15,8 +15,8 @@ fn role_adapter_changes_only_interface_and_key_authority() {
         data_power_primary: 1,
         data_power_alternate: 2,
         control: TxControlFrame {
-            protection: oer_esp32s31_ieee80211_mac::tx::protection::TxProtection::RtsCts {
-                rate: oer_esp32s31_ieee80211_mac::tx::LegacyRate::Ofdm24M,
+            protection: crate::mac::tx::protection::TxProtection::RtsCts {
+                rate: oer_esp32s31_hal::types::MacLegacyRate::Ofdm24M,
             },
             power_primary: 3,
             power_alternate: 4,

@@ -39,7 +39,6 @@ oer-esp32s31-phy = { path = "../../../chips/esp32s31/phy" }
 oer-esp32s31-radio-client = { path = "../../../chips/esp32s31/radio/client" }
 oer-esp32s31-radio-system = { path = "../../../chips/esp32s31/radio/system" }
 oer-esp32s31-ieee80211-driver = { path = "../../../chips/esp32s31/ieee80211/driver" }
-oer-esp32s31-ieee80211-mac = { path = "../../../chips/esp32s31/ieee80211/mac" }
 oer-espressif-executor = { path = "../../../chips/espressif/executor", features = ["port-slots"] }
 oer-espressif-interrupt-table = { path = "../../../chips/espressif/interrupt-table" }
 oer-embassy-time = { path = "../../../portable/embassy/time" }

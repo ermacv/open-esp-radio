@@ -5,17 +5,17 @@ use core::{
 };
 use std::{boxed::Box, sync::Arc, task::Wake};
 
-use oer_esp32s31_hal::types::{
-    MacInterruptEnableState, MacInterruptEvents, MacInterruptMask, MacInterruptObservation,
-    MacPowerInterruptObservation,
-};
-use oer_esp32s31_ieee80211_mac::irq::{
+use crate::mac::irq::{
     IrqWork, MacInterrupt,
     consumer::{IrqConsumer, IrqStorage, PowerIrqConsumer, PowerIrqStorage},
     epoch::{EpochState, InterruptEpoch},
     model::{
         MacInterruptModel, MacInterruptOperation, PowerInterruptModel, PowerInterruptOperation,
     },
+};
+use oer_esp32s31_hal::types::{
+    MacInterruptEnableState, MacInterruptEvents, MacInterruptMask, MacInterruptObservation,
+    MacPowerInterruptObservation,
 };
 use oer_espressif_interrupt_table::signal::host::Host;
 

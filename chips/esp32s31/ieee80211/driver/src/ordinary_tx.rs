@@ -14,9 +14,7 @@ use oer_esp32s31_hal::layouts::{WifiTxMetadataHead, WifiTxMetadataHeadMut};
 use oer_ieee80211_port::backend::RetryCounters;
 use oer_time::{Clock, Instant, Timer};
 
-pub use crate::tx::{WifiTxEntropy, WifiTxPowerPair, WifiTxPowerProfile, WifiTxResources};
-use oer_esp32s31_ieee80211_mac::{
-    MacInterface,
+use crate::mac::{
     edca::EdcaContentionParameters,
     tx::{
         CompletionObservation, HeSmpduTxConfig, HtTxConfig, LegacyTxConfig, LegacyTxQueue,
@@ -27,6 +25,8 @@ use oer_esp32s31_ieee80211_mac::{
         runtime::WifiTxRuntimePolicy,
     },
 };
+pub use crate::tx::{WifiTxEntropy, WifiTxPowerPair, WifiTxPowerProfile, WifiTxResources};
+use oer_esp32s31_hal::types::MacInterface;
 use oer_ieee80211_port::{MacTxResult, MacTxStatus};
 use oer_ieee80211_port::{ManagementTxPlan, VifRole};
 use oer_ieee80211_wire::frame::FrameControl;
@@ -348,10 +348,10 @@ pub struct OrdinaryTxPlan {
 pub enum SingleAttemptProtection {
     None,
     RtsCts {
-        rate: oer_esp32s31_ieee80211_mac::tx::LegacyRate,
+        rate: oer_esp32s31_hal::types::MacLegacyRate,
     },
     CtsToSelf {
-        rate: oer_esp32s31_ieee80211_mac::tx::LegacyRate,
+        rate: oer_esp32s31_hal::types::MacLegacyRate,
     },
 }
 
@@ -584,9 +584,9 @@ impl<P: WifiTxPowerProfile, E: WifiTxEntropy, T: Timer, const N: usize, const LE
         mut plan: OrdinaryTxPlan,
         management: ManagementTxPlan,
     ) -> Result<WifiTxProgress, OrdinaryTxError> {
-        plan.exchange.initial_rate = TxPhyRate::Legacy(
-            oer_esp32s31_ieee80211_mac::tx::LegacyRate::from_phy_rate(management.rate()),
-        );
+        plan.exchange.initial_rate = TxPhyRate::Legacy(crate::mac::portable::legacy_from_phy_rate(
+            management.rate(),
+        ));
         plan.exchange.publication_limit = management.attempts();
         self.owner.start_transaction(hardware, plan, None)
     }
@@ -867,7 +867,7 @@ where
 
     /// Submitted work for the current/last exchange, retained through retries
     /// and timeout detach; independent of terminal delivery status.
-    pub fn work(&self) -> oer_esp32s31_ieee80211_mac::tx_work::MacTxWork {
+    pub fn work(&self) -> crate::mac::tx_work::MacTxWork {
         self.slot.as_ref().get_ref().work()
     }
 
@@ -1025,7 +1025,7 @@ where
         wake: WifiTxWake,
         may_begin_timeout_abort: bool,
     ) -> Result<Step, OrdinaryTxError> {
-        use oer_esp32s31_ieee80211_mac::irq::EVENT_TX_TIMEOUT;
+        use crate::mac::irq::EVENT_TX_TIMEOUT;
 
         if matches!(active.phase, OrdinaryTxPhase::AbortSettling) {
             return self.service_abort_settle(hardware, active);
@@ -1242,8 +1242,7 @@ where
             WifiTxWake::Deadline => 0,
         };
         let tx_events = interrupt_events
-            & (oer_esp32s31_ieee80211_mac::irq::EVENT_TX_COMPLETE
-                | oer_esp32s31_ieee80211_mac::irq::EVENT_TX_TIMEOUT);
+            & (crate::mac::irq::EVENT_TX_COMPLETE | crate::mac::irq::EVENT_TX_TIMEOUT);
         if tx_events.count_ones() > 1 {
             return self
                 .reset_required(active, TxResetReason::ConflictingInterruptEvents(tx_events));
@@ -1264,7 +1263,7 @@ where
             }
         }
 
-        use oer_esp32s31_ieee80211_mac::irq::{EVENT_TX_COMPLETE, EVENT_TX_TIMEOUT};
+        use crate::mac::irq::{EVENT_TX_COMPLETE, EVENT_TX_TIMEOUT};
         // A global HE BSS-color event is never evidence about this queue.
         // The PAC detaches only when its per-queue collision state is set.
         if self

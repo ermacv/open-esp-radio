@@ -8,7 +8,7 @@
 
 use crate::ordinary_tx::{TX_FCS_SIZE, TX_METADATA_SIZE};
 
-use oer_esp32s31_ieee80211_mac::tx::LegacyRate;
+use oer_esp32s31_hal::types::MacLegacyRate;
 
 use oer_ieee80211_port::{
     MonitorInjectionChannelBinding, MonitorInjectionRate, MonitorInjectionRequest, MonitorSink,
@@ -45,23 +45,23 @@ pub struct MonitorInjectionAdmission {
 
 /// Pure mapping for the standard legacy rate subset exposed by the portable
 /// request. Raw/LR/HT/HE codes cannot enter this function.
-pub const fn esp32s31_monitor_injection_rate(rate: MonitorInjectionRate) -> LegacyRate {
+pub const fn esp32s31_monitor_injection_rate(rate: MonitorInjectionRate) -> MacLegacyRate {
     match rate {
-        MonitorInjectionRate::Dsss1MLong => LegacyRate::Dsss1MLong,
-        MonitorInjectionRate::Dsss2MLong => LegacyRate::Dsss2MLong,
-        MonitorInjectionRate::Cck5M5Long => LegacyRate::Cck5M5Long,
-        MonitorInjectionRate::Cck11MLong => LegacyRate::Cck11MLong,
-        MonitorInjectionRate::Dsss2MShort => LegacyRate::Dsss2MShort,
-        MonitorInjectionRate::Cck5M5Short => LegacyRate::Cck5M5Short,
-        MonitorInjectionRate::Cck11MShort => LegacyRate::Cck11MShort,
-        MonitorInjectionRate::Ofdm6M => LegacyRate::Ofdm6M,
-        MonitorInjectionRate::Ofdm9M => LegacyRate::Ofdm9M,
-        MonitorInjectionRate::Ofdm12M => LegacyRate::Ofdm12M,
-        MonitorInjectionRate::Ofdm18M => LegacyRate::Ofdm18M,
-        MonitorInjectionRate::Ofdm24M => LegacyRate::Ofdm24M,
-        MonitorInjectionRate::Ofdm36M => LegacyRate::Ofdm36M,
-        MonitorInjectionRate::Ofdm48M => LegacyRate::Ofdm48M,
-        MonitorInjectionRate::Ofdm54M => LegacyRate::Ofdm54M,
+        MonitorInjectionRate::Dsss1MLong => MacLegacyRate::Dsss1MLong,
+        MonitorInjectionRate::Dsss2MLong => MacLegacyRate::Dsss2MLong,
+        MonitorInjectionRate::Cck5M5Long => MacLegacyRate::Cck5M5Long,
+        MonitorInjectionRate::Cck11MLong => MacLegacyRate::Cck11MLong,
+        MonitorInjectionRate::Dsss2MShort => MacLegacyRate::Dsss2MShort,
+        MonitorInjectionRate::Cck5M5Short => MacLegacyRate::Cck5M5Short,
+        MonitorInjectionRate::Cck11MShort => MacLegacyRate::Cck11MShort,
+        MonitorInjectionRate::Ofdm6M => MacLegacyRate::Ofdm6M,
+        MonitorInjectionRate::Ofdm9M => MacLegacyRate::Ofdm9M,
+        MonitorInjectionRate::Ofdm12M => MacLegacyRate::Ofdm12M,
+        MonitorInjectionRate::Ofdm18M => MacLegacyRate::Ofdm18M,
+        MonitorInjectionRate::Ofdm24M => MacLegacyRate::Ofdm24M,
+        MonitorInjectionRate::Ofdm36M => MacLegacyRate::Ofdm36M,
+        MonitorInjectionRate::Ofdm48M => MacLegacyRate::Ofdm48M,
+        MonitorInjectionRate::Ofdm54M => MacLegacyRate::Ofdm54M,
     }
 }
 

@@ -1,6 +1,6 @@
 //! One core and its four independently owned EDCA queue places.
 
-use oer_esp32s31_ieee80211_mac::tx::LegacyTxQueue;
+use crate::mac::tx::LegacyTxQueue;
 use oer_ieee80211_wire::qos::WmmAccessCategory;
 use oer_radio_port::{Child, PoolBuilder, PoolPath, PoolSet, Root, Slot, Slots};
 

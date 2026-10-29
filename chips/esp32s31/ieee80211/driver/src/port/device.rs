@@ -1,5 +1,10 @@
 //! The cooperative S31 register/RX owner used by the port driver on P2.
 use super::*;
+use crate::mac::{
+    irq::{EVENT_TX_COMPLETE, EVENT_TX_TIMEOUT, IrqWork},
+    local_time::MacTimeline,
+    rx::pool::NetworkRxFrame,
+};
 use crate::{
     irq::{RadioDoorbell, WifiIrqActivation, WifiIrqLine},
     runtime::{
@@ -16,11 +21,6 @@ use crate::{
     startup::WifiMacPlatform,
 };
 use oer_esp32s31_hal::{ieee80211::dma::space::ChipDma, owner::RadioAccess};
-use oer_esp32s31_ieee80211_mac::{
-    irq::{EVENT_TX_COMPLETE, EVENT_TX_TIMEOUT, IrqWork},
-    local_time::MacTimeline,
-    rx::pool::NetworkRxFrame,
-};
 use oer_esp32s31_radio_client::{MembershipCell, wifi::Wifi};
 use oer_espressif_interrupt_table::signal::SignalExecutor;
 use oer_memory::HandlerCell;
@@ -543,7 +543,7 @@ where
             session.port_abandon(&self.doorbell);
         }
         if let Some(active) = self.active.as_mut() {
-            oer_esp32s31_ieee80211_mac::crypto::erase_lower_mac_keys(&mut active.registers);
+            crate::mac::crypto::erase_lower_mac_keys(&mut active.registers);
         }
         // Masking both banks is not a walker/entered-ISR stop proof.
         false
@@ -553,7 +553,7 @@ where
             session.port_mask_all(&self.doorbell);
         }
         if let Some(active) = self.active.as_mut() {
-            oer_esp32s31_ieee80211_mac::crypto::erase_lower_mac_keys(&mut active.registers);
+            crate::mac::crypto::erase_lower_mac_keys(&mut active.registers);
         }
     }
 }

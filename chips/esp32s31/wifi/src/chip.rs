@@ -101,7 +101,7 @@ impl InterruptTypes for Interrupts {
     }
     fn service(&self, part: &mut Self::Part) -> Result<bool, u32> {
         service_wifi_line(&self.line, part)
-            .map_err(|oer_esp32s31_ieee80211_mac::irq::Fault::FatalAssertion { raw }| raw)
+            .map_err(|oer_esp32s31_ieee80211_driver::mac::irq::Fault::FatalAssertion { raw }| raw)
     }
 }
 pub trait DmaTypes {

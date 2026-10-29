@@ -1,0 +1,54 @@
+//! Source-owned ESP32-S31 Wi-Fi MAC building blocks.
+//!
+//! Production builds contain no ESP-IDF ABI, vendor archive, allocator,
+//! executor, or `esp-hal` dependency. Target code supplies volatile MMIO and
+//! owns the interrupt binding; the state machines here stay host-testable.
+//! The explicit `test-support` feature enables synthetic completion evidence
+//! and DMA models on both host and RV32, including A-MPDU formatter buffers
+//! and synthetic RX bindings. These APIs require hardware doubles. Production
+//! builds validate real DMA addresses on every architecture.
+
+#[cfg(test)]
+#[allow(
+    clippy::disallowed_methods,
+    clippy::disallowed_macros,
+    clippy::arithmetic_side_effects
+)]
+mod airtime_tests;
+pub mod ap_policy;
+pub mod ap_tsf;
+pub mod capabilities;
+pub mod channel_state;
+pub mod coex_runtime;
+pub mod crypto;
+pub mod edca;
+pub mod init;
+pub mod irq;
+/// The 32-bit MAC local time on a 64-bit timeline.
+pub mod local_time;
+/// Conversions to and from the portable values of the lower-MAC port.
+pub mod portable;
+pub mod rx;
+mod sniffer;
+pub mod sta_ap_registers;
+mod sta_link_policy;
+pub mod tsf_relation;
+pub mod tx;
+/// Predicted cost of one transmission: PPDU timing, response and protection.
+pub mod tx_cost;
+/// Submitted publication work of one exchange.
+pub mod tx_work;
+
+/// Rate selection, receive observations and scheduling policy.
+pub mod rate;
+
+/// Generation `jumps` of the port's radio-clock relation, for tests that
+/// name generations by number.
+#[cfg(test)]
+pub(crate) fn clock_generation(jumps: u32) -> oer_ieee80211_port::Ieee80211ClockGeneration {
+    let mut source = oer_ieee80211_port::GenerationSource::new(0);
+    for _ in 0..jumps {
+        source.jump();
+    }
+    source.current()
+}

@@ -1,7 +1,7 @@
 use crate::rx::storage::{ReceiveDmaStorage, walker_enable_settle};
 use oer_esp32s31_hal::ieee80211::dma::{rx_storage::PlacedRxDma, space::DmaSpace};
 
-use oer_esp32s31_ieee80211_mac::rx::{
+use crate::mac::rx::{
     RxDescriptorSnapshot, RxDma, RxRingError, RxRingHalted, RxRingLive, RxRingStopped,
 };
 
@@ -14,7 +14,7 @@ impl<'storage, const COUNT: usize, const DMA_BUFFER_SIZE: usize>
     ReceiveFrontier<'storage, COUNT, DMA_BUFFER_SIZE>
 {
     pub fn prepare_initial<M: RxDma, const DMA_STORAGE_SIZE: usize, S: DmaSpace>(
-        mac: &mut impl oer_esp32s31_ieee80211_mac::init::MacRuntimeStartHardware,
+        mac: &mut impl crate::mac::init::MacRuntimeStartHardware,
         hardware: &mut M,
         storage: PlacedRxDma<COUNT, DMA_BUFFER_SIZE, DMA_STORAGE_SIZE, S>,
     ) -> Result<Self, RxRingError> {

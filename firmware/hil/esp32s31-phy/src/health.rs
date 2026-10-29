@@ -334,7 +334,7 @@ pub fn signal(store: &mut Store, runtime: &oer_esp32s31_hal::owner::RadioAccess)
 }
 pub fn received(
     store: &mut Store,
-    frame: &oer_esp32s31_ieee80211_mac::rx::NormalizedRxFrame<'_>,
+    frame: &oer_esp32s31_ieee80211_driver::mac::rx::NormalizedRxFrame<'_>,
     channel: u8,
 ) {
     let Some(config) = store.config() else {

@@ -12,11 +12,13 @@ oer-wire = { path = "../../../../portable/wire" }
 oer-sync = { path = "../../../../portable/sync" }
 atomic-waker = "1.1.2"
 heapless = "0.9.2"
+pin-project = "1.1.13"
+subtle = { version = "2.6.1", default-features = false }
+zeroize = { version = "1.9.0", default-features = false }
 bytemuck = { version = "1.25.2", default-features = false, features = ["derive", "min_const_generics", "zeroable_atomics", "zeroable_maybe_uninit"] }
 oer-espressif-coex = { path = "../../../espressif/coex" }
 oer-esp32s31-hal = { path = "../../hal" }
 oer-esp32s31-phy = { path = "../../phy" }
-oer-esp32s31-ieee80211-mac = { path = "../mac" }
 oer-esp32s31-radio-client = { path = "../../radio/client" }
 oer-ieee80211-port = { path = "../../../../protocols/ieee80211/port" }
 oer-memory = { path = "../../../../portable/memory" }
@@ -32,20 +34,18 @@ oer-trace = { path = "../../../../portable/trace" }
 
 [features]
 default = []
-test-support = ["oer-esp32s31-ieee80211-mac/test-support"]
+test-support = ["oer-esp32s31-hal/test-support", "oer-espressif-interrupt-table/host-signal"]
 
 [dev-dependencies]
+oer-embassy-net = { path = "../../../../portable/embassy/net" }
+oer-esp32s31-hal = { path = "../../hal", features = ["test-support"] }
+oer-ieee80211-wire = { path = "../../../../protocols/ieee80211/wire", features = ["test-support"] }
 oer-espressif-ieee80211-policy = { path = "../../../espressif/ieee80211-policy" }
 oer-ieee80211-upper-mac = { path = "../../../../protocols/ieee80211/upper-mac" }
 
 oer-espressif-interrupt-table = { path = "../../../espressif/interrupt-table", features = ["host-signal"] }
 oer-time-virtual = { path = "../../../../portable/time-virtual" }
 oer-test-ui-cases = { path = "../../../../tools/test/ui-cases" }
-
-# Host unit tests use the allocating MAC model. RV32 API doctests exercise
-# the production API without introducing an allocator into their binaries.
-[target.'cfg(not(target_arch = "riscv32"))'.dev-dependencies]
-oer-esp32s31-ieee80211-mac = { path = "../mac", features = ["test-support"] }
 
 [target.'cfg(not(target_os = "none"))'.dev-dependencies]
 tempfile = "=3.27.0"
@@ -57,3 +57,10 @@ workspace = true
 # Chip APIs exist only for the chip target; document them there alone.
 default-target = "riscv32imafc-unknown-none-elf"
 targets = []
+
+[[test]]
+name = "mac"
+required-features = ["test-support"]
+
+[package.metadata.open-radio]
+test-feature-sets = ["test-support"]

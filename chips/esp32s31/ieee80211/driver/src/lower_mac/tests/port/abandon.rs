@@ -13,12 +13,8 @@ fn poll_p2<F: Future>(future: Pin<&mut F>, observed: &RefCell<Observed>) -> Poll
 }
 fn fixture() -> (PortParts<TestDevice, 512>, Rc<RefCell<Observed>>, TestTimer) {
     let mut hardware = Hardware::default();
-    oer_esp32s31_ieee80211_mac::crypto::install_sta_pairwise_ccmp(
-        &mut hardware,
-        super::super::PEER,
-        &[7; 16],
-    )
-    .expect("seed one key before the driver's first poll");
+    crate::mac::crypto::install_sta_pairwise_ccmp(&mut hardware, super::super::PEER, &[7; 16])
+        .expect("seed one key before the driver's first poll");
     let (parts, observed, timer) = installed_with_hardware(Vec::new(), hardware);
     observed.borrow_mut().check_context = true;
     observed.borrow_mut().context = 2;
