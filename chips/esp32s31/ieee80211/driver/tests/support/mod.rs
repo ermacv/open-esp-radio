@@ -623,12 +623,8 @@ impl MacTxPowerSource for MockPlatform {
 impl MacCoexPtiSource for MockPlatform {
     fn mac_coex_pti(&mut self, event: MacCoexEvent) -> MacCoexPti {
         self.operations.push(PlatformOperation::CoexPti(event));
-        MacCoexPti::new(match event {
-            MacCoexEvent::Event1 => 5,
-            MacCoexEvent::Event3 => 7,
-            MacCoexEvent::Event10 => 3,
-            MacCoexEvent::Event15 => 1,
-        })
-        .expect("a four-bit priority")
+        oer_espressif_coex::CoexPtiTable::VENDOR
+            .pti(event.coex_event())
+            .into()
     }
 }

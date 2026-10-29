@@ -241,7 +241,6 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 "firmware/hil/esp32s31-lower-mac/src/phy_pilot.rs:crate::phy_pilot::reset:terminal-reference:reset:1" = { owner = "firmware/hil/esp32s31-lower-mac", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
 
 # firmware/hil/esp32s31-lower-mac/src/suite.rs
-"firmware/hil/esp32s31-lower-mac/src/suite.rs:crate::suite::impl RadioCoexPriorities for Coex::beacon_window_pti:panic-method:expect:1" = { owner = "firmware/hil/esp32s31-lower-mac", classes = ["rust-panic"] }
 "firmware/hil/esp32s31-lower-mac/src/suite.rs:crate::suite::channels:panic-method:expect:1" = { owner = "firmware/hil/esp32s31-lower-mac", classes = ["rust-panic"] }
 "firmware/hil/esp32s31-lower-mac/src/suite.rs:crate::suite::impl Server::frontend:panic-method:expect:1" = { owner = "firmware/hil/esp32s31-lower-mac", classes = ["rust-panic"] }
 "firmware/hil/esp32s31-lower-mac/src/suite.rs:crate::suite::impl Server::frontend:terminal-reference:reset_request:1" = { owner = "firmware/hil/esp32s31-lower-mac", classes = ["cancellation"] }
@@ -324,7 +323,6 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 "firmware/hil/esp32s31-phy/src/phy_pilot.rs:crate::phy_pilot::interrupt:terminal-reference:reset:1" = { owner = "firmware/hil/esp32s31-phy", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
 
 # firmware/hil/esp32s31-phy/src/radio.rs
-"firmware/hil/esp32s31-phy/src/radio.rs:crate::radio::impl Radio::enter:panic-method:expect:1" = { owner = "firmware/hil/esp32s31-phy", classes = ["rust-panic"] }
 
 # firmware/hil/esp32s31-phy/src/transport.rs
 "firmware/hil/esp32s31-phy/src/transport.rs:crate::transport::open_usb:terminal-reference:reset_binding:1" = { owner = "firmware/hil/esp32s31-phy", classes = ["configuration-boot", "unexpected-hardware", "software-invariant"] }

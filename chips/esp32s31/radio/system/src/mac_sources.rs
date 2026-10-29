@@ -68,11 +68,11 @@ pub(crate) fn probe_priority(
     table: oer_espressif_coex::CoexPtiTable,
 ) -> oer_esp32s31_radio_client::wifi::ProbePriority {
     use oer_espressif_coex::wifi_events;
-    let packet = table.pti(wifi_events::PROBE_REQUEST).value();
-    let scheduler = packet.min(table.pti(wifi_events::SLICE).value());
+    let packet = table.pti(wifi_events::PROBE_REQUEST);
+    let scheduler = packet.min(table.pti(wifi_events::SLICE));
     oer_esp32s31_radio_client::wifi::ProbePriority {
-        packet: MacCoexPti::new(packet).expect("the table has four-bit PTI"),
-        scheduler: MacCoexPti::new(scheduler).expect("the table has four-bit PTI"),
+        packet: packet.into(),
+        scheduler: scheduler.into(),
     }
 }
 

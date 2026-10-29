@@ -1,6 +1,10 @@
 //! Ownership boundary for the complete cold COEX/PTI transaction.
 
-use crate::{coex::CoexEventId, ieee80211::mac::WifiMacColdHal, types::MacPti};
+use crate::{
+    coex::{CoexEventId, CoexPti},
+    ieee80211::mac::WifiMacColdHal,
+    types::MacPti,
+};
 
 /// The four OSI coexistence event numbers queried by complete cold init.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -39,20 +43,18 @@ impl MacCoexEvent {
 pub struct MacCoexPti(MacPti);
 
 impl MacCoexPti {
-    /// The priority, or `None` above the four bits the MAC fields hold.
-    pub const fn new(value: u8) -> Option<Self> {
-        match MacPti::new(value as u32) {
-            Some(pti) => Some(Self(pti)),
-            None => None,
-        }
-    }
-
     pub const fn value(self) -> u8 {
         self.0.get() as u8
     }
 
     const fn pti(self) -> MacPti {
         self.0
+    }
+}
+
+impl From<CoexPti> for MacCoexPti {
+    fn from(pti: CoexPti) -> Self {
+        Self(MacPti::from_coex(pti))
     }
 }
 

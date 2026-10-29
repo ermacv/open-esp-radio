@@ -33,7 +33,7 @@ const VENDOR_PTI_TABLE: [u8; COEX_EVENT_COUNT] = const {
     ];
     let mut remaining = table.as_slice();
     while let Some((priority, rest)) = remaining.split_first() {
-        if *priority > 0x0f {
+        if *priority > CoexPti::MAX {
             panic!("the vendor table must hold four-bit priorities");
         }
         remaining = rest;
@@ -168,9 +168,13 @@ pub mod wifi_events {
 pub struct CoexPti(u8);
 
 impl CoexPti {
+    /// The shared priority domain's maximum. Chip bindings const-check this
+    /// domain against their generated MAC field geometry.
+    pub const MAX: u8 = 0x0f;
+
     /// A priority of the four-bit hardware domain, or `None` above it.
     pub const fn new(value: u8) -> Option<Self> {
-        if value <= 0x0f {
+        if value <= Self::MAX {
             Some(Self(value))
         } else {
             None
