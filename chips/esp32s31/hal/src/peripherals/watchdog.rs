@@ -5,8 +5,7 @@
 //! The bootstrap takes the RTC, super and timer group 0's main watchdogs
 //! over from the bootloader (`oer_espressif_boot::watchdog`) and disables
 //! the RTC watchdog right before its jump; stage two owns all four
-//! ([`Watchdogs`]) and arms the RTC watchdog again as its backstop the
-//! moment it takes them: stage 0 resets the chip
+//! through the family adoption driver, which arms the RTC backstop: stage 0 resets the chip
 //! [`RTC_WATCHDOG_BUDGET_MS`] after the last feed. The image's executor
 //! feeds it from a task ([`ArmedRtcWatchdog::feed_every`] every
 //! [`RTC_WATCHDOG_FEED_PERIOD_MS`]), and a fatal path that cannot prepare
@@ -96,44 +95,6 @@ impl WatchdogRegisters {
             main1: Mwdt1Registers::new(timg1_wdt, hp_sys_clkrst_timg1),
             rtc: RwdtRegisters::new(lp_wdt),
             super_watchdog: SwdRegisters::new(lp_wdt_swd),
-        }
-    }
-}
-
-/// Every watchdog of the chip, owned for stage two's lifetime.
-pub struct Watchdogs {
-    /// Timer group 0's main watchdog, only stopped: its watchdog clock is
-    /// not the image's, which gates it. It retains the group clock/reset
-    /// word after selecting and enabling T0's XTAL clock at startup.
-    pub main0: StoppedMainWatchdog<Mwdt0Registers>,
-    /// Timer group 1's main watchdog, the system deadline's timer.
-    pub main1: MainWatchdog<Mwdt1Registers>,
-    /// The RTC watchdog, armed: the image's executor feeds it.
-    pub rtc: ArmedRtcWatchdog<RwdtRegisters>,
-    /// The super watchdog.
-    pub super_watchdog: SuperWatchdog<SwdRegisters>,
-}
-
-impl Watchdogs {
-    /// Own every watchdog: run timer group 1 from reset on the XTAL clock,
-    /// stop both main watchdogs, latched and locked, and arm the RTC
-    /// watchdog for [`RTC_WATCHDOG_BUDGET_MS`]. Enable T0's XTAL clock
-    /// without resetting its group or changing the watchdog clock.
-    /// The super watchdog is left as the bootstrap leaves it, fed by hardware.
-    pub fn new(registers: WatchdogRegisters) -> Self {
-        let WatchdogRegisters {
-            mut main0,
-            mut main1,
-            rtc,
-            super_watchdog,
-        } = registers;
-        main0.start_timer0_clock();
-        main1.start_clock();
-        Self {
-            main0: StoppedMainWatchdog::new(main0),
-            main1: MainWatchdog::new(main1, MAIN_WATCHDOG_TICK),
-            rtc: RtcWatchdog::new(rtc).arm_rtc_reset(RTC_WATCHDOG_STAGE0_HOLD),
-            super_watchdog: SuperWatchdog::new(super_watchdog),
         }
     }
 }

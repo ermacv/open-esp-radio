@@ -56,8 +56,11 @@
 #![forbid(unsafe_code)]
 
 #[cfg(test)]
+extern crate self as oer_espressif_boot;
+#[cfg(test)]
 extern crate std;
 
+pub mod adoption;
 pub mod cache;
 pub mod clock;
 pub mod drivers;

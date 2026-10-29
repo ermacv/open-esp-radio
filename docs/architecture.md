@@ -64,6 +64,22 @@ through the final RTC disable and jump. The S31 boot binding supplies its
 `BootProfile` as a chip composition; the bootstrap image declares resources.
 The order, reports and common deadline remain unchanged.
 
+The family boot adoption driver accepts the existing CPU rate and permanent
+MPLL reference, installs the console/core/debug owners and arms the runtime
+watchdogs before publishing interrupt owners. Both HAL root splits return
+unstarted owners without startup effects. The staged-runtime adoption runner
+uses that driver through the chip composition's binding, then reports retained
+records, adopts the board's existing mapping through the staged-layout contract
+and installs the interrupt context. Only then can it publish a `Runtime`.
+The opaque `Prepared` phase lets an image report startup after console
+installation while keeping hardware private until mapping/context adoption.
+An image callback between driver initialization and mapping adoption preserves
+its previous-record and reset-cause observation order. Isolated verifier
+sessions call the same family driver directly without a staged runtime,
+handoff or fabricated mapping proof; there is no second sequence. Neither path
+repeats cold boot or reconfigures CPU clocks, the MMU or PSRAM. Runtime SYSTIMER
+owners transfer unchanged to the executor, which retains its latch check.
+
 Every chip and HIL package has one explicit role in `oer-test-layers`, never
 derived from its path; the role names the level and its allowed direct
 dependencies ([layer tests](../tools/test/layers/README.md)).

@@ -1,0 +1,19 @@
+error[E0277]: the trait bound `RuntimeCpuClock: CpuClockRegisters` is not satisfied
+  --> tests/ui/runtime_cpu_clock_has_no_programming_port.rs:10:13
+   |
+10 |     program(clock); // ui-error: E0277
+   |     ------- ^^^^^ the trait `CpuClockRegisters` is not implemented for `RuntimeCpuClock`
+   |     |
+   |     required by a bound introduced by this call
+   |
+help: the trait `CpuClockRegisters` is implemented for `oer_esp32s31_hal::boot::ClockRegisters<P, Q, R, S>`
+  --> src/boot/clock.rs
+   |
+   | / impl<P: Placement, Q: Placement, R: Placement, S: Placement> CpuClockRegisters
+   | |     for ClockRegisters<P, Q, R, S>
+   | |__________________________________^
+note: required by a bound in `program`
+  --> tests/ui/runtime_cpu_clock_has_no_programming_port.rs:5:15
+   |
+ 5 | fn program<C: oer_espressif_boot::clock::CpuClockRegisters>(_: C) {}
+   |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `program`

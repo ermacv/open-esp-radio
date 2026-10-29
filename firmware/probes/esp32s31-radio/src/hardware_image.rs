@@ -45,19 +45,18 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
     let Some(root) = Root::take() else {
         fail(oer_diagnostics::name!("root"; 32));
     };
-    let runtime = match root.into_runtime() {
-        Ok(runtime) => runtime,
-        Err(error) => fail(error.name()),
-    };
-    let (_psram, mut adopted) = match handoff.adopt(
-        INTERRUPT_TABLE,
-        runtime.interrupts.controller,
-        oer_esp32s31_board::BootstrapPsram,
-        oer_esp32s31_compose::phy_fault::report_previous,
-    ) {
-        Ok(value) => value,
-        Err(error) => fail(error.name()),
-    };
+    let (runtime, _psram, mut adopted) =
+        match oer_espressif_staged_runtime::adoption::run::<oer_esp32s31_compose::Esp32s31, _, _>(
+            handoff,
+            root.into_runtime(),
+            INTERRUPT_TABLE,
+            oer_esp32s31_board::BootstrapPsram,
+            oer_esp32s31_compose::phy_fault::report_previous,
+            core::convert::identity,
+        ) {
+            Ok(value) => value.into_parts(),
+            Err(error) => fail(error.name()),
+        };
     let Some(interrupts) = Interrupts::take() else {
         fail(oer_diagnostics::name!("interrupts"; 32));
     };

@@ -11,6 +11,7 @@ description = "Stage-two entry, relocation, traps, per-hart interrupt stacks, cr
 oer-trace = { path = "../../../portable/trace" }
 bytemuck = { version = "1.25.2", default-features = false, features = ["derive"] }
 oer-diagnostics = { path = "../../../portable/diagnostics" }
+oer-espressif-boot = { path = "../boot" }
 oer-espressif-staged-layout.workspace = true
 oer-memory = { path = "../../../portable/memory" }
 oer-riscv = { path = "../../../portable/riscv" }
@@ -27,6 +28,10 @@ oer-espressif-facts = { path = "../facts" }
 
 [dev-dependencies]
 tempfile = "=3.27.0"
+oer-time = { path = "../../../portable/time" }
+oer-time-virtual = { path = "../../../portable/time-virtual" }
+oer-test-ui-cases = { path = "../../../tools/test/ui-cases" }
+oer-espressif-watchdog = { path = "../watchdog" }
 
 [lints]
 workspace = true

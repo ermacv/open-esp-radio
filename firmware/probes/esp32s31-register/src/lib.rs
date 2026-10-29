@@ -39,9 +39,10 @@ fn start_session() -> u32 {
     let Some(root) = Root::take() else {
         return 1;
     };
-    let Ok(runtime) = root.into_runtime() else {
+    let Ok(platform) = oer_espressif_boot::adoption::initialize(root.into_runtime()) else {
         return 5;
     };
+    let runtime = platform.hardware;
     #[cfg(target_arch = "riscv32")]
     let identity = phy_identity();
     #[cfg(not(target_arch = "riscv32"))]

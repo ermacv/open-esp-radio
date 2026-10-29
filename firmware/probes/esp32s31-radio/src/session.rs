@@ -1,8 +1,8 @@
 //! The probe image's verifier session, over the production root only.
 //!
 //! [`init`], the session's first entry, takes the chip's reset root once
-//! (`Root::take`), splits it for stage two (`Root::into_runtime`) and the
-//! radio once, and brings Wi-Fi up through its public client path: common
+//! (`Root::take`), splits its unstarted owners (`Root::into_runtime`), calls
+//! the family adoption driver without a staged handoff, and splits the radio once, and brings Wi-Fi up through its public client path: common
 //! power, the module clocks and the running owner. Every later entry
 //! borrows the owners it needs from the session ([`with`]); none claims a
 //! register again.
@@ -56,9 +56,10 @@ pub(crate) fn init(
     let Some(root) = Root::take() else {
         return ROOT_TAKEN;
     };
-    let Ok(runtime) = root.into_runtime() else {
+    let Ok(platform) = oer_espressif_boot::adoption::initialize(root.into_runtime()) else {
         return ROOT_INIT;
     };
+    let runtime = platform.hardware;
     let transaction_identity = identity();
     let clocks = runtime.clocks;
     let (radio, partitions) = runtime

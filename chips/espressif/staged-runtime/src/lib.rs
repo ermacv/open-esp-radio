@@ -23,7 +23,7 @@
 //! the boot hart PSRAM task stack, installs the runtime's vectors and enters the
 //! image's `runtime_main` that [`entry!`] defines. The image's `main` adopts
 //! the bootstrap's PSRAM mapping through its board and takes its hart's
-//! routes and lines ([`Handoff::adopt`]), binds its interrupts through the
+//! routes and lines ([`adoption::run`]), binds its interrupts through the
 //! [`Router`](oer_espressif_interrupt_table::Router) it gets back and enables
 //! interrupts ([`Adopted::enable_interrupts`]). The chip HAL selects the
 //! chip through the platform port (`oer-espressif-platform-port`), whose
@@ -40,6 +40,7 @@
 //! port's [`Platform`](oer_espressif_platform_port::Platform), which lends
 //! the chip HAL's fatal-path proof); the interrupt table's router writes the
 //! routes and the CLIC lines through the chip's controller.
+pub mod adoption;
 #[allow(unsafe_code, reason = "the critical-section implementation contract")]
 mod critical;
 #[cfg(target_arch = "riscv32")]
@@ -207,7 +208,7 @@ impl<P: oer_espressif_platform_port::EarlyText> Handoff<P> {
     /// A wrong hart, missing interrupt stack, invalid stack guard, or controller
     /// disagreement with its chip facts or the image's table returns [`BootError`].
     #[cfg(target_arch = "riscv32")]
-    pub fn adopt<B: AdoptsBootstrapMapping, C: oer_espressif_interrupt_table::Controller>(
+    pub(crate) fn adopt<B: AdoptsBootstrapMapping, C: oer_espressif_interrupt_table::Controller>(
         mut self,
         interrupt_table: &'static InterruptTable,
         controller: C,
@@ -216,7 +217,7 @@ impl<P: oer_espressif_platform_port::EarlyText> Handoff<P> {
     ) -> Result<(B::Mapping, Adopted<C>), BootError> {
         panic::report_previous_fault::<P>();
         previous_records();
-        let mapping = board.adopt(&self.proof);
+        let mapping = oer_espressif_boot::adoption::adopt_mapping(board, &self.proof);
         let actual = usize::from(controller.hart());
         let expected = oer_espressif_platform_port::BOOT_HART.get();
         if actual != expected {
@@ -269,7 +270,7 @@ impl<C: oer_espressif_interrupt_table::Controller> Adopted<C> {
     /// image's, for bindings made later. Stack-install authority ends, while
     /// the returned hart token authorizes local executor startup.
     ///
-    /// Safe at any point after [`Handoff::adopt`]: adoption silenced every
+    /// Safe at any point after [`adoption::run`]: adoption silenced every
     /// source and disabled every line, and a source is routed again only by
     /// binding its entry, after its handler holds its part.
     ///

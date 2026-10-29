@@ -9,6 +9,7 @@ build = "build.rs"
 description = "Isolated ESP32-S31 PAC/HAL register conformance probes, and the linked probe image"
 
 [dependencies]
+oer-espressif-boot = { path = "../../../chips/espressif/boot" }
 oer-probe-macros = { path = "../../../tools/probe/macros" }
 oer-esp32s31-hal = { path = "../../../chips/esp32s31/hal" }
 oer-memory = { path = "../../../portable/memory" }

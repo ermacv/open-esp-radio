@@ -25,7 +25,7 @@
 //!
 //! - [`phy_fault`]: the PHY transaction seat, its retained fault record, the
 //!   reset the HAL's `phy_fault_reporter!` names and the next boot's report,
-//!   which the image passes to `Handoff::adopt`;
+//!   which the image passes to `adoption::run`;
 //! - `wifi_fault` (feature `wifi-fault`): the Wi-Fi MAC's fatal assertion
 //!   record, its reset and the next boot's report.
 
@@ -39,6 +39,18 @@ pub struct Esp32s31 {
 }
 #[cfg(target_arch = "riscv32")]
 oer_espressif_executor::bind!(Esp32s31, oer_esp32s31_hal::platform::Port);
+
+#[cfg(target_arch = "riscv32")]
+impl oer_espressif_staged_runtime::adoption::Binding for Esp32s31 {
+    type Platform = oer_esp32s31_hal::platform::Port;
+    type Driver = oer_esp32s31_hal::root::RuntimePort;
+    type Hardware = oer_esp32s31_hal::root::Hardware;
+    type Controller = oer_esp32s31_hal::platform::InterruptController;
+
+    fn split(parts: oer_esp32s31_hal::root::PlatformParts) -> (Self::Hardware, Self::Controller) {
+        (parts.hardware, parts.interrupts.controller)
+    }
+}
 
 /// Shared retained/reset path selected only by staged Wi-Fi images.
 #[cfg(feature = "wifi-fault")]

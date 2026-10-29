@@ -1,0 +1,10 @@
+error[E0308]: mismatched types
+ --> tests/ui/prepared_is_not_runtime.rs:6:99
+  |
+6 |     let _ready: oer_espressif_staged_runtime::adoption::Runtime<B::Hardware, B::Controller, ()> = prepared; // ui-error: E0308
+  |                 -------------------------------------------------------------------------------   ^^^^^^^^ expected `Runtime<..., ..., ()>`, found `Prepared<B>`
+  |                 |
+  |                 expected due to this
+  |
+  = note: expected struct `Runtime<<B as oer_espressif_staged_runtime::adoption::Binding>::Hardware, <B as oer_espressif_staged_runtime::adoption::Binding>::Controller, ()>`
+             found struct `Prepared<B>`

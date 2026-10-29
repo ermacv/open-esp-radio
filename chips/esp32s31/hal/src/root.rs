@@ -31,7 +31,6 @@ use crate::{
         ActivePower, Brownout, CacheRegisters, ClockRegisters, FLASH_MMU_WINDOW, FlashRegisters,
         LpFastClock, MmuWindow, PsramRegisters, Soc,
     },
-    cores,
     domain::{
         BluetoothClient, CoexAbsent, Ieee802154Client, RadioDomain, RadioDomainReleaseError,
         WifiClient,
@@ -47,15 +46,15 @@ use crate::{
         software_interrupt::SoftwareInterrupts,
         system_timer::{BootstrapTimer, SystemTimer},
         timg0_alarm::Timg0AlarmParts,
-        usb_serial_jtag::{self, ConsoleRegisters},
-        watchdog::{Mwdt0Registers, RwdtRegisters, SwdRegisters, WatchdogRegisters, Watchdogs},
+        usb_serial_jtag::ConsoleRegisters,
+        watchdog::{Mwdt0Registers, RwdtRegisters, SwdRegisters, WatchdogRegisters},
     },
     phy::{RadioPhyRegisters, registration::PhyRegistration, restore::PhyRouteState},
     platform::{
         InterruptBlocks,
         core_control::{CoreControlRegisters, Uart0ClockRegisters},
     },
-    power::{ChipClocks, PlatformClockBackend, PsramMpll},
+    power::{ChipClocks, PlatformClockBackend},
 };
 
 /// The chip's reset root: every claimed part, once.
@@ -64,30 +63,8 @@ pub struct Root {
     partitions: Partitions,
 }
 
-/// Why the reset root could not publish its image's platform owners.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum InitError {
-    /// The console's parts were installed before.
-    ConsoleInstalled,
-    /// Stage two's core-control words were installed before.
-    CoreControlInstalled,
-}
-
-impl InitError {
-    /// The stable reason used by an image's boot-failure record.
-    pub const fn name(self) -> oer_diagnostics::Name<32> {
-        match self {
-            Self::ConsoleInstalled => oer_diagnostics::name!("console-installed"; 32),
-            Self::CoreControlInstalled => oer_diagnostics::name!("core-control-installed"; 32),
-        }
-    }
-}
-
-impl From<usb_serial_jtag::Installed> for InitError {
-    fn from(_: usb_serial_jtag::Installed) -> Self {
-        Self::ConsoleInstalled
-    }
-}
+mod adoption;
+pub use adoption::{Hardware, PlatformParts, RuntimePort, RuntimeResources};
 
 impl Root {
     /// The root, the first time it is called in an image; `None` after.
@@ -170,26 +147,11 @@ impl Root {
         }
     }
 
-    /// Split the root for stage two, which adopts the platform the
-    /// bootstrap initialized: the console's parts go to the early writer,
-    /// the core-control words to the cores' owner and the fatal paths,
-    /// hart 0's pending sources and debug status to the executor's
-    /// platform, and the platform's and radio's owners are returned. The
-    /// bootstrap's partitions are dropped: stage two repeats no cold boot.
-    ///
-    /// The platform clock words go to the one clock owner
-    /// ([`ChipClocks`]), which opens the Wi-Fi power gate and adopts the
-    /// PSRAM mapping's MPLL reference.
-    ///
-    /// Taking the watchdogs arms the RTC watchdog
-    /// ([`Watchdogs::new`]): from here the image's executor must feed it
-    /// ([`ArmedRtcWatchdog::feed_every`](crate::peripherals::watchdog::ArmedRtcWatchdog::feed_every)),
-    /// and a fatal path that cannot prepare the reset waits for it.
-    ///
-    /// # Errors
-    ///
-    /// The console or core-control words were installed before.
-    pub fn into_runtime(self) -> Result<Runtime, InitError> {
+    /// Split the claim into unstarted runtime owners. No register access,
+    /// global installation, clock adoption or watchdog arming occurs here.
+    /// The family adoption driver consumes these owners; staged images use
+    /// it through the staged-runtime runner. Cold boot is never repeated.
+    pub fn into_runtime(self) -> oer_espressif_boot::adoption::Owners<RuntimePort> {
         let Partitions {
             usb_serial_jtag,
             core_control,
@@ -226,57 +188,63 @@ impl Root {
             chip_clocks,
             timer_group0,
         } = self.partitions;
-        #[cfg(target_arch = "riscv32")]
-        ClockRegisters::new(
-            boot.hp_sys_clkrst_boot_clock,
-            boot.lp_aon_clkrst_cpll,
-            boot.pmu_boot_clock,
-            boot.hp_alive_sys_pll_clock,
-        )
-        .adopt_short_settle_clock();
-        #[cfg(not(target_arch = "riscv32"))]
-        let _ = boot;
-        usb_serial_jtag::install(ConsoleRegisters::new(usb_serial_jtag))?;
-        // Stage two runs from the PSRAM the bootstrap mapped over MPLL.
-        let clocks = ChipClocks::install(chip_clocks, PsramMpll::adopted());
-        cores::install(
-            CoreControlRegisters::new(core_control),
-            Uart0ClockRegisters::new(uart0_clock),
-        )
-        .map_err(|_| InitError::CoreControlInstalled)?;
-        crate::platform::port::publish_debug_status(debug);
-        Ok(Runtime {
-            watchdogs: Watchdogs::new(WatchdogRegisters::new(watchdog)),
-            system_timer: SystemTimer::new(system_timer),
-            timg0_alarm: Timg0AlarmParts::new(timer_group0),
-            software_interrupts: SoftwareInterrupts::new(
-                software_interrupt_0,
-                software_interrupt_1,
-                software_interrupt_2,
-                software_interrupt_3,
-            ),
-            interrupts: InterruptBlocks::new(interrupt_matrix),
-            efuse: EfuseRegisters::new(efuse),
-            entropy: EntropyRegisters::new(entropy, soc.lp_periclkrst_rng_init),
-            reset_cause: ResetCauseRegisters::new(reset_cause),
-            wifi_interrupts: WifiInterruptBanks::new(wifi_interrupts),
-            clocks,
-            radio: RadioHardware::new(RadioPartitions::compose(RadioParts {
-                wifi_mac,
-                wifi_mac_interface,
-                wifi_rx_dma,
-                mac_local_time,
-                radio_phy,
-                coexistence,
-                bluetooth,
-                bluetooth_modem_lp_timer,
-                bluetooth_interrupts,
-                shared_radio,
-                modem_etm,
-                ieee802154,
-                analog_bus,
-            })),
-        })
+        let WatchdogRegisters {
+            main0,
+            main1,
+            rtc,
+            super_watchdog,
+        } = WatchdogRegisters::new(watchdog);
+        oer_espressif_boot::adoption::Owners {
+            cpu_clock: crate::boot::RuntimeCpuClock::new(ClockRegisters::new(
+                boot.hp_sys_clkrst_boot_clock,
+                boot.lp_aon_clkrst_cpll,
+                boot.pmu_boot_clock,
+                boot.hp_alive_sys_pll_clock,
+            )),
+            console: ConsoleRegisters::new(usb_serial_jtag),
+            clocks: adoption::ClockParts(chip_clocks),
+            core_control: adoption::CoreParts {
+                core: CoreControlRegisters::new(core_control),
+                uart0: Uart0ClockRegisters::new(uart0_clock),
+            },
+            debug: adoption::DebugParts(debug),
+            watchdogs: oer_espressif_boot::adoption::WatchdogParts {
+                main0,
+                main1,
+                rtc,
+                super_watchdog,
+            },
+            resources: RuntimeResources {
+                system_timer: SystemTimer::new(system_timer),
+                timg0_alarm: Timg0AlarmParts::new(timer_group0),
+                software_interrupts: SoftwareInterrupts::new(
+                    software_interrupt_0,
+                    software_interrupt_1,
+                    software_interrupt_2,
+                    software_interrupt_3,
+                ),
+                interrupt_matrix,
+                efuse: EfuseRegisters::new(efuse),
+                entropy: EntropyRegisters::new(entropy, soc.lp_periclkrst_rng_init),
+                reset_cause: ResetCauseRegisters::new(reset_cause),
+                wifi_interrupts: WifiInterruptBanks::new(wifi_interrupts),
+                radio: RadioHardware::new(RadioPartitions::compose(RadioParts {
+                    wifi_mac,
+                    wifi_mac_interface,
+                    wifi_rx_dma,
+                    mac_local_time,
+                    radio_phy,
+                    coexistence,
+                    bluetooth,
+                    bluetooth_modem_lp_timer,
+                    bluetooth_interrupts,
+                    shared_radio,
+                    modem_etm,
+                    ieee802154,
+                    analog_bus,
+                })),
+            },
+        }
     }
 }
 
@@ -314,36 +282,6 @@ pub struct Bootstrap {
     pub flash: FlashRegisters,
     /// The flash MMU's window.
     pub flash_window: MmuWindow,
-}
-
-/// Stage two's owners of the platform and the radio.
-#[must_use = "the runtime's owners drive the platform and the radio"]
-pub struct Runtime {
-    /// Every watchdog, the RTC watchdog armed: the image's executor feeds
-    /// it.
-    pub watchdogs: Watchdogs,
-    /// The system timer's comparators, counter and alarm parts.
-    pub system_timer: SystemTimer,
-    /// TIMG0 T0 program and permanent IRQ owners, adopted without writes.
-    pub timg0_alarm: Timg0AlarmParts,
-    /// The four software interrupt lines and their interrupt parts.
-    pub software_interrupts: SoftwareInterrupts,
-    /// Hart 0's interrupt controller and hart 1's bank.
-    pub interrupts: InterruptBlocks,
-    /// The factory MAC words.
-    pub efuse: EfuseRegisters,
-    /// The TRNG's output and status.
-    pub entropy: EntropyRegisters,
-    /// The HP cores' reset causes.
-    pub reset_cause: ResetCauseRegisters,
-    /// The Wi-Fi MAC's interrupt banks, which the image's interrupt table
-    /// binds to the radio interrupt handler once.
-    pub wifi_interrupts: WifiInterruptBanks,
-    /// The platform clock owner: the provider and backend of the radio's
-    /// clock references ([`RadioHardware::split`]`::<ChipClocks, _>`).
-    pub clocks: ChipClocks,
-    /// The protocol-neutral radio root.
-    pub radio: RadioHardware,
 }
 
 /// The radio's partitions of the root, as `take()` hands them out.

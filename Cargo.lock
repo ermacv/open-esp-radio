@@ -2241,6 +2241,7 @@ name = "oer-espressif-boot"
 version = "0.1.0"
 dependencies = [
  "oer-espressif-analog",
+ "oer-espressif-staged-layout",
  "oer-espressif-watchdog",
  "oer-time",
  "oer-time-virtual",
@@ -2376,12 +2377,17 @@ dependencies = [
  "bytemuck",
  "critical-section",
  "oer-diagnostics",
+ "oer-espressif-boot",
  "oer-espressif-facts",
  "oer-espressif-interrupt-table",
  "oer-espressif-platform-port",
  "oer-espressif-staged-layout",
+ "oer-espressif-watchdog",
  "oer-memory",
  "oer-riscv",
+ "oer-test-ui-cases",
+ "oer-time",
+ "oer-time-virtual",
  "oer-trace",
  "tempfile",
 ]
@@ -2766,6 +2772,7 @@ dependencies = [
  "oer-esp32s31-ieee80211-mac",
  "oer-esp32s31-layout",
  "oer-esp32s31-phy",
+ "oer-espressif-boot",
  "oer-espressif-coex",
  "oer-espressif-executor",
  "oer-espressif-ieee80211-policy",
@@ -2786,6 +2793,7 @@ name = "oer-firmware-probes-esp32s31-register"
 version = "0.1.0"
 dependencies = [
  "oer-esp32s31-hal",
+ "oer-espressif-boot",
  "oer-memory",
  "oer-probe-codegen",
  "oer-probe-macros",

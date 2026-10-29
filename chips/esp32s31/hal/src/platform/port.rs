@@ -39,8 +39,8 @@ fn hart(hart: port::Hart) -> Hart {
     *hart.at(&Hart::ALL)
 }
 
-/// Per-hart debug status, published once by the stage-two split of the
-/// reset root ([`publish_debug_status`]), before any executor exists.
+/// Per-hart debug status, published once by adoption of the reset root's
+/// parts ([`publish_debug_status`]), before any executor exists.
 static DEBUG: ZeroedOnce<DebugModeStatus> = ZeroedOnce::new();
 
 /// Publish the per-hart debug status for [`Port::debugger_connected`], from

@@ -155,16 +155,15 @@ pub fn boot(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::pla
     let Some(root) = Root::take() else {
         crate::fail("root-taken")
     };
-    let runtime = root
-        .into_runtime()
-        .unwrap_or_else(|error| crate::fail(error.name().as_str()));
-    let (_psram, mut adopted) = match handoff.adopt(
+    let (runtime, _psram, mut adopted) = match oer_espressif_staged_runtime::adoption::run::<oer_esp32s31_compose::Esp32s31, _, _>(
+        handoff,
+        root.into_runtime(),
         INTERRUPT_TABLE,
-        runtime.interrupts.controller,
         board::BootstrapPsram,
         oer_esp32s31_compose::phy_fault::report_previous,
+        core::convert::identity,
     ) {
-        Ok(adopted) => adopted,
+        Ok(adopted) => adopted.into_parts(),
         Err(error) => crate::fail(error.name().as_str()),
     };
     crate::gate_fault::report_previous();

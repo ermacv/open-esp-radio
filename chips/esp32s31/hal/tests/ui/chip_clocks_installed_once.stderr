@@ -1,10 +1,10 @@
 error[E0382]: use of moved value: `root`
  --> tests/ui/chip_clocks_installed_once.rs:8:18
   |
-5 | pub fn install(root: Root) -> Result<ChipClocks, oer_esp32s31_hal::root::InitError> {
+5 | pub fn install(root: Root) -> Result<ChipClocks, oer_espressif_boot::adoption::InitError> {
   |                ---- move occurs because `root` has type `Root`, which does not implement the `Copy` trait
-6 |     let clocks = root.into_runtime()?.clocks;
-  |                       -------------- `root` moved due to this method call
+6 |     let clocks = oer_espressif_boot::adoption::initialize(root.into_runtime())?.hardware.clocks;
+  |                                                                -------------- `root` moved due to this method call
 7 |     #[cfg(all())]
 8 |     let _again = root.into_runtime(); // ui-error: E0382
   |                  ^^^^ value used here after move
@@ -12,5 +12,5 @@ error[E0382]: use of moved value: `root`
 note: `Root::into_runtime` takes ownership of the receiver `self`, which moves `root`
  --> src/root.rs
   |
-  |     pub fn into_runtime(self) -> Result<Runtime, InitError> {
+  |     pub fn into_runtime(self) -> oer_espressif_boot::adoption::Owners<RuntimePort> {
   |                         ^^^^
