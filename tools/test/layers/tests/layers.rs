@@ -899,7 +899,6 @@ const ROLES: &[(&str, Role)] = &[
     ("chips/esp32s31/phy", Role::HardwareDriver),
     ("chips/esp32s31/bluetooth/driver", Role::ChipAdapter),
     ("chips/esp32s31/ieee80211/driver", Role::ChipAdapter),
-    ("chips/esp32s31/ieee80211/mac", Role::ChipAdapter),
     ("chips/esp32s31/ieee802154/driver", Role::ChipAdapter),
     // docs/repository-layout.md: "Wi-Fi upper-MAC and the family policy
     // select each attempt's rate and protection" places this family policy
@@ -2798,11 +2797,6 @@ const OUTSIDE_THE_ROLES: &[Deviation] = &[
     ),
     (
         "firmware/hil/esp32s31-lower-mac",
-        "chips/esp32s31/ieee80211/mac",
-        "the lower-MAC conformance image (#848)",
-    ),
-    (
-        "firmware/hil/esp32s31-lower-mac",
         "chips/esp32s31/phy",
         "the lower-MAC conformance image (#848)",
     ),
@@ -2869,11 +2863,6 @@ const OUTSIDE_THE_ROLES: &[Deviation] = &[
     (
         "firmware/hil/esp32s31-phy",
         "chips/esp32s31/ieee80211/driver",
-        "the PHY capture probe and instrumentation (#848)",
-    ),
-    (
-        "firmware/hil/esp32s31-phy",
-        "chips/esp32s31/ieee80211/mac",
         "the PHY capture probe and instrumentation (#848)",
     ),
     (
@@ -3065,7 +3054,7 @@ fn drivers_and_adapters_stand_on_the_hal_and_the_port_never_above_it() {
     assert!(role_allows(
         Role::ChipAdapter,
         Role::ChipAdapter,
-        "chips/esp32s31/ieee80211/mac"
+        "chips/esp32s31/ieee80211/driver"
     ));
     assert!(!role_allows(
         Role::Service,
@@ -3861,7 +3850,6 @@ fn the_thin_image_rule_accepts_facades_and_rejects_backend_runtime_and_port_bypa
     }
     for path in [
         "chips/esp32s31/ieee80211/driver",
-        "chips/esp32s31/ieee80211/mac",
         "protocols/ieee80211/runtime",
         "protocols/ieee80211/port",
         "protocols/ieee80211/sta",

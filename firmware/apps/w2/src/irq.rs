@@ -7,7 +7,7 @@ use oer_esp32s31_ieee80211_driver::{
     irq::{DoorbellAcknowledge, RadioDoorbell, WifiIrqLine, WifiIrqPart, service_wifi_line},
     rx::arena::{WifiRxArena, WifiRxStatic},
 };
-use oer_esp32s31_ieee80211_mac::tx::TxSlot;
+use oer_esp32s31_ieee80211_driver::mac::tx::TxSlot;
 use oer_espressif_executor::{Doorbell, DoorbellAcknowledger, InterruptExecutor};
 use oer_espressif_interrupt_table::signal::{FromHandler, FromTask, IrqSignal};
 use oer_memory::HandlerCell;
@@ -52,7 +52,7 @@ pub type WifiPart = WifiIrqPart<Lower>;
 pub fn on_wifi(part: &mut WifiPart) {
     if !match service_wifi_line(&LINE, part) {
         Ok(installed) => installed,
-        Err(oer_esp32s31_ieee80211_mac::irq::Fault::FatalAssertion { raw }) => {
+        Err(oer_esp32s31_ieee80211_driver::mac::irq::Fault::FatalAssertion { raw }) => {
             oer_esp32s31_compose::wifi_fault::reset(raw)
         }
     } {

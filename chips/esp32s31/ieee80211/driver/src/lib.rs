@@ -59,6 +59,7 @@ pub mod cooperative_hardware;
 pub mod datapath;
 pub mod irq;
 pub mod lower_mac;
+pub mod mac;
 pub mod monitor_injection;
 pub mod ordinary_tx;
 pub mod port;

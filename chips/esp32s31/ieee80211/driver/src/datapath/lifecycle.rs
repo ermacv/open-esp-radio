@@ -6,7 +6,7 @@
 //! leaves and the role-neutral runtime orchestrator. It deliberately performs
 //! no MMIO and does not claim scheduler or DMA ownership.
 
-use oer_esp32s31_ieee80211_mac::sta_ap_registers::{
+use crate::mac::sta_ap_registers::{
     StaApRegisterHardware, configure_sta_ap_receive_registers,
     disable_access_point_receive_registers, disable_station_receive_registers,
 };

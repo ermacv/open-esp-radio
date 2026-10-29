@@ -117,7 +117,7 @@ named `hil` takes its role from the list.
 - `protocols/ieee80211/runtime` has a dev-dependency on
   `chips/espressif/ieee80211-policy`.
 - `chips/espressif/ieee80211-policy` has a dev-dependency on
-  `chips/esp32s31/ieee80211/mac`.
+  `chips/esp32s31/ieee80211/driver`.
 - Host tests include image source files through `#[path]`:
   `tools/image/cli/src/main.rs` includes the W1 CRC implementation;
   `tools/hil/family-phy/tests/` includes cache and hold modules of

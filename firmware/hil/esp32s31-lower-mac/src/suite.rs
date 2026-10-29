@@ -38,7 +38,7 @@ use oer_esp32s31_ieee80211_driver::{
     },
     tx::{CappedTxPowerProfile, WifiTxResources},
 };
-use oer_esp32s31_ieee80211_mac::tx::{TxSlot, runtime::WifiTxRuntimePolicy};
+use oer_esp32s31_ieee80211_driver::mac::tx::{TxSlot, runtime::WifiTxRuntimePolicy};
 use oer_esp32s31_phy::{PhyConfig, PhyTxTargetPowerProfile};
 use oer_esp32s31_radio_client::{MembershipCell, wifi::Wifi};
 use oer_hil_protocol::base::RejectReason;

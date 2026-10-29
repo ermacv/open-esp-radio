@@ -21,11 +21,11 @@
 use core::{future::poll_fn, task::Poll};
 use oer_espressif_interrupt_table::signal::SignalExecutor;
 
-use atomic_waker::AtomicWaker;
-use oer_esp32s31_ieee80211_mac::rx::{
+use crate::mac::rx::{
     NormalizedRxFrame, RxError, RxIngressConfig, decode_rx_local_timestamp, first_segment_layout,
     pool::{NetworkRxFrame, RxTimes},
 };
+use atomic_waker::AtomicWaker;
 use oer_memory::{
     AffineSpscQueue, AffineSpscReceiver, AffineSpscSender, AffineSpscTryReceiveError,
     AffineSpscTrySendError,

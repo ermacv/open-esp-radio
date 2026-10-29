@@ -8,7 +8,7 @@
 //! backend implements [`StationTsfHardware`] but no caller writes the timer
 //! around the owner.
 
-use oer_esp32s31_ieee80211_mac::tsf_relation::{TsfRelation, TsfSetKind, TsfTimingError};
+use crate::mac::tsf_relation::{TsfRelation, TsfSetKind, TsfTimingError};
 use oer_ieee80211_port::TsfGeneration;
 use oer_ieee80211_port::tsf::TsfInstant;
 

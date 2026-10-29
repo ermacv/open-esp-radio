@@ -40,7 +40,7 @@ aliases and include optional and target-specific dependencies.
 | --- | --- | --- |
 | `oer-network` (`protocols/network`) | logical interfaces, link state, frame and admission errors, `TransportFlow` | queues, allocator, executor, hardware |
 | `oer-embassy-net` (`portable/embassy/net`) | the Xarxa `PacketBuf` handoff, destination/flow TX queues, stack wake registration, RX copying into packet pools; in `datapath`, the software/physical TX ownership traits and `TxQueues` | radio scheduling, DMA descriptors, a concrete physical allocator |
-| `oer-esp32s31-ieee80211-mac` | the TX cost model (`tx_cost`) and work receipts (`tx_work`) of its publications | packet storage |
+| `oer-esp32s31-ieee80211-driver::mac` | the TX cost model (`mac::tx_cost`) and work receipts (`mac::tx_work`) of its publications | packet storage |
 | `oer-ieee80211-upper-mac` | the airtime ledger (`airtime`) and affine scheduling reservations | hardware, packet storage |
 | the radio runner (P2) | VIF/peer generations, power-save eligibility, rate and retry state, BA sessions, DMA descriptors, physical credits, terminal TX receipts | sockets, a second stack |
 
@@ -108,7 +108,7 @@ radio runner (P2)
 - `with_observer` attaches a bounded synchronous observer of grants,
   settlements and cancellations; it must not log, await or re-enter.
 
-## TX cost model (`oer-esp32s31-ieee80211-mac`)
+## TX cost model (`oer-esp32s31-ieee80211-driver::mac`)
 
 - `PpduTiming` includes preamble, SERVICE and tail bits, whole-symbol rounding
   and the 2.4 GHz signal extension; HT uses the exact bits per symbol, not

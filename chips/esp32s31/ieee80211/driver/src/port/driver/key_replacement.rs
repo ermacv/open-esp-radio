@@ -1,6 +1,6 @@
 //! A diagnostic write rejection; the rollback still programs the real table.
+use crate::mac::crypto::CcmpKeyHardware;
 use oer_esp32s31_hal::types::{MacCcmpKeyIdentity, MacInterface, MacKeyInstallOutcome, MacSppMode};
-use oer_esp32s31_ieee80211_mac::crypto::CcmpKeyHardware;
 
 pub(super) struct RejectOnce<'a, H> {
     pub hardware: &'a mut H,

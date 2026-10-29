@@ -1,4 +1,4 @@
-use oer_esp32s31_ieee80211_mac::rx::{
+use crate::mac::rx::{
     RxObservedMask, RxRingError, RxRingHalted, RxRingLive, RxRingStopped, RxRingTopologySnapshot,
 };
 

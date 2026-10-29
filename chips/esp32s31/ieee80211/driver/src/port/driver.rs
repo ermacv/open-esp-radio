@@ -1080,9 +1080,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Driver<'id, Id, D, B> 
                     key_id,
                     activity: &held.storage.shared.key_live[17 + usize::from(slot.index())],
                 };
-                let Some(key_id) =
-                    oer_esp32s31_ieee80211_mac::crypto::ApGroupKeyId::new(key_id.get())
-                else {
+                let Some(key_id) = crate::mac::crypto::ApGroupKeyId::new(key_id.get()) else {
                     return Err(Fault::Capacity);
                 };
                 self.install(
@@ -1164,12 +1162,16 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Driver<'id, Id, D, B> 
                             owners: [key.identity.slot, permission.index()],
                             previous_key_id: key.identity.key_id.get(),
                             attempted_key_id: key_id.get(),
-                            restored: matches!(_error,
-                                oer_esp32s31_ieee80211_mac::crypto::StaGroupCcmpReplaceError::ReplacementRolledBack(_)),
+                            restored: matches!(
+                                _error,
+                                crate::mac::crypto::StaGroupCcmpReplaceError::ReplacementRolledBack(
+                                    _
+                                )
+                            ),
                         });
                     }
                     return Err(Fault::Core(core_mac::LowerMacFault::Key(
-                        oer_esp32s31_ieee80211_mac::crypto::CryptoKeyError::HardwareRejected,
+                        crate::mac::crypto::CryptoKeyError::HardwareRejected,
                     )));
                 }
                 let identity = RawKeyIdentity {

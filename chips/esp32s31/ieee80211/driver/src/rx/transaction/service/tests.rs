@@ -3,11 +3,11 @@ extern crate std;
 use core::cell::RefCell;
 use std::{boxed::Box, vec::Vec};
 
+use crate::mac::rx::pool::NetworkRxFrame;
 use oer_esp32s31_hal::ieee80211::dma::{
     descriptor::rx_armed_word, rx_dma::model::RxWalkerModel, rx_ring::RxDmaArenaState,
     space::HostDma,
 };
-use oer_esp32s31_ieee80211_mac::rx::pool::NetworkRxFrame;
 
 use super::*;
 use crate::rx::transaction::{CompletedUnit, IngressClass, IngressRoute, Preview};

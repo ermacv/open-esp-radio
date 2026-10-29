@@ -1,7 +1,7 @@
 //! Affine publication boundary; endpoint state remains with the adapter.
 
 use super::{CompletedUnit, Preview};
-use oer_esp32s31_ieee80211_mac::rx::pool::NetworkRxFrame;
+use crate::mac::rx::pool::NetworkRxFrame;
 
 /// A single ordered publisher borrowing the original staged DMA allocation.
 ///
@@ -26,7 +26,7 @@ pub trait Publisher<'pool, const CAPACITY: usize, const SLOTS: usize> {
     /// #     loop {}
     /// # }
     /// use oer_esp32s31_ieee80211_driver::rx::transaction::Publisher;
-    /// use oer_esp32s31_ieee80211_mac::rx::pool::NetworkRxFrame;
+    /// use oer_esp32s31_ieee80211_driver::mac::rx::pool::NetworkRxFrame;
     ///
     /// fn publish<'pool, P: Publisher<'pool, 64, 1>>(
     ///     publisher: &P,
@@ -47,7 +47,7 @@ pub trait Publisher<'pool, const CAPACITY: usize, const SLOTS: usize> {
     /// #     loop {}
     /// # }
     /// use oer_esp32s31_ieee80211_driver::rx::transaction::Publisher;
-    /// use oer_esp32s31_ieee80211_mac::rx::pool::NetworkRxFrame;
+    /// use oer_esp32s31_ieee80211_driver::mac::rx::pool::NetworkRxFrame;
     ///
     /// fn publish<'pool, P: Publisher<'pool, 64, 1>>(
     ///     publisher: &P,

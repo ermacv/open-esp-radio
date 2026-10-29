@@ -6,6 +6,10 @@
 //! All DMA allocations and the device remain in static storage through an
 //! abnormal exit. Neither a dropped future nor a forgotten port frees them.
 
+use crate::mac::{
+    rx::{NormalizedRxFrame, RxError},
+    tx::{LegacyTxQueue, TxSlot, TxSlotAccess, TxSlotFree},
+};
 use crate::{
     lower_mac::{self as core_mac, *},
     ordinary_tx::{OrdinaryTxIdleOwner, WifiTxEntropy, WifiTxPowerProfile},
@@ -19,10 +23,6 @@ use core::{
     marker::PhantomData,
     pin::Pin,
     task::{Context, Poll},
-};
-use oer_esp32s31_ieee80211_mac::{
-    rx::{NormalizedRxFrame, RxError},
-    tx::{LegacyTxQueue, TxSlot, TxSlotAccess, TxSlotFree},
 };
 use oer_ieee80211_port::association;
 use oer_ieee80211_port::*;
@@ -332,7 +332,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> Esp32s31Backend<Id, D, B> {
             || parts
                 .buffers
                 .iter()
-                .any(|slot| slot.state() != oer_esp32s31_ieee80211_mac::tx::TxDmaState::Free)
+                .any(|slot| slot.state() != crate::mac::tx::TxDmaState::Free)
             || parts.storage.shared.poisoned.get().is_some()
         {
             return Err(parts);

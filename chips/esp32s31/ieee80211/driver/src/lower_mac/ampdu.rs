@@ -36,8 +36,7 @@ use super::{FreeQueue, TxAdmission};
 use core::fmt;
 use oer_radio_port::{PoolPath, Root};
 
-use oer_esp32s31_hal::memory::dma_static::{PlacedBacking, PlacedTxLease};
-use oer_esp32s31_ieee80211_mac::tx::{
+use crate::mac::tx::{
     HeAmpduTxConfig, HtAmpduDensity, HtChannelWidth, HtGuardInterval, HtMcs, HtProtectionSpacing,
     HtRate, LegacyTxQueue, TxControlFrame, TxCookie,
     ampdu::{
@@ -46,6 +45,7 @@ use oer_esp32s31_ieee80211_mac::tx::{
         TX_AMPDU_METADATA_SIZE,
     },
 };
+use oer_esp32s31_hal::memory::dma_static::{PlacedBacking, PlacedTxLease};
 use oer_ieee80211_port::{AmpduCapabilities, BlockAckReport, PhyFormatSet, TxStatus};
 use oer_memory::{PinnedDmaTxRadioLease, StableDmaBacking as _};
 
@@ -738,7 +738,7 @@ where
     B: PlacedBacking,
     H: HtAmpduHardware,
 {
-    use oer_esp32s31_ieee80211_mac::irq::EVENT_TX_TIMEOUT;
+    use crate::mac::irq::EVENT_TX_TIMEOUT;
     let cookie = published.cookie;
     if published.settling {
         if now < published.deadline {
@@ -749,12 +749,12 @@ where
     }
     if let Some(event) = published.owner.acknowledge_completion(hardware)? {
         match event {
-            oer_esp32s31_ieee80211_mac::tx::CompletionObservation::Observed(completion) => {
+            crate::mac::tx::CompletionObservation::Observed(completion) => {
                 published.owner.detach_completed(hardware, cookie)?;
                 published.owner.release_completed(cookie)?;
                 return Ok(Some(AmpduOutcome::Completed(completion)));
             }
-            oer_esp32s31_ieee80211_mac::tx::CompletionObservation::NoEffect => {}
+            crate::mac::tx::CompletionObservation::NoEffect => {}
         }
     }
     let events = match wake {

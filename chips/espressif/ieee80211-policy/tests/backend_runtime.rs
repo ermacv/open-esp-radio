@@ -1,18 +1,19 @@
-use oer_esp32s31_ieee80211_mac::{
+use oer_esp32s31_ieee80211_driver::mac::{
     edca::*,
+    portable::legacy_from_phy_rate,
     tx::{runtime::*, *},
 };
 use oer_espressif_ieee80211_policy::{backend::EspressifAmpduRetryState, lmac};
 use oer_ieee80211_port::backend::*;
 use oer_ieee80211_port::backend_aggregate::*;
-use oer_ieee80211_wire::sequence::SequenceNumber;
+use oer_ieee80211_wire::{phy::LegacyRate, sequence::SequenceNumber};
 type AmpduRetryState<const C: usize> = EspressifAmpduRetryState<C>;
 const VENDOR_SHORT_RETRY_LIMIT: u8 = lmac::SHORT_RETRY_LIMIT;
 const VENDOR_AMPDU_MSDU_LIFETIME_MICROS: u32 = lmac::AMPDU_MSDU_LIFETIME_MICROS;
 
-use oer_esp32s31_ieee80211_mac::tx::test_support::model_completion;
-use oer_esp32s31_ieee80211_mac::tx::{
-    LegacyRate, TxCompletion, TxCookie,
+use oer_esp32s31_ieee80211_driver::mac::tx::test_support::model_completion;
+use oer_esp32s31_ieee80211_driver::mac::tx::{
+    TxCompletion, TxCookie,
     ampdu::{HtAmpduTxCompletion, HtBlockAckObservation},
 };
 use oer_ieee80211_port::VifRole;
@@ -111,8 +112,8 @@ fn negotiated_txop_is_bounded_and_medium_ownership_stays_unsupported() {
 
 #[test]
 fn ordinary_he_retries_walk_the_dot11ax_record() {
-    use oer_esp32s31_ieee80211_mac::rx::HeGuardIntervalAndLtf;
-    use oer_esp32s31_ieee80211_mac::tx::{HeMcs, HeRate};
+    use oer_esp32s31_ieee80211_driver::mac::rx::HeGuardIntervalAndLtf;
+    use oer_esp32s31_ieee80211_driver::mac::tx::{HeMcs, HeRate};
     let counters = |failures| RetryCounters {
         mpdu: failures,
         short: 0,
@@ -150,7 +151,7 @@ fn ordinary_he_retries_walk_the_dot11ax_record() {
             &oer_espressif_ieee80211_policy::retry_ladder::EspressifRetryLadder
         )
         .and_then(|rate| TxPhyRate::try_from(rate).ok()),
-        Some(TxPhyRate::Legacy(LegacyRate::Ofdm6M))
+        Some(TxPhyRate::Legacy(legacy_from_phy_rate(LegacyRate::Ofdm6M)))
     );
     // An 800-ns rate below MCS9 has no record and keeps its rate.
     let mcs8 = TxPhyRate::He(HeRate::new(HeMcs::Mcs8, HeGuardIntervalAndLtf::OneLtf800Ns));

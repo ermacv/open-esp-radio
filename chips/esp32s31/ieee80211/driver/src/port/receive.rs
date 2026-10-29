@@ -1,5 +1,5 @@
 //! The protocol port's RX boundary, distinct from the raw monitor view.
-use oer_esp32s31_ieee80211_mac::rx::{
+use crate::mac::rx::{
     NormalizedRxFrame, RxError, RxIngressConfig, RxSegment, view_ccmp_data,
     view_ccmp_data_fragment, view_normalized_rx_frame,
 };

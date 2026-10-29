@@ -1,7 +1,7 @@
 #![no_std]
 use oer_esp32s31_ieee80211_driver::ordinary_tx::{OrdinaryTxActive, OrdinaryTxPlan};
 use oer_esp32s31_ieee80211_driver::tx::{WifiTxEntropy, WifiTxPowerProfile, WifiTxWake};
-use oer_esp32s31_ieee80211_mac::tx::TxHardware;
+use oer_esp32s31_ieee80211_driver::mac::tx::TxHardware;
 use oer_time::Timer;
 
 pub fn service<P: WifiTxPowerProfile, E: WifiTxEntropy, T: Timer, H: TxHardware>(

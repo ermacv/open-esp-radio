@@ -13,16 +13,16 @@
 use core::mem::MaybeUninit;
 use oer_espressif_interrupt_table::signal::SignalExecutor;
 
+use crate::mac::{
+    irq::consumer::{IrqConsumer, IrqPublisher, IrqStorage, PowerIrqConsumer, PowerIrqStorage},
+    rx::pool::RxStagePool,
+};
 use oer_esp32s31_hal::{
     ieee80211::dma::{
         rx_storage::{PlacedRxDma, RxDmaStorage, RxDmaStorageError},
         space::{ChipDma, DmaSpace},
     },
     memory::dma_static::Placed,
-};
-use oer_esp32s31_ieee80211_mac::{
-    irq::consumer::{IrqConsumer, IrqPublisher, IrqStorage, PowerIrqConsumer, PowerIrqStorage},
-    rx::pool::RxStagePool,
 };
 
 use super::{

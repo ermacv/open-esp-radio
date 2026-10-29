@@ -55,9 +55,9 @@ use {
         MAC_COLD_HANDSHAKE_DEADLINE, MacDelayEntropy, MacSlowClockCalibration,
         MacSlowClockCalibrationSource,
     },
-    oer_esp32s31_ieee80211_mac::{
+    oer_esp32s31_ieee80211_driver::mac::{
         irq::{EVENT_TX_COMPLETE, EVENT_TX_TIMEOUT, IrqWork},
-        tx::{LegacyRate, TxPhyRate, TxSlot, runtime::WifiTxRuntimePolicy},
+        tx::{TxPhyRate, TxSlot, runtime::WifiTxRuntimePolicy},
     },
 };
 use {
@@ -494,7 +494,7 @@ fn begin_probe(
         descriptor_capacity: None,
         exchange: MacTxPlan {
             access_category: WmmAccessCategory::Voice,
-            initial_rate: TxPhyRate::Legacy(LegacyRate::from_phy_rate(rate)),
+            initial_rate: TxPhyRate::Legacy(oer_esp32s31_ieee80211_driver::mac::portable::legacy_from_phy_rate(rate)),
             publication_limit: management.attempts(),
             publication_timeout: TX_TIMEOUT,
         },

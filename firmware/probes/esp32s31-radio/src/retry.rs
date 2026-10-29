@@ -1,6 +1,6 @@
 //! Retry-rate admission at the comparison probe's descriptor boundary.
 
-use oer_esp32s31_ieee80211_mac::{
+use oer_esp32s31_ieee80211_driver::mac::{
     portable::UnsupportedTxRate,
     tx::{HtChannelWidth, TxPhyRate},
 };
@@ -77,7 +77,7 @@ pub(crate) fn select(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oer_esp32s31_ieee80211_mac::tx::LegacyRate;
+    use oer_esp32s31_hal::types::MacLegacyRate;
     use oer_espressif_ieee80211_policy::retry_ladder::EspressifRetryLadder;
     use oer_ieee80211_wire::phy::{
         FecCoding, HeGiLtf, HeMcs, HeRate, HtMcs, HtRate, PpduBandwidth, SpatialStreams,
@@ -94,7 +94,7 @@ mod tests {
     fn a_representable_vendor_stage_is_admitted_exactly() {
         assert_eq!(
             select(
-                u32::from(LegacyRate::Ofdm54M.code()),
+                u32::from(MacLegacyRate::Ofdm54M.code()),
                 RetryCounters {
                     mpdu: 4,
                     short: 2,
@@ -102,7 +102,7 @@ mod tests {
                 },
                 &EspressifRetryLadder,
             ),
-            Ok(TxPhyRate::Legacy(LegacyRate::Ofdm6M))
+            Ok(TxPhyRate::Legacy(MacLegacyRate::Ofdm6M))
         );
         assert_eq!(RetryProbeStatus::Selected as u32, 0);
     }
@@ -158,7 +158,7 @@ mod tests {
             assert_eq!(refusal, RetryRateRefusal::InvalidInitialRate { code });
             assert_eq!(refusal.status(), RetryProbeStatus::InvalidInitialRate);
         }
-        let initial = TxPhyRate::Legacy(LegacyRate::Ofdm54M);
+        let initial = TxPhyRate::Legacy(MacLegacyRate::Ofdm54M);
         let counters = RetryCounters {
             mpdu: 32,
             short: 0,

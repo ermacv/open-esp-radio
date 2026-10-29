@@ -19,7 +19,7 @@ use oer_esp32s31_ieee80211_driver::rx::{
     storage::walker_enable_settle,
     upper::W1_INGRESS,
 };
-use oer_esp32s31_ieee80211_mac::{
+use oer_esp32s31_ieee80211_driver::mac::{
     init::{
         MacRuntimeStartHardware, MacRuntimeStopHardware, activate_promiscuous_receive,
         deactivate_promiscuous_receive,

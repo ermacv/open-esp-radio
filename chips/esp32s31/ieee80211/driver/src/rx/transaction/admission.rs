@@ -1,7 +1,7 @@
 //! Value-only admission contract for a real completed DMA unit.
 
 use super::Discard;
-use oer_esp32s31_ieee80211_mac::rx::pool::RxStageTransactionError;
+use crate::mac::rx::pool::RxStageTransactionError;
 
 /// Explicit bulk/critical capacity policy, independent of vendor pool sizes.
 ///

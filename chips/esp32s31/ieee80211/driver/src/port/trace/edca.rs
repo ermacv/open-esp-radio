@@ -1,6 +1,6 @@
 //! Read-only records from the policy that selected the actual publication.
 use super::*;
-use oer_esp32s31_ieee80211_mac::tx::{LegacyTxQueue, runtime::WifiTxRuntimePolicy};
+use crate::mac::tx::{LegacyTxQueue, runtime::WifiTxRuntimePolicy};
 use oer_ieee80211_port::{EdcaAcParameters, VifRole};
 use oer_ieee80211_wire::{extensions::wmm::WmmAcParameters, qos::WmmAccessCategory};
 fn role(value: u32) -> VifRole {

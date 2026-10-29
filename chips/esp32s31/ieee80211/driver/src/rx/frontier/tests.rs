@@ -6,7 +6,7 @@ use oer_esp32s31_hal::ieee80211::dma::{
     space::HostDma,
 };
 
-use oer_esp32s31_ieee80211_mac::rx::RxRingHalted;
+use crate::mac::rx::RxRingHalted;
 
 use super::*;
 

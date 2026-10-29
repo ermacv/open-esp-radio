@@ -3,6 +3,22 @@
 The ESP32-S31 Wi-Fi driver: device composition, the lower-MAC port backend,
 DMA rings, keys and the P3/P2 interrupt path. System context: [architecture](../../../../docs/architecture.md).
 
+The driver's MAC building blocks cover initialization and receive policy,
+EDCA and channel state, DMA ownership, aggregate formatting, local/TSF time
+relations, transmission costs and work receipts. Hardware rate codes come
+from the HAL's register-model domains. `mac` groups these primitives beside
+the driver's RX/TX/IRQ orchestration; callers use `oer-esp32s31-hal::types`
+for HAL values, including `MacLegacyRate`. Portable rate conversions live
+in `mac::portable`.
+
+The explicit `test-support` feature enables synthetic completion evidence
+and DMA models. Portable peer airtime fairness belongs to
+[`oer-ieee80211-upper-mac::airtime`](../../../../protocols/ieee80211/upper-mac/README.md).
+The MAC exposes `mac::tx_cost` and `mac::tx_work`; it does not select peers
+or own the fairness ledger. Tests under `src/mac/airtime_tests` combine the
+upper-MAC scheduler with work receipts and network TX queues, using only
+development dependencies on the upper MAC and `oer-embassy-net`.
+
 ## Rules
 
 - **Driver core.** The driver owns all four EDCA queues. Its TX forms are a
@@ -88,7 +104,7 @@ One entry of the image's interrupt table binds `WifiIrqPart` once, at start:
 its sources are the MAC bank (`MODEM_WIFI_MAC`), the WDEVPWR bank
 (`MODEM_WIFI_PWR`) and the radio doorbell (`FROM_CPU_INTR3`), all routed to
 the entry's one P3 line. Its handler holds the part, with both banks in
-their interrupt epoch (`irq::epoch::InterruptEpoch` of the MAC crate), for
+their interrupt epoch (`mac::irq::epoch::InterruptEpoch`), for
 the image's life; no task writes a bank and the CPU route never changes.
 The handler calls `service_wifi_line` and serves one cause per entry, read
 from the peripherals: it lowers the doorbell and applies the requests it
@@ -104,7 +120,7 @@ before acknowledging STATUS; every epoch clear checks RAW with both banks
 masked before clearing either bank, acknowledging only that same nonfatal MAC
 RAW sample so a later fatal arrival remains pending. This includes activation,
 direct close, `MaskedBanks::clear_all` and a stray entry without an installed
-line. A fatal cause returns the MAC crate's `irq::Fault::FatalAssertion { raw }`
+line. A fatal cause returns the MAC module's `mac::irq::Fault::FatalAssertion { raw }`
 and keeps both banks quarantined. Closing or activating a quarantined epoch returns the
 same fault without clearing it. While Masked (or Closed), a new fatal cause
 remains in RAW; detection waits for a later handler entry, which that masked

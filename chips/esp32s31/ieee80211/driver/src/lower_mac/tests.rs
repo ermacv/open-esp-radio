@@ -3,14 +3,7 @@ use oer_esp32s31_hal::layouts::{DmaRef, WifiTxDmaDescriptor};
 use core::{cell::RefCell, pin::Pin};
 use std::{boxed::Box, vec::Vec};
 
-use oer_esp32s31_hal::types::{
-    MacCcmpKeyIdentity, MacHeTbLinkReservation, MacHeTbProgramError, MacHeTbTidLimit, MacHeTid,
-    MacHeTriggerTxQueueSnapshot, MacHeTxProgram, MacHtAmpduCompletionObservation, MacHtTxProgram,
-    MacKeyInstallOutcome, MacLegacyTxProgram, MacLegacyTxResponse, MacStaApReceivePlan,
-    MacTxCompletionObservation, MacTxDetachOutcome, MacTxDetachReason, MacTxProtection,
-    MacTxQueueDetached,
-};
-use oer_esp32s31_ieee80211_mac::{
+use crate::mac::{
     irq::{EVENT_TX_COMPLETE, EVENT_TX_TIMEOUT},
     rx::RxPhyInfo,
     tx::{
@@ -18,6 +11,13 @@ use oer_esp32s31_ieee80211_mac::{
         ampdu::{HtAmpduTxStorage, RetainedAmpduDmaStorage, RetainedDmaAmpduTx},
         runtime::WifiTxRuntimePolicy,
     },
+};
+use oer_esp32s31_hal::types::{
+    MacCcmpKeyIdentity, MacHeTbLinkReservation, MacHeTbProgramError, MacHeTbTidLimit, MacHeTid,
+    MacHeTriggerTxQueueSnapshot, MacHeTxProgram, MacHtAmpduCompletionObservation, MacHtTxProgram,
+    MacKeyInstallOutcome, MacLegacyTxProgram, MacLegacyTxResponse, MacStaApReceivePlan,
+    MacTxCompletionObservation, MacTxDetachOutcome, MacTxDetachReason, MacTxProtection,
+    MacTxQueueDetached,
 };
 use oer_ieee80211_port::MacRxMetadata;
 use oer_ieee80211_port::tsf::TsfInstant;
@@ -373,17 +373,11 @@ impl ApRxPolicyHardware for Hardware {
 }
 
 impl ApTsfHardware for Hardware {
-    fn reset_and_start_access_point_tsf(
-        &mut self,
-        _: oer_esp32s31_ieee80211_mac::ap_tsf::AccessPointTsfWrite,
-    ) {
+    fn reset_and_start_access_point_tsf(&mut self, _: crate::mac::ap_tsf::AccessPointTsfWrite) {
         self.access_point_tsf_resets += 1;
     }
 
-    fn stop_access_point_tsf(
-        &mut self,
-        _: oer_esp32s31_ieee80211_mac::ap_tsf::AccessPointTsfWrite,
-    ) {
+    fn stop_access_point_tsf(&mut self, _: crate::mac::ap_tsf::AccessPointTsfWrite) {
         unreachable!("the port never stops the access-point TSF")
     }
 }
@@ -976,7 +970,7 @@ fn classic_transmitter_lends_only_its_current_phase_and_returns_idle_after_detac
     let OrdinaryTxAccess::Active(active) = owner.access() else {
         panic!("a published transaction lends only its active phase");
     };
-    let color = oer_esp32s31_ieee80211_mac::irq::event_mask(
+    let color = crate::mac::irq::event_mask(
         oer_esp32s31_hal::types::MacInterruptEvents::BSS_COLOR_COLLISION,
     );
     assert_eq!(
@@ -1043,7 +1037,7 @@ fn check_management_transmissions(
 ) {
     use crate::ordinary_tx::{OrdinaryTxAccess, OrdinaryTxInterface, OrdinaryTxRetryReport};
     use ManagementObservation::*;
-    use oer_esp32s31_ieee80211_mac::tx::LegacyRate as ChipLegacyRate;
+    use oer_esp32s31_hal::types::MacLegacyRate as ChipLegacyRate;
     use oer_ieee80211_port::backend::RetryCounters;
     use oer_ieee80211_wire::frame::FrameControl;
 
@@ -1086,7 +1080,7 @@ fn check_management_transmissions(
             .unwrap(),
         WifiTxProgress::Pending
     );
-    let rate = ChipLegacyRate::from_phy_rate(management.rate());
+    let rate = crate::mac::portable::legacy_from_phy_rate(management.rate());
     let mut expected_retries = OrdinaryTxRetryReport::default();
     for (index, &observation) in completions.iter().enumerate() {
         let snapshot = owner.active_snapshot().unwrap();
@@ -1110,7 +1104,7 @@ fn check_management_transmissions(
             4 + expected_retries.total().min(6)
         );
         let program = hardware.legacy.last().unwrap().1;
-        assert_eq!(program.rate(), rate.pac_rate());
+        assert_eq!(program.rate(), rate);
         assert_eq!(
             program.response(),
             if receiver[0] & 1 == 0 {
@@ -1542,7 +1536,7 @@ fn a_no_effect_rts_event_retains_its_published_owner_until_the_real_result() {
         assert_eq!(queued(&core, BE).slot().buffer_address(), address);
         assert_eq!(
             queued(&core, BE).slot().state(),
-            oer_esp32s31_ieee80211_mac::tx::TxDmaState::HardwareOwned
+            crate::mac::tx::TxDmaState::HardwareOwned
         );
         assert_eq!(core.next_deadline(), deadline);
         hardware.completion[BE] = Some(MacTxCompletionObservation::new_model(0, 0));
@@ -1603,7 +1597,7 @@ fn review_no_effect_cannot_postpone_an_expired_publication_watchdog() {
 
 #[test]
 fn completion_faults_return_the_existing_backend_fault_without_a_tx_terminal() {
-    use oer_esp32s31_ieee80211_mac::tx::CompletionFault;
+    use crate::mac::tx::CompletionFault;
     for (status, detail, fault) in [
         (1, 0xc0, CompletionFault::SecurityKeyError),
         (4, 0xc0, CompletionFault::SecurityKeyError),
@@ -1692,9 +1686,9 @@ fn an_invalid_retry_header_returns_its_slot_without_publishing_or_rewriting() {
 #[test]
 fn bss_color_only_interrupt_never_detaches_a_published_queue() {
     installed(|pools| {
+        use crate::mac::irq::event_mask;
         use WmmAccessCategory::{Background, BestEffort, Video, Voice};
         use oer_esp32s31_hal::types::MacInterruptEvents;
-        use oer_esp32s31_ieee80211_mac::irq::event_mask;
 
         let mut hardware = Hardware::default();
         let mut core = enabled(&mut hardware, pools);
@@ -1971,7 +1965,7 @@ fn the_callers_protection_and_control_rate_are_published_on_every_phy() {
                     assert_eq!(control.protection, expected);
                     assert_eq!(
                         control.rate,
-                        oer_esp32s31_ieee80211_mac::tx::LegacyRate::from_phy_rate(rate).pac_rate()
+                        crate::mac::portable::legacy_from_phy_rate(rate)
                     );
                     complete(&mut core, &mut hardware, 0);
                 }
@@ -2377,7 +2371,7 @@ fn reserved_slot_carries_no_numbering_authority_and_retains_the_packet_number() 
 
         assert!(matches!(
             slot.as_mut().access(),
-            oer_esp32s31_ieee80211_mac::tx::TxSlotAccess::Reserved
+            crate::mac::tx::TxSlotAccess::Reserved
         ));
         slot.as_mut().cancel_reservation(cookie).unwrap();
         assert_eq!(queued_free_slot(slot.as_mut()).into_buffer(), &[0xee; 512]);
@@ -3340,7 +3334,7 @@ fn aggregate_collision_comes_from_its_queue_and_never_from_bss_color() {
         let buffer = aggregate_of(source, 3, 26);
         let published =
             publish_ampdu(&mut core, &mut hardware, buffer, ampdu_values(ht_rate(7))).unwrap();
-        let color = oer_esp32s31_ieee80211_mac::irq::event_mask(
+        let color = crate::mac::irq::event_mask(
             oer_esp32s31_hal::types::MacInterruptEvents::BSS_COLOR_COLLISION,
         );
         let published =
@@ -3624,7 +3618,7 @@ fn key_removal_waits_for_both_parallel_attempts_and_follows_the_last_terminal() 
             association_id: 1,
         },
         TransmitKeyScope::AccessPointGroup {
-            key_id: oer_esp32s31_ieee80211_mac::crypto::ApGroupKeyId::new(1).unwrap(),
+            key_id: crate::mac::crypto::ApGroupKeyId::new(1).unwrap(),
         },
     ] {
         for second_status in [0, 5] {
@@ -3915,7 +3909,7 @@ fn key_right_is_retained_by_an_aggregate_through_completion_or_quarantine() {
                 .unwrap();
                 assert_eq!(
                     fault.error,
-                    oer_esp32s31_ieee80211_mac::tx::ampdu::HtAmpduTxError::ResetRequired
+                    crate::mac::tx::ampdu::HtAmpduTxError::ResetRequired
                 );
                 assert_eq!(core.keys.uses[index].get(), 1);
                 assert!(events.removed.is_empty());
@@ -4411,8 +4405,8 @@ fn spp_changes_only_after_the_complete_bank_and_end_has_no_hardware_effect() {
 
 #[test]
 fn an_irq_legacy_transmitter_refuses_ht_before_reserving_or_publishing_dma() {
+    use crate::mac::tx::{HtChannelWidth, HtGuardInterval, HtMcs, HtRate};
     use crate::ordinary_tx::{OrdinaryTxAccess, OrdinaryTxError, OrdinaryTxInterface};
-    use oer_esp32s31_ieee80211_mac::tx::{HtChannelWidth, HtGuardInterval, HtMcs, HtRate};
     let mut owner = OrdinaryTxOwner::new_legacy(WifiTxResources {
         slot: slot(),
         policy: WifiTxRuntimePolicy::vendor_defaults(),
@@ -4524,7 +4518,7 @@ fn the_core_draws_from_the_publishing_vif_and_keeps_each_complete_record() {
 
 #[test]
 fn group_replacement_keeps_exact_material_and_poisons_even_after_a_successful_rollback() {
-    use oer_esp32s31_ieee80211_mac::crypto::StaGroupCcmpReplaceError;
+    use crate::mac::crypto::StaGroupCcmpReplaceError;
     use oer_ieee80211_wire::ccmp::GroupKeyId;
     for rejected in 0..=2 {
         installed(|resources| {

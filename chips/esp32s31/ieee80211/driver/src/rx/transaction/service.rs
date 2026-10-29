@@ -1,10 +1,10 @@
 use super::*;
 use crate::datapath::DatapathRxProgress;
-use oer_esp32s31_hal::ieee80211::dma::rx_storage::RxDmaStorage;
-use oer_esp32s31_ieee80211_mac::{
+use crate::mac::{
     rx::pool::{RxDmaDeferredStageUnitOutcome, RxStagePool, RxStageTransactionError},
     rx::{PUBLIC_HEADER_SIZE, RxBufferFullCounter, RxDma, RxRingError, RxRingLive},
 };
+use oer_esp32s31_hal::ieee80211::dma::rx_storage::RxDmaStorage;
 use oer_time::settle::Settle;
 
 /// Maximum units in the existing masked RX poll epoch.

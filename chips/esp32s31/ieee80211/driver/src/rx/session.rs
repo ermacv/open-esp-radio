@@ -14,15 +14,15 @@ use super::{
     transaction::Publisher,
 };
 use crate::irq::{RadioDoorbell, WifiIrqActivation, WifiIrqLine, WifiIrqRequest, WifiIrqRequests};
+use crate::mac::{
+    init::{MacRuntimeStopHardware, activate_promiscuous_receive},
+    irq::consumer::{IrqBatch, IrqConsumer, PowerIrqConsumer},
+    rx::pool::RxStagePool,
+};
 use core::task::{Context, Poll};
 use oer_esp32s31_hal::{
     ieee80211::dma::{rx_storage::RxDmaStorage, space::ChipDma},
     owner::RadioAccess,
-};
-use oer_esp32s31_ieee80211_mac::{
-    init::{MacRuntimeStopHardware, activate_promiscuous_receive},
-    irq::consumer::{IrqBatch, IrqConsumer, PowerIrqConsumer},
-    rx::pool::RxStagePool,
 };
 use oer_espressif_interrupt_table::signal::SignalExecutor;
 use oer_memory::HandlerCell;
@@ -363,9 +363,7 @@ where
         doorbell: &impl RadioDoorbell,
         timer: &impl Timer,
     ) -> Poll<Result<(), WifiRxCause>> {
-        use oer_esp32s31_ieee80211_mac::init::{
-            MacRuntimeStopHardware, deactivate_promiscuous_receive,
-        };
+        use crate::mac::init::{MacRuntimeStopHardware, deactivate_promiscuous_receive};
         if !self.port_masked {
             let start = *self.port_mask_started.get_or_insert_with(|| {
                 self.requests.ring(WifiIrqRequest::MaskAll, doorbell);

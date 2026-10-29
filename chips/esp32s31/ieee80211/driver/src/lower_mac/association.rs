@@ -55,7 +55,7 @@ pub enum TransmitKeyInstallation<'a, 'id, P: PoolPath = Root<oer_radio_port::Loc
     AccessPointGroup {
         association: &'a AccessPointAssociation<'id, P>,
         slot: AccessPointGroupSlot<'id, P>,
-        key_id: oer_esp32s31_ieee80211_mac::crypto::ApGroupKeyId,
+        key_id: crate::mac::crypto::ApGroupKeyId,
     },
 }
 

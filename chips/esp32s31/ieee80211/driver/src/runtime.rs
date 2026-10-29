@@ -7,7 +7,7 @@ use oer_esp32s31_hal::{
     owner::RadioAccess,
 };
 
-use oer_esp32s31_ieee80211_mac::sta_ap_registers::disable_all_role_receive_registers;
+use crate::mac::sta_ap_registers::disable_all_role_receive_registers;
 use oer_esp32s31_radio_client::{
     DomainHealth, Leaving, Left, Member, MembershipCell, Tracked,
     wifi::{Wifi, WifiLeave, WifiLeft, WifiReturned},

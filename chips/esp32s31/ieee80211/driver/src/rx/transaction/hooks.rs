@@ -1,7 +1,7 @@
 //! Statically dispatched observation hooks without hardware or lease access.
 
 use super::{Discard, ServiceObservation};
-use oer_esp32s31_ieee80211_mac::rx::RxRingError;
+use crate::mac::rx::RxRingError;
 
 #[derive(Clone, Copy)]
 pub enum Phase {

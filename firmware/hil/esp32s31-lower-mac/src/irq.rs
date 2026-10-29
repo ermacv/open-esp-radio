@@ -6,7 +6,7 @@ use oer_esp32s31_ieee80211_driver::{
     irq::{DoorbellAcknowledge, RadioDoorbell, WifiIrqLine, WifiIrqPart, service_wifi_line},
     rx::arena::{WifiRxArena, WifiRxStatic},
 };
-use oer_esp32s31_ieee80211_mac::tx::TxSlot;
+use oer_esp32s31_ieee80211_driver::mac::tx::TxSlot;
 use oer_espressif_executor::{Doorbell, DoorbellAcknowledger, InterruptExecutor};
 use oer_espressif_interrupt_table::{
     Bound,
@@ -54,7 +54,7 @@ pub static SLOT7: static_cell::StaticCell<TxSlot<TX>> = static_cell::StaticCell:
 pub static SLOT8: static_cell::StaticCell<TxSlot<TX>> = static_cell::StaticCell::new();
 #[cfg(oer_debug_control)]
 pub fn hold_completion(hold: bool) {
-    use oer_esp32s31_ieee80211_mac::irq::{EVENT_TX_COMPLETE, EVENT_TX_TIMEOUT};
+    use oer_esp32s31_ieee80211_driver::mac::irq::{EVENT_TX_COMPLETE, EVENT_TX_TIMEOUT};
     MAC_SIGNAL.debug_hold(EVENT_TX_COMPLETE | EVENT_TX_TIMEOUT, hold);
 }
 
@@ -74,7 +74,7 @@ pub type WifiBound = Bound<crate::WifiToken>;
 pub fn on_wifi(part: &mut WifiIrqPart<Lower>) {
     if !match service_wifi_line(&LINE, part) {
         Ok(installed) => installed,
-        Err(oer_esp32s31_ieee80211_mac::irq::Fault::FatalAssertion { raw }) => {
+        Err(oer_esp32s31_ieee80211_driver::mac::irq::Fault::FatalAssertion { raw }) => {
             oer_esp32s31_compose::wifi_fault::reset(raw)
         }
     } {

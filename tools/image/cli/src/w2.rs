@@ -320,7 +320,7 @@ pub fn check(
     let selected_rate = management_rate(Band::Ghz2_4, Some(&basic)).map(|r| r.kbps());
     let rate = number(&unicast, "rate_kbps", 54000)? as u32;
     let unicast_ok = success && responses > 0 && attempts > 0 && selected_rate == Some(rate);
-    // SOURCE: chips/esp32s31/ieee80211/mac/src/tx/completion.rs::decode;
+    // SOURCE: chips/esp32s31/ieee80211/driver/src/mac/tx/completion.rs::decode;
     // ordinary status zero is the only successful completion dispatch.
     let raw = number(&unicast, "raw", 255)?;
     if success && raw != 0 {
