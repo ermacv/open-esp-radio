@@ -6,7 +6,7 @@ use oer_hil_scenario::Result;
 use oer_ieee80211_conformance_control::{CaseTrace, Prepared};
 use oer_ieee80211_port::conformance::{BarrierCase, Execution, catalog::Case};
 
-pub const INPUT: &str = "OER_W4_KEY_CONFORMANCE_RUN";
+pub const INPUT: &str = "OER_WIFI_STATION_KEY_CONFORMANCE_RUN";
 
 fn valid_id(id: &str) -> bool {
     !id.is_empty()
@@ -23,20 +23,22 @@ fn same_device(
     record.cell_id == cell && record.device_id == device
 }
 pub fn load(lab: &oer_hil_session::config::LabConfig) -> Result<(String, KeyEvidence)> {
-    let id=std::env::var(INPUT).map_err(|_| "W4 requires OER_W4_KEY_CONFORMANCE_RUN naming its independent s31-a key conformance run")?;
+    let id=std::env::var(INPUT).map_err(|_| "Wi-Fi station requires OER_WIFI_STATION_KEY_CONFORMANCE_RUN naming its independent s31-a key conformance run")?;
     if !valid_id(&id) {
-        return Err("invalid W4 conformance run identity".into());
+        return Err("invalid Wi-Fi station conformance run identity".into());
     }
     let run = oer_hil_runs::store::RunStore::shared()?.open(&id)?;
     run.validate()?;
     if run.manifest().state != RunState::Completed
         || !same_device(&run.manifest().cell, lab.cell_id(), &lab.dut.id)
     {
-        return Err("W4 conformance run is unfinished or belongs to another board".into());
+        return Err(
+            "Wi-Fi station conformance run is unfinished or belongs to another board".into(),
+        );
     }
     let scenario = run.scenario_result("lower-mac-conformance")?;
     if scenario.image != ImageClass::DiagnosticLowerMac || scenario.repetitions.len() != 1 {
-        return Err("W4 requires one existing lower-MAC conformance repetition".into());
+        return Err("Wi-Fi station requires one existing lower-MAC conformance repetition".into());
     }
     let messages = run.protocol_messages(
         scenario

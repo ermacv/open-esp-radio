@@ -69,7 +69,7 @@ quarantined radio ends the service through the existing fail-stop path; the
 controller cannot obtain a reusable radio owner. The backend grants one group
 slot, retaining its fail-stop GTK rollback policy.
 
-The W4 peer generates 100-echo and ten-echo windows; the device replies through
+The Wi-Fi station peer generates 100-echo and ten-echo windows; the device replies through
 its ordinary IP stack. The host checks ping counts against independent
 request/reply captures, including identities and pacing, and ends the run with
 `StopStation`. The image has no target ping generator.

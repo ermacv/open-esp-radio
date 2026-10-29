@@ -17,7 +17,7 @@ relative to `tools/`.
 | `hil/stats` (`oer-hil-stats`) | Bundle queries, measurements, comparisons, retention, performance and JUnit/HTML views |
 | `hil/family-system` (`oer-hil-family-system`) | System workloads: boot smoke, watchdog and panic reset |
 | `hil/family-lower-mac` (`oer-hil-family-lower-mac`) | Lower-MAC conformance and ownership-close checks |
-| `hil/family-wifi` (`oer-hil-family-wifi`) | W4 station qualification and the initial-GTK investigation |
+| `hil/family-wifi` (`oer-hil-family-wifi`) | WPA2-Personal station qualification |
 | `hil/family-phy`, `hil/family-phy-esp32s31` | PHY comparison port, vendor reference driver and executable S31 PHY family |
 | `lab/cli` (`oer-tool-lab-cli`) | `cargo stand`: stand leases, queue, boards, owners and fixture installation |
 | `lab/model` (`oer-lab-model`) | Stand file, board-name resolution and state paths |

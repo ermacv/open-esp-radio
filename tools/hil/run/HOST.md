@@ -108,7 +108,7 @@ cargo hil plan --proof lower-mac-conformance
 `plan` prints procedure identity, image, repetitions, requirements and named
 checks. Repeated `--proof` arguments require every named check. Lower-MAC and
 Wi-Fi families supply checks including `lower-mac-conformance`,
-`lower-mac-ownership-close-gate`, `w4` and `initial-gtk-diagnostic`. The plan
+`lower-mac-ownership-close-gate` and `wifi-station`. The plan
 neither runs the workload nor infers a passing observation from tags.
 Scenario identity and discovery are described by the
 [catalog](../scenarios/README.md).

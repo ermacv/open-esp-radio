@@ -1,4 +1,4 @@
-//! Cold full/save/reset/partial exercise through the production R1 owner.
+//! Cold full/save/reset/partial exercise through the production diagnostic PHY owner.
 use crate::{
     Result,
     cache::{self, Link, StartRequest},
@@ -31,9 +31,11 @@ pub(crate) fn run(boots: u16, output: &Path, context: &Context<'_>) -> Result<()
             context.with_capture(&directory, |capture| {
                 let keys = capture.request_image_keys(Duration::from_secs(3))?;
                 if !keys.has::<HostCalibrationCache>() {
-                    return Err("R1 image lacks host cache capability".into());
+                    return Err("diagnostic PHY image lacks host cache capability".into());
                 }
-                let boot = capture.latest_boot_id().ok_or("R1 boot has no identity")?;
+                let boot = capture
+                    .latest_boot_id()
+                    .ok_or("diagnostic PHY boot has no identity")?;
                 if previous_boot == Some(boot) {
                     return Err("cache exercise did not reset into a new boot".into());
                 }
@@ -67,7 +69,7 @@ pub(crate) fn run(boots: u16, output: &Path, context: &Context<'_>) -> Result<()
                     ..
                 } = started.status.state
                 else {
-                    return Err("R1 did not become ready".into());
+                    return Err("diagnostic PHY did not become ready".into());
                 };
                 let mut epoch = ready.epoch;
                 let measured: Result<()> = (|| {
@@ -154,7 +156,9 @@ pub(crate) fn run(boots: u16, output: &Path, context: &Context<'_>) -> Result<()
         };
         context.with_capture(&output.join(name), |capture| {
             capture.request_image_keys(Duration::from_secs(3))?;
-            let boot = capture.latest_boot_id().ok_or("R1 boot has no identity")?;
+            let boot = capture
+                .latest_boot_id()
+                .ok_or("diagnostic PHY boot has no identity")?;
             if previous_boot == Some(boot) {
                 return Err("negative case reused the previous boot".into());
             }
@@ -287,7 +291,7 @@ fn producing_provenance(output: &Path, application_sha256: &str) -> Result<Prove
         .firmware
         .iter()
         .find(|firmware| firmware.image == ImageClass::DiagnosticPhy)
-        .ok_or("run has no producing R1 firmware record")?;
+        .ok_or("run has no producing diagnostic PHY firmware record")?;
     if firmware.repository.dirty || firmware.application_sha256 != application_sha256 {
         return Err(
             "cache producing firmware is dirty or does not match the flashed application".into(),

@@ -19,8 +19,8 @@ pub mod mac;
 pub mod router;
 pub mod ssh;
 pub mod station;
+pub mod station_wpa2;
 pub mod udhcpc;
-pub mod w4;
 
 pub type Error = Box<dyn std::error::Error + Send + Sync>;
 pub type Result<T> = std::result::Result<T, Error>;

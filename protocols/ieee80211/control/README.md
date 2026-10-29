@@ -33,7 +33,7 @@ without inventing a Control disconnect reason.
 
 Traffic originates at the host/peer. The device uses normal DHCP and ICMP echo
 reply services; no probe command, target ping generator or echo window is mounted.
-The W4 family checks peer ping counts against independent request/reply captures,
+The Wi-Fi station family checks peer ping counts against independent request/reply captures,
 including packet identities and one-second pacing, and keeps the GTK/ARP, air,
 reconnect, departure and hardware/model key evidence gates.
 

@@ -224,9 +224,9 @@ mod tests {
     #[test]
     fn removed_application_commands_and_options_are_rejected() {
         for line in [
-            "fw b0 --board s31-a --peer-board c5-a --base-sizes base",
-            "fw w3 ax211",
-            "fw w3 check --console console --observations router",
+            "fw bluetooth-controller --board s31-a --peer-board c5-a --base-sizes base",
+            "fw wifi-station ax211",
+            "fw wifi-station check --console console --observations router",
             "fw router",
             "fw build boot-smoke --analysis",
             "fw run radio-root --board s31-a --load-1ms",

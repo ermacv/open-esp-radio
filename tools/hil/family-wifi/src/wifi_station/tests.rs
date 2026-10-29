@@ -23,7 +23,7 @@ fn failed_work_stops_the_station_before_returning_and_cleanup_failure_is_visible
     });
     assert_eq!(
         result.expect_err("cleanup failed").to_string(),
-        "DHCP missing; W4 StopStation cleanup failed"
+        "DHCP missing; Wi-Fi station StopStation cleanup failed"
     );
     let result: Result<()> =
         stop_on_error(Err("no reconnection".into()), || Ok(Some(service_end())));
@@ -286,7 +286,7 @@ fn capture_loss_and_missing_final_deauth_cannot_become_complete_air_evidence() {
 #[test]
 fn credentials_and_key_material_have_no_place_in_the_run_observation_or_errors() {
     let e = crate::evidence::test_evidence();
-    let password = "w4-secret-passphrase-never-log";
+    let password = "wifi-station-secret-passphrase-never-log";
     let command = StartStation(StationStart {
         credentials: NetworkCredentials::try_new(b"private-ssid", password.as_bytes())
             .expect("credentials"),

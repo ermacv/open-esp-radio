@@ -57,10 +57,10 @@ pub fn run(output: &Path, context: &Context<'_>, selected: Option<Case>) -> Resu
             selected.is_none_or(|wanted| wanted == *case) && case.execution() == Execution::Hardware
                 && case.extension() == Some(Extension::Ampdu) && !prepared.ampdu
         }).map(|(index, case)| {
-            let reason = format!("{case:?}: не поддерживается бэкендом: нет AmpduPhase; до W6");
-            context.results.observe(format!("gate-e-skipped-{index:02}"),
-                &serde_json::json!({"status":"skipped","case":index,"reason":"backend has no AmpduPhase","until":"W6"}));
-            eprintln!("гейт e: пропущено: {reason}");
+            let reason = format!("{case:?}: не поддерживается бэкендом: нет AmpduPhase; требуется поддержка агрегации");
+            context.results.observe(format!("hardware-model-conformance-skipped-{index:02}"),
+                &serde_json::json!({"status":"skipped","case":index,"reason":"backend has no AmpduPhase","until":"backend aggregate support"}));
+            eprintln!("сравнение аппаратной и модельной трасс: пропущено: {reason}");
             reason
         }).collect();
         for (index,case) in Case::all().enumerate() {
@@ -76,14 +76,14 @@ pub fn run(output: &Path, context: &Context<'_>, selected: Option<Case>) -> Resu
             let model = model(case, &prepared, applied.channel)?;
             context.results.observe(format!("case-{index:02}-model"), &model);
             if !traces_match(&hardware.trace, &model) {
-                context.results.observe(if selected.is_some() {"diagnostic-result"} else {"gate-e"}, &serde_json::json!({"pass":false,"case":index,"reason":"trace mismatch"}));
+                context.results.observe(if selected.is_some() {"diagnostic-result"} else {"hardware-model-conformance"}, &serde_json::json!({"pass":false,"case":index,"reason":"trace mismatch"}));
                 return Err(format!("lower-MAC trace differs from ModelBackend in {case:?}; stop for owner/architect decision").into());
             }
             passed += 1;
         }
-        context.results.observe(if selected.is_some() {"diagnostic-result"} else {"gate-e"}, &serde_json::json!({"pass":true,"passed":passed,"model_only":model_only,
+        context.results.observe(if selected.is_some() {"diagnostic-result"} else {"hardware-model-conformance"}, &serde_json::json!({"pass":true,"passed":passed,"model_only":model_only,
             "unsupported":unsupported}));
-        eprintln!("lower-MAC gate e: {passed} hardware traces equal ModelBackend; {model_only} model-only");
+        eprintln!("lower-MAC hardware/model conformance: {passed} hardware traces equal ModelBackend; {model_only} model-only");
         Ok(())
     })
 }

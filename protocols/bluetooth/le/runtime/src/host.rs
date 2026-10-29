@@ -36,7 +36,7 @@ pub trait Transport {
 }
 
 /// Sequential access to the composition's enabled port owner. A phase loan
-/// ends before the independent physical latch, as it does in B0.
+/// ends before the controller service takes an independent physical clock latch.
 pub trait ControllerPort<'p, P: PoolPath> {
     type Caps: LeCapabilities;
     type Fault;
@@ -66,8 +66,8 @@ pub enum Error<E, F> {
     Terminal(oer_bluetooth_le_controller::dtm::Fault),
 }
 
-/// Serve commands in B0's order: read, optional latch/entropy, accept/consume,
-/// submit, physical latch, terminal, send, then release the command credit.
+/// Serve commands in order: read, optional latch/entropy, accept/consume, submit,
+/// physical latch, terminal, send, then release the command credit.
 /// Installation, disable/uninstall and failure policy remain in the image.
 pub async fn serve<'p, P, R, T>(
     port: &mut R,

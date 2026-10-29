@@ -1,4 +1,4 @@
-//! W4 observations collected only by an instrumented image. None of these records carries
+//! Wi-Fi station observations collected only by an instrumented image. None of these records carries
 //! SSIDs, passphrases, PMKs or traffic keys. KeyID is a public CCMP header field.
 use postcard_schema::Schema;
 use serde::{Deserialize, Serialize};

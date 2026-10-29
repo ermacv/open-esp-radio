@@ -259,7 +259,7 @@ fn a_table_reachable_unimp_keeps_both_observers_open_at_unknown() {
     .unwrap();
 }
 
-/// The w0 state dispatch excludes byte values zero and one, then reads a
+/// The displaced state dispatch excludes byte values zero and one, then reads a
 /// table whose label is eight bytes beyond the nominal indexed load start.
 fn displaced_root() -> Symbol {
     Symbol {
@@ -330,7 +330,7 @@ fn recognized(elf: &[u8]) -> (Vec<FunctionRecord>, Vec<JumpDispatch>) {
 }
 
 #[test]
-fn the_w0_displaced_shape_proves_a_table_and_closes_the_stack_graph() {
+fn the_displaced_state_dispatch_proves_a_table_and_closes_the_stack_graph() {
     let elf = built(
         TEXT,
         &[displaced_root()],

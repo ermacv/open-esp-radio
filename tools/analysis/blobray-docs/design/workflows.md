@@ -34,10 +34,10 @@ a typed request or result, never a path the operation reopens.
 
 | User question or action | Operation route | Governing contract | Acceptance scenarios |
 | --- | --- | --- | --- |
-| What is in these inputs, including missing/unsupported parts? | executable → artifacts inventory | [Artifact inspection](contracts.md#artifact-inspection), [identity](contracts.md#identity) | A1, A3, A4 |
-| What does this library's code do? | executables → library analysis with ISA ports → outcomes | [Analysis ports](contracts.md#analysis-and-verification-ports) | A7, I1, R1, R9 |
-| Can this archive entry be executed under this environment? | executables → link request → host linker → linked image → execution session | [Image linking](contracts.md#image-linking) | A2, A5, A7, J1 |
-| Does the compiled Rust implementation satisfy the declared comparison? | identified pair → linked images → sessions → verifier → records | [Comparison](contracts.md#analysis-and-verification-ports) | V1, V2, V3, A5 |
+| What is in these inputs, including missing/unsupported parts? | executable → artifacts inventory | [Artifact inspection](contracts.md#artifact-inspection), [identity](contracts.md#identity) | archive occurrence identity, thin archive coverage, malformed member coverage |
+| What does this library's code do? | executables → library analysis with ISA ports → outcomes | [Analysis ports](contracts.md#analysis-and-verification-ports) | unknown source mappings, API and CLI parity, work exhaustion, bounded graph traversal |
+| Can this archive entry be executed under this environment? | executables → link request → host linker → linked image → execution session | [Image linking](contracts.md#image-linking) | linker symbol resolution, companion linking, unknown source mappings, linker deadline |
+| Does the compiled Rust implementation satisfy the declared comparison? | identified pair → linked images → sessions → verifier → records | [Comparison](contracts.md#analysis-and-verification-ports) | comparison outcomes, reference claim limits, session state isolation, companion linking |
 
 A workflow requires all its relevant authority, resource and coverage contracts,
 not just its successful path. Resource containment does not make a wrong symbol
@@ -113,26 +113,26 @@ record of tests already run. Synthetic ELF/AR fixtures exercise contracts
 without vendor inputs. Tests assert observable behavior and ownership rather
 than internal layout or generated register constants.
 
-| ID | Scenario | Required observable result | Responsible boundary |
+| Contract | Scenario | Required observable result | Responsible boundary |
 | --- | --- | --- | --- |
-| A1 | Two archive members have equal names and bytes; symbols repeat across tables | Every occurrence remains selectable by its ordinal | artifacts, domain |
-| A2 | Weak/common definitions, duplicate exports, library reordering and cyclic archive references | Inventory remains unchanged; the linked image and manifest reflect the actual linker semantics | linking |
-| A3 | Thin archive with external members | Every member is reported with a missing-member diagnostic; the caller gives the members themselves | artifacts |
-| A4 | Mixed or malformed archive members | Every payload occurrence has an outcome; supported subsets cannot claim complete archive coverage | artifacts, analysis |
-| A5 | Companion supplies data relocation and callback definitions | Every consumer links equivalent images for the same request | application, backend |
-| A7 | Required source mapping or relocation is unknown | Affected claim is incomplete, never inferred from an equal label or placeholder value | artifacts, verification |
-| J1 | A linker blocks or exceeds its deadline | The operation fails; the linker process is killed and reaped and the workspace removed | linking, host |
-| R1 | Exhaust work in an ELF table, member iteration or long name | Typed resource failure retains the last position | application, artifacts |
-| R6 | Exhaust scoped scratch, unwind a phase, then start another | Typed capacity failure; no escaped reference or stale ID; temporary capacity is reusable | computing module |
-| R8 | Repeat with the same work policy and budget; overflow a counter | Deterministic accounting and checked arithmetic; no budget reset or wraparound | application |
-| R9 | Cyclic CFG/call graph or nonconvergent dataflow | Program traversal is iterative and bounded with declared completeness | analysis |
-| R10 | A sink retains records or a phase grows a buffer | Simultaneous allocations and result lifetimes remain charged | consumer, application |
-| V1 | Missing behavior, known difference and fully discharged comparison | Typed INCOMPLETE, DIFF and MATCH with their coverage and claim scopes | verification |
-| V2 | Generated reference or model stands in for production behavior | Evidence keeps its limited class; exact production equivalence is not asserted | verification |
-| V3 | Stateful phase is incomplete, or independent cases run in a different order | Dependent phases cannot consume unknown state; independent cases have fresh session state and no cross-case leakage | executor, verification |
-| I1 | Issue equivalent requests through API and CLI/JSON | Same selection, results and diagnostics; only presentation differs | application, frontends |
-| B1 | Build generic Blobray without open-radio-specific code | No generic dependency on production code or chip hosts | crate dependency checks |
-| B2 | Attempt a forbidden crate dependency | Dependency checks reject it | architecture checks |
+| archive occurrence identity | Two archive members have equal names and bytes; symbols repeat across tables | Every occurrence remains selectable by its ordinal | artifacts, domain |
+| linker symbol resolution | Weak/common definitions, duplicate exports, library reordering and cyclic archive references | Inventory remains unchanged; the linked image and manifest reflect the actual linker semantics | linking |
+| thin archive coverage | Thin archive with external members | Every member is reported with a missing-member diagnostic; the caller gives the members themselves | artifacts |
+| malformed member coverage | Mixed or malformed archive members | Every payload occurrence has an outcome; supported subsets cannot claim complete archive coverage | artifacts, analysis |
+| companion linking | Companion supplies data relocation and callback definitions | Every consumer links equivalent images for the same request | application, backend |
+| unknown source mappings | Required source mapping or relocation is unknown | Affected claim is incomplete, never inferred from an equal label or placeholder value | artifacts, verification |
+| linker deadline | A linker blocks or exceeds its deadline | The operation fails; the linker process is killed and reaped and the workspace removed | linking, host |
+| work exhaustion | Exhaust work in an ELF table, member iteration or long name | Typed resource failure retains the last position | application, artifacts |
+| scratch reuse | Exhaust scoped scratch, unwind a phase, then start another | Typed capacity failure; no escaped reference or stale ID; temporary capacity is reusable | computing module |
+| deterministic accounting | Repeat with the same work policy and budget; overflow a counter | Deterministic accounting and checked arithmetic; no budget reset or wraparound | application |
+| bounded graph traversal | Cyclic CFG/call graph or nonconvergent dataflow | Program traversal is iterative and bounded with declared completeness | analysis |
+| retained allocation accounting | A sink retains records or a phase grows a buffer | Simultaneous allocations and result lifetimes remain charged | consumer, application |
+| comparison outcomes | Missing behavior, known difference and fully discharged comparison | Typed INCOMPLETE, DIFF and MATCH with their coverage and claim scopes | verification |
+| reference claim limits | Generated reference or model stands in for production behavior | Evidence keeps its limited class; exact production equivalence is not asserted | verification |
+| session state isolation | Stateful phase is incomplete, or independent cases run in a different order | Dependent phases cannot consume unknown state; independent cases have fresh session state and no cross-case leakage | executor, verification |
+| API and CLI parity | Issue equivalent requests through API and CLI/JSON | Same selection, results and diagnostics; only presentation differs | application, frontends |
+| standalone build | Build generic Blobray without open-radio-specific code | No generic dependency on production code or chip hosts | crate dependency checks |
+| dependency direction | Attempt a forbidden crate dependency | Dependency checks reject it | architecture checks |
 
 ## Contract enforcement
 

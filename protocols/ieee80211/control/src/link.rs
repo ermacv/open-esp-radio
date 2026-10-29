@@ -9,7 +9,7 @@ pub struct StationStart {
     pub power_save: StationPowerSave,
 }
 
-/// W4 keeps the station awake; no modem power-save mode is advertised.
+/// Wi-Fi station keeps the station awake; no modem power-save mode is advertised.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub enum StationPowerSave {
     #[default]

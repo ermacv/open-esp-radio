@@ -21,7 +21,7 @@ use oer_lab_router::{
         self,
         stream::{Capture, Departure, DepartureOutcome},
     },
-    w4,
+    station_wpa2,
 };
 use oer_network_control::{Ready, WifiNetworkInterface};
 use std::{
@@ -48,7 +48,7 @@ pub(super) fn stop_on_error<T>(
 ) -> Result<T> {
     match work {
         Err(error) => match stop() {
-            Err(_) => Err(format!("{error}; W4 StopStation cleanup failed").into()),
+            Err(_) => Err(format!("{error}; Wi-Fi station StopStation cleanup failed").into()),
             Ok(Some(end)) => Err(format!("{error}; {}", ended(&end)).into()),
             Ok(None) => Err(error),
         },
@@ -206,7 +206,7 @@ pub(super) fn network(
 
 pub fn run(output: &Path, context: &Context<'_>) -> Result<()> {
     let StationFixtureConfig::OpenWrt(config) = &context.lab.station_fixture else {
-        return Err("W4 requires managed OpenWrt".into());
+        return Err("Wi-Fi station requires managed OpenWrt".into());
     };
     let (key_run, keys) = keys::load(context.lab)?;
     if !keys.complete() {
@@ -214,7 +214,9 @@ pub fn run(output: &Path, context: &Context<'_>) -> Result<()> {
             "independent key conformance evidence is incomplete or differs from the model".into(),
         );
     }
-    context.results.observe("w4-key-conformance-run", &key_run);
+    context
+        .results
+        .observe("wifi-station-key-conformance-run", &key_run);
     let mut evidence = Evidence {
         keys: Some(keys),
         ..Default::default()
@@ -223,7 +225,7 @@ pub fn run(output: &Path, context: &Context<'_>) -> Result<()> {
     let _router = oer_lab_router::lock::router(&directory, &config.ssh_target)?;
     let ssid = credentials::ssid("oer-w4")?;
     let passphrase = credentials::passphrase()?;
-    let target = Mac::parse(&context.lab.dut.mac).ok_or("invalid W4 station identity")?;
+    let target = Mac::parse(&context.lab.dut.mac).ok_or("invalid Wi-Fi station identity")?;
     let target_text = target.octets().map(|byte| format!("{byte:02x}")).join(":");
     let results = context.results.clone();
     let log = CommandLog::new(
@@ -234,11 +236,11 @@ pub fn run(output: &Path, context: &Context<'_>) -> Result<()> {
             &config.wireless_interface,
             &target_text,
         ],
-        move |record| results.observe("w4-router-command", &record),
+        move |record| results.observe("wifi-station-router-command", &record),
     );
     let mut ssh = Ssh::new(&config.ssh_target)?.with_log(log);
-    w4::verify_observation_tools(&mut ssh)?;
-    let profile = router::Profile::w4(
+    station_wpa2::verify_observation_tools(&mut ssh)?;
+    let profile = router::Profile::station_wpa2(
         &config.radio,
         &config.ap_section,
         &config.wireless_interface,
@@ -247,19 +249,22 @@ pub fn run(output: &Path, context: &Context<'_>) -> Result<()> {
         passphrase.expose(),
     )?;
     let applied = router::apply(&mut ssh, &profile)?;
-    w4::verify_runtime(&mut ssh, &config.radio, &config.wireless_interface)?;
-    let interval = w4::group_rekey_seconds(&mut ssh, &config.radio, &config.wireless_interface)?;
-    context.results.observe("w4-rekey-seconds", &interval);
-    if interval != w4::GROUP_REKEY_SECONDS {
-        return Err("running W4 BSS has the wrong group rekey interval".into());
+    station_wpa2::verify_runtime(&mut ssh, &config.radio, &config.wireless_interface)?;
+    let interval =
+        station_wpa2::group_rekey_seconds(&mut ssh, &config.radio, &config.wireless_interface)?;
+    context
+        .results
+        .observe("wifi-station-rekey-seconds", &interval);
+    if interval != station_wpa2::GROUP_REKEY_SECONDS {
+        return Err("running Wi-Fi station BSS has the wrong group rekey interval".into());
     }
     drop(profile);
     let before = station::station(&mut ssh, &config.wireless_interface, target)?;
     if before.present {
-        return Err("W4 station was already associated before StartStation".into());
+        return Err("Wi-Fi station was already associated before StartStation".into());
     }
-    let hostapd = super::diagnostic::hostapd(&ssh, target)?;
-    let dhcp = super::diagnostic::Observer::start(
+    let hostapd = super::observation::hostapd(&ssh, target)?;
+    let dhcp = super::observation::Observer::start(
         &ssh,
         &format!(
             "exec timeout 240 tcpdump -n -e -tt -vvv -l -i {} 'udp port 67 or 68'",
@@ -333,7 +338,7 @@ pub fn run(output: &Path, context: &Context<'_>) -> Result<()> {
             let departure = Departure::start(&ssh, target)?;
             let cursor = capture.event_cursor();
             let forced = now();
-            w4::deauthenticate(
+            station_wpa2::deauthenticate(
                 |script| ssh.output(script, COMMAND_TIMEOUT),
                 &config.wireless_interface,
                 target,
@@ -387,12 +392,14 @@ pub fn run(output: &Path, context: &Context<'_>) -> Result<()> {
                 }
                 StopEnd::Ended(end) => {
                     station_stopped = true;
-                    context.results.observe("w4-service-ended", &end);
+                    context.results.observe("wifi-station-service-ended", &end);
                     return Err(ended(&end).into());
                 }
             };
             station_stopped = true;
-            context.results.observe("w4-final-counters", &stopped);
+            context
+                .results
+                .observe("wifi-station-final-counters", &stopped);
             let deadline = Instant::now() + SHORT;
             let after = loop {
                 let after = station::station(&mut ssh, &config.wireless_interface, target)?;
@@ -428,11 +435,13 @@ pub fn run(output: &Path, context: &Context<'_>) -> Result<()> {
             match stop_station(&Station { capture, start })? {
                 StopEnd::Stopped(counters) => {
                     stopped_us = Some(now());
-                    context.results.observe("w4-failure-stopped", &counters);
+                    context
+                        .results
+                        .observe("wifi-station-failure-stopped", &counters);
                     Ok(None)
                 }
                 StopEnd::Ended(end) => {
-                    context.results.observe("w4-service-ended", &end);
+                    context.results.observe("wifi-station-service-ended", &end);
                     Ok(Some(end))
                 }
             }
@@ -460,10 +469,10 @@ pub fn run(output: &Path, context: &Context<'_>) -> Result<()> {
     });
     if let Some(stopped_us) = stopped_us {
         let tail = air.await_after(stopped_us, TAIL_BOUND)?;
-        context.results.observe("w4-air-tail", &tail);
+        context.results.observe("wifi-station-air-tail", &tail);
         if !tail.covered {
             eprintln!(
-                "w4 air capture has no frame after StationStopped within {} s",
+                "wifi-station air capture has no frame after StationStopped within {} s",
                 TAIL_BOUND.as_secs()
             );
         }
@@ -471,22 +480,25 @@ pub fn run(output: &Path, context: &Context<'_>) -> Result<()> {
     let projected = air
         .finish_station(target.octets(), applied.bssid.octets())
         .and_then(|(frames, drops, stats)| {
-            context.results.observe("w4-air-health", &stats);
-            context.results.observe("w4-station-air", &frames);
+            context.results.observe("wifi-station-air-health", &stats);
+            context.results.observe("wifi-station-air", &frames);
             project(&mut evidence, &frames, drops, &connected, stop_at)?;
             Ok(())
         });
-    context.results.observe("w4-hostapd", &hostapd.finish()?);
     context
         .results
-        .observe("w4-dhcp", &super::diagnostic::dhcp(&dhcp.finish()?));
-    context.results.observe("w4-link-events", &links);
-    context.results.observe("w4-evidence", &evidence);
+        .observe("wifi-station-hostapd", &hostapd.finish()?);
+    context.results.observe(
+        "wifi-station-dhcp",
+        &super::observation::dhcp(&dhcp.finish()?),
+    );
+    context.results.observe("wifi-station-link-events", &links);
+    context.results.observe("wifi-station-evidence", &evidence);
     let gates = evaluate(&evidence);
-    context.results.observe("w4-gates", &gates);
+    context.results.observe("wifi-station-gates", &gates);
     for gate in &gates {
         eprintln!(
-            "w4 gate {}: {}{}",
+            "wifi-station gate {}: {}{}",
             gate.id,
             if gate.passed() { "PASS" } else { "FAIL" },
             gate.reason
@@ -498,13 +510,15 @@ pub fn run(output: &Path, context: &Context<'_>) -> Result<()> {
     projected?;
     if let Some(gate) = gates.iter().find(|gate| !gate.passed()) {
         return Err(format!(
-            "W4 gate {}: {}",
+            "Wi-Fi station gate {}: {}",
             gate.id,
             gate.reason.expect("failed gate has a reason")
         )
         .into());
     }
-    context.results.claim("w4", &["PTK rekey", "WPA3-SAE"]);
+    context
+        .results
+        .claim("wifi-station", &["PTK rekey", "WPA3-SAE"]);
     Ok(())
 }
 
@@ -521,13 +535,13 @@ fn traffic(
     initial: Option<StationCounters>,
 ) -> Result<(Traffic, Option<Rekey>)> {
     let StationFixtureConfig::OpenWrt(config) = &context.lab.station_fixture else {
-        return Err("W4 requires OpenWrt".into());
+        return Err("Wi-Fi station requires OpenWrt".into());
     };
     let status = capture.request(0, GetStationStatus, SHORT)?;
     if !status.linked || status.stopped {
         return Err("station Control is not linked for the traffic window".into());
     }
-    context.results.observe("w4-station-status", &status);
+    context.results.observe("wifi-station-status", &status);
     let observed = Capture::start_peer(ssh, &config.wireless_interface, address, count)?;
     let cursor = capture.event_cursor();
     let ping_ssh = ssh.parallel();
@@ -553,13 +567,19 @@ fn traffic(
                 let before = capture.request(0, GetStationCounters, SHORT)?;
                 let cursor = capture.event_cursor();
                 let triggered_us = now();
-                let neighbor = w4::refresh_neighbor(
+                let neighbor = station_wpa2::refresh_neighbor(
                     |script| ssh.output(script, COMMAND_TIMEOUT),
                     station::network::BRIDGE,
                     address,
-                    |state| context.results.observe("w4-neighbor-state", state),
+                    |state| {
+                        context
+                            .results
+                            .observe("wifi-station-neighbor-state", state)
+                    },
                 )?;
-                context.results.observe("w4-neighbor-refresh", &neighbor);
+                context
+                    .results
+                    .observe("wifi-station-neighbor-refresh", &neighbor);
                 let deadline = Instant::now() + Duration::from_secs(5);
                 let observe = |transmitted: bool| -> Result<ArpObservation> {
                     let (message, frame) = capture

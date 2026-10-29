@@ -1,7 +1,0 @@
-schema = 5
-id = "w4-initial-gtk"
-description = "Investigate initial GTK and DHCP without connected group rekey; require a nonempty observer before starting the station"
-role = "investigation"
-tags = ["wifi", "air-exclusive"]
-[wifi]
-kind = "initial-gtk-diagnostic"

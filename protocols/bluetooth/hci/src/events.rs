@@ -3,7 +3,7 @@
 //! SOURCE: [Bluetooth Core 6.0, Vol 4, Part E](https://www.bluetooth.com/wp-content/uploads/Files/Specification/HTML/Core-60/out/en/host-controller-interface/host-controller-interface-functional-specification.html),
 //! sections 5.4.4 (event envelope), 7.7.14 (Command Complete), and 7.7.16
 //! (Hardware Error). Section 5.4.4 reserves 0xff for vendor debug events;
-//! the shutdown subevent and its observation bytes are the B0 product dialect.
+//! the shutdown subevent and its observation bytes are the controller shutdown dialect.
 
 use bt_hci::{PacketKind, cmd::Opcode, param::Status};
 use oer_wire::{U8, U16};
@@ -95,11 +95,11 @@ oer_wire::bitfield! {
         code, with_code: (u8) = 0..8;
         /// Core 6.0, Vol 4, Part E, 5.4.4: three parameter octets.
         length, with_length: (u8) = 8..16;
-        /// B0 product dialect: shutdown observation subevent 1.
+        /// Controller shutdown dialect: shutdown observation subevent 1.
         subevent, with_subevent: (u8) = 16..24;
-        /// B0 product dialect: software-pending observation, unmodified.
+        /// Controller shutdown dialect: software-pending observation, unmodified.
         software, with_software: (u8) = 24..32;
-        /// B0 product dialect: rollover-pending observation, unmodified.
+        /// Controller shutdown dialect: rollover-pending observation, unmodified.
         rollover, with_rollover: (u8) = 32..40;
     }
 }
