@@ -2,8 +2,10 @@
 
 The boundary between the IP stack and the radio. The radio owns peer and
 physical execution state; the network adapter owns its packet storage and the
-stack-facing contract. The application keeps credentials, the network stack,
-DHCP and sockets; stack APIs never expose radio peer slots or airtime grants.
+stack-facing contract. The application supplies credentials, IP configuration
+and socket workloads. `oer_embassy_net::ip` constructs its pools, stack and
+Ethernet bridge once and owns DHCP/static configuration and product IP status;
+stack APIs never expose radio peer slots or airtime grants.
 
 ## The stack
 
@@ -40,6 +42,7 @@ aliases and include optional and target-specific dependencies.
 | --- | --- | --- |
 | `oer-network` (`protocols/network`) | logical interfaces, link state, frame and admission errors, `TransportFlow` | queues, allocator, executor, hardware |
 | `oer-embassy-net` (`portable/embassy/net`) | the Xarxa `PacketBuf` handoff, destination/flow TX queues, stack wake registration, RX copying into packet pools; in `datapath`, the software/physical TX ownership traits and `TxQueues` | radio scheduling, DMA descriptors, a concrete physical allocator |
+| `oer-embassy-net::ip` | final pool/stack storage, one `EthernetBridge` over `NetDevice`, DHCP/static IPv4, link epoch and typed configuration/stop/error status | radio installation, a second stack, a common TCP/UDP API |
 | `oer-esp32s31-ieee80211-driver::mac` | the TX cost model (`mac::tx_cost`) and work receipts (`mac::tx_work`) of its publications | packet storage |
 | `oer-ieee80211-upper-mac` | the airtime ledger (`airtime`) and affine scheduling reservations | hardware, packet storage |
 | the radio runner (P2) | VIF/peer generations, power-save eligibility, rate and retry state, BA sessions, DMA descriptors, physical credits, terminal TX receipts | sockets, a second stack |

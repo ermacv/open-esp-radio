@@ -126,6 +126,19 @@ impl<'r, X: oer_memory::ExecutionContext, const RX: usize, const TX: usize, D: N
             pending: None,
         }
     }
+    pub(crate) const fn link(&self) -> oer_network::LinkSnapshot {
+        self.link
+    }
+
+    pub(crate) fn stop(&mut self) -> Result<(), crate::AccessRefused> {
+        self.radio.link_controller().set_link_up(false);
+        self.pending = None;
+        while let Some(packet) = self.radio.try_receive_tx()? {
+            drop(packet);
+        }
+        Ok(())
+    }
+
     /// One drain/one-TX turn. Always arm link and RX before observing them;
     /// a blocked TX remains owned here while RX and link keep progressing.
     /// No timer or time driver is needed to make an idle bridge run again.

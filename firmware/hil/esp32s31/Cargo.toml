@@ -42,7 +42,6 @@ wifi-station = [
     "dep:oer-hil-agent",
     "dep:embassy-futures",
     "dep:heapless",
-    "dep:xarxa-driver",
     "dep:oer-radio-port",
     "dep:oer-ieee80211-sta",
     "dep:oer-ieee80211-upper-mac",
@@ -70,7 +69,6 @@ oer-time = { path = "../../../portable/time" }
 oer-ieee80211-arbiter = { path = "../../../protocols/ieee80211/arbiter", optional = true }
 embassy-futures = { version = "0.1.2", optional = true }
 heapless = { version = "0.9.3", optional = true }
-xarxa-driver = { git = "https://github.com/ermacv/xarxa.git", rev = "6f5ae91f9269ec3151d1aa61d0cfe0f3ae1b0798", features = ["async"], optional = true }
 oer-radio-port = { path = "../../../protocols/radio/port", optional = true }
 oer-ieee80211-sta = { path = "../../../protocols/ieee80211/sta", optional = true }
 oer-ieee80211-upper-mac = { path = "../../../protocols/ieee80211/upper-mac", optional = true }

@@ -13,8 +13,12 @@ oer-sync = { path = "../../sync" }
 oer-network = { path = "../../../protocols/network" }
 oer-memory = { path = "../../memory" }
 xarxa-driver = { git = "https://github.com/ermacv/xarxa.git", rev = "6f5ae91f9269ec3151d1aa61d0cfe0f3ae1b0798", features = ["async"] }
+owned-embassy-net = { package = "embassy-net", git = "https://github.com/ermacv/embassy.git", rev = "17f796c8ddb90ff510d995e24c2dcb758a97e8f8", features = ["medium-ethernet", "ipv4", "dhcpv4", "icmp-ping-reply"] }
 
 [dev-dependencies]
+# Link the pinned runner's time ABI. Tests never set or advance this driver;
+# service deadlines and stack events use a per-test oer-time-virtual clock.
+embassy-time = { version = "0.5.1", features = ["mock-driver", "generic-queue-8"] }
 oer-time = { path = "../../time" }
 oer-time-virtual = { path = "../../time-virtual" }
 oer-memory = { path = "../../memory", features = ["host-context"] }
