@@ -9,11 +9,14 @@ use oer_embassy_time::EmbassyClock;
 use oer_esp32s31_board as board;
 use oer_esp32s31_compose::Esp32s31;
 use oer_esp32s31_hal::{
-    peripherals::{software_interrupt::{FromCpu0Irq, FromCpu2Irq, FromCpu3Irq}, system_timer::{SystimerAlarm0, SystimerAlarm1}},
-    power::ChipClocks,
-    root::Root,
     peripherals::usb_serial_jtag::ConsoleInterrupt,
     peripherals::watchdog::{ArmedRtcWatchdog, RTC_WATCHDOG_FEED_PERIOD_MS, RwdtRegisters},
+    peripherals::{
+        software_interrupt::{FromCpu0Irq, FromCpu2Irq, FromCpu3Irq},
+        system_timer::{SystimerAlarm0, SystimerAlarm1},
+    },
+    power::ChipClocks,
+    root::Root,
 };
 use oer_esp32s31_ieee80211_driver::irq::WifiIrqPart;
 use oer_esp32s31_phy::{
@@ -100,9 +103,9 @@ pub(crate) type Rng = oer_esp32s31_hal::peripherals::entropy::Entropy<EmbassyClo
 oer_esp32s31_hal::phy_fault_reporter!(oer_esp32s31_compose::phy_fault::reset);
 oer_espressif_staged_runtime::entry!(main, oer_esp32s31_hal::platform::Port);
 fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platform::Port>) -> ! {
-    oer_esp32s31_hal::peripherals::usb_serial_jtag::early_note(&oer_diagnostics::Note::diagnostic_start(
-        oer_diagnostics::name!("lower-mac"),
-    ));
+    oer_esp32s31_hal::peripherals::usb_serial_jtag::early_note(
+        &oer_diagnostics::Note::diagnostic_start(oer_diagnostics::name!("lower-mac")),
+    );
     let Some(root) = Root::take() else {
         fail(oer_diagnostics::name!("root-taken"; 32));
     };
@@ -221,9 +224,9 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
     let Some(poster) = SLOT.claim() else {
         fail(oer_diagnostics::name!("requester"; 32));
     };
-    let chip = transport::Chip(oer_esp32s31_hal::peripherals::reset_cause::ResetCauses::read(
-        runtime.reset_cause,
-    ));
+    let chip = transport::Chip(
+        oer_esp32s31_hal::peripherals::reset_cause::ResetCauses::read(runtime.reset_cause),
+    );
     let Ok((usb, _pads)) = transport::open_usb(adopted.router(), interrupts.console_usb) else {
         fail(oer_diagnostics::name!("console"; 32));
     };
@@ -293,9 +296,13 @@ async fn dispatch(mut poster: Poster<Request, Answer>) {
     loop {
         let (id, request) = REQUESTS.receive().await;
         let mut pending = poster.post(request);
-        let (returned, answer) = poll_fn(|cx| pending.poll_answer(cx))
-            .await
-            .unwrap_or_else(oer_espressif_staged_runtime::panic::reset_request);
+        let (returned, answer) =
+            poll_fn(|cx| pending.poll_answer(cx)).await.unwrap_or_else(
+                oer_espressif_staged_runtime::panic::reset_request::<
+                    oer_esp32s31_hal::platform::Port,
+                    _,
+                >,
+            );
         poster = returned;
         match answer {
             Answer::Prepared(value) => {

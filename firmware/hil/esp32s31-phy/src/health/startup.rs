@@ -38,18 +38,26 @@ pub(crate) async fn dispatch(mut poster: Poster<Request, Answer>) {
             oer_hil_agent::base::Either::First(request) => request,
             oer_hil_agent::base::Either::Second(request) => {
                 let mut pending = health_poster.post(request);
-                let (returned, answer) = poll_fn(|cx| pending.poll_answer(cx))
-                    .await
-                    .unwrap_or_else(oer_espressif_staged_runtime::panic::reset_request);
+                let (returned, answer) =
+                    poll_fn(|cx| pending.poll_answer(cx)).await.unwrap_or_else(
+                        oer_espressif_staged_runtime::panic::reset_request::<
+                            oer_esp32s31_hal::platform::Port,
+                            _,
+                        >,
+                    );
                 health_poster = returned;
                 answer.publish(id).await;
                 continue;
             }
         };
         let mut pending = poster.post(request);
-        let (returned, answer) = poll_fn(|cx| pending.poll_answer(cx))
-            .await
-            .unwrap_or_else(oer_espressif_staged_runtime::panic::reset_request);
+        let (returned, answer) =
+            poll_fn(|cx| pending.poll_answer(cx)).await.unwrap_or_else(
+                oer_espressif_staged_runtime::panic::reset_request::<
+                    oer_esp32s31_hal::platform::Port,
+                    _,
+                >,
+            );
         poster = returned;
         macro_rules! send {
             ($value:expr) => {
@@ -113,9 +121,12 @@ pub(crate) async fn dispatch(mut poster: Poster<Request, Answer>) {
                 transport::receiver_limit(fault);
             }
             let mut pending = poster.post(Request::Proceed);
-            let (returned, _answer) = poll_fn(|cx| pending.poll_answer(cx))
-                .await
-                .unwrap_or_else(oer_espressif_staged_runtime::panic::reset_request);
+            let (returned, _answer) = poll_fn(|cx| pending.poll_answer(cx)).await.unwrap_or_else(
+                oer_espressif_staged_runtime::panic::reset_request::<
+                    oer_esp32s31_hal::platform::Port,
+                    _,
+                >,
+            );
             poster = returned;
         }
     }

@@ -255,13 +255,16 @@ pub fn reset_fault<P: oer_espressif_platform_port::Platform>(
 
 /// Preserve an unanswered request's source identity before resetting. The
 /// image retains its dependent owners; `RequestQuarantine` never releases them.
-#[cfg(all(target_arch = "riscv32", feature = "esp32s31"))]
-pub fn reset_request<T>(error: impl Into<oer_memory::RequestError>) -> T {
+/// `P` is the image's platform.
+#[cfg(all(target_arch = "riscv32", chip_vectors))]
+pub fn reset_request<P: oer_espressif_platform_port::Platform, T>(
+    error: impl Into<oer_memory::RequestError>,
+) -> T {
     let (reason, observations) = request_fault(error.into());
-    reset_fault(reason, observations)
+    reset_fault::<P>(reason, observations)
 }
 
-#[cfg(any(test, all(target_arch = "riscv32", feature = "esp32s31")))]
+#[cfg(any(test, all(target_arch = "riscv32", chip_vectors)))]
 fn request_fault(error: oer_memory::RequestError) -> (FaultReason, [u32; 4]) {
     (FaultReason::RequestUnanswered, error.observations())
 }

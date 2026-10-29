@@ -268,7 +268,12 @@ impl Server {
         let (poster, frontend) = poll_fn(|cx| pending.poll_answer(cx))
             .await
             .map_err(|error| error.with_epoch(self.epoch))
-            .unwrap_or_else(oer_espressif_staged_runtime::panic::reset_request);
+            .unwrap_or_else(
+                oer_espressif_staged_runtime::panic::reset_request::<
+                    oer_esp32s31_hal::platform::Port,
+                    _,
+                >,
+            );
         self.driver = Some(poster);
         frontend
     }
@@ -439,7 +444,9 @@ async fn install(boot: Boot, config: Prepare) -> Result<PortParts<Device, TX>, &
         start,
     )
     .await
-    .unwrap_or_else(oer_espressif_staged_runtime::panic::reset_request);
+    .unwrap_or_else(
+        oer_espressif_staged_runtime::panic::reset_request::<oer_esp32s31_hal::platform::Port, _>,
+    );
     let stopped = stopped.map_err(|_| "radio start")?;
     let power = stopped.start_report().track.tx_power;
     let arena = irq::RX.take().ok_or("RX claimed")?;

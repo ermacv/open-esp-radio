@@ -178,9 +178,9 @@ pub async fn drive(boot: Boot, channel: DriverChannel) {
 }
 pub async fn serve(channel: FrontendChannel, config: W3Config, address: [u8; 6], seed: u64) {
     let mut pending = channel.0.post(());
-    let (_, front) = poll_fn(|cx| pending.poll_answer(cx))
-        .await
-        .unwrap_or_else(oer_espressif_staged_runtime::panic::reset_request);
+    let (_, front) = poll_fn(|cx| pending.poll_answer(cx)).await.unwrap_or_else(
+        oer_espressif_staged_runtime::panic::reset_request::<oer_esp32s31_hal::platform::Port, _>,
+    );
     let mut report = match front {
         Ok(front) => {
             let mut running = core::pin::pin!(radio::run_port(
@@ -236,7 +236,9 @@ async fn install(boot: Boot, config: W3Config) -> Result<PortParts<Device, TX>, 
         start,
     )
     .await
-    .unwrap_or_else(oer_espressif_staged_runtime::panic::reset_request);
+    .unwrap_or_else(
+        oer_espressif_staged_runtime::panic::reset_request::<oer_esp32s31_hal::platform::Port, _>,
+    );
     let stopped = stopped.map_err(|_| "radio start")?;
     let power = stopped.start_report().track.tx_power;
     let arena = irq::RX.take().ok_or("RX claimed")?;
