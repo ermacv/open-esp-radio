@@ -20,7 +20,9 @@ pub use syscon::*;
 
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK. 40 MHz / (399 + 1) = 100 kHz.
 pub const BLUETOOTH_MAIN_XTAL_LOW_POWER_DIVIDER: values::ModemLowPowerClockDivider =
-    match values::ModemLowPowerClockDivider::new(399) {
+    match values::ModemLowPowerClockDivider::new(
+        oer_esp32s31_knowledge::modem_clock::BLUETOOTH_MAIN_XTAL_LOW_POWER_DIVIDER,
+    ) {
         Some(value) => value,
         None => panic!("the sourced divider fits its field"),
     };

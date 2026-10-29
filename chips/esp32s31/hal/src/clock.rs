@@ -261,15 +261,6 @@ pub struct CommonPowerExitFailure<K: RadioClientKind> {
     pub error: CommonRadioPowerError,
 }
 
-/// The membership bit of `client` in [`CommonRadioPower`].
-const fn client_bit(client: RadioClient) -> u8 {
-    match client {
-        RadioClient::Wifi => 1,
-        RadioClient::Bluetooth => 1 << 1,
-        RadioClient::Ieee802154 => 1 << 2,
-    }
-}
-
 /// Why a client cannot enter or leave the common radio power.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CommonRadioPowerError {
@@ -294,26 +285,14 @@ pub enum CommonRadioPowerError {
 /// clock dependencies such as coexistence belong to the shared modem clock
 /// planner, not to this membership.
 pub(crate) struct CommonRadioPower<B: PlatformClockBackend> {
-    clients: u8,
+    membership: oer_espressif_radio::membership::PowerMembership<WifiPowerBaseline>,
     refs: PlatformClockRefs<B>,
-    power: PowerEpoch,
-    entered_since_boot: bool,
 }
-
-/// A checked admission whose baseline precedes the client's own entry writes.
-#[must_use]
-pub(crate) struct CommonPowerEntry<K: RadioClientKind> {
-    first_client: bool,
-    _client: core::marker::PhantomData<K>,
-}
-
 impl<B: PlatformClockBackend> Default for CommonRadioPower<B> {
     fn default() -> Self {
         Self {
-            clients: 0,
-            refs: PlatformClockRefs::default(),
-            power: PowerEpoch::default(),
-            entered_since_boot: false,
+            membership: Default::default(),
+            refs: Default::default(),
         }
     }
 }
@@ -346,145 +325,170 @@ impl<B: PlatformClockBackend> CommonRadioPower<B> {
 }
 
 impl<B: PlatformClockBackend> CommonRadioPower<B> {
-    /// Whether `client` currently holds common power.
-    pub(crate) const fn holds(&self, client: RadioClient) -> bool {
-        self.clients & client_bit(client) != 0
+    pub(crate) fn holds(&self, client: RadioClient) -> bool {
+        self.membership.holds(client)
     }
-
-    /// Whether any client holds common power.
-    pub(crate) const fn any_client(&self) -> bool {
-        self.clients != 0
+    pub(crate) fn any_client(&self) -> bool {
+        self.membership.any_client()
     }
-
-    /// Count the platform references common power holds into `holds`.
     pub(crate) fn count_platform_clocks(&self, holds: &mut PlatformClockHolds) {
         self.refs.count_into(holds);
     }
-
     #[cfg(test)]
     pub(crate) fn hold_for_test(&mut self, client: RadioClient) {
-        self.clients |= client_bit(client);
+        self.membership.hold_for_test(client);
     }
-
-    /// Check admission and capture the baseline before any client entry writes.
-    ///
-    /// A failed sequence admits no client. It keeps the original baseline
-    /// and any platform reference already taken, so a retry restarts from
-    /// the same cold state without taking a reference twice.
-    pub(crate) fn prepare_entry<K: RadioClientKind>(
+    pub(crate) fn enter<K: RadioClientKind>(
         &mut self,
-        port: &mut impl ClockPort,
-    ) -> Result<CommonPowerEntry<K>, CommonRadioPowerError> {
-        let client = K::CLIENT;
-        if self.holds(client) {
-            return Err(CommonRadioPowerError::AlreadyEntered);
-        }
-        if self.clients == 0 {
-            self.power.prepare(port);
-            if !self.entered_since_boot {
-                port.select_wifi_low_power_clock();
-            }
-        }
-        Ok(CommonPowerEntry {
-            first_client: self.clients == 0,
-            _client: core::marker::PhantomData,
-        })
-    }
-
-    /// Complete the checked entry, enabling only the shared power domain.
-    pub(crate) fn finish_entry<K: RadioClientKind>(
-        &mut self,
-        entry: CommonPowerEntry<K>,
         port: &mut impl ClockPort,
         platform: &impl PlatformClockProvider<Backend = B>,
     ) -> Result<CommonPower<K>, CommonRadioPowerError> {
-        if entry.first_client {
-            port.run_common_power_sequence(&mut self.refs, platform)
-                .map_err(CommonRadioPowerError::Power)?;
-            self.entered_since_boot = true;
-        }
-        self.clients |= client_bit(K::CLIENT);
+        self.membership
+            .enter(
+                K::CLIENT,
+                &mut PowerEntryBinding {
+                    binding: PowerBinding {
+                        port,
+                        refs: &mut self.refs,
+                    },
+                    platform,
+                },
+            )
+            .map_err(power_error)?;
         Ok(CommonPower::entered())
     }
-
-    /// Leave common power; the last client gives back the analog-I2C
-    /// reference, restores the cold baseline and then gives back the 160 MHz
-    /// and MPLL references, as the vendor closes a gate before releasing its source.
-    ///
-    /// A failed step, a refused release included, keeps the client entered
-    /// and returns its proof so the exit can be retried; a retry gives back
-    /// only the references still held.
+    pub(crate) fn enter_wifi(
+        &mut self,
+        port: &mut impl crate::ieee80211::client::WifiPowerPort,
+        platform: &impl PlatformClockProvider<Backend = B>,
+    ) -> Result<CommonPower<WifiClient>, CommonRadioPowerError> {
+        self.membership
+            .enter_wifi(&mut PowerEntryBinding {
+                binding: PowerBinding {
+                    port,
+                    refs: &mut self.refs,
+                },
+                platform,
+            })
+            .map_err(power_error)?;
+        Ok(CommonPower::entered())
+    }
     pub(crate) fn exit<K: RadioClientKind>(
         &mut self,
         port: &mut impl ClockPort,
         power: CommonPower<K>,
     ) -> Result<(), CommonPowerExitFailure<K>> {
-        let client = power.client();
-        if self.clients == client_bit(client) {
-            let refused = |power, clock| CommonPowerExitFailure {
+        // The release binding requires no provider; the exact guards own release.
+        self.membership
+            .exit(
+                K::CLIENT,
+                &mut PowerBinding {
+                    port,
+                    refs: &mut self.refs,
+                },
+            )
+            .map_err(|error| CommonPowerExitFailure {
                 power,
-                error: CommonRadioPowerError::Release(clock),
-            };
-            if self.refs.release(PlatformClock::AnalogI2cMaster).is_err() {
-                return Err(refused(power, PlatformClock::AnalogI2cMaster));
-            }
-            if let Err(checkpoint) = self.power.restore(port) {
-                return Err(CommonPowerExitFailure {
-                    power,
-                    error: CommonRadioPowerError::Restore(checkpoint),
-                });
-            }
-            for clock in [PlatformClock::Pll160m, PlatformClock::Mpll] {
-                if self.refs.release(clock).is_err() {
-                    return Err(refused(power, clock));
-                }
-            }
-        }
-        self.clients &= !client_bit(client);
-        Ok(())
+                error: power_error(error),
+            })
     }
 }
-
-/// Cold-power baseline captured before the first route power edge.
-#[derive(Default)]
-pub(crate) struct PowerEpoch {
-    baseline: Option<WifiPowerBaseline>,
+struct PowerBinding<'a, H, B: PlatformClockBackend> {
+    port: &'a mut H,
+    refs: &'a mut PlatformClockRefs<B>,
 }
-
-impl PowerEpoch {
-    /// Capture the reversible baseline before the first mutation.
-    ///
-    /// A retry of the same partially executed power-up keeps the original
-    /// baseline instead of sampling its own mutations as a new cold state.
-    pub(crate) fn prepare(&mut self, port: &impl ClockPort) {
-        if self.baseline.is_none() {
-            self.baseline = Some(port.capture_power_baseline());
-        }
+impl<H: ClockPort, B: PlatformClockBackend> oer_espressif_radio::membership::PowerPort
+    for PowerBinding<'_, H, B>
+{
+    type Baseline = WifiPowerBaseline;
+    type RestoreError = PowerRestoreCheckpoint;
+    fn capture(&self) -> Self::Baseline {
+        self.port.capture_power_baseline()
     }
-
-    /// Restore every non-monotonic field changed by the cold-power path.
-    ///
-    /// The analog-I2C reference must be released first. The baseline is committed
-    /// only after every readback matches.
-    pub(crate) fn restore(
+    fn restore(&mut self, baseline: Self::Baseline) -> Result<(), Self::RestoreError> {
+        self.port.restore_power_baseline(baseline)
+    }
+    fn select_wifi_low_power_clock(&mut self) {
+        self.port.select_wifi_low_power_clock();
+    }
+    fn release(
         &mut self,
-        port: &mut impl ClockPort,
-    ) -> Result<(), WifiPowerRestoreCheckpoint> {
-        let Some(baseline) = self.baseline else {
-            return Ok(());
-        };
-        port.restore_power_baseline(baseline)
-            .map_err(|readback| match readback {
-                PowerRestoreCheckpoint::ModemSyscon => WifiPowerRestoreCheckpoint::ModemSyscon,
-                PowerRestoreCheckpoint::ModemSourceClocks => {
-                    WifiPowerRestoreCheckpoint::ModemSourceClocks
-                }
-                PowerRestoreCheckpoint::ModemRegisterBusClock => {
-                    WifiPowerRestoreCheckpoint::ModemRegisterBusClock
-                }
-            })?;
-        self.baseline = None;
-        Ok(())
+        clock: oer_espressif_radio::membership::Clock,
+    ) -> Result<(), oer_espressif_radio::membership::ReleaseRefused> {
+        self.refs
+            .release(platform_clock(clock))
+            .map_err(|_| oer_espressif_radio::membership::ReleaseRefused)
+    }
+}
+struct PowerEntryBinding<'a, H, B: PlatformClockBackend, P> {
+    binding: PowerBinding<'a, H, B>,
+    platform: &'a P,
+}
+impl<H: ClockPort, B: PlatformClockBackend, P> oer_espressif_radio::membership::PowerPort
+    for PowerEntryBinding<'_, H, B, P>
+{
+    type Baseline = WifiPowerBaseline;
+    type RestoreError = PowerRestoreCheckpoint;
+    fn capture(&self) -> Self::Baseline {
+        self.binding.capture()
+    }
+    fn restore(&mut self, baseline: Self::Baseline) -> Result<(), Self::RestoreError> {
+        self.binding.restore(baseline)
+    }
+    fn select_wifi_low_power_clock(&mut self) {
+        self.binding.select_wifi_low_power_clock();
+    }
+    fn release(
+        &mut self,
+        clock: oer_espressif_radio::membership::Clock,
+    ) -> Result<(), oer_espressif_radio::membership::ReleaseRefused> {
+        self.binding.release(clock)
+    }
+}
+impl<H: ClockPort, B: PlatformClockBackend, P: PlatformClockProvider<Backend = B>>
+    oer_espressif_radio::membership::PowerEntryPort for PowerEntryBinding<'_, H, B, P>
+{
+    fn power_up(&mut self) -> Result<(), oer_espressif_radio::power::PowerError> {
+        self.binding
+            .port
+            .run_common_power_sequence(self.binding.refs, self.platform)
+    }
+}
+impl<
+    H: crate::ieee80211::client::WifiPowerPort,
+    B: PlatformClockBackend,
+    P: PlatformClockProvider<Backend = B>,
+> oer_espressif_radio::membership::WifiPowerPort for PowerEntryBinding<'_, H, B, P>
+{
+    fn reset_wifi(&mut self) {
+        self.binding.port.pulse_wifi_baseband_and_mac_reset();
+    }
+}
+fn platform_clock(clock: oer_espressif_radio::membership::Clock) -> PlatformClock {
+    use oer_espressif_radio::membership::Clock;
+    match clock {
+        Clock::AnalogI2c => PlatformClock::AnalogI2cMaster,
+        Clock::Pll160m => PlatformClock::Pll160m,
+        Clock::Mpll => PlatformClock::Mpll,
+    }
+}
+fn power_error(
+    error: oer_espressif_radio::membership::PowerError<PowerRestoreCheckpoint>,
+) -> CommonRadioPowerError {
+    use oer_espressif_radio::membership::PowerError;
+    match error {
+        PowerError::AlreadyEntered => CommonRadioPowerError::AlreadyEntered,
+        PowerError::Power(error) => CommonRadioPowerError::Power(error),
+        PowerError::Release(clock) => CommonRadioPowerError::Release(platform_clock(clock)),
+        PowerError::Restore(checkpoint) => CommonRadioPowerError::Restore(match checkpoint {
+            PowerRestoreCheckpoint::ModemSyscon => WifiPowerRestoreCheckpoint::ModemSyscon,
+            PowerRestoreCheckpoint::ModemSourceClocks => {
+                WifiPowerRestoreCheckpoint::ModemSourceClocks
+            }
+            PowerRestoreCheckpoint::ModemRegisterBusClock => {
+                WifiPowerRestoreCheckpoint::ModemRegisterBusClock
+            }
+        }),
     }
 }
 

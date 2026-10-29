@@ -1,4 +1,4 @@
-//! Shared radio power and clock operations over chip-owned register ports.
+//! Shared RF membership, epoch, power and clock drivers over chip-owned ports.
 #![no_std]
 #![forbid(unsafe_code)]
 #![deny(
@@ -28,4 +28,11 @@ extern crate std;
 
 pub mod baseline;
 pub mod clocks;
+pub mod domain;
+pub mod epoch;
+pub mod membership;
+pub mod modem;
 pub mod power;
+
+#[cfg(test)]
+mod tests;

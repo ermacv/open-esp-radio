@@ -2047,6 +2047,8 @@ dependencies = [
 name = "oer-espressif-radio"
 version = "0.1.0"
 dependencies = [
+ "oer-espressif-modem-clock",
+ "oer-radio-coex",
  "oer-time",
  "oer-time-virtual",
 ]

@@ -1,4 +1,4 @@
-# Shared radio power and clocks
+# Shared radio domain drivers
 
 `oer-espressif-radio` executes common power prerequisites, checks the semantic
 readback, restores the cold-power baseline in three verified stages, and
@@ -27,9 +27,21 @@ RTC selector, including invalid values, retains the existing RC_SLOW selection.
 The S31 modem tables live in `knowledge::modem_clock`; its HAL newtype binds
 them to `oer-espressif-modem-clock`. That family's `execution` module orders
 upstream and device edges and retains the planner's poison/lease semantics.
-The HAL's radio custody still owns common-power membership and PHY transactions.
-It releases only through exact affine reunion, preserving quarantine and the
-existing cancellation reporter ABI.
+The family's `membership` driver owns first/last common-power membership,
+retained baseline commit, retry order, one-time Wi-Fi reset and coexistence
+participant accounting. `epoch` retains the packed registration counter across
+route retirement. `domain` checks BTBB registration/gain generation before its
+first initialization, orders low-power selector/reference edges, and sequences
+external coexistence. `modem` retains each module lease and every poisoned
+planner transaction through refusals.
+
+The HAL's S31 binding retains public affine client/registration/coexistence
+proofs, clock guards, snapshots, register owners and PHY transactions. Its
+methods lend those atoms and owners to the family driver and translate typed
+results. Entry ports borrow a provider; release ports require only the held
+guards. The family obtains no register handle or reset authority. Exact affine
+reunion, both quarantine guards and the cancellation reporter ABI remain HAL
+custody obligations. Chip PHY and radio-system lifecycle run above this binding.
 
 Recording fake ports use `oer-time-virtual` to check effect order, elapsed atom
 time, partial failures, first/last clock edges and permanent-owner retention.

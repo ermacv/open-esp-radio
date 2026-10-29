@@ -24,6 +24,8 @@ pub fn copied(grant: &PhyRegistrationGrant) -> PhyRegistrationGrant {
 
 // A gain is not minted outside the domain.
 #[cfg(ui_reject)]
-pub fn forged() -> BtbbGain {
-    BtbbGain { value: 0x4f } // ui-error: cannot construct `BtbbGain` with struct literal syntax due to private fields
+pub fn forged(
+    gain: oer_espressif_radio::domain::Gain<oer_esp32s31_hal::owner::PhyRegistrationEpoch>,
+) -> BtbbGain {
+    BtbbGain(gain) // ui-error: E0423
 }

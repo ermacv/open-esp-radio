@@ -725,7 +725,13 @@ register atoms, the permanent PSRAM MPLL owner and PHY custody. S31 modem clock
 tables live in `knowledge::modem_clock`, with a HAL newtype implementing the
 family dependency contract. `oer-espressif-modem-clock::execution` orders the
 upstream-source and device edges; failed edges retain the poisoned planner and
-its leases. Neither family depends on a chip or protocol driver.
+its leases. The radio family also owns common-power and coexistence membership,
+registration epoch policy, BTBB gain-generation admission, module lease slots,
+and the low-power/external-coexistence edge order. The S31 HAL binding retains
+affine public proofs and clock guards and lends its register atoms to those
+drivers. PHY transactions retain the complete family state with their exact
+seat and both cancellation guards. Neither family depends on a chip or protocol
+driver.
 
 ## Radio system
 

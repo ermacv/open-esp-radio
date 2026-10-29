@@ -24,10 +24,10 @@ controller engine, scheduler and modem timer, the boot policy and waits in
 `boot`, the Wi-Fi cold start in `ieee80211`, the PHY analog bus and delays in
 `phy`, and the entropy read gap in `peripherals/entropy.rs`. The list only shrinks; no
 new file joins it. The scan does not find driver code without such a marker:
-the radio domain's membership and first/last-client policy and the IEEE
-802.15.4 lifecycle policy are driver code that this crate still holds.
-The common power sequence, semantic verification, cold-baseline restore and
-clock refcounts live in `oer-espressif-radio`; HAL supplies owned atom ports.
+the IEEE 802.15.4 lifecycle policy is driver code that this crate still holds.
+Shared radio membership, epoch policy, common power, semantic verification,
+cold-baseline restore and clock refcounts live in `oer-espressif-radio`;
+HAL supplies owned atom ports and affine proofs.
 
 For IEEE 802.15.4, `ieee802154::polled` retains task/IRQ owners with `Silent`
 while exposing finite semantic transactions. `ieee802154::frames` owns the
@@ -334,3 +334,11 @@ controller-global CTE publication is disabled. The adjacent bank is not a
 primary ENA/status bank or the task +0x4b4/+0x4b8 bank. No all-bank cleanup or
 pending-zero claim covers it (SOURCE: `BLOB_LIBBLE_PHY_INIT_REGISTERS` and
 `BLOB_LIBBLE_HW_CTE_RING_CONTROL`).
+
+Shared radio membership and registration epoch policy execute in
+`oer-espressif-radio` over the S31 binding. The HAL retains affine power,
+coexistence and registration proofs, platform clock guards, register owners,
+restore storage, transaction seat/reunion checks and both quarantine guards.
+BTBB and module membership, first/last common-power ordering and low-power /
+external coexistence sequencing belong to the family driver. S31 modem settings
+remain in `knowledge::modem_clock`.

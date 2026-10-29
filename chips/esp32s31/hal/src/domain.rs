@@ -38,8 +38,7 @@ use crate::coex::{
 use crate::coex_participation::CoexParticipants;
 pub use crate::coex_participation::{CoexAbsent, Coexisting, ExternalCoexistence};
 use crate::power::clock::{
-    ModemClockLease, ModemClockModule, ModemClockPlanner, ModemClockPlannerIdentity,
-    ModemExecution, ModemPlatformClocks, PoisonedModemClockAcquire, PoisonedModemClockRelease,
+    ModemClockModule, ModemClockPlannerIdentity, ModemExecution, ModemPlatformClocks,
 };
 pub use crate::power::{
     PlatformClock, PlatformClockAbandonment, PlatformClockBackend, PlatformClockError,
@@ -55,14 +54,6 @@ use transaction::PhyIdentity;
 
 mod sealed {
     pub trait RadioClientOwner {}
-}
-
-const fn client_bit(client: RadioClient) -> u8 {
-    match client {
-        RadioClient::Wifi => 1,
-        RadioClient::Bluetooth => 1 << 1,
-        RadioClient::Ieee802154 => 1 << 2,
-    }
 }
 
 /// Protocol register owner that proves which client calls the domain.
@@ -124,16 +115,10 @@ impl oer_diagnostics::DiagnosticPath for BtbbError {
 /// publication of the current registration admits [`RadioDomain::btbb_acquire`];
 /// any earlier one is [`BtbbError::Stale`].
 #[derive(Debug, Eq, PartialEq)]
-pub struct BtbbGain {
-    epoch: PhyRegistrationEpoch,
-    generation: u32,
-    value: u8,
-}
-
+pub struct BtbbGain(oer_espressif_radio::domain::Gain<PhyRegistrationEpoch>);
 impl BtbbGain {
-    /// The published byte, as the vendor's `phy_param[0x120]`.
     pub const fn value(&self) -> u8 {
-        self.value
+        self.0.value()
     }
 }
 
@@ -141,7 +126,7 @@ impl BtbbGain {
 /// ([`RadioDomain::btbb_publisher`]).
 pub struct BtbbPublisher<'d> {
     current: Option<PhyRegistrationEpoch>,
-    generation: &'d mut u32,
+    membership: &'d mut oer_espressif_radio::domain::BtbbMembership,
 }
 
 impl BtbbPublisher<'_> {
@@ -160,16 +145,10 @@ impl BtbbPublisher<'_> {
         grant: &crate::owner::PhyRegistrationGrant,
         value: u8,
     ) -> Result<BtbbGain, BtbbError> {
-        let epoch = self.current.ok_or(BtbbError::Unregistered)?;
-        if grant.epoch() != epoch {
-            return Err(BtbbError::Stale);
-        }
-        *self.generation = self.generation.wrapping_add(1);
-        Ok(BtbbGain {
-            epoch,
-            generation: *self.generation,
-            value,
-        })
+        self.membership
+            .publish(self.current, grant.epoch(), value)
+            .map(BtbbGain)
+            .map_err(btbb_error)
     }
 }
 
@@ -188,10 +167,7 @@ struct SharedRadioState<B: PlatformClockBackend, T> {
     registers: SharedRadioRegisters,
     phy: PhyRouteState,
     power: CommonRadioPower<B>,
-    wifi_power_entry: crate::ieee80211::client::WifiPowerEntry,
-    btbb_clients: u8,
-    /// The generation of the latest BTBB gain publication.
-    btbb_gain_generation: u32,
+    btbb: oer_espressif_radio::domain::BtbbMembership,
     clocks: ModemClocks,
     /// Platform references of the modem clock planner's enabled
     /// dependencies; a poisoned planner keeps them held.
@@ -219,43 +195,8 @@ impl<B: PlatformClockBackend, T> SharedRadioState<B, T> {
     }
 }
 
-/// Modem clock planner and the module lease each client holds.
-#[allow(
-    clippy::large_enum_variant,
-    reason = "the domain keeps the allocation-free planner or its poisoned owner inline"
-)]
-enum ModemClocks {
-    Ready {
-        planner: ModemClockPlanner,
-        leases: [Option<ModemClockLease>; CLOCK_SLOTS],
-    },
-    /// Exactly one transaction failed at a physical edge. Keep its owner
-    /// inline without reserving a second transaction in every radio move.
-    AcquirePoisoned {
-        _owner: PoisonedModemClockAcquire,
-    },
-    ReleasePoisoned {
-        _owner: PoisonedModemClockRelease,
-    },
-    /// Transient state while one transaction owns the planner.
-    InFlight,
-}
-
-impl ModemClocks {
-    fn new(identity: ModemClockPlannerIdentity) -> Self {
-        Self::Ready {
-            planner: ModemClockPlanner::managed(identity),
-            leases: [const { None }; CLOCK_SLOTS],
-        }
-    }
-
-    fn any_held(&self) -> bool {
-        match self {
-            Self::Ready { leases, .. } => leases.iter().any(Option::is_some),
-            Self::AcquirePoisoned { .. } | Self::ReleasePoisoned { .. } | Self::InFlight => true,
-        }
-    }
-}
+type ModemClocks =
+    oer_espressif_radio::modem::ModemClocks<crate::power::clock::Dependency, CLOCK_SLOTS>;
 
 /// Why the Bluetooth low-power timer clock selection cannot change.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -380,9 +321,7 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
                 registers,
                 phy,
                 power: CommonRadioPower::default(),
-                wifi_power_entry: crate::ieee80211::client::WifiPowerEntry::default(),
-                btbb_clients: 0,
-                btbb_gain_generation: 0,
+                btbb: Default::default(),
                 clocks: ModemClocks::new(clock_identity),
                 modem_platform_clocks: ModemPlatformClocks::default(),
                 coex_pti: CoexPtiTable::VENDOR,
@@ -417,7 +356,7 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
                 RadioDomainReleaseError::CommonPowerHeld,
             ));
         }
-        if state.btbb_clients != 0 {
+        if state.btbb.any_held() {
             return Err((Self::from_state(state), RadioDomainReleaseError::BtbbHeld));
         }
         if state.clocks.any_held() {
@@ -486,7 +425,7 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
     #[cfg(any(test, all(feature = "test-support", not(target_arch = "riscv32"))))]
     #[doc(hidden)]
     pub fn hold_btbb_for_test(&mut self, client: RadioClient) {
-        self.state.btbb_clients |= client_bit(client);
+        self.state.btbb.hold_for_test(client);
     }
 
     /// Record a programmed PHY grant-protect request without register
@@ -603,12 +542,9 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
         clocks: &impl PlatformClockProvider<Backend = B>,
     ) -> Result<CommonPower<O::Client>, CommonRadioPowerError> {
         let state = self.state_mut();
-        let entry = state
-            .power
-            .prepare_entry::<O::Client>(state.registers.radio_phy_mut())?;
         state
             .power
-            .finish_entry(entry, state.registers.radio_phy_mut(), clocks)
+            .enter::<O::Client>(state.registers.radio_phy_mut(), clocks)
     }
 
     /// Wi-Fi's checked cold-reset edge followed by common power. The whole
@@ -620,8 +556,8 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
     ) -> Result<CommonPower<WifiClient>, CommonRadioPowerError> {
         let state = self.state_mut();
         state
-            .wifi_power_entry
-            .enter(&mut state.power, state.registers.radio_phy_mut(), clocks)
+            .power
+            .enter_wifi(state.registers.radio_phy_mut(), clocks)
     }
 
     /// How many radios take part in coexistence.
@@ -670,7 +606,7 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
 
     /// Whether `client` currently holds the shared BTBB baseband.
     pub fn holds_btbb(&self, client: RadioClient) -> bool {
-        self.state().btbb_clients & client_bit(client) != 0
+        self.state().btbb.holds(client)
     }
 
     /// The attachment beside the domain's BTBB gain publisher, borrowed
@@ -682,7 +618,7 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
             &state.attachment,
             BtbbPublisher {
                 current: state.phy.registration_epoch(),
-                generation: &mut state.btbb_gain_generation,
+                membership: &mut state.btbb,
             },
         )
     }
@@ -705,25 +641,20 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
         _owner: &O,
         gain: &BtbbGain,
     ) -> Result<BtbbAcquired, BtbbError> {
-        let bit = client_bit(O::CLIENT);
         let state = self.state_mut();
-        if state.btbb_clients & bit != 0 {
-            return Err(BtbbError::AlreadyAcquired);
-        }
-        let Some(epoch) = state.phy.registration_epoch() else {
-            return Err(BtbbError::Unregistered);
-        };
-        if gain.epoch != epoch || gain.generation != state.btbb_gain_generation {
-            return Err(BtbbError::Stale);
-        }
-        let acquired = if state.btbb_clients == 0 {
-            state.registers.initialize_btbb_v2_arg_one(gain.value);
-            BtbbAcquired::Initialized
-        } else {
-            BtbbAcquired::Joined
-        };
-        state.btbb_clients |= bit;
-        Ok(acquired)
+        state
+            .btbb
+            .acquire(
+                O::CLIENT,
+                state.phy.registration_epoch(),
+                &gain.0,
+                &mut state.registers,
+            )
+            .map(|acquired| match acquired {
+                oer_espressif_radio::domain::BtbbAcquired::Initialized => BtbbAcquired::Initialized,
+                oer_espressif_radio::domain::BtbbAcquired::Joined => BtbbAcquired::Joined,
+            })
+            .map_err(btbb_error)
     }
 
     /// Leave the shared BTBB baseband. Like ESP-IDF's `esp_btbb_disable`,
@@ -733,13 +664,7 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
     ///
     /// The client does not hold BTBB.
     pub fn btbb_release<O: BtbbClientOwner>(&mut self, _owner: &O) -> Result<(), BtbbError> {
-        let bit = client_bit(O::CLIENT);
-        let state = self.state_mut();
-        if state.btbb_clients & bit == 0 {
-            return Err(BtbbError::NotAcquired);
-        }
-        state.btbb_clients &= !bit;
-        Ok(())
+        self.state_mut().btbb.release(O::CLIENT).map_err(btbb_error)
     }
 
     /// Borrow the shared PHY registers with the route restore state, for a
@@ -800,15 +725,10 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
         _owner: &WifiRadioRegisters,
         initialized: bool,
     ) -> Result<(), ModemClockError> {
-        match &mut self.state_mut().clocks {
-            ModemClocks::Ready { planner, .. } => {
-                planner.set_wifi_initialized(initialized);
-                Ok(())
-            }
-            ModemClocks::AcquirePoisoned { .. }
-            | ModemClocks::ReleasePoisoned { .. }
-            | ModemClocks::InFlight => Err(ModemClockError::Poisoned),
-        }
+        self.state_mut()
+            .clocks
+            .set_wifi_initialized(initialized)
+            .map_err(modem_error)
     }
 
     /// Whether Bluetooth currently selects its low-power timer clock.
@@ -839,15 +759,15 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
         clocks: &impl PlatformClockProvider<Backend = B>,
     ) -> Result<(), LowPowerClockError> {
         let state = self.state_mut();
-        if state.bluetooth_low_power_clock.is_some() {
-            return Err(LowPowerClockError::AlreadySelected);
-        }
-        select_bluetooth_low_power_clock(state.registers.radio_phy_mut());
-        let timer = clocks
-            .acquire(PlatformClock::ModemLowPowerTimer)
-            .map_err(LowPowerClockError::PlatformClock)?;
-        state.bluetooth_low_power_clock = Some(timer);
-        Ok(())
+        oer_espressif_radio::domain::select_low_power(
+            &mut state.bluetooth_low_power_clock,
+            &mut LowPowerBinding {
+                phy: state.registers.radio_phy_mut(),
+                platform: clocks,
+                backend: core::marker::PhantomData,
+            },
+        )
+        .map_err(low_power_error)
     }
 
     /// Deselect the Bluetooth low-power timer clock.
@@ -866,16 +786,15 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
         _owner: &BluetoothTaskRegisters,
     ) -> Result<(), LowPowerClockError> {
         let state = self.state_mut();
-        let Some(timer) = state.bluetooth_low_power_clock.take() else {
-            return Err(LowPowerClockError::NotSelected);
-        };
-        deselect_bluetooth_low_power_clock(state.registers.radio_phy_mut());
-        if let Err(refused) = timer.release() {
-            let error = refused.error();
-            state.bluetooth_low_power_clock = Some(refused.into_guard());
-            return Err(LowPowerClockError::PlatformClock(error));
-        }
-        Ok(())
+        oer_espressif_radio::domain::deselect_low_power(
+            &mut state.bluetooth_low_power_clock,
+            &mut LowPowerBinding::<B, ()> {
+                phy: state.registers.radio_phy_mut(),
+                platform: (),
+                backend: core::marker::PhantomData,
+            },
+        )
+        .map_err(low_power_error)
     }
 
     /// Enable a modem clock module of the shared PHY domain, with the same
@@ -910,21 +829,17 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
         config: crate::coex::ExternalCoexConfig,
         platform: &impl PlatformClockProvider<Backend = B>,
     ) -> Result<(ExternalCoexistence, u32), crate::coex::ExternalCoexError> {
-        if self.state().external_coex.is_some() {
-            return Err(crate::coex::ExternalCoexError::AlreadyActive);
-        }
-        let grant_delay = config
-            .grant_delay()
-            .ok_or(crate::coex::ExternalCoexError::GrantDelayOutOfRange)?;
-        self.enable_slot(EXTERNAL_COEX_SLOT, ModemClockModule::Coexistence, platform)
-            .map_err(crate::coex::ExternalCoexError::Clock)?;
         let state = self.state_mut();
-        let registers = &mut state.registers;
-        registers.configure_external_coex_mode(config.role, config.wires);
-        registers.configure_external_coex_grant(grant_delay, config.validate_high);
-        registers.publish_external_coex_priorities(config.role, config.wires, config.priorities());
-        registers.set_external_coex_enabled(true);
-        state.external_coex = Some(config);
+        oer_espressif_radio::domain::start_external(
+            &mut state.external_coex,
+            config,
+            &mut ExternalBinding {
+                registers: &mut state.registers,
+                clocks: &mut state.clocks,
+                held: &mut state.modem_platform_clocks,
+                platform,
+            },
+        )?;
         Ok(state.coex_participants.enter_external())
     }
 
@@ -944,13 +859,15 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
     ) -> Result<u32, crate::coex::ExternalCoexError> {
         let state = self.state_mut();
         let remaining = state.coex_participants.leave_external(external);
-        // Only a started external coexistence issues the proof.
-        if let Some(config) = state.external_coex.take() {
-            state.registers.clear_external_coex_priorities(config.role);
-            state.registers.set_external_coex_enabled(false);
-        }
-        self.disable_slot(EXTERNAL_COEX_SLOT)
-            .map_err(crate::coex::ExternalCoexError::Clock)?;
+        oer_espressif_radio::domain::stop_external(
+            &mut state.external_coex,
+            &mut ExternalBinding {
+                registers: &mut state.registers,
+                clocks: &mut state.clocks,
+                held: &mut state.modem_platform_clocks,
+                platform: (),
+            },
+        )?;
         Ok(remaining)
     }
 
@@ -978,91 +895,33 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
         platform: &impl PlatformClockProvider<Backend = B>,
     ) -> Result<(), ModemClockError> {
         let state = self.state_mut();
-        let (planner, mut leases) =
-            match core::mem::replace(&mut state.clocks, ModemClocks::InFlight) {
-                ModemClocks::Ready { planner, leases } => (planner, leases),
-                other => {
-                    state.clocks = other;
-                    return Err(ModemClockError::Poisoned);
-                }
-            };
-        if leases[index].is_some() {
-            state.clocks = ModemClocks::Ready { planner, leases };
-            return Err(ModemClockError::AlreadyEnabled);
-        }
-        let prepared =
-            match planner.prepare_acquire(crate::power::clock::module_dependencies(module)) {
-                Ok(prepared) => prepared,
-                Err(failure) => {
-                    state.clocks = ModemClocks::Ready {
-                        planner: failure.into_planner(),
-                        leases,
-                    };
-                    return Err(ModemClockError::Rejected);
-                }
-            };
-        let phy = state.registers.radio_phy_mut();
-        match oer_espressif_modem_clock::execution::acquire(
-            prepared,
-            &mut ModemExecution {
-                port: phy,
-                held: &mut state.modem_platform_clocks,
-                platform,
-            },
-        ) {
-            Ok((planner, lease)) => {
-                leases[index] = Some(lease);
-                state.clocks = ModemClocks::Ready { planner, leases };
-                Ok(())
-            }
-            Err(poisoned) => {
-                // Remaining leases retire with the poisoned planner epoch.
-                state.clocks = ModemClocks::AcquirePoisoned { _owner: poisoned };
-                Err(ModemClockError::Poisoned)
-            }
-        }
+        state
+            .clocks
+            .enable(
+                index,
+                crate::power::clock::module_dependencies(module),
+                &mut ModemExecution {
+                    port: state.registers.radio_phy_mut(),
+                    held: &mut state.modem_platform_clocks,
+                    platform,
+                },
+            )
+            .map_err(modem_error)
     }
 
     fn disable_slot(&mut self, index: usize) -> Result<(), ModemClockError> {
         let state = self.state_mut();
-        let (planner, mut leases) =
-            match core::mem::replace(&mut state.clocks, ModemClocks::InFlight) {
-                ModemClocks::Ready { planner, leases } => (planner, leases),
-                other => {
-                    state.clocks = other;
-                    return Err(ModemClockError::Poisoned);
-                }
-            };
-        let Some(lease) = leases[index].take() else {
-            state.clocks = ModemClocks::Ready { planner, leases };
-            return Err(ModemClockError::NotEnabled);
-        };
-        let prepared = match planner.prepare_release(lease) {
-            Ok(prepared) => prepared,
-            Err(failure) => {
-                let (planner, lease) = failure.into_owners();
-                leases[index] = Some(lease);
-                state.clocks = ModemClocks::Ready { planner, leases };
-                return Err(ModemClockError::Rejected);
-            }
-        };
-        match oer_espressif_modem_clock::execution::release(
-            prepared,
-            &mut ModemExecution {
-                port: state.registers.radio_phy_mut(),
-                held: &mut state.modem_platform_clocks,
-                platform: (),
-            },
-        ) {
-            Ok(planner) => {
-                state.clocks = ModemClocks::Ready { planner, leases };
-                Ok(())
-            }
-            Err(poisoned) => {
-                state.clocks = ModemClocks::ReleasePoisoned { _owner: poisoned };
-                Err(ModemClockError::Poisoned)
-            }
-        }
+        state
+            .clocks
+            .disable(
+                index,
+                &mut ModemExecution {
+                    port: state.registers.radio_phy_mut(),
+                    held: &mut state.modem_platform_clocks,
+                    platform: (),
+                },
+            )
+            .map_err(modem_error)
     }
 
     /// The current coexistence priority of `event`.
@@ -1200,3 +1059,139 @@ use crate::{
     modem::{BLUETOOTH_MAIN_XTAL_LOW_POWER_DIVIDER, SharedRadioRegisters},
     phy::RadioPhyRegisters,
 };
+
+fn btbb_error(error: oer_espressif_radio::domain::BtbbError) -> BtbbError {
+    use oer_espressif_radio::domain::BtbbError as E;
+    match error {
+        E::AlreadyAcquired => BtbbError::AlreadyAcquired,
+        E::NotAcquired => BtbbError::NotAcquired,
+        E::Unregistered => BtbbError::Unregistered,
+        E::Stale => BtbbError::Stale,
+    }
+}
+fn modem_error(error: oer_espressif_radio::modem::Error) -> ModemClockError {
+    use oer_espressif_radio::modem::Error;
+    match error {
+        Error::AlreadyEnabled => ModemClockError::AlreadyEnabled,
+        Error::NotEnabled => ModemClockError::NotEnabled,
+        Error::Rejected => ModemClockError::Rejected,
+        Error::Poisoned => ModemClockError::Poisoned,
+    }
+}
+fn low_power_error(
+    error: oer_espressif_radio::domain::LowPowerError<PlatformClockError>,
+) -> LowPowerClockError {
+    use oer_espressif_radio::domain::LowPowerError;
+    match error {
+        LowPowerError::AlreadySelected => LowPowerClockError::AlreadySelected,
+        LowPowerError::NotSelected => LowPowerClockError::NotSelected,
+        LowPowerError::Platform(error) => LowPowerClockError::PlatformClock(error),
+    }
+}
+impl oer_espressif_radio::domain::BtbbPort for SharedRadioRegisters {
+    fn initialize(&mut self, gain: u8) {
+        self.initialize_btbb_v2_arg_one(gain);
+    }
+}
+struct LowPowerBinding<'a, B, P> {
+    phy: &'a mut RadioPhyRegisters,
+    platform: P,
+    backend: core::marker::PhantomData<fn() -> B>,
+}
+impl<B: PlatformClockBackend, P> oer_espressif_radio::domain::LowPowerPort
+    for LowPowerBinding<'_, B, P>
+{
+    type Guard = PlatformClockGuard<B>;
+    type Error = PlatformClockError;
+    fn deselect(&mut self) {
+        deselect_bluetooth_low_power_clock(self.phy);
+    }
+    fn release(&mut self, guard: Self::Guard) -> Result<(), (Self::Guard, Self::Error)> {
+        guard.release().map_err(|refused| {
+            let error = refused.error();
+            (refused.into_guard(), error)
+        })
+    }
+}
+impl<B: PlatformClockBackend, P: PlatformClockProvider<Backend = B>>
+    oer_espressif_radio::domain::LowPowerAcquirePort for LowPowerBinding<'_, B, &P>
+{
+    fn select(&mut self) {
+        select_bluetooth_low_power_clock(self.phy);
+    }
+    fn acquire(&mut self) -> Result<Self::Guard, Self::Error> {
+        self.platform.acquire(PlatformClock::ModemLowPowerTimer)
+    }
+}
+struct ExternalBinding<'a, B: PlatformClockBackend, P> {
+    registers: &'a mut SharedRadioRegisters,
+    clocks: &'a mut ModemClocks,
+    held: &'a mut ModemPlatformClocks<B>,
+    platform: P,
+}
+impl<B: PlatformClockBackend, P>
+    oer_espressif_radio::domain::ExternalPort<crate::coex::ExternalCoexConfig>
+    for ExternalBinding<'_, B, P>
+{
+    type Error = crate::coex::ExternalCoexError;
+    fn enabled(&mut self, enabled: bool) {
+        self.registers.set_external_coex_enabled(enabled);
+    }
+    fn clear_priorities(&mut self, config: crate::coex::ExternalCoexConfig) {
+        self.registers.clear_external_coex_priorities(config.role);
+    }
+    fn disable_clock(&mut self) -> Result<(), Self::Error> {
+        self.clocks
+            .disable(
+                EXTERNAL_COEX_SLOT,
+                &mut ModemExecution {
+                    port: self.registers.radio_phy_mut(),
+                    held: self.held,
+                    platform: (),
+                },
+            )
+            .map_err(|error| crate::coex::ExternalCoexError::Clock(modem_error(error)))
+    }
+}
+impl<B: PlatformClockBackend, P: PlatformClockProvider<Backend = B>>
+    oer_espressif_radio::domain::ExternalStartPort<crate::coex::ExternalCoexConfig>
+    for ExternalBinding<'_, B, &P>
+{
+    type Delay = crate::modem::values::ExternalCoexGrantDelay;
+    fn already_active() -> Self::Error {
+        crate::coex::ExternalCoexError::AlreadyActive
+    }
+    fn grant_delay(config: crate::coex::ExternalCoexConfig) -> Result<Self::Delay, Self::Error> {
+        config
+            .grant_delay()
+            .ok_or(crate::coex::ExternalCoexError::GrantDelayOutOfRange)
+    }
+    fn enable_clock(&mut self) -> Result<(), Self::Error> {
+        self.clocks
+            .enable(
+                EXTERNAL_COEX_SLOT,
+                crate::power::clock::module_dependencies(ModemClockModule::Coexistence),
+                &mut ModemExecution {
+                    port: self.registers.radio_phy_mut(),
+                    held: self.held,
+                    platform: self.platform,
+                },
+            )
+            .map_err(|error| crate::coex::ExternalCoexError::Clock(modem_error(error)))
+    }
+    fn mode(&mut self, config: crate::coex::ExternalCoexConfig) {
+        self.registers
+            .configure_external_coex_mode(config.role, config.wires);
+    }
+    fn grant(&mut self, config: crate::coex::ExternalCoexConfig, delay: Self::Delay) {
+        self.registers
+            .configure_external_coex_grant(delay, config.validate_high);
+    }
+    fn priorities(&mut self, config: crate::coex::ExternalCoexConfig) {
+        self.registers.publish_external_coex_priorities(
+            config.role,
+            config.wires,
+            config.priorities(),
+        );
+    }
+}

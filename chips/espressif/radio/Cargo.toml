@@ -5,7 +5,14 @@ edition.workspace = true
 rust-version.workspace = true
 license = "Apache-2.0"
 repository.workspace = true
-description = "Safe family radio power and clock drivers over owned register ports"
+description = "Safe family RF domain membership, power and clock drivers over owned ports"
+
+[features]
+test-support = []
+
+[dependencies]
+oer-radio-coex = { path = "../../../protocols/radio/coex" }
+oer-espressif-modem-clock = { path = "../modem-clock" }
 
 [dev-dependencies]
 oer-time = { path = "../../../portable/time" }

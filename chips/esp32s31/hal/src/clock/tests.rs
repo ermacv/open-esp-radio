@@ -8,7 +8,7 @@ use crate::power::{PlatformClock, PlatformClockBackend, PlatformClockProvider};
 
 use super::{
     BluetoothClient, ClockPort, CommonPower, CommonRadioPower, CommonRadioPowerError,
-    Ieee802154Client, PlatformClockRefs, PowerEpoch, RadioClient, RadioClientKind, WifiClient,
+    Ieee802154Client, PlatformClockRefs, RadioClient, RadioClientKind, WifiClient,
     WifiPowerRestoreCheckpoint,
 };
 
@@ -99,8 +99,7 @@ fn try_enter<K: RadioClientKind>(
     port: &mut Port,
     platform: &CountingPlatformClocks,
 ) -> Result<CommonPower<K>, CommonRadioPowerError> {
-    let entry = power.prepare_entry::<K>(port)?;
-    power.finish_entry(entry, port, platform)
+    power.enter::<K>(port, platform)
 }
 
 /// Enter `K`, which the test expects to succeed.
@@ -143,44 +142,6 @@ const COMMON: [PlatformClock; 3] = [
     PlatformClock::Pll160m,
     PlatformClock::AnalogI2cMaster,
 ];
-
-#[test]
-fn power_retry_preserves_the_original_cold_baseline_until_commit() {
-    let original = WifiPowerBaseline::for_host_test(false);
-    let retry_observation = WifiPowerBaseline::for_host_test(true);
-    let (log, mut port, _) = setup();
-    port.power = original;
-    let mut epoch = PowerEpoch::default();
-
-    epoch.prepare(&port);
-    port.power = retry_observation;
-    epoch.prepare(&port);
-    assert_eq!(epoch.restore(&mut port), Ok(()));
-    assert_eq!(*log.borrow(), [Operation::RestorePower(original)]);
-
-    epoch.prepare(&port);
-    assert_eq!(epoch.restore(&mut port), Ok(()));
-    assert_eq!(
-        log.borrow()[1..],
-        [Operation::RestorePower(retry_observation)]
-    );
-}
-
-#[test]
-fn power_restore_failure_retains_the_baseline_for_retry() {
-    let (log, mut port, _) = setup();
-    let mut epoch = PowerEpoch::default();
-    epoch.prepare(&port);
-
-    port.power_readback = Err(PowerRestoreCheckpoint::ModemSourceClocks);
-    assert_eq!(
-        epoch.restore(&mut port),
-        Err(WifiPowerRestoreCheckpoint::ModemSourceClocks)
-    );
-    port.power_readback = Ok(());
-    assert_eq!(epoch.restore(&mut port), Ok(()));
-    assert_eq!(log.borrow().len(), 2);
-}
 
 #[test]
 fn common_power_holds_one_platform_reference_of_each_shared_gate() {
@@ -412,9 +373,8 @@ fn calibrated(port: &mut Port) -> oer_time::Instant {
 fn wifi_entry_resets_after_calibration_before_domain_power_and_only_once() {
     let (log, mut port, platform) = setup();
     let mut power = CommonRadioPower::default();
-    let mut wifi = crate::ieee80211::client::WifiPowerEntry::default();
     let at = calibrated(&mut port);
-    let first = wifi.enter(&mut power, &mut port, &platform).unwrap();
+    let first = power.enter_wifi(&mut port, &platform).unwrap();
     assert!(!port.calibrated_window);
     assert_eq!(
         &log.borrow()[..4],
@@ -428,7 +388,7 @@ fn wifi_entry_resets_after_calibration_before_domain_power_and_only_once() {
     left(&mut power, &mut port, first);
     // A retained wake republishes PHY state before a repeated client entry.
     calibrated(&mut port);
-    let _second = wifi.enter(&mut power, &mut port, &platform).unwrap();
+    let _second = power.enter_wifi(&mut port, &platform).unwrap();
     assert!(port.calibrated_window);
     assert_eq!(
         log.borrow()
@@ -466,19 +426,18 @@ fn ieee_and_ble_initial_and_repeated_entries_preserve_the_calibrated_mac_window(
 fn wifi_reset_is_retried_after_power_failure_but_not_on_duplicate_admission() {
     let (log, mut port, platform) = setup();
     let mut power = CommonRadioPower::default();
-    let mut wifi = crate::ieee80211::client::WifiPowerEntry::default();
     calibrated(&mut port);
     port.power_sequence_failure = Some(oer_espressif_radio::power::PowerError {
         checkpoint: oer_espressif_radio::power::PowerCheckpoint::ModemClockSource,
         expected: true,
         observed: false,
     });
-    assert!(wifi.enter(&mut power, &mut port, &platform).is_err());
+    assert!(power.enter_wifi(&mut port, &platform).is_err());
     port.power_sequence_failure = None;
-    let _entered = wifi.enter(&mut power, &mut port, &platform).unwrap();
+    let _entered = power.enter_wifi(&mut port, &platform).unwrap();
     let before = log.borrow().len();
     assert!(matches!(
-        wifi.enter(&mut power, &mut port, &platform),
+        power.enter_wifi(&mut port, &platform),
         Err(CommonRadioPowerError::AlreadyEntered)
     ));
     assert_eq!(log.borrow().len(), before);
@@ -496,12 +455,11 @@ fn wifi_reset_is_retried_after_power_failure_but_not_on_duplicate_admission() {
 fn wifi_has_its_own_initial_reset_after_an_ieee_power_epoch() {
     let (log, mut port, platform) = setup();
     let mut power = CommonRadioPower::default();
-    let mut wifi = crate::ieee80211::client::WifiPowerEntry::default();
     calibrated(&mut port);
     let ieee = entered::<Ieee802154Client>(&mut power, &mut port, &platform);
     left(&mut power, &mut port, ieee);
     assert!(port.calibrated_window);
-    let _wifi = wifi.enter(&mut power, &mut port, &platform).unwrap();
+    let _wifi = power.enter_wifi(&mut port, &platform).unwrap();
     assert!(!port.calibrated_window);
     assert_eq!(
         log.borrow()

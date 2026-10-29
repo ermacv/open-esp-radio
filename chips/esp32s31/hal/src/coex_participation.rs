@@ -104,41 +104,13 @@ pub struct ExternalCoexistence {
     _private: (),
 }
 
-/// One participant of the coexistence set.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum Participant {
-    Client(RadioClient),
-    External,
-}
-
-impl Participant {
-    const fn bit(self) -> u8 {
-        match self {
-            Self::Client(RadioClient::Wifi) => 1,
-            Self::Client(RadioClient::Bluetooth) => 1 << 1,
-            Self::Client(RadioClient::Ieee802154) => 1 << 2,
-            Self::External => 1 << 3,
-        }
-    }
-}
-
 /// The radios that enabled coexistence (`coex_core_enable`).
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub(crate) struct CoexParticipants(u8);
+pub(crate) struct CoexParticipants(oer_espressif_radio::membership::Participants);
 
 impl CoexParticipants {
     pub(crate) const fn count(self) -> u32 {
-        self.0.count_ones()
-    }
-
-    fn enter(&mut self, participant: Participant) -> u32 {
-        self.0 |= participant.bit();
-        self.count()
-    }
-
-    fn leave(&mut self, participant: Participant) -> u32 {
-        self.0 &= !participant.bit();
-        self.count()
+        self.0.count()
     }
 
     /// Enter client `K`; returns how many take part.
@@ -147,7 +119,7 @@ impl CoexParticipants {
         absent: CoexAbsent<K>,
     ) -> (Coexisting<K>, u32) {
         let CoexAbsent { _client } = absent;
-        let count = self.enter(Participant::Client(K::CLIENT));
+        let count = self.0.enter(K::CLIENT);
         (Coexisting { _client }, count)
     }
 
@@ -157,18 +129,18 @@ impl CoexParticipants {
         coexisting: Coexisting<K>,
     ) -> (CoexAbsent<K>, u32) {
         let Coexisting { _client } = coexisting;
-        let count = self.leave(Participant::Client(K::CLIENT));
+        let count = self.0.leave(K::CLIENT);
         (CoexAbsent { _client }, count)
     }
 
     pub(crate) fn enter_external(&mut self) -> (ExternalCoexistence, u32) {
-        let count = self.enter(Participant::External);
+        let count = self.0.enter_external();
         (ExternalCoexistence { _private: () }, count)
     }
 
     pub(crate) fn leave_external(&mut self, external: ExternalCoexistence) -> u32 {
         let ExternalCoexistence { _private: () } = external;
-        self.leave(Participant::External)
+        self.0.leave_external()
     }
 }
 
