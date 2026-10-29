@@ -160,8 +160,17 @@ arbiter, station and runtime as `station(resources, config) -> (Control,
 NetDevice, Runners)`; images select the interrupt entries, callbacks, observers
 and key-unwrap engine and spawn the returned runners.
 The neutral `oer-network::NetDevice` transfers Ethernet owners and publishes
-the link epoch. `portable/embassy/net` maps it to the IP stack, retaining a
-refused TX owner. Neither contract exposes a stack packet or Wi-Fi core type.
+the link epoch. `oer_embassy_net::ip` builds its pools, one pinned IP stack
+and `EthernetBridge` once. The service selects DHCPv4 or static IPv4 and
+reports link epoch, IPv4 configuration and stop/error through typed product
+values and synchronous status callbacks. Reassociation invalidates DHCP before
+the next stack poll, including a coalesced down/up, while retaining the stack
+and bridge. Stop wakes independently of queue capacity, clears configuration
+and reclaims pending/queued software TX; terminal services retain their device
+and stack owners. Socket applications use the pinned stack API. The HIL
+network vocabulary serializes the resulting values without constructing a
+stack. A refused TX retains its original owner. Neither the neutral device
+nor the product status exposes a stack packet or Wi-Fi core type.
 The network bridges advance only on RX, TX publication/capacity and link
 level/epoch events, with bounded continuations for remaining work. They have
 no periodic safety timer. IP polling follows the stack's waker and protocol

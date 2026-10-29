@@ -141,7 +141,7 @@ pub async fn serve(
         None => {
             let mut controls = core::pin::pin!(reconnect(&mut control, attempt, &stopped, pending));
             let mut workload = core::pin::pin!(embassy_futures::join::join(
-                super::network::run(address, seed, net, &LINK, attempt),
+                super::network::run(address, seed, net, attempt),
                 super::future::Boundary(controls.as_mut())
             ));
             match embassy_futures::select::select(

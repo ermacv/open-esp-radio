@@ -21,8 +21,8 @@
 //! are copied into packet-pool storage before publication to the network stack.
 //! [`ethernet`] consumes the neutral `oer_network::NetDevice` contract; a
 //! refused TX retains its original packet and software credit together.
-//! [`station_network`] retains the network stack and its radio-side runner
-//! across station associations. [`datapath`] holds the software/physical TX
+//! [`ip`] builds one permanent stack over that device and publishes its typed
+//! status across associations. [`datapath`] holds the software/physical TX
 //! ownership contracts and the destination/flow queue arena between them.
 
 pub use oer_network::{
@@ -31,8 +31,8 @@ pub use oer_network::{
 
 pub mod datapath;
 pub mod ethernet;
+pub mod ip;
 mod owned;
-pub mod station_network;
 
 pub use owned::{
     AccessRefused, EndpointSplitError, OwnedEndpointResources, OwnedLinkController,

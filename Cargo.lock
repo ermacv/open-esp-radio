@@ -1619,6 +1619,7 @@ dependencies = [
  "critical-section",
  "embassy-futures",
  "embassy-net",
+ "embassy-time",
  "oer-memory",
  "oer-network",
  "oer-sync",
@@ -2199,7 +2200,6 @@ dependencies = [
  "oer-time",
  "oer-trace",
  "static_cell",
- "xarxa-driver",
 ]
 
 [[package]]

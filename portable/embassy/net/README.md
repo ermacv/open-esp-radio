@@ -16,8 +16,47 @@ only when it would wake a different task, then explicitly drop it; a matching Wa
 only dropped. Separate fixed-slot wake-by-reference and drop calls preserve
 the DWARF method scopes the stack analyzer uses to prove Waker targets.
 
-`station_network` consumes a network device once to start the IP stack and
-retains that stack and the radio-side runner across station associations.
+## Product IP service
+
+`ip::Resources<X, RX, TX, GENERAL>` holds final pool, endpoint, device and
+stack storage. An image places it once and lends it exclusively to `start`,
+passing a `NetDevice`, interface identity, MAC address, random seed and
+`Configuration::Dhcpv4` or `Configuration::Static`. It receives one local
+`Control` and one `Service`; no second start, allocator waiter or stack is
+available through that borrow. A construction refusal returns the original
+neutral device and a typed reason. Storage remains lent.
+
+`Service::run` polls its Ethernet bridge before the pinned stack and publishes
+`StatusChanged { previous, current }` synchronously after link/configuration
+changes. `Control::status` returns the latest link level/epoch, IPv4 lease or
+static configuration, and running/stopped/failed lifecycle. IPv4 configuration
+contains address, prefix and optional gateway, using product values rather
+than stack types. Idle polls publish no duplicate status. A new epoch revokes
+the old DHCP lease before polling the stack, even when Down/Up coalesced to
+Up with a new epoch. A changed renewal is observed after each stack poll.
+Pools, stack, bridge and socket handles remain in place across reconnects.
+
+`Control::stop` wakes the runner independently of data-plane capacity. The
+service lowers its stack link, reclaims pending/queued software TX, clears IP
+addresses/routes and returns its typed stop/error. It retains its owners in
+terminal state; subsequent runs return that same terminal without polling the
+stack. Control and runner stay on the same executor/hart. The neutral device's
+radio lifecycle is controlled by its own facade, not by stopping IP.
+
+`Service::stack` and `interface` expose the pinned stack for socket
+applications; there is no additional TCP/UDP abstraction. HIL only serializes
+the service's values. Its bridge preserves HIL's drain-and-report-refusal RX
+policy and serves one TX per turn. Frame observations go to the image's
+collector and do not become product status counters.
+
+Host service tests inject lease/configuration events at the private stack
+boundary and drive protocol deadlines with per-test `oer-time-virtual`
+clocks. They also construct the real pinned stack, retain a socket and
+configuration across reconnects, and exercise its public terminal paths.
+The development-only Embassy mock driver supplies link symbols; these tests
+never set or advance its global clock or run the pinned DHCP engine. Existing
+bridge cases exercise real packet pools, TX credit and RX delivery during
+TX backpressure.
 
 RX frames are copied into the endpoint's packet pool before publication.
 The adapter accepts packet-pool owners and forbids unsafe code; it does not
@@ -54,7 +93,7 @@ or critical section is introduced. Queue Waker clone, wake and drop callbacks
 run only outside the ContextCell borrow, including displaced registrations.
 
 HIL `wifi-station` selects `oer_espressif_executor::ThreadContext<0>`:
-their network and station sides remain on the existing P1 executor. Host tests
+its network and station sides remain on the existing P1 executor. Host tests
 use `oer_memory::HostContext`. RX ordinary atomic wakers and the packet-pool
 waiter are still confined to that composition. These types do not admit new
 cross-priority wiring.
@@ -71,8 +110,6 @@ its drain-and-report-refusal RX policy.
 | Waiting state | Event source |
 | --- | --- |
 | No device RX | `NetDevice::poll_receive_ready` |
-| Bounded RX endpoint queue full | affine SPSC producer readiness, woken by stack dequeue |
-| Bounded RX pool empty | claimed packet-pool waiter, woken after packet return; register then recheck |
 | No stack TX | coalesced TX publication hint; consuming a stale hint schedules a turn to rearm |
 | Retained TX blocked or refused | `NetDevice::poll_transmit_ready`, rearmed after refusal |
 | Stack TX admission full | packet destruction, then credit return and producer wake |
@@ -83,7 +120,7 @@ After work, a continuation yields to the other P1 futures and rearms waits.
 An idle or blocked turn does not wake itself. The image polls its network
 event producers before its application predicates in the same task; their
 shared waker delivers link, DHCP and probe updates without a 10-ms sampler.
-HIL compares the lease after each IP-runner poll, including renewal while
+The IP service compares the lease after each stack-runner poll, including renewal while
 the interface remains configured. Only protocol and application deadlines
 use time.
 
