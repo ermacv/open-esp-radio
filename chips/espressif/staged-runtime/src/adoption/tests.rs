@@ -132,3 +132,55 @@ fn context_failure_returns_the_original_observation_without_replaying_initializa
         "core-control-installed"
     );
 }
+
+#[test]
+fn early_reset_and_retained_output_survives_context_admission_failure() {
+    use core::cell::RefCell;
+    use oer_diagnostics::fault::{Class, Domain, Record};
+
+    let log = Log::new(None);
+    let output = RefCell::new(Vec::new());
+    let mut previous = Record::encode(
+        Class::ConfigurationBoot,
+        Domain::Boot,
+        1,
+        0,
+        0,
+        b"previous boot failure",
+    )
+    .unwrap();
+    let result = complete::<Chip<'_>, _, ()>(
+        log.owners(),
+        |hardware| {
+            assert!(log.operations().contains(&Op::Console));
+            crate::diagnostics::reset_cause(0, hardware.resources.id.into(), |part| {
+                output.borrow_mut().extend_from_slice(part);
+                Ok::<_, ()>(())
+            })
+            .unwrap();
+            previous
+                .report(|view| {
+                    output.borrow_mut().extend_from_slice(view.payload);
+                    Ok::<_, ()>(())
+                })
+                .unwrap();
+            hardware.watchdogs
+        },
+        |_| {
+            assert_eq!(
+                output.borrow().as_slice(),
+                b"reset cause hart=00000000 raw=0000000f retained=best-effort\nprevious boot failure"
+            );
+            Err(BootError::WrongHart {
+                actual: 1,
+                expected: 0,
+            })
+        },
+    );
+    assert!(matches!(
+        result,
+        Err(Error::Context(BootError::WrongHart { .. }))
+    ));
+    assert!(previous.peek().is_err());
+    assert!(!output.borrow().is_empty());
+}

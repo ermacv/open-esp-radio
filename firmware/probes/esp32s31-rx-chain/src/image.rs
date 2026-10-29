@@ -101,30 +101,58 @@ oer_esp32s31_hal::phy_fault_reporter!(oer_esp32s31_compose::phy_fault::reset);
 oer_espressif_staged_runtime::entry!(
     main,
     oer_esp32s31_hal::platform::Port,
-    hook = crate::diagnostic::panic
+    hook = crate::diagnostic::panic,
+    exception = crate::diagnostic::exception
 );
 fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platform::Port>) -> ! {
     let Some(root) = Root::take() else {
         fail(oer_diagnostics::name!("root"; 32));
     };
-    let (runtime, _psram, mut adopted) =
-        match oer_espressif_staged_runtime::adoption::run::<oer_esp32s31_compose::Esp32s31, _, _>(
-            handoff,
-            root.into_runtime(),
-            INTERRUPT_TABLE,
-            board::BootstrapPsram,
-            oer_esp32s31_compose::phy_fault::report_previous,
-            core::convert::identity,
-        ) {
-            Ok(value) => value.into_parts(),
-            Err(error) => fail(error.name()),
-        };
+    let (
+        (
+            runtime_efuse,
+            runtime_radio,
+            runtime_timg0_alarm,
+            runtime_clocks,
+            runtime_system_timer,
+            runtime_wifi_interrupts,
+            runtime_software_interrupts,
+            runtime_entropy,
+            runtime_watchdogs,
+        ),
+        _psram,
+        mut adopted,
+    ) = match oer_espressif_staged_runtime::adoption::run::<oer_esp32s31_compose::Esp32s31, _, _>(
+        handoff,
+        root.into_runtime(),
+        INTERRUPT_TABLE,
+        board::BootstrapPsram,
+        oer_esp32s31_compose::phy_fault::report_previous,
+        |hardware| {
+            let _reset_causes = oer_esp32s31_compose::reset_causes::read(hardware.reset_cause);
+
+            crate::diagnostic::report_previous();
+            (
+                hardware.efuse,
+                hardware.radio,
+                hardware.timg0_alarm,
+                hardware.clocks,
+                hardware.system_timer,
+                hardware.wifi_interrupts,
+                hardware.software_interrupts,
+                hardware.entropy,
+                hardware.watchdogs,
+            )
+        },
+    ) {
+        Ok(value) => value.into_parts(),
+        Err(error) => fail(error.name()),
+    };
     let Some(interrupts) = Interrupts::take() else {
         fail(oer_diagnostics::name!("interrupts"; 32));
     };
-    crate::diagnostic::report_previous();
     crate::diagnostic::phase(1);
-    let factory = FactoryIdentity::read(runtime.efuse);
+    let factory = FactoryIdentity::read(runtime_efuse);
     let identity = PhyCalibrationIdentity {
         rf_cal_version: phy_get_rf_cal_version(),
         base_mac_address: factory.base_mac(),
@@ -132,8 +160,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
     };
     let station = factory.address(Interface::Station);
     let ap = factory.address(Interface::AccessPoint);
-    let (domain, partitions) = runtime
-        .radio
+    let (domain, partitions) = runtime_radio
         .split::<ChipClocks, _>(
             ConcurrentPhy::new(),
             oer_esp32s31_compose::phy_fault::identity(),
@@ -146,11 +173,11 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
     let Some(lp) = LpClock::<RcSlow>::claim() else {
         fail(oer_diagnostics::name!("claim"; 32));
     };
-    let phy_pilot = crate::phy_pilot::init(runtime.timg0_alarm, adopted.router(), interrupts.phy);
+    let phy_pilot = crate::phy_pilot::init(runtime_timg0_alarm, adopted.router(), interrupts.phy);
     let backend = Esp32s31Radio::new(
         domain,
         partitions.wifi_coex,
-        runtime.clocks,
+        runtime_clocks,
         oer_espressif_executor::Cooperative::<Esp32s31, _>::new(EmbassyClock),
         NoopPhyTargetObserver,
         PhyRegisterConfig::new(identity),
@@ -159,7 +186,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
     let Some(backend) = DIRECT_BACKEND.try_init(backend) else {
         fail(oer_diagnostics::name!("direct-backend"; 32));
     };
-    let timer = runtime.system_timer;
+    let timer = runtime_system_timer;
     oer_espressif_executor::init::<Esp32s31, 2, _, _>(
         oer_espressif_executor::systimer::SystemTimer {
             comparators: timer.comparators,
@@ -178,19 +205,19 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
     .unwrap_or_else(|failure| failure.reset());
     // No Wi-Fi interrupt consumer is installed: this experiment polls only.
     // The MAC bank stays with the polling task; no CPU route is installed.
-    let mut wifi_irqs = runtime.wifi_interrupts;
+    let mut wifi_irqs = runtime_wifi_interrupts;
     wifi_irqs.mac.mask_all_mac_interrupts();
     wifi_irqs.power.mask_all_power_interrupts();
     let traffic = traffic::take().unwrap_or_else(|reason| fail(reason));
     if let Err(reason) = traffic::checkpoint(traffic, 200, 0, &wifi_irqs.mac) {
         fail(reason);
     }
-    let software = runtime.software_interrupts;
+    let software = runtime_software_interrupts;
     let (hart, router) = adopted.parts();
     let radio = InterruptExecutor::<Esp32s31, 2>::new(software.line2)
         .start(hart, router, interrupts.radio, software.irq2, ())
         .unwrap_or_else(|failure| failure.reset());
-    let rng = Rng::new(runtime.entropy, EmbassyClock);
+    let rng = Rng::new(runtime_entropy, EmbassyClock);
     if RadioTasks::direct(&radio, backend, lp, partitions.wifi, rng, station, ap).is_err() {
         fail(oer_diagnostics::name!("direct-task"; 32));
     }
@@ -217,7 +244,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
             (),
             move |spawner| {
                 if AppTasks::capture(spawner, boot).is_err()
-                    || AppTasks::watchdog(spawner, runtime.watchdogs.rtc).is_err()
+                    || AppTasks::watchdog(spawner, runtime_watchdogs.rtc).is_err()
                 {
                     fail(oer_diagnostics::name!("task"; 32));
                 }
@@ -226,11 +253,14 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
         .unwrap_or_else(|failure| failure.reset()) {}
 }
 fn fail<const B: usize>(reason: oer_diagnostics::Name<B>) -> ! {
-    oer_espressif_staged_runtime::fatal_halt::<oer_esp32s31_hal::platform::Port>(|_, _| {
-        let _ = oer_esp32s31_hal::peripherals::usb_serial_jtag::fatal_note(
-            &oer_diagnostics::Note::runtime_fail(reason),
-        );
-    })
+    oer_espressif_staged_runtime::fatal::boot_failure::<oer_esp32s31_hal::platform::Port>(
+        reason.as_str(),
+        || {
+            let _ = oer_esp32s31_hal::peripherals::usb_serial_jtag::fatal_note(
+                &oer_diagnostics::Note::runtime_fail(reason),
+            );
+        },
+    )
 }
 type DirectRun =
     impl core::future::Future<Output = Result<DirectOutput, oer_diagnostics::Name<32>>>;

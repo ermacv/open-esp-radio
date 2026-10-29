@@ -3,7 +3,7 @@
 //!
 //! A hart takes interrupts at the levels of its table entries; a level
 //! preempts only a lower one, so the stack holds at most one interrupt per level at a time,
-//! with an exception on top. Each level costs its worst hardware-vector entry
+//! with the runtime's bounded number of exception entries on top. Each level costs its worst hardware-vector entry
 //! among the lines its table entries bind: the entry's frame below the
 //! interrupt stack's position plus the bound of the handler it calls. One
 //! line, one source, one direct call: the vector of an entry's line must call
@@ -34,8 +34,32 @@ pub struct Stacks<'a> {
     pub vectors: &'a [Vector],
     /// The checked entry of exceptions.
     pub exception: TrapEntry,
+    /// Maximum simultaneous exception entries, proven by the runtime's fatal path.
+    pub exception_copies: u32,
     /// Targets of indirect sites, the same in every context.
     pub resolutions: &'a Resolutions,
+}
+
+/// Read the runtime's required absolute nesting metadata, independently of
+/// function symbols. Missing, non-absolute or zero metadata is refused.
+pub fn exception_copies(file: &oer_analysis_elf::Elf<'_>) -> Result<u32> {
+    let invalid = || {
+        Error::new(
+            ErrorCode::Integrity,
+            "invalid or missing _runtime_exception_frames",
+        )
+    };
+    let symbol = file
+        .symbol("_runtime_exception_frames")
+        .ok_or_else(invalid)?;
+    if symbol.section.is_some() {
+        return Err(invalid());
+    }
+    let copies = u32::try_from(symbol.address).map_err(|_| invalid())?;
+    if copies == 0 {
+        return Err(invalid());
+    }
+    Ok(copies)
 }
 
 /// The checked entry of one hart's line.
@@ -67,7 +91,8 @@ pub struct HartStack {
     pub levels: Vec<LevelStack>,
     /// The exception on top of every level.
     pub exception: LevelStack,
-    /// The sum of every level and the exception; `None` when one is unknown.
+    pub exception_copies: u32,
+    /// The sum of every level and all exception copies; `None` when one is unknown.
     pub bytes: Option<u64>,
     /// The sum over what is resolved (`partial + ?` when [`Self::bytes`] is
     /// unknown).
@@ -155,6 +180,12 @@ pub fn interrupt_stacks(
     keep: &mut Ledger<'_>,
     control: &mut dyn RunControl,
 ) -> Result<Vec<HartStack>> {
+    if stacks.exception_copies == 0 {
+        return Err(Error::new(
+            ErrorCode::Integrity,
+            "exception nesting cannot be zero",
+        ));
+    }
     let mut harts = Vec::new();
     for &core in stacks.cores {
         let levels: BTreeSet<u32> = stacks
@@ -183,20 +214,27 @@ pub fn interrupt_stacks(
             keep,
             control,
         )?;
+        let overflow = || Error::new(ErrorCode::Integrity, "interrupt stack sum overflow");
+        let scale = u64::from(stacks.exception_copies);
+        let exception_bytes = exception
+            .bytes
+            .map(|bytes| bytes.checked_mul(scale).ok_or_else(overflow))
+            .transpose()?;
         let bytes = level_stacks
             .iter()
-            .chain([&exception])
-            .map(|level| level.bytes)
-            .sum::<Option<u64>>();
-        let partial = level_stacks
-            .iter()
-            .chain([&exception])
-            .map(|level| level.partial)
-            .sum();
+            .try_fold(exception_bytes, |sum, level| match (sum, level.bytes) {
+                (Some(sum), Some(bytes)) => sum.checked_add(bytes).map(Some).ok_or_else(overflow),
+                _ => Ok(None),
+            })?;
+        let partial = level_stacks.iter().try_fold(
+            exception.partial.checked_mul(scale).ok_or_else(overflow)?,
+            |sum, level| sum.checked_add(level.partial).ok_or_else(overflow),
+        )?;
         harts.push(HartStack {
             core,
             levels: level_stacks,
             exception,
+            exception_copies: stacks.exception_copies,
             bytes,
             partial,
         });

@@ -907,6 +907,7 @@ extern "C" fn facts_main() -> ! {
     };
     loop {
         FACTS_OUTPUT[1].store(0, Ordering::Relaxed);
+        report_reset_causes(&s);
         if request == u32::MAX {
             FACTS_OUTPUT[0].store(0xfac70000, Ordering::Release);
         } else {
@@ -1306,13 +1307,8 @@ fn retained_record() -> [u32; 12] {
     }
     record
 }
-fn after_reset(s: &mut Session<'_>) {
-    let record = retained_record();
-    emit(0x80, record[0], record[1], record[2]);
-    emit(0x83, record[3], record[4], record[5]);
-    emit(0x84, record[6], record[7], record[11]);
-    emit(0x85, record[8], record[9], record[10]);
-    config(s);
+// Raw causes use the probe's existing numeric session channel.
+fn report_reset_causes(s: &Session<'_>) {
     let r = &s.reset_cause.lp_aon_reset_cause;
     emit(
         0x81,
@@ -1329,6 +1325,15 @@ fn after_reset(s: &mut Session<'_>) {
                 .lp_core_etm_wakeup_flag(),
         ),
     );
+}
+fn after_reset(s: &mut Session<'_>) {
+    let record = retained_record();
+    emit(0x80, record[0], record[1], record[2]);
+    emit(0x83, record[3], record[4], record[5]);
+    emit(0x84, record[6], record[7], record[11]);
+    emit(0x85, record[8], record[9], record[10]);
+    config(s);
+    report_reset_causes(s);
     let u = s.uart0_clock.hp_sys_clkrst_uart0.read_uart0_ctrl0();
     emit(
         0x82,

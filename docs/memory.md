@@ -92,6 +92,13 @@ contracts: [Hardware memory](hardware-memory.md).
   complete bounds.
   Defaults cover the entire geometry, including explicit zeroes for contained
   harts. See the [image linker](../tools/image/linker/README.md).
+- The staged runtime exports `_runtime_exception_frames` from its trap policy.
+  The IRQ bound adds that many complete exception entry/handler bounds above
+  the per-level interrupt sum. Its reset gate permits one platform reset attempt;
+  with intact SRAM/entry/local mask code, capture, a stop/hook fault and a reset
+  fault need at most three copies. Stack allocation and the existing margin
+  include those copies; a fault before a complete frame remains outside the
+  software guarantee. The FPU remains disabled throughout the trap closure.
 - The image linker sizes each used hart's IRQ stack to
   `align16(ceil(bound * (100 + margin) / 100)) + guard`. The contract margin
   is 10%; `irq-stack-bytes` is the maximum, used without a proven bound and

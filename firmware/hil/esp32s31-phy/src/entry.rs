@@ -146,21 +146,49 @@ pub(crate) type Rng =
 oer_esp32s31_hal::phy_fault_reporter!(oer_esp32s31_compose::phy_fault::reset);
 oer_espressif_staged_runtime::entry!(main, oer_esp32s31_hal::platform::Port);
 fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platform::Port>) -> ! {
-    oer_esp32s31_hal::peripherals::usb_serial_jtag::early_note(
-        &oer_diagnostics::Note::diagnostic_start(oer_diagnostics::name!("phy")),
-    );
     let Some(root) = Root::take() else {
         fail(oer_diagnostics::name!("root-taken"; 32));
     };
-    let (runtime, _psram, mut adopted) = match oer_espressif_staged_runtime::adoption::run::<oer_esp32s31_compose::Esp32s31, _, _>(
+    let (
+        (
+            runtime_efuse,
+            runtime_radio,
+            runtime_system_timer,
+            runtime_entropy,
+            runtime_timg0_alarm,
+            runtime_clocks,
+            runtime_software_interrupts,
+            runtime_watchdogs,
+            chip,
+        ),
+        _psram,
+        mut adopted,
+    ) = match oer_espressif_staged_runtime::adoption::run::<oer_esp32s31_compose::Esp32s31, _, _>(
         handoff,
         root.into_runtime(),
         INTERRUPT_TABLE,
         oer_esp32s31_board::BootstrapPsram,
         oer_esp32s31_compose::phy_fault::report_previous,
         |hardware| {
+            let chip = transport::Chip(oer_esp32s31_compose::reset_causes::read(
+                hardware.reset_cause,
+            ));
             ieee802154_fault::report_previous();
-            hardware
+
+            oer_esp32s31_hal::peripherals::usb_serial_jtag::early_note(
+                &oer_diagnostics::Note::diagnostic_start(oer_diagnostics::name!("phy")),
+            );
+            (
+                hardware.efuse,
+                hardware.radio,
+                hardware.system_timer,
+                hardware.entropy,
+                hardware.timg0_alarm,
+                hardware.clocks,
+                hardware.software_interrupts,
+                hardware.watchdogs,
+                chip,
+            )
         },
     ) {
         Ok(adopted) => adopted.into_parts(),
@@ -172,7 +200,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
     let Ok(silent) = adopted.router().silent::<Ieee802154InterruptOwner>() else {
         fail(oer_diagnostics::name!("ieee802154-route"; 32));
     };
-    let factory = oer_esp32s31_hal::peripherals::efuse::FactoryIdentity::read(runtime.efuse);
+    let factory = oer_esp32s31_hal::peripherals::efuse::FactoryIdentity::read(runtime_efuse);
     let identity = PhyCalibrationIdentity {
         rf_cal_version: phy_get_rf_cal_version(),
         base_mac_address: factory.base_mac(),
@@ -181,8 +209,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
     let station = factory.address(oer_esp32s31_hal::peripherals::efuse::Interface::Station);
     let access_point =
         factory.address(oer_esp32s31_hal::peripherals::efuse::Interface::AccessPoint);
-    let (domain, partitions) = runtime
-        .radio
+    let (domain, partitions) = runtime_radio
         .split::<ChipClocks, _>(
             ConcurrentPhy::new(),
             oer_esp32s31_compose::phy_fault::identity(),
@@ -193,7 +220,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
             oer_esp32s31_compose::phy_fault::reset(fault)
         });
     // RNG's inter-read settle needs an advancing clock before executor startup.
-    let timer = runtime.system_timer;
+    let timer = runtime_system_timer;
     oer_espressif_executor::init::<Esp32s31, 2, _, _>(
         oer_espressif_executor::systimer::SystemTimer {
             comparators: timer.comparators,
@@ -204,17 +231,17 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
         timer.alarm0,
     )
     .unwrap_or_else(|failure| failure.reset());
-    let mut rng = Rng::new(runtime.entropy, oer_embassy_time::EmbassyClock);
+    let mut rng = Rng::new(runtime_entropy, oer_embassy_time::EmbassyClock);
     let boot = (u64::from(rng.random()) << 32 | u64::from(rng.random())).max(1);
     let (phy_pilot, pilot_timing) =
-        crate::phy_pilot::init(runtime.timg0_alarm, adopted.router(), interrupts.phy);
+        crate::phy_pilot::init(runtime_timg0_alarm, adopted.router(), interrupts.phy);
     let radio = radio::Radio::place(
         RADIO.uninit(),
         domain,
         partitions.wifi,
         partitions.wifi_coex,
         ieee802154::Rx::new(partitions.ieee802154, partitions.ieee802154_coex, silent),
-        runtime.clocks,
+        runtime_clocks,
         identity,
         station,
         access_point,
@@ -230,7 +257,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
         timer.alarm1,
     )
     .unwrap_or_else(|failure| failure.reset());
-    let software = runtime.software_interrupts;
+    let software = runtime_software_interrupts;
     let (hart, router) = adopted.parts();
     let radio_spawner = InterruptExecutor::<Esp32s31, 2>::new(software.line2)
         .start(hart, router, interrupts.radio, software.irq2, ())
@@ -241,9 +268,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
     let Some(poster) = SLOT.claim() else {
         fail(oer_diagnostics::name!("requester"; 32));
     };
-    let chip = transport::Chip(
-        oer_esp32s31_hal::peripherals::reset_cause::ResetCauses::read(runtime.reset_cause),
-    );
+
     let Ok((usb, _pads)) = transport::open_usb(adopted.router(), interrupts.console_usb) else {
         fail(oer_diagnostics::name!("console"; 32));
     };
@@ -252,7 +277,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
         Ok(router) => router,
         Err(error) => fail(error.name()),
     };
-    let watchdog = runtime.watchdogs.rtc;
+    let watchdog = runtime_watchdogs.rtc;
     match Executor::<Esp32s31, 0>::new(software.line0)
         .run(
             &hart,
@@ -275,11 +300,14 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
 /// Halt the image on a failed boot step, its reason on the console while
 /// no one holds the block.
 fn fail<const B: usize>(reason: oer_diagnostics::Name<B>) -> ! {
-    oer_espressif_staged_runtime::fatal_halt::<oer_esp32s31_hal::platform::Port>(|_, _path| {
-        let _note = oer_esp32s31_hal::peripherals::usb_serial_jtag::fatal_note(
-            &oer_diagnostics::Note::runtime_fail(reason),
-        );
-    })
+    oer_espressif_staged_runtime::fatal::boot_failure::<oer_esp32s31_hal::platform::Port>(
+        reason.as_str(),
+        || {
+            let _note = oer_esp32s31_hal::peripherals::usb_serial_jtag::fatal_note(
+                &oer_diagnostics::Note::runtime_fail(reason),
+            );
+        },
+    )
 }
 
 /// Feed the RTC watchdog for good: the image resets when this executor stops

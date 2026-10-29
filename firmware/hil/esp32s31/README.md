@@ -90,7 +90,7 @@ stay outside the small task shells.
 ## Panic and exception records
 
 The agent's panic hook, which the platform's panic entry calls because the
-image names it in its entry (`entry!(main, Port, hook = panic_hook)`), runs
+image names it in `entry!` with `hook = panic_hook`), runs
 in every image but `system-panic-reset` (the agent's `panic-hook` feature,
 which each image's base feature enables, selects that entry).
 `RequestReset` requests a reset through the staged runtime's retained path
@@ -102,23 +102,23 @@ and session ID low/high words in the common fault envelope. The next boot
 prints `previous fault HilRequested:` with those words; both the
 `system-panic-reset` scenario and the requested-reset step of `system-watchdog`
 require that report for the acknowledged request and a software reset.
-The hook for unexpected panics and the
-exception entry format nothing: they record the post-mortem fault and the
-hart's trap registers, the vector it took and the sources pending and routed
-to it (`agent/src/fatal.rs`) in RTC fast memory and reset, and the next boot
-prints `OPEN_RADIO_HIL runtime=PANIC boot=previous` or `runtime=EXCEPTION
-boot=previous` with that state before anything else, as typed notes
+The hook for unexpected panics and the common exception capture format
+nothing. `entry!` selects `exception = exception::capture` for supplemental
+HIL observations after the runtime has retained the entry-time frame and
+attempted peer stop. The supplement keeps the saved cause/PC/mtval and reads
+the vector and sources pending/routed to it (`src/fatal.rs`). The chip resets,
+and the next boot prints `OPEN_RADIO_HIL runtime=PANIC boot=previous` or `runtime=EXCEPTION
+boot=previous` with that state early, beside raw reset causes, as typed notes
 (`OER-DIAG:01` lines through the ROM) that the host renders into those lines. A panic message with
 arguments is not kept, only a static one in task context. An
 interrupt-context panic omits location and message because compiler metadata
 may be in unavailable PSRAM; the hook receives the platform's safe
 `PanicDetails`. The hook's code and diagnostic stage stay in SRAM, its
 records stay in RTC memory, and its fault CRC uses no cached lookup table.
-A failed boot check masks the hart's interrupts for good. While no one
-holds the USB Serial/JTAG block it prints `OPEN_RADIO_HIL runtime=FAIL` and
-halts. Once the console's driver holds the block, the check never takes it
-over: it keeps its reason in the same record and resets the chip
-(`cores::software_reset`), and the next boot prints
+A failed boot check masks the hart's interrupts and retains its reason
+before best-effort output of `OPEN_RADIO_HIL runtime=FAIL`. It always requests
+an explicit reset with the watchdog preserved. Once the console's driver
+holds the block, the check never takes it over. The next boot prints
 `OPEN_RADIO_HIL runtime=FAIL boot=previous`. A takeover of the driver's
 block returns only with a documented drain of the other hart's bus
 transactions after its stall, or one a stand run shows, and a revocation of

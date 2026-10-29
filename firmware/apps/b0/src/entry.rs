@@ -1,9 +1,14 @@
 // B0's statically placed radio tasks and owned USB console.
-use oer_esp32s31_compose::Esp32s31;
 use oer_embassy_time::EmbassyClock;
-use oer_esp32s31_hal::peripherals::{software_interrupt::{FromCpu0Irq, FromCpu2Irq}, system_timer::{SystimerAlarm0, SystimerAlarm1}};
+use oer_esp32s31_compose::Esp32s31;
 use oer_esp32s31_hal::peripherals::usb_serial_jtag::ConsoleInterrupt;
-use oer_esp32s31_hal::peripherals::watchdog::{ArmedRtcWatchdog, RTC_WATCHDOG_FEED_PERIOD_MS, RwdtRegisters};
+use oer_esp32s31_hal::peripherals::watchdog::{
+    ArmedRtcWatchdog, RTC_WATCHDOG_FEED_PERIOD_MS, RwdtRegisters,
+};
+use oer_esp32s31_hal::peripherals::{
+    software_interrupt::{FromCpu0Irq, FromCpu2Irq},
+    system_timer::{SystimerAlarm0, SystimerAlarm1},
+};
 use oer_espressif_executor::{Executor, InterruptExecutor};
 use static_cell::StaticCell;
 
@@ -55,11 +60,14 @@ async fn feed_rtc_watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) {
     match watchdog.feed_every(&EmbassyClock, period).await {}
 }
 
-/// Report a failed boot step on the early writer and wait: no task feeds
-/// the RTC watchdog, which resets the chip.
+/// Retain a failed boot step, report it, and explicitly reset with the watchdog preserved.
 fn fail(reason: &'static str) -> ! {
-    usb::early_text(b"OER-B0-BRINGUP: fail ");
-    usb::early_text(reason.as_bytes());
-    usb::early_text(b"\r\n");
-    oer_espressif_staged_runtime::idle()
+    oer_espressif_staged_runtime::fatal::boot_failure::<oer_esp32s31_hal::platform::Port>(
+        reason,
+        || {
+            usb::early_text(b"OER-B0-BRINGUP: fail ");
+            usb::early_text(reason.as_bytes());
+            usb::early_text(b"\r\n");
+        },
+    )
 }

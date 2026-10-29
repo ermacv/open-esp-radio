@@ -16,16 +16,14 @@ pub fn report_stack_guard() {
     ));
 }
 
-oer_espressif_staged_runtime::exception_handler!(exception);
-
 /// A fatal exception cannot rely on a live executor or acquire a logger
 /// lock that the interrupted code may already hold: it records the
 /// machine state without formatting, with the other hart stopped, and
 /// resets; the next boot reports it.
-#[inline(always)]
-fn exception(context: &TrapFrame) -> ! {
-    let ra = context.ra;
-    oer_espressif_staged_runtime::reset_recording::<oer_esp32s31_hal::platform::Port>(|claim, stop| {
-        crate::fatal::record_exception(claim, ra, stop)
-    })
+pub(crate) fn capture(
+    claim: &oer_espressif_staged_runtime::retained_fault::Claim<'_>,
+    frame: &TrapFrame,
+    stop: Result<&oer_esp32s31_hal::cores::StopTheWorld<'_>, oer_esp32s31_hal::cores::StopError>,
+) {
+    crate::fatal::record_exception(claim, frame, stop);
 }

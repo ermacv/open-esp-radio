@@ -1,12 +1,16 @@
-use oer_esp32s31_compose::Esp32s31;
 use oer_diagnostics::radio_root::{self, RadioRoot};
 use oer_embassy_time::EmbassyClock;
 use oer_esp32s31_board as board;
-use oer_esp32s31_hal::peripherals::{software_interrupt::FromCpu0Irq, system_timer::SystimerAlarm0};
+use oer_esp32s31_compose::Esp32s31;
+use oer_esp32s31_hal::peripherals::usb_serial_jtag;
+use oer_esp32s31_hal::peripherals::watchdog::{
+    ArmedRtcWatchdog, RTC_WATCHDOG_FEED_PERIOD_MS, RwdtRegisters,
+};
+use oer_esp32s31_hal::peripherals::{
+    software_interrupt::FromCpu0Irq, system_timer::SystimerAlarm0,
+};
 use oer_esp32s31_hal::power::{PlatformClock, PlatformClockError, PlatformClockProvider as _};
 use oer_esp32s31_hal::root::Root;
-use oer_esp32s31_hal::peripherals::usb_serial_jtag;
-use oer_esp32s31_hal::peripherals::watchdog::{ArmedRtcWatchdog, RTC_WATCHDOG_FEED_PERIOD_MS, RwdtRegisters};
 use oer_espressif_executor::Executor;
 use oer_espressif_staged_runtime::diagnostics::{self, Console};
 use oer_espressif_staged_runtime::panic;
@@ -34,32 +38,53 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
     let Some(root) = Root::take() else {
         fail(oer_diagnostics::name!("root-taken"; 32));
     };
-    let (runtime, _psram, mut adopted) = match oer_espressif_staged_runtime::adoption::run::<oer_esp32s31_compose::Esp32s31, _, _>(
+    let (
+        (
+            runtime_radio,
+            runtime_clocks,
+            runtime_system_timer,
+            runtime_software_interrupts,
+            runtime_watchdogs,
+            mut diagnostics,
+        ),
+        _psram,
+        mut adopted,
+    ) = match oer_espressif_staged_runtime::adoption::run::<oer_esp32s31_compose::Esp32s31, _, _>(
         handoff,
         root.into_runtime(),
         INTERRUPT_TABLE,
         board::BootstrapPsram,
         oer_esp32s31_compose::phy_fault::report_previous,
-        core::convert::identity,
+        |hardware| {
+            let _reset_causes = oer_esp32s31_compose::reset_causes::read(hardware.reset_cause);
+            // The executor is not running yet: the early writer waits for room
+            // within its budget and counts what it drops.
+            let mut diagnostics = Console::new(|bytes| {
+                if usb_serial_jtag::early_text(bytes) {
+                    Ok(())
+                } else {
+                    Err(())
+                }
+            });
+            if let Some(record) = previous {
+                let _ = diagnostics::previous_panic(&mut diagnostics, &record);
+            }
+            (
+                hardware.radio,
+                hardware.clocks,
+                hardware.system_timer,
+                hardware.software_interrupts,
+                hardware.watchdogs,
+                diagnostics,
+            )
+        },
     ) {
         Ok(adopted) => adopted.into_parts(),
         Err(error) => fail(error.name()),
     };
-    // The executor is not running yet: the early writer waits for room
-    // within its budget and counts what it drops.
-    let mut diagnostics = Console::new(|bytes| {
-        if usb_serial_jtag::early_text(bytes) {
-            Ok(())
-        } else {
-            Err(())
-        }
-    });
-    if let Some(record) = previous {
-        let _ = diagnostics::previous_panic(&mut diagnostics, &record);
-    }
     // The radio root stays held, untouched, until reset.
-    let _radio = runtime.radio;
-    let clocks = runtime.clocks;
+    let _radio = runtime_radio;
+    let clocks = runtime_clocks;
     let mut passed = true;
     for clock in PlatformClock::ALL {
         match clocks.acquire(clock) {
@@ -81,7 +106,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
     let Some(interrupts) = Interrupts::take() else {
         fail(oer_diagnostics::name!("interrupt-table"; 32));
     };
-    let timer = runtime.system_timer;
+    let timer = runtime_system_timer;
     oer_espressif_executor::init::<Esp32s31, 0, _, _>(
         oer_espressif_executor::systimer::SystemTimer {
             comparators: timer.comparators,
@@ -92,13 +117,13 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
         timer.alarm0,
     )
     .unwrap_or_else(|failure| failure.reset());
-    let software = runtime.software_interrupts;
+    let software = runtime_software_interrupts;
     let executor = Executor::<Esp32s31, 0>::new(software.line0);
     let (mut router, hart) = match adopted.enable_interrupts() {
         Ok(router) => router,
         Err(error) => fail(error.name()),
     };
-    let watchdog = runtime.watchdogs.rtc;
+    let watchdog = runtime_watchdogs.rtc;
     match executor
         .run(
             &hart,
@@ -133,10 +158,12 @@ async fn feed_rtc_watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) {
     match watchdog.feed_every(&EmbassyClock, period).await {}
 }
 
-/// Halt the image on a failed boot step, its reason on the console while
-/// no one holds the block.
+/// Retain and report a failed boot step before explicitly resetting the image.
 fn fail<const B: usize>(reason: oer_diagnostics::Name<B>) -> ! {
-    oer_espressif_staged_runtime::fatal_halt::<oer_esp32s31_hal::platform::Port>(|_, _path| {
-        let _note = usb_serial_jtag::fatal_note(&oer_diagnostics::Note::runtime_fail(reason));
-    })
+    oer_espressif_staged_runtime::fatal::boot_failure::<oer_esp32s31_hal::platform::Port>(
+        reason.as_str(),
+        || {
+            let _note = usb_serial_jtag::fatal_note(&oer_diagnostics::Note::runtime_fail(reason));
+        },
+    )
 }

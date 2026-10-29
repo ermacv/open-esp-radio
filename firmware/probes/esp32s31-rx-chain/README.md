@@ -89,9 +89,11 @@ cargo stand --owner wifi lease --board s31-b --air exclusive -- \
   cargo fw run ../probes/esp32s31-rx-chain --board s31-b --timeout 8s
 ```
 
-The image retains exception/panic details through the runtime's public hooks;
-a subsequent boot prints the retained diagnostic and a failed verdict.
+The common runtime exception path retains the entry-time frame before the
+image's supplemental exception hook captures its phase. Panic details use the
+panic hook. A subsequent boot prints raw reset causes, retained diagnostics
+and a failed verdict.
 No handler takes the live console's owner. The direct-backend composition
-passes mandatory image gates with the existing interrupt-stack allocation;
-no panic budget or memory profile is raised. A pass denotes bounded collection,
+uses the normal image gates and IRQ allocation from the handler bound,
+including three bounded exception entries; the profile limits stay unchanged. A pass denotes bounded collection,
 not a hardware ordering or traffic-delivery qualification.

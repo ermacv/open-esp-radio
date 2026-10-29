@@ -55,3 +55,5 @@ impl oer_espressif_staged_runtime::adoption::Binding for Esp32s31 {
 /// Shared retained/reset path selected only by staged Wi-Fi images.
 #[cfg(feature = "wifi-fault")]
 pub mod wifi_fault;
+
+pub mod reset_causes;

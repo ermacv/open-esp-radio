@@ -880,8 +880,8 @@ needs:
   whose optional `hook` parameter exports the image's panic hook symbol, the
   `Handoff` and `Adopted::enable_interrupts`), the sections the linker script
   maps (`placed_static!`, `retained_static!`), the exception handler symbol
-  (`exception_handler!`), trap
-  snapshots and vector-table reads (`trap`), and the linked sections (`layout`).
+  (the common binding in `entry!`, with an optional supplemental `exception`
+  hook), trap snapshots and vector-table reads (`trap`), and the linked sections (`layout`).
   Images and HIL agents reach these through safe APIs and forbid unsafe code.
   The critical section masks its executing hart only. Firmware packages depending
   on the staged runtime declare `critical-section-hart`. The staged build/run

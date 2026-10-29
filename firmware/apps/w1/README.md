@@ -177,7 +177,8 @@ stand file's channel, HT 20 MHz, 100 TU beacons, the stand's SSID;
 SSID reach the image as build-time values (`OER_W1_CHANNEL`,
 `OER_W1_BSSID`, `OER_W1_SSID_HEX`) that `build.rs` writes to
 `$OUT_DIR/w1_config.rs`; built without them (`cargo fw build w1`) the image
-prints `OER-RESULT: fail w1 unconfigured`. BSSIDs are printed with only
+retains the `unconfigured` boot failure and explicitly resets with the
+watchdog preserved; current output is best effort. BSSIDs are printed with only
 their last two octets, SSIDs only as their length and `ssid_ok=`, and the
 base MAC never.
 

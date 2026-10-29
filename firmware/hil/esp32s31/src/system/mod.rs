@@ -56,13 +56,16 @@ static PLATFORM_PANIC: embassy_sync::once_lock::OnceLock<
 > = embassy_sync::once_lock::OnceLock::new();
 
 /// Why each HP core last left reset, read once at boot.
-static RESET_CAUSES: embassy_sync::once_lock::OnceLock<oer_esp32s31_hal::peripherals::reset_cause::ResetCauses> =
-    embassy_sync::once_lock::OnceLock::new();
+static RESET_CAUSES: embassy_sync::once_lock::OnceLock<
+    oer_esp32s31_hal::peripherals::reset_cause::ResetCauses,
+> = embassy_sync::once_lock::OnceLock::new();
 
 /// Read the reset causes from their transferred owner; before the first boot
 /// evidence is served.
-pub(crate) fn read_reset_causes(registers: oer_esp32s31_hal::peripherals::reset_cause::ResetCauseRegisters) {
-    let _ = RESET_CAUSES.init(oer_esp32s31_hal::peripherals::reset_cause::ResetCauses::read(registers));
+pub(crate) fn read_reset_causes(
+    registers: oer_esp32s31_hal::peripherals::reset_cause::ResetCauseRegisters,
+) {
+    let _ = RESET_CAUSES.init(oer_esp32s31_compose::reset_causes::read(registers));
 }
 
 /// Take the previous boot's platform panic record; before the first boot

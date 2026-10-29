@@ -13,10 +13,10 @@
 //! block records only its [`Failure`] and the hart, then resets the chip.
 
 use oer_diagnostics::Note;
-use oer_espressif_staged_runtime::retained_fault::{self, Claim};
 use oer_diagnostics::fault::{Class, Domain, Record};
 use oer_esp32s31_hal::cores::{StopError, StopTheWorld};
 use oer_esp32s31_hal::platform::interrupt_controller::{self, LineObservation};
+use oer_espressif_staged_runtime::retained_fault::{self, Claim};
 use oer_espressif_staged_runtime::trap::{self, TrapRegisters};
 use oer_riscv::clic::Trigger;
 
@@ -62,8 +62,12 @@ oer_espressif_staged_runtime::retained_static! {
 /// Record a panic's machine state under `stop`; the platform resets the
 /// chip next.
 #[cfg(feature = "panic-hook")]
-pub(crate) fn record_panic(claim: &Claim<'_>, stage: u32, stop: Result<&StopTheWorld<'_>, StopError>) {
-    record(claim, PANIC, 0, stage, stop);
+pub(crate) fn record_panic(
+    claim: &Claim<'_>,
+    stage: u32,
+    stop: Result<&StopTheWorld<'_>, StopError>,
+) {
+    record(claim, PANIC, 0, stage, None, stop);
 }
 
 /// A boot check that halts the image.
@@ -165,16 +169,26 @@ pub(crate) fn record_failure(claim: &Claim<'_>, failure: Failure) {
     payload.hart = TrapRegisters::read().hart as u32;
     payload.stage = failure as u32;
     commit(claim, payload);
-
 }
 
 /// Record an exception's machine state and its `ra` under `stop`; the
 /// runtime's fatal reset follows.
-pub(crate) fn record_exception(claim: &Claim<'_>, ra: u32, stop: Result<&StopTheWorld<'_>, StopError>) {
-    record(claim, EXCEPTION, ra, 0, stop);
+pub(crate) fn record_exception(
+    claim: &Claim<'_>,
+    frame: &trap::TrapFrame,
+    stop: Result<&StopTheWorld<'_>, StopError>,
+) {
+    record(claim, EXCEPTION, frame.ra, 0, Some(frame), stop);
 }
 
-fn record(claim: &Claim<'_>, kind: u32, ra: u32, stage: u32, stop: Result<&StopTheWorld<'_>, StopError>) {
+fn record(
+    claim: &Claim<'_>,
+    kind: u32,
+    ra: u32,
+    stage: u32,
+    frame: Option<&trap::TrapFrame>,
+    stop: Result<&StopTheWorld<'_>, StopError>,
+) {
     let TrapRegisters {
         hart,
         mcause,
@@ -184,6 +198,13 @@ fn record(claim: &Claim<'_>, kind: u32, ra: u32, stage: u32, stop: Result<&StopT
         mtvec,
         mtvt,
     } = TrapRegisters::read();
+    let (mcause, mepc, mtval) = frame.map_or((mcause, mepc, mtval), |frame| {
+        (
+            frame.mcause as usize,
+            frame.mepc as usize,
+            frame.mtval as usize,
+        )
+    });
     let vector = mcause & 0x0fff;
     let mtvt_slot = trap::current_hart_vector_slot(vector).unwrap_or(0);
     let mut pending = [0; SOURCE_WORDS];
@@ -264,7 +285,9 @@ pub(crate) fn report_previous() {
     if let Some(mut slot) = retained_fault::peek(&SLOT) {
         let _reported = slot.report(|view| {
             let payload: Payload = view.decode(Domain::Hil).map_err(|_| ())?;
-            report_payload(payload, |note| crate::usb::early(note).then_some(()).ok_or(()))
+            report_payload(payload, |note| {
+                crate::usb::early(note).then_some(()).ok_or(())
+            })
         });
     }
 }
@@ -274,31 +297,84 @@ fn commit(claim: &Claim<'_>, payload: Payload) {
         FAILURE => Class::ConfigurationBoot,
         _ => Class::RustPanic,
     };
-    let [p0,p1,p2,p3,p4,p5] = payload.pending;
-    let [r0,r1,r2,r3,r4,r5] = payload.routed;
-    let words = [payload.kind, payload.hart, payload.mcause, payload.mepc, payload.mtval,
-        payload.ra, payload.mscratch, payload.mtvec, payload.mtvt, payload.mtvt_slot,
-        payload.stage, payload.line, p0,p1,p2,p3,p4,p5,r0,r1,r2,r3,r4,r5];
-    if let Ok(record) = Record::encode(class, Domain::Hil, payload.kind,
-        payload.hart, payload.stage, &words) {
+    let [p0, p1, p2, p3, p4, p5] = payload.pending;
+    let [r0, r1, r2, r3, r4, r5] = payload.routed;
+    let words = [
+        payload.kind,
+        payload.hart,
+        payload.mcause,
+        payload.mepc,
+        payload.mtval,
+        payload.ra,
+        payload.mscratch,
+        payload.mtvec,
+        payload.mtvt,
+        payload.mtvt_slot,
+        payload.stage,
+        payload.line,
+        p0,
+        p1,
+        p2,
+        p3,
+        p4,
+        p5,
+        r0,
+        r1,
+        r2,
+        r3,
+        r4,
+        r5,
+    ];
+    if let Ok(record) = Record::encode(
+        class,
+        Domain::Hil,
+        payload.kind,
+        payload.hart,
+        payload.stage,
+        &words,
+    ) {
         let _committed = claim.commit(&SLOT, record);
     }
 }
-fn report_payload(payload: Payload, mut emit: impl FnMut(&Note<'_>) -> Result<(), ()>) -> Result<(), ()> {
-    let [p0,p1,p2,p3,p4,p5] = payload.pending;
-    let [r0,r1,r2,r3,r4,r5] = payload.routed;
-    let Payload { kind, hart, mcause, mepc, mtval, ra, mscratch, stage,
-        line, mtvec, mtvt, mtvt_slot, .. } = payload;
+fn report_payload(
+    payload: Payload,
+    mut emit: impl FnMut(&Note<'_>) -> Result<(), ()>,
+) -> Result<(), ()> {
+    let [p0, p1, p2, p3, p4, p5] = payload.pending;
+    let [r0, r1, r2, r3, r4, r5] = payload.routed;
+    let Payload {
+        kind,
+        hart,
+        mcause,
+        mepc,
+        mtval,
+        ra,
+        mscratch,
+        stage,
+        line,
+        mtvec,
+        mtvt,
+        mtvt_slot,
+        ..
+    } = payload;
     if kind == FAILURE {
         let failure = Failure::from_word(stage).ok_or(())?;
         return emit(&Note::fatal_fail(hart, failure.name()));
     }
     if kind == EXCEPTION {
-        emit(&Note::fatal_exception(hart, mcause, mepc, mtval, ra, mscratch))?;
+        emit(&Note::fatal_exception(
+            hart, mcause, mepc, mtval, ra, mscratch,
+        ))?;
     } else {
         emit(&Note::fatal_panic(hart, stage, mcause, mepc, mtval))?;
     }
-    emit(&Note::fatal_irq_vector(mcause & 0x0fff, line, mtvec, mtvt, mtvt_slot))?;
-    emit(&Note::fatal_irq_pending(p0,p1,p2,p3,p4,p5))?;
-    emit(&Note::fatal_irq_routed(r0,r1,r2,r3,r4,r5))
+    emit(&Note::fatal_irq_vector(
+        mcause & 0x0fff,
+        line,
+        mtvec,
+        mtvt,
+        mtvt_slot,
+    ))?;
+    emit(&Note::fatal_irq_pending(p0, p1, p2, p3, p4, p5))?;
+    emit(&Note::fatal_irq_routed(r0, r1, r2, r3, r4, r5))
 }

@@ -32,6 +32,11 @@ minimum_free_bytes = 16384
 # The dedicated SRAM interrupt stacks are bounded by the interrupt-stack gate
 # against the platform interrupt contract's percentage margin; there is no
 # separate fixed free-byte reserve.
+# The IRQ sum includes three complete exception entry/handler bounds, from
+# staged-runtime::trap::MAX_EXCEPTION_FRAMES and _runtime_exception_frames.
+# fatal::reset_platform_once admits one reset attempt; with intact SRAM,
+# entry and local mask code, stop/hook reentry plus a reset fault add at most
+# two frames above the first. Link-time sizing retains the existing margin.
 [core.0.interrupt_stack]
 
 # Secondary harts remain contained by the HAL. The image gate proves no

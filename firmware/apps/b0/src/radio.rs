@@ -1,5 +1,4 @@
 //! Permanent physical P2 worker. Only ordinary graph return admits another epoch.
-use oer_esp32s31_compose::Esp32s31;
 use super::*;
 use core::future::{pending, poll_fn};
 use embassy_futures::select::{Either, select};
@@ -19,14 +18,15 @@ use oer_esp32s31_bluetooth_driver::{
     shutdown,
 };
 use oer_esp32s31_board as board;
+use oer_esp32s31_compose::Esp32s31;
 use oer_esp32s31_hal::{
     bluetooth::engine::{
         ArenaError, BluetoothArena, ChipDma, Engine, EpochScope, PoolScope,
         SchedulerAllocationConfig, with_epoch_async, with_pool_async,
     },
     bluetooth::{ClockedOwner, ColdOwner, InterruptSetupOwner},
-    memory::dma_static::Placed,
     domain::{BluetoothClient, CoexAbsent},
+    memory::dma_static::Placed,
     power::ChipClocks,
     root::Root,
 };
@@ -155,36 +155,63 @@ pub fn boot(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::pla
     let Some(root) = Root::take() else {
         crate::fail("root-taken")
     };
-    let (runtime, _psram, mut adopted) = match oer_espressif_staged_runtime::adoption::run::<oer_esp32s31_compose::Esp32s31, _, _>(
+    let (
+        (
+            runtime_efuse,
+            runtime_radio,
+            runtime_timg0_alarm,
+            runtime_clocks,
+            runtime_system_timer,
+            runtime_software_interrupts,
+            runtime_entropy,
+            runtime_watchdogs,
+        ),
+        _psram,
+        mut adopted,
+    ) = match oer_espressif_staged_runtime::adoption::run::<oer_esp32s31_compose::Esp32s31, _, _>(
         handoff,
         root.into_runtime(),
         INTERRUPT_TABLE,
         board::BootstrapPsram,
         oer_esp32s31_compose::phy_fault::report_previous,
-        core::convert::identity,
+        |hardware| {
+            let _reset_causes = oer_esp32s31_compose::reset_causes::read(hardware.reset_cause);
+            crate::gate_fault::report_previous();
+            crate::release_fault::report_previous();
+            if let Some(previous) = previous
+                && oer_esp32s31_hal::peripherals::usb_serial_jtag::early_text(
+                    b"OER-B0-BRINGUP: previous panic\r\n",
+                )
+            {
+                oer_espressif_staged_runtime::panic::clear_previous(&previous);
+            }
+            (
+                hardware.efuse,
+                hardware.radio,
+                hardware.timg0_alarm,
+                hardware.clocks,
+                hardware.system_timer,
+                hardware.software_interrupts,
+                hardware.entropy,
+                hardware.watchdogs,
+            )
+        },
     ) {
         Ok(adopted) => adopted.into_parts(),
         Err(error) => crate::fail(error.name().as_str()),
     };
-    crate::gate_fault::report_previous();
-    crate::release_fault::report_previous();
-    if let Some(previous) = previous
-        && oer_esp32s31_hal::peripherals::usb_serial_jtag::early_text(b"OER-B0-BRINGUP: previous panic\r\n") {
-        oer_espressif_staged_runtime::panic::clear_previous(&previous);
-    }
     let profile = PROFILE;
     let Some(tokens) = Interrupts::take() else {
         crate::fail("interrupt-table")
     };
-    let factory = oer_esp32s31_hal::peripherals::efuse::FactoryIdentity::read(runtime.efuse);
+    let factory = oer_esp32s31_hal::peripherals::efuse::FactoryIdentity::read(runtime_efuse);
     let base = factory.base_mac();
     let identity = PhyCalibrationIdentity {
         rf_cal_version: phy_get_rf_cal_version(),
         base_mac_address: base,
         mac_extension: factory.mac_extension(),
     };
-    let (domain, parts) = runtime
-        .radio
+    let (domain, parts) = runtime_radio
         .split::<ChipClocks, _>(
             ConcurrentPhy::new(),
             oer_esp32s31_compose::phy_fault::identity(),
@@ -202,18 +229,18 @@ pub fn boot(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::pla
     ) else {
         crate::fail("claim")
     };
-    let phy_pilot = crate::phy_pilot::init(runtime.timg0_alarm, adopted.router(), tokens.phy);
+    let phy_pilot = crate::phy_pilot::init(runtime_timg0_alarm, adopted.router(), tokens.phy);
     let backend = Esp32s31Radio::new(
         domain,
         parts.wifi_coex,
-        runtime.clocks,
+        runtime_clocks,
         oer_espressif_executor::Cooperative::<Esp32s31, _>::new(EmbassyClock),
         NoopPhyTargetObserver,
         PhyRegisterConfig::new(identity),
         phy_pilot,
     );
     let actor = RadioSystem::new(end, backend, EmbassyClock, lp);
-    let timer = runtime.system_timer;
+    let timer = runtime_system_timer;
     oer_espressif_executor::init::<Esp32s31, 2, _, _>(
         oer_espressif_executor::systimer::SystemTimer {
             comparators: timer.comparators,
@@ -224,9 +251,13 @@ pub fn boot(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::pla
         timer.alarm0,
     )
     .unwrap_or_else(|failure| failure.reset());
-    oer_espressif_executor::bind::<Esp32s31, 0, _, _>(adopted.router(), tokens.app_alarm, timer.alarm1)
-        .unwrap_or_else(|failure| failure.reset());
-    let software = runtime.software_interrupts;
+    oer_espressif_executor::bind::<Esp32s31, 0, _, _>(
+        adopted.router(),
+        tokens.app_alarm,
+        timer.alarm1,
+    )
+    .unwrap_or_else(|failure| failure.reset());
+    let software = runtime_software_interrupts;
     let Ok(bound) = irq::bind(
         adopted.router(),
         tokens.bt,
@@ -278,8 +309,8 @@ pub fn boot(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::pla
         Ok(router) => router,
         Err(error) => crate::fail(error.name().as_str()),
     };
-    let rng = host::Rng::new(runtime.entropy, EmbassyClock);
-    let watchdog = runtime.watchdogs.rtc;
+    let rng = host::Rng::new(runtime_entropy, EmbassyClock);
+    let watchdog = runtime_watchdogs.rtc;
     match app
         .run(
             &hart,

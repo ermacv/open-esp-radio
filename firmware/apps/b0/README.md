@@ -29,7 +29,8 @@ nothing is masked at the interrupt controller. P1 alone initializes, activates, 
 P2 constructs the epoch-keyed endpoint and serves its mailbox.
 
 `cargo fw build b0` builds an unconfigured image that prints `unconfigured`
-and stays idle. Its entry has no tasks or interrupt bindings; only the
+and explicitly resets after retaining the configuration failure, with the
+watchdog preserved. Its entry has no tasks or interrupt bindings; only the
 configured composition declares executor task poll records.
 `cargo fw build b0 --analysis` selects the fictitious DE/0 dBm
 profile; its Analysis bundle cannot be flashed. The configured composition

@@ -123,6 +123,7 @@ fn every_handler_and_exception_is_a_root_including_the_shorter_handler() {
         core: OTHER,
         levels: vec![level.clone()],
         exception: level,
+        exception_copies: 1,
         bytes: Some(128),
         partial: 128,
     }];

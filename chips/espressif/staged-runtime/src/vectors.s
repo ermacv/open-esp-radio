@@ -17,7 +17,7 @@
     //
     // Every entry swaps `sp` with `mscratch` before its first memory access
     // and saves the interrupted caller registers, `mstatus`, `mepc`,
-    // `mcause`, the threshold and `tcontrol` in a TrapFrame on the hart's
+    // `mcause`, `mtval`, the threshold and `tcontrol` in a TrapFrame on the hart's
     // SRAM interrupt stack before it admits a nested interrupt; it
     // turns the FPU off, since no trap saves the floating-point registers,
     // and calls its one handler directly. An interrupt's entry gives its
@@ -40,6 +40,10 @@
     .global _runtime_mtvt
     .type _runtime_mtvt, @object
     .set _runtime_mtvt, {mtvt}
+
+    // Absolute stack-analysis metadata: no storage or hardware address.
+    .global _runtime_exception_frames
+    .set _runtime_exception_frames, {exception_frames}
 
     .balign 4
     .global _runtime_stack_bootstrap
@@ -96,6 +100,15 @@ _runtime_stack_bootstrap:
     sw t0, {frame_sp}(sp)
 
 91:
+    // Capture the synchronous cause before any handler or platform operation.
+    csrr t1, mcause
+    sw t1, {frame_mcause}(sp)
+    csrr t1, mepc
+    sw t1, {frame_mepc}(sp)
+    csrr t1, mtval
+    sw t1, {frame_mtval}(sp)
+    csrr t1, mstatus
+    sw t1, {frame_mstatus}(sp)
     sw ra, {frame_ra}(sp)
     // Both paths saved t1 before using it to recover the interrupted t0.
     csrr t1, mscratch
@@ -113,12 +126,6 @@ _runtime_stack_bootstrap:
     sw a5, {frame_a5}(sp)
     sw a6, {frame_a6}(sp)
     sw a7, {frame_a7}(sp)
-    csrr t1, mstatus
-    sw t1, {frame_mstatus}(sp)
-    csrr t1, mepc
-    sw t1, {frame_mepc}(sp)
-    csrr t1, mcause
-    sw t1, {frame_mcause}(sp)
     csrr t1, {mintthresh}
     sw t1, {frame_mintthresh}(sp)
     csrr t1, {tcontrol}

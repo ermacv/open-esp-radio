@@ -187,6 +187,10 @@ fn every_runtime_entry_returns_through_the_checked_exit() {
             address(&elf, &entry);
         }
         assert_eq!(exception.frame, 96);
+        assert_eq!(
+            exception_copies(&oer_analysis_elf::Elf::parse(&elf).unwrap()).unwrap(),
+            3
+        );
         assert_eq!(exception.handler, address(&elf, "oer_exception_handler"));
     }
 }
@@ -336,4 +340,22 @@ fn a_trap_that_loses_tcontrol_or_changes_it_unsaved_fails() {
         "    lw t0, {frame_tcontrol}(sp)\n    csrw {tcontrol}, t0\n    csrci mstatus, {mie}\n    lw t0, {frame_mcause}(sp)",
     );
     assert!(failure(&early).contains("tcontrol with interrupts enabled"));
+}
+
+#[test]
+fn malformed_exception_nesting_metadata_is_refused() {
+    for vectors in [
+        VECTORS.replace("_runtime_exception_frames", "_other_exception_frames"),
+        VECTORS.replace(
+            ".set _runtime_exception_frames, {exception_frames}",
+            ".set _runtime_exception_frames, _start_trap + ({exception_frames} * 0)",
+        ),
+        VECTORS.replace(
+            ".set _runtime_exception_frames, {exception_frames}",
+            ".set _runtime_exception_frames, ({exception_frames} * 0)",
+        ),
+    ] {
+        let elf = runtime(&vectors, &s31());
+        assert!(exception_copies(&oer_analysis_elf::Elf::parse(&elf).unwrap()).is_err());
+    }
 }

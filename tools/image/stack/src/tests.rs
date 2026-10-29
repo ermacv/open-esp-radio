@@ -2385,7 +2385,7 @@ fn a_hart_stacks_one_interrupt_per_level_and_an_exception() {
         frame: 96,
         handler: small,
     };
-    let stacks = |table: &[TableEntry], vectors: &[Vector]| {
+    let stacks = |table: &[TableEntry], vectors: &[Vector], exception_copies| {
         interrupt_stacks(
             &analysis,
             &Stacks {
@@ -2393,13 +2393,14 @@ fn a_hart_stacks_one_interrupt_per_level_and_an_exception() {
                 cores: &[0, 1],
                 vectors,
                 exception,
+                exception_copies,
                 resolutions: &Resolutions::new(),
             },
             &mut ledger(),
             &mut || Ok(()),
         )
     };
-    let harts = stacks(&table, &vectors).unwrap();
+    let harts = stacks(&table, &vectors, 1).unwrap();
     // Level 1: 96 + 16; level 8: 96 + 32; the exception 96 + 16.
     let levels = |hart: &HartStack| {
         hart.levels
@@ -2414,16 +2415,23 @@ fn a_hart_stacks_one_interrupt_per_level_and_an_exception() {
     assert_eq!(levels(&harts[1]), [(1, Some(112))]);
     assert_eq!(harts[1].bytes, Some(112 + 112));
 
+    // The staged reset gate admits capture, reentry and one reset fault.
+    let repeated = stacks(&table, &vectors, 3).unwrap();
+    assert_eq!(repeated[0].bytes, Some(112 + 128 + 3 * 112));
+    assert_eq!(repeated[1].bytes, Some(112 + 3 * 112));
+    assert_eq!(repeated[0].exception_copies, 3);
+    assert!(stacks(&table, &vectors, 0).is_err());
+
     // A line's vector that calls another handler than its entry's, or no
     // vector for an entry's line, refuses the stacks.
     let mut crossed = vectors;
     crossed[1] = vector(0, 17, small);
-    let error = stacks(&table, &crossed).unwrap_err();
+    let error = stacks(&table, &crossed, 1).unwrap_err();
     assert!(
         error.message.contains("the vector of line 17 on hart 0"),
         "{error:?}"
     );
-    let error = stacks(&table, &vectors[..2]).unwrap_err();
+    let error = stacks(&table, &vectors[..2], 1).unwrap_err();
     assert!(error.message.contains("no vector for line 16"), "{error:?}");
 }
 
