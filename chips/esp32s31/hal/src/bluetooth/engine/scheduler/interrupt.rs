@@ -10,6 +10,7 @@ use core::{
     task::{Context, Poll},
 };
 
+use oer_espressif_bluetooth_engine::port::OutputInterruptPort;
 use oer_memory::{InPlace, InPlaceClient, InPlaceServer, RequestSlot};
 
 use crate::bluetooth::{
@@ -229,13 +230,11 @@ impl SchedulerInterruptHalf {
                         .map_err(unsettled)?,
                 ),
                 Command::SampleIdleOutput(admitted) => {
-                    Reply::IdleSampled(interrupts.sample_idle_output(admitted, settle))
+                    Reply::IdleSampled(interrupts.sample_idle(admitted, settle))
                 }
-                Command::MaskOutput(heads) => {
-                    Reply::OutputMasked(interrupts.mask_output_dynamic_sources(heads))
-                }
+                Command::MaskOutput(heads) => Reply::OutputMasked(interrupts.mask_dynamic(heads)),
                 Command::ReleaseOutput(run) => {
-                    Reply::OutputReleased(interrupts.release_idle_output(run, settle))
+                    Reply::OutputReleased(interrupts.release_idle(run, settle))
                 }
             };
             if let Reply::IdleSampled(Err(

@@ -33,7 +33,9 @@ use crate::domain::{
 pub use registers::{BluetoothControllerParts, BluetoothModemLpTimerParts};
 
 mod controller_time;
+mod ports;
 pub(crate) mod registers;
+use oer_espressif_bluetooth_engine::port::SchedulerInterruptPort;
 mod scheduler_execution_lock;
 mod scheduler_execution_modify;
 mod scheduler_stop;
@@ -1317,7 +1319,7 @@ impl InterruptRegistersOwner {
         &mut self,
         settle: Settle<'_, C>,
     ) -> Result<BluetoothSchedulerBusyObservation, Unsettled> {
-        let result = settle::settle(settle, || self.registers.capture_scheduler_busy());
+        let result = settle::settle(settle, || self.registers.sample_busy());
         #[cfg(feature = "bluetooth-engine")]
         self.restore_diagnostic_selection();
         result
@@ -1340,9 +1342,7 @@ impl InterruptRegistersOwner {
         &mut self,
         settle: Settle<'_, C>,
     ) -> Result<BluetoothSchedulerLockModifyInterruptObservation, Unsettled> {
-        let result = settle::settle(settle, || {
-            self.registers.capture_scheduler_lock_modify_interrupt()
-        });
+        let result = settle::settle(settle, || self.registers.sample_lock_modify());
         #[cfg(feature = "bluetooth-engine")]
         self.restore_diagnostic_selection();
         result
@@ -1352,18 +1352,14 @@ impl InterruptRegistersOwner {
     fn restore_diagnostic_selection(&mut self) {
         match self.diagnostic_selection {
             DiagnosticSelection::None => {}
-            DiagnosticSelection::Progress => {
-                self.registers.select_scheduler_execution_modify_progress()
-            }
-            DiagnosticSelection::Settle => {
-                self.registers.select_scheduler_execution_modify_settle()
-            }
+            DiagnosticSelection::Progress => self.registers.select_modify_progress(),
+            DiagnosticSelection::Settle => self.registers.select_modify_settle(),
         }
     }
 
     #[cfg(feature = "bluetooth-engine")]
     pub(crate) fn mask_scheduler_run_interrupts(&mut self) {
-        self.registers.mask_scheduler_run_interrupts();
+        self.registers.mask_run();
     }
     #[cfg(feature = "bluetooth-engine")]
     pub(crate) fn select_scheduler_execution_modify_progress(&mut self) {
@@ -1380,9 +1376,7 @@ impl InterruptRegistersOwner {
         &mut self,
         budget: Settle<'_, C>,
     ) -> Result<bool, Unsettled> {
-        let result = settle::settle(budget, || {
-            self.registers.scheduler_execution_modify_repeats()
-        });
+        let result = settle::settle(budget, || self.registers.sample_modify_repeats());
         self.diagnostic_selection = DiagnosticSelection::None;
         result
     }
@@ -1391,9 +1385,7 @@ impl InterruptRegistersOwner {
         &mut self,
         budget: Settle<'_, C>,
     ) -> Result<bool, Unsettled> {
-        let result = settle::settle(budget, || {
-            self.registers.scheduler_execution_modify_settled()
-        });
+        let result = settle::settle(budget, || self.registers.sample_modify_settled());
         self.diagnostic_selection = DiagnosticSelection::None;
         result
     }

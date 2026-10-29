@@ -1,5 +1,7 @@
 //! Register operations and absorbing terminal custody of the whole arena.
 
+use oer_espressif_bluetooth_engine::port::OutputTaskPort;
+
 use super::{ControllerMemory, Engine, scheduler};
 use crate::bluetooth::{self, ControllerHalBorrow};
 
@@ -109,7 +111,7 @@ impl<M: ControllerMemory> Engine<M> {
 
     /// Non-repeating identity of this engine installation, for lifecycle replies.
     pub const fn installation(&self) -> u32 {
-        self.epoch.0
+        self.epoch.sequence()
     }
 
     /// Bind the unique task request endpoint to this engine's installation.
@@ -128,7 +130,7 @@ impl<M: ControllerMemory> Engine<M> {
         if self.scheduler_interrupts.is_some() {
             return Err(SchedulerInterruptError::Occupied);
         }
-        let (task, interrupts) = channel.install(self.epoch.0)?;
+        let (task, interrupts) = channel.install(self.epoch.sequence())?;
         self.scheduler_interrupts = Some(task);
         Ok(interrupts)
     }
@@ -350,7 +352,7 @@ impl<M: ControllerMemory> Engine<M> {
     ) -> Result<bluetooth::BluetoothOutputReleased, EngineOutputReleaseError> {
         let admitted = self
             .registers
-            .admit_output_release()
+            .admit_release()
             .map_err(EngineOutputReleaseError::Output)?;
         let channel =
             self.scheduler_interrupts
@@ -361,10 +363,10 @@ impl<M: ControllerMemory> Engine<M> {
         let sampled = channel.sample_idle_output(bell, admitted).await??;
         let heads = self
             .registers
-            .confirm_scheduler_heads_absent(sampled)
+            .confirm_heads_absent(sampled)
             .map_err(EngineOutputReleaseError::Output)?;
         let masked = channel.mask_output(bell, heads).await??;
-        let run = self.registers.disable_scheduler_run(masked);
+        let run = self.registers.disable_run(masked);
         Ok(channel.release_output(bell, run).await??)
     }
 

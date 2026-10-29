@@ -1650,6 +1650,7 @@ dependencies = [
  "oer-esp32s31-hal",
  "oer-esp32s31-phy",
  "oer-esp32s31-radio-client",
+ "oer-espressif-bluetooth-engine",
  "oer-espressif-interrupt-table",
  "oer-memory",
  "oer-radio-port",
@@ -1710,6 +1711,7 @@ dependencies = [
  "oer-esp32s31-knowledge",
  "oer-esp32s31-pac",
  "oer-espressif-analog",
+ "oer-espressif-bluetooth-engine",
  "oer-espressif-boot",
  "oer-espressif-coex",
  "oer-espressif-efuse",
@@ -1935,6 +1937,13 @@ dependencies = [
 [[package]]
 name = "oer-espressif-analog"
 version = "0.1.0"
+
+[[package]]
+name = "oer-espressif-bluetooth-engine"
+version = "0.1.0"
+dependencies = [
+ "oer-time",
+]
 
 [[package]]
 name = "oer-espressif-boot"

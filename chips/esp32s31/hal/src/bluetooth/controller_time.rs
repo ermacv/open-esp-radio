@@ -89,17 +89,11 @@ impl ControllerTimeLatch {
     }
 }
 
-trait BluetoothControllerTimeLatchControl {
-    fn publish_latch_request(&mut self, request: BluetoothControllerTimeLatchRequest);
-    fn order_after_publication(&mut self);
-    fn latch_request_pending(&mut self) -> bool;
-    fn order_after_clear_observation(&mut self);
-    fn read_latched_time_0(&mut self) -> u32;
-}
+use oer_espressif_bluetooth_engine::port::ControllerTimeRegisters;
 
 fn execute_latch_publication(
     ownership: &mut ControllerTimeLatch,
-    control: &mut impl BluetoothControllerTimeLatchControl,
+    control: &mut impl ControllerTimeRegisters<Request = BluetoothControllerTimeLatchRequest>,
     request: BluetoothControllerTimeLatchRequest,
 ) -> Result<(), BluetoothControllerTimeLatchBeginError> {
     ownership.begin()?;
@@ -110,7 +104,7 @@ fn execute_latch_publication(
 
 fn execute_latch_step(
     ownership: &mut ControllerTimeLatch,
-    control: &mut impl BluetoothControllerTimeLatchControl,
+    control: &mut impl ControllerTimeRegisters<Request = BluetoothControllerTimeLatchRequest>,
 ) -> Result<BluetoothControllerTimeLatchStep, BluetoothControllerTimeLatchStepError> {
     ownership.require_in_flight()?;
     if control.latch_request_pending() {
@@ -125,7 +119,8 @@ fn execute_latch_step(
     }
 }
 
-impl BluetoothControllerTimeLatchControl for BluetoothTaskRegisters {
+impl ControllerTimeRegisters for BluetoothTaskRegisters {
+    type Request = BluetoothControllerTimeLatchRequest;
     fn publish_latch_request(&mut self, _request: BluetoothControllerTimeLatchRequest) {
         // The publication includes its trailing device fence.
         self.publish_controller_time_latch_request();

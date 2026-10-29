@@ -2,6 +2,7 @@ use oer_esp32s31_hal::bluetooth::{
     BluetoothControllerTimeLatchBeginError, BluetoothControllerTimeLatchStep,
     BluetoothControllerTimeLatchStepError,
 };
+use oer_espressif_bluetooth_engine::port::ControllerTimePort;
 
 use oer_esp32s31_hal::bluetooth::{
     BluetoothControllerHalInitConfig, BluetoothControllerLatchedTime, BluetoothHalInitPeriod,
@@ -12,17 +13,20 @@ use std::{collections::VecDeque, vec::Vec};
 
 use super::{
     ControllerSchedulerEpoch, ControllerSchedulerNow, ControllerTimeEventError,
-    ControllerTimeEventStep, ControllerTimeHardware, ControllerTimePendingCore,
-    ControllerTimePendingCoreStep, ControllerTimePendingOrphanStep, ControllerTimePendingOwner,
-    ControllerTimePendingOwnerStep, ControllerTimeRequest, ControllerTimeRequestError,
-    ControllerTimeSample, ControllerTimeWorker, ControllerTimeWorkerPhase,
-    drain_controller_time_orphan,
+    ControllerTimeEventStep, ControllerTimePendingCore, ControllerTimePendingCoreStep,
+    ControllerTimePendingOrphanStep, ControllerTimePendingOwner, ControllerTimePendingOwnerStep,
+    ControllerTimeRequest, ControllerTimeRequestError, ControllerTimeSample, ControllerTimeWorker,
+    ControllerTimeWorkerPhase, drain_controller_time_orphan,
 };
 
 /// Fixtures explicitly move the idle phase; active phases expose no request.
 fn request_idle(
     worker: &mut ControllerTimeWorker,
-    hardware: &mut impl ControllerTimeHardware,
+    hardware: &mut impl ControllerTimePort<
+        BeginError = BluetoothControllerTimeLatchBeginError,
+        Step = BluetoothControllerTimeLatchStep,
+        StepError = BluetoothControllerTimeLatchStepError,
+    >,
 ) -> Result<ControllerTimeRequest, ControllerTimeRequestError> {
     let ControllerTimeWorker::Idle(idle) =
         core::mem::replace(worker, ControllerTimeWorker::Faulted)
@@ -97,7 +101,10 @@ impl ModelHardware {
     }
 }
 
-impl ControllerTimeHardware for ModelHardware {
+impl ControllerTimePort for ModelHardware {
+    type BeginError = BluetoothControllerTimeLatchBeginError;
+    type Step = BluetoothControllerTimeLatchStep;
+    type StepError = BluetoothControllerTimeLatchStepError;
     fn begin_controller_time_latch(
         &mut self,
     ) -> Result<(), BluetoothControllerTimeLatchBeginError> {

@@ -85,39 +85,7 @@ mod worker {
 
     use super::ControllerTimeSample;
 
-    /// Crate-private hardware seam required by the controller-time worker.
-    ///
-    /// Keeping this boundary private prevents downstream code from manufacturing
-    /// a supposedly live sample. Production has exactly one implementation: the
-    /// finite borrow of the unique controller HAL owner.
-    pub(crate) trait ControllerTimeHardware {
-        /// Publish one fresh request without waiting for hardware.
-        fn begin_controller_time_latch(
-            &mut self,
-        ) -> Result<(), BluetoothControllerTimeLatchBeginError>;
-
-        /// Perform exactly one hardware observation and return immediately.
-        fn step_controller_time_latch(
-            &mut self,
-        ) -> Result<BluetoothControllerTimeLatchStep, BluetoothControllerTimeLatchStepError>;
-    }
-
-    impl<M: oer_esp32s31_hal::bluetooth::engine::ControllerMemory> ControllerTimeHardware
-        for oer_esp32s31_hal::bluetooth::engine::Engine<M>
-    {
-        fn begin_controller_time_latch(
-            &mut self,
-        ) -> Result<(), BluetoothControllerTimeLatchBeginError> {
-            Self::begin_controller_time_latch(self)
-        }
-
-        fn step_controller_time_latch(
-            &mut self,
-        ) -> Result<BluetoothControllerTimeLatchStep, BluetoothControllerTimeLatchStepError>
-        {
-            Self::step_controller_time_latch(self)
-        }
-    }
+    use oer_espressif_bluetooth_engine::port::ControllerTimePort;
 
     /// Opaque identity of one logical controller-time request.
     ///
@@ -229,7 +197,11 @@ mod worker {
     impl ControllerTimeIdle {
         pub(crate) fn request(
             self,
-            hardware: &mut impl ControllerTimeHardware,
+            hardware: &mut impl ControllerTimePort<
+                BeginError = BluetoothControllerTimeLatchBeginError,
+                Step = BluetoothControllerTimeLatchStep,
+                StepError = BluetoothControllerTimeLatchStepError,
+            >,
         ) -> (
             ControllerTimeWorker,
             Result<ControllerTimeRequest, ControllerTimeRequestError>,
@@ -331,7 +303,11 @@ mod worker {
         pub(crate) fn recheck_owned(
             &mut self,
             request: ControllerTimeRequest,
-            hardware: &mut impl ControllerTimeHardware,
+            hardware: &mut impl ControllerTimePort<
+                BeginError = BluetoothControllerTimeLatchBeginError,
+                Step = BluetoothControllerTimeLatchStep,
+                StepError = BluetoothControllerTimeLatchStepError,
+            >,
         ) -> Result<ControllerTimeEventStep, ControllerTimeEventError> {
             match self {
                 Self::Requested(owned) if *owned == request => {}
@@ -367,7 +343,11 @@ mod worker {
         /// Drain one abandoned hardware request without creating a sample.
         pub(crate) fn drain_orphan(
             &mut self,
-            hardware: &mut impl ControllerTimeHardware,
+            hardware: &mut impl ControllerTimePort<
+                BeginError = BluetoothControllerTimeLatchBeginError,
+                Step = BluetoothControllerTimeLatchStep,
+                StepError = BluetoothControllerTimeLatchStepError,
+            >,
         ) -> Result<ControllerTimeEventStep, ControllerTimeEventError> {
             let request = match self {
                 Self::Idle(_) => {
@@ -402,8 +382,6 @@ mod worker {
     }
 }
 
-#[cfg(test)]
-pub(crate) use worker::ControllerTimeHardware;
 #[cfg(any(target_arch = "riscv32", test))]
 pub use worker::ControllerTimeRequest;
 #[cfg(any(target_arch = "riscv32", test))]

@@ -57,20 +57,7 @@ pub enum ArenaError {
     Placement(crate::memory::dma_address::ProjectionError),
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(super) struct EngineEpoch(pub(super) u32);
-
-impl EngineEpoch {
-    pub(super) fn allocate(counter: &core::sync::atomic::AtomicU32) -> Option<Self> {
-        use core::sync::atomic::Ordering;
-        counter
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |epoch| {
-                epoch.checked_add(1)
-            })
-            .ok()
-            .map(Self)
-    }
-}
+use oer_espressif_bluetooth_engine::phase::EngineEpoch;
 
 /// Hardware reachability became uncertain; the arena remains quarantined.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -284,7 +271,7 @@ impl<
         };
         let placement = Placement::<D>::from_projection(projection);
         let (registers, interrupts) = clocked.separate_interrupt_owner();
-        let epoch = installation.0;
+        let epoch = installation.sequence();
         let root = core::ptr::NonNull::from(storage);
         #[allow(
             unsafe_code,
