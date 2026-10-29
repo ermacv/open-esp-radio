@@ -1,9 +1,7 @@
 use crate::{Caps, Channels, Connection, Control, Network, radio, station as service};
 use oer_esp32s31_compose::Esp32s31;
-use oer_esp32s31_hal::{ieee80211::dma::tx_storage::TxDmaStorage, root::WifiPartition};
-use oer_esp32s31_ieee80211_driver::{
-    irq::{DoorbellAcknowledge, RadioDoorbell, WifiIrqLine, WifiIrqPart, service_wifi_line},
-    rx::arena::WifiRxStatic,
+use oer_esp32s31_ieee80211_driver::irq::{
+    DoorbellAcknowledge, RadioDoorbell, WifiIrqLine, WifiIrqPart, service_wifi_line,
 };
 use oer_espressif_executor::{Doorbell, DoorbellAcknowledger, InterruptExecutor};
 use oer_espressif_interrupt_table::{Bound, Entry, InterruptSources, signal::IrqSignal};
@@ -25,13 +23,13 @@ pub const S: usize = B;
 pub const Q: usize = 32;
 pub const TX: usize = crate::FRAME_CAPACITY;
 pub type RadioExecutor = InterruptExecutor<Esp32s31, 2>;
-pub type Rng = oer_esp32s31_hal::peripherals::entropy::Entropy<oer_embassy_time::EmbassyClock>;
+pub(crate) type Rng = oer_esp32s31_compose::platform::Entropy;
 /// Image-selected entries, callbacks, observers and key-unwrap engine.
 pub trait Binding: Sized + 'static {
     type Id: SlotIdentity + 'static;
     type Wifi: Entry<Part = WifiIrqPart<Lower>>;
     type Radio: Entry;
-    type Callbacks: StaCallbacks + 'static;
+    type Callbacks: crate::Callbacks + 'static;
     type Observer: Observer + Clone + 'static;
     type DriverObserver: Observer + Default + 'static;
     type Engine: oer_crypto::KeyUnwrap<{ oer_ieee80211_sta::machine::KEY_DATA_CAPACITY }, Operation: Unpin>
@@ -43,7 +41,7 @@ pub trait Binding: Sized + 'static {
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum InitializationError {
-    Phy(oer_esp32s31_hal::domain::transaction::Fault),
+    Phy(oer_esp32s31_compose::phy_fault::Failure),
     Country,
     Domain,
     Channel,
@@ -60,6 +58,7 @@ pub enum InitializationError {
     Registration,
     Rx,
     Tx,
+    Dma(crate::DmaError),
 }
 pub struct Lower(pub DoorbellAcknowledger<Esp32s31, 3>);
 impl DoorbellAcknowledge for Lower {
@@ -104,14 +103,6 @@ impl InterruptTypes for Interrupts {
             .map_err(|oer_esp32s31_ieee80211_driver::mac::irq::Fault::FatalAssertion { raw }| raw)
     }
 }
-pub trait DmaTypes {
-    type Rx: bytemuck::Zeroable;
-    type Tx: bytemuck::Zeroable;
-}
-impl DmaTypes for Interrupts {
-    type Rx = WifiRxStatic<N, B, S, Q, RadioExecutor>;
-    type Tx = TxDmaStorage<TX>;
-}
 #[derive(Clone, Copy)]
 pub struct Config {
     pub(crate) channel: u8,
@@ -154,10 +145,10 @@ impl Config {
         })
     }
 }
-pub struct OpenCallbacks;
-impl StaCallbacks for OpenCallbacks {
+pub(crate) struct CoreCallbacks<C>(C);
+impl<C: crate::Callbacks> StaCallbacks for CoreCallbacks<C> {
     fn nonce(&mut self) -> [u8; 32] {
-        [0; 32]
+        self.0.nonce()
     }
     fn he_packet_padding(&self, _: &[u8]) -> oer_ieee80211_upper_mac::protection::HePacketPadding {
         oer_ieee80211_upper_mac::protection::HePacketPadding::None
@@ -165,20 +156,17 @@ impl StaCallbacks for OpenCallbacks {
 }
 pub(crate) enum Security {
     Open,
-    Personal {
-        oer_password: oer_ieee80211_rsn::sae::SaePassword,
-        pmk: oer_ieee80211_rsn::Pmk,
-    },
+    Wpa2Personal(oer_ieee80211_rsn::Pmk),
 }
 pub struct Profile<W: Binding> {
-    pub(crate) station: StaConfig<Caps, W::Callbacks, W::Observer>,
+    pub(crate) station: StaConfig<Caps, CoreCallbacks<W::Callbacks>, W::Observer>,
     pub(crate) security: Security,
 }
 impl<W: Binding> Profile<W> {
-    pub fn open(
+    pub fn new(
         config: &Config,
         address: [u8; 6],
-        ssid: &[u8],
+        credentials: crate::PreparedCredentials,
         callbacks: W::Callbacks,
         observer: W::Observer,
     ) -> Result<Self, InitializationError> {
@@ -205,7 +193,7 @@ impl<W: Binding> Profile<W> {
                     IndividualAddress::for_interface(address)
                         .map_err(|_| InitializationError::Address)?,
                 ),
-                ssid: heapless::Vec::from_slice(ssid).map_err(|_| InitializationError::Ssid)?,
+                ssid: credentials.ssid,
                 channels,
                 dwell: Duration::from_millis(250),
                 skipped_absences: 3,
@@ -214,27 +202,14 @@ impl<W: Binding> Profile<W> {
                 association: &service::ASSOCIATION,
                 listen_interval: oer_ieee80211_sta::request::StationListenInterval::DEFAULT,
                 phy: oer_ieee80211_upper_mac::phy_mode::PhyMode::Ht20,
-                callbacks,
+                callbacks: CoreCallbacks(callbacks),
                 observer,
             },
-            security: Security::Open,
+            security: match credentials.pmk {
+                None => Security::Open,
+                Some(pmk) => Security::Wpa2Personal(pmk),
+            },
         })
-    }
-    pub fn personal(
-        config: &Config,
-        address: [u8; 6],
-        ssid: &[u8],
-        credentials: (oer_ieee80211_rsn::sae::SaePassword, oer_ieee80211_rsn::Pmk),
-        callbacks: W::Callbacks,
-        observer: W::Observer,
-    ) -> Result<Self, InitializationError> {
-        let mut p = Self::open(config, address, ssid, callbacks, observer)?;
-        let (password, pmk) = credentials;
-        p.security = Security::Personal {
-            oer_password: password,
-            pmk,
-        };
-        Ok(p)
     }
 }
 /// Product callbacks are immediate, concrete, and never queued or coalesced.
@@ -313,8 +288,7 @@ impl<W: Binding> Default for Storage<W> {
 pub struct Resources<W: Binding> {
     pub events: W::Events,
     pub storage: &'static mut Storage<W>,
-    pub cell: oer_esp32s31_radio_client::MembershipCell<oer_esp32s31_radio_client::wifi::Wifi>,
-    pub wifi: WifiPartition,
+    pub hardware: crate::WifiHardware,
     pub rng: Rng,
     pub address: [u8; 6],
     pub ap: [u8; 6],
@@ -324,8 +298,7 @@ pub struct Resources<W: Binding> {
     pub interrupts: &'static Interrupts,
     pub mac: &'static IrqSignal<RadioExecutor>,
     pub power: &'static IrqSignal<RadioExecutor>,
-    pub rx: oer_esp32s31_hal::memory::dma_static::Placed<WifiRxStatic<N, B, S, Q, RadioExecutor>>,
-    pub tx: [oer_esp32s31_hal::memory::dma_static::Placed<TxDmaStorage<TX>>; 9],
+    pub dma: crate::DmaResources,
 }
 pub struct Runners<W: Binding> {
     pub driver: Driver<W>,
@@ -343,17 +316,19 @@ pub struct StationRunner<W: Binding> {
     pub(crate) storage: &'static mut service::ServiceStorage<W>,
     pub(crate) output: runtime::Events<'static, Output<W::Events>>,
 }
+/// Terminal result owns every typed cause, with no backend identity.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum EndKind {
+pub enum StationExit {
     Stopped,
-    Failed,
-    Poisoned,
-    Quarantined,
-    Unavailable,
+    Failed(crate::failure::StationFailure),
+    Poisoned(crate::failure::StationFailure),
+    Quarantined(crate::failure::StationFailure),
+    Unavailable(UnavailableCause),
 }
-pub struct Outcome<W: Binding> {
-    pub kind: EndKind,
-    pub fault: Option<runtime::ServiceFault<service::StationComposition<W, W::Id>>>,
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum UnavailableCause {
+    Abandoned,
+    Initialization(InitializationError),
 }
 pub fn station<W: Binding>(
     resources: Resources<W>,
@@ -362,8 +337,7 @@ pub fn station<W: Binding>(
     let Resources {
         events,
         storage,
-        cell,
-        wifi,
+        hardware,
         rng,
         address,
         ap,
@@ -373,9 +347,10 @@ pub fn station<W: Binding>(
         interrupts,
         mac,
         power,
-        rx,
-        tx,
+        dma,
     } = resources;
+    let crate::WifiHardware { cell, wifi } = hardware;
+    let crate::DmaResources { rx, tx } = dma;
     let (control, network, connection) = storage
         .channels
         .split()
@@ -431,7 +406,7 @@ impl<W: Binding> Driver<W> {
     }
 }
 impl<W: Binding> StationRunner<W> {
-    pub async fn run(self, profile: Profile<W>, engine: W::Engine) -> Outcome<W> {
+    pub async fn run(self, profile: Profile<W>, engine: W::Engine) -> StationExit {
         service::serve(self, profile, engine).await
     }
 }

@@ -256,7 +256,11 @@ system-reset trigger.
 executor's binding `Esp32s31`, which images name in every executor type
 (`Executor<Esp32s31, 0>`), and the PHY transaction and Wi-Fi fault records,
 which need both the HAL's types and the runtime's retained memory and fatal
-path.
+path. Its `platform` boundary supplies typed interrupt parts, runtime preparation,
+factory identity, entropy and timer installation. The reusable console and
+SAR/PWDET bindings keep the existing driver/handler ownership, while images
+select their entries, priorities and task spawning. Trace clocks and unanswered
+request resets bind through that same platform.
 These crates are outside the sans-IO layer. `oer-espressif-watchdog` is
 also a platform owner: it owns hardware reset arming and the affine
 system-deadline lease. `oer-time::deadline` contains only the deadline policy,

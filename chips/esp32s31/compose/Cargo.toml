@@ -21,6 +21,15 @@ oer-espressif-staged-runtime.workspace = true
 
 # The executor runs on the chip target only.
 [target.'cfg(target_arch = "riscv32")'.dependencies]
+embedded-io-async = "0.7.0"
+oer-espressif-usb-serial-jtag.workspace = true
+oer-embassy-time = { path = "../../../portable/embassy/time" }
+oer-esp32s31-phy = { path = "../phy" }
+oer-espressif-interrupt-table = { path = "../../espressif/interrupt-table" }
+oer-espressif-platform-port = { path = "../../espressif/platform-port" }
+oer-memory = { path = "../../../portable/memory" }
+oer-time = { path = "../../../portable/time" }
+static_cell.workspace = true
 oer-espressif-executor = { path = "../../espressif/executor", features = ["chip"] }
 
 [lints]

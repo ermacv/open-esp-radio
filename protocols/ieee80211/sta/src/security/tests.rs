@@ -232,7 +232,7 @@ fn open_ap_needs_no_security_ie() {
             .is_empty()
     );
     assert_eq!(
-        select_association_rsn(&record, StaSecurityPolicy::Wpa2Personal),
+        select_association_rsn(&record, StaSecurityPolicy::Wpa2Psk),
         Err(StaSecurityError::SecurityModeMismatch)
     );
 }
@@ -353,4 +353,20 @@ fn security_matching_admits_one_exact_mode() {
     let mut mixed = record;
     mixed.legacy_wpa = true;
     assert!(!matches_security(&mixed, LinkProtection::Ccmp));
+}
+
+#[test]
+fn a_psk_only_owner_never_selects_sae_or_an_open_network() {
+    let transition = access_point_with_rsn(&[[0, 0x0f, 0xac, 8], [0, 0x0f, 0xac, 2]], 0x80);
+    assert_eq!(
+        select_association_rsn(&transition, StaSecurityPolicy::Wpa2Psk)
+            .unwrap()
+            .negotiated_akm(),
+        AssociationAkm::Psk
+    );
+    let sae = access_point_with_rsn(&[[0, 0x0f, 0xac, 8]], 0xc0);
+    assert_eq!(
+        select_association_rsn(&sae, StaSecurityPolicy::Wpa2Psk),
+        Err(StaSecurityError::UnsupportedAkm)
+    );
 }

@@ -57,3 +57,11 @@ impl oer_espressif_staged_runtime::adoption::Binding for Esp32s31 {
 pub mod wifi_fault;
 
 pub mod reset_causes;
+
+#[cfg(target_arch = "riscv32")]
+pub mod pilot;
+#[cfg(target_arch = "riscv32")]
+pub mod platform;
+
+#[cfg(target_arch = "riscv32")]
+pub mod console;

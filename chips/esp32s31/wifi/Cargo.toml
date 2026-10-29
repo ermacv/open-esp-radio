@@ -9,8 +9,10 @@ publish.workspace = true
 description = "ESP32-S31 station facade over the portable runtime and S31 backend"
 
 [dependencies]
+embassy-futures = "0.1.2"
+zeroize = { version = "1.8.1", default-features = false }
 oer-sync = { path = "../../../portable/sync" }
-heapless = "0.9.3"
+heapless = { version = "0.9.3", features = ["zeroize"] }
 static_cell.workspace = true
 bytemuck = { version = "1.25.2", features = ["derive"] }
 oer-crypto = { path = "../../../portable/crypto" }
@@ -32,6 +34,7 @@ oer-trace = { path = "../../../portable/trace" }
 oer-memory = { path = "../../../portable/memory" }
 
 [target.'cfg(target_arch = "riscv32")'.dependencies]
+oer-espressif-radio = { path = "../../espressif/radio" }
 oer-esp32s31-hal = { path = "../../../chips/esp32s31/hal" }
 oer-esp32s31-board = { path = "../../../chips/esp32s31/board" }
 oer-esp32s31-compose = { path = "../../../chips/esp32s31/compose", features = ["wifi-fault"] }
@@ -44,7 +47,12 @@ oer-espressif-interrupt-table = { path = "../../../chips/espressif/interrupt-tab
 oer-embassy-time = { path = "../../../portable/embassy/time" }
 
 [dev-dependencies]
-embassy-futures = "0.1.2"
+oer-espressif-radio = { path = "../../espressif/radio" }
+oer-esp32s31-hal = { path = "../hal" }
+oer-esp32s31-phy = { path = "../phy" }
+oer-esp32s31-radio-client = { path = "../radio/client" }
+oer-esp32s31-ieee80211-driver = { path = "../ieee80211/driver" }
+
 oer-memory = { path = "../../../portable/memory", features = ["host-context"] }
 oer-time-virtual = { path = "../../../portable/time-virtual" }
 

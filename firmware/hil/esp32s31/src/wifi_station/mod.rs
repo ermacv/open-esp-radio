@@ -15,12 +15,12 @@ mod station;
 use crate::services::StationRequests as Requests;
 use crate::transport::CONSOLE;
 use oer_esp32s31_compose::Esp32s31;
+use oer_esp32s31_wifi::NonceSource;
 use oer_hil_protocol::RequestIdentity;
 use oer_ieee80211_control::{
     StationLink, StationLinkState, StationRole, StationServiceEnd, StationServiceEnded,
     StationStart, StopStation,
 };
-use oer_ieee80211_rsn::{PmkDerivation, nonce::SNonceSource, sae::SaePassword};
 use oer_time::Clock;
 
 use oer_embassy_time::EmbassyClock;
@@ -32,8 +32,7 @@ use oer_espressif_executor::{Doorbell, InterruptExecutor};
 
 use oer_memory::{Placed, StaticPlace};
 use static_cell::{ConstStaticCell, StaticCell};
-static NONCES: ConstStaticCell<StaticPlace<SNonceSource>> =
-    ConstStaticCell::new(StaticPlace::new());
+static NONCES: ConstStaticCell<StaticPlace<NonceSource>> = ConstStaticCell::new(StaticPlace::new());
 
 #[derive(Clone, Copy)]
 pub struct RadioConfig {
@@ -118,9 +117,9 @@ pub(crate) fn start(
     let Some(interrupts) = crate::Interrupts::take() else {
         crate::fail(crate::fatal::Failure::InterruptTable);
     };
-    let factory = oer_esp32s31_hal::peripherals::efuse::FactoryIdentity::read(runtime_efuse);
-    let station = factory.address(oer_esp32s31_hal::peripherals::efuse::Interface::Station);
-    let ap = factory.address(oer_esp32s31_hal::peripherals::efuse::Interface::AccessPoint);
+    let factory = oer_esp32s31_compose::platform::DeviceIdentity::read(runtime_efuse);
+    let station = factory.station_address();
+    let ap = factory.ap_address();
     let radio_resources = wifi::RadioResources::new::<radio::binding::Binding>(
         runtime_radio,
         runtime_clocks,
@@ -131,23 +130,12 @@ pub(crate) fn start(
     let actor = ACTOR.init(actor);
     // The radio executor writes the system timer; the application executor
     // publishes its deadlines to it.
-    let timer = runtime_system_timer;
-    oer_espressif_executor::init::<Esp32s31, 2, _, _>(
-        oer_espressif_executor::systimer::SystemTimer {
-            comparators: timer.comparators,
-            counter: timer.counter,
-        },
-        adopted.router(),
-        interrupts.radio_alarm,
-        timer.alarm0,
-    )
-    .unwrap_or_else(|failure| failure.reset());
-    oer_espressif_executor::bind::<Esp32s31, 0, _, _>(
+    oer_esp32s31_compose::platform::timers(
+        runtime_system_timer,
         adopted.router(),
         interrupts.alarm,
-        timer.alarm1,
-    )
-    .unwrap_or_else(|failure| failure.reset());
+        interrupts.radio_alarm,
+    );
     let software = runtime_software_interrupts;
     // The radio handler's part holds both banks and the doorbell's lowering
     // half; its binding makes the doorbell's ringing half.
@@ -170,12 +158,12 @@ pub(crate) fn start(
     let radio = InterruptExecutor::<Esp32s31, 2>::new(software.line2)
         .start(hart, router, interrupts.radio, software.irq2, urgent)
         .unwrap_or_else(|failure| failure.reset());
-    let mut rng = crate::Rng::new(runtime_entropy, EmbassyClock);
-    if !rng.status().is_healthy() {
+    let mut rng = oer_esp32s31_compose::platform::Entropy::new(runtime_entropy, EmbassyClock);
+    if !rng.is_healthy() {
         crate::fail(crate::fatal::Failure::EntropySource);
     }
     let nonces = Placed::init(NONCES.take().uninit(), |place| {
-        place.write(SNonceSource::from_entropy(|seed| rng.fill(seed)))
+        place.write(NonceSource::from_entropy(|seed| rng.fill(seed)))
     });
     let mut boot_bytes = [0; 8];
     rng.fill(&mut boot_bytes);
@@ -196,8 +184,7 @@ pub(crate) fn start(
         wifi::Resources {
             events: station::ProductEvents(pending),
             storage: radio::binding::storage(),
-            cell: hardware.cell,
-            wifi: hardware.wifi,
+            hardware,
             rng,
             address: station,
             ap,
@@ -207,38 +194,8 @@ pub(crate) fn start(
             interrupts: &irq::LINE,
             mac: &irq::MAC_SIGNAL,
             power: &irq::POWER_SIGNAL,
-            rx: irq::RX
-                .take()
-                .unwrap_or_else(|| radio::failure(wifi::InitializationError::Rx)),
-            tx: [
-                irq::TX0
-                    .take()
-                    .unwrap_or_else(|| radio::failure(wifi::InitializationError::Tx)),
-                irq::TX1
-                    .take()
-                    .unwrap_or_else(|| radio::failure(wifi::InitializationError::Tx)),
-                irq::TX2
-                    .take()
-                    .unwrap_or_else(|| radio::failure(wifi::InitializationError::Tx)),
-                irq::TX3
-                    .take()
-                    .unwrap_or_else(|| radio::failure(wifi::InitializationError::Tx)),
-                irq::TX4
-                    .take()
-                    .unwrap_or_else(|| radio::failure(wifi::InitializationError::Tx)),
-                irq::TX5
-                    .take()
-                    .unwrap_or_else(|| radio::failure(wifi::InitializationError::Tx)),
-                irq::TX6
-                    .take()
-                    .unwrap_or_else(|| radio::failure(wifi::InitializationError::Tx)),
-                irq::TX7
-                    .take()
-                    .unwrap_or_else(|| radio::failure(wifi::InitializationError::Tx)),
-                irq::TX8
-                    .take()
-                    .unwrap_or_else(|| radio::failure(wifi::InitializationError::Tx)),
-            ],
+            dma: wifi::DmaResources::claim()
+                .unwrap_or_else(|error| radio::failure(wifi::InitializationError::Dma(error))),
         },
         setup,
     );
@@ -494,7 +451,7 @@ fn station_work_future(
     net: wifi::Network<'static>,
     address: [u8; 6],
     seed: u64,
-    nonces: Placed<'static, SNonceSource>,
+    nonces: Placed<'static, NonceSource>,
     pending: &'static oer_ieee80211_control::PendingCommands,
 ) -> StationWork {
     station_work(runner, control, net, address, seed, nonces, pending)
@@ -505,29 +462,24 @@ async fn station_work(
     net: wifi::Network<'static>,
     address: [u8; 6],
     seed: u64,
-    nonces: Placed<'static, SNonceSource>,
+    nonces: Placed<'static, NonceSource>,
     pending: &'static oer_ieee80211_control::PendingCommands,
 ) {
     let (request, mut start) = STARTS.receive().await;
     let attempt = Attempt { request };
     attempt.advance();
-    let ssid =
-        heapless::Vec::<u8, 32>::from_slice(start.credentials.ssid()).expect("decoded SSID fits");
-    let password =
-        SaePassword::new(start.credentials.passphrase()).expect("decoded personal password fits");
-    let mut derive = PmkDerivation::new(start.credentials.passphrase(), start.credentials.ssid())
-        .expect("decoded personal credentials fit");
-    // All retained copies now have their own zeroizing owner. Erase the
-    // received command before the first cooperative cancellation point.
+    let settings = wifi::StationSettings::wpa2_passphrase(
+        start.credentials.ssid(),
+        start.credentials.passphrase(),
+    )
+    .unwrap_or_else(|_| radio::failure(wifi::InitializationError::Ssid));
     start.credentials.clear_passphrase();
     drop(start);
     let begin = EmbassyClock.now();
-    let pmk = loop {
-        if let Some(pmk) = derive.step() {
-            break pmk;
-        }
-        embassy_futures::yield_now().await;
-    };
+    let credentials = settings
+        .prepare()
+        .await
+        .unwrap_or_else(|_| radio::failure(wifi::InitializationError::Ssid));
     let elapsed = EmbassyClock
         .now()
         .as_micros()
@@ -537,11 +489,10 @@ async fn station_work(
         .await;
     let setup = wifi::Config::new(CONFIG.channel, CONFIG.country, CONFIG.cap_dbm, None, true)
         .unwrap_or_else(|error| radio::failure(error));
-    let profile = wifi::Profile::personal(
+    let profile = wifi::Profile::new(
         &setup,
         address,
-        &ssid,
-        (password, pmk),
+        credentials,
         station::Callbacks(nonces),
         observation::StationObserver(attempt),
     )

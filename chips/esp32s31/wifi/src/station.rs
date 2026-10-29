@@ -1,7 +1,7 @@
 //! Image-owned mapping; the station service and IP workload run on P1.
 use crate::chip::{
-    Binding, Config, EndKind, InitializationError, Outcome, Output, Profile, Security,
-    StationRunner, TX,
+    Binding, Config, InitializationError, Output, Profile, Security, StationExit, StationRunner,
+    TX, UnavailableCause,
 };
 use crate::radio::{self, Backend, Caps, Device, Family};
 use core::{convert::Infallible, future::Future, marker::PhantomData, mem::MaybeUninit};
@@ -258,7 +258,7 @@ pub struct Body<W: Binding> {
 type Service<'id, W> = Runner<
     'id,
     StationComposition<W, <W as Binding>::Id>,
-    <W as Binding>::Callbacks,
+    crate::chip::CoreCallbacks<<W as Binding>::Callbacks>,
     Rates<W>,
     1,
     <W as Binding>::Observer,
@@ -267,7 +267,7 @@ type Completed<'p, 'id, W> = ServiceCompleted<
     'p,
     'id,
     StationComposition<W, <W as Binding>::Id>,
-    <W as Binding>::Callbacks,
+    crate::chip::CoreCallbacks<<W as Binding>::Callbacks>,
     Rates<W>,
     1,
     <W as Binding>::Observer,
@@ -360,10 +360,9 @@ fn initialize_service<'id, W: Binding>(
                 Security::Open => {
                     Station::init_open(station_storage, profile.station, station_resources)
                 }
-                Security::Personal { oer_password, pmk } => Station::init_personal(
+                Security::Wpa2Personal(pmk) => Station::init_wpa2_personal(
                     station_storage,
                     profile.station,
-                    oer_password,
                     pmk,
                     station_resources,
                     machine::GroupCapacity::new(),
@@ -387,12 +386,12 @@ fn initialize_service<'id, W: Binding>(
     )
 }
 impl<W: Binding> rp::PortBody<W::Id, Backend<W::Id, W>> for Body<W> {
-    type Output = Outcome<W>;
+    type Output = StationExit;
     async fn run<'p, 'id>(
         self,
         owner: rp::Owner<'p, 'id, W::Id, Backend<W::Id, W>, rp::Disabled>,
         resources: <Backend<W::Id, W> as PortBackend<W::Id>>::Resources<'id>,
-    ) -> rp::Ended<W::Id, Backend<W::Id, W>, Outcome<W>>
+    ) -> rp::Ended<W::Id, Backend<W::Id, W>, StationExit>
     where
         Backend<W::Id, W>: 'id,
         W::Id: 'id,
@@ -440,10 +439,10 @@ impl<W: Binding> rp::PortBody<W::Id, Backend<W::Id, W>> for Body<W> {
             .await;
         let (end, _retired) = oer_memory::unpack_placed!(done, ServiceCompleted { end, retired });
         oer_memory::match_placed!(end,ServiceEnd{
-        Stopped(owner)=>rp::Ended::uninstall(owner.read(),(),Outcome{kind:EndKind::Stopped,fault:None}),
-        Failed{owner,fault,custody}=>{drop(custody);owner.read().uninstall((),Outcome{kind:EndKind::Failed,fault:Some(fault.read())})},
-        Poisoned{owner,fault,custody}=>{drop(custody);rp::Ended::fail_stop(owner.read().fail_stop(),Outcome{kind:EndKind::Poisoned,fault:Some(fault.read())})},
-        Quarantined{request,fault,custody}=>{drop(custody);rp::Ended::fail_stop(request.read(),Outcome{kind:EndKind::Quarantined,fault:Some(fault.read())})}
+        Stopped(owner)=>rp::Ended::uninstall(owner.read(),(),StationExit::Stopped),
+        Failed{owner,fault,custody}=>{drop(custody);owner.read().uninstall((),StationExit::Failed(crate::failure::convert::service::<StationComposition<W, W::Id>>(fault.read())))},
+        Poisoned{owner,fault,custody}=>{drop(custody);rp::Ended::fail_stop(owner.read().fail_stop(),StationExit::Poisoned(crate::failure::convert::service::<StationComposition<W, W::Id>>(fault.read())))},
+        Quarantined{request,fault,custody}=>{drop(custody);rp::Ended::fail_stop(request.read(),StationExit::Quarantined(crate::failure::convert::service::<StationComposition<W, W::Id>>(fault.read())))}
         })
     }
 }
@@ -451,7 +450,7 @@ pub async fn serve<W: Binding>(
     mut runner: StationRunner<W>,
     profile: Profile<W>,
     engine: W::Engine,
-) -> Outcome<W> {
+) -> StationExit {
     let mut pending = runner.frontend.post(());
     let (poster, front) = core::future::poll_fn(|cx| pending.poll_answer(cx))
         .await
@@ -471,20 +470,14 @@ pub async fn serve<W: Binding>(
             rp::PortEnd::Uninstalled { output, .. } | rp::PortEnd::FailStopped { output, .. } => {
                 output
             }
-            rp::PortEnd::Abandoned { .. } => Outcome {
-                kind: EndKind::Unavailable,
-                fault: None,
-            },
+            rp::PortEnd::Abandoned { .. } => StationExit::Unavailable(UnavailableCause::Abandoned),
         },
-        Err(_) => {
+        Err(error) => {
             runner
                 .connection
                 .start
                 .complete(Err(crate::StartError::Unavailable));
-            Outcome {
-                kind: EndKind::Unavailable,
-                fault: None,
-            }
+            StationExit::Unavailable(UnavailableCause::Initialization(error))
         }
     }
 }

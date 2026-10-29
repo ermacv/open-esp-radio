@@ -1,36 +1,30 @@
 //! The station's reasons and faults as HIL wire values. Every match is
 //! exhaustive, so a new runtime or driver variant does not compile until it
 //! has its wire value.
-use oer_esp32s31_hal::{domain::RadioClient, owner::maintenance};
-use oer_esp32s31_ieee80211_driver::{
-    lower_mac::LowerMacFault,
-    port::{Fault, WifiRetuneError},
-    rx::control::WifiRxCause,
-};
-use oer_esp32s31_phy::{
-    PhyRegisterBindingError, PhyRegisterStage,
-    concurrent::ConcurrentPhyError,
-    state::client::{PhyClientAcquireError, PhyTrackTimeError},
-};
-use oer_esp32s31_radio_client::{
-    CalibrationTrackingFailure, CalibrationTrackingFault, Failure, PhyFault, Poison, PoisonCause,
-    PoisonOrigin, RegistrationFailure, RegistrationFault, RequestKind,
-};
+use oer_esp32s31_wifi::failure::*;
 use oer_ieee80211_control::*;
-use oer_ieee80211_runtime::station::{ServiceFault, StationPort};
-use oer_radio_port::PortBackend;
-
-pub fn service<B>(fault: ServiceFault<B>) -> StationServiceFault
-where
-    B: StationPort,
-    B::Backend: PortBackend<B::SlotId, Fault = Fault, Refusal = Fault>,
-{
-    service_fault(fault, backend, backend)
+pub fn service(fault: StationFailure) -> StationServiceFault {
+    match fault {
+        StationFailure::RxBlockAckCapacity => StationServiceFault::RxBlockAckCapacity,
+        StationFailure::RxBlockAckEncode => StationServiceFault::RxBlockAckEncode,
+        StationFailure::EnableRefused(v) => StationServiceFault::EnableRefused(backend(v)),
+        StationFailure::Backend(v) => StationServiceFault::Backend(backend(v)),
+        StationFailure::Submission(v) => StationServiceFault::Submission(backend(v)),
+        StationFailure::Contract(v) => {
+            StationServiceFault::Contract(oer_ieee80211_control::contract_violation(v))
+        }
+        StationFailure::DrainedWithOutstanding { cause, missing } => {
+            StationServiceFault::DrainedWithOutstanding {
+                cause: backend(cause),
+                missing: oer_ieee80211_control::pending_terminal(missing),
+            }
+        }
+    }
 }
 
-pub fn backend(fault: Fault) -> StationBackendFault {
+pub fn backend(fault: BackendFault) -> StationBackendFault {
     match fault {
-        Fault::Core(core) => StationBackendFault::Core(match core {
+        BackendFault::Core(core) => StationBackendFault::Core(match core {
             LowerMacFault::Tx(_) => StationLowerMacFault::Tx,
             LowerMacFault::RxBlockAckReadback => StationLowerMacFault::RxBlockAckReadback,
             LowerMacFault::Key(_) => StationLowerMacFault::Key,
@@ -39,57 +33,57 @@ pub fn backend(fault: Fault) -> StationBackendFault {
             LowerMacFault::Abandoned => StationLowerMacFault::Abandoned,
             LowerMacFault::KeyUseMismatch => StationLowerMacFault::KeyUseMismatch,
         }),
-        Fault::Receive(cause) => StationBackendFault::Receive(match cause {
-            WifiRxCause::StopRequested => StationReceiveFault::StopRequested,
-            WifiRxCause::Prepare(_) => StationReceiveFault::Prepare,
-            WifiRxCause::LineRefused => StationReceiveFault::LineRefused,
-            WifiRxCause::Start(_) => StationReceiveFault::Start,
-            WifiRxCause::Service(_) => StationReceiveFault::Service,
-            WifiRxCause::ForeignExecutor => StationReceiveFault::ForeignExecutor,
+        BackendFault::Receive(cause) => StationBackendFault::Receive(match cause {
+            ReceiveFault::StopRequested => StationReceiveFault::StopRequested,
+            ReceiveFault::Prepare(_) => StationReceiveFault::Prepare,
+            ReceiveFault::LineRefused => StationReceiveFault::LineRefused,
+            ReceiveFault::Start(_) => StationReceiveFault::Start,
+            ReceiveFault::Service(_) => StationReceiveFault::Service,
+            ReceiveFault::ForeignExecutor => StationReceiveFault::ForeignExecutor,
         }),
-        Fault::Deadline => StationBackendFault::Deadline,
-        Fault::Capacity => StationBackendFault::Capacity,
-        Fault::Clock => StationBackendFault::Clock,
-        Fault::Retune(cause) => StationBackendFault::Retune(retune(cause)),
-        Fault::Abandoned => StationBackendFault::Abandoned,
+        BackendFault::Deadline => StationBackendFault::Deadline,
+        BackendFault::Capacity => StationBackendFault::Capacity,
+        BackendFault::Clock => StationBackendFault::Clock,
+        BackendFault::Retune(cause) => StationBackendFault::Retune(retune(cause)),
+        BackendFault::Abandoned => StationBackendFault::Abandoned,
     }
 }
 
-fn retune(cause: WifiRetuneError) -> StationRetuneFault {
+fn retune(cause: RetuneError) -> StationRetuneFault {
     match cause {
-        WifiRetuneError::NotStopped(maintenance::Error::MacActive { state }) => {
+        RetuneError::NotStopped(MaintenanceError::MacActive { state }) => {
             StationRetuneFault::MacActive { state }
         }
-        WifiRetuneError::NotStopped(maintenance::Error::RxWalkerEnabled) => {
+        RetuneError::NotStopped(MaintenanceError::RxWalkerEnabled) => {
             StationRetuneFault::RxWalkerEnabled
         }
-        WifiRetuneError::Radio(Failure::Refused) => StationRetuneFault::Refused,
-        WifiRetuneError::Radio(Failure::ClientFailed) => StationRetuneFault::ClientFailed,
-        WifiRetuneError::Radio(Failure::Poisoned(poison)) => {
+        RetuneError::Radio(RadioFailure::Refused) => StationRetuneFault::Refused,
+        RetuneError::Radio(RadioFailure::ClientFailed) => StationRetuneFault::ClientFailed,
+        RetuneError::Radio(RadioFailure::Poisoned(poison)) => {
             StationRetuneFault::Poisoned(radio_poison(poison))
         }
     }
 }
 
-fn radio_poison(poison: Poison) -> StationRadioPoison {
-    use PoisonCause as C;
+fn radio_poison(poison: RadioPoison) -> StationRadioPoison {
+    use RadioPoisonCause as C;
     use StationRadioPoisonCause as W;
     StationRadioPoison {
         origin: match poison.origin {
-            PoisonOrigin::TrackingTick => StationRadioOperation::TrackingTick,
-            PoisonOrigin::Prepare => StationRadioOperation::Prepare,
-            PoisonOrigin::CloseRf => StationRadioOperation::CloseRf,
-            PoisonOrigin::Request { client, request } => StationRadioOperation::Request {
+            RadioOperation::TrackingTick => StationRadioOperation::TrackingTick,
+            RadioOperation::Prepare => StationRadioOperation::Prepare,
+            RadioOperation::CloseRf => StationRadioOperation::CloseRf,
+            RadioOperation::Request { client, request } => StationRadioOperation::Request {
                 client: match client {
                     RadioClient::Wifi => StationRadioClient::Wifi,
                     RadioClient::Bluetooth => StationRadioClient::Bluetooth,
                     RadioClient::Ieee802154 => StationRadioClient::Ieee802154,
                 },
                 request: match request {
-                    RequestKind::Join => StationRadioRequest::Join,
-                    RequestKind::Track => StationRadioRequest::Track,
-                    RequestKind::Retune => StationRadioRequest::Retune,
-                    RequestKind::Leave => StationRadioRequest::Leave,
+                    RadioRequest::Join => StationRadioRequest::Join,
+                    RadioRequest::Track => StationRadioRequest::Track,
+                    RadioRequest::Retune => StationRadioRequest::Retune,
+                    RadioRequest::Leave => StationRadioRequest::Leave,
                 },
             },
         },
@@ -181,8 +175,8 @@ fn registration(fault: RegistrationFault) -> StationRegistrationFault {
     }
 }
 
-fn phy_domain(error: ConcurrentPhyError) -> StationPhyDomainError {
-    use ConcurrentPhyError as E;
+fn phy_domain(error: PhyDomainError) -> StationPhyDomainError {
+    use PhyDomainError as E;
     use StationPhyDomainError as W;
     let time = |error| match error {
         PhyTrackTimeError::DeadlineOverflow { .. } => W::TimeOverflow,

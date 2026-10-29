@@ -296,6 +296,8 @@ pub enum StaSecurity {
     /// Personal credentials: the password supports SAE and the prederived
     /// PMK supports PSK. Selection prefers SAE whenever the BSS offers it.
     Personal { password: SaePassword, pmk: Pmk },
+    /// A WPA2 PSK without a retained password or SAE upgrade.
+    Wpa2Personal { pmk: Pmk },
 }
 
 /// What the application asks of the station.
@@ -2862,6 +2864,36 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks, O: Observer>
         )
     }
 
+    /// Build a WPA2-only station with a prederived, zeroizing PMK.
+    #[cfg(feature = "placement")]
+    pub fn init_wpa2_personal<
+        'a,
+        const TICKETS: usize,
+        const BUFFERS: usize,
+        const GROUPS: usize,
+    >(
+        storage: &'a mut core::mem::MaybeUninit<Self>,
+        config: StaConfig<K, C, O>,
+        pmk: Pmk,
+        resources: StationResources<'id, T, TICKETS, BUFFERS, GROUPS>,
+        _capacity: GroupCapacity<GROUPS>,
+    ) -> (&'a mut Self, StaCommandCredits<'id, T::ConfigurationPath>) {
+        Self::from_config_in_place(
+            storage,
+            config,
+            StaSecurity::Wpa2Personal { pmk },
+            resources,
+        )
+    }
+    pub fn new_wpa2_personal<const TICKETS: usize, const BUFFERS: usize, const GROUPS: usize>(
+        config: StaConfig<K, C, O>,
+        pmk: Pmk,
+        resources: StationResources<'id, T, TICKETS, BUFFERS, GROUPS>,
+        _capacity: GroupCapacity<GROUPS>,
+    ) -> (Self, StaCommandCredits<'id, T::ConfigurationPath>) {
+        Self::from_config(config, StaSecurity::Wpa2Personal { pmk }, resources)
+    }
+
     /// Build a personal station. `capacity` proves its group capacity nonzero.
     pub fn new_personal<const TICKETS: usize, const BUFFERS: usize, const GROUPS: usize>(
         config: StaConfig<K, C, O>,
@@ -3067,6 +3099,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks, O: Observer>
         match self.security {
             StaSecurity::Open => StaSecurityPolicy::Open,
             StaSecurity::Personal { .. } => StaSecurityPolicy::Wpa2Personal,
+            StaSecurity::Wpa2Personal { .. } => StaSecurityPolicy::Wpa2Psk,
         }
     }
 
@@ -3466,6 +3499,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks, O: Observ
         match *self.security {
             StaSecurity::Open => StaSecurityPolicy::Open,
             StaSecurity::Personal { .. } => StaSecurityPolicy::Wpa2Personal,
+            StaSecurity::Wpa2Personal { .. } => StaSecurityPolicy::Wpa2Psk,
         }
     }
 
@@ -4421,6 +4455,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks, O: Observ
         let bssid = join.access_point.bssid;
         let key = match &(*self.security) {
             StaSecurity::Open => AssociationKey::Open,
+            StaSecurity::Wpa2Personal { pmk } => AssociationKey::Protected(pmk.duplicate()),
             StaSecurity::Personal { password, pmk } => {
                 if let AssociationSecurity::Rsn(RsnAssociation {
                     akm: AssociationAkm::Sae(pwe),
@@ -4748,7 +4783,8 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks, O: Observ
                                     StaSecurity::Open => {
                                         oer_ieee80211_wire::security::LinkProtection::Open
                                     }
-                                    StaSecurity::Personal { .. } => {
+                                    StaSecurity::Personal { .. }
+                                    | StaSecurity::Wpa2Personal { .. } => {
                                         oer_ieee80211_wire::security::LinkProtection::Ccmp
                                     }
                                 },

@@ -11,11 +11,9 @@ pub fn failure(error: wifi::InitializationError) -> ! {
             )
         }
         wifi::InitializationError::Request(request) => {
-            oer_espressif_staged_runtime::panic::reset_request::<oer_esp32s31_hal::platform::Port, _>(
-                request,
-            )
+            oer_esp32s31_compose::platform::reset_request(request)
         }
-        wifi::InitializationError::Phy(fault) => oer_esp32s31_compose::phy_fault::reset(fault),
+        wifi::InitializationError::Phy(fault) => fault.reset(),
         _ => crate::fail(crate::fatal::Failure::RootInitialization),
     }
 }

@@ -426,6 +426,32 @@ impl<'id> World<'id> {
         Self::with_builder::<TX, G>(mint, skipped_absences, group_slots, |config, resources| {
             match security {
                 StaSecurity::Open => Station::new_open(config, resources),
+                StaSecurity::Wpa2Personal { pmk } => {
+                    #[cfg(not(feature = "placement"))]
+                    {
+                        Station::new_wpa2_personal(config, pmk, resources, GroupCapacity::new())
+                    }
+                    #[cfg(feature = "placement")]
+                    {
+                        let mut storage = core::mem::MaybeUninit::uninit();
+                        let mut credits = None;
+                        let station = oer_memory::Placed::init(&mut storage, |storage| {
+                            let (station, granted) = Station::init_wpa2_personal(
+                                storage,
+                                config,
+                                pmk,
+                                resources,
+                                GroupCapacity::new(),
+                            );
+                            credits = Some(granted);
+                            station
+                        });
+                        (
+                            station.read(),
+                            credits.expect("placed WPA2 station command credits"),
+                        )
+                    }
+                }
                 StaSecurity::Personal { password, pmk } => {
                     #[cfg(not(feature = "placement"))]
                     {
@@ -1976,100 +2002,108 @@ fn a_const_group_capacity_builds_a_personal_station() {
 
 #[test]
 fn a_station_joins_a_wpa2_network_through_the_four_way_handshake() {
-    installed(|mint| {
-        use oer_ieee80211_rsn::{PtkContext, frames::RsnTxFrame};
-        use oer_ieee80211_wire::security::rsn::Akm;
+    for psk_only in [false, true] {
+        installed(|mint| {
+            use oer_ieee80211_rsn::{PtkContext, frames::RsnTxFrame};
+            use oer_ieee80211_wire::security::rsn::Akm;
 
-        let mut world = World::with_security(
-            mint,
-            3,
-            StaSecurity::Personal {
-                password: oer_ieee80211_rsn::sae::SaePassword::new(b"password").unwrap(),
-                pmk: Pmk::from_bytes(PMK),
-            },
-        );
-        world.command(at(0), 1, StaCommand::Connect).unwrap();
-        world.run(at(0));
-        world.advance();
-        world.receive(at(13), &wpa2_beacon());
-        world.advance();
-        world.answer_authentication(at(30), 0);
-        // The association response with the Privacy capability.
-        world.receive(at(31), &association_response(0));
-        world.take();
+            let mut world = World::with_security(
+                mint,
+                3,
+                if psk_only {
+                    StaSecurity::Wpa2Personal {
+                        pmk: Pmk::from_bytes(PMK),
+                    }
+                } else {
+                    StaSecurity::Personal {
+                        password: oer_ieee80211_rsn::sae::SaePassword::new(b"password").unwrap(),
+                        pmk: Pmk::from_bytes(PMK),
+                    }
+                },
+            );
+            world.command(at(0), 1, StaCommand::Connect).unwrap();
+            world.run(at(0));
+            world.advance();
+            world.receive(at(13), &wpa2_beacon());
+            world.advance();
+            world.answer_authentication(at(30), 0);
+            // The association response with the Privacy capability.
+            world.receive(at(31), &association_response(0));
+            world.take();
 
-        // Message 1: the station answers with Message 2 in a data frame.
-        let message1 = RsnTxFrame::<512>::message1(Akm::Psk, LOCAL, 1, ANONCE).unwrap();
-        world.receive(at(32), &eapol_frame(message1.as_bytes()));
-        assert_eq!(
-            world.take(),
-            [Seen::Transmit {
-                subtype: 0x0008,
-                on: 6
-            }]
-        );
-
-        // Message 3, with the access point's RSN element and the GTK in its
-        // key data: the station installs both keys, then sends Message 4.
-        let ptk = Pmk::from_bytes(PMK).derive_ptk(
-            Akm::Psk,
-            PtkContext {
-                authenticator_address: BSSID,
-                supplicant_address: LOCAL,
-                authenticator_nonce: ANONCE,
-                supplicant_nonce: SNONCE,
-            },
-        );
-        let mut plain = std::vec::Vec::new();
-        plain.extend_from_slice(&RSN);
-        // The GTK KDE of key 1.
-        plain.extend_from_slice(&[0xdd, 22, 0x00, 0x0f, 0xac, 0x01, 0x01, 0x00]);
-        plain.extend_from_slice(&[0x99; 16]);
-        plain.extend_from_slice(&[0xdd, 0]);
-        let wrapped =
-            oer_ieee80211_cipher::aes::software_aes128_key_wrap(ptk.kek(), &plain).unwrap();
-        let message3 =
-            RsnTxFrame::<512>::message3(Akm::Psk, LOCAL, 2, ANONCE, [0; 8], wrapped.as_bytes())
-                .unwrap()
-                .authenticate(&ptk);
-        world.receive(at(33), &eapol_frame(message3.as_bytes()));
-        let seen = world.take();
-        assert!(matches!(seen[0], Seen::InstallPairwise(_)));
-        assert_eq!(
-            seen[1..],
-            [
-                Seen::InstallGroup(1),
-                Seen::Transmit {
+            // Message 1: the station answers with Message 2 in a data frame.
+            let message1 = RsnTxFrame::<512>::message1(Akm::Psk, LOCAL, 1, ANONCE).unwrap();
+            world.receive(at(32), &eapol_frame(message1.as_bytes()));
+            assert_eq!(
+                world.take(),
+                [Seen::Transmit {
                     subtype: 0x0008,
                     on: 6
-                },
-                Seen::Notify(StaNotice::Connected {
-                    bssid: oer_ieee80211_wire::address::Bssid::new(
-                        oer_ieee80211_wire::address::IndividualAddress::new(BSSID).unwrap()
-                    )
-                    .unwrap(),
-                    channel: 6
-                }),
-                Seen::Upstream(UpstreamFact::Connected(channel(6))),
-            ]
-        );
-        assert!(world.station.is_connected());
+                }]
+            );
 
-        // Leaving removes both keys before the Deauthentication.
-        world.command(at(40), 2, StaCommand::Disconnect).unwrap();
-        world.run(at(40));
-        assert_eq!(
-            world.take()[..3],
-            [
-                Seen::RemoveKey,
-                Seen::RemoveKey,
-                Seen::Transmit {
-                    subtype: 0x00c0,
-                    on: 6
+            // Message 3, with the access point's RSN element and the GTK in its
+            // key data: the station installs both keys, then sends Message 4.
+            let ptk = Pmk::from_bytes(PMK).derive_ptk(
+                Akm::Psk,
+                PtkContext {
+                    authenticator_address: BSSID,
+                    supplicant_address: LOCAL,
+                    authenticator_nonce: ANONCE,
+                    supplicant_nonce: SNONCE,
                 },
-            ]
-        );
-    });
+            );
+            let mut plain = std::vec::Vec::new();
+            plain.extend_from_slice(&RSN);
+            // The GTK KDE of key 1.
+            plain.extend_from_slice(&[0xdd, 22, 0x00, 0x0f, 0xac, 0x01, 0x01, 0x00]);
+            plain.extend_from_slice(&[0x99; 16]);
+            plain.extend_from_slice(&[0xdd, 0]);
+            let wrapped =
+                oer_ieee80211_cipher::aes::software_aes128_key_wrap(ptk.kek(), &plain).unwrap();
+            let message3 =
+                RsnTxFrame::<512>::message3(Akm::Psk, LOCAL, 2, ANONCE, [0; 8], wrapped.as_bytes())
+                    .unwrap()
+                    .authenticate(&ptk);
+            world.receive(at(33), &eapol_frame(message3.as_bytes()));
+            let seen = world.take();
+            assert!(matches!(seen[0], Seen::InstallPairwise(_)));
+            assert_eq!(
+                seen[1..],
+                [
+                    Seen::InstallGroup(1),
+                    Seen::Transmit {
+                        subtype: 0x0008,
+                        on: 6
+                    },
+                    Seen::Notify(StaNotice::Connected {
+                        bssid: oer_ieee80211_wire::address::Bssid::new(
+                            oer_ieee80211_wire::address::IndividualAddress::new(BSSID).unwrap()
+                        )
+                        .unwrap(),
+                        channel: 6
+                    }),
+                    Seen::Upstream(UpstreamFact::Connected(channel(6))),
+                ]
+            );
+            assert!(world.station.is_connected());
+
+            // Leaving removes both keys before the Deauthentication.
+            world.command(at(40), 2, StaCommand::Disconnect).unwrap();
+            world.run(at(40));
+            assert_eq!(
+                world.take()[..3],
+                [
+                    Seen::RemoveKey,
+                    Seen::RemoveKey,
+                    Seen::Transmit {
+                        subtype: 0x00c0,
+                        on: 6
+                    },
+                ]
+            );
+        });
+    }
 }
 
 /// A WPA2 world whose station holds `group_slots` group key slots, up to

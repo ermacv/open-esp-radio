@@ -6,20 +6,17 @@ use core::{
 };
 use oer_embassy_time::EmbassyClock;
 use oer_esp32s31_wifi as wifi;
+use oer_esp32s31_wifi::NonceSource;
 use oer_ieee80211_cipher::aes::{SoftwareAes128, SoftwareKeyUnwrap};
 use oer_ieee80211_control::StationServiceEnd;
-use oer_ieee80211_rsn::nonce::SNonceSource;
 use oer_memory::{OnceValue, Placed};
 use oer_time::{Duration, Timer};
-pub struct Callbacks(pub Placed<'static, SNonceSource>);
-impl oer_ieee80211_sta::machine::StaCallbacks for Callbacks {
+pub struct Callbacks(pub Placed<'static, NonceSource>);
+impl wifi::Callbacks for Callbacks {
     fn nonce(&mut self) -> [u8; 32] {
         self.0
             .next_nonce()
-            .expect("SNonce stream exhausted; reset required")
-    }
-    fn he_packet_padding(&self, _: &[u8]) -> oer_ieee80211_upper_mac::protection::HePacketPadding {
-        oer_ieee80211_upper_mac::protection::HePacketPadding::None
+            .unwrap_or_else(|_| radio::failure(wifi::InitializationError::Control))
     }
 }
 static ATTEMPT: OnceValue<Attempt> = OnceValue::new();
@@ -166,26 +163,28 @@ pub async fn serve(
         let admission = pending.admit(&mut Commands(&mut control), request, command);
         super::emit(request, &admission);
     }
-    if outcome.kind == wifi::EndKind::Unavailable {
-        super::end(attempt, StationServiceEnd::Unavailable);
-    }
-    if outcome.kind == wifi::EndKind::Stopped {
-        if let Some(request) = stopped.get() {
-            super::emit(
-                request,
-                &oer_ieee80211_control::StationStopped(observation::counters()),
-            );
+    match outcome {
+        wifi::StationExit::Unavailable(_) => super::end(attempt, StationServiceEnd::Unavailable),
+        wifi::StationExit::Stopped => {
+            if let Some(request) = stopped.get() {
+                super::emit(
+                    request,
+                    &oer_ieee80211_control::StationStopped(observation::counters()),
+                );
+            }
         }
-    } else if let Some(fault) = outcome.fault {
-        let fault = super::report::service(fault);
-        super::end(
+        wifi::StationExit::Failed(fault) => super::end(
             attempt,
-            match outcome.kind {
-                wifi::EndKind::Failed => StationServiceEnd::Failed(fault),
-                wifi::EndKind::Poisoned => StationServiceEnd::Poisoned(fault),
-                _ => StationServiceEnd::Quarantined(fault),
-            },
-        );
+            StationServiceEnd::Failed(super::report::service(fault)),
+        ),
+        wifi::StationExit::Poisoned(fault) => super::end(
+            attempt,
+            StationServiceEnd::Poisoned(super::report::service(fault)),
+        ),
+        wifi::StationExit::Quarantined(fault) => super::end(
+            attempt,
+            StationServiceEnd::Quarantined(super::report::service(fault)),
+        ),
     }
 }
 async fn reconnect(

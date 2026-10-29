@@ -2733,21 +2733,6 @@ const OUTSIDE_THE_ROLES: &[Deviation] = &[
     ),
     (
         "firmware/hil/esp32s31",
-        "chips/esp32s31/ieee80211/driver",
-        "the Wi-Fi station image on the facade and compose (#848)",
-    ),
-    (
-        "firmware/hil/esp32s31",
-        "chips/esp32s31/phy",
-        "the Wi-Fi station image on the facade and compose (#848)",
-    ),
-    (
-        "firmware/hil/esp32s31",
-        "chips/esp32s31/radio/client",
-        "the Wi-Fi station image on the facade and compose (#848)",
-    ),
-    (
-        "firmware/hil/esp32s31",
         "chips/espressif/usb-serial-jtag",
         "the Wi-Fi station image on the facade and compose (#848)",
     ),
@@ -2758,47 +2743,12 @@ const OUTSIDE_THE_ROLES: &[Deviation] = &[
     ),
     (
         "firmware/hil/esp32s31",
-        "protocols/ieee80211/arbiter",
-        "the Wi-Fi station image on the facade and compose (#848)",
-    ),
-    (
-        "firmware/hil/esp32s31",
         "protocols/ieee80211/cipher",
         "the Wi-Fi station image on the facade and compose (#848)",
     ),
     (
         "firmware/hil/esp32s31",
-        "protocols/ieee80211/port",
-        "the Wi-Fi station image on the facade and compose (#848)",
-    ),
-    (
-        "firmware/hil/esp32s31",
-        "protocols/ieee80211/rsn",
-        "the Wi-Fi station image on the facade and compose (#848)",
-    ),
-    (
-        "firmware/hil/esp32s31",
         "protocols/ieee80211/runtime",
-        "the Wi-Fi station image on the facade and compose (#848)",
-    ),
-    (
-        "firmware/hil/esp32s31",
-        "protocols/ieee80211/sta",
-        "the Wi-Fi station image on the facade and compose (#848)",
-    ),
-    (
-        "firmware/hil/esp32s31",
-        "protocols/ieee80211/upper-mac",
-        "the Wi-Fi station image on the facade and compose (#848)",
-    ),
-    (
-        "firmware/hil/esp32s31",
-        "protocols/ieee80211/wire",
-        "the Wi-Fi station image on the facade and compose (#848)",
-    ),
-    (
-        "firmware/hil/esp32s31",
-        "protocols/radio/port",
         "the Wi-Fi station image on the facade and compose (#848)",
     ),
     (

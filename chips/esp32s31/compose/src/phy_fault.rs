@@ -40,3 +40,17 @@ pub fn report_previous() {
         );
     }
 }
+
+/// A copied observation, not a hardware owner or permission to continue.
+/// An image may consume it through the platform's retained terminal path.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Failure(oer_esp32s31_hal::domain::transaction::Fault);
+impl Failure {
+    pub fn capture(fault: oer_esp32s31_hal::domain::transaction::Fault) -> Self {
+        Self(fault)
+    }
+    #[cfg(target_arch = "riscv32")]
+    pub fn reset(self) -> ! {
+        reset(self.0)
+    }
+}

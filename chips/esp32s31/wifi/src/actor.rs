@@ -33,8 +33,8 @@ impl<P: sar_pilot::Service> RadioActor<P> {
     }
 }
 pub struct WifiHardware {
-    pub cell: client::MembershipCell<client::wifi::Wifi>,
-    pub wifi: oer_esp32s31_hal::root::WifiPartition,
+    pub(crate) cell: client::MembershipCell<client::wifi::Wifi>,
+    pub(crate) wifi: oer_esp32s31_hal::root::WifiPartition,
 }
 pub struct RadioResources {
     domain: RadioDomain<ChipClocks, ConcurrentPhy>,
@@ -49,7 +49,7 @@ impl RadioResources {
     pub fn new<W: Binding>(
         hardware: RadioHardware,
         clocks: ChipClocks,
-        factory: &oer_esp32s31_hal::peripherals::efuse::FactoryIdentity,
+        factory: &oer_esp32s31_compose::platform::DeviceIdentity,
     ) -> Self {
         let identity = PhyCalibrationIdentity {
             rf_cal_version: phy_get_rf_cal_version(),
@@ -64,7 +64,9 @@ impl RadioResources {
             .unwrap_or_else(|failure| {
                 let fault = failure.fault();
                 let _owners = failure;
-                W::fail(InitializationError::Phy(fault))
+                W::fail(InitializationError::Phy(
+                    oer_esp32s31_compose::phy_fault::Failure::capture(fault),
+                ))
             });
         let (Some((end, cells)), Some(lp)) = (client::claim(), LpClock::<RcSlow>::claim()) else {
             W::fail(InitializationError::MembershipUnavailable)
