@@ -3,6 +3,7 @@
 pub mod evidence;
 mod keys;
 mod observation;
+mod ping;
 mod wifi_station;
 use oer_hil_model::{catalog::link::PhyExpectation, schema::image::ImageClass};
 use oer_hil_scenario::{

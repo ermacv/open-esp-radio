@@ -56,6 +56,17 @@ identities and one-second request pacing. No `ProbeStation` command or target
 traffic counters participate. Product readiness is checked with `GetStationStatus`;
 trace collectors still supply GTK, ARP and radio observations to the existing gates.
 
+Native ping output is parsed on the host. Each window retains every reply's
+sequence, RTT in microseconds and duplicate marker in `observations.json` under
+`wifi-station.ping.group-key-change` or `wifi-station.ping.after-reconnect`.
+Lost sequences have no entry; duplicate replies remain separate entries.
+Reported min/avg/max/mdev become informational measurements named
+`wifi-station.ping.<window>.rtt-us.<statistic>`, with no direction, threshold or
+verdict. Decimal milliseconds are converted exactly to integer microseconds.
+A missing RTT summary produces no summary measurements; BusyBox's min/avg/max
+summary has no mdev. Neither is synthesized from the reply list. Completed ping
+observations survive later GTK, capture or acceptance failures.
+
 Scenario, workload, profile and acceptance gate names describe the behavior they exercise.
 
 The `station-lifecycle` gate covers association, DHCP, the 100-echo window,

@@ -1,0 +1,8 @@
+PING 192.0.2.8 (192.0.2.8): 56 data bytes
+64 bytes from 192.0.2.8: seq=0 ttl=64 time=1.234 ms
+64 bytes from 192.0.2.8: seq=2 ttl=64 time=2.500 ms
+64 bytes from 192.0.2.8: seq=2 ttl=64 time=3.000 ms (DUP!)
+
+--- 192.0.2.8 ping statistics ---
+3 packets transmitted, 2 packets received, 1 duplicates, 33% packet loss
+round-trip min/avg/max = 1.234/2.244/3.000 ms

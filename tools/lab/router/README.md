@@ -114,7 +114,7 @@ committed and stays; the earlier settings are not restored. Other
 Each step is one script that `ssh -o BatchMode=yes -o ConnectTimeout=5
 <ssh_target> sh -s` reads from stdin, so no stand value but the target is in
 an argument list; each takes at most 30 s. Values are single-quoted for the
-remote shell. Every read is filtered on the router by an allowlist, so keys
+remote shell. Configuration reads are filtered on the router by an allowlist, so keys
 (`key`, `sae_password`, `auth_secret`, `wpa_psk_file`, …) never leave it,
 and the host refuses any line outside the allowlist. In order:
 
@@ -394,3 +394,8 @@ interface without a channel.
 file. `station::stream::Capture::start_peer` observes peer-originated ICMP
 requests and DUT replies; a complete capture requires every pair and clean
 capture statistics. The departure observer counts fresh hostapd events.
+`station::ping` returns native ping counts, every reply's sequence/RTT/duplicate
+marker and the reported RTT summary, parsed on the host without an `awk` filter.
+Only numeric observations are retained. Both iputils and BusyBox formats are
+accepted; missing RTT statistics stay absent and malformed observations return
+typed parse errors. Times use exact integer microseconds.
