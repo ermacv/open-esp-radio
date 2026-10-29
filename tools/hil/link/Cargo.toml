@@ -8,6 +8,10 @@ repository.workspace = true
 publish = false
 description = "HIL host link: one board's serial line, the protocol's frames on it, their boot and request/response exchange"
 
+[features]
+# A simulated device for other packages' tests.
+test-support = []
+
 [dependencies]
 oer-diagnostics = { path = "../../../portable/diagnostics", features = ["render"] }
 oer-hil-protocol = { path = "../../../protocols/hil/protocol" }

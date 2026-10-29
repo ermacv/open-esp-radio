@@ -63,7 +63,6 @@ oer_espressif_staged_runtime::retained_static! {
 pub(crate) enum Failure {
     Layout = 1,
     TaskAllocation = 2,
-    EntropySource = 3,
     RootTaken = 4,
     InterruptTable = 5,
     Console = 6,
@@ -75,14 +74,12 @@ pub(crate) enum Failure {
     InterruptLevelBits = 12,
     InterruptStackGuard = 13,
     RootInitialization = 14,
-    NetworkContextAccessRefused = 15,
 }
 
 impl Failure {
-    const ALL: [Self; 15] = [
+    const ALL: [Self; 13] = [
         Self::Layout,
         Self::TaskAllocation,
-        Self::EntropySource,
         Self::RootTaken,
         Self::InterruptTable,
         Self::Console,
@@ -94,7 +91,6 @@ impl Failure {
         Self::InterruptLevelBits,
         Self::InterruptStackGuard,
         Self::RootInitialization,
-        Self::NetworkContextAccessRefused,
     ];
 
     pub(crate) fn from_boot(error: oer_espressif_staged_runtime::BootError) -> Self {
@@ -122,12 +118,8 @@ impl Failure {
         match self {
             Self::Layout => oer_diagnostics::name!("layout"; 32),
             Self::TaskAllocation => oer_diagnostics::name!("task-allocation"; 32),
-            Self::EntropySource => oer_diagnostics::name!("entropy-source"; 32),
             Self::RootTaken => oer_diagnostics::name!("root-taken"; 32),
             Self::RootInitialization => oer_diagnostics::name!("root-initialization"; 32),
-            Self::NetworkContextAccessRefused => {
-                oer_diagnostics::name!("network-context-access-refused"; 32)
-            }
             Self::InterruptTable => oer_diagnostics::name!("interrupt-table"; 32),
             Self::Console => oer_diagnostics::name!("console"; 32),
             Self::InterruptHart => oer_diagnostics::name!("interrupt-hart"; 32),

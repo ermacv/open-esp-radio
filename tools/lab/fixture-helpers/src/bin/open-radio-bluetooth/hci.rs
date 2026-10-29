@@ -102,12 +102,6 @@ impl Socket {
         self.send(&bytes)
     }
 
-    pub(super) fn send_acl(&self, packet: &bt_hci::data::AclPacket<'_>) -> Result<()> {
-        let bytes = h4_frame(bt_hci::PacketKind::AclData, packet)
-            .map_err(|error| format!("HCI ACL encode: {error}"))?;
-        self.send(&bytes)
-    }
-
     pub(super) fn command<C: SyncCmd>(&self, command: C) -> Result<C::Return> {
         self.command_with_timeout(command, Duration::from_secs(2))
     }

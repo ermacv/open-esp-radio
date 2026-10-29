@@ -1,6 +1,6 @@
 # Linux network fixture
 
-Use the canonical [Linux fixture software installation](../run/fixtures.md#linux-fixture-software-installation)
+Use the Linux fixture software installation
 route from the repository root:
 
 ```console
@@ -19,7 +19,7 @@ is used only for the final root-owned staging, policy validation and activation.
 The provider is deliberately restricted to `wlan0`. Installing it does not
 discover or assign adapters, change network state, start hostapd, reset rfkill,
 open serial/SSH, flash a DUT or transmit RF. Those effects belong to explicit
-fixture checks and HIL runs described in the [host operations guide](../cli/README.md).
+fixture checks and the scenarios that lease the station equipment.
 
 ## Station contract
 
@@ -77,7 +77,7 @@ NetworkManager exclusion still in place.
 
 The DHCP binary is BusyBox 1.38.0 with only its `udhcpc` applet. BusyBox is
 GPL-2.0-only, built locally from verified source and installed only on this
-host; it is not committed, included in CI/HIL result artifacts or redistributed.
+host; it is not committed, included in CI artifacts or redistributed.
 Its source archive is verified by SHA-256, with the build configuration in provenance.
 The [upstream-derived source hash](https://raw.githubusercontent.com/buildroot/buildroot/master/package/busybox/busybox.hash)
 is pinned in `oer_lab_router::udhcpc`. Build it without root or RF:

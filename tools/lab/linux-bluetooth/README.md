@@ -1,16 +1,14 @@
 # Linux Bluetooth helper
 
-`open-radio-bluetooth` is the finite Linux helper in `tools/lab/fixture-helpers`.
-Its shared request/report model is
-`tools/lab/fixture/src/bluetooth/model.rs`; host-side library operations are
-in [Bluetooth fixtures](../fixtures-bluetooth/README.md). The HIL runner's
-current CLI exposes `fixture check SCENARIO` and no Bluetooth-specific check
-subcommand.
+`open-radio-bluetooth` is the stand's finite Linux Bluetooth helper in
+`tools/lab/fixture-helpers`: it owns a dedicated adapter for one operation and
+restores it. Its shared request/report model is
+`tools/lab/fixture/src/bluetooth/model.rs`. It holds no test sequence of a
+device under test; a scenario drives the adapter through it.
 
 ## Installation
 
-Run the [fixture installation](../run/fixtures.md#linux-fixture-software-installation)
-as the unprivileged operator; the installer makes one interactive sudo handoff
+Run the fixture installation as the unprivileged operator; the installer makes one interactive sudo handoff
 for system activation.
 
 ```console
@@ -30,8 +28,6 @@ Bluetooth interfaces and rfkill access.
 | --- | --- |
 | `capabilities` | Print the exact supported interface without opening an adapter |
 | `check` | DTM on LE 1M, channel 0, PRBS9, with fixed 100 ms RX/TX windows |
-| `connect-reset` | Connect to a public peer, exchange bounded ACL data and execute the selected termination |
-| `security-failure` | Exercise one named key or MIC failure with a public peer |
 | `att-parameters` | Hold fixed 7.5 ms kernel ATT defaults until stdin closes, up to 120 seconds |
 | `restore-att-parameters` | Restore an interrupted durable ATT timing snapshot |
 
@@ -54,15 +50,10 @@ state. Cancellation follows the same cleanup path; abrupt termination or
 adapter loss can prevent restoration. DTM TX is real RF activity. Command
 acceptance alone does not establish RF delivery or qualify a DUT.
 
-`connect-reset` selects `peer-reset`, `peer-rfkill`, `target-disconnect` or
-`target-reset`; `--hold-ms` is bounded to 0–5000. `--encrypted` selects the
-fixed public test LTK; `--key-refresh` requires encryption and replaces that
-key on the same connection. The model defines the typed reports and explicit
-failure cases; inputs cannot select arbitrary HCI opcodes or shell commands.
+Inputs cannot select arbitrary HCI opcodes or shell commands.
 
-The helper prints its typed report on stdout. The host library can archive
-it and stderr in a caller-owned directory, validate it and write
-`result.json`; the DTM summary records `rf_verified: false`. The installed
+The helper prints its typed report on stdout; the DTM report does not claim
+RF delivery. The installed
 launchers bind a committed software generation and retain its software lease
 for the operation. These software leases are separate from physical adapter
 and stand ownership.

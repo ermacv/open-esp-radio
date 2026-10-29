@@ -742,42 +742,6 @@ mod tests {
     }
 
     #[test]
-    fn staged_image_policies_keep_the_platform_bootstrap_contract() {
-        let directory = tempfile::tempdir().unwrap();
-        let root = directory.path();
-        let policies = [
-            (
-                "chips/esp32s31/platform/stack.toml",
-                include_str!("../../../../chips/esp32s31/platform/stack.toml"),
-            ),
-            (
-                "firmware/hil/esp32s31-lower-mac/stack.toml",
-                include_str!("../../../../firmware/hil/esp32s31-lower-mac/stack.toml"),
-            ),
-        ];
-        for (path, source) in policies {
-            let path = root.join(path);
-            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-            std::fs::write(path, source).unwrap();
-        }
-        let platform = StackPolicy::load(&root.join(policies[0].0)).unwrap();
-        let lower_mac = StackPolicy::load(&root.join(policies[1].0)).unwrap();
-        assert_eq!(
-            platform.bootstrap_stack.as_ref().unwrap().root,
-            "bootstrap_main"
-        );
-        assert_eq!(lower_mac.bootstrap_stack, platform.bootstrap_stack);
-        assert_eq!(
-            lower_mac.core[&0]
-                .interrupt_stack
-                .used()
-                .unwrap()
-                .allocation_bytes,
-            Some(65536)
-        );
-    }
-
-    #[test]
     fn tracked_loads_record_the_chip_and_both_policy_files_at_their_reads() {
         let directory = tempfile::tempdir().unwrap();
         let root = directory.path();

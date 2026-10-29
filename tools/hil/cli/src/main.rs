@@ -1,2 +1,68 @@
+//! `cargo hil`: the HIL scenarios are the workspace packages whose metadata
+//! says `[package.metadata.open-radio] hil-scenario = true`; their names
+//! drop the `oer-hil-scenarios-` prefix. `list` prints them, `run NAME`
+//! builds and runs that scenario's program with the arguments that follow.
+//! The tool knows no scenario, image or result: the program's own exit code
+//! is its verdict (0 pass, 1 fail, 2 incomplete).
 #![forbid(unsafe_code)]
-fn main() {}
+
+use std::process::ExitCode;
+
+use clap::{Parser, Subcommand};
+
+mod scenarios;
+
+#[derive(Parser)]
+#[command(name = "cargo hil", about = "List and run the HIL scenarios")]
+struct Cli {
+    #[command(subcommand)]
+    command: Command,
+}
+
+#[derive(Subcommand)]
+enum Command {
+    /// Print every scenario with its description.
+    List,
+    /// Build and run one scenario's program; ARGUMENTS go to it (`--help`
+    /// shows its own).
+    Run {
+        scenario: String,
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        arguments: Vec<String>,
+    },
+}
+
+fn main() -> ExitCode {
+    match run(Cli::parse()) {
+        Ok(code) => code,
+        Err(error) => {
+            eprintln!("error: {error}");
+            ExitCode::from(2)
+        }
+    }
+}
+
+fn run(cli: Cli) -> scenarios::Result<ExitCode> {
+    let root = oer_os_process::Checkout::discover("cargo hil")?.root;
+    let found = scenarios::discover(&scenarios::metadata(&root)?)?;
+    match cli.command {
+        Command::List => {
+            for scenario in &found {
+                println!("{:<24} {}", scenario.name, scenario.description);
+            }
+            Ok(ExitCode::SUCCESS)
+        }
+        Command::Run {
+            scenario,
+            arguments,
+        } => {
+            let scenario = scenarios::find(&found, &scenario)?;
+            let status = std::process::Command::new(std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into()))
+                .current_dir(&root)
+                .args(["run", "--quiet", "--profile", "tools", "-p", &scenario.package, "--"])
+                .args(arguments)
+                .status()?;
+            Ok(oer_os_process::exit_code(status))
+        }
+    }
+}

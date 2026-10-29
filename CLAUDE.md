@@ -194,23 +194,12 @@ system these rules serve.
   run into the test's own build directory for compile-fail and
   compiler-driven cases.
 - **Generated files.** `chips/*/pac/src/generated.rs`,
-  `chips/*/vendor/facts/**/*.toml` (including TOML files directly in `facts/`)
-  and `chips/*/vendor/phy-baselines/*/*.json` are never read whole or edited
-  by hand: grep them by path, regenerate them. `cargo registers generate
+  and `chips/*/vendor/facts/**/*.toml` (including TOML files directly in
+  `facts/`) are never read whole or edited by hand: grep them by path, regenerate them. `cargo registers generate
   --chip <chip>` renders the PAC and
   `chips/*/layout/linker/dma-window.x`; the linker fragment may be read,
   never edited. Its inputs are `chips/<chip>/registers/chip.toml`, `types/`,
   `layouts/`, `evidence/` and the schema-6 `policy.toml`.
-- **Recorded PHY baselines.** Identity is only the pinned `libphy` artifact's
-  SHA-256 in `chips/esp32s31/vendor/artifacts.toml`; directories use that hash.
-  IDF, application, ROM, `esp_phy` and recipe inputs remain capture provenance
-  and never invalidate a reference for the same libphy. Missing libphy
-  reference is INCOMPLETE. Coverage, metadata and measured-bound checks apply.
-  Regeneration projects archived primary captures through current metadata;
-  retired MMIO bounds and unmasked per-boot observations remain provenance.
-  Only active words are compared, with exact coverage still required.
-  Register reviews are read against the full current model catalog; an unknown
-  key is an error even when its lifecycle or register is outside the active image.
 - **Sources.** No vendor binaries, disassembly or credentials in git. A
   recovered value carries its `SOURCE:`. From sources without a license only
   facts, never code or verbatim tables
@@ -220,12 +209,22 @@ system these rules serve.
   [tools/analysis/blobray-README.md](tools/analysis/blobray-README.md)) first.
 - **Where code goes** ([docs/repository-layout.md](docs/repository-layout.md)):
   `protocols/` sans-IO protocols, `portable/` generic support, `chips/`
-  everything Espressif, `firmware/` chip images, `tools/<domain>/` the
-  developer's machine. Executables only in `firmware/` and `tools/`. A library
-  is `oer-` plus its path below the root; an executable keeps its root
+  everything Espressif, `firmware/` chip images, `hil-scenarios/` the HIL
+  scenarios (their shared images, test-only services and host programs),
+  `tools/<domain>/` the developer's machine. Executables only in
+  `firmware/`, `hil-scenarios/` and `tools/`. A library is `oer-` plus its
+  path below the root; an executable keeps its root
   (`oer-firmware-apps-boot-smoke`). A crate never sits inside another; a new crate
   needs a reason (dependency direction, license, target, independent
-  consumer). Only `cargo fw` builds images. Every package builds.
+  consumer). Only the image pipeline builds images: `cargo fw`, and the HIL
+  harness for a scenario's image. Every package builds.
+- **HIL.** The HIL core (`protocols/hil`, `tools/hil/link`) only carries
+  data and commands between the host and the device under test; it stores
+  nothing and knows no scenario, service or stand equipment. A scenario's
+  host program holds its cases and verdict; the image it runs serves
+  services whose every endpoint has a handler (`oer_hil_agent::service!`);
+  several scenarios share one image. Stand equipment and its drivers belong
+  to `tools/lab`. A message owner checks its own `messages.lock`.
 
 ## Work
 

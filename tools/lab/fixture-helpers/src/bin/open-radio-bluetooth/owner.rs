@@ -18,8 +18,6 @@ use std::{
     time::{Duration, Instant},
 };
 
-const PEER_RF_LOSS_MILLIS: u16 = 2_500;
-
 pub(super) mod connection_parameters;
 
 struct Rfkill {
@@ -232,28 +230,6 @@ impl Owner {
             }
         }
     }
-
-    fn rfkill_for_loss(
-        &mut self,
-        hold_ms: u16,
-        connected: Instant,
-        report: &mut super::model::ConnectionReset,
-    ) -> Result<()> {
-        oer_os_process::sleep(Duration::from_millis(u64::from(hold_ms)))?;
-        let user = self.user.take().ok_or("missing exclusive HCI channel")?;
-        drop(user);
-        self.rfkill.set(true)?;
-        report.termination_after_connection_micros = Some(connected.elapsed().as_micros() as u64);
-        report.peer_rfkill_blocked = true;
-        let blocked = Instant::now();
-        oer_os_process::sleep(Duration::from_millis(u64::from(PEER_RF_LOSS_MILLIS)))?;
-        if fs::read_to_string(self.rfkill.path.join("soft"))?.trim() != "1" {
-            return Err("Bluetooth peer rfkill cleared during the RF-loss hold".into());
-        }
-        report.peer_rfkill_micros =
-            Some(blocked.elapsed().as_micros().try_into().unwrap_or(u64::MAX));
-        Ok(())
-    }
 }
 
 impl Drop for Owner {
@@ -310,65 +286,6 @@ pub(super) fn check(adapter: Adapter, report: &mut Check) -> Result<()> {
         },
         Owner::restore,
     );
-    Ok(())
-}
-
-pub(super) fn connect_reset(
-    adapter: Adapter,
-    peer: super::model::PeerAddress,
-    hold_ms: u16,
-    termination: oer_bluetooth_control::BluetoothPeripheralTermination,
-    report: &mut super::model::ConnectionReset,
-) -> Result<()> {
-    if hold_ms > 5_000 {
-        return Err("connection hold must be at most 5000 ms".into());
-    }
-    let mut owner = Owner::snapshot(adapter)?;
-    report.initial_powered = Some(owner.powered);
-    report.initial_soft_blocked = Some(owner.rfkill.blocked);
-    let result = (|| {
-        owner.acquire()?;
-        let user = owner.user.as_ref().ok_or("missing exclusive HCI channel")?;
-        user.command(Reset::new())?;
-        let outcome = super::connection_reset::run(user, peer, hold_ms, termination, report)?;
-        match outcome {
-            super::connection_reset::ConnectionRunOutcome::Complete => Ok(()),
-            super::connection_reset::ConnectionRunOutcome::PeerRfkill { connected } => {
-                owner.rfkill_for_loss(hold_ms, connected, report)
-            }
-        }
-    })();
-    if let Err(error) = result {
-        report.errors.push(error.to_string());
-    }
-    match oer_os_process::cleanup(|| owner.restore()) {
-        Ok(()) => report.restored = true,
-        Err(error) => report.errors.push(format!("restore: {error}")),
-    }
-    Ok(())
-}
-
-pub(super) fn security_failure(
-    adapter: Adapter,
-    peer: super::model::PeerAddress,
-    report: &mut super::model::security_failure::Report,
-) -> Result<()> {
-    let mut owner = Owner::snapshot(adapter)?;
-    report.initial_powered = Some(owner.powered);
-    report.initial_soft_blocked = Some(owner.rfkill.blocked);
-    let result = (|| {
-        owner.acquire()?;
-        let user = owner.user.as_ref().ok_or("missing exclusive HCI channel")?;
-        user.command(Reset::new())?;
-        super::security_failure::run(user, peer, report)
-    })();
-    if let Err(error) = result {
-        report.errors.push(error.to_string());
-    }
-    match oer_os_process::cleanup(|| owner.restore()) {
-        Ok(()) => report.restored = true,
-        Err(error) => report.errors.push(format!("restore: {error}")),
-    }
     Ok(())
 }
 

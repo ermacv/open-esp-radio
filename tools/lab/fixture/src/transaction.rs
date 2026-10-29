@@ -1352,22 +1352,6 @@ mod linux {
                             ));
                         }
                     }
-                    lines.push(format!(
-                        "{operator} ALL=(root) NOPASSWD: /usr/local/libexec/open-radio-bluetooth connect-reset --adapter {adapter} --peer * --hold-ms * --termination *"
-                    ));
-                    for failure in [
-                        "missing-key",
-                        "wrong-key",
-                        "missing-refresh-key",
-                        "active-data-mic",
-                    ] {
-                        lines.push(format!(
-                            "{operator} ALL=(root) NOPASSWD: /usr/local/libexec/open-radio-bluetooth security-failure --adapter {adapter} --peer * --failure {failure}"
-                        ));
-                    }
-                    lines.push(format!(
-                        "{operator} ALL=(root) NOPASSWD: /usr/local/libexec/open-radio-bluetooth security-failure --adapter {adapter} --peer * --failure missing-key --read-version-before-disconnect"
-                    ));
                 }
             }
         }
