@@ -43,11 +43,8 @@ mod profile;
 const PHY_I2C_SDM_STABLE_VALUE: u8 = 0x5b;
 const PHY_I2C_SDM_DEADLINE_CYCLES: u32 = 9_999;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum PhyI2cError {
-    Busy,
-    UnroutedAddress,
-}
+#[cfg(test)]
+use crate::serial::PhyI2cError;
 
 /// Program the complete PHY-I2C command RAM from Rust-owned cold state.
 ///
@@ -81,82 +78,6 @@ pub async fn configure_i2c_initialization_stage_two(
         wait,
     )
     .await
-}
-
-/// Publish one complete-register PHY-I2C read without waiting for completion.
-///
-/// Unlike the ROM read leaf, this function also rejects an already-busy host
-/// before publishing the command. This is a deliberate fail-fast ownership
-/// check, not a claim that the ROM performed the same pre-command check.
-///
-/// The caller must keep borrowing the same shared-PHY register owner until
-/// [`try_finish_read`] succeeds.
-#[cfg(target_arch = "riscv32")]
-pub(crate) fn try_start_read(
-    registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
-    address: Address,
-) -> Result<(), PhyI2cError> {
-    hal_phy_i2c::try_start_read(registers, address).map_err(|error| match error {
-        hal_phy_i2c::PhyI2cAccessError::Busy => PhyI2cError::Busy,
-        hal_phy_i2c::PhyI2cAccessError::UnroutedAddress => PhyI2cError::UnroutedAddress,
-    })
-}
-
-/// Observe one previously published PHY-I2C read exactly once.
-///
-/// The caller may invoke this once after an independently delivered hardware
-/// or timer completion edge. `Busy` is then an incomplete/timeout result; it
-/// must not be converted into a self-waking retry loop. This function never
-/// loops, delays, or schedules itself.
-///
-/// `address` must name the in-flight command started by [`try_start_read`]
-/// under the same borrowed radio ownership.
-#[cfg(target_arch = "riscv32")]
-pub(crate) fn try_finish_read(
-    registers: &impl oer_esp32s31_hal::owner::SharedPhyAccess,
-    address: Address,
-) -> Result<u8, PhyI2cError> {
-    hal_phy_i2c::try_finish_read(registers, address).map_err(|error| match error {
-        hal_phy_i2c::PhyI2cAccessError::Busy => PhyI2cError::Busy,
-        hal_phy_i2c::PhyI2cAccessError::UnroutedAddress => PhyI2cError::UnroutedAddress,
-    })
-}
-
-/// Publish one complete-register PHY-I2C write after observing the
-/// pre-command busy state once. It never waits or loops on that state and
-/// leaves post-command completion to [`try_finish_write`].
-///
-/// The caller must keep borrowing the same shared-PHY register owner until
-/// [`try_finish_write`] succeeds.
-#[cfg(target_arch = "riscv32")]
-pub(crate) fn try_start_write(
-    registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
-    address: Address,
-    value: u8,
-) -> Result<(), PhyI2cError> {
-    hal_phy_i2c::try_start_write(registers, address, value).map_err(|error| match error {
-        hal_phy_i2c::PhyI2cAccessError::Busy => PhyI2cError::Busy,
-        hal_phy_i2c::PhyI2cAccessError::UnroutedAddress => PhyI2cError::UnroutedAddress,
-    })
-}
-
-/// Observe one previously published PHY-I2C write exactly once.
-///
-/// The caller may invoke this once after an independently delivered hardware
-/// or timer completion edge. `Busy` is an incomplete/timeout result and must
-/// not be converted into a self-waking retry loop.
-///
-/// `address` must name the in-flight command started by [`try_start_write`]
-/// under the same borrowed radio ownership.
-#[cfg(target_arch = "riscv32")]
-pub(crate) fn try_finish_write(
-    registers: &impl oer_esp32s31_hal::owner::SharedPhyAccess,
-    address: Address,
-) -> Result<(), PhyI2cError> {
-    hal_phy_i2c::try_finish_write(registers, address).map_err(|error| match error {
-        hal_phy_i2c::PhyI2cAccessError::Busy => PhyI2cError::Busy,
-        hal_phy_i2c::PhyI2cAccessError::UnroutedAddress => PhyI2cError::UnroutedAddress,
-    })
 }
 
 /// Execute the finite register prefix which precedes the vendor

@@ -3,11 +3,10 @@ use oer_diagnostics::Note;
 use oer_embassy_time::EmbassyClock;
 use oer_esp32s31_hal::{
     domain::RadioDomain,
-    phy::i2c::{
-        self, analog_i2c::saradc::adc_sar2_initial_code_high_addr::ADC_SAR2_INITIAL_CODE_HIGH_ADDR,
-    },
+    phy::i2c::analog_i2c::saradc::adc_sar2_initial_code_high_addr::ADC_SAR2_INITIAL_CODE_HIGH_ADDR,
     power::PlatformClockBackend,
 };
+use oer_esp32s31_phy::serial as phy_i2c;
 use oer_hil_protocol::base::RejectReason;
 use oer_time::{Clock, Duration, Timer};
 
@@ -45,9 +44,9 @@ pub async fn observe<B: PlatformClockBackend, T>(
         let mut started = false;
         for _ in 0..oer_esp32s31_phy::HARDWARE_EDGE_LIMIT {
             if !started {
-                started = i2c::try_start_read(registers, address).is_ok();
+                started = phy_i2c::try_start_read(registers, address).is_ok();
             }
-            if started && let Ok(raw) = i2c::try_finish_read(registers, address) {
+            if started && let Ok(raw) = phy_i2c::try_finish_read(registers, address) {
                 crate::transport::CONSOLE
                     .note_reliably(&Note::sar2_checkpoint(
                         point.name(),

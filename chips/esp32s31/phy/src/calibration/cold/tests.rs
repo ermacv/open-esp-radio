@@ -15,9 +15,10 @@ use crate::analog::crystal_duty::{
 use crate::analog::frequency::{PhyChannelFrequencyInitAction, PhyChannelFrequencyInitCompletion};
 use crate::analog::i2c::{
     FilterDcapAction, FilterDcapParameters, I2cInit1Action, OpenI2cXpdAction, OpenI2cXpdCompletion,
-    PhyI2cError, PhyRfInitParameterSnapshot, PhyRfInitPrefixAction, PhyRfInitPrefixCompletion,
+    PhyRfInitParameterSnapshot, PhyRfInitPrefixAction, PhyRfInitPrefixCompletion,
     RcCalibrationAction, RcCalibrationCompletion, analog_i2c,
 };
+use crate::serial::PhyI2cError;
 
 #[test]
 fn an_unrouted_address_is_reported_without_turning_into_a_pending_edge() {

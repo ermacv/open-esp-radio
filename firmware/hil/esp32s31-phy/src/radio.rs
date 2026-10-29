@@ -20,7 +20,7 @@ use oer_esp32s31_hal::{
         client::{WifiClocked, WifiCold},
         init::*,
     },
-    phy::i2c::{self, Address},
+    phy::i2c::Address,
     root::WifiPartition,
     types::MacTxPowerPair,
 };
@@ -31,6 +31,7 @@ use oer_esp32s31_phy::{
     *,
 };
 use oer_esp32s31_phy_probe::{hold::metrics, *};
+use oer_esp32s31_phy::serial as phy_i2c;
 use oer_hil_protocol::base::RejectReason;
 use oer_time::{Clock, Timer};
 
@@ -1012,12 +1013,10 @@ impl Radio {
             let mut started = false;
             for _ in 0..HARDWARE_EDGE_LIMIT {
                 if !started {
-                    started = i2c::try_start_read(registers, address).is_ok();
+                    started = phy_i2c::try_start_read(registers, address).is_ok();
                 }
-                if started {
-                    if let Ok(value) = i2c::try_finish_read(registers, address) {
-                        return Ok(value);
-                    }
+                if started && let Ok(value) = phy_i2c::try_finish_read(registers, address) {
+                    return Ok(value);
                 }
                 EmbassyClock
                     .wait_until(

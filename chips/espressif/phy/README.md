@@ -4,6 +4,9 @@ Safe PHY operations over chip-owned register ports, with no dependency on a
 chip, PAC, executor or terminal owner:
 
 - `analog_i2c`: RF/baseband power order and the conditional analog reset pulse.
+- `serial`: routed byte starts and completion samples; busy or unrouted starts
+  publish nothing. Reads preserve host-map → read-mask → command order and
+  sample data only after a non-busy observation.
 - `i2c`: finite parallel-host initialization with a caller-supplied chip profile
   and cooperative wait. The normal map is restored on success and finite error;
   cancellation retains the current hardware state with its outer owner.

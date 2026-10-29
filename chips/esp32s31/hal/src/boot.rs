@@ -100,14 +100,14 @@ impl Brownout {
         &mut self,
     ) -> (
         &mut BrownoutRegisters,
-        crate::phy::i2c::AnalogBus<
+        crate::phy::i2c::master::ConfigurationBus<
             '_,
             oer_mmio::Fixed<{ oer_esp32s31_pac::instances::i2c_ana_mst::BASE }>,
         >,
     ) {
         (
             &mut self.registers,
-            crate::phy::i2c::AnalogBus::new(&mut self.analog.i2c_ana_mst),
+            crate::phy::i2c::master::ConfigurationBus::new(&mut self.analog.i2c_ana_mst),
         )
     }
 }

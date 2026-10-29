@@ -29,7 +29,10 @@ Shared radio membership, epoch policy, common power, semantic verification,
 cold-baseline restore and clock refcounts live in `oer-espressif-radio`;
 HAL supplies owned atom ports and affine proofs.
 `oer-espressif-phy` owns analog-I2C power/reset readback decisions, retained-wake
-parallel-host waits, PBus mode/completion order and short settles. PHY calibration
+parallel-host waits, serial-byte routing decisions and publication/completion
+order, PBus mode/completion order and short settles. The generated S31 routing
+dictionary stays behind `MasterAddress`, which cannot be constructed by a
+caller or substituted with a fake port’s address. PHY calibration
 configuration/restore machines and other cross-block calibration operations
 remain here; the no-wait scan does not classify them as atoms.
 

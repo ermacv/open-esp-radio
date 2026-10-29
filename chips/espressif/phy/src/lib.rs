@@ -31,6 +31,7 @@ extern crate std;
 
 pub mod analog_i2c;
 pub mod i2c;
+pub mod serial;
 pub mod pbus {
     //! PBus mode and completion sequencing. SOURCE: ROM_REV0_PHY_PBUS.
 

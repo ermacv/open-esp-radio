@@ -749,8 +749,10 @@ seat and both cancellation guards. Neither family depends on a chip or protocol
 driver.
 
 The family `oer-espressif-phy` owns analog-I2C power/reset decisions,
-retained-wake parallel-host sequencing, PBus mode/completion order and named
-short settles over HAL atom ports. The S31 PHY supplies the retained-wake
+retained-wake parallel-host sequencing, serial-byte starts and completion
+observations, PBus mode/completion order and named short settles over HAL atom
+ports. The serial port uses an opaque S31-validated address for command
+publication; a fake port cannot manufacture an address for the hardware port. The S31 PHY supplies the retained-wake
 command profile and adopted-clock delay binding. HAL retains the physical
 parts, fixed vendor write series, calibration restore storage and exact affine
 transaction custody, including the existing fault ABI.
