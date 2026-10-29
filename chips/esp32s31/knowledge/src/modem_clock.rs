@@ -163,3 +163,7 @@ impl ModemClockModule {
         }
     }
 }
+
+/// Bluetooth main-XTAL divider: 40 MHz / (399 + 1) = 100 kHz.
+/// SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK.
+pub const BLUETOOTH_MAIN_XTAL_LOW_POWER_DIVIDER: u32 = 399;

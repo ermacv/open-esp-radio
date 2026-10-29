@@ -51,44 +51,21 @@ impl PhyRegistrationGrant {
 /// One word holds the last issued epoch in its low 31 bits and whether that
 /// epoch is current in its top bit.
 #[derive(Debug)]
-pub(crate) struct PhyRegistration(u32);
-
+pub(crate) struct PhyRegistration(oer_espressif_radio::epoch::Registration);
 impl PhyRegistration {
-    const CURRENT: u32 = 1 << 31;
-    const COUNTER: u32 = Self::CURRENT - 1;
-
-    /// No epoch has been issued in this boot.
     pub(crate) const fn new() -> Self {
-        Self(0)
+        Self(oer_espressif_radio::epoch::Registration::new())
     }
-
-    const fn issued(&self) -> u32 {
-        self.0 & Self::COUNTER
-    }
-
-    /// Begin a registration and retire every earlier epoch.
     pub(crate) fn begin(&mut self) -> PhyRegistrationEpoch {
-        // Each registration runs a full calibration graph, so 2^31 of them
-        // cannot occur in one boot. Wrapping past zero keeps this total.
-        let next = self.issued().wrapping_add(1) & Self::COUNTER;
-        let issued = core::num::NonZeroU32::new(next).unwrap_or(core::num::NonZeroU32::MIN);
-        self.0 = issued.get() | Self::CURRENT;
-        PhyRegistrationEpoch(issued)
+        PhyRegistrationEpoch(self.0.begin())
     }
-
-    /// The registration that currently describes the PHY, if any.
     pub(crate) const fn current(&self) -> Option<PhyRegistrationEpoch> {
-        if self.0 & Self::CURRENT == 0 {
-            return None;
-        }
-        match core::num::NonZeroU32::new(self.issued()) {
-            Some(issued) => Some(PhyRegistrationEpoch(issued)),
+        match self.0.current() {
+            Some(epoch) => Some(PhyRegistrationEpoch(epoch)),
             None => None,
         }
     }
-
-    /// Retire the current registration while keeping the issued counter.
     pub(crate) const fn retired(self) -> Self {
-        Self(self.issued())
+        Self(self.0.retired())
     }
 }

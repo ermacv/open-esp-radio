@@ -26,7 +26,7 @@ use core::fmt;
 use crate::ieee80211::registers::{WifiRadioRegisters, WifiRxDmaRegisters};
 
 use crate::{
-    clock::{ClockPort, CommonRadioPower},
+    clock::ClockPort,
     domain::{
         CoexAbsent, CommonPower, CommonPowerExitFailure, CommonRadioPowerError, ModemClockError,
         PlatformClockProvider, RadioDomain, WifiClient,
@@ -48,32 +48,6 @@ impl WifiPowerPort for crate::phy::RadioPhyRegisters {
     fn pulse_wifi_baseband_and_mac_reset(&mut self) {
         self.set_wifi_baseband_and_mac_reset(true);
         self.set_wifi_baseband_and_mac_reset(false);
-    }
-}
-
-/// Retained across Wi-Fi power epochs, independently of the other protocols.
-#[derive(Default)]
-pub(crate) struct WifiPowerEntry {
-    reset_completed: bool,
-}
-
-impl WifiPowerEntry {
-    pub(crate) fn enter<B: PlatformClockBackend>(
-        &mut self,
-        power: &mut CommonRadioPower<B>,
-        port: &mut impl WifiPowerPort,
-        clocks: &impl PlatformClockProvider<Backend = B>,
-    ) -> Result<CommonPower<WifiClient>, CommonRadioPowerError> {
-        let entry = power.prepare_entry::<WifiClient>(port)?;
-        // SOURCE: IDF Wi-Fi initialization resets its MAC after the initial
-        // PHY calibration. Keep the prior write order: cold baseline, LP
-        // clock selection, combined reset, then the domain power sequence.
-        if !self.reset_completed {
-            port.pulse_wifi_baseband_and_mac_reset();
-        }
-        let entered = power.finish_entry(entry, port, clocks)?;
-        self.reset_completed = true;
-        Ok(entered)
     }
 }
 

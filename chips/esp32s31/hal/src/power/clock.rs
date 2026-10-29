@@ -54,7 +54,9 @@ impl ModemClockDependency for Dependency {
     }
 }
 
+#[cfg(test)]
 pub(crate) type ModemClockPlanner = oer_espressif_modem_clock::ModemClockPlanner<Dependency>;
+#[cfg(test)]
 pub(crate) type ModemClockLease = oer_espressif_modem_clock::ModemClockLease<Dependency>;
 #[cfg(test)]
 pub(crate) type PreparedModemClockAcquire =
@@ -62,8 +64,10 @@ pub(crate) type PreparedModemClockAcquire =
 #[cfg(test)]
 pub(crate) type PreparedModemClockRelease =
     oer_espressif_modem_clock::PreparedModemClockRelease<Dependency>;
+#[cfg(test)]
 pub(crate) type PoisonedModemClockAcquire =
     oer_espressif_modem_clock::PoisonedModemClockAcquire<Dependency>;
+#[cfg(test)]
 pub(crate) type PoisonedModemClockRelease =
     oer_espressif_modem_clock::PoisonedModemClockRelease<Dependency>;
 

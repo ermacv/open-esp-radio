@@ -214,3 +214,40 @@ fn channel_custody_records_channel_or_retune_on_unpolled_and_pending_drop() {
         }
     }
 }
+
+#[test]
+fn exact_reunion_retains_power_coexistence_and_latest_btbb_publication() {
+    let mut radio = domain(());
+    let grant = radio.begin_registration_for_host_test();
+    let earlier = radio.btbb_publisher().1.publish(&grant, 4).unwrap();
+    let latest = radio.btbb_publisher().1.publish(&grant, 5).unwrap();
+    radio.state.power.hold_for_test(RadioClient::Wifi);
+    radio.hold_btbb_for_test(RadioClient::Bluetooth);
+    let (coexisting, count) = radio.enter_coex(CoexAbsent::<WifiClient>::issued());
+    assert_eq!(count, 1);
+
+    let (owner, phy) = radio.detach(Operation::Maintain).split();
+    let mut radio = owner
+        .reunite(phy)
+        .unwrap_or_else(|_| panic!("the exact seat reunites"));
+    assert!(radio.holds_common_power(RadioClient::Wifi));
+    assert!(radio.holds_btbb(RadioClient::Bluetooth));
+    assert_eq!(radio.coex_participant_count(), 1);
+    assert_eq!(radio.registration_epoch(), Some(grant.epoch()));
+    let parts = crate::root::RadioPartitions::for_host_test();
+    let (ieee802154, _irq) = crate::ieee802154::mac::split(parts.ieee802154.into_mac());
+    assert_eq!(
+        radio.btbb_acquire(&ieee802154, &earlier),
+        Err(BtbbError::Stale)
+    );
+    assert_eq!(
+        radio.btbb_acquire(&ieee802154, &latest),
+        Ok(BtbbAcquired::Joined)
+    );
+    let (_absent, remaining) = radio.leave_coex(coexisting);
+    assert_eq!(remaining, 0);
+    assert!(matches!(
+        radio.into_parts(),
+        Err((_, RadioDomainReleaseError::CommonPowerHeld))
+    ));
+}

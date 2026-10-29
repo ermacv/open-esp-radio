@@ -28,10 +28,14 @@ note: `PhyRegistrationGrant` does not implement `Clone`, so `&PhyRegistrationGra
 22 |     grant.clone() // ui-error: E0308
    |     ^^^^^
 
-error: cannot construct `BtbbGain` with struct literal syntax due to private fields
-  --> tests/ui/btbb_gain_needs_the_registration_grant.rs:28:5
+error[E0423]: cannot initialize a tuple struct which contains private fields
+  --> tests/ui/btbb_gain_needs_the_registration_grant.rs:30:5
    |
-28 |     BtbbGain { value: 0x4f } // ui-error: cannot construct `BtbbGain` with struct literal syntax due to private fields
-   |     ^^^^^^^^   ----------- private field
+30 |     BtbbGain(gain) // ui-error: E0423
+   |     ^^^^^^^^
    |
-   = note: ...and other private fields `epoch` and `generation` that were not provided
+note: constructor is not visible here due to private fields
+  --> src/domain.rs
+   |
+   | pub struct BtbbGain(oer_espressif_radio::domain::Gain<PhyRegistrationEpoch>);
+   |                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ private field

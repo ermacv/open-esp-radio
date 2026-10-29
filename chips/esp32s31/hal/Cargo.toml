@@ -12,7 +12,7 @@ description = "Ownership and async HAL boundaries for the ESP32-S31 radio"
 # their code-generation identity.
 bluetooth-engine = []
 # Synthetic Wi-Fi observations and DMA bindings for explicit test builds.
-test-support = []
+test-support = ["oer-espressif-radio/test-support"]
 
 [dependencies]
 oer-espressif-radio = { path = "../../espressif/radio" }
@@ -42,6 +42,7 @@ oer-espressif-platform-port = { path = "../../espressif/platform-port", features
 oer-espressif-facts = { path = "../../espressif/facts" }
 
 [dev-dependencies]
+oer-espressif-radio = { path = "../../espressif/radio", features = ["test-support"] }
 oer-time-virtual = { path = "../../../portable/time-virtual" }
 oer-radio-regulatory = { path = "../../../protocols/radio/regulatory", features = ["test-support"] }
 critical-section = { version = "1.2.0", features = ["std"] }

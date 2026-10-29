@@ -1,5 +1,6 @@
 use super::*;
 use crate::phy::registration::PhyRegistration;
+use crate::power::clock::ModemClockPlanner;
 use crate::root::RadioPartitions;
 
 fn radio_domain() -> RadioDomain<crate::power::test_clocks::CountingBackend> {
@@ -56,10 +57,11 @@ fn poisoned_acquire_keeps_its_failed_edge_through_refused_changes_and_release() 
     .expect("the second acquire edge failed");
     let failed = poisoned.dependency();
     assert_eq!(poisoned.completed_edges(), 1);
-    radio.state_mut().clocks = ModemClocks::AcquirePoisoned { _owner: poisoned };
+    radio.state_mut().clocks = ModemClocks::AcquirePoisoned { owner: poisoned };
 
+    let radio = radio.detach(transaction::Operation::Maintain).reunite();
     let radio = refuse_poisoned_clock_changes(radio);
-    let ModemClocks::AcquirePoisoned { _owner: retained } = &radio.state().clocks else {
+    let ModemClocks::AcquirePoisoned { owner: retained } = &radio.state().clocks else {
         panic!("the failed acquire owner must remain quarantined")
     };
     assert_eq!(retained.dependency(), failed);
@@ -87,10 +89,11 @@ fn poisoned_release_keeps_its_failed_edge_through_refused_changes_and_release() 
     .expect("the second release edge failed");
     let failed = poisoned.dependency();
     assert_eq!(poisoned.completed_edges(), 1);
-    radio.state_mut().clocks = ModemClocks::ReleasePoisoned { _owner: poisoned };
+    radio.state_mut().clocks = ModemClocks::ReleasePoisoned { owner: poisoned };
 
+    let radio = radio.detach(transaction::Operation::Maintain).reunite();
     let radio = refuse_poisoned_clock_changes(radio);
-    let ModemClocks::ReleasePoisoned { _owner: retained } = &radio.state().clocks else {
+    let ModemClocks::ReleasePoisoned { owner: retained } = &radio.state().clocks else {
         panic!("the failed release owner must remain quarantined")
     };
     assert_eq!(retained.dependency(), failed);
