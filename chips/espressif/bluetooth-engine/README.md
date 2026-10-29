@@ -22,7 +22,7 @@ or arena can be extracted through these ports.
 `ExecutionModifyPhase` and `StopPhase` are durable progress values, without
 hardware authority. `EngineEpoch` is a non-wrapping installation identity;
 a detached numeric identity cannot create a completion receipt. Exact arena,
-pool and epoch brands and all receipt constructors remain private to HAL's
+pool and epoch brands and live receipt construction remain in HAL's
 memory/owner core. No port exports a raw address, graph projection, arena
 extraction or reclamation operation.
 

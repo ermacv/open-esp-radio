@@ -16,8 +16,11 @@ use oer_espressif_bluetooth_engine::port::SchedulerTaskPort;
 
 use crate::bluetooth::registers::{
     BluetoothSchedulerExecutionModifyDisposition, BluetoothSchedulerExecutionModifyPublished,
-    BluetoothSchedulerHardwareListIndex, BluetoothTaskRegisters,
+    BluetoothSchedulerHardwareListIndex,
 };
+
+#[cfg(feature = "bluetooth-engine")]
+use crate::bluetooth::registers::BluetoothTaskRegisters;
 
 #[cfg(feature = "bluetooth-engine")]
 use super::engine::scheduler::interrupt::{
