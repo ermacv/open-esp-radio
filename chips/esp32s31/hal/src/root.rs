@@ -40,17 +40,22 @@ use crate::{
     ieee802154::mac::Ieee802154Partition,
     modem::SharedRadioRegisters,
     owner::WifiInterruptBanks,
+    peripherals::{
+        efuse::EfuseRegisters,
+        entropy::EntropyRegisters,
+        reset_cause::ResetCauseRegisters,
+        software_interrupt::SoftwareInterrupts,
+        system_timer::{Monotonic, MonotonicStuck, SystemTimer, open_clock},
+        timg0_alarm::Timg0AlarmParts,
+        usb_serial_jtag::{self, ConsoleRegisters},
+        watchdog::{Mwdt0Registers, RwdtRegisters, SwdRegisters, WatchdogRegisters, Watchdogs},
+    },
     phy::{RadioPhyRegisters, registration::PhyRegistration, restore::PhyRouteState},
     platform::{
-        EfuseRegisters, EntropyRegisters, InterruptBlocks, ResetCauseRegisters, SoftwareInterrupts,
-        SystemTimer,
+        InterruptBlocks,
         core_control::{CoreControlRegisters, Uart0ClockRegisters},
-        system_timer::{Monotonic, MonotonicStuck, open_clock},
-        timg0_alarm::Timg0AlarmParts,
     },
     power::{ChipClocks, PlatformClockBackend, PsramMpll},
-    usb_serial_jtag::{self, ConsoleRegisters},
-    watchdog::{Mwdt0Registers, RwdtRegisters, SwdRegisters, WatchdogRegisters, Watchdogs},
 };
 
 /// The chip's reset root: every claimed part, once.
@@ -193,7 +198,7 @@ impl Root {
     ///
     /// Taking the watchdogs arms the RTC watchdog
     /// ([`Watchdogs::new`]): from here the image's executor must feed it
-    /// ([`ArmedRtcWatchdog::feed_every`](crate::watchdog::ArmedRtcWatchdog::feed_every)),
+    /// ([`ArmedRtcWatchdog::feed_every`](crate::peripherals::watchdog::ArmedRtcWatchdog::feed_every)),
     /// and a fatal path that cannot prepare the reset waits for it.
     ///
     /// # Errors

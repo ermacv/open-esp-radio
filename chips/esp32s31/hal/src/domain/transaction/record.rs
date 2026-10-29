@@ -236,7 +236,7 @@ mod tests {
         let mut record: FaultRecord = bytemuck::Zeroable::zeroed();
         record.record(Fault {
             reason: FaultReason::SarAlarmWithoutBundle(super::super::SarAlarmWithoutBundle {
-                observation: crate::platform::timg0_alarm::Observation {
+                observation: crate::peripherals::timg0_alarm::Observation {
                     pending: true,
                     asserted: false,
                 },

@@ -110,7 +110,7 @@ pub struct Rx {
     power: Option<CommonPower<Ieee802154Client>>,
     route: Option<RegisteredIeee802154OperationalRoute>,
     silent: Option<Silent<Ieee802154InterruptOwner>>,
-    buffers: Option<oer_esp32s31_hal::dma_static::Placed<Ieee802154EngineBuffers>>,
+    buffers: Option<oer_esp32s31_hal::memory::dma_static::Placed<Ieee802154EngineBuffers>>,
     detached: Option<DetachedIeee802154Engine>,
 }
 impl Rx {

@@ -36,7 +36,7 @@ fn pool() -> Pool {
         .unwrap()
         .connections();
     Pool::place::<crate::bluetooth::engine::HostDma<0x2f00_0100>>(
-        crate::dma_static::Placed::host(storage),
+        crate::memory::dma_static::Placed::host(storage),
         numbers,
     )
     .expect("the pool fits controller SRAM")
@@ -45,7 +45,7 @@ fn pool() -> Pool {
 fn workspace() -> DirectionFindingWorkspaceLink {
     let storage = Box::leak(Box::new(DirectionFindingWorkspaceStorage::zeroed()));
     DirectionFindingWorkspaceStorage::place::<crate::bluetooth::engine::HostDma<0x2f02_0000>>(
-        crate::dma_static::Placed::host(storage),
+        crate::memory::dma_static::Placed::host(storage),
     )
     .expect("workspace projection")
     .binding()

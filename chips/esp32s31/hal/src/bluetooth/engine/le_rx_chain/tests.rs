@@ -13,7 +13,7 @@ const B: LeRxTag = LeRxTag(7);
 fn chain() -> LeRxChain<3> {
     let storage = Box::leak(Box::new(LeRxChainStorage::<3>::zeroed()));
     LeRxChain::place::<crate::bluetooth::engine::HostDma<0x2f00_4000>>(
-        crate::dma_static::Placed::host(storage),
+        crate::memory::dma_static::Placed::host(storage),
         RxMemoryListClass::NonScanning,
     )
     .expect("test chain binds")
@@ -189,7 +189,7 @@ fn a_single_packet_cannot_form_a_receive_chain() {
     let storage = Box::leak(Box::new(LeRxChainStorage::<1>::zeroed()));
     assert!(matches!(
         LeRxChain::place::<crate::bluetooth::engine::HostDma<0x2f00_4000>>(
-            crate::dma_static::Placed::host(storage),
+            crate::memory::dma_static::Placed::host(storage),
             RxMemoryListClass::Scanning,
         ),
         Err(super::LeRxChainPlaceError::TooFewPackets)

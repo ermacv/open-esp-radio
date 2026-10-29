@@ -9,11 +9,11 @@ use alloc::boxed::Box;
 
 use core::{ops::Deref, pin::Pin};
 
-use oer_esp32s31_hal::dma_static::PlacedBacking;
 use oer_esp32s31_hal::ieee80211::dma::tx_ampdu_storage::{
     AmpduDmaState, AmpduDmaStorage, AmpduDmaStorageError, PinnedAmpduDmaStorage, RetainedAmpduDma,
     RetainedAmpduDmaStorage,
 };
+use oer_esp32s31_hal::memory::dma_static::PlacedBacking;
 use oer_esp32s31_hal::types::{
     MacHeTxProgram, MacHtTxProgram, MacTxDetachOutcome, MacTxDetachReason,
 };
@@ -70,7 +70,7 @@ impl<'storage, const SLOTS: usize> HtAmpduTxResources<'storage, SLOTS> {
         Self::new(
             metadata,
             AmpduDmaStorage::pin::<oer_esp32s31_hal::ieee80211::dma::space::HostDma>(
-                oer_esp32s31_hal::dma_static::Placed::host(dma),
+                oer_esp32s31_hal::memory::dma_static::Placed::host(dma),
             )?,
         )
     }
@@ -89,7 +89,7 @@ impl<const SLOTS: usize> HtAmpduTxResources<'static, SLOTS> {
     /// final addresses.
     pub fn pin_static(
         metadata: &'static mut HtAmpduTxStorage<SLOTS>,
-        dma: oer_esp32s31_hal::dma_static::Placed<AmpduDmaStorage<SLOTS, 0>>,
+        dma: oer_esp32s31_hal::memory::dma_static::Placed<AmpduDmaStorage<SLOTS, 0>>,
     ) -> Result<Self, HtAmpduTxError> {
         Self::new(
             HtAmpduTxStorage::pin_static(metadata),

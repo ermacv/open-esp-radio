@@ -12,7 +12,7 @@ use core::sync::atomic::{AtomicU32, Ordering};
 use oer_embassy_time::EmbassyClock;
 use oer_esp32s31_hal::ieee80211::dma::rx_storage::{RxDmaStorage, RxDmaStorageError};
 use oer_esp32s31_hal::owner::{MacInterruptRegisters, MacPowerInterruptRegisters, RadioAccess};
-use oer_esp32s31_hal::platform::{FromCpu2Irq, interrupt_controller};
+use oer_esp32s31_hal::{peripherals::software_interrupt::FromCpu2Irq, platform::interrupt_controller};
 use oer_esp32s31_ieee80211_driver::{
     irq::{
         DoorbellAcknowledge, RadioDoorbell, WifiIrqLine, WifiIrqPart, WifiIrqRequests,

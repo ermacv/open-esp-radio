@@ -510,7 +510,7 @@ fn systimer(s: &mut Session<'_>, n: usize) {
             pac::Interrupt::SYSTIMER_TARGET1
         },
     );
-    // SOURCE: production platform::system_timer::open_clock. Only this block
+    // SOURCE: production peripherals::system_timer::open_clock. Only this block
     // is reset; no timer-group/watchdog reset or RF operation occurs.
     let clock = &mut s.generic.systimer_clock;
     clock.modify_systimer_ctrl0(|w| {

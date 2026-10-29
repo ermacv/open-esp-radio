@@ -6,7 +6,7 @@
 )]
 
 use super::{le_rx_chain::RxPlan, scheduler_pool::PoolPlan, *};
-use crate::{bluetooth::TaskOwner, dma_static::Placed};
+use crate::{bluetooth::TaskOwner, memory::dma_static::Placed};
 
 /// Complete controller backing, with capacities chosen by the composition.
 ///
@@ -54,7 +54,7 @@ pub enum ArenaError {
     Receive(LeRxChainPlaceError),
     SchedulerCapacity,
     EpochExhausted,
-    Placement(crate::dma_address::ProjectionError),
+    Placement(crate::memory::dma_address::ProjectionError),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -268,15 +268,16 @@ impl<
         let Some(installation) = EngineEpoch::allocate(&EPOCHS) else {
             return Err((ArenaError::EpochExhausted, clocked, placed));
         };
-        let projected = crate::dma_address::PlacementProjection::try_with_controller::<D, _, _>(
-            placed,
-            |storage, projection| {
-                direction_finding_workspace::DirectionFindingWorkspaceBinding::new(
-                    &storage.0.1.0,
-                    projection,
-                )
-            },
-        );
+        let projected = crate::memory::dma_address::PlacementProjection::try_with_controller::<
+            D,
+            _,
+            _,
+        >(placed, |storage, projection| {
+            direction_finding_workspace::DirectionFindingWorkspaceBinding::new(
+                &storage.0.1.0,
+                projection,
+            )
+        });
         let (storage, projection, df_binding) = match projected {
             Ok(parts) => parts,
             Err((error, placed)) => return Err((ArenaError::Placement(error), clocked, placed)),

@@ -190,7 +190,7 @@ fn finish(s: &mut Session<'_>) {
     });
 }
 // Exact #710 arm_after transaction, with mcycle bracketing the start store.
-// SOURCE: hal/src/platform/timg0_alarm.rs and ESP_IDF_4D59230D_S31_TIMER0_LL.
+// SOURCE: hal/src/peripherals/timg0_alarm.rs and ESP_IDF_4D59230D_S31_TIMER0_LL.
 fn arm(s: &mut Session<'_>, us: u32) -> [u32; 2] {
     stop(s);
     ena(s, false);

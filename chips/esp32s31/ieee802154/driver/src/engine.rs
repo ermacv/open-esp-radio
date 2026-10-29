@@ -2,7 +2,7 @@
 
 use super::ll::S31Mac;
 use core::{mem::ManuallyDrop, ops::Deref};
-use oer_esp32s31_hal::{dma_static::Placed, ieee802154::frames, layouts::DmaWindowAddress};
+use oer_esp32s31_hal::{ieee802154::frames, layouts::DmaWindowAddress, memory::dma_static::Placed};
 use oer_espressif_ieee802154_engine::{
     engine::{
         Fault, Ieee802154Engine as SharedEngine, Ieee802154Interfaces,
@@ -78,7 +78,7 @@ pub struct DetachedIeee802154Engine {
 
 /// Rejected placement returns both unchanged affine owners.
 pub struct PlacementRefusal<Ll> {
-    pub error: oer_esp32s31_hal::dma_address::ProjectionError,
+    pub error: oer_esp32s31_hal::memory::dma_address::ProjectionError,
     pub mac: Ll,
     pub buffers: Placed<Ieee802154EngineBuffers>,
 }

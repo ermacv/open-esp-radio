@@ -28,7 +28,7 @@ pub(crate) fn engine(
     oer_esp32s31_hal::bluetooth::InterruptSetupOwner,
 ) {
     use bytemuck::Zeroable;
-    use oer_esp32s31_hal::{bluetooth::engine::*, dma_static::Placed};
+    use oer_esp32s31_hal::{bluetooth::engine::*, memory::dma_static::Placed};
     use std::boxed::Box;
     let arena = Box::leak(Box::new(BluetoothArena::<0, 1, 2, 1, 4, 4>::zeroed()));
     Engine::for_host_test::<HostDma<0x2f00_1000>>(

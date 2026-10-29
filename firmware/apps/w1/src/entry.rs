@@ -20,14 +20,11 @@ use oer_diagnostics::Note;
 use oer_embassy_time::EmbassyClock;
 use oer_esp32s31_board as board;
 use oer_esp32s31_hal::boot::CpuProfile;
-use oer_esp32s31_hal::platform::{
-    FactoryIdentity, FromCpu0Irq, FromCpu2Irq, FromCpu3Irq, Interface, SystimerAlarm0,
-    SystimerAlarm1,
-};
+use oer_esp32s31_hal::peripherals::{efuse::{FactoryIdentity, Interface}, software_interrupt::{FromCpu0Irq, FromCpu2Irq, FromCpu3Irq}, system_timer::{SystimerAlarm0, SystimerAlarm1}};
 use oer_esp32s31_hal::root::{ProtocolPartitions, Root};
 use oer_esp32s31_hal::types::MacInterruptEnableState;
-use oer_esp32s31_hal::usb_serial_jtag::ConsoleInterrupt;
-use oer_esp32s31_hal::watchdog::{ArmedRtcWatchdog, RTC_WATCHDOG_FEED_PERIOD_MS, RwdtRegisters};
+use oer_esp32s31_hal::peripherals::usb_serial_jtag::ConsoleInterrupt;
+use oer_esp32s31_hal::peripherals::watchdog::{ArmedRtcWatchdog, RTC_WATCHDOG_FEED_PERIOD_MS, RwdtRegisters};
 use oer_esp32s31_ieee80211_driver::{
     runtime::{WifiRoleMaterialized, materialize_esp32s31_wifi_role},
     rx::{counters::WifiRxCounters, returns::HeldRxFrame, upper::FrameReceiver},
@@ -91,7 +88,7 @@ oer_espressif_staged_runtime::interrupt_table! {
     wake: WakeToken = FromCpu0Irq => oer_espressif_executor::wake_handler::<Esp32s31, 0, FromCpu0Irq>, line 40, context app_wake, hart 0, Hardware;
     // SOURCE: family.toml [interrupts] highest-line; HW23_S31_P2_ARBITRATION_20261027
     // measures only this P2 pair on S31: FROM_CPU2 line17 before TIMG0 line16.
-    phy: PhyToken = oer_esp32s31_hal::platform::timg0_alarm::Timg0AlarmInterrupt => phy_pilot::interrupt, line 16, context radio_executor, hart 0, Exempt(ExecutorLevel, "SAR/PWDET steps between radio executor rounds");
+    phy: PhyToken = oer_esp32s31_hal::peripherals::timg0_alarm::Timg0AlarmInterrupt => phy_pilot::interrupt, line 16, context radio_executor, hart 0, Exempt(ExecutorLevel, "SAR/PWDET steps between radio executor rounds");
     /// The radio executor (P2), polled in its handler, which times each run.
     radio: RadioToken = FromCpu2Irq => crate::irq::radio_executor, line 17, context radio_executor, hart 0, Executor;
     /// The radio interrupt: the Wi-Fi MAC and WDEVPWR banks and the radio
@@ -194,7 +191,7 @@ type Actor = RadioSystem<
 struct Boot {
     console: Console,
     /// The console's pads, held so that nothing switches them off.
-    _pads: oer_esp32s31_hal::usb_serial_jtag::UsbPads,
+    _pads: oer_esp32s31_hal::peripherals::usb_serial_jtag::UsbPads,
     cell: oer_esp32s31_radio_client::MembershipCell<oer_esp32s31_radio_client::wifi::Wifi>,
     wifi: oer_esp32s31_hal::root::WifiPartition,
     rng: Rng,
@@ -211,7 +208,7 @@ struct Boot {
 }
 
 /// The image's entropy owner.
-pub(crate) type Rng = oer_esp32s31_hal::platform::Entropy<EmbassyClock>;
+pub(crate) type Rng = oer_esp32s31_hal::peripherals::entropy::Entropy<EmbassyClock>;
 
 oer_esp32s31_hal::phy_fault_reporter!(oer_esp32s31_compose::phy_fault::reset);
 oer_espressif_staged_runtime::entry!(main, oer_esp32s31_hal::platform::Port);
@@ -378,7 +375,7 @@ async fn feed_rtc_watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) {
 /// no one holds the block.
 fn fail<const B: usize>(reason: oer_diagnostics::Name<B>) -> ! {
     oer_espressif_staged_runtime::fatal_halt::<oer_esp32s31_hal::platform::Port>(|_path| {
-        let _note = oer_esp32s31_hal::usb_serial_jtag::fatal_note(&Note::w1_fail(reason));
+        let _note = oer_esp32s31_hal::peripherals::usb_serial_jtag::fatal_note(&Note::w1_fail(reason));
     })
 }
 

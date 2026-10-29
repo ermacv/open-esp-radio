@@ -67,7 +67,7 @@ enum State<E, X: SignalExecutor, M: ControllerMemory, const MT: usize> {
     Running,
     Retired(Option<ControllerRetired<M>>),
     Reset {
-        arena: Option<oer_esp32s31_hal::dma_static::Placed<M::Storage>>,
+        arena: Option<oer_esp32s31_hal::memory::dma_static::Placed<M::Storage>>,
         pending: oer_esp32s31_hal::bluetooth::BluetoothModemLpTimerPendingObservation,
     },
     FactoryFailed(E),
@@ -154,7 +154,7 @@ impl<F, E, X: SignalExecutor + 'static, M: ControllerMemory, R, const MT: usize>
         mut self,
     ) -> Result<
         (
-            oer_esp32s31_hal::dma_static::Placed<M::Storage>,
+            oer_esp32s31_hal::memory::dma_static::Placed<M::Storage>,
             BluetoothInterruptGate<ChipGate, X, R>,
             oer_esp32s31_hal::bluetooth::BluetoothModemLpTimerPendingObservation,
         ),

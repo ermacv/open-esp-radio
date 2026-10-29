@@ -32,7 +32,7 @@ pub(crate) fn reset(fault: Fault) -> ! {
 #[cfg(target_arch = "riscv32")]
 pub(crate) fn report_previous() {
     if let Some(mut record) = EVENT_FAULT.try_lock() {
-        let _reported = record.report(oer_esp32s31_hal::usb_serial_jtag::early_text);
+        let _reported = record.report(oer_esp32s31_hal::peripherals::usb_serial_jtag::early_text);
     }
 }
 

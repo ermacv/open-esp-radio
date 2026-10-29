@@ -21,7 +21,7 @@ use crate::bluetooth::BluetoothControllerReset;
 use crate::layouts::*;
 
 use crate::bluetooth::engine::{ControllerDmaSpace, Placement};
-use crate::dma_static::Placed;
+use crate::memory::dma_static::Placed;
 
 /// Bytes in the complete recovered BLE PHY environment allocation.
 pub const BLUETOOTH_BLE_PHY_ENVIRONMENT_BYTES: usize = BlePhyEnvironment::SIZE;

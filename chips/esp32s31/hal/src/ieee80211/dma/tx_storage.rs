@@ -5,7 +5,7 @@
 //! in the MAC backend. The split lets those safe upper layers pass an unforgeable memory
 //! capability instead of a bare descriptor address to the register boundary.
 
-use crate::dma_static::Placed;
+use crate::memory::dma_static::Placed;
 use core::{marker::PhantomPinned, pin::Pin};
 
 use crate::types::MacTxQueueDetached;

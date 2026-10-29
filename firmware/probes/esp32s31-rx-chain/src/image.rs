@@ -11,13 +11,15 @@ use oer_esp32s31_hal::{
             MacSlowClockCalibrationSource,
         },
     },
-    platform::{
-        FactoryIdentity, FromCpu0Irq, FromCpu2Irq, Interface, SystimerAlarm0, SystimerAlarm1,
+    peripherals::usb_serial_jtag::ConsoleInterrupt,
+    peripherals::watchdog::{ArmedRtcWatchdog, RTC_WATCHDOG_FEED_PERIOD_MS, RwdtRegisters},
+    peripherals::{
+        efuse::{FactoryIdentity, Interface},
+        software_interrupt::{FromCpu0Irq, FromCpu2Irq},
+        system_timer::{SystimerAlarm0, SystimerAlarm1},
     },
     power::ChipClocks,
     root::Root,
-    usb_serial_jtag::ConsoleInterrupt,
-    watchdog::{ArmedRtcWatchdog, RTC_WATCHDOG_FEED_PERIOD_MS, RwdtRegisters},
 };
 use oer_esp32s31_phy::{
     NoopPhyTargetObserver, PhyCalibrationIdentity, PhyConfig, PhyRegisterConfig,
@@ -43,7 +45,7 @@ const FULL_PATTERN_NODES: [usize; 3] = [12, 20, 28];
 const WORDS: usize = BUFFER / 4;
 const _: () = assert!(BUFFER >= 4 && BUFFER.is_multiple_of(4) && COUNT <= u32::BITS as usize);
 type Storage = RxDmaStorage<COUNT, BUFFER, BUFFER>;
-type Rng = oer_esp32s31_hal::platform::Entropy<EmbassyClock>;
+type Rng = oer_esp32s31_hal::peripherals::entropy::Entropy<EmbassyClock>;
 type Backend = Esp32s31Radio<
     ChipClocks,
     oer_espressif_executor::Cooperative<Esp32s31, EmbassyClock>,
@@ -72,7 +74,7 @@ oer_espressif_interrupt_table::interrupt_table! {
     wake: WakeToken = FromCpu0Irq => oer_espressif_executor::wake_handler::<Esp32s31, 0, FromCpu0Irq>, line 40, context app, hart 0, Hardware;
     // SOURCE: family.toml [interrupts]; HW23_S31_P2_ARBITRATION_20261027:
     // only P2 line17 before16 is measured on S31.
-    phy: PhyToken = oer_esp32s31_hal::platform::timg0_alarm::Timg0AlarmInterrupt => phy_pilot::interrupt, line 16, context radio_exec, hart 0, Exempt(ExecutorLevel, "SAR/PWDET steps between radio executor rounds");
+    phy: PhyToken = oer_esp32s31_hal::peripherals::timg0_alarm::Timg0AlarmInterrupt => phy_pilot::interrupt, line 16, context radio_exec, hart 0, Exempt(ExecutorLevel, "SAR/PWDET steps between radio executor rounds");
     radio: RadioToken = FromCpu2Irq => oer_espressif_executor::interrupt_handler::<RadioTasks, FromCpu2Irq>, line 17, context radio_exec, hart 0, Executor;
     radio_alarm: RadioAlarm = SystimerAlarm0 => oer_espressif_executor::alarm_interrupt::<Esp32s31, 0, SystimerAlarm0>, line 18, context radio_irq, hart 0, Hardware;
     console_usb: ConsoleUsb = ConsoleInterrupt => crate::usb::interrupt, line 41, context app, hart 0, Hardware;
@@ -91,7 +93,7 @@ oer_espressif_executor::tasks! {
 }
 struct Boot {
     console: usb::Console,
-    _pads: oer_esp32s31_hal::usb_serial_jtag::UsbPads,
+    _pads: oer_esp32s31_hal::peripherals::usb_serial_jtag::UsbPads,
     mac_irq: oer_esp32s31_hal::owner::MacInterruptRegisters,
     traffic: &'static mut traffic::Trace,
 }
@@ -225,7 +227,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
 }
 fn fail<const B: usize>(reason: oer_diagnostics::Name<B>) -> ! {
     oer_espressif_staged_runtime::fatal_halt::<oer_esp32s31_hal::platform::Port>(|_| {
-        let _ = oer_esp32s31_hal::usb_serial_jtag::fatal_note(
+        let _ = oer_esp32s31_hal::peripherals::usb_serial_jtag::fatal_note(
             &oer_diagnostics::Note::runtime_fail(reason),
         );
     })

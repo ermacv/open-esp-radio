@@ -5,7 +5,7 @@ use bytemuck::Zeroable;
 fn le_1m_calibration_preserves_elapsed_controller_time() {
     let storage = std::boxed::Box::leak(std::boxed::Box::new(BlePhyEngineStorage::zeroed()));
     let owner = BlePhyEngineStorage::place::<crate::bluetooth::engine::HostDma<0x2f00_0100>>(
-        crate::dma_static::Placed::host(storage),
+        crate::memory::dma_static::Placed::host(storage),
     );
     let calibration = owner.le_1m_packet_start_calibration();
 
@@ -25,7 +25,7 @@ fn le_1m_calibration_preserves_elapsed_controller_time() {
 fn a_controller_reset_restores_the_allocation_image() {
     let storage = std::boxed::Box::leak(std::boxed::Box::new(BlePhyEngineStorage::zeroed()));
     let mut owner = BlePhyEngineStorage::place::<crate::bluetooth::engine::HostDma<0x2f00_0100>>(
-        crate::dma_static::Placed::host(storage),
+        crate::memory::dma_static::Placed::host(storage),
     );
     let initial = owner.image();
     owner.emulate_hardware_writes();
@@ -41,7 +41,7 @@ fn a_controller_reset_restores_the_allocation_image() {
 fn the_environment_records_the_retained_btbb_transmit_power_table() {
     let storage = std::boxed::Box::leak(std::boxed::Box::new(BlePhyEngineStorage::zeroed()));
     let owner = BlePhyEngineStorage::place::<crate::bluetooth::engine::HostDma<0x2f00_0100>>(
-        crate::dma_static::Placed::host(storage),
+        crate::memory::dma_static::Placed::host(storage),
     );
     let storage = owner.storage.as_ref().get_ref();
     let levels = oer_esp32s31_knowledge::tx_power::TX_POWER_LEVELS_DBM;

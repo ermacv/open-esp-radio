@@ -1,10 +1,10 @@
 use oer_esp32s31_compose::Esp32s31;
 use oer_embassy_time::EmbassyClock;
 use oer_esp32s31_board as board;
-use oer_esp32s31_hal::platform::{FromCpu0Irq, SystimerAlarm0};
+use oer_esp32s31_hal::peripherals::{software_interrupt::FromCpu0Irq, system_timer::SystimerAlarm0};
 use oer_esp32s31_hal::root::Root;
-use oer_esp32s31_hal::usb_serial_jtag;
-use oer_esp32s31_hal::watchdog::{ArmedRtcWatchdog, RTC_WATCHDOG_FEED_PERIOD_MS, RwdtRegisters};
+use oer_esp32s31_hal::peripherals::usb_serial_jtag;
+use oer_esp32s31_hal::peripherals::watchdog::{ArmedRtcWatchdog, RTC_WATCHDOG_FEED_PERIOD_MS, RwdtRegisters};
 use oer_espressif_executor::Executor;
 use oer_espressif_staged_runtime::diagnostics::{self, BootSmokePassed, Console};
 use oer_espressif_staged_runtime::panic;

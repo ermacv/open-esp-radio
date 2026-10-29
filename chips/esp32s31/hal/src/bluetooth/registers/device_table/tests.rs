@@ -25,7 +25,7 @@ impl BluetoothDeviceTableTransaction for Recorder {
 
 #[test]
 fn the_count_is_published_before_the_first_entry() {
-    let first = crate::dma_address::model_reference(0x2f07_e508);
+    let first = crate::memory::dma_address::model_reference(0x2f07_e508);
     let mut recorder = Recorder::default();
     execute_device_table_publication(&mut recorder, first, 2);
     assert_eq!(

@@ -92,8 +92,8 @@ fn address_slots_are_written_low_word_then_high_halfword() {
 
 #[test]
 fn ble_phy_initialization_points_the_controller_at_its_memory() {
-    let environment = crate::dma_address::model_reference(0x2f00_1000);
-    let resolving_list = crate::dma_address::model_reference(0x2f00_2000);
+    let environment = crate::memory::dma_address::model_reference(0x2f00_1000);
+    let resolving_list = crate::memory::dma_address::model_reference(0x2f00_2000);
     let inputs =
         BluetoothPhyRegisterInitInputs::normal_controller_profile(environment, resolving_list);
     let mut baseband_words = std::vec![0; instances::bt_bb::SIZE.div_ceil(4)];
@@ -208,7 +208,7 @@ fn a_near_deadline_programs_its_low_counter_image() {
 fn a_memory_list_pointer_keeps_the_valid_bit_of_its_word() {
     let mut memory = HostMemory::filled(0x0010_0000 | 0x5_5555);
     let (mut task, _, _) = memory.owners();
-    let header = crate::dma_address::model_reference(0x2f00_0040);
+    let header = crate::memory::dma_address::model_reference(0x2f00_0040);
     task.program_memory_list_pointer(
         BluetoothMemoryListSelector::One,
         BluetoothMemoryListSlot::CurrentRx,
@@ -230,7 +230,7 @@ fn a_published_head_reads_back_and_the_heads_clear() {
     let mut memory = HostMemory::filled(u32::MAX);
     let (mut task, _, _) = memory.owners();
     let index = BluetoothSchedulerHardwareListIndex::new(3).expect("list three");
-    let item = crate::dma_address::model_reference(0x2f00_0100);
+    let item = crate::memory::dma_address::model_reference(0x2f00_0100);
     let published = task.publish_scheduler_hardware_list_head(index, Some(item));
     assert_eq!(published.head().address(), Some(0x2f00_0100));
     assert_eq!(
@@ -297,7 +297,7 @@ fn scanner_start_publishes_both_backoff_words_and_the_upper_limit() {
 
 #[test]
 fn scheduler_requests_store_every_field_of_their_words() {
-    let item = crate::dma_address::model_reference(0x2f00_0100);
+    let item = crate::memory::dma_address::model_reference(0x2f00_0100);
     let index = BluetoothSchedulerHardwareListIndex::new(3).expect("list three");
     // Every bit set before: the requests are the vendor's stores from zero.
     let mut memory = HostMemory::filled(u32::MAX);
@@ -354,8 +354,8 @@ fn a_memory_list_pointer_is_cleared_then_ored_into_a_fresh_read() {
 
 #[test]
 fn ble_phy_initialization_clears_every_source_in_one_write() {
-    let environment = crate::dma_address::model_reference(0x2f00_1000);
-    let resolving_list = crate::dma_address::model_reference(0x2f00_2000);
+    let environment = crate::memory::dma_address::model_reference(0x2f00_1000);
+    let resolving_list = crate::memory::dma_address::model_reference(0x2f00_2000);
     let inputs =
         BluetoothPhyRegisterInitInputs::normal_controller_profile(environment, resolving_list);
     let mut baseband_words = std::vec![0; instances::bt_bb::SIZE.div_ceil(4)];

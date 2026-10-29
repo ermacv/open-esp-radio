@@ -353,7 +353,7 @@ impl<'pool, 'epoch, S: SchedulerRoleStorage, const N: usize>
 {
     /// Claim placed storage, validate allocation counts and initialize its graphs.
     pub(crate) fn place<D: crate::bluetooth::engine::ControllerDmaSpace>(
-        placed: crate::dma_static::Placed<SchedulerRolePoolStorage<S, N>>,
+        placed: crate::memory::dma_static::Placed<SchedulerRolePoolStorage<S, N>>,
         numbers: SchedulerAllocationNumbers,
     ) -> Result<Self, SchedulerPoolPlaceError> {
         let plan = PoolPlan::<S, N>::new(numbers)?;
@@ -840,7 +840,7 @@ impl<'pool> PoolScope<'pool> {
     pub fn place<'epoch, D: super::ControllerDmaSpace, S: SchedulerRoleStorage, const N: usize>(
         self,
         _epoch: EpochScope<'epoch>,
-        placed: crate::dma_static::Placed<SchedulerRolePoolStorage<S, N>>,
+        placed: crate::memory::dma_static::Placed<SchedulerRolePoolStorage<S, N>>,
         numbers: SchedulerAllocationNumbers,
     ) -> Result<SchedulerRolePool<'pool, 'epoch, S, N>, SchedulerPoolPlaceError> {
         SchedulerRolePool::place::<D>(placed, numbers)

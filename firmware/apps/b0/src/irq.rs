@@ -11,7 +11,7 @@ use oer_esp32s31_bluetooth_driver::interrupt::{
 };
 use oer_esp32s31_bluetooth_driver::runtime_resources::ControllerEventCells;
 use oer_esp32s31_hal::bluetooth::engine::scheduler::interrupt::SchedulerInterruptChannel;
-use oer_esp32s31_hal::platform::{FromCpu3, FromCpu3Irq};
+use oer_esp32s31_hal::peripherals::software_interrupt::{FromCpu3, FromCpu3Irq};
 use oer_espressif_executor::{Doorbell, DoorbellAcknowledger};
 use oer_espressif_interrupt_table::{
     Controller, Router,

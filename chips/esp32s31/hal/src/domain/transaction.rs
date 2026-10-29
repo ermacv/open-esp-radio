@@ -86,7 +86,7 @@ pub enum SarTransferFault {
 /// The image retains all owners and records this terminal reason.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct SarAlarmWithoutBundle {
-    pub observation: crate::platform::timg0_alarm::Observation,
+    pub observation: crate::peripherals::timg0_alarm::Observation,
     pub requests: usize,
     pub replies: usize,
 }

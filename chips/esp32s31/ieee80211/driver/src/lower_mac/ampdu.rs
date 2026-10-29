@@ -36,7 +36,7 @@ use super::{FreeQueue, TxAdmission};
 use core::fmt;
 use oer_radio_port::{PoolPath, Root};
 
-use oer_esp32s31_hal::dma_static::{PlacedBacking, PlacedTxLease};
+use oer_esp32s31_hal::memory::dma_static::{PlacedBacking, PlacedTxLease};
 use oer_esp32s31_ieee80211_mac::tx::{
     HeAmpduTxConfig, HtAmpduDensity, HtChannelWidth, HtGuardInterval, HtMcs, HtProtectionSpacing,
     HtRate, LegacyTxQueue, TxControlFrame, TxCookie,

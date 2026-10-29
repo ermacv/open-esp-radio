@@ -11,7 +11,7 @@
 use core::{marker::PhantomPinned, pin::Pin};
 
 use crate::bluetooth::engine::{ControllerDmaSpace, ControllerSramLink, Placement};
-use crate::dma_static::Placed;
+use crate::memory::dma_static::Placed;
 
 use crate::bluetooth::BluetoothControllerReset;
 use crate::layouts::*;
@@ -61,8 +61,8 @@ pub(crate) struct DirectionFindingWorkspaceBinding {
 impl DirectionFindingWorkspaceBinding {
     pub(super) fn new(
         storage: &DirectionFindingWorkspaceStorage,
-        placement: &crate::dma_address::PlacementProjection,
-    ) -> Result<Self, crate::dma_address::ProjectionError> {
+        placement: &crate::memory::dma_address::PlacementProjection,
+    ) -> Result<Self, crate::memory::dma_address::ProjectionError> {
         let disabled_cte_descriptor = placement
             .reference_at::<BleDirectionFindingDescriptor, _, _>(
                 &storage.layout,
@@ -163,7 +163,8 @@ impl DirectionFindingWorkspaceStorage {
     /// Claim the linker-proven workspace and install its disabled-CTE baseline.
     pub(crate) fn place<S: ControllerDmaSpace>(
         placed: Placed<Self>,
-    ) -> Result<DirectionFindingWorkspaceCpuOwned, crate::dma_address::ProjectionError> {
+    ) -> Result<DirectionFindingWorkspaceCpuOwned, crate::memory::dma_address::ProjectionError>
+    {
         let (storage, placement) = Placement::<S>::take(placed);
         let binding = DirectionFindingWorkspaceBinding::new(storage, placement.projection())?;
         Ok(Self::from_parts(storage, binding))

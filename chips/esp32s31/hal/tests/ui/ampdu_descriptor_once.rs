@@ -1,5 +1,5 @@
 #![no_std]
-use oer_esp32s31_hal::dma_static::PlacedTxLease;
+use oer_esp32s31_hal::memory::dma_static::PlacedTxLease;
 use oer_esp32s31_hal::ieee80211::dma::tx_ampdu_storage::{RetainedAmpduDma, RetainedDmaBacking};
 use oer_memory::PinnedDmaTxRadioLease;
 

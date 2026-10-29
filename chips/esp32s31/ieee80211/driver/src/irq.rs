@@ -48,7 +48,7 @@ use oer_espressif_interrupt_table::{Bound, InterruptSources, signal::SignalExecu
 use oer_esp32s31_hal::{
     ieee80211::init::MAC_STATION_INTERRUPT_MASK,
     owner::{MacInterruptRegisters, MacPowerInterruptRegisters, WifiInterruptBanks},
-    platform::FromCpu3Irq,
+    peripherals::software_interrupt::FromCpu3Irq,
     types::MacInterruptEnableState,
 };
 use oer_esp32s31_ieee80211_mac::irq::{
@@ -89,7 +89,7 @@ pub trait DoorbellAcknowledge {
 /// image's interrupt table binds it once, its sources from its type:
 ///
 /// ```no_run
-/// use oer_esp32s31_hal::{owner::WifiInterruptBanks, platform::FromCpu3Irq};
+/// use oer_esp32s31_hal::{owner::WifiInterruptBanks, peripherals::software_interrupt::FromCpu3Irq};
 /// use oer_esp32s31_ieee80211_driver::irq::{DoorbellAcknowledge, WifiIrqPart};
 /// # const LINES: oer_espressif_interrupt_table::Lines =
 /// #     oer_espressif_interrupt_table::Lines { first: 16, count: 48, levels: 8, harts: 2, tie_break: oer_espressif_interrupt_table::TieBreak::HighestLine };

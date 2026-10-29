@@ -92,7 +92,7 @@ fn pool() -> Pool {
         SchedulerRolePoolStorage::<TestStorage, 2>::zeroed(),
     ));
     Pool::place::<crate::bluetooth::engine::HostDma<0x2f00_1000>>(
-        crate::dma_static::Placed::host(storage),
+        crate::memory::dma_static::Placed::host(storage),
         config().connections(),
     )
     .expect("test pool binds")
@@ -107,7 +107,7 @@ fn an_empty_pool_cannot_hide_a_populated_pools_submitted_item() {
     let empty = SchedulerRolePool::<'static, 'static, TestStorage, 0>::place::<
         crate::bluetooth::engine::HostDma<0x2f00_2000>,
     >(
-        crate::dma_static::Placed::host(Box::leak(Box::new(SchedulerRolePoolStorage::<
+        crate::memory::dma_static::Placed::host(Box::leak(Box::new(SchedulerRolePoolStorage::<
             TestStorage,
             0,
         >::zeroed()))),
@@ -287,7 +287,7 @@ fn a_pool_larger_than_its_numbers_is_refused() {
         .connections();
     assert!(matches!(
         Pool::place::<crate::bluetooth::engine::HostDma<0x2f00_1000>>(
-            crate::dma_static::Placed::host(storage),
+            crate::memory::dma_static::Placed::host(storage),
             one_connection
         ),
         Err(SchedulerPoolPlaceError::AllocationNumbers)
@@ -315,7 +315,7 @@ fn the_last_populated_pool_of_a_kind_resolves_without_falling_back() {
         SchedulerRolePoolStorage::<TestStorage, 2>::zeroed(),
     ));
     let mut last = Pool::place::<crate::bluetooth::engine::HostDma<0x2f00_3000>>(
-        crate::dma_static::Placed::host(storage),
+        crate::memory::dma_static::Placed::host(storage),
         config().connections(),
     )
     .expect("second pool fits");
@@ -347,7 +347,7 @@ fn lookup_follows_role_order_independent_of_composition_order() {
     let mut dtm = SchedulerRolePool::<'static, 'static, TestStorage<true>, 1>::place::<
         crate::bluetooth::engine::HostDma<0x2f00_1000>,
     >(
-        crate::dma_static::Placed::host(Box::leak(Box::new(SchedulerRolePoolStorage::<
+        crate::memory::dma_static::Placed::host(Box::leak(Box::new(SchedulerRolePoolStorage::<
             TestStorage<true>,
             1,
         >::zeroed()))),

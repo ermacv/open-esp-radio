@@ -5,11 +5,10 @@ use core::{future::poll_fn, ops::ControlFlow};
 /// The host's console.
 pub(crate) type Console = crate::usb::Console;
 /// The host's entropy source.
-pub(crate) type Rng = oer_esp32s31_hal::platform::Entropy<EmbassyClock>;
+pub(crate) type Rng = oer_esp32s31_hal::peripherals::entropy::Entropy<EmbassyClock>;
 use oer_bluetooth_hci::{
-    CommandCompleteStatusEvent, HardwareErrorEvent, HciControllerResponse,
-    VendorShutdownObservationEvent,
-    Opcode, OpcodeGroup, Status,
+    CommandCompleteStatusEvent, HardwareErrorEvent, HciControllerResponse, Opcode, OpcodeGroup,
+    Status, VendorShutdownObservationEvent,
 };
 use oer_bluetooth_le_controller::dtm::{self, Entropy};
 use oer_bluetooth_le_port::{LePhase, TxPower};
@@ -37,7 +36,7 @@ impl Entropy for RandomValue {
 struct Io {
     console: Console,
     /// The console's pads, held so that nothing switches them off.
-    _pads: oer_esp32s31_hal::usb_serial_jtag::UsbPads,
+    _pads: oer_esp32s31_hal::peripherals::usb_serial_jtag::UsbPads,
     inbox: Inbox,
     rng: Rng,
     commands: Commands,
@@ -60,8 +59,13 @@ impl Transport for Io {
         })
         .map_err(|_| Fault::Hardware)
     }
-    fn command(&mut self) -> Result<(oer_bluetooth_hci::HciCommandPacket<'_>, &mut RandomValue), Fault> {
-        Ok((self.commands.packet().map_err(|_| Fault::Hardware)?, &mut self.entropy))
+    fn command(
+        &mut self,
+    ) -> Result<(oer_bluetooth_hci::HciCommandPacket<'_>, &mut RandomValue), Fault> {
+        Ok((
+            self.commands.packet().map_err(|_| Fault::Hardware)?,
+            &mut self.entropy,
+        ))
     }
     fn consume(&mut self) -> Result<(), Fault> {
         self.commands.consume().map_err(|_| Fault::Accounting)
@@ -73,7 +77,7 @@ impl Transport for Io {
         // spins.
         let low = self.rng.random().to_le_bytes();
         EmbassyClock
-            .wait_for(oer_esp32s31_hal::platform::READ_GAP)
+            .wait_for(oer_esp32s31_hal::peripherals::entropy::READ_GAP)
             .await
             .map_err(|_| Fault::Hardware)?;
         let high = self.rng.random().to_le_bytes();
@@ -92,7 +96,11 @@ struct Installed<'o, 'a, 'p: 'a>(&'o mut rp::Owner<'a, 'p, Id, Backend, rp::Enab
 impl<'p> host::ControllerPort<'p, rp::Root<Id>> for Installed<'_, '_, 'p> {
     type Caps = DtmCaps;
     type Fault = Fault;
-    fn phase(&mut self) -> impl core::ops::DerefMut<Target: Sized + LePhase<'p, rp::Root<Id>, (), Caps = DtmCaps, Fault = Fault>> {
+    fn phase(
+        &mut self,
+    ) -> impl core::ops::DerefMut<
+        Target: Sized + LePhase<'p, rp::Root<Id>, (), Caps = DtmCaps, Fault = Fault>,
+    > {
         self.0.phase()
     }
     async fn latch(&mut self) -> rp::PortResult<(), rp::ClockError, Fault> {
@@ -130,14 +138,20 @@ impl rp::PortBody<Id, Backend> for Body<'_> {
         };
         let mut service =
             dtm::Service::<_, DtmCaps>::new(resources.session, seat, Some(self.power));
-        let outcome = host::serve(&mut Installed(&mut owner), &mut service, self.io, reset, STOP)
-            .await
-            .map_err(|error| match error {
-                host::Error::Transport(fault) | host::Error::Backend(fault) => fault,
-                host::Error::ClockBusy => Fault::ClockBusy,
-                host::Error::Accounting => Fault::Accounting,
-                host::Error::Terminal(_) => Fault::Hardware,
-            });
+        let outcome = host::serve(
+            &mut Installed(&mut owner),
+            &mut service,
+            self.io,
+            reset,
+            STOP,
+        )
+        .await
+        .map_err(|error| match error {
+            host::Error::Transport(fault) | host::Error::Backend(fault) => fault,
+            host::Error::ClockBusy => Fault::ClockBusy,
+            host::Error::Accounting => Fault::Accounting,
+            host::Error::Terminal(_) => Fault::Hardware,
+        });
         match outcome {
             Ok(disposition) => {
                 let mut sink = |_| ControlFlow::Continue(());
@@ -160,7 +174,7 @@ impl rp::PortBody<Id, Backend> for Body<'_> {
 }
 pub async fn serve(
     console: Console,
-    pads: oer_esp32s31_hal::usb_serial_jtag::UsbPads,
+    pads: oer_esp32s31_hal::peripherals::usb_serial_jtag::UsbPads,
     rng: Rng,
     channel: bridge::FrontendChannel,
     power: TxPower,
@@ -217,7 +231,9 @@ pub async fn serve(
                 ..
             } => {
                 report_shutdown(&mut io, &reports).await;
-                let _ = io.send(&CommandCompleteStatusEvent::new(STOP, Status::SUCCESS)).await;
+                let _ = io
+                    .send(&CommandCompleteStatusEvent::new(STOP, Status::SUCCESS))
+                    .await;
                 return;
             }
             _ => core::future::pending::<()>().await,

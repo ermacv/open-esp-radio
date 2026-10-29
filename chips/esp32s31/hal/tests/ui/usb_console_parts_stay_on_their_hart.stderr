@@ -13,7 +13,7 @@ note: required because it appears within the type `PhantomData<*const ()>`
    | pub struct PhantomData<T: PointeeSized>;
    |            ^^^^^^^^^^^
 note: required because it appears within the type `UsbEndpoint<P>`
-  --> src/usb_serial_jtag.rs
+  --> src/peripherals/usb_serial_jtag.rs
    |
    | pub struct UsbEndpoint<P: Placement = UsbSerialJtagPlacement>(Endpoint<P>, ThisHart);
    |            ^^^^^^^^^^^
@@ -42,12 +42,12 @@ note: required because it appears within the type `oer_esp32s31_pac::generated::
        |     pub struct UsbSerialJtagTask<P: oer_mmio::Placement = oer_mmio::Fixed<0x20391000>>(
        |                ^^^^^^^^^^^^^^^^^
 note: required because it appears within the type `Endpoint<P>`
-      --> src/usb_serial_jtag.rs
+      --> src/peripherals/usb_serial_jtag.rs
        |
        | pub struct Endpoint<P: Placement = UsbSerialJtagPlacement>(UsbSerialJtagTask<P>);
        |            ^^^^^^^^
 note: required because it appears within the type `UsbEndpoint<P>`
-      --> src/usb_serial_jtag.rs
+      --> src/peripherals/usb_serial_jtag.rs
        |
        | pub struct UsbEndpoint<P: Placement = UsbSerialJtagPlacement>(Endpoint<P>, ThisHart);
        |            ^^^^^^^^^^^
@@ -76,7 +76,7 @@ note: required because it appears within the type `PhantomData<*const ()>`
    | pub struct PhantomData<T: PointeeSized>;
    |            ^^^^^^^^^^^
 note: required because it appears within the type `UsbPads<P>`
-  --> src/usb_serial_jtag.rs
+  --> src/peripherals/usb_serial_jtag.rs
    |
    | pub struct UsbPads<P: Placement = UsbSerialJtagPlacement>(UsbSerialJtagPads<P>, ThisHart);
    |            ^^^^^^^
@@ -105,7 +105,7 @@ note: required because it appears within the type `oer_esp32s31_pac::generated::
        |     pub struct UsbSerialJtagPads<P: oer_mmio::Placement = oer_mmio::Fixed<0x20391000>>(
        |                ^^^^^^^^^^^^^^^^^
 note: required because it appears within the type `UsbPads<P>`
-      --> src/usb_serial_jtag.rs
+      --> src/peripherals/usb_serial_jtag.rs
        |
        | pub struct UsbPads<P: Placement = UsbSerialJtagPlacement>(UsbSerialJtagPads<P>, ThisHart);
        |            ^^^^^^^

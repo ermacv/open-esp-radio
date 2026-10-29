@@ -3,8 +3,8 @@
 #![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
 
 use crate::{
-    dma_static::Placed,
     layouts::{DmaLayout, DmaRef, DmaWindowAddress},
+    memory::dma_static::Placed,
 };
 use core::marker::PhantomData;
 
@@ -43,14 +43,14 @@ impl<const BASE: u32> ControllerDmaSpace for HostDma<BASE> {}
 /// owner's mutable storage. Field checks are against this allocation.
 #[doc(hidden)]
 pub(crate) struct Placement<S> {
-    projection: crate::dma_address::PlacementProjection,
+    projection: crate::memory::dma_address::PlacementProjection,
     space: PhantomData<fn() -> S>,
 }
 
 impl<S: ControllerDmaSpace> Placement<S> {
     pub(crate) fn take<T>(placed: Placed<T>) -> (&'static mut T, Self) {
         let (storage, projection) =
-            crate::dma_address::PlacementProjection::take_controller::<S, _>(placed);
+            crate::memory::dma_address::PlacementProjection::take_controller::<S, _>(placed);
         let geometry = Self {
             projection,
             space: PhantomData,
@@ -58,14 +58,16 @@ impl<S: ControllerDmaSpace> Placement<S> {
         (storage, geometry)
     }
 
-    pub(super) fn from_projection(projection: crate::dma_address::PlacementProjection) -> Self {
+    pub(super) fn from_projection(
+        projection: crate::memory::dma_address::PlacementProjection,
+    ) -> Self {
         Self {
             projection,
             space: PhantomData,
         }
     }
 
-    pub(super) fn projection(&self) -> &crate::dma_address::PlacementProjection {
+    pub(super) fn projection(&self) -> &crate::memory::dma_address::PlacementProjection {
         &self.projection
     }
 
@@ -96,7 +98,7 @@ impl<S: ControllerDmaSpace> Placement<S> {
         &self,
         workspace: &B,
         field: &F,
-    ) -> Result<DmaRef<L>, crate::dma_address::ProjectionError> {
+    ) -> Result<DmaRef<L>, crate::memory::dma_address::ProjectionError> {
         self.projection.reference_at::<L, B, F>(workspace, field)
     }
 }

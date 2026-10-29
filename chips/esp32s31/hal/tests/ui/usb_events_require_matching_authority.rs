@@ -1,6 +1,6 @@
 #![no_std]
-use oer_esp32s31_hal::platform::SystimerAlarm0;
-use oer_esp32s31_hal::usb_serial_jtag::{ConsoleEndpoint, ConsoleInterrupt};
+use oer_esp32s31_hal::peripherals::system_timer::SystimerAlarm0;
+use oer_esp32s31_hal::peripherals::usb_serial_jtag::{ConsoleEndpoint, ConsoleInterrupt};
 use oer_espressif_usb_serial_jtag::{Endpoint, EndpointRegisters};
 use oer_espressif_interrupt_table::signal::{IrqSignal, SignalExecutor};
 use oer_espressif_interrupt_table::{Bound, Silent};

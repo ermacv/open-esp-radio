@@ -25,9 +25,9 @@ use oer_time::Clock;
 
 use oer_embassy_time::EmbassyClock;
 use oer_esp32s31_board as board;
-use oer_esp32s31_hal::platform::FromCpu3Irq;
+use oer_esp32s31_hal::peripherals::software_interrupt::FromCpu3Irq;
 use oer_esp32s31_hal::power::ChipClocks;
-use oer_esp32s31_hal::watchdog::{ArmedRtcWatchdog, RwdtRegisters};
+use oer_esp32s31_hal::peripherals::watchdog::{ArmedRtcWatchdog, RwdtRegisters};
 use oer_esp32s31_ieee80211_driver::irq::WifiIrqPart;
 use oer_esp32s31_phy::{
     NoopPhyTargetObserver, PhyCalibrationIdentity, PhyRegisterConfig, concurrent::ConcurrentPhy,
@@ -115,9 +115,9 @@ pub(crate) fn start(
         crate::fail(crate::fatal::Failure::InterruptTable);
     };
     crate::system::read_reset_causes(runtime.reset_cause);
-    let factory = oer_esp32s31_hal::platform::FactoryIdentity::read(runtime.efuse);
-    let station = factory.address(oer_esp32s31_hal::platform::Interface::Station);
-    let ap = factory.address(oer_esp32s31_hal::platform::Interface::AccessPoint);
+    let factory = oer_esp32s31_hal::peripherals::efuse::FactoryIdentity::read(runtime.efuse);
+    let station = factory.address(oer_esp32s31_hal::peripherals::efuse::Interface::Station);
+    let ap = factory.address(oer_esp32s31_hal::peripherals::efuse::Interface::AccessPoint);
     let identity = PhyCalibrationIdentity {
         rf_cal_version: phy_get_rf_cal_version(),
         base_mac_address: factory.base_mac(),

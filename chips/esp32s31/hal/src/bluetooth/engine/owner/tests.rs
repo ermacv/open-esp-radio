@@ -1,6 +1,6 @@
 use super::*;
 use crate::bluetooth::engine::*;
-use crate::dma_static::Placed;
+use crate::memory::dma_static::Placed;
 use bytemuck::Zeroable;
 use std::boxed::Box;
 

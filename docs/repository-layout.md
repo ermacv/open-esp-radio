@@ -135,7 +135,8 @@ named `hil` takes its role from the list.
   system, chip facts, family policy, protocol crates and `portable/riscv`
   instead of a facade.
 - HAL production files that wait or poll are listed with exact counts:
-  modules of `bluetooth`, `boot`, `ieee80211` and `phy`, and `platform.rs`.
+  modules of `bluetooth`, `boot`, `ieee80211` and `phy`, and
+  `peripherals/entropy.rs`.
 - Direct normal dependencies on `embassy-sync` remain in
   `portable/cooperate`, `protocols/hil/agent`,
   `firmware/hil/esp32s31`, `firmware/hil/esp32s31-lower-mac` and

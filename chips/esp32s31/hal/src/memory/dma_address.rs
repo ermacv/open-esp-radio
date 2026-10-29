@@ -2,7 +2,7 @@
 //!
 //! The PAC's [`DmaWindowAddress`] and [`DmaRef`] constructors are `unsafe`
 //! and called only here: an address inside storage placed in the DMA window
-//! ([`crate::dma_static`]), a descriptor table, a buffer arena or a placed
+//! ([`crate::memory::dma_static`]), a descriptor table, a buffer arena or a placed
 //! pool's buffer that stays pinned while the hardware may read it.
 //!
 //! A buffer lent to the hardware from outside the placed storage (a network
@@ -20,7 +20,7 @@ use crate::layouts::{DmaLayout, DmaRef, DmaWindowAddress};
 ///
 /// # Safety
 ///
-/// `address` lies in storage proved by [`crate::dma_static::Placed`] to be
+/// `address` lies in storage proved by [`crate::memory::dma_static::Placed`] to be
 /// in the DMA window. The caller retains and pins that storage for the
 /// complete epoch in which hardware may follow the address. Native models
 /// use the corresponding synthetic address without dereferencing it.
@@ -77,8 +77,9 @@ pub(crate) struct PlacementProjection {
 impl PlacementProjection {
     /// Consume the only placement authority; callers cannot supply an address.
     pub(crate) fn take<S: crate::ieee80211::dma::space::DmaSpace, T>(
-        placed: crate::dma_static::Placed<T>,
-    ) -> Result<(&'static mut T, Self), (ProjectionError, crate::dma_static::Placed<T>)> {
+        placed: crate::memory::dma_static::Placed<T>,
+    ) -> Result<(&'static mut T, Self), (ProjectionError, crate::memory::dma_static::Placed<T>)>
+    {
         let Some(base) = S::address(placed.as_ref(), core::ptr::from_ref(placed.as_ref())) else {
             return Err((ProjectionError::AddressWidth, placed));
         };
@@ -96,9 +97,9 @@ impl PlacementProjection {
     }
 
     pub(crate) fn try_with<S: crate::ieee80211::dma::space::DmaSpace, T, R>(
-        placed: crate::dma_static::Placed<T>,
+        placed: crate::memory::dma_static::Placed<T>,
         project: impl FnOnce(&T, &Self) -> Result<R, ProjectionError>,
-    ) -> Result<(&'static mut T, R), (ProjectionError, crate::dma_static::Placed<T>)> {
+    ) -> Result<(&'static mut T, R), (ProjectionError, crate::memory::dma_static::Placed<T>)> {
         let Some(base) = S::address(placed.as_ref(), core::ptr::from_ref(placed.as_ref())) else {
             return Err((ProjectionError::AddressWidth, placed));
         };
@@ -111,7 +112,7 @@ impl PlacementProjection {
 
     #[cfg(feature = "bluetooth-engine")]
     pub(crate) fn take_controller<S: crate::bluetooth::engine::ControllerDmaSpace, T>(
-        placed: crate::dma_static::Placed<T>,
+        placed: crate::memory::dma_static::Placed<T>,
     ) -> (&'static mut T, Self) {
         let geometry = Self::controller_geometry::<S, T>(&placed);
         (placed.into_inner(), geometry)
@@ -119,9 +120,10 @@ impl PlacementProjection {
 
     #[cfg(feature = "bluetooth-engine")]
     pub(crate) fn try_with_controller<S: crate::bluetooth::engine::ControllerDmaSpace, T, R>(
-        placed: crate::dma_static::Placed<T>,
+        placed: crate::memory::dma_static::Placed<T>,
         project: impl FnOnce(&T, &Self) -> Result<R, ProjectionError>,
-    ) -> Result<(&'static mut T, Self, R), (ProjectionError, crate::dma_static::Placed<T>)> {
+    ) -> Result<(&'static mut T, Self, R), (ProjectionError, crate::memory::dma_static::Placed<T>)>
+    {
         let geometry = Self::controller_geometry::<S, T>(&placed);
         match project(placed.as_ref(), &geometry) {
             Ok(value) => Ok((placed.into_inner(), geometry, value)),
@@ -131,7 +133,7 @@ impl PlacementProjection {
 
     #[cfg(feature = "bluetooth-engine")]
     fn controller_geometry<S: crate::bluetooth::engine::ControllerDmaSpace, T>(
-        placed: &crate::dma_static::Placed<T>,
+        placed: &crate::memory::dma_static::Placed<T>,
     ) -> Self {
         #[cfg(target_arch = "riscv32")]
         const {
@@ -152,7 +154,7 @@ impl PlacementProjection {
 
     #[cfg(test)]
     pub(crate) fn for_test<T>(
-        placed: crate::dma_static::Placed<T>,
+        placed: crate::memory::dma_static::Placed<T>,
         base: u32,
     ) -> (&'static mut T, Self) {
         let storage = placed.into_inner();
@@ -214,7 +216,7 @@ impl PlacementProjection {
     }
 
     pub(crate) fn pool_regions<const F: usize, const H: usize, const T: usize, const N: usize>(
-        placed: crate::dma_static::Placed<oer_memory::PinnedDmaTxPool<F, H, T, N>>,
+        placed: crate::memory::dma_static::Placed<oer_memory::PinnedDmaTxPool<F, H, T, N>>,
     ) -> Result<
         (
             &'static mut oer_memory::PinnedDmaTxPool<F, H, T, N>,
@@ -222,7 +224,7 @@ impl PlacementProjection {
         ),
         (
             ProjectionError,
-            crate::dma_static::Placed<oer_memory::PinnedDmaTxPool<F, H, T, N>>,
+            crate::memory::dma_static::Placed<oer_memory::PinnedDmaTxPool<F, H, T, N>>,
         ),
     > {
         const {

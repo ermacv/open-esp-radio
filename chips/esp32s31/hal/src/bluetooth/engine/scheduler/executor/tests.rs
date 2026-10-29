@@ -771,7 +771,7 @@ mod pools {
             .unwrap();
         let mut pool =
             LegacyAdvertisingPool::place::<crate::bluetooth::engine::HostDma<0x2f00_0100>>(
-                crate::dma_static::Placed::host(storage),
+                crate::memory::dma_static::Placed::host(storage),
                 numbers,
             )
             .unwrap();

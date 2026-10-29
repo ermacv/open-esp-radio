@@ -80,5 +80,5 @@ pub(crate) type SchedulerItemLink = ControllerSramLink<crate::layouts::BleSchedu
 /// A host model's link to the synthetic address `address`.
 #[cfg(test)]
 pub(crate) fn model_link<L: DmaLayout>(address: u32) -> ControllerSramLink<L> {
-    ControllerSramLink::new(crate::dma_address::model_reference(address))
+    ControllerSramLink::new(crate::memory::dma_address::model_reference(address))
 }

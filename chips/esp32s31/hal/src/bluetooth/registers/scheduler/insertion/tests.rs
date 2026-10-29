@@ -172,7 +172,7 @@ impl BluetoothSchedulerInsertionExecutionControl for Recorder {
 
 #[test]
 fn each_execution_command_is_followed_by_its_device_fence() {
-    let address = crate::dma_address::model_reference(0x2f00_0040);
+    let address = crate::memory::dma_address::model_reference(0x2f00_0040);
     let index = BluetoothSchedulerHardwareListIndex::new(6).expect("test list is representable");
     let request = BluetoothSchedulerExecutionLockRequest::new(address, index);
     let mut recorder = Recorder {

@@ -1,5 +1,5 @@
 use oer_esp32s31_compose::Esp32s31;
-use oer_esp32s31_hal::usb_serial_jtag::{
+use oer_esp32s31_hal::peripherals::usb_serial_jtag::{
     ConsoleEndpoint, ConsoleInterrupt, UsbPads, retire_early_writer,
 };
 use oer_espressif_executor::Executor;
@@ -11,11 +11,11 @@ pub(crate) struct EarlyUsb;
 
 impl Immediate for EarlyUsb {
     fn note(note: &oer_diagnostics::Note<'_>) -> bool {
-        oer_esp32s31_hal::usb_serial_jtag::early_note(note)
+        oer_esp32s31_hal::peripherals::usb_serial_jtag::early_note(note)
     }
 
     fn take_lost() -> u32 {
-        oer_esp32s31_hal::usb_serial_jtag::take_early_lost()
+        oer_esp32s31_hal::peripherals::usb_serial_jtag::take_early_lost()
     }
 }
 
@@ -33,10 +33,10 @@ pub(crate) fn usb_interrupt(part: &mut ConsoleInterrupt) {
 }
 
 /// The image's platform: why the chip last reset, read once at boot.
-pub struct Chip(pub oer_esp32s31_hal::platform::ResetCauses);
+pub struct Chip(pub oer_esp32s31_hal::peripherals::reset_cause::ResetCauses);
 impl oer_hil_agent::base::Platform for Chip {
     fn boot_evidence(&self) -> BootEvidence {
-        use oer_esp32s31_hal::platform::ResetCause;
+        use oer_esp32s31_hal::peripherals::reset_cause::ResetCause;
         // The console serves boot evidence from core 0.
         let cause = self.0.of(oer_esp32s31_hal::platform::BOOT_HART);
         BootEvidence {

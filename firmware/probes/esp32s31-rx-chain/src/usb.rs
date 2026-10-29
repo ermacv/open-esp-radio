@@ -3,7 +3,7 @@
 //! which raises the endpoint's static signal.
 
 use oer_esp32s31_compose::Esp32s31;
-use oer_esp32s31_hal::usb_serial_jtag::{
+use oer_esp32s31_hal::peripherals::usb_serial_jtag::{
     ConsoleEndpoint, ConsoleInterrupt, RetireError, UsbPads, retire_early_writer,
 };
 use oer_espressif_executor::Executor;

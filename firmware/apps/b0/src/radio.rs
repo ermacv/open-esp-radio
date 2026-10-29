@@ -25,7 +25,7 @@ use oer_esp32s31_hal::{
         SchedulerAllocationConfig, with_epoch_async, with_pool_async,
     },
     bluetooth::{ClockedOwner, ColdOwner, InterruptSetupOwner},
-    dma_static::Placed,
+    memory::dma_static::Placed,
     domain::{BluetoothClient, CoexAbsent},
     power::ChipClocks,
     root::Root,
@@ -67,7 +67,7 @@ oer_espressif_executor::tasks! {
     pub(crate) AppTasks: Executor<Esp32s31, 0> {
         serve(
             console: host::Console,
-            pads: oer_esp32s31_hal::usb_serial_jtag::UsbPads,
+            pads: oer_esp32s31_hal::peripherals::usb_serial_jtag::UsbPads,
             rng: host::Rng,
             channel: bridge::FrontendChannel,
             power: TxPower,
@@ -176,7 +176,7 @@ pub fn boot(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::pla
     let Some(tokens) = Interrupts::take() else {
         crate::fail("interrupt-table")
     };
-    let factory = oer_esp32s31_hal::platform::FactoryIdentity::read(runtime.efuse);
+    let factory = oer_esp32s31_hal::peripherals::efuse::FactoryIdentity::read(runtime.efuse);
     let base = factory.base_mac();
     let identity = PhyCalibrationIdentity {
         rf_cal_version: phy_get_rf_cal_version(),

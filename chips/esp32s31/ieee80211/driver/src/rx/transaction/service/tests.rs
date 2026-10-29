@@ -77,15 +77,13 @@ impl Hooks for &Recorder {
 
 #[test]
 fn a_chain_longer_than_the_length_field_is_a_counted_oversized_drop() {
-    let placed = oer_esp32s31_hal::ieee80211::dma::rx_storage::RxDmaStorage::place(
-        oer_esp32s31_hal::dma_static::Placed::host(Box::leak(Box::new(RxDmaStorage::<
-            COUNT,
-            BUFFER,
-            BUFFER,
-            HostDma,
-        >::new()))),
-    )
-    .unwrap();
+    let placed =
+        oer_esp32s31_hal::ieee80211::dma::rx_storage::RxDmaStorage::place(
+            oer_esp32s31_hal::memory::dma_static::Placed::host(Box::leak(Box::new(
+                RxDmaStorage::<COUNT, BUFFER, BUFFER, HostDma>::new(),
+            ))),
+        )
+        .unwrap();
     let storage = placed.storage();
     let buffers = storage.buffer_addresses();
     let base = placed.descriptor_base();
@@ -214,7 +212,7 @@ impl<'pool> Publisher<'pool, CAPACITY, SLOTS> for WordAtPublish {
 #[test]
 fn a_staged_frame_is_published_only_after_its_descriptor_owner_bit_is_clear() {
     let placed = oer_esp32s31_hal::ieee80211::dma::rx_storage::RxDmaStorage::place(
-        oer_esp32s31_hal::dma_static::Placed::host(Box::leak(Box::new(Storage::new()))),
+        oer_esp32s31_hal::memory::dma_static::Placed::host(Box::leak(Box::new(Storage::new()))),
     )
     .unwrap();
     let storage = placed.storage();

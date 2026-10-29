@@ -17,7 +17,7 @@ use crate::ieee80211::registers::{WifiRxDmaRegisters, rx::dma::MacRxDmaSnapshot}
 use crate::layouts::{DmaRef, WifiRxDmaDescriptor};
 
 /// The DMA addresses of one RX descriptor table: its ring, then R.
-pub type RxDescriptorAddresses = crate::dma_address::PlacedTable<WifiRxDmaDescriptor>;
+pub type RxDescriptorAddresses = crate::memory::dma_address::PlacedTable<WifiRxDmaDescriptor>;
 
 /// Unforgeable authority for mutating one validated RX descriptor walker.
 ///

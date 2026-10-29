@@ -64,7 +64,7 @@ mod tests {
     use crate::bluetooth::engine::{
         DtmStorage, HostDma, SchedulerAllocationConfig, SchedulerRolePoolStorage,
     };
-    use crate::dma_static::Placed;
+    use crate::memory::dma_static::Placed;
     use core::{
         cell::Cell,
         future::Future,

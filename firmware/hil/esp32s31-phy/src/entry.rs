@@ -36,11 +36,11 @@ use core::future::poll_fn;
 use oer_esp32s31_compose::Esp32s31;
 use oer_esp32s31_hal::{
     ieee802154::mac::Ieee802154InterruptOwner,
-    platform::{FromCpu0Irq, FromCpu2Irq, SystimerAlarm0, SystimerAlarm1},
+    peripherals::{software_interrupt::{FromCpu0Irq, FromCpu2Irq}, system_timer::{SystimerAlarm0, SystimerAlarm1}},
     power::ChipClocks,
     root::Root,
-    usb_serial_jtag::ConsoleInterrupt,
-    watchdog::{ArmedRtcWatchdog, RTC_WATCHDOG_FEED_PERIOD_MS, RwdtRegisters},
+    peripherals::usb_serial_jtag::ConsoleInterrupt,
+    peripherals::watchdog::{ArmedRtcWatchdog, RTC_WATCHDOG_FEED_PERIOD_MS, RwdtRegisters},
 };
 use oer_esp32s31_phy::{PhyCalibrationIdentity, concurrent::ConcurrentPhy, phy_get_rf_cal_version};
 use oer_esp32s31_phy_probe::*;
@@ -63,7 +63,7 @@ oer_espressif_staged_runtime::interrupt_table! {
     wake: WakeToken = FromCpu0Irq => oer_espressif_executor::wake_handler::<Esp32s31, 0, FromCpu0Irq>, line 40, context app_wake, hart 0, Hardware;
     // SOURCE: family.toml [interrupts] highest-line; HW23_S31_P2_ARBITRATION_20261027
     // measures only this P2 pair on S31: FROM_CPU2 line17 before TIMG0 line16.
-    phy: PhyToken = oer_esp32s31_hal::platform::timg0_alarm::Timg0AlarmInterrupt => phy_pilot::interrupt, line 16, context radio_executor, hart 0, Exempt(ExecutorLevel, "SAR/PWDET steps between radio executor rounds");
+    phy: PhyToken = oer_esp32s31_hal::peripherals::timg0_alarm::Timg0AlarmInterrupt => phy_pilot::interrupt, line 16, context radio_executor, hart 0, Exempt(ExecutorLevel, "SAR/PWDET steps between radio executor rounds");
     /// The radio executor (P2), polled in its handler.
     radio: RadioToken = FromCpu2Irq => oer_espressif_executor::interrupt_handler::<RadioTasks, FromCpu2Irq>, line 17, context radio_executor, hart 0, Executor;
     /// The radio executor's timer alarm; it only acknowledges and pends.
@@ -135,12 +135,12 @@ static REQUESTS: embassy_sync::channel::Channel<
 > = embassy_sync::channel::Channel::new();
 
 /// The image's entropy owner.
-pub(crate) type Rng = oer_esp32s31_hal::platform::Entropy<oer_embassy_time::EmbassyClock>;
+pub(crate) type Rng = oer_esp32s31_hal::peripherals::entropy::Entropy<oer_embassy_time::EmbassyClock>;
 
 oer_esp32s31_hal::phy_fault_reporter!(oer_esp32s31_compose::phy_fault::reset);
 oer_espressif_staged_runtime::entry!(main, oer_esp32s31_hal::platform::Port);
 fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platform::Port>) -> ! {
-    oer_esp32s31_hal::usb_serial_jtag::early_note(&oer_diagnostics::Note::diagnostic_start(
+    oer_esp32s31_hal::peripherals::usb_serial_jtag::early_note(&oer_diagnostics::Note::diagnostic_start(
         oer_diagnostics::name!("phy"),
     ));
     let Some(root) = Root::take() else {
@@ -165,14 +165,14 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
     let Ok(silent) = adopted.router().silent::<Ieee802154InterruptOwner>() else {
         fail(oer_diagnostics::name!("ieee802154-route"; 32));
     };
-    let factory = oer_esp32s31_hal::platform::FactoryIdentity::read(runtime.efuse);
+    let factory = oer_esp32s31_hal::peripherals::efuse::FactoryIdentity::read(runtime.efuse);
     let identity = PhyCalibrationIdentity {
         rf_cal_version: phy_get_rf_cal_version(),
         base_mac_address: factory.base_mac(),
         mac_extension: factory.mac_extension(),
     };
-    let station = factory.address(oer_esp32s31_hal::platform::Interface::Station);
-    let access_point = factory.address(oer_esp32s31_hal::platform::Interface::AccessPoint);
+    let station = factory.address(oer_esp32s31_hal::peripherals::efuse::Interface::Station);
+    let access_point = factory.address(oer_esp32s31_hal::peripherals::efuse::Interface::AccessPoint);
     let (domain, partitions) = runtime
         .radio
         .split::<ChipClocks, _>(
@@ -233,7 +233,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
     let Some(poster) = SLOT.claim() else {
         fail(oer_diagnostics::name!("requester"; 32));
     };
-    let chip = transport::Chip(oer_esp32s31_hal::platform::ResetCauses::read(
+    let chip = transport::Chip(oer_esp32s31_hal::peripherals::reset_cause::ResetCauses::read(
         runtime.reset_cause,
     ));
     let Ok((usb, _pads)) = transport::open_usb(adopted.router(), interrupts.console_usb) else {
@@ -268,7 +268,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
 /// no one holds the block.
 fn fail<const B: usize>(reason: oer_diagnostics::Name<B>) -> ! {
     oer_espressif_staged_runtime::fatal_halt::<oer_esp32s31_hal::platform::Port>(|_path| {
-        let _note = oer_esp32s31_hal::usb_serial_jtag::fatal_note(
+        let _note = oer_esp32s31_hal::peripherals::usb_serial_jtag::fatal_note(
             &oer_diagnostics::Note::runtime_fail(reason),
         );
     })

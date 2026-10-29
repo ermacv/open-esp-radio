@@ -438,7 +438,7 @@ epoch, so a list another epoch published, or a reset head, never starts
 it.
 
 Each chip's HAL has one module that makes typed DMA addresses,
-`dma_address`: the only caller of the `unsafe` `DmaWindowAddress` and
+`memory::dma_address`: the only caller of the `unsafe` `DmaWindowAddress` and
 `DmaRef` constructors of `oer-memory`, which the PAC's generated `layouts`
 bind to the chip's DMA window (clippy `disallowed-methods` refuses them
 elsewhere). Consuming constructors select the base exclusively through sealed
@@ -472,7 +472,7 @@ unsafe reclaim block calls `Placed::from_retained`: its contract requires the
 exact original placed allocation, with field borrows and hardware use ended.
 No safe constructor can restore placement from an arbitrary static reference.
 
-Its `dma_static` module holds the placement constructor:
+Its `memory::dma_static` module holds the placement constructor:
 `DmaStatic::placed`, `unsafe` and called only by the `dma_static!` macro,
 whose section is checked to be `.dma.bss.<block>`; the runtime linker
 script's ASSERTs over the DMA range (from the generated `dma-window.x`) are

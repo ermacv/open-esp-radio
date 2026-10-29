@@ -510,7 +510,7 @@ impl<const PACKETS: usize> LeRxChain<PACKETS> {
     }
 
     pub fn place<S: ControllerDmaSpace>(
-        placed: crate::dma_static::Placed<LeRxChainStorage<PACKETS>>,
+        placed: crate::memory::dma_static::Placed<LeRxChainStorage<PACKETS>>,
         class: RxMemoryListClass,
     ) -> Result<Self, LeRxChainPlaceError> {
         let plan = RxPlan::<PACKETS>::new()?;

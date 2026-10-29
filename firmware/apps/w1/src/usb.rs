@@ -3,7 +3,7 @@
 //! which raises the endpoint's static signal.
 
 use oer_esp32s31_compose::Esp32s31;
-use oer_esp32s31_hal::usb_serial_jtag::{
+use oer_esp32s31_hal::peripherals::usb_serial_jtag::{
     ConsoleEndpoint, ConsoleInterrupt, RetireError, UsbPads, retire_early_writer,
 };
 use oer_espressif_executor::Executor;
@@ -30,7 +30,7 @@ pub(crate) fn interrupt(part: &mut ConsoleInterrupt) {
 pub(crate) fn early_previous_panic(record: &PanicRecord) {
     let _ = oer_espressif_staged_runtime::diagnostics::emit_previous_panic(
         |bytes| {
-            if oer_esp32s31_hal::usb_serial_jtag::early_text(bytes) {
+            if oer_esp32s31_hal::peripherals::usb_serial_jtag::early_text(bytes) {
                 Ok(())
             } else {
                 Err(())

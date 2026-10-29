@@ -42,7 +42,7 @@ fn pool() -> Pool {
         .advertising(3, 1)
         .unwrap();
     Pool::place::<crate::bluetooth::engine::HostDma<0x2f00_0100>>(
-        crate::dma_static::Placed::host(storage),
+        crate::memory::dma_static::Placed::host(storage),
         numbers,
     )
     .expect("the pool fits controller SRAM")
@@ -51,7 +51,7 @@ fn pool() -> Pool {
 fn chain(class: RxMemoryListClass) -> LeRxChain<2> {
     let storage = Box::leak(Box::new(LeRxChainStorage::<2>::zeroed()));
     LeRxChain::place::<crate::bluetooth::engine::HostDma<0x2f00_8000>>(
-        crate::dma_static::Placed::host(storage),
+        crate::memory::dma_static::Placed::host(storage),
         class,
     )
     .unwrap()

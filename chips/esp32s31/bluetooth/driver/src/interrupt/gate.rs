@@ -47,7 +47,7 @@ use oer_esp32s31_hal::bluetooth::{
         ControllerMemory, EngineResetTimerPending, scheduler::interrupt::SchedulerInterruptHalf,
     },
 };
-use oer_esp32s31_hal::platform::FromCpu3Irq;
+use oer_esp32s31_hal::peripherals::software_interrupt::FromCpu3Irq;
 use oer_espressif_interrupt_table::{
     Bound,
     signal::{IrqSignal, SignalExecutor},

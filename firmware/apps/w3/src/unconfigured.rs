@@ -1,6 +1,6 @@
 // An unconfigured image has no tasks or enabled interrupt sources.
 use oer_esp32s31_hal::root::Root;
-use oer_esp32s31_hal::usb_serial_jtag;
+use oer_esp32s31_hal::peripherals::usb_serial_jtag;
 use oer_espressif_staged_runtime::{diagnostics, panic};
 
 oer_espressif_staged_runtime::interrupt_table! {

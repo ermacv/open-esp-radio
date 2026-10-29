@@ -9,8 +9,8 @@ use core::{
     sync::atomic::{AtomicU8, Ordering},
 };
 
-use crate::dma_static::Placed;
 use crate::layouts::{DmaWindowAddress, WifiRxDmaDescriptorControl};
+use crate::memory::dma_static::Placed;
 use oer_memory::{ExternalRxBuffer, ExternalRxReturnState};
 
 use crate::ieee80211::dma::{

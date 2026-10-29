@@ -1,5 +1,5 @@
 use super::*;
-use oer_esp32s31_hal::dma_static::Placed;
+use oer_esp32s31_hal::memory::dma_static::Placed;
 use std::boxed::Box;
 
 // Exercise the same wire decode and typed hardware policy as AdvertisingImageBuilder.

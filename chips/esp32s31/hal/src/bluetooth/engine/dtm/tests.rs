@@ -28,7 +28,7 @@ fn pool_at<const BASE: u32>() -> Pool {
         .unwrap()
         .direct_test_mode();
     Pool::place::<crate::bluetooth::engine::HostDma<BASE>>(
-        crate::dma_static::Placed::host(storage),
+        crate::memory::dma_static::Placed::host(storage),
         numbers,
     )
     .expect("the pool fits controller SRAM")
@@ -145,9 +145,9 @@ fn a_foreign_rx_packet_is_refused_before_the_builder_runs() {
         let (graph, binding, _) = pool.shared(&instance).unwrap();
         let (storage, placement) = crate::bluetooth::engine::Placement::<
             crate::bluetooth::engine::HostDma<0x2f00_4000>,
-        >::take(crate::dma_static::Placed::host(Box::leak(
-            Box::new(DtmStorage::zeroed()),
-        )));
+        >::take(crate::memory::dma_static::Placed::host(
+            Box::leak(Box::new(DtmStorage::zeroed())),
+        ));
         let foreign = super::codec::DtmBinding::new(storage, &placement, 0);
         let _ = binding;
         graph.rx_header.model_retarget_rx_packet(foreign.rx_packet);
@@ -239,7 +239,7 @@ fn dtm_only_arena_receives_and_rotates_without_global_rx_chains() {
     let backing = Box::leak(Box::new(BluetoothArena::<0, 0, 0, 0, 0, 0>::zeroed()));
     let (mut engine, _) = Engine::<Memory>::for_host_test::<HostDma<0x2f00_1000>>(
         clocked,
-        crate::dma_static::Placed::host(backing),
+        crate::memory::dma_static::Placed::host(backing),
         SchedulerAllocationConfig::new(0, 0, 0).unwrap(),
     )
     .ok()

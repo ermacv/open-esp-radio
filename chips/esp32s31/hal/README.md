@@ -7,12 +7,22 @@ family drivers' register ports and of the platform contracts, and the DMA
 memory core. A sequence that waits, polls, retries or decides on a read value
 is driver code.
 
+`root` claims the chip and splits its partitions. `platform` holds the chip
+bindings: the hart geometry, core control, the interrupt controller and the
+family platform contracts (`platform::Port`); `cores` holds the fatal path's
+stop and the software reset. Ordinary blocks are `peripherals::<block>`:
+`efuse`, `entropy`, `reset_cause`, `software_interrupt`, `system_timer`,
+`timg0_alarm`, `usb_serial_jtag` and `watchdog`. `memory` is the DMA memory
+core (`dma_address`, `dma_static`); the `dma_static!` macro is exported at
+the crate root. `boot` holds the bootstrap's owners; the radio modules are
+at the crate root.
+
 Production files that wait, poll or run on deadlines are a per-file list
 with exact marker counts in `oer-test-layers`
 ([layer tests](../../../tools/test/layers/README.md)): the Bluetooth
 controller engine, scheduler and modem timer, the boot policy and waits in
 `boot`, the Wi-Fi cold start in `ieee80211`, the PHY analog bus and delays in
-`phy`, and the entropy read gap in `platform.rs`. The list only shrinks; no
+`phy`, and the entropy read gap in `peripherals/entropy.rs`. The list only shrinks; no
 new file joins it. The scan does not find driver code without such a marker:
 the radio domain's membership and first/last-client policy, the common radio
 power sequence and the IEEE 802.15.4 lifecycle policy are driver code that

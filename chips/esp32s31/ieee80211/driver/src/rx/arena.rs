@@ -14,11 +14,11 @@ use core::mem::MaybeUninit;
 use oer_espressif_interrupt_table::signal::SignalExecutor;
 
 use oer_esp32s31_hal::{
-    dma_static::Placed,
     ieee80211::dma::{
         rx_storage::{PlacedRxDma, RxDmaStorage, RxDmaStorageError},
         space::{ChipDma, DmaSpace},
     },
+    memory::dma_static::Placed,
 };
 use oer_esp32s31_ieee80211_mac::{
     irq::consumer::{IrqConsumer, IrqPublisher, IrqStorage, PowerIrqConsumer, PowerIrqStorage},
