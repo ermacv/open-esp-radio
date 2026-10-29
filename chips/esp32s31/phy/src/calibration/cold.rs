@@ -4,6 +4,7 @@
 //! module contains only the hardware-operation graph and its bound external
 //! completions.
 
+use crate::serial::PhyI2cError;
 use crate::{
     analog::{
         crystal_duty::{
@@ -20,7 +21,7 @@ use crate::{
         i2c::{
             AdcRateAction, AdcRateCompletion, Address, Field, FilterDcapAction,
             FilterDcapCompletion, I2cInit1Action, I2cInit1Completion, OpenI2cXpdAction,
-            OpenI2cXpdCompletion, PhyI2cError, PhyRfInitPrefixAction, PhyRfInitPrefixCompletion,
+            OpenI2cXpdCompletion, PhyRfInitPrefixAction, PhyRfInitPrefixCompletion,
             PhyRfInitPrefixOutcome, PhyRfInitPrefixTransition, PhyRfInitPrefixTransitionError,
             RcCalibrationAction, RcCalibrationCompletion, RfpllChargePumpAction,
             RfpllChargePumpCompletion, analog_i2c,
@@ -232,16 +233,14 @@ impl PhyColdI2cTransaction {
     ) -> Result<(), PhyColdI2cError> {
         match self.action() {
             PhyColdI2cAction::StartRead { address } => {
-                crate::analog::i2c::try_start_read(platform, address).map_err(
-                    |error| match error {
-                        PhyI2cError::Busy => PhyColdI2cError::BusyAtStart,
-                        PhyI2cError::UnroutedAddress => PhyColdI2cError::UnroutedAddress,
-                    },
-                )?;
+                crate::serial::try_start_read(platform, address).map_err(|error| match error {
+                    PhyI2cError::Busy => PhyColdI2cError::BusyAtStart,
+                    PhyI2cError::UnroutedAddress => PhyColdI2cError::UnroutedAddress,
+                })?;
                 self.read_started()
             }
             PhyColdI2cAction::StartWrite { address, value } => {
-                crate::analog::i2c::try_start_write(platform, address, value).map_err(|error| {
+                crate::serial::try_start_write(platform, address, value).map_err(|error| {
                     match error {
                         PhyI2cError::Busy => PhyColdI2cError::BusyAtStart,
                         PhyI2cError::UnroutedAddress => PhyColdI2cError::UnroutedAddress,
@@ -262,10 +261,10 @@ impl PhyColdI2cTransaction {
     ) -> Result<PhyColdI2cObservation, PhyColdI2cError> {
         match self.action() {
             PhyColdI2cAction::AwaitReadCompletionEdge { address } => {
-                self.observe_read_result(crate::analog::i2c::try_finish_read(platform, address))
+                self.observe_read_result(crate::serial::try_finish_read(platform, address))
             }
             PhyColdI2cAction::AwaitWriteCompletionEdge { address } => {
-                self.observe_write_result(crate::analog::i2c::try_finish_write(platform, address))
+                self.observe_write_result(crate::serial::try_finish_write(platform, address))
             }
             PhyColdI2cAction::Complete(_) => Err(PhyColdI2cError::AlreadyComplete),
             _ => Err(PhyColdI2cError::WrongEdge),

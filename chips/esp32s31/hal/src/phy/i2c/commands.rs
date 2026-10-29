@@ -3,26 +3,12 @@
 //! control over the generated analog-I²C vocabulary.
 //!
 //! Values that depend on the explicit PHY parameter snapshot are derived
-//! here; the bus driver ([`super::master`]) publishes them.
+//! here; the calibration binding ([`super::master`]) lends the master atoms
+//! to the family serial-byte driver.
 
 #![forbid(unsafe_code)]
 
-use oer_esp32s31_pac::analog_i2c::{self, Address, Field, Profile, Route};
-
-pub(crate) const fn normal_route(address: Address) -> Result<Route, PhyI2cAccessError> {
-    match analog_i2c::route(Profile::LibphyNormal, address.block()) {
-        Some(route) => Ok(route),
-        None => Err(PhyI2cAccessError::UnroutedAddress),
-    }
-}
-
-/// One finite analog-register command is still owned by its hardware host.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum PhyI2cAccessError {
-    Busy,
-    /// The physical byte has no admitted route in the production profile.
-    UnroutedAddress,
-}
+use oer_esp32s31_pac::analog_i2c::{self, Address, Field};
 
 // SOURCE: BLOB_LIBPHY_PHY_SET_RATE_CLASS; opaque-blobray-phy.md, TXRF.
 // Existing vendor initialization 0x08 selects class 1 with all other bits 0.
@@ -510,12 +496,12 @@ pub enum BluetoothTxPowerControlRegister {
 }
 
 impl BluetoothTxPowerControlRegister {
-    pub(crate) const fn address(self) -> u8 {
+    pub(crate) const fn address(self) -> Address {
         match self {
-            Self::Low0 => analog_i2c::bbtop::byte_1c_opaque::ADDRESS.index(),
-            Self::Low1 => analog_i2c::bbtop::byte_1d_opaque::ADDRESS.index(),
-            Self::High0 => analog_i2c::bbtop::bluetooth_tx_power_high_0::ADDRESS.index(),
-            Self::High1 => analog_i2c::bbtop::bluetooth_tx_power_high_1::ADDRESS.index(),
+            Self::Low0 => analog_i2c::bbtop::byte_1c_opaque::ADDRESS,
+            Self::Low1 => analog_i2c::bbtop::byte_1d_opaque::ADDRESS,
+            Self::High0 => analog_i2c::bbtop::bluetooth_tx_power_high_0::ADDRESS,
+            Self::High1 => analog_i2c::bbtop::bluetooth_tx_power_high_1::ADDRESS,
         }
     }
 }
@@ -523,23 +509,6 @@ impl BluetoothTxPowerControlRegister {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn low_block_knowledge_does_not_admit_a_production_transaction() {
-        use analog_i2c::blocks;
-        for block in [
-            blocks::CPLL,
-            blocks::MPLL,
-            blocks::APLL,
-            blocks::SAR_MASTER,
-            blocks::SAR_SLAVE,
-        ] {
-            assert_eq!(
-                normal_route(block.register(0)),
-                Err(PhyI2cAccessError::UnroutedAddress)
-            );
-        }
-    }
 
     #[test]
     fn named_initial_rate_class_preserves_the_vendor_byte() {

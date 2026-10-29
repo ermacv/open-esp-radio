@@ -1,6 +1,7 @@
 use super::*;
+use crate::serial::PhyI2cError;
 use crate::{
-    analog::i2c::{PhyI2cError, analog_i2c},
+    analog::i2c::analog_i2c,
     calibration::cold::{PhyColdI2cRequest, PhyColdI2cTransaction},
 };
 use oer_time::Duration;

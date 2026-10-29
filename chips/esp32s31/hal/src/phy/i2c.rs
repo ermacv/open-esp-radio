@@ -2,7 +2,8 @@
 //!
 //! The PAC renders the analog-I²C vocabulary (identities, fields, routes)
 //! and the master's registers. [`commands`] holds the recovered command
-//! tables, [`master`] the bus driver over the master. This module owns the
+//! tables, [`master`] the owned master atoms. The family PHY serial driver
+//! owns byte starts and completion observations. This module owns the
 //! calibration configuration and Bluetooth TX-power phase machines and the
 //! Bluetooth restore obligation; parallel-host waits belong to the family PHY.
 
@@ -14,11 +15,11 @@ pub mod commands;
 pub mod master;
 
 pub use commands::{
-    BluetoothTxPowerControlRegister, PhyAdcRate, PhyFilterDcapInputs, PhyI2cAccessError,
-    PhyI2cCommandMemoryInputs, PhyI2cConfigurationCommand, PhyI2cConfigurationOperation,
-    PhyI2cInitializationStageOneInputs,
+    BluetoothTxPowerControlRegister, PhyAdcRate, PhyFilterDcapInputs, PhyI2cCommandMemoryInputs,
+    PhyI2cConfigurationCommand, PhyI2cConfigurationOperation, PhyI2cInitializationStageOneInputs,
 };
-pub use master::AnalogBus;
+use master::{ConfigurationBus, MasterPort};
+use oer_espressif_phy::serial::AnalogBus;
 
 pub use crate::phy::restore::{
     BluetoothTxPowerControlPrepareError, BluetoothTxPowerControlRestoreError,
@@ -494,7 +495,7 @@ pub fn start_configuration(
     transaction: &mut PhyI2cConfigurationTransaction,
     registers: &mut impl SharedPhyAccess,
 ) -> Result<(), PhyI2cConfigurationError> {
-    transaction.start_with(&mut AnalogBus::new(
+    transaction.start_with(&mut ConfigurationBus::new(
         &mut phy_blocks_mut(registers).i2c_ana_mst,
     ))
 }
@@ -504,7 +505,9 @@ pub fn observe_configuration(
     transaction: &mut PhyI2cConfigurationTransaction,
     registers: &mut impl SharedPhyAccess,
 ) -> Result<PhyI2cConfigurationObservation, PhyI2cConfigurationError> {
-    transaction.observe_with(&AnalogBus::new(&mut phy_blocks_mut(registers).i2c_ana_mst))
+    transaction.observe_with(&ConfigurationBus::new(
+        &mut phy_blocks_mut(registers).i2c_ana_mst,
+    ))
 }
 
 /// Start the current command of one Bluetooth TX-power transaction.
@@ -513,7 +516,7 @@ pub fn start_bluetooth_tx_power_control(
     registers: &mut impl SharedPhyAccess,
 ) -> Result<(), BluetoothTxPowerControlError> {
     let (phy, restore) = phy_parts_mut(registers);
-    let bus = AnalogBus::new(&mut phy.peripherals.i2c_ana_mst);
+    let bus = AnalogBus::new(MasterPort::new(&mut phy.peripherals.i2c_ana_mst));
     transaction.start_with(&mut BluetoothTxPowerPort { bus, restore })
 }
 
@@ -523,33 +526,13 @@ pub fn observe_bluetooth_tx_power_control(
     registers: &mut impl SharedPhyAccess,
 ) -> Result<BluetoothTxPowerControlObservation, BluetoothTxPowerControlError> {
     let (phy, restore) = phy_parts_mut(registers);
-    let bus = AnalogBus::new(&mut phy.peripherals.i2c_ana_mst);
+    let bus = AnalogBus::new(MasterPort::new(&mut phy.peripherals.i2c_ana_mst));
     transaction.observe_with(&mut BluetoothTxPowerPort { bus, restore })
-}
-
-impl<P: Placement> oer_espressif_phy::i2c::PhyI2cParallelAccess for AnalogBus<'_, P> {
-    type Pair = oer_espressif_phy::i2c::PhyI2cParallelWrite<Address>;
-
-    fn select_parallel_host_map(&mut self) {
-        AnalogBus::select_parallel_host_map(self);
-    }
-
-    fn restore_radio_host_map(&mut self) {
-        AnalogBus::restore_radio_host_map(self);
-    }
-
-    fn is_busy(&self, host: Host) -> bool {
-        AnalogBus::is_busy(self, host)
-    }
-
-    fn start_pair(&mut self, pair: Self::Pair) {
-        AnalogBus::start_parallel_pair(self, pair);
-    }
 }
 
 /// The analog-I²C bus paired with the route restore slot.
 struct BluetoothTxPowerPort<'a, P: Placement> {
-    bus: AnalogBus<'a, P>,
+    bus: AnalogBus<MasterPort<'a, P>>,
     restore: &'a mut PhyRouteState,
 }
 
@@ -575,9 +558,7 @@ impl<P: Placement> BluetoothTxPowerControlI2cAccess for BluetoothTxPowerPort<'_,
     }
 
     fn start_read(&mut self, register: BluetoothTxPowerControlRegister) -> Result<(), ()> {
-        self.bus
-            .start_bluetooth_tx_power_control_read(register)
-            .map_err(|_| ())
+        self.bus.try_start_read(register.address()).map_err(|_| ())
     }
 
     fn start_write(
@@ -586,50 +567,21 @@ impl<P: Placement> BluetoothTxPowerControlI2cAccess for BluetoothTxPowerPort<'_,
         value: u8,
     ) -> Result<(), ()> {
         self.bus
-            .start_bluetooth_tx_power_control_write(register, value)
+            .try_start_write(register.address(), value)
             .map_err(|_| ())
     }
 
     fn observe_read(&self) -> Result<u8, ()> {
-        self.bus.finish_host_read(Host::Host1).map_err(|_| ())
+        self.bus
+            .try_finish_read(analog_i2c::bbtop::rf_close_control::ADDRESS)
+            .map_err(|_| ())
     }
 
     fn observe_write(&self) -> Result<(), ()> {
-        self.bus.finish_host_write(Host::Host1).map_err(|_| ())
+        self.bus
+            .try_finish_write(analog_i2c::bbtop::rf_close_control::ADDRESS)
+            .map_err(|_| ())
     }
-}
-
-/// Start one analog-register read.
-pub fn try_start_read(
-    registers: &mut impl SharedPhyAccess,
-    address: Address,
-) -> Result<(), PhyI2cAccessError> {
-    AnalogBus::new(&mut phy_blocks_mut(registers).i2c_ana_mst).try_start_read(address)
-}
-
-/// Consume one externally delivered completion edge for a read.
-pub fn try_finish_read(
-    registers: &impl SharedPhyAccess,
-    address: Address,
-) -> Result<u8, PhyI2cAccessError> {
-    master::try_finish_read(&phy_blocks(registers).i2c_ana_mst, address)
-}
-
-/// Start one analog-register write.
-pub fn try_start_write(
-    registers: &mut impl SharedPhyAccess,
-    address: Address,
-    value: u8,
-) -> Result<(), PhyI2cAccessError> {
-    AnalogBus::new(&mut phy_blocks_mut(registers).i2c_ana_mst).try_start_write(address, value)
-}
-
-/// Consume one externally delivered completion edge for a write.
-pub fn try_finish_write(
-    registers: &impl SharedPhyAccess,
-    address: Address,
-) -> Result<(), PhyI2cAccessError> {
-    master::try_finish_write(&phy_blocks(registers).i2c_ana_mst, address)
 }
 
 /// Publish one full-word PHY-I2C master reset command.
@@ -638,7 +590,7 @@ pub fn try_finish_write(
 /// bit 25. This finite method publishes that one edge; retry and timeout
 /// ownership remain in the Rust transition.
 pub fn pulse_master_reset(registers: &mut impl SharedPhyAccess, host: Host) {
-    AnalogBus::new(&mut phy_blocks_mut(registers).i2c_ana_mst).pulse_master_reset(host);
+    MasterPort::new(&mut phy_blocks_mut(registers).i2c_ana_mst).pulse_master_reset(host);
 }
 
 /// Sample one PHY-I2C master reset busy edge without retrying.
@@ -697,5 +649,19 @@ pub fn parallel_port(
 ) -> impl oer_espressif_phy::i2c::PhyI2cParallelAccess<
     Pair = oer_espressif_phy::i2c::PhyI2cParallelWrite<Address>,
 > + '_ {
-    AnalogBus::new(&mut phy_blocks_mut(registers).i2c_ana_mst)
+    MasterPort::new(&mut phy_blocks_mut(registers).i2c_ana_mst)
+}
+
+/// Lend the exclusive byte-command atoms to the family transport.
+pub fn serial_port(
+    registers: &mut impl SharedPhyAccess,
+) -> impl oer_espressif_phy::serial::Port + '_ {
+    MasterPort::new(&mut phy_blocks_mut(registers).i2c_ana_mst)
+}
+
+/// Borrow observations without granting command publication.
+pub fn serial_sample(
+    registers: &impl SharedPhyAccess,
+) -> impl oer_espressif_phy::serial::SamplePort + '_ {
+    master::MasterSample::new(&phy_blocks(registers).i2c_ana_mst)
 }

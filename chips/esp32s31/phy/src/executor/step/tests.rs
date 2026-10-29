@@ -1,4 +1,5 @@
 use super::*;
+use crate::serial::PhyI2cError;
 use oer_time::Timer;
 mod channel_gain;
 mod dc_iq;
@@ -16,7 +17,7 @@ impl crate::executor::wait::PhyShortDelay for TestDelay {
 use crate::executor::test_clock::VirtualClock;
 use crate::{
     analog::{
-        i2c::{PhyI2cError, analog_i2c},
+        i2c::analog_i2c,
         temperature::{
             PhyTemperatureAction, PhyTemperatureCompletion, PhyTemperatureI2cBinding,
             PhyTemperatureOutcome, PhyTemperatureTransition,

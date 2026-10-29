@@ -339,7 +339,7 @@ impl PhyTemperatureI2cBinding {
     #[cfg(test)]
     pub fn observe_read_result(
         &mut self,
-        result: Result<u8, crate::analog::i2c::PhyI2cError>,
+        result: Result<u8, crate::serial::PhyI2cError>,
     ) -> Result<
         crate::calibration::cold::PhyColdI2cObservation,
         crate::calibration::cold::PhyColdI2cError,
@@ -350,7 +350,7 @@ impl PhyTemperatureI2cBinding {
     #[cfg(test)]
     pub fn observe_write_result(
         &mut self,
-        result: Result<(), crate::analog::i2c::PhyI2cError>,
+        result: Result<(), crate::serial::PhyI2cError>,
     ) -> Result<
         crate::calibration::cold::PhyColdI2cObservation,
         crate::calibration::cold::PhyColdI2cError,

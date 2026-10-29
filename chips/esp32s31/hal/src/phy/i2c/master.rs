@@ -1,159 +1,126 @@
-//! The analog-I²C bus driver over the generated I²C master and its command
-//! memory.
-//!
-//! The master is one serial resource: one [`AnalogBus`] borrows the whole
-//! block, so one owner starts and completes every byte command. Each start
-//! refuses, writing nothing, while its host is busy; each completion is one
-//! sample of the busy bit. Nothing here waits: the bounded waits and their
-//! wake-ups belong to the callers' transitions. Commands and reset writes
-//! use generated writers from zero; the complemented read mask uses the
-//! generated sourced word publication.
-
+//! Owned master atoms and the legacy calibration bus binding.
+//! Serial-byte sequencing belongs to `oer_espressif_phy::serial`.
 #![forbid(unsafe_code)]
-
+use super::commands::{
+    PHY_I2C_COMMAND_MEMORY_DYNAMIC_INDICES, PHY_I2C_COMMAND_MEMORY_ENTRY_COUNT,
+    PHY_I2C_COMMAND_MEMORY_TEMPLATE, PhyI2cCommandMemoryInputs,
+};
 use oer_esp32s31_pac::{
-    analog_i2c::{Address, Host, Route},
+    analog_i2c::{Address, Host, Profile, Route},
     i2c_ana_mst::I2cAnaMst,
     i2c_ana_mst_mem::PhyI2cCommandRam,
 };
+use oer_espressif_phy::serial::{AnalogBus, PhyI2cAccessError, Port, SamplePort};
 use oer_mmio::{Bits, Index, Placement};
 
-use super::commands::{
-    BluetoothTxPowerControlRegister, PHY_I2C_COMMAND_MEMORY_DYNAMIC_INDICES,
-    PHY_I2C_COMMAND_MEMORY_ENTRY_COUNT, PHY_I2C_COMMAND_MEMORY_TEMPLATE, PhyI2cAccessError,
-    PhyI2cCommandMemoryInputs, normal_route,
-};
-
-/// The block that holds the Bluetooth TX-power control registers.
-///
-/// SOURCE: BLOB_LIBPHY_PHY_I2C. They are BBTOP bytes on host one.
-const BLUETOOTH_TX_POWER_CONTROL_BLOCK: u8 = oer_esp32s31_pac::analog_i2c::blocks::BBTOP.code();
-
-/// The analog-I²C bus over the master's block: the one owner of every byte
-/// command for as long as it is borrowed.
-pub struct AnalogBus<'a, P: Placement> {
+/// Exclusive atom loan from the master owner.
+pub struct MasterPort<'a, P: Placement> {
     master: &'a mut I2cAnaMst<P>,
 }
-
-impl<'a, P: Placement> AnalogBus<'a, P> {
-    /// Borrow the master for a sequence of byte commands.
+impl<'a, P: Placement> MasterPort<'a, P> {
     pub fn new(master: &'a mut I2cAnaMst<P>) -> Self {
         Self { master }
     }
-
-    /// Install the reviewed host map and return the address's host.
-    pub fn configure_and_select_host(&mut self, block: Route) -> Host {
-        configure_host_map(self.master);
-        block.host
-    }
-
-    /// Start one analog-register read; refused while its host is busy.
-    pub fn try_start_read(&mut self, address: Address) -> Result<(), PhyI2cAccessError> {
-        let route = normal_route(address)?;
-        let host = route.host;
-        if is_busy(self.master, host) {
-            return Err(PhyI2cAccessError::Busy);
+    pub fn pulse_master_reset(&mut self, host: Host) {
+        match host {
+            Host::Host0 => self.master.write_i2c0_ctrl(|w| {
+                w.set_start_or_reset(true);
+            }),
+            Host::Host1 => self.master.write_i2c1_ctrl(|w| {
+                w.set_start_or_reset(true);
+            }),
         }
+    }
+}
+
+/// Read-only observations of the same owned master, with no command authority.
+pub struct MasterSample<'a, P: Placement> {
+    master: &'a I2cAnaMst<P>,
+}
+impl<'a, P: Placement> MasterSample<'a, P> {
+    pub fn new(master: &'a I2cAnaMst<P>) -> Self {
+        Self { master }
+    }
+}
+/// An address admitted by this master's production routing dictionary.
+/// Its fields are private so a route from a fake port cannot command this master.
+///
+/// ```compile_fail
+/// use oer_esp32s31_hal::phy::i2c::{Address, Route, master::MasterAddress};
+/// fn forge(address: Address, route: Route) -> MasterAddress {
+///     MasterAddress { address, route }
+/// }
+/// ```
+#[derive(Clone, Copy)]
+pub struct MasterAddress {
+    address: Address,
+    route: Route,
+}
+fn route(address: Address) -> Option<MasterAddress> {
+    oer_esp32s31_pac::analog_i2c::route(Profile::LibphyNormal, address.block())
+        .map(|route| MasterAddress { address, route })
+}
+fn data<P: Placement>(master: &I2cAnaMst<P>, host: Host) -> u8 {
+    match host {
+        Host::Host0 => master.read_i2c0_ctrl().data(),
+        Host::Host1 => master.read_i2c1_ctrl().data(),
+    }
+}
+impl<P: Placement> SamplePort for MasterSample<'_, P> {
+    type Address = MasterAddress;
+    fn route(&self, address: Address) -> Option<MasterAddress> {
+        route(address)
+    }
+    fn host(address: MasterAddress) -> Host {
+        address.route.host
+    }
+    fn is_busy(&self, host: Host) -> bool {
+        is_busy(self.master, host)
+    }
+    fn data(&self, host: Host) -> u8 {
+        data(self.master, host)
+    }
+}
+impl<P: Placement> SamplePort for MasterPort<'_, P> {
+    type Address = MasterAddress;
+    fn route(&self, address: Address) -> Option<MasterAddress> {
+        route(address)
+    }
+    fn host(address: MasterAddress) -> Host {
+        address.route.host
+    }
+    fn is_busy(&self, host: Host) -> bool {
+        is_busy(self.master, host)
+    }
+    fn data(&self, host: Host) -> u8 {
+        data(self.master, host)
+    }
+}
+impl<P: Placement> Port for MasterPort<'_, P> {
+    fn configure_host_map(&mut self) {
         configure_host_map(self.master);
-        publish_read_mask(self.master, route);
+    }
+    fn publish_read_mask(&mut self, address: MasterAddress) {
+        publish_read_mask(self.master, address.route);
+    }
+    fn publish_command(&mut self, address: MasterAddress, value: u8, write: bool) {
         publish_command(
             self.master,
-            host,
-            address.block(),
-            address.index(),
-            0,
-            false,
-        );
-        Ok(())
-    }
-
-    /// Consume one externally delivered completion edge of a read.
-    pub fn try_finish_read(&self, address: Address) -> Result<u8, PhyI2cAccessError> {
-        try_finish_read(self.master, address)
-    }
-
-    /// Start one analog-register write; refused while its host is busy.
-    pub fn try_start_write(
-        &mut self,
-        address: Address,
-        value: u8,
-    ) -> Result<(), PhyI2cAccessError> {
-        let host = normal_route(address)?.host;
-        if is_busy(self.master, host) {
-            return Err(PhyI2cAccessError::Busy);
-        }
-        configure_host_map(self.master);
-        publish_command(
-            self.master,
-            host,
-            address.block(),
-            address.index(),
+            address.route.host,
+            address.address.block(),
+            address.address.index(),
             value,
-            true,
+            write,
         );
-        Ok(())
     }
-
-    /// Consume one externally delivered completion edge of a write.
-    pub fn try_finish_write(&self, address: Address) -> Result<(), PhyI2cAccessError> {
-        try_finish_write(self.master, address)
+}
+impl<P: Placement> oer_espressif_phy::i2c::PhyI2cParallelAccess for MasterPort<'_, P> {
+    type Pair = oer_espressif_phy::i2c::PhyI2cParallelWrite<Address>;
+    fn is_busy(&self, host: Host) -> bool {
+        is_busy(self.master, host)
     }
-
-    /// Start one Bluetooth TX-power control read with its block's read mask.
-    pub fn start_bluetooth_tx_power_control_read(
-        &mut self,
-        register: BluetoothTxPowerControlRegister,
-    ) -> Result<(), PhyI2cAccessError> {
-        let route = normal_route(oer_esp32s31_pac::analog_i2c::bbtop::rf_close_control::ADDRESS)?;
-        if is_busy(self.master, route.host) {
-            return Err(PhyI2cAccessError::Busy);
-        }
-        configure_host_map(self.master);
-        publish_read_mask(self.master, route);
-        publish_command(
-            self.master,
-            route.host,
-            BLUETOOTH_TX_POWER_CONTROL_BLOCK,
-            register.address(),
-            0,
-            false,
-        );
-        Ok(())
-    }
-
-    /// Start one Bluetooth TX-power control write.
-    pub fn start_bluetooth_tx_power_control_write(
-        &mut self,
-        register: BluetoothTxPowerControlRegister,
-        value: u8,
-    ) -> Result<(), PhyI2cAccessError> {
-        if is_busy(self.master, Host::Host1) {
-            return Err(PhyI2cAccessError::Busy);
-        }
-        configure_host_map(self.master);
-        publish_command(
-            self.master,
-            Host::Host1,
-            BLUETOOTH_TX_POWER_CONTROL_BLOCK,
-            register.address(),
-            value,
-            true,
-        );
-        Ok(())
-    }
-
-    /// Consume one completion edge of a read on `host`.
-    pub fn finish_host_read(&self, host: Host) -> Result<u8, PhyI2cAccessError> {
-        finish_host_read(self.master, host)
-    }
-
-    /// Consume one completion edge of a write on `host`.
-    pub fn finish_host_write(&self, host: Host) -> Result<(), PhyI2cAccessError> {
-        finish_host_write(self.master, host)
-    }
-
     /// Select the parallel host map of the retained-wake stage two.
-    pub fn select_parallel_host_map(&mut self) {
+    fn select_parallel_host_map(&mut self) {
         // SOURCE: BLOB_LIBPHY_PHY_I2C_INIT2_20260907, S31_ESP_PACS_SVD.
         self.master.modify_ana_conf2(|w| {
             w.set_bbtop_mst0_select(false)
@@ -171,15 +138,12 @@ impl<'a, P: Placement> AnalogBus<'a, P> {
     }
 
     /// Restore the normal radio host map with one fresh RMW.
-    pub fn restore_radio_host_map(&mut self) {
+    fn restore_radio_host_map(&mut self) {
         configure_host_map(self.master);
     }
 
     /// Start both writes of one parallel pair, host zero first.
-    pub fn start_parallel_pair(
-        &mut self,
-        pair: oer_espressif_phy::i2c::PhyI2cParallelWrite<Address>,
-    ) {
+    fn start_pair(&mut self, pair: oer_espressif_phy::i2c::PhyI2cParallelWrite<Address>) {
         let (address, value) = pair.first;
         publish_command(
             self.master,
@@ -199,28 +163,7 @@ impl<'a, P: Placement> AnalogBus<'a, P> {
             true,
         );
     }
-
-    /// Sample the busy bit of one host once.
-    pub fn is_busy(&self, host: Host) -> bool {
-        is_busy(self.master, host)
-    }
-
-    /// Publish the finite reset command of one host.
-    ///
-    /// The complete ROM parent writes only bit 26 to a busy host and then
-    /// polls bit 25; the caller's transition owns that bounded poll.
-    pub fn pulse_master_reset(&mut self, host: Host) {
-        match host {
-            Host::Host0 => self.master.write_i2c0_ctrl(|w| {
-                w.set_start_or_reset(true);
-            }),
-            Host::Host1 => self.master.write_i2c1_ctrl(|w| {
-                w.set_start_or_reset(true);
-            }),
-        }
-    }
 }
-
 /// Install the complete reviewed PHY-I²C host map with one fresh RMW.
 fn configure_host_map<P: Placement>(master: &mut I2cAnaMst<P>) {
     // SOURCE: ROM_REV0_PHY_I2C, S31_ESP_PACS_SVD.
@@ -239,53 +182,11 @@ fn configure_host_map<P: Placement>(master: &mut I2cAnaMst<P>) {
     });
 }
 
-/// Consume one externally delivered completion edge of a read: one sample
-/// of its host's busy bit, then its data byte.
-pub fn try_finish_read<P: Placement>(
-    master: &I2cAnaMst<P>,
-    address: Address,
-) -> Result<u8, PhyI2cAccessError> {
-    finish_host_read(master, normal_route(address)?.host)
-}
-
-/// Consume one externally delivered completion edge of a write: one sample
-/// of its host's busy bit.
-pub fn try_finish_write<P: Placement>(
-    master: &I2cAnaMst<P>,
-    address: Address,
-) -> Result<(), PhyI2cAccessError> {
-    finish_host_write(master, normal_route(address)?.host)
-}
-
 /// Sample the busy bit of one host once.
 pub fn is_busy<P: Placement>(master: &I2cAnaMst<P>, host: Host) -> bool {
     match host {
         Host::Host0 => master.read_i2c0_ctrl().i2c0_busy(),
         Host::Host1 => master.read_i2c1_ctrl().i2c1_busy(),
-    }
-}
-
-fn finish_host_read<P: Placement>(
-    master: &I2cAnaMst<P>,
-    host: Host,
-) -> Result<u8, PhyI2cAccessError> {
-    if is_busy(master, host) {
-        return Err(PhyI2cAccessError::Busy);
-    }
-    Ok(match host {
-        Host::Host0 => master.read_i2c0_ctrl().data(),
-        Host::Host1 => master.read_i2c1_ctrl().data(),
-    })
-}
-
-fn finish_host_write<P: Placement>(
-    master: &I2cAnaMst<P>,
-    host: Host,
-) -> Result<(), PhyI2cAccessError> {
-    if is_busy(master, host) {
-        Err(PhyI2cAccessError::Busy)
-    } else {
-        Ok(())
     }
 }
 
@@ -407,30 +308,33 @@ pub fn configure_command_memory<P: Placement>(
     }
 }
 
-impl<P: Placement> oer_espressif_analog::AnalogRegisterBus for AnalogBus<'_, P> {
+/// Binding for the calibration machines that still consume the analog transition port.
+/// The admitted command tables and its existing table-defect assertion remain here.
+pub struct ConfigurationBus<'a, P: Placement>(AnalogBus<MasterPort<'a, P>>);
+impl<'a, P: Placement> ConfigurationBus<'a, P> {
+    pub(crate) fn new(master: &'a mut I2cAnaMst<P>) -> Self {
+        Self(AnalogBus::new(MasterPort::new(master)))
+    }
+}
+impl<P: Placement> oer_espressif_analog::AnalogRegisterBus for ConfigurationBus<'_, P> {
     type Address = Address;
-
     fn try_start_read(&mut self, address: Address) -> Result<(), oer_espressif_analog::Busy> {
-        AnalogBus::try_start_read(self, address).map_err(port_busy)
+        self.0.try_start_read(address).map_err(port_busy)
     }
-
     fn try_finish_read(&self, address: Address) -> Result<u8, oer_espressif_analog::Busy> {
-        AnalogBus::try_finish_read(self, address).map_err(port_busy)
+        self.0.try_finish_read(address).map_err(port_busy)
     }
-
     fn try_start_write(
         &mut self,
         address: Address,
         value: u8,
     ) -> Result<(), oer_espressif_analog::Busy> {
-        AnalogBus::try_start_write(self, address, value).map_err(port_busy)
+        self.0.try_start_write(address, value).map_err(port_busy)
     }
-
     fn try_finish_write(&self, address: Address) -> Result<(), oer_espressif_analog::Busy> {
-        AnalogBus::try_finish_write(self, address).map_err(port_busy)
+        self.0.try_finish_write(address).map_err(port_busy)
     }
 }
-
 /// The port's refusal of a busy host. Configuration operations use only
 /// routed addresses, so an unrouted one is a table defect.
 fn port_busy(error: PhyI2cAccessError) -> oer_espressif_analog::Busy {

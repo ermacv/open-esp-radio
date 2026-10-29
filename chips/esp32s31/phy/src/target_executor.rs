@@ -96,14 +96,14 @@ pub(crate) fn read_i2c_direct<C: oer_time::Clock + ?Sized>(
 ) -> Result<u8, PhyTargetPortError> {
     let started =
         crate::executor::wait::poll::bounded::<core::convert::Infallible, _>(clock, || {
-            Ok(crate::analog::i2c::try_start_read(registers, address).is_ok())
+            Ok(crate::serial::try_start_read(registers, address).is_ok())
         })
         .unwrap_or_else(|never| match never {});
     if !started {
         return Err(PhyTargetPortError::HardwareEdgeTimedOut);
     }
     crate::executor::wait::poll::settled(clock, || {
-        crate::analog::i2c::try_finish_read(registers, address).ok()
+        crate::serial::try_finish_read(registers, address).ok()
     })
     .map_err(|_| PhyTargetPortError::HardwareEdgeTimedOut)
 }
@@ -120,7 +120,7 @@ pub(crate) fn write_i2c_direct<C: oer_time::Clock + ?Sized>(
 ) -> Result<(), PhyTargetPortError> {
     let started =
         crate::executor::wait::poll::bounded::<core::convert::Infallible, _>(clock, || {
-            Ok(crate::analog::i2c::try_start_write(registers, address, value).is_ok())
+            Ok(crate::serial::try_start_write(registers, address, value).is_ok())
         })
         .unwrap_or_else(|never| match never {});
     if !started {
@@ -128,7 +128,7 @@ pub(crate) fn write_i2c_direct<C: oer_time::Clock + ?Sized>(
     }
     let completed =
         crate::executor::wait::poll::bounded::<core::convert::Infallible, _>(clock, || {
-            Ok(crate::analog::i2c::try_finish_write(registers, address).is_ok())
+            Ok(crate::serial::try_finish_write(registers, address).is_ok())
         })
         .unwrap_or_else(|never| match never {});
     if completed {
