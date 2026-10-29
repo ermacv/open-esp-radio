@@ -17,7 +17,7 @@ use oer_lab_router::{
     mac::Mac,
     router,
     ssh::{COMMAND_TIMEOUT, CommandLog, Ssh},
-    w3::{
+    station::{
         self,
         stream::{Capture, Departure, DepartureOutcome},
     },
@@ -254,7 +254,7 @@ pub fn run(output: &Path, context: &Context<'_>) -> Result<()> {
         return Err("running W4 BSS has the wrong group rekey interval".into());
     }
     drop(profile);
-    let before = w3::station(&mut ssh, &config.wireless_interface, target)?;
+    let before = station::station(&mut ssh, &config.wireless_interface, target)?;
     if before.present {
         return Err("W4 station was already associated before StartStation".into());
     }
@@ -294,8 +294,8 @@ pub fn run(output: &Path, context: &Context<'_>) -> Result<()> {
                 info.gateway
                     .ok_or("station DHCP observation has no gateway")?,
             );
-            let joined = w3::station(&mut ssh, &config.wireless_interface, target)?;
-            let lease = w3::lease(&mut ssh, target)?
+            let joined = station::station(&mut ssh, &config.wireless_interface, target)?;
+            let lease = station::lease(&mut ssh, target)?
                 .ok_or("router has no unique live station DHCP lease")?;
             connected[0].router_authorized = joined.joined();
             evidence.baseline = Some(Baseline {
@@ -314,7 +314,7 @@ pub fn run(output: &Path, context: &Context<'_>) -> Result<()> {
                 queue_collisions: 0,
                 deauth_transmissions: 0,
                 final_departure_us: 0,
-                after: w3::Station::default(),
+                after: station::Station::default(),
             });
             let initial_key = capture.request(0, GetStationCounters, SHORT)?;
             let (initial_traffic, rekey) = traffic(
@@ -362,7 +362,7 @@ pub fn run(output: &Path, context: &Context<'_>) -> Result<()> {
                     .into());
                 }
             }
-            if !w3::station(&mut ssh, &config.wireless_interface, target)?.joined() {
+            if !station::station(&mut ssh, &config.wireless_interface, target)?.joined() {
                 return Err("router did not authorize the reconnected station".into());
             }
             connected[1].router_authorized = true;
@@ -395,7 +395,7 @@ pub fn run(output: &Path, context: &Context<'_>) -> Result<()> {
             context.results.observe("w4-final-counters", &stopped);
             let deadline = Instant::now() + SHORT;
             let after = loop {
-                let after = w3::station(&mut ssh, &config.wireless_interface, target)?;
+                let after = station::station(&mut ssh, &config.wireless_interface, target)?;
                 if !after.present || Instant::now() >= deadline {
                     break after;
                 }
@@ -532,7 +532,7 @@ fn traffic(
     let cursor = capture.event_cursor();
     let ping_ssh = ssh.parallel();
     let (ping, rekey) = std::thread::scope(|scope| -> Result<_> {
-        let ping = scope.spawn(|| w3::ping(&ping_ssh, address, count));
+        let ping = scope.spawn(|| station::ping(&ping_ssh, address, count));
         let work: Result<_> = (|| {
             let rekey = if let Some(initial) = initial {
                 let (message, key) = capture
@@ -555,7 +555,7 @@ fn traffic(
                 let triggered_us = now();
                 let neighbor = w4::refresh_neighbor(
                     |script| ssh.output(script, COMMAND_TIMEOUT),
-                    w3::network::BRIDGE,
+                    station::network::BRIDGE,
                     address,
                     |state| context.results.observe("w4-neighbor-state", state),
                 )?;

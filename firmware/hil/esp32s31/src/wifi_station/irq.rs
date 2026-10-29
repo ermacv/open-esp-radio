@@ -1,4 +1,4 @@
-//! Static ISR owners and DMA allocations, as in W1.
+//! Static ISR owners and DMA allocations for the HIL image.
 use core::sync::atomic::{AtomicU32, Ordering};
 use oer_esp32s31_compose::Esp32s31;
 use oer_esp32s31_wifi::{DmaTypes, InterruptTypes, Interrupts};

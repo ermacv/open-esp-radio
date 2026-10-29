@@ -279,10 +279,6 @@ after drain. Retirement waits for an abandoned clock answer before returning
 the poster. P2 constructs an epoch-keyed endpoint without entering that cell
 and serves correlated clock requests through the mailbox.
 
-`firmware/apps/b0` composes actor join/tracking, the interrupt gate, H4
-Reset/Rand and 1M DTM commands, End, leave/reset and arena return. Its
-two-boot RF/count gate is qualified; hardware port conformance is unqualified.
-
 The production interrupt set is bank0 baseline15 and dynamic21/27/28, bank1
 baseline1/8/9/12 and dynamic3, and task14's pre-RUN/terminal lifecycle.
 Task14 has no vendor scan-truncation runtime consumer here. Inherited enables
@@ -291,9 +287,7 @@ silently remove them. Terminal nonzero readback is `ReleaseNotQuiet`.
 Both faults retain primary enables/status/NRT and task enables. Production
 never reads the opaque task +0x4bc word; that view is diagnostic-only.
 The gate publishes the first fault once and serves no later hardware or queue
-operation; the HAL/driver owners remain quarantined. B0 calls safe
-`fatal::reset_recording`, reusing its 44-byte BLE gate record, and prints all
-banks on the next boot. Opaque bank1[0,2] and task17 retain their sourced
+operation; the HAL/driver owners remain quarantined for the image's terminal policy. Opaque bank1[0,2] and task17 retain their sourced
 positional names; this policy assigns them no event identity.
 
 Release never opens ENA to inspect hidden pending or changes matrix routing.

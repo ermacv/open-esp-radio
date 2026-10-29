@@ -406,10 +406,10 @@ pub struct LegacyBss {
     pub country: String,
 }
 
-/// The fixture kind image `w1` drives.
+/// The OpenWrt station fixture kind.
 pub const OPEN_WRT: &str = "open-wrt";
 
-/// What image `w1` needs of the stand router; the SSID is the run's.
+/// The HIL stand router; the SSID is the run's.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Router<'a> {
     pub ssh_target: &'a Secret,
@@ -490,16 +490,17 @@ impl Stand {
         Ok(stand)
     }
 
-    /// The stand router of image `w1`: every key present, `kind` `open-wrt`.
+    /// The HIL stand router: every key present, `kind` `open-wrt`.
     /// An error names the missing key, never a value.
     pub fn router(&self) -> std::result::Result<Router<'_>, String> {
         let fixture = &self.station_fixture;
-        let missing = |key: &str| format!("the stand file has no {key}, which image w1 needs");
+        let missing =
+            |key: &str| format!("the stand file has no {key}, which the station fixture needs");
         match fixture.kind.as_deref() {
             Some(OPEN_WRT) => {}
             Some(_) => {
                 return Err(format!(
-                    "[station_fixture].kind is not `{OPEN_WRT}`: image w1 drives an OpenWrt router"
+                    "[station_fixture].kind is not `{OPEN_WRT}`: the station fixture requires an OpenWrt router"
                 ));
             }
             None => return Err(missing("[station_fixture].kind")),

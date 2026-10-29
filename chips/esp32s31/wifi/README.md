@@ -2,7 +2,7 @@
 
 `station(resources, config) -> (Control, NetDevice, Runners)` assembles the
 S31 lower-MAC backend, arbiter, station/upper-MAC/RSN and portable station
-runtime. The separate crate keeps both w3 and HIL wifi-station above that
+runtime. The separate crate keeps HIL wifi-station above that
 composition; its explicit layer role is `Facade`.
 
 Control and the affine neutral Ethernet end exist before installation. `Control::wait_started` gates image workload startup on
@@ -11,7 +11,7 @@ an uninstalled runner wakes it with a typed failure. Commands contain only a kin
 station's installation-scoped permissions when the P1 runner constructs the
 station, retains them through each terminal, and delivers every completion
 or refusal directly to the image's concrete callback. No scoped application
-callback, port identity or installation loan is required by w3.
+callback, port identity or installation loan is required by the image.
 
 The image declares `bind_station!` with its interrupt entries, station
 callbacks, collectors, key-unwrap engine and handled-error terminal policy.

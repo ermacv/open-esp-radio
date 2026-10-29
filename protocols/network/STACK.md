@@ -1,8 +1,8 @@
 # Network boundaries
 
 This directory owns stack-facing contracts; chip radio execution belongs to
-[`exec`](../../chips/espressif/executor/README.md). W3 and the HIL Wi-Fi station
-image link the pinned Embassy/Xarxa network stack through
+[`exec`](../../chips/espressif/executor/README.md). The HIL Wi-Fi station
+image links the pinned Embassy/Xarxa network stack through
 `portable/embassy/net`. Direct normal stack dependencies belong to that
 adapter and firmware, outside the protocol cores and runtimes.
 

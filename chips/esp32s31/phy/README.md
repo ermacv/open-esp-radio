@@ -310,8 +310,7 @@ is enforced. The actor serializes
 its own retunes but checks no granted hard-window calendar. `EmbassyClock`
 uses the executor's SYSTIMER timer service: Alarm0 at P3 acknowledges and pends
 P2, which dispatches timers and polls tasks. The direct maintenance
-TXDC/PWDET path has a separate SAR/PWDET timer handler at P2. Wi-Fi images declare an actor task; B0 polls the attached actor inside
-its P2 driver task, and the PHY diagnostic image drives concurrent PHY calls
+TXDC/PWDET path has a separate SAR/PWDET timer handler at P2. Wi-Fi images declare an actor task; the PHY diagnostic image drives concurrent PHY calls
 directly from P2.
 
 The parameter-tracking graph selects individual operations internally; no

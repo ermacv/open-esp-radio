@@ -73,7 +73,7 @@ slot, retaining its fail-stop GTK rollback policy.
 The W4 peer generates 100-echo and ten-echo windows; the device replies through
 its ordinary IP stack. The host checks ping counts against independent
 request/reply captures, including identities and pacing, and ends the run with
-`StopStation`. The image has no target ping generator or dependency on W3.
+`StopStation`. The image has no target ping generator.
 Typed observations expose hardware GTK installation
 KeyIDs, decoded broadcast ARPs, timeouts/collisions and final deauthentication;
 the station service reports the GTK installations, ARPs and receive drops as

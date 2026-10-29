@@ -272,7 +272,7 @@ mod tests {
             chip_of("oer-firmware-probes-esp32x9-radio", &chips).unwrap(),
             "esp32x9"
         );
-        assert!(chip_of("oer-firmware-apps-w1", &chips).is_err());
+        assert!(chip_of("oer-firmware-apps-boot-smoke", &chips).is_err());
         assert!(chip_of("oer-firmware-probes-esp32s3-probe", &chips).is_err());
         assert!(chip_of("oer-firmware-probes-esp32s31", &chips).is_err());
     }

@@ -129,8 +129,7 @@ back; its operations are synchronous and never wait:
   above the driver and a nonzero attempt budget; every attempt keeps the
   selected rate. `oer-ieee80211-upper-mac` `management` chooses the budget:
   seven attempts (dot11ShortRetryLimit) for a unicast frame, one for a
-  broadcast. The S31 direct W2 path consumes this contract without parsing
-  a BSS or using vendor control schedules.
+  broadcast.
 - **Retry plans.** An individual frame carries its `RetryPlan`, a sequence
   of rates with their transmissions and protection (including each control
   frame's legacy rate), as mac80211's rate

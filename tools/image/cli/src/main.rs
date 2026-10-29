@@ -8,13 +8,9 @@
 use std::{process::ExitCode, time::Duration};
 
 use clap::{CommandFactory as _, Parser, Subcommand};
-mod b0;
 mod command;
 mod diagnostics;
 mod image;
-mod w1;
-mod w2;
-mod w3;
 
 use oer_image_build::probe;
 
@@ -27,27 +23,9 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Run the two-boot B0 1M DTM stand procedure against the pinned C5 peer.
-    B0 {
-        #[arg(long)]
-        board: String,
-        #[arg(long)]
-        peer_board: String,
-        /// Common-image sizes.json used for the owner's full SRAM accounting.
-        #[arg(long)]
-        base_sizes: std::path::PathBuf,
-    },
     /// Render typed boot diagnostics from a captured console file; no board I/O.
     DecodeConsole { console: std::path::PathBuf },
-    /// W3 host observations and strict report checking, independent of firmware.
-    W3 {
-        #[command(subcommand)]
-        command: W3Command,
-    },
     /// Build an image of firmware/apps into target/fw/<image>/.
-    ///
-    /// Without --analysis the image is unconfigured; `run` builds it for
-    /// the stand.
     Build {
         image: String,
         /// Select another binary of the image package.
@@ -56,10 +34,6 @@ enum Command {
         /// Package an unqualified firmware/probes image with reported checks.
         #[arg(long)]
         diagnostic: bool,
-        /// Use a fixed fictitious stand configuration (w0 through w3).
-        /// The bundle in target/fw/<image>-analysis/ cannot be flashed.
-        #[arg(long)]
-        analysis: bool,
     },
     /// Compare sizes.json files in two output directories; builds nothing.
     /// Exit 0 for same/report, 1 for incompatible provenance or unreadable input.
@@ -96,18 +70,13 @@ enum Command {
         board: String,
     },
     /// Build and flash an image, then read the board's console until its
-    /// `OER-RESULT:` line: exit 0 on pass, 1 on fail, 2 on a timeout and,
-    /// for w1, 3 on a missing, malformed or contradicted report. For w1 the
-    /// stand router is first brought to the W1 profile over SSH.
+    /// `OER-RESULT:` line: exit 0 on pass, 1 on fail, 2 on a timeout.
     Run {
-        /// W3 only: the #486 one-millisecond load and recovery recipe.
-        #[arg(long)]
-        load_1ms: bool,
         image: String,
         #[arg(long)]
         board: String,
         /// How long to wait for the result, such as `30s` or `2m`; the
-        /// image's own run time when omitted (w1 120 s, any other 30 s).
+        /// default is 30 s.
         #[arg(long, value_parser = parse_duration)]
         timeout: Option<Duration>,
     },
@@ -116,29 +85,12 @@ enum Command {
         #[arg(long)]
         board: String,
     },
-    /// Bring the stand router to W1's profile and verify it, without a
-    /// board; print the stand AP's masked BSSID and channel.
-    Router,
     /// List the attached boards and their stand ids.
     Boards,
     /// Switch a board's hub port off and on again.
     PowerCycle {
         #[arg(long)]
         board: String,
-    },
-}
-
-#[derive(Subcommand)]
-enum W3Command {
-    /// Verify the W3 host path using the installed AX211 station fixture.
-    #[cfg(target_os = "linux")]
-    Ax211,
-    /// Recompute a-d and f from a firmware console and router observations.
-    Check {
-        #[arg(long)]
-        console: std::path::PathBuf,
-        #[arg(long)]
-        observations: std::path::PathBuf,
     },
 }
 
@@ -169,29 +121,12 @@ fn main() -> ExitCode {
     let result = (|| -> oer_image_build::Result<ExitCode> {
         let root = command::root()?;
         match cli.command {
-            Command::B0 {
-                board,
-                peer_board,
-                base_sizes,
-            } => return b0::run(&root, &board, &peer_board, &base_sizes),
             Command::DecodeConsole { console } => diagnostics::decode_file(&console)?,
-            #[cfg(target_os = "linux")]
-            Command::W3 {
-                command: W3Command::Ax211,
-            } => return w3::ax211::run(&root),
-            Command::W3 {
-                command:
-                    W3Command::Check {
-                        console,
-                        observations,
-                    },
-            } => return w3::check_files(&console, &observations),
             Command::Build {
                 image,
-                analysis,
                 bin,
                 diagnostic,
-            } => command::build(&root, &image, analysis, bin.as_deref(), diagnostic)?,
+            } => command::build(&root, &image, bin.as_deref(), diagnostic)?,
             Command::Sizes {
                 base,
                 head,
@@ -225,13 +160,11 @@ fn main() -> ExitCode {
                 image,
                 board,
                 timeout,
-                load_1ms,
             } => {
-                let timeout = timeout.unwrap_or_else(|| image::run_timeout(&image));
-                return command::run(&root, &image, &board, timeout, load_1ms);
+                let timeout = timeout.unwrap_or(Duration::from_secs(30));
+                return command::run(&root, &image, &board, timeout);
             }
             Command::Monitor { board } => command::monitor(&root, &board)?,
-            Command::Router => command::router_ready()?,
             Command::Boards => command::list_boards()?,
             Command::PowerCycle { board } => command::power_cycle(&root, &board)?,
         }
@@ -251,65 +184,56 @@ mod tests {
         Cli::try_parse_from(line.split(' '))
     }
     #[test]
-    fn only_build_accepts_analysis() {
-        for image in ["w0", "w1", "w2"] {
+    fn remaining_images_keep_build_flash_and_run_commands() {
+        for image in [
+            "boot-smoke",
+            "radio-root",
+            "../hil/esp32s31",
+            "../probes/esp32s31-radio",
+        ] {
             assert!(matches!(
-                parse(&format!("fw build {image} --analysis"))
+                parse(&format!("fw build {image}")).unwrap().command,
+                Command::Build { .. }
+            ));
+            assert!(matches!(
+                parse(&format!("fw flash {image} --board s31-a"))
                     .unwrap()
                     .command,
-                Command::Build { analysis: true, .. }
+                Command::Flash { .. }
+            ));
+            assert!(matches!(
+                parse(&format!("fw run {image} --board s31-a --timeout 90s"))
+                    .unwrap()
+                    .command,
+                Command::Run {
+                    timeout: Some(_),
+                    ..
+                }
             ));
         }
         assert!(matches!(
-            parse("fw build w2").unwrap().command,
-            Command::Build {
-                analysis: false,
-                ..
-            }
+            parse("fw build ../probes/esp32s31-radio --bin oer-firmware-probes-esp32s31-radio-hardware --diagnostic").unwrap().command,
+            Command::Build { bin: Some(_), diagnostic: true, .. }
         ));
-        for command in ["flash", "run"] {
-            assert!(parse(&format!("fw {command} w2 --board b1 --analysis")).is_err());
-        }
+        assert!(matches!(
+            parse("fw sizes base head").unwrap().command,
+            Command::Sizes { .. }
+        ));
     }
 
     #[test]
-    fn build_selects_a_companion_binary_explicitly() {
-        let command = parse(
-            "fw build ../probes/esp32s31-radio --bin oer-firmware-probes-esp32s31-radio-hardware",
-        )
-        .unwrap()
-        .command;
-        assert!(
-            matches!(command, Command::Build { bin: Some(name), .. } if name == "oer-firmware-probes-esp32s31-radio-hardware")
-        );
-        assert!(parse("fw run w0 --board s31-a --bin another").is_err());
-    }
-
-    #[test]
-    fn no_image_takes_stand_flags() {
+    fn removed_application_commands_and_options_are_rejected() {
         for line in [
-            "fw build w1 --expect-bssid 02:00:00:00:F6:D0",
-            "fw build w1 --channel 6",
-            "fw run w1 --board b1 --channel 6",
-            "fw run w1 --board b1 --expect-bssid 02:00:00:00:F6:D0",
+            "fw b0 --board s31-a --peer-board c5-a --base-sizes base",
+            "fw w3 ax211",
+            "fw w3 check --console console --observations router",
+            "fw router",
+            "fw build boot-smoke --analysis",
+            "fw run radio-root --board s31-a --load-1ms",
         ] {
             assert!(parse(line).is_err(), "{line}");
         }
-        assert!(matches!(
-            parse("fw build w1").unwrap().command,
-            Command::Build { .. }
-        ));
-        assert!(matches!(
-            parse("fw run w1 --board b1 --timeout 90s").unwrap().command,
-            Command::Run { .. }
-        ));
-        assert!(matches!(
-            parse("fw router").unwrap().command,
-            Command::Router
-        ));
-        assert!(parse("fw router --channel 6").is_err());
     }
-
     #[test]
     fn saved_size_refresh_has_an_explicit_output_and_configuration_root() {
         assert!(matches!(
@@ -325,33 +249,6 @@ mod tests {
     }
 
     #[test]
-    fn w3_load_flag_and_plan_are_explicit() {
-        let Command::Run {
-            image, load_1ms, ..
-        } = parse("fw run w3 --board s31-b --load-1ms").unwrap().command
-        else {
-            panic!("run command");
-        };
-        assert!(load_1ms);
-        assert_eq!(
-            oer_lab_router::w3::load::Plan::select(&image, load_1ms)
-                .unwrap()
-                .unwrap()
-                .count,
-            10000
-        );
-        assert!(oer_lab_router::w3::load::Plan::select("w0", true).is_err());
-        assert!(matches!(
-            parse("fw run w3 --board s31-b").unwrap().command,
-            Command::Run {
-                load_1ms: false,
-                ..
-            }
-        ));
-        assert!(parse("fw build w3 --load-1ms").is_err());
-    }
-
-    #[test]
     fn durations() {
         assert_eq!(parse_duration("30s"), Ok(Duration::from_secs(30)));
         assert_eq!(parse_duration("2m"), Ok(Duration::from_secs(120)));
@@ -359,7 +256,3 @@ mod tests {
         assert!(parse_duration("soon").is_err());
     }
 }
-
-#[cfg(test)]
-#[path = "../../../../firmware/apps/w1/src/own/crc32.rs"]
-mod ownership_crc;

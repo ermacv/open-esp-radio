@@ -751,16 +751,8 @@ mod tests {
                 include_str!("../../../../chips/esp32s31/platform/stack.toml"),
             ),
             (
-                "firmware/apps/w3/stack.toml",
-                include_str!("../../../../firmware/apps/w3/stack.toml"),
-            ),
-            (
                 "firmware/hil/esp32s31-lower-mac/stack.toml",
                 include_str!("../../../../firmware/hil/esp32s31-lower-mac/stack.toml"),
-            ),
-            (
-                "firmware/apps/w3/stack-configured.toml",
-                include_str!("../../../../firmware/apps/w3/stack-configured.toml"),
             ),
         ];
         for (path, source) in policies {
@@ -769,21 +761,10 @@ mod tests {
             std::fs::write(path, source).unwrap();
         }
         let platform = StackPolicy::load(&root.join(policies[0].0)).unwrap();
-        let w3 = StackPolicy::load(&root.join(policies[1].0)).unwrap();
-        let lower_mac = StackPolicy::load(&root.join(policies[2].0)).unwrap();
-        let configured_w3 = StackPolicy::load(&root.join(policies[3].0)).unwrap();
+        let lower_mac = StackPolicy::load(&root.join(policies[1].0)).unwrap();
         assert_eq!(
             platform.bootstrap_stack.as_ref().unwrap().root,
             "bootstrap_main"
-        );
-        assert_eq!(w3.bootstrap_stack, platform.bootstrap_stack);
-        assert_eq!(w3.core, platform.core);
-        assert_eq!(configured_w3.bootstrap_stack, platform.bootstrap_stack);
-        assert_eq!(configured_w3.core, platform.core);
-        assert!(!configured_w3.frame_exceptions.runtime.is_empty());
-        assert_eq!(
-            w3.default_task_stack_bytes,
-            platform.default_task_stack_bytes
         );
         assert_eq!(lower_mac.bootstrap_stack, platform.bootstrap_stack);
         assert_eq!(

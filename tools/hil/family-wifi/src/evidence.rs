@@ -1,6 +1,6 @@
 //! Secret-free observations. The host computes every gate from these values;
 //! an image's verdict is never an input.
-use oer_lab_router::w3::{Echo, Lease, Station};
+use oer_lab_router::station::{Echo, Lease, Station};
 use serde::{Deserialize, Serialize};
 use std::net::Ipv4Addr;
 
@@ -341,7 +341,7 @@ pub fn evaluate(e: &Evidence) -> [Gate; 6] {
         });
     let f = e.keys.as_ref().is_some_and(KeyEvidence::complete);
     [
-        ('a', a, "missing or contradictory W3 association/DHCP/ICMP/departure/statistics evidence"),
+        ('a', a, "missing or contradictory station association/DHCP/ICMP/departure/statistics evidence"),
         ('b', b, "missing/contradictory four-way handshake, Connected or router authorization; association to M4 exceeds 1 s"),
         ('c', c, "missing peer ping 100/100, GTK change or protected broadcast ARP request/station reply on the new key"),
         ('d', d, "missing/truncated air window, zero protected station frames, capture loss or plaintext data"),

@@ -1,4 +1,4 @@
-//! The stand router (OpenWrt), brought to W1's profile and verified over
+//! The stand router (OpenWrt), brought to a HIL profile and verified over
 //! SSH. The router is a lab router: the profile is committed and its
 //! previous settings are not restored.
 //!
@@ -24,8 +24,7 @@
 //!    apart: an AP on the profile's channel, 20 MHz wide, with the stand's
 //!    SSID; its `addr` is the stand's BSSID.
 //!
-//! W1 leaves encryption unchanged. W3 sets encryption to none and disables
-//! HE. W4 sets WPA2-PSK/CCMP without PMF and a short GTK rekey interval.
+//! The lower-MAC HIL profile leaves encryption unchanged. W4 sets WPA2-PSK/CCMP without PMF and a short GTK rekey interval.
 //! Keys are write-only: the generated passphrase reaches `uci batch` on
 //! stdin, never an argument list, and secret buffers are zeroized. Every
 //! read is filtered there by an allowlist, and the host refuses any line
@@ -107,11 +106,10 @@ pub fn show_script() -> String {
 
 enum Security {
     Unchanged,
-    Open,
     Wpa2(Zeroizing<String>),
 }
 
-/// A run's wireless profile; W3 and W4 share the isolated station network.
+/// A run's wireless profile; W4 uses the isolated station network.
 pub struct Profile {
     radio: String,
     ap_section: String,
@@ -181,20 +179,6 @@ impl Profile {
             security: Security::Unchanged,
             group_rekey_seconds: crate::w4::GROUP_REKEY_SECONDS,
         })
-    }
-
-    /// W3's open HT20 station profile. The selected AP is open and HE is
-    /// disabled; other AP sections and credentials are left untouched.
-    pub fn w3(
-        radio: &str,
-        ap_section: &str,
-        interface: &str,
-        channel: u8,
-        ssid: &str,
-    ) -> Result<Self> {
-        let mut profile = Self::new(radio, ap_section, interface, channel, ssid)?;
-        profile.security = Security::Open;
-        Ok(profile)
     }
 
     /// W4's WPA2-Personal/CCMP HT20 profile, with PMF and HE disabled.
@@ -276,7 +260,6 @@ impl Profile {
         ]);
         match &self.security {
             Security::Unchanged => {}
-            Security::Open => steps.push(set(&self.ap_section, "encryption", "none")?),
             Security::Wpa2(_) => {
                 steps.push(set(&self.ap_section, "encryption", "psk2+ccmp")?);
                 steps.push(set(&self.ap_section, "ieee80211r", "0")?);
@@ -290,7 +273,11 @@ impl Profile {
         }
         if self.station_network() {
             steps.push(set(&self.radio, "ieee80211ax", "0")?);
-            steps.push(set(&self.ap_section, "network", crate::w3::network::NAME)?);
+            steps.push(set(
+                &self.ap_section,
+                "network",
+                crate::station::network::NAME,
+            )?);
             steps.push(set(&self.ap_section, "isolate", "1")?);
         }
         steps.push("uci commit wireless".to_owned());
@@ -410,10 +397,10 @@ fn apply_inner(remote: &mut dyn Remote, profile: &Profile) -> Result<Applied> {
         .map_err(step("reading the radio's channels"))?;
     check_channel(&channels, profile.channel, radio.option("country"))?;
     let previous_network = if profile.station_network() {
-        let fingerprint = crate::w3::network::prepare(remote)?;
+        let fingerprint = crate::station::network::prepare(remote)?;
         remote
-            .run(&crate::w3::network::render()?)
-            .map_err(step("applying the W3 network"))?;
+            .run(&crate::station::network::render()?)
+            .map_err(step("applying the isolated station network"))?;
         Some(fingerprint)
     } else {
         None
@@ -433,7 +420,7 @@ fn apply_inner(remote: &mut dyn Remote, profile: &Profile) -> Result<Applied> {
     let country = country_of(after.sections(profile)?.0)?;
     let applied = settle(remote, profile, country)?;
     if let Some(before) = previous_network {
-        crate::w3::network::verify(remote, &profile.interface, &before)?;
+        crate::station::network::verify(remote, &profile.interface, &before)?;
     }
     Ok(applied)
 }
@@ -796,11 +783,6 @@ impl Wireless {
                 "the committed {}.ssid is not the stand's SSID",
                 ap.name
             ));
-        }
-        if matches!(profile.security, Security::Open)
-            && (ap.option("encryption") != Some("none") || radio.option("ieee80211ax") != Some("0"))
-        {
-            return Err("the committed W3 profile is not open with HE disabled".to_owned());
         }
         if matches!(profile.security, Security::Wpa2(_))
             && (ap.option("encryption") != Some("psk2+ccmp")

@@ -198,8 +198,7 @@ One received frame and the owner of its DMA buffer at each step:
    strict RXEND or dump-length refusal; what they would refuse is counted)
    and counts refusals by reason. The application owns the lease.
 5. **P1.** The MPDU and `portable::rx_meta` on the configured channel go to
-   `sta::receive::classify` and `observe_scan`; in W1 the acceptance
-   instrument `Survey` (`firmware/apps/w1/src/survey.rs`) calls them and tallies each BSS.
+   `sta::receive::classify` and `observe_scan`.
 6. **P1.** Dropping the held frame releases the lease and posts the
    RX-capacity fact; P2 rearms the buffer.
 
@@ -228,7 +227,7 @@ permission. An erased key cannot authorize a returned MPDU's retransmission.
 
 The port exposes ordinary MPDUs and RX BlockAck agreements. It does not expose
 the optional aggregate, beacon-timing, monitor or air-reservation phases.
-Its publication watchdog is 250 ms, as in W2; command and retirement bounds
+Its publication watchdog is 250 ms; command and retirement bounds
 are 400 ms, including the publication and the finite RX stop.
 The operation mapping and portable limits are in
 [the port's README](../../../../protocols/ieee80211/port/README.md#implementers).

@@ -78,13 +78,13 @@ mod tests {
             ["oer-esp32s31-hal v0.1.0"]
         );
         assert_eq!(
-            super::forbidden_packages("oer-firmware-apps-w2", tree).len(),
+            super::forbidden_packages("oer-firmware-apps-radio-root", tree).len(),
             2
         );
     }
     #[test]
     fn an_image_with_test_support_is_named() {
-        let tree = "oer-firmware-apps-w1 v0.1.0 (/w1)|\noer-esp32s31-hal v0.1.0 (/hal)|test-support\noer-memory v0.1.0 (/m)|serde,test-support\nbytemuck v1.0.0|derive\n";
+        let tree = "oer-firmware-apps-boot-smoke v0.1.0 (/boot-smoke)|\noer-esp32s31-hal v0.1.0 (/hal)|test-support\noer-memory v0.1.0 (/m)|serde,test-support\nbytemuck v1.0.0|derive\n";
         assert_eq!(
             super::packages(tree),
             ["oer-esp32s31-hal v0.1.0", "oer-memory v0.1.0"]

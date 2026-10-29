@@ -319,8 +319,7 @@ Its cited sources establish use, not general read safety.
 without a positive task cause; general read safety remains unqualified.
 
 Admission and terminal readback faults retain their owners and reach the
-image's retained reset path. B0 stores these seven words and a reserved zero
-word in its common-format BLE gate record with a reason-tagged payload; the next boot prints them.
+image's terminal policy. The returned fault retains the seven observation words.
 Readback is sequential, not an atomic cross-bank sample or proof that every
 producer is stopped. The stop sequence keeps its handler/task order.
 SOURCE: `BLOB_S31_BLE_IRQ_RELEASE_SCOPE_20261027`,

@@ -32,7 +32,11 @@ fn the_name_follows_the_path() {
             false,
             "oer-esp32s31-ieee80211-driver",
         ),
-        ("firmware/apps/w1", true, "oer-firmware-apps-w1"),
+        (
+            "firmware/apps/boot-smoke",
+            true,
+            "oer-firmware-apps-boot-smoke",
+        ),
         ("tools/image/build", false, "oer-image-build"),
         ("tools/image/bundle", false, "oer-image-bundle"),
         ("tools/vendor/scenario", false, "oer-vendor-scenario"),
@@ -135,7 +139,7 @@ fn the_boundary_is_named_by_package_or_domain() {
         "portable/interrupt-table",
         "tools/os/durable",
         "tools/hil/link",
-        "firmware/apps/w1",
+        "firmware/apps/boot-smoke",
         "firmware/hil/esp32s31",
         "tools/lab/fixture-install",
     ] {
@@ -1264,7 +1268,7 @@ fn protocol_roles_and_the_explicit_chip_roles_follow_the_layout() {
         ("chips/esp32s31/new/driver", None),
         ("firmware/hil/esp32s31", Some(Role::HilImage)),
         ("firmware/hil/new", None),
-        ("firmware/apps/w1", Some(Role::Image)),
+        ("firmware/apps/boot-smoke", Some(Role::Image)),
         ("tools/hil/cli", Some(Role::Tool)),
     ] {
         assert_eq!(role(path), expected, "{path}");
@@ -2238,7 +2242,7 @@ fn external_crate_homes_and_futures_exclusions_are_explicit() {
         ("embassy-time-driver", vec!["chips/espressif/executor"]),
         (
             "embassy-net",
-            vec!["portable/embassy/net", "firmware/apps/w3"],
+            vec!["portable/embassy/net", "firmware/apps/radio-root"],
         ),
         (
             "xarxa",
@@ -2246,11 +2250,11 @@ fn external_crate_homes_and_futures_exclusions_are_explicit() {
         ),
         (
             "xarxa-driver",
-            vec!["portable/embassy/net", "firmware/apps/w3"],
+            vec!["portable/embassy/net", "firmware/apps/radio-root"],
         ),
         (
             "trouble-host",
-            vec!["portable/embassy/trouble", "firmware/apps/b0"],
+            vec!["portable/embassy/trouble", "firmware/apps/radio-root"],
         ),
         (
             "bt-hci",
@@ -2292,7 +2296,7 @@ fn external_crate_homes_and_futures_exclusions_are_explicit() {
         ("portable/cooperate", true),
         ("portable/embassy/net", true),
         ("chips/esp32s31/bluetooth/driver", true),
-        ("firmware/apps/b0", true),
+        ("firmware/apps/radio-root", true),
         ("tools/hil/fixture", true),
     ] {
         assert_eq!(
@@ -2390,8 +2394,13 @@ fn the_name_rule_tells_libraries_from_programs_by_their_binary_targets() {
     let members = [
         member("protocols/ieee80211/wire", "oer-ieee80211-wire", false, &[]),
         member("protocols/ieee80211/sta", "oer-sta", false, &[]),
-        member("firmware/apps/w1", "oer-firmware-apps-w1", true, &[]),
-        member("firmware/apps/w2", "oer-apps-w2", true, &[]),
+        member(
+            "firmware/apps/boot-smoke",
+            "oer-firmware-apps-boot-smoke",
+            true,
+            &[],
+        ),
+        member("firmware/apps/example", "oer-apps-example", true, &[]),
         member("tools/image/build", "oer-image-build", false, &[]),
         member("tools/image/cli", "oer-tool-image-cli", true, &[]),
         member("tools/image/bundle", "oer-tool-image-bundle", false, &[]),
@@ -2401,7 +2410,7 @@ fn the_name_rule_tells_libraries_from_programs_by_their_binary_targets() {
         name_violations(&members),
         [
             "protocols/ieee80211/sta: named oer-sta, expected oer-ieee80211-sta",
-            "firmware/apps/w2: named oer-apps-w2, expected oer-firmware-apps-w2",
+            "firmware/apps/example: named oer-apps-example, expected oer-firmware-apps-example",
             "tools/image/bundle: named oer-tool-image-bundle, expected oer-image-bundle",
             "tools/pins: named oer-pins, expected oer-tool-pins",
         ]
@@ -2562,7 +2571,7 @@ fn the_edge_rules_see_optional_target_and_aliased_dependencies_and_judge_by_path
 [dependencies]
 hal = { package = "oer-esp32s31-hal", version = "1", optional = true }
 [target.'cfg(target_arch = "riscv32")'.dependencies]
-app = { package = "oer-firmware-apps-w3", version = "1" }
+app = { package = "oer-firmware-apps-radio-root", version = "1" }
 [dev-dependencies]
 tool = { package = "oer-tool-pins", version = "1" }
 "#,
@@ -2575,7 +2584,12 @@ tool = { package = "oer-tool-pins", version = "1" }
             )
         },
         member("chips/esp32s31/hal", "oer-esp32s31-hal", false, &[]),
-        member("firmware/apps/w3", "oer-firmware-apps-w3", true, &[]),
+        member(
+            "firmware/apps/radio-root",
+            "oer-firmware-apps-radio-root",
+            true,
+            &[],
+        ),
         member("tools/pins", "oer-tool-pins", true, &[]),
         member("tools/image/build", "oer-image-build", false, &[]),
         member(
@@ -2602,7 +2616,7 @@ tool = { package = "oer-tool-pins", version = "1" }
     assert_eq!(
         forbidden_edges(&members, image_or_program),
         BTreeSet::from([
-            edge("chips/espressif/executor", "firmware/apps/w3"),
+            edge("chips/espressif/executor", "firmware/apps/radio-root"),
             edge("tools/image/checks", "tools/pins"),
         ])
     );
@@ -3106,7 +3120,7 @@ fn only_a_composition_and_a_facade_assemble_runtimes_and_backends() {
                 (Role::Pac, "chips/esp32s31/pac", false),
                 (Role::HilAgent, "protocols/hil/agent", false),
                 (Role::HilImage, "firmware/hil/esp32s31", false),
-                (Role::Image, "firmware/apps/w3", false),
+                (Role::Image, "firmware/apps/radio-root", false),
             ],
         );
         assert!(!keeps_the_backend_rule(from), "{from:?}");
@@ -3232,7 +3246,7 @@ fn hil_roles_keep_radio_out_of_the_framework_and_images_behind_the_facade() {
             (PROTOCOL_CORE, "protocols/ieee80211/sta", false),
             (PROTOCOL_PORT, "protocols/ieee80211/port", false),
             (PROTOCOL_WIRE, "protocols/ieee80211/wire", false),
-            (Role::Image, "firmware/apps/w3", false),
+            (Role::Image, "firmware/apps/radio-root", false),
         ],
     );
 }
@@ -3436,11 +3450,7 @@ fn firmware_inclusions(
 
 /// Image sources that a package outside `firmware/` includes through
 /// `#[path]`, with what removes each.
-const FIRMWARE_SOURCES_INCLUDED: &[Deviation] = &[(
-    "tools/image/cli/src/main.rs",
-    "firmware/apps/w1/src/own/crc32.rs",
-    "the W1 image removal (#848)",
-)];
+const FIRMWARE_SOURCES_INCLUDED: &[Deviation] = &[];
 
 #[test]
 fn no_package_outside_firmware_includes_an_image_source() {
@@ -3466,13 +3476,13 @@ fn the_inclusion_scan_resolves_nested_path_attributes_into_firmware() {
 #[path = "../../../firmware/hil/image/src/cache.rs"]
 mod cache;
 mod nested {
-    #[path = "../../../firmware/apps/w1/src/crc.rs"]
+    #[path = "../../../firmware/apps/boot-smoke/src/crc.rs"]
     mod crc;
 }
 #[path = "../src/helper.rs"]
 mod helper;
-// #[path = "../../../firmware/apps/w1/src/comment.rs"]
-const TEXT: &str = "#[path = \"../../../firmware/apps/w1/src/string.rs\"]";
+// #[path = "../../../firmware/apps/boot-smoke/src/comment.rs"]
+const TEXT: &str = "#[path = \"../../../firmware/apps/boot-smoke/src/string.rs\"]";
 "##,
     )
     .expect("source");
@@ -3487,7 +3497,7 @@ const TEXT: &str = "#[path = \"../../../firmware/apps/w1/src/string.rs\"]";
     assert_eq!(
         found,
         BTreeSet::from([
-            inclusion("firmware/apps/w1/src/crc.rs"),
+            inclusion("firmware/apps/boot-smoke/src/crc.rs"),
             inclusion("firmware/hil/image/src/cache.rs"),
         ])
     );
@@ -3788,85 +3798,4 @@ fn the_hal_ratchet_fails_on_a_new_file_a_changed_count_and_a_gone_entry() {
         )
         .is_empty()
     );
-}
-
-fn w3_bypasses_the_facade(from: &Member, to: &Member) -> bool {
-    from.path == "firmware/apps/w3"
-        && !matches!(
-            role(&to.path),
-            Some(
-                Role::Facade
-                    | Role::Composition
-                    | Role::Platform
-                    | Role::PlatformContract
-                    | Role::Portable
-                    | Role::EmbassyAdapter
-                    | Role::SharedVocabulary
-                    | Role::ObservationContract
-            )
-        )
-}
-// Typed interrupt/root ownership, the SAR handler, and the explicitly image-selected
-// unwrap engine are the only remaining implementation edges. No port or runtime.
-const W3_IMPLEMENTATION_EDGES: &[Deviation] = &[
-    (
-        "firmware/apps/w3",
-        "chips/espressif/usb-serial-jtag",
-        "application console endpoint; shared image setup moves to compose (#848)",
-    ),
-    (
-        "firmware/apps/w3",
-        "chips/esp32s31/hal",
-        "image root and interrupt owners; common image setup moves to compose (#848)",
-    ),
-    (
-        "firmware/apps/w3",
-        "chips/esp32s31/phy",
-        "SAR/PWDET interrupt binding moves to compose (#848)",
-    ),
-    (
-        "firmware/apps/w3",
-        "protocols/ieee80211/cipher",
-        "key-unwrap engine remains selected by the image (#844)",
-    ),
-];
-#[test]
-fn w3_reaches_the_station_only_through_its_facade() {
-    let found = forbidden_edges(&workspace_members(), w3_bypasses_the_facade);
-    let differences = deviation_differences(&found, W3_IMPLEMENTATION_EDGES);
-    assert!(differences.is_empty(), "{}", differences.join("\n"));
-}
-#[test]
-fn the_thin_image_rule_accepts_facades_and_rejects_backend_runtime_and_port_bypasses() {
-    let image = member("firmware/apps/w3", "oer-firmware-apps-w3", true, &[]);
-    for path in [
-        "chips/esp32s31/wifi",
-        "chips/esp32s31/compose",
-        "portable/embassy/net",
-        "protocols/network",
-    ] {
-        assert!(
-            !w3_bypasses_the_facade(&image, &member(path, "fixture", false, &[])),
-            "{path}"
-        );
-    }
-    for path in [
-        "chips/esp32s31/ieee80211/driver",
-        "protocols/ieee80211/runtime",
-        "protocols/ieee80211/port",
-        "protocols/ieee80211/sta",
-    ] {
-        assert!(
-            w3_bypasses_the_facade(&image, &member(path, "fixture", false, &[])),
-            "{path}"
-        );
-    }
-    for backend in [Role::HardwareDriver, Role::ChipAdapter] {
-        assert!(!role_allows(
-            backend,
-            PROTOCOL_RUNTIME,
-            "protocols/ieee80211/runtime"
-        ));
-        assert!(!role_allows(backend, Role::Facade, "chips/esp32s31/wifi"));
-    }
 }

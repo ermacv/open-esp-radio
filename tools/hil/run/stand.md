@@ -68,7 +68,7 @@ Receipts determine the currently loaded bundle; the journal records history.
 See [the flash contract](FLASH.md) for ownership and catalog handling.
 
 ```console
-cargo fw flash w1 --board s31-a
+cargo fw flash ../hil/esp32s31 --board s31-a
 ```
 
 `dashboard` serves a page on the loopback interface (`--port` changes the

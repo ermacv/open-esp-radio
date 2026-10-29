@@ -415,14 +415,12 @@ release a secondary hart.
   Compiler `panic_const_async_fn_resumed` sites have a separate row outside
   the budgets and target of 0, based on the executor's runtime `DONE` check
   (not a type guarantee) and `.await` never polling a completed child again.
-- The w0, w1, w2, w3, b0, boot-smoke and radio-root images write diagnostic
+- The boot-smoke and radio-root images write diagnostic
   bytes directly, without `core::fmt` writer or argument dispatch. Host and
   test renderers may format values.
   Panic capture keeps static messages through `PanicMessage::as_str()`;
   parameterized messages are marked without rendering them. Next-boot panic
   output uses the existing binary diagnostic record.
-  W3 retains `core::fmt::write` only in subtle/sec1 panic metadata on the
-  SAE path; the RSN sans-IO boundary owns their conversion to typed errors.
 - Interrupt handlers and the executor code they run execute from SRAM or ROM.
   P2 tasks may run from PSRAM (the S31 reaches flash and PSRAM through
   separate controllers). Nothing runs from cached flash. The image check
@@ -933,7 +931,7 @@ its model and conformance case.
   follows. Bank1 CC0/CC1/overflow have hw32 masked-W1C coverage; bank0/NRT
   and other feature lanes have vendor coverage, not hardware verification. The opaque task +0x4bc view is diagnostic-only and is never read by
   production. Both faults retain primary observations and task enables and
-  quarantine owners through `fatal::reset_recording`; B0 retains all eight gate observation words in the common fault envelope. The separate CTE interrupt bank is outside this policy;
+  quarantine owners through `fatal::reset_recording`. The separate CTE interrupt bank is outside this policy;
   production has no enabled CTE interrupt consumer. These sequential reads
   neither prove producer shutdown nor name opaque causes.
 - **IEEE 802.15.4** (`protocols/ieee802154`, driver

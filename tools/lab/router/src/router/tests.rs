@@ -83,7 +83,7 @@ fn show_profiled() -> String {
     show(&radio, &ap)
 }
 
-/// The router's state before the first W1 run: another channel, HE40, the
+/// The router's state before the first HIL run: another channel, HE40, the
 /// radio disabled, the AP hidden with another SSID.
 fn show_before() -> String {
     show(
@@ -178,7 +178,7 @@ const CHANNELS_PREFIX: &str = "phy=";
 const SET_PREFIX: &str = "uci set";
 const IW_PREFIX: &str = "info=";
 
-/// A router on its first W1 run: it settles after two reads.
+/// A router on its first HIL run: it settles after two reads.
 fn first_run() -> Canned {
     Canned::new(vec![
         (CHANGES_PREFIX, vec![Ok("\n".to_owned())]),
@@ -334,38 +334,6 @@ fn the_host_refuses_lines_outside_the_allowlist() {
     assert!(error.contains("outside the allowlist"), "{error}");
 }
 
-#[test]
-fn w3_applies_and_verifies_open_security_and_disables_he() {
-    let p = Profile::w3("radio9", "lab_ap", INTERFACE, 6, SSID).unwrap();
-    let script = p.apply_script().unwrap();
-    assert!(script.contains("wireless.lab_ap.encryption=none"));
-    assert!(script.contains("wireless.radio9.ieee80211ax=0"));
-    assert!(script.contains("wireless.lab_ap.network=oer_w3"));
-    assert!(script.contains("wireless.lab_ap.isolate=1"));
-    assert!(script.contains("wifi down radio9"));
-    assert!(script.contains("wifi up radio9"));
-    assert!(!profile().apply_script().unwrap().contains("encryption"));
-    let configured = show_profiled().replace("encryption='psk2'", "encryption='none'")
-        + "wireless.radio9.ieee80211ax='0'\n";
-    assert!(
-        Wireless::parse(&configured, SSID)
-            .unwrap()
-            .check_after(&p)
-            .is_ok()
-    );
-    for broken in [
-        configured.replace("encryption='none'", "encryption='psk2'"),
-        configured.replace("ieee80211ax='0'", "ieee80211ax='1'"),
-    ] {
-        assert!(
-            Wireless::parse(&broken, SSID)
-                .unwrap()
-                .check_after(&p)
-                .is_err()
-        );
-    }
-}
-
 fn w4_profile() -> Profile {
     Profile::w4("radio9", "lab_ap", INTERFACE, 6, SSID, PASSPHRASE).unwrap()
 }
@@ -416,7 +384,7 @@ fn w4_scripted_router_applies_wpa2_ccmp_ht20_without_pmf_and_short_gtk_rekey() {
         "wireless.lab_ap.wpa_group_rekey=30",
         "wireless.radio9.htmode=HT20",
         "wireless.radio9.ieee80211ax=0",
-        "wireless.lab_ap.network=oer_w3",
+        "wireless.lab_ap.network=oer_station",
         "wireless.lab_ap.isolate=1",
     ] {
         assert!(script.contains(setting));

@@ -1,4 +1,4 @@
-//! The dedicated W3 BSS network. All non-W3 network sections are fingerprinted
+//! The dedicated station BSS network. All non-station network sections are fingerprinted
 //! before and after applying it; no LAN address, port or route is rewritten.
 
 use crate::{
@@ -8,10 +8,10 @@ use crate::{
 use serde::Serialize;
 use std::{net::Ipv4Addr, time::Duration};
 
-pub const NAME: &str = "oer_w3";
-pub const BRIDGE: &str = "br-oer-w3";
+pub const NAME: &str = "oer_station";
+pub const BRIDGE: &str = "br-oer-station";
 pub const GATEWAY: Ipv4Addr = Ipv4Addr::new(10, 231, 0, 1);
-pub const LEASE_FILE: &str = "/tmp/oer-w3.leases";
+pub const LEASE_FILE: &str = "/tmp/oer-station.leases";
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct Setting {
@@ -22,73 +22,76 @@ pub struct Setting {
 
 fn settings() -> Vec<Setting> {
     let scalar = [
-        ("network.oer_w3_device", "device"),
-        ("network.oer_w3_device.name", BRIDGE),
-        ("network.oer_w3_device.type", "bridge"),
-        ("network.oer_w3_device.bridge_empty", "1"),
-        ("network.oer_w3_device.ipv6", "0"),
-        ("network.oer_w3", "interface"),
-        ("network.oer_w3.device", BRIDGE),
-        ("network.oer_w3.proto", "static"),
-        ("network.oer_w3.ipaddr", "10.231.0.1"),
-        ("network.oer_w3.netmask", "255.255.255.0"),
-        ("network.oer_w3.delegate", "0"),
-        ("network.oer_w3.defaultroute", "0"),
-        ("dhcp.oer_w3_dns", "dnsmasq"),
-        ("dhcp.oer_w3_dns.port", "0"),
-        ("dhcp.oer_w3_dns.nonwildcard", "1"),
-        ("dhcp.oer_w3_dns.localuse", "0"),
-        ("dhcp.oer_w3_dns.noresolv", "1"),
-        ("dhcp.oer_w3_dns.nohosts", "1"),
-        ("dhcp.oer_w3_dns.readethers", "0"),
-        ("dhcp.oer_w3_dns.authoritative", "1"),
-        ("dhcp.oer_w3_dns.leasefile", LEASE_FILE),
-        ("dhcp.oer_w3", "dhcp"),
-        ("dhcp.oer_w3.interface", NAME),
-        ("dhcp.oer_w3.instance", "oer_w3_dns"),
-        ("dhcp.oer_w3.start", "100"),
-        ("dhcp.oer_w3.limit", "100"),
-        ("dhcp.oer_w3.leasetime", "15m"),
-        ("dhcp.oer_w3.force", "1"),
-        ("dhcp.oer_w3.ignore", "0"),
-        ("dhcp.oer_w3.ra", "disabled"),
-        ("dhcp.oer_w3.dhcpv6", "disabled"),
-        ("dhcp.oer_w3.ndp", "disabled"),
-        ("firewall.oer_w3", "zone"),
-        ("firewall.oer_w3.name", NAME),
-        ("firewall.oer_w3.input", "REJECT"),
-        ("firewall.oer_w3.output", "ACCEPT"),
-        ("firewall.oer_w3.forward", "REJECT"),
-        ("firewall.oer_w3.masq", "0"),
-        ("firewall.oer_w3.masq6", "0"),
-        ("firewall.oer_w3_dhcp", "rule"),
-        ("firewall.oer_w3_dhcp.name", "oer-w3-dhcp"),
-        ("firewall.oer_w3_dhcp.src", NAME),
-        ("firewall.oer_w3_dhcp.proto", "udp"),
-        ("firewall.oer_w3_dhcp.src_port", "68"),
-        ("firewall.oer_w3_dhcp.dest_port", "67"),
-        ("firewall.oer_w3_dhcp.family", "ipv4"),
-        ("firewall.oer_w3_dhcp.target", "ACCEPT"),
-        ("firewall.oer_w3_ping", "rule"),
-        ("firewall.oer_w3_ping.name", "oer-w3-ping"),
-        ("firewall.oer_w3_ping.src", NAME),
-        ("firewall.oer_w3_ping.proto", "icmp"),
-        ("firewall.oer_w3_ping.icmp_type", "echo-request"),
-        ("firewall.oer_w3_ping.dest_ip", "10.231.0.1"),
-        ("firewall.oer_w3_ping.family", "ipv4"),
-        ("firewall.oer_w3_ping.target", "ACCEPT"),
-        ("firewall.oer_w3_out", "rule"),
-        ("firewall.oer_w3_out.name", "oer-w3-no-forward-out"),
-        ("firewall.oer_w3_out.src", NAME),
-        ("firewall.oer_w3_out.dest", "*"),
-        ("firewall.oer_w3_out.proto", "all"),
-        ("firewall.oer_w3_out.target", "REJECT"),
-        ("firewall.oer_w3_in", "rule"),
-        ("firewall.oer_w3_in.name", "oer-w3-no-forward-in"),
-        ("firewall.oer_w3_in.src", "*"),
-        ("firewall.oer_w3_in.dest", NAME),
-        ("firewall.oer_w3_in.proto", "all"),
-        ("firewall.oer_w3_in.target", "REJECT"),
+        ("network.oer_station_device", "device"),
+        ("network.oer_station_device.name", BRIDGE),
+        ("network.oer_station_device.type", "bridge"),
+        ("network.oer_station_device.bridge_empty", "1"),
+        ("network.oer_station_device.ipv6", "0"),
+        ("network.oer_station", "interface"),
+        ("network.oer_station.device", BRIDGE),
+        ("network.oer_station.proto", "static"),
+        ("network.oer_station.ipaddr", "10.231.0.1"),
+        ("network.oer_station.netmask", "255.255.255.0"),
+        ("network.oer_station.delegate", "0"),
+        ("network.oer_station.defaultroute", "0"),
+        ("dhcp.oer_station_dns", "dnsmasq"),
+        ("dhcp.oer_station_dns.port", "0"),
+        ("dhcp.oer_station_dns.nonwildcard", "1"),
+        ("dhcp.oer_station_dns.localuse", "0"),
+        ("dhcp.oer_station_dns.noresolv", "1"),
+        ("dhcp.oer_station_dns.nohosts", "1"),
+        ("dhcp.oer_station_dns.readethers", "0"),
+        ("dhcp.oer_station_dns.authoritative", "1"),
+        ("dhcp.oer_station_dns.leasefile", LEASE_FILE),
+        ("dhcp.oer_station", "dhcp"),
+        ("dhcp.oer_station.interface", NAME),
+        ("dhcp.oer_station.instance", "oer_station_dns"),
+        ("dhcp.oer_station.start", "100"),
+        ("dhcp.oer_station.limit", "100"),
+        ("dhcp.oer_station.leasetime", "15m"),
+        ("dhcp.oer_station.force", "1"),
+        ("dhcp.oer_station.ignore", "0"),
+        ("dhcp.oer_station.ra", "disabled"),
+        ("dhcp.oer_station.dhcpv6", "disabled"),
+        ("dhcp.oer_station.ndp", "disabled"),
+        ("firewall.oer_station", "zone"),
+        ("firewall.oer_station.name", NAME),
+        ("firewall.oer_station.input", "REJECT"),
+        ("firewall.oer_station.output", "ACCEPT"),
+        ("firewall.oer_station.forward", "REJECT"),
+        ("firewall.oer_station.masq", "0"),
+        ("firewall.oer_station.masq6", "0"),
+        ("firewall.oer_station_dhcp", "rule"),
+        ("firewall.oer_station_dhcp.name", "oer-station-dhcp"),
+        ("firewall.oer_station_dhcp.src", NAME),
+        ("firewall.oer_station_dhcp.proto", "udp"),
+        ("firewall.oer_station_dhcp.src_port", "68"),
+        ("firewall.oer_station_dhcp.dest_port", "67"),
+        ("firewall.oer_station_dhcp.family", "ipv4"),
+        ("firewall.oer_station_dhcp.target", "ACCEPT"),
+        ("firewall.oer_station_ping", "rule"),
+        ("firewall.oer_station_ping.name", "oer-station-ping"),
+        ("firewall.oer_station_ping.src", NAME),
+        ("firewall.oer_station_ping.proto", "icmp"),
+        ("firewall.oer_station_ping.icmp_type", "echo-request"),
+        ("firewall.oer_station_ping.dest_ip", "10.231.0.1"),
+        ("firewall.oer_station_ping.family", "ipv4"),
+        ("firewall.oer_station_ping.target", "ACCEPT"),
+        ("firewall.oer_station_out", "rule"),
+        (
+            "firewall.oer_station_out.name",
+            "oer-station-no-forward-out",
+        ),
+        ("firewall.oer_station_out.src", NAME),
+        ("firewall.oer_station_out.dest", "*"),
+        ("firewall.oer_station_out.proto", "all"),
+        ("firewall.oer_station_out.target", "REJECT"),
+        ("firewall.oer_station_in", "rule"),
+        ("firewall.oer_station_in.name", "oer-station-no-forward-in"),
+        ("firewall.oer_station_in.src", "*"),
+        ("firewall.oer_station_in.dest", NAME),
+        ("firewall.oer_station_in.proto", "all"),
+        ("firewall.oer_station_in.target", "REJECT"),
     ];
     let mut values = scalar
         .into_iter()
@@ -99,12 +102,12 @@ fn settings() -> Vec<Setting> {
         })
         .collect::<Vec<_>>();
     for (path, value) in [
-        ("dhcp.oer_w3_dns.interface", NAME),
-        ("dhcp.oer_w3_dns.notinterface", "loopback"),
-        ("dhcp.oer_w3.dhcp_option", "3,10.231.0.1"),
-        ("dhcp.oer_w3.dhcp_option", "6"),
-        ("firewall.oer_w3.network", NAME),
-        ("firewall.oer_w3.device", BRIDGE),
+        ("dhcp.oer_station_dns.interface", NAME),
+        ("dhcp.oer_station_dns.notinterface", "loopback"),
+        ("dhcp.oer_station.dhcp_option", "3,10.231.0.1"),
+        ("dhcp.oer_station.dhcp_option", "6"),
+        ("firewall.oer_station.network", NAME),
+        ("firewall.oer_station.device", BRIDGE),
     ] {
         values.push(Setting {
             path: path.into(),
@@ -140,22 +143,22 @@ pub fn changes(radio: &str, ap: &str, channel: u8) -> Vec<Setting> {
     }
     for value in &mut values {
         if value.value == BRIDGE {
-            value.value = "<W3 bridge>".into();
+            value.value = "<station bridge>".into();
         }
     }
     values
 }
 
 const SECTIONS: &[&str] = &[
-    "network.oer_w3_device",
-    "network.oer_w3",
-    "dhcp.oer_w3_dns",
-    "dhcp.oer_w3",
-    "firewall.oer_w3",
-    "firewall.oer_w3_dhcp",
-    "firewall.oer_w3_ping",
-    "firewall.oer_w3_out",
-    "firewall.oer_w3_in",
+    "network.oer_station_device",
+    "network.oer_station",
+    "dhcp.oer_station_dns",
+    "dhcp.oer_station",
+    "firewall.oer_station",
+    "firewall.oer_station_dhcp",
+    "firewall.oer_station_ping",
+    "firewall.oer_station_out",
+    "firewall.oer_station_in",
 ];
 
 pub fn render() -> Result<String> {
@@ -171,11 +174,11 @@ pub fn render() -> Result<String> {
         ));
     }
     script.push_str(
-        "uci reorder firewall.oer_w3_out=0\nuci reorder firewall.oer_w3_in=0\n\
+        "uci reorder firewall.oer_station_out=0\nuci reorder firewall.oer_station_in=0\n\
         fw4 check >/dev/null\n\
         uci commit firewall\n/etc/init.d/firewall reload >/dev/null\n\
         uci commit network\nuci commit dhcp\nubus call network reload >/dev/null\n\
-        ifup oer_w3\n",
+        ifup oer_station\n",
     );
     Ok(script)
 }
@@ -203,26 +206,26 @@ pub fn check_routes(text: &str) -> Result<()> {
             .checked_shl(32 - prefix.min(24))
             .ok_or("invalid subnet mask")?;
         if u32::from(address) & mask == u32::from(GATEWAY) & mask {
-            return Err("W3 subnet overlaps an existing non-W3 route".into());
+            return Err("station subnet overlaps an existing non-station route".into());
         }
     }
     Ok(())
 }
 
 fn fingerprint(remote: &mut dyn Remote) -> Result<String> {
-    let value = remote.run("set -e\nconfig=$(uci show network)\nprintf '%s\\n' \"$config\" | awk '$0 !~ /^network\\.oer_w3(_device)?[.=]/' | sha256sum | cut -d ' ' -f 1")?;
+    let value = remote.run("set -e\nconfig=$(uci show network)\nprintf '%s\\n' \"$config\" | awk '$0 !~ /^network\\.oer_station(_device)?[.=]/' | sha256sum | cut -d ' ' -f 1")?;
     let value = value.trim();
     if value.len() != 64 || !value.bytes().all(|b| b.is_ascii_hexdigit()) {
-        return Err("invalid non-W3 network fingerprint".into());
+        return Err("invalid non-station network fingerprint".into());
     }
     Ok(value.into())
 }
 
-/// Read-only preflight. Returns the fingerprint of every non-W3 network section.
+/// Read-only preflight. Returns the fingerprint of every non-station network section.
 pub fn prepare(remote: &mut dyn Remote) -> Result<String> {
     let changes = remote.run("set -e\nfor package in network dhcp firewall; do changes=$(uci changes \"$package\"); printf '%s\\n' \"$changes\" | sed 's/=.*//'; done")?;
     if !changes.trim().is_empty() {
-        return Err("staged network, DHCP or firewall changes refuse W3".into());
+        return Err("staged network, DHCP or firewall changes refuse station".into());
     }
     let routes = remote.run(&format!("set -e\ncommand -v fw4 >/dev/null\nnft list table inet fw4 >/dev/null\ntest -x /etc/init.d/dnsmasq\nroutes=$(ip -4 route show table all)\nprintf '%s\\n' \"$routes\" | awk -v own_bridge={} '{{own=0; for(i=1;i<NF;i++) if($i==\"dev\" && $(i+1)==own_bridge) own=1; if(!own && NF) {{ if($1 ~ /^(local|broadcast|unreachable|blackhole|prohibit|throw)$/) print $2; else print $1 }} }}'", quote(BRIDGE)?))?;
     check_routes(&routes)?;
@@ -255,8 +258,8 @@ fn verify_script(interface: &str) -> Result<String> {
         "test \"$(readlink -f /sys/class/net/{}/master)\" = /sys/devices/virtual/net/{}\n\
          test \"$(ls /sys/class/net/{}/brif)\" = {}\n\
          test \"$(ip -4 -o addr show dev {} | awk '{{print $4}}')\" = 10.231.0.1/24\n\
-         nft list chain inet fw4 forward_oer_w3 | grep -qF oer-w3-no-forward-out\n\
-         nft list chain inet fw4 forward | grep -qF oer-w3-no-forward-in\n\
+         nft list chain inet fw4 forward_oer_station | grep -qF oer-station-no-forward-out\n\
+         nft list chain inet fw4 forward | grep -qF oer-station-no-forward-in\n\
          printf 'verified\\n'\n",
         quote(interface)?,
         BRIDGE,
@@ -269,10 +272,10 @@ fn verify_script(interface: &str) -> Result<String> {
 
 pub fn verify(remote: &mut dyn Remote, interface: &str, before: &str) -> Result<()> {
     // fw4 resolves the source-zone device set again now that netifd has
-    // created the bridge. The initial reload precedes W3 activation.
+    // created the bridge. The initial reload precedes station activation.
     remote
         .run("/etc/init.d/firewall reload >/dev/null")
-        .map_err(|_| "cannot reload firewall for the active W3 device")?;
+        .map_err(|_| "cannot reload firewall for the active station device")?;
     let script = verify_script(interface)?;
     let mut verified = false;
     for attempt in 0..10 {
@@ -288,17 +291,17 @@ pub fn verify(remote: &mut dyn Remote, interface: &str, before: &str) -> Result<
         }
     }
     if !verified {
-        return Err("W3 isolated network runtime verification failed".into());
+        return Err("station isolated network runtime verification failed".into());
     }
     if fingerprint(remote)? != before {
-        return Err("non-W3 network configuration changed".into());
+        return Err("non-station network configuration changed".into());
     }
     // DHCP starts only once the AP belongs to its addressed bridge.
     remote
         .run("/etc/init.d/dnsmasq reload >/dev/null")
-        .map_err(|_| "cannot reload W3 DHCP service")?;
+        .map_err(|_| "cannot reload station DHCP service")?;
     let ready = format!(
-        "set -e\ntest -r {}\ntest \"$(ubus call service list '{{\"name\":\"dnsmasq\"}}' | jsonfilter -e '@.dnsmasq.instances.oer_w3_dns.running')\" = true\nprintf 'ready\\n'",
+        "set -e\ntest -r {}\ntest \"$(ubus call service list '{{\"name\":\"dnsmasq\"}}' | jsonfilter -e '@.dnsmasq.instances.oer_station_dns.running')\" = true\nprintf 'ready\\n'",
         quote(LEASE_FILE)?
     );
     for attempt in 0..10 {
@@ -312,7 +315,7 @@ pub fn verify(remote: &mut dyn Remote, interface: &str, before: &str) -> Result<
             remote.pause(Duration::from_secs(1));
         }
     }
-    Err("W3 DHCP instance did not become ready".into())
+    Err("station DHCP instance did not become ready".into())
 }
 
 #[cfg(test)]
@@ -321,16 +324,16 @@ mod tests {
     #[test]
     fn rendered_network_is_dedicated_and_exposes_only_dhcp_and_gateway_echo() {
         let script = render().unwrap();
-        assert!(script.contains("network.oer_w3_device.type=bridge"));
+        assert!(script.contains("network.oer_station_device.type=bridge"));
         assert!(!script.contains(".ports="));
-        assert!(script.contains("network.oer_w3.ipaddr=10.231.0.1"));
-        assert!(script.contains("dhcp.oer_w3.instance=oer_w3_dns"));
-        assert!(script.contains("dhcp.oer_w3_dns.port=0"));
-        assert!(script.contains("dhcp.oer_w3_dns.leasefile=/tmp/oer-w3.leases"));
-        assert!(script.contains("dhcp.oer_w3.dhcp_option=3,10.231.0.1"));
-        assert!(script.contains("firewall.oer_w3.forward=REJECT"));
-        assert!(script.contains("firewall.oer_w3.masq=0"));
-        assert!(script.contains("firewall.oer_w3_ping.dest_ip=10.231.0.1"));
+        assert!(script.contains("network.oer_station.ipaddr=10.231.0.1"));
+        assert!(script.contains("dhcp.oer_station.instance=oer_station_dns"));
+        assert!(script.contains("dhcp.oer_station_dns.port=0"));
+        assert!(script.contains("dhcp.oer_station_dns.leasefile=/tmp/oer-station.leases"));
+        assert!(script.contains("dhcp.oer_station.dhcp_option=3,10.231.0.1"));
+        assert!(script.contains("firewall.oer_station.forward=REJECT"));
+        assert!(script.contains("firewall.oer_station.masq=0"));
+        assert!(script.contains("firewall.oer_station_ping.dest_ip=10.231.0.1"));
         assert!(!script.contains("forwarding"));
         assert!(!script.contains("network.lan"));
         assert!(!script.contains("network.wan"));
@@ -371,8 +374,8 @@ mod tests {
         assert!(values.iter().all(|s| s.value != BRIDGE));
         let script = verify_script("made-up'interface").unwrap();
         assert!(script.contains(&quote("made-up'interface").unwrap()));
-        assert!(script.contains("forward_oer_w3 | grep -qF oer-w3-no-forward-out"));
-        assert!(script.contains("fw4 forward | grep -qF oer-w3-no-forward-in"));
+        assert!(script.contains("forward_oer_station | grep -qF oer-station-no-forward-out"));
+        assert!(script.contains("fw4 forward | grep -qF oer-station-no-forward-in"));
     }
 
     struct Fake {
@@ -417,7 +420,7 @@ mod tests {
         assert_eq!(remote.scripts.len(), 1);
     }
     #[test]
-    fn runtime_requires_unchanged_non_w3_network_and_starts_dhcp_after_bridge_checks() {
+    fn runtime_requires_unchanged_non_station_network_and_starts_dhcp_after_bridge_checks() {
         let hash = "a".repeat(64);
         let mut remote = Fake {
             replies: [

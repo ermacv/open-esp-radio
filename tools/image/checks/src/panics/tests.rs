@@ -413,7 +413,10 @@ fn a_function_takes_the_layer_of_the_crate_its_name_starts_with() {
         ),
         ("oer-time", Path::new("portable/time")),
         ("oer-ieee80211-sta", Path::new("protocols/ieee80211/sta")),
-        ("oer-firmware-apps-w1", Path::new("firmware/apps/w1")),
+        (
+            "oer-firmware-apps-boot-smoke",
+            Path::new("firmware/apps/boot-smoke"),
+        ),
         ("oer-image-checks", Path::new("tools/image/checks")),
     ]);
     for (name, layer) in [
@@ -430,7 +433,7 @@ fn a_function_takes_the_layer_of_the_crate_its_name_starts_with() {
             Layer::Portable,
         ),
         ("oer_ieee80211_sta::Station::step", Layer::Protocols),
-        ("oer_firmware_apps_w1::main", Layer::Firmware),
+        ("oer_firmware_apps_boot_smoke::main", Layer::Firmware),
         ("core::ptr::drop_in_place<oer_time::Instant>", Layer::Core),
         ("compiler_builtins::mem::memcpy", Layer::Core),
         ("embassy_sync::signal::Signal<M,T>::wait", Layer::Embassy),

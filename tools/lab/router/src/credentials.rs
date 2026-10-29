@@ -53,11 +53,11 @@ mod tests {
     #[test]
     fn generated_credentials_differ_and_fit_wpa2_and_show_nothing() {
         let (first, second) = (
-            super::ssid("oer-w1").unwrap(),
-            super::ssid("oer-w1").unwrap(),
+            super::ssid("oer-hil").unwrap(),
+            super::ssid("oer-hil").unwrap(),
         );
         assert_ne!(first, second);
-        assert!(first.expose().starts_with("oer-w1-") && first.expose().len() == 15);
+        assert!(first.expose().starts_with("oer-hil-") && first.expose().len() == 16);
         let passphrase = super::passphrase().unwrap();
         assert!((8..=63).contains(&passphrase.expose().len()));
         assert_eq!(format!("{passphrase:?}"), "<generated>");
