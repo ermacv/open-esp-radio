@@ -33,7 +33,7 @@ fn cases() -> Result<Vec<AesKeyUnwrap>> {
                     *last ^= 1;
                 }
                 requests.push(AesKeyUnwrap {
-                    operation: u32::try_from(requests.len() + 1)?,
+                    operation: u32::try_from(requests.len().saturating_add(1))?,
                     kek,
                     wrapped,
                 });
@@ -67,18 +67,18 @@ fn matches(
     actual.operation == request.operation
         && actual.completed == request.operation
         && actual.succeeded == successes
-        && actual.refused == request.operation - successes
+        && request.operation.checked_sub(successes) == Some(actual.refused)
         && actual.result == *expected
 }
 
 pub fn run(output: &Path, context: &Context<'_>) -> Result<()> {
     context.with_capture(output, |capture| {
         require_keys::<AesKeyUnwrap>(capture)?;
-        let mut successes = 0;
+        let mut successes = 0u32;
         let mut last = None;
         for request in cases()? {
             let expected = reference(&request)?;
-            successes += u32::from(expected.is_ok());
+            successes = successes.saturating_add(u32::from(expected.is_ok()));
             let actual = capture.request(0, request.clone(), Duration::from_secs(5))?;
             if !matches(&request, &expected, &actual, successes) {
                 context.results.observe(
@@ -113,7 +113,7 @@ mod tests {
             reference(&cases[0]).unwrap().unwrap().as_slice(),
             RFC3394_4_1_KEY_DATA
         );
-        let mut successes = 0;
+        let mut successes = 0u32;
         for (index, case) in cases.iter().enumerate() {
             let result = reference(case).unwrap();
             assert_eq!(result.is_err(), index > 0 && (index - 1) % 3 == 1);
