@@ -607,6 +607,7 @@ mod service_tests {
     fn invalid_service_fields_are_rejected() {
         for details in [
             [0, 255, 0, 0, 0, 0, 0, 0],
+            [0, 5, 0, 0, 0, 0, 0, 0], // retired FrameMetadata code
             [0, 3, 1, 0, 0, 0, 0, 0],
             [0, 6, 0, 0, 0, 0, 0, 14],
             [15, 3, 0, 0, 0, 0, 0, 0],

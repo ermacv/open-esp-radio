@@ -52,10 +52,15 @@ impl SoftwareInterrupt {
             }
         }
     }
-    pub(crate) const fn checked(index: u8) -> Self {
-        match Self::from_index(index) {
-            Some(swi) => swi,
-            None => panic!("software interrupt is out of range"),
+    /// Select from the four source slots without a runtime bounds path.
+    #[cfg(feature = "chip")]
+    pub(crate) const fn at<T>(self, entries: &[T; 4]) -> &T {
+        let [zero, one, two, three] = entries;
+        match self {
+            Self::Zero => zero,
+            Self::One => one,
+            Self::Two => two,
+            Self::Three => three,
         }
     }
     pub const fn index(self) -> usize {

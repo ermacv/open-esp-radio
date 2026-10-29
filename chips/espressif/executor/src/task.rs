@@ -164,7 +164,12 @@ impl<T: Tasks> Spawner<T> {
     {
         task.claim()?.publish(start);
         wake::<T::Binding>(TaskId {
-            executor: const { SoftwareInterrupt::checked(T::EXECUTOR) },
+            executor: const {
+                match SoftwareInterrupt::from_index(T::EXECUTOR) {
+                    Some(swi) => swi,
+                    None => panic!("software interrupt is out of range"),
+                }
+            },
             index: task.index,
         });
         Ok(())
@@ -507,7 +512,12 @@ pub(crate) fn poll_round<T: Tasks>(
         current.0.store(index, Ordering::Relaxed);
         before_poll();
         let waker = TaskId {
-            executor: const { SoftwareInterrupt::checked(T::EXECUTOR) },
+            executor: const {
+                match SoftwareInterrupt::from_index(T::EXECUTOR) {
+                    Some(swi) => swi,
+                    None => panic!("software interrupt is out of range"),
+                }
+            },
             index,
         }
         .waker::<T::Binding>();

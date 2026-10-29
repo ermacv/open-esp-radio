@@ -135,10 +135,12 @@ pub struct UnboundClient<B: 'static, E: SignalExecutor, A: 'static = Timg0AlarmP
 impl<I: Entry<Part = Timg0AlarmInterrupt> + 'static, E: SignalExecutor> UnboundClient<Bound<I>, E> {
     pub fn bind(self, bound: Bound<I>) -> Client<Bound<I>, E> {
         const {
-            assert!(matches!(
+            if !matches!(
                 I::CLASS,
                 oer_espressif_interrupt_table::Class::ExemptExecutorLevel
-            ));
+            ) {
+                panic!("the SAR alarm must be an executor-level exempt entry");
+            }
         }
         self.into_client(bound)
     }

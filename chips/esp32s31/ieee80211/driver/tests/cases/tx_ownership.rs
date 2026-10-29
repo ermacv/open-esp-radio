@@ -101,7 +101,7 @@ fn each_publication_carries_its_control_frame_across_phy_and_queue_changes() {
                 assert_eq!(hardware.tx_control, expected);
                 assert_eq!(slot.state(), TxDmaState::HardwareOwned);
                 hardware.set_tx_completion(
-                    queue.hardware_index(),
+                    queue.hardware_index().get() as u8,
                     MacTxCompletionObservation::new_model(0, 0),
                 );
                 slot.as_mut()

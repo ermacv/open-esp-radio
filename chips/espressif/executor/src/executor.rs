@@ -154,32 +154,31 @@ pub(crate) fn should_yield<B: Binding>() -> bool {
         }
         .reset::<PortOf<B>>()
     });
-    let swi = identity.index();
-    let state = &EXECUTOR_CORE[swi];
-    READY[swi].any()
+    let state = identity.at(&EXECUTOR_CORE);
+    identity.at(&READY).any()
         || crate::chip::is_pending::<B>(software_interrupt_source::<PortOf<B>>(identity))
-        || URGENT[swi].get().is_some_and(|sources| {
+        || identity.at(&URGENT).get().is_some_and(|sources| {
             crate::urgent_sources::pending(sources, crate::chip::is_pending::<B>)
         })
-        || signal_pending::<B>(swi)
+        || signal_pending::<B>(identity)
         || {
             let now = crate::chip::now::<B>();
             ChipStamp::poll_elapsed(state.load(Ordering::Acquire), now)
                 >= crate::poll_stamp::POLL_ADMISSION_MICROS
         }
 }
-fn signal_pending<B: Binding>(swi: usize) -> bool {
+fn signal_pending<B: Binding>(swi: SoftwareInterrupt) -> bool {
     use oer_espressif_interrupt_table::signal::has_pending;
-    let interrupt_mode = INTERRUPT_MODE[swi].load(Ordering::Acquire);
+    let interrupt_mode = swi.at(&INTERRUPT_MODE).load(Ordering::Acquire);
     let pending = match (interrupt_mode, swi) {
-        (true, 0) => has_pending::<InterruptExecutor<B, 0>>(),
-        (true, 1) => has_pending::<InterruptExecutor<B, 1>>(),
-        (true, 2) => has_pending::<InterruptExecutor<B, 2>>(),
-        (true, _) => has_pending::<InterruptExecutor<B, 3>>(),
-        (false, 0) => has_pending::<Executor<B, 0>>(),
-        (false, 1) => has_pending::<Executor<B, 1>>(),
-        (false, 2) => has_pending::<Executor<B, 2>>(),
-        (false, _) => has_pending::<Executor<B, 3>>(),
+        (true, SoftwareInterrupt::Zero) => has_pending::<InterruptExecutor<B, 0>>(),
+        (true, SoftwareInterrupt::One) => has_pending::<InterruptExecutor<B, 1>>(),
+        (true, SoftwareInterrupt::Two) => has_pending::<InterruptExecutor<B, 2>>(),
+        (true, SoftwareInterrupt::Three) => has_pending::<InterruptExecutor<B, 3>>(),
+        (false, SoftwareInterrupt::Zero) => has_pending::<Executor<B, 0>>(),
+        (false, SoftwareInterrupt::One) => has_pending::<Executor<B, 1>>(),
+        (false, SoftwareInterrupt::Two) => has_pending::<Executor<B, 2>>(),
+        (false, SoftwareInterrupt::Three) => has_pending::<Executor<B, 3>>(),
     };
     match pending {
         Ok(pending) => pending,
@@ -529,7 +528,12 @@ pub fn interrupt_handler<
 ) where
     T::Binding: Binding,
 {
-    let swi = const { SoftwareInterrupt::checked(T::EXECUTOR) };
+    let swi = const {
+        match SoftwareInterrupt::from_index(T::EXECUTOR) {
+            Some(swi) => swi,
+            None => panic!("software interrupt is out of range"),
+        }
+    };
     // The line is lowered before the round takes its work: a pend during the
     // round raises it again and runs another round.
     serve_interrupt::<T::Binding, _>(swi, || round::<T::Binding, T>(swi));
@@ -538,7 +542,7 @@ pub fn interrupt_handler<
 /// One round of the interrupt-mode executor `swi`.
 fn round<B: Binding, T: Tasks<Binding = B, Mode = InterruptMode>>(swi: SoftwareInterrupt) {
     use oer_espressif_interrupt_table::signal::service;
-    if !INTERRUPT_MODE[swi.index()].load(Ordering::Acquire) {
+    if !swi.at(&INTERRUPT_MODE).load(Ordering::Acquire) {
         return;
     }
     as_running::<B>(swi as u8, || {
@@ -562,10 +566,9 @@ fn round<B: Binding, T: Tasks<Binding = B, Mode = InterruptMode>>(swi: SoftwareI
 /// Make executor `swi` run again: a thread-mode executor sees its work flag
 /// at its next wake, an interrupt-mode executor's handler runs.
 pub(crate) fn pend<B: Binding>(swi: SoftwareInterrupt) {
-    let index = swi.index();
-    let mode = &INTERRUPT_MODE[index];
-    let work = &WORK_PENDING.0[index];
-    let core = &EXECUTOR_CORE[index];
+    let mode = swi.at(&INTERRUPT_MODE);
+    let work = swi.at(&WORK_PENDING.0);
+    let core = swi.at(&EXECUTOR_CORE);
     if mode.load(Ordering::Acquire) {
         raise_interrupt::<B>(swi);
         return;

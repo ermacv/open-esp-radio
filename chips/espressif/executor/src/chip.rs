@@ -7,7 +7,6 @@ pub(crate) use crate::binding::Binding;
 use crate::{Failure, Fault, SoftwareInterrupt};
 use oer_espressif_boot::drivers::system_timer;
 use oer_espressif_platform_port::{ExecutorPlatform, Hart};
-use oer_memory::OnceValue;
 
 use crate::software_line::{SoftwareLine, serve};
 
@@ -205,7 +204,7 @@ own_line!(3, Three, Line3, own_line_3, line3);
 
 /// Install software interrupt `swi`'s line for its executor.
 pub(crate) fn install_line<B: Binding>(swi: SoftwareInterrupt, line: Line<PortOf<B>>) {
-    let slot = &B::storage().lines[swi.index()];
+    let slot = swi.at(&B::storage().lines);
     line.lower();
     if slot.set(line).is_err() {
         Fault::LinePublished {
@@ -218,7 +217,7 @@ pub(crate) fn install_line<B: Binding>(swi: SoftwareInterrupt, line: Line<PortOf
 /// Software interrupt `swi`'s installed line: none before its executor or
 /// doorbell took it, when there is nothing it could wake.
 fn line<B: Binding>(swi: SoftwareInterrupt) -> Option<Line<PortOf<B>>> {
-    B::storage().lines.get(swi.index()).and_then(OnceValue::get)
+    swi.at(&B::storage().lines).get()
 }
 
 /// Raise software interrupt `swi`; a line no executor took yet has no

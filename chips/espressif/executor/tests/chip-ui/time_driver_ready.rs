@@ -1,3 +1,4 @@
+#![no_std]
 use oer_espressif_executor::{Binding, TimeDriverReady};
 pub fn startup<B: Binding>(ready: TimeDriverReady<B>) {
     #[cfg(not(ui_reject))]
