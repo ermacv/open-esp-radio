@@ -102,13 +102,8 @@ mod tests {
     #[test]
     fn every_image_declares_a_budget_that_parses() -> Result<()> {
         for text in [
-            include_str!("../../../../firmware/apps/b0/Cargo.toml"),
             include_str!("../../../../firmware/apps/boot-smoke/Cargo.toml"),
             include_str!("../../../../firmware/apps/radio-root/Cargo.toml"),
-            include_str!("../../../../firmware/apps/w0/Cargo.toml"),
-            include_str!("../../../../firmware/apps/w1/Cargo.toml"),
-            include_str!("../../../../firmware/apps/w2/Cargo.toml"),
-            include_str!("../../../../firmware/apps/w3/Cargo.toml"),
             include_str!("../../../../firmware/hil/esp32s31/Cargo.toml"),
             include_str!("../../../../firmware/hil/esp32s31-lower-mac/Cargo.toml"),
             include_str!("../../../../firmware/hil/esp32s31-phy/Cargo.toml"),

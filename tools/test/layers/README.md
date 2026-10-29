@@ -63,9 +63,7 @@ is gone both fail, so every list only shrinks:
 - `FIRMWARE_SOURCES_INCLUDED`: `#[path]` inclusions of `firmware/` sources
   from any other root;
 - `HAL_SEQUENCES`: HAL files that wait.
-- `W3_IMPLEMENTATION_EDGES`: the exact remaining image edges for root/IRQ
-  owners, the SAR interrupt binder, the console endpoint and image-selected
-  software key unwrap. Wi-Fi backend, runtime, port and core edges are rejected.
+
 - `EXTERNAL_ASYNC_CRATES`: direct normal `embassy-sync` edges in cooperate,
   the network adapter, the HIL agent and the three HIL images.
 
@@ -113,7 +111,7 @@ name, in AST/token visitation order. Every key includes it, including unique
 sites, so appending a repeat preserves existing keys. Inserting or reordering
 identical sites requires reviewing their classifications.
 
-For example, `firmware/apps/w0/src/main.rs:crate::run:panic-macro:panic:1`
+For example, `firmware/apps/boot-smoke/src/main.rs:crate::run:panic-macro:panic:1`
 names the first `panic!` in `run`. Unregistered-site diagnostics show the
 current `path:line:column` (1-based) for navigation. Stale keys identify sites
 which no longer exist and have no current coordinates.
@@ -148,12 +146,12 @@ Site kinds cover:
   reporters, including generic callback values and simple import aliases;
   qualified `fatal::reset`, fault reporters and panic dispatch are included.
 - `reset-method`: every image `.reset()` call, including executor failure
-  reporters. `[nonterminal]` contains the exact reviewed B0 parser/frame
+  reporters. `[nonterminal]` can contain reviewed parser/frame
   resets which return normally; these use the same stable key format, each
   needs a reason and must still exist.
 - `reset-trigger`: HAL system-reset requests and the typed PAC reset strobe
   used by HAL and the isolated facts image.
-- `retained-reason`, `retained-code`, `retained-slot`: runtime, PHY, B0,
+- `retained-reason`, `retained-code`, `retained-slot`: runtime, PHY,
   IEEE 802.15.4 and HIL reason catalogues, numeric decoder arms (including
   payload subcodes), retained slots and the facts image's `.noinit` slot.
 - `terminal-binding`, `panic-handler`: image entry, exception and PHY

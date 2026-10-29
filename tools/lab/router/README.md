@@ -1,6 +1,6 @@
 # `oer-lab-router`
 
-The stand, for the host tools that use it (`cargo fw` today): the owner's
+The stand, for the host tools that use it (`cargo fw` and HIL): the owner's
 stand file, the OpenWrt lab router that serves the stand's access point,
 the SSH that reaches it, and a lock per router.
 
@@ -94,7 +94,7 @@ nothing else is read:
 | Consumer | Reads |
 | --- | --- |
 | boards, flashing, power | `schema`, `[[hub]]`, `[[board]]` |
-| W1 (`cargo fw run w1`, `cargo fw router`) | `[station_fixture]` `kind`, `ssh_target`, `wireless_interface`, `radio`, `ap_section`, `channel`; the SSID is generated per run |
+| HIL lower-MAC and station | `[station_fixture]` `kind`, `ssh_target`, `wireless_interface`, `radio`, `ap_section`, `channel`; the SSID is generated per run |
 | the stand services and HIL (`cargo stand`, `cargo hil`) | also `[stand]`, the boards' `radios`, `roles`, `reset`, `startup-artifact`, the hubs' `buttons`, `[station].ipv4`, `[access_point]` without credentials, `[air_observer]`, `[bluetooth]`, `[legacy_bss]` |
 
 **Secret** are the generated SSIDs and passphrases, `ssh_target` and the
@@ -106,8 +106,8 @@ attach run logs, captures or the stand file anywhere.
 
 ## The lab router
 
-The router is a lab router: before each W1 run (and on `cargo fw router`)
-the tool brings it to W1's profile and verifies it. The profile is
+The router is a lab router: before each HIL run
+the tool applies and verifies the selected profile. The profile is
 committed and stays; the earlier settings are not restored. Other
 `wifi-iface` sections are never changed.
 
@@ -147,7 +147,7 @@ and the host refuses any line outside the allowlist. In order:
 
 4. The profile: the stand's channel, HT 20 MHz, a 100 TU beacon interval,
    the radio enabled; the stand's SSID on the AP section, enabled, not
-   hidden. W1 leaves encryption unchanged. Keys are write-only: W4 sets its generated
+   hidden. The lower-MAC profile leaves encryption unchanged. Keys are write-only: W4 sets its generated
    passphrase through the script on stdin; no configuration read returns it.
 
    ```sh
@@ -173,79 +173,53 @@ and the host refuses any line outside the allowlist. In order:
 A second run against a router already in the profile sends the same
 scripts; nothing changes and the checks pass the same.
 
-One process at a time drives the router: `cargo fw` holds an exclusive lock
+One process at a time drives the router: HIL holds an exclusive lock
 `$XDG_RUNTIME_DIR/open-esp-radio/routers/router-<hash of the target>.lock` for the whole
-`run w1` or `router`, and a second holder is refused, naming the first.
+run, and a second holder is refused, naming the first.
 
-## W3 open station
+## Isolated station network
 
-`router::Profile::w3` also sets the selected AP's `encryption=none` and the
-radio's `ieee80211ax=0`. The channel is the stand's 2.4 GHz channel, with
-HT20 and a generated run SSID. The profile is committed without restoration.
-It assigns the selected BSS to an isolated `10.231.0.0/24` network, with
+The neutral `station` module owns the network used by W4. Its deployed UCI,
+bridge and lease-file identifiers remain stable across runs.
+
+The station profile assigns the selected BSS to an isolated `10.231.0.0/24` network, with
 OpenWrt at `10.231.0.1` as DHCP server, DHCP router and the sole ping endpoint.
 The existing LAN, its management address and all other network sections are
 preserved. A non-default route overlapping this subnet or staged changes in
 wireless/network/dhcp/firewall refuse the profile before applying it.
 
-The profile replaces only these named W3 sections and changes the selected
+The profile replaces only these named station sections and changes the selected
 wireless radio/BSS. These are the complete settings it owns:
 
 | Section | Settings |
 | --- | --- |
 | `network.oer_w3_device` | Empty bridge, no physical ports, `bridge_empty=1`, IPv6 disabled |
 | `network.oer_w3` | Bridge device, static `10.231.0.1`, netmask `255.255.255.0`, `delegate=0`, `defaultroute=0` |
-| `dhcp.oer_w3_dns` | Dedicated dnsmasq, bound only to W3 and excluding loopback; `nonwildcard=1`, `port=0`, `localuse=0`, `noresolv=1`, `nohosts=1`, `readethers=0`, `authoritative=1`, lease file `/tmp/oer-w3.leases` |
-| `dhcp.oer_w3` | W3 interface and dnsmasq instance, start 100, limit 100, lease 15 minutes, `force=1`, `ignore=0`, DHCP option 3 = `10.231.0.1`, option 6 suppressed; RA, DHCPv6 and NDP disabled |
-| `firewall.oer_w3` | W3 network/bridge only, input REJECT, output ACCEPT, forward REJECT, IPv4/IPv6 masquerade disabled |
-| `firewall.oer_w3_dhcp` | Accept IPv4 UDP 68→67 from W3 to OpenWrt |
-| `firewall.oer_w3_ping` | Accept IPv4 echo requests from W3 only to `10.231.0.1` |
-| `firewall.oer_w3_out`, `firewall.oer_w3_in` | Reject all forwarding out of and into W3, placed first among configured rules |
+| `dhcp.oer_w3_dns` | Dedicated dnsmasq, bound only to station and excluding loopback; `nonwildcard=1`, `port=0`, `localuse=0`, `noresolv=1`, `nohosts=1`, `readethers=0`, `authoritative=1`, lease file `/tmp/oer-w3.leases` |
+| `dhcp.oer_w3` | station interface and dnsmasq instance, start 100, limit 100, lease 15 minutes, `force=1`, `ignore=0`, DHCP option 3 = `10.231.0.1`, option 6 suppressed; RA, DHCPv6 and NDP disabled |
+| `firewall.oer_w3` | station network/bridge only, input REJECT, output ACCEPT, forward REJECT, IPv4/IPv6 masquerade disabled |
+| `firewall.oer_w3_dhcp` | Accept IPv4 UDP 68→67 from station to OpenWrt |
+| `firewall.oer_w3_ping` | Accept IPv4 echo requests from station only to `10.231.0.1` |
+| `firewall.oer_w3_out`, `firewall.oer_w3_in` | Reject all forwarding out of and into station, placed first among configured rules |
 | Selected radio | Stand channel, HT20, beacon interval 100 TU, enabled, HE disabled |
-| Selected BSS | Generated SSID, enabled, visible, open encryption, W3 network, client isolation enabled |
+| Selected BSS | Generated SSID, enabled, visible, WPA2-CCMP encryption, station network, client isolation enabled |
 
 There are no forwarding sections, NAT, LAN/WAN bridge ports or external DNS
-service in the W3 configuration. The firewall is validated and reloaded before
-the network is loaded. Network reload adds the W3 definitions without restarting
-LAN; only W3 is brought up explicitly. Wireless is committed and the selected
+service in the station configuration. The firewall is validated and reloaded before
+the network is loaded. Network reload adds the station definitions without restarting
+LAN; only station is brought up explicitly. Wireless is committed and the selected
 radio is cycled to recreate its AP on the new bridge. Firewall is reloaded
-with the active W3 device before verification; dnsmasq is reloaded after the
+with the active station device before verification; dnsmasq is reloaded after the
 addressed bridge contains exactly the selected BSS. Runtime checks verify the bridge address and membership, firewall reject
-rules and running DHCP instance. SHA-256 of every non-W3 network section must
-be unchanged. The AX211 report lists all settings in `router_profile_changes`
-and service actions in `router_service_actions`, redacting generated SSIDs and
-interface names.
+rules and running DHCP instance. SHA-256 of every non-station network section must
+be unchanged. Generated SSIDs and interface names remain redacted in evidence.
 
 The DHCP instance uses OpenWrt's [per-instance DHCP
 configuration](https://openwrt.org/docs/guide-user/base-system/dhcp_configuration#multiple_dhcpdns_serverforwarder_instances).
 
-`w3::verify_open_ht20` checks the filtered runtime hostapd configuration:
-open authentication, WPA off, HT on, no HT40 capability and HE off.
-
-`w3::station` selects only the target's MAC in `iw station dump` and returns
-presence/authentication/association/authorization flags. `w3::lease` selects
-only that MAC from `/tmp/oer-w3.leases`, returning IPv4 and lifetime without
-hostnames or client identifiers. The bounded in-memory ICMP observer and
-router `ping` establish both 100-echo directions.
-The capture ends naturally after all 400 ICMP rows, with up to ten seconds to
-drain the final buffered batch and require a successful process exit and clean
-capture statistics. A partial capture cannot establish either echo gate.
-Both echo directions check adjacent request intervals of 1 s ± 250 ms,
-without an absolute phase or a separate total-duration gate.
-A fresh hostapd disconnect
-event and the final station snapshot establish departure. Every process is
-owned by the command and remote observers have a 240-second limit.
-
-Callers hold router and exclusive air ownership for the complete run;
-laptop work also holds its physical-radio and fixture-software leases.
-The AX211 station belongs to the installed `linux-net` fixture, while
-NetworkManager's unmanaged rule remains enabled. The strict firmware
-contract and offline checker are documented in
-[w3](../../../firmware/apps/w3/README.md).
-
 ## W4 WPA2 station
 
-`router::Profile::w4` uses the same isolated station network as W3 and sets
+`router::Profile::w4` uses the isolated station network above and sets
 only the selected BSS to `encryption=psk2+ccmp`, `ieee80211r=0` and
 `ieee80211w=0`: WPA2-Personal with CCMP, no SAE/transition, FT or PMF. The
 radio stays at HT20 with HE disabled. It sets `wpa_group_rekey=30` seconds
@@ -414,8 +388,9 @@ interface without a channel.
 - Before signalling a stored PID on the router, check that it still
   belongs to `wpa_supplicant`.
 
-The optional W3 `--load-1ms` recipe runs the pinned #486 fping 5.3 source
-from a temporary extraction, without installing packages or changing the
-W3 AP profile. The caller holds the board/router/air leases across source
-preparation, capture, flood, recovery and cleanup. Its AP capture keeps numeric
-ICMP observations only; saturation counters come from the target's typed notes.
+
+`station::station` reads only the selected target's association flags.
+`station::lease` reads its DHCP address and lifetime from the isolated lease
+file. `station::stream::Capture::start_peer` observes peer-originated ICMP
+requests and DUT replies; a complete capture requires every pair and clean
+capture statistics. The departure observer counts fresh hostapd events.

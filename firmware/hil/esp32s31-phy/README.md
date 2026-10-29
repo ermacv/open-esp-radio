@@ -63,8 +63,8 @@ only in StopCapture, after the host's reads.
 For Wi-Fi, StopCapture first runs a separate CCA experiment after the host's
 calibration, MMIO and analog reads. Four placed RX descriptors with 1664-byte
 buffers use the same promiscuous activation, walker-enable settle and MAC
-runtime resume as W1/W2. Bounded timer-driven polling normalizes completed
-single-descriptor frames with W1's ingress decoder, counts parsed beacons on
+runtime resume. Bounded timer-driven polling normalizes completed
+single-descriptor frames with the shared ingress decoder, counts parsed beacons on
 the capture channel, and returns every unit through the existing HAL. Five
 observations are spaced by at least 200 ms; zero beacons rejects the experiment.
 No CPU Wi-Fi IRQ route or transmit path is installed. Teardown closes

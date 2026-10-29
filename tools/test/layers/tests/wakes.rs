@@ -91,10 +91,6 @@ fn upward_notification_fields_use_the_shared_primitive() {
             include_str!("../../../../portable/memory/src/request_slot.rs"),
             &["waker: PriorityWaker,", "client: PriorityWaker,"][..],
         ),
-        (
-            include_str!("../../../../firmware/apps/w1/src/measure.rs"),
-            &["static PHASE_WAKER: PriorityWaker = PriorityWaker::new()"][..],
-        ),
     ] {
         for field in fields {
             assert!(

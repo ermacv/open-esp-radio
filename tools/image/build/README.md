@@ -44,7 +44,7 @@ An `ImageSpec` names the purpose (`Flash` or `Analysis`), the tree
 (`root`: a checkout or a worktree), the
 chip, the application crate (package, binary, features), the stack
 policy, the layout seed, the variables the runtime's build sets or removes
-(`cargo fw`'s stand identity of `w1`), the caller's builder packages and
+(runtime configuration), the caller's builder packages and
 extra policy files, the bundle directory (every build compiles in the checkout's
 `compile_cache()` of its instrumentation classes) and the checks (`Gates` of `oer-image-checks`): which
 run, what the interrupt checks require (`Required::Product`, or
@@ -230,9 +230,7 @@ frame plus 64 bytes. A key matching multiple implementations or none fails; alia
 at one address count once. A frame at or below the move limit makes its
 exception stale and requires removal. Ceilings are reporting references.
 An extending policy can append exceptions without
-changing its base's other settings. W1 uses its own policy; W3 keeps the
-unconfigured policy separate from `stack-configured.toml` for analysis and
-stand configurations, since absent functions must not retain exceptions.
+changing its base's other settings. Absent functions must not retain exceptions.
 The [checks README](../checks/README.md) specifies the key and policy format.
 The separate frame reports list counts, current frames, ceilings, spare bytes
 and reasons, including warnings or configuration errors. This report changes no compiler
@@ -518,9 +516,9 @@ implementations sharing a demangled name retain their sorted individual sizes.
 When a targeted image comparison is authorized, build its base and head in
 two output directories, with the same compiler,
 flags, image configuration and profile. For example, from clean main build
-`cargo fw build w3 --analysis`, then copy `target/fw/w3-analysis` to
-`target/size-base/w3-analysis`. Switch to the PR head, repeat the build and copy
-the output to `target/size-head/w3-analysis`. Include the selected image's
+`cargo fw build radio-root`, then copy `target/fw/radio-root` to
+`target/size-base/radio-root`. Switch to the PR head, repeat the build and copy
+the output to `target/size-head/radio-root`. Include the selected image's
 bundles, or reuse captured bundles with matching provenance. Then run:
 
 ```console

@@ -2111,40 +2111,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-firmware-apps-b0"
-version = "0.1.0"
-dependencies = [
- "bytemuck",
- "embassy-futures",
- "embedded-io-async",
- "oer-bluetooth-hci",
- "oer-bluetooth-le-controller",
- "oer-bluetooth-le-port",
- "oer-bluetooth-le-runtime",
- "oer-bluetooth-le-wire",
- "oer-diagnostics",
- "oer-embassy-time",
- "oer-esp32s31-bluetooth-driver",
- "oer-esp32s31-board",
- "oer-esp32s31-compose",
- "oer-esp32s31-hal",
- "oer-esp32s31-layout",
- "oer-esp32s31-phy",
- "oer-esp32s31-radio-client",
- "oer-esp32s31-radio-system",
- "oer-espressif-executor",
- "oer-espressif-interrupt-table",
- "oer-espressif-staged-runtime",
- "oer-espressif-usb-serial-jtag",
- "oer-memory",
- "oer-radio-port",
- "oer-radio-regulatory",
- "oer-time",
- "oer-time-virtual",
- "static_cell",
-]
-
-[[package]]
 name = "oer-firmware-apps-boot-smoke"
 version = "0.1.0"
 dependencies = [
@@ -2172,135 +2138,6 @@ dependencies = [
  "oer-espressif-executor",
  "oer-espressif-staged-runtime",
  "oer-time",
-]
-
-[[package]]
-name = "oer-firmware-apps-w0"
-version = "0.1.0"
-dependencies = [
- "oer-diagnostics",
- "oer-embassy-time",
- "oer-esp32s31-board",
- "oer-esp32s31-compose",
- "oer-esp32s31-hal",
- "oer-esp32s31-ieee80211-driver",
- "oer-esp32s31-layout",
- "oer-esp32s31-phy",
- "oer-esp32s31-radio-client",
- "oer-esp32s31-radio-system",
- "oer-espressif-executor",
- "oer-espressif-interrupt-table",
- "oer-espressif-staged-runtime",
- "oer-espressif-usb-serial-jtag",
- "oer-ieee80211-port",
- "oer-ieee80211-wire",
- "oer-memory",
- "oer-radio-regulatory",
- "oer-time",
- "static_cell",
-]
-
-[[package]]
-name = "oer-firmware-apps-w1"
-version = "0.1.0"
-dependencies = [
- "crc",
- "embassy-futures",
- "embedded-io-async",
- "heapless",
- "oer-diagnostics",
- "oer-embassy-time",
- "oer-esp32s31-board",
- "oer-esp32s31-compose",
- "oer-esp32s31-hal",
- "oer-esp32s31-ieee80211-driver",
- "oer-esp32s31-layout",
- "oer-esp32s31-phy",
- "oer-esp32s31-radio-client",
- "oer-esp32s31-radio-system",
- "oer-espressif-executor",
- "oer-espressif-interrupt-table",
- "oer-espressif-platform-port",
- "oer-espressif-staged-runtime",
- "oer-espressif-usb-serial-jtag",
- "oer-ieee80211-port",
- "oer-ieee80211-sta",
- "oer-ieee80211-wire",
- "oer-memory",
- "oer-radio-regulatory",
- "oer-sort",
- "oer-sync",
- "oer-time",
- "oer-time-virtual",
- "static_cell",
-]
-
-[[package]]
-name = "oer-firmware-apps-w2"
-version = "0.1.0"
-dependencies = [
- "atomic-waker",
- "embassy-futures",
- "heapless",
- "oer-diagnostics",
- "oer-embassy-time",
- "oer-esp32s31-board",
- "oer-esp32s31-compose",
- "oer-esp32s31-hal",
- "oer-esp32s31-ieee80211-driver",
- "oer-esp32s31-layout",
- "oer-esp32s31-phy",
- "oer-esp32s31-radio-client",
- "oer-esp32s31-radio-system",
- "oer-espressif-executor",
- "oer-espressif-ieee80211-policy",
- "oer-espressif-interrupt-table",
- "oer-espressif-staged-runtime",
- "oer-espressif-usb-serial-jtag",
- "oer-ieee80211-port",
- "oer-ieee80211-runtime",
- "oer-ieee80211-upper-mac",
- "oer-ieee80211-wire",
- "oer-memory",
- "oer-radio-regulatory",
- "oer-time",
- "static_cell",
-]
-
-[[package]]
-name = "oer-firmware-apps-w3"
-version = "0.1.0"
-dependencies = [
- "critical-section",
- "embassy-futures",
- "embassy-net",
- "heapless",
- "oer-diagnostics",
- "oer-embassy-net",
- "oer-embassy-time",
- "oer-esp32s31-board",
- "oer-esp32s31-compose",
- "oer-esp32s31-hal",
- "oer-esp32s31-layout",
- "oer-esp32s31-phy",
- "oer-esp32s31-wifi",
- "oer-espressif-executor",
- "oer-espressif-interrupt-table",
- "oer-espressif-staged-runtime",
- "oer-espressif-usb-serial-jtag",
- "oer-ieee80211-cipher",
- "oer-ieee80211-instrumentation",
- "oer-ieee80211-runtime",
- "oer-ieee80211-sta",
- "oer-ieee80211-wire",
- "oer-memory",
- "oer-network",
- "oer-time",
- "oer-time-virtual",
- "oer-trace",
- "static_cell",
- "tempfile",
- "xarxa-driver",
 ]
 
 [[package]]
@@ -3634,35 +3471,19 @@ name = "oer-tool-image-cli"
 version = "0.1.0"
 dependencies = [
  "clap",
- "crc",
- "hex",
  "jiff",
- "oer-bluetooth-hci",
  "oer-chip-profile",
  "oer-diagnostics",
  "oer-espressif-facts",
- "oer-firmware-apps-w3",
- "oer-hil-link",
- "oer-hil-session",
- "oer-ieee80211-port",
- "oer-ieee80211-upper-mac",
- "oer-ieee80211-wire",
  "oer-image-build",
  "oer-image-bundle",
  "oer-image-checks",
- "oer-lab-arbiter",
  "oer-lab-board",
- "oer-lab-fixture",
  "oer-lab-model",
  "oer-lab-router",
- "oer-memory",
  "oer-os-command-tree",
- "oer-os-durable",
- "oer-os-process",
- "oer-radio-regulatory",
  "oer-trace",
  "serde",
- "serde_json",
  "tempfile",
  "toml",
 ]

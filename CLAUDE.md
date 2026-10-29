@@ -223,7 +223,7 @@ system these rules serve.
   everything Espressif, `firmware/` chip images, `tools/<domain>/` the
   developer's machine. Executables only in `firmware/` and `tools/`. A library
   is `oer-` plus its path below the root; an executable keeps its root
-  (`oer-firmware-apps-w1`). A crate never sits inside another; a new crate
+  (`oer-firmware-apps-boot-smoke`). A crate never sits inside another; a new crate
   needs a reason (dependency direction, license, target, independent
   consumer). Only `cargo fw` builds images. Every package builds.
 

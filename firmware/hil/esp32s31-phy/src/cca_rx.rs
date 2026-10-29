@@ -257,7 +257,7 @@ async fn sample<B: PlatformClockBackend, T>(
                 };
                 received = received.saturating_add(1);
                 // Borrow only a complete single-descriptor frame, exactly
-                // the ingress shape W1 normalizes. Chains and the tail of a
+                // the shared ingress shape. Chains and the tail of a
                 // reserved-descriptor landing are discarded and returned.
                 if unit.descriptor_count() == 1
                     && !unit.metadata().continues_reserved_landing()

@@ -31,7 +31,7 @@ chips/espressif/{analog, boot, coex, efuse, executor, facts, ieee80211-policy,
     ieee802154-engine, ieee802154-mac-values, interrupt-table, modem-clock,
     platform-port, staged-bootstrap, staged-layout, staged-runtime, usb-serial-jtag,
     watchdog}/
-firmware/apps/{b0, boot-smoke, radio-root, w0, w1, w2, w3}/
+firmware/apps/{boot-smoke, radio-root}/
 firmware/bootstrap/esp32s31/
 firmware/hil/{esp32s31, esp32s31-lower-mac, esp32s31-phy}/
 firmware/probes/{esp32s31-facts, esp32s31-radio, esp32s31-register, esp32s31-rx-chain}/
@@ -97,8 +97,8 @@ tools/vendor/{cli, ieee802154-esp32s31, ieee802154-esp32s31-cli, lineage,
 A library's package name is `oer-` and its path below its root:
 `protocols/ieee80211/wire` is `oer-ieee80211-wire`,
 `chips/esp32s31/hal` is `oer-esp32s31-hal`, and `tools/hil/run` is
-`oer-hil-run`. An executable keeps its root: `firmware/apps/w1` is
-`oer-firmware-apps-w1`, and `tools/image/cli` is `oer-tool-image-cli`.
+`oer-hil-run`. An executable keeps its root: `firmware/apps/boot-smoke` is
+`oer-firmware-apps-boot-smoke`, and `tools/image/cli` is `oer-tool-image-cli`.
 Rust imports replace hyphens with underscores. A program called by name,
 such as the image linker or a privileged helper, sets its binary name
 with `[[bin]] name`.
@@ -119,7 +119,6 @@ named `hil` takes its role from the list.
 - `chips/espressif/ieee80211-policy` has a dev-dependency on
   `chips/esp32s31/ieee80211/driver`.
 - Host tests include image source files through `#[path]`:
-  `tools/image/cli/src/main.rs` includes the W1 CRC implementation;
   `tools/hil/family-phy/tests/` includes cache and hold modules of
   `firmware/hil/esp32s31-phy`.
 - Normal dependencies outside their role:

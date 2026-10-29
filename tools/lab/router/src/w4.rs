@@ -113,7 +113,7 @@ pub fn refresh_neighbor(
     address: std::net::Ipv4Addr,
     mut observe: impl FnMut(&NeighborState),
 ) -> Result<NeighborRefresh> {
-    if !token(interface) || !crate::w3::usable_address(address) {
+    if !token(interface) || !crate::station::usable_address(address) {
         return Err("invalid W4 ARP selection".to_owned());
     }
     let available = execute("command -v ip")?;

@@ -1,11 +1,10 @@
-//! The dedicated W3 BSS network. All non-W3 network sections are fingerprinted
+//! The dedicated station BSS network. All non-station network sections are fingerprinted
 //! before and after applying it; no LAN address, port or route is rewritten.
 
 use crate::{
     router::quote,
     ssh::{Remote, Result},
 };
-use serde::Serialize;
 use std::{net::Ipv4Addr, time::Duration};
 
 pub const NAME: &str = "oer_w3";
@@ -13,11 +12,11 @@ pub const BRIDGE: &str = "br-oer-w3";
 pub const GATEWAY: Ipv4Addr = Ipv4Addr::new(10, 231, 0, 1);
 pub const LEASE_FILE: &str = "/tmp/oer-w3.leases";
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-pub struct Setting {
-    pub path: String,
-    pub value: String,
-    pub list: bool,
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct Setting {
+    path: String,
+    value: String,
+    list: bool,
 }
 
 fn settings() -> Vec<Setting> {
@@ -115,37 +114,6 @@ fn settings() -> Vec<Setting> {
     values
 }
 
-/// Complete, secret-free mutation inventory, also used in the run report.
-/// The generated SSID is represented by its role rather than its bytes.
-pub fn changes(radio: &str, ap: &str, channel: u8) -> Vec<Setting> {
-    let mut values = settings();
-    for (section, option, value) in [
-        (radio, "channel", channel.to_string()),
-        (radio, "htmode", "HT20".into()),
-        (radio, "beacon_int", "100".into()),
-        (radio, "disabled", "0".into()),
-        (radio, "ieee80211ax", "0".into()),
-        (ap, "ssid", "<generated>".into()),
-        (ap, "disabled", "0".into()),
-        (ap, "hidden", "0".into()),
-        (ap, "encryption", "none".into()),
-        (ap, "network", NAME.into()),
-        (ap, "isolate", "1".into()),
-    ] {
-        values.push(Setting {
-            path: format!("wireless.{section}.{option}"),
-            value,
-            list: false,
-        });
-    }
-    for value in &mut values {
-        if value.value == BRIDGE {
-            value.value = "<W3 bridge>".into();
-        }
-    }
-    values
-}
-
 const SECTIONS: &[&str] = &[
     "network.oer_w3_device",
     "network.oer_w3",
@@ -203,7 +171,7 @@ pub fn check_routes(text: &str) -> Result<()> {
             .checked_shl(32 - prefix.min(24))
             .ok_or("invalid subnet mask")?;
         if u32::from(address) & mask == u32::from(GATEWAY) & mask {
-            return Err("W3 subnet overlaps an existing non-W3 route".into());
+            return Err("station subnet overlaps an existing non-station route".into());
         }
     }
     Ok(())
@@ -213,16 +181,16 @@ fn fingerprint(remote: &mut dyn Remote) -> Result<String> {
     let value = remote.run("set -e\nconfig=$(uci show network)\nprintf '%s\\n' \"$config\" | awk '$0 !~ /^network\\.oer_w3(_device)?[.=]/' | sha256sum | cut -d ' ' -f 1")?;
     let value = value.trim();
     if value.len() != 64 || !value.bytes().all(|b| b.is_ascii_hexdigit()) {
-        return Err("invalid non-W3 network fingerprint".into());
+        return Err("invalid non-station network fingerprint".into());
     }
     Ok(value.into())
 }
 
-/// Read-only preflight. Returns the fingerprint of every non-W3 network section.
+/// Read-only preflight. Returns the fingerprint of every non-station network section.
 pub fn prepare(remote: &mut dyn Remote) -> Result<String> {
     let changes = remote.run("set -e\nfor package in network dhcp firewall; do changes=$(uci changes \"$package\"); printf '%s\\n' \"$changes\" | sed 's/=.*//'; done")?;
     if !changes.trim().is_empty() {
-        return Err("staged network, DHCP or firewall changes refuse W3".into());
+        return Err("staged network, DHCP or firewall changes refuse station".into());
     }
     let routes = remote.run(&format!("set -e\ncommand -v fw4 >/dev/null\nnft list table inet fw4 >/dev/null\ntest -x /etc/init.d/dnsmasq\nroutes=$(ip -4 route show table all)\nprintf '%s\\n' \"$routes\" | awk -v own_bridge={} '{{own=0; for(i=1;i<NF;i++) if($i==\"dev\" && $(i+1)==own_bridge) own=1; if(!own && NF) {{ if($1 ~ /^(local|broadcast|unreachable|blackhole|prohibit|throw)$/) print $2; else print $1 }} }}'", quote(BRIDGE)?))?;
     check_routes(&routes)?;
@@ -269,10 +237,10 @@ fn verify_script(interface: &str) -> Result<String> {
 
 pub fn verify(remote: &mut dyn Remote, interface: &str, before: &str) -> Result<()> {
     // fw4 resolves the source-zone device set again now that netifd has
-    // created the bridge. The initial reload precedes W3 activation.
+    // created the bridge. The initial reload precedes station activation.
     remote
         .run("/etc/init.d/firewall reload >/dev/null")
-        .map_err(|_| "cannot reload firewall for the active W3 device")?;
+        .map_err(|_| "cannot reload firewall for the active station device")?;
     let script = verify_script(interface)?;
     let mut verified = false;
     for attempt in 0..10 {
@@ -288,15 +256,15 @@ pub fn verify(remote: &mut dyn Remote, interface: &str, before: &str) -> Result<
         }
     }
     if !verified {
-        return Err("W3 isolated network runtime verification failed".into());
+        return Err("station isolated network runtime verification failed".into());
     }
     if fingerprint(remote)? != before {
-        return Err("non-W3 network configuration changed".into());
+        return Err("non-station network configuration changed".into());
     }
     // DHCP starts only once the AP belongs to its addressed bridge.
     remote
         .run("/etc/init.d/dnsmasq reload >/dev/null")
-        .map_err(|_| "cannot reload W3 DHCP service")?;
+        .map_err(|_| "cannot reload station DHCP service")?;
     let ready = format!(
         "set -e\ntest -r {}\ntest \"$(ubus call service list '{{\"name\":\"dnsmasq\"}}' | jsonfilter -e '@.dnsmasq.instances.oer_w3_dns.running')\" = true\nprintf 'ready\\n'",
         quote(LEASE_FILE)?
@@ -312,7 +280,7 @@ pub fn verify(remote: &mut dyn Remote, interface: &str, before: &str) -> Result<
             remote.pause(Duration::from_secs(1));
         }
     }
-    Err("W3 DHCP instance did not become ready".into())
+    Err("station DHCP instance did not become ready".into())
 }
 
 #[cfg(test)]
@@ -356,19 +324,7 @@ mod tests {
         check_routes("10.231.1.0/24").unwrap();
     }
     #[test]
-    fn inventory_redacts_only_generated_and_interface_values() {
-        let values = changes("radio9", "lab_ap", 6);
-        assert!(
-            values
-                .iter()
-                .any(|s| s.path == "wireless.lab_ap.ssid" && s.value == "<generated>")
-        );
-        assert!(
-            values
-                .iter()
-                .any(|s| s.path == "wireless.lab_ap.network" && s.value == NAME)
-        );
-        assert!(values.iter().all(|s| s.value != BRIDGE));
+    fn runtime_verification_quotes_the_interface_and_checks_isolation() {
         let script = verify_script("made-up'interface").unwrap();
         assert!(script.contains(&quote("made-up'interface").unwrap()));
         assert!(script.contains("forward_oer_w3 | grep -qF oer-w3-no-forward-out"));
@@ -417,7 +373,7 @@ mod tests {
         assert_eq!(remote.scripts.len(), 1);
     }
     #[test]
-    fn runtime_requires_unchanged_non_w3_network_and_starts_dhcp_after_bridge_checks() {
+    fn runtime_requires_unchanged_non_station_network_and_starts_dhcp_after_bridge_checks() {
         let hash = "a".repeat(64);
         let mut remote = Fake {
             replies: [

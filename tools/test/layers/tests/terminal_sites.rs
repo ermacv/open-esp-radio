@@ -51,14 +51,10 @@ const REASON_ENUMS: &[(&str, &str)] = &[
 
 // Numeric codecs without a reason enum: every numeric arm in their next-boot
 // name decoder is inventoried, including payload/operation subcodes.
-const REASON_DECODERS: &[(&str, &str)] = &[
-    (
-        "chips/esp32s31/hal/src/domain/transaction/record.rs",
-        "report_fault",
-    ),
-    ("firmware/apps/b0/src/gate_fault.rs", "report"),
-    ("firmware/apps/b0/src/release_fault.rs", "reason_name"),
-];
+const REASON_DECODERS: &[(&str, &str)] = &[(
+    "chips/esp32s31/hal/src/domain/transaction/record.rs",
+    "report_fault",
+)];
 
 type Sites = BTreeSet<String>;
 type ScannedSites = BTreeMap<String, Location>;
@@ -938,14 +934,14 @@ fn scanner_finds_macros_callbacks_and_reasons_but_skips_tests_and_const_blocks()
 fn metadata_requires_an_admitted_owner_and_fault_class() {
     for metadata in [
         "{ owner = 'protocols/wire', classes = ['rust-panic'] }",
-        "{ owner = 'firmware/apps/w0', classes = [] }",
-        "{ owner = 'firmware/apps/w0', classes = ['impossible-because-named-fault'] }",
-        "{ owner = 'firmware/apps/w0', classes = ['hardware-impossible'] }",
-        "{ owner = 'firmware/apps/w1', classes = ['rust-panic'] }",
+        "{ owner = 'firmware/apps/boot-smoke', classes = [] }",
+        "{ owner = 'firmware/apps/boot-smoke', classes = ['impossible-because-named-fault'] }",
+        "{ owner = 'firmware/apps/boot-smoke', classes = ['hardware-impossible'] }",
+        "{ owner = 'firmware/apps/radio-root', classes = ['rust-panic'] }",
     ] {
-        assert!(registry(&format!("version = 1\n[sites]\n'firmware/apps/w0/src/main.rs:crate::run:panic-macro:panic:1' = {metadata}\n")).is_err());
+        assert!(registry(&format!("version = 1\n[sites]\n'firmware/apps/boot-smoke/src/main.rs:crate::run:panic-macro:panic:1' = {metadata}\n")).is_err());
     }
-    assert!(registry("version = 1\n[sites]\n'firmware/apps/w0/src/main.rs:crate::run:panic-macro:panic:1' = { owner = 'firmware/apps/w0', classes = ['rust-panic'] }\n").is_ok());
+    assert!(registry("version = 1\n[sites]\n'firmware/apps/boot-smoke/src/main.rs:crate::run:panic-macro:panic:1' = { owner = 'firmware/apps/boot-smoke', classes = ['rust-panic'] }\n").is_ok());
 }
 
 #[test]
@@ -1046,7 +1042,7 @@ fn aliases_macro_expansions_and_new_retained_variants_are_inventoried() {
 
 #[test]
 fn nonterminal_reviews_cannot_hide_panic_sites_or_survive_removed_calls() {
-    let id = "firmware/apps/b0/src/h4.rs:crate::run:reset-method:reset:1";
+    let id = "firmware/apps/boot-smoke/src/main.rs:crate::run:reset-method:reset:1";
     let recorded = registry(&format!(
         "version = 1\n[sites]\n[nonterminal]\n'{id}' = 'parser clears its frame and returns'\n"
     ))
@@ -1055,14 +1051,15 @@ fn nonterminal_reviews_cannot_hide_panic_sites_or_survive_removed_calls() {
         differences(&ScannedSites::new(), &recorded),
         [format!("stale: {id}")]
     );
-    assert!(registry("version = 1\n[sites]\n[nonterminal]\n'firmware/apps/b0/src/h4.rs:crate::run:panic-macro:panic:1' = 'hide panic'\n").is_err());
+    assert!(registry("version = 1\n[sites]\n[nonterminal]\n'firmware/apps/boot-smoke/src/main.rs:crate::run:panic-macro:panic:1' = 'hide panic'\n").is_err());
 }
 
 #[test]
 fn duplicate_registry_keys_and_overlapping_nonterminal_reviews_are_rejected() {
-    let id = "firmware/apps/b0/src/h4.rs:crate::run:reset-method:reset:1";
-    let entry =
-        format!("'{id}' = {{ owner = 'firmware/apps/b0', classes = ['requested-reset'] }}\n");
+    let id = "firmware/apps/boot-smoke/src/main.rs:crate::run:reset-method:reset:1";
+    let entry = format!(
+        "'{id}' = {{ owner = 'firmware/apps/boot-smoke', classes = ['requested-reset'] }}\n"
+    );
     assert!(registry(&format!("version = 1\n[sites]\n{entry}{entry}")).is_err());
     assert!(
         registry(&format!(

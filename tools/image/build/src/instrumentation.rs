@@ -186,11 +186,9 @@ mod tests {
 
     #[test]
     fn the_workspace_images_declare_their_classes() {
-        let packages: Vec<_> = [
-            include_str!("../../../../firmware/apps/w0/Cargo.toml"),
-            include_str!("../../../../firmware/apps/w1/Cargo.toml"),
-            include_str!("../../../../firmware/apps/boot-smoke/Cargo.toml"),
-        ]
+        let packages: Vec<_> = [include_str!(
+            "../../../../firmware/apps/boot-smoke/Cargo.toml"
+        )]
         .into_iter()
         .map(|text| {
             let manifest: toml::Value = toml::from_str(text).unwrap();
@@ -208,8 +206,6 @@ mod tests {
                 .classes()
                 .collect::<Vec<_>>()
         };
-        assert_eq!(classes("oer-firmware-apps-w0"), [Class::Trace]);
-        assert_eq!(classes("oer-firmware-apps-w1"), [Class::Profile]);
         assert_eq!(classes("oer-firmware-apps-boot-smoke"), []);
     }
 }

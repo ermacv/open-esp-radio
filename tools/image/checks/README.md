@@ -97,10 +97,8 @@ now fits the move limit is stale and fails: remove the entry. An exception
 cannot supply a missing compiler record. These remain configuration errors.
 
 An extending policy can append exceptions while retaining its base's stack
-allocations, reserves and move limit. W1 has its own `stack.toml`; configured
-W3 uses `stack-configured.toml`, extending W3's `stack.toml`. Unconfigured W3
-does not link these implementations, so it uses the base without exceptions.
-The same configured policy serves `--analysis` and stand-configured W3.
+allocations, reserves and move limit. Exceptions apply only to implementations
+linked by that image configuration.
 
 `runtime-frames.txt` and `bootstrap-frames.txt` report the limit, recorded
 functions and count above the limit, each large function, and each applied
@@ -339,7 +337,7 @@ Build the same app/analysis and HIL configurations on main and on the PR head,
 copying all bundles into `target/size-base` and `target/size-head` respectively.
 Keep compiler/profile/flags/configuration identical. Run
 `cargo fw sizes target/size-base target/size-head` and put the table in the PR;
-a `stop` requires a question to the owner. The build README gives a W3 example.
+a `stop` requires a question to the owner. The build README gives a radio-root example.
 
 ## Reachability reports
 
@@ -350,7 +348,7 @@ names, examining every alias and the analysed ROM companions. `*` matches
 any substring; every other character is literal. An extending image policy
 appends selectors to its base. Empty and duplicate selectors are errors.
 The family selectors also apply when an image defines an independent stack
-layout instead of extending the chip policy, as W3 does. Report selection is
+layout instead of extending the chip policy. Report selection is
 the union of family and image selectors, deduplicated before matching.
 The chip policies select `core::fmt::write`, `Formatter` methods, the runtime
 `Argument::fmt` entry, debug builders, `Write::write_fmt`, and the `fmt`

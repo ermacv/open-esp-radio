@@ -83,7 +83,7 @@ fn show_profiled() -> String {
     show(&radio, &ap)
 }
 
-/// The router's state before the first W1 run: another channel, HE40, the
+/// The router's state before the first HIL run: another channel, HE40, the
 /// radio disabled, the AP hidden with another SSID.
 fn show_before() -> String {
     show(
@@ -178,7 +178,7 @@ const CHANNELS_PREFIX: &str = "phy=";
 const SET_PREFIX: &str = "uci set";
 const IW_PREFIX: &str = "info=";
 
-/// A router on its first W1 run: it settles after two reads.
+/// A router on its first HIL run: it settles after two reads.
 fn first_run() -> Canned {
     Canned::new(vec![
         (CHANGES_PREFIX, vec![Ok("\n".to_owned())]),
@@ -332,38 +332,6 @@ fn the_host_refuses_lines_outside_the_allowlist() {
     assert!(error.contains("outside the allowlist"), "{error}");
     let error = check_channel(&format!("{CHANNELS}Wiphy phy0\n"), 6, None).unwrap_err();
     assert!(error.contains("outside the allowlist"), "{error}");
-}
-
-#[test]
-fn w3_applies_and_verifies_open_security_and_disables_he() {
-    let p = Profile::w3("radio9", "lab_ap", INTERFACE, 6, SSID).unwrap();
-    let script = p.apply_script().unwrap();
-    assert!(script.contains("wireless.lab_ap.encryption=none"));
-    assert!(script.contains("wireless.radio9.ieee80211ax=0"));
-    assert!(script.contains("wireless.lab_ap.network=oer_w3"));
-    assert!(script.contains("wireless.lab_ap.isolate=1"));
-    assert!(script.contains("wifi down radio9"));
-    assert!(script.contains("wifi up radio9"));
-    assert!(!profile().apply_script().unwrap().contains("encryption"));
-    let configured = show_profiled().replace("encryption='psk2'", "encryption='none'")
-        + "wireless.radio9.ieee80211ax='0'\n";
-    assert!(
-        Wireless::parse(&configured, SSID)
-            .unwrap()
-            .check_after(&p)
-            .is_ok()
-    );
-    for broken in [
-        configured.replace("encryption='none'", "encryption='psk2'"),
-        configured.replace("ieee80211ax='0'", "ieee80211ax='1'"),
-    ] {
-        assert!(
-            Wireless::parse(&broken, SSID)
-                .unwrap()
-                .check_after(&p)
-                .is_err()
-        );
-    }
 }
 
 fn w4_profile() -> Profile {
@@ -897,29 +865,6 @@ fn nothing_secret_is_shown() {
         assert!(!shown.contains(secret), "{secret}: {shown}");
     }
     assert!(shown.contains("xx:xx:xx:xx:F6:D0"), "{shown}");
-}
-
-#[test]
-fn the_radio_country_is_read_without_changing_anything() {
-    let mut remote = Canned::new(vec![(SHOW_PREFIX, vec![Ok(show_before())])]);
-    assert_eq!(radio_country(&mut remote, "radio9").unwrap(), *b"DE");
-    assert_eq!(remote.scripts, [show_script()]);
-    let mut remote = Canned::new(vec![(SHOW_PREFIX, vec![Ok(show_before())])]);
-    assert!(radio_country(&mut remote, "radio7").is_err());
-}
-
-#[test]
-fn a_radio_without_a_valid_country_is_refused() {
-    for replacement in [
-        "",
-        "wireless.radio9.country='de'\n",
-        "wireless.radio9.country='DEU'\n",
-    ] {
-        let text = show_before().replace("wireless.radio9.country='DE'\n", replacement);
-        let mut remote = Canned::new(vec![(SHOW_PREFIX, vec![Ok(text)])]);
-        let error = radio_country(&mut remote, "radio9").unwrap_err();
-        assert!(error.contains("country"), "{error}");
-    }
 }
 
 #[test]

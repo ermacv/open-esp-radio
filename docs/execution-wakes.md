@@ -29,15 +29,14 @@ name does not establish that its task runs on P2.
 | `chips/esp32s31/ieee80211/driver/src/rx/control.rs`: runner | Stop handle P1 → receive runner P2 | Upward wake, protected by `PriorityWaker`; repeated stop requests publish the same atomic flag. |
 | Same file: reporter | Receive runner P2 → application P1 | Ordinary AtomicWaker, descending priority. |
 | `chips/esp32s31/ieee80211/driver/src/rx/upper.rs`: frame queue | Receive runner P2 → frame consumer P1 | Ordinary AtomicWaker, descending priority. Returning a held frame takes the separate typed-signal path below. |
-| `portable/memory/src/request_slot.rs`: Doorbell | Wi-Fi/BLE clients P1 or P2 → radio-system actor P2; W3 ready exchange | Upward wake, protected by `PriorityWaker`; clients OR durable request bits before waking the actor. |
-| Same file: answer | Radio-system actor P2 → requesting client P1/P2; W3 ready reply P2 → P1 | `PriorityWaker` also supports a higher-priority client without changing the request-slot contract. |
+| `portable/memory/src/request_slot.rs`: Doorbell | Wi-Fi/BLE clients P1 or P2 → radio-system actor P2 | Upward wake, protected by `PriorityWaker`; clients OR durable request bits before waking the actor. |
+| Same file: answer | Radio-system actor P2 → requesting client P1/P2 | `PriorityWaker` also supports a higher-priority client without changing the request-slot contract. |
 | `protocols/radio/port/src/slot.rs`: p2 | Frontend/body P1, registration teardown P2 → registered owner P2 | Upward wake, protected by `PriorityWaker`; commands, returns, retirement and quarantine publish their state before notification. |
 | Same file: join | Registered owner P2 → frontend P1 | Ordinary AtomicWaker, descending priority. |
-| `firmware/apps/w1/src/measure.rs`: PHASE_WAKER | Phase writer P1 → timer observer P2 | Upward wake, protected by `PriorityWaker`; the phase is an atomic level checked after registration. |
-| `portable/embassy/net/src/owned.rs`: radio_waker, network_waker | W3/HIL station/network tasks P1 ↔ P1 | `oer_sync::PriorityWaker` over atomic link state. The image retains the same P1 composition; endpoint and link-controller loans are affine and local. |
-| `owned/tx_queue.rs`, `owned/tx_budget.rs` and RX in `owned.rs` | W3/HIL network producer, station consumer and packet return P1 ↔ P1 | TX metadata and its coalesced publication hint use `ContextCell` with a private checked `Entered<X>` proof. All Waker callbacks run after the borrow ends. Admission is atomic and uses `PriorityWaker`; packet destruction precedes credit return. RX uses affine `WakingSpscQueue` ends and ordinary AtomicWakers. |
-| Xarxa's pinned `PacketPoolWaiter`, through `owned.rs` | W3 packet destruction P1 → RX publisher P1 | Dependency's ordinary AtomicWaker, same executor. Moving the publisher to P2 would require reviewing this path too. |
-| `portable/memory/src/waking_spsc.rs` | W3 network/application/service P1 ↔ P1 | Ordinary AtomicWakers for consumer and producer; both endpoints currently run on P1. The generic queue must not be composed across priorities with an upward wake. |
+| `portable/embassy/net/src/owned.rs`: radio_waker, network_waker | HIL station/network tasks P1 ↔ P1 | `oer_sync::PriorityWaker` over atomic link state. The image retains the same P1 composition; endpoint and link-controller loans are affine and local. |
+| `owned/tx_queue.rs`, `owned/tx_budget.rs` and RX in `owned.rs` | HIL network producer, station consumer and packet return P1 ↔ P1 | TX metadata and its coalesced publication hint use `ContextCell` with a private checked `Entered<X>` proof. All Waker callbacks run after the borrow ends. Admission is atomic and uses `PriorityWaker`; packet destruction precedes credit return. RX uses affine `WakingSpscQueue` ends and ordinary AtomicWakers. |
+| Xarxa's pinned `PacketPoolWaiter`, through `owned.rs` | Network packet destruction P1 → RX publisher P1 | Dependency's ordinary AtomicWaker, same executor. Moving the publisher to P2 would require reviewing this path too. |
+| `portable/memory/src/waking_spsc.rs` | Network/application/service P1 ↔ P1 | Ordinary AtomicWakers for consumer and producer; both endpoints currently run on P1. The generic queue must not be composed across priorities with an upward wake. |
 | `portable/cooperate/src/connected_tasks.rs` | Parent/worker tasks on the composition's executor | Embassy Signal under the supplied RawMutex. No hardware P1 → P2 composition uses these cells. A composition must not introduce an upward wake through them. |
 | `protocols/ieee80211/runtime/src/monitor/{capture,injection}.rs` | Monitor capture/injection producer → consumer on the composition's executor | `oer_memory::WakingSpscQueue` (ordinary AtomicWakers) and a `ClaimCell` binding; no lock. A composition must not compose them across priorities with an upward wake. |
 | `protocols/hil/agent/src/console.rs`; HIL request/console Channels | Synchronous callers only queue; the sole async console and dispatch run on P1 | Embassy Mutex/Channel/Watch use CriticalSectionRawMutex, which masks the hart, including P3, during a P1 operation. Logger waits descend to P1; this remains a checked deviation from the blocking critical-section restriction. |
@@ -50,7 +49,7 @@ name does not establish that its task runs on P2.
 | Cooperative `cx.waker().wake_by_ref()` in driver/HIL/probe steps | Task → itself | Direct executor waker, no shared registration held during the callback. |
 
 The Embassy network adapter's TX metadata context is an `ExecutionContext`;
-W3 and HIL select `ThreadContext<0>`, their existing P1 executor. A refused
+HIL select `ThreadContext<0>`, their existing P1 executor. A refused
 context or nested borrow returns `AccessRefused` without consuming a queued
 owner; TX publication refusal returns its input packet. The network device,
 radio runner, RX publisher and link controller cannot be copied or sent to

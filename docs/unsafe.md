@@ -225,7 +225,7 @@ The instruction module and its exports exist only on RISC-V. Staged firmware
 binaries gate their entry composition and hardware dependencies on the same target;
 their build scripts emit image linker arguments only for that target.
 Host tests compile pure modules with explicit fixture inputs rather than
-providing synthetic CSR reads. Their host entry is empty, as in B0 and W3.
+providing synthetic CSR reads. Their host entry is empty.
 
 Interrupt stack install takes a local `&mut PreAdmission<H>` and is safe.
 The boot handoff wraps its unique entry proof with that token, retains it
@@ -994,10 +994,9 @@ or producer shutdown. `ReleaseNotQuiet` retains nonzero enables or unexpected
 visible observations. SOURCE: `POLICY_S31_BLE_TERMINAL_NONFAULT_ACK_20261027`.
 Bank1 CC0/CC1/overflow have hardware coverage from
 `hw32-20261027-ble-masked-01` (#757); bank0/NRT and other feature lanes are
-vendor-covered and not hardware-verified. Both named faults quarantine the task/IRQ owners and reach safe
-`fatal::reset_recording`. The common-format BLE gate slot has a reason-tagged
-eight-word payload: seven policy source words and one reserved zero word.
-Next-boot output reports the observed banks. Bank1[0,2] and task17 remain
+vendor-covered and not hardware-verified. Both named faults quarantine the
+task/IRQ owners and return the seven policy source words to the image's
+terminal policy. Bank1[0,2] and task17 remain
 opaque with their existing SOURCEs. CTE +0x4c4/+0x4c8/+0x4cc is outside this
 policy; production has no enabled CTE interrupt consumer. Sequential readback
 is not a producer-drain proof.
@@ -1013,16 +1012,14 @@ word into continuous time. Terminal release masks
 and clears overflow before the bank leaves the handler; CONTROL1/2 alone do
 not silence enabled pending (SOURCE: `HW12_S31_BLE_OVERFLOW_ACK_20261026` and
 `HW9_S31_MAC_RELEASE_20261027`). Exhaustion retains its original count or raw
-word in a named fault. B0 uses the same common-format retained slot for these reasons,
-without releasing owners, through `fatal::reset_recording`; the next boot
-prints the diagnostic. No additional unsafe sharing is involved.
+word in a named fault. Owners remain quarantined for the image's terminal
+policy. No additional unsafe sharing is involved.
 
 NRT acknowledgement checks the exact sampled pair against shared primary
 fault and overflow clear lanes before either clear. A pair containing one returns a
 named fault preserving both words. Runtime capture reports `BluetoothNrtInterruptFault`;
 terminal release reports `ReleaseNotQuiet` with that pair in its policy observation.
-The gate quarantines its owners and B0 records the fault observations in the same
-44-byte slot before `fatal::reset_recording`. NRT cannot consume a primary
+The gate quarantines its owners and returns the fault observations to the image. NRT cannot consume a primary
 overflow observation or blindly clear a primary fault. Arrivals absent from
 the affine sample are not included in its acknowledgement.
 
@@ -1048,8 +1045,7 @@ Outstanding dispatch refuses stop, while rollover-only planning can retire
 its ending epoch projection. The handler steps the timer before taking a
 stop request, so a dispatch in that entry is retained and refuses stop.
 Pending observations cross retirement, Controller reset and reunion into the
-returned result. B0 sends both bytes through its H4 shutdown event; the physical
-B0 procedure logs them and includes them in its run report.
+returned result.
 The handler permanently retains a copyable, read-only `BtdmLpTimerStatus`
 capability for the side-effect-free LP cause word, independent of the timer's
 runtime-control owner. A vacant timer with nonzero LP status is an invariant
@@ -1057,11 +1053,8 @@ failure. `GateFault::Invariant` retains the full entry LP cause, both NRT cause 
 when the bank is present (explicitly unavailable otherwise), the timer phase,
 and the stopped-timer fault's pending bytes and raw unexpected status.
 The first fault is published once; subsequent service returns it without
-hardware access, queue service or owner release. B0 calls safe
-`fatal::reset_recording` directly from the handler without unwinding or dropping
-any gate or interrupted task owner. Its 44-byte versioned, checksummed retained
-record keeps the exact reason and observation. The next boot consumes and prints
-it through the early console. No watchdog expiry drives this transition.
+hardware access, queue service or owner release. The image chooses the terminal
+policy without releasing any gate or interrupted task owner.
 The port lifecycle's fault flag is separate and carries no gate fault.
 
 The Wi-Fi source120 fatal-assertion path keeps the full sampled RAW as

@@ -53,7 +53,7 @@ Link and capacity notification use `oer_sync::PriorityWaker`; no blocking mutex
 or critical section is introduced. Queue Waker clone, wake and drop callbacks
 run only outside the ContextCell borrow, including displaced registrations.
 
-W3 and HIL `wifi-station` select `oer_espressif_executor::ThreadContext<0>`:
+HIL `wifi-station` selects `oer_espressif_executor::ThreadContext<0>`:
 their network and station sides remain on the existing P1 executor. Host tests
 use `oer_memory::HostContext`. RX ordinary atomic wakers and the packet-pool
 waiter are still confined to that composition. These types do not admit new
@@ -61,18 +61,18 @@ cross-priority wiring.
 
 ## Event-driven bridges
 
-W3's bounded bridge and `ethernet::EthernetBridge` have no periodic timer.
+`ethernet::EthernetBridge` has no periodic timer.
 Each turn registers the neutral device's link waiter before observing the
 link level and epoch, even with empty queues or a retained TX. An epoch
 change reclaims stale retained and queued owners before waiting for new TX
 capacity. The HIL bridge continues servicing RX while TX is blocked, retaining
-its drain-and-report-refusal RX policy; W3 waits for RX publication capacity.
+its drain-and-report-refusal RX policy.
 
 | Waiting state | Event source |
 | --- | --- |
 | No device RX | `NetDevice::poll_receive_ready` |
-| W3 RX endpoint queue full | affine SPSC producer readiness, woken by stack dequeue |
-| W3 RX pool empty | claimed packet-pool waiter, woken after packet return; register then recheck |
+| Bounded RX endpoint queue full | affine SPSC producer readiness, woken by stack dequeue |
+| Bounded RX pool empty | claimed packet-pool waiter, woken after packet return; register then recheck |
 | No stack TX | coalesced TX publication hint; consuming a stale hint schedules a turn to rearm |
 | Retained TX blocked or refused | `NetDevice::poll_transmit_ready`, rearmed after refusal |
 | Stack TX admission full | packet destruction, then credit return and producer wake |
@@ -85,7 +85,7 @@ event producers before its application predicates in the same task; their
 shared waker delivers link, DHCP and probe updates without a 10-ms sampler.
 HIL compares the lease after each IP-runner poll, including renewal while
 the interface remains configured. Only protocol and application deadlines
-use time, including W3's six-second beacon-loss deadline.
+use time.
 
 The current notification directions and priority requirements are in the
 [execution audit](../../../docs/execution-wakes.md).
