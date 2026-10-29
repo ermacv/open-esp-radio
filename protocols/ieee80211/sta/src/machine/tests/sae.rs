@@ -309,7 +309,10 @@ fn password_element_invariant_is_a_local_fault_with_its_peer_and_derivation() {
     ] {
         assert_eq!(
             sae_derivation_failure(oer_ieee80211_rsn::sae::SaeError::Crypto, BSSID, pwe),
-            StaDisconnectReason::Sae(StaSaeFailure::Crypto { peer: BSSID, pwe })
+            StaDisconnectReason::Sae(StaSaeFailure::Crypto {
+                peer: BSSID,
+                pwe: pwe.into()
+            })
         );
         assert_eq!(
             sae_derivation_failure(

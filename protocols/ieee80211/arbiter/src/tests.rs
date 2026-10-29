@@ -581,7 +581,7 @@ fn an_upstream_switch_moves_the_port_with_the_access_points_announcement() {
             run(&mut arbiter, &mut port, at(10)),
             [Seen::AccessPoint(AccessPointCommand::AnnounceSwitch {
                 target: channel(6),
-                mode: ChannelSwitchMode::Continue,
+                mode: SwitchMode::Continue,
                 count: 3,
             })]
         );
@@ -704,7 +704,7 @@ fn a_join_away_from_the_access_point_starts_with_its_announced_move_and_it_stays
             run(&mut arbiter, &mut port, at(0)),
             [Seen::AccessPoint(AccessPointCommand::AnnounceSwitch {
                 target: channel(6),
-                mode: ChannelSwitchMode::Continue,
+                mode: SwitchMode::Continue,
                 count: 5,
             })]
         );

@@ -37,8 +37,9 @@ protocol and announces no keys.
 
 ## Personal station
 
-`wifi-station` serves `wifi/station/start`, correlated link events and the
-network-ready event on the USB console. One `StartStation` provisions a boot;
+`wifi-station` serves `wifi/station/start`, station Control commands and status,
+correlated link events and the network-ready event on the USB console. One
+`StartStation` provisions a boot;
 another configuration in that boot is rejected with `InvalidState`. Credentials
 arrive only in the binary HIL command. P1 derives the PMK with 8192 bounded
 PBKDF2-HMAC-SHA1 steps, yielding between them, and retains a zeroizing
@@ -56,20 +57,24 @@ through the reset path; it never substitutes a nonce or wraps an epoch.
 
 The network bridge waits only on RX, TX publication/capacity and link/epoch
 events. A retained TX does not block RX or link delivery. The IP runner's
-event-driven polls publish changed DHCP leases; probe completion and stop
-link waits share their task's waker and use no 10-ms sampler. Probe deadlines
-and the one-second reconnect policy remain image policy.
+event-driven polls publish changed DHCP leases; stop link waits share their
+task's waker and use no periodic sampler. The one-second reconnect policy
+remains image policy.
 
 Successful Association processing emits `Associated`; the controlled-port
-notice emits `Authorized`. The controller retains the Connect credit returned by its terminal; a
-disconnect enables another attempt with the next epoch. A poisoned or
+notice emits `Authorized` with the BSSID and channel. Runtime restores the
+Connect credit before its terminal callback; a peer departure enables another
+attempt with the next epoch. Explicit `DisconnectStation` pauses automatic
+reconnect until `ConnectStation`. A poisoned or
 quarantined radio ends the service through the existing fail-stop path; the
 controller cannot obtain a reusable radio owner. The backend grants one group
 slot, retaining its fail-stop GTK rollback policy.
 
-The W4 host controls 100-echo and ten-echo windows through `ProbeStation` and
-ends the run with `StopStation`. The image reuses W3's checked ICMP codec and
-distinct-pair observer. Typed observations expose hardware GTK installation
+The W4 peer generates 100-echo and ten-echo windows; the device replies through
+its ordinary IP stack. The host checks ping counts against independent
+request/reply captures, including identities and pacing, and ends the run with
+`StopStation`. The image has no target ping generator or dependency on W3.
+Typed observations expose hardware GTK installation
 KeyIDs, decoded broadcast ARPs, timeouts/collisions and final deauthentication;
 the station service reports the GTK installations, ARPs and receive drops as
 observation events, which the class's observer turns into these messages, so
@@ -77,9 +82,14 @@ the package declares the `trace` instrumentation class (every class builds
 with it);
 the host computes acceptance. Only a clean service stop emits `StationStopped`;
 a service that ends otherwise emits one `StationServiceEnded` with its typed
-fault, and the console then refuses `StopStation` and `ProbeStation` with
-`InvalidState`. Disconnect reasons and faults map to wire values by exhaustive
-matches (`wifi_station/report.rs`).
+fault, and the console then refuses `StopStation` with `InvalidState`.
+`ConnectStation`, `DisconnectStation` and `ScanStation` report typed Control
+admission and correlated terminal results; pending unexecuted commands complete
+once with `NotExecuted(Stopped)`. `GetStationStatus` reads the live product
+status before installation and after shutdown. Runtime owns the public
+vocabulary and converts core causes internally; `oer-ieee80211-control` mirrors
+it exhaustively. Only chip-backend teardown conversion remains in
+`wifi_station/report.rs`.
 
 The personal image's `stack-wifi-station.toml` names the measured P1
 frames that exceed the move limit, each with its own checked ceiling. IRQ

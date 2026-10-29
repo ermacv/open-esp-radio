@@ -28,15 +28,16 @@ pub struct StationLink {
 pub enum StationLinkState {
     Associated,
     /// RSN keys have been installed and the controlled port is open.
-    Authorized,
+    Authorized {
+        bssid: [u8; 6],
+        channel: u8,
+    },
     Disconnected {
         reason: StationDisconnectReason,
     },
 }
 
-/// Why a station link ended: one variant for each reason the portable
-/// station gives, and `RadioFailure` when the image's radio front end refused
-/// the station port before any link.
+/// Exact wire mirror of the runtime's connection failure vocabulary.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub enum StationDisconnectReason {
     /// The application asked the station to leave.
@@ -73,8 +74,6 @@ pub enum StationDisconnectReason {
     DeadlineOverflow,
     /// A frame the station had to send did not encode.
     Encode,
-    /// The radio front end refused the station port.
-    RadioFailure,
     /// An owned EAPOL frame failed its retained parse invariant.
     InvalidEapol(StationEapolParseError),
     RetainedSecurityIes(StationRsnFrameError),

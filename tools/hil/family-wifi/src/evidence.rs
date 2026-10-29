@@ -66,7 +66,7 @@ impl Handshake {
     }
 }
 
-/// ICMP identities come from the independent router capture, with target-side
+/// ICMP identities come from the independent router capture, with peer ping
 /// counts retained separately. Timestamps are the capture's epoch microseconds.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -74,10 +74,6 @@ pub struct Traffic {
     pub count: u16,
     pub address: Ipv4Addr,
     pub router: Ipv4Addr,
-    pub target_sent: u16,
-    pub target_received: u16,
-    pub target_peer_requests: u16,
-    pub target_peer_replies: u16,
     pub router_sent: u16,
     pub router_received: u16,
     pub echoes: Vec<Echo>,
@@ -88,7 +84,7 @@ impl Traffic {
         if self.count == 0 || self.address == self.router {
             return false;
         }
-        if self.echoes.len() != usize::from(self.count) * 4 {
+        if self.echoes.len() != usize::from(self.count) * 2 {
             return false;
         }
         let mut requests = BTreeMap::new();
@@ -133,17 +129,9 @@ impl Traffic {
     }
     fn complete(&self, count: u16) -> bool {
         self.count == count
-            && [
-                self.target_sent,
-                self.target_received,
-                self.target_peer_requests,
-                self.target_peer_replies,
-                self.router_sent,
-                self.router_received,
-            ]
-            .into_iter()
-            .all(|value| value == count)
-            && self.pairs(self.address, self.router)
+            && [self.router_sent, self.router_received]
+                .into_iter()
+                .all(|value| value == count)
             && self.pairs(self.router, self.address)
     }
     fn window(&self) -> Option<(u64, u64)> {
@@ -355,9 +343,9 @@ pub fn evaluate(e: &Evidence) -> [Gate; 6] {
     [
         ('a', a, "missing or contradictory W3 association/DHCP/ICMP/departure/statistics evidence"),
         ('b', b, "missing/contradictory four-way handshake, Connected or router authorization; association to M4 exceeds 1 s"),
-        ('c', c, "missing bidirectional 100/100, GTK change or protected broadcast ARP request/station reply on the new key"),
+        ('c', c, "missing peer ping 100/100, GTK change or protected broadcast ARP request/station reply on the new key"),
         ('d', d, "missing/truncated air window, zero protected station frames, capture loss or plaintext data"),
-        ('e', x, "missing forced departure, fresh authorized handshake or bidirectional 10/10 after reconnect"),
+        ('e', x, "missing forced departure, fresh authorized handshake or peer ping 10/10 after reconnect"),
         ('f', f, "missing or mismatching required hardware/model key traces"),
     ].map(|(id,pass,reason)| Gate { id, reason: (!pass).then_some(reason) })
 }

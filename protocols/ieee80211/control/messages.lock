@@ -1,20 +1,25 @@
 # The HIL wire of this revision.
-# The registry test prints the complete replacement when it differs.
 framing 2
 [modules]
 wifi base
 [messages]
 wifi/station ad7cdfe0a7c257e4 property
+wifi/station/admission 82336297e8a2e71b topic
 wifi/station/arp-frame 7c17039e1f1d0df0 topic
+wifi/station/command/finished 20dbeb547013edf2 topic
+wifi/station/connect 59623549ef7f53cf endpoint
 wifi/station/counters 3435d1c1f6700713 topic
 wifi/station/counters/get c3c4a743d084a9bb endpoint
+wifi/station/disconnect 9422d8f408d98d03 endpoint
 wifi/station/group-key 27ab2647264945bc topic
-wifi/station/link cdfbc45e12fa8807 topic
-wifi/station/probe e37fc052d9ec85e9 endpoint
-wifi/station/probe/finished e156497f15ad8e46 topic
-wifi/station/probe/ready 940908ee7694d30f topic
+wifi/station/link 13e5d19c0f15b769 topic
+wifi/station/msdu/refused 8c1ae86fa725f4b2 topic
 wifi/station/receive-drop 71f137fcccb01e28 topic
+wifi/station/scan 07c75e49657b792e endpoint
 wifi/station/service-ended 540f1846cb5b2961 topic
 wifi/station/start 0bded670f6ef9188 endpoint
+wifi/station/status 44f64cd67feec126 topic
+wifi/station/status/get 273a9e49d7ed24f6 endpoint
 wifi/station/stop 82add8a7b5f872f9 endpoint
 wifi/station/stopped 3704030980b827e2 topic
+wifi/station/transmit/refused 0f2711193d498dfa topic

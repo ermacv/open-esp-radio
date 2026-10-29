@@ -16,11 +16,17 @@ use crate::{
     ssh::{CommandObservation, Remote, Result, Ssh, Stderr, read_stderr},
 };
 
+struct EchoWindow {
+    count: u16,
+    peer_only: bool,
+}
+
 pub struct Capture {
     child: Child,
     output: Option<JoinHandle<Result<String>>>,
     diagnostics: Option<JoinHandle<(bool, Stderr)>>,
     count: u16,
+    peer_only: bool,
     saved: Option<std::fs::File>,
     status_file: Option<std::fs::File>,
     stop: Option<(Ssh, String)>,
@@ -46,7 +52,39 @@ impl Capture {
         address: std::net::Ipv4Addr,
         count: u16,
     ) -> Result<Self> {
-        Self::begin(ssh, interface, address, count, None, None, None)
+        Self::begin(
+            ssh,
+            interface,
+            address,
+            EchoWindow {
+                count,
+                peer_only: false,
+            },
+            None,
+            None,
+            None,
+        )
+    }
+
+    /// Observe peer-originated requests and the DUT stack's ordinary echo replies.
+    pub fn start_peer(
+        ssh: &Ssh,
+        interface: &str,
+        address: std::net::Ipv4Addr,
+        count: u16,
+    ) -> Result<Self> {
+        Self::begin(
+            ssh,
+            interface,
+            address,
+            EchoWindow {
+                count,
+                peer_only: true,
+            },
+            None,
+            None,
+            None,
+        )
     }
 
     pub(crate) fn start_load(
@@ -61,7 +99,10 @@ impl Capture {
             ssh,
             interface,
             address,
-            10000,
+            EchoWindow {
+                count: 10000,
+                peer_only: false,
+            },
             Some(directory),
             Some(saved),
             Some(status_file),
@@ -72,11 +113,12 @@ impl Capture {
         ssh: &Ssh,
         interface: &str,
         address: std::net::Ipv4Addr,
-        count: u16,
+        window: EchoWindow,
         directory: Option<&str>,
         saved: Option<std::fs::File>,
         status_file: Option<std::fs::File>,
     ) -> Result<Self> {
+        let EchoWindow { count, peer_only } = window;
         if !matches!(
             (count, directory.is_some()),
             (10 | 100, false) | (10000, true)
@@ -89,7 +131,7 @@ impl Capture {
         let script = format!(
             "exec timeout {} tcpdump -n -tt -l -c {} -i {} {}",
             u32::from(count) + 25,
-            u32::from(count) * 4,
+            u32::from(count) * if peer_only { 2 } else { 4 },
             quote(interface)?,
             quote(&format!("icmp and host {address}"))?
         );
@@ -145,6 +187,7 @@ impl Capture {
             output: Some(output),
             diagnostics: Some(diagnostics),
             count,
+            peer_only,
             saved,
             status_file,
             stop,
@@ -210,7 +253,10 @@ impl Capture {
             &text,
             waited.is_ok_and(|status| status.success()),
             complete,
-            self.count,
+            EchoWindow {
+                count: self.count,
+                peer_only: self.peer_only,
+            },
         )
     }
 }
@@ -280,10 +326,12 @@ fn completed_observation(
     text: &str,
     exited: bool,
     healthy: bool,
-    count: u16,
+    window: EchoWindow,
 ) -> Result<(Vec<super::Echo>, bool)> {
     let echoes = super::parse_echoes(text)?;
-    let complete = exited && healthy && echoes.len() == usize::from(count) * 4;
+    let complete = exited
+        && healthy
+        && echoes.len() == usize::from(window.count) * if window.peer_only { 2 } else { 4 };
     Ok((echoes, complete))
 }
 
@@ -586,7 +634,16 @@ mod tests {
                 })
             })
         }).collect::<String>();
-        let (rows, complete) = completed_observation(&text, true, true, 100).unwrap();
+        let (rows, complete) = completed_observation(
+            &text,
+            true,
+            true,
+            EchoWindow {
+                count: 100,
+                peer_only: false,
+            },
+        )
+        .unwrap();
         assert!(complete);
         assert_eq!(rows.len(), 400);
         let station = "192.0.2.8".parse().unwrap();
@@ -595,12 +652,108 @@ mod tests {
         assert!(crate::w3::echo_gate(&rows, router, station));
         let truncated = text.lines().take(398).collect::<Vec<_>>().join("\n");
         assert!(
-            !completed_observation(&truncated, true, true, 100)
-                .unwrap()
-                .1
+            !completed_observation(
+                &truncated,
+                true,
+                true,
+                EchoWindow {
+                    count: 100,
+                    peer_only: false
+                }
+            )
+            .unwrap()
+            .1
         );
-        assert!(!completed_observation(&text, false, true, 100).unwrap().1);
-        assert!(!completed_observation(&text, true, false, 100).unwrap().1);
-        assert!(completed_observation(&format!("{text}truncated"), true, true, 100).is_err());
+        assert!(
+            !completed_observation(
+                &text,
+                false,
+                true,
+                EchoWindow {
+                    count: 100,
+                    peer_only: false
+                }
+            )
+            .unwrap()
+            .1
+        );
+        assert!(
+            !completed_observation(
+                &text,
+                true,
+                false,
+                EchoWindow {
+                    count: 100,
+                    peer_only: false
+                }
+            )
+            .unwrap()
+            .1
+        );
+        assert!(
+            completed_observation(
+                &format!("{text}truncated"),
+                true,
+                true,
+                EchoWindow {
+                    count: 100,
+                    peer_only: false
+                }
+            )
+            .is_err()
+        );
+    }
+    #[test]
+    fn peer_window_requires_every_reply_and_a_healthy_complete_capture() {
+        let text = (1..=10)
+            .flat_map(|sequence| {
+                [false, true].map(move |reply| {
+                    format!(
+                        "{}.{:06} IP {} > {}: ICMP echo {}, id 8, seq {sequence}, length 64\n",
+                        1792590000_u64 + sequence,
+                        u32::from(reply) * 1000,
+                        if reply { "192.0.2.8" } else { "192.0.2.1" },
+                        if reply { "192.0.2.1" } else { "192.0.2.8" },
+                        if reply { "reply" } else { "request" }
+                    )
+                })
+            })
+            .collect::<String>();
+        let result = |text: &str, exited, healthy| {
+            completed_observation(
+                text,
+                exited,
+                healthy,
+                EchoWindow {
+                    count: 10,
+                    peer_only: true,
+                },
+            )
+        };
+        assert!(result(&text, true, true).unwrap().1);
+        assert!(!result(&text, false, true).unwrap().1);
+        assert!(!result(&text, true, false).unwrap().1);
+        assert!(
+            !result(
+                &text.lines().take(19).collect::<Vec<_>>().join("\n"),
+                true,
+                true
+            )
+            .unwrap()
+            .1
+        );
+        assert!(
+            !completed_observation(
+                &text,
+                true,
+                true,
+                EchoWindow {
+                    count: 10,
+                    peer_only: false
+                }
+            )
+            .unwrap()
+            .1
+        );
     }
 }

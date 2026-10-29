@@ -118,8 +118,6 @@ named `hil` takes its role from the list.
   `chips/espressif/ieee80211-policy`.
 - `chips/espressif/ieee80211-policy` has a dev-dependency on
   `chips/esp32s31/ieee80211/mac`.
-- `firmware/hil/esp32s31` has an optional, RISC-V-only normal dependency on
-  `firmware/apps/w3` for shared network observation and ICMP helpers in its `wifi-station` feature (the IP adapter extraction, N-d).
 - Host tests include image source files through `#[path]`:
   `tools/image/cli/src/main.rs` includes the W1 CRC implementation;
   `tools/hil/family-phy/tests/` includes cache and hold modules of

@@ -27,7 +27,11 @@
 )]
 //! Station admission and link state, separate from network transport sessions.
 
+mod binding;
+mod contract;
 mod credentials;
+pub use binding::*;
+pub use contract::*;
 mod link;
 mod observation;
 mod service;
@@ -41,14 +45,20 @@ oer_hil_protocol::messages! {
     /// Accept a station configuration; authorization is a later link event.
         endpoint StartStation = "wifi/station/start" => oer_hil_protocol::base::Accepted;
         topic StationLink = "wifi/station/link";
-        endpoint ProbeStation = "wifi/station/probe" => oer_hil_protocol::base::Accepted;
-        topic StationProbeFinished = "wifi/station/probe/finished";
-        topic StationProbeReady = "wifi/station/probe/ready";
         endpoint GetStationCounters = "wifi/station/counters/get" => StationCounters;
         topic StationCounters = "wifi/station/counters";
         topic StationGroupKey = "wifi/station/group-key";
         topic StationReceiveDrop = "wifi/station/receive-drop";
         topic StationArpFrame = "wifi/station/arp-frame";
+        endpoint ConnectStation = "wifi/station/connect" => StationAdmission;
+        endpoint DisconnectStation = "wifi/station/disconnect" => StationAdmission;
+        endpoint ScanStation = "wifi/station/scan" => StationAdmission;
+        endpoint GetStationStatus = "wifi/station/status/get" => StationStatus;
+        topic StationAdmission = "wifi/station/admission";
+        topic StationStatus = "wifi/station/status";
+        topic StationTransmitRefused = "wifi/station/transmit/refused";
+        topic StationMsduRefusal = "wifi/station/msdu/refused";
+        topic StationCommandFinished = "wifi/station/command/finished";
         endpoint StopStation = "wifi/station/stop" => oer_hil_protocol::base::Accepted;
         topic StationStopped = "wifi/station/stopped";
         topic StationServiceEnded = "wifi/station/service-ended";

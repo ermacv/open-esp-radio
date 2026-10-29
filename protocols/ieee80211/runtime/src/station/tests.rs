@@ -3,11 +3,14 @@
 //! record switches once the station associated, the handshake's EAPOL on
 //! the association's record.
 
+use super::contract::{
+    Command as StaCommand, CommandOutcome as StaCommandOutcome, CommandRefusal,
+    DisconnectReason as StaDisconnectReason, Notice as StaNotice, TransmitRefusal as TxRefusal,
+};
 use core::cell::{Cell, RefCell};
 use core::future::{Future, poll_fn};
 use core::pin::Pin;
 use core::task::{Poll, Waker};
-use oer_ieee80211_sta::machine::{CommandRefusal, StaCommand, StaCommandOutcome};
 
 use embassy_futures::join::join;
 use oer_espressif_ieee80211_policy::{
@@ -34,6 +37,7 @@ use {
     },
 };
 
+use super::contract::{AccessPointCommand, AccessPointFact};
 use super::*;
 use oer_ieee80211_wire::qos::{WmmAccessCategory, WmmUserPriority};
 use oer_memory::WakingSpscQueue;
@@ -683,8 +687,8 @@ struct ObservedCommandTerminal {
 enum ObservedOutput {
     CommandInFlight(ObservedRequest),
     MsduRefused {
-        _packet: Box<TxMsdu>,
-        _reason: DataRefusal,
+        _packet: Box<super::contract::TransmitPacket>,
+        _reason: super::contract::MsduRefusal,
     },
     TxRefused {
         operation: TxOperation,
@@ -839,10 +843,7 @@ impl Application<'_, '_, '_> {
         assert_eq!(message4.key, None);
         assert_eq!(message4.plaintext[1] & 0x40, 0);
         self.notice(StaNotice::Connected {
-            bssid: oer_ieee80211_wire::address::Bssid::new(
-                oer_ieee80211_wire::address::IndividualAddress::new(BSSID).unwrap(),
-            )
-            .unwrap(),
+            bssid: BSSID,
             channel: 6,
         })
         .await;
@@ -1151,10 +1152,7 @@ where
                         } else {
                             world
                                 .notice(StaNotice::Connected {
-                                    bssid: oer_ieee80211_wire::address::Bssid::new(
-                                        IndividualAddress::new(BSSID).unwrap(),
-                                    )
-                                    .unwrap(),
+                                    bssid: BSSID,
                                     channel: 6,
                                 })
                                 .await;
@@ -1287,8 +1285,8 @@ where
                 );
                 assert_eq!(world.outputs.borrow().iter().filter(|output| matches!(output,
                     ObservedOutput::CommandCompleted(terminal) if terminal.request.correlation() == 901
-                    && terminal.outcome == oer_ieee80211_sta::machine::StaCommandOutcome::ConnectFailed(
-                        oer_ieee80211_sta::machine::StaDisconnectReason::Arbiter(oer_ieee80211_arbiter::LeaveReason::PortFailed))
+                    && terminal.outcome == StaCommandOutcome::ConnectFailed(
+                        StaDisconnectReason::Arbiter(super::contract::LeaveReason::PortFailed))
                 )).count(), 1);
             }
             match end {
@@ -1475,11 +1473,9 @@ fn refused_initial_enable_finishes_the_accepted_connect_and_uninstalls_without_r
         |world| {
             Box::pin(async move {
                 world
-                    .notice(StaNotice::Disconnected(
-                        oer_ieee80211_sta::machine::StaDisconnectReason::Arbiter(
-                            oer_ieee80211_arbiter::LeaveReason::PortFailed,
-                        ),
-                    ))
+                    .notice(StaNotice::Disconnected(StaDisconnectReason::Arbiter(
+                        super::contract::LeaveReason::PortFailed,
+                    )))
                     .await;
                 assert!(world.air.sent().is_empty());
             })
@@ -1490,15 +1486,16 @@ fn refused_initial_enable_finishes_the_accepted_connect_and_uninstalls_without_r
 
 #[test]
 fn port_failure_during_scan_returns_one_connect_terminal_and_one_lifecycle_notice() {
-    use oer_ieee80211_sta::machine::{StaCommandOutcome, StaDisconnectReason};
+    use super::contract::{
+        CommandOutcome as StaCommandOutcome, DisconnectReason as StaDisconnectReason,
+    };
     run(StaSecurity::Open, |world| {
         Box::pin(async move {
             let mut seen = 0;
             world.station_command(777, StaCommand::Connect).await;
             world.sent(&mut seen, PROBE_REQUEST).await;
             world.air.poison();
-            let reason =
-                StaDisconnectReason::Arbiter(oer_ieee80211_arbiter::LeaveReason::PortFailed);
+            let reason = StaDisconnectReason::Arbiter(super::contract::LeaveReason::PortFailed);
             world.notice(StaNotice::Disconnected(reason)).await;
             let outputs = world.outputs.borrow();
             assert_eq!(
@@ -1526,7 +1523,7 @@ fn port_failure_during_scan_returns_one_connect_terminal_and_one_lifecycle_notic
 
 #[test]
 fn event_end_checks_outstanding_tx_and_quarantines_without_disable() {
-    use oer_ieee80211_sta::machine::StaDisconnectReason;
+    use super::contract::DisconnectReason as StaDisconnectReason;
     for end in [
         ExpectedStreamEnd::Drained,
         ExpectedStreamEnd::SubmissionFailed,
@@ -1539,10 +1536,7 @@ fn event_end_checks_outstanding_tx_and_quarantines_without_disable() {
                 world.associate(&mut seen, false).await;
                 world
                     .notice(StaNotice::Connected {
-                        bssid: oer_ieee80211_wire::address::Bssid::new(
-                            IndividualAddress::new(BSSID).unwrap(),
-                        )
-                        .unwrap(),
+                        bssid: BSSID,
                         channel: 6,
                     })
                     .await;
@@ -1578,7 +1572,7 @@ fn event_end_checks_outstanding_tx_and_quarantines_without_disable() {
                 }
                 world
                     .notice(StaNotice::Disconnected(StaDisconnectReason::Arbiter(
-                        oer_ieee80211_arbiter::LeaveReason::PortFailed,
+                        super::contract::LeaveReason::PortFailed,
                     )))
                     .await;
             })
@@ -1588,17 +1582,14 @@ fn event_end_checks_outstanding_tx_and_quarantines_without_disable() {
 
 #[test]
 fn poisoned_disable_after_stop_finishes_the_connected_lifecycle() {
-    use oer_ieee80211_sta::machine::StaDisconnectReason;
+    use super::contract::DisconnectReason as StaDisconnectReason;
     run(StaSecurity::Open, |world| {
         Box::pin(async move {
             let mut seen = 0;
             world.associate(&mut seen, false).await;
             world
                 .notice(StaNotice::Connected {
-                    bssid: oer_ieee80211_wire::address::Bssid::new(
-                        IndividualAddress::new(BSSID).unwrap(),
-                    )
-                    .unwrap(),
+                    bssid: BSSID,
                     channel: 6,
                 })
                 .await;
@@ -1612,8 +1603,7 @@ fn poisoned_disable_after_stop_finishes_the_connected_lifecycle() {
                 yield_now().await;
             }
             world.air.poison();
-            let reason =
-                StaDisconnectReason::Arbiter(oer_ieee80211_arbiter::LeaveReason::PortFailed);
+            let reason = StaDisconnectReason::Arbiter(super::contract::LeaveReason::PortFailed);
             world.notice(StaNotice::Disconnected(reason)).await;
             let outputs = world.outputs.borrow();
             assert_eq!(
@@ -1660,10 +1650,7 @@ fn on_an_open_network_the_join_goes_on_the_default_record_and_then_the_associati
             assert_eq!(association.rate, dsss1());
             world
                 .notice(StaNotice::Connected {
-                    bssid: oer_ieee80211_wire::address::Bssid::new(
-                        oer_ieee80211_wire::address::IndividualAddress::new(BSSID).unwrap(),
-                    )
-                    .unwrap(),
+                    bssid: BSSID,
                     channel: 6,
                 })
                 .await;
@@ -1794,10 +1781,7 @@ fn a_delayed_unwrap_leaves_the_loop_serving_the_port_and_completes_the_handshake
                 assert!(at >= started.saturating_add(DELAY));
                 world
                     .notice(StaNotice::Connected {
-                        bssid: oer_ieee80211_wire::address::Bssid::new(
-                            IndividualAddress::new(BSSID).unwrap(),
-                        )
-                        .unwrap(),
+                        bssid: BSSID,
                         channel: 6,
                     })
                     .await;
@@ -1857,7 +1841,7 @@ fn stop_during_an_unwrap_waits_for_the_engine_before_the_station_retires() {
 
 #[test]
 fn a_one_slot_station_completes_group_replacement_through_the_service_event_stream() {
-    use oer_ieee80211_sta::machine::StaDisconnectReason;
+    use super::contract::DisconnectReason as StaDisconnectReason;
     run_with_groups::<_, 1>(
         config(StaSecurity::Personal {
             password: oer_ieee80211_rsn::sae::SaePassword::new(b"password").unwrap(),
@@ -1887,7 +1871,7 @@ fn a_one_slot_station_completes_group_replacement_through_the_service_event_stre
                 world.station_command(2, StaCommand::Disconnect).await;
                 world.sent(&mut seen, DEAUTHENTICATION).await;
                 world
-                    .notice(StaNotice::Disconnected(StaDisconnectReason::Requested))
+                    .notice(StaNotice::Disconnected(StaDisconnectReason::LocalRequest))
                     .await;
             })
         },
@@ -1929,7 +1913,7 @@ fn refusing_m4_releases_handshake_resources_without_connecting_and_service_can_r
                 world.air.receive(&message3(&ptk), meta());
                 world
                     .notice(StaNotice::Disconnected(
-                        oer_ieee80211_sta::machine::StaDisconnectReason::HandshakeFailed,
+                        StaDisconnectReason::HandshakeFailed,
                     ))
                     .await;
                 assert!(world.outputs.borrow().iter().any(|output| matches!(
@@ -2089,9 +2073,7 @@ fn a_station_scans_joins_handshakes_carries_data_both_ways_and_disconnects() {
                 let deauthentication = world.sent(&mut seen, DEAUTHENTICATION).await;
                 assert_eq!(deauthentication.plaintext[4..10], BSSID);
                 world
-                    .notice(StaNotice::Disconnected(
-                        oer_ieee80211_sta::machine::StaDisconnectReason::Requested,
-                    ))
+                    .notice(StaNotice::Disconnected(StaDisconnectReason::LocalRequest))
                     .await;
                 world.send_msdu(destination);
                 for _ in 0..5 {
@@ -2229,10 +2211,7 @@ fn a_disconnection_during_an_absence_leaves_no_old_frame_to_go_after_the_reconne
             world.associate(&mut seen, false).await;
             world
                 .notice(StaNotice::Connected {
-                    bssid: oer_ieee80211_wire::address::Bssid::new(
-                        oer_ieee80211_wire::address::IndividualAddress::new(BSSID).unwrap(),
-                    )
-                    .unwrap(),
+                    bssid: BSSID,
                     channel: 6,
                 })
                 .await;
@@ -2253,9 +2232,7 @@ fn a_disconnection_during_an_absence_leaves_no_old_frame_to_go_after_the_reconne
             // deadline; waiting only for a notice leaves time stopped.
             world.sent(&mut seen, DEAUTHENTICATION).await;
             world
-                .notice(StaNotice::Disconnected(
-                    oer_ieee80211_sta::machine::StaDisconnectReason::Requested,
-                ))
+                .notice(StaNotice::Disconnected(StaDisconnectReason::LocalRequest))
                 .await;
             // Reconnected: every data token is back, so the machine takes
             // four MSDUs again and two more wait in the stack's queue.
@@ -2312,10 +2289,7 @@ fn beside_an_access_point_msdus_survive_an_absence() {
             world.associate(&mut seen, false).await;
             world
                 .notice(StaNotice::Connected {
-                    bssid: oer_ieee80211_wire::address::Bssid::new(
-                        oer_ieee80211_wire::address::IndividualAddress::new(BSSID).unwrap(),
-                    )
-                    .unwrap(),
+                    bssid: BSSID,
                     channel: 6,
                 })
                 .await;
@@ -2329,9 +2303,9 @@ fn beside_an_access_point_msdus_survive_an_absence() {
                     )
                     .unwrap(),
                     next_tbtt: tbtt,
-                    beacon_interval: oer_ieee80211_arbiter::coordinator::BeaconInterval::new(
-                        Duration::from_micros(102_400),
-                    )
+                    beacon_interval: super::contract::BeaconInterval::new(Duration::from_micros(
+                        102_400,
+                    ))
                     .unwrap(),
                 }))
                 .await;
@@ -2553,10 +2527,7 @@ fn continuous_rx_cannot_starve_data_tx_or_application_commands() {
             world.associate(&mut seen, false).await;
             world
                 .notice(StaNotice::Connected {
-                    bssid: oer_ieee80211_wire::address::Bssid::new(
-                        oer_ieee80211_wire::address::IndividualAddress::new(BSSID).unwrap(),
-                    )
-                    .unwrap(),
+                    bssid: BSSID,
                     channel: 6,
                 })
                 .await;
@@ -2601,10 +2572,7 @@ fn lost_port_events_are_counted_and_the_service_keeps_running() {
             world.associate(&mut seen, false).await;
             world
                 .notice(StaNotice::Connected {
-                    bssid: oer_ieee80211_wire::address::Bssid::new(
-                        oer_ieee80211_wire::address::IndividualAddress::new(BSSID).unwrap(),
-                    )
-                    .unwrap(),
+                    bssid: BSSID,
                     channel: 6,
                 })
                 .await;
@@ -2624,7 +2592,7 @@ fn lost_port_events_are_counted_and_the_service_keeps_running() {
 
 #[test]
 fn application_requests_return_correlated_refusals_and_unique_completions() {
-    use oer_ieee80211_sta::machine::{CommandRefusal, StaCommandOutcome};
+    use super::contract::{CommandOutcome as StaCommandOutcome, CommandRefusal};
     run_with(config(StaSecurity::Open), |world| {
         Box::pin(async move {
             world.station_command(91, StaCommand::BackgroundScan).await;
@@ -2765,7 +2733,9 @@ fn message4_waits_for_the_actual_group_installation_terminal() {
 
 #[test]
 fn stop_or_fault_with_an_accepted_group_install_keeps_owners_and_sends_no_message4() {
-    use oer_ieee80211_sta::machine::{StaCommandOutcome, StaDisconnectReason};
+    use super::contract::{
+        CommandOutcome as StaCommandOutcome, DisconnectReason as StaDisconnectReason,
+    };
     for poisoned in [false, true] {
         run(
             StaSecurity::Personal {
@@ -2787,10 +2757,10 @@ fn stop_or_fault_with_an_accepted_group_install_keeps_owners_and_sends_no_messag
                     assert_eq!(world.air.sent().len(), before);
                     let reason = if poisoned {
                         world.air.poison();
-                        StaDisconnectReason::Arbiter(oer_ieee80211_arbiter::LeaveReason::PortFailed)
+                        StaDisconnectReason::Arbiter(super::contract::LeaveReason::PortFailed)
                     } else {
                         world.command(ServiceCommand::Stop).await;
-                        StaDisconnectReason::Requested
+                        StaDisconnectReason::LocalRequest
                     };
                     world.notice(StaNotice::Disconnected(reason)).await;
                     assert_eq!(
@@ -2834,10 +2804,7 @@ fn an_extended_ofdm_rate_set_reaches_the_data_and_control_plans() {
             world.associate_with(&mut seen, advertisement, false).await;
             world
                 .notice(StaNotice::Connected {
-                    bssid: oer_ieee80211_wire::address::Bssid::new(
-                        IndividualAddress::new(BSSID).unwrap(),
-                    )
-                    .unwrap(),
+                    bssid: BSSID,
                     channel: 6,
                 })
                 .await;
@@ -2895,10 +2862,7 @@ fn negotiated_pmf_checks_received_management_and_keeps_the_tx_key_through_discon
                     let _message4 = world.sent(&mut seen, DATA).await;
                     world
                         .notice(StaNotice::Connected {
-                            bssid: oer_ieee80211_wire::address::Bssid::new(
-                                IndividualAddress::new(BSSID).unwrap(),
-                            )
-                            .unwrap(),
+                            bssid: BSSID,
                             channel: 6,
                         })
                         .await;
@@ -2933,11 +2897,9 @@ fn negotiated_pmf_checks_received_management_and_keeps_the_tx_key_through_discon
                             .collect();
                         world.air.receive(&valid, meta());
                         world
-                            .notice(StaNotice::Disconnected(
-                                oer_ieee80211_sta::machine::StaDisconnectReason::Peer {
-                                    reason_code: 7,
-                                },
-                            ))
+                            .notice(StaNotice::Disconnected(StaDisconnectReason::Peer {
+                                reason_code: 7,
+                            }))
                             .await;
                     } else {
                         world.station_command(2, StaCommand::Disconnect).await;
@@ -2946,9 +2908,7 @@ fn negotiated_pmf_checks_received_management_and_keeps_the_tx_key_through_discon
                         assert!(matches!(deauthentication.key, Some((_, true))));
                         assert_eq!(deauthentication.packet_number, Some(2));
                         world
-                            .notice(StaNotice::Disconnected(
-                                oer_ieee80211_sta::machine::StaDisconnectReason::Requested,
-                            ))
+                            .notice(StaNotice::Disconnected(StaDisconnectReason::LocalRequest))
                             .await;
                     }
                 })
@@ -3001,10 +2961,7 @@ fn stopped_service_reconnects_and_sends_data_on_the_same_installation() {
                     } else {
                         world
                             .notice(StaNotice::Connected {
-                                bssid: oer_ieee80211_wire::address::Bssid::new(
-                                    IndividualAddress::new(BSSID).unwrap(),
-                                )
-                                .unwrap(),
+                                bssid: BSSID,
                                 channel: 6,
                             })
                             .await;
@@ -3035,10 +2992,7 @@ fn placed_service_retires_its_banks_on_stop_drained_and_quarantined_ports() {
                     world.associate(&mut seen, false).await;
                     world
                         .notice(StaNotice::Connected {
-                            bssid: oer_ieee80211_wire::address::Bssid::new(
-                                IndividualAddress::new(BSSID).unwrap(),
-                            )
-                            .unwrap(),
+                            bssid: BSSID,
                             channel: 6,
                         })
                         .await;
@@ -3061,11 +3015,9 @@ fn placed_service_retires_its_banks_on_stop_drained_and_quarantined_ports() {
                             ExpectedStreamEnd::SubmissionFailed => unreachable!(),
                         }
                         world
-                            .notice(StaNotice::Disconnected(
-                                oer_ieee80211_sta::machine::StaDisconnectReason::Arbiter(
-                                    oer_ieee80211_arbiter::LeaveReason::PortFailed,
-                                ),
-                            ))
+                            .notice(StaNotice::Disconnected(StaDisconnectReason::Arbiter(
+                                super::contract::LeaveReason::PortFailed,
+                            )))
                             .await;
                     }
                 })
@@ -3180,10 +3132,7 @@ fn control_and_runner_publish_status_and_distinct_core_epochs_on_reconnect() {
                 world.associate(&mut seen, false).await;
                 world
                     .notice(StaNotice::Connected {
-                        bssid: oer_ieee80211_wire::address::Bssid::new(
-                            IndividualAddress::new(BSSID).unwrap(),
-                        )
-                        .unwrap(),
+                        bssid: BSSID,
                         channel: 6,
                     })
                     .await;
@@ -3193,9 +3142,7 @@ fn control_and_runner_publish_status_and_distinct_core_epochs_on_reconnect() {
                 previous = connected.link.epoch;
                 world.station_command(9, StaCommand::Disconnect).await;
                 world
-                    .notice(StaNotice::Disconnected(
-                        oer_ieee80211_sta::machine::StaDisconnectReason::Requested,
-                    ))
+                    .notice(StaNotice::Disconnected(StaDisconnectReason::LocalRequest))
                     .await;
                 assert_eq!(
                     world.status().link,
@@ -3219,9 +3166,7 @@ fn control_cooperative_stop_retires_the_model_runner_and_publishes_the_last_noti
             control.stop();
             world.commands.set(Some(control));
             world
-                .notice(StaNotice::Disconnected(
-                    oer_ieee80211_sta::machine::StaDisconnectReason::Requested,
-                ))
+                .notice(StaNotice::Disconnected(StaDisconnectReason::LocalRequest))
                 .await;
             assert_eq!(world.status().link.state, oer_network::LinkState::Down);
         })
@@ -3256,10 +3201,7 @@ fn runner_retains_its_installation_credit_through_a_duplicate_request_and_return
             world.air.receive(&association_response(false), meta());
             world
                 .notice(StaNotice::Connected {
-                    bssid: oer_ieee80211_wire::address::Bssid::new(
-                        IndividualAddress::new(BSSID).unwrap(),
-                    )
-                    .unwrap(),
+                    bssid: BSSID,
                     channel: 6,
                 })
                 .await;

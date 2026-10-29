@@ -1,0 +1,26 @@
+error[E0277]: `Cell<Status>` cannot be shared between threads safely
+ --> tests/ui/status_reader_context.rs:7:18
+  |
+7 |     require_send(reader); // ui-error: E0277
+  |     ------------ ^^^^^^ `Cell<Status>` cannot be shared between threads safely
+  |     |
+  |     required by a bound introduced by this call
+  |
+  = help: within `State`, the trait `Sync` is not implemented for `Cell<Status>`
+  = note: if you want to do aliasing and mutation between multiple threads, use `std::sync::RwLock`
+note: required because it appears within the type `State`
+ --> src/station/control.rs
+  |
+  | pub struct State {
+  |            ^^^^^
+  = note: required for `&State` to implement `Send`
+note: required because it appears within the type `StatusReader<'_>`
+ --> src/station/control.rs
+  |
+  | pub struct StatusReader<'c> {
+  |            ^^^^^^^^^^^^
+note: required by a bound in `require_send`
+ --> tests/ui/status_reader_context.rs:4:20
+  |
+4 | fn require_send<T: Send>(_: T) {}
+  |                    ^^^^ required by this bound in `require_send`

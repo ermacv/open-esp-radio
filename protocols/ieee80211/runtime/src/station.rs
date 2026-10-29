@@ -89,12 +89,13 @@
 //! received payload too long for one is refused, never clipped.
 
 mod commands;
+pub mod contract;
 mod control;
 use commands::CommandCredits;
 pub use commands::{CommandRefused, CommandTerminal, Request};
 pub use control::{
     Control, ControlCreateRefused, ControlError, ControlRefused, Device, Events, RunnerControl,
-    State, Status,
+    State, Status, StatusReader,
 };
 
 use core::marker::PhantomData;
@@ -109,8 +110,7 @@ use core::task::Poll;
 use embassy_futures::yield_now;
 use oer_crypto::KeyUnwrap;
 use oer_ieee80211_arbiter::{
-    AccessPointCommand, AccessPointFact, Arbiter, ArbiterAction, ArbiterEnd, ArbiterNotice,
-    NoReservation, RetiredArbiter, RetuneRefused,
+    Arbiter, ArbiterAction, ArbiterEnd, ArbiterNotice, NoReservation, RetiredArbiter, RetuneRefused,
 };
 use oer_ieee80211_port::{
     ClassFrame, Ieee80211Capabilities, InstalledGroup, InterfacePhase, KeyTypes, LowerMacBackend,
@@ -410,7 +410,7 @@ pub enum ServiceCommand<K> {
     /// A command of the station.
     Station(Request),
     /// A fact of the access point beside the station.
-    AccessPoint(AccessPointFact<K>),
+    AccessPoint(contract::AccessPointFact<K>),
     /// The access point beside the station is wanted.
     WantAccessPoint,
     /// Stop: the service disables the port and returns its owner.
@@ -425,17 +425,20 @@ pub enum ServiceCommand<K> {
 )]
 pub enum ServiceOutput<K> {
     /// The original network operation refused before data admission.
-    MsduRefused { packet: TxMsdu, reason: DataRefusal },
+    MsduRefused {
+        packet: contract::TransmitPacket,
+        reason: contract::MsduRefusal,
+    },
     /// An operation refused before admission. Its resources return and the
     /// service continues; this is not a TX completion or radio statistic.
     TxRefused {
         /// The machine that originated the operation.
         operation: TxOperation,
         /// The preparation failure.
-        reason: TxRefusal,
+        reason: contract::TransmitRefusal,
     },
     /// The station's notice.
-    Notice(StaNotice),
+    Notice(contract::Notice),
     /// A request refused synchronously, with its original correlation.
     CommandRefused(CommandRefused),
     /// A raw producer submitted a second request without the first terminal.
@@ -443,7 +446,7 @@ pub enum ServiceOutput<K> {
     /// The unique terminal of one admitted station request.
     CommandCompleted(CommandTerminal),
     /// The arbiter's command to the access point beside the station.
-    AccessPoint(AccessPointCommand<K>),
+    AccessPoint(contract::AccessPointCommand<K>),
 }
 
 /// The origin of a preparation refusal reported to the application.
@@ -479,7 +482,7 @@ pub enum BackendContractViolation {
     GroupSlotMismatch,
     GroupTerminalKindMismatch,
     TxContextBufferMismatch,
-    StationKeyBank(oer_ieee80211_sta::machine::StaKeyContractViolation),
+    StationKeyBank(contract::KeyContractViolation),
     /// The station asked for a second key-data unwrap while one was waiting
     /// to start; it owns one ticket.
     StationKeyUnwrap,
@@ -1218,7 +1221,7 @@ impl<
                     while let Some(notice) = retired._arbiter.poll_notice() {
                         match notice {
                             ArbiterNotice::Station(notice) => retired._places.returned(notice),
-                            ArbiterNotice::AccessPoint(command) => io.output.emit(ServiceOutput::AccessPoint(command)),
+                            ArbiterNotice::AccessPoint(command) => io.output.emit(ServiceOutput::AccessPoint(command.into())),
                         }
                     }
                     while let Some(output) = retired.station.poll_output() {
@@ -1226,7 +1229,7 @@ impl<
                             oer_ieee80211_sta::machine::StaFinalOutput::CommandCompleted(terminal) =>
                                 io.output.emit(ServiceOutput::CommandCompleted(retired._pending.commands.completed(terminal))),
                             oer_ieee80211_sta::machine::StaFinalOutput::Notify(notice) =>
-                                io.output.emit(ServiceOutput::Notice(notice)),
+                                io.output.emit(ServiceOutput::Notice(notice.into())),
                         }
                     }
                     retired.into_mut()
@@ -1290,7 +1293,7 @@ impl<
             match notice {
                 ArbiterNotice::Station(notice) => places.returned(notice),
                 ArbiterNotice::AccessPoint(command) => {
-                    io.output.emit(ServiceOutput::AccessPoint(command))
+                    io.output.emit(ServiceOutput::AccessPoint(command.into()))
                 }
             }
         }
@@ -1302,7 +1305,7 @@ impl<
                     ))
                 }
                 oer_ieee80211_sta::machine::StaFinalOutput::Notify(notice) => {
-                    io.output.emit(ServiceOutput::Notice(notice))
+                    io.output.emit(ServiceOutput::Notice(notice.into()))
                 }
             }
         }
@@ -1767,7 +1770,7 @@ impl<
                             None => io.output.emit(ServiceOutput::CommandInFlight(command)),
                         }
                     }
-                    ServiceCommand::AccessPoint(fact) => arbiter.access_point(now, fact),
+                    ServiceCommand::AccessPoint(fact) => arbiter.access_point(now, fact.into()),
                     ServiceCommand::WantAccessPoint => arbiter.want_access_point(),
                     ServiceCommand::Stop => {
                         self.pending.receive.clear(&mut PhaseBlockAcks::new(phase));
@@ -1902,8 +1905,10 @@ impl<
                 // The available-pool observation is dynamic and the public
                 // data input can refuse it. Return the original owned packet,
                 // rather than manufacturing a terminal or losing its bytes.
-                io.output
-                    .emit(ServiceOutput::MsduRefused { packet, reason });
+                io.output.emit(ServiceOutput::MsduRefused {
+                    packet: contract::TransmitPacket(packet),
+                    reason: reason.into(),
+                });
             }
         }
     }
@@ -1944,7 +1949,7 @@ impl<
                         self.station.input(now, StaInput::Arbiter(notice));
                     }
                     ArbiterAction::AccessPoint(command) => {
-                        io.output.emit(ServiceOutput::AccessPoint(command));
+                        io.output.emit(ServiceOutput::AccessPoint(command.into()));
                     }
                     ArbiterAction::CloseGate { gate, reserve: () } => {
                         self.pending
@@ -2177,7 +2182,7 @@ impl<
                 {
                     io.control.state.epoch(link.epoch.sequence());
                 }
-                io.output.emit(ServiceOutput::Notice(notice));
+                io.output.emit(ServiceOutput::Notice(notice.into()));
                 if let StaNotice::Disconnected(_) = notice {
                     self.rates.disconnected();
                     self.data.leave();
@@ -2194,8 +2199,10 @@ impl<
                     TxContext::Station(_) => TxOperation::Station,
                     TxContext::Data(_) => TxOperation::Data,
                 };
-                io.output
-                    .emit(ServiceOutput::TxRefused { operation, reason });
+                io.output.emit(ServiceOutput::TxRefused {
+                    operation,
+                    reason: reason.into(),
+                });
                 self.returned(now, context, ticket, buffer, ReturnedTx::Refused(reason))?;
             }
         }
@@ -2225,7 +2232,7 @@ impl<
                     self.station.input(now, StaInput::Arbiter(notice))
                 }
                 ArbiterNotice::AccessPoint(command) => {
-                    io.output.emit(ServiceOutput::AccessPoint(command))
+                    io.output.emit(ServiceOutput::AccessPoint(command.into()))
                 }
             }
         }
@@ -3049,7 +3056,7 @@ where
         }
         StaAction::ContractViolation(reason) => {
             return Err(ServiceFault::Contract(
-                BackendContractViolation::StationKeyBank(reason),
+                BackendContractViolation::StationKeyBank(reason.into()),
             ));
         }
         StaAction::Notify(notice) => return Ok(Follow::Notice(notice)),

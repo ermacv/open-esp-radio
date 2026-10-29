@@ -12,7 +12,3 @@ fn main() {}
 
 #[cfg(all(test, not(target_arch = "riscv32")))]
 mod services;
-
-#[cfg(test)]
-#[path = "wifi_station/security_report.rs"]
-mod security_report;

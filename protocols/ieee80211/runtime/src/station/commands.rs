@@ -1,6 +1,7 @@
 //! Installation-independent requests; affine permissions never leave Runner.
+use super::contract::{Command, CommandOutcome, CommandRefusal};
 use oer_ieee80211_sta::machine::{
-    self, StaCommand, StaCommandCredit, StaCommandCredits, StaCommandPermission, StaRequest,
+    self, StaCommandCredit, StaCommandCredits, StaCommandPermission, StaRequest,
 };
 use oer_radio_port::PoolPath;
 
@@ -8,10 +9,10 @@ use oer_radio_port::PoolPath;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Request {
     correlation: u64,
-    command: StaCommand,
+    command: Command,
 }
 impl Request {
-    pub const fn new(correlation: u64, command: StaCommand) -> Self {
+    pub const fn new(correlation: u64, command: Command) -> Self {
         Self {
             correlation,
             command,
@@ -20,19 +21,19 @@ impl Request {
     pub const fn correlation(&self) -> u64 {
         self.correlation
     }
-    pub const fn command(&self) -> StaCommand {
+    pub const fn command(&self) -> Command {
         self.command
     }
 }
 #[derive(Debug, Eq, PartialEq)]
 pub struct CommandRefused {
     pub request: Request,
-    pub reason: machine::CommandRefusal,
+    pub reason: CommandRefusal,
 }
 #[derive(Debug, Eq, PartialEq)]
 pub struct CommandTerminal {
     pub request: Request,
-    pub outcome: machine::StaCommandOutcome,
+    pub outcome: CommandOutcome,
 }
 
 pub(super) struct CommandCredits<'id, P: PoolPath> {
@@ -58,16 +59,14 @@ impl<'id, P: PoolPath> CommandCredits<'id, P> {
     }
     pub fn request(&mut self, r: Request) -> Option<StaRequest<'id, P>> {
         let permission = match r.command {
-            StaCommand::Connect => self.connect.take().map(StaCommandPermission::Connect),
-            StaCommand::BackgroundScan => {
-                self.scan.take().map(StaCommandPermission::BackgroundScan)
-            }
-            StaCommand::Disconnect => self.disconnect.take().map(StaCommandPermission::Disconnect),
+            Command::Connect => self.connect.take().map(StaCommandPermission::Connect),
+            Command::BackgroundScan => self.scan.take().map(StaCommandPermission::BackgroundScan),
+            Command::Disconnect => self.disconnect.take().map(StaCommandPermission::Disconnect),
         }?;
         Some(StaRequest::new(r.correlation, permission))
     }
     fn returned(&mut self, r: StaRequest<'id, P>) -> Request {
-        let request = Request::new(r.correlation(), r.command());
+        let request = Request::new(r.correlation(), r.command().into());
         match r.into_parts().1 {
             StaCommandPermission::Connect(c) => self.connect = Some(c),
             StaCommandPermission::BackgroundScan(c) => self.scan = Some(c),
@@ -78,13 +77,13 @@ impl<'id, P: PoolPath> CommandCredits<'id, P> {
     pub fn refused(&mut self, r: machine::StaCommandRefused<'id, P>) -> CommandRefused {
         CommandRefused {
             request: self.returned(r.request),
-            reason: r.reason,
+            reason: r.reason.into(),
         }
     }
     pub fn completed(&mut self, r: machine::StaCommandTerminal<'id, P>) -> CommandTerminal {
         CommandTerminal {
             request: self.returned(r.request),
-            outcome: r.outcome,
+            outcome: r.outcome.into(),
         }
     }
 }

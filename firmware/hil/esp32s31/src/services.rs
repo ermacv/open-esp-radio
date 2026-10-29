@@ -37,15 +37,19 @@ oer_hil_agent::requests! {
     /// station property.
     pub enum StationRequests (sessions = false) {
         Start(oer_ieee80211_control::StartStation),
-        Probe(oer_ieee80211_control::ProbeStation),
+        Connect(oer_ieee80211_control::ConnectStation),
+        Disconnect(oer_ieee80211_control::DisconnectStation),
+        Scan(oer_ieee80211_control::ScanStation),
+        Status(oer_ieee80211_control::GetStationStatus),
         Counters(oer_ieee80211_control::GetStationCounters),
         Stop(oer_ieee80211_control::StopStation)
     }
     publishes [
         oer_ieee80211_control::Station,
         oer_ieee80211_control::StationLink,
-        oer_ieee80211_control::StationProbeFinished,
-        oer_ieee80211_control::StationProbeReady,
+        oer_ieee80211_control::StationCommandFinished,
+        oer_ieee80211_control::StationTransmitRefused,
+        oer_ieee80211_control::StationMsduRefusal,
         oer_ieee80211_control::StationGroupKey,
         oer_ieee80211_control::StationArpFrame,
         oer_ieee80211_control::StationReceiveDrop,

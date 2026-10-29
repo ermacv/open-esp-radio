@@ -5,10 +5,10 @@ use serde::{Deserialize, Serialize};
 
 use oer_hil_protocol::base::RejectReason;
 
-use super::{ProbeStation, StopStation};
+use super::StopStation;
 
-/// The station service ended without a stop command. It follows the link's
-/// last `Disconnected` event and ends the station role of the boot.
+/// The station service ended without a stop command. A startup refusal may
+/// have no link notice; this event ends the station role of the boot.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub struct StationServiceEnded {
     pub epoch: u32,
@@ -317,20 +317,6 @@ impl StopStation {
     pub const fn refusal(role: StationRole) -> Option<RejectReason> {
         match role {
             StationRole::Running => None,
-            StationRole::Idle | StationRole::Stopping | StationRole::Ended => {
-                Some(RejectReason::InvalidState)
-            }
-        }
-    }
-}
-
-impl ProbeStation {
-    /// The refusal of this probe in `role`, before its admission to a full
-    /// queue (`Busy`).
-    pub const fn refusal(self, role: StationRole) -> Option<RejectReason> {
-        match role {
-            StationRole::Running if self.valid() => None,
-            StationRole::Running => Some(RejectReason::InvalidConfiguration),
             StationRole::Idle | StationRole::Stopping | StationRole::Ended => {
                 Some(RejectReason::InvalidState)
             }

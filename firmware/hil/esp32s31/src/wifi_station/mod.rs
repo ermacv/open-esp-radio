@@ -187,9 +187,14 @@ pub(crate) fn start(
     CONSOLE.start(boot);
     let setup = wifi::Config::new(config.channel, config.country, config.cap_dbm, None, true)
         .unwrap_or_else(|error| radio::failure(error));
+    let pending: &'static oer_ieee80211_control::PendingCommands =
+        match PENDING.try_init(oer_ieee80211_control::PendingCommands::new()) {
+            Some(pending) => pending,
+            None => radio::failure(wifi::InitializationError::Control),
+        };
     let (control, net, runners) = wifi::station(
         wifi::Resources {
-            events: station::ProductEvents,
+            events: station::ProductEvents(pending),
             storage: radio::binding::storage(),
             cell: hardware.cell,
             wifi: hardware.wifi,
@@ -242,6 +247,7 @@ pub(crate) fn start(
     {
         crate::fail(crate::fatal::Failure::TaskAllocation);
     }
+    let status = control.status_reader();
     let (usb, _pads) = crate::usb::open(adopted.router(), interrupts.console_usb);
     let executor = crate::Executor::<Esp32s31, 0>::new(software.line0);
     let (mut router, hart) = match adopted.enable_interrupts() {
@@ -257,12 +263,22 @@ pub(crate) fn start(
             software.irq0,
             urgent,
             move |spawner| {
-                let console_work = CONSOLE_WORK.take().future(|| console_future(usb, boot));
+                let console_work = CONSOLE_WORK
+                    .take()
+                    .future(|| console_future(usb, boot, status));
                 if AppTasks::console(spawner, console_work).is_err() {
                     crate::fail(crate::fatal::Failure::TaskAllocation);
                 }
                 let station_work = STATION_WORK.take().future(|| {
-                    station_work_future(runners.station, control, net, station, seed, nonces)
+                    station_work_future(
+                        runners.station,
+                        control,
+                        net,
+                        station,
+                        seed,
+                        nonces,
+                        pending,
+                    )
                 });
                 if AppTasks::station_task(spawner, station_work).is_err() {
                     crate::fail(crate::fatal::Failure::TaskAllocation);
@@ -342,20 +358,50 @@ type Controls<T> = embassy_sync::channel::Channel<
     T,
     1,
 >;
-static PROBES: Controls<(RequestIdentity, oer_ieee80211_control::ProbeStation)> = Controls::new();
+static COMMANDS: Controls<(RequestIdentity, oer_ieee80211_control::StationCommandKind)> =
+    Controls::new();
 static STOPS: Controls<RequestIdentity> = Controls::new();
+static PENDING: StaticCell<oer_ieee80211_control::PendingCommands> = StaticCell::new();
+fn post_command(
+    request: RequestIdentity,
+    command: oer_ieee80211_control::StationCommandKind,
+    role: StationRole,
+) {
+    if role != StationRole::Running {
+        emit(
+            request,
+            &oer_hil_protocol::base::Rejected(oer_hil_protocol::base::RejectReason::InvalidState),
+        );
+        return;
+    }
+    if COMMANDS.try_send((request, command)).is_err() {
+        emit(
+            request,
+            &oer_hil_protocol::base::Rejected(oer_hil_protocol::base::RejectReason::Busy),
+        );
+    }
+}
+
 type ConsoleWork = impl core::future::Future<Output = ()>;
 static CONSOLE_WORK: ConstStaticCell<StaticPlace<ConsoleWork>> =
     ConstStaticCell::new(StaticPlace::new());
 #[define_opaque(ConsoleWork)]
-fn console_future(usb: crate::transport::Usb, boot: u64) -> ConsoleWork {
-    console_work(usb, boot)
+fn console_future(
+    usb: crate::transport::Usb,
+    boot: u64,
+    status: oer_ieee80211_runtime::station::StatusReader<'static>,
+) -> ConsoleWork {
+    console_work(usb, boot, status)
 }
 /// The console's task: its work lives in its own static place.
 async fn console(work: oer_memory::PlacedFuture<'static, ConsoleWork>) {
     work.await;
 }
-async fn console_work(usb: crate::transport::Usb, boot: u64) {
+async fn console_work(
+    usb: crate::transport::Usb,
+    boot: u64,
+    status: oer_ieee80211_runtime::station::StatusReader<'static>,
+) {
     use oer_hil_protocol::base::{Accepted, RejectReason, Rejected};
     let mut configured = false;
     let mut stopping = false;
@@ -382,14 +428,36 @@ async fn console_work(usb: crate::transport::Usb, boot: u64) {
                         None
                     }
                 }
-                Requests::Probe(probe) => {
-                    if let Some(reason) = probe.refusal(role(configured, stopping)) {
-                        Some(reason)
-                    } else if PROBES.try_send((request, probe)).is_err() {
-                        Some(RejectReason::Busy)
-                    } else {
-                        None
-                    }
+                Requests::Connect(_) => {
+                    post_command(
+                        request,
+                        oer_ieee80211_control::StationCommandKind::Connect,
+                        role(configured, stopping),
+                    );
+                    return;
+                }
+                Requests::Disconnect(_) => {
+                    post_command(
+                        request,
+                        oer_ieee80211_control::StationCommandKind::Disconnect,
+                        role(configured, stopping),
+                    );
+                    return;
+                }
+                Requests::Scan(_) => {
+                    post_command(
+                        request,
+                        oer_ieee80211_control::StationCommandKind::BackgroundScan,
+                        role(configured, stopping),
+                    );
+                    return;
+                }
+                Requests::Status(_) => {
+                    emit(
+                        request,
+                        &oer_ieee80211_control::StationStatus::from(status.status()),
+                    );
+                    return;
                 }
                 Requests::Stop(_) => {
                     if let Some(reason) = StopStation::refusal(role(configured, stopping)) {
@@ -427,8 +495,9 @@ fn station_work_future(
     address: [u8; 6],
     seed: u64,
     nonces: Placed<'static, SNonceSource>,
+    pending: &'static oer_ieee80211_control::PendingCommands,
 ) -> StationWork {
-    station_work(runner, control, net, address, seed, nonces)
+    station_work(runner, control, net, address, seed, nonces, pending)
 }
 async fn station_work(
     runner: wifi::StationRunner<radio::binding::Binding>,
@@ -437,6 +506,7 @@ async fn station_work(
     address: [u8; 6],
     seed: u64,
     nonces: Placed<'static, SNonceSource>,
+    pending: &'static oer_ieee80211_control::PendingCommands,
 ) {
     let (request, mut start) = STARTS.receive().await;
     let attempt = Attempt { request };
@@ -476,7 +546,16 @@ async fn station_work(
         observation::StationObserver(attempt),
     )
     .unwrap_or_else(|error| radio::failure(error));
-    station::serve(runner, control, net, profile, address, seed, attempt).await;
+    station::serve(
+        runner,
+        control,
+        net,
+        profile,
+        address,
+        seed,
+        station::Session { attempt, pending },
+    )
+    .await;
 }
 
 // Keep the bounded wire-record constructor out of control/worker poll frames.

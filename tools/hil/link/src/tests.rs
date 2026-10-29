@@ -60,7 +60,10 @@ fn wifi_credentials_are_redacted_in_host_debug_and_persisted_protocol_records() 
                 17,
                 StationLink {
                     epoch: 3,
-                    state: StationLinkState::Authorized,
+                    state: StationLinkState::Authorized {
+                        bssid: [2; 6],
+                        channel: 6,
+                    },
                 },
             ),
         ],
@@ -87,7 +90,7 @@ fn wifi_credentials_are_redacted_in_host_debug_and_persisted_protocol_records() 
     );
     assert_eq!(
         records[2]["message"]["body"],
-        serde_json::json!({"epoch":3, "state":"Authorized"})
+        serde_json::json!({"epoch":3, "state":{"Authorized":{"bssid":[2,2,2,2,2,2],"channel":6}}})
     );
     assert_eq!(records[4]["finalized"], true);
     assert_eq!(records[4]["cancelled"], false);

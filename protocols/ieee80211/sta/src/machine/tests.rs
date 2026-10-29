@@ -1476,7 +1476,7 @@ fn beside_an_access_point_a_join_elsewhere_moves_it_and_one_too_soon_after_waits
                 .take()
                 .contains(&Seen::AccessPoint(AccessPointCommand::AnnounceSwitch {
                     target: channel(6),
-                    mode: ChannelSwitchMode::Continue,
+                    mode: oer_ieee80211_arbiter::SwitchMode::Continue,
                     count: 5,
                 }))
         );
@@ -1520,7 +1520,7 @@ fn beside_an_access_point_a_join_elsewhere_moves_it_and_one_too_soon_after_waits
                 .take()
                 .contains(&Seen::AccessPoint(AccessPointCommand::AnnounceSwitch {
                     target: channel(1),
-                    mode: ChannelSwitchMode::Continue,
+                    mode: oer_ieee80211_arbiter::SwitchMode::Continue,
                     count: 5,
                 }))
         );
