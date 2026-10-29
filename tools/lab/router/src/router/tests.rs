@@ -868,29 +868,6 @@ fn nothing_secret_is_shown() {
 }
 
 #[test]
-fn the_radio_country_is_read_without_changing_anything() {
-    let mut remote = Canned::new(vec![(SHOW_PREFIX, vec![Ok(show_before())])]);
-    assert_eq!(radio_country(&mut remote, "radio9").unwrap(), *b"DE");
-    assert_eq!(remote.scripts, [show_script()]);
-    let mut remote = Canned::new(vec![(SHOW_PREFIX, vec![Ok(show_before())])]);
-    assert!(radio_country(&mut remote, "radio7").is_err());
-}
-
-#[test]
-fn a_radio_without_a_valid_country_is_refused() {
-    for replacement in [
-        "",
-        "wireless.radio9.country='de'\n",
-        "wireless.radio9.country='DEU'\n",
-    ] {
-        let text = show_before().replace("wireless.radio9.country='DE'\n", replacement);
-        let mut remote = Canned::new(vec![(SHOW_PREFIX, vec![Ok(text)])]);
-        let error = radio_country(&mut remote, "radio9").unwrap_err();
-        assert!(error.contains("country"), "{error}");
-    }
-}
-
-#[test]
 fn shell_quote_rejects_nul_and_preserves_other_words() {
     assert!(quote("nul\0byte").unwrap_err().contains("nul"));
     for value in [

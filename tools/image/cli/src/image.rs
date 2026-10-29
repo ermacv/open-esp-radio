@@ -141,9 +141,12 @@ mod tests {
                 .join(image)
                 .join("Cargo.toml");
             std::fs::create_dir_all(manifest.parent().unwrap()).unwrap();
+            let suffix = image
+                .strip_prefix("../")
+                .map_or_else(|| format!("apps-{image}"), |path| path.replace('/', "-"));
             std::fs::write(
                 manifest,
-                format!("[package]\nname = \"oer-firmware-apps-{image}\"\n"),
+                format!("[package]\nname = \"oer-firmware-{suffix}\"\n"),
             )
             .unwrap();
         }

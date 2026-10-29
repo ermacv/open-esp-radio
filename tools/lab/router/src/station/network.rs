@@ -5,7 +5,6 @@ use crate::{
     router::quote,
     ssh::{Remote, Result},
 };
-use serde::Serialize;
 use std::{net::Ipv4Addr, time::Duration};
 
 pub const NAME: &str = "oer_station";
@@ -13,11 +12,11 @@ pub const BRIDGE: &str = "br-oer-station";
 pub const GATEWAY: Ipv4Addr = Ipv4Addr::new(10, 231, 0, 1);
 pub const LEASE_FILE: &str = "/tmp/oer-station.leases";
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-pub struct Setting {
-    pub path: String,
-    pub value: String,
-    pub list: bool,
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct Setting {
+    path: String,
+    value: String,
+    list: bool,
 }
 
 fn settings() -> Vec<Setting> {
@@ -114,37 +113,6 @@ fn settings() -> Vec<Setting> {
             value: value.into(),
             list: true,
         });
-    }
-    values
-}
-
-/// Complete, secret-free mutation inventory, also used in the run report.
-/// The generated SSID is represented by its role rather than its bytes.
-pub fn changes(radio: &str, ap: &str, channel: u8) -> Vec<Setting> {
-    let mut values = settings();
-    for (section, option, value) in [
-        (radio, "channel", channel.to_string()),
-        (radio, "htmode", "HT20".into()),
-        (radio, "beacon_int", "100".into()),
-        (radio, "disabled", "0".into()),
-        (radio, "ieee80211ax", "0".into()),
-        (ap, "ssid", "<generated>".into()),
-        (ap, "disabled", "0".into()),
-        (ap, "hidden", "0".into()),
-        (ap, "encryption", "none".into()),
-        (ap, "network", NAME.into()),
-        (ap, "isolate", "1".into()),
-    ] {
-        values.push(Setting {
-            path: format!("wireless.{section}.{option}"),
-            value,
-            list: false,
-        });
-    }
-    for value in &mut values {
-        if value.value == BRIDGE {
-            value.value = "<station bridge>".into();
-        }
     }
     values
 }
@@ -359,19 +327,7 @@ mod tests {
         check_routes("10.231.1.0/24").unwrap();
     }
     #[test]
-    fn inventory_redacts_only_generated_and_interface_values() {
-        let values = changes("radio9", "lab_ap", 6);
-        assert!(
-            values
-                .iter()
-                .any(|s| s.path == "wireless.lab_ap.ssid" && s.value == "<generated>")
-        );
-        assert!(
-            values
-                .iter()
-                .any(|s| s.path == "wireless.lab_ap.network" && s.value == NAME)
-        );
-        assert!(values.iter().all(|s| s.value != BRIDGE));
+    fn runtime_verification_quotes_the_interface_and_checks_isolation() {
         let script = verify_script("made-up'interface").unwrap();
         assert!(script.contains(&quote("made-up'interface").unwrap()));
         assert!(script.contains("forward_oer_station | grep -qF oer-station-no-forward-out"));

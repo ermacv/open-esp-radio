@@ -425,25 +425,6 @@ fn apply_inner(remote: &mut dyn Remote, profile: &Profile) -> Result<Applied> {
     Ok(applied)
 }
 
-/// The UCI `country` of the radio `radio`: the stand's regulatory domain.
-/// Read only.
-pub fn radio_country(remote: &mut dyn Remote, radio: &str) -> Result<[u8; 2]> {
-    if !section_name(radio) {
-        return Err("[station_fixture].radio is no named UCI section".to_owned());
-    }
-    let wireless = Wireless::parse(
-        &remote
-            .run(&show_script())
-            .map_err(step("reading the wireless configuration"))?,
-        "",
-    )?;
-    let section = wireless
-        .section(radio)
-        .filter(|section| section.kind == "wifi-device")
-        .ok_or_else(|| format!("the router has no wifi-device section {radio}"))?;
-    country_of(section)
-}
-
 /// The two-letter `country` of a radio section.
 fn country_of(radio: &Section) -> Result<[u8; 2]> {
     let country = radio.option("country").ok_or_else(|| {
