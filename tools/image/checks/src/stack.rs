@@ -1,5 +1,5 @@
 //! The stack gate of an image build. One analysis of each ELF
-//! (`oer-analysis-riscv-stack`, with the pinned ROM ELF and its reviewed summaries)
+//! (`oer-image-stack`, with the pinned ROM ELF and its reviewed summaries)
 //! bounds every stack the image runs on:
 //!
 //! - the runtime's interrupt stacks ([`crate::interrupts`]);
@@ -32,7 +32,7 @@ use std::rc::Rc;
 
 use oer_analysis_riscv_model::{Ledger, RunControl, WorkingMemory};
 use oer_analysis_riscv_program::facts::ImageFacts;
-use oer_analysis_riscv_stack::{
+use oer_image_stack::{
     Analysis, Bound, DebugMetadata, Dwarf, Function, Reason, Resolutions, Summary, analyze,
     image_resolutions, parse_summaries, read_debug, stack_sizes,
 };
@@ -51,14 +51,14 @@ use crate::stack::contract::Contract;
 /// The assumptions a check admits in a bound, each by name: a bound resting
 /// on one is conditional and passes with a warning; any other fails. Each
 /// leaves this list in the pull request that proves it.
-pub const ADMITTED: &[oer_analysis_riscv_stack::Assumption] =
-    &[oer_analysis_riscv_stack::Assumption::ExecutorInvariant];
+pub const ADMITTED: &[oer_image_stack::Assumption] =
+    &[oer_image_stack::Assumption::ExecutorInvariant];
 
 /// What a bound with a number rests on, by short name: each assumption, and
 /// `nesting` where a handler may lower the interrupt level. `None` when it
 /// rests on nothing: the bound is proven.
 pub fn conditions(
-    assumptions: &BTreeSet<oer_analysis_riscv_stack::Assumption>,
+    assumptions: &BTreeSet<oer_image_stack::Assumption>,
     nesting: bool,
 ) -> Option<String> {
     let names: Vec<&str> = assumptions
@@ -73,7 +73,7 @@ pub fn conditions(
 /// `conditional (…)` naming what it rests on, `partial` without a number.
 pub fn bound_state(
     bytes: Option<u64>,
-    assumptions: &BTreeSet<oer_analysis_riscv_stack::Assumption>,
+    assumptions: &BTreeSet<oer_image_stack::Assumption>,
     nesting: bool,
 ) -> String {
     match (bytes, conditions(assumptions, nesting)) {
@@ -132,7 +132,7 @@ pub fn audit_bootstrap_stack(
 /// One image's analysis with its pinned ROM, and the facts outside the
 /// machine code every stack bound resolves indirect sites with.
 pub struct Image {
-    pub traps: oer_analysis_riscv_stack::TrapFact,
+    pub traps: oer_image_stack::TrapFact,
     pub elf: Rc<[u8]>,
     pub analysis: Analysis,
     /// The image's own functions.
@@ -289,7 +289,7 @@ impl Image {
                     preliminary.insert(address, function.limit_events);
                 }
             }
-            oer_analysis_riscv_stack::prove_traps(
+            oer_image_stack::prove_traps(
                 &facts,
                 &unknown,
                 &entries,
@@ -298,15 +298,15 @@ impl Image {
                 &mut control,
             )?
         } else {
-            oer_analysis_riscv_stack::TrapFact {
-                failure: Some(oer_analysis_riscv_stack::TrapFailure::Entry {
+            oer_image_stack::TrapFact {
+                failure: Some(oer_image_stack::TrapFailure::Entry {
                     hart: None,
                     entry: None,
                 }),
                 ..Default::default()
             }
         };
-        let analysis = oer_analysis_riscv_stack::analyze_with_traps(
+        let analysis = oer_image_stack::analyze_with_traps(
             &facts,
             &companions,
             summaries,
@@ -447,7 +447,7 @@ impl Image {
 #[derive(Debug)]
 pub struct StackAudit {
     pub expression_limited_functions: usize,
-    pub traps: oer_analysis_riscv_stack::TrapFact,
+    pub traps: oer_image_stack::TrapFact,
     pub coverage: Coverage,
     pub stacks: Vec<StackBound>,
     /// What the image's analysis used of its [`budget`].

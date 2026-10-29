@@ -1,4 +1,4 @@
-//! Compiler frame coverage: every function of an image (`oer-analysis-riscv-stack`'s
+//! Compiler frame coverage: every function of an image (`oer-image-stack`'s
 //! inventory) either has a `.stack_sizes` record or exactly one reviewed
 //! reason why not. A review explains a missing record; it never supplies a
 //! frame, so the bound of a root that reaches such a function still names it
@@ -7,7 +7,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
-use oer_analysis_riscv_stack::Function;
+use oer_image_stack::Function;
 use serde::Deserialize;
 
 use crate::stack::Result;

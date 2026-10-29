@@ -33,7 +33,7 @@ static FIXTURES: std::sync::Mutex<Vec<oer_lab_router::fixtures::Fixture>> =
 
 /// Probe the host fixtures now and every [`FIXTURE_REFRESH`] after.
 fn watch_fixtures() {
-    let Ok(lab) = oer_hil_lab::config::LabConfig::default_path() else {
+    let Ok(lab) = oer_hil_session::config::LabConfig::default_path() else {
         return;
     };
     std::thread::spawn(move || {
@@ -300,7 +300,7 @@ fn snapshot(store: &RunStore) -> Result<Value> {
     let status = arbiter.status()?;
     let jobs = arbiter.jobs().unfinished();
     let mut history = arbiter.history()?;
-    let mut runs = oer_hil_analysis::dashboard::newest_runs(store, RECENT_RUNS);
+    let mut runs = oer_hil_stats::dashboard::newest_runs(store, RECENT_RUNS);
     link_runs(&mut runs, &status.holders, &history);
     history.reverse();
     history.truncate(RECENT_LEASES);
@@ -500,7 +500,7 @@ mod tests {
         run(&store, "2000-b");
         run(&store, "3000-c");
         std::fs::create_dir_all(store.runs().join("runs.before-shared-store")).unwrap();
-        let newest = oer_hil_analysis::dashboard::newest_runs(&store, 2);
+        let newest = oer_hil_stats::dashboard::newest_runs(&store, 2);
         assert_eq!(
             newest
                 .iter()

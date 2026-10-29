@@ -47,7 +47,7 @@ contracts, observation contracts and protocol models: no normal path, direct
 or transitive, reaches a protocol core, runtime or core-side policy. Only
 `Composition` and `Facade` assemble runtimes with backends. The radio
 service reaches no chip adapter by any path. The host HIL families
-(`tools/hil/family-*`) and the vendor PHY tools (`tools/vendor/phy*`) reach
+(`tools/hil/family-*`), including the PHY comparison family, reach
 no HAL or PAC.
 
 ## Deviation lists

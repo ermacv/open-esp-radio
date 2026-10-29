@@ -42,7 +42,7 @@ mod tests {
     }
 }
 
-use oer_hil_lab::air::{Frame, acknowledged_probes};
+use oer_hil_session::air::{Frame, acknowledged_probes};
 use oer_ieee80211_port::Band;
 use oer_ieee80211_upper_mac::rate_selection::management_rate;
 use oer_ieee80211_wire::channel::{WifiChannel, WifiChannelWidth};

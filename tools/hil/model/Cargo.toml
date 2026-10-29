@@ -6,16 +6,13 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 publish = false
-description = "The HIL scenario model: a scenario's typed specification and pure verdict, derived waits and the stand profile, repetition statistics, resources, target capabilities and tier budgets"
+description = "Shared HIL catalog values, evidence schemas, image classes and radio health"
 
 [dependencies]
 oer-esp32s31-instrumentation = { path = "../../../chips/esp32s31/instrumentation" }
 oer-esp32s31-instrumentation-hil = { path = "../../../chips/esp32s31/instrumentation-hil" }
-hex = "=0.4.3"
-oer-time = { path = "../../../portable/time" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-sha2 = "0.10"
 oer-chip-profile = { path = "../../chip/profile" }
 oer-hil-protocol = { path = "../../../protocols/hil/protocol", features = ["registry"] }
 toml = "1.1"

@@ -1,8 +1,8 @@
-use oer_hil_lab::config::StationFixtureConfig;
 use oer_hil_scenario::{
     Result,
     workload::{context::Context, require_keys},
 };
+use oer_hil_session::config::StationFixtureConfig;
 use oer_ieee80211_conformance_control::*;
 use oer_ieee80211_port::{
     Band, Channel, ChannelWidth,

@@ -396,7 +396,7 @@ pub fn run(
     if result.is_err() {
         let elf = fs::read(bundle.runtime_elf()).ok();
         if let Some(access) = grant.device(&selected.device_id()?) {
-            oer_hil_lab::post_mortem::jtag_snapshot_through_stand_openocd(
+            oer_hil_session::post_mortem::jtag_snapshot_through_stand_openocd(
                 "esp32s31",
                 access,
                 &output,

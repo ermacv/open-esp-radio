@@ -8,7 +8,6 @@ use std::{
 };
 
 use crate::{Result, emit_json, fixture};
-use oer_hil_lab::config::LabConfig;
 use oer_hil_model::schema::image::ImageClass;
 use oer_hil_runs::format::run::Failure;
 use oer_hil_runs::format::run::FailureKind;
@@ -21,6 +20,7 @@ use oer_hil_runs::format::run::RepetitionResult;
 use oer_hil_runs::format::run::RunPlan;
 use oer_hil_runs::format::run::ScenarioResult;
 use oer_hil_runs::run::RunSession;
+use oer_hil_session::config::LabConfig;
 
 use crate::scenario::{Catalog, Families, Scenario, requirements};
 use oer_hil_scenario::ScenarioFamily as _;
@@ -299,9 +299,12 @@ pub(crate) const AIR_NOISY_TAG: &str = "air-noisy";
 /// How `scenario` uses the air: the ranges its family states, tolerant of
 /// others' protocol traffic and transmitting normally unless its tags say
 /// otherwise.
-pub(crate) fn air_use(lab: &LabConfig, scenario: &Scenario) -> Vec<oer_hil_lab::lock::Spectrum> {
-    use oer_hil_lab::lock::{BAND_2G4, Emits, Need, Spectrum};
+pub(crate) fn air_use(
+    lab: &LabConfig,
+    scenario: &Scenario,
+) -> Vec<oer_hil_session::lock::Spectrum> {
     use oer_hil_scenario::{AirUse, ScenarioFamily as _};
+    use oer_hil_session::lock::{BAND_2G4, Emits, Need, Spectrum};
     let tagged = |tag: &str| scenario.header.tags.iter().any(|known| known == tag);
     let need = if tagged(AIR_EXCLUSIVE_TAG) || tagged(AIR_STRICT_TAG) {
         Need::Strict
@@ -333,14 +336,14 @@ pub(crate) fn air_use(lab: &LabConfig, scenario: &Scenario) -> Vec<oer_hil_lab::
 pub(crate) fn lease_request(
     lab: &LabConfig,
     selected: &[&Scenario],
-) -> oer_hil_lab::lock::LeaseRequest {
+) -> oer_hil_session::lock::LeaseRequest {
     let mut air = Vec::new();
     for range in selected.iter().flat_map(|scenario| air_use(lab, scenario)) {
         if !air.contains(&range) {
             air.push(range);
         }
     }
-    oer_hil_lab::lock::LeaseRequest {
+    oer_hil_session::lock::LeaseRequest {
         required: requirements(selected),
         scenarios: selected
             .iter()
@@ -358,19 +361,19 @@ fn lease_stand(
     session: &mut RunSession,
     lab: &LabConfig,
     selected: &[&Scenario],
-) -> Result<oer_hil_lab::lock::FixtureLock> {
+) -> Result<oer_hil_session::lock::FixtureLock> {
     session.record_event(RunEventKind::StandLeaseRequested, None, None, None)?;
-    let request = oer_hil_lab::lock::LeaseRequest {
+    let request = oer_hil_session::lock::LeaseRequest {
         run: Some(session.id().to_owned()),
         ..lease_request(lab, selected)
     };
-    let fixture = oer_hil_lab::lock::FixtureLock::lease(lab, request.clone())?;
+    let fixture = oer_hil_session::lock::FixtureLock::lease(lab, request.clone())?;
     session.record_event(RunEventKind::StandLeaseGranted, None, None, None)?;
     oer_os_durable::atomic_json(
         &session.directory().join("air.json"),
-        &oer_hil_lab::lock::air_record(&request)?,
+        &oer_hil_session::lock::air_record(&request)?,
     )?;
-    let lab_provenance = oer_hil_lab::provenance::capture(lab, requirements(selected))?;
+    let lab_provenance = oer_hil_session::provenance::capture(lab, requirements(selected))?;
     session.record_lab_provenance(&lab_provenance)?;
     session.record_event(RunEventKind::LabProvenanceCaptured, None, None, None)?;
     Ok(fixture)
@@ -387,7 +390,7 @@ struct LiveSuite<'a> {
     firmware: FirmwarePreparation<'a>,
     /// Images built before the lease; a class without one is prepared whole.
     prebuilt: Vec<(ImageClass, firmware::Built)>,
-    lease: Option<oer_hil_lab::lock::FixtureLock>,
+    lease: Option<oer_hil_session::lock::FixtureLock>,
     /// The class on the device and, when built by this run, its archive.
     flashed: Option<(ImageClass, Option<Box<crate::image::Artifacts>>)>,
     /// The peer image this run brought up to its current catalog build.
@@ -505,10 +508,10 @@ impl SuiteEffects for LiveSuite<'_> {
     fn after_scenario(&mut self, scenario: &Scenario, session: &mut RunSession) -> Result<()> {
         let class = scenario.image();
         let recovery = RECOVERY_IMAGE;
-        let silent = oer_hil_lab::recovery::image_silent(class.id());
+        let silent = oer_hil_session::recovery::image_silent(class.id());
         if !needs_recovery_image(
             silent,
-            oer_hil_lab::recovery::device_quarantined(),
+            oer_hil_session::recovery::device_quarantined(),
             self.recovered.contains(&class),
             self.recovery_silent,
         ) {
@@ -548,14 +551,14 @@ impl SuiteEffects for LiveSuite<'_> {
         let origin = format!("run {}", session.id());
         match outcome {
             AfterReflash::Recovered => {
-                oer_hil_lab::recovery::record_reflash(Some(mac), origin);
+                oer_hil_session::recovery::record_reflash(Some(mac), origin);
                 eprintln!("hil: the board answers its recovery image");
             }
             AfterReflash::ImageFault(why) => {
                 // The board's ROM answered before the reflash: the run's
                 // remaining scenarios of the recovery image are blocked
                 // like those of any other silent image.
-                oer_hil_lab::recovery::mark_image_silent(recovery.id());
+                oer_hil_session::recovery::mark_image_silent(recovery.id());
                 self.recovery_silent = true;
                 eprintln!(
                     "hil: the board's ROM answers, so it is not quarantined; the {} recovery \
@@ -573,10 +576,10 @@ impl SuiteEffects for LiveSuite<'_> {
                     recovery.id()
                 );
                 let board = self.lab.dut_board()?.lease(self.device_lock()?)?;
-                match oer_hil_lab::recovery::recover(&board, &output, None, &origin)? {
+                match oer_hil_session::recovery::recover(&board, &output, None, &origin)? {
                     Some(judged) => {
                         if !judged.quarantined() {
-                            oer_hil_lab::recovery::mark_image_silent(recovery.id());
+                            oer_hil_session::recovery::mark_image_silent(recovery.id());
                             self.recovery_silent = true;
                         }
                         eprintln!("hil: {}", judged.describe());
@@ -627,7 +630,7 @@ impl SuiteEffects for LiveSuite<'_> {
                 .map(|images| images as &dyn oer_hil_scenario::workload::context::BoardImages),
             self.lease
                 .as_ref()
-                .and_then(oer_hil_lab::lock::FixtureLock::device),
+                .and_then(oer_hil_session::lock::FixtureLock::device),
         );
         // A workload that wrote another image leaves the board's image
         // unknown: the next scenario flashes its own.
@@ -722,7 +725,7 @@ impl LiveSuite<'_> {
     fn device_lock(&self) -> Result<&oer_lab_board::lock::DeviceAccess> {
         self.lease
             .as_ref()
-            .and_then(oer_hil_lab::lock::FixtureLock::device)
+            .and_then(oer_hil_session::lock::FixtureLock::device)
             .ok_or_else(|| "the run holds no lease of its device under test".into())
     }
 
@@ -744,7 +747,7 @@ impl LiveSuite<'_> {
         let lock = self
             .lease
             .as_ref()
-            .and_then(oer_hil_lab::lock::FixtureLock::peer)
+            .and_then(oer_hil_session::lock::FixtureLock::peer)
             .ok_or("the run holds no lease of its peer board")?;
         let board = self.lab.peer_board()?.lease(lock)?;
         let journal = oer_lab_arbiter::journal::Journal::open()?;
@@ -775,7 +778,7 @@ impl LiveSuite<'_> {
             return Ok(());
         }
         let path = self.lab.peer()?.serial()?;
-        let live = oer_hil_lab::peer_console(&path)
+        let live = oer_hil_session::peer_console(&path)
             .and_then(|mut link| oer_hil_link::peer::answers_sync(&mut link, PEER_SYNC_TIMEOUT));
         match live {
             Ok(true) => Ok(()),
@@ -1140,7 +1143,7 @@ fn start_run(
 
 fn finish_run(session: RunSession, results: Vec<ScenarioResult>) -> Result<()> {
     oer_os_process::check_cancelled()?;
-    let (suite, completion) = session.finish(results, oer_hil_analysis::report::views)?;
+    let (suite, completion) = session.finish(results, oer_hil_stats::report::views)?;
     emit_json(&completion, false)?;
     // Cancellation of a derived history update occurs after the run was
     // finished. Publish completion first, then preserve the CLI signal status.
@@ -1214,12 +1217,12 @@ fn run_scenario_repetition(
         .peer_image()
         .and_then(|_| lab.peer().ok())
         .and_then(|peer| peer.serial().ok());
-    let usb = oer_hil_lab::usb_events::UsbWatch::start(
+    let usb = oer_hil_session::usb_events::UsbWatch::start(
         std::iter::once(lab.dut.serial.as_path()).chain(peer_serial.as_deref()),
         started_unix_millis,
     );
     let cleanup = oer_hil_scenario::workload::fixture::cleanup::Scope::new(output);
-    if oer_hil_lab::recovery::device_quarantined() {
+    if oer_hil_session::recovery::device_quarantined() {
         return finalize_repetition(
             repetition,
             artifacts,
@@ -1236,7 +1239,7 @@ fn run_scenario_repetition(
             Vec::new(),
         );
     }
-    if oer_hil_lab::recovery::image_silent(selected.image().id()) {
+    if oer_hil_session::recovery::image_silent(selected.image().id()) {
         return finalize_repetition(
             repetition,
             artifacts,
@@ -1269,7 +1272,7 @@ fn run_scenario_repetition(
     {
         // A board that needs a person must not serve the run's remaining
         // repetitions or the next lease: the run stops.
-        Err(error) if error.is::<oer_hil_lab::recovery::UnrecordedQuarantine>() => {
+        Err(error) if error.is::<oer_hil_session::recovery::UnrecordedQuarantine>() => {
             return Err(error);
         }
         Err(error) => {
@@ -1312,7 +1315,7 @@ fn run_scenario_repetition(
 fn finalize_repetition(
     repetition: u8,
     artifacts: &Path,
-    usb: &oer_hil_lab::usb_events::UsbWatch,
+    usb: &oer_hil_session::usb_events::UsbWatch,
     output: &Path,
     started_unix_millis: u64,
     started: std::time::Instant,

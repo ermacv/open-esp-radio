@@ -85,10 +85,10 @@ fn hardware_code_neither_polls_tasks_nor_calls_wakers_and_its_data_is_reported()
         summaries: BTreeSet::new(),
     };
     let mut dequeue_facts = crate::interrupts::placement::tests::facts(dequeue, 32);
-    dequeue_facts.transfers = vec![oer_analysis_riscv_stack::Transfer {
+    dequeue_facts.transfers = vec![oer_image_stack::Transfer {
         site: dequeue,
         target: Some(shared),
-        kind: oer_analysis_riscv_stack::TransferKind::Call,
+        kind: oer_image_stack::TransferKind::Call,
         source: None,
         table: None,
         load: None,

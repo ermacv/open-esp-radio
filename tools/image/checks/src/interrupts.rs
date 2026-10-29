@@ -1,6 +1,6 @@
 //! The interrupt gate checks code placement and each hart's worst-case stack,
 //! bounded from the image's machine code, its interrupt table and the chip's
-//! ROM ELF (`oer-analysis-riscv-stack`). The bound must leave the platform's
+//! ROM ELF (`oer-image-stack`). The bound must leave the platform's
 //! margin below the usable interrupt stack. Diagnostic images report placement
 //! violations and unresolved bounds; handler entries and panic safety are
 //! mandatory under either policy.
@@ -9,7 +9,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 use std::path::Path;
 
-use oer_analysis_riscv_stack::{
+use oer_image_stack::{
     Analysis, Class, Dwarf, Field, HartStack, Stacks, TableEntry, TableLayout, Vector, Violation,
     interrupt_entry, interrupt_table, parse_summaries, trap_entry, vector_table,
 };
@@ -43,7 +43,7 @@ pub struct InterruptStacks {
     pub allocations: BTreeMap<u32, LinkedStack>,
     pub expression_limited_functions: usize,
     pub witness_memory_peak: u64,
-    pub traps: oer_analysis_riscv_stack::TrapFact,
+    pub traps: oer_image_stack::TrapFact,
     pub harts: Vec<HartStack>,
     /// The ROM summaries the image's analysis applied: those of the ROM
     /// functions it reaches.
@@ -694,10 +694,7 @@ pub fn rom_summaries(root: &Path, profile: &oer_chip_profile::Profile) -> Result
 
 /// A core without an interrupt stack takes no interrupt: an entry that routes
 /// a source to it would run a handler on a stack nobody bounded.
-fn reject_unstacked_cores(
-    table: &[oer_analysis_riscv_stack::TableEntry],
-    harts: &[u32],
-) -> Result<()> {
+fn reject_unstacked_cores(table: &[oer_image_stack::TableEntry], harts: &[u32]) -> Result<()> {
     match table.iter().find(|entry| !harts.contains(&entry.core)) {
         Some(entry) => Err(format!(
             "the interrupt table routes source {} (level {}) to core {}, whose interrupt \
@@ -840,8 +837,7 @@ pub fn interrupt_stacks_of(image: &Image) -> Result<InterruptStacks> {
         exception,
         resolutions,
     };
-    let harts =
-        oer_analysis_riscv_stack::interrupt_stacks(analysis, &inputs, &mut keep, &mut control)?;
+    let harts = oer_image_stack::interrupt_stacks(analysis, &inputs, &mut keep, &mut control)?;
     let panic_code = panic_path_code(
         analysis,
         names,
@@ -1055,7 +1051,7 @@ fn exemption_reasons(
 /// own static references may depend on the cache.
 fn cached_hook_references(
     elf: &oer_analysis_elf::Elf<'_>,
-    functions: &[oer_analysis_riscv_stack::Function],
+    functions: &[oer_image_stack::Function],
     reached: &BTreeSet<u32>,
     memory: &oer_espressif_facts::Memory,
 ) -> Result<Vec<(u32, u32, u64)>> {
@@ -1099,7 +1095,7 @@ fn cached_hook_references(
 fn panic_path_code(
     analysis: &Analysis,
     names: &BTreeMap<u32, String>,
-    resolutions: &oer_analysis_riscv_stack::Resolutions,
+    resolutions: &oer_image_stack::Resolutions,
     memory: &oer_espressif_facts::Memory,
     keep: &mut Ledger<'_>,
     control: &mut dyn RunControl,
@@ -1115,7 +1111,7 @@ fn panic_path_code(
 fn panic_reached(
     analysis: &Analysis,
     names: &BTreeMap<u32, String>,
-    resolutions: &oer_analysis_riscv_stack::Resolutions,
+    resolutions: &oer_image_stack::Resolutions,
     keep: &mut Ledger<'_>,
     control: &mut dyn RunControl,
 ) -> Result<BTreeSet<u32>> {
@@ -1233,7 +1229,7 @@ mod tests {
     }
 
     use super::*;
-    use oer_analysis_riscv_stack::Assumption;
+    use oer_image_stack::Assumption;
 
     fn contract() -> Contract {
         oer_espressif_facts::tracked::ids()
@@ -1283,7 +1279,7 @@ mod tests {
     }
 
     pub(super) fn partial(partial: u64) -> InterruptStacks {
-        let bound = oer_analysis_riscv_stack::Bound {
+        let bound = oer_image_stack::Bound {
             root: 0,
             bytes: None,
             partial,
@@ -1295,7 +1291,7 @@ mod tests {
             reached: BTreeSet::new(),
             predecessors: Default::default(),
         };
-        let level = oer_analysis_riscv_stack::LevelStack {
+        let level = oer_image_stack::LevelStack {
             level: 0,
             bytes: None,
             partial,
@@ -1400,9 +1396,7 @@ mod tests {
 
     #[test]
     fn panic_helpers_and_transitive_hook_callees_must_be_uncached() {
-        use oer_analysis_riscv_stack::{
-            FrameSource, Function, FunctionFacts, Transfer, TransferKind,
-        };
+        use oer_image_stack::{FrameSource, Function, FunctionFacts, Transfer, TransferKind};
         let memory = contract().memory;
         let sram = memory.sram.origin() + 0x1000;
         let cached = memory.psram.unwrap().origin() + 0x1000;
@@ -1470,7 +1464,7 @@ mod tests {
                     (root, entry.to_owned()),
                     (helper, "outlined_helper".to_owned()),
                 ]);
-                let resolutions = oer_analysis_riscv_stack::Resolutions::new();
+                let resolutions = oer_image_stack::Resolutions::new();
                 let mut report = stacks(Vec::new());
                 report.names = names.clone();
                 report.panic_code = panic_path_code(
@@ -1636,7 +1630,7 @@ mod tests {
         // One such instruction breaks the sum over levels: no proof, and a
         // warning under the diagnostic policy.
         stacks.harts[0].exception.bound.level_drops =
-            vec![(0x2f00_1000, oer_analysis_riscv_stack::LevelDrop::Return)];
+            vec![(0x2f00_1000, oer_image_stack::LevelDrop::Return)];
         let error = stacks.check(Required::Product).unwrap_err().to_string();
         assert!(error.contains("conditional"), "{error}");
         let warnings = stacks.check(Required::Diagnostic).unwrap();

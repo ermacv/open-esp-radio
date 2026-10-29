@@ -1,12 +1,12 @@
 //! Bounded initial-GTK investigation, distinct from W4 qualification.
 use super::workload::{Station, StopEnd, authorized, ended, network, stop_on_error, stop_station};
-use oer_hil_lab::{
-    air::{AirCapture, station::Direction},
-    config::StationFixtureConfig,
-};
 use oer_hil_scenario::{
     Result,
     workload::{context::Context, require_keys},
+};
+use oer_hil_session::{
+    air::{AirCapture, station::Direction},
+    config::StationFixtureConfig,
 };
 use oer_ieee80211_control::*;
 use oer_lab_router::{

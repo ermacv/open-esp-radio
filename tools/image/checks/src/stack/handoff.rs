@@ -80,7 +80,7 @@ impl Image {
                         constant_jump_target(&own, &facts.function, transfer.site) == Some(entry)
                     }
                 };
-                if transfer.kind == oer_analysis_riscv_stack::TransferKind::Tail && goes_there {
+                if transfer.kind == oer_image_stack::TransferKind::Tail && goes_there {
                     sites.push((transfer.site, self.function_at(transfer.site)));
                 }
             }

@@ -24,7 +24,7 @@ pub(crate) struct Flash<'a> {
 /// operation under the run's access `lock` to it: written and receipted,
 /// started, then journaled.
 pub(crate) fn flash_dut(
-    lab: &oer_hil_lab::config::LabConfig,
+    lab: &oer_hil_session::config::LabConfig,
     lock: &DeviceAccess,
     bundle: &ImageBundle,
     flash: Flash<'_>,

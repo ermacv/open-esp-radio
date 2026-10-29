@@ -22,7 +22,7 @@ fn same_device(
 ) -> bool {
     record.cell_id == cell && record.device_id == device
 }
-pub fn load(lab: &oer_hil_lab::config::LabConfig) -> Result<(String, KeyEvidence)> {
+pub fn load(lab: &oer_hil_session::config::LabConfig) -> Result<(String, KeyEvidence)> {
     let id=std::env::var(INPUT).map_err(|_| "W4 requires OER_W4_KEY_CONFORMANCE_RUN naming its independent s31-a key conformance run")?;
     if !valid_id(&id) {
         return Err("invalid W4 conformance run identity".into());

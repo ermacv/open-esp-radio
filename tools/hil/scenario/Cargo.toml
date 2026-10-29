@@ -23,7 +23,7 @@ serde_json = "1.0"
 toml = "1.1"
 oer-hil-runs = { path = "../runs" }
 oer-image-bundle = { path = "../../image/bundle" }
-oer-hil-lab = { path = "../lab" }
+oer-hil-session = { path = "../session" }
 oer-lab-board = { path = "../../lab/board" }
 oer-hil-link = { path = "../link" }
 rustix = { version = "1.1.4", features = ["event", "fs", "net", "process", "stdio"] }
@@ -33,5 +33,5 @@ oer-os-process = { path = "../../os/process" }
 workspace = true
 
 [dev-dependencies]
-oer-hil-lab = { path = "../lab", features = ["test-support"] }
+oer-hil-session = { path = "../session", features = ["test-support"] }
 oer-hil-link = { path = "../link", features = ["test-support"] }

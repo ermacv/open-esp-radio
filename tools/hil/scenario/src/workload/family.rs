@@ -10,9 +10,9 @@
 use std::{fmt, marker::PhantomData, path::Path, sync::Arc};
 
 use crate::{AirUse, PeerImage, Plan, ScenarioFamily};
-use oer_hil_lab::config::LabConfig;
 use oer_hil_model::catalog::requirements::Requirements;
 use oer_hil_protocol::Key;
+use oer_hil_session::config::LabConfig;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 use crate::workload::{Result, context::Context, fixture::Fixtures};

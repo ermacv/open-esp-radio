@@ -262,15 +262,15 @@ pub fn run(
     let (stand, board) = board(selector)?;
     // Acquire the laptop/air lease before the router lock to keep HIL's lock order.
     let capture = if image == w2::IMAGE {
-        let lab = oer_hil_lab::config::LabConfig::load(
+        let lab = oer_hil_session::config::LabConfig::load(
             &stand::path()?,
             image::CHIP,
-            &oer_hil_lab::config::BoardChoice {
+            &oer_hil_session::config::BoardChoice {
                 dut: Some(board.id.clone()),
                 ..Default::default()
             },
         )?;
-        Some(oer_hil_lab::air::AirCapture::start(
+        Some(oer_hil_session::air::AirCapture::start(
             &lab,
             stand.router()?.channel,
         )?)
@@ -351,7 +351,7 @@ pub fn run(
     }
     eprintln!("fw: log {}", log_path.display());
     let air = capture
-        .map(oer_hil_lab::air::AirCapture::finish)
+        .map(oer_hil_session::air::AirCapture::finish)
         .transpose()?;
     Ok(match verdict {
         Some((_, result)) if let Some(config) = &w1 => {

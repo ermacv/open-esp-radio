@@ -45,9 +45,9 @@ impl ScenarioFamily for LowerMacScenario {
     }
 }
 impl Workload for LowerMacScenario {
-    fn precondition(&self, lab: &oer_hil_lab::config::LabConfig) -> Result<()> {
+    fn precondition(&self, lab: &oer_hil_session::config::LabConfig) -> Result<()> {
         match &lab.station_fixture {
-            oer_hil_lab::config::StationFixtureConfig::OpenWrt(config) if !config.read_only => {
+            oer_hil_session::config::StationFixtureConfig::OpenWrt(config) if !config.read_only => {
                 Ok(())
             }
             _ => Err("lower-MAC conformance requires the managed laboratory OpenWrt AP".into()),

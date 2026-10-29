@@ -2,7 +2,7 @@
 
 The `oer-analysis-riscv-*` packages are the RV32 analysis layer that two tools share:
 [Blobray](cli/README.md), which researches and compares vendor code,
-and the stack analyzer [`oer-analysis-riscv-stack`](riscv-stack/README.md), which bounds the
+and the stack analyzer [`oer-image-stack`](../image/stack/README.md), which bounds the
 stacks of our firmware images. Both read ELF through [`oer-analysis-elf`](elf/README.md),
 whose `rv32` table is the one classification of RV32 relocations.
 
@@ -28,7 +28,7 @@ unavailable ROM summaries and incomplete signature audits. See the
 | [`oer-analysis-riscv-lift`](riscv-lift/README.md) | Function decoding, relocation interpretation, instruction semantics and placement-independent listings |
 | [`oer-analysis-riscv-analysis`](riscv-analysis/README.md) | The bounded control-flow and value analysis of one function |
 | [`oer-analysis-riscv-program`](riscv-program/README.md) | The view of one static RV32 image: segments, image memory, code symbols and executable sections |
-| [`oer-analysis-riscv-stack`](riscv-stack/README.md) | Worst-case stack bounds of a static image; a consumer of the layer, not part of Blobray |
+| [`oer-image-stack`](../image/stack/README.md) | Worst-case stack bounds of a static image; a consumer of the layer, not part of Blobray |
 
 The layer is Blobray's ISA layer: Blobray's application depends on the
 ISA-neutral model, the function analysis and the static image view, and its
@@ -49,7 +49,7 @@ Its linker adapters also use the host process library.
 | `oer-analysis-riscv-lift` | `oer-analysis-elf`, `oer-analysis-riscv-decode`, `oer-analysis-riscv-model` |
 | `oer-analysis-riscv-analysis` | `oer-analysis-riscv-model` |
 | `oer-analysis-riscv-program` | `oer-analysis-elf`, `oer-analysis-riscv-model` |
-| `oer-analysis-riscv-stack` | `oer-analysis-elf`, `oer-analysis-riscv-analysis`, `oer-analysis-riscv-decode`, `oer-analysis-riscv-lift`, `oer-analysis-riscv-model`, `oer-analysis-riscv-program` |
+| `oer-image-stack` | `oer-analysis-elf`, `oer-analysis-riscv-analysis`, `oer-analysis-riscv-decode`, `oer-analysis-riscv-lift`, `oer-analysis-riscv-model`, `oer-analysis-riscv-program` |
 
 The rows of the `blobray-*` crates are in
 [Blobray's architecture](blobray-docs/design/architecture.md#crates-and-modules).

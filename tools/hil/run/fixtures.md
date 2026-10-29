@@ -14,7 +14,7 @@ provider list does not apply or restore an AP profile.
 The finite helper interfaces and their operating effects are documented in
 [Linux network fixtures](../linux-net/README.md) and
 [Linux Bluetooth fixtures](../linux-bluetooth/README.md). The stand file and
-physical fixture leases belong to `tools/lab/model` and `tools/hil/lab`;
+physical fixture leases belong to `tools/lab/model` and `tools/hil/session`;
 provider software leases are separate from those device and fixture locks.
 
 ## Linux fixture software installation

@@ -49,8 +49,8 @@ fn callers(image: &Image) -> BTreeSet<u32> {
 pub(crate) fn roots(
     image: &Image,
     policy: &StackPolicy,
-    table: &[oer_analysis_riscv_stack::TableEntry],
-    harts: &[oer_analysis_riscv_stack::HartStack],
+    table: &[oer_image_stack::TableEntry],
+    harts: &[oer_image_stack::HartStack],
 ) -> Result<BTreeMap<(u32, u32), String>> {
     let mut roots = BTreeMap::new();
     for root in policy.runtime_task_stacks() {

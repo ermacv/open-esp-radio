@@ -10,15 +10,15 @@ relative to `tools/`.
 | `hil/runner` (`oer-tool-hil-runner`) | Thin executable embedding its host build record and calling `oer_hil_run::main` |
 | `hil/run` (`oer-hil-run`) | Runner CLI, selection, preflight, leases, repetitions and finishing a run; `oer-hil-run::image` builds image classes through the image pipeline, and `flash` orchestrates leased writes |
 | `hil/scenario` (`oer-hil-scenario`) | Scenario envelope, catalog and campaign plan; `workload` owns the repetition context, result writer, measurements, fixture and family contracts |
-| `hil/model` (`oer-hil-model`) | Typed scenario vocabulary, evidence schemas, image classes, feature recipes and target agent metadata |
-| `hil/lab` (`oer-hil-lab`) | Run configuration, fixture locks and software leases, laboratory provenance, recovery and post-mortem; implements the link's DUT port |
+| `hil/model` (`oer-hil-model`) | Catalog vocabulary, evidence schemas, image classes, feature recipes and target agent metadata |
+| `hil/session` (`oer-hil-session`) | Run configuration, fixture locks and software leases, laboratory provenance, recovery and post-mortem; implements the link's DUT port |
 | `hil/link` (`oer-hil-link`) | DUT session, UART capture, protocol exchanges, reboots and peer console |
 | `hil/runs` (`oer-hil-runs`) | Bundle format and reader in `format`, writer in `run`, run store, object store, launch records and replay |
-| `hil/analysis` (`oer-hil-analysis`) | Bundle queries, measurements, comparisons, retention, performance and JUnit/HTML views |
+| `hil/stats` (`oer-hil-stats`) | Bundle queries, measurements, comparisons, retention, performance and JUnit/HTML views |
 | `hil/family-system` (`oer-hil-family-system`) | System workloads: boot smoke, watchdog and panic reset |
 | `hil/family-lower-mac` (`oer-hil-family-lower-mac`) | Lower-MAC conformance and ownership-close checks |
 | `hil/family-wifi` (`oer-hil-family-wifi`) | W4 station qualification and the initial-GTK investigation |
-| `vendor/phy`, `vendor/phy-esp32s31` | PHY comparison port, vendor reference driver and executable S31 PHY family |
+| `hil/family-phy`, `hil/family-phy-esp32s31` | PHY comparison port, vendor reference driver and executable S31 PHY family |
 | `lab/cli` (`oer-tool-lab-cli`) | `cargo stand`: stand leases, queue, boards, owners and fixture installation |
 | `lab/model` (`oer-lab-model`) | Stand file, board-name resolution and state paths |
 | `lab/board` (`oer-lab-board`) | Leased board I/O, device access, image receipts, writes, starts, resets, OpenOCD and consoles |
@@ -71,7 +71,7 @@ from the scenario result. See [runs](runs.md#failed-repetitions-and-board-recove
 | `oer-hil-runs::run::RunSession` | Run directory, manifest, plan, firmware archive, suite and lifecycle events |
 | `oer-hil-scenario::workload::context::Context` | Repetition observations, measurements and cleanup evidence |
 | `oer-hil-link::SerialCapture` | Raw UART bytes, decoded protocol records and typed link health |
-| `oer-hil-analysis` | JUnit/HTML views and comparisons read from the typed bundle |
+| `oer-hil-stats` | JUnit/HTML views and comparisons read from the typed bundle |
 | `oer-lab-board::image` | Receipt of the complete image written and started on a board |
 | `oer-lab-arbiter::journal` | Board-operation history |
 
@@ -123,7 +123,7 @@ junit.xml, report.html derived views
 A run archives the firmware bytes it uses. Replays validate archived subjects
 and their identities; a Markdown narrative, derived view or previous PASS
 cannot replace the underlying records. See [run bundles](../runs/README.md)
-for the format and store, and [analysis](../analysis/README.md) for queries.
+for the format and store, and [analysis](../stats/README.md) for queries.
 
 `SerialCapture` saves received bytes incrementally as `uart.bin` and a lossy
 text view as `uart.log`; `protocol.jsonl` records decoded events, sent-command
@@ -140,13 +140,13 @@ The runner library depends on the family crates, scenario APIs, laboratory,
 link, image pipeline and bundle libraries. The families use
 `oer-hil-scenario::workload`; the scenario library depends on the laboratory,
 link and bundle libraries, which do not depend on the runner.
-`oer-hil-lab` implements the link's DUT port. `oer-hil-runs` depends on no
+`oer-hil-session` implements the link's DUT port. `oer-hil-runs` depends on no
 board or image builder; consumers read through
 `oer_hil_runs::format::RunBundle`. The observer's producer modules are in
 `oer-hil-observer`, while readers use its identity data in
 `oer-hil-runs::format::observer`.
 
-`oer-hil-scenario`, `oer-hil-lab`, `oer-hil-link` and `oer-hil-runs` expose
+`oer-hil-scenario`, `oer-hil-session`, `oer-hil-link` and `oer-hil-runs` expose
 test doubles through `test-support`. The recursive
 [catalog contract](../scenarios/README.md) has one discovery,
 `oer_hil_scenario::catalog::documents`; the runner interprets each family's

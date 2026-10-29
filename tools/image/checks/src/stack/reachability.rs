@@ -2,8 +2,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 
-use oer_analysis_riscv_stack::Bound;
 use oer_chip_profile::policy::StackPolicy;
+use oer_image_stack::Bound;
 
 use super::Image;
 

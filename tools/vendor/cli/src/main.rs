@@ -12,6 +12,7 @@ use clap::{Parser, Subcommand};
 
 mod copies;
 mod lineage;
+mod phy_archive;
 mod phy_baseline;
 mod run;
 mod workspace;
@@ -176,7 +177,7 @@ fn run() -> Result<ExitCode> {
                 .iter()
                 .map(|source| source.replace('-', "_"))
                 .collect();
-            oer_vendor_phy::archive::audit_phy(&ctx, &archive, &sources)?
+            phy_archive::audit_phy(&ctx, &archive, &sources)?
         }
         Command::Diff {
             chip,

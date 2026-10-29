@@ -1,8 +1,8 @@
 //! Image size measurements. These observe the checks' existing analysis;
 //! they neither run an analysis nor decide a check's verdict.
 use crate::{Result, stack::Image};
-use oer_analysis_riscv_stack::Bound;
 use oer_chip_profile::{Profile, policy::Storage};
+use oer_image_stack::Bound;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 

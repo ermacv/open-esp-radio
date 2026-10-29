@@ -8,7 +8,7 @@ Each owns a scenario table and its executable workload.
 | `tools/hil/family-system/` | `[system]`: boot smoke, watchdog, panic reset and stand recovery |
 | `tools/hil/family-lower-mac/` | `[lower-mac]`: conformance and ownership-close checks |
 | `tools/hil/family-wifi/` | `[wifi]`: W4 qualification and the initial-GTK investigation |
-| `tools/vendor/phy-esp32s31/` | `[phy]`: calibration comparison and tracking investigations, composed over `tools/vendor/phy/` |
+| `tools/hil/family-phy-esp32s31/` | `[phy]`: calibration comparison and tracking investigations, composed over `tools/hil/family-phy/` |
 
 ## Family contract
 
@@ -54,5 +54,5 @@ managed-router operations. Scenario documents live under
 
 ```console
 cargo test -p oer-hil-family-system -p oer-hil-family-lower-mac \
-  -p oer-hil-family-wifi -p oer-vendor-phy -p oer-vendor-phy-esp32s31
+  -p oer-hil-family-wifi -p oer-hil-family-phy -p oer-hil-family-phy-esp32s31
 ```

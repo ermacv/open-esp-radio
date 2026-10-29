@@ -1,6 +1,6 @@
 //! The `cargo hil` command line: argument parsing and calls into the stand
 //! libraries (leases, owners, jobs), the ESP-IDF firmware catalog,
-//! the run store's analyses (`oer-hil-analysis`), experiments and the
+//! the run store's analyses (`oer-hil-stats`), experiments and the
 //! launch of the runner (`oer-hil-experiment`).
 #![forbid(unsafe_code)]
 

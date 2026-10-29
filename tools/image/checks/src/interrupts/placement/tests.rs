@@ -2,7 +2,7 @@ use super::*;
 use crate::interrupts::tests::{partial, stacks};
 use object::write::{Object, Relocation, StandardSection, Symbol, SymbolSection};
 use object::{Architecture, BinaryFormat, Endianness, RelocationFlags, SymbolFlags, SymbolScope};
-use oer_analysis_riscv_stack::{Function, FunctionFacts};
+use oer_image_stack::{Function, FunctionFacts};
 
 pub(in crate::interrupts) fn facts(address: u32, size: u32) -> FunctionFacts {
     FunctionFacts {

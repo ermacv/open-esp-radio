@@ -36,7 +36,7 @@ partial calibration or retained RF wake. P1 reaches it through RequestSlot and
 waits for the initial/sealing answer to reach the endpoint before releasing registration. A sealed
 operation cannot wait past the original deadline for console publication.
 Calibration temperature is reported in degrees Celsius, as the native snapshot
-defines it. The [host store](../../../tools/hil/lab/CALIBRATION_CACHE.md) owns
+defines it. The [host store](../../../tools/hil/session/CALIBRATION_CACHE.md) owns
 persistence; the firmware has no calibration flash/NVS backend.
 
 `cargo hil run phy-host-calibration-cache --chip esp32s31 --board s31-a` exercises
@@ -116,7 +116,7 @@ software enhanced ACKs are disabled; there is no transmit command. A private
 RX-only laboratory permit has NO_IR; its 21 dBm ceiling preserves the reference
 PIB value and does not authorize transmission. The vendor reference retains its
 normal automatic ACK policy; these captures compare PHY state in idle RX.
-SOURCE: `tools/vendor/phy/src/reference.rs` and the reference peer's CFG command.
+SOURCE: `tools/hil/family-phy/src/reference.rs` and the reference peer's CFG command.
 
 The MAC IRQ and all engine entries execute on the same hart at P2, serializing
 entries without a task/IRQ lock or a borrow across await. Every received slot is

@@ -9,7 +9,7 @@
 //! image's and the ROM's bytes, their facts, the value analysis, and every
 //! structure of the stack analysis that grows with the image: the facts it
 //! keeps of each function, the DWARF and type facts, and the resolutions
-//! (`oer-analysis-riscv-stack`). Outside it stay the caches addr2line grows for the
+//! (`oer-image-stack`). Outside it stay the caches addr2line grows for the
 //! inline chains, which the working memory's contract leaves to the
 //! library, and the pre-existing bound scratch and critical-path structures.
 //! First-discovery predecessors are admitted by each bound's caller through

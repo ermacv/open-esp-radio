@@ -21,9 +21,9 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use oer_hil_analysis::Run;
 use oer_hil_model::schema::run::{FailureKind, Outcome};
 use oer_hil_runs::RunStore;
+use oer_hil_stats::Run;
 use oer_os_process::git::Worktree;
 
 use crate::experiment::{

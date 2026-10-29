@@ -78,7 +78,7 @@ the budgets and target of 0, based on the executor's runtime `DONE` check
 (not a type guarantee) and `.await` never polling a completed child again.
 
 The stack analyzer's DWARF Waker-slot proof also requires the image
-pipeline's [code-generation preconditions](../tools/analysis/riscv-stack/README.md#code-generation-preconditions):
+pipeline's [code-generation preconditions](../tools/image/stack/README.md#code-generation-preconditions):
 MergeFunctions and machine outlining are disabled, merged source locations
 are not picked from a single origin, and linker ICF is off. The build
 validates the effective compiler flags and expanded linker arguments;

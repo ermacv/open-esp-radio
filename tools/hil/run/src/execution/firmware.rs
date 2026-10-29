@@ -5,7 +5,6 @@ use std::path::Path;
 
 use crate::Result;
 use crate::image::{Artifacts, CurrentBuild};
-use oer_hil_lab::config::LabConfig;
 use oer_hil_model::schema::image::ImageClass;
 use oer_hil_runs::format::run::Failure;
 use oer_hil_runs::format::run::FailureKind;
@@ -13,6 +12,7 @@ use oer_hil_runs::format::run::Outcome;
 use oer_hil_runs::format::run::PlannedFirmware;
 use oer_hil_runs::replay::ArchivedFirmware;
 use oer_hil_runs::run::RunSession;
+use oer_hil_session::config::LabConfig;
 use oer_lab_board::lock::DeviceAccess;
 
 pub(crate) enum RunFirmware {

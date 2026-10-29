@@ -1,5 +1,5 @@
 use super::*;
-use oer_analysis_riscv_stack::{Assumption, Fact};
+use oer_image_stack::{Assumption, Fact};
 
 #[path = "handoff_tests.rs"]
 mod handoff;

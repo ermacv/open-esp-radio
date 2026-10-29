@@ -2,8 +2,8 @@
 //! repetition.
 
 use crate::workload::{Result, measurements::Recorder, results::Results};
-use oer_hil_lab::config::LabConfig;
 use oer_hil_link::{Dut, Profile, SerialCapture};
+use oer_hil_session::config::LabConfig;
 use std::path::Path;
 
 pub struct Context<'a> {
