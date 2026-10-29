@@ -682,6 +682,11 @@ its model and conformance case.
   progress the admitted test with the Core Part F interval grid and 5 ms RX
   windows. Public backend identity crosses as an explicit wire value with
   named canonical/air byte order; the driver depends on neither LL nor HCI.
+  The backend does not parse air PDUs: wire codecs, LL decisions and role
+  policy stay above the port. An address needed by the backend crosses the
+  port as a `LeDeviceAddress`, separately from encoded packet bytes. Role
+  images contain only hardware scheduler values, SRAM layout, channels and
+  execution timing.
   HCI is the world boundary. The controller's DTM service owns correlation,
   command credit, pending commands, session leases and retained faulty terminals
   without IO. The LE runtime awaits capacity and terminals and runs the HCI

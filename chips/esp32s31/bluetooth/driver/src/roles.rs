@@ -1,10 +1,6 @@
 //! Role value builders and list selection. None borrows controller layouts.
 
 mod dtm_event_image;
-mod legacy_scanning_event_image;
-pub use legacy_scanning_event_image::{
-    LegacyScanFilterPolicy, LegacyScanResetConfig, LegacyScanStartSelection, LegacyScanType,
-};
 mod legacy_advertising_event_image;
 pub use dtm_event_image::{
     DtmReceiverEventPhase, DtmRole, DtmSchedulerItemEventType, DtmSchedulerReceiverPhy,
@@ -152,77 +148,6 @@ impl DtmImageBuilder {
         lease: &SchedulerRoleInstance<'pool, 'epoch>,
     ) -> Result<(), DtmPrepareError> {
         pool.prepare_event(lease, |seed| Ok(self.build(seed)))
-    }
-}
-
-/// The advertiser chooses the PDU, primary-channel plan, timing and PTI;
-/// HAL alone installs links and commits the hardware words.
-pub struct AdvertisingImageBuilder<'pdu> {
-    pub pdu: &'pdu [u8],
-    pub power: LeTxPower,
-    pub channels: LegacyAdvertisingPrimaryChannelPlan,
-    pub start: u32,
-    pub item_duration: u32,
-    pub coexistence: AdvertisingCoexistencePriorities,
-}
-
-impl AdvertisingImageBuilder<'_> {
-    pub fn prepare<'pool, 'epoch, const N: usize>(
-        self,
-        pool: &mut LegacyAdvertisingPool<'pool, 'epoch, N>,
-        lease: &SchedulerRoleInstance<'pool, 'epoch>,
-    ) -> Result<LegacyAdvertisingEvent, LegacyAdvertisingError> {
-        let advertisement =
-            oer_bluetooth_le_wire::advertising_header::LegacyAdvertisingPduPrefix::decode(self.pdu)
-                .map_err(|_| {
-                    LegacyAdvertisingError::Pdu(LegacyAdvertisingPduError::MissingAdvertiserAddress)
-                })?;
-        let address = legacy_advertising_event_image::own_address_for_advertisement(advertisement)
-            .map_err(LegacyAdvertisingError::Pdu)?;
-        pool.prepare_packet(lease, self.pdu)?;
-        pool.reset_link_state(lease, self.power, address, ROLE_PRIORITY)?;
-        pool.prepare_event(
-            lease,
-            &self.channels.image(self.start, self.item_duration, 0),
-            self.coexistence,
-        )
-    }
-}
-
-pub struct ScanningImageBuilder {
-    pub reset: LegacyScanResetConfig,
-    pub channel: LegacyScanPrimaryChannel,
-    pub timing: LegacyScanEventTiming,
-    pub start: LegacyScanStartSelection,
-    pub coexistence: LegacyScanCoexistencePriorities,
-}
-
-impl ScanningImageBuilder {
-    pub fn prepare<
-        'pool,
-        'epoch,
-        const A: usize,
-        const C: usize,
-        const N: usize,
-        const R: usize,
-        const O: usize,
-        const Q: usize,
-    >(
-        self,
-        engine: &mut Engine<ArenaMemory<'pool, 'epoch, A, C, N, 1, R, O, Q>>,
-        lease: &SchedulerRoleInstance<'pool, 'epoch>,
-    ) -> Result<LegacyScanEvent, EnginePrepareError<LegacyScanError>> {
-        engine.reset_scanning(lease, self.reset.image())?;
-        engine
-            .scanning()
-            .map_err(|_| EnginePrepareError::Quarantined)?
-            .prepare_event(
-                lease,
-                self.start.image(self.channel),
-                self.timing,
-                self.coexistence,
-            )
-            .map_err(EnginePrepareError::Role)
     }
 }
 
