@@ -252,7 +252,7 @@ impl<X: ExecutionContext, const RX_QUEUE_DEPTH: usize, const TX_QUEUE_DEPTH: usi
 
 /// Xarxa/Embassy side of one owned packet endpoint.
 ///
-/// The device stays in the constructing execution context even for a shared
+/// The device stays on the constructing thread even for a shared
 /// metadata context; it cannot be sent to another task thread.
 /// ```compile_fail,E0277
 /// use oer_embassy_net::OwnedNetworkDevice;

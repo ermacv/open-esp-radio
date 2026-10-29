@@ -13,8 +13,8 @@
 //! block records only its [`Failure`] and the hart, then resets the chip.
 
 use oer_diagnostics::Note;
-use oer_esp32s31_hal::platform::interrupt_controller::{self, LineObservation};
 use oer_esp32s31_hal::cores::{StopError, StopTheWorld};
+use oer_esp32s31_hal::platform::interrupt_controller::{self, LineObservation};
 use oer_espressif_staged_runtime::trap::{self, TrapRegisters};
 use oer_riscv::clic::Trigger;
 
@@ -166,7 +166,9 @@ impl Failure {
             Self::EntropySource => oer_diagnostics::name!("entropy-source"; 32),
             Self::RootTaken => oer_diagnostics::name!("root-taken"; 32),
             Self::RootInitialization => oer_diagnostics::name!("root-initialization"; 32),
-            Self::NetworkContextAccessRefused => oer_diagnostics::name!("network-context-access-refused"; 32),
+            Self::NetworkContextAccessRefused => {
+                oer_diagnostics::name!("network-context-access-refused"; 32)
+            }
             Self::InterruptTable => oer_diagnostics::name!("interrupt-table"; 32),
             Self::Console => oer_diagnostics::name!("console"; 32),
             Self::InterruptHart => oer_diagnostics::name!("interrupt-hart"; 32),

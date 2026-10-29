@@ -2138,11 +2138,6 @@ const EXTERNAL_ASYNC_CRATES: &[Deviation] = &[
         "connected_tasks on owned notification cells (#848)",
     ),
     (
-        "portable/embassy/net",
-        "embassy-sync",
-        "network adapter on ContextCell and affine endpoints (#848)",
-    ),
-    (
         "protocols/hil/agent",
         "embassy-sync",
         "console on owned queues and waiter slots (#848)",

@@ -34,8 +34,8 @@ name does not establish that its task runs on P2.
 | `protocols/radio/port/src/slot.rs`: p2 | Frontend/body P1, registration teardown P2 → registered owner P2 | Upward wake, protected by `PriorityWaker`; commands, returns, retirement and quarantine publish their state before notification. |
 | Same file: join | Registered owner P2 → frontend P1 | Ordinary AtomicWaker, descending priority. |
 | `firmware/apps/w1/src/measure.rs`: PHASE_WAKER | Phase writer P1 → timer observer P2 | Upward wake, protected by `PriorityWaker`; the phase is an atomic level checked after registration. |
-| `portable/embassy/net/src/owned.rs`: radio_waker, network_waker | W3 station/network tasks P1 ↔ P1 | Embassy `GenericAtomicWaker<NoopRawMutex>`. No preemption between these users. This implementation locks a `Cell<Option<Waker>>`, invokes the callback while locked and restores its registration; it has no WAKING state. |
-| Same file: tx_published and RX Channel; `owned/tx_queue.rs`, `owned/tx_budget.rs` | W3 network producer, station consumer and packet return P1 ↔ P1 | Embassy Signal/Channel and WakerRegistration under `NoopRawMutex`, same executor. Signal publishes Signaled before its callback; WakerRegistration takes its registration before waking. These mutex-backed paths are not admitted for upward notifications. |
+| `portable/embassy/net/src/owned.rs`: radio_waker, network_waker | W3/HIL station/network tasks P1 ↔ P1 | `oer_sync::PriorityWaker` over atomic link state. The image retains the same P1 composition; endpoint and link-controller loans are affine and local. |
+| `owned/tx_queue.rs`, `owned/tx_budget.rs` and RX in `owned.rs` | W3/HIL network producer, station consumer and packet return P1 ↔ P1 | TX metadata and its coalesced publication hint use `ContextCell` with a private checked `Entered<X>` proof. All Waker callbacks run after the borrow ends. Admission is atomic and uses `PriorityWaker`; packet destruction precedes credit return. RX uses affine `WakingSpscQueue` ends and ordinary AtomicWakers. |
 | Xarxa's pinned `PacketPoolWaiter`, through `owned.rs` | W3 packet destruction P1 → RX publisher P1 | Dependency's ordinary AtomicWaker, same executor. Moving the publisher to P2 would require reviewing this path too. |
 | `portable/memory/src/waking_spsc.rs` | W3 network/application/service P1 ↔ P1 | Ordinary AtomicWakers for consumer and producer; both endpoints currently run on P1. The generic queue must not be composed across priorities with an upward wake. |
 | `portable/cooperate/src/connected_tasks.rs` | Parent/worker tasks on the composition's executor | Embassy Signal under the supplied RawMutex. No hardware P1 → P2 composition uses these cells. A composition must not introduce an upward wake through them. |
@@ -49,15 +49,16 @@ name does not establish that its task runs on P2.
 | `protocols/radio/port/src/pool/fifo.rs`, `portable/embassy/net/src/datapath/memory.rs`, BLE/Wi-Fi models, `portable/time-virtual` | Parts of one task or one host model world | RefCell/Option or MultiWakerRegistration, not Sync. No shared cell crosses execution levels. |
 | Cooperative `cx.waker().wake_by_ref()` in driver/HIL/probe steps | Task → itself | Direct executor waker, no shared registration held during the callback. |
 
-The generic Embassy network adapter also permits other RawMutex types. Its
-existing mutex/owner limitations are documented in its
-[README](../portable/embassy/net/README.md); those types alone do not prove a
-valid cross-priority or cross-core composition. W3 selects NoopRawMutex and
-keeps every adapter endpoint on P1. Neither an IRQ nor a P2 task may share
-that NoopRawMutex state.
+The Embassy network adapter's TX metadata context is an `ExecutionContext`;
+W3 and HIL select `ThreadContext<0>`, their existing P1 executor. A refused
+context or nested borrow returns `AccessRefused` without consuming a queued
+owner; TX publication refusal returns its input packet. The network device,
+radio runner, RX publisher and link controller cannot be copied or sent to
+another thread. The RX queue's ordinary wakers and the pool waiter remain in
+that same P1 composition; no new cross-priority distribution is admitted.
 
 Direct `embassy-sync` dependencies remain in `portable/cooperate`,
-`portable/embassy/net`, `protocols/hil/agent` and the three HIL images. The
+`protocols/hil/agent` and the three HIL images. The
 layer test checks those exact edges against its shrinking deviation list;
 the absence of priority preemption does not admit a new mutex-backed path.
 

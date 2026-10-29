@@ -12,9 +12,7 @@ use embassy_futures::{
     select::{Either, select},
     yield_now,
 };
-use oer_embassy_net::{
-    NetworkInterfaceId, OwnedEndpointResources, OwnedNetworkDevice,
-};
+use oer_embassy_net::{NetworkInterfaceId, OwnedEndpointResources, OwnedNetworkDevice};
 use oer_embassy_time::EmbassyClock;
 use oer_firmware_apps_w3::{
     icmp,
@@ -23,8 +21,8 @@ use oer_firmware_apps_w3::{
 };
 use oer_ieee80211_runtime::station_service::*;
 use oer_ieee80211_sta::data::{EthernetFrame, TxMsdu};
-use oer_memory::{WakingSpscReceiver, WakingSpscSender};
 use oer_ieee80211_sta::machine::{StaCommandCredits, StaRequest};
+use oer_memory::{WakingSpscReceiver, WakingSpscSender};
 use oer_radio_port::PoolPath;
 use oer_time::{Clock, Duration, Timer};
 use owned_embassy_net::{
@@ -144,17 +142,23 @@ fn workload_future<'a, 'id: 'a, Path: PoolPath + 'a>(
         match select(
             application,
             join3(
-                async { match oer_firmware_apps_w3::bridge::run(
-                    radio,
-                    tx,
-                    rx,
-                    &observations,
-                    link,
-                    &EmbassyClock,
-                ).await {
-                    Ok(never) => match never {},
-                    Err(_) => crate::fail(oer_diagnostics::name!("network-context-access-refused"; 32)),
-                } },
+                async {
+                    match oer_firmware_apps_w3::bridge::run(
+                        radio,
+                        tx,
+                        rx,
+                        &observations,
+                        link,
+                        &EmbassyClock,
+                    )
+                    .await
+                    {
+                        Ok(never) => match never {},
+                        Err(_) => crate::fail(
+                            oer_diagnostics::name!("network-context-access-refused"; 32),
+                        ),
+                    }
+                },
                 runner.run(),
                 drain(&socket),
             ),
@@ -164,7 +168,7 @@ fn workload_future<'a, 'id: 'a, Path: PoolPath + 'a>(
             Either::First(mut report) => {
                 report.stack = Some(stack.statistics());
                 report
-            },
+            }
             Either::Second(_) => unreachable!("permanent network runners do not return"),
         }
     }

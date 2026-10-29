@@ -1,10 +1,13 @@
 //! P1 DHCP/ICMP stack over the existing owned Ethernet adapter.
 use super::Attempt;
 use core::cell::{Cell, RefCell};
-use embassy_futures::{join::join3, select::select, yield_now};
+use embassy_futures::{
+    join::join3,
+    select::{Either, select},
+    yield_now,
+};
 use oer_embassy_net::{
-    NetworkInterfaceId, OwnedEndpointResources, OwnedNetworkDevice,
-    OwnedNetworkRunner,
+    NetworkInterfaceId, OwnedEndpointResources, OwnedNetworkDevice, OwnedNetworkRunner,
 };
 use oer_embassy_time::EmbassyClock;
 use oer_firmware_apps_w3::{icmp, observation::Observations, report::Lease};
@@ -103,10 +106,12 @@ fn running_future<'a>(
             .expect("one station ICMP socket");
         let observations = observations();
         join3(
-            async { match bridge(radio, tx, rx, link, &observations).await {
-                Ok(never) => match never {},
-                Err(_) => crate::fail(crate::fatal::Failure::NetworkContextAccessRefused),
-            } },
+            async {
+                match bridge(radio, tx, rx, link, observations).await {
+                    Ok(never) => match never {},
+                    Err(_) => crate::fail(crate::fatal::Failure::NetworkContextAccessRefused),
+                }
+            },
             runner.run(),
             join3(
                 drain(&socket),
@@ -304,7 +309,9 @@ async fn bridge(
                 ),
             )
             .await;
-            if let Either::Second(Either::First(result)) = ready { result?; }
+            if let Either::Second(Either::First(result)) = ready {
+                result?;
+            }
         }
     }
 }
