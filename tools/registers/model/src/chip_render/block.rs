@@ -1254,10 +1254,14 @@ fn render_values(output: &mut String, field: &FieldPlan<'_>, values: &Values) {
         output,
         "}}\n\nimpl {name} {{\n/// The value's field bits.\n#[inline]\npub const fn bits(self) -> u32 {{\nself as u32\n}}\n"
     );
+    let positioned = if field.low == 0 {
+        "self.bits()".to_owned()
+    } else {
+        format!("self.bits() << {}", field.low)
+    };
     let _ = writeln!(
         output,
-        "/// The value positioned in its register.\n#[inline]\npub const fn register_bits(self) -> u32 {{ self.bits() << {} }}\n",
-        field.low
+        "/// The value positioned in its register.\n#[inline]\npub const fn register_bits(self) -> u32 {{ {positioned} }}\n"
     );
     let mut canonical = BTreeMap::new();
     let mut variants = Vec::new();

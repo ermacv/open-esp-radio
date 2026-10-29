@@ -126,10 +126,21 @@ Cryptographic operations shared by protocols have one contract each in
 owns its key and buffers and moves by value into an engine, which moves itself
 into the operation and returns with the response and the same buffers; there
 is no busy refusal, and consuming the request erases the key. Mode algorithms
-(RFC 3394) have one copy there, as resumable machines over a synchronous block
-primitive; a protocol's software primitive lives in its `cipher`. The image
-chooses the engine as a static type. A core asks for an operation as an action and takes its response as an
-input, holding no future; the runtime runs the engine in one slot of its
+(RFC 3394) have one copy there, as resumable machines issuing owned block
+inputs with affine continuations that accept an output or a typed engine
+error. The machine has no async code and advances only after completion;
+an engine may yield while its block is in flight. A protocol's synchronous
+software primitive lives in its `cipher`; `BlockKeyUnwrap` feeds each result
+back immediately. The chip composition chooses the engine as a static type.
+The S31 Typical AES engine lives in `chips/esp32s31/crypto`, over the HAL's
+`peripherals::aes` atoms and exclusive crypto clock/reset word. The shared
+`compose::crypto` selects it and supplies it to the Wi-Fi facade in
+`Resources`. The station runner retains the engine from
+construction; images supply no separate engine when starting it. It owns AES by value,
+retains IRQ55 with `Silent`, uses timer-woken completion samples and erases
+the hardware key and intermediates on completion or cancellation. A failed
+engine retains its owner and refuses further requests with a typed error.
+A core asks for an operation as an action and takes its response as an input, holding no future; the runtime runs the engine in one slot of its
 select. An engine whose hardware may still reach a request's buffers keeps
 them until it confirmed the stop.
 
@@ -157,8 +168,9 @@ the lossless concrete callback. A duplicate in-flight kind has its own typed
 admission refusal. Runner selects inputs over the generic port and executes
 the existing cores. The chip facade `oer-esp32s31-wifi` assembles the S31 backend,
 arbiter, station and runtime as `station(resources, config) -> (Control,
-NetDevice, Runners)`; images select the interrupt entries, callbacks, observers
-and key-unwrap engine and spawn the returned runners.
+NetDevice, Runners)`; compose supplies the value-owned key-unwrap engine in
+resources. Images declare its composed static type, select the interrupt entries,
+callbacks and observers, and spawn the returned runners.
 Automatic reconnect and graceful station shutdown belong to the product
 runtime. The facade configures reconnect with its own policy values; disabled
 is the default, and the HIL station selects a one-second interval. Explicit

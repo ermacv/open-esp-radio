@@ -76,3 +76,17 @@ fn a_deadline_before_the_driver_epoch_has_passed() {
     let mut passed = pin!(EmbassyClock.wait_until(Instant::EPOCH));
     assert_eq!(poll(passed.as_mut()), Poll::Ready(()));
 }
+
+#[test]
+fn the_owned_wait_is_movable_and_retains_its_timer_registration() {
+    let _driver = driver();
+    let at = EmbassyClock
+        .now()
+        .checked_add(Duration::from_millis(5))
+        .unwrap();
+    let mut wait = super::WaitUntil::new(at);
+    assert_eq!(poll(core::pin::Pin::new(&mut wait)), Poll::Pending);
+    let mut moved = wait;
+    embassy_time::MockDriver::get().advance(embassy_time::Duration::from_millis(6));
+    assert_eq!(poll(core::pin::Pin::new(&mut moved)), Poll::Ready(()));
+}

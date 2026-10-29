@@ -1,0 +1,22 @@
+[package]
+name = "oer-esp32s31-crypto"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0"
+repository.workspace = true
+description = "Value-owned S31 Typical AES key unwrap over HAL atoms"
+
+[dependencies]
+oer-esp32s31-hal = { path = "../hal" }
+oer-crypto = { path = "../../../portable/crypto" }
+oer-time = { path = "../../../portable/time" }
+zeroize = { version = "1.9.0", default-features = false }
+
+[dev-dependencies]
+oer-crypto = { path = "../../../portable/crypto", features = ["test-support"] }
+oer-time-virtual = { path = "../../../portable/time-virtual" }
+aes = { version = "0.8.4", default-features = false, features = ["zeroize"] }
+
+[lints]
+workspace = true

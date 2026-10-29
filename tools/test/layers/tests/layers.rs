@@ -907,6 +907,7 @@ const ROLES: &[(&str, Role)] = &[
     ("chips/espressif/usb-serial-jtag", Role::HardwareDriver),
     ("chips/espressif/watchdog", Role::HardwareDriver),
     ("chips/esp32s31/phy", Role::HardwareDriver),
+    ("chips/esp32s31/crypto", Role::HardwareDriver),
     ("chips/esp32s31/bluetooth/driver", Role::ChipAdapter),
     ("chips/esp32s31/ieee80211/driver", Role::ChipAdapter),
     ("chips/esp32s31/ieee802154/driver", Role::ChipAdapter),
@@ -2743,11 +2744,6 @@ const OUTSIDE_THE_ROLES: &[Deviation] = &[
     (
         "firmware/hil/esp32s31",
         "portable/riscv",
-        "the Wi-Fi station image on the facade and compose (#848)",
-    ),
-    (
-        "firmware/hil/esp32s31",
-        "protocols/ieee80211/cipher",
         "the Wi-Fi station image on the facade and compose (#848)",
     ),
     (

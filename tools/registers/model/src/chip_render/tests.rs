@@ -1425,6 +1425,10 @@ fn field_geometry_and_equal_encoding_names_are_generated_without_ambiguous_reads
         "{ name = \"FAST\", value = 1 }",
         "{ name = \"FAST\", value = 1 }, { name = \"FAST_WRITE\", value = 1 }",
     )]);
+    assert!(
+        !rust.contains("self.bits() << 0"),
+        "zero-position enum values need no shift"
+    );
     assert_eq!(
         run(
             &rust,
@@ -1435,6 +1439,7 @@ fn main() {
     assert_eq!(radio::config::Mode::FastWrite.bits(), radio::config::Mode::Fast.bits());
     assert_eq!(radio::config::Mode::from_bits(1), Some(radio::config::Mode::Fast));
     assert_eq!(radio::config::Mode::FastWrite.register_bits(), 1 << 8);
+    assert_eq!(radio::command::Opcode::Run.register_bits(), 1);
 }
 "#
         ),

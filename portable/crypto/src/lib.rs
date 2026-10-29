@@ -31,10 +31,10 @@
 //! refusal. The key-encryption key is erased when the request is consumed.
 //!
 //! The RFC 3394 algorithm has one copy, in [`rfc3394`]: a resumable unwrap
-//! machine and a wrap over a synchronous AES-128 block primitive
-//! ([`block::BlockCipher`]). A software primitive and a hardware block both
-//! reduce to that primitive; [`block::BlockKeyUnwrap`] is the engine of a
-//! primitive that completes each block synchronously.
+//! machine issuing owned blocks and accepting their results or typed errors.
+//! Hardware engines may yield while a block is in flight. The wrap and
+//! [`block::BlockKeyUnwrap`] use the synchronous [`block::BlockCipher`]
+//! software primitive and return each block's result immediately.
 
 #[cfg(test)]
 extern crate std;
@@ -118,8 +118,7 @@ impl<const N: usize> Drop for KeyData<N> {
 
 impl<const N: usize> ZeroizeOnDrop for KeyData<N> {}
 
-/// Why an RFC 3394 unwrap refused its input. Both are properties of the
-/// wrapped data, never of the engine's state.
+/// Why an RFC 3394 unwrap refused its input or its block engine failed.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum KeyUnwrapError {
     /// The wrapped data is not 64-bit blocks with at least two blocks of
@@ -127,6 +126,8 @@ pub enum KeyUnwrapError {
     InvalidLength,
     /// The initial value did not verify (RFC 3394 §2.2.3).
     IntegrityCheckFailed,
+    /// A block engine failed; the plaintext and intermediate state are erased.
+    Engine(block::BlockError),
 }
 
 /// One RFC 3394 unwrap under an AES-128 key-encryption key. The request owns

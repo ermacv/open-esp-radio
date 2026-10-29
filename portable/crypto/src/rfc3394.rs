@@ -1,12 +1,15 @@
 //! RFC 3394 AES key wrap: the one copy of the algorithm, over a synchronous
 //! [`BlockCipher`].
 //!
-//! [`Rfc3394Unwrap`] is resumable: each [`Rfc3394Unwrap::step`] performs one
+//! [`Rfc3394Unwrap`] is resumable: each [`Rfc3394Unwrap::next_block`] issues one
 //! block of the index-based unwrap (RFC 3394 §2.2.2, second form), so an
-//! engine may yield between blocks. [`wrap`] is the index-based wrap (§2.2.1)
+//! engine may yield while a block is in flight and between blocks. [`wrap`] is the index-based wrap (§2.2.1)
 //! to completion. Received data reaches the unwrap; nothing here panics on it.
 
-use crate::{KeyData, KeyUnwrapError, KeyUnwrapResponse, block::BlockCipher};
+use crate::{
+    KeyData, KeyUnwrapError, KeyUnwrapResponse,
+    block::{BlockCipher, BlockError, CipherBlock},
+};
 use zeroize::Zeroize;
 
 /// The default initial value (RFC 3394 §2.2.3.1).
@@ -34,11 +37,18 @@ pub struct Rfc3394Unwrap<const N: usize> {
 
 /// The machine after one step.
 pub enum Rfc3394Step<const N: usize> {
-    /// More blocks remain.
-    Continue(Rfc3394Unwrap<N>),
+    /// One owned input block and the unique continuation accepting its result.
+    Block {
+        input: CipherBlock,
+        pending: Rfc3394Pending<N>,
+    },
     /// The response, with the plaintext or the refusal.
     Complete(KeyUnwrapResponse<N>),
 }
+
+/// The mode state while a block engine owns its input. It accepts one result;
+/// dropping it erases the intermediate key data and integrity register.
+pub struct Rfc3394Pending<const N: usize>(Rfc3394Unwrap<N>);
 
 impl<const N: usize> Rfc3394Unwrap<N> {
     /// Admit wrapped data: `n + 1` semiblocks with `n >= 2`. A refusal
@@ -61,9 +71,9 @@ impl<const N: usize> Rfc3394Unwrap<N> {
         })
     }
 
-    /// Perform one block: `B = AES-1(K, (A ^ t) | R[i])`, `A = MSB(64, B)`,
-    /// `R[i] = LSB(64, B)` with `t = n * j + i`.
-    pub fn step(mut self, cipher: &mut impl BlockCipher) -> Rfc3394Step<N> {
+    /// Issue `AES-1(K, (A ^ t) | R[i])`, with `t = n * j + i`.
+    /// No mode state advances until the returned continuation accepts a result.
+    pub fn next_block(mut self) -> Rfc3394Step<N> {
         let Some(register) = register(&mut self.data, self.index) else {
             return Rfc3394Step::Complete(self.refuse(KeyUnwrapError::InvalidLength));
         };
@@ -81,20 +91,17 @@ impl<const N: usize> Rfc3394Unwrap<N> {
         {
             *out = value ^ count;
         }
-        let mut block = join(&high, register);
+        let input = CipherBlock::new(join(&high, register));
         high.zeroize();
-        cipher.decrypt_block(&mut block);
-        (self.accumulator, *register) = split(&block);
-        block.zeroize();
-        match (self.index.checked_sub(1), self.round.checked_sub(1)) {
-            (Some(index @ 1..), _) => self.index = index,
-            (_, Some(round)) => {
-                self.round = round;
-                self.index = self.semiblocks;
-            }
-            (_, None) => return Rfc3394Step::Complete(self.finish()),
+        Rfc3394Step::Block {
+            input,
+            pending: Rfc3394Pending(self),
         }
-        Rfc3394Step::Continue(self)
+    }
+
+    /// Terminate an admitted operation before submitting a block.
+    pub fn fail(self, error: BlockError) -> KeyUnwrapResponse<N> {
+        self.refuse(KeyUnwrapError::Engine(error))
     }
 
     /// Check the integrity register and move the plaintext `R[1..=n]` to the
@@ -139,6 +146,36 @@ impl<const N: usize> Rfc3394Unwrap<N> {
             data: core::mem::replace(&mut self.data, KeyData::cleared()),
             outcome: Err(error),
         }
+    }
+}
+
+impl<const N: usize> Rfc3394Pending<N> {
+    /// Terminate while the block is in flight, erasing all mode state.
+    pub fn fail(self, error: BlockError) -> KeyUnwrapResponse<N> {
+        self.0.fail(error)
+    }
+
+    /// Accept exactly one completed block or a typed engine error.
+    pub fn complete(self, result: Result<CipherBlock, BlockError>) -> Rfc3394Step<N> {
+        let mut machine = self.0;
+        let block = match result {
+            Ok(block) => block,
+            Err(error) => return Rfc3394Step::Complete(machine.fail(error)),
+        };
+        let Some(register) = register(&mut machine.data, machine.index) else {
+            return Rfc3394Step::Complete(machine.refuse(KeyUnwrapError::InvalidLength));
+        };
+        (machine.accumulator, *register) = split(block.as_bytes());
+        drop(block);
+        match (machine.index.checked_sub(1), machine.round.checked_sub(1)) {
+            (Some(index @ 1..), _) => machine.index = index,
+            (_, Some(round)) => {
+                machine.round = round;
+                machine.index = machine.semiblocks;
+            }
+            (_, None) => return Rfc3394Step::Complete(machine.finish()),
+        }
+        machine.next_block()
     }
 }
 

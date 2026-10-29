@@ -1256,6 +1256,1625 @@ pub mod instances {
         #[allow(non_upper_case_globals, reason = "the vendor's source name")]
         pub const CACHE: super::super::Interrupt = super::super::Interrupt::CACHE;
     }
+
+    /// The `AES` instance of [`AES`](super::aes).
+    ///
+    /// SOURCE: ESP_IDF_4D80C1B2_S31_AES.
+    pub mod aes {
+        /// The instance's base address.
+        pub const BASE: usize = 0x20508000;
+        /// The bytes of the instance's window.
+        pub const SIZE: usize = 0xd8;
+
+        /// The interrupt source of the instance.
+        #[allow(non_upper_case_globals, reason = "the vendor's source name")]
+        pub const AES: super::super::Interrupt = super::super::Interrupt::AES;
+    }
+}
+
+/// The `AES` block type.
+///
+/// The S31 AES accelerator; Typical AES uses CPU-owned blocks without DMA.
+pub mod aes {
+    /// The `KEY%s` register.
+    pub mod key {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's width in bits.
+        pub const WIDTH: u32 = 32;
+
+        /// The first element's byte offset in its block.
+        pub const OFFSET: usize = 0x0;
+        /// The byte distance between two elements.
+        pub const STRIDE: usize = 0x4;
+        /// The element count.
+        pub const COUNT: usize = 8;
+
+        /// Width of `DATA` in bits.
+        pub const DATA_WIDTH: u32 = 32;
+        /// Greatest unsigned image of `DATA`.
+        pub const DATA_MAX: u32 = 0xffffffff;
+        /// Positioned bits of `DATA`.
+        pub const DATA_MASK: u32 = 0xffffffff;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// The `DATA` field.
+            #[inline]
+            pub const fn data(self) -> u32 {
+                self.0
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// The `DATA` field.
+            #[inline]
+            pub const fn data(&self) -> u32 {
+                self.0
+            }
+
+            /// Set `DATA`.
+            #[inline]
+            pub fn set_data(&mut self, value: u32) -> &mut Self {
+                self.0 = value;
+                self
+            }
+        }
+    }
+
+    /// The `TEXT_IN%s` register.
+    pub mod text_in {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's width in bits.
+        pub const WIDTH: u32 = 32;
+
+        /// The first element's byte offset in its block.
+        pub const OFFSET: usize = 0x20;
+        /// The byte distance between two elements.
+        pub const STRIDE: usize = 0x4;
+        /// The element count.
+        pub const COUNT: usize = 4;
+
+        /// Width of `DATA` in bits.
+        pub const DATA_WIDTH: u32 = 32;
+        /// Greatest unsigned image of `DATA`.
+        pub const DATA_MAX: u32 = 0xffffffff;
+        /// Positioned bits of `DATA`.
+        pub const DATA_MASK: u32 = 0xffffffff;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// The `DATA` field.
+            #[inline]
+            pub const fn data(self) -> u32 {
+                self.0
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// The `DATA` field.
+            #[inline]
+            pub const fn data(&self) -> u32 {
+                self.0
+            }
+
+            /// Set `DATA`.
+            #[inline]
+            pub fn set_data(&mut self, value: u32) -> &mut Self {
+                self.0 = value;
+                self
+            }
+        }
+    }
+
+    /// The `TEXT_OUT%s` register.
+    pub mod text_out {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's width in bits.
+        pub const WIDTH: u32 = 32;
+
+        /// The first element's byte offset in its block.
+        pub const OFFSET: usize = 0x30;
+        /// The byte distance between two elements.
+        pub const STRIDE: usize = 0x4;
+        /// The element count.
+        pub const COUNT: usize = 4;
+
+        /// Width of `DATA` in bits.
+        pub const DATA_WIDTH: u32 = 32;
+        /// Greatest unsigned image of `DATA`.
+        pub const DATA_MAX: u32 = 0xffffffff;
+        /// Positioned bits of `DATA`.
+        pub const DATA_MASK: u32 = 0xffffffff;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// The `DATA` field.
+            #[inline]
+            pub const fn data(self) -> u32 {
+                self.0
+            }
+        }
+    }
+
+    /// The `MODE` register.
+    pub mod mode {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x00000017;
+        /// The register's width in bits.
+        pub const WIDTH: u32 = 32;
+
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x40;
+
+        /// The reserved bits: never a field, kept by every read-modify-write and
+        /// stored at their reset value by a write from zero.
+        pub const RESERVED: u32 = 0xffffffe8;
+
+        /// Width of `MODE` in bits.
+        pub const MODE_WIDTH: u32 = 3;
+        /// Greatest unsigned image of `MODE`.
+        pub const MODE_MAX: u32 = 0x7;
+        /// Positioned bits of `MODE`.
+        pub const MODE_MASK: u32 = 0x7;
+
+        /// The declared values of the `MODE` field.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        #[allow(
+            clippy::enum_variant_names,
+            reason = "the variants are the model's value names"
+        )]
+        pub enum Mode {
+            Encrypt128 = 0x0,
+            Encrypt256 = 0x2,
+            Decrypt128 = 0x4,
+            Decrypt256 = 0x6,
+        }
+
+        impl Mode {
+            /// The value's field bits.
+            #[inline]
+            pub const fn bits(self) -> u32 {
+                self as u32
+            }
+
+            /// The value positioned in its register.
+            #[inline]
+            pub const fn register_bits(self) -> u32 {
+                self.bits()
+            }
+
+            /// The declared value `bits`, if it is one.
+            #[inline]
+            pub const fn from_bits(bits: u32) -> Option<Self> {
+                match bits {
+                    0x0 => Some(Self::Encrypt128),
+                    0x2 => Some(Self::Encrypt256),
+                    0x4 => Some(Self::Decrypt128),
+                    0x6 => Some(Self::Decrypt256),
+                    _ => None,
+                }
+            }
+        }
+
+        /// Width of `USE_HARDWARE_KEY` in bits.
+        pub const USE_HARDWARE_KEY_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `USE_HARDWARE_KEY`.
+        pub const USE_HARDWARE_KEY_MAX: u32 = 0x1;
+        /// Positioned bits of `USE_HARDWARE_KEY`.
+        pub const USE_HARDWARE_KEY_MASK: u32 = 0x10;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// The `MODE` field.
+            #[inline]
+            pub const fn mode(self) -> oer_mmio::Bits<3> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// The `MODE` field as its declared value, if it is one.
+            #[inline]
+            pub const fn mode_variant(self) -> Option<Mode> {
+                Mode::from_bits(self.0 & 0x7)
+            }
+
+            /// The `USE_HARDWARE_KEY` field.
+            #[inline]
+            pub const fn use_hardware_key(self) -> bool {
+                (self.0 & 0x00000010) != 0
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// The `MODE` field.
+            #[inline]
+            pub const fn mode(&self) -> oer_mmio::Bits<3> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// The `MODE` field as its declared value, if it is one.
+            #[inline]
+            pub const fn mode_variant(&self) -> Option<Mode> {
+                Mode::from_bits(self.0 & 0x7)
+            }
+
+            /// The `USE_HARDWARE_KEY` field.
+            #[inline]
+            pub const fn use_hardware_key(&self) -> bool {
+                (self.0 & 0x00000010) != 0
+            }
+
+            /// Set `MODE`.
+            #[inline]
+            pub fn set_mode(&mut self, value: Mode) -> &mut Self {
+                self.0 = (self.0 & 0xfffffff8) | value.bits();
+                self
+            }
+
+            /// Set `USE_HARDWARE_KEY`.
+            #[inline]
+            pub fn set_use_hardware_key(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xffffffef) | (u32::from(value) << 4);
+                self
+            }
+        }
+    }
+
+    /// The `ENDIAN` register.
+    pub mod endian {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x0000003f;
+        /// The register's width in bits.
+        pub const WIDTH: u32 = 32;
+
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x44;
+
+        /// The reserved bits: never a field, kept by every read-modify-write and
+        /// stored at their reset value by a write from zero.
+        pub const RESERVED: u32 = 0xffffffc0;
+
+        /// Width of `ENDIAN` in bits.
+        pub const ENDIAN_WIDTH: u32 = 6;
+        /// Greatest unsigned image of `ENDIAN`.
+        pub const ENDIAN_MAX: u32 = 0x3f;
+        /// Positioned bits of `ENDIAN`.
+        pub const ENDIAN_MASK: u32 = 0x3f;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// The `ENDIAN` field.
+            #[inline]
+            pub const fn endian(self) -> oer_mmio::Bits<6> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// The `ENDIAN` field.
+            #[inline]
+            pub const fn endian(&self) -> oer_mmio::Bits<6> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// Set `ENDIAN`.
+            #[inline]
+            pub fn set_endian(&mut self, value: oer_mmio::Bits<6>) -> &mut Self {
+                self.0 = (self.0 & 0xffffffc0) | value.get();
+                self
+            }
+        }
+    }
+
+    /// The `TRIGGER` register.
+    pub mod trigger {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x00000001;
+        /// The register's width in bits.
+        pub const WIDTH: u32 = 32;
+
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x48;
+
+        /// The reserved bits: never a field, kept by every read-modify-write and
+        /// stored at their reset value by a write from zero.
+        pub const RESERVED: u32 = 0xfffffffe;
+
+        /// The bits of the write-trigger fields: zero in every write but a
+        /// field's explicit trigger.
+        pub const TRIGGERS: u32 = 0x00000001;
+
+        /// Width of `TRIGGER` in bits.
+        pub const TRIGGER_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `TRIGGER`.
+        pub const TRIGGER_MAX: u32 = 0x1;
+        /// Positioned bits of `TRIGGER`.
+        pub const TRIGGER_MASK: u32 = 0x1;
+    }
+
+    /// The `STATE` register.
+    pub mod state {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x00000003;
+        /// The register's width in bits.
+        pub const WIDTH: u32 = 32;
+
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x4c;
+
+        /// The reserved bits: never a field, kept by every read-modify-write and
+        /// stored at their reset value by a write from zero.
+        pub const RESERVED: u32 = 0xfffffffc;
+
+        /// Width of `STATE` in bits.
+        pub const STATE_WIDTH: u32 = 2;
+        /// Greatest unsigned image of `STATE`.
+        pub const STATE_MAX: u32 = 0x3;
+        /// Positioned bits of `STATE`.
+        pub const STATE_MASK: u32 = 0x3;
+
+        /// The declared values of the `STATE` field.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        #[allow(
+            clippy::enum_variant_names,
+            reason = "the variants are the model's value names"
+        )]
+        pub enum State {
+            Idle = 0x0,
+            Work = 0x1,
+            Done = 0x2,
+        }
+
+        impl State {
+            /// The value's field bits.
+            #[inline]
+            pub const fn bits(self) -> u32 {
+                self as u32
+            }
+
+            /// The value positioned in its register.
+            #[inline]
+            pub const fn register_bits(self) -> u32 {
+                self.bits()
+            }
+
+            /// The declared value `bits`, if it is one.
+            #[inline]
+            pub const fn from_bits(bits: u32) -> Option<Self> {
+                match bits {
+                    0x0 => Some(Self::Idle),
+                    0x1 => Some(Self::Work),
+                    0x2 => Some(Self::Done),
+                    _ => None,
+                }
+            }
+        }
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// The `STATE` field.
+            #[inline]
+            pub const fn state(self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// The `STATE` field as its declared value, if it is one.
+            #[inline]
+            pub const fn state_variant(self) -> Option<State> {
+                State::from_bits(self.0 & 0x3)
+            }
+        }
+    }
+
+    /// The `IV%s` register.
+    pub mod iv {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's width in bits.
+        pub const WIDTH: u32 = 32;
+
+        /// The first element's byte offset in its block.
+        pub const OFFSET: usize = 0x50;
+        /// The byte distance between two elements.
+        pub const STRIDE: usize = 0x4;
+        /// The element count.
+        pub const COUNT: usize = 4;
+
+        /// Width of `DATA` in bits.
+        pub const DATA_WIDTH: u32 = 32;
+        /// Greatest unsigned image of `DATA`.
+        pub const DATA_MAX: u32 = 0xffffffff;
+        /// Positioned bits of `DATA`.
+        pub const DATA_MASK: u32 = 0xffffffff;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// The `DATA` field.
+            #[inline]
+            pub const fn data(self) -> u32 {
+                self.0
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// The `DATA` field.
+            #[inline]
+            pub const fn data(&self) -> u32 {
+                self.0
+            }
+
+            /// Set `DATA`.
+            #[inline]
+            pub fn set_data(&mut self, value: u32) -> &mut Self {
+                self.0 = value;
+                self
+            }
+        }
+    }
+
+    /// The `H%s` register.
+    pub mod h {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's width in bits.
+        pub const WIDTH: u32 = 32;
+
+        /// The first element's byte offset in its block.
+        pub const OFFSET: usize = 0x60;
+        /// The byte distance between two elements.
+        pub const STRIDE: usize = 0x4;
+        /// The element count.
+        pub const COUNT: usize = 4;
+
+        /// Width of `DATA` in bits.
+        pub const DATA_WIDTH: u32 = 32;
+        /// Greatest unsigned image of `DATA`.
+        pub const DATA_MAX: u32 = 0xffffffff;
+        /// Positioned bits of `DATA`.
+        pub const DATA_MASK: u32 = 0xffffffff;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// The `DATA` field.
+            #[inline]
+            pub const fn data(self) -> u32 {
+                self.0
+            }
+        }
+    }
+
+    /// The `J0%s` register.
+    pub mod j0 {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's width in bits.
+        pub const WIDTH: u32 = 32;
+
+        /// The first element's byte offset in its block.
+        pub const OFFSET: usize = 0x70;
+        /// The byte distance between two elements.
+        pub const STRIDE: usize = 0x4;
+        /// The element count.
+        pub const COUNT: usize = 4;
+
+        /// Width of `DATA` in bits.
+        pub const DATA_WIDTH: u32 = 32;
+        /// Greatest unsigned image of `DATA`.
+        pub const DATA_MAX: u32 = 0xffffffff;
+        /// Positioned bits of `DATA`.
+        pub const DATA_MASK: u32 = 0xffffffff;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// The `DATA` field.
+            #[inline]
+            pub const fn data(self) -> u32 {
+                self.0
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// The `DATA` field.
+            #[inline]
+            pub const fn data(&self) -> u32 {
+                self.0
+            }
+
+            /// Set `DATA`.
+            #[inline]
+            pub fn set_data(&mut self, value: u32) -> &mut Self {
+                self.0 = value;
+                self
+            }
+        }
+    }
+
+    /// The `T0%s` register.
+    pub mod t0 {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's width in bits.
+        pub const WIDTH: u32 = 32;
+
+        /// The first element's byte offset in its block.
+        pub const OFFSET: usize = 0x80;
+        /// The byte distance between two elements.
+        pub const STRIDE: usize = 0x4;
+        /// The element count.
+        pub const COUNT: usize = 4;
+
+        /// Width of `DATA` in bits.
+        pub const DATA_WIDTH: u32 = 32;
+        /// Greatest unsigned image of `DATA`.
+        pub const DATA_MAX: u32 = 0xffffffff;
+        /// Positioned bits of `DATA`.
+        pub const DATA_MASK: u32 = 0xffffffff;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// The `DATA` field.
+            #[inline]
+            pub const fn data(self) -> u32 {
+                self.0
+            }
+        }
+    }
+
+    /// The `DMA_ENABLE` register.
+    pub mod dma_enable {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x00000001;
+        /// The register's width in bits.
+        pub const WIDTH: u32 = 32;
+
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x90;
+
+        /// The reserved bits: never a field, kept by every read-modify-write and
+        /// stored at their reset value by a write from zero.
+        pub const RESERVED: u32 = 0xfffffffe;
+
+        /// Width of `DMA_ENABLE` in bits.
+        pub const DMA_ENABLE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `DMA_ENABLE`.
+        pub const DMA_ENABLE_MAX: u32 = 0x1;
+        /// Positioned bits of `DMA_ENABLE`.
+        pub const DMA_ENABLE_MASK: u32 = 0x1;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// The `DMA_ENABLE` field.
+            #[inline]
+            pub const fn dma_enable(self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// The `DMA_ENABLE` field.
+            #[inline]
+            pub const fn dma_enable(&self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// Set `DMA_ENABLE`.
+            #[inline]
+            pub fn set_dma_enable(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffffffe) | u32::from(value);
+                self
+            }
+        }
+    }
+
+    /// The `BLOCK_MODE` register.
+    pub mod block_mode {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x00000007;
+        /// The register's width in bits.
+        pub const WIDTH: u32 = 32;
+
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x94;
+
+        /// The reserved bits: never a field, kept by every read-modify-write and
+        /// stored at their reset value by a write from zero.
+        pub const RESERVED: u32 = 0xfffffff8;
+
+        /// Width of `BLOCK_MODE` in bits.
+        pub const BLOCK_MODE_WIDTH: u32 = 3;
+        /// Greatest unsigned image of `BLOCK_MODE`.
+        pub const BLOCK_MODE_MAX: u32 = 0x7;
+        /// Positioned bits of `BLOCK_MODE`.
+        pub const BLOCK_MODE_MASK: u32 = 0x7;
+
+        /// The declared values of the `BLOCK_MODE` field.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        #[allow(
+            clippy::enum_variant_names,
+            reason = "the variants are the model's value names"
+        )]
+        pub enum BlockMode {
+            Ecb = 0x0,
+            Cbc = 0x1,
+            Ofb = 0x2,
+            Ctr = 0x3,
+            Cfb8 = 0x4,
+            Cfb128 = 0x5,
+            Gcm = 0x6,
+        }
+
+        impl BlockMode {
+            /// The value's field bits.
+            #[inline]
+            pub const fn bits(self) -> u32 {
+                self as u32
+            }
+
+            /// The value positioned in its register.
+            #[inline]
+            pub const fn register_bits(self) -> u32 {
+                self.bits()
+            }
+
+            /// The declared value `bits`, if it is one.
+            #[inline]
+            pub const fn from_bits(bits: u32) -> Option<Self> {
+                match bits {
+                    0x0 => Some(Self::Ecb),
+                    0x1 => Some(Self::Cbc),
+                    0x2 => Some(Self::Ofb),
+                    0x3 => Some(Self::Ctr),
+                    0x4 => Some(Self::Cfb8),
+                    0x5 => Some(Self::Cfb128),
+                    0x6 => Some(Self::Gcm),
+                    _ => None,
+                }
+            }
+        }
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// The `BLOCK_MODE` field.
+            #[inline]
+            pub const fn block_mode(self) -> oer_mmio::Bits<3> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// The `BLOCK_MODE` field as its declared value, if it is one.
+            #[inline]
+            pub const fn block_mode_variant(self) -> Option<BlockMode> {
+                BlockMode::from_bits(self.0 & 0x7)
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// The `BLOCK_MODE` field.
+            #[inline]
+            pub const fn block_mode(&self) -> oer_mmio::Bits<3> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// The `BLOCK_MODE` field as its declared value, if it is one.
+            #[inline]
+            pub const fn block_mode_variant(&self) -> Option<BlockMode> {
+                BlockMode::from_bits(self.0 & 0x7)
+            }
+
+            /// Set `BLOCK_MODE`.
+            #[inline]
+            pub fn set_block_mode(&mut self, value: oer_mmio::Bits<3>) -> &mut Self {
+                self.0 = (self.0 & 0xfffffff8) | value.get();
+                self
+            }
+        }
+    }
+
+    /// The `BLOCK_NUM` register.
+    pub mod block_num {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's width in bits.
+        pub const WIDTH: u32 = 32;
+
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x98;
+
+        /// Width of `BLOCK_NUM` in bits.
+        pub const BLOCK_NUM_WIDTH: u32 = 32;
+        /// Greatest unsigned image of `BLOCK_NUM`.
+        pub const BLOCK_NUM_MAX: u32 = 0xffffffff;
+        /// Positioned bits of `BLOCK_NUM`.
+        pub const BLOCK_NUM_MASK: u32 = 0xffffffff;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// The `BLOCK_NUM` field.
+            #[inline]
+            pub const fn block_num(self) -> u32 {
+                self.0
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// The `BLOCK_NUM` field.
+            #[inline]
+            pub const fn block_num(&self) -> u32 {
+                self.0
+            }
+
+            /// Set `BLOCK_NUM`.
+            #[inline]
+            pub fn set_block_num(&mut self, value: u32) -> &mut Self {
+                self.0 = value;
+                self
+            }
+        }
+    }
+
+    /// The `INC_SEL` register.
+    pub mod inc_sel {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x00000001;
+        /// The register's width in bits.
+        pub const WIDTH: u32 = 32;
+
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x9c;
+
+        /// The reserved bits: never a field, kept by every read-modify-write and
+        /// stored at their reset value by a write from zero.
+        pub const RESERVED: u32 = 0xfffffffe;
+
+        /// Width of `INC_SEL` in bits.
+        pub const INC_SEL_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `INC_SEL`.
+        pub const INC_SEL_MAX: u32 = 0x1;
+        /// Positioned bits of `INC_SEL`.
+        pub const INC_SEL_MASK: u32 = 0x1;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// The `INC_SEL` field.
+            #[inline]
+            pub const fn inc_sel(self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// The `INC_SEL` field.
+            #[inline]
+            pub const fn inc_sel(&self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// Set `INC_SEL`.
+            #[inline]
+            pub fn set_inc_sel(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffffffe) | u32::from(value);
+                self
+            }
+        }
+    }
+
+    /// The `AAD_BLOCK_NUM` register.
+    pub mod aad_block_num {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's width in bits.
+        pub const WIDTH: u32 = 32;
+
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0xa0;
+
+        /// Width of `AAD_BLOCK_NUM` in bits.
+        pub const AAD_BLOCK_NUM_WIDTH: u32 = 32;
+        /// Greatest unsigned image of `AAD_BLOCK_NUM`.
+        pub const AAD_BLOCK_NUM_MAX: u32 = 0xffffffff;
+        /// Positioned bits of `AAD_BLOCK_NUM`.
+        pub const AAD_BLOCK_NUM_MASK: u32 = 0xffffffff;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// The `AAD_BLOCK_NUM` field.
+            #[inline]
+            pub const fn aad_block_num(self) -> u32 {
+                self.0
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// The `AAD_BLOCK_NUM` field.
+            #[inline]
+            pub const fn aad_block_num(&self) -> u32 {
+                self.0
+            }
+
+            /// Set `AAD_BLOCK_NUM`.
+            #[inline]
+            pub fn set_aad_block_num(&mut self, value: u32) -> &mut Self {
+                self.0 = value;
+                self
+            }
+        }
+    }
+
+    /// The `REMAINDER_BIT_NUM` register.
+    pub mod remainder_bit_num {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x0000007f;
+        /// The register's width in bits.
+        pub const WIDTH: u32 = 32;
+
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0xa4;
+
+        /// The reserved bits: never a field, kept by every read-modify-write and
+        /// stored at their reset value by a write from zero.
+        pub const RESERVED: u32 = 0xffffff80;
+
+        /// Width of `REMAINDER_BIT_NUM` in bits.
+        pub const REMAINDER_BIT_NUM_WIDTH: u32 = 7;
+        /// Greatest unsigned image of `REMAINDER_BIT_NUM`.
+        pub const REMAINDER_BIT_NUM_MAX: u32 = 0x7f;
+        /// Positioned bits of `REMAINDER_BIT_NUM`.
+        pub const REMAINDER_BIT_NUM_MASK: u32 = 0x7f;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// The `REMAINDER_BIT_NUM` field.
+            #[inline]
+            pub const fn remainder_bit_num(self) -> oer_mmio::Bits<7> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// The `REMAINDER_BIT_NUM` field.
+            #[inline]
+            pub const fn remainder_bit_num(&self) -> oer_mmio::Bits<7> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// Set `REMAINDER_BIT_NUM`.
+            #[inline]
+            pub fn set_remainder_bit_num(&mut self, value: oer_mmio::Bits<7>) -> &mut Self {
+                self.0 = (self.0 & 0xffffff80) | value.get();
+                self
+            }
+        }
+    }
+
+    /// The `CONTINUE` register.
+    pub mod r#continue {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x00000001;
+        /// The register's width in bits.
+        pub const WIDTH: u32 = 32;
+
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0xa8;
+
+        /// The reserved bits: never a field, kept by every read-modify-write and
+        /// stored at their reset value by a write from zero.
+        pub const RESERVED: u32 = 0xfffffffe;
+
+        /// The bits of the write-trigger fields: zero in every write but a
+        /// field's explicit trigger.
+        pub const TRIGGERS: u32 = 0x00000001;
+
+        /// Width of `CONTINUE` in bits.
+        pub const CONTINUE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `CONTINUE`.
+        pub const CONTINUE_MAX: u32 = 0x1;
+        /// Positioned bits of `CONTINUE`.
+        pub const CONTINUE_MASK: u32 = 0x1;
+    }
+
+    /// The `INT_CLEAR` register.
+    pub mod int_clear {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x00000001;
+        /// The register's width in bits.
+        pub const WIDTH: u32 = 32;
+
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0xac;
+
+        /// The reserved bits: never a field, kept by every read-modify-write and
+        /// stored at their reset value by a write from zero.
+        pub const RESERVED: u32 = 0xfffffffe;
+
+        /// The bits of the write-trigger fields: zero in every write but a
+        /// field's explicit trigger.
+        pub const TRIGGERS: u32 = 0x00000001;
+
+        /// Width of `INT_CLEAR` in bits.
+        pub const INT_CLEAR_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `INT_CLEAR`.
+        pub const INT_CLEAR_MAX: u32 = 0x1;
+        /// Positioned bits of `INT_CLEAR`.
+        pub const INT_CLEAR_MASK: u32 = 0x1;
+    }
+
+    /// The `INT_ENA` register.
+    pub mod int_ena {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x00000001;
+        /// The register's width in bits.
+        pub const WIDTH: u32 = 32;
+
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0xb0;
+
+        /// The reserved bits: never a field, kept by every read-modify-write and
+        /// stored at their reset value by a write from zero.
+        pub const RESERVED: u32 = 0xfffffffe;
+
+        /// Width of `INT_ENA` in bits.
+        pub const INT_ENA_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `INT_ENA`.
+        pub const INT_ENA_MAX: u32 = 0x1;
+        /// Positioned bits of `INT_ENA`.
+        pub const INT_ENA_MASK: u32 = 0x1;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// The `INT_ENA` field.
+            #[inline]
+            pub const fn int_ena(self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// The `INT_ENA` field.
+            #[inline]
+            pub const fn int_ena(&self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// Set `INT_ENA`.
+            #[inline]
+            pub fn set_int_ena(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffffffe) | u32::from(value);
+                self
+            }
+        }
+    }
+
+    /// The `DATE` register.
+    pub mod date {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x0fffffff;
+        /// The register's width in bits.
+        pub const WIDTH: u32 = 32;
+
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0xb4;
+
+        /// The reserved bits: never a field, kept by every read-modify-write and
+        /// stored at their reset value by a write from zero.
+        pub const RESERVED: u32 = 0xf0000000;
+
+        /// Width of `DATE` in bits.
+        pub const DATE_WIDTH: u32 = 28;
+        /// Greatest unsigned image of `DATE`.
+        pub const DATE_MAX: u32 = 0xfffffff;
+        /// Positioned bits of `DATE`.
+        pub const DATE_MASK: u32 = 0xfffffff;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// The `DATE` field.
+            #[inline]
+            pub const fn date(self) -> oer_mmio::Bits<28> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// The `DATE` field.
+            #[inline]
+            pub const fn date(&self) -> oer_mmio::Bits<28> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// Set `DATE`.
+            #[inline]
+            pub fn set_date(&mut self, value: oer_mmio::Bits<28>) -> &mut Self {
+                self.0 = (self.0 & 0xf0000000) | value.get();
+                self
+            }
+        }
+    }
+
+    /// The `DMA_EXIT` register.
+    pub mod dma_exit {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x00000001;
+        /// The register's width in bits.
+        pub const WIDTH: u32 = 32;
+
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0xb8;
+
+        /// The reserved bits: never a field, kept by every read-modify-write and
+        /// stored at their reset value by a write from zero.
+        pub const RESERVED: u32 = 0xfffffffe;
+
+        /// The bits of the write-trigger fields: zero in every write but a
+        /// field's explicit trigger.
+        pub const TRIGGERS: u32 = 0x00000001;
+
+        /// Width of `DMA_EXIT` in bits.
+        pub const DMA_EXIT_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `DMA_EXIT`.
+        pub const DMA_EXIT_MAX: u32 = 0x1;
+        /// Positioned bits of `DMA_EXIT`.
+        pub const DMA_EXIT_MASK: u32 = 0x1;
+    }
+
+    /// The `RX_RESET` register.
+    pub mod rx_reset {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x00000001;
+        /// The register's width in bits.
+        pub const WIDTH: u32 = 32;
+
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0xc0;
+
+        /// The reserved bits: never a field, kept by every read-modify-write and
+        /// stored at their reset value by a write from zero.
+        pub const RESERVED: u32 = 0xfffffffe;
+
+        /// The bits of the write-trigger fields: zero in every write but a
+        /// field's explicit trigger.
+        pub const TRIGGERS: u32 = 0x00000001;
+
+        /// Width of `RX_RESET` in bits.
+        pub const RX_RESET_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `RX_RESET`.
+        pub const RX_RESET_MAX: u32 = 0x1;
+        /// Positioned bits of `RX_RESET`.
+        pub const RX_RESET_MASK: u32 = 0x1;
+    }
+
+    /// The `TX_RESET` register.
+    pub mod tx_reset {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x00000001;
+        /// The register's width in bits.
+        pub const WIDTH: u32 = 32;
+
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0xc4;
+
+        /// The reserved bits: never a field, kept by every read-modify-write and
+        /// stored at their reset value by a write from zero.
+        pub const RESERVED: u32 = 0xfffffffe;
+
+        /// The bits of the write-trigger fields: zero in every write but a
+        /// field's explicit trigger.
+        pub const TRIGGERS: u32 = 0x00000001;
+
+        /// Width of `TX_RESET` in bits.
+        pub const TX_RESET_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `TX_RESET`.
+        pub const TX_RESET_MAX: u32 = 0x1;
+        /// Positioned bits of `TX_RESET`.
+        pub const TX_RESET_MASK: u32 = 0x1;
+    }
+
+    /// The `PSEUDO` register.
+    pub mod pseudo {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x000003ff;
+        /// The register's width in bits.
+        pub const WIDTH: u32 = 32;
+
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0xd0;
+
+        /// The reserved bits: never a field, kept by every read-modify-write and
+        /// stored at their reset value by a write from zero.
+        pub const RESERVED: u32 = 0xfffffc00;
+
+        /// Width of `PSEUDO_EN` in bits.
+        pub const PSEUDO_EN_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `PSEUDO_EN`.
+        pub const PSEUDO_EN_MAX: u32 = 0x1;
+        /// Positioned bits of `PSEUDO_EN`.
+        pub const PSEUDO_EN_MASK: u32 = 0x1;
+
+        /// Width of `PSEUDO_BASE` in bits.
+        pub const PSEUDO_BASE_WIDTH: u32 = 4;
+        /// Greatest unsigned image of `PSEUDO_BASE`.
+        pub const PSEUDO_BASE_MAX: u32 = 0xf;
+        /// Positioned bits of `PSEUDO_BASE`.
+        pub const PSEUDO_BASE_MASK: u32 = 0x1e;
+
+        /// Width of `PSEUDO_INC` in bits.
+        pub const PSEUDO_INC_WIDTH: u32 = 2;
+        /// Greatest unsigned image of `PSEUDO_INC`.
+        pub const PSEUDO_INC_MAX: u32 = 0x3;
+        /// Positioned bits of `PSEUDO_INC`.
+        pub const PSEUDO_INC_MASK: u32 = 0x60;
+
+        /// Width of `PSEUDO_RNG_CNT` in bits.
+        pub const PSEUDO_RNG_CNT_WIDTH: u32 = 3;
+        /// Greatest unsigned image of `PSEUDO_RNG_CNT`.
+        pub const PSEUDO_RNG_CNT_MAX: u32 = 0x7;
+        /// Positioned bits of `PSEUDO_RNG_CNT`.
+        pub const PSEUDO_RNG_CNT_MASK: u32 = 0x380;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// The `PSEUDO_EN` field.
+            #[inline]
+            pub const fn pseudo_en(self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// The `PSEUDO_BASE` field.
+            #[inline]
+            pub const fn pseudo_base(self) -> oer_mmio::Bits<4> {
+                oer_mmio::Bits::truncate(self.0 >> 1)
+            }
+
+            /// The `PSEUDO_INC` field.
+            #[inline]
+            pub const fn pseudo_inc(self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0 >> 5)
+            }
+
+            /// The `PSEUDO_RNG_CNT` field.
+            #[inline]
+            pub const fn pseudo_rng_cnt(self) -> oer_mmio::Bits<3> {
+                oer_mmio::Bits::truncate(self.0 >> 7)
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// The `PSEUDO_EN` field.
+            #[inline]
+            pub const fn pseudo_en(&self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// The `PSEUDO_BASE` field.
+            #[inline]
+            pub const fn pseudo_base(&self) -> oer_mmio::Bits<4> {
+                oer_mmio::Bits::truncate(self.0 >> 1)
+            }
+
+            /// The `PSEUDO_INC` field.
+            #[inline]
+            pub const fn pseudo_inc(&self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0 >> 5)
+            }
+
+            /// The `PSEUDO_RNG_CNT` field.
+            #[inline]
+            pub const fn pseudo_rng_cnt(&self) -> oer_mmio::Bits<3> {
+                oer_mmio::Bits::truncate(self.0 >> 7)
+            }
+
+            /// Set `PSEUDO_EN`.
+            #[inline]
+            pub fn set_pseudo_en(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffffffe) | u32::from(value);
+                self
+            }
+
+            /// Set `PSEUDO_BASE`.
+            #[inline]
+            pub fn set_pseudo_base(&mut self, value: oer_mmio::Bits<4>) -> &mut Self {
+                self.0 = (self.0 & 0xffffffe1) | (value.get() << 1);
+                self
+            }
+
+            /// Set `PSEUDO_INC`.
+            #[inline]
+            pub fn set_pseudo_inc(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
+                self.0 = (self.0 & 0xffffff9f) | (value.get() << 5);
+                self
+            }
+
+            /// Set `PSEUDO_RNG_CNT`.
+            #[inline]
+            pub fn set_pseudo_rng_cnt(&mut self, value: oer_mmio::Bits<3>) -> &mut Self {
+                self.0 = (self.0 & 0xfffffc7f) | (value.get() << 7);
+                self
+            }
+        }
+    }
+
+    /// The `FREE` register.
+    pub mod free {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x00000001;
+        /// The register's width in bits.
+        pub const WIDTH: u32 = 32;
+
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0xd4;
+
+        /// The reserved bits: never a field, kept by every read-modify-write and
+        /// stored at their reset value by a write from zero.
+        pub const RESERVED: u32 = 0xfffffffe;
+
+        /// Width of `FREE` in bits.
+        pub const FREE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `FREE`.
+        pub const FREE_MAX: u32 = 0x1;
+        /// Positioned bits of `FREE`.
+        pub const FREE_MASK: u32 = 0x1;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// The `FREE` field.
+            #[inline]
+            pub const fn free(self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// The `FREE` field.
+            #[inline]
+            pub const fn free(&self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// Set `FREE`.
+            #[inline]
+            pub fn set_free(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffffffe) | u32::from(value);
+                self
+            }
+        }
+    }
+
+    /// The `AesProgram` part of `AES`.
+    ///
+    /// SOURCE: ESP_IDF_4D80C1B2_S31_AES, TRM_S31_V01_AES.
+    #[must_use = "dropping a register owner permanently loses its register authority"]
+    pub struct AesProgram<P: oer_mmio::Placement = oer_mmio::Fixed<0x20508000>>(
+        oer_mmio::Block<P, AesProgramWords>,
+    );
+
+    /// The words [`AesProgram`] holds, as byte offsets from its instance's base.
+    pub struct AesProgramWords;
+
+    impl oer_mmio::Registers for AesProgramWords {
+        type Sharing = oer_mmio::sharing::Owned;
+        const WORDS: &'static [usize] = &[
+            0x0, 0x4, 0x8, 0xc, 0x10, 0x14, 0x18, 0x1c, 0x20, 0x24, 0x28, 0x2c, 0x30, 0x34, 0x38,
+            0x3c, 0x40, 0x48, 0x4c, 0x90, 0xb0, 0xd0, 0xd4,
+        ];
+    }
+
+    impl oer_mmio::Words for AesProgramWords {
+        const OWNED: &'static [usize] = &[
+            0x0, 0x4, 0x8, 0xc, 0x10, 0x14, 0x18, 0x1c, 0x20, 0x24, 0x28, 0x2c, 0x30, 0x34, 0x38,
+            0x3c, 0x40, 0x48, 0x4c, 0x90, 0xb0, 0xd0, 0xd4,
+        ];
+        const OBSERVED: &'static [usize] = &[];
+    }
+
+    /// The part's device registers, as the PAC root claims them.
+    pub type AesProgramClaim = oer_mmio::Block<oer_mmio::Fixed<0x20508000>, AesProgramWords>;
+
+    impl AesProgram {
+        /// The owner of the part's device registers.
+        #[inline]
+        pub fn new(block: AesProgramClaim) -> Self {
+            Self(block)
+        }
+    }
+
+    impl<'a> AesProgram<oer_mmio::Host<'a>> {
+        /// The part over host memory, for tests of its accessors.
+        pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
+            oer_mmio::Block::host(words).map(Self)
+        }
+    }
+
+    impl<P: oer_mmio::Placement> AesProgram<P> {
+        /// Read `KEY%s`.
+        #[inline]
+        pub fn read_key(&self, index: oer_mmio::Index<8>) -> key::R {
+            key::R(self.0.read_indexed::<0x0, 0x4, 8>(index))
+        }
+
+        /// Read `KEY%s`, change fields and write it back; every other bit keeps
+        /// the value read, every write-trigger field is zero.
+        #[inline]
+        pub fn modify_key(&mut self, index: oer_mmio::Index<8>, change: impl FnOnce(&mut key::W)) {
+            let mut value = key::W(self.0.read_indexed::<0x0, 0x4, 8>(index));
+            change(&mut value);
+            self.0.write_indexed::<0x0, 0x4, 8>(index, value.0);
+        }
+
+        /// Read `TEXT_IN%s`.
+        #[inline]
+        pub fn read_text_in(&self, index: oer_mmio::Index<4>) -> text_in::R {
+            text_in::R(self.0.read_indexed::<0x20, 0x4, 4>(index))
+        }
+
+        /// Read `TEXT_IN%s`, change fields and write it back; every other bit keeps
+        /// the value read, every write-trigger field is zero.
+        #[inline]
+        pub fn modify_text_in(
+            &mut self,
+            index: oer_mmio::Index<4>,
+            change: impl FnOnce(&mut text_in::W),
+        ) {
+            let mut value = text_in::W(self.0.read_indexed::<0x20, 0x4, 4>(index));
+            change(&mut value);
+            self.0.write_indexed::<0x20, 0x4, 4>(index, value.0);
+        }
+
+        /// Read `TEXT_OUT%s`.
+        #[inline]
+        pub fn read_text_out(&self, index: oer_mmio::Index<4>) -> text_out::R {
+            text_out::R(self.0.read_indexed::<0x30, 0x4, 4>(index))
+        }
+
+        /// Read `MODE`.
+        #[inline]
+        pub fn read_mode(&self) -> mode::R {
+            mode::R(self.0.read::<0x40>())
+        }
+
+        /// Read `MODE`, change fields and write it back; every other bit keeps
+        /// the value read, every write-trigger field is zero.
+        #[inline]
+        pub fn modify_mode(&mut self, change: impl FnOnce(&mut mode::W)) {
+            let mut value = mode::W(self.0.read::<0x40>());
+            change(&mut value);
+            self.0.write::<0x40>(value.0);
+        }
+
+        /// Write to the write-trigger field `TRIGGER` of `TRIGGER`, starting its
+        /// hardware action once; every other bit is zero or its fixed value.
+        #[inline]
+        pub fn trigger_trigger_trigger(&mut self) {
+            self.0.write::<0x48>(0x00000001);
+        }
+
+        /// Read `STATE`.
+        #[inline]
+        pub fn read_state(&self) -> state::R {
+            state::R(self.0.read::<0x4c>())
+        }
+
+        /// Read `DMA_ENABLE`.
+        #[inline]
+        pub fn read_dma_enable(&self) -> dma_enable::R {
+            dma_enable::R(self.0.read::<0x90>())
+        }
+
+        /// Read `DMA_ENABLE`, change fields and write it back; every other bit keeps
+        /// the value read, every write-trigger field is zero.
+        #[inline]
+        pub fn modify_dma_enable(&mut self, change: impl FnOnce(&mut dma_enable::W)) {
+            let mut value = dma_enable::W(self.0.read::<0x90>());
+            change(&mut value);
+            self.0.write::<0x90>(value.0);
+        }
+
+        /// Read `INT_ENA`.
+        #[inline]
+        pub fn read_int_ena(&self) -> int_ena::R {
+            int_ena::R(self.0.read::<0xb0>())
+        }
+
+        /// Read `INT_ENA`, change fields and write it back; every other bit keeps
+        /// the value read, every write-trigger field is zero.
+        #[inline]
+        pub fn modify_int_ena(&mut self, change: impl FnOnce(&mut int_ena::W)) {
+            let mut value = int_ena::W(self.0.read::<0xb0>());
+            change(&mut value);
+            self.0.write::<0xb0>(value.0);
+        }
+
+        /// Read `PSEUDO`.
+        #[inline]
+        pub fn read_pseudo(&self) -> pseudo::R {
+            pseudo::R(self.0.read::<0xd0>())
+        }
+
+        /// Read `PSEUDO`, change fields and write it back; every other bit keeps
+        /// the value read, every write-trigger field is zero.
+        #[inline]
+        pub fn modify_pseudo(&mut self, change: impl FnOnce(&mut pseudo::W)) {
+            let mut value = pseudo::W(self.0.read::<0xd0>());
+            change(&mut value);
+            self.0.write::<0xd0>(value.0);
+        }
+
+        /// Read `FREE`.
+        #[inline]
+        pub fn read_free(&self) -> free::R {
+            free::R(self.0.read::<0xd4>())
+        }
+
+        /// Read `FREE`, change fields and write it back; every other bit keeps
+        /// the value read, every write-trigger field is zero.
+        #[inline]
+        pub fn modify_free(&mut self, change: impl FnOnce(&mut free::W)) {
+            let mut value = free::W(self.0.read::<0xd4>());
+            change(&mut value);
+            self.0.write::<0xd4>(value.0);
+        }
+    }
+
+    /// The `AesInterrupt` part of `AES`.
+    ///
+    /// DMA completion only; Typical-mode clients retain Silent and keep INT_ENA disabled.
+    ///
+    /// SOURCE: TRM_S31_V01_AES.
+    #[must_use = "dropping a register owner permanently loses its register authority"]
+    pub struct AesInterrupt<P: oer_mmio::Placement = oer_mmio::Fixed<0x20508000>>(
+        oer_mmio::Block<P, AesInterruptWords>,
+    );
+
+    /// The words [`AesInterrupt`] holds, as byte offsets from its instance's base.
+    pub struct AesInterruptWords;
+
+    impl oer_mmio::Registers for AesInterruptWords {
+        type Sharing = oer_mmio::sharing::Owned;
+        const WORDS: &'static [usize] = &[0xac];
+    }
+
+    impl oer_mmio::Words for AesInterruptWords {
+        const OWNED: &'static [usize] = &[0xac];
+        const OBSERVED: &'static [usize] = &[];
+    }
+
+    /// The part's device registers, as the PAC root claims them.
+    pub type AesInterruptClaim = oer_mmio::Block<oer_mmio::Fixed<0x20508000>, AesInterruptWords>;
+
+    impl AesInterrupt {
+        /// The owner of the part's device registers.
+        #[inline]
+        pub fn new(block: AesInterruptClaim) -> Self {
+            Self(block)
+        }
+    }
+
+    impl<'a> AesInterrupt<oer_mmio::Host<'a>> {
+        /// The part over host memory, for tests of its accessors.
+        pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
+            oer_mmio::Block::host(words).map(Self)
+        }
+    }
+
+    impl<P: oer_mmio::Placement> oer_mmio::InterruptSource for AesInterrupt<P> {
+        const SOURCE: u16 = 55;
+    }
+
+    impl<P: oer_mmio::Placement> AesInterrupt<P> {
+        /// Write to the write-trigger field `INT_CLEAR` of `INT_CLEAR`, starting its
+        /// hardware action once; every other bit is zero or its fixed value.
+        #[inline]
+        pub fn trigger_int_clear_int_clear(&mut self) {
+            self.0.write::<0xac>(0x00000001);
+        }
+    }
 }
 
 /// The `BLE_ACCELERATOR` block type.
@@ -20122,7 +21741,7 @@ pub mod bt_mac {
             /// The value positioned in its register.
             #[inline]
             pub const fn register_bits(self) -> u32 {
-                self.bits() << 0
+                self.bits()
             }
 
             /// The declared value `bits`, if it is one.
@@ -20187,7 +21806,7 @@ pub mod bt_mac {
             /// The value positioned in its register.
             #[inline]
             pub const fn register_bits(self) -> u32 {
-                self.bits() << 0
+                self.bits()
             }
 
             /// The declared value `bits`, if it is one.
@@ -20252,7 +21871,7 @@ pub mod bt_mac {
             /// The value positioned in its register.
             #[inline]
             pub const fn register_bits(self) -> u32 {
-                self.bits() << 0
+                self.bits()
             }
 
             /// The declared value `bits`, if it is one.
@@ -20317,7 +21936,7 @@ pub mod bt_mac {
             /// The value positioned in its register.
             #[inline]
             pub const fn register_bits(self) -> u32 {
-                self.bits() << 0
+                self.bits()
             }
 
             /// The declared value `bits`, if it is one.
@@ -20382,7 +22001,7 @@ pub mod bt_mac {
             /// The value positioned in its register.
             #[inline]
             pub const fn register_bits(self) -> u32 {
-                self.bits() << 0
+                self.bits()
             }
 
             /// The declared value `bits`, if it is one.
@@ -24437,7 +26056,7 @@ pub mod bt_mac {
             /// The value positioned in its register.
             #[inline]
             pub const fn register_bits(self) -> u32 {
-                self.bits() << 0
+                self.bits()
             }
 
             /// The declared value `bits`, if it is one.
@@ -24506,7 +26125,7 @@ pub mod bt_mac {
             /// The value positioned in its register.
             #[inline]
             pub const fn register_bits(self) -> u32 {
-                self.bits() << 0
+                self.bits()
             }
 
             /// The declared value `bits`, if it is one.
@@ -64978,7 +66597,7 @@ pub mod fe {
             /// The value positioned in its register.
             #[inline]
             pub const fn register_bits(self) -> u32 {
-                self.bits() << 0
+                self.bits()
             }
 
             /// The declared value `bits`, if it is one.
@@ -66935,7 +68554,7 @@ pub mod fe {
             /// The value positioned in its register.
             #[inline]
             pub const fn register_bits(self) -> u32 {
-                self.bits() << 0
+                self.bits()
             }
 
             /// The declared value `bits`, if it is one.
@@ -68045,7 +69664,7 @@ pub mod fe {
             /// The value positioned in its register.
             #[inline]
             pub const fn register_bits(self) -> u32 {
-                self.bits() << 0
+                self.bits()
             }
 
             /// The value of the field in the low bits of `bits`; the field has
@@ -68295,7 +69914,7 @@ pub mod fe {
             /// The value positioned in its register.
             #[inline]
             pub const fn register_bits(self) -> u32 {
-                self.bits() << 0
+                self.bits()
             }
 
             /// The value of the field in the low bits of `bits`; the field has
@@ -68852,7 +70471,7 @@ pub mod fe {
             /// The value positioned in its register.
             #[inline]
             pub const fn register_bits(self) -> u32 {
-                self.bits() << 0
+                self.bits()
             }
 
             /// The declared value `bits`, if it is one.
@@ -70624,7 +72243,7 @@ pub mod fe {
             /// The value positioned in its register.
             #[inline]
             pub const fn register_bits(self) -> u32 {
-                self.bits() << 0
+                self.bits()
             }
 
             /// The value of the field in the low bits of `bits`; the field has
@@ -86522,7 +88141,7 @@ pub mod hp_sys_clkrst {
             /// The value positioned in its register.
             #[inline]
             pub const fn register_bits(self) -> u32 {
-                self.bits() << 0
+                self.bits()
             }
 
             /// The value of the field in the low bits of `bits`; the field has
@@ -88580,7 +90199,7 @@ pub mod hp_sys_clkrst {
             /// The value positioned in its register.
             #[inline]
             pub const fn register_bits(self) -> u32 {
-                self.bits() << 0
+                self.bits()
             }
 
             /// The value of the field in the low bits of `bits`; the field has
@@ -104912,6 +106531,82 @@ pub mod hp_sys_clkrst {
             });
         }
     }
+
+    /// The `CryptoClock` part of `HP_SYS_CLKRST`.
+    ///
+    /// SOURCE: ESP_IDF_4D80C1B2_S31_AES.
+    #[must_use = "dropping a register owner permanently loses its register authority"]
+    pub struct CryptoClock<P: oer_mmio::Placement = oer_mmio::Fixed<0x20587000>>(
+        oer_mmio::Block<P, CryptoClockWords>,
+    );
+
+    /// The words [`CryptoClock`] holds, as byte offsets from its instance's base.
+    pub struct CryptoClockWords;
+
+    impl oer_mmio::Registers for CryptoClockWords {
+        type Sharing = oer_mmio::sharing::Owned;
+        const WORDS: &'static [usize] = &[0x58];
+    }
+
+    impl oer_mmio::Words for CryptoClockWords {
+        const OWNED: &'static [usize] = &[0x58];
+        const OBSERVED: &'static [usize] = &[];
+    }
+
+    /// The part's device registers, as the PAC root claims them.
+    pub type CryptoClockClaim = oer_mmio::Block<oer_mmio::Fixed<0x20587000>, CryptoClockWords>;
+
+    impl CryptoClock {
+        /// The owner of the part's device registers.
+        #[inline]
+        pub fn new(block: CryptoClockClaim) -> Self {
+            Self(block)
+        }
+    }
+
+    impl<'a> CryptoClock<oer_mmio::Host<'a>> {
+        /// The part over host memory, for tests of its accessors.
+        pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
+            oer_mmio::Block::host(words).map(Self)
+        }
+    }
+
+    impl<P: oer_mmio::Placement> CryptoClock<P> {
+        /// Read `CRYPTO_CTRL0`.
+        #[inline]
+        pub fn read_crypto_ctrl0(&self) -> crypto_ctrl0::R {
+            crypto_ctrl0::R(self.0.read::<0x58>())
+        }
+
+        /// Read `CRYPTO_CTRL0`, change fields and write it back; every other bit keeps
+        /// the value read, every write-trigger field is zero.
+        #[inline]
+        pub fn modify_crypto_ctrl0(&mut self, change: impl FnOnce(&mut crypto_ctrl0::W)) {
+            let mut value = crypto_ctrl0::W(self.0.read::<0x58>());
+            change(&mut value);
+            self.0.write::<0x58>(value.0);
+        }
+
+        /// Open (`true`) or close the `bus` clock of `AES` (`HP_SYS_CLKRST.CRYPTO_CTRL0.REG_CRYPTO_AES_CLK_EN`); every other bit keeps the value read.
+        ///
+        /// SOURCE: ESP_IDF_4D80C1B2_S31_AES.
+        #[inline]
+        pub fn set_aes_bus_clock(&mut self, on: bool) {
+            self.modify_crypto_ctrl0(|w| {
+                w.set_reg_crypto_aes_clk_en(on);
+            });
+        }
+
+        /// Assert (`true`) or release the `module` reset of `AES` (`HP_SYS_CLKRST.CRYPTO_CTRL0.REG_CRYPTO_AES_RST_EN`); every other bit keeps the value read.
+        ///
+        /// SOURCE: ESP_IDF_4D80C1B2_S31_AES.
+        #[inline]
+        pub fn set_aes_module_reset(&mut self, asserted: bool) {
+            self.modify_crypto_ctrl0(|w| {
+                w.set_reg_crypto_aes_rst_en(asserted);
+            });
+        }
+    }
 }
 
 /// The `I2C_ANA_MST` block type.
@@ -107122,7 +108817,7 @@ pub mod i2c_ana_mst_mem {
             /// The value positioned in its register.
             #[inline]
             pub const fn register_bits(self) -> u32 {
-                self.bits() << 0
+                self.bits()
             }
 
             /// The declared value `bits`, if it is one.
@@ -107310,7 +109005,7 @@ pub mod ieee802154 {
             /// The value positioned in its register.
             #[inline]
             pub const fn register_bits(self) -> u32 {
-                self.bits() << 0
+                self.bits()
             }
 
             /// The declared value `bits`, if it is one.
@@ -111028,7 +112723,7 @@ pub mod ieee802154 {
             /// The value positioned in its register.
             #[inline]
             pub const fn register_bits(self) -> u32 {
-                self.bits() << 0
+                self.bits()
             }
 
             /// The declared value `bits`, if it is one.
@@ -114212,7 +115907,7 @@ pub mod interrupt_core {
             /// The value positioned in its register.
             #[inline]
             pub const fn register_bits(self) -> u32 {
-                self.bits() << 0
+                self.bits()
             }
 
             /// The declared value `bits`, if it is one.
@@ -125505,7 +127200,7 @@ pub mod modem_etm {
             /// The value positioned in its register.
             #[inline]
             pub const fn register_bits(self) -> u32 {
-                self.bits() << 0
+                self.bits()
             }
 
             /// The declared value `bits`, if it is one.
@@ -125615,7 +127310,7 @@ pub mod modem_etm {
             /// The value positioned in its register.
             #[inline]
             pub const fn register_bits(self) -> u32 {
-                self.bits() << 0
+                self.bits()
             }
 
             /// The declared value `bits`, if it is one.
@@ -129530,7 +131225,7 @@ pub mod modem_pwr {
             /// The value positioned in its register.
             #[inline]
             pub const fn register_bits(self) -> u32 {
-                self.bits() << 0
+                self.bits()
             }
 
             /// The declared value `bits`, if it is one.
@@ -129865,7 +131560,7 @@ pub mod modem_pwr {
             /// The value positioned in its register.
             #[inline]
             pub const fn register_bits(self) -> u32 {
-                self.bits() << 0
+                self.bits()
             }
 
             /// The declared value `bits`, if it is one.
@@ -134756,7 +136451,7 @@ pub mod modem_pwr {
             /// The value positioned in its register.
             #[inline]
             pub const fn register_bits(self) -> u32 {
-                self.bits() << 0
+                self.bits()
             }
 
             /// The declared value `bits`, if it is one.
@@ -141212,7 +142907,7 @@ pub mod modem_syscon {
             /// The value positioned in its register.
             #[inline]
             pub const fn register_bits(self) -> u32 {
-                self.bits() << 0
+                self.bits()
             }
 
             /// The value of the field in the low bits of `bits`; the field has
@@ -160601,7 +162296,7 @@ pub mod rtc_wdt {
             /// The value positioned in its register.
             #[inline]
             pub const fn register_bits(self) -> u32 {
-                self.bits() << 0
+                self.bits()
             }
 
             /// The declared value `bits`, if it is one.
@@ -198446,7 +200141,7 @@ pub mod spi1_mem_c {
             /// The value positioned in its register.
             #[inline]
             pub const fn register_bits(self) -> u32 {
-                self.bits() << 0
+                self.bits()
             }
 
             /// The declared value `bits`, if it is one.
@@ -227192,7 +228887,7 @@ pub mod spi_mem_s {
             /// The value positioned in its register.
             #[inline]
             pub const fn register_bits(self) -> u32 {
-                self.bits() << 0
+                self.bits()
             }
 
             /// The declared value `bits`, if it is one.
@@ -227324,7 +229019,7 @@ pub mod spi_mem_s {
             /// The value positioned in its register.
             #[inline]
             pub const fn register_bits(self) -> u32 {
-                self.bits() << 0
+                self.bits()
             }
 
             /// The declared value `bits`, if it is one.
@@ -256303,7 +257998,7 @@ pub mod wifi_bb {
             /// The value positioned in its register.
             #[inline]
             pub const fn register_bits(self) -> u32 {
-                self.bits() << 0
+                self.bits()
             }
 
             /// The value of the field in the low bits of `bits`; the field has
@@ -257039,7 +258734,7 @@ pub mod wifi_bb {
             /// The value positioned in its register.
             #[inline]
             pub const fn register_bits(self) -> u32 {
-                self.bits() << 0
+                self.bits()
             }
 
             /// The value of the field in the low bits of `bits`; the field has
@@ -259565,7 +261260,7 @@ pub mod wifi_bb {
             /// The value positioned in its register.
             #[inline]
             pub const fn register_bits(self) -> u32 {
-                self.bits() << 0
+                self.bits()
             }
 
             /// The declared value `bits`, if it is one.
@@ -265145,7 +266840,7 @@ pub mod wifi_mac {
             /// The value positioned in its register.
             #[inline]
             pub const fn register_bits(self) -> u32 {
-                self.bits() << 0
+                self.bits()
             }
 
             /// The declared value `bits`, if it is one.
@@ -270864,7 +272559,7 @@ pub mod wifi_mac {
             /// The value positioned in its register.
             #[inline]
             pub const fn register_bits(self) -> u32 {
-                self.bits() << 0
+                self.bits()
             }
 
             /// The declared value `bits`, if it is one.
@@ -271889,7 +273584,7 @@ pub mod wifi_mac {
             /// The value positioned in its register.
             #[inline]
             pub const fn register_bits(self) -> u32 {
-                self.bits() << 0
+                self.bits()
             }
 
             /// The declared value `bits`, if it is one.
@@ -272152,7 +273847,7 @@ pub mod wifi_mac {
             /// The value positioned in its register.
             #[inline]
             pub const fn register_bits(self) -> u32 {
-                self.bits() << 0
+                self.bits()
             }
 
             /// The declared value `bits`, if it is one.
@@ -272569,7 +274264,7 @@ pub mod wifi_mac {
             /// The value positioned in its register.
             #[inline]
             pub const fn register_bits(self) -> u32 {
-                self.bits() << 0
+                self.bits()
             }
 
             /// The declared value `bits`, if it is one.
@@ -272832,7 +274527,7 @@ pub mod wifi_mac {
             /// The value positioned in its register.
             #[inline]
             pub const fn register_bits(self) -> u32 {
-                self.bits() << 0
+                self.bits()
             }
 
             /// The declared value `bits`, if it is one.
@@ -273197,7 +274892,7 @@ pub mod wifi_mac {
             /// The value positioned in its register.
             #[inline]
             pub const fn register_bits(self) -> u32 {
-                self.bits() << 0
+                self.bits()
             }
 
             /// The declared value `bits`, if it is one.
@@ -279318,7 +281013,7 @@ pub mod wifi_mac {
             /// The value positioned in its register.
             #[inline]
             pub const fn register_bits(self) -> u32 {
-                self.bits() << 0
+                self.bits()
             }
 
             /// The declared value `bits`, if it is one.
@@ -291379,7 +293074,7 @@ pub mod wifi_mac {
             /// The value positioned in its register.
             #[inline]
             pub const fn register_bits(self) -> u32 {
-                self.bits() << 0
+                self.bits()
             }
 
             /// The declared value `bits`, if it is one.
@@ -292896,7 +294591,7 @@ pub mod wifi_mac {
             /// The value positioned in its register.
             #[inline]
             pub const fn register_bits(self) -> u32 {
-                self.bits() << 0
+                self.bits()
             }
 
             /// The declared value `bits`, if it is one.
@@ -296691,7 +298386,7 @@ pub mod wifi_mac {
             /// The value positioned in its register.
             #[inline]
             pub const fn register_bits(self) -> u32 {
-                self.bits() << 0
+                self.bits()
             }
 
             /// The declared value `bits`, if it is one.
@@ -303726,6 +305421,20 @@ pub mod ownership {
         pub debug_mode_status: super::bus_monitor::DebugModeStatus,
     }
 
+    /// The exclusive crypto clock/reset word owner. Only sourced AES and parent/DS reset fields are changed through preserving RMW; no whole-word image is granted.
+    pub struct CryptoClockPeripherals {
+        /// The `CryptoClock` part.
+        pub crypto_clock: super::hp_sys_clkrst::CryptoClock,
+    }
+
+    /// The single Typical AES program owner and its unbound DMA interrupt capability.
+    pub struct AesPeripherals {
+        /// The `AesProgram` part.
+        pub aes_program: super::aes::AesProgram,
+        /// The `AesInterrupt` part.
+        pub aes_interrupt: super::aes::AesInterrupt,
+    }
+
     /// Every partition.
     pub struct Partitions {
         /// [`SocPeripherals`].
@@ -303794,6 +305503,10 @@ pub mod ownership {
         pub analog_bus: AnalogBusPeripherals,
         /// [`DebugPeripherals`].
         pub debug: DebugPeripherals,
+        /// [`CryptoClockPeripherals`].
+        pub crypto_clock: CryptoClockPeripherals,
+        /// [`AesPeripherals`].
+        pub aes: AesPeripherals,
     }
 
     /// The device registers of every part, which the PAC root takes with
@@ -303838,96 +305551,94 @@ pub mod ownership {
             (
                 super::timg::Timg0InterruptBankClaim,
                 super::systimer::SystimerClaim,
+                super::systimer::SystimerCounterClaim,
             ),
         ),
         (
             (
-                super::systimer::SystimerCounterClaim,
                 super::hp_system::FromCpu0Claim,
                 super::hp_system::FromCpu1Claim,
+                super::hp_system::FromCpu2Claim,
             ),
             (
-                super::hp_system::FromCpu2Claim,
                 super::hp_system::FromCpu3Claim,
                 super::interrupt_core::InterruptCore0StatusClaim,
+                super::interrupt_core::InterruptCore1Claim,
             ),
             (
-                super::interrupt_core::InterruptCore1Claim,
                 super::interrupt_core::InterruptCore1StatusClaim,
                 super::wifi_bb::WifiPhyRateOracleWifiBbClaim,
+                super::wifi_bb_brx::WifiPhyRateOracleWifiBbBrxClaim,
             ),
             (
-                super::wifi_bb_brx::WifiPhyRateOracleWifiBbBrxClaim,
                 super::wifi_mac::WifiMacAntennaInitClaim,
                 super::modem_pwr::WifiMacAuxTsfControlClaim,
+                super::wifi_mac::WifiMacBeaconIeCrcClaim,
             ),
             (
-                super::wifi_mac::WifiMacBeaconIeCrcClaim,
                 super::wifi_mac::WifiMacBeamformingFeedbackTestClaim,
                 super::wifi_mac::WifiMacBeamformingReportClaim,
+                super::wifi_mac::WifiMacBlockAckClaim,
             ),
             (
-                super::wifi_mac::WifiMacBlockAckClaim,
                 super::wifi_mac::WifiMacBssidPolicyClaim,
                 super::wifi_mac::WifiMacCoexInitClaim,
+                super::modem_pwr::WifiMacCoexRuntimeClaim,
             ),
             (
-                super::modem_pwr::WifiMacCoexRuntimeClaim,
                 super::wifi_mac::WifiMacColdHandshakeClaim,
                 super::wifi_mac::WifiMacControlClaim,
+                super::wifi_mac::WifiMacCoreEnableClaim,
             ),
             (
-                super::wifi_mac::WifiMacCoreEnableClaim,
                 super::wifi_mac::WifiMacCryptoControlClaim,
+                super::wifi_mac::WifiMacCsiDumpClaim,
+                super::wifi_mac::WifiMacDiagnosticStatisticsClaim,
             ),
         ),
         (
             (
-                super::wifi_mac::WifiMacCsiDumpClaim,
-                super::wifi_mac::WifiMacDiagnosticStatisticsClaim,
                 super::wifi_mac::WifiMacHeBufferStatusClaim,
-            ),
-            (
                 super::wifi_mac::WifiMacHeColorCollisionClaim,
                 super::wifi_mac::WifiMacHeInitPrefixClaim,
-                super::wifi_mac::WifiMacHeInitSuffixClaim,
             ),
             (
+                super::wifi_mac::WifiMacHeInitSuffixClaim,
                 super::wifi_mac::WifiMacHeMuEdcaTimerClaim,
                 super::wifi_mac::WifiMacHeObssNarrowBandRuClaim,
-                super::wifi_mac::WifiMacHeTbDiagnosticsClaim,
             ),
             (
+                super::wifi_mac::WifiMacHeTbDiagnosticsClaim,
                 super::wifi_mac::WifiMacHeTbStatisticsClaim,
                 super::wifi_mac::WifiMacHeTriggerRxDiagnosticsClaim,
-                super::wifi_mac::WifiMacInternalTxBlockAckClaim,
             ),
             (
+                super::wifi_mac::WifiMacInternalTxBlockAckClaim,
                 super::wifi_mac::WifiMacKeyTableClaim,
                 super::wifi_mac::WifiMacLastRxBufferClaim,
-                super::modem_pwr::WifiMacRegdmaControlClaim,
             ),
             (
+                super::modem_pwr::WifiMacRegdmaControlClaim,
                 super::modem_pwr::WifiMacRtcTimerUpdateClaim,
                 super::wifi_mac::WifiMacRxBssidListClaim,
-                super::wifi_mac::WifiMacRxCsiControlClaim,
             ),
             (
+                super::wifi_mac::WifiMacRxCsiControlClaim,
                 super::wifi_mac::WifiMacRxCustomTypeClaim,
                 super::wifi_mac::WifiMacRxEndStateClaim,
-                super::wifi_mac::WifiMacRxFilterClaim,
             ),
             (
+                super::wifi_mac::WifiMacRxFilterClaim,
                 super::wifi_mac::WifiMacRxHangStatisticsClaim,
                 super::wifi_mac::WifiMacRxPowerSaveClaim,
             ),
-        ),
-        (
             (
                 super::wifi_mac::WifiMacRxRuntimeResultsClaim,
                 super::wifi_mac::WifiMacRxStatisticsClaim,
                 super::wifi_mac::WifiMacStaBeaconFilterClaim,
             ),
+        ),
+        (
             (
                 super::modem_pwr::WifiMacStaTbttTargetClaim,
                 super::modem_pwr::WifiMacTsfLoadClaim,
@@ -303961,91 +305672,87 @@ pub mod ownership {
             (
                 super::pmu::PmuWakeStatusClaim,
                 super::modem_lpcon::ModemWakeStatusClaim,
-            ),
-        ),
-        (
-            (
                 super::hp_sys_clkrst::HpSysClkrstRadioClaim,
+            ),
+            (
                 super::pmu::PmuRadioClaim,
                 super::modem_syscon::ModemSysconClockResetClaim,
-            ),
-            (
                 super::modem_syscon::ModemSysconRadioClaim,
-                super::fe::PhyAgcOracleFeClaim,
-                super::wifi_bb::PhyAgcOracleWifiBbClaim,
-            ),
-            (
-                super::wifi_bb_brx::PhyAgcOracleWifiBbBrxClaim,
-                super::wifi_bb::PhyAgcRecoveredGapsClaim,
-                super::fe::PhyBasebandConfigOracleFeClaim,
-            ),
-            (
-                super::wifi_mac::PhyBasebandConfigOracleWifiMacClaim,
-                super::wifi_bb::PhyBasebandConfigOracleWifiBbClaim,
-                super::wifi_bb::PhyBbRecoveredGapsClaim,
-            ),
-            (
-                super::wifi_bb_brx::PhyBrxRecoveredGapsClaim,
-                super::bt_bb::PhyBtagcRecoveredClaim,
-                super::fe::PhyClockOracleFeClaim,
-            ),
-            (
-                super::wifi_bb::PhyClockOracleWifiBbClaim,
-                super::fe::PhyFectrlRecoveredClaim,
-                super::fe::PhyAdcDumpRecoveredFeClaim,
-            ),
-            (
-                super::bt_bb::PhyAdcDumpRecoveredBtBbClaim,
-                super::wifi_bb::PhyAdcDumpRecoveredWifiBbClaim,
-                super::modem_datadump::PhyAdcDumpRecoveredModemDatadumpClaim,
-            ),
-            (
-                super::fe::PhyFedataRecoveredClaim,
-                super::fe::PhyFedataWifiRecoveredClaim,
             ),
         ),
         (
             (
+                super::fe::PhyAgcOracleFeClaim,
+                super::wifi_bb::PhyAgcOracleWifiBbClaim,
+                super::wifi_bb_brx::PhyAgcOracleWifiBbBrxClaim,
+            ),
+            (
+                super::wifi_bb::PhyAgcRecoveredGapsClaim,
+                super::fe::PhyBasebandConfigOracleFeClaim,
+                super::wifi_mac::PhyBasebandConfigOracleWifiMacClaim,
+            ),
+            (
+                super::wifi_bb::PhyBasebandConfigOracleWifiBbClaim,
+                super::wifi_bb::PhyBbRecoveredGapsClaim,
+                super::wifi_bb_brx::PhyBrxRecoveredGapsClaim,
+            ),
+            (
+                super::bt_bb::PhyBtagcRecoveredClaim,
+                super::fe::PhyClockOracleFeClaim,
+                super::wifi_bb::PhyClockOracleWifiBbClaim,
+            ),
+            (
+                super::fe::PhyFectrlRecoveredClaim,
+                super::fe::PhyAdcDumpRecoveredFeClaim,
+                super::bt_bb::PhyAdcDumpRecoveredBtBbClaim,
+            ),
+            (
+                super::wifi_bb::PhyAdcDumpRecoveredWifiBbClaim,
+                super::modem_datadump::PhyAdcDumpRecoveredModemDatadumpClaim,
+                super::fe::PhyFedataRecoveredClaim,
+            ),
+            (
+                super::fe::PhyFedataWifiRecoveredClaim,
                 super::fe::PhyFrequencyChannelOracleFeClaim,
                 super::wifi_mac::PhyFrequencyChannelOracleWifiMacClaim,
-                super::wifi_bb::PhyFrequencyChannelOracleWifiBbClaim,
             ),
             (
+                super::wifi_bb::PhyFrequencyChannelOracleWifiBbClaim,
                 super::fe::PhyIqEstimatorOracleClaim,
                 super::modem_lpcon::BluetoothLpTimerClockClaim,
-                super::modem_lpcon::CoexLpClockClaim,
             ),
+        ),
+        (
             (
+                super::modem_lpcon::CoexLpClockClaim,
                 super::modem_lpcon::ModemLpconPowerClaim,
                 super::modem_lpcon::ModemLpconPhyTickClaim,
-                super::lp_aonclkrst::LpAonRadioClockClaim,
             ),
             (
+                super::lp_aonclkrst::LpAonRadioClockClaim,
                 super::lp_aonclkrst::LpAonClkrstClaim,
                 super::lp_peri_clkrst::LpPericlkrstClaim,
-                super::tsens::LpTsensClaim,
             ),
             (
+                super::tsens::LpTsensClaim,
                 super::fe::PhyMemoryClaim,
                 super::wifi_bb::PhyNrxRecoveredGapsClaim,
-                super::fe::PhyPbusClaim,
             ),
             (
+                super::fe::PhyPbusClaim,
                 super::fe::PhyRxDcoOracleClaim,
                 super::coex::CoexPolicyTimersClaim,
-                super::coex::PhyGrantProtectTimerClaim,
             ),
             (
+                super::coex::PhyGrantProtectTimerClaim,
                 super::coex::CoexExternalClaim,
                 super::fe::PhyFecoexRecoveredClaim,
-                super::bt_mac::BleControllerAddressSlotsClaim,
             ),
             (
+                super::bt_mac::BleControllerAddressSlotsClaim,
                 super::ble_accelerator::BleHwAcceleratorClaim,
                 super::bt_mac::BleHwCteRingControlClaim,
             ),
-        ),
-        (
             (
                 super::bt_mac::BleHwResolvingListClaim,
                 super::bt_mac::BleHwRuntimeControlClaim,
@@ -304056,6 +305763,8 @@ pub mod ownership {
                 super::modem_etm::BleHwPositionalWord891cClaim,
                 super::bt_mac::BleScanBackoffClaim,
             ),
+        ),
+        (
             (
                 super::bt_mac::BleSyncPublicationClaim,
                 super::bt_mac::BluetoothControllerCoreClaim,
@@ -304084,45 +305793,50 @@ pub mod ownership {
             (
                 super::bt_bb::ZbbbRadioControlClaim,
                 super::modem_lpcon::ModemLpconChipClocksClaim,
+                super::hp_sys_clkrst::HpSysClkrstPll160Claim,
+            ),
+            (
+                super::hp_sys_clkrst::HpSysClkrstBootClockClaim,
+                super::lp_aonclkrst::LpAonClkrstCpllClaim,
+                super::pmu::PmuBootClockClaim,
+            ),
+            (
+                super::hp_alive_sys::HpAliveSysPllClockClaim,
+                super::cache::CacheBootClaim,
+                super::spi_mem_c::Spi0FlashClaim,
             ),
         ),
         (
             (
-                super::hp_sys_clkrst::HpSysClkrstPll160Claim,
-                super::hp_sys_clkrst::HpSysClkrstBootClockClaim,
-                super::lp_aonclkrst::LpAonClkrstCpllClaim,
-            ),
-            (
-                super::pmu::PmuBootClockClaim,
-                super::hp_alive_sys::HpAliveSysPllClockClaim,
-                super::cache::CacheBootClaim,
-            ),
-            (
-                super::spi_mem_c::Spi0FlashClaim,
                 super::spi1_mem_c::Spi1FlashClaim,
                 super::spi_mem_s::Memspi2PsramClaim,
+                super::spi1_mem_s::Memspi3PsramClaim,
             ),
             (
-                super::spi1_mem_s::Memspi3PsramClaim,
                 super::iomux_mspi_pin::IomuxMspiPsramPinsClaim,
                 super::lp_ana::LpAnaBrownoutClaim,
+                super::i2c_ana_mst::I2cAnaMstClaim,
             ),
             (
-                super::i2c_ana_mst::I2cAnaMstClaim,
                 super::i2c_ana_mst_mem::PhyI2cCommandRamClaim,
                 super::bus_monitor::DebugModeStatusClaim,
+                super::hp_sys_clkrst::CryptoClockClaim,
             ),
             (
+                super::aes::AesProgramClaim,
+                super::aes::AesInterruptClaim,
                 super::trng::TrngDivisionClaim,
+            ),
+            (
                 super::usb_serial_jtag::UsbDeviceDivisionClaim,
                 super::systimer::SystimerDivisionClaim,
+                super::clic::ClicDivisionClaim,
             ),
             (
-                super::clic::ClicDivisionClaim,
                 super::interrupt_core::InterruptCore0DivisionClaim,
                 super::modem_etm::ModemEtmDivisionClaim,
+                super::ieee802154::Ieee802154DivisionClaim,
             ),
-            (super::ieee802154::Ieee802154DivisionClaim,),
         ),
     );
 
@@ -304138,77 +305852,75 @@ pub mod ownership {
                 (claim_15, claim_17, claim_18),
                 (claim_19, claim_20, claim_21),
                 (claim_22, claim_23, claim_24),
-                (claim_25, claim_26),
+                (claim_25, claim_26, claim_27),
             ),
             (
-                (claim_27, claim_31, claim_32),
-                (claim_33, claim_34, claim_39),
-                (claim_40, claim_41, claim_42),
-                (claim_43, claim_44, claim_45),
-                (claim_46, claim_47, claim_48),
-                (claim_49, claim_50, claim_51),
-                (claim_52, claim_53, claim_54),
-                (claim_55, claim_56),
+                (claim_31, claim_32, claim_33),
+                (claim_34, claim_39, claim_40),
+                (claim_41, claim_42, claim_43),
+                (claim_44, claim_45, claim_46),
+                (claim_47, claim_48, claim_49),
+                (claim_50, claim_51, claim_52),
+                (claim_53, claim_54, claim_55),
+                (claim_56, claim_57, claim_58),
             ),
             (
-                (claim_57, claim_58, claim_59),
-                (claim_60, claim_61, claim_62),
-                (claim_63, claim_64, claim_65),
-                (claim_66, claim_67, claim_68),
-                (claim_69, claim_70, claim_71),
-                (claim_72, claim_73, claim_74),
-                (claim_75, claim_76, claim_77),
-                (claim_78, claim_79),
-            ),
-            (
+                (claim_59, claim_60, claim_61),
+                (claim_62, claim_63, claim_64),
+                (claim_65, claim_66, claim_67),
+                (claim_68, claim_69, claim_70),
+                (claim_71, claim_72, claim_73),
+                (claim_74, claim_75, claim_76),
+                (claim_77, claim_78, claim_79),
                 (claim_80, claim_81, claim_82),
+            ),
+            (
                 (claim_83, claim_84, claim_85),
                 (claim_86, claim_87, claim_88),
                 (claim_89, claim_90, claim_91),
                 (claim_92, claim_93, claim_94),
                 (claim_95, claim_96, claim_97),
                 (claim_98, claim_99, claim_100),
-                (claim_101, claim_102),
+                (claim_101, claim_102, claim_103),
+                (claim_104, claim_105, claim_106),
             ),
             (
-                (claim_103, claim_104, claim_105),
-                (claim_106, claim_107, claim_108),
-                (claim_109, claim_110, claim_111),
-                (claim_112, claim_113, claim_114),
-                (claim_115, claim_116, claim_117),
-                (claim_118, claim_119, claim_120),
-                (claim_121, claim_122, claim_123),
-                (claim_124, claim_125),
+                (claim_107, claim_108, claim_109),
+                (claim_110, claim_111, claim_112),
+                (claim_113, claim_114, claim_115),
+                (claim_116, claim_117, claim_118),
+                (claim_119, claim_120, claim_121),
+                (claim_122, claim_123, claim_124),
+                (claim_125, claim_126, claim_127),
+                (claim_128, claim_129, claim_130),
             ),
             (
-                (claim_126, claim_127, claim_128),
-                (claim_129, claim_130, claim_131),
-                (claim_132, claim_133, claim_134),
-                (claim_135, claim_136, claim_137),
-                (claim_138, claim_139, claim_140),
-                (claim_141, claim_142, claim_143),
-                (claim_144, claim_145, claim_146),
-                (claim_147, claim_148),
-            ),
-            (
+                (claim_131, claim_132, claim_133),
+                (claim_134, claim_135, claim_136),
+                (claim_137, claim_138, claim_139),
+                (claim_140, claim_141, claim_142),
+                (claim_143, claim_144, claim_145),
+                (claim_146, claim_147, claim_148),
                 (claim_149, claim_150, claim_151),
                 (claim_152, claim_153, claim_154),
+            ),
+            (
                 (claim_155, claim_156, claim_157),
                 (claim_158, claim_159, claim_160),
                 (claim_161, claim_162, claim_163),
                 (claim_164, claim_165, claim_166),
                 (claim_167, claim_168, claim_169),
-                (claim_170, claim_176),
+                (claim_170, claim_176, claim_177),
+                (claim_178, claim_179, claim_180),
+                (claim_181, claim_182, claim_183),
             ),
             (
-                (claim_177, claim_178, claim_179),
-                (claim_180, claim_181, claim_182),
-                (claim_183, claim_184, claim_185),
-                (claim_186, claim_187, claim_188),
-                (claim_189, claim_190, claim_191),
-                (division_0, division_1, division_2),
-                (division_3, division_4, division_5),
-                (division_6,),
+                (claim_184, claim_185, claim_186),
+                (claim_187, claim_188, claim_189),
+                (claim_190, claim_191, claim_192),
+                (claim_193, claim_194, division_0),
+                (division_1, division_2, division_3),
+                (division_4, division_5, division_6),
             ),
         ) = claims;
         let owner_0 = super::lp_apm::LpApmFilter::new(claim_0);
@@ -304387,6 +306099,9 @@ pub mod ownership {
         let owner_189 = super::i2c_ana_mst::I2cAnaMst::new(claim_189);
         let owner_190 = super::i2c_ana_mst_mem::PhyI2cCommandRam::new(claim_190);
         let owner_191 = super::bus_monitor::DebugModeStatus::new(claim_191);
+        let owner_192 = super::hp_sys_clkrst::CryptoClock::new(claim_192);
+        let owner_193 = super::aes::AesProgram::new(claim_193);
+        let owner_194 = super::aes::AesInterrupt::new(claim_194);
         let (owner_3, owner_16) = super::trng::trng_divide(division_0);
         let (owner_6, owner_7) = super::usb_serial_jtag::usb_device_divide(division_1);
         let (owner_28, owner_29, owner_30) = super::systimer::systimer_divide(division_2);
@@ -304649,11 +306364,18 @@ pub mod ownership {
             debug: DebugPeripherals {
                 debug_mode_status: owner_191,
             },
+            crypto_clock: CryptoClockPeripherals {
+                crypto_clock: owner_192,
+            },
+            aes: AesPeripherals {
+                aes_program: owner_193,
+                aes_interrupt: owner_194,
+            },
         }
     }
 
     const _: () = assert!(
-oer_mmio::check::disjoint_blocks(&[(0x20706c00, <super::lp_apm::LpApmFilterWords as oer_mmio::Registers>::WORDS), (0x20504400, <super::hp_apm::HpApmFilterWords as oer_mmio::Registers>::WORDS), (0x20504800, <super::hp_mem_apm::HpMemApmFilterWords as oer_mmio::Registers>::WORDS), (0x20710000, <super::lp_peri_clkrst::LpPericlkrstRngInitWords as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::HpSysClkrstSystimerWords as oer_mmio::Registers>::WORDS), (0x20391000, <super::usb_serial_jtag::UsbSerialJtagPadsWords as oer_mmio::Registers>::WORDS), (0x20704000, <super::pmu::PmuCpuStallWords as oer_mmio::Registers>::WORDS), (0x20586000, <super::hp_system::HpSysCoreStallStatusWords as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::HpSysClkrstCoreWords as oer_mmio::Registers>::WORDS), (0x20701000, <super::lp_aonclkrst::LpAonClkrstCoreResetWords as oer_mmio::Registers>::WORDS), (0x20700000, <super::lp_system_reg::LpSysCoreControlWords as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::HpSysClkrstUart0Words as oer_mmio::Registers>::WORDS), (0x20715000, <super::efuse::EfuseWords as oer_mmio::Registers>::WORDS), (0x20701000, <super::lp_aonclkrst::LpAonResetCauseWords as oer_mmio::Registers>::WORDS), (0x20580000, <super::timg::Timg0WdtWords as oer_mmio::Registers>::WORDS), (0x20581000, <super::timg::Timg1WdtWords as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::HpSysClkrstTimg0Words as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::HpSysClkrstTimg1Words as oer_mmio::Registers>::WORDS), (0x20801000, <super::rtc_wdt::LpWdtWords as oer_mmio::Registers>::WORDS), (0x20801000, <super::rtc_wdt::LpWdtSwdWords as oer_mmio::Registers>::WORDS), (0x20580000, <super::timg::Timg0Timer0Words as oer_mmio::Registers>::WORDS), (0x20580000, <super::timg::Timg0InterruptBankWords as oer_mmio::Registers>::WORDS), (0x20399000, <super::systimer::SystimerWords as oer_mmio::Registers>::WORDS), (0x20399000, <super::systimer::SystimerCounterWords as oer_mmio::Registers>::WORDS), (0x20586000, <super::hp_system::FromCpu0Words as oer_mmio::Registers>::WORDS), (0x20586000, <super::hp_system::FromCpu1Words as oer_mmio::Registers>::WORDS), (0x20586000, <super::hp_system::FromCpu2Words as oer_mmio::Registers>::WORDS), (0x20586000, <super::hp_system::FromCpu3Words as oer_mmio::Registers>::WORDS), (0x20585000, <super::interrupt_core::InterruptCore0StatusWords as oer_mmio::Registers>::WORDS), (0x20585800, <super::interrupt_core::InterruptCore1Words as oer_mmio::Registers>::WORDS), (0x20585800, <super::interrupt_core::InterruptCore1StatusWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::WifiPhyRateOracleWifiBbWords as oer_mmio::Registers>::WORDS), (0x20108000, <super::wifi_bb_brx::WifiPhyRateOracleWifiBbBrxWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacAntennaInitWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacAuxTsfControlWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacBeaconIeCrcWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacBeamformingFeedbackTestWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacBeamformingReportWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacBlockAckWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacBssidPolicyWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacCoexInitWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacCoexRuntimeWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacColdHandshakeWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacControlWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacCoreEnableWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacCryptoControlWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacCsiDumpWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacDiagnosticStatisticsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeBufferStatusWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeColorCollisionWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeInitPrefixWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeInitSuffixWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeMuEdcaTimerWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeObssNarrowBandRuWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeTbDiagnosticsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeTbStatisticsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeTriggerRxDiagnosticsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacInternalTxBlockAckWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacKeyTableWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacLastRxBufferWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacRegdmaControlWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacRtcTimerUpdateWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxBssidListWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxCsiControlWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxCustomTypeWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxEndStateWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxFilterWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxHangStatisticsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxPowerSaveWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxRuntimeResultsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxStatisticsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacStaBeaconFilterWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacStaTbttTargetWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacTsfLoadWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacTsfStatusWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacTsfTimerWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxrxCallbacksWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxrxPrefixWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxrxSuffixWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxCommonWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxCompletionWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxPowerInitWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxQueueControlWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxQueueVectorWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxStatisticsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacInterfaceAddressWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxDmaWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacInterruptWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacPowerInterruptWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacLocalTimeWords as oer_mmio::Registers>::WORDS), (0x20704000, <super::pmu::PmuWakeStatusWords as oer_mmio::Registers>::WORDS), (0x2010f000, <super::modem_lpcon::ModemWakeStatusWords as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::HpSysClkrstRadioWords as oer_mmio::Registers>::WORDS), (0x20704000, <super::pmu::PmuRadioWords as oer_mmio::Registers>::WORDS), (0x20109c00, <super::modem_syscon::ModemSysconClockResetWords as oer_mmio::Registers>::WORDS), (0x20109c00, <super::modem_syscon::ModemSysconRadioWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyAgcOracleFeWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyAgcOracleWifiBbWords as oer_mmio::Registers>::WORDS), (0x20108000, <super::wifi_bb_brx::PhyAgcOracleWifiBbBrxWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyAgcRecoveredGapsWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyBasebandConfigOracleFeWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::PhyBasebandConfigOracleWifiMacWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyBasebandConfigOracleWifiBbWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyBbRecoveredGapsWords as oer_mmio::Registers>::WORDS), (0x20108000, <super::wifi_bb_brx::PhyBrxRecoveredGapsWords as oer_mmio::Registers>::WORDS), (0x20102000, <super::bt_bb::PhyBtagcRecoveredWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyClockOracleFeWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyClockOracleWifiBbWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyFectrlRecoveredWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyAdcDumpRecoveredFeWords as oer_mmio::Registers>::WORDS), (0x20102000, <super::bt_bb::PhyAdcDumpRecoveredBtBbWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyAdcDumpRecoveredWifiBbWords as oer_mmio::Registers>::WORDS), (0x20109000, <super::modem_datadump::PhyAdcDumpRecoveredModemDatadumpWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyFedataRecoveredWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyFedataWifiRecoveredWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyFrequencyChannelOracleFeWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::PhyFrequencyChannelOracleWifiMacWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyFrequencyChannelOracleWifiBbWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyIqEstimatorOracleWords as oer_mmio::Registers>::WORDS), (0x2010f000, <super::modem_lpcon::BluetoothLpTimerClockWords as oer_mmio::Registers>::WORDS), (0x2010f000, <super::modem_lpcon::CoexLpClockWords as oer_mmio::Registers>::WORDS), (0x2010f000, <super::modem_lpcon::ModemLpconPowerWords as oer_mmio::Registers>::WORDS), (0x2010f000, <super::modem_lpcon::ModemLpconPhyTickWords as oer_mmio::Registers>::WORDS), (0x20701000, <super::lp_aonclkrst::LpAonRadioClockWords as oer_mmio::Registers>::WORDS), (0x20701000, <super::lp_aonclkrst::LpAonClkrstWords as oer_mmio::Registers>::WORDS), (0x20710000, <super::lp_peri_clkrst::LpPericlkrstWords as oer_mmio::Registers>::WORDS), (0x20818000, <super::tsens::LpTsensWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyMemoryWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyNrxRecoveredGapsWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyPbusWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyRxDcoOracleWords as oer_mmio::Registers>::WORDS), (0x2010f400, <super::coex::CoexPolicyTimersWords as oer_mmio::Registers>::WORDS), (0x2010f400, <super::coex::PhyGrantProtectTimerWords as oer_mmio::Registers>::WORDS), (0x2010f400, <super::coex::CoexExternalWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyFecoexRecoveredWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleControllerAddressSlotsWords as oer_mmio::Registers>::WORDS), (0x20109800, <super::ble_accelerator::BleHwAcceleratorWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleHwCteRingControlWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleHwResolvingListWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleHwRuntimeControlWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleIsoSchedulerNotifyWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleHwPositionalWord1ff0Words as oer_mmio::Registers>::WORDS), (0x20108800, <super::modem_etm::BleHwPositionalWord891cWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleScanBackoffWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleSyncPublicationWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BluetoothControllerCoreWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BluetoothResetIdleStatus0Words as oer_mmio::Registers>::WORDS), (0x2010a000, <super::btdm::BtdmSchedulerTableWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BtmacBlePhyInitWords as oer_mmio::Registers>::WORDS), (0x20102000, <super::bt_bb::BtV32CteWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::BtdmRuntimeControlWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::BtdmLpTimerStatusWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BluetoothInterruptBankWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BluetoothSchedulerInterruptRuntimeWords as oer_mmio::Registers>::WORDS), (0x20102000, <super::bt_bb::BtV32BasebandWords as oer_mmio::Registers>::WORDS), (0x20102000, <super::bt_bb::BtV32BasebandRxInfoWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::SharedRadioInitControlWords as oer_mmio::Registers>::WORDS), (0x20103000, <super::ieee802154::SharedBasebandResetIdleStatusWords as oer_mmio::Registers>::WORDS), (0x20102000, <super::bt_bb::SharedBasebandTxTimingWords as oer_mmio::Registers>::WORDS), (0x20102000, <super::bt_bb::ZbbbRadioControlWords as oer_mmio::Registers>::WORDS), (0x2010f000, <super::modem_lpcon::ModemLpconChipClocksWords as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::HpSysClkrstPll160Words as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::HpSysClkrstBootClockWords as oer_mmio::Registers>::WORDS), (0x20701000, <super::lp_aonclkrst::LpAonClkrstCpllWords as oer_mmio::Registers>::WORDS), (0x20704000, <super::pmu::PmuBootClockWords as oer_mmio::Registers>::WORDS), (0x20589000, <super::hp_alive_sys::HpAliveSysPllClockWords as oer_mmio::Registers>::WORDS), (0x2c000000, <super::cache::CacheBootWords as oer_mmio::Registers>::WORDS), (0x20500000, <super::spi_mem_c::Spi0FlashWords as oer_mmio::Registers>::WORDS), (0x20501000, <super::spi1_mem_c::Spi1FlashWords as oer_mmio::Registers>::WORDS), (0x20502000, <super::spi_mem_s::Memspi2PsramWords as oer_mmio::Registers>::WORDS), (0x20503000, <super::spi1_mem_s::Memspi3PsramWords as oer_mmio::Registers>::WORDS), (0x20584000, <super::iomux_mspi_pin::IomuxMspiPsramPinsWords as oer_mmio::Registers>::WORDS), (0x20702000, <super::lp_ana::LpAnaBrownoutWords as oer_mmio::Registers>::WORDS), (0x2010f800, <super::i2c_ana_mst::I2cAnaMstWords as oer_mmio::Registers>::WORDS), (0x2010fc00, <super::i2c_ana_mst_mem::PhyI2cCommandRamWords as oer_mmio::Registers>::WORDS), (0x2d002000, <super::bus_monitor::DebugModeStatusWords as oer_mmio::Registers>::WORDS), (0x20814000, <super::trng::TrngDivision as oer_mmio::Registers>::WORDS), (0x20391000, <super::usb_serial_jtag::UsbDeviceDivision as oer_mmio::Registers>::WORDS), (0x20399000, <super::systimer::SystimerDivision as oer_mmio::Registers>::WORDS), (0x10800000, <super::clic::ClicDivision as oer_mmio::Registers>::WORDS), (0x20585000, <super::interrupt_core::InterruptCore0Division as oer_mmio::Registers>::WORDS), (0x20108800, <super::modem_etm::ModemEtmDivision as oer_mmio::Registers>::WORDS), (0x20103000, <super::ieee802154::Ieee802154Division as oer_mmio::Registers>::WORDS)]),
+oer_mmio::check::disjoint_blocks(&[(0x20706c00, <super::lp_apm::LpApmFilterWords as oer_mmio::Registers>::WORDS), (0x20504400, <super::hp_apm::HpApmFilterWords as oer_mmio::Registers>::WORDS), (0x20504800, <super::hp_mem_apm::HpMemApmFilterWords as oer_mmio::Registers>::WORDS), (0x20710000, <super::lp_peri_clkrst::LpPericlkrstRngInitWords as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::HpSysClkrstSystimerWords as oer_mmio::Registers>::WORDS), (0x20391000, <super::usb_serial_jtag::UsbSerialJtagPadsWords as oer_mmio::Registers>::WORDS), (0x20704000, <super::pmu::PmuCpuStallWords as oer_mmio::Registers>::WORDS), (0x20586000, <super::hp_system::HpSysCoreStallStatusWords as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::HpSysClkrstCoreWords as oer_mmio::Registers>::WORDS), (0x20701000, <super::lp_aonclkrst::LpAonClkrstCoreResetWords as oer_mmio::Registers>::WORDS), (0x20700000, <super::lp_system_reg::LpSysCoreControlWords as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::HpSysClkrstUart0Words as oer_mmio::Registers>::WORDS), (0x20715000, <super::efuse::EfuseWords as oer_mmio::Registers>::WORDS), (0x20701000, <super::lp_aonclkrst::LpAonResetCauseWords as oer_mmio::Registers>::WORDS), (0x20580000, <super::timg::Timg0WdtWords as oer_mmio::Registers>::WORDS), (0x20581000, <super::timg::Timg1WdtWords as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::HpSysClkrstTimg0Words as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::HpSysClkrstTimg1Words as oer_mmio::Registers>::WORDS), (0x20801000, <super::rtc_wdt::LpWdtWords as oer_mmio::Registers>::WORDS), (0x20801000, <super::rtc_wdt::LpWdtSwdWords as oer_mmio::Registers>::WORDS), (0x20580000, <super::timg::Timg0Timer0Words as oer_mmio::Registers>::WORDS), (0x20580000, <super::timg::Timg0InterruptBankWords as oer_mmio::Registers>::WORDS), (0x20399000, <super::systimer::SystimerWords as oer_mmio::Registers>::WORDS), (0x20399000, <super::systimer::SystimerCounterWords as oer_mmio::Registers>::WORDS), (0x20586000, <super::hp_system::FromCpu0Words as oer_mmio::Registers>::WORDS), (0x20586000, <super::hp_system::FromCpu1Words as oer_mmio::Registers>::WORDS), (0x20586000, <super::hp_system::FromCpu2Words as oer_mmio::Registers>::WORDS), (0x20586000, <super::hp_system::FromCpu3Words as oer_mmio::Registers>::WORDS), (0x20585000, <super::interrupt_core::InterruptCore0StatusWords as oer_mmio::Registers>::WORDS), (0x20585800, <super::interrupt_core::InterruptCore1Words as oer_mmio::Registers>::WORDS), (0x20585800, <super::interrupt_core::InterruptCore1StatusWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::WifiPhyRateOracleWifiBbWords as oer_mmio::Registers>::WORDS), (0x20108000, <super::wifi_bb_brx::WifiPhyRateOracleWifiBbBrxWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacAntennaInitWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacAuxTsfControlWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacBeaconIeCrcWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacBeamformingFeedbackTestWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacBeamformingReportWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacBlockAckWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacBssidPolicyWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacCoexInitWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacCoexRuntimeWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacColdHandshakeWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacControlWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacCoreEnableWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacCryptoControlWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacCsiDumpWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacDiagnosticStatisticsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeBufferStatusWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeColorCollisionWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeInitPrefixWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeInitSuffixWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeMuEdcaTimerWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeObssNarrowBandRuWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeTbDiagnosticsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeTbStatisticsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeTriggerRxDiagnosticsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacInternalTxBlockAckWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacKeyTableWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacLastRxBufferWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacRegdmaControlWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacRtcTimerUpdateWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxBssidListWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxCsiControlWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxCustomTypeWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxEndStateWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxFilterWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxHangStatisticsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxPowerSaveWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxRuntimeResultsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxStatisticsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacStaBeaconFilterWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacStaTbttTargetWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacTsfLoadWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacTsfStatusWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacTsfTimerWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxrxCallbacksWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxrxPrefixWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxrxSuffixWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxCommonWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxCompletionWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxPowerInitWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxQueueControlWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxQueueVectorWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxStatisticsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacInterfaceAddressWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxDmaWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacInterruptWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacPowerInterruptWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacLocalTimeWords as oer_mmio::Registers>::WORDS), (0x20704000, <super::pmu::PmuWakeStatusWords as oer_mmio::Registers>::WORDS), (0x2010f000, <super::modem_lpcon::ModemWakeStatusWords as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::HpSysClkrstRadioWords as oer_mmio::Registers>::WORDS), (0x20704000, <super::pmu::PmuRadioWords as oer_mmio::Registers>::WORDS), (0x20109c00, <super::modem_syscon::ModemSysconClockResetWords as oer_mmio::Registers>::WORDS), (0x20109c00, <super::modem_syscon::ModemSysconRadioWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyAgcOracleFeWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyAgcOracleWifiBbWords as oer_mmio::Registers>::WORDS), (0x20108000, <super::wifi_bb_brx::PhyAgcOracleWifiBbBrxWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyAgcRecoveredGapsWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyBasebandConfigOracleFeWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::PhyBasebandConfigOracleWifiMacWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyBasebandConfigOracleWifiBbWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyBbRecoveredGapsWords as oer_mmio::Registers>::WORDS), (0x20108000, <super::wifi_bb_brx::PhyBrxRecoveredGapsWords as oer_mmio::Registers>::WORDS), (0x20102000, <super::bt_bb::PhyBtagcRecoveredWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyClockOracleFeWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyClockOracleWifiBbWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyFectrlRecoveredWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyAdcDumpRecoveredFeWords as oer_mmio::Registers>::WORDS), (0x20102000, <super::bt_bb::PhyAdcDumpRecoveredBtBbWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyAdcDumpRecoveredWifiBbWords as oer_mmio::Registers>::WORDS), (0x20109000, <super::modem_datadump::PhyAdcDumpRecoveredModemDatadumpWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyFedataRecoveredWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyFedataWifiRecoveredWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyFrequencyChannelOracleFeWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::PhyFrequencyChannelOracleWifiMacWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyFrequencyChannelOracleWifiBbWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyIqEstimatorOracleWords as oer_mmio::Registers>::WORDS), (0x2010f000, <super::modem_lpcon::BluetoothLpTimerClockWords as oer_mmio::Registers>::WORDS), (0x2010f000, <super::modem_lpcon::CoexLpClockWords as oer_mmio::Registers>::WORDS), (0x2010f000, <super::modem_lpcon::ModemLpconPowerWords as oer_mmio::Registers>::WORDS), (0x2010f000, <super::modem_lpcon::ModemLpconPhyTickWords as oer_mmio::Registers>::WORDS), (0x20701000, <super::lp_aonclkrst::LpAonRadioClockWords as oer_mmio::Registers>::WORDS), (0x20701000, <super::lp_aonclkrst::LpAonClkrstWords as oer_mmio::Registers>::WORDS), (0x20710000, <super::lp_peri_clkrst::LpPericlkrstWords as oer_mmio::Registers>::WORDS), (0x20818000, <super::tsens::LpTsensWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyMemoryWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyNrxRecoveredGapsWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyPbusWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyRxDcoOracleWords as oer_mmio::Registers>::WORDS), (0x2010f400, <super::coex::CoexPolicyTimersWords as oer_mmio::Registers>::WORDS), (0x2010f400, <super::coex::PhyGrantProtectTimerWords as oer_mmio::Registers>::WORDS), (0x2010f400, <super::coex::CoexExternalWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyFecoexRecoveredWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleControllerAddressSlotsWords as oer_mmio::Registers>::WORDS), (0x20109800, <super::ble_accelerator::BleHwAcceleratorWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleHwCteRingControlWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleHwResolvingListWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleHwRuntimeControlWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleIsoSchedulerNotifyWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleHwPositionalWord1ff0Words as oer_mmio::Registers>::WORDS), (0x20108800, <super::modem_etm::BleHwPositionalWord891cWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleScanBackoffWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleSyncPublicationWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BluetoothControllerCoreWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BluetoothResetIdleStatus0Words as oer_mmio::Registers>::WORDS), (0x2010a000, <super::btdm::BtdmSchedulerTableWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BtmacBlePhyInitWords as oer_mmio::Registers>::WORDS), (0x20102000, <super::bt_bb::BtV32CteWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::BtdmRuntimeControlWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::BtdmLpTimerStatusWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BluetoothInterruptBankWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BluetoothSchedulerInterruptRuntimeWords as oer_mmio::Registers>::WORDS), (0x20102000, <super::bt_bb::BtV32BasebandWords as oer_mmio::Registers>::WORDS), (0x20102000, <super::bt_bb::BtV32BasebandRxInfoWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::SharedRadioInitControlWords as oer_mmio::Registers>::WORDS), (0x20103000, <super::ieee802154::SharedBasebandResetIdleStatusWords as oer_mmio::Registers>::WORDS), (0x20102000, <super::bt_bb::SharedBasebandTxTimingWords as oer_mmio::Registers>::WORDS), (0x20102000, <super::bt_bb::ZbbbRadioControlWords as oer_mmio::Registers>::WORDS), (0x2010f000, <super::modem_lpcon::ModemLpconChipClocksWords as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::HpSysClkrstPll160Words as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::HpSysClkrstBootClockWords as oer_mmio::Registers>::WORDS), (0x20701000, <super::lp_aonclkrst::LpAonClkrstCpllWords as oer_mmio::Registers>::WORDS), (0x20704000, <super::pmu::PmuBootClockWords as oer_mmio::Registers>::WORDS), (0x20589000, <super::hp_alive_sys::HpAliveSysPllClockWords as oer_mmio::Registers>::WORDS), (0x2c000000, <super::cache::CacheBootWords as oer_mmio::Registers>::WORDS), (0x20500000, <super::spi_mem_c::Spi0FlashWords as oer_mmio::Registers>::WORDS), (0x20501000, <super::spi1_mem_c::Spi1FlashWords as oer_mmio::Registers>::WORDS), (0x20502000, <super::spi_mem_s::Memspi2PsramWords as oer_mmio::Registers>::WORDS), (0x20503000, <super::spi1_mem_s::Memspi3PsramWords as oer_mmio::Registers>::WORDS), (0x20584000, <super::iomux_mspi_pin::IomuxMspiPsramPinsWords as oer_mmio::Registers>::WORDS), (0x20702000, <super::lp_ana::LpAnaBrownoutWords as oer_mmio::Registers>::WORDS), (0x2010f800, <super::i2c_ana_mst::I2cAnaMstWords as oer_mmio::Registers>::WORDS), (0x2010fc00, <super::i2c_ana_mst_mem::PhyI2cCommandRamWords as oer_mmio::Registers>::WORDS), (0x2d002000, <super::bus_monitor::DebugModeStatusWords as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::CryptoClockWords as oer_mmio::Registers>::WORDS), (0x20508000, <super::aes::AesProgramWords as oer_mmio::Registers>::WORDS), (0x20508000, <super::aes::AesInterruptWords as oer_mmio::Registers>::WORDS), (0x20814000, <super::trng::TrngDivision as oer_mmio::Registers>::WORDS), (0x20391000, <super::usb_serial_jtag::UsbDeviceDivision as oer_mmio::Registers>::WORDS), (0x20399000, <super::systimer::SystimerDivision as oer_mmio::Registers>::WORDS), (0x10800000, <super::clic::ClicDivision as oer_mmio::Registers>::WORDS), (0x20585000, <super::interrupt_core::InterruptCore0Division as oer_mmio::Registers>::WORDS), (0x20108800, <super::modem_etm::ModemEtmDivision as oer_mmio::Registers>::WORDS), (0x20103000, <super::ieee802154::Ieee802154Division as oer_mmio::Registers>::WORDS)]),
 "no two claimed blocks list the same word"
 );
 }

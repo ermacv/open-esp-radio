@@ -45,7 +45,7 @@ struct Stepping;
     reason = "a test operation holds its machine in place"
 )]
 enum SteppingOperation {
-    Running(Rfc3394Unwrap<64>, RustKeyed),
+    Running(Rfc3394Step<64>, RustKeyed),
     Done(KeyUnwrapResponse<64>),
     Taken,
 }
@@ -55,14 +55,18 @@ impl Future for SteppingOperation {
     fn poll(self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.get_mut();
         match core::mem::replace(this, Self::Taken) {
-            Self::Running(machine, mut cipher) => {
-                *this = match machine.step(&mut cipher) {
-                    Rfc3394Step::Continue(machine) => Self::Running(machine, cipher),
-                    Rfc3394Step::Complete(response) => Self::Done(response),
-                };
-                context.waker().wake_by_ref();
-                Poll::Pending
-            }
+            Self::Running(step, mut cipher) => match step {
+                Rfc3394Step::Block { mut input, pending } => {
+                    cipher.decrypt_block(input.as_mut_bytes());
+                    *this = Self::Running(pending.complete(Ok(input)), cipher);
+                    context.waker().wake_by_ref();
+                    Poll::Pending
+                }
+                Rfc3394Step::Complete(response) => Poll::Ready(KeyUnwrapDone {
+                    engine: Stepping,
+                    response,
+                }),
+            },
             Self::Done(response) => Poll::Ready(KeyUnwrapDone {
                 engine: Stepping,
                 response,
@@ -77,7 +81,7 @@ impl KeyUnwrap<64> for Stepping {
     fn unwrap_key(self, request: KeyUnwrapRequest<64>) -> SteppingOperation {
         let (kek, wrapped) = request.into_parts();
         match Rfc3394Unwrap::start(wrapped) {
-            Ok(machine) => SteppingOperation::Running(machine, Rust.load_key(&kek)),
+            Ok(machine) => SteppingOperation::Running(machine.next_block(), Rust.load_key(&kek)),
             Err(response) => SteppingOperation::Done(response),
         }
     }
@@ -107,13 +111,16 @@ fn an_engine_yielding_between_blocks_passes_the_same_cases() {
 #[test]
 fn the_machine_unwraps_one_block_per_step() {
     let wrapped = KeyData::<32>::try_copy(&RFC3394_4_1_CIPHERTEXT).unwrap();
-    let mut machine = Rfc3394Unwrap::start(wrapped).ok().unwrap();
+    let mut step = Rfc3394Unwrap::start(wrapped).ok().unwrap().next_block();
     let mut cipher = Rust.load_key(&Aes128Key::copy_from(&RFC3394_4_1_KEK));
     let mut steps = 0;
     let response = loop {
-        steps += 1;
-        machine = match machine.step(&mut cipher) {
-            Rfc3394Step::Continue(machine) => machine,
+        step = match step {
+            Rfc3394Step::Block { mut input, pending } => {
+                steps += 1;
+                cipher.decrypt_block(input.as_mut_bytes());
+                pending.complete(Ok(input))
+            }
             Rfc3394Step::Complete(response) => break response,
         };
     };
@@ -188,4 +195,29 @@ fn keys_and_key_data_erase_themselves_when_dropped() {
     fn erased<T: ZeroizeOnDrop>() {}
     erased::<Aes128Key>();
     erased::<KeyData<32>>();
+}
+
+#[test]
+fn an_engine_error_terminates_the_mode_without_exposing_key_data() {
+    use crate::block::{BlockError, CipherBlock};
+    let wrapped = KeyData::<32>::try_copy(&RFC3394_4_1_CIPHERTEXT).unwrap();
+    let machine = Rfc3394Unwrap::start(wrapped).ok().unwrap();
+    let Rfc3394Step::Block { input, pending } = machine.next_block() else {
+        panic!("first block")
+    };
+    let mut expected = [0; 16];
+    expected[..8].copy_from_slice(&RFC3394_4_1_CIPHERTEXT[..8]);
+    expected[7] ^= 12; // n*j+i = 2*5+2, big endian.
+    expected[8..].copy_from_slice(&RFC3394_4_1_CIPHERTEXT[16..]);
+    assert_eq!(input.as_bytes(), &expected);
+    drop(input);
+    let error = BlockError::Timeout { observation: 1 };
+    let Rfc3394Step::Complete(response) = pending.complete(Err(error)) else {
+        panic!("error is terminal")
+    };
+    assert_eq!(response.plaintext(), Err(KeyUnwrapError::Engine(error)));
+    assert_eq!(response.data.len, 0);
+    assert!(response.data.bytes.iter().all(|byte| *byte == 0));
+    fn erased<T: ZeroizeOnDrop>() {}
+    erased::<CipherBlock>();
 }

@@ -272,7 +272,6 @@ pub(crate) static ASSOCIATION: AssociationCapabilities = AssociationCapabilities
 pub struct Body<W: Binding> {
     runner: StationRunner<W>,
     profile: Profile<W>,
-    engine: W::Engine,
 }
 
 type Service<'id, W> = Runner<
@@ -417,12 +416,9 @@ impl<W: Binding> rp::PortBody<W::Id, Backend<W::Id, W>> for Body<W> {
         W::Id: 'id,
         'id: 'p,
     {
-        let Body {
-            runner,
-            profile,
-            engine,
-        } = self;
+        let Body { runner, profile } = self;
         let StationRunner {
+            engine,
             config,
             connection,
             storage,
@@ -466,27 +462,14 @@ impl<W: Binding> rp::PortBody<W::Id, Backend<W::Id, W>> for Body<W> {
         })
     }
 }
-pub async fn serve<W: Binding>(
-    mut runner: StationRunner<W>,
-    profile: Profile<W>,
-    engine: W::Engine,
-) -> StationExit {
+pub async fn serve<W: Binding>(mut runner: StationRunner<W>, profile: Profile<W>) -> StationExit {
     let mut pending = runner.frontend.post(());
     let (poster, front) = core::future::poll_fn(|cx| pending.poll_answer(cx))
         .await
         .unwrap_or_else(|error| W::fail(InitializationError::Request(error)));
     runner.frontend = poster;
     match front {
-        Ok(front) => match rp::run_port(
-            front,
-            Body {
-                runner,
-                profile,
-                engine,
-            },
-        )
-        .await
-        {
+        Ok(front) => match rp::run_port(front, Body { runner, profile }).await {
             rp::PortEnd::Uninstalled { output, .. } | rp::PortEnd::FailStopped { output, .. } => {
                 output
             }

@@ -1,0 +1,9 @@
+schema = 1
+
+[[sources]]
+id = "ESP_IDF_4D80C1B2_S31_AES"
+description = "SOURCE: ESP-IDF 4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d, components/soc/esp32s31/register/soc/aes_reg.h and aes_struct.h (pinned in vendor/artifacts.toml); components/esp_hal_security/esp32s31/include/hal/aes_ll.h:34-57,68-144, and components/esp_hal_security/aes_hal.c:24-39. components/soc/esp32s31/register/soc/reg_base.h:60 supplies DR_REG_AES_BASE=0x20508000. Register offsets, fields, reset values, word order, individual clock/reset RMW writes and Typical-mode trigger/state sequence. No bounded block latency is specified. AES-192 codes from the header are excluded according to the S31 TRM."
+
+[[sources]]
+id = "TRM_S31_V01_AES"
+description = "SOURCE: ESP32-S31 TRM pre-release v0.1 (2026-09-21), https://documentation.espressif.com/esp32-s31_technical_reference_manual_en.html, chapter 10 pp.409-431, sections 10.3-10.5, 10.8-10.12: Typical AES-128/256 only; little-endian key/text word order; FREE=0 prevents RSA_DS preemption; STATE 0=IDLE,1=WORK, DMA-only2=DONE; TEXT_OUT, H and T0 are RO; memory IV/H/J0/T0 has no stated reset value; pseudo-round enable defaults off. No maximum block latency is specified."

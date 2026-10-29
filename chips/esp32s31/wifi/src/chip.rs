@@ -308,6 +308,7 @@ impl<W: Binding> Default for Storage<W> {
     }
 }
 pub struct Resources<W: Binding> {
+    pub engine: W::Engine,
     pub events: W::Events,
     pub storage: &'static mut Storage<W>,
     pub hardware: crate::WifiHardware,
@@ -332,6 +333,7 @@ pub struct Driver<W: Binding> {
     pub(crate) bell: &'static oer_memory::Doorbell,
 }
 pub struct StationRunner<W: Binding> {
+    pub(crate) engine: W::Engine,
     pub(crate) frontend: oer_memory::Poster<(), Result<radio::Front<W>, InitializationError>>,
     pub(crate) config: Config,
     pub(crate) connection: Connection<'static>,
@@ -357,6 +359,7 @@ pub fn station<W: Binding>(
     config: Config,
 ) -> (Control<'static>, Network<'static>, Runners<W>) {
     let Resources {
+        engine,
         events,
         storage,
         hardware,
@@ -419,6 +422,7 @@ pub fn station<W: Binding>(
                 bell: &storage.bell,
             },
             station: StationRunner {
+                engine,
                 frontend,
                 config,
                 connection,
@@ -434,7 +438,7 @@ impl<W: Binding> Driver<W> {
     }
 }
 impl<W: Binding> StationRunner<W> {
-    pub async fn run(self, profile: Profile<W>, engine: W::Engine) -> StationExit {
-        service::serve(self, profile, engine).await
+    pub async fn run(self, profile: Profile<W>) -> StationExit {
+        service::serve(self, profile).await
     }
 }

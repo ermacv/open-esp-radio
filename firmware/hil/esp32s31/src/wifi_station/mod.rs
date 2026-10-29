@@ -82,6 +82,7 @@ pub(crate) fn start(
     let prepared = crate::initialize_runtime();
     let (
         (
+            runtime_aes,
             runtime_efuse,
             runtime_radio,
             runtime_clocks,
@@ -106,6 +107,7 @@ pub(crate) fn start(
                 crate::fatal::report_previous();
                 oer_esp32s31_compose::wifi_fault::report_previous();
                 (
+                    hardware.aes,
                     hardware.efuse,
                     hardware.radio,
                     hardware.clocks,
@@ -121,6 +123,9 @@ pub(crate) fn start(
     })
     .into_parts();
     crate::exception::report_stack_guard();
+    let silent = adopted.router().silent::<oer_esp32s31_hal::peripherals::aes::AesInterrupt>()
+        .unwrap_or_else(|_| crate::fail(crate::fatal::Failure::InterruptTable));
+    let engine = oer_esp32s31_compose::crypto::wifi_key_unwrap(runtime_aes, silent);
     let config = CONFIG;
     let Some(interrupts) = crate::Interrupts::take() else {
         crate::fail(crate::fatal::Failure::InterruptTable);
@@ -201,6 +206,7 @@ pub(crate) fn start(
         };
     let (control, net, runners) = wifi::station(
         wifi::Resources {
+            engine,
             events: control::ProductEvents(pending),
             storage: radio::binding::storage(),
             hardware,

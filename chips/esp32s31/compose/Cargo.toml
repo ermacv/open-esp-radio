@@ -15,6 +15,10 @@ wifi-fault = []
 
 [dependencies]
 oer-diagnostics = { path = "../../../portable/diagnostics" }
+oer-esp32s31-crypto = { path = "../crypto" }
+oer-embassy-time = { path = "../../../portable/embassy/time" }
+oer-time = { path = "../../../portable/time" }
+oer-espressif-interrupt-table = { path = "../../espressif/interrupt-table" }
 bytemuck = { version = "1.25.2", default-features = false, features = ["derive"] }
 oer-esp32s31-hal = { path = "../hal" }
 oer-espressif-staged-runtime.workspace = true

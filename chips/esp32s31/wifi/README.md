@@ -14,16 +14,17 @@ or refusal directly to the image's concrete callback. No scoped application
 callback, port identity or installation loan is required by the image.
 
 The image declares `bind_station!` with its interrupt entries, station
-callbacks, collectors, key-unwrap engine and handled-error terminal policy.
+callbacks, collectors, the composed engine type and handled-error terminal policy.
 `Resources` consumes the unique hardware partition, binding proof, doorbell,
-the facade's affine `DmaResources` claim, signals and declared storage.
+the facade's affine `DmaResources` claim, signals, declared storage and the
+value-owned key-unwrap engine supplied by `compose::crypto::wifi_key_unwrap`.
 The permanent RX ring and nine TX allocations have one declaration in the
 facade. Their HAL placement proof stays in the existing HAL macro; image IRQ
 modules hold only their line and signals. `Resources` consumes the opaque
 `WifiHardware` and DMA owners without exposing their backend field types. `Runners::driver` runs
 on the existing P2 executor; `Runners::station` runs on P1 beside networking.
-The image supplies the latter's validated `Profile` and selected key-unwrap
-engine. `StationSettings::open`, `wpa2_passphrase` and `wpa2_pmk` validate the
+The station runner retains that engine from construction; the image supplies
+its validated `Profile`. `StationSettings::open`, `wpa2_passphrase` and `wpa2_pmk` validate the
 SSID and credentials without exposing STA or RSN types. `prepare` consumes
 that affine owner: open and prederived PMK provisioning complete immediately;
 passphrase provisioning yields after each bounded PBKDF2 step. The password

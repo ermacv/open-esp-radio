@@ -3,7 +3,6 @@ use super::{Attempt, ObservationStorage, radio};
 use core::cell::Cell;
 use oer_esp32s31_wifi as wifi;
 use oer_esp32s31_wifi::NonceSource;
-use oer_ieee80211_cipher::aes::{SoftwareAes128, SoftwareKeyUnwrap};
 use oer_ieee80211_control::StationServiceEnd;
 use oer_memory::{OnceValue, Placed};
 pub struct Callbacks(pub Placed<'static, NonceSource>);
@@ -105,7 +104,7 @@ pub async fn serve(
     let stopped = Cell::new(None);
     let (network_control, network) = super::ip::start(address, seed, net, attempt, observations);
     let mut network = core::pin::pin!(network);
-    let mut running = core::pin::pin!(runner.run(profile, SoftwareKeyUnwrap::new(SoftwareAes128)));
+    let mut running = core::pin::pin!(runner.run(profile));
     let outcome = {
         let mut controls = core::pin::pin!(commands(&mut control, &stopped, pending, observations));
         let mut workload = core::pin::pin!(embassy_futures::join::join(
