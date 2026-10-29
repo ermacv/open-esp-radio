@@ -29,6 +29,7 @@
 //! - `wifi_fault` (feature `wifi-fault`): the Wi-Fi MAC's fatal assertion
 //!   record, its reset and the next boot's report.
 
+pub mod crypto;
 pub mod phy_fault;
 
 /// The ESP32-S31's executor binding over the HAL's platform port; the

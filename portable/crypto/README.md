@@ -14,14 +14,18 @@ data (`InvalidLength`, `IntegrityCheckFailed`). An engine whose hardware may
 still reach a request's storage keeps that storage until it confirmed the stop,
 even when its operation is dropped.
 
-The RFC 3394 algorithm has one copy, in `rfc3394`: the resumable
-`Rfc3394Unwrap` machine performs one block per `step`, so an engine may yield
-between blocks, and `wrap` wraps to completion. Both run over the synchronous
-`block::BlockCipher`; `block::Aes128Blocks` loads a key for a run of blocks and
-erases it when the keyed view drops. `block::BlockKeyUnwrap` is the engine of a
-synchronous primitive: its operation is ready on its first poll. Only the
-machine builds a response, so every engine's plaintext passed the same
-integrity check.
+The RFC 3394 algorithm has one copy, in `rfc3394`. `Rfc3394Unwrap::next_block`
+issues a secret `CipherBlock` input and an affine `Rfc3394Pending` continuation.
+The engine returns an output or `BlockError` through `complete`; only then does
+the mode advance. A pending continuation and each block erase their secret
+state on drop. There is no async code inside the machine. Engine failures
+become `KeyUnwrapError::Engine` and clear the response buffer.
+
+`BlockKeyUnwrap` decrypts every issued block immediately through the synchronous
+`BlockCipher`, so its operation is ready on the first poll; `Aes128Blocks`
+loads a key for the run and erases it when its keyed view drops. `wrap` uses
+the same synchronous primitive. Hardware engines can instead yield between
+submission and completion without copying the mode algorithm.
 
 With `test-support`, `conformance::key_unwrap_rfc3394` runs an engine through
 the RFC 3394 §4.1 vector, a changed ciphertext, two invalid lengths and a

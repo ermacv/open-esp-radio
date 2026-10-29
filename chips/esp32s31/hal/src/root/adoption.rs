@@ -21,6 +21,7 @@ pub struct DebugParts(pub(super) DebugPeripherals);
 
 /// Remaining unstarted resources. Interrupt publication stays after arming.
 pub struct RuntimeResources {
+    pub(super) aes: crate::peripherals::aes::AesParts,
     pub(super) system_timer: SystemTimer,
     pub(super) timg0_alarm: Timg0AlarmParts,
     pub(super) software_interrupts: SoftwareInterrupts,
@@ -42,6 +43,8 @@ pub struct PlatformParts {
 
 /// Hardware consumed by tasks or a verifier session after driver adoption.
 pub struct Hardware {
+    /// The CPU AES block and its exclusive crypto clock/reset word.
+    pub aes: crate::peripherals::aes::AesParts,
     pub watchdogs: adoption::Watchdogs<
         Mwdt0Registers,
         crate::peripherals::watchdog::Mwdt1Registers,
@@ -97,6 +100,7 @@ impl Port for RuntimePort {
         watchdogs: adoption::Watchdogs<Self::Main0, Self::Main1, Self::Rtc, Self::Super>,
     ) -> PlatformParts {
         let RuntimeResources {
+            aes,
             system_timer,
             timg0_alarm,
             software_interrupts,
@@ -110,6 +114,7 @@ impl Port for RuntimePort {
         PlatformParts {
             interrupts: InterruptBlocks::new(interrupt_matrix),
             hardware: Hardware {
+                aes,
                 watchdogs,
                 system_timer,
                 timg0_alarm,

@@ -11,6 +11,7 @@
 //! - [`usb_serial_jtag`]: the USB Serial/JTAG console;
 //! - [`watchdog`]: the timer groups' and RTC watchdogs.
 
+pub mod aes;
 pub mod efuse;
 pub mod entropy;
 pub mod reset_cause;

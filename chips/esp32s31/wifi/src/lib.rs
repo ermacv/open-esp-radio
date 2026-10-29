@@ -257,7 +257,7 @@ pub use chip::{
 };
 
 /// Bind the facade's backing to this image's concrete interrupt entries.
-/// The image chooses its callbacks, collectors, engine and terminal policy.
+/// The image declares callbacks, collectors, the composed engine type and terminal policy.
 #[cfg(target_arch = "riscv32")]
 #[macro_export]
 macro_rules! bind_station {

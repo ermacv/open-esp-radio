@@ -1,0 +1,10 @@
+error[E0382]: use of moved value: `runtime.aes`
+ --> tests/ui/aes_owned_once.rs:8:18
+  |
+6 |     let aes = runtime.aes;
+  |               ----------- value moved here
+7 |     #[cfg(all())]
+8 |     let _again = runtime.aes; // ui-error: E0382
+  |                  ^^^^^^^^^^^ value used here after move
+  |
+  = note: move occurs because `runtime.aes` has type `AesParts`, which does not implement the `Copy` trait

@@ -2,8 +2,8 @@
 //! RFC 3394 algorithm of `oer-crypto`.
 //!
 //! [`SoftwareAes128`] implements `oer_crypto::block::Aes128Blocks` with the
-//! RustCrypto cipher; [`SoftwareKeyUnwrap`] is its key-unwrap engine, ready on
-//! the first poll. WPA2 key data is bounded by [`RSN_KEY_DATA_CAPACITY`].
+//! RustCrypto cipher; [`SoftwareKeyUnwrap`] immediately answers each owned
+//! block request from the shared RFC 3394 machine, ready on the first poll. WPA2 key data is bounded by [`RSN_KEY_DATA_CAPACITY`].
 #![deny(
     clippy::indexing_slicing,
     clippy::unwrap_used,

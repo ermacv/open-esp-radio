@@ -1,0 +1,316 @@
+# SOURCE: ESP_IDF_4D80C1B2_S31_AES and TRM_S31_V01_AES.
+schema = 3
+[type]
+name = "AES"
+sources = ["ESP_IDF_4D80C1B2_S31_AES", "TRM_S31_V01_AES"]
+description = "The S31 AES accelerator; Typical AES uses CPU-owned blocks without DMA."
+[review]
+sources = ["ESP_IDF_4D80C1B2_S31_AES", "TRM_S31_V01_AES"]
+provenance = "imported"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[registers]]
+name = "KEY%s"
+offset = 0x0
+dim = { count = 8, stride = 4 }
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "DATA"
+bits = "31:0"
+class = "plain"
+
+[[registers]]
+name = "TEXT_IN%s"
+offset = 0x20
+dim = { count = 4, stride = 4 }
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "DATA"
+bits = "31:0"
+class = "plain"
+
+[[registers]]
+name = "TEXT_OUT%s"
+offset = 0x30
+dim = { count = 4, stride = 4 }
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "DATA"
+bits = "31:0"
+class = "read-only"
+
+[[registers]]
+name = "MODE"
+offset = 0x40
+reset = { value = 0x0 }
+reserved = { mask = 0xffffffe8, sources = ["ESP_IDF_4D80C1B2_S31_AES", "TRM_S31_V01_AES"] }
+
+[[registers.fields]]
+name = "MODE"
+write-values-only = true
+bits = "2:0"
+class = "plain"
+values = [{ name = "ENCRYPT128", value = 0, sources = ["TRM_S31_V01_AES"] }, { name = "ENCRYPT256", value = 2, sources = ["TRM_S31_V01_AES"] }, { name = "DECRYPT128", value = 4, sources = ["TRM_S31_V01_AES"] }, { name = "DECRYPT256", value = 6, sources = ["TRM_S31_V01_AES"] }]
+
+[[registers.fields]]
+name = "USE_HARDWARE_KEY"
+bits = "4"
+class = "plain"
+
+[[registers]]
+name = "ENDIAN"
+offset = 0x44
+reset = { value = 0x0 }
+reserved = { mask = 0xffffffc0, sources = ["ESP_IDF_4D80C1B2_S31_AES", "TRM_S31_V01_AES"] }
+
+[[registers.fields]]
+name = "ENDIAN"
+bits = "5:0"
+class = "plain"
+
+[[registers]]
+name = "TRIGGER"
+offset = 0x48
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D80C1B2_S31_AES", "TRM_S31_V01_AES"] }
+
+[[registers.fields]]
+name = "TRIGGER"
+bits = "0"
+class = "write-trigger"
+
+[[registers]]
+name = "STATE"
+offset = 0x4c
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffc, sources = ["ESP_IDF_4D80C1B2_S31_AES", "TRM_S31_V01_AES"] }
+
+[[registers.fields]]
+name = "STATE"
+bits = "1:0"
+class = "read-only"
+values = [{ name = "IDLE", value = 0, sources = ["TRM_S31_V01_AES"] }, { name = "WORK", value = 1, sources = ["TRM_S31_V01_AES"] }, { name = "DONE", value = 2, sources = ["TRM_S31_V01_AES"] }]
+
+[[registers]]
+name = "IV%s"
+offset = 0x50
+dim = { count = 4, stride = 4 }
+
+[[registers.fields]]
+name = "DATA"
+bits = "31:0"
+class = "plain"
+
+[[registers]]
+name = "H%s"
+offset = 0x60
+dim = { count = 4, stride = 4 }
+
+[[registers.fields]]
+name = "DATA"
+bits = "31:0"
+class = "read-only"
+
+[[registers]]
+name = "J0%s"
+offset = 0x70
+dim = { count = 4, stride = 4 }
+
+[[registers.fields]]
+name = "DATA"
+bits = "31:0"
+class = "plain"
+
+[[registers]]
+name = "T0%s"
+offset = 0x80
+dim = { count = 4, stride = 4 }
+
+[[registers.fields]]
+name = "DATA"
+bits = "31:0"
+class = "read-only"
+
+[[registers]]
+name = "DMA_ENABLE"
+offset = 0x90
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D80C1B2_S31_AES", "TRM_S31_V01_AES"] }
+
+[[registers.fields]]
+name = "DMA_ENABLE"
+bits = "0"
+class = "plain"
+
+[[registers]]
+name = "BLOCK_MODE"
+offset = 0x94
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffff8, sources = ["ESP_IDF_4D80C1B2_S31_AES", "TRM_S31_V01_AES"] }
+
+[[registers.fields]]
+name = "BLOCK_MODE"
+bits = "2:0"
+class = "plain"
+values = [{ name = "ECB", value = 0, sources = ["TRM_S31_V01_AES"] }, { name = "CBC", value = 1, sources = ["TRM_S31_V01_AES"] }, { name = "OFB", value = 2, sources = ["TRM_S31_V01_AES"] }, { name = "CTR", value = 3, sources = ["TRM_S31_V01_AES"] }, { name = "CFB8", value = 4, sources = ["TRM_S31_V01_AES"] }, { name = "CFB128", value = 5, sources = ["TRM_S31_V01_AES"] }, { name = "GCM", value = 6, sources = ["TRM_S31_V01_AES"] }]
+
+[[registers]]
+name = "BLOCK_NUM"
+offset = 0x98
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "BLOCK_NUM"
+bits = "31:0"
+class = "plain"
+
+[[registers]]
+name = "INC_SEL"
+offset = 0x9c
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D80C1B2_S31_AES", "TRM_S31_V01_AES"] }
+
+[[registers.fields]]
+name = "INC_SEL"
+bits = "0"
+class = "plain"
+
+[[registers]]
+name = "AAD_BLOCK_NUM"
+offset = 0xa0
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "AAD_BLOCK_NUM"
+bits = "31:0"
+class = "plain"
+
+[[registers]]
+name = "REMAINDER_BIT_NUM"
+offset = 0xa4
+reset = { value = 0x0 }
+reserved = { mask = 0xffffff80, sources = ["ESP_IDF_4D80C1B2_S31_AES", "TRM_S31_V01_AES"] }
+
+[[registers.fields]]
+name = "REMAINDER_BIT_NUM"
+bits = "6:0"
+class = "plain"
+
+[[registers]]
+name = "CONTINUE"
+offset = 0xa8
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D80C1B2_S31_AES", "TRM_S31_V01_AES"] }
+
+[[registers.fields]]
+name = "CONTINUE"
+bits = "0"
+class = "write-trigger"
+
+[[registers]]
+name = "INT_CLEAR"
+offset = 0xac
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D80C1B2_S31_AES", "TRM_S31_V01_AES"] }
+
+[[registers.fields]]
+name = "INT_CLEAR"
+bits = "0"
+class = "write-trigger"
+
+[[registers]]
+name = "INT_ENA"
+offset = 0xb0
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D80C1B2_S31_AES", "TRM_S31_V01_AES"] }
+
+[[registers.fields]]
+name = "INT_ENA"
+bits = "0"
+class = "plain"
+
+[[registers]]
+name = "DATE"
+offset = 0xb4
+reset = { value = 0x2507280 }
+reserved = { mask = 0xf0000000, sources = ["ESP_IDF_4D80C1B2_S31_AES", "TRM_S31_V01_AES"] }
+
+[[registers.fields]]
+name = "DATE"
+bits = "27:0"
+class = "plain"
+
+[[registers]]
+name = "DMA_EXIT"
+offset = 0xb8
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D80C1B2_S31_AES", "TRM_S31_V01_AES"] }
+
+[[registers.fields]]
+name = "DMA_EXIT"
+bits = "0"
+class = "write-trigger"
+
+[[registers]]
+name = "RX_RESET"
+offset = 0xc0
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D80C1B2_S31_AES", "TRM_S31_V01_AES"] }
+
+[[registers.fields]]
+name = "RX_RESET"
+bits = "0"
+class = "write-trigger"
+
+[[registers]]
+name = "TX_RESET"
+offset = 0xc4
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D80C1B2_S31_AES", "TRM_S31_V01_AES"] }
+
+[[registers.fields]]
+name = "TX_RESET"
+bits = "0"
+class = "write-trigger"
+
+[[registers]]
+name = "PSEUDO"
+offset = 0xd0
+reset = { value = 0x3c4 }
+reserved = { mask = 0xfffffc00, sources = ["ESP_IDF_4D80C1B2_S31_AES", "TRM_S31_V01_AES"] }
+
+[[registers.fields]]
+name = "PSEUDO_EN"
+bits = "0"
+class = "plain"
+
+[[registers.fields]]
+name = "PSEUDO_BASE"
+bits = "4:1"
+class = "plain"
+
+[[registers.fields]]
+name = "PSEUDO_INC"
+bits = "6:5"
+class = "plain"
+
+[[registers.fields]]
+name = "PSEUDO_RNG_CNT"
+bits = "9:7"
+class = "plain"
+
+[[registers]]
+name = "FREE"
+offset = 0xd4
+reset = { value = 0x1 }
+reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D80C1B2_S31_AES", "TRM_S31_V01_AES"] }
+
+[[registers.fields]]
+name = "FREE"
+bits = "0"
+class = "plain"

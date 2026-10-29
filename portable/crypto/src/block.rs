@@ -9,6 +9,35 @@ use crate::{
 /// One 128-bit cipher block.
 pub type Block = [u8; 16];
 
+/// Secret input or output of one block operation, erased when dropped.
+#[derive(zeroize::Zeroize, zeroize::ZeroizeOnDrop)]
+pub struct CipherBlock(Block);
+
+impl CipherBlock {
+    pub const fn new(bytes: Block) -> Self {
+        Self(bytes)
+    }
+    pub const fn as_bytes(&self) -> &Block {
+        &self.0
+    }
+    pub fn as_mut_bytes(&mut self) -> &mut Block {
+        &mut self.0
+    }
+}
+
+/// A block engine's refusal, independent of the mode's input errors.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum BlockError {
+    /// The engine retains a failed resource and accepts no more blocks.
+    Unavailable,
+    /// Completion did not arrive within the engine's policy budget.
+    Timeout { observation: u32 },
+    /// A status outside the selected operation's domain was observed.
+    InvalidState { observation: u32 },
+    /// The monotonic clock cannot represent the operation's bound.
+    TimeOverflow,
+}
+
 /// A keyed block cipher: one block in place per call, finished on return.
 pub trait BlockCipher {
     fn encrypt_block(&mut self, block: &mut Block);
@@ -48,15 +77,19 @@ impl<P: Aes128Blocks> BlockKeyUnwrap<P> {
         request: KeyUnwrapRequest<N>,
     ) -> KeyUnwrapResponse<N> {
         let (kek, wrapped) = request.into_parts();
-        let mut machine = match Rfc3394Unwrap::start(wrapped) {
+        let machine = match Rfc3394Unwrap::start(wrapped) {
             Ok(machine) => machine,
             Err(refused) => return refused,
         };
         let mut cipher = self.blocks.load_key(&kek);
         drop(kek);
+        let mut step = machine.next_block();
         loop {
-            machine = match machine.step(&mut cipher) {
-                Rfc3394Step::Continue(machine) => machine,
+            step = match step {
+                Rfc3394Step::Block { mut input, pending } => {
+                    cipher.decrypt_block(input.as_mut_bytes());
+                    pending.complete(Ok(input))
+                }
                 Rfc3394Step::Complete(response) => return response,
             };
         }

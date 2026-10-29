@@ -187,6 +187,8 @@ impl Root {
             debug,
             chip_clocks,
             timer_group0,
+            aes,
+            crypto_clock,
         } = self.partitions;
         let WatchdogRegisters {
             main0,
@@ -215,6 +217,7 @@ impl Root {
                 super_watchdog,
             },
             resources: RuntimeResources {
+                aes: crate::peripherals::aes::AesParts::new(aes, crypto_clock),
                 system_timer: SystemTimer::new(system_timer),
                 timg0_alarm: Timg0AlarmParts::new(timer_group0),
                 software_interrupts: SoftwareInterrupts::new(

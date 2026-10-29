@@ -11,7 +11,7 @@ is driver code.
 bindings: the hart geometry, core control, the interrupt controller and the
 family platform contracts (`platform::Port`); `cores` holds the fatal path's
 stop and the software reset. Ordinary blocks are `peripherals::<block>`:
-`efuse`, `entropy`, `reset_cause`, `software_interrupt`, `system_timer`,
+`aes`, `efuse`, `entropy`, `reset_cause`, `software_interrupt`, `system_timer`,
 `timg0_alarm`, `usb_serial_jtag` and `watchdog`. `memory` is the DMA memory
 core (`dma_address`, `dma_static`); the `dma_static!` macro is exported at
 the crate root. `boot` holds the bootstrap's owners; the radio modules are
@@ -365,3 +365,13 @@ restore storage, transaction seat/reunion checks and both quarantine guards.
 BTBB and module membership, first/last common-power ordering and low-power /
 external coexistence sequencing belong to the family driver. S31 modem settings
 remain in `knowledge::modem_clock`.
+
+## Typical AES
+
+`Hardware::aes`, transferred through the root's adoption resources, owns
+the AES program and DMA IRQ parts and the complete
+`HP_SYS_CLKRST.CRYPTO_CTRL0` word. `into_polled` consumes the router's
+`Silent<AesInterrupt>` proof. The new peripheral exposes register atoms only;
+`oer-esp32s31-crypto` owns the sequence and waits. Clock/reset writes preserve
+sibling and reserved bits; no fixed whole-word clock image is granted.
+SOURCE: ESP_IDF_4D80C1B2_S31_AES and TRM_S31_V01_AES in the register model.

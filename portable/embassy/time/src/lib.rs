@@ -26,7 +26,57 @@
 //! driver's zero reads as 2^31 µs, so code at the boundary with 32-bit
 //! hardware counters meets the wrap at once.
 
+use core::{
+    future::Future,
+    pin::Pin,
+    task::{Context, Poll},
+};
 use oer_time::{CLOCK_EPOCH_OFFSET, Clock, Instant, Timer};
+
+/// An owned, movable timer wait for manually polled driver operations.
+pub struct WaitUntil {
+    timer: Option<embassy_time::Timer>,
+    elapsed: bool,
+}
+
+impl WaitUntil {
+    pub fn new(deadline: Instant) -> Self {
+        let Some(deadline) = driver_micros(deadline) else {
+            return Self {
+                timer: None,
+                elapsed: true,
+            };
+        };
+        match embassy_time::Instant::try_from_micros(deadline) {
+            Some(deadline) if deadline <= embassy_time::Instant::now() => Self {
+                timer: None,
+                elapsed: true,
+            },
+            Some(deadline) => Self {
+                timer: Some(embassy_time::Timer::at(deadline)),
+                elapsed: false,
+            },
+            None => Self {
+                timer: None,
+                elapsed: false,
+            },
+        }
+    }
+}
+
+impl Future for WaitUntil {
+    type Output = ();
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<()> {
+        let this = self.get_mut();
+        if this.elapsed {
+            return Poll::Ready(());
+        }
+        match this.timer.as_mut() {
+            Some(timer) => Pin::new(timer).poll(cx),
+            None => Poll::Pending,
+        }
+    }
+}
 
 /// The image's monotonic time in microseconds: the driver's time plus
 /// [`CLOCK_EPOCH_OFFSET`].
@@ -61,18 +111,7 @@ impl Clock for EmbassyClock {
 
 impl Timer for EmbassyClock {
     async fn wait_until(&self, deadline: Instant) {
-        // Before the driver's epoch: the deadline has passed.
-        let Some(deadline) = driver_micros(deadline) else {
-            return;
-        };
-        match embassy_time::Instant::try_from_micros(deadline) {
-            // `embassy_time::Timer` yields once even for a past deadline;
-            // the contract completes a reached deadline at once.
-            Some(deadline) if deadline <= embassy_time::Instant::now() => {}
-            Some(deadline) => embassy_time::Timer::at(deadline).await,
-            // Past the driver's tick range: the deadline is never reached.
-            None => core::future::pending().await,
-        }
+        WaitUntil::new(deadline).await;
     }
 }
 
