@@ -43,13 +43,11 @@ pub struct ControllerLifecycle<
     R,
     const MT: usize,
 > {
-    factory: Option<F>,
-    runtime: Option<ControllerRuntimeResources<'static, MT, X>>,
     cells: &'static ControllerEventCells<X>,
     gate: BluetoothInterruptGate<ChipGate, X, R>,
     address: oer_bluetooth_le_wire::LePublicDeviceAddress,
     installation: Option<u32>,
-    state: State<E, X, M, MT>,
+    state: State<F, E, X, M, MT>,
 }
 
 #[allow(
@@ -57,21 +55,31 @@ pub struct ControllerLifecycle<
     dead_code,
     reason = "each failure retains the complete hardware graph until chip reset"
 )]
-// An in-place take moves only the active owner, never a maximum-sized
-// retained failure through Empty and back on an invalid lifecycle call.
-// None is transient while the same exclusive call owns its payload.
-enum State<E, X: SignalExecutor, M: ControllerMemory, const MT: usize> {
-    Empty,
-    Prepared(Option<ControllerLowPowerHardwareInitialized<'static, MT, X, M>>),
-    Ready(Option<ControllerBlePhyEngineInitialized<'static, MT, X, M>>),
+// Every stable phase holds its required owners directly. Transition is
+// private to the exclusive consuming step; rejected calls restore the exact
+// previous state. A cancelled reset keeps its in-flight owners in its future.
+enum State<F, E, X: SignalExecutor, M: ControllerMemory, const MT: usize> {
+    Fresh {
+        factory: F,
+        runtime: ControllerRuntimeResources<'static, MT, X>,
+    },
+    Transition,
+    Prepared(ControllerLowPowerHardwareInitialized<'static, MT, X, M>),
+    Ready(ControllerBlePhyEngineInitialized<'static, MT, X, M>),
     Running,
-    Retired(Option<ControllerRetired<M>>),
+    Retired(ControllerRetired<M>),
     Reset {
-        arena: Option<oer_esp32s31_hal::memory::dma_static::Placed<M::Storage>>,
+        arena: oer_esp32s31_hal::memory::dma_static::Placed<M::Storage>,
         pending: oer_esp32s31_hal::bluetooth::BluetoothModemLpTimerPendingObservation,
     },
-    FactoryFailed(E),
-    HalFailed(ControllerHalInitializationFailure<M>),
+    FactoryFailed {
+        _error: E,
+        _runtime: ControllerRuntimeResources<'static, MT, X>,
+    },
+    HalFailed {
+        _error: ControllerHalInitializationFailure<M>,
+        _runtime: ControllerRuntimeResources<'static, MT, X>,
+    },
     SchedulerFailed(SchedulerInitializationFailure<'static, MT, X, M>),
     LowPowerFailed(ControllerLowPowerHardwareInitializationFailure<'static, MT, X, M>),
     PhyFailed(crate::ble_phy::ControllerBlePhyInitializationFailure<'static, MT, X, M>),
@@ -95,13 +103,11 @@ impl<F, E, X: SignalExecutor + 'static, M: ControllerMemory, R, const MT: usize>
         F: ControllerFactory<M, Error = E>,
     {
         Self {
-            factory: Some(factory),
-            runtime: Some(runtime),
             cells,
             gate,
             address,
             installation: None,
-            state: State::Empty,
+            state: State::Fresh { factory, runtime },
         }
     }
 
@@ -121,9 +127,12 @@ impl<F, E, X: SignalExecutor + 'static, M: ControllerMemory, R, const MT: usize>
         if self.installation != Some(installation) {
             return Err(ControllerFault);
         }
-        let ready = match &mut self.state {
-            State::Ready(ready) => ready.take().ok_or(ControllerFault)?,
-            _ => return Err(ControllerFault),
+        let ready = match core::mem::replace(&mut self.state, State::Transition) {
+            State::Ready(ready) => ready,
+            state => {
+                self.state = state;
+                return Err(ControllerFault);
+            }
         };
         self.state = State::Running;
         Ok(ready.activate())
@@ -141,7 +150,7 @@ impl<F, E, X: SignalExecutor + 'static, M: ControllerMemory, R, const MT: usize>
         {
             return Err(retired);
         }
-        self.state = State::Retired(Some(retired));
+        self.state = State::Retired(retired);
         Ok(())
     }
 
@@ -151,7 +160,7 @@ impl<F, E, X: SignalExecutor + 'static, M: ControllerMemory, R, const MT: usize>
     /// gate: the handler's part stays bound for every epoch.
     #[allow(clippy::result_large_err, clippy::type_complexity)]
     pub fn into_reset(
-        mut self,
+        self,
     ) -> Result<
         (
             oer_esp32s31_hal::memory::dma_static::Placed<M::Storage>,
@@ -160,12 +169,13 @@ impl<F, E, X: SignalExecutor + 'static, M: ControllerMemory, R, const MT: usize>
         ),
         Self,
     > {
-        match &mut self.state {
-            State::Reset { arena, pending } => match arena.take() {
-                Some(arena) => Ok((arena, self.gate, *pending)),
-                None => Err(self),
-            },
-            _ => Err(self),
+        match self {
+            Self {
+                state: State::Reset { arena, pending },
+                gate,
+                ..
+            } => Ok((arena, gate, pending)),
+            owner => Err(owner),
         }
     }
 }
@@ -180,12 +190,7 @@ where
     R: RadioDoorbell,
 {
     fn can_prepare(&self) -> bool {
-        matches!(self.state, State::Empty)
-            && self.factory.is_some()
-            && self
-                .runtime
-                .as_ref()
-                .is_some_and(|runtime| matches!(runtime.is_pristine(), Ok(true)))
+        matches!(&self.state, State::Fresh { runtime, .. } if matches!(runtime.is_pristine(), Ok(true)))
     }
 
     #[inline(never)]
@@ -195,14 +200,22 @@ where
                 returned: Some(clocked),
             });
         }
-        let factory = self
-            .factory
-            .take()
-            .expect("actor preflight retains the one controller factory");
+        let (factory, runtime) = match core::mem::replace(&mut self.state, State::Transition) {
+            State::Fresh { factory, runtime } => (factory, runtime),
+            state => {
+                self.state = state;
+                return Err(PreparationFailure {
+                    returned: Some(clocked),
+                });
+            }
+        };
         let (engine, interrupts) = match factory.build(clocked) {
             Ok(owners) => owners,
             Err(error) => {
-                self.state = State::FactoryFailed(error);
+                self.state = State::FactoryFailed {
+                    _error: error,
+                    _runtime: runtime,
+                };
                 return Err(PreparationFailure { returned: None });
             }
         };
@@ -217,14 +230,13 @@ where
                 {
                     self.gate.quarantine_interrupt_policy(fault);
                 }
-                self.state = State::HalFailed(error);
+                self.state = State::HalFailed {
+                    _error: error,
+                    _runtime: runtime,
+                };
                 return Err(PreparationFailure { returned: None });
             }
         };
-        let runtime = self
-            .runtime
-            .take()
-            .expect("actor preflight retains the one pristine runtime");
         let scheduler = match hal.initialize_scheduler(runtime) {
             Ok(scheduler) => scheduler,
             Err(error) => {
@@ -234,7 +246,7 @@ where
         };
         match scheduler.initialize_modem_lp_timer_hardware() {
             Ok(controller) => {
-                self.state = State::Prepared(Some(controller));
+                self.state = State::Prepared(controller);
                 Ok(installation)
             }
             Err(error) => {
@@ -246,21 +258,24 @@ where
 
     fn task_owner(&self) -> Option<&TaskOwner> {
         match &self.state {
-            State::Prepared(Some(controller)) => Some(controller.phy_task_owner()),
-            State::Retired(Some(controller)) => Some(controller.task_owner()),
+            State::Prepared(controller) => Some(controller.phy_task_owner()),
+            State::Retired(controller) => Some(controller.task_owner()),
             _ => None,
         }
     }
 
     #[inline(never)]
     fn initialize_phy(&mut self, ready: BluetoothRfReady<'_, B>) -> Result<(), ControllerFault> {
-        let controller = match &mut self.state {
-            State::Prepared(controller) => controller.take().ok_or(ControllerFault)?,
-            _ => return Err(ControllerFault),
+        let controller = match core::mem::replace(&mut self.state, State::Transition) {
+            State::Prepared(controller) => controller,
+            state => {
+                self.state = state;
+                return Err(ControllerFault);
+            }
         };
         match controller.initialize_ble_phy_engine(ready, self.address) {
             Ok(controller) => {
-                self.state = State::Ready(Some(controller));
+                self.state = State::Ready(controller);
                 Ok(())
             }
             Err(error) => {
@@ -271,16 +286,19 @@ where
     }
 
     fn is_retired(&self, installation: u32) -> bool {
-        self.installation == Some(installation) && matches!(self.state, State::Retired(Some(_)))
+        self.installation == Some(installation) && matches!(self.state, State::Retired(_))
     }
 
     async fn reset(
         &mut self,
         radio: &mut RadioDomain<B, ConcurrentPhy>,
     ) -> Result<ClockedOwner, ControllerFault> {
-        let retired = match &mut self.state {
-            State::Retired(retired) => retired.take().ok_or(ControllerFault)?,
-            _ => return Err(ControllerFault),
+        let retired = match core::mem::replace(&mut self.state, State::Transition) {
+            State::Retired(retired) => retired,
+            state => {
+                self.state = state;
+                return Err(ControllerFault);
+            }
         };
         let pending = match retired.shut_down(radio, self.cells) {
             Ok(pending) => pending,
@@ -292,7 +310,7 @@ where
         match pending.reunite(&mut self.gate).await {
             Ok(returned) => {
                 self.state = State::Reset {
-                    arena: Some(returned.arena),
+                    arena: returned.arena,
                     pending: returned.pending,
                 };
                 Ok(returned.clocked)

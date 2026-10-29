@@ -426,31 +426,67 @@ impl MacItwtClearIndex {
 
 /// One of the four ordinary Wi-Fi transmit queues accepted by complete hal_set_tx_pti.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct MacTxQueueIndex(u32);
+#[repr(u8)]
+pub enum MacTxQueueIndex {
+    Zero,
+    One,
+    Two,
+    Three,
+}
 
 impl MacTxQueueIndex {
-    pub const MIN: u32 = 0x00000000;
+    pub const MIN: u32 = 0;
     pub const MAX: u32 = oer_esp32s31_pac::wifi_mac::control_n::COUNT as u32 - 1;
+    pub const ALL: [Self; 4] = [Self::Zero, Self::One, Self::Two, Self::Three];
 
-    /// Construct a value only when it lies in the reviewed inclusive range.
     pub const fn new(value: u32) -> Option<Self> {
-        if value <= Self::MAX {
-            Some(Self(value))
-        } else {
-            None
+        match value {
+            0 => Some(Self::Zero),
+            1 => Some(Self::One),
+            2 => Some(Self::Two),
+            3 => Some(Self::Three),
+            _ => None,
         }
     }
 
-    /// The value of a 2-bit field, which the range holds whole.
-    pub const fn from_bits(bits: oer_mmio::Bits<2>) -> Self {
-        Self(bits.get())
+    /// Fixed queue identities are checked during monomorphization.
+    ///
+    /// ```compile_fail
+    /// use oer_esp32s31_hal::types::MacTxQueueIndex;
+    /// const INVALID: MacTxQueueIndex = MacTxQueueIndex::constant::<4>();
+    /// ```
+    pub const fn constant<const QUEUE: u8>() -> Self {
+        const {
+            match Self::new(QUEUE as u32) {
+                Some(queue) => queue,
+                None => panic!("ordinary TX queue is out of range"),
+            }
+        }
     }
 
-    /// Return the checked numeric value.
+    pub const fn from_bits(bits: oer_mmio::Bits<2>) -> Self {
+        match bits.get() {
+            0 => Self::Zero,
+            1 => Self::One,
+            2 => Self::Two,
+            _ => Self::Three,
+        }
+    }
+
     pub const fn get(self) -> u32 {
-        self.0
+        self as u32
     }
 }
+impl From<MacTxQueueIndex> for usize {
+    fn from(queue: MacTxQueueIndex) -> Self {
+        queue as usize
+    }
+}
+const _: () = {
+    if oer_esp32s31_pac::wifi_mac::control_n::COUNT != MacTxQueueIndex::ALL.len() {
+        panic!("ordinary queue identities must cover the generated geometry");
+    }
+};
 
 /// Twelve-bit descriptor metadata count published by complete hal_set_tx_pti.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]

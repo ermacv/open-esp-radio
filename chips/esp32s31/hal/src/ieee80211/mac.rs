@@ -553,7 +553,7 @@ impl<'registers> WifiMacHal<'registers> {
     pub fn prepare_bound_legacy_tx(
         &mut self,
         dma: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
-        queue: u8,
+        queue: MacTxQueueIndex,
         program: MacLegacyTxProgram,
     ) -> bool {
         self.pac_mut()
@@ -563,7 +563,7 @@ impl<'registers> WifiMacHal<'registers> {
     pub fn start_bound_tx(
         &mut self,
         dma: &dyn HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
-        queue: u8,
+        queue: MacTxQueueIndex,
     ) {
         self.pac_mut().start_bound_mac_tx(dma, queue);
     }
@@ -571,7 +571,7 @@ impl<'registers> WifiMacHal<'registers> {
     pub fn prepare_bound_ht_tx(
         &mut self,
         dma: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
-        queue: u8,
+        queue: MacTxQueueIndex,
         program: MacHtTxProgram,
     ) -> bool {
         self.pac_mut().prepare_bound_ht_mac_tx(dma, queue, program)
@@ -580,27 +580,30 @@ impl<'registers> WifiMacHal<'registers> {
     pub fn prepare_bound_he_tx(
         &mut self,
         dma: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
-        queue: u8,
+        queue: MacTxQueueIndex,
         program: MacHeTxProgram,
     ) -> bool {
         self.pac_mut().prepare_bound_he_mac_tx(dma, queue, program)
     }
 
-    pub fn take_tx_completion(&mut self, queue: u8) -> Option<MacTxCompletionObservation> {
+    pub fn take_tx_completion(
+        &mut self,
+        queue: MacTxQueueIndex,
+    ) -> Option<MacTxCompletionObservation> {
         self.pac_mut().take_mac_tx_completion(queue)
     }
 
-    pub fn ordinary_tx_queue_snapshot(&self, queue: u8) -> MacOrdinaryTxQueueSnapshot {
+    pub fn ordinary_tx_queue_snapshot(&self, queue: MacTxQueueIndex) -> MacOrdinaryTxQueueSnapshot {
         self.pac().ordinary_tx_queue_snapshot(queue)
     }
 
-    pub fn begin_tx_timeout_abort(&mut self, queue: u8) -> bool {
+    pub fn begin_tx_timeout_abort(&mut self, queue: MacTxQueueIndex) -> bool {
         self.pac_mut().begin_mac_tx_timeout_abort(queue)
     }
 
     pub fn with_tx_queue_detached<R>(
         &mut self,
-        queue: u8,
+        queue: MacTxQueueIndex,
         reason: MacTxDetachReason,
         detached: impl for<'detached> FnOnce(MacTxQueueDetached<'detached>) -> R,
     ) -> MacTxDetachOutcome<R> {
@@ -609,7 +612,7 @@ impl<'registers> WifiMacHal<'registers> {
 
     pub fn take_block_ack_completion(
         &mut self,
-        queue: u8,
+        queue: MacTxQueueIndex,
     ) -> Option<MacHtAmpduCompletionObservation> {
         self.pac_mut().take_mac_block_ack_completion(queue)
     }

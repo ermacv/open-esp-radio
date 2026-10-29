@@ -12,6 +12,11 @@ fn doorbell_constructor_checks_direction_and_urgent_source_identity() {
     let scratch = tempfile::tempdir_in(scratch_root).expect("own compiler scratch");
     for (case, code, expected) in [
         (
+            "software_interrupt_range",
+            "error[E0080]",
+            "software interrupt is out of range",
+        ),
+        (
             "doorbell_direction",
             "error[E0080]",
             "a request handler must be above its executor",

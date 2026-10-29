@@ -236,13 +236,11 @@ impl<'pool, 'epoch, X: SignalExecutor, D: SchedulerDoorbell, T: Timer, C: ClockR
                     )
                     .await?
                     .map_err(|_| Fault::ClockRead)?;
-                    let projected = ControllerSchedulerEpoch::from_counted_live_update(
+                    let projected = ControllerSchedulerEpoch::from_counted_standalone_update(
                         &sample,
                         overflows,
                         self.wake.controller_time_overflows(),
-                        self.task.controller_time_scale(),
-                    )
-                    .map_err(Fault::ControllerTimeRange)?;
+                    );
                     let Some((epoch, extended)) = projected else {
                         // A wrap may precede or follow the hardware latch. Retry
                         // under the original deadline instead of guessing its epoch.

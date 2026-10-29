@@ -333,7 +333,8 @@ hardware progress. The actor submits `PhyTransaction`, TIMG0's program owner,
 the binding proof and machine through a one-slot queue. `DetachedRadioDomain`
 stays in the waiting future, retaining cancellation and clock obligations;
 calibration state is outside the transferred hardware half. Between events
-the handler retains the active bundle in its own cell. Completion returns it
+the handler retains the active bundle in its own cell. Completion stops the
+alarm and creates a distinct `CompletedBundle` with a mandatory result, returning it
 through a one-slot queue and a same-level `IrqSignal<InterruptExecutor<Esp32s31, 2>>`
 declared with `FromExecutorLevel`. The leaf still suspends asynchronously at
 its submission boundary: `Client::sample` has one `poll_fn` to validate/register

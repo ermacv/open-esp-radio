@@ -3,6 +3,7 @@
 #![forbid(unsafe_code)]
 
 use oer_esp32s31_hal::layouts::{DmaRef, WifiTxDmaDescriptor};
+use oer_esp32s31_hal::types::MacTxQueueIndex;
 
 pub use crate::mac::tx_cost::TxContention;
 
@@ -104,15 +105,20 @@ pub enum LegacyTxQueue {
 
 impl LegacyTxQueue {
     pub(crate) const fn index(self) -> u8 {
-        self.hardware_index()
+        self as u8
     }
 
     /// Return the queue number used by the ESP32-S31 MAC transaction.
     ///
     /// This is intentionally chip-specific: callers must not infer it from
     /// portable WMM access-category numbering.
-    pub const fn hardware_index(self) -> u8 {
-        self as u8
+    pub const fn hardware_index(self) -> MacTxQueueIndex {
+        match self {
+            Self::Voice => MacTxQueueIndex::Zero,
+            Self::Video => MacTxQueueIndex::One,
+            Self::BestEffort => MacTxQueueIndex::Two,
+            Self::Background => MacTxQueueIndex::Three,
+        }
     }
 
     /// Translate the portable EDCA category into the ESP32-S31 queue order.
@@ -178,20 +184,20 @@ pub trait TxHardware {
     fn prepare_bound_legacy_tx(
         &mut self,
         dma: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
-        queue: u8,
+        queue: MacTxQueueIndex,
         program: MacLegacyTxProgram,
     ) -> bool;
 
     fn start_bound_legacy_tx(
         &mut self,
         dma: &dyn HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
-        queue: u8,
+        queue: MacTxQueueIndex,
     );
 
     fn prepare_bound_ht_tx(
         &mut self,
         _dma: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
-        _queue: u8,
+        _queue: MacTxQueueIndex,
         _program: MacHtTxProgram,
     ) -> bool {
         false
@@ -200,14 +206,14 @@ pub trait TxHardware {
     fn start_bound_ht_tx(
         &mut self,
         _dma: &dyn HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
-        _queue: u8,
+        _queue: MacTxQueueIndex,
     ) {
     }
 
     fn prepare_bound_he_tx(
         &mut self,
         _dma: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
-        _queue: u8,
+        _queue: MacTxQueueIndex,
         _program: MacHeTxProgram,
     ) -> bool {
         false
@@ -216,7 +222,7 @@ pub trait TxHardware {
     fn start_bound_he_tx(
         &mut self,
         _dma: &dyn HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
-        _queue: u8,
+        _queue: MacTxQueueIndex,
     ) {
     }
     /// Sample one ordinary queue without changing or acknowledging it.
@@ -224,20 +230,23 @@ pub trait TxHardware {
     /// Pure/model backends may omit this low-frequency hardware diagnostic.
     fn ordinary_tx_queue_snapshot(
         &mut self,
-        _queue: u8,
+        _queue: MacTxQueueIndex,
     ) -> Option<oer_esp32s31_hal::types::MacOrdinaryTxQueueSnapshot> {
         None
     }
-    fn take_tx_completion(&mut self, queue: u8) -> Option<MacTxCompletionObservation>;
+    fn take_tx_completion(&mut self, queue: MacTxQueueIndex) -> Option<MacTxCompletionObservation>;
     /// Take the completion of a PPDU that solicited a BlockAck: an A-MPDU or
     /// a BlockAckReq. The queue's three BlockAck words are sampled before
     /// the completion edge is acknowledged, while that edge still owns them,
     /// so this cannot be replaced by [`Self::take_tx_completion`].
-    fn take_block_ack_completion(&mut self, queue: u8) -> Option<MacHtAmpduCompletionObservation>;
-    fn begin_tx_timeout_abort(&mut self, queue: u8) -> bool;
+    fn take_block_ack_completion(
+        &mut self,
+        queue: MacTxQueueIndex,
+    ) -> Option<MacHtAmpduCompletionObservation>;
+    fn begin_tx_timeout_abort(&mut self, queue: MacTxQueueIndex) -> bool;
     fn with_tx_queue_detached<R>(
         &mut self,
-        queue: u8,
+        queue: MacTxQueueIndex,
         expected_descriptor_head: u32,
         reason: MacTxDetachReason,
         detached: impl for<'detached> FnOnce(MacTxQueueDetached<'detached>) -> R,
@@ -254,7 +263,7 @@ impl TxHardware for WifiMacHal<'_> {
     fn prepare_bound_legacy_tx(
         &mut self,
         dma: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
-        queue: u8,
+        queue: MacTxQueueIndex,
         program: MacLegacyTxProgram,
     ) -> bool {
         WifiMacHal::prepare_bound_legacy_tx(self, dma, queue, program)
@@ -263,7 +272,7 @@ impl TxHardware for WifiMacHal<'_> {
     fn start_bound_legacy_tx(
         &mut self,
         dma: &dyn HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
-        queue: u8,
+        queue: MacTxQueueIndex,
     ) {
         WifiMacHal::start_bound_tx(self, dma, queue);
     }
@@ -271,7 +280,7 @@ impl TxHardware for WifiMacHal<'_> {
     fn prepare_bound_ht_tx(
         &mut self,
         dma: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
-        queue: u8,
+        queue: MacTxQueueIndex,
         program: MacHtTxProgram,
     ) -> bool {
         WifiMacHal::prepare_bound_ht_tx(self, dma, queue, program)
@@ -280,7 +289,7 @@ impl TxHardware for WifiMacHal<'_> {
     fn start_bound_ht_tx(
         &mut self,
         dma: &dyn HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
-        queue: u8,
+        queue: MacTxQueueIndex,
     ) {
         WifiMacHal::start_bound_tx(self, dma, queue);
     }
@@ -288,7 +297,7 @@ impl TxHardware for WifiMacHal<'_> {
     fn prepare_bound_he_tx(
         &mut self,
         dma: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
-        queue: u8,
+        queue: MacTxQueueIndex,
         program: MacHeTxProgram,
     ) -> bool {
         WifiMacHal::prepare_bound_he_tx(self, dma, queue, program)
@@ -297,33 +306,36 @@ impl TxHardware for WifiMacHal<'_> {
     fn start_bound_he_tx(
         &mut self,
         dma: &dyn HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
-        queue: u8,
+        queue: MacTxQueueIndex,
     ) {
         WifiMacHal::start_bound_tx(self, dma, queue);
     }
 
     fn ordinary_tx_queue_snapshot(
         &mut self,
-        queue: u8,
+        queue: MacTxQueueIndex,
     ) -> Option<oer_esp32s31_hal::types::MacOrdinaryTxQueueSnapshot> {
         Some(WifiMacHal::ordinary_tx_queue_snapshot(self, queue))
     }
 
-    fn take_tx_completion(&mut self, queue: u8) -> Option<MacTxCompletionObservation> {
+    fn take_tx_completion(&mut self, queue: MacTxQueueIndex) -> Option<MacTxCompletionObservation> {
         WifiMacHal::take_tx_completion(self, queue)
     }
 
-    fn take_block_ack_completion(&mut self, queue: u8) -> Option<MacHtAmpduCompletionObservation> {
+    fn take_block_ack_completion(
+        &mut self,
+        queue: MacTxQueueIndex,
+    ) -> Option<MacHtAmpduCompletionObservation> {
         WifiMacHal::take_block_ack_completion(self, queue)
     }
 
-    fn begin_tx_timeout_abort(&mut self, queue: u8) -> bool {
+    fn begin_tx_timeout_abort(&mut self, queue: MacTxQueueIndex) -> bool {
         WifiMacHal::begin_tx_timeout_abort(self, queue)
     }
 
     fn with_tx_queue_detached<R>(
         &mut self,
-        queue: u8,
+        queue: MacTxQueueIndex,
         _expected_descriptor_head: u32,
         reason: MacTxDetachReason,
         detached: impl for<'detached> FnOnce(MacTxQueueDetached<'detached>) -> R,
@@ -342,7 +354,7 @@ impl TxHardware for RadioAccess {
     fn prepare_bound_legacy_tx(
         &mut self,
         dma: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
-        queue: u8,
+        queue: MacTxQueueIndex,
         program: MacLegacyTxProgram,
     ) -> bool {
         TxHardware::prepare_bound_legacy_tx(&mut self.wifi_mac_hal(), dma, queue, program)
@@ -351,7 +363,7 @@ impl TxHardware for RadioAccess {
     fn start_bound_legacy_tx(
         &mut self,
         dma: &dyn HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
-        queue: u8,
+        queue: MacTxQueueIndex,
     ) {
         TxHardware::start_bound_legacy_tx(&mut self.wifi_mac_hal(), dma, queue);
     }
@@ -359,7 +371,7 @@ impl TxHardware for RadioAccess {
     fn prepare_bound_ht_tx(
         &mut self,
         dma: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
-        queue: u8,
+        queue: MacTxQueueIndex,
         program: MacHtTxProgram,
     ) -> bool {
         TxHardware::prepare_bound_ht_tx(&mut self.wifi_mac_hal(), dma, queue, program)
@@ -368,7 +380,7 @@ impl TxHardware for RadioAccess {
     fn start_bound_ht_tx(
         &mut self,
         dma: &dyn HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
-        queue: u8,
+        queue: MacTxQueueIndex,
     ) {
         TxHardware::start_bound_ht_tx(&mut self.wifi_mac_hal(), dma, queue);
     }
@@ -376,7 +388,7 @@ impl TxHardware for RadioAccess {
     fn prepare_bound_he_tx(
         &mut self,
         dma: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
-        queue: u8,
+        queue: MacTxQueueIndex,
         program: MacHeTxProgram,
     ) -> bool {
         TxHardware::prepare_bound_he_tx(&mut self.wifi_mac_hal(), dma, queue, program)
@@ -385,33 +397,36 @@ impl TxHardware for RadioAccess {
     fn start_bound_he_tx(
         &mut self,
         dma: &dyn HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
-        queue: u8,
+        queue: MacTxQueueIndex,
     ) {
         TxHardware::start_bound_he_tx(&mut self.wifi_mac_hal(), dma, queue);
     }
 
     fn ordinary_tx_queue_snapshot(
         &mut self,
-        queue: u8,
+        queue: MacTxQueueIndex,
     ) -> Option<oer_esp32s31_hal::types::MacOrdinaryTxQueueSnapshot> {
         Some(self.wifi_mac_hal().ordinary_tx_queue_snapshot(queue))
     }
 
-    fn take_tx_completion(&mut self, queue: u8) -> Option<MacTxCompletionObservation> {
+    fn take_tx_completion(&mut self, queue: MacTxQueueIndex) -> Option<MacTxCompletionObservation> {
         TxHardware::take_tx_completion(&mut self.wifi_mac_hal(), queue)
     }
 
-    fn take_block_ack_completion(&mut self, queue: u8) -> Option<MacHtAmpduCompletionObservation> {
+    fn take_block_ack_completion(
+        &mut self,
+        queue: MacTxQueueIndex,
+    ) -> Option<MacHtAmpduCompletionObservation> {
         TxHardware::take_block_ack_completion(&mut self.wifi_mac_hal(), queue)
     }
 
-    fn begin_tx_timeout_abort(&mut self, queue: u8) -> bool {
+    fn begin_tx_timeout_abort(&mut self, queue: MacTxQueueIndex) -> bool {
         TxHardware::begin_tx_timeout_abort(&mut self.wifi_mac_hal(), queue)
     }
 
     fn with_tx_queue_detached<R>(
         &mut self,
-        queue: u8,
+        queue: MacTxQueueIndex,
         expected_descriptor_head: u32,
         reason: MacTxDetachReason,
         detached: impl for<'detached> FnOnce(MacTxQueueDetached<'detached>) -> R,
@@ -3164,7 +3179,7 @@ impl<const BUFFER_SIZE: usize> TxSlot<BUFFER_SIZE> {
         if slot.dma.state() != TxDmaState::Reserved || cookie != slot.active {
             return Err(TxError::Stale);
         }
-        let index = queue.index();
+        let index = queue.hardware_index();
         let publication = slot.dma.publication().map_err(map_dma_storage_error)?;
         let program = MacLegacyTxProgram::new(
             &publication,
@@ -3223,7 +3238,7 @@ impl<const BUFFER_SIZE: usize> TxSlot<BUFFER_SIZE> {
         if slot.dma.state() != TxDmaState::Reserved || cookie != slot.active {
             return Err(TxError::Stale);
         }
-        let index = queue.index();
+        let index = queue.hardware_index();
         let publication = slot.dma.publication().map_err(map_dma_storage_error)?;
         let program =
             MacHtTxProgram::new(&publication, config.pac_parameters()).ok_or(TxError::Invalid)?;
@@ -3266,7 +3281,7 @@ impl<const BUFFER_SIZE: usize> TxSlot<BUFFER_SIZE> {
         if slot.dma.state() != TxDmaState::Reserved || cookie != slot.active {
             return Err(TxError::Stale);
         }
-        let index = queue.index();
+        let index = queue.hardware_index();
         let publication = slot.dma.publication().map_err(map_dma_storage_error)?;
         if !config.valid() {
             return Err(TxError::Invalid);
@@ -3383,7 +3398,7 @@ impl<const BUFFER_SIZE: usize> TxSlot<BUFFER_SIZE> {
         if slot.dma.state() != TxDmaState::HardwareOwned || cookie != slot.active {
             return Err(TxError::Stale);
         }
-        if !hardware.begin_tx_timeout_abort(slot.queue.index()) {
+        if !hardware.begin_tx_timeout_abort(slot.queue.hardware_index()) {
             return Ok(false);
         }
         Ok(true)
@@ -3416,7 +3431,7 @@ impl<const BUFFER_SIZE: usize> TxSlot<BUFFER_SIZE> {
         }
         let descriptor_head = slot.dma.binding().descriptor_address();
         match hardware.with_tx_queue_detached(
-            slot.queue.index(),
+            slot.queue.hardware_index(),
             descriptor_head,
             MacTxDetachReason::Collision,
             |detached| slot.dma.release_aborted(detached),
@@ -3450,7 +3465,7 @@ impl<const BUFFER_SIZE: usize> TxSlot<BUFFER_SIZE> {
         }
         let descriptor_head = slot.dma.binding().descriptor_address();
         match hardware.with_tx_queue_detached(
-            slot.queue.index(),
+            slot.queue.hardware_index(),
             descriptor_head,
             MacTxDetachReason::Timeout,
             |detached| slot.dma.release_aborted(detached),
@@ -3481,7 +3496,7 @@ impl<const BUFFER_SIZE: usize> TxSlot<BUFFER_SIZE> {
         }
         let descriptor_head = slot.dma.binding().descriptor_address();
         match hardware.with_tx_queue_detached(
-            slot.queue.index(),
+            slot.queue.hardware_index(),
             descriptor_head,
             MacTxDetachReason::Completed,
             |detached| slot.dma.release_completed(detached),

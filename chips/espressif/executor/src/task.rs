@@ -34,6 +34,7 @@
               executor's one waker vtable"
 )]
 
+use crate::SoftwareInterrupt;
 use core::{
     cell::UnsafeCell,
     future::Future,
@@ -99,7 +100,7 @@ pub trait Wakes: 'static {
     /// The binding's one waker vtable.
     fn vtable() -> &'static RawWakerVTable;
     /// Pend executor `executor` for a ready task.
-    fn pend_task(executor: u8);
+    fn pend_task(executor: SoftwareInterrupt);
 }
 
 /// The tasks of one executor, declared by [`tasks!`](crate::tasks), which
@@ -163,7 +164,7 @@ impl<T: Tasks> Spawner<T> {
     {
         task.claim()?.publish(start);
         wake::<T::Binding>(TaskId {
-            executor: T::EXECUTOR,
+            executor: const { SoftwareInterrupt::checked(T::EXECUTOR) },
             index: task.index,
         });
         Ok(())
@@ -353,12 +354,12 @@ unsafe fn make_in_place<M: MakeFuture>(stage: *mut Stage<M>) {
 /// One task of one executor: its software interrupt and its index.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct TaskId {
-    executor: u8,
+    executor: SoftwareInterrupt,
     index: u8,
 }
 
 impl TaskId {
-    pub(crate) const fn executor(self) -> u8 {
+    pub(crate) const fn executor(self) -> SoftwareInterrupt {
         self.executor
     }
 
@@ -372,17 +373,19 @@ impl TaskId {
     }
 
     /// The task a waker's data names, as [`Self::data`] wrote it.
-    fn from_data(data: *const ()) -> Self {
+    fn from_data(data: *const ()) -> Option<Self> {
         let data = data as usize;
-        Self {
-            executor: (data >> 8) as u8,
+        Some(Self {
+            executor: SoftwareInterrupt::from_index((data >> 8) as u8)?,
             index: data as u8,
-        }
+        })
     }
 
     /// The task `waker` wakes, when it is one of binding `W`'s wakers.
     pub(crate) fn of<W: Wakes>(waker: &Waker) -> Option<Self> {
-        core::ptr::eq(waker.vtable(), W::vtable()).then(|| Self::from_data(waker.data()))
+        core::ptr::eq(waker.vtable(), W::vtable())
+            .then(|| Self::from_data(waker.data()))
+            .flatten()
     }
 
     /// The task's waker.
@@ -406,14 +409,16 @@ fn clone<W: Wakes>(data: *const ()) -> RawWaker {
 }
 
 fn wake_data<W: Wakes>(data: *const ()) {
-    wake::<W>(TaskId::from_data(data));
+    if let Some(task) = TaskId::from_data(data) {
+        wake::<W>(task);
+    }
 }
 
 fn drop_data(_: *const ()) {}
 
 /// Mark `task` ready and pend its executor.
 pub(crate) fn wake<W: Wakes>(task: TaskId) {
-    if let Some(ready) = ready(task.executor) {
+    if let Some(ready) = ready(task.executor as u8) {
         ready.mark(task.index);
         W::pend_task(task.executor);
     }
@@ -459,7 +464,8 @@ impl Current {
     /// The task polled now, when `waker` is its waker.
     pub(crate) fn matching<W: Wakes>(&self, executor: u8, waker: &Waker) -> Option<TaskId> {
         let current = self.0.load(Ordering::Relaxed);
-        TaskId::of::<W>(waker).filter(|task| task.executor == executor && task.index == current)
+        TaskId::of::<W>(waker)
+            .filter(|task| task.executor as u8 == executor && task.index == current)
     }
 }
 
@@ -479,7 +485,7 @@ pub(crate) fn signal_current<W: Wakes>(
 /// The signal side's `wake`, in the executor's context before its poll
 /// round: mark the task ready, which the round takes; no pend is needed.
 pub(crate) fn signal_wake(task: TaskId) {
-    if let Some(ready) = ready(task.executor) {
+    if let Some(ready) = ready(task.executor as u8) {
         ready.mark(task.index);
     }
 }
@@ -501,7 +507,7 @@ pub(crate) fn poll_round<T: Tasks>(
         current.0.store(index, Ordering::Relaxed);
         before_poll();
         let waker = TaskId {
-            executor: T::EXECUTOR,
+            executor: const { SoftwareInterrupt::checked(T::EXECUTOR) },
             index,
         }
         .waker::<T::Binding>();
@@ -523,7 +529,7 @@ impl<B: crate::Binding> Wakes for B {
     fn vtable() -> &'static RawWakerVTable {
         B::waker_vtable()
     }
-    fn pend_task(executor: u8) {
+    fn pend_task(executor: SoftwareInterrupt) {
         crate::executor::pend_task::<B>(executor);
     }
 }

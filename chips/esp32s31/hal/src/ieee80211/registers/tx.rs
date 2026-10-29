@@ -12,8 +12,8 @@ use oer_esp32s31_pac::wifi_mac::plcp1::Rate as PlcpRate;
 use oer_memory::{HardwareOwnedTxDma, PreparedTxDma};
 
 use crate::ieee80211::registers::{
-    MacInterface, MacPlacement, MacPti, MacTxPtiCount, MacTxQueueIndex, ORDINARY_QUEUE_COUNT,
-    WifiDescriptorAddressLow, WifiRadioRegisters, bits, byte, halfword,
+    MacInterface, MacPlacement, MacPti, MacTxPtiCount, MacTxQueueIndex, WifiDescriptorAddressLow,
+    WifiRadioRegisters, bits, byte, halfword,
 };
 
 const DESCRIPTOR_ADDRESS_LOW_MASK: u32 = WifiDescriptorAddressLow::MAX;
@@ -859,11 +859,7 @@ impl MacTxQueueDetached<'_> {
 
 impl<M: MacPlacement> WifiRadioRegisters<M> {
     /// Sample one ordinary queue without acknowledging or changing it.
-    pub fn ordinary_tx_queue_snapshot(&self, queue: u8) -> MacOrdinaryTxQueueSnapshot {
-        assert!(
-            queue < ORDINARY_QUEUE_COUNT,
-            "ordinary TX queue is out of range"
-        );
+    pub fn ordinary_tx_queue_snapshot(&self, queue: MacTxQueueIndex) -> MacOrdinaryTxQueueSnapshot {
         let bank = queue::bank(queue);
         let control_bank = &self.mac.wifi_mac_tx_queue_control;
         let control = control_bank.read_control_n(bank);
@@ -911,7 +907,6 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
 
     /// Execute complete `hal_set_tx_pti` over one bounded logical queue.
     pub fn set_tx_pti(&mut self, queue: MacTxQueueIndex, program: MacTxPtiProgram) {
-        let queue = u8::try_from(queue.get()).expect("a TX queue index fits a byte");
         let bank = queue::bank(queue);
         self.mac.wifi_mac_tx_queue_control.modify_config(bank, |w| {
             w.set_scheduler_priority(bits(program.scheduler_priority.get()));
@@ -938,7 +933,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     pub fn prepare_bound_legacy_mac_tx(
         &mut self,
         dma: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
-        queue: u8,
+        queue: MacTxQueueIndex,
         program: MacLegacyTxProgram,
     ) -> bool {
         assert!(
@@ -960,7 +955,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     pub fn prepare_bound_ht_mac_tx(
         &mut self,
         dma: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
-        queue: u8,
+        queue: MacTxQueueIndex,
         program: MacHtTxProgram,
     ) -> bool {
         assert!(
@@ -982,7 +977,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     pub fn prepare_bound_he_mac_tx(
         &mut self,
         dma: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
-        queue: u8,
+        queue: MacTxQueueIndex,
         program: MacHeTxProgram,
     ) -> bool {
         assert!(
@@ -1004,12 +999,8 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     pub fn start_bound_mac_tx(
         &mut self,
         dma: &dyn HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
-        queue: u8,
+        queue: MacTxQueueIndex,
     ) {
-        assert!(
-            queue < ORDINARY_QUEUE_COUNT,
-            "ordinary TX queue is out of range"
-        );
         let control = self
             .mac
             .wifi_mac_tx_queue_control
@@ -1026,7 +1017,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     ///
     /// SOURCE: complete hal_mac_tx_config_timeout. This precedes every
     /// vector write in the recovered libpp[lmac.o]::lmacSetTxFrame parent.
-    fn begin_mac_tx(&mut self, queue: u8, timeout: u16) -> bool {
+    fn begin_mac_tx(&mut self, queue: MacTxQueueIndex, timeout: u16) -> bool {
         let bank = queue::bank(queue);
         let control_bank = &mut self.mac.wifi_mac_tx_queue_control;
         let control_state = control_bank.read_control_n(bank);
@@ -1043,12 +1034,12 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     ///
     /// Keeping the final edge separate lets the MAC publish its software
     /// ownership state before hardware can complete the queue.
-    fn prepare_legacy_mac_tx(&mut self, queue: u8, program: MacLegacyTxProgram) -> bool {
+    fn prepare_legacy_mac_tx(
+        &mut self,
+        queue: MacTxQueueIndex,
+        program: MacLegacyTxProgram,
+    ) -> bool {
         let parameters = program.parameters;
-        assert!(
-            queue < ORDINARY_QUEUE_COUNT,
-            "ordinary TX queue is out of range"
-        );
         assert!(
             u32::from(parameters.timeout) <= oer_esp32s31_pac::wifi_mac::config::TIMEOUT_MAX,
             "the program bounds the timeout"
@@ -1101,7 +1092,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     /// SOURCE: complete `libpp[hal_mac_tx.o]::mac_tx_set_plcp0`.
     fn publish_prepared_control(
         &mut self,
-        queue: u8,
+        queue: MacTxQueueIndex,
         descriptor_head: DmaRef<WifiTxDmaDescriptor>,
         plcp_format: u8,
     ) {
@@ -1127,7 +1118,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     }
 
     /// The PLCP1%s image, stored from zero (`publish_mac_tx_plcp1_fields`).
-    fn publish_plcp1(&mut self, queue: u8, plcp1: Plcp1) {
+    fn publish_plcp1(&mut self, queue: MacTxQueueIndex, plcp1: Plcp1) {
         self.mac
             .wifi_mac_tx_queue_vector
             .modify_plcp1(queue::bank(queue), |w| {
@@ -1143,7 +1134,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     }
 
     /// Clear trigger-based transmission on the queue's HE queue control.
-    fn clear_trigger_based_enable(&mut self, queue: u8) {
+    fn clear_trigger_based_enable(&mut self, queue: MacTxQueueIndex) {
         self.mac.wifi_mac_he_init_suffix.modify_queue_control(
             queue::he_queue_control(queue),
             |w| {
@@ -1153,7 +1144,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     }
 
     /// The parent's independent PTI-low edge.
-    fn set_txop(&mut self, queue: u8, txop: bool) {
+    fn set_txop(&mut self, queue: MacTxQueueIndex, txop: bool) {
         self.mac
             .wifi_mac_tx_queue_vector
             .modify_pti(queue::bank(queue), |w| {
@@ -1164,7 +1155,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     /// LENGTH_CONTROL%s stored from zero
     /// (`publish_mac_tx_length_control_fields`): the TX/RX queue antenna
     /// enable, the control-frame rate and the HT20 EOF count.
-    fn publish_length_control(&mut self, queue: u8, rts_rate: u8, ht20_eof_count: u8) {
+    fn publish_length_control(&mut self, queue: MacTxQueueIndex, rts_rate: u8, ht20_eof_count: u8) {
         self.mac
             .wifi_mac_tx_queue_vector
             .modify_length_control(queue::bank(queue), |w| {
@@ -1185,7 +1176,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     /// POWER%s stored from zero (`publish_mac_tx_power_fields`).
     fn publish_power(
         &mut self,
-        queue: u8,
+        queue: MacTxQueueIndex,
         data_primary: u8,
         data_alternate: u8,
         control: MacTxControlFrame,
@@ -1210,7 +1201,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     /// be coalesced.
     fn publish_packet_pti(
         &mut self,
-        queue: u8,
+        queue: MacTxQueueIndex,
         scheduler_priority: u8,
         packet_priority: u8,
         priority_count: u16,
@@ -1244,12 +1235,12 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     /// Queue readiness, timeout, EDCA and the final ENABLE|VALID ownership
     /// edge belong to the surrounding production transaction, as for
     /// [`Self::program_ht_mac_tx_ppdu`].
-    pub(crate) fn program_legacy_mac_tx_ppdu(&mut self, queue: u8, program: MacLegacyTxProgram) {
+    pub(crate) fn program_legacy_mac_tx_ppdu(
+        &mut self,
+        queue: MacTxQueueIndex,
+        program: MacLegacyTxProgram,
+    ) {
         let parameters = program.parameters;
-        assert!(
-            queue < ORDINARY_QUEUE_COUNT,
-            "ordinary TX queue is out of range"
-        );
         assert!(
             u32::from(parameters.scheduler_priority)
                 <= oer_esp32s31_pac::wifi_mac::config::SCHEDULER_PRIORITY_MAX,
@@ -1305,7 +1296,11 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     /// This is deliberately separate from the legacy routine: an HT PPDU has
     /// two additional vector words and three descriptor-count RMW edges which
     /// must not be silently omitted by a shared "mostly legacy" formatter.
-    pub(crate) fn prepare_ht_mac_tx(&mut self, queue: u8, program: MacHtTxProgram) -> bool {
+    pub(crate) fn prepare_ht_mac_tx(
+        &mut self,
+        queue: MacTxQueueIndex,
+        program: MacHtTxProgram,
+    ) -> bool {
         let parameters = program.parameters;
         assert!(
             u32::from(parameters.timeout) <= oer_esp32s31_pac::wifi_mac::config::TIMEOUT_MAX,
@@ -1319,10 +1314,6 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             u32::from(parameters.contention_window)
                 <= oer_esp32s31_pac::wifi_mac::config::CONTENTION_WINDOW_MAX,
             "the program bounds the window"
-        );
-        assert!(
-            queue < ORDINARY_QUEUE_COUNT,
-            "ordinary TX queue is out of range"
         );
 
         // SOURCE: complete hal_mac_tx_config_timeout, followed by the
@@ -1350,12 +1341,12 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     /// edge belong to the surrounding production transaction. Keeping this
     /// slice explicit lets the compiled production implementation be compared
     /// to the same vendor responsibility without a shadow register model.
-    pub(crate) fn program_ht_mac_tx_ppdu(&mut self, queue: u8, program: MacHtTxProgram) {
+    pub(crate) fn program_ht_mac_tx_ppdu(
+        &mut self,
+        queue: MacTxQueueIndex,
+        program: MacHtTxProgram,
+    ) {
         let parameters = program.parameters;
-        assert!(
-            queue < ORDINARY_QUEUE_COUNT,
-            "ordinary TX queue is out of range"
-        );
         assert!(
             u32::from(parameters.descriptor_count)
                 <= oer_esp32s31_pac::wifi_mac::ht_descriptor_counts::DESCRIPTOR_COUNT_A_MAX,
@@ -1488,12 +1479,8 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     ///
     /// This is separate from HT because HE publishes two different vector
     /// words and deliberately does not write the non-HE DATA_LENGTH word.
-    fn prepare_he_mac_tx(&mut self, queue: u8, program: MacHeTxProgram) -> bool {
+    fn prepare_he_mac_tx(&mut self, queue: MacTxQueueIndex, program: MacHeTxProgram) -> bool {
         let parameters = program.parameters;
-        assert!(
-            queue < ORDINARY_QUEUE_COUNT,
-            "ordinary TX queue is out of range"
-        );
         assert!(
             parameters.descriptor_count <= 32,
             "the program bounds the count"
@@ -1550,12 +1537,12 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     /// Queue readiness, timeout, EDCA and the final ENABLE|VALID ownership
     /// edge belong to the surrounding production transaction, as for
     /// [`Self::program_ht_mac_tx_ppdu`].
-    pub(crate) fn program_he_mac_tx_ppdu(&mut self, queue: u8, program: MacHeTxProgram) {
+    pub(crate) fn program_he_mac_tx_ppdu(
+        &mut self,
+        queue: MacTxQueueIndex,
+        program: MacHeTxProgram,
+    ) {
         let parameters = program.parameters;
-        assert!(
-            queue < ORDINARY_QUEUE_COUNT,
-            "ordinary TX queue is out of range"
-        );
         assert!(
             parameters.descriptor_count <= 32,
             "the program bounds the count"
@@ -1694,11 +1681,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         );
     }
 
-    pub(crate) fn start_prepared_mac_tx(&mut self, queue: u8) {
-        assert!(
-            queue < ORDINARY_QUEUE_COUNT,
-            "ordinary TX queue is out of range"
-        );
+    pub(crate) fn start_prepared_mac_tx(&mut self, queue: MacTxQueueIndex) {
         oer_riscv::fence();
         // SOURCE: publication prefix of `libpp[hal_mac_tx.o]::hal_mac_txq_enable` offsets 0x00..0x1e, before libpp[lmac.o]::GetAccess. It reads the
         // already prepared CONTROL word and ORs only ENABLE|VALID before
@@ -1711,11 +1694,10 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         oer_riscv::fence();
     }
 
-    pub fn take_mac_tx_completion(&mut self, queue: u8) -> Option<MacTxCompletionObservation> {
-        assert!(
-            queue < ORDINARY_QUEUE_COUNT,
-            "ordinary TX queue is out of range"
-        );
+    pub fn take_mac_tx_completion(
+        &mut self,
+        queue: MacTxQueueIndex,
+    ) -> Option<MacTxCompletionObservation> {
         if !queue::completion_pending(&self.mac.wifi_mac_tx_common, queue) {
             return None;
         }
@@ -1723,35 +1705,34 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         let bank = queue::bank(queue);
         let tx_results = &self.mac.wifi_mac_block_ack;
         let (trigger_based_packet_count, last_tx_was_trigger_based) = match queue {
-            0 => {
+            MacTxQueueIndex::Zero => {
                 let information = tx_results.read_tx_queue_information_q0();
                 (
                     byte(information.trigger_based_packet_count()),
                     information.last_tx_was_trigger_based(),
                 )
             }
-            1 => {
+            MacTxQueueIndex::One => {
                 let information = tx_results.read_tx_queue_information_q1();
                 (
                     byte(information.trigger_based_packet_count()),
                     information.last_tx_was_trigger_based(),
                 )
             }
-            2 => {
+            MacTxQueueIndex::Two => {
                 let information = tx_results.read_tx_queue_information_q2();
                 (
                     byte(information.trigger_based_packet_count()),
                     information.last_tx_was_trigger_based(),
                 )
             }
-            3 => {
+            MacTxQueueIndex::Three => {
                 let information = tx_results.read_tx_queue_information_q3();
                 (
                     byte(information.trigger_based_packet_count()),
                     information.last_tx_was_trigger_based(),
                 )
             }
-            _ => unreachable!("the queue was checked against the ordinary count"),
         };
         let completion = &self.mac.wifi_mac_tx_completion;
         let secondary_trigger_based_packet_count = byte(
@@ -1789,16 +1770,12 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     /// while that completion edge still owns the result registers.
     pub fn take_mac_block_ack_completion(
         &mut self,
-        queue: u8,
+        queue: MacTxQueueIndex,
     ) -> Option<MacHtAmpduCompletionObservation> {
-        assert!(
-            queue < ORDINARY_QUEUE_COUNT,
-            "ordinary TX queue is out of range"
-        );
         if !queue::completion_pending(&self.mac.wifi_mac_tx_common, queue) {
             return None;
         }
-        let block_ack = self.read_tx_block_ack_observation(queue)?;
+        let block_ack = self.read_tx_block_ack_observation(queue.get() as u8)?;
         let tx = self.take_mac_tx_completion(queue)?;
         Some(MacHtAmpduCompletionObservation {
             tx,
@@ -1809,11 +1786,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         })
     }
 
-    pub fn begin_mac_tx_timeout_abort(&mut self, queue: u8) -> bool {
-        assert!(
-            queue < ORDINARY_QUEUE_COUNT,
-            "ordinary TX queue is out of range"
-        );
+    pub fn begin_mac_tx_timeout_abort(&mut self, queue: MacTxQueueIndex) -> bool {
         let common = &mut self.mac.wifi_mac_tx_common;
         if !queue::timeout_pending(common, queue) {
             return false;
@@ -1827,14 +1800,10 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     /// this register owner to be borrowed for another queue operation.
     pub fn with_detached_mac_tx<'registers, R>(
         &'registers mut self,
-        queue: u8,
+        queue: MacTxQueueIndex,
         reason: MacTxDetachReason,
         detached: impl FnOnce(MacTxQueueDetached<'registers>) -> R,
     ) -> MacTxDetachOutcome<R> {
-        assert!(
-            queue < ORDINARY_QUEUE_COUNT,
-            "ordinary TX queue is out of range"
-        );
         let common = &mut self.mac.wifi_mac_tx_common;
         let queue_control = &mut self.mac.wifi_mac_tx_queue_control;
         let descriptor_address_low = queue_control

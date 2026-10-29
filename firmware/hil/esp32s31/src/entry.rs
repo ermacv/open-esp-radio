@@ -240,7 +240,7 @@ fn system_main(
     let Some(interrupts) = Interrupts::take() else {
         fail(fatal::Failure::InterruptTable);
     };
-    oer_espressif_executor::init::<Esp32s31, 0, _, _>(
+    let _timer_ready = oer_espressif_executor::init::<Esp32s31, 0, _, _>(
         oer_espressif_executor::systimer::SystemTimer {
             comparators: timer.comparators,
             counter: timer.counter,

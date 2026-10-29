@@ -23,9 +23,6 @@ pub enum Fault {
     LinePublished {
         executor: u8,
     },
-    InvalidExecutor {
-        executor: u8,
-    },
     UrgentPublished {
         executor: u8,
     },
@@ -34,7 +31,6 @@ pub enum Fault {
     TimerInstalled {
         writer: u8,
     },
-    TimerNotInstalled,
     TimerBinding {
         executor: u8,
         comparator: u8,
@@ -91,9 +87,6 @@ impl Fault {
             Self::LinePublished { executor } => {
                 (FaultReason::LinePublished, [executor.into(), 0, 0, 0])
             }
-            Self::InvalidExecutor { executor } => {
-                (FaultReason::InvalidExecutor, [executor.into(), 0, 0, 0])
-            }
             Self::UrgentPublished { executor } => {
                 (FaultReason::UrgentPublished, [executor.into(), 0, 0, 0])
             }
@@ -102,7 +95,6 @@ impl Fault {
             Self::TimerInstalled { writer } => {
                 (FaultReason::TimerInstalled, [writer.into(), 0, 0, 0])
             }
-            Self::TimerNotInstalled => (FaultReason::TimerNotInstalled, [0; 4]),
             Self::TimerBinding {
                 executor,
                 comparator,

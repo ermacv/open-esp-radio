@@ -260,7 +260,11 @@ requires the open PLL image with the XTAL gate clear
 (`ESP_IDF_4D59230D_S31_MODEM_PLL_GATE`).
 
 Ordinary legacy, HT and HE queue preparation sets CONTROL bit 22. The
-reserved-TXOP-slot adjustment is a known vendor difference, documented in
+queue identity is `MacTxQueueIndex`, a closed four-value domain checked against
+the generated ordinary-queue geometry. Raw input is admitted with `new`;
+fixed identities use `constant`, checked during monomorphization. Bank selection
+and event acknowledgement match that domain exhaustively.
+The reserved-TXOP-slot adjustment is a known vendor difference, documented in
 [the driver](../ieee80211/driver/README.md#tx-control-bit-22)
 (`VENDOR_WIFI_TXOP_DESCRIPTOR_CLASS`).
 FE `+0x8d0[21:20]` remains opaque: its nonzero sample contributes diagnostic

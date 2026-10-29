@@ -29,7 +29,8 @@ impl<const SLOTS: usize> HtAmpduTxStorage<SLOTS> {
         hardware: &mut H,
     ) -> Result<Option<CompletionObservation<HtAmpduTxCompletion>>, HtAmpduTxError> {
         let storage = self.project();
-        let Some(registers) = hardware.take_block_ack_completion(storage.queue.index()) else {
+        let Some(registers) = hardware.take_block_ack_completion(storage.queue.hardware_index())
+        else {
             return Ok(None);
         };
         if *storage.state != TxDmaState::HardwareOwned {
@@ -88,7 +89,7 @@ impl<const SLOTS: usize> HtAmpduTxStorage<SLOTS> {
         hardware: &mut H,
     ) -> Result<Option<CompletionObservation<TxCompletion>>, HtAmpduTxError> {
         let storage = self.project();
-        let Some(registers) = hardware.take_tx_completion(storage.queue.index()) else {
+        let Some(registers) = hardware.take_tx_completion(storage.queue.hardware_index()) else {
             return Ok(None);
         };
         if *storage.state != TxDmaState::HardwareOwned || *storage.count != 1 {
@@ -117,7 +118,7 @@ impl<const SLOTS: usize> HtAmpduTxStorage<SLOTS> {
         if *storage.state != TxDmaState::HardwareOwned || *storage.active != cookie {
             return Err(HtAmpduTxError::Stale);
         }
-        Ok(hardware.begin_tx_timeout_abort(storage.queue.index()))
+        Ok(hardware.begin_tx_timeout_abort(storage.queue.hardware_index()))
     }
 
     /// Permanently quarantine an aggregate whose executor deadline expired

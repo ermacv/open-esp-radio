@@ -644,12 +644,7 @@ impl Radio {
                     observer,
                     pilot,
                 )));
-            crate::hold::observe(
-                Boundary::new(future.as_mut()),
-                &crate::PHY_CLOCK,
-                &metrics,
-            )
-            .await
+            crate::hold::observe(Boundary::new(future.as_mut()), &crate::PHY_CLOCK, &metrics).await
         };
         self.domain = Some(domain);
         let pilot_lost = crate::phy_pilot::end_timing();
@@ -1147,7 +1142,9 @@ impl Radio {
         let request = match request {
             oer_hil_agent::base::Either::First(request) => request,
             oer_hil_agent::base::Either::Second(request) => {
-                return Ok(oer_hil_agent::base::Either::Second(request.serve(&self.health)));
+                return Ok(oer_hil_agent::base::Either::Second(
+                    request.serve(&self.health),
+                ));
             }
         };
         use oer_esp32s31_instrumentation::health::*;
@@ -1224,20 +1221,18 @@ impl Radio {
                             (TrackingOperation::Common, 2),
                             (TrackingOperation::Transmit, 4),
                         ] {
-                            self.health
-                                .push(Record::Tracking(Tracking {
-                                    condition: None,
-                                    operation,
-                                    due: Due::Unknown,
-                                    disposition: if committed & bit != 0 {
-                                        Disposition::Ran
-                                    } else {
-                                        Disposition::Skipped
-                                    },
-                                    at_micros: at,
-                                    committed,
-                                }))
-                                .unwrap_or_else(|fault| crate::health::count_fault(fault));
+                            self.health.push(Record::Tracking(Tracking {
+                                condition: None,
+                                operation,
+                                due: Due::Unknown,
+                                disposition: if committed & bit != 0 {
+                                    Disposition::Ran
+                                } else {
+                                    Disposition::Skipped
+                                },
+                                at_micros: at,
+                                committed,
+                            }));
                         }
                         (Due::Due, Disposition::Ran, committed, false)
                     }
@@ -1246,16 +1241,14 @@ impl Radio {
                         (Due::Unknown, Disposition::Failed, 0, true)
                     }
                 };
-                self.health
-                    .push(Record::Tracking(Tracking {
-                        condition: None,
-                        operation: TrackingOperation::Tick,
-                        due,
-                        disposition,
-                        at_micros: at,
-                        committed,
-                    }))
-                    .unwrap_or_else(|fault| crate::health::count_fault(fault));
+                self.health.push(Record::Tracking(Tracking {
+                    condition: None,
+                    operation: TrackingOperation::Tick,
+                    due,
+                    disposition,
+                    at_micros: at,
+                    committed,
+                }));
                 if let Ok(state) = require_radio(self.domain.as_ref(), self.radio_fault)
                     .attachment()
                     .phy_state()

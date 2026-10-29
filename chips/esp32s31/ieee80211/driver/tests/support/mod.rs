@@ -469,9 +469,10 @@ impl TxHardware for MockMmio {
     fn prepare_bound_legacy_tx(
         &mut self,
         _dma: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
-        queue: u8,
+        queue: oer_esp32s31_hal::types::MacTxQueueIndex,
         program: MacLegacyTxProgram,
     ) -> bool {
+        let queue = queue.get() as u8;
         self.tx_control[usize::from(queue)] = Some(program.control());
         true
     }
@@ -479,9 +480,10 @@ impl TxHardware for MockMmio {
     fn prepare_bound_ht_tx(
         &mut self,
         _dma: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
-        queue: u8,
+        queue: oer_esp32s31_hal::types::MacTxQueueIndex,
         program: MacHtTxProgram,
     ) -> bool {
+        let queue = queue.get() as u8;
         self.tx_control[usize::from(queue)] = Some(program.control());
         true
     }
@@ -489,9 +491,10 @@ impl TxHardware for MockMmio {
     fn prepare_bound_he_tx(
         &mut self,
         _dma: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
-        queue: u8,
+        queue: oer_esp32s31_hal::types::MacTxQueueIndex,
         program: oer_esp32s31_hal::types::MacHeTxProgram,
     ) -> bool {
+        let queue = queue.get() as u8;
         self.tx_control[usize::from(queue)] = Some(program.control());
         true
     }
@@ -499,7 +502,7 @@ impl TxHardware for MockMmio {
     fn start_bound_legacy_tx(
         &mut self,
         _dma: &dyn HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
-        _queue: u8,
+        _queue: oer_esp32s31_hal::types::MacTxQueueIndex,
     ) {
         self.record_fence();
         self.record_fence();
@@ -508,17 +511,22 @@ impl TxHardware for MockMmio {
     fn start_bound_ht_tx(
         &mut self,
         _dma: &dyn HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
-        _queue: u8,
+        _queue: oer_esp32s31_hal::types::MacTxQueueIndex,
     ) {
         self.record_fence();
         self.record_fence();
     }
 
-    fn take_tx_completion(&mut self, queue: u8) -> Option<MacTxCompletionObservation> {
+    fn take_tx_completion(
+        &mut self,
+        queue: oer_esp32s31_hal::types::MacTxQueueIndex,
+    ) -> Option<MacTxCompletionObservation> {
+        let queue = queue.get() as u8;
         self.tx_completions[usize::from(queue)].take()
     }
 
-    fn begin_tx_timeout_abort(&mut self, queue: u8) -> bool {
+    fn begin_tx_timeout_abort(&mut self, queue: oer_esp32s31_hal::types::MacTxQueueIndex) -> bool {
+        let queue = queue.get() as u8;
         if !self.tx_timeout_pending[usize::from(queue)] {
             return false;
         }
@@ -529,11 +537,12 @@ impl TxHardware for MockMmio {
 
     fn with_tx_queue_detached<R>(
         &mut self,
-        queue: u8,
+        queue: oer_esp32s31_hal::types::MacTxQueueIndex,
         expected_descriptor_head: u32,
         reason: MacTxDetachReason,
         detached: impl for<'detached> FnOnce(MacTxQueueDetached<'detached>) -> R,
     ) -> MacTxDetachOutcome<R> {
+        let queue = queue.get() as u8;
         let index = usize::from(queue);
         match reason {
             MacTxDetachReason::Collision => {
@@ -576,7 +585,7 @@ impl TxHardware for MockMmio {
 
     fn take_block_ack_completion(
         &mut self,
-        _queue: u8,
+        _queue: oer_esp32s31_hal::types::MacTxQueueIndex,
     ) -> Option<oer_esp32s31_hal::types::MacHtAmpduCompletionObservation> {
         None
     }

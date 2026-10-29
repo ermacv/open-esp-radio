@@ -608,6 +608,43 @@ pub struct ControllerSchedulerEpoch {
 
 #[cfg(any(target_arch = "riscv32", test))]
 impl ControllerSchedulerEpoch {
+    /// Project the reviewed standalone profile, which always has two raw
+    /// ticks per microsecond. The division is defined for every counted u64.
+    pub fn from_counted_standalone_update(
+        sample: &ControllerTimeSample,
+        before: crate::interrupt::ControllerTimeOverflowEpoch,
+        after: crate::interrupt::ControllerTimeOverflowEpoch,
+    ) -> Option<(Self, u64)> {
+        const SCALE: BluetoothControllerTimeScale =
+            crate::controller_hal::reviewed_standalone_time_scale();
+        const {
+            if SCALE.shift_image() != 0 {
+                panic!("standalone counted time requires the Image2000 scale");
+            }
+        }
+        if before != after {
+            return None;
+        }
+        let ticks = (u64::from(before.0) << u32::BITS) | u64::from(sample.raw_ticks());
+        Some(Self::from_counted_micros(sample, SCALE, ticks / 2))
+    }
+
+    fn from_counted_micros(
+        sample: &ControllerTimeSample,
+        scale: BluetoothControllerTimeScale,
+        micros: u64,
+    ) -> (Self, u64) {
+        let remainder = scale.project_raw_ticks(sample.raw_ticks()).remainder_ticks;
+        (
+            Self {
+                raw_tick_anchor: sample.raw_ticks().wrapping_sub(u32::from(remainder)),
+                micros_anchor: truncate_scheduler_micros(micros),
+                scale,
+            },
+            micros,
+        )
+    }
+
     /// Project a live latch whose complete transaction had the same P3 wrap
     /// epoch at both ends. Unlike signed-delta projection this admits arbitrary
     /// sample gaps, provided P3 acknowledges each hardware wrap.
@@ -629,15 +666,7 @@ impl ControllerSchedulerEpoch {
                 scale,
             },
         )?;
-        let remainder = scale.project_raw_ticks(sample.raw_ticks()).remainder_ticks;
-        Ok(Some((
-            Self {
-                raw_tick_anchor: sample.raw_ticks().wrapping_sub(u32::from(remainder)),
-                micros_anchor: truncate_scheduler_micros(micros),
-                scale,
-            },
-            micros,
-        )))
+        Ok(Some(Self::from_counted_micros(sample, scale, micros)))
     }
 
     /// Establish the source-owned epoch from its first live raw-tick update.

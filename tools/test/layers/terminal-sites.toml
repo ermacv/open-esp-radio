@@ -45,7 +45,6 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 "chips/esp32s31/hal/src/domain/transaction/record.rs:crate::domain::transaction::record::report_fault:retained-code:10:1" = { owner = "chips/esp32s31/hal", classes = ["software-invariant"] }
 "chips/esp32s31/hal/src/domain/transaction/record.rs:crate::domain::transaction::record::report_fault:retained-code:11:1" = { owner = "chips/esp32s31/hal", classes = ["software-invariant"] }
 "chips/esp32s31/hal/src/domain/transaction/record.rs:crate::domain::transaction::record::report_fault:retained-code:12:1" = { owner = "chips/esp32s31/hal", classes = ["software-invariant"] }
-"chips/esp32s31/hal/src/domain/transaction/record.rs:crate::domain::transaction::record::report_fault:retained-code:13:1" = { owner = "chips/esp32s31/hal", classes = ["software-invariant"] }
 "chips/esp32s31/hal/src/domain/transaction/record.rs:crate::domain::transaction::record::report_fault:retained-code:14:1" = { owner = "chips/esp32s31/hal", classes = ["software-invariant"] }
 "chips/esp32s31/hal/src/domain/transaction/record.rs:crate::domain::transaction::record::report_fault:retained-code:15:1" = { owner = "chips/esp32s31/hal", classes = ["software-invariant"] }
 "chips/esp32s31/hal/src/domain/transaction/record.rs:crate::domain::transaction::record::report_fault:retained-code:16:1" = { owner = "chips/esp32s31/hal", classes = ["configuration-boot"] }
@@ -90,7 +89,6 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 "chips/espressif/ieee802154-engine/src/engine/fault.rs:crate::engine::fault::ServiceError:retained-reason:ServiceError::RxAbortState:1" = { owner = "firmware/hil/esp32s31-phy", classes = ["unexpected-hardware"] }
 "chips/espressif/ieee802154-engine/src/engine/fault.rs:crate::engine::fault::ServiceError:retained-reason:ServiceError::TxAbortUnclassified:1" = { owner = "firmware/hil/esp32s31-phy", classes = ["unexpected-hardware"] }
 "chips/espressif/ieee802154-engine/src/engine/fault.rs:crate::engine::fault::ServiceError:retained-reason:ServiceError::FrequencyCode:1" = { owner = "firmware/hil/esp32s31-phy", classes = ["unexpected-hardware"] }
-"chips/espressif/ieee802154-engine/src/engine/fault.rs:crate::engine::fault::ServiceError:retained-reason:ServiceError::FrameMetadata:1" = { owner = "firmware/hil/esp32s31-phy", classes = ["software-invariant"] }
 "chips/espressif/ieee802154-engine/src/engine/fault.rs:crate::engine::fault::ServiceError:retained-reason:ServiceError::Statistics:1" = { owner = "firmware/hil/esp32s31-phy", classes = ["exhaustion"] }
 
 # chips/espressif/staged-bootstrap/src/runtime.rs
@@ -151,12 +149,10 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 # chips/espressif/staged-runtime/src/panic/fault.rs
 "chips/espressif/staged-runtime/src/panic/fault.rs:crate::panic::fault::FaultReason:retained-reason:FaultReason::ExecutorClaimed:1" = { owner = "chips/espressif/staged-runtime", classes = ["software-invariant"] }
 "chips/espressif/staged-runtime/src/panic/fault.rs:crate::panic::fault::FaultReason:retained-reason:FaultReason::LinePublished:1" = { owner = "chips/espressif/staged-runtime", classes = ["software-invariant"] }
-"chips/espressif/staged-runtime/src/panic/fault.rs:crate::panic::fault::FaultReason:retained-reason:FaultReason::InvalidExecutor:1" = { owner = "chips/espressif/staged-runtime", classes = ["software-invariant"] }
 "chips/espressif/staged-runtime/src/panic/fault.rs:crate::panic::fault::FaultReason:retained-reason:FaultReason::UrgentPublished:1" = { owner = "chips/espressif/staged-runtime", classes = ["software-invariant"] }
 "chips/espressif/staged-runtime/src/panic/fault.rs:crate::panic::fault::FaultReason:retained-reason:FaultReason::CounterPublished:1" = { owner = "chips/espressif/staged-runtime", classes = ["software-invariant"] }
 "chips/espressif/staged-runtime/src/panic/fault.rs:crate::panic::fault::FaultReason:retained-reason:FaultReason::CounterLatchStuck:1" = { owner = "chips/espressif/staged-runtime", classes = ["unexpected-hardware"] }
 "chips/espressif/staged-runtime/src/panic/fault.rs:crate::panic::fault::FaultReason:retained-reason:FaultReason::TimerInstalled:1" = { owner = "chips/espressif/staged-runtime", classes = ["software-invariant"] }
-"chips/espressif/staged-runtime/src/panic/fault.rs:crate::panic::fault::FaultReason:retained-reason:FaultReason::TimerNotInstalled:1" = { owner = "chips/espressif/staged-runtime", classes = ["software-invariant"] }
 "chips/espressif/staged-runtime/src/panic/fault.rs:crate::panic::fault::FaultReason:retained-reason:FaultReason::TimerBinding:1" = { owner = "chips/espressif/staged-runtime", classes = ["software-invariant"] }
 "chips/espressif/staged-runtime/src/panic/fault.rs:crate::panic::fault::FaultReason:retained-reason:FaultReason::TimerBankUnavailable:1" = { owner = "chips/espressif/staged-runtime", classes = ["software-invariant"] }
 "chips/espressif/staged-runtime/src/panic/fault.rs:crate::panic::fault::FaultReason:retained-reason:FaultReason::AlarmHart:1" = { owner = "chips/espressif/staged-runtime", classes = ["software-invariant"] }
@@ -176,7 +172,6 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 "chips/espressif/staged-runtime/src/panic/fault.rs:crate::panic::fault::FaultReason:retained-reason:FaultReason::HilConsole:1" = { owner = "chips/espressif/staged-runtime", classes = ["software-invariant"] }
 "chips/espressif/staged-runtime/src/panic/fault.rs:crate::panic::fault::FaultReason:retained-reason:FaultReason::HilCheckpoint:1" = { owner = "chips/espressif/staged-runtime", classes = ["software-invariant"] }
 "chips/espressif/staged-runtime/src/panic/fault.rs:crate::panic::fault::FaultReason:retained-reason:FaultReason::HilRateOverflow:1" = { owner = "chips/espressif/staged-runtime", classes = ["exhaustion"] }
-"chips/espressif/staged-runtime/src/panic/fault.rs:crate::panic::fault::FaultReason:retained-reason:FaultReason::HilHealthCount:1" = { owner = "chips/espressif/staged-runtime", classes = ["exhaustion"] }
 "chips/espressif/staged-runtime/src/panic/fault.rs:crate::panic::fault::FaultReason:retained-reason:FaultReason::RouteWrongClass:1" = { owner = "chips/espressif/staged-runtime", classes = ["configuration-boot"] }
 "chips/espressif/staged-runtime/src/panic/fault.rs:crate::panic::fault::FaultReason:retained-reason:FaultReason::RouteHandlerCellMismatch:1" = { owner = "chips/espressif/staged-runtime", classes = ["configuration-boot"] }
 "chips/espressif/staged-runtime/src/panic/fault.rs:crate::panic::fault::FaultReason:retained-reason:FaultReason::HilRequested:1" = { owner = "chips/espressif/staged-runtime", classes = ["requested-reset"] }
@@ -297,8 +292,6 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 
 # firmware/hil/esp32s31-phy/src/health.rs
 "firmware/hil/esp32s31-phy/src/health.rs:crate::health::cut:terminal-reference:abort:1" = { owner = "firmware/hil/esp32s31-phy", classes = ["rust-panic"] }
-"firmware/hil/esp32s31-phy/src/health.rs:crate::health::count_fault:terminal-entry:count_fault:1" = { owner = "firmware/hil/esp32s31-phy", classes = ["exhaustion"] }
-"firmware/hil/esp32s31-phy/src/health.rs:crate::health::count_fault:terminal-reference:reset_fault:1" = { owner = "firmware/hil/esp32s31-phy", classes = ["exhaustion"] }
 
 # firmware/hil/esp32s31-phy/src/health/startup.rs
 "firmware/hil/esp32s31-phy/src/health/startup.rs:crate::health::startup::dispatch:terminal-reference:reset_request:3" = { owner = "firmware/hil/esp32s31-phy", classes = ["cancellation"] }

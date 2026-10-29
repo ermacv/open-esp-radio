@@ -3,6 +3,7 @@
 //! Logical queue `q` lives in physical bank `3 - q` of the queue-control and
 //! queue-vector arrays; every leaf here takes the logical queue.
 
+use crate::types::MacTxQueueIndex;
 use oer_esp32s31_pac::wifi_mac::{
     AcknowledgeMacTxCompletionConsumed, WifiMacTxCommon, WifiMacTxQueueControl,
     WifiMacTxQueueVector,
@@ -10,34 +11,28 @@ use oer_esp32s31_pac::wifi_mac::{
 use oer_mmio::{Index, Placement};
 
 use super::MacTxProtection;
-use crate::ieee80211::registers::{
-    MacInterface, ORDINARY_QUEUE_COUNT, bits, element, ordinary_bank,
-};
+use crate::ieee80211::registers::{MacInterface, bits};
 
-/// The physical bank of ordinary logical queue `queue`.
+/// The register-array element of an ordinary logical queue.
 #[inline(always)]
-pub(crate) const fn physical_bank(queue: u8) -> usize {
-    assert!(
-        queue < ORDINARY_QUEUE_COUNT,
-        "ordinary TX queue is out of range"
-    );
-    (ORDINARY_QUEUE_COUNT - 1 - queue) as usize
-}
-
-/// The register-array element of ordinary logical queue `queue`.
-#[inline(always)]
-pub(crate) const fn bank(queue: u8) -> Index<4> {
-    match ordinary_bank(queue) {
-        Some(bank) => bank,
-        None => panic!("ordinary TX queue is out of range"),
+pub(crate) const fn bank(queue: MacTxQueueIndex) -> Index<4> {
+    match queue {
+        MacTxQueueIndex::Zero => Index::constant::<3>(),
+        MacTxQueueIndex::One => Index::constant::<2>(),
+        MacTxQueueIndex::Two => Index::constant::<1>(),
+        MacTxQueueIndex::Three => Index::constant::<0>(),
     }
 }
 
-/// The element of the eight-entry HE queue-control array that belongs to
-/// ordinary logical queue `queue`: the upper four entries.
+/// The upper half of the eight-entry HE array holds ordinary queues.
 #[inline(always)]
-pub(crate) const fn he_queue_control(queue: u8) -> Index<8> {
-    element::<8>(4 + physical_bank(queue))
+pub(crate) const fn he_queue_control(queue: MacTxQueueIndex) -> Index<8> {
+    match queue {
+        MacTxQueueIndex::Zero => Index::constant::<7>(),
+        MacTxQueueIndex::One => Index::constant::<6>(),
+        MacTxQueueIndex::Two => Index::constant::<5>(),
+        MacTxQueueIndex::Three => Index::constant::<4>(),
+    }
 }
 
 /// Replace both software request flags while the prepared queue is idle.
@@ -48,7 +43,7 @@ pub(crate) const fn he_queue_control(queue: u8) -> Index<8> {
 #[inline(always)]
 pub(crate) fn configure_protection<P: Placement>(
     control: &mut WifiMacTxQueueControl<P>,
-    queue: u8,
+    queue: MacTxQueueIndex,
     protection: MacTxProtection,
 ) {
     control.modify_protection(bank(queue), |writer| {
@@ -61,7 +56,7 @@ pub(crate) fn configure_protection<P: Placement>(
 #[inline(always)]
 fn set_software_rts<P: Placement>(
     registers: &mut WifiMacTxQueueControl<P>,
-    queue: u8,
+    queue: MacTxQueueIndex,
     enabled: bool,
 ) {
     registers.modify_protection(bank(queue), |writer| {
@@ -82,7 +77,7 @@ fn set_software_rts<P: Placement>(
 pub(crate) fn configure_rts<P: Placement>(
     control: &mut WifiMacTxQueueControl<P>,
     vector: &mut WifiMacTxQueueVector<P>,
-    queue: u8,
+    queue: MacTxQueueIndex,
     enabled: bool,
     threshold_bytes: Option<u16>,
 ) {
@@ -104,7 +99,7 @@ pub(crate) fn configure_rts<P: Placement>(
 /// Complete `hal_he_disable_rts_threshold`; this does not clear software RTS.
 #[inline(always)]
 pub(crate) fn disable_he_rts_threshold<P: Placement>(vector: &mut WifiMacTxQueueVector<P>) {
-    for queue in 0..ORDINARY_QUEUE_COUNT {
+    for queue in MacTxQueueIndex::ALL {
         vector.modify_he_rts_control(bank(queue), |writer| {
             writer.set_he_rts_disabled(true);
         });
@@ -120,64 +115,68 @@ pub(crate) fn set_cca_force<P: Placement>(registers: &mut WifiMacTxCommon<P>, va
 }
 
 #[inline(always)]
-pub(crate) fn completion_pending<P: Placement>(registers: &WifiMacTxCommon<P>, queue: u8) -> bool {
+pub(crate) fn completion_pending<P: Placement>(
+    registers: &WifiMacTxCommon<P>,
+    queue: MacTxQueueIndex,
+) -> bool {
     let state = registers.read_complete_state();
     match queue {
-        0 => state.queue_0(),
-        1 => state.queue_1(),
-        2 => state.queue_2(),
-        3 => state.queue_3(),
-        _ => panic!("ordinary TX queue is out of range"),
+        MacTxQueueIndex::Zero => state.queue_0(),
+        MacTxQueueIndex::One => state.queue_1(),
+        MacTxQueueIndex::Two => state.queue_2(),
+        MacTxQueueIndex::Three => state.queue_3(),
     }
 }
 
 #[inline(always)]
-pub(crate) fn collision_pending<P: Placement>(registers: &WifiMacTxCommon<P>, queue: u8) -> bool {
+pub(crate) fn collision_pending<P: Placement>(
+    registers: &WifiMacTxCommon<P>,
+    queue: MacTxQueueIndex,
+) -> bool {
     let state = registers.read_queue_state();
     match queue {
-        0 => state.collision_queue_0(),
-        1 => state.collision_queue_1(),
-        2 => state.collision_queue_2(),
-        3 => state.collision_queue_3(),
-        _ => panic!("ordinary TX queue is out of range"),
+        MacTxQueueIndex::Zero => state.collision_queue_0(),
+        MacTxQueueIndex::One => state.collision_queue_1(),
+        MacTxQueueIndex::Two => state.collision_queue_2(),
+        MacTxQueueIndex::Three => state.collision_queue_3(),
     }
 }
 
 #[inline(always)]
-pub(crate) fn timeout_pending<P: Placement>(registers: &WifiMacTxCommon<P>, queue: u8) -> bool {
+pub(crate) fn timeout_pending<P: Placement>(
+    registers: &WifiMacTxCommon<P>,
+    queue: MacTxQueueIndex,
+) -> bool {
     let state = registers.read_queue_state();
     match queue {
-        0 => state.timeout_queue_0(),
-        1 => state.timeout_queue_1(),
-        2 => state.timeout_queue_2(),
-        3 => state.timeout_queue_3(),
-        _ => panic!("ordinary TX queue is out of range"),
+        MacTxQueueIndex::Zero => state.timeout_queue_0(),
+        MacTxQueueIndex::One => state.timeout_queue_1(),
+        MacTxQueueIndex::Two => state.timeout_queue_2(),
+        MacTxQueueIndex::Three => state.timeout_queue_3(),
     }
 }
 
 #[inline(always)]
 pub(crate) fn queue_in_trigger_flow<P: Placement>(
     registers: &WifiMacTxCommon<P>,
-    queue: u8,
+    queue: MacTxQueueIndex,
 ) -> bool {
     let state = registers.read_queue_state();
     match queue {
-        0 => state.trigger_flow_queue_0(),
-        1 => state.trigger_flow_queue_1(),
-        2 => state.trigger_flow_queue_2(),
-        3 => state.trigger_flow_queue_3(),
-        _ => panic!("ordinary TX queue is out of range"),
+        MacTxQueueIndex::Zero => state.trigger_flow_queue_0(),
+        MacTxQueueIndex::One => state.trigger_flow_queue_1(),
+        MacTxQueueIndex::Two => state.trigger_flow_queue_2(),
+        MacTxQueueIndex::Three => state.trigger_flow_queue_3(),
     }
 }
 
 /// The completion event of ordinary logical queue `queue`.
-const fn completion_event(queue: u8) -> AcknowledgeMacTxCompletionConsumed {
+const fn completion_event(queue: MacTxQueueIndex) -> AcknowledgeMacTxCompletionConsumed {
     match queue {
-        0 => AcknowledgeMacTxCompletionConsumed::Queue0,
-        1 => AcknowledgeMacTxCompletionConsumed::Queue1,
-        2 => AcknowledgeMacTxCompletionConsumed::Queue2,
-        3 => AcknowledgeMacTxCompletionConsumed::Queue3,
-        _ => panic!("ordinary TX queue is out of range"),
+        MacTxQueueIndex::Zero => AcknowledgeMacTxCompletionConsumed::Queue0,
+        MacTxQueueIndex::One => AcknowledgeMacTxCompletionConsumed::Queue1,
+        MacTxQueueIndex::Two => AcknowledgeMacTxCompletionConsumed::Queue2,
+        MacTxQueueIndex::Three => AcknowledgeMacTxCompletionConsumed::Queue3,
     }
 }
 
@@ -187,60 +186,82 @@ const fn completion_event(queue: u8) -> AcknowledgeMacTxCompletionConsumed {
 /// SOURCE: BLOB_LIBPP_HAL_MAC_TX, PROMOTED_LMAC_TX: the vendor reads
 /// `COMPLETE_CLEAR` and writes it back with the completed queue's bit set.
 #[inline(always)]
-pub(crate) fn acknowledge_completion<P: Placement>(registers: &mut WifiMacTxCommon<P>, queue: u8) {
+pub(crate) fn acknowledge_completion<P: Placement>(
+    registers: &mut WifiMacTxCommon<P>,
+    queue: MacTxQueueIndex,
+) {
     let consumed = completion_event(queue);
     let sampled = registers.sample_acknowledge_mac_tx_completion();
     registers.acknowledge_acknowledge_mac_tx_completion(sampled, Some(consumed));
 }
 
 #[inline(always)]
-pub(crate) fn acknowledge_collision<P: Placement>(registers: &mut WifiMacTxCommon<P>, queue: u8) {
+pub(crate) fn acknowledge_collision<P: Placement>(
+    registers: &mut WifiMacTxCommon<P>,
+    queue: MacTxQueueIndex,
+) {
     match queue {
-        0 => registers.trigger_queue_state_clear_collision_queue_0(),
-        1 => registers.trigger_queue_state_clear_collision_queue_1(),
-        2 => registers.trigger_queue_state_clear_collision_queue_2(),
-        3 => registers.trigger_queue_state_clear_collision_queue_3(),
-        _ => panic!("ordinary TX queue is out of range"),
+        MacTxQueueIndex::Zero => registers.trigger_queue_state_clear_collision_queue_0(),
+        MacTxQueueIndex::One => registers.trigger_queue_state_clear_collision_queue_1(),
+        MacTxQueueIndex::Two => registers.trigger_queue_state_clear_collision_queue_2(),
+        MacTxQueueIndex::Three => registers.trigger_queue_state_clear_collision_queue_3(),
     }
 }
 
 #[inline(always)]
-pub(crate) fn acknowledge_timeout<P: Placement>(registers: &mut WifiMacTxCommon<P>, queue: u8) {
+pub(crate) fn acknowledge_timeout<P: Placement>(
+    registers: &mut WifiMacTxCommon<P>,
+    queue: MacTxQueueIndex,
+) {
     match queue {
-        0 => registers.trigger_queue_state_clear_timeout_queue_0(),
-        1 => registers.trigger_queue_state_clear_timeout_queue_1(),
-        2 => registers.trigger_queue_state_clear_timeout_queue_2(),
-        3 => registers.trigger_queue_state_clear_timeout_queue_3(),
-        _ => panic!("ordinary TX queue is out of range"),
+        MacTxQueueIndex::Zero => registers.trigger_queue_state_clear_timeout_queue_0(),
+        MacTxQueueIndex::One => registers.trigger_queue_state_clear_timeout_queue_1(),
+        MacTxQueueIndex::Two => registers.trigger_queue_state_clear_timeout_queue_2(),
+        MacTxQueueIndex::Three => registers.trigger_queue_state_clear_timeout_queue_3(),
     }
 }
 
 #[inline(always)]
-pub(crate) fn queue_enabled<P: Placement>(registers: &WifiMacTxQueueControl<P>, queue: u8) -> bool {
+pub(crate) fn queue_enabled<P: Placement>(
+    registers: &WifiMacTxQueueControl<P>,
+    queue: MacTxQueueIndex,
+) -> bool {
     registers.read_control_n(bank(queue)).enable()
 }
 
 #[inline(always)]
-pub(crate) fn queue_valid<P: Placement>(registers: &WifiMacTxQueueControl<P>, queue: u8) -> bool {
+pub(crate) fn queue_valid<P: Placement>(
+    registers: &WifiMacTxQueueControl<P>,
+    queue: MacTxQueueIndex,
+) -> bool {
     registers.read_control_n(bank(queue)).valid()
 }
 
 #[inline(always)]
-pub(crate) fn invalidate_queue<P: Placement>(registers: &mut WifiMacTxQueueControl<P>, queue: u8) {
+pub(crate) fn invalidate_queue<P: Placement>(
+    registers: &mut WifiMacTxQueueControl<P>,
+    queue: MacTxQueueIndex,
+) {
     registers.modify_control_n(bank(queue), |writer| {
         writer.set_valid(false);
     });
 }
 
 #[inline(always)]
-pub(crate) fn disable_queue<P: Placement>(registers: &mut WifiMacTxQueueControl<P>, queue: u8) {
+pub(crate) fn disable_queue<P: Placement>(
+    registers: &mut WifiMacTxQueueControl<P>,
+    queue: MacTxQueueIndex,
+) {
     registers.modify_control_n(bank(queue), |writer| {
         writer.set_valid(false).set_enable(false);
     });
 }
 
 #[inline(always)]
-pub(crate) fn publish_queue<P: Placement>(registers: &mut WifiMacTxQueueControl<P>, queue: u8) {
+pub(crate) fn publish_queue<P: Placement>(
+    registers: &mut WifiMacTxQueueControl<P>,
+    queue: MacTxQueueIndex,
+) {
     registers.modify_control_n(bank(queue), |writer| {
         writer.set_valid(true).set_enable(true);
     });
@@ -253,7 +274,7 @@ pub(crate) fn publish_queue<P: Placement>(registers: &mut WifiMacTxQueueControl<
 #[inline(always)]
 pub(crate) fn configure_edca<P: Placement>(
     registers: &mut WifiMacTxQueueControl<P>,
-    queue: u8,
+    queue: MacTxQueueIndex,
     aifsn: u8,
     contention_window: u16,
     interface: MacInterface,

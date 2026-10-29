@@ -31,21 +31,6 @@ const _: () = const {
     }
 };
 
-/// Refused before appending: the exact category count cannot represent a record.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct CountOverflow {
-    pub kind: CountKind,
-    pub count: u16,
-    pub stored: usize,
-}
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum CountKind {
-    Counter,
-    Signal,
-    Tracking,
-    Measurement,
-}
-
 impl Default for Store {
     fn default() -> Self {
         Self::new()
@@ -177,26 +162,15 @@ impl Store {
             self.failed = true;
         }
     }
-    pub fn push(&mut self, record: Record) -> core::result::Result<(), CountOverflow> {
+    pub fn push(&mut self, record: Record) {
         if !matches!(self.state, State::Armed | State::Capturing) {
-            return Ok(());
+            return;
         }
-        let (kind, count) = match record {
-            Record::Counter(_) => (CountKind::Counter, &mut self.counts.counters),
-            Record::Signal(_) => (CountKind::Signal, &mut self.counts.signals),
-            Record::Tracking(_) => (CountKind::Tracking, &mut self.counts.tracking),
-            Record::Measurement(_) => (CountKind::Measurement, &mut self.counts.measurements),
-        };
-        // A full store has the existing counted-loss policy. Otherwise check
-        // the category count before committing either the record or its count.
-        let next = if self.records.is_full() {
-            *count
-        } else {
-            count.checked_add(1).ok_or(CountOverflow {
-                kind,
-                count: *count,
-                stored: self.records.len(),
-            })?
+        let count = match record {
+            Record::Counter(_) => &mut self.counts.counters,
+            Record::Signal(_) => &mut self.counts.signals,
+            Record::Tracking(_) => &mut self.counts.tracking,
+            Record::Measurement(_) => &mut self.counts.measurements,
         };
         if let Some(aggregate) = self.aggregates.get_mut(usize::from(record.kind())) {
             match aggregate.checked_add(1) {
@@ -210,9 +184,12 @@ impl Store {
         if self.records.push(record).is_err() {
             self.dropped = self.dropped.saturating_add(1);
         } else {
-            *count = next;
+            // Induction: begin resets records and counts together; only a
+            // successful append increments one category. Thus each count is
+            // at most records.len() <= MAX_RECORDS <= u16::MAX (const above).
+            // Before this append it was strictly below that bound.
+            *count = count.wrapping_add(1);
         }
-        Ok(())
     }
     /// Call after the already-started operation and RF cleanup have returned, even on failure.
     pub fn finish(&mut self, identity: HealthIdentity, rf_closed: bool) -> Result<HealthFinished> {
@@ -381,7 +358,7 @@ mod tests {
         };
         assert!(store.records(page).is_err());
         for _ in 0..MAX_RECORDS + 1 {
-            store.push(record()).unwrap();
+            store.push(record());
         }
         store
             .window_finished(HealthWindow {
@@ -405,7 +382,7 @@ mod tests {
             store.describe().unwrap().failure,
             Some(oer_hil_protocol::capture::Error::RecordsFull)
         );
-        store.push(record()).unwrap();
+        store.push(record());
         assert_eq!(store.records(page).expect("read").total, MAX_RECORDS as u32);
         assert!(store.records(PageRequest { count: 3, ..page }).is_err());
         assert!(
@@ -433,19 +410,20 @@ mod tests {
         assert!(!result.complete());
     }
     #[test]
-    fn category_overflow_refuses_before_mutating_storage() {
+    fn full_store_keeps_exact_counts_and_preserves_aggregate_saturation() {
         let mut store = Store::new();
         store.begin(config(), 7).unwrap();
-        store.counts.tracking = u16::MAX;
-        assert_eq!(
-            store.push(record()),
-            Err(CountOverflow {
-                kind: CountKind::Tracking,
-                count: u16::MAX,
-                stored: 0
-            })
-        );
-        assert!(store.records.is_empty());
-        assert_eq!(store.counts.tracking, u16::MAX);
+        // Tracking fills the exact-count capacity; rejected history continues
+        // to contribute to the independent aggregate, including saturation.
+        for _ in 0..MAX_RECORDS {
+            store.push(record());
+        }
+        store.aggregates[2] = u32::MAX;
+        store.push(record());
+        assert_eq!(store.counts.tracking as usize, MAX_RECORDS);
+        assert_eq!(store.records.len(), MAX_RECORDS);
+        assert_eq!(store.aggregates[2], u32::MAX);
+        assert!(store.saturated && store.failed);
+        assert_eq!(store.dropped, 1);
     }
 }

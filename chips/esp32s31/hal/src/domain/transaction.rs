@@ -75,7 +75,6 @@ pub enum SarTransferFault {
     ReplyOccupied {
         queued: usize,
     },
-    ResultUnavailable,
     ForeignSignal,
     ForeignReunion {
         expected_owner: usize,

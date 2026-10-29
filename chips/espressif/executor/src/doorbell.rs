@@ -19,6 +19,7 @@
 //! [`DoorbellAcknowledger::acknowledge`], then takes the requests: a ring
 //! after that raises the interrupt again and is not lost.
 
+use crate::SoftwareInterrupt;
 use core::{
     marker::PhantomData,
     sync::atomic::{Ordering, fence},
@@ -113,7 +114,9 @@ impl<B: Binding, const SWI: u8, E: Entry, X: Entry> Doorbell<B, SWI, E, X> {
             if !request_direction(E::CONTEXT, X::CONTEXT) {
                 panic!("a request handler must be above its executor on the same hart");
             }
-            if Member::SOURCE != software_interrupt_source::<PortOf<B>>(SWI) {
+            if Member::SOURCE
+                != software_interrupt_source::<PortOf<B>>(SoftwareInterrupt::constant::<SWI>())
+            {
                 panic!("the member is not the doorbell's software interrupt");
             }
             if !holds(<E::Part as InterruptSources>::SOURCES, Member::SOURCE) {
@@ -161,7 +164,8 @@ pub struct DoorbellAcknowledger<B: Binding, const SWI: u8> {
 }
 
 impl<B: Binding, const SWI: u8> InterruptSource for DoorbellAcknowledger<B, SWI> {
-    const SOURCE: u16 = software_interrupt_source::<PortOf<B>>(SWI);
+    const SOURCE: u16 =
+        software_interrupt_source::<PortOf<B>>(SoftwareInterrupt::constant::<SWI>());
 }
 
 impl<B: Binding, const SWI: u8> DoorbellAcknowledger<B, SWI> {

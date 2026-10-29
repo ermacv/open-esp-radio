@@ -548,7 +548,7 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
             .prepared_ht_submission(cookie, config)?;
         let count = usize::from(storage.as_ref().get_ref().count);
         let publication = dma.publish_retained_chain(count)?;
-        let queue_index = queue.index();
+        let queue_index = queue.hardware_index();
         let program = MacHtTxProgram::new(&publication, prepared.parameters).ok_or(
             HtAmpduTxError::TxProgramUnavailable {
                 format: super::HtAmpduTxFormat::HtAmpdu,
@@ -598,7 +598,7 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
             .prepared_he_submission(cookie, queue, config)?;
         let count = usize::from(storage.as_ref().get_ref().count);
         let publication = dma.publish_retained_chain(count)?;
-        let queue_index = queue.index();
+        let queue_index = queue.hardware_index();
         let program = MacHeTxProgram::new(&publication, prepared.parameters).ok_or(
             HtAmpduTxError::TxProgramUnavailable {
                 format: HtAmpduTxFormat::HeAmpdu,
@@ -675,7 +675,7 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
             if storage.state != TxDmaState::HardwareOwned || storage.active != cookie {
                 return Err(HtAmpduTxError::Stale);
             }
-            storage.queue.index()
+            storage.queue.hardware_index()
         };
         let descriptor_head = self.dma_mut().descriptor_head();
         let outcome = {
@@ -712,7 +712,7 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
             if storage.state != TxDmaState::HardwareOwned || storage.active != cookie {
                 return Err(HtAmpduTxError::Stale);
             }
-            storage.queue.index()
+            storage.queue.hardware_index()
         };
         let descriptor_head = self.dma_mut().descriptor_head();
         let outcome = {
@@ -749,7 +749,7 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
             if storage.state != TxDmaState::Completed || storage.active != cookie {
                 return Err(HtAmpduTxError::Stale);
             }
-            storage.queue.index()
+            storage.queue.hardware_index()
         };
         let descriptor_head = self.dma_mut().descriptor_head();
         let outcome = {

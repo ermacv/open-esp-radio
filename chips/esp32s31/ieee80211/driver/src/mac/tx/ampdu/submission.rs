@@ -90,7 +90,7 @@ impl<const SLOTS: usize> HtAmpduTxStorage<SLOTS> {
         let reservation =
             MacHeTbLinkReservation::for_queue(trigger.tid_limit(), queue.index(), count).ok_or(
                 HtAmpduTxError::InvalidTriggerReservation {
-                    queue: queue.index(),
+                    queue: queue.hardware_index(),
                     subframes: count,
                 },
             )?;
