@@ -438,6 +438,15 @@ release a secondary hart.
   stopped hart's bus transactions after its stall, or one a stand run
   shows, and a revocation of the old owner's accesses.
 
+## Fatal decisions and reset
+
+A **handled error** is a typed outcome for reachable input or a refused
+operation. A **terminal decision** is the image or HAL owner's decision to
+end execution when safe continuation is not established, including after a
+handled error. It does not make that error impossible and does not use
+`panic!`. A **retained record** is diagnostic data for a later boot, not an
+owner, a recovery authority or proof of the physical reset cause.
+
 ## Hardware
 
 - **One root at reset.** The S31 workspace contains no esp-* platform
