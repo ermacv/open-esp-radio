@@ -36,6 +36,14 @@ caller or substituted with a fake port’s address. PHY calibration
 configuration/restore machines and other cross-block calibration operations
 remain here; the no-wait scan does not classify them as atoms.
 
+For BLE, `oer-espressif-bluetooth-engine` supplies the task/interrupt register
+contracts, controller-time contracts, modify/stop progress values and
+non-repeating installation identity. The existing HAL owners implement these
+ports without transferring a P3 writer to P2. HAL retains affine publication
+and release receipts, generative pool/epoch brands, arena projection and DMA
+custody. The execution-lock/modify/stop machines, diagnostic settling,
+request/reply exchange, terminal output release and role workers remain here.
+
 For IEEE 802.15.4, `ieee802154::polled` retains task/IRQ owners with `Silent`
 while exposing finite semantic transactions. `ieee802154::frames` owns the
 permanent DMA static and projects each frame into the typed DMA window.

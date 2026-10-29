@@ -223,6 +223,7 @@ existing local entries.
 | `oer-espressif-modem-clock` | `chips/espressif/modem-clock` |
 | `oer-espressif-radio` | `chips/espressif/radio` |
 | `oer-espressif-phy` | `chips/espressif/phy` |
+| `oer-espressif-bluetooth-engine` | `chips/espressif/bluetooth-engine` |
 | `oer-esp32s31-instrumentation` | `chips/esp32s31/instrumentation` |
 | `oer-esp32s31-instrumentation-hil` | `chips/esp32s31/instrumentation-hil` |
 | `oer-esp32s31-phy-probe` | `chips/esp32s31/phy-probe` |
@@ -913,6 +914,12 @@ its model and conformance case.
   port as a `LeDeviceAddress`, separately from encoded packet bytes. Role
   images contain only hardware scheduler values, SRAM layout, channels and
   execution timing.
+  The family `oer-espressif-bluetooth-engine` declares separate task/interrupt
+  register ports, controller-time ports, modify/stop progress and non-repeating
+  installation identities. HAL implements them with its existing owners and
+  retains affine receipts, arena brands, memory projection and DMA custody.
+  Execution-lock/modify/stop orchestration, diagnostic settling, interrupt
+  exchange, terminal-release policy and hardware workers still reside in HAL.
   HCI is the world boundary. The controller's DTM service owns correlation,
   command credit, pending commands, session leases and retained faulty terminals
   without IO. The LE runtime awaits capacity and terminals and runs the HCI

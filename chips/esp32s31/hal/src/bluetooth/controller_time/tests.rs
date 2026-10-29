@@ -2,9 +2,9 @@ use std::vec::Vec;
 
 use super::{
     BluetoothControllerLatchedTime, BluetoothControllerTimeLatchBeginError,
-    BluetoothControllerTimeLatchControl, BluetoothControllerTimeLatchRequest,
-    BluetoothControllerTimeLatchStep, BluetoothControllerTimeLatchStepError, ControllerTimeLatch,
-    execute_latch_publication, execute_latch_step,
+    BluetoothControllerTimeLatchRequest, BluetoothControllerTimeLatchStep,
+    BluetoothControllerTimeLatchStepError, ControllerTimeLatch, execute_latch_publication,
+    execute_latch_step,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -21,7 +21,8 @@ struct Recorder {
     operations: Vec<Operation>,
 }
 
-impl BluetoothControllerTimeLatchControl for Recorder {
+impl oer_espressif_bluetooth_engine::port::ControllerTimeRegisters for Recorder {
+    type Request = BluetoothControllerTimeLatchRequest;
     fn publish_latch_request(&mut self, _request: BluetoothControllerTimeLatchRequest) {
         self.latch_request_pending = true;
         self.operations.push(Operation::Publish);

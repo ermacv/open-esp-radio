@@ -1,7 +1,7 @@
 //! A finished-list fence belongs to the engine epoch that captured it.
 
-use super::arena::EngineEpoch;
 use crate::bluetooth;
+use oer_espressif_bluetooth_engine::phase::EngineEpoch;
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct EngineFinishedListObservation {
@@ -65,7 +65,7 @@ impl EngineFinishedListObservation {
     pub fn from_lists_for_host_test(lists: &[u8]) -> Option<Self> {
         Some(Self::new(
             bluetooth::BluetoothSchedulerFinishedListObservation::from_lists_for_host_test(lists)?,
-            EngineEpoch(u32::MAX),
+            EngineEpoch::from_sequence(u32::MAX),
         ))
     }
 }

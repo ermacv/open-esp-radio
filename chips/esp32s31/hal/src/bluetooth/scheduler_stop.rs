@@ -5,6 +5,9 @@
 //! idle sample nor this sequence alone releases descriptor/software ownership.
 
 #[cfg(feature = "bluetooth-engine")]
+use oer_espressif_bluetooth_engine::port::SchedulerTaskPort;
+
+#[cfg(feature = "bluetooth-engine")]
 use super::engine::scheduler::interrupt::{
     SchedulerDoorbell, SchedulerInterruptError, SchedulerTaskHalf,
 };
@@ -16,16 +19,7 @@ use core::task::{Context, Poll, ready};
 #[cfg(test)]
 use oer_time::settle::Unsettled;
 
-#[derive(Debug)]
-enum Phase {
-    Initial,
-    InitialReply,
-    MaskReply,
-    Preamble,
-    PreambleReply,
-    Requested,
-    RequestedReply,
-}
+use oer_espressif_bluetooth_engine::phase::StopPhase as Phase;
 
 /// Durable progress of the common scheduler stop transaction, including each
 /// outstanding P3 request. Dropping a poll borrower never resets this state.
@@ -143,7 +137,7 @@ impl<D: SchedulerDoorbell> Control for Hardware<'_, D> {
         busy.is_busy()
     }
     fn confirm_stopped(&mut self, busy: Self::Busy) -> Option<Self::Stopped> {
-        self.task.confirm_scheduler_stopped(busy)
+        self.task.confirm_stopped(busy)
     }
     fn begin_mask(&mut self) -> Result<(), Self::Error> {
         self.interrupts.begin_mask_run(self.bell)
@@ -152,13 +146,13 @@ impl<D: SchedulerDoorbell> Control for Hardware<'_, D> {
         self.interrupts.poll_mask_run(self.bell, cx)
     }
     fn disable_run(&mut self) {
-        self.task.disable_scheduler_run_event();
+        self.task.disable_run_event();
     }
     fn commands_ready(&mut self) -> bool {
-        self.task.scheduler_stop_commands_ready()
+        self.task.commands_ready()
     }
     fn request(&mut self) {
-        self.task.publish_scheduler_lifecycle_request();
+        self.task.request_stop();
     }
 }
 

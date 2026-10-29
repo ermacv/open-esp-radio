@@ -11,11 +11,16 @@
 //! in one critical section with polling loops; here every step is finite,
 //! sequenced through durable P3 replies, and the caller owns the deadline.
 
+#[cfg(feature = "bluetooth-engine")]
+use oer_espressif_bluetooth_engine::port::SchedulerTaskPort;
+
 use crate::bluetooth::registers::{
     BluetoothSchedulerExecutionModifyDisposition, BluetoothSchedulerExecutionModifyPublished,
-    BluetoothSchedulerHardwareListIndex, BluetoothSchedulerInsertionCommand,
-    BluetoothTaskRegisters,
+    BluetoothSchedulerHardwareListIndex,
 };
+
+#[cfg(feature = "bluetooth-engine")]
+use crate::bluetooth::registers::BluetoothTaskRegisters;
 
 #[cfg(feature = "bluetooth-engine")]
 use super::engine::scheduler::interrupt::{
@@ -24,17 +29,7 @@ use super::engine::scheduler::interrupt::{
 #[cfg(test)]
 use oer_time::settle::Unsettled;
 
-#[derive(Debug)]
-enum Phase {
-    /// Before the request: the engines must be idle.
-    Preamble,
-    /// The progress signal may still report a conflict.
-    Progress { selected: bool },
-    /// Waiting for the request while the scheduler is busy.
-    Completion,
-    /// Waiting for the settle signal to leave 9.
-    Settle { selected: bool },
-}
+use oer_espressif_bluetooth_engine::phase::ExecutionModifyPhase as Phase;
 
 /// One execution-modify request of one hardware list and its progress.
 #[derive(Debug)]
@@ -174,7 +169,7 @@ impl<D: SchedulerDoorbell> Control for Hardware<'_, D> {
             .map(|busy| busy.is_busy())
     }
     fn engines_idle(&mut self) -> bool {
-        self.task.scheduler_stop_commands_ready()
+        self.task.commands_ready()
     }
     async fn select_progress(&mut self) -> Result<(), Self::Error> {
         self.interrupts.select_progress(self.bell).await
@@ -185,17 +180,16 @@ impl<D: SchedulerDoorbell> Control for Hardware<'_, D> {
         list_deletion: bool,
     ) -> BluetoothSchedulerExecutionModifyPublished {
         if list_deletion {
-            self.task
-                .publish_scheduler_execution_modify_list_deletion(index)
+            self.task.publish_execution_modify_deletion(index)
         } else {
-            self.task.publish_scheduler_execution_modify(index)
+            self.task.publish_execution_modify(index)
         }
     }
     async fn repeats(&mut self) -> Result<bool, SchedulerInterruptError> {
         self.interrupts.progress(self.bell).await
     }
     fn ready(&mut self) -> bool {
-        self.task.scheduler_execution_modify_ready()
+        self.task.execution_modify_ready()
     }
     async fn select_settle(&mut self) -> Result<(), Self::Error> {
         self.interrupts.select_settle(self.bell).await
@@ -203,13 +197,11 @@ impl<D: SchedulerDoorbell> Control for Hardware<'_, D> {
     async fn settled(&mut self) -> Result<bool, SchedulerInterruptError> {
         self.interrupts.settled(self.bell).await
     }
-    fn clear_start(&mut self, _published: BluetoothSchedulerExecutionModifyPublished) {
-        let _cleared = self
-            .task
-            .clear_scheduler_insertion_command_start(BluetoothSchedulerInsertionCommand::One);
+    fn clear_start(&mut self, published: BluetoothSchedulerExecutionModifyPublished) {
+        self.task.clear_execution_modify(published);
     }
     fn rejected(&mut self) -> bool {
-        self.task.scheduler_execution_modify_rejected()
+        self.task.execution_modify_rejected()
     }
 }
 

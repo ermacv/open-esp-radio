@@ -8,10 +8,12 @@
 //! idle or command zero reports its result. The vendor polls inside one
 //! critical section; here every step is finite, sequenced through durable P3 replies, and the caller owns the deadline.
 
+#[cfg(feature = "bluetooth-engine")]
+use oer_espressif_bluetooth_engine::port::SchedulerTaskPort;
+
 use crate::bluetooth::registers::{
     BluetoothSchedulerExecutionLockDisposition, BluetoothSchedulerExecutionLockPublished,
-    BluetoothSchedulerExecutionLockRequest, BluetoothSchedulerInsertionCommand,
-    BluetoothTaskRegisters,
+    BluetoothSchedulerExecutionLockRequest, BluetoothTaskRegisters,
 };
 
 #[cfg(feature = "bluetooth-engine")]
@@ -87,19 +89,19 @@ impl<D: SchedulerDoorbell> Control for Hardware<'_, D> {
             .map(|busy| busy.is_busy())
     }
     fn engines_idle(&mut self) -> bool {
-        self.task.scheduler_stop_commands_ready()
+        self.task.commands_ready()
     }
     fn publish(
         &mut self,
         request: BluetoothSchedulerExecutionLockRequest,
     ) -> BluetoothSchedulerExecutionLockPublished {
-        self.task.publish_scheduler_execution_lock(request)
+        self.task.publish_execution_lock(request)
     }
     async fn observe(
         &mut self,
     ) -> Result<BluetoothSchedulerExecutionLockDisposition, SchedulerInterruptError> {
         let busy = self.interrupts.busy(self.bell).await?;
-        Ok(self.task.observe_scheduler_execution_lock(busy))
+        Ok(self.task.observe_execution_lock(busy))
     }
 }
 
@@ -128,9 +130,10 @@ pub(crate) fn clear_start(
     task: &mut BluetoothTaskRegisters,
     lock: &mut BluetoothSchedulerExecutionLock,
 ) {
-    if lock.take_published().is_some() {
-        let _cleared =
-            task.clear_scheduler_insertion_command_start(BluetoothSchedulerInsertionCommand::Zero);
+    if let Some(published) = lock.take_published() {
+        oer_espressif_bluetooth_engine::port::SchedulerTaskPort::clear_execution_lock(
+            task, published,
+        );
     }
 }
 
