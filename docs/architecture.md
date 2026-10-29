@@ -134,8 +134,8 @@ software primitive lives in its `cipher`; `BlockKeyUnwrap` feeds each result
 back immediately. The chip composition chooses the engine as a static type.
 The S31 Typical AES engine lives in `chips/esp32s31/crypto`, over the HAL's
 `peripherals::aes` atoms and exclusive crypto clock/reset word. The shared
-`compose::crypto` selects it for HIL wifi-station and supplies it to
-the Wi-Fi facade in `Resources`. The station runner retains the engine from
+`compose::crypto` selects it and supplies it to the Wi-Fi facade in
+`Resources`. The station runner retains the engine from
 construction; images supply no separate engine when starting it. It owns AES by value,
 retains IRQ55 with `Silent`, uses timer-woken completion samples and erases
 the hardware key and intermediates on completion or cancellation. A failed

@@ -1,4 +1,4 @@
-//! The product engine selection supplied to the Wi-Fi facade and AES HIL.
+//! The product key-unwrap engine supplied to the Wi-Fi facade.
 use oer_embassy_time::{EmbassyClock, WaitUntil};
 use oer_esp32s31_hal::peripherals::aes::{AesInterrupt, AesParts, AesRegisters};
 use oer_espressif_interrupt_table::Silent;

@@ -20,8 +20,6 @@ pub enum SystemScenario {
     // empty struct variants keep `deny_unknown_fields` effective.
     /// Bootstrap, PSRAM mapping and runtime startup.
     BootSmoke {},
-    /// Product AES through the public KeyUnwrap API, without a station.
-    AesKeyUnwrap {},
     /// SoC watchdog reset on its exclusive radio-free image.
     Watchdog {},
     /// A host-requested reset retains HilRequested on its exclusive radio-free
@@ -37,8 +35,7 @@ const BOOT_SMOKE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(1
 impl ScenarioFamily for SystemScenario {
     fn validate(&self) -> Result<()> {
         match self {
-            Self::AesKeyUnwrap {}
-            | Self::BootSmoke {}
+            Self::BootSmoke {}
             | Self::Watchdog {}
             | Self::PanicReset {}
             | Self::StandRecovery {} => Ok(()),
@@ -47,7 +44,6 @@ impl ScenarioFamily for SystemScenario {
 
     fn plan(&self) -> Plan {
         Plan::target_only(match self {
-            Self::AesKeyUnwrap {} => ImageClass::AesKeyUnwrap,
             Self::BootSmoke {} => ImageClass::BootSmoke,
             Self::Watchdog {} => ImageClass::SystemWatchdog,
             Self::PanicReset {} => ImageClass::SystemPanicReset,
@@ -69,7 +65,6 @@ impl ScenarioFamily for SystemScenario {
             system::UsbJtagOff::KEY,
         ];
         match self {
-            Self::AesKeyUnwrap {} => &[system::AesKeyUnwrap::KEY, system::AesKeyUnwrapped::KEY],
             Self::BootSmoke {} => &[],
             Self::Watchdog {} => WATCHDOG,
             Self::PanicReset {} => PANIC,
@@ -82,7 +77,7 @@ impl ScenarioFamily for SystemScenario {
         match self {
             Self::Watchdog {} => &[system::UsbJtagOff::KEY],
             Self::PanicReset {} => &[system::PanicHook::KEY, system::UsbJtagOff::KEY],
-            Self::AesKeyUnwrap {} | Self::BootSmoke {} | Self::StandRecovery {} => &[],
+            Self::BootSmoke {} | Self::StandRecovery {} => &[],
         }
     }
 
@@ -90,7 +85,7 @@ impl ScenarioFamily for SystemScenario {
     /// the product's radios.
     fn air_use(&self) -> Vec<AirUse> {
         match self {
-            Self::AesKeyUnwrap {} | Self::Watchdog {} => Vec::new(),
+            Self::Watchdog {} => Vec::new(),
             _ => vec![AirUse::Band2G4],
         }
     }
@@ -102,7 +97,6 @@ impl Workload for SystemScenario {
             Self::BootSmoke {} => context.with_capture(output, |capture| {
                 capture.wait_for_boot_smoke(BOOT_SMOKE_TIMEOUT)
             }),
-            Self::AesKeyUnwrap {} => system::aes::run(output, context),
             Self::Watchdog {} => system::watchdog::run(output, context),
             Self::PanicReset {} => system::panic_reset::run(output, context),
             Self::StandRecovery {} => system::stand_recovery::run(output, context),
@@ -122,7 +116,6 @@ mod tests {
     fn each_workload_implies_its_image_and_needs_no_fixture() {
         for (text, image) in [
             ("kind = 'boot-smoke'", ImageClass::BootSmoke),
-            ("kind = 'aes-key-unwrap'", ImageClass::AesKeyUnwrap),
             ("kind = 'watchdog'", ImageClass::SystemWatchdog),
             ("kind = 'panic-reset'", ImageClass::SystemPanicReset),
             ("kind = 'stand-recovery'", ImageClass::DiagnosticUsbJtagOff),

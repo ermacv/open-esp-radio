@@ -51,11 +51,7 @@ fn migrated_wire() -> Result<String, oer_hil_registry::LockError> {
         .join("\n");
     let mut previous = previous.replace("[modules]\n", "[modules]\ncapture\n");
     previous.push('\n');
-    for message in oer_hil_protocol::capture::MESSAGES.iter().chain(
-        oer_hil_protocol::system::MESSAGES
-            .iter()
-            .filter(|m| m.path.starts_with("system/aes/")),
-    ) {
+    for message in oer_hil_protocol::capture::MESSAGES {
         let kind = match message.kind {
             Kind::Endpoint => "endpoint",
             Kind::Topic => "topic",

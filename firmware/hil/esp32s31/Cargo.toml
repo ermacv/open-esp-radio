@@ -31,7 +31,6 @@ system-panic-reset = [
     "dep:oer-hil-agent",
     "dep:oer-hil-protocol",
 ]
-aes-key-unwrap = ["panic-hook", "dep:oer-hil-protocol", "dep:embassy-sync", "dep:oer-hil-agent", "dep:oer-crypto"]
 wifi-station = [
     "oer-esp32s31-compose/wifi-fault",
     "dep:oer-network-control",
@@ -51,7 +50,6 @@ wifi-station = [
 ]
 
 [target.'cfg(target_arch = "riscv32")'.dependencies]
-oer-crypto = { path = "../../../portable/crypto", optional = true }
 oer-network-control = { path = "../../../protocols/network-control", optional = true }
 oer-ieee80211-control = { path = "../../../protocols/ieee80211/control", optional = true }
 oer-esp32s31-wifi = { path = "../../../chips/esp32s31/wifi", optional = true }

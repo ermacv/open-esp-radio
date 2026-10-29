@@ -324,11 +324,6 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 "firmware/hil/esp32s31-phy/src/transport.rs:crate::transport::receiver_limit:terminal-entry:receiver_limit:1" = { owner = "firmware/hil/esp32s31-phy", classes = ["exhaustion"] }
 "firmware/hil/esp32s31-phy/src/transport.rs:crate::transport::receiver_limit:terminal-reference:reset_fault:1" = { owner = "firmware/hil/esp32s31-phy", classes = ["exhaustion"] }
 
-# firmware/hil/esp32s31/src/aes_key_unwrap.rs
-"firmware/hil/esp32s31/src/aes_key_unwrap.rs:crate::aes_key_unwrap::start:terminal-entry:start:1" = { owner = "firmware/hil/esp32s31", classes = ["configuration-boot"] }
-"firmware/hil/esp32s31/src/aes_key_unwrap.rs:crate::aes_key_unwrap::start:reset-method:reset:1" = { owner = "firmware/hil/esp32s31", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
-"firmware/hil/esp32s31/src/aes_key_unwrap.rs:crate::aes_key_unwrap::start:reset-method:reset:2" = { owner = "firmware/hil/esp32s31", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
-
 # firmware/hil/esp32s31/src/entry.rs
 "firmware/hil/esp32s31/src/entry.rs:crate:terminal-binding:phy_fault_reporter:1" = { owner = "firmware/hil/esp32s31", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
 "firmware/hil/esp32s31/src/entry.rs:crate:terminal-reference:reset:1" = { owner = "firmware/hil/esp32s31", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }

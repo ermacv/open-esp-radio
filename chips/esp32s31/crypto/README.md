@@ -4,10 +4,8 @@
 It drives the sole RFC 3394 machine in `oer-crypto`: submit its owned input,
 wait through an owned timer, then feed back the output or a typed block error.
 The mode machine contains no async code. `compose::crypto::wifi_key_unwrap`
-selects the hardware engine for HIL wifi-station and the radio-free
-`aes-key-unwrap` investigation. The latter sends individual host requests
-through the same public `KeyUnwrap` API and keeps the software reference on
-the host ([workload](../../../tools/hil/family-system/README.md)).
+selects the hardware engine for the Wi-Fi facade. The station runner owns
+the engine from construction and uses it for RSN key-data unwrap operations.
 
 There is no sourced <=20 us completion bound in TRM v0.1 §10.5.3 or the
 pinned ESP-IDF 4d80c1b2 AES HAL. Every block therefore yields before its first

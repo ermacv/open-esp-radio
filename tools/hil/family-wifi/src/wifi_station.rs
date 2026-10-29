@@ -503,10 +503,6 @@ pub fn run(output: &Path, context: &Context<'_>) -> Result<()> {
     );
     context.results.observe("wifi-station-link-events", &links);
     context.results.observe("wifi-station-evidence", &evidence);
-    context.results.observe(
-        "wifi-station-icmp-pacing-start-us",
-        &evidence.pacing_start(),
-    );
     let gates = evaluate(&evidence);
     context.results.observe("wifi-station-gates", &gates);
     for gate in &gates {

@@ -161,11 +161,6 @@ power-on = 1
 
 [hil]
 
-[hil.images.aes-key-unwrap]
-package = "oer-firmware-hil-esp32s31"
-manifest = "firmware/hil/esp32s31/Cargo.toml"
-stack-policy = "firmware/hil/esp32s31/stack.toml"
-
 [hil.images.system-watchdog]
 package = "oer-firmware-hil-esp32s31"
 manifest = "firmware/hil/esp32s31/Cargo.toml"

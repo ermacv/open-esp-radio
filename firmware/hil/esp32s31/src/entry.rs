@@ -2,10 +2,9 @@
     feature = "boot-smoke",
     feature = "system-watchdog",
     feature = "system-panic-reset",
-    feature = "wifi-station",
-    feature = "aes-key-unwrap"
+    feature = "wifi-station"
 )))]
-compile_error!("select boot-smoke, system-watchdog, system-panic-reset, wifi-station or aes-key-unwrap");
+compile_error!("select boot-smoke, system-watchdog, system-panic-reset or wifi-station");
 #[cfg(all(feature = "system-watchdog", feature = "boot-smoke"))]
 compile_error!("system-watchdog requires an exclusive image");
 #[cfg(all(
@@ -53,8 +52,6 @@ use BootSmokeTasks as SingleExecutorTasks;
 use system::console::WatchdogTasks as SingleExecutorTasks;
 #[cfg(feature = "system-panic-reset")]
 use system::panic_reset::PanicResetTasks as SingleExecutorTasks;
-#[cfg(feature = "aes-key-unwrap")]
-use aes_key_unwrap::AesTasks as SingleExecutorTasks;
 
 #[cfg(feature = "wifi-station")]
 mod phy_pilot;
@@ -96,31 +93,24 @@ oer_espressif_staged_runtime::interrupt_table! {
 mod boot_smoke_console;
 #[cfg(feature = "boot-smoke")]
 mod boot_smoke_rearm;
-#[cfg(feature = "aes-key-unwrap")]
-mod aes_key_unwrap;
-#[cfg(all(feature = "aes-key-unwrap", any(feature = "wifi-station", feature = "boot-smoke", feature = "system-watchdog", feature = "system-panic-reset")))]
-compile_error!("aes-key-unwrap requires an exclusive image");
 mod exception;
 mod fatal;
 #[cfg(any(
     feature = "system-watchdog",
     feature = "system-panic-reset",
-    feature = "wifi-station",
-    feature = "aes-key-unwrap"
+    feature = "wifi-station"
 ))]
 mod services;
 #[cfg(any(
     feature = "system-watchdog",
     feature = "system-panic-reset",
-    feature = "wifi-station",
-    feature = "aes-key-unwrap"
+    feature = "wifi-station"
 ))]
 mod system;
 #[cfg(any(
     feature = "system-watchdog",
     feature = "system-panic-reset",
-    feature = "wifi-station",
-    feature = "aes-key-unwrap"
+    feature = "wifi-station"
 ))]
 mod transport;
 mod usb;
@@ -212,13 +202,11 @@ oer_espressif_staged_runtime::entry!(
 fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platform::Port>) -> ! {
     #[cfg(feature = "wifi-station")]
     wifi_station::start(handoff);
-    #[cfg(feature = "aes-key-unwrap")]
-    aes_key_unwrap::start(handoff);
-    #[cfg(not(any(feature = "wifi-station", feature = "aes-key-unwrap")))]
+    #[cfg(not(feature = "wifi-station"))]
     system_main(handoff)
 }
 
-#[cfg(not(any(feature = "wifi-station", feature = "aes-key-unwrap")))]
+#[cfg(not(feature = "wifi-station"))]
 fn system_main(
     handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platform::Port>,
 ) -> ! {

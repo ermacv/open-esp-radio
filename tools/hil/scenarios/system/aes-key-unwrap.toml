@@ -1,8 +1,0 @@
-schema = 5
-id = "aes-key-unwrap"
-description = "Product AES-128 RFC 3394 unwrap: host reference, repeated operations and recovery after integrity refusals, without Wi-Fi"
-role = "investigation"
-tags = ["crypto"]
-
-[system]
-kind = "aes-key-unwrap"

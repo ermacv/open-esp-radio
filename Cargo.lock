@@ -2215,7 +2215,6 @@ dependencies = [
  "embassy-time",
  "embedded-io-async",
  "heapless",
- "oer-crypto",
  "oer-diagnostics",
  "oer-embassy-net",
  "oer-embassy-time",
@@ -2490,11 +2489,9 @@ dependencies = [
 name = "oer-hil-family-system"
 version = "0.1.0"
 dependencies = [
- "oer-crypto",
  "oer-hil-model",
  "oer-hil-protocol",
  "oer-hil-scenario",
- "oer-ieee80211-cipher",
  "oer-lab-board",
  "oer-os-process",
  "serde",

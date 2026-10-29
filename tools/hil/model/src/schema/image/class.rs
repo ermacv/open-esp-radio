@@ -6,8 +6,6 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "kebab-case")]
 pub enum ImageClass {
     SystemWatchdog,
-    /// Radio-free, host-driven product AES key unwrap.
-    AesKeyUnwrap,
     /// Runtime-provisioned personal station with DHCP and ICMP.
     WifiStation,
     /// Public-read calibration diagnostic; no station data service.
@@ -33,8 +31,7 @@ impl ImageClass {
     pub fn build_features(self, network: &str) -> String {
         if matches!(
             self,
-            Self::AesKeyUnwrap
-                | Self::WifiStation
+            Self::WifiStation
                 | Self::SystemWatchdog
                 | Self::SystemPanicReset
                 | Self::DiagnosticUsbJtagOff
@@ -48,12 +45,11 @@ impl ImageClass {
         }
     }
 
-    pub const ALL: [Self; 9] = [
+    pub const ALL: [Self; 8] = [
         Self::DiagnosticPhy,
         Self::DiagnosticRadioHealth,
         Self::DiagnosticLowerMac,
         Self::WifiStation,
-        Self::AesKeyUnwrap,
         Self::SystemWatchdog,
         Self::SystemPanicReset,
         Self::BootSmoke,
@@ -78,7 +74,6 @@ impl ImageClass {
             Self::DiagnosticRadioHealth => "diagnostic-radio-health",
             Self::DiagnosticLowerMac => "diagnostic-lower-mac",
             Self::WifiStation => "wifi-station",
-            Self::AesKeyUnwrap => "aes-key-unwrap",
             Self::SystemWatchdog => "system-watchdog",
             Self::SystemPanicReset => "system-panic-reset",
             Self::BootSmoke => "boot-smoke",
@@ -92,7 +87,6 @@ impl ImageClass {
             Self::DiagnosticRadioHealth => "diagnostic-radio-health",
             Self::DiagnosticLowerMac => "diagnostic-lower-mac",
             Self::WifiStation => "wifi-station",
-            Self::AesKeyUnwrap => "aes-key-unwrap",
             Self::SystemWatchdog => "system-watchdog",
             Self::SystemPanicReset => "system-panic-reset",
             Self::DiagnosticUsbJtagOff => "system-watchdog,usb-jtag-off",

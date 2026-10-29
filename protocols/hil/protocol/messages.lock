@@ -29,8 +29,6 @@ capture/records/read 683fa29e9591b654 endpoint
 capture/refused 4fc5607b58934294 topic
 lifecycle/reset 29c5dbb4127bbf20 endpoint
 lifecycle/reset-accepted 049d48815e37d848 topic
-system/aes/key-unwrap 85f08f4c2e0eb7e2 endpoint
-system/aes/key-unwrapped 6ad8782dbe37aee4 topic
 system/panic-hook 65d7eff2b42a4745 property
 system/usb-jtag-off b73c7c6b99ff8e8b property
 system/usb/disable 0341ab5f7efd972b endpoint
