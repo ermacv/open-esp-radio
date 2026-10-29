@@ -57,11 +57,21 @@ fn run(cli: Cli) -> scenarios::Result<ExitCode> {
             arguments,
         } => {
             let scenario = scenarios::find(&found, &scenario)?;
-            let status = std::process::Command::new(std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into()))
-                .current_dir(&root)
-                .args(["run", "--quiet", "--profile", "tools", "-p", &scenario.package, "--"])
-                .args(arguments)
-                .status()?;
+            let status = std::process::Command::new(
+                std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into()),
+            )
+            .current_dir(&root)
+            .args([
+                "run",
+                "--quiet",
+                "--profile",
+                "tools",
+                "-p",
+                &scenario.package,
+                "--",
+            ])
+            .args(arguments)
+            .status()?;
             Ok(oer_os_process::exit_code(status))
         }
     }

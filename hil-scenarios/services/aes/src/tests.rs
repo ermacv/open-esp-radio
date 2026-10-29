@@ -52,7 +52,10 @@ fn the_handler_unwraps_rfc3394_4_1_and_keeps_its_engine_for_the_next_request() {
     let mut handler = engine();
     for _ in 0..2 {
         assert_eq!(
-            unwrap(&mut handler, "1fa68b0a8112b447aef34bd8fb5a7b829d3e862371d2cfe5"),
+            unwrap(
+                &mut handler,
+                "1fa68b0a8112b447aef34bd8fb5a7b829d3e862371d2cfe5"
+            ),
             Unwrapped::Plaintext(hex("00112233445566778899aabbccddeeff"))
         );
     }
@@ -62,7 +65,10 @@ fn the_handler_unwraps_rfc3394_4_1_and_keeps_its_engine_for_the_next_request() {
 fn refusals_are_typed_answers() {
     let mut handler = engine();
     assert_eq!(
-        unwrap(&mut handler, "1fa68b0a8112b447aef34bd8fb5a7b829d3e862371d2cfe4"),
+        unwrap(
+            &mut handler,
+            "1fa68b0a8112b447aef34bd8fb5a7b829d3e862371d2cfe4"
+        ),
         Unwrapped::Refused(UnwrapError::IntegrityCheckFailed)
     );
     assert_eq!(
@@ -70,7 +76,10 @@ fn refusals_are_typed_answers() {
         Unwrapped::Refused(UnwrapError::InvalidLength)
     );
     assert_eq!(
-        unwrap(&mut handler, "1fa68b0a8112b447aef34bd8fb5a7b829d3e862371d2cf"),
+        unwrap(
+            &mut handler,
+            "1fa68b0a8112b447aef34bd8fb5a7b829d3e862371d2cf"
+        ),
         Unwrapped::Refused(UnwrapError::InvalidLength)
     );
 }
@@ -86,7 +95,10 @@ fn the_service_serves_exactly_its_endpoint() {
 fn every_engine_failure_has_its_own_answer() {
     for (error, expected) in [
         (BlockError::Unavailable, UnwrapError::EngineUnavailable),
-        (BlockError::Timeout { observation: 3 }, UnwrapError::EngineTimeout { observation: 3 }),
+        (
+            BlockError::Timeout { observation: 3 },
+            UnwrapError::EngineTimeout { observation: 3 },
+        ),
         (
             BlockError::InvalidState { observation: 4 },
             UnwrapError::EngineInvalidState { observation: 4 },

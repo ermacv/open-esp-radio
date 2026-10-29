@@ -3,4 +3,3 @@
 # it. Git does not read this file. See CLAUDE.md, "Generated files".
 /chips/*/pac/src/generated.rs
 /chips/*/vendor/facts/**
-/chips/*/vendor/phy-baselines/*/*.json

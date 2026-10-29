@@ -7,7 +7,7 @@ exchanges with the device under test run against the vendor implementation.
 
 ## Build and flash
 
-The peer is a [firmware catalog](../../../tools/hil/run/stand.md#esp-idf-firmware-catalog) entry
+The peer is an ESP-IDF firmware catalog entry (`cargo fw idf list`)
 (`firmware.toml`). It builds against the ESP-IDF revision and ESP32-C5 archives
 pinned in
 [`chips/esp32c5/vendor/artifacts.toml`](../../../chips/esp32c5/vendor/artifacts.toml),
@@ -24,16 +24,7 @@ reproducible build.
 
 The peer is a board of the stand file's pool with the `peer` role
 (`--peer-board ID` names it when there are several). The board is shared with
-other consumers. Before a
-run's first IEEE 802.15.4 peer scenario, `cargo hil run` brings the board up
-to the current catalog build of the scenario's peer image within the run's
-lease, which holds and locks the peer board: the flash operation's catalog
-flash builds the
-image (from the shared ESP-IDF cache, quickly once built) and flashes and
-journals it unless the board's newest recorded flash is that image with the
-same digest, so a fixed peer reaches the board without a manual flash. `doctor` and `fixture check` do not flash: they report
-the other image and who flashed it. A board without a recorded flash is
-accepted; the peer's `@READY` handshake then decides.
+other consumers.
 
 ### USB Serial/JTAG resets
 
@@ -57,16 +48,7 @@ fails the scenario's precondition, pointing here, instead of breaking it
 midway. Firmware is not the cause, so reflashing does not help; power-cycling only the peer's own hub
 port does: `cargo stand board reset esp32c5 --via power`, for a board whose reset ladder has
 `power` on a switchable hub port of the stand file. A lease runs no `uhubctl` itself.
-`cargo hil peer send esp32c5 SYNC` answers `@OK SYNC` once it is back.
-
-A run of `system-watchdog --chip esp32c5` on this board always leaves it
-wedged: the scenario's intentional watchdog reset drops the C5's USB
-30–75 s into the run, and the board comes back half-enumerated as above.
-Until its port is power-cycled, the next peer scenario's restore fails at
-`espflash` ("Failed to connect to the device") or its preflight `SYNC`
-times out. Whoever runs that scenario on the peer board cycles the port
-under the same lease or right after it, before releasing the board to peer
-scenarios.
+The peer answers `SYNC` with `@OK SYNC` once it is back.
 
 ## Line protocol
 

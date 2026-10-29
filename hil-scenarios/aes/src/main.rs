@@ -53,9 +53,16 @@ fn unwrap(cx: &mut Cx<'_>, kek: [u8; 16], wrapped: &[u8]) -> Result<Unwrapped, F
 
 /// RFC 3394 §4.1: 128 bits of key data under a 128-bit KEK.
 fn known_answer(cx: &mut Cx<'_>) -> Result<(), Failure> {
-    let answer = unwrap(cx, reference::RFC3394_4_1_KEK, &reference::RFC3394_4_1_WRAPPED)?;
+    let answer = unwrap(
+        cx,
+        reference::RFC3394_4_1_KEK,
+        &reference::RFC3394_4_1_WRAPPED,
+    )?;
     check(
-        answer == Unwrapped::Plaintext(heapless::Vec::from_slice(&reference::RFC3394_4_1_KEY_DATA).unwrap_or_default()),
+        answer
+            == Unwrapped::Plaintext(
+                heapless::Vec::from_slice(&reference::RFC3394_4_1_KEY_DATA).unwrap_or_default(),
+            ),
         format!("RFC 3394 §4.1 unwrapped to {answer:?}"),
     )
 }
@@ -68,7 +75,10 @@ fn reference_wraps(cx: &mut Cx<'_>) -> Result<(), Failure> {
         let expected = Unwrapped::Plaintext(heapless::Vec::from_slice(&data).unwrap_or_default());
         check(
             answer == expected,
-            format!("case {index}: {} bytes of key data unwrapped to {answer:?}", data.len()),
+            format!(
+                "case {index}: {} bytes of key data unwrapped to {answer:?}",
+                data.len()
+            ),
         )?;
     }
     Ok(())

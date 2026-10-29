@@ -117,12 +117,19 @@ fn missing_messages_are_counted_and_a_reordered_one_fails_the_link() {
     let boot = link.boot(SHORT).unwrap();
     device.sequence = 4;
     device.send(0, Pong(1));
-    assert!(link.take(&boot, |message| message.is::<Pong>(), SHORT).unwrap().is_some());
+    assert!(
+        link.take(&boot, |message| message.is::<Pong>(), SHORT)
+            .unwrap()
+            .is_some()
+    );
     assert_eq!(link.health().missing, 3);
     device.sequence = 2;
     device.send(0, Pong(2));
     let failed = link.take(&boot, |_| false, SHORT);
-    assert!(matches!(failed, Err(CallError::Link(LinkError::Protocol(_)))), "{failed:?}");
+    assert!(
+        matches!(failed, Err(CallError::Link(LinkError::Protocol(_)))),
+        "{failed:?}"
+    );
 }
 
 #[test]

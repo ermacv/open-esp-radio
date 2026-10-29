@@ -62,7 +62,13 @@ impl Device {
     pub fn send<M: Message>(&mut self, request_id: u32, body: M) {
         let frame = self
             .encoder
-            .encode(&Envelope::new(self.boot_id, self.sequence, 0, request_id, body))
+            .encode(&Envelope::new(
+                self.boot_id,
+                self.sequence,
+                0,
+                request_id,
+                body,
+            ))
             .expect("the frame encodes")
             .to_vec();
         self.sequence += 1;

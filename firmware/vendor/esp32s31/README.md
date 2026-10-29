@@ -3,7 +3,7 @@
 ESP-IDF applications that run vendor code on the HIL board, so hardware
 cross-checks compare vendor and production behavior on the same device.
 Each project is an entry of the stand's firmware catalog (its
-`firmware.toml`): `cargo hil firmware build <image>` builds it against the
+`firmware.toml`): `cargo fw idf build <image>` builds it against the
 pinned ESP-IDF and the pinned vendor archives of
 [`artifacts.toml`](../../../chips/esp32s31/vendor/artifacts.toml), with outputs and `build.json` in
 `target/vendor-firmware/esp32s31/<project>/`, and `cargo fw flash

@@ -137,7 +137,7 @@ pub fn current(root: &Path, image: &str) -> Result<idf::Build> {
     let entries = entries(root)?;
     let entry = entry(&entries, image)?;
     idf::current(root, &entry.pins, &entry.project(root))
-        .map_err(|error| format!("{error}; run `cargo hil firmware build {image}`").into())
+        .map_err(|error| format!("{error}; run `cargo fw idf build {image}`").into())
 }
 
 /// The application a built entry provides and its SHA-256.
@@ -345,7 +345,7 @@ mod tests {
         let repository = crate::tests::repository();
         let root = repository.path();
         let entries = entries(&root).unwrap();
-        for image in ["ieee802154-peer", "vendor-calibration"] {
+        for image in ["ieee802154-peer", "phy-tracking-reference"] {
             assert!(entries.iter().any(|entry| entry.image == image), "{image}");
         }
     }

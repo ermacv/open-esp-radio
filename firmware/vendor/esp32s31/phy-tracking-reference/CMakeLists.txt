@@ -1,6 +1,6 @@
 # Vendor link environment of the ESP32-S31 vendor scenarios.
 #
-# Built by `cargo hil firmware build phy-tracking-reference` against the
+# Built by `cargo fw idf build phy-tracking-reference` against the
 # pinned ESP-IDF tree whose PHY, coexistence and Wi-Fi library submodules are
 # replaced by the pinned archives of chips/esp32s31/vendor/artifacts.toml.
 cmake_minimum_required(VERSION 3.22)

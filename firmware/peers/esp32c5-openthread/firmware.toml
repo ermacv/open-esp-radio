@@ -1,4 +1,4 @@
-# Firmware catalog entry: `cargo hil firmware build openthread-peer`.
+# Firmware catalog entry: `cargo fw idf build openthread-peer`.
 # ESP-IDF's OpenThread stack over its IEEE 802.15.4 driver, the Thread
 # reference peer for the device under test's OpenThread radio.
 image = "openthread-peer"

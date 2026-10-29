@@ -1,27 +1,15 @@
 # HIL protocol
 
-`oer-hil-protocol` is the radio-independent message and frame skeleton: keys, `Message`/`Endpoint`, `messages!`, bounded framing, the envelope and optional asynchronous IO. `base` owns discovery, image-key pages, boot/post-mortem evidence, link health and request admission; `lifecycle` owns the optional generic reset exchange; `system` owns image diagnostics and properties, and `telemetry` owns profile messages.
+`oer-hil-protocol` is the radio-independent message and frame skeleton: keys, `Message`/`Endpoint`, `messages!`, bounded framing, the envelope and optional asynchronous IO. `base` owns discovery, image-key pages, boot/post-mortem evidence, link health and request admission; `lifecycle` owns the optional generic reset exchange; `system` holds the stack watermark values other modules carry.
 
 - [Wire contract](wire.md): framing, version checks, discovery and boot identity.
-- [Platform diagnostics](diagnostics.md): watchdog, program-counter profile and stack measurements.
+- [Platform diagnostics](diagnostics.md): requested reset and stack measurements.
 
-Each message's key hashes its path and postcard schema. A semantic change with the same schema requires a new path. `messages!` emits typed endpoints/topics/properties and their compile-time `KEYS`; `registry` additionally exposes descriptors and readable decoders for this crate. `async-io` enables `write_frame`. There are no radio-family features or dependencies.
+Each message's key hashes its path and postcard schema. A semantic change with the same schema requires a new path. `messages!` emits typed endpoints/topics/properties and their compile-time `KEYS`; the calling crate's `descriptors` feature additionally emits its `MESSAGES` descriptors. `async-io` enables `write_frame`. There are no radio-family features or dependencies.
 
-Radio dictionaries are separate host/image crates beside their owners:
+Every message owner keeps its reviewed `messages.lock` and checks it in its own test with `check_lock`: the framing version and exactly one `path key kind` line per descriptor. This crate checks its own lock the same way. Domain crates depend on the framework, never the reverse; the framework knows no other owner's messages.
 
-| Vocabulary | Owner |
-| --- | --- |
-| Wi-Fi station | `protocols/ieee80211/control` |
-| Network sessions and evidence | `protocols/network-control` |
-| Bluetooth | `protocols/bluetooth/control` |
-| Lower-MAC conformance | `protocols/ieee80211/conformance-control` |
-| PHY capture, hold and cache experiment | `chips/esp32s31/phy-probe` |
-| Radio observations | `chips/esp32s31/instrumentation` |
-| Radio-health HIL binding and store | `chips/esp32s31/instrumentation-hil` |
-
-Every message owner keeps its reviewed `messages.lock`; [the host registry](../../../tools/hil/registry/README.md) composes them and checks keys, paths, schemas and lock coverage. Domain crates depend on the framework, never the reverse. The locks describe wire dependencies by path prefix, independently of Rust package paths.
-
-An image's advertised keys come from its mounted [services](../agent/README.md#image-keys). A family requires or forbids keys; unrelated extra keys remain accepted. `system::PanicHook` and `system::UsbJtagOff` describe the installed hook and USB-off variant, respectively. Properties are unit markers and never sent as frames. A refusal is `base::Rejected`; an endpoint has exactly one typed response, which may follow related events.
+An image's advertised keys come from its mounted [services](../agent/README.md#image-keys). A scenario requires the keys of the services it uses; unrelated extra keys remain accepted. Properties are unit markers and never sent as frames. A refusal is `base::Rejected`; an endpoint has exactly one typed response, which may follow related events.
 
 ## Conformance trace header
 

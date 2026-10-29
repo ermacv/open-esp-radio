@@ -13,7 +13,7 @@ dependencies count only where a rule says so.
 ## Roles
 
 `tests/layers.rs` lists the role of every package under `chips/`,
-`protocols/hil/` and `firmware/hil/` and of any `hil` leaf (`ROLES`); a
+`protocols/hil/` and `hil-scenarios/` and of any `hil` leaf (`ROLES`); a
 listed role whose package does not exist yet waits in `AWAITED_ROLES`. Other
 packages follow their root: protocol leaves (`wire`, `cipher`, `port`,
 `model`, `runtime`, otherwise a core; `instrumentation` is an
@@ -39,16 +39,14 @@ other `portable/` support, firmware images and tools.
 | `HilProtocol` | `protocols/hil/protocol` | portable |
 | `HilAgent` | `protocols/hil/agent` | HIL protocol, portable |
 | `HilBinding` | Wi-Fi, network, Bluetooth, conformance, PHY probe and radio-health dictionaries | HIL protocol and agent, facades, observation contracts, shared vocabulary, wire, port, runtime, portable without `portable/time{,-virtual}` |
-| `HilImage` | `firmware/hil/*` | composition, facades, observation contracts, HIL bindings, agent and protocol, platform, platform contracts, portable, Embassy adapters |
+| `HilImage` | `hil-scenarios/images/*` | composition, facades, observation contracts, HIL bindings, agent and protocol, platform, platform contracts, portable, Embassy adapters |
 
 Roles outside this table keep their own rules. The backend rule holds for
 facts, PAC, HAL, drivers, adapters, service and client, platform, platform
 contracts, observation contracts and protocol models: no normal path, direct
 or transitive, reaches a protocol core, runtime or core-side policy. Only
 `Composition` and `Facade` assemble runtimes with backends. The radio
-service reaches no chip adapter by any path. The host HIL families
-(`tools/hil/family-*`), including the PHY comparison family, reach
-no HAL or PAC.
+service reaches no chip adapter by any path.
 
 ## Deviation lists
 
@@ -78,7 +76,7 @@ are outside this rule; it does not inspect third-party dependency closures.
 | --- | --- |
 | `embassy-futures` | All except wire, cipher, core, core-side policy, facts, PAC and HAL |
 | `embassy-sync` | Development only, with the exact normal-edge deviations above |
-| `embassy-time` | `portable/embassy/time`, `firmware/hil/esp32s31` (time ABI check) |
+| `embassy-time` | `portable/embassy/time`, `hil-scenarios/images/esp32s31-rpc` (time ABI check) |
 | `embassy-time-driver` | `chips/espressif/executor` |
 | `embassy-net`, `xarxa`, `xarxa-driver` | `portable/embassy/net`, `firmware/*` |
 | `trouble-host` | `portable/embassy/trouble`, `firmware/*` |

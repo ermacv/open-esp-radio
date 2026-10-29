@@ -13,9 +13,7 @@
 //! each function's normalized instruction list by name. Identical-code-folded
 //! functions, which keep either of their names, are unified through reviewed
 //! aliases; reviewed scheduling ties are listed explicitly. It is the gate for
-//! pure code moves between crates; `cargo fw compare` calls
-//! [`compare_elf`] and `compare images` builds both sides with the HIL image
-//! classes first (`oer_hil_run::image::compare_images`).
+//! pure code moves between crates.
 
 #![forbid(unsafe_code)]
 use std::{

@@ -9,8 +9,7 @@ It is chip knowledge and links no PHY: the radio probe
 (`firmware/probes/esp32s31-radio`, its `calibration_projection`) computes
 production's words from the PHY state and publishes them, the Blobray
 tracking scenario (`tools/vendor/scenario/src/esp32s31`) compares them with the
-pinned vendor code, and the hardware calibration cross-check
-(`tools/hil/family-phy-esp32s31`) compares a board's capture with the vendor's.
+pinned vendor code.
 The crate is `no_std` so the probe images link it.
 
 ## Semantic calibration record

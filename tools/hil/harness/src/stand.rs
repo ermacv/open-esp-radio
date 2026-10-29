@@ -53,7 +53,8 @@ impl Session {
         let access = grant
             .device(&mac)
             .ok_or("the lease holds no access to the board")?;
-        let leased = oer_lab_board::stand::Board::attached(&root, &stand, &board.id)?.lease(access)?;
+        let leased =
+            oer_lab_board::stand::Board::attached(&root, &stand, &board.id)?.lease(access)?;
         write(&root, scenario.image, &bundle, &leased, &request.owner)?;
         let mut port = Port::open(leased.port(), DUT_CONSOLE)?;
         // Every supported chip restarts through its USB Serial/JTAG console.
@@ -84,7 +85,10 @@ fn build(root: &Path, image: &str) -> Result<ImageBundle> {
 
 /// The board `selector` names, or the one board of the image's chip that
 /// may be a device under test.
-fn device_under_test<'a>(stand: &'a Stand, selector: Option<&str>) -> Result<&'a oer_lab_model::Board> {
+fn device_under_test<'a>(
+    stand: &'a Stand,
+    selector: Option<&str>,
+) -> Result<&'a oer_lab_model::Board> {
     if let Some(selector) = selector {
         return stand
             .board(selector)
@@ -97,7 +101,11 @@ fn device_under_test<'a>(stand: &'a Stand, selector: Option<&str>) -> Result<&'a
         .collect::<Vec<_>>();
     match candidates.as_slice() {
         [board] => Ok(board),
-        [] => Err(format!("the stand file has no {} board with the dut role", images::CHIP).into()),
+        [] => Err(format!(
+            "the stand file has no {} board with the dut role",
+            images::CHIP
+        )
+        .into()),
         _ => Err(format!(
             "the stand file has several {} boards with the dut role; name one with --board",
             images::CHIP
@@ -108,7 +116,13 @@ fn device_under_test<'a>(stand: &'a Stand, selector: Option<&str>) -> Result<&'a
 
 /// Write `bundle` into `board` unless its receipt says it runs it, and
 /// journal the write.
-fn write(root: &Path, image: &str, bundle: &ImageBundle, board: &LeasedBoard, owner: &str) -> Result<()> {
+fn write(
+    root: &Path,
+    image: &str,
+    bundle: &ImageBundle,
+    board: &LeasedBoard,
+    owner: &str,
+) -> Result<()> {
     let store = oer_lab_board::image::Store::open()?;
     if board.carries(&store, bundle)?.is_some() {
         eprintln!("hil: the board runs {image} already");

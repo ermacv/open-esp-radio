@@ -3046,14 +3046,14 @@ dependencies = [
  "oer-image-build",
  "oer-image-bundle",
  "oer-image-checks",
+ "oer-image-esp-idf",
  "oer-lab-board",
  "oer-lab-model",
  "oer-lab-router",
  "oer-os-command-tree",
  "oer-trace",
- "serde",
+ "serde_json",
  "tempfile",
- "toml",
 ]
 
 [[package]]

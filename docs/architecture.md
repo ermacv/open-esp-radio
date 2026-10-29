@@ -205,11 +205,11 @@ including aliases, optional entries and target-specific entries:
 
 - `embassy-futures` is allowed except in wire, cipher, protocol cores,
   core-side policy, facts, PAC and HAL roles.
-- `embassy-sync` is development-only. Its four remaining normal edges are
+- `embassy-sync` is development-only. Its two remaining normal edges are
   checked against a shrinking [deviation list](repository-layout.md#known-deviations).
   Transitive uses inside `embassy-net` and `bt-hci` do not admit direct uses.
 - `embassy-time` belongs to `portable/embassy/time` and the Embassy time ABI
-  check in `firmware/hil/esp32s31`; `embassy-time-driver` belongs to
+  check in `hil-scenarios/images/esp32s31-rpc`; `embassy-time-driver` belongs to
   `chips/espressif/executor`.
 - `embassy-net`, `xarxa` and `xarxa-driver` belong to
   `portable/embassy/net` and `firmware/*`; `trouble-host` belongs to

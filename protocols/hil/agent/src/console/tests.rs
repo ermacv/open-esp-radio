@@ -3,13 +3,13 @@ use std::collections::VecDeque;
 use std::rc::Rc;
 use std::vec::Vec;
 
+use crate::test_messages::{Probe, ProbeArmed, ProbeMode};
 use embassy_futures::block_on;
 use embassy_futures::select::{Either, select};
 use oer_hil_protocol::base::{
     BootEvidence, GetBootStatus, GetImageKeys, GetLinkHealth, Hello, ImageKeySet,
     PostMortemCheckpoints, RejectReason, ResetReason, sorted_keys,
 };
-use crate::test_messages::{Probe, ProbeArmed, ProbeMode};
 use oer_hil_protocol::{Envelope, FrameDecoder, Key, WireKind};
 
 use super::*;
@@ -241,10 +241,7 @@ fn hello_leads_the_boot_although_the_image_published_first() {
         |_, _| unreachable!(),
         |host| host.frames().len() == 2,
     );
-    assert_eq!(
-        host.frames(),
-        [(0, 0, Hello::KEY), (0, 1, ProbeArmed::KEY)]
-    );
+    assert_eq!(host.frames(), [(0, 0, Hello::KEY), (0, 1, ProbeArmed::KEY)]);
 }
 
 #[test]
@@ -438,8 +435,7 @@ fn a_control_reply_is_not_written_until_the_entire_frame_and_trailer_reach_the_e
 
     let console = console();
     console.start(BOOT);
-    let sequence =
-        block_on(console.publish_reliably(0, 9, &ProbeArmed(ProbeMode::Complete)));
+    let sequence = block_on(console.publish_reliably(0, 9, &ProbeArmed(ProbeMode::Complete)));
     let message = console.messages.try_receive().expect("queued reply");
     let host = Host::default();
     let gate = Signal::new();

@@ -10,6 +10,7 @@ use std::{process::ExitCode, time::Duration};
 use clap::{CommandFactory as _, Parser, Subcommand};
 mod command;
 mod diagnostics;
+mod idf;
 mod image;
 
 use oer_image_build::probe;
@@ -92,6 +93,20 @@ enum Command {
         #[arg(long)]
         board: String,
     },
+    /// The catalog of tracked ESP-IDF firmware: the stand's peers and the
+    /// vendor references, built against the pinned ESP-IDF.
+    Idf {
+        #[command(subcommand)]
+        command: IdfCommand,
+    },
+}
+
+#[derive(Subcommand)]
+enum IdfCommand {
+    /// Every catalog image: its chip, project and last build.
+    List,
+    /// Build one catalog image and print its digest and file.
+    Build { image: String },
 }
 
 /// `30s`, `2m` or a number of seconds.
@@ -167,6 +182,12 @@ fn main() -> ExitCode {
             Command::Monitor { board } => command::monitor(&root, &board)?,
             Command::Boards => command::list_boards()?,
             Command::PowerCycle { board } => command::power_cycle(&root, &board)?,
+            Command::Idf {
+                command: IdfCommand::List,
+            } => idf::list(&root)?,
+            Command::Idf {
+                command: IdfCommand::Build { image },
+            } => idf::build(&root, &image)?,
         }
         Ok(ExitCode::SUCCESS)
     })();

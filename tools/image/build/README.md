@@ -1,10 +1,11 @@
 # Image pipeline
 
 `oer-image-build` is the one image pipeline of the repository: `build(ImageSpec)
--> ImageBundle`. `cargo fw` ([tools/image/cli](../cli/README.md)) and the HIL image
-classes (`oer-hil-run`, through `cargo hil image build`, the runner and
-`cargo hil images check`) build every image here; nothing else compiles,
-checks or encodes one. Every image builds with the `firmware` profile against
+-> ImageBundle`. `cargo fw` ([tools/image/cli](../cli/README.md)) and the HIL harness
+(`tools/hil/harness`, for a scenario's image) build every image here; nothing
+else compiles, checks or encodes one. `images` resolves an image by its
+directory in `firmware/apps` or `hil-scenarios/images` and gives its spec and
+bundle to both. Every image builds with the `firmware` profile against
 the workspace's one `Cargo.lock` (`--locked`).
 
 ## Code-generation preconditions
@@ -423,8 +424,7 @@ function modulo placement, over the `oer-analysis-elf` symbols and the decoded
 listings of `oer_analysis_riscv_lift::listing`: every address an instruction forms
 becomes symbol+offset, legacy mangling hashes and LLVM clone numbers are
 dropped, identical-code-folded names pair by body, and a `Review` applies
-reviewed aliases and scheduling ties. `cargo fw compare` calls it;
-`compare images` builds both sides first (`oer_hil_run::image::compare_images`).
+reviewed aliases and scheduling ties.
 
 ## Exclusion
 

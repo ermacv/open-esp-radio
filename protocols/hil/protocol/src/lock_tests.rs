@@ -15,7 +15,9 @@ fn a_changed_key_a_missing_line_and_a_duplicate_are_refused() {
     let changed = MESSAGES_LOCK.replace(line, "lifecycle/reset 29c5dbb4127bbf21 endpoint");
     assert_eq!(
         check_lock(&changed, DESCRIPTORS),
-        Err(LockMismatch::Stale("lifecycle/reset 29c5dbb4127bbf21 endpoint"))
+        Err(LockMismatch::Stale(
+            "lifecycle/reset 29c5dbb4127bbf21 endpoint"
+        ))
     );
     let missing = MESSAGES_LOCK.replace(&format!("{line}\n"), "");
     assert_eq!(
@@ -25,5 +27,8 @@ fn a_changed_key_a_missing_line_and_a_duplicate_are_refused() {
     let duplicate = format!("{MESSAGES_LOCK}{line}\n");
     assert!(check_lock(&duplicate, DESCRIPTORS).is_err());
     let framing = MESSAGES_LOCK.replace("framing 2", "framing 3");
-    assert_eq!(check_lock(&framing, DESCRIPTORS), Err(LockMismatch::Framing));
+    assert_eq!(
+        check_lock(&framing, DESCRIPTORS),
+        Err(LockMismatch::Framing)
+    );
 }

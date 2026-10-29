@@ -111,16 +111,40 @@ pub enum LockMismatch<'a> {
     Missing(&'static str),
 }
 
+/// Whether `text` is `value` as 16 lowercase hexadecimal digits, the lock's
+/// spelling of a key.
+#[cfg(feature = "descriptors")]
+fn hex_is(text: &str, value: u64) -> bool {
+    const DIGITS: &[u8; 16] = b"0123456789abcdef";
+    // The most significant digit first: shifts 60, 56, .., 0.
+    let mut shift = 64_u32;
+    text.len() == 16
+        && text.bytes().all(|byte| {
+            shift = shift.saturating_sub(4);
+            value
+                .checked_shr(shift)
+                .and_then(|nibble| usize::try_from(nibble & 0xf).ok())
+                .and_then(|nibble| DIGITS.get(nibble))
+                == Some(&byte)
+        })
+}
+
 /// Check `lock`, an owner's reviewed `messages.lock`, against its
 /// `descriptors`: the framing version and exactly one `path key kind` line
 /// per descriptor. Comment lines and the `[modules]` section are reviewed
 /// text and not compared.
 #[cfg(feature = "descriptors")]
-pub fn check_lock<'a>(lock: &'a str, descriptors: &[&[MessageInfo]]) -> Result<(), LockMismatch<'a>> {
+pub fn check_lock<'a>(
+    lock: &'a str,
+    descriptors: &[&[MessageInfo]],
+) -> Result<(), LockMismatch<'a>> {
     let mut framing = false;
     let mut messages = false;
     let mut listed = 0_usize;
-    for line in lock.lines().filter(|line| !line.is_empty() && !line.starts_with('#')) {
+    for line in lock
+        .lines()
+        .filter(|line| !line.is_empty() && !line.starts_with('#'))
+    {
         if let Some(version) = line.strip_prefix("framing ") {
             if version.parse::<u8>() != Ok(crate::FRAMING_VERSION) {
                 return Err(LockMismatch::Framing);
@@ -148,10 +172,7 @@ pub fn check_lock<'a>(lock: &'a str, descriptors: &[&[MessageInfo]]) -> Result<(
             _ => return Err(LockMismatch::Line(line)),
         };
         let matches = descriptors.iter().copied().flatten().filter(|info| {
-            info.path == path
-                && info.kind == kind
-                && key.len() == 16
-                && u64::from_str_radix(key, 16) == Ok(info.key.to_u64())
+            info.path == path && info.kind == kind && hex_is(key, info.key.to_u64())
         });
         if matches.count() != 1 {
             return Err(LockMismatch::Stale(line));

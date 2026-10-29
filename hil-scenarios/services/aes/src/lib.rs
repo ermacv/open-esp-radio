@@ -31,7 +31,9 @@
 //! [`Request`] and [`Engine`], and the host scenario, which sends them and
 //! checks the answers against its own reference.
 
-use oer_crypto::{Aes128Key, KeyData, KeyUnwrap, KeyUnwrapError, KeyUnwrapRequest, block::BlockError};
+use oer_crypto::{
+    Aes128Key, KeyData, KeyUnwrap, KeyUnwrapError, KeyUnwrapRequest, block::BlockError,
+};
 use postcard_schema::Schema;
 use serde::{Deserialize, Serialize};
 

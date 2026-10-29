@@ -37,12 +37,18 @@ pub enum CallError {
     Rejected(RejectReason),
     /// No response within the timeout. The request may still be running on
     /// the device: its outcome is unconfirmed until a reset ends its boot.
-    Unconfirmed { request_id: u32 },
+    Unconfirmed {
+        request_id: u32,
+    },
     /// The device runs another boot: every operation of the request's boot
     /// ended with it.
-    Rebooted { boot_id: u64 },
+    Rebooted {
+        boot_id: u64,
+    },
     /// The response's payload does not decode as its type.
-    Payload { path: &'static str },
+    Payload {
+        path: &'static str,
+    },
     /// The request does not fit a frame.
     Encode,
     Link(LinkError),
@@ -51,12 +57,22 @@ pub enum CallError {
 impl std::fmt::Display for CallError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Rejected(reason) => write!(formatter, "the device rejected the request: {reason:?}"),
-            Self::Unconfirmed { request_id } => {
-                write!(formatter, "request {request_id} got no response; its outcome is unconfirmed")
+            Self::Rejected(reason) => {
+                write!(formatter, "the device rejected the request: {reason:?}")
             }
-            Self::Rebooted { boot_id } => write!(formatter, "the device rebooted into boot {boot_id:016x}"),
-            Self::Payload { path } => write!(formatter, "{path}: the response does not decode as its type"),
+            Self::Unconfirmed { request_id } => {
+                write!(
+                    formatter,
+                    "request {request_id} got no response; its outcome is unconfirmed"
+                )
+            }
+            Self::Rebooted { boot_id } => {
+                write!(formatter, "the device rebooted into boot {boot_id:016x}")
+            }
+            Self::Payload { path } => write!(
+                formatter,
+                "{path}: the response does not decode as its type"
+            ),
             Self::Encode => formatter.write_str("the request does not fit a frame"),
             Self::Link(error) => error.fmt(formatter),
         }

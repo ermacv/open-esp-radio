@@ -1,12 +1,7 @@
 //! One descriptor plus explicit command, shutdown and cancellation notifications.
 
 use mio::{Events, Interest, Poll, Token, Waker, unix::SourceFd};
-use std::{
-    io,
-    os::fd::AsRawFd,
-    sync::Arc,
-    time::Instant,
-};
+use std::{io, os::fd::AsRawFd, sync::Arc, time::Instant};
 
 const IO: Token = Token(0);
 const CONTROL: Token = Token(1);

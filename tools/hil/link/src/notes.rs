@@ -58,7 +58,8 @@ impl Notes {
 
     fn render(&mut self, line: &[u8]) -> Vec<String> {
         let mut scratch = [0; MAX_PAYLOAD + 7];
-        let error = |kind: String| format!("OER-DIAG-ERROR {kind}: {}", String::from_utf8_lossy(line));
+        let error =
+            |kind: String| format!("OER-DIAG-ERROR {kind}: {}", String::from_utf8_lossy(line));
         match self.stream.line(line, &mut scratch) {
             Ok(Some(Next { gap, record })) => {
                 let mut texts = Vec::new();
@@ -97,7 +98,9 @@ mod tests {
             Ok::<_, ()>(())
         });
         for _ in 0..sequence {
-            console.note(&oer_diagnostics::Note::placement_pass()).unwrap();
+            console
+                .note(&oer_diagnostics::Note::placement_pass())
+                .unwrap();
         }
         let skip = bytes.borrow().len();
         console.note(note).unwrap();
@@ -119,7 +122,10 @@ mod tests {
         }
         assert_eq!(out.len(), 3, "{out:?}");
         assert!(!out[0].starts_with("OER-DIAG-ERROR"), "{out:?}");
-        assert!(out[1].starts_with("OER-DIAG-ERROR loss or reorder"), "{out:?}");
+        assert!(
+            out[1].starts_with("OER-DIAG-ERROR loss or reorder"),
+            "{out:?}"
+        );
         assert!(!out[2].starts_with("OER-DIAG-ERROR"), "{out:?}");
     }
 

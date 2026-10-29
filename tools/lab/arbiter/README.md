@@ -1,8 +1,8 @@
 # HIL stand arbiter
 
-`oer-lab-arbiter` orders access to the HIL stand between every checkout of one
-host user and is the one owner of hardware exclusion. The
-[host guide](../../hil/run/stand.md) describes the commands; this crate owns the queue,
+`oer-lab-arbiter` orders access to the stand between every checkout of one
+host user and is the one owner of hardware exclusion. `cargo stand --help`
+lists the commands; this crate owns the queue,
 leases, claims, owner balances, preemption and maintenance, the lock files,
 the job tickets of deferred `cargo hil` runs and the board journal. It
 actuates no hardware: it reads the stand file through the stand model

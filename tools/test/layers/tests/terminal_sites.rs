@@ -525,8 +525,7 @@ impl<'ast> Visit<'ast> for Scanner<'_> {
         {
             self.add(expr.method.span(), "reset-trigger", &expr.method);
         }
-        if image_file(self.file)
-            && ["unwrap", "expect"].contains(&expr.method.to_string().as_str())
+        if image_file(self.file) && ["unwrap", "expect"].contains(&expr.method.to_string().as_str())
         {
             self.add(expr.method.span(), "panic-method", &expr.method);
         }
@@ -652,7 +651,13 @@ fn image_file(path: &str) -> bool {
 fn scan(root: &Path) -> ScannedSites {
     let root = root.canonicalize().expect("source root");
     let mut files = Vec::new();
-    for directory in ["chips", "firmware", "hil-scenarios", "portable", "protocols"] {
+    for directory in [
+        "chips",
+        "firmware",
+        "hil-scenarios",
+        "portable",
+        "protocols",
+    ] {
         sources(&root.join(directory), &mut files);
     }
     let packages: BTreeSet<_> = files

@@ -15,7 +15,9 @@ fn expected_name(path: &str, executable: bool) -> String {
     let parts = path.split('/').collect::<Vec<_>>();
     let parts = match parts.as_slice() {
         ["firmware", rest @ ..] => [&["oer", "firmware"][..], rest].concat(),
-        ["hil-scenarios", rest @ ..] if executable => [&["oer", "hil", "scenarios"][..], rest].concat(),
+        ["hil-scenarios", rest @ ..] if executable => {
+            [&["oer", "hil", "scenarios"][..], rest].concat()
+        }
         ["tools", rest @ ..] if executable => [&["oer", "tool"][..], rest].concat(),
         [_, rest @ ..] => [&["oer"][..], rest].concat(),
         [] => Vec::new(),
@@ -2103,7 +2105,9 @@ fn external_crate_allowed(path: &str, role: Role, dependency: &str) -> bool {
                 | Role::Protocol(ProtocolRole::Wire | ProtocolRole::Cipher | ProtocolRole::Core)
         ),
         "embassy-sync" => false,
-        "embassy-time" => path == "portable/embassy/time" || path == "hil-scenarios/images/esp32s31-rpc",
+        "embassy-time" => {
+            path == "portable/embassy/time" || path == "hil-scenarios/images/esp32s31-rpc"
+        }
         "embassy-time-driver" => path == "chips/espressif/executor",
         "embassy-net" | "xarxa" | "xarxa-driver" => {
             path == "portable/embassy/net" || path.starts_with("firmware/")

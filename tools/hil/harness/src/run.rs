@@ -118,7 +118,9 @@ pub fn cases(link: &Link, scenario: &Scenario, cases: &[&Case]) -> Vec<Outcome> 
 
 /// The running boot, once its image serves every service of `scenario`.
 fn ready(link: &Link, scenario: &Scenario) -> Result<Boot, String> {
-    let boot = link.boot(HELLO_TIMEOUT).map_err(|error| error.to_string())?;
+    let boot = link
+        .boot(HELLO_TIMEOUT)
+        .map_err(|error| error.to_string())?;
     let served = keys::served(link, &boot).map_err(|error| format!("image keys: {error}"))?;
     let missing = keys::missing(scenario.services, &served);
     if missing.is_empty() {

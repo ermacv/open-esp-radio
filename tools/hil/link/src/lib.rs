@@ -221,8 +221,9 @@ impl Link {
         });
         let stop = Arc::new(AtomicBool::new(false));
         let (outbound, commands) = mpsc::channel();
-        let poll = transport::events::EventPoll::new()
-            .map_err(|error| LinkError::Transport(format!("cannot poll the serial line: {error}")))?;
+        let poll = transport::events::EventPoll::new().map_err(|error| {
+            LinkError::Transport(format!("cannot poll the serial line: {error}"))
+        })?;
         let wake = poll.waker();
         let serial = worker::nonblocking(line)?;
         let worker = {

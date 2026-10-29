@@ -24,7 +24,10 @@ mod tests {
             .chain(<oer_services_aes::Request as Service>::KEYS)
             .copied()
             .collect();
-        assert_eq!(KEYS.keys().iter().copied().collect::<BTreeSet<_>>(), expected);
+        assert_eq!(
+            KEYS.keys().iter().copied().collect::<BTreeSet<_>>(),
+            expected
+        );
         assert!(KEYS.keys().windows(2).all(|pair| pair[0] < pair[1]));
     }
 

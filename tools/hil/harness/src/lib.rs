@@ -107,7 +107,11 @@ impl<'a> Cx<'a> {
     /// payload of another type or another boot refute the case; a request
     /// without a response, a broken link or a cancellation leave it
     /// incomplete.
-    pub fn call<E: Endpoint>(&mut self, request: E, timeout: Duration) -> Result<E::Response, Failure> {
+    pub fn call<E: Endpoint>(
+        &mut self,
+        request: E,
+        timeout: Duration,
+    ) -> Result<E::Response, Failure> {
         self.request(request, timeout).map_err(failure)
     }
 }

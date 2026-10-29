@@ -75,7 +75,10 @@ mod tests {
 
     #[test]
     fn the_reference_wrap_reproduces_the_rfc_vector() {
-        assert_eq!(wrap(&RFC3394_4_1_KEK, &RFC3394_4_1_KEY_DATA), RFC3394_4_1_WRAPPED);
+        assert_eq!(
+            wrap(&RFC3394_4_1_KEK, &RFC3394_4_1_KEY_DATA),
+            RFC3394_4_1_WRAPPED
+        );
     }
 
     #[test]

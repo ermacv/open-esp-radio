@@ -19,10 +19,11 @@ pub struct Scenario {
 
 /// The workspace's `cargo metadata --no-deps`.
 pub fn metadata(root: &Path) -> Result<Value> {
-    let output = std::process::Command::new(std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into()))
-        .current_dir(root)
-        .args(["metadata", "--format-version", "1", "--no-deps", "--locked"])
-        .output()?;
+    let output =
+        std::process::Command::new(std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into()))
+            .current_dir(root)
+            .args(["metadata", "--format-version", "1", "--no-deps", "--locked"])
+            .output()?;
     if !output.status.success() {
         return Err(format!(
             "cargo metadata failed: {}",
@@ -51,7 +52,10 @@ pub fn discover(metadata: &Value) -> Result<Vec<Scenario>> {
         scenarios.push(Scenario {
             name: short.to_owned(),
             package: name.to_owned(),
-            description: package["description"].as_str().unwrap_or_default().to_owned(),
+            description: package["description"]
+                .as_str()
+                .unwrap_or_default()
+                .to_owned(),
         });
     }
     scenarios.sort_by(|a, b| a.name.cmp(&b.name));
@@ -60,10 +64,16 @@ pub fn discover(metadata: &Value) -> Result<Vec<Scenario>> {
 
 /// The scenario called `name`.
 pub fn find<'a>(scenarios: &'a [Scenario], name: &str) -> Result<&'a Scenario> {
-    scenarios.iter().find(|scenario| scenario.name == name).ok_or_else(|| {
-        let names = scenarios.iter().map(|scenario| scenario.name.as_str()).collect::<Vec<_>>();
-        format!("no HIL scenario `{name}`; scenarios: {}", names.join(", ")).into()
-    })
+    scenarios
+        .iter()
+        .find(|scenario| scenario.name == name)
+        .ok_or_else(|| {
+            let names = scenarios
+                .iter()
+                .map(|scenario| scenario.name.as_str())
+                .collect::<Vec<_>>();
+            format!("no HIL scenario `{name}`; scenarios: {}", names.join(", ")).into()
+        })
 }
 
 #[cfg(test)]
@@ -87,9 +97,15 @@ mod tests {
             package("oer-hil-scenarios-aes", Some(true)),
         ]});
         let scenarios = discover(&metadata).unwrap();
-        let names = scenarios.iter().map(|scenario| scenario.name.as_str()).collect::<Vec<_>>();
+        let names = scenarios
+            .iter()
+            .map(|scenario| scenario.name.as_str())
+            .collect::<Vec<_>>();
         assert_eq!(names, ["aes", "zeta"]);
-        assert_eq!(find(&scenarios, "aes").unwrap().package, "oer-hil-scenarios-aes");
+        assert_eq!(
+            find(&scenarios, "aes").unwrap().package,
+            "oer-hil-scenarios-aes"
+        );
         let missing = find(&scenarios, "wifi").unwrap_err().to_string();
         assert!(missing.contains("aes, zeta"), "{missing}");
     }

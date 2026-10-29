@@ -38,7 +38,11 @@ fn directory(root: &Path, image: &str) -> Result<PathBuf> {
     match found.as_slice() {
         [directory] => Ok(directory.clone()),
         [] => Err(format!("no image `{image}` in {}", DIRECTORIES.join(" or ")).into()),
-        _ => Err(format!("image `{image}` is in more than one of {}", DIRECTORIES.join(", ")).into()),
+        _ => Err(format!(
+            "image `{image}` is in more than one of {}",
+            DIRECTORIES.join(", ")
+        )
+        .into()),
     }
 }
 
@@ -131,7 +135,10 @@ mod tests {
         for (image, package) in [
             ("boot-smoke", "oer-firmware-apps-boot-smoke"),
             ("esp32s31-rpc", "oer-hil-scenarios-images-esp32s31-rpc"),
-            ("../probes/esp32s31-radio", "oer-firmware-probes-esp32s31-radio"),
+            (
+                "../probes/esp32s31-radio",
+                "oer-firmware-probes-esp32s31-radio",
+            ),
         ] {
             for enforced in [
                 Enforced::Only([Check::Interrupts].into()),

@@ -1,13 +1,28 @@
 # HIL link
 
-The host/target exchange, console capture and protocol correlation for HIL runs.
+`oer-hil-link` is the host end of one board's serial line: it writes the
+host's frames, decodes the device's, tracks the boot they belong to and
+correlates each request with its response. It knows the protocol's `base`
+module and nothing else; every other message is a header, a key and a payload
+that the caller decodes as the type it expects (`Received::decode`). It
+stores nothing.
 
-## Instrumentation
+| Item | Owns |
+| --- | --- |
+| `Link::start` | The worker thread that owns the serial line the stand opened |
+| `Link::boot` | The running boot: its own Hello, or the answer to `base::GetHello` asked once at half the timeout |
+| `Link::call` | One request and its typed response or `Rejected`; `Unconfirmed` without a response, `Rebooted` when another boot's frame arrives |
+| `Link::take` | A kept message of the boot, such as an event of a request |
+| `Health` | Decoder counters, device messages missing from a boot's sequence, host drops and boots seen |
+| `Link::take_notes` | The device's `OER-DIAG` lines rendered as text; a garbled one stays visible as `OER-DIAG-ERROR` |
 
-`SerialCapture::read_instrumentation` pins the boot, capture identity, epoch
-and expected schema key, then drains generic record and counter pages.
-The pure `instrumentation::Pages` assembler rejects changed identities,
-counts, repeated/skipped pages, incomplete responses and duplicate counter
-ids before accepting a page. A completed drain retains device completeness
-failures; it cannot turn lost history or saturated counts into exact evidence.
-Domain tools decode records only after checking their dictionary schema.
+A frame of boot 0, another framing version or a repeated or reordered device
+sequence fails the link. A late response to an unconfirmed request answers no
+later request. Every wait ends on cancellation.
+
+`test-support` provides a simulated device on a socket pair for other
+packages' tests.
+
+```console
+cargo test -p oer-hil-link
+```

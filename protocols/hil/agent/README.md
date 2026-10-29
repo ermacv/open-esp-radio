@@ -3,7 +3,7 @@
 `oer-hil-agent` holds the HIL target logic that does not
 depend on the chip: the request intake (`base`), console serialization and
 the lifecycle acknowledgement barrier and the reset-retained post-mortem codec. The
-[esp32s31 HIL agent](../../../firmware/hil/esp32s31/README.md) composes these modules with
+[ESP32-S31 RPC image](../../../hil-scenarios/images/esp32s31-rpc/README.md) composes these modules with
 its executor and console. Host tests exercise the same compiled code the
 firmware links.
 
@@ -14,21 +14,24 @@ firmware links.
 ## Image keys
 
 A request service is a `requests!` declaration: its enum decodes the
-endpoints it serves, and its `Service::KEYS` holds each endpoint's key, the key of that
-endpoint's response and the keys of the topics and properties in its
-`publishes [...]` list. `image_keys!` declares an image's `ImageKeySet` from
-the `Base` service (the intake's own module) and the services the image
-mounts. The set is sorted, deduplicated (a response two endpoints share
-counts once) and checked against the wire bound at compile time; the intake
-announces it in `Hello` and pages it out.
+endpoints it serves, its `Service::KEYS` holds each endpoint's key, the key of
+that endpoint's response and the keys of the topics and properties in its
+`publishes [...]` list, and its `Service::REQUESTS` the endpoints' keys.
+`image_keys!` declares an image's `ImageKeySet` from the `Base` service (the
+intake's own module) and the services the image mounts. The set is sorted,
+deduplicated (a response two endpoints share counts once) and checked against
+the wire bound at compile time; two services that serve the same request do
+not compile. The intake announces the set in `Hello` and pages it out.
+
+`service!` declares a service whose every endpoint has a handler: the
+`requests!` enum and keys, a handler trait with one required method per
+endpoint and `serve`, which awaits the handler of a request and publishes its
+response with the request's identity. An image implements the trait; a
+missing or extra method does not compile. A handler that cannot answer still
+returns its endpoint's response type, so every request is answered.
 
 An image component with no requests can implement `Service` for its
-properties alone. The ESP32-S31 image's `PanicHook` service reports
-`system::PanicHook` under the same `panic-hook` configuration as its entry.
-It is independent of the mounted `lifecycle::Request` reset service. The
-image's own `WatchdogRequest` and `UsbRequest` declarations live beside its
-hardware actions; USB pad switching and watchdog fault injection are not
-agent services.
+properties alone.
 
 The optional `lifecycle::Request` service advertises `lifecycle/reset` and
 `lifecycle/reset-accepted`. Discovery, key pages, boot evidence and link
@@ -43,8 +46,8 @@ hardware reset operation.
 Terminal completion waits are bounded to sixteen receivers. Exhaustion returns
 `ReceiverLimit` with the requested sequence, last published position and capacity.
 The image retains this impossible-state fault through its existing fatal record,
-keeps the operation's owners quarantined and resets. It never performs the USB,
-watchdog, panic-injection or radio-release action after a failed barrier.
+keeps the operation's owners quarantined and resets. It never performs the
+requested action after a failed barrier.
 
 `Console::run` returns a `RunFault` owning the endpoint on an invalid read length
 or counter-borrow conflict. `link_health` reports counter-borrow conflicts as a

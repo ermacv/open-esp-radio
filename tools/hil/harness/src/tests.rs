@@ -46,7 +46,12 @@ fn serve(mut device: Device) {
     device.send(0, hello());
     while let Some(request) = device.request() {
         if let Some(GetImageKeys { first }) = request.decode() {
-            let keys = SERVICE.iter().copied().skip(usize::from(first)).take(1).collect();
+            let keys = SERVICE
+                .iter()
+                .copied()
+                .skip(usize::from(first))
+                .take(1)
+                .collect();
             device.send(
                 request.request_id,
                 ImageKeyPage {
@@ -85,13 +90,25 @@ fn cases_pass_fail_and_a_reboot_fails_its_case_but_not_the_next() {
     let (device, link) = Device::new(10);
     let server = thread::spawn(move || serve(device));
     let cases = [
-        Case { name: "answers", run: |cx| ask(7)(cx) },
-        Case { name: "refused", run: |cx| ask(0)(cx) },
-        Case { name: "reboots", run: |cx| ask(2)(cx) },
-        Case { name: "after-reboot", run: |cx| {
-            check(cx.boot().boot_id == 11, "the case runs on the new boot")?;
-            ask(9)(cx)
-        } },
+        Case {
+            name: "answers",
+            run: |cx| ask(7)(cx),
+        },
+        Case {
+            name: "refused",
+            run: |cx| ask(0)(cx),
+        },
+        Case {
+            name: "reboots",
+            run: |cx| ask(2)(cx),
+        },
+        Case {
+            name: "after-reboot",
+            run: |cx| {
+                check(cx.boot().boot_id == 11, "the case runs on the new boot")?;
+                ask(9)(cx)
+            },
+        },
     ];
     let selected = cases.iter().collect::<Vec<_>>();
     let outcomes = run::cases(&link, &SCENARIO, &selected);
@@ -114,12 +131,22 @@ fn an_unconfirmed_request_leaves_the_rest_of_its_boot_incomplete() {
     let (device, link) = Device::new(20);
     let server = thread::spawn(move || serve(device));
     let cases = [
-        Case { name: "silent", run: |cx| ask(1)(cx) },
-        Case { name: "next", run: |cx| ask(7)(cx) },
+        Case {
+            name: "silent",
+            run: |cx| ask(1)(cx),
+        },
+        Case {
+            name: "next",
+            run: |cx| ask(7)(cx),
+        },
     ];
     let selected = cases.iter().collect::<Vec<_>>();
     let outcomes = run::cases(&link, &SCENARIO, &selected);
-    assert_eq!(verdicts(&outcomes), [(Some("silent"), 2), (Some("next"), 2)], "{outcomes:?}");
+    assert_eq!(
+        verdicts(&outcomes),
+        [(Some("silent"), 2), (Some("next"), 2)],
+        "{outcomes:?}"
+    );
     drop(link);
     server.join().unwrap();
 }
@@ -131,7 +158,10 @@ fn an_image_without_the_scenarios_service_runs_no_case() {
         device.send(0, HELLO);
         while device.request().is_some() {}
     });
-    let cases = [Case { name: "answers", run: |cx| ask(7)(cx) }];
+    let cases = [Case {
+        name: "answers",
+        run: |cx| ask(7)(cx),
+    }];
     let selected = cases.iter().collect::<Vec<_>>();
     let outcomes = run::cases(&link, &SCENARIO, &selected);
     assert_eq!(verdicts(&outcomes), [(None, 2)], "{outcomes:?}");
@@ -145,7 +175,10 @@ fn an_image_without_the_scenarios_service_runs_no_case() {
 
 #[test]
 fn a_failure_outranks_an_incomplete_case_and_no_case_is_no_pass() {
-    let outcome = |case, verdict| Outcome { case: Some(case), verdict };
+    let outcome = |case, verdict| Outcome {
+        case: Some(case),
+        verdict,
+    };
     let mut out = Vec::new();
     let verdict = run::report(
         &SCENARIO,
@@ -159,8 +192,15 @@ fn a_failure_outranks_an_incomplete_case_and_no_case_is_no_pass() {
     assert_eq!(verdict, Verdict::Fail("wrong".into()));
     let text = String::from_utf8(out).unwrap();
     assert!(text.contains("case b: fail: wrong"), "{text}");
-    assert!(text.ends_with("scenario test: 1 pass, 1 fail, 1 incomplete\n"), "{text}");
-    let incomplete = run::report(&SCENARIO, &[outcome("a", Verdict::Incomplete("x".into()))], &mut Vec::new());
+    assert!(
+        text.ends_with("scenario test: 1 pass, 1 fail, 1 incomplete\n"),
+        "{text}"
+    );
+    let incomplete = run::report(
+        &SCENARIO,
+        &[outcome("a", Verdict::Incomplete("x".into()))],
+        &mut Vec::new(),
+    );
     assert_eq!(incomplete.exit_code(), 2);
     assert_eq!(run::report(&SCENARIO, &[], &mut Vec::new()).exit_code(), 2);
 }
@@ -168,11 +208,20 @@ fn a_failure_outranks_an_incomplete_case_and_no_case_is_no_pass() {
 #[test]
 fn a_case_filter_keeps_the_scenarios_order_and_refuses_an_unknown_name() {
     let cases = [
-        Case { name: "a", run: |_| Ok(()) },
-        Case { name: "b", run: |_| Ok(()) },
+        Case {
+            name: "a",
+            run: |_| Ok(()),
+        },
+        Case {
+            name: "b",
+            run: |_| Ok(()),
+        },
     ];
     let names = |selected: Vec<&Case>| selected.iter().map(|case| case.name).collect::<Vec<_>>();
     assert_eq!(names(run::select(&cases, &[]).unwrap()), ["a", "b"]);
-    assert_eq!(names(run::select(&cases, &["b".into(), "a".into()]).unwrap()), ["a", "b"]);
+    assert_eq!(
+        names(run::select(&cases, &["b".into(), "a".into()]).unwrap()),
+        ["a", "b"]
+    );
     assert!(run::select(&cases, &["c".into()]).is_err());
 }

@@ -25,7 +25,9 @@ pub(crate) fn nonblocking(line: Box<dyn crate::SerialLine>) -> Result<fs::File, 
     let file = fs::File::from(line.into_owned_descriptor());
     rustix::fs::fcntl_getfl(&file)
         .and_then(|flags| rustix::fs::fcntl_setfl(&file, flags | rustix::fs::OFlags::NONBLOCK))
-        .map_err(|error| LinkError::Transport(format!("cannot make the serial line nonblocking: {error}")))?;
+        .map_err(|error| {
+            LinkError::Transport(format!("cannot make the serial line nonblocking: {error}"))
+        })?;
     Ok(file)
 }
 
@@ -71,13 +73,21 @@ fn serve(
         while let Some(frame) = pending.front() {
             let deadline = *write_deadline.get_or_insert_with(|| Instant::now() + WRITE_DEADLINE);
             if Instant::now() >= deadline {
-                return Err(LinkError::Transport("a frame missed its write deadline".to_owned()));
+                return Err(LinkError::Transport(
+                    "a frame missed its write deadline".to_owned(),
+                ));
             }
             let Some(rest) = frame.get(offset..) else {
-                return Err(LinkError::Transport("the frame writer lost its place".to_owned()));
+                return Err(LinkError::Transport(
+                    "the frame writer lost its place".to_owned(),
+                ));
             };
             match serial.write(rest) {
-                Ok(0) => return Err(LinkError::Transport("the serial writer made no progress".to_owned())),
+                Ok(0) => {
+                    return Err(LinkError::Transport(
+                        "the serial writer made no progress".to_owned(),
+                    ));
+                }
                 Ok(length) => {
                     offset += length;
                     if offset == frame.len() {
@@ -88,7 +98,11 @@ fn serve(
                 }
                 Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => break,
                 Err(error) if error.kind() == std::io::ErrorKind::Interrupted => {}
-                Err(error) => return Err(LinkError::Transport(format!("serial write failed: {error}"))),
+                Err(error) => {
+                    return Err(LinkError::Transport(format!(
+                        "serial write failed: {error}"
+                    )));
+                }
             }
         }
         let wants_write = !pending.is_empty();
