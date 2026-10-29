@@ -144,12 +144,18 @@ async fn reconnect(
             let _refused = commands.disconnect(0xffff).await;
         }
         if stopped.get().is_some() {
-            if !LINK.load(Relaxed) {
-                commands.stop();
-                core::future::pending::<()>().await;
-            }
-            let _ = EmbassyClock.wait_for(Duration::from_millis(10)).await;
-            continue;
+            // Station and NetDevice event producers run before this control
+            // future in the same task; link loss needs no periodic sampler.
+            core::future::poll_fn(|_| {
+                if LINK.load(Relaxed) {
+                    core::task::Poll::Pending
+                } else {
+                    core::task::Poll::Ready(())
+                }
+            })
+            .await;
+            commands.stop();
+            core::future::pending::<()>().await;
         }
         if RETRY.load(Relaxed) && READY.swap(false, Relaxed) {
             if !first {

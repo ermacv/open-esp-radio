@@ -54,6 +54,12 @@ source owner supplies a fresh 256-bit ChaCha20 seed before moving to P2. The
 P1 SNonce stream continues across reconnects. Stream or epoch exhaustion stops
 through the reset path; it never substitutes a nonce or wraps an epoch.
 
+The network bridge waits only on RX, TX publication/capacity and link/epoch
+events. A retained TX does not block RX or link delivery. The IP runner's
+event-driven polls publish changed DHCP leases; probe completion and stop
+link waits share their task's waker and use no 10-ms sampler. Probe deadlines
+and the one-second reconnect policy remain image policy.
+
 Successful Association processing emits `Associated`; the controlled-port
 notice emits `Authorized`. The controller retains the Connect credit returned by its terminal; a
 disconnect enables another attempt with the next epoch. A poisoned or

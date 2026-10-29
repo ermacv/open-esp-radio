@@ -98,6 +98,40 @@ fn running_future<'a>(
         let socket = RawSocket::new(stack, Some(IpVersion::V4), Some(IpProtocol::Icmp))
             .expect("one station ICMP socket");
         let observations = observations();
+        use core::future::Future;
+        let mut running = core::pin::pin!(runner.run());
+        let mut previous = None;
+        // Inspect status after each event-driven IP poll, including a renewed
+        // lease that remains configured. No periodic lease sampler is needed.
+        let stack_task = core::future::poll_fn(|cx| {
+            let result = running.as_mut().poll(cx);
+            let current = if link.load(Relaxed) {
+                iface.dhcpv4_lease()
+            } else {
+                None
+            };
+            if current != previous {
+                if let Some(ref lease) = current {
+                    observations.borrow_mut().lease = lease.router.map(|router| Lease {
+                        address: lease.address.address(),
+                        router,
+                        prefix: lease.address.prefix_len(),
+                    });
+                    crate::transport::CONSOLE.publish(
+                        attempt.request.session_id,
+                        attempt.request.request_id,
+                        &oer_network_control::Ready(oer_network_control::NetworkInfo {
+                            network_interface: oer_network_control::WifiNetworkInterface::Station,
+                            address: lease.address.address().octets(),
+                            prefix_length: lease.address.prefix_len(),
+                            gateway: lease.router.map(|router| router.octets()),
+                        }),
+                    );
+                }
+                previous = current;
+            }
+            result
+        });
         join3(
             async {
                 match bridge(radio, net, observations).await {
@@ -105,43 +139,11 @@ fn running_future<'a>(
                     Err(_) => crate::fail(crate::fatal::Failure::NetworkContextAccessRefused),
                 }
             },
-            runner.run(),
-            join3(
+            stack_task,
+            // Producers run first; probes observe their state in this same task.
+            embassy_futures::join::join(
                 drain(&socket),
                 probes(iface, &socket, &observations, link),
-                async {
-                    let mut previous = None;
-                    loop {
-                        let current = if link.load(Relaxed) {
-                            iface.dhcpv4_lease()
-                        } else {
-                            None
-                        };
-                        if current != previous {
-                            if let Some(ref lease) = current {
-                                observations.borrow_mut().lease =
-                                    lease.router.map(|router| Lease {
-                                        address: lease.address.address(),
-                                        router,
-                                        prefix: lease.address.prefix_len(),
-                                    });
-                                crate::transport::CONSOLE.publish(
-                                    attempt.request.session_id,
-                                    attempt.request.request_id,
-                                    &oer_network_control::Ready(oer_network_control::NetworkInfo {
-                                        network_interface:
-                                            oer_network_control::WifiNetworkInterface::Station,
-                                        address: lease.address.address().octets(),
-                                        prefix_length: lease.address.prefix_len(),
-                                        gateway: lease.router.map(|router| router.octets()),
-                                    }),
-                                );
-                            }
-                            previous = current;
-                        }
-                        let _ = EmbassyClock.wait_for(Duration::from_millis(10)).await;
-                    }
-                },
             ),
         )
         .await;
@@ -204,21 +206,20 @@ async fn probes(
                 }
                 next = next.saturating_add(Duration::from_secs(1));
             }
-            loop {
-                let complete = {
+            let _ = select(
+                core::future::poll_fn(|_| {
                     let o = observations.borrow();
-                    o.station.replies() == u32::from(probe.count)
-                        && o.peer.replies() == u32::from(probe.count)
-                };
-                if complete
-                    || !link.load(Relaxed)
-                    || super::EPOCH.load(Relaxed) != epoch
-                    || EmbassyClock.now() >= deadline
-                {
-                    break;
-                }
-                let _ = EmbassyClock.wait_for(Duration::from_millis(10)).await;
-            }
+                    let complete = o.station.replies() == u32::from(probe.count)
+                        && o.peer.replies() == u32::from(probe.count);
+                    if complete || !link.load(Relaxed) || super::EPOCH.load(Relaxed) != epoch {
+                        core::task::Poll::Ready(())
+                    } else {
+                        core::task::Poll::Pending
+                    }
+                }),
+                EmbassyClock.wait_until(deadline),
+            )
+            .await;
         }
         let result = {
             let o = observations.borrow();
@@ -243,9 +244,9 @@ async fn bridge(
     observations: &RefCell<Observations>,
 ) -> Result<core::convert::Infallible, oer_embassy_net::AccessRefused> {
     let mut bridge = oer_embassy_net::ethernet::EthernetBridge::new(radio, net);
-    loop {
-        bridge.synchronize_link();
-        bridge.drain_receive(
+    core::future::poll_fn(|cx| {
+        bridge.poll(
+            cx,
             |p| {
                 observations.borrow_mut().observe(
                     p.ether_type,
@@ -261,27 +262,17 @@ async fn bridge(
             |_| {
                 super::observation::RX_REFUSED.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
             },
-        );
-        if bridge
-            .transmit_one(|p| {
+            |p| {
                 observations.borrow_mut().observe(
                     p.ether_type,
                     p.payload,
                     true,
                     EmbassyClock.now().as_micros(),
                 );
-            })
-            .await?
-        {
-            yield_now().await;
-        } else {
-            bridge
-                .wait(async {
-                    let _timeout = EmbassyClock.wait_for(Duration::from_millis(1)).await;
-                })
-                .await?;
-        }
-    }
+            },
+        )
+    })
+    .await
 }
 
 fn valid_arp(payload: &[u8]) -> bool {

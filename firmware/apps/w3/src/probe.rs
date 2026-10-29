@@ -27,25 +27,20 @@ impl ProbeCounters {
 
 /// Run the scheduled series while the link remains healthy. Each attempt has
 /// its own send deadline; an error or expiry consumes that probe and the next
-/// one keeps its original schedule. The caller retains the normal completion
+/// one keeps its original schedule. `wait_healthy` waits for that schedule or
+/// a link/health event and returns whether another probe is allowed. The caller
+/// retains the normal completion
 /// and link-loss departure paths, independently of these counters.
 pub async fn run<T: Clock + Timer>(
     clock: &T,
     first: Instant,
     mut send: impl AsyncFnMut(u16) -> Result<(), SendError>,
-    mut healthy: impl FnMut() -> bool,
+    mut wait_healthy: impl AsyncFnMut(Instant) -> bool,
 ) -> ProbeCounters {
     let mut counters = ProbeCounters::default();
     let mut next = first;
     for sequence in 1..=ECHO_COUNT {
-        while clock.now() < next && healthy() {
-            let wake = clock
-                .now()
-                .saturating_add(Duration::from_millis(10))
-                .min(next);
-            clock.wait_until(wake).await;
-        }
-        if !healthy() {
+        if !wait_healthy(next).await {
             break;
         }
         match select(send(sequence), clock.wait_for(Duration::from_millis(250))).await {
@@ -85,7 +80,20 @@ mod tests {
                     _ => Ok(()),
                 }
             },
-            || link.get(),
+            async |next| {
+                let _ = select(
+                    core::future::poll_fn(|_| {
+                        if link.get() {
+                            core::task::Poll::Pending
+                        } else {
+                            core::task::Poll::Ready(())
+                        }
+                    }),
+                    clock.wait_until(next),
+                )
+                .await;
+                link.get()
+            },
         ));
         let mut cx = Context::from_waker(core::task::Waker::noop());
         let start = clock.now();
@@ -133,12 +141,26 @@ mod tests {
                 attempts.set(attempts.get() + 1);
                 Err(SendError::InvalidState)
             },
-            || link.get(),
+            async |next| {
+                let _ = select(
+                    core::future::poll_fn(|_| {
+                        if link.get() {
+                            core::task::Poll::Pending
+                        } else {
+                            core::task::Poll::Ready(())
+                        }
+                    }),
+                    clock.wait_until(next),
+                )
+                .await;
+                link.get()
+            },
         ));
         let mut cx = Context::from_waker(core::task::Waker::noop());
         assert!(future.as_mut().poll(&mut cx).is_pending());
         link.set(false);
-        clock.advance(Duration::from_millis(10)).unwrap();
+        // The station/bridge event polls this same task; no clock tick is needed.
+        assert_eq!(clock.now(), oer_time_virtual::START);
         let core::task::Poll::Ready(counters) = future.as_mut().poll(&mut cx) else {
             panic!("lost link ends probes");
         };

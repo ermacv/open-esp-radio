@@ -431,7 +431,6 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 "firmware/apps/w3/src/network.rs:crate::network::workload_future:panic-method:expect:1" = { owner = "firmware/apps/w3", classes = ["rust-panic"] }
 "firmware/apps/w3/src/network.rs:crate::network::workload_future:panic-method:expect:2" = { owner = "firmware/apps/w3", classes = ["rust-panic"] }
 "firmware/apps/w3/src/network.rs:crate::network::workload_future:panic-method:expect:3" = { owner = "firmware/apps/w3", classes = ["rust-panic"] }
-"firmware/apps/w3/src/network.rs:crate::network::workload_future:panic-macro:unreachable:1" = { owner = "firmware/apps/w3", classes = ["rust-panic"] }
 "firmware/apps/w3/src/network.rs:crate::network::application:panic-method:expect:1" = { owner = "firmware/apps/w3", classes = ["rust-panic"] }
 "firmware/apps/w3/src/network.rs:crate::network::application:panic-method:expect:2" = { owner = "firmware/apps/w3", classes = ["rust-panic"] }
 "firmware/apps/w3/src/network.rs:crate::network::application:panic-method:expect:3" = { owner = "firmware/apps/w3", classes = ["rust-panic"] }

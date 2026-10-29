@@ -112,10 +112,15 @@ fn bridge_keeps_a_refused_packet_until_cancellation_without_spinning_or_releasin
     let mut bridge = EthernetBridge::new(radio, port);
     let mut observed = 0;
     {
-        let mut future = core::pin::pin!(bridge.transmit_one(|view| {
-            assert_eq!(view.payload, &[7; 4]);
-            observed += 1;
-        }));
+        let mut future = core::pin::pin!(core::future::poll_fn(|cx| bridge.poll(
+            cx,
+            |_| {},
+            |_| {},
+            |view| {
+                assert_eq!(view.payload, &[7; 4]);
+                observed += 1;
+            }
+        )));
         let mut cx = Context::from_waker(core::task::Waker::noop());
         for _ in 0..3 {
             assert!(future.as_mut().poll(&mut cx).is_pending());
@@ -124,6 +129,7 @@ fn bridge_keeps_a_refused_packet_until_cancellation_without_spinning_or_releasin
         }
     }
     assert_eq!(observed, 0);
+    drop(bridge);
     assert!(pool.has_available());
     assert!(stack.can_transmit());
 }

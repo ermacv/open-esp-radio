@@ -5,7 +5,8 @@ before the returned P2 driver and P1 station runner start. The facade owns
 backend, arbiter, station and runtime composition. W3 declares interrupt
 bindings, spawns the runners, adapts NetDevice to Embassy networking and runs
 the bounded application and its collectors. Software key unwrap is still
-selected here. The bridge's 1-ms timer and 10-ms application polling remain.
+selected here. Network progress uses RX, TX-credit and link/epoch events;
+the bridge has no periodic timer or application-state sampler.
 
 
 The build selects the configured composition only when all five stand
@@ -30,13 +31,19 @@ checks each adjacent outgoing request against the 750–1250 ms cadence window.
 The bridge checks the owned endpoint's RX publisher readiness before removing
 an RX input. Each turn drains ready RX frames up to the RX input
 queue capacity and advances TX owners up to the TX input queue capacity, then
-yields. Both output readiness checks precede their input dequeue, so a full
-output retains the source owner. RX pool exhaustion waits for capacity while
+yields. RX output readiness precedes input dequeue. A full TX output retains
+the packet and its software credit in the bridge. RX pool exhaustion waits for capacity while
 TX remains eligible to return those same pool owners. After a productive
-bounded step the bridge yields; idle waits use readiness wakes and the
-existing one-millisecond link timer. The synchronous drain step stays out of
-the generated poll frame with `#[inline(never)]`; the loop has one await.
+bounded step the bridge yields; idle waits register RX, TX publication/capacity
+and link/epoch wakes. The synchronous drain step stays out of
+the generated poll frame with `#[inline(never)]`; the runner has one await.
 The packet ownership and copy boundaries are unchanged.
+
+The station, network and application share one task waker. Network producers
+are polled before application predicates, so link, DHCP and probe completion
+advance on their events. Application timeouts and the six-second beacon-loss
+deadline remain explicit timers. Probe cadence uses that same event/deadline
+health wait, without an intermediate link sampler.
 
 A local probe socket error or its 250 ms send deadline consumes that probe
 and is counted separately, without marking the link failed or ending the

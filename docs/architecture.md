@@ -137,6 +137,10 @@ and key-unwrap engine and spawn the returned runners.
 The neutral `oer-network::NetDevice` transfers Ethernet owners and publishes
 the link epoch. `portable/embassy/net` maps it to the IP stack, retaining a
 refused TX owner. Neither contract exposes a stack packet or Wi-Fi core type.
+The network bridges advance only on RX, TX publication/capacity and link
+level/epoch events, with bounded continuations for remaining work. They have
+no periodic safety timer. IP polling follows the stack's waker and protocol
+deadlines; application deadlines remain image policy.
 Finite connected-task shutdown lives in `oer-time` behind its non-default
 `connected-tasks` feature, without `embassy-sync`; `oer-cooperate` retains only
 hardware-atom admission and its bounds.
