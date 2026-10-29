@@ -1,7 +1,6 @@
 //! Read-only records from the policy that selected the actual publication.
 use super::*;
-use crate::mac::tx::{LegacyTxQueue, runtime::WifiTxRuntimePolicy};
-use oer_ieee80211_port::{EdcaAcParameters, VifRole};
+use oer_ieee80211_port::VifRole;
 use oer_ieee80211_wire::{extensions::wmm::WmmAcParameters, qos::WmmAccessCategory};
 fn role(value: u32) -> VifRole {
     if value == 0 {
@@ -18,6 +17,7 @@ fn category(value: u32) -> WmmAccessCategory {
         _ => WmmAccessCategory::Voice,
     }
 }
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct EdcaTable {
     pub role: VifRole,
     pub count: u8,
@@ -43,16 +43,18 @@ impl Event for EdcaTable {
         })
     }
 }
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct EdcaRecord {
     pub role: VifRole,
     pub category: WmmAccessCategory,
-    pub parameters: EdcaAcParameters,
+    pub wmm: WmmAcParameters,
+    pub lifetime_micros: u32,
 }
 impl Event for EdcaRecord {
     const KIND: Kind = Kind::new(Domain::Ieee80211, 104);
     const CHANNEL: Channel = Publication::CHANNEL;
     fn encode(&self) -> [u32; 2] {
-        let w = self.parameters.wmm;
+        let w = self.wmm;
         [
             u32::from(w.aifsn.get())
                 | (u32::from(w.ecw_min.get()) << 4)
@@ -61,27 +63,25 @@ impl Event for EdcaRecord {
                 | (u32::from(w.admission_control_mandatory) << 28)
                 | ((self.role as u32) << 29)
                 | ((self.category as u32) << 30),
-            u32::try_from(self.parameters.msdu_lifetime.as_micros())
-                .expect("installed S31 MSDU lifetime fits u32"),
+            self.lifetime_micros,
         ]
     }
     fn decode([w, life]: [u32; 2]) -> Option<Self> {
         Some(Self {
             role: role((w >> 29) & 1),
             category: category(w >> 30),
-            parameters: EdcaAcParameters {
-                wmm: WmmAcParameters {
-                    admission_control_mandatory: w & (1 << 28) != 0,
-                    aifsn: oer_wire::U8::from_low_bits((w & 15) as u8),
-                    ecw_min: oer_wire::U8::from_low_bits(((w >> 4) & 15) as u8),
-                    ecw_max: oer_wire::U8::from_low_bits(((w >> 8) & 15) as u8),
-                    txop_limit_units_32_us: ((w >> 12) & 0xffff) as u16,
-                },
-                msdu_lifetime: oer_time::Duration::from_micros(u64::from(life)),
+            lifetime_micros: life,
+            wmm: WmmAcParameters {
+                admission_control_mandatory: w & (1 << 28) != 0,
+                aifsn: oer_wire::U8::from_low_bits((w & 15) as u8),
+                ecw_min: oer_wire::U8::from_low_bits(((w >> 4) & 15) as u8),
+                ecw_max: oer_wire::U8::from_low_bits(((w >> 8) & 15) as u8),
+                txop_limit_units_32_us: ((w >> 12) & 0xffff) as u16,
             },
         })
     }
 }
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct EdcaDraw {
     pub role: VifRole,
     pub category: WmmAccessCategory,
@@ -109,40 +109,6 @@ impl Event for EdcaDraw {
         })
     }
 }
-#[inline(never)]
-pub(crate) fn contention(
-    policy: &WifiTxRuntimePolicy,
-    head: VifRole,
-    ac: WmmAccessCategory,
-    backoff: u16,
-) {
-    if !oer_espressif_staged_runtime::trace::enabled(Publication::CHANNEL) {
-        return;
-    }
-    for role in [VifRole::Station, VifRole::AccessPoint] {
-        let set = policy.debug_edca(role);
-        let wmm = set.wmm();
-        oer_espressif_staged_runtime::trace::emit(&EdcaTable {
-            role,
-            count: wmm.parameter_set_count,
-            uapsd: wmm.uapsd,
-        });
-        for category in WmmAccessCategory::ALL {
-            oer_espressif_staged_runtime::trace::emit(&EdcaRecord {
-                role,
-                category,
-                parameters: set.access_category(category),
-            });
-        }
-    }
-    oer_espressif_staged_runtime::trace::emit(&EdcaDraw {
-        role: head,
-        category: ac,
-        exponent: policy.contention_exponent(LegacyTxQueue::from_access_category(ac)),
-        backoff,
-    });
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -163,12 +129,17 @@ mod tests {
                     let input = EdcaRecord {
                         role,
                         category,
-                        parameters,
+                        wmm: parameters.wmm,
+                        lifetime_micros: parameters.msdu_lifetime.as_micros() as u32,
                     };
                     let output = EdcaRecord::decode(input.encode()).expect("record roundtrip");
                     assert_eq!(output.role, role);
                     assert_eq!(output.category, category);
-                    assert_eq!(output.parameters, parameters);
+                    assert_eq!(output.wmm, parameters.wmm);
+                    assert_eq!(
+                        u64::from(output.lifetime_micros),
+                        parameters.msdu_lifetime.as_micros()
+                    );
                     let draw = EdcaDraw {
                         role,
                         category,

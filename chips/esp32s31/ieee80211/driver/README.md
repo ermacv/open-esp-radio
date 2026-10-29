@@ -231,3 +231,5 @@ Its publication watchdog is 250 ms; command and retirement bounds
 are 400 ms, including the publication and the finite RX stop.
 The operation mapping and portable limits are in
 [the port's README](../../../../protocols/ieee80211/port/README.md#implementers).
+
+The driver reports small event values through its image-selected `oer-trace::Observer`, passed by reference to contention points. The product selects `Noop`; HIL images count event kinds atomically. The driver has no recorder/runtime dependency, observation counters or frame snapshots. `oer_debug_control` holds and injections remain separate.

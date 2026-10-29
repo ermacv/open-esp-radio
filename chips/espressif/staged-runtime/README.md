@@ -90,3 +90,5 @@ The runtime's generic `fatal::reset_recording` performs their final reset;
 protocol cores do not acquire that policy. The
 [bootstrap](../staged-bootstrap/README.md) owns cold initialization and
 [staged layout](../staged-layout/README.md) owns the image boundary.
+
+Observation is supplied by image-owned atomic event counters through `oer-trace`; this runtime owns no event ring, trace clock or retained observation storage. Its retained fault records remain separate failure contracts.

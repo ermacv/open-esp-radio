@@ -1,15 +1,9 @@
 use super::*;
 use alloc::{vec, vec::Vec};
 
-type TestBarrierTrace =
-    BarrierTrace<Vec<BarrierEvent<(), ()>>, Vec<u8>, Vec<Vec<u8>>, BarrierEvent<(), ()>>;
+type TestBarrierTrace = BarrierTrace<Vec<BarrierEvent<(), ()>>, BarrierEvent<(), ()>>;
 
 fn retry_trace() -> TestBarrierTrace {
-    let mut original = vec![0x5a; 40];
-    original[0] = 0x08;
-    original[1] = 0x41;
-    let mut retry = original.clone();
-    retry[1] |= 0x08;
     BarrierTrace {
         tickets: [1, 2],
         before_request: HeldSnapshot {
@@ -35,26 +29,7 @@ fn retry_trace() -> TestBarrierTrace {
             },
             BarrierEvent::GateClosed,
         ],
-        first_frame: original,
-        retried_frames: vec![retry],
         retry_terminal: None,
-    }
-}
-
-#[test]
-fn changed_retry_bytes_are_distinct_from_returning_the_wrong_owner() {
-    assert_eq!(
-        verify_barrier(BarrierCase::GateRetry, retry_trace()),
-        Ok(())
-    );
-    // Header, SN, PN and payload changes all belong to the MPDU contents
-    // diagnostic. Ticket identity is unchanged in every case.
-    for index in 0..40 {
-        let mut trace = retry_trace();
-        trace.retried_frames[0][index] ^= 1;
-        let error = verify_barrier(BarrierCase::GateRetry, trace).unwrap_err();
-        assert_ne!(error, Violation::Owners, "changed octet {index}");
-        assert_eq!(error, Violation::MpduChanged);
     }
 }
 

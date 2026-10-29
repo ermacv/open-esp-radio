@@ -72,43 +72,12 @@ pub enum Trace {
     Group(GroupTrace),
     Edca(EdcaTrace),
 }
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
-pub struct EdcaParameters {
-    pub acm: bool,
-    pub aifsn: u8,
-    pub minimum: u8,
-    pub maximum: u8,
-    pub txop: u16,
-    pub lifetime_us: u32,
-}
-pub fn edca_parameters(record: EdcaAcParameters) -> Option<EdcaParameters> {
-    Some(EdcaParameters {
-        acm: record.wmm.admission_control_mandatory,
-        aifsn: record.wmm.aifsn.get(),
-        minimum: record.wmm.ecw_min.get(),
-        maximum: record.wmm.ecw_max.get(),
-        txop: record.wmm.txop_limit_units_32_us,
-        lifetime_us: record.msdu_lifetime.as_micros().try_into().ok()?,
-    })
-}
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
-pub struct EdcaHeader {
-    pub count: u8,
-    pub uapsd: bool,
-}
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
-pub struct EdcaDraw {
-    pub role: u8,
-    pub category: u8,
-    pub parameters: Option<EdcaParameters>,
-    pub window: u16,
-    pub backoff: u16,
-}
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub struct EdcaTrace {
-    pub draws: [Option<EdcaDraw>; 4],
-    pub installed: [[Option<EdcaParameters>; 4]; 2],
-    pub headers: [Option<EdcaHeader>; 2],
+    pub publications: u16,
+    pub tables: u16,
+    pub records: u16,
+    pub draws: u16,
     pub admitted: [u8; 3],
     pub completed: [u8; 3],
     pub held_draws: Option<u16>,
@@ -116,36 +85,16 @@ pub struct EdcaTrace {
 pub fn edca_trace<D: AsRef<[conformance::edca::Draw]>>(
     raw: &conformance::edca::Trace<D>,
 ) -> Option<EdcaTrace> {
-    use oer_ieee80211_wire::qos::WmmAccessCategory;
-    let mut trace = EdcaTrace {
-        draws: [None; 4],
-        installed: [[None; 4]; 2],
-        headers: [None; 2],
+    let draws = u16::try_from(raw.draws.as_ref().len()).ok()?;
+    Some(EdcaTrace {
+        publications: draws,
+        tables: draws.checked_mul(2)?,
+        records: draws.checked_mul(8)?,
+        draws,
         admitted: raw.admitted,
         completed: raw.completed,
         held_draws: raw.held_draws.map(u16::try_from).transpose().ok()?,
-    };
-    for (index, draw) in raw.draws.as_ref().iter().enumerate() {
-        *trace.draws.get_mut(index)? = Some(EdcaDraw {
-            role: draw.role as u8,
-            category: draw.category as u8,
-            parameters: Some(edca_parameters(draw.parameters)?),
-            window: draw.window_slots,
-            backoff: draw.backoff_slots,
-        });
-    }
-    for (index, set) in raw.installed.iter().enumerate() {
-        let wmm = set.wmm();
-        *trace.headers.get_mut(index)? = Some(EdcaHeader {
-            count: wmm.parameter_set_count,
-            uapsd: wmm.uapsd,
-        });
-        for category in WmmAccessCategory::ALL {
-            *trace.installed.get_mut(index)?.get_mut(category as usize)? =
-                Some(edca_parameters(set.access_category(category))?);
-        }
-    }
-    Some(trace)
+    })
 }
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub enum GroupCompletion {
@@ -154,21 +103,14 @@ pub enum GroupCompletion {
 }
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub struct GroupTrace {
-    pub rollback: Option<GroupRollback>,
+    pub rollback: bool,
     pub admitted: [u8; 2],
     pub within_bound: bool,
     pub events: [Option<GroupCompletion>; 4],
-    pub retained: [Option<[u8; 2]>; 4],
     pub poisoned: bool,
     pub deadline_woke: bool,
     pub published: Option<[u32; 2]>,
     pub blocked_while_published: bool,
-}
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
-pub struct GroupRollback {
-    pub previous_key_id: u8,
-    pub attempted_key_id: u8,
-    pub restored: bool,
 }
 pub fn group_trace<
     E: AsRef<[conformance::group_keys::Completion]>,
@@ -196,16 +138,8 @@ pub fn group_trace<
             },
         });
     }
-    let mut retained = [None; 4];
-    for (index, owners) in raw.retained.as_ref().iter().enumerate() {
-        *retained.get_mut(index)? = Some([owners.slot, owners.permission]);
-    }
     Some(GroupTrace {
-        rollback: raw.rollback.map(|rollback| GroupRollback {
-            previous_key_id: rollback.previous_key_id,
-            attempted_key_id: rollback.attempted_key_id,
-            restored: rollback.restored,
-        }),
+        rollback: raw.rollback.is_some(),
         admitted: [raw.admitted.slot, raw.admitted.permission],
         within_bound: bound_micros != 0
             && raw
@@ -214,7 +148,6 @@ pub fn group_trace<
                 .checked_duration_since(raw.timing.admitted_at)
                 .is_some_and(|elapsed| elapsed.as_micros() <= bound_micros),
         events,
-        retained,
         poisoned: raw.poisoned,
         deadline_woke: raw.deadline_woke,
         published: match raw.published {
@@ -280,34 +213,12 @@ pub enum BarrierEvent {
     KeyRemoved,
 }
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
-pub struct Frame {
-    pub len: u8,
-    pub bytes: [[u8; 32]; 2],
-}
-fn frame(bytes: &[u8]) -> Option<Frame> {
-    if bytes.len() > 64 {
-        return None;
-    }
-    let mut out = Frame {
-        len: bytes.len().try_into().ok()?,
-        bytes: [[0; 32]; 2],
-    };
-    for (index, (out, byte)) in out.bytes.iter_mut().flatten().zip(bytes).enumerate() {
-        // The three physical MAC addresses are fixture coordinates. All other
-        // encoded octets, including FC, Duration, SN, PN and payload, survive.
-        *out = if (4..22).contains(&index) { 0 } else { *byte };
-    }
-    Some(out)
-}
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub struct BarrierTrace {
     pub tickets: [u8; 2],
     pub before_request: HeldSnapshot,
     pub before_result: HeldSnapshot,
     pub publications_at_barrier: u16,
     pub events: [Option<BarrierEvent>; 8],
-    pub first_frame: Frame,
-    pub retried_frames: [Option<Frame>; 4],
     pub retry_terminal: Option<BarrierEvent>,
 }
 fn barrier_event<A, D>(event: &conformance::BarrierEvent<A, D>) -> BarrierEvent {
@@ -359,14 +270,8 @@ fn barrier_event<A, D>(event: &conformance::BarrierEvent<A, D>) -> BarrierEvent 
         }
     }
 }
-pub fn barrier_trace<
-    A,
-    D,
-    E: AsRef<[conformance::BarrierEvent<A, D>]>,
-    F: AsRef<[u8]>,
-    R: AsRef<[F]>,
->(
-    raw: &conformance::BarrierTrace<E, F, R, conformance::BarrierEvent<A, D>>,
+pub fn barrier_trace<A, D, E: AsRef<[conformance::BarrierEvent<A, D>]>>(
+    raw: &conformance::BarrierTrace<E, conformance::BarrierEvent<A, D>>,
 ) -> Option<BarrierTrace> {
     fn snapshot(raw: conformance::HeldSnapshot) -> Option<HeldSnapshot> {
         Some(HeldSnapshot {
@@ -378,18 +283,12 @@ pub fn barrier_trace<
     for (index, event) in raw.events.as_ref().iter().enumerate() {
         *events.get_mut(index)? = Some(barrier_event(event));
     }
-    let mut retries = core::array::from_fn(|_| None);
-    for (index, bytes) in raw.retried_frames.as_ref().iter().enumerate() {
-        *retries.get_mut(index)? = Some(frame(bytes.as_ref())?);
-    }
     Some(BarrierTrace {
         tickets: raw.tickets,
         before_request: snapshot(raw.before_request)?,
         before_result: snapshot(raw.before_result)?,
         publications_at_barrier: raw.publications_at_barrier.try_into().ok()?,
         events,
-        first_frame: frame(raw.first_frame.as_ref())?,
-        retried_frames: retries,
         retry_terminal: raw.retry_terminal.as_ref().map(barrier_event),
     })
 }
@@ -414,18 +313,12 @@ pub struct OwnerReturn {
     pub transmissions: Option<u16>,
     pub outcome: u8,
 }
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
-pub enum OwnerPublication {
-    Tx(u8),
-    GateClosed,
-}
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub struct OwnershipTrace {
     pub returned: [Option<OwnerReturn>; 8],
     pub contexts_dropped: u16,
     pub before_teardown_dropped: u16,
     pub publications: u16,
-    pub publication_events: [Option<OwnerPublication>; 8],
 }
 /// Allocation numbers come from the actual body owners and their frees. Raw
 /// pointer equality is recorded separately for each original/returned pair.
@@ -433,7 +326,6 @@ pub fn ownership_trace<R, E, P>(trace: conformance::Trace<R, E, P>) -> Option<Ow
 where
     R: AsRef<[conformance::Returned]>,
     E: AsRef<[conformance::ReturnEvidence]>,
-    P: IntoIterator<Item = conformance::PublicationEvent>,
 {
     use conformance::{Class, End, Resources};
     fn class(value: Class) -> u8 {
@@ -471,22 +363,7 @@ where
             },
         });
     }
-    let mut publication_events = [None; 8];
-    let mut count = 0_usize;
-    for (index, event) in trace.publication_events.into_iter().enumerate() {
-        *publication_events.get_mut(index)? = Some(match event {
-            conformance::PublicationEvent::Tx(ticket) => {
-                count = count.checked_add(1)?;
-                OwnerPublication::Tx(ticket)
-            }
-            conformance::PublicationEvent::GateClosed => OwnerPublication::GateClosed,
-        });
-    }
-    if count != trace.publications {
-        return None;
-    }
     Some(OwnershipTrace {
-        publication_events,
         returned,
         contexts_dropped: trace.contexts_dropped.try_into().ok()?,
         before_teardown_dropped: trace.before_teardown_dropped.try_into().ok()?,
@@ -541,49 +418,6 @@ mod tests {
     use oer_ieee80211_wire::{phy::LegacyRate, sequence::SequenceNumber};
 
     #[test]
-    fn edca_projection_preserves_advertised_contention_fields() {
-        use oer_ieee80211_wire::qos::WmmAccessCategory;
-
-        let expected = [(3, 4, 10, 0), (7, 4, 10, 0), (2, 3, 4, 94), (2, 2, 3, 47)];
-        for (category, (aifsn, minimum, maximum, txop)) in
-            WmmAccessCategory::ALL.into_iter().zip(expected)
-        {
-            let record = EdcaParameterSet::STANDARD_DEFAULT.access_category(category);
-            assert_eq!(
-                edca_parameters(record),
-                Some(EdcaParameters {
-                    acm: false,
-                    aifsn,
-                    minimum,
-                    maximum,
-                    txop,
-                    lifetime_us: 512_000,
-                })
-            );
-        }
-    }
-
-    fn trace(observed: LegacyRate, state: MpduState) -> outcomes::Trace<(), (), ()> {
-        outcomes::Trace {
-            admitted: outcomes::Identity {
-                ticket: 0,
-                buffer: 1,
-            },
-            returned: outcomes::Identity {
-                ticket: 0,
-                buffer: 1,
-            },
-            state,
-            rate: PhyRate::Legacy(LegacyRate::Ofdm6M),
-            sequence: SequenceNumber::from_sequence_control(0x1230),
-            publications: 1,
-            outcome: outcomes::Outcome::Single(TxOutcome::Ended(SingleEnd::AckTimeout(Air {
-                transmissions: NonZeroU16::MIN,
-                rate: PhyRate::Legacy(observed),
-            }))),
-        }
-    }
-    #[test]
     fn projection_does_not_hide_a_different_terminal_rate_or_owner_state() {
         let expected = outcome_trace(&trace(LegacyRate::Ofdm6M, MpduState::Sent)).unwrap();
         let changed = outcome_trace(&trace(LegacyRate::Ofdm12M, MpduState::Sent)).unwrap();
@@ -613,8 +447,6 @@ mod tests {
             just_before_timeout: None,
             publications_at_barrier: 1,
             events: [conformance::BarrierEvent::<(), core::convert::Infallible>::GateClosed],
-            first_frame: [0; 40],
-            retried_frames: [[0; 40]; 2],
             retry_terminal: Some(conformance::BarrierEvent::Tx {
                 ticket: 0,
                 state: MpduState::Sent,
@@ -640,7 +472,6 @@ mod tests {
             });
         }
         let ack = barrier_trace(&raw).unwrap();
-        assert_eq!(expected.retried_frames, ack.retried_frames);
         assert_ne!(
             expected, ack,
             "an ACK cannot masquerade as exhausted retries"
@@ -674,7 +505,9 @@ mod tests {
                 before_teardown_dropped: 1,
                 publications: 0,
                 terminal_evidence: [ReturnEvidence::refused(pointer)],
-                publication_events: [],
+                publication_events: core::iter::empty::<
+                    oer_ieee80211_port::conformance::PublicationEvent,
+                >(),
             })
             .unwrap()
         };
@@ -684,61 +517,35 @@ mod tests {
         assert_ne!(original, project(true, 1));
     }
     #[test]
-    fn ownership_projection_preserves_publications_gate_and_terminal_count() {
-        use PublicationEvent::{GateClosed, Tx};
-        use conformance::{End, OPERATIONS, PublicationEvent, Resources, ReturnEvidence, Returned};
+    fn ownership_projection_keeps_publication_count_without_a_journal() {
+        use conformance::{End, OPERATIONS, Resources, ReturnEvidence, Returned};
         let resource = Resources {
             ticket: 2,
             buffer: 0,
             class: OPERATIONS[2].class,
             body: 0,
         };
-        let project = |count, events: &[PublicationEvent]| {
-            let terminal: SingleOutcome<(), ()> = TxOutcome::Ended(SingleEnd::AckTimeout(Air {
-                transmissions: NonZeroU16::new(count).unwrap(),
-                rate: PhyRate::Legacy(LegacyRate::Ofdm6M),
-            }));
-            ownership_trace(conformance::Trace {
-                returned: [Returned {
-                    operation: OPERATIONS[2],
-                    expected: resource,
-                    actual: resource,
-                    end: End::Ended,
-                }],
-                contexts_dropped: 1,
-                before_teardown_dropped: 1,
-                publications: 3,
-                terminal_evidence: [ReturnEvidence::terminal(true, &terminal).unwrap()],
-                publication_events: events.iter().copied(),
-            })
-        };
-        let first = project(1, &[Tx(2), Tx(3), Tx(2), GateClosed]).unwrap();
-        assert_eq!(
-            first.publication_events,
-            [
-                Some(OwnerPublication::Tx(2)),
-                Some(OwnerPublication::Tx(3)),
-                Some(OwnerPublication::Tx(2)),
-                Some(OwnerPublication::GateClosed),
-                None,
-                None,
-                None,
-                None
-            ]
-        );
-        assert_eq!(first.returned[0].unwrap().transmissions, Some(1));
-        assert_ne!(
-            first,
-            project(2, &[Tx(2), Tx(3), Tx(2), GateClosed]).unwrap()
-        );
-        assert_ne!(
-            first,
-            project(1, &[Tx(2), Tx(3), Tx(0), GateClosed]).unwrap()
-        );
-        assert_ne!(
-            first,
-            project(1, &[Tx(2), Tx(3), GateClosed, Tx(2)]).unwrap()
-        );
-        assert!(project(1, &[Tx(2), Tx(3), GateClosed]).is_none());
+        let terminal: SingleOutcome<(), ()> = TxOutcome::Ended(SingleEnd::AckTimeout(Air {
+            transmissions: NonZeroU16::MIN,
+            rate: PhyRate::Legacy(LegacyRate::Ofdm6M),
+        }));
+        let trace = ownership_trace(conformance::Trace {
+            returned: [Returned {
+                operation: OPERATIONS[2],
+                expected: resource,
+                actual: resource,
+                end: End::Ended,
+            }],
+            contexts_dropped: 1,
+            before_teardown_dropped: 1,
+            publications: 3,
+            terminal_evidence: [ReturnEvidence::terminal(true, &terminal).unwrap()],
+            publication_events: core::iter::empty::<
+                oer_ieee80211_port::conformance::PublicationEvent,
+            >(),
+        })
+        .unwrap();
+        assert_eq!(trace.publications, 3);
+        assert_eq!(trace.returned[0].unwrap().transmissions, Some(1));
     }
 }

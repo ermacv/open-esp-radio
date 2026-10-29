@@ -8,6 +8,8 @@ repository.workspace = true
 description = "Role-neutral ESP32-S31 Wi-Fi device composition"
 
 [dependencies]
+oer-trace = { path = "../../../../portable/trace" }
+oer-esp32s31-instrumentation = { path = "../../instrumentation" }
 oer-wire = { path = "../../../../portable/wire" }
 oer-sync = { path = "../../../../portable/sync" }
 atomic-waker = "1.1.2"
@@ -28,9 +30,6 @@ oer-radio-regulatory = { path = "../../../../protocols/radio/regulatory" }
 oer-time = { path = "../../../../portable/time" }
 oer-espressif-interrupt-table = { path = "../../../espressif/interrupt-table" }
 
-[target.'cfg(oer_debug_control)'.dependencies]
-oer-espressif-staged-runtime = { path = "../../../espressif/staged-runtime" }
-oer-trace = { path = "../../../../portable/trace" }
 
 [features]
 default = []

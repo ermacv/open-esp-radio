@@ -2,7 +2,7 @@ use super::*;
 use oer_ieee80211_port::conformance::{BarrierCase, BarrierEvent, BarrierTrace, HeldSnapshot};
 use oer_ieee80211_wire::qos::WmmAccessCategory;
 type Terminal = BarrierEvent<ModelAck, ModelAirDenied>;
-pub type Trace = BarrierTrace<Vec<Terminal>, Vec<u8>, Vec<Vec<u8>>, Terminal>;
+pub type Trace = BarrierTrace<Vec<Terminal>, Terminal>;
 pub async fn barrier(
     case: BarrierCase,
     channel: Channel,
@@ -217,13 +217,6 @@ async fn exercise<'p, 'id: 'p, Id: SlotIdentity + 'id>(
         yield_once().await;
     }
     let before_request = snapshot(phase);
-    let first_frame = body
-        .air
-        .sent()
-        .first()
-        .ok_or("model first publication")?
-        .plaintext
-        .clone();
     if body.case == BarrierCase::RemoveKey {
         phase
             .station()
@@ -281,7 +274,6 @@ async fn exercise<'p, 'id: 'p, Id: SlotIdentity + 'id>(
         }
     }
     let publications_at_barrier = body.air.sent().len();
-    let mut retried_frames = Vec::new();
     let mut retry_terminal = None;
     if body.case == BarrierCase::GateRetry {
         let _open = phase.open_gate(closed.ok_or("model closed gate")?);
@@ -341,13 +333,6 @@ async fn exercise<'p, 'id: 'p, Id: SlotIdentity + 'id>(
                 _ => return Err("unexpected model retry event"),
             }
         }
-        retried_frames = body
-            .air
-            .sent()
-            .into_iter()
-            .skip(1)
-            .map(|frame| frame.plaintext)
-            .collect();
     }
     Ok(BarrierTrace {
         tickets: identities,
@@ -356,8 +341,6 @@ async fn exercise<'p, 'id: 'p, Id: SlotIdentity + 'id>(
         just_before_timeout: None,
         publications_at_barrier,
         events,
-        first_frame,
-        retried_frames,
         retry_terminal,
     })
 }
@@ -393,7 +376,6 @@ mod tests {
                 core::num::NonZeroU8::new(budget).expect("nonzero retry budget"),
             ))
             .expect("actual model trace");
-            assert_eq!(trace.retried_frames.len(), usize::from(budget));
             let Some(BarrierEvent::Tx {
                 ticket,
                 state: MpduState::Sent,

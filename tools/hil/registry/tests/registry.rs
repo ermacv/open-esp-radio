@@ -35,6 +35,7 @@ fn migrated_wire() -> Result<String, oer_hil_registry::LockError> {
                 "wifi/station/probe ",
                 "wifi/station/probe/ready ",
                 "wifi/station/probe/finished ",
+                "lower-mac/case/trace ",
                 "health/counters ",
                 "health/counters/read ",
                 "health/signals ",
@@ -96,6 +97,8 @@ fn migrated_wire() -> Result<String, oer_hil_registry::LockError> {
         };
         previous.push_str(&format!("{} {} {kind}\n", message.path, message.key));
     }
+    let message = oer_ieee80211_conformance_control::MESSAGES.iter().find(|message| message.path == "lower-mac/case/trace").expect("conformance topic");
+    previous.push_str(&format!("{} {} topic\n", message.path, message.key));
     oer_hil_registry::merge_locks([previous.as_str()])
 }
 

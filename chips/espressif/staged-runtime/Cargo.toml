@@ -8,7 +8,6 @@ publish = false
 description = "Stage-two entry, relocation, traps, per-hart interrupt stacks, critical-section, panic record and fatal paths of the Espressif staged boot"
 
 [dependencies]
-oer-trace = { path = "../../../portable/trace" }
 bytemuck = { version = "1.25.2", default-features = false, features = ["derive"] }
 oer-diagnostics = { path = "../../../portable/diagnostics" }
 oer-espressif-boot = { path = "../boot" }

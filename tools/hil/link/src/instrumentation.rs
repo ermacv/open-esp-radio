@@ -193,7 +193,7 @@ mod tests {
                 capture: 1,
                 epoch: 2,
             },
-            schema: EVENT_SCHEMA,
+            schema: Key::of::<Counter>("test/counter"),
             frozen: true,
             records: 3,
             counters: 0,

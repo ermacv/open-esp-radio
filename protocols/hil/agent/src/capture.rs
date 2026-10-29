@@ -1,5 +1,5 @@
-//! An image owns capture storage, its clock, lifecycle and context. The agent
-//! serves only bounded encoded records and aggregate counters.
+//! Images expose atomic observation counters through this service. Independent
+//! RF experiment readers also serve their own bounded data contracts.
 use crate::console::{Console, Immediate};
 use oer_hil_protocol::{RequestIdentity, capture::*};
 
@@ -8,7 +8,7 @@ pub mod atomic;
 pub mod collector;
 
 /// No radio or platform dependency is needed to serve an image's capture.
-/// Reads must observe one immutable cut; live captures refuse page reads.
+/// A counter reader loads live atomics; RF data readers enforce their own lifecycle.
 pub trait Reader {
     fn describe(&self) -> Result<Description, Error>;
     fn records(&self, request: PageRequest) -> Result<Records, Error>;

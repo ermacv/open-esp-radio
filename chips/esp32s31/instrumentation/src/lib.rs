@@ -27,3 +27,5 @@
 )]
 //! Host-safe ESP32-S31 radio observation values.
 pub mod health;
+
+pub mod wifi;

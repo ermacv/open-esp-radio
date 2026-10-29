@@ -92,8 +92,8 @@ impl WifiTxRuntimePolicy {
         }
     }
     /// The diagnostic composition observes the installed table without a copy.
-    #[cfg(oer_debug_control)]
-    pub const fn debug_edca(&self, role: VifRole) -> &EdcaParameterSet {
+    #[cfg(oer_trace)]
+    pub const fn observed_edca(&self, role: VifRole) -> &EdcaParameterSet {
         self.edca(role)
     }
 
@@ -167,7 +167,7 @@ impl WifiTxRuntimePolicy {
         }
     }
 
-    #[cfg(any(test, feature = "test-support", oer_debug_control))]
+    #[cfg(any(test, feature = "test-support", oer_debug_control, oer_trace))]
     pub fn contention_exponent(&self, queue: LegacyTxQueue) -> u8 {
         self.queues.queue(queue).current_exponent()
     }

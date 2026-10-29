@@ -43,16 +43,6 @@
 #[cfg(test)]
 extern crate std;
 
-// Host driver fixtures own virtual time; no installed image trace consumes
-// these timestamps. The clock binding lets the real trace path link in tests.
-#[cfg(all(test, oer_trace, oer_debug_control))]
-mod trace_clock {
-    fn now() -> u64 {
-        0
-    }
-    oer_espressif_staged_runtime::trace_clock!(now);
-}
-
 pub mod ampdu_tx;
 pub mod coex;
 pub mod cooperative_hardware;
@@ -61,6 +51,8 @@ pub mod irq;
 pub mod lower_mac;
 pub mod mac;
 pub mod monitor_injection;
+#[cfg(oer_trace)]
+mod observation;
 pub mod ordinary_tx;
 pub mod port;
 #[cfg(target_arch = "riscv32")]

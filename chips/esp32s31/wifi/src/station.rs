@@ -33,6 +33,7 @@ use oer_time::{Duration, Instant};
 pub type Epoch<Id> = Child<Root<Id>, 4>;
 pub struct ImageComposition<W: Binding>(PhantomData<W>);
 impl<W: Binding> Composition for ImageComposition<W> {
+    type Observer = W::DriverObserver;
     type Coex = radio::Coex;
     type Entropy = radio::Entropy;
     type Body = Infallible;

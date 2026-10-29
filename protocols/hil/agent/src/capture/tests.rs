@@ -5,7 +5,7 @@
     clippy::indexing_slicing
 )]
 use super::*;
-use collector::{Clock, Collector};
+use collector::Collector;
 use oer_trace::{Channel, Domain, Event, Kind, Observer};
 
 #[derive(Clone, Copy)]
@@ -23,12 +23,6 @@ impl Event for Step {
         (words == [7, 9]).then_some(Self)
     }
 }
-pub(super) struct Virtual;
-impl Clock for Virtual {
-    fn micros(&self) -> u64 {
-        17
-    }
-}
 pub(super) const ID: Identity = Identity {
     capture: 1,
     epoch: 2,
@@ -41,67 +35,52 @@ pub(super) fn request(first: u32, count: u8) -> PageRequest {
     }
 }
 
-#[test]
-fn counts_survive_history_overflow_and_masking_without_affecting_the_owner() {
-    let mut collector = Collector::<_, 1, 1>::new(Virtual);
-    collector.begin(ID, u64::MAX).unwrap();
-    collector.event(Step);
-    assert_eq!(collector.record(Step), Err(Error::RecordsFull));
-    let description = collector.freeze().unwrap();
-    assert_eq!(description.failure, Some(Error::RecordsFull));
-    assert_eq!(description.dropped, 1);
-    let page = collector.records(request(0, 1)).unwrap();
-    let event: EventRecord = postcard::from_bytes(page.records.first().unwrap()).unwrap();
-    assert_eq!(
-        (event.kind, event.at_micros, event.words),
-        (Step::KIND.raw(), 17, [7, 9])
-    );
-    assert_eq!(
-        collector
-            .counters(request(0, 1))
-            .unwrap()
-            .counters
-            .first()
-            .unwrap()
-            .value,
-        2
-    );
-    collector.release(ID).unwrap();
-    collector.begin(Identity { capture: 2, ..ID }, 0).unwrap();
-    collector.event(Step);
-    let description = collector.freeze().unwrap();
-    assert_eq!(
-        (
-            description.records,
-            description.counters,
-            description.failure
-        ),
-        (0, 1, None)
-    );
+#[derive(Clone, Copy)]
+struct Other(u8);
+impl Event for Other {
+    const KIND: Kind = Kind::new(Domain::Platform, 201);
+    const CHANNEL: Channel = Step::CHANNEL;
+    fn encode(&self) -> [u32; 2] {
+        panic!("atomic counters must not encode event payloads")
+    }
+    fn decode(_: [u32; 2]) -> Option<Self> {
+        None
+    }
 }
-
 #[test]
-fn invalid_reads_and_exhausted_counter_banks_are_typed() {
-    let mut collector = Collector::<_, 1, 0>::new(Virtual);
-    assert_eq!(collector.describe(), Err(Error::InvalidState));
-    collector.begin(ID, u64::MAX).unwrap();
-    assert_eq!(collector.records(request(0, 1)), Err(Error::InvalidState));
+fn kinds_count_independently_include_supported_zeros_and_validate_reads() {
+    let collector =
+        Collector::new([Step::KIND, Other::KIND, Kind::new(Domain::Platform, 202)]).unwrap();
     collector.event(Step);
+    collector.event(Step);
+    let other = Other(9);
+    assert_eq!(other.0, 9);
+    collector.event(other);
+    let reader = collector.reader(ID);
+    let page = reader.counters(request(0, 3)).unwrap();
     assert_eq!(
-        collector.freeze().unwrap().failure,
-        Some(Error::CounterKindsFull)
+        page.counters
+            .iter()
+            .map(|counter| counter.value)
+            .collect::<std::vec::Vec<_>>(),
+        [2, 1, 0]
     );
-    assert_eq!(collector.records(request(0, 2)), Err(Error::InvalidRange));
+    assert_eq!(reader.describe().unwrap().records, 0);
+    assert_eq!(reader.counters(request(1, 3)), Err(Error::InvalidRange));
     assert_eq!(
-        collector.records(PageRequest {
+        reader.counters(PageRequest {
             identity: Identity { epoch: 3, ..ID },
             ..request(0, 1)
         }),
         Err(Error::IdentityMismatch)
     );
     assert!(matches!(
-        Request::Records(ReadRecords(request(1, 1))).serve(&collector),
+        Request::Records(ReadRecords(request(0, 1))).serve(&reader),
         Answer::Refused(Refused(Error::InvalidRange))
+    ));
+    assert!(matches!(
+        Collector::new([Step::KIND, Step::KIND]),
+        Err(Error::InvalidState)
     ));
 }
 
@@ -245,10 +224,9 @@ fn fake_console_serves_the_same_capture_and_a_typed_refusal() {
             Ok(())
         }
     }
-    let mut collector = Collector::<_, 2, 1>::new(Virtual);
-    collector.begin(ID, u64::MAX).unwrap();
+    let collector = Collector::new([Step::KIND]).unwrap();
     collector.event(Step);
-    collector.freeze().unwrap();
+    let reader = collector.reader(ID);
     let console = Console::<1, 8, Early>::new();
     console.start(77);
     crate::image_keys! { KEYS = [Request] }
@@ -261,9 +239,7 @@ fn fake_console_serves_the_same_capture_and_a_typed_refusal() {
         Endpoint(host.clone()),
         Intake::new(77, KEYS, 0),
         &Chip,
-        |identity, request: Request| {
-            block_on(request.serve(&collector).publish(&console, identity))
-        },
+        |identity, request: Request| block_on(request.serve(&reader).publish(&console, identity)),
     );
     let watch = async {
         for _ in 0..1000 {
@@ -283,7 +259,7 @@ fn fake_console_serves_the_same_capture_and_a_typed_refusal() {
                     received,
                     [
                         (1, Description::KEY),
-                        (2, Records::KEY),
+                        (2, Refused::KEY),
                         (3, Counters::KEY),
                         (4, Refused::KEY)
                     ]

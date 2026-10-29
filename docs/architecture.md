@@ -1022,28 +1022,32 @@ its model and conformance case.
 
 ## Instrumentation and probes
 
-`oer-trace` contains only event values, encoding, decoding, ordering of
-caller-owned record slices and the observer contract
-([portable/trace](../portable/trace/README.md)). An owner holds an
+`oer-trace` contains small event values, dictionary encoding and the observer
+contract ([portable/trace](../portable/trace/README.md)). An owner holds an
 `O: Observer` field, by default the zero-sized `Noop`, and reports through
-`observe!`. The observer receives a `Copy + 'static` event value and returns
-`()`: it holds no owner, register block or lease and cannot steer the owner.
-Without `cfg(oer_trace)` an observation point evaluates no argument and
-leaves no code. Owners keep no counters of observations: a count is the
-number of events of a kind, which the collector of an image declaring the
-`trace` class keeps. A protocol family's events are a host-safe vocabulary
-crate without cores, runtime or driver
-([IEEE 802.11](../protocols/ieee80211/instrumentation/README.md)).
-Instrumentation is never a Cargo feature of a library under
-`chips/`, `protocols/` or `portable/`; `oer-test-layers` rejects feature
-names carrying an instrumentation word, and its list of remaining ones only
-shrinks. `oer-espressif-staged-runtime::trace` owns the
-retained recorder, commit/clear protocol, global installation and previous-boot
-policy. The image places its retained storage and recorder and supplies its
-clock with `trace_clock!`. The platform preserves OETR layout 1: the six-word
-header, 16-byte entries, three-word snapshot headers and snapshot payload words.
-Retained storage uses plain atomic loads/stores; the recorder's read-modify-write
-counters and global pointer/mask stay in ordinary atomic RAM.
+`observe!`. The observer receives a `Copy + 'static` value and returns `()`:
+it holds no owner, register block, lease or frame borrow and cannot steer the
+owner. Without `cfg(oer_trace)` the point evaluates no event argument and
+leaves no code. Owners keep no observation counters, buffers or copied data.
+An image selects the observer; product compositions select `Noop`.
+
+Observation consists of these points and atomic counters in an image-owned
+collector. It has no ring, frame snapshots, retained event history or trace
+clock slot. `oer-hil-agent::capture::collector` counts a fixed image-declared
+bank of event kinds, including supported zeros. It retains no event payloads;
+unknown kinds and saturating counts are reported through the capture service.
+Readers load live atomics, without freezing or copying a history. Existing
+execution-duration consumers own their measurement state in the image.
+Fault records (`oer-diagnostics`, retained fault records) are separate failure
+contracts; test holds and injections under `oer_debug_control` are separate
+control contracts. Neither is an observation recorder.
+
+A protocol family's vocabulary is a host-safe crate without cores, runtime or
+driver ([IEEE 802.11](../protocols/ieee80211/instrumentation/README.md)). The
+S31 driver's small values live in `chips/esp32s31/instrumentation`, without HAL.
+Instrumentation is never a Cargo feature of a library under `chips/`,
+`protocols/` or `portable/`; the layer tests reject such feature names and check
+that the Wi-Fi driver's normal dependency graph never reaches staged-runtime.
 
 `trace` is the single observation mechanism, including execution cost and CPU
 load. Under image cfg `oer_trace`, owners emit event values through `observe!`;

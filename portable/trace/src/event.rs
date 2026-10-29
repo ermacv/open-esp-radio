@@ -13,7 +13,7 @@ pub enum Domain {
 }
 
 impl Domain {
-    /// The first mask bit and number of channels this domain owns.
+    /// The first dictionary group index and the number this domain owns.
     pub const fn channels(self) -> (u8, u8) {
         match self {
             Self::Platform => (0, 8),
@@ -60,8 +60,8 @@ impl Kind {
     }
 }
 
-/// A host-controlled enable bit. The 64 bits of the mask are split into
-/// fixed per-domain ranges, so domains allocate channels independently.
+/// A dictionary group in a fixed 64-bit namespace. Groups do not gate
+/// atomic counts; domains allocate them independently.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Channel(u8);
 
@@ -95,8 +95,8 @@ impl Channel {
     }
 }
 
-/// A trace point. Its encoding is the contract between the target that emits
-/// it and the host that decodes it, so both link the same type.
+/// A small observation value. Its dictionary encoding supports typed image
+/// adapters; atomic collectors count kinds without encoding payloads.
 pub trait Event: Sized {
     const KIND: Kind;
     const CHANNEL: Channel;
@@ -105,4 +105,17 @@ pub trait Event: Sized {
 
     /// `None` for words this type never encodes.
     fn decode(words: [u32; 2]) -> Option<Self>;
+}
+
+impl core::fmt::Display for Kind {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let domain = match self.domain {
+            Domain::Platform => "platform",
+            Domain::Phy => "phy",
+            Domain::Ieee80211 => "ieee80211",
+            Domain::Bluetooth => "bluetooth",
+            Domain::Ieee802154 => "ieee802154",
+        };
+        write!(f, "{domain}.{}", self.event)
+    }
 }

@@ -12,8 +12,6 @@ enum Barrier {
 }
 type ModelBarrierTrace = BarrierTrace<
     Vec<BarrierEvent<ModelAck, ModelAirDenied>>,
-    Vec<u8>,
-    Vec<Vec<u8>>,
     BarrierEvent<ModelAck, ModelAirDenied>,
 >;
 type RecordedBarrier = Rc<RefCell<Option<ModelBarrierTrace>>>;
@@ -201,7 +199,6 @@ impl Work for DuringPublication {
             "the barrier waits one publication, not the two-entry plan"
         );
         let publications_at_barrier = air.sent().len();
-        let mut retried_frames = Vec::new();
         let mut retry_terminal = None;
         if matches!(self.0, Barrier::RemoveKey) {
             assert!(matches!(
@@ -261,12 +258,6 @@ impl Work for DuringPublication {
                 );
                 assert_eq!(first.plaintext[1] & 0x08, 0);
                 assert_ne!(retried.plaintext[1] & 0x08, 0);
-                retried_frames = air
-                    .sent()
-                    .into_iter()
-                    .skip(1)
-                    .map(|frame| frame.plaintext)
-                    .collect();
             }
         }
         if let Some(recorded) = self.1 {
@@ -277,8 +268,6 @@ impl Work for DuringPublication {
                 just_before_timeout,
                 publications_at_barrier,
                 events,
-                first_frame: first.plaintext,
-                retried_frames,
                 retry_terminal,
             });
         }
@@ -326,8 +315,6 @@ impl conformance::BarrierHarness for ModelBarrierHarness {
     type Ack = ModelAck;
     type AirDenied = ModelAirDenied;
     type Events = Vec<BarrierEvent<ModelAck, ModelAirDenied>>;
-    type Frame = Vec<u8>;
-    type Retries = Vec<Vec<u8>>;
     async fn exercise_barrier(&mut self, case: BarrierCase) -> ModelBarrierTrace {
         let barrier = match case {
             BarrierCase::GateAck => Barrier::GateAck,

@@ -50,3 +50,5 @@ Record and counter pages retain that identity and their absolute range.
 `capture/refused` is the typed response to an invalid read. The owning image
 controls arming, freezing and release; the generic service never performs a
 radio operation or retains counters from another boot.
+
+Image observation readers expose live atomic event counters through the capture service, with zero event record pages. The generic record transport remains for independently defined RF experiment payloads. Counter pages are individual atomic readings, without a simultaneous snapshot guarantee.

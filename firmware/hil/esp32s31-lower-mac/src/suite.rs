@@ -27,7 +27,6 @@ use oer_esp32s31_ieee80211_driver::{
     lower_mac::{ConnectionFramePriorities, LowerMacConfig, RadioCoexPriorities},
     ordinary_tx::{OrdinaryTxOwner, WifiTxEntropy},
     port::{
-        self,
         device::{Composition, RadioDevice, RadioParts},
         *,
     },
@@ -114,11 +113,20 @@ type Caps = Esp32s31Caps<TX>;
 static SHARED: StaticCell<PortSharedStorage<TX>> = StaticCell::new();
 static STORAGE: StaticCell<PortStorage<Device, TX>> = StaticCell::new();
 static DEVICE: StaticCell<Device> = StaticCell::new();
-static RETAINED: oer_espressif_staged_runtime::trace::Retained<256, 4, 33> =
-    oer_espressif_staged_runtime::trace::Retained::new();
-static TRACE: oer_espressif_staged_runtime::trace::Trace =
-    oer_espressif_staged_runtime::trace::Trace::new(&RETAINED);
-oer_espressif_staged_runtime::trace_clock!(oer_embassy_time::now_micros);
+pub(crate) static COUNTERS: oer_hil_agent::capture::collector::Collector<6> = const {
+    use oer_esp32s31_instrumentation::wifi::*;
+    match oer_hil_agent::capture::collector::Collector::new([
+        Publication::KIND, TerminalPosted::KIND, EdcaTable::KIND,
+        EdcaRecord::KIND, EdcaDraw::KIND, GroupRollback::KIND,
+    ]) { Ok(collector) => collector, Err(_) => panic!("unique image event kinds") }
+};
+#[derive(Default)]
+struct DriverObserver;
+impl oer_trace::Observer for DriverObserver {
+    fn event<E: oer_trace::Event + Copy + 'static>(&self, event: E) {
+        oer_trace::Observer::event(&COUNTERS, event);
+    }
+}
 
 pub struct Boot {
     pub cell: MembershipCell<Wifi>,
@@ -156,6 +164,7 @@ impl WifiTxEntropy for Entropy {
 }
 struct Fixture;
 impl Composition for Fixture {
+    type Observer = DriverObserver;
     type Coex = Coex;
     type Entropy = Entropy;
     type Body = FixtureBody;
@@ -279,6 +288,7 @@ impl Server {
         match request {
             Request::Prepare(config) => run_request(pin!(self.prepare(config))).await,
             Request::Run(key) => run_request(pin!(self.exchange(key))).await,
+            Request::Describe(_) | Request::Counters(_) => Err(RejectReason::InvalidState),
         }
     }
     async fn prepare(&mut self, config: Prepare) -> Result<Answer, RejectReason> {
@@ -508,7 +518,6 @@ async fn install(boot: Boot, config: Prepare) -> Result<PortParts<Device, TX>, &
         access_point_address: IndividualAddress::for_interface(boot.ap).map_err(|_| "AP")?,
         coex: &Coex,
     };
-    let _ = oer_espressif_staged_runtime::trace::install(&TRACE);
     Ok(parts)
 }
 struct Discover {
@@ -756,7 +765,7 @@ async fn exchange<'p, 'id: 'p, Id: radio::SlotIdentity + 'id>(
     let source =
         <Family<Id> as TxBufferPool<'id, BufferClass<TX>>>::prepare::<Station, Caps>(source)
             .map_err(|_| "prepare")?;
-    oer_espressif_staged_runtime::trace::start(port::trace::Publication::CHANNEL.mask());
+    COUNTERS.clear();
     phase
         .station()
         .submit(
@@ -814,10 +823,7 @@ async fn exchange<'p, 'id: 'p, Id: radio::SlotIdentity + 'id>(
         state,
         rate: PhyRate::Legacy(peer.rate),
         sequence,
-        publications: TRACE
-            .records()
-            .filter(|record| record.decode::<port::trace::Publication>().is_some())
-            .count(),
+        publications: COUNTERS.count::<oer_esp32s31_instrumentation::wifi::Publication>() as usize,
         outcome: outcomes::Outcome::Single(parts.outcome),
     };
     outcome_trace(&trace).ok_or("unrepresentable outcome")

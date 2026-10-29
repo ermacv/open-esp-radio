@@ -79,7 +79,6 @@ impl core::fmt::Display for Activity {
         )
     }
 }
-oer_trace::event_set!(pub ExecutorEvents: Activity);
 
 #[cfg(test)]
 mod tests {

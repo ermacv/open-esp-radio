@@ -28,6 +28,7 @@ use oer_radio_regulatory::{PowerLimits, RegulatoryDomain};
 
 /// Image-owned policy and opaque operation contexts. No executor is selected.
 pub trait Composition: 'static {
+    type Observer: oer_trace::Observer + Default + 'static;
     type Coex: RadioCoexPriorities + 'static;
     type Entropy: WifiTxEntropy;
     type Body: TxBody + 'static;
@@ -239,6 +240,7 @@ where
 {
     type Power = Power;
     type Coex = C::Coex;
+    type Observer = C::Observer;
     type Entropy = C::Entropy;
     type Timer = T;
     type Hardware = RadioAccess;

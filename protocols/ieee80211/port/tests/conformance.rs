@@ -247,17 +247,8 @@ fn outcome_verification_rejects_wrong_owners_state_form_and_extra_publications()
     );
 }
 #[test]
-fn retained_mpdu_verification_accepts_array_and_bounded_observation_storage() {
+fn barrier_verification_accepts_count_samples_and_terminal_arrays() {
     use conformance::{BarrierCase, BarrierEvent, BarrierTrace, HeldSnapshot};
-    let mut first = [0x5a; 40];
-    first[0] = 0x08;
-    first[1] = 0x41;
-    let mut retry = first;
-    assert!(oer_ieee80211_wire::frame::set_retry_bit(&mut retry));
-    let mut retried_frames: heapless::Vec<[u8; 40], 1> = heapless::Vec::new();
-    retried_frames
-        .push(retry)
-        .expect("one retry fits the fixture");
     let snapshot = || HeldSnapshot {
         publications: 1,
         events: 0,
@@ -281,8 +272,6 @@ fn retained_mpdu_verification_accepts_array_and_bounded_observation_storage() {
             },
             BarrierEvent::GateClosed,
         ],
-        first_frame: first,
-        retried_frames,
         retry_terminal: None,
     };
     assert_eq!(

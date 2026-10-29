@@ -159,6 +159,7 @@ impl Drop for TestReceive {
     }
 }
 impl Device<512> for TestDevice {
+    type Observer = oer_trace::Noop;
     type Power = Power;
     type Coex = RadioNine;
     type Entropy = fn() -> u32;

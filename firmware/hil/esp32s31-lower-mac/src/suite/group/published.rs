@@ -74,7 +74,7 @@ async fn exchange<'p, 'id: 'p, Id: radio::SlotIdentity + 'id>(
     .map_err(|_| "group prepare")?;
     irq::hold_completion(true);
     phase.debug_hold_completion(true);
-    oer_espressif_staged_runtime::trace::start(port::trace::Publication::CHANNEL.mask());
+    COUNTERS.clear();
     phase
         .access_point()
         .submit(
@@ -91,10 +91,7 @@ async fn exchange<'p, 'id: 'p, Id: radio::SlotIdentity + 'id>(
         )
         .map_err(|_| "group submit")?;
     barrier::progress().await;
-    if TRACE
-        .records()
-        .filter(|row| row.decode::<port::trace::Publication>().is_some())
-        .count()
+    if COUNTERS.count::<oer_esp32s31_instrumentation::wifi::Publication>() as usize
         != 1
     {
         return Err("one AP publication required");
@@ -102,9 +99,7 @@ async fn exchange<'p, 'id: 'p, Id: radio::SlotIdentity + 'id>(
     let admitted_at = EmbassyClock.now();
     phase.access_point().remove_group_key(permission, key);
     barrier::progress().await;
-    let blocked_while_published = !TRACE
-        .records()
-        .any(|row| row.decode::<port::trace::TerminalPosted>().is_some());
+    let blocked_while_published = COUNTERS.count::<oer_esp32s31_instrumentation::wifi::TerminalPosted>() == 0;
     irq::hold_completion(false);
     phase.debug_hold_completion(false);
     let mut access = resources.terminal_access;

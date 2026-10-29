@@ -32,7 +32,6 @@ macro_rules! observations {
             }
         }
 
-        oer_trace::event_set!(pub StationEvents: $($event),+);
     };
 }
 

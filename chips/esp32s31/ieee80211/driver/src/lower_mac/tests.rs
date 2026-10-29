@@ -3541,7 +3541,13 @@ fn the_backoff_is_drawn_from_the_category_s_contention_window() {
         let mut core = enabled(&mut hardware, pools);
         // The standard defaults: best effort's CWmin is 15 slots.
         for _ in 0..16 {
-            assert!(core.draw_backoff(VifRole::Station, WmmAccessCategory::BestEffort) <= 15);
+            assert!(
+                core.draw_backoff(
+                    VifRole::Station,
+                    WmmAccessCategory::BestEffort,
+                    &oer_trace::Noop
+                ) <= 15
+            );
         }
     });
 }
@@ -4502,7 +4508,7 @@ fn the_core_draws_from_the_publishing_vif_and_keeps_each_complete_record() {
             }
             .get()
             .access_category(WmmAccessCategory::BestEffort);
-            let slots = core.draw_backoff(role, WmmAccessCategory::BestEffort);
+            let slots = core.draw_backoff(role, WmmAccessCategory::BestEffort, &oer_trace::Noop);
             assert_eq!(
                 slots,
                 (entropy() as u16) & ((1 << record.wmm.ecw_min.get()) - 1)

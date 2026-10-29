@@ -31,8 +31,9 @@ pub enum Error {
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub struct Description {
     pub identity: Identity,
-    /// Hash of the record's path and full postcard schema.
+    /// Hash of the counter or experiment data path and full postcard schema.
     pub schema: Key,
+    /// The page extent is ready to read; atomic counter values remain live.
     pub frozen: bool,
     pub records: u32,
     pub counters: u16,
@@ -75,7 +76,7 @@ pub struct Records {
     pub records: heapless::Vec<EncodedRecord, RECORDS_PER_PAGE>,
 }
 
-/// Counts are independent of history filtering and history capacity.
+/// Image observation counts, independent of RF experiment data pages.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub struct Counter {
     pub kind: u16,
@@ -93,16 +94,6 @@ pub struct Counters {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub struct Refused(pub Error);
-
-/// Schema shared by image collectors and the host. Dictionary event kinds
-/// keep their existing two-word encoding; timestamps are boot-local µs.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
-pub struct EventRecord {
-    pub kind: u16,
-    pub at_micros: u64,
-    pub words: [u32; 2],
-}
-pub const EVENT_SCHEMA: Key = Key::of::<EventRecord>("trace/event");
 
 crate::messages! {
     endpoint Describe = "capture/describe" => Description;

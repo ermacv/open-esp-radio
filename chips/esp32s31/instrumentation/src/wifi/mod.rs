@@ -1,7 +1,6 @@
-//! P2 publication evidence for the image declaring trace and debug-control.
+//! Small Wi-Fi driver observation values; images count their kinds.
 use oer_trace::{Channel, Domain, Event, Kind};
 mod edca;
-pub(crate) use edca::contention;
 pub use edca::{EdcaDraw, EdcaRecord, EdcaTable};
 
 /// A successful publication of one admitted MPDU.
@@ -30,6 +29,7 @@ impl Event for Publication {
 }
 
 /// A terminal successfully entered the real port event queue.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct TerminalPosted;
 impl Event for TerminalPosted {
     const KIND: Kind = Kind::new(Domain::Ieee80211, 102);
@@ -43,6 +43,7 @@ impl Event for TerminalPosted {
 }
 
 /// Internal rollback and the actual retained command owners before fail-stop.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct GroupRollback {
     pub owners: [u8; 2],
     pub previous_key_id: u8,
@@ -75,23 +76,5 @@ impl Event for GroupRollback {
                 _ => return None,
             },
         })
-    }
-}
-/// Snapshot of the encoded DMA input immediately before reservation.
-pub const ENCODED_MPDU: Kind = Kind::new(Domain::Ieee80211, 101);
-#[cfg(oer_trace)]
-#[inline(always)]
-pub(crate) fn encoded_mpdu(bytes: &[u8]) {
-    if oer_espressif_staged_runtime::trace::enabled(Publication::CHANNEL) {
-        oer_espressif_staged_runtime::trace::capture(ENCODED_MPDU, |snapshot| {
-            snapshot.push(bytes.len() as u32);
-            for chunk in bytes.chunks(4) {
-                let mut word = [0; 4];
-                for (out, byte) in word.iter_mut().zip(chunk) {
-                    *out = *byte;
-                }
-                snapshot.push(u32::from_le_bytes(word));
-            }
-        });
     }
 }

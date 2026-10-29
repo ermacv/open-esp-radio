@@ -1,348 +1,218 @@
-//! Caller-owned, single-context observation collector. A collector is not
-//! Sync: the image lends it only within its chosen task/executor context.
+//! Image-owned atomic event counters. Observation retains no event payload,
+//! timestamp or history, and never borrows mutable state or waits for IO.
 use super::Reader;
-use core::cell::{Cell, RefCell};
+use core::sync::atomic::{AtomicU32, Ordering::Relaxed};
 use oer_hil_protocol::capture::*;
-use oer_trace::{Event, Observer};
+use oer_trace::{Event, Kind, Observer};
 
-pub trait Clock {
-    fn micros(&self) -> u64;
+/// The image declares the supported kinds, including supported zero counts.
+/// Each slot is one saturating atomic counter; no registration or ring exists.
+pub struct Collector<const K: usize> {
+    kinds: [Kind; K],
+    values: [AtomicU32; K],
+    unlisted: AtomicU32,
 }
-
-pub struct Collector<C, const R: usize, const K: usize> {
-    clock: C,
-    state: RefCell<State<R, K>>,
-    borrow_failure: Cell<bool>,
-}
-
-struct State<const R: usize, const K: usize> {
-    identity: Option<Identity>,
-    frozen: bool,
-    mask: u64,
-    records: heapless::Vec<EncodedRecord, R>,
-    counters: heapless::Vec<Counter, K>,
-    dropped: u32,
-    failure: Option<Error>,
-}
-
-impl<C, const R: usize, const K: usize> Collector<C, R, K> {
-    pub const fn new(clock: C) -> Self {
+impl<const K: usize> Collector<K> {
+    pub const fn new(kinds: [Kind; K]) -> Result<Self, Error> {
         const {
-            if R > u32::MAX as usize || K > u16::MAX as usize {
-                panic!("capture geometry fits the wire counts");
+            if K > u16::MAX as usize {
+                panic!("counter bank fits wire count");
             }
         }
-        Self {
-            clock,
-            state: RefCell::new(State {
-                identity: None,
-                frozen: false,
-                mask: 0,
-                records: heapless::Vec::new(),
-                counters: heapless::Vec::new(),
-                dropped: 0,
-                failure: None,
-            }),
-            borrow_failure: Cell::new(false),
+        // A duplicate kind would make the bank ambiguous. Image dictionaries
+        // are fixed values, so reject duplicates in their static initializer.
+        let mut remaining = kinds.as_slice();
+        while let [kind, tail @ ..] = remaining {
+            let mut other = tail;
+            while let [candidate, rest @ ..] = other {
+                if kind.raw() == candidate.raw() {
+                    return Err(Error::InvalidState);
+                }
+                other = rest;
+            }
+            remaining = tail;
         }
+        Ok(Self {
+            kinds,
+            values: [const { AtomicU32::new(0) }; K],
+            unlisted: AtomicU32::new(0),
+        })
     }
-
-    /// Identity allocation and operation bracketing belong to the image.
-    /// A capture cannot be replaced until its owner explicitly releases it.
-    pub fn begin(&mut self, identity: Identity, mask: u64) -> Result<(), Error> {
-        let state = self.state.get_mut();
-        if state.identity.is_some() || identity.capture == 0 {
-            return Err(Error::InvalidState);
+    /// The image resets a measurement window at its own operation boundary.
+    pub fn clear(&self) {
+        for value in &self.values {
+            value.store(0, Relaxed);
         }
-        state.identity = Some(identity);
-        state.mask = mask;
-        self.borrow_failure.set(false);
-        Ok(())
+        self.unlisted.store(0, Relaxed);
     }
-
-    /// Live aggregate query; history filtering and capacity never change it.
-    pub fn counter(&self, kind: u16) -> Result<Counter, Error> {
-        let state = self.state.try_borrow().map_err(|_| Error::Borrowed)?;
-        Ok(state
-            .counters
+    /// A single live atomic reading; it carries no event payload or ordering.
+    pub fn count<E: Event>(&self) -> u32 {
+        self.value(E::KIND)
+    }
+    pub fn value(&self, kind: Kind) -> u32 {
+        self.kinds
             .iter()
-            .find(|counter| counter.kind == kind)
-            .copied()
-            .unwrap_or(Counter {
-                kind,
-                value: 0,
-                saturated: false,
-            }))
-    }
-    pub fn mark_failure(&mut self, error: Error) {
-        self.state.get_mut().failure.get_or_insert(error);
-    }
-    /// Join a producer's immutable aggregate cut before freezing this collector.
-    pub fn merge_counters(&mut self, counters: &[Counter]) -> Result<(), Error> {
-        let state = self.state.get_mut();
-        if state.identity.is_none() || state.frozen {
-            return Err(Error::InvalidState);
-        }
-        for incoming in counters {
-            if let Some(counter) = state
-                .counters
-                .iter_mut()
-                .find(|counter| counter.kind == incoming.kind)
-            {
-                let value = counter.value.checked_add(incoming.value);
-                counter.value = value.unwrap_or(u32::MAX);
-                counter.saturated |= incoming.saturated || value.is_none();
-                if counter.saturated {
-                    state.failure.get_or_insert(Error::CounterOverflow);
-                }
-            } else if state.counters.push(*incoming).is_err() {
-                state.failure.get_or_insert(Error::CounterKindsFull);
-                return Err(Error::CounterKindsFull);
-            } else if incoming.saturated {
-                state.failure.get_or_insert(Error::CounterOverflow);
-            }
-        }
-        Ok(())
-    }
-
-    pub fn freeze(&mut self) -> Result<Description, Error> {
-        let state = self.state.get_mut();
-        if state.identity.is_none() || state.frozen {
-            return Err(Error::InvalidState);
-        }
-        state.frozen = true;
-        self.describe()
-    }
-
-    pub fn release(&mut self, identity: Identity) -> Result<(), Error> {
-        let state = self.state.get_mut();
-        state.validate(identity)?;
-        state.identity = None;
-        state.frozen = false;
-        state.records.clear();
-        state.counters.clear();
-        state.dropped = 0;
-        state.failure = None;
-        Ok(())
-    }
-}
-
-impl<C: Clock, const R: usize, const K: usize> Collector<C, R, K> {
-    /// Image-local admission reports a refused observation as a typed value.
-    /// Owners call through Observer, which latches this failure and returns ().
-    pub fn record<E: Event + Copy + 'static>(&self, event: E) -> Result<(), Error> {
-        let Ok(mut state) = self.state.try_borrow_mut() else {
-            self.borrow_failure.set(true);
-            return Err(Error::Borrowed);
-        };
-        if state.identity.is_none() || state.frozen {
-            return Err(Error::InvalidState);
-        }
-        let counted = state.count(E::KIND.raw());
-        if let Err(error) = counted {
-            state.failure.get_or_insert(error);
-        }
-        // History filtering never disables aggregate counts.
-        if state.mask & E::CHANNEL.mask() == 0 {
-            return counted;
-        }
-        let record = EventRecord {
-            kind: E::KIND.raw(),
-            at_micros: self.clock.micros(),
-            words: event.encode(),
-        };
-        let mut bytes = [0; RECORD_BYTES];
-        let result = postcard::to_slice(&record, &mut bytes)
-            .map_err(|_| Error::Encoding)
-            .and_then(|bytes| EncodedRecord::from_slice(bytes).map_err(|_| Error::Encoding))
-            .and_then(|record| state.records.push(record).map_err(|_| Error::RecordsFull));
-        if let Err(error) = result {
-            state.failure.get_or_insert(error);
-            match state.dropped.checked_add(1) {
-                Some(next) => state.dropped = next,
-                None => {
-                    state.failure.get_or_insert(Error::CounterOverflow);
-                }
-            }
-        }
-        counted.and(result)
-    }
-}
-
-impl<C: Clock, const R: usize, const K: usize> Observer for Collector<C, R, K> {
-    fn event<E: Event + Copy + 'static>(&self, event: E) {
-        let _ = self.record(event);
-    }
-}
-
-impl<const R: usize, const K: usize> State<R, K> {
-    fn count(&mut self, kind: u16) -> Result<(), Error> {
-        if let Some(counter) = self
-            .counters
-            .iter_mut()
-            .find(|counter| counter.kind == kind)
-        {
-            match counter.value.checked_add(1) {
-                Some(next) => counter.value = next,
-                None => {
-                    counter.saturated = true;
-                    return Err(Error::CounterOverflow);
-                }
-            }
-            return Ok(());
-        }
-        self.counters
-            .push(Counter {
-                kind,
-                value: 1,
-                saturated: false,
+            .zip(&self.values)
+            .find_map(|(candidate, value)| {
+                (candidate.raw() == kind.raw()).then(|| value.load(Relaxed))
             })
-            .map_err(|_| Error::CounterKindsFull)
+            .unwrap_or(0)
     }
-
-    fn validate(&self, identity: Identity) -> Result<(), Error> {
-        if self.identity != Some(identity) {
-            return Err(Error::IdentityMismatch);
+    /// Identity is supplied by the image's HIL endpoint, not observation points.
+    pub fn reader(&self, identity: Identity) -> CounterReader<'_, K> {
+        CounterReader {
+            collector: self,
+            identity,
         }
-        if !self.frozen {
-            return Err(Error::InvalidState);
+    }
+}
+fn increment(value: &AtomicU32) {
+    let _ = value.fetch_update(Relaxed, Relaxed, |current| current.checked_add(1));
+}
+impl<const K: usize> Observer for Collector<K> {
+    #[inline]
+    fn event<E: Event + Copy + 'static>(&self, _: E) {
+        if let Some(value) = self
+            .kinds
+            .iter()
+            .zip(&self.values)
+            .find_map(|(kind, value)| (kind.raw() == E::KIND.raw()).then_some(value))
+        {
+            increment(value);
+        } else {
+            increment(&self.unlisted);
         }
-        Ok(())
     }
 }
 
-impl<C, const R: usize, const K: usize> Reader for Collector<C, R, K> {
+/// Existing capture transport over a fixed bank of live atomic counts.
+/// The generic service also serves independent RF experiment record readers;
+/// this reader has zero records and no freeze/clock/history lifecycle.
+pub struct CounterReader<'a, const K: usize> {
+    collector: &'a Collector<K>,
+    identity: Identity,
+}
+impl<const K: usize> CounterReader<'_, K> {
+    fn validate(&self, identity: Identity) -> Result<(), Error> {
+        if identity == self.identity {
+            Ok(())
+        } else {
+            Err(Error::IdentityMismatch)
+        }
+    }
+}
+impl<const K: usize> Reader for CounterReader<'_, K> {
     fn describe(&self) -> Result<Description, Error> {
-        let state = self.state.try_borrow().map_err(|_| Error::Borrowed)?;
+        let dropped = self.collector.unlisted.load(Relaxed);
+        let overflow = self
+            .collector
+            .values
+            .iter()
+            .any(|value| value.load(Relaxed) == u32::MAX);
         Ok(Description {
-            identity: state.identity.ok_or(Error::InvalidState)?,
-            schema: EVENT_SCHEMA,
-            frozen: state.frozen,
-            records: state.records.len() as u32,
-            counters: state.counters.len() as u16,
-            dropped: state.dropped,
-            failure: if self.borrow_failure.get() {
-                Some(Error::Borrowed)
+            identity: self.identity,
+            schema: oer_hil_protocol::Key::of::<Counter>("trace/counter"),
+            frozen: true,
+            records: 0,
+            counters: K as u16,
+            dropped,
+            failure: if overflow {
+                Some(Error::CounterOverflow)
+            } else if dropped != 0 {
+                Some(Error::CounterKindsFull)
             } else {
-                state.failure
+                None
             },
         })
     }
-
     fn records(&self, request: PageRequest) -> Result<Records, Error> {
-        let state = self.state.try_borrow().map_err(|_| Error::Borrowed)?;
-        state.validate(request.identity)?;
-        let range = request.range(state.records.len(), RECORDS_PER_PAGE)?;
-        let mut records = heapless::Vec::new();
-        for record in state.records.get(range).ok_or(Error::InvalidRange)? {
-            records
-                .push(record.clone())
+        self.validate(request.identity)?;
+        Err(Error::InvalidRange)
+    }
+    fn counters(&self, request: PageRequest) -> Result<Counters, Error> {
+        self.validate(request.identity)?;
+        let range = request.range(K, COUNTERS_PER_PAGE)?;
+        let mut counters = heapless::Vec::new();
+        for (kind, value) in self
+            .collector
+            .kinds
+            .iter()
+            .zip(&self.collector.values)
+            .skip(range.start)
+            .take(range.len())
+        {
+            let value = value.load(Relaxed);
+            counters
+                .push(Counter {
+                    kind: kind.raw(),
+                    value,
+                    saturated: value == u32::MAX,
+                })
                 .map_err(|_| Error::InvalidRange)?;
         }
-        Ok(Records {
-            identity: request.identity,
-            first: request.first,
-            total: state.records.len() as u32,
-            records,
-        })
-    }
-
-    fn counters(&self, request: PageRequest) -> Result<Counters, Error> {
-        let state = self.state.try_borrow().map_err(|_| Error::Borrowed)?;
-        state.validate(request.identity)?;
-        let range = request.range(state.counters.len(), COUNTERS_PER_PAGE)?;
-        let counters =
-            heapless::Vec::from_slice(state.counters.get(range).ok_or(Error::InvalidRange)?)
-                .map_err(|_| Error::InvalidRange)?;
         Ok(Counters {
-            identity: request.identity,
+            identity: self.identity,
             first: request.first,
-            total: state.counters.len() as u16,
+            total: K as u16,
             counters,
         })
     }
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
-    use crate::capture::tests::{ID, Step, Virtual};
+    use crate::capture::tests::{ID, Step, request};
     #[test]
-    fn saturation_and_nested_observation_are_reported_without_panicking() {
-        let mut collector = Collector::<_, 2, 1>::new(Virtual);
-        collector.begin(ID, u64::MAX).unwrap();
-        collector.event(Step);
+    fn counts_saturate_and_report_unlisted_kinds_without_panicking() {
+        let collector = Collector::new([Step::KIND]).unwrap();
         collector
-            .state
-            .get_mut()
-            .counters
-            .first_mut()
+            .values
+            .first()
             .unwrap()
-            .value = u32::MAX;
+            .store(u32::MAX - 1, Relaxed);
         collector.event(Step);
-        assert!(
-            collector
-                .counters(crate::capture::tests::request(0, 1))
-                .is_err()
-        );
-        let description = collector.freeze().unwrap();
-        assert_eq!(description.failure, Some(Error::CounterOverflow));
-        let counter = collector
-            .counters(crate::capture::tests::request(0, 1))
-            .unwrap()
-            .counters
-            .pop()
-            .unwrap();
-        assert_eq!((counter.value, counter.saturated), (u32::MAX, true));
-        collector.release(ID).unwrap();
-        collector.begin(ID, u64::MAX).unwrap();
-        let borrow = collector.state.borrow_mut();
         collector.event(Step);
-        drop(borrow);
-        assert_eq!(collector.freeze().unwrap().failure, Some(Error::Borrowed));
-    }
-}
-
-#[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-mod merge_tests {
-    use super::*;
-    #[test]
-    fn immutable_aggregates_merge_by_kind_and_keep_saturation_and_capacity_failures() {
-        let mut collector = Collector::<_, 0, 1>::new(());
-        let identity = Identity {
-            capture: 1,
-            epoch: 0,
-        };
-        collector.begin(identity, 0).unwrap();
-        collector
-            .merge_counters(&[Counter {
-                kind: 1,
-                value: u32::MAX,
-                saturated: false,
-            }])
-            .unwrap();
-        collector
-            .merge_counters(&[Counter {
-                kind: 1,
-                value: 1,
-                saturated: false,
-            }])
-            .unwrap();
-        let counter = collector.counter(1).unwrap();
-        assert_eq!(counter.value, u32::MAX);
-        assert!(counter.saturated);
+        assert_eq!(collector.count::<Step>(), u32::MAX);
+        let reader = collector.reader(ID);
         assert_eq!(
-            collector.merge_counters(&[Counter {
-                kind: 2,
-                value: 1,
-                saturated: false
-            }]),
-            Err(Error::CounterKindsFull)
+            reader.describe().unwrap().failure,
+            Some(Error::CounterOverflow)
         );
-        let cut = collector.freeze().unwrap();
-        assert_eq!(cut.failure, Some(Error::CounterOverflow));
-        assert_eq!(collector.merge_counters(&[]), Err(Error::InvalidState));
+        assert!(reader.counters(request(0, 1)).unwrap().counters[0].saturated);
+        collector.clear();
+        assert_eq!(reader.describe().unwrap().failure, None);
+        let empty = Collector::new([]).unwrap();
+        empty.event(Step);
+        assert_eq!(empty.reader(ID).describe().unwrap().dropped, 1);
+        assert_eq!(
+            empty.reader(ID).describe().unwrap().failure,
+            Some(Error::CounterKindsFull)
+        );
+    }
+    #[test]
+    fn concurrent_observers_share_only_atomics_and_keep_every_count() {
+        let collector = Collector::new([Step::KIND]).unwrap();
+        std::thread::scope(|scope| {
+            for _ in 0..4 {
+                scope.spawn(|| {
+                    for _ in 0..1000 {
+                        collector.event(Step);
+                    }
+                });
+            }
+        });
+        assert_eq!(collector.count::<Step>(), 4000);
+    }
+    #[test]
+    fn observation_point_evaluates_no_arguments_without_trace_and_counts_once_with_trace() {
+        let observer = Collector::new([Step::KIND]).unwrap();
+        let evaluated = core::cell::Cell::new(0u32);
+        oer_trace::observe!(observer, {
+            evaluated.set(evaluated.get() + 1);
+            Step
+        });
+        assert_eq!(evaluated.get(), u32::from(cfg!(oer_trace)));
+        assert_eq!(observer.count::<Step>(), u32::from(cfg!(oer_trace)));
     }
 }

@@ -2,7 +2,7 @@ extern crate std;
 
 use std::{format, vec::Vec};
 
-use oer_trace::{Described, Describer, Domain, Event, EventSet, Noop, Observer, Record};
+use oer_trace::{Domain, Event, Noop, Observer};
 
 use super::*;
 
@@ -186,7 +186,7 @@ fn identity(observation: Observation) -> (oer_trace::Kind, oer_trace::Channel, [
 fn every_event_decodes_to_itself_and_kinds_are_unique_below_the_driver_range() {
     let mut kinds = std::collections::BTreeMap::new();
     for observation in every_event() {
-        let (kind, channel, words) = identity(observation);
+        let (kind, channel, _words) = identity(observation);
         assert_eq!(kind.domain, Domain::Ieee80211);
         assert!(kind.event < 100, "{observation:?} uses the driver's ids");
         let (first, count) = Domain::Ieee80211.channels();
@@ -194,24 +194,6 @@ fn every_event_decodes_to_itself_and_kinds_are_unique_below_the_driver_range() {
         assert!(
             channel.bit_index() < first + count - 1,
             "{observation:?} uses the driver's channel"
-        );
-        let record = Record {
-            tag: 0,
-            kind: kind.raw(),
-            t_us: 0,
-            words,
-        };
-        let sets: &[Describer] = &[StationEvents::describe];
-        let described = format!(
-            "{}",
-            Described {
-                record: &record,
-                sets
-            }
-        );
-        assert!(
-            !described.starts_with("ieee80211."),
-            "{observation:?} is in the event set"
         );
         let name = format!("{observation:?}");
         let variant = std::string::String::from(name.split('(').next().expect("variant"));
@@ -482,31 +464,6 @@ fn arp_parse_takes_ethernet_ipv4_requests_and_replies_only() {
         other[index] = value;
         assert_eq!(ArpAddresses::parse(&other), None, "byte {index} = {value}");
     }
-}
-
-#[test]
-fn events_describe_with_their_names() {
-    let event = GroupKeyInstalled {
-        key_id: 1,
-        replaced: false,
-    };
-    let record = Record {
-        tag: 0,
-        kind: GroupKeyInstalled::KIND.raw(),
-        t_us: 0,
-        words: event.encode(),
-    };
-    let sets: &[Describer] = &[StationEvents::describe];
-    assert_eq!(
-        format!(
-            "{}",
-            Described {
-                record: &record,
-                sets
-            }
-        ),
-        "service.group-key key_id=1 replaced=false"
-    );
 }
 
 #[test]

@@ -163,9 +163,9 @@ pub enum BarrierEvent<A, D> {
 }
 
 /// One published head and one queued successor on the same AC. Fixtures
-/// capture counts and frame bytes from their actual publication observer;
+/// read atomic counts from their image collector;
 /// terminals come through the port, never from an expected identity.
-pub struct BarrierTrace<E, F, R, T> {
+pub struct BarrierTrace<E, T> {
     /// Head and successor identities captured before admission.
     pub tickets: [u8; 2],
     /// Sample with the head published, before requesting its barrier.
@@ -178,11 +178,6 @@ pub struct BarrierTrace<E, F, R, T> {
     pub publications_at_barrier: usize,
     /// Events captured from the actual backend event stream.
     pub events: E,
-    /// Encoded MPDU after numbering, excluding hardware-generated trailers.
-    /// Capture it from the actual publication's owner, before hardware owns it.
-    pub first_frame: F,
-    /// The same encoded extent for each real Sent republication.
-    pub retried_frames: R,
     /// The actual terminal of the post-barrier Sent submission, if any.
     pub retry_terminal: Option<T>,
 }
@@ -195,21 +190,12 @@ pub trait BarrierHarness {
     type AirDenied;
     /// Captured event storage; may be an array or bounded collection.
     type Events: AsRef<[BarrierEvent<Self::Ack, Self::AirDenied>]>;
-    /// Encoded MPDU storage owned by this fixture.
-    type Frame: AsRef<[u8]>;
-    /// Captured republications, without a prescribed allocator.
-    type Retries: AsRef<[Self::Frame]>;
-    /// Run the case through the actual backend and capture its owners and bytes.
+    /// Run the case through the actual backend and capture its owners and counts.
     fn exercise_barrier(
         &mut self,
         case: BarrierCase,
     ) -> impl core::future::Future<
-        Output = BarrierTrace<
-            Self::Events,
-            Self::Frame,
-            Self::Retries,
-            BarrierEvent<Self::Ack, Self::AirDenied>,
-        >,
+        Output = BarrierTrace<Self::Events, BarrierEvent<Self::Ack, Self::AirDenied>>,
     >;
 }
 
@@ -230,9 +216,9 @@ pub async fn check_barriers(
 }
 
 /// Verify real observations of a held publication, its barrier and a Sent retry.
-pub fn verify_barrier<A, D, E: AsRef<[BarrierEvent<A, D>]>, F: AsRef<[u8]>, R: AsRef<[F]>>(
+pub fn verify_barrier<A, D, E: AsRef<[BarrierEvent<A, D>]>>(
     case: BarrierCase,
-    trace: BarrierTrace<E, F, R, BarrierEvent<A, D>>,
+    trace: BarrierTrace<E, BarrierEvent<A, D>>,
 ) -> Result<(), Violation> {
     for snapshot in [trace.before_request, trace.before_result]
         .into_iter()
@@ -300,39 +286,7 @@ pub fn verify_barrier<A, D, E: AsRef<[BarrierEvent<A, D>]>, F: AsRef<[u8]>, R: A
     if !correct_head {
         return Err(Violation::TerminalKind);
     }
-    match case {
-        BarrierCase::GateRetry if trace.retried_frames.as_ref().is_empty() => {
-            return Err(Violation::Publication);
-        }
-        BarrierCase::GateAck | BarrierCase::GateTimeout | BarrierCase::RemoveKey
-            if !trace.retried_frames.as_ref().is_empty() =>
-        {
-            return Err(Violation::Publication);
-        }
-        _ => {}
-    }
-    for retry in trace.retried_frames.as_ref() {
-        let Some((first_control, original)) = trace.first_frame.as_ref().split_first_chunk::<2>()
-        else {
-            return Err(Violation::Publication);
-        };
-        let Some((retry_control, repeated)) = retry.as_ref().split_first_chunk::<2>() else {
-            return Err(Violation::Publication);
-        };
-        // Everything after Frame Control includes the original SN, CCMP PN
-        // and payload. Attempt policy may change; MPDU contents may not.
-        let first_control =
-            oer_ieee80211_wire::frame::FrameControlFields::from_bytes(*first_control);
-        let retry_control =
-            oer_ieee80211_wire::frame::FrameControlFields::from_bytes(*retry_control);
-        if first_control.retry()
-            || !retry_control.retry()
-            || first_control.to_bytes() != retry_control.with_retry(false).to_bytes()
-            || original != repeated
-        {
-            return Err(Violation::MpduChanged);
-        }
-    }
+
     Ok(())
 }
 

@@ -57,7 +57,6 @@ pub mod fatal;
     reason = "terminal election is placed in boot-initialized SRAM"
 )]
 pub mod retained_fault;
-pub mod trace;
 #[cfg(all(target_arch = "riscv32", chip_vectors))]
 pub use fatal::{fatal_halt, reset, reset_recording};
 #[cfg(target_arch = "riscv32")]

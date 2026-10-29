@@ -87,7 +87,7 @@ fn a_tx_word_is_size_length_last_and_owned() {
 
 #[test]
 fn the_mpdu_length_bound_is_the_length_field_width() {
-    let bound = u16::try_from(MAX_ENCODED_MPDU_LEN).unwrap_or(u16::MAX);
+    let bound = u16::try_from(MAX_DMA_MPDU_LEN).unwrap_or(u16::MAX);
     assert!(rx(0).with_length(bound).is_some());
     assert!(rx(0).with_length(bound + 1).is_none());
 }

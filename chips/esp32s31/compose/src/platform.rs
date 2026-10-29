@@ -107,13 +107,6 @@ pub fn timers<A, R>(
         .unwrap_or_else(|failure| failure.reset());
 }
 
-/// Bind a trace clock with `trace_clock!(platform::trace_now)` in an image
-/// that declares the trace class. This function owns no recorder or counter.
-#[cfg(oer_trace)]
-pub fn trace_now() -> u64 {
-    use oer_time::Clock;
-    EmbassyClock.now().as_micros()
-}
 /// The image chooses this terminal path for an unanswered owned request.
 pub fn reset_request<T>(error: oer_memory::RequestError) -> T {
     oer_espressif_staged_runtime::panic::reset_request::<oer_esp32s31_hal::platform::Port, T>(error)

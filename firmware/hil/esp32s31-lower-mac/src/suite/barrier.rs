@@ -3,8 +3,6 @@ use super::*;
 use oer_ieee80211_conformance_control::{Trace, barrier_trace};
 use oer_ieee80211_port::conformance::{BarrierCase, BarrierEvent, BarrierTrace, HeldSnapshot};
 use oer_ieee80211_wire::{ccmp::Ccmp128Key, qos::WmmAccessCategory};
-type Frame = heapless::Vec<u8, 64>;
-type Frames = heapless::Vec<Frame, 4>;
 type Events = heapless::Vec<BarrierEvent<Ack, Infallible>, 8>;
 
 pub(super) async fn run<'p, 'id, Id: radio::SlotIdentity + 'id>(
@@ -56,53 +54,13 @@ pub(super) async fn progress() {
     }
 }
 fn publications() -> usize {
-    TRACE
-        .records()
-        .filter(|r| r.decode::<port::trace::Publication>().is_some())
-        .count()
+    COUNTERS.count::<oer_esp32s31_instrumentation::wifi::Publication>() as usize
 }
 fn snapshot() -> HeldSnapshot {
     HeldSnapshot {
         publications: publications(),
-        events: TRACE
-            .records()
-            .filter(|r| r.decode::<port::trace::TerminalPosted>().is_some())
-            .count(),
+        events: COUNTERS.count::<oer_esp32s31_instrumentation::wifi::TerminalPosted>() as usize,
     }
-}
-fn frames() -> Result<Frames, &'static str> {
-    let mut frames = Frames::new();
-    for snapshot in TRACE
-        .snapshots()
-        .filter(|snapshot| snapshot.point == port::trace::ENCODED_MPDU.raw())
-    {
-        if snapshot.truncated {
-            return Err("truncated encoded MPDU");
-        }
-        let mut words = [0; 33];
-        let count = TRACE
-            .read_snapshot(&snapshot, 0, &mut words)
-            .ok_or("stale encoded MPDU")?;
-        let len = *words.first().ok_or("encoded length")? as usize;
-        if len > 64 {
-            return Err("encoded frame capacity");
-        }
-        let mut frame = Frame::new();
-        for byte in words
-            .get(1..count)
-            .ok_or("encoded snapshot words")?
-            .iter()
-            .flat_map(|word| word.to_le_bytes())
-            .take(len)
-        {
-            frame.push(byte).map_err(|_| "encoded frame overflow")?;
-        }
-        if frame.len() != len {
-            return Err("short encoded MPDU");
-        }
-        frames.push(frame).map_err(|_| "too many encoded frames")?;
-    }
-    Ok(frames)
 }
 fn frame<'p, 'id: 'p, Id: radio::SlotIdentity + 'id>(
     phase: &Esp32s31Phase<'p, 'id, Id, Device, TX>,
@@ -164,7 +122,7 @@ async fn exercise<'p, 'id: 'p, Id: radio::SlotIdentity + 'id>(
     ));
     irq::hold_completion(true);
     phase.debug_hold_completion(true);
-    oer_espressif_staged_runtime::trace::start(port::trace::Publication::CHANNEL.mask());
+    COUNTERS.clear();
     let mut tickets = resources.tickets.into_iter();
     let mut buffers = resources.buffers.into_iter();
     let mut identities = [0; 2];
@@ -211,10 +169,6 @@ async fn exercise<'p, 'id: 'p, Id: radio::SlotIdentity + 'id>(
     }
     progress().await;
     let before_request = snapshot();
-    let first_frame = frames()?
-        .into_iter()
-        .next()
-        .ok_or("first real publication frame")?;
     if case == BarrierCase::RemoveKey {
         phase
             .station()
@@ -272,7 +226,6 @@ async fn exercise<'p, 'id: 'p, Id: radio::SlotIdentity + 'id>(
         events.push(event).map_err(|_| "too many barrier events")?;
     }
     let publications_at_barrier = publications();
-    let mut retried_frames = Frames::new();
     let mut retry_terminal = None;
     if case == BarrierCase::GateRetry {
         let _open = phase.open_gate(closed.ok_or("closed gate")?);
@@ -330,11 +283,7 @@ async fn exercise<'p, 'id: 'p, Id: radio::SlotIdentity + 'id>(
                 _ => return Err("unexpected retry event"),
             }
         }
-        for frame in frames()?.into_iter().skip(1) {
-            retried_frames
-                .push(frame)
-                .map_err(|_| "too many retry frames")?;
-        }
+
     }
     let trace = BarrierTrace {
         tickets: identities,
@@ -343,8 +292,6 @@ async fn exercise<'p, 'id: 'p, Id: radio::SlotIdentity + 'id>(
         just_before_timeout: None,
         publications_at_barrier,
         events,
-        first_frame,
-        retried_frames,
         retry_terminal,
     };
     barrier_trace(&trace)

@@ -180,8 +180,10 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Held<'_, 'id, Id, D, B
             retain_terminal(self.failed_terminal, terminal);
             self.storage.poison(Fault::Capacity);
         } else {
-            #[cfg(all(oer_trace, oer_debug_control))]
-            oer_espressif_staged_runtime::trace::emit(&trace::TerminalPosted);
+            oer_trace::observe!(
+                self.storage.observer,
+                oer_esp32s31_instrumentation::wifi::TerminalPosted
+            );
         }
         self.storage.shared.wake_body();
     }

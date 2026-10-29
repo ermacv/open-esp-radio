@@ -47,6 +47,7 @@ wifi-station = [
     "oer-espressif-executor/port-slots",
     "dep:oer-ieee80211-instrumentation",
     "dep:oer-trace",
+    "dep:oer-esp32s31-instrumentation",
 ]
 
 [target.'cfg(target_arch = "riscv32")'.dependencies]
@@ -61,6 +62,7 @@ oer-embassy-time = { path = "../../../portable/embassy/time" }
 oer-espressif-interrupt-table = { path = "../../../chips/espressif/interrupt-table" }
 oer-esp32s31-hal = { path = "../../../chips/esp32s31/hal" }
 oer-ieee80211-instrumentation = { path = "../../../protocols/ieee80211/instrumentation", optional = true }
+oer-esp32s31-instrumentation = { path = "../../../chips/esp32s31/instrumentation", optional = true }
 oer-trace = { path = "../../../portable/trace", optional = true }
 owned-embassy-net = { package = "embassy-net", git = "https://github.com/ermacv/embassy.git", rev = "17f796c8ddb90ff510d995e24c2dcb758a97e8f8", optional = true, features = ["medium-ethernet", "ipv4", "dhcpv4", "icmp-ping-reply", "udp"] }
 oer-memory = { path = "../../../portable/memory" }

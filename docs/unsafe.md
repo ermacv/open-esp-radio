@@ -788,8 +788,7 @@ value type, including a function's calling convention and complete signature.
 Safe declarations and definitions check all three; private emission arms also
 check the name, so a direct call cannot select another symbol. The former
 unrestricted `define fn` and string-named `export` forms are unavailable.
-`oer-memory::TraceClockSlot` owns `__oer_trace_now_micros: fn() -> u64`;
-`oer-trace` retains `forbid(unsafe_code)` and contains no unsafe site.
+`oer-trace` retains `forbid(unsafe_code)` and contains no unsafe site or foreign clock slot.
 The HAL's `domain::transaction::PhyFaultSlot` owns
 `__oer_phy_transaction_fault: fn(Fault) -> !`. This one narrow unsafe slot
 implementation is the HAL's permitted one-site caller-count exception.

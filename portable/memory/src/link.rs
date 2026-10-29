@@ -93,16 +93,6 @@ pub unsafe trait LinkSlot {
     const KIND: SlotKind;
 }
 
-/// The trace clock's fixed Rust ABI slot; trace itself stays entirely safe.
-pub enum TraceClockSlot {}
-// SAFETY: the trace clock's sole name denotes a safe Rust `fn() -> u64`.
-// Its declaration and every accepted definition below check this same slot.
-unsafe impl LinkSlot for TraceClockSlot {
-    type Value = fn() -> u64;
-    const NAME: SlotName = SlotName(&[NamePart::Text("__oer_trace_now_micros")]);
-    const KIND: SlotKind = SlotKind::Function;
-}
-
 /// Declare or define an unsafe-owned typed symbol slot. Ordinary function
 /// names are identifiers; interrupt names come from fixed families. Internal
 /// emission arms also const-check the complete name against the slot owner,

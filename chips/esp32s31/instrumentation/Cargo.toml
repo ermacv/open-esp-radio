@@ -8,6 +8,10 @@ repository.workspace = true
 description = "Host-safe ESP32-S31 radio observation values"
 
 [dependencies]
+oer-trace = { path = "../../../portable/trace" }
+oer-ieee80211-port = { path = "../../../protocols/ieee80211/port" }
+oer-ieee80211-wire = { path = "../../../protocols/ieee80211/wire" }
+oer-wire = { path = "../../../portable/wire" }
 postcard-schema = { version = "0.2.5", default-features = false, features = ["derive", "heapless-v0_9"] }
 serde = { version = "1.0.219", default-features = false, features = ["derive"] }
 

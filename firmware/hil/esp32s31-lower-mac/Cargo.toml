@@ -16,6 +16,7 @@ diagnostic-lower-mac = []
 oer-ieee80211-conformance-control = { path = "../../../protocols/ieee80211/conformance-control" }
 sha2 = { version = "0.10", default-features = false }
 embassy-sync = "0.8.0"
+oer-esp32s31-instrumentation = { path = "../../../chips/esp32s31/instrumentation" }
 oer-trace = { path = "../../../portable/trace" }
 oer-hil-agent = { path = "../../../protocols/hil/agent" }
 oer-hil-protocol = { path = "../../../protocols/hil/protocol", default-features = false, features = ["async-io"] }

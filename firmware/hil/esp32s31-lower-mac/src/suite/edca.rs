@@ -1,6 +1,6 @@
 //! VIF records and draws captured from the installed policy at publication.
 use super::*;
-use oer_ieee80211_conformance_control::{EdcaDraw, EdcaHeader, EdcaTrace, Trace, edca_parameters};
+use oer_ieee80211_conformance_control::{EdcaTrace, Trace};
 use oer_ieee80211_port::conformance::{
     Execution,
     edca::{self as contract, Case, Scenario},
@@ -81,54 +81,15 @@ fn submit<'p, 'id: 'p, Id: radio::SlotIdentity + 'id>(
     Ok(())
 }
 fn captured(admitted: [u8; 3], completed: [u8; 3]) -> Result<EdcaTrace, &'static str> {
-    let mut trace = EdcaTrace {
-        draws: [None; 4],
-        installed: [[None; 4]; 2],
-        headers: [None; 2],
-        admitted,
-        completed,
+    use oer_esp32s31_instrumentation::wifi::{Publication, EdcaTable, EdcaRecord, EdcaDraw};
+    Ok(EdcaTrace {
+        publications: COUNTERS.count::<Publication>().try_into().map_err(|_| "publication count")?,
+        tables: COUNTERS.count::<EdcaTable>().try_into().map_err(|_| "table count")?,
+        records: COUNTERS.count::<EdcaRecord>().try_into().map_err(|_| "record count")?,
+        draws: COUNTERS.count::<EdcaDraw>().try_into().map_err(|_| "draw count")?,
+        admitted, completed,
         held_draws: None,
-    };
-    let mut count = 0;
-    for record in TRACE.records() {
-        if let Some(header) = record.decode::<port::trace::EdcaTable>() {
-            if header.role == VifRole::Station {
-                trace.installed = [[None; 4]; 2];
-                trace.headers = [None; 2];
-            }
-            *trace
-                .headers
-                .get_mut(header.role as usize)
-                .ok_or("EDCA header role")? = Some(EdcaHeader {
-                count: header.count,
-                uapsd: header.uapsd,
-            });
-        } else if let Some(record) = record.decode::<port::trace::EdcaRecord>() {
-            *trace
-                .installed
-                .get_mut(record.role as usize)
-                .and_then(|row| row.get_mut(record.category as usize))
-                .ok_or("EDCA record coordinate")? = edca_parameters(record.parameters);
-        } else if let Some(draw) = record.decode::<port::trace::EdcaDraw>() {
-            let parameters = *trace
-                .installed
-                .get(draw.role as usize)
-                .and_then(|row| row.get(draw.category as usize))
-                .ok_or("EDCA draw coordinate")?;
-            *trace.draws.get_mut(count).ok_or("EDCA draw capacity")? = Some(EdcaDraw {
-                role: draw.role as u8,
-                category: draw.category as u8,
-                parameters,
-                window: 1_u16
-                    .checked_shl(u32::from(draw.exponent))
-                    .and_then(|window| window.checked_sub(1))
-                    .ok_or("EDCA exponent")?,
-                backoff: draw.backoff,
-            });
-            count = count.checked_add(1).ok_or("EDCA draw count")?;
-        }
-    }
-    Ok(trace)
+    })
 }
 async fn exchange<'p, 'id: 'p, Id: radio::SlotIdentity + 'id>(
     phase: &mut Esp32s31Phase<'p, 'id, Id, Device, TX>,
@@ -152,7 +113,7 @@ async fn exchange<'p, 'id: 'p, Id: radio::SlotIdentity + 'id>(
     let [first, second, last, ..] = resources.tickets;
     let [a, b, c, ..] = resources.buffers;
     let admitted = [first.index(), second.index(), last.index()];
-    oer_espressif_staged_runtime::trace::start(port::trace::Publication::CHANNEL.mask());
+    COUNTERS.clear();
     for (ticket, buffer, role) in [
         (first, a, VifRole::Station),
         (second, b, VifRole::AccessPoint),

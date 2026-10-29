@@ -63,15 +63,4 @@ mod tests {
         slot.set(&VALUE);
         assert!(core::ptr::eq(slot.get().unwrap(), &VALUE));
     }
-
-    crate::link_fn! { declare crate::TraceClockSlot => fn __oer_trace_now_micros() -> u64; }
-    fn eight() -> u64 {
-        8
-    }
-    crate::link_fn! { define crate::TraceClockSlot => fn __oer_trace_now_micros() -> u64 = eight; }
-
-    #[test]
-    fn a_linked_function_calls_its_typed_definition() {
-        assert_eq!(__oer_trace_now_micros(), 8);
-    }
 }

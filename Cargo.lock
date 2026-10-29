@@ -1759,12 +1759,12 @@ dependencies = [
  "heapless",
  "oer-embassy-net",
  "oer-esp32s31-hal",
+ "oer-esp32s31-instrumentation",
  "oer-esp32s31-phy",
  "oer-esp32s31-radio-client",
  "oer-espressif-coex",
  "oer-espressif-ieee80211-policy",
  "oer-espressif-interrupt-table",
- "oer-espressif-staged-runtime",
  "oer-ieee80211-port",
  "oer-ieee80211-upper-mac",
  "oer-ieee80211-wire",
@@ -1804,6 +1804,10 @@ dependencies = [
 name = "oer-esp32s31-instrumentation"
 version = "0.1.0"
 dependencies = [
+ "oer-ieee80211-port",
+ "oer-ieee80211-wire",
+ "oer-trace",
+ "oer-wire",
  "postcard-schema",
  "serde",
 ]
@@ -2138,7 +2142,6 @@ dependencies = [
  "oer-test-ui-cases",
  "oer-time",
  "oer-time-virtual",
- "oer-trace",
  "tempfile",
 ]
 
@@ -2221,6 +2224,7 @@ dependencies = [
  "oer-esp32s31-board",
  "oer-esp32s31-compose",
  "oer-esp32s31-hal",
+ "oer-esp32s31-instrumentation",
  "oer-esp32s31-layout",
  "oer-esp32s31-wifi",
  "oer-espressif-executor",
@@ -2254,6 +2258,7 @@ dependencies = [
  "oer-esp32s31-compose",
  "oer-esp32s31-hal",
  "oer-esp32s31-ieee80211-driver",
+ "oer-esp32s31-instrumentation",
  "oer-esp32s31-layout",
  "oer-esp32s31-phy",
  "oer-esp32s31-radio-client",

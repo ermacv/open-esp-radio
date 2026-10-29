@@ -1019,11 +1019,17 @@ where
     /// Draw for the head frame of `access_category`, using its VIF's record
     /// and the AC queue's single contention state. The backend calls this
     /// at publication and carries the draw into the single-attempt values.
-    pub fn draw_backoff(&mut self, role: VifRole, access_category: WmmAccessCategory) -> u16 {
+    pub fn draw_backoff(
+        &mut self,
+        role: VifRole,
+        access_category: WmmAccessCategory,
+        observer: &impl oer_trace::Observer,
+    ) -> u16 {
         let queue = LegacyTxQueue::from_access_category(access_category);
         let backoff = self.tx.contention_publication(role, queue).1;
-        #[cfg(all(oer_trace, oer_debug_control))]
-        crate::port::trace::contention(self.tx.policy(), role, access_category, backoff);
+        #[cfg(oer_trace)]
+        crate::observation::contention(observer, self.tx.policy(), role, access_category, backoff);
+        let _ = observer;
         backoff
     }
     #[inline(never)]

@@ -197,3 +197,5 @@ The scan is lexical and proves no absence of sequences:
 
 The rule therefore stops new waiting code in the HAL; which code is an atom
 remains a review question ([architecture](../../../docs/architecture.md#layers)).
+
+The normal dependency graph of the Wi-Fi driver must not reach staged-runtime. Regression fixtures include optional aliased target edges and transitive paths. Observation points feed image atomic counters, with no retained event recorder.

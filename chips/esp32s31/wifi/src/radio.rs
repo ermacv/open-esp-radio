@@ -310,6 +310,7 @@ async fn install<W: Binding>(
 }
 
 impl<W: Binding> port::Device<TX> for Device<W> {
+    type Observer = W::DriverObserver;
     type Power = <Inner<W> as port::Device<TX>>::Power;
     type Coex = <Inner<W> as port::Device<TX>>::Coex;
     type Entropy = Entropy;

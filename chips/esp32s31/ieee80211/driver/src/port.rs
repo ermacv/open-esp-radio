@@ -49,12 +49,10 @@ mod placement;
 #[cfg(any(target_arch = "riscv32", test))]
 mod receive;
 mod settings;
-use oer_sync::PriorityWaker;
-use placement::Prepared;
-#[cfg(all(oer_trace, oer_debug_control))]
-pub mod trace;
 pub use buffer::*;
 pub use keys::{GroupKey, KeyIdentity, PairwiseKey, PortKeys};
+use oer_sync::PriorityWaker;
+use placement::Prepared;
 mod loan;
 mod owned;
 pub use phase::{Esp32s31Interface, Esp32s31Phase, Esp32s31Setup};
@@ -109,6 +107,7 @@ pub trait ReceiveUnit: 'static {
 /// themselves across `Pending`; no ISR may call any of these operations.
 /// The device owns the cooperative registers, RX ring and PHY membership.
 pub trait Device<const B: usize>: Sized + 'static {
+    type Observer: oer_trace::Observer + Default + 'static;
     /// Image-selected concrete coexistence policy, statically dispatched on P2.
     type Coex: RadioCoexPriorities + 'static;
     type Power: WifiTxPowerProfile;
@@ -195,7 +194,8 @@ impl<const B: usize> Ieee80211Capabilities for Esp32s31Caps<B> {
 
 /// P2-only backing borrowing the retained device and cross-context storage.
 /// Only the P2 registration can reach its device `RefCell`.
-pub struct PortStorage<D: 'static, const B: usize> {
+pub struct PortStorage<D: Device<B>, const B: usize> {
+    observer: D::Observer,
     device: RefCell<&'static mut D>,
     shared: &'static mut PortSharedStorage<B>,
     identity: Cell<u64>,
@@ -218,8 +218,9 @@ pub struct PortSharedStorage<const B: usize> {
 impl<D: Device<B>, const B: usize> PortStorage<D, B> {
     // Keep storage construction outside the install future's poll frame.
     #[inline(never)]
-    pub const fn new(device: &'static mut D, shared: &'static mut PortSharedStorage<B>) -> Self {
+    pub fn new(device: &'static mut D, shared: &'static mut PortSharedStorage<B>) -> Self {
         Self {
+            observer: D::Observer::default(),
             device: RefCell::new(device),
             shared,
             identity: Cell::new(1),

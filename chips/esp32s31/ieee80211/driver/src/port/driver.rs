@@ -3,6 +3,8 @@ use super::{
     keys::{GroupCommand, Installation, Installed, RawKeyIdentity, Removal},
     lifecycle::PortCoreOwner,
 };
+#[cfg(oer_trace)]
+use oer_esp32s31_instrumentation::wifi as trace;
 use oer_ieee80211_wire::qos::WmmAccessCategory;
 
 mod core_views;
@@ -850,7 +852,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Driver<'id, Id, D, B> 
         let CoreView::Open(mut core) = self.core.view() else {
             return Err(Fault::Capacity);
         };
-        let backoff_slots = core.draw_backoff(role, pending.category);
+        let backoff_slots = core.draw_backoff(role, pending.category, &held.storage.observer);
         let core_ticket = self
             .tickets
             .iter_mut()
@@ -909,8 +911,8 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Driver<'id, Id, D, B> 
         .map_err(|_| Fault::Capacity)?;
         mpdu.published = true;
         pending.publications = pending.publications.checked_add(1).ok_or(Fault::Capacity)?;
-        #[cfg(all(oer_trace, oer_debug_control))]
-        let publication = super::trace::Publication {
+        #[cfg(oer_trace)]
+        let publication = trace::Publication {
             ticket: pending.operation.ticket().index(),
             buffer: pending.operation.execute().mpdu.buffer.index(),
         };
@@ -921,8 +923,8 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Driver<'id, Id, D, B> 
             core::mem::forget(refused);
             return Err(Fault::Capacity);
         }
-        #[cfg(all(oer_trace, oer_debug_control))]
-        oer_espressif_staged_runtime::trace::emit(&publication);
+        #[cfg(oer_trace)]
+        oer_trace::observe!(held.storage.observer, publication);
         let _ = held;
         Ok(())
     }
@@ -1146,7 +1148,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Driver<'id, Id, D, B> 
                     });
                     // Observe actual quarantined owners after moving them to
                     // permanent custody, never a synthetic success terminal.
-                    #[cfg(all(oer_trace, oer_debug_control))]
+                    #[cfg(oer_trace)]
                     if let Some(Command::Group {
                         command:
                             GroupCommand::Replace {
@@ -1158,17 +1160,20 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Driver<'id, Id, D, B> 
                         ..
                     }) = &self.pending_command
                     {
-                        oer_espressif_staged_runtime::trace::emit(&trace::GroupRollback {
-                            owners: [key.identity.slot, permission.index()],
-                            previous_key_id: key.identity.key_id.get(),
-                            attempted_key_id: key_id.get(),
-                            restored: matches!(
+                        oer_trace::observe!(
+                            held.storage.observer,
+                            trace::GroupRollback {
+                                owners: [key.identity.slot, permission.index()],
+                                previous_key_id: key.identity.key_id.get(),
+                                attempted_key_id: key_id.get(),
+                                restored: matches!(
                                 _error,
                                 crate::mac::crypto::StaGroupCcmpReplaceError::ReplacementRolledBack(
                                     _
                                 )
                             ),
-                        });
+                            }
+                        );
                     }
                     return Err(Fault::Core(core_mac::LowerMacFault::Key(
                         crate::mac::crypto::CryptoKeyError::HardwareRejected,

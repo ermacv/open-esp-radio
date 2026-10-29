@@ -51,8 +51,8 @@ system these rules serve.
   contract and `// SAFETY:` proof.
   The PHY-fault slot's ABI declaration belongs to the HAL, with one narrow
   `LinkSlot` unsafe implementation; its one-site caller-count increase is
-  permitted. The trace clock slot belongs to `oer-memory`, and trace retains
-  `forbid(unsafe_code)`. Other callers retain the no-growth rule.
+  permitted. Observation retains `forbid(unsafe_code)` and has no foreign clock
+  slot. Other callers retain the no-growth rule.
   Context-local mutable payloads use `oer-memory::ContextCell` with a private
   `ContextProof`; nested access is refused without consuming the payload.
   A hardware state is impossible only with a `SOURCE:` proof naming the

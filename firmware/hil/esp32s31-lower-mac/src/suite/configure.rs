@@ -50,7 +50,7 @@ pub(super) async fn run<'p, 'id, Id: radio::SlotIdentity + 'id>(
     case: Case,
 ) -> Ended<Id, Backend<Id>, Result<Trace, &'static str>> {
     ownership::DROPS.store(0, Ordering::Relaxed);
-    oer_espressif_staged_runtime::trace::start(port::trace::Publication::CHANNEL.mask());
+    COUNTERS.clear();
     let station = Witness::Station;
     let ap = Witness::AccessPoint;
     let mut admitted = [
@@ -101,10 +101,7 @@ pub(super) async fn run<'p, 'id, Id: radio::SlotIdentity + 'id>(
         };
         if round == 0 && case.drain != Drain::Running {
             if case.drain == Drain::Posted {
-                while TRACE
-                    .records()
-                    .filter(|row| row.decode::<port::trace::TerminalPosted>().is_some())
-                    .count()
+                while COUNTERS.count::<oer_esp32s31_instrumentation::wifi::TerminalPosted>()
                     < 2
                 {
                     barrier::progress().await;

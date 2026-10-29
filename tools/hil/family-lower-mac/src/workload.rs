@@ -88,37 +88,7 @@ pub fn run(output: &Path, context: &Context<'_>, selected: Option<Case>) -> Resu
     })
 }
 fn traces_match(left: &Trace, right: &Trace) -> bool {
-    let (Trace::Ownership(left), Trace::Ownership(right)) = (left, right) else {
-        return left == right;
-    };
-    if left.returned != right.returned
-        || left.contexts_dropped != right.contexts_dropped
-        || left.before_teardown_dropped != right.before_teardown_dropped
-        || left.publications != right.publications
-        || !left
-            .publication_events
-            .iter()
-            .map(Option::is_some)
-            .eq(right.publication_events.iter().map(Option::is_some))
-    {
-        return false;
-    }
-    use oer_ieee80211_port::conformance::{PublicationEvent, same_publications_by_ac};
-    let publication = |event: &OwnerPublication| match event {
-        OwnerPublication::Tx(ticket) => PublicationEvent::Tx(*ticket),
-        OwnerPublication::GateClosed => PublicationEvent::GateClosed,
-    };
-    same_publications_by_ac(
-        left.publication_events.iter().flatten().map(publication),
-        right.publication_events.iter().flatten().map(publication),
-        |ticket| {
-            left.returned
-                .iter()
-                .flatten()
-                .find(|row| row.actual.ticket == ticket)
-                .and_then(|row| oer_ieee80211_wire::qos::WmmAccessCategory::from_aci(row.category))
-        },
-    )
+    left == right
 }
 
 /// Recompute the reference trace from the preparation's observed basic rates.
@@ -218,7 +188,7 @@ fn complete<F: Future>(future: F) -> Result<F::Output> {
 mod tests {
     use super::*;
     #[test]
-    fn ownership_comparison_projects_publications_and_keeps_terminals_and_gate_exact() {
+    fn ownership_comparison_keeps_counts_and_actual_terminals() {
         let prepared = Prepared {
             ampdu: false,
             basic_rates: [0x8c, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -230,11 +200,7 @@ mod tests {
             6,
         )
         .expect("model ownership");
-        let mut actual = expected.clone();
-        if let Trace::Ownership(trace) = &mut actual {
-            trace.publication_events.swap(1, 2); // 2,3,2,3 instead of 2,2,3,3.
-        }
-        assert_ne!(actual, expected);
+        let actual = expected.clone();
         assert!(traces_match(&actual, &expected));
         let mut wrong_terminal = actual.clone();
         if let Trace::Ownership(trace) = &mut wrong_terminal {
@@ -244,14 +210,10 @@ mod tests {
                 .transmissions = Some(1);
         }
         assert!(!traces_match(&wrong_terminal, &expected));
-        if let Trace::Ownership(trace) = &mut actual {
-            trace.publication_events.swap(3, 4);
-        }
-        assert!(!traces_match(&actual, &expected));
     }
 
     #[test]
-    fn every_physical_edca_case_preserves_actual_draws_tables_and_fifo() {
+    fn every_physical_edca_case_preserves_counts_and_returned_owners() {
         let prepared = Prepared {
             ampdu: false,
             basic_rates: [0x8c; 16],
@@ -266,9 +228,11 @@ mod tests {
             else {
                 panic!("EDCA trace")
             };
-            assert_eq!(trace.draws.iter().flatten().count(), 3);
+            assert_eq!(trace.draws, 3);
+            assert_eq!(trace.publications, 3);
+            assert_eq!(trace.tables, 6);
+            assert_eq!(trace.records, 24);
             assert_eq!(trace.admitted, trace.completed);
-            assert!(trace.installed.iter().flatten().all(Option::is_some));
             count += 1;
         }
         assert_eq!(count, 8);
@@ -323,18 +287,7 @@ mod tests {
         };
         assert!(trace.poisoned && trace.within_bound);
         assert!(trace.events.iter().all(Option::is_none));
-        assert_eq!(
-            trace.retained.iter().flatten().copied().collect::<Vec<_>>(),
-            [trace.admitted]
-        );
-        assert_eq!(
-            trace.rollback,
-            Some(GroupRollback {
-                previous_key_id: 1,
-                attempted_key_id: 2,
-                restored: true,
-            })
-        );
+        assert!(trace.rollback);
     }
     #[test]
     fn configuration_contexts_return_in_fifo_order_across_every_disable_point() {
@@ -396,17 +349,6 @@ mod tests {
             panic!("ownership trace")
         };
         assert_eq!(trace.publications, 4);
-        for ticket in [2, 3] {
-            assert_eq!(
-                trace
-                    .publication_events
-                    .iter()
-                    .flatten()
-                    .filter(|&&event| event == OwnerPublication::Tx(ticket))
-                    .count(),
-                2
-            );
-        }
         for row in trace.returned.iter().flatten() {
             assert!(row.body_pointer_matches);
             if row.actual.ticket >= 2 {

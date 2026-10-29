@@ -153,22 +153,22 @@ oer_espressif_interrupt_table::interrupt_table! {
     for (name, body, expected) in [
         (
             "wrong-signature",
-            "fn wrong() -> u8 { 0 } oer_memory::link_fn! { define oer_memory::TraceClockSlot => fn __oer_trace_now_micros() -> u8 = wrong; }",
+            r#"oer_memory::link_fn! { @function oer_espressif_interrupt_table::__private::InterruptHandlerSlot<0, 16>, "__oer_interrupt_h0_l16" => extern "C" fn wrong() -> u8 { 0 } }"#,
             "mismatched types",
         ),
         (
             "wrong-kind",
-            r#"fn clock() -> u64 { 0 } oer_memory::link_fn! { @static oer_memory::TraceClockSlot, "__oer_trace_now_micros" => static BAD: fn() -> u64 = clock; }"#,
+            r#"oer_memory::link_fn! { @static oer_espressif_interrupt_table::__private::InterruptHandlerSlot<0, 16>, "__oer_interrupt_h0_l16" => static BAD: extern "C" fn() = handler; } extern "C" fn handler() {}"#,
             "a function slot cannot define a static",
         ),
         (
             "wrong-name",
-            "fn clock() -> u64 { 0 } oer_memory::link_fn! { define oer_memory::TraceClockSlot => fn memcpy() -> u64 = clock; }",
+            r#"oer_memory::link_fn! { @function oer_espressif_interrupt_table::__private::InterruptHandlerSlot<0, 16>, "memcpy" => extern "C" fn handler() {} }"#,
             "definition names another slot",
         ),
         (
             "wrong-abi",
-            r#"oer_memory::link_fn! { @function oer_memory::TraceClockSlot, "__oer_trace_now_micros" => extern "C" fn bad() -> u64 { 0 } }"#,
+            r#"oer_memory::link_fn! { @function oer_espressif_interrupt_table::__private::InterruptHandlerSlot<0, 16>, "__oer_interrupt_h0_l16" => extern "Rust" fn handler() {} }"#,
             "mismatched types",
         ),
         (

@@ -89,7 +89,7 @@ async fn admit<'p, 'id: 'p, Id: radio::SlotIdentity + 'id>(
         },
         permission: permission.index(),
     };
-    oer_espressif_staged_runtime::trace::start(port::trace::Publication::CHANNEL.mask());
+    COUNTERS.clear();
     let now = EmbassyClock.now();
     match mutation {
         Mutation::Install => phase.station().install_group_key(
@@ -133,7 +133,7 @@ pub(super) async fn run<'p, 'id, Id: radio::SlotIdentity + 'id>(
         let result = async {
             let mut phase = owner.phase();
             phase.debug_reject_group_replacement();
-            let (admitted, mut timing) = admit(&mut phase, resources, Mutation::Replace).await?;
+            let (admitted, timing) = admit(&mut phase, resources, Mutation::Replace).await?;
             let poisoned = loop {
                 match phase.next_event().await {
                     Err(radio::EventEnd::Quarantined { .. }) => break true,
@@ -143,42 +143,18 @@ pub(super) async fn run<'p, 'id, Id: radio::SlotIdentity + 'id>(
                     _ => return Err("rollback emitted an ordinary terminal"),
                 }
             };
-            let (observed, completed) = TRACE
-                .records()
-                .find_map(|row| {
-                    row.decode::<port::trace::GroupRollback>()
-                        .map(|event| (event, row.t_us))
-                })
-                .ok_or("missing hardware rollback observation")?;
-            let elapsed = completed.wrapping_sub(timing.admitted_at.as_micros() as u32);
-            timing.completed_at = timing
-                .admitted_at
-                .saturating_add(Duration::from_micros(u64::from(elapsed)));
-            let mut retained = Retained::new();
-            retained
-                .push(Owners {
-                    slot: observed.owners[0],
-                    permission: observed.owners[1],
-                })
-                .map_err(|_| "rollback custody extent")?;
-            let raw = ProgressTrace {
-                rollback: Some(oer_ieee80211_port::conformance::group_keys::Rollback {
-                    previous_key_id: observed.previous_key_id,
-                    attempted_key_id: observed.attempted_key_id,
-                    restored: observed.restored,
-                }),
-                admitted,
-                timing,
-                retained,
-                events: Events::new(),
+            let completed = EmbassyClock.now();
+            let bound = Backend::<Id>::GROUP_COMMAND_BOUND;
+            Ok(Trace::Group(oer_ieee80211_conformance_control::GroupTrace {
+                rollback: COUNTERS.count::<oer_esp32s31_instrumentation::wifi::GroupRollback>() == 1,
+                admitted: [admitted.slot, admitted.permission],
+                within_bound: completed.checked_duration_since(timing.admitted_at).is_some_and(|elapsed| elapsed <= bound),
+                events: [None, None, None, None],
                 poisoned,
                 deadline_woke: false,
                 published: None,
                 blocked_while_published: false,
-            };
-            group_trace(&raw, Backend::<Id>::GROUP_COMMAND_BOUND.as_micros())
-                .map(Trace::Group)
-                .ok_or("rollback trace extent")
+            }))
         }
         .await;
         return match owner
@@ -193,9 +169,7 @@ pub(super) async fn run<'p, 'id, Id: radio::SlotIdentity + 'id>(
         ProgressCase::Disable { mutation, applied } => {
             let setup = admit(&mut owner.phase(), resources, mutation).await;
             if applied && setup.is_ok() {
-                while !TRACE
-                    .records()
-                    .any(|row| row.decode::<port::trace::TerminalPosted>().is_some())
+                while COUNTERS.count::<oer_esp32s31_instrumentation::wifi::TerminalPosted>() == 0
                 {
                     barrier::progress().await;
                 }

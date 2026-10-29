@@ -52,7 +52,7 @@ pub use esp_now::{
     PacketNumberOutcome, PeerChange, ReplayOutcome,
 };
 pub use event::{ARP, ESP_NOW, SERVICE, STATION};
-pub use observation::{Observation, StationEvents};
+pub use observation::Observation;
 #[cfg(any(test, feature = "test-support"))]
 pub use recorder::Recorder;
 pub use service::{

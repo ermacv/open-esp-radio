@@ -3742,3 +3742,39 @@ fn the_hal_ratchet_fails_on_a_new_file_a_changed_count_and_a_gone_entry() {
         .is_empty()
     );
 }
+
+#[test]
+fn wifi_driver_reaches_no_staged_runtime_through_normal_dependencies() {
+    let graph = workspace_dependency_graph();
+    let violations = forbidden_paths(&graph, "oer-esp32s31-ieee80211-driver", |name| {
+        name == "oer-espressif-staged-runtime"
+    });
+    assert!(
+        violations.is_empty(),
+        "driver depends on the platform runtime: {violations:?}"
+    );
+}
+#[test]
+fn driver_runtime_rule_rejects_an_aliased_optional_cfg_edge_and_a_transitive_edge() {
+    let fixture: toml::Value = toml::from_str(
+        r#"
+[target.'cfg(oer_debug_control)'.dependencies]
+runtime = { package = "oer-espressif-staged-runtime", version = "1", optional = true }
+"#,
+    )
+    .expect("fixture");
+    let workspace: toml::Value = toml::from_str("[dependencies]").expect("workspace");
+    let graph = BTreeMap::from([
+        ("driver".into(), normal_dependencies(&fixture, &workspace)),
+        ("helper".into(), BTreeSet::from(["driver".into()])),
+    ]);
+    let forbidden = |name: &str| name == "oer-espressif-staged-runtime";
+    assert_eq!(
+        forbidden_paths(&graph, "driver", forbidden),
+        ["driver -> oer-espressif-staged-runtime"]
+    );
+    assert_eq!(
+        forbidden_paths(&graph, "helper", forbidden),
+        ["helper -> driver -> oer-espressif-staged-runtime"]
+    );
+}

@@ -28,29 +28,27 @@ an ARP MSDU inside the owner's observation point.
 Station activity has independent kinds 22..=28 on `SERVICE`:
 `StationAuthenticated`, `StationBeacon`, `StationAssociated`,
 `TxIndeterminate`, `TxHardwareTimeout`, `TxQueueCollision` and
-`ControlDelivered`. Each is part of `Observation`, `StationEvents` and
+`ControlDelivered`. Each is part of `Observation` and
 `Recorder`. `StationActivity::of` projects these events for image-local
 correlation without depending on the facade. `TxIndeterminate` denotes every
 unknown single-TX outcome; `TxHardwareTimeout` denotes only a timeout reported
 to rate selection. `TxQueueCollision` denotes one sampled pending EDCA queue.
 A beacon carries wrapping milliseconds from the image's monotonic clock.
-Collectors retain these distinct meanings and own their counts. The generic
-capture service counts each kind independently of filtered or lost history.
+Collectors retain these distinct meanings and own their counts. The generic capture service exposes a fixed bank of atomic kind counters, including supported zeros.
 
-## Collectors and decoders
+## Image adapters and test fixtures
 
 - `Observation::of(&event)` turns any event an observer receives into one
   typed value of this vocabulary (`None` for other vocabularies), so a
   collector's `Observer::event` is a `match`.
-- `StationEvents` is the `oer_trace::EventSet` a host describes drained
-  records with.
+
 - `Recorder<N>` (feature `test-support`) keeps the first `N` observations in
   order, for host tests of owners and collectors under `--cfg oer_trace`.
 
 ## Checks
 
 Unit tests (`src/tests.rs`): every event decodes to itself through its words
-and the event set, kinds are unique and below the driver's range, channels
+and typed projections, kinds are unique and below the driver's range, channels
 stay below the driver's, malformed words are refused, receive drop codes
 follow the upper MAC's order, ARP parsing accepts only Ethernet/IPv4
 requests and replies, and the recorder keeps observations only with
@@ -59,8 +57,7 @@ requests and replies, and the recorder keeps observations only with
 ## Aggregation and rate selection
 
 Kinds 36..=40 on `AGGREGATION` describe `RxContainment`, `RxReorder`,
-`RxBaStarted`, `RxBaStopped` and `TxRateSelected`; all are in `Observation`
-and `StationEvents`. Receive events originate in the upper-MAC BA owner, using
+`RxBaStarted`, `RxBaStopped` and `TxRateSelected`; all are in `Observation`. Receive events originate in the upper-MAC BA owner, using
 the caller's temporarily borrowed observer (`view.observed(&observer)`). Its
 placed storage keeps no observer state or diagnostic counters. The runtime
 passes its existing observer to receive, negotiation, deadlines and clear.
@@ -81,3 +78,5 @@ explicit. Computing that diagnostic plan is entirely inside the observation
 point. Image collectors own weighted totals and last-rate state; bounded trace
 history is not the source of those totals. None of these observations enables
 TX A-MPDU: the ordinary S31 station port still submits individual attempts.
+
+Images count these small values with atomic event-kind counters. Production observation has no record ring or frame snapshots; the bounded recording observer is a host test fixture only.
