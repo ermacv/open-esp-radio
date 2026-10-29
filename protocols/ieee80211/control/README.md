@@ -48,10 +48,10 @@ prints metadata and payload length only. A target must not echo credential
 wire bytes into UART evidence.
 
 With `oer_trace`, `collector::Observations` translates the existing dictionary
-through an image-owned generic HIL collector and injected timestamps. HIL
+through an image-owned atomic HIL counter bank. HIL
 summaries use independent aggregate counts, plus correlation boundaries for
-GTK and final deauthentication. Bounded history exhaustion remains explicit.
-`StationStopped` carries the frozen capture description. The generic capture
-service serves its immutable records and counters. Service failures carry the
+GTK and final deauthentication. The image lends a fixed bank of atomic counters; there is no event history, clock, freeze or counter merge.
+`StationStopped` carries the live counter description. The generic capture
+service reads individual atomic counters; it exposes no event history. Service failures carry the
 exact serialized facade value and its schema key instead of a second, lossy
 failure dictionary; schema mismatches and malformed encodings are refused.

@@ -192,12 +192,6 @@ pub(crate) fn start(
     let observations = OBSERVATIONS
         .try_take()
         .unwrap_or_else(|| radio::failure(wifi::InitializationError::Storage));
-    observations
-        .begin(oer_hil_protocol::capture::Identity {
-            capture: 1,
-            epoch: 0,
-        })
-        .unwrap_or_else(|_| radio::failure(wifi::InitializationError::Control));
     let observations: &'static ObservationStorage = observations;
     let pending: &'static oer_ieee80211_control::PendingCommands =
         match PENDING.try_init(oer_ieee80211_control::PendingCommands::new()) {
@@ -588,23 +582,56 @@ fn emit<M: oer_hil_protocol::Message>(request: RequestIdentity, body: &M) {
 }
 
 use oer_ieee80211_control::collector::Observations;
-pub(super) type ObservationStorage = Observations<ObservationClock, 4096, 128>;
-static OBSERVATIONS: ConstStaticCell<ObservationStorage> =
-    ConstStaticCell::new(Observations::new(ObservationClock));
-#[derive(Clone, Copy)]
-pub(super) struct ObservationClock;
-impl oer_hil_agent::capture::collector::Clock for ObservationClock {
-    fn micros(&self) -> u64 {
-        EmbassyClock.now().as_micros()
-    }
-}
-static DRIVER_OBSERVATIONS: oer_hil_agent::capture::atomic::AtomicCollector<64> =
-    oer_hil_agent::capture::atomic::AtomicCollector::new();
+pub(super) type ObservationStorage = Observations<'static, 37>;
+static COUNTERS: oer_hil_agent::capture::collector::Collector<37> = const {
+    match oer_hil_agent::capture::collector::Collector::new([
+        <oer_ieee80211_instrumentation::RxContainment as oer_trace::Event>::KIND,
+        <oer_ieee80211_instrumentation::RxReorder as oer_trace::Event>::KIND,
+        <oer_ieee80211_instrumentation::RxBaStarted as oer_trace::Event>::KIND,
+        <oer_ieee80211_instrumentation::RxBaStopped as oer_trace::Event>::KIND,
+        <oer_ieee80211_instrumentation::TxRateSelected as oer_trace::Event>::KIND,
+        <oer_ieee80211_instrumentation::TokenLost as oer_trace::Event>::KIND,
+        <oer_ieee80211_instrumentation::DataMsduLost as oer_trace::Event>::KIND,
+        <oer_ieee80211_instrumentation::RsnInputDropped as oer_trace::Event>::KIND,
+        <oer_ieee80211_instrumentation::ScanBssObserved as oer_trace::Event>::KIND,
+        <oer_ieee80211_instrumentation::PortEventsLost as oer_trace::Event>::KIND,
+        <oer_ieee80211_instrumentation::RxFrameDropped as oer_trace::Event>::KIND,
+        <oer_ieee80211_instrumentation::RxMsduRefused as oer_trace::Event>::KIND,
+        <oer_ieee80211_instrumentation::TxUnsent as oer_trace::Event>::KIND,
+        <oer_ieee80211_instrumentation::TxMsduTooLong as oer_trace::Event>::KIND,
+        <oer_ieee80211_instrumentation::GroupKeyInstalled as oer_trace::Event>::KIND,
+        <oer_ieee80211_instrumentation::StationAuthenticated as oer_trace::Event>::KIND,
+        <oer_ieee80211_instrumentation::StationBeacon as oer_trace::Event>::KIND,
+        <oer_ieee80211_instrumentation::StationAssociated as oer_trace::Event>::KIND,
+        <oer_ieee80211_instrumentation::TxIndeterminate as oer_trace::Event>::KIND,
+        <oer_ieee80211_instrumentation::TxHardwareTimeout as oer_trace::Event>::KIND,
+        <oer_ieee80211_instrumentation::TxQueueCollision as oer_trace::Event>::KIND,
+        <oer_ieee80211_instrumentation::ControlDelivered as oer_trace::Event>::KIND,
+        <oer_ieee80211_instrumentation::ArpAddresses as oer_trace::Event>::KIND,
+        <oer_ieee80211_instrumentation::ArpTransmitted as oer_trace::Event>::KIND,
+        <oer_ieee80211_instrumentation::ArpReceived as oer_trace::Event>::KIND,
+        <oer_ieee80211_instrumentation::EspNowPeerTableChanged as oer_trace::Event>::KIND,
+        <oer_ieee80211_instrumentation::EspNowPeersCleared as oer_trace::Event>::KIND,
+        <oer_ieee80211_instrumentation::EspNowTxPacketNumber as oer_trace::Event>::KIND,
+        <oer_ieee80211_instrumentation::EspNowReplay as oer_trace::Event>::KIND,
+        <oer_esp32s31_instrumentation::wifi::Publication as oer_trace::Event>::KIND,
+        <oer_esp32s31_instrumentation::wifi::TerminalPosted as oer_trace::Event>::KIND,
+        <oer_esp32s31_instrumentation::wifi::EdcaTable as oer_trace::Event>::KIND,
+        <oer_esp32s31_instrumentation::wifi::EdcaRecord as oer_trace::Event>::KIND,
+        <oer_esp32s31_instrumentation::wifi::EdcaDraw as oer_trace::Event>::KIND,
+        <oer_esp32s31_instrumentation::wifi::GroupRollback as oer_trace::Event>::KIND,
+        <oer_ieee80211_control::collector::NetworkArp as oer_trace::Event>::KIND,
+        <oer_ieee80211_control::collector::NetworkRefused as oer_trace::Event>::KIND,
+    ]) { Ok(bank) => bank, Err(_) => panic!("unique image event kinds") }
+};
+static OBSERVATIONS: ConstStaticCell<ObservationStorage> = ConstStaticCell::new(Observations::new(
+    &COUNTERS, oer_hil_protocol::capture::Identity { capture: 1, epoch: 0 },
+));
 #[derive(Default)]
 pub struct DriverObserver;
 impl oer_trace::Observer for DriverObserver {
     fn event<E: oer_trace::Event + Copy + 'static>(&self, event: E) {
-        oer_trace::Observer::event(&DRIVER_OBSERVATIONS, event);
+        oer_trace::Observer::event(&COUNTERS, event);
     }
 }
 #[derive(Clone, Copy)]
@@ -630,12 +657,9 @@ impl oer_ieee80211_control::collector::Publish for Publisher {
     }
 }
 fn counters(observations: &ObservationStorage) -> oer_ieee80211_control::StationCounters {
-    use oer_trace::Event;
     observations.counters(
         EPOCH.load(core::sync::atomic::Ordering::Relaxed),
-        DRIVER_OBSERVATIONS
-            .counter(oer_ieee80211_instrumentation::TxQueueCollision::KIND.raw())
-            .value,
+        COUNTERS.count::<oer_ieee80211_instrumentation::TxQueueCollision>(),
         u32::try_from(
             oer_espressif_staged_runtime::stacks::current_hart_interrupt_stack_free_bytes(),
         )

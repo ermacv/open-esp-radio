@@ -146,11 +146,7 @@ pub async fn serve(
         let admission = pending.admit(&mut Commands(&mut control), request, command);
         super::emit(request, &admission);
     }
-    let driver = super::DRIVER_OBSERVATIONS
-        .freeze()
-        .unwrap_or_else(|_| radio::failure(wifi::InitializationError::Control));
-    let capture = observations
-        .freeze(&driver, super::DRIVER_OBSERVATIONS.failure())
+    let capture = oer_hil_agent::capture::Reader::describe(observations)
         .unwrap_or_else(|_| radio::failure(wifi::InitializationError::Control));
     match outcome {
         wifi::StationExit::Unavailable(_) => super::end(attempt, StationServiceEnd::Unavailable),

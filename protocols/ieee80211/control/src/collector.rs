@@ -1,11 +1,8 @@
-//! HIL observation translation over the agent's generic collector. All storage
-//! is placed by the image and stays in its one station executor context.
+//! HIL translation over the image's shared atomic counter bank. Correlation
+//! state belongs to the station context; observation retains no history.
 use crate::*;
-use core::cell::{Cell, RefCell};
-use oer_hil_agent::capture::{
-    Reader,
-    collector::{Clock, Collector},
-};
+use core::cell::Cell;
+use oer_hil_agent::capture::{Reader, collector::Collector};
 use oer_hil_protocol::{Message, RequestIdentity, capture::*};
 use oer_ieee80211_instrumentation as observation;
 use oer_trace::{Event, Observer};
@@ -13,43 +10,27 @@ use oer_trace::{Event, Observer};
 pub trait Publish {
     fn publish<M: Message>(&self, request: RequestIdentity, message: &M);
 }
-pub struct Observations<C, const R: usize, const K: usize> {
-    collector: RefCell<Collector<C, R, K>>,
+pub struct Observations<'a, const K: usize> {
+    collector: &'a Collector<K>,
+    identity: Identity,
     key_id: Cell<u8>,
     arp_base: Cell<u32>,
     departing_base: Cell<Option<u32>>,
     arp: Cell<Option<([u8; 4], [u8; 4])>>,
-    borrowed: Cell<bool>,
 }
-impl<C: Clock, const R: usize, const K: usize> Observations<C, R, K> {
-    pub const fn new(clock: C) -> Self {
+impl<'a, const K: usize> Observations<'a, K> {
+    pub const fn new(collector: &'a Collector<K>, identity: Identity) -> Self {
         Self {
-            collector: RefCell::new(Collector::new(clock)),
+            collector,
+            identity,
             key_id: Cell::new(0),
             arp_base: Cell::new(0),
             departing_base: Cell::new(None),
             arp: Cell::new(None),
-            borrowed: Cell::new(false),
         }
     }
-    pub fn begin(&mut self, identity: Identity) -> Result<(), Error> {
-        self.collector.get_mut().begin(
-            identity,
-            observation::SERVICE.mask() | NetworkArp::CHANNEL.mask(),
-        )
-    }
     fn count<E: Event>(&self) -> u32 {
-        self.collector
-            .try_borrow()
-            .ok()
-            .and_then(|collector| collector.counter(E::KIND.raw()).ok())
-            .map_or_else(
-                || {
-                    self.borrowed.set(true);
-                    0
-                },
-                |counter| counter.value,
-            )
+        self.collector.count::<E>()
     }
     pub fn departing(&self) {
         self.departing_base
@@ -74,29 +55,7 @@ impl<C: Clock, const R: usize, const K: usize> Observations<C, R, K> {
         }
     }
     pub fn record<E: Event + Copy + 'static>(&self, event: E) {
-        if let Ok(collector) = self.collector.try_borrow() {
-            collector.event(event);
-        } else {
-            self.borrowed.set(true);
-        }
-    }
-    pub fn freeze(
-        &self,
-        counters: &[Counter],
-        failure: Option<Error>,
-    ) -> Result<Description, Error> {
-        let mut collector = self
-            .collector
-            .try_borrow_mut()
-            .map_err(|_| Error::Borrowed)?;
-        collector.merge_counters(counters)?;
-        if self.borrowed.get() {
-            collector.mark_failure(Error::Borrowed);
-        }
-        if let Some(error) = failure {
-            collector.mark_failure(error);
-        }
-        collector.freeze()
+        self.collector.event(event);
     }
     pub fn event<E: Event + Copy + 'static>(
         &self,
@@ -210,29 +169,15 @@ impl<C: Clock, const R: usize, const K: usize> Observations<C, R, K> {
         }
     }
 }
-impl<C, const R: usize, const K: usize> Reader for Observations<C, R, K> {
+impl<const K: usize> Reader for Observations<'_, K> {
     fn describe(&self) -> Result<Description, Error> {
-        let mut description = self
-            .collector
-            .try_borrow()
-            .map_err(|_| Error::Borrowed)?
-            .describe()?;
-        if self.borrowed.get() {
-            description.failure = Some(Error::Borrowed);
-        }
-        Ok(description)
+        self.collector.reader(self.identity).describe()
     }
     fn records(&self, request: PageRequest) -> Result<Records, Error> {
-        self.collector
-            .try_borrow()
-            .map_err(|_| Error::Borrowed)?
-            .records(request)
+        self.collector.reader(self.identity).records(request)
     }
     fn counters(&self, request: PageRequest) -> Result<Counters, Error> {
-        self.collector
-            .try_borrow()
-            .map_err(|_| Error::Borrowed)?
-            .counters(request)
+        self.collector.reader(self.identity).counters(request)
     }
 }
 
@@ -273,26 +218,26 @@ network_event!(NetworkRefused, 201);
 )]
 mod tests {
     use super::*;
-    use oer_time::Clock as _;
-    struct TestClock<'a>(&'a oer_time_virtual::VirtualClock);
-    impl Clock for TestClock<'_> {
-        fn micros(&self) -> u64 {
-            self.0.now().as_micros()
-        }
-    }
     struct Output;
     impl Publish for Output {
         fn publish<M: Message>(&self, _: RequestIdentity, _: &M) {}
     }
     #[test]
-    fn summary_uses_aggregates_through_history_overflow_and_preserves_group_and_stop_boundaries() {
-        let clock = oer_time_virtual::VirtualClock::new();
-        let mut observed = Observations::<_, 1, 16>::new(TestClock(&clock));
+    fn summary_uses_atomic_counts_and_preserves_group_and_stop_boundaries() {
+        let bank = Collector::new([
+            NetworkArp::KIND,
+            NetworkRefused::KIND,
+            observation::GroupKeyInstalled::KIND,
+            observation::ControlDelivered::KIND,
+            observation::TxHardwareTimeout::KIND,
+            observation::TxQueueCollision::KIND,
+        ])
+        .unwrap();
         let identity = Identity {
             capture: 1,
             epoch: 0,
         };
-        observed.begin(identity).unwrap();
+        let observed = Observations::new(&bank, identity);
         let request = RequestIdentity {
             boot_id: 1,
             session_id: 0,
@@ -320,18 +265,10 @@ mod tests {
         assert_eq!(counters.tx_timeouts, 1);
         assert_eq!(counters.queue_collisions, 3);
         assert_eq!(counters.deauth_transmissions, 1);
-        let cut = observed
-            .freeze(
-                &[Counter {
-                    kind: observation::TxQueueCollision::KIND.raw(),
-                    value: 3,
-                    saturated: false,
-                }],
-                None,
-            )
-            .unwrap();
-        assert_eq!(cut.failure, Some(Error::RecordsFull));
-        assert!(cut.dropped > 0);
+        let cut = observed.describe().unwrap();
+        assert_eq!(cut.failure, None);
+        assert_eq!(cut.dropped, 0);
+        assert_eq!(cut.records, 0);
         assert!(cut.frozen);
         assert!(
             observed

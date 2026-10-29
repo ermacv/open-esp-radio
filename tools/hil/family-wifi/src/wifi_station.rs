@@ -131,7 +131,7 @@ impl StationStop for Station<'_> {
             let cut = self.capture.read_instrumentation(
                 message.boot_id,
                 capture.identity,
-                oer_hil_protocol::capture::EVENT_SCHEMA,
+                oer_hil_protocol::capture::COUNTER_SCHEMA,
                 SHORT,
             )?;
             if !cut.complete() {

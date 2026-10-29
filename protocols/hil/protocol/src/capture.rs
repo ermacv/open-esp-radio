@@ -84,6 +84,9 @@ pub struct Counter {
     pub saturated: bool,
 }
 
+/// Schema of image-owned atomic event-kind counters.
+pub const COUNTER_SCHEMA: Key = Key::of::<Counter>("trace/counter");
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub struct Counters {
     pub identity: Identity,

@@ -90,13 +90,11 @@ vocabulary and converts core causes internally; `oer-ieee80211-control` mirrors
 it exhaustively. Service failures carry the exact schema-identified facade
 value; the image has no duplicate error dictionary or report translator.
 The generic agent capture and requested-reset lifecycle services are mounted.
-P1 history is initialized in static storage and bounded to 4096 records and
-128 aggregate kinds. P2 has a separate
-64-kind counter collector; its immutable cut joins P1 at station termination.
-Dropped history, saturation and refused observation admission remain explicit.
-The host drains and validates the frozen cut after Stop. Station/UDP teardown
-joins the socket workload and stops the product IP service before freezing.
-No observation changes a product operation or contributes a product counter.
+The image declares one shared bank of 37 atomic event-kind counters for the
+station, network adapter and P2 driver. The HIL station adapter borrows that
+bank for its existing public summaries and correlation messages. Capture pages
+read live counters; stop reports their description without freezing, merging
+or retaining event history. Unsupported kinds and saturation remain explicit.
 
 The personal image's `stack-wifi-station.toml` names the measured P1
 frames that exceed the move limit, each with its own checked ceiling. IRQ

@@ -75,8 +75,7 @@ owner activation/retirement, not confirmation of a hardware register write.
 The station rate wrapper reports the selected first data-plan rate in kb/s
 after association and each learned data terminal; an unavailable plan is
 explicit. Computing that diagnostic plan is entirely inside the observation
-point. Image collectors own weighted totals and last-rate state; bounded trace
-history is not the source of those totals. None of these observations enables
+point. Image collectors own weighted totals and last-rate state; no observation history is retained. None of these observations enables
 TX A-MPDU: the ordinary S31 station port still submits individual attempts.
 
 Images count these small values with atomic event-kind counters. Production observation has no record ring or frame snapshots; the bounded recording observer is a host test fixture only.

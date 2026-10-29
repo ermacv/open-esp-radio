@@ -43,12 +43,12 @@ final representable index remains a valid case index.
 
 ## Instrumentation captures
 
-`capture` transports immutable image-owned observations without a radio
-vocabulary. A description identifies the capture, epoch, record schema,
-retained record and aggregate counts, dropped history and a typed failure.
-Record and counter pages retain that identity and their absolute range.
-`capture/refused` is the typed response to an invalid read. The owning image
-controls arming, freezing and release; the generic service never performs a
-radio operation or retains counters from another boot.
-
-Image observation readers expose live atomic event counters through the capture service, with zero event record pages. The generic record transport remains for independently defined RF experiment payloads. Counter pages are individual atomic readings, without a simultaneous snapshot guarantee.
+`capture` transports image-owned atomic event counters and independently
+specified RF experiment data, without a radio vocabulary in the transport.
+Descriptions identify the capture, epoch and counter/data schema. Counter
+pages preserve identity and absolute ranges and load live atomic values;
+they do not promise a simultaneous snapshot. Observation readers have zero
+event record pages and no arming, clock or freeze lifecycle. The generic
+record transport is also used by RF experiment readers, which enforce their
+own data lifecycle. `capture/refused` reports invalid reads as typed values.
+Fault/postmortem storage and debug-control are separate contracts.

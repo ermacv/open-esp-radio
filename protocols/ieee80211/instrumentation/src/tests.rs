@@ -316,84 +316,59 @@ fn activity_projection_preserves_each_outcome_and_wrapping_beacon_time() {
 }
 
 #[test]
-fn capture_counts_activity_independently_when_history_is_filtered_or_full() {
-    use oer_hil_agent::capture::{Reader, collector};
-    use oer_hil_protocol::capture::{Error, Identity, PageRequest};
-    use oer_time::Clock as _;
-
-    struct Clock<'a>(&'a oer_time_virtual::VirtualClock);
-    impl collector::Clock for Clock<'_> {
-        fn micros(&self) -> u64 {
-            self.0.now().as_micros()
-        }
+fn capture_counts_activity_by_kind_without_history_or_argument_evaluation_when_disabled() {
+    use oer_hil_agent::capture::{Reader, collector::Collector};
+    use oer_hil_protocol::capture::{Identity, PageRequest};
+    let kinds = [
+        StationAuthenticated::KIND,
+        StationBeacon::KIND,
+        StationAssociated::KIND,
+        TxIndeterminate::KIND,
+        TxHardwareTimeout::KIND,
+        TxQueueCollision::KIND,
+        ControlDelivered::KIND,
+    ];
+    let capture = Collector::new(kinds).unwrap();
+    let identity = Identity {
+        capture: 1,
+        epoch: 11,
+    };
+    let observer = &capture;
+    for _ in 0..2 {
+        oer_trace::observe!(observer, StationAuthenticated);
+        oer_trace::observe!(observer, StationBeacon { at_millis: 0 });
+        oer_trace::observe!(observer, StationAssociated);
+        oer_trace::observe!(observer, TxIndeterminate);
+        oer_trace::observe!(observer, TxHardwareTimeout);
+        oer_trace::observe!(observer, TxQueueCollision);
+        oer_trace::observe!(observer, ControlDelivered);
     }
-    let clock = oer_time_virtual::VirtualClock::new();
-    let mut capture = collector::Collector::<_, 0, 7>::new(Clock(&clock));
-    for (index, mask) in [0, SERVICE.mask()].into_iter().enumerate() {
-        let identity = Identity {
-            capture: index as u32 + 1,
-            epoch: 11,
-        };
-        capture.begin(identity, mask).unwrap();
-        let observer = &capture;
-        for _ in 0..2 {
-            oer_trace::observe!(observer, StationAuthenticated);
-            oer_trace::observe!(observer, StationBeacon { at_millis: 0 });
-            oer_trace::observe!(observer, StationAssociated);
-            oer_trace::observe!(observer, TxIndeterminate);
-            oer_trace::observe!(observer, TxHardwareTimeout);
-            oer_trace::observe!(observer, TxQueueCollision);
-            oer_trace::observe!(observer, ControlDelivered);
-        }
-        let description = capture.freeze().unwrap();
-        assert_eq!(description.records, 0);
-        if cfg!(oer_trace) {
-            let counters = capture
-                .counters(PageRequest {
-                    identity,
-                    first: 0,
-                    count: 7,
-                })
-                .unwrap();
-            assert_eq!(description.counters, 7);
-            assert_eq!(counters.counters.len(), 7);
-            assert!(
-                counters
-                    .counters
-                    .iter()
-                    .all(|counter| counter.value == 2 && !counter.saturated)
-            );
-            let kinds: std::collections::BTreeSet<_> = counters
-                .counters
-                .iter()
-                .map(|counter| counter.kind)
-                .collect();
-            assert_eq!(
-                kinds,
-                [
-                    StationAuthenticated::KIND,
-                    StationBeacon::KIND,
-                    StationAssociated::KIND,
-                    TxIndeterminate::KIND,
-                    TxHardwareTimeout::KIND,
-                    TxQueueCollision::KIND,
-                    ControlDelivered::KIND
-                ]
-                .map(|kind| kind.raw())
-                .into_iter()
-                .collect()
-            );
-            assert_eq!(
-                description.failure,
-                (mask != 0).then_some(Error::RecordsFull)
-            );
-            assert_eq!(description.dropped, if mask == 0 { 0 } else { 14 });
-        } else {
-            assert_eq!(description.counters, 0);
-            assert_eq!(description.failure, None);
-        }
-        capture.release(identity).unwrap();
-    }
+    let reader = capture.reader(identity);
+    let description = reader.describe().unwrap();
+    let counters = reader
+        .counters(PageRequest {
+            identity,
+            first: 0,
+            count: 7,
+        })
+        .unwrap();
+    assert_eq!(description.records, 0);
+    assert_eq!(description.counters, 7);
+    assert_eq!(description.failure, None);
+    assert_eq!(description.dropped, 0);
+    assert!(
+        counters.counters.iter().all(|counter| counter.value
+            == if cfg!(oer_trace) { 2 } else { 0 }
+            && !counter.saturated)
+    );
+    assert_eq!(
+        counters
+            .counters
+            .iter()
+            .map(|counter| counter.kind)
+            .collect::<Vec<_>>(),
+        kinds.map(|kind| kind.raw())
+    );
 }
 
 #[test]

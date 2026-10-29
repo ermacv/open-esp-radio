@@ -111,7 +111,7 @@ impl<const K: usize> Reader for CounterReader<'_, K> {
             .any(|value| value.load(Relaxed) == u32::MAX);
         Ok(Description {
             identity: self.identity,
-            schema: oer_hil_protocol::Key::of::<Counter>("trace/counter"),
+            schema: COUNTER_SCHEMA,
             frozen: true,
             records: 0,
             counters: K as u16,

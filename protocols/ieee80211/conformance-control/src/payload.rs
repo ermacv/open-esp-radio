@@ -417,6 +417,26 @@ mod tests {
     use oer_ieee80211_port::{Air, PhyRate};
     use oer_ieee80211_wire::{phy::LegacyRate, sequence::SequenceNumber};
 
+    fn trace(observed: LegacyRate, state: MpduState) -> outcomes::Trace<(), (), ()> {
+        outcomes::Trace {
+            admitted: outcomes::Identity {
+                ticket: 0,
+                buffer: 1,
+            },
+            returned: outcomes::Identity {
+                ticket: 0,
+                buffer: 1,
+            },
+            state,
+            rate: PhyRate::Legacy(LegacyRate::Ofdm6M),
+            sequence: SequenceNumber::from_sequence_control(0x1230),
+            publications: 1,
+            outcome: outcomes::Outcome::Single(TxOutcome::Ended(SingleEnd::AckTimeout(Air {
+                transmissions: NonZeroU16::MIN,
+                rate: PhyRate::Legacy(observed),
+            }))),
+        }
+    }
     #[test]
     fn projection_does_not_hide_a_different_terminal_rate_or_owner_state() {
         let expected = outcome_trace(&trace(LegacyRate::Ofdm6M, MpduState::Sent)).unwrap();
