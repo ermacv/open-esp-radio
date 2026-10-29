@@ -318,12 +318,12 @@ impl From<runtime::contract::Notice> for StationNotice {
 }
 
 use runtime::{BackendContractViolation, ControlTerminal, PendingTerminal};
-fn contract(violation: BackendContractViolation) -> StationContractViolation {
+pub fn contract_violation(violation: BackendContractViolation) -> StationContractViolation {
     use BackendContractViolation as V;
     use StationContractViolation as W;
     match violation {
         V::UnexpectedAggregate => W::UnexpectedAggregate,
-        V::UnexpectedTerminal(terminal) => W::UnexpectedTerminal(pending(terminal)),
+        V::UnexpectedTerminal(terminal) => W::UnexpectedTerminal(pending_terminal(terminal)),
         V::TerminalAfterEventEnd => W::TerminalAfterEventEnd,
         V::UnexpectedAccessPointTerminal => W::UnexpectedAccessPointTerminal,
         V::UnexpectedTsfSample => W::UnexpectedTsfSample,
@@ -343,7 +343,7 @@ fn contract(violation: BackendContractViolation) -> StationContractViolation {
     }
 }
 
-fn pending(terminal: PendingTerminal) -> StationPendingTerminal {
+pub fn pending_terminal(terminal: PendingTerminal) -> StationPendingTerminal {
     match terminal {
         PendingTerminal::Transmit(index) => StationPendingTerminal::Transmit(index),
         PendingTerminal::Control(control) => StationPendingTerminal::Control(match control {
@@ -352,31 +352,6 @@ fn pending(terminal: PendingTerminal) -> StationPendingTerminal {
             ControlTerminal::GroupChange => StationControlTerminal::GroupChange,
             ControlTerminal::GateClosed => StationControlTerminal::GateClosed,
         }),
-    }
-}
-
-pub fn service_fault<B: runtime::StationPort>(
-    value: runtime::ServiceFault<B>,
-    backend: impl Fn(
-        <B::Backend as oer_radio_port::PortBackend<B::SlotId>>::Fault,
-    ) -> StationBackendFault,
-    refusal: impl Fn(
-        <B::Backend as oer_radio_port::PortBackend<B::SlotId>>::Refusal,
-    ) -> StationBackendFault,
-) -> StationServiceFault {
-    match value {
-        runtime::ServiceFault::RxBlockAckCapacity => StationServiceFault::RxBlockAckCapacity,
-        runtime::ServiceFault::RxBlockAckEncode => StationServiceFault::RxBlockAckEncode,
-        runtime::ServiceFault::EnableRefused(r) => StationServiceFault::EnableRefused(refusal(r)),
-        runtime::ServiceFault::Backend(r) => StationServiceFault::Backend(backend(r)),
-        runtime::ServiceFault::Submission(r) => StationServiceFault::Submission(backend(r)),
-        runtime::ServiceFault::Contract(r) => StationServiceFault::Contract(contract(r)),
-        runtime::ServiceFault::DrainedWithOutstanding { cause, missing } => {
-            StationServiceFault::DrainedWithOutstanding {
-                cause: backend(cause),
-                missing: pending(missing),
-            }
-        }
     }
 }
 

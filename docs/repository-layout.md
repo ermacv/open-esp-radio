@@ -78,7 +78,8 @@ tools/vendor/{cli, ieee802154-esp32s31, ieee802154-esp32s31-cli, lineage,
 - `chips/espressif/executor/` contains the executor and its `bind!` macro,
   without a chip-specific feature or dependency. `chips/esp32s31/compose/`
   declares the `Esp32s31` executor binding over the HAL's platform port,
-  alongside the chip's retained fault records.
+  alongside the chip's retained fault records and its platform, console and
+  SAR/PWDET bindings.
 - `chips/esp32c5/` contains `vendor/artifacts.toml` and `platform/` flash
   metadata and partitions for ESP-IDF peers; it contains no Rust package.
 - `firmware/peers/` and `firmware/vendor/` contain ESP-IDF projects, whose

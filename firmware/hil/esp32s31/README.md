@@ -41,9 +41,8 @@ protocol and announces no keys.
 correlated link events and the network-ready event on the USB console. One
 `StartStation` provisions a boot;
 another configuration in that boot is rejected with `InvalidState`. Credentials
-arrive only in the binary HIL command. P1 derives the PMK with 8192 bounded
-PBKDF2-HMAC-SHA1 steps, yielding between them, and retains a zeroizing
-`SaePassword` for the personal station. The received passphrase is erased before
+arrive only in the binary HIL command. The facade prepares WPA2 credentials on P1 with 8192 bounded
+PBKDF2-HMAC-SHA1 steps, yielding between them. It retains no SAE password. The received passphrase is erased before
 the first yield. Cancelling derivation drops its zeroizing password and partial
 key owner. The `station-pmk` note reports only elapsed microseconds.
 
@@ -88,8 +87,8 @@ admission and correlated terminal results; pending unexecuted commands complete
 once with `NotExecuted(Stopped)`. `GetStationStatus` reads the live product
 status before installation and after shutdown. Runtime owns the public
 vocabulary and converts core causes internally; `oer-ieee80211-control` mirrors
-it exhaustively. Only chip-backend teardown conversion remains in
-`wifi_station/report.rs`.
+it exhaustively. `wifi_station/report.rs` consumes only facade-owned failure values; backend,
+PHY and HAL conversions run inside the facade.
 
 The personal image's `stack-wifi-station.toml` names the measured P1
 frames that exceed the move limit, each with its own checked ceiling. IRQ

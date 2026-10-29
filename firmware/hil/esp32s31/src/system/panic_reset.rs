@@ -26,7 +26,7 @@ pub(crate) fn start<C: oer_espressif_interrupt_table::Controller>(
     (wake, line): (crate::ExecutorWake, oer_esp32s31_hal::peripherals::software_interrupt::FromCpu0Irq),
     (usb, _pads): (
         crate::transport::Usb,
-        oer_esp32s31_hal::peripherals::usb_serial_jtag::UsbPads,
+        oer_esp32s31_compose::console::Pads,
     ),
     mut entropy: crate::Rng,
     watchdog: RtcWatchdog,

@@ -22,6 +22,8 @@ use oer_ieee80211_wire::{
 pub enum StaSecurityPolicy {
     Open,
     Wpa2Personal,
+    /// PSK credentials only: never select SAE, including transition BSSes.
+    Wpa2Psk,
     Wpa3Personal,
 }
 
@@ -30,7 +32,7 @@ impl StaSecurityPolicy {
     pub const fn link_protection(self) -> LinkProtection {
         match self {
             Self::Open => LinkProtection::Open,
-            Self::Wpa2Personal | Self::Wpa3Personal => LinkProtection::Ccmp,
+            Self::Wpa2Personal | Self::Wpa2Psk | Self::Wpa3Personal => LinkProtection::Ccmp,
         }
     }
 
@@ -40,7 +42,7 @@ impl StaSecurityPolicy {
     pub const fn management_protection(self) -> ManagementProtection {
         match self {
             Self::Open => ManagementProtection::Disabled,
-            Self::Wpa2Personal => ManagementProtection::Capable,
+            Self::Wpa2Personal | Self::Wpa2Psk => ManagementProtection::Capable,
             Self::Wpa3Personal => ManagementProtection::Required,
         }
     }
@@ -150,7 +152,7 @@ fn select_personal_rsn(
     }
     let sae = management_protection && rsn.akm_suites().contains(ieee_suite(RSN_AKM_SAE));
     let akm = match policy {
-        _ if sae => AssociationAkm::Sae(
+        _ if sae && policy != StaSecurityPolicy::Wpa2Psk => AssociationAkm::Sae(
             if rsnx_capabilities(access_point.rsnxe_bytes())
                 .is_some_and(|capabilities| capabilities.sae_h2e())
             {
@@ -162,15 +164,19 @@ fn select_personal_rsn(
         StaSecurityPolicy::Wpa3Personal | StaSecurityPolicy::Open => {
             return Err(StaSecurityError::UnsupportedAkm);
         }
-        StaSecurityPolicy::Wpa2Personal
+        StaSecurityPolicy::Wpa2Personal | StaSecurityPolicy::Wpa2Psk
             if rsn.akm_suites().contains(ieee_suite(RSN_AKM_PSK_SHA256)) =>
         {
             AssociationAkm::PskSha256
         }
-        StaSecurityPolicy::Wpa2Personal if rsn.akm_suites().contains(ieee_suite(RSN_AKM_PSK)) => {
+        StaSecurityPolicy::Wpa2Personal | StaSecurityPolicy::Wpa2Psk
+            if rsn.akm_suites().contains(ieee_suite(RSN_AKM_PSK)) =>
+        {
             AssociationAkm::Psk
         }
-        StaSecurityPolicy::Wpa2Personal => return Err(StaSecurityError::UnsupportedAkm),
+        StaSecurityPolicy::Wpa2Personal | StaSecurityPolicy::Wpa2Psk => {
+            return Err(StaSecurityError::UnsupportedAkm);
+        }
     };
     // Advertise support and retain the negotiated decision for key installation.
     // SOURCE[HIL_VENDOR_HE20_NDPA_CBF_2026_07_24]: frame 7624 carries RSN
@@ -192,9 +198,9 @@ pub fn select_association_rsn(
             Ok(SelectedRsn::OPEN)
         }
         StaSecurityPolicy::Open => Err(StaSecurityError::SecurityModeMismatch),
-        StaSecurityPolicy::Wpa2Personal | StaSecurityPolicy::Wpa3Personal => {
-            select_personal_rsn(access_point, policy)
-        }
+        StaSecurityPolicy::Wpa2Personal
+        | StaSecurityPolicy::Wpa2Psk
+        | StaSecurityPolicy::Wpa3Personal => select_personal_rsn(access_point, policy),
     }
 }
 

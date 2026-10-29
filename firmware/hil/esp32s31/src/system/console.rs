@@ -25,7 +25,7 @@ static TESTS: Channel<CriticalSectionRawMutex, (RequestIdentity, WatchdogTestMod
     Channel::new();
 
 /// The USB Serial/JTAG's pads.
-type Pads = oer_esp32s31_hal::peripherals::usb_serial_jtag::UsbPads;
+type Pads = oer_esp32s31_compose::console::Pads;
 
 oer_espressif_executor::tasks! {
     /// The watchdog image's tasks.

@@ -176,8 +176,7 @@ fn panic_hook(
 /// The image's entropy owner.
 #[cfg(any(
     feature = "system-watchdog",
-    feature = "system-panic-reset",
-    feature = "wifi-station"
+    feature = "system-panic-reset"
 ))]
 pub(crate) type Rng =
     oer_esp32s31_hal::peripherals::entropy::Entropy<oer_embassy_time::EmbassyClock>;
@@ -301,11 +300,12 @@ fn system_main(
 
 /// Install the console and arm the watchdogs before observing boot evidence.
 fn initialize_runtime() -> oer_espressif_staged_runtime::adoption::Prepared<Esp32s31> {
-    let Some(root) = oer_esp32s31_hal::root::Root::take() else {
-        fail(fatal::Failure::RootTaken);
-    };
-    oer_espressif_staged_runtime::adoption::prepare::<Esp32s31>(root.into_runtime())
-        .unwrap_or_else(|_| fail(fatal::Failure::RootInitialization))
+    oer_esp32s31_compose::platform::prepare().unwrap_or_else(|error| {
+        fail(match error {
+            oer_esp32s31_compose::platform::PrepareError::Claimed => fatal::Failure::RootTaken,
+            oer_esp32s31_compose::platform::PrepareError::Initialization(_) => fatal::Failure::RootInitialization,
+        })
+    })
 }
 
 /// Reset/retained evidence precedes adoption; ordinary startup checks follow it.

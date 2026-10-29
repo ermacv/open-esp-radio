@@ -426,6 +426,9 @@ impl<'id> World<'id> {
         Self::with_builder::<TX, G>(mint, skipped_absences, group_slots, |config, resources| {
             match security {
                 StaSecurity::Open => Station::new_open(config, resources),
+                StaSecurity::Wpa2Personal { pmk } => {
+                    Station::new_wpa2_personal(config, pmk, resources, GroupCapacity::new())
+                }
                 StaSecurity::Personal { password, pmk } => {
                     #[cfg(not(feature = "placement"))]
                     {

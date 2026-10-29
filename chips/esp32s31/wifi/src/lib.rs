@@ -11,7 +11,13 @@
 )]
 #![cfg_attr(target_arch = "riscv32", feature(type_alias_impl_trait))]
 //! ESP32-S31 station composition. Installation owners stay in its runners.
+mod credentials;
+pub mod failure;
 use core::task::{Context, Poll};
+pub use credentials::{
+    Callbacks, CredentialsError, NonceExhausted, NonceSource, OpenCallbacks, PreparedCredentials,
+    StationSettings,
+};
 use oer_ieee80211_runtime::station as runtime;
 use oer_ieee80211_sta::data::{EthernetFrame as Frame, TxMsdu};
 use oer_memory::WakingSpscQueue;
@@ -227,9 +233,9 @@ pub mod station;
 // The facade's own API, not aliases of backend or runtime modules.
 #[cfg(target_arch = "riscv32")]
 pub use chip::{
-    Bell, Binding, Config, DmaTypes, Driver, EndKind, Event, Events, InitializationError,
-    InterruptTypes, Interrupts, Lower, OpenCallbacks, Outcome, Profile, Resources, Runners,
-    StationRunner, Storage, station,
+    Bell, Binding, Config, DmaTypes, Driver, Event, Events, InitializationError, InterruptTypes,
+    Interrupts, Lower, Profile, Resources, Runners, StationExit, StationRunner, Storage,
+    UnavailableCause, station,
 };
 
 /// Bind the facade's backing to this image's concrete interrupt entries.

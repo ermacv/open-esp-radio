@@ -42,21 +42,11 @@ wifi-station = [
     "dep:oer-hil-agent",
     "dep:embassy-futures",
     "dep:heapless",
-    "dep:oer-radio-port",
-    "dep:oer-ieee80211-sta",
-    "dep:oer-ieee80211-upper-mac",
-    "dep:oer-ieee80211-port",
     "dep:oer-embassy-net",
-    "dep:oer-esp32s31-phy",
-    "dep:oer-esp32s31-radio-client",
-    "dep:oer-esp32s31-ieee80211-driver",
-    "dep:oer-ieee80211-wire",
     "dep:oer-ieee80211-runtime",
     "dep:oer-ieee80211-cipher",
-    "dep:oer-ieee80211-rsn",
     "dep:owned-embassy-net",
     "oer-espressif-executor/port-slots",
-    "dep:oer-ieee80211-arbiter",
     "dep:oer-ieee80211-instrumentation",
     "dep:oer-trace",
 ]
@@ -66,24 +56,14 @@ oer-network-control = { path = "../../../protocols/network-control", optional = 
 oer-ieee80211-control = { path = "../../../protocols/ieee80211/control", optional = true }
 oer-esp32s31-wifi = { path = "../../../chips/esp32s31/wifi", optional = true }
 oer-time = { path = "../../../portable/time" }
-oer-ieee80211-arbiter = { path = "../../../protocols/ieee80211/arbiter", optional = true }
 embassy-futures = { version = "0.1.2", optional = true }
 heapless = { version = "0.9.3", optional = true }
-oer-radio-port = { path = "../../../protocols/radio/port", optional = true }
-oer-ieee80211-sta = { path = "../../../protocols/ieee80211/sta", optional = true }
-oer-ieee80211-upper-mac = { path = "../../../protocols/ieee80211/upper-mac", optional = true }
-oer-ieee80211-port = { path = "../../../protocols/ieee80211/port", optional = true }
 oer-embassy-net = { path = "../../../portable/embassy/net", optional = true }
 oer-embassy-time = { path = "../../../portable/embassy/time" }
 oer-espressif-interrupt-table = { path = "../../../chips/espressif/interrupt-table" }
 oer-esp32s31-hal = { path = "../../../chips/esp32s31/hal" }
-oer-esp32s31-phy = { path = "../../../chips/esp32s31/phy", optional = true }
-oer-esp32s31-radio-client = { path = "../../../chips/esp32s31/radio/client", optional = true }
-oer-esp32s31-ieee80211-driver = { path = "../../../chips/esp32s31/ieee80211/driver", optional = true }
-oer-ieee80211-wire = { path = "../../../protocols/ieee80211/wire", optional = true }
 oer-ieee80211-runtime = { path = "../../../protocols/ieee80211/runtime", features = ["placement"], optional = true }
 oer-ieee80211-cipher = { path = "../../../protocols/ieee80211/cipher", optional = true }
-oer-ieee80211-rsn = { path = "../../../protocols/ieee80211/rsn", optional = true }
 oer-ieee80211-instrumentation = { path = "../../../protocols/ieee80211/instrumentation", optional = true }
 oer-trace = { path = "../../../portable/trace", optional = true }
 owned-embassy-net = { package = "embassy-net", git = "https://github.com/ermacv/embassy.git", rev = "17f796c8ddb90ff510d995e24c2dcb758a97e8f8", optional = true, features = ["medium-ethernet", "ipv4", "dhcpv4", "icmp-ping-reply"] }
@@ -111,8 +91,6 @@ oer-network-control = { path = "../../../protocols/network-control" }
 oer-ieee80211-control = { path = "../../../protocols/ieee80211/control" }
 oer-hil-agent = { path = "../../../protocols/hil/agent", default-features = false }
 oer-hil-protocol = { workspace = true }
-oer-ieee80211-rsn = { path = "../../../protocols/ieee80211/rsn" }
-oer-ieee80211-wire = { path = "../../../protocols/ieee80211/wire" }
 
 [lints]
 workspace = true

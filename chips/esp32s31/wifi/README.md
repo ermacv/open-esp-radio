@@ -18,8 +18,26 @@ callbacks, collectors, key-unwrap engine and handled-error terminal policy.
 `Resources` consumes the unique hardware partition, binding proof, doorbell,
 placed DMA allocations, signals and declared storage. `Runners::driver` runs
 on the existing P2 executor; `Runners::station` runs on P1 beside networking.
-The image supplies the latter's validated open/personal `Profile` and the
-selected key-unwrap engine. HIL can obtain credentials after spawning without
+The image supplies the latter's validated `Profile` and selected key-unwrap
+engine. `StationSettings::open`, `wpa2_passphrase` and `wpa2_pmk` validate the
+SSID and credentials without exposing STA or RSN types. `prepare` consumes
+that affine owner: open and prederived PMK provisioning complete immediately;
+passphrase provisioning yields after each bounded PBKDF2 step. The password
+is erased before the first yield, partial derivation is erased on cancellation,
+and the prepared PMK is erased on drop. `Profile::new` consumes the prepared
+owner. WPA2 uses PSK/PSK-SHA256 only, including on transition access points;
+no password is retained for SAE. Existing core users can still select their
+personal policy that upgrades to SAE.
+
+The facade's `Callbacks` and boot-seeded `NonceSource` hide the STA callbacks
+and RSN nonce implementation. Stream exhaustion returns `NonceExhausted` for
+the image's terminal policy; the stream never restarts at reassociation.
+`StationExit` distinguishes stopped, failed, poisoned, quarantined and
+unavailable results. Its facade-owned `failure` vocabulary exhaustively
+converts the backend's nested causes, preserving numeric observations,
+tracking classes and radio request identity. It contains no backend type.
+Runtime's existing nominal command and status values remain the Control
+vocabulary. HIL can obtain credentials after spawning without
 moving an installation credit into its command handler.
 
 `RadioResources` constructs the same shared RF actor, calibration identity,
