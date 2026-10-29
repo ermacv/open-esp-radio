@@ -317,44 +317,6 @@ impl From<runtime::contract::Notice> for StationNotice {
     }
 }
 
-use runtime::{BackendContractViolation, ControlTerminal, PendingTerminal};
-pub fn contract_violation(violation: BackendContractViolation) -> StationContractViolation {
-    use BackendContractViolation as V;
-    use StationContractViolation as W;
-    match violation {
-        V::UnexpectedAggregate => W::UnexpectedAggregate,
-        V::UnexpectedTerminal(terminal) => W::UnexpectedTerminal(pending_terminal(terminal)),
-        V::TerminalAfterEventEnd => W::TerminalAfterEventEnd,
-        V::UnexpectedAccessPointTerminal => W::UnexpectedAccessPointTerminal,
-        V::UnexpectedTsfSample => W::UnexpectedTsfSample,
-        V::GroupTerminalWithoutRequest => W::GroupTerminalWithoutRequest,
-        V::GroupSlotMismatch => W::GroupSlotMismatch,
-        V::GroupTerminalKindMismatch => W::GroupTerminalKindMismatch,
-        V::TxContextBufferMismatch => W::TxContextBufferMismatch,
-        V::StationKeyBank(violation) => W::StationKeyBank(match violation {
-            runtime::contract::KeyContractViolation::IncompleteBank => {
-                StationKeyContractViolation::IncompleteBank
-            }
-            runtime::contract::KeyContractViolation::MissingAssociation => {
-                StationKeyContractViolation::MissingAssociation
-            }
-        }),
-        V::StationKeyUnwrap => W::StationKeyUnwrap,
-    }
-}
-
-pub fn pending_terminal(terminal: PendingTerminal) -> StationPendingTerminal {
-    match terminal {
-        PendingTerminal::Transmit(index) => StationPendingTerminal::Transmit(index),
-        PendingTerminal::Control(control) => StationPendingTerminal::Control(match control {
-            ControlTerminal::Configure => StationControlTerminal::Configure,
-            ControlTerminal::PairwiseRemoval => StationControlTerminal::PairwiseRemoval,
-            ControlTerminal::GroupChange => StationControlTerminal::GroupChange,
-            ControlTerminal::GateClosed => StationControlTerminal::GateClosed,
-        }),
-    }
-}
-
 impl From<runtime::contract::Notice> for StationLinkState {
     fn from(value: runtime::contract::Notice) -> Self {
         match value {

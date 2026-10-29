@@ -410,19 +410,12 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 "firmware/hil/esp32s31/src/wifi_station/mod.rs:crate::wifi_station::start:reset-method:reset:1" = { owner = "firmware/hil/esp32s31", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
 "firmware/hil/esp32s31/src/wifi_station/mod.rs:crate::wifi_station::start:reset-method:reset:2" = { owner = "firmware/hil/esp32s31", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
 "firmware/hil/esp32s31/src/wifi_station/mod.rs:crate::wifi_station::start:terminal-reference:reset_binding:1" = { owner = "firmware/hil/esp32s31", classes = ["configuration-boot", "unexpected-hardware", "software-invariant"] }
-"firmware/hil/esp32s31/src/wifi_station/mod.rs:crate::wifi_station::impl Attempt::advance:panic-method:expect:1" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
 "firmware/hil/esp32s31/src/wifi_station/mod.rs:crate::wifi_station::start:terminal-entry:start:1" = { owner = "firmware/hil/esp32s31", classes = ["configuration-boot", "software-invariant", "rust-panic"] }
-
-
-# firmware/hil/esp32s31/src/wifi_station/observation.rs
-"firmware/hil/esp32s31/src/wifi_station/observation.rs:crate::wifi_station::observation::counters:panic-method:expect:1" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
 
 # firmware/hil/esp32s31/src/wifi_station/radio.rs
 "firmware/hil/esp32s31/src/wifi_station/radio.rs:crate::wifi_station::radio::failure:terminal-entry:failure:1" = { owner = "firmware/hil/esp32s31", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
 "firmware/hil/esp32s31/src/wifi_station/radio.rs:crate::wifi_station::radio::failure:terminal-reference:reset_request:1" = { owner = "firmware/hil/esp32s31", classes = ["cancellation"] }
 "firmware/hil/esp32s31/src/wifi_station/radio.rs:crate::wifi_station::radio::failure:terminal-reference:boot_failure:1" = { owner = "firmware/hil/esp32s31", classes = ["configuration-boot"] }
-
-# firmware/hil/esp32s31/src/wifi_station/station.rs
 
 # firmware/probes/esp32s31-facts/src/image.rs
 "firmware/probes/esp32s31-facts/src/image.rs:crate::image::RETAINED:retained-slot:RETAINED:1" = { owner = "firmware/probes/esp32s31-facts", classes = ["requested-reset"] }

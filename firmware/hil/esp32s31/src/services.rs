@@ -1,7 +1,12 @@
 //! The HIL services each image of this package mounts, and the key set it
 //! reports: the union of the keys of those services and of the base module.
 
-#[cfg(any(test, feature = "system-watchdog", feature = "system-panic-reset"))]
+#[cfg(any(
+    test,
+    feature = "system-watchdog",
+    feature = "system-panic-reset",
+    feature = "wifi-station"
+))]
 use oer_hil_agent::lifecycle::Request as ResetRequest;
 
 #[cfg(any(test, feature = "system-watchdog"))]
@@ -77,10 +82,15 @@ oer_hil_agent::image_keys! {
     pub(crate) PANIC_RESET_KEYS = [ResetRequest, PanicHook]
 }
 
+#[cfg(all(not(test), feature = "wifi-station"))]
+use crate::wifi_station::udp::Requests as UdpRequests;
+#[cfg(test)]
+oer_hil_agent::requests! { pub enum UdpRequests(sessions = false) { Start(oer_network_control::StartDatagrams), Stop(oer_network_control::StopDatagrams), } publishes [oer_network_control::DatagramsFinished, oer_network_control::Udp] }
+
 #[cfg(any(test, feature = "wifi-station"))]
 oer_hil_agent::image_keys! {
     /// The station image.
-    pub(crate) STATION_KEYS = [StationRequests, PanicHook]
+    pub(crate) STATION_KEYS = [StationRequests, oer_hil_agent::capture::Request, ResetRequest, UdpRequests, PanicHook]
 }
 
 #[cfg(test)]
@@ -141,7 +151,13 @@ mod tests {
         assert_eq!(set(PANIC_RESET_KEYS), expected(&[RESET]));
         assert_eq!(
             set(STATION_KEYS),
-            expected(&[wifi::KEYS, &[base::Accepted::KEY, network::Ready::KEY],])
+            expected(&[
+                wifi::KEYS,
+                &[base::Accepted::KEY, network::Ready::KEY],
+                RESET,
+                <oer_hil_agent::capture::Request as Service>::KEYS,
+                UdpRequests::KEYS
+            ])
         );
     }
 

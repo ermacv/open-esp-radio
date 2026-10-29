@@ -17,6 +17,22 @@ use oer_hil_scenario::{
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
+const REQUIRED_KEYS: &[oer_hil_protocol::Key] = &const {
+    match oer_hil_protocol::base::concat_keys::<
+        {
+            oer_ieee80211_control::KEYS.len()
+                + oer_hil_protocol::capture::KEYS.len()
+                + oer_hil_protocol::lifecycle::KEYS.len()
+        },
+    >(&[
+        oer_ieee80211_control::KEYS,
+        oer_hil_protocol::capture::KEYS,
+        oer_hil_protocol::lifecycle::KEYS,
+    ]) {
+        Some(keys) => keys,
+        None => panic!("station service key geometry"),
+    }
+};
 pub const FAMILY: Kind = Kind::of::<WifiScenario>("wifi");
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
@@ -44,7 +60,7 @@ impl ScenarioFamily for WifiScenario {
         vec![AirUse::WifiLink]
     }
     fn required_keys(&self) -> &'static [oer_hil_protocol::Key] {
-        oer_ieee80211_control::KEYS
+        REQUIRED_KEYS
     }
 }
 impl Workload for WifiScenario {

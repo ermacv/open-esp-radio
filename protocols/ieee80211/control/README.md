@@ -46,3 +46,12 @@ credentials with `<redacted>`; human-readable decoding is rejected. The host
 records command identity and time, never command payloads. Transport Debug
 prints metadata and payload length only. A target must not echo credential
 wire bytes into UART evidence.
+
+With `oer_trace`, `collector::Observations` translates the existing dictionary
+through an image-owned generic HIL collector and injected timestamps. HIL
+summaries use independent aggregate counts, plus correlation boundaries for
+GTK and final deauthentication. Bounded history exhaustion remains explicit.
+`StationStopped` carries the frozen capture description. The generic capture
+service serves its immutable records and counters. Service failures carry the
+exact serialized facade value and its schema key instead of a second, lossy
+failure dictionary; schema mismatches and malformed encodings are refused.

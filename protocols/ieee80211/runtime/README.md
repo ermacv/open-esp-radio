@@ -109,3 +109,13 @@ in `station::contract`, without wire serialization or re-exports of
 station/upper-MAC core types. Core conversions are exhaustive inside runtime;
 refused Ethernet owners stay opaque and affine. `Device::new` is the separate
 network wiring constructor. The HIL binding translates only the public contract.
+
+The station runtime owns its optional reconnect policy through the existing
+`oer-time` timer and command-credit admission. Policy requests use correlations
+1 (connect) and 65535 (graceful disconnect); explicit callers retain their
+correlations. `CommandStarted` precedes the core call after credit admission.
+Explicit Disconnect pauses the policy and Connect resumes it. Graceful Stop
+has its own wake, admits one disconnect and retires after link-down. The raw
+runtime `Control::stop` still requests immediate cooperative retirement.
+Policy deadline exhaustion is a typed service failure. No policy timer or
+initial automatic request exists when reconnect is disabled.

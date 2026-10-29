@@ -14,6 +14,7 @@ where
         >,
 {
     match value {
+        ServiceFault::PolicyDeadlineOverflow => StationFailure::PolicyDeadlineOverflow,
         ServiceFault::RxBlockAckCapacity => StationFailure::RxBlockAckCapacity,
         ServiceFault::RxBlockAckEncode => StationFailure::RxBlockAckEncode,
         ServiceFault::EnableRefused(v) => StationFailure::EnableRefused(backend_fault(v)),
@@ -519,9 +520,9 @@ pub(super) fn rx_stage_transaction_error(
             pool_slots,
             queue_depth,
         } => RxStageTransactionError::InvalidCreditReserve {
-            reserved,
-            pool_slots,
-            queue_depth,
+            reserved: reserved as u64,
+            pool_slots: pool_slots as u64,
+            queue_depth: queue_depth as u64,
         },
     }
 }

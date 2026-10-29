@@ -30,6 +30,8 @@ fn migrated_wire() -> Result<String, oer_hil_registry::LockError> {
         .filter(|line| {
             ![
                 "wifi/station/link ",
+                "wifi/station/stopped ",
+                "wifi/station/service-ended ",
                 "wifi/station/probe ",
                 "wifi/station/probe/ready ",
                 "wifi/station/probe/finished ",
@@ -61,6 +63,8 @@ fn migrated_wire() -> Result<String, oer_hil_registry::LockError> {
         matches!(
             message.path,
             "wifi/station/link"
+                | "wifi/station/stopped"
+                | "wifi/station/service-ended"
                 | "wifi/station/transmit/refused"
                 | "wifi/station/msdu/refused"
                 | "wifi/station/connect"
@@ -78,6 +82,19 @@ fn migrated_wire() -> Result<String, oer_hil_registry::LockError> {
             Kind::Property => "property",
         };
         previous.push_str(&format!("{} {} {}\n", message.path, message.key, kind));
+    }
+    for message in oer_network_control::MESSAGES.iter().filter(|message| {
+        matches!(
+            message.path,
+            "network/datagrams/start" | "network/datagrams/stop" | "network/datagrams/finished"
+        )
+    }) {
+        let kind = match message.kind {
+            Kind::Endpoint => "endpoint",
+            Kind::Topic => "topic",
+            Kind::Property => "property",
+        };
+        previous.push_str(&format!("{} {} {kind}\n", message.path, message.key));
     }
     oer_hil_registry::merge_locks([previous.as_str()])
 }

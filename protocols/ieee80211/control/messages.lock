@@ -16,10 +16,10 @@ wifi/station/link 13e5d19c0f15b769 topic
 wifi/station/msdu/refused 8c1ae86fa725f4b2 topic
 wifi/station/receive-drop 71f137fcccb01e28 topic
 wifi/station/scan 07c75e49657b792e endpoint
-wifi/station/service-ended 540f1846cb5b2961 topic
+wifi/station/service-ended 359fe1dd85d65a26 topic
 wifi/station/start 0bded670f6ef9188 endpoint
 wifi/station/status 44f64cd67feec126 topic
 wifi/station/status/get 273a9e49d7ed24f6 endpoint
 wifi/station/stop 82add8a7b5f872f9 endpoint
-wifi/station/stopped 3704030980b827e2 topic
+wifi/station/stopped cf2cf1adf8eb8754 topic
 wifi/station/transmit/refused 0f2711193d498dfa topic

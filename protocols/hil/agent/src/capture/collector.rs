@@ -60,6 +60,51 @@ impl<C, const R: usize, const K: usize> Collector<C, R, K> {
         Ok(())
     }
 
+    /// Live aggregate query; history filtering and capacity never change it.
+    pub fn counter(&self, kind: u16) -> Result<Counter, Error> {
+        let state = self.state.try_borrow().map_err(|_| Error::Borrowed)?;
+        Ok(state
+            .counters
+            .iter()
+            .find(|counter| counter.kind == kind)
+            .copied()
+            .unwrap_or(Counter {
+                kind,
+                value: 0,
+                saturated: false,
+            }))
+    }
+    pub fn mark_failure(&mut self, error: Error) {
+        self.state.get_mut().failure.get_or_insert(error);
+    }
+    /// Join a producer's immutable aggregate cut before freezing this collector.
+    pub fn merge_counters(&mut self, counters: &[Counter]) -> Result<(), Error> {
+        let state = self.state.get_mut();
+        if state.identity.is_none() || state.frozen {
+            return Err(Error::InvalidState);
+        }
+        for incoming in counters {
+            if let Some(counter) = state
+                .counters
+                .iter_mut()
+                .find(|counter| counter.kind == incoming.kind)
+            {
+                let value = counter.value.checked_add(incoming.value);
+                counter.value = value.unwrap_or(u32::MAX);
+                counter.saturated |= incoming.saturated || value.is_none();
+                if counter.saturated {
+                    state.failure.get_or_insert(Error::CounterOverflow);
+                }
+            } else if state.counters.push(*incoming).is_err() {
+                state.failure.get_or_insert(Error::CounterKindsFull);
+                return Err(Error::CounterKindsFull);
+            } else if incoming.saturated {
+                state.failure.get_or_insert(Error::CounterOverflow);
+            }
+        }
+        Ok(())
+    }
+
     pub fn freeze(&mut self) -> Result<Description, Error> {
         let state = self.state.get_mut();
         if state.identity.is_none() || state.frozen {
@@ -256,5 +301,48 @@ mod tests {
         collector.event(Step);
         drop(borrow);
         assert_eq!(collector.freeze().unwrap().failure, Some(Error::Borrowed));
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod merge_tests {
+    use super::*;
+    #[test]
+    fn immutable_aggregates_merge_by_kind_and_keep_saturation_and_capacity_failures() {
+        let mut collector = Collector::<_, 0, 1>::new(());
+        let identity = Identity {
+            capture: 1,
+            epoch: 0,
+        };
+        collector.begin(identity, 0).unwrap();
+        collector
+            .merge_counters(&[Counter {
+                kind: 1,
+                value: u32::MAX,
+                saturated: false,
+            }])
+            .unwrap();
+        collector
+            .merge_counters(&[Counter {
+                kind: 1,
+                value: 1,
+                saturated: false,
+            }])
+            .unwrap();
+        let counter = collector.counter(1).unwrap();
+        assert_eq!(counter.value, u32::MAX);
+        assert!(counter.saturated);
+        assert_eq!(
+            collector.merge_counters(&[Counter {
+                kind: 2,
+                value: 1,
+                saturated: false
+            }]),
+            Err(Error::CounterKindsFull)
+        );
+        let cut = collector.freeze().unwrap();
+        assert_eq!(cut.failure, Some(Error::CounterOverflow));
+        assert_eq!(collector.merge_counters(&[]), Err(Error::InvalidState));
     }
 }

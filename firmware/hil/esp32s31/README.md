@@ -57,8 +57,8 @@ through the reset path; it never substitutes a nonce or wraps an epoch.
 The network bridge waits only on RX, TX publication/capacity and link/epoch
 events. A retained TX does not block RX or link delivery. The IP runner's
 event-driven polls publish changed DHCP leases; stop link waits share their
-task's waker and use no periodic sampler. The one-second reconnect policy
-remains image policy.
+task's waker and use no periodic sampler. The facade configures the product runtime's one-second reconnect policy;
+the image has no reconnect timer or retry state.
 
 Successful Association processing emits `Associated`; the controlled-port
 notice emits `Authorized` with the BSSID and channel. Runtime restores the
@@ -87,8 +87,16 @@ admission and correlated terminal results; pending unexecuted commands complete
 once with `NotExecuted(Stopped)`. `GetStationStatus` reads the live product
 status before installation and after shutdown. Runtime owns the public
 vocabulary and converts core causes internally; `oer-ieee80211-control` mirrors
-it exhaustively. `wifi_station/report.rs` consumes only facade-owned failure values; backend,
-PHY and HAL conversions run inside the facade.
+it exhaustively. Service failures carry the exact schema-identified facade
+value; the image has no duplicate error dictionary or report translator.
+The generic agent capture and requested-reset lifecycle services are mounted.
+P1 history is initialized in static storage and bounded to 4096 records and
+128 aggregate kinds. P2 has a separate
+64-kind counter collector; its immutable cut joins P1 at station termination.
+Dropped history, saturation and refused observation admission remain explicit.
+The host drains and validates the frozen cut after Stop. Station/UDP teardown
+joins the socket workload and stops the product IP service before freezing.
+No observation changes a product operation or contributes a product counter.
 
 The personal image's `stack-wifi-station.toml` names the measured P1
 frames that exceed the move limit, each with its own checked ceiling. IRQ
@@ -134,6 +142,8 @@ transactions after its stall, or one a stand run shows, and a revocation of
 the old owner's accesses.
 
 
+## CPU and radio observations
+
 With `wifi-station` and `oer_trace`, `measurements::CPU` receives executor
 boundaries from the application's and radio's task sets. Two `CpuSample`s
 produce a `CpuWindow`: thread idle yields whole-hart busy time and per-mille
@@ -151,3 +161,40 @@ observations have no verdict thresholds and add no product control messages;
 they are available to workload reporting independently of any retained history.
 There is no TX A-MPDU traffic on the ordinary S31 station port, and containment
 evidence does not provide physical RX aggregate counts or member counts.
+
+## UDP application
+
+The station mounts `network/datagrams/start`, `network/datagrams/stop` and
+`network/datagrams/finished`. One workload runs at a time. Start selects
+`Echo`, `Sink` or `Source`, a nonzero local port and, for Source, an IPv4 peer,
+payload size (16–1400 bytes) and optional packets/second (1–1,000,000). `None`
+sends at socket capacity. Source should start after IPv4 readiness. Echo and
+Sink have no peer/rate setting; their receive buffer is bounded to 1400 bytes.
+Echo returns the exact received payload. All modes use the pinned fork's
+ordinary UDP sockets, without another socket API.
+
+Source/sink payload header (network byte order):
+
+| Offset | Bytes | Value |
+| --- | --- | --- |
+| 0 | 8 | Unsigned sequence, starting at zero; never wraps |
+| 8 | 8 | Sender's boot-local monotonic microseconds, sampled before socket admission |
+| 16 | remainder | Source fills with `0x5a`; Echo preserves every byte |
+
+Sink counts all received datagrams/bytes and separately malformed headers.
+Sequence tracking retains 64 sequence positions. Missing counts unfilled gaps
+from zero through the highest observed sequence and is corrected by late
+arrivals within that window. Reordered and duplicate counts are distinct;
+older packets increment `too_old`, explicitly making sequence accounting
+incomplete. Trailing losses require a sender's independent total and cannot
+be inferred from this receiver alone. Counter saturation is explicit.
+
+Stop acknowledges admission and publishes `DatagramsFinished` on its request;
+other terminal errors use the Start request. The result includes the Start
+request ID, start/end microseconds, typed end reason and final RX/TX/sequence
+counters. Sent means accepted by the socket, including packets awaiting
+neighbor resolution; it does not prove on-air delivery. StopStation joins any
+workload before station shutdown. Measurements are information only, with no
+throughput threshold. This application and its counters exist only in the
+station image's required `oer_trace` configuration. The host UDP limit test is
+outside this image's station acceptance workload.
