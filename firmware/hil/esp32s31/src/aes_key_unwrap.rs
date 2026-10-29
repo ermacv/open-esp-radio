@@ -53,7 +53,7 @@ pub(crate) fn start(
     let Some(interrupts) = crate::Interrupts::take() else {
         crate::fail(crate::fatal::Failure::InterruptTable)
     };
-    oer_espressif_executor::init::<Esp32s31, 0, _, _>(
+    let _timer_ready = oer_espressif_executor::init::<Esp32s31, 0, _, _>(
         oer_espressif_executor::systimer::SystemTimer {
             comparators: timer.comparators,
             counter: timer.counter,
