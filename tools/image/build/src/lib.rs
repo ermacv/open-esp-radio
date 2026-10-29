@@ -25,6 +25,7 @@ mod critical_section;
 pub mod encode;
 pub mod esp_idf;
 pub mod exclusion;
+pub mod images;
 pub mod instrumentation;
 mod large_values;
 mod manifest;

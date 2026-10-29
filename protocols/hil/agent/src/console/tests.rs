@@ -9,7 +9,7 @@ use oer_hil_protocol::base::{
     BootEvidence, GetBootStatus, GetImageKeys, GetLinkHealth, Hello, ImageKeySet,
     PostMortemCheckpoints, RejectReason, ResetReason, sorted_keys,
 };
-use oer_hil_protocol::system::{WatchdogArmed, WatchdogTest, WatchdogTestMode};
+use crate::test_messages::{Probe, ProbeArmed, ProbeMode};
 use oer_hil_protocol::{Envelope, FrameDecoder, Key, WireKind};
 
 use super::*;
@@ -17,7 +17,7 @@ use oer_diagnostics::Note;
 
 crate::requests! {
     enum WatchdogRequest (sessions = false) {
-        Test(WatchdogTest),
+        Test(Probe),
     }
 }
 
@@ -79,8 +79,8 @@ const SERVED: [Key; 6] = sorted_keys([
     GetBootStatus::KEY,
     GetLinkHealth::KEY,
     Hello::KEY,
-    WatchdogTest::KEY,
-    WatchdogArmed::KEY,
+    Probe::KEY,
+    ProbeArmed::KEY,
 ]);
 
 /// The host side of the endpoint: bytes to deliver and bytes written.
@@ -147,7 +147,7 @@ impl Write for Endpoint {
 fn run_until(
     console: &'static TestConsole,
     host: &Host,
-    mut served: impl FnMut(RequestIdentity, WatchdogTest),
+    mut served: impl FnMut(RequestIdentity, Probe),
     done: impl Fn(&Host) -> bool,
 ) {
     let intake = Intake::new(BOOT, ImageKeySet::new(&SERVED).unwrap(), 0);
@@ -196,17 +196,17 @@ fn the_image_serves_its_own_requests_and_publishes_their_replies() {
     let console = console();
     let host = Host::default();
     console.start(BOOT);
-    host.send(0, 9, WatchdogTest(WatchdogTestMode::Complete));
+    host.send(0, 9, Probe(ProbeMode::Complete));
     run_until(
         console,
         &host,
-        |request, WatchdogTest(mode)| {
+        |request, Probe(mode)| {
             assert_eq!(request.request_id, 9);
-            console.publish(0, request.request_id, &WatchdogArmed(mode));
+            console.publish(0, request.request_id, &ProbeArmed(mode));
         },
         |host| host.frames().len() == 2,
     );
-    assert_eq!(host.frames()[1], (9, 1, WatchdogArmed::KEY));
+    assert_eq!(host.frames()[1], (9, 1, ProbeArmed::KEY));
 }
 
 #[test]
@@ -214,7 +214,7 @@ fn a_rejection_names_the_request() {
     let console = console();
     let host = Host::default();
     console.start(BOOT);
-    host.send(3, 4, WatchdogTest(WatchdogTestMode::Complete));
+    host.send(3, 4, Probe(ProbeMode::Complete));
     run_until(
         console,
         &host,
@@ -232,7 +232,7 @@ fn hello_leads_the_boot_although_the_image_published_first() {
     let host = Host::default();
     console.start(BOOT);
     assert_eq!(
-        console.publish(0, 0, &WatchdogArmed(WatchdogTestMode::Complete)),
+        console.publish(0, 0, &ProbeArmed(ProbeMode::Complete)),
         Some(1)
     );
     run_until(
@@ -243,7 +243,7 @@ fn hello_leads_the_boot_although_the_image_published_first() {
     );
     assert_eq!(
         host.frames(),
-        [(0, 0, Hello::KEY), (0, 1, WatchdogArmed::KEY)]
+        [(0, 0, Hello::KEY), (0, 1, ProbeArmed::KEY)]
     );
 }
 
@@ -439,7 +439,7 @@ fn a_control_reply_is_not_written_until_the_entire_frame_and_trailer_reach_the_e
     let console = console();
     console.start(BOOT);
     let sequence =
-        block_on(console.publish_reliably(0, 9, &WatchdogArmed(WatchdogTestMode::Complete)));
+        block_on(console.publish_reliably(0, 9, &ProbeArmed(ProbeMode::Complete)));
     let message = console.messages.try_receive().expect("queued reply");
     let host = Host::default();
     let gate = Signal::new();
@@ -460,7 +460,7 @@ fn a_control_reply_is_not_written_until_the_entire_frame_and_trailer_reach_the_e
     gate.signal(());
     assert_eq!(writing.as_mut().poll(&mut context), Poll::Ready(()));
     assert_eq!(written.as_mut().poll(&mut context), Poll::Ready(Ok(())));
-    assert_eq!(host.frames(), [(9, sequence, WatchdogArmed::KEY)]);
+    assert_eq!(host.frames(), [(9, sequence, ProbeArmed::KEY)]);
 }
 
 #[test]
@@ -705,4 +705,49 @@ fn boot_evidence_acknowledges_retained_data_only_after_frame_and_trailer_succeed
             assert!(platform.retained.borrow().peek().is_err());
         }
     }
+}
+
+crate::service! {
+    /// A test service with one handled endpoint.
+    enum ProbeService (sessions = false, handler = ProbeHandler) {
+        Probe(Probe) => probe,
+    }
+}
+
+/// Answers a probe with its mode and counts the calls.
+struct Prober {
+    calls: u32,
+}
+
+impl ProbeHandler for Prober {
+    async fn probe(&mut self, Probe(mode): Probe) -> ProbeArmed {
+        self.calls += 1;
+        ProbeArmed(mode)
+    }
+}
+
+#[test]
+fn a_service_answers_each_request_through_its_handler_with_the_request_identity() {
+    let console = console();
+    console.start(BOOT);
+    let mut prober = Prober { calls: 0 };
+    let identity = oer_hil_protocol::RequestIdentity {
+        boot_id: BOOT,
+        session_id: 0,
+        request_id: 21,
+    };
+    let sequence = block_on(ProbeService::Probe(Probe(ProbeMode::Stall)).serve(
+        &mut prober,
+        console,
+        identity,
+    ));
+    assert_eq!(prober.calls, 1);
+    let message = console.messages.try_receive().expect("the queued response");
+    let host = Host::default();
+    block_on(console.write_message(&mut Endpoint(host.clone()), &message, &Chip));
+    assert_eq!(host.frames(), [(21, sequence, ProbeArmed::KEY)]);
+    assert_eq!(
+        <ProbeService as crate::base::Service>::REQUESTS,
+        [Probe::KEY]
+    );
 }

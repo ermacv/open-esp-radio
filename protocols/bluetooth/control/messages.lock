@@ -1,5 +1,5 @@
 # The HIL wire of this revision.
-# The registry test prints the complete replacement when it differs.
+# This crate's test checks it against the descriptors.
 framing 2
 [modules]
 bluetooth base system

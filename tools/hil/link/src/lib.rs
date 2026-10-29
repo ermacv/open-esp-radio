@@ -1,377 +1,421 @@
-//! The host/target link of a HIL run: one session with the board under test
-//! (its UART capture, the generic protocol exchange [`SerialCapture::call`] /
-//! [`SerialCapture::request`], readiness and reboots) and the line console
-//! of a reference peer board ([`peer`]).
+//! The host end of the HIL link: one board's serial line, the protocol's
+//! frames on it, the boot they belong to and the request/response exchange.
 //!
-//! The link reaches the board only through the [`Dut`] port the laboratory
-//! implements; it depends on no laboratory, board,
-//! scenario, run-bundle or image code. Families build their operations on
-//! the generic exchange, a repetition's measurements observe a capture
-//! through [`CaptureObserver`].
+//! The link knows the framework's `base` module and nothing else: every
+//! other message is a header, a key and a payload, which the caller decodes
+//! as the type it expects. It stores nothing; the device's diagnostic lines
+//! come back as text for the caller to print.
+//!
+//! A boot is named by the `boot_id` every frame carries. The boot's first
+//! frame is its Hello; [`Link::boot`] also asks a running boot for it again
+//! (`base::GetHello`), which answers with the same boot's Hello. A frame of
+//! another boot means the device restarted, and every request of the earlier
+//! boot ended with it.
 #![forbid(unsafe_code)]
 
 use std::{
-    fs,
-    io::{Read, Write},
-    net::Ipv4Addr,
-    path::{Path, PathBuf},
+    collections::VecDeque,
     sync::{
         Arc, Condvar, Mutex,
-        atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering},
+        atomic::{AtomicBool, AtomicU32, Ordering},
         mpsc,
     },
     thread,
     time::{Duration, Instant},
 };
 
-use oer_hil_protocol::{DecodeCounters, Envelope, FrameDecoder, FrameEncoder, base::LinkHealth};
-use oer_network_control::{OperationStatus, WifiNetworkInterface};
+use oer_hil_protocol::{
+    DecodeCounters, Endpoint, Envelope, Frame, FrameEncoder, Key, Message,
+    base::{GetHello, Hello, Rejected},
+};
 use zeroize::Zeroizing;
 
+mod error;
+mod notes;
 mod target;
-pub use target::{ConsoleOpener, Dut, SerialLine};
-mod reboot;
-use reboot::{ExpectedReboot, RebootObservation};
-mod received;
-pub use received::{Received, message_info};
+mod transport;
+mod worker;
 
-/// How long the link waits for a protocol readiness step: a Hello or an
-/// accepted command.
-pub const PROTOCOL_READY_TIMEOUT: Duration = Duration::from_secs(10);
-const PROTOCOL_EVENT_CAPACITY: usize = 16_384;
+pub use error::{CallError, LinkError};
+pub use target::SerialLine;
+
+/// Device messages the link keeps until a caller takes them; one more is
+/// counted in [`Health::dropped`] instead.
+pub const RECEIVED_CAPACITY: usize = 4096;
+
+/// How often a waiting caller looks at cancellation.
+const CANCEL_POLL: Duration = Duration::from_millis(100);
+
+/// One device message: its header, its key and its payload.
+#[derive(Clone)]
+pub struct Received {
+    pub boot_id: u64,
+    pub message_sequence: u32,
+    pub session_id: u64,
+    pub request_id: u32,
+    pub key: Key,
+    payload: Vec<u8>,
+}
+
+impl std::fmt::Debug for Received {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("Received")
+            .field("boot_id", &self.boot_id)
+            .field("message_sequence", &self.message_sequence)
+            .field("session_id", &self.session_id)
+            .field("request_id", &self.request_id)
+            .field("key", &self.key)
+            .field("payload_length", &self.payload.len())
+            .finish()
+    }
+}
+
+impl Drop for Received {
+    fn drop(&mut self) {
+        zeroize::Zeroize::zeroize(&mut self.payload);
+    }
+}
+
+impl Received {
+    fn from_frame(frame: &Frame<'_>) -> Self {
+        Self {
+            boot_id: frame.boot_id,
+            message_sequence: frame.message_sequence,
+            session_id: frame.session_id,
+            request_id: frame.request_id,
+            key: frame.key,
+            payload: frame.payload.to_vec(),
+        }
+    }
+
+    pub fn is<M: Message>(&self) -> bool {
+        self.key == M::KEY
+    }
+
+    /// This message as `M`: `None` when its key is another type's, an error
+    /// when its key is `M`'s but its payload does not decode as `M`.
+    pub fn decode<M: Message>(&self) -> Option<Result<M, CallError>> {
+        self.is::<M>().then(|| {
+            postcard::from_bytes(&self.payload).map_err(|_| CallError::Payload { path: M::PATH })
+        })
+    }
+}
+
+/// The running boot, as its Hello describes it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Boot {
+    pub boot_id: u64,
+    pub hello: Hello,
+}
+
+/// What the link observed of the wire.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct Health {
+    /// The host decoder's counters over the whole line.
+    pub counters: DecodeCounters,
+    /// Device messages missing from a boot's sequence numbers.
+    pub missing: u32,
+    /// Device messages the host dropped because nobody took them.
+    pub dropped: u32,
+    /// Boots seen on the line.
+    pub boots: u32,
+}
 
 #[derive(Default)]
-struct ProtocolEvents {
-    state: Mutex<ProtocolState>,
+struct State {
+    received: VecDeque<Received>,
+    /// The boot of the newest frame and the sequence number its next one
+    /// carries.
+    boot: Option<(u64, u32)>,
+    /// The newest boot's Hello, once seen.
+    hello: Option<Boot>,
+    health: Health,
+    notes: Vec<String>,
+    failure: Option<LinkError>,
+}
+
+impl State {
+    fn fail(&mut self, error: LinkError) {
+        self.failure.get_or_insert(error);
+    }
+
+    /// Takes `message` into the boot and sequence accounting.
+    fn receive(&mut self, message: Received) {
+        if message.boot_id == 0 {
+            self.fail(LinkError::Protocol(
+                "the device sent the reserved boot identity 0".to_owned(),
+            ));
+            return;
+        }
+        match self.boot {
+            Some((boot_id, next)) if boot_id == message.boot_id => {
+                let missing = message.message_sequence.wrapping_sub(next);
+                if missing > u32::MAX / 2 {
+                    self.fail(LinkError::Protocol(format!(
+                        "device message {} repeats or reorders boot {boot_id:016x}'s sequence",
+                        message.message_sequence
+                    )));
+                    return;
+                }
+                self.health.missing = self.health.missing.saturating_add(missing);
+            }
+            _ => {
+                self.health.boots = self.health.boots.saturating_add(1);
+                self.hello = None;
+            }
+        }
+        self.boot = Some((message.boot_id, message.message_sequence.wrapping_add(1)));
+        if let Some(Ok(hello)) = message.decode::<Hello>() {
+            self.hello = Some(Boot {
+                boot_id: message.boot_id,
+                hello,
+            });
+        }
+        if self.received.len() < RECEIVED_CAPACITY {
+            self.received.push_back(message);
+        } else {
+            self.health.dropped = self.health.dropped.saturating_add(1);
+        }
+    }
+
+    /// The first kept message `matches` accepts, removed.
+    fn take(&mut self, matches: impl Fn(&Received) -> bool) -> Option<Received> {
+        let index = self.received.iter().position(matches)?;
+        self.received.remove(index)
+    }
+}
+
+struct Shared {
+    state: Mutex<State>,
     changed: Condvar,
 }
 
-#[derive(Default)]
-struct ProtocolState {
-    expected_reboot: Option<ExpectedReboot>,
-    observed_reboot: Option<RebootObservation>,
-    messages: Vec<Received>,
-    /// When the host decoded each of `messages`, in Unix microseconds.
-    received_unix_micros: Vec<u64>,
-    /// Every command the host sent, in order.
-    sent: Vec<SentCommand>,
-    health: ProtocolHealth,
-    failure: Option<LinkError>,
-    closed: bool,
-    /// The target was asked to leave USB: the end of its stream is that
-    /// departure, not a transport failure.
-    expected_detach: bool,
-}
-
-/// A command the host sent: its identity and when, never its payload, which
-/// can carry credentials.
-#[derive(serde::Serialize)]
-struct SentCommand {
-    request_id: u32,
-    session_id: u64,
-    /// The command's message path.
-    path: &'static str,
-    host_sent_unix_micros: u64,
-}
-
-/// Microseconds since the Unix epoch on the host clock.
-fn host_unix_micros() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |elapsed| elapsed.as_micros() as u64)
-}
-
-/// What a sent message was: its path.
-impl ProtocolState {
-    fn check(&self) -> Result<()> {
-        if let Some(error) = &self.failure {
-            return Err(error.clone().into());
-        }
-        // After an expected detach, the messages received before it still
-        // answer their requests.
-        if self.closed && !self.expected_detach {
-            return Err(LinkError::transport("serial capture is closed").into());
-        }
-        Ok(())
-    }
-
-    fn fail(&mut self, error: LinkError) {
-        // A later reset or teardown must not replace the original cause.
-        self.failure.get_or_insert(error);
-    }
-}
-
-impl ProtocolEvents {
-    fn close(&self, error: Option<LinkError>) {
-        let mut state = self
-            .state
+impl Shared {
+    fn lock(&self) -> std::sync::MutexGuard<'_, State> {
+        self.state
             .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        if let Some(error) = error
-            && !state.expected_detach
-        {
-            state.fail(error);
-        }
-        state.closed = true;
-        self.changed.notify_all();
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 }
 
-#[derive(Clone, Debug, Default, serde::Serialize)]
-struct ProtocolHealth {
-    origin: CaptureOrigin,
-    active: bool,
-    boot_id: Option<u64>,
-    next_sequence: u32,
-    counters: DecodeCounters,
-    #[serde(skip)]
-    decoder_baseline: DecodeCounters,
-    failure: Option<String>,
-    /// The boot began with the answer to the host's capability request,
-    /// because the link lost the boot's own Hello.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    solicited_hello: Option<SolicitedHello>,
-    /// Whether a boot may begin with a solicited Hello; set only while the
-    /// host asks a boot whose Hello it missed.
-    #[serde(skip)]
-    accept_solicited_hello: bool,
-}
-
-/// A boot that began with the answer to the host's capability request.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize)]
-struct SolicitedHello {
-    /// The answer's target message sequence: the boot's messages before it
-    /// were lost on the link.
-    message_sequence: u32,
-}
-
-/// The latest target message sequence a solicited Hello may begin a boot
-/// at: the boot's own Hello and the few messages a boot sends unasked.
-const SOLICITED_HELLO_SEQUENCE_LIMIT: u32 = 8;
-
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, serde::Serialize)]
-#[serde(rename_all = "kebab-case")]
-enum CaptureOrigin {
-    #[default]
-    Boot,
-    Attachment,
-}
-
-impl ProtocolHealth {
-    fn observe(&mut self, message: &Received, decoder_counters: DecodeCounters) {
-        match self.boot_id {
-            None => {
-                self.begin_boot(message, decoder_counters);
-            }
-            Some(boot_id) if boot_id != message.boot_id => {
-                self.begin_boot(message, decoder_counters);
-            }
-            Some(_) if message.message_sequence != self.next_sequence => {
-                let expected = self.next_sequence;
-                self.next_sequence = message.message_sequence.wrapping_add(1);
-                self.fail(format!(
-                    "target message sequence discontinuity: expected {expected}, observed {}",
-                    message.message_sequence
-                ));
-            }
-            Some(_) => self.next_sequence = self.next_sequence.wrapping_add(1),
-        }
-    }
-
-    fn begin_boot(&mut self, message: &Received, decoder_counters: DecodeCounters) {
-        self.active = true;
-        self.boot_id = Some(message.boot_id);
-        self.next_sequence = message.message_sequence.wrapping_add(1);
-        self.decoder_baseline = decoder_counters;
-        self.counters = DecodeCounters::default();
-        self.failure = None;
-        if message.boot_id == 0 {
-            self.fail("target published a reserved zero boot identity".into());
-        } else if self.origin == CaptureOrigin::Boot
-            && (message.message_sequence != 0 || !message.is::<oer_hil_protocol::base::Hello>())
-        {
-            if self.accept_solicited_hello
-                && message.is::<oer_hil_protocol::base::Hello>()
-                && message.request_id != 0
-                && message.message_sequence <= SOLICITED_HELLO_SEQUENCE_LIMIT
-            {
-                self.solicited_hello = Some(SolicitedHello {
-                    message_sequence: message.message_sequence,
-                });
-                return;
-            }
-            self.fail(format!(
-                "boot {} began with {} at target message sequence {}, expected Hello at 0",
-                message.boot_id,
-                message.path(),
-                message.message_sequence
-            ));
-        }
-    }
-
-    fn update_decoder_counters(&mut self, totals: DecodeCounters) {
-        self.counters = decode_counter_delta(totals, self.decoder_baseline);
-    }
-
-    fn decode_error(&mut self, error: impl std::fmt::Display) {
-        if self.active {
-            self.fail(format!(
-                "HIL wire decode failure after protocol activation: {error}"
-            ));
-        }
-    }
-
-    fn fail(&mut self, failure: String) {
-        if self.failure.is_none() {
-            self.failure = Some(failure);
-        }
-    }
-}
-
-fn decode_counter_delta(totals: DecodeCounters, baseline: DecodeCounters) -> DecodeCounters {
-    DecodeCounters {
-        frames: totals.frames.saturating_sub(baseline.frames),
-        cobs_errors: totals.cobs_errors.saturating_sub(baseline.cobs_errors),
-        too_short: totals.too_short.saturating_sub(baseline.too_short),
-        header_errors: totals.header_errors.saturating_sub(baseline.header_errors),
-        framing_version_errors: totals
-            .framing_version_errors
-            .saturating_sub(baseline.framing_version_errors),
-        message_kind_errors: totals
-            .message_kind_errors
-            .saturating_sub(baseline.message_kind_errors),
-        payload_length_errors: totals
-            .payload_length_errors
-            .saturating_sub(baseline.payload_length_errors),
-        checksum_errors: totals
-            .checksum_errors
-            .saturating_sub(baseline.checksum_errors),
-        deserialize_errors: totals
-            .deserialize_errors
-            .saturating_sub(baseline.deserialize_errors),
-        overflows: totals.overflows.saturating_sub(baseline.overflows),
-    }
-}
-
-/// Concurrent UART transcript retained across traffic setup and measurement.
-pub struct SerialCapture {
-    // Released after Drop joins the serial worker and closes its descriptor.
-    io_lifetime: Option<oer_os_process::IoLifetime>,
-    stop: Arc<AtomicBool>,
-    bytes: Arc<Mutex<Vec<u8>>>,
-    protocol: Arc<ProtocolEvents>,
+/// The link to one board: a worker thread owns its serial line.
+pub struct Link {
+    shared: Arc<Shared>,
     outbound: mpsc::Sender<Zeroizing<Vec<u8>>>,
-    worker_wake: Arc<mio::Waker>,
-    _cancellation: oer_os_process::CancellationNotification,
-    next_host_sequence: AtomicU32,
-    next_session_id: AtomicU64,
+    wake: Arc<mio::Waker>,
+    stop: Arc<AtomicBool>,
     worker: Option<thread::JoinHandle<()>>,
-    output: PathBuf,
-    persisted: bool,
-    observer: Option<Box<dyn CaptureObserver>>,
-    /// The armed program-counter profile and the request it records, drained
-    /// when the capture finishes.
-    profile: Option<Profile>,
+    encoder: Mutex<FrameEncoder>,
+    next_request: AtomicU32,
+    next_sequence: AtomicU32,
 }
 
-fn command_response_matches(
-    message: &Received,
-    boot_id: u64,
-    session_id: u64,
-    request_id: u32,
-) -> bool {
-    message.boot_id == boot_id
-        && message.session_id == session_id
-        && message.request_id == request_id
-}
-
-/// A command the device accepted: the messages that complete it carry its
-/// boot, request and session zero, after the acceptance.
-#[derive(Clone, Copy, Debug)]
-pub struct CommandHandle {
-    path: &'static str,
-    boot_id: u64,
-    request_id: u32,
-    first_event: usize,
-}
-
-impl CommandHandle {
-    /// The cursor just after the command's acceptance.
-    pub fn first_event(&self) -> usize {
-        self.first_event
+impl Link {
+    /// Start reading and writing `line`. A line the caller opened with a
+    /// reset shows the boot from its first byte.
+    pub fn start(line: Box<dyn SerialLine>) -> Result<Self, LinkError> {
+        let shared = Arc::new(Shared {
+            state: Mutex::new(State::default()),
+            changed: Condvar::new(),
+        });
+        let stop = Arc::new(AtomicBool::new(false));
+        let (outbound, commands) = mpsc::channel();
+        let poll = transport::events::EventPoll::new()
+            .map_err(|error| LinkError::Transport(format!("cannot poll the serial line: {error}")))?;
+        let wake = poll.waker();
+        let serial = worker::nonblocking(line)?;
+        let worker = {
+            let shared = Arc::clone(&shared);
+            let stop = Arc::clone(&stop);
+            thread::Builder::new()
+                .name("hil-link".to_owned())
+                .spawn(move || worker::run(serial, poll, &shared, &stop, commands))
+                .map_err(|error| LinkError::Transport(format!("cannot start the link: {error}")))?
+        };
+        Ok(Self {
+            shared,
+            outbound,
+            wake,
+            stop,
+            worker: Some(worker),
+            encoder: Mutex::new(FrameEncoder::new()),
+            next_request: AtomicU32::new(1),
+            next_sequence: AtomicU32::new(0),
+        })
     }
 
-    pub fn request_id(&self) -> u32 {
-        self.request_id
-    }
-
-    /// Whether `message` belongs to this command.
-    pub fn correlates(&self, message: &Received) -> bool {
-        message.boot_id == self.boot_id
-            && message.session_id == 0
-            && message.request_id == self.request_id
-    }
-
-    /// A handle of a command of `path` the tests accepted by hand.
-    #[cfg(any(test, feature = "test-support"))]
-    pub fn accepted(path: &'static str, boot_id: u64, request_id: u32, first_event: usize) -> Self {
-        Self {
-            path,
-            boot_id,
-            request_id,
-            first_event,
+    /// The running boot: its own Hello, or, when the link missed it, the
+    /// answer to `base::GetHello`, asked once after `timeout / 2`.
+    pub fn boot(&self, timeout: Duration) -> Result<Boot, LinkError> {
+        let deadline = Instant::now() + timeout;
+        let ask_at = Instant::now() + timeout / 2;
+        let mut asked = false;
+        let mut state = self.shared.lock();
+        loop {
+            if let Some(error) = &state.failure {
+                return Err(error.clone());
+            }
+            if let Some(boot) = state.hello {
+                return Ok(boot);
+            }
+            let now = Instant::now();
+            if now >= deadline {
+                return Err(LinkError::NoHello);
+            }
+            if !asked && now >= ask_at {
+                drop(state);
+                // Discovery names no boot: any running boot answers it.
+                self.send(0, GetHello)
+                    .map_err(|_| LinkError::Protocol("GetHello does not encode".to_owned()))?;
+                asked = true;
+                state = self.shared.lock();
+                continue;
+            }
+            state = self.wait(state, deadline.min(if asked { deadline } else { ask_at }))?;
         }
     }
+
+    /// Send `request` to `boot` and wait up to `timeout` for its response.
+    /// Other messages of the same request (related events) stay for
+    /// [`Link::take`].
+    pub fn call<E: Endpoint>(
+        &self,
+        boot: &Boot,
+        request: E,
+        timeout: Duration,
+    ) -> Result<E::Response, CallError> {
+        let request_id = self.send(boot.boot_id, request)?;
+        let deadline = Instant::now() + timeout;
+        let ours = |message: &Received| {
+            message.boot_id == boot.boot_id
+                && message.session_id == 0
+                && message.request_id == request_id
+                && (message.is::<E::Response>() || message.is::<Rejected>())
+        };
+        let mut state = self.shared.lock();
+        loop {
+            if let Some(message) = state.take(ours) {
+                if let Some(rejected) = message.decode::<Rejected>() {
+                    return Err(CallError::Rejected(rejected?.0));
+                }
+                return message
+                    .decode::<E::Response>()
+                    .unwrap_or(Err(CallError::Payload {
+                        path: <E::Response as Message>::PATH,
+                    }));
+            }
+            if let Some(error) = &state.failure {
+                return Err(error.clone().into());
+            }
+            if let Some((boot_id, _)) = state.boot
+                && boot_id != boot.boot_id
+            {
+                return Err(CallError::Rebooted { boot_id });
+            }
+            if Instant::now() >= deadline {
+                return Err(CallError::Unconfirmed { request_id });
+            }
+            state = self.wait(state, deadline)?;
+        }
+    }
+
+    /// The first kept message of `boot` that `matches` accepts, waiting up
+    /// to `timeout`; `None` when none came.
+    pub fn take(
+        &self,
+        boot: &Boot,
+        matches: impl Fn(&Received) -> bool,
+        timeout: Duration,
+    ) -> Result<Option<Received>, CallError> {
+        let deadline = Instant::now() + timeout;
+        let mut state = self.shared.lock();
+        loop {
+            if let Some(message) =
+                state.take(|message| message.boot_id == boot.boot_id && matches(message))
+            {
+                return Ok(Some(message));
+            }
+            if let Some(error) = &state.failure {
+                return Err(error.clone().into());
+            }
+            if let Some((boot_id, _)) = state.boot
+                && boot_id != boot.boot_id
+            {
+                return Err(CallError::Rebooted { boot_id });
+            }
+            if Instant::now() >= deadline {
+                return Ok(None);
+            }
+            state = self.wait(state, deadline)?;
+        }
+    }
+
+    /// What the link observed of the wire so far.
+    pub fn health(&self) -> Health {
+        self.shared.lock().health
+    }
+
+    /// The device's diagnostic lines since the last call, as text.
+    pub fn take_notes(&self) -> Vec<String> {
+        std::mem::take(&mut self.shared.lock().notes)
+    }
+
+    fn send<M: Message>(&self, boot_id: u64, message: M) -> Result<u32, CallError> {
+        let request_id = self.next_request.fetch_add(1, Ordering::Relaxed);
+        let sequence = self.next_sequence.fetch_add(1, Ordering::Relaxed);
+        let envelope = Envelope::new(boot_id, sequence, 0, request_id, message);
+        let frame = {
+            let mut encoder = self
+                .encoder
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            Zeroizing::new(
+                encoder
+                    .encode(&envelope)
+                    .map_err(|_| CallError::Encode)?
+                    .to_vec(),
+            )
+        };
+        self.outbound
+            .send(frame)
+            .map_err(|_| LinkError::Transport("the link's worker ended".to_owned()))?;
+        self.wake
+            .wake()
+            .map_err(|error| LinkError::Transport(format!("cannot wake the link: {error}")))?;
+        Ok(request_id)
+    }
+
+    /// Wait for a change until `deadline`, looking at cancellation.
+    fn wait<'a>(
+        &self,
+        state: std::sync::MutexGuard<'a, State>,
+        deadline: Instant,
+    ) -> Result<std::sync::MutexGuard<'a, State>, LinkError> {
+        if oer_os_process::cancellation_requested() {
+            return Err(LinkError::Cancelled);
+        }
+        let timeout = deadline
+            .saturating_duration_since(Instant::now())
+            .min(CANCEL_POLL);
+        Ok(self
+            .shared
+            .changed
+            .wait_timeout(state, timeout)
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .0)
+    }
 }
 
-/// What a capture reports, when it persists, about the messages it decoded:
-/// the repetition's measurement projection implements it.
-pub trait CaptureObserver: Send + Sync {
-    /// Project `messages` (and the count of bytes received) into the
-    /// document `measurements.json` keeps; it is called once, before any
-    /// fallible write, so the projection survives a storage failure.
-    fn observe(&self, messages: &[Received], received_bytes: u64) -> serde_json::Value;
-}
-
-/// A program-counter profile a capture arms after the boot's Hello: the
-/// target's arming command and the scenario's request `profile.json` records.
-#[derive(Clone, Debug)]
-pub struct Profile {
-    pub control: oer_hil_protocol::telemetry::ProfileControl,
-    pub request: serde_json::Value,
-}
-
-impl Drop for SerialCapture {
+impl Drop for Link {
     fn drop(&mut self) {
-        self.stop_and_join();
-        if !self.persisted
-            && let Err(error) = self.persist(None, false)
-        {
-            eprintln!("cannot preserve partial serial capture: {error}");
+        self.stop.store(true, Ordering::Release);
+        let _ = self.wake.wake();
+        if let Some(worker) = self.worker.take() {
+            let _ = worker.join();
         }
     }
 }
 
-fn append(bytes: &Mutex<Vec<u8>>, chunk: &[u8]) {
-    bytes
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
-        .extend_from_slice(chunk);
-}
-
-mod capture;
-mod console_text;
-#[cfg(any(test, feature = "test-support"))]
-pub use capture::test_support;
-pub mod error;
-pub mod instrumentation;
-use error::LinkError;
-mod protocol;
-pub use protocol::latest_boot_id_in;
 #[cfg(test)]
 mod tests;
-
-pub mod peer;
-pub mod transport;
-
-pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;

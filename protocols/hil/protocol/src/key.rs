@@ -74,20 +74,18 @@ pub enum Kind {
     Property,
 }
 
-/// The description of one message in a module's registry.
-#[cfg(feature = "registry")]
+/// The description of one message in a module's descriptors.
+#[cfg(feature = "descriptors")]
 #[derive(Clone, Copy)]
 pub struct MessageInfo {
     pub path: &'static str,
     pub key: Key,
     pub kind: Kind,
-    /// The complete wire schema, for the registry's own consistency checks.
+    /// The complete wire schema.
     pub schema: &'static postcard_schema::schema::NamedType,
-    /// Decodes one payload of this message to its readable form.
-    pub decode_json: fn(&[u8]) -> Option<serde_json::Value>,
 }
 
-#[cfg(feature = "registry")]
+#[cfg(feature = "descriptors")]
 impl core::fmt::Debug for MessageInfo {
     fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         formatter
@@ -99,15 +97,89 @@ impl core::fmt::Debug for MessageInfo {
     }
 }
 
-#[cfg(feature = "registry")]
-#[doc(hidden)]
-pub fn decode_json<M: Message>(payload: &[u8]) -> Option<serde_json::Value> {
-    let message: M = postcard::from_bytes(payload).ok()?;
-    serde_json::to_value(message).ok()
+/// Where an owner's reviewed `messages.lock` and its descriptors disagree.
+#[cfg(feature = "descriptors")]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum LockMismatch<'a> {
+    /// The lock's framing line is not this crate's [`crate::FRAMING_VERSION`].
+    Framing,
+    /// A lock line is not `path key kind` of the `[messages]` section.
+    Line(&'a str),
+    /// A lock line names no descriptor, or another key or kind.
+    Stale(&'a str),
+    /// A descriptor the lock does not list.
+    Missing(&'static str),
+}
+
+/// Check `lock`, an owner's reviewed `messages.lock`, against its
+/// `descriptors`: the framing version and exactly one `path key kind` line
+/// per descriptor. Comment lines and the `[modules]` section are reviewed
+/// text and not compared.
+#[cfg(feature = "descriptors")]
+pub fn check_lock<'a>(lock: &'a str, descriptors: &[&[MessageInfo]]) -> Result<(), LockMismatch<'a>> {
+    let mut framing = false;
+    let mut messages = false;
+    let mut listed = 0_usize;
+    for line in lock.lines().filter(|line| !line.is_empty() && !line.starts_with('#')) {
+        if let Some(version) = line.strip_prefix("framing ") {
+            if version.parse::<u8>() != Ok(crate::FRAMING_VERSION) {
+                return Err(LockMismatch::Framing);
+            }
+            framing = true;
+            continue;
+        }
+        if line.starts_with('[') {
+            messages = line == "[messages]";
+            continue;
+        }
+        if !messages {
+            continue;
+        }
+        let mut parts = line.split_whitespace();
+        let (Some(path), Some(key), Some(kind), None) =
+            (parts.next(), parts.next(), parts.next(), parts.next())
+        else {
+            return Err(LockMismatch::Line(line));
+        };
+        let kind = match kind {
+            "endpoint" => Kind::Endpoint,
+            "topic" => Kind::Topic,
+            "property" => Kind::Property,
+            _ => return Err(LockMismatch::Line(line)),
+        };
+        let matches = descriptors.iter().copied().flatten().filter(|info| {
+            info.path == path
+                && info.kind == kind
+                && key.len() == 16
+                && u64::from_str_radix(key, 16) == Ok(info.key.to_u64())
+        });
+        if matches.count() != 1 {
+            return Err(LockMismatch::Stale(line));
+        }
+        listed = listed.checked_add(1).ok_or(LockMismatch::Line(line))?;
+    }
+    if !framing {
+        return Err(LockMismatch::Framing);
+    }
+    for info in descriptors.iter().copied().flatten() {
+        let mut lines = lock.lines();
+        if !lines.any(|line| line.split_whitespace().next() == Some(info.path)) {
+            return Err(LockMismatch::Missing(info.path));
+        }
+    }
+    let total = descriptors
+        .iter()
+        .try_fold(0_usize, |total, module| total.checked_add(module.len()));
+    if total == Some(listed) {
+        Ok(())
+    } else {
+        Err(LockMismatch::Line("duplicate message line"))
+    }
 }
 
 /// Declares a module's messages: their paths, how they are used, the
-/// module's `KEYS` and (with the `registry` feature) its `MESSAGES` list.
+/// module's `KEYS` and (with the calling crate's `descriptors` feature) its
+/// `MESSAGES` list.
 ///
 /// ```ignore
 /// messages! {
@@ -129,14 +201,13 @@ macro_rules! messages {
         pub const KEYS: &[$crate::Key] = &[$($(#[$meta])* <$name as $crate::Message>::KEY,)*];
 
         /// This module's messages.
-        #[cfg(feature = "registry")]
+        #[cfg(feature = "descriptors")]
         pub const MESSAGES: &[$crate::MessageInfo] = &[
             $($crate::MessageInfo {
                 path: $path,
                 key: <$name as $crate::Message>::KEY,
                 kind: $crate::__message_kind!($kind),
                 schema: <$name as $crate::__Schema>::SCHEMA,
-                decode_json: $crate::__decode_json::<$name>,
             },)*
         ];
     };

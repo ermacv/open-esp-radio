@@ -23,6 +23,8 @@ embassy-futures = "0.1.2"
 
 [dev-dependencies]
 critical-section = { version = "1.2.0", features = ["std"] }
+postcard-schema = { version = "0.2.5", features = ["derive"] }
+serde = { version = "1.0", features = ["derive"] }
 
 [lints]
 workspace = true

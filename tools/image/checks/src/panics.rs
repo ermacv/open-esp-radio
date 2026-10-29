@@ -111,6 +111,10 @@ impl Layer {
             "portable" => Self::Portable,
             "protocols" => Self::Protocols,
             "firmware" => Self::Firmware,
+            // The scenarios' services are wire vocabularies; their images
+            // are firmware.
+            "hil-scenarios" if parts.get(1) == Some(&"services") => Self::Protocols,
+            "hil-scenarios" => Self::Firmware,
             _ => return None,
         })
     }

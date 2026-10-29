@@ -129,7 +129,7 @@ const LINUX_NET_ARTIFACTS: [ArtifactSpec; 9] = [
     },
     ArtifactSpec {
         role: ArtifactRole::NetworkHelper,
-        source: "tools/hil/linux-net/open-radio-net",
+        source: "tools/lab/linux-net/open-radio-net",
         name: "open-radio-net",
         target: "/usr/local/sbin/open-radio-net",
         mode: 0o555,

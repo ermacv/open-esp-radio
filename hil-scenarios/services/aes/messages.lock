@@ -1,0 +1,8 @@
+# The HIL wire of this revision.
+# This crate's test checks it against the descriptors.
+framing 2
+[modules]
+aes
+[messages]
+aes/key-unwrap 90ecc1f2f01cf888 endpoint
+aes/key-unwrapped f3cf52497552b5a3 topic

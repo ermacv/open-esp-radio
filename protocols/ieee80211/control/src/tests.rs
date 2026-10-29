@@ -170,19 +170,15 @@ fn debug_and_errors_do_not_disclose_credentials_or_wire_bytes() {
     );
 }
 
-#[cfg(feature = "registry")]
 #[test]
-fn readable_serializers_and_registry_redact_the_secret_owner() {
+fn readable_serializers_redact_the_secret_owner() {
     let command = start(b"private-test-network", b"private-test-password");
     let expected = serde_json::json!({"credentials": "<redacted>", "power_save": "Off"});
     assert_eq!(serde_json::to_value(&command).unwrap(), expected);
     let mut storage = [0; 128];
     let wire = postcard::to_slice(&command, &mut storage).unwrap();
-    let info = crate::MESSAGES
-        .iter()
-        .find(|message| message.key == StartStation::KEY)
-        .unwrap();
-    assert_eq!((info.decode_json)(wire), Some(expected));
+    let decoded: StartStation = postcard::from_bytes(wire).unwrap();
+    assert_eq!(serde_json::to_value(&decoded).unwrap(), expected);
     let error =
         serde_json::from_str::<NetworkCredentials>(r#"{"private-test-password":42}"#).unwrap_err();
     assert!(!format!("{error:?} {error}").contains("private-test"));

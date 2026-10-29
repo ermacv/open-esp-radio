@@ -40,6 +40,9 @@ pub trait Requests: Sized {
 /// ([`image_keys!`](crate::image_keys)).
 pub trait Service {
     const KEYS: &'static [Key];
+    /// The keys of the endpoints it serves: no two services of an image
+    /// serve the same one ([`image_keys!`](crate::image_keys) checks it).
+    const REQUESTS: &'static [Key];
 }
 
 /// The base module the intake serves for every image: discovery, image
@@ -59,6 +62,13 @@ impl Service for Base {
         GetLinkHealth::KEY,
         <GetLinkHealth as Endpoint>::Response::KEY,
         Rejected::KEY,
+    ];
+    const REQUESTS: &'static [Key] = &[
+        GetHello::KEY,
+        GetImageKeys::KEY,
+        GetBootStatus::KEY,
+        GetPostMortemCheckpoints::KEY,
+        GetLinkHealth::KEY,
     ];
 }
 
@@ -317,6 +327,120 @@ macro_rules! requests {
                     <$published as $crate::__protocol::Message>::KEY,
                 )*)?
             ];
+            const REQUESTS: &'static [$crate::__protocol::Key] = &[
+                $(
+                    $(#[cfg($cfg)])*
+                    <$ty as $crate::__protocol::Message>::KEY,
+                )*
+            ];
+        }
+    };
+}
+
+/// Declares a service whose every endpoint has a handler: the
+/// [`requests!`](crate::requests) enum and keys, a handler trait with one
+/// required method per endpoint, and `serve`, which awaits the handler of a
+/// request and publishes its response as the request's answer. An image
+/// implements the trait; a missing or extra method does not compile.
+///
+/// ```ignore
+/// oer_hil_agent::service! {
+///     /// The AES service's requests.
+///     pub enum Request (sessions = false, handler = Handler) {
+///         UnwrapKey(UnwrapKey) => unwrap_key,
+///     }
+/// }
+/// ```
+///
+/// A handler that cannot answer still returns its endpoint's response type:
+/// failures belong in that type, so every request is answered.
+///
+/// An image whose handler leaves an endpoint out does not compile:
+///
+/// ```compile_fail
+/// # mod wire {
+/// #     use oer_hil_protocol::{Endpoint, Message, WireKind};
+/// #     #[derive(serde::Serialize, serde::Deserialize, postcard_schema::Schema)]
+/// #     pub struct Ask;
+/// #     impl Message for Ask { const PATH: &'static str = "doc/ask"; const WIRE_KIND: WireKind = WireKind::Command; }
+/// #     impl Endpoint for Ask { type Response = Told; }
+/// #     #[derive(serde::Serialize, serde::Deserialize, postcard_schema::Schema)]
+/// #     pub struct Told;
+/// #     impl Message for Told { const PATH: &'static str = "doc/told"; }
+/// # }
+/// oer_hil_agent::service! {
+///     pub enum Request (sessions = false, handler = Handler) {
+///         Ask(wire::Ask) => ask,
+///     }
+/// }
+/// struct Image;
+/// impl Handler for Image {}
+/// ```
+///
+/// Two services of one image that serve the same request do not compile
+/// either:
+///
+/// ```compile_fail
+/// oer_hil_agent::requests! {
+///     pub enum First (sessions = false) { Reset(oer_hil_protocol::lifecycle::RequestReset) }
+/// }
+/// oer_hil_agent::image_keys! {
+///     KEYS = [First, oer_hil_agent::lifecycle::Request]
+/// }
+/// ```
+#[macro_export]
+macro_rules! service {
+    (
+        $(#[$meta:meta])*
+        $vis:vis enum $name:ident (sessions = $sessions:literal, handler = $handler:ident) {
+            $($variant:ident($ty:ty) => $method:ident),* $(,)?
+        }
+        $(publishes [$($published:ty),* $(,)?])?
+    ) => {
+        $crate::requests! {
+            $(#[$meta])*
+            $vis enum $name (sessions = $sessions) {
+                $($variant($ty)),*
+            }
+            $(publishes [$($published),*])?
+        }
+
+        /// One method per endpoint of the service; each returns the
+        /// endpoint's response.
+        $vis trait $handler {
+            $(
+                fn $method(
+                    &mut self,
+                    request: $ty,
+                ) -> impl ::core::future::Future<
+                    Output = <$ty as $crate::__protocol::Endpoint>::Response,
+                >;
+            )*
+        }
+
+        impl $name {
+            /// Answer `identity`'s request through `handler` on `console`;
+            /// the sequence of the published response.
+            $vis async fn serve<
+                H: $handler,
+                const NOTES: usize,
+                const MESSAGES: usize,
+                P: $crate::console::Immediate,
+            >(
+                self,
+                handler: &mut H,
+                console: &$crate::console::Console<NOTES, MESSAGES, P>,
+                identity: $crate::__protocol::RequestIdentity,
+            ) -> u32 {
+                match self {
+                    $(Self::$variant(request) => {
+                        let response = handler.$method(request).await;
+                        console
+                            .publish_reliably(identity.session_id, identity.request_id, &response)
+                            .await
+                    })*
+                }
+            }
         }
     };
 }
@@ -350,6 +474,21 @@ macro_rules! image_keys {
                 Some(keys) => base::sorted_keys(keys),
                 None => panic!("the image key array holds every service key"),
             };
+            const REQUEST_GROUPS: &[&[Key]] = &[
+                <$crate::base::Base as $crate::base::Service>::REQUESTS,
+                $(<$service as $crate::base::Service>::REQUESTS,)*
+            ];
+            const REQUEST_LENGTH: usize = match base::keys_len(REQUEST_GROUPS) {
+                Some(length) => length,
+                None => panic!("the image's services serve more requests than a usize counts"),
+            };
+            const REQUESTS: [Key; REQUEST_LENGTH] = match base::concat_keys(REQUEST_GROUPS) {
+                Some(keys) => base::sorted_keys(keys),
+                None => panic!("the image request array holds every service request"),
+            };
+            if base::distinct_len(&REQUESTS) != REQUEST_LENGTH {
+                panic!("two services of the image serve the same request");
+            }
             const DISTINCT: [Key; base::distinct_len(&SORTED)] =
                 match base::distinct_keys(&SORTED) {
                     Some(keys) => keys,

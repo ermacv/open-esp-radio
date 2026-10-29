@@ -1,0 +1,31 @@
+[package]
+name = "oer-services-aes"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "The HIL AES service: RFC 3394 key unwrap requests and responses, and their handler over a product key-unwrap engine"
+
+[features]
+default = []
+descriptors = ["oer-hil-protocol/descriptors"]
+
+[dependencies]
+oer-crypto = { path = "../../../portable/crypto" }
+oer-hil-agent = { path = "../../../protocols/hil/agent" }
+oer-hil-protocol = { path = "../../../protocols/hil/protocol", default-features = false }
+heapless = { version = "0.9.3", features = ["serde"] }
+postcard-schema = { version = "0.2.5", default-features = false, features = ["derive", "heapless-v0_9"] }
+serde = { version = "1.0.219", default-features = false, features = ["derive"] }
+
+[dev-dependencies]
+aes = { version = "0.8.4", default-features = false }
+embassy-futures = "0.1.2"
+
+[lints]
+workspace = true
+
+[package.metadata.open-radio]
+test-feature-sets = ["descriptors"]

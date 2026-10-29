@@ -73,5 +73,14 @@ pub struct StartStation(pub StationStart);
 mod tests;
 
 /// Reviewed paths, schemas (through keys) and message kinds.
-#[cfg(feature = "registry")]
+#[cfg(feature = "descriptors")]
 pub const MESSAGES_LOCK: &str = include_str!("../messages.lock");
+
+#[cfg(all(test, feature = "descriptors"))]
+#[test]
+fn the_reviewed_lock_lists_exactly_this_crates_descriptors() {
+    assert_eq!(
+        oer_hil_protocol::check_lock(MESSAGES_LOCK, &[MESSAGES]),
+        Ok(())
+    );
+}

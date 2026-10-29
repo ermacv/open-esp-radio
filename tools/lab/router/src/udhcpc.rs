@@ -31,7 +31,7 @@ pub fn build(root: &Path) -> Result<()> {
     fs::create_dir_all(&out)?;
     let _lock =
         process::lock::FileLock::acquire(&out.join("build.lock"), process::lock::Mode::Exclusive)?;
-    let seed = fs::read(root.join("tools/hil/linux-net/udhcpc.config"))?;
+    let seed = fs::read(root.join("tools/lab/linux-net/udhcpc.config"))?;
     let compiler = process::output(
         command(root, "cc").arg("--version"),
         Some(std::time::Duration::from_secs(10)),

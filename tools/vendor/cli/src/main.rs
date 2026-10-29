@@ -13,7 +13,6 @@ use clap::{Parser, Subcommand};
 mod copies;
 mod lineage;
 mod phy_archive;
-mod phy_baseline;
 mod run;
 mod workspace;
 use oer_os_process::Checkout;
@@ -31,8 +30,6 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Generate or check the recorded ESP32-S31 PHY calibration reference.
-    PhyBaseline(phy_baseline::Arguments),
     /// Compare two revisions of a vendor archive function by function, or
     /// every pinned artifact with its namesake in `--baseline`.
     Diff {
@@ -170,7 +167,6 @@ fn run() -> Result<ExitCode> {
     };
     let _signals = oer_os_process::install_signal_handlers()?;
     match cli.command {
-        Command::PhyBaseline(arguments) => return phy_baseline::run(&ctx, arguments),
         Command::Lineage(arguments) => lineage::run(arguments)?,
         Command::PhyArchive { archive, sources } => {
             let sources: Vec<_> = sources

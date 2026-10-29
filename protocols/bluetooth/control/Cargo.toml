@@ -9,7 +9,7 @@ description = "HIL bluetooth vocabulary shared by images and the host"
 
 [features]
 default = []
-registry = ["oer-hil-protocol/registry"]
+descriptors = ["oer-hil-protocol/descriptors"]
 
 [dependencies]
 oer-hil-protocol = { path = "../../hil/protocol", default-features = false }
@@ -20,3 +20,6 @@ serde = { version = "1.0.219", default-features = false, features = ["derive"] }
 
 [lints]
 workspace = true
+
+[package.metadata.open-radio]
+test-feature-sets = ["descriptors"]

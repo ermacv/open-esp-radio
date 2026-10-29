@@ -3,9 +3,10 @@
 `AesKeyUnwrap` owns the HAL's CPU Typical AES port by value for one client.
 It drives the sole RFC 3394 machine in `oer-crypto`: submit its owned input,
 wait through an owned timer, then feed back the output or a typed block error.
-The mode machine contains no async code. `compose::crypto::wifi_key_unwrap`
-selects the hardware engine for the Wi-Fi facade. The station runner owns
-the engine from construction and uses it for RSN key-data unwrap operations.
+The mode machine contains no async code. `compose::crypto::key_unwrap`
+builds the hardware engine for its one client: the Wi-Fi facade's station
+runner, which uses it for RSN key-data unwrap operations, or the HIL AES
+image (`hil-scenarios/images/esp32s31`), which serves it to the host.
 
 There is no sourced <=20 us completion bound in TRM v0.1 §10.5.3 or the
 pinned ESP-IDF 4d80c1b2 AES HAL. Every block therefore yields before its first

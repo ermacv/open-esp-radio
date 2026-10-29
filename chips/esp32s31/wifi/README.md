@@ -17,7 +17,7 @@ The image declares `bind_station!` with its interrupt entries, station
 callbacks, collectors, the composed engine type and handled-error terminal policy.
 `Resources` consumes the unique hardware partition, binding proof, doorbell,
 the facade's affine `DmaResources` claim, signals, declared storage and the
-value-owned key-unwrap engine supplied by `compose::crypto::wifi_key_unwrap`.
+value-owned key-unwrap engine supplied by `compose::crypto::key_unwrap`.
 The permanent RX ring and nine TX allocations have one declaration in the
 facade. Their HAL placement proof stays in the existing HAL macro; image IRQ
 modules hold only their line and signals. `Resources` consumes the opaque

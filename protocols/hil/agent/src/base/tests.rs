@@ -4,10 +4,10 @@ use oer_hil_protocol::lifecycle::{RequestReset, ResetAccepted};
 
 crate::requests! {
     enum WatchdogRequest (sessions = false) {
-        Test(oer_hil_protocol::system::WatchdogTest),
+        Test(crate::test_messages::Probe),
     }
 }
-use oer_hil_protocol::system::{WatchdogTest, WatchdogTestMode};
+use crate::test_messages::{Probe, ProbeMode};
 use oer_hil_protocol::{Envelope, FrameEncoder, Key};
 
 use super::*;
@@ -19,7 +19,7 @@ const SERVED: [Key; 5] = sorted_keys([
     GetBootStatus::KEY,
     GetPostMortemCheckpoints::KEY,
     GetLinkHealth::KEY,
-    WatchdogTest::KEY,
+    Probe::KEY,
 ]);
 
 fn intake() -> Intake<'static> {
@@ -107,7 +107,7 @@ fn a_request_of_no_served_type_is_unsupported() {
 #[test]
 fn the_image_serves_its_own_requests_outside_sessions() {
     let mut intake = intake();
-    let request = WatchdogTest(WatchdogTestMode::Complete);
+    let request = Probe(ProbeMode::Complete);
     match send::<_, WatchdogRequest>(&mut intake, BOOT, 0, request) {
         Request::Serve(identity, WatchdogRequest::Test(served)) => {
             assert_eq!((identity.request_id, served), (7, request));
@@ -170,11 +170,11 @@ fn every_request_of_one_chunk_is_handed_over_in_order() {
 crate::requests! {
     #[expect(dead_code, reason = "the test mounts the service for its keys alone")]
     enum Mounted (sessions = false) {
-        Watchdog(WatchdogTest),
+        Watchdog(Probe),
         #[cfg(any())]
-        Absent(oer_hil_protocol::system::DisableUsb),
+        Absent(crate::test_messages::Switch),
     }
-    publishes [oer_hil_protocol::lifecycle::ResetAccepted, #[cfg(any())] oer_hil_protocol::system::UsbDisabled]
+    publishes [oer_hil_protocol::lifecycle::ResetAccepted, #[cfg(any())] crate::test_messages::Switched]
 }
 
 crate::requests! {
@@ -190,17 +190,17 @@ crate::image_keys! {
 
 #[test]
 fn a_service_reports_its_endpoints_their_responses_and_what_it_publishes() {
-    use oer_hil_protocol::system::WatchdogArmed;
+    use crate::test_messages::ProbeArmed;
     assert_eq!(
         Mounted::KEYS,
-        [WatchdogTest::KEY, WatchdogArmed::KEY, ResetAccepted::KEY]
+        [Probe::KEY, ProbeArmed::KEY, ResetAccepted::KEY]
     );
 }
 
 #[test]
 fn lifecycle_support_does_not_advertise_image_diagnostics() {
-    use oer_hil_protocol::system::{PanicHook, UsbJtagOff, WatchdogTest};
-    for key in [PanicHook::KEY, UsbJtagOff::KEY, WatchdogTest::KEY] {
+    use crate::test_messages::{Marker, Probe, Switch};
+    for key in [Marker::KEY, Switch::KEY, Probe::KEY] {
         assert!(!Base::KEYS.contains(&key));
         assert!(!LifecycleRequest::KEYS.contains(&key));
     }
@@ -230,15 +230,15 @@ fn reset_is_mounted_explicitly_and_rejects_foreign_boots_and_sessions() {
 
 #[test]
 fn an_image_reports_the_base_module_and_each_shared_key_once() {
-    use oer_hil_protocol::system::WatchdogArmed;
+    use crate::test_messages::ProbeArmed;
     let mut expected: Vec<Key> = Base::KEYS.to_vec();
     expected.extend([
-        WatchdogTest::KEY,
-        WatchdogArmed::KEY,
+        Probe::KEY,
+        ProbeArmed::KEY,
         RequestReset::KEY,
         ResetAccepted::KEY,
     ]);
     expected.sort();
     assert_eq!(MOUNTED.keys(), expected.as_slice());
-    assert!(!MOUNTED.contains(oer_hil_protocol::system::DisableUsb::KEY));
+    assert!(!MOUNTED.contains(crate::test_messages::Switch::KEY));
 }
