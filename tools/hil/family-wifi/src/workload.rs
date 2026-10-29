@@ -156,7 +156,7 @@ pub(super) fn authorized(
     epoch: u32,
 ) -> Result<Connected> {
     let (message,link)=capture.wait_for_after::<StationLink>(start.first_event(),Duration::from_secs(45),|message,link|
-        start.correlates(message) && link.epoch>epoch && link.state==StationLinkState::Authorized)?
+        start.correlates(message) && link.epoch>epoch && matches!(link.state,StationLinkState::Authorized{..}))?
         .ok_or("station did not report Connected/Authorized; inspect the handshake trace before continuing")?;
     let associated = capture
         .messages_since(start.first_event(), |messages| {
@@ -274,7 +274,7 @@ pub fn run(output: &Path, context: &Context<'_>) -> Result<()> {
     let mut stopped_us = None;
     let result = context.with_capture(output, |capture| {
         require_keys::<StartStation>(capture)?;
-        require_keys::<ProbeStation>(capture)?;
+        require_keys::<GetStationStatus>(capture)?;
         require_keys::<StopStation>(capture)?;
         let credentials =
             NetworkCredentials::try_new(ssid.expose().as_bytes(), passphrase.expose().as_bytes())?;
@@ -523,29 +523,21 @@ fn traffic(
     let StationFixtureConfig::OpenWrt(config) = &context.lab.station_fixture else {
         return Err("W4 requires OpenWrt".into());
     };
-    let observed = Capture::start(ssh, &config.wireless_interface, address, count)?;
-    let probe = capture.command(
-        ProbeStation {
-            count,
-            identifier: if count == 100 { 0x4331 } else { 0x4332 },
-        },
-        SHORT,
-    )?;
-    let ready: StationProbeReady = capture.wait_command(probe, SHORT)?;
-    if ready.count != count
-        || ready.epoch != epoch
-        || ready.identifier != if count == 100 { 0x4331 } else { 0x4332 }
-    {
-        return Err("probe readiness belongs to another traffic window".into());
+    let status = capture.request(0, GetStationStatus, SHORT)?;
+    if !status.linked || status.stopped {
+        return Err("station Control is not linked for the traffic window".into());
     }
+    context.results.observe("w4-station-status", &status);
+    let observed = Capture::start_peer(ssh, &config.wireless_interface, address, count)?;
+    let cursor = capture.event_cursor();
     let ping_ssh = ssh.parallel();
-    let (finished, ping, rekey) = std::thread::scope(|scope| -> Result<_> {
+    let (ping, rekey) = std::thread::scope(|scope| -> Result<_> {
         let ping = scope.spawn(|| w3::ping(&ping_ssh, address, count));
         let work: Result<_> = (|| {
             let rekey = if let Some(initial) = initial {
                 let (message, key) = capture
                     .wait_for_after::<StationGroupKey>(
-                        probe.first_event(),
+                        cursor,
                         Duration::from_secs(45),
                         |message, key| {
                             station.correlates(message)
@@ -629,19 +621,11 @@ fn traffic(
             } else {
                 None
             };
-            let finished: StationProbeFinished =
-                capture.wait_command(probe, Duration::from_secs(u64::from(count) + 20))?;
-            context
-                .results
-                .observe(format!("w4-probe-{count}"), &finished);
-            if finished.epoch != epoch || finished.identifier != ready.identifier {
-                return Err("probe result belongs to another traffic window".into());
-            }
-            Ok((finished, rekey))
+            Ok(rekey)
         })();
         let ping = ping.join().map_err(|_| "router ping worker panicked")??;
-        let (finished, rekey) = work?;
-        Ok((finished, ping, rekey))
+        let rekey = work?;
+        Ok((ping, rekey))
     })?;
     let (echoes, complete) = observed.finish()?;
     if !complete {
@@ -652,10 +636,6 @@ fn traffic(
             count,
             address,
             router,
-            target_sent: finished.sent,
-            target_received: finished.received,
-            target_peer_requests: finished.peer_requests,
-            target_peer_replies: finished.peer_replies,
             router_sent: ping.sent.try_into()?,
             router_received: ping.received.try_into()?,
             echoes,

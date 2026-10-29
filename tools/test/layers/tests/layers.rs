@@ -2512,11 +2512,7 @@ fn portable_reaches_a_protocol_or_a_chip(from: &Member, to: &Member) -> bool {
 
 /// Nothing depends on an image or on a program of `tools/` (a package with a
 /// binary target) through a normal dependency.
-const NO_EDGE_ON_AN_IMAGE_OR_PROGRAM: &[Deviation] = &[(
-    "firmware/hil/esp32s31",
-    "firmware/apps/w3",
-    "shared network observation/ICMP helpers move to the IP adapter (N-d)",
-)];
+const NO_EDGE_ON_AN_IMAGE_OR_PROGRAM: &[Deviation] = &[];
 
 /// `chips/espressif` depends on no chip, through a normal or a build
 /// dependency: it is the family below them.
@@ -2739,11 +2735,6 @@ const OUTSIDE_THE_ROLES: &[Deviation] = &[
         "firmware/hil/esp32s31",
         "chips/espressif/usb-serial-jtag",
         "the Wi-Fi station image on the facade and compose (#848)",
-    ),
-    (
-        "firmware/hil/esp32s31",
-        "firmware/apps/w3",
-        "shared network observation/ICMP helpers move to the IP adapter (N-d)",
     ),
     (
         "firmware/hil/esp32s31",

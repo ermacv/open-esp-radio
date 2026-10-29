@@ -265,16 +265,20 @@ fn link_events_preserve_epoch_and_typed_disconnect_reason() {
         StationDisconnectReason::Arbiter(StationLeaveReason::Unservable),
         StationDisconnectReason::DeadlineOverflow,
         StationDisconnectReason::Encode,
-        StationDisconnectReason::RadioFailure,
     ];
-    for state in [StationLinkState::Associated, StationLinkState::Authorized]
-        .into_iter()
-        .chain(
-            reasons
-                .into_iter()
-                .map(|reason| StationLinkState::Disconnected { reason }),
-        )
-    {
+    for state in [
+        StationLinkState::Associated,
+        StationLinkState::Authorized {
+            bssid: [2; 6],
+            channel: 6,
+        },
+    ]
+    .into_iter()
+    .chain(
+        reasons
+            .into_iter()
+            .map(|reason| StationLinkState::Disconnected { reason }),
+    ) {
         event_round_trip(StationLink {
             epoch: u32::MAX,
             state,
@@ -283,7 +287,7 @@ fn link_events_preserve_epoch_and_typed_disconnect_reason() {
     // Reasons the W4 diagnosis could not tell apart decode as distinct values.
     assert_ne!(
         StationDisconnectReason::Arbiter(StationLeaveReason::PortFailed),
-        StationDisconnectReason::RadioFailure
+        StationDisconnectReason::LocalRequest
     );
 }
 
@@ -420,26 +424,153 @@ fn service_end_preserves_the_fault_and_its_typed_cause() {
 }
 
 #[test]
-fn only_a_running_station_admits_stop_and_probe() {
-    use oer_hil_protocol::base::RejectReason::{InvalidConfiguration, InvalidState};
-    let probe = ProbeStation {
-        count: 10,
-        identifier: 1,
-    };
-    let invalid = ProbeStation {
-        count: 11,
-        identifier: 1,
-    };
+fn only_a_running_station_admits_stop() {
+    use oer_hil_protocol::base::RejectReason::InvalidState;
     assert_eq!(StopStation::refusal(StationRole::Running), None);
-    assert_eq!(probe.refusal(StationRole::Running), None);
-    assert_eq!(
-        invalid.refusal(StationRole::Running),
-        Some(InvalidConfiguration)
-    );
-    // After the service ended nothing would answer an accepted command.
     for role in [StationRole::Idle, StationRole::Stopping, StationRole::Ended] {
         assert_eq!(StopStation::refusal(role), Some(InvalidState));
-        assert_eq!(probe.refusal(role), Some(InvalidState));
-        assert_eq!(invalid.refusal(role), Some(InvalidState));
     }
+}
+
+#[test]
+fn pending_commands_preserve_identity_cause_and_each_command_credit() {
+    use oer_ieee80211_runtime::station::{self as runtime, contract::Command};
+    use oer_memory::WakingSpscQueue;
+    let mut queue = WakingSpscQueue::<runtime::ServiceCommand<()>, 1>::new();
+    let (send, receive) = queue.split();
+    let state = runtime::State::new();
+    let (mut control, _runner) = runtime::Control::new(send, &state).unwrap();
+    let pending = PendingCommands::new();
+    let first = oer_hil_protocol::RequestIdentity {
+        boot_id: 7,
+        session_id: 91,
+        request_id: 13,
+    };
+    let second = oer_hil_protocol::RequestIdentity {
+        session_id: 92,
+        ..first
+    };
+    assert_eq!(
+        pending.admit(&mut control, first, StationCommandKind::Connect),
+        StationAdmission::Accepted
+    );
+    assert_eq!(
+        pending.admit(&mut control, second, StationCommandKind::Connect),
+        StationAdmission::InFlight
+    );
+    assert_eq!(
+        pending.admit(&mut control, second, StationCommandKind::BackgroundScan),
+        StationAdmission::Refused(StationControlError::QueueFull)
+    );
+    let Some(runtime::ServiceCommand::Station(request)) = receive.try_receive() else {
+        panic!("original queued request missing")
+    };
+    assert_eq!(request.command(), Command::Connect);
+    assert_ne!(request.correlation(), u64::from(first.request_id));
+    let result = StationCommandResult::Refused(StationCommandRefusal::Transitioning);
+    assert!(
+        pending
+            .finish(runtime::Request::new(1, Command::Connect), result)
+            .is_none()
+    );
+    let (identity, event) = pending.finish(request, result).unwrap();
+    assert_eq!(identity, first);
+    assert_eq!(event.result, result);
+    assert_eq!(
+        pending.admit(&mut control, second, StationCommandKind::Connect),
+        StationAdmission::Accepted
+    );
+    let status = StationStatus::from(control.status());
+    assert_eq!(
+        (status.epoch, status.linked, status.stopped, status.notice),
+        (0, false, false, None)
+    );
+}
+
+#[test]
+fn nested_runtime_causes_round_trip_without_erasure() {
+    use oer_ieee80211_runtime::station::contract as runtime;
+    let outcome = runtime::CommandOutcome::BackgroundScan {
+        interrupted: Some(runtime::BackgroundScanEnd::LinkEnded(
+            runtime::DisconnectReason::Sae(runtime::SaeFailure::Crypto {
+                peer: [9; 6],
+                pwe: runtime::SaePwe::HashToElement,
+            }),
+        )),
+    };
+    let event = StationCommandFinished {
+        correlation: u64::MAX,
+        origin: StationCommandOrigin::Requested,
+        command: StationCommandKind::BackgroundScan,
+        result: StationCommandResult::Completed(outcome.into()),
+    };
+    let mut bytes = [0; 128];
+    let encoded = postcard::to_slice(&event, &mut bytes).unwrap();
+    assert_eq!(
+        postcard::from_bytes::<StationCommandFinished>(encoded).unwrap(),
+        event
+    );
+    assert_eq!(
+        event.result,
+        StationCommandResult::Completed(StationCommandOutcome::BackgroundScan {
+            interrupted: Some(StationBackgroundScanEnd::LinkEnded(
+                StationDisconnectReason::Sae(StationSaeFailure::Crypto {
+                    peer: [9; 6],
+                    pwe: StationSaePwe::HashToElement
+                })
+            ))
+        })
+    );
+}
+
+#[test]
+fn stopped_control_reports_unexecuted_requests_once_without_losing_identities() {
+    use oer_ieee80211_runtime::station as runtime;
+    use oer_memory::WakingSpscQueue;
+    let mut queue = WakingSpscQueue::<runtime::ServiceCommand<()>, 1>::new();
+    let (send, _receive) = queue.split();
+    let state = runtime::State::new();
+    let (mut control, runner) = runtime::Control::new(send, &state).unwrap();
+    let pending = PendingCommands::new();
+    let status = control.status_reader();
+    let request = oer_hil_protocol::RequestIdentity {
+        boot_id: 7,
+        session_id: 91,
+        request_id: 13,
+    };
+    assert_eq!(
+        pending.admit(&mut control, request, StationCommandKind::Connect),
+        StationAdmission::Accepted
+    );
+    assert!(
+        pending
+            .finish_stopped(control.status())
+            .iter()
+            .all(Option::is_none)
+    );
+    assert!(!status.status().stopped);
+    drop(runner);
+    assert!(control.status().stopped);
+    assert!(status.status().stopped);
+    let terminals = pending
+        .finish_stopped(control.status())
+        .into_iter()
+        .flatten()
+        .collect::<std::vec::Vec<_>>();
+    assert_eq!(terminals.len(), 1);
+    assert_eq!(terminals[0].0, request);
+    assert_eq!(
+        terminals[0].1.result,
+        StationCommandResult::NotExecuted(StationControlError::Stopped)
+    );
+    assert!(
+        pending
+            .finish_stopped(control.status())
+            .iter()
+            .all(Option::is_none)
+    );
+    assert_eq!(
+        pending.admit(&mut control, request, StationCommandKind::Connect),
+        StationAdmission::Refused(StationControlError::Stopped)
+    );
 }

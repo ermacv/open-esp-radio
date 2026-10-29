@@ -5,7 +5,7 @@ fn traffic(count: u16, begin: u64) -> Traffic {
     let router = Ipv4Addr::new(10, 231, 0, 1);
     let mut echoes = Vec::new();
     for sequence in 1..=count {
-        for reverse in [false, true] {
+        for reverse in [true] {
             for reply in [false, true] {
                 let (source, destination) = if reverse ^ reply {
                     (router, address)
@@ -30,10 +30,6 @@ fn traffic(count: u16, begin: u64) -> Traffic {
         count,
         address,
         router,
-        target_sent: count,
-        target_received: count,
-        target_peer_requests: count,
-        target_peer_replies: count,
         router_sent: count,
         router_received: count,
         echoes,

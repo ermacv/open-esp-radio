@@ -103,3 +103,9 @@ at that instant is refused with a typed result (`DwellChanging`,
   only yields instead of raising a contract fault.
 - **Low:** retired-service fields `_pending`, `_arbiter` and `_places` remain
   in `station.rs`.
+
+Control's public records belong to the runtime; their semantic payloads live
+in `station::contract`, without wire serialization or re-exports of
+station/upper-MAC core types. Core conversions are exhaustive inside runtime;
+refused Ethernet owners stay opaque and affine. `Device::new` is the separate
+network wiring constructor. The HIL binding translates only the public contract.

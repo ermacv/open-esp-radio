@@ -21,8 +21,7 @@ use oer_ieee80211_wire::sae::{SAE_COMMIT_LEN, SaeCommitValues, anti_clogging_tok
 use oer_ieee80211_wire::security::SaePwe;
 use oer_ieee80211_wire::security::rsn::RSN_PMKID_LEN;
 use oer_ieee80211_wire::station::{
-    SAE_COMMIT_TRANSACTION, SAE_CONFIRM_TRANSACTION, StaDisconnect, parse_sae_authentication,
-    parse_sta_disconnect,
+    SAE_COMMIT_TRANSACTION, SAE_CONFIRM_TRANSACTION, parse_sae_authentication, parse_sta_disconnect,
 };
 use oer_ieee80211_wire::status::status_code;
 use oer_time::{Duration, Instant};
@@ -60,11 +59,43 @@ impl core::fmt::Debug for StaSaePmk {
     }
 }
 
+/// Semantic password derivation reported by the station, independent of a wire codec.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum StaSaePwe {
+    HuntingAndPecking,
+    HashToElement,
+}
+impl From<SaePwe> for StaSaePwe {
+    fn from(value: SaePwe) -> Self {
+        match value {
+            SaePwe::HuntingAndPecking => Self::HuntingAndPecking,
+            SaePwe::HashToElement => Self::HashToElement,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum StaPeerDisconnectKind {
+    Disassociation,
+    Deauthentication,
+}
+impl From<oer_ieee80211_wire::station::StaDisconnectKind> for StaPeerDisconnectKind {
+    fn from(value: oer_ieee80211_wire::station::StaDisconnectKind) -> Self {
+        use oer_ieee80211_wire::station::StaDisconnectKind as C;
+        match value {
+            C::Disassociation => Self::Disassociation,
+            C::Deauthentication => Self::Deauthentication,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum StaSaeFailure {
     Timeout,
     DeadlineOverflow,
-    PeerDisconnect(StaDisconnect),
+    PeerDisconnect {
+        kind: StaPeerDisconnectKind,
+        reason_code: u16,
+    },
     Rejected {
         status_code: u16,
     },
@@ -72,7 +103,7 @@ pub enum StaSaeFailure {
     /// Local password-element derivation failed its mathematical invariant.
     Crypto {
         peer: [u8; 6],
-        pwe: SaePwe,
+        pwe: StaSaePwe,
     },
     TokenTooLong,
 }
@@ -147,7 +178,10 @@ impl StaSaeAuthentication {
             return StaSaeEvent::Failed(StaSaeFailure::Timeout);
         }
         if let Some(disconnect) = parse_sta_disconnect(frame, self.local, self.bssid) {
-            return StaSaeEvent::Failed(StaSaeFailure::PeerDisconnect(disconnect));
+            return StaSaeEvent::Failed(StaSaeFailure::PeerDisconnect {
+                kind: disconnect.kind.into(),
+                reason_code: disconnect.reason_code,
+            });
         }
         let Some(frame) = parse_sae_authentication(frame, self.local.get(), self.bssid.get())
         else {

@@ -98,13 +98,11 @@ async fn connected(world: &Application<'_, '_, '_>, seen: &mut usize) {
     world.associate_with(seen, ht_beacon(), false).await;
     world
         .notice(StaNotice::Connected {
-            bssid: Bssid::new(IndividualAddress::new(BSSID).unwrap()).unwrap(),
+            bssid: BSSID,
             channel: 6,
         })
         .await;
 }
-
-use oer_ieee80211_wire::address::Bssid;
 
 #[test]
 fn addba_programs_an_owned_bank_before_response_and_reorders_downlink() {

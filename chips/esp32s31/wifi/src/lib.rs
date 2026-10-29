@@ -13,12 +13,10 @@
 //! ESP32-S31 station composition. Installation owners stay in its runners.
 use core::task::{Context, Poll};
 use oer_ieee80211_runtime::station as runtime;
-use oer_ieee80211_sta::{
-    data::{EthernetFrame as Frame, TxMsdu},
-    machine::StaCommand,
-};
+use oer_ieee80211_sta::data::{EthernetFrame as Frame, TxMsdu};
 use oer_memory::WakingSpscQueue;
 use oer_network::{EthernetFrame, LinkSnapshot, NetDevice, TransmitRefused};
+use runtime::contract::Command;
 
 pub const RX_DEPTH: usize = 8;
 pub const FRAME_CAPACITY: usize = 1664;
@@ -27,18 +25,12 @@ type Caps = oer_esp32s31_ieee80211_driver::port::Esp32s31Caps<FRAME_CAPACITY>;
 #[cfg(not(target_arch = "riscv32"))]
 type Caps = ();
 
-/// Refusal before command transfer; a request owns no installation permission.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum Refusal {
-    QueueFull,
-    Stopped,
-}
 /// The sole product command end. Its type carries no port identity or loan.
 pub struct Control<'a> {
     start: &'a StartState,
     inner: runtime::Control<'a, Caps, 2>,
 }
-impl Control<'_> {
+impl<'a> Control<'a> {
     /// Wait for station construction before starting an image's workload.
     pub async fn wait_started(&mut self) -> Result<(), StartError> {
         core::future::poll_fn(|cx| {
@@ -50,49 +42,49 @@ impl Control<'_> {
         })
         .await
     }
+    pub fn status_reader(&self) -> runtime::StatusReader<'a> {
+        self.inner.status_reader()
+    }
+    pub fn status(&self) -> runtime::Status {
+        self.inner.status()
+    }
     pub fn link(&self) -> LinkSnapshot {
         self.inner.status().link
     }
     pub fn stopped(&self) -> bool {
         self.inner.status().stopped
     }
-    pub fn try_connect(&mut self, correlation: u64) -> Result<(), Refusal> {
-        self.request(correlation, StaCommand::Connect)
+    pub fn try_connect(&mut self, correlation: u64) -> Result<(), runtime::ControlError> {
+        self.request(correlation, Command::Connect)
     }
-    pub fn try_disconnect(&mut self, correlation: u64) -> Result<(), Refusal> {
-        self.request(correlation, StaCommand::Disconnect)
+    pub fn try_disconnect(&mut self, correlation: u64) -> Result<(), runtime::ControlError> {
+        self.request(correlation, Command::Disconnect)
     }
-    pub fn try_scan(&mut self, correlation: u64) -> Result<(), Refusal> {
-        self.request(correlation, StaCommand::BackgroundScan)
+    pub fn try_scan(&mut self, correlation: u64) -> Result<(), runtime::ControlError> {
+        self.request(correlation, Command::BackgroundScan)
     }
-    fn request(&mut self, correlation: u64, command: StaCommand) -> Result<(), Refusal> {
+    fn request(&mut self, correlation: u64, command: Command) -> Result<(), runtime::ControlError> {
         self.inner
             .try_command(runtime::ServiceCommand::Station(runtime::Request::new(
                 correlation,
                 command,
             )))
-            .map_err(|r| match r.reason {
-                runtime::ControlError::QueueFull => Refusal::QueueFull,
-                runtime::ControlError::Stopped => Refusal::Stopped,
-            })
+            .map_err(|r| r.reason)
     }
-    pub async fn connect(&mut self, correlation: u64) -> Result<(), Refusal> {
-        self.inner.connect(correlation).await.map_err(refusal)
+    pub async fn connect(&mut self, correlation: u64) -> Result<(), runtime::ControlError> {
+        self.inner.connect(correlation).await.map_err(|r| r.reason)
     }
-    pub async fn disconnect(&mut self, correlation: u64) -> Result<(), Refusal> {
-        self.inner.disconnect(correlation).await.map_err(refusal)
+    pub async fn disconnect(&mut self, correlation: u64) -> Result<(), runtime::ControlError> {
+        self.inner
+            .disconnect(correlation)
+            .await
+            .map_err(|r| r.reason)
     }
     pub fn stop(&mut self) {
         self.inner.stop();
     }
     pub async fn wait_stopped(&mut self) {
         self.inner.wait_stopped().await;
-    }
-}
-fn refusal(r: runtime::ControlRefused<Caps>) -> Refusal {
-    match r.reason {
-        runtime::ControlError::QueueFull => Refusal::QueueFull,
-        runtime::ControlError::Stopped => Refusal::Stopped,
     }
 }
 /// Affine neutral Ethernet end. The concrete station frame is private.
@@ -192,7 +184,7 @@ impl Channels {
         let (tx, transmit) = self.tx.split();
         let (receive, rx) = self.rx.split();
         let (control, runner) = runtime::Control::new(send, &self.state).map_err(|r| r.reason)?;
-        let network = control.device(tx, rx);
+        let network = runtime::Device::new(tx, rx, &self.state);
         Ok((
             Control {
                 inner: control,
@@ -315,7 +307,7 @@ mod tests {
         assert_eq!(dropped.get(), 0);
         assert_eq!(control.try_connect(41), Ok(()));
         assert_eq!(control.try_disconnect(42), Ok(()));
-        assert_eq!(control.try_scan(43), Err(Refusal::QueueFull));
+        assert_eq!(control.try_scan(43), Err(runtime::ControlError::QueueFull));
         let crate::Connection {
             start,
             commands,
@@ -336,7 +328,7 @@ mod tests {
         // Losing the uninstalled runner poisons its control connection, not a new
         // backend installation or a replacement command producer.
         drop(runner);
-        assert_eq!(control.try_connect(44), Err(Refusal::Stopped));
+        assert_eq!(control.try_connect(44), Err(runtime::ControlError::Stopped));
         drop(refused.frame);
         assert_eq!(dropped.get(), 1);
     }

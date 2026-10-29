@@ -35,7 +35,6 @@ wifi-station = [
     "oer-esp32s31-compose/wifi-fault",
     "dep:oer-network-control",
     "dep:oer-ieee80211-control",
-    "dep:oer-firmware-apps-w3",
     "dep:oer-esp32s31-wifi",
     "panic-hook",
     "dep:oer-hil-protocol",
@@ -67,7 +66,6 @@ wifi-station = [
 oer-network-control = { path = "../../../protocols/network-control", optional = true }
 oer-ieee80211-control = { path = "../../../protocols/ieee80211/control", optional = true }
 oer-esp32s31-wifi = { path = "../../../chips/esp32s31/wifi", optional = true }
-oer-firmware-apps-w3 = { path = "../../apps/w3", optional = true }
 oer-time = { path = "../../../portable/time" }
 oer-ieee80211-arbiter = { path = "../../../protocols/ieee80211/arbiter", optional = true }
 embassy-futures = { version = "0.1.2", optional = true }
@@ -90,7 +88,7 @@ oer-ieee80211-cipher = { path = "../../../protocols/ieee80211/cipher", optional 
 oer-ieee80211-rsn = { path = "../../../protocols/ieee80211/rsn", optional = true }
 oer-ieee80211-instrumentation = { path = "../../../protocols/ieee80211/instrumentation", optional = true }
 oer-trace = { path = "../../../portable/trace", optional = true }
-owned-embassy-net = { package = "embassy-net", git = "https://github.com/ermacv/embassy.git", rev = "17f796c8ddb90ff510d995e24c2dcb758a97e8f8", optional = true, features = ["medium-ethernet", "ipv4", "dhcpv4", "raw-ip", "icmp-ping-reply"] }
+owned-embassy-net = { package = "embassy-net", git = "https://github.com/ermacv/embassy.git", rev = "17f796c8ddb90ff510d995e24c2dcb758a97e8f8", optional = true, features = ["medium-ethernet", "ipv4", "dhcpv4", "icmp-ping-reply"] }
 oer-memory = { path = "../../../portable/memory" }
 oer-riscv = { path = "../../../portable/riscv" }
 oer-diagnostics = { path = "../../../portable/diagnostics" }

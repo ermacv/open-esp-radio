@@ -30,10 +30,10 @@ fn neutral_tx_refusal_returns_the_original_owner_and_consumes_no_queue_credit() 
     let mut rx = WakingSpscQueue::<EthernetFrame, 1>::new();
     let state = State::new();
     let (sender, _) = commands.split();
-    let (control, _runner) = Control::new(sender, &state).unwrap();
+    let (_control, _runner) = Control::new(sender, &state).unwrap();
     let (sender, receiver) = tx.split();
     let (_, receive) = rx.split();
-    let mut device = control.device(sender, receive);
+    let mut device = Device::new(sender, receive, &state);
     let dropped = Rc::new(Cell::new(0));
     let first = Frame {
         owner: dropped.clone(),
@@ -119,7 +119,7 @@ fn network_link_wakes_on_events_and_keeps_the_cores_epoch() {
     let (mut control, _runner) = Control::new(sender, &state).unwrap();
     let (sender, _) = tx.split();
     let (received, receive) = rx.split();
-    let mut device = control.device(sender, receive);
+    let mut device = Device::new(sender, receive, &state);
     let wake = Arc::new(WakeCount(AtomicUsize::new(0)));
     let waker = core::task::Waker::from(wake.clone());
     let mut cx = Context::from_waker(&waker);
@@ -130,11 +130,8 @@ fn network_link_wakes_on_events_and_keeps_the_cores_epoch() {
             delivered.push(notice);
         }
     });
-    let connected = StaNotice::Connected {
-        bssid: oer_ieee80211_wire::address::Bssid::new(
-            oer_ieee80211_wire::address::IndividualAddress::new([2; 6]).unwrap(),
-        )
-        .unwrap(),
+    let connected = Notice::Connected {
+        bssid: [2; 6],
         channel: 6,
     };
     for epoch in [11, 12] {
@@ -150,8 +147,8 @@ fn network_link_wakes_on_events_and_keeps_the_cores_epoch() {
         );
         assert_eq!(control.status().link, device.link());
         assert!(device.poll_link(&mut cx).is_pending());
-        events.emit(ServiceOutput::Notice(StaNotice::Disconnected(
-            oer_ieee80211_sta::machine::StaDisconnectReason::Requested,
+        events.emit(ServiceOutput::Notice(Notice::Disconnected(
+            super::super::contract::DisconnectReason::LocalRequest,
         )));
         assert_eq!(
             device.poll_link(&mut cx),

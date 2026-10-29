@@ -1,5 +1,6 @@
 //! Application control, lossless callback events, and the neutral network end.
 
+use super::contract::{Command, Notice};
 use super::{ServiceCommand, ServiceOutput, ServiceOutputSink};
 use core::{
     cell::Cell,
@@ -8,10 +9,7 @@ use core::{
     task::{Context, Poll},
 };
 use embassy_futures::select::{Either, select};
-use oer_ieee80211_sta::{
-    data::{EthernetFrame, TxMsdu},
-    machine::{StaCommand, StaNotice},
-};
+use oer_ieee80211_sta::data::{EthernetFrame, TxMsdu};
 use oer_memory::{WakingSpscReceiver, WakingSpscSender};
 use oer_network::{LinkSnapshot, LinkState, NetDevice, TransmitError, TransmitRefused};
 use oer_sync::PriorityWaker;
@@ -24,7 +22,7 @@ use oer_time::connected_tasks::{
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Status {
     pub link: LinkSnapshot,
-    pub notice: Option<StaNotice>,
+    pub notice: Option<Notice>,
     pub stopped: bool,
 }
 
@@ -80,6 +78,19 @@ impl State {
 impl Default for State {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// A context-local read-only projection of Control's existing product state.
+#[derive(Clone, Copy)]
+pub struct StatusReader<'c> {
+    state: &'c State,
+}
+impl StatusReader<'_> {
+    pub fn status(&self) -> Status {
+        let mut status = self.state.status.get();
+        status.stopped |= self.state.tasks.is_poisoned();
+        status
     }
 }
 
@@ -158,26 +169,17 @@ impl<'c, K, const DEPTH: usize> Control<'c, K, DEPTH> {
             Err(reason) => Err(ControlCreateRefused { commands, reason }),
         }
     }
+    pub fn status_reader(&self) -> StatusReader<'c> {
+        StatusReader { state: self.state }
+    }
     pub fn status(&self) -> Status {
-        self.state.status.get()
+        self.status_reader().status()
     }
     /// All events, including affine refusals and command terminals, are
     /// delivered directly to this concrete recipient. There is no event queue
     /// whose overflow could discard an owner or coalesce a lifecycle notice.
     pub fn events<O>(&self, output: O) -> Events<'c, O> {
         self.state.events(output)
-    }
-    pub fn device<const TX: usize, const RX: usize>(
-        &self,
-        transmit: WakingSpscSender<'c, TxMsdu, TX>,
-        receive: WakingSpscReceiver<'c, EthernetFrame, RX>,
-    ) -> Device<'c, TX, RX> {
-        Device {
-            transmit,
-            receive,
-            state: self.state,
-            observed: LinkSnapshot::DOWN,
-        }
     }
     pub fn try_command(&mut self, command: ServiceCommand<K>) -> Result<(), ControlRefused<K>> {
         if self.status().stopped || self.state.tasks.is_poisoned() {
@@ -231,21 +233,21 @@ impl<'c, K, const DEPTH: usize> Control<'c, K, DEPTH> {
     pub async fn connect(&mut self, correlation: u64) -> Result<(), ControlRefused<K>> {
         self.command(ServiceCommand::Station(super::Request::new(
             correlation,
-            StaCommand::Connect,
+            Command::Connect,
         )))
         .await
     }
     pub async fn disconnect(&mut self, correlation: u64) -> Result<(), ControlRefused<K>> {
         self.command(ServiceCommand::Station(super::Request::new(
             correlation,
-            StaCommand::Disconnect,
+            Command::Disconnect,
         )))
         .await
     }
     pub async fn scan(&mut self, correlation: u64) -> Result<(), ControlRefused<K>> {
         self.command(ServiceCommand::Station(super::Request::new(
             correlation,
-            StaCommand::BackgroundScan,
+            Command::BackgroundScan,
         )))
         .await
     }
@@ -267,8 +269,8 @@ impl<K, O: ServiceOutputSink<K>> ServiceOutputSink<K> for Events<'_, O> {
             let mut status = self.state.status.get();
             status.notice = Some(*notice);
             status.link.state = match notice {
-                StaNotice::Connected { .. } => LinkState::Up,
-                StaNotice::Disconnected(_) => LinkState::Down,
+                Notice::Connected { .. } => LinkState::Up,
+                Notice::Disconnected(_) => LinkState::Down,
             };
             self.state.status.set(status);
             self.state.link_waker.wake();
@@ -283,6 +285,20 @@ pub struct Device<'c, const TX: usize, const RX: usize> {
     receive: WakingSpscReceiver<'c, EthernetFrame, RX>,
     state: &'c State,
     observed: LinkSnapshot,
+}
+impl<'c, const TX: usize, const RX: usize> Device<'c, TX, RX> {
+    pub fn new(
+        transmit: WakingSpscSender<'c, TxMsdu, TX>,
+        receive: WakingSpscReceiver<'c, EthernetFrame, RX>,
+        state: &'c State,
+    ) -> Self {
+        Self {
+            transmit,
+            receive,
+            state,
+            observed: LinkSnapshot::DOWN,
+        }
+    }
 }
 impl<const TX: usize, const RX: usize> NetDevice for Device<'_, TX, RX> {
     type RxFrame = EthernetFrame;

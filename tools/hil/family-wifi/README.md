@@ -48,3 +48,10 @@ first requires captured AP beacons on the configured channel, then records
 initial-key DHCP, protected air metadata, fresh hostapd events and typed RX
 rejections. It stops the station on success or failure and makes no W4 claim.
 The qualification profile retains its 30-second GTK interval.
+
+Traffic windows are peer-originated ping: 100 requests before departure and ten
+after reconnect. The DUT uses ordinary stack echo replies. Each result compares
+peer ping counts with an independent complete, loss-free ICMP capture, ordered
+identities and one-second request pacing. No `ProbeStation` command or target
+traffic counters participate. Product readiness is checked with `GetStationStatus`;
+trace collectors still supply GTK, ARP and radio observations to the existing gates.

@@ -2351,7 +2351,6 @@ dependencies = [
  "oer-espressif-interrupt-table",
  "oer-espressif-staged-runtime",
  "oer-espressif-usb-serial-jtag",
- "oer-firmware-apps-w3",
  "oer-hil-agent",
  "oer-hil-protocol",
  "oer-ieee80211-arbiter",
@@ -2913,6 +2912,10 @@ version = "0.1.0"
 dependencies = [
  "heapless",
  "oer-hil-protocol",
+ "oer-ieee80211-runtime",
+ "oer-memory",
+ "oer-network",
+ "oer-radio-port",
  "postcard",
  "postcard-schema",
  "serde",

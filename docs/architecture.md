@@ -143,6 +143,13 @@ from `oer-time`, interrupt signals from `portable/`, no executor,
 that poll the futures.
 The Wi-Fi station runtime exposes `station::Control` and `station::Runner`.
 Control and the neutral network end are constructed before port installation.
+The runtime owns the nominal command, status, event and failure vocabulary of
+Control. Exhaustive conversions from core values run inside the runtime;
+Control exposes neither station nor upper-MAC core types. The Wi-Fi HIL
+binding mirrors this runtime vocabulary without depending on a core. HIL
+traffic originates at the host or peer; the device uses the IP stack's normal
+ICMP echo reply service. Instrumented image collectors retain diagnostic
+observations separately from the product contract.
 Commands contain a kind and correlation, with no installation lifetime or pool
 path. Runner receives the station's affine command credits at installation,
 retains each through its refusal or terminal, and restores it before delivering

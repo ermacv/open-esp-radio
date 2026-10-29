@@ -1,0 +1,17 @@
+error[E0308]: mismatched types
+  --> tests/ui/control_vocabulary.rs:10:21
+   |
+10 |     Request::new(7, kind) // ui-error: E0308
+   |     ------------    ^^^^ expected `Command`, found `StaCommand`
+   |     |
+   |     arguments to this function are incorrect
+   |
+note: associated function defined here
+  --> src/station/commands.rs
+   |
+   |     pub const fn new(correlation: u64, command: Command) -> Self {
+   |                  ^^^
+help: call `Into::into` on this expression to convert `StaCommand` into `oer_ieee80211_runtime::station::contract::Command`
+   |
+10 |     Request::new(7, kind.into()) // ui-error: E0308
+   |                         +++++++

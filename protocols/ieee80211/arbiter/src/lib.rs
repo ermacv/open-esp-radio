@@ -479,6 +479,21 @@ pub enum StationNotice<'id, K, Path: PoolPath = Root<oer_radio_port::LocalId<'id
 }
 
 /// What the arbiter tells the access point.
+/// Semantic AP transmission policy reported to the application.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SwitchMode {
+    Continue,
+    StopTransmitting,
+}
+impl From<ChannelSwitchMode> for SwitchMode {
+    fn from(value: ChannelSwitchMode) -> Self {
+        match value {
+            ChannelSwitchMode::Continue => Self::Continue,
+            ChannelSwitchMode::StopTransmitting => Self::StopTransmitting,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AccessPointCommand<K> {
     /// Announce a switch to `target` in the next `count` beacons.
@@ -486,7 +501,7 @@ pub enum AccessPointCommand<K> {
         /// The channel.
         target: SupportedChannel<K>,
         /// What its peers do until the switch.
-        mode: ChannelSwitchMode,
+        mode: SwitchMode,
         /// The beacons left.
         count: u8,
     },
@@ -1441,7 +1456,7 @@ impl<'id, K: Ieee80211Capabilities, R: ReservationMode, Path: PoolPath> Arbiter<
                     self.coordinator.follow_announced(now);
                     self.outbox.announce = Some(AccessPointCommand::AnnounceSwitch {
                         target: request.channel,
-                        mode: ChannelSwitchMode::Continue,
+                        mode: SwitchMode::Continue,
                         count,
                     });
                     follows = Some((at, deadline));
@@ -1883,7 +1898,7 @@ impl<'id, K: Ieee80211Capabilities, R: ReservationMode, Path: PoolPath> Arbiter<
                 } => {
                     self.outbox.announce = Some(AccessPointCommand::AnnounceSwitch {
                         target,
-                        mode,
+                        mode: mode.into(),
                         count,
                     });
                 }

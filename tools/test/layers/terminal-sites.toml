@@ -700,13 +700,6 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 # firmware/hil/esp32s31/src/wifi_station/network.rs
 "firmware/hil/esp32s31/src/wifi_station/network.rs:crate::wifi_station::network::running_future:panic-method:expect:1" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
 "firmware/hil/esp32s31/src/wifi_station/network.rs:crate::wifi_station::network::running_future:panic-method:expect:2" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
-"firmware/hil/esp32s31/src/wifi_station/network.rs:crate::wifi_station::network::running_future:panic-method:expect:3" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
-"firmware/hil/esp32s31/src/wifi_station/network.rs:crate::wifi_station::network::running_future:panic-macro:unreachable:1" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
-"firmware/hil/esp32s31/src/wifi_station/network.rs:crate::wifi_station::network::probes:panic-method:expect:1" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
-"firmware/hil/esp32s31/src/wifi_station/network.rs:crate::wifi_station::network::probes:panic-method:expect:2" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
-"firmware/hil/esp32s31/src/wifi_station/network.rs:crate::wifi_station::network::probes:panic-method:expect:3" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
-"firmware/hil/esp32s31/src/wifi_station/network.rs:crate::wifi_station::network::probes:panic-method:expect:4" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
-"firmware/hil/esp32s31/src/wifi_station/network.rs:crate::wifi_station::network::valid_arp:panic-method:expect:1" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
 
 # firmware/hil/esp32s31/src/wifi_station/observation.rs
 "firmware/hil/esp32s31/src/wifi_station/observation.rs:crate::wifi_station::observation::counters:panic-method:expect:1" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }

@@ -4,7 +4,7 @@ use oer_hil_registry::{LOCKS, messages_lock, registry};
 use std::collections::{BTreeMap, BTreeSet};
 
 #[test]
-fn capture_migration_preserves_every_other_reviewed_message()
+fn station_control_migration_preserves_every_other_reviewed_message()
 -> Result<(), oer_hil_registry::LockError> {
     assert_eq!(messages_lock()?, migrated_wire()?);
     Ok(())
@@ -29,6 +29,10 @@ fn migrated_wire() -> Result<String, oer_hil_registry::LockError> {
         .lines()
         .filter(|line| {
             ![
+                "wifi/station/link ",
+                "wifi/station/probe ",
+                "wifi/station/probe/ready ",
+                "wifi/station/probe/finished ",
                 "health/counters ",
                 "health/counters/read ",
                 "health/signals ",
@@ -46,6 +50,28 @@ fn migrated_wire() -> Result<String, oer_hil_registry::LockError> {
     let mut previous = previous.replace("[modules]\n", "[modules]\ncapture\n");
     previous.push('\n');
     for message in oer_hil_protocol::capture::MESSAGES {
+        let kind = match message.kind {
+            Kind::Endpoint => "endpoint",
+            Kind::Topic => "topic",
+            Kind::Property => "property",
+        };
+        previous.push_str(&format!("{} {} {}\n", message.path, message.key, kind));
+    }
+    for message in oer_ieee80211_control::MESSAGES.iter().filter(|message| {
+        matches!(
+            message.path,
+            "wifi/station/link"
+                | "wifi/station/transmit/refused"
+                | "wifi/station/msdu/refused"
+                | "wifi/station/connect"
+                | "wifi/station/disconnect"
+                | "wifi/station/scan"
+                | "wifi/station/status/get"
+                | "wifi/station/status"
+                | "wifi/station/admission"
+                | "wifi/station/command/finished"
+        )
+    }) {
         let kind = match message.kind {
             Kind::Endpoint => "endpoint",
             Kind::Topic => "topic",

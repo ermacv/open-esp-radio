@@ -8,7 +8,7 @@ use oer_esp32s31_ieee80211_driver::{
 use oer_espressif_executor::{Doorbell, DoorbellAcknowledger, InterruptExecutor};
 use oer_espressif_interrupt_table::{Bound, Entry, InterruptSources, signal::IrqSignal};
 use oer_ieee80211_runtime::station as runtime;
-use oer_ieee80211_sta::machine::{StaCallbacks, StaConfig, StaNotice};
+use oer_ieee80211_sta::machine::{StaCallbacks, StaConfig};
 use oer_ieee80211_wire::{
     address::{IndividualAddress, OwnAddress},
     channel::WifiChannelWidth,
@@ -247,12 +247,18 @@ impl Events for () {
     reason = "a refused original frame reaches its callback without allocation or loss"
 )]
 pub enum Event {
-    Connected,
-    Disconnected(oer_ieee80211_sta::machine::StaDisconnectReason),
+    Connected {
+        bssid: [u8; 6],
+        channel: u8,
+    },
+    Disconnected(runtime::contract::DisconnectReason),
     CommandRefused(runtime::CommandRefused),
     CommandCompleted(runtime::CommandTerminal),
     CommandInFlight(runtime::Request),
-    TxRefused,
+    TxRefused {
+        operation: runtime::TxOperation,
+        reason: runtime::contract::TransmitRefusal,
+    },
     Other(runtime::ServiceOutput<Caps>),
 }
 pub(crate) struct Output<E: Events> {
@@ -261,12 +267,19 @@ pub(crate) struct Output<E: Events> {
 impl<E: Events> runtime::ServiceOutputSink<Caps> for Output<E> {
     fn emit(&mut self, event: runtime::ServiceOutput<Caps>) {
         let event = match event {
-            runtime::ServiceOutput::Notice(StaNotice::Connected { .. }) => Event::Connected,
-            runtime::ServiceOutput::Notice(StaNotice::Disconnected(r)) => Event::Disconnected(r),
+            runtime::ServiceOutput::Notice(runtime::contract::Notice::Connected {
+                bssid,
+                channel,
+            }) => Event::Connected { bssid, channel },
+            runtime::ServiceOutput::Notice(runtime::contract::Notice::Disconnected(r)) => {
+                Event::Disconnected(r)
+            }
             runtime::ServiceOutput::CommandRefused(r) => Event::CommandRefused(r),
             runtime::ServiceOutput::CommandCompleted(r) => Event::CommandCompleted(r),
             runtime::ServiceOutput::CommandInFlight(r) => Event::CommandInFlight(r),
-            runtime::ServiceOutput::TxRefused { .. } => Event::TxRefused,
+            runtime::ServiceOutput::TxRefused { operation, reason } => {
+                Event::TxRefused { operation, reason }
+            }
             other => Event::Other(other),
         };
         self.events.event(event)

@@ -39,14 +39,14 @@ pub struct ProductEvents;
 impl wifi::Events for ProductEvents {
     fn event(&mut self, event: wifi::Event) {
         match event {
-            wifi::Event::Connected => LINK.store(true, Relaxed),
+            wifi::Event::Connected { .. } => LINK.store(true, Relaxed),
             wifi::Event::Disconnected(_) => {
                 LINK.store(false, Relaxed);
                 DISCONNECTED.store(true, Relaxed);
             }
             wifi::Event::CommandRefused(_)
             | wifi::Event::CommandInFlight(_)
-            | wifi::Event::TxRefused => FAILED.store(true, Relaxed),
+            | wifi::Event::TxRefused { .. } => FAILED.store(true, Relaxed),
             _ => {}
         }
     }

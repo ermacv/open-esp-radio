@@ -235,15 +235,12 @@ mod tests {
         let (control, _runner) = Control::new(sender, state).unwrap();
         let mut events = control.events(|_: ServiceOutput<()>| {});
         events.emit(ServiceOutput::Notice(
-            oer_ieee80211_sta::machine::StaNotice::Connected {
-                bssid: oer_ieee80211_wire::address::Bssid::new(
-                    oer_ieee80211_wire::address::IndividualAddress::new([2; 6]).unwrap(),
-                )
-                .unwrap(),
+            oer_ieee80211_runtime::station::contract::Notice::Connected {
+                bssid: [2; 6],
                 channel: 6,
             },
         ));
-        let device = control.device(tx, rx);
+        let device = oer_ieee80211_runtime::station::Device::new(tx, rx, state);
         (control, device)
     }
     use core::{future::Future, task::Context};
@@ -616,8 +613,8 @@ mod tests {
             assert_eq!(sink.try_receive().unwrap().frame.parts().payload, &[5]);
             settle(&mut bridge, &scheduled, &mut cx);
             events.emit(ServiceOutput::Notice(
-                oer_ieee80211_sta::machine::StaNotice::Disconnected(
-                    oer_ieee80211_sta::machine::StaDisconnectReason::Requested,
+                oer_ieee80211_runtime::station::contract::Notice::Disconnected(
+                    oer_ieee80211_runtime::station::contract::DisconnectReason::LocalRequest,
                 ),
             ));
             assert!(scheduled.0.load(Ordering::Relaxed), "idle link event");

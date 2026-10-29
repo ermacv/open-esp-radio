@@ -2315,7 +2315,10 @@ fn sae_derivation_failure(
     pwe: oer_ieee80211_wire::security::SaePwe,
 ) -> StaDisconnectReason {
     StaDisconnectReason::Sae(match error {
-        oer_ieee80211_rsn::sae::SaeError::Crypto => StaSaeFailure::Crypto { peer, pwe },
+        oer_ieee80211_rsn::sae::SaeError::Crypto => StaSaeFailure::Crypto {
+            peer,
+            pwe: pwe.into(),
+        },
         error => StaSaeFailure::Protocol(error),
     })
 }
