@@ -341,17 +341,40 @@ fn event_mask(events: &[Ieee802154Event]) -> Ieee802154EventMask {
         })
 }
 
-fn frame_metadata(image: &[u8; FRAME_SIZE], length: u8) -> Result<(i8, u8), ServiceError> {
-    let rssi_index = length
-        .checked_sub(1)
-        .ok_or(ServiceError::FrameMetadata(length))?;
-    let rssi = *image
-        .get(usize::from(rssi_index))
-        .ok_or(ServiceError::FrameMetadata(length))? as i8;
-    let lqi = *image
-        .get(usize::from(length))
-        .ok_or(ServiceError::FrameMetadata(length))?;
-    Ok((rssi, lqi))
+/// Select a seven-bit PHR-relative byte from the complete 128-byte DMA image.
+/// Every arm uses a fixed in-bounds position. Masking makes the last arm
+/// exactly position 127; no runtime bounds check or missing-byte path remains.
+fn phr_byte(image: &[u8; FRAME_SIZE], position: u8) -> u8 {
+    const {
+        if FRAME_SIZE != 128 {
+            panic!("seven-bit PHR metadata requires a 128-byte DMA image");
+        }
+    }
+    macro_rules! select {
+        ($($position:literal),* $(,)?) => {
+            match position & 0x7f {
+                $($position => image[$position],)*
+                _ => image[127],
+            }
+        };
+    }
+    select!(
+        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
+        25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47,
+        48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70,
+        71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93,
+        94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112,
+        113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126,
+    )
+}
+
+fn frame_metadata(image: &[u8; FRAME_SIZE], length: u8) -> (i8, u8) {
+    // rx_frame_info_update admits only PHR lengths 3..=127. RSSI precedes
+    // LQI, so both positions are inside the same complete DMA image.
+    (
+        phr_byte(image, length.wrapping_sub(1)) as i8,
+        phr_byte(image, length),
+    )
 }
 
 /// Hardware and environment borrowed for one engine entry.
@@ -1502,7 +1525,7 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
             info.lqi = 0;
             return Ok(());
         }
-        let (rssi, lqi) = frame_metadata(&image, length)?;
+        let (rssi, lqi) = frame_metadata(&image, length);
         if let Some(interfaces) = self.multipan {
             let interface = Self::match_interface(cx, &image, interfaces);
             index.select_mut(&mut self.rx_info).mpf_index = interface;

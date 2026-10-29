@@ -896,3 +896,30 @@ fn counted_projection_uses_the_configured_scale_and_retains_range_failure_inputs
         })
     );
 }
+
+#[test]
+fn standalone_counted_projection_is_total_and_matches_the_reviewed_scale() {
+    use crate::interrupt::ControllerTimeOverflowEpoch;
+    let scale = crate::controller_hal::reviewed_standalone_time_scale();
+    for overflows in [0, 1, u32::MAX] {
+        let count = ControllerTimeOverflowEpoch(overflows);
+        for raw in [0, 1, 2, u32::MAX] {
+            let sample = ControllerTimeSample::for_host_test(raw);
+            let standalone =
+                ControllerSchedulerEpoch::from_counted_standalone_update(&sample, count, count);
+            assert_eq!(
+                Ok(standalone),
+                ControllerSchedulerEpoch::from_counted_live_update(&sample, count, count, scale)
+            );
+        }
+    }
+    let sample = ControllerTimeSample::for_host_test(u32::MAX);
+    assert_eq!(
+        ControllerSchedulerEpoch::from_counted_standalone_update(
+            &sample,
+            ControllerTimeOverflowEpoch(0),
+            ControllerTimeOverflowEpoch(1)
+        ),
+        None
+    );
+}

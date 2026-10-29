@@ -41,8 +41,8 @@ impl Wakes for TestBinding {
     fn vtable() -> &'static RawWakerVTable {
         &TEST_VTABLE
     }
-    fn pend_task(executor: u8) {
-        pend(executor);
+    fn pend_task(executor: SoftwareInterrupt) {
+        pend(executor as u8);
     }
 }
 
@@ -201,24 +201,27 @@ fn the_polled_task_is_current_and_its_waker_names_it() {
     assert_eq!(
         seen[1].current.get(),
         Some(TaskId {
-            executor: EXECUTOR,
+            executor: SoftwareInterrupt::constant::<EXECUTOR>(),
             index: 1
         })
     );
     // Between polls no task is current, and a foreign waker names none.
     let waker = TaskId {
-        executor: EXECUTOR,
+        executor: SoftwareInterrupt::constant::<EXECUTOR>(),
         index: 1,
     }
     .waker::<TestBinding>();
     assert_eq!(current.matching::<TestBinding>(EXECUTOR, &waker), None);
     assert_eq!(TaskId::of::<TestBinding>(Waker::noop()), None);
     let named = TaskId::of::<TestBinding>(&waker).expect("the executor's waker");
-    assert_eq!((named.executor(), named.index()), (EXECUTOR, 1));
+    assert_eq!(
+        (named.executor(), named.index()),
+        (SoftwareInterrupt::constant::<EXECUTOR>(), 1)
+    );
     assert_eq!(
         TaskId::of::<TestBinding>(&waker.clone()),
         Some(TaskId {
-            executor: EXECUTOR,
+            executor: SoftwareInterrupt::constant::<EXECUTOR>(),
             index: 1
         })
     );
@@ -234,7 +237,7 @@ fn a_waker_marks_its_task_ready_and_pends_its_executor() {
         .expect("first start");
     round::<Set>(current);
     let waker = TaskId {
-        executor: EXECUTOR,
+        executor: SoftwareInterrupt::constant::<EXECUTOR>(),
         index: 2,
     }
     .waker::<TestBinding>();
@@ -336,7 +339,7 @@ fn a_start_preempted_by_its_executor_is_polled_only_once_published() {
     claim.publish(Box::new(move || Recorder { argument: 7, seen }));
     assert_eq!(seen.1.load(Ordering::Relaxed), 0);
     wake::<TestBinding>(TaskId {
-        executor: EXECUTOR,
+        executor: SoftwareInterrupt::constant::<EXECUTOR>(),
         index: 1,
     });
     assert!(!round::<Set>(current));

@@ -116,21 +116,20 @@ impl<Id: SlotIdentity, D: Device, X> Backend<Id, D, X> {
             Ok(Started::Aborted) => Cause::Withdrawn,
             Err(_) => Cause::Fault,
         };
-        let mut credit = Some(capacity);
-        let session = match (command, outcome) {
+        let (session, credit) = match (command, outcome) {
             (OwnedCommand::Transmit(s, _) | OwnedCommand::Receive(s, _), Ok(Started::Executed)) => {
-                owned::SessionOwner::Running(s.transition())
+                (owned::SessionOwner::Running(s.transition()), Some(capacity))
             }
             (OwnedCommand::Transmit(s, _) | OwnedCommand::Receive(s, _), Ok(_)) => {
-                owned::SessionOwner::Idle(s)
+                (owned::SessionOwner::Idle(s), Some(capacity))
             }
             (OwnedCommand::End(s), Ok(Started::Executed)) => {
-                owned::SessionOwner::Idle(s.transition())
+                (owned::SessionOwner::Idle(s.transition()), Some(capacity))
             }
-            (OwnedCommand::End(s), Ok(_)) => owned::SessionOwner::Running(s),
+            (OwnedCommand::End(s), Ok(_)) => (owned::SessionOwner::Running(s), Some(capacity)),
             (command, Err(_)) => {
-                self.quarantine = Some((command, credit.take().expect("unmoved failed credit")));
-                owned::SessionOwner::Quarantined
+                self.quarantine = Some((command, capacity));
+                (owned::SessionOwner::Quarantined, None)
             }
         };
         self.terminal = Some(OwnedTerminal {

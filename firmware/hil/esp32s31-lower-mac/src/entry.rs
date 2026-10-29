@@ -192,7 +192,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
     );
     let actor = ACTOR.init_with(|| RadioSystem::new(end, backend, EmbassyClock, lp));
     let timer = runtime_system_timer;
-    oer_espressif_executor::init::<Esp32s31, 2, _, _>(
+    let mut timer_ready = oer_espressif_executor::init::<Esp32s31, 2, _, _>(
         oer_espressif_executor::systimer::SystemTimer {
             comparators: timer.comparators,
             counter: timer.counter,
@@ -203,6 +203,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
     )
     .unwrap_or_else(|failure| failure.reset());
     oer_espressif_executor::bind::<Esp32s31, 0, _, _>(
+        &mut timer_ready,
         adopted.router(),
         interrupts.app_alarm,
         timer.alarm1,

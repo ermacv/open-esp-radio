@@ -258,7 +258,6 @@ impl Payload {
                     ServiceError::RxAbortState(status) => (2, 0, status_bits(status)),
                     ServiceError::TxAbortUnclassified => (3, 0, 0),
                     ServiceError::FrequencyCode(code) => (4, u32::from(code), 0),
-                    ServiceError::FrameMetadata(length) => (5, u32::from(length), 0),
                     ServiceError::Statistics(error) => {
                         let counter = match error.counter {
                             StatisticsCounter::Transmit => 0,
@@ -342,7 +341,6 @@ impl Payload {
             2 if parameter == 0 => ServiceError::RxAbortState(status_from(status)?),
             3 if parameter == 0 => ServiceError::TxAbortUnclassified,
             4 => ServiceError::FrequencyCode(parameter),
-            5 => ServiceError::FrameMetadata(parameter),
             6 if drained <= 13 => ServiceError::Statistics(StatisticsOverflow {
                 counter: match parameter {
                     0 => StatisticsCounter::Transmit,
@@ -536,7 +534,6 @@ mod service_tests {
         }
         for value in [0, 127, 255] {
             reasons.push(ServiceError::FrequencyCode(value));
-            reasons.push(ServiceError::FrameMetadata(value));
             for ordering in [
                 core::cmp::Ordering::Less,
                 core::cmp::Ordering::Equal,
@@ -610,6 +607,7 @@ mod service_tests {
     fn invalid_service_fields_are_rejected() {
         for details in [
             [0, 255, 0, 0, 0, 0, 0, 0],
+            [0, 5, 0, 0, 0, 0, 0, 0], // retired FrameMetadata code
             [0, 3, 1, 0, 0, 0, 0, 0],
             [0, 6, 0, 0, 0, 0, 0, 14],
             [15, 3, 0, 0, 0, 0, 0, 0],
@@ -631,10 +629,6 @@ fn encode(fault: Fault) -> Result<Record, fault_format::Error> {
             reason: ServiceError::Statistics(_),
             ..
         } => Class::Exhaustion,
-        Fault::Service {
-            reason: ServiceError::FrameMetadata(_),
-            ..
-        } => Class::SoftwareInvariant,
         _ => Class::UnexpectedHardware,
     };
     let mut payload: Payload = bytemuck::Zeroable::zeroed();

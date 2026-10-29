@@ -4,10 +4,9 @@
 //! instructions.
 
 pub(crate) use crate::binding::Binding;
-use crate::{Failure, Fault};
+use crate::{Failure, Fault, SoftwareInterrupt};
 use oer_espressif_boot::drivers::system_timer;
 use oer_espressif_platform_port::{ExecutorPlatform, Hart};
-use oer_memory::OnceValue;
 
 use crate::software_line::{SoftwareLine, serve};
 
@@ -112,12 +111,26 @@ pub(crate) fn is_pending<B: Binding>(source: u16) -> bool {
     PortOf::<B>::is_pending(current_hart::<B>(), source)
 }
 
-pub(crate) const fn software_interrupt_source<P: ExecutorPlatform>(swi: u8) -> u16 {
-    P::SOFTWARE_SOURCES[swi as usize]
+pub(crate) const fn software_interrupt_source<P: ExecutorPlatform>(swi: SoftwareInterrupt) -> u16 {
+    let [zero, one, two, three] = P::SOFTWARE_SOURCES;
+    match swi {
+        SoftwareInterrupt::Zero => zero,
+        SoftwareInterrupt::One => one,
+        SoftwareInterrupt::Two => two,
+        SoftwareInterrupt::Three => three,
+    }
 }
 
-pub(crate) const fn alarm_source<P: ExecutorPlatform>(comparator: usize) -> u16 {
-    P::ALARM_SOURCES[comparator]
+pub(crate) const fn alarm_source<P: ExecutorPlatform>(
+    comparator: oer_espressif_platform_port::Comparator,
+) -> u16 {
+    use oer_espressif_platform_port::Comparator;
+    let [zero, one, two] = P::ALARM_SOURCES;
+    match comparator {
+        Comparator::Zero => zero,
+        Comparator::One => one,
+        Comparator::Two => two,
+    }
 }
 
 pub(crate) fn wait_for_interrupt<B: Binding>() {
@@ -190,13 +203,8 @@ own_line!(2, Two, Line2, own_line_2, line2);
 own_line!(3, Three, Line3, own_line_3, line3);
 
 /// Install software interrupt `swi`'s line for its executor.
-pub(crate) fn install_line<B: Binding>(swi: usize, line: Line<PortOf<B>>) {
-    let Some(slot) = B::storage().lines.get(swi) else {
-        Fault::InvalidExecutor {
-            executor: swi as u8,
-        }
-        .reset::<PortOf<B>>();
-    };
+pub(crate) fn install_line<B: Binding>(swi: SoftwareInterrupt, line: Line<PortOf<B>>) {
+    let slot = swi.at(&B::storage().lines);
     line.lower();
     if slot.set(line).is_err() {
         Fault::LinePublished {
@@ -208,17 +216,14 @@ pub(crate) fn install_line<B: Binding>(swi: usize, line: Line<PortOf<B>>) {
 
 /// Software interrupt `swi`'s installed line: none before its executor or
 /// doorbell took it, when there is nothing it could wake.
-fn line<B: Binding>(swi: u8) -> Option<Line<PortOf<B>>> {
-    B::storage()
-        .lines
-        .get(usize::from(swi))
-        .and_then(OnceValue::get)
+fn line<B: Binding>(swi: SoftwareInterrupt) -> Option<Line<PortOf<B>>> {
+    swi.at(&B::storage().lines).get()
 }
 
 /// Raise software interrupt `swi`; a line no executor took yet has no
 /// handler to run, so nothing is raised. Never panics.
 #[inline(always)]
-pub(crate) fn raise_interrupt<B: Binding>(swi: u8) {
+pub(crate) fn raise_interrupt<B: Binding>(swi: SoftwareInterrupt) {
     if let Some(line) = line::<B>(swi) {
         line.raise();
     }
@@ -229,7 +234,10 @@ pub(crate) fn raise_interrupt<B: Binding>(swi: u8) {
 /// an installed line's handler runs, since only an installed line is raised
 /// and routed. Never panics.
 #[inline(always)]
-pub(crate) fn serve_interrupt<B: Binding, R>(swi: u8, drain: impl FnOnce() -> R) -> R {
+pub(crate) fn serve_interrupt<B: Binding, R>(
+    swi: SoftwareInterrupt,
+    drain: impl FnOnce() -> R,
+) -> R {
     match line::<B>(swi) {
         Some(line) => serve(&line, drain),
         None => drain(),

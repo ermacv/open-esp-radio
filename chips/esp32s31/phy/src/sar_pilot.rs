@@ -18,15 +18,21 @@ use oer_espressif_interrupt_table::{
 use oer_memory::{AffineSpscQueue, AffineSpscReceiver, AffineSpscSender, CompactSpscCursor};
 use oer_time::{Clock, Duration};
 
-type Queue<B, A> = AffineSpscQueue<Bundle<B, A>, 1, CompactSpscCursor>;
-type Sender<B, A> = AffineSpscSender<'static, Bundle<B, A>, 1, CompactSpscCursor>;
-type Receiver<B, A> = AffineSpscReceiver<'static, Bundle<B, A>, 1, CompactSpscCursor>;
+type Queue<T> = AffineSpscQueue<T, 1, CompactSpscCursor>;
+type Sender<T> = AffineSpscSender<'static, T, 1, CompactSpscCursor>;
+type Receiver<T> = AffineSpscReceiver<'static, T, 1, CompactSpscCursor>;
 struct Bundle<B, A> {
     phy: PhyTransaction,
     alarm: A,
     bound: B,
     engine: Engine,
-    result: Option<Result<Sample, Error>>,
+}
+/// Reply custody exists only after the machine completes and the alarm stops.
+struct CompletedBundle<B, A> {
+    phy: PhyTransaction,
+    alarm: A,
+    bound: B,
+    result: Result<Sample, Error>,
 }
 impl<B, A: Program<B>> Bundle<B, A> {
     fn arm(&mut self, delay: Duration) {
@@ -39,8 +45,8 @@ impl<B, A: Program<B>> Bundle<B, A> {
 }
 /// Permanent one-slot request and return cells; endpoints are split once.
 pub struct Cells<B: 'static, A: 'static = Timg0AlarmProgram> {
-    request: Queue<B, A>,
-    reply: Queue<B, A>,
+    request: Queue<Bundle<B, A>>,
+    reply: Queue<CompletedBundle<B, A>>,
 }
 impl<B: 'static, A: 'static> Cells<B, A> {
     pub const fn new() -> Self {
@@ -122,17 +128,19 @@ impl Acknowledge for Timg0AlarmInterrupt {
 /// No alarm may be armed until the image has bound its permanent IRQ owner.
 pub struct UnboundClient<B: 'static, E: SignalExecutor, A: 'static = Timg0AlarmProgram> {
     alarm: A,
-    send: Sender<B, A>,
-    receive: Receiver<B, A>,
+    send: Sender<Bundle<B, A>>,
+    receive: Receiver<CompletedBundle<B, A>>,
     signal: &'static IrqSignal<E>,
 }
 impl<I: Entry<Part = Timg0AlarmInterrupt> + 'static, E: SignalExecutor> UnboundClient<Bound<I>, E> {
     pub fn bind(self, bound: Bound<I>) -> Client<Bound<I>, E> {
         const {
-            assert!(matches!(
+            if !matches!(
                 I::CLASS,
                 oer_espressif_interrupt_table::Class::ExemptExecutorLevel
-            ));
+            ) {
+                panic!("the SAR alarm must be an executor-level exempt entry");
+            }
         }
         self.into_client(bound)
     }
@@ -152,8 +160,8 @@ impl<B: 'static, E: SignalExecutor, A: 'static> UnboundClient<B, E, A> {
 /// the PHY half is in one of the cells or the handler.
 pub struct Client<B: 'static, E: SignalExecutor, A: 'static = Timg0AlarmProgram> {
     alarm: Option<(A, B)>,
-    send: Sender<B, A>,
-    receive: Receiver<B, A>,
+    send: Sender<Bundle<B, A>>,
+    receive: Receiver<CompletedBundle<B, A>>,
     signal: &'static IrqSignal<E>,
 }
 /// The one public leaf submission contract; the production client moves
@@ -189,7 +197,6 @@ impl<B: 'static, E: SignalExecutor, A: Program<B> + 'static> Service for Client<
             alarm,
             bound,
             engine: Engine::new(clear_tone),
-            result: None,
         };
         // Both contexts are on P2 of the same hart. Arm before publication;
         // the handler cannot enter until this actor poll has returned.
@@ -217,20 +224,15 @@ impl<B: 'static, E: SignalExecutor, A: Program<B> + 'static> Service for Client<
         })
         .await;
         self.alarm = Some((bundle.alarm, bundle.bound));
-        let Some(result) = bundle.result else {
-            bundle
-                .phy
-                .quarantine_sar_transfer(SarTransferFault::ResultUnavailable);
-        };
-        (bundle.phy, result)
+        (bundle.phy, bundle.result)
     }
 }
 /// State lent only to the P2 TIMG0 handler; the table retains the interrupt
 /// part independently for the entire image. No task poll or waker is called.
 pub struct Interrupt<B: 'static, E: SignalExecutor, A: 'static = Timg0AlarmProgram> {
     active: Option<Bundle<B, A>>,
-    receive: Receiver<B, A>,
-    send: Sender<B, A>,
+    receive: Receiver<Bundle<B, A>>,
+    send: Sender<CompletedBundle<B, A>>,
     signal: &'static IrqSignal<E>,
 }
 impl<I: Entry<Part = Timg0AlarmInterrupt> + 'static, E: SignalExecutor> Interrupt<Bound<I>, E> {
@@ -266,7 +268,7 @@ impl<B: 'static, E: SignalExecutor, A: 'static> Interrupt<B, E, A> {
             .or_else(|| self.receive.try_receive().ok())
         else {
             // Startup and completion stop/mask the program. An acknowledged
-            // event without custody is impossible; retain every owner in
+            // event without custody remains unproven; retain every owner in
             // place while the image records these observations and resets.
             return Err(SarAlarmWithoutBundle {
                 observation,
@@ -283,7 +285,12 @@ impl<B: 'static, E: SignalExecutor, A: 'static> Interrupt<B, E, A> {
             }
             Event::Complete(result) => {
                 bundle.alarm.disarm();
-                bundle.result = Some(result);
+                let bundle = CompletedBundle {
+                    phy: bundle.phy,
+                    alarm: bundle.alarm,
+                    bound: bundle.bound,
+                    result,
+                };
                 if let Err(refused) = self.send.try_send(bundle) {
                     refused
                         .0

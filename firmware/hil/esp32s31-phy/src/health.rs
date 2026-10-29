@@ -10,10 +10,8 @@ use oer_esp32s31_phy::{
 use oer_hil_protocol::RequestIdentity;
 use oer_time::Clock;
 
-pub type Request = oer_hil_agent::base::Either<
-    crate::services::HealthRequest,
-    oer_hil_agent::capture::Request,
->;
+pub type Request =
+    oer_hil_agent::base::Either<crate::services::HealthRequest, oer_hil_agent::capture::Request>;
 pub enum Answer {
     Rejected(oer_hil_protocol::base::RejectReason),
     Started(HealthStarted),
@@ -58,14 +56,12 @@ impl Observer<'_> {
     fn measurement(&mut self, read: Bracket, value: MeasurementValue) {
         // Cold calibration visits several frequencies. Configured capture channel
         // must not be substituted for the measurement's actual channel or gain.
-        self.store
-            .push(Record::Measurement(Measurement {
-                read,
-                channel: None,
-                gain: None,
-                value,
-            }))
-            .unwrap_or_else(|fault| crate::health::count_fault(fault));
+        self.store.push(Record::Measurement(Measurement {
+            read,
+            channel: None,
+            gain: None,
+            value,
+        }));
     }
     fn point(&mut self, value: MeasurementValue) {
         let at = now();
@@ -180,16 +176,14 @@ impl PhyTargetObserver for Observer<'_> {
             Operation::Temperature => TrackingOperation::Temperature,
             other => TrackingOperation::Other(other as u8),
         };
-        self.store
-            .push(Record::Tracking(Tracking {
-                condition: None,
-                operation,
-                due: Due::Unknown,
-                disposition,
-                at_micros: now(),
-                committed: 0,
-            }))
-            .unwrap_or_else(|fault| crate::health::count_fault(fault));
+        self.store.push(Record::Tracking(Tracking {
+            condition: None,
+            operation,
+            due: Due::Unknown,
+            disposition,
+            at_micros: now(),
+            committed: 0,
+        }));
         if disposition == Disposition::Failed {
             self.store.fail();
         }
@@ -224,20 +218,18 @@ pub fn temperature(store: &mut Store, state: &oer_esp32s31_phy::PhyState, channe
         }),
     };
     let at = now();
-    store
-        .push(Record::Signal(Signal {
-            channel,
-            gain: None,
-            read: Bracket {
-                first_micros: at,
-                last_micros: at,
-            },
-            value: SignalValue::Temperature(Temperature {
-                sensor_units: observed.value,
-                acquisition,
-            }),
-        }))
-        .unwrap_or_else(|fault| crate::health::count_fault(fault));
+    store.push(Record::Signal(Signal {
+        channel,
+        gain: None,
+        read: Bracket {
+            first_micros: at,
+            last_micros: at,
+        },
+        value: SignalValue::Temperature(Temperature {
+            sensor_units: observed.value,
+            acquisition,
+        }),
+    }));
 }
 
 pub fn cut(store: &mut Store, runtime: &oer_esp32s31_hal::owner::RadioAccess, cut: Cut) {
@@ -253,15 +245,13 @@ pub fn cut(store: &mut Store, runtime: &oer_esp32s31_hal::owner::RadioAccess, cu
     let d = rx.decode_errors;
     macro_rules! counter {
         ($kind:ident, $value:expr) => {
-            store
-                .push(Record::Counter(Counter {
-                    cut,
-                    epoch,
-                    read,
-                    kind: CounterKind::$kind,
-                    value: $value,
-                }))
-                .unwrap_or_else(|fault| crate::health::count_fault(fault))
+            store.push(Record::Counter(Counter {
+                cut,
+                epoch,
+                read,
+                kind: CounterKind::$kind,
+                value: $value,
+            }))
         };
     }
     macro_rules! c16 { ($($kind:ident = $field:ident),* $(,)?) => { $(counter!($kind, CounterValue::Modulo16(p.$field));)* }; }
@@ -317,20 +307,18 @@ pub fn signal(store: &mut Store, runtime: &oer_esp32s31_hal::owner::RadioAccess)
     };
     let first_micros = now();
     let (raw, quarter_db) = runtime.noise_floor_snapshot();
-    store
-        .push(Record::Signal(Signal {
-            read: Bracket {
-                first_micros,
-                last_micros: now(),
-            },
-            channel: config.channel,
-            gain: None,
-            value: SignalValue::NoiseFloor(NoiseFloor::SixteenthsDb12 {
-                raw,
-                quarter_db: quarter_db as i16,
-            }),
-        }))
-        .unwrap_or_else(|fault| crate::health::count_fault(fault));
+    store.push(Record::Signal(Signal {
+        read: Bracket {
+            first_micros,
+            last_micros: now(),
+        },
+        channel: config.channel,
+        gain: None,
+        value: SignalValue::NoiseFloor(NoiseFloor::SixteenthsDb12 {
+            raw,
+            quarter_db: quarter_db as i16,
+        }),
+    }));
 }
 pub fn received(
     store: &mut Store,
@@ -346,24 +334,22 @@ pub fn received(
         return;
     }
     let at = now();
-    store
-        .push(Record::Signal(Signal {
-            read: Bracket {
-                first_micros: at,
-                last_micros: at,
-            },
-            channel,
-            gain: None,
-            value: SignalValue::Received {
-                peer: config.peer,
-                rssi_dbm: frame.rssi_dbm,
-                rate: frame.observed_phy().map(|r| ReceivedRate {
-                    family: r.bb_format,
-                    code: r.rate,
-                }),
-            },
-        }))
-        .unwrap_or_else(|fault| crate::health::count_fault(fault));
+    store.push(Record::Signal(Signal {
+        read: Bracket {
+            first_micros: at,
+            last_micros: at,
+        },
+        channel,
+        gain: None,
+        value: SignalValue::Received {
+            peer: config.peer,
+            rssi_dbm: frame.rssi_dbm,
+            rate: frame.observed_phy().map(|r| ReceivedRate {
+                family: r.bb_format,
+                code: r.rate,
+            }),
+        },
+    }));
 }
 
 /// Retained native predicates at one instant; actual branch outcomes follow separately.
@@ -374,56 +360,50 @@ pub fn inspection(store: &mut Store, phy: &oer_esp32s31_phy::concurrent::Concurr
         return;
     };
     let due = |due| if due { Due::Due } else { Due::NotDue };
-    store
-        .push(Record::Tracking(Tracking {
-            condition: None,
-            operation: TrackingOperation::Tick,
-            due: due(matches!(
-                i.schedule,
-                oer_esp32s31_phy::tracking::schedule::Schedule::Due(_)
-            )),
+    store.push(Record::Tracking(Tracking {
+        condition: None,
+        operation: TrackingOperation::Tick,
+        due: due(matches!(
+            i.schedule,
+            oer_esp32s31_phy::tracking::schedule::Schedule::Due(_)
+        )),
+        disposition: Disposition::Inspected,
+        at_micros,
+        committed: 0,
+    }));
+    if let Some(r) = i.rfpll {
+        store.push(Record::Tracking(Tracking {
+            operation: TrackingOperation::Rfpll,
+            condition: Some(ThermalCondition {
+                current: r.current_temperature,
+                reference: r.reference_temperature,
+                threshold: r.threshold(),
+                inhibited: i.inhibited,
+            }),
+            due: due(r.is_due()),
             disposition: Disposition::Inspected,
             at_micros,
             committed: 0,
-        }))
-        .unwrap_or_else(|fault| crate::health::count_fault(fault));
-    if let Some(r) = i.rfpll {
-        store
-            .push(Record::Tracking(Tracking {
-                operation: TrackingOperation::Rfpll,
-                condition: Some(ThermalCondition {
-                    current: r.current_temperature,
-                    reference: r.reference_temperature,
-                    threshold: r.threshold(),
-                    inhibited: i.inhibited,
-                }),
-                due: due(r.is_due()),
-                disposition: Disposition::Inspected,
-                at_micros,
-                committed: 0,
-            }))
-            .unwrap_or_else(|fault| crate::health::count_fault(fault));
+        }));
     }
     if let Some(cal) = i.wifi.and_then(|w| w.calibration) {
         for (operation, r) in [
             (TrackingOperation::Common, cal.common),
             (TrackingOperation::Transmit, cal.transmit),
         ] {
-            store
-                .push(Record::Tracking(Tracking {
-                    operation,
-                    condition: Some(ThermalCondition {
-                        current: r.current,
-                        reference: r.reference,
-                        threshold: r.threshold,
-                        inhibited: i.inhibited,
-                    }),
-                    due: due(r.is_due()),
-                    disposition: Disposition::Inspected,
-                    at_micros,
-                    committed: 0,
-                }))
-                .unwrap_or_else(|fault| crate::health::count_fault(fault));
+            store.push(Record::Tracking(Tracking {
+                operation,
+                condition: Some(ThermalCondition {
+                    current: r.current,
+                    reference: r.reference,
+                    threshold: r.threshold,
+                    inhibited: i.inhibited,
+                }),
+                due: due(r.is_due()),
+                disposition: Disposition::Inspected,
+                at_micros,
+                committed: 0,
+            }));
         }
     }
 }
@@ -431,38 +411,22 @@ pub fn inspection(store: &mut Store, phy: &oer_esp32s31_phy::concurrent::Concurr
 pub fn retained_detector(store: &mut Store, state: &oer_esp32s31_phy::PhyState) {
     let p = state.pwdet_parameters();
     let at = now();
-    store
-        .push(Record::Measurement(Measurement {
-            read: Bracket {
-                first_micros: at,
-                last_micros: at,
-            },
-            channel: None,
-            gain: None,
-            value: MeasurementValue::RetainedPowerDetector {
-                tx_path: p.pbus_tx_path_value,
-                rx_path: p.pbus_rx_path_value,
-                dco: p.dco,
-                clear_tone_after_ready: p.clear_tone_after_ready,
-                reference_codes: p.reference_codes,
-                calibrated: p.already_calibrated,
-            },
-        }))
-        .unwrap_or_else(|fault| crate::health::count_fault(fault));
+    store.push(Record::Measurement(Measurement {
+        read: Bracket {
+            first_micros: at,
+            last_micros: at,
+        },
+        channel: None,
+        gain: None,
+        value: MeasurementValue::RetainedPowerDetector {
+            tx_path: p.pbus_tx_path_value,
+            rx_path: p.pbus_rx_path_value,
+            dco: p.dco,
+            clear_tone_after_ready: p.clear_tone_after_ready,
+            reference_codes: p.reference_codes,
+            calibrated: p.already_calibrated,
+        },
+    }));
 }
 
 pub(crate) mod startup;
-
-/// An impossible exact-count overflow keeps the recording owner's borrow
-/// alive through the image's retained reset.
-pub(crate) fn count_fault(fault: oer_esp32s31_instrumentation_hil::store::CountOverflow) -> ! {
-    oer_espressif_staged_runtime::panic::reset_fault::<oer_esp32s31_hal::platform::Port>(
-        oer_espressif_staged_runtime::panic::FaultReason::HilHealthCount,
-        [
-            fault.kind as u32,
-            u32::from(fault.count),
-            fault.stored as u32,
-            0,
-        ],
-    )
-}

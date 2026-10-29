@@ -18,3 +18,52 @@ pub(crate) fn serve<R>(line: &impl SoftwareLine, drain: impl FnOnce() -> R) -> R
 
 #[cfg(test)]
 mod tests;
+
+/// One of the four software interrupt identities used by an executor.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(u8)]
+pub enum SoftwareInterrupt {
+    Zero,
+    One,
+    Two,
+    Three,
+}
+impl SoftwareInterrupt {
+    pub const fn from_index(index: u8) -> Option<Self> {
+        match index {
+            0 => Some(Self::Zero),
+            1 => Some(Self::One),
+            2 => Some(Self::Two),
+            3 => Some(Self::Three),
+            _ => None,
+        }
+    }
+    /// A fixed source, checked during monomorphization.
+    ///
+    /// ```compile_fail
+    /// use oer_espressif_executor::SoftwareInterrupt;
+    /// const INVALID: SoftwareInterrupt = SoftwareInterrupt::constant::<4>();
+    /// ```
+    pub const fn constant<const SWI: u8>() -> Self {
+        const {
+            match Self::from_index(SWI) {
+                Some(swi) => swi,
+                None => panic!("software interrupt is out of range"),
+            }
+        }
+    }
+    /// Select from the four source slots without a runtime bounds path.
+    #[cfg(feature = "chip")]
+    pub(crate) const fn at<T>(self, entries: &[T; 4]) -> &T {
+        let [zero, one, two, three] = entries;
+        match self {
+            Self::Zero => zero,
+            Self::One => one,
+            Self::Two => two,
+            Self::Three => three,
+        }
+    }
+    pub const fn index(self) -> usize {
+        self as usize
+    }
+}

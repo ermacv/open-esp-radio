@@ -12,6 +12,11 @@ fn doorbell_constructor_checks_direction_and_urgent_source_identity() {
     let scratch = tempfile::tempdir_in(scratch_root).expect("own compiler scratch");
     for (case, code, expected) in [
         (
+            "software_interrupt_range",
+            "error[E0080]",
+            "software interrupt is out of range",
+        ),
+        (
             "doorbell_direction",
             "error[E0080]",
             "a request handler must be above its executor",
@@ -34,8 +39,9 @@ fn doorbell_constructor_checks_direction_and_urgent_source_identity() {
             &format!("include!(\"{}/tests/ui/support/", manifest.display()),
         );
         fs::write(scratch.path().join("Cargo.toml"), format!(
-        "[package]\nname = \"doorbell-direction\"\nversion = \"0.0.0\"\nedition = \"2024\"\n[workspace]\n[lib]\npath = \"case.rs\"\n[dependencies]\noer-espressif-interrupt-table = {{ path = {:?} }}\n",
-        manifest.join("../../../chips/espressif/interrupt-table")
+        "[package]\nname = \"doorbell-direction\"\nversion = \"0.0.0\"\nedition = \"2024\"\n[workspace]\n[lib]\npath = \"case.rs\"\n[dependencies]\noer-espressif-interrupt-table = {{ path = {:?} }}\noer-espressif-platform-port = {{ path = {:?} }}\n",
+        manifest.join("../../../chips/espressif/interrupt-table"),
+        manifest.join("../../../chips/espressif/platform-port")
     )).expect("write isolated compiler manifest");
         for (mode, cfg, accepted) in [("pass", "any()", true), ("reject", "all()", false)] {
             fs::write(

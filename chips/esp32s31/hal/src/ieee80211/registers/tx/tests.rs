@@ -70,12 +70,11 @@ fn a_legacy_preparation_publishes_six_words_of_the_reversed_bank() {
     let dma = dma();
     let before = HostWords::filled(0);
     let mut memory = before.clone();
-    assert!(
-        memory
-            .owners()
-            .registers
-            .prepare_bound_legacy_mac_tx(&dma, 0, legacy_program(&dma))
-    );
+    assert!(memory.owners().registers.prepare_bound_legacy_mac_tx(
+        &dma,
+        MacTxQueueIndex::constant::<0>(),
+        legacy_program(&dma)
+    ));
 
     // CONTROL and CONFIG of the queue control, PLCP1, PTI, LENGTH_CONTROL
     // and POWER of the queue vector; nothing else.
@@ -91,7 +90,7 @@ fn a_legacy_preparation_publishes_six_words_of_the_reversed_bank() {
     assert_eq!((control, vector, changes.len()), (2, 4, 6));
 
     let owners = memory.owners();
-    let bank = queue::bank(0);
+    let bank = queue::bank(MacTxQueueIndex::constant::<0>());
     let queue_control = &owners.registers.mac.wifi_mac_tx_queue_control;
     let control = queue_control.read_control_n(bank);
     assert_eq!(control.descriptor_address_low().get(), HEAD & 0xf_ffff);
@@ -141,8 +140,8 @@ fn whole_word_publications_clear_every_other_field_while_updates_keep_them() {
     let mut owners = memory.owners();
     owners
         .registers
-        .program_legacy_mac_tx_ppdu(0, legacy_program(&dma));
-    let bank = queue::bank(0);
+        .program_legacy_mac_tx_ppdu(MacTxQueueIndex::constant::<0>(), legacy_program(&dma));
+    let bank = queue::bank(MacTxQueueIndex::constant::<0>());
     let vectors = &owners.registers.mac.wifi_mac_tx_queue_vector;
     let plcp1 = vectors.read_plcp1(bank);
     assert!(!plcp1.high_control_28() && !plcp1.cbw40());
@@ -159,7 +158,7 @@ fn whole_word_publications_clear_every_other_field_while_updates_keep_them() {
         .registers
         .mac
         .wifi_mac_he_init_suffix
-        .read_queue_control(queue::he_queue_control(0));
+        .read_queue_control(queue::he_queue_control(MacTxQueueIndex::constant::<0>()));
     assert!(!he.trigger_based_enable() && he.qos_null_to_translated_bss());
 }
 
@@ -168,12 +167,11 @@ fn a_busy_queue_is_not_prepared() {
     let dma = dma();
     let before = HostWords::filled(u32::MAX);
     let mut memory = before.clone();
-    assert!(
-        !memory
-            .owners()
-            .registers
-            .prepare_bound_legacy_mac_tx(&dma, 1, legacy_program(&dma))
-    );
+    assert!(!memory.owners().registers.prepare_bound_legacy_mac_tx(
+        &dma,
+        MacTxQueueIndex::constant::<1>(),
+        legacy_program(&dma)
+    ));
     assert!(before.changes(&memory).is_empty());
 }
 
@@ -184,9 +182,12 @@ fn starting_a_bound_chain_sets_only_enable_and_valid() {
     memory
         .owners()
         .registers
-        .program_legacy_mac_tx_ppdu(2, legacy_program(&dma));
+        .program_legacy_mac_tx_ppdu(MacTxQueueIndex::constant::<2>(), legacy_program(&dma));
     let before = memory.clone();
-    memory.owners().registers.start_bound_mac_tx(&dma, 2);
+    memory
+        .owners()
+        .registers
+        .start_bound_mac_tx(&dma, MacTxQueueIndex::constant::<2>());
     let changes = before.changes(&memory);
     assert_eq!(changes.len(), 1);
     let control = memory
@@ -194,7 +195,7 @@ fn starting_a_bound_chain_sets_only_enable_and_valid() {
         .registers
         .mac
         .wifi_mac_tx_queue_control
-        .read_control_n(queue::bank(2));
+        .read_control_n(queue::bank(MacTxQueueIndex::constant::<2>()));
     assert!(control.valid() && control.enable());
     assert_eq!(control.descriptor_address_low().get(), HEAD & 0xf_ffff);
 }
@@ -206,7 +207,7 @@ fn a_completion_is_read_from_the_alternate_result_after_a_trigger_based_send() {
     let completion = memory
         .owners()
         .registers
-        .take_mac_tx_completion(1)
+        .take_mac_tx_completion(MacTxQueueIndex::constant::<1>())
         .expect("every completion bit reads set");
     assert!(completion.last_tx_was_trigger_based() && completion.trigger_flow());
     assert_eq!(completion.status(), 0xf);
@@ -226,17 +227,22 @@ fn no_completion_is_taken_while_none_is_pending() {
         memory
             .owners()
             .registers
-            .take_mac_tx_completion(0)
+            .take_mac_tx_completion(MacTxQueueIndex::constant::<0>())
             .is_none()
     );
     assert!(
         memory
             .owners()
             .registers
-            .take_mac_block_ack_completion(0)
+            .take_mac_block_ack_completion(MacTxQueueIndex::constant::<0>())
             .is_none()
     );
-    assert!(!memory.owners().registers.begin_mac_tx_timeout_abort(0));
+    assert!(
+        !memory
+            .owners()
+            .registers
+            .begin_mac_tx_timeout_abort(MacTxQueueIndex::constant::<0>())
+    );
     assert!(before.changes(&memory).is_empty());
 }
 
@@ -245,7 +251,7 @@ fn a_completed_queue_detaches_with_its_descriptor_head() {
     let mut memory = HostWords::filled(u32::MAX);
     let before = memory.clone();
     let outcome = memory.owners().registers.with_detached_mac_tx(
-        3,
+        MacTxQueueIndex::constant::<3>(),
         MacTxDetachReason::Completed,
         |detached| detached.confirms_descriptor_head(0x2fff_ffff),
     );
@@ -258,11 +264,11 @@ fn a_completed_queue_detaches_with_its_descriptor_head() {
 fn a_collision_detach_without_the_event_changes_nothing() {
     let before = HostWords::filled(0);
     let mut memory = before.clone();
-    let outcome =
-        memory
-            .owners()
-            .registers
-            .with_detached_mac_tx(0, MacTxDetachReason::Collision, |_| ());
+    let outcome = memory.owners().registers.with_detached_mac_tx(
+        MacTxQueueIndex::constant::<0>(),
+        MacTxDetachReason::Collision,
+        |_| (),
+    );
     assert_eq!(outcome, MacTxDetachOutcome::NoEvent);
     assert!(before.changes(&memory).is_empty());
 }
@@ -283,7 +289,7 @@ fn pti_programs_the_reversed_bank_in_five_lane_edges() {
         },
     );
     let owners = memory.owners();
-    let bank = queue::bank(3);
+    let bank = queue::bank(MacTxQueueIndex::constant::<3>());
     let lanes = owners.registers.mac.wifi_mac_tx_queue_vector.read_pti(bank);
     assert_eq!(
         [lanes.pti_0(), lanes.pti_1(), lanes.pti_2(), lanes.pti_3()].map(|lane| lane.get()),
@@ -310,10 +316,11 @@ fn a_foreign_dma_chain_is_refused_before_writes_with_static_panic_bytes() {
     let before = HostWords::filled(0);
     let mut memory = before.clone();
     let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        memory
-            .owners()
-            .registers
-            .prepare_bound_legacy_mac_tx(&foreign, 0, legacy_program(&dma));
+        memory.owners().registers.prepare_bound_legacy_mac_tx(
+            &foreign,
+            MacTxQueueIndex::constant::<0>(),
+            legacy_program(&dma),
+        );
     }))
     .expect_err("a program belongs to its own DMA chain");
     assert!(before.changes(&memory).is_empty());

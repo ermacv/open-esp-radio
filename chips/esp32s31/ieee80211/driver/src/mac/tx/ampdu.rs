@@ -8,6 +8,7 @@
 #![forbid(unsafe_code)]
 
 use crate::mac::tx_work::MacTxWork;
+use oer_esp32s31_hal::types::MacTxQueueIndex;
 use oer_ieee80211_wire::sequence::SequenceNumber;
 
 use core::{marker::PhantomPinned, pin::Pin};
@@ -92,7 +93,7 @@ pub enum HtAmpduTxError {
         format: HtAmpduTxFormat,
     },
     InvalidTriggerReservation {
-        queue: u8,
+        queue: MacTxQueueIndex,
         subframes: u8,
     },
     FrameTooLong,

@@ -70,6 +70,8 @@ mod software_line;
 #[cfg(feature = "chip")]
 pub mod systimer;
 #[cfg(any(feature = "chip", test))]
+pub use software_line::SoftwareInterrupt;
+#[cfg(any(feature = "chip", test))]
 pub mod task;
 #[cfg(feature = "chip")]
 mod time_driver;
@@ -90,7 +92,7 @@ pub use executor::{
 #[cfg(any(feature = "chip", test))]
 pub use task::{AlreadyStarted, Spawner, TaskId, Tasks};
 #[cfg(feature = "chip")]
-pub use time_driver::{TimeSetup, alarm_interrupt, bind, init};
+pub use time_driver::{TimeDriverReady, TimeSetup, alarm_interrupt, bind, init};
 #[cfg(feature = "chip")]
 pub use urgent_sources::{UrgentSource, UrgentSources};
 

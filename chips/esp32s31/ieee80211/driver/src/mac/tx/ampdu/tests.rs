@@ -40,7 +40,7 @@ impl TxHardware for CompletionHardware {
     fn prepare_bound_legacy_tx(
         &mut self,
         _: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
-        _: u8,
+        _: oer_esp32s31_hal::types::MacTxQueueIndex,
         _: MacLegacyTxProgram,
     ) -> bool {
         false
@@ -49,14 +49,14 @@ impl TxHardware for CompletionHardware {
     fn start_bound_legacy_tx(
         &mut self,
         _: &dyn HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
-        _: u8,
+        _: oer_esp32s31_hal::types::MacTxQueueIndex,
     ) {
     }
 
     fn prepare_bound_ht_tx(
         &mut self,
         _: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
-        _: u8,
+        _: oer_esp32s31_hal::types::MacTxQueueIndex,
         _: MacHtTxProgram,
     ) -> bool {
         true
@@ -65,21 +65,24 @@ impl TxHardware for CompletionHardware {
     fn start_bound_ht_tx(
         &mut self,
         _: &dyn HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
-        _: u8,
+        _: oer_esp32s31_hal::types::MacTxQueueIndex,
     ) {
     }
 
-    fn take_tx_completion(&mut self, _: u8) -> Option<MacTxCompletionObservation> {
+    fn take_tx_completion(
+        &mut self,
+        _: oer_esp32s31_hal::types::MacTxQueueIndex,
+    ) -> Option<MacTxCompletionObservation> {
         None
     }
 
-    fn begin_tx_timeout_abort(&mut self, _: u8) -> bool {
+    fn begin_tx_timeout_abort(&mut self, _: oer_esp32s31_hal::types::MacTxQueueIndex) -> bool {
         false
     }
 
     fn with_tx_queue_detached<R>(
         &mut self,
-        _: u8,
+        _: oer_esp32s31_hal::types::MacTxQueueIndex,
         _: u32,
         _: MacTxDetachReason,
         _: impl for<'detached> FnOnce(MacTxQueueDetached<'detached>) -> R,
@@ -87,7 +90,10 @@ impl TxHardware for CompletionHardware {
         MacTxDetachOutcome::NoEvent
     }
 
-    fn take_block_ack_completion(&mut self, _: u8) -> Option<MacHtAmpduCompletionObservation> {
+    fn take_block_ack_completion(
+        &mut self,
+        _: oer_esp32s31_hal::types::MacTxQueueIndex,
+    ) -> Option<MacHtAmpduCompletionObservation> {
         self.completion.take()
     }
 }
@@ -151,7 +157,7 @@ impl TxHardware for DetachingCompletionHardware {
     fn prepare_bound_legacy_tx(
         &mut self,
         _: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
-        _: u8,
+        _: oer_esp32s31_hal::types::MacTxQueueIndex,
         _: MacLegacyTxProgram,
     ) -> bool {
         false
@@ -160,14 +166,14 @@ impl TxHardware for DetachingCompletionHardware {
     fn start_bound_legacy_tx(
         &mut self,
         _: &dyn HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
-        _: u8,
+        _: oer_esp32s31_hal::types::MacTxQueueIndex,
     ) {
     }
 
     fn prepare_bound_ht_tx(
         &mut self,
         _: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
-        _: u8,
+        _: oer_esp32s31_hal::types::MacTxQueueIndex,
         program: MacHtTxProgram,
     ) -> bool {
         if !self.reject_publication {
@@ -179,14 +185,14 @@ impl TxHardware for DetachingCompletionHardware {
     fn start_bound_ht_tx(
         &mut self,
         _: &dyn HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
-        _: u8,
+        _: oer_esp32s31_hal::types::MacTxQueueIndex,
     ) {
     }
 
     fn prepare_bound_he_tx(
         &mut self,
         _: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
-        _: u8,
+        _: oer_esp32s31_hal::types::MacTxQueueIndex,
         program: oer_esp32s31_hal::types::MacHeTxProgram,
     ) -> bool {
         if !self.reject_publication {
@@ -195,18 +201,21 @@ impl TxHardware for DetachingCompletionHardware {
         !self.reject_publication
     }
 
-    fn take_tx_completion(&mut self, _: u8) -> Option<MacTxCompletionObservation> {
+    fn take_tx_completion(
+        &mut self,
+        _: oer_esp32s31_hal::types::MacTxQueueIndex,
+    ) -> Option<MacTxCompletionObservation> {
         None
     }
 
-    fn begin_tx_timeout_abort(&mut self, _: u8) -> bool {
+    fn begin_tx_timeout_abort(&mut self, _: oer_esp32s31_hal::types::MacTxQueueIndex) -> bool {
         self.abort_requested = true;
         true
     }
 
     fn with_tx_queue_detached<R>(
         &mut self,
-        _: u8,
+        _: oer_esp32s31_hal::types::MacTxQueueIndex,
         descriptor_head: u32,
         _: MacTxDetachReason,
         detached: impl for<'detached> FnOnce(MacTxQueueDetached<'detached>) -> R,
@@ -217,7 +226,10 @@ impl TxHardware for DetachingCompletionHardware {
         MacTxDetachOutcome::Detached(detached(MacTxQueueDetached::new_model(descriptor_head)))
     }
 
-    fn take_block_ack_completion(&mut self, _: u8) -> Option<MacHtAmpduCompletionObservation> {
+    fn take_block_ack_completion(
+        &mut self,
+        _: oer_esp32s31_hal::types::MacTxQueueIndex,
+    ) -> Option<MacHtAmpduCompletionObservation> {
         self.completion.take()
     }
 }

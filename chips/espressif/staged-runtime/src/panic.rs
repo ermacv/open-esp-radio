@@ -477,7 +477,13 @@ mod tests {
     }
     #[test]
     fn every_numeric_fault_preserves_exact_words() {
-        for code in (1..=34).chain(256..=260) {
+        for retired in [5, 10, 30] {
+            assert_eq!(FaultReason::from_code(retired), None);
+        }
+        for code in (1..=34)
+            .filter(|code| ![5, 10, 30].contains(code))
+            .chain(256..=260)
+        {
             let reason = FaultReason::from_code(code).unwrap();
             let words = [u32::MAX, 0x80000000, 17, 42];
             let record =

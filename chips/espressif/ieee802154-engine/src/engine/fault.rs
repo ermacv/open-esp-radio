@@ -46,7 +46,6 @@ pub enum ServiceError {
     /// Receive metadata observed an unsupported channel code.
     FrequencyCode(u8),
     /// PHR metadata does not fit the fixed DMA image.
-    FrameMetadata(u8),
     /// A diagnostic total cannot represent the next count.
     Statistics(super::statistics::StatisticsOverflow),
 }

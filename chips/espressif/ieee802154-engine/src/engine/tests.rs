@@ -2346,14 +2346,6 @@ fn invalid_frequency_retains_the_metadata_stage_and_does_not_deliver() {
         assert!(bench.env.notes.is_empty());
         assert!(!bench.engine.rx_index.select(&bench.engine.rx_info).process);
     }
-    assert_eq!(
-        super::frame_metadata(&[0; FRAME_SIZE], 0),
-        Err(super::fault::ServiceError::FrameMetadata(0))
-    );
-    assert_eq!(
-        super::frame_metadata(&[0; FRAME_SIZE], 255),
-        Err(super::fault::ServiceError::FrameMetadata(255))
-    );
 }
 
 #[test]
@@ -2596,4 +2588,18 @@ fn a_tx_abort_fault_retains_a_preceding_ack_coexistence_notification_and_deliver
         [Note::CoexistenceBreak, Note::ReceiveDone { .. }]
     ));
     assert!(bench.engine.rx_index.select(&bench.engine.rx_info).process);
+}
+
+#[test]
+fn every_admitted_phr_length_selects_its_rssi_and_lqi() {
+    let image = core::array::from_fn(|position| position as u8);
+    for phr in 0..=u8::MAX {
+        let length = phr & 0x7f;
+        if length >= super::FRAME_MIN_LEN {
+            assert_eq!(
+                super::frame_metadata(&image, length),
+                ((length - 1) as i8, length)
+            );
+        }
+    }
 }

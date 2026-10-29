@@ -34,7 +34,10 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> Esp32s31Phase<'_, '_, Id, D
 
     /// Hold this AC before it transfers DMA ownership to the real transmitter.
     pub fn debug_hold_publication(&mut self, category: WmmAccessCategory, hold: bool) {
-        let bit = 1 << LegacyTxQueue::from_access_category(category).hardware_index();
+        let bit = 1
+            << LegacyTxQueue::from_access_category(category)
+                .hardware_index()
+                .get();
         let mask = self.held.publication_hold.get();
         self.held
             .publication_hold

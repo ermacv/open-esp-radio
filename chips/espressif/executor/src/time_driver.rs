@@ -27,8 +27,8 @@
 
 use core::{marker::PhantomData, task::Waker};
 
-use crate::{Failure, Fault};
-use oer_memory::{ContextCell, ContextProof};
+use crate::{Failure, Fault, SoftwareInterrupt};
+use oer_memory::{ContextCell, ContextProof, OnceValue};
 
 use embassy_time_driver::Driver;
 use oer_espressif_interrupt_table::Entry;
@@ -49,6 +49,23 @@ const COMPARATOR_COUNT: usize = 3;
 const NO_COMPARATOR: u8 = u8::MAX;
 /// The comparators' 52-bit range.
 const TICK_MASK: u64 = 0xF_FFFF_FFFF_FFFF;
+
+fn alarm_slot<T>(comparator: Comparator, entries: &[T; COMPARATOR_COUNT]) -> &T {
+    let [zero, one, two] = entries;
+    match comparator {
+        Comparator::Zero => zero,
+        Comparator::One => one,
+        Comparator::Two => two,
+    }
+}
+fn alarm_slot_mut<T>(comparator: Comparator, entries: &mut [T; COMPARATOR_COUNT]) -> &mut T {
+    let [zero, one, two] = entries;
+    match comparator {
+        Comparator::Zero => zero,
+        Comparator::One => one,
+        Comparator::Two => two,
+    }
+}
 
 /// One executor's timers. Only that executor's context touches it.
 struct Slot {
@@ -88,12 +105,18 @@ static SLOTS: [ContextCell<Slot, SlotContext>; SOFTWARE_INTERRUPT_COUNT] = [cons
 };
     SOFTWARE_INTERRUPT_COUNT];
 
-/// Each executor's comparator, or [`NO_COMPARATOR`].
-static COMPARATOR_OF: [AtomicU8; SOFTWARE_INTERRUPT_COUNT] =
-    [const { AtomicU8::new(NO_COMPARATOR) }; SOFTWARE_INTERRUPT_COUNT];
-/// Each comparator's executor, or [`NO_EXECUTOR`].
-static EXECUTOR_OF: [AtomicU8; COMPARATOR_COUNT] =
-    [const { AtomicU8::new(NO_EXECUTOR) }; COMPARATOR_COUNT];
+/// A successful assignment always carries both bounded identities.
+#[derive(Clone, Copy)]
+struct Assignment {
+    comparator: Comparator,
+    writer: SoftwareInterrupt,
+}
+/// No assignment exists before the executor's alarm is bound.
+static COMPARATOR_OF: [OnceValue<Assignment>; SOFTWARE_INTERRUPT_COUNT] =
+    [const { OnceValue::new() }; SOFTWARE_INTERRUPT_COUNT];
+/// An alarm has no receiving executor until its assignment is published.
+static EXECUTOR_OF: [OnceValue<SoftwareInterrupt>; COMPARATOR_COUNT] =
+    [const { OnceValue::new() }; COMPARATOR_COUNT];
 /// The one executor that writes the SYSTIMER registers.
 static WRITER: AtomicU8 = AtomicU8::new(NO_EXECUTOR);
 /// Each executor's next deadline, published to the writer.
@@ -108,26 +131,26 @@ static ALARM_FIRED: [AtomicBool; COMPARATOR_COUNT] =
     [const { AtomicBool::new(false) }; COMPARATOR_COUNT];
 
 /// Run `f` on executor `swi`'s slot in its context; refuse a nested borrow.
-fn with_slot<B: Binding, R>(swi: u8, f: impl FnOnce(&mut Slot) -> R) -> Option<R> {
-    if running::<B>() != swi {
+fn with_slot<B: Binding, R>(swi: SoftwareInterrupt, f: impl FnOnce(&mut Slot) -> R) -> Option<R> {
+    if running::<B>() != swi as u8 {
         return None;
     }
-    let cell = SLOTS.get(swi as usize)?;
+    let cell = swi.at(&SLOTS);
     cell.with(&SlotContext(PhantomData), f)
 }
 
 use crate::chip::now;
 
 /// The comparator whose alarm interrupt is `source`.
-const fn comparator_of_source<P: ExecutorPlatform>(source: u16) -> u8 {
-    if source == alarm_source::<P>(0) {
-        0
-    } else if source == alarm_source::<P>(1) {
-        1
-    } else if source == alarm_source::<P>(2) {
-        2
+const fn comparator_of_source<P: ExecutorPlatform>(source: u16) -> Option<Comparator> {
+    if source == alarm_source::<P>(Comparator::Zero) {
+        Some(Comparator::Zero)
+    } else if source == alarm_source::<P>(Comparator::One) {
+        Some(Comparator::One)
+    } else if source == alarm_source::<P>(Comparator::Two) {
+        Some(Comparator::Two)
     } else {
-        NO_COMPARATOR
+        None
     }
 }
 
@@ -150,6 +173,16 @@ enum TimeSetupOwners<P: ExecutorPlatform, A: Entry> {
 /// A refused time-driver setup of binding `B`.
 type SetupFailure<B, A> = Failure<PortOf<B>, TimeSetup<PortOf<B>, A>>;
 
+/// Affine startup authority for binding more alarms after successful init.
+/// Its private constructor runs only after counter publication and the writer's
+/// first alarm binding succeed. It remains on the initialization hart.
+#[must_use = "retain the startup authority while binding additional alarms"]
+pub struct TimeDriverReady<B: Binding> {
+    writer: SoftwareInterrupt,
+    _binding: PhantomData<fn() -> B>,
+    _local: PhantomData<*mut ()>,
+}
+
 /// Install the time driver over the SoC's system timer: `systimer` is
 /// consumed for the rest of the program. Executor `WRITER` serves the
 /// comparator of `alarm`'s source and writes the SYSTIMER registers for
@@ -165,12 +198,13 @@ pub fn init<B: Binding, const WRITER_SWI: u8, A, C>(
     router: &mut oer_espressif_interrupt_table::Router<C>,
     alarm: A,
     part: A::Part,
-) -> Result<(), SetupFailure<B, A>>
+) -> Result<TimeDriverReady<B>, SetupFailure<B, A>>
 where
     A: Entry,
     A::Part: AlarmPart,
     C: oer_espressif_interrupt_table::Controller,
 {
+    let identity = const { SoftwareInterrupt::constant::<WRITER_SWI>() };
     let writer = WRITER.load(Ordering::Acquire);
     if writer != NO_EXECUTOR {
         Fault::TimerInstalled { writer }.reset::<PortOf<B>>();
@@ -200,22 +234,43 @@ where
     {
         Fault::TimerInstalled { writer }.reset::<PortOf<B>>();
     }
-    bind::<B, WRITER_SWI, A, C>(router, alarm, part).map_err(|failure| {
-        failure.map_owners(|refused| TimeSetup {
-            _owners: TimeSetupOwners::Binding { _error: refused },
+    bind_inner::<B, WRITER_SWI, A, C>(identity, router, alarm, part)
+        .map(|()| TimeDriverReady {
+            writer: identity,
+            _binding: PhantomData,
+            _local: PhantomData,
         })
-    })
+        .map_err(|failure| {
+            failure.map_owners(|refused| TimeSetup {
+                _owners: TimeSetupOwners::Binding { _error: refused },
+            })
+        })
 }
 
 /// Give executor `SWI` the comparator of `alarm`'s source, whose table entry
 /// names [`alarm_interrupt`] for that comparator on this core.
 ///
-/// Call it after [`init`] and before interrupts are enabled.
+/// Borrow the authority returned by [`init`], before interrupts are enabled.
 ///
 /// # Errors
 /// A refused route returns its token and part in quarantine. Duplicate
 /// assignment or an unavailable timer bank records a fault and resets.
 pub fn bind<B: Binding, const SWI: u8, A, C>(
+    ready: &mut TimeDriverReady<B>,
+    router: &mut oer_espressif_interrupt_table::Router<C>,
+    alarm: A,
+    part: A::Part,
+) -> Result<(), Failure<PortOf<B>, oer_espressif_interrupt_table::BindError<A>>>
+where
+    A: Entry,
+    A::Part: AlarmPart,
+    C: oer_espressif_interrupt_table::Controller,
+{
+    bind_inner::<B, SWI, A, C>(ready.writer, router, alarm, part)
+}
+
+fn bind_inner<B: Binding, const SWI: u8, A, C>(
+    writer: SoftwareInterrupt,
     router: &mut oer_espressif_interrupt_table::Router<C>,
     alarm: A,
     mut part: A::Part,
@@ -229,39 +284,45 @@ where
         let comparator = comparator_of_source::<PortOf<B>>(
             <A::Part as oer_espressif_interrupt_table::InterruptSource>::SOURCE,
         );
-        if comparator == NO_COMPARATOR {
+        let Some(comparator) = comparator else {
             panic!("the token is not a SYSTIMER alarm");
-        }
+        };
         if SWI as usize >= SOFTWARE_INTERRUPT_COUNT {
             panic!("no such executor");
         }
         comparator
     };
-    if WRITER.load(Ordering::Acquire) == NO_EXECUTOR {
-        Fault::TimerNotInstalled.reset::<PortOf<B>>();
-    }
-    if let Err(previous) = COMPARATOR_OF[SWI as usize].compare_exchange(
-        NO_COMPARATOR,
-        comparator,
-        Ordering::AcqRel,
-        Ordering::Acquire,
-    ) {
+    let executor = const { SoftwareInterrupt::constant::<SWI>() };
+    if executor
+        .at(&COMPARATOR_OF)
+        .set(Assignment { comparator, writer })
+        .is_err()
+    {
+        // init creates the only authority; bind borrows it exclusively and
+        // neither call yields. A duplicate therefore sees a completed earlier
+        // publication. The sentinel also keeps diagnostics nonblocking if a
+        // fault interrupts publication before its READY marker.
+        let previous = executor
+            .at(&COMPARATOR_OF)
+            .get()
+            .map_or(NO_COMPARATOR, |assignment| assignment.comparator as u8);
         Fault::TimerBinding {
             executor: SWI,
-            comparator,
+            comparator: comparator as u8,
             previous,
         }
         .reset::<PortOf<B>>();
     }
-    if let Err(previous) = EXECUTOR_OF[comparator as usize].compare_exchange(
-        NO_EXECUTOR,
-        SWI,
-        Ordering::AcqRel,
-        Ordering::Acquire,
-    ) {
+    if alarm_slot(comparator, &EXECUTOR_OF)
+        .set(const { SoftwareInterrupt::constant::<SWI>() })
+        .is_err()
+    {
+        let previous = alarm_slot(comparator, &EXECUTOR_OF)
+            .get()
+            .map_or(NO_EXECUTOR, |executor| executor as u8);
         Fault::TimerBinding {
             executor: SWI,
-            comparator,
+            comparator: comparator as u8,
             previous,
         }
         .reset::<PortOf<B>>();
@@ -289,7 +350,10 @@ where
         .with(|bank| bank.bind(&mut part))
         .is_none()
     {
-        Fault::TimerBankUnavailable { comparator }.reset::<PortOf<B>>();
+        Fault::TimerBankUnavailable {
+            comparator: comparator as u8,
+        }
+        .reset::<PortOf<B>>();
     }
     router
         .bind(alarm, part)
@@ -320,8 +384,8 @@ fn program<B: Binding>(comparator: Comparator, deadline: u64) {
 }
 
 /// Mark executor `swi`'s task ready, in its context before it polls.
-fn mark(swi: u8) -> impl FnMut(u8) {
-    let ready = ready(swi);
+fn mark(swi: SoftwareInterrupt) -> impl FnMut(u8) {
+    let ready = ready(swi as u8);
     move |index| {
         if let Some(ready) = ready {
             ready.mark(index);
@@ -331,17 +395,24 @@ fn mark(swi: u8) -> impl FnMut(u8) {
 
 /// After `slot`'s queue changed: program its comparator (the writer) or
 /// publish its next deadline to the writer.
-fn rearm<B: Binding>(swi: u8, comparator: Comparator, slot: &mut Slot, now: u64, fired: bool) {
+fn rearm<B: Binding>(
+    swi: SoftwareInterrupt,
+    assignment: Assignment,
+    slot: &mut Slot,
+    now: u64,
+    fired: bool,
+) {
+    let comparator = assignment.comparator;
     let Some(next) = slot.queue.alarm_deadline(fired) else {
         return;
     };
-    let writer = WRITER.load(Ordering::Relaxed);
+    let writer = assignment.writer;
     #[cfg(oer_profile)]
     let start = now;
     if swi == writer {
         program::<B>(comparator, next);
     } else {
-        PUBLISHED[swi as usize].publish(next);
+        swi.at(&PUBLISHED).publish(next);
         pend::<B>(writer);
     }
     #[cfg(oer_profile)]
@@ -356,19 +427,17 @@ fn rearm<B: Binding>(swi: u8, comparator: Comparator, slot: &mut Slot, now: u64,
 /// Serve executor `swi`'s timers, in its context before it polls: dispatch
 /// its expired timers and rearm; the writer also programs the comparators
 /// whose executors published a new deadline.
-pub(crate) fn service<B: Binding>(swi: u8) {
-    let Some(comparator) = COMPARATOR_OF
-        .get(swi as usize)
-        .and_then(|assignment| Comparator::from_index(assignment.load(Ordering::Acquire)))
-    else {
+pub(crate) fn service<B: Binding>(swi: SoftwareInterrupt) {
+    let Some(assignment) = swi.at(&COMPARATOR_OF).get() else {
         return;
     };
+    let comparator = assignment.comparator;
     let _ = with_slot::<B, _>(swi, |slot| {
-        let fired = ALARM_FIRED[comparator as usize].swap(false, Ordering::AcqRel);
+        let fired = alarm_slot(comparator, &ALARM_FIRED).swap(false, Ordering::AcqRel);
         let start = now::<B>();
         #[cfg(oer_profile)]
         if fired {
-            let (entered, acknowledged) = &ALARM_AT[comparator as usize];
+            let (entered, acknowledged) = alarm_slot(comparator, &ALARM_AT);
             if let (Some(entered), Some(acknowledged)) = (entered.read(), acknowledged.read()) {
                 slot.observation
                     .interrupt(entered.value, acknowledged.value);
@@ -379,8 +448,8 @@ pub(crate) fn service<B: Binding>(swi: u8) {
         slot.observation.dispatch(start, now::<B>());
         // Only an actual alarm leaves the comparator idle. A task's self-wake
         // must not disable and program an unchanged comparator on every poll.
-        rearm::<B>(swi, comparator, slot, start, fired);
-        if swi == WRITER.load(Ordering::Relaxed) {
+        rearm::<B>(swi, assignment, slot, start, fired);
+        if swi == assignment.writer {
             program_published::<B>(slot);
         }
     });
@@ -390,18 +459,18 @@ pub(crate) fn service<B: Binding>(swi: u8) {
 /// deadline it has not programmed yet. A torn read is left for the next
 /// pass, which the publisher's pend brings.
 fn program_published<B: Binding>(writer: &mut Slot) {
-    for (swi, cell) in PUBLISHED.iter().enumerate() {
-        let Some(comparator) = Comparator::from_index(COMPARATOR_OF[swi].load(Ordering::Acquire))
-        else {
+    for (swi, (cell, assignment)) in PUBLISHED.iter().zip(COMPARATOR_OF.iter()).enumerate() {
+        let Some(assignment) = assignment.get() else {
             continue;
         };
-        if swi as u8 == WRITER.load(Ordering::Relaxed) {
+        let comparator = assignment.comparator;
+        if swi == assignment.writer.index() {
             continue;
         }
         let Some(published) = cell.read() else {
             continue;
         };
-        let programmed = &mut writer.programmed[comparator as usize];
+        let programmed = alarm_slot_mut(comparator, &mut writer.programmed);
         if *programmed != Some(published.generation) {
             program::<B>(comparator, published.value);
             *programmed = Some(published.generation);
@@ -424,13 +493,12 @@ pub fn alarm_interrupt<B: Binding, const COMPARATOR: u8, P: AlarmPart>(part: &mu
     part.acknowledge();
     #[cfg(oer_profile)]
     {
-        let (entry, acknowledgement) = &ALARM_AT[COMPARATOR as usize];
+        let (entry, acknowledgement) = alarm_slot(P::COMPARATOR, &ALARM_AT);
         entry.publish(entered);
         acknowledgement.publish(now::<B>());
     }
-    ALARM_FIRED[COMPARATOR as usize].store(true, Ordering::Release);
-    let executor = EXECUTOR_OF[COMPARATOR as usize].load(Ordering::Acquire);
-    if executor != NO_EXECUTOR {
+    alarm_slot(P::COMPARATOR, &ALARM_FIRED).store(true, Ordering::Release);
+    if let Some(executor) = alarm_slot(P::COMPARATOR, &EXECUTOR_OF).get() {
         pend::<B>(executor);
     }
 }
@@ -447,18 +515,10 @@ impl<B: Binding> Driver for TimeDriver<B> {
             return;
         };
         let swi = task.executor();
-        let Some(comparator) = COMPARATOR_OF
-            .get(usize::from(swi))
-            .and_then(|assignment| Comparator::from_index(assignment.load(Ordering::Acquire)))
-        else {
-            let comparator = COMPARATOR_OF
-                .get(usize::from(swi))
-                .map_or(NO_COMPARATOR, |assignment| {
-                    assignment.load(Ordering::Acquire)
-                });
+        let Some(assignment) = swi.at(&COMPARATOR_OF).get() else {
             Fault::MissingComparator {
-                executor: swi,
-                comparator,
+                executor: swi as u8,
+                comparator: NO_COMPARATOR,
             }
             .reset::<PortOf<B>>();
         };
@@ -469,7 +529,7 @@ impl<B: Binding> Driver for TimeDriver<B> {
                 .queue
                 .schedule_wake(at, task.index(), now::<B>, mark(swi))
             {
-                rearm::<B>(swi, comparator, slot, now, false);
+                rearm::<B>(swi, assignment, slot, now, false);
             }
         });
         if registered.is_none() {
@@ -482,13 +542,18 @@ impl<B: Binding> Driver for TimeDriver<B> {
 
 #[cfg(oer_profile)]
 pub(crate) fn begin_observation<B: Binding>() -> bool {
-    with_slot::<B, _>(running::<B>(), |slot| slot.observation.begin(now::<B>())).unwrap_or(false)
+    let Some(swi) = SoftwareInterrupt::from_index(running::<B>()) else {
+        return false;
+    };
+    with_slot::<B, _>(swi, |slot| slot.observation.begin(now::<B>())).unwrap_or(false)
 }
 
 #[cfg(oer_profile)]
 // Keep the recorder snapshot's temporary report out of the UART caller frame.
 #[inline(never)]
 pub(crate) fn finish_observation<B: Binding>() -> crate::timer_observation::Report {
-    with_slot::<B, _>(running::<B>(), |slot| slot.observation.finish(now::<B>()))
-        .unwrap_or_default()
+    let Some(swi) = SoftwareInterrupt::from_index(running::<B>()) else {
+        return Default::default();
+    };
+    with_slot::<B, _>(swi, |slot| slot.observation.finish(now::<B>())).unwrap_or_default()
 }

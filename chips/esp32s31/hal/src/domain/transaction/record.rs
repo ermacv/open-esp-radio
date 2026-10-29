@@ -20,7 +20,6 @@ pub fn encode_fault(fault: Fault) -> Result<Record, Error> {
                 SarTransferFault::ProgramUnavailable => 10,
                 SarTransferFault::InvalidDelay { .. } => 11,
                 SarTransferFault::ReplyOccupied { .. } => 12,
-                SarTransferFault::ResultUnavailable => 13,
                 SarTransferFault::ForeignSignal => 14,
                 SarTransferFault::ForeignReunion { .. } => 15,
             };
@@ -118,7 +117,6 @@ pub fn report_fault(record: &mut Record, mut write: impl FnMut(&[u8]) -> bool) -
                 10 => ("SarProgramUnavailable", "maintain"),
                 11 => ("SarInvalidDelay", "maintain"),
                 12 => ("SarReplyOccupied", "maintain"),
-                13 => ("SarResultUnavailable", "maintain"),
                 14 => ("SarForeignSignal", "maintain"),
                 15 => ("SarForeignReunion", "maintain"),
                 16 => ("SarSetupStorage", "none"),

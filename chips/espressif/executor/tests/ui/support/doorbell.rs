@@ -1,12 +1,10 @@
 // The actual doorbell implementation with a synthetic host-owned binding and
 // software lines. No chip instructions, MMIO or unsafe authority are needed
 // for this UI case.
-mod software_line {
-    pub trait SoftwareLine {
-        fn raise(&self);
-        fn lower(&self);
-    }
-}
+#[path = "../../../src/software_line.rs"]
+mod software_line;
+use software_line::SoftwareInterrupt;
+
 mod chip {
     use core::marker::PhantomData;
     pub trait Port {
@@ -34,7 +32,7 @@ mod chip {
         fn raise(&self) {}
         fn lower(&self) {}
     }
-    pub const fn software_interrupt_source<P>(swi: u8) -> u16 {
+    pub const fn software_interrupt_source<P>(swi: super::SoftwareInterrupt) -> u16 {
         swi as u16
     }
     pub mod platform {

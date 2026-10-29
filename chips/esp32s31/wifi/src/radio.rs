@@ -359,7 +359,7 @@ impl<W: Binding> port::Device<TX> for Device<W> {
             oer_esp32s31_ieee80211_driver::tx::WifiTxWake::Interrupt { .. },
         ))) = &result
         {
-            for queue in 0..4 {
+            for queue in oer_esp32s31_hal::types::MacTxQueueIndex::ALL {
                 if <Inner<W> as port::Device<TX>>::hardware(&mut self.0)
                     .wifi_mac_hal()
                     .ordinary_tx_queue_snapshot(queue)

@@ -92,6 +92,10 @@ monotonic floor when preempting strobes prevent verification. The binding
 requires the family driver's latch atoms on the platform port's counter owner;
 HAL performs no retry. S31 selects 16 ticks per microsecond. Alarm
 interrupts never borrow the comparator writer or a task's timer queue.
+Successful `init` returns the affine, hart-local `TimeDriverReady<B>` authority;
+each additional `bind` borrows it. A timer binding cannot precede initialization.
+Software line identities use `SoftwareInterrupt`, and comparator selection uses
+the platform's `Comparator`; fixed source numbers are checked in const contexts.
 
 The interrupt table uses numeric levels and harts and each part's
 `InterruptSource`, with no vendor enum. Executor start and timer binding
@@ -110,8 +114,8 @@ calls its never-returning `reset` to record the named `Fault` through the
 staged runtime's `fatal::reset_recording` on platform `P`. Successful thread execution has
 `Infallible` as its return value. Every firmware caller handles the refusal.
 
-Duplicate publication, missing timer ownership, foreign cooperative context
-and invalid wake indices are named faults. No task, handler, comparator or
+Duplicate publication, missing comparator ownership and foreign cooperative
+context are named faults. No task, handler, comparator or
 line owner is released on their terminal path. Four diagnostic words and the
 reason reuse the runtime's retained panic slot; the next boot prints them,
 retaining the record if console output is refused.

@@ -1,4 +1,5 @@
 //! Read-only CCA/RX observations around diagnostic Wi-Fi bring-up.
+use oer_esp32s31_hal::types::MacTxQueueIndex;
 use oer_diagnostics::Note;
 use oer_embassy_time::EmbassyClock;
 use oer_esp32s31_hal::{
@@ -104,7 +105,9 @@ pub async fn observe_enables<B: PlatformClockBackend, T>(
 ) -> Result<(), RejectReason> {
     // This existing read-only projection samples the shared CCA force fields
     // without publishing or acknowledging anything on the unused TX queue.
-    let mac = runtime.wifi_mac_hal().ordinary_tx_queue_snapshot(0);
+    let mac = runtime
+        .wifi_mac_hal()
+        .ordinary_tx_queue_snapshot(MacTxQueueIndex::Zero);
     crate::transport::CONSOLE
         .note_reliably(&Note::cca_enable(
             point.name(),
