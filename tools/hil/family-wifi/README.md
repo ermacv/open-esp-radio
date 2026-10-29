@@ -52,7 +52,14 @@ The WPA2 station profile uses a 30-second GTK interval.
 Traffic windows are peer-originated ping: 100 requests before departure and ten
 after reconnect. The DUT uses ordinary stack echo replies. Each result compares
 peer ping counts with an independent complete, loss-free ICMP capture, ordered
-identities and one-second request pacing. No `ProbeStation` command or target
+identities and one-second request pacing (0.75–1.25 seconds). The 100-echo
+window checks all identities and replies, including those queued while the
+scenario flushes the neighbor after GTK replacement. Its pacing measurement
+starts after the first ICMP reply following the exact, protected ARP reply
+on the new GTK; at least two subsequent requests are required. The boundary
+is derived from the independent ICMP capture and exact air evidence, and is
+recorded as `wifi-station-icmp-pacing-start-us`. The ten-echo reconnect window
+retains pacing across all its requests. No `ProbeStation` command or target
 traffic counters participate. Product readiness is checked with `GetStationStatus`;
 trace collectors still supply GTK, ARP and radio observations to the existing gates.
 
