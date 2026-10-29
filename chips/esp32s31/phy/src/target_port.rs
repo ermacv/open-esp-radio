@@ -1893,15 +1893,16 @@ impl<P, S: crate::sar_pilot::Service, D: PhyShortDelay, T: Timer, O: PhyTargetOb
                 let mut child = transition
                     .begin_dcode()
                     .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
-                let result = calibration::dcode::<D, _, _>(
-                    self.timer,
-                    &mut child,
-                    self.platform,
-                    self.physical.hardware(),
-                    |locked| self.observer.dcode_pll_lock(locked),
-                    O::OBSERVE_ENGINE_POLLS.then_some(&mut timing),
-                )
-                .await;
+                let result =
+                    crate::executor::boundary::Boundary::new(calibration::dcode::<D, _, _>(
+                        self.timer,
+                        &mut child,
+                        self.platform,
+                        self.physical.hardware(),
+                        |locked| self.observer.dcode_pll_lock(locked),
+                        O::OBSERVE_ENGINE_POLLS.then_some(&mut timing),
+                    ))
+                    .await;
                 if O::OBSERVE_ENGINE_POLLS {
                     self.observer.engine_completed(Operation::Dcode, timing);
                 }
@@ -1922,19 +1923,20 @@ impl<P, S: crate::sar_pilot::Service, D: PhyShortDelay, T: Timer, O: PhyTargetOb
                 let mut child = transition
                     .begin_rx_gain_recalibration()
                     .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
-                let result = calibration::rx_gain_init::<D, _>(
-                    self.timer,
-                    child.transition_mut(),
-                    self.physical.hardware(),
-                    |operation, event| {
-                        if operation.is_rx_gain_region() {
-                            observer.borrow_mut().tracking_operation(operation, event);
-                        }
-                    },
-                    |execution| observer.borrow_mut().rx_gain_execution(execution),
-                    O::OBSERVE_ENGINE_POLLS.then_some(&mut timing),
-                )
-                .await;
+                let result =
+                    crate::executor::boundary::Boundary::new(calibration::rx_gain_init::<D, _>(
+                        self.timer,
+                        child.transition_mut(),
+                        self.physical.hardware(),
+                        |operation, event| {
+                            if operation.is_rx_gain_region() {
+                                observer.borrow_mut().tracking_operation(operation, event);
+                            }
+                        },
+                        |execution| observer.borrow_mut().rx_gain_execution(execution),
+                        O::OBSERVE_ENGINE_POLLS.then_some(&mut timing),
+                    ))
+                    .await;
                 if O::OBSERVE_ENGINE_POLLS {
                     observer
                         .borrow_mut()
@@ -1952,13 +1954,13 @@ impl<P, S: crate::sar_pilot::Service, D: PhyShortDelay, T: Timer, O: PhyTargetOb
                 let mut child = transition
                     .begin_channel_restore()
                     .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
-                calibration::channel::<D, _, _, _>(
+                crate::executor::boundary::Boundary::new(calibration::channel::<D, _, _, _>(
                     self.timer,
                     &mut child,
                     self.platform,
                     self.physical.hardware(),
                     &mut *self.observer,
-                )
+                ))
                 .await?;
                 child
                     .commit()
@@ -1978,15 +1980,16 @@ impl<P, S: crate::sar_pilot::Service, D: PhyShortDelay, T: Timer, O: PhyTargetOb
                 observer
                     .borrow_mut()
                     .tracking_operation(Operation::TxDcPwdet, Event::PollStarted);
-                let result = TargetCompleter::<D, T>::new(self.timer)
-                    .run_calibration_tx_dc_pwdet(
+                let result = crate::executor::boundary::Boundary::new(
+                    TargetCompleter::<D, T>::new(self.timer).run_calibration_tx_dc_pwdet(
                         transition
                             .begin_tx_dc_pwdet()
                             .map_err(|_| PhyTargetPortError::UnexpectedBinding)?,
                         self.physical,
                         &observer,
-                    )
-                    .await;
+                    ),
+                )
+                .await;
                 observer
                     .borrow_mut()
                     .tracking_operation(Operation::TxDcPwdet, Event::PollReady);

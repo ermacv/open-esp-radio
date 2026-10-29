@@ -253,6 +253,8 @@ impl<'a, F: Future> Future for PollPlaced<'a, '_, F> {
         clippy::expect_used,
         reason = "the Future contract: polling after completion may panic, and the wrapper holds the output place once"
     )]
+    // Keep the child's return place out of the enclosing poll's frame.
+    #[inline(never)]
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.get_mut();
         let storage = this

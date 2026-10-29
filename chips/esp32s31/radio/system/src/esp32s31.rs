@@ -801,15 +801,21 @@ where
         }
         let start = self.timer.now();
         let mut observer = self.observer.clone();
-        let (radio, result) = retune::select_wifi_channel(
-            &self.timer,
-            require_radio(self.radio.take(), self.radio_fault),
-            &mut wifi,
-            channel,
-            &mut observer,
-        )
-        .await;
-        self.radio = Some(radio);
+        let result = {
+            let mut operation = core::pin::pin!(retune::select_wifi_channel(
+                &self.timer,
+                require_radio(self.radio.take(), self.radio_fault),
+                &mut wifi,
+                channel,
+                &mut observer,
+            ));
+            owned_operation::run(
+                operation.as_mut(),
+                &mut self.radio,
+                owned_operation::restore,
+            )
+            .await
+        };
         if let Err(error) = result {
             return Err(Failed {
                 returned: wifi,

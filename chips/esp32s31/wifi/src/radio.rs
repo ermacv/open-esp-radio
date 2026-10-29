@@ -189,6 +189,19 @@ pub(crate) async fn drive<W: Binding>(driver: Driver<W>) {
         completion.unregistered();
     }
 }
+// Initialize one slot directly in its static home, outside the driver poll.
+#[inline(never)]
+fn tx_slot(
+    dma: oer_esp32s31_hal::memory::dma_static::Placed<TxDmaStorage<TX>>,
+    storage: &'static StaticCell<TxSlot<TX>>,
+) -> Result<Pin<&'static mut TxSlot<TX>>, InitializationError> {
+    let dma = TxDmaStorage::pin::<ChipDma>(dma).map_err(|_| InitializationError::Tx)?;
+    let slot = storage
+        .try_init_with(|| TxSlot::from_dma(dma))
+        .ok_or(InitializationError::Storage)?;
+    Ok(Pin::new(slot))
+}
+
 async fn install<W: Binding>(
     boot: Boot<W>,
     config: Config,
@@ -259,18 +272,8 @@ async fn install<W: Binding>(
         .ok_or(InitializationError::Storage)?;
     let [t0, t1, t2, t3, t4, t5, t6, t7, t8] = boot.tx;
     let [s0, s1, s2, s3, s4, s5, s6, s7, s8] = &mut storage.slots;
-    macro_rules! slot {
-        ($dma:ident, $slot:ident) => {{
-            let dma = TxDmaStorage::pin::<ChipDma>($dma).map_err(|_| InitializationError::Tx)?;
-            Pin::new(
-                $slot
-                    .try_init(TxSlot::from_dma(dma))
-                    .ok_or(InitializationError::Storage)?,
-            )
-        }};
-    }
     let transmitter = OrdinaryTxOwner::new(WifiTxResources {
-        slot: slot!(t0, s0),
+        slot: tx_slot(t0, s0)?,
         policy: WifiTxRuntimePolicy::vendor_defaults(),
         power: CappedTxPowerProfile::new(power, ceiling),
         entropy: Entropy(boot.entropy.max(1)),
@@ -293,14 +296,14 @@ async fn install<W: Binding>(
             .ok_or(InitializationError::Storage)?,
         transmitter,
         buffers: [
-            slot!(t1, s1),
-            slot!(t2, s2),
-            slot!(t3, s3),
-            slot!(t4, s4),
-            slot!(t5, s5),
-            slot!(t6, s6),
-            slot!(t7, s7),
-            slot!(t8, s8),
+            tx_slot(t1, s1)?,
+            tx_slot(t2, s2)?,
+            tx_slot(t3, s3)?,
+            tx_slot(t4, s4)?,
+            tx_slot(t5, s5)?,
+            tx_slot(t6, s6)?,
+            tx_slot(t7, s7)?,
+            tx_slot(t8, s8)?,
         ],
         config: LowerMacConfig {
             station_address: boot.station,

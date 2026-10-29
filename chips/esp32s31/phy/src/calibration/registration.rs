@@ -631,7 +631,7 @@ impl PhyRegisterTransition {
     pub fn step_local(&mut self) -> Result<PhyRegisterLocalStep, PhyRegisterTransitionError> {
         let phase = self
             .phase
-            .take()
+            .as_mut()
             .ok_or(PhyRegisterTransitionError::AlreadyComplete)?;
         match phase {
             Phase::Prelude(PreludeStep::ApplyProfile) => {
@@ -666,6 +666,7 @@ impl PhyRegisterTransition {
                 Ok(PhyRegisterLocalStep::StateAdvanced)
             }
             Phase::Prelude(step) => {
+                let step = *step;
                 let action = match step {
                     PreludeStep::Prepare => {
                         PhyRegisterAction::Mmio(PhyRegisterMmioAction::PrepareColdStart)
@@ -737,93 +738,40 @@ impl PhyRegisterTransition {
                 self.phase = Some(Phase::Prelude(step));
                 Ok(PhyRegisterLocalStep::External(action))
             }
-            Phase::Rf(mut transition) => {
-                let local = match transition.step_local() {
-                    Ok(local) => local,
-                    Err(error) => {
-                        self.phase = Some(Phase::Rf(transition));
-                        return Err(error.into());
-                    }
-                };
-                match local {
-                    crate::calibration::cold::PhyColdLocalStep::StateAdvanced => {
-                        self.phase = Some(Phase::Rf(transition));
-                        Ok(PhyRegisterLocalStep::StateAdvanced)
-                    }
-                    crate::calibration::cold::PhyColdLocalStep::External(action) => {
-                        self.phase = Some(Phase::Rf(transition));
-                        Ok(PhyRegisterLocalStep::External(PhyRegisterAction::Rf(
-                            action,
-                        )))
-                    }
-                    crate::calibration::cold::PhyColdLocalStep::Complete(outcome) => {
-                        let successful = matches!(
-                            outcome,
-                            crate::analog::i2c::PhyRfInitPrefixOutcome::ChannelFrequencyInitialized { .. }
-                        );
-                        #[cfg(oer_trace)]
-                        {
-                            self.rf_calibration = RfCalibrationDiagnostics::from_outcome(outcome);
-                        }
-                        let state = transition.into_state();
-                        if successful {
-                            self.phase = Some(Phase::Baseband(
-                                crate::calibration::baseband::PhyBbInitTransition::new_on_channel(
-                                    state,
-                                    self.channel_or_frequency,
-                                ),
-                            ));
-                        } else {
-                            self.state = Some(state);
-                            self.begin_cleanup(PhyRegisterFailure::Rf(outcome));
-                        }
-                        Ok(PhyRegisterLocalStep::StateAdvanced)
-                    }
+            Phase::Rf(transition) => match transition.step_local()? {
+                crate::calibration::cold::PhyColdLocalStep::StateAdvanced => {
+                    Ok(PhyRegisterLocalStep::StateAdvanced)
                 }
-            }
-            Phase::Baseband(mut transition) => {
-                let local = match transition.step_local() {
-                    Ok(local) => local,
-                    Err(error) => {
-                        self.phase = Some(Phase::Baseband(transition));
-                        return Err(error.into());
-                    }
-                };
-                match local {
-                    crate::calibration::baseband::PhyBbInitLocalStep::StateAdvanced => {
-                        self.phase = Some(Phase::Baseband(transition));
-                        Ok(PhyRegisterLocalStep::StateAdvanced)
-                    }
-                    crate::calibration::baseband::PhyBbInitLocalStep::RxGain => {
-                        self.phase = Some(Phase::Baseband(transition));
-                        Ok(PhyRegisterLocalStep::RxGain)
-                    }
-                    crate::calibration::baseband::PhyBbInitLocalStep::External(action) => {
-                        self.phase = Some(Phase::Baseband(transition));
-                        Ok(PhyRegisterLocalStep::External(PhyRegisterAction::Baseband(
-                            action,
-                        )))
-                    }
-                    crate::calibration::baseband::PhyBbInitLocalStep::Complete(_) => {
-                        self.state = Some(transition.into_state());
-                        self.phase = Some(Phase::Tail(TailStep::CalibrationClockOff));
-                        Ok(PhyRegisterLocalStep::StateAdvanced)
-                    }
-                    crate::calibration::baseband::PhyBbInitLocalStep::Failed(failure) => {
-                        self.state = Some(transition.into_state());
-                        self.begin_cleanup(PhyRegisterFailure::Baseband(failure));
-                        Ok(PhyRegisterLocalStep::StateAdvanced)
-                    }
+                crate::calibration::cold::PhyColdLocalStep::External(action) => Ok(
+                    PhyRegisterLocalStep::External(PhyRegisterAction::Rf(action)),
+                ),
+                crate::calibration::cold::PhyColdLocalStep::Complete(outcome) => {
+                    self.complete_rf(outcome)
                 }
-            }
+            },
+            Phase::Baseband(transition) => match transition.step_local()? {
+                crate::calibration::baseband::PhyBbInitLocalStep::StateAdvanced => {
+                    Ok(PhyRegisterLocalStep::StateAdvanced)
+                }
+                crate::calibration::baseband::PhyBbInitLocalStep::RxGain => {
+                    Ok(PhyRegisterLocalStep::RxGain)
+                }
+                crate::calibration::baseband::PhyBbInitLocalStep::External(action) => Ok(
+                    PhyRegisterLocalStep::External(PhyRegisterAction::Baseband(action)),
+                ),
+                crate::calibration::baseband::PhyBbInitLocalStep::Complete(_) => {
+                    self.complete_baseband(None)
+                }
+                crate::calibration::baseband::PhyBbInitLocalStep::Failed(failure) => {
+                    self.complete_baseband(Some(failure))
+                }
+            },
             Phase::Temperature(transition) => match transition.action() {
                 crate::analog::temperature::PhyTemperatureAction::Complete(outcome) => {
                     let Some(control) = self.temperature_control else {
-                        self.phase = Some(Phase::Temperature(transition));
                         return Err(PhyRegisterTransitionError::MissingStateOwner);
                     };
                     let Some(state) = self.state.as_mut() else {
-                        self.phase = Some(Phase::Temperature(transition));
                         return Err(PhyRegisterTransitionError::MissingStateOwner);
                     };
                     state.apply_register_temperature_outcome(control, outcome);
@@ -838,12 +786,9 @@ impl PhyRegisterTransition {
                     self.begin_cleanup(PhyRegisterFailure::Temperature(failure));
                     Ok(PhyRegisterLocalStep::StateAdvanced)
                 }
-                action => {
-                    self.phase = Some(Phase::Temperature(transition));
-                    Ok(PhyRegisterLocalStep::External(
-                        PhyRegisterAction::Temperature(action),
-                    ))
-                }
+                action => Ok(PhyRegisterLocalStep::External(
+                    PhyRegisterAction::Temperature(action),
+                )),
             },
             Phase::Tail(TailStep::Temperature) => {
                 self.phase = Some(Phase::Temperature(
@@ -869,6 +814,7 @@ impl PhyRegisterTransition {
                 Ok(PhyRegisterLocalStep::StateAdvanced)
             }
             Phase::Tail(step) => {
+                let step = *step;
                 let action =
                     Self::tail_action(step).ok_or(PhyRegisterTransitionError::WrongCompletion)?;
                 self.phase = Some(Phase::Tail(step));
@@ -882,6 +828,7 @@ impl PhyRegisterTransition {
                     | TailStep::MarkRegistered,
                 failure,
             } => {
+                let failure = *failure;
                 self.phase = Some(Phase::Cleanup {
                     step: TailStep::BbpllOff,
                     failure,
@@ -889,20 +836,74 @@ impl PhyRegisterTransition {
                 Ok(PhyRegisterLocalStep::StateAdvanced)
             }
             Phase::Cleanup { step, failure } => {
+                let (step, failure) = (*step, *failure);
                 let action =
                     Self::tail_action(step).ok_or(PhyRegisterTransitionError::WrongCompletion)?;
                 self.phase = Some(Phase::Cleanup { step, failure });
                 Ok(PhyRegisterLocalStep::External(action))
             }
-            Phase::Complete(outcome) => {
-                self.phase = Some(Phase::Complete(outcome));
-                Ok(PhyRegisterLocalStep::Complete(outcome))
-            }
-            Phase::Failed(failure) => {
-                self.phase = Some(Phase::Failed(failure));
-                Ok(PhyRegisterLocalStep::Failed(failure))
-            }
+            Phase::Complete(outcome) => Ok(PhyRegisterLocalStep::Complete(*outcome)),
+            Phase::Failed(failure) => Ok(PhyRegisterLocalStep::Failed(*failure)),
         }
+    }
+
+    // Move a completed child only at the ownership handoff, outside the step poll.
+    #[inline(never)]
+    fn complete_rf(
+        &mut self,
+        outcome: crate::analog::i2c::PhyRfInitPrefixOutcome,
+    ) -> Result<PhyRegisterLocalStep, PhyRegisterTransitionError> {
+        let phase = self
+            .phase
+            .take()
+            .ok_or(PhyRegisterTransitionError::AlreadyComplete)?;
+        let Phase::Rf(transition) = phase else {
+            self.phase = Some(phase);
+            return Err(PhyRegisterTransitionError::WrongCompletion);
+        };
+        let successful = matches!(
+            outcome,
+            crate::analog::i2c::PhyRfInitPrefixOutcome::ChannelFrequencyInitialized { .. }
+        );
+        #[cfg(oer_trace)]
+        {
+            self.rf_calibration = RfCalibrationDiagnostics::from_outcome(outcome);
+        }
+        let state = transition.into_state();
+        if successful {
+            self.phase = Some(Phase::Baseband(
+                crate::calibration::baseband::PhyBbInitTransition::new_on_channel(
+                    state,
+                    self.channel_or_frequency,
+                ),
+            ));
+        } else {
+            self.state = Some(state);
+            self.begin_cleanup(PhyRegisterFailure::Rf(outcome));
+        }
+        Ok(PhyRegisterLocalStep::StateAdvanced)
+    }
+
+    #[inline(never)]
+    fn complete_baseband(
+        &mut self,
+        failure: Option<crate::calibration::baseband::PhyBbInitFailure>,
+    ) -> Result<PhyRegisterLocalStep, PhyRegisterTransitionError> {
+        let phase = self
+            .phase
+            .take()
+            .ok_or(PhyRegisterTransitionError::AlreadyComplete)?;
+        let Phase::Baseband(transition) = phase else {
+            self.phase = Some(phase);
+            return Err(PhyRegisterTransitionError::WrongCompletion);
+        };
+        self.state = Some(transition.into_state());
+        if let Some(failure) = failure {
+            self.begin_cleanup(PhyRegisterFailure::Baseband(failure));
+        } else {
+            self.phase = Some(Phase::Tail(TailStep::CalibrationClockOff));
+        }
+        Ok(PhyRegisterLocalStep::StateAdvanced)
     }
 
     #[inline(never)]

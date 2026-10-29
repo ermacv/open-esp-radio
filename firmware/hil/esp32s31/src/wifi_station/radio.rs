@@ -17,5 +17,6 @@ pub fn failure(error: wifi::InitializationError) -> ! {
 
 wifi::bind_station! {pub(crate) mod binding{wifi:crate::WifiToken,radio:crate::RadioToken,callbacks:super::station::Callbacks,observer:super::observation::StationObserver,driver_observer:super::observation::DriverObserver,engine:SoftwareKeyUnwrap,events:super::station::ProductEvents,fail:super::failure}}
 pub async fn drive(driver: wifi::Driver<binding::Binding>) {
-    driver.run().await;
+    let mut running = core::pin::pin!(driver.run());
+    super::future::Boundary(running.as_mut()).await;
 }
