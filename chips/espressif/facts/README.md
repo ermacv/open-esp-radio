@@ -76,8 +76,8 @@ for missing guards, invalid alignment or arithmetic overflow.
 `lp-fast-source` is a typed chip/profile startup policy, rather than a
 register code or a property of the board. Its supported value is `xtal`;
 `rc-fast` is refused because no RC_FAST power/readiness policy is supported.
-`generate::lp_fast_source` requires this key and renders a typed PAC constant
-for the boot clock owner. Encodings remain solely in the register model.
+`generate::lp_fast_source` requires this key and renders a typed constant for
+`oer-esp32s31-boot`, using the HAL port's named source type. Encodings remain solely in the register model.
 
 `generate` turns the facts into the sources a person writing them could get
 wrong, each a pure function of the facts; build scripts call it, and nothing

@@ -20,7 +20,7 @@
 //! or the deadline is a typed [`BootFailure`]; no sequence falls back to a
 //! value it did not read.
 //!
-//! The chip PAC implements the register traits of each module with its typed
+//! The chip HAL implements the register traits of each module with its typed
 //! field accessors, one register operation per call; this crate holds the
 //! order of the operations and contains no address. Every trait method takes
 //! an [`Access`] only this crate makes, so the traits are reached only
@@ -33,6 +33,7 @@
 //! }
 //! ```
 //!
+//! - [`drivers`]: LP-fast, brownout, secondary containment, APM and TRNG;
 //! - [`clock`]: the CPU clock profile, its PLL calibrated only when the CPU
 //!   does not already run from it, every divider applied by one update;
 //! - [`cache`]: code published to instruction fetch (data written back, the
@@ -59,6 +60,7 @@ extern crate std;
 
 pub mod cache;
 pub mod clock;
+pub mod drivers;
 pub mod flash;
 pub mod mmu;
 pub mod psram;

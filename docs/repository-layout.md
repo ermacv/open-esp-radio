@@ -22,7 +22,7 @@ folders. This inventory corresponds to `cargo metadata --no-deps`.
 
 ```text
 chips/esp32s31/bluetooth/driver/
-chips/esp32s31/{board, compose, hal, instrumentation, instrumentation-hil,
+chips/esp32s31/{board, boot, compose, hal, instrumentation, instrumentation-hil,
     knowledge, layout, pac, phy, phy-probe}/
 chips/esp32s31/ieee80211/{driver, mac}/
 chips/esp32s31/ieee802154/driver/

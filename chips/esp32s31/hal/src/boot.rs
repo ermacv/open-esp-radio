@@ -1,4 +1,6 @@
-//! The ESP32-S31 bootstrap's facts for the `oer-espressif-boot` sequences:
+//! The ESP32-S31 bootstrap owners and memory/CPU profiles.
+//! LP-fast, brownout and TRNG profiles live in `oer-esp32s31-boot`.
+//! The remaining facts for the `oer-espressif-boot` sequences are:
 //! the CPU clock profiles, the flash read commands and timing candidates,
 //! the octal PSRAM's profile, the named boot waits and the boot budget below
 //! the RTC watchdog the bootloader armed.
@@ -16,11 +18,11 @@ mod psram;
 mod soc;
 
 pub use active_power::ActivePower;
-pub use brownout::{BrownoutFailure, BrownoutRegisters, THRESHOLD_WAIT, apply_idf_policy};
+pub use brownout::BrownoutRegisters;
 pub use cache::{CacheMap, CacheRegisters};
 pub use clock::{
-    BusDividers, ClockRegisters, CpllDividers, CpuRoot, FlashClockWord, LP_FAST_SOURCE,
-    LpFastClock, MemDivider, PsramSupplyLevel,
+    BusDividers, ClockRegisters, CpllDividers, CpuRoot, FlashClockWord, LpFastClock, LpFastSource,
+    MemDivider, PsramSupplyLevel,
 };
 pub use flash::{FlashRegisters, FlashTimingCandidate, FlashTimingWords};
 pub use oer_espressif_boot::{
@@ -33,11 +35,11 @@ pub use oer_espressif_boot::{
     wait::{BootBudget, BootDeadline, BootWait},
 };
 pub use psram::PsramRegisters;
-pub use soc::{Soc, SocFailure};
+pub use soc::Soc;
 
 use oer_esp32s31_pac::{lp_ana::LpAnaBrownout, ownership::AnalogBusPeripherals};
-use oer_mmio::Bits;
-use oer_time::{Clock, Duration};
+pub use oer_mmio::Bits;
+use oer_time::Duration;
 
 #[cfg(test)]
 mod register_tests;
@@ -119,18 +121,20 @@ impl Brownout {
         }
     }
 
-    /// Apply ESP-IDF's application brownout policy and check it reads back
-    /// ([`apply_idf_policy`]).
-    ///
-    /// # Errors
-    ///
-    /// [`BrownoutFailure`].
-    pub fn apply_idf_policy<C: Clock + ?Sized>(
+    /// Lend disjoint detector atoms and the owned analog bus to its driver.
+    pub fn parts(
         &mut self,
-        deadline: &BootDeadline<'_, C>,
-    ) -> Result<(), BrownoutFailure> {
-        let mut bus = crate::phy::i2c::AnalogBus::new(&mut self.analog.i2c_ana_mst);
-        apply_idf_policy(&mut self.registers, &mut bus, deadline)
+    ) -> (
+        &mut BrownoutRegisters,
+        crate::phy::i2c::AnalogBus<
+            '_,
+            oer_mmio::Fixed<{ oer_esp32s31_pac::instances::i2c_ana_mst::BASE }>,
+        >,
+    ) {
+        (
+            &mut self.registers,
+            crate::phy::i2c::AnalogBus::new(&mut self.analog.i2c_ana_mst),
+        )
     }
 }
 

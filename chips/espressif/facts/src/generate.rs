@@ -28,7 +28,7 @@ pub fn lp_fast_source(facts: &Facts) -> Result<String> {
     };
     Ok(format!(
         "// Generated from chip/profile `lp-fast-source`; edit the facts.\n\
-         pub const LP_FAST_SOURCE: root_clk_conf::FastClkSel = root_clk_conf::FastClkSel::{variant};\n"
+         pub const LP_FAST_SOURCE: LpFastSource = LpFastSource::{variant};\n"
     ))
 }
 
@@ -507,9 +507,11 @@ mod tests {
     fn lp_fast_selection_is_generated_from_the_profile_and_requires_a_policy() {
         let mut facts = tracked("esp32s31");
         assert_eq!(facts.lp_fast_source, Some(crate::LpFastSource::Xtal));
-        assert!(lp_fast_source(&facts).expect("explicit policy").contains(
-            "pub const LP_FAST_SOURCE: root_clk_conf::FastClkSel = root_clk_conf::FastClkSel::Xtal;"
-        ));
+        assert!(
+            lp_fast_source(&facts)
+                .expect("explicit policy")
+                .contains("pub const LP_FAST_SOURCE: LpFastSource = LpFastSource::Xtal;")
+        );
         facts.lp_fast_source = None;
         assert!(lp_fast_source(&facts).is_err());
         assert_eq!(

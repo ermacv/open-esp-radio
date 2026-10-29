@@ -1,4 +1,5 @@
-//! The brownout detector's policy: ESP-IDF's application replaces the
+//! The brownout detector's register port for the family driver.
+//! The application policy: ESP-IDF's application replaces the
 //! bootloader's analog mode-1 reset with the software-controlled mode-0
 //! detector, once, before the application runs, and the boot stops unless
 //! the detector reads back in that policy.
@@ -18,42 +19,11 @@
 //! found: no handler is installed.
 
 use oer_esp32s31_pac::{analog_i2c, instances, lp_ana::LpAnaBrownout};
-use oer_espressif_analog::{AnalogRegisterBus, FieldWrite, Step};
-use oer_espressif_boot::wait::{BootDeadline, BootWait, WaitFailure};
-use oer_mmio::{Bits, Fixed, Placement};
-use oer_time::{Clock, Duration};
-
-#[cfg(test)]
-mod tests;
-
-/// Brownout reset wait, in detector cycles (ESP-IDF's fixed `0x3ff`).
-const RESET_WAIT: Bits<10> = Bits::constant::<0x3ff>();
-
-/// Detector cycles before the brownout event (ESP-IDF's fixed `2`).
-const INTR_WAIT: Bits<10> = Bits::constant::<2>();
-
-/// The detector's threshold level, `ESP_BROWNOUT_DET_LVL` 7 (about 2.4 V).
-const THRESHOLD: u8 = 7;
-
-/// One analog-I2C byte transaction of the threshold's write: a few bus
-/// clocks at the master's rate. ESP-IDF's `regi2c_write_mask` polls the
-/// host's busy bit without a limit; this bound is this crate's.
-pub const THRESHOLD_WAIT: BootWait = const {
-    match BootWait::new("bod-threshold", Duration::from_millis(1)) {
-        Ok(wait) => wait,
-        Err(_) => panic!("a boot wait has a nonzero bound"),
-    }
+use oer_espressif_boot::{
+    Access,
+    drivers::brownout::{Mode0, Registers, Settings},
 };
-
-/// Why the policy was not applied.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum BrownoutFailure {
-    /// The threshold's analog-I2C write did not complete within its wait.
-    Threshold(WaitFailure),
-    /// The detector does not read back in the policy.
-    Readback,
-    Transition(oer_espressif_analog::TransitionError),
-}
+use oer_mmio::{Bits, Fixed, Placement};
 
 /// The brownout detector's control words.
 #[must_use = "dropping a register owner permanently loses its register authority"]
@@ -68,11 +38,10 @@ impl BrownoutRegisters {
     }
 }
 
-impl<P: Placement> BrownoutRegisters<P> {
-    /// Take mode 1 into software control, disarm its reset, then configure
-    /// mode 0's waits and actions, clear its count and arm its system
-    /// reset: everything before the threshold.
-    fn configure_mode0(&mut self) {
+impl<P: Placement> Registers for BrownoutRegisters<P> {
+    type Wait = Bits<10>;
+    type Address = analog_i2c::Address;
+    fn configure_mode0(&mut self, _: Access<'_>, settings: Settings<Self::Wait>) {
         // brownout_ll_ana_reset_enable(false): take mode 1 into software
         // control, then disarm its reset.
         self.0.modify_fib_enable(|w| {
@@ -82,13 +51,13 @@ impl<P: Placement> BrownoutRegisters<P> {
             w.set_bod_mode1_reset_ena(false);
         });
         self.0.modify_bod_mode0_cntl(|w| {
-            w.set_bod_mode0_intr_wait(INTR_WAIT);
+            w.set_bod_mode0_intr_wait(settings.interrupt_wait);
         });
         self.0.modify_bod_mode0_cntl(|w| {
-            w.set_bod_mode0_close_flash_ena(true);
+            w.set_bod_mode0_close_flash_ena(settings.close_flash);
         });
         self.0.modify_bod_mode0_cntl(|w| {
-            w.set_bod_mode0_pd_rf_ena(true);
+            w.set_bod_mode0_pd_rf_ena(settings.power_down_rf);
         });
         // brownout_ll_clear_count
         self.0.modify_bod_mode0_cntl(|w| {
@@ -99,78 +68,45 @@ impl<P: Placement> BrownoutRegisters<P> {
         });
         // brownout_ll_reset_config(true, 0x3ff, BROWNOUT_RESET_LEVEL_SYSTEM)
         self.0.modify_bod_mode0_cntl(|w| {
-            w.set_bod_mode0_reset_wait(RESET_WAIT);
+            w.set_bod_mode0_reset_wait(settings.reset_wait);
         });
         self.0.modify_bod_mode0_cntl(|w| {
-            w.set_bod_mode0_reset_ena(true);
+            w.set_bod_mode0_reset_ena(settings.reset_enabled);
         });
         self.0.modify_bod_mode0_cntl(|w| {
-            w.set_bod_mode0_reset_sel(true);
+            w.set_bod_mode0_reset_sel(settings.system_reset);
         });
     }
 
-    /// brownout_ll_bod_enable(true): arm mode 0's event.
-    fn enable(&mut self) {
+    fn enable(&mut self, _: Access<'_>) {
         self.0.modify_bod_mode0_cntl(|w| {
             w.set_bod_mode0_intr_ena(true);
         });
     }
-
-    /// Whether the detector reads back in the policy: mode 1 under software
-    /// control with its reset disarmed, mode 0 armed with its actions and
-    /// waits. The threshold is an analog register the check does not read.
-    fn in_policy(&self) -> bool {
-        let mode0 = self.0.read_bod_mode0_cntl();
+    fn mode0(&self, _: Access<'_>) -> Mode0<Self::Wait> {
+        let word = self.0.read_bod_mode0_cntl();
+        Mode0 {
+            enabled: word.bod_mode0_intr_ena(),
+            settings: Settings {
+                interrupt_wait: word.bod_mode0_intr_wait(),
+                reset_wait: word.bod_mode0_reset_wait(),
+                close_flash: word.bod_mode0_close_flash_ena(),
+                power_down_rf: word.bod_mode0_pd_rf_ena(),
+                reset_enabled: word.bod_mode0_reset_ena(),
+                system_reset: word.bod_mode0_reset_sel(),
+            },
+        }
+    }
+    fn mode1_software(&self, _: Access<'_>) -> bool {
         !self.0.read_fib_enable().bod_mode1_fib()
-            && !self.0.read_bod_mode1_cntl().bod_mode1_reset_ena()
-            && mode0.bod_mode0_reset_ena()
-            && mode0.bod_mode0_reset_sel()
-            && mode0.bod_mode0_intr_ena()
-            && mode0.bod_mode0_pd_rf_ena()
-            && mode0.bod_mode0_close_flash_ena()
-            && mode0.bod_mode0_reset_wait() == RESET_WAIT
-            && mode0.bod_mode0_intr_wait() == INTR_WAIT
+    }
+    fn mode1_reset(&self, _: Access<'_>) -> bool {
+        self.0.read_bod_mode1_cntl().bod_mode1_reset_ena()
+    }
+    fn threshold_field() -> oer_espressif_analog::AnalogField<Self::Address> {
+        analog_i2c::ulp_bod::i2c_bod_threshold::I2C_BOD_THRESHOLD
     }
 }
-
-/// Apply ESP-IDF's application brownout policy over `registers` and the
-/// analog bus `bus`, under `deadline`, then check it reads back.
-///
-/// # Errors
-///
-/// The threshold's write did not complete in its wait or before the
-/// deadline, or the detector does not read back in the policy.
-pub fn apply_idf_policy<P, B, C>(
-    registers: &mut BrownoutRegisters<P>,
-    bus: &mut B,
-    deadline: &BootDeadline<'_, C>,
-) -> Result<(), BrownoutFailure>
-where
-    P: Placement,
-    B: AnalogRegisterBus<Address = analog_i2c::Address>,
-    C: Clock + ?Sized,
-{
-    registers.configure_mode0();
-    let threshold = analog_i2c::ulp_bod::i2c_bod_threshold::I2C_BOD_THRESHOLD;
-    let mut write = match FieldWrite::new(bus, threshold, THRESHOLD) {
-        Ok(write) => write,
-        Err(_) => unreachable!("the threshold level fits its three-bit field"),
-    };
-    deadline
-        .poll(THRESHOLD_WAIT, || match write.poll() {
-            Ok(Step::Ready(())) => Some(Ok(())),
-            Ok(Step::Pending) => None,
-            Err(error) => Some(Err(BrownoutFailure::Transition(error))),
-        })
-        .map_err(BrownoutFailure::Threshold)??;
-    registers.enable();
-    if registers.in_policy() {
-        Ok(())
-    } else {
-        Err(BrownoutFailure::Readback)
-    }
-}
-
 #[cfg(any(test, feature = "test-support"))]
 impl<'a> BrownoutRegisters<oer_mmio::Host<'a>> {
     /// The detector's words over host memory from the instance's base.

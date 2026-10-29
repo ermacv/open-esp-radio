@@ -2,7 +2,7 @@
 //! the clock update, the flash clock, the memory PLL and the PSRAM's supply.
 
 mod lp_fast;
-pub use lp_fast::{LP_FAST_SOURCE, LpFastClock};
+pub use lp_fast::{LpFastClock, LpFastSource};
 
 use oer_espressif_boot::{
     Access, Busy,

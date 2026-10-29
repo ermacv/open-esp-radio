@@ -89,16 +89,28 @@ line17-before16 pair; other pairs, levels and sustained fairness are unqualified
 
 ## Platform clocks
 
-The bootstrap's `boot::LpFastClock` explicitly selects the LP-fast root from
-`lp-fast-source` in the chip/profile facts before SoC initialization and LP
-consumers. The HAL build generates the typed PAC selection; the current
-profile selects XTAL. The existing `LpAonRadioClock` part moves into this
-bootstrap owner; runtime PHY receives its part through the separate runtime
-root and observes the slow source and diagnostic image. Selection preserves
-every other field of `ROOT_CLK_CONF`, waits the sourced 3 µs under the common
-boot deadline, and rejects readback disagreement as `ClockFailure::LpFastReadback`
-with both codes in the terminal boot report. RC_FAST is not a supported
-startup policy: its power/readiness and consumer timing policy is absent.
+The bootstrap's `boot::LpFastClock` implements the family's LP-fast selector
+port. `oer-esp32s31-boot` generates the selection from `lp-fast-source` in
+tracked chip/profile facts (currently XTAL) and supplies its sourced 3 µs
+settle. `oer-espressif-boot::drivers::clock` writes the selector, holds under
+the common boot deadline and rejects readback disagreement as
+`ClockFailure::LpFastReadback` with both codes in the terminal boot report.
+Every neighboring field of `ROOT_CLK_CONF` is preserved. The existing
+`LpAonRadioClock` part moves into this bootstrap owner; runtime PHY receives
+its part through the separate runtime root. RC_FAST has no startup profile.
+
+`boot::BrownoutRegisters` implements the family's brownout port: a fixed
+vendor write series, event enable, and individual word samples. Its owner
+lends that port and its analog bus together. Threshold transaction, timeout
+and readback policy live in `oer-espressif-boot::drivers::brownout`; the
+chip's waits, thresholds and actions live in `oer-esp32s31-boot`.
+
+`boot::Soc` owns the core-control, access-filter and TRNG parts and implements
+`drivers::{cores,access_control,entropy}` ports. The family SoC-init driver
+keeps containment → APM filters → TRNG and its single initial deadline check.
+The chip profile supplies TRNG noise selectors and health-test settings.
+Runtime/fatal core policy remains in `cores`; system-timer latch reading
+remains in `peripherals::system_timer::counter`.
 
 `power::ChipClocks` is the one owner of the platform clock words the radio
 shares with the SoC (`MODEM_LPCON.CLK_CONF`, `HP_SYS_CLKRST.REF_160M_CTRL0`):

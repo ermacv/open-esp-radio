@@ -13,10 +13,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let geometry = oer_espressif_facts::generate::Vectors::of(&facts)?;
     std::fs::write(out.join("interrupts.rs"), geometry.rust()?)?;
     std::fs::write(out.join("pending.rs"), pending_banks(geometry.harts)?)?;
-    std::fs::write(
-        out.join("lp-fast-source.rs"),
-        oer_espressif_facts::generate::lp_fast_source(&facts)?,
-    )?;
     Ok(())
 }
 

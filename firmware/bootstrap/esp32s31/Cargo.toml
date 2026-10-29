@@ -8,6 +8,7 @@ publish.workspace = true
 build = "build.rs"
 
 [dependencies]
+oer-esp32s31-boot = { path = "../../../chips/esp32s31/boot" }
 oer-esp32s31-layout.workspace = true
 oer-espressif-staged-bootstrap = { path = "../../../chips/espressif/staged-bootstrap" }
 oer-esp32s31-hal = { path = "../../../chips/esp32s31/hal" }

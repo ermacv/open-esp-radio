@@ -2,6 +2,7 @@
 members = [
     "chips/esp32s31/bluetooth/driver",
     "chips/esp32s31/knowledge",
+    "chips/esp32s31/boot",
     "tools/vendor/phy-esp32s31",
     "firmware/probes/esp32s31-register",
     "firmware/probes/esp32s31-facts",
@@ -175,6 +176,7 @@ members = [
 default-members = [
     "chips/esp32s31/bluetooth/driver",
     "chips/esp32s31/knowledge",
+    "chips/esp32s31/boot",
     "tools/vendor/phy-esp32s31",
     "tools/vendor/scenario-cli",
     "tools/vendor/cli",
