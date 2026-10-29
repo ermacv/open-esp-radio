@@ -9,7 +9,7 @@ policy. The PHY/RF owner remains borrowed until each started operation returns.
 
 ## Exchange
 
-The optional `health` protocol family has independent paths and schema keys.
+The `health` lifecycle and generic `capture` reader have independent paths and schema keys.
 The existing framing version and 560-byte postcard payload limit apply.
 
 | Request | Response |
@@ -17,10 +17,9 @@ The existing framing version and 560-byte postcard payload limit apply.
 | `health/begin` | `health/started`: boot/id, native capacity and storage size |
 | `health/window` | `health/window-finished`: RX cleanup and natural tracking result |
 | `health/finish` | `health/finished`: immutable counts, dropped records, failure and RF cleanup |
-| `health/counters/read` | `health/counters`: at most 16 records |
-| `health/signals/read` | `health/signals`: at most 8 records |
-| `health/tracking/read` | `health/tracking`: at most 2 records |
-| `health/measurements/read` | `health/measurements`: at most 2 records |
+| `capture/describe` | `capture/description`: identity, record schema, counts and completeness |
+| `capture/records/read` | `capture/records`: at most two opaque dictionary records |
+| `capture/counters/read` | `capture/counters`: aggregate category counts, including history lost to capacity |
 | `health/release` | `health/released`: retire the observation |
 
 The host arms before an explicit full `phy/calibration/start`. That existing cold registration
@@ -85,3 +84,12 @@ never overwrites golden calibration references.
 ## Ownership
 
 Pure radio observations live in `oer-esp32s31-instrumentation::health` without HIL, HAL or storage dependencies. This binding owns the bounded health request/page messages and `store::Store`, the append-only capture store. Publishing a capture freezes its pages; the image retains hardware cleanup and reset policy. The generic HIL agent contains no radio-health storage or dependency. This transport does not start an independent RF measurement.
+
+The generic capture reader serializes `oer-esp32s31-instrumentation::health::Record`
+with `RECORD_SCHEMA`. It freezes with the existing health finish operation;
+reads before finish and stale or out-of-range reads return typed refusals.
+The four aggregate ids are the record dictionary's category ids. They count
+all observations independently of retained pages. The image retains its
+native append-only storage and 128 KiB bound, with four additional `u32`
+aggregate values and a saturation flag. No record dictionary or RF operation
+is owned by the generic agent.

@@ -188,6 +188,9 @@ impl SerialCapture {
         if let Some(response) = reply.decode::<E::Response>() {
             return Ok((reply, Ok(response)));
         }
+        if let Some(oer_hil_protocol::capture::Refused(error)) = reply.decode() {
+            return Err(crate::instrumentation::CaptureError::Device(error).into());
+        }
         match reply.decode::<Rejected>() {
             Some(Rejected(reason)) => Ok((reply, Err(reason))),
             None => Err(format!("device answered {} with {}", E::PATH, reply.path()).into()),
@@ -263,7 +266,9 @@ impl SerialCapture {
                 },
                 session_id,
                 request_id,
-            ) && (message.is::<E::Response>() || message.is::<Rejected>())
+            ) && (message.is::<E::Response>()
+                || message.is::<Rejected>()
+                || message.is::<oer_hil_protocol::capture::Refused>())
         })?
         .ok_or_else(|| format!("device did not answer {}", E::PATH).into())
     }

@@ -5,18 +5,10 @@ framing 2
 health
 [messages]
 health/begin 7f6fb6caa4502b2d endpoint
-health/counters 5faa1e1be6011ae7 topic
-health/counters/read 42aaa115ed31c9a9 endpoint
 health/finish 036e41ddd127f1ba endpoint
 health/finished 1f6135da617ad3f3 topic
-health/measurements 3a66090ba588beda topic
-health/measurements/read 21bc5b95598d4d29 endpoint
 health/release 9780e20f2c149390 endpoint
 health/released 48a6b75e9f1b6516 topic
-health/signals 8ad8eb2ad2e7d1b4 topic
-health/signals/read 433cec6237230699 endpoint
 health/started 74496e1a05141ab5 topic
-health/tracking baa7bf571d1f309b topic
-health/tracking/read ed83d4e71fad3e45 endpoint
 health/window 9b76a03610638ae5 endpoint
 health/window-finished 7cad69d1fb60899b topic

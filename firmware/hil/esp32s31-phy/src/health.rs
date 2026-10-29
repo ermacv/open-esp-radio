@@ -10,16 +10,15 @@ use oer_esp32s31_phy::{
 use oer_hil_protocol::RequestIdentity;
 use oer_time::Clock;
 
-pub use crate::services::HealthRequest as Request;
+pub type Request = oer_hil_agent::base::Either<
+    crate::services::HealthRequest,
+    oer_hil_agent::capture::Request,
+>;
 pub enum Answer {
     Rejected(oer_hil_protocol::base::RejectReason),
     Started(HealthStarted),
     Window(HealthWindow),
     Finished(HealthFinished),
-    Counters(CounterPage),
-    Signals(SignalPage),
-    Tracking(TrackingPage),
-    Measurements(MeasurementPage),
     Released(HealthReleased),
 }
 impl Answer {
@@ -36,14 +35,22 @@ impl Answer {
             Self::Started(v) => send!(v),
             Self::Window(v) => send!(v),
             Self::Finished(v) => send!(v),
-            Self::Counters(v) => send!(v),
-            Self::Signals(v) => send!(v),
-            Self::Tracking(v) => send!(v),
-            Self::Measurements(v) => send!(v),
             Self::Released(v) => send!(v),
         };
     }
 }
+/// Each mounted service retains its own response vocabulary.
+pub type Reply = oer_hil_agent::base::Either<Answer, oer_hil_agent::capture::Answer>;
+
+pub async fn publish(reply: &Reply, id: RequestIdentity) {
+    match reply {
+        oer_hil_agent::base::Either::First(answer) => answer.publish(id).await,
+        oer_hil_agent::base::Either::Second(answer) => {
+            answer.publish(&crate::transport::CONSOLE, id).await;
+        }
+    }
+}
+
 pub struct Observer<'a> {
     pub store: &'a mut Store,
 }

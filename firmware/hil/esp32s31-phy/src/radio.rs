@@ -1143,8 +1143,15 @@ impl Radio {
         &mut self,
         request: crate::health::Request,
         capture_rx: &mut Option<crate::cca_rx::Prepared>,
-    ) -> Result<crate::health::Answer> {
-        use crate::health::{self, Answer as A, Observer, Request};
+    ) -> Result<crate::health::Reply> {
+        use crate::health::{self, Answer as A, Observer};
+        use crate::services::HealthRequest as Request;
+        let request = match request {
+            oer_hil_agent::base::Either::First(request) => request,
+            oer_hil_agent::base::Either::Second(request) => {
+                return Ok(oer_hil_agent::base::Either::Second(request.serve(&self.health)));
+            }
+        };
         use oer_esp32s31_instrumentation::health::*;
         use oer_esp32s31_instrumentation_hil::*;
         let result = match request {
@@ -1201,9 +1208,9 @@ impl Radio {
                     }
                 } else {
                     self.health.fail();
-                    return Ok(A::Window(
+                    return Ok(oer_hil_agent::base::Either::First(A::Window(
                         self.health_failed_window(identity, started_micros)?,
-                    ));
+                    )));
                 };
                 let at = health::now();
                 let (due, disposition, committed, tracking_failed) = match tracking {
@@ -1285,17 +1292,11 @@ impl Radio {
                     )?,
                 )
             }
-            Request::Counters(ReadHealthCounters(r)) => A::Counters(self.health.counters(r)?),
-            Request::Signals(ReadHealthSignals(r)) => A::Signals(self.health.signals(r)?),
-            Request::Tracking(ReadHealthTracking(r)) => A::Tracking(self.health.tracking(r)?),
-            Request::Measurements(ReadHealthMeasurements(r)) => {
-                A::Measurements(self.health.measurements(r)?)
-            }
             Request::Release(ReleaseHealth(identity)) => {
                 A::Released(self.health.release(identity)?)
             }
         };
-        Ok(result)
+        Ok(oer_hil_agent::base::Either::First(result))
     }
     fn health_failed_window(
         &mut self,

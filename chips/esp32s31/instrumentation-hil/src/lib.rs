@@ -25,14 +25,11 @@
         clippy::disallowed_methods
     )
 )]
-//! Frozen, bounded radio observations. No message starts an independent RF measurement.
+//! Radio observation lifecycle and the generic capture reader binding. No message starts an independent RF measurement.
 use oer_esp32s31_instrumentation::health::*;
 use postcard_schema::Schema;
 use serde::{Deserialize, Serialize};
 
-pub const COUNTER_PAGE: usize = 16;
-pub const SIGNAL_PAGE: usize = 8;
-pub const DETAIL_PAGE: usize = 2;
 pub const MAX_RECORDS: usize = 1024;
 pub const PSRAM_BUDGET: usize = 128 * 1024;
 
@@ -108,42 +105,6 @@ impl HealthFinished {
     }
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
-pub struct HealthPageRequest {
-    pub identity: HealthIdentity,
-    pub first: u16,
-    pub count: u8,
-}
-impl HealthPageRequest {
-    pub fn range(self, total: usize, limit: usize) -> Option<core::ops::Range<usize>> {
-        let first = usize::from(self.first);
-        let count = usize::from(self.count);
-        let end = first.checked_add(count)?;
-        (count > 0 && count <= limit && end <= total).then_some(first..end)
-    }
-}
-macro_rules! page {
-    ($request:ident, $page:ident, $record:ty, $limit:ident) => {
-        #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
-        pub struct $request(pub HealthPageRequest);
-        #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
-        pub struct $page {
-            pub identity: HealthIdentity,
-            pub first: u16,
-            pub total: u16,
-            pub records: heapless::Vec<$record, $limit>,
-        }
-    };
-}
-page!(ReadHealthCounters, CounterPage, Counter, COUNTER_PAGE);
-page!(ReadHealthSignals, SignalPage, Signal, SIGNAL_PAGE);
-page!(ReadHealthTracking, TrackingPage, Tracking, DETAIL_PAGE);
-page!(
-    ReadHealthMeasurements,
-    MeasurementPage,
-    Measurement,
-    DETAIL_PAGE
-);
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub struct ReleaseHealth(pub HealthIdentity);
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub struct HealthReleased(pub HealthIdentity);
@@ -155,14 +116,6 @@ oer_hil_protocol::messages! {
     topic HealthWindow = "health/window-finished";
     endpoint FinishHealth = "health/finish" => HealthFinished;
     topic HealthFinished = "health/finished";
-    endpoint ReadHealthCounters = "health/counters/read" => CounterPage;
-    topic CounterPage = "health/counters";
-    endpoint ReadHealthSignals = "health/signals/read" => SignalPage;
-    topic SignalPage = "health/signals";
-    endpoint ReadHealthTracking = "health/tracking/read" => TrackingPage;
-    topic TrackingPage = "health/tracking";
-    endpoint ReadHealthMeasurements = "health/measurements/read" => MeasurementPage;
-    topic MeasurementPage = "health/measurements";
     endpoint ReleaseHealth = "health/release" => HealthReleased;
     topic HealthReleased = "health/released";
 }
@@ -175,3 +128,19 @@ pub mod store;
 /// Reviewed paths, schemas (through keys) and message kinds.
 #[cfg(feature = "registry")]
 pub const MESSAGES_LOCK: &str = include_str!("../messages.lock");
+
+/// Full postcard schema of records served through the generic capture service.
+pub const RECORD_SCHEMA: oer_hil_protocol::Key =
+    oer_hil_protocol::Key::of::<Record>("esp32s31/health/record");
+
+/// The lifecycle dictionary together with the generic service its reader
+/// requires. Hosts must discover both before starting a health observation.
+pub const REQUIRED_KEYS: &[oer_hil_protocol::Key] = &{
+    use oer_hil_agent::base::Service;
+    const GROUPS: &[&[oer_hil_protocol::Key]] = &[KEYS, oer_hil_agent::capture::Request::KEYS];
+    const LEN: usize = KEYS.len() + oer_hil_agent::capture::Request::KEYS.len();
+    match oer_hil_protocol::base::concat_keys::<LEN>(GROUPS) {
+        Some(keys) => keys,
+        None => panic!("health capture requirements contain both mounted services"),
+    }
+};

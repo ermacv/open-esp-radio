@@ -58,6 +58,7 @@ pub use key::{Endpoint, Key, Kind, Message};
 
 // The modules: each is a path prefix and a directory.
 pub mod base;
+pub mod capture;
 pub mod lifecycle;
 pub mod system;
 pub mod telemetry;
@@ -68,6 +69,7 @@ pub fn registry() -> impl Iterator<Item = &'static MessageInfo> {
     [
         base::MESSAGES,
         lifecycle::MESSAGES,
+        capture::MESSAGES,
         system::MESSAGES,
         telemetry::MESSAGES,
     ]

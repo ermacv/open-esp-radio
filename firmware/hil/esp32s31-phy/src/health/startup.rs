@@ -46,7 +46,7 @@ pub(crate) async fn dispatch(mut poster: Poster<Request, Answer>) {
                         >,
                     );
                 health_poster = returned;
-                answer.publish(id).await;
+                health::publish(&answer, id).await;
                 continue;
             }
         };
@@ -181,7 +181,7 @@ pub(crate) async fn serve_radio(radio: &'static mut radio::Radio) {
             let answer = radio
                 .health_request(request, &mut capture_rx)
                 .await
-                .unwrap_or_else(health::Answer::Rejected);
+                .unwrap_or_else(|reason| oer_hil_agent::base::Either::First(health::Answer::Rejected(reason)));
             response.answer(answer);
         }
     }

@@ -24,8 +24,7 @@ oer_hil_agent::requests! {
     /// The radio-health window requests.
     pub enum HealthRequest(sessions = false) {
         Begin(BeginHealth), Window(RunHealthWindow), Finish(FinishHealth),
-        Counters(ReadHealthCounters), Signals(ReadHealthSignals), Tracking(ReadHealthTracking),
-        Measurements(ReadHealthMeasurements), Release(ReleaseHealth),
+        Release(ReleaseHealth),
     }
 }
 
@@ -38,7 +37,7 @@ oer_hil_agent::image_keys! {
 #[cfg(any(test, feature = "diagnostic-radio-health"))]
 oer_hil_agent::image_keys! {
     /// The calibration and capture image with radio-health windows.
-    pub(crate) RADIO_HEALTH_KEYS = [WireRequest, HealthRequest]
+    pub(crate) RADIO_HEALTH_KEYS = [WireRequest, HealthRequest, oer_hil_agent::capture::Request]
 }
 
 #[cfg(test)]
@@ -66,7 +65,18 @@ mod tests {
             .filter(|key| *key != phy::CalibrationCacheRequested::KEY)
             .collect();
         assert_eq!(set(PHY_KEYS), phy);
-        let health: BTreeSet<Key> = phy.iter().chain(health::KEYS).copied().collect();
+        let health: BTreeSet<Key> = phy
+            .iter()
+            .chain(health::KEYS)
+            .chain(oer_hil_agent::capture::Request::KEYS)
+            .copied()
+            .collect();
         assert_eq!(set(RADIO_HEALTH_KEYS), health);
+        let required: BTreeSet<Key> = oer_esp32s31_instrumentation_hil::REQUIRED_KEYS
+            .iter()
+            .copied()
+            .collect();
+        assert!(set(RADIO_HEALTH_KEYS).is_superset(&required));
+        assert!(!set(PHY_KEYS).is_superset(&required));
     }
 }
