@@ -274,35 +274,220 @@ fn record(timing: &mut Timing, start: u64, end: u64, invalid: &mut bool) {
         .is_none();
 }
 
-/// Exclusive diagnostic window of an executor of chip binding `B`. Drop
-/// stops recording, including cancellation. It cannot move to another
-/// executor/core. Hardware timer ownership is unchanged.
-#[cfg(feature = "chip")]
-pub struct Window<B: crate::Binding> {
-    active: bool,
-    _local: core::marker::PhantomData<(*mut (), fn() -> B)>,
-}
-#[cfg(feature = "chip")]
-impl<B: crate::Binding> Window<B> {
-    pub fn begin() -> Option<Self> {
-        crate::time_driver::begin_observation::<B>().then(|| Self {
-            active: true,
-            _local: core::marker::PhantomData,
-        })
+#[cfg(test)]
+mod tests;
+
+/// Extend a wrapping trace timestamp within half its period of this observation.
+/// Requested deadlines may be in the future; event timestamps may not.
+fn timestamp(now: u64, value: u32, future: bool) -> Option<u64> {
+    let delta = value.wrapping_sub(now as u32) as i32;
+    if delta == i32::MIN || (!future && delta > 0) {
+        return None;
     }
-    pub fn finish(mut self) -> Report {
-        self.active = false;
-        crate::time_driver::finish_observation::<B>()
-    }
+    now.checked_add_signed(i64::from(delta))
 }
-#[cfg(feature = "chip")]
-impl<B: crate::Binding> Drop for Window<B> {
-    fn drop(&mut self) {
-        if self.active {
-            let _ = crate::time_driver::finish_observation::<B>();
+
+struct Collector {
+    recorder: Recorder,
+    arm: Option<(u64, u64)>,
+    dispatch: Option<u64>,
+}
+impl Collector {
+    const fn new() -> Self {
+        Self {
+            recorder: Recorder::new(),
+            arm: None,
+            dispatch: None,
         }
+    }
+    fn observe(
+        &mut self,
+        event: oer_espressif_executor::observation::timer::Observation,
+        now: u64,
+        irq: Option<(u64, u64)>,
+    ) {
+        use oer_espressif_executor::observation::timer::Phase;
+        if !self.recorder.enabled() {
+            return;
+        }
+        let Some(at) = timestamp(now, event.at_micros, false) else {
+            self.recorder.report.invalid = true;
+            return;
+        };
+        match event.phase {
+            Phase::Registration | Phase::Arm => {
+                let Some(deadline) = timestamp(now, event.value, true) else {
+                    self.recorder.report.invalid = true;
+                    return;
+                };
+                if event.phase == Phase::Registration {
+                    self.recorder.registration(deadline, at);
+                } else {
+                    if self.arm.replace((deadline, at)).is_some() {
+                        self.recorder.report.invalid = true;
+                    }
+                }
+            }
+            Phase::Armed => match self.arm.take() {
+                Some((deadline, start)) => self.recorder.arm(deadline, start, at),
+                None => self.recorder.report.invalid = true,
+            },
+            Phase::Stop => self.recorder.stop(),
+            Phase::Dispatch => {
+                if event.value != 0 {
+                    match irq {
+                        Some((entered, acknowledged)) => {
+                            self.recorder.interrupt(entered, acknowledged)
+                        }
+                        None => self.recorder.report.invalid = true,
+                    }
+                }
+                if self.dispatch.replace(at).is_some() {
+                    self.recorder.report.invalid = true;
+                }
+            }
+            Phase::Dispatched => match self.dispatch.take() {
+                Some(start) => self.recorder.dispatch(start, at),
+                None => self.recorder.report.invalid = true,
+            },
+            // IRQs publish only to the image's atomic mailbox, never this cell.
+            Phase::Interrupt | Phase::Invalid => self.recorder.report.invalid = true,
+        }
+    }
+    fn begin(&mut self, now: u64) -> bool {
+        if !self.recorder.begin(now) {
+            return false;
+        }
+        self.arm = None;
+        self.dispatch = None;
+        true
     }
 }
 
-#[cfg(test)]
-mod tests;
+/// IRQ-only writer, bounded task read. No lock or mutable report is shared
+/// between the timer IRQ and the radio executor it preempts.
+struct Irq {
+    sequence: core::sync::atomic::AtomicU32,
+    entered: core::sync::atomic::AtomicU32,
+    acknowledged: core::sync::atomic::AtomicU32,
+}
+impl Irq {
+    const fn new() -> Self {
+        use core::sync::atomic::AtomicU32;
+        Self {
+            sequence: AtomicU32::new(0),
+            entered: AtomicU32::new(0),
+            acknowledged: AtomicU32::new(0),
+        }
+    }
+    fn publish(&self, entered: u32, acknowledged: u32) {
+        use core::sync::atomic::{Ordering, fence};
+        self.sequence.fetch_add(1, Ordering::Relaxed);
+        fence(Ordering::Release);
+        self.entered.store(entered, Ordering::Relaxed);
+        self.acknowledged.store(acknowledged, Ordering::Relaxed);
+        self.sequence.fetch_add(1, Ordering::Release);
+    }
+    fn read(&self, now: u64) -> Option<(u64, u64)> {
+        use core::sync::atomic::{Ordering, fence};
+        let first = self.sequence.load(Ordering::Acquire);
+        if first == 0 || first & 1 != 0 {
+            return None;
+        }
+        let entered = self.entered.load(Ordering::Relaxed);
+        let acknowledged = self.acknowledged.load(Ordering::Relaxed);
+        fence(Ordering::Acquire);
+        if self.sequence.load(Ordering::Relaxed) != first {
+            return None;
+        }
+        Some((
+            timestamp(now, entered, false)?,
+            timestamp(now, acknowledged, false)?,
+        ))
+    }
+}
+
+#[cfg(all(target_arch = "riscv32", oer_trace))]
+mod image {
+    use super::*;
+    use oer_espressif_executor::observation::timer::{Observation, Phase};
+    use oer_time::Clock;
+    use oer_trace::{Event, Observer};
+    static TIMER: oer_memory::HandlerCell<Collector> = oer_memory::HandlerCell::new();
+    static STORAGE: static_cell::StaticCell<Collector> = static_cell::StaticCell::new();
+    static IRQ: Irq = Irq::new();
+
+    #[derive(Debug)]
+    pub enum InstallError {
+        StorageClaimed,
+        CellOccupied,
+    }
+    pub fn install() -> Result<(), InstallError> {
+        let storage = STORAGE
+            .try_init(Collector::new())
+            .ok_or(InstallError::StorageClaimed)?;
+        TIMER
+            .install(storage)
+            .map(|_| ())
+            .map_err(|_| InstallError::CellOccupied)
+    }
+    fn now() -> u64 {
+        oer_embassy_time::EmbassyClock.now().as_micros()
+    }
+
+    pub struct TimerObserver;
+    impl Observer for TimerObserver {
+        fn event<E: Event>(&self, event: E) {
+            let Some(event) = Observation::of(&event) else {
+                return;
+            };
+            // This image selects timer reporting only for its radio executor.
+            if event.executor != 2 {
+                return;
+            }
+            if event.phase == Phase::Interrupt {
+                IRQ.publish(event.at_micros, event.value);
+                return;
+            }
+            let now = now();
+            let irq = if event.phase == Phase::Dispatch && event.value != 0 {
+                IRQ.read(now)
+            } else {
+                None
+            };
+            let _ = TIMER.with(|collector| collector.observe(event, now, irq));
+        }
+    }
+    /// Exclusive window on the radio executor; cancellation stops recording.
+    pub struct Window {
+        _local: core::marker::PhantomData<*mut ()>,
+    }
+    impl Window {
+        pub fn begin() -> Option<Self> {
+            TIMER
+                .with(|collector| collector.begin(now()))?
+                .then_some(Self {
+                    _local: core::marker::PhantomData,
+                })
+        }
+        pub fn finish(self) -> Report {
+            TIMER
+                .with(|collector| collector.recorder.finish(now()))
+                .unwrap_or(Report {
+                    invalid: true,
+                    ..Report::default()
+                })
+        }
+    }
+    impl Drop for Window {
+        fn drop(&mut self) {
+            let _ = TIMER.with(|collector| {
+                if collector.recorder.enabled() {
+                    let _ = collector.recorder.finish(now());
+                }
+            });
+        }
+    }
+}
+#[cfg(all(target_arch = "riscv32", oer_trace))]
+pub use image::{TimerObserver, Window, install};

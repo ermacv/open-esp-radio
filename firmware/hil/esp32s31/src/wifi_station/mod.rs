@@ -50,6 +50,7 @@ const CONFIG: RadioConfig = RadioConfig {
 oer_espressif_executor::tasks! {
     /// The radio executor's tasks (P2).
     pub(crate) RadioTasks: InterruptExecutor<Esp32s31, 2> {
+        @observer: crate::measurements::CpuObserver;
         radio_actor(actor: &'static mut Actor) = radio_actor;
         driver(driver: wifi::Driver<radio::binding::Binding>) = radio::drive;
     }
@@ -57,7 +58,8 @@ oer_espressif_executor::tasks! {
 
 oer_espressif_executor::tasks! {
     /// The application executor's tasks.
-    AppTasks: Executor<Esp32s31, 0> {
+    pub(crate) AppTasks: Executor<Esp32s31, 0> {
+        @observer: crate::measurements::CpuObserver;
         console(work: oer_memory::PlacedFuture<'static, ConsoleWork>) = console;
         station_task(work: oer_memory::PlacedFuture<'static, StationWork>) = station_task;
         rtc_watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) = crate::feed_rtc_watchdog;

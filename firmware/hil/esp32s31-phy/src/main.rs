@@ -3,6 +3,8 @@
 #![cfg_attr(target_arch = "riscv32", feature(type_alias_impl_trait))]
 #[cfg(any(target_arch = "riscv32", test))]
 mod ieee802154_fault;
+#[cfg(any(test, all(target_arch = "riscv32", oer_trace)))]
+mod timer_measurements;
 #[cfg(target_arch = "riscv32")]
 include!("entry.rs");
 #[cfg(all(test, not(target_arch = "riscv32")))]

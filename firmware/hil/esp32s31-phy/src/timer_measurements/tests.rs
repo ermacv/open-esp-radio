@@ -148,3 +148,75 @@ fn alarm_program_after_ack_is_still_invalid() {
     assert!(report.invalid);
     assert_eq!(report.overlapping_interrupts, 0);
 }
+
+#[test]
+fn observer_events_drive_the_image_report_across_trace_clock_wrap() {
+    use oer_espressif_executor::observation::timer::{Observation, Phase};
+    let clock = oer_time_virtual::VirtualClock::<1>::new();
+    use oer_time::Clock;
+    clock
+        .advance(oer_time::Duration::from_micros(u64::from(u32::MAX) - 9))
+        .unwrap();
+    let origin = clock.now().as_micros();
+    let mut collector = Collector::new();
+    let irq = Irq::new();
+    assert!(collector.begin(origin));
+    let mut send = |offset, phase, value, irq: Option<(u64, u64)>| {
+        let now = clock.now().as_micros();
+        clock
+            .advance(oer_time::Duration::from_micros(origin + offset - now))
+            .unwrap();
+        collector.observe(
+            Observation {
+                executor: 2,
+                phase,
+                at_micros: (origin + offset) as u32,
+                value,
+            },
+            clock.now().as_micros(),
+            irq,
+        );
+    };
+    send(1, Phase::Registration, (origin + 10) as u32, None);
+    send(2, Phase::Arm, (origin + 10) as u32, None);
+    send(5, Phase::Armed, 0, None);
+    irq.publish((origin + 11) as u32, (origin + 12) as u32);
+    send(14, Phase::Dispatch, 1, irq.read(origin + 14));
+    send(16, Phase::Dispatched, 0, None);
+    let report = collector.recorder.finish(origin + 20);
+    assert!(!report.invalid);
+    assert_eq!(report.registrations, 1);
+    assert_eq!(report.programming.total_micros, 3);
+    assert_eq!(report.irq_ack.total_micros, 1);
+    assert_eq!(report.alarm_to_irq.total_micros, 6);
+    assert_eq!(report.deadline_lateness.total_micros, 1);
+    assert_eq!(report.irq_to_dispatch.total_micros, 3);
+    assert_eq!(report.dispatch.total_micros, 2);
+}
+
+#[test]
+fn incomplete_timer_edges_and_concurrent_irq_are_invalid_not_zero() {
+    use core::sync::atomic::Ordering;
+    use oer_espressif_executor::observation::timer::{Observation, Phase};
+    let irq = Irq::new();
+    assert_eq!(irq.read(10), None);
+    irq.publish(1, 2);
+    assert_eq!(irq.read(10), Some((1, 2)));
+    irq.sequence.store(3, Ordering::Relaxed);
+    assert_eq!(irq.read(10), None);
+    let mut collector = Collector::new();
+    assert!(collector.begin(0));
+    collector.observe(
+        Observation {
+            executor: 2,
+            phase: Phase::Armed,
+            at_micros: 1,
+            value: 0,
+        },
+        1,
+        None,
+    );
+    assert!(collector.recorder.finish(2).invalid);
+    assert_eq!(timestamp(0, 1, false), None);
+    assert_eq!(timestamp(0, 1 << 31, true), None);
+}

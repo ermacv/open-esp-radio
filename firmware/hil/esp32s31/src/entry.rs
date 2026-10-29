@@ -46,6 +46,12 @@ use oer_esp32s31_hal::peripherals::{
     software_interrupt::FromCpu2Irq, system_timer::SystimerAlarm1,
 };
 use oer_espressif_executor::Executor;
+#[cfg(feature = "boot-smoke")]
+use BootSmokeTasks as SingleExecutorTasks;
+#[cfg(feature = "system-watchdog")]
+use system::console::WatchdogTasks as SingleExecutorTasks;
+#[cfg(feature = "system-panic-reset")]
+use system::panic_reset::PanicResetTasks as SingleExecutorTasks;
 
 #[cfg(feature = "wifi-station")]
 mod phy_pilot;
@@ -59,13 +65,13 @@ oer_espressif_staged_runtime::interrupt_table! {
     wake: ExecutorWake = FromCpu0Irq => oer_espressif_executor::wake_handler::<Esp32s31, 0, FromCpu0Irq>, line 40, context app_wake, hart 0, Hardware;
     #[cfg(not(feature = "wifi-station"))]
     /// The Embassy time driver's alarm (system timer comparator 0).
-    alarm: TimeAlarm = SystimerAlarm0 => oer_espressif_executor::alarm_interrupt::<Esp32s31, 0, SystimerAlarm0>, line 17, context app_wake, hart 0, Hardware;
+    alarm: TimeAlarm = SystimerAlarm0 => oer_espressif_executor::alarm_interrupt::<SingleExecutorTasks, 0, SystimerAlarm0>, line 17, context app_wake, hart 0, Hardware;
     #[cfg(feature = "wifi-station")]
     /// The application executor's alarm (system timer comparator 1).
-    alarm: TimeAlarm = SystimerAlarm1 => oer_espressif_executor::alarm_interrupt::<Esp32s31, 1, SystimerAlarm1>, line 41, context app_wake, hart 0, Hardware;
+    alarm: TimeAlarm = SystimerAlarm1 => oer_espressif_executor::alarm_interrupt::<wifi_station::AppTasks, 1, SystimerAlarm1>, line 41, context app_wake, hart 0, Hardware;
     #[cfg(feature = "wifi-station")]
     /// The radio executor's alarm (system timer comparator 0).
-    radio_alarm: RadioAlarmToken = SystimerAlarm0 => oer_espressif_executor::alarm_interrupt::<Esp32s31, 0, SystimerAlarm0>, line 19, context radio, hart 0, Hardware;
+    radio_alarm: RadioAlarmToken = SystimerAlarm0 => oer_espressif_executor::alarm_interrupt::<wifi_station::RadioTasks, 0, SystimerAlarm0>, line 19, context radio, hart 0, Hardware;
     #[cfg(feature = "wifi-station")]
     // SOURCE: family.toml [interrupts] highest-line; HW23_S31_P2_ARBITRATION_20261027
     // measures only this P2 pair on S31: FROM_CPU2 line17 before TIMG0 line16.
@@ -453,3 +459,5 @@ fn fail(failure: fatal::Failure) -> ! {
         let cores::AwaitWatchdog { reason: _ } = cores::software_reset(path);
     })
 }
+
+oer_espressif_executor::time_driver!(Esp32s31);

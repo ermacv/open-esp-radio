@@ -29,7 +29,7 @@ type Pads = oer_esp32s31_compose::console::Pads;
 
 oer_espressif_executor::tasks! {
     /// The watchdog image's tasks.
-    WatchdogTasks: Executor<Esp32s31, 0> {
+    pub(crate) WatchdogTasks: Executor<Esp32s31, 0> {
         test_watchdog(service: DeadlineWatchdog) = test_watchdog;
         reset_on_request() = super::panic::reset_on_request;
         #[cfg(feature = "usb-jtag-off")]

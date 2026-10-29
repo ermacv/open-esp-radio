@@ -8,7 +8,7 @@ use crate::transport::CONSOLE;
 
 oer_espressif_executor::tasks! {
     /// The panic-reset image's tasks.
-    PanicResetTasks: Executor<Esp32s31, 0> {
+    pub(crate) PanicResetTasks: Executor<Esp32s31, 0> {
         reset_on_request() = super::panic::reset_on_request;
         run(usb: crate::transport::Usb, boot: u64) = run;
         rtc_watchdog(watchdog: RtcWatchdog) = crate::feed_rtc_watchdog;

@@ -11,9 +11,10 @@ build = "build.rs"
 
 [package.metadata.open-radio]
 critical-section-hart = "boot"
-instrumentation = ["profile", "debug-control"]
+instrumentation = ["trace", "debug-control"]
 
 [dependencies]
+oer-trace = { path = "../../../portable/trace" }
 bytemuck = { version = "1.25.2", default-features = false, features = ["derive"] }
 
 [features]
@@ -52,6 +53,7 @@ oer-esp32s31-knowledge = { path = "../../../chips/esp32s31/knowledge" }
 oer-radio-regulatory = { path = "../../../protocols/radio/regulatory" }
 
 [target.'cfg(not(target_arch = "riscv32"))'.dev-dependencies]
+oer-espressif-executor = { path = "../../../chips/espressif/executor" }
 heapless = { version = "0.9.3", features = ["serde"] }
 oer-diagnostics = { path = "../../../portable/diagnostics", features = ["render"] }
 oer-esp32s31-instrumentation = { path = "../../../chips/esp32s31/instrumentation" }

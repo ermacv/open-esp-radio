@@ -45,11 +45,11 @@ oer_espressif_staged_runtime::interrupt_table! {
     /// The radio interrupt (P3): both Wi-Fi MAC banks and the doorbell.
     wifi: WifiToken = WifiIrqPart<irq::Lower> => crate::irq::on_wifi, line 18, context radio, hart 0, Hardware;
     /// The radio executor's timer alarm; it only acknowledges and pends.
-    radio_alarm: RadioAlarmToken = SystimerAlarm0 => oer_espressif_executor::alarm_interrupt::<Esp32s31, 0, SystimerAlarm0>, line 19, context radio, hart 0, Hardware;
+    radio_alarm: RadioAlarmToken = SystimerAlarm0 => oer_espressif_executor::alarm_interrupt::<RadioTasks, 0, SystimerAlarm0>, line 19, context radio, hart 0, Hardware;
     /// The console's USB Serial/JTAG interrupt; it raises the endpoint's signal.
     console_usb: ConsoleUsb = ConsoleInterrupt => crate::transport::usb_interrupt, line 41, context app_wake, hart 0, Hardware;
     /// The application executor's timer alarm.
-    app_alarm: AppAlarmToken = SystimerAlarm1 => oer_espressif_executor::alarm_interrupt::<Esp32s31, 1, SystimerAlarm1>, line 42, context app_wake, hart 0, Hardware;
+    app_alarm: AppAlarmToken = SystimerAlarm1 => oer_espressif_executor::alarm_interrupt::<AppTasks, 1, SystimerAlarm1>, line 42, context app_wake, hart 0, Hardware;
 }
 
 oer_espressif_executor::tasks! {
@@ -362,3 +362,5 @@ async fn serve_driver(boot: suite::Boot, channel: suite::DriverChannel) {
 async fn serve_port(channel: suite::FrontendChannel) {
     suite::serve(channel).await
 }
+
+oer_espressif_executor::time_driver!(Esp32s31);

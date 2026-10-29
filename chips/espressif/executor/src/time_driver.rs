@@ -67,14 +67,25 @@ fn alarm_slot_mut<T>(comparator: Comparator, entries: &mut [T; COMPARATOR_COUNT]
     }
 }
 
+macro_rules! timer_observe {
+    ($observer:expr, $executor:expr, $phase:ident, $at:expr, $value:expr) => {
+        #[cfg(oer_trace)]
+        crate::observation::timer::emit(
+            &$observer,
+            $executor,
+            crate::observation::timer::Phase::$phase,
+            $at,
+            $value,
+        );
+    };
+}
+
 /// One executor's timers. Only that executor's context touches it.
 struct Slot {
     queue: WakeQueue,
     /// The writer's view of each comparator it programs for another
     /// executor: the generation of the deadline it programmed.
     programmed: [Option<u32>; COMPARATOR_COUNT],
-    #[cfg(oer_profile)]
-    observation: crate::timer_observation::Recorder,
 }
 
 // Private to with_slot: no caller can apply a proof to a different slot.
@@ -99,8 +110,6 @@ static SLOTS: [ContextCell<Slot, SlotContext>; SOFTWARE_INTERRUPT_COUNT] = [cons
     ContextCell::new(Slot {
         queue: WakeQueue::new(),
         programmed: [None; COMPARATOR_COUNT],
-        #[cfg(oer_profile)]
-        observation: crate::timer_observation::Recorder::new(),
     })
 };
     SOFTWARE_INTERRUPT_COUNT];
@@ -123,10 +132,6 @@ static WRITER: AtomicU8 = AtomicU8::new(NO_EXECUTOR);
 static PUBLISHED: [DeadlineCell; SOFTWARE_INTERRUPT_COUNT] =
     [const { DeadlineCell::new(u64::MAX) }; SOFTWARE_INTERRUPT_COUNT];
 
-#[cfg(oer_profile)]
-/// Each comparator's last alarm entry and acknowledgement, in microseconds.
-static ALARM_AT: [(DeadlineCell, DeadlineCell); COMPARATOR_COUNT] =
-    [const { (DeadlineCell::new(0), DeadlineCell::new(0)) }; COMPARATOR_COUNT];
 static ALARM_FIRED: [AtomicBool; COMPARATOR_COUNT] =
     [const { AtomicBool::new(false) }; COMPARATOR_COUNT];
 
@@ -395,31 +400,41 @@ fn mark(swi: SoftwareInterrupt) -> impl FnMut(u8) {
 
 /// After `slot`'s queue changed: program its comparator (the writer) or
 /// publish its next deadline to the writer.
-fn rearm<B: Binding>(
+fn rearm<B: Binding, O: oer_trace::Observer>(
     swi: SoftwareInterrupt,
     assignment: Assignment,
     slot: &mut Slot,
     now: u64,
     fired: bool,
+    observer: &O,
 ) {
+    let _ = observer;
     let comparator = assignment.comparator;
     let Some(next) = slot.queue.alarm_deadline(fired) else {
         return;
     };
     let writer = assignment.writer;
-    #[cfg(oer_profile)]
-    let start = now;
+    #[cfg(oer_trace)]
+    crate::observation::timer::emit(
+        observer,
+        swi,
+        if next == u64::MAX {
+            crate::observation::timer::Phase::Stop
+        } else {
+            crate::observation::timer::Phase::Arm
+        },
+        now,
+        next,
+    );
     if swi == writer {
         program::<B>(comparator, next);
     } else {
         swi.at(&PUBLISHED).publish(next);
         pend::<B>(writer);
     }
-    #[cfg(oer_profile)]
-    if next == u64::MAX {
-        slot.observation.stop();
-    } else {
-        slot.observation.arm(next, start, self::now::<B>());
+    #[cfg(oer_trace)]
+    if next != u64::MAX {
+        timer_observe!(observer, swi, Armed, self::now::<B>(), 0);
     }
     let _ = now;
 }
@@ -427,28 +442,25 @@ fn rearm<B: Binding>(
 /// Serve executor `swi`'s timers, in its context before it polls: dispatch
 /// its expired timers and rearm; the writer also programs the comparators
 /// whose executors published a new deadline.
-pub(crate) fn service<B: Binding>(swi: SoftwareInterrupt) {
+pub(crate) fn service<B: Binding, T: crate::Tasks<Binding = B>>(swi: SoftwareInterrupt) {
+    let _: PhantomData<T> = PhantomData;
     let Some(assignment) = swi.at(&COMPARATOR_OF).get() else {
         return;
     };
     let comparator = assignment.comparator;
+    #[cfg(oer_trace)]
+    let observer = T::observer();
+    #[cfg(not(oer_trace))]
+    let observer = oer_trace::Noop;
     let _ = with_slot::<B, _>(swi, |slot| {
         let fired = alarm_slot(comparator, &ALARM_FIRED).swap(false, Ordering::AcqRel);
         let start = now::<B>();
-        #[cfg(oer_profile)]
-        if fired {
-            let (entered, acknowledged) = alarm_slot(comparator, &ALARM_AT);
-            if let (Some(entered), Some(acknowledged)) = (entered.read(), acknowledged.read()) {
-                slot.observation
-                    .interrupt(entered.value, acknowledged.value);
-            }
-        }
+        timer_observe!(observer, swi, Dispatch, start, u64::from(fired));
         slot.queue.dispatch_expired(start, mark(swi));
-        #[cfg(oer_profile)]
-        slot.observation.dispatch(start, now::<B>());
+        timer_observe!(observer, swi, Dispatched, now::<B>(), 0);
         // Only an actual alarm leaves the comparator idle. A task's self-wake
         // must not disable and program an unchanged comparator on every poll.
-        rearm::<B>(swi, assignment, slot, start, fired);
+        rearm::<B, _>(swi, assignment, slot, start, fired, &observer);
         if swi == assignment.writer {
             program_published::<B>(slot);
         }
@@ -482,28 +494,35 @@ fn program_published<B: Binding>(writer: &mut Slot) {
 /// (`SYSTIMER_TARGET<COMPARATOR>`), which holds the comparator's alarm part:
 /// it acknowledges the alarm and pends the comparator's executor. It writes
 /// no other register and touches no queue.
-pub fn alarm_interrupt<B: Binding, const COMPARATOR: u8, P: AlarmPart>(part: &mut P) {
+pub fn alarm_interrupt<T: crate::Tasks, const COMPARATOR: u8, P: AlarmPart>(part: &mut P)
+where
+    T::Binding: Binding,
+{
     const {
         if P::COMPARATOR as u8 != COMPARATOR {
             panic!("the part is another comparator's");
         }
     };
-    #[cfg(oer_profile)]
-    let entered = now::<B>();
+    #[cfg(oer_trace)]
+    let entered = now::<T::Binding>();
     part.acknowledge();
-    #[cfg(oer_profile)]
-    {
-        let (entry, acknowledgement) = alarm_slot(P::COMPARATOR, &ALARM_AT);
-        entry.publish(entered);
-        acknowledgement.publish(now::<B>());
+    #[cfg(oer_trace)]
+    if let Some(executor) = alarm_slot(P::COMPARATOR, &EXECUTOR_OF).get() {
+        timer_observe!(
+            T::observer(),
+            executor,
+            Interrupt,
+            entered,
+            now::<T::Binding>()
+        );
     }
     alarm_slot(P::COMPARATOR, &ALARM_FIRED).store(true, Ordering::Release);
     if let Some(executor) = alarm_slot(P::COMPARATOR, &EXECUTOR_OF).get() {
-        pend::<B>(executor);
+        pend::<T::Binding>(executor);
     }
 }
 
-impl<B: Binding> Driver for TimeDriver<B> {
+impl<B: Binding, O: oer_trace::Observer + Send + Sync + 'static> Driver for TimeDriver<B, O> {
     #[inline]
     fn now(&self) -> u64 {
         now::<B>()
@@ -523,13 +542,16 @@ impl<B: Binding> Driver for TimeDriver<B> {
             .reset::<PortOf<B>>();
         };
         let registered = with_slot::<B, _>(swi, |slot| {
-            #[cfg(oer_profile)]
-            slot.observation.registration(at, now::<B>());
+            timer_observe!(self.observer, swi, Registration, now::<B>(), at);
             if let Some(now) = slot
                 .queue
                 .schedule_wake(at, task.index(), now::<B>, mark(swi))
             {
-                rearm::<B>(swi, assignment, slot, now, false);
+                #[cfg(oer_trace)]
+                let observer = &self.observer;
+                #[cfg(not(oer_trace))]
+                let observer = &oer_trace::Noop;
+                rearm::<B, _>(swi, assignment, slot, now, false, observer);
             }
         });
         if registered.is_none() {
@@ -538,22 +560,4 @@ impl<B: Binding> Driver for TimeDriver<B> {
             waker.wake_by_ref();
         }
     }
-}
-
-#[cfg(oer_profile)]
-pub(crate) fn begin_observation<B: Binding>() -> bool {
-    let Some(swi) = SoftwareInterrupt::from_index(running::<B>()) else {
-        return false;
-    };
-    with_slot::<B, _>(swi, |slot| slot.observation.begin(now::<B>())).unwrap_or(false)
-}
-
-#[cfg(oer_profile)]
-// Keep the recorder snapshot's temporary report out of the UART caller frame.
-#[inline(never)]
-pub(crate) fn finish_observation<B: Binding>() -> crate::timer_observation::Report {
-    let Some(swi) = SoftwareInterrupt::from_index(running::<B>()) else {
-        return Default::default();
-    };
-    with_slot::<B, _>(swi, |slot| slot.observation.finish(now::<B>())).unwrap_or_default()
 }

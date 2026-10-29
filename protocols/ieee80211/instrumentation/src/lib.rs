@@ -28,6 +28,11 @@
 //! compiles none of them into its owners.
 
 mod activity;
+mod aggregation;
+pub use aggregation::{
+    AGGREGATION, BaStop, Evidence, ReorderCause, RxBaStarted, RxBaStopped, RxContainment,
+    RxReorder, TxRateSelected,
+};
 mod arp;
 mod esp_now;
 mod event;

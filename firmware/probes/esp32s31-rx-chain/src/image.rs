@@ -76,9 +76,9 @@ oer_espressif_interrupt_table::interrupt_table! {
     // only P2 line17 before16 is measured on S31.
     phy: PhyToken = oer_esp32s31_hal::peripherals::timg0_alarm::Timg0AlarmInterrupt => phy_pilot::interrupt, line 16, context radio_exec, hart 0, Exempt(ExecutorLevel, "SAR/PWDET steps between radio executor rounds");
     radio: RadioToken = FromCpu2Irq => oer_espressif_executor::interrupt_handler::<RadioTasks, FromCpu2Irq>, line 17, context radio_exec, hart 0, Executor;
-    radio_alarm: RadioAlarm = SystimerAlarm0 => oer_espressif_executor::alarm_interrupt::<Esp32s31, 0, SystimerAlarm0>, line 18, context radio_irq, hart 0, Hardware;
+    radio_alarm: RadioAlarm = SystimerAlarm0 => oer_espressif_executor::alarm_interrupt::<RadioTasks, 0, SystimerAlarm0>, line 18, context radio_irq, hart 0, Hardware;
     console_usb: ConsoleUsb = ConsoleInterrupt => crate::usb::interrupt, line 41, context app, hart 0, Hardware;
-    app_alarm: AppAlarm = SystimerAlarm1 => oer_espressif_executor::alarm_interrupt::<Esp32s31, 1, SystimerAlarm1>, line 42, context app, hart 0, Hardware;
+    app_alarm: AppAlarm = SystimerAlarm1 => oer_espressif_executor::alarm_interrupt::<AppTasks, 1, SystimerAlarm1>, line 42, context app, hart 0, Hardware;
 }
 oer_espressif_executor::tasks! {
     RadioTasks: InterruptExecutor<Esp32s31, 2> {
@@ -615,3 +615,5 @@ async fn run_direct(
     // leased host reset; this diagnostic returns no reusable radio/storage.
     Ok(())
 }
+
+oer_espressif_executor::time_driver!(Esp32s31);

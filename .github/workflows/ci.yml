@@ -79,7 +79,7 @@ jobs:
           members=$(jq -r '.workspace_default_members as $members | .packages[]
             | select(.id as $id | $members | index($id))
             | .name + " " + (.manifest_path | rtrimstr("/Cargo.toml"))' <<<"$meta")
-          for cfg in oer_trace oer_profile oer_debug_control; do
+          for cfg in oer_trace oer_debug_control; do
             packages=$(while read -r name directory; do
               if grep -rqE --include='*.rs' "cfg!?\(.*\b$cfg\b" "$directory"; then
                 echo "-p $name"

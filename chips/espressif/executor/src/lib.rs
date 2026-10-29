@@ -39,6 +39,11 @@
 //!   lock is taken on any of these paths; the module documentation of
 //!   `time_driver` has the details.
 
+pub mod observation;
+
+#[doc(hidden)]
+pub use oer_trace as __trace;
+
 #[cfg(feature = "chip")]
 mod binding;
 #[cfg(feature = "chip")]
@@ -95,15 +100,6 @@ pub use task::{AlreadyStarted, Spawner, TaskId, Tasks};
 pub use time_driver::{TimeDriverReady, TimeSetup, alarm_interrupt, bind, init};
 #[cfg(feature = "chip")]
 pub use urgent_sources::{UrgentSource, UrgentSources};
-
-#[cfg(any(all(oer_profile, feature = "chip"), test))]
-pub mod timer_observation;
-
-#[cfg(any(all(oer_profile, feature = "chip"), test))]
-pub mod idle_accounting;
-
-#[cfg(any(all(oer_profile, feature = "chip"), test))]
-pub mod poll_timing;
 
 /// What the expansion of [`bind!`] names in this crate.
 #[cfg(feature = "chip")]

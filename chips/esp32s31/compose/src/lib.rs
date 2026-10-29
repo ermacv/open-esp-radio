@@ -16,8 +16,8 @@
 //!
 //! - `Esp32s31`: the executor's chip binding (chip target only), whose statics `bind!`
 //!   declares here once: the storage of the port's owned blocks, the one
-//!   waker vtable and the Embassy time driver's symbols. Images name it in
-//!   every executor type (`Executor<Esp32s31, 0>`).
+//!   waker vtable. Images name it in every executor type
+//!   (`Executor<Esp32s31, 0>`) and declare their Embassy time driver.
 //!
 //! It also holds the chip's retained fault records, which need both the
 //! HAL's types and the runtime's retained memory and fatal path, so neither

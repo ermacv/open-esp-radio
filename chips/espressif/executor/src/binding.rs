@@ -4,7 +4,7 @@
 //! Rust has no generic statics, so the executor's code is generic over a
 //! binding `B` and the chip's composition crate declares the concrete
 //! statics once, with [`bind!`](crate::bind): the storage, the one waker
-//! vtable and the Embassy time driver's symbols.
+//! vtable. The image declares the Embassy time driver and its symbols.
 
 use core::task::RawWakerVTable;
 
@@ -70,26 +70,35 @@ impl<P: ExecutorPlatform> Storage<P> {
     }
 }
 
-/// The Embassy time driver of binding `B`, whose one exported instance and
-/// symbols [`bind!`](crate::bind) declares.
-pub struct TimeDriver<B>(core::marker::PhantomData<fn() -> B>);
+/// The Embassy time driver of binding `B`, with image-selected observer `O`.
+/// The image declares its one exported instance with [`time_driver!`](crate::time_driver).
+pub struct TimeDriver<B, O> {
+    #[cfg(oer_trace)]
+    pub(crate) observer: O,
+    binding: core::marker::PhantomData<fn() -> B>,
+    observer_type: core::marker::PhantomData<fn() -> O>,
+}
 
-impl<B> TimeDriver<B> {
-    /// The driver, which [`bind!`](crate::bind) declares once.
+impl<B, O> TimeDriver<B, O> {
+    /// The driver, which the image declares once.
     #[allow(
         clippy::new_without_default,
         reason = "the one driver is a static, built in a const context"
     )]
-    pub const fn new() -> Self {
-        Self(core::marker::PhantomData)
+    pub const fn new(#[cfg(oer_trace)] observer: O) -> Self {
+        Self {
+            #[cfg(oer_trace)]
+            observer,
+            binding: core::marker::PhantomData,
+            observer_type: core::marker::PhantomData,
+        }
     }
 }
 
 /// Bind the executor to a chip: implement [`Binding`] for the marker type
 /// `$binding` over the platform port `$port` and declare the binding's
-/// statics once in the calling crate: the storage, the one waker vtable
-/// and the Embassy time driver with its `_embassy_time_now` and
-/// `_embassy_time_schedule_wake` symbols. An image links one binding.
+/// storage and one waker vtable once in the calling crate. An image links
+/// one binding and declares its time driver separately.
 ///
 /// ```ignore
 /// /// The ESP32-S31's executor binding.
@@ -115,19 +124,40 @@ macro_rules! bind {
         /// The executor's one waker vtable.
         static WAKER_VTABLE: ::core::task::RawWakerVTable =
             $crate::task::waker_vtable::<$binding>();
+    };
+}
 
+/// Declare the image's Embassy time driver, with `Noop` by default. An
+/// optional unit-struct observer is instantiated only under `oer_trace`.
+#[macro_export]
+macro_rules! time_driver {
+    ($binding:ty) => {
+        $crate::time_driver!($binding, $crate::__trace::Noop);
+    };
+    ($binding:ty, $observer:path) => {
+        #[cfg(oer_trace)]
+        type ImageTimeDriver = $crate::TimeDriver<$binding, $observer>;
+        #[cfg(not(oer_trace))]
+        type ImageTimeDriver = $crate::TimeDriver<$binding, $crate::__trace::Noop>;
         #[used]
         #[unsafe(link_section = ".critical.data.executor_time")]
-        static EMBASSY_TIME_DRIVER: $crate::TimeDriver<$binding> = $crate::TimeDriver::new();
-
+        static EMBASSY_TIME_DRIVER: ImageTimeDriver = {
+            #[cfg(oer_trace)]
+            {
+                $crate::TimeDriver::new($observer)
+            }
+            #[cfg(not(oer_trace))]
+            {
+                $crate::TimeDriver::new()
+            }
+        };
         #[unsafe(no_mangle)]
         fn _embassy_time_now() -> u64 {
-            <$crate::TimeDriver<$binding> as $crate::__bind::Driver>::now(&EMBASSY_TIME_DRIVER)
+            <ImageTimeDriver as $crate::__bind::Driver>::now(&EMBASSY_TIME_DRIVER)
         }
-
         #[unsafe(no_mangle)]
         fn _embassy_time_schedule_wake(at: u64, waker: &::core::task::Waker) {
-            <$crate::TimeDriver<$binding> as $crate::__bind::Driver>::schedule_wake(
+            <ImageTimeDriver as $crate::__bind::Driver>::schedule_wake(
                 &EMBASSY_TIME_DRIVER,
                 at,
                 waker,

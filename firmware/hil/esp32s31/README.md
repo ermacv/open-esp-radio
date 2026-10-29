@@ -133,3 +133,21 @@ block returns only with a documented drain of the other hart's bus
 transactions after its stall, or one a stand run shows, and a revocation of
 the old owner's accesses.
 
+
+With `wifi-station` and `oer_trace`, `measurements::CPU` receives executor
+boundaries from the application's and radio's task sets. Two `CpuSample`s
+produce a `CpuWindow`: thread idle yields whole-hart busy time and per-mille
+load, while executor work includes preemption and is not additive across
+levels. Sample on the owning hart, in a task, more often than 2^31 us; a
+concurrent read or malformed boundary sequence returns `SampleError`, without
+spinning or changing the observed owner. Debugger-skipped waits are not idle.
+
+`measurements::RADIO` receives station observations directly: admitted
+A-MPDU-contained MPDUs and normalized port bytes, S-MPDUs, unavailable containment, reorder
+holds/releases/missing sequences/duplicates/rejections/clear recycling, RX BA
+activation/retirement and the last selected data rate. Checked weighted totals
+latch `incomplete` on exhaustion or unrepresentable lengths. These image-local
+observations have no verdict thresholds and add no product control messages;
+they are available to workload reporting independently of any retained history.
+There is no TX A-MPDU traffic on the ordinary S31 station port, and containment
+evidence does not provide physical RX aggregate counts or member counts.

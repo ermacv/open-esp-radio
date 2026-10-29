@@ -125,13 +125,9 @@ pub async fn report_preparation(
     }
 }
 
-#[cfg(all(target_arch = "riscv32", oer_profile))]
+#[cfg(all(target_arch = "riscv32", oer_trace))]
 #[inline(never)]
-pub async fn report_timer(
-    window: Option<
-        oer_espressif_executor::timer_observation::Window<oer_esp32s31_compose::Esp32s31>,
-    >,
-) {
+pub async fn report_timer(window: Option<crate::timer_measurements::Window>) {
     let Some(window) = window else {
         return;
     };

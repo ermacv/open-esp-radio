@@ -114,6 +114,11 @@ pub trait Tasks: Sized + 'static {
     const EXECUTOR: u8;
     /// How many tasks the set declares.
     const COUNT: u8;
+    /// Image-selected observer of this executor; the default keeps nothing.
+    #[cfg(oer_trace)]
+    fn observer() -> impl oer_trace::Observer {
+        oer_trace::Noop
+    }
     /// Poll the task at `index` once, if it has started and not finished.
     fn poll(index: u8, token: &PollToken<Self>, cx: &mut Context<'_>);
 }
@@ -589,6 +594,7 @@ macro_rules! tasks {
     };
     (
         @set [$($set_attr:tt)*] [$vis:vis] $set:ident [$binding:ty] [$mode:ty] $executor:literal {
+            $(@observer: $observer:expr;)?
             $(
                 $(#[$attr:meta])*
                 $name:ident ( $($argument:ident : $type:ty),* $(,)? ) = $body:path;
@@ -603,6 +609,10 @@ macro_rules! tasks {
         impl $crate::task::Tasks for $set {
             type Binding = $binding;
             type Mode = $mode;
+            $(
+                #[cfg(oer_trace)]
+                fn observer() -> impl $crate::__trace::Observer { $observer }
+            )?
             const EXECUTOR: u8 = $executor;
             const COUNT: u8 = 0 $(+ { let _ = stringify!($name); 1 })*;
             #[allow(unused_doc_comments, unused_variables)]

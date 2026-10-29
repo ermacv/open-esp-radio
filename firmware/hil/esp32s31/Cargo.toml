@@ -86,6 +86,11 @@ oer-esp32s31-layout = { path = "../../../chips/esp32s31/layout" }
 static_cell.workspace = true
 
 [dev-dependencies]
+oer-time = { path = "../../../portable/time" }
+oer-espressif-executor = { path = "../../../chips/espressif/executor" }
+oer-trace = { path = "../../../portable/trace" }
+oer-time-virtual = { path = "../../../portable/time-virtual" }
+oer-ieee80211-instrumentation = { path = "../../../protocols/ieee80211/instrumentation" }
 oer-diagnostics = { path = "../../../portable/diagnostics", features = ["render"] }
 oer-network-control = { path = "../../../protocols/network-control" }
 oer-ieee80211-control = { path = "../../../protocols/ieee80211/control" }

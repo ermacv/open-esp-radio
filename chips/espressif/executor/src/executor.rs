@@ -192,10 +192,34 @@ fn signal_pending<B: Binding>(swi: SoftwareInterrupt) -> bool {
 
 /// Run `poll` as executor `swi`'s context, at the caller's interrupt level,
 /// and restore the preempted one.
-fn as_running<B: Binding>(swi: u8, poll: impl FnOnce()) {
-    crate::chip::current_hart::<B>()
-        .at(&RUNNING)
-        .enter(swi, interrupt_level(), poll);
+fn as_running<B: Binding, T: Tasks<Binding = B>>(swi: u8, poll: impl FnOnce()) {
+    let _: PhantomData<T> = PhantomData;
+    let hart = crate::chip::current_hart::<B>();
+    #[cfg(oer_trace)]
+    let observer = T::observer();
+    #[cfg(oer_trace)]
+    oer_trace::observe!(
+        observer,
+        crate::observation::Activity::new(
+            crate::chip::now::<B>() as u32,
+            swi,
+            hart.get() as u8,
+            interrupt_level(),
+            crate::observation::Phase::WorkStart
+        )
+    );
+    hart.at(&RUNNING).enter(swi, interrupt_level(), poll);
+    #[cfg(oer_trace)]
+    oer_trace::observe!(
+        observer,
+        crate::observation::Activity::new(
+            crate::chip::now::<B>() as u32,
+            swi,
+            hart.get() as u8,
+            interrupt_level(),
+            crate::observation::Phase::WorkEnd
+        )
+    );
 }
 
 /// One poll round of executor `T::EXECUTOR`, in its context: whether a task
@@ -289,14 +313,14 @@ impl<B: Binding, const SWI: u8> Executor<B, SWI> {
         init(&Spawner::new());
         loop {
             WORK_PENDING.0[usize::from(SWI)].store(0, Ordering::Release);
-            as_running::<B>(SWI, || {
-                crate::time_driver::service::<B>(const { SoftwareInterrupt::constant::<SWI>() });
+            as_running::<B, T>(SWI, || {
+                crate::time_driver::service::<B, T>(const { SoftwareInterrupt::constant::<SWI>() });
                 // Raised signals wake their tasks before the round; a signal
                 // raised meanwhile marks the work flag again.
                 oer_espressif_interrupt_table::signal::service::<Self>();
                 let _ = poll_tasks::<B, T>();
             });
-            wait_for_work::<B, SWI>();
+            wait_for_work::<B, T, SWI>();
         }
     }
 }
@@ -545,8 +569,8 @@ fn round<B: Binding, T: Tasks<Binding = B, Mode = InterruptMode>>(swi: SoftwareI
     if !swi.at(&INTERRUPT_MODE).load(Ordering::Acquire) {
         return;
     }
-    as_running::<B>(swi as u8, || {
-        crate::time_driver::service::<B>(swi);
+    as_running::<B, T>(swi as u8, || {
+        crate::time_driver::service::<B, T>(swi);
         // Raised signals wake their tasks here, in this context, before
         // the poll; a signal raised meanwhile raises this interrupt again.
         match swi {
@@ -588,33 +612,12 @@ pub(crate) fn pend_task<B: Binding>(swi: SoftwareInterrupt) {
     }
 }
 
-fn wait_for_work<B: Binding, const SWI: u8>() {
+fn wait_for_work<B: Binding, T: Tasks<Binding = B>, const SWI: u8>() {
     oer_riscv::interrupt_free(|| {
         if WORK_PENDING.0[usize::from(SWI)].load(Ordering::Acquire) == 0
             && !READY[usize::from(SWI)].any()
         {
-            #[cfg(oer_profile)]
-            crate::idle_accounting::add_wait::<B>(usize::from(SWI));
-            #[cfg(not(oer_profile))]
-            crate::chip::wait_for_interrupt::<B>();
+            crate::chip::wait_for_interrupt::<B, T>();
         }
     });
-}
-
-/// The core executor `executor` runs on, once it runs.
-#[cfg(oer_profile)]
-pub(crate) fn executor_core(executor: usize) -> Option<usize> {
-    let core = EXECUTOR_CORE[executor].load(Ordering::Acquire);
-    ChipStamp::assigned_core(core)
-}
-
-/// Raise the software interrupt of the running executor `executor`, waking
-/// its core from its wait.
-#[cfg(oer_profile)]
-pub(crate) fn raise<B: Binding>(executor: usize) {
-    if executor_core(executor).is_some() {
-        if let Some(swi) = SoftwareInterrupt::from_index(executor as u8) {
-            raise_interrupt::<B>(swi);
-        }
-    }
 }

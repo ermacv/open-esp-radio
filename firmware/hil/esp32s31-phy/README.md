@@ -198,3 +198,22 @@ This image retains the concrete PHY observer, clock/poll wrapper, queued console
 and calibration-cache adapter as composition. Host tests of the image exercise
 observer output after root return and cache admission/export; vendor workloads
 include no image sources.
+
+## Timer observations
+
+The image declares `trace` and `debug-control`. Its radio task set and Embassy
+time driver select `timer_measurements::TimerObserver`; other task sets use
+`Noop`. Timer registration, arm, acknowledgement and dispatch boundaries are
+`oer-trace` values. The image owns the exclusive window guard, recorder and
+IRQ mailbox; the executor owns no diagnostic counters. The IRQ publishes only
+atomic timestamps; it never borrows the task's report or takes a task lock.
+
+The existing T7 timer notes report registration counts and maximum program,
+acknowledgement, alarm-to-IRQ, deadline and dispatch intervals. Partial windows,
+replaced/stopped alarms, unmatched/coalesced interrupts and pending work remain
+explicit. Timestamp reversal, overflow, an incomplete pair or a concurrent
+mailbox read invalidates the report. Windows and attributable deadlines must
+be within half the wrapping trace clock period (2^31 microseconds). These
+intervals include instrumentation overhead, overlap, and cannot be summed as
+CPU utilization or attributed to an individual PHY future. The PHY image has
+no CPU-load consumer; the Wi-Fi station image owns the CPU window collector.

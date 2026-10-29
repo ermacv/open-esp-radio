@@ -19,8 +19,8 @@ oer_espressif_staged_runtime::interrupt_table! {
     contexts { app: 1; radio_exec: 2; radio_irq: 3; }
     wake: WakeToken = FromCpu0Irq => oer_espressif_executor::wake_handler::<Esp32s31, 0, FromCpu0Irq>, line 16, context app, hart 0, Hardware;
     radio: RadioToken = FromCpu2Irq => oer_espressif_executor::interrupt_handler::<RadioTasks, FromCpu2Irq>, line 17, context radio_exec, hart 0, Executor;
-    radio_alarm: RadioAlarm = SystimerAlarm0 => oer_espressif_executor::alarm_interrupt::<Esp32s31, 0, SystimerAlarm0>, line 18, context radio_irq, hart 0, Hardware;
-    app_alarm: AppAlarm = SystimerAlarm1 => oer_espressif_executor::alarm_interrupt::<Esp32s31, 1, SystimerAlarm1>, line 20, context app, hart 0, Hardware;
+    radio_alarm: RadioAlarm = SystimerAlarm0 => oer_espressif_executor::alarm_interrupt::<RadioTasks, 0, SystimerAlarm0>, line 18, context radio_irq, hart 0, Hardware;
+    app_alarm: AppAlarm = SystimerAlarm1 => oer_espressif_executor::alarm_interrupt::<AppTasks, 1, SystimerAlarm1>, line 20, context app, hart 0, Hardware;
 }
 oer_espressif_executor::tasks! {
     RadioTasks: InterruptExecutor<Esp32s31, 2> { sheets(boot: Boot) = sheets; }
@@ -199,3 +199,5 @@ async fn sheets(boot: Boot) {
             .await;
     }
 }
+
+oer_espressif_executor::time_driver!(Esp32s31);
