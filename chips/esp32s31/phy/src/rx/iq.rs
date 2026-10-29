@@ -2443,7 +2443,9 @@ impl PhyRxIqInitMmioBinding {
                 PhyRxIqInitCompletion::RootStatusConfigured
             }
             PhyRxIqInitAction::ConfigurePbusDebugMode => {
-                oer_esp32s31_hal::phy::pbus::configure_debug_mode(registers);
+                oer_espressif_phy::pbus::configure_debug_mode(
+                    &mut oer_esp32s31_hal::phy::pbus::port(registers),
+                );
                 PhyRxIqInitCompletion::PbusDebugModeConfigured
             }
             PhyRxIqInitAction::ConfigureCorrection { begin } => {
@@ -2452,7 +2454,9 @@ impl PhyRxIqInitMmioBinding {
             }
             PhyRxIqInitAction::ConfigurePbusWorkMode => {
                 PhyRxIqInitCompletion::PbusWorkModeConfigured {
-                    settle_required: oer_esp32s31_hal::phy::pbus::configure_work_mode(registers),
+                    settle_required: oer_espressif_phy::pbus::configure_work_mode(
+                        &mut oer_esp32s31_hal::phy::pbus::port(registers),
+                    ),
                 }
             }
             PhyRxIqInitAction::ConfigurePbusWorkModePulse => {

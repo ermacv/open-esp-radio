@@ -1,149 +1,15 @@
-use std::{
-    cell::{Cell, RefCell},
-    collections::VecDeque,
-    vec::Vec,
-};
+use std::{cell::RefCell, collections::VecDeque, vec::Vec};
 
 use super::{
     Address, BluetoothTxPowerControlAction, BluetoothTxPowerControlCompletion,
     BluetoothTxPowerControlError, BluetoothTxPowerControlI2cAccess,
     BluetoothTxPowerControlObservation, BluetoothTxPowerControlOperation,
     BluetoothTxPowerControlPrepareError, BluetoothTxPowerControlRegister,
-    BluetoothTxPowerControlRestoreError, BluetoothTxPowerControlTransaction, Host, PhyAdcRate,
-    PhyFilterDcapInputs, PhyI2cCommandMemoryInputs, PhyI2cConfigurationAction,
-    PhyI2cConfigurationCommand, PhyI2cConfigurationError, PhyI2cConfigurationObservation,
-    PhyI2cConfigurationOperation, PhyI2cConfigurationTransaction,
-    PhyI2cInitializationStageOneInputs, PhyI2cInitializationStageTwoError, PhyI2cParallelAccess,
-    PhyI2cParallelWrite,
+    BluetoothTxPowerControlRestoreError, BluetoothTxPowerControlTransaction, PhyAdcRate,
+    PhyFilterDcapInputs, PhyI2cConfigurationAction, PhyI2cConfigurationCommand,
+    PhyI2cConfigurationError, PhyI2cConfigurationObservation, PhyI2cConfigurationOperation,
+    PhyI2cConfigurationTransaction, PhyI2cInitializationStageOneInputs,
 };
-
-fn run_parallel_stage(
-    access: &mut impl PhyI2cParallelAccess,
-    inputs: PhyI2cCommandMemoryInputs,
-    budget: u32,
-) -> Result<(), PhyI2cInitializationStageTwoError> {
-    use core::{
-        future::Future,
-        task::{Context, Poll, Waker},
-    };
-    let mut future = core::pin::pin!(super::configure_initialization_stage_two_with(
-        access,
-        inputs,
-        budget,
-        async || {}
-    ));
-    match future
-        .as_mut()
-        .poll(&mut Context::from_waker(Waker::noop()))
-    {
-        Poll::Ready(result) => result,
-        Poll::Pending => panic!("an immediately ready test wait does not suspend"),
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum ParallelEvent {
-    SelectParallelMap,
-    StartPair,
-    RestoreRadioMap,
-}
-
-#[derive(Default)]
-struct FakeParallelI2c {
-    events: Vec<ParallelEvent>,
-    initially_busy_host: Option<Host>,
-    busy_after_start_host: Option<Host>,
-    started: Cell<bool>,
-}
-
-impl PhyI2cParallelAccess for FakeParallelI2c {
-    fn select_parallel_host_map(&mut self) {
-        self.events.push(ParallelEvent::SelectParallelMap);
-    }
-
-    fn restore_radio_host_map(&mut self) {
-        self.events.push(ParallelEvent::RestoreRadioMap);
-    }
-
-    fn is_busy(&self, host: Host) -> bool {
-        if self.started.get() {
-            self.busy_after_start_host == Some(host)
-        } else {
-            self.initially_busy_host == Some(host)
-        }
-    }
-
-    fn start_pair(&mut self, _pair: PhyI2cParallelWrite) {
-        self.started.set(true);
-        self.events.push(ParallelEvent::StartPair);
-    }
-}
-
-#[test]
-fn retained_wake_i2c_stage_two_pairs_both_hosts_and_restores_the_radio_map() {
-    let mut access = FakeParallelI2c::default();
-    run_parallel_stage(
-        &mut access,
-        PhyI2cCommandMemoryInputs::new(1, 2, 3, 4, 5, 6),
-        10,
-    )
-    .unwrap();
-
-    assert_eq!(
-        access.events.first(),
-        Some(&ParallelEvent::SelectParallelMap)
-    );
-    assert_eq!(access.events.last(), Some(&ParallelEvent::RestoreRadioMap));
-    let pairs = access
-        .events
-        .iter()
-        .filter(|event| **event == ParallelEvent::StartPair)
-        .count();
-    assert_eq!(pairs, 22);
-}
-
-#[test]
-fn retained_wake_i2c_stage_two_restores_the_radio_map_on_busy_entry() {
-    let mut access = FakeParallelI2c {
-        initially_busy_host: Some(Host::Host1),
-        ..FakeParallelI2c::default()
-    };
-    assert_eq!(
-        run_parallel_stage(
-            &mut access,
-            PhyI2cCommandMemoryInputs::new(1, 2, 3, 4, 5, 6),
-            10,
-        ),
-        Err(PhyI2cInitializationStageTwoError::BusyAtStart { host: Host::Host1 })
-    );
-    assert_eq!(
-        access.events,
-        [
-            ParallelEvent::SelectParallelMap,
-            ParallelEvent::RestoreRadioMap,
-        ]
-    );
-}
-
-#[test]
-fn retained_wake_i2c_stage_two_bounds_completion_and_restores_the_radio_map() {
-    let mut access = FakeParallelI2c {
-        busy_after_start_host: Some(Host::Host0),
-        ..FakeParallelI2c::default()
-    };
-    assert_eq!(
-        run_parallel_stage(
-            &mut access,
-            PhyI2cCommandMemoryInputs::new(1, 2, 3, 4, 5, 6),
-            2,
-        ),
-        Err(PhyI2cInitializationStageTwoError::CompletionTimeout {
-            host: Host::Host0,
-            pair: 0,
-        })
-    );
-    assert_eq!(access.events.last(), Some(&ParallelEvent::RestoreRadioMap));
-}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Operation {
@@ -540,28 +406,4 @@ fn prepare_retries_a_busy_first_command_without_reserving_restore_twice() {
         BluetoothTxPowerControlCompletion::RestorePrepared
     );
     assert_eq!(access.restore, Some((0xa5, 0x15)));
-}
-
-#[test]
-fn a_busy_parallel_host_suspends_before_the_next_observation() {
-    use core::{
-        future::{Future, pending},
-        task::{Context, Poll, Waker},
-    };
-    let mut access = FakeParallelI2c {
-        busy_after_start_host: Some(Host::Host0),
-        ..FakeParallelI2c::default()
-    };
-    let mut future = core::pin::pin!(super::configure_initialization_stage_two_with(
-        &mut access,
-        PhyI2cCommandMemoryInputs::new(1, 2, 3, 4, 5, 6),
-        2,
-        async || pending::<()>().await
-    ));
-    assert_eq!(
-        future
-            .as_mut()
-            .poll(&mut Context::from_waker(Waker::noop())),
-        Poll::Pending
-    );
 }

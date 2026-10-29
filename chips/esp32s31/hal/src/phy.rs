@@ -8,7 +8,7 @@ pub mod baseband;
 
 pub mod clock;
 #[cfg(target_arch = "riscv32")]
-pub mod delay;
+pub mod settle_clock;
 
 pub mod frequency;
 

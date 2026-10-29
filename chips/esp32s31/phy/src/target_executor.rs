@@ -75,7 +75,12 @@ pub(crate) fn force_pbus_direct<C: oer_time::Clock + ?Sized>(
         transaction.value(),
     );
     crate::executor::wait::poll::bounded::<core::convert::Infallible, _>(clock, || {
-        Ok(oer_esp32s31_hal::phy::pbus::try_finish_force_test(registers).is_ok())
+        Ok(
+            oer_espressif_phy::pbus::try_finish_force_test(&mut oer_esp32s31_hal::phy::pbus::port(
+                registers,
+            ))
+            .is_ok(),
+        )
     })
     .unwrap_or_else(|never| match never {})
 }
@@ -207,11 +212,26 @@ impl DirectOperationBudget {
     }
 }
 
-impl PhyShortDelay for oer_esp32s31_hal::phy::delay::RomShortDelay {
-    const MAX_MICROS: u32 = oer_esp32s31_hal::phy::delay::RomShortDelay::MAX_MICROS;
+/// Production PHY delay provider using the CPU rate adopted by its clock owner.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct RomShortDelay;
+
+impl RomShortDelay {
+    pub const MAX_MICROS: u32 = oer_espressif_phy::settle::MAX_MICROS;
+
+    pub fn settle_micros(micros: u32) -> bool {
+        oer_espressif_phy::settle::settle_micros(
+            &mut oer_esp32s31_hal::phy::settle_clock::SettleClock,
+            micros,
+        )
+    }
+}
+
+impl PhyShortDelay for crate::RomShortDelay {
+    const MAX_MICROS: u32 = crate::RomShortDelay::MAX_MICROS;
 
     fn settle_micros(micros: u32) -> bool {
-        oer_esp32s31_hal::phy::delay::RomShortDelay::settle_micros(micros)
+        crate::RomShortDelay::settle_micros(micros)
     }
 }
 

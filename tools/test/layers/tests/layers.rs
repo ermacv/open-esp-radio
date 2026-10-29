@@ -162,6 +162,7 @@ const ESPRESSIF_SANS_IO: &[&str] = &[
     "chips/espressif/ieee802154-mac-values",
     "chips/espressif/modem-clock",
     "chips/espressif/radio",
+    "chips/espressif/phy",
 ];
 
 fn sans_io(package: &str) -> bool {
@@ -900,6 +901,7 @@ const ROLES: &[(&str, Role)] = &[
     ("chips/espressif/ieee802154-engine", Role::HardwareDriver),
     ("chips/espressif/modem-clock", Role::HardwareDriver),
     ("chips/espressif/radio", Role::HardwareDriver),
+    ("chips/espressif/phy", Role::HardwareDriver),
     ("chips/espressif/usb-serial-jtag", Role::HardwareDriver),
     ("chips/espressif/watchdog", Role::HardwareDriver),
     ("chips/esp32s31/phy", Role::HardwareDriver),
@@ -3514,8 +3516,6 @@ const HAL_SEQUENCES: &[(&str, usize)] = &[
     ("chips/esp32s31/hal/src/ieee80211/init.rs", 5),
     ("chips/esp32s31/hal/src/ieee80211/init/cold/handshake.rs", 8),
     ("chips/esp32s31/hal/src/peripherals/entropy.rs", 2),
-    ("chips/esp32s31/hal/src/phy/delay.rs", 1),
-    ("chips/esp32s31/hal/src/phy/i2c.rs", 5),
 ];
 
 /// The change that moves the driver code out of each HAL module, by path

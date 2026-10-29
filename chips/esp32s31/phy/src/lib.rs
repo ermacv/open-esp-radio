@@ -116,9 +116,9 @@ pub const HARDWARE_EDGE_LIMIT: u16 = 10_000;
 #[cfg(target_arch = "riscv32")]
 pub use executor::wait::PhyShortDelay;
 #[cfg(target_arch = "riscv32")]
-pub use oer_esp32s31_hal::phy::delay::RomShortDelay;
-#[cfg(target_arch = "riscv32")]
 pub use target_executor::PhyTargetPortError;
+#[cfg(target_arch = "riscv32")]
+pub use target_executor::RomShortDelay;
 #[cfg(target_arch = "riscv32")]
 pub use target_port::{
     ConcurrentPhyRegisterFailure, ConcurrentPhyRegistration, ConcurrentPhyTrackingError,

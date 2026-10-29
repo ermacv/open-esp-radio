@@ -21,7 +21,7 @@ use oer_mmio::{Bits, Index, Placement};
 use super::commands::{
     BluetoothTxPowerControlRegister, PHY_I2C_COMMAND_MEMORY_DYNAMIC_INDICES,
     PHY_I2C_COMMAND_MEMORY_ENTRY_COUNT, PHY_I2C_COMMAND_MEMORY_TEMPLATE, PhyI2cAccessError,
-    PhyI2cCommandMemoryInputs, PhyI2cParallelWrite, normal_route,
+    PhyI2cCommandMemoryInputs, normal_route,
 };
 
 /// The block that holds the Bluetooth TX-power control registers.
@@ -176,7 +176,10 @@ impl<'a, P: Placement> AnalogBus<'a, P> {
     }
 
     /// Start both writes of one parallel pair, host zero first.
-    pub fn start_parallel_pair(&mut self, pair: PhyI2cParallelWrite) {
+    pub fn start_parallel_pair(
+        &mut self,
+        pair: oer_espressif_phy::i2c::PhyI2cParallelWrite<Address>,
+    ) {
         let (address, value) = pair.first;
         publish_command(
             self.master,

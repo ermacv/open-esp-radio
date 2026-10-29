@@ -908,7 +908,9 @@ impl PhyColdMmioBinding {
 
         match self.outer_action {
             PhyRfInitPrefixAction::PbusClear(PhyPbusClearAction::ConfigureDebugMode) => {
-                oer_esp32s31_hal::phy::pbus::configure_debug_mode(registers)
+                oer_espressif_phy::pbus::configure_debug_mode(
+                    &mut oer_esp32s31_hal::phy::pbus::port(registers),
+                )
             }
             PhyRfInitPrefixAction::PbusClear(PhyPbusClearAction::ConfigureWorkModePulse) => {
                 oer_esp32s31_hal::phy::agc::configure_pbus_work_mode_pulse(registers)
@@ -972,7 +974,9 @@ impl PhyColdMmioBinding {
             )) => oer_esp32s31_hal::phy::pbus::configure_tx_clock(registers, enabled),
             PhyRfInitPrefixAction::XtalDuty(XtalDutyCalibrationAction::Pass(
                 XtalDutyPassAction::Prepare(XtalDutyPrepareAction::ConfigurePbusDebugMode),
-            )) => oer_esp32s31_hal::phy::pbus::configure_debug_mode(registers),
+            )) => oer_espressif_phy::pbus::configure_debug_mode(
+                &mut oer_esp32s31_hal::phy::pbus::port(registers),
+            ),
             PhyRfInitPrefixAction::XtalDuty(XtalDutyCalibrationAction::Pass(
                 XtalDutyPassAction::Prepare(XtalDutyPrepareAction::PrepareRxDcoControlRestore),
             ))
@@ -1882,7 +1886,9 @@ impl PhyColdObservationBinding {
                 })
             }
             PhyColdObservationRequest::ConfigurePbusWorkMode => {
-                let settle_required = oer_esp32s31_hal::phy::pbus::configure_work_mode(registers);
+                let settle_required = oer_espressif_phy::pbus::configure_work_mode(
+                    &mut oer_esp32s31_hal::phy::pbus::port(registers),
+                );
                 self.into_completion(PhyColdObservationResult::PbusWorkMode { settle_required })
             }
             PhyColdObservationRequest::ReadRxDcoPbus { selector, path } => {
@@ -2087,9 +2093,11 @@ impl PhyColdPbusBinding {
                 PhyColdPbusError::WrongEdge
             });
         }
-        match oer_esp32s31_hal::phy::pbus::try_finish_force_test(registers) {
+        match oer_espressif_phy::pbus::try_finish_force_test(
+            &mut oer_esp32s31_hal::phy::pbus::port(registers),
+        ) {
             Ok(()) => self.observe_result(PhyColdPbusHardwareResult::Completed),
-            Err(oer_esp32s31_hal::phy::pbus::PbusError::Busy) => {
+            Err(oer_espressif_phy::pbus::PbusError::Busy) => {
                 self.observe_result(PhyColdPbusHardwareResult::Busy)
             }
         }

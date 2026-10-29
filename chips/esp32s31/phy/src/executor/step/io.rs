@@ -583,12 +583,17 @@ impl Io<'_> {
             registers: &mut impl oer_esp32s31_hal::owner::SharedPhyContext,
             work_mode: bool,
         ) -> Result<bool, Failure> {
-            use oer_esp32s31_hal::phy::{agc, delay::RomShortDelay, pbus};
+            use crate::RomShortDelay;
+            use oer_esp32s31_hal::phy::agc;
             if !work_mode {
-                pbus::configure_debug_mode(registers);
+                oer_espressif_phy::pbus::configure_debug_mode(
+                    &mut oer_esp32s31_hal::phy::pbus::port(registers),
+                );
                 return Ok(false);
             }
-            let settled = pbus::configure_work_mode(registers);
+            let settled = oer_espressif_phy::pbus::configure_work_mode(
+                &mut oer_esp32s31_hal::phy::pbus::port(registers),
+            );
             if settled {
                 if !RomShortDelay::settle_micros(1) {
                     return Err(Failure::Binding);

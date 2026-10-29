@@ -858,7 +858,9 @@ impl PhyTxDcMmioBinding {
     ) -> PhyTxDcCompletion {
         match self.action {
             PhyTxDcAction::ConfigurePbusDebugMode => {
-                oer_esp32s31_hal::phy::pbus::configure_debug_mode(registers);
+                oer_espressif_phy::pbus::configure_debug_mode(
+                    &mut oer_esp32s31_hal::phy::pbus::port(registers),
+                );
                 PhyTxDcCompletion::PbusDebugModeConfigured
             }
             PhyTxDcAction::ReadPbus { selector, path } => PhyTxDcCompletion::PbusRead {
@@ -929,7 +931,9 @@ impl PhyTxDcMmioBinding {
                 PhyTxDcCompletion::MeasurementCleared
             }
             PhyTxDcAction::ConfigurePbusWorkMode => PhyTxDcCompletion::PbusWorkModeConfigured {
-                settle_required: oer_esp32s31_hal::phy::pbus::configure_work_mode(registers),
+                settle_required: oer_espressif_phy::pbus::configure_work_mode(
+                    &mut oer_esp32s31_hal::phy::pbus::port(registers),
+                ),
             },
             PhyTxDcAction::ConfigurePbusWorkModePulse => {
                 oer_esp32s31_hal::phy::agc::configure_pbus_work_mode_pulse(registers);

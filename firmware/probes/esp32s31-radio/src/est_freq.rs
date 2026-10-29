@@ -4,8 +4,9 @@
 use core::sync::atomic::{AtomicU32, Ordering};
 use oer_esp32s31_hal::{
     owner::SharedPhyAccess,
-    phy::{clock, delay::RomShortDelay, frequency as freq, iq_estimator as iq, pbus, rx_dco},
+    phy::{clock, frequency as freq, iq_estimator as iq, pbus, rx_dco},
 };
+use oer_esp32s31_phy::RomShortDelay;
 
 oer_memory::zeroed_static! {
     static EST_FREQ_OUTPUT: [AtomicU32; 2050] = zeroed in ".critical.bss.est_freq";
@@ -86,12 +87,17 @@ fn settle() -> Result<(), u32> {
 fn force(phy: &mut impl SharedPhyAccess, selector: u8, path: u8, value: u16) -> Result<(), u32> {
     pbus::start_force_test(phy, selector, path, value);
     for _ in 0..20 {
-        if pbus::try_finish_force_test(phy).is_ok() {
+        if oer_espressif_phy::pbus::try_finish_force_test(&mut oer_esp32s31_hal::phy::pbus::port(
+            phy,
+        ))
+        .is_ok()
+        {
             return Ok(());
         }
         settle()?;
     }
-    pbus::try_finish_force_test(phy).map_err(|_| 6)
+    oer_espressif_phy::pbus::try_finish_force_test(&mut oer_esp32s31_hal::phy::pbus::port(phy))
+        .map_err(|_| 6)
 }
 fn pairs(phy: &mut impl SharedPhyAccess, tag: u32) {
     for _ in 0..100 {
@@ -131,7 +137,7 @@ fn estimator(phy: &mut impl oer_esp32s31_hal::owner::SharedPhyContext) -> Result
     phy.configure_calibration_tone(true, 0x80, 0);
     pbus::configure_rx_clock(phy, true);
     pbus::configure_tx_clock(phy, true);
-    pbus::configure_debug_mode(phy);
+    oer_espressif_phy::pbus::configure_debug_mode(&mut oer_esp32s31_hal::phy::pbus::port(phy));
     let prepared = (|| {
         for (selector, path, value) in [
             (4, 1, 0),
@@ -209,7 +215,10 @@ fn estimator(phy: &mut impl oer_esp32s31_hal::owner::SharedPhyContext) -> Result
         }
         cleanup = force(phy, selector, path, 0);
     }
-    if bus_usable && cleanup.is_ok() && pbus::configure_work_mode(phy) {
+    if bus_usable
+        && cleanup.is_ok()
+        && oer_espressif_phy::pbus::configure_work_mode(&mut oer_esp32s31_hal::phy::pbus::port(phy))
+    {
         cleanup = cleanup.and(settle());
         oer_esp32s31_hal::phy::agc::configure_pbus_work_mode_pulse(phy);
         cleanup = cleanup.and(settle());

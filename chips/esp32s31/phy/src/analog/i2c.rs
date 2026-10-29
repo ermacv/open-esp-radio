@@ -34,9 +34,11 @@ use oer_esp32s31_hal::owner::SharedPhyAccess;
 
 use oer_esp32s31_hal::phy::i2c::PhyAdcRate;
 
-pub(crate) use oer_esp32s31_hal::phy::i2c::{Address, Field, analog_i2c};
 #[cfg(target_arch = "riscv32")]
-use oer_esp32s31_hal::phy::{analog_i2c as analog_i2c_power, i2c as hal_phy_i2c};
+use oer_esp32s31_hal::phy::i2c as hal_phy_i2c;
+pub(crate) use oer_esp32s31_hal::phy::i2c::{Address, Field, analog_i2c};
+
+mod profile;
 
 const PHY_I2C_SDM_STABLE_VALUE: u8 = 0x5b;
 const PHY_I2C_SDM_DEADLINE_CYCLES: u32 = 9_999;
@@ -71,10 +73,10 @@ pub async fn configure_i2c_initialization_stage_two(
     parameter: PhyRfInitParameterSnapshot,
     maximum_observations: u32,
     wait: impl AsyncFnMut(),
-) -> Result<(), hal_phy_i2c::PhyI2cInitializationStageTwoError> {
-    hal_phy_i2c::configure_initialization_stage_two(
-        registers,
-        parameter.pac_command_memory_inputs(),
+) -> Result<(), oer_espressif_phy::i2c::PhyI2cInitializationStageTwoError> {
+    oer_espressif_phy::i2c::configure_initialization_stage_two(
+        &mut hal_phy_i2c::parallel_port(registers),
+        |index| parameter.initialization_stage_two_pair(index),
         maximum_observations,
         wait,
     )
@@ -161,21 +163,25 @@ pub(crate) fn try_finish_write(
 /// `ets_delay_us(100)` call in `phy_open_i2c_xpd_new(true)`.
 ///
 /// This leaf deliberately stops before the delay and delegates to the
-/// shared-PHY HAL. Basis: complete pinned `libphy.a[phy_reg.o]` sequence at
+/// family PHY driver over shared-PHY atoms. Basis: complete pinned `libphy.a[phy_reg.o]` sequence at
 /// offsets `0x2e..0x4e`; field identities remain private to the custom PAC.
 #[cfg(target_arch = "riscv32")]
 pub fn configure_open_i2c_pre_delay(registers: &mut impl SharedPhyAccess) {
-    analog_i2c_power::prepare_open_i2c_pre_delay(registers);
+    oer_espressif_phy::analog_i2c::prepare_open_i2c_pre_delay(
+        &mut oer_esp32s31_hal::phy::analog_i2c::power_port(registers),
+    );
 }
 
 /// Execute the finite common register suffix of `phy_open_i2c_xpd_new`.
 ///
-/// The conditional PMU reset edge is preserved by the owned HAL. Basis:
+/// The family driver preserves the conditional PMU reset edge. Basis:
 /// complete pinned `libphy.a[phy_reg.o]::phy_open_i2c_xpd_new`; PMU field
 /// identities remain private to the custom PAC.
 #[cfg(target_arch = "riscv32")]
 pub fn configure_open_i2c_power_and_pulse(registers: &mut impl SharedPhyAccess) {
-    analog_i2c_power::complete_open_i2c_power_and_reset(registers);
+    oer_espressif_phy::analog_i2c::complete_open_i2c_power_and_reset(
+        &mut oer_esp32s31_hal::phy::analog_i2c::power_port(registers),
+    );
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
