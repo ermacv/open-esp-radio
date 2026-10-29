@@ -57,6 +57,8 @@ pub enum Domain {
     Hil = 9,
     RxChain = 10,
     Postmortem = 11,
+    CpuException = 12,
+    Boot = 13,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

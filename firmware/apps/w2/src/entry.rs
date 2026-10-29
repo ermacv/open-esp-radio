@@ -3,14 +3,20 @@ mod report;
 mod scan;
 mod usb;
 
-use oer_esp32s31_compose::Esp32s31;
 use oer_embassy_time::EmbassyClock;
 use oer_esp32s31_board as board;
-use oer_esp32s31_hal::peripherals::{efuse::{FactoryIdentity, Interface}, software_interrupt::{FromCpu0Irq, FromCpu2Irq, FromCpu3Irq}, system_timer::{SystimerAlarm0, SystimerAlarm1}};
+use oer_esp32s31_compose::Esp32s31;
+use oer_esp32s31_hal::peripherals::usb_serial_jtag::ConsoleInterrupt;
+use oer_esp32s31_hal::peripherals::watchdog::{
+    ArmedRtcWatchdog, RTC_WATCHDOG_FEED_PERIOD_MS, RwdtRegisters,
+};
+use oer_esp32s31_hal::peripherals::{
+    efuse::{FactoryIdentity, Interface},
+    software_interrupt::{FromCpu0Irq, FromCpu2Irq, FromCpu3Irq},
+    system_timer::{SystimerAlarm0, SystimerAlarm1},
+};
 use oer_esp32s31_hal::power::ChipClocks;
 use oer_esp32s31_hal::root::Root;
-use oer_esp32s31_hal::peripherals::usb_serial_jtag::ConsoleInterrupt;
-use oer_esp32s31_hal::peripherals::watchdog::{ArmedRtcWatchdog, RTC_WATCHDOG_FEED_PERIOD_MS, RwdtRegisters};
 use oer_esp32s31_ieee80211_driver::irq::WifiIrqPart;
 use oer_esp32s31_phy::{
     NoopPhyTargetObserver, PhyCalibrationIdentity, PhyRegisterConfig, concurrent::ConcurrentPhy,
@@ -100,28 +106,53 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
     let Some(root) = Root::take() else {
         fail(oer_diagnostics::name!("root-taken"; 32))
     };
-    let (runtime, _psram, mut adopted) = match oer_espressif_staged_runtime::adoption::run::<oer_esp32s31_compose::Esp32s31, _, _>(
+    let (
+        (
+            runtime_efuse,
+            runtime_radio,
+            runtime_timg0_alarm,
+            runtime_clocks,
+            runtime_system_timer,
+            runtime_software_interrupts,
+            runtime_wifi_interrupts,
+            runtime_entropy,
+            runtime_watchdogs,
+        ),
+        _psram,
+        mut adopted,
+    ) = match oer_espressif_staged_runtime::adoption::run::<oer_esp32s31_compose::Esp32s31, _, _>(
         handoff,
         root.into_runtime(),
         INTERRUPT_TABLE,
         board::BootstrapPsram,
         oer_esp32s31_compose::phy_fault::report_previous,
         |hardware| {
+            let _reset_causes = oer_esp32s31_compose::reset_causes::read(hardware.reset_cause);
             oer_esp32s31_compose::wifi_fault::report_previous();
-            hardware
+            if let Some(record) = previous {
+                usb::early_previous_panic(&record);
+            }
+            (
+                hardware.efuse,
+                hardware.radio,
+                hardware.timg0_alarm,
+                hardware.clocks,
+                hardware.system_timer,
+                hardware.software_interrupts,
+                hardware.wifi_interrupts,
+                hardware.entropy,
+                hardware.watchdogs,
+            )
         },
     ) {
         Ok(adopted) => adopted.into_parts(),
         Err(error) => fail(error.name()),
     };
-    if let Some(record) = previous {
-        usb::early_previous_panic(&record);
-    }
     let config = CONFIG;
     let Some(interrupts) = Interrupts::take() else {
         fail(oer_diagnostics::name!("interrupt-table"; 32))
     };
-    let factory = FactoryIdentity::read(runtime.efuse);
+    let factory = FactoryIdentity::read(runtime_efuse);
     let station = factory.address(Interface::Station);
     let ap = factory.address(Interface::AccessPoint);
     let identity = PhyCalibrationIdentity {
@@ -129,8 +160,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
         base_mac_address: factory.base_mac(),
         mac_extension: factory.mac_extension(),
     };
-    let (domain, partitions) = runtime
-        .radio
+    let (domain, partitions) = runtime_radio
         .split::<ChipClocks, _>(
             ConcurrentPhy::new(),
             oer_esp32s31_compose::phy_fault::identity(),
@@ -143,18 +173,18 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
     let (Some((end, cells)), Some(lp)) = (claim(), LpClock::<RcSlow>::claim()) else {
         fail(oer_diagnostics::name!("claim"; 32))
     };
-    let phy_pilot = crate::phy_pilot::init(runtime.timg0_alarm, adopted.router(), interrupts.phy);
+    let phy_pilot = crate::phy_pilot::init(runtime_timg0_alarm, adopted.router(), interrupts.phy);
     let backend = Esp32s31Radio::new(
         domain,
         partitions.wifi_coex,
-        runtime.clocks,
+        runtime_clocks,
         oer_espressif_executor::Cooperative::<Esp32s31, _>::new(EmbassyClock),
         NoopPhyTargetObserver,
         PhyRegisterConfig::new(identity),
         phy_pilot,
     );
     let actor = ACTOR.init_with(|| RadioSystem::new(end, backend, EmbassyClock, lp));
-    let timer = runtime.system_timer;
+    let timer = runtime_system_timer;
     oer_espressif_executor::init::<Esp32s31, 2, _, _>(
         oer_espressif_executor::systimer::SystemTimer {
             comparators: timer.comparators,
@@ -165,9 +195,13 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
         timer.alarm0,
     )
     .unwrap_or_else(|failure| failure.reset());
-    oer_espressif_executor::bind::<Esp32s31, 0, _, _>(adopted.router(), interrupts.app_alarm, timer.alarm1)
-        .unwrap_or_else(|failure| failure.reset());
-    let software = runtime.software_interrupts;
+    oer_espressif_executor::bind::<Esp32s31, 0, _, _>(
+        adopted.router(),
+        interrupts.app_alarm,
+        timer.alarm1,
+    )
+    .unwrap_or_else(|failure| failure.reset());
+    let software = runtime_software_interrupts;
     // The radio handler's part holds both MAC banks and the doorbell's
     // lowering half; its binding makes the doorbell's ringing half.
     let (line, ack) = oer_espressif_executor::DoorbellLine::<Esp32s31, 3>::split(software.line3);
@@ -175,7 +209,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
         .router()
         .bind(
             interrupts.wifi,
-            WifiIrqPart::new(runtime.wifi_interrupts, software.irq3, irq::Lower(ack)),
+            WifiIrqPart::new(runtime_wifi_interrupts, software.irq3, irq::Lower(ack)),
         )
         .unwrap_or_else(|error| {
             oer_espressif_staged_runtime::interrupts::reset_binding::<
@@ -198,7 +232,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
         scan::Boot {
             cell: cells.wifi,
             wifi: partitions.wifi,
-            rng: Rng::new(runtime.entropy, EmbassyClock),
+            rng: Rng::new(runtime_entropy, EmbassyClock),
             station,
             ap,
             config,
@@ -216,7 +250,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
         Ok(router) => router,
         Err(error) => fail(error.name()),
     };
-    let watchdog = runtime.watchdogs.rtc;
+    let watchdog = runtime_watchdogs.rtc;
     match executor
         .run(
             &hart,
@@ -269,11 +303,14 @@ async fn reporting(
         .notes(async |note| oer_espressif_usb_serial_jtag::write_note(&mut console, note).await)
         .await;
 }
-/// Report a failed boot step on the early writer and wait: no task feeds
-/// the RTC watchdog, which resets the chip.
+/// Retain a failed boot step, report it, and explicitly reset with the watchdog preserved.
 fn fail<const B: usize>(reason: oer_diagnostics::Name<B>) -> ! {
-    usb::early_text(b"OER-RESULT: fail w2 ");
-    usb::early_text(reason.as_str().as_bytes());
-    usb::early_text(b"\r\n");
-    oer_espressif_staged_runtime::idle()
+    oer_espressif_staged_runtime::fatal::boot_failure::<oer_esp32s31_hal::platform::Port>(
+        reason.as_str(),
+        || {
+            usb::early_text(b"OER-RESULT: fail w2 ");
+            usb::early_text(reason.as_str().as_bytes());
+            usb::early_text(b"\r\n");
+        },
+    )
 }

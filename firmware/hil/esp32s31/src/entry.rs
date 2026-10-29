@@ -27,18 +27,24 @@ compile_error!("system-panic-reset requires an exclusive image with the product 
 ))]
 compile_error!("wifi-station requires an exclusive image");
 
-use oer_esp32s31_compose::Esp32s31;
 use core::ops::Range;
 use core::sync::atomic::{AtomicU32, Ordering};
 use oer_diagnostics::Note;
+use oer_esp32s31_compose::Esp32s31;
 
 #[cfg(feature = "boot-smoke")]
 use embassy_time::{Duration, Timer};
-use oer_esp32s31_hal::peripherals::{software_interrupt::FromCpu0Irq, system_timer::SystimerAlarm0};
-#[cfg(feature = "wifi-station")]
-use oer_esp32s31_hal::peripherals::{software_interrupt::FromCpu2Irq, system_timer::SystimerAlarm1};
 use oer_esp32s31_hal::peripherals::usb_serial_jtag::ConsoleInterrupt;
-use oer_esp32s31_hal::peripherals::watchdog::{ArmedRtcWatchdog, RTC_WATCHDOG_FEED_PERIOD_MS, RwdtRegisters};
+use oer_esp32s31_hal::peripherals::watchdog::{
+    ArmedRtcWatchdog, RTC_WATCHDOG_FEED_PERIOD_MS, RwdtRegisters,
+};
+use oer_esp32s31_hal::peripherals::{
+    software_interrupt::FromCpu0Irq, system_timer::SystimerAlarm0,
+};
+#[cfg(feature = "wifi-station")]
+use oer_esp32s31_hal::peripherals::{
+    software_interrupt::FromCpu2Irq, system_timer::SystimerAlarm1,
+};
 use oer_espressif_executor::Executor;
 
 #[cfg(feature = "wifi-station")]
@@ -173,13 +179,23 @@ fn panic_hook(
     feature = "system-panic-reset",
     feature = "wifi-station"
 ))]
-pub(crate) type Rng = oer_esp32s31_hal::peripherals::entropy::Entropy<oer_embassy_time::EmbassyClock>;
+pub(crate) type Rng =
+    oer_esp32s31_hal::peripherals::entropy::Entropy<oer_embassy_time::EmbassyClock>;
 
 oer_esp32s31_hal::phy_fault_reporter!(oer_esp32s31_compose::phy_fault::reset);
 #[cfg(feature = "panic-hook")]
-oer_espressif_staged_runtime::entry!(main, oer_esp32s31_hal::platform::Port, hook = panic_hook);
+oer_espressif_staged_runtime::entry!(
+    main,
+    oer_esp32s31_hal::platform::Port,
+    hook = panic_hook,
+    exception = exception::capture
+);
 #[cfg(not(feature = "panic-hook"))]
-oer_espressif_staged_runtime::entry!(main, oer_esp32s31_hal::platform::Port);
+oer_espressif_staged_runtime::entry!(
+    main,
+    oer_esp32s31_hal::platform::Port,
+    exception = exception::capture
+);
 
 fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platform::Port>) -> ! {
     #[cfg(feature = "wifi-station")]
@@ -193,27 +209,34 @@ fn system_main(
     handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platform::Port>,
 ) -> ! {
     let prepared = initialize_runtime();
-    let ((timer, software, watchdogs, entropy), _psram, mut adopted) =
-        match prepared.adopt(
+    let ((timer, software, watchdogs, entropy), _psram, mut adopted) = finish_startup(|| {
+        prepared.adopt(
             handoff,
             INTERRUPT_TABLE,
             oer_esp32s31_board::BootstrapPsram,
             oer_esp32s31_compose::phy_fault::report_previous,
             |runtime| {
+                #[cfg(any(feature = "system-watchdog", feature = "system-panic-reset"))]
+                system::read_reset_causes(runtime.reset_cause);
+                #[cfg(not(any(feature = "system-watchdog", feature = "system-panic-reset")))]
+                let _reset_causes = oer_esp32s31_compose::reset_causes::read(runtime.reset_cause);
+                fatal::report_previous();
                 // Before anything records a checkpoint over the previous boot's record.
                 #[cfg(feature = "system-watchdog")]
                 system::postmortem::begin();
-                // Before any boot evidence is served: taking it clears the record.
+                // Snapshot before boot evidence; acknowledge only after complete output.
                 #[cfg(any(feature = "system-watchdog", feature = "system-panic-reset"))]
                 system::take_platform_panic();
-                #[cfg(any(feature = "system-watchdog", feature = "system-panic-reset"))]
-                system::read_reset_causes(runtime.reset_cause);
-                (runtime.system_timer, runtime.software_interrupts, runtime.watchdogs, runtime.entropy)
+                (
+                    runtime.system_timer,
+                    runtime.software_interrupts,
+                    runtime.watchdogs,
+                    runtime.entropy,
+                )
             },
-        ) {
-            Ok(runtime) => runtime.into_parts(),
-            Err(error) => crate::fail(crate::fatal::Failure::from_boot(error)),
-        };
+        )
+    })
+    .into_parts();
     #[cfg(not(any(feature = "system-watchdog", feature = "system-panic-reset")))]
     let _entropy = entropy;
     exception::report_stack_guard();
@@ -276,22 +299,24 @@ fn system_main(
         .unwrap_or_else(|failure| failure.reset()) {};
 }
 
-/// Install the console's owned parts before any stage-two diagnostic.
+/// Install the console and arm the watchdogs before observing boot evidence.
 fn initialize_runtime() -> oer_espressif_staged_runtime::adoption::Prepared<Esp32s31> {
-    startup::initialize(
-        || {
-            let root = oer_esp32s31_hal::root::Root::take().ok_or(fatal::Failure::RootTaken)?;
-            oer_espressif_staged_runtime::adoption::prepare::<Esp32s31>(root.into_runtime())
-                .map_err(|_| fatal::Failure::RootInitialization)
-        },
-        || {
-            early(&Note::runtime_start(PROFILE_NAME));
-            // The console exists; report before subsequent boot checks can fail.
-            fatal::report_previous();
-            validate_runtime_layout();
-        },
-    )
-    .unwrap_or_else(|failure| fail(failure))
+    let Some(root) = oer_esp32s31_hal::root::Root::take() else {
+        fail(fatal::Failure::RootTaken);
+    };
+    oer_espressif_staged_runtime::adoption::prepare::<Esp32s31>(root.into_runtime())
+        .unwrap_or_else(|_| fail(fatal::Failure::RootInitialization))
+}
+
+/// Reset/retained evidence precedes adoption; ordinary startup checks follow it.
+fn finish_startup<R>(
+    adopt: impl FnOnce() -> Result<R, oer_espressif_staged_runtime::BootError>,
+) -> R {
+    startup::initialize(adopt, || {
+        early(&Note::runtime_start(PROFILE_NAME));
+        validate_runtime_layout();
+    })
+    .unwrap_or_else(|error| fail(fatal::Failure::from_boot(error)))
 }
 
 /// Feed the RTC watchdog for good: the image resets when its executor stops
@@ -420,22 +445,12 @@ fn early(note: &Note<'_>) {
     usb::early(note);
 }
 
-/// Reports a failed boot check, its hart's interrupts masked for good. The
-/// note goes to the host while no one holds the USB Serial/JTAG block, and
-/// the hart halts. While the console's driver or an early record holds the
-/// block, the fatal path never makes a second owner of it: it keeps the
-/// check's reason for the next boot and resets the chip, whose next boot
-/// prints it. It takes no lock.
+/// Retain every failed boot check before best-effort output and explicit reset.
 fn fail(failure: fatal::Failure) -> ! {
-    use oer_esp32s31_hal::{
-        cores,
-        peripherals::usb_serial_jtag::{FatalNote, fatal_note},
-    };
+    use oer_esp32s31_hal::{cores, peripherals::usb_serial_jtag::fatal_note};
     oer_espressif_staged_runtime::fatal_halt::<oer_esp32s31_hal::platform::Port>(|claim, path| {
-        if fatal_note(&Note::runtime_fail(failure.name())) == FatalNote::Written {
-            return;
-        }
         fatal::record_failure(claim, failure);
+        let _note = fatal_note(&Note::runtime_fail(failure.name()));
         let cores::AwaitWatchdog { reason: _ } = cores::software_reset(path);
     })
 }

@@ -311,7 +311,9 @@ pub fn halt() -> ! {
 /// [`Platform`](oer_espressif_platform_port::Platform)): `runtime_main`,
 /// which `_runtime_start` calls once on the boot hart, gives `$main` the one
 /// [`Handoff`], and the panic handler records the panic and resets
-/// ([`panic`]).
+/// ([`panic`]). The same entry binds the common CPU-exception handler.
+/// `exception = hook` adds supplemental observations after its minimal record
+/// and peer-stop attempt; it cannot replace capture or the reset policy.
 ///
 /// With `hook = $hook`, the panic entry calls the image's hook after its
 /// record, in the fatal path with the hart masked and the other hart stopped
@@ -341,7 +343,11 @@ macro_rules! entry {
         }
     };
     ($main:path, $platform:ty) => {
+        $crate::entry!($main, $platform, exception = |_claim, _frame, _stop| ());
+    };
+    ($main:path, $platform:ty, exception = $exception:expr) => {
         $crate::entry!(@runtime_main $main, $platform);
+        $crate::__exception_handler!($platform, $exception);
         #[cfg(target_arch = "riscv32")]
         #[panic_handler]
         fn __oer_panic(info: &::core::panic::PanicInfo<'_>) -> ! {
@@ -349,7 +355,11 @@ macro_rules! entry {
         }
     };
     ($main:path, $platform:ty, hook = $hook:path) => {
+        $crate::entry!($main, $platform, hook = $hook, exception = |_claim, _frame, _stop| ());
+    };
+    ($main:path, $platform:ty, hook = $hook:path, exception = $exception:expr) => {
         $crate::entry!(@runtime_main $main, $platform);
+        $crate::__exception_handler!($platform, $exception);
         #[cfg(target_arch = "riscv32")]
         #[unsafe(no_mangle)]
         fn oer_platform_panic_hook(

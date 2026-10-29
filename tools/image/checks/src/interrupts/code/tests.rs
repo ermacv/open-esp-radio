@@ -71,6 +71,7 @@ pub(crate) fn same_level_handler_placement(handlers: [Function; 2]) -> CodePlace
             handler: exception,
             frame: 0,
         },
+        exception_copies: 1,
         resolutions: &resolutions,
     };
     CodePlacement::of(
@@ -165,6 +166,7 @@ pub(in crate::interrupts) fn fixture(
             handler: exception,
             frame: 0,
         },
+        exception_copies: 1,
         resolutions: &resolutions,
     };
     stacks.code_placement = CodePlacement::of(
@@ -420,6 +422,7 @@ impl MultipleHandlers {
                 handler: self.exception,
                 frame: 0,
             },
+            exception_copies: 1,
             resolutions: &self.resolutions,
         };
         self.stacks.harts =

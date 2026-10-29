@@ -126,7 +126,7 @@ impl Payload {
         bytes
     }
 }
-crate::retained_static! { static SLOT: Record; }
+crate::retained_static! { pub(crate) static SLOT: Record; }
 
 /// Inspect without consuming. Output acknowledgement, through diagnostics,
 /// clears an ordinary panic; a refused output leaves its retained bytes intact.
@@ -195,6 +195,21 @@ fn report_fault_early<P: oer_espressif_platform_port::EarlyText>(slot: &mut Reco
                 |bytes| P::text(bytes).then_some(()).ok_or(()),
             )
             .map_err(|_| ());
+        }
+        if view.domain == Domain::CpuException as u32 {
+            return crate::trap::report_exception(view, |bytes| {
+                P::text(bytes).then_some(()).ok_or(())
+            });
+        }
+        if view.domain == Domain::Boot as u32 {
+            if view.class != Class::ConfigurationBoot || view.reason != 1 {
+                return Err(());
+            }
+            P::text(b"previous boot failure: ")
+                .then_some(())
+                .ok_or(())?;
+            P::text(view.payload).then_some(()).ok_or(())?;
+            return P::text(b"\n").then_some(()).ok_or(());
         }
         let observations = view.decode::<[u32; 4]>(Domain::Runtime).map_err(|_| ())?;
         let reason = FaultReason::from_code(view.reason).ok_or(())?;

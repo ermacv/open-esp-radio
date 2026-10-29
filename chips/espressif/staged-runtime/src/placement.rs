@@ -1,6 +1,5 @@
-//! Statics in SRAM and reset-retained RTC fast memory, and the exported
-//! exception-handler symbol (the panic hook is a parameter of
-//! [`entry!`](crate::entry)). Data macros name only sections the
+//! Statics in SRAM and reset-retained RTC fast memory, and the common
+//! exception-handler binding selected by [`entry!`](crate::entry). Data macros name only sections the
 //! runtime linker script maps. The image linker places strict code in SRAM
 //! from its analysis; functions need no manual section attributes.
 
@@ -56,17 +55,16 @@ macro_rules! retained_static {
     };
 }
 
-/// The image's fatal-exception handler: the exception entry `_start_trap`
-/// calls `$handler` on an SRAM stack with the saved frame, also when the
-/// interrupted task ran from PSRAM. It does not return. Without one the
-/// runtime's `oer_default_exception` stops the hart. The image linker
-/// analyses the exception path and places its strict code in SRAM.
+/// Platform binding of the common exception path. Used by [`crate::entry!`].
+#[doc(hidden)]
 #[macro_export]
-macro_rules! exception_handler {
-    ($handler:path) => {
+macro_rules! __exception_handler {
+    ($platform:ty, $hook:expr) => {
+        // SAFETY: the staged trap entry passes its initialized, aligned SRAM frame;
+        // the handler never returns and a second binding is a link error.
         #[unsafe(export_name = "oer_exception_handler")]
         extern "C" fn __oer_exception_handler(context: &$crate::trap::TrapFrame) -> ! {
-            $handler(context)
+            $crate::trap::handle::<$platform>(context, $hook)
         }
     };
 }

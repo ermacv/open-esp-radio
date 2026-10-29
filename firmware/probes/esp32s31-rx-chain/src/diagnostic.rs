@@ -13,11 +13,12 @@ pub(crate) fn phase(value: u32) {
     PHASE.store(value, Ordering::Relaxed);
 }
 
-runtime::exception_handler!(exception);
-fn exception(frame: &TrapFrame) -> ! {
-    runtime::reset_recording::<oer_esp32s31_hal::platform::Port>(|claim, _| {
-        record(claim, 1, frame.mcause, frame.mepc, frame.ra)
-    })
+pub(crate) fn exception(
+    claim: &Claim<'_>,
+    frame: &TrapFrame,
+    _: Result<&oer_esp32s31_hal::cores::StopTheWorld<'_>, oer_esp32s31_hal::cores::StopError>,
+) {
+    record(claim, 1, frame.mcause, frame.mepc, frame.mtval, frame.ra);
 }
 /// The image's panic hook, which its entry names.
 pub(crate) fn panic(
@@ -26,16 +27,23 @@ pub(crate) fn panic(
     _: Result<&oer_esp32s31_hal::cores::StopTheWorld<'_>, oer_esp32s31_hal::cores::StopError>,
 ) {
     let registers = runtime::trap::TrapRegisters::read();
-    record(claim, 2, registers.mcause as u32, registers.mepc as u32, 0);
+    record(
+        claim,
+        2,
+        registers.mcause as u32,
+        registers.mepc as u32,
+        registers.mtval as u32,
+        0,
+    );
 }
-fn record(claim: &Claim<'_>, kind: u32, cause: u32, pc: u32, ra: u32) {
+fn record(claim: &Claim<'_>, kind: u32, cause: u32, pc: u32, mtval: u32, ra: u32) {
     let words = [
         kind,
         PHASE.load(Ordering::Relaxed),
         oer_riscv::hart_id() as u32,
         cause,
         pc,
-        oer_riscv::read_mtval() as u32,
+        mtval,
         ra,
         oer_riscv::read_mscratch() as u32,
     ];

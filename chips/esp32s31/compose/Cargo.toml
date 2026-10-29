@@ -25,3 +25,6 @@ oer-espressif-executor = { path = "../../espressif/executor", features = ["chip"
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+oer-esp32s31-hal = { path = "../hal", features = ["test-support"] }

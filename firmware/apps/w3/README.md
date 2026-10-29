@@ -11,8 +11,9 @@ the bridge has no periodic timer or application-state sampler.
 
 The build selects the configured composition only when all five stand
 settings are present. Without them, a separate entry adopts the platform,
-prints `OER-RESULT: fail w3 unconfigured` and idles with no tasks or interrupt
-bindings. Only the configured composition declares executor task poll records.
+retains the configuration failure, prints `OER-RESULT: fail w3 unconfigured`
+and explicitly resets with the watchdog preserved. This entry has no tasks
+or interrupt bindings. Only the configured composition declares executor task poll records.
 
 The facade composes the S31 lower-MAC backend, channel arbiter, open
 station runtime and Espressif rate selection. The image connects its neutral

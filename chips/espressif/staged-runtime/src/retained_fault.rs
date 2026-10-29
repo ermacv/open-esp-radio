@@ -4,7 +4,10 @@ use core::sync::atomic::{AtomicBool, Ordering};
 use oer_diagnostics::fault::{Error, Record};
 use oer_memory::retained::{RetainedCell, RetainedGuard};
 
-struct Election(AtomicBool);
+pub(crate) struct Election {
+    claimed: AtomicBool,
+    reset_started: AtomicBool,
+}
 impl Default for Election {
     fn default() -> Self {
         Self::new()
@@ -12,10 +15,18 @@ impl Default for Election {
 }
 impl Election {
     pub const fn new() -> Self {
-        Self(AtomicBool::new(false))
+        Self {
+            claimed: AtomicBool::new(false),
+            reset_started: AtomicBool::new(false),
+        }
+    }
+    fn begin_reset(&self) -> bool {
+        self.reset_started
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .is_ok()
     }
     pub fn claim(&self) -> Result<Claim<'_>, Reentered> {
-        self.0
+        self.claimed
             .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
             .map(|_| Claim { _election: self })
             .map_err(|_| Reentered)
@@ -54,9 +65,21 @@ pub(crate) fn claim() -> Result<Claim<'static>, Reentered> {
     ELECTION.claim()
 }
 
+pub(crate) fn begin_reset() -> bool {
+    ELECTION.begin_reset()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn reset_attempt_is_held_even_when_reset_faults_or_returns() {
+        let boot = Election::new();
+        assert!(boot.begin_reset());
+        assert!(!boot.begin_reset());
+        assert!(!boot.begin_reset());
+        assert!(Election::new().begin_reset());
+    }
     #[test]
     fn reentry_is_visible_and_dropping_claim_does_not_release_it() {
         let boot = Election::new();

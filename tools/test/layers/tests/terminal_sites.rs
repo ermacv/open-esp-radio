@@ -175,7 +175,9 @@ impl Scanner<'_> {
                             None
                         }
                     });
-                if name_text == "panic_handler" {
+                if name_text == "__exception_handler" {
+                    self.add(name.span(), "terminal-binding", name);
+                } else if name_text == "panic_handler" {
                     self.add(name.span(), "panic-handler", name);
                 } else if let Some(TokenTree::Punct(bang)) = tokens.get(index + 1)
                     && bang.as_char() == '!'
@@ -185,7 +187,10 @@ impl Scanner<'_> {
                     self.add(name.span(), "panic-macro", name);
                 } else if terminal_api(resolved)
                     || (name_text == "reset" && parent.as_deref().is_some_and(reset_module))
-                    || (name_text == "handle" && parent.as_deref() == Some("panic"))
+                    || (name_text == "handle"
+                        && parent
+                            .as_deref()
+                            .is_some_and(|name| ["panic", "trap"].contains(&name)))
                 {
                     self.add(name.span(), "terminal-reference", name);
                 }
@@ -218,6 +223,9 @@ fn panic_macro(name: &str) -> bool {
 fn terminal_api(name: &str) -> bool {
     [
         "reset_recording",
+        "reset_claimed",
+        "reset_platform_once",
+        "boot_failure",
         "reset_recording_with",
         "reset_fault",
         "reset_request",
@@ -243,7 +251,10 @@ fn terminal_path(path: &syn::Path, aliases: &BTreeMap<String, String>) -> bool {
     names.last().is_some_and(|name| {
         (terminal_api(name) && (name != "abort" || names.len() > 1))
             || (name == "reset" && names.iter().any(|part| reset_module(part)))
-            || (name == "handle" && names.iter().any(|part| part == "panic"))
+            || (name == "handle"
+                && names
+                    .iter()
+                    .any(|part| ["panic", "trap"].contains(&part.as_str())))
     })
 }
 
@@ -369,6 +380,8 @@ impl<'ast> Visit<'ast> for Scanner<'_> {
             syn::Item::Const(item) => {
                 if (self.file == "chips/espressif/staged-runtime/src/panic.rs"
                     && item.ident == "INVALID_HART")
+                    || (self.file == "chips/espressif/staged-runtime/src/trap.rs" && item.ident == "CPU_EXCEPTION")
+                    || (self.file == "chips/espressif/staged-runtime/src/fatal.rs" && item.ident == "BOOT_FAILURE")
                     || (self.file == "firmware/hil/esp32s31/src/fatal.rs"
                         && ["PANIC", "EXCEPTION", "FAILURE"]
                             .iter()
@@ -544,7 +557,7 @@ impl<'ast> Visit<'ast> for Scanner<'_> {
                 "entry",
                 "panic_handler",
                 "phy_fault_reporter",
-                "exception_handler",
+                "__exception_handler",
             ]
             .contains(&text.as_str())
             {
@@ -1199,5 +1212,40 @@ fn free_function_codecs_keep_their_numeric_reason_inventory() {
             format!("{file}:crate::report_fault:retained-code:1:1"),
             format!("{file}:crate::report_fault:retained-code:2:1"),
         ])
+    );
+}
+
+#[test]
+fn common_exception_binding_and_boot_callbacks_are_inventoried() {
+    let source = r#"
+        use platform::fatal::boot_failure as end_boot;
+        fn check() { let callback = end_boot::<Port>; consume(callback); }
+        macro_rules! binding { () => {
+            __exception_handler!(Port, supplemental);
+            trap::handle::<Port>(frame, supplemental)
+        } }
+    "#;
+    let mut scanner = Scanner {
+        file: "firmware/fixture/src/lib.rs",
+        source,
+        item: vec!["crate".into()],
+        ordinals: BTreeMap::new(),
+        sites: ScannedSites::new(),
+        decoder: false,
+        aliases: BTreeMap::new(),
+    };
+    scanner.visit_file(&syn::parse_file(source).expect("fixture parses"));
+    let keys: Sites = scanner.sites.into_keys().collect();
+    assert!(
+        keys.iter()
+            .any(|key| key.contains("terminal-reference:end_boot"))
+    );
+    assert!(
+        keys.iter()
+            .any(|key| key.contains("terminal-binding:__exception_handler"))
+    );
+    assert!(
+        keys.iter()
+            .any(|key| key.contains("terminal-reference:handle"))
     );
 }

@@ -107,19 +107,22 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 # chips/espressif/staged-runtime/src/default_handlers.rs
 "chips/espressif/staged-runtime/src/default_handlers.rs:crate::default_handlers::oer_unhandled_interrupt:terminal-entry:oer_unhandled_interrupt:1" = { owner = "chips/espressif/staged-runtime", classes = ["configuration-boot"] }
 "chips/espressif/staged-runtime/src/default_handlers.rs:crate::default_handlers::oer_unhandled_interrupt:panic-macro:panic:1" = { owner = "chips/espressif/staged-runtime", classes = ["rust-panic"] }
-"chips/espressif/staged-runtime/src/default_handlers.rs:crate::default_handlers::oer_default_exception:terminal-entry:oer_default_exception:1" = { owner = "chips/espressif/staged-runtime", classes = ["cpu-exception"] }
-"chips/espressif/staged-runtime/src/default_handlers.rs:crate::default_handlers::oer_default_exception:terminal-reference:spin_forever:1" = { owner = "chips/espressif/staged-runtime", classes = ["cpu-exception"] }
 
 # chips/espressif/staged-runtime/src/fatal.rs
 "chips/espressif/staged-runtime/src/fatal.rs:crate::fatal::fatal_halt:terminal-entry:fatal_halt:1" = { owner = "chips/espressif/staged-runtime", classes = ["hardware-impossible", "unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation", "cpu-exception", "requested-reset", "rust-panic"], proof = "invalid-hart" }
 "chips/espressif/staged-runtime/src/fatal.rs:crate::fatal::reset_recording:terminal-entry:reset_recording:1" = { owner = "chips/espressif/staged-runtime", classes = ["hardware-impossible", "unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation", "cpu-exception", "requested-reset", "rust-panic"], proof = "invalid-hart" }
 "chips/espressif/staged-runtime/src/fatal.rs:crate::fatal::reset_recording:terminal-reference:reset_recording_with:1" = { owner = "chips/espressif/staged-runtime", classes = ["hardware-impossible", "unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation", "cpu-exception", "requested-reset", "rust-panic"], proof = "invalid-hart" }
-"chips/espressif/staged-runtime/src/fatal.rs:crate::fatal::reset_recording_with:terminal-reference:software_reset:1" = { owner = "chips/espressif/staged-runtime", classes = ["hardware-impossible", "unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation", "cpu-exception", "requested-reset", "rust-panic"], proof = "invalid-hart" }
 "chips/espressif/staged-runtime/src/fatal.rs:crate::fatal::reset:terminal-entry:reset:1" = { owner = "chips/espressif/staged-runtime", classes = ["hardware-impossible", "unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation", "cpu-exception", "requested-reset", "rust-panic"], proof = "invalid-hart" }
 "chips/espressif/staged-runtime/src/fatal.rs:crate::fatal::reset:terminal-reference:reset_recording:1" = { owner = "chips/espressif/staged-runtime", classes = ["hardware-impossible", "unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation", "cpu-exception", "requested-reset", "rust-panic"], proof = "invalid-hart" }
-"chips/espressif/staged-runtime/src/fatal.rs:crate::fatal::fatal_halt:terminal-reference:software_reset:1" = { owner = "chips/espressif/staged-runtime", classes = ["hardware-impossible", "unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation", "cpu-exception", "requested-reset", "rust-panic"], proof = "invalid-hart" }
 "chips/espressif/staged-runtime/src/fatal.rs:crate::fatal::reset_claimed:terminal-entry:reset_claimed:1" = { owner = "chips/espressif/staged-runtime", classes = ["hardware-impossible", "unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation", "cpu-exception", "requested-reset", "rust-panic"], proof = "invalid-hart" }
-"chips/espressif/staged-runtime/src/fatal.rs:crate::fatal::reset_claimed_with:terminal-reference:software_reset:1" = { owner = "chips/espressif/staged-runtime", classes = ["hardware-impossible", "unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation", "cpu-exception", "requested-reset", "rust-panic"], proof = "invalid-hart" }
+"chips/espressif/staged-runtime/src/fatal.rs:crate::fatal::BOOT_FAILURE:retained-reason:BOOT_FAILURE:1" = { owner = "chips/espressif/staged-runtime", classes = ["configuration-boot"] }
+"chips/espressif/staged-runtime/src/fatal.rs:crate::fatal::boot_failure:terminal-entry:boot_failure:1" = { owner = "chips/espressif/staged-runtime", classes = ["configuration-boot"] }
+"chips/espressif/staged-runtime/src/fatal.rs:crate::fatal::boot_failure:terminal-reference:reset_claimed:1" = { owner = "chips/espressif/staged-runtime", classes = ["configuration-boot"] }
+"chips/espressif/staged-runtime/src/fatal.rs:crate::fatal::boot_failure:terminal-reference:reset_platform_once:1" = { owner = "chips/espressif/staged-runtime", classes = ["configuration-boot"] }
+"chips/espressif/staged-runtime/src/fatal.rs:crate::fatal::fatal_halt:terminal-reference:reset_platform_once:1" = { owner = "chips/espressif/staged-runtime", classes = ["hardware-impossible", "unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation", "cpu-exception", "requested-reset", "rust-panic"], proof = "invalid-hart" }
+"chips/espressif/staged-runtime/src/fatal.rs:crate::fatal::reset_claimed_with:terminal-reference:reset_platform_once:1" = { owner = "chips/espressif/staged-runtime", classes = ["hardware-impossible", "unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation", "cpu-exception", "requested-reset", "rust-panic"], proof = "invalid-hart" }
+"chips/espressif/staged-runtime/src/fatal.rs:crate::fatal::reset_platform_once:terminal-reference:software_reset:1" = { owner = "chips/espressif/staged-runtime", classes = ["hardware-impossible", "unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation", "cpu-exception", "requested-reset", "rust-panic"], proof = "invalid-hart" }
+"chips/espressif/staged-runtime/src/fatal.rs:crate::fatal::reset_recording_with:terminal-reference:reset_platform_once:1" = { owner = "chips/espressif/staged-runtime", classes = ["hardware-impossible", "unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation", "cpu-exception", "requested-reset", "rust-panic"], proof = "invalid-hart" }
 
 # chips/espressif/staged-runtime/src/interrupts.rs
 "chips/espressif/staged-runtime/src/interrupts.rs:crate::interrupts::reset_binding:terminal-entry:reset_binding:1" = { owner = "chips/espressif/staged-runtime", classes = ["configuration-boot", "unexpected-hardware", "software-invariant"] }
@@ -132,6 +135,8 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 "chips/espressif/staged-runtime/src/lib.rs:crate::entry:terminal-reference:handle:1" = { owner = "chips/espressif/staged-runtime", classes = ["rust-panic"] }
 "chips/espressif/staged-runtime/src/lib.rs:crate::entry:panic-handler:panic_handler:2" = { owner = "chips/espressif/staged-runtime", classes = ["rust-panic"] }
 "chips/espressif/staged-runtime/src/lib.rs:crate::entry:terminal-reference:handle:2" = { owner = "chips/espressif/staged-runtime", classes = ["rust-panic"] }
+"chips/espressif/staged-runtime/src/lib.rs:crate::entry:terminal-binding:__exception_handler:1" = { owner = "chips/espressif/staged-runtime", classes = ["cpu-exception"] }
+"chips/espressif/staged-runtime/src/lib.rs:crate::entry:terminal-binding:__exception_handler:2" = { owner = "chips/espressif/staged-runtime", classes = ["cpu-exception"] }
 
 # chips/espressif/staged-runtime/src/panic.rs
 "chips/espressif/staged-runtime/src/panic.rs:crate::panic:retained-slot:retained_static:1" = { owner = "chips/espressif/staged-runtime", classes = ["hardware-impossible", "unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation", "cpu-exception", "requested-reset", "rust-panic"], proof = "invalid-hart" }
@@ -141,6 +146,7 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 "chips/espressif/staged-runtime/src/panic.rs:crate::panic::INVALID_HART:retained-reason:INVALID_HART:1" = { owner = "chips/espressif/staged-runtime", classes = ["hardware-impossible"], proof = "invalid-hart" }
 "chips/espressif/staged-runtime/src/panic.rs:crate::panic::handle:terminal-entry:handle:1" = { owner = "chips/espressif/staged-runtime", classes = ["rust-panic"] }
 "chips/espressif/staged-runtime/src/panic.rs:crate::panic::handle:terminal-reference:reset:1" = { owner = "chips/espressif/staged-runtime", classes = ["rust-panic"] }
+"chips/espressif/staged-runtime/src/panic.rs:crate::panic::handle:terminal-reference:reset_claimed:1" = { owner = "chips/espressif/staged-runtime", classes = ["rust-panic"] }
 
 # chips/espressif/staged-runtime/src/panic/fault.rs
 "chips/espressif/staged-runtime/src/panic/fault.rs:crate::panic::fault::FaultReason:retained-reason:FaultReason::ExecutorClaimed:1" = { owner = "chips/espressif/staged-runtime", classes = ["software-invariant"] }
@@ -205,6 +211,7 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 "firmware/apps/b0/src/entry.rs:crate:terminal-binding:entry:1" = { owner = "firmware/apps/b0", classes = ["rust-panic"] }
 "firmware/apps/b0/src/entry.rs:crate::main:terminal-entry:main:1" = { owner = "firmware/apps/b0", classes = ["configuration-boot"] }
 "firmware/apps/b0/src/entry.rs:crate::fail:terminal-entry:fail:1" = { owner = "firmware/apps/b0", classes = ["configuration-boot"] }
+"firmware/apps/b0/src/entry.rs:crate::fail:terminal-reference:boot_failure:1" = { owner = "firmware/apps/b0", classes = ["configuration-boot"] }
 
 # firmware/apps/b0/src/gate_fault.rs
 "firmware/apps/b0/src/gate_fault.rs:crate::gate_fault:retained-slot:retained_static:1" = { owner = "firmware/apps/b0", classes = ["unexpected-hardware", "software-invariant", "exhaustion"] }
@@ -296,25 +303,27 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 "firmware/apps/b0/src/unconfigured.rs:crate:terminal-binding:entry:1" = { owner = "firmware/apps/b0", classes = ["rust-panic"] }
 "firmware/apps/b0/src/unconfigured.rs:crate::main:terminal-entry:main:1" = { owner = "firmware/apps/b0", classes = ["configuration-boot"] }
 "firmware/apps/b0/src/unconfigured.rs:crate::fail:terminal-entry:fail:1" = { owner = "firmware/apps/b0", classes = ["configuration-boot"] }
+"firmware/apps/b0/src/unconfigured.rs:crate::fail:terminal-reference:boot_failure:1" = { owner = "firmware/apps/b0", classes = ["configuration-boot"] }
+"firmware/apps/b0/src/unconfigured.rs:crate::main:terminal-reference:boot_failure:1" = { owner = "firmware/apps/b0", classes = ["configuration-boot"] }
 
 # firmware/apps/b0/src/usb.rs
 "firmware/apps/b0/src/usb.rs:crate::usb::open:terminal-reference:reset_binding:1" = { owner = "firmware/apps/b0", classes = ["configuration-boot", "unexpected-hardware", "software-invariant"] }
 
 # firmware/apps/boot-smoke/src/entry.rs
 "firmware/apps/boot-smoke/src/entry.rs:crate::fail:terminal-entry:fail:1" = { owner = "firmware/apps/boot-smoke", classes = ["configuration-boot"] }
-"firmware/apps/boot-smoke/src/entry.rs:crate::fail:terminal-reference:fatal_halt:1" = { owner = "firmware/apps/boot-smoke", classes = ["configuration-boot"] }
 "firmware/apps/boot-smoke/src/entry.rs:crate:terminal-binding:entry:1" = { owner = "firmware/apps/boot-smoke", classes = ["rust-panic"] }
 "firmware/apps/boot-smoke/src/entry.rs:crate::main:terminal-entry:main:1" = { owner = "firmware/apps/boot-smoke", classes = ["configuration-boot"] }
 "firmware/apps/boot-smoke/src/entry.rs:crate::main:reset-method:reset:1" = { owner = "firmware/apps/boot-smoke", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
 "firmware/apps/boot-smoke/src/entry.rs:crate::main:reset-method:reset:2" = { owner = "firmware/apps/boot-smoke", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
+"firmware/apps/boot-smoke/src/entry.rs:crate::fail:terminal-reference:boot_failure:1" = { owner = "firmware/apps/boot-smoke", classes = ["configuration-boot"] }
 
 # firmware/apps/radio-root/src/entry.rs
 "firmware/apps/radio-root/src/entry.rs:crate::main:reset-method:reset:2" = { owner = "firmware/apps/radio-root", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
 "firmware/apps/radio-root/src/entry.rs:crate::fail:terminal-entry:fail:1" = { owner = "firmware/apps/radio-root", classes = ["configuration-boot"] }
-"firmware/apps/radio-root/src/entry.rs:crate::fail:terminal-reference:fatal_halt:1" = { owner = "firmware/apps/radio-root", classes = ["configuration-boot"] }
 "firmware/apps/radio-root/src/entry.rs:crate:terminal-binding:entry:1" = { owner = "firmware/apps/radio-root", classes = ["rust-panic"] }
 "firmware/apps/radio-root/src/entry.rs:crate::main:terminal-entry:main:1" = { owner = "firmware/apps/radio-root", classes = ["configuration-boot"] }
 "firmware/apps/radio-root/src/entry.rs:crate::main:reset-method:reset:1" = { owner = "firmware/apps/radio-root", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
+"firmware/apps/radio-root/src/entry.rs:crate::fail:terminal-reference:boot_failure:1" = { owner = "firmware/apps/radio-root", classes = ["configuration-boot"] }
 
 # firmware/apps/w0/src/entry.rs
 "firmware/apps/w0/src/entry.rs:crate:terminal-binding:phy_fault_reporter:1" = { owner = "firmware/apps/w0", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
@@ -329,6 +338,7 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 "firmware/apps/w0/src/entry.rs:crate::run:terminal-reference:reset_request:1" = { owner = "firmware/apps/w0", classes = ["cancellation"] }
 "firmware/apps/w0/src/entry.rs:crate::run:terminal-reference:reset_request:2" = { owner = "firmware/apps/w0", classes = ["cancellation"] }
 "firmware/apps/w0/src/entry.rs:crate::fail:terminal-entry:fail:1" = { owner = "firmware/apps/w0", classes = ["configuration-boot"] }
+"firmware/apps/w0/src/entry.rs:crate::fail:terminal-reference:boot_failure:1" = { owner = "firmware/apps/w0", classes = ["configuration-boot"] }
 
 # firmware/apps/w0/src/phy_pilot.rs
 "firmware/apps/w0/src/phy_pilot.rs:crate::phy_pilot::init:terminal-reference:reset_binding:1" = { owner = "firmware/apps/w0", classes = ["configuration-boot", "unexpected-hardware", "software-invariant"] }
@@ -351,8 +361,8 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 "firmware/apps/w1/src/entry.rs:crate::main:reset-method:reset:3" = { owner = "firmware/apps/w1", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
 "firmware/apps/w1/src/entry.rs:crate::main:reset-method:reset:4" = { owner = "firmware/apps/w1", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
 "firmware/apps/w1/src/entry.rs:crate::fail:terminal-entry:fail:1" = { owner = "firmware/apps/w1", classes = ["configuration-boot"] }
-"firmware/apps/w1/src/entry.rs:crate::fail:terminal-reference:fatal_halt:1" = { owner = "firmware/apps/w1", classes = ["configuration-boot"] }
 "firmware/apps/w1/src/entry.rs:crate::run:terminal-reference:reset_request:1" = { owner = "firmware/apps/w1", classes = ["cancellation"] }
+"firmware/apps/w1/src/entry.rs:crate::fail:terminal-reference:boot_failure:1" = { owner = "firmware/apps/w1", classes = ["configuration-boot"] }
 
 # firmware/apps/w1/src/irq.rs
 "firmware/apps/w1/src/irq.rs:crate::irq::on_wifi:terminal-reference:reset:1" = { owner = "firmware/apps/w1", classes = ["unexpected-hardware"] }
@@ -378,6 +388,7 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 "firmware/apps/w2/src/entry.rs:crate:terminal-reference:reset:1" = { owner = "firmware/apps/w2", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
 "firmware/apps/w2/src/entry.rs:crate:terminal-binding:entry:1" = { owner = "firmware/apps/w2", classes = ["rust-panic"] }
 "firmware/apps/w2/src/entry.rs:crate::main:terminal-entry:main:1" = { owner = "firmware/apps/w2", classes = ["configuration-boot"] }
+"firmware/apps/w2/src/entry.rs:crate::fail:terminal-reference:boot_failure:1" = { owner = "firmware/apps/w2", classes = ["configuration-boot"] }
 
 # firmware/apps/w2/src/irq.rs
 "firmware/apps/w2/src/irq.rs:crate::irq::on_wifi:terminal-reference:reset:1" = { owner = "firmware/apps/w2", classes = ["unexpected-hardware"] }
@@ -406,6 +417,7 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 "firmware/apps/w2/src/unconfigured.rs:crate::main:terminal-entry:main:1" = { owner = "firmware/apps/w2", classes = ["configuration-boot"] }
 "firmware/apps/w2/src/unconfigured.rs:crate::fail:terminal-entry:fail:1" = { owner = "firmware/apps/w2", classes = ["configuration-boot"] }
 "firmware/apps/w2/src/unconfigured.rs:crate:terminal-binding:entry:1" = { owner = "firmware/apps/w2", classes = ["rust-panic"] }
+"firmware/apps/w2/src/unconfigured.rs:crate::fail:terminal-reference:boot_failure:1" = { owner = "firmware/apps/w2", classes = ["configuration-boot"] }
 
 # firmware/apps/w2/src/usb.rs
 "firmware/apps/w2/src/usb.rs:crate::usb::open:terminal-reference:reset_binding:1" = { owner = "firmware/apps/w2", classes = ["configuration-boot", "unexpected-hardware", "software-invariant"] }
@@ -421,8 +433,7 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 "firmware/apps/w3/src/entry.rs:crate::main:reset-method:reset:3" = { owner = "firmware/apps/w3", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
 "firmware/apps/w3/src/entry.rs:crate::main:reset-method:reset:4" = { owner = "firmware/apps/w3", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
 "firmware/apps/w3/src/entry.rs:crate::fail:terminal-entry:fail:1" = { owner = "firmware/apps/w3", classes = ["configuration-boot"] }
-"firmware/apps/w3/src/entry.rs:crate::fail:terminal-reference:fatal_halt:1" = { owner = "firmware/apps/w3", classes = ["configuration-boot"] }
-"firmware/apps/w3/src/entry.rs:crate::park:terminal-entry:park:1" = { owner = "firmware/apps/w3", classes = ["configuration-boot"] }
+"firmware/apps/w3/src/entry.rs:crate::fail:terminal-reference:boot_failure:1" = { owner = "firmware/apps/w3", classes = ["configuration-boot"] }
 
 # firmware/apps/w3/src/irq.rs
 "firmware/apps/w3/src/irq.rs:crate::irq::on_wifi:terminal-reference:reset:1" = { owner = "firmware/apps/w3", classes = ["unexpected-hardware"] }
@@ -453,11 +464,13 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 
 # firmware/apps/w3/src/station.rs
 
+
 # firmware/apps/w3/src/unconfigured.rs
 "firmware/apps/w3/src/unconfigured.rs:crate::main:terminal-entry:main:1" = { owner = "firmware/apps/w3", classes = ["configuration-boot"] }
 "firmware/apps/w3/src/unconfigured.rs:crate::fail:terminal-entry:fail:1" = { owner = "firmware/apps/w3", classes = ["configuration-boot"] }
-"firmware/apps/w3/src/unconfigured.rs:crate::fail:terminal-reference:fatal_halt:1" = { owner = "firmware/apps/w3", classes = ["configuration-boot"] }
 "firmware/apps/w3/src/unconfigured.rs:crate:terminal-binding:entry:1" = { owner = "firmware/apps/w3", classes = ["rust-panic"] }
+"firmware/apps/w3/src/unconfigured.rs:crate::fail:terminal-reference:boot_failure:1" = { owner = "firmware/apps/w3", classes = ["configuration-boot"] }
+"firmware/apps/w3/src/unconfigured.rs:crate::main:terminal-reference:boot_failure:1" = { owner = "firmware/apps/w3", classes = ["configuration-boot"] }
 
 # firmware/apps/w3/src/usb.rs
 "firmware/apps/w3/src/usb.rs:crate::usb::open:terminal-reference:reset_binding:1" = { owner = "firmware/apps/w3", classes = ["configuration-boot", "unexpected-hardware", "software-invariant"] }
@@ -478,9 +491,9 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 "firmware/hil/esp32s31-lower-mac/src/entry.rs:crate::main:reset-method:reset:3" = { owner = "firmware/hil/esp32s31-lower-mac", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
 "firmware/hil/esp32s31-lower-mac/src/entry.rs:crate::main:reset-method:reset:4" = { owner = "firmware/hil/esp32s31-lower-mac", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
 "firmware/hil/esp32s31-lower-mac/src/entry.rs:crate::fail:terminal-entry:fail:1" = { owner = "firmware/hil/esp32s31-lower-mac", classes = ["configuration-boot"] }
-"firmware/hil/esp32s31-lower-mac/src/entry.rs:crate::fail:terminal-reference:fatal_halt:1" = { owner = "firmware/hil/esp32s31-lower-mac", classes = ["configuration-boot"] }
 "firmware/hil/esp32s31-lower-mac/src/entry.rs:crate::dispatch:terminal-reference:reset_request:1" = { owner = "firmware/hil/esp32s31-lower-mac", classes = ["cancellation"] }
 "firmware/hil/esp32s31-lower-mac/src/entry.rs:crate::serve_driver:panic-method:expect:1" = { owner = "firmware/hil/esp32s31-lower-mac", classes = ["rust-panic"] }
+"firmware/hil/esp32s31-lower-mac/src/entry.rs:crate::fail:terminal-reference:boot_failure:1" = { owner = "firmware/hil/esp32s31-lower-mac", classes = ["configuration-boot"] }
 
 # firmware/hil/esp32s31-lower-mac/src/irq.rs
 "firmware/hil/esp32s31-lower-mac/src/irq.rs:crate::irq::on_wifi:terminal-reference:reset:1" = { owner = "firmware/hil/esp32s31-lower-mac", classes = ["unexpected-hardware"] }
@@ -543,9 +556,9 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 "firmware/hil/esp32s31-phy/src/entry.rs:crate::main:reset-method:reset:3" = { owner = "firmware/hil/esp32s31-phy", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
 "firmware/hil/esp32s31-phy/src/entry.rs:crate::main:reset-method:reset:4" = { owner = "firmware/hil/esp32s31-phy", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
 "firmware/hil/esp32s31-phy/src/entry.rs:crate::fail:terminal-entry:fail:1" = { owner = "firmware/hil/esp32s31-phy", classes = ["configuration-boot"] }
-"firmware/hil/esp32s31-phy/src/entry.rs:crate::fail:terminal-reference:fatal_halt:1" = { owner = "firmware/hil/esp32s31-phy", classes = ["configuration-boot"] }
 "firmware/hil/esp32s31-phy/src/entry.rs:crate::dispatch:terminal-reference:reset_request:1" = { owner = "firmware/hil/esp32s31-phy", classes = ["cancellation"] }
 "firmware/hil/esp32s31-phy/src/entry.rs:crate::dispatch:terminal-reference:reset_request:2" = { owner = "firmware/hil/esp32s31-phy", classes = ["cancellation"] }
+"firmware/hil/esp32s31-phy/src/entry.rs:crate::fail:terminal-reference:boot_failure:1" = { owner = "firmware/hil/esp32s31-phy", classes = ["configuration-boot"] }
 
 # firmware/hil/esp32s31-phy/src/health.rs
 "firmware/hil/esp32s31-phy/src/health.rs:crate::health::cut:terminal-reference:abort:1" = { owner = "firmware/hil/esp32s31-phy", classes = ["rust-panic"] }
@@ -598,9 +611,7 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 "firmware/hil/esp32s31/src/entry.rs:crate::fail:terminal-reference:software_reset:1" = { owner = "firmware/hil/esp32s31", classes = ["configuration-boot"] }
 
 # firmware/hil/esp32s31/src/exception.rs
-"firmware/hil/esp32s31/src/exception.rs:crate::exception:terminal-binding:exception_handler:1" = { owner = "firmware/hil/esp32s31", classes = ["cpu-exception"] }
-"firmware/hil/esp32s31/src/exception.rs:crate::exception::exception:terminal-entry:exception:1" = { owner = "firmware/hil/esp32s31", classes = ["cpu-exception"] }
-"firmware/hil/esp32s31/src/exception.rs:crate::exception::exception:terminal-reference:reset_recording:1" = { owner = "firmware/hil/esp32s31", classes = ["cpu-exception"] }
+
 
 # firmware/hil/esp32s31/src/fatal.rs
 "firmware/hil/esp32s31/src/fatal.rs:crate::fatal::Failure:retained-reason:Failure::Layout:1" = { owner = "firmware/hil/esp32s31", classes = ["configuration-boot"] }
@@ -680,7 +691,6 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 "firmware/hil/esp32s31/src/wifi_station/mod.rs:crate::wifi_station::start:terminal-reference:reset_binding:1" = { owner = "firmware/hil/esp32s31", classes = ["configuration-boot", "unexpected-hardware", "software-invariant"] }
 "firmware/hil/esp32s31/src/wifi_station/mod.rs:crate::wifi_station::start:reset-method:reset:3" = { owner = "firmware/hil/esp32s31", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
 "firmware/hil/esp32s31/src/wifi_station/mod.rs:crate::wifi_station::start:reset-method:reset:4" = { owner = "firmware/hil/esp32s31", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
-"firmware/hil/esp32s31/src/wifi_station/mod.rs:crate::wifi_station::park:terminal-entry:park:1" = { owner = "firmware/hil/esp32s31", classes = ["configuration-boot"] }
 "firmware/hil/esp32s31/src/wifi_station/mod.rs:crate::wifi_station::impl Attempt::advance:panic-method:expect:1" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
 "firmware/hil/esp32s31/src/wifi_station/mod.rs:crate::wifi_station::station_work:panic-method:expect:1" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
 "firmware/hil/esp32s31/src/wifi_station/mod.rs:crate::wifi_station::station_work:panic-method:expect:2" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
@@ -705,6 +715,7 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 "firmware/hil/esp32s31/src/wifi_station/radio.rs:crate::wifi_station::radio::failure:terminal-entry:failure:1" = { owner = "firmware/hil/esp32s31", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
 "firmware/hil/esp32s31/src/wifi_station/radio.rs:crate::wifi_station::radio::failure:terminal-reference:reset:1" = { owner = "firmware/hil/esp32s31", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
 "firmware/hil/esp32s31/src/wifi_station/radio.rs:crate::wifi_station::radio::failure:terminal-reference:reset_request:1" = { owner = "firmware/hil/esp32s31", classes = ["cancellation"] }
+"firmware/hil/esp32s31/src/wifi_station/radio.rs:crate::wifi_station::radio::failure:terminal-reference:boot_failure:1" = { owner = "firmware/hil/esp32s31", classes = ["configuration-boot"] }
 
 # firmware/hil/esp32s31/src/wifi_station/station.rs
 "firmware/hil/esp32s31/src/wifi_station/station.rs:crate::wifi_station::station::impl oer_ieee80211_sta :: machine :: StaCallbacks for Callbacks::nonce:panic-method:expect:1" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
@@ -727,7 +738,6 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 # firmware/probes/esp32s31-radio/src/hardware_image.rs
 "firmware/probes/esp32s31-radio/src/hardware_image.rs:crate::hardware_image::main:reset-method:reset:4" = { owner = "firmware/probes/esp32s31-radio", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
 "firmware/probes/esp32s31-radio/src/hardware_image.rs:crate::hardware_image::fail:terminal-entry:fail:1" = { owner = "firmware/probes/esp32s31-radio", classes = ["configuration-boot"] }
-"firmware/probes/esp32s31-radio/src/hardware_image.rs:crate::hardware_image::fail:terminal-reference:fatal_halt:1" = { owner = "firmware/probes/esp32s31-radio", classes = ["configuration-boot"] }
 "firmware/probes/esp32s31-radio/src/hardware_image.rs:crate::hardware_image::sheets:terminal-reference:reset:1" = { owner = "firmware/probes/esp32s31-radio", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
 "firmware/probes/esp32s31-radio/src/hardware_image.rs:crate::hardware_image:terminal-binding:phy_fault_reporter:1" = { owner = "firmware/probes/esp32s31-radio", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
 "firmware/probes/esp32s31-radio/src/hardware_image.rs:crate::hardware_image:terminal-reference:reset:1" = { owner = "firmware/probes/esp32s31-radio", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
@@ -736,6 +746,7 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 "firmware/probes/esp32s31-radio/src/hardware_image.rs:crate::hardware_image::main:reset-method:reset:1" = { owner = "firmware/probes/esp32s31-radio", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
 "firmware/probes/esp32s31-radio/src/hardware_image.rs:crate::hardware_image::main:reset-method:reset:2" = { owner = "firmware/probes/esp32s31-radio", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
 "firmware/probes/esp32s31-radio/src/hardware_image.rs:crate::hardware_image::main:reset-method:reset:3" = { owner = "firmware/probes/esp32s31-radio", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
+"firmware/probes/esp32s31-radio/src/hardware_image.rs:crate::hardware_image::fail:terminal-reference:boot_failure:1" = { owner = "firmware/probes/esp32s31-radio", classes = ["configuration-boot"] }
 
 # firmware/probes/esp32s31-radio/src/lib.rs
 "firmware/probes/esp32s31-radio/src/lib.rs:crate::probe_halt:terminal-entry:probe_halt:1" = { owner = "firmware/probes/esp32s31-radio", classes = ["rust-panic"] }
@@ -758,9 +769,6 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 "firmware/probes/esp32s31-register/src/main.rs:crate::_start:terminal-entry:_start:1" = { owner = "firmware/probes/esp32s31-register", classes = ["configuration-boot"] }
 
 # firmware/probes/esp32s31-rx-chain/src/diagnostic.rs
-"firmware/probes/esp32s31-rx-chain/src/diagnostic.rs:crate::diagnostic:terminal-binding:exception_handler:1" = { owner = "firmware/probes/esp32s31-rx-chain", classes = ["cpu-exception"] }
-"firmware/probes/esp32s31-rx-chain/src/diagnostic.rs:crate::diagnostic::exception:terminal-entry:exception:1" = { owner = "firmware/probes/esp32s31-rx-chain", classes = ["cpu-exception"] }
-"firmware/probes/esp32s31-rx-chain/src/diagnostic.rs:crate::diagnostic::exception:terminal-reference:reset_recording:1" = { owner = "firmware/probes/esp32s31-rx-chain", classes = ["cpu-exception", "rust-panic"] }
 "firmware/probes/esp32s31-rx-chain/src/diagnostic.rs:crate::diagnostic:retained-slot:retained_static:1" = { owner = "firmware/probes/esp32s31-rx-chain", classes = ["configuration-boot", "cpu-exception", "rust-panic"] }
 "firmware/probes/esp32s31-rx-chain/src/diagnostic.rs:crate::diagnostic::report_previous:terminal-reference:fatal_halt:1" = { owner = "firmware/probes/esp32s31-rx-chain", classes = ["cpu-exception", "rust-panic"] }
 
@@ -775,7 +783,7 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 "firmware/probes/esp32s31-rx-chain/src/image.rs:crate::image::main:reset-method:reset:3" = { owner = "firmware/probes/esp32s31-rx-chain", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
 "firmware/probes/esp32s31-rx-chain/src/image.rs:crate::image::main:reset-method:reset:4" = { owner = "firmware/probes/esp32s31-rx-chain", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
 "firmware/probes/esp32s31-rx-chain/src/image.rs:crate::image::fail:terminal-entry:fail:1" = { owner = "firmware/probes/esp32s31-rx-chain", classes = ["configuration-boot"] }
-"firmware/probes/esp32s31-rx-chain/src/image.rs:crate::image::fail:terminal-reference:fatal_halt:1" = { owner = "firmware/probes/esp32s31-rx-chain", classes = ["configuration-boot"] }
+"firmware/probes/esp32s31-rx-chain/src/image.rs:crate::image::fail:terminal-reference:boot_failure:1" = { owner = "firmware/probes/esp32s31-rx-chain", classes = ["configuration-boot"] }
 
 # firmware/probes/esp32s31-rx-chain/src/phy_pilot.rs
 "firmware/probes/esp32s31-rx-chain/src/phy_pilot.rs:crate::phy_pilot::init:terminal-reference:reset_binding:1" = { owner = "firmware/probes/esp32s31-rx-chain", classes = ["configuration-boot", "unexpected-hardware", "software-invariant"] }
@@ -785,6 +793,15 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 
 # firmware/probes/esp32s31-rx-chain/src/usb.rs
 "firmware/probes/esp32s31-rx-chain/src/usb.rs:crate::usb::open:terminal-reference:reset_binding:1" = { owner = "firmware/probes/esp32s31-rx-chain", classes = ["configuration-boot", "unexpected-hardware", "software-invariant"] }
+
+# chips/espressif/staged-runtime/src/placement.rs
+"chips/espressif/staged-runtime/src/placement.rs:crate::placement::__exception_handler:terminal-reference:handle:1" = { owner = "chips/espressif/staged-runtime", classes = ["cpu-exception"] }
+
+# chips/espressif/staged-runtime/src/trap.rs
+"chips/espressif/staged-runtime/src/trap.rs:crate::trap::CPU_EXCEPTION:retained-reason:CPU_EXCEPTION:1" = { owner = "chips/espressif/staged-runtime", classes = ["cpu-exception"] }
+"chips/espressif/staged-runtime/src/trap.rs:crate::trap::handle:terminal-entry:handle:1" = { owner = "chips/espressif/staged-runtime", classes = ["cpu-exception"] }
+"chips/espressif/staged-runtime/src/trap.rs:crate::trap::handle:terminal-reference:reset_claimed:1" = { owner = "chips/espressif/staged-runtime", classes = ["cpu-exception"] }
+"chips/espressif/staged-runtime/src/trap.rs:crate::trap::handle:terminal-reference:reset_platform_once:1" = { owner = "chips/espressif/staged-runtime", classes = ["cpu-exception"] }
 
 [nonterminal]
 # These B0 H4 parser resets return normally and never reset the chip.

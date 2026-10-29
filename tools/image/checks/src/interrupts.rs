@@ -631,7 +631,7 @@ impl InterruptStacks {
             }
             for level in hart.levels.iter().chain([&hart.exception]) {
                 let label = if level.level == 0 {
-                    "exception".to_owned()
+                    format!("exception x{}", hart.exception_copies)
                 } else {
                     format!(
                         "level {} ({})",
@@ -835,6 +835,7 @@ pub fn interrupt_stacks_of(image: &Image) -> Result<InterruptStacks> {
         cores: &interrupts.harts,
         vectors: &vectors,
         exception,
+        exception_copies: oer_image_stack::exception_copies(facts.file())?,
         resolutions,
     };
     let harts = oer_image_stack::interrupt_stacks(analysis, &inputs, &mut keep, &mut control)?;
@@ -1308,6 +1309,7 @@ mod tests {
                 core: 0,
                 levels: Vec::new(),
                 exception: level,
+                exception_copies: 1,
                 bytes: None,
                 partial,
             }],

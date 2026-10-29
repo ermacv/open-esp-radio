@@ -56,7 +56,7 @@ pub use cha::{
     StorageEvidence, TypeFacts, TypedStore, UnknownUse, audit_function_addresses,
     function_pointer_resolutions, typed_function_pointer_resolutions,
 };
-pub use contexts::{HartStack, LevelStack, Stacks, Vector, interrupt_stacks};
+pub use contexts::{HartStack, LevelStack, Stacks, Vector, exception_copies, interrupt_stacks};
 pub use dwarf::{DebugMetadata, Dwarf, Returned, read as read_debug};
 use image::ReadOnlyTables;
 pub use image::{Function, stack_sizes};

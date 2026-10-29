@@ -45,28 +45,48 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
     let Some(root) = Root::take() else {
         fail(oer_diagnostics::name!("root"; 32));
     };
-    let (runtime, _psram, mut adopted) =
-        match oer_espressif_staged_runtime::adoption::run::<oer_esp32s31_compose::Esp32s31, _, _>(
-            handoff,
-            root.into_runtime(),
-            INTERRUPT_TABLE,
-            oer_esp32s31_board::BootstrapPsram,
-            oer_esp32s31_compose::phy_fault::report_previous,
-            core::convert::identity,
-        ) {
-            Ok(value) => value.into_parts(),
-            Err(error) => fail(error.name()),
-        };
+    let (
+        (
+            runtime_efuse,
+            runtime_system_timer,
+            runtime_software_interrupts,
+            runtime_radio,
+            runtime_clocks,
+            runtime_watchdogs,
+        ),
+        _psram,
+        mut adopted,
+    ) = match oer_espressif_staged_runtime::adoption::run::<oer_esp32s31_compose::Esp32s31, _, _>(
+        handoff,
+        root.into_runtime(),
+        INTERRUPT_TABLE,
+        oer_esp32s31_board::BootstrapPsram,
+        oer_esp32s31_compose::phy_fault::report_previous,
+        |hardware| {
+            let _reset_causes = oer_esp32s31_compose::reset_causes::read(hardware.reset_cause);
+            (
+                hardware.efuse,
+                hardware.system_timer,
+                hardware.software_interrupts,
+                hardware.radio,
+                hardware.clocks,
+                hardware.watchdogs,
+            )
+        },
+    ) {
+        Ok(value) => value.into_parts(),
+        Err(error) => fail(error.name()),
+    };
     let Some(interrupts) = Interrupts::take() else {
         fail(oer_diagnostics::name!("interrupts"; 32));
     };
-    let factory = FactoryIdentity::read(runtime.efuse);
+    let factory = FactoryIdentity::read(runtime_efuse);
     let identity = PhyCalibrationIdentity {
         rf_cal_version: phy_get_rf_cal_version(),
         base_mac_address: factory.base_mac(),
         mac_extension: factory.mac_extension(),
     };
-    let timer = runtime.system_timer;
+    let timer = runtime_system_timer;
     oer_espressif_executor::init::<Esp32s31, 2, _, _>(
         oer_espressif_executor::systimer::SystemTimer {
             comparators: timer.comparators,
@@ -83,7 +103,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
         timer.alarm1,
     )
     .unwrap_or_else(|failure| failure.reset());
-    let software = runtime.software_interrupts;
+    let software = runtime_software_interrupts;
     let (hart, router) = adopted.parts();
     let radio = InterruptExecutor::<Esp32s31, 2>::new(software.line2)
         .start(hart, router, interrupts.radio, software.irq2, ())
@@ -93,8 +113,8 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
         Err(error) => fail(error.name()),
     };
     let boot = Boot {
-        hardware: runtime.radio,
-        clocks: runtime.clocks,
+        hardware: runtime_radio,
+        clocks: runtime_clocks,
         identity,
     };
     if RadioTasks::sheets(&radio, boot).is_err() {
@@ -108,7 +128,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
             software.irq0,
             (),
             move |spawner| {
-                if AppTasks::watchdog(spawner, runtime.watchdogs.rtc).is_err() {
+                if AppTasks::watchdog(spawner, runtime_watchdogs.rtc).is_err() {
                     fail(oer_diagnostics::name!("watchdog-task"; 32));
                 }
             },
@@ -116,11 +136,14 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
         .unwrap_or_else(|failure| failure.reset()) {}
 }
 fn fail<const B: usize>(reason: oer_diagnostics::Name<B>) -> ! {
-    oer_espressif_staged_runtime::fatal_halt::<oer_esp32s31_hal::platform::Port>(|_, _| {
-        let _ = oer_esp32s31_hal::peripherals::usb_serial_jtag::fatal_note(
-            &oer_diagnostics::Note::runtime_fail(reason),
-        );
-    })
+    oer_espressif_staged_runtime::fatal::boot_failure::<oer_esp32s31_hal::platform::Port>(
+        reason.as_str(),
+        || {
+            let _ = oer_esp32s31_hal::peripherals::usb_serial_jtag::fatal_note(
+                &oer_diagnostics::Note::runtime_fail(reason),
+            );
+        },
+    )
 }
 async fn feed_watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) {
     match watchdog

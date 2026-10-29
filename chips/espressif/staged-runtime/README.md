@@ -8,7 +8,8 @@ vectors, stack symbols and default handlers.
 
 `_runtime_start` initializes application data and SRAM interrupt/DMA sections,
 selects the boot hart's PSRAM task stack and calls the image's `runtime_main`.
-`entry!` supplies that entry and the image's single panic handler. The image
+`entry!` supplies that entry, the image's single panic handler and the common
+CPU-exception handler. The image
 passes the HAL reset root's unstarted runtime partition to `adoption::run`,
 with its composition binding, interrupt table, board mapping adapter and
 previous-fault reporter. The runner calls `oer-espressif-boot::adoption::initialize`
@@ -16,19 +17,20 @@ for CPU-rate/clock adoption, console/core/debug installation, runtime watchdog
 arming and interrupt-owner publication. Isolated verifiers call that same driver
 without linking the runtime. The HAL split performs no startup effects.
 
-The optional image work is an explicit ownership projection callback after
-driver initialization and before retained-record reporting and mapping adoption;
-images with no work there pass `core::convert::identity`. Wi-Fi and IEEE 802.15.4
-retained reports, and HIL postmortem/reset-cause reads, keep their original order
-in this callback. The runner then calls the
-family mapping-adoption API and installs the interrupt context. Only a successful
-arm/adopt path constructs `adoption::Runtime`; its constructor and fields are
-private. `into_parts` returns the hardware, mapping and interrupt context together.
-`prepare` exposes the initialized phase as an opaque `Prepared` for image startup
-reporting. Its owners stay private until `Prepared::adopt` completes mapping and
-context adoption. HIL uses this phase to retain its console-before-diagnostics
-startup helper and regression test; `run` uses the same preparation/completion
-implementation.
+The image's ownership projection callback runs after console installation and
+watchdog arming, before mapping/context adoption. It consumes the reset-cause
+owner once, reports raw causes for every hart, reports image retained records,
+and forwards the owners needed by the image. HIL also keeps the reset-cause
+value snapshot for later boot evidence. The runner reports the runtime's named,
+boot and CPU-exception records, then calls the family mapping-adoption API and
+installs the interrupt context. Only a successful arm/adopt path constructs
+`adoption::Runtime`; its constructor and fields are private. `into_parts`
+returns the projected hardware, mapping and interrupt context together.
+`prepare` exposes the initialized phase as an opaque `Prepared`; its owners stay
+private until `Prepared::adopt` invokes the projection and completes adoption.
+HIL reports reset/retained evidence there and emits its startup banner and
+layout checks after successful adoption. `run` uses the same preparation and
+completion implementation.
 Adoption writes no CPU clock, PSRAM, cache or MMU register and repeats no cold boot.
 
 Adoption installs the SRAM interrupt stack and vectors, silences sources and
@@ -52,6 +54,15 @@ may be cached; task-context records can retain them. An optional hook receives
 `PanicDetails` and the winning terminal claim after capture with the local hart
 masked and the others stopped, or the stop failure. Hooks and their callees/data
 stay in SRAM or retained memory and take no locks. The image resets.
+
+The exception entry captures `mcause`, `mepc` and `mtval` in the existing
+96-byte frame before Rust/platform work. It commits that frame before peer stop
+and optional image observations, then resets. Reentry preserves the first
+committed minimum and skips the recorder. One reset-attempt gate bounds the
+handler nesting; a fault in reset reaches the architectural halt and preserved
+watchdog. The exported bound of three exception frames participates in IRQ stack
+sums. These guarantees require intact SRAM, trap entry and local mask code;
+capture and retention remain best effort.
 
 `retained_fault` owns a boot-initialized SRAM election. `claim` returns an
 exclusive terminal claim or typed `Reentered`, without waiting. The winning

@@ -212,6 +212,7 @@ fn irq_context_resolutions_and_bootstrap_use_the_same_three_way_report() {
         cores: &[0, 1],
         vectors: &[vector(0, FORMATTER), vector(1, TEXT + 28)],
         exception: vector(0, TEXT).entry,
+        exception_copies: 1,
         resolutions: &image.resolutions,
     };
     let (harts, _) = image

@@ -187,6 +187,7 @@ pub fn derive<'m>(
             cores: &irq.harts,
             vectors: &vectors,
             exception,
+            exception_copies: exception_copies(image.file())?,
             resolutions: &resolutions,
         },
         keep,

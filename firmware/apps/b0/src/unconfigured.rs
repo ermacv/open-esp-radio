@@ -1,6 +1,6 @@
 // An unconfigured image has no tasks or enabled interrupt sources.
-use oer_esp32s31_hal::root::Root;
 use oer_esp32s31_hal::peripherals::usb_serial_jtag;
+use oer_esp32s31_hal::root::Root;
 use oer_espressif_staged_runtime::panic;
 
 mod gate_fault;
@@ -16,30 +16,42 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
     let Some(root) = Root::take() else {
         fail("root-taken");
     };
-    let (_runtime, _psram, _adopted) = match oer_espressif_staged_runtime::adoption::run::<oer_esp32s31_compose::Esp32s31, _, _>(
-        handoff,
-        root.into_runtime(),
-        INTERRUPT_TABLE,
-        oer_esp32s31_board::BootstrapPsram,
-        oer_esp32s31_compose::phy_fault::report_previous,
-        core::convert::identity,
-    ) {
-        Ok(adopted) => adopted.into_parts(),
-        Err(error) => fail(error.name().as_str()),
-    };
-    gate_fault::report_previous();
-    release_fault::report_previous();
-    if let Some(previous) = previous
-        && usb_serial_jtag::early_text(b"OER-B0-BRINGUP: previous panic\r\n") {
-        panic::clear_previous(&previous);
-    }
-    let _ = usb_serial_jtag::early_text(b"OER-B0-BRINGUP: unconfigured\r\n");
-    oer_espressif_staged_runtime::idle()
+    let ((), _psram, _adopted) =
+        match oer_espressif_staged_runtime::adoption::run::<oer_esp32s31_compose::Esp32s31, _, _>(
+            handoff,
+            root.into_runtime(),
+            INTERRUPT_TABLE,
+            oer_esp32s31_board::BootstrapPsram,
+            oer_esp32s31_compose::phy_fault::report_previous,
+            |hardware| {
+                let _reset_causes = oer_esp32s31_compose::reset_causes::read(hardware.reset_cause);
+                gate_fault::report_previous();
+                release_fault::report_previous();
+                if let Some(previous) = previous
+                    && usb_serial_jtag::early_text(b"OER-B0-BRINGUP: previous panic\r\n")
+                {
+                    panic::clear_previous(&previous);
+                }
+            },
+        ) {
+            Ok(adopted) => adopted.into_parts(),
+            Err(error) => fail(error.name().as_str()),
+        };
+    oer_espressif_staged_runtime::fatal::boot_failure::<oer_esp32s31_hal::platform::Port>(
+        "unconfigured",
+        || {
+            let _ = usb_serial_jtag::early_text(b"OER-B0-BRINGUP: unconfigured\r\n");
+        },
+    )
 }
 
 fn fail(reason: &'static str) -> ! {
-    let _ = usb_serial_jtag::early_text(b"OER-B0-BRINGUP: fail ");
-    let _ = usb_serial_jtag::early_text(reason.as_bytes());
-    let _ = usb_serial_jtag::early_text(b"\r\n");
-    oer_espressif_staged_runtime::idle()
+    oer_espressif_staged_runtime::fatal::boot_failure::<oer_esp32s31_hal::platform::Port>(
+        reason,
+        || {
+            let _ = usb_serial_jtag::early_text(b"OER-B0-BRINGUP: fail ");
+            let _ = usb_serial_jtag::early_text(reason.as_bytes());
+            let _ = usb_serial_jtag::early_text(b"\r\n");
+        },
+    )
 }

@@ -73,8 +73,10 @@ records, adopts the board's existing mapping through the staged-layout contract
 and installs the interrupt context. Only then can it publish a `Runtime`.
 The opaque `Prepared` phase lets an image report startup after console
 installation while keeping hardware private until mapping/context adoption.
-An image callback between driver initialization and mapping adoption preserves
-its previous-record and reset-cause observation order. Isolated verifier
+An image callback after console installation and driver initialization reports
+raw reset causes and retained records before mapping/context adoption. It
+consumes the reset-cause owner once and forwards the remaining image owners;
+HIL retains the observed values for later boot evidence. Isolated verifier
 sessions call the same family driver directly without a staged runtime,
 handoff or fabricated mapping proof; there is no second sequence. Neither path
 repeats cold boot or reconfigures CPU clocks, the MMU or PSRAM. Runtime SYSTIMER
@@ -550,12 +552,21 @@ The current mechanisms have narrower guarantees than the policy:
   establishes neither DMA quiescence nor a drain of old bus transactions.
   An unavailable core-control owner returns `AwaitWatchdog`; the hart then
   waits for an already armed watchdog without taking over that owner.
-- Boot terminal paths include `idle`/`fatal_halt` and the bootstrap's halt.
-  HIL's boot reporter records/resets when console output is refused, but
-  halts after successful output. These paths do not implement the explicit
-  repeated-boot-failure policy. The default CPU exception handler spins
-  without capture/reset; HIL and RX-chain supply their own handlers.
-  The ordinary executor idle wait's debugger check is not terminal policy.
+- Stage-two boot failures retain a reason before output and explicitly reset
+  with the watchdog preserved. Bootstrap halt remains a separate path.
+  Every staged entry binds one common CPU-exception handler. Its unchanged
+  96-byte trap frame captures `mcause`, `mepc` and `mtval` before Rust or
+  platform work; the minimum commits before peer stop and supplemental image
+  hooks. Reentry skips capture/stop and requests reset, preserving the first
+  committed minimum. A fault before frame/commit completion remains best effort;
+  software cannot repair a broken stack or trap entry. One boot-zeroed reset
+  gate admits a single platform reset attempt; a fault during it returns to
+  the platform's architectural halt with the watchdog preserved. Assuming intact
+  SRAM, trap entry and local mask code, at most three exception frames coexist:
+  the original, a stop/hook fault, and a reset fault. The runtime exports this
+  bound to stack analysis; the IRQ sum includes all three frame/handler bounds.
+  The ordinary executor
+  idle wait's debugger check does not affect terminal policy.
 - All staged fault slots store `oer-diagnostics::fault::Record`: layout
   version 1, payload length, registry class, diagnostic domain/reason, captured
   hart (or an explicit unavailable sentinel), context, up to 280 observation bytes, checksum and a completion marker.
@@ -577,15 +588,18 @@ The current mechanisms have narrower guarantees than the policy:
   machine-state observations and postmortem data, and RX-chain observations.
   PHY retains operation/epoch, SAR RAW/ST, queue lengths, invalid delay and
   numeric foreign-reunion identities. None of these values grants ownership.
-  HIL exception diagnostics still reread trap CSRs after stop; they are not an
-  entry-time frame snapshot of every register. Trace and checkpoint rings have
-  independent, non-fault formats.
+  HIL and RX-chain exception supplements use the entry-time cause/PC/trap value;
+  HIL samples pending/routes after stop as additional observations. Neither
+  the frame nor those sequential samples are an atomic snapshot of all hardware.
+  Trace and checkpoint rings have independent, non-fault formats.
 - `NOLOAD` prevents startup initialization; it promises no hardware
   retention. `HW1_S31_RESET_20261026` in the register evidence observes a
   probe record surviving `SYS_SW_RST`. It establishes no retention for the
   watchdog's `ResetRtc`, super watchdog, brownout or power loss. Checksums
-  validate stored words, not power-fail atomicity. Raw reset-cause reporting
-  exists in the three HIL images, not uniformly in product images.
+  validate stored words, not power-fail atomicity. Every staged image reports
+  per-hart raw reset causes through the chip composition at boot, beside the
+  retained diagnostics; output is best effort. Isolated facts probes use their
+  own session diagnostic channel. Bootstrap reporting remains separate.
 
 [`terminal-sites.toml`](../tools/test/layers/terminal-sites.toml) and its
 [source check](../tools/test/layers/tests/terminal_sites.rs) inventory the

@@ -53,7 +53,9 @@ impl wifi::Events for ProductEvents {
 }
 pub fn failure(error: wifi::InitializationError) -> ! {
     match error {
-        wifi::InitializationError::MembershipUnavailable => crate::park(),
+        wifi::InitializationError::MembershipUnavailable => {
+            crate::fail(oer_diagnostics::name!("station-membership"; 32))
+        }
         wifi::InitializationError::Request(request) => {
             oer_espressif_staged_runtime::panic::reset_request::<oer_esp32s31_hal::platform::Port, _>(
                 request,

@@ -9,9 +9,8 @@ ENTRY(_runtime_start)
    An exception calls the image's `oer_exception_handler`, else the
    runtime's default stop. */
 EXTERN(oer_unhandled_interrupt);
-EXTERN(oer_default_exception);
+EXTERN(oer_exception_handler);
 EXTERN(_runtime_mtvt);
-PROVIDE(oer_exception_handler = oer_default_exception);
 /* Every line's default handler, which the staged runtime's build generates
    from the chip facts' lines and harts into its build directory, a library
    search path of every image that links the runtime. */
