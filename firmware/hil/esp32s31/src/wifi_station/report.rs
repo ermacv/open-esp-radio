@@ -10,8 +10,15 @@ pub fn service(fault: StationFailure) -> StationServiceFault {
         StationFailure::EnableRefused(v) => StationServiceFault::EnableRefused(backend(v)),
         StationFailure::Backend(v) => StationServiceFault::Backend(backend(v)),
         StationFailure::Submission(v) => StationServiceFault::Submission(backend(v)),
-        StationFailure::Contract(v) => StationServiceFault::Contract(oer_ieee80211_control::contract_violation(v)),
-        StationFailure::DrainedWithOutstanding {cause, missing} => StationServiceFault::DrainedWithOutstanding {cause:backend(cause),missing:oer_ieee80211_control::pending_terminal(missing)},
+        StationFailure::Contract(v) => {
+            StationServiceFault::Contract(oer_ieee80211_control::contract_violation(v))
+        }
+        StationFailure::DrainedWithOutstanding { cause, missing } => {
+            StationServiceFault::DrainedWithOutstanding {
+                cause: backend(cause),
+                missing: oer_ieee80211_control::pending_terminal(missing),
+            }
+        }
     }
 }
 

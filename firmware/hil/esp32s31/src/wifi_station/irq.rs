@@ -1,25 +1,11 @@
-//! Static ISR owners and DMA allocations for the HIL image.
+//! Image-owned ISR line and task signals.
 use core::sync::atomic::{AtomicU32, Ordering};
 use oer_esp32s31_compose::Esp32s31;
-use oer_esp32s31_wifi::{DmaTypes, InterruptTypes, Interrupts};
+use oer_esp32s31_wifi::{InterruptTypes, Interrupts};
 use oer_espressif_executor::InterruptExecutor;
 use oer_espressif_interrupt_table::signal::{FromHandler, FromTask, IrqSignal};
 
 pub type RadioExecutor = InterruptExecutor<Esp32s31, 2>;
-type Static = <Interrupts as DmaTypes>::Rx;
-type Tx = <Interrupts as DmaTypes>::Tx;
-oer_esp32s31_hal::dma_static! {
-    pub static RX: Static = zeroed in ".dma.bss.wifi_rx";
-    pub static TX0: Tx = zeroed in ".dma.bss.wifi_station_tx0";
-    pub static TX1: Tx = zeroed in ".dma.bss.wifi_station_tx1";
-    pub static TX2: Tx = zeroed in ".dma.bss.wifi_station_tx2";
-    pub static TX3: Tx = zeroed in ".dma.bss.wifi_station_tx3";
-    pub static TX4: Tx = zeroed in ".dma.bss.wifi_station_tx4";
-    pub static TX5: Tx = zeroed in ".dma.bss.wifi_station_tx5";
-    pub static TX6: Tx = zeroed in ".dma.bss.wifi_station_tx6";
-    pub static TX7: Tx = zeroed in ".dma.bss.wifi_station_tx7";
-    pub static TX8: Tx = zeroed in ".dma.bss.wifi_station_tx8";
-}
 oer_memory::zeroed_static! {
     pub static LINE: Interrupts = zeroed in ".critical.bss.wifi_rx_line";
 }

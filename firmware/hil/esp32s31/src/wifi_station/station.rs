@@ -6,9 +6,9 @@ use core::{
 };
 use oer_embassy_time::EmbassyClock;
 use oer_esp32s31_wifi as wifi;
+use oer_esp32s31_wifi::NonceSource;
 use oer_ieee80211_cipher::aes::{SoftwareAes128, SoftwareKeyUnwrap};
 use oer_ieee80211_control::StationServiceEnd;
-use oer_esp32s31_wifi::NonceSource;
 use oer_memory::{OnceValue, Placed};
 use oer_time::{Duration, Timer};
 pub struct Callbacks(pub Placed<'static, NonceSource>);
@@ -18,7 +18,6 @@ impl wifi::Callbacks for Callbacks {
             .next_nonce()
             .unwrap_or_else(|_| radio::failure(wifi::InitializationError::Control))
     }
-
 }
 static ATTEMPT: OnceValue<Attempt> = OnceValue::new();
 pub static LINK: AtomicBool = AtomicBool::new(false);
@@ -168,12 +167,24 @@ pub async fn serve(
         wifi::StationExit::Unavailable(_) => super::end(attempt, StationServiceEnd::Unavailable),
         wifi::StationExit::Stopped => {
             if let Some(request) = stopped.get() {
-                super::emit(request, &oer_ieee80211_control::StationStopped(observation::counters()));
+                super::emit(
+                    request,
+                    &oer_ieee80211_control::StationStopped(observation::counters()),
+                );
             }
         }
-        wifi::StationExit::Failed(fault) => super::end(attempt, StationServiceEnd::Failed(super::report::service(fault))),
-        wifi::StationExit::Poisoned(fault) => super::end(attempt, StationServiceEnd::Poisoned(super::report::service(fault))),
-        wifi::StationExit::Quarantined(fault) => super::end(attempt, StationServiceEnd::Quarantined(super::report::service(fault))),
+        wifi::StationExit::Failed(fault) => super::end(
+            attempt,
+            StationServiceEnd::Failed(super::report::service(fault)),
+        ),
+        wifi::StationExit::Poisoned(fault) => super::end(
+            attempt,
+            StationServiceEnd::Poisoned(super::report::service(fault)),
+        ),
+        wifi::StationExit::Quarantined(fault) => super::end(
+            attempt,
+            StationServiceEnd::Quarantined(super::report::service(fault)),
+        ),
     }
 }
 async fn reconnect(

@@ -1909,6 +1909,7 @@ dependencies = [
  "oer-espressif-executor",
  "oer-espressif-ieee80211-policy",
  "oer-espressif-interrupt-table",
+ "oer-espressif-radio",
  "oer-ieee80211-arbiter",
  "oer-ieee80211-instrumentation",
  "oer-ieee80211-port",

@@ -1,9 +1,7 @@
 use crate::{Caps, Channels, Connection, Control, Network, radio, station as service};
 use oer_esp32s31_compose::Esp32s31;
-use oer_esp32s31_hal::{ieee80211::dma::tx_storage::TxDmaStorage, root::WifiPartition};
-use oer_esp32s31_ieee80211_driver::{
-    irq::{DoorbellAcknowledge, RadioDoorbell, WifiIrqLine, WifiIrqPart, service_wifi_line},
-    rx::arena::WifiRxStatic,
+use oer_esp32s31_ieee80211_driver::irq::{
+    DoorbellAcknowledge, RadioDoorbell, WifiIrqLine, WifiIrqPart, service_wifi_line,
 };
 use oer_espressif_executor::{Doorbell, DoorbellAcknowledger, InterruptExecutor};
 use oer_espressif_interrupt_table::{Bound, Entry, InterruptSources, signal::IrqSignal};
@@ -60,6 +58,7 @@ pub enum InitializationError {
     Registration,
     Rx,
     Tx,
+    Dma(crate::DmaError),
 }
 pub struct Lower(pub DoorbellAcknowledger<Esp32s31, 3>);
 impl DoorbellAcknowledge for Lower {
@@ -103,14 +102,6 @@ impl InterruptTypes for Interrupts {
         service_wifi_line(&self.line, part)
             .map_err(|oer_esp32s31_ieee80211_driver::mac::irq::Fault::FatalAssertion { raw }| raw)
     }
-}
-pub trait DmaTypes {
-    type Rx: bytemuck::Zeroable;
-    type Tx: bytemuck::Zeroable;
-}
-impl DmaTypes for Interrupts {
-    type Rx = WifiRxStatic<N, B, S, Q, RadioExecutor>;
-    type Tx = TxDmaStorage<TX>;
 }
 #[derive(Clone, Copy)]
 pub struct Config {
@@ -297,8 +288,7 @@ impl<W: Binding> Default for Storage<W> {
 pub struct Resources<W: Binding> {
     pub events: W::Events,
     pub storage: &'static mut Storage<W>,
-    pub cell: oer_esp32s31_radio_client::MembershipCell<oer_esp32s31_radio_client::wifi::Wifi>,
-    pub wifi: WifiPartition,
+    pub hardware: crate::WifiHardware,
     pub rng: Rng,
     pub address: [u8; 6],
     pub ap: [u8; 6],
@@ -308,8 +298,7 @@ pub struct Resources<W: Binding> {
     pub interrupts: &'static Interrupts,
     pub mac: &'static IrqSignal<RadioExecutor>,
     pub power: &'static IrqSignal<RadioExecutor>,
-    pub rx: oer_esp32s31_hal::memory::dma_static::Placed<WifiRxStatic<N, B, S, Q, RadioExecutor>>,
-    pub tx: [oer_esp32s31_hal::memory::dma_static::Placed<TxDmaStorage<TX>>; 9],
+    pub dma: crate::DmaResources,
 }
 pub struct Runners<W: Binding> {
     pub driver: Driver<W>,
@@ -348,8 +337,7 @@ pub fn station<W: Binding>(
     let Resources {
         events,
         storage,
-        cell,
-        wifi,
+        hardware,
         rng,
         address,
         ap,
@@ -359,9 +347,10 @@ pub fn station<W: Binding>(
         interrupts,
         mac,
         power,
-        rx,
-        tx,
+        dma,
     } = resources;
+    let crate::WifiHardware { cell, wifi } = hardware;
+    let crate::DmaResources { rx, tx } = dma;
     let (control, network, connection) = storage
         .channels
         .split()

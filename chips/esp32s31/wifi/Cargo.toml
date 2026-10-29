@@ -34,6 +34,7 @@ oer-trace = { path = "../../../portable/trace" }
 oer-memory = { path = "../../../portable/memory" }
 
 [target.'cfg(target_arch = "riscv32")'.dependencies]
+oer-espressif-radio = { path = "../../espressif/radio" }
 oer-esp32s31-hal = { path = "../../../chips/esp32s31/hal" }
 oer-esp32s31-board = { path = "../../../chips/esp32s31/board" }
 oer-esp32s31-compose = { path = "../../../chips/esp32s31/compose", features = ["wifi-fault"] }
@@ -46,6 +47,7 @@ oer-espressif-interrupt-table = { path = "../../../chips/espressif/interrupt-tab
 oer-embassy-time = { path = "../../../portable/embassy/time" }
 
 [dev-dependencies]
+oer-espressif-radio = { path = "../../espressif/radio" }
 oer-esp32s31-hal = { path = "../hal" }
 oer-esp32s31-phy = { path = "../phy" }
 oer-esp32s31-radio-client = { path = "../radio/client" }

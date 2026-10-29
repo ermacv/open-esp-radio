@@ -15,12 +15,12 @@ mod station;
 use crate::services::StationRequests as Requests;
 use crate::transport::CONSOLE;
 use oer_esp32s31_compose::Esp32s31;
+use oer_esp32s31_wifi::NonceSource;
 use oer_hil_protocol::RequestIdentity;
 use oer_ieee80211_control::{
     StationLink, StationLinkState, StationRole, StationServiceEnd, StationServiceEnded,
     StationStart, StopStation,
 };
-use oer_esp32s31_wifi::NonceSource;
 use oer_time::Clock;
 
 use oer_embassy_time::EmbassyClock;
@@ -32,8 +32,7 @@ use oer_espressif_executor::{Doorbell, InterruptExecutor};
 
 use oer_memory::{Placed, StaticPlace};
 use static_cell::{ConstStaticCell, StaticCell};
-static NONCES: ConstStaticCell<StaticPlace<NonceSource>> =
-    ConstStaticCell::new(StaticPlace::new());
+static NONCES: ConstStaticCell<StaticPlace<NonceSource>> = ConstStaticCell::new(StaticPlace::new());
 
 #[derive(Clone, Copy)]
 pub struct RadioConfig {
@@ -131,7 +130,12 @@ pub(crate) fn start(
     let actor = ACTOR.init(actor);
     // The radio executor writes the system timer; the application executor
     // publishes its deadlines to it.
-    oer_esp32s31_compose::platform::timers(runtime_system_timer, adopted.router(), interrupts.alarm, interrupts.radio_alarm);
+    oer_esp32s31_compose::platform::timers(
+        runtime_system_timer,
+        adopted.router(),
+        interrupts.alarm,
+        interrupts.radio_alarm,
+    );
     let software = runtime_software_interrupts;
     // The radio handler's part holds both banks and the doorbell's lowering
     // half; its binding makes the doorbell's ringing half.
@@ -180,8 +184,7 @@ pub(crate) fn start(
         wifi::Resources {
             events: station::ProductEvents(pending),
             storage: radio::binding::storage(),
-            cell: hardware.cell,
-            wifi: hardware.wifi,
+            hardware,
             rng,
             address: station,
             ap,
@@ -191,38 +194,8 @@ pub(crate) fn start(
             interrupts: &irq::LINE,
             mac: &irq::MAC_SIGNAL,
             power: &irq::POWER_SIGNAL,
-            rx: irq::RX
-                .take()
-                .unwrap_or_else(|| radio::failure(wifi::InitializationError::Rx)),
-            tx: [
-                irq::TX0
-                    .take()
-                    .unwrap_or_else(|| radio::failure(wifi::InitializationError::Tx)),
-                irq::TX1
-                    .take()
-                    .unwrap_or_else(|| radio::failure(wifi::InitializationError::Tx)),
-                irq::TX2
-                    .take()
-                    .unwrap_or_else(|| radio::failure(wifi::InitializationError::Tx)),
-                irq::TX3
-                    .take()
-                    .unwrap_or_else(|| radio::failure(wifi::InitializationError::Tx)),
-                irq::TX4
-                    .take()
-                    .unwrap_or_else(|| radio::failure(wifi::InitializationError::Tx)),
-                irq::TX5
-                    .take()
-                    .unwrap_or_else(|| radio::failure(wifi::InitializationError::Tx)),
-                irq::TX6
-                    .take()
-                    .unwrap_or_else(|| radio::failure(wifi::InitializationError::Tx)),
-                irq::TX7
-                    .take()
-                    .unwrap_or_else(|| radio::failure(wifi::InitializationError::Tx)),
-                irq::TX8
-                    .take()
-                    .unwrap_or_else(|| radio::failure(wifi::InitializationError::Tx)),
-            ],
+            dma: wifi::DmaResources::claim()
+                .unwrap_or_else(|error| radio::failure(wifi::InitializationError::Dma(error))),
         },
         setup,
     );
@@ -495,12 +468,17 @@ async fn station_work(
     let (request, mut start) = STARTS.receive().await;
     let attempt = Attempt { request };
     attempt.advance();
-    let settings = wifi::StationSettings::wpa2_passphrase(start.credentials.ssid(), start.credentials.passphrase())
-        .unwrap_or_else(|_| radio::failure(wifi::InitializationError::Ssid));
+    let settings = wifi::StationSettings::wpa2_passphrase(
+        start.credentials.ssid(),
+        start.credentials.passphrase(),
+    )
+    .unwrap_or_else(|_| radio::failure(wifi::InitializationError::Ssid));
     start.credentials.clear_passphrase();
     drop(start);
     let begin = EmbassyClock.now();
-    let credentials = settings.prepare().await
+    let credentials = settings
+        .prepare()
+        .await
         .unwrap_or_else(|_| radio::failure(wifi::InitializationError::Ssid));
     let elapsed = EmbassyClock
         .now()

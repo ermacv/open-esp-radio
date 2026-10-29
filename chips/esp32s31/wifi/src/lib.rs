@@ -223,6 +223,8 @@ pub struct Connection<'a> {
 
 #[cfg(target_arch = "riscv32")]
 mod chip;
+#[cfg(target_arch = "riscv32")]
+mod dma;
 pub mod policy;
 #[cfg(target_arch = "riscv32")]
 #[doc(hidden)]
@@ -230,12 +232,14 @@ pub mod radio;
 #[cfg(target_arch = "riscv32")]
 #[doc(hidden)]
 pub mod station;
+#[cfg(target_arch = "riscv32")]
+pub use dma::{DmaError, DmaResources};
 // The facade's own API, not aliases of backend or runtime modules.
 #[cfg(target_arch = "riscv32")]
 pub use chip::{
-    Bell, Binding, Config, DmaTypes, Driver, Event, Events, InitializationError, InterruptTypes,
-    Interrupts, Lower, Profile, Resources, Runners, StationExit, StationRunner, Storage,
-    UnavailableCause, station,
+    Bell, Binding, Config, Driver, Event, Events, InitializationError, InterruptTypes, Interrupts,
+    Lower, Profile, Resources, Runners, StationExit, StationRunner, Storage, UnavailableCause,
+    station,
 };
 
 /// Bind the facade's backing to this image's concrete interrupt entries.

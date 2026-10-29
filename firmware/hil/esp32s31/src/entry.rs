@@ -174,10 +174,7 @@ fn panic_hook(
 }
 
 /// The image's entropy owner.
-#[cfg(any(
-    feature = "system-watchdog",
-    feature = "system-panic-reset"
-))]
+#[cfg(any(feature = "system-watchdog", feature = "system-panic-reset"))]
 pub(crate) type Rng =
     oer_esp32s31_hal::peripherals::entropy::Entropy<oer_embassy_time::EmbassyClock>;
 
@@ -303,7 +300,9 @@ fn initialize_runtime() -> oer_espressif_staged_runtime::adoption::Prepared<Esp3
     oer_esp32s31_compose::platform::prepare().unwrap_or_else(|error| {
         fail(match error {
             oer_esp32s31_compose::platform::PrepareError::Claimed => fatal::Failure::RootTaken,
-            oer_esp32s31_compose::platform::PrepareError::Initialization(_) => fatal::Failure::RootInitialization,
+            oer_esp32s31_compose::platform::PrepareError::Initialization(_) => {
+                fatal::Failure::RootInitialization
+            }
         })
     })
 }

@@ -2,8 +2,8 @@
 //! deadline watchdog, an explicit host-requested retained reset and,
 //! in the `usb-jtag-off` image, the switch of the USB Serial/JTAG off its
 //! pads.
-use oer_esp32s31_compose::Esp32s31;
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel};
+use oer_esp32s31_compose::Esp32s31;
 use oer_esp32s31_hal::peripherals::watchdog::{
     ArmedRtcWatchdog, DeadlineBudget, MainWatchdog, Mwdt1Registers, RwdtRegisters,
 };
@@ -11,9 +11,9 @@ use oer_hil_protocol::RequestIdentity;
 use oer_hil_protocol::base::{RejectReason, Rejected};
 use oer_hil_protocol::system::{WatchdogArmed, WatchdogTest, WatchdogTestMode};
 
+use crate::services::WatchdogRequest;
 use crate::transport::CONSOLE;
 use oer_hil_agent::{base::Either, lifecycle::Request as ResetRequest};
-use crate::services::WatchdogRequest;
 
 /// The SoC deadline service on timer group 1's main watchdog, measured on
 /// the image clock.
@@ -43,7 +43,10 @@ pub(crate) fn start<C: oer_espressif_interrupt_table::Controller>(
     executor: crate::Executor<Esp32s31, 0>,
     hart: &oer_espressif_staged_runtime::Hart<{ oer_espressif_staged_runtime::BOOT_HART }>,
     router: &mut oer_espressif_interrupt_table::Router<C>,
-    (wake, line): (crate::ExecutorWake, oer_esp32s31_hal::peripherals::software_interrupt::FromCpu0Irq),
+    (wake, line): (
+        crate::ExecutorWake,
+        oer_esp32s31_hal::peripherals::software_interrupt::FromCpu0Irq,
+    ),
     (usb, pads): (crate::transport::Usb, Pads),
     mut entropy: crate::Rng,
     main1: MainWatchdog<Mwdt1Registers>,

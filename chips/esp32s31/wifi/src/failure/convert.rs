@@ -442,8 +442,8 @@ pub(super) fn modem_clock_error(
     }
 }
 
-pub(super) fn power_error(value: oer_esp32s31_hal::power::PowerError) -> PowerError {
-    let oer_esp32s31_hal::power::PowerError {
+pub(super) fn power_error(value: oer_espressif_radio::power::PowerError) -> PowerError {
+    let oer_espressif_radio::power::PowerError {
         checkpoint,
         expected,
         observed,
@@ -455,8 +455,10 @@ pub(super) fn power_error(value: oer_esp32s31_hal::power::PowerError) -> PowerEr
     }
 }
 
-pub(super) fn power_checkpoint(value: oer_esp32s31_hal::power::PowerCheckpoint) -> PowerCheckpoint {
-    use oer_esp32s31_hal::power::PowerCheckpoint as Source;
+pub(super) fn power_checkpoint(
+    value: oer_espressif_radio::power::PowerCheckpoint,
+) -> PowerCheckpoint {
+    use oer_espressif_radio::power::PowerCheckpoint as Source;
     match value {
         Source::Mpll => PowerCheckpoint::Mpll,
         Source::ResetReleased => PowerCheckpoint::ResetReleased,

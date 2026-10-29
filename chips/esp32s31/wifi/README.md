@@ -16,7 +16,11 @@ callback, port identity or installation loan is required by the image.
 The image declares `bind_station!` with its interrupt entries, station
 callbacks, collectors, key-unwrap engine and handled-error terminal policy.
 `Resources` consumes the unique hardware partition, binding proof, doorbell,
-placed DMA allocations, signals and declared storage. `Runners::driver` runs
+the facade's affine `DmaResources` claim, signals and declared storage.
+The permanent RX ring and nine TX allocations have one declaration in the
+facade. Their HAL placement proof stays in the existing HAL macro; image IRQ
+modules hold only their line and signals. `Resources` consumes the opaque
+`WifiHardware` and DMA owners without exposing their backend field types. `Runners::driver` runs
 on the existing P2 executor; `Runners::station` runs on P1 beside networking.
 The image supplies the latter's validated `Profile` and selected key-unwrap
 engine. `StationSettings::open`, `wpa2_passphrase` and `wpa2_pmk` validate the
