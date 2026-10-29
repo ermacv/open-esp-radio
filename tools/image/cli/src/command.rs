@@ -211,9 +211,6 @@ pub fn run(root: &Path, image: &str, selector: &str, timeout: Duration) -> Resul
         }
     };
     drop(lines);
-    if let Err(error) = diagnostics.finish() {
-        eprintln!("fw: {error}");
-    }
     eprintln!("fw: log {}", log_path.display());
     Ok(match verdict {
         Some(Verdict::Pass) => ExitCode::SUCCESS,

@@ -3,32 +3,21 @@
 
 use std::borrow::Cow;
 
-use oer_diagnostics::note::Part;
 use oer_diagnostics::radio_root::RadioRoot;
 use oer_diagnostics::render::{Gap, Next};
 use oer_diagnostics::{BootSmokePassed, MAX_PAYLOAD, Record};
 use oer_trace::Event;
 
-/// The first parts of a console line that several notes make, and the
-/// console lines they came from.
-struct Joining {
-    text: String,
-    raw: Vec<String>,
-}
-
 #[derive(Default)]
 pub(crate) struct Decoder {
     stream: oer_diagnostics::render::Stream,
-    joining: Option<Joining>,
     /// The last line was a diagnostic one: the empty line its frame's line
     /// ends make before the next frame is not the console's.
     after_frame: bool,
 }
 
 impl Decoder {
-    /// The console text of `line`, or `None` while the notes of a longer line
-    /// are still coming. A missing part, or any other line in between, is an
-    /// error that names the lines it holds.
+    /// Render one diagnostic record, omitting the frame's empty separator line.
     pub(crate) fn line<'a>(
         &mut self,
         line: &'a [u8],
@@ -36,52 +25,12 @@ impl Decoder {
         if line.is_empty() && std::mem::take(&mut self.after_frame) {
             return Ok(None);
         }
-        let (text, part) = self.decode(line)?;
+        let text = self.decode(line)?;
         self.after_frame = line.starts_with(b"OER-DIAG:");
-        let raw = String::from_utf8_lossy(line).into_owned();
-        match (self.joining.take(), part) {
-            (None, Part::Whole) => Ok(Some(text)),
-            (None, Part::First) => {
-                self.joining = Some(Joining {
-                    text: text.into_owned(),
-                    raw: vec![raw],
-                });
-                Ok(None)
-            }
-            (None, Part::Middle | Part::Last) => {
-                Err(format!("a continued console line starts without its first part: {raw}").into())
-            }
-            (Some(mut joining), Part::Middle) => {
-                joining.text.push_str(&text);
-                joining.raw.push(raw);
-                self.joining = Some(joining);
-                Ok(None)
-            }
-            (Some(mut joining), Part::Last) => {
-                joining.text.push_str(&text);
-                Ok(Some(Cow::Owned(joining.text)))
-            }
-            (Some(joining), Part::Whole | Part::First) => Err(format!(
-                "a continued console line is interrupted by another line: parts {:?}, then {raw}",
-                joining.raw
-            )
-            .into()),
-        }
+        Ok(Some(text))
     }
 
-    /// The console stream ended: a line must not be left half joined.
-    pub(crate) fn finish(&mut self) -> oer_image_build::Result<()> {
-        match self.joining.take() {
-            Some(joining) => Err(format!(
-                "the console ended inside a continued line: parts {:?}",
-                joining.raw
-            )
-            .into()),
-            None => Ok(()),
-        }
-    }
-
-    fn decode<'a>(&mut self, line: &'a [u8]) -> oer_image_build::Result<(Cow<'a, str>, Part)> {
+    fn decode<'a>(&mut self, line: &'a [u8]) -> oer_image_build::Result<Cow<'a, str>> {
         if oer_lab_board::console::is_reset_line(&String::from_utf8_lossy(line)) {
             self.stream.restart();
         }
@@ -91,11 +40,7 @@ impl Decoder {
             .line(line, &mut scratch)
             .map_err(|error| format!("boot diagnostic decode error: {error:?}"))?;
         let Some(Next { gap, record }) = decoded else {
-            return Ok((String::from_utf8_lossy(line), Part::Whole));
-        };
-        let part = match &record {
-            Record::Note(note) => note.topic.part(),
-            _ => Part::Whole,
+            return Ok(String::from_utf8_lossy(line));
         };
         if let Some(Gap { expected, received }) = gap {
             return Err(format!(
@@ -130,7 +75,7 @@ impl Decoder {
             }
             Record::Event { kind, words } => {
                 if kind == BootSmokePassed::KIND && BootSmokePassed::decode(words).is_some() {
-                    return Ok((Cow::Borrowed("OER-RESULT: pass boot-smoke"), Part::Whole));
+                    return Ok(Cow::Borrowed("OER-RESULT: pass boot-smoke"));
                 }
                 let event = (kind == RadioRoot::KIND)
                     .then(|| RadioRoot::decode(words))
@@ -148,7 +93,7 @@ impl Decoder {
                 }
             }
         });
-        Ok((text, part))
+        Ok(text)
     }
 }
 
@@ -182,7 +127,7 @@ fn render_stream(
         }
         line.clear();
     }
-    decoder.finish()
+    Ok(())
 }
 
 #[cfg(test)]

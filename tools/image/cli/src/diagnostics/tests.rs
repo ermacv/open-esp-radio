@@ -16,6 +16,20 @@ fn rendered(bytes: &[u8]) -> oer_image_build::Result<String> {
 }
 
 #[test]
+fn boot_failure_notes_remain_complete_console_lines() {
+    let mut bytes = Vec::new();
+    Console::new(write(&mut bytes))
+        .note(&oer_diagnostics::Note::runtime_fail(
+            oer_diagnostics::name!("refused"),
+        ))
+        .unwrap();
+    assert_eq!(
+        rendered(&bytes).unwrap().trim(),
+        "OPEN_RADIO_HIL runtime=FAIL reason=refused"
+    );
+}
+
+#[test]
 fn human_panic_text_preserves_static_formatted_empty_and_interrupt_fields() {
     let mut bytes = Vec::new();
     {
