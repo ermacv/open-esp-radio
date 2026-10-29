@@ -6,6 +6,8 @@
 
 #![forbid(unsafe_code)]
 
+use oer_espressif_radio::clocks::{RtcSlowClockSource, WifiLowPowerClockSource};
+
 use crate::{modem::values::ModemLowPowerClockDivider, phy::RadioPhyRegisters};
 
 /// Semantic route-owned observation used by protocol clock checkpoints.
@@ -35,22 +37,6 @@ pub struct CoexistenceLowPowerClockObservation {
 pub struct BluetoothLowPowerClockObservation {
     pub exclusive_main_xtal_selected: bool,
     pub bluetooth_divider_configured: bool,
-}
-
-/// RTC slow-clock source decoded from `LP_AON_CLKRST.ROOT_CLK_CONF`.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum RtcSlowClockSource {
-    SlowOscillator,
-    Crystal32Khz,
-    /// A selector value the vendor reports as invalid.
-    Invalid(u8),
-}
-
-/// Wi-Fi power-domain low-power clock source selected at system start.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum WifiLowPowerClockSource {
-    SlowOscillator,
-    Crystal32Khz,
 }
 
 /// Semantic Wi-Fi low-power-clock observation without register authority.
@@ -276,5 +262,16 @@ impl<P: crate::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
             bluetooth_divider_configured: u32::from(divider_minus_one)
                 == super::BLUETOOTH_MAIN_XTAL_LOW_POWER_DIVIDER.get(),
         }
+    }
+}
+
+impl<P: crate::phy::registers::RadioPlacement> oer_espressif_radio::clocks::LowPowerClockPort
+    for RadioPhyRegisters<P>
+{
+    fn rtc_slow_clock_source(&self) -> RtcSlowClockSource {
+        RadioPhyRegisters::rtc_slow_clock_source(self)
+    }
+    fn select_wifi_low_power_clock(&mut self, source: WifiLowPowerClockSource) {
+        RadioPhyRegisters::select_wifi_low_power_clock(self, source);
     }
 }

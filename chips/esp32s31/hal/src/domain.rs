@@ -39,8 +39,7 @@ use crate::coex_participation::CoexParticipants;
 pub use crate::coex_participation::{CoexAbsent, Coexisting, ExternalCoexistence};
 use crate::power::clock::{
     ModemClockLease, ModemClockModule, ModemClockPlanner, ModemClockPlannerIdentity,
-    ModemPlatformClocks, PoisonedModemClockAcquire, PoisonedModemClockRelease, execute_acquire,
-    execute_release,
+    ModemExecution, ModemPlatformClocks, PoisonedModemClockAcquire, PoisonedModemClockRelease,
 };
 pub use crate::power::{
     PlatformClock, PlatformClockAbandonment, PlatformClockBackend, PlatformClockError,
@@ -991,18 +990,26 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
             state.clocks = ModemClocks::Ready { planner, leases };
             return Err(ModemClockError::AlreadyEnabled);
         }
-        let prepared = match planner.prepare_acquire(module.dependencies()) {
-            Ok(prepared) => prepared,
-            Err(failure) => {
-                state.clocks = ModemClocks::Ready {
-                    planner: failure.into_planner(),
-                    leases,
-                };
-                return Err(ModemClockError::Rejected);
-            }
-        };
+        let prepared =
+            match planner.prepare_acquire(crate::power::clock::module_dependencies(module)) {
+                Ok(prepared) => prepared,
+                Err(failure) => {
+                    state.clocks = ModemClocks::Ready {
+                        planner: failure.into_planner(),
+                        leases,
+                    };
+                    return Err(ModemClockError::Rejected);
+                }
+            };
         let phy = state.registers.radio_phy_mut();
-        match execute_acquire(prepared, phy, &mut state.modem_platform_clocks, platform) {
+        match oer_espressif_modem_clock::execution::acquire(
+            prepared,
+            &mut ModemExecution {
+                port: phy,
+                held: &mut state.modem_platform_clocks,
+                platform,
+            },
+        ) {
             Ok((planner, lease)) => {
                 leases[index] = Some(lease);
                 state.clocks = ModemClocks::Ready { planner, leases };
@@ -1039,10 +1046,13 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
                 return Err(ModemClockError::Rejected);
             }
         };
-        match execute_release(
+        match oer_espressif_modem_clock::execution::release(
             prepared,
-            state.registers.radio_phy_mut(),
-            &mut state.modem_platform_clocks,
+            &mut ModemExecution {
+                port: state.registers.radio_phy_mut(),
+                held: &mut state.modem_platform_clocks,
+                platform: (),
+            },
         ) {
             Ok(planner) => {
                 state.clocks = ModemClocks::Ready { planner, leases };

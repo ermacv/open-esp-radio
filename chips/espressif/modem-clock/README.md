@@ -10,7 +10,7 @@ reproduces the vendor's two exceptions: a dependency whose refcount another
 owner keeps emits its edge on every request, and the Wi-Fi clock
 dependencies stay enabled while Wi-Fi is initialized.
 
-A chip's HAL supplies:
+A chip binding supplies:
 
 - its vendor device order as a `ModemClockDependency` table
   (`table_is_consistent` checks the table's indices);
@@ -23,8 +23,12 @@ A chip's HAL supplies:
 Preparation is transactional: counts and lease slots change only when every
 edge was performed and the transaction commits. Leases are opaque, bound to
 one planner epoch and checked against stale, duplicate and cross-planner
-release. The crate performs no MMIO; the ESP32-S31 table and executor are in
-`oer_esp32s31_hal::power::clock`.
+release. The crate performs no MMIO. The ESP32-S31 table is in
+`oer_esp32s31_knowledge::modem_clock`; the HAL's newtype implements the family
+contract without making chip knowledge depend on a driver. `execution` performs
+prepared edges over `RegisterPort`/`AcquirePort`: sources are acquired before
+device gates and released after gates close. The HAL binding lends the device
+atoms and held platform references, retaining every reference on failure.
 
 Each planner consumes a unique `ModemClockPlannerIdentity` by value. Its
 monotonic key follows the owner through moves and poisoned transactions;

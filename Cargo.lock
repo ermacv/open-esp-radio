@@ -1708,6 +1708,7 @@ dependencies = [
  "oer-espressif-interrupt-table",
  "oer-espressif-modem-clock",
  "oer-espressif-platform-port",
+ "oer-espressif-radio",
  "oer-espressif-usb-serial-jtag",
  "oer-espressif-watchdog",
  "oer-memory",
@@ -2029,6 +2030,10 @@ dependencies = [
 [[package]]
 name = "oer-espressif-modem-clock"
 version = "0.1.0"
+dependencies = [
+ "oer-time",
+ "oer-time-virtual",
+]
 
 [[package]]
 name = "oer-espressif-platform-port"
@@ -2036,6 +2041,14 @@ version = "0.1.0"
 dependencies = [
  "oer-espressif-facts",
  "oer-mmio",
+]
+
+[[package]]
+name = "oer-espressif-radio"
+version = "0.1.0"
+dependencies = [
+ "oer-time",
+ "oer-time-virtual",
 ]
 
 [[package]]

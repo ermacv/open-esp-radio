@@ -1,10 +1,25 @@
 use std::{cell::RefCell, rc::Rc, vec::Vec};
 
-use crate::modem::{PlatformClockPowerObservation, SharedModemClockObservation};
+#[derive(Clone, Copy)]
+struct PowerClockPowerObservation {
+    hp_active_icg_selected: bool,
+    modem_register_bus_clock_enabled: bool,
+    modem_source_clocks_configured: bool,
+}
+#[derive(Clone, Copy)]
+struct SharedModemClockObservation {
+    power_state_map_configured: bool,
+}
+#[derive(Clone, Copy)]
+struct ModemSysconPowerObservation {
+    wifi_reset_released: bool,
+    active_clock_map_configured: bool,
+    phy_calibration_clocks_enabled: bool,
+    phy_i2c_160mhz_selected: bool,
+}
 
 use super::{
-    PlatformClock, PlatformClockError, PowerCheckpoint, PowerError, PowerSequenceBackend,
-    execute_owned,
+    PowerCheckpoint, PowerClock, PowerError, PowerSequenceBackend, ReferenceRefused, execute_owned,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -15,7 +30,7 @@ enum Operation {
     EnableModemBus,
     ConfigureHpActiveMap,
     PrepareSharedMap,
-    Acquire(PlatformClock),
+    Acquire(PowerClock),
     ConfigureModemSource,
     ResetBaseband(bool),
     EnablePhyClocks,
@@ -27,8 +42,8 @@ struct FakeShared {
     prepare_calls: u8,
     /// The platform clock owner refuses this reference.
     refused: Option<PowerCheckpoint>,
-    platform: PlatformClockPowerObservation,
-    modem: crate::modem::ModemSysconPowerObservation,
+    platform: PowerClockPowerObservation,
+    modem: ModemSysconPowerObservation,
     observation: SharedModemClockObservation,
 }
 
@@ -38,12 +53,12 @@ impl FakeShared {
             operations,
             prepare_calls: 0,
             refused: None,
-            platform: PlatformClockPowerObservation {
+            platform: PowerClockPowerObservation {
                 hp_active_icg_selected: true,
                 modem_register_bus_clock_enabled: true,
                 modem_source_clocks_configured: true,
             },
-            modem: crate::modem::ModemSysconPowerObservation {
+            modem: ModemSysconPowerObservation {
                 wifi_reset_released: true,
                 active_clock_map_configured: true,
                 phy_calibration_clocks_enabled: true,
@@ -57,6 +72,22 @@ impl FakeShared {
 }
 
 impl PowerSequenceBackend for FakeShared {
+    fn power_readback(&self) -> super::PowerClockReadback {
+        let platform = self.platform;
+        let modem = self.modem;
+        let shared = self.observation;
+        super::PowerClockReadback {
+            reset_released: modem.wifi_reset_released,
+            hp_active_icg_selected: platform.hp_active_icg_selected,
+            modem_bus_clock_enabled: platform.modem_register_bus_clock_enabled,
+            hp_active_clock_map_configured: modem.active_clock_map_configured,
+            shared_clock_map_configured: shared.power_state_map_configured,
+            modem_source_clocks_configured: platform.modem_source_clocks_configured,
+            phy_calibration_clocks_enabled: modem.phy_calibration_clocks_enabled,
+            phy_i2c_160mhz_selected: modem.phy_i2c_160mhz_selected,
+        }
+    }
+
     fn publish_modem_power_state(&mut self) {
         self.operations.borrow_mut().extend([
             Operation::SelectHpActiveIcg,
@@ -69,15 +100,15 @@ impl PowerSequenceBackend for FakeShared {
         self.operations.borrow_mut().push(Operation::EnableModemBus);
     }
 
-    fn acquire_platform_clock(&mut self, clock: PlatformClock) -> Result<(), PlatformClockError> {
+    fn acquire_platform_clock(&mut self, clock: PowerClock) -> Result<(), ReferenceRefused> {
         self.operations.borrow_mut().push(Operation::Acquire(clock));
         let refused = match clock {
-            PlatformClock::Mpll => PowerCheckpoint::Mpll,
-            PlatformClock::Pll160m => PowerCheckpoint::Reference160m,
+            PowerClock::Mpll => PowerCheckpoint::Mpll,
+            PowerClock::Pll160m => PowerCheckpoint::Reference160m,
             _ => PowerCheckpoint::I2cClock,
         };
         if self.refused == Some(refused) {
-            Err(PlatformClockError)
+            Err(ReferenceRefused)
         } else {
             Ok(())
         }
@@ -87,10 +118,6 @@ impl PowerSequenceBackend for FakeShared {
         self.operations
             .borrow_mut()
             .push(Operation::ConfigureModemSource);
-    }
-
-    fn platform_clock_power_observation(&self) -> PlatformClockPowerObservation {
-        self.platform
     }
 
     fn set_wifi_baseband_reset(&mut self, asserted: bool) {
@@ -117,19 +144,11 @@ impl PowerSequenceBackend for FakeShared {
             .push(Operation::SelectI2c160Mhz);
     }
 
-    fn modem_syscon_power_observation(&self) -> crate::modem::ModemSysconPowerObservation {
-        self.modem
-    }
-
     fn prepare_shared_modem_clock_map(&mut self) {
         self.operations
             .borrow_mut()
             .push(Operation::PrepareSharedMap);
         self.prepare_calls += 1;
-    }
-
-    fn shared_modem_clock_observation(&self) -> SharedModemClockObservation {
-        self.observation
     }
 }
 
@@ -141,20 +160,20 @@ fn exact_semantic_sequence_is_finite_and_ordered() {
     assert_eq!(
         operations.borrow().as_slice(),
         [
-            Operation::Acquire(PlatformClock::Mpll),
+            Operation::Acquire(PowerClock::Mpll),
             Operation::SelectHpActiveIcg,
             Operation::ApplyModemIcg,
             Operation::ApplySleepIcg,
             Operation::EnableModemBus,
             Operation::ConfigureHpActiveMap,
             Operation::PrepareSharedMap,
-            Operation::Acquire(PlatformClock::Pll160m),
+            Operation::Acquire(PowerClock::Pll160m),
             Operation::ConfigureModemSource,
             Operation::ResetBaseband(true),
             Operation::ResetBaseband(false),
             Operation::EnablePhyClocks,
             Operation::SelectI2c160Mhz,
-            Operation::Acquire(PlatformClock::AnalogI2cMaster),
+            Operation::Acquire(PowerClock::AnalogI2cMaster),
         ]
     );
     assert_eq!(shared.prepare_calls, 1);
@@ -227,7 +246,7 @@ fn power_sequence_takes_the_i2c_reference_on_success_and_each_readback_failure()
         assert_eq!(
             operations
                 .iter()
-                .filter(|op| **op == Operation::Acquire(PlatformClock::AnalogI2cMaster))
+                .filter(|op| **op == Operation::Acquire(PowerClock::AnalogI2cMaster))
                 .count(),
             1,
             "the I2C reference belongs to the retained epoch"
@@ -251,17 +270,14 @@ fn power_sequence_takes_the_i2c_reference_on_success_and_each_readback_failure()
 #[test]
 fn a_refused_platform_reference_stops_the_sequence_at_its_edge() {
     for (refused, last) in [
-        (
-            PowerCheckpoint::Mpll,
-            Operation::Acquire(PlatformClock::Mpll),
-        ),
+        (PowerCheckpoint::Mpll, Operation::Acquire(PowerClock::Mpll)),
         (
             PowerCheckpoint::Reference160m,
-            Operation::Acquire(PlatformClock::Pll160m),
+            Operation::Acquire(PowerClock::Pll160m),
         ),
         (
             PowerCheckpoint::I2cClock,
-            Operation::Acquire(PlatformClock::AnalogI2cMaster),
+            Operation::Acquire(PowerClock::AnalogI2cMaster),
         ),
     ] {
         let operations = Rc::new(RefCell::new(Vec::new()));

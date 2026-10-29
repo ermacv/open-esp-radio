@@ -133,14 +133,6 @@ impl WifiPowerBaseline {
     }
 }
 
-/// Exact stage whose restored cold-power baseline did not read back.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum WifiPowerRestoreReadback {
-    ModemSyscon,
-    ModemSourceClocks,
-    ModemRegisterBusClock,
-}
-
 impl<P: crate::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
     /// Capture every non-monotonic field changed by the cold-power path.
     #[doc(hidden)]
@@ -153,45 +145,6 @@ impl<P: crate::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
             self.platform_pll_source_baseline(),
             self.modem_syscon_power_baseline(),
         )
-    }
-
-    /// Restore one captured cold-power baseline and verify each stage.
-    ///
-    /// ICG state maps are monotonic global initialization and deliberately
-    /// remain installed, matching the vendor modem-clock manager.
-    #[doc(hidden)]
-    pub fn restore_wifi_power_baseline(
-        &mut self,
-        baseline: WifiPowerBaseline,
-    ) -> Result<(), WifiPowerRestoreReadback> {
-        self.restore_modem_syscon_power_baseline(baseline.modem_syscon());
-        if self.modem_syscon_power_baseline() != baseline.modem_syscon() {
-            return Err(WifiPowerRestoreReadback::ModemSyscon);
-        }
-
-        self.restore_platform_pll_source_baseline(baseline.pll_source());
-        if self.platform_pll_source_baseline() != baseline.pll_source() {
-            return Err(WifiPowerRestoreReadback::ModemSourceClocks);
-        }
-
-        super::ops::restore_modem_register_bus_clock(
-            &mut self.peripherals.hp_sys_clkrst_radio,
-            if baseline.modem_register_bus_clock_enabled() {
-                ModemSysconClockGateState::Enabled
-            } else {
-                ModemSysconClockGateState::Disabled
-            },
-        );
-        if self
-            .peripherals
-            .hp_sys_clkrst_radio
-            .read_modem_ctrl0()
-            .reg_modem_clk_en()
-            != baseline.modem_register_bus_clock_enabled()
-        {
-            return Err(WifiPowerRestoreReadback::ModemRegisterBusClock);
-        }
-        Ok(())
     }
 
     /// Publish the active modem ICG state before opening module clock gates.
@@ -325,6 +278,41 @@ impl<P: crate::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
     #[doc(hidden)]
     pub fn enable_frontend_baseband_power(&mut self) {
         super::ops::enable_frontend_baseband_power(&mut self.peripherals.pmu_radio);
+    }
+}
+
+impl<P: crate::phy::registers::RadioPlacement> oer_espressif_radio::baseline::PowerBaselinePort
+    for RadioPhyRegisters<P>
+{
+    type Baseline = WifiPowerBaseline;
+    fn restore_syscon(&mut self, baseline: WifiPowerBaseline) {
+        self.restore_modem_syscon_power_baseline(baseline.modem_syscon());
+    }
+    fn syscon_matches(&self, baseline: WifiPowerBaseline) -> bool {
+        self.modem_syscon_power_baseline() == baseline.modem_syscon()
+    }
+    fn restore_source(&mut self, baseline: WifiPowerBaseline) {
+        self.restore_platform_pll_source_baseline(baseline.pll_source());
+    }
+    fn source_matches(&self, baseline: WifiPowerBaseline) -> bool {
+        self.platform_pll_source_baseline() == baseline.pll_source()
+    }
+    fn restore_bus(&mut self, baseline: WifiPowerBaseline) {
+        super::ops::restore_modem_register_bus_clock(
+            &mut self.peripherals.hp_sys_clkrst_radio,
+            if baseline.modem_register_bus_clock_enabled() {
+                ModemSysconClockGateState::Enabled
+            } else {
+                ModemSysconClockGateState::Disabled
+            },
+        );
+    }
+    fn bus_matches(&self, baseline: WifiPowerBaseline) -> bool {
+        self.peripherals
+            .hp_sys_clkrst_radio
+            .read_modem_ctrl0()
+            .reg_modem_clk_en()
+            == baseline.modem_register_bus_clock_enabled()
     }
 }
 

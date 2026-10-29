@@ -15,6 +15,7 @@ bluetooth-engine = []
 test-support = []
 
 [dependencies]
+oer-espressif-radio = { path = "../../espressif/radio" }
 oer-esp32s31-knowledge = { path = "../knowledge" }
 oer-espressif-efuse = { path = "../../espressif/efuse" }
 oer-espressif-watchdog = { path = "../../espressif/watchdog" }

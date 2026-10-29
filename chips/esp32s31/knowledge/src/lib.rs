@@ -33,6 +33,9 @@
 
 pub mod calibration_cache;
 
+/// Hardware-free modem clock profile.
+pub mod modem_clock;
+
 pub mod ieee802154;
 
 pub mod phy_relation;

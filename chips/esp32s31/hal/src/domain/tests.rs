@@ -43,7 +43,9 @@ fn poisoned_acquire_keeps_its_failed_edge_through_refused_changes_and_release() 
     let mut radio = radio_domain();
     let identity = ModemClockPlannerIdentity::new().expect("identity capacity");
     let prepared = ModemClockPlanner::managed(identity)
-        .prepare_acquire(ModemClockModule::Phy.dependencies())
+        .prepare_acquire(crate::power::clock::module_dependencies(
+            ModemClockModule::Phy,
+        ))
         .unwrap();
     let mut edges = 0;
     let poisoned = oer_espressif_modem_clock::execute_acquire(prepared, |_| {
@@ -69,7 +71,9 @@ fn poisoned_release_keeps_its_failed_edge_through_refused_changes_and_release() 
     let mut radio = radio_domain();
     let identity = ModemClockPlannerIdentity::new().expect("identity capacity");
     let prepared = ModemClockPlanner::managed(identity)
-        .prepare_acquire(ModemClockModule::Phy.dependencies())
+        .prepare_acquire(crate::power::clock::module_dependencies(
+            ModemClockModule::Phy,
+        ))
         .unwrap();
     let (planner, lease) =
         oer_espressif_modem_clock::execute_acquire(prepared, |_| Ok::<(), ()>(())).unwrap();

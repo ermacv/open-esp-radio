@@ -1,7 +1,7 @@
 use std::{cell::RefCell, rc::Rc, vec::Vec};
 
 use super::*;
-use crate::power::clock::{ModemClockModule, ModemClockPlannerIdentity};
+use crate::power::clock::{ModemClockModule, ModemClockPlanner, ModemClockPlannerIdentity};
 use crate::power::test_clocks::{ClockEvent, CountingPlatformClocks, abandoned, held, holding};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -55,7 +55,9 @@ fn the_pll_source_brackets_the_modem_gate_and_the_analog_clock_goes_to_the_platf
     let identity = ModemClockPlannerIdentity::new().expect("identity capacity");
     let planner = ModemClockPlanner::managed(identity);
     let prepared = planner
-        .prepare_acquire(ModemClockModule::Phy.dependencies())
+        .prepare_acquire(crate::power::clock::module_dependencies(
+            ModemClockModule::Phy,
+        ))
         .unwrap_or_else(|_| panic!("PHY"));
     let (planner, lease) = execute_acquire(prepared, &mut port, &mut held_clocks, &platform)
         .unwrap_or_else(|_| panic!("acquire"));
@@ -108,12 +110,17 @@ fn a_refused_platform_request_poisons_the_transaction_before_the_gate() {
     let identity = ModemClockPlannerIdentity::new().expect("identity capacity");
     let planner = ModemClockPlanner::managed(identity);
     let prepared = planner
-        .prepare_acquire(ModemClockModule::Coexistence.dependencies())
+        .prepare_acquire(crate::power::clock::module_dependencies(
+            ModemClockModule::Coexistence,
+        ))
         .unwrap_or_else(|_| panic!("coexistence"));
     let Err(poisoned) = execute_acquire(prepared, &mut port, &mut held_clocks, &platform) else {
         panic!("a refused PLL request must poison the acquisition");
     };
-    assert_eq!(poisoned.dependency(), Dependency::Pll160AndModemSource);
+    assert_eq!(
+        poisoned.dependency(),
+        Dependency(crate::power::clock::ChipDependency::Pll160AndModemSource)
+    );
     // The modem gate was not opened without its upstream source.
     assert_eq!(*log.borrow(), [Operation::PreparePowerState]);
     assert!(held().is_empty());
@@ -127,12 +134,17 @@ fn a_poisoned_acquisition_is_abandoned_with_its_references_on() {
     let identity = ModemClockPlannerIdentity::new().expect("identity capacity");
     let planner = ModemClockPlanner::managed(identity);
     let prepared = planner
-        .prepare_acquire(ModemClockModule::Phy.dependencies())
+        .prepare_acquire(crate::power::clock::module_dependencies(
+            ModemClockModule::Phy,
+        ))
         .unwrap_or_else(|_| panic!("PHY"));
     let Err(poisoned) = execute_acquire(prepared, &mut port, &mut held_clocks, &platform) else {
         panic!("a refused analog-I2C request must poison the acquisition");
     };
-    assert_eq!(poisoned.dependency(), Dependency::AnalogI2cMaster);
+    assert_eq!(
+        poisoned.dependency(),
+        Dependency(crate::power::clock::ChipDependency::AnalogI2cMaster)
+    );
     // The 160 MHz source taken before the refusal stays with the poisoned
     // owner; abandoning the owner keeps it on and records it, as a failed
     // transaction stays fail-stop.
@@ -299,7 +311,7 @@ fn phy_and_calibration_publish_power_before_any_clock_edge() {
         let identity = ModemClockPlannerIdentity::new().expect("identity capacity");
         let planner = ModemClockPlanner::managed(identity);
         let prepared = planner
-            .prepare_acquire(module.dependencies())
+            .prepare_acquire(crate::power::clock::module_dependencies(module))
             .expect("module");
         let (planner, lease) = execute_acquire(prepared, &mut port, &mut held_clocks, &platform)
             .unwrap_or_else(|_| panic!("module clocks"));
@@ -344,4 +356,42 @@ fn prepare_power_state_selects_active_modem_on_host_registers() {
             );
         });
     }
+}
+
+#[allow(clippy::result_large_err)]
+fn execute_acquire<B: PlatformClockBackend>(
+    prepared: super::super::PreparedModemClockAcquire,
+    port: &mut impl ModemClockPort,
+    held: &mut ModemPlatformClocks<B>,
+    platform: &impl PlatformClockProvider<Backend = B>,
+) -> Result<
+    (
+        super::super::ModemClockPlanner,
+        super::super::ModemClockLease,
+    ),
+    super::super::PoisonedModemClockAcquire,
+> {
+    oer_espressif_modem_clock::execution::acquire(
+        prepared,
+        &mut ModemExecution {
+            port,
+            held,
+            platform,
+        },
+    )
+}
+#[allow(clippy::result_large_err)]
+fn execute_release<B: PlatformClockBackend>(
+    prepared: super::super::PreparedModemClockRelease,
+    port: &mut impl ModemClockPort,
+    held: &mut ModemPlatformClocks<B>,
+) -> Result<super::super::ModemClockPlanner, super::super::PoisonedModemClockRelease> {
+    oer_espressif_modem_clock::execution::release(
+        prepared,
+        &mut ModemExecution {
+            port,
+            held,
+            platform: (),
+        },
+    )
 }

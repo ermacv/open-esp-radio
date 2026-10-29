@@ -212,6 +212,7 @@ existing local entries.
 | `oer-espressif-ieee802154-engine` | `chips/espressif/ieee802154-engine` |
 | `oer-espressif-ieee802154-mac-values` | `chips/espressif/ieee802154-mac-values` |
 | `oer-espressif-modem-clock` | `chips/espressif/modem-clock` |
+| `oer-espressif-radio` | `chips/espressif/radio` |
 | `oer-esp32s31-instrumentation` | `chips/esp32s31/instrumentation` |
 | `oer-esp32s31-instrumentation-hil` | `chips/esp32s31/instrumentation-hil` |
 | `oer-esp32s31-phy-probe` | `chips/esp32s31/phy-probe` |
@@ -716,6 +717,15 @@ defines the scan's scope and limits.
   protocol its partition. The Wi-Fi driver owns its `RadioAccess` through
   the runtime epoch and lends it with `&mut`. There is no shared register
   arena or dynamic borrow guard.
+
+The family `oer-espressif-radio` executes common radio power prerequisites,
+semantic power checks, ordered cold-baseline restoration and platform clock
+reference transitions over HAL register ports. HAL keeps the clock-word claim,
+register atoms, the permanent PSRAM MPLL owner and PHY custody. S31 modem clock
+tables live in `knowledge::modem_clock`, with a HAL newtype implementing the
+family dependency contract. `oer-espressif-modem-clock::execution` orders the
+upstream-source and device edges; failed edges retain the poisoned planner and
+its leases. Neither family depends on a chip or protocol driver.
 
 ## Radio system
 

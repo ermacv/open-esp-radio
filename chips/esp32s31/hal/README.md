@@ -24,9 +24,10 @@ controller engine, scheduler and modem timer, the boot policy and waits in
 `boot`, the Wi-Fi cold start in `ieee80211`, the PHY analog bus and delays in
 `phy`, and the entropy read gap in `peripherals/entropy.rs`. The list only shrinks; no
 new file joins it. The scan does not find driver code without such a marker:
-the radio domain's membership and first/last-client policy, the common radio
-power sequence and the IEEE 802.15.4 lifecycle policy are driver code that
-this crate still holds.
+the radio domain's membership and first/last-client policy and the IEEE
+802.15.4 lifecycle policy are driver code that this crate still holds.
+The common power sequence, semantic verification, cold-baseline restore and
+clock refcounts live in `oer-espressif-radio`; HAL supplies owned atom ports.
 
 For IEEE 802.15.4, `ieee802154::polled` retains task/IRQ owners with `Silent`
 while exposing finite semantic transactions. `ieee802154::frames` owns the
@@ -142,9 +143,10 @@ deadline over the returned monotonic clock.
 
 `power::ChipClocks` is the one owner of the platform clock words the radio
 shares with the SoC (`MODEM_LPCON.CLK_CONF`, `HP_SYS_CLKRST.REF_160M_CTRL0`):
-the family adoption driver installs it through the HAL adapter, it counts the
-references of every user, and a refused acquire or release is the caller's
-typed error.
+the family adoption driver installs it through the HAL adapter. Its
+`oer-espressif-radio::clocks::ClockCounts` counts the references of every user;
+the HAL retains the word claim and permanent `PsramMpll`. A refused acquire or
+release is the caller's typed error.
 
 Installation consumes the unique `ChipClockPeripherals` from the root by
 value. These fixed-placement PAC owners cannot be cloned or recovered after

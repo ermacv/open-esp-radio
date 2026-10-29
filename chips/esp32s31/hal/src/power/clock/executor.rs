@@ -20,10 +20,7 @@ use core::marker::PhantomData;
 
 use crate::{modem::ModemClockDevice, phy::RadioPhyRegisters};
 
-use super::{
-    Dependency, ModemClockLease, ModemClockPlanner, PoisonedModemClockAcquire,
-    PoisonedModemClockRelease, PreparedModemClockAcquire, PreparedModemClockRelease,
-};
+use super::Dependency;
 
 /// The platform refused a clock request: nothing changed.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -377,111 +374,64 @@ impl<P: crate::phy::registers::RadioPlacement> ModemClockPort for RadioPhyRegist
     }
 }
 
-const fn modem_device(dependency: Dependency) -> Option<ModemClockDevice> {
-    Some(match dependency {
-        Dependency::ModemAdcCommonFe => ModemClockDevice::ModemAdcCommonFe,
-        Dependency::ModemPrivateFe => ModemClockDevice::ModemPrivateFe,
-        Dependency::WifiApb => ModemClockDevice::WifiApb,
-        Dependency::WifiBb44m => ModemClockDevice::WifiBaseband44m,
-        Dependency::WifiMac => ModemClockDevice::WifiMac,
-        Dependency::WifiBb => ModemClockDevice::WifiBaseband,
-        Dependency::WifiBb80x1 => ModemClockDevice::WifiBaseband80x1,
-        Dependency::Etm => ModemClockDevice::Etm,
-        Dependency::BtMac => ModemClockDevice::BluetoothMac,
-        Dependency::BtPeripheral => ModemClockDevice::BluetoothPeripheral,
-        Dependency::BtApbAndSecurity => ModemClockDevice::BluetoothApb,
-        Dependency::BtIeee802154CommonBaseband => {
-            ModemClockDevice::BluetoothIeee802154CommonBaseband
-        }
-        Dependency::Ieee802154ApbAndMac => ModemClockDevice::Ieee802154Mac,
-        // Platform-owned halves are handled by the caller.
-        Dependency::Pll160AndModemSource
-        | Dependency::AnalogI2cMaster
-        | Dependency::Coexistence => return None,
-    })
+/// Borrowed chip binding; this owner lends no register handle to the family.
+pub(crate) struct ModemExecution<'a, H, B: PlatformClockBackend, P> {
+    pub(crate) port: &'a mut H,
+    pub(crate) held: &'a mut ModemPlatformClocks<B>,
+    pub(crate) platform: P,
 }
 
-fn perform_acquire<B: PlatformClockBackend>(
-    dependency: Dependency,
-    port: &mut impl ModemClockPort,
-    held: &mut ModemPlatformClocks<B>,
-    platform: &impl PlatformClockProvider<Backend = B>,
-) -> Result<(), PlatformClockError> {
-    match dependency {
-        Dependency::Pll160AndModemSource => {
-            held.acquire(PlatformClock::Pll160m, platform)?;
-            port.configure_device(ModemClockDevice::PllSourceGate, true);
-        }
-        Dependency::AnalogI2cMaster => held.acquire(PlatformClock::AnalogI2cMaster, platform)?,
-        Dependency::Coexistence => held.acquire(PlatformClock::ModemCoexistence, platform)?,
-        other => {
-            if let Some(device) = modem_device(other) {
-                port.configure_device(device, true);
+impl<H: ModemClockPort, B: PlatformClockBackend, P>
+    oer_espressif_modem_clock::execution::RegisterPort<Dependency> for ModemExecution<'_, H, B, P>
+{
+    type Device = ModemClockDevice;
+    type Clock = PlatformClock;
+    type Error = PlatformClockError;
+    fn action(
+        dependency: Dependency,
+    ) -> oer_espressif_modem_clock::execution::Action<ModemClockDevice, PlatformClock> {
+        use super::ChipDependency as D;
+        use oer_espressif_modem_clock::execution::Action;
+        Action::Device(match dependency.0 {
+            D::ModemAdcCommonFe => ModemClockDevice::ModemAdcCommonFe,
+            D::ModemPrivateFe => ModemClockDevice::ModemPrivateFe,
+            D::WifiApb => ModemClockDevice::WifiApb,
+            D::WifiBb44m => ModemClockDevice::WifiBaseband44m,
+            D::WifiMac => ModemClockDevice::WifiMac,
+            D::WifiBb => ModemClockDevice::WifiBaseband,
+            D::WifiBb80x1 => ModemClockDevice::WifiBaseband80x1,
+            D::Etm => ModemClockDevice::Etm,
+            D::BtMac => ModemClockDevice::BluetoothMac,
+            D::BtPeripheral => ModemClockDevice::BluetoothPeripheral,
+            D::BtApbAndSecurity => ModemClockDevice::BluetoothApb,
+            D::BtIeee802154CommonBaseband => ModemClockDevice::BluetoothIeee802154CommonBaseband,
+            D::Ieee802154ApbAndMac => ModemClockDevice::Ieee802154Mac,
+            D::Pll160AndModemSource => {
+                return Action::Source {
+                    clock: PlatformClock::Pll160m,
+                    device: ModemClockDevice::PllSourceGate,
+                };
             }
-        }
+            D::AnalogI2cMaster => return Action::Platform(PlatformClock::AnalogI2cMaster),
+            D::Coexistence => return Action::Platform(PlatformClock::ModemCoexistence),
+        })
     }
-    Ok(())
-}
-
-fn perform_release<B: PlatformClockBackend>(
-    dependency: Dependency,
-    port: &mut impl ModemClockPort,
-    held: &mut ModemPlatformClocks<B>,
-) -> Result<(), PlatformClockError> {
-    match dependency {
-        Dependency::Pll160AndModemSource => {
-            port.configure_device(ModemClockDevice::PllSourceGate, false);
-            held.release(PlatformClock::Pll160m)?;
-        }
-        Dependency::AnalogI2cMaster => held.release(PlatformClock::AnalogI2cMaster)?,
-        Dependency::Coexistence => held.release(PlatformClock::ModemCoexistence)?,
-        other => {
-            if let Some(device) = modem_device(other) {
-                port.configure_device(device, false);
-            }
-        }
+    fn configure_device(&mut self, device: ModemClockDevice, enable: bool) {
+        self.port.configure_device(device, enable);
     }
-    Ok(())
+    fn release_clock(&mut self, clock: PlatformClock) -> Result<(), PlatformClockError> {
+        self.held.release(clock)
+    }
 }
-
-/// Perform and commit one prepared acquisition.
-///
-/// # Errors
-///
-/// A refused platform request poisons the transaction at that edge.
-#[allow(
-    clippy::result_large_err,
-    reason = "the poisoned transaction retains the planner without allocation"
-)]
-pub(crate) fn execute_acquire<B: PlatformClockBackend>(
-    prepared: PreparedModemClockAcquire,
-    port: &mut impl ModemClockPort,
-    held: &mut ModemPlatformClocks<B>,
-    platform: &impl PlatformClockProvider<Backend = B>,
-) -> Result<(ModemClockPlanner, ModemClockLease), PoisonedModemClockAcquire> {
-    port.prepare_power_state();
-    oer_espressif_modem_clock::execute_acquire(prepared, |dependency| {
-        perform_acquire(dependency, port, held, platform)
-    })
-}
-
-/// Perform and commit one prepared release.
-///
-/// # Errors
-///
-/// A refused platform release poisons the transaction at that edge.
-#[allow(
-    clippy::result_large_err,
-    reason = "the poisoned transaction retains the planner and lease without allocation"
-)]
-pub(crate) fn execute_release<B: PlatformClockBackend>(
-    prepared: PreparedModemClockRelease,
-    port: &mut impl ModemClockPort,
-    held: &mut ModemPlatformClocks<B>,
-) -> Result<ModemClockPlanner, PoisonedModemClockRelease> {
-    oer_espressif_modem_clock::execute_release(prepared, |dependency| {
-        perform_release(dependency, port, held)
-    })
+impl<H: ModemClockPort, B: PlatformClockBackend, P: PlatformClockProvider<Backend = B>>
+    oer_espressif_modem_clock::execution::AcquirePort<Dependency> for ModemExecution<'_, H, B, &P>
+{
+    fn prepare_power_state(&mut self) {
+        self.port.prepare_power_state();
+    }
+    fn acquire_clock(&mut self, clock: PlatformClock) -> Result<(), PlatformClockError> {
+        self.held.acquire(clock, self.platform)
+    }
 }
 
 #[cfg(test)]

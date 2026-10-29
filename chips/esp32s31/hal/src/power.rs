@@ -1,33 +1,5 @@
-//! Finite ESP32-S31 modem/PHY prerequisite sequence.
-//!
-//! Domain clock prerequisites shared by all radio protocols. Wi-Fi's cold
-//! BB+MAC reset belongs to its client entry after PHY calibration; this port
-//! cannot issue it. Wi-Fi MAC clocks belong to the later MAC start transition.
-
-use crate::{
-    modem::{
-        ModemSysconPowerObservation, PlatformClockPowerObservation, SharedModemClockObservation,
-    },
-    phy::RadioPhyRegisters,
-};
-
-use crate::clock::PlatformClockRefs;
-
-pub(crate) trait PowerSequenceBackend {
-    fn publish_modem_power_state(&mut self);
-    fn enable_modem_register_bus_clock(&mut self);
-    /// Take one platform clock reference for common power.
-    fn acquire_platform_clock(&mut self, clock: PlatformClock) -> Result<(), PlatformClockError>;
-    fn configure_modem_source_clocks(&mut self);
-    fn platform_clock_power_observation(&self) -> crate::modem::PlatformClockPowerObservation;
-    fn set_wifi_baseband_reset(&mut self, asserted: bool);
-    fn configure_wifi_power_clock_map(&mut self);
-    fn enable_phy_calibration_clocks(&mut self);
-    fn select_phy_i2c_160mhz_source(&mut self);
-    fn modem_syscon_power_observation(&self) -> crate::modem::ModemSysconPowerObservation;
-    fn prepare_shared_modem_clock_map(&mut self);
-    fn shared_modem_clock_observation(&self) -> crate::modem::SharedModemClockObservation;
-}
+//! Owned S31 register and reference adapter for the family power driver.
+use crate::{clock::PlatformClockRefs, phy::RadioPhyRegisters};
 
 /// Power-sequence port over one route's shared PHY, its platform clock
 /// references and the platform clock owner.
@@ -37,21 +9,31 @@ pub(crate) struct RoutePower<'route, P: PlatformClockProvider> {
     pub(crate) platform: &'route P,
 }
 
-impl<P: PlatformClockProvider> PowerSequenceBackend for RoutePower<'_, P> {
+impl<P: PlatformClockProvider> oer_espressif_radio::power::PowerSequenceBackend
+    for RoutePower<'_, P>
+{
     fn publish_modem_power_state(&mut self) {
         self.phy.publish_modem_power_state();
     }
     fn enable_modem_register_bus_clock(&mut self) {
         self.phy.enable_modem_register_bus_clock();
     }
-    fn acquire_platform_clock(&mut self, clock: PlatformClock) -> Result<(), PlatformClockError> {
-        self.refs.acquire(clock, self.platform)
+    fn acquire_platform_clock(
+        &mut self,
+        clock: oer_espressif_radio::power::PowerClock,
+    ) -> Result<(), oer_espressif_radio::power::ReferenceRefused> {
+        use oer_espressif_radio::power::{PowerClock, ReferenceRefused};
+        let clock = match clock {
+            PowerClock::Mpll => PlatformClock::Mpll,
+            PowerClock::Pll160m => PlatformClock::Pll160m,
+            PowerClock::AnalogI2cMaster => PlatformClock::AnalogI2cMaster,
+        };
+        self.refs
+            .acquire(clock, self.platform)
+            .map_err(|_| ReferenceRefused)
     }
     fn configure_modem_source_clocks(&mut self) {
         self.phy.configure_modem_source_clocks();
-    }
-    fn platform_clock_power_observation(&self) -> PlatformClockPowerObservation {
-        self.phy.platform_clock_power_observation()
     }
     fn set_wifi_baseband_reset(&mut self, asserted: bool) {
         self.phy.set_wifi_baseband_reset(asserted);
@@ -65,169 +47,30 @@ impl<P: PlatformClockProvider> PowerSequenceBackend for RoutePower<'_, P> {
     fn select_phy_i2c_160mhz_source(&mut self) {
         self.phy.select_phy_i2c_160mhz_source();
     }
-    fn modem_syscon_power_observation(&self) -> ModemSysconPowerObservation {
-        self.phy.modem_syscon_power_observation()
-    }
     fn prepare_shared_modem_clock_map(&mut self) {
         self.phy.prepare_shared_modem_clock_map();
     }
-    fn shared_modem_clock_observation(&self) -> SharedModemClockObservation {
-        self.phy.shared_modem_clock_observation()
+    fn power_readback(&self) -> oer_espressif_radio::power::PowerClockReadback {
+        let platform = self.phy.platform_clock_power_observation();
+        let modem = self.phy.modem_syscon_power_observation();
+        let shared = self.phy.shared_modem_clock_observation();
+        oer_espressif_radio::power::PowerClockReadback {
+            reset_released: modem.wifi_reset_released,
+            hp_active_icg_selected: platform.hp_active_icg_selected,
+            modem_bus_clock_enabled: platform.modem_register_bus_clock_enabled,
+            hp_active_clock_map_configured: modem.active_clock_map_configured,
+            shared_clock_map_configured: shared.power_state_map_configured,
+            modem_source_clocks_configured: platform.modem_source_clocks_configured,
+            phy_calibration_clocks_enabled: modem.phy_calibration_clocks_enabled,
+            phy_i2c_160mhz_selected: modem.phy_i2c_160mhz_selected,
+        }
     }
 }
-
-/// Semantic read-back state captured after the cold clock/reset sequence.
-///
-/// Route-owned field decoding stays in the custom PAC; remaining platform
-/// decoding stays behind the integration capability. Neither register handles,
-/// addresses nor system-register masks cross into this layer.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct PowerClockReadback {
-    pub reset_released: bool,
-    pub hp_active_icg_selected: bool,
-    pub modem_bus_clock_enabled: bool,
-    pub hp_active_clock_map_configured: bool,
-    pub shared_clock_map_configured: bool,
-    pub modem_source_clocks_configured: bool,
-    pub phy_calibration_clocks_enabled: bool,
-    pub phy_i2c_160mhz_selected: bool,
-}
-
-/// Read-back checkpoint following the finite prerequisite sequence.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum PowerCheckpoint {
-    /// The platform clock owner granted the MPLL reference.
-    Mpll,
-    /// Both Wi-Fi reset lines were released.
-    ResetReleased,
-    /// PMU selects the HP-active modem ICG code.
-    HpActiveIcg,
-    /// The modem register bus clock is enabled.
-    ModemBusClock,
-    /// HP-active modem domain clocks are ungated.
-    HpActiveClockMap,
-    /// Shared low-power modem clocks are ungated.
-    SharedClockMap,
-    /// The platform clock owner granted the 160 MHz reference.
-    Reference160m,
-    /// The modem PLL/XTAL source configuration is active.
-    ModemClockSource,
-    /// All PHY frontend and calibration clocks are enabled.
-    PhyClocks,
-    /// PHY-I²C uses the 160 MHz source.
-    I2cSource,
-    /// The platform clock owner granted the PHY-I²C master clock.
-    I2cClock,
-}
-
-/// A prerequisite failed its bounded semantic read-back checkpoint.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PowerError {
-    /// Semantic checkpoint that failed.
-    pub checkpoint: PowerCheckpoint,
-    /// Expected semantic state.
-    pub expected: bool,
-    /// Observed semantic state.
-    pub observed: bool,
-}
-
-pub(crate) fn execute_owned(registers: &mut impl PowerSequenceBackend) -> Result<(), PowerError> {
-    // Wi-Fi's combined BB+MAC reset belongs to its client entry. The BB-only
-    // pulse below is the PHY clock-enable prerequisite, repeated by the
-    // vendor modem clock manager; it preserves the MAC calibration window.
-    // The PHY writes front-end baseband power into the PMU word where the
-    // platform powers MPLL; holding MPLL keeps the platform from writing it.
-    registers
-        .acquire_platform_clock(PlatformClock::Mpll)
-        .map_err(|PlatformClockError| refused(PowerCheckpoint::Mpll))?;
-    registers.publish_modem_power_state();
-    registers.enable_modem_register_bus_clock();
-    registers.configure_wifi_power_clock_map();
-    registers.prepare_shared_modem_clock_map();
-    // The platform owns the 160 MHz gate; its reference replaces the gate
-    // write that ESP-IDF's modem clock performs first for this source.
-    registers
-        .acquire_platform_clock(PlatformClock::Pll160m)
-        .map_err(|PlatformClockError| refused(PowerCheckpoint::Reference160m))?;
-    registers.configure_modem_source_clocks();
-    registers.set_wifi_baseband_reset(true);
-    registers.set_wifi_baseband_reset(false);
-    registers.enable_phy_calibration_clocks();
-    registers.select_phy_i2c_160mhz_source();
-    registers
-        .acquire_platform_clock(PlatformClock::AnalogI2cMaster)
-        .map_err(|PlatformClockError| refused(PowerCheckpoint::I2cClock))?;
-
-    let platform = registers.platform_clock_power_observation();
-    let modem = registers.modem_syscon_power_observation();
-    let shared = registers.shared_modem_clock_observation();
-    let readback = PowerClockReadback {
-        reset_released: modem.wifi_reset_released,
-        hp_active_icg_selected: platform.hp_active_icg_selected,
-        modem_bus_clock_enabled: platform.modem_register_bus_clock_enabled,
-        hp_active_clock_map_configured: modem.active_clock_map_configured,
-        shared_clock_map_configured: shared.power_state_map_configured,
-        modem_source_clocks_configured: platform.modem_source_clocks_configured,
-        phy_calibration_clocks_enabled: modem.phy_calibration_clocks_enabled,
-        phy_i2c_160mhz_selected: modem.phy_i2c_160mhz_selected,
-    };
-    verify_state(PowerCheckpoint::ResetReleased, readback.reset_released)?;
-    verify_state(
-        PowerCheckpoint::HpActiveIcg,
-        readback.hp_active_icg_selected,
-    )?;
-    verify_state(
-        PowerCheckpoint::ModemBusClock,
-        readback.modem_bus_clock_enabled,
-    )?;
-    verify_state(
-        PowerCheckpoint::HpActiveClockMap,
-        readback.hp_active_clock_map_configured,
-    )?;
-    verify_state(
-        PowerCheckpoint::SharedClockMap,
-        readback.shared_clock_map_configured,
-    )?;
-    verify_state(
-        PowerCheckpoint::ModemClockSource,
-        readback.modem_source_clocks_configured,
-    )?;
-    verify_state(
-        PowerCheckpoint::PhyClocks,
-        readback.phy_calibration_clocks_enabled,
-    )?;
-    verify_state(PowerCheckpoint::I2cSource, readback.phy_i2c_160mhz_selected)
-}
-
-/// The platform clock owner refused a reference at `checkpoint`.
-const fn refused(checkpoint: PowerCheckpoint) -> PowerError {
-    PowerError {
-        checkpoint,
-        expected: true,
-        observed: false,
-    }
-}
-
-fn verify_state(checkpoint: PowerCheckpoint, observed: bool) -> Result<(), PowerError> {
-    if observed {
-        Ok(())
-    } else {
-        Err(PowerError {
-            checkpoint,
-            expected: true,
-            observed,
-        })
-    }
-}
-
-#[cfg(test)]
-pub(crate) mod test_clocks;
-
-#[cfg(test)]
-mod tests;
 
 mod chip_clocks;
 pub(crate) mod clock;
+#[cfg(test)]
+pub(crate) mod test_clocks;
 pub use chip_clocks::{ChipClocks, PsramMpll};
 pub use clock::{
     PlatformClock, PlatformClockAbandonment, PlatformClockBackend, PlatformClockError,
