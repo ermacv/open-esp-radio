@@ -1,12 +1,10 @@
 //! The owned Embassy/Xarxa device, DHCP and bounded W3 application.
 use crate::{
     W3Config,
-    station::{AUTHENTICATED, DEAUTH, DEPARTING, LAST_BEACON_MS},
+    radio::{AUTHENTICATED, DEAUTH, DEPARTING, LAST_BEACON_MS},
 };
-use core::{
-    cell::{Cell, RefCell},
-    sync::atomic::Ordering,
-};
+use core::sync::atomic::AtomicBool;
+use core::{cell::RefCell, sync::atomic::Ordering};
 use embassy_futures::{
     join::join3,
     select::{Either, select},
@@ -14,15 +12,12 @@ use embassy_futures::{
 };
 use oer_embassy_net::{NetworkInterfaceId, OwnedEndpointResources, OwnedNetworkDevice};
 use oer_embassy_time::EmbassyClock;
+use oer_esp32s31_wifi::{Control, Network};
 use oer_firmware_apps_w3::{
     icmp,
     observation::Observations,
     report::{Lease, Report},
 };
-use oer_ieee80211_runtime::station::*;
-use oer_ieee80211_runtime::station::Device as StationDevice;
-use oer_ieee80211_sta::machine::{StaCommandCredits, StaRequest};
-use oer_radio_port::PoolPath;
 use oer_time::{Clock, Duration, Timer};
 use owned_embassy_net::{
     Stack, StackStorage,
@@ -33,7 +28,7 @@ use owned_embassy_net::{
 use static_cell::{ConstStaticCell, StaticCell};
 use xarxa_driver::{PacketPool, PacketPoolStorage};
 
-const RX: usize = oer_firmware_apps_w3::policy::RX_DEPTH;
+const RX: usize = oer_esp32s31_wifi::RX_DEPTH;
 const TX: usize = 4;
 type Endpoint = OwnedEndpointResources<oer_espressif_executor::ThreadContext<0>, RX, TX>;
 type Device = OwnedNetworkDevice<'static, oer_espressif_executor::ThreadContext<0>, RX, TX>;
@@ -48,23 +43,21 @@ static RX_STORAGE: ConstStaticCell<PacketPoolStorage<8>> =
 static RX_POOL: StaticCell<PacketPool<8>> = StaticCell::new();
 
 #[allow(clippy::too_many_arguments)]
-pub fn workload<'a, 'id: 'a, Path: PoolPath + 'a>(
+pub fn workload<'a>(
     config: W3Config,
     address: [u8; 6],
     seed: u64,
-    credits: StaCommandCredits<'id, Path>,
-    commands: Control<'a, 'id, crate::radio::Caps, Path, 2>,
-    net: StationDevice<'a, 2, RX>,
-    link: &'a Cell<bool>,
-    disconnected: &'a Cell<bool>,
-    failed: &'a Cell<bool>,
+    commands: Control<'a>,
+    net: Network<'a>,
+    link: &'a AtomicBool,
+    disconnected: &'a AtomicBool,
+    failed: &'a AtomicBool,
 ) -> impl core::future::Future<Output = Report> + 'a {
     WORKLOAD.take().future(|| {
         workload_future(
             config,
             address,
             seed,
-            credits,
             commands,
             net,
             link,
@@ -74,25 +67,23 @@ pub fn workload<'a, 'id: 'a, Path: PoolPath + 'a>(
     })
 }
 
-type Workload<'a, 'id: 'a, Path: PoolPath + 'a> = impl core::future::Future<Output = Report>;
-type CommandPath = oer_radio_port::Child<oer_radio_port::Root<crate::radio::slot::Id>, 8>;
-static WORKLOAD: ConstStaticCell<oer_memory::StaticPlace<Workload<'static, 'static, CommandPath>>> =
+type Workload<'a> = impl core::future::Future<Output = Report>;
+static WORKLOAD: ConstStaticCell<oer_memory::StaticPlace<Workload<'static>>> =
     ConstStaticCell::new(oer_memory::StaticPlace::new());
 
 #[allow(clippy::too_many_arguments)]
 #[define_opaque(Workload)]
 #[inline(never)]
-fn workload_future<'a, 'id: 'a, Path: PoolPath + 'a>(
+fn workload_future<'a>(
     config: W3Config,
     address: [u8; 6],
     seed: u64,
-    credits: StaCommandCredits<'id, Path>,
-    mut commands: Control<'a, 'id, crate::radio::Caps, Path, 2>,
-    net: StationDevice<'a, 2, RX>,
-    link: &'a Cell<bool>,
-    disconnected: &'a Cell<bool>,
-    failed: &'a Cell<bool>,
-) -> Workload<'a, 'id, Path> {
+    mut commands: Control<'a>,
+    net: Network<'a>,
+    link: &'a AtomicBool,
+    disconnected: &'a AtomicBool,
+    failed: &'a AtomicBool,
+) -> Workload<'a> {
     async move {
         let general = GENERAL_POOL
             .init_with(|| PacketPool::new(GENERAL_STORAGE.take()))
@@ -126,7 +117,6 @@ fn workload_future<'a, 'id: 'a, Path: PoolPath + 'a>(
         let application = application(
             config,
             address,
-            credits,
             &mut commands,
             iface,
             &socket,
@@ -174,34 +164,37 @@ async fn drain(socket: &RawSocket<'_, Device>) -> ! {
     }
 }
 #[allow(clippy::too_many_arguments)]
-async fn application<'id, Path: PoolPath>(
+async fn application(
     config: W3Config,
     address: [u8; 6],
-    credits: StaCommandCredits<'id, Path>,
-    commands: &mut Control<'_, 'id, crate::radio::Caps, Path, 2>,
+    commands: &mut Control<'_>,
     iface: Iface<'_, Device>,
     socket: &RawSocket<'_, Device>,
     observations: &RefCell<Observations>,
-    link: &Cell<bool>,
-    disconnected: &Cell<bool>,
-    failed: &Cell<bool>,
+    link: &AtomicBool,
+    disconnected: &AtomicBool,
+    failed: &AtomicBool,
 ) -> Report {
     let mut report = Report::new(config.channel, address, config.stand);
-    let _ = commands.try_command(ServiceCommand::Station(StaRequest::new(1, credits.connect)));
+    let _ = commands.try_connect(1);
     let deadline = EmbassyClock
         .now()
         .checked_add(Duration::from_secs(30))
         .expect("W3 monotonic deadline");
-    while !link.get() && !disconnected.get() && !failed.get() && EmbassyClock.now() < deadline {
+    while !link.load(Ordering::Relaxed)
+        && !disconnected.load(Ordering::Relaxed)
+        && !failed.load(Ordering::Relaxed)
+        && EmbassyClock.now() < deadline
+    {
         let _ = EmbassyClock.wait_for(Duration::from_millis(10)).await;
     }
     report.authenticated = AUTHENTICATED.load(Ordering::Relaxed);
-    report.associated = link.get();
+    report.associated = link.load(Ordering::Relaxed);
     LAST_BEACON_MS.store(
         (EmbassyClock.now().as_micros() / 1000) as u32,
         Ordering::Relaxed,
     );
-    if link.get() {
+    if link.load(Ordering::Relaxed) {
         let deadline = EmbassyClock
             .now()
             .checked_add(Duration::from_secs(35))
@@ -260,17 +253,14 @@ async fn application<'id, Path: PoolPath>(
         }
     }
     observations.borrow().report(&mut report);
-    if link.get() {
+    if link.load(Ordering::Relaxed) {
         DEPARTING.store(true, Ordering::Relaxed);
-        let _ = commands.try_command(ServiceCommand::Station(StaRequest::new(
-            2,
-            credits.disconnect,
-        )));
+        let _ = commands.try_disconnect(2);
         let deadline = EmbassyClock
             .now()
             .checked_add(Duration::from_secs(10))
             .expect("W3 monotonic deadline");
-        while !disconnected.get() && EmbassyClock.now() < deadline {
+        while !disconnected.load(Ordering::Relaxed) && EmbassyClock.now() < deadline {
             let _ = EmbassyClock.wait_for(Duration::from_millis(10)).await;
         }
     }
@@ -279,10 +269,10 @@ async fn application<'id, Path: PoolPath>(
     report
 }
 
-fn healthy(link: &Cell<bool>, failed: &Cell<bool>) -> bool {
+fn healthy(link: &AtomicBool, failed: &AtomicBool) -> bool {
     let last = LAST_BEACON_MS.load(Ordering::Relaxed);
     if oer_firmware_apps_w3::beacon::lost(last, (EmbassyClock.now().as_micros() / 1000) as u32) {
-        failed.set(true);
+        failed.store(true, Ordering::Relaxed);
     }
-    link.get() && !failed.get()
+    link.load(Ordering::Relaxed) && !failed.load(Ordering::Relaxed)
 }

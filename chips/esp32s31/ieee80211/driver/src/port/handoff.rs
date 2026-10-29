@@ -63,7 +63,7 @@ pub(super) struct HeldBacking<'id, Id: SlotIdentity, D: Device<B>, const B: usiz
     >,
     pub(super) events: oer_memory::AffineSpscQueue<
         owned::OwnedEvent<'id, Id, D, B>,
-        { TERMINALS + TX_TICKETS },
+        { TERMINAL_CAPACITY + TX_TICKETS },
         oer_memory::CompactSpscCursor,
     >,
     pub(super) rx_out: Cell<usize>,
@@ -151,7 +151,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> HeldBacking<'id, Id, D
 pub(super) struct Held<'s, 'id, Id: SlotIdentity, D: Device<B>, const B: usize> {
     pub(super) storage: &'static PortStorage<D, B>,
     pub(super) commands: Incoming<'s, Cmd<'id, Id, D, B>, COMMANDS>,
-    pub(super) events: Outgoing<'s, Msg<'id, Id, D, B>, { TERMINALS + TX_TICKETS }>,
+    pub(super) events: Outgoing<'s, Msg<'id, Id, D, B>, { TERMINAL_CAPACITY + TX_TICKETS }>,
     pub(super) recycled: Incoming<'s, ReceiveBuffer<'id, Id, D::Receive>, TX_TICKETS>,
     pub(super) rx_out: &'s Cell<usize>,
     pub(super) gate: &'s Prepared<GateIssuer<'id, Part<Id, 1>>>,
@@ -193,7 +193,7 @@ pub(super) struct FrontHeld<'p, Id: SlotIdentity, D: Device<B>, const B: usize> 
     pub(super) events: LocalSpscReceiver<
         'p,
         Msg<'static, Id, D, B>,
-        { TERMINALS + TX_TICKETS },
+        { TERMINAL_CAPACITY + TX_TICKETS },
         CompactSpscCursor,
     >,
     pub(super) recycled:

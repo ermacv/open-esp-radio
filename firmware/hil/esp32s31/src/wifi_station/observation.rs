@@ -57,6 +57,19 @@ static ARP_PENDING: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicB
 
 impl oer_trace::Observer for StationObserver {
     fn event<E: oer_trace::Event + Copy + 'static>(&self, event: E) {
+        use oer_esp32s31_wifi::observation::Observation as FacadeObservation;
+        match FacadeObservation::of(&event) {
+            Some(FacadeObservation::Associated) => self
+                .0
+                .publish(oer_ieee80211_control::StationLinkState::Associated),
+            Some(FacadeObservation::HardwareTimeout) => {
+                TIMEOUTS.fetch_add(1, Relaxed);
+            }
+            Some(FacadeObservation::ControlDelivered) if DEPARTING.load(Relaxed) => {
+                DEAUTH.fetch_add(1, Relaxed);
+            }
+            _ => {}
+        }
         use oer_ieee80211_instrumentation::{ArpOperation, Observation};
         let operation = |operation| match operation {
             ArpOperation::Request => 1,
@@ -146,4 +159,16 @@ fn receive_drop(attempt: super::Attempt, reason: oer_ieee80211_instrumentation::
             reason,
         },
     );
+}
+
+#[derive(Default)]
+pub struct DriverObserver;
+impl oer_trace::Observer for DriverObserver {
+    fn event<E: oer_trace::Event + Copy + 'static>(&self, event: E) {
+        if oer_esp32s31_wifi::observation::Observation::of(&event)
+            == Some(oer_esp32s31_wifi::observation::Observation::QueueCollision)
+        {
+            COLLISIONS.fetch_add(1, Relaxed);
+        }
+    }
 }

@@ -1,13 +1,21 @@
 # w3 report contract
 
+The image consumes `oer-esp32s31-wifi::station`: Control and NetDevice exist
+before the returned P2 driver and P1 station runner start. The facade owns
+backend, arbiter, station and runtime composition. W3 declares interrupt
+bindings, spawns the runners, adapts NetDevice to Embassy networking and runs
+the bounded application and its collectors. Software key unwrap is still
+selected here. The bridge's 1-ms timer and 10-ms application polling remain.
+
+
 The build selects the configured composition only when all five stand
 settings are present. Without them, a separate entry adopts the platform,
 prints `OER-RESULT: fail w3 unconfigured` and idles with no tasks or interrupt
 bindings. Only the configured composition declares executor task poll records.
 
-The image composes the S31 lower-MAC backend, channel arbiter, open
-`station::Runner` and Espressif rate selection with the owned Embassy network
-adapter. P2 owns the device and port registration; the station and IP stack run
+The facade composes the S31 lower-MAC backend, channel arbiter, open
+station runtime and Espressif rate selection. The image connects its neutral
+Ethernet end to the owned Embassy network adapter. P2 owns the device and port registration; the station and IP stack run
 on P1 in PSRAM. The linker sizes this image's P1 stack under `stack.toml`, with the platform's
 unchanged interrupt-stack allocation. The image stores the large station future
 in static PSRAM using the same pinned compiler support as the HIL images.

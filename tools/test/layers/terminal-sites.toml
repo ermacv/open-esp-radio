@@ -414,7 +414,6 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 "firmware/apps/w3/src/entry.rs:crate:terminal-reference:reset:1" = { owner = "firmware/apps/w3", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
 "firmware/apps/w3/src/entry.rs:crate:terminal-binding:entry:1" = { owner = "firmware/apps/w3", classes = ["rust-panic"] }
 "firmware/apps/w3/src/entry.rs:crate::main:terminal-entry:main:1" = { owner = "firmware/apps/w3", classes = ["configuration-boot"] }
-"firmware/apps/w3/src/entry.rs:crate::main:terminal-reference:reset:1" = { owner = "firmware/apps/w3", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
 "firmware/apps/w3/src/entry.rs:crate::main:reset-method:reset:1" = { owner = "firmware/apps/w3", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
 "firmware/apps/w3/src/entry.rs:crate::main:reset-method:reset:2" = { owner = "firmware/apps/w3", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
 "firmware/apps/w3/src/entry.rs:crate::main:terminal-reference:reset_binding:1" = { owner = "firmware/apps/w3", classes = ["configuration-boot", "unexpected-hardware", "software-invariant"] }
@@ -448,25 +447,11 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 "firmware/apps/w3/src/probe.rs:crate::probe::run:panic-method:expect:1" = { owner = "firmware/apps/w3", classes = ["rust-panic"] }
 
 # firmware/apps/w3/src/radio.rs
-"firmware/apps/w3/src/radio.rs:crate::radio::impl RadioCoexPriorities for Coex::beacon_window_pti:panic-method:expect:1" = { owner = "firmware/apps/w3", classes = ["rust-panic"] }
-"firmware/apps/w3/src/radio.rs:crate::radio::channels:panic-method:expect:1" = { owner = "firmware/apps/w3", classes = ["rust-panic"] }
-"firmware/apps/w3/src/radio.rs:crate::radio::drive:panic-method:expect:1" = { owner = "firmware/apps/w3", classes = ["rust-panic"] }
-"firmware/apps/w3/src/radio.rs:crate::radio::drive:panic-method:expect:2" = { owner = "firmware/apps/w3", classes = ["rust-panic"] }
-"firmware/apps/w3/src/radio.rs:crate::radio::drive:panic-method:expect:3" = { owner = "firmware/apps/w3", classes = ["rust-panic"] }
-"firmware/apps/w3/src/radio.rs:crate::radio::serve:terminal-reference:reset_request:1" = { owner = "firmware/apps/w3", classes = ["cancellation"] }
-"firmware/apps/w3/src/radio.rs:crate::radio::install:terminal-reference:reset_request:1" = { owner = "firmware/apps/w3", classes = ["cancellation"] }
+"firmware/apps/w3/src/radio.rs:crate::radio::failure:terminal-entry:failure:1" = { owner = "firmware/apps/w3", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
+"firmware/apps/w3/src/radio.rs:crate::radio::failure:terminal-reference:reset:1" = { owner = "firmware/apps/w3", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
+"firmware/apps/w3/src/radio.rs:crate::radio::failure:terminal-reference:reset_request:1" = { owner = "firmware/apps/w3", classes = ["cancellation"] }
 
 # firmware/apps/w3/src/station.rs
-"firmware/apps/w3/src/station.rs:crate::station::initialize_service:panic-method:expect:2" = { owner = "firmware/apps/w3", classes = ["rust-panic"] }
-"firmware/apps/w3/src/station.rs:crate::station::initialize_service:panic-method:expect:1" = { owner = "firmware/apps/w3", classes = ["rust-panic"] }
-"firmware/apps/w3/src/station.rs:crate::station::initialize_service:panic-method:expect:5" = { owner = "firmware/apps/w3", classes = ["rust-panic"] }
-"firmware/apps/w3/src/station.rs:crate::station::initialize_service:panic-method:expect:4" = { owner = "firmware/apps/w3", classes = ["rust-panic"] }
-"firmware/apps/w3/src/station.rs:crate::station::initialize_service:panic-method:expect:3" = { owner = "firmware/apps/w3", classes = ["rust-panic"] }
-"firmware/apps/w3/src/station.rs:crate::station::initialize_service:panic-method:expect:6" = { owner = "firmware/apps/w3", classes = ["rust-panic"] }
-"firmware/apps/w3/src/station.rs:crate::station::initialize_service:panic-method:expect:7" = { owner = "firmware/apps/w3", classes = ["rust-panic"] }
-"firmware/apps/w3/src/station.rs:crate::station::initialize_service:panic-method:expect:8" = { owner = "firmware/apps/w3", classes = ["rust-panic"] }
-"firmware/apps/w3/src/station.rs:crate::station::initialize_service:panic-method:expect:9" = { owner = "firmware/apps/w3", classes = ["rust-panic"] }
-"firmware/apps/w3/src/station.rs:crate::station::initialize_service:panic-method:expect:10" = { owner = "firmware/apps/w3", classes = ["rust-panic"] }
 
 # firmware/apps/w3/src/unconfigured.rs
 "firmware/apps/w3/src/unconfigured.rs:crate::main:terminal-entry:main:1" = { owner = "firmware/apps/w3", classes = ["configuration-boot"] }
@@ -690,7 +675,6 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 "firmware/hil/esp32s31/src/wifi_station/irq.rs:crate::wifi_station::irq::on_wifi:terminal-reference:reset:1" = { owner = "firmware/hil/esp32s31", classes = ["unexpected-hardware"] }
 
 # firmware/hil/esp32s31/src/wifi_station/mod.rs
-"firmware/hil/esp32s31/src/wifi_station/mod.rs:crate::wifi_station::start:terminal-reference:reset:1" = { owner = "firmware/hil/esp32s31", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
 "firmware/hil/esp32s31/src/wifi_station/mod.rs:crate::wifi_station::start:reset-method:reset:1" = { owner = "firmware/hil/esp32s31", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
 "firmware/hil/esp32s31/src/wifi_station/mod.rs:crate::wifi_station::start:reset-method:reset:2" = { owner = "firmware/hil/esp32s31", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
 "firmware/hil/esp32s31/src/wifi_station/mod.rs:crate::wifi_station::start:terminal-reference:reset_binding:1" = { owner = "firmware/hil/esp32s31", classes = ["configuration-boot", "unexpected-hardware", "software-invariant"] }
@@ -718,26 +702,12 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 "firmware/hil/esp32s31/src/wifi_station/observation.rs:crate::wifi_station::observation::counters:panic-method:expect:1" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
 
 # firmware/hil/esp32s31/src/wifi_station/radio.rs
-"firmware/hil/esp32s31/src/wifi_station/radio.rs:crate::wifi_station::radio::impl RadioCoexPriorities for Coex::beacon_window_pti:panic-method:expect:1" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
-"firmware/hil/esp32s31/src/wifi_station/radio.rs:crate::wifi_station::radio::channels:panic-method:expect:1" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
-"firmware/hil/esp32s31/src/wifi_station/radio.rs:crate::wifi_station::radio::drive:panic-method:expect:1" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
-"firmware/hil/esp32s31/src/wifi_station/radio.rs:crate::wifi_station::radio::drive:panic-method:expect:2" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
-"firmware/hil/esp32s31/src/wifi_station/radio.rs:crate::wifi_station::radio::drive:panic-method:expect:3" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
-"firmware/hil/esp32s31/src/wifi_station/radio.rs:crate::wifi_station::radio::serve:terminal-reference:reset_request:1" = { owner = "firmware/hil/esp32s31", classes = ["cancellation"] }
-"firmware/hil/esp32s31/src/wifi_station/radio.rs:crate::wifi_station::radio::install:terminal-reference:reset_request:1" = { owner = "firmware/hil/esp32s31", classes = ["cancellation"] }
+"firmware/hil/esp32s31/src/wifi_station/radio.rs:crate::wifi_station::radio::failure:terminal-entry:failure:1" = { owner = "firmware/hil/esp32s31", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
+"firmware/hil/esp32s31/src/wifi_station/radio.rs:crate::wifi_station::radio::failure:terminal-reference:reset:1" = { owner = "firmware/hil/esp32s31", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
+"firmware/hil/esp32s31/src/wifi_station/radio.rs:crate::wifi_station::radio::failure:terminal-reference:reset_request:1" = { owner = "firmware/hil/esp32s31", classes = ["cancellation"] }
 
 # firmware/hil/esp32s31/src/wifi_station/station.rs
-"firmware/hil/esp32s31/src/wifi_station/station.rs:crate::wifi_station::station::impl machine :: StaCallbacks for Callbacks::nonce:panic-method:expect:1" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
-"firmware/hil/esp32s31/src/wifi_station/station.rs:crate::wifi_station::station::initialize_service:panic-method:expect:2" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
-"firmware/hil/esp32s31/src/wifi_station/station.rs:crate::wifi_station::station::initialize_service:panic-method:expect:1" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
-"firmware/hil/esp32s31/src/wifi_station/station.rs:crate::wifi_station::station::initialize_service:panic-method:expect:5" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
-"firmware/hil/esp32s31/src/wifi_station/station.rs:crate::wifi_station::station::initialize_service:panic-method:expect:4" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
-"firmware/hil/esp32s31/src/wifi_station/station.rs:crate::wifi_station::station::initialize_service:panic-method:expect:3" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
-"firmware/hil/esp32s31/src/wifi_station/station.rs:crate::wifi_station::station::initialize_service:panic-method:expect:6" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
-"firmware/hil/esp32s31/src/wifi_station/station.rs:crate::wifi_station::station::initialize_service:panic-method:expect:7" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
-"firmware/hil/esp32s31/src/wifi_station/station.rs:crate::wifi_station::station::initialize_service:panic-method:expect:8" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
-"firmware/hil/esp32s31/src/wifi_station/station.rs:crate::wifi_station::station::impl rp :: PortBody < Id , Backend < Id >> for Body::run:panic-macro:unreachable:1" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
-"firmware/hil/esp32s31/src/wifi_station/station.rs:crate::wifi_station::station::channels:panic-method:expect:1" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
+"firmware/hil/esp32s31/src/wifi_station/station.rs:crate::wifi_station::station::impl oer_ieee80211_sta :: machine :: StaCallbacks for Callbacks::nonce:panic-method:expect:1" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
 
 # firmware/probes/esp32s31-facts/src/image.rs
 "firmware/probes/esp32s31-facts/src/image.rs:crate::image::RETAINED:retained-slot:RETAINED:1" = { owner = "firmware/probes/esp32s31-facts", classes = ["requested-reset"] }

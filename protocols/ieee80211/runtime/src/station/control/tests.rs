@@ -151,7 +151,7 @@ fn network_link_wakes_on_events_and_keeps_the_cores_epoch() {
         assert_eq!(control.status().link, device.link());
         assert!(device.poll_link(&mut cx).is_pending());
         events.emit(ServiceOutput::Notice(StaNotice::Disconnected(
-            machine::StaDisconnectReason::Requested,
+            oer_ieee80211_sta::machine::StaDisconnectReason::Requested,
         )));
         assert_eq!(
             device.poll_link(&mut cx),

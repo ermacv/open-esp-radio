@@ -34,7 +34,7 @@ other `portable/` support, firmware images and tools.
 | `PlatformContract` | `espressif/{interrupt-table,platform-port,staged-layout}` | platform contracts, facts, portable, hardware access |
 | `Platform` | `espressif/{executor,staged-bootstrap,staged-runtime}`, `esp32s31/{board,layout}` | platform, platform contracts, family hardware drivers, facts, shared vocabulary, portable, hardware access |
 | `Composition` | `esp32s31/compose` | every chip role but PAC, composition and facade, every protocol role, portable, Embassy adapters, hardware access; no HIL |
-| `Facade` | `esp32s31/wifi` (awaited) | as a composition, and the composition |
+| `Facade` | `esp32s31/wifi` | as a composition, and the composition |
 | `ObservationContract` | `protocols/*/instrumentation`, `chips/esp32s31/instrumentation` | observation contracts, facts, shared vocabulary, portable, wire, port |
 | `HilProtocol` | `protocols/hil/protocol` | portable |
 | `HilAgent` | `protocols/hil/agent` | HIL protocol, portable |
@@ -63,6 +63,9 @@ is gone both fail, so every list only shrinks:
 - `FIRMWARE_SOURCES_INCLUDED`: `#[path]` inclusions of `firmware/` sources
   from any other root;
 - `HAL_SEQUENCES`: HAL files that wait.
+- `W3_IMPLEMENTATION_EDGES`: the exact remaining image edges for root/IRQ
+  owners, the SAR interrupt binder, the console endpoint and image-selected
+  software key unwrap. Wi-Fi backend, runtime, port and core edges are rejected.
 - `EXTERNAL_ASYNC_CRATES`: direct normal `embassy-sync` edges in cooperate,
   the network adapter, the HIL agent and the three HIL images.
 

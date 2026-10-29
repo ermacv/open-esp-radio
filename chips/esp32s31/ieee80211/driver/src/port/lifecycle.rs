@@ -48,7 +48,7 @@ pub struct RawFrontend<'s, Id: SlotIdentity, D: Device<B>, const B: usize> {
     events: oer_memory::AffineSpscReceiver<
         's,
         owned::OwnedEvent<'static, Id, D, B>,
-        { TERMINALS + TX_TICKETS },
+        { TERMINAL_CAPACITY + TX_TICKETS },
         oer_memory::CompactSpscCursor,
     >,
     recycled: oer_memory::AffineSpscSender<

@@ -8,25 +8,23 @@ mod future;
 mod irq;
 mod network;
 mod radio;
-mod station;
 mod usb;
 use oer_esp32s31_compose::Esp32s31;
 use oer_firmware_apps_w3::report;
 
 use oer_embassy_time::EmbassyClock;
 use oer_esp32s31_board as board;
-use oer_esp32s31_hal::peripherals::{efuse::{FactoryIdentity, Interface}, software_interrupt::{FromCpu0Irq, FromCpu2Irq, FromCpu3Irq}, system_timer::{SystimerAlarm0, SystimerAlarm1}};
-use oer_esp32s31_hal::power::ChipClocks;
-use oer_esp32s31_hal::root::Root;
 use oer_esp32s31_hal::peripherals::usb_serial_jtag::ConsoleInterrupt;
-use oer_esp32s31_hal::peripherals::watchdog::{ArmedRtcWatchdog, RTC_WATCHDOG_FEED_PERIOD_MS, RwdtRegisters};
-use oer_esp32s31_ieee80211_driver::irq::WifiIrqPart;
-use oer_esp32s31_phy::{
-    NoopPhyTargetObserver, PhyCalibrationIdentity, PhyRegisterConfig, concurrent::ConcurrentPhy,
-    phy_get_rf_cal_version,
+use oer_esp32s31_hal::peripherals::watchdog::{
+    ArmedRtcWatchdog, RTC_WATCHDOG_FEED_PERIOD_MS, RwdtRegisters,
 };
-use oer_esp32s31_radio_client::{LpClock, RcSlow, claim};
-use oer_esp32s31_radio_system::{Esp32s31Radio, RadioSystem};
+use oer_esp32s31_hal::peripherals::{
+    efuse::{FactoryIdentity, Interface},
+    software_interrupt::{FromCpu0Irq, FromCpu2Irq, FromCpu3Irq},
+    system_timer::{SystimerAlarm0, SystimerAlarm1},
+};
+use oer_esp32s31_hal::root::Root;
+use oer_esp32s31_wifi::{self as wifi, InterruptTypes};
 use oer_espressif_executor::{Doorbell, Executor, InterruptExecutor};
 use oer_memory::OnceValue;
 use static_cell::StaticCell;
@@ -68,7 +66,7 @@ oer_espressif_executor::tasks! {
     /// The radio executor's tasks (P2).
     RadioTasks: InterruptExecutor<Esp32s31, 2> {
         radio_actor(actor: &'static mut Actor) = radio_actor;
-        driver(boot: radio::Boot, channel: radio::DriverChannel) = radio::drive;
+        driver(driver: wifi::Driver<radio::binding::Binding>) = radio::drive;
     }
 }
 
@@ -77,7 +75,9 @@ oer_espressif_executor::tasks! {
     AppTasks: Executor<Esp32s31, 0> {
         reporting(console: Console, pads: oer_esp32s31_hal::peripherals::usb_serial_jtag::UsbPads) = reporting;
         station_task(
-            channel: radio::FrontendChannel,
+            runner: wifi::StationRunner<radio::binding::Binding>,
+            control: wifi::Control<'static>,
+            net: wifi::Network<'static>,
             config: W3Config,
             address: [u8; 6],
             seed: u64,
@@ -88,17 +88,7 @@ oer_espressif_executor::tasks! {
 static REPORT: OnceValue<report::Report> = OnceValue::new();
 static ACTOR: StaticCell<Actor> = StaticCell::new();
 
-type Actor = RadioSystem<
-    oer_esp32s31_radio_client::wifi::Wifi,
-    RcSlow,
-    Esp32s31Radio<
-        ChipClocks,
-        oer_espressif_executor::Cooperative<Esp32s31, EmbassyClock>,
-        NoopPhyTargetObserver,
-        crate::phy_pilot::Client,
-    >,
-    EmbassyClock,
->;
+type Actor = wifi::RadioActor<crate::phy_pilot::Client>;
 
 /// The image's entropy owner.
 pub(crate) type Rng = oer_esp32s31_hal::peripherals::entropy::Entropy<EmbassyClock>;
@@ -134,36 +124,14 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
     let factory = FactoryIdentity::read(runtime.efuse);
     let station = factory.address(Interface::Station);
     let ap = factory.address(Interface::AccessPoint);
-    let identity = PhyCalibrationIdentity {
-        rf_cal_version: phy_get_rf_cal_version(),
-        base_mac_address: factory.base_mac(),
-        mac_extension: factory.mac_extension(),
-    };
-    let (domain, partitions) = runtime
-        .radio
-        .split::<ChipClocks, _>(
-            ConcurrentPhy::new(),
-            oer_esp32s31_compose::phy_fault::identity(),
-        )
-        .unwrap_or_else(|failure| {
-            let fault = failure.fault();
-            let _owners = failure;
-            oer_esp32s31_compose::phy_fault::reset(fault)
-        });
-    let (Some((end, cells)), Some(lp)) = (claim(), LpClock::<RcSlow>::claim()) else {
-        park()
-    };
-    let phy_pilot = crate::phy_pilot::init(runtime.timg0_alarm, adopted.router(), interrupts.phy);
-    let backend = Esp32s31Radio::new(
-        domain,
-        partitions.wifi_coex,
+    let radio_resources = wifi::RadioResources::new::<radio::binding::Binding>(
+        runtime.radio,
         runtime.clocks,
-        oer_espressif_executor::Cooperative::<Esp32s31, _>::new(EmbassyClock),
-        NoopPhyTargetObserver,
-        PhyRegisterConfig::new(identity),
-        phy_pilot,
+        &factory,
     );
-    let actor = ACTOR.init_with(|| RadioSystem::new(end, backend, EmbassyClock, lp));
+    let phy_pilot = crate::phy_pilot::init(runtime.timg0_alarm, adopted.router(), interrupts.phy);
+    let (actor, hardware) = radio_resources.start(phy_pilot);
+    let actor = ACTOR.init(actor);
     // The radio executor writes the system timer; the application executor
     // publishes its deadlines to it.
     let timer = runtime.system_timer;
@@ -177,8 +145,12 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
         timer.alarm0,
     )
     .unwrap_or_else(|failure| failure.reset());
-    oer_espressif_executor::bind::<Esp32s31, 0, _, _>(adopted.router(), interrupts.app_alarm, timer.alarm1)
-        .unwrap_or_else(|failure| failure.reset());
+    oer_espressif_executor::bind::<Esp32s31, 0, _, _>(
+        adopted.router(),
+        interrupts.app_alarm,
+        timer.alarm1,
+    )
+    .unwrap_or_else(|failure| failure.reset());
     let software = runtime.software_interrupts;
     // The radio handler's part holds both banks and the doorbell's lowering
     // half; its binding makes the doorbell's ringing half.
@@ -187,7 +159,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
         .router()
         .bind(
             interrupts.wifi,
-            WifiIrqPart::new(runtime.wifi_interrupts, software.irq3, irq::Lower(lower)),
+            wifi::Interrupts::part(runtime.wifi_interrupts, software.irq3, wifi::Lower(lower)),
         )
         .unwrap_or_else(|error| {
             oer_espressif_staged_runtime::interrupts::reset_binding::<
@@ -196,7 +168,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
             >(error)
         });
     let (bell, urgent) = Doorbell::new::<FromCpu3Irq>(line, &bound);
-    let bell = irq::ImageDoorbell(bell);
+    let bell = wifi::Bell(bell);
     let (hart, router) = adopted.parts();
     let radio = InterruptExecutor::<Esp32s31, 2>::new(software.line2)
         .start(hart, router, interrupts.radio, software.irq2, urgent)
@@ -204,28 +176,68 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
     let mut rng = Rng::new(runtime.entropy, EmbassyClock);
     let seed = (u64::from(rng.random()) << 32) | u64::from(rng.random());
     let entropy = rng.random();
-    let (driver_channel, frontend_channel) = radio::channels();
-    if RadioTasks::radio_actor(&radio, actor).is_err() {
-        fail(oer_diagnostics::name!("task-start"; 32));
-    }
-    if RadioTasks::driver(
-        &radio,
-        radio::Boot {
-            cell: cells.wifi,
-            wifi: partitions.wifi,
+    let setup = wifi::Config::new(
+        config.channel,
+        config.country,
+        config.cap_dbm,
+        Some(config.stand),
+        false,
+    )
+    .unwrap_or_else(|error| radio::failure(error));
+    let (control, net, runners) = wifi::station(
+        wifi::Resources {
+            events: radio::ProductEvents,
+            storage: radio::binding::storage(),
+            cell: hardware.cell,
+            wifi: hardware.wifi,
             rng,
-            station,
+            address: station,
             ap,
-            config,
             bound,
             bell,
             entropy,
+            interrupts: &irq::LINE,
+            mac: &irq::MAC_SIGNAL,
+            power: &irq::POWER_SIGNAL,
+            rx: irq::RX
+                .take()
+                .unwrap_or_else(|| radio::failure(wifi::InitializationError::Rx)),
+            tx: [
+                irq::TX0
+                    .take()
+                    .unwrap_or_else(|| radio::failure(wifi::InitializationError::Tx)),
+                irq::TX1
+                    .take()
+                    .unwrap_or_else(|| radio::failure(wifi::InitializationError::Tx)),
+                irq::TX2
+                    .take()
+                    .unwrap_or_else(|| radio::failure(wifi::InitializationError::Tx)),
+                irq::TX3
+                    .take()
+                    .unwrap_or_else(|| radio::failure(wifi::InitializationError::Tx)),
+                irq::TX4
+                    .take()
+                    .unwrap_or_else(|| radio::failure(wifi::InitializationError::Tx)),
+                irq::TX5
+                    .take()
+                    .unwrap_or_else(|| radio::failure(wifi::InitializationError::Tx)),
+                irq::TX6
+                    .take()
+                    .unwrap_or_else(|| radio::failure(wifi::InitializationError::Tx)),
+                irq::TX7
+                    .take()
+                    .unwrap_or_else(|| radio::failure(wifi::InitializationError::Tx)),
+                irq::TX8
+                    .take()
+                    .unwrap_or_else(|| radio::failure(wifi::InitializationError::Tx)),
+            ],
         },
-        driver_channel,
-    )
-    .is_err()
+        setup,
+    );
+    if RadioTasks::radio_actor(&radio, actor).is_err()
+        || RadioTasks::driver(&radio, runners.driver).is_err()
     {
-        fail(oer_diagnostics::name!("task-start"; 32));
+        fail(oer_diagnostics::name!("task-start";32));
     }
     let Ok((console, pads)) = usb::open(adopted.router(), interrupts.console_usb) else {
         fail(oer_diagnostics::name!("console"; 32));
@@ -245,8 +257,16 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
             urgent,
             move |spawner| {
                 if AppTasks::reporting(spawner, console, pads).is_err()
-                    || AppTasks::station_task(spawner, frontend_channel, config, station, seed)
-                        .is_err()
+                    || AppTasks::station_task(
+                        spawner,
+                        runners.station,
+                        control,
+                        net,
+                        config,
+                        station,
+                        seed,
+                    )
+                    .is_err()
                     || AppTasks::rtc_watchdog(spawner, watchdog).is_err()
                 {
                     fail(oer_diagnostics::name!("task-start"; 32));
@@ -277,7 +297,10 @@ async fn radio_actor(actor: &'static mut Actor) {
     let mut run = core::pin::pin!(actor.run());
     match run.as_mut().await {}
 }
-async fn reporting(mut console: Console, _pads: oer_esp32s31_hal::peripherals::usb_serial_jtag::UsbPads) {
+async fn reporting(
+    mut console: Console,
+    _pads: oer_esp32s31_hal::peripherals::usb_serial_jtag::UsbPads,
+) {
     let result = loop {
         if let Some(report) = REPORT.get() {
             break report;

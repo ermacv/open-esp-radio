@@ -916,6 +916,7 @@ const ROLES: &[(&str, Role)] = &[
     ("chips/esp32s31/board", Role::Platform),
     ("chips/esp32s31/layout", Role::Platform),
     ("chips/esp32s31/compose", Role::Composition),
+    ("chips/esp32s31/wifi", Role::Facade),
     ("protocols/hil/protocol", Role::HilProtocol),
     ("protocols/hil/agent", Role::HilAgent),
     ("protocols/ieee80211/control", Role::HilBinding),
@@ -932,11 +933,7 @@ const ROLES: &[(&str, Role)] = &[
 
 /// Roles fixed before their package exists, with what creates it. When the
 /// package joins the workspace its entry moves to [`ROLES`].
-const AWAITED_ROLES: &[(&str, Role, &str)] = &[(
-    "chips/esp32s31/wifi",
-    Role::Facade,
-    "the IEEE 802.11 facade (#844)",
-)];
+const AWAITED_ROLES: &[(&str, Role, &str)] = &[];
 
 /// Whether `path` is a package that [`ROLES`] must name.
 fn listed_role_required(path: &str) -> bool {
@@ -2518,7 +2515,7 @@ fn portable_reaches_a_protocol_or_a_chip(from: &Member, to: &Member) -> bool {
 const NO_EDGE_ON_AN_IMAGE_OR_PROGRAM: &[Deviation] = &[(
     "firmware/hil/esp32s31",
     "firmware/apps/w3",
-    "the IEEE 802.11 facade (#844)",
+    "shared network observation/ICMP helpers move to the IP adapter (N-d)",
 )];
 
 /// `chips/espressif` depends on no chip, through a normal or a build
@@ -2730,11 +2727,6 @@ const OUTSIDE_THE_ROLES: &[Deviation] = &[
     ),
     (
         "firmware/hil/esp32s31",
-        "chips/esp32s31/ieee80211/mac",
-        "the Wi-Fi station image on the facade and compose (#848)",
-    ),
-    (
-        "firmware/hil/esp32s31",
         "chips/esp32s31/phy",
         "the Wi-Fi station image on the facade and compose (#848)",
     ),
@@ -2745,28 +2737,13 @@ const OUTSIDE_THE_ROLES: &[Deviation] = &[
     ),
     (
         "firmware/hil/esp32s31",
-        "chips/esp32s31/radio/system",
-        "the Wi-Fi station image on the facade and compose (#848)",
-    ),
-    (
-        "firmware/hil/esp32s31",
-        "chips/espressif/coex",
-        "the Wi-Fi station image on the facade and compose (#848)",
-    ),
-    (
-        "firmware/hil/esp32s31",
-        "chips/espressif/ieee80211-policy",
-        "the Wi-Fi station image on the facade and compose (#848)",
-    ),
-    (
-        "firmware/hil/esp32s31",
         "chips/espressif/usb-serial-jtag",
         "the Wi-Fi station image on the facade and compose (#848)",
     ),
     (
         "firmware/hil/esp32s31",
         "firmware/apps/w3",
-        "the Wi-Fi station image on the facade and compose (#848)",
+        "shared network observation/ICMP helpers move to the IP adapter (N-d)",
     ),
     (
         "firmware/hil/esp32s31",
@@ -2816,11 +2793,6 @@ const OUTSIDE_THE_ROLES: &[Deviation] = &[
     (
         "firmware/hil/esp32s31",
         "protocols/radio/port",
-        "the Wi-Fi station image on the facade and compose (#848)",
-    ),
-    (
-        "firmware/hil/esp32s31",
-        "protocols/radio/regulatory",
         "the Wi-Fi station image on the facade and compose (#848)",
     ),
     (
@@ -3834,4 +3806,86 @@ fn the_hal_ratchet_fails_on_a_new_file_a_changed_count_and_a_gone_entry() {
         )
         .is_empty()
     );
+}
+
+fn w3_bypasses_the_facade(from: &Member, to: &Member) -> bool {
+    from.path == "firmware/apps/w3"
+        && !matches!(
+            role(&to.path),
+            Some(
+                Role::Facade
+                    | Role::Composition
+                    | Role::Platform
+                    | Role::PlatformContract
+                    | Role::Portable
+                    | Role::EmbassyAdapter
+                    | Role::SharedVocabulary
+                    | Role::ObservationContract
+            )
+        )
+}
+// Typed interrupt/root ownership, the SAR handler, and the explicitly image-selected
+// unwrap engine are the only remaining implementation edges. No port or runtime.
+const W3_IMPLEMENTATION_EDGES: &[Deviation] = &[
+    (
+        "firmware/apps/w3",
+        "chips/espressif/usb-serial-jtag",
+        "application console endpoint; shared image setup moves to compose (#848)",
+    ),
+    (
+        "firmware/apps/w3",
+        "chips/esp32s31/hal",
+        "image root and interrupt owners; common image setup moves to compose (#848)",
+    ),
+    (
+        "firmware/apps/w3",
+        "chips/esp32s31/phy",
+        "SAR/PWDET interrupt binding moves to compose (#848)",
+    ),
+    (
+        "firmware/apps/w3",
+        "protocols/ieee80211/cipher",
+        "key-unwrap engine remains selected by the image (#844)",
+    ),
+];
+#[test]
+fn w3_reaches_the_station_only_through_its_facade() {
+    let found = forbidden_edges(&workspace_members(), w3_bypasses_the_facade);
+    let differences = deviation_differences(&found, W3_IMPLEMENTATION_EDGES);
+    assert!(differences.is_empty(), "{}", differences.join("\n"));
+}
+#[test]
+fn the_thin_image_rule_accepts_facades_and_rejects_backend_runtime_and_port_bypasses() {
+    let image = member("firmware/apps/w3", "oer-firmware-apps-w3", true, &[]);
+    for path in [
+        "chips/esp32s31/wifi",
+        "chips/esp32s31/compose",
+        "portable/embassy/net",
+        "protocols/network",
+    ] {
+        assert!(
+            !w3_bypasses_the_facade(&image, &member(path, "fixture", false, &[])),
+            "{path}"
+        );
+    }
+    for path in [
+        "chips/esp32s31/ieee80211/driver",
+        "chips/esp32s31/ieee80211/mac",
+        "protocols/ieee80211/runtime",
+        "protocols/ieee80211/port",
+        "protocols/ieee80211/sta",
+    ] {
+        assert!(
+            w3_bypasses_the_facade(&image, &member(path, "fixture", false, &[])),
+            "{path}"
+        );
+    }
+    for backend in [Role::HardwareDriver, Role::ChipAdapter] {
+        assert!(!role_allows(
+            backend,
+            PROTOCOL_RUNTIME,
+            "protocols/ieee80211/runtime"
+        ));
+        assert!(!role_allows(backend, Role::Facade, "chips/esp32s31/wifi"));
+    }
 }
