@@ -410,7 +410,7 @@ mod tests {
                 .unwrap()
                 .contains(&"esp32c5".to_owned())
         );
-        let (entry, build) = built_peer(root, "ble-dtm-peer");
+        let (entry, build) = built_peer(root, "ieee802154-peer");
         let output = tempfile::tempdir().unwrap();
         let bundle = bundle(root, &entry, &build, &output.path().join("bundle")).unwrap();
         assert_eq!(bundle.chip, "esp32c5");

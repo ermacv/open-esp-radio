@@ -254,10 +254,6 @@ pub(crate) fn repository() -> tempfile::TempDir {
             include_str!("../../../../chips/esp32s31/platform/partitions/applications.csv"),
         ),
         (
-            "firmware/peers/esp32c5-ble-dtm/firmware.toml",
-            include_str!("../../../../firmware/peers/esp32c5-ble-dtm/firmware.toml"),
-        ),
-        (
             "firmware/peers/esp32c5-ieee802154/firmware.toml",
             include_str!("../../../../firmware/peers/esp32c5-ieee802154/firmware.toml"),
         ),
