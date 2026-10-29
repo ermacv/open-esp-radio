@@ -1,14 +1,31 @@
-//! Regression contract: extracting owners preserves every wire key and descriptor.
+//! The reviewed wire changes only its explicit lifecycle reset exchange.
 use oer_hil_protocol::{FRAMING_VERSION, Key, Kind, MessageInfo};
 use oer_hil_registry::{LOCKS, messages_lock, registry};
 use std::collections::{BTreeMap, BTreeSet};
 
 #[test]
-fn extraction_preserves_the_complete_reviewed_wire() {
-    assert_eq!(
-        messages_lock().unwrap(),
-        include_str!("before.messages.lock")
-    );
+fn lifecycle_migration_preserves_every_other_reviewed_message()
+-> Result<(), oer_hil_registry::LockError> {
+    assert_eq!(messages_lock()?, migrated_wire()?);
+    Ok(())
+}
+
+fn migrated_wire() -> Result<String, oer_hil_registry::LockError> {
+    use oer_hil_protocol::{
+        Message,
+        lifecycle::{RequestReset, ResetAccepted},
+    };
+    let previous = include_str!("before.messages.lock")
+        .replace("[modules]\n", "[modules]\nlifecycle\n")
+        .replace(
+            "system/panic/inject 4a8069a58696abc1 endpoint",
+            &format!("{} {} endpoint", RequestReset::PATH, RequestReset::KEY),
+        )
+        .replace(
+            "system/panic/injected 9f469405c60e21be topic",
+            &format!("{} {} topic", ResetAccepted::PATH, ResetAccepted::KEY),
+        );
+    oer_hil_registry::merge_locks([previous.as_str()])
 }
 
 #[test]
@@ -78,8 +95,4 @@ fn malformed_or_ambiguous_locks_cannot_become_a_wire_identity() {
     );
     let invalid = format!("{base}not-a-message\n");
     assert!(merge_locks([invalid.as_str()]).is_err());
-    assert_eq!(
-        merge_locks([include_str!("before.messages.lock")]).unwrap(),
-        messages_lock().unwrap()
-    );
 }

@@ -1,8 +1,8 @@
 //! The panic-reset image: the HIL console serving a host-requested reset
 //! through the platform's retained `HilRequested` path.
 use oer_esp32s31_compose::Esp32s31;
-use oer_hil_agent::base::PanicRequest;
-use oer_hil_protocol::system::InjectPanic;
+use oer_hil_agent::lifecycle::Request as ResetRequest;
+use oer_hil_protocol::lifecycle::RequestReset;
 
 use crate::transport::CONSOLE;
 
@@ -50,7 +50,7 @@ async fn run(usb: crate::transport::Usb, boot: u64) {
         boot,
         crate::services::PANIC_RESET_KEYS,
         0,
-        |request, PanicRequest::Inject(InjectPanic)| super::panic::queue(request),
+        |request, ResetRequest::Reset(RequestReset)| super::panic::queue(request),
     )
     .await
 }

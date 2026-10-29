@@ -10,8 +10,8 @@ reset, MWDT1 reset or another cause; querying it does not change radio state.
 ran on the interrupt stack and the interrupted PC, and the end of its file
 path, line and column.
 
-`system::InjectPanic` is served by the panic-reset image and the system
-watchdog image: the image acknowledges with `PanicInjected`, waits until
+`lifecycle::RequestReset` is served by the panic-reset image and the system
+watchdog image: the image acknowledges with `ResetAccepted`, waits until
 the acknowledgement is written and requests a reset through the staged
 runtime's retained `HilRequested` path. The next boot reports the request's
 identity. This request does not invoke the panic hook.

@@ -28,6 +28,7 @@
 
 pub mod base;
 pub mod console;
+pub mod lifecycle;
 pub mod postmortem;
 
 #[doc(hidden)]

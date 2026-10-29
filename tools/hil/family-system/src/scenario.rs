@@ -1,5 +1,6 @@
 //! The `[system]` scenario table: radio-free workloads and their images.
 
+use oer_hil_protocol::lifecycle;
 use std::path::Path;
 
 use oer_hil_model::schema::image::ImageClass;
@@ -57,7 +58,7 @@ impl ScenarioFamily for SystemScenario {
             system::WatchdogArmed::KEY,
             system::PanicHook::KEY,
         ];
-        const PANIC: &[Key] = &[system::InjectPanic::KEY, system::PanicInjected::KEY];
+        const PANIC: &[Key] = &[lifecycle::RequestReset::KEY, lifecycle::ResetAccepted::KEY];
         const USB: &[Key] = &[
             system::DisableUsb::KEY,
             system::UsbDisabled::KEY,
@@ -131,7 +132,7 @@ mod tests {
         assert!(parse("kind = 'boot-smoke'").required_keys().is_empty());
         for (text, endpoint) in [
             ("kind = 'watchdog'", system::WatchdogTest::KEY),
-            ("kind = 'panic-reset'", system::InjectPanic::KEY),
+            ("kind = 'panic-reset'", lifecycle::RequestReset::KEY),
             ("kind = 'stand-recovery'", system::DisableUsb::KEY),
         ] {
             assert!(parse(text).required_keys().contains(&endpoint), "{text}");

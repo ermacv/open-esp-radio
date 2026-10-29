@@ -87,8 +87,8 @@ The agent's panic hook, which the platform's panic entry calls because the
 image names it in its entry (`entry!(main, Port, hook = panic_hook)`), runs
 in every image but `system-panic-reset` (the agent's `panic-hook` feature,
 which each image's base feature enables, selects that entry).
-`InjectPanic` requests a reset through the staged runtime's retained path
-after its `PanicInjected` acknowledgement has been written. It records
+`RequestReset` requests a reset through the staged runtime's retained path
+after its `ResetAccepted` acknowledgement has been written. It records
 `FaultReason::HilRequested`, an explicit host-requested reset, not a hardware
 fault, and does not call the panic entry or the HIL panic hook. The existing
 slot's four observation words retain the request ID, acknowledgement sequence
