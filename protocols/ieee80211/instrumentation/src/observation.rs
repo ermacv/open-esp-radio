@@ -3,10 +3,11 @@
 use oer_trace::Event;
 
 use crate::{
-    ArpAddresses, ArpReceived, ArpTransmitted, DataMsduLost, EspNowPeerTableChanged,
-    EspNowPeersCleared, EspNowReplay, EspNowTxPacketNumber, GroupKeyInstalled, PortEventsLost,
-    RsnInputDropped, RxFrameDropped, RxMsduRefused, ScanBssObserved, TokenLost, TxMsduTooLong,
-    TxUnsent,
+    ArpAddresses, ArpReceived, ArpTransmitted, ControlDelivered, DataMsduLost,
+    EspNowPeerTableChanged, EspNowPeersCleared, EspNowReplay, EspNowTxPacketNumber,
+    GroupKeyInstalled, PortEventsLost, RsnInputDropped, RxFrameDropped, RxMsduRefused,
+    ScanBssObserved, StationAssociated, StationAuthenticated, StationBeacon, TokenLost,
+    TxHardwareTimeout, TxIndeterminate, TxMsduTooLong, TxQueueCollision, TxUnsent,
 };
 
 macro_rules! observations {
@@ -45,6 +46,13 @@ observations!(
     TxUnsent,
     TxMsduTooLong,
     GroupKeyInstalled,
+    StationAuthenticated,
+    StationBeacon,
+    StationAssociated,
+    TxIndeterminate,
+    TxHardwareTimeout,
+    TxQueueCollision,
+    ControlDelivered,
     ArpAddresses,
     ArpTransmitted,
     ArpReceived,

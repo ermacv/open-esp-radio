@@ -28,6 +28,10 @@ interrupt binding and spawns `RadioActor`. The facade has no diagnostic
 counters: its copied trace observations reach image-owned collectors, and its
 product events are immediate callbacks. Bridge timers, polling, protocol
 parameters, DMA geometry and rate-selection policy retain their values.
+The observation vocabulary is `oer-ieee80211-instrumentation`, including
+`StationActivity`; the facade exports no observation dictionary. The target
+used to correlate raw authentication/beacon observations and all diagnostic
+TX classification exist only under `cfg(oer_trace)`.
 
 Typed constructors reject invalid regulatory channels, addresses and SSIDs.
 The existing backend terminal capacity has one public canonical constant;

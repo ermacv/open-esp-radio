@@ -30,6 +30,18 @@ fn every_event() -> Vec<Observation> {
             reason: RxDrop::Draining,
         }),
     ];
+    events.extend([
+        Observation::StationAuthenticated(StationAuthenticated),
+        Observation::StationBeacon(StationBeacon { at_millis: 0 }),
+        Observation::StationBeacon(StationBeacon {
+            at_millis: u32::MAX,
+        }),
+        Observation::StationAssociated(StationAssociated),
+        Observation::TxIndeterminate(TxIndeterminate),
+        Observation::TxHardwareTimeout(TxHardwareTimeout),
+        Observation::TxQueueCollision(TxQueueCollision),
+        Observation::ControlDelivered(ControlDelivered),
+    ]);
     for code in 0..6 {
         events.push(Observation::DataMsduLost(DataMsduLost {
             reason: DataLoss::of_code(code).expect("data loss"),
@@ -114,6 +126,13 @@ fn identity(observation: Observation) -> (oer_trace::Kind, oer_trace::Channel, [
         TxUnsent,
         TxMsduTooLong,
         GroupKeyInstalled,
+        StationAuthenticated,
+        StationBeacon,
+        StationAssociated,
+        TxIndeterminate,
+        TxHardwareTimeout,
+        TxQueueCollision,
+        ControlDelivered,
         ArpAddresses,
         ArpTransmitted,
         ArpReceived,
@@ -162,7 +181,7 @@ fn every_event_decodes_to_itself_and_kinds_are_unique_below_the_driver_range() {
             assert_eq!(previous, variant, "kind {kind} is used twice");
         }
     }
-    assert_eq!(kinds.len(), 17);
+    assert_eq!(kinds.len(), 24);
 }
 
 #[test]
@@ -192,6 +211,13 @@ fn observation_of_an_event_is_that_event_and_others_are_none() {
             TxUnsent,
             TxMsduTooLong,
             GroupKeyInstalled,
+            StationAuthenticated,
+            StationBeacon,
+            StationAssociated,
+            TxIndeterminate,
+            TxHardwareTimeout,
+            TxQueueCollision,
+            ControlDelivered,
             ArpAddresses,
             ArpTransmitted,
             ArpReceived,
@@ -216,10 +242,144 @@ fn observation_of_an_event_is_that_event_and_others_are_none() {
         }
     }
     assert_eq!(Observation::of(&Foreign), None);
+    assert_eq!(StationActivity::of(&Foreign), None);
+}
+
+#[test]
+fn station_activity_and_service_events_share_the_collector_in_order() {
+    let recorder = Recorder::<3>::new();
+    let observer = &recorder;
+    oer_trace::observe!(observer, StationAssociated);
+    oer_trace::observe!(observer, TxUnsent);
+    oer_trace::observe!(observer, TxHardwareTimeout);
+    let events: Vec<_> = recorder.observations().collect();
+    if cfg!(oer_trace) {
+        assert_eq!(
+            events,
+            [
+                Observation::StationAssociated(StationAssociated),
+                Observation::TxUnsent(TxUnsent),
+                Observation::TxHardwareTimeout(TxHardwareTimeout),
+            ]
+        );
+    } else {
+        assert!(events.is_empty());
+    }
+    assert!(!recorder.overflowed());
+}
+
+#[test]
+fn activity_projection_preserves_each_outcome_and_wrapping_beacon_time() {
+    macro_rules! check {
+        ($event:expr, $activity:expr) => {
+            assert_eq!(StationActivity::of(&$event), Some($activity));
+        };
+    }
+    check!(StationAuthenticated, StationActivity::Authenticated);
+    check!(StationAssociated, StationActivity::Associated);
+    check!(TxIndeterminate, StationActivity::Indeterminate);
+    check!(TxHardwareTimeout, StationActivity::HardwareTimeout);
+    check!(TxQueueCollision, StationActivity::QueueCollision);
+    check!(ControlDelivered, StationActivity::ControlDelivered);
+    for at_millis in [0, 1, u32::MAX] {
+        check!(
+            StationBeacon { at_millis },
+            StationActivity::Beacon(at_millis)
+        );
+    }
+    assert_eq!(StationActivity::of(&TxUnsent), None);
+}
+
+#[test]
+fn capture_counts_activity_independently_when_history_is_filtered_or_full() {
+    use oer_hil_agent::capture::{Reader, collector};
+    use oer_hil_protocol::capture::{Error, Identity, PageRequest};
+    use oer_time::Clock as _;
+
+    struct Clock<'a>(&'a oer_time_virtual::VirtualClock);
+    impl collector::Clock for Clock<'_> {
+        fn micros(&self) -> u64 {
+            self.0.now().as_micros()
+        }
+    }
+    let clock = oer_time_virtual::VirtualClock::new();
+    let mut capture = collector::Collector::<_, 0, 7>::new(Clock(&clock));
+    for (index, mask) in [0, SERVICE.mask()].into_iter().enumerate() {
+        let identity = Identity {
+            capture: index as u32 + 1,
+            epoch: 11,
+        };
+        capture.begin(identity, mask).unwrap();
+        let observer = &capture;
+        for _ in 0..2 {
+            oer_trace::observe!(observer, StationAuthenticated);
+            oer_trace::observe!(observer, StationBeacon { at_millis: 0 });
+            oer_trace::observe!(observer, StationAssociated);
+            oer_trace::observe!(observer, TxIndeterminate);
+            oer_trace::observe!(observer, TxHardwareTimeout);
+            oer_trace::observe!(observer, TxQueueCollision);
+            oer_trace::observe!(observer, ControlDelivered);
+        }
+        let description = capture.freeze().unwrap();
+        assert_eq!(description.records, 0);
+        if cfg!(oer_trace) {
+            let counters = capture
+                .counters(PageRequest {
+                    identity,
+                    first: 0,
+                    count: 7,
+                })
+                .unwrap();
+            assert_eq!(description.counters, 7);
+            assert_eq!(counters.counters.len(), 7);
+            assert!(
+                counters
+                    .counters
+                    .iter()
+                    .all(|counter| counter.value == 2 && !counter.saturated)
+            );
+            let kinds: std::collections::BTreeSet<_> = counters
+                .counters
+                .iter()
+                .map(|counter| counter.kind)
+                .collect();
+            assert_eq!(
+                kinds,
+                [
+                    StationAuthenticated::KIND,
+                    StationBeacon::KIND,
+                    StationAssociated::KIND,
+                    TxIndeterminate::KIND,
+                    TxHardwareTimeout::KIND,
+                    TxQueueCollision::KIND,
+                    ControlDelivered::KIND
+                ]
+                .map(|kind| kind.raw())
+                .into_iter()
+                .collect()
+            );
+            assert_eq!(
+                description.failure,
+                (mask != 0).then_some(Error::RecordsFull)
+            );
+            assert_eq!(description.dropped, if mask == 0 { 0 } else { 14 });
+        } else {
+            assert_eq!(description.counters, 0);
+            assert_eq!(description.failure, None);
+        }
+        capture.release(identity).unwrap();
+    }
 }
 
 #[test]
 fn malformed_words_do_not_decode() {
+    assert_eq!(StationBeacon::decode([0, 1]), None);
+    assert_eq!(StationAuthenticated::decode([1, 0]), None);
+    assert_eq!(StationAssociated::decode([1, 0]), None);
+    assert_eq!(TxIndeterminate::decode([0, 1]), None);
+    assert_eq!(TxHardwareTimeout::decode([0, 1]), None);
+    assert_eq!(TxQueueCollision::decode([0, 1]), None);
+    assert_eq!(ControlDelivered::decode([0, 1]), None);
     assert_eq!(TokenLost::decode([1, 0]), None);
     assert_eq!(DataMsduLost::decode([6, 0]), None);
     assert_eq!(DataMsduLost::decode([0, 1]), None);
