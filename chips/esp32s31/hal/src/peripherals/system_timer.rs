@@ -10,11 +10,10 @@
 use oer_esp32s31_pac::{
     hp_sys_clkrst::HpSysClkrstSystimer, instances, ownership::SystemTimerPeripherals, systimer,
 };
-use oer_espressif_platform_port::{AlarmPart, Comparator, Comparators, LatchStuck, SystemCounter};
+use oer_espressif_boot::drivers::system_timer::CounterLatch;
+use oer_espressif_platform_port::{AlarmPart, Comparator, Comparators};
 use oer_mmio::{Bits, Fixed, Index, InterruptSource, Placement};
-use oer_time::{Clock, Instant};
 
-pub mod counter;
 #[cfg(test)]
 mod tests;
 
@@ -145,15 +144,22 @@ impl<P: Placement> SystimerCounter<P> {
     }
 }
 
-impl<P: Placement> SystemCounter for SystimerCounter<P> {
+impl<P: Placement> CounterLatch for SystimerCounter<P> {
     #[inline(always)]
-    fn check(&self) -> Result<(), LatchStuck> {
-        counter::check(self)
+    fn update(&self) {
+        Self::update(self);
     }
-
     #[inline(always)]
-    fn read(&self) -> Result<u64, oer_espressif_platform_port::Unverified> {
-        counter::read(self)
+    fn valid(&self) -> bool {
+        Self::valid(self)
+    }
+    #[inline(always)]
+    fn high(&self) -> u32 {
+        Self::high(self)
+    }
+    #[inline(always)]
+    fn low(&self) -> u32 {
+        Self::low(self)
     }
 }
 
@@ -180,42 +186,6 @@ pub fn open_clock<P: Placement>(clock: &mut HpSysClkrstSystimer<P>) {
     clock.modify_systimer_ctrl0(|w| {
         w.set_reg_systimer_clk_en(true);
     });
-}
-
-/// The bootstrap's monotonic clock: unit zero's counter in microseconds.
-/// Only the bootstrap's one context reads it, so every read verifies; a
-/// read preempting strobes kept from verifying names its floor
-/// ([`counter::read`]), which no earlier read exceeds.
-pub struct Monotonic<P: Placement = SystimerPlacement>(SystimerCounter<P>);
-
-/// The counter's latch did not settle within its bound: a fault of the
-/// system timer, and a typed boot failure.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct MonotonicStuck;
-
-impl<P: Placement> Monotonic<P> {
-    /// The clock over `counter`, once its latch settled within its bound
-    /// ([`counter::check`]).
-    ///
-    /// # Errors
-    ///
-    /// [`MonotonicStuck`] when the latch never turns valid.
-    pub fn new(counter: SystimerCounter<P>) -> Result<Self, MonotonicStuck> {
-        counter::check(&counter).map_err(|LatchStuck| MonotonicStuck)?;
-        Ok(Self(counter))
-    }
-
-    /// The counter, for the next owner of the time base.
-    pub fn into_counter(self) -> SystimerCounter<P> {
-        self.0
-    }
-}
-
-impl<P: Placement> Clock for Monotonic<P> {
-    fn now(&self) -> Instant {
-        let ticks = counter::read(&self.0).unwrap_or_else(|unverified| unverified.floor);
-        Instant::from_micros(ticks / TICKS_PER_MICROSECOND)
-    }
 }
 
 impl<P: Placement> SystimerComparators<P> {

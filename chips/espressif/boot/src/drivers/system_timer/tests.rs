@@ -1,7 +1,15 @@
 //! A fake latch over a counter that advances on every register access, with
 //! a hook that runs a preempting read at a chosen access.
 
+#![allow(
+    clippy::arithmetic_side_effects,
+    clippy::disallowed_macros,
+    clippy::disallowed_methods
+)]
+
 use core::cell::Cell;
+use oer_time::{Clock, Duration, Instant};
+use oer_time_virtual::VirtualClock;
 
 use super::{CounterLatch, LATCH_SETTLE_POLLS, LatchStuck, READ_ROUNDS, Unverified, check, read};
 
@@ -12,7 +20,7 @@ fn verified(latch: &impl CounterLatch) -> u64 {
 
 struct Fake {
     /// The free-running count; it advances by `step` on every access.
-    count: Cell<u64>,
+    clock: VirtualClock,
     step: u64,
     latched: Cell<u64>,
     /// Accesses left until the latch turns valid after a strobe.
@@ -31,7 +39,7 @@ struct Fake {
 impl Fake {
     fn new(start: u64, step: u64, settle: u32) -> Self {
         Self {
-            count: Cell::new(start),
+            clock: VirtualClock::starting_at(Instant::from_micros(start)),
             step,
             latched: Cell::new(0),
             pending: Cell::new(u32::MAX),
@@ -47,7 +55,9 @@ impl Fake {
 
     /// Whether the latch held `value` at some point.
     fn held(&self, value: u64) -> bool {
-        self.history[..self.latches.get()]
+        self.history
+            .get(..self.latches.get())
+            .expect("fake history fits")
             .iter()
             .any(|held| held.get() == value)
     }
@@ -55,13 +65,18 @@ impl Fake {
     /// One register access: the clock runs, a pending copy completes, and a
     /// preempting context may run its own whole read here.
     fn access(&self) {
-        self.count.set(self.count.get() + self.step);
+        self.clock
+            .advance(Duration::from_micros(self.step))
+            .expect("test time fits");
         let accesses = self.accesses.get() + 1;
         self.accesses.set(accesses);
         if self.pending.get() != u32::MAX {
             if self.pending.get() == 0 {
-                self.latched.set(self.count.get());
-                self.history[self.latches.get()].set(self.count.get());
+                self.latched.set(self.clock.now().as_micros());
+                self.history
+                    .get(self.latches.get())
+                    .expect("fake history fits")
+                    .set(self.clock.now().as_micros());
                 self.latches.set(self.latches.get() + 1);
                 self.pending.set(u32::MAX);
             } else {
@@ -242,4 +257,111 @@ fn a_latch_that_stays_invalid_never_certifies_its_old_count() {
     // The count is the copy before this read's strobe: a floor, never a
     // verified reading.
     assert_eq!(read(&latch), Err(Unverified { floor: 42 }));
+}
+
+/// This pre-deadline check must never read either value word.
+struct InitialLatch {
+    strobes: Cell<u32>,
+    polls: Cell<u32>,
+    valid_at: u32,
+}
+impl CounterLatch for InitialLatch {
+    fn update(&self) {
+        self.strobes.set(self.strobes.get() + 1);
+    }
+    fn valid(&self) -> bool {
+        let poll = self.polls.get() + 1;
+        self.polls.set(poll);
+        poll >= self.valid_at
+    }
+    fn high(&self) -> u32 {
+        panic!("the initial check only samples VALID");
+    }
+    fn low(&self) -> u32 {
+        panic!("the initial check only samples VALID");
+    }
+}
+#[test]
+fn the_named_pre_deadline_start_checks_exactly_the_settle_bound() {
+    use super::Monotonic;
+    for (valid_at, succeeds) in [
+        (1, true),
+        (LATCH_SETTLE_POLLS, true),
+        (LATCH_SETTLE_POLLS + 1, false),
+    ] {
+        let latch = InitialLatch {
+            strobes: Cell::new(0),
+            polls: Cell::new(0),
+            valid_at,
+        };
+        // Borrow the same owned fake so the test can inspect the refused start.
+        struct Borrowed<'a>(&'a InitialLatch);
+        impl CounterLatch for Borrowed<'_> {
+            fn update(&self) {
+                self.0.update();
+            }
+            fn valid(&self) -> bool {
+                self.0.valid()
+            }
+            fn high(&self) -> u32 {
+                self.0.high()
+            }
+            fn low(&self) -> u32 {
+                self.0.low()
+            }
+        }
+        let started = Monotonic::<_, 16>::start_initial_latch_check(Borrowed(&latch));
+        assert_eq!(started.is_ok(), succeeds);
+        assert_eq!(latch.strobes.get(), 1);
+        assert_eq!(latch.polls.get(), valid_at.min(LATCH_SETTLE_POLLS));
+        if let Ok(clock) = started {
+            let _counter = clock.into_counter();
+            assert_eq!(latch.strobes.get(), 1, "handoff does not relatch");
+        }
+    }
+}
+
+#[test]
+fn bootstrap_time_uses_the_same_reader_and_preserves_its_floor() {
+    use super::Monotonic;
+    let latch = Fake::new(1_000_000, 16, 2);
+    let clock = Monotonic::<_, 16>::start_initial_latch_check(latch).expect("settles");
+    let first = clock.now();
+    let second = clock.now();
+    assert!(first.as_micros() >= 1_000_000 / 16);
+    assert!(second >= first);
+    let latch = NeverValidAgain {
+        latched: 1_600,
+        ready: Cell::new(true),
+        first: Cell::new(true),
+    };
+    let clock = Monotonic::<_, 16>::start_initial_latch_check(latch).expect("first check settles");
+    assert_eq!(
+        clock.now(),
+        Instant::from_micros(100),
+        "same unverified floor and units"
+    );
+}
+
+#[test]
+fn verification_accepts_the_last_round_and_exhausts_after_exactly_the_bound() {
+    let last_round = PreemptEveryHigh {
+        latched: Cell::new(0),
+        left: Cell::new(READ_ROUNDS - 1),
+    };
+    assert_eq!(read(&last_round), Ok(u64::from(READ_ROUNDS - 1)));
+    assert_eq!(last_round.left.get(), 0);
+
+    let exhausted = PreemptEveryHigh {
+        latched: Cell::new(0),
+        left: Cell::new(READ_ROUNDS + 1),
+    };
+    assert_eq!(
+        read(&exhausted),
+        Err(Unverified {
+            floor: u64::from(READ_ROUNDS - 1),
+        })
+    );
+    assert_eq!(exhausted.left.get(), 1, "no seventeenth verification round");
+    assert_eq!(exhausted.latched.get(), u64::from(READ_ROUNDS));
 }

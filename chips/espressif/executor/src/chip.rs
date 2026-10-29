@@ -5,7 +5,8 @@
 
 pub(crate) use crate::binding::Binding;
 use crate::{Failure, Fault};
-use oer_espressif_platform_port::{ExecutorPlatform, Hart, SystemCounter};
+use oer_espressif_boot::drivers::system_timer;
+use oer_espressif_platform_port::{ExecutorPlatform, Hart};
 use oer_memory::OnceValue;
 
 use crate::software_line::{SoftwareLine, serve};
@@ -71,7 +72,7 @@ pub(crate) fn interrupt_level() -> u8 {
 }
 
 /// Publish the counter latch, from the system timer's handoff, once its
-/// latch has settled within its bound ([`SystemCounter::check`]).
+/// latch has settled within its bound ([`system_timer::check`]).
 ///
 /// # Errors
 /// A latch that does not settle returns the complete timer to its caller.
@@ -80,7 +81,7 @@ pub(crate) fn install_counter<B: Binding>(systimer: SystemTimer<B>) -> CounterSe
     if storage.counter.get().is_some() {
         Fault::CounterPublished.reset::<PortOf<B>>();
     }
-    if systimer.counter.check().is_err() {
+    if system_timer::check(&systimer.counter).is_err() {
         return Err(Failure::new(Fault::CounterLatchStuck, systimer));
     }
     let cell = match storage.counter_storage.try_uninit() {
@@ -100,7 +101,7 @@ pub(crate) fn install_counter<B: Binding>(systimer: SystemTimer<B>) -> CounterSe
 #[inline(never)]
 pub(crate) fn now<B: Binding>() -> u64 {
     B::storage().counter.get().map_or(0, |counter| {
-        counter.read().unwrap_or_else(|unverified| unverified.floor)
+        system_timer::read(counter).unwrap_or_else(|unverified| unverified.floor)
             / PortOf::<B>::TICKS_PER_MICROSECOND
     })
 }

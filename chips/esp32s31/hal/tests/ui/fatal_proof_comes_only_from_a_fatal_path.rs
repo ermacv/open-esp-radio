@@ -8,7 +8,7 @@ pub fn paths(_slot: &mut Option<Fatal<'static>>) -> ! {
     })
 }
 
-pub fn stops(stop: Option<StopTheWorld<'_>>) -> Option<cores::Stopped> {
+pub fn stops(stop: Option<StopTheWorld<'_>>) -> Option<oer_espressif_boot::drivers::cores::Stopped> {
     let stop = stop?;
     #[cfg(ui_reject)]
     let _forged = StopTheWorld { hart: stop.hart() }; // ui-error: cannot construct `StopTheWorld<'_>` with struct literal syntax due to private fields

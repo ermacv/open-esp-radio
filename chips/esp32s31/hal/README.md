@@ -109,8 +109,21 @@ chip's waits, thresholds and actions live in `oer-esp32s31-boot`.
 `drivers::{cores,access_control,entropy}` ports. The family SoC-init driver
 keeps containment → APM filters → TRNG and its single initial deadline check.
 The chip profile supplies TRNG noise selectors and health-test settings.
-Runtime/fatal core policy remains in `cores`; system-timer latch reading
-remains in `peripherals::system_timer::counter`.
+`drivers::cores` also owns runtime status, park/run/stall confirmation and
+fatal peer-stop/reset preparation. HAL `cores` retains the affine owner,
+CAS election, `ClaimCell` quarantine, masked fatal proof and final system-reset
+trigger. Its core-control port clears ROM entries but cannot publish a
+secondary-hart launcher. Confirmation counts at most 10,000 completed status reads, with a fence
+before sampling and after success, and no peripheral takeover authority.
+
+`drivers::system_timer` owns latch settling and LO/HI/LO verification: 64
+VALID polls per settle and 16 verification rounds, preserving the unverified
+floor. HAL implements only strobe/VALID/LO/HI atoms. The executor reaches the
+owned counter through `platform-port` and its binding requires the family's
+latch port. The generic `Monotonic::start_initial_latch_check` explicitly
+names the initial bounded check, before a `BootDeadline` exists. The reset
+root calls it after opening the timer clock; the bootstrap starts its common
+deadline over the returned monotonic clock.
 
 `power::ChipClocks` is the one owner of the platform clock words the radio
 shares with the SoC (`MODEM_LPCON.CLK_CONF`, `HP_SYS_CLKRST.REF_160M_CTRL0`):

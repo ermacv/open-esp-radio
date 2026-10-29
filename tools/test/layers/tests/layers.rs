@@ -3642,11 +3642,6 @@ const HAL_MARKERS_IN_ATOMS: &[(&str, usize, &str)] = &[
         "a terminal halt after the fatal path requested reset",
     ),
     (
-        "chips/esp32s31/hal/src/peripherals/system_timer.rs",
-        3,
-        "the SYSTIMER counter's `Clock::now` instant",
-    ),
-    (
         "chips/esp32s31/hal/src/peripherals/watchdog.rs",
         9,
         "the family watchdog driver's deadline types over the HAL's register port",
