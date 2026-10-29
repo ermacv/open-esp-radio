@@ -26,6 +26,28 @@ pub const TICKS_PER_MICROSECOND: u64 = 16;
 /// Where the system timer lies.
 pub type SystimerPlacement = Fixed<{ instances::systimer::BASE }>;
 
+/// The bootstrap's unstarted timer clock and counter latch.
+#[must_use = "the bootstrap must open the timer before checking its latch"]
+pub struct BootstrapTimer {
+    clock: HpSysClkrstSystimer<Fixed<{ instances::hp_sys_clkrst::BASE }>>,
+    counter: SystimerCounter,
+}
+
+impl BootstrapTimer {
+    pub(crate) fn new(
+        clock: HpSysClkrstSystimer<Fixed<{ instances::hp_sys_clkrst::BASE }>>,
+        counter: SystimerCounter,
+    ) -> Self {
+        Self { clock, counter }
+    }
+
+    /// Open the sourced timer gates and retire their owner, returning the latch.
+    pub fn open_clock(mut self) -> SystimerCounter {
+        open_clock(&mut self.clock);
+        self.counter
+    }
+}
+
 /// The comparator's element of the SYSTIMER arrays.
 const fn index(comparator: Comparator) -> Index<3> {
     const INDICES: [Index<3>; 3] = [

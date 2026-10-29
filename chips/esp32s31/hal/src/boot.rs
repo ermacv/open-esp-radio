@@ -29,7 +29,7 @@ pub use oer_espressif_boot::{
     BootFailure,
     cache::{CacheGeometry, SuspendWaits},
     clock::{ClockRates, ClockWaits, CpuClockProfile},
-    flash::{FlashGeometry, FlashReadCommand, FlashReadCommands, TuningWaits, XipWindow},
+    flash::{FlashGeometry, FlashReadCommand, FlashReadCommands, TuningWaits},
     mmu::MmuWindow,
     psram::{CacheAccess, ChipSelectTiming, OctalPsramProfile, PsramWaits},
     wait::{BootBudget, BootDeadline, BootWait},
@@ -77,32 +77,6 @@ pub const PSRAM_MMU_WINDOW: MmuWindow = MmuWindow {
     entries: oer_esp32s31_pac::spi_mem_s::MMU_ENTRIES as u16,
     physical_pages: oer_esp32s31_pac::spi_mem_s::mmu_item_content::PADDR_MAX + 1,
 };
-
-/// The flash tuning region as instruction fetch maps it: the bootstrap's
-/// own cold reference words, read through the cache, each read a volatile
-/// load the compiler keeps.
-pub struct XipRegion<'a>(&'a [u32]);
-
-impl<'a> XipRegion<'a> {
-    /// The region of `words`, which nothing else reads during the sweep.
-    pub const fn new(words: &'a [u32]) -> Self {
-        Self(words)
-    }
-}
-
-impl XipWindow for XipRegion<'_> {
-    /// Word `index` of the region.
-    ///
-    /// Returns the index and region length when the word lies outside it.
-    fn word(&self, index: usize) -> Result<u32, oer_espressif_boot::FlashFailure> {
-        self.0.get(index).map(oer_memory::read_volatile).ok_or(
-            oer_espressif_boot::FlashFailure::XipOutside {
-                index,
-                words: self.0.len(),
-            },
-        )
-    }
-}
 
 /// The brownout detector and the analog bus whose threshold it writes,
 /// owned by the bootstrap.

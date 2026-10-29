@@ -44,10 +44,18 @@ port decodes the coexistence low-power clock observation with the 40 MHz
 crystal of every supported board profile. The binding does not implement RF
 grant notification.
 
-The reset root's `into_bootstrap` and `into_runtime` return `Result` with
-`root::InitError`: a refused console installation, a stuck bootstrap
-monotonic latch, or a refused stage-two core-control installation is a
-named boot failure. Image callers handle it without a panic or fallback.
+`Root::into_bootstrap` returns unstarted owners without installing the console,
+opening the timer clock or checking its latch. The family cold-start runner
+performs those steps through the S31 boot binding. `into_runtime` retains its
+existing adoption effects and returns `Result` with `root::InitError` for a
+refused console or core-control installation.
+
+The PSRAM driver owns the controller/MMU adapter and returns affine
+`MappedPsram<PsramRegisters>`. Its physical window comes from the HAL adapter,
+not a caller-supplied range. `PsramRegisters::into_region` consumes that exact
+witness, retires remap authority and creates the one static mutable slice;
+the HAL performs no PSRAM bring-up. Chip UI twins reject repeated loans,
+remapping after a loan and foreign ranges or owners.
 
 The watchdog owners retain both timer groups' clock/reset words. Runtime
 startup selects XTAL and enables TIMG0 T0 through a private watchdog operation

@@ -1,4 +1,4 @@
-//! S31 profiles for the family's SoC boot drivers, separate from HAL atoms.
+//! S31 profiles and cold-start platform binding, separate from HAL atoms.
 #![no_std]
 #![forbid(unsafe_code)]
 #![deny(
@@ -81,3 +81,8 @@ pub fn apply_brownout<C: oer_time::Clock + ?Sized>(
     let (registers, mut bus) = owner.parts();
     brownout::apply(registers, &mut bus, BROWNOUT, deadline)
 }
+
+#[cfg(target_arch = "riscv32")]
+mod startup;
+#[cfg(target_arch = "riscv32")]
+pub use startup::S31;

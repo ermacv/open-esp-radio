@@ -21,8 +21,6 @@
 //! # }
 //! ```
 
-use oer_espressif_boot::drivers::system_timer::{LatchStuck, Monotonic};
-
 use oer_esp32s31_pac::ownership::{
     BootPeripherals, MacLocalTimePeripherals, ModemEtmPeripherals, Partitions, SocPeripherals,
 };
@@ -47,7 +45,7 @@ use crate::{
         entropy::EntropyRegisters,
         reset_cause::ResetCauseRegisters,
         software_interrupt::SoftwareInterrupts,
-        system_timer::{SystemTimer, SystimerCounter, TICKS_PER_MICROSECOND, open_clock},
+        system_timer::{BootstrapTimer, SystemTimer},
         timg0_alarm::Timg0AlarmParts,
         usb_serial_jtag::{self, ConsoleRegisters},
         watchdog::{Mwdt0Registers, RwdtRegisters, SwdRegisters, WatchdogRegisters, Watchdogs},
@@ -71,8 +69,6 @@ pub struct Root {
 pub enum InitError {
     /// The console's parts were installed before.
     ConsoleInstalled,
-    /// The system timer's counter latch never settled during bootstrap.
-    MonotonicStuck,
     /// Stage two's core-control words were installed before.
     CoreControlInstalled,
 }
@@ -82,7 +78,6 @@ impl InitError {
     pub const fn name(self) -> oer_diagnostics::Name<32> {
         match self {
             Self::ConsoleInstalled => oer_diagnostics::name!("console-installed"; 32),
-            Self::MonotonicStuck => oer_diagnostics::name!("monotonic"; 32),
             Self::CoreControlInstalled => oer_diagnostics::name!("core-control-installed"; 32),
         }
     }
@@ -94,28 +89,16 @@ impl From<usb_serial_jtag::Installed> for InitError {
     }
 }
 
-impl From<LatchStuck> for InitError {
-    fn from(_: LatchStuck) -> Self {
-        Self::MonotonicStuck
-    }
-}
-
 impl Root {
     /// The root, the first time it is called in an image; `None` after.
     pub fn take() -> Option<Self> {
         oer_esp32s31_pac::take().map(|partitions| Self { partitions })
     }
 
-    /// Split the root for the bootstrap image: the console's parts go to the
-    /// early writer, the system timer's clock opens for the boot's
-    /// monotonic clock, and the bootstrap's owners are returned. The other
-    /// partitions are dropped: the bootstrap writes no other word.
-    ///
-    /// # Errors
-    ///
-    /// The console was installed before, or the system timer's counter
-    /// latch never settled: no boot wait can be bounded.
-    pub fn into_bootstrap(self) -> Result<Bootstrap, InitError> {
+    /// Split the reset claim into bootstrap owners without installing the
+    /// console, opening clocks or checking the timer. Startup belongs to the
+    /// family staged-bootstrap runner. Unused partitions are dropped.
+    pub fn into_bootstrap(self) -> Bootstrap {
         let Partitions {
             usb_serial_jtag,
             core_control,
@@ -127,18 +110,17 @@ impl Root {
             analog_bus,
             ..
         } = self.partitions;
-        usb_serial_jtag::install(ConsoleRegisters::new(usb_serial_jtag))?;
+        let console = ConsoleRegisters::new(usb_serial_jtag);
         let SocPeripherals {
             lp_apm_filter,
             hp_apm_filter,
             hp_mem_apm_filter,
             trng_init,
             lp_periclkrst_rng_init,
-            mut hp_sys_clkrst_systimer,
+            hp_sys_clkrst_systimer,
         } = soc;
-        open_clock(&mut hp_sys_clkrst_systimer);
         let SystemTimer { counter, .. } = SystemTimer::new(system_timer);
-        let monotonic = Monotonic::start_initial_latch_check(counter)?;
+        let timer = BootstrapTimer::new(hp_sys_clkrst_systimer, counter);
         let BootPeripherals {
             hp_sys_clkrst_boot_clock,
             lp_aon_clkrst_cpll,
@@ -158,8 +140,9 @@ impl Root {
             super_watchdog,
             ..
         } = WatchdogRegisters::new(watchdog);
-        Ok(Bootstrap {
-            monotonic,
+        Bootstrap {
+            console,
+            timer,
             soc: Soc::new(
                 lp_apm_filter,
                 hp_apm_filter,
@@ -184,7 +167,7 @@ impl Root {
             cache: CacheRegisters::new(cache_boot),
             flash: FlashRegisters::new(spi0_flash, spi1_flash),
             flash_window: FLASH_MMU_WINDOW,
-        })
+        }
     }
 
     /// Split the root for stage two, which adopts the platform the
@@ -297,13 +280,15 @@ impl Root {
     }
 }
 
-/// The bootstrap's owners: the boot's monotonic clock, the SoC initializer,
+/// The bootstrap's unstarted owners: console, timer, the SoC initializer,
 /// the brownout detector, the three watchdogs the bootstrap takes over, the
 /// clock, PLL power, PSRAM, cache and flash owners, and the MMU windows.
 #[must_use = "the bootstrap's owners bring the chip up"]
 pub struct Bootstrap {
-    /// The boot's monotonic clock, counting before the boot deadline starts.
-    pub monotonic: Monotonic<SystimerCounter, TICKS_PER_MICROSECOND>,
+    /// The early writer's parts, not yet installed.
+    pub console: ConsoleRegisters,
+    /// The timer clock and latch, not yet started.
+    pub timer: BootstrapTimer,
     /// The SoC initialization.
     pub soc: Soc,
     /// The brownout detector and the analog bus of its threshold.

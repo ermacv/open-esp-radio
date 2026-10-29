@@ -11,9 +11,9 @@ use crate::{
     clock::ActivePllPower,
     mmu::{MappedRange, MmuEntry, MmuRegisters, MmuTarget, MmuWindow},
     psram::{
-        CacheAccess, ChipSelectTiming, MemoryClockRegisters, OctalPsramProfile, PsramCommand,
-        PsramCommandRegisters, PsramControllerRegisters, PsramOwners, PsramReady, PsramWaits,
-        bring_up, density_bytes,
+        CacheAccess, ChipSelectTiming, MappedPsram, MemoryClockRegisters, OctalPsramProfile,
+        PsramCommand, PsramCommandRegisters, PsramControllerRegisters, PsramError, PsramOwners,
+        PsramWaits, bring_up, density_bytes,
     },
     wait::{BootBudget, BootDeadline, BootWait},
 };
@@ -117,6 +117,8 @@ struct Model {
     input: u32,
     entries: Vec<Option<MmuEntry>>,
     sync_until: Option<Instant>,
+    sync_stuck: bool,
+    discard_mapping: bool,
 }
 
 type Shared = Rc<RefCell<Model>>;
@@ -135,6 +137,8 @@ fn model(clock: &Rc<VirtualClock>, density: u8) -> Shared {
         input: 0,
         entries: vec![None; 1024],
         sync_until: None,
+        sync_stuck: false,
+        discard_mapping: false,
     }))
 }
 
@@ -272,7 +276,10 @@ impl MmuRegisters for Owner {
     }
     fn write_entry(&mut self, _: Access<'_>, index: u16, entry: MmuEntry) {
         self.record(Op::MmuWrite(index, entry));
-        self.0.borrow_mut().entries[usize::from(index)] = Some(entry);
+        let mut model = self.0.borrow_mut();
+        if !model.discard_mapping {
+            model.entries[usize::from(index)] = Some(entry);
+        }
     }
 }
 
@@ -289,13 +296,18 @@ impl CacheSyncRegisters for Owner {
     }
     fn done(&self, _: Access<'_>) -> bool {
         let model = self.0.borrow();
-        model
-            .sync_until
-            .is_some_and(|until| model.clock.now() >= until)
+        !model.sync_stuck
+            && model
+                .sync_until
+                .is_some_and(|until| model.clock.now() >= until)
     }
 }
 
-fn bring_up_on(model: &Shared) -> Result<PsramReady, BootFailure> {
+impl crate::psram::PsramMemory for Owner {
+    const WINDOW: MmuWindow = WINDOW;
+}
+
+fn mapped_on(model: &Shared) -> Result<MappedPsram<Owner>, PsramError<Owner>> {
     let clock = Rc::clone(&model.borrow().clock);
     let ticking = Ticking::new(&clock);
     let budget =
@@ -303,21 +315,74 @@ fn bring_up_on(model: &Shared) -> Result<PsramReady, BootFailure> {
     let deadline = BootDeadline::start(&ticking, budget);
     let mut clock_owner = Owner(Rc::clone(model));
     let mut active = Owner(Rc::clone(model));
-    let mut psram = Owner(Rc::clone(model));
+    let psram = Owner(Rc::clone(model));
     let mut cache = Owner(Rc::clone(model));
     bring_up(
         PsramOwners {
             clock: &mut clock_owner,
             active: &mut active,
-            psram: &mut psram,
+            psram,
             cache: &mut cache,
         },
         PROFILE,
-        WINDOW,
         CACHE,
         WAITS,
         &deadline,
     )
+}
+
+#[test]
+fn late_mapping_and_cache_failures_retain_the_controller_without_a_witness() {
+    for cache_timeout in [false, true] {
+        let clock = Rc::new(VirtualClock::new());
+        let model = model(&clock, 0x5);
+        model.borrow_mut().sync_stuck = cache_timeout;
+        model.borrow_mut().discard_mapping = !cache_timeout;
+        let error = mapped_on(&model)
+            .err()
+            .expect("late failure grants no mapping");
+        assert_eq!(
+            error.failure(),
+            if cache_timeout {
+                BootFailure::Wait(WaitFailure::TimedOut("cache-sync"))
+            } else {
+                BootFailure::Mmu(crate::MmuFailure::Readback)
+            }
+        );
+        let (owner, _) = error.into_parts();
+        assert!(Rc::ptr_eq(&owner.0, &model));
+        assert!(ops(&model).iter().any(|op| matches!(op, Op::MmuWrite(..))));
+    }
+}
+
+fn bring_up_on(model: &Shared) -> Result<MappedRange, BootFailure> {
+    mapped_on(model)
+        .map(|mapped| mapped.mapped())
+        .map_err(|error| error.failure())
+}
+
+#[test]
+fn success_and_every_failure_retain_the_exact_controller_owner() {
+    let clock = Rc::new(VirtualClock::new());
+    let model = model(&clock, 0x5);
+    let mapped = mapped_on(&model).unwrap_or_else(|_| panic!("valid mapping"));
+    let observed = mapped.mapped();
+    let (owner, range) = mapped.into_parts();
+    assert!(Rc::ptr_eq(&owner.0, &model));
+    assert_eq!(range, observed);
+    for (density, completes) in [(0, true), (3, true), (5, false)] {
+        let clock = Rc::new(VirtualClock::new());
+        let failed = self::model(&clock, density);
+        if !completes {
+            failed.borrow_mut().takes = None;
+        }
+        let error = mapped_on(&failed).err().expect("bring-up fails");
+        let failure = error.failure();
+        let (owner, retained) = error.into_parts();
+        assert!(Rc::ptr_eq(&owner.0, &failed));
+        assert_eq!(failure, retained);
+        assert!(!ops(&failed).iter().any(|op| matches!(op, Op::MmuWrite(..))));
+    }
 }
 
 fn ops(model: &Shared) -> Vec<Op> {
@@ -354,7 +419,7 @@ fn a_cold_psram_is_powered_clocked_configured_and_mapped_in_order() {
     let model = model(&clock, 0x5);
     let ready = bring_up_on(&model).expect("comes up");
     assert_eq!(
-        ready.mapped(),
+        ready,
         MappedRange {
             virtual_start: 0x5000_0000,
             len: 16 * MIB,

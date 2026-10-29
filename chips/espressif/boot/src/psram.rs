@@ -184,6 +184,12 @@ impl PsramFailure {
     }
 }
 
+/// The controller/MMU owner's physical mapping geometry. The chip adapter
+/// supplies it, so a caller cannot mint a witness for an arbitrary address.
+pub trait PsramMemory: PsramControllerRegisters + PsramCommandRegisters + MmuRegisters {
+    const WINDOW: MmuWindow;
+}
+
 /// The owners the bring-up uses.
 pub struct PsramOwners<'a, K, A, P, S> {
     /// The memory PLL, the supply and the controller's clocks.
@@ -191,30 +197,49 @@ pub struct PsramOwners<'a, K, A, P, S> {
     /// The PLLs' power in the PMU's active state.
     pub active: &'a mut A,
     /// The controllers, the command port and the PSRAM's MMU table.
-    pub psram: &'a mut P,
+    pub psram: P,
     /// The cache sync engine.
     pub cache: &'a mut S,
 }
 
-/// The PSRAM as the boot leaves it: powered, configured and mapped.
-/// The result is observable but cannot be manufactured by a caller.
-///
-/// ```compile_fail,E0451
-/// use oer_espressif_boot::{mmu::MappedRange, psram::PsramReady};
-/// let ready = PsramReady {
-///     mapped: MappedRange { virtual_start: 0x5000_0000, len: 4096 },
-/// };
-/// ```
+/// A completed mapping together with its unique controller/MMU owner.
+/// No register borrow escapes while this affine witness exists.
 #[derive(Debug, Eq, PartialEq)]
-#[must_use = "the PSRAM is used through its mapped window"]
-pub struct PsramReady {
+#[must_use = "consume the mapped owner to lend its region once"]
+pub struct MappedPsram<R> {
+    registers: R,
     mapped: MappedRange,
 }
 
-impl PsramReady {
-    /// Observe the completed mapping; only successful bring-up creates it.
+impl<R> MappedPsram<R> {
+    /// Copyable observations grant no authority to lend memory.
     pub const fn mapped(&self) -> MappedRange {
         self.mapped
+    }
+
+    /// Consume the witness and return its exact owner and mapping to the
+    /// chip's narrow loan primitive. This destroys the witness; after a remap
+    /// the caller must complete bring-up again before another loan.
+    pub fn into_parts(self) -> (R, MappedRange) {
+        (self.registers, self.mapped)
+    }
+}
+
+/// A failed bring-up retains the controller/MMU owner and grants no loan.
+#[derive(Debug, Eq, PartialEq)]
+pub struct PsramError<R> {
+    registers: R,
+    failure: BootFailure,
+}
+
+impl<R> PsramError<R> {
+    pub const fn failure(&self) -> BootFailure {
+        self.failure
+    }
+
+    /// Recover the same owner for diagnosis or an explicitly chosen retry.
+    pub fn into_parts(self) -> (R, BootFailure) {
+        (self.registers, self.failure)
     }
 }
 
@@ -278,11 +303,56 @@ pub const fn density_bytes(code: u8) -> Option<u32> {
 pub fn bring_up<K, A, P, S, C>(
     owners: PsramOwners<'_, K, A, P, S>,
     profile: OctalPsramProfile<K::SupplyLevel>,
+    cache: CacheGeometry<S::Map>,
+    waits: PsramWaits,
+    deadline: &BootDeadline<'_, C>,
+) -> Result<MappedPsram<P>, PsramError<P>>
+where
+    K: MemoryClockRegisters,
+    A: ActivePllPower,
+    P: PsramMemory,
+    S: CacheSyncRegisters,
+    C: Clock + ?Sized,
+{
+    let PsramOwners {
+        clock,
+        active,
+        mut psram,
+        cache: sync,
+    } = owners;
+    let result = initialize(
+        PsramOwners {
+            clock,
+            active,
+            psram: &mut psram,
+            cache: sync,
+        },
+        profile,
+        P::WINDOW,
+        cache,
+        waits,
+        deadline,
+    );
+    match result {
+        Ok(mapped) => Ok(MappedPsram {
+            registers: psram,
+            mapped,
+        }),
+        Err(failure) => Err(PsramError {
+            registers: psram,
+            failure,
+        }),
+    }
+}
+
+fn initialize<K, A, P, S, C>(
+    owners: PsramOwners<'_, K, A, &mut P, S>,
+    profile: OctalPsramProfile<K::SupplyLevel>,
     window: MmuWindow,
     cache: CacheGeometry<S::Map>,
     waits: PsramWaits,
     deadline: &BootDeadline<'_, C>,
-) -> Result<PsramReady, BootFailure>
+) -> Result<MappedRange, BootFailure>
 where
     K: MemoryClockRegisters,
     A: ActivePllPower,
@@ -365,7 +435,7 @@ where
         waits.cache_sync,
         deadline,
     )?;
-    Ok(PsramReady { mapped })
+    Ok(mapped)
 }
 
 /// Read the mode register pair at `address`: (the register, its neighbour).
