@@ -81,7 +81,7 @@ impl<W: Binding> DriverStorage<W> {
         }
     }
 }
-pub struct Boot<W: Binding> {
+pub(crate) struct Boot<W: Binding> {
     pub cell: MembershipCell<Wifi>,
     pub wifi: WifiPartition,
     pub rng: Rng,
@@ -151,10 +151,10 @@ impl RadioCoexPriorities for Coex {
         None
     }
 }
-pub type Front<W> =
+pub(crate) type Front<W> =
     radio::SlotFrontend<'static, <W as Binding>::Id, Backend<<W as Binding>::Id, W>>;
-pub type ReadySlot<W> = oer_memory::RequestSlot<(), Result<Front<W>, InitializationError>>;
-pub async fn drive<W: Binding>(driver: Driver<W>) {
+pub(crate) type ReadySlot<W> = oer_memory::RequestSlot<(), Result<Front<W>, InitializationError>>;
+pub(crate) async fn drive<W: Binding>(driver: Driver<W>) {
     let Driver { boot, ready, bell } = driver;
     let slot = W::take_slot().unwrap_or_else(|| W::fail(InitializationError::Storage));
     let mut slot = oer_espressif_executor::port_slot::StaticPortSlot::new(slot);
