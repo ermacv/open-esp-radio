@@ -167,14 +167,12 @@ impl Composition for Fixture {
 struct Coex;
 impl RadioCoexPriorities for Coex {
     fn beacon_window_pti(&self) -> oer_esp32s31_hal::types::MacPti {
-        let event = const { oer_espressif_coex::CoexEventId::new(0).expect("beacon event") };
-        oer_esp32s31_hal::types::MacPti::new(
-            oer_espressif_coex::CoexPtiTable::VENDOR
-                .pti(event)
-                .value()
-                .into(),
-        )
-        .expect("four bit PTI")
+        const {
+            oer_esp32s31_hal::types::MacPti::from_coex(
+                oer_espressif_coex::CoexPtiTable::VENDOR
+                    .pti(oer_espressif_coex::wifi_events::BEACON),
+            )
+        }
     }
     fn connection_frame_priorities(&self, _: ConnectionFrame) -> Option<ConnectionFramePriorities> {
         None

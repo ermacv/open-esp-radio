@@ -24,6 +24,13 @@ The recovered values cite the ESP32-S31 archive where they were reviewed;
 the PTI table and the IEEE 802.15.4 level lookup were also reviewed against
 the ESP32-C5 archive.
 
+`CoexPti` admits only the shared four-bit priority domain; the vendor table
+is checked against `CoexPti::MAX` in an inline const initializer, and table
+mutation accepts only `CoexPti`. Chip bindings prove at compile time that
+the entire domain fits their generated MAC field geometry. The S31 HAL's
+`MacPti::from_coex` and `From<CoexPti> for MacCoexPti` preserve every value
+without a runtime range check.
+
 ## Portable clients and operations
 
 The portable vocabulary is [`oer-radio-coex`](../../../protocols/radio/coex/README.md).

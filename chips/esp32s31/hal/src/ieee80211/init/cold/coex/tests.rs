@@ -13,7 +13,15 @@ fn cold_queries_read_their_own_shared_coexistence_events() {
 }
 
 #[test]
-fn a_priority_above_four_bits_is_not_a_mac_priority() {
-    assert_eq!(MacCoexPti::new(15).map(MacCoexPti::value), Some(15));
-    assert!(MacCoexPti::new(16).is_none());
+fn every_coexistence_priority_reaches_the_mac_unchanged() {
+    use crate::{coex::CoexPti, types::MacPti};
+
+    for value in 0..=u8::MAX {
+        if let Some(pti) = CoexPti::new(value) {
+            let cold = MacCoexPti::from(pti);
+            assert_eq!(cold.value(), value);
+            assert_eq!(cold.pti(), MacPti::from_coex(pti));
+            assert_eq!(cold.pti().get(), u32::from(value));
+        }
+    }
 }

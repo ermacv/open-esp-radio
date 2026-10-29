@@ -135,16 +135,10 @@ pub struct Coex;
 impl RadioCoexPriorities for Coex {
     fn beacon_window_pti(&self) -> oer_esp32s31_hal::types::MacPti {
         const {
-            let event = match oer_espressif_coex::CoexEventId::new(0) {
-                Some(event) => event,
-                None => panic!("beacon event"),
-            };
-            match oer_esp32s31_hal::types::MacPti::new(
-                oer_espressif_coex::CoexPtiTable::VENDOR.pti(event).value() as u32,
-            ) {
-                Some(pti) => pti,
-                None => panic!("four bit PTI"),
-            }
+            oer_esp32s31_hal::types::MacPti::from_coex(
+                oer_espressif_coex::CoexPtiTable::VENDOR
+                    .pti(oer_espressif_coex::wifi_events::BEACON),
+            )
         }
     }
     fn connection_frame_priorities(&self, _: ConnectionFrame) -> Option<ConnectionFramePriorities> {

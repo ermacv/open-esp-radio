@@ -212,6 +212,17 @@ impl MacPti {
     pub const MIN: u32 = 0x00000000;
     pub const MAX: u32 = oer_esp32s31_pac::wifi_mac::default_control::WIFI_DEFAULT_PTI_MAX;
 
+    /// Preserve a shared coexistence priority in the MAC field. The entire
+    /// source domain must fit the generated field geometry at compile time.
+    pub const fn from_coex(pti: oer_espressif_coex::CoexPti) -> Self {
+        const {
+            if oer_espressif_coex::CoexPti::MAX as u32 > Self::MAX {
+                panic!("the coexistence priority domain must fit the MAC PTI field");
+            }
+        };
+        Self(pti.value() as u32)
+    }
+
     /// Construct a value only when it lies in the reviewed inclusive range.
     pub const fn new(value: u32) -> Option<Self> {
         if value <= Self::MAX {

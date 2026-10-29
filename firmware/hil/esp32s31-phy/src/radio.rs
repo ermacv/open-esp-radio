@@ -899,12 +899,10 @@ impl Radio {
                 MacCoexEvent::Event15,
             ]
             .map(|event| {
-                MacCoexPti::new(
+                MacCoexPti::from(
                     require_radio(self.domain.as_ref(), self.radio_fault)
-                        .coex_pti(event.coex_event())
-                        .value(),
+                        .coex_pti(event.coex_event()),
                 )
-                .expect("generated coexistence PTI fits")
             }),
         };
         wifi = observe(

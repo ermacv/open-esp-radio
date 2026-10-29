@@ -1,0 +1,25 @@
+error[E0277]: the trait bound `MacCoexPti: From<u8>` is not satisfied
+ --> tests/ui/mac_coex_pti_requires_coex_domain.rs:8:13
+  |
+8 |     let _ = MacCoexPti::from(16_u8); // ui-error: E0277
+  |             ^^^^^^^^^^ the trait `From<u8>` is not implemented for `MacCoexPti`
+  |
+help: the trait `From<u8>` is not implemented for `MacCoexPti`
+      but trait `From<CoexPti>` is implemented for it
+ --> src/ieee80211/init/cold/coex.rs
+  |
+  | impl From<CoexPti> for MacCoexPti {
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  = help: for that trait implementation, expected `CoexPti`, found `u8`
+
+error[E0423]: cannot initialize a tuple struct which contains private fields
+  --> tests/ui/mac_coex_pti_requires_coex_domain.rs:10:13
+   |
+10 |     let _ = CoexPti(16); // ui-error: E0423
+   |             ^^^^^^^
+   |
+note: constructor is not visible here due to private fields
+  --> $WORKSPACE/chips/espressif/coex/src/pti.rs
+   |
+   | pub struct CoexPti(u8);
+   |                    ^^ private field
