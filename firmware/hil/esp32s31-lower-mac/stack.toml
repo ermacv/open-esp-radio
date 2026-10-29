@@ -40,11 +40,11 @@ unused = true
 [core.1.interrupt_stack]
 unused = true
 
-# The bootstrap runs on the linker script's `_stack_end`..`_stack_start` from
-# riscv-rt's `_start_rust`, which calls `hal_main` and then the bootstrap's
-# `main`.
+# This image keeps its own policy for the 64 KiB interrupt stack above.
+# The reset entry installs `_stack_end`..`_stack_start`, clears BSS and
+# enters `bootstrap_main`, the Rust root used by the stack analysis.
 [bootstrap_stack]
-root = "_start_rust"
+root = "bootstrap_main"
 bottom_symbol = "_stack_end"
 top_symbol = "_stack_start"
 minimum_free_bytes = 4096
