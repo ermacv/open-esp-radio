@@ -16,7 +16,7 @@ oer-ieee80211-conformance-control = { path = "../../../protocols/ieee80211/confo
 oer-ieee80211-control = { path = "../../../protocols/ieee80211/control" }
 oer-hil-family-wifi = { path = "../family-wifi" }
 oer-hil-family-lower-mac = { path = "../family-lower-mac" }
-oer-vendor-phy-esp32s31 = { path = "../../vendor/phy-esp32s31" }
+oer-hil-family-phy-esp32s31 = { path = "../family-phy-esp32s31" }
 oer-image-checks = { path = "../../image/checks" }
 oer-lab-board = { path = "../../lab/board" }
 oer-hil-runs = { path = "../runs" }
@@ -24,10 +24,10 @@ oer-hil-model = { path = "../model" }
 oer-image-build = { path = "../../image/build" }
 oer-image-bundle = { path = "../../image/bundle" }
 oer-os-toolchain = { path = "../../os/toolchain" }
-oer-hil-lab = { path = "../lab" }
+oer-hil-session = { path = "../session" }
 oer-hil-link = { path = "../link" }
 oer-chip-profile = { path = "../../chip/profile" }
-oer-hil-analysis = { path = "../analysis" }
+oer-hil-stats = { path = "../stats" }
 oer-hil-scenario = { path = "../scenario" }
 oer-os-durable = { path = "../../os/durable" }
 oer-hil-family-system = { path = "../family-system" }
@@ -46,7 +46,7 @@ toml = "1.1"
 
 [dev-dependencies]
 oer-espressif-facts = { path = "../../../chips/espressif/facts" }
-oer-hil-lab = { path = "../lab", features = ["test-support"] }
+oer-hil-session = { path = "../session", features = ["test-support"] }
 oer-hil-runs = { path = "../runs", features = ["test-support"] }
 toml = "1.1"
 oer-hil-scenario = { path = "../scenario", features = ["test-support"] }

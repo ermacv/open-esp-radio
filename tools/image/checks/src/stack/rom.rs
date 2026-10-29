@@ -3,8 +3,8 @@
 //! function that overlaps a forbidden range. Like the bound, the check covers
 //! what the walk resolved; a root's unresolved sites stay in its report.
 
-use oer_analysis_riscv_stack::Bound;
 use oer_espressif_facts::RomRange;
+use oer_image_stack::Bound;
 
 use crate::stack::{Image, Result};
 

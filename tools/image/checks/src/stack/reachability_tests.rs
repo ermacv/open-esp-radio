@@ -1,6 +1,6 @@
 use super::*;
 use crate::stack::reachability::Report;
-use oer_analysis_riscv_stack::{Fact, Predecessor};
+use oer_image_stack::{Fact, Predecessor};
 
 const FORMATTER: u32 = TEXT + 40;
 
@@ -177,14 +177,14 @@ fn aliases_and_overlapping_selectors_count_one_implementation_and_missing_entrie
 
 #[test]
 fn irq_context_resolutions_and_bootstrap_use_the_same_three_way_report() {
-    use oer_analysis_riscv_stack::{Stacks, TableEntry, TrapEntry, Vector};
+    use oer_image_stack::{Stacks, TableEntry, TrapEntry, Vector};
     let image = graph(false, true);
     let entries = [
         TableEntry {
             core: 0,
             line: 16,
             level: 2,
-            class: oer_analysis_riscv_stack::Class::Executor,
+            class: oer_image_stack::Class::Executor,
             source: 7,
             handler: Some(FORMATTER),
         },
@@ -192,7 +192,7 @@ fn irq_context_resolutions_and_bootstrap_use_the_same_three_way_report() {
             core: 1,
             line: 16,
             level: 2,
-            class: oer_analysis_riscv_stack::Class::Executor,
+            class: oer_image_stack::Class::Executor,
             source: 8,
             handler: Some(TEXT + 28),
         },
@@ -216,7 +216,7 @@ fn irq_context_resolutions_and_bootstrap_use_the_same_three_way_report() {
     };
     let (harts, _) = image
         .with_bounds(|keep, control| {
-            Ok(oer_analysis_riscv_stack::interrupt_stacks(
+            Ok(oer_image_stack::interrupt_stacks(
                 &image.analysis,
                 &inputs,
                 keep,

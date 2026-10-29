@@ -49,12 +49,12 @@ protocols/{network, network-control}/
 protocols/radio/{coex, port, regulatory}/
 tools/analysis/{blobray-analysis, blobray-application, blobray-artifacts,
     blobray-domain, blobray-linker, blobray-riscv, blobray-verification, cli, elf,
-    riscv-analysis, riscv-decode, riscv-lift, riscv-model, riscv-program, riscv-stack}/
+    riscv-analysis, riscv-decode, riscv-lift, riscv-model, riscv-program}/
 tools/chip/profile/
-tools/hil/{analysis, cli, executor, family-lower-mac, family-system, family-wifi,
-    fixture, fixtures-bluetooth, lab, link, model, net-traffic, observer, registry, run, runner,
-    runs, scenario}/
-tools/image/{build, bundle, checks, cli, compare, esp-idf, large-values, linker}/
+tools/hil/{cli, family-lower-mac, family-phy, family-phy-esp32s31, family-system,
+    family-wifi, fixture, link, model, observer, registry, run, runner, runs, scenario,
+    session, stats}/
+tools/image/{build, bundle, checks, cli, compare, esp-idf, large-values, linker, stack}/
 tools/lab/{arbiter, board, cli, fixture, fixture-install, model, router}/
 tools/os/{command-tree, durable, process, serial, toolchain}/
 tools/pins/{artifacts, cli}/
@@ -62,8 +62,8 @@ tools/probe/{codegen, macros}/
 tools/registers/{cli, contracts, generate, model}/
 tools/regulatory/generate/
 tools/test/{layers, ui-cases}/
-tools/vendor/{cli, ieee802154-esp32s31, ieee802154-esp32s31-cli, lineage, phy,
-    phy-esp32s31, provenance, scenario, scenario-cli}/
+tools/vendor/{cli, ieee802154-esp32s31, ieee802154-esp32s31-cli, lineage,
+    provenance, scenario, scenario-cli}/
 ```
 
 ## Data and supporting files
@@ -122,7 +122,7 @@ named `hil` takes its role from the list.
   `firmware/apps/w3` for shared network observation and ICMP helpers in its `wifi-station` feature (the IP adapter extraction, N-d).
 - Host tests include image source files through `#[path]`:
   `tools/image/cli/src/main.rs` includes the W1 CRC implementation;
-  `tools/vendor/phy/tests/` includes cache and hold modules of
+  `tools/hil/family-phy/tests/` includes cache and hold modules of
   `firmware/hil/esp32s31-phy`.
 - Normal dependencies outside their role:
   `chips/esp32s31/pac` renders the analog-I2C model types of

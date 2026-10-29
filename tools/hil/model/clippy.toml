@@ -1,13 +1,4 @@
-# copies: hil-scenario
-# Every new HIL scenario crate (hil/model, hil/host/executor, the future
-# hil/scenarios/<block>) holds this same file; the copies stay
-# identical. After  step 10 removes the old runner, the copies
-# become one hil/clippy.toml.
-#
-# The nearest clippy.toml wins, so this repeats the workspace's rule. HIL
-# scenario code holds no duration literal and never sleeps: every wait is an
-# `oer_hil_model::Wait` derived from a contract bound, a typed protocol
-# interval or the measured stand profile.
+# Shared HIL catalog values contain no waits or sleeping operations.
 disallowed-methods = [
     { path = "oer_espressif_interrupt_table::__private::EntryProof::new", reason = "interrupt entry implementations and handler/cell proofs come from interrupt_table!" },
     # Clippy uses the nearest config; retain every common workspace ban.
@@ -20,21 +11,21 @@ disallowed-methods = [
     { path = "std::mem::zeroed", reason = "zero initialization uses a Zeroable proof" },
     { path = "std::mem::transmute", reason = "representation changes use typed conversions or a documented narrow boundary" },
     { path = "core::hint::spin_loop", reason = "production radio code must yield through its executor or platform" },
-    { path = "core::time::Duration::from_secs", reason = "derive the wait: oer_hil_model::Wait" },
-    { path = "core::time::Duration::from_millis", reason = "derive the wait: oer_hil_model::Wait" },
-    { path = "core::time::Duration::from_micros", reason = "derive the wait: oer_hil_model::Wait" },
-    { path = "core::time::Duration::from_nanos", reason = "derive the wait: oer_hil_model::Wait" },
-    { path = "core::time::Duration::from_nanos_u128", reason = "derive the wait: oer_hil_model::Wait" },
-    { path = "core::time::Duration::from_mins", reason = "derive the wait: oer_hil_model::Wait" },
-    { path = "core::time::Duration::from_hours", reason = "derive the wait: oer_hil_model::Wait" },
-    { path = "core::time::Duration::from_secs_f32", reason = "derive the wait: oer_hil_model::Wait" },
-    { path = "core::time::Duration::from_secs_f64", reason = "derive the wait: oer_hil_model::Wait" },
-    { path = "core::time::Duration::new", reason = "derive the wait: oer_hil_model::Wait" },
-    { path = "core::time::Duration::try_from_secs_f32", reason = "derive the wait: oer_hil_model::Wait" },
-    { path = "core::time::Duration::try_from_secs_f64", reason = "derive the wait: oer_hil_model::Wait" },
-    { path = "oer_time::Duration::from_micros", reason = "derive the wait: oer_hil_model::Wait from a port's CEILINGS" },
-    { path = "oer_time::Duration::from_millis", reason = "derive the wait: oer_hil_model::Wait from a port's CEILINGS" },
-    { path = "oer_time::Duration::from_secs", reason = "derive the wait: oer_hil_model::Wait from a port's CEILINGS" },
-    { path = "std::thread::sleep", reason = "wait for a typed event or a derived oer_hil_model::Wait" },
-    { path = "std::thread::sleep_ms", reason = "wait for a typed event or a derived oer_hil_model::Wait" },
+    { path = "core::time::Duration::from_secs", reason = "derive the wait from a contract bound" },
+    { path = "core::time::Duration::from_millis", reason = "derive the wait from a contract bound" },
+    { path = "core::time::Duration::from_micros", reason = "derive the wait from a contract bound" },
+    { path = "core::time::Duration::from_nanos", reason = "derive the wait from a contract bound" },
+    { path = "core::time::Duration::from_nanos_u128", reason = "derive the wait from a contract bound" },
+    { path = "core::time::Duration::from_mins", reason = "derive the wait from a contract bound" },
+    { path = "core::time::Duration::from_hours", reason = "derive the wait from a contract bound" },
+    { path = "core::time::Duration::from_secs_f32", reason = "derive the wait from a contract bound" },
+    { path = "core::time::Duration::from_secs_f64", reason = "derive the wait from a contract bound" },
+    { path = "core::time::Duration::new", reason = "derive the wait from a contract bound" },
+    { path = "core::time::Duration::try_from_secs_f32", reason = "derive the wait from a contract bound" },
+    { path = "core::time::Duration::try_from_secs_f64", reason = "derive the wait from a contract bound" },
+    { path = "oer_time::Duration::from_micros", reason = "derive the wait from a port's CEILINGS" },
+    { path = "oer_time::Duration::from_millis", reason = "derive the wait from a port's CEILINGS" },
+    { path = "oer_time::Duration::from_secs", reason = "derive the wait from a port's CEILINGS" },
+    { path = "std::thread::sleep", reason = "wait for a typed event or a contract-derived interval" },
+    { path = "std::thread::sleep_ms", reason = "wait for a typed event or a contract-derived interval" },
 ]

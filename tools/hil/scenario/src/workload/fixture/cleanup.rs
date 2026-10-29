@@ -14,7 +14,7 @@ thread_local! { static QUARANTINE: RefCell<Option<String>> = const { RefCell::ne
 
 pub fn require_healthy() -> Result<()> {
     QUARANTINE.with_borrow(|failure| match failure {
-        Some(failure) => Err(oer_hil_lab::Error::new(format!(
+        Some(failure) => Err(oer_hil_session::Error::new(format!(
             "fixture quarantined after failed restoration: {failure}"
         ))
         .into()),

@@ -49,9 +49,10 @@ impl ScenarioFamily for WifiScenario {
     }
 }
 impl Workload for WifiScenario {
-    fn precondition(&self, lab: &oer_hil_lab::config::LabConfig) -> Result<()> {
+    fn precondition(&self, lab: &oer_hil_session::config::LabConfig) -> Result<()> {
         match &lab.station_fixture {
-            oer_hil_lab::config::StationFixtureConfig::OpenWrt(config) if !config.read_only => {}
+            oer_hil_session::config::StationFixtureConfig::OpenWrt(config) if !config.read_only => {
+            }
             _ => return Err("W4 requires the managed OpenWrt station fixture".into()),
         }
         if matches!(self, Self::InitialGtkDiagnostic {}) {

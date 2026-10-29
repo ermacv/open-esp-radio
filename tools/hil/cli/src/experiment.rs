@@ -4,7 +4,7 @@
 //!   whose runs come back from the runner's launch run list.
 //! - [`job`]: the arbiter job a launch runs as.
 //! - [`ab`]: two firmware variants on the same scenarios, compared with
-//!   [`oer_hil_analysis::arms`].
+//!   [`oer_hil_stats::arms`].
 //! - [`bisect`]: one step of a manual bisection, for `git bisect run`.
 //!
 //! A revision is checked out with [`oer_os_process::git::Worktree`], the one

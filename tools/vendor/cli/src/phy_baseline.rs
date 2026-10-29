@@ -1,7 +1,7 @@
 //! Generate measured PHY references and compare archived production captures.
 use crate::{Checkout, Result};
 use clap::{Args, Subcommand};
-use oer_vendor_phy_esp32s31::{
+use oer_hil_family_phy_esp32s31::{
     baseline::{self, Check, Provenance, Reference, Signature},
     compare::Verdict,
 };

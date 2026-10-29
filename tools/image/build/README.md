@@ -10,7 +10,7 @@ the workspace's one `Cargo.lock` (`--locked`).
 ## Code-generation preconditions
 
 The compiler setup in `src/compiler.rs` pins the conditions required by the
-[DWARF Waker-slot proof](../../analysis/riscv-stack/README.md#code-generation-preconditions)
+[DWARF Waker-slot proof](../stack/README.md#code-generation-preconditions)
 for every Rust image build, including bootstrap and probes:
 
 - `-Zmerge-functions=disabled` keeps distinct function origins from becoming
@@ -214,7 +214,7 @@ The image build pipeline invokes the gates in `oer-image-checks`.
 [`oer_image_checks::stack`](../checks/src/stack.rs) implements the runtime
 task-stack gate (`audit_runtime_stacks`) and the bootstrap stack gate
 (`audit_bootstrap_stack`). The checks analyze each ELF once with
-`oer-analysis-riscv-stack`, the pinned ROM and its summaries, and resolve
+`oer-image-stack`, the pinned ROM and its summaries, and resolve
 indirect sites with the same facts (waker vtables, function-pointer field
 types). The runtime's task and interrupt gates share that analysis.
 The `frames` report shares it too, and the bootstrap's frame and stack checks
@@ -257,7 +257,7 @@ them to the firmware as `OPEN_RADIO_*_STACK_MINIMUM_FREE_BYTES`), checks the
 exercised call chains. Secondary task roots require complete bounds; unused
 harts link zero bytes for both stack kinds.
 The gate also fails an ELF without `.stack_sizes`
-records and every function of `oer-analysis-riscv-stack`'s inventory without a record
+records and every function of `oer-image-stack`'s inventory without a record
 that `stack-coverage.toml` does not review exactly once (assembly, vector data,
 compiler runtime or a linker script's section label; a review supplies no
 frame). The analysis of one image runs within

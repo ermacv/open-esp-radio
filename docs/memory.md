@@ -103,7 +103,7 @@ contracts: [Hardware memory](hardware-memory.md).
   [S31 policy](../chips/esp32s31/platform/stack.toml).
 - Static bounds and their assumptions are described in [execution in the
   architecture](architecture.md#execution) and the
-  [RV32 stack analyzer](../tools/analysis/riscv-stack/README.md).
+  [RV32 stack analyzer](../tools/image/stack/README.md).
 
 ## Panic
 

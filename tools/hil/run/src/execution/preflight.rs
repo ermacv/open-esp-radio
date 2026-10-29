@@ -5,11 +5,11 @@ use std::{path::Path, time::Duration};
 use oer_hil_scenario::ScenarioFamily as _;
 
 use crate::{Result, fixture, scenario::Scenario};
-use oer_hil_lab::config::LabConfig;
 use oer_hil_link::SerialCapture;
 use oer_hil_model::schema::image::ImageClass;
 use oer_hil_registry::DeviceImageKeys;
 use oer_hil_runs::format::run::Failure;
+use oer_hil_session::config::LabConfig;
 
 pub(crate) fn scenario_failure(lab: &LabConfig, selected: &Scenario) -> Option<Failure> {
     fixture::preflight::scenario_precondition(lab, selected).or_else(|| {
@@ -38,7 +38,7 @@ pub(crate) fn validate_flashed_image(
     // A bootloader that resets in a loop keeps state an RTS reset and a
     // reflash leave: climb to the resets that clear it.
     let console = std::fs::read_to_string(preflight.join("uart.log")).unwrap_or_default();
-    let Some(found) = oer_hil_lab::recovery::boot_loop(&console) else {
+    let Some(found) = oer_hil_session::recovery::boot_loop(&console) else {
         return Err(error);
     };
     eprintln!(
@@ -52,7 +52,7 @@ pub(crate) fn validate_flashed_image(
         .dut_board()?
         .lease(device.ok_or("the run holds no lease of its device under test")?)?;
     let escalation =
-        oer_hil_lab::recovery::escalate_boot_loop(&board, found, output, &origin, || {
+        oer_hil_session::recovery::escalate_boot_loop(&board, found, output, &origin, || {
             attempt += 1;
             let directory = output.join(format!("image-preflight-retry-{attempt}"));
             answered = image_keys_of(lab, &directory).ok();
@@ -82,7 +82,7 @@ pub(crate) fn validate_flashed_image(
                 }
                 _ => "the board is quarantined for a person",
             },
-            oer_hil_lab::recovery::RESET_ESCALATION_FILE
+            oer_hil_session::recovery::RESET_ESCALATION_FILE
         )
         .into()),
     }

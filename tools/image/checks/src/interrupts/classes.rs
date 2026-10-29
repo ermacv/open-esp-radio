@@ -3,9 +3,7 @@
 //! declaration in its table (`oer_espressif_interrupt_table::Class`), never a level
 //! number or a handler's name.
 
-use oer_analysis_riscv_stack::{
-    Analysis, Class, Fact, Resolutions, TableEntry, Violation, task_poll_sites,
-};
+use oer_image_stack::{Analysis, Class, Fact, Resolutions, TableEntry, Violation, task_poll_sites};
 use std::collections::BTreeSet;
 use std::fmt;
 

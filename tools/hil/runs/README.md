@@ -23,7 +23,7 @@ Every document of a bundle carries a schema version (`RUN_SCHEMA`, `LAB_PROVENAN
 required field, a renamed, removed or retyped one) needs a schema bump. A new
 optional field that defaults when absent needs none.
 
-The JUnit and HTML views a run writes are rendered by `oer-hil-analysis`,
+The JUnit and HTML views a run writes are rendered by `oer-hil-stats`,
 which the runner hands `RunSession::finish`. The bundle depends on no
 stand, board or image builder code.
 

@@ -112,7 +112,7 @@ fn a_document_dispatches_to_the_family_it_names() {
     assert!(radio.family.forbidden_keys().is_empty());
     assert_eq!(radio.family.air_use(), vec![AirUse::Ieee802154Channel(15)]);
     assert_eq!(radio.family.peer_image().unwrap().name, "radio-peer");
-    let lab = oer_hil_lab::config::LabConfig::for_test();
+    let lab = oer_hil_session::config::LabConfig::for_test();
     assert!(quiet.family.precondition(&lab).is_ok());
     assert_eq!(
         radio.family.precondition(&lab).unwrap_err().to_string(),

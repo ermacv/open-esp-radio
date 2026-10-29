@@ -44,7 +44,7 @@ impl ExecutionEvidence {
 }
 
 pub(crate) fn execute_workload(
-    lab: &oer_hil_lab::config::LabConfig,
+    lab: &oer_hil_session::config::LabConfig,
     selected: &Scenario,
     output: &Path,
     fixtures: &oer_hil_scenario::workload::fixture::Fixtures,
@@ -82,7 +82,7 @@ pub(crate) fn execute_workload(
     let mut post_mortem = failed
         .then(|| {
             device.and_then(|device| {
-                oer_hil_lab::post_mortem::inspect(
+                oer_hil_session::post_mortem::inspect(
                     &lab.dut.serial,
                     device,
                     output,
@@ -94,7 +94,7 @@ pub(crate) fn execute_workload(
     // A target that does not answer is read through its JTAG before any
     // reset erases where it stopped.
     if let Some(device) = device.filter(|_| failed && post_mortem.is_none()) {
-        oer_hil_lab::post_mortem::jtag_snapshot_through_stand_openocd(
+        oer_hil_session::post_mortem::jtag_snapshot_through_stand_openocd(
             lab.chip(),
             device,
             output,
@@ -108,9 +108,12 @@ pub(crate) fn execute_workload(
                 .ok_or_else(|| "the run holds no lease of it".into())
                 .and_then(|device| lab.dut_board()?.lease(device));
             match leased {
-                Ok(board) => {
-                    oer_hil_lab::recovery::recover(&board, output, elf_bytes.as_deref(), &origin)
-                }
+                Ok(board) => oer_hil_session::recovery::recover(
+                    &board,
+                    output,
+                    elf_bytes.as_deref(),
+                    &origin,
+                ),
                 Err(error) => {
                     eprintln!("hil: the board {mac} cannot be recovered: {error}");
                     Ok(None)
@@ -119,16 +122,16 @@ pub(crate) fn execute_workload(
         })
         .transpose()?
         .flatten();
-    if let Some(oer_hil_lab::recovery::Recovery::Recovered { finding, .. }) = &recovery {
+    if let Some(oer_hil_session::recovery::Recovery::Recovered { finding, .. }) = &recovery {
         post_mortem = Some((**finding).clone());
     }
-    if let Some(oer_hil_lab::recovery::Recovery::BootedSilent { .. }) = &recovery {
-        oer_hil_lab::recovery::mark_image_silent(selected.image().id());
+    if let Some(oer_hil_session::recovery::Recovery::BootedSilent { .. }) = &recovery {
+        oer_hil_session::recovery::mark_image_silent(selected.image().id());
     }
     let mut evidence = ExecutionEvidence {
         quarantined: recovery
             .as_ref()
-            .is_some_and(oer_hil_lab::recovery::Recovery::quarantined),
+            .is_some_and(oer_hil_session::recovery::Recovery::quarantined),
         measurements: context.measurements.snapshot(),
         interrupted: result
             .as_ref()

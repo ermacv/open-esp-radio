@@ -15,7 +15,7 @@ oer-analysis-riscv-decode = { path = "../../analysis/riscv-decode" }
 oer-analysis-riscv-lift = { path = "../../analysis/riscv-lift" }
 oer-analysis-riscv-model = { path = "../../analysis/riscv-model" }
 oer-analysis-riscv-program = { path = "../../analysis/riscv-program" }
-oer-analysis-riscv-stack = { path = "../../analysis/riscv-stack" }
+oer-image-stack = { path = "../stack" }
 oer-chip-profile = { path = "../../chip/profile" }
 oer-image-bundle = { path = "../bundle" }
 oer-espressif-facts = { path = "../../../chips/espressif/facts" }

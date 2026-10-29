@@ -3,8 +3,8 @@ use std::path::Path;
 
 use crate::Result;
 use crate::scenario::{Families, Scenario};
-use oer_hil_lab::config::LabConfig;
 use oer_hil_scenario::workload::family::Registry as _;
+use oer_hil_session::config::LabConfig;
 
 pub(crate) fn check_without_device(
     root: &Path,
@@ -15,7 +15,7 @@ pub(crate) fn check_without_device(
     let resolved = lab.resolve(plan.wifi);
     let lab = &resolved;
     let required = plan.requirements;
-    let _lease = oer_hil_lab::lock::FixtureLock::acquire_without_device(lab, required)?;
+    let _lease = oer_hil_session::lock::FixtureLock::acquire_without_device(lab, required)?;
     let output = root.join("target/hil/fixture-checks").join(format!(
         "{}-{}",
         oer_os_durable::unix_millis(),

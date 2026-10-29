@@ -21,14 +21,14 @@ oer-chip-profile = { path = "../../chip/profile" }
 oer-os-command-tree = { path = "../../os/command-tree", features = ["clap"] }
 oer-lab-arbiter = { path = "../../lab/arbiter" }
 oer-lab-board = { path = "../../lab/board" }
-oer-hil-analysis = { path = "../analysis" }
+oer-hil-stats = { path = "../stats" }
 oer-image-build = { path = "../../image/build" }
 oer-image-checks = { path = "../../image/checks" }
 oer-image-compare = { path = "../../image/compare" }
 oer-hil-run = { path = "../run" }
 oer-hil-model = { path = "../model" }
 oer-hil-observer = { path = "../observer" }
-oer-hil-lab = { path = "../lab" }
+oer-hil-session = { path = "../session" }
 oer-lab-router = { path = "../../lab/router" }
 oer-os-durable = { path = "../../os/durable" }
 oer-os-process = { path = "../../os/process", features = ["clap"] }

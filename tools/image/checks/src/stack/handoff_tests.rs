@@ -147,7 +147,7 @@ fn bootstrap() -> Image {
     image(&[code("boot", vec![LUI_T1_0X5000, ADDI_T1_0, JR_T1])], &[])
 }
 
-fn boot_bound(image: &Image) -> oer_analysis_riscv_stack::Bound {
+fn boot_bound(image: &Image) -> oer_image_stack::Bound {
     let boot = image.symbol("boot").unwrap();
     image
         .with_bounds(|keep, control| {

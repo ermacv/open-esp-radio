@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::path::Path;
 
-use oer_analysis_riscv_stack::{Assumption, Bound, CodeFact, Fact, SiteSource};
+use oer_image_stack::{Assumption, Bound, CodeFact, Fact, SiteSource};
 use serde::Serialize;
 
 use super::{Image, Result, bound_state};

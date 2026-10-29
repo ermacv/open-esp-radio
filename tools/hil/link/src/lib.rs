@@ -7,8 +7,7 @@
 //! implements; it depends on no laboratory, board,
 //! scenario, run-bundle or image code. Families build their operations on
 //! the generic exchange, a repetition's measurements observe a capture
-//! through [`CaptureObserver`], and network traffic sessions live in
-//! `oer-hil-net-traffic`.
+//! through [`CaptureObserver`].
 #![forbid(unsafe_code)]
 
 use std::{

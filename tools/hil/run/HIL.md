@@ -31,15 +31,14 @@ The root Cargo workspace contains both host and target Rust packages. The
 wire contract and chip-independent agent are in `protocols/hil/`; images
 are in `firmware/hil/`. The executable catalog is in `tools/hil/scenarios/`,
 its envelope and workload APIs in `tools/hil/scenario/`, and runner
-orchestration in `tools/hil/run/`. `tools/hil/model/` owns typed scenario
-values, evidence schemas and image classes; it also has the separate typed
-executor in `tools/hil/executor/`.
+orchestration in `tools/hil/run/`. `tools/hil/model/` owns catalog values, evidence schemas, image classes and
+radio-health observations.
 
 [`observer/`](../observer/README.md) builds the runner. Its identity format
 and content store, together with the bundle format, writer and reader, live
 in [`runs/`](../runs/README.md). The PHY family is composed by
-`tools/vendor/phy-esp32s31/` over `tools/vendor/phy/` and the chip-neutral
-[capture types](../link/src/capture). Its reviewed relation is in
+`tools/hil/family-phy-esp32s31/` over `tools/hil/family-phy/` and the chip-neutral
+[capture types](../family-phy/src/calibration_capture). Its reviewed relation is in
 [chip knowledge](../../../chips/esp32s31/knowledge/README.md).
 Generated runs are stored outside the checkout, with a `target/hil/runs`
 link; they are not tracked. A run never writes tracked files.

@@ -19,7 +19,7 @@ oer-hil-model = { path = "../model" }
 oer-hil-scenario = { path = "../scenario" }
 oer-hil-protocol = { path = "../../../protocols/hil/protocol" }
 oer-hil-link = { path = "../link" }
-oer-hil-lab = { path = "../lab" }
+oer-hil-session = { path = "../session" }
 oer-lab-router = { path = "../../lab/router" }
 oer-os-durable = { path = "../../os/durable" }
 oer-os-process = { path = "../../os/process" }

@@ -20,7 +20,7 @@
 //! Which arm runs first in a measured round is balanced and seeded: the
 //! measured rounds of a layout seed come in consecutive pairs, one AB and
 //! one BA, and which of the two leads is drawn from
-//! `oer_hil_analysis::stats::balanced_swaps` with the experiment's order seed (given, or
+//! `oer_hil_stats::stats::balanced_swaps` with the experiment's order seed (given, or
 //! the experiment id) mixed with the layout seed. Warm-up, temperature drift and recovery order therefore
 //! fall on both arms alike instead of always on B. The order seed is in the
 //! report, and every run records its round (layout seed, index, order,
@@ -30,7 +30,7 @@
 //! Every run is launched through [`crate::experiment::launch::launch_run`] as a job of
 //! its own and records no evidence. The report compares, per metric, the
 //! two arms' run means paired by measured round, after checking that every
-//! run belongs to this one experiment ([`oer_hil_analysis::arms`]), and is
+//! run belongs to this one experiment ([`oer_hil_stats::arms`]), and is
 //! written to `ab-report.json`.
 
 use std::{
@@ -39,10 +39,6 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use oer_hil_analysis::{
-    Run,
-    arms::{self, MeasurementComparison, ValidatedExperiment},
-};
 use oer_hil_model::schema::image::FeatureDelta;
 use oer_hil_model::schema::run::Outcome;
 use oer_hil_runs::RunId;
@@ -53,6 +49,10 @@ use oer_hil_runs::format::experiment::Order;
 use oer_hil_runs::format::experiment::Phase;
 use oer_hil_runs::format::experiment::Round;
 use oer_hil_runs::format::experiment::Variant;
+use oer_hil_stats::{
+    Run,
+    arms::{self, MeasurementComparison, ValidatedExperiment},
+};
 use oer_os_process::git::Worktree;
 use serde::Serialize;
 
@@ -304,7 +304,7 @@ fn round(orders: &[Order], layout_seed: NonZeroU32, index: u32, order_seed: u64)
 /// so every layout seed has its own reproducible sequence.
 fn orders(order_seed: u64, layout_seed: NonZeroU32, rounds: u32) -> Vec<Order> {
     let stream = order_seed ^ u64::from(layout_seed.get()).wrapping_mul(0x9e37_79b9_7f4a_7c15);
-    oer_hil_analysis::stats::balanced_swaps(stream, rounds as usize)
+    oer_hil_stats::stats::balanced_swaps(stream, rounds as usize)
         .into_iter()
         .map(Order::swapped)
         .collect()

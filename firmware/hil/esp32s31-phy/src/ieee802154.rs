@@ -257,7 +257,7 @@ impl Rx {
         engine.mac_init();
         let mut env = Environment::default();
         // SOURCE: firmware/peers/esp32c5-ieee802154/main/peer.c CFG,
-        // tools/vendor/phy/src/reference.rs configuration(). The diagnostic
+        // tools/hil/family-phy/src/reference.rs configuration(). The diagnostic
         // keeps RX auto-ACK disabled so no frame can make it transmit.
         engine.set_panid(0x1234);
         engine.set_short_address(0x0001);
@@ -376,7 +376,7 @@ impl Rx {
 fn receive_permit(number: u8) -> Result<Ieee802154Permit> {
     // RX-only laboratory configuration, matching the reference's 21 dBm PIB
     // value without authorizing transmission. No TX/ACK path is exposed.
-    // SOURCE: tools/vendor/phy/src/reference.rs CHANNEL/POWER_DBM.
+    // SOURCE: tools/hil/family-phy/src/reference.rs CHANNEL/POWER_DBM.
     const RULES: &[Rule] = &[Rule::new(
         match FrequencySpan::new(2_400_000, 2_483_500) {
             Some(span) => span,

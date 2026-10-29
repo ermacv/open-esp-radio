@@ -20,7 +20,7 @@ through the same checks.
 The [compiler setup](../build/README.md#code-generation-preconditions) pins
 MergeFunctions and machine outlining off and validates rustc flags. Together
 these conditions preserve the source identity used by the analyzer's
-[DWARF Waker-slot rule](../../analysis/riscv-stack/README.md#code-generation-preconditions).
+[DWARF Waker-slot rule](../stack/README.md#code-generation-preconditions).
 
 ## Placement and stacks
 

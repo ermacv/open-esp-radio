@@ -280,7 +280,7 @@ impl std::error::Error for PeerConsoleError {
 impl SerialLink {
     /// The console `port` the stand opened at `path`. The stand opens a
     /// peer's console without resetting it and drops what the running image
-    /// printed before (`oer_hil_lab::peer_console`): a USB Serial/JTAG reset
+    /// printed before (`oer_hil_session::peer_console`): a USB Serial/JTAG reset
     /// of a peer whose IEEE 802.15.4 radio runs can leave it in ROM
     /// download, so the peer is never reset from here.
     pub fn new(path: &Path, port: Box<dyn PeerLine>) -> Self {

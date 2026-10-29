@@ -7,11 +7,11 @@ use crate::{
     execution::firmware::RunFirmware, execution::orchestration,
 };
 
-use oer_hil_lab as lab;
 use oer_hil_model::catalog::SCENARIO_SCHEMA;
 use oer_hil_scenario::ScenarioFamily as _;
 use oer_hil_scenario::workload::family::Registry as _;
 use oer_hil_scenario::workload::output;
+use oer_hil_session as lab;
 
 pub(crate) fn run(cli: Cli, invocation: Vec<std::ffi::OsString>) -> Result<()> {
     let root = oer_os_process::built_root();
@@ -46,7 +46,7 @@ pub(crate) fn run(cli: Cli, invocation: Vec<std::ffi::OsString>) -> Result<()> {
             let lab = lab::config::LabConfig::load(&lab_path, &chip, &choice)?
                 .with_peer_images(&peer_images(selected.iter().copied()))?;
             let required = requirements(&selected);
-            let _software = oer_hil_lab::software::SoftwareLease::acquire_for(&lab, required)?;
+            let _software = oer_hil_session::software::SoftwareLease::acquire_for(&lab, required)?;
             crate::execution::doctor::run(&root, &lab, &selected)
         }
         CliCommand::Plan { selection, proofs } => {

@@ -8,7 +8,7 @@ use serde::Serialize;
 use crate::scenario::{Scenario, requirements};
 use crate::{Result, fixture};
 
-use oer_hil_lab::config::LabConfig;
+use oer_hil_session::config::LabConfig;
 
 #[derive(Default, Serialize)]
 struct Checks {
@@ -75,7 +75,7 @@ pub(crate) fn run(root: &Path, lab: &LabConfig, scenarios: &[&Scenario]) -> Resu
         })?;
     }
     checks.run("resource-ownership", || {
-        oer_hil_lab::lock::FixtureLock::probe_for(lab, required)
+        oer_hil_session::lock::FixtureLock::probe_for(lab, required)
     })?;
     crate::emit_json(
         &serde_json::json!({

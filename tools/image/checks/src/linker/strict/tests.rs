@@ -214,7 +214,7 @@ fn two_handlers_at_one_level_are_both_linked_into_sram() {
         let handlers = ["worst_handler", "other_handler"].map(|name| {
             let function = first.symbol(name).unwrap();
             assert!(function.address >= 0x50000000);
-            oer_analysis_riscv_stack::Function {
+            oer_image_stack::Function {
                 address: u32::try_from(function.address).unwrap(),
                 size: u32::try_from(function.size).unwrap(),
                 names: vec![name.into()],

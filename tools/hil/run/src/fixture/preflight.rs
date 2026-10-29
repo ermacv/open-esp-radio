@@ -4,11 +4,11 @@ use crate::{
     Result,
     scenario::{Families, Scenario},
 };
-use oer_hil_lab::config::LabConfig;
 use oer_hil_runs::format::run::Failure;
 use oer_hil_runs::format::run::FailureKind;
 use oer_hil_scenario::ScenarioFamily as _;
 use oer_hil_scenario::workload::family::Registry as _;
+use oer_hil_session::config::LabConfig;
 
 /// The laboratory checks a scenario needs before it may run: its
 /// preconditions, then every fixture provider's check of its requirements.
@@ -17,7 +17,7 @@ pub(crate) fn check(lab: &LabConfig, scenario: &Scenario) -> Result<()> {
     let resolved = lab.resolve(plan.wifi);
     let lab = &resolved;
     if let Some(failure) = scenario_precondition(lab, scenario) {
-        return Err(oer_hil_lab::Error::new(failure.message).into());
+        return Err(oer_hil_session::Error::new(failure.message).into());
     }
     for provider in Families::FIXTURES {
         provider.check(lab, &plan)?;
@@ -31,7 +31,7 @@ pub(crate) fn check(lab: &LabConfig, scenario: &Scenario) -> Result<()> {
 /// the consumer's own handshake decides.
 fn require_peer_image(
     lab: &LabConfig,
-    peer: &oer_hil_lab::config::PeerBoardConfig,
+    peer: &oer_hil_session::config::PeerBoardConfig,
     expected: &str,
     reflash: &str,
 ) -> crate::Result<()> {

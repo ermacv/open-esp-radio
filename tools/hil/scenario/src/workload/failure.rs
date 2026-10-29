@@ -9,7 +9,7 @@ pub fn classify(error: &(dyn std::error::Error + 'static)) -> Failure {
     let mut kind = FailureKind::Scenario;
     while let Some(error) = cause {
         if error.is::<oer_hil_link::error::LinkError>()
-            || error.is::<oer_hil_lab::Error>()
+            || error.is::<oer_hil_session::Error>()
             || error.is::<std::io::Error>()
             || error.is::<oer_os_process::Cancelled>()
             || error.is::<oer_os_process::owned::DeadlineExceeded>()

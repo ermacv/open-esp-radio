@@ -1,10 +1,8 @@
 //! The executor/task boundary comes from resolution facts, never names.
 
 use super::Result;
-use oer_analysis_riscv_stack::{
-    Analysis, Class, Function, HartStack, Resolutions, Stacks, task_poll_sites,
-};
 use oer_espressif_facts::Memory;
+use oer_image_stack::{Analysis, Class, Function, HartStack, Resolutions, Stacks, task_poll_sites};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fmt::{self, Write as _};
 

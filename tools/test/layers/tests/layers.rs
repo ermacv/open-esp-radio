@@ -3325,10 +3325,10 @@ adapter = { package = "oer-esp32s31-ieee80211-driver", version = "1" }
     );
 }
 
-/// The host HIL families and the vendor PHY tools, which link no HAL and no
+/// The host HIL families, which link no HAL and no
 /// PAC (`docs/repository-layout.md`, HIL).
 fn host_family(path: &str) -> bool {
-    path.starts_with("tools/hil/family-") || path.starts_with("tools/vendor/phy")
+    path.starts_with("tools/hil/family-")
 }
 
 fn hal_or_pac(roles: &BTreeMap<String, Role>, name: &str) -> bool {
@@ -3369,7 +3369,7 @@ fn the_host_family_rule_finds_a_transitive_hal() {
         ["family -> helper -> oer-esp32s31-hal"]
     );
     assert!(host_family("tools/hil/family-wifi"));
-    assert!(host_family("tools/vendor/phy-esp32s31"));
+    assert!(host_family("tools/hil/family-phy-esp32s31"));
     assert!(!host_family("tools/hil/runner"));
 }
 

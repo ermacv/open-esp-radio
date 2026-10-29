@@ -385,9 +385,9 @@ fn wait(args: &[OsString]) -> Result<std::process::ExitCode> {
     if oer_lab_arbiter::Arbiter::open()?.jobs().read(text).is_ok() {
         return crate::jobs::wait_command(args);
     }
-    let run = oer_hil_analysis::Run::open(&oer_hil_runs::RunStore::shared()?, text)
+    let run = oer_hil_stats::Run::open(&oer_hil_runs::RunStore::shared()?, text)
         .map_err(|_| format!("{text} is neither a job nor a run"))?;
-    Ok(std::process::ExitCode::from(oer_hil_analysis::runs::wait(
+    Ok(std::process::ExitCode::from(oer_hil_stats::runs::wait(
         run.directory(),
         |line| println!("{line}"),
     )?))
@@ -401,11 +401,11 @@ fn parse_budget(text: &str) -> std::result::Result<std::time::Duration, String> 
 /// run store.
 /// `cargo hil perf`: gated measurements across commits and their baselines.
 fn perf(ctx: &Checkout, options: &LeaseOptions, cli: PerfCli) -> Result<std::process::ExitCode> {
-    use oer_hil_analysis::perf;
+    use oer_hil_stats::perf;
     let store = oer_hil_runs::RunStore::shared()?;
     let now = oer_os_durable::unix_millis();
     let find = |id: &str| -> Result<perf::RunSummary> {
-        perf::summary(&oer_hil_analysis::Run::open(&store, id)?)
+        perf::summary(&oer_hil_stats::Run::open(&store, id)?)
     };
     let baselines = perf::baselines(&store)?;
     match cli {
@@ -453,10 +453,10 @@ fn perf(ctx: &Checkout, options: &LeaseOptions, cli: PerfCli) -> Result<std::pro
 /// `cargo hil runs list|show|why|compare|history|pin|unpin|flaky|quarantine|release|prune`
 /// over the shared run store.
 fn runs(ctx: &Checkout, options: &LeaseOptions, parsed: RunsCli) -> Result<std::process::ExitCode> {
-    use oer_hil_analysis::{Run, retention, runs};
     use oer_hil_runs::store::Note;
     use oer_hil_runs::store::Notes;
     use oer_hil_runs::store::Sidecar;
+    use oer_hil_stats::{Run, retention, runs};
     let store = oer_hil_runs::RunStore::shared()?;
     // Reading every run takes long; commands about one run read only it.
     let all = || Run::all(&store);
@@ -692,9 +692,9 @@ fn prune_automatically(ctx: &Checkout, store: &oer_hil_runs::RunStore) -> Result
         return Ok(());
     }
     std::fs::write(&marker, b"")?;
-    let pruned = oer_hil_analysis::retention::prune(
+    let pruned = oer_hil_stats::retention::prune(
         store,
-        &oer_hil_analysis::retention::Retention {
+        &oer_hil_stats::retention::Retention {
             keep_days: PRUNE_DAYS,
             keep_failed: PRUNE_KEEP_FAILED,
         },
@@ -904,7 +904,7 @@ fn profile(ctx: &Checkout, cli: ProfileCli) -> Result<std::process::ExitCode> {
             {
                 continue;
             }
-            let report = oer_hil_analysis::profile::report(&path, elf.as_deref(), cli.top)?;
+            let report = oer_hil_stats::profile::report(&path, elf.as_deref(), cli.top)?;
             let relative = path
                 .parent()
                 .unwrap_or(&path)

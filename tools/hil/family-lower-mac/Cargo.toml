@@ -13,7 +13,7 @@ oer-ieee80211-conformance-control = { path = "../../../protocols/ieee80211/confo
 oer-hil-model = { path = "../model" }
 oer-hil-scenario = { path = "../scenario" }
 oer-hil-protocol = { path = "../../../protocols/hil/protocol" }
-oer-hil-lab = { path = "../lab" }
+oer-hil-session = { path = "../session" }
 oer-lab-router = { path = "../../lab/router" }
 oer-os-durable = { path = "../../os/durable" }
 oer-ieee80211-port = { path = "../../../protocols/ieee80211/port", features = ["test-support"] }
