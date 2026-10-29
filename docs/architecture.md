@@ -57,8 +57,12 @@ secondary containment, access-filter and TRNG startup operations over register
 ports implemented by the HAL's owned boot parts. `oer-esp32s31-boot` supplies
 S31 profiles, including the generated LP-fast source. This chip binding sits
 above HAL and family drivers so neither HAL nor chip knowledge chooses or
-executes those policies. The bootstrap retains its call order and common
-deadline; other boot blocks retain their existing APIs.
+executes those policies. The family staged-bootstrap cold-start runner owns
+claim/console/time startup through the deadline, LP-fast and SoC, watchdog
+takeover and brownout, CPU PLL, PSRAM, staging/CRC, flash tuning and publication
+through the final RTC disable and jump. The S31 boot binding supplies its
+`BootProfile` as a chip composition; the bootstrap image declares resources.
+The order, reports and common deadline remain unchanged.
 
 Every chip and HIL package has one explicit role in `oer-test-layers`, never
 derived from its path; the role names the level and its allowed direct
@@ -567,8 +571,11 @@ defines the scan's scope and limits.
   Every staged image build audits the complete linked bootstrap for this
   placement before encoding or flashing, including diagnostic runs. Only
   explicitly tagged image payloads and tuning references remain in flash.
-  The PSRAM controller/MMU owner is consumed by its HAL bring-up method,
-  which lends the mapped region once as a static mutable byte slice. Staging
+  The family PSRAM driver owns the HAL controller/MMU adapter and returns
+  an affine mapped owner with a private constructor; failures retain it.
+  The adapter fixes the physical MMU window. Consuming the successful mapped
+  owner through the HAL's narrow loan primitive retires remap authority before
+  lending the region once as a static mutable byte slice. Staging
   validates, copies and checks the image through that slice and retains its
   payload loan until the cache publication and stage-two jump.
   Flash tuning claims its SRAM scratch fallibly and checks each XIP word;

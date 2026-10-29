@@ -2,7 +2,7 @@
 //! console's driver exists, the parts the driver is built from, and the
 //! fatal note.
 //!
-//! The reset root installs the console's parts once ([`install`]) in this
+//! Platform startup installs the reset root's console parts once ([`install`]) in this
 //! chip's one [`Ownership`](oer_espressif_usb_serial_jtag::ownership::Ownership):
 //! each early record borrows the endpoint while it writes, until the
 //! console's driver takes the parts for good ([`retire_early_writer`]);
@@ -218,7 +218,7 @@ pub struct Installed;
 
 /// Install the console's parts for the early writer, the fatal note and
 /// the driver, once, from the reset root.
-pub(crate) fn install(registers: ConsoleRegisters) -> Result<(), Installed> {
+pub fn install(registers: ConsoleRegisters) -> Result<(), Installed> {
     install_in(&OWNERSHIP, registers)
 }
 

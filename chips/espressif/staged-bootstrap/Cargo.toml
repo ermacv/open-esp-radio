@@ -5,9 +5,10 @@ edition.workspace = true
 rust-version.workspace = true
 license = "Apache-2.0"
 publish = false
-description = "The chip-neutral steps of the Espressif staged-boot bootstrap: stage-two validation, relocation into PSRAM and handoff"
+description = "The Espressif family cold-start runner, staged entry, PSRAM relocation and handoff"
 
 [dependencies]
+oer-time = { path = "../../../portable/time" }
 bytemuck = { version = "1.25.2", default-features = false }
 oer-memory = { path = "../../../portable/memory" }
 oer-espressif-boot = { path = "../boot" }

@@ -1967,6 +1967,7 @@ dependencies = [
  "oer-esp32s31-hal",
  "oer-espressif-boot",
  "oer-espressif-facts",
+ "oer-espressif-staged-bootstrap",
  "oer-time",
 ]
 
@@ -2316,6 +2317,7 @@ dependencies = [
  "oer-espressif-staged-layout",
  "oer-memory",
  "oer-riscv",
+ "oer-time",
 ]
 
 [[package]]

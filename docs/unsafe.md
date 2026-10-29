@@ -910,12 +910,17 @@ needs:
 - Each board implements `AdoptsBootstrapMapping` for its PSRAM.
 - The bootstrap places the packed stage two and the flash tuning reference in
   its own read-only flash sections.
-- The HAL's `PsramRegisters::into_region` runs cold bring-up and consumes
-  the reset root's unique PSRAM controller/MMU partition before creating
-  one `&'static mut [u8]`. Only that method creates the slice; a caller-supplied
-  `PsramReady` cannot authorize it. `PsramReady` exposes its completed mapping
-  through a read-only accessor. The safe `stage` uses slice offsets, checked
-  ranges and volatile borrowed probe/CRC accesses, returning typed errors.
+- The family PSRAM driver owns the reset root's controller/MMU adapter while
+  running cold bring-up. Only success creates `MappedPsram<R>`, with private
+  fields and the same owner; failure retains it in `PsramError<R>`. The chip's
+  `PsramMemory` adapter fixes the MMU window, so caller-supplied geometry cannot
+  authorize a slice at an arbitrary address. The HAL's
+  `PsramRegisters::into_region` consumes the witness for its exact fixed owner
+  and retires remap authority before creating one `&'static mut [u8]`, at the
+  same single unsafe site. Observed ranges and other owners cannot authorize
+  that loan. Chip UI twins check these ownership boundaries. The safe `stage`
+  uses slice offsets, checked ranges and volatile borrowed probe/CRC accesses,
+  returning typed errors.
   Its `Staged` result retains the exclusive payload loan through publication
   and handoff. The bootstrap checks the physical PSRAM base before the probe
   and its flash source immediately after the probe, before header/CRC reads.

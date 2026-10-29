@@ -100,6 +100,9 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 "chips/espressif/staged-bootstrap/src/runtime.rs:394:8:terminal-entry:fail" = { owner = "chips/espressif/staged-bootstrap", classes = ["configuration-boot", "rust-panic"] }
 "chips/espressif/staged-bootstrap/src/runtime.rs:400:4:terminal-entry:halt" = { owner = "chips/espressif/staged-bootstrap", classes = ["configuration-boot", "rust-panic"] }
 
+# chips/espressif/staged-bootstrap/src/startup.rs
+"chips/espressif/staged-bootstrap/src/startup.rs:107:8:terminal-entry:run" = { owner = "chips/espressif/staged-bootstrap", classes = ["configuration-boot"] }
+
 # chips/espressif/staged-runtime/src/default_handlers.rs
 "chips/espressif/staged-runtime/src/default_handlers.rs:11:19:terminal-entry:oer_unhandled_interrupt" = { owner = "chips/espressif/staged-runtime", classes = ["configuration-boot"] }
 "chips/espressif/staged-runtime/src/default_handlers.rs:12:5:panic-macro:panic" = { owner = "chips/espressif/staged-runtime", classes = ["rust-panic"] }

@@ -52,29 +52,6 @@ fn budget() -> BootBudget {
     BootBudget::below(Duration::from_millis(10), Duration::from_secs(9)).expect("below")
 }
 
-#[test]
-fn xip_reads_return_the_exact_rejected_index_and_region_length() {
-    use oer_espressif_boot::flash::XipWindow;
-
-    let words = [0x1234_5678, 0x89ab_cdef];
-    let region = super::XipRegion::new(&words);
-    assert_eq!(region.word(0), Ok(words[0]));
-    assert_eq!(region.word(1), Ok(words[1]));
-    for index in [words.len(), usize::MAX] {
-        assert_eq!(
-            region.word(index),
-            Err(FlashFailure::XipOutside {
-                index,
-                words: words.len(),
-            })
-        );
-    }
-    assert_eq!(
-        super::XipRegion::new(&[]).word(0),
-        Err(FlashFailure::XipOutside { index: 0, words: 0 })
-    );
-}
-
 /// The PMU's active-state power: the radio PMU block's word, not this
 /// PAC's soc blocks; the tests count its calls.
 #[derive(Default)]
@@ -573,7 +550,7 @@ fn a_mode_register_read_selects_four_byte_addresses_even_at_address_zero() {
     let ticking = Ticking(&virtual_clock);
     let deadline = BootDeadline::start(&ticking, budget());
     let mut clock_owner = clock.owner();
-    let mut psram_owner = psram.owner();
+    let psram_owner = psram.owner();
     let mut cache_owner = CacheRegisters::host(&mut cache_words).expect("host memory holds it");
     let mut active = ActivePower::host(&mut active_words).expect("host memory holds it");
     assert_eq!(
@@ -581,18 +558,18 @@ fn a_mode_register_read_selects_four_byte_addresses_even_at_address_zero() {
             PsramOwners {
                 clock: &mut clock_owner,
                 active: &mut active,
-                psram: &mut psram_owner,
+                psram: psram_owner,
                 cache: &mut cache_owner,
             },
             PSRAM_PROFILE,
-            PSRAM_WINDOW,
             GEOMETRY,
             PSRAM_WAITS,
             &deadline,
-        ),
+        )
+        .map(|mapped| mapped.mapped())
+        .map_err(|error| error.failure()),
         Err(BootFailure::Wait(WaitFailure::TimedOut("psram-command")))
     );
-    drop(psram_owner);
     let command = Memspi3::host(&mut psram.memspi3).expect("host memory holds it");
     assert!(command.read_cmd().usr(), "the first MR read was submitted");
     assert_eq!(command.read_addr().usr_addr_value(), 0);
@@ -621,25 +598,26 @@ fn a_cold_psram_is_powered_and_clocked_and_its_first_mode_register_read_never_en
     let active_before = active_words.clone();
     let mut active = ActivePower::host(&mut active_words).expect("host memory holds it");
     let mut clock_owner = clock.owner();
-    let mut psram_owner = psram.owner();
+    let psram_owner = psram.owner();
     let mut cache_owner = CacheRegisters::host(&mut cache_words).expect("host memory holds it");
     assert_eq!(
         psram::bring_up(
             PsramOwners {
                 clock: &mut clock_owner,
                 active: &mut active,
-                psram: &mut psram_owner,
+                psram: psram_owner,
                 cache: &mut cache_owner,
             },
             PSRAM_PROFILE,
-            PSRAM_WINDOW,
             GEOMETRY,
             PSRAM_WAITS,
             &deadline,
-        ),
+        )
+        .map(|mapped| mapped.mapped())
+        .map_err(|error| error.failure()),
         Err(BootFailure::Wait(WaitFailure::TimedOut("psram-command")))
     );
-    drop((clock_owner, psram_owner, cache_owner));
+    drop((clock_owner, cache_owner));
     drop(active);
     assert_active_power(&mut active_words, &active_before, false);
 

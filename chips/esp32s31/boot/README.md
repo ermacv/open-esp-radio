@@ -1,11 +1,14 @@
-# ESP32-S31 boot profiles
+# ESP32-S31 boot binding
 
-This chip binding supplies LP-fast, brownout and TRNG policy to
-`oer-espressif-boot::drivers`. The dependency direction needs its own package:
-profiles use both HAL register value types and family driver types; neither
-chip knowledge nor HAL depends on this binding. LP-fast comes from tracked
-chip/profile facts, generated with the register model's named source.
+The chip's cold-start composition supplies LP-fast, brownout and TRNG profiles
+and `S31: staged_bootstrap::startup::BootProfile`. It binds the root's owned HAL
+parts and existing CPU, PSRAM, cache and flash profiles to the family runner.
+Its Composition role permits that platform wiring; startup order stays in
+`oer-espressif-staged-bootstrap`, and block algorithms in `oer-espressif-boot`.
+Neither HAL nor chip knowledge depends on this binding. LP-fast comes from
+tracked chip/profile facts, generated with the register model's named source.
 
-The bootstrap calls the family drivers with these profiles, retaining its
-existing order, observations, waits and common deadline. HAL owns each port;
-the binding owns no registers and performs no hardware initialization.
+The bootstrap image declares its descriptor, payload and tuning resources and
+calls the family runner. The binding delegates leaf operations to the same
+HAL atoms and family drivers, preserving observations, waits and deadline.
+Runtime adoption remains in the staged runtime and HAL runtime root.
