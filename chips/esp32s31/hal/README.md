@@ -21,13 +21,17 @@ Production files that wait, poll or run on deadlines are a per-file list
 with exact marker counts in `oer-test-layers`
 ([layer tests](../../../tools/test/layers/README.md)): the Bluetooth
 controller engine, scheduler and modem timer, the boot policy and waits in
-`boot`, the Wi-Fi cold start in `ieee80211`, the PHY analog bus and delays in
-`phy`, and the entropy read gap in `peripherals/entropy.rs`. The list only shrinks; no
+`boot`, the Wi-Fi cold start in `ieee80211`, and the entropy read gap in
+`peripherals/entropy.rs`. The list only shrinks; no
 new file joins it. The scan does not find driver code without such a marker:
 the IEEE 802.15.4 lifecycle policy is driver code that this crate still holds.
 Shared radio membership, epoch policy, common power, semantic verification,
 cold-baseline restore and clock refcounts live in `oer-espressif-radio`;
 HAL supplies owned atom ports and affine proofs.
+`oer-espressif-phy` owns analog-I2C power/reset readback decisions, retained-wake
+parallel-host waits, PBus mode/completion order and short settles. PHY calibration
+configuration/restore machines and other cross-block calibration operations
+remain here; the no-wait scan does not classify them as atoms.
 
 For IEEE 802.15.4, `ieee802154::polled` retains task/IRQ owners with `Silent`
 while exposing finite semantic transactions. `ieee802154::frames` owns the

@@ -1708,6 +1708,7 @@ dependencies = [
  "oer-espressif-ieee802154-mac-values",
  "oer-espressif-interrupt-table",
  "oer-espressif-modem-clock",
+ "oer-espressif-phy",
  "oer-espressif-platform-port",
  "oer-espressif-radio",
  "oer-espressif-usb-serial-jtag",
@@ -1827,6 +1828,7 @@ dependencies = [
  "oer-esp32s31-hal",
  "oer-espressif-analog",
  "oer-espressif-interrupt-table",
+ "oer-espressif-phy",
  "oer-memory",
  "oer-time",
  "oer-time-virtual",
@@ -2032,6 +2034,15 @@ dependencies = [
 name = "oer-espressif-modem-clock"
 version = "0.1.0"
 dependencies = [
+ "oer-time",
+ "oer-time-virtual",
+]
+
+[[package]]
+name = "oer-espressif-phy"
+version = "0.1.0"
+dependencies = [
+ "oer-espressif-analog",
  "oer-time",
  "oer-time-virtual",
 ]
@@ -2307,6 +2318,7 @@ dependencies = [
  "oer-espressif-coex",
  "oer-espressif-executor",
  "oer-espressif-ieee80211-policy",
+ "oer-espressif-phy",
  "oer-espressif-staged-runtime",
  "oer-ieee80211-port",
  "oer-ieee80211-upper-mac",

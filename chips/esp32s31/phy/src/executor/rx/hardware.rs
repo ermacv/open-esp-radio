@@ -17,11 +17,15 @@ impl<R: oer_esp32s31_hal::owner::SharedPhyContext> Hardware for R {
             ControlCommand::Registers(enabled) => {
                 crate::hardware::configure_phy_rx_gain_dc_registers(self, enabled)
             }
-            ControlCommand::Debug => pbus::configure_debug_mode(self),
+            ControlCommand::Debug => oer_espressif_phy::pbus::configure_debug_mode(
+                &mut oer_esp32s31_hal::phy::pbus::port(self),
+            ),
             ControlCommand::RxClock(enabled) => pbus::configure_rx_clock(self, enabled),
             ControlCommand::TxClock(enabled) => pbus::configure_tx_clock(self, enabled),
             ControlCommand::WorkMode => {
-                if pbus::configure_work_mode(self) {
+                if oer_espressif_phy::pbus::configure_work_mode(
+                    &mut oer_esp32s31_hal::phy::pbus::port(self),
+                ) {
                     settle::<D>(1)?;
                     agc::configure_pbus_work_mode_pulse(self);
                     settle::<D>(2)?;

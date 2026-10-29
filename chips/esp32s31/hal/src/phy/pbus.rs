@@ -8,13 +8,6 @@ use crate::{
 
 pub mod ops;
 
-/// A PBus command could not be published or completed.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum PbusError {
-    /// The hardware busy bit was set at the single allowed observation.
-    Busy,
-}
-
 /// Apply one finite force-TX/RX phase around its caller-owned delay edge.
 ///
 /// Basis: complete rev0 ROM `phy_force_txrx_off` at `0x2f827bb0`, size
@@ -26,28 +19,6 @@ pub fn configure_force_txrx(registers: &mut impl SharedPhyAccess, enabled: bool,
     ops::set_force_txrx_mode(&mut phy_blocks_mut(registers).phy_pbus, enabled, phase == 0);
 }
 
-/// Enter the PBus debug mode used before force-test transactions.
-///
-/// Basis: complete rev0 ROM `phy_pbus_debugmode` and
-/// `phy_pbus_force_mode(1)`. They clear `MODE.WORK_MODE_ENABLE`, then set
-/// `COMMAND.DEBUG_MODE_ENABLE`, with one fresh read before each write.
-#[cfg(target_arch = "riscv32")]
-pub fn configure_debug_mode(registers: &mut impl SharedPhyAccess) {
-    crate::phy::sequence::pbus_debug_mode(phy_blocks_mut(registers));
-}
-
-/// Enter PBus work mode and sample the optional settle-pulse condition once.
-///
-/// Basis: complete rev0 ROM `phy_pbus_force_mode(0)`. It clears
-/// `COMMAND.DEBUG_MODE_ENABLE`, sets `MODE.WORK_MODE_ENABLE`, and samples the
-/// semantic Wi-Fi-baseband-enable condition. The returned boolean only reports
-/// that instruction-evidenced condition; the delayed pulse itself belongs to
-/// the caller's async transition.
-#[cfg(target_arch = "riscv32")]
-pub fn configure_work_mode(registers: &mut impl SharedPhyContext) -> bool {
-    crate::phy::sequence::pbus_work_mode(phy_blocks_mut(registers))
-}
-
 /// Publish one PBus force-test command before the first busy sample.
 ///
 /// Basis: complete rev0 ROM `phy_pbus_force_test` at `0x2f824228`, size
@@ -56,7 +27,7 @@ pub fn configure_work_mode(registers: &mut impl SharedPhyContext) -> bool {
 /// low eleven bits while composing the command; it does not reject values
 /// above the separately visible nine-bit PBus result window. Like ROM, this
 /// edge publishes first; completion sampling and its finite Rust deadline are
-/// owned by [`try_finish_force_test`].
+/// owned by the family PHY completion driver.
 #[cfg(target_arch = "riscv32")]
 pub fn start_force_test(
     registers: &mut impl SharedPhyAccess,
@@ -70,17 +41,6 @@ pub fn start_force_test(
         path,
         test_value,
     );
-}
-
-/// Observe one force-test completion edge and clear its transaction bit.
-///
-/// Basis: the suffix of complete rev0 ROM `phy_pbus_force_test`. ROM spins
-/// until `STATUS_CLOCK_FORCE.BUSY` clears and then clears
-/// `COMMAND.TRANSACTION_START`; this HAL performs only one observation so the
-/// Rust async owner controls retries and timeout.
-#[cfg(target_arch = "riscv32")]
-pub fn try_finish_force_test(registers: &mut impl SharedPhyAccess) -> Result<(), PbusError> {
-    crate::phy::sequence::finish_pbus_force_test(&mut phy_blocks_mut(registers).phy_pbus)
 }
 
 /// Read the nine-bit packed result selected by the ROM address/shift tables.
@@ -116,4 +76,38 @@ pub fn configure_rx_clock(registers: &mut impl SharedPhyAccess, enabled: bool) {
 #[cfg(target_arch = "riscv32")]
 pub fn configure_tx_clock(registers: &mut impl SharedPhyAccess, enabled: bool) {
     ops::set_tx_clock_pair(&mut phy_blocks_mut(registers).phy_pbus, enabled);
+}
+
+#[cfg(target_arch = "riscv32")]
+/// Exclusive borrowed PBus atoms from the current affine PHY owner.
+pub struct Port<'a, T: ?Sized>(&'a mut T);
+
+#[cfg(target_arch = "riscv32")]
+pub fn port<T: SharedPhyAccess + ?Sized>(owner: &mut T) -> Port<'_, T> {
+    Port(owner)
+}
+
+#[cfg(target_arch = "riscv32")]
+impl<T: SharedPhyAccess + ?Sized> oer_espressif_phy::pbus::PbusAccess for Port<'_, T> {
+    fn set_work_mode(&mut self, enabled: bool) {
+        ops::set_work_mode(&mut phy_blocks_mut(self.0).phy_pbus, enabled);
+    }
+    fn set_debug_mode(&mut self, enabled: bool) {
+        ops::set_debug_mode(&mut phy_blocks_mut(self.0).phy_pbus, enabled);
+    }
+    fn is_busy(&self) -> bool {
+        ops::is_busy(&crate::phy_blocks(self.0).phy_pbus)
+    }
+    fn clear_transaction(&mut self) {
+        ops::clear_transaction(&mut phy_blocks_mut(self.0).phy_pbus);
+    }
+}
+#[cfg(target_arch = "riscv32")]
+impl<T: SharedPhyContext + ?Sized> oer_espressif_phy::pbus::PbusContext for Port<'_, T> {
+    fn wifi_baseband_enabled(&self) -> bool {
+        crate::phy_blocks(self.0)
+            .modem_syscon_radio
+            .read_wifi_bb_cfg()
+            .wifi_enable()
+    }
 }

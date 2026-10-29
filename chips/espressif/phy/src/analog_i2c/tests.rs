@@ -1,9 +1,6 @@
 use std::vec::Vec;
 
-use super::{
-    AnalogI2cPowerAccess, complete_open_i2c_power_and_reset_sequence,
-    prepare_open_i2c_pre_delay_sequence,
-};
+use super::{AnalogI2cPowerAccess, complete_open_i2c_power_and_reset, prepare_open_i2c_pre_delay};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Operation {
@@ -60,7 +57,7 @@ impl AnalogI2cPowerAccess for FakePmu {
 #[test]
 fn pre_delay_retains_both_blob_operations() {
     let mut pmu = FakePmu::new(true, true);
-    prepare_open_i2c_pre_delay_sequence(&mut pmu);
+    prepare_open_i2c_pre_delay(&mut pmu);
     assert_eq!(
         pmu.operations,
         [
@@ -73,7 +70,7 @@ fn pre_delay_retains_both_blob_operations() {
 #[test]
 fn powered_down_i2c_gets_the_complete_assert_release_edge() {
     let mut pmu = FakePmu::new(false, false);
-    complete_open_i2c_power_and_reset_sequence(&mut pmu);
+    complete_open_i2c_power_and_reset(&mut pmu);
     assert_eq!(
         pmu.operations,
         [
@@ -91,7 +88,7 @@ fn powered_down_i2c_gets_the_complete_assert_release_edge() {
 #[test]
 fn already_powered_i2c_only_releases_reset_when_needed() {
     let mut pmu = FakePmu::new(true, false);
-    complete_open_i2c_power_and_reset_sequence(&mut pmu);
+    complete_open_i2c_power_and_reset(&mut pmu);
     assert_eq!(
         pmu.operations,
         [

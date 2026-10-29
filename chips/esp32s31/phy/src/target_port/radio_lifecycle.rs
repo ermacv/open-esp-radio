@@ -251,7 +251,9 @@ fn clear_wake_pbus<D: PhyShortDelay, C: oer_time::Clock + ?Sized>(
     for _ in 0..RF_OPERATION_LIMIT {
         let completion = match transition.action() {
             PhyPbusClearAction::ConfigureDebugMode => {
-                oer_esp32s31_hal::phy::pbus::configure_debug_mode(registers);
+                oer_espressif_phy::pbus::configure_debug_mode(
+                    &mut oer_esp32s31_hal::phy::pbus::port(registers),
+                );
                 PhyPbusClearCompletion::DebugModeConfigured
             }
             PhyPbusClearAction::ForceTest(transaction) => {
@@ -262,7 +264,9 @@ fn clear_wake_pbus<D: PhyShortDelay, C: oer_time::Clock + ?Sized>(
                 }
             }
             PhyPbusClearAction::ConfigureWorkMode => {
-                let settle_required = oer_esp32s31_hal::phy::pbus::configure_work_mode(registers);
+                let settle_required = oer_espressif_phy::pbus::configure_work_mode(
+                    &mut oer_esp32s31_hal::phy::pbus::port(registers),
+                );
                 PhyPbusClearCompletion::WorkModeConfigured { settle_required }
             }
             PhyPbusClearAction::DelayMicros(micros) => {

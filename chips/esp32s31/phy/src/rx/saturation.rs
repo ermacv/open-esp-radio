@@ -258,11 +258,15 @@ impl PhyRxSaturationMmioBinding {
     ) -> PhyRxSaturationCompletion {
         match self.action {
             PhyRxSaturationAction::ConfigureDebugMode => {
-                oer_esp32s31_hal::phy::pbus::configure_debug_mode(registers);
+                oer_espressif_phy::pbus::configure_debug_mode(
+                    &mut oer_esp32s31_hal::phy::pbus::port(registers),
+                );
                 PhyRxSaturationCompletion::DebugModeConfigured
             }
             PhyRxSaturationAction::ConfigureWorkMode => {
-                let _ = oer_esp32s31_hal::phy::pbus::configure_work_mode(registers);
+                let _ = oer_espressif_phy::pbus::configure_work_mode(
+                    &mut oer_esp32s31_hal::phy::pbus::port(registers),
+                );
                 PhyRxSaturationCompletion::WorkModeConfigured
             }
             _ => unreachable!(),

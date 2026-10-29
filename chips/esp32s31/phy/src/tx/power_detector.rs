@@ -834,7 +834,9 @@ impl PhyPwdetMmioBinding {
     ) -> PhyPwdetCompletion {
         match self.action {
             PhyPwdetAction::ConfigurePbusDebugMode => {
-                oer_esp32s31_hal::phy::pbus::configure_debug_mode(registers);
+                oer_espressif_phy::pbus::configure_debug_mode(
+                    &mut oer_esp32s31_hal::phy::pbus::port(registers),
+                );
                 PhyPwdetCompletion::PbusDebugModeConfigured
             }
             PhyPwdetAction::ConfigureTxClock { enabled } => {
@@ -904,7 +906,9 @@ impl PhyPwdetMmioBinding {
                 PhyPwdetCompletion::ToneStopped
             }
             PhyPwdetAction::ConfigurePbusWorkMode => PhyPwdetCompletion::PbusWorkModeConfigured {
-                settle_required: oer_esp32s31_hal::phy::pbus::configure_work_mode(registers),
+                settle_required: oer_espressif_phy::pbus::configure_work_mode(
+                    &mut oer_esp32s31_hal::phy::pbus::port(registers),
+                ),
             },
             PhyPwdetAction::ConfigurePbusWorkModePulse => {
                 oer_esp32s31_hal::phy::agc::configure_pbus_work_mode_pulse(registers);

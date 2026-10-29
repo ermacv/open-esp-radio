@@ -1482,7 +1482,9 @@ impl PhyTxCalibrationEnvironmentMmioBinding {
     ) -> PhyTxCalibrationEnvironmentCompletion {
         match self.action {
             PhyTxCalibrationEnvironmentAction::ConfigurePbusDebugMode => {
-                oer_esp32s31_hal::phy::pbus::configure_debug_mode(registers);
+                oer_espressif_phy::pbus::configure_debug_mode(
+                    &mut oer_esp32s31_hal::phy::pbus::port(registers),
+                );
                 PhyTxCalibrationEnvironmentCompletion::PbusDebugModeConfigured
             }
             PhyTxCalibrationEnvironmentAction::ConfigureTxClock { enabled } => {
@@ -1503,7 +1505,9 @@ impl PhyTxCalibrationEnvironmentMmioBinding {
             }
             PhyTxCalibrationEnvironmentAction::ConfigurePbusWorkMode => {
                 PhyTxCalibrationEnvironmentCompletion::PbusWorkModeConfigured {
-                    settle_required: oer_esp32s31_hal::phy::pbus::configure_work_mode(registers),
+                    settle_required: oer_espressif_phy::pbus::configure_work_mode(
+                        &mut oer_esp32s31_hal::phy::pbus::port(registers),
+                    ),
                 }
             }
             PhyTxCalibrationEnvironmentAction::ConfigurePbusWorkModePulse => {

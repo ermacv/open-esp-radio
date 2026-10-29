@@ -815,7 +815,9 @@ impl PhyTxDcPwdetTransition {
 
         oer_esp32s31_hal::phy::pbus::configure_tx_clock(physical.hardware(), true);
         oer_esp32s31_hal::phy::power_detector::configure_enabled(physical.hardware());
-        oer_esp32s31_hal::phy::pbus::configure_debug_mode(physical.hardware());
+        oer_espressif_phy::pbus::configure_debug_mode(&mut oer_esp32s31_hal::phy::pbus::port(
+            physical.hardware(),
+        ));
 
         let mut terminal = RootTerminal::Complete;
         for index in 0..5 {
@@ -923,7 +925,9 @@ impl PhyTxDcPwdetTransition {
             0x80,
             0x78,
         );
-        if oer_esp32s31_hal::phy::pbus::configure_work_mode(physical.hardware()) {
+        if oer_espressif_phy::pbus::configure_work_mode(&mut oer_esp32s31_hal::phy::pbus::port(
+            physical.hardware(),
+        )) {
             settle(crate::executor::wait::tx::Scope::Root, 1)?;
             oer_esp32s31_hal::phy::agc::configure_pbus_work_mode_pulse(physical.hardware());
             settle(crate::executor::wait::tx::Scope::Root, 2)?;
@@ -1334,7 +1338,9 @@ impl PhyTxDcPwdetMmioBinding {
                 Ok(PhyTxDcPwdetCompletion::PowerDetectorConfigured)
             }
             PhyTxDcPwdetAction::ConfigurePbusDebugMode => {
-                oer_esp32s31_hal::phy::pbus::configure_debug_mode(registers);
+                oer_espressif_phy::pbus::configure_debug_mode(
+                    &mut oer_esp32s31_hal::phy::pbus::port(registers),
+                );
                 Ok(PhyTxDcPwdetCompletion::PbusDebugModeConfigured)
             }
             PhyTxDcPwdetAction::ReadPbus { selector, path } => {
@@ -1370,7 +1376,9 @@ impl PhyTxDcPwdetMmioBinding {
             }
             PhyTxDcPwdetAction::ConfigurePbusWorkMode => {
                 Ok(PhyTxDcPwdetCompletion::PbusWorkModeConfigured {
-                    settle_required: oer_esp32s31_hal::phy::pbus::configure_work_mode(registers),
+                    settle_required: oer_espressif_phy::pbus::configure_work_mode(
+                        &mut oer_esp32s31_hal::phy::pbus::port(registers),
+                    ),
                 })
             }
             PhyTxDcPwdetAction::ConfigurePbusWorkModePulse => {

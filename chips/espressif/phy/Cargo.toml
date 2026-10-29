@@ -1,0 +1,18 @@
+[package]
+name = "oer-espressif-phy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0"
+repository.workspace = true
+description = "Family PHY analog and PBus operations over owned register ports"
+
+[dependencies]
+oer-espressif-analog = { path = "../analog" }
+
+[dev-dependencies]
+oer-time = { path = "../../../portable/time" }
+oer-time-virtual = { path = "../../../portable/time-virtual" }
+
+[lints]
+workspace = true

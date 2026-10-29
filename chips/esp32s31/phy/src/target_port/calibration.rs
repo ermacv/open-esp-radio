@@ -26,7 +26,7 @@ pub fn clear_pbus<D: PhyShortDelay, O: PhyTargetObserver, C: oer_time::Clock + ?
     _observer: &mut O,
 ) -> Result<PhyCalibrationTrackingCompletion, PhyTargetPortError> {
     use crate::analog::pbus::{PhyPbusClearAction as Action, PhyPbusClearCompletion as Completion};
-    use oer_esp32s31_hal::phy::{agc, pbus};
+    use oer_esp32s31_hal::phy::agc;
 
     // Keep the admitted child and its exact command/settle order. This small
     // runtime child does not need the cold-init action/completion envelopes.
@@ -37,7 +37,9 @@ pub fn clear_pbus<D: PhyShortDelay, O: PhyTargetObserver, C: oer_time::Clock + ?
         };
         let completion = match child.action() {
             Action::ConfigureDebugMode => {
-                pbus::configure_debug_mode(registers);
+                oer_espressif_phy::pbus::configure_debug_mode(
+                    &mut oer_esp32s31_hal::phy::pbus::port(registers),
+                );
                 Completion::DebugModeConfigured
             }
             Action::ForceTest(transaction) => {
@@ -48,7 +50,9 @@ pub fn clear_pbus<D: PhyShortDelay, O: PhyTargetObserver, C: oer_time::Clock + ?
                 }
             }
             Action::ConfigureWorkMode => Completion::WorkModeConfigured {
-                settle_required: pbus::configure_work_mode(registers),
+                settle_required: oer_espressif_phy::pbus::configure_work_mode(
+                    &mut oer_esp32s31_hal::phy::pbus::port(registers),
+                ),
             },
             Action::DelayMicros(micros) => {
                 short_settle::<D>(micros)?;

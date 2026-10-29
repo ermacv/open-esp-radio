@@ -3,8 +3,8 @@
 //! The PAC renders the analog-I²C vocabulary (identities, fields, routes)
 //! and the master's registers. [`commands`] holds the recovered command
 //! tables, [`master`] the bus driver over the master. This module owns the
-//! multi-command configuration and Bluetooth TX-power phase machines, the
-//! bounded retained-wake polling loop and the Bluetooth restore obligation.
+//! calibration configuration and Bluetooth TX-power phase machines and the
+//! Bluetooth restore obligation; parallel-host waits belong to the family PHY.
 
 pub use oer_esp32s31_pac::analog_i2c::{
     self as analog_i2c, Address, CAPTURE, Field, Host, Profile, Route, route,
@@ -16,7 +16,7 @@ pub mod master;
 pub use commands::{
     BluetoothTxPowerControlRegister, PhyAdcRate, PhyFilterDcapInputs, PhyI2cAccessError,
     PhyI2cCommandMemoryInputs, PhyI2cConfigurationCommand, PhyI2cConfigurationOperation,
-    PhyI2cInitializationStageOneInputs, PhyI2cParallelWrite,
+    PhyI2cInitializationStageOneInputs,
 };
 pub use master::AnalogBus;
 
@@ -29,83 +29,6 @@ use crate::{
     phy_blocks, phy_blocks_mut,
 };
 use oer_mmio::Placement;
-
-/// One finite failure while publishing current-vendor retained-wake analog
-/// initialization through both PHY-I²C hosts.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum PhyI2cInitializationStageTwoError {
-    Transition(oer_espressif_analog::TransitionError),
-    BusyAtStart { host: Host },
-    CompletionTimeout { host: Host, pair: u8 },
-}
-
-trait PhyI2cParallelAccess {
-    fn select_parallel_host_map(&mut self);
-    fn restore_radio_host_map(&mut self);
-    fn is_busy(&self, host: Host) -> bool;
-    fn start_pair(&mut self, pair: PhyI2cParallelWrite);
-}
-
-async fn configure_initialization_stage_two_with(
-    access: &mut impl PhyI2cParallelAccess,
-    inputs: PhyI2cCommandMemoryInputs,
-    maximum_observations: u32,
-    mut wait: impl AsyncFnMut(),
-) -> Result<(), PhyI2cInitializationStageTwoError> {
-    use oer_espressif_analog::{ParallelAction, ParallelHost, ParallelTransition};
-    let host = |host| match host {
-        ParallelHost::First => Host::Host0,
-        ParallelHost::Second => Host::Host1,
-    };
-    let mut transition =
-        ParallelTransition::new(|index| inputs.initialization_stage_two_pair(index));
-    let mut result = Ok(());
-    loop {
-        match transition.action() {
-            ParallelAction::SelectParallelMap => {
-                access.select_parallel_host_map();
-                // Both hosts must be idle before the first pair starts.
-                if let Some(busy) = [Host::Host0, Host::Host1]
-                    .into_iter()
-                    .find(|host| access.is_busy(*host))
-                {
-                    result = Err(PhyI2cInitializationStageTwoError::BusyAtStart { host: busy });
-                    break;
-                }
-            }
-            ParallelAction::StartPair(pair) => access.start_pair(pair),
-            ParallelAction::AwaitIdle(parallel_host) => {
-                let awaited = host(parallel_host);
-                let mut observations = 0;
-                while access.is_busy(awaited) {
-                    if observations == maximum_observations {
-                        result = Err(PhyI2cInitializationStageTwoError::CompletionTimeout {
-                            host: awaited,
-                            pair: transition.pair_index().unwrap_or(0) as u8,
-                        });
-                        break;
-                    }
-                    observations += 1;
-                    wait().await;
-                }
-                if result.is_err() {
-                    break;
-                }
-            }
-            ParallelAction::RestoreMap | ParallelAction::Complete => break,
-        }
-        if let Err(error) = transition.advance() {
-            result = Err(PhyI2cInitializationStageTwoError::Transition(error));
-            break;
-        }
-    }
-
-    // The vendor leaf restores the normal 0x3fa0 host field after the
-    // parallel sequence. OER also restores it on finite failure so diagnostic
-    // access remains well-defined; the outer RF-wake epoch still fails closed.
-    access.restore_radio_host_map();
-    result
-}
 
 /// Current externally driven edge of a PHY-I²C configuration.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -604,28 +527,9 @@ pub fn observe_bluetooth_tx_power_control(
     transaction.observe_with(&mut BluetoothTxPowerPort { bus, restore })
 }
 
-/// Run the complete 22-pair current-vendor retained-wake analog-I²C stage.
-///
-/// Each busy observation awaits `wait` before another read. The caller supplies
-/// a cooperative timer wait; both observation budgets are finite. The normal
-/// host map is restored on success and finite error. Cancellation leaves the
-/// current hardware epoch with its owner; it does not prove completion.
-pub async fn configure_initialization_stage_two(
-    registers: &mut impl SharedPhyAccess,
-    inputs: PhyI2cCommandMemoryInputs,
-    maximum_observations: u32,
-    wait: impl AsyncFnMut(),
-) -> Result<(), PhyI2cInitializationStageTwoError> {
-    configure_initialization_stage_two_with(
-        &mut AnalogBus::new(&mut phy_blocks_mut(registers).i2c_ana_mst),
-        inputs,
-        maximum_observations,
-        wait,
-    )
-    .await
-}
+impl<P: Placement> oer_espressif_phy::i2c::PhyI2cParallelAccess for AnalogBus<'_, P> {
+    type Pair = oer_espressif_phy::i2c::PhyI2cParallelWrite<Address>;
 
-impl<P: Placement> PhyI2cParallelAccess for AnalogBus<'_, P> {
     fn select_parallel_host_map(&mut self) {
         AnalogBus::select_parallel_host_map(self);
     }
@@ -638,7 +542,7 @@ impl<P: Placement> PhyI2cParallelAccess for AnalogBus<'_, P> {
         AnalogBus::is_busy(self, host)
     }
 
-    fn start_pair(&mut self, pair: PhyI2cParallelWrite) {
+    fn start_pair(&mut self, pair: Self::Pair) {
         AnalogBus::start_parallel_pair(self, pair);
     }
 }
@@ -786,3 +690,12 @@ pub fn configure_command_memory(
 
 #[cfg(test)]
 mod tests;
+
+/// Lend the owned master atoms for the retained-wake family driver.
+pub fn parallel_port(
+    registers: &mut impl SharedPhyAccess,
+) -> impl oer_espressif_phy::i2c::PhyI2cParallelAccess<
+    Pair = oer_espressif_phy::i2c::PhyI2cParallelWrite<Address>,
+> + '_ {
+    AnalogBus::new(&mut phy_blocks_mut(registers).i2c_ana_mst)
+}

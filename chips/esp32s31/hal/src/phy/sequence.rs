@@ -5,7 +5,6 @@ use super::{
     baseband::ops as bb,
     frequency::ops as frequency,
     memory::ops as memory,
-    pbus::{PbusError, ops as pbus},
     power_detector::platform,
     registers::{RadioPhyParts, RadioPhyRegisters, RadioPlacement},
     restore::{PhyRouteState, TxDcPwdetLifecycleError},
@@ -67,25 +66,6 @@ pub(crate) fn configure_bss_cbw<P: RadioPlacement>(parts: &mut RadioPhyParts<P>,
 pub(crate) fn observe_software_frequency_boundary<P: RadioPlacement>(phy: &RadioPhyRegisters<P>) {
     let _ = phy.sample_sdm_deadline_counter();
     frequency::observe_software_frequency_boundary(&phy.peripherals.phy_frequency_channel_oracle);
-}
-// SOURCE: ROM_REV0_PHY_PBUS. Keep the observation after both writes.
-pub(crate) fn pbus_debug_mode<P: RadioPlacement>(parts: &mut RadioPhyParts<P>) {
-    pbus::set_work_mode(&mut parts.phy_pbus, false);
-    pbus::set_debug_mode(&mut parts.phy_pbus, true);
-}
-pub(crate) fn pbus_work_mode<P: RadioPlacement>(parts: &mut RadioPhyParts<P>) -> bool {
-    pbus::set_debug_mode(&mut parts.phy_pbus, false);
-    pbus::set_work_mode(&mut parts.phy_pbus, true);
-    parts.modem_syscon_radio.read_wifi_bb_cfg().wifi_enable()
-}
-pub(crate) fn finish_pbus_force_test<P: oer_mmio::Placement>(
-    registers: &mut oer_esp32s31_pac::fe::PhyPbus<P>,
-) -> Result<(), PbusError> {
-    if pbus::is_busy(registers) {
-        return Err(PbusError::Busy);
-    }
-    pbus::clear_transaction(registers);
-    Ok(())
 }
 // SOURCE: ROM_REV0_PHY_POWER_DETECTOR. Refuse an overlapping restore before any MMIO.
 pub(crate) fn initialize_power_detector<P: RadioPlacement>(

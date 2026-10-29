@@ -1607,7 +1607,9 @@ impl PhyTxIqMmioBinding {
                 Ok(PhyTxIqCalibrationCompletion::CorrectionConfigured { begin })
             }
             PhyTxIqCalibrationAction::ConfigurePbusDebugMode => {
-                oer_esp32s31_hal::phy::pbus::configure_debug_mode(registers);
+                oer_espressif_phy::pbus::configure_debug_mode(
+                    &mut oer_esp32s31_hal::phy::pbus::port(registers),
+                );
                 Ok(PhyTxIqCalibrationCompletion::PbusDebugModeConfigured)
             }
             PhyTxIqCalibrationAction::PrepareToneControlRestore => {

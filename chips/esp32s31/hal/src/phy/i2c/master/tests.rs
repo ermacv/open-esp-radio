@@ -155,9 +155,10 @@ fn a_parallel_pair_starts_host_zero_then_host_one_and_the_map_is_restored() {
     let mut master = I2cAnaMst::host(&mut words).expect("memory holds the block");
     let mut bus = AnalogBus::new(&mut master);
     bus.select_parallel_host_map();
-    let pair = super::super::PhyI2cCommandMemoryInputs::new(0x11, 0x22, 0x33, 0x3e, 0x55, 0x66)
-        .initialization_stage_two_pair(0)
-        .expect("the first pair exists");
+    let pair = oer_espressif_phy::i2c::PhyI2cParallelWrite {
+        first: (analog_i2c::txrf::tx_capacitor_low::ADDRESS, 0x73),
+        second: (analog_i2c::bbtop::rf_close_control::ADDRESS, 0x27),
+    };
     bus.start_parallel_pair(pair);
     assert!(!bus.is_busy(Host::Host0) && !bus.is_busy(Host::Host1));
     drop(master);
