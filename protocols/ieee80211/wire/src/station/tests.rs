@@ -1,6 +1,7 @@
 use super::*;
 use crate::security::{AssociationAkm, AssociationSecurity, Pmkid, SaePwe, Spp};
 use crate::sequence::seq;
+use oer_network::ETHERNET_HEADER_LEN;
 
 const LOCAL: [u8; 6] = [0x02, 0, 0, 0x12, 0x34, 0x56];
 const BSSID: [u8; 6] = [0x30, 0x05, 0x5c, 0x11, 0x22, 0x33];

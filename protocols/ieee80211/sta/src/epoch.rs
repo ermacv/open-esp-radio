@@ -16,6 +16,12 @@ pub struct EpochContext<Path: PoolPath, D> {
 }
 
 impl<'p, Path: PoolPath> LinkEpoch<'p, Path> {
+    /// Read-only publication identity for a neutral network port. This does
+    /// not grant permission to construct a branded station epoch.
+    pub const fn sequence(self) -> u64 {
+        self.sequence
+    }
+
     /// Enclose this epoch and its data for an opaque backend context.
     pub fn context<D>(self, data: D) -> PortContext<'p, Path::Identity, EpochContext<Path, D>> {
         PortContext::new(EpochContext {

@@ -11,16 +11,18 @@
 //! group available for another observation, including after one child stops.
 
 use core::{
-    future::Future,
-    sync::atomic::{AtomicU8, Ordering},
+    future::{Future, poll_fn},
+    sync::atomic::{AtomicBool, AtomicU8, Ordering},
+    task::Poll,
 };
 
+use crate::{Duration, Timer};
 use embassy_futures::{
     join::join,
     select::{Either, select},
 };
-use embassy_sync::{blocking_mutex::raw::RawMutex, signal::Signal};
-use oer_time::{Duration, Timer};
+use oer_memory::ClaimCell;
+use oer_sync::PriorityWaker;
 
 const IDLE: u8 = 0;
 const ACTIVE: u8 = 1;
@@ -133,21 +135,24 @@ pub enum ConnectedTaskControlError {
     Poisoned,
 }
 
-/// Reusable signal storage for one sequential executor task.
+/// Reusable lock-free storage for one sequential executor task on one hart.
 ///
 /// Only a completed task endpoint followed by consumption of its returned
 /// owner restores `Idle`. Retirement clears that epoch's stop signal before
 /// publishing `Idle`, including stops issued after the endpoint completed.
 /// There is deliberately no safe reset operation.
-pub struct ConnectedTaskControlResources<M: RawMutex, S> {
-    stop: Signal<M, ()>,
-    stopped: Signal<M, S>,
+pub struct ConnectedTaskControlResources<S> {
+    stop: AtomicBool,
+    stop_waker: PriorityWaker,
+    stopped: ClaimCell<Option<S>>,
+    stopped_waker: PriorityWaker,
     state: AtomicU8,
+    initialized: AtomicBool,
 }
 
-pub type ConnectedTaskEndpoints<'resources, M, S> = (
-    ConnectedTaskController<'resources, M, S>,
-    ConnectedTaskEndpoint<'resources, M, S>,
+pub type ConnectedTaskEndpoints<'resources, S> = (
+    ConnectedTaskController<'resources, S>,
+    ConnectedTaskEndpoint<'resources, S>,
 );
 
 /// A task-control epoch reserved before any driver owner is decomposed.
@@ -155,13 +160,13 @@ pub type ConnectedTaskEndpoints<'resources, M, S> = (
 /// Keeping both endpoints together permits an infallible rollback while no
 /// executor task has observed either capability. Once `into_endpoints` is
 /// called, ordinary controller/endpoint shutdown rules apply.
-pub struct ConnectedTaskReservation<'resources, M: RawMutex, S> {
-    controller: ConnectedTaskController<'resources, M, S>,
-    endpoint: ConnectedTaskEndpoint<'resources, M, S>,
+pub struct ConnectedTaskReservation<'resources, S> {
+    controller: ConnectedTaskController<'resources, S>,
+    endpoint: ConnectedTaskEndpoint<'resources, S>,
 }
 
-impl<'resources, M: RawMutex, S> ConnectedTaskReservation<'resources, M, S> {
-    pub fn into_endpoints(self) -> ConnectedTaskEndpoints<'resources, M, S> {
+impl<'resources, S> ConnectedTaskReservation<'resources, S> {
+    pub fn into_endpoints(self) -> ConnectedTaskEndpoints<'resources, S> {
         (self.controller, self.endpoint)
     }
 
@@ -176,32 +181,43 @@ impl<'resources, M: RawMutex, S> ConnectedTaskReservation<'resources, M, S> {
     }
 }
 
-impl<M: RawMutex, S> ConnectedTaskControlResources<M, S> {
+impl<S> ConnectedTaskControlResources<S> {
     pub const fn new() -> Self {
         Self {
-            stop: Signal::new(),
-            stopped: Signal::new(),
+            stop: AtomicBool::new(false),
+            stop_waker: PriorityWaker::new(),
+            stopped: ClaimCell::new(),
+            stopped_waker: PriorityWaker::new(),
             state: AtomicU8::new(IDLE),
+            initialized: AtomicBool::new(false),
         }
     }
 
     /// Create exactly one parent/task capability pair for a fresh epoch.
-    pub fn split(&self) -> Result<ConnectedTaskEndpoints<'_, M, S>, ConnectedTaskControlError> {
+    pub fn split(&self) -> Result<ConnectedTaskEndpoints<'_, S>, ConnectedTaskControlError> {
         match self
             .state
             .compare_exchange(IDLE, ACTIVE, Ordering::AcqRel, Ordering::Acquire)
         {
-            Ok(_) => Ok((
-                ConnectedTaskController {
-                    resources: self,
-                    completed: false,
-                    stopped: None,
-                },
-                ConnectedTaskEndpoint {
-                    resources: self,
-                    completed: false,
-                },
-            )),
+            Ok(_) => {
+                if !self.initialized.swap(true, Ordering::AcqRel)
+                    && self.stopped.install(None).is_err()
+                {
+                    self.state.store(POISONED, Ordering::Release);
+                    return Err(ConnectedTaskControlError::Poisoned);
+                }
+                Ok((
+                    ConnectedTaskController {
+                        resources: self,
+                        completed: false,
+                        stopped: None,
+                    },
+                    ConnectedTaskEndpoint {
+                        resources: self,
+                        completed: false,
+                    },
+                ))
+            }
             Err(ACTIVE) => Err(ConnectedTaskControlError::Active),
             Err(_) => Err(ConnectedTaskControlError::Poisoned),
         }
@@ -209,7 +225,7 @@ impl<M: RawMutex, S> ConnectedTaskControlResources<M, S> {
 
     /// Reserve both sides of a future task epoch before moving any related
     /// DMA, IRQ or protocol owner.
-    pub fn reserve(&self) -> Result<ConnectedTaskReservation<'_, M, S>, ConnectedTaskControlError> {
+    pub fn reserve(&self) -> Result<ConnectedTaskReservation<'_, S>, ConnectedTaskControlError> {
         let (controller, endpoint) = self.split()?;
         Ok(ConnectedTaskReservation {
             controller,
@@ -233,32 +249,42 @@ impl<M: RawMutex, S> ConnectedTaskControlResources<M, S> {
     }
 }
 
-impl<M: RawMutex, S> Default for ConnectedTaskControlResources<M, S> {
+impl<S> Default for ConnectedTaskControlResources<S> {
     fn default() -> Self {
         Self::new()
     }
 }
 
 /// Parent-side capability: request stop and recover the returned owner.
-pub struct ConnectedTaskController<'resources, M: RawMutex, S> {
-    resources: &'resources ConnectedTaskControlResources<M, S>,
+pub struct ConnectedTaskController<'resources, S> {
+    resources: &'resources ConnectedTaskControlResources<S>,
     completed: bool,
     /// Returned ownership lives here across every cancelled observation.
     stopped: Option<S>,
 }
 
-impl<M: RawMutex, S> ConnectedTaskGroup for ConnectedTaskController<'_, M, S> {
+impl<S> ConnectedTaskGroup for ConnectedTaskController<'_, S> {
     type Stopped = S;
 
     fn request_stop(&mut self) {
         if !self.completed {
-            self.resources.stop.signal(());
+            self.resources.stop.store(true, Ordering::Release);
+            self.resources.stop_waker.wake();
         }
     }
 
     async fn wait_stopped(&mut self) {
         if self.stopped.is_none() {
-            self.stopped = Some(self.resources.stopped.wait().await);
+            self.stopped = Some(
+                poll_fn(|cx| {
+                    self.resources.stopped_waker.register(cx.waker());
+                    match self.resources.stopped.lend(Option::take) {
+                        Ok(Some(owner)) => Poll::Ready(owner),
+                        Ok(None) | Err(_) => Poll::Pending,
+                    }
+                })
+                .await,
+            );
         }
     }
 
@@ -270,13 +296,13 @@ impl<M: RawMutex, S> ConnectedTaskGroup for ConnectedTaskController<'_, M, S> {
         // The endpoint has been consumed and its destructor disarmed.
         // This controller is consumed too; observation alone kept it active.
         self.completed = true;
-        self.resources.stop.reset();
+        self.resources.stop.store(false, Ordering::Release);
         self.resources.state.store(IDLE, Ordering::Release);
         Ok(stopped)
     }
 }
 
-impl<M: RawMutex, S> Drop for ConnectedTaskController<'_, M, S> {
+impl<S> Drop for ConnectedTaskController<'_, S> {
     fn drop(&mut self) {
         if !self.completed {
             self.resources.poison_active();
@@ -285,24 +311,43 @@ impl<M: RawMutex, S> Drop for ConnectedTaskController<'_, M, S> {
 }
 
 /// Task-side capability: observe stop and return the exact stopped owner.
-pub struct ConnectedTaskEndpoint<'resources, M: RawMutex, S> {
-    resources: &'resources ConnectedTaskControlResources<M, S>,
+pub struct ConnectedTaskEndpoint<'resources, S> {
+    resources: &'resources ConnectedTaskControlResources<S>,
     completed: bool,
 }
 
-impl<M: RawMutex, S> ConnectedTaskEndpoint<'_, M, S> {
+impl<S> ConnectedTaskEndpoint<'_, S> {
     pub fn wait_for_stop(&self) -> impl Future<Output = ()> + '_ {
-        self.resources.stop.wait()
+        poll_fn(|cx| {
+            self.resources.stop_waker.register(cx.waker());
+            if self.resources.stop.load(Ordering::Acquire) {
+                Poll::Ready(())
+            } else {
+                Poll::Pending
+            }
+        })
     }
 
     /// Consume the task endpoint and publish its exact stopped owner.
-    pub fn complete(mut self, stopped: S) {
-        self.completed = true;
-        self.resources.stopped.signal(stopped);
+    pub fn complete(mut self, stopped: S) -> Result<(), S> {
+        let mut owner = Some(stopped);
+        let _publication = self.resources.stopped.lend(|slot| {
+            if slot.is_none() {
+                *slot = owner.take();
+            }
+        });
+        match owner {
+            Some(owner) => Err(owner),
+            None => {
+                self.completed = true;
+                self.resources.stopped_waker.wake();
+                Ok(())
+            }
+        }
     }
 }
 
-impl<M: RawMutex, S> Drop for ConnectedTaskEndpoint<'_, M, S> {
+impl<S> Drop for ConnectedTaskEndpoint<'_, S> {
     fn drop(&mut self) {
         if !self.completed {
             self.resources.poison_active();
@@ -368,11 +413,3 @@ where
         Either::Second(()) => ConnectedTaskStopAttempt::Pending { waited: timeout },
     }
 }
-
-#[cfg(test)]
-#[allow(
-    clippy::disallowed_macros,
-    clippy::disallowed_methods,
-    clippy::arithmetic_side_effects
-)]
-mod tests;

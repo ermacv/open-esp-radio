@@ -7,12 +7,13 @@
 //! before accessing fields; variable information elements remain borrowed slices.
 
 use crate::frame::{FrameControlFields, FrameType};
+use oer_network::ETHERNET_HEADER_LEN;
 
 use crate::{
     block_ack::{BlockAckAction, parse_block_ack_action},
     ccmp::CCMP_HEADER_LEN,
     channel::{Band, Channel},
-    data::{DataInterfaceRole, ETHERNET_HEADER_LEN, plan_data_encapsulation},
+    data::{DataInterfaceRole, plan_data_encapsulation},
     ht::{
         HT_CAPABILITY_IE_LEN, HT_OPERATION_IE_LEN, HtPeerCapabilities, ht_capability_ie_for_peer,
         ht_operation_ie, ht_peer_capabilities,

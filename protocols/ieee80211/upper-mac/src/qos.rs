@@ -4,13 +4,13 @@
 //! and the header fields read here are the formats of `oer_ieee80211_wire`.
 
 use oer_ieee80211_wire::{
-    data::ETHERNET_HEADER_LEN,
     ethertype::{ETHER_TYPE_IPV4, ETHER_TYPE_IPV6, ETHER_TYPE_PROVIDER_VLAN, ETHER_TYPE_VLAN},
     qos::{
         DsField, Dscp, Ipv4VersionIhl, Ipv6HeaderPrefix, VlanTci, WmmAccessCategory,
         WmmUserPriority,
     },
 };
+use oer_network::ETHERNET_HEADER_LEN;
 
 /// Next lower access category used when the requested AC requires an
 /// admission which the station does not own.

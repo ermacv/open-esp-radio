@@ -1,7 +1,8 @@
 //! Checked Ethernet-II storage at the network queue boundary.
 
-use oer_ieee80211_wire::data::{ETHERNET_HEADER_LEN, EthernetFrameParts};
+use oer_ieee80211_wire::data::EthernetFrameParts;
 use oer_ieee80211_wire::qos::WmmUserPriority;
+use oer_network::ETHERNET_HEADER_LEN;
 
 /// Maximum Ethernet-II payload stored by one network queue slot.
 pub const MAX_ETHERNET_PAYLOAD_LEN: usize = 1500;
@@ -86,6 +87,34 @@ impl EthernetFrame {
     pub fn length(&self) -> usize {
         // The payload is bounded by MAX_ETHERNET_PAYLOAD_LEN.
         self.parts().length()
+    }
+}
+
+impl oer_network::EthernetFrame for EthernetFrame {
+    fn view(&self) -> Result<oer_network::EthernetFrameView<'_>, oer_network::FrameLengthError> {
+        let parts = self.parts();
+        Ok(oer_network::EthernetFrameView {
+            destination: parts.destination,
+            source: parts.source,
+            ether_type: parts.ether_type,
+            payload: parts.payload,
+        })
+    }
+}
+
+impl TxMsdu {
+    /// Copy a neutral network frame into this station's checked queue owner.
+    /// UP0 preserves the network port's default user priority.
+    pub fn from_network(frame: oer_network::EthernetFrameView<'_>) -> Result<Self, FrameTooLong> {
+        Ok(Self {
+            priority: WmmUserPriority::UP0,
+            frame: EthernetFrame::from_parts(EthernetFrameParts {
+                destination: frame.destination,
+                source: frame.source,
+                ether_type: frame.ether_type,
+                payload: frame.payload,
+            })?,
+        })
     }
 }
 

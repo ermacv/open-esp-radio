@@ -11,11 +11,11 @@ reason = "Replacing DeferredEapol owns pending M3/GM1 requests while AES key unw
 ceiling_bytes = 4912
 
 [[frame_exceptions.runtime]]
-function = "oer_ieee80211_runtime::station_service::retain_after_event_end::<oer_firmware_apps_w3::station::StationComposition<oer_radio_port::identity::StaticId<oer_firmware_apps_w3::radio::slot::Declaration>>>"
+function = "oer_ieee80211_runtime::station::retain_after_event_end::<oer_firmware_apps_w3::station::StationComposition<oer_radio_port::identity::StaticId<oer_firmware_apps_w3::radio::slot::Declaration>>>"
 reason = "The static stream-end terminal handler seals unexpected owners in ContractFault/TerminalCustody and returns the original owner when that bank is full."
 ceiling_bytes = 6960
 
 [[frame_exceptions.runtime]]
-function = "<oer_ieee80211_runtime::station_service::ServiceState<oer_firmware_apps_w3::station::StationComposition<oer_radio_port::identity::StaticId<oer_firmware_apps_w3::radio::slot::Declaration>>, oer_firmware_apps_w3::station::Callbacks, oer_firmware_apps_w3::station::Rates, 1>>::disable::<oer_embassy_time::EmbassyClock>::{closure#0}"
+function = "<oer_ieee80211_runtime::station::ServiceState<oer_firmware_apps_w3::station::StationComposition<oer_radio_port::identity::StaticId<oer_firmware_apps_w3::radio::slot::Declaration>>, oer_firmware_apps_w3::station::Callbacks, oer_firmware_apps_w3::station::Rates, 1>>::disable::<oer_embassy_time::EmbassyClock>::{closure#0}"
 reason = "The disable poll combines the former owner poll and terminal-routing sink frame so their terminal/fault temporaries can share storage."
 ceiling_bytes = 7376

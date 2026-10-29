@@ -1,24 +1,29 @@
+#![cfg(feature = "connected-tasks")]
+#![allow(
+    clippy::disallowed_macros,
+    clippy::disallowed_methods,
+    clippy::arithmetic_side_effects
+)]
 use core::{
     future::pending,
     task::{Context, Poll, Waker},
 };
 
 use embassy_futures::block_on;
-use embassy_sync::blocking_mutex::raw::NoopRawMutex;
 
-use super::*;
+use oer_time::{Duration, connected_tasks::*};
 
 #[test]
 fn retired_epoch_does_not_leave_a_stop_for_its_successor() {
     for consume_stop in [false, true] {
         for repeat_stop in [false, true] {
-            let resources = ConnectedTaskControlResources::<NoopRawMutex, u32>::new();
+            let resources = ConnectedTaskControlResources::<u32>::new();
             let (mut old, first) = resources.split().unwrap();
             old.request_stop();
             if consume_stop {
                 block_on(first.wait_for_stop());
             }
-            first.complete(11);
+            assert!(first.complete(11).is_ok());
             block_on(old.wait_stopped());
             if repeat_stop {
                 block_on(stop_connected_task_group(&mut old));
@@ -29,7 +34,7 @@ fn retired_epoch_does_not_leave_a_stop_for_its_successor() {
             assert!(poll_once(second.wait_for_stop()).is_pending());
             current.request_stop();
             assert!(poll_once(second.wait_for_stop()).is_ready());
-            second.complete(22);
+            assert!(second.complete(22).is_ok());
             block_on(current.wait_stopped());
             assert_eq!(current.try_finish().ok().unwrap(), 22);
         }
@@ -38,9 +43,9 @@ fn retired_epoch_does_not_leave_a_stop_for_its_successor() {
 
 #[test]
 fn completion_without_a_stop_and_repeated_observation_retire_cleanly() {
-    let resources = ConnectedTaskControlResources::<NoopRawMutex, u32>::new();
+    let resources = ConnectedTaskControlResources::<u32>::new();
     let (mut old, first) = resources.split().unwrap();
-    first.complete(11);
+    assert!(first.complete(11).is_ok());
     block_on(old.wait_stopped());
     for _ in 0..2 {
         block_on(stop_connected_task_group(&mut old));
@@ -48,38 +53,34 @@ fn completion_without_a_stop_and_repeated_observation_retire_cleanly() {
     assert_eq!(old.try_finish().ok().unwrap(), 11);
     let (mut next, second) = resources.split().unwrap();
     assert!(poll_once(second.wait_for_stop()).is_pending());
-    second.complete(22);
+    assert!(second.complete(22).is_ok());
     block_on(next.wait_stopped());
     assert_eq!(next.try_finish().ok().unwrap(), 22);
 }
 
 struct ReadyTaskGroup {
-    stop_requests: usize,
+    stop_requests: std::rc::Rc<core::cell::Cell<usize>>,
     owner: Option<u32>,
 }
 
 #[test]
 fn auxiliary_group_reveals_primary_owner_only_after_both_tasks_stop() {
     let primary = ReadyTaskGroup {
-        stop_requests: 0,
+        stop_requests: std::rc::Rc::new(core::cell::Cell::new(0)),
         owner: Some(17),
     };
     let auxiliary = ReadyTaskGroup {
-        stop_requests: 0,
+        stop_requests: std::rc::Rc::new(core::cell::Cell::new(0)),
         owner: Some(29),
     };
+    let primary_requests = primary.stop_requests.clone();
+    let auxiliary_requests = auxiliary.stop_requests.clone();
     let mut group = ConnectedTaskGroupWithAuxiliary::new(primary, auxiliary);
 
     group.request_stop();
     block_on(group.wait_stopped());
-    let TaskCompletion::Waiting(primary) = &group.primary else {
-        panic!()
-    };
-    let TaskCompletion::Waiting(auxiliary) = &group.auxiliary else {
-        panic!()
-    };
-    assert_eq!(primary.stop_requests, 1);
-    assert_eq!(auxiliary.stop_requests, 1);
+    assert_eq!(primary_requests.get(), 1);
+    assert_eq!(auxiliary_requests.get(), 1);
     assert_eq!(group.try_finish().ok().unwrap(), 17);
 }
 
@@ -87,7 +88,7 @@ impl ConnectedTaskGroup for ReadyTaskGroup {
     type Stopped = u32;
 
     fn request_stop(&mut self) {
-        self.stop_requests += 1;
+        self.stop_requests.set(self.stop_requests.get() + 1);
     }
 
     async fn wait_stopped(&mut self) {}
@@ -103,7 +104,7 @@ impl ConnectedTaskGroup for ReadyTaskGroup {
 #[test]
 fn one_deadline_returns_the_exact_task_owner() {
     let mut group = ReadyTaskGroup {
-        stop_requests: 0,
+        stop_requests: std::rc::Rc::new(core::cell::Cell::new(0)),
         owner: Some(73),
     };
     let outcome = block_on(stop_connected_task_group_until(
@@ -114,19 +115,19 @@ fn one_deadline_returns_the_exact_task_owner() {
     let ConnectedTaskStopAttempt::Stopped = outcome else {
         panic!("ready task group unexpectedly remained pending");
     };
-    assert_eq!(group.stop_requests, 1);
+    assert_eq!(group.stop_requests.get(), 1);
     assert_eq!(group.try_finish().ok().unwrap(), 73);
 }
 
 #[test]
 fn normal_stop_waits_for_and_returns_the_exact_task_owner() {
     let mut group = ReadyTaskGroup {
-        stop_requests: 0,
+        stop_requests: std::rc::Rc::new(core::cell::Cell::new(0)),
         owner: Some(79),
     };
 
     block_on(stop_connected_task_group(&mut group));
-    assert_eq!(group.stop_requests, 1);
+    assert_eq!(group.stop_requests.get(), 1);
     assert_eq!(group.try_finish().ok().unwrap(), 79);
 }
 
@@ -166,11 +167,11 @@ fn missed_group_deadline_remains_a_pending_stop() {
 
 #[test]
 fn split_capabilities_round_trip_and_allow_a_later_epoch() {
-    let resources = ConnectedTaskControlResources::<NoopRawMutex, u32>::new();
+    let resources = ConnectedTaskControlResources::<u32>::new();
     let (mut controller, endpoint) = resources.split().expect("first epoch is idle");
     controller.request_stop();
     block_on(endpoint.wait_for_stop());
-    endpoint.complete(91);
+    assert!(endpoint.complete(91).is_ok());
     block_on(controller.wait_stopped());
     assert!(matches!(
         resources.split(),
@@ -182,7 +183,7 @@ fn split_capabilities_round_trip_and_allow_a_later_epoch() {
 
 #[test]
 fn unused_reservation_rolls_back_without_poisoning_the_next_epoch() {
-    let resources = ConnectedTaskControlResources::<NoopRawMutex, u32>::new();
+    let resources = ConnectedTaskControlResources::<u32>::new();
     resources
         .reserve()
         .expect("first epoch is idle")
@@ -193,7 +194,7 @@ fn unused_reservation_rolls_back_without_poisoning_the_next_epoch() {
 
 #[test]
 fn dropped_reservation_preserves_the_fail_closed_contract() {
-    let resources = ConnectedTaskControlResources::<NoopRawMutex, u32>::new();
+    let resources = ConnectedTaskControlResources::<u32>::new();
     drop(resources.reserve().expect("first epoch is idle"));
 
     assert!(matches!(
@@ -204,7 +205,7 @@ fn dropped_reservation_preserves_the_fail_closed_contract() {
 
 #[test]
 fn dropped_task_endpoint_permanently_poisons_reuse() {
-    let resources = ConnectedTaskControlResources::<NoopRawMutex, u32>::new();
+    let resources = ConnectedTaskControlResources::<u32>::new();
     let (_controller, endpoint) = resources.split().expect("first epoch is idle");
     drop(endpoint);
     assert!(resources.is_poisoned());
@@ -216,7 +217,7 @@ fn dropped_task_endpoint_permanently_poisons_reuse() {
 
 #[test]
 fn dropped_parent_controller_permanently_poisons_reuse() {
-    let resources = ConnectedTaskControlResources::<NoopRawMutex, u32>::new();
+    let resources = ConnectedTaskControlResources::<u32>::new();
     let (controller, endpoint) = resources.split().expect("first epoch is idle");
     drop(controller);
     assert!(resources.is_poisoned());
@@ -244,18 +245,26 @@ fn cancelled_and_expired_group_observations_retain_both_owners_in_either_complet
         for early_finish in [false, true] {
             let primary_dropped = std::rc::Rc::new(core::cell::Cell::new(0));
             let auxiliary_dropped = std::rc::Rc::new(core::cell::Cell::new(0));
-            let primary = ConnectedTaskControlResources::<NoopRawMutex, Tracked>::new();
-            let auxiliary = ConnectedTaskControlResources::<NoopRawMutex, Tracked>::new();
+            let primary = ConnectedTaskControlResources::<Tracked>::new();
+            let auxiliary = ConnectedTaskControlResources::<Tracked>::new();
             let (primary_control, primary_task) = primary.split().unwrap();
             let (auxiliary_control, auxiliary_task) = auxiliary.split().unwrap();
             let mut group =
                 ConnectedTaskGroupWithAuxiliary::new(primary_control, auxiliary_control);
             assert!(poll_once(stop_connected_task_group(&mut group)).is_pending());
             let pending = if primary_first {
-                primary_task.complete(Tracked(primary_dropped.clone()));
+                assert!(
+                    primary_task
+                        .complete(Tracked(primary_dropped.clone()))
+                        .is_ok()
+                );
                 (auxiliary_task, auxiliary_dropped.clone())
             } else {
-                auxiliary_task.complete(Tracked(auxiliary_dropped.clone()));
+                assert!(
+                    auxiliary_task
+                        .complete(Tracked(auxiliary_dropped.clone()))
+                        .is_ok()
+                );
                 (primary_task, primary_dropped.clone())
             };
             assert!(poll_once(group.wait_stopped()).is_pending());
@@ -277,7 +286,7 @@ fn cancelled_and_expired_group_observations_retain_both_owners_in_either_complet
                 assert_eq!(primary_dropped.get(), 0);
                 assert_eq!(auxiliary_dropped.get(), 0);
             }
-            pending.0.complete(Tracked(pending.1));
+            assert!(pending.0.complete(Tracked(pending.1)).is_ok());
             // Even a fully ready observation returns no resources. Cancelling
             // or repeating it leaves both owners inside this same group.
             assert!(poll_once(group.wait_stopped()).is_ready());

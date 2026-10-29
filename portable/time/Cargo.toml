@@ -8,6 +8,8 @@ repository.workspace = true
 description = "Chip-neutral monotonic time, clock and timer contract for open ESP radio drivers"
 
 [features]
+# Finite task-group shutdown; protocol cores do not enable this feature.
+connected-tasks = ["dep:embassy-futures", "dep:oer-memory", "dep:oer-sync"]
 # `Duration` serializes transparently as its `u64` microseconds, so that a
 # port's typed bounds travel from the firmware to the host.
 serde = ["dep:serde"]
@@ -16,6 +18,9 @@ serde = ["dep:serde"]
 schema = ["serde", "dep:postcard-schema"]
 
 [dependencies]
+embassy-futures = { version = "0.1.2", optional = true }
+oer-memory = { path = "../memory", optional = true }
+oer-sync = { path = "../sync", optional = true }
 postcard-schema = { version = "0.2.5", default-features = false, optional = true }
 serde = { version = "1.0", default-features = false, optional = true }
 
@@ -28,4 +33,4 @@ toml = "1.1"
 workspace = true
 
 [package.metadata.open-radio]
-test-feature-sets = ["serde", "schema"]
+test-feature-sets = ["serde", "schema", "connected-tasks"]

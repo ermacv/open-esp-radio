@@ -13,7 +13,7 @@ use oer_ieee80211_cipher::aes::{SoftwareAes128, SoftwareKeyUnwrap};
 use oer_ieee80211_control::{StationLinkState, StationServiceEnd};
 use oer_ieee80211_port::*;
 use oer_ieee80211_rsn::{Pmk, nonce::SNonceSource, sae::SaePassword};
-use oer_ieee80211_runtime::station_service::*;
+use oer_ieee80211_runtime::station::*;
 use oer_ieee80211_sta::data::{EthernetFrame, TxMsdu};
 use oer_ieee80211_sta::{
     data::StaData,
@@ -32,7 +32,7 @@ use oer_ieee80211_wire::{
     station::AssociationCapabilities,
 };
 use oer_memory::{Placed, PlacedFuture, StaticPlace};
-use oer_memory::{WakingSpscQueue, WakingSpscSender};
+use oer_memory::{WakingSpscQueue};
 use oer_radio_port::{self as rp, Child, PortBackend, Root, SlotIdentity};
 use oer_time::{Duration, Instant};
 use static_cell::ConstStaticCell;
@@ -259,11 +259,11 @@ impl<'id, Path: rp::PoolPath> ServiceOutputSink<'id, Caps, Path> for Output<'_, 
 }
 /// The observer of the station, its data machine and its service.
 type Observed = super::observation::StationObserver;
-type Service<'id, Id> = StationService<'id, StationComposition<Id>, Callbacks, Rates, 1, Observed>;
+type Service<'id, Id> = Runner<'id, StationComposition<Id>, Callbacks, Rates, 1, Observed>;
 type Completed<'p, 'id, Id> =
     ServiceCompleted<'p, 'id, StationComposition<Id>, Callbacks, Rates, 1, Observed>;
 type Io<'c, 'id, Id> =
-    ServiceIo<'c, 'id, Caps, Output<'c, 'id, Child<Root<Id>, 8>>, 2, 8, 2, Child<Root<Id>, 8>>;
+    ServiceIo<'c, 'id, Caps, Events<'c, Output<'c, 'id, Child<Root<Id>, 8>>>, 2, 8, 2, Child<Root<Id>, 8>>;
 type Running<'s, 'c: 's, 'p: 's, 'id: 'p + 'c, Id: SlotIdentity + 'id> =
     impl Future<Output = Placed<'s, Completed<'p, 'id, Id>>>;
 
@@ -304,7 +304,7 @@ where
     'p: 's,
     'c: 's,
 {
-    StationService::run_placed(service, output, owner, io, &EmbassyClock, unwrap)
+    Runner::run_placed(service, output, owner, io, &EmbassyClock, unwrap)
 }
 
 fn running<'s, 'c, 'p, 'id, Id: SlotIdentity + 'id>(
@@ -366,7 +366,7 @@ fn initialize_service<'id, Id: SlotIdentity + 'id>(
         Duration::from_millis(100),
     )
     .view();
-    let service = StationService::<StationComposition<Id>, _, _, 1, Observed>::init_in_place(
+    let service = Runner::<StationComposition<Id>, _, _, 1, Observed>::init_in_place(
         service_storage,
         |station_storage| {
             let (station, granted) = Station::init_personal(
@@ -445,18 +445,23 @@ impl<Id: SlotIdentity> rp::PortBody<Id, Backend<Id>> for Body {
         let (command_send, command_receive) = commands.split();
         let (tx_send, tx_receive) = tx.split();
         let (rx_send, rx_receive) = rx.split();
+        let state = State::new();
+        let (control, connected) = Control::new(command_send, &state)
+            .unwrap_or_else(|_| crate::fail(crate::fatal::Failure::RootInitialization));
+        let net = control.device(tx_send, rx_receive);
         let link = core::cell::Cell::new(false);
         let retry = core::cell::Cell::new(true);
         let stopped = core::cell::Cell::new(None);
         let ready = core::cell::Cell::new(Some(machine::StaRequest::new(1, credits.connect)));
-        let mut output = Output {
+        let mut output = control.events(Output {
             link: &link,
             retry: &retry,
             ready: &ready,
             attempt,
-        };
+        });
         let mut io = ServiceIo {
             commands: command_receive,
+            control: connected,
             transmit: tx_receive,
             receive: rx_send,
             output: &mut output,
@@ -472,7 +477,7 @@ impl<Id: SlotIdentity> rp::PortBody<Id, Backend<Id>> for Body {
             &mut unwrap,
         ));
         let mut controls = core::pin::pin!(reconnect(
-            command_send,
+            control,
             &retry,
             &ready,
             attempt,
@@ -482,7 +487,7 @@ impl<Id: SlotIdentity> rp::PortBody<Id, Backend<Id>> for Body {
         ));
         let mut workload = core::pin::pin!(async {
             embassy_futures::join::join(
-                super::network::run(address, seed, tx_send, rx_receive, &link, attempt),
+                super::network::run(address, seed, net, &link, attempt),
                 super::future::Boundary(controls.as_mut()),
             )
             .await
@@ -549,7 +554,7 @@ fn channels(
     channels
 }
 async fn reconnect<'a, 'id: 'a, Path: rp::PoolPath>(
-    mut commands: WakingSpscSender<'a, ServiceCommand<'id, Caps, Path>, 2>,
+    mut commands: Control<'a, 'id, Caps, Path, 2>,
     retry: &core::cell::Cell<bool>,
     ready: &core::cell::Cell<Option<machine::StaRequest<'id, Path>>>,
     attempt: Attempt,
@@ -567,16 +572,11 @@ async fn reconnect<'a, 'id: 'a, Path: rp::PoolPath>(
             stopped.set(Some(request));
             super::observation::DEPARTING.store(true, core::sync::atomic::Ordering::Relaxed);
             retry.set(false);
-            commands
-                .ready()
-                .await
-                .send(ServiceCommand::Station(machine::StaRequest::new(
-                    0xffff, disconnect,
-                )));
+            let _refused = commands.disconnect(0xffff, disconnect).await;
         }
         if stopped.get().is_some() {
             if !link.get() {
-                commands.ready().await.send(ServiceCommand::Stop);
+                commands.stop();
                 core::future::pending::<()>().await;
             }
             let _ = EmbassyClock.wait_for(Duration::from_millis(10)).await;
@@ -590,10 +590,7 @@ async fn reconnect<'a, 'id: 'a, Path: rp::PoolPath>(
             }
             first = false;
             retry.set(false);
-            commands
-                .ready()
-                .await
-                .send(ServiceCommand::Station(request));
+            let _refused = commands.request(request).await;
         }
         let _ = EmbassyClock.wait_for(Duration::from_secs(1)).await;
     }

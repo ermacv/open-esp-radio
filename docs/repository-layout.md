@@ -138,7 +138,7 @@ named `hil` takes its role from the list.
   modules of `bluetooth`, `boot`, `ieee80211` and `phy`, and
   `peripherals/entropy.rs`.
 - Direct normal dependencies on `embassy-sync` remain in
-  `portable/cooperate`, `protocols/hil/agent`,
+  `protocols/hil/agent`,
   `firmware/hil/esp32s31`, `firmware/hil/esp32s31-lower-mac` and
   `firmware/hil/esp32s31-phy`.
 

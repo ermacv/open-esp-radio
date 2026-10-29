@@ -1,5 +1,5 @@
 #![no_std]
-use oer_ieee80211_runtime::station_service::{QuarantinedTerminals, StationPort};
+use oer_ieee80211_runtime::station::{QuarantinedTerminals, StationPort};
 
 pub fn return_once<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id>(bank: QuarantinedTerminals<'id, B>) {
     let returned = bank.into_parts();

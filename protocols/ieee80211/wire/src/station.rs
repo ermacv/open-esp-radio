@@ -7,8 +7,8 @@
 use crate::{
     ccmp::CCMP_HEADER_LEN,
     data::{
-        DataHeControl, DataInterfaceRole, ETHERNET_HEADER_LEN, LLC_SNAP_HEADER_LEN,
-        plan_data_encapsulation, plan_data_encapsulation_with_he_control,
+        DataHeControl, DataInterfaceRole, LLC_SNAP_HEADER_LEN, plan_data_encapsulation,
+        plan_data_encapsulation_with_he_control,
     },
     extensions::wmm::{WmmParameterSet, parse_wmm_parameter_element},
     management::{MANAGEMENT_HEADER_LEN, MAX_SSID_LEN, MAX_SUPPORTED_RATES_LEN},
@@ -17,6 +17,7 @@ use crate::{
     security::LinkProtection,
     sequence::SequenceNumber,
 };
+use oer_network::ETHERNET_HEADER_LEN;
 
 const OPEN_AUTHENTICATION_FRAME_CONTROL: u16 = 0x00b0;
 #[cfg(test)]

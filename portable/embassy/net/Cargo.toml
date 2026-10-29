@@ -8,6 +8,7 @@ repository.workspace = true
 description = "Owned-packet boundary for the optimized open ESP radio Embassy/Xarxa integration"
 
 [dependencies]
+embassy-futures = "0.1.2"
 oer-sync = { path = "../../sync" }
 oer-network = { path = "../../../protocols/network" }
 oer-memory = { path = "../../memory" }

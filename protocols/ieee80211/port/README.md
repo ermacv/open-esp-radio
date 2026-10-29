@@ -402,7 +402,7 @@ PNs and external bodies; a normal uninstall returns the stopped resources.
 gate and requested clock completions in the normal FIFO. Disable returns
 only `LowerMacTerminal`; RX and TBTT are excluded by type. The backend
 recycles unread RX itself and reports the coalesced loss after re-enable.
-StationService therefore needs no retained-RX array or receive-capacity
+`station::Runner` therefore needs no retained-RX array or receive-capacity
 const parameter for disable.
 
 

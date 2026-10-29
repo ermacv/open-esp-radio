@@ -8,7 +8,7 @@ adapter and firmware, outside the protocol cores and runtimes.
 
 | Path | Responsibility |
 | --- | --- |
-| `src/` | Stack-neutral interface, link and error values (`oer-network`) |
+| `src/` | Stack-neutral owned `NetDevice`, Ethernet views, link epochs and typed refusals (`oer-network`) |
 | `../../portable/embassy/net/` | Maintained Embassy/Xarxa packet-owner contract with explicit pools |
 
 Selecting a patched stack does not create another physical radio owner or
