@@ -88,6 +88,69 @@ protocol sources, including tests, for `bt_hci::controller` paths and grouped
 imports. Comments and strings do not count. This is a lexical check, not Rust
 name resolution.
 
+## Terminal-site registry
+
+[`terminal-sites.toml`](terminal-sites.toml) records source sites with their
+fault classes and reset owner. `tests/terminal_sites.rs` compares exact sets:
+an added site, a missing record, a deleted site and a stale record all fail.
+Negative fixtures change calls, remove files, add retained variants and
+exercise callback references, aliases and macro bodies. The registry is an
+inventory, not permission to add a panic or reset path.
+
+Each `[sites]` key is `path:line:column:kind:source-name`, with 1-based
+coordinates. Each value has `owner` (the owning package's repository path)
+and nonempty `classes` (the spellings in the architecture's
+[fatal/reset contract](../../../docs/architecture.md#fatal-decisions-and-reset)).
+A shared dispatch mechanism can accept several classes. An entry containing
+`hardware-impossible` references a bounded `SOURCE:` statement in `[proofs]`;
+the checker validates the reference, not the hardware proposition. The
+InvalidHart proof is conditional on the stated rev0 model, correct CSR
+observation and intact code/data. It proves no radio event ordering.
+
+Reset owners are admitted explicitly: HAL, chip composition, staged runtime,
+staged bootstrap, executor and the image containing the site. The family
+IEEE 802.15.4 engine's typed reasons belong to PHY HIL's terminal policy;
+their declaration grants the engine no reset dependency. An ordinary driver
+or sans-IO source cannot gain an owner merely by adding a registry entry.
+
+The scan starts at library/binary roots below `chips/`, `firmware/`,
+`portable/` and `protocols/`, follows out-of-line/inline modules, `#[path]`
+and literal `include!` files, and considers target/feature alternatives
+together. It skips `cfg(test)`, `cfg(all(test, ...))` and `#[test]` items,
+const/static initializers and inline const blocks; `test-support` counts as
+production. Generated PAC code and computed/generated includes are outside
+the source inventory. It does not execute build scripts.
+
+Site kinds cover:
+
+- `terminal-entry`: synchronous functions/methods returning `!`, including
+  image roots and terminal waits; a nonreturning root is not itself a fault.
+- `terminal-reference`: references to fatal/reset APIs and named PHY
+  reporters, including generic callback values and simple import aliases;
+  qualified `fatal::reset`, fault reporters and panic dispatch are included.
+- `reset-method`: every image `.reset()` call, including executor failure
+  reporters. `[nonterminal]` contains the exact reviewed B0 parser/frame
+  resets which return normally; each needs a reason and must still exist.
+- `reset-trigger`: HAL system-reset requests and the typed PAC reset strobe
+  used by HAL and the isolated facts image.
+- `retained-reason`, `retained-code`, `retained-slot`: runtime, PHY, B0,
+  IEEE 802.15.4 and HIL reason catalogues, numeric decoder arms (including
+  payload subcodes), retained slots and the facts image's `.noinit` slot.
+- `terminal-binding`, `panic-handler`: image entry, exception and PHY
+  reporter bindings, plus panic handlers in source and macro definitions.
+- `panic-macro`, `panic-method`: explicit panic/assertion macros and image
+  `unwrap`/`expect` candidates; runtime/bootstrap macro templates also count.
+
+This is a conservative syntax inventory, not Rust name/type resolution or
+macro expansion. It scans macro bodies but does not multiply them by their
+expansions. Glob imports, arbitrary function-pointer dataflow, implicit
+bounds/overflow/division panics, transitive panicking methods and linker/ROM
+abort paths require review and the separate image analysis. The registry
+does not prove that a site is reachable, that a record commits or survives
+a reset, or that its observations justify impossibility. Source formatting
+or moves change coordinates and require reviewed registry updates; do not
+regenerate classifications without checking their cause and owner.
+
 ## HAL atoms
 
 `hal_production_code_gains_no_waits_or_sequences` scans the production
