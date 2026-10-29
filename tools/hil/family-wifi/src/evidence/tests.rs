@@ -215,29 +215,78 @@ fn rekey_timer_or_duplicate_echoes_are_not_successful_traffic_or_rekey() {
     }
 }
 
-#[test]
-fn arp_queued_ping_burst_is_a_pacing_failure_even_with_all_replies_and_a_valid_gtk_exchange() {
+fn arp_queued_echoes() -> Evidence {
     let mut e = full();
     let t = e.traffic.as_mut().expect("traffic");
-    // Run 1793291035362-0014baa9: after neighbor deletion the PN=0
-    // broadcast was rejected; ARP retry released requests 3 and 4 together.
-    // Keep all 100 identities/replies and the successful GTK/ARP evidence.
+    // Run 1793291035362-0014baa9: PN=0 was correctly rejected;
+    // ARP retry released requests 3 and 4 together. Every echo is retained.
     let begin = t.echoes[0].at_us;
     t.echoes[6].at_us = begin + 4_079_164;
     t.echoes[7].at_us = begin + 4_083_954;
     t.echoes[8].at_us = begin + 4_079_185;
     t.echoes[9].at_us = begin + 4_086_271;
     t.echoes.sort_by_key(|echo| echo.at_us);
-    let gates = evaluate(&e);
-    for gate in &gates {
-        if matches!(gate.id, "station-lifecycle" | "group-key-change") {
-            assert_eq!(
-                gate.reason,
-                Some("peer ICMP capture violates one-second request pacing")
-            );
-        } else {
-            assert!(gate.passed(), "{gate:?}");
+    let rekey = e.rekey.as_mut().expect("GTK");
+    rekey.completed_us = begin + 2_500_000;
+    rekey.triggered_us = begin + 2_600_000;
+    let request = rekey.request.as_mut().expect("ARP request");
+    request.air_us = Some(begin + 4_079_900);
+    request.received_us = begin + 4_079_000;
+    let reply = rekey.reply.as_mut().expect("ARP reply");
+    reply.air_us = Some(begin + 4_080_000);
+    reply.received_us = begin + 4_085_000;
+    e
+}
+
+#[test]
+fn pacing_starts_after_the_first_echo_reply_following_neighbor_resolution() {
+    let e = arp_queued_echoes();
+    let t = e.traffic.as_ref().expect("traffic");
+    assert!(t.pacing_gap(0));
+    assert_eq!(e.pacing_start(), Some(t.echoes[0].at_us + 4_083_954));
+    assert!(evaluate(&e).iter().all(Gate::passed));
+}
+
+#[test]
+fn the_pacing_boundary_never_hides_loss_identities_or_later_pacing_failures() {
+    for mutation in 0..4 {
+        let mut e = arp_queued_echoes();
+        let t = e.traffic.as_mut().expect("traffic");
+        match mutation {
+            0 => {
+                t.echoes.remove(1);
+            }
+            1 => t.echoes[1].sequence = 999,
+            2 => t.router_received = 99,
+            _ => {
+                t.echoes[40].at_us += 2_000_000;
+                t.echoes.sort_by_key(|echo| echo.at_us);
+            }
         }
+        let gates = evaluate(&e);
+        assert!(!gates[0].passed());
+        assert!(!gates[2].passed());
+    }
+    let e = arp_queued_echoes();
+    let t = e.traffic.as_ref().expect("traffic");
+    assert!(!t.complete(100, t.echoes.last().expect("last reply").at_us));
+}
+
+#[test]
+fn post_resolution_pacing_keeps_both_original_interval_limits() {
+    for (gap, pass) in [
+        (749_999, false),
+        (750_000, true),
+        (1_250_000, true),
+        (1_250_001, false),
+    ] {
+        let mut t = traffic(3, 10_000_000);
+        let begin = t.echoes[0].at_us;
+        t.echoes[2].at_us = begin + gap;
+        t.echoes[3].at_us = begin + gap + 1000;
+        t.echoes[4].at_us = begin + gap + 1_000_000;
+        t.echoes[5].at_us = begin + gap + 1_001_000;
+        assert_eq!(t.complete(3, 0), pass, "gap={gap}");
     }
 }
 #[test]

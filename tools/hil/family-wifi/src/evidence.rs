@@ -79,11 +79,28 @@ pub struct Traffic {
     pub echoes: Vec<Echo>,
 }
 impl Traffic {
-    fn pacing_gap(&self) -> bool {
+    fn first_reply_after(&self, after: u64) -> Option<u64> {
+        self.echoes
+            .iter()
+            .find(|echo| {
+                echo.reply
+                    && echo.source == self.address
+                    && echo.destination == self.router
+                    && echo.at_us >= after
+            })
+            .map(|echo| echo.at_us)
+    }
+
+    fn pacing_gap(&self, after: u64) -> bool {
         let mut previous = None;
         self.echoes
             .iter()
-            .filter(|e| !e.reply && e.source == self.router && e.destination == self.address)
+            .filter(|e| {
+                !e.reply
+                    && e.source == self.router
+                    && e.destination == self.address
+                    && e.at_us > after
+            })
             .any(|e| {
                 let bad = previous.is_some_and(|at| {
                     e.at_us
@@ -133,22 +150,22 @@ impl Traffic {
         times
             .iter()
             .enumerate()
-            .all(|(index, ((id, sequence), at))| {
+            .all(|(index, ((id, sequence), _at))| {
                 let (expected, first) = *identity.get_or_insert((*id, *sequence));
-                *id == expected
-                    && sequence.wrapping_sub(first) == index as u16
-                    && (index == 0
-                        || at
-                            .checked_sub(times[index - 1].1)
-                            .is_some_and(|gap| (750_000..=1_250_000).contains(&gap)))
+                *id == expected && sequence.wrapping_sub(first) == index as u16
             })
     }
-    fn complete(&self, count: u16) -> bool {
+    fn complete(&self, count: u16, pacing_after: u64) -> bool {
         self.count == count
             && [self.router_sent, self.router_received]
                 .into_iter()
                 .all(|value| value == count)
             && self.pairs(self.router, self.address)
+            // Require at least one measured interval; the window cannot be
+            // moved past the traffic and pass vacuously.
+            && self.echoes.iter().filter(|echo| !echo.reply && echo.source == self.router
+                && echo.destination == self.address && echo.at_us > pacing_after).take(2).count() == 2
+            && !self.pacing_gap(pacing_after)
     }
     fn window(&self) -> Option<(u64, u64)> {
         Some((self.echoes.first()?.at_us, self.echoes.last()?.at_us))
@@ -268,6 +285,19 @@ pub struct Evidence {
     pub keys: Option<KeyEvidence>,
 }
 
+impl Evidence {
+    /// Neighbor resolution is evidenced by the exact protected ARP exchange.
+    /// Start pacing after the first subsequent ICMP reply, retaining every
+    /// request/reply in the 100/100 identity and loss checks.
+    pub(crate) fn pacing_start(&self) -> Option<u64> {
+        let rekey = self.rekey.as_ref()?;
+        let arp_reply = rekey.reply.as_ref()?.air_us?;
+        self.traffic
+            .as_ref()?
+            .first_reply_after(arp_reply.max(rekey.triggered_us))
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct Gate {
     pub id: &'static str,
@@ -280,6 +310,7 @@ impl Gate {
 }
 
 pub fn evaluate(e: &Evidence) -> [Gate; 6] {
+    let pacing_start = e.pacing_start();
     let station_lifecycle = e
         .baseline
         .as_ref()
@@ -298,7 +329,7 @@ pub fn evaluate(e: &Evidence) -> [Gate; 6] {
                 && b.target_address == t.address
                 && b.target_gateway == t.router
                 && b.target_prefix == 24
-                && t.complete(100)
+                && pacing_start.is_some_and(|start| t.complete(100, start))
                 && b.tx_timeouts == 0
                 && b.queue_collisions == 0
                 && b.deauth_transmissions > 0
@@ -312,7 +343,7 @@ pub fn evaluate(e: &Evidence) -> [Gate; 6] {
         .as_ref()
         .zip(e.rekey.as_ref())
         .is_some_and(|(t, r)| {
-            t.complete(100)
+            pacing_start.is_some_and(|start| t.complete(100, start))
                 && t.window().is_some_and(|(start, end)| {
                     start < r.completed_us
                         && r.exchange(t, end)
@@ -351,7 +382,7 @@ pub fn evaluate(e: &Evidence) -> [Gate; 6] {
                 && deauth > first.connected_us
                 && next.association_us > deauth
                 && next.epoch > first.epoch
-                && t.complete(10)
+                && t.complete(10, 0)
                 && t.window()
                     .is_some_and(|(start, _)| start >= next.connected_us)
         });
@@ -365,7 +396,7 @@ pub fn evaluate(e: &Evidence) -> [Gate; 6] {
         ("key-conformance", key_conformance, "missing or mismatching required hardware/model key traces"),
     ].map(|(id,pass,reason)| Gate {
         id,
-        reason: (!pass).then_some(if matches!(id, "station-lifecycle" | "group-key-change") && e.traffic.as_ref().is_some_and(Traffic::pacing_gap) {
+        reason: (!pass).then_some(if matches!(id, "station-lifecycle" | "group-key-change") && e.traffic.as_ref().zip(pacing_start).is_some_and(|(t, start)| t.pacing_gap(start)) {
             "peer ICMP capture violates one-second request pacing"
         } else { reason }),
     })
