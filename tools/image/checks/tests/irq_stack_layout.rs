@@ -187,8 +187,9 @@ fn per_hart_allocations_keep_both_guard_bottoms_aligned_without_growing_other_st
         let mut sizes = vec![0; contract.harts.len()];
         for &hart in &contract.harts {
             sizes[hart as usize] = contract
-                .irq_stack_size(hart, Some(if hart == 0 { 16192 } else { 1008 }))
-                .unwrap();
+                .irq_stack_allocation(hart, Some(if hart == 0 { 16192 } else { 1008 }))
+                .unwrap()
+                .bytes;
         }
         let bytes = link(
             contract.harts.len() as u32,
@@ -288,4 +289,24 @@ fn task_irq_disagreement_and_out_of_memory_allocations_are_rejected() {
             .contains("boot hart needs both stacks")
     );
     assert!(link_stacks(&[32768], &[0x400000], &[4096], 0x20000000).is_err());
+}
+
+#[test]
+fn an_omitted_guard_links_without_dividing_by_zero_or_reserving_guard_storage() -> Result<(), String>
+{
+    let bytes = link_stacks(&[32768, 0], &[196608, 0], &[0, 1024], 0x20000000)?;
+    let elf = object::File::parse(&*bytes).map_err(|error| error.to_string())?;
+    assert_eq!(
+        elf.symbol_by_name("__runtime_cpu0_irq_stack_guard_bytes")
+            .ok_or("missing guard size")?
+            .address(),
+        0
+    );
+    assert_eq!(
+        elf.section_by_name(".irq_stacks")
+            .ok_or("missing stacks")?
+            .size(),
+        32768
+    );
+    Ok(())
 }

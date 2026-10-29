@@ -1,5 +1,5 @@
-//! A guard must catch the first store after a whole-frame stack adjustment
-//! and still leave room for the exception that records the overflow.
+//! Report whether the optional guard covers a whole-frame stack adjustment
+//! and the exception that records the overflow. Guard coverage never gates an image.
 
 use super::{HartStack, InterruptStacks};
 use std::collections::BTreeSet;
@@ -35,7 +35,10 @@ impl InterruptStacks {
 
     pub(crate) fn guard_problem(&self, hart: &HartStack) -> Option<String> {
         let frames = self.hart_frames(hart);
-        let guard = u64::from(self.contract.interrupts.irq_stack_guard_bytes[&hart.core]);
+        let guard = match self.guard_bytes(hart.core) {
+            Ok(guard) => u64::from(guard),
+            Err(error) => return Some(error.to_string()),
+        };
         let exception = hart.exception.bytes.unwrap_or(hart.exception.partial);
         let largest = frames.largest.map_or(0, |(_, bytes)| bytes);
         if exception.saturating_add(largest) > guard {
@@ -70,7 +73,13 @@ impl InterruptStacks {
         );
         for hart in &self.harts {
             let frames = self.hart_frames(hart);
-            let guard = self.contract.interrupts.irq_stack_guard_bytes[&hart.core];
+            let guard = match self.guard_bytes(hart.core) {
+                Ok(guard) => guard,
+                Err(error) => {
+                    let _ = writeln!(out, "hart {}: {error}", hart.core);
+                    continue;
+                }
+            };
             let exception = hart.exception.bytes.unwrap_or(hart.exception.partial);
             let (largest, function) = frames
                 .largest
@@ -133,27 +142,36 @@ mod tests {
     }
 
     #[test]
-    fn one_byte_over_fails_product_and_warns_diagnostic_with_the_same_table() {
+    fn one_byte_over_is_reported_under_both_policies_with_the_same_table() -> crate::Result<()> {
         let report = report(Some(3665));
-        let error = report.check(Required::Product).unwrap_err().to_string();
-        let warnings = report.check(Required::Diagnostic).unwrap();
-        assert_eq!(warnings.len(), 1);
-        let table = "0\t4096\t432\t3665\t4097\t-1\texception_helper";
-        assert!(error.contains(table), "{error}");
-        assert!(warnings[0].contains(table), "{warnings:?}");
+        for policy in [Required::Product, Required::Diagnostic] {
+            let warnings = report.check(policy)?;
+            assert_eq!(warnings.len(), 1);
+            let warning = warnings.first().ok_or("missing guard report")?;
+            assert!(warning.contains("reported only"));
+            assert!(warning.contains("0\t4096\t432\t3665\t4097\t-1\texception_helper"));
+        }
+        Ok(())
     }
 
     #[test]
-    fn an_unknown_reachable_frame_is_not_silently_treated_as_zero() {
+    fn an_unknown_reachable_frame_is_not_silently_treated_as_zero() -> crate::Result<()> {
         let report = report(None);
-        assert!(report.check(Required::Product).is_err());
-        let warnings = report.check(Required::Diagnostic).unwrap();
-        assert!(warnings[0].contains("without a known frame"));
+        for policy in [Required::Product, Required::Diagnostic] {
+            let warnings = report.check(policy)?;
+            assert!(
+                warnings
+                    .iter()
+                    .any(|warning| warning.contains("without a known frame"))
+            );
+        }
         assert!(report.render().contains("unknown frame: exception_helper"));
+        Ok(())
     }
 
     #[test]
-    fn all_reached_frames_count_including_tasks_off_the_critical_path_but_not_other_harts() {
+    fn all_reached_frames_count_including_tasks_off_the_critical_path_but_not_other_harts()
+    -> crate::Result<()> {
         let mut report = report(Some(304));
         let mut level = report.harts[0].exception.clone();
         level.level = 2;
@@ -168,13 +186,12 @@ mod tests {
         report.names.insert(0x3000, "off_path_task".to_owned());
         assert!(
             report
-                .check(Required::Product)
-                .unwrap_err()
-                .to_string()
-                .contains("off_path_task")
+                .check(Required::Product)?
+                .iter()
+                .any(|warning| warning.contains("off_path_task"))
         );
         report.frames.insert(0x3000, Some(3664));
-        assert!(report.check(Required::Product).is_ok());
+        assert!(report.check(Required::Product)?.is_empty());
         let mut hart1 = report.harts[0].clone();
         hart1.core = 1;
         hart1.levels.clear();
@@ -185,14 +202,14 @@ mod tests {
             .irq_stack_guard_bytes
             .insert(1, 1024);
         report.harts.push(hart1);
-        assert!(report.check(Required::Product).is_ok());
+        assert!(report.check(Required::Product)?.is_empty());
         report.harts[1].exception.bound.reached.insert(0x3000);
         assert!(
             report
-                .check(Required::Product)
-                .unwrap_err()
-                .to_string()
-                .contains("hart 1")
+                .check(Required::Product)?
+                .iter()
+                .any(|warning| warning.contains("hart 1"))
         );
+        Ok(())
     }
 }

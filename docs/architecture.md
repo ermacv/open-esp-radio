@@ -440,7 +440,11 @@ release a secondary hart.
   the jump and that the entry installs its own stack pointer first. There is no
   baseline of accepted holes, and an observed depth above a bound fails the run.
   The frame/move limit (4 KiB) is a reporting threshold: larger frames and
-  moves produce messages without failing the build. Proven task, interrupt
+  moves produce messages without failing the build. Stack guards are reported,
+  never a gate: frame coverage, unknown guard-window frames and guard storage
+  cannot fail build, run or analysis. The IRQ bound plus margin must fit the
+  contract maximum excluding guard bytes; a physical guard is omitted when it
+  does not fit beside that bound and margin. Proven task, interrupt
   and bootstrap stack bounds, unresolved-path restrictions and placement
   remain gates. Code and stacks run from PSRAM after
   the staged bootstrap. Details: [memory and stacks](memory.md).

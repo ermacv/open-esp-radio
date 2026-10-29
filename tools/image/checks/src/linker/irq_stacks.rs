@@ -8,12 +8,14 @@ use serde::{Deserialize, Serialize};
 pub struct Allocation {
     pub hart: u32,
     pub bytes: u32,
+    pub guard_bytes: u32,
     /// The first-pass bound, including diagnostic bounds retained at maximum.
     pub first_bound: Option<u64>,
     pub from_bound: bool,
 }
 
 pub(crate) fn select(stacks: &InterruptStacks, diagnostic: bool) -> Result<Vec<Allocation>> {
+    let mut bottom = u64::from(stacks.contract.memory.sram.origin());
     stacks
         .harts
         .iter()
@@ -25,13 +27,29 @@ pub(crate) fn select(stacks: &InterruptStacks, diagnostic: bool) -> Result<Vec<A
                     .assumptions()
                     .iter()
                     .all(|assumption| crate::stack::ADMITTED.contains(assumption));
-            let bound = hart.bytes.filter(|_| from_bound);
+            let physical = stacks
+                .contract
+                .interrupts
+                .irq_stack_allocation(hart.core, Some(hart.bytes.unwrap_or(hart.partial)))?;
+            let bytes = if from_bound {
+                physical.bytes
+            } else {
+                stacks.contract.interrupts.irq_stack_bytes
+            };
+            let guard_bytes = if physical.guard_bytes != 0
+                && bottom.is_multiple_of(u64::from(physical.guard_bytes))
+            {
+                physical.guard_bytes
+            } else {
+                0
+            };
+            bottom = bottom
+                .checked_add(u64::from(bytes))
+                .ok_or("IRQ stack placement overflows u64")?;
             Ok(Allocation {
                 hart: hart.core,
-                bytes: stacks
-                    .contract
-                    .interrupts
-                    .irq_stack_size(hart.core, bound)?,
+                bytes,
+                guard_bytes,
                 first_bound: hart.bytes,
                 from_bound,
             })
@@ -53,6 +71,13 @@ pub(super) fn verify(stacks: &InterruptStacks, planned: &[Allocation]) -> Result
             .allocations
             .get(&hart.core)
             .ok_or("the final ELF lacks an IRQ stack allocation")?;
+        if linked.guard_bytes != allocation.guard_bytes {
+            return Err(format!(
+                "hart {}'s final IRQ guard is {} bytes, expected {}",
+                hart.core, linked.guard_bytes, allocation.guard_bytes
+            )
+            .into());
+        }
         if linked.bytes != allocation.bytes || linked.from_bound != allocation.from_bound {
             return Err(format!("hart {}'s final IRQ stack is {} bytes (from_bound={}), expected {} (from_bound={})", hart.core, linked.bytes, linked.from_bound, allocation.bytes, allocation.from_bound).into());
         }
@@ -62,11 +87,6 @@ pub(super) fn verify(stacks: &InterruptStacks, planned: &[Allocation]) -> Result
             hart.partial,
             &stacks.contract.interrupts,
         )?;
-        if allocation.from_bound
-            && let Some(problem) = stacks.guard_problem(hart)
-        {
-            return Err(format!("after relinking: {problem}").into());
-        }
     }
     Ok(())
 }
@@ -88,7 +108,7 @@ fn verify_bound(
     }
     let bytes = bound.unwrap_or(partial);
     let needed = contract.irq_stack_with_margin(bytes)?;
-    let guard = contract.irq_stack_guard_bytes[&hart];
+    let guard = allocation.guard_bytes;
     let usable = allocation.bytes - guard;
     if needed > u64::from(usable) {
         return Err(format!("hart {hart}'s IRQ stack after relinking: first bound {:?}, final bound {bytes}{} + {}% margin requires {needed} usable bytes; allocated {} - guard {guard} = {usable} usable bytes; no further link attempted", allocation.first_bound, if bound.is_none() { " + ?" } else { "" }, contract.irq_stack_margin_percent, allocation.bytes).into());
@@ -110,11 +130,96 @@ mod tests {
     }
 
     #[test]
+    fn guard_overflow_and_omission_pass_selection_and_final_verification() -> Result<()> {
+        use crate::interrupts::{LinkedStack, Required, tests::partial};
+        for diagnostic in [false, true] {
+            for bound in [1000, 29000, 29789] {
+                let mut stacks = partial(bound);
+                let hart = stacks.harts.first_mut().ok_or("missing test hart")?;
+                hart.bytes = Some(bound);
+                hart.exception.bound.reached.insert(0x1000);
+                stacks.frames.insert(0x1000, Some(5000));
+                let planned = select(&stacks, diagnostic)?;
+                let allocation = planned.first().ok_or("missing test allocation")?;
+                stacks.allocations.insert(
+                    0,
+                    LinkedStack {
+                        bottom: u64::from(stacks.contract.memory.sram.origin()),
+                        bytes: allocation.bytes,
+                        guard_bytes: allocation.guard_bytes,
+                        from_bound: allocation.from_bound,
+                    },
+                );
+                verify(&stacks, &planned)?;
+                for policy in [Required::Product, Required::Diagnostic] {
+                    assert!(
+                        stacks
+                            .check(policy)?
+                            .iter()
+                            .any(|warning| warning.contains("reported only"))
+                    );
+                }
+                if bound >= 29000 {
+                    assert_eq!(allocation.guard_bytes, 0);
+                    assert_eq!(allocation.bytes, stacks.contract.interrupts.irq_stack_bytes);
+                    assert!(stacks.render().contains("guard omitted (reported only)"));
+                }
+                assert!(stacks.render().contains("Interrupt guards"));
+            }
+            let stacks = partial(29790);
+            assert!(select(&stacks, diagnostic).is_err());
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn partial_bounds_and_contiguous_alignment_can_omit_guards() -> Result<()> {
+        use crate::interrupts::{Required, tests::partial};
+        let stacks = partial(29789);
+        for diagnostic in [false, true] {
+            let planned = select(&stacks, diagnostic)?;
+            assert!(planned.iter().all(|allocation| !allocation.from_bound
+                && allocation.guard_bytes == 0
+                && allocation.bytes == 32768));
+        }
+        // The bound remains unresolved; only Diagnostic may accept it.
+        let mut stacks = stacks;
+        let planned = select(&stacks, true)?;
+        for allocation in &planned {
+            stacks.allocations.insert(
+                allocation.hart,
+                crate::interrupts::LinkedStack {
+                    bottom: u64::from(stacks.contract.memory.sram.origin()),
+                    bytes: allocation.bytes,
+                    guard_bytes: allocation.guard_bytes,
+                    from_bound: allocation.from_bound,
+                },
+            );
+        }
+        verify(&stacks, &planned)?;
+        assert!(!stacks.check(Required::Diagnostic)?.is_empty());
+        assert!(stacks.check(Required::Product).is_err());
+
+        let mut stacks = partial(1000);
+        stacks.contract.interrupts.irq_stack_bytes = 4112;
+        let first = stacks.harts.first_mut().ok_or("missing test hart")?;
+        first.bytes = Some(1000);
+        let mut second = first.clone();
+        second.core = 1;
+        stacks.harts.push(second);
+        let planned = select(&stacks, false)?;
+        assert_eq!(planned.len(), 2);
+        assert!(planned.iter().all(|allocation| allocation.guard_bytes == 0));
+        Ok(())
+    }
+
+    #[test]
     fn a_small_bound_increase_that_exceeds_the_final_capacity_is_an_error_with_figures() {
         let contract = contract();
         let allocation = Allocation {
             hart: 1,
-            bytes: contract.irq_stack_size(1, Some(1000)).unwrap(),
+            bytes: contract.irq_stack_allocation(1, Some(1000)).unwrap().bytes,
+            guard_bytes: 1024,
             first_bound: Some(1000),
             from_bound: true,
         };
@@ -142,6 +247,7 @@ mod tests {
         let allocation = Allocation {
             hart: 0,
             bytes: contract.irq_stack_bytes,
+            guard_bytes: 4096,
             first_bound: Some(1000),
             from_bound: false,
         };

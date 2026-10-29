@@ -22,8 +22,8 @@
 //! interrupt or exception code raises an illegal-instruction exception instead
 //! of silently corrupting the interrupted task's registers (on a core without
 //! the F extension the field reads zero and the writes do nothing). A debug
-//! trigger watches the chip contract's guard of each hart's interrupt stack, so an
-//! overflow traps before it reaches the state below the stack.
+//! trigger watches each linked IRQ guard when it fits beside the bound plus
+//! margin. Guard coverage is reported and does not guarantee overflow capture.
 //!
 //! The runtime linker script reserves every hart's task stack and sizes each
 //! interrupt stack from its bound or contract maximum; this module finds them by
@@ -223,9 +223,9 @@ fn invalid_hart() -> ! {
 /// for this hart's interrupt-stack guard.
 #[cfg(target_arch = "riscv32")]
 fn guard_interrupt_stack(bottom: usize, bytes: usize) -> Result<(), crate::BootError> {
-    let data2 = guard::napot_guard(bottom, bytes)?;
-    oer_riscv::arm_store_trigger(IRQ_STACK_GUARD_TRIGGER, data2);
-    Ok(())
+    guard::arm_interrupt_guard(bottom, bytes, |data2| {
+        oer_riscv::arm_store_trigger(IRQ_STACK_GUARD_TRIGGER, data2);
+    })
 }
 
 /// Whether `sp` lies in `hart`'s dedicated interrupt stack. Reads no memory,

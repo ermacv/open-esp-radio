@@ -627,20 +627,13 @@ impl StackPolicy {
             })
         });
         interrupts.harts.retain(|hart| !unused.contains(hart));
-        let mut maximum = interrupts.irq_stack_bytes;
+        let mut maximum = 0;
         let mut total = 0_u64;
         for (&hart, stacks) in &self.core {
             let Some(irq) = stacks.interrupt_stack.used() else {
                 continue;
             };
             let bytes = irq.allocation_bytes.unwrap_or(interrupts.irq_stack_bytes);
-            let guard = interrupts
-                .irq_stack_guard_bytes
-                .get(&hart)
-                .ok_or("missing hart guard")?;
-            if bytes <= *guard || bytes % *guard != 0 {
-                return Err("interrupt stack allocation does not fit the guard contract".into());
-            }
             total += u64::from(bytes);
             maximum = maximum.max(bytes);
             let names = [
@@ -1035,6 +1028,29 @@ mod tests {
         );
     }
     #[test]
+    fn guard_storage_is_optional_but_the_bound_plus_margin_is_a_gate() -> Result<()> {
+        let image = policy(None).runtime_profile(&profile())?;
+        let contract = image.facts.interrupts.ok_or("missing interrupt contract")?;
+        let allocation = contract.irq_stack_allocation(0, Some(29789))?;
+        assert_eq!(allocation.bytes, contract.irq_stack_bytes);
+        assert_eq!(allocation.guard_bytes, 0);
+        assert!(contract.irq_stack_allocation(0, Some(29790)).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn an_explicit_maximum_need_not_reserve_or_align_to_a_guard() -> Result<()> {
+        for bytes in [4096, 4096 + 16, 32768 + 16] {
+            let image = policy(Some(bytes)).runtime_profile(&profile())?;
+            let contract = image.facts.interrupts.ok_or("missing interrupt contract")?;
+            assert_eq!(contract.irq_stack_bytes, bytes);
+            let allocation = contract.irq_stack_allocation(0, Some(u64::from(bytes) * 9 / 10))?;
+            assert_eq!(allocation.guard_bytes, 0);
+        }
+        Ok(())
+    }
+
+    #[test]
     fn a_larger_budget_requires_consistent_exact_sram_placement() {
         let mut base = profile();
         let requested = base.facts.interrupts.as_ref().unwrap().irq_stack_bytes * 2;
@@ -1061,8 +1077,7 @@ mod tests {
     #[test]
     fn bad_or_unaffordable_allocations_are_refused() {
         let base = profile();
-        let maximum = base.facts.interrupts.as_ref().unwrap().irq_stack_bytes;
-        for bytes in [0, 4096, maximum + 16, 65537, u32::MAX - 15] {
+        for bytes in [0, 65537, u32::MAX - 15] {
             assert!(policy(Some(bytes)).runtime_profile(&base).is_err());
         }
     }
