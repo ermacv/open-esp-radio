@@ -8,6 +8,7 @@ oer_hil_agent::requests! {
     pub(crate) enum Request(sessions = false) { Prepare(Prepare), Run(RunCase),
         Describe(oer_hil_protocol::capture::Describe),
         Counters(oer_hil_protocol::capture::ReadCounters), }
+    publishes [oer_hil_protocol::capture::Refused]
 }
 
 oer_hil_agent::image_keys! {

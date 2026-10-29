@@ -82,7 +82,10 @@ impl Event for GroupRollback {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use core::{cell::Cell, sync::atomic::{AtomicU32, Ordering::Relaxed}};
+    use core::{
+        cell::Cell,
+        sync::atomic::{AtomicU32, Ordering::Relaxed},
+    };
     struct ImageObserver(AtomicU32);
     impl oer_trace::Observer for ImageObserver {
         fn event<E: Event + Copy + 'static>(&self, _: E) {
@@ -96,7 +99,10 @@ mod tests {
         let evaluated = Cell::new(0u32);
         oer_trace::observe!(observer, {
             evaluated.set(evaluated.get() + 1);
-            Publication { ticket: 2, buffer: 3 }
+            Publication {
+                ticket: 2,
+                buffer: 3,
+            }
         });
         assert_eq!(evaluated.get(), u32::from(cfg!(oer_trace)));
         assert_eq!(observer.0.load(Relaxed), u32::from(cfg!(oer_trace)));

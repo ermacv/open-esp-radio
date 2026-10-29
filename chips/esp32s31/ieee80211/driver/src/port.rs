@@ -49,10 +49,10 @@ mod placement;
 #[cfg(any(target_arch = "riscv32", test))]
 mod receive;
 mod settings;
-pub use buffer::*;
-pub use keys::{GroupKey, KeyIdentity, PairwiseKey, PortKeys};
 use oer_sync::PriorityWaker;
 use placement::Prepared;
+pub use buffer::*;
+pub use keys::{GroupKey, KeyIdentity, PairwiseKey, PortKeys};
 mod loan;
 mod owned;
 pub use phase::{Esp32s31Interface, Esp32s31Phase, Esp32s31Setup};
