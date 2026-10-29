@@ -425,15 +425,15 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 "firmware/apps/w3/src/irq.rs:76:47:terminal-reference:reset" = { owner = "firmware/apps/w3", classes = ["unexpected-hardware"] }
 
 # firmware/apps/w3/src/network.rs
-"firmware/apps/w3/src/network.rs:122:14:panic-method:expect" = { owner = "firmware/apps/w3", classes = ["rust-panic"] }
-"firmware/apps/w3/src/network.rs:125:14:panic-method:expect" = { owner = "firmware/apps/w3", classes = ["rust-panic"] }
-"firmware/apps/w3/src/network.rs:127:14:panic-method:expect" = { owner = "firmware/apps/w3", classes = ["rust-panic"] }
-"firmware/apps/w3/src/network.rs:172:34:panic-macro:unreachable" = { owner = "firmware/apps/w3", classes = ["rust-panic"] }
-"firmware/apps/w3/src/network.rs:200:10:panic-method:expect" = { owner = "firmware/apps/w3", classes = ["rust-panic"] }
-"firmware/apps/w3/src/network.rs:214:14:panic-method:expect" = { owner = "firmware/apps/w3", classes = ["rust-panic"] }
-"firmware/apps/w3/src/network.rs:238:14:panic-method:expect" = { owner = "firmware/apps/w3", classes = ["rust-panic"] }
-"firmware/apps/w3/src/network.rs:241:14:panic-method:expect" = { owner = "firmware/apps/w3", classes = ["rust-panic"] }
-"firmware/apps/w3/src/network.rs:278:14:panic-method:expect" = { owner = "firmware/apps/w3", classes = ["rust-panic"] }
+"firmware/apps/w3/src/network.rs:118:14:panic-method:expect" = { owner = "firmware/apps/w3", classes = ["rust-panic"] }
+"firmware/apps/w3/src/network.rs:121:14:panic-method:expect" = { owner = "firmware/apps/w3", classes = ["rust-panic"] }
+"firmware/apps/w3/src/network.rs:123:14:panic-method:expect" = { owner = "firmware/apps/w3", classes = ["rust-panic"] }
+"firmware/apps/w3/src/network.rs:166:34:panic-macro:unreachable" = { owner = "firmware/apps/w3", classes = ["rust-panic"] }
+"firmware/apps/w3/src/network.rs:194:10:panic-method:expect" = { owner = "firmware/apps/w3", classes = ["rust-panic"] }
+"firmware/apps/w3/src/network.rs:208:14:panic-method:expect" = { owner = "firmware/apps/w3", classes = ["rust-panic"] }
+"firmware/apps/w3/src/network.rs:232:14:panic-method:expect" = { owner = "firmware/apps/w3", classes = ["rust-panic"] }
+"firmware/apps/w3/src/network.rs:235:14:panic-method:expect" = { owner = "firmware/apps/w3", classes = ["rust-panic"] }
+"firmware/apps/w3/src/network.rs:272:14:panic-method:expect" = { owner = "firmware/apps/w3", classes = ["rust-panic"] }
 
 # firmware/apps/w3/src/phy_pilot.rs
 "firmware/apps/w3/src/phy_pilot.rs:44:55:terminal-reference:reset_binding" = { owner = "firmware/apps/w3", classes = ["configuration-boot", "unexpected-hardware", "software-invariant"] }
@@ -701,15 +701,15 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 "firmware/hil/esp32s31/src/wifi_station/mod.rs:89:15:terminal-entry:start" = { owner = "firmware/hil/esp32s31", classes = ["configuration-boot", "software-invariant", "rust-panic"] }
 
 # firmware/hil/esp32s31/src/wifi_station/network.rs
-"firmware/hil/esp32s31/src/wifi_station/network.rs:101:14:panic-method:expect" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
-"firmware/hil/esp32s31/src/wifi_station/network.rs:104:14:panic-method:expect" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
-"firmware/hil/esp32s31/src/wifi_station/network.rs:106:14:panic-method:expect" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
-"firmware/hil/esp32s31/src/wifi_station/network.rs:155:9:panic-macro:unreachable" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
-"firmware/hil/esp32s31/src/wifi_station/network.rs:235:59:panic-method:expect" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
-"firmware/hil/esp32s31/src/wifi_station/network.rs:236:62:panic-method:expect" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
-"firmware/hil/esp32s31/src/wifi_station/network.rs:237:65:panic-method:expect" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
-"firmware/hil/esp32s31/src/wifi_station/network.rs:238:63:panic-method:expect" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
-"firmware/hil/esp32s31/src/wifi_station/network.rs:323:48:panic-method:expect" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
+"firmware/hil/esp32s31/src/wifi_station/network.rs:97:14:panic-method:expect" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
+"firmware/hil/esp32s31/src/wifi_station/network.rs:100:14:panic-method:expect" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
+"firmware/hil/esp32s31/src/wifi_station/network.rs:102:14:panic-method:expect" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
+"firmware/hil/esp32s31/src/wifi_station/network.rs:151:9:panic-macro:unreachable" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
+"firmware/hil/esp32s31/src/wifi_station/network.rs:231:59:panic-method:expect" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
+"firmware/hil/esp32s31/src/wifi_station/network.rs:232:62:panic-method:expect" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
+"firmware/hil/esp32s31/src/wifi_station/network.rs:233:65:panic-method:expect" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
+"firmware/hil/esp32s31/src/wifi_station/network.rs:234:63:panic-method:expect" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
+"firmware/hil/esp32s31/src/wifi_station/network.rs:273:48:panic-method:expect" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
 
 # firmware/hil/esp32s31/src/wifi_station/observation.rs
 "firmware/hil/esp32s31/src/wifi_station/observation.rs:42:10:panic-method:expect" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
@@ -733,8 +733,8 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 "firmware/hil/esp32s31/src/wifi_station/station.rs:354:49:panic-method:expect" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
 "firmware/hil/esp32s31/src/wifi_station/station.rs:377:30:panic-method:expect" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
 "firmware/hil/esp32s31/src/wifi_station/station.rs:423:34:panic-method:expect" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
-"firmware/hil/esp32s31/src/wifi_station/station.rs:497:34:panic-macro:unreachable" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
-"firmware/hil/esp32s31/src/wifi_station/station.rs:546:18:panic-method:expect" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
+"firmware/hil/esp32s31/src/wifi_station/station.rs:502:34:panic-macro:unreachable" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
+"firmware/hil/esp32s31/src/wifi_station/station.rs:551:18:panic-method:expect" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
 
 # firmware/probes/esp32s31-facts/src/image.rs
 "firmware/probes/esp32s31-facts/src/image.rs:106:8:retained-slot:RETAINED" = { owner = "firmware/probes/esp32s31-facts", classes = ["requested-reset"] }
