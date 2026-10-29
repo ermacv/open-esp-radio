@@ -1,9 +1,11 @@
 //! Image-local observer: callbacks only record; UART is flushed after root return.
-use super::{Notes, metrics::Metrics, recorder::Recorder, sar_tails::Tails};
 use core::cell::RefCell;
 use oer_diagnostics::Note;
 use oer_esp32s31_phy::tracking::observation::{
     EngineTiming, Event, GainTiming, Operation, ReadinessTrace, RfpllEngineTrace, RxGainExecution,
+};
+use oer_esp32s31_phy_probe::hold::{
+    metrics::Metrics, notes::Notes, recorder::Recorder, sar_tails::Tails,
 };
 use oer_esp32s31_phy_probe::{HoldOperation, HoldPolls};
 use oer_time::Clock;
@@ -137,7 +139,7 @@ impl<C: Clock, W: Notes> Observer<'_, C, W> {
         self.engine.merge(counters);
     }
     pub fn tx_sar_wait(&mut self, elapsed: u64, observations: u16, ready: bool) {
-        self.tails.observe(elapsed, observations, ready);
+        self.engine.invalid |= self.tails.observe(elapsed, observations, ready).is_err();
     }
     pub fn tracking_operation(&mut self, operation: Operation, event: Event) {
         let operation = match operation {
@@ -306,3 +308,6 @@ fn operation_family(operation: Operation) -> usize {
         _ => 0,
     }
 }
+
+#[cfg(test)]
+mod tests;

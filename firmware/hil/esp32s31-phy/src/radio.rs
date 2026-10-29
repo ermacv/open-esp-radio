@@ -30,7 +30,7 @@ use oer_esp32s31_phy::{
     wifi_client::{WifiPhyMembership, join_wifi, leave_wifi, set_wifi_rx},
     *,
 };
-use oer_esp32s31_phy_probe::*;
+use oer_esp32s31_phy_probe::{hold::metrics, *};
 use oer_hil_protocol::base::RejectReason;
 use oer_time::{Clock, Timer};
 
@@ -615,7 +615,7 @@ impl Radio {
             return;
         }
         let mut trace = oer_esp32s31_phy::tracking::observation::ReadinessTrace::default();
-        let metrics = core::cell::RefCell::new(crate::hold::metrics::Metrics::default());
+        let metrics = core::cell::RefCell::new(metrics::Metrics::default());
         let mut uart = crate::hold::Uart;
         let mut observer = crate::hold::Observer::new(
             hold.samples.len() as u8 + 1,
@@ -644,7 +644,7 @@ impl Radio {
                     observer,
                     pilot,
                 )));
-            crate::hold::metrics::observe(
+            crate::hold::observe(
                 Boundary::new(future.as_mut()),
                 &crate::PHY_CLOCK,
                 &metrics,
@@ -689,7 +689,7 @@ impl Radio {
         observer.report(hold.samples.len() as u8 + 1).await;
         let recorder = observer.recorder;
         let measured = *metrics.borrow();
-        crate::hold::metrics::report(hold.samples.len() as u8 + 1, &measured, &mut uart).await;
+        metrics::report(hold.samples.len() as u8 + 1, &measured, &mut uart).await;
         crate::hold::report_preparation(&trace, &hold.engine).await;
         crate::hold::finish_sample(hold, recorder, committed, failed);
     }

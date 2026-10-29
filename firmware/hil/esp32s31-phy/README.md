@@ -191,3 +191,10 @@ handshakes add time to the 600 one-second tick intervals.
 Registration and bring-up checkpoints use the console's reliable text queue;
 the console owns USB writes for both frames and checkpoint lines. Reporting
 runs after the native registration result and outside its measured duration.
+
+The hardware-free hold recorder, metrics, note sink contract and SAR readiness
+distribution live in `oer-esp32s31-phy-probe::hold`, with their own host tests.
+This image retains the concrete PHY observer, clock/poll wrapper, queued console
+and calibration-cache adapter as composition. Host tests of the image exercise
+observer output after root return and cache admission/export; vendor workloads
+include no image sources.
