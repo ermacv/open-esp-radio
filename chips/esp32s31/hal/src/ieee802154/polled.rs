@@ -62,31 +62,8 @@ const fn timer_stop(timer: Ieee802154Timer) -> Opcode {
 /// pair holds the router's [`Silent`] proof that no CPU line receives the
 /// MAC's source:
 ///
-/// ```no_run
-/// use oer_esp32s31_hal::ieee802154::{polled::Ieee802154MacOwners, mac::*};
-/// use oer_esp32s31_hal::platform::InterruptController;
-/// use oer_espressif_interrupt_table::Router;
-/// fn poll(
-///     router: &Router<InterruptController>,
-///     task: Ieee802154TaskOwner,
-///     setup: Ieee802154InterruptSetupOwner,
-/// ) -> Option<Ieee802154MacOwners> {
-///     // A refused route has not accessed or started the MAC.
-///     let Ok(silent) = router.silent::<Ieee802154InterruptOwner>() else { return None; };
-///     let (startup, interrupts) = setup.arm(task);
-///     Some(Ieee802154MacOwners::new(startup, interrupts, silent))
-/// }
-/// # fn main() {}
-/// ```
-///
-/// ```compile_fail,E0061
-/// # use oer_esp32s31_hal::ieee802154::{polled::Ieee802154MacOwners, mac::*};
-/// fn poll(mut task: Ieee802154TaskOwner, setup: Ieee802154InterruptSetupOwner) {
-///     let (startup, interrupts) = setup.arm(task);
-///     // Enabling the events by polling takes the silent route's proof.
-///     let _mac = Ieee802154MacOwners::new(startup, interrupts);
-/// }
-/// ```
+/// Construction requires the armed startup task owner, its IRQ owner and
+/// `Silent`. Neither setup ownership nor a foreign route proof can construct it.
 #[must_use = "the MAC owners must be separated and returned to their route"]
 pub struct Ieee802154MacOwners<
     P: Placement = MacPlacement,
@@ -319,8 +296,12 @@ impl<P: Placement, E: Placement, B: Placement> Ieee802154MacOwners<P, E, B> {
         self.task.set_ed_sample_mode(mode);
     }
 
-    pub fn disable_coex(&mut self) {
+    /// Disable coexistence in the TX/RX priority field only.
+    pub fn disable_txrx_coex(&mut self) {
         self.task.set_txrx_pti(Ieee802154Pti::COEX_DISABLED);
+    }
+    /// Disable coexistence in the ACK priority field only.
+    pub fn disable_ack_coex(&mut self) {
         self.task.set_ack_pti(Ieee802154Pti::COEX_DISABLED);
     }
 

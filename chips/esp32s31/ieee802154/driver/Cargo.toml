@@ -8,6 +8,7 @@ repository.workspace = true
 description = "ESP32-S31 IEEE 802.15.4 engine adapter and placed MAC ownership"
 
 [dependencies]
+oer-espressif-interrupt-table = { path = "../../../espressif/interrupt-table" }
 oer-ieee802154-port = { path = "../../../../protocols/ieee802154/port" }
 oer-esp32s31-hal = { path = "../../hal" }
 oer-esp32s31-knowledge = { path = "../../knowledge" }

@@ -12,6 +12,16 @@ helpers), ported once for every supported chip.
 | `ll` | The `Ieee802154LowLevel` interface (the driver's `ieee802154_ll_*` accessors, modem ETM steps and timer commands) and the hardware helpers generic over it; `ll::model` is a register model for tests and explicit `test-support` builds |
 | `capabilities` | The portable capabilities a radio over the engine reports (ESP-IDF's OpenThread port defaults) and the table a chip builds from its transmit-power level set |
 | `coex` | Operation-dependent software-coexistence policy and priorities |
+| `lifecycle` | Reset/foundation sequencing and readback with retained affine owners |
+| `policy` | Interrupt-masked static policy and strongest-phase recovery |
+| `interrupt` | Consuming startup/teardown order and the ten runtime events |
+
+The lifecycle backend associates its own reset-loan type: a caller's unrelated
+reset port cannot prove a HAL reset phase. Handing out an operational backend
+also returns an affine `Ieee802154FoundationReturn`; revalidation consumes it
+with the returning backend. The PHY membership route retains this proof for
+the whole operational epoch, so a fresh clocked owner cannot resume a prior
+foundation and a return proof cannot be reused or fabricated.
 
 All MAC semantic values come directly from
 `oer-espressif-ieee802154-mac-values`: commands, timers, channel and power
@@ -26,8 +36,8 @@ completion types, PIB, coexistence policy and storage/owner contracts.
 Each chip's driver implements `Ieee802154LowLevel`; HAL converts semantic
 values into its own PAC register types. The ESP32-S31 implementation is
 `oer_esp32s31_ieee802154_driver::ll::S31Mac`. What differs between
-chips stays with the chip: register geometry, the transmit-on delays and the
-rest of the MAC lifecycle, the transmit-power level set, the coexistence
+chips stays with the chip: register geometry, transmit-on delay atoms,
+module-clock/partition owners, the transmit-power level set, the coexistence
 table and the diagnostic counters a chip's LL adds. Each HAL places its frame
 storage with `dma_static!` in `.dma.bss.ieee802154`, consumes the `Placed`
 claim and builds one typed address per RX, TX and enhanced-ACK slot. The
@@ -125,6 +135,10 @@ cannot reach a new operation.
 Masked ack is measured for timers0/1 and RX_ABORT reason26; masked visibility
 and hidden pending on 7/10/13 remain unmeasured. No zero read establishes their
 absence, and the startup discard does not prove producer drain.
+The family function executes each consuming register-port step; HAL's phase
+types with private fields permit only the next atom. Only the final fence
+returns a bindable IRQ owner. The shared mac-values crate contains observations
+and port vocabulary, with no lifecycle or interrupt sequence execution.
 Deactivation issues STOP and both timer-stop commands, samples, masks and
 acknowledges its saved sample. These commands and selected acknowledgements do
 not prove that every hardware producer drained.

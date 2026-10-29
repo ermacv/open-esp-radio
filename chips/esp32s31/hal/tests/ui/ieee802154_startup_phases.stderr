@@ -1,0 +1,85 @@
+error[E0308]: mismatched types
+  --> tests/ui/ieee802154_startup_phases.rs:14:32
+   |
+14 |     let _ = router.bind(token, setup); // ui-error: E0308
+   |                    ----        ^^^^^ expected `Ieee802154InterruptOwner<...>`, found `Ieee802154InterruptSetupOwner<...>`
+   |                    |
+   |                    arguments to this method are incorrect
+   |
+   = note: expected struct `Ieee802154InterruptOwner<Fixed<537931776>>`
+              found struct `Ieee802154InterruptSetupOwner<Fixed<537931776>>`
+note: method defined here
+  --> $WORKSPACE/chips/espressif/interrupt-table/src/router.rs
+   |
+   |     pub fn bind<E: Entry>(&mut self, token: E, part: E::Part) -> Result<Bound<E>, BindError<E>> {
+   |            ^^^^
+
+error[E0308]: mismatched types
+  --> tests/ui/ieee802154_startup_phases.rs:22:43
+   |
+22 |     let _ = Ieee802154StartupPort::finish(masked); // ui-error: E0308
+   |             ----------------------------- ^^^^^^ expected `9`, found `1`
+   |             |
+   |             arguments to this function are incorrect
+   |
+   = note: expected struct `Ieee802154Startup<_, _, _, 9>`
+              found struct `Ieee802154Startup<Fixed<537931776>, Fixed<537954304>, Fixed<537927680>, 1>`
+note: associated function defined here
+  --> $WORKSPACE/chips/espressif/ieee802154-mac-values/src/interrupt.rs
+   |
+   |     fn finish(phase: Self::Discarded) -> Self::Output;
+   |        ^^^^^^
+
+error[E0599]: no method named `into_parts` found for struct `Ieee802154Startup<P, E, B, STEP>` in the current scope
+  --> tests/ui/ieee802154_startup_phases.rs:30:20
+   |
+30 |     let _ = masked.into_parts(); // ui-error: E0599
+   |                    ^^^^^^^^^^ method not found in `Ieee802154Startup<Fixed<537931776>, Fixed<537954304>, Fixed<537927680>, 1>`
+
+error[E0271]: type mismatch resolving `<I as Entry>::Part == Ieee802154InterruptOwner<Fixed<537931776>>`
+  --> tests/ui/ieee802154_startup_phases.rs:42:30
+   |
+42 |     let _ = startup.activate(bound, Ieee802154EventMask::HANDLED_BASELINE_NO_TIMER0); // ui-error: E0271
+   |                     -------- ^^^^^ expected `Ieee802154InterruptOwner<...>`, found `OtherIrq`
+   |                     |
+   |                     required by a bound introduced by this call
+   |
+   = note: expected struct `Ieee802154InterruptOwner<Fixed<537931776>>`
+              found struct `OtherIrq`
+note: required by a bound in `Ieee802154ArmedTaskOwner::<P, E, B>::activate`
+  --> src/ieee802154/mac.rs
+   |
+   |     pub fn activate<I: oer_espressif_interrupt_table::Entry<Part = Ieee802154InterruptOwner<P>>>(
+   |                                                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `Ieee802154ArmedTaskOwner::<P, E, B>::activate`
+
+error[E0308]: mismatched types
+  --> tests/ui/ieee802154_startup_phases.rs:49:52
+   |
+49 |     let _ = Ieee802154MacOwners::new(startup, irq, silent); // ui-error: E0308
+   |             ------------------------               ^^^^^^ expected `Silent<Ieee802154InterruptOwner<...>>`, found `Silent<OtherIrq>`
+   |             |
+   |             arguments to this function are incorrect
+   |
+   = note: expected struct `Silent<Ieee802154InterruptOwner<Fixed<537931776>>>`
+              found struct `Silent<OtherIrq>`
+note: associated function defined here
+  --> src/ieee802154/polled.rs
+   |
+   |     pub fn new(
+   |            ^^^
+
+error[E0061]: this function takes 3 arguments but 2 arguments were supplied
+  --> tests/ui/ieee802154_startup_phases.rs:60:13
+   |
+60 |     let _ = Ieee802154MacOwners::new(startup, irq); // ui-error: E0061
+   |             ^^^^^^^^^^^^^^^^^^^^^^^^-------------- argument #3 of type `Silent<Ieee802154InterruptOwner<Fixed<537931776>>>` is missing
+   |
+note: associated function defined here
+  --> src/ieee802154/polled.rs
+   |
+   |     pub fn new(
+   |            ^^^
+help: provide the argument
+   |
+60 |     let _ = Ieee802154MacOwners::new(startup, irq, /* Silent<Ieee802154InterruptOwner<Fixed<537931776>>> */); // ui-error: E0061
+   |                                                  ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++

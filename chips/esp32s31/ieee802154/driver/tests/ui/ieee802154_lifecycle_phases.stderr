@@ -1,0 +1,42 @@
+error[E0308]: mismatched types
+  --> tests/ui/ieee802154_lifecycle_phases.rs:17:61
+   |
+17 |     let _ = Ieee802154Lifecycle::clocked(clocked).reset_mac(&mut foreign); // ui-error: E0308
+   |                                                   --------- ^^^^^^^^^^^^ expected `&mut LeasedResetPort<'_>`, found `&mut ForeignReset`
+   |                                                   |
+   |                                                   arguments to this method are incorrect
+   |
+   = note: expected mutable reference `&mut ieee802154::role::LeasedResetPort<'_>`
+              found mutable reference `&mut ForeignReset`
+note: method defined here
+  --> $WORKSPACE/chips/espressif/ieee802154-engine/src/lifecycle.rs
+   |
+   |     pub fn reset_mac<'a>(
+   |            ^^^^^^^^^
+
+error[E0061]: this function takes 2 arguments but 1 argument was supplied
+  --> tests/ui/ieee802154_lifecycle_phases.rs:24:13
+   |
+24 |     let _ = Ieee802154Lifecycle::resume(clocked); // ui-error: E0061
+   |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^--------- argument #2 of type `Ieee802154FoundationReturn<Ieee802154Clocked>` is missing
+   |
+note: associated function defined here
+  --> $WORKSPACE/chips/espressif/ieee802154-engine/src/lifecycle.rs
+   |
+   |     pub fn resume(
+   |            ^^^^^^
+help: provide the argument
+   |
+24 |     let _ = Ieee802154Lifecycle::resume(clocked, /* Ieee802154FoundationReturn<Ieee802154Clocked> */); // ui-error: E0061
+   |                                                +++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+error[E0382]: use of moved value: `phase`
+  --> tests/ui/ieee802154_lifecycle_phases.rs:32:18
+   |
+29 | pub fn a_return_phase_is_consumed_once(clocked: Ieee802154Clocked, phase: Ieee802154FoundationReturn<Ieee802154Clocked>) {
+   |                                                                    ----- move occurs because `phase` has type `Ieee802154FoundationReturn<Ieee802154Clocked>`, which does not implement the `Copy` trait
+30 |     let _ = Ieee802154Lifecycle::resume(clocked, phase);
+   |                                                  ----- value moved here
+31 |     #[cfg(all())]
+32 |     let _again = phase; // ui-error: E0382
+   |                  ^^^^^ value used here after move

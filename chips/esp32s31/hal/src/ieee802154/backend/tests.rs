@@ -1,3 +1,4 @@
+use oer_espressif_ieee802154_mac_values::Ieee802154FoundationSnapshot;
 use oer_espressif_ieee802154_mac_values::{
     Ieee802154AckTimeout, Ieee802154CcaMode, Ieee802154Channel, Ieee802154MacControl,
     Ieee802154MultipanEnableState, Ieee802154PanIdentity, Ieee802154RxStateCode,
@@ -6,11 +7,12 @@ use oer_espressif_ieee802154_mac_values::{
 use std::vec::Vec;
 
 use super::{
-    Ieee802154FoundationSnapshot, Ieee802154Hal, Ieee802154MacHal, Ieee802154Pti,
-    Ieee802154RegisterBackend, Ieee802154StateSnapshot,
+    Ieee802154Hal, Ieee802154MacHal, Ieee802154Pti, Ieee802154RegisterBackend,
+    Ieee802154StateSnapshot,
 };
-use crate::ieee802154::{mac, policy::Ieee802154MacPolicySnapshot};
+use crate::ieee802154::mac;
 use crate::root::RadioPartitions;
+use oer_espressif_ieee802154_mac_values::Ieee802154MacPolicySnapshot;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Operation {
@@ -52,15 +54,7 @@ impl FakeRegisters {
                 ),
                 Ieee802154TxStateCode::from_field(tx),
             ),
-            foundation: Ieee802154FoundationSnapshot::new(
-                true,
-                true,
-                true,
-                true,
-                Ieee802154Pti::new(3).expect("five-bit PTI"),
-                Ieee802154Pti::new(3).expect("five-bit PTI"),
-                true,
-            ),
+            foundation: Ieee802154FoundationSnapshot::new(true, true, true, true, 3, 3, true),
             policy: Ieee802154MacPolicySnapshot::new(
                 48,
                 Ieee802154CcaMode::CarrierAndEnergyDetection,
@@ -241,8 +235,8 @@ fn foundation_readback_is_delegated_without_event_status_access() {
     assert!(snapshot.rx_aborts_masked());
     assert!(snapshot.tx_aborts_masked());
     assert!(snapshot.ed_uses_average());
-    assert_eq!(snapshot.txrx_pti().value(), 3);
-    assert_eq!(snapshot.ack_pti().value(), 3);
+    assert_eq!(snapshot.txrx_pti(), 3);
+    assert_eq!(snapshot.ack_pti(), 3);
     assert_eq!(
         hal.into_register_backend().operations,
         [Operation::FoundationSnapshot]

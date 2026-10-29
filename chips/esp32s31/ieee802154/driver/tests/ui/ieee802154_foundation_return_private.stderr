@@ -1,0 +1,5 @@
+error[E0451]: field `_backend` of struct `Ieee802154FoundationReturn` is private
+ --> tests/ui/ieee802154_foundation_return_private.rs:7:63
+  |
+7 |     let _ = Ieee802154FoundationReturn::<Ieee802154Clocked> { _backend: core::marker::PhantomData }; // ui-error: E0451
+  |                                                               ^^^^^^^^ private field

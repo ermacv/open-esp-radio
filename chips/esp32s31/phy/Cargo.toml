@@ -12,6 +12,7 @@ radio-health = []
 
 [dependencies]
 oer-espressif-phy = { path = "../../espressif/phy" }
+oer-espressif-ieee802154-engine = { path = "../../espressif/ieee802154-engine" }
 oer-espressif-analog = { path = "../../espressif/analog" }
 oer-diagnostics = { path = "../../../portable/diagnostics" }
 oer-time = { path = "../../../portable/time" }

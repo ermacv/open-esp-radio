@@ -21,7 +21,10 @@ use oer_espressif_ieee802154_mac_values::{
 use oer_mmio::{Bits, Index, Placement};
 
 use super::{Ieee802154TaskOwner, codes};
-use crate::{ieee802154::policy::Ieee802154MacPolicySnapshot, layouts::DmaWindowAddress};
+use crate::layouts::DmaWindowAddress;
+use oer_espressif_ieee802154_mac_values::{
+    Ieee802154FoundationSnapshot, Ieee802154MacPolicySnapshot,
+};
 
 /// The transmit-on delay `ieee802154_txon_delay_set` writes.
 ///
@@ -70,75 +73,6 @@ impl Ieee802154Pti {
     /// The priority.
     pub(crate) const fn value(self) -> u8 {
         byte(self.0)
-    }
-}
-
-/// Readback of the interrupt-masked MAC foundation.
-///
-/// It excludes `EVENT_STATUS`: the foundation neither owns nor acknowledges
-/// pending events.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) struct Ieee802154FoundationSnapshot {
-    events_masked: bool,
-    rx_aborts_masked: bool,
-    tx_aborts_masked: bool,
-    ed_uses_average: bool,
-    txrx_pti: Ieee802154Pti,
-    ack_pti: Ieee802154Pti,
-    txon_delay_applied: bool,
-}
-
-impl Ieee802154FoundationSnapshot {
-    /// One readback, as a test reports it.
-    #[cfg(test)]
-    pub(crate) const fn new(
-        events_masked: bool,
-        rx_aborts_masked: bool,
-        tx_aborts_masked: bool,
-        ed_uses_average: bool,
-        txrx_pti: Ieee802154Pti,
-        ack_pti: Ieee802154Pti,
-        txon_delay_applied: bool,
-    ) -> Self {
-        Self {
-            events_masked,
-            rx_aborts_masked,
-            tx_aborts_masked,
-            ed_uses_average,
-            txrx_pti,
-            ack_pti,
-            txon_delay_applied,
-        }
-    }
-
-    pub(crate) const fn events_masked(self) -> bool {
-        self.events_masked
-    }
-
-    pub(crate) const fn rx_aborts_masked(self) -> bool {
-        self.rx_aborts_masked
-    }
-
-    pub(crate) const fn tx_aborts_masked(self) -> bool {
-        self.tx_aborts_masked
-    }
-
-    pub(crate) const fn ed_uses_average(self) -> bool {
-        self.ed_uses_average
-    }
-
-    pub(crate) const fn txrx_pti(self) -> Ieee802154Pti {
-        self.txrx_pti
-    }
-
-    pub(crate) const fn ack_pti(self) -> Ieee802154Pti {
-        self.ack_pti
-    }
-
-    /// Whether `TXON_DELAY`, `TXOFF_DELAY`, `RXON_DELAY` and
-    /// `TXRX_SWITCH_DELAY` hold the vendor MAC-initialization values.
-    pub(crate) const fn txon_delay_applied(self) -> bool {
-        self.txon_delay_applied
     }
 }
 
@@ -313,22 +247,6 @@ fn set_event(writer: &mut event_enable::W, event: Ieee802154Event, enable: bool)
     };
 }
 
-/// The events the interrupt handler serves: every named event but TIMER0
-/// overflow and the clock-count match, which the driver enables only while
-/// it uses them.
-const RUNTIME_EVENTS: [Ieee802154Event; 10] = [
-    Ieee802154Event::TxDone,
-    Ieee802154Event::RxDone,
-    Ieee802154Event::AckTxDone,
-    Ieee802154Event::AckRxDone,
-    Ieee802154Event::RxAbort,
-    Ieee802154Event::TxAbort,
-    Ieee802154Event::EdDone,
-    Ieee802154Event::Timer1Overflow,
-    Ieee802154Event::TxSfdDone,
-    Ieee802154Event::RxSfdDone,
-];
-
 /// Set `IEEE802154_RX_ABORT_BASELINE`'s fields to `enable`: the ACK
 /// transmit timeout and its coexistence break.
 fn set_rx_abort_baseline(writer: &mut rx_abort_enable::W, enable: bool) {
@@ -437,11 +355,27 @@ impl<P: Placement, E: Placement, B: Placement> Ieee802154TaskOwner<P, E, B> {
     }
 
     /// Enable exactly the events the interrupt handler serves.
-    pub(crate) fn enable_runtime_events(&mut self) {
+    pub(crate) fn replace_events(
+        &mut self,
+        events: oer_espressif_ieee802154_mac_values::Ieee802154EventMask,
+    ) {
         self.mac.modify_event_enable(|writer| {
             set_all_events(writer, false);
-            for event in RUNTIME_EVENTS {
-                set_event(writer, event, true);
+            for event in [
+                Ieee802154Event::TxDone,
+                Ieee802154Event::RxDone,
+                Ieee802154Event::AckTxDone,
+                Ieee802154Event::AckRxDone,
+                Ieee802154Event::RxAbort,
+                Ieee802154Event::TxAbort,
+                Ieee802154Event::EdDone,
+                Ieee802154Event::Timer0Overflow,
+                Ieee802154Event::Timer1Overflow,
+                Ieee802154Event::ClockCountMatch,
+                Ieee802154Event::TxSfdDone,
+                Ieee802154Event::RxSfdDone,
+            ] {
+                set_event(writer, event, events.contains(event));
             }
         });
     }
@@ -1013,18 +947,18 @@ impl<P: Placement, E: Placement, B: Placement> Ieee802154TaskOwner<P, E, B> {
             || tx_aborts.cca_failed()
             || tx_aborts.cca_busy()
             || tx_aborts.tx_abort_en_25_30().get() != 0);
-        Ieee802154FoundationSnapshot {
+        Ieee802154FoundationSnapshot::new(
             events_masked,
             rx_aborts_masked,
             tx_aborts_masked,
-            ed_uses_average: ed_config.ed_sample_mode_variant() == EdSampleMode::Average,
-            txrx_pti: Ieee802154Pti(coex_pti.txrx_pti()),
-            ack_pti: Ieee802154Pti(coex_pti.ack_pti()),
-            txon_delay_applied: tx_on == TX_ON_DELAY
+            ed_config.ed_sample_mode_variant() == EdSampleMode::Average,
+            Ieee802154Pti(coex_pti.txrx_pti()).value(),
+            Ieee802154Pti(coex_pti.ack_pti()).value(),
+            tx_on == TX_ON_DELAY
                 && tx_off == TX_OFF_DELAY
                 && rx_on == RX_ON_DELAY
                 && switch == TXRX_SWITCH_DELAY,
-        }
+        )
     }
 
     /// Read the static MAC policy the foundation owner writes, once per

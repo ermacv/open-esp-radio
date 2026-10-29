@@ -113,3 +113,43 @@ pub(crate) fn silent<'a>()
         .and_then(|router| router.silent())
         .expect("a table without entries leaves the MAC's source silent")
 }
+
+/// Drive the startup atom contract on host owners, testing every phase.
+pub(crate) fn arm<'a>(
+    setup: HostSetup<'a>,
+    task: HostTask<'a>,
+) -> (
+    super::Ieee802154ArmedTaskOwner<Host<'a>, Host<'a>, Host<'a>>,
+    super::Ieee802154InterruptOwner<Host<'a>>,
+) {
+    use oer_espressif_ieee802154_mac_values::Ieee802154InterruptStartup as _;
+    type P<'a> = super::Ieee802154StartupPort<Host<'a>, Host<'a>, Host<'a>>;
+    let p = P::mask_events(setup, task);
+    let p = P::runtime_tx_aborts(p);
+    let p = P::runtime_rx_aborts(p);
+    let p = P::order_before_stop(p);
+    let p = P::stop_operation(p);
+    let p = P::stop_timer0(p);
+    let p = P::stop_timer1(p);
+    let p = P::order_before_discard(p);
+    let p = P::discard_startup_events(p);
+    P::finish(p)
+}
+/// Drive the teardown atom contract, retaining its affine sample through the masks.
+pub(crate) fn deactivate<'a>(
+    interrupt: super::Ieee802154InterruptOwner<Host<'a>>,
+    task: &mut HostTask<'a>,
+) -> HostSetup<'a> {
+    use oer_espressif_ieee802154_mac_values::Ieee802154InterruptTeardown as _;
+    type P<'a, 'b> = super::Ieee802154TeardownPort<'b, Host<'a>, Host<'a>, Host<'a>>;
+    let p = P::stop_operation(interrupt, task);
+    let p = P::stop_timer0(p);
+    let p = P::stop_timer1(p);
+    let p = P::order_before_sample(p);
+    let p = P::sample_events(p);
+    let p = P::mask_events(p);
+    let p = P::mask_tx_aborts(p);
+    let p = P::mask_rx_aborts(p);
+    let p = P::acknowledge_events(p);
+    P::finish(p)
+}

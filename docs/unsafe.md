@@ -487,7 +487,7 @@ no unsafe code and perform no address arithmetic.
 
 The S31 802.15.4 HAL's runtime acknowledgement consumes an affine
 `Ieee802154EventSnapshot`; its copyable observation grants no write authority.
-Startup is a separate, typed pre-bind discard. `arm` consumes the task and
+Startup is a separate, typed pre-bind discard. The family driver's `arm` consumes the task and
 inactive IRQ owners, masks every event, installs the abort baseline, issues
 STOP and both timer stops, then writes the fixed W1C set of all fourteen event
 lanes through the existing `Ieee802154MacIrq` part. This write does not use a
@@ -498,6 +498,9 @@ accessor preserves undeclared bits rather than treating it as a whole-word
 vendor image. A word consisting entirely of W1C fields is its own status/clear
 pair and needs the same explicit fixed-image proof as a named pair.
 
+HAL implements each consuming phase as one register atom or fence, with
+private fields and no public intermediate owner extraction. The family driver
+executes their order; HAL and chip knowledge reach neither engine nor driver.
 Only after the final fence does `arm` return the bindable IRQ owner and an
 affine task owner without operational methods. `Router::bind` transfers the
 IRQ owner permanently into its handler. Consuming task activation with its

@@ -19,7 +19,7 @@ use super::{
     Ieee802154Pti,
     host::{HostMemory, changed},
 };
-use crate::ieee802154::policy::Ieee802154MacPolicySnapshot;
+use oer_espressif_ieee802154_mac_values::Ieee802154MacPolicySnapshot;
 
 fn mask(events: &[Ieee802154Event]) -> Ieee802154EventMask {
     events
@@ -43,13 +43,13 @@ fn assembling_host_owners_performs_no_register_access() {
 fn arming_masks_the_events_and_the_session_enables_then_masks_them() {
     let mut memory = HostMemory::filled(u32::MAX);
     let (task, setup) = memory.owners();
-    let (startup, interrupts) = setup.arm(task);
+    let (startup, interrupts) = crate::ieee802154::mac::host::arm(setup, task);
     let mut task = startup.task;
     // Arming leaves every event masked: nothing is raised before a handler
     // holds the owner (`enable_events` takes the binding's proof).
     assert!(task.foundation_snapshot().events_masked());
 
-    task.publish_runtime_events();
+    task.publish_events(Ieee802154EventMask::HANDLED_BASELINE_NO_TIMER0);
     let events = task.mac_part().read_event_enable();
     for (enabled, served) in [
         (events.tx_done(), true),
@@ -97,7 +97,7 @@ fn arming_masks_the_events_and_the_session_enables_then_masks_them() {
     assert!(foundation.events_masked());
     assert!(!foundation.rx_aborts_masked());
 
-    let setup = interrupts.deactivate(&mut task);
+    let setup = crate::ieee802154::mac::host::deactivate(interrupts, &mut task);
     let foundation = task.foundation_snapshot();
     assert!(foundation.events_masked());
     assert!(foundation.rx_aborts_masked());
@@ -109,7 +109,7 @@ fn arming_masks_the_events_and_the_session_enables_then_masks_them() {
 fn clearing_events_acknowledges_only_the_sampled_events_the_mask_selects() {
     let mut memory = HostMemory::filled(u32::MAX);
     let (task, setup) = memory.owners();
-    let (startup, mut interrupts) = setup.arm(task);
+    let (startup, mut interrupts) = crate::ieee802154::mac::host::arm(setup, task);
     let mut task = startup.task;
     // Host memory stores the startup W1C image, including unnamed lanes.
     assert!(interrupts.events().observation().classification().is_err());
@@ -127,7 +127,7 @@ fn clearing_events_acknowledges_only_the_sampled_events_the_mask_selects() {
     let snapshot = interrupts.events();
     interrupts.clear_events(snapshot, Ieee802154EventMask::NONE);
     assert!(interrupts.events().observation().is_clear());
-    let _setup = interrupts.deactivate(&mut task);
+    let _setup = crate::ieee802154::mac::host::deactivate(interrupts, &mut task);
 }
 
 #[test]
@@ -187,8 +187,8 @@ fn the_foundation_writes_read_back_as_the_foundation() {
     assert!(foundation.rx_aborts_masked());
     assert!(foundation.tx_aborts_masked());
     assert!(foundation.ed_uses_average());
-    assert_eq!(foundation.txrx_pti(), Ieee802154Pti::COEX_DISABLED);
-    assert_eq!(foundation.ack_pti(), Ieee802154Pti::COEX_DISABLED);
+    assert_eq!(foundation.txrx_pti(), Ieee802154Pti::COEX_DISABLED.value());
+    assert_eq!(foundation.ack_pti(), Ieee802154Pti::COEX_DISABLED.value());
     assert!(foundation.txon_delay_applied());
 }
 
@@ -440,7 +440,7 @@ fn the_recent_rssi_is_the_signed_low_byte_of_the_receive_information() {
 fn a_saved_timer_sample_is_acknowledged_after_masking_without_resampling() {
     let mut memory = HostMemory::filled(u32::MAX);
     let (task, setup) = memory.owners();
-    let (startup, mut interrupts) = setup.arm(task);
+    let (startup, mut interrupts) = crate::ieee802154::mac::host::arm(setup, task);
     let mut task = startup.task;
     let saved = interrupts.events();
     // Host memory stores the acknowledgement image. Make the current status
@@ -459,7 +459,7 @@ fn a_saved_timer_sample_is_acknowledged_after_masking_without_resampling() {
         interrupts.events().observation().classification(),
         Ok(timers)
     );
-    let _setup = interrupts.deactivate(&mut task);
+    let _setup = crate::ieee802154::mac::host::deactivate(interrupts, &mut task);
 }
 
 #[test]
@@ -467,12 +467,12 @@ fn activation_publication_matches_the_ten_event_runtime_baseline() {
     for fill in [0, u32::MAX] {
         let mut memory = HostMemory::filled(fill);
         let (task, setup) = memory.owners();
-        let (startup, _interrupts) = setup.arm(task);
+        let (startup, _interrupts) = crate::ieee802154::mac::host::arm(setup, task);
         assert!(startup.task.foundation_snapshot().events_masked());
         // Exercise the publication used by activate. Host placements are
         // deliberately !Send and cannot enter a static interrupt table.
         let mut task = startup.task;
-        task.publish_runtime_events();
+        task.publish_events(Ieee802154EventMask::HANDLED_BASELINE_NO_TIMER0);
         let events = task.mac_part().read_event_enable();
         // Explicit main baseline, independent of the production event array.
         assert_eq!(
@@ -498,7 +498,7 @@ fn activation_publication_matches_the_ten_event_runtime_baseline() {
             ]
         );
         task.mask_events();
-        task.publish_runtime_events();
+        task.publish_events(Ieee802154EventMask::HANDLED_BASELINE_NO_TIMER0);
         assert_eq!(task.mac_part().read_event_enable(), events);
     }
 }
@@ -547,7 +547,7 @@ fn assert_startup_discard(events_7: bool, clock: bool, events_13: bool, other: b
         .retain_rx_sfd_done(other)
         .retain_events_13(events_13);
     setup.mac.acknowledge_event_status(visible);
-    let (startup, interrupts) = setup.arm(task);
+    let (startup, interrupts) = crate::ieee802154::mac::host::arm(setup, task);
     let observed = interrupts.events().observation();
     assert!(startup.task.foundation_snapshot().events_masked());
     // Host memory stores the write image. Even when a lane was absent from
@@ -571,7 +571,7 @@ fn assert_startup_discard(events_7: bool, clock: bool, events_13: bool, other: b
 fn startup_discards_hidden_pending_even_with_an_empty_visible_image() {
     let mut memory = HostMemory::filled(0);
     let (task, setup) = memory.owners();
-    let (startup, interrupts) = setup.arm(task);
+    let (startup, interrupts) = crate::ieee802154::mac::host::arm(setup, task);
     assert!(startup.task.foundation_snapshot().events_masked());
     let image = interrupts.events().observation();
     assert_eq!(

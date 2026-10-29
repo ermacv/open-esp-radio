@@ -23,8 +23,8 @@ with exact marker counts in `oer-test-layers`
 controller engine, scheduler and modem timer, the boot policy and waits in
 `boot`, the Wi-Fi cold start in `ieee80211`, and the entropy read gap in
 `peripherals/entropy.rs`. The list only shrinks; no
-new file joins it. The scan does not find driver code without such a marker:
-the IEEE 802.15.4 lifecycle policy is driver code that this crate still holds.
+new file joins it. The scan does not find driver code without such a marker.
+
 Shared radio membership, epoch policy, common power, semantic verification,
 cold-baseline restore and clock refcounts live in `oer-espressif-radio`;
 HAL supplies owned atom ports and affine proofs.
@@ -39,6 +39,11 @@ permanent DMA static and projects each frame into the typed DMA window.
 `oer-esp32s31-ieee802154-driver` implements the family engine's LL contract
 and owns its service/placement wrapper above HAL. HAL has no normal or test
 engine dependency.
+The family engine owns reset/foundation validation, static policy and
+startup/teardown order. HAL supplies register atoms, reset loans and consuming
+startup/teardown phase ports. Intermediate startup phases expose no parts;
+only the final discard fence releases a bindable IRQ owner. Runtime teardown
+keeps the saved affine sample through all three masks before acknowledgement.
 
 `coex::CoexDomainPorts` binds the family coexistence policy
 ([`oer-espressif-coex`](../../espressif/coex/README.md)) to one radio domain:
