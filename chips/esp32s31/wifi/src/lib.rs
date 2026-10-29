@@ -48,8 +48,10 @@ impl<'a> Control<'a> {
         })
         .await
     }
-    pub fn status_reader(&self) -> runtime::StatusReader<'a> {
-        self.inner.status_reader()
+    pub fn status_reader(&self) -> StatusReader<'a> {
+        StatusReader {
+            inner: self.inner.status_reader(),
+        }
     }
     pub fn status(&self) -> runtime::Status {
         self.inner.status()
@@ -87,10 +89,20 @@ impl<'a> Control<'a> {
             .map_err(|r| r.reason)
     }
     pub fn stop(&mut self) {
-        self.inner.stop();
+        self.inner.stop_gracefully();
     }
     pub async fn wait_stopped(&mut self) {
         self.inner.wait_stopped().await;
+    }
+}
+/// Read-only product state in the Control/Runner context.
+#[derive(Clone, Copy)]
+pub struct StatusReader<'a> {
+    inner: runtime::StatusReader<'a>,
+}
+impl StatusReader<'_> {
+    pub fn status(&self) -> runtime::Status {
+        self.inner.status()
     }
 }
 /// Affine neutral Ethernet end. The concrete station frame is private.
@@ -226,6 +238,8 @@ mod chip;
 #[cfg(target_arch = "riscv32")]
 mod dma;
 pub mod policy;
+mod reconnect;
+pub use reconnect::{ReconnectPolicy, ZeroReconnectInterval};
 #[cfg(target_arch = "riscv32")]
 #[doc(hidden)]
 pub mod radio;

@@ -28,6 +28,8 @@
 //! Station admission and link state, separate from network transport sessions.
 
 mod binding;
+#[cfg(oer_trace)]
+pub mod collector;
 mod contract;
 mod credentials;
 pub use binding::*;

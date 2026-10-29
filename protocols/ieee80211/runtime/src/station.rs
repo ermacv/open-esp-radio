@@ -91,12 +91,14 @@
 mod commands;
 pub mod contract;
 mod control;
+mod reconnect;
 use commands::CommandCredits;
 pub use commands::{CommandRefused, CommandTerminal, Request};
 pub use control::{
     Control, ControlCreateRefused, ControlError, ControlRefused, Device, Events, RunnerControl,
     State, Status, StatusReader,
 };
+pub use reconnect::{ReconnectPolicy, ZeroReconnectInterval};
 
 use core::marker::PhantomData;
 use oer_trace::{Noop, Observer};
@@ -437,6 +439,7 @@ pub enum ServiceCommand<K> {
     reason = "a refusal returns the original owned packet without allocation"
 )]
 pub enum ServiceOutput<K> {
+    CommandStarted(Request),
     /// The original network operation refused before data admission.
     MsduRefused {
         packet: contract::TransmitPacket,
@@ -484,7 +487,9 @@ pub type PortReturnedTx<'id, B> =
     ReturnedTx<PhaseSingleOutcome<'id, <B as StationPort>::Types<'id>>>;
 
 /// A backend returned owners that cannot belong to the submitted operation.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(
+    Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize, postcard_schema::Schema,
+)]
 pub enum BackendContractViolation {
     UnexpectedAggregate,
     UnexpectedTerminal(PendingTerminal),
@@ -504,6 +509,7 @@ pub enum BackendContractViolation {
 /// The original failure that ended this service. A poisoned disabled owner
 /// additionally retains the backend's disable failure through `cause()`.
 pub enum ServiceFault<B: StationPort> {
+    PolicyDeadlineOverflow,
     /// A checked management request exceeded its retained response domain.
     RxBlockAckCapacity,
     /// A validated receive BA reply could not fit the control frame encoder.
@@ -1659,10 +1665,22 @@ impl<
                 Ok(false) => {}
                 Err(fault) => return Served::Failed(fault),
             }
-            let deadline = [
+            let accepting_commands = !self.station.is_reclaiming();
+            let machine_deadline = [
                 arbiter.poll_deadline(),
                 self.station.poll_deadline(),
                 self.pending.receive.deadline(),
+            ]
+            .into_iter()
+            .flatten()
+            .min();
+            let deadline = [
+                machine_deadline,
+                if accepting_commands {
+                    io.control.policy_deadline()
+                } else {
+                    None
+                },
             ]
             .into_iter()
             .flatten()
@@ -1675,7 +1693,6 @@ impl<
                 self.pending.unwrap = Some(waiting);
             }
             let sending = self.data.accepts() && self.station.link().is_some();
-            let accepting_commands = !self.station.is_reclaiming();
             let (event, command_ready, tick, transmit, unwrapped) = {
                 let event = phase.next_event();
                 let command = async {
@@ -1713,7 +1730,11 @@ impl<
                     } else {
                         None
                     };
-                    let tick = alarm.as_mut().poll(cx).is_ready();
+                    io.control.policy_register(cx);
+                    let alarm_ready = alarm.as_mut().poll(cx).is_ready();
+                    let policy_ready = accepting_commands && io.control.policy_ready(timer.now());
+                    let tick = alarm_ready
+                        && machine_deadline.is_some_and(|deadline| timer.now() >= deadline);
                     let transmit = sending && transmit_ready.as_mut().poll(cx).is_ready();
                     let unwrapped = match unwrap.poll_done(cx) {
                         Poll::Ready(done) => Some(done),
@@ -1721,7 +1742,8 @@ impl<
                     };
                     if event.is_some()
                         || command_ready.is_some()
-                        || tick
+                        || alarm_ready
+                        || policy_ready
                         || transmit
                         || unwrapped.is_some()
                     {
@@ -1770,11 +1792,20 @@ impl<
                 Some(false) => io.commands.try_receive(),
                 None => None,
             };
+            let command = match command {
+                Some(command) => Some(command),
+                None if accepting_commands => match io.control.policy_command(now) {
+                    Ok(command) => command,
+                    Err(_) => return Served::Failed(ServiceFault::PolicyDeadlineOverflow.into()),
+                },
+                None => None,
+            };
             if let Some(command) = command {
                 match command {
                     ServiceCommand::Station(command) => {
                         match self.pending.commands.request(command) {
                             Some(request) => {
+                                io.output.emit(ServiceOutput::CommandStarted(command));
                                 if let Err(refused) = self.station.command(now, request) {
                                     let refused = self.pending.commands.refused(refused);
                                     io.output.emit(ServiceOutput::CommandRefused(refused));

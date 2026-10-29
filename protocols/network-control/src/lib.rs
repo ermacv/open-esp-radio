@@ -31,6 +31,8 @@
 use postcard_schema::Schema;
 use serde::{Deserialize, Serialize};
 
+mod datagram;
+pub use datagram::*;
 mod state;
 pub use state::*;
 mod session;
@@ -44,6 +46,9 @@ pub use udp_probe::*;
 
 oer_hil_protocol::messages! {
     property Udp = "network/udp";
+        endpoint StartDatagrams = "network/datagrams/start" => oer_hil_protocol::base::Accepted;
+        endpoint StopDatagrams = "network/datagrams/stop" => oer_hil_protocol::base::Accepted;
+        topic DatagramsFinished = "network/datagrams/finished";
     property Tcp = "network/tcp";
     property Rx = "network/rx";
     property Tx = "network/tx";

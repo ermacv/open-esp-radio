@@ -105,6 +105,7 @@ impl InterruptTypes for Interrupts {
 }
 #[derive(Clone, Copy)]
 pub struct Config {
+    pub(crate) reconnect: crate::ReconnectPolicy,
     pub(crate) channel: u8,
     pub(crate) country: [u8; 2],
     pub(crate) cap_dbm: i8,
@@ -115,6 +116,10 @@ pub struct Config {
     pub(crate) supported: oer_ieee80211_port::SupportedChannel<Caps>,
 }
 impl Config {
+    pub fn with_reconnect(mut self, policy: crate::ReconnectPolicy) -> Self {
+        self.reconnect = policy;
+        self
+    }
     pub fn new(
         channel: u8,
         country: [u8; 2],
@@ -134,6 +139,7 @@ impl Config {
         )
         .ok_or(InitializationError::Channel)?;
         Ok(Self {
+            reconnect: crate::ReconnectPolicy::DISABLED,
             channel,
             country,
             cap_dbm,
@@ -236,10 +242,19 @@ pub enum Event {
         operation: runtime::TxOperation,
         reason: runtime::contract::TransmitRefusal,
     },
-    Other(runtime::ServiceOutput<Caps>),
+    CommandStarted {
+        request: runtime::Request,
+        status: runtime::Status,
+    },
+    MsduRefused {
+        packet: runtime::contract::TransmitPacket,
+        reason: runtime::contract::MsduRefusal,
+    },
+    AccessPoint(runtime::contract::AccessPointCommand<Caps>),
 }
 pub(crate) struct Output<E: Events> {
     pub events: E,
+    pub status: crate::StatusReader<'static>,
 }
 impl<E: Events> runtime::ServiceOutputSink<Caps> for Output<E> {
     fn emit(&mut self, event: runtime::ServiceOutput<Caps>) {
@@ -257,7 +272,14 @@ impl<E: Events> runtime::ServiceOutputSink<Caps> for Output<E> {
             runtime::ServiceOutput::TxRefused { operation, reason } => {
                 Event::TxRefused { operation, reason }
             }
-            other => Event::Other(other),
+            runtime::ServiceOutput::CommandStarted(request) => Event::CommandStarted {
+                request,
+                status: self.status.status(),
+            },
+            runtime::ServiceOutput::MsduRefused { packet, reason } => {
+                Event::MsduRefused { packet, reason }
+            }
+            runtime::ServiceOutput::AccessPoint(command) => Event::AccessPoint(command),
         };
         self.events.event(event)
     }
@@ -351,13 +373,19 @@ pub fn station<W: Binding>(
     } = resources;
     let crate::WifiHardware { cell, wifi } = hardware;
     let crate::DmaResources { rx, tx } = dma;
-    let (control, network, connection) = storage
+    let (mut control, network, connection) = storage
         .channels
         .split()
         .unwrap_or_else(|_| W::fail(InitializationError::Control));
     #[cfg(oer_trace)]
     let _ = service::TARGET.set((address, config.target, config.channel));
-    let output = control.inner.events(Output { events });
+    control
+        .inner
+        .configure_reconnect(config.reconnect.runtime());
+    let output = control.inner.events(Output {
+        events,
+        status: control.status_reader(),
+    });
     let ready = storage
         .ready
         .try_init_with(|| radio::ReadySlot::<W>::new(&storage.bell, 1, 0x100))

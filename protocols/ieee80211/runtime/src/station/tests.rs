@@ -730,6 +730,7 @@ impl Application<'_, '_, '_> {
     }
     fn record_output(&self, output: ServiceOutput<ModelCaps24>) {
         let observed = match output {
+            ServiceOutput::CommandStarted(_) => return,
             ServiceOutput::CommandInFlight(request) => {
                 ObservedOutput::CommandInFlight(ObservedRequest::of(&request))
             }
@@ -1007,6 +1008,9 @@ where
             };
             let (station, credits) = match security {
                 StaSecurity::Open => Station::new_open(config, resources),
+                StaSecurity::Wpa2Personal { pmk } => {
+                    Station::new_wpa2_personal(config, pmk, resources, GroupCapacity::new())
+                }
                 StaSecurity::Personal { password, pmk } => {
                     Station::new_personal(config, password, pmk, resources, GroupCapacity::new())
                 }
@@ -3218,6 +3222,59 @@ fn runner_retains_its_installation_credit_through_a_duplicate_request_and_return
                 |e| matches!(e,ObservedOutput::CommandCompleted(t) if t.request.correlation()==52)
             ));
             assert!(outputs.iter().any(|e|matches!(e,ObservedOutput::CommandRefused(r) if r.request.correlation()==53&&r.reason==CommandRefusal::AlreadyConnected)));
+        })
+    });
+}
+
+#[test]
+fn product_policy_connects_reconnects_after_peer_departure_and_gracefully_stops() {
+    run(StaSecurity::Open, |world| {
+        Box::pin(async move {
+            let mut control = world.commands.take().unwrap();
+            control.configure_reconnect(ReconnectPolicy::every(Duration::from_secs(1)).unwrap());
+            world.commands.set(Some(control));
+            let mut seen = 0;
+            let mut last_epoch = 0;
+            for attempt in 0..2 {
+                world.outputs.borrow_mut().clear();
+                let _probe = world.sent(&mut seen, PROBE_REQUEST).await;
+                world.air.receive(&beacon(false), meta());
+                let auth = world.sent(&mut seen, AUTHENTICATION).await;
+                world
+                    .air
+                    .receive(&authentication_response(&auth.plaintext).unwrap(), meta());
+                let _association = world.sent(&mut seen, ASSOCIATION_REQUEST).await;
+                world.air.receive(&association_response(false), meta());
+                world
+                    .notice(StaNotice::Connected {
+                        bssid: BSSID,
+                        channel: 6,
+                    })
+                    .await;
+                assert!(world.status().link.epoch > last_epoch);
+                last_epoch = world.status().link.epoch;
+                if attempt == 0 {
+                    let mut departure = std::vec![0; 26];
+                    departure[0] = 0xc0;
+                    departure[4..10].copy_from_slice(&LOCAL);
+                    departure[10..16].copy_from_slice(&BSSID);
+                    departure[16..22].copy_from_slice(&BSSID);
+                    departure[24] = 7;
+                    world.air.receive(&departure, meta());
+                    world
+                        .notice(StaNotice::Disconnected(StaDisconnectReason::Peer {
+                            reason_code: 7,
+                        }))
+                        .await;
+                }
+            }
+            let mut control = world.commands.take().unwrap();
+            control.stop_gracefully();
+            world.commands.set(Some(control));
+            let _deauth = world.sent(&mut seen, DEAUTHENTICATION).await;
+            world
+                .notice(StaNotice::Disconnected(StaDisconnectReason::LocalRequest))
+                .await;
         })
     });
 }

@@ -2751,11 +2751,6 @@ const OUTSIDE_THE_ROLES: &[Deviation] = &[
         "the Wi-Fi station image on the facade and compose (#848)",
     ),
     (
-        "firmware/hil/esp32s31",
-        "protocols/ieee80211/runtime",
-        "the Wi-Fi station image on the facade and compose (#848)",
-    ),
-    (
         "firmware/hil/esp32s31-lower-mac",
         "chips/esp32s31/hal",
         "the lower-MAC conformance image (#848)",

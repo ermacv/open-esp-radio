@@ -31,6 +31,8 @@ pub struct State {
     status: Cell<Status>,
     tasks: ConnectedTaskControlResources<()>,
     link_waker: PriorityWaker,
+    policy: Cell<super::reconnect::Policy>,
+    policy_waker: PriorityWaker,
 }
 
 impl State {
@@ -43,6 +45,10 @@ impl State {
             }),
             tasks: ConnectedTaskControlResources::new(),
             link_waker: PriorityWaker::new(),
+            policy: Cell::new(super::reconnect::Policy::new(
+                super::ReconnectPolicy::DISABLED,
+            )),
+            policy_waker: PriorityWaker::new(),
         }
     }
     pub(super) fn split(
@@ -138,6 +144,27 @@ impl<'c> RunnerControl<'c> {
             None => core::future::pending().await,
         }
     }
+    pub(super) fn policy_deadline(&self) -> Option<oer_time::Instant> {
+        self.state.policy.get().deadline()
+    }
+    pub(super) fn policy_ready(&self, now: oer_time::Instant) -> bool {
+        self.state
+            .policy
+            .get()
+            .ready(now, self.state.status.get().link.state == LinkState::Up)
+    }
+    pub(super) fn policy_register(&self, cx: &Context<'_>) {
+        self.state.policy_waker.register(cx.waker());
+    }
+    pub(super) fn policy_command<K>(
+        &self,
+        now: oer_time::Instant,
+    ) -> Result<Option<ServiceCommand<K>>, super::reconnect::DeadlineOverflow> {
+        let mut policy = self.state.policy.get();
+        let result = policy.command(now, self.state.status.get().link.state == LinkState::Up);
+        self.state.policy.set(policy);
+        result
+    }
     pub(super) fn complete(&mut self) {
         let mut status = self.state.status.get();
         status.stopped = true;
@@ -181,6 +208,25 @@ impl<'c, K, const DEPTH: usize> Control<'c, K, DEPTH> {
     pub fn events<O>(&self, output: O) -> Events<'c, O> {
         self.state.events(output)
     }
+    pub fn configure_reconnect(&mut self, policy: super::ReconnectPolicy) {
+        self.state.policy.set(super::reconnect::Policy::new(policy));
+        self.state.policy_waker.wake();
+    }
+    /// Disconnect once, then retire Runner after the link is down. Stop is
+    /// independent of command queue capacity and never schedules a reconnect.
+    pub fn stop_gracefully(&mut self) {
+        let mut policy = self.state.policy.get();
+        policy.stop();
+        self.state.policy.set(policy);
+        self.state.policy_waker.wake();
+    }
+    fn admitted(&self, command: Option<Command>) {
+        if let Some(command) = command {
+            let mut policy = self.state.policy.get();
+            policy.admitted(command);
+            self.state.policy.set(policy);
+        }
+    }
     pub fn try_command(&mut self, command: ServiceCommand<K>) -> Result<(), ControlRefused<K>> {
         if self.status().stopped || self.state.tasks.is_poisoned() {
             return Err(ControlRefused {
@@ -188,12 +234,18 @@ impl<'c, K, const DEPTH: usize> Control<'c, K, DEPTH> {
                 reason: ControlError::Stopped,
             });
         }
+        let kind = match &command {
+            ServiceCommand::Station(request) => Some(request.command()),
+            _ => None,
+        };
         self.commands
             .try_send(command)
             .map_err(|error| ControlRefused {
                 command: error.0,
                 reason: ControlError::QueueFull,
-            })
+            })?;
+        self.admitted(kind);
+        Ok(())
     }
     pub async fn command(&mut self, command: ServiceCommand<K>) -> Result<(), ControlRefused<K>> {
         if self.status().stopped || self.state.tasks.is_poisoned() {
@@ -202,7 +254,11 @@ impl<'c, K, const DEPTH: usize> Control<'c, K, DEPTH> {
                 reason: ControlError::Stopped,
             });
         }
-        match select(self.commands.ready(), self.task.wait_stopped()).await {
+        let kind = match &command {
+            ServiceCommand::Station(request) => Some(request.command()),
+            _ => None,
+        };
+        let result = match select(self.commands.ready(), self.task.wait_stopped()).await {
             Either::First(permit) => {
                 permit.send(command);
                 Ok(())
@@ -211,7 +267,11 @@ impl<'c, K, const DEPTH: usize> Control<'c, K, DEPTH> {
                 command,
                 reason: ControlError::Stopped,
             }),
+        };
+        if result.is_ok() {
+            self.admitted(kind);
         }
+        result
     }
     /// Consume the completed control epoch and recover its sole producer.
     /// A pending result retains the entire control, including partial returns.
@@ -275,6 +335,10 @@ impl<K, O: ServiceOutputSink<K>> ServiceOutputSink<K> for Events<'_, O> {
             self.state.status.set(status);
             self.state.link_waker.wake();
         }
+        let mut policy = self.state.policy.get();
+        policy.observe(&output, self.state.status.get().link.state == LinkState::Up);
+        self.state.policy.set(policy);
+        self.state.policy_waker.wake();
         self.output.emit(output);
     }
 }

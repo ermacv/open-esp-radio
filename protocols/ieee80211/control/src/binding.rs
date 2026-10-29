@@ -95,7 +95,7 @@ pub trait StationControl {
         command: StationCommandKind,
         correlation: u64,
     ) -> Result<(), StationControlError>;
-    fn status(&self) -> runtime::Status;
+    fn status(&self) -> StationStatus;
 }
 impl<K, const N: usize> StationControl for runtime::Control<'_, K, N> {
     fn try_command(
@@ -114,8 +114,8 @@ impl<K, const N: usize> StationControl for runtime::Control<'_, K, N> {
         )
         .map_err(|r| r.reason.into())
     }
-    fn status(&self) -> runtime::Status {
-        runtime::Control::status(self)
+    fn status(&self) -> StationStatus {
+        runtime::Control::status(self).into()
     }
 }
 /// One retained request identity per product command kind, until refusal/terminal.
@@ -186,9 +186,30 @@ impl PendingCommands {
             },
         ))
     }
+    /// Correlate a terminal or retain its explicit policy/unmatched origin.
+    pub fn finished(
+        &self,
+        request: runtime::Request,
+        result: StationCommandResult,
+        fallback: RequestIdentity,
+    ) -> (RequestIdentity, StationCommandFinished) {
+        self.finish(request, result).unwrap_or((
+            fallback,
+            StationCommandFinished {
+                correlation: request.correlation(),
+                origin: if request.correlation() < (1u64 << 32) {
+                    StationCommandOrigin::Policy
+                } else {
+                    StationCommandOrigin::Unmatched
+                },
+                command: request.command().into(),
+                result,
+            },
+        ))
+    }
     pub fn finish_stopped(
         &self,
-        status: runtime::Status,
+        status: StationStatus,
     ) -> [Option<(RequestIdentity, StationCommandFinished)>; 3] {
         if !status.stopped {
             return [None; 3];

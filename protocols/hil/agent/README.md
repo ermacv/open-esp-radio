@@ -90,3 +90,10 @@ payload bound. Dictionaries own record schemas and interpretation. The
 ESP32-S31 radio-health binding implements `Reader` over its native storage;
 its RF lifecycle stays in the image. `oer-hil-link::instrumentation` drains
 and validates the generic pages before domain decoding.
+
+The trace-only `capture::atomic::AtomicCollector` collects counter-only events
+in a producer context separate from the reader. A producer or freeze operation
+never waits for an interrupted producer. Refused admission, kind exhaustion
+and saturation remain visible. A successful freeze prevents further writes;
+`Collector::merge_counters` joins that immutable aggregate cut before the
+image freezes its local history. No owner or radio dictionary enters the agent.

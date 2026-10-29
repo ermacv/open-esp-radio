@@ -5,13 +5,12 @@ compile_error!(
     "the wifi-station class reports the station service's observations: build it with its declared trace class (RUSTFLAGS=\"--cfg oer_trace\")"
 );
 
+mod control;
 mod future;
+mod ip;
 pub(crate) mod irq;
-mod network;
-mod observation;
 mod radio;
-mod report;
-mod station;
+pub(crate) mod udp;
 use crate::services::StationRequests as Requests;
 use crate::transport::CONSOLE;
 use oer_esp32s31_compose::Esp32s31;
@@ -46,6 +45,11 @@ const CONFIG: RadioConfig = RadioConfig {
     country: *b"DE",
     cap_dbm: 10,
 };
+const RECONNECT: wifi::ReconnectPolicy =
+    match wifi::ReconnectPolicy::every(oer_time::Duration::from_secs(1)) {
+        Ok(policy) => policy,
+        Err(_) => panic!("the fixed reconnect interval is nonzero"),
+    };
 
 oer_espressif_executor::tasks! {
     /// The radio executor's tasks (P2).
@@ -63,6 +67,8 @@ oer_espressif_executor::tasks! {
         console(work: oer_memory::PlacedFuture<'static, ConsoleWork>) = console;
         station_task(work: oer_memory::PlacedFuture<'static, StationWork>) = station_task;
         rtc_watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) = crate::feed_rtc_watchdog;
+        capture(observations: &'static ObservationStorage) = capture;
+        reset_on_request() = crate::system::panic::reset_on_request;
     }
 }
 
@@ -176,7 +182,18 @@ pub(crate) fn start(
     let entropy = u32::from_le_bytes(tx_bytes);
     CONSOLE.start(boot);
     let setup = wifi::Config::new(config.channel, config.country, config.cap_dbm, None, true)
-        .unwrap_or_else(|error| radio::failure(error));
+        .unwrap_or_else(|error| radio::failure(error))
+        .with_reconnect(RECONNECT);
+    let observations = OBSERVATIONS
+        .try_take()
+        .unwrap_or_else(|| radio::failure(wifi::InitializationError::Storage));
+    observations
+        .begin(oer_hil_protocol::capture::Identity {
+            capture: 1,
+            epoch: 0,
+        })
+        .unwrap_or_else(|_| radio::failure(wifi::InitializationError::Control));
+    let observations: &'static ObservationStorage = observations;
     let pending: &'static oer_ieee80211_control::PendingCommands =
         match PENDING.try_init(oer_ieee80211_control::PendingCommands::new()) {
             Some(pending) => pending,
@@ -184,7 +201,7 @@ pub(crate) fn start(
         };
     let (control, net, runners) = wifi::station(
         wifi::Resources {
-            events: station::ProductEvents(pending),
+            events: control::ProductEvents(pending),
             storage: radio::binding::storage(),
             hardware,
             rng,
@@ -224,22 +241,28 @@ pub(crate) fn start(
             move |spawner| {
                 let console_work = CONSOLE_WORK
                     .take()
-                    .future(|| console_future(usb, boot, status));
+                    .future(|| console_future(usb, boot, status, observations));
                 if AppTasks::console(spawner, console_work).is_err() {
                     crate::fail(crate::fatal::Failure::TaskAllocation);
                 }
                 let station_work = STATION_WORK.take().future(|| {
-                    station_work_future(
-                        runners.station,
+                    station_work_future(StationInputs {
+                        runner: runners.station,
                         control,
                         net,
-                        station,
+                        address: station,
                         seed,
                         nonces,
                         pending,
-                    )
+                        observations,
+                    })
                 });
                 if AppTasks::station_task(spawner, station_work).is_err() {
+                    crate::fail(crate::fatal::Failure::TaskAllocation);
+                }
+                if AppTasks::capture(spawner, observations).is_err()
+                    || AppTasks::reset_on_request(spawner).is_err()
+                {
                     crate::fail(crate::fatal::Failure::TaskAllocation);
                 }
                 if AppTasks::rtc_watchdog(spawner, watchdog).is_err() {
@@ -266,7 +289,7 @@ impl Attempt {
             .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |epoch| {
                 epoch.checked_add(1)
             })
-            .expect("station epoch exhausted; reset required");
+            .unwrap_or_else(|_| radio::failure(wifi::InitializationError::Control));
     }
     pub fn publish(self, state: StationLinkState) {
         CONSOLE.publish(
@@ -348,9 +371,10 @@ static CONSOLE_WORK: ConstStaticCell<StaticPlace<ConsoleWork>> =
 fn console_future(
     usb: crate::transport::Usb,
     boot: u64,
-    status: oer_ieee80211_runtime::station::StatusReader<'static>,
+    status: wifi::StatusReader<'static>,
+    observations: &'static ObservationStorage,
 ) -> ConsoleWork {
-    console_work(usb, boot, status)
+    console_work(usb, boot, status, observations)
 }
 /// The console's task: its work lives in its own static place.
 async fn console(work: oer_memory::PlacedFuture<'static, ConsoleWork>) {
@@ -359,7 +383,8 @@ async fn console(work: oer_memory::PlacedFuture<'static, ConsoleWork>) {
 async fn console_work(
     usb: crate::transport::Usb,
     boot: u64,
-    status: oer_ieee80211_runtime::station::StatusReader<'static>,
+    status: wifi::StatusReader<'static>,
+    observations: &'static ObservationStorage,
 ) {
     use oer_hil_protocol::base::{Accepted, RejectReason, Rejected};
     let mut configured = false;
@@ -369,10 +394,39 @@ async fn console_work(
         boot,
         crate::services::STATION_KEYS,
         0,
-        move |request, command: Requests| {
+        move |request,
+              command: oer_hil_agent::base::Either<
+            Requests,
+            oer_hil_agent::base::Either<
+                oer_hil_agent::capture::Request,
+                oer_hil_agent::base::Either<oer_hil_agent::lifecycle::Request, udp::Requests>,
+            >,
+        >| {
+            use oer_hil_agent::base::Either;
+            let command = match command {
+                Either::First(command) => command,
+                Either::Second(Either::First(command)) => {
+                    if CAPTURES.try_send((request, command)).is_err() {
+                        emit(request, &Rejected(RejectReason::Busy));
+                    }
+                    return;
+                }
+                Either::Second(Either::Second(Either::First(_))) => {
+                    crate::system::panic::queue(request);
+                    return;
+                }
+                Either::Second(Either::Second(Either::Second(command))) => {
+                    udp::request(
+                        request,
+                        command,
+                        role(configured, stopping) == StationRole::Running,
+                    );
+                    return;
+                }
+            };
             let reason = match command {
                 Requests::Counters(_) => {
-                    emit(request, &observation::counters());
+                    emit(request, &counters(observations));
                     return;
                 }
                 Requests::Start(start) => {
@@ -446,8 +500,7 @@ async fn station_task(work: oer_memory::PlacedFuture<'static, StationWork>) {
 type StationWork = impl core::future::Future<Output = ()>;
 static STATION_WORK: ConstStaticCell<StaticPlace<StationWork>> =
     ConstStaticCell::new(StaticPlace::new());
-#[define_opaque(StationWork)]
-fn station_work_future(
+struct StationInputs {
     runner: wifi::StationRunner<radio::binding::Binding>,
     control: wifi::Control<'static>,
     net: wifi::Network<'static>,
@@ -455,21 +508,25 @@ fn station_work_future(
     seed: u64,
     nonces: Placed<'static, NonceSource>,
     pending: &'static oer_ieee80211_control::PendingCommands,
-) -> StationWork {
-    station_work(runner, control, net, address, seed, nonces, pending)
+    observations: &'static ObservationStorage,
 }
-async fn station_work(
-    runner: wifi::StationRunner<radio::binding::Binding>,
-    control: wifi::Control<'static>,
-    net: wifi::Network<'static>,
-    address: [u8; 6],
-    seed: u64,
-    nonces: Placed<'static, NonceSource>,
-    pending: &'static oer_ieee80211_control::PendingCommands,
-) {
+#[define_opaque(StationWork)]
+fn station_work_future(inputs: StationInputs) -> StationWork {
+    station_work(inputs)
+}
+async fn station_work(inputs: StationInputs) {
+    let StationInputs {
+        runner,
+        control,
+        net,
+        address,
+        seed,
+        nonces,
+        pending,
+        observations,
+    } = inputs;
     let (request, mut start) = STARTS.receive().await;
     let attempt = Attempt { request };
-    attempt.advance();
     let settings = wifi::StationSettings::wpa2_passphrase(
         start.credentials.ssid(),
         start.credentials.passphrase(),
@@ -495,18 +552,25 @@ async fn station_work(
         &setup,
         address,
         credentials,
-        station::Callbacks(nonces),
-        observation::StationObserver(attempt),
+        control::Callbacks(nonces),
+        StationObserver {
+            attempt,
+            observations,
+        },
     )
     .unwrap_or_else(|error| radio::failure(error));
-    station::serve(
+    control::serve(
         runner,
         control,
         net,
         profile,
         address,
         seed,
-        station::Session { attempt, pending },
+        control::Session {
+            attempt,
+            pending,
+            observations,
+        },
     )
     .await;
 }
@@ -515,4 +579,68 @@ async fn station_work(
 #[inline(never)]
 fn emit<M: oer_hil_protocol::Message>(request: RequestIdentity, body: &M) {
     CONSOLE.publish(request.session_id, request.request_id, body);
+}
+
+use oer_ieee80211_control::collector::Observations;
+pub(super) type ObservationStorage = Observations<ObservationClock, 4096, 128>;
+static OBSERVATIONS: ConstStaticCell<ObservationStorage> =
+    ConstStaticCell::new(Observations::new(ObservationClock));
+#[derive(Clone, Copy)]
+pub(super) struct ObservationClock;
+impl oer_hil_agent::capture::collector::Clock for ObservationClock {
+    fn micros(&self) -> u64 {
+        EmbassyClock.now().as_micros()
+    }
+}
+static DRIVER_OBSERVATIONS: oer_hil_agent::capture::atomic::AtomicCollector<64> =
+    oer_hil_agent::capture::atomic::AtomicCollector::new();
+#[derive(Default)]
+pub struct DriverObserver;
+impl oer_trace::Observer for DriverObserver {
+    fn event<E: oer_trace::Event + Copy + 'static>(&self, event: E) {
+        oer_trace::Observer::event(&DRIVER_OBSERVATIONS, event);
+    }
+}
+#[derive(Clone, Copy)]
+pub struct StationObserver {
+    attempt: Attempt,
+    observations: &'static ObservationStorage,
+}
+impl oer_trace::Observer for StationObserver {
+    fn event<E: oer_trace::Event + Copy + 'static>(&self, event: E) {
+        crate::measurements::RADIO.observe(&event);
+        self.observations.event(
+            event,
+            self.attempt.request,
+            EPOCH.load(core::sync::atomic::Ordering::Relaxed),
+            &Publisher,
+        );
+    }
+}
+pub(super) struct Publisher;
+impl oer_ieee80211_control::collector::Publish for Publisher {
+    fn publish<M: oer_hil_protocol::Message>(&self, request: RequestIdentity, message: &M) {
+        emit(request, message);
+    }
+}
+fn counters(observations: &ObservationStorage) -> oer_ieee80211_control::StationCounters {
+    use oer_trace::Event;
+    observations.counters(
+        EPOCH.load(core::sync::atomic::Ordering::Relaxed),
+        DRIVER_OBSERVATIONS
+            .counter(oer_ieee80211_instrumentation::TxQueueCollision::KIND.raw())
+            .value,
+        u32::try_from(
+            oer_espressif_staged_runtime::stacks::current_hart_interrupt_stack_free_bytes(),
+        )
+        .unwrap_or_else(|_| radio::failure(wifi::InitializationError::Control)),
+    )
+}
+
+static CAPTURES: Controls<(RequestIdentity, oer_hil_agent::capture::Request)> = Controls::new();
+async fn capture(observations: &'static ObservationStorage) {
+    loop {
+        let (request, command) = CAPTURES.receive().await;
+        command.serve(observations).publish(&CONSOLE, request).await;
+    }
 }

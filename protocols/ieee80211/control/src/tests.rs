@@ -188,10 +188,10 @@ fn readable_serializers_and_registry_redact_the_secret_owner() {
     assert!(!format!("{error:?} {error}").contains("private-test"));
 }
 
-fn event_round_trip<M: Message + Copy + PartialEq + core::fmt::Debug>(message: M) {
+fn event_round_trip<M: Message + Clone + PartialEq + core::fmt::Debug>(message: M) {
     let mut encoder = FrameEncoder::new();
     let wire = encoder
-        .encode(&Envelope::new(7, 11, 13, 17, message))
+        .encode(&Envelope::new(7, 11, 13, 17, message.clone()))
         .expect("an event fits a frame");
     let mut decoded = None;
     FrameDecoder::new().feed(WireKind::Event, wire, |frame| {
@@ -292,135 +292,24 @@ fn link_events_preserve_epoch_and_typed_disconnect_reason() {
 }
 
 #[test]
-fn service_end_preserves_the_fault_and_its_typed_cause() {
-    let backend = [
-        StationBackendFault::Core(StationLowerMacFault::Tx),
-        StationBackendFault::Core(StationLowerMacFault::KeyUseMismatch),
-        StationBackendFault::Receive(StationReceiveFault::Service),
-        StationBackendFault::Receive(StationReceiveFault::ForeignExecutor),
-        StationBackendFault::Deadline,
-        StationBackendFault::Capacity,
-        StationBackendFault::Clock,
-        StationBackendFault::Retune(StationRetuneFault::MacActive { state: u8::MAX }),
-        StationBackendFault::Retune(StationRetuneFault::RxWalkerEnabled),
-        StationBackendFault::Retune(StationRetuneFault::Refused),
-        StationBackendFault::Retune(StationRetuneFault::ClientFailed),
-        StationBackendFault::Retune(StationRetuneFault::Poisoned(StationRadioPoison {
-            origin: StationRadioOperation::TrackingTick,
-            cause: StationRadioPoisonCause::Tracking(StationPhyFault::EdgeTimedOut),
-        })),
-        StationBackendFault::Retune(StationRetuneFault::Poisoned(StationRadioPoison {
-            origin: StationRadioOperation::Request {
-                client: StationRadioClient::Wifi,
-                request: StationRadioRequest::Retune,
-            },
-            cause: StationRadioPoisonCause::Channel(StationPhyFault::UnexpectedBinding),
-        })),
-        StationBackendFault::Retune(StationRetuneFault::Poisoned(StationRadioPoison {
-            origin: StationRadioOperation::TrackingTick,
-            cause: StationRadioPoisonCause::CalibrationTracking(
-                StationCalibrationTrackingFault::Step(StationPhyFault::EdgeTimedOut),
-            ),
-        })),
-        StationBackendFault::Retune(StationRetuneFault::Poisoned(StationRadioPoison {
-            origin: StationRadioOperation::TrackingTick,
-            cause: StationRadioPoisonCause::CalibrationTracking(
-                StationCalibrationTrackingFault::Radio(StationCalibrationTrackingFailure::Dcode),
-            ),
-        })),
-        StationBackendFault::Retune(StationRetuneFault::Poisoned(StationRadioPoison {
-            origin: StationRadioOperation::Prepare,
-            cause: StationRadioPoisonCause::Registration(StationRegistrationFault::Lowering {
-                stage: StationRegisterStage::FinalI2cRead,
-                error: StationRegisterBindingError::UnexpectedOutcome,
-            }),
-        })),
-        StationBackendFault::Retune(StationRetuneFault::Poisoned(StationRadioPoison {
-            origin: StationRadioOperation::Prepare,
-            cause: StationRadioPoisonCause::Registration(StationRegistrationFault::Radio(
-                StationRegistrationFailure::I2cMasterResetTimedOut {
-                    index: u8::MAX,
-                    samples: u16::MAX,
-                },
-            )),
-        })),
-        StationBackendFault::Retune(StationRetuneFault::Poisoned(StationRadioPoison {
-            origin: StationRadioOperation::TrackingTick,
-            cause: StationRadioPoisonCause::TrackingRefused(StationPhyDomainError::TimeReversed {
-                previous_us: u64::MAX,
-                now_us: 0,
-            }),
-        })),
-        StationBackendFault::Abandoned,
-    ];
-    let mut faults = std::vec![
-        StationServiceFault::RxBlockAckCapacity,
-        StationServiceFault::RxBlockAckEncode,
-        StationServiceFault::Contract(StationContractViolation::UnexpectedTerminal(
-            StationPendingTerminal::Transmit(u8::MAX),
-        )),
-        StationServiceFault::Contract(StationContractViolation::StationKeyBank(
-            StationKeyContractViolation::IncompleteBank,
-        )),
-        StationServiceFault::Contract(StationContractViolation::GroupSlotMismatch),
-        StationServiceFault::Contract(StationContractViolation::StationKeyUnwrap),
-    ];
-    for cause in backend {
-        faults.extend([
-            StationServiceFault::EnableRefused(cause),
-            StationServiceFault::Backend(cause),
-            StationServiceFault::Submission(cause),
-            StationServiceFault::DrainedWithOutstanding {
-                cause,
-                missing: StationPendingTerminal::Control(StationControlTerminal::GateClosed),
-            },
-        ]);
-    }
-    for fault in faults {
-        for end in [
-            StationServiceEnd::Failed(fault),
-            StationServiceEnd::Poisoned(fault),
-            StationServiceEnd::Quarantined(fault),
-        ] {
-            event_round_trip(StationServiceEnded {
-                epoch: u32::MAX,
-                end,
-            });
-        }
+fn service_end_preserves_the_schema_and_exact_serialized_cause() {
+    let fault = StationServiceFault::encode(&u64::MAX).unwrap();
+    assert_eq!(fault.decode::<u64>().unwrap(), u64::MAX);
+    assert!(fault.decode::<u32>().is_err());
+    for end in [
+        StationServiceEnd::Failed(fault.clone()),
+        StationServiceEnd::Poisoned(fault.clone()),
+        StationServiceEnd::Quarantined(fault),
+    ] {
+        event_round_trip(StationServiceEnded {
+            epoch: u32::MAX,
+            end,
+        });
     }
     event_round_trip(StationServiceEnded {
         epoch: u32::MAX,
         end: StationServiceEnd::Unavailable,
     });
-    // A retune refused by an earlier failed tick and one that failed itself
-    // stay distinct.
-    let poisoned = |origin| {
-        StationBackendFault::Retune(StationRetuneFault::Poisoned(StationRadioPoison {
-            origin,
-            cause: StationRadioPoisonCause::Tracking(StationPhyFault::EdgeTimedOut),
-        }))
-    };
-    assert_ne!(
-        poisoned(StationRadioOperation::TrackingTick),
-        poisoned(StationRadioOperation::Request {
-            client: StationRadioClient::Wifi,
-            request: StationRadioRequest::Retune,
-        })
-    );
-    // A failed calibration-tracking child is not a binding error of the
-    // tracking parent.
-    assert_ne!(
-        StationRadioPoisonCause::CalibrationTracking(StationCalibrationTrackingFault::Step(
-            StationPhyFault::EdgeTimedOut
-        )),
-        StationRadioPoisonCause::Tracking(StationPhyFault::UnexpectedBinding)
-    );
-    // Enabling and submitting faults with the same cause stay distinct.
-    let cause = StationBackendFault::Deadline;
-    assert_ne!(
-        StationServiceFault::EnableRefused(cause),
-        StationServiceFault::Backend(cause)
-    );
 }
 
 #[test]
@@ -544,7 +433,7 @@ fn stopped_control_reports_unexecuted_requests_once_without_losing_identities() 
     );
     assert!(
         pending
-            .finish_stopped(control.status())
+            .finish_stopped(control.status().into())
             .iter()
             .all(Option::is_none)
     );
@@ -553,7 +442,7 @@ fn stopped_control_reports_unexecuted_requests_once_without_losing_identities() 
     assert!(control.status().stopped);
     assert!(status.status().stopped);
     let terminals = pending
-        .finish_stopped(control.status())
+        .finish_stopped(control.status().into())
         .into_iter()
         .flatten()
         .collect::<std::vec::Vec<_>>();
@@ -565,7 +454,7 @@ fn stopped_control_reports_unexecuted_requests_once_without_losing_identities() 
     );
     assert!(
         pending
-            .finish_stopped(control.status())
+            .finish_stopped(control.status().into())
             .iter()
             .all(Option::is_none)
     );

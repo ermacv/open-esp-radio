@@ -43,7 +43,6 @@ wifi-station = [
     "dep:embassy-futures",
     "dep:heapless",
     "dep:oer-embassy-net",
-    "dep:oer-ieee80211-runtime",
     "dep:oer-ieee80211-cipher",
     "dep:owned-embassy-net",
     "oer-espressif-executor/port-slots",
@@ -62,11 +61,10 @@ oer-embassy-net = { path = "../../../portable/embassy/net", optional = true }
 oer-embassy-time = { path = "../../../portable/embassy/time" }
 oer-espressif-interrupt-table = { path = "../../../chips/espressif/interrupt-table" }
 oer-esp32s31-hal = { path = "../../../chips/esp32s31/hal" }
-oer-ieee80211-runtime = { path = "../../../protocols/ieee80211/runtime", features = ["placement"], optional = true }
 oer-ieee80211-cipher = { path = "../../../protocols/ieee80211/cipher", optional = true }
 oer-ieee80211-instrumentation = { path = "../../../protocols/ieee80211/instrumentation", optional = true }
 oer-trace = { path = "../../../portable/trace", optional = true }
-owned-embassy-net = { package = "embassy-net", git = "https://github.com/ermacv/embassy.git", rev = "17f796c8ddb90ff510d995e24c2dcb758a97e8f8", optional = true, features = ["medium-ethernet", "ipv4", "dhcpv4", "icmp-ping-reply"] }
+owned-embassy-net = { package = "embassy-net", git = "https://github.com/ermacv/embassy.git", rev = "17f796c8ddb90ff510d995e24c2dcb758a97e8f8", optional = true, features = ["medium-ethernet", "ipv4", "dhcpv4", "icmp-ping-reply", "udp"] }
 oer-memory = { path = "../../../portable/memory" }
 oer-riscv = { path = "../../../portable/riscv" }
 oer-diagnostics = { path = "../../../portable/diagnostics" }

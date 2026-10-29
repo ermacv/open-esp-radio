@@ -43,7 +43,10 @@ pub struct StationGroupKey {
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub struct StopStation;
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
-pub struct StationStopped(pub StationCounters);
+pub struct StationStopped {
+    pub counters: StationCounters,
+    pub capture: oer_hil_protocol::capture::Description,
+}
 
 /// A protocol rejection category without frame or key bytes.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]

@@ -127,7 +127,16 @@ impl StationStop for Station<'_> {
                     || (self.start.correlates(message) && message.is::<StationServiceEnded>())
             })?
             .ok_or("device did not complete wifi/station/stop with wifi/station/stopped")?;
-        if let Some(StationStopped(counters)) = message.decode() {
+        if let Some(StationStopped { counters, capture }) = message.decode() {
+            let cut = self.capture.read_instrumentation(
+                message.boot_id,
+                capture.identity,
+                oer_hil_protocol::capture::EVENT_SCHEMA,
+                SHORT,
+            )?;
+            if !cut.complete() {
+                return Err("station observation capture is incomplete".into());
+            }
             return Ok(StopEnd::Stopped(counters));
         }
         Ok(StopEnd::Ended(

@@ -159,6 +159,14 @@ the existing cores. The chip facade `oer-esp32s31-wifi` assembles the S31 backen
 arbiter, station and runtime as `station(resources, config) -> (Control,
 NetDevice, Runners)`; images select the interrupt entries, callbacks, observers
 and key-unwrap engine and spawn the returned runners.
+Automatic reconnect and graceful station shutdown belong to the product
+runtime. The facade configures reconnect with its own policy values; disabled
+is the default, and the HIL station selects a one-second interval. Explicit
+Disconnect pauses reconnect and Connect resumes the configured policy.
+Policy requests use the Runner's existing affine command credits and normal
+Control events. A facade Stop disconnects once, waits for link-down and then
+retires Runner. HIL retains command correlation and socket workload lifetime,
+without its own station policy loop or product counters.
 The neutral `oer-network::NetDevice` transfers Ethernet owners and publishes
 the link epoch. `oer_embassy_net::ip` builds its pools, one pinned IP stack
 and `EthernetBridge` once. The service selects DHCPv4 or static IPv4 and

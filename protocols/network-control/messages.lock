@@ -6,6 +6,9 @@ network base system
 [messages]
 network/bidirectional b6817e1d148a8246 property
 network/data-plane-placement 880e961aa58a91dc property
+network/datagrams/finished fc95e685ed83e36b topic
+network/datagrams/start ebc1667984e09af8 endpoint
+network/datagrams/stop 4863a2bac52f7c0c endpoint
 network/ready d57982baa9a27831 topic
 network/runtime-configuration 80d9410d4730af36 property
 network/rx 4fe48d19d7020c71 property

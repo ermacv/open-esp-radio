@@ -64,3 +64,18 @@ Host tests exercise pre-installation control/NetDevice construction, queue
 admission, exact TX-owner return and poisoned connection refusal. The
 runtime's model tests cover correlated terminals, duplicate in-flight
 requests, credit reuse, reconnect epochs, cooperative stop and retirement.
+
+## Reconnect and lifecycle
+
+`Config::with_reconnect(ReconnectPolicy::every(interval)?)` enables automatic
+initial connection and retries on the existing station runtime timer. A zero
+interval is refused. The default is `ReconnectPolicy::DISABLED`. Explicit
+Disconnect pauses the policy; explicit Connect resumes it. A connect credit
+stays with Runner until refusal or completion, including policy attempts.
+
+`Control::stop` requests graceful shutdown independently of command queue
+capacity: disconnect once, wait for link-down, then retire Runner and its
+installation owners. Terminal errors do not reconnect or recreate resources.
+`StationExit` retains the facade's original typed failure. Its public failure
+values have a fixed-width serde/schema encoding; no HIL dependency, observation
+counter or collector is part of the facade.

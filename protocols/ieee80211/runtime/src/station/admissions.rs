@@ -5,13 +5,17 @@
 //! operations each consume a unique affine permission. This is accounting
 //! of a backend's external promises, not another owner of those permissions.
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(
+    Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize, postcard_schema::Schema,
+)]
 pub enum PendingTerminal {
     Transmit(u8),
     Control(ControlTerminal),
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(
+    Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize, postcard_schema::Schema,
+)]
 pub enum ControlTerminal {
     Configure,
     PairwiseRemoval,

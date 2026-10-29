@@ -12,6 +12,9 @@ default = []
 registry = ["oer-hil-protocol/registry", "dep:serde_json"]
 
 [dependencies]
+oer-hil-agent = { path = "../../hil/agent" }
+oer-trace = { path = "../../../portable/trace" }
+oer-ieee80211-instrumentation = { path = "../instrumentation" }
 oer-network = { path = "../../network" }
 oer-ieee80211-runtime = { path = "../runtime" }
 serde_json = { version = "1.0", optional = true }
@@ -23,6 +26,8 @@ serde = { version = "1.0.219", default-features = false, features = ["derive"] }
 zeroize = { version = "1.8.1", default-features = false }
 
 [dev-dependencies]
+oer-time = { path = "../../../portable/time" }
+oer-time-virtual = { path = "../../../portable/time-virtual" }
 oer-memory = { path = "../../../portable/memory" }
 
 [lints]

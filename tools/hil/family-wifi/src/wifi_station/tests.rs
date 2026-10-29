@@ -29,17 +29,14 @@ fn failed_work_stops_the_station_before_returning_and_cleanup_failure_is_visible
         stop_on_error(Err("no reconnection".into()), || Ok(Some(service_end())));
     assert_eq!(
         result.expect_err("service ended").to_string(),
-        "no reconnection; station service ended in epoch 2: \
-         Failed(EnableRefused(Core(KeyUseMismatch)))"
+        format!("no reconnection; {}", ended(&service_end()))
     );
 }
 
 fn service_end() -> StationServiceEnded {
     StationServiceEnded {
         epoch: 2,
-        end: StationServiceEnd::Failed(StationServiceFault::EnableRefused(
-            StationBackendFault::Core(StationLowerMacFault::KeyUseMismatch),
-        )),
+        end: StationServiceEnd::Failed(StationServiceFault::encode(&17_u64).unwrap()),
     }
 }
 
@@ -68,7 +65,11 @@ impl StationStop for Fake {
     fn ended(&self) -> Result<Option<StationServiceEnded>> {
         let stopped = self.calls.borrow().contains(&"stop");
         self.calls.borrow_mut().push("ended");
-        Ok(if stopped { self.after } else { self.before })
+        Ok(if stopped {
+            self.after.clone()
+        } else {
+            self.before.clone()
+        })
     }
     fn stop(&self) -> Result<()> {
         self.calls.borrow_mut().push("stop");
@@ -82,7 +83,7 @@ impl StationStop for Fake {
         self.calls.borrow_mut().push("stopped");
         match &self.waited {
             Some(StopEnd::Stopped(counters)) => Ok(StopEnd::Stopped(*counters)),
-            Some(StopEnd::Ended(end)) => Ok(StopEnd::Ended(*end)),
+            Some(StopEnd::Ended(end)) => Ok(StopEnd::Ended(end.clone())),
             None => Err("device did not complete wifi/station/stop".into()),
         }
     }

@@ -1932,6 +1932,9 @@ dependencies = [
  "oer-time",
  "oer-time-virtual",
  "oer-trace",
+ "postcard",
+ "postcard-schema",
+ "serde",
  "static_cell",
  "zeroize",
 ]
@@ -2216,7 +2219,6 @@ dependencies = [
  "oer-ieee80211-cipher",
  "oer-ieee80211-control",
  "oer-ieee80211-instrumentation",
- "oer-ieee80211-runtime",
  "oer-memory",
  "oer-network-control",
  "oer-riscv",
@@ -2764,10 +2766,15 @@ name = "oer-ieee80211-control"
 version = "0.1.0"
 dependencies = [
  "heapless",
+ "oer-hil-agent",
  "oer-hil-protocol",
+ "oer-ieee80211-instrumentation",
  "oer-ieee80211-runtime",
  "oer-memory",
  "oer-network",
+ "oer-time",
+ "oer-time-virtual",
+ "oer-trace",
  "postcard",
  "postcard-schema",
  "serde",
@@ -2887,6 +2894,8 @@ dependencies = [
  "oer-time",
  "oer-time-virtual",
  "oer-trace",
+ "postcard-schema",
+ "serde",
 ]
 
 [[package]]

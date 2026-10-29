@@ -3,6 +3,8 @@
 use crate::console::{Console, Immediate};
 use oer_hil_protocol::{RequestIdentity, capture::*};
 
+#[cfg(oer_trace)]
+pub mod atomic;
 pub mod collector;
 
 /// No radio or platform dependency is needed to serve an image's capture.
