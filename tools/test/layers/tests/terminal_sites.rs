@@ -61,6 +61,13 @@ const REASON_DECODERS: &[(&str, &str)] = &[
 ];
 
 type Sites = BTreeSet<String>;
+type ScannedSites = BTreeMap<String, Location>;
+
+#[derive(Debug, PartialEq, Eq)]
+struct Location {
+    line: usize,
+    column: usize,
+}
 
 fn test_only(attrs: &[Attribute]) -> bool {
     attrs.iter().any(|attr| {
@@ -108,7 +115,10 @@ fn sources(directory: &Path, files: &mut Vec<PathBuf>) {
 
 struct Scanner<'a> {
     file: &'a str,
-    sites: Sites,
+    source: &'a str,
+    item: Vec<String>,
+    ordinals: BTreeMap<String, usize>,
+    sites: ScannedSites,
     decoder: bool,
     aliases: BTreeMap<String, String>,
 }
@@ -116,12 +126,25 @@ struct Scanner<'a> {
 impl Scanner<'_> {
     fn add(&mut self, span: Span, kind: &str, name: impl std::fmt::Display) {
         let start = span.start();
-        self.sites.insert(format!(
-            "{}:{}:{}:{kind}:{name}",
-            self.file,
-            start.line,
-            start.column + 1
-        ));
+        let prefix = format!("{}:{}:{kind}:{name}", self.file, self.item.join("::"));
+        let ordinal = self.ordinals.entry(prefix.clone()).or_default();
+        *ordinal += 1;
+        self.sites.insert(
+            format!("{prefix}:{ordinal}"),
+            Location {
+                line: start.line,
+                column: start.column + 1,
+            },
+        );
+    }
+
+    fn tokens(&self, span: Span) -> String {
+        self.source
+            .get(span.byte_range())
+            .expect("AST span is inside its source")
+            .parse::<TokenStream>()
+            .expect("AST item tokens")
+            .to_string()
     }
 
     fn image_panic_scope(&self) -> bool {
@@ -313,12 +336,36 @@ impl<'ast> Visit<'ast> for Imports {
 
 impl<'ast> Visit<'ast> for Scanner<'_> {
     fn visit_item(&mut self, item: &'ast syn::Item) {
-        let attrs = match item {
-            syn::Item::Fn(item) => &item.attrs,
-            syn::Item::Mod(item) => &item.attrs,
-            syn::Item::Impl(item) => &item.attrs,
-            syn::Item::Macro(item) => &item.attrs,
-            syn::Item::Enum(item) => &item.attrs,
+        let (attrs, name) = match item {
+            syn::Item::Fn(item) => (&item.attrs, Some(item.sig.ident.to_string())),
+            syn::Item::Mod(item) => (&item.attrs, Some(item.ident.to_string())),
+            syn::Item::Impl(item) => {
+                let ty = self.tokens(item.self_ty.span());
+                let name = if let Some((_, path, _)) = &item.trait_ {
+                    format!("impl {} for {ty}", self.tokens(path.span()))
+                } else {
+                    format!("impl {ty}")
+                };
+                (&item.attrs, Some(name))
+            }
+            syn::Item::Macro(item) => (&item.attrs, item.ident.as_ref().map(ToString::to_string)),
+            syn::Item::Enum(item) => (&item.attrs, Some(item.ident.to_string())),
+            syn::Item::Const(item) => (&item.attrs, Some(item.ident.to_string())),
+            syn::Item::Static(item) => (&item.attrs, Some(item.ident.to_string())),
+            syn::Item::Trait(item) => (&item.attrs, Some(item.ident.to_string())),
+            syn::Item::Struct(item) => (&item.attrs, Some(item.ident.to_string())),
+            syn::Item::Union(item) => (&item.attrs, Some(item.ident.to_string())),
+            syn::Item::Type(item) => (&item.attrs, Some(item.ident.to_string())),
+            _ => return syn::visit::visit_item(self, item),
+        };
+        if test_only(attrs) {
+            return;
+        }
+        let named = name.is_some();
+        if let Some(name) = name {
+            self.item.push(name);
+        }
+        match item {
             syn::Item::Const(item) => {
                 if (self.file == "chips/espressif/staged-runtime/src/panic.rs"
                     && item.ident == "INVALID_HART")
@@ -329,18 +376,16 @@ impl<'ast> Visit<'ast> for Scanner<'_> {
                 {
                     self.add(item.ident.span(), "retained-reason", &item.ident);
                 }
-                return;
             }
             syn::Item::Static(item) => {
                 if item.attrs.iter().any(|attr| matches!(&attr.meta, syn::Meta::List(list) if list.path.is_ident("unsafe") && list.tokens.to_string().contains("noinit"))) {
                     self.add(item.ident.span(), "retained-slot", &item.ident);
                 }
-                return;
             }
-            _ => return syn::visit::visit_item(self, item),
-        };
-        if !test_only(attrs) {
-            syn::visit::visit_item(self, item);
+            _ => syn::visit::visit_item(self, item),
+        }
+        if named {
+            self.item.pop();
         }
     }
 
@@ -365,6 +410,7 @@ impl<'ast> Visit<'ast> for Scanner<'_> {
         if test_only(&item.attrs) {
             return;
         }
+        self.item.push(item.sig.ident.to_string());
         if never(&item.sig.output)
             && item.sig.asyncness.is_none()
             && !self.file.starts_with("portable/")
@@ -377,6 +423,31 @@ impl<'ast> Visit<'ast> for Scanner<'_> {
             .any(|&(file, name)| self.file == file && item.sig.ident == name);
         syn::visit::visit_impl_item_fn(self, item);
         self.decoder = decoder;
+        self.item.pop();
+    }
+
+    fn visit_trait_item_fn(&mut self, item: &'ast syn::TraitItemFn) {
+        if !test_only(&item.attrs) {
+            self.item.push(item.sig.ident.to_string());
+            syn::visit::visit_trait_item_fn(self, item);
+            self.item.pop();
+        }
+    }
+
+    fn visit_impl_item_const(&mut self, item: &'ast syn::ImplItemConst) {
+        if !test_only(&item.attrs) {
+            self.item.push(item.ident.to_string());
+            syn::visit::visit_impl_item_const(self, item);
+            self.item.pop();
+        }
+    }
+
+    fn visit_trait_item_const(&mut self, item: &'ast syn::TraitItemConst) {
+        if !test_only(&item.attrs) {
+            self.item.push(item.ident.to_string());
+            syn::visit::visit_trait_item_const(self, item);
+            self.item.pop();
+        }
     }
 
     fn visit_item_enum(&mut self, item: &'ast syn::ItemEnum) {
@@ -512,7 +583,8 @@ fn modules(
     items: &[syn::Item],
     module_dir: &Path,
     path_dir: &Path,
-    found: &mut Vec<(PathBuf, Option<PathBuf>)>,
+    scope: &[String],
+    found: &mut Vec<(PathBuf, Option<PathBuf>, Vec<String>)>,
 ) {
     for item in items {
         if let syn::Item::Macro(item) = item
@@ -520,15 +592,21 @@ fn modules(
             && item.mac.path.is_ident("include")
             && let Ok(path) = syn::parse2::<syn::LitStr>(item.mac.tokens.clone())
         {
-            found.push((path_dir.join(path.value()), Some(module_dir.to_path_buf())));
+            found.push((
+                path_dir.join(path.value()),
+                Some(module_dir.to_path_buf()),
+                scope.to_vec(),
+            ));
         }
         if let syn::Item::Mod(item) = item {
             if test_only(&item.attrs) {
                 continue;
             }
+            let mut scope = scope.to_vec();
+            scope.push(item.ident.to_string());
             if let Some((_, items)) = &item.content {
                 let directory = module_dir.join(item.ident.to_string());
-                modules(items, &directory, &directory, found);
+                modules(items, &directory, &directory, &scope, found);
             } else {
                 let explicit = item.attrs.iter().find_map(|attr| {
                     if let syn::Meta::NameValue(meta) = &attr.meta
@@ -553,14 +631,14 @@ fn modules(
                 });
                 // Generated modules are outside this source inventory.
                 if path.is_file() && !path.ends_with("pac/src/generated.rs") {
-                    found.push((path, None));
+                    found.push((path, None, scope));
                 }
             }
         }
     }
 }
 
-fn scan(root: &Path) -> Sites {
+fn scan(root: &Path) -> ScannedSites {
     let root = root.canonicalize().expect("source root");
     let mut files = Vec::new();
     for directory in ["chips", "firmware", "portable", "protocols"] {
@@ -585,7 +663,7 @@ fn scan(root: &Path) -> Sites {
             let file = package.join(name);
             if file.is_file() {
                 let directory = file.parent().expect("crate root directory").to_path_buf();
-                pending.push((file, Some(directory)));
+                pending.push((file, Some(directory), vec!["crate".into()]));
             }
         }
         if let Some(path) = manifest
@@ -595,23 +673,23 @@ fn scan(root: &Path) -> Sites {
         {
             let file = package.join(path);
             let directory = file.parent().expect("crate root directory").to_path_buf();
-            pending.push((file, Some(directory)));
+            pending.push((file, Some(directory), vec!["crate".into()]));
         }
         if let Some(bins) = manifest.get("bin").and_then(toml::Value::as_array) {
             for bin in bins {
                 if let Some(path) = bin.get("path").and_then(toml::Value::as_str) {
                     let file = package.join(path);
                     let directory = file.parent().expect("crate root directory").to_path_buf();
-                    pending.push((file, Some(directory)));
+                    pending.push((file, Some(directory), vec!["crate".into()]));
                 }
             }
         }
     }
-    let mut sites = Sites::new();
+    let mut sites = ScannedSites::new();
     let mut visited = BTreeSet::new();
-    while let Some((path, included_module_dir)) = pending.pop() {
+    while let Some((path, included_module_dir, scope)) = pending.pop() {
         let path = path.canonicalize().expect("module path");
-        if !visited.insert(path.clone()) {
+        if !visited.insert((path.clone(), scope.clone())) {
             continue;
         }
         let file = path
@@ -634,12 +712,15 @@ fn scan(root: &Path) -> Sites {
         } else {
             parent.join(path.file_stem().expect("source stem"))
         };
-        modules(&parsed.items, &module_dir, parent, &mut pending);
+        modules(&parsed.items, &module_dir, parent, &scope, &mut pending);
         let mut imports = Imports::default();
         imports.visit_file(&parsed);
         let mut scanner = Scanner {
             file: &file,
-            sites: Sites::new(),
+            source: &source,
+            item: scope,
+            ordinals: BTreeMap::new(),
+            sites: ScannedSites::new(),
             decoder: false,
             aliases: imports.0,
         };
@@ -701,10 +782,12 @@ fn registry(text: &str) -> Result<Sites, String> {
     }
     if let Some(nonterminal) = document.get("nonterminal").and_then(toml::Value::as_table) {
         for (id, reason) in nonterminal {
-            if !id.ends_with(":reset-method:reset")
-                || reason
-                    .as_str()
-                    .is_none_or(|reason| reason.trim().is_empty())
+            if !id.rsplit_once(':').is_some_and(|(site, ordinal)| {
+                site.ends_with(":reset-method:reset")
+                    && ordinal.parse::<usize>().is_ok_and(|ordinal| ordinal > 0)
+            }) || reason
+                .as_str()
+                .is_none_or(|reason| reason.trim().is_empty())
                 || !sites.insert(id.clone())
             {
                 return Err(format!("{id}: invalid nonterminal reset-method review"));
@@ -737,21 +820,34 @@ fn admitted_owner(id: &str) -> Option<&str> {
     }
 }
 
-fn differences(actual: &Sites, recorded: &Sites) -> Vec<String> {
+fn differences(actual: &ScannedSites, recorded: &Sites) -> Vec<String> {
     actual
-        .difference(recorded)
-        .map(|id| format!("unregistered: {id}"))
-        .chain(recorded.difference(actual).map(|id| format!("stale: {id}")))
+        .iter()
+        .filter(|(id, _)| !recorded.contains(*id))
+        .map(|(id, location)| {
+            let (file, _) = id.split_once(':').expect("site path and item");
+            format!(
+                "unregistered: {id} ({file}:{}:{})",
+                location.line, location.column
+            )
+        })
+        .chain(
+            recorded
+                .iter()
+                .filter(|id| !actual.contains_key(*id))
+                .map(|id| format!("stale: {id}")),
+        )
         .collect()
 }
 
 #[test]
 fn terminal_registry_matches_source() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let actual = scan(&root);
     let recorded =
         registry(include_str!("../terminal-sites.toml")).expect("valid terminal registry");
     assert_eq!(
-        differences(&scan(&root), &recorded),
+        differences(&actual, &recorded),
         Vec::<String>::new(),
         "terminal-site registry drift"
     );
@@ -759,15 +855,34 @@ fn terminal_registry_matches_source() {
 
 #[test]
 fn missing_and_extra_sites_are_both_rejected() {
-    let actual = Sites::from(["one".into(), "two".into()]);
+    let one = "firmware/fixture/src/main.rs:crate::one:panic-macro:panic:1";
+    let two = "firmware/fixture/src/main.rs:crate::two:panic-macro:panic:1";
+    let actual = ScannedSites::from([
+        (
+            one.into(),
+            Location {
+                line: 1,
+                column: 12,
+            },
+        ),
+        (
+            two.into(),
+            Location {
+                line: 3,
+                column: 12,
+            },
+        ),
+    ]);
     assert_eq!(
-        differences(&actual, &Sites::from(["one".into()])),
-        ["unregistered: two"]
+        differences(&actual, &Sites::from([one.into()])),
+        [format!(
+            "unregistered: {two} (firmware/fixture/src/main.rs:3:12)"
+        )]
     );
     assert_eq!(
         differences(
             &actual,
-            &Sites::from(["one".into(), "two".into(), "gone".into()])
+            &Sites::from([one.into(), two.into(), "gone".into()])
         ),
         ["stale: gone"]
     );
@@ -790,7 +905,10 @@ fn scanner_finds_macros_callbacks_and_reasons_but_skips_tests_and_const_blocks()
     let parsed = syn::parse_file(source).expect("fixture parses");
     let mut scanner = Scanner {
         file: "firmware/fixture/src/lib.rs",
-        sites: Sites::new(),
+        source,
+        item: vec!["crate".into()],
+        ordinals: BTreeMap::new(),
+        sites: ScannedSites::new(),
         decoder: false,
         aliases: BTreeMap::new(),
     };
@@ -807,9 +925,9 @@ fn metadata_requires_an_admitted_owner_and_fault_class() {
         "{ owner = 'firmware/apps/w0', classes = ['hardware-impossible'] }",
         "{ owner = 'firmware/apps/w1', classes = ['rust-panic'] }",
     ] {
-        assert!(registry(&format!("version = 1\n[sites]\n'firmware/apps/w0/src/main.rs:1:1:panic-macro:panic' = {metadata}\n")).is_err());
+        assert!(registry(&format!("version = 1\n[sites]\n'firmware/apps/w0/src/main.rs:crate::run:panic-macro:panic:1' = {metadata}\n")).is_err());
     }
-    assert!(registry("version = 1\n[sites]\n'firmware/apps/w0/src/main.rs:1:1:panic-macro:panic' = { owner = 'firmware/apps/w0', classes = ['rust-panic'] }\n").is_ok());
+    assert!(registry("version = 1\n[sites]\n'firmware/apps/w0/src/main.rs:crate::run:panic-macro:panic:1' = { owner = 'firmware/apps/w0', classes = ['rust-panic'] }\n").is_ok());
 }
 
 #[test]
@@ -835,13 +953,25 @@ fn source_addition_deletion_and_file_removal_require_registry_changes() {
         "fn end() -> ! { runtime::reset_recording::<Port>(|_| ()) }\n",
     )
     .expect("terminal source");
-    let original = scan(root.path());
+    let original_scan = scan(root.path());
+    let original: Sites = original_scan.keys().cloned().collect();
     assert_eq!(
         original.len(),
         2,
         "literal include is scanned, test module is excluded"
     );
-    assert!(differences(&original, &original).is_empty());
+    assert!(differences(&original_scan, &original).is_empty());
+    std::fs::write(
+        &source,
+        "\n    fn end() -> ! { runtime::reset_recording::<Port>(|_| ()) }\n",
+    )
+    .expect("shift line and column above the sites");
+    let shifted = scan(root.path());
+    assert!(differences(&shifted, &original).is_empty());
+    assert_ne!(
+        shifted, original_scan,
+        "navigation coordinates stay current"
+    );
     std::fs::write(&source, "fn end() -> ! { runtime::reset_recording::<Port>(|_| ()) }\nfn extra() { runtime::reset_recording::<Port>(|_| ()); }\n").expect("new site");
     let added = differences(&scan(root.path()), &original);
     assert_eq!(added.len(), 1);
@@ -869,7 +999,10 @@ fn aliases_macro_expansions_and_new_retained_variants_are_inventoried() {
     let parsed = syn::parse_file(source).expect("fixture parses");
     let mut scanner = Scanner {
         file: "chips/espressif/staged-runtime/src/panic/fault.rs",
-        sites: Sites::new(),
+        source,
+        item: vec!["crate".into()],
+        ordinals: BTreeMap::new(),
+        sites: ScannedSites::new(),
         decoder: false,
         aliases: BTreeMap::new(),
     };
@@ -883,7 +1016,10 @@ fn aliases_macro_expansions_and_new_retained_variants_are_inventoried() {
         "retained-reason:FaultReason::Two",
     ] {
         assert!(
-            scanner.sites.iter().any(|site| site.ends_with(name)),
+            scanner
+                .sites
+                .keys()
+                .any(|site| site.contains(&format!(":{name}:"))),
             "missing {name}"
         );
     }
@@ -892,14 +1028,111 @@ fn aliases_macro_expansions_and_new_retained_variants_are_inventoried() {
 
 #[test]
 fn nonterminal_reviews_cannot_hide_panic_sites_or_survive_removed_calls() {
-    let id = "firmware/apps/b0/src/h4.rs:1:1:reset-method:reset";
+    let id = "firmware/apps/b0/src/h4.rs:crate::run:reset-method:reset:1";
     let recorded = registry(&format!(
         "version = 1\n[sites]\n[nonterminal]\n'{id}' = 'parser clears its frame and returns'\n"
     ))
     .expect("reviewed method");
     assert_eq!(
-        differences(&Sites::new(), &recorded),
+        differences(&ScannedSites::new(), &recorded),
         [format!("stale: {id}")]
     );
-    assert!(registry("version = 1\n[sites]\n[nonterminal]\n'firmware/apps/b0/src/h4.rs:1:1:panic-macro:panic' = 'hide panic'\n").is_err());
+    assert!(registry("version = 1\n[sites]\n[nonterminal]\n'firmware/apps/b0/src/h4.rs:crate::run:panic-macro:panic:1' = 'hide panic'\n").is_err());
+}
+
+#[test]
+fn duplicate_registry_keys_and_overlapping_nonterminal_reviews_are_rejected() {
+    let id = "firmware/apps/b0/src/h4.rs:crate::run:reset-method:reset:1";
+    let entry =
+        format!("'{id}' = {{ owner = 'firmware/apps/b0', classes = ['requested-reset'] }}\n");
+    assert!(registry(&format!("version = 1\n[sites]\n{entry}{entry}")).is_err());
+    assert!(
+        registry(&format!(
+            "version = 1\n[sites]\n{entry}[nonterminal]\n'{id}' = 'reviewed reset'\n"
+        ))
+        .is_err()
+    );
+}
+
+#[test]
+fn enclosing_items_distinguish_methods_and_number_only_identical_sites() {
+    let source = r#"
+        mod nested {
+            impl<T> Device<T> {
+                fn run() {
+                    panic!("first");
+                    runtime::reset_recording::<Port>(|_| ());
+                    panic!("second");
+                    fn inner() { panic!("nested function"); }
+                }
+            }
+            impl Service for Device<u8> {
+                fn run() { panic!("trait implementation"); }
+            }
+            impl Device<u16> {
+                fn run() { panic!("different type"); }
+            }
+            macro_rules! emitted { () => { panic!("template"); } }
+        }
+    "#;
+    let mut scanner = Scanner {
+        file: "firmware/fixture/src/lib.rs",
+        source,
+        item: vec!["crate".into()],
+        ordinals: BTreeMap::new(),
+        sites: ScannedSites::new(),
+        decoder: false,
+        aliases: BTreeMap::new(),
+    };
+    scanner.visit_file(&syn::parse_file(source).expect("fixture parses"));
+    let names: Sites = scanner.sites.into_keys().collect();
+    let file = "firmware/fixture/src/lib.rs";
+    assert_eq!(
+        names,
+        Sites::from([
+            format!("{file}:crate::nested::impl Device < T >::run:panic-macro:panic:1"),
+            format!("{file}:crate::nested::impl Device < T >::run:panic-macro:panic:2"),
+            format!(
+                "{file}:crate::nested::impl Device < T >::run:terminal-reference:reset_recording:1"
+            ),
+            format!("{file}:crate::nested::impl Device < T >::run::inner:panic-macro:panic:1"),
+            format!(
+                "{file}:crate::nested::impl Service for Device < u8 >::run:panic-macro:panic:1"
+            ),
+            format!("{file}:crate::nested::impl Device < u16 >::run:panic-macro:panic:1"),
+            format!("{file}:crate::nested::emitted:panic-macro:panic:1"),
+        ])
+    );
+}
+
+#[test]
+fn module_paths_follow_inline_modules_path_attributes_and_includes() {
+    let root = tempfile::tempdir().expect("source fixture");
+    let package = root.path().join("firmware/apps/fixture");
+    let src = package.join("src");
+    std::fs::create_dir_all(src.join("outer")).expect("module directory");
+    std::fs::write(package.join("Cargo.toml"), "[package]\nname = 'fixture'\n")
+        .expect("fixture manifest");
+    std::fs::write(
+        src.join("main.rs"),
+        "mod outer; mod inline { fn run() { panic!(); } }",
+    )
+    .expect("crate root");
+    std::fs::write(
+        src.join("outer.rs"),
+        "#[path = \"different.rs\"] mod named;",
+    )
+    .expect("out-of-line module");
+    std::fs::write(src.join("different.rs"), "include!(\"included.rs\");")
+        .expect("explicit module path");
+    std::fs::write(src.join("included.rs"), "fn run() { panic!(); }").expect("included source");
+    let actual = scan(root.path());
+    assert_eq!(
+        actual.into_keys().collect::<Sites>(),
+        Sites::from([
+            "firmware/apps/fixture/src/main.rs:crate::inline::run:panic-macro:panic:1".into(),
+            "firmware/apps/fixture/src/included.rs:crate::outer::named::run:panic-macro:panic:1"
+                .into(),
+        ])
+    );
 }

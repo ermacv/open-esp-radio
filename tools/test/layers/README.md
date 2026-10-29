@@ -93,12 +93,28 @@ name resolution.
 [`terminal-sites.toml`](terminal-sites.toml) records source sites with their
 fault classes and reset owner. `tests/terminal_sites.rs` compares exact sets:
 an added site, a missing record, a deleted site and a stale record all fail.
-Negative fixtures change calls, remove files, add retained variants and
-exercise callback references, aliases and macro bodies. The registry is an
-inventory, not permission to add a panic or reset path.
+Negative fixtures change calls, remove files, add retained variants, reject
+duplicate keys and exercise callback references, aliases and macro bodies.
+A regression fixture shifts a site's line and column without changing its key.
+The registry is an inventory, not permission to add a panic or reset path.
 
-Each `[sites]` key is `path:line:column:kind:source-name`, with 1-based
-coordinates. Each value has `owner` (the owning package's repository path)
+Each `[sites]` key is `path:item:kind:source-name:ordinal`. `item` is the
+enclosing AST path from `crate`, including out-of-line and inline modules,
+named items and methods. Inherent implementations use `impl Type`; trait
+implementations use `impl Trait for Type`, with type/trait tokens normalized
+independently of source whitespace. Named macro definitions use their name;
+unnamed macro invocations belong to the enclosing module or named item.
+Literal `include!` files inherit the including module's path.
+The 1-based `ordinal` counts only sites with the same item, kind and source
+name, in AST/token visitation order. Every key includes it, including unique
+sites, so appending a repeat preserves existing keys. Inserting or reordering
+identical sites requires reviewing their classifications.
+
+For example, `firmware/apps/w0/src/main.rs:crate::run:panic-macro:panic:1`
+names the first `panic!` in `run`. Unregistered-site diagnostics show the
+current `path:line:column` (1-based) for navigation. Stale keys identify sites
+which no longer exist and have no current coordinates.
+Each value has `owner` (the owning package's repository path)
 and nonempty `classes` (the spellings in the architecture's
 [fatal/reset contract](../../../docs/architecture.md#fatal-decisions-and-reset)).
 A shared dispatch mechanism can accept several classes. An entry containing
@@ -130,7 +146,8 @@ Site kinds cover:
   qualified `fatal::reset`, fault reporters and panic dispatch are included.
 - `reset-method`: every image `.reset()` call, including executor failure
   reporters. `[nonterminal]` contains the exact reviewed B0 parser/frame
-  resets which return normally; each needs a reason and must still exist.
+  resets which return normally; these use the same stable key format, each
+  needs a reason and must still exist.
 - `reset-trigger`: HAL system-reset requests and the typed PAC reset strobe
   used by HAL and the isolated facts image.
 - `retained-reason`, `retained-code`, `retained-slot`: runtime, PHY, B0,
@@ -147,8 +164,9 @@ expansions. Glob imports, arbitrary function-pointer dataflow, implicit
 bounds/overflow/division panics, transitive panicking methods and linker/ROM
 abort paths require review and the separate image analysis. The registry
 does not prove that a site is reachable, that a record commits or survives
-a reset, or that its observations justify impossibility. Source formatting
-or moves change coordinates and require reviewed registry updates; do not
+a reset, or that its observations justify impossibility. Formatting and
+line shifts preserve keys; file moves, enclosing-item changes and changes
+to the site itself require reviewed registry updates. Do not
 regenerate classifications without checking their cause and owner.
 
 ## HAL atoms
