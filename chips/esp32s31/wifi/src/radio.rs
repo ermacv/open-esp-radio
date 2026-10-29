@@ -37,7 +37,7 @@ use oer_esp32s31_ieee80211_driver::{
     tx::{CappedTxPowerProfile, WifiTxResources},
 };
 use oer_esp32s31_ieee80211_mac::tx::{TxSlot, runtime::WifiTxRuntimePolicy};
-use oer_esp32s31_phy::{PhyConfig, PhyTxTargetPowerProfile};
+use oer_esp32s31_phy::{PhyConfig, PhyTxTargetPowerProfile, executor::boundary::Boundary};
 use oer_esp32s31_radio_client::{MembershipCell, wifi::Wifi};
 use oer_ieee80211_port::*;
 use oer_ieee80211_wire::{
@@ -51,6 +51,17 @@ use static_cell::StaticCell;
 
 type Inner<W> = RadioDevice<
     ImageComposition<W>,
+    EmbassyClock,
+    Platform,
+    oer_espressif_interrupt_table::Bound<<W as Binding>::Wifi>,
+    irq::Bell<<W as Binding>::Wifi, <W as Binding>::Radio>,
+    N,
+    B,
+    S,
+    Q,
+    RadioExecutor,
+>;
+type DeviceParts<W> = RadioParts<
     EmbassyClock,
     Platform,
     oer_espressif_interrupt_table::Bound<<W as Binding>::Wifi>,
@@ -163,11 +174,14 @@ pub(crate) async fn drive<W: Binding>(driver: Driver<W>) {
         .take_request()
         .unwrap_or_else(|| W::fail(InitializationError::Frontend));
     let config = boot.config;
-    let parts = match install(boot, config).await {
-        Ok(p) => p,
-        Err(e) => {
-            response.answer(Err(e));
-            return;
+    let parts = {
+        let mut installation = core::pin::pin!(install(boot, config));
+        match Boundary::new(installation.as_mut()).await {
+            Ok(parts) => parts,
+            Err(error) => {
+                response.answer(Err(error));
+                return;
+            }
         }
     };
     let backend = Backend::new(parts)
@@ -189,6 +203,17 @@ pub(crate) async fn drive<W: Binding>(driver: Driver<W>) {
         completion.unregistered();
     }
 }
+// Consume device parts in the static initializer, outside the installation poll.
+#[inline(never)]
+fn init_device<W: Binding>(
+    storage: &'static StaticCell<Device<W>>,
+    parts: DeviceParts<W>,
+) -> Result<&'static mut Device<W>, InitializationError> {
+    storage
+        .try_init_with(|| Device(RadioDevice::new(parts)))
+        .ok_or(InitializationError::Storage)
+}
+
 // Initialize one slot directly in its static home, outside the driver poll.
 #[inline(never)]
 fn tx_slot(
@@ -230,17 +255,20 @@ async fn install<W: Binding>(
         )
         .map_err(|_| InitializationError::Radio)?,
     );
-    let (cell, stopped) = start_esp32s31_radio(
-        boot.cell,
-        boot.wifi,
-        Platform {
-            rng: boot.rng,
-            power: None,
-        },
-        start,
-    )
-    .await
-    .unwrap_or_else(|error| W::fail(InitializationError::Request(error.into())));
+    let (cell, stopped) = {
+        let mut startup = core::pin::pin!(start_esp32s31_radio(
+            boot.cell,
+            boot.wifi,
+            Platform {
+                rng: boot.rng,
+                power: None,
+            },
+            start,
+        ));
+        Boundary::new(startup.as_mut())
+            .await
+            .unwrap_or_else(|error| W::fail(InitializationError::Request(error.into())))
+    };
     let stopped = stopped.map_err(|_| InitializationError::Radio)?;
     let power = stopped.start_report().track.tx_power;
     let arena = boot.rx;
@@ -254,22 +282,20 @@ async fn install<W: Binding>(
         )
         .map_err(|_| InitializationError::Rx)?;
     let storage = boot.storage;
-    let device = storage
-        .device
-        .try_init_with(|| {
-            Device(RadioDevice::new(RadioParts {
-                wifi: stopped,
-                rx,
-                interrupt_cell: &boot.interrupts.line,
-                bound: boot.bound,
-                actor: cell,
-                timer: EmbassyClock,
-                doorbell: boot.bell,
-                domain,
-                power_limits: limits,
-            }))
-        })
-        .ok_or(InitializationError::Storage)?;
+    let device = init_device(
+        &storage.device,
+        RadioParts {
+            wifi: stopped,
+            rx,
+            interrupt_cell: &boot.interrupts.line,
+            bound: boot.bound,
+            actor: cell,
+            timer: EmbassyClock,
+            doorbell: boot.bell,
+            domain,
+            power_limits: limits,
+        },
+    )?;
     let [t0, t1, t2, t3, t4, t5, t6, t7, t8] = boot.tx;
     let [s0, s1, s2, s3, s4, s5, s6, s7, s8] = &mut storage.slots;
     let transmitter = OrdinaryTxOwner::new(WifiTxResources {
