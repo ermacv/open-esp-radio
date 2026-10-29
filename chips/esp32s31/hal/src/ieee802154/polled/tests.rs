@@ -44,7 +44,7 @@ fn a_timer_threshold_is_written_whole() {
 fn the_pib_accessors_read_back_what_they_write() {
     let mut memory = HostMemory::filled(0);
     let (task, setup) = memory.owners();
-    let (startup, interrupts) = setup.arm(task);
+    let (startup, interrupts) = crate::ieee802154::mac::host::arm(setup, task);
     let mut owners = Ieee802154MacOwners::new(startup, interrupts, silent());
 
     owners.set_tx_auto_ack(true);
@@ -73,16 +73,17 @@ fn the_pib_accessors_read_back_what_they_write() {
     assert_eq!(owners.multipan_enable(), Ieee802154MultipanEnableState::ALL);
 
     let (mut task, interrupts, _silent) = owners.into_parts();
-    let _setup = interrupts.deactivate(&mut task);
+    let _setup = crate::ieee802154::mac::host::deactivate(interrupts, &mut task);
 }
 
 #[test]
 fn disabling_coexistence_writes_the_disabled_priority_to_both_fields() {
     let mut memory = HostMemory::filled(u32::MAX);
     let (task, setup) = memory.owners();
-    let (startup, interrupts) = setup.arm(task);
+    let (startup, interrupts) = crate::ieee802154::mac::host::arm(setup, task);
     let mut owners = Ieee802154MacOwners::new(startup, interrupts, silent());
-    owners.disable_coex();
+    owners.disable_txrx_coex();
+    owners.disable_ack_coex();
     let pti = owners.task.mac_part().read_coex_pti();
     assert_eq!(pti.txrx_pti().get(), u32::from(COEX_DISABLED_PTI));
     assert_eq!(pti.ack_pti().get(), u32::from(COEX_DISABLED_PTI));
@@ -96,14 +97,14 @@ fn disabling_coexistence_writes_the_disabled_priority_to_both_fields() {
     assert_eq!(owners.task.mac_part().read_coex_pti().txrx_pti().get(), 9);
 
     let (mut task, interrupts, _silent) = owners.into_parts();
-    let _setup = interrupts.deactivate(&mut task);
+    let _setup = crate::ieee802154::mac::host::deactivate(interrupts, &mut task);
 }
 
 #[test]
 fn an_event_enable_reaches_only_its_event() {
     let mut memory = HostMemory::filled(0);
     let (task, setup) = memory.owners();
-    let (startup, interrupts) = setup.arm(task);
+    let (startup, interrupts) = crate::ieee802154::mac::host::arm(setup, task);
     let mut owners = Ieee802154MacOwners::new(startup, interrupts, silent());
     // Arming left every event masked; the engine enables them.
     owners.enable_all_events();
@@ -118,5 +119,5 @@ fn an_event_enable_reaches_only_its_event() {
     assert!(events.timer0_overflow() && events.clock_count_match());
 
     let (mut task, interrupts, _silent) = owners.into_parts();
-    let _setup = interrupts.deactivate(&mut task);
+    let _setup = crate::ieee802154::mac::host::deactivate(interrupts, &mut task);
 }

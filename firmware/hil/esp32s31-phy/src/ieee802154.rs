@@ -224,8 +224,7 @@ impl Rx {
                 RejectReason::Internal
             })?;
         }
-        let foundation = clocked
-            .reset_mac(require_radio(domain_slot.as_mut(), fault))
+        let foundation = oer_esp32s31_ieee802154_driver::lifecycle::reset_mac(clocked, require_radio(domain_slot.as_mut(), fault))
             .map_err(|_| failed(oer_diagnostics::name!("154-reset"; 32)))?
             .configure_foundation()
             .map_err(|_| failed(oer_diagnostics::name!("154-foundation"; 32)))?;
@@ -235,7 +234,7 @@ impl Rx {
             route,
         } = RegisteredIeee802154Operational::new(foundation, member);
         let silent = self.silent.take().ok_or(RejectReason::Internal)?;
-        let (startup, interrupts) = interrupts.arm(task);
+        let (startup, interrupts) = oer_esp32s31_ieee802154_driver::lifecycle::arm(interrupts, task);
         let mac = S31Mac::new(Ieee802154MacOwners::new(startup, interrupts, silent));
         let mut engine = match self.detached.take() {
             Some(detached) => detached.rebind(mac),
@@ -319,14 +318,14 @@ impl Rx {
         self.detached = Some(detached);
         let (mut task, interrupts, silent) = mac.into_inner().into_parts();
         self.silent = Some(silent);
-        let interrupts = interrupts.deactivate(&mut task);
+        let interrupts = oer_esp32s31_ieee802154_driver::lifecycle::deactivate(interrupts, &mut task);
         let (foundation, member) = self
             .route
             .take()
             .ok_or(RejectReason::Internal)?
             .into_foundation(task, interrupts)
             .map_err(|_| failed(oer_diagnostics::name!("154-return"; 32)))?;
-        let clocked = foundation.into_clocked();
+        let clocked = foundation.into_clocked().into_backend();
         if !leave_ieee802154(require_radio(domain_slot.as_mut(), fault), &clocked, member)
             .map_err(|_| failed(oer_diagnostics::name!("154-leave"; 32)))?
         {

@@ -16,14 +16,7 @@
 
 #![deny(unsafe_code)]
 
-use crate::power::PlatformClockBackend;
-use core::fmt;
-use oer_espressif_ieee802154_mac_values::{
-    Ieee802154AckTimeout, Ieee802154CcaMode, Ieee802154MacControl, Ieee802154PanIdentity,
-};
-
-use crate::phy::RadioPhyRegisters;
-
+use super::mac::Ieee802154Pti;
 use crate::{
     domain::{
         BtbbAcquired, BtbbError, CoexAbsent, CommonPower, CommonPowerExitFailure,
@@ -32,23 +25,18 @@ use crate::{
     },
     ieee802154::{
         backend::Ieee802154MacHal,
-        lifecycle::{
-            Ieee802154FoundationCheckpoint, Ieee802154FoundationFailure as EngineFoundationFailure,
-            Ieee802154Lifecycle, Ieee802154LifecycleBackend, Ieee802154ReadbackError,
-            Ieee802154ResetCheckpoint, Ieee802154ResetFailure as EngineResetFailure,
-            Ieee802154ResetPort, Ieee802154ResetReadback, state as lifecycle_state,
-        },
-        mac::{
-            self, Ieee802154FoundationSnapshot, Ieee802154InterruptSetupOwner, Ieee802154Pti,
-            Ieee802154TaskOwner,
-        },
-        policy::{
-            Ieee802154MacPolicy, Ieee802154MacPolicyBackend, Ieee802154MacPolicyCheckpoint,
-            Ieee802154MacPolicyFailure as EngineMacPolicyFailure, Ieee802154MacPolicyReadback,
-            Ieee802154MacPolicyWrites, configure_ieee802154_mac_policy,
-        },
+        mac::{self, Ieee802154InterruptSetupOwner, Ieee802154TaskOwner},
     },
+    phy::RadioPhyRegisters,
+    power::PlatformClockBackend,
     root::Ieee802154RadioPartition,
+};
+use core::fmt;
+use oer_espressif_ieee802154_mac_values::{
+    Ieee802154AckTimeout, Ieee802154CcaMode, Ieee802154FoundationSnapshot,
+    Ieee802154LifecycleBackend, Ieee802154MacControl, Ieee802154MacPolicyBackend,
+    Ieee802154MacPolicyReadback, Ieee802154MacPolicyWrites, Ieee802154PanIdentity,
+    Ieee802154ResetPort, Ieee802154ResetReadback,
 };
 
 /// The IEEE 802.15.4 partition split into its task and inactive interrupt
@@ -64,47 +52,50 @@ impl Ieee802154Mac {
     }
 }
 
-impl Ieee802154LifecycleBackend for Ieee802154Mac {
+impl Ieee802154LifecycleBackend for Ieee802154Clocked {
+    type ResetPort<'a> = LeasedResetPort<'a>;
     fn mask_all_events(&mut self) {
-        self.mac_hal().mask_all_events();
+        self.mac.mac_hal().mask_all_events();
     }
 
     fn mask_all_rx_aborts(&mut self) {
-        self.mac_hal().mask_all_rx_aborts();
+        self.mac.mac_hal().mask_all_rx_aborts();
     }
 
     fn mask_all_tx_aborts(&mut self) {
-        self.mac_hal().mask_all_tx_aborts();
+        self.mac.mac_hal().mask_all_tx_aborts();
     }
 
     fn select_average_ed_sampling(&mut self) {
-        self.mac_hal().select_average_ed_sampling();
+        self.mac.mac_hal().select_average_ed_sampling();
     }
 
-    fn set_txrx_pti(&mut self, pti: Ieee802154Pti) {
-        self.mac_hal().set_txrx_pti(pti);
+    fn disable_txrx_coex(&mut self) {
+        self.mac
+            .mac_hal()
+            .set_txrx_pti(Ieee802154Pti::COEX_DISABLED);
     }
 
-    fn set_ack_pti(&mut self, pti: Ieee802154Pti) {
-        self.mac_hal().set_ack_pti(pti);
+    fn disable_ack_coex(&mut self) {
+        self.mac.mac_hal().set_ack_pti(Ieee802154Pti::COEX_DISABLED);
     }
 
     fn apply_txon_delay(&mut self) {
-        self.mac_hal().apply_txon_delay();
+        self.mac.mac_hal().apply_txon_delay();
     }
 
     fn order_device_accesses(&mut self) {
-        self.mac_hal().order_device_accesses();
+        self.mac.mac_hal().order_device_accesses();
     }
 
     fn foundation_snapshot(&mut self) -> Ieee802154FoundationSnapshot {
-        self.mac_hal().foundation_snapshot()
+        self.mac.mac_hal().foundation_snapshot()
     }
 }
 
 /// The private MAC resets in the shared modem syscon block, borrowed from
 /// one lease for one reset transition.
-struct LeasedResetPort<'a> {
+pub struct LeasedResetPort<'a> {
     radio_phy: &'a mut RadioPhyRegisters,
 }
 
@@ -231,9 +222,7 @@ impl Ieee802154Powered {
         platform: &impl PlatformClockProvider<Backend = B>,
     ) -> Result<Ieee802154Clocked, Ieee802154ClockTransitionFailure<Self>> {
         match radio.enable_modem_clocks(&self.mac.task, platform) {
-            Ok(()) => Ok(Ieee802154Clocked {
-                inner: Ieee802154Lifecycle::clocked(self.mac),
-            }),
+            Ok(()) => Ok(Ieee802154Clocked { mac: self.mac }),
             Err(error) => Err(Ieee802154ClockTransitionFailure { owner: self, error }),
         }
     }
@@ -294,188 +283,47 @@ impl<Owner> fmt::Debug for Ieee802154PowerTransitionFailure<Owner> {
     }
 }
 
-/// IEEE 802.15.4 client whose module clocks the shared planner holds.
-///
-/// This is the stage at which the PHY layer enters the client into the
-/// shared PHY domain and the shared BTBB baseband, before the MAC reset.
-#[must_use = "the clocked IEEE 802.15.4 client must release its module clocks"]
+/// IEEE 802.15.4 module-clock owner and the MAC's unbound register atoms.
+#[must_use = "retain the module-clock and partition owner"]
 pub struct Ieee802154Clocked {
-    inner: Ieee802154Lifecycle<Ieee802154Mac, lifecycle_state::Clocked>,
+    mac: Ieee802154Mac,
 }
-
-/// IEEE 802.15.4 client after the MAC and APB resets were pulsed and
-/// released.
-#[must_use = "the reset IEEE 802.15.4 client retains its partition"]
-pub struct Ieee802154Reset {
-    inner: Ieee802154Lifecycle<Ieee802154Mac, lifecycle_state::Reset>,
-}
-
-/// Interrupt-masked static MAC foundation.
-///
-/// This state does not imply PHY/RF ownership, interrupt routing, DMA buffer
-/// setup, or an idle/operational MAC. Those are later one-way transitions.
-#[must_use = "the IEEE 802.15.4 foundation owner retains its partition"]
-pub struct Ieee802154FoundationConfigured {
-    inner: Ieee802154Lifecycle<Ieee802154Mac, lifecycle_state::FoundationConfigured>,
-}
-
-impl Ieee802154MacPolicyWrites for Ieee802154FoundationConfigured {
+impl Ieee802154MacPolicyWrites for Ieee802154Clocked {
     fn set_channel(&mut self, channel: oer_espressif_ieee802154_mac_values::Ieee802154Channel) {
-        self.inner.backend_mut().mac_hal().set_channel(channel);
+        self.mac.mac_hal().set_channel(channel);
     }
 
     fn set_cca_mode(&mut self, mode: Ieee802154CcaMode) {
-        self.inner.backend_mut().mac_hal().set_cca_mode(mode);
+        self.mac.mac_hal().set_cca_mode(mode);
     }
 
     fn set_cca_threshold_code(&mut self, threshold: i8) {
-        self.inner
-            .backend_mut()
-            .mac_hal()
-            .set_cca_threshold_code(threshold);
+        self.mac.mac_hal().set_cca_threshold_code(threshold);
     }
 
     fn set_mac_control(&mut self, control: Ieee802154MacControl) {
-        self.inner.backend_mut().mac_hal().set_mac_control(control);
+        self.mac.mac_hal().set_mac_control(control);
     }
 
     fn set_ack_timeout(&mut self, timeout: Ieee802154AckTimeout) {
-        self.inner.backend_mut().mac_hal().set_ack_timeout(timeout);
+        self.mac.mac_hal().set_ack_timeout(timeout);
     }
 
     fn set_primary_pan_identity(&mut self, identity: Ieee802154PanIdentity) {
-        self.inner
-            .backend_mut()
-            .mac_hal()
-            .set_primary_pan_identity(identity);
+        self.mac.mac_hal().set_primary_pan_identity(identity);
     }
 
     fn order_device_accesses(&mut self) {
-        self.inner.backend_mut().mac_hal().order_device_accesses();
+        self.mac.mac_hal().order_device_accesses();
     }
 }
 
-impl Ieee802154MacPolicyBackend for Ieee802154FoundationConfigured {
+impl Ieee802154MacPolicyBackend for Ieee802154Clocked {
     fn mac_policy_readback(&mut self) -> Ieee802154MacPolicyReadback {
-        let mut hal = self.inner.backend_mut().mac_hal();
+        let mut hal = self.mac.mac_hal();
         let foundation = hal.foundation_snapshot();
         let policy = hal.mac_policy_snapshot();
         Ieee802154MacPolicyReadback::new(foundation, policy)
-    }
-}
-
-/// Foundation owner after the known static MAC policy passed readback.
-///
-/// Event and abort delivery stay masked. This state is not PHY/RF or BTBB
-/// readiness, does not route an IRQ, owns no DMA buffer, and is not an
-/// operational RX/TX MAC. It is not a complete vendor PIB because TX-power
-/// mapping remains opaque.
-#[must_use = "the IEEE 802.15.4 policy owner retains its partition"]
-pub struct Ieee802154MacPolicyConfigured {
-    foundation: Ieee802154FoundationConfigured,
-    policy: Ieee802154MacPolicy,
-}
-
-/// Failed private-reset readback retaining the clocked owner.
-pub struct Ieee802154ResetTransitionFailure {
-    inner: EngineResetFailure<Ieee802154Mac>,
-}
-
-impl fmt::Debug for Ieee802154ResetTransitionFailure {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter
-            .debug_struct("Ieee802154ResetTransitionFailure")
-            .field("error", &self.inner.error())
-            .finish_non_exhaustive()
-    }
-}
-
-impl Ieee802154ResetTransitionFailure {
-    pub const fn error(&self) -> Ieee802154ReadbackError<Ieee802154ResetCheckpoint> {
-        self.inner.error()
-    }
-
-    /// Recover the clocked owner for diagnosis or an exact reset retry.
-    pub fn into_clocked(self) -> Ieee802154Clocked {
-        Ieee802154Clocked {
-            inner: self.inner.into_lifecycle(),
-        }
-    }
-}
-
-/// Failed foundation readback retaining the last proved reset owner.
-pub struct Ieee802154FoundationTransitionFailure {
-    inner: EngineFoundationFailure<Ieee802154Mac>,
-}
-
-impl fmt::Debug for Ieee802154FoundationTransitionFailure {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter
-            .debug_struct("Ieee802154FoundationTransitionFailure")
-            .field("error", &self.inner.error())
-            .finish_non_exhaustive()
-    }
-}
-
-impl Ieee802154FoundationTransitionFailure {
-    pub const fn error(&self) -> Ieee802154ReadbackError<Ieee802154FoundationCheckpoint> {
-        self.inner.error()
-    }
-
-    /// Recover the reset owner for diagnosis or an exact foundation retry.
-    pub fn into_reset(self) -> Ieee802154Reset {
-        Ieee802154Reset {
-            inner: self.inner.into_lifecycle(),
-        }
-    }
-}
-
-/// Failed static-policy readback retaining the exact owner until recovery
-/// classifies the strongest still-proved typestate.
-pub struct Ieee802154MacPolicyTransitionFailure {
-    inner: EngineMacPolicyFailure<Ieee802154FoundationConfigured>,
-}
-
-/// Safe owner recovered after a static-policy readback failure.
-///
-/// Policy-only mismatches preserve the still-proved foundation for an exact
-/// retry. A mismatch in masks, ED sampling, PTI or the receive-on delay
-/// disproves that foundation and therefore returns the preceding reset state
-/// instead.
-pub enum Ieee802154MacPolicyRecovery {
-    /// The foundation still passed and only the requested policy mismatched.
-    Foundation(Ieee802154FoundationConfigured),
-    /// A foundation invariant failed and must be configured and proved again.
-    Reset(Ieee802154Reset),
-}
-
-impl fmt::Debug for Ieee802154MacPolicyTransitionFailure {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter
-            .debug_struct("Ieee802154MacPolicyTransitionFailure")
-            .field("error", &self.inner.error())
-            .finish_non_exhaustive()
-    }
-}
-
-impl Ieee802154MacPolicyTransitionFailure {
-    /// Return the first mismatched foundation or policy checkpoint.
-    pub const fn error(&self) -> Ieee802154ReadbackError<Ieee802154MacPolicyCheckpoint> {
-        self.inner.error()
-    }
-
-    /// Recover the strongest typestate still supported by the failed
-    /// readback.
-    pub fn into_recovery(self) -> Ieee802154MacPolicyRecovery {
-        let invalidates_foundation = self.inner.error().checkpoint.invalidates_foundation();
-        let foundation = self.inner.into_backend();
-        if invalidates_foundation {
-            Ieee802154MacPolicyRecovery::Reset(Ieee802154Reset {
-                inner: foundation.inner.forget_foundation(),
-            })
-        } else {
-            Ieee802154MacPolicyRecovery::Foundation(foundation)
-        }
     }
 }
 
@@ -491,31 +339,36 @@ impl Ieee802154Clocked {
         self,
         radio: &mut RadioDomain<B, T>,
     ) -> Result<Ieee802154Powered, Ieee802154ClockTransitionFailure<Self>> {
-        match radio.disable_modem_clocks(&self.inner.backend().task) {
-            Ok(()) => Ok(Ieee802154Powered {
-                mac: self.inner.into_backend(),
-            }),
+        match radio.disable_modem_clocks(&self.mac.task) {
+            Ok(()) => Ok(Ieee802154Powered { mac: self.mac }),
             Err(error) => Err(Ieee802154ClockTransitionFailure { owner: self, error }),
         }
     }
 
-    /// Pulse the functional MAC reset and then the APB reset.
-    ///
-    /// # Errors
-    ///
-    /// A reset line did not read back released; the clocked owner is
-    /// retained for a retry.
-    pub fn reset_mac<B: PlatformClockBackend, T>(
-        self,
-        radio: &mut RadioDomain<B, T>,
-    ) -> Result<Ieee802154Reset, Ieee802154ResetTransitionFailure> {
-        let mut port = LeasedResetPort {
+    /// Lend the shared reset atoms for one family-driver transition.
+    pub fn reset_port<'a, B: PlatformClockBackend, T>(
+        &self,
+        radio: &'a mut RadioDomain<B, T>,
+    ) -> LeasedResetPort<'a> {
+        LeasedResetPort {
             radio_phy: radio.registers_mut().radio_phy_mut(),
-        };
-        self.inner
-            .reset_mac(&mut port)
-            .map(|inner| Ieee802154Reset { inner })
-            .map_err(|inner| Ieee802154ResetTransitionFailure { inner })
+        }
+    }
+
+    /// Transfer the unbound MAC atoms, retaining no module-clock release right.
+    /// The family driver retains the reset/foundation validation phase.
+    pub fn into_operational(self) -> Ieee802154Operational {
+        let Ieee802154Mac { task, interrupts } = self.mac;
+        Ieee802154Operational { task, interrupts }
+    }
+
+    /// Recover the same clock/partition owner after a masked operational epoch.
+    /// This performs no MMIO and proves no foundation readback.
+    pub fn from_operational(operational: Ieee802154Operational) -> Self {
+        let Ieee802154Operational { task, interrupts } = operational;
+        Self {
+            mac: Ieee802154Mac { task, interrupts },
+        }
     }
 
     /// Join the shared BTBB baseband as the IEEE 802.15.4 client.
@@ -532,7 +385,7 @@ impl Ieee802154Clocked {
         radio: &mut RadioDomain<B, T>,
         gain: &crate::domain::BtbbGain,
     ) -> Result<BtbbAcquired, BtbbError> {
-        radio.btbb_acquire(&self.inner.backend().task, gain)
+        radio.btbb_acquire(&self.mac.task, gain)
     }
 
     /// Leave the shared BTBB baseband. This performs no register access.
@@ -544,105 +397,7 @@ impl Ieee802154Clocked {
         &self,
         radio: &mut RadioDomain<B, T>,
     ) -> Result<(), BtbbError> {
-        radio.btbb_release(&self.inner.backend().task)
-    }
-}
-
-impl Ieee802154Reset {
-    /// Configure the interrupt-masked, non-operational MAC foundation.
-    ///
-    /// # Errors
-    ///
-    /// A foundation field did not read back; the reset owner is retained.
-    pub fn configure_foundation(
-        self,
-    ) -> Result<Ieee802154FoundationConfigured, Ieee802154FoundationTransitionFailure> {
-        self.inner
-            .configure_foundation()
-            .map(|inner| Ieee802154FoundationConfigured { inner })
-            .map_err(|inner| Ieee802154FoundationTransitionFailure { inner })
-    }
-
-    /// Retreat to the clocked owner before releasing the module clocks.
-    /// This performs no MMIO.
-    pub fn into_clocked(self) -> Ieee802154Clocked {
-        Ieee802154Clocked {
-            inner: self.inner.into_clocked(),
-        }
-    }
-}
-
-impl Ieee802154FoundationConfigured {
-    /// Configure and prove the known, interrupt-masked static MAC policy.
-    ///
-    /// This deterministic subset omits the vendor TX-power step because its
-    /// RF-dependent mapping remains opaque. No PHY/RF/BTBB, IRQ, DMA, start,
-    /// stop, or `EVENT_STATUS` operation occurs.
-    ///
-    /// # Errors
-    ///
-    /// A foundation or policy field did not read back; recovery returns the
-    /// strongest still-proved owner.
-    pub fn configure_mac_policy(
-        self,
-        policy: Ieee802154MacPolicy,
-    ) -> Result<Ieee802154MacPolicyConfigured, Ieee802154MacPolicyTransitionFailure> {
-        configure_ieee802154_mac_policy(self, policy)
-            .map(|foundation| Ieee802154MacPolicyConfigured { foundation, policy })
-            .map_err(|inner| Ieee802154MacPolicyTransitionFailure { inner })
-    }
-
-    /// Hand the task and inactive interrupt owners to the operational MAC.
-    ///
-    /// This transition performs no MMIO. Event and abort delivery stay masked
-    /// until the interrupt owner is armed and its events are enabled. The operational MAC publishes
-    /// its own PIB; both owners return through [`Self::from_operational`].
-    pub fn into_operational(self) -> Ieee802154Operational {
-        let Ieee802154Mac { task, interrupts } = self.inner.into_backend();
-        Ieee802154Operational { task, interrupts }
-    }
-
-    /// Reunite the delivery-masked operational owners and prove the foundation
-    /// again.
-    ///
-    /// Teardown issued STOP and both timer-stop commands, masked every event
-    /// and abort enable, and acknowledged its saved event sample. This does
-    /// not prove that every hardware producer drained. No register is written
-    /// here. The operational epoch rewrote the PIB, so
-    /// only the foundation is re-proved; a policy is not.
-    ///
-    /// # Errors
-    ///
-    /// A foundation field did not read back; the reset owner is retained so
-    /// the foundation can be configured again.
-    pub fn from_operational(
-        operational: Ieee802154Operational,
-    ) -> Result<Self, Ieee802154FoundationTransitionFailure> {
-        let Ieee802154Operational { task, interrupts } = operational;
-        Ieee802154Lifecycle::resume(Ieee802154Mac { task, interrupts })
-            .map(|inner| Self { inner })
-            .map_err(|inner| Ieee802154FoundationTransitionFailure { inner })
-    }
-
-    /// Retreat to the clocked owner before releasing the module clocks.
-    /// This performs no MMIO.
-    pub fn into_clocked(self) -> Ieee802154Clocked {
-        Ieee802154Clocked {
-            inner: self.inner.into_clocked(),
-        }
-    }
-}
-
-impl Ieee802154MacPolicyConfigured {
-    /// Return the semantically proved static policy.
-    pub const fn policy(&self) -> Ieee802154MacPolicy {
-        self.policy
-    }
-
-    /// Keep the foundation and forget the policy. This performs no MMIO: the
-    /// policy readback included the complete foundation.
-    pub fn into_foundation(self) -> Ieee802154FoundationConfigured {
-        self.foundation
+        radio.btbb_release(&self.mac.task)
     }
 }
 
@@ -665,9 +420,7 @@ impl Ieee802154Clocked {
     #[doc(hidden)]
     pub fn for_host_test(partition: Ieee802154RadioPartition) -> Self {
         let Ieee802154Cold { mac } = Ieee802154Cold::from_partition(partition);
-        Self {
-            inner: Ieee802154Lifecycle::clocked(mac),
-        }
+        Self { mac }
     }
 }
 

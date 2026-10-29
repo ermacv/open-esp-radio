@@ -1,18 +1,19 @@
 use oer_espressif_ieee802154_mac_values::COEX_DISABLED_PTI;
+use oer_espressif_ieee802154_mac_values::Ieee802154MacPolicyReadback;
 use oer_espressif_ieee802154_mac_values::{
     Ieee802154AckTimeout, Ieee802154CcaMode, Ieee802154Channel, Ieee802154MacControl,
     Ieee802154MultipanEnableState, Ieee802154PanIdentity,
 };
 use std::vec::Vec;
 
-use crate::ieee802154::mac::{Ieee802154FoundationSnapshot, Ieee802154Pti};
+use oer_espressif_ieee802154_mac_values::Ieee802154FoundationSnapshot;
 
 use super::{
     Ieee802154MacPolicy, Ieee802154MacPolicyBackend, Ieee802154MacPolicyCheckpoint,
-    Ieee802154MacPolicyReadback, Ieee802154MacPolicySnapshot, Ieee802154MacPolicyWrites,
-    configure_ieee802154_mac_policy, verify_ieee802154_mac_policy,
+    Ieee802154MacPolicySnapshot, Ieee802154MacPolicyWrites, configure_ieee802154_mac_policy,
+    verify_ieee802154_mac_policy,
 };
-use crate::ieee802154::lifecycle::Ieee802154ReadbackError;
+use crate::lifecycle::Ieee802154ReadbackError;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Operation {
@@ -91,8 +92,8 @@ fn valid_foundation() -> Ieee802154FoundationSnapshot {
         true,
         true,
         true,
-        Ieee802154Pti::new(COEX_DISABLED_PTI).expect("five-bit PTI"),
-        Ieee802154Pti::new(COEX_DISABLED_PTI).expect("five-bit PTI"),
+        COEX_DISABLED_PTI,
+        COEX_DISABLED_PTI,
         true,
     )
 }
@@ -115,11 +116,8 @@ fn backend_with_foundation(
 #[test]
 fn static_policy_uses_exact_deterministic_order_then_one_snapshot() {
     let policy = policy();
-    let configured = configure_ieee802154_mac_policy(
-        backend(Ieee802154MacPolicySnapshot::from_policy(policy)),
-        policy,
-    )
-    .expect("matching readback");
+    let configured = configure_ieee802154_mac_policy(backend(snapshot_from_policy(policy)), policy)
+        .expect("matching readback");
 
     assert_eq!(
         configured.operations,
@@ -139,7 +137,7 @@ fn static_policy_uses_exact_deterministic_order_then_one_snapshot() {
 #[test]
 fn every_checkpoint_fails_closed_and_preserves_the_owner() {
     let policy = policy();
-    let valid = Ieee802154MacPolicySnapshot::from_policy(policy);
+    let valid = snapshot_from_policy(policy);
     let cases = [
         Ieee802154MacPolicyCheckpoint::EventsMasked,
         Ieee802154MacPolicyCheckpoint::RxAbortsMasked,
@@ -185,8 +183,8 @@ fn every_checkpoint_fails_closed_and_preserves_the_owner() {
                 true,
                 true,
                 true,
-                Ieee802154Pti::new(COEX_DISABLED_PTI).expect("five-bit PTI"),
-                Ieee802154Pti::new(COEX_DISABLED_PTI).expect("five-bit PTI"),
+                COEX_DISABLED_PTI,
+                COEX_DISABLED_PTI,
                 true,
             ),
             Ieee802154MacPolicyCheckpoint::RxAbortsMasked => Ieee802154FoundationSnapshot::new(
@@ -194,8 +192,8 @@ fn every_checkpoint_fails_closed_and_preserves_the_owner() {
                 false,
                 true,
                 true,
-                Ieee802154Pti::new(COEX_DISABLED_PTI).expect("five-bit PTI"),
-                Ieee802154Pti::new(COEX_DISABLED_PTI).expect("five-bit PTI"),
+                COEX_DISABLED_PTI,
+                COEX_DISABLED_PTI,
                 true,
             ),
             Ieee802154MacPolicyCheckpoint::TxAbortsMasked => Ieee802154FoundationSnapshot::new(
@@ -203,8 +201,8 @@ fn every_checkpoint_fails_closed_and_preserves_the_owner() {
                 true,
                 false,
                 true,
-                Ieee802154Pti::new(COEX_DISABLED_PTI).expect("five-bit PTI"),
-                Ieee802154Pti::new(COEX_DISABLED_PTI).expect("five-bit PTI"),
+                COEX_DISABLED_PTI,
+                COEX_DISABLED_PTI,
                 true,
             ),
             Ieee802154MacPolicyCheckpoint::EdSampleAverage => Ieee802154FoundationSnapshot::new(
@@ -212,8 +210,8 @@ fn every_checkpoint_fails_closed_and_preserves_the_owner() {
                 true,
                 true,
                 false,
-                Ieee802154Pti::new(COEX_DISABLED_PTI).expect("five-bit PTI"),
-                Ieee802154Pti::new(COEX_DISABLED_PTI).expect("five-bit PTI"),
+                COEX_DISABLED_PTI,
+                COEX_DISABLED_PTI,
                 true,
             ),
             Ieee802154MacPolicyCheckpoint::TxrxPtiDisabled => Ieee802154FoundationSnapshot::new(
@@ -221,8 +219,8 @@ fn every_checkpoint_fails_closed_and_preserves_the_owner() {
                 true,
                 true,
                 true,
-                Ieee802154Pti::new(COEX_DISABLED_PTI - 1).expect("five-bit PTI"),
-                Ieee802154Pti::new(COEX_DISABLED_PTI).expect("five-bit PTI"),
+                COEX_DISABLED_PTI - 1,
+                COEX_DISABLED_PTI,
                 true,
             ),
             Ieee802154MacPolicyCheckpoint::AckPtiDisabled => Ieee802154FoundationSnapshot::new(
@@ -230,8 +228,8 @@ fn every_checkpoint_fails_closed_and_preserves_the_owner() {
                 true,
                 true,
                 true,
-                Ieee802154Pti::new(COEX_DISABLED_PTI).expect("five-bit PTI"),
-                Ieee802154Pti::new(COEX_DISABLED_PTI - 1).expect("five-bit PTI"),
+                COEX_DISABLED_PTI,
+                COEX_DISABLED_PTI - 1,
                 true,
             ),
             Ieee802154MacPolicyCheckpoint::TxOnDelayApplied => Ieee802154FoundationSnapshot::new(
@@ -239,8 +237,8 @@ fn every_checkpoint_fails_closed_and_preserves_the_owner() {
                 true,
                 true,
                 true,
-                Ieee802154Pti::new(COEX_DISABLED_PTI).expect("five-bit PTI"),
-                Ieee802154Pti::new(COEX_DISABLED_PTI).expect("five-bit PTI"),
+                COEX_DISABLED_PTI,
+                COEX_DISABLED_PTI,
                 false,
             ),
             _ => valid_foundation(),
@@ -377,7 +375,7 @@ fn every_checkpoint_fails_closed_and_preserves_the_owner() {
 #[test]
 fn readback_reports_the_first_failed_checkpoint() {
     let policy = policy();
-    let mut snapshot = Ieee802154MacPolicySnapshot::from_policy(policy);
+    let mut snapshot = snapshot_from_policy(policy);
     snapshot.cca_mode = Ieee802154CcaMode::Carrier;
     let mut address = snapshot.identity.extended_address();
     address[0] ^= 1;
@@ -398,11 +396,8 @@ fn readback_reports_the_first_failed_checkpoint() {
 #[test]
 fn returning_owner_is_proved_by_readback_alone() {
     let policy = policy();
-    let verified = verify_ieee802154_mac_policy(
-        backend(Ieee802154MacPolicySnapshot::from_policy(policy)),
-        policy,
-    )
-    .expect("matching readback");
+    let verified = verify_ieee802154_mac_policy(backend(snapshot_from_policy(policy)), policy)
+        .expect("matching readback");
 
     // No policy or foundation field is rewritten on the way back.
     assert_eq!(verified.operations, [Operation::Snapshot]);
@@ -416,12 +411,12 @@ fn returning_owner_with_live_event_enables_invalidates_the_foundation() {
         true,
         true,
         true,
-        Ieee802154Pti::new(COEX_DISABLED_PTI).expect("five-bit PTI"),
-        Ieee802154Pti::new(COEX_DISABLED_PTI).expect("five-bit PTI"),
+        COEX_DISABLED_PTI,
+        COEX_DISABLED_PTI,
         true,
     );
     let failure = verify_ieee802154_mac_policy(
-        backend_with_foundation(foundation, Ieee802154MacPolicySnapshot::from_policy(policy)),
+        backend_with_foundation(foundation, snapshot_from_policy(policy)),
         policy,
     )
     .expect_err("an interrupt teardown that left events enabled must fail");
@@ -432,4 +427,101 @@ fn returning_owner_with_live_event_enables_invalidates_the_foundation() {
     );
     assert!(failure.error().checkpoint.invalidates_foundation());
     assert_eq!(failure.into_backend().operations, [Operation::Snapshot]);
+}
+
+fn snapshot_from_policy(policy: Ieee802154MacPolicy) -> Ieee802154MacPolicySnapshot {
+    Ieee802154MacPolicySnapshot::new(
+        policy.channel().frequency_code(),
+        policy.cca_mode(),
+        policy.cca_threshold_code(),
+        policy.ack_timeout(),
+        policy.control(),
+        oer_espressif_ieee802154_mac_values::Ieee802154MultipanEnableState::new(
+            true, false, true, false,
+        ),
+        policy.identity(),
+    )
+}
+
+impl oer_espressif_ieee802154_mac_values::Ieee802154LifecycleBackend for FakeBackend {
+    type ResetPort<'a> = PolicyResetPort;
+    fn mask_all_events(&mut self) {}
+    fn mask_all_rx_aborts(&mut self) {}
+    fn mask_all_tx_aborts(&mut self) {}
+    fn select_average_ed_sampling(&mut self) {}
+    fn disable_txrx_coex(&mut self) {}
+    fn disable_ack_coex(&mut self) {}
+    fn apply_txon_delay(&mut self) {}
+    fn order_device_accesses(&mut self) {}
+    fn foundation_snapshot(&mut self) -> Ieee802154FoundationSnapshot {
+        valid_foundation()
+    }
+}
+
+#[test]
+fn typed_policy_recovery_preserves_only_the_phase_supported_by_readback() {
+    use super::Ieee802154MacPolicyRecovery;
+    use crate::lifecycle::Ieee802154Lifecycle;
+    let policy = policy();
+    let snapshot = snapshot_from_policy(policy);
+    let broken_foundation = Ieee802154FoundationSnapshot::new(
+        false,
+        true,
+        true,
+        true,
+        COEX_DISABLED_PTI,
+        COEX_DISABLED_PTI,
+        true,
+    );
+    let foundation =
+        Ieee802154Lifecycle::clocked(backend_with_foundation(broken_foundation, snapshot))
+            .reset_mac(&mut PolicyResetPort)
+            .expect("reset")
+            .configure_foundation()
+            .expect("entry foundation passes");
+    let failure = match foundation.configure_mac_policy(policy) {
+        Ok(_) => panic!("a changed foundation must be rejected"),
+        Err(failure) => failure,
+    };
+    assert_eq!(
+        failure.error().checkpoint,
+        super::Ieee802154MacPolicyCheckpoint::EventsMasked
+    );
+    match failure.into_recovery() {
+        Ieee802154MacPolicyRecovery::Reset(reset) => {
+            assert_eq!(reset.into_backend().owner_id, 0x154)
+        }
+        _ => panic!("a failed foundation cannot retain a foundation proof"),
+    }
+    let mut snapshot = snapshot_from_policy(policy);
+    snapshot.cca_mode = Ieee802154CcaMode::Carrier;
+    let foundation = Ieee802154Lifecycle::clocked(backend(snapshot))
+        .reset_mac(&mut PolicyResetPort)
+        .expect("reset")
+        .configure_foundation()
+        .expect("entry foundation passes");
+    let failure = match foundation.configure_mac_policy(policy) {
+        Ok(_) => panic!("a changed policy must be rejected"),
+        Err(failure) => failure,
+    };
+    match failure.into_recovery() {
+        Ieee802154MacPolicyRecovery::Foundation(foundation) => {
+            assert_eq!(foundation.into_backend().owner_id, 0x154)
+        }
+        _ => panic!("a policy-only failure retains the foundation"),
+    }
+}
+
+struct PolicyResetPort;
+impl oer_espressif_ieee802154_mac_values::Ieee802154ResetPort for PolicyResetPort {
+    fn set_ieee802154_mac_reset(&mut self, _: bool) {}
+    fn set_ieee802154_apb_reset(&mut self, _: bool) {}
+    fn ieee802154_reset_readback(
+        &self,
+    ) -> oer_espressif_ieee802154_mac_values::Ieee802154ResetReadback {
+        oer_espressif_ieee802154_mac_values::Ieee802154ResetReadback {
+            mac_reset_released: true,
+            apb_reset_released: true,
+        }
+    }
 }

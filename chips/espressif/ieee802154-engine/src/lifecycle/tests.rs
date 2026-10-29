@@ -1,6 +1,6 @@
 use std::vec::Vec;
 
-use crate::ieee802154::mac::{Ieee802154FoundationSnapshot, Ieee802154Pti};
+use oer_espressif_ieee802154_mac_values::Ieee802154FoundationSnapshot;
 
 use super::{
     COEX_DISABLED_PTI, Ieee802154FoundationCheckpoint, Ieee802154Lifecycle,
@@ -38,8 +38,8 @@ fn valid_foundation() -> Ieee802154FoundationSnapshot {
         true,
         true,
         true,
-        Ieee802154Pti::new(COEX_DISABLED_PTI).expect("five-bit PTI"),
-        Ieee802154Pti::new(COEX_DISABLED_PTI).expect("five-bit PTI"),
+        COEX_DISABLED_PTI,
+        COEX_DISABLED_PTI,
         true,
     )
 }
@@ -89,6 +89,7 @@ impl Ieee802154ResetPort for FakeResetPort {
 }
 
 impl Ieee802154LifecycleBackend for FakeBackend {
+    type ResetPort<'a> = FakeResetPort;
     fn mask_all_events(&mut self) {
         self.operations.push(Operation::MaskEvents);
     }
@@ -105,12 +106,14 @@ impl Ieee802154LifecycleBackend for FakeBackend {
         self.operations.push(Operation::SetEdSampleAverage);
     }
 
-    fn set_txrx_pti(&mut self, pti: Ieee802154Pti) {
-        self.operations.push(Operation::SetTxrxPti(pti.value()));
+    fn disable_txrx_coex(&mut self) {
+        self.operations
+            .push(Operation::SetTxrxPti(COEX_DISABLED_PTI));
     }
 
-    fn set_ack_pti(&mut self, pti: Ieee802154Pti) {
-        self.operations.push(Operation::SetAckPti(pti.value()));
+    fn disable_ack_coex(&mut self) {
+        self.operations
+            .push(Operation::SetAckPti(COEX_DISABLED_PTI));
     }
 
     fn apply_txon_delay(&mut self) {
@@ -194,8 +197,8 @@ fn foundation_failure_remains_reset_with_events_masked_first() {
         true,
         true,
         true,
-        Ieee802154Pti::new(COEX_DISABLED_PTI + 1).expect("five-bit PTI"),
-        Ieee802154Pti::new(COEX_DISABLED_PTI).expect("five-bit PTI"),
+        COEX_DISABLED_PTI + 1,
+        COEX_DISABLED_PTI,
         true,
     );
     let reset = backend
@@ -234,8 +237,8 @@ fn foundation_requires_the_receive_on_delay() {
         true,
         true,
         true,
-        Ieee802154Pti::new(COEX_DISABLED_PTI).expect("five-bit PTI"),
-        Ieee802154Pti::new(COEX_DISABLED_PTI).expect("five-bit PTI"),
+        COEX_DISABLED_PTI,
+        COEX_DISABLED_PTI,
         false,
     );
     let reset = backend
@@ -254,27 +257,46 @@ fn foundation_requires_the_receive_on_delay() {
 
 #[test]
 fn a_returning_owner_resumes_the_foundation_without_writes() {
-    let resumed =
-        match Ieee802154Lifecycle::<_, state::FoundationConfigured>::resume(FakeBackend::ready()) {
-            Ok(resumed) => resumed,
-            Err(_) => panic!("an intact foundation resumes"),
-        };
+    let foundation = FakeBackend::ready()
+        .clocked()
+        .reset_mac(&mut FakeResetPort::released())
+        .expect("reset")
+        .configure_foundation()
+        .expect("foundation");
+    let (mut backend, return_phase) = foundation.into_operational();
+    backend.operations.clear();
+    let resumed = match Ieee802154Lifecycle::<_, state::FoundationConfigured>::resume(
+        backend,
+        return_phase,
+    ) {
+        Ok(resumed) => resumed,
+        Err(_) => panic!("an intact foundation resumes"),
+    };
     assert!(resumed.into_backend().operations.is_empty());
 }
 
 #[test]
 fn a_returning_owner_with_unmasked_events_falls_back_to_reset() {
-    let mut backend = FakeBackend::ready();
+    let foundation = FakeBackend::ready()
+        .clocked()
+        .reset_mac(&mut FakeResetPort::released())
+        .expect("reset")
+        .configure_foundation()
+        .expect("foundation");
+    let (mut backend, return_phase) = foundation.into_operational();
     backend.foundation_snapshot = Ieee802154FoundationSnapshot::new(
         false,
         true,
         true,
         true,
-        Ieee802154Pti::new(COEX_DISABLED_PTI).expect("five-bit PTI"),
-        Ieee802154Pti::new(COEX_DISABLED_PTI).expect("five-bit PTI"),
+        COEX_DISABLED_PTI,
+        COEX_DISABLED_PTI,
         true,
     );
-    let failure = match Ieee802154Lifecycle::<_, state::FoundationConfigured>::resume(backend) {
+    let failure = match Ieee802154Lifecycle::<_, state::FoundationConfigured>::resume(
+        backend,
+        return_phase,
+    ) {
         Ok(_) => panic!("unmasked events disprove the foundation"),
         Err(failure) => failure,
     };

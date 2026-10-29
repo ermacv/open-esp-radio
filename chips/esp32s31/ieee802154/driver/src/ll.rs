@@ -228,7 +228,8 @@ impl<P: Placement, E: Placement, B: Placement> Ieee802154LowLevel for S31Mac<P, 
     }
 
     fn disable_coex(&mut self) {
-        self.inner.disable_coex()
+        self.inner.disable_txrx_coex();
+        self.inner.disable_ack_coex()
     }
 
     fn set_txrx_pti(&mut self, pti: CoexPti) {

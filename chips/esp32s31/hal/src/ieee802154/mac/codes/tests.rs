@@ -34,7 +34,7 @@ fn every_named_rx_abort_reason_retains_its_semantic_identity() {
             task.rx_status().abort_reason(),
             Ieee802154RxAbortReasonObservation::Named(reason)
         );
-        let (_startup, interrupt) = setup.arm(task);
+        let (_startup, interrupt) = crate::ieee802154::mac::host::arm(setup, task);
         assert_eq!(
             interrupt.rx_abort_reason(),
             Ieee802154RxAbortReasonObservation::Named(reason)
@@ -73,7 +73,7 @@ fn every_named_tx_abort_reason_retains_its_semantic_identity() {
             task.tx_status().abort_reason(),
             Ieee802154TxAbortReasonObservation::Named(reason)
         );
-        let (_startup, interrupt) = setup.arm(task);
+        let (_startup, interrupt) = crate::ieee802154::mac::host::arm(setup, task);
         assert_eq!(
             interrupt.tx_abort_reason(),
             Ieee802154TxAbortReasonObservation::Named(reason)

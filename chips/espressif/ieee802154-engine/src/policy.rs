@@ -7,22 +7,24 @@
 //!
 //! The policy is also not a complete vendor PIB update. In particular, the
 //! public vendor path programs TX power between channel and CCA mode, but the
-//! dBm-to-hardware-code mapping is still opaque and is therefore omitted.
+//! RF-dependent power resolution belongs to the chip adapter and is omitted here.
 
-#![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
-use crate::ieee802154::{lifecycle::Ieee802154ReadbackError, mac::Ieee802154FoundationSnapshot};
+use crate::lifecycle::Ieee802154ReadbackError;
 use oer_espressif_ieee802154_mac_values::COEX_DISABLED_PTI;
 use oer_espressif_ieee802154_mac_values::{
     Ieee802154AckTimeout, Ieee802154CcaMode, Ieee802154Channel, Ieee802154MacControl,
-    Ieee802154MultipanEnableState, Ieee802154MultipanIndex, Ieee802154PanIdentity,
+    Ieee802154MultipanIndex, Ieee802154PanIdentity,
+};
+use oer_espressif_ieee802154_mac_values::{
+    Ieee802154FoundationSnapshot, Ieee802154MacPolicyBackend, Ieee802154MacPolicySnapshot,
+    Ieee802154MacPolicyWrites,
 };
 
 /// Static, interrupt-masked MAC policy subset whose register semantics are known.
 ///
-/// TX power is intentionally absent because its RF-dependent conversion table
-/// has not been recovered from an authoritative public source.
+/// TX power is resolved separately by the chip adapter.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Ieee802154MacPolicy {
     channel: Ieee802154Channel,
@@ -151,128 +153,6 @@ impl Ieee802154MacPolicyCheckpoint {
     }
 }
 
-/// One field-level image sampled after all deterministic static-policy writes.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) struct Ieee802154MacPolicySnapshot {
-    frequency_code: u8,
-    cca_mode: Ieee802154CcaMode,
-    cca_threshold_code: i8,
-    ack_timeout: Ieee802154AckTimeout,
-    control: Ieee802154MacControl,
-    multipan_enable_state: Ieee802154MultipanEnableState,
-    identity: Ieee802154PanIdentity,
-}
-
-impl Ieee802154MacPolicySnapshot {
-    /// One readback, as the registers report it.
-    pub(crate) const fn new(
-        frequency_code: u8,
-        cca_mode: Ieee802154CcaMode,
-        cca_threshold_code: i8,
-        ack_timeout: Ieee802154AckTimeout,
-        control: Ieee802154MacControl,
-        multipan_enable_state: Ieee802154MultipanEnableState,
-        identity: Ieee802154PanIdentity,
-    ) -> Self {
-        Self {
-            frequency_code,
-            cca_mode,
-            cca_threshold_code,
-            ack_timeout,
-            control,
-            multipan_enable_state,
-            identity,
-        }
-    }
-
-    #[cfg(test)]
-    const fn from_policy(policy: Ieee802154MacPolicy) -> Self {
-        Self {
-            frequency_code: policy.channel.frequency_code(),
-            cca_mode: policy.cca_mode,
-            cca_threshold_code: policy.cca_threshold_code,
-            ack_timeout: policy.ack_timeout,
-            control: policy.control,
-            // Context zero must be enabled; unrelated enabled contexts are
-            // deliberately retained and accepted by policy verification.
-            multipan_enable_state: Ieee802154MultipanEnableState::new(true, false, true, false),
-            identity: policy.identity,
-        }
-    }
-}
-
-#[cfg(test)]
-impl Ieee802154MacPolicySnapshot {
-    pub(crate) const fn frequency_code(self) -> u8 {
-        self.frequency_code
-    }
-
-    pub(crate) const fn cca_mode(self) -> Ieee802154CcaMode {
-        self.cca_mode
-    }
-
-    pub(crate) const fn cca_threshold_code(self) -> i8 {
-        self.cca_threshold_code
-    }
-
-    pub(crate) const fn ack_timeout(self) -> Ieee802154AckTimeout {
-        self.ack_timeout
-    }
-
-    pub(crate) const fn control(self) -> Ieee802154MacControl {
-        self.control
-    }
-
-    pub(crate) const fn multipan_enable_state(self) -> Ieee802154MultipanEnableState {
-        self.multipan_enable_state
-    }
-
-    pub(crate) const fn identity(self) -> Ieee802154PanIdentity {
-        self.identity
-    }
-}
-
-/// One composite post-fence readback of the retained foundation and policy.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) struct Ieee802154MacPolicyReadback {
-    foundation: Ieee802154FoundationSnapshot,
-    policy: Ieee802154MacPolicySnapshot,
-}
-
-impl Ieee802154MacPolicyReadback {
-    pub(crate) const fn new(
-        foundation: Ieee802154FoundationSnapshot,
-        policy: Ieee802154MacPolicySnapshot,
-    ) -> Self {
-        Self { foundation, policy }
-    }
-}
-
-/// Closed backend for the static-policy transition.
-///
-/// The production implementation is the already-proved foundation owner.
-/// Its aggregate control and identity operations preserve the source-backed
-/// inner order: TX auto ACK, RX auto ACK, enhanced ACK TX, coordinator,
-/// promiscuous, enhanced pending; then primary-context enable before each
-/// address class.
-pub(crate) trait Ieee802154MacPolicyWrites {
-    fn set_channel(&mut self, channel: Ieee802154Channel);
-    fn set_cca_mode(&mut self, mode: Ieee802154CcaMode);
-    fn set_cca_threshold_code(&mut self, threshold: i8);
-    fn set_mac_control(&mut self, control: Ieee802154MacControl);
-    fn set_ack_timeout(&mut self, timeout: Ieee802154AckTimeout);
-    fn set_primary_pan_identity(&mut self, identity: Ieee802154PanIdentity);
-    fn order_device_accesses(&mut self);
-}
-
-/// Cold static-policy backend: the foundation owner can still prove that
-/// every event and abort source remains masked.
-pub(crate) trait Ieee802154MacPolicyBackend: Ieee802154MacPolicyWrites {
-    /// Sample the foundation invariants and static policy as one semantic
-    /// post-fence readback operation.
-    fn mac_policy_readback(&mut self) -> Ieee802154MacPolicyReadback;
-}
-
 /// Publish the deterministic, known static policy and fence it.
 ///
 /// The missing TX-power operation is intentionally visible in this sequence:
@@ -289,16 +169,18 @@ fn write_mac_policy(backend: &mut impl Ieee802154MacPolicyWrites, policy: Ieee80
 
 /// Failed policy transition retaining the exact input owner for retry.
 #[derive(Debug)]
-pub(crate) struct Ieee802154MacPolicyFailure<Backend> {
+pub struct Ieee802154MacPolicyFailure<Backend> {
     backend: Backend,
     error: Ieee802154ReadbackError<Ieee802154MacPolicyCheckpoint>,
 }
 
 impl<Backend> Ieee802154MacPolicyFailure<Backend> {
-    pub(crate) const fn error(&self) -> Ieee802154ReadbackError<Ieee802154MacPolicyCheckpoint> {
+    /// Return the first failed foundation or policy checkpoint.
+    pub const fn error(&self) -> Ieee802154ReadbackError<Ieee802154MacPolicyCheckpoint> {
         self.error
     }
 
+    /// Recover the same owner for typed phase recovery.
     pub(crate) fn into_backend(self) -> Backend {
         self.backend
     }
@@ -357,11 +239,11 @@ fn verify_foundation_readback(
     )?;
     verify(
         Ieee802154MacPolicyCheckpoint::TxrxPtiDisabled,
-        foundation.txrx_pti().value() == COEX_DISABLED_PTI,
+        foundation.txrx_pti() == COEX_DISABLED_PTI,
     )?;
     verify(
         Ieee802154MacPolicyCheckpoint::AckPtiDisabled,
-        foundation.ack_pti().value() == COEX_DISABLED_PTI,
+        foundation.ack_pti() == COEX_DISABLED_PTI,
     )?;
     verify(
         Ieee802154MacPolicyCheckpoint::TxOnDelayApplied,
@@ -451,4 +333,75 @@ fn verify<Checkpoint: Copy>(
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::panic,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::arithmetic_side_effects,
+    clippy::disallowed_macros
+)]
 mod tests;
+
+/// A statically configured MAC retaining its proved foundation.
+pub struct Ieee802154MacPolicyConfigured<B> {
+    foundation:
+        crate::lifecycle::Ieee802154Lifecycle<B, crate::lifecycle::state::FoundationConfigured>,
+    policy: Ieee802154MacPolicy,
+}
+impl<B> Ieee802154MacPolicyConfigured<B> {
+    /// Return the proved policy.
+    pub const fn policy(&self) -> Ieee802154MacPolicy {
+        self.policy
+    }
+    /// Forget only the policy, retaining the proved foundation.
+    pub fn into_foundation(
+        self,
+    ) -> crate::lifecycle::Ieee802154Lifecycle<B, crate::lifecycle::state::FoundationConfigured>
+    {
+        self.foundation
+    }
+}
+/// Failed policy configuration, retaining the exact affine phase owner.
+pub struct Ieee802154MacPolicyTransitionFailure<B> {
+    inner: Ieee802154MacPolicyFailure<
+        crate::lifecycle::Ieee802154Lifecycle<B, crate::lifecycle::state::FoundationConfigured>,
+    >,
+}
+/// Strongest phase supported by the failed policy readback.
+pub enum Ieee802154MacPolicyRecovery<B> {
+    /// Only the policy failed; the foundation may be retried.
+    Foundation(
+        crate::lifecycle::Ieee802154Lifecycle<B, crate::lifecycle::state::FoundationConfigured>,
+    ),
+    /// A foundation field failed and must be configured again.
+    Reset(crate::lifecycle::Ieee802154Lifecycle<B, crate::lifecycle::state::Reset>),
+}
+impl<B> Ieee802154MacPolicyTransitionFailure<B> {
+    /// Return the first mismatched checkpoint.
+    pub const fn error(&self) -> Ieee802154ReadbackError<Ieee802154MacPolicyCheckpoint> {
+        self.inner.error()
+    }
+    /// Recover only the strongest phase justified by this readback.
+    pub fn into_recovery(self) -> Ieee802154MacPolicyRecovery<B> {
+        let invalidates = self.inner.error().checkpoint.invalidates_foundation();
+        let foundation = self.inner.into_backend();
+        if invalidates {
+            Ieee802154MacPolicyRecovery::Reset(foundation.forget_foundation())
+        } else {
+            Ieee802154MacPolicyRecovery::Foundation(foundation)
+        }
+    }
+}
+impl<B: Ieee802154MacPolicyBackend>
+    crate::lifecycle::Ieee802154Lifecycle<B, crate::lifecycle::state::FoundationConfigured>
+{
+    /// Write and verify the static policy without enabling events or touching DMA.
+    pub fn configure_mac_policy(
+        self,
+        policy: Ieee802154MacPolicy,
+    ) -> Result<Ieee802154MacPolicyConfigured<B>, Ieee802154MacPolicyTransitionFailure<B>> {
+        configure_ieee802154_mac_policy(self, policy)
+            .map(|foundation| Ieee802154MacPolicyConfigured { foundation, policy })
+            .map_err(|inner| Ieee802154MacPolicyTransitionFailure { inner })
+    }
+}

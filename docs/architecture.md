@@ -972,8 +972,12 @@ its model and conformance case.
   the engine owns neither quarantine nor retained/reset policy. PHY HIL owns the
   fault payload codec, common-format retained slot and safe `fatal::reset_recording` call,
   reporting the previous fault on the next boot and retaining it on output refusal.
-  HAL owns PAC access, startup discard, DMA allocation and projection; its
-  normal dependency closure contains neither engine nor driver. Chip knowledge
+  The family engine owns reset/foundation readback, static policy and interrupt
+  startup/teardown order over hardware-free register-port contracts. HAL owns
+  PAC access, DMA allocation/projection and affine startup/teardown phases;
+  only the final pre-bind discard fence releases a bindable IRQ owner. The
+  existing S31Mac adapter retains its Silent polling pair. HAL's normal
+  dependency closure contains neither engine nor driver. Chip knowledge
   supplies hardware-free power facts; the driver composes the engine's typed
   level set. The port boundary follows the
   OpenThread radio platform: the backend executes acknowledgement, a single

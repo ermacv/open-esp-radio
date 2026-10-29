@@ -19,8 +19,9 @@
 //! interrupt route. Their chip PACs own the generated register blocks and the
 //! raw register access; this crate owns what is the same on both: the
 //! semantic values, events, abort reasons and observations the typed MAC
-//! surface speaks, and the order of the interrupt activation and teardown
-//! transactions. It contains no address and no register access.
+//! surface speaks, hardware-free configuration observations and consuming
+//! register-port vocabulary. The family engine executes lifecycle and interrupt
+//! sequences. This crate contains no address or register access.
 #![no_std]
 #![forbid(unsafe_code)]
 
@@ -29,19 +30,21 @@ extern crate std;
 
 mod buffers;
 mod channel;
+mod configuration;
 mod events;
+mod interrupt;
 mod mac;
 mod status;
-mod transition;
 mod tx_power;
 mod values;
 
 pub use buffers::*;
 pub use channel::*;
+pub use configuration::*;
 pub use events::*;
+pub use interrupt::*;
 pub use mac::*;
 pub use status::*;
-pub use transition::*;
 pub use tx_power::*;
 pub use values::*;
 
