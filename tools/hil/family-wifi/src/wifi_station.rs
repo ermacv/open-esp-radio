@@ -545,6 +545,11 @@ fn traffic(
     let observed = Capture::start_peer(ssh, &config.wireless_interface, address, count)?;
     let cursor = capture.event_cursor();
     let ping_ssh = ssh.parallel();
+    let window = if initial.is_some() {
+        super::ping::Window::GroupKeyChange
+    } else {
+        super::ping::Window::AfterReconnect
+    };
     let (ping, rekey) = std::thread::scope(|scope| -> Result<_> {
         let ping = scope.spawn(|| station::ping(&ping_ssh, address, count));
         let work: Result<_> = (|| {
@@ -644,6 +649,7 @@ fn traffic(
             Ok(rekey)
         })();
         let ping = ping.join().map_err(|_| "router ping worker panicked")??;
+        super::ping::record(&context.results, &context.measurements, window, &ping);
         let rekey = work?;
         Ok((ping, rekey))
     })?;
