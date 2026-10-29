@@ -593,8 +593,7 @@ The current mechanisms have narrower guarantees than the policy:
   succeeds. Ordinary panic renderers acknowledge the exact snapshot; HIL's
   platform panic and postmortem remain until the complete boot-evidence frame
   and CRLF reach the transport. A refused output retains the record.
-- Payloads preserve panic text, Wi-Fi RAW, all eight BLE gate words, BLE release
-  detail, IEEE 802.15.4 entry observations and completed service prefix, HIL
+- Payloads preserve panic text, Wi-Fi RAW, IEEE 802.15.4 entry observations and completed service prefix, HIL
   machine-state observations and postmortem data, and RX-chain observations.
   PHY retains operation/epoch, SAR RAW/ST, queue lengths, invalid delay and
   numeric foreign-reunion identities. None of these values grants ownership.
@@ -931,7 +930,7 @@ its model and conformance case.
   follows. Bank1 CC0/CC1/overflow have hw32 masked-W1C coverage; bank0/NRT
   and other feature lanes have vendor coverage, not hardware verification. The opaque task +0x4bc view is diagnostic-only and is never read by
   production. Both faults retain primary observations and task enables and
-  quarantine owners through `fatal::reset_recording`. The separate CTE interrupt bank is outside this policy;
+  quarantine owners for the image's terminal policy. The separate CTE interrupt bank is outside this policy;
   production has no enabled CTE interrupt consumer. These sequential reads
   neither prove producer shutdown nor name opaque causes.
 - **IEEE 802.15.4** (`protocols/ieee802154`, driver

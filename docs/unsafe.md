@@ -994,10 +994,9 @@ or producer shutdown. `ReleaseNotQuiet` retains nonzero enables or unexpected
 visible observations. SOURCE: `POLICY_S31_BLE_TERMINAL_NONFAULT_ACK_20261027`.
 Bank1 CC0/CC1/overflow have hardware coverage from
 `hw32-20261027-ble-masked-01` (#757); bank0/NRT and other feature lanes are
-vendor-covered and not hardware-verified. Both named faults quarantine the task/IRQ owners and reach safe
-`fatal::reset_recording`. The common-format BLE gate slot has a reason-tagged
-eight-word payload: seven policy source words and one reserved zero word.
-Next-boot output reports the observed banks. Bank1[0,2] and task17 remain
+vendor-covered and not hardware-verified. Both named faults quarantine the
+task/IRQ owners and return the seven policy source words to the image's
+terminal policy. Bank1[0,2] and task17 remain
 opaque with their existing SOURCEs. CTE +0x4c4/+0x4c8/+0x4cc is outside this
 policy; production has no enabled CTE interrupt consumer. Sequential readback
 is not a producer-drain proof.
