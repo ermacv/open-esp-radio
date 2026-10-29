@@ -14,10 +14,7 @@ pub use clock_device::ModemClockDevice;
 pub use coex::{CoexTimerBankRegisters, CoexTimerRegister};
 pub use coex_external::{ExternalCoexPriority, ExternalCoexRole, ExternalCoexWires};
 pub use ownership::SharedRadioRegisters;
-pub use platform::{
-    PlatformClockPowerObservation, PlatformPllSourceBaseline, WifiPowerBaseline,
-    WifiPowerRestoreReadback,
-};
+pub use platform::{PlatformClockPowerObservation, PlatformPllSourceBaseline, WifiPowerBaseline};
 pub use shared_clock::*;
 pub use syscon::*;
 

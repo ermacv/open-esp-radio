@@ -1,124 +1,65 @@
-//! ESP32-S31 table of the shared modem clock planner.
-//!
-//! The chip-neutral reference-count planner is [`oer_espressif_modem_clock`]; this
-//! module supplies the ESP32-S31 vendor device order and module dependency
-//! sets, and its executor performs each edge. The analog-I2C master clock is
-//! not refcounted here, because the vendor keeps that refcount in the platform
-//! analog-I2C owner, and the Wi-Fi clock dependencies are retained while
-//! Wi-Fi is initialized.
-//!
-//! Source: reviewed evidence `ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK`, ESP-IDF
-//! revision `4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d` (Apache-2.0),
-//! `components/esp_hw_support/modem/port/esp32s31/`
-//! `modem_clock_impl.c` (`*_CLOCK_DEPS`, `modem_clock_get_module_deps`, the
-//! per-device `modem_clock_*_configure` actions and the I2C-master refcount
-//! exception in `modem_clock_device_context`), the device order of
-//! `modem/include/modem/modem_clock_impl.h` and the S31 `soc_caps.h`
-//! selections (`SOC_MODEM_CLOCK_SOC_PLL_SOURCE_CG_SUPPORTED`,
-//! `SOC_PHY_CALIBRATION_CLOCK_IS_INDEPENDENT`,
-//! `SOC_MODEM_CLOCK_WIFI_BB_80X1_AS_APB`). The vendor `DATADUMP` device has no
-//! module dependency and is omitted. Applies to ESP32-S31 only.
-//!
-//! The monotonic modem ICG map that the vendor ORs in on every module enable
-//! belongs to platform initialization. A concurrently split radio runs a
-//! managed planner inside its arbiter: every client goes through the arbiter
-//! and the upstream PLL and analog-I2C halves through the platform clock
-//! provider.
-
+//! S31 newtype binding of the hardware-free profile to the family clock planner.
 #![forbid(unsafe_code)]
-
+use oer_esp32s31_knowledge::modem_clock::Dependency as ChipDependency;
+pub(crate) use oer_esp32s31_knowledge::modem_clock::ModemClockModule;
+pub(crate) use oer_espressif_modem_clock::ModemClockPlannerIdentity;
 use oer_espressif_modem_clock::{DependencySet, ModemClockDependency};
 
-pub(crate) use oer_espressif_modem_clock::ModemClockPlannerIdentity;
-
-/// Exact low-bit-first dependency identities, in the vendor device order.
-///
-/// Discriminants are planner indices, not public register masks.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-#[repr(u8)]
-pub(crate) enum Dependency {
-    ModemAdcCommonFe,
-    ModemPrivateFe,
-    /// First acquires the upstream 160 MHz source, then opens the modem
-    /// PLL-source gate; release closes the gate first.
-    Pll160AndModemSource,
-    Coexistence,
-    /// Acquires the platform analog-I2C clock reference.
-    AnalogI2cMaster,
-    WifiApb,
-    WifiBb44m,
-    WifiMac,
-    /// Enabling pulses the Wi-Fi baseband reset before the clock.
-    WifiBb,
-    WifiBb80x1,
-    Etm,
-    BtMac,
-    BtPeripheral,
-    BtApbAndSecurity,
-    BtIeee802154CommonBaseband,
-    Ieee802154ApbAndMac,
-}
+pub(crate) struct Dependency(ChipDependency);
 
 impl ModemClockDependency for Dependency {
-    const LOW_BIT_FIRST: &'static [Self] = &[
-        Self::ModemAdcCommonFe,
-        Self::ModemPrivateFe,
-        Self::Pll160AndModemSource,
-        Self::Coexistence,
-        Self::AnalogI2cMaster,
-        Self::WifiApb,
-        Self::WifiBb44m,
-        Self::WifiMac,
-        Self::WifiBb,
-        Self::WifiBb80x1,
-        Self::Etm,
-        Self::BtMac,
-        Self::BtPeripheral,
-        Self::BtApbAndSecurity,
-        Self::BtIeee802154CommonBaseband,
-        Self::Ieee802154ApbAndMac,
-    ];
+    const LOW_BIT_FIRST: &'static [Self] = &const {
+        let mut wrapped =
+            [Self(ChipDependency::ModemAdcCommonFe); ChipDependency::LOW_BIT_FIRST.len()];
+        let mut source = ChipDependency::LOW_BIT_FIRST.as_slice();
+        let mut destination = wrapped.as_mut_slice();
+        while let (Some((dependency, remaining)), Some((slot, tail))) =
+            (source.split_first(), destination.split_first_mut())
+        {
+            *slot = Self(*dependency);
+            source = remaining;
+            destination = tail;
+        }
+        wrapped
+    };
 
     fn index(self) -> oer_espressif_modem_clock::DependencyIndex {
         use oer_espressif_modem_clock::DependencyIndex;
-        match self {
-            Self::ModemAdcCommonFe => DependencyIndex::constant::<0>(),
-            Self::ModemPrivateFe => DependencyIndex::constant::<1>(),
-            Self::Pll160AndModemSource => DependencyIndex::constant::<2>(),
-            Self::Coexistence => DependencyIndex::constant::<3>(),
-            Self::AnalogI2cMaster => DependencyIndex::constant::<4>(),
-            Self::WifiApb => DependencyIndex::constant::<5>(),
-            Self::WifiBb44m => DependencyIndex::constant::<6>(),
-            Self::WifiMac => DependencyIndex::constant::<7>(),
-            Self::WifiBb => DependencyIndex::constant::<8>(),
-            Self::WifiBb80x1 => DependencyIndex::constant::<9>(),
-            Self::Etm => DependencyIndex::constant::<10>(),
-            Self::BtMac => DependencyIndex::constant::<11>(),
-            Self::BtPeripheral => DependencyIndex::constant::<12>(),
-            Self::BtApbAndSecurity => DependencyIndex::constant::<13>(),
-            Self::BtIeee802154CommonBaseband => DependencyIndex::constant::<14>(),
-            Self::Ieee802154ApbAndMac => DependencyIndex::constant::<15>(),
+        match self.0 {
+            ChipDependency::ModemAdcCommonFe => DependencyIndex::constant::<0>(),
+            ChipDependency::ModemPrivateFe => DependencyIndex::constant::<1>(),
+            ChipDependency::Pll160AndModemSource => DependencyIndex::constant::<2>(),
+            ChipDependency::Coexistence => DependencyIndex::constant::<3>(),
+            ChipDependency::AnalogI2cMaster => DependencyIndex::constant::<4>(),
+            ChipDependency::WifiApb => DependencyIndex::constant::<5>(),
+            ChipDependency::WifiBb44m => DependencyIndex::constant::<6>(),
+            ChipDependency::WifiMac => DependencyIndex::constant::<7>(),
+            ChipDependency::WifiBb => DependencyIndex::constant::<8>(),
+            ChipDependency::WifiBb80x1 => DependencyIndex::constant::<9>(),
+            ChipDependency::Etm => DependencyIndex::constant::<10>(),
+            ChipDependency::BtMac => DependencyIndex::constant::<11>(),
+            ChipDependency::BtPeripheral => DependencyIndex::constant::<12>(),
+            ChipDependency::BtApbAndSecurity => DependencyIndex::constant::<13>(),
+            ChipDependency::BtIeee802154CommonBaseband => DependencyIndex::constant::<14>(),
+            ChipDependency::Ieee802154ApbAndMac => DependencyIndex::constant::<15>(),
         }
     }
 
-    /// The vendor keeps this refcount in the platform analog-I2C owner.
     fn refcounted(self) -> bool {
-        !matches!(self, Self::AnalogI2cMaster)
+        self.0.refcounted()
     }
-
-    /// Hardware stays enabled while Wi-Fi is initialized.
     fn retained_while_wifi_initialized(self) -> bool {
-        matches!(
-            self,
-            Self::WifiApb | Self::WifiBb44m | Self::WifiMac | Self::WifiBb | Self::WifiBb80x1
-        )
+        self.0.retained_while_wifi_initialized()
     }
 }
 
 pub(crate) type ModemClockPlanner = oer_espressif_modem_clock::ModemClockPlanner<Dependency>;
 pub(crate) type ModemClockLease = oer_espressif_modem_clock::ModemClockLease<Dependency>;
+#[cfg(test)]
 pub(crate) type PreparedModemClockAcquire =
     oer_espressif_modem_clock::PreparedModemClockAcquire<Dependency>;
+#[cfg(test)]
 pub(crate) type PreparedModemClockRelease =
     oer_espressif_modem_clock::PreparedModemClockRelease<Dependency>;
 pub(crate) type PoisonedModemClockAcquire =
@@ -126,91 +67,17 @@ pub(crate) type PoisonedModemClockAcquire =
 pub(crate) type PoisonedModemClockRelease =
     oer_espressif_modem_clock::PoisonedModemClockRelease<Dependency>;
 
-/// Radio modules that request modem clocks, with their vendor dependency sets.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-#[allow(
-    dead_code,
-    reason = "the complete vendor module list; not every module has a client yet"
-)]
-pub(crate) enum ModemClockModule {
-    AnalogI2cMaster,
-    Phy,
-    ModemAdcCommonFe,
-    Coexistence,
-    Wifi,
-    Bluetooth,
-    PhyCalibration,
-    Ieee802154,
-    ModemEtm,
-    BluetoothApb,
-}
-
-impl ModemClockModule {
-    /// The module's exact vendor dependency set.
-    pub(crate) fn dependencies(self) -> DependencySet<Dependency> {
-        use Dependency::*;
-        let set = DependencySet::of;
-        match self {
-            Self::AnalogI2cMaster => set(&[AnalogI2cMaster]),
-            Self::Phy => set(&[
-                ModemAdcCommonFe,
-                ModemPrivateFe,
-                Pll160AndModemSource,
-                WifiBb80x1,
-                AnalogI2cMaster,
-            ]),
-            Self::ModemAdcCommonFe => set(&[ModemAdcCommonFe, Pll160AndModemSource]),
-            Self::Coexistence => set(&[Coexistence, Pll160AndModemSource]),
-            Self::Wifi => set(&[
-                WifiMac,
-                WifiApb,
-                WifiBb,
-                WifiBb44m,
-                Coexistence,
-                WifiBb80x1,
-                Pll160AndModemSource,
-            ]),
-            Self::Bluetooth => set(&[
-                BtMac,
-                BtIeee802154CommonBaseband,
-                Etm,
-                Coexistence,
-                WifiBb80x1,
-                Pll160AndModemSource,
-                BtApbAndSecurity,
-                BtPeripheral,
-            ]),
-            Self::PhyCalibration => set(&[
-                WifiApb,
-                WifiBb,
-                WifiBb44m,
-                WifiBb80x1,
-                Pll160AndModemSource,
-                BtIeee802154CommonBaseband,
-                BtApbAndSecurity,
-            ]),
-            Self::Ieee802154 => set(&[
-                Ieee802154ApbAndMac,
-                BtIeee802154CommonBaseband,
-                Etm,
-                Coexistence,
-                WifiBb80x1,
-                Pll160AndModemSource,
-                BtApbAndSecurity,
-            ]),
-            Self::ModemEtm => set(&[Etm]),
-            Self::BluetoothApb => set(&[BtApbAndSecurity, Etm, Pll160AndModemSource, BtMac]),
-        }
-    }
+pub(crate) fn module_dependencies(module: ModemClockModule) -> DependencySet<Dependency> {
+    DependencySet::of_iter(module.dependencies().iter().copied().map(Dependency))
 }
 
 mod executor;
+pub(crate) use executor::ModemExecution;
 pub(crate) use executor::ModemPlatformClocks;
 pub use executor::{
     PlatformClock, PlatformClockAbandonment, PlatformClockBackend, PlatformClockError,
     PlatformClockGuard, PlatformClockHolds, PlatformClockProvider, PlatformClockReleaseRefused,
 };
-pub(crate) use executor::{execute_acquire, execute_release};
 
 #[cfg(test)]
 mod tests;

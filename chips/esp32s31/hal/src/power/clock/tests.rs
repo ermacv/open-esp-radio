@@ -11,13 +11,13 @@ use super::*;
 
 /// The IEEE 802.15.4 module set, low bit first.
 const IEEE802154_EDGES: [Dependency; 7] = [
-    Dependency::Pll160AndModemSource,
-    Dependency::Coexistence,
-    Dependency::WifiBb80x1,
-    Dependency::Etm,
-    Dependency::BtApbAndSecurity,
-    Dependency::BtIeee802154CommonBaseband,
-    Dependency::Ieee802154ApbAndMac,
+    Dependency(crate::power::clock::ChipDependency::Pll160AndModemSource),
+    Dependency(crate::power::clock::ChipDependency::Coexistence),
+    Dependency(crate::power::clock::ChipDependency::WifiBb80x1),
+    Dependency(crate::power::clock::ChipDependency::Etm),
+    Dependency(crate::power::clock::ChipDependency::BtApbAndSecurity),
+    Dependency(crate::power::clock::ChipDependency::BtIeee802154CommonBaseband),
+    Dependency(crate::power::clock::ChipDependency::Ieee802154ApbAndMac),
 ];
 
 fn acquire(
@@ -61,7 +61,10 @@ fn the_table_is_consistent() {
 fn the_ieee802154_set_is_acquired_and_released_low_bit_first() {
     let identity = ModemClockPlannerIdentity::new().expect("identity capacity");
     let planner = ModemClockPlanner::managed(identity);
-    let (planner, lease, edges) = acquire(planner, ModemClockModule::Ieee802154.dependencies());
+    let (planner, lease, edges) = acquire(
+        planner,
+        crate::power::clock::module_dependencies(ModemClockModule::Ieee802154),
+    );
     assert_eq!(edges, IEEE802154_EDGES);
     let (_planner, edges) = release(planner, lease);
     assert_eq!(edges, IEEE802154_EDGES);
@@ -71,17 +74,23 @@ fn the_ieee802154_set_is_acquired_and_released_low_bit_first() {
 fn a_second_module_enables_only_its_missing_dependencies() {
     let identity = ModemClockPlannerIdentity::new().expect("identity capacity");
     let planner = ModemClockPlanner::managed(identity);
-    let (planner, wifi, _) = acquire(planner, ModemClockModule::Wifi.dependencies());
+    let (planner, wifi, _) = acquire(
+        planner,
+        crate::power::clock::module_dependencies(ModemClockModule::Wifi),
+    );
     // Coexistence, the PLL source and the 80x1 clock are already on for Wi-Fi.
-    let (planner, bluetooth, edges) = acquire(planner, ModemClockModule::Bluetooth.dependencies());
+    let (planner, bluetooth, edges) = acquire(
+        planner,
+        crate::power::clock::module_dependencies(ModemClockModule::Bluetooth),
+    );
     assert_eq!(
         edges,
         [
-            Dependency::Etm,
-            Dependency::BtMac,
-            Dependency::BtPeripheral,
-            Dependency::BtApbAndSecurity,
-            Dependency::BtIeee802154CommonBaseband,
+            Dependency(crate::power::clock::ChipDependency::Etm),
+            Dependency(crate::power::clock::ChipDependency::BtMac),
+            Dependency(crate::power::clock::ChipDependency::BtPeripheral),
+            Dependency(crate::power::clock::ChipDependency::BtApbAndSecurity),
+            Dependency(crate::power::clock::ChipDependency::BtIeee802154CommonBaseband),
         ]
     );
     // Leaving Wi-Fi keeps every dependency Bluetooth still uses.
@@ -89,24 +98,24 @@ fn a_second_module_enables_only_its_missing_dependencies() {
     assert_eq!(
         edges,
         [
-            Dependency::WifiApb,
-            Dependency::WifiBb44m,
-            Dependency::WifiMac,
-            Dependency::WifiBb,
+            Dependency(crate::power::clock::ChipDependency::WifiApb),
+            Dependency(crate::power::clock::ChipDependency::WifiBb44m),
+            Dependency(crate::power::clock::ChipDependency::WifiMac),
+            Dependency(crate::power::clock::ChipDependency::WifiBb),
         ]
     );
     let (_planner, edges) = release(planner, bluetooth);
     assert_eq!(
         edges,
         [
-            Dependency::Pll160AndModemSource,
-            Dependency::Coexistence,
-            Dependency::WifiBb80x1,
-            Dependency::Etm,
-            Dependency::BtMac,
-            Dependency::BtPeripheral,
-            Dependency::BtApbAndSecurity,
-            Dependency::BtIeee802154CommonBaseband,
+            Dependency(crate::power::clock::ChipDependency::Pll160AndModemSource),
+            Dependency(crate::power::clock::ChipDependency::Coexistence),
+            Dependency(crate::power::clock::ChipDependency::WifiBb80x1),
+            Dependency(crate::power::clock::ChipDependency::Etm),
+            Dependency(crate::power::clock::ChipDependency::BtMac),
+            Dependency(crate::power::clock::ChipDependency::BtPeripheral),
+            Dependency(crate::power::clock::ChipDependency::BtApbAndSecurity),
+            Dependency(crate::power::clock::ChipDependency::BtIeee802154CommonBaseband),
         ]
     );
 }
@@ -115,17 +124,36 @@ fn a_second_module_enables_only_its_missing_dependencies() {
 fn the_analog_i2c_master_edge_follows_every_module_request() {
     let identity = ModemClockPlannerIdentity::new().expect("identity capacity");
     let planner = ModemClockPlanner::managed(identity);
-    let (planner, first, first_edges) = acquire(planner, ModemClockModule::Phy.dependencies());
-    assert!(first_edges.contains(&Dependency::AnalogI2cMaster));
-    let (planner, second, second_edges) =
-        acquire(planner, ModemClockModule::AnalogI2cMaster.dependencies());
+    let (planner, first, first_edges) = acquire(
+        planner,
+        crate::power::clock::module_dependencies(ModemClockModule::Phy),
+    );
+    assert!(first_edges.contains(&Dependency(
+        crate::power::clock::ChipDependency::AnalogI2cMaster
+    )));
+    let (planner, second, second_edges) = acquire(
+        planner,
+        crate::power::clock::module_dependencies(ModemClockModule::AnalogI2cMaster),
+    );
     // The platform owner counts analog-I2C references, so each request
     // reaches it even while the dependency is already enabled.
-    assert_eq!(second_edges, [Dependency::AnalogI2cMaster]);
+    assert_eq!(
+        second_edges,
+        [Dependency(
+            crate::power::clock::ChipDependency::AnalogI2cMaster
+        )]
+    );
     let (planner, released) = release(planner, second);
-    assert_eq!(released, [Dependency::AnalogI2cMaster]);
+    assert_eq!(
+        released,
+        [Dependency(
+            crate::power::clock::ChipDependency::AnalogI2cMaster
+        )]
+    );
     let (_planner, released) = release(planner, first);
-    assert!(released.contains(&Dependency::AnalogI2cMaster));
+    assert!(released.contains(&Dependency(
+        crate::power::clock::ChipDependency::AnalogI2cMaster
+    )));
 }
 
 #[test]
@@ -133,15 +161,24 @@ fn initialized_wifi_keeps_its_clocks_and_re_enables_them_on_the_next_request() {
     let identity = ModemClockPlannerIdentity::new().expect("identity capacity");
     let mut planner = ModemClockPlanner::managed(identity);
     planner.set_wifi_initialized(true);
-    let (planner, wifi, _) = acquire(planner, ModemClockModule::Wifi.dependencies());
+    let (planner, wifi, _) = acquire(
+        planner,
+        crate::power::clock::module_dependencies(ModemClockModule::Wifi),
+    );
     let (planner, released) = release(planner, wifi);
     // Only the dependencies outside the Wi-Fi clock group are switched off.
     assert_eq!(
         released,
-        [Dependency::Pll160AndModemSource, Dependency::Coexistence]
+        [
+            Dependency(crate::power::clock::ChipDependency::Pll160AndModemSource),
+            Dependency(crate::power::clock::ChipDependency::Coexistence)
+        ]
     );
     // The next zero-to-one request enables them again, including the
     // baseband reset carried by the WifiBb edge.
-    let (_planner, _lease, edges) = acquire(planner, ModemClockModule::Wifi.dependencies());
-    assert!(edges.contains(&Dependency::WifiBb));
+    let (_planner, _lease, edges) = acquire(
+        planner,
+        crate::power::clock::module_dependencies(ModemClockModule::Wifi),
+    );
+    assert!(edges.contains(&Dependency(crate::power::clock::ChipDependency::WifiBb)));
 }

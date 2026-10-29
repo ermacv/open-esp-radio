@@ -69,27 +69,16 @@ impl PsramMpll {
     }
 }
 
-/// Why the clock owner refused a request.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum ChipClockError {
-    /// A release without a reference to give back.
-    NotHeld(PlatformClock),
-    /// The count of `clock` cannot grow.
-    CountExhausted(PlatformClock),
-}
+use oer_espressif_radio::clocks::{ClockCounts, ClockError, ClockGates, ClockReferences};
 
-/// The gate writes of the platform clocks.
-pub(crate) trait ClockGates {
-    /// Open or close the 160 MHz PLL output.
-    fn set_pll_f160m(&mut self, on: bool);
-    /// Open or close the analog-I2C master clock.
-    fn set_analog_i2c_master(&mut self, on: bool);
-    /// Open or close the modem coexistence clock.
-    fn set_coexistence(&mut self, on: bool);
-    /// Open or close the modem low-power timer clock.
-    fn set_low_power_timer(&mut self, on: bool);
-    /// Open the Wi-Fi power clock.
-    fn open_wifi_power(&mut self);
+impl ClockReferences for PlatformClockHolds {
+    type Clock = PlatformClock;
+    fn get(&self, clock: PlatformClock) -> u16 {
+        self.get(clock)
+    }
+    fn set(&mut self, clock: PlatformClock, count: u16) {
+        self.set(clock, count);
+    }
 }
 
 /// The words of the platform clocks: `MODEM_LPCON.CLK_CONF` and
@@ -130,117 +119,27 @@ impl<'a, 'b> ClockWords<oer_mmio::Host<'a>, oer_mmio::Host<'b>> {
 }
 
 impl<P: Placement, Q: Placement> ClockGates for ClockWords<P, Q> {
-    /// SOURCE: ESP-IDF 4d80c1b2
-    /// `components/esp_hal_clock/esp32s31/include/hal/clk_gate_ll.h:321-327`
-    /// (`_clk_gate_ll_ref_160m_clk_en`); a HAL field, as the root links no
-    /// instance to the 160 MHz output.
-    fn set_pll_f160m(&mut self, on: bool) {
-        self.pll_f160m.modify_ref_160m_ctrl0(|w| {
-            w.set_reg_ref_160m_clk_en(on);
-        });
+    type References = PlatformClockHolds;
+    fn set_clock(&mut self, clock: PlatformClock, on: bool) {
+        match clock {
+            // SOURCE: ESP-IDF 4d80c1b2 `components/esp_hal_clock/esp32s31/include/hal/clk_gate_ll.h:321-327`.
+            PlatformClock::Pll160m => self.pll_f160m.modify_ref_160m_ctrl0(|w| {
+                w.set_reg_ref_160m_clk_en(on);
+            }),
+            PlatformClock::AnalogI2cMaster => self.lpcon.set_i2c_ana_mst_master_clock(on),
+            PlatformClock::ModemCoexistence => self.lpcon.set_coex_function_clock(on),
+            PlatformClock::ModemLowPowerTimer => self.lpcon.set_modem_pwr_lp_timer_clock(on),
+            // The permanent PSRAM reference remains below every radio reference.
+            PlatformClock::Mpll => {}
+        }
     }
-
-    fn set_analog_i2c_master(&mut self, on: bool) {
-        self.lpcon.set_i2c_ana_mst_master_clock(on);
-    }
-
-    fn set_coexistence(&mut self, on: bool) {
-        self.lpcon.set_coex_function_clock(on);
-    }
-
-    fn set_low_power_timer(&mut self, on: bool) {
-        self.lpcon.set_modem_pwr_lp_timer_clock(on);
-    }
-
     fn open_wifi_power(&mut self) {
         self.lpcon.set_modem_pwr_wifi_power_clock(true);
     }
 }
 
-/// The reference counts of the platform clocks over their gate writes.
-pub(crate) struct ClockCounts<G> {
-    gates: G,
-    /// References per clock; MPLL's count is the radio's, above the PSRAM
-    /// mapping's permanent one.
-    counts: PlatformClockHolds,
-    _psram: PsramMpll,
-}
-
-impl<G: ClockGates> ClockCounts<G> {
-    /// Adopt the clocks with no radio reference held, and open the Wi-Fi
-    /// power gate, which nothing closes.
-    ///
-    /// SOURCE: esp-hal 1f646c5 `esp-hal/src/rtc_cntl/rtc/esp32s31.rs:670`
-    /// and `esp-hal/src/soc/esp32s31/regi2c.rs` (`enable_wifi_power_clock`:
-    /// opened at clock initialization, never closed).
-    pub(crate) fn adopt(mut gates: G, psram: PsramMpll) -> Self {
-        gates.open_wifi_power();
-        Self {
-            gates,
-            counts: PlatformClockHolds::default(),
-            _psram: psram,
-        }
-    }
-
-    /// Take one reference to `clock`: the first opens its gate.
-    ///
-    /// SOURCE: ESP-IDF 4d80c1b2
-    /// `components/esp_hw_support/port/esp32s31/esp_clk_tree.c:510-541`
-    /// (`esp_clk_tree_enable_gated_clk`: the gate on the zero-to-one
-    /// count), `components/esp_hw_support/include/esp_private/regi2c_ctrl.h:47-63`
-    /// (`ANALOG_CLOCK_ENABLE`),
-    /// `components/esp_hw_support/modem/port/esp32s31/modem_clock_impl.c:209-212`
-    /// (the coexistence gate) and esp-hal 1f646c5
-    /// `esp-hal/src/soc/esp32s31/regi2c.rs` (`ClkConfRefs`: one count per
-    /// `CLK_CONF` gate).
-    pub(crate) fn acquire(&mut self, clock: PlatformClock) -> Result<(), ChipClockError> {
-        let count = self.counts.get(clock);
-        let next = count
-            .checked_add(1)
-            .ok_or(ChipClockError::CountExhausted(clock))?;
-        if count == 0 {
-            self.edge(clock, true);
-        }
-        self.counts.set(clock, next);
-        Ok(())
-    }
-
-    /// Give back one reference to `clock`: the last closes its gate.
-    ///
-    /// SOURCE: as [`Self::acquire`], the one-to-zero count.
-    pub(crate) fn release(&mut self, clock: PlatformClock) -> Result<(), ChipClockError> {
-        let next = self
-            .counts
-            .get(clock)
-            .checked_sub(1)
-            .ok_or(ChipClockError::NotHeld(clock))?;
-        if next == 0 {
-            self.edge(clock, false);
-        }
-        self.counts.set(clock, next);
-        Ok(())
-    }
-
-    /// The references held to `clock`, MPLL's above the PSRAM mapping's.
-    #[cfg(test)]
-    pub(crate) fn count(&self, clock: PlatformClock) -> u16 {
-        self.counts.get(clock)
-    }
-
-    fn edge(&mut self, clock: PlatformClock, on: bool) {
-        match clock {
-            PlatformClock::Pll160m => self.gates.set_pll_f160m(on),
-            PlatformClock::AnalogI2cMaster => self.gates.set_analog_i2c_master(on),
-            PlatformClock::ModemCoexistence => self.gates.set_coexistence(on),
-            PlatformClock::ModemLowPowerTimer => self.gates.set_low_power_timer(on),
-            // The PSRAM mapping's reference is under every radio one.
-            PlatformClock::Mpll => {}
-        }
-    }
-}
-
 /// The installed clock words and their counts.
-static CHIP_CLOCKS: ClaimCell<ClockCounts<ClockWords>> = ClaimCell::new();
+static CHIP_CLOCKS: ClaimCell<ClockCounts<ClockWords, PsramMpll>> = ClaimCell::new();
 
 /// The chip's platform clock owner: the provider and the backend of every
 /// [`PlatformClockGuard`] of the radio.
@@ -276,7 +175,9 @@ impl ChipClocks {
     }
 
     fn with(
-        operation: impl FnOnce(&mut ClockCounts<ClockWords>) -> Result<(), ChipClockError>,
+        operation: impl FnOnce(
+            &mut ClockCounts<ClockWords, PsramMpll>,
+        ) -> Result<(), ClockError<PlatformClock>>,
     ) -> Result<(), PlatformClockError> {
         match CHIP_CLOCKS.lend(operation) {
             Ok(Ok(())) => Ok(()),

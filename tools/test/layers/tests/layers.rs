@@ -157,6 +157,7 @@ const ESPRESSIF_SANS_IO: &[&str] = &[
     "chips/espressif/ieee802154-engine",
     "chips/espressif/ieee802154-mac-values",
     "chips/espressif/modem-clock",
+    "chips/espressif/radio",
 ];
 
 fn sans_io(package: &str) -> bool {
@@ -894,6 +895,7 @@ const ROLES: &[(&str, Role)] = &[
     ("chips/espressif/coex", Role::HardwareDriver),
     ("chips/espressif/ieee802154-engine", Role::HardwareDriver),
     ("chips/espressif/modem-clock", Role::HardwareDriver),
+    ("chips/espressif/radio", Role::HardwareDriver),
     ("chips/espressif/usb-serial-jtag", Role::HardwareDriver),
     ("chips/espressif/watchdog", Role::HardwareDriver),
     ("chips/esp32s31/phy", Role::HardwareDriver),

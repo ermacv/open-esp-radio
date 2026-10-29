@@ -8,18 +8,14 @@
 //! Every value here is route-scoped: a route gives back its references and
 //! restores the baseline before the neutral root is reconstructed.
 
-use crate::{
-    modem::{
-        RtcSlowClockSource, WifiLowPowerClockSource, WifiPowerBaseline, WifiPowerRestoreReadback,
-    },
-    phy::RadioPhyRegisters,
-};
+use crate::{modem::WifiPowerBaseline, phy::RadioPhyRegisters};
 
 use crate::power::{
     PlatformClock, PlatformClockBackend, PlatformClockError, PlatformClockGuard,
     PlatformClockHolds, PlatformClockProvider,
 };
 use crate::root::WifiPowerRestoreCheckpoint;
+use oer_espressif_radio::baseline::PowerRestoreCheckpoint;
 
 /// Register transactions consumed by route clock policy.
 pub(crate) trait ClockPort {
@@ -28,27 +24,19 @@ pub(crate) trait ClockPort {
     fn restore_power_baseline(
         &mut self,
         baseline: WifiPowerBaseline,
-    ) -> Result<(), WifiPowerRestoreReadback>;
+    ) -> Result<(), PowerRestoreCheckpoint>;
     /// Run the common modem/PHY power sequence, taking the platform clock
     /// references into `refs` at their exact edges.
     fn run_common_power_sequence<B: PlatformClockBackend>(
         &mut self,
         refs: &mut PlatformClockRefs<B>,
         platform: &impl PlatformClockProvider<Backend = B>,
-    ) -> Result<(), crate::power::PowerError>;
+    ) -> Result<(), oer_espressif_radio::power::PowerError>;
 }
 
 impl ClockPort for RadioPhyRegisters {
     fn select_wifi_low_power_clock(&mut self) {
-        // SOURCE: IDF 4d59230d esp_perip_clk_init selects XTAL32K only for
-        // that RTC slow source, otherwise RC_SLOW, including invalid selectors.
-        let source = match self.rtc_slow_clock_source() {
-            RtcSlowClockSource::Crystal32Khz => WifiLowPowerClockSource::Crystal32Khz,
-            RtcSlowClockSource::SlowOscillator | RtcSlowClockSource::Invalid(_) => {
-                WifiLowPowerClockSource::SlowOscillator
-            }
-        };
-        RadioPhyRegisters::select_wifi_low_power_clock(self, source);
+        oer_espressif_radio::clocks::select_wifi_low_power_clock(self);
     }
     fn capture_power_baseline(&self) -> WifiPowerBaseline {
         self.capture_wifi_power_baseline()
@@ -56,15 +44,15 @@ impl ClockPort for RadioPhyRegisters {
     fn restore_power_baseline(
         &mut self,
         baseline: WifiPowerBaseline,
-    ) -> Result<(), WifiPowerRestoreReadback> {
-        self.restore_wifi_power_baseline(baseline)
+    ) -> Result<(), PowerRestoreCheckpoint> {
+        oer_espressif_radio::baseline::restore(self, baseline)
     }
     fn run_common_power_sequence<B: PlatformClockBackend>(
         &mut self,
         refs: &mut PlatformClockRefs<B>,
         platform: &impl PlatformClockProvider<Backend = B>,
-    ) -> Result<(), crate::power::PowerError> {
-        crate::power::execute_owned(&mut crate::power::RoutePower {
+    ) -> Result<(), oer_espressif_radio::power::PowerError> {
+        oer_espressif_radio::power::execute_owned(&mut crate::power::RoutePower {
             phy: self,
             refs,
             platform,
@@ -288,7 +276,7 @@ pub enum CommonRadioPowerError {
     /// The client already holds common power.
     AlreadyEntered,
     /// The first client's power sequence failed a read-back checkpoint.
-    Power(crate::power::PowerError),
+    Power(oer_espressif_radio::power::PowerError),
     /// The last client's cold-power baseline did not read back.
     Restore(WifiPowerRestoreCheckpoint),
     /// The platform refused to take back the last client's reference to
@@ -487,11 +475,11 @@ impl PowerEpoch {
         };
         port.restore_power_baseline(baseline)
             .map_err(|readback| match readback {
-                WifiPowerRestoreReadback::ModemSyscon => WifiPowerRestoreCheckpoint::ModemSyscon,
-                WifiPowerRestoreReadback::ModemSourceClocks => {
+                PowerRestoreCheckpoint::ModemSyscon => WifiPowerRestoreCheckpoint::ModemSyscon,
+                PowerRestoreCheckpoint::ModemSourceClocks => {
                     WifiPowerRestoreCheckpoint::ModemSourceClocks
                 }
-                WifiPowerRestoreReadback::ModemRegisterBusClock => {
+                PowerRestoreCheckpoint::ModemRegisterBusClock => {
                     WifiPowerRestoreCheckpoint::ModemRegisterBusClock
                 }
             })?;

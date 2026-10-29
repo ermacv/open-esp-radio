@@ -52,6 +52,9 @@
 #[cfg(test)]
 extern crate std;
 
+/// Physical execution over a chip register port.
+pub mod execution;
+
 use core::{
     fmt,
     marker::PhantomData,
@@ -170,9 +173,14 @@ impl<D: ModemClockDependency> DependencySet<D> {
 
     /// The set of `dependencies`.
     pub fn of(dependencies: &[D]) -> Self {
+        Self::of_iter(dependencies.iter().copied())
+    }
+
+    /// A set from chip profile values mapped into the dependency port.
+    pub fn of_iter(dependencies: impl IntoIterator<Item = D>) -> Self {
         let mut mask = 0;
         for dependency in dependencies {
-            mask |= bit(*dependency);
+            mask |= bit(dependency);
         }
         Self {
             mask,
