@@ -1,111 +1,72 @@
-//! Retained Wi-Fi fatal assertion diagnostics for staged Wi-Fi images.
-//!
-//! The driver quarantines both banks and lends the captured RAW word to the
-//! image. This module owns the record, the never-returning reset path and
-//! next-boot reporting. Neither register nor DMA ownership is released here.
+//! Wi-Fi fatal source observations, retained until complete successful output.
+#[cfg(any(test, target_arch = "riscv32"))]
+use oer_diagnostics::fault::Class;
+use oer_diagnostics::fault::{Domain, Record};
+use oer_espressif_staged_runtime::retained_fault;
+oer_espressif_staged_runtime::retained_static! { static WIFI_FAULT: Record; }
 
-const MAGIC: u32 = 0x5749_4641;
-
-/// Twelve retained bytes. Magic and checksum validate stored values at boot;
-/// ordinary stores are not a transactional or power-fail commit protocol.
-/// The software-reset path orders completed writes before triggering reset.
-#[derive(Clone, Copy, bytemuck::AnyBitPattern)]
-#[repr(C)]
-struct RetainedFault {
-    magic: u32,
-    raw: u32,
-    checksum: u32,
-}
-
-impl RetainedFault {
-    #[cfg_attr(
-        not(target_arch = "riscv32"),
-        allow(dead_code, reason = "only the target's reset records")
-    )]
-    fn record(&mut self, raw: u32) {
-        self.magic = 0;
-        self.raw = raw;
-        self.checksum = checksum(raw);
-        self.magic = MAGIC;
-    }
-
-    fn take(&mut self) -> Option<u32> {
-        let valid = self.magic == MAGIC && self.checksum == checksum(self.raw);
-        self.magic = 0;
-        valid.then_some(self.raw)
-    }
-}
-
-const fn checksum(raw: u32) -> u32 {
-    (MAGIC ^ raw).wrapping_mul(0x0100_0193)
-}
-
-oer_espressif_staged_runtime::retained_static! {
-    static WIFI_FAULT: RetainedFault;
-}
-
-/// Record a Wi-Fi fatal assertion and reset with all owners retained.
-/// The caller has quarantined its banks; this path never returns to the
-/// preempted DMA owners or drops them before reset.
 #[cfg(target_arch = "riscv32")]
 pub fn reset(raw: u32) -> ! {
     oer_espressif_staged_runtime::fatal::reset_recording::<oer_esp32s31_hal::platform::Port>(
-        |_stop| {
-            if let Some(mut record) = WIFI_FAULT.try_lock() {
-                record.record(raw);
+        |claim, _| {
+            if let Ok(record) = encode(raw) {
+                let _committed = claim.commit(&WIFI_FAULT, record);
             }
         },
     )
 }
-
-/// Consume and report the previous boot's Wi-Fi fault, after
-/// `Root::into_runtime` installs the early console and before it retires.
+#[cfg(any(test, target_arch = "riscv32"))]
+fn encode(raw: u32) -> Result<Record, oer_diagnostics::fault::Error> {
+    Record::encode(
+        Class::UnexpectedHardware,
+        Domain::Wifi,
+        1,
+        oer_diagnostics::fault::UNKNOWN_HART,
+        0,
+        &raw.to_le_bytes(),
+    )
+}
 pub fn report_previous() {
-    if let Some(raw) = WIFI_FAULT.try_lock().and_then(|mut record| record.take()) {
-        report(raw, |bytes| {
-            let _written = oer_esp32s31_hal::peripherals::usb_serial_jtag::early_text(bytes);
-        });
+    if let Some(mut record) = retained_fault::peek(&WIFI_FAULT) {
+        let _reported = report(
+            &mut record,
+            oer_esp32s31_hal::peripherals::usb_serial_jtag::early_text,
+        );
     }
 }
-
-fn report(mut raw: u32, mut write: impl FnMut(&[u8])) {
-    let mut digits = [b'0'; 8];
-    for digit in digits.iter_mut().rev() {
-        let nibble = (raw & 0xf) as u8;
-        *digit = if nibble < 10 {
-            b'0'.wrapping_add(nibble)
-        } else {
-            b'a'.wrapping_add(nibble - 10)
-        };
-        raw >>= 4;
-    }
-    write(b"previous Wi-Fi MAC fatal assertion RAW=0x");
-    write(&digits);
-    write(b"\n");
+fn report(record: &mut Record, mut write: impl FnMut(&[u8]) -> bool) -> Result<(), ()> {
+    record
+        .report(|view| {
+            let bytes: [u8; 4] = view.decode(Domain::Wifi).map_err(|_| ())?;
+            let mut raw = u32::from_le_bytes(bytes);
+            let mut digits = [b'0'; 8];
+            for digit in digits.iter_mut().rev() {
+                let nibble = (raw & 0xf) as u8;
+                *digit = if nibble < 10 {
+                    b'0'.wrapping_add(nibble)
+                } else {
+                    b'a'.wrapping_add(nibble.wrapping_sub(10))
+                };
+                raw >>= 4;
+            }
+            for bytes in [
+                b"previous Wi-Fi MAC fatal assertion RAW=0x".as_slice(),
+                &digits,
+                b"\n",
+            ] {
+                if !write(bytes) {
+                    return Err(());
+                }
+            }
+            Ok(())
+        })
+        .map_err(|_| ())
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
     #[test]
-    fn retained_fault_preserves_full_raw_and_reports_once() {
-        let mut record: RetainedFault = bytemuck::Zeroable::zeroed();
-        assert_eq!(record.take(), None);
-        let raw = 0xa582_1357;
-        record.record(raw);
-        assert_eq!(record.take(), Some(raw));
-        assert_eq!(record.take(), None);
-        let mut output = std::vec::Vec::new();
-        report(raw, |bytes| output.extend_from_slice(bytes));
-        assert_eq!(
-            output,
-            b"previous Wi-Fi MAC fatal assertion RAW=0xa5821357\n"
-        );
-    }
-
-    #[test]
-    fn raw_output_preserves_hex_width_case_and_newline() {
+    fn every_refused_chunk_preserves_the_full_raw_word() {
         for raw in [
             0,
             1,
@@ -113,27 +74,33 @@ mod tests {
             0x10,
             0xff,
             0x100,
-            0x1234_abcd,
-            0x8000_0000,
+            0x1234abcd,
+            0x80000000,
             u32::MAX,
         ] {
-            let mut output = std::vec::Vec::new();
-            report(raw, |bytes| output.extend_from_slice(bytes));
-            assert_eq!(
-                output,
-                std::format!("previous Wi-Fi MAC fatal assertion RAW={raw:#010x}\n").as_bytes()
-            );
+            for refused in 0..3 {
+                let mut record = encode(raw).unwrap();
+                let mut count = 0;
+                assert!(
+                    report(&mut record, |_| {
+                        let accept = count != refused;
+                        count += 1;
+                        accept
+                    })
+                    .is_err()
+                );
+                let mut bytes = std::vec::Vec::new();
+                report(&mut record, |part| {
+                    bytes.extend_from_slice(part);
+                    true
+                })
+                .unwrap();
+                assert_eq!(
+                    bytes,
+                    std::format!("previous Wi-Fi MAC fatal assertion RAW={raw:#010x}\n").as_bytes()
+                );
+                assert!(record.peek().is_err());
+            }
         }
-    }
-
-    #[test]
-    fn invalid_values_are_rejected() {
-        let mut record: RetainedFault = bytemuck::Zeroable::zeroed();
-        record.record(0x1234_abcd);
-        record.raw ^= 1;
-        assert_eq!(record.take(), None);
-        record.record(0x1234_abcd);
-        record.magic = 0;
-        assert_eq!(record.take(), None);
     }
 }

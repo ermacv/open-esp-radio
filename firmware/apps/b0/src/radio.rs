@@ -151,7 +151,7 @@ pub fn permission(profile: Profile) -> (Permission, TxPower) {
 
 pub fn boot(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platform::Port>) -> ! {
     let previous =
-        oer_espressif_staged_runtime::panic::take_previous::<oer_esp32s31_hal::platform::Port>();
+        oer_espressif_staged_runtime::panic::peek_previous::<oer_esp32s31_hal::platform::Port>();
     let Some(root) = Root::take() else {
         crate::fail("root-taken")
     };
@@ -169,8 +169,9 @@ pub fn boot(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::pla
     };
     crate::gate_fault::report_previous();
     crate::release_fault::report_previous();
-    if previous.is_some() {
-        usb::early_text(b"OER-B0-BRINGUP: previous panic\r\n");
+    if let Some(previous) = previous
+        && oer_esp32s31_hal::peripherals::usb_serial_jtag::early_text(b"OER-B0-BRINGUP: previous panic\r\n") {
+        oer_espressif_staged_runtime::panic::clear_previous(&previous);
     }
     let profile = PROFILE;
     let Some(tokens) = Interrupts::take() else {

@@ -2,25 +2,27 @@
 //! stacks and in the gate until the fatal path resets the chip.
 #[cfg(test)]
 use core::fmt;
+#[cfg(any(test, all(target_arch = "riscv32", oer_b0_configured)))]
+use oer_diagnostics::fault::{self as fault_format, Class};
+use oer_diagnostics::fault::{Domain, Record};
+#[cfg(any(test, all(target_arch = "riscv32", oer_b0_configured)))]
 use oer_esp32s31_bluetooth_driver::interrupt::gate::{GateFault, GateFaultReason, GateTimerState};
+#[cfg(any(test, all(target_arch = "riscv32", oer_b0_configured)))]
 use oer_esp32s31_hal::bluetooth::BluetoothModemLpTimerStoppedInterruptFault;
+#[cfg(target_arch = "riscv32")]
+use oer_espressif_staged_runtime::retained_fault;
 
-const MAGIC: u32 = 0x4247_4601;
-
-/// All-bit-pattern retained representation, including a version and checksum.
+/// Reason-tagged observations; the common envelope owns version and integrity.
 #[derive(Clone, Copy, bytemuck::AnyBitPattern)]
 #[repr(C)]
-struct Record {
-    magic: u32,
+struct Payload {
     reason: u32,
     /// Reason-tagged encoded payload; each codec names its own source words.
     payload: [u32; 8],
-    checksum: u32,
 }
 
-const _: () = assert!(core::mem::size_of::<Record>() == 44);
-
-impl Record {
+impl Payload {
+    #[cfg(any(test, all(target_arch = "riscv32", oer_b0_configured)))]
     fn new(fault: GateFault) -> Self {
         let (gate_reason, observation) = match fault {
             GateFault::Invariant {
@@ -49,8 +51,7 @@ impl Record {
             _ => 0,
         };
         let [nrt0, nrt1] = observation.nrt_status.unwrap_or_default();
-        let mut record = Self {
-            magic: MAGIC,
+        Self {
             reason,
             payload: [
                 match observation.timer {
@@ -67,22 +68,11 @@ impl Record {
                 pending.map_or(captured_inputs, |pending| u32::from(pending.state_0024())),
                 pending.map_or(0, |pending| u32::from(pending.state_002c())),
             ],
-            checksum: 0,
-        };
-        record.checksum = record.sum();
-        record
-    }
-
-    fn sum(&self) -> u32 {
-        let mut sum = 0x811c_9dc5_u32;
-        for word in [self.magic, self.reason].into_iter().chain(self.payload) {
-            sum = (sum ^ word).wrapping_mul(0x0100_0193);
         }
-        sum
     }
 
-    /// Consumes the record once, rejecting cold, partial or corrupt writes.
-    fn take(&mut self) -> Option<Self> {
+    /// Reject semantically invalid payloads after envelope integrity validation.
+    fn validate(&self) -> Option<Self> {
         let payload_valid = if matches!(self.reason, 10 | 11) {
             let [_, _, _, _, _, _, _, reserved] = self.payload;
             reserved == 0 // the seven policy words are full-width images
@@ -93,17 +83,12 @@ impl Record {
                 && (matches!(self.reason, 7 | 9) || pending_0024 <= u32::from(u8::MAX))
                 && pending_002c <= u32::from(u8::MAX)
         };
-        let valid = self.magic == MAGIC
-            && self.checksum == self.sum()
-            && (1..=11).contains(&self.reason)
-            && payload_valid;
-        let record = valid.then_some(*self);
-        self.magic = 0;
-        record
+        let valid = (1..=11).contains(&self.reason) && payload_valid;
+        valid.then_some(*self)
     }
 }
 
-impl Record {
+impl Payload {
     /// Emit the complete early-console line with statically dispatched writes.
     fn report(&self, mut write: impl FnMut(&[u8])) -> Result<(), ()> {
         let reason = match self.reason {
@@ -244,7 +229,7 @@ fn decimal(mut word: u32, write: &mut impl FnMut(&[u8])) {
 
 // The original formatter is a test-only byte oracle for direct output.
 #[cfg(test)]
-impl fmt::Display for Record {
+impl fmt::Display for Payload {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let reason = match self.reason {
             1 => "plan-without-pending-timer",
@@ -336,7 +321,8 @@ impl fmt::Display for Record {
     }
 }
 
-impl Record {
+impl Payload {
+    #[cfg(any(test, all(target_arch = "riscv32", oer_b0_configured)))]
     fn interrupt_policy(fault: oer_esp32s31_hal::bluetooth::BluetoothInterruptPolicyFault) -> Self {
         use oer_esp32s31_hal::bluetooth::BluetoothInterruptPolicyFault;
         let reason = match fault {
@@ -344,10 +330,9 @@ impl Record {
             BluetoothInterruptPolicyFault::ReleaseNotQuiet(_) => 11,
         };
         let o = fault.observation();
-        // Encode the source words in the 44-byte slot; no gate-entry sample
+        // Encode all source words in the common-format slot; no gate-entry sample
         // exists for pre-initialization admission. The reason selects this layout.
-        let mut record = Self {
-            magic: MAGIC,
+        Self {
             reason,
             payload: [
                 o.primary.enable_0,
@@ -359,18 +344,15 @@ impl Record {
                 o.task_enable,
                 0, // reserved: no opaque task-status read in production
             ],
-            checksum: 0,
-        };
-        record.checksum = record.sum();
-        record
+        }
     }
+    #[cfg(any(test, all(target_arch = "riscv32", oer_b0_configured)))]
     fn controller_time(
         fault: oer_esp32s31_bluetooth_driver::controller_time::ControllerTimeRangeFault,
     ) -> Self {
         // Reuse the same retained slot and word layout; this reason has no gate
         // observation. The raw word and count are the full source observation.
-        let mut record = Self {
-            magic: MAGIC,
+        Self {
             reason: 8,
             payload: [
                 0,
@@ -382,10 +364,7 @@ impl Record {
                 u32::from(fault.scale.shift_image()),
                 0,
             ],
-            checksum: 0,
-        };
-        record.checksum = record.sum();
-        record
+        }
     }
 }
 
@@ -395,52 +374,88 @@ oer_espressif_staged_runtime::retained_static! {
 }
 
 /// Never returns, so no live gate, task or DMA owner is dropped or reused.
-#[cfg(target_arch = "riscv32")]
+#[cfg(all(target_arch = "riscv32", oer_b0_configured))]
 pub(crate) fn reset(fault: GateFault) -> ! {
-    reset_record(Record::new(fault))
+    reset_record(|| Payload::new(fault))
 }
 
-#[cfg(target_arch = "riscv32")]
+#[cfg(all(target_arch = "riscv32", oer_b0_configured))]
 pub(crate) fn reset_controller_time(
     fault: oer_esp32s31_bluetooth_driver::controller_time::ControllerTimeRangeFault,
 ) -> ! {
-    reset_record(Record::controller_time(fault))
+    reset_record(|| Payload::controller_time(fault))
 }
 
-#[cfg(target_arch = "riscv32")]
-pub(crate) fn reset_interrupt_policy(
+#[cfg(all(target_arch = "riscv32", oer_b0_configured))]
+pub(crate) fn record_interrupt_policy(
+    claim: &retained_fault::Claim<'_>,
     fault: oer_esp32s31_hal::bluetooth::BluetoothInterruptPolicyFault,
-) -> ! {
-    reset_record(Record::interrupt_policy(fault))
+) {
+    commit(claim, Payload::interrupt_policy(fault));
 }
 
-#[cfg(target_arch = "riscv32")]
-fn reset_record(record: Record) -> ! {
+#[cfg(all(target_arch = "riscv32", oer_b0_configured))]
+fn reset_record(capture: impl FnOnce() -> Payload) -> ! {
     oer_espressif_staged_runtime::fatal::reset_recording::<oer_esp32s31_hal::platform::Port>(
-        |_stop| {
-            if let Some(mut slot) = RECORD.try_lock() {
-                *slot = record;
-                // Keep the first record claimed until reset, including a nested fault.
-                core::mem::forget(slot);
-            }
-        },
+        |claim, _stop| commit(claim, capture()),
     )
+}
+#[cfg(all(target_arch = "riscv32", oer_b0_configured))]
+fn commit(claim: &retained_fault::Claim<'_>, payload: Payload) {
+    if let Ok(envelope) = payload.envelope() {
+        let _committed = claim.commit(&RECORD, envelope);
+    }
 }
 
 /// Print before the early console is retired to the application.
 #[cfg(target_arch = "riscv32")]
 pub(crate) fn report_previous() {
-    let previous = RECORD.try_lock().and_then(|mut record| record.take());
-    if let Some(previous) = previous {
-        let _ = previous.report(|bytes| {
-            let _ = oer_esp32s31_hal::peripherals::usb_serial_jtag::early_text(bytes);
-        });
+    if let Some(mut record) = retained_fault::peek(&RECORD) {
+        let _reported = report(
+            &mut record,
+            oer_esp32s31_hal::peripherals::usb_serial_jtag::early_text,
+        );
     }
 }
 
+impl Payload {
+    #[cfg(any(test, all(target_arch = "riscv32", oer_b0_configured)))]
+    fn envelope(&self) -> Result<Record, fault_format::Error> {
+        let [a, b, c, d, e, f, g, h] = self.payload;
+        let words = [self.reason, a, b, c, d, e, f, g, h];
+        Record::encode(
+            match self.reason {
+                7 | 8 => Class::Exhaustion,
+                4..=6 | 9..=11 => Class::UnexpectedHardware,
+                _ => Class::SoftwareInvariant,
+            },
+            Domain::BluetoothGate,
+            self.reason,
+            oer_diagnostics::fault::UNKNOWN_HART,
+            0,
+            &words,
+        )
+    }
+}
+fn report(record: &mut Record, mut write: impl FnMut(&[u8]) -> bool) -> Result<(), ()> {
+    record
+        .report(|view| {
+            let payload: Payload = view.decode(Domain::BluetoothGate).map_err(|_| ())?;
+            let payload = payload.validate().ok_or(())?;
+            let mut accepted = true;
+            payload.report(|bytes| {
+                if accepted {
+                    accepted = write(bytes);
+                }
+            })?;
+            accepted.then_some(()).ok_or(())
+        })
+        .map_err(|_| ())
+}
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(any(test, all(target_arch = "riscv32", oer_b0_configured)))]
     use oer_esp32s31_bluetooth_driver::interrupt::gate::GateObservation;
 
     fn fault(reason: GateFaultReason) -> GateFault {
@@ -456,23 +471,22 @@ mod tests {
 
     #[test]
     fn retained_record_survives_boot_state_recreation_and_is_reported_once() {
-        let storage = std::cell::RefCell::new(Record::new(fault(GateFaultReason::VacantTimer)));
+        let storage = std::cell::RefCell::new(Payload::new(fault(GateFaultReason::VacantTimer)));
         // The record outlives both boot-local owners, just as the NOLOAD slot does.
         {
             let previous_boot = storage.borrow();
             assert_eq!(previous_boot.payload[1], 0x40002);
         }
-        let record = storage.borrow_mut().take().expect("next boot's record");
+        let record = storage.borrow_mut().validate().expect("next boot's record");
         assert_eq!(
             record.to_string(),
             "OER-B0-FAULT: bluetooth-gate reason=vacant-timer timer=stopped lp=0x00040002 nrt=0x12345678,0xabcdef01"
         );
-        assert!(storage.borrow_mut().take().is_none());
     }
 
     #[test]
     fn stopped_payload_bytes_and_unknown_status_survive_retention_and_reporting() {
-        let mut slot = Record::new(fault(GateFaultReason::StoppedTimer(
+        let mut slot = Payload::new(fault(GateFaultReason::StoppedTimer(
             BluetoothModemLpTimerStoppedInterruptFault::UnexpectedStatus {
                 status: 0xfedcba98,
                 pending: Default::default(),
@@ -481,8 +495,8 @@ mod tests {
         // Arbitrary retained bytes, including their high bits, are not booleans.
         slot.payload[6] = 0xa5;
         slot.payload[7] = 0xe7;
-        slot.checksum = slot.sum();
-        let record = slot.take().unwrap();
+
+        let record = slot.validate().unwrap();
         assert_eq!(record.payload[5], 0xfedcba98);
         assert!(
             record
@@ -493,28 +507,16 @@ mod tests {
 
     #[test]
     fn software_pending_keeps_the_fault_sample_as_well_as_the_entry_sample() {
-        let mut slot = Record::new(fault(GateFaultReason::StoppedTimer(
+        let slot = Payload::new(fault(GateFaultReason::StoppedTimer(
             BluetoothModemLpTimerStoppedInterruptFault::SoftwarePending {
                 status: 0x40000,
                 pending: Default::default(),
             },
         )));
-        let record = slot.take().unwrap();
+        let record = slot.validate().unwrap();
         assert_eq!(record.payload[1], 0x40002);
         assert_eq!(record.payload[5], 0x40000);
         assert!(record.to_string().contains("stopped-status=0x00040000"));
-    }
-
-    #[test]
-    fn cold_partial_or_corrupt_records_are_rejected() {
-        let mut cold: Record = bytemuck::zeroed();
-        assert!(cold.take().is_none());
-        let mut partial = Record::new(fault(GateFaultReason::ReplyOccupied));
-        partial.checksum = 0;
-        assert!(partial.take().is_none());
-        let mut corrupt = Record::new(fault(GateFaultReason::WorkOccupied));
-        corrupt.payload[4] ^= 0x80000000;
-        assert!(corrupt.take().is_none());
     }
 
     #[test]
@@ -531,9 +533,9 @@ mod tests {
                 },
             ),
         ] {
-            let mut slot = Record::new(fault(reason));
+            let slot = Payload::new(fault(reason));
             assert!(
-                slot.take()
+                slot.validate()
                     .unwrap()
                     .to_string()
                     .starts_with("OER-B0-FAULT: bluetooth-gate reason=")
@@ -551,7 +553,7 @@ mod controller_time_tests {
     };
     #[test]
     fn time_faults_keep_their_source_words_in_the_existing_retained_slot() {
-        assert_eq!(core::mem::size_of::<Record>(), 44);
+        assert_eq!(core::mem::size_of::<Payload>(), 36);
         let fault = GateFault::Invariant {
             reason: GateFaultReason::ControllerTimeOverflow(ControllerTimeOverflowExhausted {
                 overflows: u32::MAX,
@@ -563,30 +565,30 @@ mod controller_time_tests {
                 timer: GateTimerState::Ready,
             },
         };
-        let mut slot = Record::new(fault);
-        let text = slot.take().unwrap().to_string();
+        let slot = Payload::new(fault);
+        let text = slot.validate().unwrap().to_string();
         assert!(text.contains("reason=controller-time-overflow-exhausted"));
         assert!(text.contains("nrt=0x00000012,0x00000034 overflows=0xffffffff"));
-        assert!(slot.take().is_none());
-        let mut slot = Record::controller_time(ControllerTimeRangeFault {
+
+        let slot = Payload::controller_time(ControllerTimeRangeFault {
             raw_ticks: 0xfedcba98,
             overflows: u32::MAX,
             scale:
                 oer_esp32s31_hal::bluetooth::BluetoothControllerHalInitConfig::reviewed_standalone()
                     .controller_time_scale(),
         });
-        let text = slot.take().unwrap().to_string();
+        let text = slot.validate().unwrap().to_string();
         assert_eq!(
             text,
             "OER-B0-FAULT: bluetooth-controller-time reason=controller-time-range-exhausted overflows=0xffffffff raw-ticks=0xfedcba98 scale-shift=0"
         );
-        assert!(slot.take().is_none());
     }
 }
 
 #[cfg(test)]
 mod nrt_tests {
     use super::*;
+    #[cfg(any(test, all(target_arch = "riscv32", oer_b0_configured)))]
     use oer_esp32s31_bluetooth_driver::interrupt::gate::GateObservation;
     use oer_esp32s31_hal::bluetooth::BluetoothNrtInterruptFault;
 
@@ -602,14 +604,13 @@ mod nrt_tests {
                 timer: GateTimerState::Ready,
             },
         };
-        let mut slot = Record::new(fault);
-        assert_eq!(core::mem::size_of::<Record>(), 44);
-        let record = slot.take().unwrap();
+        let slot = Payload::new(fault);
+        assert_eq!(core::mem::size_of::<Payload>(), 36);
+        let record = slot.validate().unwrap();
         assert_eq!(
             record.to_string(),
             "OER-B0-FAULT: bluetooth-gate reason=nrt-primary-fault timer=ready lp=0x00040000 nrt=0x00000000,0x00000000 nrt-captured=0x87654321,0xa5000002"
         );
-        assert!(slot.take().is_none());
     }
 }
 
@@ -637,12 +638,11 @@ mod interrupt_policy_tests {
             BluetoothInterruptPolicyFault::ForeignEnable(observation),
             BluetoothInterruptPolicyFault::ReleaseNotQuiet(observation),
         ] {
-            let mut slot = Record::new(GateFault::InterruptPolicy(cause));
-            assert_eq!(core::mem::size_of::<Record>(), 44);
-            let record = slot.take().unwrap();
+            let slot = Payload::new(GateFault::InterruptPolicy(cause));
+            assert_eq!(core::mem::size_of::<Payload>(), 36);
+            let record = slot.validate().unwrap();
             let text = record.to_string();
             assert!(text.contains("ena0=0x81234567 ena1=0xfedcba98 status0=0x12345678 status1=0x87654321 nrt0=0xdeadbeef nrt1=0xbadcaffe task-enable=0x80020000"));
-            assert!(slot.take().is_none());
         }
     }
 }
@@ -657,11 +657,9 @@ mod direct_output_tests {
             for timer in 0..=3 {
                 for nrt_present in 0..=1 {
                     for word in [0, 1, 0xf, 0x10, 0xff, 0x100, 999_999_999, u32::MAX] {
-                        let record = Record {
-                            magic: MAGIC,
+                        let record = Payload {
                             reason,
                             payload: [timer, word, nrt_present, word, word, word, word, word],
-                            checksum: 0,
                         };
                         let mut output = std::vec::Vec::new();
                         record
@@ -678,17 +676,58 @@ mod direct_output_tests {
     #[test]
     fn invalid_reason_or_timer_emits_nothing() {
         for (reason, timer) in [(0, 0), (12, 0), (u32::MAX, 0), (1, 4), (9, u32::MAX)] {
-            let record = Record {
-                magic: MAGIC,
+            let record = Payload {
                 reason,
                 payload: [timer, 0, 0, 0, 0, 0, 0, 0],
-                checksum: 0,
             };
             assert!(
                 record
                     .report(|_| panic!("invalid record emits no bytes"))
                     .is_err()
             );
+        }
+    }
+}
+
+#[cfg(test)]
+mod envelope_tests {
+    use super::*;
+    #[test]
+    fn each_refused_chunk_keeps_the_complete_payload_until_replay_succeeds() {
+        let payload = Payload {
+            reason: 10,
+            payload: [u32::MAX, 2, 3, 4, 5, 6, 7, 0],
+        };
+        let original = payload.envelope().unwrap();
+        let mut record = original;
+        let mut expected = std::vec::Vec::new();
+        let mut chunks = 0;
+        report(&mut record, |bytes| {
+            chunks += 1;
+            expected.extend_from_slice(bytes);
+            true
+        })
+        .unwrap();
+        assert!(record.peek().is_err());
+        for refused in 0..chunks {
+            let mut reboot = original;
+            let mut attempted = 0;
+            assert!(
+                report(&mut reboot, |_| {
+                    let ok = attempted != refused;
+                    attempted += 1;
+                    ok
+                })
+                .is_err()
+            );
+            assert_eq!(reboot, original);
+            let mut replay = std::vec::Vec::new();
+            report(&mut reboot, |bytes| {
+                replay.extend_from_slice(bytes);
+                true
+            })
+            .unwrap();
+            assert_eq!(replay, expected);
         }
     }
 }

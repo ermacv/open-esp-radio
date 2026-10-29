@@ -1,6 +1,7 @@
 //! Image-local IEEE 802.15.4 retained diagnostic codec and terminal policy.
 
 use core::fmt::{self, Write};
+use oer_diagnostics::fault::{self as fault_format, Class, Domain, Record};
 use oer_espressif_ieee802154_engine::engine::fault::{ServiceError, ServiceProgress, ServiceStage};
 use oer_espressif_ieee802154_engine::engine::{
     Fault, Ieee802154State, StatisticsCounter, StatisticsOverflow,
@@ -10,20 +11,22 @@ use oer_espressif_ieee802154_mac_values::{
     Ieee802154RxAbortReason, Ieee802154RxAbortReasonObservation, Ieee802154RxStateCode,
     Ieee802154RxStatus, Ieee802154TxAbortReason, Ieee802154TxAbortReasonObservation,
 };
+#[cfg(target_arch = "riscv32")]
+use oer_espressif_staged_runtime::retained_fault;
 
 // Only this image uses the hardware engine; retain its source observations
 // without adding a record to unrelated staged images.
 #[cfg(target_arch = "riscv32")]
 oer_espressif_staged_runtime::retained_static! {
-    static EVENT_FAULT: FaultRecord;
+    static EVENT_FAULT: Record;
 }
 
 #[cfg(target_arch = "riscv32")]
 pub(crate) fn reset(fault: Fault) -> ! {
     oer_espressif_staged_runtime::fatal::reset_recording::<oer_esp32s31_hal::platform::Port>(
-        |_stop| {
-            if let Some(mut record) = EVENT_FAULT.try_lock() {
-                record.record(fault);
+        |claim, _stop| {
+            if let Ok(record) = encode(fault) {
+                let _committed = claim.commit(&EVENT_FAULT, record);
             }
         },
     )
@@ -31,8 +34,11 @@ pub(crate) fn reset(fault: Fault) -> ! {
 
 #[cfg(target_arch = "riscv32")]
 pub(crate) fn report_previous() {
-    if let Some(mut record) = EVENT_FAULT.try_lock() {
-        let _reported = record.report(oer_esp32s31_hal::peripherals::usb_serial_jtag::early_text);
+    if let Some(mut record) = retained_fault::peek(&EVENT_FAULT) {
+        let _reported = report(
+            &mut record,
+            oer_esp32s31_hal::peripherals::usb_serial_jtag::early_text,
+        );
     }
 }
 
@@ -124,7 +130,6 @@ const STAGES: [ServiceStage; 6] = [
     ServiceStage::AckRxDone,
     ServiceStage::TxAbort,
 ];
-const MAGIC: u32 = 0x154f_0004;
 // Diagnostic layout: named events in bits 0..=11, unnamed 7/13 at 12/13,
 // entry state at 14..=17, service reason at 18, completed statistics at 19;
 // upper bits are reserved. Service details preserve exact typed observations.
@@ -133,15 +138,12 @@ const STATE_MASK: u32 = 0xf;
 const REASON: u32 = 1 << 18;
 const RECORD_BITS: u32 = (1 << 20) - 1;
 
-/// Forty-four retained bytes: source sample, ordered progress, typed reason and
-/// its source values. Ordinary stores do not promise power-fail atomicity.
+/// Source sample, ordered progress and typed details inside the common envelope.
 #[derive(Clone, Copy, bytemuck::AnyBitPattern)]
 #[repr(C)]
-pub(crate) struct FaultRecord {
-    magic: u32,
+pub(crate) struct Payload {
     raw: u32,
     details: [u32; 8],
-    checksum: u32,
 }
 
 fn event_bits(events: Ieee802154EventMask) -> u32 {
@@ -227,10 +229,9 @@ fn status_from(bits: u32) -> Option<Ieee802154RxStatus> {
     ))
 }
 
-impl FaultRecord {
+impl Payload {
     /// Retain a terminal fault before software reset, without releasing owners.
     pub fn record(&mut self, fault: Fault) {
-        self.magic = 0;
         self.details = [0; 8];
         let (observation, state, service) = match fault {
             Fault::UnhandledEvents { observation, state } => (observation, state, None),
@@ -302,22 +303,9 @@ impl FaultRecord {
                 Some(statistics) => REASON | (u32::from(statistics) << 19),
                 None => 0,
             };
-        self.checksum = self.checksum();
-        self.magic = MAGIC;
-    }
-
-    fn checksum(&self) -> u32 {
-        self.details
-            .into_iter()
-            .fold((MAGIC ^ self.raw).wrapping_mul(0x0100_0193), |sum, word| {
-                (sum ^ word).wrapping_mul(0x0100_0193)
-            })
     }
 
     fn fault(&self) -> Option<Fault> {
-        if self.magic != MAGIC || self.checksum != self.checksum() {
-            return None;
-        }
         if self.raw & !RECORD_BITS != 0 {
             return None;
         }
@@ -410,7 +398,7 @@ impl FaultRecord {
         })
     }
 
-    /// Report a valid previous-boot fault once. Refused output retains it.
+    /// Render the validated source payload. The envelope owns acknowledgement.
     pub fn report(&mut self, write: impl FnMut(&[u8]) -> bool) -> fmt::Result {
         let Some(fault) = self.fault() else {
             return Ok(());
@@ -426,14 +414,13 @@ impl FaultRecord {
             }
         }
         writeln!(Output(write), "previous IEEE 802.15.4 fault {fault:?}")?;
-        self.magic = 0;
         Ok(())
     }
 }
 
 const _: () = {
-    if core::mem::size_of::<FaultRecord>() != 44 {
-        panic!("fault record ABI must remain forty-four bytes");
+    if core::mem::size_of::<Payload>() != 36 {
+        panic!("fault payload must preserve all nine observation words");
     }
 };
 
@@ -461,8 +448,7 @@ mod tests {
                     ),
                     state,
                 };
-                let mut record: FaultRecord = bytemuck::Zeroable::zeroed();
-                assert_eq!(record.fault(), None);
+                let mut record: Payload = bytemuck::Zeroable::zeroed();
                 record.record(fault);
                 assert_eq!(record.fault(), Some(fault));
                 assert!(record.report(|_| false).is_err());
@@ -476,30 +462,13 @@ mod tests {
                     .unwrap();
                 let output = std::string::String::from_utf8(output).unwrap();
                 assert!(output.contains(&std::format!("{fault:?}")));
-                record.report(|_| panic!("already reported")).unwrap();
             }
         }
     }
 
     #[test]
-    fn corrupt_record_is_not_reported() {
-        let mut record: FaultRecord = bytemuck::Zeroable::zeroed();
-        record.record(Fault::UnhandledEvents {
-            observation: Ieee802154EventObservation::from_parts(
-                Ieee802154EventMask::NONE,
-                true,
-                false,
-            ),
-            state: Ieee802154State::Rx,
-        });
-        record.raw ^= 1 << 13;
-        assert_eq!(record.fault(), None);
-        record.report(|_| panic!("invalid record")).unwrap();
-    }
-
-    #[test]
     fn all_fourteen_event_flags_round_trip_independently() {
-        assert_eq!(core::mem::size_of::<FaultRecord>(), 44);
+        assert_eq!(core::mem::size_of::<Payload>(), 36);
         for flags in 0..(1u32 << 14) {
             let events = NAMED.into_iter().enumerate().fold(
                 Ieee802154EventMask::NONE,
@@ -519,14 +488,14 @@ mod tests {
                 ),
                 state: Ieee802154State::Rx,
             };
-            let mut record: FaultRecord = bytemuck::Zeroable::zeroed();
+            let mut record: Payload = bytemuck::Zeroable::zeroed();
             record.record(fault);
             assert_eq!(record.fault(), Some(fault));
         }
     }
 
     #[test]
-    fn invalid_state_reason_and_reserved_bits_are_rejected_with_valid_checksum() {
+    fn invalid_state_reason_and_reserved_bits_are_rejected() {
         for raw in [
             0xf << STATE_SHIFT,
             REASON | (7 << 28),
@@ -534,13 +503,11 @@ mod tests {
             1 << 20,
             1 << 31,
         ] {
-            let mut record = FaultRecord {
-                magic: MAGIC,
+            let mut record = Payload {
                 raw,
                 details: [0; 8],
-                checksum: 0,
             };
-            record.checksum = record.checksum();
+
             assert_eq!(record.fault(), None);
             record.report(|_| panic!("invalid encoding")).unwrap();
         }
@@ -552,13 +519,13 @@ mod service_tests {
     use super::*;
 
     fn round_trip(fault: Fault) {
-        let mut record: FaultRecord = bytemuck::Zeroable::zeroed();
+        let mut record: Payload = bytemuck::Zeroable::zeroed();
         record.record(fault);
         assert_eq!(record.fault(), Some(fault));
         assert!(record.report(|_| false).is_err());
         assert_eq!(record.fault(), Some(fault));
         record.report(|_| true).unwrap();
-        assert_eq!(record.fault(), None);
+        assert_eq!(record.fault(), Some(fault));
     }
 
     #[test]
@@ -640,7 +607,7 @@ mod service_tests {
     }
 
     #[test]
-    fn invalid_service_fields_and_previous_layout_are_rejected() {
+    fn invalid_service_fields_are_rejected() {
         for details in [
             [0, 255, 0, 0, 0, 0, 0, 0],
             [0, 3, 1, 0, 0, 0, 0, 0],
@@ -648,18 +615,78 @@ mod service_tests {
             [15, 3, 0, 0, 0, 0, 0, 0],
             [7 << 28, 3, 0, 0, 0, 0, 0, 0],
         ] {
-            let mut record = FaultRecord {
-                magic: MAGIC,
+            let record = Payload {
                 raw: REASON,
                 details,
-                checksum: 0,
             };
-            record.checksum = record.checksum();
+
             assert_eq!(record.fault(), None);
         }
-        let mut record: FaultRecord = bytemuck::Zeroable::zeroed();
-        record.magic = 0x154f_0003;
-        record.checksum = record.checksum();
-        assert_eq!(record.fault(), None);
+    }
+}
+
+fn encode(fault: Fault) -> Result<Record, fault_format::Error> {
+    let class = match fault {
+        Fault::Service {
+            reason: ServiceError::Statistics(_),
+            ..
+        } => Class::Exhaustion,
+        Fault::Service {
+            reason: ServiceError::FrameMetadata(_),
+            ..
+        } => Class::SoftwareInvariant,
+        _ => Class::UnexpectedHardware,
+    };
+    let mut payload: Payload = bytemuck::Zeroable::zeroed();
+    payload.record(fault);
+    let [a, b, c, d, e, f, g, h] = payload.details;
+    let reason = b;
+    let words = [payload.raw, a, b, c, d, e, f, g, h];
+    Record::encode(
+        class,
+        Domain::Ieee802154,
+        reason,
+        oer_diagnostics::fault::UNKNOWN_HART,
+        0,
+        &words,
+    )
+}
+fn report(record: &mut Record, write: impl FnMut(&[u8]) -> bool) -> fmt::Result {
+    record
+        .report(|view| {
+            let payload: Payload = view.decode(Domain::Ieee802154).map_err(|_| fmt::Error)?;
+            let mut payload = payload;
+            payload.fault().ok_or(fmt::Error)?;
+            payload.report(write)
+        })
+        .map_err(|_| fmt::Error)
+}
+#[cfg(test)]
+mod envelope_tests {
+    use super::*;
+    #[test]
+    fn reset_and_output_refusal_preserve_the_entire_event_snapshot() {
+        let fault = Fault::UnhandledEvents {
+            observation: Ieee802154EventObservation::from_parts(
+                Ieee802154EventMask::NAMED,
+                true,
+                true,
+            ),
+            state: Ieee802154State::Rx,
+        };
+        let mut reboot = encode(fault).unwrap();
+        assert_eq!(
+            reboot
+                .peek()
+                .unwrap()
+                .decode::<Payload>(Domain::Ieee802154)
+                .unwrap()
+                .fault(),
+            Some(fault)
+        );
+        assert!(report(&mut reboot, |_| false).is_err());
+        assert!(reboot.peek().is_ok());
+        report(&mut reboot, |_| true).unwrap();
+        assert!(reboot.peek().is_err());
     }
 }

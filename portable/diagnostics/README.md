@@ -7,6 +7,19 @@ storage, transport singleton or trace clock. The platform still owns panic
 capture and retained memory; `staged-runtime::diagnostics::previous_panic` is
 the shared conversion of its unchanged `PanicRecord` to `PreviousPanic`.
 
+## Fault envelope: `oer_diagnostics::fault`
+
+`fault::Record` is the one staged fault format: numeric version, payload length,
+registry class, domain/reason, captured hart or an unavailable sentinel, and domain-specific context,
+280 observation bytes, checksum and a completion marker (316 bytes total).
+The codec owns no storage, election or reset. `new` refuses oversized dynamic
+payloads; `encode` checks fixed payload geometry at compile time. `peek`
+returns typed errors for incomplete, corrupt or unsupported records.
+`commit` publishes completion last; `report` clears only after its complete
+emitter succeeds. No old-format decoder is provided. Staged runtime owns the
+boot-initialized terminal election and the retained cells. Retention is best
+effort, without a power-loss or RTC-watchdog guarantee.
+
 ## Record codec: `oer_diagnostics::record`
 
 `record::encode(&Record, write)` emits raw byte slices into a caller-supplied

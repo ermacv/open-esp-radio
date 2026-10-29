@@ -280,7 +280,7 @@ on foreign input. Affine successful reunion leaves no stale return token.
 Both payloads use `ManuallyDrop` until explicit reunion. Cancellation retains
 them and reports `Cancelled(operation)` from either half. The HAL's
 `phy_fault_reporter!` macro binds the image's direct link-time reporter.
-Staged firmware retains a 16-byte operation/epoch record and resets; hermetic host cancellation tests catch their own reporter.
+Staged firmware retains operation/epoch and source observations in the common fault envelope and resets; hermetic host cancellation tests catch their own reporter.
 
 `WifiClocked` and `RadioAccess` consume PHY custody into a
 `ChannelTransaction`, which borrows their MAC and platform. Channel and retune
@@ -311,7 +311,7 @@ without a positive task cause; general read safety remains unqualified.
 
 Admission and terminal readback faults retain their owners and reach the
 image's retained reset path. B0 stores these seven words and a reserved zero
-word in its existing 44-byte BLE gate record with a reason-tagged payload; the next boot prints them.
+word in its common-format BLE gate record with a reason-tagged payload; the next boot prints them.
 Readback is sequential, not an atomic cross-bank sample or proof that every
 producer is stopped. The stop sequence keeps its handler/task order.
 SOURCE: `BLOB_S31_BLE_IRQ_RELEASE_SCOPE_20261027`,

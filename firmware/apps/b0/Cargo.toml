@@ -8,6 +8,7 @@ repository.workspace = true
 publish.workspace = true
 build = "build.rs"
 [dependencies]
+oer-diagnostics = { path = "../../../portable/diagnostics" }
 oer-bluetooth-le-wire = { path = "../../../protocols/bluetooth/le/wire" }
 bytemuck = { version = "1.25.2", default-features = false, features = ["derive"] }
 oer-bluetooth-hci = { path = "../../../protocols/bluetooth/hci" }

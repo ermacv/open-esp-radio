@@ -25,7 +25,7 @@ oer_espressif_staged_runtime::exception_handler!(exception);
 #[inline(always)]
 fn exception(context: &TrapFrame) -> ! {
     let ra = context.ra;
-    oer_espressif_staged_runtime::reset_recording::<oer_esp32s31_hal::platform::Port>(|stop| {
-        crate::fatal::record_exception(ra, stop)
+    oer_espressif_staged_runtime::reset_recording::<oer_esp32s31_hal::platform::Port>(|claim, stop| {
+        crate::fatal::record_exception(claim, ra, stop)
     })
 }

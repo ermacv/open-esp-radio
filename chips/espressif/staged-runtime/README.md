@@ -31,12 +31,30 @@ their state. Observed writes do not establish maximum possible depth.
 The panic handler records bounded binary details in retained memory without
 formatting. Interrupt-context records omit text and location metadata that
 may be cached; task-context records can retain them. An optional hook receives
-`PanicDetails` after capture with the local hart masked and the others stopped,
-or the stop failure. Hooks and their callees/data stay in SRAM or retained
-memory and take no locks. The image resets. On the next boot, `panic::take_previous` takes and clears
-the panic record for the image to report; named setup faults are retained
-when console reporting is refused. `retained_static!` provides
-single-holder access without waiting.
+`PanicDetails` and the winning terminal claim after capture with the local hart
+masked and the others stopped, or the stop failure. Hooks and their callees/data
+stay in SRAM or retained memory and take no locks. The image resets.
+
+`retained_fault` owns a boot-initialized SRAM election. `claim` returns an
+exclusive terminal claim or typed `Reentered`, without waiting. The winning
+claim and every slot it commits remain held until reset. The same terminal
+may commit supplemental hook observations in separate slots of the same format.
+A losing terminal requests reset without invoking another recorder.
+
+Every staged fault slot uses `oer-diagnostics::fault::Record`, layout version 1:
+eight numeric header words (completion, version, payload length, registry class,
+domain, reason, captured hart or an unavailable sentinel, and context), 280
+payload bytes and a checksum, 316 bytes in total. The largest payload is the existing HIL postmortem snapshot. Commit
+publishes completion last; unsupported versions, oversized payloads and corrupt
+records return typed errors. There is no previous-layout decoder.
+
+`panic::peek_previous` reads without consuming. The diagnostics renderers clear
+an ordinary panic only after successful output of its exact snapshot; named
+faults and image reporters likewise clear after their complete output succeeds.
+HIL acknowledges its platform panic and postmortem after the full boot-evidence
+frame and CRLF are written. Output refusal retains diagnostic bytes. A new boot's
+first terminal may replace an unreported older record. Retention is best effort;
+checksums are not a power-loss or `ResetRtc` retention guarantee.
 
 Chip composition owns PHY and Wi-Fi fault records (`oer-esp32s31-compose`).
 The runtime's generic `fatal::reset_recording` performs their final reset;

@@ -6,7 +6,7 @@ use core::{
 };
 use oer_memory::OnceValue;
 mod record;
-pub use record::FaultRecord;
+pub use record::{encode_fault, report_fault};
 #[cfg(target_arch = "riscv32")]
 oer_memory::link_fn! { declare PhyFaultSlot => fn __oer_phy_transaction_fault(fault: Fault) -> !; }
 

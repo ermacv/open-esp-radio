@@ -114,7 +114,7 @@ oer_espressif_staged_runtime::entry!(main, oer_esp32s31_hal::platform::Port);
 
 fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platform::Port>) -> ! {
     // Before anything can panic and overwrite it.
-    let previous = panic::take_previous::<oer_esp32s31_hal::platform::Port>();
+    let previous = panic::peek_previous::<oer_esp32s31_hal::platform::Port>();
     let Some(root) = Root::take() else {
         fail(oer_diagnostics::name!("root-taken"; 32))
     };

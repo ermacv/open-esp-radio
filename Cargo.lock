@@ -1902,6 +1902,7 @@ dependencies = [
 name = "oer-diagnostics"
 version = "0.1.0"
 dependencies = [
+ "bytemuck",
  "oer-test-ui-cases",
  "oer-trace",
 ]
@@ -1976,6 +1977,7 @@ name = "oer-esp32s31-compose"
 version = "0.1.0"
 dependencies = [
  "bytemuck",
+ "oer-diagnostics",
  "oer-esp32s31-hal",
  "oer-espressif-executor",
  "oer-espressif-staged-runtime",
@@ -2372,6 +2374,7 @@ dependencies = [
  "oer-bluetooth-le-port",
  "oer-bluetooth-le-runtime",
  "oer-bluetooth-le-wire",
+ "oer-diagnostics",
  "oer-embassy-time",
  "oer-esp32s31-bluetooth-driver",
  "oer-esp32s31-board",

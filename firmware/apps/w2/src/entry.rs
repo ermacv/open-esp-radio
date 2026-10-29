@@ -96,7 +96,7 @@ oer_esp32s31_hal::phy_fault_reporter!(oer_esp32s31_compose::phy_fault::reset);
 oer_espressif_staged_runtime::entry!(main, oer_esp32s31_hal::platform::Port);
 fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platform::Port>) -> ! {
     let previous =
-        oer_espressif_staged_runtime::panic::take_previous::<oer_esp32s31_hal::platform::Port>();
+        oer_espressif_staged_runtime::panic::peek_previous::<oer_esp32s31_hal::platform::Port>();
     let Some(root) = Root::take() else {
         fail(oer_diagnostics::name!("root-taken"; 32))
     };

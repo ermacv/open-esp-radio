@@ -30,6 +30,9 @@ oer_espressif_staged_runtime::placed_static! {
 struct Chip;
 
 impl Platform for Chip {
+    fn boot_evidence_written(&self) {
+        crate::system::boot_evidence_written();
+    }
     fn boot_evidence(&self) -> BootEvidence {
         crate::system::boot_evidence()
     }

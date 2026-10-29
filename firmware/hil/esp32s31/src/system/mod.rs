@@ -50,7 +50,7 @@ pub(super) fn boot_evidence() -> oer_hil_protocol::base::BootEvidence {
 }
 
 /// The platform panic entry's record of the previous boot, taken once at
-/// boot: taking it clears the retained slot.
+/// boot: output acknowledgement clears the retained slot.
 static PLATFORM_PANIC: embassy_sync::once_lock::OnceLock<
     Option<oer_espressif_staged_runtime::panic::PanicRecord>,
 > = embassy_sync::once_lock::OnceLock::new();
@@ -68,7 +68,7 @@ pub(crate) fn read_reset_causes(registers: oer_esp32s31_hal::peripherals::reset_
 /// Take the previous boot's platform panic record; before the first boot
 /// evidence is served.
 pub(crate) fn take_platform_panic() {
-    let _ = PLATFORM_PANIC.init(oer_espressif_staged_runtime::panic::take_previous::<
+    let _ = PLATFORM_PANIC.init(oer_espressif_staged_runtime::panic::peek_previous::<
         oer_esp32s31_hal::platform::Port,
     >());
 }
@@ -98,4 +98,12 @@ pub(crate) fn receiver_limit(fault: oer_hil_agent::console::progress::ReceiverLi
             u32::from(fault.next.is_some()),
         ],
     )
+}
+
+/// Called by the image's transport after full boot-evidence output succeeds.
+pub(crate) fn boot_evidence_written() {
+    if let Some(record) = PLATFORM_PANIC.try_get().and_then(Option::as_ref) {
+        oer_espressif_staged_runtime::panic::clear_previous(record);
+    }
+    postmortem::output_succeeded();
 }

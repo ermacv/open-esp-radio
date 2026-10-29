@@ -1,23 +1,25 @@
 //! Retained controller-output release failures; no owner is released before reset.
+#[cfg(any(test, all(target_arch = "riscv32", oer_b0_configured)))]
+use oer_diagnostics::fault::{self as fault_format, Class};
+use oer_diagnostics::fault::{Domain, Record};
+#[cfg(any(test, all(target_arch = "riscv32", oer_b0_configured)))]
 use oer_esp32s31_hal::bluetooth::{
     BluetoothControllerOutputReleaseError as Output, BluetoothInterruptPolicyFault,
     engine::{EngineOutputReleaseError, scheduler::interrupt::SchedulerInterruptError as Channel},
 };
-
-const MAGIC: u32 = 0x4252_4601;
+#[cfg(target_arch = "riscv32")]
+use oer_espressif_staged_runtime::retained_fault;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, bytemuck::AnyBitPattern)]
 #[repr(C)]
-struct Record {
-    magic: u32,
+struct Payload {
     reason: u32,
     detail: u32,
-    checksum: u32,
 }
-const _: () = assert!(core::mem::size_of::<Record>() == 16);
 
-impl Record {
+impl Payload {
     /// Policy faults retain all seven source words in the existing gate slot.
+    #[cfg(any(test, all(target_arch = "riscv32", oer_b0_configured)))]
     fn new(fault: EngineOutputReleaseError) -> Result<Self, BluetoothInterruptPolicyFault> {
         let (reason, detail) = match fault {
             EngineOutputReleaseError::Output(output) => match output {
@@ -44,22 +46,8 @@ impl Record {
                 },
             ),
         };
-        let mut record = Self {
-            magic: MAGIC,
-            reason,
-            detail,
-            checksum: 0,
-        };
-        record.checksum = record.sum();
+        let record = Self { reason, detail };
         Ok(record)
-    }
-
-    fn sum(&self) -> u32 {
-        [self.magic, self.reason, self.detail]
-            .into_iter()
-            .fold(0x811c_9dc5_u32, |sum, word| {
-                (sum ^ word).wrapping_mul(0x0100_0193)
-            })
     }
 
     fn reason_name(&self) -> Option<&'static [u8]> {
@@ -81,14 +69,6 @@ impl Record {
             (6, 10) => b"channel-output-released",
             _ => return None,
         })
-    }
-
-    fn take(&mut self) -> Option<Self> {
-        let valid =
-            self.magic == MAGIC && self.checksum == self.sum() && self.reason_name().is_some();
-        let record = valid.then_some(*self);
-        self.magic = 0;
-        record
     }
 
     fn report(&self, mut write: impl FnMut(&[u8])) {
@@ -113,16 +93,16 @@ oer_espressif_staged_runtime::retained_static! { static RECORD: Record; }
 /// Borrowing the failure keeps its task, arena and register owners quarantined.
 #[cfg(all(target_arch = "riscv32", oer_b0_configured))]
 pub(crate) fn reset<T>(owner: &mut T, fault: EngineOutputReleaseError) -> ! {
-    core::hint::black_box(owner);
-    let record = match Record::new(fault) {
-        Ok(record) => record,
-        Err(policy) => crate::gate_fault::reset_interrupt_policy(policy),
-    };
     oer_espressif_staged_runtime::fatal::reset_recording::<oer_esp32s31_hal::platform::Port>(
-        |_stop| {
-            if let Some(mut slot) = RECORD.try_lock() {
-                *slot = record;
-                core::mem::forget(slot);
+        |claim, _stop| {
+            core::hint::black_box(owner);
+            match Payload::new(fault) {
+                Ok(record) => {
+                    if let Ok(envelope) = record.envelope() {
+                        let _committed = claim.commit(&RECORD, envelope);
+                    }
+                }
+                Err(policy) => crate::gate_fault::record_interrupt_policy(claim, policy),
             }
         },
     )
@@ -130,14 +110,50 @@ pub(crate) fn reset<T>(owner: &mut T, fault: EngineOutputReleaseError) -> ! {
 
 #[cfg(target_arch = "riscv32")]
 pub(crate) fn report_previous() {
-    let previous = RECORD.try_lock().and_then(|mut record| record.take());
-    if let Some(previous) = previous {
-        previous.report(|bytes| {
-            let _ = oer_esp32s31_hal::peripherals::usb_serial_jtag::early_text(bytes);
-        });
+    if let Some(mut record) = retained_fault::peek(&RECORD) {
+        let _reported = report(
+            &mut record,
+            oer_esp32s31_hal::peripherals::usb_serial_jtag::early_text,
+        );
     }
 }
 
+impl Payload {
+    #[cfg(any(test, all(target_arch = "riscv32", oer_b0_configured)))]
+    fn envelope(&self) -> Result<Record, fault_format::Error> {
+        Record::encode(
+            if self.reason == 6 && self.detail == 4 {
+                Class::Exhaustion
+            } else if self.reason == 6 && self.detail == 3 {
+                Class::Cancellation
+            } else if self.reason == 5 {
+                Class::UnexpectedHardware
+            } else {
+                Class::SoftwareInvariant
+            },
+            Domain::BluetoothRelease,
+            self.reason,
+            oer_diagnostics::fault::UNKNOWN_HART,
+            0,
+            &[self.reason, self.detail],
+        )
+    }
+}
+fn report(record: &mut Record, mut write: impl FnMut(&[u8]) -> bool) -> Result<(), ()> {
+    record
+        .report(|view| {
+            let payload: Payload = view.decode(Domain::BluetoothRelease).map_err(|_| ())?;
+            payload.reason_name().ok_or(())?;
+            let mut accepted = true;
+            payload.report(|bytes| {
+                if accepted {
+                    accepted = write(bytes);
+                }
+            });
+            accepted.then_some(()).ok_or(())
+        })
+        .map_err(|_| ())
+}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -182,8 +198,8 @@ mod tests {
             cases.push((channel.into(), std::format!("channel-{name}")));
         }
         for (fault, expected) in cases {
-            let mut slot = Record::new(fault).unwrap();
-            let next_boot = slot.take().expect("retained cause");
+            let slot = Payload::new(fault).unwrap();
+            let next_boot = slot;
             let mut bytes = std::vec::Vec::new();
             next_boot.report(|part| bytes.extend_from_slice(part));
             assert_eq!(
@@ -191,7 +207,6 @@ mod tests {
                 std::format!("OER-B0-FAULT: bluetooth-output-release reason={expected}\r\n")
                     .as_bytes()
             );
-            assert_eq!(slot.take(), None);
         }
     }
 
@@ -213,39 +228,49 @@ mod tests {
             BluetoothInterruptPolicyFault::ReleaseNotQuiet(observation),
         ] {
             assert_eq!(
-                Record::new(Output::InterruptPolicy(policy).into()),
+                Payload::new(Output::InterruptPolicy(policy).into()),
                 Err(policy)
             );
         }
     }
+}
 
+#[cfg(test)]
+mod envelope_tests {
+    use super::*;
     #[test]
-    fn cold_corrupt_and_invalid_payloads_are_never_reported() {
-        let valid = Record::new(Output::SchedulerBusy.into()).unwrap();
-        for mut invalid in [
-            Record { magic: 0, ..valid },
-            Record {
-                checksum: valid.checksum ^ 1,
-                ..valid
-            },
-            Record { reason: 7, ..valid },
-            Record {
-                reason: 4,
-                detail: 16,
-                ..valid
-            },
-            Record {
-                reason: 6,
-                detail: 11,
-                ..valid
-            },
-            Record { detail: 1, ..valid },
-        ] {
-            if invalid.checksum == valid.checksum && invalid.magic == MAGIC {
-                invalid.checksum = invalid.sum();
-            }
-            assert_eq!(invalid.take(), None);
-            assert_eq!(invalid.magic, 0);
+    fn each_refused_chunk_keeps_the_complete_payload_until_replay_succeeds() {
+        let payload = Payload::new(Output::SchedulerBusy.into()).unwrap();
+        let original = payload.envelope().unwrap();
+        let mut record = original;
+        let mut expected = std::vec::Vec::new();
+        let mut chunks = 0;
+        report(&mut record, |bytes| {
+            chunks += 1;
+            expected.extend_from_slice(bytes);
+            true
+        })
+        .unwrap();
+        assert!(record.peek().is_err());
+        for refused in 0..chunks {
+            let mut reboot = original;
+            let mut attempted = 0;
+            assert!(
+                report(&mut reboot, |_| {
+                    let ok = attempted != refused;
+                    attempted += 1;
+                    ok
+                })
+                .is_err()
+            );
+            assert_eq!(reboot, original);
+            let mut replay = std::vec::Vec::new();
+            report(&mut reboot, |bytes| {
+                replay.extend_from_slice(bytes);
+                true
+            })
+            .unwrap();
+            assert_eq!(replay, expected);
         }
     }
 }

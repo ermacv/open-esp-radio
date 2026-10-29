@@ -35,6 +35,7 @@ pub(crate) fn usb_interrupt(part: &mut ConsoleInterrupt) {
 /// The image's platform: why the chip last reset, read once at boot.
 pub struct Chip(pub oer_esp32s31_hal::peripherals::reset_cause::ResetCauses);
 impl oer_hil_agent::base::Platform for Chip {
+    fn boot_evidence_written(&self) {}
     fn boot_evidence(&self) -> BootEvidence {
         use oer_esp32s31_hal::peripherals::reset_cause::ResetCause;
         // The console serves boot evidence from core 0.

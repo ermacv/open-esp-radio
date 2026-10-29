@@ -155,15 +155,16 @@ use oer_espressif_staged_runtime as _;
 /// bound. The next boot reports what it recorded.
 #[inline(always)]
 fn panic_hook(
+    claim: &oer_espressif_staged_runtime::retained_fault::Claim<'_>,
     details: &oer_espressif_staged_runtime::panic::PanicDetails<'_>,
     stop: Result<&oer_esp32s31_hal::cores::StopTheWorld<'_>, oer_esp32s31_hal::cores::StopError>,
 ) {
     #[cfg(feature = "system-watchdog")]
-    system::postmortem::record_panic(details);
+    system::postmortem::record_panic(claim, details);
     #[cfg(not(feature = "system-watchdog"))]
     let _ = details;
     let stage = 0;
-    fatal::record_panic(stage, stop);
+    fatal::record_panic(claim, stage, stop);
 }
 
 /// The image's entropy owner.
@@ -422,11 +423,11 @@ fn fail(failure: fatal::Failure) -> ! {
         cores,
         peripherals::usb_serial_jtag::{FatalNote, fatal_note},
     };
-    oer_espressif_staged_runtime::fatal_halt::<oer_esp32s31_hal::platform::Port>(|path| {
+    oer_espressif_staged_runtime::fatal_halt::<oer_esp32s31_hal::platform::Port>(|claim, path| {
         if fatal_note(&Note::runtime_fail(failure.name())) == FatalNote::Written {
             return;
         }
-        fatal::record_failure(failure);
+        fatal::record_failure(claim, failure);
         let cores::AwaitWatchdog { reason: _ } = cores::software_reset(path);
     })
 }

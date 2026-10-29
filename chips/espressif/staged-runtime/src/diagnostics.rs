@@ -18,7 +18,9 @@ where
         column: record.column,
         file: record.file(),
         message: record.message(),
-    })
+    })?;
+    crate::panic::clear_previous(record);
+    Ok(())
 }
 
 /// Writes the retained panic as one frame of the shared note sequence, for an
@@ -41,5 +43,7 @@ where
             message: record.message(),
         },
         write,
-    )
+    )?;
+    crate::panic::clear_previous(record);
+    Ok(())
 }

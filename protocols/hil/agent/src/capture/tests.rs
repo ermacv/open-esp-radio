@@ -189,6 +189,7 @@ fn fake_console_serves_the_same_capture_and_a_typed_refusal() {
     }
     struct Chip;
     impl Platform for Chip {
+        fn boot_evidence_written(&self) {}
         fn boot_evidence(&self) -> BootEvidence {
             BootEvidence {
                 reset_reason: ResetReason::Software,

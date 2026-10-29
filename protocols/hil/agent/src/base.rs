@@ -17,6 +17,9 @@ use oer_hil_protocol::{
 /// What the base module reads from the platform.
 pub trait Platform {
     fn boot_evidence(&self) -> BootEvidence;
+    /// Acknowledge only after the complete boot-evidence frame and newline
+    /// have been written. Enqueuing or a refused write is not success.
+    fn boot_evidence_written(&self);
     fn post_mortem_checkpoints(&self, first: u8) -> PostMortemCheckpoints;
 }
 

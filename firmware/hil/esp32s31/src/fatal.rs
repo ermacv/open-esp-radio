@@ -13,12 +13,13 @@
 //! block records only its [`Failure`] and the hart, then resets the chip.
 
 use oer_diagnostics::Note;
+use oer_espressif_staged_runtime::retained_fault::{self, Claim};
+use oer_diagnostics::fault::{Class, Domain, Record};
 use oer_esp32s31_hal::cores::{StopError, StopTheWorld};
 use oer_esp32s31_hal::platform::interrupt_controller::{self, LineObservation};
 use oer_espressif_staged_runtime::trap::{self, TrapRegisters};
 use oer_riscv::clic::Trigger;
 
-const MAGIC: u32 = u32::from_le_bytes(*b"OFTL");
 #[cfg(feature = "panic-hook")]
 const PANIC: u32 = 1;
 const EXCEPTION: u32 = 2;
@@ -26,12 +27,10 @@ const FAILURE: u32 = 3;
 /// The interrupt matrix's sources, in 32-bit words.
 const SOURCE_WORDS: usize = 6;
 
-/// The retained words: a magic, the record and a checksum over both. Any
-/// bit pattern is a slot; an invalid one reports nothing.
-#[derive(Clone, Copy, bytemuck::Zeroable, bytemuck::Pod)]
+/// Numeric source observations inside the common retained envelope.
+#[derive(Clone, Copy, bytemuck::AnyBitPattern)]
 #[repr(C)]
-struct Slot {
-    magic: u32,
+struct Payload {
     kind: u32,
     hart: u32,
     mcause: u32,
@@ -52,50 +51,19 @@ struct Slot {
     pending: [u32; SOURCE_WORDS],
     /// The sources routed to the vector in `mcause` on this hart.
     routed: [u32; SOURCE_WORDS],
-    checksum: u32,
-}
-
-impl Slot {
-    #[inline(always)]
-    fn sum(&self) -> u32 {
-        let mut sum = 0x811c_9dc5_u32;
-        let mut mix = |word: u32| sum = (sum ^ word).wrapping_mul(0x0100_0193);
-        for word in [
-            self.magic,
-            self.kind,
-            self.hart,
-            self.mcause,
-            self.mepc,
-            self.mtval,
-            self.ra,
-            self.mscratch,
-            self.mtvec,
-            self.mtvt,
-            self.mtvt_slot,
-            self.stage,
-            self.line,
-        ]
-        .into_iter()
-        .chain(self.pending)
-        .chain(self.routed)
-        {
-            mix(word);
-        }
-        sum
-    }
 }
 
 oer_espressif_staged_runtime::retained_static! {
     /// The fatal record. The fatal path takes it without waiting: while the
     /// other hart records its own failure, this one's is skipped.
-    static SLOT: Slot;
+    static SLOT: Record;
 }
 
 /// Record a panic's machine state under `stop`; the platform resets the
 /// chip next.
 #[cfg(feature = "panic-hook")]
-pub(crate) fn record_panic(stage: u32, stop: Result<&StopTheWorld<'_>, StopError>) {
-    record(PANIC, 0, stage, stop);
+pub(crate) fn record_panic(claim: &Claim<'_>, stage: u32, stop: Result<&StopTheWorld<'_>, StopError>) {
+    record(claim, PANIC, 0, stage, stop);
 }
 
 /// A boot check that halts the image.
@@ -191,25 +159,22 @@ impl Failure {
 /// Record a failed boot check for the next boot, whose note the console's
 /// driver kept off the block. Never waits: while the other hart records its
 /// own failure, this one's is skipped.
-pub(crate) fn record_failure(failure: Failure) {
-    let Some(mut slot) = SLOT.try_lock() else {
-        return;
-    };
-    *slot = bytemuck::Zeroable::zeroed();
-    slot.magic = MAGIC;
-    slot.kind = FAILURE;
-    slot.hart = TrapRegisters::read().hart as u32;
-    slot.stage = failure as u32;
-    slot.checksum = slot.sum();
+pub(crate) fn record_failure(claim: &Claim<'_>, failure: Failure) {
+    let mut payload: Payload = bytemuck::Zeroable::zeroed();
+    payload.kind = FAILURE;
+    payload.hart = TrapRegisters::read().hart as u32;
+    payload.stage = failure as u32;
+    commit(claim, payload);
+
 }
 
 /// Record an exception's machine state and its `ra` under `stop`; the
 /// runtime's fatal reset follows.
-pub(crate) fn record_exception(ra: u32, stop: Result<&StopTheWorld<'_>, StopError>) {
-    record(EXCEPTION, ra, 0, stop);
+pub(crate) fn record_exception(claim: &Claim<'_>, ra: u32, stop: Result<&StopTheWorld<'_>, StopError>) {
+    record(claim, EXCEPTION, ra, 0, stop);
 }
 
-fn record(kind: u32, ra: u32, stage: u32, stop: Result<&StopTheWorld<'_>, StopError>) {
+fn record(claim: &Claim<'_>, kind: u32, ra: u32, stage: u32, stop: Result<&StopTheWorld<'_>, StopError>) {
     let TrapRegisters {
         hart,
         mcause,
@@ -252,11 +217,7 @@ fn record(kind: u32, ra: u32, stage: u32, stop: Result<&StopTheWorld<'_>, StopEr
     // The other hart may hold any lock while this one fails, so the slot
     // is taken without waiting; when that hart is recording its own
     // failure, this one's is skipped.
-    let Some(mut slot) = SLOT.try_lock() else {
-        return;
-    };
-    *slot = Slot {
-        magic: MAGIC,
+    let payload = Payload {
         kind,
         hart: hart as u32,
         mcause: mcause as u32,
@@ -271,9 +232,8 @@ fn record(kind: u32, ra: u32, stage: u32, stop: Result<&StopTheWorld<'_>, StopEr
         line,
         pending,
         routed,
-        checksum: 0,
     };
-    slot.checksum = slot.sum();
+    commit(claim, payload);
 }
 
 /// The record's word of an observed line: bit 0 pending, 1 enabled, 2
@@ -298,53 +258,47 @@ fn set(words: &mut [u32; SOURCE_WORDS], source: usize) {
     }
 }
 
-/// Print and clear the record the previous boot left. Call once, early at
-/// boot and before anything can fail.
+/// Print the previous record early at boot; acknowledge only after every
+/// note was successfully written.
 pub(crate) fn report_previous() {
-    let Some(mut slot) = SLOT.try_lock() else {
-        return;
+    if let Some(mut slot) = retained_fault::peek(&SLOT) {
+        let _reported = slot.report(|view| {
+            let payload: Payload = view.decode(Domain::Hil).map_err(|_| ())?;
+            report_payload(payload, |note| crate::usb::early(note).then_some(()).ok_or(()))
+        });
+    }
+}
+fn commit(claim: &Claim<'_>, payload: Payload) {
+    let class = match payload.kind {
+        EXCEPTION => Class::CpuException,
+        FAILURE => Class::ConfigurationBoot,
+        _ => Class::RustPanic,
     };
-    let valid = slot.magic == MAGIC && slot.checksum == slot.sum();
-    slot.magic = 0;
-    if !valid {
-        return;
+    let [p0,p1,p2,p3,p4,p5] = payload.pending;
+    let [r0,r1,r2,r3,r4,r5] = payload.routed;
+    let words = [payload.kind, payload.hart, payload.mcause, payload.mepc, payload.mtval,
+        payload.ra, payload.mscratch, payload.mtvec, payload.mtvt, payload.mtvt_slot,
+        payload.stage, payload.line, p0,p1,p2,p3,p4,p5,r0,r1,r2,r3,r4,r5];
+    if let Ok(record) = Record::encode(class, Domain::Hil, payload.kind,
+        payload.hart, payload.stage, &words) {
+        let _committed = claim.commit(&SLOT, record);
     }
-    let [p0, p1, p2, p3, p4, p5] = slot.pending;
-    let [r0, r1, r2, r3, r4, r5] = slot.routed;
-    let Slot {
-        hart,
-        mcause,
-        mepc,
-        mtval,
-        ra,
-        mscratch,
-        stage,
-        line,
-        mtvec,
-        mtvt,
-        mtvt_slot,
-        ..
-    } = *slot;
-    if slot.kind == FAILURE {
-        if let Some(failure) = Failure::from_word(stage) {
-            crate::usb::early(&Note::fatal_fail(hart, failure.name()));
-        }
-        return;
+}
+fn report_payload(payload: Payload, mut emit: impl FnMut(&Note<'_>) -> Result<(), ()>) -> Result<(), ()> {
+    let [p0,p1,p2,p3,p4,p5] = payload.pending;
+    let [r0,r1,r2,r3,r4,r5] = payload.routed;
+    let Payload { kind, hart, mcause, mepc, mtval, ra, mscratch, stage,
+        line, mtvec, mtvt, mtvt_slot, .. } = payload;
+    if kind == FAILURE {
+        let failure = Failure::from_word(stage).ok_or(())?;
+        return emit(&Note::fatal_fail(hart, failure.name()));
     }
-    if slot.kind == EXCEPTION {
-        crate::usb::early(&Note::fatal_exception(
-            hart, mcause, mepc, mtval, ra, mscratch,
-        ));
+    if kind == EXCEPTION {
+        emit(&Note::fatal_exception(hart, mcause, mepc, mtval, ra, mscratch))?;
     } else {
-        crate::usb::early(&Note::fatal_panic(hart, stage, mcause, mepc, mtval));
+        emit(&Note::fatal_panic(hart, stage, mcause, mepc, mtval))?;
     }
-    crate::usb::early(&Note::fatal_irq_vector(
-        mcause & 0x0fff,
-        line,
-        mtvec,
-        mtvt,
-        mtvt_slot,
-    ));
-    crate::usb::early(&Note::fatal_irq_pending(p0, p1, p2, p3, p4, p5));
-    crate::usb::early(&Note::fatal_irq_routed(r0, r1, r2, r3, r4, r5));
+    emit(&Note::fatal_irq_vector(mcause & 0x0fff, line, mtvec, mtvt, mtvt_slot))?;
+    emit(&Note::fatal_irq_pending(p0,p1,p2,p3,p4,p5))?;
+    emit(&Note::fatal_irq_routed(r0,r1,r2,r3,r4,r5))
 }

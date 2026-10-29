@@ -9,7 +9,7 @@ oer_espressif_staged_runtime::interrupt_table! {
 oer_espressif_staged_runtime::entry!(main, oer_esp32s31_hal::platform::Port);
 
 fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platform::Port>) -> ! {
-    let previous = panic::take_previous::<oer_esp32s31_hal::platform::Port>();
+    let previous = panic::peek_previous::<oer_esp32s31_hal::platform::Port>();
     let Some(root) = Root::take() else {
         fail(oer_diagnostics::name!("root-taken"; 32));
     };
@@ -44,7 +44,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
 }
 
 fn fail<const B: usize>(reason: oer_diagnostics::Name<B>) -> ! {
-    oer_espressif_staged_runtime::fatal_halt::<oer_esp32s31_hal::platform::Port>(|_| {
+    oer_espressif_staged_runtime::fatal_halt::<oer_esp32s31_hal::platform::Port>(|_, _| {
         let _ = usb_serial_jtag::fatal_note(&oer_diagnostics::Note::runtime_fail(reason));
     })
 }

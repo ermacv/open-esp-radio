@@ -56,6 +56,7 @@ std::thread_local! {
 struct Chip;
 
 impl Platform for Chip {
+    fn boot_evidence_written(&self) {}
     fn boot_evidence(&self) -> BootEvidence {
         BootEvidence {
             reset_reason: ResetReason::Software,
@@ -448,7 +449,7 @@ fn a_control_reply_is_not_written_until_the_entire_frame_and_trailer_reach_the_e
         split: false,
         open: false,
     };
-    let mut writing = core::pin::pin!(console.write_message(&mut tx, &message));
+    let mut writing = core::pin::pin!(console.write_message(&mut tx, &message, &Chip));
     let mut written = core::pin::pin!(console.written(sequence));
     let mut context = Context::from_waker(Waker::noop());
     assert_eq!(written.as_mut().poll(&mut context), Poll::Pending);
@@ -483,7 +484,7 @@ fn reset_acknowledgement_requires_the_complete_write_and_keeps_correlation() {
     let message = console.messages.try_receive().unwrap();
     let host = Host::default();
     assert!(host.frames().is_empty());
-    block_on(console.write_message(&mut Endpoint(host.clone()), &message));
+    block_on(console.write_message(&mut Endpoint(host.clone()), &message, &Chip));
     let Poll::Ready(Ok(acknowledged)) = acknowledging.as_mut().poll(&mut cx) else {
         panic!("a complete write releases the reset acknowledgement");
     };
@@ -646,4 +647,62 @@ fn note_length_overflow_refuses_the_whole_line() {
     line.encode(&Note::diag_lost(1));
     assert!(line.framed().is_empty());
     assert_eq!(line.bytes, [0; MAX_NOTE_LINE + 1]);
+}
+
+#[test]
+fn boot_evidence_acknowledges_retained_data_only_after_frame_and_trailer_succeed() {
+    use oer_diagnostics::fault::{Class, Domain, Record};
+    struct Observed {
+        retained: RefCell<Record>,
+    }
+    impl Platform for Observed {
+        fn boot_evidence(&self) -> BootEvidence {
+            Chip.boot_evidence()
+        }
+        fn boot_evidence_written(&self) {
+            self.retained
+                .borrow_mut()
+                .report(|_| Ok::<_, ()>(()))
+                .unwrap();
+        }
+        fn post_mortem_checkpoints(&self, first: u8) -> PostMortemCheckpoints {
+            Chip.post_mortem_checkpoints(first)
+        }
+    }
+    struct Output {
+        refused: usize,
+        calls: usize,
+    }
+    impl embedded_io_async::ErrorType for Output {
+        type Error = embedded_io_async::ErrorKind;
+    }
+    impl Write for Output {
+        async fn write(&mut self, bytes: &[u8]) -> Result<usize, Self::Error> {
+            self.calls += 1;
+            if self.calls == self.refused {
+                Err(embedded_io_async::ErrorKind::Other)
+            } else {
+                Ok(bytes.len())
+            }
+        }
+        async fn flush(&mut self) -> Result<(), Self::Error> {
+            Ok(())
+        }
+    }
+    for refused in [1, 2, 3] {
+        let retained =
+            Record::new(Class::RustPanic, Domain::Postmortem, 2, 0, 0, &[7; 44]).unwrap();
+        let platform = Observed {
+            retained: RefCell::new(retained),
+        };
+        let console = console();
+        console.start(BOOT);
+        let message = Outbound::new(1, 0, 1, &platform.boot_evidence()).unwrap();
+        block_on(console.write_message(&mut Output { refused, calls: 0 }, &message, &platform));
+        if refused <= 2 {
+            assert_eq!(*platform.retained.borrow(), retained);
+        } else {
+            assert!(platform.retained.borrow().peek().is_err());
+        }
+    }
 }
