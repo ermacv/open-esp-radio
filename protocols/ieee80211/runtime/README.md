@@ -55,9 +55,11 @@ identity. The radio and lower-MAC port contracts remain the common boundary.
 its resource bank across stop/restart. It keeps no counters: it holds the
 composition's `O: StationEvents` sink (by default `()`), lends it to each call
 of its station, data machine and receive agreements, and reports lost port
-events, receive drops with their reason, MSDU refusals, unsent frames and group
-key installations as `ServiceEvent`s. The refusals of a received frame's MSDUs
-follow the station's own events of that frame. Its types carry no transport
+events, receive drops with their reason, the MSDUs of a received frame the
+network queue did not take (one `RxMsdusRefused` count per reason and frame,
+after the station's own events of that frame) and group key installations as
+`ServiceEvent`s. A refusal it returns to the application (`MsduRefused`,
+`TxRefused`) is the application's to count and is no event. Its types carry no transport
 encoding. `ServiceOutput` carries only what the
 application acts on: notices, command terminals, refusals that return an
 owner, and the arbiter's access-point commands. `ServiceIo` borrows a concrete

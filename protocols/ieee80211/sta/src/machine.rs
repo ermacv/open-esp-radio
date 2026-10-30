@@ -2055,12 +2055,11 @@ impl ConnectedRsn {
         &mut self,
         eapol: OwnedEapolFrame<DEFAULT_EAPOL_FRAME_CAPACITY>,
         protection: EapolProtection,
-        events: &mut impl EventSink<StaEvent>,
     ) -> Result<(), StaRxError> {
         if self.fault.is_some() {
             return Ok(());
         }
-        match self.receive_eapol(eapol, protection, events) {
+        match self.receive_eapol(eapol, protection) {
             Err(error) => match connected_rsn_fault(error) {
                 Some(reason) => {
                     self.fault = Some(reason);
@@ -2076,7 +2075,6 @@ impl ConnectedRsn {
         &mut self,
         eapol: OwnedEapolFrame<DEFAULT_EAPOL_FRAME_CAPACITY>,
         protection: EapolProtection,
-        events: &mut impl EventSink<StaEvent>,
     ) -> Result<(), RsnConnectedSupplicantError> {
         use oer_ieee80211_rsn::EapolKeyMessage;
         let message = eapol
@@ -2163,12 +2161,12 @@ impl ConnectedRsn {
                 }
             }
         };
-        if let Err(error) = result {
-            if let Some(reason) = connected_rsn_fault(error) {
-                self.fault = Some(reason);
-                return Err(error);
-            }
-            report(events, || StaEvent::RsnInputDropped(RsnDrop::EapolRefused));
+        // A refusal returns to the caller, which counts it.
+        if let Err(error) = result
+            && let Some(reason) = connected_rsn_fault(error)
+        {
+            self.fault = Some(reason);
+            return Err(error);
         }
         self.advance_deferred();
         result
@@ -4696,7 +4694,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                         self.handshake_eapol(handshake, now, eapol, protection)
                     }
                     State::Connected(connected) => {
-                        Self::connected_eapol(connected, eapol, protection, events)?;
+                        Self::connected_eapol(connected, eapol, protection)?;
                         Change::Keep
                     }
                     _ => Change::Keep,
@@ -4966,12 +4964,11 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
         connected: &mut Connected<T, K>,
         eapol: OwnedEapolFrame<DEFAULT_EAPOL_FRAME_CAPACITY>,
         protection: EapolProtection,
-        events: &mut impl EventSink<StaEvent>,
     ) -> Result<(), StaRxError> {
         let Some(rsn) = connected.rsn.as_mut() else {
             return Err(oer_ieee80211_upper_mac::receive::RxDropReason::Protection.into());
         };
-        rsn.receive(eapol, protection, events)
+        rsn.receive(eapol, protection)
     }
 
     fn configure(&mut self, receive: StationReceive<K>) -> Option<Owed<'id, T, K>> {

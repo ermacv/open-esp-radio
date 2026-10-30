@@ -268,8 +268,16 @@ impl Observations {
         self.count(|event| *event == Observation::Service(ServiceEvent::PortEventsLost))
     }
 
-    fn rx_msdus_refused(&self, reason: RxMsduRefusal) -> u32 {
-        self.count(|event| *event == Observation::Service(ServiceEvent::RxMsduRefused(reason)))
+    fn rx_msdus_refused(&self) -> Vec<RxMsdusRefused> {
+        self.events
+            .lock()
+            .unwrap()
+            .iter()
+            .filter_map(|event| match event {
+                Observation::Service(ServiceEvent::RxMsdusRefused(refused)) => Some(*refused),
+                _ => None,
+            })
+            .collect()
     }
 
     fn tokens_lost(&self) -> u32 {
@@ -3163,4 +3171,30 @@ fn product_policy_connects_reconnects_after_peer_departure_and_gracefully_stops(
                 .await;
         })
     });
+}
+
+#[test]
+fn msdu_refusals_of_one_frame_aggregate_by_reason_whatever_their_order() {
+    let mut refused = RxMsdusRefused::default();
+    for refusal in [
+        Some(MsduRefusal::QueueFull),
+        None,
+        Some(MsduRefusal::TooLong),
+        Some(MsduRefusal::QueueFull),
+    ] {
+        count_refusal(&mut refused, refusal);
+    }
+    assert_eq!(
+        refused,
+        RxMsdusRefused {
+            too_long: 1,
+            queue_full: 2
+        }
+    );
+    let mut saturated = RxMsdusRefused {
+        too_long: u16::MAX,
+        queue_full: 0,
+    };
+    count_refusal(&mut saturated, Some(MsduRefusal::TooLong));
+    assert_eq!(saturated.too_long, u16::MAX);
 }

@@ -643,11 +643,9 @@ impl<'id, D: StaDataTokens, K: oer_ieee80211_port::Ieee80211Capabilities, const 
                 buffer,
                 reason: _,
             } => {
+                // The service reported the refusal to the application.
                 let (context, permit) = context.admission(());
                 self.admission.put(context.access_category, permit);
-                if self.is_current(&context) {
-                    report(events, || StaEvent::DataLost(DataLoss::PreparationRefused));
-                }
                 self.tickets.put(ticket, events);
                 self.buffers.put(buffer.into_fresh(D::renew), events);
             }

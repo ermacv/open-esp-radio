@@ -207,13 +207,15 @@ fn invalid_mic_and_non_increasing_counters_never_replace_a_deferred_frame() {
                             reason
                         )))
                     );
-                    assert_eq!(security_drops(&world), 1 + index as u32);
+                    // The refusal is the call's result: the caller counts
+                    // it, and the station reports no second event.
+                    assert_eq!(security_drops(&world), 0);
                 }
                 assert_eq!(world.frames.len(), before);
                 world.end_transmissions(at(52));
                 world.run(at(52));
                 assert_eq!(response_counters(&world, before), [5]);
-                assert_eq!(security_drops(&world), 3);
+                assert_eq!(security_drops(&world), 0);
             });
         }
     }

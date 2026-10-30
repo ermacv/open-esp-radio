@@ -29,11 +29,26 @@
 
 /// Receives the events of the owner it is lent to.
 ///
-/// The event is a `Copy + 'static` value, so a borrow of a frame, a register
-/// block or a lease cannot be an event; `event` returns `()`, so a sink
-/// cannot steer the owner. The trait has no `dyn` form: every report is a
-/// direct call.
-pub trait EventSink<E: Copy + 'static> {
+/// # Events
+///
+/// An event is a `Copy` value of the owner's own type, so it carries no
+/// affine owner (a buffer, a register block, a lease, a permit). Its fields
+/// are values the owner computed or copies of what its caller supplied, such
+/// as a caller's key; an owner's event type holds no borrow of frame bytes or
+/// of state the owner keeps. A borrowed field keeps its lifetime: a sink
+/// cannot retain the event beyond the data it borrows.
+///
+/// # Cost
+///
+/// `event` runs inside the owner's call, on the owner's context. A
+/// production sink completes in bounded time: it does not wait, block, take a
+/// lock, allocate, or do I/O; it may update its own values (a count, a sum,
+/// the last value, a fixed buffer that drops on overflow). A host test sink
+/// may record without these limits. `event` returns `()`, so a sink cannot
+/// steer the owner; returning `()` proves none of the cost limits, which are
+/// each implementation's obligation. The trait has no `dyn` form: every
+/// report is a direct call.
+pub trait EventSink<E: Copy> {
     /// Whether this sink receives events; [`report`] builds an event only
     /// when it does.
     const ENABLED: bool = true;
@@ -43,7 +58,7 @@ pub trait EventSink<E: Copy + 'static> {
 }
 
 /// The sink that keeps nothing.
-impl<E: Copy + 'static> EventSink<E> for () {
+impl<E: Copy> EventSink<E> for () {
     const ENABLED: bool = false;
 
     #[inline(always)]
@@ -51,7 +66,7 @@ impl<E: Copy + 'static> EventSink<E> for () {
 }
 
 /// An owner lends its own loan on to a child.
-impl<E: Copy + 'static, S: EventSink<E> + ?Sized> EventSink<E> for &mut S {
+impl<E: Copy, S: EventSink<E> + ?Sized> EventSink<E> for &mut S {
     const ENABLED: bool = S::ENABLED;
 
     #[inline(always)]
@@ -65,10 +80,7 @@ impl<E: Copy + 'static, S: EventSink<E> + ?Sized> EventSink<E> for &mut S {
 /// `()`. It takes values the owner already computed: no frame parse, clock
 /// read or search.
 #[inline(always)]
-pub fn report<E: Copy + 'static, S: EventSink<E> + ?Sized>(
-    sink: &mut S,
-    event: impl FnOnce() -> E,
-) {
+pub fn report<E: Copy, S: EventSink<E> + ?Sized>(sink: &mut S, event: impl FnOnce() -> E) {
     if S::ENABLED {
         sink.event(event());
     }

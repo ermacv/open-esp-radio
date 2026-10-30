@@ -272,10 +272,7 @@ impl<'owner, K: Copy + Eq, const PEERS: usize, const RESERVATIONS: usize>
         &mut self,
         candidates: impl IntoIterator<Item = AirtimeCandidate<K>>,
         events: &mut impl EventSink<AirtimeObservation<K>>,
-    ) -> Result<Option<AirtimeReservation<'owner, K>>, AirtimeError>
-    where
-        K: 'static,
-    {
+    ) -> Result<Option<AirtimeReservation<'owner, K>>, AirtimeError> {
         let pending = self
             .state
             .pending
@@ -393,10 +390,7 @@ impl<'owner, K: Copy + Eq, const PEERS: usize, const RESERVATIONS: usize>
         completion: AirtimeCompletion<'owner, K, W>,
         charged_micros: NonZeroU32,
         events: &mut impl EventSink<AirtimeObservation<K>>,
-    ) -> Result<W, (AirtimeError, AirtimeCompletion<'owner, K, W>)>
-    where
-        K: 'static,
-    {
+    ) -> Result<W, (AirtimeError, AirtimeCompletion<'owner, K, W>)> {
         let AirtimeCompletion { publication, work } = completion;
         match self.finish(publication.reservation, charged_micros.get(), events) {
             Ok(()) => Ok(work),
@@ -416,10 +410,7 @@ impl<'owner, K: Copy + Eq, const PEERS: usize, const RESERVATIONS: usize>
         &mut self,
         reservation: AirtimeReservation<'owner, K>,
         events: &mut impl EventSink<AirtimeObservation<K>>,
-    ) -> Result<(), (AirtimeError, AirtimeReservation<'owner, K>)>
-    where
-        K: 'static,
-    {
+    ) -> Result<(), (AirtimeError, AirtimeReservation<'owner, K>)> {
         self.finish(reservation, 0, events)
     }
 
@@ -428,10 +419,7 @@ impl<'owner, K: Copy + Eq, const PEERS: usize, const RESERVATIONS: usize>
         reservation: AirtimeReservation<'owner, K>,
         charged: u32,
         events: &mut impl EventSink<AirtimeObservation<K>>,
-    ) -> Result<(), (AirtimeError, AirtimeReservation<'owner, K>)>
-    where
-        K: 'static,
-    {
+    ) -> Result<(), (AirtimeError, AirtimeReservation<'owner, K>)> {
         if reservation.origin != self.origin {
             return Err((AirtimeError::WrongScheduler, reservation));
         }

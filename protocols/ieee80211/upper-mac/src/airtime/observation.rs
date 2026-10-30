@@ -34,9 +34,7 @@ impl<K: Copy + Eq, const PEERS: usize, const RESERVATIONS: usize>
         grant_micros: u32,
         charged_micros: u32,
         events: &mut impl EventSink<AirtimeObservation<K>>,
-    ) where
-        K: 'static,
-    {
+    ) {
         // The reservation count is bounded by `RESERVATIONS`; it is summed
         // only for an enabled sink.
         report(events, || {

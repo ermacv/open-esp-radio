@@ -13,10 +13,16 @@ pub fn receive(&mut self, frame: Frame, events: &mut impl EventSink<Event>) -> D
 
 - The owner takes `&mut impl EventSink<E>` as a call parameter and never
   stores it. It passes the same loan to its children.
-- An event is a `Copy + 'static` value of the owner's own type: a variant or
-  a struct with the fields the decision already computed. It carries no
-  global identifier, encoding or time, and no borrow of frame bytes.
-- `EventSink::event` returns `()`: a sink cannot steer the owner.
+- An event is a `Copy` value of the owner's own type: a variant or a struct
+  with the fields the decision already computed, or copies of what the caller
+  supplied (a caller's key may borrow the caller's data). It carries no
+  affine owner, global identifier, encoding or time, and no borrow of frame
+  bytes or owner state.
+- One fact is reported in one place. A refusal or result the call returns is
+  counted by its caller; an owner reports only what it decides and absorbs.
+- A production sink runs in bounded time on the owner's context: no wait,
+  lock, allocation or I/O. `EventSink::event` returns `()`, so a sink cannot
+  steer the owner; that return proves none of the cost limits.
 - `report` builds the event only when `EventSink::ENABLED` is `true`. `()`
   is the sink that keeps nothing; with it no event argument is evaluated
   and the report point leaves no code.

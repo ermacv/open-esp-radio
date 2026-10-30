@@ -37,9 +37,8 @@ pub use extensions::espressif::esp_now::security::{
     EspNowEncryptedPeerError, EspNowEncryptedPeerId, EspNowEncryptedPeerMutationFailure,
     EspNowEncryptedPeerReplacement, EspNowEncryptedPeerRestoreFailure, EspNowEncryptedPeerTable,
     EspNowEncryptedPeerView, EspNowEncryptedProtocol, EspNowEncryptedReceiveError,
-    EspNowEncryptedRxCandidate, EspNowEncryptedSendError, EspNowLmk, EspNowPacketNumberOutcome,
-    EspNowPeerChange, EspNowPmk, EspNowPmkError, EspNowPmkId, EspNowPmkMutationFailure,
-    EspNowPmkOwner, EspNowPreparedEncryptedV1Tx, EspNowRemovedEncryptedPeer, EspNowReplayOutcome,
-    EspNowRxReplayCandidate, EspNowSecurityEvent, encrypted_peer_destination,
-    esp_now_encrypted_v1_codec_status,
+    EspNowEncryptedRxCandidate, EspNowEncryptedSendError, EspNowLmk, EspNowPeersCleared, EspNowPmk,
+    EspNowPmkError, EspNowPmkId, EspNowPmkMutationFailure, EspNowPmkOwner,
+    EspNowPreparedEncryptedV1Tx, EspNowRemovedEncryptedPeer, EspNowRxReplayCandidate,
+    encrypted_peer_destination, esp_now_encrypted_v1_codec_status,
 };

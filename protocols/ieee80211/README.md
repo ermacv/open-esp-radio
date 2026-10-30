@@ -56,7 +56,7 @@ the portable runtime drives role services over that port.
 | `esp-now/src/extensions/espressif/esp_now/reassembly.rs` | Caller-owned ESP-NOW v2 datagram storage |
 | `sta/src/events.rs` | The station core's events: lost tokens and data, dropped RSN input, scan table outcomes |
 | `upper-mac/src/block_ack/banks.rs` (`RxBlockAckEvent`) | The receive agreements' events: containment, reorder decisions, agreement start and stop |
-| `esp-now/src/extensions/espressif/esp_now/security.rs` (`EspNowSecurityEvent`) | The encrypted peer table's events |
+| `esp-now/src/extensions/espressif/esp_now/security.rs` (`EspNowPeersCleared`) | The keys shutdown cleared, the one fact its result does not return |
 | `runtime/src/station/events.rs` | The station service's events and `StationEvents`, the sink a composition lends the service |
 
 Frame builders, sequence owners and reorder windows use
@@ -122,7 +122,9 @@ ESP-NOW peer table) takes `&mut impl oer_events::EventSink<E>` as a call
 parameter and reports what it dropped, refused or decided as a value of its
 own event type `E`; it never stores the sink. The station service holds the
 sink its composition chose (`O: StationEvents`, by default `()`) and lends it
-to each call of its cores. What an event becomes, the time it is bound to and
+to each call of its cores. One fact is reported in one place: a refusal or
+result a call returns is its caller's to count, and an owner reports only what
+it decides and absorbs. What an event becomes, the time it is bound to and
 how it leaves the device belong to the facade or image; `()` keeps nothing and
 builds no event. No IEEE 802.11 package depends on `oer-trace`, transport
 serialization or HIL. Counts that decide protocol behaviour (packet numbers,

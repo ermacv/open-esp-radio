@@ -66,3 +66,20 @@ fn a_lent_loan_forwards_to_the_callers_sink() {
     assert_eq!(built, 2);
     assert_eq!((kept.dropped, kept.released), (1, 3));
 }
+
+#[test]
+fn an_event_may_carry_a_key_borrowed_from_the_caller() {
+    #[derive(Clone, Copy)]
+    struct Keyed<'a>(&'a str);
+    struct Last<'a>(Option<&'a str>);
+    impl<'a> EventSink<Keyed<'a>> for Last<'a> {
+        fn event(&mut self, event: Keyed<'a>) {
+            self.0 = Some(event.0);
+        }
+    }
+    let key = std::string::String::from("peer");
+    report(&mut (), || Keyed(&key));
+    let mut last = Last(None);
+    report(&mut last, || Keyed(&key));
+    assert_eq!(last.0, Some("peer"));
+}

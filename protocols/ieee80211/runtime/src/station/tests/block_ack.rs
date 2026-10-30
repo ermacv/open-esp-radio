@@ -146,7 +146,36 @@ fn addba_programs_an_owned_bank_before_response_and_reorders_downlink() {
         })
     });
     assert_eq!(counters.rx_frames_dropped(), 0);
-    assert_eq!(counters.rx_msdus_refused(RxMsduRefusal::QueueFull), 0);
+    assert!(counters.rx_msdus_refused().is_empty());
+}
+
+#[test]
+fn a_full_receive_queue_reports_one_aggregate_per_refused_frame() {
+    let counters = run_with(ht_config(), |world| {
+        Box::pin(async move {
+            let mut seen = 0;
+            connected(world, &mut seen).await;
+            // The test's network queue holds eight MSDUs; nothing drains it.
+            for sequence in 1..=10 {
+                world
+                    .air
+                    .receive(&data(sequence, 0, sequence as u8), meta());
+                for _ in 0..20 {
+                    yield_now().await;
+                }
+            }
+            assert_eq!(world.delivered().await.len(), 8);
+            world.command(ServiceCommand::Stop).await;
+        })
+    });
+    assert_eq!(counters.rx_frames_dropped(), 0);
+    assert_eq!(
+        counters.rx_msdus_refused(),
+        [RxMsdusRefused {
+            too_long: 0,
+            queue_full: 1
+        }; 2]
+    );
 }
 
 #[test]

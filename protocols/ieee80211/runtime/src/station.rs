@@ -91,7 +91,7 @@
 mod commands;
 pub mod contract;
 mod events;
-pub use events::{RxDrop, RxMsduRefusal, ServiceEvent, StationEvents};
+pub use events::{RxDrop, RxMsdusRefused, ServiceEvent, StationEvents};
 mod control;
 mod reconnect;
 use commands::CommandCredits;
@@ -123,8 +123,8 @@ use oer_ieee80211_sta::port::{PortDataTokens, PortStaTokens, StationPairwiseKey}
 use oer_ieee80211_sta::{
     data,
     data::{
-        DataInput, DataProtection, DataRefusal, DataReturn, DataTxContext, EthernetFrame,
-        FrameTooLong, Msdu, StaData, TxMsdu,
+        DataInput, DataProtection, DataReturn, DataTxContext, EthernetFrame, FrameTooLong, Msdu,
+        StaData, TxMsdu,
     },
     machine::{
         KEY_DATA_CAPACITY, KeyUnwrapId, Peer, RxBlockAckReply, StaAction, StaCallbacks, StaInput,
@@ -1923,9 +1923,6 @@ impl<
         ) {
             Ok(()) => {}
             Err(reason) => {
-                if reason == DataRefusal::TooLong {
-                    report(&mut self.events, || ServiceEvent::TxMsduTooLong);
-                }
                 // The available-pool observation is dynamic and the public
                 // data input can refuse it. Return the original owned packet,
                 // rather than manufacturing a terminal or losing its bytes.
@@ -2203,7 +2200,6 @@ impl<
                 buffer,
                 reason,
             } => {
-                report(&mut self.events, || ServiceEvent::TxUnsent);
                 let operation = match &context {
                     TxContext::Station(_) => TxOperation::Station,
                     TxContext::Data(_) => TxOperation::Data,
@@ -2363,16 +2359,24 @@ impl<
             COMMAND_DEPTH,
         >,
     ) {
-        let mut refused = Refused::default();
+        let mut refused = RxMsdusRefused::default();
         let result = self.station.receive(
             now,
             frame.bytes(),
             meta,
-            |parts| refused.count(Self::queue_received(io, EthernetFrame::from_parts(parts))),
+            |parts| {
+                count_refusal(
+                    &mut refused,
+                    Self::queue_received(io, EthernetFrame::from_parts(parts)),
+                )
+            },
             &mut self.events,
         );
-        // The application's refusals follow the station's own events.
-        refused.report(&mut self.events);
+        // The sink is the station's during delivery: the frame's refusals
+        // follow its events as one aggregate.
+        if refused != RxMsdusRefused::default() {
+            report(&mut self.events, || ServiceEvent::RxMsdusRefused(refused));
+        }
         if let Err(reason) = result {
             report(&mut self.events, || {
                 ServiceEvent::RxFrameDropped(RxDrop::Station(reason))
@@ -2393,14 +2397,14 @@ impl<
             COMMAND_DEPTH,
         >,
         frame: Result<EthernetFrame, FrameTooLong>,
-    ) -> Option<RxMsduRefusal> {
+    ) -> Option<MsduRefusal> {
         match frame {
             Ok(frame) => io
                 .receive
                 .try_send(frame)
                 .is_err()
-                .then_some(RxMsduRefusal::QueueFull),
-            Err(_) => Some(RxMsduRefusal::TooLong),
+                .then_some(MsduRefusal::QueueFull),
+            Err(_) => Some(MsduRefusal::TooLong),
         }
     }
 
@@ -3132,31 +3136,17 @@ fn stop_disabled<'p, 'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id>(
     }
 }
 
-/// The refusals of one received frame's MSDUs, reported once the station's
-/// receive call has returned the service's event sink.
-#[derive(Default)]
-struct Refused {
-    too_long: u16,
-    queue_full: u16,
+/// Why the service did not deliver one received MSDU.
+#[derive(Clone, Copy)]
+enum MsduRefusal {
+    TooLong,
+    QueueFull,
 }
 
-impl Refused {
-    fn count(&mut self, refusal: Option<RxMsduRefusal>) {
-        match refusal {
-            Some(RxMsduRefusal::TooLong) => self.too_long = self.too_long.saturating_add(1),
-            Some(RxMsduRefusal::QueueFull) => self.queue_full = self.queue_full.saturating_add(1),
-            None => {}
-        }
-    }
-
-    fn report(self, events: &mut impl EventSink<ServiceEvent>) {
-        for (refusal, count) in [
-            (RxMsduRefusal::TooLong, self.too_long),
-            (RxMsduRefusal::QueueFull, self.queue_full),
-        ] {
-            for _ in 0..count {
-                report(events, || ServiceEvent::RxMsduRefused(refusal));
-            }
-        }
+fn count_refusal(refused: &mut RxMsdusRefused, refusal: Option<MsduRefusal>) {
+    match refusal {
+        Some(MsduRefusal::TooLong) => refused.too_long = refused.too_long.saturating_add(1),
+        Some(MsduRefusal::QueueFull) => refused.queue_full = refused.queue_full.saturating_add(1),
+        None => {}
     }
 }

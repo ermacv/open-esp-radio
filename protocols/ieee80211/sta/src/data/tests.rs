@@ -350,7 +350,8 @@ fn a_changed_link_refuses_data_without_reinterpreting_the_encoding_or_losing_res
                 &mut events,
             );
             assert_eq!(data.available(WmmAccessCategory::Voice), capacity);
-            assert_eq!(losses(&events, DataLoss::PreparationRefused), 1);
+            // The service reported the refusal; the data machine adds no event.
+            assert!(events.0.is_empty());
             assert!(data.poll_action().is_none());
             assert_eq!(core::iter::from_fn(|| data.tickets.take()).count(), 2);
             assert_eq!(core::iter::from_fn(|| data.buffers.take()).count(), 2);
@@ -618,7 +619,8 @@ fn preparation_refusal_ends_only_its_msdu_without_a_radio_terminal_or_retry() {
     );
     assert_eq!(data.available(WmmAccessCategory::Voice), capacity);
     assert_eq!(data.available(WmmAccessCategory::Video), capacity - 1);
-    assert_eq!(losses(&events, DataLoss::PreparationRefused), 1);
+    // The service reported the refusal; the data machine adds no event.
+    assert!(events.0.is_empty());
     assert!(data.poll_action().is_none());
     data.returned(
         DataReturn::TxDone {

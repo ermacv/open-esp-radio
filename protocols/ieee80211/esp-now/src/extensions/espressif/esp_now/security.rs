@@ -386,57 +386,20 @@ impl EspNowEncryptedPeerSlot {
 
 /// Fixed-capacity owner of encrypted individual peers and their PN spaces.
 ///
-/// It reports peer-table changes, packet-number allocations and replay
-/// admission as [`EspNowSecurityEvent`]s to the sink each call lends; the
-/// events never carry key material and the table keeps no count of them.
+/// Every change, packet-number allocation and replay step is its call's
+/// result; the table keeps no count of them.
 pub struct EspNowEncryptedPeerTable<const N: usize = ESP_NOW_DEFAULT_ENCRYPTED_PEER_CAPACITY> {
     home_channel: WifiChannel,
     slots: [EspNowEncryptedPeerSlot; N],
     length: usize,
 }
 
-/// What the encrypted peer table did, reported to the caller's sink.
+/// Shutdown cleared the keys of `count` peers, saturated at `u32::MAX`:
+/// [`EspNowEncryptedProtocol::shutdown`] reports it, because it returns only
+/// the configuration.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum EspNowSecurityEvent {
-    /// The table changed, or refused a change.
-    PeerTableChanged(EspNowPeerChange),
-    /// Shutdown dropped the keys of `count` peers, saturated at `u32::MAX`.
-    PeersCleared { count: u32 },
-    /// A peer's transmit packet number was allocated, or was not.
-    TxPacketNumber(EspNowPacketNumberOutcome),
-    /// One step of receive replay admission.
-    Replay(EspNowReplayOutcome),
-}
-
-/// A change of the encrypted peer table, or a refused one.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum EspNowPeerChange {
-    Installed,
-    Replaced,
-    Removed,
-    /// A removal was rolled back into its slot.
-    RemoveRolledBack,
-    /// An install or replacement was refused.
-    MutationRejected,
-}
-
-/// The result of a transmit packet-number allocation.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum EspNowPacketNumberOutcome {
-    Allocated,
-    /// The peer's packet-number space is exhausted.
-    Exhausted,
-}
-
-/// A step of receive replay admission.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum EspNowReplayOutcome {
-    /// A packet number passed the unauthenticated replay check.
-    Candidate,
-    /// An authenticated candidate advanced the replay frontier.
-    Committed,
-    /// A packet number was a replay.
-    Replayed,
+pub struct EspNowPeersCleared {
+    pub count: u32,
 }
 
 impl<const N: usize> EspNowEncryptedPeerTable<N> {
@@ -467,7 +430,6 @@ impl<const N: usize> EspNowEncryptedPeerTable<N> {
     pub fn install(
         &mut self,
         config: EspNowEncryptedPeerConfig,
-        events: &mut impl EventSink<EspNowSecurityEvent>,
     ) -> Result<EspNowEncryptedPeerId, EspNowEncryptedPeerMutationFailure> {
         if config.channel != self.home_channel {
             return Err(self.mutation_failure(
@@ -476,7 +438,6 @@ impl<const N: usize> EspNowEncryptedPeerTable<N> {
                     home: self.home_channel,
                 },
                 config,
-                events,
             ));
         }
 
@@ -488,7 +449,6 @@ impl<const N: usize> EspNowEncryptedPeerTable<N> {
             return Err(self.mutation_failure(
                 EspNowEncryptedPeerError::Duplicate(config.destination),
                 config,
-                events,
             ));
         }
         let Some((index, slot)) = self
@@ -502,14 +462,12 @@ impl<const N: usize> EspNowEncryptedPeerTable<N> {
             } else {
                 EspNowEncryptedPeerError::Full
             };
-            return Err(self.mutation_failure(error, config, events));
+            return Err(self.mutation_failure(error, config));
         };
         let Some(generation) = slot.generation.checked_add(1) else {
-            return Err(self.mutation_failure(
-                EspNowEncryptedPeerError::GenerationExhausted,
-                config,
-                events,
-            ));
+            return Err(
+                self.mutation_failure(EspNowEncryptedPeerError::GenerationExhausted, config)
+            );
         };
         let Some(length) = self.length.checked_add(1).filter(|length| *length <= N) else {
             return Err(self.mutation_failure(
@@ -518,7 +476,6 @@ impl<const N: usize> EspNowEncryptedPeerTable<N> {
                     capacity: N,
                 },
                 config,
-                events,
             ));
         };
         slot.generation = generation;
@@ -527,9 +484,6 @@ impl<const N: usize> EspNowEncryptedPeerTable<N> {
             replay: CcmpReplayFrontier::default(),
         });
         self.length = length;
-        report(events, || {
-            EspNowSecurityEvent::PeerTableChanged(EspNowPeerChange::Installed)
-        });
         Ok(EspNowEncryptedPeerId { index, generation })
     }
 
@@ -539,28 +493,15 @@ impl<const N: usize> EspNowEncryptedPeerTable<N> {
         &mut self,
         peer: EspNowEncryptedPeerId,
         replacement: EspNowEncryptedPeerConfig,
-        events: &mut impl EventSink<EspNowSecurityEvent>,
     ) -> Result<EspNowEncryptedPeerReplacement, EspNowEncryptedPeerMutationFailure> {
         let Some(slot) = self.slots.get_mut(peer.index) else {
-            return Err(self.mutation_failure(
-                EspNowEncryptedPeerError::Stale(peer),
-                replacement,
-                events,
-            ));
+            return Err(self.mutation_failure(EspNowEncryptedPeerError::Stale(peer), replacement));
         };
         if slot.generation != peer.generation {
-            return Err(self.mutation_failure(
-                EspNowEncryptedPeerError::Stale(peer),
-                replacement,
-                events,
-            ));
+            return Err(self.mutation_failure(EspNowEncryptedPeerError::Stale(peer), replacement));
         }
         let Some(installed) = slot.state.as_mut() else {
-            return Err(self.mutation_failure(
-                EspNowEncryptedPeerError::Stale(peer),
-                replacement,
-                events,
-            ));
+            return Err(self.mutation_failure(EspNowEncryptedPeerError::Stale(peer), replacement));
         };
         if replacement.channel != self.home_channel {
             return Err(self.mutation_failure(
@@ -569,7 +510,6 @@ impl<const N: usize> EspNowEncryptedPeerTable<N> {
                     home: self.home_channel,
                 },
                 replacement,
-                events,
             ));
         }
         let installed_destination = installed.config().destination;
@@ -580,15 +520,12 @@ impl<const N: usize> EspNowEncryptedPeerTable<N> {
                     proposed: replacement.destination,
                 },
                 replacement,
-                events,
             ));
         }
         let Some(generation) = peer.generation.checked_add(1) else {
-            return Err(self.mutation_failure(
-                EspNowEncryptedPeerError::GenerationExhausted,
-                replacement,
-                events,
-            ));
+            return Err(
+                self.mutation_failure(EspNowEncryptedPeerError::GenerationExhausted, replacement)
+            );
         };
 
         // Preserve both packet-number spaces across replacement. This is
@@ -596,9 +533,6 @@ impl<const N: usize> EspNowEncryptedPeerTable<N> {
         // supplies the same LMK bytes again.
         let replaced = installed.key.replace_key(replacement);
         slot.generation = generation;
-        report(events, || {
-            EspNowSecurityEvent::PeerTableChanged(EspNowPeerChange::Replaced)
-        });
         Ok(EspNowEncryptedPeerReplacement {
             peer: EspNowEncryptedPeerId {
                 index: peer.index,
@@ -611,7 +545,6 @@ impl<const N: usize> EspNowEncryptedPeerTable<N> {
     pub fn remove(
         &mut self,
         peer: EspNowEncryptedPeerId,
-        events: &mut impl EventSink<EspNowSecurityEvent>,
     ) -> Result<EspNowRemovedEncryptedPeer, EspNowEncryptedPeerError> {
         self.state(peer)?;
         let length = self
@@ -628,9 +561,6 @@ impl<const N: usize> EspNowEncryptedPeerTable<N> {
             .take()
             .ok_or(EspNowEncryptedPeerError::Stale(peer))?;
         self.length = length;
-        report(events, || {
-            EspNowSecurityEvent::PeerTableChanged(EspNowPeerChange::Removed)
-        });
         Ok(EspNowRemovedEncryptedPeer {
             index: peer.index,
             generation: peer.generation,
@@ -645,7 +575,6 @@ impl<const N: usize> EspNowEncryptedPeerTable<N> {
     pub fn restore_removed(
         &mut self,
         removed: EspNowRemovedEncryptedPeer,
-        events: &mut impl EventSink<EspNowSecurityEvent>,
     ) -> Result<EspNowEncryptedPeerId, EspNowEncryptedPeerRestoreFailure> {
         let Some(slot) = self.slots.get(removed.index) else {
             return Err(EspNowEncryptedPeerRestoreFailure {
@@ -716,24 +645,18 @@ impl<const N: usize> EspNowEncryptedPeerTable<N> {
             state: Some(state),
         };
         self.length = length;
-        report(events, || {
-            EspNowSecurityEvent::PeerTableChanged(EspNowPeerChange::RemoveRolledBack)
-        });
         Ok(EspNowEncryptedPeerId { index, generation })
     }
 
     /// Drop and zeroize every LMK. Existing handles become stale immediately;
     /// a later install advances each reused slot generation.
-    pub fn clear_on_shutdown(&mut self, events: &mut impl EventSink<EspNowSecurityEvent>) -> usize {
+    pub fn clear_on_shutdown(&mut self) -> usize {
         let cleared = self
             .slots
             .iter_mut()
             .filter_map(|slot| slot.state.take())
             .count();
         self.length = 0;
-        report(events, || EspNowSecurityEvent::PeersCleared {
-            count: u32::try_from(cleared).unwrap_or(u32::MAX),
-        });
         cleared
     }
 
@@ -777,7 +700,6 @@ impl<const N: usize> EspNowEncryptedPeerTable<N> {
     pub fn allocate_tx_packet_number(
         &mut self,
         peer: EspNowEncryptedPeerId,
-        events: &mut impl EventSink<EspNowSecurityEvent>,
     ) -> Result<EspNowCcmpPacketNumber, EspNowEncryptedPeerError> {
         // The allocator starts after zero, so every number it hands out is
         // an ESP-NOW packet number.
@@ -789,14 +711,8 @@ impl<const N: usize> EspNowEncryptedPeerTable<N> {
             .ok()
             .and_then(|next| EspNowCcmpPacketNumber::new(next.value()).ok());
         let Some(packet_number) = packet_number else {
-            report(events, || {
-                EspNowSecurityEvent::TxPacketNumber(EspNowPacketNumberOutcome::Exhausted)
-            });
             return Err(EspNowEncryptedPeerError::TxPacketNumberExhausted(peer));
         };
-        report(events, || {
-            EspNowSecurityEvent::TxPacketNumber(EspNowPacketNumberOutcome::Allocated)
-        });
         Ok(packet_number)
     }
 
@@ -809,7 +725,6 @@ impl<const N: usize> EspNowEncryptedPeerTable<N> {
         &mut self,
         peer: EspNowEncryptedPeerId,
         packet_number: EspNowCcmpPacketNumber,
-        events: &mut impl EventSink<EspNowSecurityEvent>,
     ) -> Result<EspNowRxReplayCandidate<'_>, EspNowEncryptedPeerError> {
         let state = self
             .slots
@@ -818,26 +733,16 @@ impl<const N: usize> EspNowEncryptedPeerTable<N> {
             .and_then(|slot| slot.state.as_mut())
             .ok_or(EspNowEncryptedPeerError::Stale(peer))?;
         match state.replay.prepare(CcmpPacketNumber::from(packet_number)) {
-            Ok(replay) => {
-                report(events, || {
-                    EspNowSecurityEvent::Replay(EspNowReplayOutcome::Candidate)
-                });
-                Ok(EspNowRxReplayCandidate {
-                    peer,
-                    packet_number,
-                    replay,
-                })
-            }
-            Err(CcmpReplayed { highest, .. }) => {
-                report(events, || {
-                    EspNowSecurityEvent::Replay(EspNowReplayOutcome::Replayed)
-                });
-                Err(EspNowEncryptedPeerError::Replay {
-                    peer,
-                    packet_number,
-                    highest,
-                })
-            }
+            Ok(replay) => Ok(EspNowRxReplayCandidate {
+                peer,
+                packet_number,
+                replay,
+            }),
+            Err(CcmpReplayed { highest, .. }) => Err(EspNowEncryptedPeerError::Replay {
+                peer,
+                packet_number,
+                highest,
+            }),
         }
     }
 
@@ -873,11 +778,7 @@ impl<const N: usize> EspNowEncryptedPeerTable<N> {
         &mut self,
         error: EspNowEncryptedPeerError,
         config: EspNowEncryptedPeerConfig,
-        events: &mut impl EventSink<EspNowSecurityEvent>,
     ) -> EspNowEncryptedPeerMutationFailure {
-        report(events, || {
-            EspNowSecurityEvent::PeerTableChanged(EspNowPeerChange::MutationRejected)
-        });
         EspNowEncryptedPeerMutationFailure { error, config }
     }
 }
@@ -1114,17 +1015,13 @@ impl EspNowRxReplayCandidate<'_> {
 
     /// Commit only after a cryptographic owner has authenticated the MIC of
     /// the exact frame which produced this candidate.
-    pub fn commit_authenticated(self, events: &mut impl EventSink<EspNowSecurityEvent>) {
+    pub fn commit_authenticated(self) {
         self.replay.commit();
-        report(events, || {
-            EspNowSecurityEvent::Replay(EspNowReplayOutcome::Committed)
-        });
     }
 }
 
 /// Portable owner combining one station binding, PMK and encrypted peers.
 ///
-/// Its peer table reports to the sink each call lends.
 pub struct EspNowEncryptedProtocol<const N: usize = ESP_NOW_DEFAULT_ENCRYPTED_PEER_CAPACITY> {
     config: EspNowConfig,
     pmk: EspNowPmkOwner,
@@ -1163,34 +1060,30 @@ impl<const N: usize> EspNowEncryptedProtocol<N> {
     pub fn add_peer(
         &mut self,
         peer: EspNowEncryptedPeerConfig,
-        events: &mut impl EventSink<EspNowSecurityEvent>,
     ) -> Result<EspNowEncryptedPeerId, EspNowEncryptedPeerMutationFailure> {
-        self.peers.install(peer, events)
+        self.peers.install(peer)
     }
 
     pub fn replace_peer(
         &mut self,
         peer: EspNowEncryptedPeerId,
         replacement: EspNowEncryptedPeerConfig,
-        events: &mut impl EventSink<EspNowSecurityEvent>,
     ) -> Result<EspNowEncryptedPeerReplacement, EspNowEncryptedPeerMutationFailure> {
-        self.peers.replace(peer, replacement, events)
+        self.peers.replace(peer, replacement)
     }
 
     pub fn remove_peer(
         &mut self,
         peer: EspNowEncryptedPeerId,
-        events: &mut impl EventSink<EspNowSecurityEvent>,
     ) -> Result<EspNowRemovedEncryptedPeer, EspNowEncryptedPeerError> {
-        self.peers.remove(peer, events)
+        self.peers.remove(peer)
     }
 
     pub fn restore_removed_peer(
         &mut self,
         removed: EspNowRemovedEncryptedPeer,
-        events: &mut impl EventSink<EspNowSecurityEvent>,
     ) -> Result<EspNowEncryptedPeerId, EspNowEncryptedPeerRestoreFailure> {
-        self.peers.restore_removed(removed, events)
+        self.peers.restore_removed(removed)
     }
 
     /// Build all portable TX metadata and burn one peer-local PN. Final frame
@@ -1201,7 +1094,6 @@ impl<const N: usize> EspNowEncryptedProtocol<N> {
         sequence: &mut SequenceCounter,
         random_value: EspNowRandomValue,
         payload: &'payload [u8],
-        events: &mut impl EventSink<EspNowSecurityEvent>,
     ) -> Result<EspNowPreparedEncryptedV1Tx<'payload>, EspNowEncryptedSendError> {
         let payload = EspNowV1Payload::new(payload).map_err(EspNowEncryptedSendError::Wire)?;
         let encoded_len =
@@ -1212,7 +1104,7 @@ impl<const N: usize> EspNowEncryptedProtocol<N> {
             .map_err(EspNowEncryptedSendError::Peer)?;
         let packet_number = self
             .peers
-            .allocate_tx_packet_number(peer, events)
+            .allocate_tx_packet_number(peer)
             .map_err(EspNowEncryptedSendError::Peer)?;
         Ok(EspNowPreparedEncryptedV1Tx {
             peer,
@@ -1236,7 +1128,6 @@ impl<const N: usize> EspNowEncryptedProtocol<N> {
         active_station: BoundVirtualInterface,
         active_channel: WifiChannel,
         bytes: &'frame [u8],
-        events: &mut impl EventSink<EspNowSecurityEvent>,
     ) -> Result<EspNowEncryptedRxCandidate<'_, 'frame>, EspNowEncryptedReceiveError> {
         if active_station != self.config.station() {
             return Err(EspNowEncryptedReceiveError::StationBindingMismatch {
@@ -1264,7 +1155,7 @@ impl<const N: usize> EspNowEncryptedProtocol<N> {
             .ok_or(EspNowEncryptedReceiveError::UnknownPeer(source))?;
         let replay = self
             .peers
-            .prepare_rx_replay(peer, envelope.packet_number(), events)
+            .prepare_rx_replay(peer, envelope.packet_number())
             .map_err(EspNowEncryptedReceiveError::Peer)?;
         Ok(EspNowEncryptedRxCandidate {
             peer,
@@ -1275,8 +1166,11 @@ impl<const N: usize> EspNowEncryptedProtocol<N> {
 
     /// End the security epoch, zeroizing all LMKs and the PMK on drop. The
     /// returned config contains no secret and can seed a later fresh epoch.
-    pub fn shutdown(mut self, events: &mut impl EventSink<EspNowSecurityEvent>) -> EspNowConfig {
-        self.peers.clear_on_shutdown(events);
+    pub fn shutdown(mut self, events: &mut impl EventSink<EspNowPeersCleared>) -> EspNowConfig {
+        let cleared = self.peers.clear_on_shutdown();
+        report(events, || EspNowPeersCleared {
+            count: u32::try_from(cleared).unwrap_or(u32::MAX),
+        });
         self.config
     }
 }

@@ -67,3 +67,52 @@ fn failed_cross_ledger_settlement_emits_nothing_and_drop_does_not_refund() {
     assert_eq!(storage.scheduler().balance_micros(1), Some(0));
     assert_eq!(events.0.len(), 1);
 }
+
+#[test]
+fn a_key_borrowed_from_the_caller_runs_with_and_without_a_sink() {
+    struct Borrowed<'a>(Vec<AirtimeObservation<&'a u8>>);
+    impl<'a> EventSink<AirtimeObservation<&'a u8>> for Borrowed<'a> {
+        fn event(&mut self, event: AirtimeObservation<&'a u8>) {
+            self.0.push(event);
+        }
+    }
+    let peers = [1_u8, 2];
+    let key = &peers[0];
+    let budget = us(100);
+    let mut storage = AirtimeStorage::<&u8, 1>::new(us(1000));
+    let mut scheduler = storage.scheduler();
+    let silent = scheduler
+        .reserve(
+            [AirtimeCandidate {
+                key,
+                minimum_micros: budget,
+            }],
+            &mut (),
+        )
+        .unwrap()
+        .unwrap();
+    scheduler.cancel(silent, &mut ()).unwrap();
+    let mut events = Borrowed(Vec::new());
+    let granted = scheduler
+        .reserve(
+            [AirtimeCandidate {
+                key,
+                minimum_micros: budget,
+            }],
+            &mut events,
+        )
+        .unwrap()
+        .unwrap();
+    scheduler
+        .settle(granted.published().completed(()), budget, &mut events)
+        .unwrap();
+    let actions: Vec<_> = events
+        .0
+        .iter()
+        .map(|event| (*event.key, event.action))
+        .collect();
+    assert_eq!(
+        actions,
+        [(1, AirtimeAction::Granted), (1, AirtimeAction::Settled)]
+    );
+}

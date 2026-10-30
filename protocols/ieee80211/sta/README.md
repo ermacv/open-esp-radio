@@ -51,9 +51,13 @@ sink. The calls that can lose or drop something (`Station::input`,
 `receive`, `poll_action`, `try_block_ack_reply` and the data machine's
 `input`, `returned`, `leave` and `finish`) take the caller's
 `&mut impl EventSink<StaEvent>`. They report a token returned to a full pool
-(`TokenLost`), a lost data MSDU or MPDU with its reason (`DataLost`), a
-dropped RSN input (`RsnInputDropped`) and each beacon or probe response the
-scan table took (`ScanBssObserved`), values of `events::StaEvent`. The scan result keeps its typed
+(`TokenLost`), a lost data MSDU or MPDU with its reason (`DataLost`), an RSN
+input dropped without a returned error (`RsnInputDropped`: key data that did
+not unwrap, fit or install, or a refused unwrap result) and each beacon or
+probe response the scan table took (`ScanBssObserved`), values of
+`events::StaEvent`. A refusal a call returns, such as an EAPOL frame's
+`StaRxError` or a preparation refusal the service passes to `returned`, is
+its caller's to count and is no event. The scan result keeps its typed
 completeness (`ScanSummary::completeness`: `Complete`, or `Truncated` when a
 new BSS found the table full); how many frames or BSSs a scan heard are
 events only.

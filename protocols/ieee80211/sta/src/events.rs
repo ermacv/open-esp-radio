@@ -23,8 +23,6 @@ pub enum StaEvent {
 /// MPDU, without its delivery.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DataLoss {
-    /// A preparation refusal ended it before admission.
-    PreparationRefused,
     /// The hardware outcome of its transmission is unknown.
     Indeterminate,
     /// Its lifetime expired.
