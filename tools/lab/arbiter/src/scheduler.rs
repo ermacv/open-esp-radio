@@ -81,23 +81,24 @@ impl Scheduler {
     /// Resume from the persisted `state` of a service that stopped, at
     /// `now_ms`. The waiting requests left with their clients; every lease
     /// still held ends as abandoned. Its resources, those whose recovery did
-    /// not finish and those never confirmed are recovered before they are
-    /// granted again.
+    /// not finish, those never confirmed, and the ready ones too are
+    /// recovered before they are granted again: a ready board's end state
+    /// held only while the stopped service kept its port open.
     pub(crate) fn resume(mut state: State, stand: Vec<String>, now_ms: u64) -> (Self, Resumed) {
         state.queue.clear();
         let mut recoveries = Vec::new();
         for (resource, readiness) in &mut state.readiness {
-            if let Readiness::Recovering { lease, generation } = readiness {
-                let generation = *generation + 1;
-                *readiness = Readiness::Recovering {
-                    lease: *lease,
-                    generation,
-                };
-                recoveries.push(Recovery {
-                    resource: resource.clone(),
-                    generation,
-                });
-            }
+            let lease = match readiness {
+                Readiness::Recovering { lease, .. } => *lease,
+                Readiness::Ready { .. } => None,
+                Readiness::InUse { .. } | Readiness::Unavailable { .. } => continue,
+            };
+            let generation = readiness.generation() + 1;
+            *readiness = Readiness::Recovering { lease, generation };
+            recoveries.push(Recovery {
+                resource: resource.clone(),
+                generation,
+            });
         }
         let mut scheduler = Self {
             state,

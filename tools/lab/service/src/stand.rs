@@ -40,6 +40,13 @@ const POLL: Duration = Duration::from_millis(50);
 /// How long a stopped command has to exit before it is killed.
 const COMMAND_GRACE: Duration = Duration::from_secs(5);
 
+/// The chips whose boards the service parks in their ROM's download mode
+/// over USB. An ESP32-C5's USB Serial/JTAG reset enters a UART/SDIO download
+/// that no longer serves USB and needs its RST button
+/// (`docs/hardware-errata.md`): its boards are claimed in the queue but have
+/// no confirmed end state.
+const PARKED_CHIPS: [&str; 1] = ["esp32s31"];
+
 /// The stand's drivers.
 pub struct StandDrivers {
     /// The repository the service was built from: the chip profiles.
@@ -74,12 +81,13 @@ impl StandDrivers {
         }
     }
 
-    /// The stand's stateful resources: its boards and, when the stand file
-    /// names a station fixture, the router.
+    /// The stand's stateful resources: its boards of the parked chips and,
+    /// when the stand file names a station fixture, the router.
     pub fn resources(stand: &Stand) -> Vec<String> {
         let mut resources = stand
             .boards
             .iter()
+            .filter(|board| PARKED_CHIPS.contains(&board.chip.as_str()))
             .map(|board| format!("board:{}", board.mac))
             .collect::<Vec<_>>();
         if stand.station_fixture.ssh_target.is_some() {
@@ -120,6 +128,7 @@ impl StandDrivers {
         if let Some(port) = board.current_port(REATTACH) {
             match download(&port) {
                 Ok((serial, line)) if serves_usb_download(&line) => {
+                    eprintln!("lab-service: board {mac} parked: {line}");
                     lock(&self.parked).insert(mac.to_owned(), serial);
                     return Confirmation::Ready;
                 }
@@ -137,6 +146,9 @@ impl StandDrivers {
                         // return: prove the mode with a fresh reset.
                         match download(&port) {
                             Ok((serial, line)) if serves_usb_download(&line) => {
+                                eprintln!(
+                                    "lab-service: board {mac} parked after a power cycle: {line}"
+                                );
                                 lock(&self.parked).insert(mac.to_owned(), serial);
                                 return Confirmation::Ready;
                             }

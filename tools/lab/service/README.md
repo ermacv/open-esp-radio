@@ -62,7 +62,10 @@ as abandoned and recovers its resources before granting them again.
   it, then a reset line the ROM printed after that reset, naming a download
   boot that serves the USB Serial/JTAG (`boot:0x.. (DOWNLOAD(USB/UART0))`).
   A board without that line after a power cycle into download (where its hub
-  port switches) is unavailable. The service keeps a parked board's port
+  port switches) is unavailable. Only ESP32-S31 boards are parked: an
+  ESP32-C5's USB reset enters a download that no longer serves USB
+  (`docs/hardware-errata.md`), so its boards are claimed in the queue
+  without a confirmed end state, and the air check does not cover them. The service keeps a parked board's port
   open: closing a USB Serial/JTAG port can move its reset lines. Operations:
   write and start an image (journaled), reset, the steps of the reset
   ladder, the console as a duplex stream, a watched power cycle and its

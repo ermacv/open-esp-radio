@@ -252,7 +252,7 @@ fn a_restart_ends_held_leases_and_recovers_their_resources_first() {
     assert_eq!(resumed.abandoned.len(), 1);
     assert_eq!(resumed.abandoned[0].id, held);
     assert_eq!(resumed.abandoned[0].outcome, LeaseOutcome::Abandoned);
-    assert_eq!(resumed.recoveries, vec![recovering(&scheduler, A)]);
+    assert!(resumed.recoveries.contains(&recovering(&scheduler, A)));
     assert!(
         scheduler.state.queue.is_empty(),
         "waiters left with their clients"
@@ -260,7 +260,9 @@ fn a_restart_ends_held_leases_and_recovers_their_resources_first() {
     let next = scheduler.enqueue(queued("bob", vec![Claim::board(&A[6..])]), 3);
     assert!(next > held, "lease identities are never reused");
     assert!(grant(&mut scheduler).is_empty());
-    scheduler.confirm(&resumed.recoveries[0], Confirmation::Ready);
+    for recovery in &resumed.recoveries {
+        scheduler.confirm(recovery, Confirmation::Ready);
+    }
     assert_eq!(grant(&mut scheduler), vec![next]);
 }
 
@@ -280,7 +282,12 @@ fn a_restart_runs_an_unfinished_recovery_again_under_a_new_generation() {
 
     let (mut scheduler, resumed) = Scheduler::open(&path, stand(), NOW).unwrap();
     assert!(resumed.abandoned.is_empty());
-    let after = resumed.recoveries[0].clone();
+    let after = resumed
+        .recoveries
+        .iter()
+        .find(|recovery| recovery.resource == A)
+        .unwrap()
+        .clone();
     assert_eq!(after.resource, A);
     assert!(after.generation > before.generation);
     assert!(!scheduler.confirm(&before, Confirmation::Ready));
@@ -329,4 +336,40 @@ fn a_merged_owner_keeps_one_balance() {
     scheduler.merge_owner("old", "new");
     assert!(!scheduler.forget_owner("old"));
     assert!(scheduler.forget_owner("new"));
+}
+
+#[test]
+fn a_restart_confirms_ready_resources_again_and_leaves_unavailable_ones() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("state.json");
+    let mut scheduler = ready();
+    let b = scheduler.release(B);
+    assert!(b.is_none());
+    let first = scheduler.enqueue(queued("ann", vec![Claim::board(&B[6..])]), 1);
+    grant(&mut scheduler);
+    let b = scheduler
+        .end(first, LeaseOutcome::Released, NOW)
+        .unwrap()
+        .recoveries
+        .remove(0);
+    scheduler.confirm(
+        &b,
+        Confirmation::Unavailable {
+            reason: "silent".to_owned(),
+            quiet: false,
+        },
+    );
+    scheduler.save(&path).unwrap();
+    let (scheduler, resumed) = Scheduler::open(&path, stand(), NOW).unwrap();
+    let resources = resumed
+        .recoveries
+        .iter()
+        .map(|recovery| recovery.resource.as_str())
+        .collect::<Vec<_>>();
+    assert!(resources.contains(&A), "a ready board is parked again");
+    assert!(!resources.contains(&B), "an unavailable board waits for a person");
+    assert!(matches!(
+        scheduler.readiness(B),
+        Some(Readiness::Unavailable { .. })
+    ));
 }
