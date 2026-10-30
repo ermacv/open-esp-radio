@@ -98,9 +98,7 @@ fn blink<'a>(
     owner: String,
 ) -> Result<(&'a oer_lab_model::Hub, u8)> {
     let (hub, port) = discover::blink_target(stand, target)?;
-    let mut claims = vec![oer_lab_arbiter::claims::Claim::exclusive(
-        oer_lab_service::stand::hub_port_resource(&hub.usb2, port),
-    )];
+    let mut claims = vec![oer_lab_arbiter::claims::Claim::hub_port(&hub.usb2, port)];
     if let Some(board) = stand.boards.iter().find(|board| {
         board
             .port
@@ -116,7 +114,7 @@ fn blink<'a>(
     )?;
     crate::service::run(
         &mut lease,
-        oer_lab_service::protocol::Operation::HubPort {
+        oer_lab_client::protocol::Operation::HubPort {
             hub: hub.id.clone(),
             port,
             off_secs: discover::BLINK.as_secs(),
@@ -140,7 +138,7 @@ fn verify_power(
     )?;
     let returned = crate::service::run(
         &mut lease,
-        oer_lab_service::protocol::Operation::ProvePowerLoss {
+        oer_lab_client::protocol::Operation::ProvePowerLoss {
             board: board.mac.clone(),
         },
     )?;

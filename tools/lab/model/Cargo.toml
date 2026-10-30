@@ -13,6 +13,7 @@ oer-os-durable = { path = "../../os/durable" }
 oer-chip-profile = { path = "../../chip/profile" }
 oer-espressif-facts = { path = "../../../chips/espressif/facts" }
 serde = { version = "=1.0.229", features = ["derive"] }
+hex = "=0.4.3"
 toml = "=1.1.4"
 
 [dev-dependencies]

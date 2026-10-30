@@ -26,7 +26,8 @@ pub fn stand_file() -> crate::Result<PathBuf> {
     crate::path()
 }
 
-/// The arbiter's state directory.
+/// The LAB service's state directory: its restrictions on the stand, its
+/// balances and records, in `$XDG_STATE_HOME`.
 pub fn arbiter() -> crate::Result<PathBuf> {
     arbiter_in(environment)
 }
@@ -46,7 +47,7 @@ fn socket_in(variable: impl Fn(&str) -> Option<OsString>) -> crate::Result<PathB
 fn arbiter_in(variable: impl Fn(&str) -> Option<OsString>) -> crate::Result<PathBuf> {
     Ok(overridable_in(
         ARBITER_ENV,
-        Base::Cache,
+        Base::State,
         "arbiter",
         variable,
     )?)
@@ -60,16 +61,17 @@ mod tests {
     fn environment(name: &str) -> Option<OsString> {
         match name {
             "XDG_CACHE_HOME" => Some("/cache".into()),
+            "XDG_STATE_HOME" => Some("/state".into()),
             "HOME" => Some("/home/u".into()),
             _ => None,
         }
     }
 
     #[test]
-    fn the_stand_state_lies_below_the_xdg_cache() {
+    fn the_stand_state_lies_below_the_xdg_state_home() {
         assert_eq!(
             arbiter_in(environment).unwrap(),
-            Path::new("/cache/open-esp-radio/arbiter")
+            Path::new("/state/open-esp-radio/arbiter")
         );
     }
 

@@ -1,4 +1,4 @@
-use oer_lab_board::reset::RecoveryStep;
+use oer_lab_model::rom::RecoveryStep;
 
 use super::{Cleanup, Ending, finish};
 use crate::fakes::{Behavior, FakeBoard, IMAGE, ROM_LINE, WAITS, device, power, rts, unmoved};
@@ -256,4 +256,19 @@ fn a_boot_the_probe_saw_without_its_hello_is_no_recovery() {
         "{cleanup:?}"
     );
     assert_eq!(link.and_then(|link| link.running_boot_id()), Some(102));
+}
+
+#[test]
+fn a_lease_the_lab_ended_unconfirmed_keeps_a_clean_device_from_passing() {
+    assert_eq!(Cleanup::Clean.released(Ok(())), Cleanup::Clean);
+    let problem = Cleanup::Clean
+        .released(Err(
+            "board:02:00:00:00:00:0a (its ROM did not answer)".to_owned()
+        ))
+        .problem()
+        .unwrap();
+    assert!(
+        problem.contains("left clean") && problem.contains("its ROM did not answer"),
+        "{problem}"
+    );
 }

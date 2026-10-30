@@ -1,0 +1,23 @@
+[package]
+name = "oer-lab-client"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "The LAB service's IPC protocol and client"
+
+[dependencies]
+oer-lab-arbiter = { path = "../arbiter" }
+oer-lab-model = { path = "../model" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[features]
+# What the service's own tests need of a client: a raw request, and a
+# connection closed the way a dying client closes it.
+testing = []
+
+[lints]
+workspace = true

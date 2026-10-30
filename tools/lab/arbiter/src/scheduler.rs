@@ -3,9 +3,9 @@
 //!
 //! A request is granted when the queue serves it (no conflicting holder, no
 //! conflicting request served before it) and every stateful resource it
-//! holds is ready. A request that uses the air also needs every other board
-//! of the stand quiet: a board the service has not confirmed in an end state
-//! may still radiate. The scheduler runs no hardware and reads no clock: the
+//! holds is ready. A request that uses the air also needs what every other
+//! stateful resource may put on the air known: a board or router the
+//! service has not confirmed in an end state may still radiate. The scheduler runs no hardware and reads no clock: the
 //! service passes the time, runs the recoveries it returns and reports each
 //! driver's confirmation.
 
@@ -55,11 +55,13 @@ pub struct Granted {
     pub resources: Vec<(String, u64)>,
 }
 
-/// A lease that ended: its history record and the recoveries it leaves.
+/// A lease that ended: its history record, the recoveries it leaves, and
+/// each marked resource it left unavailable, with why.
 #[derive(Clone, Debug)]
 pub struct Ended {
     pub record: LeaseRecord,
     pub recoveries: Vec<Recovery>,
+    pub unavailable: Vec<(String, String)>,
 }
 
 /// What a restart found: the leases it ended and the recoveries to run.
@@ -329,6 +331,7 @@ impl Scheduler {
                     Readiness::InUse {
                         lease: id,
                         generation,
+                        marked: None,
                     },
                 );
                 resources.push((resource.to_owned(), generation));
@@ -353,7 +356,8 @@ impl Scheduler {
     }
 
     /// Whether every stateful resource ticket `id` holds is ready and, when
-    /// it uses the air, every other board of the stand is quiet.
+    /// it uses the air, what every other stateful resource of the stand may
+    /// put on the air is known.
     fn ready(&self, id: u64) -> bool {
         let Some(ticket) = self.state.queue.iter().find(|ticket| ticket.id == id) else {
             return false;
@@ -370,20 +374,18 @@ impl Scheduler {
                 Some(Readiness::Ready { .. })
             )
         });
-        let quiet = !readiness::uses_air(&ticket.claims)
+        let air_known = !readiness::uses_air(&ticket.claims)
             || self
                 .stand
                 .iter()
-                .filter(|resource| {
-                    readiness::is_board(resource) && !held.contains(&resource.as_str())
-                })
+                .filter(|resource| !held.contains(&resource.as_str()))
                 .all(|resource| {
                     self.state
                         .readiness
                         .get(resource)
-                        .is_some_and(Readiness::quiet)
+                        .is_some_and(Readiness::emission_known)
                 });
-        ready && quiet
+        ready && air_known
     }
 
     /// End lease `lease` at `now_ms` with `outcome`: its resources start
@@ -398,22 +400,36 @@ impl Scheduler {
             .position(|holder| holder.ticket.id == lease)?;
         let holder = self.state.holders.remove(index);
         let mut recoveries = Vec::new();
+        let mut unavailable = Vec::new();
         for (resource, readiness) in &mut self.state.readiness {
             if let Readiness::InUse {
                 lease: holding,
                 generation,
+                marked,
             } = readiness
                 && *holding == lease
             {
                 let generation = *generation + 1;
-                *readiness = Readiness::Recovering {
-                    lease: Some(lease),
-                    generation,
-                };
-                recoveries.push(Recovery {
-                    resource: resource.clone(),
-                    generation,
-                });
+                match marked.take() {
+                    Some(reason) => {
+                        unavailable.push((resource.clone(), reason.clone()));
+                        *readiness = Readiness::Unavailable {
+                            reason,
+                            emission: crate::readiness::Emission::Unknown,
+                            generation,
+                        };
+                    }
+                    None => {
+                        *readiness = Readiness::Recovering {
+                            lease: Some(lease),
+                            generation,
+                        };
+                        recoveries.push(Recovery {
+                            resource: resource.clone(),
+                            generation,
+                        });
+                    }
+                }
             }
         }
         let held_ms = now_ms.saturating_sub(holder.granted_unix.saturating_mul(1000));
@@ -436,7 +452,45 @@ impl Scheduler {
             run: holder.ticket.run,
             unknown: Default::default(),
         };
-        Some(Ended { record, recoveries })
+        Some(Ended {
+            record,
+            recoveries,
+            unavailable,
+        })
+    }
+
+    /// Mark every stateful resource lease `lease` holds, for `reason`
+    /// (see [`Self::mark`]).
+    pub fn mark_held(&mut self, lease: u64, reason: &str) {
+        let held = self
+            .state
+            .readiness
+            .iter()
+            .filter(|(_, readiness)| {
+                matches!(readiness, Readiness::InUse { lease: holding, .. } if *holding == lease)
+            })
+            .map(|(resource, _)| resource.clone())
+            .collect::<Vec<_>>();
+        for resource in held {
+            self.mark(lease, &resource, reason);
+        }
+    }
+
+    /// Mark `resource`, which lease `lease` holds, as possibly left in a
+    /// state its recovery cannot confirm, for `reason`: the end of the lease
+    /// leaves it unavailable. False when the lease does not hold it.
+    pub fn mark(&mut self, lease: u64, resource: &str, reason: &str) -> bool {
+        match self.state.readiness.get_mut(resource) {
+            Some(Readiness::InUse {
+                lease: holding,
+                marked,
+                ..
+            }) if *holding == lease => {
+                marked.get_or_insert_with(|| reason.to_owned());
+                true
+            }
+            _ => false,
+        }
     }
 
     /// What held leases are due at `now_ms`: a lease held for `limit` ends,
@@ -532,9 +586,9 @@ impl Scheduler {
             Confirmation::Ready => Readiness::Ready {
                 generation: recovery.generation,
             },
-            Confirmation::Unavailable { reason, quiet } => Readiness::Unavailable {
+            Confirmation::Unavailable { reason, emission } => Readiness::Unavailable {
                 reason,
-                quiet,
+                emission,
                 generation: recovery.generation,
             },
         };

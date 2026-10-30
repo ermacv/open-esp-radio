@@ -6,21 +6,24 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 publish = false
-description = "The LAB service: the one owner of the stand's leases and hardware access, its IPC protocol and client"
+description = "The LAB service: the one owner of the stand's leases and hardware access"
 
 [dependencies]
+oer-chip-profile = { path = "../../chip/profile" }
 oer-image-bundle = { path = "../../image/bundle" }
 oer-lab-arbiter = { path = "../arbiter" }
+oer-lab-client = { path = "../client" }
 oer-lab-board = { path = "../board" }
 oer-lab-model = { path = "../model" }
 oer-lab-router = { path = "../router" }
 oer-os-durable = { path = "../../os/durable" }
 oer-os-process = { path = "../../os/process" }
-rustix = { version = "=1.1.4", features = ["fs", "net", "pty", "termios"] }
+rustix = { version = "=1.1.4", features = ["event", "fs", "net", "process", "pty", "termios"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
 [dev-dependencies]
+oer-lab-client = { path = "../client", features = ["testing"] }
 tempfile = "3"
 
 [lints]

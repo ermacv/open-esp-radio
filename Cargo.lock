@@ -2256,9 +2256,8 @@ dependencies = [
  "oer-image-bundle",
  "oer-image-checks",
  "oer-lab-arbiter",
- "oer-lab-board",
+ "oer-lab-client",
  "oer-lab-model",
- "oer-lab-service",
  "oer-os-process",
  "postcard-schema",
  "serde",
@@ -2671,7 +2670,6 @@ dependencies = [
 name = "oer-lab-arbiter"
 version = "0.1.0"
 dependencies = [
- "oer-lab-board",
  "oer-lab-model",
  "oer-os-durable",
  "oer-os-process",
@@ -2702,12 +2700,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-lab-client"
+version = "0.1.0"
+dependencies = [
+ "oer-lab-arbiter",
+ "oer-lab-model",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "oer-lab-fixture"
 version = "0.1.0"
 dependencies = [
  "clap",
  "libc",
  "oer-ieee80211-wire",
+ "oer-lab-model",
  "oer-os-durable",
  "oer-os-process",
  "oer-time",
@@ -2723,6 +2732,7 @@ dependencies = [
 name = "oer-lab-model"
 version = "0.1.0"
 dependencies = [
+ "hex",
  "oer-chip-profile",
  "oer-espressif-facts",
  "oer-os-durable",
@@ -2752,9 +2762,11 @@ dependencies = [
 name = "oer-lab-service"
 version = "0.1.0"
 dependencies = [
+ "oer-chip-profile",
  "oer-image-bundle",
  "oer-lab-arbiter",
  "oer-lab-board",
+ "oer-lab-client",
  "oer-lab-model",
  "oer-lab-router",
  "oer-os-durable",
@@ -3050,10 +3062,8 @@ dependencies = [
  "oer-image-checks",
  "oer-image-esp-idf",
  "oer-lab-arbiter",
- "oer-lab-board",
+ "oer-lab-client",
  "oer-lab-model",
- "oer-lab-router",
- "oer-lab-service",
  "oer-os-command-tree",
  "oer-os-process",
  "oer-trace",
@@ -3086,11 +3096,9 @@ dependencies = [
  "oer-chip-profile",
  "oer-espressif-facts",
  "oer-lab-arbiter",
- "oer-lab-board",
+ "oer-lab-client",
  "oer-lab-fixture",
  "oer-lab-model",
- "oer-lab-router",
- "oer-lab-service",
  "oer-os-command-tree",
  "oer-os-durable",
  "oer-os-process",

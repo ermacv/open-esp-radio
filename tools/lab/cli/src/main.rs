@@ -61,9 +61,6 @@ enum StandCommand {
     Fixture(FixtureCli),
     #[command(name = "__command-tree", hide = true)]
     CommandTree,
-    /// Run the LAB service; its systemd user unit starts it.
-    #[command(name = "__serve", hide = true)]
-    Serve,
 }
 
 /// `cargo stand fixture install|build-hostapd|build-udhcpc`.
@@ -125,8 +122,8 @@ fn run() -> Result<ExitCode> {
             Ok(ExitCode::SUCCESS)
         }
         Some(StandCommand::Fixtures) => {
-            // The router and the air observer are reached over SSH, which
-            // the service owns: a probe holds the router shared.
+            // The equipment reached over SSH is the service's: its probe
+            // holds the router shared. The host's own radios are fixtures.
             let mut lease = service::lease(
                 options.owner(&ctx)?,
                 String::from("stand fixtures"),
@@ -134,11 +131,15 @@ fn run() -> Result<ExitCode> {
                     oer_lab_arbiter::readiness::ROUTER,
                 )],
             )?;
-            let report = service::run(
-                &mut lease,
-                oer_lab_service::protocol::Operation::ProbeFixtures,
+            let remote: Vec<oer_lab_model::equipment::Fixture> = serde_json::from_value(
+                service::run(&mut lease, oer_lab_client::protocol::Operation::ProbeRouter)?,
             )?;
-            print!("{}", report.as_str().unwrap_or_default());
+            lease.release()?;
+            let local = oer_lab_fixture::local::probe_local(&oer_lab_model::paths::stand_file()?);
+            println!("Equipment over SSH (the LAB service):");
+            print!("{}", oer_lab_model::equipment::describe(&remote));
+            println!("Host fixtures:");
+            print!("{}", oer_lab_model::equipment::describe(&local));
             Ok(ExitCode::SUCCESS)
         }
         Some(StandCommand::Fixture(FixtureCli::Install {
@@ -150,15 +151,11 @@ fn run() -> Result<ExitCode> {
             Ok(ExitCode::SUCCESS)
         }
         Some(StandCommand::Fixture(FixtureCli::BuildHostapd)) => {
-            oer_lab_router::hostapd::build(&ctx.root)?;
+            oer_lab_fixture::hostapd::build(&ctx.root)?;
             Ok(ExitCode::SUCCESS)
         }
         Some(StandCommand::Fixture(FixtureCli::BuildUdhcpc)) => {
-            oer_lab_router::udhcpc::build(&ctx.root)?;
-            Ok(ExitCode::SUCCESS)
-        }
-        Some(StandCommand::Serve) => {
-            oer_lab_service::run::serve(ctx.root.clone())?;
+            oer_lab_fixture::udhcpc::build(&ctx.root)?;
             Ok(ExitCode::SUCCESS)
         }
         Some(StandCommand::CommandTree) => {

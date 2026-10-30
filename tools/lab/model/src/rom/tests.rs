@@ -129,7 +129,5 @@ fn a_rom_that_boots_from_flash_counts_as_loadable_too() {
             reset_line: FLASH_BOOT.into()
         }
     );
-    assert!(
-        crate::console::is_reset_line(DOWNLOAD) && !crate::console::is_reset_line("garbled output")
-    );
+    assert!(is_reset_line(DOWNLOAD) && !is_reset_line("garbled output"));
 }

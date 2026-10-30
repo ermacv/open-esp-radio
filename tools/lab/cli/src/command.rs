@@ -4,7 +4,7 @@
 use std::{ffi::OsString, path::Path};
 
 use crate::Result;
-use oer_lab_service::protocol::{Operation, Request};
+use oer_lab_client::protocol::Request;
 use oer_os_process::Checkout;
 
 #[derive(clap::Args)]
@@ -295,7 +295,7 @@ struct FlashedArgs {
 impl FlashedArgs {
     fn record(
         &self,
-        client: &mut oer_lab_service::client::Client,
+        client: &mut oer_lab_client::client::Client,
         stand: &oer_lab_model::Stand,
         owner: String,
         origin: String,
@@ -428,50 +428,15 @@ pub(crate) fn lease(
         .collect::<Vec<_>>();
     environment.retain(|(key, _)| key != oer_lab_arbiter::owner::OWNER_ENV);
     environment.push((oer_lab_arbiter::owner::OWNER_ENV.to_owned(), owner.clone()));
-    // On a terminal the command gets a pseudo-terminal of its size, and this
-    // terminal passes every key through until the command ends.
-    let terminal = terminal_size();
-    let _raw = terminal.and_then(|_| RawTerminal::enter());
-    let running = client.start(Operation::Command {
-        argv: cli
-            .command
+    let result = crate::service::command(
+        &mut client,
+        cli.command
             .iter()
             .map(|argument| argument.to_string_lossy().into_owned())
             .collect(),
-        directory: std::env::current_dir()?.display().to_string(),
         environment,
-        terminal,
-    })?;
-    // A cancelled lease command stops its command through the service.
-    let stop = running.input();
-    let done = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
-    let watching = done.clone();
-    std::thread::spawn(move || {
-        while !watching.load(std::sync::atomic::Ordering::SeqCst) {
-            if oer_os_process::cancellation_requested() {
-                let _ = stop.cancel();
-                return;
-            }
-            std::thread::sleep(std::time::Duration::from_millis(200));
-        }
-    });
-    let input = running.input();
-    std::thread::spawn(move || {
-        use std::io::Read as _;
-        let mut stdin = std::io::stdin();
-        let mut buffer = vec![0u8; 4096];
-        while let Ok(read) = stdin.read(&mut buffer) {
-            let Some(chunk) = buffer.get(..read).filter(|chunk| !chunk.is_empty()) else {
-                break;
-            };
-            if input.send(chunk).is_err() {
-                return;
-            }
-        }
-        let _ = input.close();
-    });
-    let result = running.finish(&mut std::io::stdout());
-    done.store(true, std::sync::atomic::Ordering::SeqCst);
+        false,
+    );
     if let Some(reason) = client.revoked() {
         eprintln!("stand: the lease ended: {reason}");
         return Ok(std::process::ExitCode::from(HARD_LIMIT_EXIT));
@@ -486,57 +451,20 @@ pub(crate) fn lease(
             eprintln!("stand: the command failed; its flash is not recorded");
         }
     }
+    // The lease ends once the service confirmed what the command used.
+    let released = client.release();
     if oer_os_process::cancellation_requested() {
         return Ok(std::process::ExitCode::from(130));
     }
-    Ok(std::process::ExitCode::from(
-        code.as_u64()
-            .and_then(|code| u8::try_from(code).ok())
-            .unwrap_or(1),
-    ))
-}
-
-/// The size of the terminal this command runs on, when its input and output
-/// are one.
-fn terminal_size() -> Option<oer_lab_service::protocol::TerminalSize> {
-    use std::io::IsTerminal as _;
-    if !std::io::stdin().is_terminal() || !std::io::stdout().is_terminal() {
-        return None;
+    let code = code
+        .as_u64()
+        .and_then(|code| u8::try_from(code).ok())
+        .unwrap_or(1);
+    if let Err(reason) = released {
+        eprintln!("stand: {reason}");
+        return Ok(std::process::ExitCode::from(code.max(1)));
     }
-    let size = rustix::termios::tcgetwinsize(std::io::stdout()).ok()?;
-    Some(oer_lab_service::protocol::TerminalSize {
-        rows: size.ws_row,
-        columns: size.ws_col,
-    })
-}
-
-/// This terminal in raw mode until dropped, so the leased command's own
-/// terminal handles every key.
-struct RawTerminal(rustix::termios::Termios);
-
-impl RawTerminal {
-    fn enter() -> Option<Self> {
-        let saved = rustix::termios::tcgetattr(std::io::stdin()).ok()?;
-        let mut raw = saved.clone();
-        raw.make_raw();
-        rustix::termios::tcsetattr(
-            std::io::stdin(),
-            rustix::termios::OptionalActions::Now,
-            &raw,
-        )
-        .ok()?;
-        Some(Self(saved))
-    }
-}
-
-impl Drop for RawTerminal {
-    fn drop(&mut self) {
-        let _ = rustix::termios::tcsetattr(
-            std::io::stdin(),
-            rustix::termios::OptionalActions::Now,
-            &self.0,
-        );
-    }
+    Ok(std::process::ExitCode::from(code))
 }
 
 /// `cargo stand board reset|check|console|soak`.

@@ -20,12 +20,12 @@ use oer_lab_arbiter::{
     claims::Claim,
     journal::{BoardEventKind, ImageIdentity},
 };
-use oer_lab_board::reset::{Ladder, RecoveryStep, Rung};
-use oer_lab_model::{BoardRole, Stand};
-use oer_lab_service::{
+use oer_lab_client::{
     client::{Client, Running},
     protocol::{FlashVia, LeaseRequest, Operation, Request},
 };
+use oer_lab_model::rom::{Ladder, RecoveryStep, Rung};
+use oer_lab_model::{BoardRole, Stand};
 
 use crate::Scenario;
 use crate::finish::{self, Cleanup, Ending, Waits};
@@ -110,6 +110,13 @@ impl Session {
     /// The built image's identity, which the board must report.
     pub(crate) fn image_crc32(&self) -> u32 {
         self.image_crc32
+    }
+
+    /// Close the link and finish the lease: the LAB service stops its
+    /// operations and confirms the board's end state, or says why not.
+    pub(crate) fn release(&mut self) -> std::result::Result<(), String> {
+        drop(self.link.take());
+        self.board.client().release()
     }
 }
 
@@ -239,7 +246,7 @@ impl Rung for ServiceRung<'_> {
         self.step
     }
 
-    fn reset(&self) -> oer_lab_board::Result<Option<String>> {
+    fn reset(&self) -> oer_lab_model::Result<Option<String>> {
         Ok(self.board.rung(self.step)?)
     }
 }
@@ -262,18 +269,18 @@ impl finish::Board for StandBoard {
             })
             .collect::<Vec<_>>();
         let download = steps.contains(&RecoveryStep::DownloadEntry).then_some(
-            || -> oer_lab_board::Result<String> {
+            || -> oer_lab_model::Result<String> {
                 Ok(self.rung(RecoveryStep::DownloadEntry)?.unwrap_or_default())
             },
         );
-        oer_lab_board::reset::climb(
+        oer_lab_model::rom::climb(
             &rungs
                 .iter()
                 .map(|rung| rung as &dyn Rung)
                 .collect::<Vec<_>>(),
             download
                 .as_ref()
-                .map(|entry| entry as &dyn Fn() -> oer_lab_board::Result<String>),
+                .map(|entry| entry as &dyn Fn() -> oer_lab_model::Result<String>),
             &String::new,
             answers,
         )

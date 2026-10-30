@@ -10,8 +10,8 @@ use std::{
 use oer_lab_model as stand;
 
 use oer_lab_arbiter::claims::{AIR, Claim};
-use oer_lab_service::client::{Client, Running};
-use oer_lab_service::protocol::{FlashVia, LeaseRequest, Operation};
+use oer_lab_client::client::{Client, Running};
+use oer_lab_client::protocol::{FlashVia, LeaseRequest, Operation};
 
 use crate::image;
 use oer_image_build::{Check, Enforced, Result};
@@ -53,8 +53,9 @@ fn board(selector: &str) -> Result<stand::Board> {
 }
 
 /// A lease of `board` and the air from the LAB service, which runs every
-/// operation on it. When the lease ends, the service parks the board in its
-/// ROM's download mode.
+/// operation on it. A command that ends releases it and fails when the
+/// service could not bring the board back to its end state (its ROM's
+/// download mode or, for a board without a USB reset, its power off).
 fn lease(board: &stand::Board) -> Result<Client> {
     let command = std::env::args().collect::<Vec<_>>().join(" ");
     let mut client = Client::open(&command)?;
@@ -97,16 +98,16 @@ fn write_image(root: &Path, image: &str, board: &stand::Board, client: &mut Clie
         &mut std::io::sink(),
         None,
     )?;
-    let receipt: oer_lab_board::image::Receipt = serde_json::from_value(
-        written
-            .get("receipt")
-            .cloned()
-            .ok_or("the service returned no receipt")?,
-    )?;
-    for segment in &receipt.segments {
+    let segments = written
+        .pointer("/receipt/segments")
+        .and_then(serde_json::Value::as_array)
+        .ok_or("the service returned no receipt")?;
+    for segment in segments {
         eprintln!(
             "fw:   {:<16} {:#08x} {:>8} bytes",
-            segment.description, segment.offset, segment.bytes
+            segment["description"].as_str().unwrap_or("?"),
+            segment["offset"].as_u64().unwrap_or_default(),
+            segment["bytes"].as_u64().unwrap_or_default()
         );
     }
     Ok(())
@@ -255,6 +256,7 @@ pub fn run(root: &Path, image: &str, selector: &str, timeout: Duration) -> Resul
     let _ = stop.cancel();
     drop(lines);
     eprintln!("fw: log {}", log_path.display());
+    client.release()?;
     Ok(match verdict {
         Some(Verdict::Pass) => ExitCode::SUCCESS,
         Some(Verdict::Fail) => ExitCode::from(1),
@@ -292,44 +294,26 @@ pub fn monitor(selector: &str, start: bool) -> Result<()> {
 }
 
 pub fn list_boards() -> Result<()> {
-    let path = stand::path()?;
-    let stand = stand::Stand::load(&path)
-        .map_err(|error| eprintln!("warning: {error}"))
-        .ok();
-    let report = oer_lab_router::hub::status()
-        .map_err(|error| eprintln!("warning: {error}"))
-        .unwrap_or_default();
-    let devices = std::path::Path::new(oer_lab_router::hub::SYSFS_USB_DEVICES);
+    let boards = Client::open("cargo fw boards")?.inventory()?;
     println!(
         "{:<10} {:<18} {:<14} {:<13} {:<16} POWER-CYCLE",
         "BOARD", "MAC", "USB", "TTY", "HUB PORT"
     );
-    for attached in oer_lab_router::boards::attached() {
-        let board = stand
-            .as_ref()
-            .and_then(|stand| stand.board_by_mac(&attached.mac));
-        let id = board.map_or("-", |board| board.id.as_str());
-        let detected = oer_lab_router::hub::parent(&attached.location)
-            .map_or_else(|| "-".to_owned(), |(hub, port)| format!("{hub}:{port}"));
-        let power = match oer_lab_router::hub::power_port(
-            devices,
-            &report,
-            stand.as_ref(),
-            &attached.location,
-        ) {
-            Ok(_) => "yes".to_owned(),
-            Err(why) => format!("no: {why}"),
-        };
-        if let Some(warning) = board.and_then(|board| board.ignored_port(&detected)) {
+    for board in boards {
+        if let Some(warning) = &board.warning {
             eprintln!("warning: {warning}");
         }
-        let tty = attached
-            .tty
-            .as_ref()
-            .map_or_else(|| "-".to_owned(), |tty| tty.display().to_string());
         println!(
-            "{id:<10} {:<18} {:<14} {tty:<13} {detected:<16} {power}",
-            attached.mac, attached.location
+            "{:<10} {:<18} {:<14} {:<13} {:<16} {}",
+            board.id.as_deref().unwrap_or("-"),
+            board.mac,
+            board.location,
+            board.tty.as_deref().unwrap_or("-"),
+            board.hub_port.as_deref().unwrap_or("-"),
+            match &board.power {
+                Ok(()) => "yes".to_owned(),
+                Err(why) => format!("no: {why}"),
+            }
         );
     }
     Ok(())
@@ -347,7 +331,7 @@ pub fn power_cycle(selector: &str) -> Result<()> {
         None,
     )?;
     eprintln!("fw: {} is back after {after} ms", board.id);
-    Ok(())
+    Ok(client.release()?)
 }
 
 /// The checks enforced for a product or an explicitly diagnostic probe build.
@@ -387,7 +371,9 @@ pub fn build(root: &Path, image_name: &str, binary: Option<&str>, diagnostic: bo
 /// in its ROM's download mode. `cargo fw monitor --start` runs it again.
 pub fn flash_image(root: &Path, image_name: &str, selector: &str) -> Result<()> {
     let board = board(selector)?;
-    write_image(root, image_name, &board, &mut lease(&board)?)
+    let mut client = lease(&board)?;
+    write_image(root, image_name, &board, &mut client)?;
+    Ok(client.release()?)
 }
 
 #[cfg(test)]

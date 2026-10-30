@@ -5,8 +5,9 @@
 //! needs a lease that holds the router. The stand file names the router and
 //! its AP; its secrets never leave the service.
 
-use std::{net::Ipv4Addr, sync::atomic::Ordering, time::Duration};
+use std::{sync::atomic::Ordering, time::Duration};
 
+use oer_lab_client::protocol::RouterOperation;
 use oer_lab_model::Stand;
 use oer_lab_router::{
     mac::Mac,
@@ -15,7 +16,7 @@ use oer_lab_router::{
     station::{self, stream},
     station_wpa2,
 };
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 use crate::service::OperationIo;
 
@@ -23,39 +24,6 @@ type Result<T> = std::result::Result<T, String>;
 
 /// How long an observer looks at its stop flag between checks.
 const POLL: Duration = Duration::from_millis(100);
-
-/// One operation on the lab router.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(tag = "router", rename_all = "kebab-case", deny_unknown_fields)]
-pub enum RouterOperation {
-    /// Apply the WPA2 station profile with `ssid` and `passphrase` to the
-    /// stand's AP. Result: the applied profile's description.
-    ApplyStationProfile { ssid: String, passphrase: String },
-    /// Check that the router has its observation tools.
-    VerifyObservationTools,
-    /// Check that the AP's runtime state matches a WPA2 profile.
-    VerifyRuntime,
-    /// The AP's group rekey interval, in seconds.
-    GroupRekeySeconds,
-    /// What the AP knows of station `mac`.
-    Station { mac: String },
-    /// Station `mac`'s DHCP lease, if it has one.
-    Lease { mac: String },
-    /// `count` pings from the router to `address`.
-    Ping { address: Ipv4Addr, count: u16 },
-    /// Ask the AP to deauthenticate station `mac`.
-    Deauthenticate { mac: String },
-    /// Prepare the routed network's check. Result: the state before.
-    PrepareNetwork,
-    /// Check the routed network against its state `before`.
-    VerifyNetwork { before: String },
-    /// Watch `count` echo requests to `address` and their replies until
-    /// the operation stops or the observer ends. Result: the echoes.
-    CaptureEchoes { address: Ipv4Addr, count: u16 },
-    /// Watch the AP's log for station `mac`'s departure until the
-    /// operation stops. Result: what it saw.
-    Departure { mac: String },
-}
 
 /// The router the stand file names, and its AP.
 struct Fixture {
@@ -190,10 +158,23 @@ fn wait(io: &OperationIo) {
     }
 }
 
-/// Whether the router answers over SSH: its end state after a lease, since
-/// its observers end by the timeouts they run under and the next run applies
-/// its own profile.
-pub(crate) fn answers(stand: &Stand) -> Result<()> {
+/// The router's end state after a lease: it answers over SSH and its
+/// access point's interface runs as an access point, as the stand file
+/// names it. Its observers end by the timeouts they run under, and the next
+/// run applies its own profile; what else a command could have changed is
+/// marked before it runs, never guessed from here.
+pub(crate) fn end_state(stand: &Stand) -> Result<()> {
     let mut router = fixture(stand)?;
-    router.ssh.run("true").map(drop)
+    let script = format!(
+        "iw dev {} info | sed -n 's/^[[:space:]]*type //p'",
+        oer_lab_router::router::quote(&router.interface)?
+    );
+    let kind = router.ssh.run(&script)?;
+    if kind.trim() != "AP" {
+        return Err(format!(
+            "its access point's interface runs as `{}`, not as an access point",
+            kind.trim()
+        ));
+    }
+    Ok(())
 }

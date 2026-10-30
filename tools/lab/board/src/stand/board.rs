@@ -18,7 +18,7 @@ use crate::console;
 use crate::openocd::Openocd;
 use crate::port::{Port, retrying};
 use crate::reset;
-use crate::reset::{RecoveryStep, ResetPath, Rung};
+use oer_lab_model::rom::{RecoveryStep, ResetPath, Rung};
 
 use crate::power::{HubPower, PowerCycle, PowerLoss, ResetCauseField};
 
@@ -110,6 +110,17 @@ impl Board {
     /// Whether the board resets by its hub port's power.
     pub fn has_power(&self) -> bool {
         self.power.is_some()
+    }
+
+    /// The switchable hub port that powers the board, found on the host
+    /// while the board is attached to it, when its ladder includes `power`.
+    pub fn hub_power(&self) -> Option<&HubPower> {
+        self.power.as_ref()
+    }
+
+    /// The ways the stand file lets the stand reset the board, in order.
+    pub fn resets(&self) -> &[oer_lab_model::ResetStep] {
+        &self.reset
     }
 }
 
@@ -271,7 +282,7 @@ impl Board {
         eprintln!(
             "hil: board `{}` was not on USB; its ROM now waits for the flash: {}",
             self.reference.id,
-            reset::reset_line(&banner)
+            oer_lab_model::rom::reset_line(&banner)
                 .as_deref()
                 .unwrap_or("no reset line")
         );
@@ -310,8 +321,8 @@ impl Board {
         // before the port returns: read the console again once it is back.
         Ok(banner
             .as_deref()
-            .and_then(reset::reset_line)
-            .or_else(|| reset::reset_line(&self.console(BANNER))))
+            .and_then(oer_lab_model::rom::reset_line)
+            .or_else(|| oer_lab_model::rom::reset_line(&self.console(BANNER))))
     }
 
     /// The board's console read for `watch` without resetting it, once its

@@ -6,7 +6,9 @@
 //! operations and waits until each one has returned; only then do its
 //! resources go to their drivers' recovery, and only a confirmed recovery
 //! lets the scheduler grant them again. A lost client therefore releases
-//! nothing while its hardware work still runs.
+//! nothing while its hardware work still runs. A client that releases its
+//! lease hears the end once every recovery ended, with each resource left
+//! unavailable.
 
 use std::{
     collections::{BTreeMap, VecDeque},
@@ -29,15 +31,18 @@ use oer_lab_arbiter::{
     scheduler::{Due, Queued, Scheduler},
 };
 
-use crate::protocol::{
+use oer_lab_client::protocol::{
     Frame, HolderStatus, LeaseRequest, Operation, PROTOCOL, Reply, Request, Status,
 };
 
 /// Output an operation may have queued for its reader; more is dropped and
 /// reported as lost.
 const OUTPUT_BUDGET: usize = 1 << 20;
-/// Input chunks an operation may have pending.
-const INPUT_DEPTH: usize = 64;
+/// The operation identity a lease's preparation takes among its client's
+/// operations.
+const PREPARATION: u64 = u64::MAX;
+/// Input frames an operation may have pending: the client's window.
+const INPUT_DEPTH: usize = oer_lab_client::protocol::INPUT_WINDOW;
 /// How long a driver has to confirm a recovery: the longest reset ladder,
 /// a hub power cycle with the board's return to USB included.
 const RECOVERY_DEADLINE: std::time::Duration = std::time::Duration::from_secs(180);
@@ -48,6 +53,24 @@ pub trait Drivers: Send + Sync + 'static {
     /// Bring `recovery`'s resource to an end state its kind declares and
     /// confirm it; within the kind's deadline.
     fn recover(&self, recovery: &Recovery) -> Confirmation;
+    /// Make `resource`, just granted, ready for its lease from its end
+    /// state, such as a board parked with its power off. The grant reaches
+    /// its client only after this; an error leaves the resource unavailable
+    /// and refuses the lease.
+    fn prepare(&self, resource: &str) -> Result<(), String>;
+    /// The stateful resources `operation` under a lease holding `claims`
+    /// may leave in a state their recovery cannot confirm, each with why.
+    /// The service records them before the operation starts; they become
+    /// unavailable when the lease ends, also after a restart.
+    fn marks(&self, operation: &Operation, claims: &[Claim]) -> Vec<(String, String)>;
+    /// The boards attached to the host now, each by its port and MAC.
+    fn attached(&self) -> Vec<(String, String)>;
+    /// The boards attached to the host, with their hub ports.
+    fn inventory(&self) -> Vec<oer_lab_client::protocol::AttachedBoard>;
+    /// `uhubctl`'s report of the stand's hubs.
+    fn hubs(&self) -> Result<String, String>;
+    /// The stand's stateful resources as its stand file names them now.
+    fn resources(&self) -> Result<Vec<String>, String>;
     /// Run `operation` for a lease holding `claims`. It returns soon after
     /// `io.stop` is set and only once the hardware it touched is no longer
     /// in use.
@@ -62,9 +85,66 @@ pub trait Drivers: Send + Sync + 'static {
 /// What an operation exchanges with its client.
 pub struct OperationIo {
     pub output: Output,
-    /// Input chunks; the channel ends when the client closes the input.
-    pub input: mpsc::Receiver<Vec<u8>>,
+    /// Input chunks; they end when the client closes the input.
+    pub input: Input,
     pub stop: Arc<AtomicBool>,
+    /// Why the operation could not confirm that it ended, when it could not.
+    unconfirmed: Arc<Mutex<Option<String>>>,
+}
+
+impl OperationIo {
+    /// The operation could not confirm that what it started ended, for
+    /// `reason`: every resource of its lease stays unavailable when the
+    /// lease ends, until a person returns it.
+    pub fn unconfirmed(&self, reason: String) {
+        lock(&self.unconfirmed).get_or_insert(reason);
+    }
+}
+
+/// An operation's input from its client. Each chunk taken returns the
+/// client one credit to send another.
+pub struct Input {
+    receiver: mpsc::Receiver<Vec<u8>>,
+    outbox: Arc<Outbox>,
+    operation: u64,
+}
+
+impl Input {
+    fn taken(
+        &self,
+        chunk: Result<Vec<u8>, mpsc::TryRecvError>,
+    ) -> Result<Vec<u8>, mpsc::TryRecvError> {
+        if chunk.is_ok() {
+            self.outbox.push(&Reply::Credit { id: self.operation });
+        }
+        chunk
+    }
+
+    /// The next chunk if one waits.
+    pub fn try_recv(&self) -> Result<Vec<u8>, mpsc::TryRecvError> {
+        self.taken(self.receiver.try_recv())
+    }
+
+    /// The next chunk, waiting for it; an error once the input ended.
+    pub fn recv(&self) -> Result<Vec<u8>, mpsc::RecvError> {
+        let chunk = self.receiver.recv();
+        if chunk.is_ok() {
+            self.outbox.push(&Reply::Credit { id: self.operation });
+        }
+        chunk
+    }
+
+    /// The next chunk, waiting up to `timeout`.
+    pub fn recv_timeout(
+        &self,
+        timeout: std::time::Duration,
+    ) -> Result<Vec<u8>, mpsc::RecvTimeoutError> {
+        let chunk = self.receiver.recv_timeout(timeout);
+        if chunk.is_ok() {
+            self.outbox.push(&Reply::Credit { id: self.operation });
+        }
+        chunk
+    }
 }
 
 /// An operation's output stream to its client.
@@ -78,7 +158,7 @@ impl Output {
     /// Queue `bytes` for the client; when the client reads too slowly they
     /// are dropped and counted, never waited for.
     pub fn write(&self, bytes: &[u8]) {
-        for chunk in bytes.chunks(crate::protocol::MAX_FRAME / 2) {
+        for chunk in bytes.chunks(oer_lab_client::protocol::MAX_FRAME / 2) {
             let frame = Frame::Data {
                 operation: self.operation,
                 bytes: chunk.to_vec(),
@@ -222,6 +302,8 @@ struct Inner {
     /// Resources whose driver still runs a recovery, also one past its
     /// deadline: nothing else touches them until it returns.
     recovering: std::collections::BTreeSet<String>,
+    /// Released leases whose client waits for their resources' recoveries.
+    closing: BTreeMap<u64, Closing>,
     next_connection: u64,
     next_token: u64,
     /// No more grants: the service is being replaced.
@@ -239,8 +321,9 @@ struct Lease {
     yield_asked: bool,
     /// Why it ends, once it ends.
     ending: Option<LeaseOutcome>,
-    /// The connections of commands that joined it.
-    joined: std::collections::BTreeSet<u64>,
+    /// The connections of commands that joined it, each with the claims
+    /// it joined for: its operations hold no more.
+    joined: BTreeMap<u64, Vec<Claim>>,
     /// Running operations by connection and identity.
     operations: BTreeMap<(u64, u64), Running>,
 }
@@ -248,6 +331,17 @@ struct Lease {
 struct Running {
     stop: Arc<AtomicBool>,
     input: Option<mpsc::SyncSender<Vec<u8>>>,
+    /// The client sent input beyond its window: the operation was stopped.
+    overrun: Arc<AtomicBool>,
+}
+
+/// A lease whose recoveries still run, for the client that released it.
+struct Closing {
+    connection: u64,
+    /// The resources whose recovery has not ended.
+    waiting: std::collections::BTreeSet<String>,
+    /// Each resource left unavailable, with why.
+    unavailable: Vec<(String, String)>,
 }
 
 impl Service {
@@ -288,6 +382,7 @@ impl Service {
                     connections: BTreeMap::new(),
                     clients: BTreeMap::new(),
                     recovering: Default::default(),
+                    closing: BTreeMap::new(),
                     next_connection: 1,
                     draining: false,
                     next_token: 1,
@@ -304,7 +399,7 @@ impl Service {
         {
             let mut inner = lock(&service.shared.inner);
             for recovery in resumed.recoveries {
-                service.spawn_recovery(&mut inner, recovery);
+                service.spawn_recovery(&mut inner, recovery, None);
             }
         }
         Ok(service)
@@ -381,13 +476,15 @@ impl Service {
         while let Ok(Some(frame)) = Frame::read(&mut stream) {
             match frame {
                 Frame::Data { operation, bytes } => {
-                    // Input beyond the operation's depth is dropped: the
-                    // client sent it faster than the operation reads.
+                    // Input beyond the client's window fails the operation:
+                    // the client did not wait for its credit.
                     let inner = lock(&self.shared.inner);
-                    if let Some(input) =
-                        running(&inner, id, operation).and_then(|running| running.input.as_ref())
+                    if let Some(running) = running(&inner, id, operation)
+                        && let Some(input) = &running.input
+                        && let Err(mpsc::TrySendError::Full(_)) = input.try_send(bytes)
                     {
-                        let _ = input.try_send(bytes);
+                        running.overrun.store(true, Ordering::SeqCst);
+                        running.stop.store(true, Ordering::SeqCst);
                     }
                 }
                 Frame::Message(json) => {
@@ -462,6 +559,27 @@ impl Service {
             Request::Status => outbox.push(&Reply::Status {
                 status: self.status(),
             }),
+            Request::Inventory => outbox.push(&Reply::Inventory {
+                boards: self.shared.drivers.inventory(),
+            }),
+            Request::Hubs => match self.shared.drivers.hubs() {
+                Ok(report) => outbox.push(&Reply::Hubs { report }),
+                Err(reason) => outbox.push(&Reply::Refused { reason }),
+            },
+            Request::Reload => match self.shared.drivers.resources() {
+                Ok(resources) => {
+                    let mut inner = lock(&self.shared.inner);
+                    let recoveries = inner.scheduler.set_stand(resources);
+                    let changed = !recoveries.is_empty();
+                    self.persist(&inner);
+                    for recovery in recoveries {
+                        self.spawn_recovery(&mut inner, recovery, None);
+                    }
+                    self.pump(&mut inner);
+                    outbox.push(&Reply::Done { changed });
+                }
+                Err(reason) => outbox.push(&Reply::Refused { reason }),
+            },
             Request::Drain => {
                 lock(&self.shared.inner).draining = true;
                 let service = self.clone();
@@ -475,7 +593,8 @@ impl Service {
             }
             Request::Report => {
                 let inner = lock(&self.shared.inner);
-                match self.shared.arbiter.status(&inner.scheduler) {
+                let attached = self.shared.drivers.attached();
+                match self.shared.arbiter.status(&inner.scheduler, &attached) {
                     Ok(status) => outbox.push(&Reply::Report {
                         status: Box::new(status),
                     }),
@@ -591,7 +710,7 @@ impl Service {
                     Some(recovery) => {
                         let mut inner = lock(&self.shared.inner);
                         self.persist(&inner);
-                        self.spawn_recovery(&mut inner, recovery);
+                        self.spawn_recovery(&mut inner, recovery, None);
                         outbox.push(&Reply::Waiting {
                             ticket: 0,
                             message: format!("{resource} is being recovered"),
@@ -687,13 +806,14 @@ impl Service {
             });
             return;
         };
-        if !covers(&lease.claims, &normalize(claims)) {
+        let claims = normalize(claims);
+        if !covers(&lease.claims, &claims) {
             outbox.push(&Reply::Refused {
                 reason: "the enclosing lease does not hold what this command claims".to_owned(),
             });
             return;
         }
-        lease.joined.insert(connection);
+        lease.joined.insert(connection, claims);
         outbox.push(&Reply::Granted {
             lease: *id,
             token: lease.token.clone(),
@@ -702,41 +822,67 @@ impl Service {
 
     fn start(&self, connection: u64, id: u64, operation: Operation, outbox: &Outbox) {
         let mut inner = lock(&self.shared.inner);
-        let Some(lease_id) = serving_lease(&inner, connection) else {
+        let Some((lease_id, claims)) = serving_lease(&inner, connection) else {
             outbox.push(&Reply::Finished {
                 id,
                 result: Err("this connection holds no lease".to_owned()),
             });
             return;
         };
+        // What the operation may leave unconfirmed is recorded before it
+        // starts: a restart then still knows it.
+        let marks = self.shared.drivers.marks(&operation, &claims);
+        if !marks.is_empty() {
+            for (resource, reason) in &marks {
+                inner.scheduler.mark(lease_id, resource, reason);
+            }
+            if !self.persist(&inner) {
+                outbox.push(&Reply::Finished {
+                    id,
+                    result: Err("the LAB service cannot record its state".to_owned()),
+                });
+                return;
+            }
+        }
         let Some(outbox) = inner.connections.get(&connection).cloned() else {
             return;
         };
         let Some(lease) = inner.leases.get_mut(&lease_id) else {
             return;
         };
-        if lease.ending.is_some() || lease.operations.contains_key(&(connection, id)) {
+        let preparing = lease
+            .operations
+            .keys()
+            .any(|(_, operation)| *operation == PREPARATION);
+        if lease.ending.is_some() || preparing || lease.operations.contains_key(&(connection, id)) {
             outbox.push(&Reply::Finished {
                 id,
-                result: Err("the lease is ending or the operation exists".to_owned()),
+                result: Err(
+                    "the lease is being prepared or ending, or the operation exists".to_owned(),
+                ),
             });
             return;
         }
         let stop = Arc::new(AtomicBool::new(false));
+        let overrun = Arc::new(AtomicBool::new(false));
+        let unconfirmed = Arc::new(Mutex::new(None));
         let (input, receiver) = mpsc::sync_channel(INPUT_DEPTH);
         lease.operations.insert(
             (connection, id),
             Running {
                 stop: stop.clone(),
                 input: Some(input),
+                overrun: overrun.clone(),
             },
         );
-        let claims = lease.claims.clone();
         // A command inside the lease joins it, for the stand tools it runs.
         let mut operation = operation;
         if let Operation::Command { environment, .. } = &mut operation {
-            environment.retain(|(key, _)| key != crate::protocol::LEASE_ENV);
-            environment.push((crate::protocol::LEASE_ENV.to_owned(), lease.token.clone()));
+            environment.retain(|(key, _)| key != oer_lab_client::protocol::LEASE_ENV);
+            environment.push((
+                oer_lab_client::protocol::LEASE_ENV.to_owned(),
+                lease.token.clone(),
+            ));
         }
         drop(inner);
         self.shared.changed.notify_all();
@@ -748,11 +894,27 @@ impl Service {
                 operation: id,
                 lost: lost.clone(),
             },
-            input: receiver,
+            input: Input {
+                receiver,
+                outbox: outbox.clone(),
+                operation: id,
+            },
             stop,
+            unconfirmed: unconfirmed.clone(),
         };
         std::thread::spawn(move || {
-            let result = service.shared.drivers.run(&operation, &claims, io);
+            let mut result = service.shared.drivers.run(&operation, &claims, io);
+            if let Some(reason) = lock(&unconfirmed).take() {
+                let mut inner = lock(&service.shared.inner);
+                inner.scheduler.mark_held(lease_id, &reason);
+                service.persist(&inner);
+            }
+            if overrun.load(Ordering::SeqCst) {
+                result = Err(format!(
+                    "the client sent input beyond its window of {INPUT_DEPTH} frames; the \
+                     operation was stopped"
+                ));
+            }
             if let Err(error) = &result {
                 eprintln!("lab-service: lease #{lease_id}: an operation failed: {error}");
             }
@@ -800,6 +962,9 @@ impl Service {
         if let Some(lease) = own_lease(&inner, connection) {
             self.end(&mut inner, lease, LeaseOutcome::Abandoned, None);
         }
+        inner
+            .closing
+            .retain(|_, closing| closing.connection != connection);
         for lease in inner.leases.values_mut() {
             lease.joined.remove(&connection);
             for ((owner, _), running) in &mut lease.operations {
@@ -853,22 +1018,68 @@ impl Service {
         {
             eprintln!("lab-service: cannot record lease #{lease}: {error}");
         }
-        if let Some(outbox) = inner.connections.get(&held.connection) {
-            outbox.push(&Reply::Ended);
-        }
+        inner.closing.insert(
+            lease,
+            Closing {
+                connection: held.connection,
+                waiting: ended
+                    .recoveries
+                    .iter()
+                    .map(|recovery| recovery.resource.clone())
+                    .collect(),
+                unavailable: ended.unavailable,
+            },
+        );
         for recovery in ended.recoveries {
-            self.spawn_recovery(inner, recovery);
+            self.spawn_recovery(inner, recovery, Some(lease));
         }
+        self.closed(inner, lease, None);
         self.pump(inner);
     }
 
-    /// Run `recovery` by its driver. A driver past the deadline leaves the
-    /// resource unavailable, and its resource stays untouched until the
-    /// driver returns.
-    fn spawn_recovery(&self, inner: &mut Inner, recovery: Recovery) {
+    /// The recovery of `resource` that lease `lease` left ended, leaving it
+    /// unavailable for `unavailable`: once every one ended, the lease's
+    /// client hears it.
+    fn closed(&self, inner: &mut Inner, lease: u64, ended: Option<(&str, Option<String>)>) {
+        let Some(closing) = inner.closing.get_mut(&lease) else {
+            return;
+        };
+        if let Some((resource, unavailable)) = ended {
+            closing.waiting.remove(resource);
+            if let Some(reason) = unavailable {
+                closing.unavailable.push((resource.to_owned(), reason));
+            }
+        }
+        if !closing.waiting.is_empty() {
+            return;
+        }
+        let Some(closing) = inner.closing.remove(&lease) else {
+            return;
+        };
+        if let Some(outbox) = inner.connections.get(&closing.connection) {
+            outbox.push(&Reply::Ended {
+                unavailable: closing.unavailable,
+            });
+        }
+    }
+
+    /// Run `recovery` by its driver, for the lease `lease` that left it. A
+    /// driver past the deadline leaves the resource unavailable, and its
+    /// resource stays untouched until the driver returns.
+    fn spawn_recovery(&self, inner: &mut Inner, recovery: Recovery, lease: Option<u64>) {
         if !inner.recovering.insert(recovery.resource.clone()) {
             // The running recovery's result is stale; a person returns the
             // resource once it ends.
+            if let Some(lease) = lease {
+                self.closed(
+                    inner,
+                    lease,
+                    Some((
+                        &recovery.resource,
+                        Some("its earlier recovery still runs".to_owned()),
+                    )),
+                );
+            }
             return;
         }
         let (done, confirmed) = mpsc::channel();
@@ -891,11 +1102,18 @@ impl Service {
                         "its recovery did not finish within {}",
                         oer_lab_arbiter::format_duration(service.shared.recovery_deadline)
                     ),
-                    quiet: false,
+                    emission: oer_lab_arbiter::readiness::Emission::Unknown,
                 });
+            let unavailable = match &confirmation {
+                Confirmation::Ready => None,
+                Confirmation::Unavailable { reason, .. } => Some(reason.clone()),
+            };
             let mut inner = lock(&service.shared.inner);
             if inner.scheduler.confirm(&recovery, confirmation) {
                 service.persist(&inner);
+            }
+            if let Some(lease) = lease {
+                service.closed(&mut inner, lease, Some((&recovery.resource, unavailable)));
             }
             service.pump(&mut inner);
         });
@@ -930,7 +1148,7 @@ impl Service {
                     .end(grant.lease, LeaseOutcome::Abandoned, now)
                 {
                     for recovery in ended.recoveries {
-                        self.spawn_recovery(inner, recovery);
+                        self.spawn_recovery(inner, recovery, None);
                     }
                 }
             }
@@ -964,14 +1182,12 @@ impl Service {
                     operations: BTreeMap::new(),
                 },
             );
-            match inner.connections.get(&connection) {
-                Some(outbox) => outbox.push(&Reply::Granted {
-                    lease: grant.lease,
-                    token: grant.token,
-                }),
+            if !inner.connections.contains_key(&connection) {
                 // The client left between its grant and this notice.
-                None => self.end(inner, grant.lease, LeaseOutcome::Abandoned, None),
+                self.end(inner, grant.lease, LeaseOutcome::Abandoned, None);
+                continue;
             }
+            self.prepare(inner, grant.lease, connection, grant.token, grant.resources);
         }
         // A waiting maintenance request preempts every holder it conflicts with.
         for (lease, ticket) in inner.scheduler.maintenance_conflicts() {
@@ -988,6 +1204,72 @@ impl Service {
             }
         }
         self.shared.changed.notify_all();
+    }
+
+    /// Make the resources lease `lease` was just granted ready for it, then
+    /// tell its client. Until then the preparation is the lease's
+    /// operation: an ending lease waits for it. A resource that could not be
+    /// prepared is left unavailable and the lease is refused.
+    fn prepare(
+        &self,
+        inner: &mut Inner,
+        lease: u64,
+        connection: u64,
+        token: String,
+        resources: Vec<(String, u64)>,
+    ) {
+        let Some(held) = inner.leases.get_mut(&lease) else {
+            return;
+        };
+        let stop = Arc::new(AtomicBool::new(false));
+        held.operations.insert(
+            (connection, PREPARATION),
+            Running {
+                stop: stop.clone(),
+                input: None,
+                overrun: Arc::new(AtomicBool::new(false)),
+            },
+        );
+        let service = self.clone();
+        std::thread::spawn(move || {
+            let failed = resources.iter().find_map(|(resource, _)| {
+                if stop.load(Ordering::SeqCst) {
+                    return None;
+                }
+                service
+                    .shared
+                    .drivers
+                    .prepare(resource)
+                    .err()
+                    .map(|reason| (resource.clone(), reason))
+            });
+            let mut inner = lock(&service.shared.inner);
+            let outbox = inner.connections.get(&connection).cloned();
+            match failed {
+                None => {
+                    if let Some(outbox) = outbox
+                        && inner
+                            .leases
+                            .get(&lease)
+                            .is_some_and(|held| held.ending.is_none())
+                    {
+                        outbox.push(&Reply::Granted { lease, token });
+                    }
+                }
+                Some((resource, reason)) => {
+                    inner.scheduler.mark(lease, &resource, &reason);
+                    service.persist(&inner);
+                    if let Some(outbox) = outbox {
+                        outbox.push(&Reply::Refused {
+                            reason: format!("{resource} could not be made ready: {reason}"),
+                        });
+                    }
+                    service.end(&mut inner, lease, LeaseOutcome::Abandoned, None);
+                }
+            }
+            drop(inner);
+            service.finished(lease, connection, PREPARATION);
+        });
     }
 
     /// End the leases at the hard limit and ask divisible work held for its
@@ -1069,15 +1351,20 @@ fn own_lease(inner: &Inner, connection: u64) -> Option<u64> {
         .map(|(id, _)| *id)
 }
 
-/// The lease connection `connection` works under: its own, or the one it
-/// joined.
-fn serving_lease(inner: &Inner, connection: u64) -> Option<u64> {
-    own_lease(inner, connection).or_else(|| {
-        inner
-            .leases
-            .iter()
-            .find(|(_, lease)| lease.ending.is_none() && lease.joined.contains(&connection))
-            .map(|(id, _)| *id)
+/// The lease connection `connection` works under and the claims it holds
+/// there: its own lease, or the one it joined for the claims it joined for.
+fn serving_lease(inner: &Inner, connection: u64) -> Option<(u64, Vec<Claim>)> {
+    inner.leases.iter().find_map(|(id, lease)| {
+        if lease.ending.is_some() {
+            return None;
+        }
+        if lease.connection == connection {
+            return Some((*id, lease.claims.clone()));
+        }
+        lease
+            .joined
+            .get(&connection)
+            .map(|claims| (*id, claims.clone()))
     })
 }
 
@@ -1091,7 +1378,11 @@ fn status(inner: &Inner) -> Status {
                 owner: held.owner.clone(),
                 work: held.work.clone(),
                 ending: held.ending.is_some(),
-                operations: held.operations.len(),
+                operations: held
+                    .operations
+                    .keys()
+                    .filter(|(_, operation)| *operation != PREPARATION)
+                    .count(),
             })
             .collect(),
         waiting: inner.tickets.keys().copied().collect(),

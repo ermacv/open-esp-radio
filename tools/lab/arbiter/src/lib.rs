@@ -17,6 +17,7 @@ pub mod balance;
 mod estimate;
 pub mod health;
 pub mod history;
+pub mod import;
 
 pub mod maintenance;
 pub mod notify;

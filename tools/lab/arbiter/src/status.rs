@@ -89,8 +89,13 @@ pub struct QueuedStatus {
 }
 
 impl Arbiter {
-    /// The stand as `scheduler` holds it, with this directory's records.
-    pub fn status(&self, scheduler: &Scheduler) -> crate::Result<Status> {
+    /// The stand as `scheduler` holds it, with this directory's records and
+    /// the boards `attached` now, each by its port and MAC.
+    pub fn status(
+        &self,
+        scheduler: &Scheduler,
+        attached: &[(String, String)],
+    ) -> crate::Result<Status> {
         let now = oer_os_durable::unix_seconds();
         let state = scheduler.state().clone();
         let mut starts = queue::expected_starts(&state, now, STOP_GRACE);
@@ -120,16 +125,11 @@ impl Arbiter {
         let events = self.journal().events()?;
         let (flashes, startup_artifacts) = latest(&events);
         let stand = self.stand()?;
-        let attached = oer_lab_board::discovery::attached();
         let mut macs: Vec<Option<String>> = stand
             .boards
             .iter()
             .filter_map(|board| board.device_id().ok().map(|mac| Some(mac.to_string())))
-            .chain(
-                attached
-                    .iter()
-                    .filter_map(|port| port.mac.as_ref().map(|mac| Some(mac.to_string()))),
-            )
+            .chain(attached.iter().map(|(_, mac)| Some(mac.clone())))
             .chain(flashes.iter().map(|flash| flash.device.clone()))
             .collect();
         let mut seen = Vec::new();
@@ -144,10 +144,8 @@ impl Arbiter {
             .map(|mac| {
                 let port = attached
                     .iter()
-                    .find(|port| {
-                        port.mac.is_some() && port.mac.as_ref().map(ToString::to_string) == mac
-                    })
-                    .map(|port| port.port.clone());
+                    .find(|(_, attached)| mac.as_deref() == Some(attached.as_str()))
+                    .map(|(port, _)| port.clone());
                 DeviceStatus {
                     label: device_label(mac.as_deref(), Some(&stand)),
                     health: mac.as_deref().map(|mac| {

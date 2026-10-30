@@ -67,7 +67,7 @@ fn a_resource_never_confirmed_is_recovered_before_its_first_grant() {
     assert_eq!(grant(&mut scheduler), vec![id]);
     assert!(matches!(
         scheduler.readiness(A),
-        Some(Readiness::InUse { lease, generation }) if *lease == id && *generation > a.generation
+        Some(Readiness::InUse { lease, generation, .. }) if *lease == id && *generation > a.generation
     ));
 }
 
@@ -156,7 +156,7 @@ fn a_board_left_unconfirmed_closes_the_air_to_another_board() {
         &a,
         Confirmation::Unavailable {
             reason: "neither its image nor its ROM answered".to_owned(),
-            quiet: false,
+            emission: crate::readiness::Emission::Unknown,
         }
     ));
     assert!(
@@ -168,7 +168,7 @@ fn a_board_left_unconfirmed_closes_the_air_to_another_board() {
         &again,
         Confirmation::Unavailable {
             reason: "its hub port is off".to_owned(),
-            quiet: true,
+            emission: crate::readiness::Emission::Quiet,
         }
     ));
     assert_eq!(grant(&mut scheduler), vec![radio]);
@@ -199,7 +199,7 @@ fn a_failed_recovery_holds_the_resource_until_a_person_returns_it() {
         &a,
         Confirmation::Unavailable {
             reason: reason.clone(),
-            quiet: false,
+            emission: crate::readiness::Emission::Unknown,
         },
     );
     let waiting = scheduler.enqueue(queued("bob", vec![Claim::board(&A[6..])]), 2);
@@ -356,7 +356,7 @@ fn a_restart_confirms_ready_resources_again_and_leaves_unavailable_ones() {
         &b,
         Confirmation::Unavailable {
             reason: "silent".to_owned(),
-            quiet: false,
+            emission: crate::readiness::Emission::Unknown,
         },
     );
     scheduler.save(&path).unwrap();
@@ -375,4 +375,78 @@ fn a_restart_confirms_ready_resources_again_and_leaves_unavailable_ones() {
         scheduler.readiness(B),
         Some(Readiness::Unavailable { .. })
     ));
+}
+
+#[test]
+fn a_marked_resource_ends_its_lease_unavailable_without_a_recovery() {
+    let mut scheduler = ready();
+    let id = scheduler.enqueue(queued("ann", vec![Claim::exclusive(readiness::ROUTER)]), 1);
+    assert_eq!(grant(&mut scheduler), vec![id]);
+    assert!(!scheduler.mark(id + 1, readiness::ROUTER, "another lease"));
+    assert!(scheduler.mark(id, readiness::ROUTER, "a command could change it"));
+    let ended = scheduler.end(id, LeaseOutcome::Released, NOW).unwrap();
+    assert!(ended.recoveries.is_empty());
+    assert_eq!(
+        ended.unavailable,
+        vec![(
+            readiness::ROUTER.to_owned(),
+            "a command could change it".to_owned()
+        )]
+    );
+    assert!(matches!(
+        scheduler.readiness(readiness::ROUTER),
+        Some(Readiness::Unavailable {
+            emission: crate::readiness::Emission::Unknown,
+            ..
+        })
+    ));
+}
+
+#[test]
+fn a_mark_outlives_a_restart() {
+    let mut scheduler = ready();
+    let id = scheduler.enqueue(queued("ann", vec![Claim::exclusive(readiness::ROUTER)]), 1);
+    assert_eq!(grant(&mut scheduler), vec![id]);
+    assert!(scheduler.mark(id, readiness::ROUTER, "a command could change it"));
+    let state: State =
+        serde_json::from_value(serde_json::to_value(scheduler.state()).unwrap()).unwrap();
+    let (scheduler, resumed) = Scheduler::resume(state, stand(), NOW);
+    assert!(
+        resumed
+            .recoveries
+            .iter()
+            .all(|recovery| recovery.resource != readiness::ROUTER)
+    );
+    assert!(matches!(
+        scheduler.readiness(readiness::ROUTER),
+        Some(Readiness::Unavailable { reason, .. }) if reason == "a command could change it"
+    ));
+}
+
+#[test]
+fn a_router_of_unknown_emission_closes_the_air_but_not_work_without_it() {
+    let mut scheduler = ready();
+    let first = scheduler.enqueue(queued("ann", vec![Claim::exclusive(readiness::ROUTER)]), 1);
+    grant(&mut scheduler);
+    let router = scheduler
+        .end(first, LeaseOutcome::Released, NOW)
+        .unwrap()
+        .recoveries
+        .remove(0);
+    assert!(scheduler.confirm(
+        &router,
+        Confirmation::Unavailable {
+            reason: "it does not answer over SSH".to_owned(),
+            emission: crate::readiness::Emission::Unknown,
+        }
+    ));
+    let radio = scheduler.enqueue(
+        queued("bob", vec![Claim::board(&A[6..]), Claim::shared(AIR)]),
+        2,
+    );
+    let wired = scheduler.enqueue(queued("cat", vec![Claim::board(&B[6..])]), 3);
+    assert_eq!(grant(&mut scheduler), vec![wired]);
+    let again = scheduler.release(readiness::ROUTER).unwrap();
+    assert!(scheduler.confirm(&again, Confirmation::Ready));
+    assert_eq!(grant(&mut scheduler), vec![radio]);
 }

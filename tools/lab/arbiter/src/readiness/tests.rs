@@ -20,26 +20,27 @@ fn the_air_a_range_and_the_whole_stand_use_the_air() {
 
 #[test]
 fn only_a_resource_in_recovery_or_unconfirmed_may_radiate() {
-    assert!(Readiness::Ready { generation: 1 }.quiet());
+    assert!(Readiness::Ready { generation: 1 }.emission_known());
     assert!(
         Readiness::InUse {
+            marked: None,
             lease: 1,
             generation: 1
         }
-        .quiet()
+        .emission_known()
     );
     assert!(
         !Readiness::Recovering {
             lease: None,
             generation: 1
         }
-        .quiet()
+        .emission_known()
     );
-    let unavailable = |quiet| Readiness::Unavailable {
+    let unavailable = |emission| Readiness::Unavailable {
         reason: String::new(),
-        quiet,
+        emission,
         generation: 1,
     };
-    assert!(unavailable(true).quiet());
-    assert!(!unavailable(false).quiet());
+    assert!(unavailable(Emission::Quiet).emission_known());
+    assert!(!unavailable(Emission::Unknown).emission_known());
 }

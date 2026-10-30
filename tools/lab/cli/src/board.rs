@@ -12,12 +12,11 @@ use std::{
 };
 
 use crate::Result;
-use oer_lab_board::console;
-use oer_lab_board::reset::ResetPath;
-use oer_lab_service::{
+use oer_lab_client::{
     client::{Client, Input},
     protocol::{Operation, Request},
 };
+use oer_lab_model::rom::ResetPath;
 use oer_os_process::Checkout;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
@@ -102,7 +101,7 @@ fn parse_duration(text: &str) -> std::result::Result<Duration, String> {
 struct Target {
     /// Its stand-file entry.
     board: oer_lab_model::Board,
-    mac: oer_lab_board::DeviceId,
+    mac: oer_lab_model::DeviceId,
 }
 
 fn target(board: &str) -> Result<Target> {
@@ -181,7 +180,7 @@ pub(crate) fn board(
             std::fs::create_dir_all(&log)?;
             let log = log.join(format!("console-{}.log", oer_os_durable::unix_seconds()));
             let (lines, input) = console_lines(&mut lease, &target)?;
-            let seen = console::capture(&lines, duration, until.as_deref(), &log)?;
+            let seen = capture(&lines, duration, until.as_deref(), &log)?;
             let _ = input.cancel();
             eprintln!("stand: console of {board} written to {}", log.display());
             if until.is_some() && !seen {
@@ -258,7 +257,7 @@ fn soak(
                             ));
                         std::fs::create_dir_all(log.parent().ok_or("no parent")?)?;
                         if let Ok((lines, input)) = console_lines(&mut leased, &target) {
-                            let _ = console::capture(&lines, Duration::from_secs(5), None, &log);
+                            let _ = capture(&lines, Duration::from_secs(5), None, &log);
                             let _ = input.cancel();
                             eprintln!("stand: console after the failure in {}", log.display());
                         }
@@ -291,7 +290,7 @@ fn soak(
 }
 
 /// Print `lines` until the `@OK` (true) or `@ERR` (false) answer to
-/// `command` in the peers' one grammar ([`oer_lab_board::peer_line::parse`]), or
+/// `command` in the peers' one grammar ([`oer_lab_model::peer_line::parse`]), or
 /// `None` after `duration`. An answer naming another command, such as noise
 /// a peer read while it booted, is only printed.
 fn answer(
@@ -307,13 +306,13 @@ fn answer(
             Ok(line) => {
                 let text = String::from_utf8_lossy(&line);
                 print(&text);
-                match oer_lab_board::peer_line::parse(text.trim()) {
-                    Some(oer_lab_board::peer_line::Line::Ok { command: about })
+                match oer_lab_model::peer_line::parse(text.trim()) {
+                    Some(oer_lab_model::peer_line::Line::Ok { command: about })
                         if about.eq_ignore_ascii_case(command) =>
                     {
                         return Some(true);
                     }
-                    Some(oer_lab_board::peer_line::Line::Err { command: about, .. })
+                    Some(oer_lab_model::peer_line::Line::Err { command: about, .. })
                         if about.eq_ignore_ascii_case(command) =>
                     {
                         return Some(false);
@@ -327,33 +326,57 @@ fn answer(
     None
 }
 
+/// Copy `lines` to the terminal and `log` until `duration` passes or a line
+/// contains `until`; returns whether one did.
+fn capture(
+    lines: &mpsc::Receiver<Vec<u8>>,
+    duration: Duration,
+    until: Option<&str>,
+    log: &std::path::Path,
+) -> Result<bool> {
+    use std::io::Write as _;
+    let mut file = std::fs::File::create(log)?;
+    let deadline = Instant::now() + duration;
+    while let Some(remaining) = deadline.checked_duration_since(Instant::now()) {
+        match lines.recv_timeout(remaining) {
+            Ok(line) if line.is_empty() => {}
+            Ok(line) => {
+                file.write_all(&line)?;
+                file.write_all(b"\n")?;
+                let text = String::from_utf8_lossy(&line);
+                println!("{text}");
+                if until.is_some_and(|until| text.contains(until)) {
+                    return Ok(true);
+                }
+            }
+            Err(mpsc::RecvTimeoutError::Timeout | mpsc::RecvTimeoutError::Disconnected) => break,
+        }
+    }
+    Ok(false)
+}
+
 fn check(target: &Target, lease: &mut Client, board: &str) -> Result<()> {
     let mac = &target.mac;
+    let described = crate::service::run(
+        lease,
+        Operation::Describe {
+            board: mac.to_string(),
+        },
+    )?;
+    let text = |key: &str| {
+        described
+            .get(key)
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("?")
+            .to_owned()
+    };
     println!(
         "{board} ({mac}): attached at {}, chip {}",
-        oer_lab_board::discovery::port_of(mac).map_or_else(
-            |_| String::from("no port"),
-            |port| port.display().to_string()
-        ),
+        text("port"),
         target.board.chip
     );
     // What the board runs is its receipt's; the journal is history.
-    match oer_lab_board::image::Store::open()?.state(mac)? {
-        Some(oer_lab_board::image::State::Started { receipt }) => println!(
-            "  image: {} (bundle {}), written by {}",
-            receipt.image,
-            receipt.digest.get(..12).unwrap_or(&receipt.digest),
-            receipt.by
-        ),
-        Some(oer_lab_board::image::State::Written { receipt }) => println!(
-            "  image: {} written by {}, its start unconfirmed",
-            receipt.image, receipt.by
-        ),
-        Some(oer_lab_board::image::State::Writing { by, .. }) => {
-            println!("  image: unknown, a write by {by} did not finish")
-        }
-        None => println!("  image: unknown"),
-    }
+    println!("  image: {}", text("image"));
     let arbiter = oer_lab_arbiter::Arbiter::open()?;
     match arbiter.journal().latest_flash(mac)? {
         Some(event) => println!("  last journaled flash: {event}"),

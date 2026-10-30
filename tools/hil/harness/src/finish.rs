@@ -15,7 +15,7 @@ use std::time::Duration;
 
 use oer_hil_link::{CallError, Link};
 use oer_hil_protocol::base::GetHello;
-use oer_lab_board::reset::{Ladder, LadderEnd, RecoveryStep};
+use oer_lab_model::rom::{Ladder, LadderEnd, RecoveryStep};
 
 /// What finishing needs from the stand: the board's reset ladder and its
 /// console.
@@ -69,6 +69,12 @@ pub enum Cleanup {
     /// The program was cancelled before the device answered: nothing about
     /// the board is judged, and the next session resets it.
     Cancelled,
+    /// The LAB service ended the lease without confirming the board's end
+    /// state, after `cleanup`.
+    Unreleased {
+        cleanup: Box<Cleanup>,
+        reason: String,
+    },
 }
 
 impl Cleanup {
@@ -86,6 +92,23 @@ impl Cleanup {
             )),
             Self::Unreachable { reason } => Some(format!("the board needs a person: {reason}")),
             Self::Cancelled => Some("cancelled before the device was checked".to_owned()),
+            Self::Unreleased { cleanup, reason } => Some(format!(
+                "{}; the LAB service ended the lease with {reason}",
+                cleanup
+                    .problem()
+                    .unwrap_or_else(|| "the device was left clean".to_owned())
+            )),
+        }
+    }
+
+    /// This cleanup, then the end of the lease the LAB service reported.
+    pub fn released(self, ended: Result<(), String>) -> Self {
+        match ended {
+            Ok(()) => self,
+            Err(reason) => Self::Unreleased {
+                cleanup: Box::new(self),
+                reason,
+            },
         }
     }
 }

@@ -20,7 +20,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use oer_lab_board::reset::{RecoveryStep, ResetPath};
+use oer_lab_model::rom::{RecoveryStep, ResetPath};
 use oer_os_process::lock::{FileLock, Mode};
 use serde::{Deserialize, Serialize};
 

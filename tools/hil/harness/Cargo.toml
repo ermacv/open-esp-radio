@@ -15,9 +15,8 @@ oer-image-build = { path = "../../image/build" }
 oer-image-bundle = { path = "../../image/bundle" }
 oer-image-checks = { path = "../../image/checks" }
 oer-lab-arbiter = { path = "../../lab/arbiter" }
-oer-lab-board = { path = "../../lab/board" }
 oer-lab-model = { path = "../../lab/model" }
-oer-lab-service = { path = "../../lab/service" }
+oer-lab-client = { path = "../../lab/client" }
 oer-os-process = { path = "../../os/process" }
 clap = { version = "4.5", features = ["derive"] }
 serde_json = "1.0"

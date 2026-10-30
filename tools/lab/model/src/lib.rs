@@ -27,7 +27,11 @@ use serde::{Deserialize, Serialize};
 
 pub use crate::device_id::DeviceId;
 
+pub mod equipment;
+pub mod hubs;
 pub mod paths;
+pub mod peer_line;
+pub mod rom;
 
 /// The crate's error type.
 pub type Error = Box<dyn std::error::Error + Send + Sync>;

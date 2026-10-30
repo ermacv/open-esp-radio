@@ -1,7 +1,8 @@
 //! `cargo stand init [--force]`: write the user's stand file from the boards
-//! attached to this host (`oer-lab-board`): one `[[board]]` per board with its
-//! chip and MAC, its radios from the chip profile, no hubs. The file is
-//! private (mode 0600); an existing one is kept unless `--force`.
+//! attached to this host, as the LAB service detects them under stand
+//! maintenance: one `[[board]]` per board with its chip and MAC, its radios
+//! from the chip profile, no hubs. The file is private (mode 0600); an
+//! existing one is kept unless `--force`.
 
 use std::fmt::Write as _;
 use std::path::Path;
@@ -31,37 +32,36 @@ pub(crate) fn init(root: &Path, cli: InitCli) -> Result<std::process::ExitCode> 
         .into());
     }
     let chips = Profile::all(root)?;
+    // The LAB service asks each board's ROM, under stand maintenance: it
+    // owns every board, also before the stand file names one.
+    let owner = oer_lab_arbiter::owner::from_environment()?.to_string();
+    let mut client = crate::service::client()?;
+    client.acquire(
+        oer_lab_client::protocol::LeaseRequest {
+            owner: owner.clone(),
+            work: String::from("stand init"),
+            scenarios: Vec::new(),
+            run: None,
+            claims: vec![oer_lab_arbiter::claims::Claim::stand()],
+            maintenance: Some(format!("stand init by {owner}")),
+            divisible: false,
+        },
+        &mut |message| eprintln!("stand: {message}"),
+    )?;
+    let detected = crate::service::run(&mut client, oer_lab_client::protocol::Operation::Detect)?;
     let mut boards = Vec::new();
-    for device in oer_lab_board::devices() {
-        let chip = match device.chip.clone() {
-            Some(chip) => chip,
-            // The ROM names the chip. Before a stand file exists the LAB
-            // service owns no board, so init asks the ROM itself.
-            None => {
-                let name = oer_lab_board::flash::detect(&device.port)?;
-                let profile = chips
-                    .iter()
-                    .find(|profile| profile.facts.espflash_chip == name)
-                    .ok_or_else(|| {
-                        format!(
-                            "board {} is an {name}, which no chip profile names",
-                            device.mac
-                        )
-                    })?;
-                oer_lab_board::device::remember_chip(&device.mac, &profile.facts.id)?;
-                profile.facts.id.clone()
-            }
-        };
+    for device in detected.as_array().ok_or("the service detected no list")? {
+        let mac = device["mac"]
+            .as_str()
+            .ok_or("a detected board has no MAC")?;
+        let chip = device["chip"]
+            .as_str()
+            .ok_or("a detected board has no chip")?;
         let profile = chips
             .iter()
             .find(|profile| profile.facts.id == chip)
-            .ok_or_else(|| {
-                format!(
-                    "board {} is a {chip}, which no chip profile names",
-                    device.mac
-                )
-            })?;
-        boards.push((device.mac.to_string(), profile));
+            .ok_or_else(|| format!("board {mac} is a {chip}, which no chip profile names"))?;
+        boards.push((mac.to_owned(), profile));
     }
     if boards.is_empty() {
         return Err("no board is attached; attach the stand's boards and run it again".into());
@@ -72,6 +72,9 @@ pub(crate) fn init(root: &Path, cli: InitCli) -> Result<std::process::ExitCode> 
     parsed.validate()?;
     parsed.validate_chips(&chips)?;
     write_private(&path, &text)?;
+    // The service recovers the boards it reads to their end states.
+    client.administer(oer_lab_client::protocol::Request::Reload)?;
+    client.release()?;
     println!("wrote {} with {} board(s)", path.display(), boards.len());
     println!(
         "next: name each board as written on it, add the hubs and the fixture sections \

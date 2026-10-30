@@ -8,8 +8,16 @@
 //! than [`MAX_FRAME`] ends the connection. The first request is
 //! [`Request::Hello`]: a client of another [`PROTOCOL`] gets
 //! [`Reply::Refused`] with the reason, and the connection ends.
+//!
+//! An operation's input flows by credit: a client sends at most
+//! [`INPUT_WINDOW`] input frames ahead of the operation, and
+//! [`Reply::Credit`] returns one for each frame the operation took. Input
+//! beyond the window fails the operation.
 
-use std::io::{self, Read, Write};
+use std::{
+    io::{self, Read, Write},
+    net::Ipv4Addr,
+};
 
 use oer_lab_arbiter::claims::Claim;
 use oer_lab_arbiter::readiness::Readiness;
@@ -22,6 +30,8 @@ pub const PROTOCOL: u32 = 1;
 pub const LEASE_ENV: &str = "OER_LAB_LEASE";
 /// The longest frame either side sends or accepts.
 pub const MAX_FRAME: usize = 1 << 20;
+/// Input frames a client may send an operation ahead of what it took.
+pub const INPUT_WINDOW: usize = 64;
 
 const MESSAGE: u8 = 0;
 const DATA: u8 = 1;
@@ -138,7 +148,7 @@ pub enum Request {
     /// inside a lease uses its resources without queueing.
     Join { token: String, claims: Vec<Claim> },
     /// End this connection's lease; [`Reply::Ended`] follows once its
-    /// operations stopped.
+    /// operations stopped and its resources' recoveries ended.
     Release,
     /// Start operation `id` under the lease; [`Reply::Finished`] follows.
     Start { id: u64, operation: Operation },
@@ -188,6 +198,14 @@ pub enum Request {
         by: String,
         reason: String,
     },
+    /// The boards attached to the host, with their hub ports:
+    /// [`Reply::Inventory`].
+    Inventory,
+    /// `uhubctl`'s report of the stand's hubs: [`Reply::Hubs`].
+    Hubs,
+    /// Read the stand file again, after `cargo stand init` wrote it: new
+    /// boards are recovered to their end state before they are granted.
+    Reload,
 }
 
 /// Work on the leased resources, run by the service's drivers. A board is
@@ -208,6 +226,12 @@ pub enum Operation {
         /// its controlling terminal.
         #[serde(default)]
         terminal: Option<TerminalSize>,
+        /// Never stop the command: a lease that ends, also by a lost client,
+        /// waits until it ended by itself, for work a stop would leave half
+        /// done (an installation under sudo, which ends a password prompt
+        /// nobody answers by its own timeout).
+        #[serde(default)]
+        run_to_end: bool,
     },
     /// Write the image bundle in directory `bundle` into `board` and start
     /// it, unless `skip_carried` and the board already runs it; the flash
@@ -223,7 +247,7 @@ pub enum Operation {
     /// Reset `board` through `path`. Result: the ROM's reset line.
     Reset {
         board: String,
-        path: oer_lab_board::reset::ResetPath,
+        path: oer_lab_model::rom::ResetPath,
     },
     /// The steps of `board`'s reset ladder, in order, its download entry
     /// last when it has one. Result: a list of steps.
@@ -232,7 +256,7 @@ pub enum Operation {
     /// ROM printed.
     Rung {
         board: String,
-        step: oer_lab_board::reset::RecoveryStep,
+        step: oer_lab_model::rom::RecoveryStep,
     },
     /// `board`'s console as the operation's stream, opened without a reset,
     /// or with a reset into its application when `reset`, until the client
@@ -248,12 +272,18 @@ pub enum Operation {
     /// port cuts the board's power.
     ProvePowerLoss { board: String },
     /// An operation on the lab router; the lease must hold the router.
-    Router {
-        request: crate::router::RouterOperation,
-    },
-    /// Probe the stand's SSH fixtures (the lab router, the air observer).
-    /// The lease must hold the router. Result: the report's text.
-    ProbeFixtures,
+    Router { request: RouterOperation },
+    /// Probe the equipment the stand reaches over SSH (the lab router, the
+    /// air observer). The lease must hold the router. Result: the
+    /// `oer_lab_router::fixtures::Fixture` list.
+    ProbeRouter,
+    /// The chip of every board attached to the host, its ROM asked when no
+    /// earlier answer is known; the lease must hold the whole stand.
+    /// Result: a list of `{mac, chip}`, the chip a chip profile's id.
+    Detect,
+    /// Where `board` is attached and what its flash holds. Result:
+    /// `{port, image}`, both text.
+    Describe { board: String },
     /// Switch port `port` of hub `hub` (stand-file ids) off for `off_secs`,
     /// then on: a person sees which button it is. The lease must hold the
     /// port (`hub-port:LOCATION:PORT`).
@@ -310,8 +340,16 @@ pub enum Reply {
     Yield {
         reason: String,
     },
-    /// The lease ended and its operations stopped.
-    Ended,
+    /// The lease ended: its operations stopped and its resources'
+    /// recoveries ended. `unavailable` names each resource no end state was
+    /// confirmed for, with why.
+    Ended {
+        unavailable: Vec<(String, String)>,
+    },
+    /// Operation `id` took one input frame: the client may send one more.
+    Credit {
+        id: u64,
+    },
     /// Operation `id` finished.
     Finished {
         id: u64,
@@ -332,6 +370,30 @@ pub enum Reply {
     Done {
         changed: bool,
     },
+    Inventory {
+        boards: Vec<AttachedBoard>,
+    },
+    /// `uhubctl`'s report, as it printed it (`oer_lab_model::hubs::parse`).
+    Hubs {
+        report: String,
+    },
+}
+
+/// A board attached to the host, as the service finds it.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct AttachedBoard {
+    /// Its stand-file id, when the stand file names it.
+    pub id: Option<String>,
+    pub mac: String,
+    /// Its USB location.
+    pub location: String,
+    pub tty: Option<String>,
+    /// The hub port it hangs on, `HUB:PORT`.
+    pub hub_port: Option<String>,
+    /// Whether the stand may power-cycle it, or why not.
+    pub power: Result<(), String>,
+    /// What the stand file says of it that the host contradicts.
+    pub warning: Option<String>,
 }
 
 /// The service's state, for `cargo stand queue` and the tests.
@@ -353,6 +415,39 @@ pub struct HolderStatus {
     pub ending: bool,
     /// Its running operations.
     pub operations: usize,
+}
+
+/// One operation on the lab router.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(tag = "router", rename_all = "kebab-case", deny_unknown_fields)]
+pub enum RouterOperation {
+    /// Apply the WPA2 station profile with `ssid` and `passphrase` to the
+    /// stand's AP. Result: the applied profile's description.
+    ApplyStationProfile { ssid: String, passphrase: String },
+    /// Check that the router has its observation tools.
+    VerifyObservationTools,
+    /// Check that the AP's runtime state matches a WPA2 profile.
+    VerifyRuntime,
+    /// The AP's group rekey interval, in seconds.
+    GroupRekeySeconds,
+    /// What the AP knows of station `mac`.
+    Station { mac: String },
+    /// Station `mac`'s DHCP lease, if it has one.
+    Lease { mac: String },
+    /// `count` pings from the router to `address`.
+    Ping { address: Ipv4Addr, count: u16 },
+    /// Ask the AP to deauthenticate station `mac`.
+    Deauthenticate { mac: String },
+    /// Prepare the routed network's check. Result: the state before.
+    PrepareNetwork,
+    /// Check the routed network against its state `before`.
+    VerifyNetwork { before: String },
+    /// Watch `count` echo requests to `address` and their replies until
+    /// the operation stops or the observer ends. Result: the echoes.
+    CaptureEchoes { address: Ipv4Addr, count: u16 },
+    /// Watch the AP's log for station `mac`'s departure until the
+    /// operation stops. Result: what it saw.
+    Departure { mac: String },
 }
 
 #[cfg(test)]

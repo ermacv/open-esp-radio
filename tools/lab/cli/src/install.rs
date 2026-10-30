@@ -1,9 +1,15 @@
 //! Install `cargo stand` as a prebuilt tool from `main`, and the LAB
-//! service it carries as a systemd user unit.
+//! service (`oer-lab-service`) as two systemd user units: `oer-lab.socket`
+//! holds the service's socket and hands it over, `oer-lab.service` runs the
+//! service with its control group delegated to it.
 //!
 //! An update first asks a running service to drain: it grants nothing more
-//! and answers once no lease is held. Then the unit restarts on the new
-//! binary. A checkout never replaces the service by itself.
+//! and answers once no lease is held. A service of another protocol cannot
+//! be asked: the update stops there and says how to replace it by hand.
+//! Then the unit restarts on the new binary. Before the service first
+//! starts, the restrictions and balances the file-locked arbiter kept are
+//! imported (`oer_lab_arbiter::import`). A checkout never replaces the
+//! service by itself.
 //!
 //! `cargo stand` otherwise builds `oer-tool-lab-cli` from the caller's working tree
 //! first: a rebuild after every edit of a stand package, unavailable while
@@ -25,6 +31,9 @@ use oer_os_process::Checkout;
 /// The package the tool installs, `cargo stand`, and the binary it builds.
 const PACKAGE: &str = "oer-tool-lab-cli";
 const BINARY: &str = "stand";
+/// The LAB service's package and binary.
+const SERVICE_PACKAGE: &str = "oer-lab-service";
+const SERVICE_BINARY: &str = "oer-lab-service";
 
 fn home() -> Result<PathBuf> {
     std::env::var_os("HOME")
@@ -38,21 +47,42 @@ pub fn tool_directory() -> Result<PathBuf> {
     oer_os_durable::xdg::path(oer_os_durable::xdg::Base::Data, "stand-tool")
 }
 
-/// The systemd user unit of the LAB service.
+/// The systemd user units of the LAB service.
 const UNIT: &str = "oer-lab.service";
+const SOCKET_UNIT: &str = "oer-lab.socket";
 
-/// The unit running `binary`'s service, with the chip profiles of the
-/// clone at `root` and the tools on `path`. Every process a hardware
-/// command starts stays in the unit's control group, which a stop or a
-/// crash empties before the service starts again.
+/// The socket unit: it holds the service's socket in the runtime
+/// directory, so a client that connects while the service restarts waits.
+pub fn socket_unit() -> String {
+    "[Unit]\n\
+     Description=open-esp-radio LAB service socket\n\
+     \n\
+     [Socket]\n\
+     ListenStream=%t/open-esp-radio/lab.sock\n\
+     SocketMode=0600\n\
+     DirectoryMode=0700\n\
+     \n\
+     [Install]\n\
+     WantedBy=sockets.target\n"
+        .to_owned()
+}
+
+/// The service unit running `binary` with the chip profiles of the clone
+/// at `root` and the tools on `path`. It starts at login too, so every
+/// board is parked before anyone asks. Its control group is delegated to
+/// it: every command it runs gets a group of its own there. A stop or a
+/// crash empties the unit's group before the service starts again.
 pub fn unit(binary: &Path, root: &Path, path: &str) -> String {
     format!(
         "[Unit]\n\
          Description=open-esp-radio LAB service: the stand's one owner\n\
+         Requires={SOCKET_UNIT}\n\
+         After={SOCKET_UNIT}\n\
          \n\
          [Service]\n\
-         ExecStart='{}' --root '{}' __serve\n\
+         ExecStart='{}' --root '{}'\n\
          Environment=\"PATH={path}\"\n\
+         Delegate=yes\n\
          KillMode=control-group\n\
          Restart=on-failure\n\
          \n\
@@ -72,21 +102,66 @@ fn systemctl(arguments: &[&str]) -> Result<()> {
     )
 }
 
-/// Install the service's unit for `binary` and restart it, after a running
-/// service drained its leases.
+/// Ask a running service to drain: wait until it holds no lease. Nothing to
+/// ask when no service listens; a service of another protocol cannot be
+/// asked, and the update stops.
+fn drain() -> Result<()> {
+    let socket = oer_lab_model::paths::socket()?;
+    let stream = match std::os::unix::net::UnixStream::connect(&socket) {
+        Ok(stream) => stream,
+        Err(error)
+            if matches!(
+                error.kind(),
+                std::io::ErrorKind::NotFound | std::io::ErrorKind::ConnectionRefused
+            ) =>
+        {
+            return Ok(());
+        }
+        Err(error) => return Err(format!("cannot reach {}: {error}", socket.display()).into()),
+    };
+    let mut client = oer_lab_client::client::Client::connect(stream, "cargo stand install")
+        .map_err(|refused| {
+            format!(
+                "the running LAB service cannot be asked to drain: {refused}. Wait until \
+                 `cargo stand queue` from a checkout of its version shows no lease, stop it \
+                 with `systemctl --user stop {UNIT}`, and install again"
+            )
+        })?;
+    println!("waiting for the running LAB service to finish its leases");
+    client.administer(oer_lab_client::protocol::Request::Drain)?;
+    Ok(())
+}
+
+/// Install the service's units for `binary` and restart it, after a
+/// running service drained its leases and the stand's earlier records were
+/// imported.
 fn install_service(binary: &Path, root: &Path) -> Result<()> {
-    if let Ok(mut client) = oer_lab_service::client::Client::open("cargo stand install") {
-        println!("waiting for the running LAB service to finish its leases");
-        client.administer(oer_lab_service::protocol::Request::Drain)?;
+    drain()?;
+    if std::env::var_os(oer_lab_model::paths::ARBITER_ENV).is_none() {
+        let previous = oer_os_durable::xdg::path(oer_os_durable::xdg::Base::Cache, "arbiter")?;
+        if let Some(imported) =
+            oer_lab_arbiter::import::previous(&previous, &oer_lab_arbiter::Arbiter::open()?)?
+        {
+            println!(
+                "imported the stand's earlier records: {} balance(s), {} board(s) under \
+                 maintenance, {} quarantined, {}",
+                imported.balances,
+                imported.maintenance,
+                imported.quarantined,
+                imported.records.join(", ")
+            );
+        }
     }
     let directory = home()?.join(".config/systemd/user");
     fs::create_dir_all(&directory)?;
     let path = std::env::var("PATH").unwrap_or_default();
+    fs::write(directory.join(SOCKET_UNIT), socket_unit())?;
     fs::write(directory.join(UNIT), unit(binary, root, &path))?;
     systemctl(&["daemon-reload"])?;
-    systemctl(&["enable", UNIT])?;
+    systemctl(&["enable", SOCKET_UNIT, UNIT])?;
+    systemctl(&["start", SOCKET_UNIT])?;
     systemctl(&["restart", UNIT])?;
-    println!("the LAB service runs as the systemd user unit {UNIT}");
+    println!("the LAB service runs as the systemd user units {SOCKET_UNIT} and {UNIT}");
     Ok(())
 }
 
@@ -141,6 +216,7 @@ pub fn run(ctx: &Checkout) -> Result<()> {
     let short = &commit[..12.min(commit.len())];
     let bin = tool.join("bin");
     let installed = bin.join(PACKAGE);
+    let service = bin.join(SERVICE_BINARY);
     let previous = fs::read_to_string(tool.join("installed-commit")).ok();
     if installed.is_file()
         && let Some(previous) = previous.as_deref().map(str::trim)
@@ -152,7 +228,7 @@ pub fn run(ctx: &Checkout) -> Result<()> {
         if git_text(&diff).is_ok_and(|changed| changed.is_empty()) {
             fs::write(tool.join("installed-commit"), &commit)?;
             println!("oer-tool-lab-cli is up to date at {short}");
-            return install_service(&installed, &source);
+            return install_service(&service, &source);
         }
     }
     // The tool's work is file and device I/O: the incremental dev profile
@@ -160,12 +236,14 @@ pub fn run(ctx: &Checkout) -> Result<()> {
     process::run(
         oer_os_toolchain::cargo_in(&ctx.root)
             .current_dir(&source)
-            .args(["build", "--locked", "-p", PACKAGE]),
+            .args(["build", "--locked", "-p", PACKAGE, "-p", SERVICE_PACKAGE]),
     )?;
     fs::create_dir_all(&bin)?;
-    let staged = bin.join(format!(".{PACKAGE}.new"));
-    fs::copy(source.join("target/debug").join(BINARY), &staged)?;
-    fs::rename(&staged, &installed)?;
+    for (built, target) in [(BINARY, &installed), (SERVICE_BINARY, &service)] {
+        let staged = bin.join(format!(".{built}.new"));
+        fs::copy(source.join("target/debug").join(built), &staged)?;
+        fs::rename(&staged, target)?;
+    }
     let script_directory = home()?.join(".local/bin");
     fs::create_dir_all(&script_directory)?;
     let script = script_directory.join("oer-tool-lab-cli");
@@ -180,7 +258,7 @@ pub fn run(ctx: &Checkout) -> Result<()> {
         "installed oer-tool-lab-cli from main {short} ({})",
         script.display()
     );
-    install_service(&installed, &source)
+    install_service(&service, &source)
 }
 
 /// The files the tool is built from, relative to its clone: the workspace
@@ -194,6 +272,7 @@ fn build_inputs(ctx: &Checkout, source: &Path) -> Result<Vec<String>> {
     )?;
     let metadata: serde_json::Value = serde_json::from_slice(&output.stdout)?;
     let mut inputs = path_package_closure(&metadata, PACKAGE, source)?;
+    inputs.extend(path_package_closure(&metadata, SERVICE_PACKAGE, source)?);
     inputs.extend(["Cargo.toml", "Cargo.lock", "rust-toolchain.toml", ".cargo"].map(String::from));
     Ok(inputs)
 }
@@ -268,13 +347,23 @@ mod tests {
     #[test]
     fn the_unit_serves_from_the_installed_binary_and_owns_every_descendant() {
         let text = unit(
-            Path::new("/tool/bin/oer-tool-lab-cli"),
+            Path::new("/tool/bin/oer-lab-service"),
             Path::new("/tool/src"),
             "/usr/bin:/bin",
         );
-        assert!(text.contains("ExecStart='/tool/bin/oer-tool-lab-cli' --root '/tool/src' __serve"));
+        assert!(text.contains("ExecStart='/tool/bin/oer-lab-service' --root '/tool/src'"));
+        assert!(text.contains("Requires=oer-lab.socket"));
+        assert!(text.contains("Delegate=yes"));
         assert!(text.contains("KillMode=control-group"));
         assert!(text.contains("Environment=\"PATH=/usr/bin:/bin\""));
         assert!(text.contains("WantedBy=default.target"));
+    }
+
+    #[test]
+    fn the_socket_unit_holds_the_service_socket_in_the_runtime_directory() {
+        let text = socket_unit();
+        assert!(text.contains("ListenStream=%t/open-esp-radio/lab.sock"));
+        assert!(text.contains("SocketMode=0600"));
+        assert!(text.contains("WantedBy=sockets.target"));
     }
 }

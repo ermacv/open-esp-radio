@@ -102,7 +102,7 @@ pub(crate) fn of(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oer_lab_board::reset::RecoveryStep;
+    use oer_lab_model::rom::RecoveryStep;
 
     const MAC: &str = "02:00:00:00:F6:D0";
 
@@ -156,7 +156,7 @@ mod tests {
         );
         let unavailable = Readiness::Unavailable {
             reason: String::from("silent"),
-            quiet: false,
+            emission: crate::readiness::Emission::Unknown,
             generation: 1,
         };
         let quarantined = of(MAC, true, Some(&unavailable), &[], &recent, now);

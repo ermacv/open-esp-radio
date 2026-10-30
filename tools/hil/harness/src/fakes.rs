@@ -1,5 +1,5 @@
 //! Stand doubles for the harness's tests: devices behind real links and a
-//! board whose reset ladder runs through `oer_lab_board::reset::climb`.
+//! board whose reset ladder runs through `oer_lab_model::rom::climb`.
 
 use std::{
     cell::{Cell, RefCell},
@@ -9,7 +9,7 @@ use std::{
 
 use oer_hil_link::{Link, test_support::Device};
 use oer_hil_protocol::base::{GetHello, Hello, RejectReason, Rejected};
-use oer_lab_board::reset::{Ladder, RecoveryStep, Rung};
+use oer_lab_model::rom::{Ladder, RecoveryStep, Rung};
 
 use crate::finish::{Board, Waits};
 
@@ -101,7 +101,7 @@ impl Rung for FakeRung<'_> {
     fn step(&self) -> RecoveryStep {
         self.1.step
     }
-    fn reset(&self) -> oer_lab_board::Result<Option<String>> {
+    fn reset(&self) -> oer_lab_model::Result<Option<String>> {
         self.0.resets.set(self.0.resets.get() + 1);
         if self.1.restarts {
             self.0.boots.set(self.0.boots.get() + 1);
@@ -118,7 +118,7 @@ impl Board for FakeBoard {
             .iter()
             .map(|step| FakeRung(self, step))
             .collect::<Vec<_>>();
-        oer_lab_board::reset::climb(
+        oer_lab_model::rom::climb(
             &rungs
                 .iter()
                 .map(|rung| rung as &dyn Rung)

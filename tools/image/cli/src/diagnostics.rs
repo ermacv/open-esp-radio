@@ -31,7 +31,7 @@ impl Decoder {
     }
 
     fn decode<'a>(&mut self, line: &'a [u8]) -> oer_image_build::Result<Cow<'a, str>> {
-        if oer_lab_board::console::is_reset_line(&String::from_utf8_lossy(line)) {
+        if oer_lab_model::rom::is_reset_line(&String::from_utf8_lossy(line)) {
             self.stream.restart();
         }
         let mut scratch = [0; MAX_PAYLOAD + 7];

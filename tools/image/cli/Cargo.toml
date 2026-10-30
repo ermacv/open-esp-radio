@@ -22,11 +22,9 @@ oer-image-checks = { path = "../checks" }
 oer-image-esp-idf = { path = "../esp-idf" }
 oer-chip-profile = { path = "../../chip/profile" }
 oer-lab-arbiter = { path = "../../lab/arbiter" }
-oer-lab-board = { path = "../../lab/board" }
-oer-lab-service = { path = "../../lab/service" }
+oer-lab-client = { path = "../../lab/client" }
 oer-os-process = { path = "../../os/process" }
 oer-lab-model = { path = "../../lab/model" }
-oer-lab-router = { path = "../../lab/router" }
 serde_json = "1.0"
 oer-os-command-tree = { path = "../../os/command-tree", features = ["clap"] }
 clap = { version = "=4.5.48", features = ["derive"] }

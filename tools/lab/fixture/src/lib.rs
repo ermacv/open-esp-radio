@@ -11,13 +11,16 @@
 
 mod admission;
 pub mod bluetooth;
+pub mod hostapd;
 pub mod launcher;
+pub mod local;
 mod model;
 pub mod network_client;
 mod prepare;
 #[cfg(target_os = "linux")]
 pub mod probe;
 mod transaction;
+pub mod udhcpc;
 
 pub use admission::{OperationalLease, admit_system};
 pub use model::{

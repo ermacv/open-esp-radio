@@ -9,7 +9,6 @@ publish = false
 description = "The stand's scheduling for the LAB service: the queue, balances, preemption, maintenance, resource readiness and the stand's records"
 
 [dependencies]
-oer-lab-board = { path = "../board" }
 oer-os-durable = { path = "../../os/durable" }
 oer-os-process = { path = "../../os/process" }
 oer-lab-model = { path = "../model" }

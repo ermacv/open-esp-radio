@@ -4,6 +4,8 @@
 //! the repository checkout a tool acts on, Git, live-process facts and the
 //! one advisory file lock ([`lock::FileLock`]).
 
+#[cfg(target_os = "linux")]
+pub mod cgroup;
 #[allow(
     unsafe_code,
     reason = "pre-exec child setup calls async-signal-safe libc"

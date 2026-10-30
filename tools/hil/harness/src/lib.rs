@@ -279,6 +279,7 @@ pub fn main(scenario: &Scenario, cases: &[Case]) -> ExitCode {
                 (run, dut.into_link())
             };
             let cleanup = session.finish(link, run.ending);
+            let cleanup = cleanup.released(session.release());
             (run.outcomes, Some(cleanup))
         }
         Err(error) => {
