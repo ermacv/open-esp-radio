@@ -24,6 +24,7 @@ oer-lab-arbiter = { path = "../arbiter" }
 oer-lab-model = { path = "../model" }
 oer-lab-fixture = { path = "../fixture" }
 oer-lab-router = { path = "../router" }
+oer-lab-service = { path = "../service" }
 oer-os-toolchain = { path = "../../os/toolchain" }
 rustix = { version = "=1.1.4", features = ["process"] }
 serde_json = "=1.0.151"

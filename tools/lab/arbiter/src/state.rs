@@ -8,8 +8,8 @@ use crate::claims::Claim;
 
 use crate::{balance::Balance, process::ProcessIdentity};
 
-/// Schema 3 serves requests by owner balance instead of arrival and budget.
-pub(crate) const STATE_SCHEMA: u32 = 3;
+/// Schema 4 is the LAB service's: readiness and maintenance with the queue.
+pub(crate) const STATE_SCHEMA: u32 = 4;
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub(crate) struct State {
@@ -26,6 +26,9 @@ pub(crate) struct State {
     /// The readiness of every stateful resource the service has seen.
     #[serde(default)]
     pub(crate) readiness: BTreeMap<String, crate::readiness::Readiness>,
+    /// Boards, or the stand, an owner took out of service.
+    #[serde(default)]
+    pub(crate) maintenance: Vec<crate::Maintenance>,
     /// Fields a newer build wrote, kept when this build rewrites the record.
     #[serde(flatten)]
     pub(crate) unknown: crate::Unknown,
@@ -41,6 +44,7 @@ impl Default for State {
             balances: BTreeMap::new(),
             settled_unix_ms: 0,
             readiness: BTreeMap::new(),
+            maintenance: Vec::new(),
             unknown: crate::Unknown::default(),
         }
     }

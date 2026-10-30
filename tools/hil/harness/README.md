@@ -6,10 +6,14 @@ of the services that image must serve, and lists its cases; `main` then:
 
 1. builds the image through the image pipeline, before it waits for the stand;
 2. leases the board (`--board`, or the one board of the image's chip with
-   the `dut` role);
-3. writes the image unless the board's receipt says it runs it, and records
-   the write in the board journal;
-4. opens the board's console with a reset and starts the link;
+   the `dut` role) from the LAB service
+   ([tools/lab/service](../../lab/service/README.md)), which runs every
+   operation on it;
+3. has the service write the image unless the board's receipt says it runs
+   it; the service records the write in the board journal;
+4. opens the board's console with a reset and starts the link on it: the
+   service streams the console through a local socket the link reads as its
+   serial line;
 5. checks that the running image is the built one (Hello's `image_crc32`
    against the bundle's runtime CRC-32, also after a reboot) and that its key
    pages hold every required key;
@@ -22,11 +26,12 @@ of the services that image must serve, and lists its cases; `main` then:
    rung after which another boot of the image answers recovers the board
    (the new console answers also a device the rung did not restart); a ROM that answers
    while the image does not leaves the board in service, since the stand
-   can write it again; only a ROM that stays silent after the whole ladder
-   quarantines the board through the arbiter. A cancelled program judges
-   nothing, and the next session resets the board anyway;
-8. releases the link, the board and the lease in that order, also on an error,
-   a cancellation or a stage of opening that failed.
+   can write it again; a ROM that stays silent after the whole ladder is
+   reported as needing a person. A cancelled program judges nothing;
+8. releases the link and the lease in that order, also on an error, a
+   cancellation or a stage of opening that failed. The service then parks
+   the board in its ROM's download mode, or keeps it out of service when
+   not even that works.
 
 A case talks to the device through `Cx`:
 

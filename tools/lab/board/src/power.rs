@@ -58,12 +58,11 @@ impl HubPower {
     }
 
     /// Whether the port is powered.
-    pub fn is_on(&self, lifetime: &oer_os_process::IoLifetime) -> crate::power::Result<bool> {
+    pub fn is_on(&self) -> crate::power::Result<bool> {
         let mut command = oer_os_process::command("uhubctl");
         command
             .args(["--location", &self.port.location, "--ports"])
             .arg(self.port.port.to_string());
-        lifetime.pin(&mut command)?;
         let output = oer_os_process::output(&mut command, Some(Duration::from_secs(30)))?;
         powered(
             &parse(&String::from_utf8_lossy(&output.stdout)),
@@ -80,23 +79,19 @@ impl HubPower {
     }
 
     /// Power the port on.
-    pub fn on(&self, lifetime: &oer_os_process::IoLifetime) -> crate::power::Result<()> {
-        self.action("on", 2, lifetime)
+    pub fn on(&self) -> crate::power::Result<()> {
+        self.action("on", 2)
     }
 
     /// Power the port off and on again.
-    pub fn cycle(&self, lifetime: &oer_os_process::IoLifetime) -> crate::power::Result<()> {
-        self.action("cycle", 2, lifetime)
+    pub fn cycle(&self) -> crate::power::Result<()> {
+        self.action("cycle", 2)
     }
 
     /// Power the port off for `off`, then on again: long enough for a person
     /// to see which button's light goes out.
-    pub fn cycle_holding(
-        &self,
-        off: Duration,
-        lifetime: &oer_os_process::IoLifetime,
-    ) -> crate::power::Result<()> {
-        self.action("cycle", off.as_secs().max(1), lifetime)
+    pub fn cycle_holding(&self, off: Duration) -> crate::power::Result<()> {
+        self.action("cycle", off.as_secs().max(1))
     }
 
     /// Power the port off and on again while watching the board with `mac`
@@ -106,13 +101,12 @@ impl HubPower {
     pub fn cycle_observed(
         &self,
         mac: &oer_lab_model::device_id::DeviceId,
-        lifetime: &oer_os_process::IoLifetime,
     ) -> crate::power::Result<PowerCycle> {
-        self.action("off", 2, lifetime)?;
+        self.action("off", 2)?;
         let left = wait_until(POWER_LEAVE, &|| !crate::discovery::is_attached(mac));
         // From the moment the port is told to power on.
         let started = Instant::now();
-        self.action("on", 2, lifetime)?;
+        self.action("on", 2)?;
         let returned = wait_until(POWER_RETURN, &|| crate::discovery::is_attached(mac))
             .then(|| started.elapsed());
         Ok(PowerCycle { left, returned })
@@ -127,10 +121,9 @@ impl HubPower {
     pub fn prove_power_loss(
         &self,
         mac: &oer_lab_model::device_id::DeviceId,
-        lifetime: &oer_os_process::IoLifetime,
         reset_cause: impl FnOnce() -> crate::power::Result<ResetCause>,
     ) -> crate::power::Result<PowerLoss> {
-        let cycle = self.cycle_observed(mac, lifetime)?;
+        let cycle = self.cycle_observed(mac)?;
         let reset = cycle
             .returned
             .is_some()
@@ -138,19 +131,13 @@ impl HubPower {
         Ok(PowerLoss { cycle, reset })
     }
 
-    fn action(
-        &self,
-        action: &str,
-        delay_secs: u64,
-        lifetime: &oer_os_process::IoLifetime,
-    ) -> crate::power::Result<()> {
+    fn action(&self, action: &str, delay_secs: u64) -> crate::power::Result<()> {
         let mut command = oer_os_process::command("uhubctl");
         command
             .args(["--location", &self.port.location, "--ports"])
             .arg(self.port.port.to_string())
             .args(["--action", action, "--delay"])
             .arg(delay_secs.to_string());
-        lifetime.pin(&mut command)?;
         let output =
             oer_os_process::output(&mut command, Some(Duration::from_secs(30 + delay_secs)))?;
         if !output.status.success() {

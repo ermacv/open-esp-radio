@@ -177,6 +177,47 @@ impl Scheduler {
         self.state.readiness.get(resource)
     }
 
+    pub(crate) fn state(&self) -> &State {
+        &self.state
+    }
+
+    /// The boards, or the stand, owners took out of service.
+    pub fn maintenance(&self) -> &[crate::Maintenance] {
+        &self.state.maintenance
+    }
+
+    /// Take `entry.mac` (a board's MAC, or the stand) out of service for
+    /// every owner but `entry.owner`, replacing an earlier entry for it.
+    pub fn set_maintenance(&mut self, entry: crate::Maintenance) {
+        self.state
+            .maintenance
+            .retain(|known| known.mac != entry.mac);
+        self.state.maintenance.push(entry);
+    }
+
+    /// Return `mac` (or the stand) to service; false when it was in service.
+    pub fn clear_maintenance(&mut self, mac: &str) -> bool {
+        let before = self.state.maintenance.len();
+        self.state.maintenance.retain(|entry| entry.mac != mac);
+        self.state.maintenance.len() != before
+    }
+
+    /// Charge `old`'s balance to `new`, for an owner known under another
+    /// name; the service renames the history.
+    pub fn merge_owner(&mut self, old: &str, new: &str) {
+        if let Some(balance) = self.state.balances.remove(old) {
+            let merged = self.state.balances.entry(new.to_owned()).or_default();
+            merged.balance_ms += balance.balance_ms;
+            merged.last_active_unix_ms =
+                merged.last_active_unix_ms.max(balance.last_active_unix_ms);
+        }
+    }
+
+    /// Drop `name`'s balance; false when it had none.
+    pub fn forget_owner(&mut self, name: &str) -> bool {
+        self.state.balances.remove(name).is_some()
+    }
+
     /// Every stateful resource's readiness.
     pub fn resources(&self) -> Vec<(String, Readiness)> {
         self.state
@@ -247,7 +288,14 @@ impl Scheduler {
             .collect::<Vec<_>>();
         let mut granted = Vec::new();
         for id in order {
-            if !crate::queue::grantable(&self.state, id) || !self.ready(id) {
+            // A request maintenance keeps waiting holds back no other one.
+            let mut view = self.state.clone();
+            view.queue.retain(|ticket| {
+                ticket.id == id
+                    || crate::maintenance::refusal(&view.maintenance, &ticket.owner, &ticket.claims)
+                        .is_none()
+            });
+            if !crate::queue::grantable(&view, id) || !self.ready(id) {
                 continue;
             }
             let Some(index) = self.state.queue.iter().position(|ticket| ticket.id == id) else {
@@ -309,6 +357,11 @@ impl Scheduler {
         let Some(ticket) = self.state.queue.iter().find(|ticket| ticket.id == id) else {
             return false;
         };
+        if crate::maintenance::refusal(&self.state.maintenance, &ticket.owner, &ticket.claims)
+            .is_some()
+        {
+            return false;
+        }
         let held = readiness::held(&ticket.claims, &self.stand);
         let ready = held.iter().all(|resource| {
             matches!(

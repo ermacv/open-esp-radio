@@ -9,7 +9,13 @@ publish = false
 description = "The LAB service: the one owner of the stand's leases and hardware access, its IPC protocol and client"
 
 [dependencies]
+oer-image-bundle = { path = "../../image/bundle" }
 oer-lab-arbiter = { path = "../arbiter" }
+oer-lab-board = { path = "../board" }
+oer-lab-model = { path = "../model" }
+oer-lab-router = { path = "../router" }
+oer-os-durable = { path = "../../os/durable" }
+oer-os-process = { path = "../../os/process" }
 rustix = { version = "=1.1.4", features = ["net"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

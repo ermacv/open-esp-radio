@@ -2258,9 +2258,11 @@ dependencies = [
  "oer-lab-arbiter",
  "oer-lab-board",
  "oer-lab-model",
+ "oer-lab-service",
  "oer-os-process",
  "postcard-schema",
  "serde",
+ "serde_json",
  "toml",
 ]
 
@@ -2669,12 +2671,10 @@ dependencies = [
 name = "oer-lab-arbiter"
 version = "0.1.0"
 dependencies = [
- "hex",
  "oer-lab-board",
  "oer-lab-model",
  "oer-os-durable",
  "oer-os-process",
- "rustix",
  "serde",
  "serde_json",
  "tempfile",
@@ -2752,7 +2752,13 @@ dependencies = [
 name = "oer-lab-service"
 version = "0.1.0"
 dependencies = [
+ "oer-image-bundle",
  "oer-lab-arbiter",
+ "oer-lab-board",
+ "oer-lab-model",
+ "oer-lab-router",
+ "oer-os-durable",
+ "oer-os-process",
  "rustix",
  "serde",
  "serde_json",
@@ -3043,10 +3049,13 @@ dependencies = [
  "oer-image-bundle",
  "oer-image-checks",
  "oer-image-esp-idf",
+ "oer-lab-arbiter",
  "oer-lab-board",
  "oer-lab-model",
  "oer-lab-router",
+ "oer-lab-service",
  "oer-os-command-tree",
+ "oer-os-process",
  "oer-trace",
  "serde_json",
  "tempfile",
@@ -3081,6 +3090,7 @@ dependencies = [
  "oer-lab-fixture",
  "oer-lab-model",
  "oer-lab-router",
+ "oer-lab-service",
  "oer-os-command-tree",
  "oer-os-durable",
  "oer-os-process",

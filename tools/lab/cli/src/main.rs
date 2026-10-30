@@ -11,6 +11,7 @@ mod discover;
 mod fixture_install;
 mod init;
 mod install;
+mod service;
 
 use std::process::ExitCode;
 
@@ -60,6 +61,9 @@ enum StandCommand {
     Fixture(FixtureCli),
     #[command(name = "__command-tree", hide = true)]
     CommandTree,
+    /// Run the LAB service; its systemd user unit starts it.
+    #[command(name = "__serve", hide = true)]
+    Serve,
 }
 
 /// `cargo stand fixture install|build-hostapd|build-udhcpc`.
@@ -121,11 +125,20 @@ fn run() -> Result<ExitCode> {
             Ok(ExitCode::SUCCESS)
         }
         Some(StandCommand::Fixtures) => {
-            let stand_file = oer_lab_model::paths::stand_file()?;
-            print!(
-                "{}",
-                oer_lab_router::fixtures::describe(&oer_lab_router::fixtures::probe(&stand_file))
-            );
+            // The router and the air observer are reached over SSH, which
+            // the service owns: a probe holds the router shared.
+            let mut lease = service::lease(
+                options.owner(&ctx)?,
+                String::from("stand fixtures"),
+                vec![oer_lab_arbiter::claims::Claim::shared(
+                    oer_lab_arbiter::readiness::ROUTER,
+                )],
+            )?;
+            let report = service::run(
+                &mut lease,
+                oer_lab_service::protocol::Operation::ProbeFixtures,
+            )?;
+            print!("{}", report.as_str().unwrap_or_default());
             Ok(ExitCode::SUCCESS)
         }
         Some(StandCommand::Fixture(FixtureCli::Install {
@@ -142,6 +155,10 @@ fn run() -> Result<ExitCode> {
         }
         Some(StandCommand::Fixture(FixtureCli::BuildUdhcpc)) => {
             oer_lab_router::udhcpc::build(&ctx.root)?;
+            Ok(ExitCode::SUCCESS)
+        }
+        Some(StandCommand::Serve) => {
+            oer_lab_service::run::serve(ctx.root.clone())?;
             Ok(ExitCode::SUCCESS)
         }
         Some(StandCommand::CommandTree) => {

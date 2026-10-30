@@ -203,6 +203,8 @@ struct Shared {
     state_path: PathBuf,
     /// The lease history.
     history_path: PathBuf,
+    /// The directory of the stand's records, and its stand file.
+    arbiter: oer_lab_arbiter::Arbiter,
     recovery_deadline: std::time::Duration,
 }
 
@@ -222,6 +224,8 @@ struct Inner {
     recovering: std::collections::BTreeSet<String>,
     next_connection: u64,
     next_token: u64,
+    /// No more grants: the service is being replaced.
+    draining: bool,
 }
 
 struct Lease {
@@ -247,28 +251,28 @@ struct Running {
 }
 
 impl Service {
-    /// Resume the service whose state lives in `directory`, for the stand's
-    /// stateful resources `stand`: leases it held end as abandoned, and every
-    /// resource left without a confirmed end state is recovered before it is
-    /// granted.
+    /// Resume the service whose state lives in `arbiter`'s directory, for
+    /// the stand's stateful resources `stand`: leases it held end as
+    /// abandoned, and every resource left without a confirmed end state is
+    /// recovered before it is granted.
     pub fn open(
-        directory: &std::path::Path,
+        arbiter: oer_lab_arbiter::Arbiter,
         stand: Vec<String>,
         drivers: Arc<dyn Drivers>,
         clock: Clock,
     ) -> oer_lab_arbiter::Result<Self> {
-        Self::open_with(directory, stand, drivers, clock, RECOVERY_DEADLINE)
+        Self::open_with(arbiter, stand, drivers, clock, RECOVERY_DEADLINE)
     }
 
     fn open_with(
-        directory: &std::path::Path,
+        arbiter: oer_lab_arbiter::Arbiter,
         stand: Vec<String>,
         drivers: Arc<dyn Drivers>,
         clock: Clock,
         recovery_deadline: std::time::Duration,
     ) -> oer_lab_arbiter::Result<Self> {
-        let state_path = directory.join("service.json");
-        let history_path = directory.join("history.jsonl");
+        let state_path = arbiter.state_path();
+        let history_path = arbiter.history_path();
         let (scheduler, resumed) = Scheduler::open(&state_path, stand, clock())?;
         scheduler.save(&state_path)?;
         for record in &resumed.abandoned {
@@ -285,6 +289,7 @@ impl Service {
                     clients: BTreeMap::new(),
                     recovering: Default::default(),
                     next_connection: 1,
+                    draining: false,
                     next_token: 1,
                 }),
                 changed: Condvar::new(),
@@ -292,6 +297,7 @@ impl Service {
                 clock,
                 state_path,
                 history_path,
+                arbiter,
                 recovery_deadline,
             }),
         };
@@ -456,6 +462,97 @@ impl Service {
             Request::Status => outbox.push(&Reply::Status {
                 status: self.status(),
             }),
+            Request::Drain => {
+                lock(&self.shared.inner).draining = true;
+                let service = self.clone();
+                let outbox = outbox_of(&self.shared, connection);
+                std::thread::spawn(move || {
+                    service.wait_until(|status| status.holders.is_empty());
+                    if let Some(outbox) = outbox {
+                        outbox.push(&Reply::Done { changed: true });
+                    }
+                });
+            }
+            Request::Report => {
+                let inner = lock(&self.shared.inner);
+                match self.shared.arbiter.status(&inner.scheduler) {
+                    Ok(status) => outbox.push(&Reply::Report {
+                        status: Box::new(status),
+                    }),
+                    Err(error) => outbox.push(&Reply::Refused {
+                        reason: error.to_string(),
+                    }),
+                }
+            }
+            Request::Maintain { mac, owner, reason } => {
+                let mut inner = lock(&self.shared.inner);
+                inner
+                    .scheduler
+                    .set_maintenance(oer_lab_arbiter::Maintenance {
+                        mac,
+                        owner,
+                        reason,
+                        since_unix: (self.shared.clock)() / 1000,
+                        unknown: Default::default(),
+                    });
+                let changed = self.persist(&inner);
+                outbox.push(&Reply::Done { changed });
+            }
+            Request::EndMaintenance { mac } => {
+                let mut inner = lock(&self.shared.inner);
+                let changed = inner.scheduler.clear_maintenance(&mac);
+                self.persist(&inner);
+                self.pump(&mut inner);
+                outbox.push(&Reply::Done { changed });
+            }
+            Request::MergeOwner { old, new } => {
+                let mut inner = lock(&self.shared.inner);
+                inner.scheduler.merge_owner(&old, &new);
+                self.persist(&inner);
+                match oer_lab_arbiter::history::rename_owner(&self.shared.history_path, &old, &new)
+                {
+                    Ok(()) => outbox.push(&Reply::Done { changed: true }),
+                    Err(error) => outbox.push(&Reply::Refused {
+                        reason: error.to_string(),
+                    }),
+                }
+            }
+            Request::ForgetOwner { name } => {
+                let mut inner = lock(&self.shared.inner);
+                let changed = inner.scheduler.forget_owner(&name);
+                self.persist(&inner);
+                outbox.push(&Reply::Done { changed });
+            }
+            Request::RecordFlash { owner, mac, image } => {
+                let recorded = oer_lab_model::device_id::DeviceId::parse(&mac)
+                    .map_err(|error| error.to_string())
+                    .and_then(|mac| {
+                        self.shared
+                            .arbiter
+                            .journal()
+                            .record_flash(owner, &mac, &image)
+                            .map_err(|error| error.to_string())
+                    });
+                match recorded {
+                    Ok(()) => outbox.push(&Reply::Done { changed: true }),
+                    Err(reason) => outbox.push(&Reply::Refused { reason }),
+                }
+            }
+            Request::Record {
+                owner,
+                device,
+                event,
+            } => match self
+                .shared
+                .arbiter
+                .journal()
+                .record_by(owner, device, event)
+            {
+                Ok(()) => outbox.push(&Reply::Done { changed: true }),
+                Err(error) => outbox.push(&Reply::Refused {
+                    reason: error.to_string(),
+                }),
+            },
             Request::Preempt { lease, by, reason } => {
                 let mut inner = lock(&self.shared.inner);
                 let now = (self.shared.clock)();
@@ -519,6 +616,18 @@ impl Service {
             outbox.push(&Reply::Refused {
                 reason: "this connection already waits for or holds a lease".to_owned(),
             });
+            return;
+        }
+        // A tool that acts on a board now is told at once; a run waits.
+        if request.scenarios.is_empty()
+            && request.maintenance.is_none()
+            && let Some(refusal) = oer_lab_arbiter::maintenance::refusal(
+                inner.scheduler.maintenance(),
+                &request.owner,
+                &oer_lab_arbiter::claims::normalize(&request.claims),
+            )
+        {
+            outbox.push(&Reply::Refused { reason: refusal });
             return;
         }
         let maintenance = request
@@ -623,6 +732,12 @@ impl Service {
             },
         );
         let claims = lease.claims.clone();
+        // A command inside the lease joins it, for the stand tools it runs.
+        let mut operation = operation;
+        if let Operation::Command { environment, .. } = &mut operation {
+            environment.retain(|(key, _)| key != crate::protocol::LEASE_ENV);
+            environment.push((crate::protocol::LEASE_ENV.to_owned(), lease.token.clone()));
+        }
         drop(inner);
         self.shared.changed.notify_all();
         let service = self.clone();
@@ -786,6 +901,10 @@ impl Service {
     /// Grant what can be granted and tell the waiting clients.
     fn pump(&self, inner: &mut Inner) {
         let now = (self.shared.clock)();
+        if inner.draining {
+            self.shared.changed.notify_all();
+            return;
+        }
         let mut next_token = inner.next_token;
         let granted = inner.scheduler.grant(now, &mut || {
             next_token += 1;
@@ -917,6 +1036,10 @@ impl Service {
             }
         }
     }
+}
+
+fn outbox_of(shared: &Shared, connection: u64) -> Option<Arc<Outbox>> {
+    lock(&shared.inner).connections.get(&connection).cloned()
 }
 
 /// Running operation `id` of connection `connection`.

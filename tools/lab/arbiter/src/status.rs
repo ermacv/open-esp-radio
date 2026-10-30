@@ -2,17 +2,21 @@
 
 use std::{fmt::Write as _, time::Duration};
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
+use crate::claims::Claim;
 use crate::journal::{BoardEvent, device_label, latest};
+use crate::readiness::Readiness;
+use crate::scheduler::Scheduler;
 
-use crate::{
-    Arbiter, LeaseRecord, balance, estimate::format_duration, grant::signed_duration, queue,
-};
+use crate::{Arbiter, LeaseRecord, balance, estimate::format_duration, queue};
+
+/// The time a preempted holder needs to stop, for expected starts.
+const STOP_GRACE: Duration = Duration::from_secs(60);
 
 const RECENT_LEASES: usize = 5;
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Status {
     /// Leases held now; leases on disjoint resources run in parallel.
     pub holders: Vec<HolderStatus>,
@@ -28,9 +32,12 @@ pub struct Status {
     /// Boards out of service.
     #[serde(default)]
     pub maintenance: Vec<crate::Maintenance>,
+    /// Every stateful resource's readiness.
+    #[serde(default)]
+    pub resources: Vec<(String, Readiness)>,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct DeviceStatus {
     /// `None` for journal records that predate device identities.
     pub mac: Option<String>,
@@ -42,7 +49,7 @@ pub struct DeviceStatus {
     pub health: Option<crate::health::Health>,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct HolderStatus {
     pub id: u64,
     pub owner: String,
@@ -57,7 +64,7 @@ pub struct HolderStatus {
     pub run: Option<String>,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct BalanceStatus {
     pub owner: String,
     pub balance_ms: i64,
@@ -66,7 +73,7 @@ pub struct BalanceStatus {
     pub last_active_unix_ms: u64,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct QueuedStatus {
     pub id: u64,
     pub owner: String,
@@ -82,32 +89,11 @@ pub struct QueuedStatus {
 }
 
 impl Arbiter {
-    /// Holders whose claims conflict with `claims`.
-    pub fn conflicting_holders(
-        &self,
-        claims: &[crate::claims::Claim],
-    ) -> crate::Result<Vec<HolderStatus>> {
-        let claims = crate::claims::normalize(claims);
-        let conflicting = self.transaction(|state| {
-            Ok(state
-                .holders
-                .iter()
-                .filter(|holder| crate::claims::conflict(&holder.ticket.claims, &claims))
-                .map(|holder| holder.ticket.id)
-                .collect::<Vec<_>>())
-        })?;
-        Ok(self
-            .status()?
-            .holders
-            .into_iter()
-            .filter(|holder| conflicting.contains(&holder.id))
-            .collect())
-    }
-
-    pub fn status(&self) -> crate::Result<Status> {
+    /// The stand as `scheduler` holds it, with this directory's records.
+    pub fn status(&self, scheduler: &Scheduler) -> crate::Result<Status> {
         let now = oer_os_durable::unix_seconds();
-        let state = self.transaction(|state| Ok(state.clone()))?;
-        let mut starts = queue::expected_starts(&state, now, crate::grant::SHUTDOWN_GRACE);
+        let state = scheduler.state().clone();
+        let mut starts = queue::expected_starts(&state, now, STOP_GRACE);
         let order = |id: u64| state.queue.iter().find(|ticket| ticket.id == id);
         starts.sort_by(|(a, ..), (b, ..)| match (order(*a), order(*b)) {
             (Some(a), Some(b)) if balance::before(&state, a, b) => std::cmp::Ordering::Less,
@@ -127,7 +113,7 @@ impl Arbiter {
                     balance_ms: balance::of(&state.balances, &ticket.owner),
                     ahead: *ahead,
                     expected_start_secs: *start,
-                    claims: crate::grant::describe_claims(&ticket.claims),
+                    claims: describe_claims(&ticket.claims),
                 })
             })
             .collect();
@@ -152,7 +138,7 @@ impl Arbiter {
             seen.push(mac.clone());
             new
         });
-        let maintenance = self.maintenance()?;
+        let maintenance = state.maintenance.clone();
         let devices = macs
             .into_iter()
             .map(|mac| {
@@ -165,7 +151,14 @@ impl Arbiter {
                 DeviceStatus {
                     label: device_label(mac.as_deref(), Some(&stand)),
                     health: mac.as_deref().map(|mac| {
-                        crate::health::of(mac, port.is_some(), &maintenance, &events, now)
+                        crate::health::of(
+                            mac,
+                            port.is_some(),
+                            state.readiness.get(&format!("board:{mac}")),
+                            &maintenance,
+                            &events,
+                            now,
+                        )
                     }),
                     port,
                     firmware: flashes
@@ -190,6 +183,7 @@ impl Arbiter {
             .collect::<Vec<_>>();
         balances.sort_by_key(|balance| std::cmp::Reverse(balance.balance_ms));
         Ok(Status {
+            resources: scheduler.resources(),
             maintenance,
             balances,
             holders: state
@@ -203,7 +197,7 @@ impl Arbiter {
                     estimate_secs: holder.ticket.estimate_secs,
                     balance_ms: balance::of(&state.balances, &holder.ticket.owner),
                     owner: holder.ticket.owner,
-                    claims: crate::grant::describe_claims(&holder.ticket.claims),
+                    claims: describe_claims(&holder.ticket.claims),
                     run: holder.ticket.run,
                 })
                 .collect(),
@@ -213,6 +207,31 @@ impl Arbiter {
             recent: history.iter().rev().take(RECENT_LEASES).cloned().collect(),
         })
     }
+}
+
+/// `+12m`, `-3m30s`, `0s`.
+pub(crate) fn signed_duration(milliseconds: i64) -> String {
+    let magnitude = format_duration(Duration::from_millis(milliseconds.unsigned_abs()));
+    match milliseconds.signum() {
+        1 => format!("+{magnitude}"),
+        -1 => format!("-{magnitude}"),
+        _ => magnitude,
+    }
+}
+
+/// `board:AA, air (shared)` or `the whole stand`.
+pub fn describe_claims(claims: &[Claim]) -> String {
+    if claims
+        .iter()
+        .any(|claim| claim.resource == crate::claims::STAND)
+    {
+        return String::from("the whole stand");
+    }
+    claims
+        .iter()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 fn duration(seconds: u64) -> String {

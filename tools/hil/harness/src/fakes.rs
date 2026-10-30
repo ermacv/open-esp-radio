@@ -66,10 +66,9 @@ pub(crate) struct Step {
     pub image: bool,
 }
 
-/// A board whose ladder is `steps`, with an arbiter that `records` or not.
+/// A board whose ladder is `steps`.
 pub(crate) struct FakeBoard {
     pub steps: Vec<Step>,
-    pub records: bool,
     pub image_up: Cell<bool>,
     pub resets: Cell<usize>,
     /// The device's running boot.
@@ -77,7 +76,6 @@ pub(crate) struct FakeBoard {
     /// Links the board opens next on which the running image's Hello is
     /// lost: the device shows its boot by another frame and answers nothing.
     pub hellos_lost: Cell<usize>,
-    pub quarantined: RefCell<Option<String>>,
     pub recovered: RefCell<Vec<RecoveryStep>>,
     /// How a device behaves on a link the board opens while its image runs.
     pub serve: fn(Device),
@@ -88,12 +86,10 @@ impl FakeBoard {
         Self {
             serve: |device| answer(device, Behavior::Answers),
             steps,
-            records: true,
             image_up: Cell::new(false),
             resets: Cell::new(0),
             boots: Cell::new(100),
             hellos_lost: Cell::new(0),
-            quarantined: RefCell::new(None),
             recovered: RefCell::new(Vec::new()),
         }
     }
@@ -154,13 +150,6 @@ impl Board for FakeBoard {
         let serve = self.serve;
         thread::spawn(move || serve(device));
         Ok(link)
-    }
-    fn quarantine(&self, reason: String) -> Result<(), String> {
-        if !self.records {
-            return Err("the arbiter is unavailable".to_owned());
-        }
-        *self.quarantined.borrow_mut() = Some(reason);
-        Ok(())
     }
     fn recovered(&self, step: RecoveryStep, _reset_line: Option<String>) {
         self.recovered.borrow_mut().push(step);

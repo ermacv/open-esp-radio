@@ -1,9 +1,8 @@
-//! One board of the stand as the host reaches it. [`Board`] describes it:
-//! its stand-file reference, where it was last seen, its chip, its reset
-//! ladder and its hub power. Every operation on it (a write, a start, a
-//! reset, a console, its power) is a [`LeasedBoard`]'s, which holds the
-//! board's [`DeviceAccess`]: no I/O without proof that this process owns
-//! the board or was delegated it.
+//! One board of the stand as the host reaches it: its stand-file reference,
+//! where it was last seen, its chip, its reset ladder and its hub power,
+//! and every operation on it (a write, a start, a reset, a console, its
+//! power). Only the LAB service, the one owner of the stand's hardware,
+//! runs them.
 
 use std::{
     path::{Path, PathBuf},
@@ -11,8 +10,8 @@ use std::{
 };
 
 use crate::image::{Receipt, Store, Transport};
-use crate::lock::{DeviceAccess, DeviceId};
 use oer_espressif_facts::Start;
+use oer_lab_model::device_id::DeviceId;
 use oer_lab_model::{BoardRef, ResetStep, Stand};
 
 use crate::console;
@@ -46,8 +45,8 @@ pub enum Via {
     Jtag,
 }
 
-/// A board of the stand file: what it is and where it was last seen. It
-/// does no I/O; [`Board::lease`] makes the [`LeasedBoard`] that does.
+/// A board of the stand file: what it is, where it was last seen, and its
+/// operations.
 #[derive(Clone, Debug)]
 pub struct Board {
     pub reference: BoardRef,
@@ -112,40 +111,14 @@ impl Board {
     pub fn has_power(&self) -> bool {
         self.power.is_some()
     }
-
-    /// The board under `access`, which must be this board's and still
-    /// exclude every other process: the only way to its I/O. The leased
-    /// board keeps `access` (an owning guard's clone, or the delegation)
-    /// for as long as it, or a console it opened, lives.
-    pub fn lease(self, access: &DeviceAccess) -> crate::stand::Result<LeasedBoard> {
-        access.ensure_covers(self.mac())?;
-        let _operation = access.operation()?;
-        Ok(LeasedBoard {
-            board: self,
-            access: access.clone(),
-        })
-    }
 }
 
-/// A board this process owns or was delegated: every operation on it.
-#[derive(Debug)]
-pub struct LeasedBoard {
-    board: Board,
-    access: DeviceAccess,
-}
-
-/// A leased board's open console: the port with the board's access, which
-/// lives as long as the port.
-///
-/// It reads and writes the port ([`std::io::Read`], [`std::io::Write`]) but
-/// never lends it out: a `&mut Port` could be swapped for another port and
-/// outlive the access. The port leaves only with the access, through
-/// [`BoardConsole::lines`].
+/// A board's open console: it reads and writes the port
+/// ([`std::io::Read`], [`std::io::Write`]), or becomes its lines
+/// ([`BoardConsole::lines`]).
 #[derive(Debug)]
 pub struct BoardConsole {
-    // Declared first: the port closes before the access is released.
     port: Port,
-    operation: crate::lock::DeviceOperation,
 }
 
 impl std::io::Read for BoardConsole {
@@ -165,21 +138,22 @@ impl std::io::Write for BoardConsole {
 }
 
 impl BoardConsole {
-    /// The lines the console receives; they keep the board's access until
-    /// their reader has closed the port.
+    /// The open port.
+    pub fn into_port(self) -> Port {
+        self.port
+    }
+
+    /// The lines the console receives.
     pub fn lines(self) -> BoardLines {
         BoardLines {
             lines: console::lines(self.port),
-            _operation: self.operation,
         }
     }
 }
 
-/// A leased board's console lines with the board's access.
+/// A board's console lines.
 pub struct BoardLines {
-    // Declared first: the reader closes the port before the access goes.
     lines: console::Lines,
-    _operation: crate::lock::DeviceOperation,
 }
 
 impl std::ops::Deref for BoardLines {
@@ -190,37 +164,12 @@ impl std::ops::Deref for BoardLines {
     }
 }
 
-impl LeasedBoard {
-    pub fn board(&self) -> &Board {
-        &self.board
-    }
-
-    pub fn access(&self) -> &DeviceAccess {
-        &self.access
-    }
-
-    pub fn mac(&self) -> &DeviceId {
-        self.board.mac()
-    }
-
-    pub fn chip(&self) -> &str {
-        self.board.chip()
-    }
-
-    pub fn has_power(&self) -> bool {
-        self.board.has_power()
-    }
-
-    /// Where the board was last seen.
-    pub fn port(&self) -> &Path {
-        self.board.port()
-    }
-
+impl Board {
     /// The board's port now: where it was while that exists, else its port
     /// once it is attached again within `within`.
     pub fn current_port(&self, within: Duration) -> Option<PathBuf> {
-        if self.board.port.exists() {
-            return Some(self.board.port.clone());
+        if self.port.exists() {
+            return Some(self.port.clone());
         }
         crate::discovery::wait_for(self.mac(), within)
     }
@@ -233,7 +182,7 @@ impl LeasedBoard {
         store: &Store,
         bundle: &oer_image_bundle::ImageBundle,
     ) -> crate::stand::Result<Option<Receipt>> {
-        crate::image::carries(store, &self.access, bundle)
+        crate::image::carries(store, self.mac(), bundle)
     }
 
     /// Write `bundle`, known as `image`, into the board's flash through
@@ -252,8 +201,7 @@ impl LeasedBoard {
         via: Via,
         by: &str,
     ) -> crate::stand::Result<Receipt> {
-        let _operation = self.access.operation()?;
-        let reference = &self.board.reference;
+        let reference = &self.reference;
         if bundle.chip != reference.chip {
             return Err(format!(
                 "board `{}` is an {}; the bundle is an {} image",
@@ -266,19 +214,19 @@ impl LeasedBoard {
                 let port = self.flashable_port()?;
                 crate::image::write(
                     store,
-                    &self.access,
+                    self.mac(),
                     bundle,
                     image,
                     Transport::Usb {
                         port: &port,
-                        espflash_chip: &self.board.espflash_chip,
+                        espflash_chip: &self.espflash_chip,
                     },
                     by,
                 )?
             }
             Via::Jtag => crate::image::write(
                 store,
-                &self.access,
+                self.mac(),
                 bundle,
                 image,
                 Transport::Jtag { chip: self.chip() },
@@ -293,11 +241,10 @@ impl LeasedBoard {
     /// writer's own reset, else a power-on reset where the board resets by
     /// power and an RTS reset where it does not.
     fn start(&self, start: Start) -> crate::stand::Result<()> {
-        match (start, &self.board.power) {
+        match (start, &self.power) {
             (Start::Reset, _) => Ok(()),
             (Start::PowerOn, Some(_)) => self.power_on(),
             (Start::PowerOn, None) => {
-                let _operation = self.access.operation()?;
                 let port = self
                     .current_port(REATTACH)
                     .ok_or("the board's port is gone")?;
@@ -313,17 +260,17 @@ impl LeasedBoard {
         if let Some(port) = self.current_port(Duration::ZERO) {
             return Ok(port);
         }
-        if self.board.power.is_none() {
+        if self.power.is_none() {
             return Err(format!(
                 "board `{}` is not on USB and does not reset by power; a person must reset it",
-                self.board.reference.id
+                self.reference.id
             )
             .into());
         }
         let banner = self.download_entry()?;
         eprintln!(
             "hil: board `{}` was not on USB; its ROM now waits for the flash: {}",
-            self.board.reference.id,
+            self.reference.id,
             reset::reset_line(&banner)
                 .as_deref()
                 .unwrap_or("no reset line")
@@ -334,18 +281,13 @@ impl LeasedBoard {
 
     /// The rungs of the board's reset ladder, in the stand file's order.
     pub fn rungs(&self) -> Vec<Box<dyn Rung + '_>> {
-        self.board
-            .reset
+        self.reset
             .iter()
             .filter_map(|step| -> Option<Box<dyn Rung + '_>> {
                 match step {
                     ResetStep::UsbJtagRts => Some(Box::new(Rts(self))),
                     ResetStep::Jtag => Some(Box::new(Jtag(self))),
-                    ResetStep::Power => self
-                        .board
-                        .power
-                        .as_ref()
-                        .map(|_| Box::new(Power(self)) as _),
+                    ResetStep::Power => self.power.as_ref().map(|_| Box::new(Power(self)) as _),
                 }
             })
             .collect()
@@ -373,11 +315,8 @@ impl LeasedBoard {
     }
 
     /// The board's console read for `watch` without resetting it, once its
-    /// port is back; nothing when the access no longer holds.
+    /// port is back.
     pub fn console(&self, watch: Duration) -> String {
-        let Ok(_operation) = self.access.operation() else {
-            return String::new();
-        };
         self.current_port(REATTACH)
             .and_then(|port| reset::open_without_reset(&port).ok())
             .map(|serial| console::read_for(serial, watch))
@@ -386,45 +325,34 @@ impl LeasedBoard {
 
     /// Open the board's console without a reset, retrying while the port is
     /// still held by the reader of a previous reset or returning after one.
-    /// The console keeps the board's access while it is open.
     pub fn open_console(&self) -> crate::stand::Result<BoardConsole> {
-        let _operation = self.access.operation()?;
         let port = self
             .current_port(REATTACH)
             .ok_or("the board's port is gone")?;
         let port = retrying(PORT_ACCESS, || reset::open_without_reset(&port))?;
-        Ok(BoardConsole {
-            port,
-            operation: _operation,
-        })
+        Ok(BoardConsole { port })
     }
 
     /// Reset the board into its flashed application over RTS and return
     /// its console, open from the reset on, so no line of the boot is
-    /// missed. The console keeps the board's access while it is open.
+    /// missed.
     pub fn reset_into_console(&self) -> crate::stand::Result<BoardConsole> {
-        let _operation = self.access.operation()?;
         let port = self
             .current_port(REATTACH)
             .ok_or("the board's port is gone")?;
         let port = retrying(PORT_ACCESS, || reset::reset_into_application(&port))?;
-        Ok(BoardConsole {
-            port,
-            operation: _operation,
-        })
+        Ok(BoardConsole { port })
     }
 
     fn require_power(&self) -> crate::stand::Result<&HubPower> {
-        self.board.power.as_ref().ok_or_else(|| {
+        self.power.as_ref().ok_or_else(|| {
             "the board does not reset by power; add `power` to its `reset` in the stand file".into()
         })
     }
 
     /// Power the board off and on, watching it leave USB and return.
     pub fn power_cycle_observed(&self) -> crate::stand::Result<PowerCycle> {
-        let _operation = self.access.operation()?;
-        self.require_power()?
-            .cycle_observed(self.mac(), _operation.lifetime())
+        self.require_power()?.cycle_observed(self.mac())
     }
 
     /// Power the board off and on, watching it leave USB and return, then
@@ -433,40 +361,35 @@ impl LeasedBoard {
     /// lets it run on; the image in flash must leave the chip's JTAG on and
     /// not reset again, as the verification of a port arranges.
     pub fn prove_power_loss(&self) -> crate::stand::Result<PowerLoss> {
-        let _operation = self.access.operation()?;
-        let field = self.board.reset_cause.as_ref().ok_or_else(|| {
+        let field = self.reset_cause.as_ref().ok_or_else(|| {
             format!(
                 "the {} profile names no reset cause, so a power cycle cannot be proven",
                 self.chip()
             )
         })?;
-        let lifetime = _operation.lifetime();
-        self.require_power()?
-            .prove_power_loss(self.mac(), lifetime, || {
-                let openocd = Openocd::locate()?;
-                let mut last = None;
-                // The USB-JTAG answers a moment after the board's USB returns.
-                for _ in 0..RESET_CAUSE_ATTEMPTS {
-                    match openocd.read_word(
-                        self.chip(),
-                        self.mac().as_ref(),
-                        field.address,
-                        RESET_CAUSE_READ,
-                        lifetime,
-                    ) {
-                        Ok(word) => return Ok(field.cause(word)),
-                        Err(error) => last = Some(error),
-                    }
-                    oer_os_process::sleep(RESET_CAUSE_RETRY)?;
+        self.require_power()?.prove_power_loss(self.mac(), || {
+            let openocd = Openocd::locate()?;
+            let mut last = None;
+            // The USB-JTAG answers a moment after the board's USB returns.
+            for _ in 0..RESET_CAUSE_ATTEMPTS {
+                match openocd.read_word(
+                    self.chip(),
+                    self.mac().as_ref(),
+                    field.address,
+                    RESET_CAUSE_READ,
+                ) {
+                    Ok(word) => return Ok(field.cause(word)),
+                    Err(error) => last = Some(error),
                 }
-                Err(last.unwrap_or_else(|| "no attempt was made".into()))
-            })
+                oer_os_process::sleep(RESET_CAUSE_RETRY)?;
+            }
+            Err(last.unwrap_or_else(|| "no attempt was made".into()))
+        })
     }
 
     /// Power the board off and on and wait until its port is back and open
     /// to the stand's user: a power-on reset into the image in its flash.
     pub fn power_on(&self) -> crate::stand::Result<()> {
-        let _operation = self.access.operation()?;
         self.power_cycle_observed()?.verdict()?;
         let port = self
             .current_port(REATTACH)
@@ -482,7 +405,6 @@ impl LeasedBoard {
     /// into its ROM's download mode through the USB Serial/JTAG; the console
     /// the ROM printed. Only a board that resets by power has it.
     pub fn download_entry(&self) -> crate::stand::Result<String> {
-        let _operation = self.access.operation()?;
         self.power_cycle_observed()?.verdict()?;
         let port = self
             .current_port(REATTACH)
@@ -497,14 +419,11 @@ impl LeasedBoard {
     pub fn download_entry_if_powered(
         &self,
     ) -> Option<impl Fn() -> crate::stand::Result<String> + '_> {
-        self.board
-            .power
-            .as_ref()
-            .map(|_| move || self.download_entry())
+        self.power.as_ref().map(|_| move || self.download_entry())
     }
 }
 
-struct Rts<'a>(&'a LeasedBoard);
+struct Rts<'a>(&'a Board);
 
 impl Rung for Rts<'_> {
     fn step(&self) -> RecoveryStep {
@@ -512,7 +431,6 @@ impl Rung for Rts<'_> {
     }
 
     fn reset(&self) -> crate::stand::Result<Option<String>> {
-        let _operation = self.0.access.operation()?;
         let port = self
             .0
             .current_port(Duration::from_secs(5))
@@ -522,7 +440,7 @@ impl Rung for Rts<'_> {
     }
 }
 
-struct Jtag<'a>(&'a LeasedBoard);
+struct Jtag<'a>(&'a Board);
 
 impl Rung for Jtag<'_> {
     fn step(&self) -> RecoveryStep {
@@ -532,18 +450,17 @@ impl Rung for Jtag<'_> {
     /// The console is opened first, without touching the reset lines, so
     /// the read starts before the reset's banner.
     fn reset(&self) -> crate::stand::Result<Option<String>> {
-        let _operation = self.0.access.operation()?;
         let openocd = Openocd::locate()?;
         let serial = self
             .0
             .current_port(Duration::ZERO)
             .and_then(|port| reset::open_without_reset(&port).ok());
-        openocd.reset(self.0.chip(), self.0.mac(), _operation.lifetime())?;
+        openocd.reset(self.0.chip(), self.0.mac())?;
         Ok(serial.map(|serial| console::read_for(serial, BANNER)))
     }
 }
 
-struct Power<'a>(&'a LeasedBoard);
+struct Power<'a>(&'a Board);
 
 impl Rung for Power<'_> {
     fn step(&self) -> RecoveryStep {
@@ -551,8 +468,7 @@ impl Rung for Power<'_> {
     }
 
     fn reset(&self) -> crate::stand::Result<Option<String>> {
-        let _operation = self.0.access.operation()?;
-        self.0.require_power()?.cycle(_operation.lifetime())?;
+        self.0.require_power()?.cycle()?;
         Ok(None)
     }
 }

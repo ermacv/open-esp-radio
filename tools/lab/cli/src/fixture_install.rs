@@ -81,7 +81,7 @@ pub(crate) fn run(
             "stand: queueing for {}",
             oer_lab_fixture::resource(provider)
         );
-        let grant = install_grant(provider)?;
+        let (mut lease, owner) = install_lease(provider)?;
         // sudo runs in this foreground process group with the terminal's
         // standard streams, so it owns password echo, input and job control,
         // and its exit status is the command's.
@@ -91,7 +91,19 @@ pub(crate) fn run(
             .arg(bundle)
             .status()
             .map_err(|error| format!("cannot start the Linux fixture installer: {error}"))?;
-        drop(grant);
+        // An installation that did not finish leaves the stand under
+        // maintenance until a person releases it.
+        if status.success() {
+            lease.administer(oer_lab_service::protocol::Request::EndMaintenance {
+                mac: oer_lab_arbiter::STAND_SERVICE.to_owned(),
+            })?;
+        } else {
+            eprintln!(
+                "stand: the installation failed; the stand stays under maintenance by {owner} \
+                 until `cargo stand devices release --stand`"
+            );
+        }
+        drop(lease);
         if !status.success() {
             std::process::exit(status.code().unwrap_or(1));
         }
@@ -106,23 +118,38 @@ pub(crate) fn run(
 
 /// Take the stand for installing `provider`: stand maintenance, served
 /// before every waiting request, and every run that uses the provider is
-/// preempted with the ordinary cleanup and a notice. The grant keeps later
-/// runs of the provider queued until it is dropped.
+/// preempted, its client told why. The stand stays under the owner's
+/// maintenance until the installation succeeded: the installer itself runs
+/// in this process, which the service does not stop, since a partial
+/// installation is worse than a late one.
 #[cfg(target_os = "linux")]
-fn install_grant(provider: Provider) -> Result<oer_lab_arbiter::Grant> {
-    let mut request = oer_lab_arbiter::Request::from_environment(format!(
-        "fixture install --provider {}",
-        provider.as_str()
-    ))?;
-    request.claims = vec![oer_lab_arbiter::claims::Claim::exclusive(
-        oer_lab_fixture::resource(provider),
-    )];
+fn install_lease(provider: Provider) -> Result<(oer_lab_service::client::Client, String)> {
+    let owner = oer_lab_arbiter::owner::from_environment()?.to_string();
     let reason = format!(
-        "fixture maintenance: {} install by {}",
-        provider.as_str(),
-        request.owner
+        "fixture maintenance: {} install by {owner}",
+        provider.as_str()
     );
-    oer_lab_arbiter::Arbiter::open()?.acquire_maintenance(&request, &reason)
+    let mut client = crate::service::client()?;
+    client.acquire(
+        oer_lab_service::protocol::LeaseRequest {
+            owner: owner.clone(),
+            work: format!("fixture install --provider {}", provider.as_str()),
+            scenarios: Vec::new(),
+            run: None,
+            claims: vec![oer_lab_arbiter::claims::Claim::exclusive(
+                oer_lab_fixture::resource(provider),
+            )],
+            maintenance: Some(reason.clone()),
+            divisible: false,
+        },
+        &mut |message| eprintln!("stand: {message}"),
+    )?;
+    client.administer(oer_lab_service::protocol::Request::Maintain {
+        mac: oer_lab_arbiter::STAND_SERVICE.to_owned(),
+        owner: owner.clone(),
+        reason,
+    })?;
+    Ok((client, owner))
 }
 
 #[cfg(target_os = "linux")]

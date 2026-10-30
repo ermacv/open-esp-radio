@@ -1,13 +1,14 @@
 //! Ending a session under its lease: the device under test is left running
 //! the built image, brought back through its board's reset ladder, or, when
-//! not even its ROM answers after the ladder, quarantined for a person.
+//! not even its ROM answers after the ladder, reported unreachable: the LAB
+//! service, which parks the board when the lease ends, then keeps it out of
+//! service for a person.
 //!
 //! After a rung only another boot counts: the new console answers also a
 //! device the rung did not restart.
 //!
 //! A ROM that answers, booting from flash or waiting for a download, means
-//! the stand can write the board again, however bad its image: such a board
-//! is never quarantined. The cleanup is kept apart from the cases' verdicts:
+//! the stand can write the board again, however bad its image. The cleanup is kept apart from the cases' verdicts:
 //! a recovery does not turn a failed case into a pass.
 
 use std::time::Duration;
@@ -16,8 +17,8 @@ use oer_hil_link::{CallError, Link};
 use oer_hil_protocol::base::GetHello;
 use oer_lab_board::reset::{Ladder, LadderEnd, RecoveryStep};
 
-/// What finishing needs from the stand: the board's reset ladder, its
-/// console and the arbiter's quarantine.
+/// What finishing needs from the stand: the board's reset ladder and its
+/// console.
 pub(crate) trait Board {
     /// Climb the board's reset ladder from its stand file, stopping at the
     /// first rung after which `answers` sees the image.
@@ -26,8 +27,6 @@ pub(crate) trait Board {
     fn reset(&self) -> Result<(), String>;
     /// A link on the board's console, opened without a reset.
     fn connect(&self) -> Result<Link, String>;
-    /// Take the board out of service until a person returns it.
-    fn quarantine(&self, reason: String) -> Result<(), String>;
     /// Journal that `step` brought the board back; best effort.
     fn recovered(&self, step: RecoveryStep, reset_line: Option<String>);
 }
@@ -65,11 +64,8 @@ pub enum Cleanup {
     /// the image or the host. The stand can write the board again, so it
     /// stays in service.
     ImageFailed { reset_line: String },
-    /// Neither the image nor the ROM answered: the board is quarantined.
-    Quarantined { reason: String },
-    /// The board needs a person, but the arbiter did not record its
-    /// quarantine.
-    Unrecorded { reason: String, cause: String },
+    /// Neither the image nor the ROM answered: the board needs a person.
+    Unreachable { reason: String },
     /// The program was cancelled before the device answered: nothing about
     /// the board is judged, and the next session resets it.
     Cancelled,
@@ -88,10 +84,7 @@ impl Cleanup {
             Self::ImageFailed { reset_line } => Some(format!(
                 "after the reset ladder the ROM answered ({reset_line}) but the image did not"
             )),
-            Self::Quarantined { reason } => Some(format!("the board was quarantined: {reason}")),
-            Self::Unrecorded { reason, cause } => Some(format!(
-                "the board needs a person ({reason}), but its quarantine was not recorded: {cause}"
-            )),
+            Self::Unreachable { reason } => Some(format!("the board needs a person: {reason}")),
             Self::Cancelled => Some("cancelled before the device was checked".to_owned()),
         }
     }
@@ -199,10 +192,7 @@ fn judge(board: &dyn Board, ladder: &Ladder) -> Cleanup {
                     steps.join(", ")
                 }
             );
-            match board.quarantine(reason.clone()) {
-                Ok(()) => Cleanup::Quarantined { reason },
-                Err(cause) => Cleanup::Unrecorded { reason, cause },
-            }
+            Cleanup::Unreachable { reason }
         }
     }
 }

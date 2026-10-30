@@ -1,4 +1,9 @@
-//! Install `cargo stand` as a prebuilt tool from `main`.
+//! Install `cargo stand` as a prebuilt tool from `main`, and the LAB
+//! service it carries as a systemd user unit.
+//!
+//! An update first asks a running service to drain: it grants nothing more
+//! and answers once no lease is held. Then the unit restarts on the new
+//! binary. A checkout never replaces the service by itself.
 //!
 //! `cargo stand` otherwise builds `oer-tool-lab-cli` from the caller's working tree
 //! first: a rebuild after every edit of a stand package, unavailable while
@@ -30,6 +35,58 @@ fn home() -> Result<PathBuf> {
 /// Where the tool's clone, build and binary live.
 pub fn tool_directory() -> Result<PathBuf> {
     oer_os_durable::xdg::path(oer_os_durable::xdg::Base::Data, "stand-tool")
+}
+
+/// The systemd user unit of the LAB service.
+const UNIT: &str = "oer-lab.service";
+
+/// The unit running `binary`'s service, with the chip profiles of the
+/// clone at `root` and the tools on `path`. Every process a hardware
+/// command starts stays in the unit's control group, which a stop or a
+/// crash empties before the service starts again.
+pub fn unit(binary: &Path, root: &Path, path: &str) -> String {
+    format!(
+        "[Unit]\n\
+         Description=open-esp-radio LAB service: the stand's one owner\n\
+         \n\
+         [Service]\n\
+         ExecStart='{}' --root '{}' __serve\n\
+         Environment=\"PATH={path}\"\n\
+         KillMode=control-group\n\
+         Restart=on-failure\n\
+         \n\
+         [Install]\n\
+         WantedBy=default.target\n",
+        binary.display(),
+        root.display()
+    )
+}
+
+/// Run `systemctl --user` with `arguments`.
+fn systemctl(arguments: &[&str]) -> Result<()> {
+    process::run(
+        oer_os_process::command("systemctl")
+            .arg("--user")
+            .args(arguments),
+    )
+}
+
+/// Install the service's unit for `binary` and restart it, after a running
+/// service drained its leases.
+fn install_service(binary: &Path, root: &Path) -> Result<()> {
+    if let Ok(mut client) = oer_lab_service::client::Client::open("cargo stand install") {
+        println!("waiting for the running LAB service to finish its leases");
+        client.administer(oer_lab_service::protocol::Request::Drain)?;
+    }
+    let directory = home()?.join(".config/systemd/user");
+    fs::create_dir_all(&directory)?;
+    let path = std::env::var("PATH").unwrap_or_default();
+    fs::write(directory.join(UNIT), unit(binary, root, &path))?;
+    systemctl(&["daemon-reload"])?;
+    systemctl(&["enable", UNIT])?;
+    systemctl(&["restart", UNIT])?;
+    println!("the LAB service runs as the systemd user unit {UNIT}");
+    Ok(())
 }
 
 /// The wrapper script: the installed binary against the caller's checkout.
@@ -94,7 +151,7 @@ pub fn run(ctx: &Checkout) -> Result<()> {
         if git_text(&diff).is_ok_and(|changed| changed.is_empty()) {
             fs::write(tool.join("installed-commit"), &commit)?;
             println!("oer-tool-lab-cli is up to date at {short}");
-            return Ok(());
+            return install_service(&installed, &source);
         }
     }
     // The tool's work is file and device I/O: the incremental dev profile
@@ -122,7 +179,7 @@ pub fn run(ctx: &Checkout) -> Result<()> {
         "installed oer-tool-lab-cli from main {short} ({})",
         script.display()
     );
-    Ok(())
+    install_service(&installed, &source)
 }
 
 /// The files the tool is built from, relative to its clone: the workspace
@@ -205,5 +262,18 @@ mod tests {
             text.contains("root=$(git rev-parse --show-toplevel 2>/dev/null) || root='/tool/src'")
         );
         assert!(text.contains("exec '/tool/bin/oer-stand' --root \"$root\" \"$@\""));
+    }
+
+    #[test]
+    fn the_unit_serves_from_the_installed_binary_and_owns_every_descendant() {
+        let text = unit(
+            Path::new("/tool/bin/oer-tool-lab-cli"),
+            Path::new("/tool/src"),
+            "/usr/bin:/bin",
+        );
+        assert!(text.contains("ExecStart='/tool/bin/oer-tool-lab-cli' --root '/tool/src' __serve"));
+        assert!(text.contains("KillMode=control-group"));
+        assert!(text.contains("Environment=\"PATH=/usr/bin:/bin\""));
+        assert!(text.contains("WantedBy=default.target"));
     }
 }

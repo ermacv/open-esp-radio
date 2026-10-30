@@ -9,8 +9,9 @@ use std::{
 
 use oer_lab_model as stand;
 
-use oer_lab_board::lock::{DeviceAccess, DeviceId};
-use oer_lab_board::stand::{LeasedBoard, Via};
+use oer_lab_arbiter::claims::{AIR, Claim};
+use oer_lab_service::client::{Client, Running};
+use oer_lab_service::protocol::{FlashVia, LeaseRequest, Operation};
 
 use crate::image;
 use oer_image_build::{Check, Enforced, Result};
@@ -30,7 +31,7 @@ pub fn root() -> Result<PathBuf> {
 }
 
 /// The stand board `selector` names, which this tool may reset and write.
-fn board(selector: &str) -> Result<(stand::Stand, stand::Board)> {
+fn board(selector: &str) -> Result<stand::Board> {
     let path = stand::path()?;
     let stand = stand::Stand::load(&path)?;
     let board = stand.board(selector).cloned().ok_or_else(|| {
@@ -48,44 +49,59 @@ fn board(selector: &str) -> Result<(stand::Stand, stand::Board)> {
         )
         .into());
     }
-    Ok((stand, board))
+    Ok(board)
 }
 
-/// The attached stand board `board` of `stand`, under this command's device
-/// access: every operation on it goes through the stand's one board path
-/// (`oer_lab_board::stand`), as HIL's do.
-fn leased(root: &Path, stand: &stand::Stand, board: &stand::Board) -> Result<LeasedBoard> {
-    let access = hold(&board.mac)?;
-    let attached = oer_lab_board::stand::Board::attached(root, stand, &board.id)?;
-    Ok(attached.lease(&access)?)
-}
-
-/// Hold board `mac` through the device lock every writer of the board takes
-/// (HIL leases, the stand's flashes), with this command as its holder; a
-/// held board is an error naming its holder.
-fn hold(mac: &str) -> Result<DeviceAccess> {
-    hold_in(&oer_lab_board::lock::directory()?, mac)
-}
-
-fn hold_in(directory: &Path, mac: &str) -> Result<DeviceAccess> {
-    let id = DeviceId::parse(mac)?;
+/// A lease of `board` and the air from the LAB service, which runs every
+/// operation on it. When the lease ends, the service parks the board in its
+/// ROM's download mode.
+fn lease(board: &stand::Board) -> Result<Client> {
     let command = std::env::args().collect::<Vec<_>>().join(" ");
-    DeviceAccess::try_acquire_in(directory, &id, &command)?
-        .map_err(|busy| format!("board {id} is busy: {busy}").into())
+    let mut client = Client::open(&command)?;
+    client.acquire(
+        LeaseRequest {
+            owner: oer_lab_arbiter::owner::from_environment()?.to_string(),
+            work: command,
+            scenarios: Vec::new(),
+            run: None,
+            claims: vec![Claim::board(&board.mac), Claim::shared(AIR)],
+            maintenance: None,
+            divisible: false,
+        },
+        &mut |message| eprintln!("fw: {message}"),
+    )?;
+    Ok(client)
 }
 
-/// Write `image`'s bundle into `board` through the board's one write
-/// operation, which records the board's receipt and starts the image.
-fn write_image(root: &Path, image: &str, id: &str, board: &LeasedBoard) -> Result<()> {
+/// Write `image`'s bundle into `board` through the service, which records
+/// the board's receipt, journals the write and starts the image.
+fn write_image(root: &Path, image: &str, board: &stand::Board, client: &mut Client) -> Result<()> {
     let bundle = image::bundle(root, image)?;
-    eprintln!("fw: writing {image} to {id}");
-    let by = std::env::args().collect::<Vec<_>>().join(" ");
-    let receipt = board.flash(
-        &oer_lab_board::image::Store::open()?,
-        &bundle,
-        image,
-        Via::Usb,
-        &by,
+    eprintln!("fw: writing {image} to {}", board.id);
+    let git = |arguments: &[&str]| oer_os_process::git::text(root, arguments).ok();
+    let written = client.run(
+        Operation::Flash {
+            board: board.mac.clone(),
+            bundle: bundle.directory().display().to_string(),
+            image: oer_lab_arbiter::journal::ImageIdentity {
+                name: image.to_owned(),
+                sha256: String::new(),
+                commit: git(&["rev-parse", "HEAD"]),
+                dirty: git(&["status", "--porcelain"]).map(|status| !status.is_empty()),
+                origin: std::env::args().collect::<Vec<_>>().join(" "),
+            },
+            owner: oer_lab_arbiter::owner::from_environment()?.to_string(),
+            via: FlashVia::Usb,
+            skip_carried: false,
+        },
+        &mut std::io::sink(),
+        None,
+    )?;
+    let receipt: oer_lab_board::image::Receipt = serde_json::from_value(
+        written
+            .get("receipt")
+            .cloned()
+            .ok_or("the service returned no receipt")?,
     )?;
     for segment in &receipt.segments {
         eprintln!(
@@ -94,6 +110,27 @@ fn write_image(root: &Path, image: &str, id: &str, board: &LeasedBoard) -> Resul
         );
     }
     Ok(())
+}
+
+/// The lines of a console stream, each without its line ending; the channel
+/// ends with the stream.
+fn lines(console: Running) -> std::sync::mpsc::Receiver<Vec<u8>> {
+    let (send, lines) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        use std::io::BufRead as _;
+        for line in std::io::BufReader::new(console).split(b'\n') {
+            let Ok(mut line) = line else {
+                break;
+            };
+            if line.last() == Some(&b'\r') {
+                line.pop();
+            }
+            if send.send(line).is_err() {
+                break;
+            }
+        }
+    });
+    lines
 }
 
 /// The next console line within `within`: `Ok(None)` when none came,
@@ -170,10 +207,10 @@ fn timestamp(time: SystemTime) -> String {
 }
 
 pub fn run(root: &Path, image: &str, selector: &str, timeout: Duration) -> Result<ExitCode> {
-    let (stand, board) = board(selector)?;
+    let board = board(selector)?;
     image::build(root, image, Enforced::Reported, None)?;
-    let leased = leased(root, &stand, &board)?;
-    write_image(root, image, &board.id, &leased)?;
+    let mut client = lease(&board)?;
+    write_image(root, image, &board, &mut client)?;
     let run = root
         .join("target/fw/runs")
         .join(format!("{}-{image}", timestamp(SystemTime::now())));
@@ -182,7 +219,12 @@ pub fn run(root: &Path, image: &str, selector: &str, timeout: Duration) -> Resul
     let mut log = std::fs::File::create(&log_path)?;
     let mut raw_log = std::fs::File::create(run.join("console.raw.txt"))?;
     let mut diagnostics = crate::diagnostics::Decoder::default();
-    let lines = leased.reset_into_console()?.lines();
+    let console = client.start(Operation::Console {
+        board: board.mac.clone(),
+        reset: true,
+    })?;
+    let stop = console.input();
+    let lines = lines(console);
     eprintln!(
         "fw: {} reset into {image}; reading its console for {}s",
         board.id,
@@ -210,6 +252,7 @@ pub fn run(root: &Path, image: &str, selector: &str, timeout: Duration) -> Resul
             Err(()) => return Err("the board's console closed".into()),
         }
     };
+    let _ = stop.cancel();
     drop(lines);
     eprintln!("fw: log {}", log_path.display());
     Ok(match verdict {
@@ -222,10 +265,17 @@ pub fn run(root: &Path, image: &str, selector: &str, timeout: Duration) -> Resul
     })
 }
 
-pub fn monitor(root: &Path, selector: &str) -> Result<()> {
-    let (stand, board) = board(selector)?;
-    let leased = leased(root, &stand, &board)?;
-    let lines = leased.open_console()?.lines();
+/// Print `selector`'s console, after a reset into its flashed image when
+/// `start`, until the command is stopped. Without `start` it shows what the
+/// board runs now: in its ROM's download mode, unless an enclosing lease
+/// started an image.
+pub fn monitor(selector: &str, start: bool) -> Result<()> {
+    let board = board(selector)?;
+    let mut client = lease(&board)?;
+    let lines = lines(client.start(Operation::Console {
+        board: board.mac.clone(),
+        reset: start,
+    })?);
     eprintln!("fw: console of {}", board.id);
     let mut diagnostics = crate::diagnostics::Decoder::default();
     loop {
@@ -285,12 +335,18 @@ pub fn list_boards() -> Result<()> {
     Ok(())
 }
 
-pub fn power_cycle(root: &Path, selector: &str) -> Result<()> {
-    let (stand, board) = board(selector)?;
-    let leased = leased(root, &stand, &board)?;
+pub fn power_cycle(selector: &str) -> Result<()> {
+    let board = board(selector)?;
+    let mut client = lease(&board)?;
     eprintln!("fw: power-cycling {} through its hub port", board.id);
-    let after = leased.power_cycle_observed()?.verdict()?;
-    eprintln!("fw: {} is back after {} ms", board.id, after.as_millis());
+    let after = client.run(
+        Operation::PowerCycle {
+            board: board.mac.clone(),
+        },
+        &mut std::io::sink(),
+        None,
+    )?;
+    eprintln!("fw: {} is back after {after} ms", board.id);
     Ok(())
 }
 
@@ -326,9 +382,12 @@ pub fn build(root: &Path, image_name: &str, binary: Option<&str>, diagnostic: bo
 }
 
 /// `cargo fw flash IMAGE --board BOARD`.
+///
+/// The board runs the image until the lease ends; then the service parks it
+/// in its ROM's download mode. `cargo fw monitor --start` runs it again.
 pub fn flash_image(root: &Path, image_name: &str, selector: &str) -> Result<()> {
-    let (stand, board) = board(selector)?;
-    write_image(root, image_name, &board.id, &leased(root, &stand, &board)?)
+    let board = board(selector)?;
+    write_image(root, image_name, &board, &mut lease(&board)?)
 }
 
 #[cfg(test)]

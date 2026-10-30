@@ -2,12 +2,11 @@
 //! reach a board's port.
 //!
 //! Opening a USB serial port with the default modem lines resets an
-//! Espressif chip, and a UART bridge's lines drive EN and BOOT, so tools open
-//! board ports only through these commands, which release RTS before DTR and
-//! hold a lease of the board, whose grant holds the board's device lock.
+//! Espressif chip, and a UART bridge's lines drive EN and BOOT, so only the
+//! LAB service opens board ports: these commands lease the board from it
+//! and ask it for each operation.
 
 use std::{
-    io::Write as _,
     sync::mpsc,
     time::{Duration, Instant},
 };
@@ -15,6 +14,10 @@ use std::{
 use crate::Result;
 use oer_lab_board::console;
 use oer_lab_board::reset::ResetPath;
+use oer_lab_service::{
+    client::{Client, Input},
+    protocol::{Operation, Request},
+};
 use oer_os_process::Checkout;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
@@ -95,39 +98,50 @@ fn parse_duration(text: &str) -> std::result::Result<Duration, String> {
     oer_lab_arbiter::parse_duration(text).map_err(|error| error.to_string())
 }
 
+/// A board of the stand file, resolved for a command.
 struct Target {
-    board: oer_lab_board::stand::Board,
-    arbiter: oer_lab_arbiter::Arbiter,
+    /// Its stand-file entry.
+    board: oer_lab_model::Board,
+    mac: oer_lab_board::DeviceId,
 }
 
-fn target(ctx: &Checkout, board: &str) -> Result<Target> {
-    let arbiter = oer_lab_arbiter::Arbiter::open()?;
+fn target(board: &str) -> Result<Target> {
+    let stand = oer_lab_model::Stand::load(&oer_lab_model::paths::stand_file()?)?;
+    let entry = stand.resolve(board)?.clone();
     Ok(Target {
-        board: oer_lab_board::stand::Board::attached(&ctx.root, &arbiter.stand()?, board)?,
-        arbiter,
+        mac: entry.device_id()?,
+        board: entry,
     })
 }
 
-/// The lease of `target`'s board, and the board leased under the grant's
-/// access to it: the grant holds the board until it is dropped, the leased
-/// board keeps that access while it lives.
-fn lease(
-    target: &Target,
-    owner: String,
-    work: String,
-) -> Result<(oer_lab_arbiter::Grant, oer_lab_board::stand::LeasedBoard)> {
-    let grant = target.arbiter.acquire(&oer_lab_arbiter::Request {
+/// A lease of `target`'s board.
+fn lease(target: &Target, owner: String, work: String) -> Result<Client> {
+    crate::service::lease(
         owner,
         work,
-        scenarios: Vec::new(),
-        run: None,
-        claims: vec![oer_lab_arbiter::claims::Claim::board(target.board.mac())],
+        vec![oer_lab_arbiter::claims::Claim::board(&target.board.mac)],
+    )
+}
+
+/// Reset `target`'s board through `path`; the ROM's reset line.
+fn reset(client: &mut Client, target: &Target, path: ResetPath) -> Result<Option<String>> {
+    Ok(serde_json::from_value(crate::service::run(
+        client,
+        Operation::Reset {
+            board: target.board.mac.clone(),
+            path,
+        },
+    )?)?)
+}
+
+/// `target`'s console lines, opened without a reset.
+fn console_lines(client: &mut Client, target: &Target) -> Result<(mpsc::Receiver<Vec<u8>>, Input)> {
+    let console = client.start(Operation::Console {
+        board: target.board.mac.clone(),
+        reset: false,
     })?;
-    let access = grant
-        .device(target.board.mac())
-        .ok_or("the lease holds no access to the board")?;
-    let board = target.board.clone().lease(access)?;
-    Ok((grant, board))
+    let input = console.input();
+    Ok((crate::service::lines(console), input))
 }
 
 pub(crate) fn board(
@@ -137,38 +151,38 @@ pub(crate) fn board(
 ) -> Result<std::process::ExitCode> {
     match command {
         BoardCommand::Reset { board, via } => {
-            let target = target(ctx, &board)?;
-            let (_lease, leased) =
-                lease(&target, owner, format!("board reset {board} --via {via:?}"))?;
-            let line = leased.reset(via.path())?;
+            let target = target(&board)?;
+            let mut lease = lease(&target, owner, format!("board reset {board} --via {via:?}"))?;
+            let line = reset(&mut lease, &target, via.path())?;
             println!(
                 "{board} ({}) reset via {}: {}",
-                target.board.mac(),
+                target.mac,
                 format!("{via:?}").to_lowercase(),
                 line.as_deref()
                     .unwrap_or("no ROM reset line on its console")
             );
         }
         BoardCommand::Check { board } => {
-            let target = target(ctx, &board)?;
-            let (_lease, leased) = lease(&target, owner, format!("board check {board}"))?;
-            check(&target, &leased, &board)?;
+            let target = target(&board)?;
+            let mut lease = lease(&target, owner, format!("board check {board}"))?;
+            check(&target, &mut lease, &board)?;
         }
         BoardCommand::Console {
             board,
             duration,
             until,
         } => {
-            let target = target(ctx, &board)?;
-            let (_lease, leased) = lease(&target, owner, format!("board console {board}"))?;
+            let target = target(&board)?;
+            let mut lease = lease(&target, owner, format!("board console {board}"))?;
             let log = ctx
                 .root
                 .join("target/hil/console")
-                .join(target.board.mac().compact());
+                .join(target.mac.compact());
             std::fs::create_dir_all(&log)?;
             let log = log.join(format!("console-{}.log", oer_os_durable::unix_seconds()));
-            let lines = leased.open_console()?.lines();
+            let (lines, input) = console_lines(&mut lease, &target)?;
             let seen = console::capture(&lines, duration, until.as_deref(), &log)?;
+            let _ = input.cancel();
             eprintln!("stand: console of {board} written to {}", log.display());
             if until.is_some() && !seen {
                 return Ok(std::process::ExitCode::FAILURE);
@@ -207,7 +221,7 @@ fn soak(
     via: &[Via],
     batch: u32,
 ) -> Result<std::process::ExitCode> {
-    let target = target(ctx, board)?;
+    let target = target(board)?;
     let started = Instant::now();
     let done = |cycle: u32| {
         cycles.is_some_and(|cycles| cycle >= cycles)
@@ -215,7 +229,7 @@ fn soak(
     };
     let (mut cycle, mut resets, mut failure) = (0_u32, 0_u32, None);
     'soak: while !done(cycle) {
-        let (_lease, leased) = lease(
+        let mut leased = lease(
             &target,
             owner.clone(),
             format!("board soak {board} cycles {}..", cycle + 1),
@@ -227,7 +241,7 @@ fn soak(
             cycle += 1;
             for &path in via {
                 resets += 1;
-                let line = leased.reset(path.path())?;
+                let line = reset(&mut leased, &target, path.path())?;
                 let name = format!("{path:?}").to_lowercase();
                 match booted(line.as_deref()) {
                     Ok(()) => println!("{cycle} {name}: {}", line.unwrap_or_default()),
@@ -237,15 +251,15 @@ fn soak(
                         let log = ctx
                             .root
                             .join("target/hil/console")
-                            .join(target.board.mac().compact())
+                            .join(target.mac.compact())
                             .join(format!(
                                 "soak-failure-{}.log",
                                 oer_os_durable::unix_seconds()
                             ));
                         std::fs::create_dir_all(log.parent().ok_or("no parent")?)?;
-                        if let Ok(serial) = leased.open_console() {
-                            let lines = serial.lines();
+                        if let Ok((lines, input)) = console_lines(&mut leased, &target) {
                             let _ = console::capture(&lines, Duration::from_secs(5), None, &log);
+                            let _ = input.cancel();
                             eprintln!("stand: console after the failure in {}", log.display());
                         }
                         failure = Some(format!("cycle {cycle} via {name}: {why}"));
@@ -255,16 +269,16 @@ fn soak(
             }
         }
     }
-    target.arbiter.journal().record_by(
+    crate::service::client()?.administer(Request::Record {
         owner,
-        Some(target.board.mac().to_string()),
-        oer_lab_arbiter::journal::BoardEventKind::Soaked {
+        device: Some(target.mac.to_string()),
+        event: oer_lab_arbiter::journal::BoardEventKind::Soaked {
             paths: via.iter().map(|via| via.path()).collect(),
             cycles: cycle,
             resets,
             failure: failure.clone(),
         },
-    )?;
+    })?;
     println!(
         "{board}: {resets} resets in {cycle} cycles: {}",
         failure.as_deref().unwrap_or("every reset booted")
@@ -313,31 +327,15 @@ fn answer(
     None
 }
 
-/// Whether `board` boots from flash after an RTS reset: its ROM reset line,
-/// or why not. A quarantined board is checked without a lease, which nobody
-/// else can hold.
-pub(crate) fn boots(ctx: &Checkout, board: &str) -> Result<String> {
-    let target = target(ctx, board)?;
-    let access =
-        oer_lab_board::lock::DeviceAccess::acquire(target.board.mac(), "stand: release check")?;
-    let line = target
-        .board
-        .clone()
-        .lease(&access)?
-        .reset(ResetPath::Rts)?
-        .ok_or("no ROM reset line on its console after an RTS reset")?;
-    if line.contains("DOWNLOAD") {
-        return Err(format!("its ROM waits for a download: {line}").into());
-    }
-    Ok(line)
-}
-
-fn check(target: &Target, leased: &oer_lab_board::stand::LeasedBoard, board: &str) -> Result<()> {
-    let mac = target.board.mac();
+fn check(target: &Target, lease: &mut Client, board: &str) -> Result<()> {
+    let mac = &target.mac;
     println!(
         "{board} ({mac}): attached at {}, chip {}",
-        target.board.port().display(),
-        target.board.chip()
+        oer_lab_board::discovery::port_of(mac).map_or_else(
+            |_| String::from("no port"),
+            |port| port.display().to_string()
+        ),
+        target.board.chip
     );
     // What the board runs is its receipt's; the journal is history.
     match oer_lab_board::image::Store::open()?.state(mac)? {
@@ -356,13 +354,14 @@ fn check(target: &Target, leased: &oer_lab_board::stand::LeasedBoard, board: &st
         }
         None => println!("  image: unknown"),
     }
-    match target.arbiter.journal().latest_flash(mac)? {
+    let arbiter = oer_lab_arbiter::Arbiter::open()?;
+    match arbiter.journal().latest_flash(mac)? {
         Some(event) => println!("  last journaled flash: {event}"),
         None => println!("  last journaled flash: none"),
     }
-    if let Some(maintenance) = target
-        .arbiter
-        .maintenance()?
+    if let Some(maintenance) = crate::service::client()?
+        .report()?
+        .maintenance
         .into_iter()
         .find(|entry| *mac == entry.mac)
     {
@@ -373,17 +372,21 @@ fn check(target: &Target, leased: &oer_lab_board::stand::LeasedBoard, board: &st
     }
     println!(
         "  reset paths: rts, jtag{}",
-        if target.board.has_power() {
+        if target
+            .board
+            .reset
+            .contains(&oer_lab_model::ResetStep::Power)
+        {
             ", power (hub port)"
         } else {
             ""
         }
     );
     // A text-protocol peer answers SYNC; a HIL runtime answers only its binary
-    // protocol, which the runner speaks.
-    let mut serial = leased.open_console()?;
-    serial.write_all(b"\nSYNC\n")?;
-    let lines = serial.lines();
+    // protocol, which the runner speaks; a board between leases waits in its
+    // ROM's download mode and answers nothing.
+    let (lines, input) = console_lines(lease, target)?;
+    input.send(b"\nSYNC\n")?;
     let mut heard = Vec::new();
     let answered = answer(&lines, "SYNC", Duration::from_secs(2), &mut |text| {
         heard.push(text.to_owned())
@@ -396,9 +399,11 @@ fn check(target: &Target, leased: &oer_lab_board::stand::LeasedBoard, board: &st
         ),
         _ => println!(
             "  answers: nothing within 2s (a HIL runtime speaks only the runner's protocol; \
-             a hung or halted chip says nothing)"
+             a board between leases waits in its ROM's download mode; a hung or halted chip \
+             says nothing)"
         ),
     }
+    let _ = input.cancel();
     Ok(())
 }
 

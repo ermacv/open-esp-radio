@@ -29,6 +29,8 @@ pub struct Client {
     routes: Arc<Mutex<BTreeMap<u64, mpsc::SyncSender<Event>>>>,
     notices: Arc<Mutex<Notices>>,
     next_operation: u64,
+    /// The client works under an enclosing command's lease.
+    joined: bool,
 }
 
 /// What the service said about the lease outside the replies.
@@ -62,6 +64,19 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 }
 
 impl Client {
+    /// Connect to the installed service as `client`.
+    pub fn open(client: &str) -> Result<Self> {
+        let socket = oer_lab_model::paths::socket().map_err(|error| error.to_string())?;
+        let stream = UnixStream::connect(&socket).map_err(|error| {
+            format!(
+                "the LAB service does not answer at {}: {error}; start it with `systemctl --user \
+                 start oer-lab` or install it with `cargo stand install`",
+                socket.display()
+            )
+        })?;
+        Self::connect(stream, client)
+    }
+
     /// Greet the service on `stream` as `client`; another protocol is
     /// refused with the service's reason.
     pub fn connect(stream: UnixStream, client: &str) -> Result<Self> {
@@ -122,6 +137,7 @@ impl Client {
             routes,
             notices,
             next_operation: 1,
+            joined: false,
         };
         this.send(&Request::Hello {
             protocol: PROTOCOL,
@@ -159,12 +175,22 @@ impl Client {
         }
     }
 
-    /// Queue for a lease and wait for it; `waiting` sees each report.
+    /// Queue for a lease and wait for it; `waiting` sees each report. A
+    /// command inside a lease (its token in [`crate::protocol::LEASE_ENV`])
+    /// joins that lease instead, for the claims it covers.
     pub fn acquire(
         &mut self,
         lease: LeaseRequest,
         waiting: &mut dyn FnMut(&str),
     ) -> Result<Granted> {
+        if let Some(token) = std::env::var(crate::protocol::LEASE_ENV)
+            .ok()
+            .filter(|token| !token.is_empty())
+        {
+            let granted = self.join(&token, lease.claims)?;
+            self.joined = true;
+            return Ok(granted);
+        }
         self.send(&Request::Acquire { lease })?;
         loop {
             match self.reply()? {
@@ -189,8 +215,12 @@ impl Client {
         }
     }
 
-    /// End the lease once its operations stopped.
+    /// End the lease once its operations stopped; a joined lease stays
+    /// with the command that holds it.
     pub fn release(&mut self) -> Result<()> {
+        if self.joined {
+            return Ok(());
+        }
         self.send(&Request::Release)?;
         self.ended()
     }
@@ -212,6 +242,27 @@ impl Client {
             if let Reply::Status { status } = self.reply()? {
                 return Ok(status);
             }
+        }
+    }
+
+    /// Send an administration `request` and wait until it was served;
+    /// whether it changed anything.
+    pub fn administer(&mut self, request: Request) -> Result<bool> {
+        self.send(&request)?;
+        match self.reply()? {
+            Reply::Done { changed } => Ok(changed),
+            Reply::Refused { reason } => Err(reason),
+            other => Err(format!("unexpected reply: {other:?}")),
+        }
+    }
+
+    /// The stand's full report.
+    pub fn report(&mut self) -> Result<oer_lab_arbiter::Status> {
+        self.send(&Request::Report)?;
+        match self.reply()? {
+            Reply::Report { status } => Ok(*status),
+            Reply::Refused { reason } => Err(reason),
+            other => Err(format!("unexpected reply to report: {other:?}")),
         }
     }
 
@@ -336,6 +387,11 @@ impl Input {
     /// The input ended.
     pub fn close(&self) -> Result<()> {
         send(&self.writer, &Request::CloseInput { id: self.id })
+    }
+
+    /// Ask the service to stop the operation.
+    pub fn cancel(&self) -> Result<()> {
+        send(&self.writer, &Request::Cancel { id: self.id })
     }
 }
 

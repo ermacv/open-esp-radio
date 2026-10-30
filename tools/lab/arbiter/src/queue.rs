@@ -48,20 +48,6 @@ pub(crate) fn grantable(state: &State, id: u64) -> bool {
         && ahead(state, ticket).is_empty()
 }
 
-/// Whether a waiting ticket conflicts with the claims of holder `id`.
-pub(crate) fn blocks_waiters(state: &State, id: u64) -> bool {
-    state
-        .holders
-        .iter()
-        .find(|holder| holder.ticket.id == id)
-        .is_some_and(|holder| {
-            state
-                .queue
-                .iter()
-                .any(|ticket| conflict(&ticket.claims, &holder.ticket.claims))
-        })
-}
-
 /// The owner and balance of the waiting ticket that holder `id` blocks and
 /// whose owner's balance exceeds the holder's, when that holder has held for
 /// at least `slice`: divisible work then yields at its next boundary.
@@ -218,7 +204,6 @@ mod tests {
         assert!(!grantable(&state, 2), "chip-a is held");
         assert!(grantable(&state, 3), "chip-b is free");
         assert!(!grantable(&state, 4), "exclusive air waits for the holder");
-        assert!(blocks_waiters(&state, 1));
     }
 
     #[test]

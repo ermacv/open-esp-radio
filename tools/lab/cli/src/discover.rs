@@ -58,9 +58,8 @@ pub(crate) fn stand(
             // enumerates; the board leaving USB, returning and reading a
             // power-on reset through its JTAG is the proof.
             let stand = Stand::load(&path)?;
-            let after = verify_power(&ctx.root, &stand, &board, owner()?)?
-                .verdict()
-                .map_err(|why| format!("{board}: {why}"))?;
+            let after =
+                verify_power(&stand, &board, owner()?).map_err(|why| format!("{board}: {why}"))?;
             println!(
                 "{board} lost its power: it left USB, returned {:.1} s after its port's power \
                  and read a power-on reset",
@@ -99,11 +98,9 @@ fn blink<'a>(
     owner: String,
 ) -> Result<(&'a oer_lab_model::Hub, u8)> {
     let (hub, port) = discover::blink_target(stand, target)?;
-    let arbiter = oer_lab_arbiter::Arbiter::open()?;
-    let mut claims = vec![oer_lab_arbiter::claims::Claim::exclusive(format!(
-        "hub-port:{}:{port}",
-        hub.usb2
-    ))];
+    let mut claims = vec![oer_lab_arbiter::claims::Claim::exclusive(
+        oer_lab_service::stand::hub_port_resource(&hub.usb2, port),
+    )];
     if let Some(board) = stand.boards.iter().find(|board| {
         board
             .port
@@ -112,56 +109,44 @@ fn blink<'a>(
     }) {
         claims.push(oer_lab_arbiter::claims::Claim::board(&board.device_id()?));
     }
-    let grant = arbiter.acquire(&oer_lab_arbiter::Request {
+    let mut lease = crate::service::lease(
         owner,
-        work: format!("stand discover --blink {}:{port}", hub.id),
-        scenarios: Vec::new(),
-        run: None,
+        format!("stand discover --blink {}:{port}", hub.id),
         claims,
-    })?;
-    let operation = stand
-        .boards
-        .iter()
-        .find_map(|board| {
-            let mac = board.device_id().ok()?;
-            grant
-                .device(&mac)
-                .map(oer_lab_board::lock::DeviceAccess::operation)
-        })
-        .transpose()?;
-    // A newly discovered port may have no board identity yet.
-    let no_device = oer_os_process::IoLifetime::default();
-    let lifetime = operation
-        .as_ref()
-        .map_or(&no_device, oer_lab_board::lock::DeviceOperation::lifetime);
-    oer_lab_board::power::HubPower::new(oer_lab_board::power::HubPort {
-        location: hub.usb2.clone(),
-        port,
-    })
-    .cycle_holding(discover::BLINK, lifetime)?;
+    )?;
+    crate::service::run(
+        &mut lease,
+        oer_lab_service::protocol::Operation::HubPort {
+            hub: hub.id.clone(),
+            port,
+            off_secs: discover::BLINK.as_secs(),
+        },
+    )?;
     Ok((hub, port))
 }
 
 /// Cycle the hub port of the board `query` names under `owner`'s lease of
 /// the board, proving the board lost its power.
 fn verify_power(
-    root: &std::path::Path,
     stand: &oer_lab_model::Stand,
     query: &str,
     owner: String,
-) -> Result<oer_lab_board::power::PowerLoss> {
-    let board = oer_lab_board::stand::Board::attached(root, stand, query)?;
-    let arbiter = oer_lab_arbiter::Arbiter::open()?;
-    // The grant holds the board's device access through the power cycle.
-    let grant = arbiter.acquire(&oer_lab_arbiter::Request {
+) -> Result<std::time::Duration> {
+    let board = stand.resolve(query)?;
+    let mut lease = crate::service::lease(
         owner,
-        work: format!("stand discover --verify-power {query}"),
-        scenarios: Vec::new(),
-        run: None,
-        claims: vec![oer_lab_arbiter::claims::Claim::board(board.mac())],
-    })?;
-    let access = grant
-        .device(board.mac())
-        .ok_or("the lease holds no access to the board")?;
-    board.lease(access)?.prove_power_loss()
+        format!("stand discover --verify-power {query}"),
+        vec![oer_lab_arbiter::claims::Claim::board(&board.device_id()?)],
+    )?;
+    let returned = crate::service::run(
+        &mut lease,
+        oer_lab_service::protocol::Operation::ProvePowerLoss {
+            board: board.mac.clone(),
+        },
+    )?;
+    Ok(std::time::Duration::from_millis(
+        returned
+            .as_u64()
+            .ok_or("the service returned no duration")?,
+    ))
 }

@@ -35,12 +35,22 @@ pub(crate) fn init(root: &Path, cli: InitCli) -> Result<std::process::ExitCode> 
     for device in oer_lab_board::devices() {
         let chip = match device.chip.clone() {
             Some(chip) => chip,
-            // The ROM names the chip: probing takes the device lock and
-            // resets the board into its application.
-            None => device
-                .clone()
-                .open("cargo stand init", false)?
-                .probe(&chips)?,
+            // The ROM names the chip. Before a stand file exists the LAB
+            // service owns no board, so init asks the ROM itself.
+            None => {
+                let name = oer_lab_board::flash::detect(&device.port)?;
+                let profile = chips
+                    .iter()
+                    .find(|profile| profile.facts.espflash_chip == name)
+                    .ok_or_else(|| {
+                        format!(
+                            "board {} is an {name}, which no chip profile names",
+                            device.mac
+                        )
+                    })?;
+                oer_lab_board::device::remember_chip(&device.mac, &profile.facts.id)?;
+                profile.facts.id.clone()
+            }
         };
         let profile = chips
             .iter()

@@ -17,6 +17,9 @@ use serde::{Deserialize, Serialize};
 
 /// The protocol version; another one is refused.
 pub const PROTOCOL: u32 = 1;
+/// The token of the lease a command runs inside: its client joins that
+/// lease instead of queueing.
+pub const LEASE_ENV: &str = "OER_LAB_LEASE";
 /// The longest frame either side sends or accepts.
 pub const MAX_FRAME: usize = 1 << 20;
 
@@ -148,6 +151,37 @@ pub enum Request {
     /// A person returns an unavailable resource: the service recovers it
     /// again.
     Return { resource: String },
+    /// The stand's full report: holders, queue, balances, boards and
+    /// recent leases.
+    Report,
+    /// Take board `mac` (or the stand, `"stand"`) out of service for every
+    /// owner but `owner`.
+    Maintain {
+        mac: String,
+        owner: String,
+        reason: String,
+    },
+    /// Return board `mac` (or the stand) to service.
+    EndMaintenance { mac: String },
+    /// Charge `old`'s balance and history to `new`.
+    MergeOwner { old: String, new: String },
+    /// Drop `name`'s balance.
+    ForgetOwner { name: String },
+    /// Grant nothing more and answer once no lease is held: the service may
+    /// then be replaced.
+    Drain,
+    /// Journal a flash of board `mac` that a command under a lease made.
+    RecordFlash {
+        owner: String,
+        mac: String,
+        image: oer_lab_arbiter::journal::ImageIdentity,
+    },
+    /// Journal `event` of board `device` by `owner`.
+    Record {
+        owner: String,
+        device: Option<String>,
+        event: oer_lab_arbiter::journal::BoardEventKind,
+    },
     /// End held lease `lease` for `reason`, on behalf of `by`.
     Preempt {
         lease: u64,
@@ -156,21 +190,85 @@ pub enum Request {
     },
 }
 
-/// Work on the leased resources, run by the service's drivers.
+/// Work on the leased resources, run by the service's drivers. A board is
+/// named as the stand file names it (its id, or its MAC) and must be among
+/// the lease's claims.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(tag = "operation", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum Operation {
     /// A command the service runs as its child under the lease, with the
-    /// client's arguments, directory and environment.
+    /// client's arguments, directory and environment; its output and input
+    /// are the operation's stream. Result: its exit code.
     Command {
         argv: Vec<String>,
         directory: String,
         environment: Vec<(String, String)>,
     },
+    /// Write the image bundle in directory `bundle` into `board` and start
+    /// it, unless `skip_carried` and the board already runs it; the flash
+    /// is journaled as `image` by `owner`. Result: `{written, receipt}`.
+    Flash {
+        board: String,
+        bundle: String,
+        image: oer_lab_arbiter::journal::ImageIdentity,
+        owner: String,
+        via: FlashVia,
+        skip_carried: bool,
+    },
+    /// Reset `board` through `path`. Result: the ROM's reset line.
+    Reset {
+        board: String,
+        path: oer_lab_board::reset::ResetPath,
+    },
+    /// The steps of `board`'s reset ladder, in order, its download entry
+    /// last when it has one. Result: a list of steps.
+    Ladder { board: String },
+    /// Take one step of `board`'s reset ladder. Result: the console the
+    /// ROM printed.
+    Rung {
+        board: String,
+        step: oer_lab_board::reset::RecoveryStep,
+    },
+    /// `board`'s console as the operation's stream, opened without a reset,
+    /// or with a reset into its application when `reset`, until the client
+    /// cancels it.
+    Console { board: String, reset: bool },
+    /// Read `board`'s console for `watch_ms` without a reset. Result: the
+    /// text.
+    ReadConsole { board: String, watch_ms: u64 },
+    /// Power `board` off and on at its hub port, watching it leave and
+    /// return. Result: how long it took to return.
+    PowerCycle { board: String },
+    /// A power cycle with the chip's reset cause read after it, proving the
+    /// port cuts the board's power.
+    ProvePowerLoss { board: String },
+    /// An operation on the lab router; the lease must hold the router.
+    Router {
+        request: crate::router::RouterOperation,
+    },
+    /// Probe the stand's SSH fixtures (the lab router, the air observer).
+    /// The lease must hold the router. Result: the report's text.
+    ProbeFixtures,
+    /// Switch port `port` of hub `hub` (stand-file ids) off for `off_secs`,
+    /// then on: a person sees which button it is. The lease must hold the
+    /// port (`hub-port:LOCATION:PORT`).
+    HubPort {
+        hub: String,
+        port: u8,
+        off_secs: u64,
+    },
+}
+
+/// How a flash reaches the board.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum FlashVia {
+    Usb,
+    Jtag,
 }
 
 /// A reply or notice of the service.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "reply", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum Reply {
     Welcome {
@@ -214,6 +312,13 @@ pub enum Reply {
     },
     Status {
         status: Status,
+    },
+    Report {
+        status: Box<oer_lab_arbiter::Status>,
+    },
+    /// The request was served; `changed` when it changed anything.
+    Done {
+        changed: bool,
     },
 }
 

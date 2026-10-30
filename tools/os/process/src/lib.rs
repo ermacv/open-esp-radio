@@ -20,14 +20,6 @@ pub mod launch_handoff;
 pub mod linux_socket;
 pub use context::{Context, command};
 #[cfg(unix)]
-#[allow(unsafe_code, reason = "polls and closes raw descriptors")]
-mod io_lifetime;
-#[cfg(unix)]
-#[allow(unsafe_code, reason = "socketpair and descriptor flags through libc")]
-mod socket;
-#[cfg(unix)]
-pub use io_lifetime::IoLifetime;
-#[cfg(unix)]
 #[allow(unsafe_code, reason = "forks the guardian process over a pipe")]
 mod guardian;
 #[cfg(unix)]
@@ -35,7 +27,6 @@ pub mod lock;
 #[allow(unsafe_code, reason = "signals the owned process group")]
 pub mod owned;
 #[cfg(unix)]
-#[allow(unsafe_code, reason = "pidfd_open and poll through libc")]
 pub mod proc;
 mod repository;
 #[cfg(feature = "clap")]

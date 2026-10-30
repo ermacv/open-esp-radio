@@ -87,7 +87,8 @@ pub fn append(path: &Path, record: &LeaseRecord) -> crate::Result<()> {
 /// Records in append order; lines another version cannot parse are skipped.
 /// Rename the owner `old` to `new` in every record. Callers hold the state
 /// lock. Lines this build cannot read are kept as they are.
-pub(crate) fn rename_owner(path: &Path, old: &str, new: &str) -> crate::Result<()> {
+/// Name `new` wherever the history at `path` names `old`.
+pub fn rename_owner(path: &Path, old: &str, new: &str) -> crate::Result<()> {
     let text = match fs::read_to_string(path) {
         Ok(text) => text,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),

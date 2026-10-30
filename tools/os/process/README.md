@@ -38,51 +38,6 @@ which fields to forward. `Context::current` parses that process's context once
 and rejects malformed input. The environment is the exec transport, rather
 than an application API for globally mutating child authority.
 
-`lock::LockBroker` transfers an exclusive `FileLock` to an independent Linux
-broker. A live owner admits authenticated `BrokerOperation` connections. Owner
-loss closes admission and drains admitted connections before explicitly unlocking
-the file. Native callers send a completion marker after closing their ports;
-unexpected connection EOF retains the caller's kernel pidfd until its complete
-thread-group exit. A graceful owner end is explicit too; owner death waits for
-the owner's completed exit. Unrelated copies of its file description inherited
-by a concurrent fork cannot postpone that release.
-Its Linux abstract socket address uses the lock file's device/inode and UID,
-so even long XDG paths fit the socket limit. Both sides check `SO_PEERCRED` for
-the same effective UID; the client also checks the recorded broker PID before
-sending its capability. The broker calls `listen` after fork, before acknowledging
-startup, so its peer credentials identify the broker itself. Processes of that
-UID are the trust boundary. The capability never appears in the address.
-Closing the listener removes the address, without a
-stale socket file to clean up. A failed `poll` backs off for 100 ms and probes
-the sockets without blocking, so persistent errors neither spin nor prevent
-owner-loss detection and I/O drainage. A polling error alone never unlocks a
-device.
-The child uses only async-signal-safe syscalls after fork and requires Linux
-`close_range` and pidfds; setup errors fail closed. `IoLifetime::pin` explicitly
-retains an admitted operation through an external command and its descendants, without
-passing a lock descriptor or admission capability. Before exec, a pinned command
-registers its own pidfd and waits for the broker's acknowledgement. The broker
-owns that direct command through its complete exit. Such children must retain
-the inherited descriptor until their I/O closes. Admission records the socket's
-inode. After owner loss, the broker allows the guardian's one-second cleanup,
-then scans `/proc/*/fd` for remaining same-UID lifetime holders. It sends SIGTERM,
-then SIGKILL after another second, repeating the scan every 250 ms to catch new
-forks. New groups and sessions do not escape this ownership. Signals use kernel
-pidfds, verified against retained `/proc/PID` directory identities before use.
-Holders claimed by cleanup retain those pidfds through complete exit: their
-sockets can close earlier during process termination. Release requires drained
-connections and completed process exits, never merely an empty process scan.
-Other UIDs, PID namespaces and restricted `/proc` access can hide holders; their
-connections keep exclusion until their I/O actually closes. The local owner is
-not signalled by its broker; local I/O guards retain that owner themselves.
-Its retained `/proc` directory identifies that exemption, so recycling the
-owner's numeric PID cannot hide a new lifetime holder.
-Daemons that close their lifetime descriptor before cleanup claims them can
-outlive the command and carry no retained device operation. An empty lifetime
-describes an operation without a device, such as discovery of an unidentified hub port.
-Transferred raw lock descriptors release exclusion with their last copy,
-including transient copies in other children before they close inherited FDs.
-
 Four more jobs have their one owner here:
 
 - `git`: every repository tool runs Git as `git -C <directory> …` through
@@ -101,13 +56,13 @@ Four more jobs have their one owner here:
   goes through it.
 - `proc`: a live process's start time (`start_ticks`, `started_unix_millis`)
   from Linux `/proc`, which tells a recycled PID from the process that held
-  it, and kernel pidfds that fence complete process exit.
+  it.
 
-The implementation supports Unix process groups; pinned hardware lifetimes also
-track escaped descendants by socket identity. Processes without a pinned lifetime
-that create another group/session, and processes on a remote SSH host, need their
-own lifecycle owner. Integration tests use real processes to exercise signals,
-pipe capacity, deadlines, daemon cleanup and inaccessible lifetime holders.
+The implementation supports Unix process groups. Processes that create
+another group or session, and processes on a remote SSH host, need their own
+lifecycle owner: the LAB service's systemd unit keeps every descendant of a
+hardware command in its control group. Integration tests use real processes
+to exercise signals, pipe capacity, deadlines and daemon cleanup.
 
 ```console
 cargo test -p oer-os-process

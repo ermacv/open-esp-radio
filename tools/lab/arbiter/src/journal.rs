@@ -240,7 +240,7 @@ pub fn device_label(device: Option<&str>, stand: Option<&oer_lab_model::Stand>) 
 /// What an image written into a board is: the name the journal knows it
 /// by (a HIL image class, a catalog image, an example), the SHA-256 of its
 /// application, the source it was built from and who wrote it.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct ImageIdentity {
     pub name: String,
     pub sha256: String,

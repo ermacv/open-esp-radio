@@ -295,3 +295,38 @@ fn a_state_of_another_schema_is_refused() {
     let error = Scheduler::open(&path, stand(), NOW).unwrap_err();
     assert!(error.to_string().contains("schema 1"), "{error}");
 }
+
+#[test]
+fn a_board_under_maintenance_waits_for_every_other_owner() {
+    let mut scheduler = ready();
+    scheduler.set_maintenance(crate::Maintenance {
+        mac: A[6..].to_owned(),
+        owner: "ann".to_owned(),
+        reason: "rework".to_owned(),
+        since_unix: 1,
+        unknown: Default::default(),
+    });
+    let other = scheduler.enqueue(queued("bob", vec![Claim::board(&A[6..])]), 1);
+    let maintainer = scheduler.enqueue(queued("ann", vec![Claim::board(&A[6..])]), 2);
+    assert_eq!(grant(&mut scheduler), vec![maintainer]);
+    let a = scheduler
+        .end(maintainer, LeaseOutcome::Released, NOW)
+        .unwrap()
+        .recoveries
+        .remove(0);
+    scheduler.confirm(&a, Confirmation::Ready);
+    assert!(grant(&mut scheduler).is_empty());
+    assert!(scheduler.clear_maintenance(&A[6..]));
+    assert_eq!(grant(&mut scheduler), vec![other]);
+}
+
+#[test]
+fn a_merged_owner_keeps_one_balance() {
+    let mut scheduler = ready();
+    let held = scheduler.enqueue(queued("old", vec![Claim::board(&A[6..])]), 1);
+    grant(&mut scheduler);
+    scheduler.end(held, LeaseOutcome::Released, NOW + 60_000);
+    scheduler.merge_owner("old", "new");
+    assert!(!scheduler.forget_owner("old"));
+    assert!(scheduler.forget_owner("new"));
+}

@@ -12,18 +12,10 @@ pub struct ProcessIdentity {
 }
 
 impl ProcessIdentity {
-    pub(crate) fn current() -> crate::Result<Self> {
-        Self::of(std::process::id()).ok_or_else(|| "cannot read this process's start time".into())
-    }
-
     pub fn of(pid: u32) -> Option<Self> {
         Some(Self {
             pid,
             start_ticks: oer_os_process::proc::start_ticks(pid)?,
         })
-    }
-
-    pub(crate) fn alive(&self) -> bool {
-        Self::of(self.pid).is_some_and(|current| current == *self)
     }
 }

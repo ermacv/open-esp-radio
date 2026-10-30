@@ -5,14 +5,12 @@
 //! - the arbiter's state (queue, holders, history, board journal):
 //!   `open-esp-radio/arbiter` in `$XDG_CACHE_HOME` (else `~/.cache`), or
 //!   `$OER_STAND_ARBITER_DIR`, which tests and a nested private arbiter use;
-//! - the lock files, the arbiter's final exclusion layer:
-//!   `open-esp-radio/leases` in the XDG cache directory. They do not move
-//!   with `$OER_STAND_ARBITER_DIR`, so every process on the host excludes
-//!   every other one from a board, whichever arbiter ordered it.
+//! - the LAB service's socket: `open-esp-radio/lab.sock` in
+//!   `$XDG_RUNTIME_DIR` (else the cache base), or `$OER_LAB_SOCKET`.
 
 use std::{ffi::OsString, path::PathBuf};
 
-use oer_os_durable::xdg::{Base, overridable_in, path_in};
+use oer_os_durable::xdg::{Base, overridable_in};
 
 pub use crate::STAND_FILE_ENV;
 
@@ -33,9 +31,16 @@ pub fn arbiter() -> crate::Result<PathBuf> {
     arbiter_in(environment)
 }
 
-/// The directory of the lock files.
-pub fn locks() -> crate::Result<PathBuf> {
-    locks_in(environment)
+/// Overrides the LAB service's socket, for a private service.
+pub const SOCKET_ENV: &str = "OER_LAB_SOCKET";
+
+/// The LAB service's socket.
+pub fn socket() -> crate::Result<PathBuf> {
+    socket_in(environment)
+}
+
+fn socket_in(variable: impl Fn(&str) -> Option<OsString>) -> crate::Result<PathBuf> {
+    overridable_in(SOCKET_ENV, Base::Runtime, "lab.sock", variable)
 }
 
 fn arbiter_in(variable: impl Fn(&str) -> Option<OsString>) -> crate::Result<PathBuf> {
@@ -45,10 +50,6 @@ fn arbiter_in(variable: impl Fn(&str) -> Option<OsString>) -> crate::Result<Path
         "arbiter",
         variable,
     )?)
-}
-
-fn locks_in(variable: impl Fn(&str) -> Option<OsString>) -> crate::Result<PathBuf> {
-    Ok(path_in(Base::Cache, "leases", variable)?)
 }
 
 #[cfg(test)]
@@ -70,20 +71,24 @@ mod tests {
             arbiter_in(environment).unwrap(),
             Path::new("/cache/open-esp-radio/arbiter")
         );
-        assert_eq!(
-            locks_in(environment).unwrap(),
-            Path::new("/cache/open-esp-radio/leases")
-        );
     }
 
     #[test]
-    fn a_private_arbiter_keeps_the_locks() {
-        let private = |name: &str| {
-            (name == ARBITER_ENV)
-                .then(|| OsString::from("/tmp/private"))
+    fn the_service_socket_lies_in_the_runtime_directory_unless_moved() {
+        let runtime = |name: &str| {
+            (name == "XDG_RUNTIME_DIR")
+                .then(|| OsString::from("/run/user/1"))
                 .or_else(|| environment(name))
         };
-        assert_eq!(arbiter_in(private).unwrap(), Path::new("/tmp/private"));
-        assert_eq!(locks_in(private).unwrap(), locks_in(environment).unwrap());
+        assert_eq!(
+            socket_in(runtime).unwrap(),
+            Path::new("/run/user/1/open-esp-radio/lab.sock")
+        );
+        let private = |name: &str| {
+            (name == SOCKET_ENV)
+                .then(|| OsString::from("/tmp/lab.sock"))
+                .or_else(|| runtime(name))
+        };
+        assert_eq!(socket_in(private).unwrap(), Path::new("/tmp/lab.sock"));
     }
 }

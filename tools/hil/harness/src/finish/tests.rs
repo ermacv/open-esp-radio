@@ -97,7 +97,6 @@ fn a_lost_response_climbs_until_the_image_answers() {
         "{cleanup:?}"
     );
     assert_eq!(board.resets.get(), 2);
-    assert!(board.quarantined.borrow().is_none());
 }
 
 #[test]
@@ -111,11 +110,10 @@ fn a_rom_that_answers_keeps_the_board_in_service_when_the_image_does_not() {
         }
     );
     assert!(link.is_none());
-    assert!(board.quarantined.borrow().is_none());
 }
 
 #[test]
-fn a_silent_rom_after_the_ladder_quarantines_the_board() {
+fn a_silent_rom_after_the_ladder_leaves_the_board_to_a_person() {
     let board = FakeBoard::new(vec![rts(false, false), power(false, false)]);
     let (_, cleanup) = finish(
         &board,
@@ -124,22 +122,10 @@ fn a_silent_rom_after_the_ladder_quarantines_the_board() {
         Ending::default(),
         WAITS,
     );
-    let Cleanup::Quarantined { reason } = &cleanup else {
+    let Cleanup::Unreachable { reason } = &cleanup else {
         panic!("{cleanup:?}");
     };
-    assert_eq!(board.quarantined.borrow().as_deref(), Some(reason.as_str()));
     assert!(reason.contains("RtsReset, PowerCycle"), "{reason}");
-}
-
-#[test]
-fn a_quarantine_the_arbiter_did_not_record_is_kept_in_the_result() {
-    let mut board = FakeBoard::new(vec![rts(false, false)]);
-    board.records = false;
-    let (_, cleanup) = finish(&board, None, IMAGE, Ending::default(), WAITS);
-    assert!(
-        matches!(&cleanup, Cleanup::Unrecorded { cause, .. } if cause.contains("unavailable")),
-        "{cleanup:?}"
-    );
 }
 
 #[test]

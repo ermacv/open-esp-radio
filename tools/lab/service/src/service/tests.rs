@@ -82,7 +82,9 @@ impl Drivers for Fake {
         _: &[Claim],
         io: OperationIo,
     ) -> Result<serde_json::Value, String> {
-        let Operation::Command { argv, .. } = operation;
+        let Operation::Command { argv, .. } = operation else {
+            return Err("the fake runs commands only".to_owned());
+        };
         match argv.first().map(String::as_str) {
             Some("hold") => {
                 self.hardware.pass();
@@ -128,7 +130,7 @@ fn open(directory: &std::path::Path, fake: &Arc<Fake>) -> Service {
 /// A service whose clock reads `now`.
 fn open_at(directory: &std::path::Path, fake: &Arc<Fake>, now: Arc<AtomicU64>) -> Service {
     Service::open(
-        directory,
+        oer_lab_arbiter::Arbiter::at(directory).unwrap(),
         vec![board(A)],
         fake.clone(),
         Box::new(move || now.load(Ordering::SeqCst)),
@@ -538,7 +540,7 @@ fn a_recovery_past_its_deadline_leaves_the_board_unavailable_and_untouched() {
     fake.recovery.close();
     let now = Arc::new(AtomicU64::new(START_MS));
     let service = Service::open_with(
-        directory.path(),
+        oer_lab_arbiter::Arbiter::at(directory.path()).unwrap(),
         vec![board(A)],
         fake.clone(),
         Box::new(move || now.load(Ordering::SeqCst)),

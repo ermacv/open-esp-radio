@@ -4,16 +4,16 @@
 //! it is attached, out of service or quarantined, and how often the stand had
 //! to recover it within [`RECOVERY_WINDOW`].
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::journal::{BoardEvent, BoardEventKind};
 
-use crate::{Maintenance, maintenance::ServiceKind};
+use crate::{Maintenance, readiness::Readiness};
 
 /// The window over which a board's recoveries count towards its health.
 pub const RECOVERY_WINDOW: std::time::Duration = std::time::Duration::from_secs(3600);
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum HealthState {
     /// Attached, in service, and not recovered recently.
@@ -22,13 +22,14 @@ pub enum HealthState {
     RecoveredRecently,
     /// Reserved for one owner.
     Maintenance,
-    /// Out of service until a person resets or power-cycles it.
+    /// No driver brought it to an end state: unavailable until a person
+    /// returns it.
     Quarantined,
     /// Registered or journaled, but not attached now.
     NotAttached,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Health {
     pub state: HealthState,
     /// Automatic recoveries within the window, and how many of them were
@@ -64,6 +65,7 @@ impl std::fmt::Display for Health {
 pub(crate) fn of(
     mac: &str,
     attached: bool,
+    readiness: Option<&Readiness>,
     maintenance: &[Maintenance],
     events: &[BoardEvent],
     now_unix: u64,
@@ -81,13 +83,13 @@ pub(crate) fn of(
         .iter()
         .filter(|(unix, _)| *unix >= since)
         .collect::<Vec<_>>();
-    let service = maintenance.iter().find(|entry| entry.mac == mac);
-    let state = match service.map(|entry| entry.kind) {
-        Some(ServiceKind::Quarantine) => HealthState::Quarantined,
-        Some(_) => HealthState::Maintenance,
-        None if !attached => HealthState::NotAttached,
-        None if !recent.is_empty() => HealthState::RecoveredRecently,
-        None => HealthState::Ok,
+    let maintained = maintenance.iter().any(|entry| entry.mac == mac);
+    let state = match readiness {
+        Some(Readiness::Unavailable { .. }) => HealthState::Quarantined,
+        _ if maintained => HealthState::Maintenance,
+        _ if !attached => HealthState::NotAttached,
+        _ if !recent.is_empty() => HealthState::RecoveredRecently,
+        _ => HealthState::Ok,
     };
     Health {
         state,
@@ -100,7 +102,6 @@ pub(crate) fn of(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::QuarantineTrigger;
     use oer_lab_board::reset::RecoveryStep;
 
     const MAC: &str = "02:00:00:00:F6:D0";
@@ -120,15 +121,12 @@ mod tests {
         }
     }
 
-    fn service(kind: ServiceKind) -> Maintenance {
+    fn maintained() -> Maintenance {
         Maintenance {
             mac: MAC.into(),
-            owner: String::from("stand"),
+            owner: String::from("ann"),
             reason: String::from("why"),
             since_unix: 0,
-            kind,
-            trigger: Some(QuarantineTrigger::Unreachable),
-            evidence: None,
             unknown: Default::default(),
         }
     }
@@ -136,30 +134,35 @@ mod tests {
     #[test]
     fn health_names_the_worst_known_state_and_recent_recoveries() {
         let now = 10_000;
-        assert_eq!(of(MAC, true, &[], &[], now).state, HealthState::Ok);
+        assert_eq!(of(MAC, true, None, &[], &[], now).state, HealthState::Ok);
         assert_eq!(
-            of(MAC, false, &[], &[], now).state,
+            of(MAC, false, None, &[], &[], now).state,
             HealthState::NotAttached
         );
         // A recovery older than the window is history, not health.
         let old = [recovered(now - 7200, true)];
-        let health = of(MAC, true, &[], &old, now);
+        let health = of(MAC, true, None, &[], &old, now);
         assert_eq!(
             (health.state, health.recoveries, health.last_recovery_unix),
             (HealthState::Ok, 0, Some(now - 7200))
         );
         let recent = [recovered(now - 60, true), recovered(now - 30, false)];
-        let health = of(MAC, true, &[], &recent, now);
+        let health = of(MAC, true, None, &[], &recent, now);
         assert_eq!(health.state, HealthState::RecoveredRecently);
         assert_eq!((health.recoveries, health.hardware_recoveries), (2, 1));
         assert_eq!(
             health.to_string(),
             "recovered recently (2 recoveries, 1 hardware, in the last hour)"
         );
-        let quarantined = of(MAC, true, &[service(ServiceKind::Quarantine)], &recent, now);
+        let unavailable = Readiness::Unavailable {
+            reason: String::from("silent"),
+            quiet: false,
+            generation: 1,
+        };
+        let quarantined = of(MAC, true, Some(&unavailable), &[], &recent, now);
         assert_eq!(quarantined.state, HealthState::Quarantined);
         assert_eq!(
-            of(MAC, false, &[service(ServiceKind::default())], &[], now).state,
+            of(MAC, false, None, &[maintained()], &[], now).state,
             HealthState::Maintenance
         );
     }

@@ -6,22 +6,19 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 publish = false
-description = "The stand arbiter: the queue and its job tickets, balances, preemption, maintenance and the device locks of every leased board"
+description = "The stand's scheduling for the LAB service: the queue, balances, preemption, maintenance, resource readiness and the stand's records"
 
 [dependencies]
-hex = "=0.4.3"
 oer-lab-board = { path = "../board" }
 oer-os-durable = { path = "../../os/durable" }
 oer-os-process = { path = "../../os/process" }
 oer-lab-model = { path = "../model" }
-rustix = { version = "1.1.4", features = ["process"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
 [dev-dependencies]
 tempfile = "3"
 serde_json = "1.0"
-rustix = { version = "1.1.4", features = ["process"] }
 
 [lints]
 workspace = true
