@@ -428,6 +428,10 @@ pub(crate) fn lease(
         .collect::<Vec<_>>();
     environment.retain(|(key, _)| key != oer_lab_arbiter::owner::OWNER_ENV);
     environment.push((oer_lab_arbiter::owner::OWNER_ENV.to_owned(), owner.clone()));
+    // On a terminal the command gets a pseudo-terminal of its size, and this
+    // terminal passes every key through until the command ends.
+    let terminal = terminal_size();
+    let _raw = terminal.and_then(|_| RawTerminal::enter());
     let running = client.start(Operation::Command {
         argv: cli
             .command
@@ -436,6 +440,7 @@ pub(crate) fn lease(
             .collect(),
         directory: std::env::current_dir()?.display().to_string(),
         environment,
+        terminal,
     })?;
     // A cancelled lease command stops its command through the service.
     let stop = running.input();
@@ -489,6 +494,49 @@ pub(crate) fn lease(
             .and_then(|code| u8::try_from(code).ok())
             .unwrap_or(1),
     ))
+}
+
+/// The size of the terminal this command runs on, when its input and output
+/// are one.
+fn terminal_size() -> Option<oer_lab_service::protocol::TerminalSize> {
+    use std::io::IsTerminal as _;
+    if !std::io::stdin().is_terminal() || !std::io::stdout().is_terminal() {
+        return None;
+    }
+    let size = rustix::termios::tcgetwinsize(std::io::stdout()).ok()?;
+    Some(oer_lab_service::protocol::TerminalSize {
+        rows: size.ws_row,
+        columns: size.ws_col,
+    })
+}
+
+/// This terminal in raw mode until dropped, so the leased command's own
+/// terminal handles every key.
+struct RawTerminal(rustix::termios::Termios);
+
+impl RawTerminal {
+    fn enter() -> Option<Self> {
+        let saved = rustix::termios::tcgetattr(std::io::stdin()).ok()?;
+        let mut raw = saved.clone();
+        raw.make_raw();
+        rustix::termios::tcsetattr(
+            std::io::stdin(),
+            rustix::termios::OptionalActions::Now,
+            &raw,
+        )
+        .ok()?;
+        Some(Self(saved))
+    }
+}
+
+impl Drop for RawTerminal {
+    fn drop(&mut self) {
+        let _ = rustix::termios::tcsetattr(
+            std::io::stdin(),
+            rustix::termios::OptionalActions::Now,
+            &self.0,
+        );
+    }
 }
 
 /// `cargo stand board reset|check|console|soak`.

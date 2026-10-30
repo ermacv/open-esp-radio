@@ -348,8 +348,23 @@ pub(crate) fn parse(json: &[u8]) -> Result<Reply> {
     serde_json::from_slice(json).map_err(|error| format!("unreadable reply: {error}"))
 }
 
+impl Client {
+    /// Close the connection the way a dying client does: without
+    /// releasing its lease.
+    #[cfg(test)]
+    pub(crate) fn sever(mut self) {
+        self.joined = true;
+    }
+}
+
 impl Drop for Client {
+    /// A client that ends releases its lease; one that dies without this
+    /// leaves it abandoned. Either way the service stops its operations
+    /// and recovers its resources.
     fn drop(&mut self) {
+        if !self.joined {
+            let _ = self.send(&Request::Release);
+        }
         let _ = self.stream.shutdown(std::net::Shutdown::Both);
     }
 }

@@ -28,7 +28,7 @@ use oer_lab_board::{
 };
 use oer_lab_model::Stand;
 
-use crate::protocol::{FlashVia, Operation};
+use crate::protocol::{FlashVia, Operation, TerminalSize};
 use crate::service::{Drivers, OperationIo};
 
 /// How long the ROM's banner is read after a reset.
@@ -247,6 +247,7 @@ impl StandDrivers {
         argv: &[String],
         directory: &str,
         environment: &[(String, String)],
+        terminal: Option<TerminalSize>,
         claims: &[Claim],
         io: &OperationIo,
     ) -> Result<serde_json::Value> {
@@ -256,19 +257,48 @@ impl StandDrivers {
         if covers(claims, &[Claim::exclusive(ROUTER)]) {
             lock(&self.touched).insert(ROUTER.to_owned());
         }
-        let mut command = oer_os_process::command(program);
+        // On a terminal the command runs under `setsid --ctty`, which makes
+        // the pseudo-terminal its controlling terminal in a session of its
+        // own: closing the terminal hangs that session up.
+        let pty = terminal.map(pseudo_terminal).transpose()?;
+        let mut command = match &pty {
+            Some(_) => {
+                let mut command = oer_os_process::command("setsid");
+                command.args(["--ctty", "--wait", "--"]).arg(program);
+                command
+            }
+            None => oer_os_process::command(program),
+        };
         command
             .args(arguments)
             .current_dir(directory)
             .env_clear()
-            .envs(environment.iter().map(|(key, value)| (key, value)))
-            .stdin(std::process::Stdio::piped())
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped());
+            .envs(environment.iter().map(|(key, value)| (key, value)));
+        let master = match pty {
+            Some((master, slave)) => {
+                let stdio = |fd: &std::os::fd::OwnedFd| -> Result<std::process::Stdio> {
+                    Ok(std::process::Stdio::from(fd.try_clone().map_err(text)?))
+                };
+                command
+                    .stdin(stdio(&slave)?)
+                    .stdout(stdio(&slave)?)
+                    .stderr(stdio(&slave)?);
+                Some(std::fs::File::from(master))
+            }
+            None => {
+                command
+                    .stdin(std::process::Stdio::piped())
+                    .stdout(std::process::Stdio::piped())
+                    .stderr(std::process::Stdio::piped());
+                None
+            }
+        };
         let mut child =
             oer_os_process::owned::Child::spawn_with_shutdown_grace(&mut command, COMMAND_GRACE)
                 .map_err(text)?;
-        let streams = [
+        // The child holds the terminal's slave side now.
+        drop(command);
+        let mut streams = vec![
             child
                 .take_stdout()
                 .map(|out| Box::new(out) as Box<dyn Read + Send>),
@@ -276,6 +306,14 @@ impl StandDrivers {
                 .take_stderr()
                 .map(|err| Box::new(err) as Box<dyn Read + Send>),
         ];
+        let mut stdin: Option<Box<dyn Write + Send>> = child
+            .stdin
+            .take()
+            .map(|input| Box::new(input) as Box<dyn Write + Send>);
+        if let Some(master) = &master {
+            streams.push(Some(Box::new(master.try_clone().map_err(text)?)));
+            stdin = Some(Box::new(master.try_clone().map_err(text)?));
+        }
         let (chunks, received) = mpsc::sync_channel::<Vec<u8>>(64);
         let readers = streams
             .into_iter()
@@ -297,7 +335,6 @@ impl StandDrivers {
             })
             .collect::<Vec<_>>();
         drop(chunks);
-        let mut stdin = child.stdin.take();
         let status = loop {
             while let Ok(chunk) = received.try_recv() {
                 io.output.write(&chunk);
@@ -319,6 +356,8 @@ impl StandDrivers {
                 }
             }
             if io.stop.load(Ordering::SeqCst) {
+                // Hang up the terminal's session, then stop the group.
+                drop(stdin.take());
                 let _ = child.kill();
                 break child.wait().map_err(text)?;
             }
@@ -329,6 +368,10 @@ impl StandDrivers {
                 io.output.write(&chunk);
             }
         };
+        // The terminal's reader ends once every holder of its slave side
+        // closed it; the master closes with the operation.
+        drop(stdin);
+        drop(master);
         for reader in readers {
             let _ = reader.join();
         }
@@ -356,6 +399,32 @@ impl StandDrivers {
             .cycle_holding(off)
             .map_err(text)
     }
+}
+
+/// A pseudo-terminal of `size`: its master and its slave side.
+fn pseudo_terminal(size: TerminalSize) -> Result<(std::os::fd::OwnedFd, std::os::fd::OwnedFd)> {
+    use rustix::{fs::OFlags, pty};
+    let master = pty::openpt(pty::OpenptFlags::RDWR | pty::OpenptFlags::NOCTTY).map_err(text)?;
+    pty::grantpt(&master).map_err(text)?;
+    pty::unlockpt(&master).map_err(text)?;
+    let name = pty::ptsname(&master, Vec::new()).map_err(text)?;
+    rustix::termios::tcsetwinsize(
+        &master,
+        rustix::termios::Winsize {
+            ws_row: size.rows,
+            ws_col: size.columns,
+            ws_xpixel: 0,
+            ws_ypixel: 0,
+        },
+    )
+    .map_err(text)?;
+    let slave = rustix::fs::open(
+        name.as_c_str(),
+        OFlags::RDWR | OFlags::NOCTTY | OFlags::CLOEXEC,
+        rustix::fs::Mode::empty(),
+    )
+    .map_err(text)?;
+    Ok((master, slave))
 }
 
 /// The claim resource of port `port` of the hub at USB 2 location
@@ -441,7 +510,8 @@ impl Drivers for StandDrivers {
                 argv,
                 directory,
                 environment,
-            } => self.command(argv, directory, environment, claims, &io),
+                terminal,
+            } => self.command(argv, directory, environment, *terminal, claims, &io),
             Operation::Flash {
                 board,
                 bundle,

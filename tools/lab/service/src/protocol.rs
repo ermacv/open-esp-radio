@@ -203,6 +203,11 @@ pub enum Operation {
         argv: Vec<String>,
         directory: String,
         environment: Vec<(String, String)>,
+        /// The client's terminal size, when it runs the command on its
+        /// terminal: the command then gets a pseudo-terminal of that size as
+        /// its controlling terminal.
+        #[serde(default)]
+        terminal: Option<TerminalSize>,
     },
     /// Write the image bundle in directory `bundle` into `board` and start
     /// it, unless `skip_carried` and the board already runs it; the flash
@@ -257,6 +262,13 @@ pub enum Operation {
         port: u8,
         off_secs: u64,
     },
+}
+
+/// A terminal's size in character cells.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct TerminalSize {
+    pub rows: u16,
+    pub columns: u16,
 }
 
 /// How a flash reaches the board.

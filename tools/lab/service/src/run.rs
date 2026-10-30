@@ -43,6 +43,15 @@ pub fn serve(root: PathBuf) -> Result<()> {
         Box::new(oer_os_durable::unix_millis),
     )?;
     eprintln!("lab-service: serving {}", socket.display());
+    // A stop (SIGTERM from systemd) ends the service at once: its state is
+    // persisted with every change, and the unit stops what it started.
+    std::thread::spawn(|| {
+        while !oer_os_process::cancellation_requested() {
+            std::thread::sleep(std::time::Duration::from_millis(200));
+        }
+        eprintln!("lab-service: stopping");
+        std::process::exit(0);
+    });
     service.serve(listener)?;
     Ok(())
 }

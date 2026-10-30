@@ -55,7 +55,8 @@ tools/analysis/{blobray-analysis, blobray-application, blobray-artifacts,
 tools/chip/profile/
 tools/hil/{cli, harness, link}/
 tools/image/{build, bundle, checks, cli, compare, esp-idf, large-values, linker, stack}/
-tools/lab/{arbiter, board, cli, fixture, fixture-helpers, fixture-install, model, router}/
+tools/lab/{arbiter, board, cli, fixture, fixture-helpers, fixture-install, model, router,
+    service}/
 tools/os/{command-tree, durable, process, serial, toolchain}/
 tools/pins/{artifacts, cli}/
 tools/probe/{codegen, macros}/

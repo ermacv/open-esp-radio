@@ -118,6 +118,7 @@ fn command(name: &str) -> Operation {
         argv: vec![name.to_owned()],
         directory: "/".to_owned(),
         environment: Vec::new(),
+        terminal: None,
     }
 }
 
@@ -215,7 +216,7 @@ fn a_lost_client_releases_nothing_while_its_hardware_work_runs() {
     })
     .unwrap();
     service.wait_until(|status| status.holders.iter().any(|h| h.operations == 1));
-    drop(lost);
+    lost.sever();
     service.wait_until(|status| status.holders.iter().all(|h| h.ending));
 
     let waiter = service.clone();
@@ -385,7 +386,7 @@ fn a_command_inside_the_lease_joins_it_and_its_loss_stops_only_its_work() {
         })
         .unwrap();
     service.wait_until(|status| status.holders.iter().any(|h| h.operations == 1));
-    drop(inside);
+    inside.sever();
     fake.hardware.open();
     service.wait_until(|status| status.holders.iter().all(|h| h.operations == 0));
     let status = service.status();

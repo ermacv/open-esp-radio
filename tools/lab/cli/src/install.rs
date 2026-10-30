@@ -22,8 +22,9 @@ use crate::Result;
 use oer_os_process as process;
 use oer_os_process::Checkout;
 
-/// The package, and binary, the tool installs: `cargo stand`.
+/// The package the tool installs, `cargo stand`, and the binary it builds.
 const PACKAGE: &str = "oer-tool-lab-cli";
+const BINARY: &str = "stand";
 
 fn home() -> Result<PathBuf> {
     std::env::var_os("HOME")
@@ -163,7 +164,7 @@ pub fn run(ctx: &Checkout) -> Result<()> {
     )?;
     fs::create_dir_all(&bin)?;
     let staged = bin.join(format!(".{PACKAGE}.new"));
-    fs::copy(source.join("target/debug").join(PACKAGE), &staged)?;
+    fs::copy(source.join("target/debug").join(BINARY), &staged)?;
     fs::rename(&staged, &installed)?;
     let script_directory = home()?.join(".local/bin");
     fs::create_dir_all(&script_directory)?;

@@ -16,7 +16,7 @@ oer-lab-model = { path = "../model" }
 oer-lab-router = { path = "../router" }
 oer-os-durable = { path = "../../os/durable" }
 oer-os-process = { path = "../../os/process" }
-rustix = { version = "=1.1.4", features = ["net"] }
+rustix = { version = "=1.1.4", features = ["fs", "net", "pty", "termios"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
