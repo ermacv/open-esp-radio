@@ -4,7 +4,7 @@
 use std::sync::atomic::AtomicU64;
 
 use super::*;
-use crate::client::{Client, parse};
+use crate::client::{Client, Event};
 
 const A: &str = "02:00:00:00:00:0a";
 
@@ -323,24 +323,17 @@ fn a_slow_reader_loses_output_visibly_and_never_holds_the_operation() {
     service.wait_until(ready);
     let mut slow = client(&service);
     slow.acquire(request("ann"), &mut |_| {}).unwrap();
-    slow.send(&Request::Start {
-        id: 7,
-        operation: command("flood"),
-    })
-    .unwrap();
+    let mut flood = slow.start(command("flood")).unwrap();
     // The operation ends before the client read a byte of its output.
     service.wait_until(|status| status.holders.iter().any(|h| h.operations == 1));
     service.wait_until(|status| status.holders.iter().all(|h| h.operations == 0));
 
     let (mut received, mut lost, mut finished) = (0usize, 0u64, None);
     while finished.is_none() {
-        match slow.frame().unwrap() {
-            Frame::Data { bytes, .. } => received += bytes.len(),
-            Frame::Message(json) => match parse(&json).unwrap() {
-                Reply::Lost { bytes, .. } => lost = bytes,
-                Reply::Finished { result, .. } => finished = Some(result),
-                _ => {}
-            },
+        match flood.event() {
+            Event::Output(bytes) => received += bytes.len(),
+            Event::Lost(bytes) => lost = bytes,
+            Event::Finished(result) => finished = Some(result),
         }
     }
     assert_eq!(finished, Some(Ok(serde_json::json!("flooded"))));
@@ -504,7 +497,10 @@ fn a_person_preempts_a_lease_and_its_client_hears_why() {
     assert!(person.preempt(granted.lease + 100, "bob", "stuck").is_err());
     person.preempt(granted.lease, "bob", "stuck run").unwrap();
     holder.ended().unwrap();
-    assert_eq!(holder.revoked(), Some("preempted by bob: stuck run"));
+    assert_eq!(
+        holder.revoked().as_deref(),
+        Some("preempted by bob: stuck run")
+    );
 }
 
 #[test]
@@ -589,4 +585,21 @@ fn a_grant_the_service_cannot_record_is_refused() {
     client(&service)
         .acquire(request("ann"), &mut |_| {})
         .unwrap();
+}
+
+#[test]
+fn an_operation_is_a_duplex_stream_for_its_client() {
+    use std::io::{Read as _, Write as _};
+    let directory = tempfile::tempdir().unwrap();
+    let fake = Fake::new();
+    let service = open(directory.path(), &fake);
+    service.wait_until(ready);
+    let mut holder = client(&service);
+    holder.acquire(request("ann"), &mut |_| {}).unwrap();
+    let mut echo = holder.start(command("echo")).unwrap();
+    echo.write_all(b"console line\n").unwrap();
+    echo.input().close().unwrap();
+    let mut read = String::new();
+    echo.read_to_string(&mut read).unwrap();
+    assert_eq!(read, "console line\n");
 }

@@ -1,10 +1,15 @@
 //! A client of the service: the connection a command holds its lease by.
 //! Dropping it ends the lease the way a lost client does.
+//!
+//! One reader thread sorts the service's frames: an operation's output,
+//! loss reports and end go to that operation, every other reply to the
+//! request waiting for it.
 
 use std::{
-    io::{Read, Write},
+    collections::BTreeMap,
+    io::{self, Read, Write},
     os::unix::net::UnixStream,
-    sync::{Arc, Mutex, PoisonError},
+    sync::{Arc, Mutex, MutexGuard, PoisonError, mpsc},
 };
 
 use oer_lab_arbiter::claims::Claim;
@@ -13,14 +18,35 @@ use crate::protocol::{Frame, LeaseRequest, Operation, PROTOCOL, Reply, Request, 
 
 pub type Result<T> = std::result::Result<T, String>;
 
+/// Events an operation may have pending before its output slows the
+/// connection.
+const ROUTE_DEPTH: usize = 256;
+
 pub struct Client {
-    reader: UnixStream,
+    stream: UnixStream,
     writer: Arc<Mutex<UnixStream>>,
-    /// Why the service ended the lease, once it did.
-    revoked: Option<String>,
-    /// Why divisible work should yield, once the service asked.
-    yield_reason: Option<String>,
+    replies: mpsc::Receiver<Reply>,
+    routes: Arc<Mutex<BTreeMap<u64, mpsc::SyncSender<Event>>>>,
+    notices: Arc<Mutex<Notices>>,
     next_operation: u64,
+}
+
+/// What the service said about the lease outside the replies.
+#[derive(Default)]
+struct Notices {
+    /// Why the service ended the lease.
+    revoked: Option<String>,
+    /// Why divisible work should yield.
+    yield_reason: Option<String>,
+}
+
+/// What an operation's client receives.
+#[derive(Debug)]
+pub enum Event {
+    Output(Vec<u8>),
+    /// Output dropped for a slow reader, in bytes.
+    Lost(u64),
+    Finished(Result<serde_json::Value>),
 }
 
 /// A lease the client holds.
@@ -31,16 +57,70 @@ pub struct Granted {
     pub token: String,
 }
 
+fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+    mutex.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
 impl Client {
     /// Greet the service on `stream` as `client`; another protocol is
     /// refused with the service's reason.
     pub fn connect(stream: UnixStream, client: &str) -> Result<Self> {
-        let writer = stream.try_clone().map_err(|error| error.to_string())?;
+        let failed = |error: io::Error| error.to_string();
+        let writer = stream.try_clone().map_err(failed)?;
+        let mut reader = stream.try_clone().map_err(failed)?;
+        let (replies_in, replies) = mpsc::channel();
+        let routes = Arc::new(Mutex::new(BTreeMap::<u64, mpsc::SyncSender<Event>>::new()));
+        let notices = Arc::new(Mutex::new(Notices::default()));
+        let (thread_routes, thread_notices) = (routes.clone(), notices.clone());
+        std::thread::spawn(move || {
+            while let Ok(Some(frame)) = Frame::read(&mut reader) {
+                let reply = match frame {
+                    Frame::Data { operation, bytes } => {
+                        // A full route stops this reader, so a slow reader
+                        // slows the socket and the service drops and counts
+                        // the output it cannot send.
+                        let route = lock(&thread_routes).get(&operation).cloned();
+                        if let Some(route) = route {
+                            let _ = route.send(Event::Output(bytes));
+                        }
+                        continue;
+                    }
+                    Frame::Message(json) => match parse(&json) {
+                        Ok(reply) => reply,
+                        Err(_) => break,
+                    },
+                };
+                match reply {
+                    Reply::Lost { id, bytes } => {
+                        let route = lock(&thread_routes).get(&id).cloned();
+                        if let Some(route) = route {
+                            let _ = route.send(Event::Lost(bytes));
+                        }
+                    }
+                    Reply::Finished { id, result } => {
+                        let route = lock(&thread_routes).remove(&id);
+                        if let Some(route) = route {
+                            let _ = route.send(Event::Finished(result));
+                        }
+                    }
+                    Reply::Revoked { reason } => lock(&thread_notices).revoked = Some(reason),
+                    Reply::Yield { reason } => lock(&thread_notices).yield_reason = Some(reason),
+                    reply => {
+                        if replies_in.send(reply).is_err() {
+                            break;
+                        }
+                    }
+                }
+            }
+            // The service is gone: every operation and request hears it.
+            lock(&thread_routes).clear();
+        });
         let mut this = Self {
-            reader: stream,
+            stream,
             writer: Arc::new(Mutex::new(writer)),
-            revoked: None,
-            yield_reason: None,
+            replies,
+            routes,
+            notices,
             next_operation: 1,
         };
         this.send(&Request::Hello {
@@ -55,14 +135,14 @@ impl Client {
     }
 
     /// Why the service ended the lease, if it did.
-    pub fn revoked(&self) -> Option<&str> {
-        self.revoked.as_deref()
+    pub fn revoked(&self) -> Option<String> {
+        lock(&self.notices).revoked.clone()
     }
 
     /// Why divisible work should release its lease at the next boundary,
     /// if the service asked it to.
-    pub fn yield_requested(&self) -> Option<&str> {
-        self.yield_reason.as_deref()
+    pub fn yield_requested(&self) -> Option<String> {
+        lock(&self.notices).yield_reason.clone()
     }
 
     /// End held lease `lease` for `reason`, on behalf of `by`.
@@ -116,7 +196,7 @@ impl Client {
     }
 
     /// Wait until the lease ended.
-    pub(crate) fn ended(&mut self) -> Result<()> {
+    pub fn ended(&mut self) -> Result<()> {
         loop {
             match self.reply()? {
                 Reply::Ended => return Ok(()),
@@ -147,98 +227,70 @@ impl Client {
         }
     }
 
+    /// Start `operation` under the lease.
+    pub fn start(&mut self, operation: Operation) -> Result<Running> {
+        let id = self.next_operation;
+        self.next_operation += 1;
+        let (route, events) = mpsc::sync_channel(ROUTE_DEPTH);
+        lock(&self.routes).insert(id, route);
+        if let Err(error) = self.send(&Request::Start { id, operation }) {
+            lock(&self.routes).remove(&id);
+            return Err(error);
+        }
+        Ok(Running {
+            id,
+            events,
+            writer: self.writer.clone(),
+            pending: Vec::new(),
+            finished: None,
+        })
+    }
+
     /// Run `operation` under the lease: its output goes to `output`, `input`
-    /// feeds it until its end. Lost output is reported on `output`'s side as
-    /// an error line, never hidden.
+    /// feeds it until its end. Lost output is reported on `output`, never
+    /// hidden.
     pub fn run(
         &mut self,
         operation: Operation,
         output: &mut dyn Write,
         input: Option<Box<dyn Read + Send>>,
     ) -> Result<serde_json::Value> {
-        let id = self.next_operation;
-        self.next_operation += 1;
-        self.send(&Request::Start { id, operation })?;
+        let running = self.start(operation)?;
         if let Some(mut input) = input {
-            let writer = self.writer.clone();
+            let feed = running.input();
             std::thread::spawn(move || {
                 let mut buffer = vec![0u8; 16 * 1024];
-                loop {
-                    let read = match input.read(&mut buffer) {
-                        Ok(0) | Err(_) => break,
-                        Ok(read) => read,
+                while let Ok(read) = input.read(&mut buffer) {
+                    let Some(chunk) = buffer.get(..read).filter(|chunk| !chunk.is_empty()) else {
+                        break;
                     };
-                    let frame = Frame::Data {
-                        operation: id,
-                        bytes: buffer.get(..read).unwrap_or_default().to_vec(),
-                    };
-                    let mut writer = writer.lock().unwrap_or_else(PoisonError::into_inner);
-                    if frame.write(&mut *writer).is_err() {
+                    if feed.send(chunk).is_err() {
                         return;
                     }
                 }
-                if let Ok(frame) = Frame::message(&Request::CloseInput { id }) {
-                    let mut writer = writer.lock().unwrap_or_else(PoisonError::into_inner);
-                    let _ = frame.write(&mut *writer);
-                }
+                let _ = feed.close();
             });
         }
-        let mut lost = 0u64;
-        loop {
-            match self.frame()? {
-                Frame::Data { operation, bytes } if operation == id => {
-                    output
-                        .write_all(&bytes)
-                        .map_err(|error| error.to_string())?;
-                }
-                Frame::Data { .. } => {}
-                Frame::Message(json) => match parse(&json)? {
-                    Reply::Lost { id: lost_id, bytes } if lost_id == id => lost += bytes,
-                    Reply::Finished { id: done, result } if done == id => {
-                        if lost > 0 {
-                            let _ = writeln!(
-                                output,
-                                "lab-service: {lost} bytes of output were lost to a slow reader"
-                            );
-                        }
-                        return result;
-                    }
-                    Reply::Revoked { reason } => self.revoked = Some(reason),
-                    Reply::Yield { reason } => self.yield_reason = Some(reason),
-                    _ => {}
-                },
-            }
-        }
+        running.finish(output)
     }
 
     pub(crate) fn send(&self, request: &Request) -> Result<()> {
-        let frame = Frame::message(request).map_err(|error| error.to_string())?;
-        let mut writer = self.writer.lock().unwrap_or_else(PoisonError::into_inner);
-        frame
-            .write(&mut *writer)
-            .map_err(|error| format!("the LAB service is unreachable: {error}"))
+        send(&self.writer, request)
     }
 
-    pub(crate) fn frame(&mut self) -> Result<Frame> {
-        match Frame::read(&mut self.reader) {
-            Ok(Some(frame)) => Ok(frame),
-            Ok(None) => Err("the LAB service closed the connection".to_owned()),
-            Err(error) => Err(format!("the LAB service connection failed: {error}")),
-        }
-    }
-
-    /// The next reply; a revocation is kept and reading goes on.
+    /// The next reply not routed to an operation.
     fn reply(&mut self) -> Result<Reply> {
-        loop {
-            if let Frame::Message(json) = self.frame()? {
-                match parse(&json)? {
-                    Reply::Revoked { reason } => self.revoked = Some(reason),
-                    Reply::Yield { reason } => self.yield_reason = Some(reason),
-                    reply => return Ok(reply),
-                }
-            }
-        }
+        self.replies
+            .recv()
+            .map_err(|_| "the LAB service closed the connection".to_owned())
     }
+}
+
+fn send(writer: &Mutex<UnixStream>, request: &Request) -> Result<()> {
+    let frame = Frame::message(request).map_err(|error| error.to_string())?;
+    frame
+        .write(&mut *lock(writer))
+        .map_err(|error| format!("the LAB service is unreachable: {error}"))
 }
 
 pub(crate) fn parse(json: &[u8]) -> Result<Reply> {
@@ -247,6 +299,135 @@ pub(crate) fn parse(json: &[u8]) -> Result<Reply> {
 
 impl Drop for Client {
     fn drop(&mut self) {
-        let _ = self.reader.shutdown(std::net::Shutdown::Both);
+        let _ = self.stream.shutdown(std::net::Shutdown::Both);
+    }
+}
+
+/// An operation the service runs for this client: a duplex stream of its
+/// output and input until it finishes.
+pub struct Running {
+    id: u64,
+    events: mpsc::Receiver<Event>,
+    writer: Arc<Mutex<UnixStream>>,
+    /// Output received but not read yet.
+    pending: Vec<u8>,
+    finished: Option<Result<serde_json::Value>>,
+}
+
+/// The input side of a running operation, for a feeding thread.
+pub struct Input {
+    id: u64,
+    writer: Arc<Mutex<UnixStream>>,
+}
+
+impl Input {
+    pub fn send(&self, bytes: &[u8]) -> Result<()> {
+        for chunk in bytes.chunks(crate::protocol::MAX_FRAME / 2) {
+            Frame::Data {
+                operation: self.id,
+                bytes: chunk.to_vec(),
+            }
+            .write(&mut *lock(&self.writer))
+            .map_err(|error| format!("the LAB service is unreachable: {error}"))?;
+        }
+        Ok(())
+    }
+
+    /// The input ended.
+    pub fn close(&self) -> Result<()> {
+        send(&self.writer, &Request::CloseInput { id: self.id })
+    }
+}
+
+impl Running {
+    pub fn input(&self) -> Input {
+        Input {
+            id: self.id,
+            writer: self.writer.clone(),
+        }
+    }
+
+    /// Ask the service to stop the operation; its end still follows.
+    pub fn cancel(&self) -> Result<()> {
+        send(&self.writer, &Request::Cancel { id: self.id })
+    }
+
+    /// The next event; an operation whose service went away finished with
+    /// that error.
+    pub fn event(&mut self) -> Event {
+        self.events.recv().unwrap_or_else(|_| {
+            Event::Finished(Err("the LAB service closed the connection".to_owned()))
+        })
+    }
+
+    /// Copy the output to `output` until the operation finishes.
+    pub fn finish(mut self, output: &mut dyn Write) -> Result<serde_json::Value> {
+        output
+            .write_all(&self.pending)
+            .map_err(|error| error.to_string())?;
+        self.pending.clear();
+        if let Some(result) = self.finished.take() {
+            return result;
+        }
+        let mut lost = 0u64;
+        loop {
+            match self.event() {
+                Event::Output(bytes) => {
+                    output
+                        .write_all(&bytes)
+                        .map_err(|error| error.to_string())?;
+                }
+                Event::Lost(bytes) => lost = lost.saturating_add(bytes),
+                Event::Finished(result) => {
+                    if lost > 0 {
+                        let _ = writeln!(
+                            output,
+                            "lab-service: {lost} bytes of output were lost to a slow reader"
+                        );
+                    }
+                    return result;
+                }
+            }
+        }
+    }
+}
+
+impl Read for Running {
+    /// The operation's output; the end of the stream once it finished. Lost
+    /// output is an error, never a silent gap.
+    fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+        while self.pending.is_empty() {
+            if self.finished.is_some() {
+                return Ok(0);
+            }
+            match self.event() {
+                Event::Output(bytes) => self.pending = bytes,
+                Event::Lost(bytes) => {
+                    return Err(io::Error::other(format!(
+                        "{bytes} bytes of output were lost to a slow reader"
+                    )));
+                }
+                Event::Finished(result) => self.finished = Some(result),
+            }
+        }
+        let count = buffer.len().min(self.pending.len());
+        let rest = self.pending.split_off(count);
+        buffer
+            .get_mut(..count)
+            .ok_or_else(|| io::Error::other("short buffer"))?
+            .copy_from_slice(&self.pending);
+        self.pending = rest;
+        Ok(count)
+    }
+}
+
+impl Write for Running {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        self.input().send(bytes).map_err(io::Error::other)?;
+        Ok(bytes.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
     }
 }
