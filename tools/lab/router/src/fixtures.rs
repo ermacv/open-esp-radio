@@ -28,8 +28,8 @@ fn stand_text(lab: &Path) -> impl Fn(&str, &str) -> Option<String> {
 pub fn probe_remote(lab: &Path) -> Vec<Fixture> {
     let text = stand_text(lab);
     let mut hosts = Vec::new();
-    if let Some(target) = text("station_fixture", "ssh_target") {
-        hosts.push(("station fixture", target));
+    if let Some(target) = text("router", "ssh_target") {
+        hosts.push(("router", target));
     }
     if let Some(target) = text("air_observer", "ssh_target") {
         hosts.push(("air observer", target));

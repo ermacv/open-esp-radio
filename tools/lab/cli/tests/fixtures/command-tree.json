@@ -16,7 +16,8 @@
       "init",
       "install",
       "fixtures",
-      "fixture"
+      "fixture",
+      "stand-file"
     ],
     "flags": [
       "--owner",
@@ -318,6 +319,30 @@
     ],
     "subcommands": [],
     "flags": [],
+    "forwards": false
+  },
+  {
+    "path": [
+      "stand",
+      "stand-file"
+    ],
+    "subcommands": [
+      "convert"
+    ],
+    "flags": [],
+    "forwards": false
+  },
+  {
+    "path": [
+      "stand",
+      "stand-file",
+      "convert"
+    ],
+    "subcommands": [],
+    "flags": [
+      "--output",
+      "--in-place"
+    ],
     "forwards": false
   }
 ]

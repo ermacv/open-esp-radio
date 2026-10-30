@@ -16,6 +16,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod convert;
 pub mod device_id;
 
 use std::{
@@ -37,8 +38,9 @@ pub mod rom;
 pub type Error = Box<dyn std::error::Error + Send + Sync>;
 pub type Result<T> = std::result::Result<T, Error>;
 
-/// The schema this tool reads.
-pub const SCHEMA: u32 = 1;
+/// The schema this tool reads. Schema 1 described the lab router as a
+/// station fixture with the run's channel; [`convert`] rewrites it.
+pub const SCHEMA: u32 = 2;
 
 /// The only mode a stand file may have.
 pub const MODE: u32 = 0o600;
@@ -336,12 +338,15 @@ pub struct Station {
     pub ipv4: Option<toml::Value>,
 }
 
-/// `[access_point]`: the access point a run's station joins, without its
-/// SSID and passphrase, which the run generates.
+/// `[access_point]`: the host's access point a run's station joins, without
+/// its SSID and passphrase, which the run generates. The channel and width
+/// a run uses are the run's, chosen among these.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct AccessPoint {
-    pub channel: u8,
-    pub channel_width: String,
+    /// The channels the stand may use for it.
+    pub channels: Vec<u8>,
+    /// The channel widths the stand may use for it.
+    pub widths: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub client_limit: Option<u8>,
     pub target_address: String,
@@ -350,36 +355,44 @@ pub struct AccessPoint {
     pub secondary_client_address: Option<String>,
 }
 
-/// `[station_fixture]`: the router that serves the stand's AP, or the
-/// local or external station; which keys apply depends on `kind`.
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
-pub struct StationFixture {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub kind: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub ssh_target: Option<Secret>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub wireless_interface: Option<Secret>,
-    /// The UCI `wifi-device` section.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub radio: Option<String>,
+/// `[router]`: the lab's OpenWrt router, equipment the LAB service owns
+/// and reaches over SSH. It describes the router, not a run: the channel
+/// and mode a run applies are the run's, chosen among `channels` and
+/// `phys`.
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct Router {
+    /// Its firmware; `open-wrt` is the one the service drives.
+    pub kind: String,
+    pub ssh_target: Secret,
+    /// The UCI `wifi-device` section of its radio.
+    pub radio: String,
     /// The UCI `wifi-iface` section of the stand's AP.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub ap_section: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub channel: Option<u8>,
+    pub ap_section: String,
+    pub wireless_interface: Secret,
+    /// Its wired port toward this host.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ingress_interface: Option<Secret>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub monitor_interface: Option<Secret>,
-    /// The radios the fixture expects, as its owner reads them.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub phys: Option<toml::Value>,
+    /// The AP modes its radio supports, as its owner reads them.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub phys: Vec<String>,
+    /// The channels the stand may use on it.
+    pub channels: Vec<u8>,
+    /// The laptop's monitor radio observes independently of the router.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub independent_laptop_monitor: Option<bool>,
+    /// A protected AP: its identity, security and channel are verified,
+    /// never applied or restored.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub read_only: Option<bool>,
-    /// A local station's interface, country, address and coexistence.
+}
+
+/// `[local_station]`: a station on this host: its interface, country,
+/// address and coexistence.
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+pub struct LocalStation {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub interface: Option<Secret>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -388,6 +401,8 @@ pub struct StationFixture {
     pub address: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub coexistence: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub read_only: Option<bool>,
 }
 
 /// `[air_observer]`: the idle OpenWrt radio that observes the air.
@@ -425,7 +440,9 @@ pub struct Stand {
     #[serde(default)]
     pub access_point: Option<AccessPoint>,
     #[serde(default)]
-    pub station_fixture: StationFixture,
+    pub router: Option<Router>,
+    #[serde(default)]
+    pub local_station: Option<LocalStation>,
     #[serde(default)]
     pub air_observer: Option<AirObserver>,
     #[serde(default)]
@@ -460,6 +477,21 @@ impl Stand {
 
     /// The stand described by `text`.
     pub fn parse(text: &str) -> std::result::Result<Self, String> {
+        // The schema decides how the rest reads.
+        #[derive(Deserialize)]
+        struct Schema {
+            schema: u32,
+        }
+        let schema = toml::from_str::<Schema>(text)
+            .map(|schema| schema.schema)
+            .unwrap_or(SCHEMA);
+        if schema == 1 {
+            return Err(
+                "schema 1 described the lab router as a station fixture; `cargo stand \
+                 stand-file convert` rewrites it to schema 2"
+                    .to_owned(),
+            );
+        }
         let stand: Self = toml::from_str(text).map_err(|error| {
             // The error's own rendering quotes the offending line, which may
             // hold a credential: report its position and message only.
@@ -504,10 +536,11 @@ impl Stand {
             .ok_or_else(|| "the stand file has no [stand] (id, air), which a HIL run needs".into())
     }
 
-    /// The fixture sections as tables, for the fixture owner that types
-    /// them: `station`, `access_point`, `station_fixture`, `air_observer`,
-    /// `bluetooth` and `legacy_bss`, each only with the keys this model
-    /// reads, so no credential the file still holds is among them.
+    /// The host's fixture sections as tables, for the fixture owner that
+    /// types them: `station`, `access_point`, `local_station`,
+    /// `air_observer`, `bluetooth` and `legacy_bss`, each only with the keys
+    /// this model reads, so no credential the file still holds is among
+    /// them. The router is the LAB service's, not a fixture.
     pub fn fixtures(&self) -> Result<toml::Table> {
         let mut table = toml::Table::new();
         let mut put = |name: &str, value: Option<toml::Value>| {
@@ -524,8 +557,11 @@ impl Stand {
                 .transpose()?,
         );
         put(
-            "station_fixture",
-            Some(toml::Value::try_from(&self.station_fixture)?),
+            "local_station",
+            self.local_station
+                .as_ref()
+                .map(toml::Value::try_from)
+                .transpose()?,
         );
         put(
             "air_observer",
@@ -788,7 +824,7 @@ mod tests {
     use super::*;
 
     const STAND: &str = r#"
-schema = 1
+schema = 2
 
 [stand]
 id = "made-up-lab"
@@ -829,20 +865,20 @@ roles = ["peer"]
 ssid = "Made Up Lab Net"
 passphrase = "made-up-passphrase"
 
-[station_fixture]
+[router]
 kind = "open-wrt"
 ssh_target = "made-up-router.lab"
 wireless_interface = "phy7-ap3"
 radio = "radio9"
 ap_section = "lab_ap"
-channel = 6
+channels = [6]
 ingress_interface = "made-up-ingress"
 
 [access_point]
 ssid = "made-up-ap-ssid"
 passphrase = "made-up-ap-passphrase"
-channel = 6
-channel_width = "ht20"
+channels = [6]
+widths = ["ht20"]
 target_address = "192.168.77.1/24"
 client_address = "192.168.77.2/24"
 "#;
@@ -883,15 +919,25 @@ client_address = "192.168.77.2/24"
         ] {
             assert!(!tables.contains(credential), "{credential}");
         }
-        assert_eq!(fixtures["access_point"]["channel"].as_integer(), Some(6));
+        assert_eq!(
+            fixtures["access_point"]["channels"]
+                .as_array()
+                .and_then(|channels| channels.first())
+                .and_then(toml::Value::as_integer),
+            Some(6)
+        );
+        assert!(
+            !tables.contains("made-up-router"),
+            "the router is no fixture"
+        );
     }
 
     #[test]
     fn a_type_error_does_not_quote_the_value() {
         for text in [
-            "schema = 1\n[station_fixture]\nchannel = \"made-up-router\"\n",
-            "schema = 1\n[air_observer]\nssh_target = [\"made-up-router\"]\nphy = \"p\"\ninterface = \"i\"\n",
-            "schema = 1\n[station_fixture]\nssh_target = 7\n",
+            "schema = 2\n[router]\nchannels = \"made-up-router\"\n",
+            "schema = 2\n[air_observer]\nssh_target = [\"made-up-router\"]\nphy = \"p\"\ninterface = \"i\"\n",
+            "schema = 2\n[router]\nssh_target = 7\n",
         ] {
             let error = Stand::parse(text).unwrap_err();
             for secret in SECRETS {
@@ -936,7 +982,7 @@ client_address = "192.168.77.2/24"
 
     #[test]
     fn a_parse_error_does_not_quote_the_file() {
-        let error = Stand::parse("schema = 1\n[station]\npassword = hunter2\n").unwrap_err();
+        let error = Stand::parse("schema = 2\n[station]\npassword = hunter2\n").unwrap_err();
         assert!(!error.contains("hunter2"), "{error}");
         assert!(error.starts_with("line 3"), "{error}");
     }
@@ -997,7 +1043,7 @@ client_address = "192.168.77.2/24"
         );
         assert_eq!(stand.label("02:00:00:00:01:d0"), "s31-a (esp32s31)");
         assert_eq!(stand.identity().unwrap().air, AirPolicy::Exclusive);
-        assert!(Stand::parse("schema = 1\n").unwrap().identity().is_err());
+        assert!(Stand::parse("schema = 2\n").unwrap().identity().is_err());
     }
 
     #[test]
@@ -1016,9 +1062,9 @@ client_address = "192.168.77.2/24"
     #[test]
     fn another_schema_is_refused() {
         assert!(
-            Stand::parse("schema = 2\n")
+            Stand::parse("schema = 3\n")
                 .unwrap_err()
-                .contains("schema 2")
+                .contains("schema 3")
         );
     }
 }

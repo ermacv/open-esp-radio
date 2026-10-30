@@ -12,6 +12,7 @@ mod fixture_install;
 mod init;
 mod install;
 mod service;
+mod stand_file;
 
 use std::process::ExitCode;
 
@@ -59,8 +60,27 @@ enum StandCommand {
     Fixtures,
     #[command(subcommand)]
     Fixture(FixtureCli),
+    #[command(subcommand, name = "stand-file")]
+    StandFile(StandFileCli),
     #[command(name = "__command-tree", hide = true)]
     CommandTree,
+}
+
+/// `cargo stand stand-file convert`.
+#[derive(clap::Parser)]
+#[command(name = "cargo stand stand-file", no_binary_name = true)]
+enum StandFileCli {
+    /// Rewrite a schema 1 stand file to schema 2, keeping its comments:
+    /// the lab router becomes `[router]`, the run's channel an allowed one.
+    Convert {
+        /// Write the schema 2 file here (mode 0600) and leave the stand
+        /// file as it is.
+        #[arg(long, conflicts_with = "in_place")]
+        output: Option<std::path::PathBuf>,
+        /// Replace the stand file, keeping the schema 1 file beside it.
+        #[arg(long)]
+        in_place: bool,
+    },
 }
 
 /// `cargo stand fixture install|build-hostapd|build-udhcpc`.
@@ -148,6 +168,16 @@ fn run() -> Result<ExitCode> {
             adapter,
         })) => {
             fixture_install::run(&ctx.root, provider, dry_run, &adapter)?;
+            Ok(ExitCode::SUCCESS)
+        }
+        Some(StandCommand::StandFile(StandFileCli::Convert { output, in_place })) => {
+            let path = oer_lab_model::paths::stand_file()?;
+            let output = match (output, in_place) {
+                (Some(output), _) => output,
+                (None, true) => path.clone(),
+                (None, false) => return Err("name --output PATH or --in-place".into()),
+            };
+            stand_file::convert(&path, &output)?;
             Ok(ExitCode::SUCCESS)
         }
         Some(StandCommand::Fixture(FixtureCli::BuildHostapd)) => {

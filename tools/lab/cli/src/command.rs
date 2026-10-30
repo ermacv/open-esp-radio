@@ -708,7 +708,7 @@ const HARD_LIMIT_EXIT: u8 = 124;
 mod tests {
     use super::*;
 
-    const TEST_STAND: &str = "schema = 1\n[stand]\nid = \"t\"\nair = \"exclusive\"\n\
+    const TEST_STAND: &str = "schema = 2\n[stand]\nid = \"t\"\nair = \"exclusive\"\n\
              [[hub]]\nid = \"h\"\nusb2 = \"1-1\"\n\
              [[board]]\nid = \"peer-a\"\nusb-serial = \"02:00:00:00:25:64\"\nchip = \"chip-b\"\n\
              radios = [\"ble\"]\nroles = [\"peer\"]\nport = { hub = \"h\", port = 1 }\nreset = [\"jtag\"]\n";

@@ -413,7 +413,7 @@ mod tests {
         assert_eq!(flashes, [&newer, &peer]);
         assert_eq!(artifacts, [&artifact, &other_checkout]);
         let stand = oer_lab_model::Stand::parse(
-            "schema = 1\n[stand]\nid = \"t\"\nair = \"exclusive\"\n\
+            "schema = 2\n[stand]\nid = \"t\"\nair = \"exclusive\"\n\
              [[hub]]\nid = \"h\"\nusb2 = \"1-1\"\n\
              [[board]]\nid = \"peer-a\"\nusb-serial = \"02:00:00:00:25:64\"\nchip = \"chip-b\"\n\
              radios = [\"ble\"]\nroles = [\"peer\"]\nport = { hub = \"h\", port = 1 }\nreset = [\"jtag\"]\n",

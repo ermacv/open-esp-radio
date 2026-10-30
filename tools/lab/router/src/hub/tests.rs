@@ -88,7 +88,7 @@ fn stand_tree() -> Tree {
 
 fn stand(hub: &str) -> Stand {
     Stand::parse(&format!(
-        "schema = 1\n[[hub]]\nid = \"bottom\"\nusb2 = \"3-8.3.4\"\n{hub}"
+        "schema = 2\n[[hub]]\nid = \"bottom\"\nusb2 = \"3-8.3.4\"\n{hub}"
     ))
     .unwrap()
 }

@@ -89,7 +89,7 @@ fn stand_file(host: &str, boards: &[(String, &Profile)]) -> String {
         "# The HIL stand file `cargo stand init` wrote from the attached boards.\n\
          # Name each board as written on it; add the hubs, their ports and the\n\
          # fixture sections as tools/lab/model/stand.example.toml shows.\n\
-         schema = 1\n\n[stand]\n",
+         schema = 2\n\n[stand]\n",
     );
     let _ = writeln!(text, "id = {host:?}\nair = \"exclusive\"");
     let mut counts = std::collections::BTreeMap::<&str, u32>::new();
@@ -156,7 +156,7 @@ fn host_name() -> String {
 }
 
 /// Write `text` to `path`, readable by its owner only.
-fn write_private(path: &Path, text: &str) -> Result<()> {
+pub(crate) fn write_private(path: &Path, text: &str) -> Result<()> {
     use std::io::Write as _;
     use std::os::unix::fs::{OpenOptionsExt as _, PermissionsExt as _};
     if let Some(parent) = path.parent() {

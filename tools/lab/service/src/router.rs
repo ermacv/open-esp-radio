@@ -31,30 +31,27 @@ struct Fixture {
     radio: String,
     ap_section: String,
     interface: String,
-    channel: u8,
+    /// The channels the stand may use on it.
+    channels: Vec<u8>,
 }
 
 fn fixture(stand: &Stand) -> Result<Fixture> {
-    let fixture = &stand.station_fixture;
-    let missing = |key: &str| format!("the stand file's station_fixture names no `{key}`");
-    let target = fixture
-        .ssh_target
+    let router = stand
+        .router
         .as_ref()
-        .ok_or_else(|| missing("ssh_target"))?;
+        .ok_or("the stand file names no [router]")?;
+    if router.kind != "open-wrt" {
+        return Err(format!(
+            "the stand file's [router] is `{}`; the service drives `open-wrt`",
+            router.kind
+        ));
+    }
     Ok(Fixture {
-        ssh: Ssh::new(target.expose())?,
-        radio: fixture.radio.clone().ok_or_else(|| missing("radio"))?,
-        ap_section: fixture
-            .ap_section
-            .clone()
-            .ok_or_else(|| missing("ap_section"))?,
-        interface: fixture
-            .wireless_interface
-            .as_ref()
-            .ok_or_else(|| missing("wireless_interface"))?
-            .expose()
-            .to_owned(),
-        channel: fixture.channel.ok_or_else(|| missing("channel"))?,
+        ssh: Ssh::new(router.ssh_target.expose())?,
+        radio: router.radio.clone(),
+        ap_section: router.ap_section.clone(),
+        interface: router.wireless_interface.expose().to_owned(),
+        channels: router.channels.clone(),
     })
 }
 
@@ -78,12 +75,22 @@ pub(crate) fn run(
         move |script: &str| ssh.output(script, Duration::from_secs(30))
     };
     match operation {
-        RouterOperation::ApplyStationProfile { ssid, passphrase } => {
+        RouterOperation::ApplyStationProfile {
+            ssid,
+            passphrase,
+            channel,
+        } => {
+            if !router.channels.contains(channel) {
+                return Err(format!(
+                    "channel {channel} is not among the router's channels {:?} in the stand file",
+                    router.channels
+                ));
+            }
             let profile = Profile::station_wpa2(
                 &router.radio,
                 &router.ap_section,
                 &router.interface,
-                router.channel,
+                *channel,
                 ssid,
                 passphrase,
             )?;

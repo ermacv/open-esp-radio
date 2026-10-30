@@ -25,7 +25,7 @@ Current status for hub 3-8 [0bda:5423 TerraMaster 4-Port USB 2.0 Hub, USB 2.10, 
 ";
 
 const STAND: &str = r#"
-schema = 1
+schema = 2
 [stand]
 id = "test"
 air = "exclusive"

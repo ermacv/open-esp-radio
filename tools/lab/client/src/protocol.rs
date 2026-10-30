@@ -421,9 +421,14 @@ pub struct HolderStatus {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(tag = "router", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum RouterOperation {
-    /// Apply the WPA2 station profile with `ssid` and `passphrase` to the
-    /// stand's AP. Result: the applied profile's description.
-    ApplyStationProfile { ssid: String, passphrase: String },
+    /// Apply the WPA2 station profile with `ssid` and `passphrase` on
+    /// `channel`, one the stand file's `[router]` allows, to the stand's AP.
+    /// Result: the applied profile's description.
+    ApplyStationProfile {
+        ssid: String,
+        passphrase: String,
+        channel: u8,
+    },
     /// Check that the router has its observation tools.
     VerifyObservationTools,
     /// Check that the AP's runtime state matches a WPA2 profile.

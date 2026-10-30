@@ -180,14 +180,14 @@ impl StandDrivers {
     }
 
     /// The stand's stateful resources: every board and, when the stand file
-    /// names a station fixture, the router.
+    /// names one, the router.
     pub fn resources(stand: &Stand) -> Vec<String> {
         let mut resources = stand
             .boards
             .iter()
             .map(|board| format!("board:{}", board.mac))
             .collect::<Vec<_>>();
-        if stand.station_fixture.ssh_target.is_some() {
+        if stand.router.is_some() {
             resources.push(ROUTER.to_owned());
         }
         resources

@@ -143,8 +143,8 @@ impl Profile {
         ssid: &str,
     ) -> Result<Self> {
         for (name, value) in [
-            ("[station_fixture].radio", radio),
-            ("[station_fixture].ap_section", ap_section),
+            ("[router].radio", radio),
+            ("[router].ap_section", ap_section),
         ] {
             if !section_name(value) {
                 return Err(format!(
@@ -154,14 +154,14 @@ impl Profile {
         }
         if !token(interface) {
             return Err(
-                "[station_fixture].wireless_interface holds characters other than letters, \
+                "[router].wireless_interface holds characters other than letters, \
                  digits, `.`, `_`, `-` and `@`"
                     .to_owned(),
             );
         }
         if !(1..=13).contains(&channel) {
             return Err(format!(
-                "[station_fixture].channel {channel} is no 2.4 GHz channel 1 to 13"
+                "the channel {channel} is no 2.4 GHz channel 1 to 13"
             ));
         }
         if ssid.is_empty() || ssid.len() > 32 {

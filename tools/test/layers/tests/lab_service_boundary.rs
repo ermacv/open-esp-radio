@@ -33,7 +33,13 @@ fn lock() -> BTreeMap<String, Vec<String>> {
                 .flatten()
                 .filter_map(toml::Value::as_str)
                 // `name version` when two versions are locked.
-                .map(|dependency| dependency.split(' ').next().unwrap_or(dependency).to_owned())
+                .map(|dependency| {
+                    dependency
+                        .split(' ')
+                        .next()
+                        .unwrap_or(dependency)
+                        .to_owned()
+                })
                 .collect();
             (name.to_owned(), dependencies)
         })

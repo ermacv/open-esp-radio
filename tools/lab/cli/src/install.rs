@@ -8,8 +8,9 @@
 //! be asked: the update stops there and says how to replace it by hand.
 //! Then the unit restarts on the new binary. Before the service first
 //! starts, the restrictions and balances the file-locked arbiter kept are
-//! imported (`oer_lab_arbiter::import`). A checkout never replaces the
-//! service by itself.
+//! imported (`oer_lab_arbiter::import`) and a schema 1 stand file is
+//! rewritten to schema 2, the schema 1 file kept beside it. A checkout never
+//! replaces the service by itself.
 //!
 //! `cargo stand` otherwise builds `oer-tool-lab-cli` from the caller's working tree
 //! first: a rebuild after every edit of a stand package, unavailable while
@@ -151,6 +152,12 @@ fn install_service(binary: &Path, root: &Path) -> Result<()> {
                 imported.records.join(", ")
             );
         }
+    }
+    // Every client switches to this service now: its stand file too.
+    let stand_file = oer_lab_model::paths::stand_file()?;
+    if fs::read_to_string(&stand_file).is_ok_and(|text| oer_lab_model::convert::is_schema_1(&text))
+    {
+        crate::stand_file::convert(&stand_file, &stand_file)?;
     }
     let directory = home()?.join(".config/systemd/user");
     fs::create_dir_all(&directory)?;
