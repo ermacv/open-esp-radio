@@ -25,9 +25,7 @@
 //! status across associations. [`datapath`] holds the software/physical TX
 //! ownership contracts and the destination/flow queue arena between them.
 
-pub use oer_network_port::{
-    ETHERNET_HEADER_LEN, FrameLengthError, LinkState, NetworkInterfaceId, RxEnqueueError,
-};
+pub use oer_network_port::{FrameLengthError, LinkState, NetworkInterfaceId, RxEnqueueError};
 
 pub mod datapath;
 pub mod ethernet;

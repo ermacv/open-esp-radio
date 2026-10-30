@@ -121,6 +121,15 @@ runtime and a reference model. IEEE 802.15.4 has `wire`, `port`, the `mac`
 core and a separate host reference `model`. A backend depends on its
 protocol's port, wire formats and implemented `cipher` only.
 
+Each format belongs to its codec. IEEE 802.11 codecs carry an MSDU as its
+fields: destination, source, the EtherType of its RFC 1042 LLC/SNAP header
+and its payload; they never read or write an Ethernet II header. Ethernet,
+VLAN, IP and transport fields are `protocols/network/wire`'s. IEEE 802.11
+packages reach them only through `protocols/bridges/ieee80211-ethernet`,
+which joins the two codecs and depends on nothing else; `oer-test-layers`
+checks both rules. The network side's adapter reads and writes its Ethernet
+header through the network codec.
+
 Cryptographic operations shared by protocols have one contract each in
 `portable/crypto` (`oer-crypto`). One operation is one request: the request
 owns its key and buffers and moves by value into an engine, which moves itself

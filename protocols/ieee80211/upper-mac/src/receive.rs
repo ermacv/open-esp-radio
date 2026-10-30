@@ -14,7 +14,7 @@ use crate::ccmp::{CcmpRxProtection, CcmpRxReplayEpoch};
 use oer_ieee80211_wire::{
     address::{AddressFlags, Bssid, OwnAddress},
     ccmp::CcmpHeader,
-    data::{EthernetFrameParts, decapsulate_payload},
+    data::{MsduParts, decapsulate_payload},
     frame::{DecodedHeader, FrameControlFields, QosControl},
     sequence::SequenceControl,
 };
@@ -116,7 +116,7 @@ impl<'a> AdmittedData<'a> {
     pub fn msdus(
         &self,
     ) -> Result<
-        impl Iterator<Item = Result<EthernetFrameParts<'a>, RxDropReason>> + 'a + use<'a>,
+        impl Iterator<Item = Result<MsduParts<'a>, RxDropReason>> + 'a + use<'a>,
         RxDropReason,
     > {
         let frames =
@@ -295,7 +295,7 @@ mod tests {
             let _ = admitted.protected();
             if let Ok(msdus) = admitted.msdus() {
                 for msdu in msdus {
-                    let _ = msdu.map(|parts| parts.length());
+                    let _ = msdu.map(|parts| parts.payload.len());
                 }
             }
         }

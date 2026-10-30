@@ -8,6 +8,21 @@ use crate::protection::ApBssProtection;
 use crate::security::test_elements;
 use crate::sequence::seq;
 
+/// One MSDU to `destination` from `source`, with `ether_type`.
+fn msdu<'p>(
+    destination: [u8; 6],
+    source: [u8; 6],
+    ether_type: u16,
+    payload: &'p [u8],
+) -> crate::data::MsduParts<'p> {
+    crate::data::MsduParts {
+        destination,
+        source,
+        ether_type,
+        payload,
+    }
+}
+
 #[test]
 fn ap_eapol_data_frame_uses_from_ds_address_mapping() {
     let access_point = [2, 0, 0, 0, 0, 1];
@@ -38,11 +53,6 @@ fn protected_ap_frame_owns_from_ds_ccmp_and_plaintext_boundary() {
     let access_point = [2, 0, 0, 0, 0, 1];
     let peer = [2, 0, 0, 0, 0, 2];
     let source = [2, 0, 0, 0, 0, 3];
-    let mut ethernet = [0_u8; 18];
-    ethernet[..6].copy_from_slice(&peer);
-    ethernet[6..12].copy_from_slice(&source);
-    ethernet[12..14].copy_from_slice(&0x0800_u16.to_be_bytes());
-    ethernet[14..].copy_from_slice(&[1, 2, 3, 4]);
     let ccmp = [3, 0, 0, 0x20, 0, 0, 0, 0];
     let mut output = [0; 96];
     let len = ApProtectedDataFrame {
@@ -53,7 +63,7 @@ fn protected_ap_frame_owns_from_ds_ccmp_and_plaintext_boundary() {
         peer_qos: true,
         more_data: false,
         ccmp_header: ccmp,
-        ethernet: &ethernet,
+        msdu: msdu(peer, source, 0x0800, &[1, 2, 3, 4]),
     }
     .encode(&mut output)
     .unwrap();
@@ -73,22 +83,11 @@ fn protected_ap_frame_owns_from_ds_ccmp_and_plaintext_boundary() {
 fn ap_amsdu_encodes_multiple_open_and_ccmp_subframes_in_order() {
     let access_point = [2, 0, 0, 0, 0, 1];
     let peer = [2, 0, 0, 0, 0, 2];
-    let mut first = [0_u8; 17];
-    first[..6].copy_from_slice(&peer);
-    first[6..12].copy_from_slice(&[2, 0, 0, 0, 0, 3]);
-    first[12..14].copy_from_slice(&0x0800_u16.to_be_bytes());
-    first[14..].copy_from_slice(&[1, 2, 3]);
-    let mut second = [0_u8; 18];
-    second[..6].copy_from_slice(&peer);
-    second[6..12].copy_from_slice(&[2, 0, 0, 0, 0, 4]);
-    second[12..14].copy_from_slice(&0x0806_u16.to_be_bytes());
-    second[14..].copy_from_slice(&[4, 5, 6, 7]);
-    let mut third = [0_u8; 16];
-    third[..6].copy_from_slice(&peer);
-    third[6..12].copy_from_slice(&[2, 0, 0, 0, 0, 5]);
-    third[12..14].copy_from_slice(&0x86dd_u16.to_be_bytes());
-    third[14..].copy_from_slice(&[8, 9]);
-    let frames: [&[u8]; 3] = [&first, &second, &third];
+    let frames = [
+        msdu(peer, [2, 0, 0, 0, 0, 3], 0x0800, &[1, 2, 3]),
+        msdu(peer, [2, 0, 0, 0, 0, 4], 0x0806, &[4, 5, 6, 7]),
+        msdu(peer, [2, 0, 0, 0, 0, 5], 0x86dd, &[8, 9]),
+    ];
     let ccmp = [9, 0, 0, 0x20, 0, 0, 0, 0];
     let mut protected = [0xa5; 192];
     let protected_len = ApAmsduFrame {
@@ -98,7 +97,7 @@ fn ap_amsdu_encodes_multiple_open_and_ccmp_subframes_in_order() {
         user_priority: 5,
         more_data: true,
         ccmp_header: Some(ccmp),
-        ethernet_frames: &frames,
+        msdus: &frames,
     }
     .encode(&mut protected)
     .unwrap();
@@ -108,6 +107,15 @@ fn ap_amsdu_encodes_multiple_open_and_ccmp_subframes_in_order() {
     assert_eq!(&protected[22..24], &0x00b0_u16.to_le_bytes());
     assert_eq!(protected[24], 0x85);
     assert_eq!(&protected[26..34], &ccmp);
+    // Independent reference: the first subframe's DA, SA, MSDU length 11,
+    // RFC 1042 LLC/SNAP with IPv4, payload and one padding octet.
+    assert_eq!(
+        &protected[34..60],
+        &[
+            2, 0, 0, 0, 0, 2, 2, 0, 0, 0, 0, 3, 0, 11, 0xaa, 0xaa, 3, 0, 0, 0, 0x08, 0x00, 1, 2, 3,
+            0
+        ]
+    );
     let mut decoded = crate::data::amsdu_subframes(
         DataInterfaceRole::Station,
         &protected[..protected_len],
@@ -128,7 +136,7 @@ fn ap_amsdu_encodes_multiple_open_and_ccmp_subframes_in_order() {
         user_priority: 0,
         more_data: false,
         ccmp_header: None,
-        ethernet_frames: &frames,
+        msdus: &frames,
     }
     .encode(&mut open)
     .unwrap();
@@ -141,11 +149,9 @@ fn ap_amsdu_encodes_multiple_open_and_ccmp_subframes_in_order() {
 fn ap_amsdu_fails_before_mutating_output_on_peer_or_capacity_miss() {
     let access_point = [2, 0, 0, 0, 0, 1];
     let peer = [2, 0, 0, 0, 0, 2];
-    let mut first = [0_u8; 14];
-    first[..6].copy_from_slice(&peer);
-    let mut wrong_peer = [0_u8; 14];
-    wrong_peer[..6].copy_from_slice(&[2, 0, 0, 0, 0, 9]);
-    let frames: [&[u8]; 2] = [&first, &wrong_peer];
+    let first = msdu(peer, [0; 6], 0, &[]);
+    let wrong_peer = msdu([2, 0, 0, 0, 0, 9], [0; 6], 0, &[]);
+    let frames = [first, wrong_peer];
     let mut output = [0xa5; 80];
     assert_eq!(
         ApAmsduFrame {
@@ -155,14 +161,14 @@ fn ap_amsdu_fails_before_mutating_output_on_peer_or_capacity_miss() {
             user_priority: 0,
             more_data: false,
             ccmp_header: Some([0; 8]),
-            ethernet_frames: &frames,
+            msdus: &frames,
         }
         .encode(&mut output),
         Err(ApDataFrameError::InvalidPeer)
     );
     assert_eq!(output, [0xa5; 80]);
 
-    let frames: [&[u8]; 2] = [&first, &first];
+    let frames = [first, first];
     let required = ap_amsdu_frame_length(&frames, true).unwrap();
     let mut short = [0x5a; 64];
     assert!(short.len() < required);
@@ -174,7 +180,7 @@ fn ap_amsdu_fails_before_mutating_output_on_peer_or_capacity_miss() {
             user_priority: 0,
             more_data: false,
             ccmp_header: Some([0; 8]),
-            ethernet_frames: &frames,
+            msdus: &frames,
         }
         .encode(&mut short),
         Err(ApDataFrameError::OutputTooSmall { required })
@@ -186,8 +192,6 @@ fn ap_amsdu_fails_before_mutating_output_on_peer_or_capacity_miss() {
 fn protected_ap_frame_rejects_a_destination_outside_pairwise_owner() {
     let access_point = [2, 0, 0, 0, 0, 1];
     let peer = [2, 0, 0, 0, 0, 2];
-    let mut ethernet = [0_u8; 14];
-    ethernet[..6].copy_from_slice(&[2, 0, 0, 0, 0, 9]);
     let mut output = [0; 64];
     assert_eq!(
         ApProtectedDataFrame {
@@ -198,48 +202,10 @@ fn protected_ap_frame_rejects_a_destination_outside_pairwise_owner() {
             peer_qos: false,
             more_data: false,
             ccmp_header: [0; 8],
-            ethernet: &ethernet,
+            msdu: msdu([2, 0, 0, 0, 0, 9], [0; 6], 0, &[]),
         }
         .encode(&mut output),
         Err(ApDataFrameError::InvalidPeer)
-    );
-}
-
-#[test]
-fn protected_ap_qos_frame_encodes_in_network_headroom_without_payload_copy() {
-    let access_point = [2, 0, 0, 0, 0, 1];
-    let peer = [2, 0, 0, 0, 0, 2];
-    let source = [2, 0, 0, 0, 0, 3];
-    let ethernet_offset = 40;
-    let mut storage = [0_u8; 96];
-    storage[ethernet_offset..ethernet_offset + 6].copy_from_slice(&peer);
-    storage[ethernet_offset + 6..ethernet_offset + 12].copy_from_slice(&source);
-    storage[ethernet_offset + 12..ethernet_offset + 14].copy_from_slice(&0x0800_u16.to_be_bytes());
-    storage[ethernet_offset + 14..ethernet_offset + 18].copy_from_slice(&[1, 2, 3, 4]);
-    let encoded = ApProtectedDataFrame {
-        access_point,
-        peer,
-        sequence_number: seq(7),
-        user_priority: 0,
-        peer_qos: true,
-        more_data: false,
-        ccmp_header: [3, 0, 0, 0x20, 0, 0, 0, 0],
-        ethernet: &[],
-    }
-    .encode_in_place(&mut storage, ethernet_offset, 18)
-    .unwrap();
-    assert_eq!(
-        encoded.offset,
-        ethernet_offset - AP_PROTECTED_QOS_ETHERNET_OVERHEAD
-    );
-    assert_eq!(encoded.length, 18 + AP_PROTECTED_QOS_ETHERNET_OVERHEAD);
-    assert_eq!(
-        &storage[encoded.offset..encoded.offset + 2],
-        &0x4288_u16.to_le_bytes()
-    );
-    assert_eq!(
-        &storage[ethernet_offset + 14..ethernet_offset + 18],
-        &[1, 2, 3, 4]
     );
 }
 
@@ -738,33 +704,6 @@ fn protected_management_codecs_keep_the_body_after_the_ccmp_header() {
             )
         ));
         assert!(parse_ap_management_request(&TEST_ADVERTISEMENT, &frame[..31], ap).is_none());
-    }
-}
-
-#[test]
-fn in_place_ap_encoder_rejects_overflowing_and_short_ethernet_ranges() {
-    let frame = ApProtectedDataFrame {
-        access_point: [2, 0, 0, 0, 0, 1],
-        peer: [2, 0, 0, 0, 0, 2],
-        sequence_number: seq(0),
-        user_priority: 0,
-        peer_qos: true,
-        more_data: false,
-        ccmp_header: [0; CCMP_HEADER_LEN],
-        ethernet: &[],
-    };
-    for (offset, length) in [(usize::MAX, 14), (1, usize::MAX)] {
-        let mut storage = [0xa5; 64];
-        assert_eq!(
-            frame.encode_in_place(&mut storage, offset, length),
-            Err(ApDataFrameError::LengthOverflow)
-        );
-        assert_eq!(storage, [0xa5; 64]);
-    }
-    for (offset, length) in [(usize::MAX, 14), (1, usize::MAX), (64, 14), (0, 13)] {
-        let mut storage = [0xa5; 64];
-        assert!(frame.encode_in_place(&mut storage, offset, length).is_err());
-        assert_eq!(storage, [0xa5; 64]);
     }
 }
 

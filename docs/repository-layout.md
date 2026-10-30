@@ -43,11 +43,12 @@ hil-scenarios/images/esp32s31-rpc/
 hil-scenarios/services/aes/
 protocols/bluetooth/hci/
 protocols/bluetooth/le/{cipher, controller, ll, model, port, runtime, wire}/
+protocols/bridges/ieee80211-ethernet/
 protocols/hil/{agent, protocol}/
 protocols/ieee80211/{ap, arbiter, cipher, esp-now, model, port, rsn, runtime,
     sta, upper-mac, wire}/
 protocols/ieee802154/{mac, model, port, wire}/
-protocols/network/port/
+protocols/network/{port, wire}/
 protocols/radio/{coex, port, regulatory}/
 tools/analysis/{blobray-analysis, blobray-application, blobray-artifacts,
     blobray-domain, blobray-linker, blobray-riscv, blobray-verification, cli, elf,

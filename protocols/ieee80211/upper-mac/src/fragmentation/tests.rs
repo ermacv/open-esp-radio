@@ -103,7 +103,7 @@ fn station_fragments_reassemble_one_exact_ethernet_view() {
             parsed(DataInterfaceRole::Station, &second, second_payload.len()),
             at(2),
             |data| {
-                let frame = data.ethernet_frame();
+                let frame = data.msdu();
                 (
                     frame.destination,
                     frame.source,
@@ -518,7 +518,7 @@ fn a_ccmp_fragment_retry_keeps_its_original_pn_and_bytes() {
             ccmp_parsed(&last, &[2], 11),
             epoch,
             at(4),
-            |data| assert_eq!(data.ethernet_frame().payload, &[1, 2])
+            |data| assert_eq!(data.msdu().payload, &[1, 2])
         ),
         Ok(OpenDataDefragmentation::Complete { .. })
     ));

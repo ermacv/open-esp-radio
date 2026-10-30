@@ -355,48 +355,5 @@ pub fn build_ap_action_frame<const N: usize>(
     Ok(frame)
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct RsnEthernetFrame<const N: usize = RSN_TX_ETHERNET_CAPACITY> {
-    interface: RsnInterface,
-    bytes: heapless::Vec<u8, N>,
-}
-
-impl<const N: usize> RsnEthernetFrame<N> {
-    pub fn build<const E: usize>(
-        local: [u8; 6],
-        eapol: &RsnTxFrame<E>,
-    ) -> Result<Self, RsnFrameError> {
-        let len = 14_usize
-            .checked_add(eapol.as_bytes().len())
-            .ok_or(RsnFrameError::CapacityExceeded)?;
-        if len > N {
-            return Err(RsnFrameError::CapacityExceeded);
-        }
-        let mut bytes = heapless::Vec::new();
-        for field in [
-            eapol.peer().as_slice(),
-            local.as_slice(),
-            ETHER_TYPE_EAPOL.to_be_bytes().as_slice(),
-            eapol.as_bytes(),
-        ] {
-            bytes
-                .extend_from_slice(field)
-                .map_err(|_| RsnFrameError::CapacityExceeded)?;
-        }
-        Ok(Self {
-            interface: eapol.interface(),
-            bytes,
-        })
-    }
-
-    pub const fn interface(&self) -> RsnInterface {
-        self.interface
-    }
-
-    pub fn as_bytes(&self) -> &[u8] {
-        self.bytes.as_slice()
-    }
-}
-
 #[cfg(test)]
 mod tests;

@@ -95,9 +95,8 @@ fn seeds() -> Vec<Vec<u8>> {
 
 fn read(data: OpenReassembledData<'_>) -> usize {
     let _ = data.identity();
-    let frame = data.ethernet_frame();
-    let mut output = [0; 64];
-    let _ = frame.copy_to(&mut output);
+    let frame = data.msdu();
+    let _ = frame.header();
     frame.payload.len()
 }
 

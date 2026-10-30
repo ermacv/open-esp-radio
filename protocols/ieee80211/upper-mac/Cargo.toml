@@ -10,7 +10,6 @@ readme = "README.md"
 
 [dependencies]
 oer-events = { path = "../../../portable/events" }
-oer-network-port = { path = "../../network/port" }
 heapless = "0.9.3"
 oer-ieee80211-port = { path = "../port" }
 oer-ieee80211-wire = { path = "../wire" }

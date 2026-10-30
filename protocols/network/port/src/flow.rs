@@ -3,6 +3,10 @@
 //! Header boundaries follow RFC 791 §3.1 and RFC 8200 §3. Extension headers,
 //! fragments and non-TCP/UDP traffic deliberately do not yield port keys.
 
+use oer_network_wire::ethernet::{EtherType, EthernetHeader};
+use oer_network_wire::ip::{Ipv4Header, Ipv6Header};
+use oer_network_wire::transport::Ports;
+
 /// Directional transport identity within one Ethernet next hop.
 ///
 /// Addresses and ports are retained exactly, without hash collisions. `None`
@@ -30,96 +34,41 @@ impl TransportFlow {
     /// the packet. Invalid/truncated input remains available to normal radio
     /// admission and is classified conservatively. Checksums are not checked.
     pub fn from_ethernet(frame: &[u8]) -> Self {
-        let Some((header, packet)) = frame.split_first_chunk::<{ super::ETHERNET_HEADER_LEN }>()
-        else {
+        let Ok((header, packet)) = EthernetHeader::parse(frame) else {
             return Self::Opaque;
         };
-        match header {
-            [.., 0x08, 0x00] => Self::ipv4(packet).unwrap_or(Self::Opaque),
-            [.., 0x86, 0xdd] => Self::ipv6(packet).unwrap_or(Self::Opaque),
+        match header.ether_type {
+            EtherType::IPV4 => match Ipv4Header::parse(packet) {
+                Ok(ip) => Self::Ipv4 {
+                    addresses: ip.addresses(),
+                    protocol: ip.protocol(),
+                    ports: if ip.is_fragment() {
+                        None
+                    } else {
+                        ports(ip.protocol(), ip.payload())
+                    },
+                },
+                Err(_) => Self::Opaque,
+            },
+            EtherType::IPV6 => match Ipv6Header::parse(packet) {
+                Ok(ip) => Self::Ipv6 {
+                    addresses: ip.addresses(),
+                    protocol: ip.next_header(),
+                    ports: ports(ip.next_header(), ip.payload()),
+                },
+                Err(_) => Self::Opaque,
+            },
             _ => Self::Opaque,
         }
     }
-
-    fn ipv4(packet: &[u8]) -> Option<Self> {
-        let &[
-            version_ihl,
-            _,
-            length_hi,
-            length_lo,
-            _,
-            _,
-            fragment_hi,
-            fragment_lo,
-            _,
-            protocol,
-            _,
-            _,
-            addresses @ ..,
-        ] = packet.first_chunk::<20>()?;
-        let header_len = usize::from(version_ihl & 0x0f).checked_mul(4)?;
-        if version_ihl >> 4 != 4 || header_len < 20 {
-            return None;
-        }
-        let total_len = usize::from(u16::from_be_bytes([length_hi, length_lo]));
-        let payload = packet.get(..total_len)?.get(header_len..)?;
-        let fragmented = u16::from_be_bytes([fragment_hi, fragment_lo]) & 0x3fff != 0;
-        Some(Self::Ipv4 {
-            addresses,
-            protocol,
-            ports: if fragmented {
-                None
-            } else {
-                ports(protocol, payload)
-            },
-        })
-    }
-
-    fn ipv6(packet: &[u8]) -> Option<Self> {
-        let (header, payload) = packet.split_first_chunk::<40>()?;
-        let &[
-            version,
-            _,
-            _,
-            _,
-            length_hi,
-            length_lo,
-            protocol,
-            _,
-            addresses @ ..,
-        ] = header;
-        if version >> 4 != 6 {
-            return None;
-        }
-        let payload_len = usize::from(u16::from_be_bytes([length_hi, length_lo]));
-        let payload = payload.get(..payload_len)?;
-        Some(Self::Ipv6 {
-            addresses,
-            protocol,
-            ports: ports(protocol, payload),
-        })
-    }
 }
 
+/// A malformed transport header groups its packet by addresses and protocol.
 fn ports(protocol: u8, payload: &[u8]) -> Option<[u8; 4]> {
-    match protocol {
-        6 => {
-            let header = payload.first_chunk::<20>()?;
-            let header_len = usize::from(header[12] >> 4).checked_mul(4)?;
-            if header_len < 20 || header_len > payload.len() {
-                return None;
-            }
-        }
-        17 => {
-            let header = payload.first_chunk::<8>()?;
-            let length = usize::from(u16::from_be_bytes([header[4], header[5]]));
-            if length < 8 || length > payload.len() {
-                return None;
-            }
-        }
-        _ => return None,
-    }
-    payload.first_chunk::<4>().copied()
+    Ports::parse(protocol, payload)
+        .ok()
+        .flatten()
+        .map(Ports::to_bytes)
 }
 
 #[cfg(test)]

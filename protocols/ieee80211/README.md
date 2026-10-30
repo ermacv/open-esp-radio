@@ -24,10 +24,11 @@ the portable runtime drives role services over that port.
 | `wire/src/eapol.rs` | EAPOL-Key Key Information field and Key Data Encapsulations |
 | `wire/src/sae.rs` | SAE Commit and Confirm body codecs (byte values of scalar, element and confirm) and SAE extension element IDs |
 | `wire/src/status.rs` | Status and reason codes |
-| `wire/src/ethertype.rs` | EtherType values |
+| `wire/src/ethertype.rs` | The EtherType values the 802.11 side names (EAPOL, WAPI) |
 | `wire/src/tsf.rs` | The Timestamp field and the time unit |
 | `sta/src/security.rs` | Station security policy: candidate admission and RSN selection |
 | `ap/src/security_policy.rs` | Access point security policy and its advertised elements |
+| `wire/src/data.rs` | MSDU fields (`MsduHeader`, `MsduParts`), data encapsulation plans, MSDU and A-MSDU decapsulation |
 | `wire/src/station/data.rs` | Data codecs, with A-MSDU framing in `station/data/amsdu.rs` |
 | `wire/src/sequence.rs` | Twelve-bit sequence numbers and modulo-4096 arithmetic |
 | `upper-mac/src/sequence.rs` | Separate management/non-QoS and per-TID TX sequence owners of the station, the access point and ESP-NOW |
@@ -35,8 +36,8 @@ the portable runtime drives role services over that port.
 | `rsn/src/pmksa.rs` | The PMKSA cache of the station and of the access point |
 | `rsn/src/authenticator.rs` | The access point's four-way handshake, with its SAE responder in `authenticator/sae.rs` |
 | `upper-mac/src/duplicate.rs` | Peer-scoped receive retry history |
-| `wire/src/qos.rs` | User priorities, access categories and the network header fields carrying traffic intent |
-| `upper-mac/src/qos.rs` | Ethernet traffic classification, DSCP mapping and admission downgrade |
+| `wire/src/qos.rs` | User priorities and access categories |
+| `upper-mac/src/qos.rs` | Admission-control downgrade of an access category |
 | `upper-mac/src/vif.rs` | Receive routing for one same-channel STA plus SoftAP pair |
 | `upper-mac/src/monitor.rs` | The frames a monitor keeps and the channels it visits |
 | `arbiter/src/interface.rs` | Virtual-interface identities and their channel-context bindings |

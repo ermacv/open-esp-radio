@@ -4,18 +4,16 @@ use crate::OwnedNetworkTxFrame;
 use oer_network_port::{
     EthernetFrame, EthernetFrameView, FrameLengthError, NetDevice, TransmitRefused,
 };
+use oer_network_wire::ethernet::EthernetHeader;
 
 impl EthernetFrame for OwnedNetworkTxFrame<'_> {
     fn view(&self) -> Result<EthernetFrameView<'_>, FrameLengthError> {
-        let (header, payload) = self
-            .ethernet()
-            .split_first_chunk::<{ oer_network_port::ETHERNET_HEADER_LEN }>()
-            .ok_or(FrameLengthError::TooShort)?;
-        let [d0, d1, d2, d3, d4, d5, s0, s1, s2, s3, s4, s5, e0, e1] = *header;
+        let (header, payload) =
+            EthernetHeader::parse(self.ethernet()).map_err(|_| FrameLengthError::TooShort)?;
         Ok(EthernetFrameView {
-            destination: [d0, d1, d2, d3, d4, d5],
-            source: [s0, s1, s2, s3, s4, s5],
-            ether_type: u16::from_be_bytes([e0, e1]),
+            destination: header.destination,
+            source: header.source,
+            ether_type: header.ether_type.value(),
             payload,
         })
     }

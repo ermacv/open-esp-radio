@@ -26,9 +26,6 @@ pub use device::{
 mod flow;
 pub use flow::TransportFlow;
 
-/// Ethernet header length, excluding an FCS.
-pub const ETHERNET_HEADER_LEN: usize = 14;
-
 /// Opaque identity of one logical network endpoint sharing a physical radio.
 ///
 /// Network adapters preserve this value but never assign Wi-Fi meaning to it.

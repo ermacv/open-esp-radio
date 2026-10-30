@@ -12,6 +12,7 @@ readme = "README.md"
 oer-ieee80211-port = { path = "../../../protocols/ieee80211/port" }
 oer-ieee80211-wire = { path = "../../../protocols/ieee80211/wire" }
 oer-ieee80211-upper-mac = { path = "../../../protocols/ieee80211/upper-mac" }
+oer-network-wire = { path = "../../../protocols/network/wire" }
 oer-time = { path = "../../../portable/time" }
 
 [dev-dependencies]

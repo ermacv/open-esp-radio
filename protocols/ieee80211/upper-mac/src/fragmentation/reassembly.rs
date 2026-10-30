@@ -11,7 +11,7 @@
 )]
 
 use super::FragmentAdmissionEpoch;
-use oer_ieee80211_wire::data::{EthernetFrameParts, LLC_SNAP_HEADER_LEN, rfc1042_ether_type};
+use oer_ieee80211_wire::data::{LLC_SNAP_HEADER_LEN, MsduParts, rfc1042_ether_type};
 
 use super::{
     CcmpPacketNumber, DataFragmentProtection, OpenDataFragment, OpenDataFragmentIdentity,
@@ -33,8 +33,8 @@ impl<'payload> OpenReassembledData<'payload> {
         self.identity
     }
 
-    pub fn ethernet_frame(self) -> EthernetFrameParts<'payload> {
-        EthernetFrameParts {
+    pub fn msdu(self) -> MsduParts<'payload> {
+        MsduParts {
             destination: self.identity.destination(),
             source: self.identity.source(),
             ether_type: self.ether_type,

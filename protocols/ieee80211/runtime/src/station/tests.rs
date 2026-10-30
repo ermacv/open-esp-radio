@@ -897,7 +897,7 @@ impl Application<'_, '_, '_> {
     fn try_send_msdu_at(&self, destination: [u8; 6], priority: u8) -> bool {
         let packet = TxMsdu {
             priority: WmmUserPriority::new(priority).unwrap(),
-            frame: EthernetFrame::from_parts(oer_ieee80211_wire::data::EthernetFrameParts {
+            frame: EthernetFrame::from_parts(oer_ieee80211_wire::data::MsduParts {
                 destination,
                 source: LOCAL,
                 ether_type: 0x0800,

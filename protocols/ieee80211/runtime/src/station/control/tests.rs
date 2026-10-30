@@ -158,7 +158,7 @@ fn network_link_wakes_on_events_and_keeps_the_cores_epoch() {
             })
         );
     }
-    let frame = EthernetFrame::from_parts(oer_ieee80211_wire::data::EthernetFrameParts {
+    let frame = EthernetFrame::from_parts(oer_ieee80211_wire::data::MsduParts {
         destination: [2; 6],
         source: [4; 6],
         ether_type: 0x0800,

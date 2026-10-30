@@ -7,7 +7,7 @@
 use crate::{
     ccmp::CCMP_HEADER_LEN,
     data::{
-        DataHeControl, DataInterfaceRole, LLC_SNAP_HEADER_LEN, plan_data_encapsulation,
+        DataHeControl, DataInterfaceRole, plan_data_encapsulation,
         plan_data_encapsulation_with_he_control,
     },
     extensions::wmm::{WmmParameterSet, parse_wmm_parameter_element},
@@ -17,7 +17,6 @@ use crate::{
     security::LinkProtection,
     sequence::SequenceNumber,
 };
-use oer_network_port::ETHERNET_HEADER_LEN;
 
 const OPEN_AUTHENTICATION_FRAME_CONTROL: u16 = 0x00b0;
 #[cfg(test)]
@@ -44,23 +43,6 @@ const POWER_CAPABILITY_IE_LEN: usize = 4;
 /// Baseline HT A-MSDU limit selected when HT Capabilities Info bit 11 is
 /// clear. The 7,935-byte extension remains deliberately unadvertised.
 const HT_AMSDU_BASELINE_MAX_LEN: usize = 3_839;
-const AMSDU_SUBFRAME_HEADER_LEN: usize = 14;
-/// Bytes added when one Ethernet-II frame is encoded as a protected QoS data
-/// MPDU, excluding the hardware-owned CCMP MIC and FCS.
-///
-/// The Ethernet DA/SA/EtherType header is replaced by the 26-byte QoS MAC
-/// header, the eight-byte CCMP header and the eight-byte LLC/SNAP header.
-pub const STA_PROTECTED_QOS_ETHERNET_OVERHEAD: usize =
-    crate::data::IEEE80211_QOS_DATA_HEADER_LEN + CCMP_HEADER_LEN + LLC_SNAP_HEADER_LEN
-        - ETHERNET_HEADER_LEN;
-/// Prefix space that lets an Ethernet frame become a protected QoS MPDU
-/// without moving its payload.
-///
-/// If the Ethernet header starts at this offset, the Ethernet payload already
-/// begins at the final `QoS header + CCMP header + LLC/SNAP` boundary. The
-/// encoder only has to preserve DA/SA/EtherType and overwrite the prefix.
-pub const STA_PROTECTED_QOS_ETHERNET_HEADROOM: usize = STA_PROTECTED_QOS_ETHERNET_OVERHEAD;
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum StationFrameError {
     InvalidBssid,
@@ -68,23 +50,10 @@ pub enum StationFrameError {
     NoSupportedRates,
     TooManySupportedRates,
     NoAmsduFrames,
-    EthernetFrameTooShort,
-    /// An external length or offset cannot be represented.
-    LengthOverflow,
-    AmsduTooLong {
-        length: usize,
-        maximum: usize,
-    },
+    AmsduTooLong { length: usize, maximum: usize },
     UserPriorityOutOfRange,
     HeControlRequiresQos,
-    AmsduRequiresQos,
-    EthernetHeadroomTooSmall {
-        required: usize,
-        available: usize,
-    },
-    OutputTooSmall {
-        required: usize,
-    },
+    OutputTooSmall { required: usize },
 }
 
 pub mod association;
@@ -98,9 +67,8 @@ pub use association::{
     parse_association_response,
 };
 pub use data::{
-    EncodedStaFrame, StaDataFrame, StaOpenDataFrame, StaProtectedAmsduFrame, StaProtectedDataFrame,
-    StaProtectedEthernetFrame, sta_protected_amsdu_frame_length,
-    sta_protected_amsdu_pair_frame_length,
+    StaDataFrame, StaOpenDataFrame, StaProtectedAmsduFrame, StaProtectedDataFrame,
+    sta_protected_amsdu_frame_length,
 };
 pub use management::{
     OpenAuthenticationRequest, OpenAuthenticationResponse, SAE_AUTHENTICATION_ALGORITHM,

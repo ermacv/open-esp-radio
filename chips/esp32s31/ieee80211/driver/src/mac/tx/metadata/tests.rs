@@ -1,5 +1,5 @@
 use super::*;
-use oer_ieee80211_wire::data::DataInterfaceRole;
+use oer_ieee80211_wire::data::{DataInterfaceRole, MsduHeader};
 
 #[test]
 fn queue_class_and_descriptor_byte_match_every_priority() {
@@ -66,15 +66,18 @@ fn portable_data_intent_preserves_every_existing_s31_queue_and_packet_profile() 
 
     for (priority, (category, queue, qos_packet_type)) in priorities.into_iter().enumerate() {
         for (role, multicast, peer_qos, frame_control, header_len) in frames {
-            let mut ethernet = [0_u8; 14];
-            ethernet[0] = if multicast { 0x11 } else { 0x10 };
-            ethernet[6..12].copy_from_slice(&[0x20; 6]);
-            ethernet[12..14].copy_from_slice(&[0x08, 0x00]);
+            let mut destination = [0_u8; 6];
+            destination[0] = if multicast { 0x11 } else { 0x10 };
+            let msdu = MsduHeader {
+                destination,
+                source: [0x20; 6],
+                ether_type: 0x0800,
+            };
             let plan = plan_data_encapsulation(
                 role,
                 [0x30; 6],
                 [0x40; 6],
-                ethernet,
+                msdu,
                 WmmUserPriority::new(priority as u8).unwrap(),
                 peer_qos,
                 false,

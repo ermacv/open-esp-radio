@@ -50,7 +50,7 @@ mod tests {
     use oer_ieee80211_wire::{
         ap::ApProtectedDataFrame,
         ccmp::{CcmpHeader, CcmpKeyId, CcmpPacketNumber},
-        data::EthernetFrameParts,
+        data::MsduParts,
         sequence::SequenceNumber,
     };
 
@@ -61,15 +61,12 @@ mod tests {
         } else {
             [0xff; 6]
         };
-        let mut ethernet = [0; 64];
-        let len = EthernetFrameParts {
+        let msdu = MsduParts {
             source: access_point,
             destination: receiver,
             ether_type: if key_id == 0 { 0x888e } else { 0x0800 },
             payload: b"protocol-payload",
-        }
-        .copy_to(&mut ethernet)
-        .expect("Ethernet");
+        };
         let frame = ApProtectedDataFrame {
             access_point,
             peer: receiver,
@@ -82,7 +79,7 @@ mod tests {
                 CcmpKeyId::new(key_id).expect("KeyID"),
             )
             .encode(),
-            ethernet: &ethernet[..len],
+            msdu,
         };
         // Same completed-prefix fixture as mac/tests/cases/rx_frames.rs.
         // Emulate a decrypted DMA image with 0..=8 retained MIC bytes.

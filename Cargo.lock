@@ -1546,6 +1546,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-bridges-ieee80211-ethernet"
+version = "0.1.0"
+dependencies = [
+ "oer-ieee80211-wire",
+ "oer-network-wire",
+]
+
+[[package]]
 name = "oer-chip-profile"
 version = "0.1.0"
 dependencies = [
@@ -1593,6 +1601,7 @@ dependencies = [
  "embassy-time",
  "oer-memory",
  "oer-network-port",
+ "oer-network-wire",
  "oer-sync",
  "oer-time",
  "oer-time-virtual",
@@ -1967,6 +1976,7 @@ dependencies = [
  "oer-ieee80211-port",
  "oer-ieee80211-upper-mac",
  "oer-ieee80211-wire",
+ "oer-network-wire",
  "oer-test-ui-cases",
  "oer-time",
  "oer-wire",
@@ -2505,7 +2515,6 @@ dependencies = [
  "oer-events",
  "oer-ieee80211-port",
  "oer-ieee80211-wire",
- "oer-network-port",
  "oer-test-ui-cases",
  "oer-time",
  "oer-time-virtual",
@@ -2515,7 +2524,6 @@ dependencies = [
 name = "oer-ieee80211-wire"
 version = "0.1.0"
 dependencies = [
- "oer-network-port",
  "oer-radio-regulatory",
  "oer-test-ui-cases",
  "oer-wire",
@@ -2768,6 +2776,16 @@ dependencies = [
 [[package]]
 name = "oer-network-port"
 version = "0.1.0"
+dependencies = [
+ "oer-network-wire",
+]
+
+[[package]]
+name = "oer-network-wire"
+version = "0.1.0"
+dependencies = [
+ "oer-wire",
+]
 
 [[package]]
 name = "oer-os-command-tree"

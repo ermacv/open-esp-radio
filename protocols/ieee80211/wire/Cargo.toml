@@ -13,7 +13,6 @@ default = []
 test-support = []
 
 [dependencies]
-oer-network-port = { path = "../../network/port" }
 oer-wire = { path = "../../../portable/wire" }
 oer-radio-regulatory = { path = "../../radio/regulatory" }
 zeroize = { version = "1.9.0", default-features = false, features = ["derive"] }

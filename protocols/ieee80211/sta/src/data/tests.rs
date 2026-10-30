@@ -11,7 +11,7 @@ use oer_ieee80211_port::{
 };
 use oer_ieee80211_port::{IndeterminateCause, WithdrawCause};
 use oer_ieee80211_upper_mac::sequence::SequenceCounter;
-use oer_ieee80211_wire::data::EthernetFrameParts;
+use oer_ieee80211_wire::data::MsduParts;
 use oer_ieee80211_wire::phy::{HeMcs, HtMcs, LegacyRate, PhyRate};
 use oer_ieee80211_wire::sequence::SequenceNumber;
 use std::vec::Vec;
@@ -1266,8 +1266,7 @@ fn received<'f, T: StaTokens>(
     frame: &'f [u8],
     meta: &RxMeta,
 ) -> Result<
-    impl Iterator<Item = Result<EthernetFrameParts<'f>, oer_ieee80211_upper_mac::receive::RxDropReason>>
-    + 'f,
+    impl Iterator<Item = Result<MsduParts<'f>, oer_ieee80211_upper_mac::receive::RxDropReason>> + 'f,
     oer_ieee80211_upper_mac::receive::RxDropReason,
 > {
     use oer_ieee80211_upper_mac::receive::{AdmittedData, RxDropReason};

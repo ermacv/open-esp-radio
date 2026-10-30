@@ -798,7 +798,8 @@ build-driver = "1"
 }
 
 /// Protocol roles follow the leaf directory, including nested protocols such
-/// as bluetooth/le. Shared radio, network and HIL vocabulary is infrastructure.
+/// as bluetooth/le. Shared radio, network and HIL vocabulary and the bridges
+/// between formats are infrastructure.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum ProtocolRole {
     Wire,
@@ -817,7 +818,7 @@ fn protocol_role(path: &str) -> Option<ProtocolRole> {
         return None;
     }
     let protocol = path.strip_prefix("protocols/")?;
-    if ["radio", "network", "hil"].contains(&protocol.split('/').next()?) {
+    if ["radio", "network", "hil", "bridges"].contains(&protocol.split('/').next()?) {
         return None;
     }
     Some(match protocol.rsplit('/').next()? {
@@ -879,6 +880,8 @@ enum Role {
     /// `protocols/radio/*` and `protocols/network/*`: vocabulary shared by the
     /// protocols.
     SharedVocabulary,
+    /// `protocols/bridges/*`: the one place two protocols' codecs meet.
+    Bridge,
     Portable,
     /// `portable/embassy/*`, the adapters of protocol boundaries.
     EmbassyAdapter,
@@ -966,6 +969,7 @@ fn role(path: &str) -> Option<Role> {
     Some(match (parts.next(), parts.next()) {
         (Some("protocols"), _) if path.ends_with("/instrumentation") => Role::ObservationContract,
         (Some("protocols"), Some("radio" | "network")) => Role::SharedVocabulary,
+        (Some("protocols"), Some("bridges")) => Role::Bridge,
         (Some("protocols"), _) => Role::Protocol(protocol_role(path)?),
         (Some("portable"), Some("mmio" | "riscv")) => Role::HardwareAccess,
         (Some("portable"), Some("embassy")) => Role::EmbassyAdapter,
@@ -1074,6 +1078,11 @@ fn role_allows(from: Role, to: Role, to_path: &str) -> bool {
         Role::Facade => assembled || to == Role::Composition,
         Role::HilProtocol => to == Role::Portable,
         Role::HilAgent => matches!(to, Role::HilProtocol | Role::Portable),
+        // A bridge stands only on the codecs it joins.
+        Role::Bridge => matches!(
+            to,
+            Role::Protocol(Wire) | Role::SharedVocabulary | Role::Portable
+        ),
         // A binding is a dictionary without a clock: no time crate.
         Role::HilBinding => {
             matches!(
@@ -1241,6 +1250,8 @@ fn protocol_roles_and_the_explicit_chip_roles_follow_the_layout() {
         "protocols/radio/port",
         "protocols/hil/protocol",
         "protocols/network/port",
+        "protocols/network/wire",
+        "protocols/bridges/ieee80211-ethernet",
         "portable/wire",
         "chips/esp32s31/hal",
     ] {
@@ -1249,6 +1260,8 @@ fn protocol_roles_and_the_explicit_chip_roles_follow_the_layout() {
     for (path, expected) in [
         ("protocols/radio/port", Some(Role::SharedVocabulary)),
         ("protocols/network/port", Some(Role::SharedVocabulary)),
+        ("protocols/network/wire", Some(Role::SharedVocabulary)),
+        ("protocols/bridges/ieee80211-ethernet", Some(Role::Bridge)),
         ("protocols/hil/protocol", Some(Role::HilProtocol)),
         ("protocols/hil/agent", Some(Role::HilAgent)),
         ("protocols/hil/new", None),
@@ -2227,13 +2240,15 @@ embassy-sync = "1"
 }
 
 /// What an IEEE 802.11 protocol package never takes as a direct normal
-/// dependency: trace records, transport serialization and HIL. Its owners
-/// report to the sink their caller lends a call (`oer-events`); a facade or
-/// an image chooses what an event becomes and how it leaves the device.
+/// dependency: trace records, transport serialization, HIL and the network
+/// codec. Its owners report to the sink their caller lends a call
+/// (`oer-events`); a facade or an image chooses what an event becomes and how
+/// it leaves the device. Network fields reach it only through the bridge
+/// (`protocols/bridges/ieee80211-ethernet`).
 fn ieee80211_foreign_dependency(dependency: &str) -> bool {
     matches!(
         dependency,
-        "oer-trace" | "serde" | "postcard" | "postcard-schema"
+        "oer-trace" | "serde" | "postcard" | "postcard-schema" | "oer-network-wire"
     ) || dependency.starts_with("oer-hil-")
 }
 
@@ -2252,7 +2267,7 @@ fn ieee80211_foreign_edges(members: &[Member]) -> BTreeSet<Edge> {
 }
 
 #[test]
-fn ieee80211_protocol_packages_take_no_trace_serialization_or_hil() {
+fn ieee80211_protocol_packages_take_no_trace_serialization_hil_or_network_codec() {
     let edges = ieee80211_foreign_edges(&workspace_members());
     assert!(edges.is_empty(), "{edges:?}");
 }
@@ -2264,6 +2279,8 @@ fn ieee80211_foreign_dependencies_include_aliases_and_spare_other_families() {
 [dependencies]
 events = { package = "oer-events", path = "../../../portable/events" }
 records = { package = "oer-trace", path = "../../../portable/trace" }
+fields = { package = "oer-network-wire", path = "../../network/wire" }
+bridge = { package = "oer-bridges-ieee80211-ethernet", path = "../../bridges/ieee80211-ethernet" }
 [target.'cfg(target_arch = "riscv32")'.dependencies]
 schema = { package = "postcard-schema", version = "0.2", optional = true }
 agent = { package = "oer-hil-agent", path = "../../hil/agent" }
@@ -2289,12 +2306,17 @@ serde = "1"
     };
     assert_eq!(
         ieee80211_foreign_edges(&[runtime, facade]),
-        ["oer-hil-agent", "oer-trace", "postcard-schema"]
-            .map(|dependency| (
-                "protocols/ieee80211/runtime".to_owned(),
-                dependency.to_owned()
-            ))
-            .into()
+        [
+            "oer-hil-agent",
+            "oer-network-wire",
+            "oer-trace",
+            "postcard-schema"
+        ]
+        .map(|dependency| (
+            "protocols/ieee80211/runtime".to_owned(),
+            dependency.to_owned()
+        ))
+        .into()
     );
 }
 

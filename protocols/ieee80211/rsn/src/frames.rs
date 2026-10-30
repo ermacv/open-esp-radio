@@ -2,7 +2,6 @@
 
 use oer_ieee80211_wire::{
     eapol::{GTK_KDE_TYPE, IGTK_KDE_TYPE, KDE_ELEMENT_ID, KeyInformation},
-    ethertype::ETHER_TYPE_EAPOL,
     security::rsn::{RSN_ELEMENT_ID, RSNXE_ELEMENT_ID},
 };
 use zeroize::{Zeroize, ZeroizeOnDrop};
@@ -22,7 +21,6 @@ pub const RSN_IGTK_LEN: usize = 16;
 pub const RSN_IPN_LEN: usize = 6;
 pub const RSN_PLAIN_KEY_DATA_CAPACITY: usize = 128;
 pub const RSN_TX_EAPOL_CAPACITY: usize = 512;
-pub const RSN_TX_ETHERNET_CAPACITY: usize = RSN_TX_EAPOL_CAPACITY + 14;
 
 /// IGTK KDE: key id (2), IPN (6) and IGTK (16) after the OUI and type.
 const IGTK_KDE_LEN: usize = 2 + 4 + 2 + RSN_IPN_LEN + RSN_IGTK_LEN;
@@ -63,7 +61,7 @@ pub use key_data::{
     RsnGroupKeys, RsnGtk, RsnIgtk, RsnPlainKeyData, parse_group_gtk_key_data, parse_gtk_key_data,
 };
 pub use security_ies::{OwnedAssociationSecurityIes, OwnedRsnIe};
-pub use transmit::{RsnEthernetFrame, RsnTxFrame, build_ap_action_frame, build_sta_action_frame};
+pub use transmit::{RsnTxFrame, build_ap_action_frame, build_sta_action_frame};
 
 #[cfg(test)]
 pub(crate) mod captured_m3;

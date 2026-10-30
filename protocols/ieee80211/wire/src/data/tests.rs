@@ -1,28 +1,16 @@
 use super::*;
-use oer_network_port::ETHERNET_HEADER_LEN;
 
 const DESTINATION: [u8; 6] = [0x10, 0x11, 0x12, 0x13, 0x14, 0x15];
 const SOURCE: [u8; 6] = [0x20, 0x21, 0x22, 0x23, 0x24, 0x25];
 const BSSID: [u8; 6] = [0x30, 0x31, 0x32, 0x33, 0x34, 0x35];
 const AP_MAC: [u8; 6] = [0x40, 0x41, 0x42, 0x43, 0x44, 0x45];
 
-const fn ethernet(destination: [u8; 6]) -> [u8; ETHERNET_HEADER_LEN] {
-    [
-        destination[0],
-        destination[1],
-        destination[2],
-        destination[3],
-        destination[4],
-        destination[5],
-        SOURCE[0],
-        SOURCE[1],
-        SOURCE[2],
-        SOURCE[3],
-        SOURCE[4],
-        SOURCE[5],
-        0x08,
-        0x00,
-    ]
+const fn msdu(destination: [u8; 6]) -> MsduHeader {
+    MsduHeader {
+        destination,
+        source: SOURCE,
+        ether_type: 0x0800,
+    }
 }
 
 #[test]
@@ -31,7 +19,7 @@ fn station_qos_header_matches_the_recovered_plan() {
         DataInterfaceRole::Station,
         BSSID,
         AP_MAC,
-        ethernet(DESTINATION),
+        msdu(DESTINATION),
         WmmUserPriority::UP7,
         true,
         false,
@@ -52,7 +40,7 @@ fn hardware_bsr_sets_order_without_moving_dma_payload() {
         DataInterfaceRole::Station,
         BSSID,
         AP_MAC,
-        ethernet(DESTINATION),
+        msdu(DESTINATION),
         WmmUserPriority::UP0,
         true,
         false,
@@ -71,7 +59,7 @@ fn hardware_bsr_sets_order_without_moving_dma_payload() {
             DataInterfaceRole::Station,
             BSSID,
             AP_MAC,
-            ethernet(DESTINATION),
+            msdu(DESTINATION),
             WmmUserPriority::UP0,
             false,
             false,
@@ -83,12 +71,11 @@ fn hardware_bsr_sets_order_without_moving_dma_payload() {
 
 #[test]
 fn station_decapsulation_reverses_from_ds_rfc1042_data() {
-    let ethernet = ethernet(DESTINATION);
     let plan = plan_data_encapsulation(
         DataInterfaceRole::AccessPoint,
         BSSID,
         BSSID,
-        ethernet,
+        msdu(DESTINATION),
         WmmUserPriority::UP0,
         false,
         false,
@@ -101,22 +88,21 @@ fn station_decapsulation_reverses_from_ds_rfc1042_data() {
     mpdu[header_length + LLC_SNAP_HEADER_LEN..header_length + LLC_SNAP_HEADER_LEN + payload.len()]
         .copy_from_slice(&payload);
     let mpdu_length = header_length + LLC_SNAP_HEADER_LEN + payload.len();
-    let mut output = [0_u8; 64];
-    let decoded = decapsulate_data(
+    let decoded = plan_data_decapsulation(
         DataInterfaceRole::Station,
         &mpdu[..mpdu_length],
         header_length,
         LLC_SNAP_HEADER_LEN + payload.len(),
-        &mut output,
     )
     .unwrap();
 
     assert_eq!(decoded.destination, DESTINATION);
     assert_eq!(decoded.source, SOURCE);
     assert_eq!(decoded.ether_type, 0x0800);
+    assert_eq!(decoded.payload_offset, header_length + LLC_SNAP_HEADER_LEN);
     assert_eq!(
-        &output[..decoded.ethernet_length],
-        &[&ethernet[..], &payload].concat()
+        &mpdu[decoded.payload_offset..][..decoded.payload_length],
+        &payload
     );
 }
 
@@ -137,20 +123,21 @@ fn protected_station_decapsulation_accepts_a_separate_ccmp_header() {
     mpdu[llc_offset + LLC_SNAP_HEADER_LEN..llc_offset + LLC_SNAP_HEADER_LEN + payload.len()]
         .copy_from_slice(&payload);
     let mpdu_length = llc_offset + LLC_SNAP_HEADER_LEN + payload.len();
-    let mut output = [0_u8; 64];
-    let decoded = decapsulate_data(
+    let decoded = plan_data_decapsulation(
         DataInterfaceRole::Station,
         &mpdu[..mpdu_length],
         llc_offset,
         LLC_SNAP_HEADER_LEN + payload.len(),
-        &mut output,
     )
     .unwrap();
 
     assert_eq!(decoded.ether_type, 0x0806);
-    assert_eq!(&output[..6], &DESTINATION);
-    assert_eq!(&output[6..12], &SOURCE);
-    assert_eq!(&output[14..decoded.ethernet_length], &payload);
+    assert_eq!(decoded.destination, DESTINATION);
+    assert_eq!(decoded.source, SOURCE);
+    assert_eq!(
+        &mpdu[decoded.payload_offset..][..decoded.payload_length],
+        &payload
+    );
 
     let mut frames = decapsulate_data_frames(
         DataInterfaceRole::Station,
@@ -240,11 +227,9 @@ fn station_amsdu_iterator_removes_subframe_length_llc_and_padding() {
     assert_eq!(ap_frames.next().unwrap().unwrap().payload, &[3, 4, 5]);
     assert!(ap_frames.next().is_none());
 
-    let mut output = [0; 32];
-    let length = decapsulate_amsdu_subframe(second, &mut output).unwrap();
-    assert_eq!(length, 17);
-    assert_eq!(&output[..6], &[0xff; 6]);
-    assert_eq!(&output[12..17], &[0x08, 0x06, 3, 4, 5]);
+    assert_eq!(second.destination, [0xff; 6]);
+    assert_eq!(second.ether_type, 0x0806);
+    assert_eq!(second.payload, &[3, 4, 5]);
 }
 
 #[test]
@@ -336,7 +321,7 @@ fn ordinary_mpdu() -> std::vec::Vec<u8> {
         DataInterfaceRole::AccessPoint,
         BSSID,
         BSSID,
-        ethernet(DESTINATION),
+        msdu(DESTINATION),
         WmmUserPriority::UP5,
         true,
         false,
@@ -398,32 +383,24 @@ fn payload_windows(mpdu: &[u8]) -> std::vec::Vec<(usize, usize)> {
 }
 
 fn decapsulate_all(mpdu: &[u8]) {
-    // Room for any Ethernet frame the MPDU holds, and room for almost none.
-    let mut output = std::vec![0_u8; mpdu.len().saturating_add(ETHERNET_HEADER_LEN)];
-    let mut short = [0_u8; 15];
     for role in [DataInterfaceRole::Station, DataInterfaceRole::AccessPoint] {
         for (offset, length) in payload_windows(mpdu) {
             if let Ok(plan) = plan_data_decapsulation(role, mpdu, offset, length) {
-                assert_eq!(
-                    decapsulate_data(role, mpdu, offset, length, &mut output),
-                    Ok(plan)
-                );
-                let _ = decapsulate_data(role, mpdu, offset, length, &mut short);
+                // A located payload lies within the MPDU.
+                let end = plan.payload_offset.checked_add(plan.payload_length);
+                assert!(end.is_some_and(|end| end <= mpdu.len()));
             }
             if let Ok(subframes) = amsdu_subframes(role, mpdu, offset, length) {
                 for subframe in subframes {
                     let Ok(subframe) = subframe else { break };
-                    let _ = decapsulate_amsdu_subframe(subframe, &mut output);
-                    let _ = decapsulate_amsdu_subframe(subframe, &mut short);
+                    let _ = subframe.header();
                 }
             }
             if let Ok(frames) = decapsulate_data_frames(role, mpdu, offset, length) {
                 let _ = frames.is_amsdu();
                 for frame in frames {
                     let Ok(frame) = frame else { break };
-                    let _ = frame.length();
-                    let _ = frame.copy_to(&mut output);
-                    let _ = frame.copy_to(&mut short);
+                    let _ = frame.header();
                 }
             }
         }
@@ -523,12 +500,12 @@ fn a_malformed_later_amsdu_subframe_exposes_no_valid_prefix() {
 }
 
 #[test]
-fn malformed_payload_offsets_and_lengths_return_errors_without_writing() {
+fn malformed_payload_offsets_and_lengths_return_errors() {
     let plan = plan_data_encapsulation(
         DataInterfaceRole::AccessPoint,
         BSSID,
         BSSID,
-        ethernet(DESTINATION),
+        msdu(DESTINATION),
         WmmUserPriority::UP0,
         false,
         false,
@@ -537,17 +514,8 @@ fn malformed_payload_offsets_and_lengths_return_errors_without_writing() {
     mpdu.extend_from_slice(&plan.llc_snap);
     mpdu.extend_from_slice(&[1, 2, 3]);
     for (offset, length) in [(usize::MAX, 8), (24, usize::MAX), (0, 8), (24, 7)] {
-        let mut output = [0xa5; 64];
         assert!(
-            decapsulate_data(
-                DataInterfaceRole::Station,
-                &mpdu,
-                offset,
-                length,
-                &mut output
-            )
-            .is_err()
+            plan_data_decapsulation(DataInterfaceRole::Station, &mpdu, offset, length).is_err()
         );
-        assert_eq!(output, [0xa5; 64]);
     }
 }

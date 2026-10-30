@@ -29,7 +29,8 @@ mod tx_queue;
 use tx_budget::TxCredit;
 use tx_queue::TxQueue;
 
-use crate::{ETHERNET_HEADER_LEN, FrameLengthError, NetworkInterfaceId, RxEnqueueError};
+use crate::{FrameLengthError, NetworkInterfaceId, RxEnqueueError};
+use oer_network_wire::ethernet::{EtherType, EthernetHeader, HEADER_LEN as ETHERNET_HEADER_LEN};
 
 #[derive(Clone, Copy)]
 struct LinkSnapshot {
@@ -477,11 +478,13 @@ impl<const RX_QUEUE_DEPTH: usize> OwnedRxPublisher<'_, RX_QUEUE_DEPTH> {
             return Err(RxEnqueueError::InvalidLength(FrameLengthError::TooLong));
         }
         packet.set_len(frame_len);
-        let bytes = destination
-            .into_iter()
-            .chain(source)
-            .chain(ether_type.to_be_bytes())
-            .chain(payload.iter().copied());
+        let header = EthernetHeader {
+            destination,
+            source,
+            ether_type: EtherType::new(ether_type),
+        }
+        .to_bytes();
+        let bytes = header.into_iter().chain(payload.iter().copied());
         for (byte, source) in packet.iter_mut().zip(bytes) {
             *byte = source;
         }

@@ -3,9 +3,10 @@
 //! Raw ESF, descriptor, and node layouts remain in the target adapter. This
 //! module contains only finite decisions which can be verified on the host.
 
-use oer_ieee80211_wire::{
-    ethertype,
-    qos::{DsField, Ipv6HeaderPrefix},
+use oer_ieee80211_wire::ethertype;
+use oer_network_wire::{
+    ethernet::EtherType,
+    ip::{DsField, Ipv6HeaderPrefix},
 };
 
 /// The classifier's protocol word: the EtherType octets as they lie in the
@@ -14,11 +15,11 @@ const fn protocol_word(ether_type: u16) -> u16 {
     u16::from_le_bytes(ether_type.to_be_bytes())
 }
 
-pub const ETHER_TYPE_IPV4: u16 = protocol_word(ethertype::ETHER_TYPE_IPV4);
-pub const ETHER_TYPE_ARP: u16 = protocol_word(ethertype::ETHER_TYPE_ARP);
+pub const ETHER_TYPE_IPV4: u16 = protocol_word(EtherType::IPV4.value());
+pub const ETHER_TYPE_ARP: u16 = protocol_word(EtherType::ARP.value());
 pub const ETHER_TYPE_EAPOL: u16 = protocol_word(ethertype::ETHER_TYPE_EAPOL);
 pub const ETHER_TYPE_WAPI: u16 = protocol_word(ethertype::ETHER_TYPE_WAPI);
-pub const ETHER_TYPE_IPV6: u16 = protocol_word(ethertype::ETHER_TYPE_IPV6);
+pub const ETHER_TYPE_IPV6: u16 = protocol_word(EtherType::IPV6.value());
 /// The vendor classifier's private priority marker.
 pub const ETHER_TYPE_VENDOR_PRIORITY: u16 = 0xeeee;
 
