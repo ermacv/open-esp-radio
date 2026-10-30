@@ -516,7 +516,7 @@ requirement rather than an inferred meaning of EAPOL's Secure bit. The same
 vendor file's `wpa_supplicant_install_ptk` at line 834 guards against repeated PTK installs.
 
 Key actions and pending/installed GTK records keep material in the shared
-`oer_ieee80211_wire::ccmp::Ccmp128Key` owner. Its Debug is redacted and its destructor zeroizes the
+`oer_ieee80211_contracts_security::Ccmp128Key` owner. Its Debug is redacted and its destructor zeroizes the
 owned bytes when a record retires or an unfinished action is dropped.
 Material comparison borrows those bytes; this makes no claim about
 arbitrary compiler temporaries or copies made inside hardware adapters.

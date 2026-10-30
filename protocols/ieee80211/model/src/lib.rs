@@ -173,6 +173,7 @@ use core::{
     num::NonZeroU16,
     task::{Poll, Waker},
 };
+use oer_ieee80211_contracts_security::Ccmp128Key;
 use oer_ieee80211_port::{EdcaAcParameters, EdcaParameterSet};
 use oer_ieee80211_port::{
     association,
@@ -181,7 +182,6 @@ use oer_ieee80211_port::{
         KeyBankParts, PairwiseKeySlot, VacantAssociation, VacantKeyBank,
     },
 };
-use oer_ieee80211_wire::ccmp::Ccmp128Key;
 use oer_ieee80211_wire::ccmp::{CcmpHeader, CcmpKeyId, GroupKeyId};
 use oer_ieee80211_wire::frame::{sequence_control, set_retry_bit};
 use oer_radio_port::{

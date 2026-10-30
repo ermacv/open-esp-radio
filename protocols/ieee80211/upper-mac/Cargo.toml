@@ -13,6 +13,7 @@ oer-events = { path = "../../../portable/events" }
 heapless = "0.9.3"
 oer-ieee80211-port = { path = "../port" }
 oer-ieee80211-wire = { path = "../wire" }
+oer-ieee80211-contracts-security = { path = "../contracts/security" }
 oer-time = { path = "../../../portable/time" }
 
 [lints]

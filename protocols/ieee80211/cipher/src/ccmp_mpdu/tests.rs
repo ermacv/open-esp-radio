@@ -39,8 +39,8 @@ fn mode(spp: bool) -> CcmpAssociation {
         Spp::NotNegotiated
     })
 }
-fn key() -> oer_ieee80211_wire::ccmp::Ccmp128Key {
-    oer_ieee80211_wire::ccmp::Ccmp128Key::new(&core::array::from_fn(|i| i as u8))
+fn key() -> oer_ieee80211_contracts_security::Ccmp128Key {
+    oer_ieee80211_contracts_security::Ccmp128Key::new(&core::array::from_fn(|i| i as u8))
 }
 
 #[test]

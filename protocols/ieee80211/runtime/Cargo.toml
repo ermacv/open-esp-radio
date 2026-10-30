@@ -29,6 +29,7 @@ oer-bridges-ieee80211-ethernet = { path = "../../bridges/ieee80211-ethernet" }
 oer-ieee80211-rsn = { path = "../rsn" }
 
 [dev-dependencies]
+oer-ieee80211-contracts-security = { path = "../contracts/security" }
 oer-crypto = { path = "../../../portable/crypto", features = ["test-support"] }
 # The compile-fail example of a shareable command channel.
 embassy-sync = "0.8.0"

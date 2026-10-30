@@ -125,7 +125,9 @@ use {
         station_power_save::{StaNullDataFrame, StaPowerManagement},
     },
 };
-use {oer_ieee80211_upper_mac::ccmp::CcmpRxReplayEpoch, oer_ieee80211_wire::ccmp::Ccmp128Key};
+use {
+    oer_ieee80211_contracts_security::Ccmp128Key, oer_ieee80211_upper_mac::ccmp::CcmpRxReplayEpoch,
+};
 
 use crate::association::StaAssociatedPeer;
 use crate::receive::{Management, Received, observe_scan};

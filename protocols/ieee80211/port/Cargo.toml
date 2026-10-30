@@ -16,6 +16,7 @@ test-support = []
 oer-wire = { path = "../../../portable/wire" }
 heapless = "0.9.3"
 oer-ieee80211-wire = { path = "../wire" }
+oer-ieee80211-contracts-security = { path = "../contracts/security" }
 oer-radio-coex = { path = "../../radio/coex" }
 oer-radio-port = { path = "../../radio/port" }
 oer-radio-regulatory = { path = "../../radio/regulatory" }

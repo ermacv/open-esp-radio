@@ -241,7 +241,7 @@ back; its operations are synchronous and never wait:
 - **Reception.** A received frame's buffer goes back through `recycle`; a
   lagging body loses unsolicited frames as `EventsLost`, never a terminal.
 
-`oer_ieee80211_wire::ccmp::Ccmp128Key` is the shared affine, zeroizing owner
+`oer_ieee80211_contracts_security::Ccmp128Key` is the shared affine, zeroizing owner
 of installation material. RSN moves this owner into installation. Its
 bytes are private; hardware programming and software CCMP borrow them.
 It has no `Clone`, `Copy`, equality or owned byte extraction, and Debug is

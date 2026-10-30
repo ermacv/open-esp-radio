@@ -1,0 +1,19 @@
+[package]
+name = "oer-ieee80211-contracts-security"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "IEEE 802.11 installed-protection contract: the affine CCMP-128 temporal-key owner"
+readme = "README.md"
+
+[dependencies]
+zeroize = { version = "1.9.0", default-features = false, features = ["derive"] }
+
+[dev-dependencies]
+tempfile = "=3.27.0"
+oer-test-ui-cases = { path = "../../../../tools/test/ui-cases" }
+
+[lints]
+workspace = true

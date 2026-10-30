@@ -195,7 +195,8 @@
 //! drain. Subsequent event calls, including through a new phase loan, return
 //! the same end and cause. Dropping a quarantine receipt releases no owners.
 
-use oer_ieee80211_wire::ccmp::{Ccmp128Key, GroupKeyId};
+use oer_ieee80211_contracts_security::Ccmp128Key;
+use oer_ieee80211_wire::ccmp::GroupKeyId;
 use oer_radio_port::PortPhase;
 use oer_radio_port::{Poisoned, PoolPath, Root, Slot};
 

@@ -47,6 +47,7 @@ protocols/bridges/ieee80211-ethernet/
 protocols/hil/{agent, protocol}/
 protocols/ieee80211/{ap, arbiter, cipher, esp-now, model, port, rsn, runtime,
     sta, upper-mac, wire}/
+protocols/ieee80211/contracts/security/
 protocols/ieee802154/{mac, model, port, wire}/
 protocols/network/{port, wire}/
 protocols/radio/{coex, port, regulatory}/
@@ -111,7 +112,10 @@ role in `oer-test-layers` that names its level
 ([architecture](architecture.md#layers)); a directory name such as `driver`
 grants nothing. `chips/esp32s31/wifi` assembles the S31 station backend and portable runtime as the Wi-Fi facade.
 A protocol leaf named `instrumentation` is an observation contract; a leaf
-named `hil` takes its role from the list.
+named `hil` takes its role from the list. A package under a protocol's
+`contracts/` is a protocol contract, which a backend may use, and
+`protocols/bridges/*` are bridges, which stand only on the codecs they
+join.
 
 ## Known deviations
 

@@ -1,12 +1,12 @@
 //! PMF state owned by one association, separate from data replay frontiers.
 
 use oer_ieee80211_cipher::bip::MANAGEMENT_MIC_ELEMENT_LEN;
+use oer_ieee80211_contracts_security::Ccmp128Key;
 use oer_ieee80211_rsn::{
     bip::BipReceiver, frames::RsnIgtk, management_ccmp::ManagementCcmpReceiver,
 };
 use oer_ieee80211_wire::{
     address::{Bssid, OwnAddress},
-    ccmp::Ccmp128Key,
     frame::{DecodedHeader, FrameControlFields, ManagementSubtype},
     management::{BROADCAST_ADDRESS, MANAGEMENT_HEADER_LEN},
     management_protection::SaQuery,

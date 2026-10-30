@@ -1,3 +1,25 @@
+#![no_std]
+#![forbid(unsafe_code)]
+#![deny(
+    clippy::panic,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::unreachable,
+    clippy::todo,
+    clippy::unimplemented,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    clippy::disallowed_macros,
+    clippy::disallowed_methods
+)]
+
+//! The IEEE 802.11 installed-protection contract.
+//!
+//! The secret material a protocol installs and a backend programs has one
+//! owner here, apart from the frame codecs: they carry field syntax, never a
+//! key. Port, backends, RSN and the software cipher borrow it; none of them
+//! has to depend on another to share it.
+
 /// The affine CCMP-128 temporal-key owner shared by RSN and lower-MAC.
 ///
 /// Installation moves this owner through the command FIFO into the backend.
@@ -22,7 +44,9 @@ impl Ccmp128Key {
     /// must itself have a zeroizing owner (PTK, GTK or a derivation buffer).
     pub fn new(bytes: &[u8; 16]) -> Self {
         let mut key = Self { bytes: [0; 16] };
-        crate::encoding::write_array::<0, _, _>(&mut key.bytes, bytes);
+        for (to, from) in key.bytes.iter_mut().zip(bytes) {
+            *to = *from;
+        }
         key
     }
 

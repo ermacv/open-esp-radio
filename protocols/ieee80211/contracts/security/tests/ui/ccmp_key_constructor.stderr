@@ -7,7 +7,7 @@ error[E0308]: mismatched types
   |               arguments to this function are incorrect
   |
 note: associated function defined here
- --> src/ccmp/key.rs
+ --> src/lib.rs
   |
   |     pub fn new(bytes: &[u8; 16]) -> Self {
   |            ^^^

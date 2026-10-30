@@ -44,7 +44,7 @@ validated Association element; the supplicant takes it from its own
 Association element. Both reject EAPOL-Key frames whose descriptor version
 differs from that suite.
 
-`oer_ieee80211_wire::ccmp::Ccmp128Key` owns temporal-key bytes, redacts Debug
+`oer_ieee80211_contracts_security::Ccmp128Key` owns temporal-key bytes, redacts Debug
 output and zeroizes its storage on drop. RSN copies directly from borrowed,
 zeroizing PTK/GTK storage into this owner; lower-MAC installation moves the
 same type without extracting an intermediate array. PTK derivation writes

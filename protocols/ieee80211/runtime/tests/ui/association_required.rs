@@ -1,5 +1,5 @@
 #![no_std]
-use oer_ieee80211_wire::ccmp::Ccmp128Key;
+use oer_ieee80211_contracts_security::Ccmp128Key;
 use oer_ieee80211_port::{InterfacePhase, KeyTypes, LowerMacPhase, Station};
 use oer_ieee80211_wire::address::IndividualAddress;
 use oer_ieee80211_model::{ModelAssociation, ModelKeys, ModelPhase};

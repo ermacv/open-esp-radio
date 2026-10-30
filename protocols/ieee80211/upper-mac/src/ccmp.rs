@@ -114,7 +114,7 @@ pub fn install_ccmp_pairwise_key<'p, 'id: 'p, P>(
     association: &<oer_ieee80211_port::InterfaceKeys<'p, 'id, P> as oer_ieee80211_port::KeyTypes<'id>>::Association,
     slot: <oer_ieee80211_port::InterfaceKeys<'p, 'id, P> as oer_ieee80211_port::KeyTypes<'id>>::PairwiseSlot,
     peer: oer_ieee80211_wire::address::IndividualAddress,
-    key: oer_ieee80211_wire::ccmp::Ccmp128Key,
+    key: oer_ieee80211_contracts_security::Ccmp128Key,
     step: CcmpPacketNumberStep,
 ) -> InstalledCcmpTxKey<<oer_ieee80211_port::InterfaceKeys<'p, 'id, P> as oer_ieee80211_port::KeyTypes<'id>>::PairwiseKey>
 where

@@ -1745,6 +1745,7 @@ dependencies = [
  "oer-espressif-ieee80211-policy",
  "oer-espressif-interrupt-table",
  "oer-espressif-staged-runtime",
+ "oer-ieee80211-contracts-security",
  "oer-ieee80211-port",
  "oer-ieee80211-upper-mac",
  "oer-ieee80211-wire",
@@ -2378,9 +2379,19 @@ dependencies = [
  "ccm",
  "cmac",
  "oer-crypto",
+ "oer-ieee80211-contracts-security",
  "oer-ieee80211-wire",
  "oer-test-ui-cases",
  "subtle",
+ "zeroize",
+]
+
+[[package]]
+name = "oer-ieee80211-contracts-security"
+version = "0.1.0"
+dependencies = [
+ "oer-test-ui-cases",
+ "tempfile",
  "zeroize",
 ]
 
@@ -2405,6 +2416,7 @@ dependencies = [
  "embassy-futures",
  "heapless",
  "oer-ieee80211-cipher",
+ "oer-ieee80211-contracts-security",
  "oer-ieee80211-port",
  "oer-ieee80211-upper-mac",
  "oer-ieee80211-wire",
@@ -2421,6 +2433,7 @@ name = "oer-ieee80211-port"
 version = "0.1.0"
 dependencies = [
  "heapless",
+ "oer-ieee80211-contracts-security",
  "oer-ieee80211-wire",
  "oer-radio-coex",
  "oer-radio-port",
@@ -2443,6 +2456,7 @@ dependencies = [
  "hmac",
  "oer-crypto",
  "oer-ieee80211-cipher",
+ "oer-ieee80211-contracts-security",
  "oer-ieee80211-upper-mac",
  "oer-ieee80211-wire",
  "oer-test-ui-cases",
@@ -2470,6 +2484,7 @@ dependencies = [
  "oer-events",
  "oer-ieee80211-arbiter",
  "oer-ieee80211-cipher",
+ "oer-ieee80211-contracts-security",
  "oer-ieee80211-model",
  "oer-ieee80211-port",
  "oer-ieee80211-rsn",
@@ -2495,6 +2510,7 @@ dependencies = [
  "oer-events",
  "oer-ieee80211-arbiter",
  "oer-ieee80211-cipher",
+ "oer-ieee80211-contracts-security",
  "oer-ieee80211-port",
  "oer-ieee80211-rsn",
  "oer-ieee80211-upper-mac",
@@ -2514,6 +2530,7 @@ version = "0.1.0"
 dependencies = [
  "heapless",
  "oer-events",
+ "oer-ieee80211-contracts-security",
  "oer-ieee80211-port",
  "oer-ieee80211-wire",
  "oer-test-ui-cases",
@@ -2526,10 +2543,8 @@ name = "oer-ieee80211-wire"
 version = "0.1.0"
 dependencies = [
  "oer-radio-regulatory",
- "oer-test-ui-cases",
  "oer-wire",
  "tempfile",
- "zeroize",
 ]
 
 [[package]]

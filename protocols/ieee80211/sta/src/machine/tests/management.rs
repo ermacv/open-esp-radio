@@ -1,5 +1,6 @@
 //! Full negotiated PMF exchanges with independent AESCCM/CMAC wire vectors.
 use super::*;
+use oer_ieee80211_contracts_security::Ccmp128Key;
 use oer_ieee80211_rsn::{Ptk, frames::RsnTxFrame};
 use oer_ieee80211_wire::security::rsn::Akm;
 
@@ -229,7 +230,7 @@ fn query_requests_are_protected_and_replays_cannot_create_another_response() {
 fn addba_on_a_pmf_link_requires_authentication_and_responds_with_protection_once() {
     use oer_ieee80211_wire::{
         block_ack::frame::{BlockAckAction, encode_addba_request, parse_block_ack_action},
-        ccmp::{Ccmp128Key, CcmpHeader, CcmpKeyId, CcmpPacketNumber},
+        ccmp::{CcmpHeader, CcmpKeyId, CcmpPacketNumber},
         sequence::SequenceNumber,
     };
     use oer_time::Clock;

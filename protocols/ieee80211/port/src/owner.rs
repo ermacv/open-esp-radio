@@ -22,7 +22,7 @@
 //! | a duplicate attempt identifier | the ticket, which comes back with the terminal |
 //! | an invalid length | [`MpduLength`] and [`ClassFrame`](crate::ClassFrame) |
 //! | no key slot, an unknown key | a key slot ([`Slot`](oer_radio_port::Slot) of the interface's own kind) and the installed key token an attempt names |
-//! | an invalid key | [`Ccmp128Key`](oer_ieee80211_wire::ccmp::Ccmp128Key), [`GroupKeyId`](oer_ieee80211_wire::ccmp::GroupKeyId), an [`IndividualAddress`] peer |
+//! | an invalid key | [`Ccmp128Key`](oer_ieee80211_contracts_security::Ccmp128Key), [`GroupKeyId`](oer_ieee80211_wire::ccmp::GroupKeyId), an [`IndividualAddress`] peer |
 //! | no Block Ack slot, an invalid agreement | a Block Ack slot, [`SupportedBlockAck`] and the agreement token that holds the slot |
 //! | an unsupported EDCA record or BSS color | [`SupportedEdca`], [`BssColor`] |
 //!

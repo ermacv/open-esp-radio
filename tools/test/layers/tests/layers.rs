@@ -804,6 +804,9 @@ build-driver = "1"
 enum ProtocolRole {
     Wire,
     Cipher,
+    /// A contract below the port and its backends, under `contracts/`: the
+    /// owner of what a protocol installs and a backend programs.
+    Contract,
     Port,
     Core,
     Model,
@@ -820,6 +823,9 @@ fn protocol_role(path: &str) -> Option<ProtocolRole> {
     let protocol = path.strip_prefix("protocols/")?;
     if ["radio", "network", "hil", "bridges"].contains(&protocol.split('/').next()?) {
         return None;
+    }
+    if protocol.rsplit('/').nth(1) == Some("contracts") {
+        return Some(ProtocolRole::Contract);
     }
     Some(match protocol.rsplit('/').next()? {
         // An event vocabulary and a HIL binding are no protocol layer.
@@ -984,7 +990,7 @@ fn role(path: &str) -> Option<Role> {
 /// the workspace package at `to_path` of role `to`. Roles outside `chips/`
 /// and HIL keep their own rules and are not limited here.
 fn role_allows(from: Role, to: Role, to_path: &str) -> bool {
-    use ProtocolRole::{Cipher, Core, Port, Runtime, Wire};
+    use ProtocolRole::{Cipher, Contract, Core, Port, Runtime, Wire};
     let family_driver = to == Role::HardwareDriver && to_path.starts_with("chips/espressif/");
     // What a driver, an adapter or a service stands on.
     let below_a_driver = matches!(
@@ -996,7 +1002,7 @@ fn role_allows(from: Role, to: Role, to_path: &str) -> bool {
             | Role::ObservationContract
             | Role::SharedVocabulary
             | Role::Portable
-            | Role::Protocol(Wire | Port | Cipher)
+            | Role::Protocol(Wire | Port | Cipher | Contract)
     );
     // Everything a composition may assemble: runtimes and backends together.
     let assembled = matches!(
@@ -1055,7 +1061,7 @@ fn role_allows(from: Role, to: Role, to_path: &str) -> bool {
         Role::Service => below_a_driver || to == Role::ServiceClient,
         Role::CoreSidePolicy => matches!(
             to,
-            Role::Protocol(Wire | Port | Cipher | Core)
+            Role::Protocol(Wire | Port | Cipher | Contract | Core)
                 | Role::Facts
                 | Role::ObservationContract
                 | Role::SharedVocabulary
@@ -1231,6 +1237,8 @@ fn protocol_roles_and_the_explicit_chip_roles_follow_the_layout() {
             ("runtime", ProtocolRole::Runtime),
             ("mac", ProtocolRole::Core),
             ("controller", ProtocolRole::Core),
+            ("contracts/security", ProtocolRole::Contract),
+            ("contracts/keys", ProtocolRole::Contract),
         ] {
             let path = format!("{prefix}/{directory}");
             assert_eq!(protocol_role(&path), Some(protocol));
@@ -1582,18 +1590,25 @@ fn portable_or_radio(path: &str) -> bool {
 }
 
 /// The layer table of `docs/repository-layout.md`: the frame cipher takes
-/// only the wire formats and portable support; the port takes the wire
-/// formats, portable support and the radio vocabulary; the reference model
-/// takes the port, the formats and the cipher beside them.
+/// only the wire formats, the security contract and portable support; the
+/// port takes the wire formats, the security contract, portable support and
+/// the radio vocabulary; the reference model takes the port, the formats,
+/// the contract and the cipher beside them.
 fn ieee80211_layer_allows(package: &str, name: &str, path: &str) -> bool {
+    const CONTRACT: &str = "oer-ieee80211-contracts-security";
     match package {
-        "oer-ieee80211-cipher" => name == "oer-ieee80211-wire" || path.starts_with("portable/"),
-        "oer-ieee80211-port" => name == "oer-ieee80211-wire" || portable_or_radio(path),
+        "oer-ieee80211-cipher" => {
+            ["oer-ieee80211-wire", CONTRACT].contains(&name) || path.starts_with("portable/")
+        }
+        "oer-ieee80211-port" => {
+            ["oer-ieee80211-wire", CONTRACT].contains(&name) || portable_or_radio(path)
+        }
         "oer-ieee80211-model" => {
             [
                 "oer-ieee80211-port",
                 "oer-ieee80211-wire",
                 "oer-ieee80211-cipher",
+                CONTRACT,
             ]
             .contains(&name)
                 || portable_or_radio(path)
@@ -2264,6 +2279,73 @@ fn ieee80211_foreign_edges(members: &[Member]) -> BTreeSet<Edge> {
                 .map(|dependency| (member.path.clone(), dependency.clone()))
         })
         .collect()
+}
+
+/// The workspace edges by which a protocol contract reaches another layer
+/// than portable support.
+fn contract_edges(members: &[Member], roles: &BTreeMap<String, Role>) -> BTreeSet<Edge> {
+    members
+        .iter()
+        .filter(|member| role(&member.path) == Some(Role::Protocol(ProtocolRole::Contract)))
+        .flat_map(|member| {
+            member
+                .dependencies
+                .iter()
+                .filter(|dependency| {
+                    roles
+                        .get(*dependency)
+                        .is_some_and(|role| *role != Role::Portable)
+                })
+                .map(|dependency| (member.path.clone(), dependency.clone()))
+        })
+        .collect()
+}
+
+#[test]
+fn a_protocol_contract_depends_on_no_protocol_package() {
+    let members = workspace_members();
+    assert!(
+        members
+            .iter()
+            .any(|member| member.path == "protocols/ieee80211/contracts/security")
+    );
+    let edges = contract_edges(&members, &workspace_roles());
+    assert!(edges.is_empty(), "{edges:?}");
+}
+
+#[test]
+fn a_contract_edge_to_a_wire_or_core_is_found_and_portable_support_is_not() {
+    let contract = member(
+        "protocols/ieee80211/contracts/security",
+        "oer-ieee80211-contracts-security",
+        false,
+        &[
+            "oer-wire",
+            "oer-ieee80211-wire",
+            "oer-ieee80211-sta",
+            "zeroize",
+        ],
+    );
+    let roles = BTreeMap::from([
+        ("oer-wire".to_owned(), Role::Portable),
+        (
+            "oer-ieee80211-wire".to_owned(),
+            Role::Protocol(ProtocolRole::Wire),
+        ),
+        (
+            "oer-ieee80211-sta".to_owned(),
+            Role::Protocol(ProtocolRole::Core),
+        ),
+    ]);
+    assert_eq!(
+        contract_edges(&[contract], &roles),
+        ["oer-ieee80211-sta", "oer-ieee80211-wire"]
+            .map(|dependency| (
+                "protocols/ieee80211/contracts/security".to_owned(),
+                dependency.to_owned()
+            ))
+            .into()
+    );
 }
 
 #[test]

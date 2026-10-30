@@ -23,6 +23,7 @@ heapless = "0.9.3"
 oer-ieee80211-arbiter = { path = "../arbiter" }
 oer-ieee80211-port = { path = "../port" }
 oer-ieee80211-wire = { path = "../wire" }
+oer-ieee80211-contracts-security = { path = "../contracts/security" }
 oer-ieee80211-rsn = { path = "../rsn" }
 oer-ieee80211-upper-mac = { path = "../upper-mac" }
 oer-time = { path = "../../../portable/time" }

@@ -19,7 +19,8 @@
 //! vectors, not additional published Annex J vectors. No C code is ported.
 
 use oer_ieee80211_cipher::ccmp_mpdu::{CcmpAssociation, CcmpMpduError};
-use oer_ieee80211_wire::{ccmp::Ccmp128Key, security::Spp};
+use oer_ieee80211_contracts_security::Ccmp128Key;
+use oer_ieee80211_wire::security::Spp;
 
 struct Vector {
     key: &'static str,

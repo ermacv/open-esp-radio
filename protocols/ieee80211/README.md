@@ -33,6 +33,7 @@ the portable runtime drives role services over that port.
 | `wire/src/sequence.rs` | Twelve-bit sequence numbers and modulo-4096 arithmetic |
 | `upper-mac/src/sequence.rs` | Separate management/non-QoS and per-TID TX sequence owners of the station, the access point and ESP-NOW |
 | `upper-mac/src/ccmp.rs` | CCMP transmit packet numbers and the receive replay frontier of every CCMP user |
+| `contracts/security` | The CCMP-128 temporal-key owner that RSN, the port, the software cipher and a backend share |
 | `rsn/src/pmksa.rs` | The PMKSA cache of the station and of the access point |
 | `rsn/src/authenticator.rs` | The access point's four-way handshake, with its SAE responder in `authenticator/sae.rs` |
 | `upper-mac/src/duplicate.rs` | Peer-scoped receive retry history |

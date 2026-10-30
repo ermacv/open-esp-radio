@@ -21,6 +21,7 @@ oer-crypto = { path = "../../../portable/crypto" }
 oer-ieee80211-cipher = { path = "../cipher" }
 oer-ieee80211-upper-mac = { path = "../upper-mac" }
 oer-ieee80211-wire = { path = "../wire" }
+oer-ieee80211-contracts-security = { path = "../contracts/security" }
 oer-time = { path = "../../../portable/time" }
 aes = { version = "0.8.4", default-features = false, features = ["zeroize"] }
 hmac = { version = "0.12.1", default-features = false }

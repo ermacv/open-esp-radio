@@ -33,8 +33,8 @@
 )]
 
 use oer_ieee80211_cipher::management_ccmp::{ManagementCcmpError, ManagementCcmpFrame};
+use oer_ieee80211_contracts_security::Ccmp128Key;
 use oer_ieee80211_upper_mac::ccmp::CcmpReplayFrontier;
-use oer_ieee80211_wire::ccmp::Ccmp128Key;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 /// The receive state of protected management frames under one pairwise key.

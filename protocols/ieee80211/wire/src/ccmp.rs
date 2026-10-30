@@ -1,12 +1,11 @@
-//! CCMP key material, packet-number values and eight-byte header codecs.
+//! CCMP packet-number values and eight-byte header codecs.
 //!
 //! Packet-number allocation and receive replay frontiers belong to the
 //! upper-MAC core. This module validates values and encodes or parses their
 //! wire representation without retaining an exchange's mutable state.
 //!
-//! [`Ccmp128Key`] is the shared zeroizing temporal-key owner. RSN constructs
-//! it from a borrowed PTK or GTK and moves it into lower-MAC installation;
-//! software CCMP and hardware programming borrow the same owner's bytes.
+//! The temporal key is not a format: its owner is
+//! `oer-ieee80211-contracts-security`.
 //!
 //! Received bytes reach this module; nothing here panics on them.
 #![deny(
@@ -17,10 +16,6 @@
     clippy::unreachable,
     clippy::arithmetic_side_effects
 )]
-
-mod key;
-
-pub use key::Ccmp128Key;
 
 pub const CCMP_HEADER_LEN: usize = 8;
 pub const CCMP_PACKET_NUMBER_MAX: u64 = (1_u64 << 48) - 1;

@@ -20,11 +20,8 @@
 )]
 
 use crate::ccm::{self, MIC_LEN, NONCE_LEN};
-use oer_ieee80211_wire::{
-    ccmp::{Ccmp128Key, CcmpHeader},
-    frame::DecodedHeader,
-    security::Spp,
-};
+use oer_ieee80211_contracts_security::Ccmp128Key;
+use oer_ieee80211_wire::{ccmp::CcmpHeader, frame::DecodedHeader, security::Spp};
 use zeroize::Zeroize;
 
 /// Why a protected data or management MPDU cannot be authenticated.

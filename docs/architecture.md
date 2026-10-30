@@ -119,7 +119,13 @@ contract), sans-IO cores and a `runtime`. Bluetooth LE has wire formats, a
 backend port, synchronous LL/controller cores, an executor-independent
 runtime and a reference model. IEEE 802.15.4 has `wire`, `port`, the `mac`
 core and a separate host reference `model`. A backend depends on its
-protocol's port, wire formats and implemented `cipher` only.
+protocol's port, wire formats, protocol contracts and implemented `cipher`
+only. A protocol contract (`protocols/<protocol>/contracts/*`) owns what a
+protocol installs and a backend programs, apart from the codecs and the
+cores; it depends on portable support alone. The IEEE 802.11 security
+contract owns the CCMP-128 temporal key: no `Clone` or owned extraction,
+redacted `Debug`, zeroized on an ordinary drop and retained by a
+quarantined owner until the chip resets.
 
 Each format belongs to its codec. IEEE 802.11 codecs carry an MSDU as its
 fields: destination, source, the EtherType of its RFC 1042 LLC/SNAP header

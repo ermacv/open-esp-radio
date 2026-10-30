@@ -4,7 +4,8 @@
 //! Hardware slot selection remains in the chip MAC crate; this module owns
 //! key material, slot identity, replacement, and zeroization.
 
-use oer_ieee80211_wire::ccmp::{Ccmp128Key, GroupKeyId};
+use oer_ieee80211_contracts_security::Ccmp128Key;
+use oer_ieee80211_wire::ccmp::GroupKeyId;
 
 use crate::{Ptk, RsnInterface, frames::RsnGtk};
 

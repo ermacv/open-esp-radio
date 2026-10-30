@@ -3,6 +3,7 @@
 //! port's phase types `Ty` define them.
 
 use core::marker::PhantomData;
+use oer_ieee80211_contracts_security::Ccmp128Key;
 use oer_ieee80211_port::association::{KEY_BANK_CAPACITY, KeyPool};
 use oer_ieee80211_port::{
     InterfaceKeys, InterfacePhase, KeyTypes, NumberedKey, PhaseTypes, TxBufferClass, TxBufferPool,
@@ -10,7 +11,7 @@ use oer_ieee80211_port::{
 use oer_ieee80211_upper_mac::ccmp::{
     CcmpPacketNumberStep, InstalledCcmpTxKey, install_ccmp_pairwise_key,
 };
-use oer_ieee80211_wire::{address::IndividualAddress, ccmp::Ccmp128Key};
+use oer_ieee80211_wire::address::IndividualAddress;
 use oer_radio_port::Slot;
 
 use crate::data::StaDataTokens;
