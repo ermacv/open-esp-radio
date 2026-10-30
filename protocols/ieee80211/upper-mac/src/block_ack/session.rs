@@ -1,5 +1,7 @@
 //! One bounded TX Block Ack negotiation and operational session.
 
+use crate::sequence::SequenceSpace;
+
 use oer_ieee80211_wire::block_ack::frame::{
     ADDBA_ACTION_BODY_LEN, AddbaRequestError, BlockAckAction, encode_addba_request,
     parse_block_ack_action,

@@ -4364,7 +4364,9 @@ pub struct ModelAggregate<
 impl<R, K, B: ModelComposition, S: AggregateState> ModelAggregate<'_, '_, '_, R, K, B, S> {
     fn acknowledgement_bit(&self, sequence: SequenceNumber) -> Option<u64> {
         let first = S::retain_head(&self.first, sequence);
-        let distance = first.forward_distance(sequence);
+        // The modulo-4096 distance (IEEE Std 802.11-2020, 10.24.7).
+        let distance =
+            SequenceNumber::from_low_bits(sequence.get().wrapping_sub(first.get())).get();
         let bit = 1_u64.checked_shl(u32::from(distance))?;
         (!self
             .subframes

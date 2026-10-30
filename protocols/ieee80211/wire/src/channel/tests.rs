@@ -90,41 +90,18 @@ fn five_gigahertz_channels_follow_the_global_operating_classes() {
 }
 
 #[test]
-fn channels_span_their_width_around_the_center() {
-    use oer_radio_regulatory::RadioChannel as _;
-    let six = Channel::ghz2_4(6, ChannelWidth::Mhz20).unwrap().span();
-    assert_eq!((six.low_khz(), six.high_khz()), (2_427_000, 2_447_000));
-    let ht40 = Channel::ghz2_4(1, ChannelWidth::Mhz40Above).unwrap().span();
-    assert_eq!((ht40.low_khz(), ht40.high_khz()), (2_402_000, 2_442_000));
-    let fourteen = Channel::ghz2_4(14, ChannelWidth::Mhz20).unwrap().span();
-    assert_eq!(fourteen.high_khz(), 2_494_000);
-}
-
-#[test]
-fn all_external_channel_codes_either_refuse_or_retain_the_exact_span() {
-    use oer_radio_regulatory::RadioChannel as _;
-    for band in [Band::Ghz2_4, Band::Ghz5] {
-        for number in 0..=u8::MAX {
-            for width in [
-                ChannelWidth::Mhz20,
-                ChannelWidth::Mhz40Above,
-                ChannelWidth::Mhz40Below,
-            ] {
-                let Ok(channel) = Channel::new(band, number, width) else {
-                    continue;
-                };
-                let span = channel.span();
-                let center = u32::from(channel.center_frequency_mhz()) * 1000;
-                let half = u32::from(width.bandwidth_mhz()) * 500;
-                assert_eq!(
-                    (span.low_khz(), span.high_khz()),
-                    (center - half, center + half)
-                );
-                if let Some(wifi) = channel.wifi_channel() {
-                    assert_eq!(wifi.span(), span);
-                }
-            }
-        }
+fn every_channel_selects_its_own_cell_of_an_exact_table() {
+    assert_eq!(Channel::ALL.len(), Channel::COUNT);
+    let numbers = Channel::ALL.map(|channel| (channel.band(), channel.number(), channel.width()));
+    for (index, channel) in Channel::ALL.into_iter().enumerate() {
+        assert_eq!(
+            channel.select(&numbers),
+            &(channel.band(), channel.number(), channel.width())
+        );
+        assert!(
+            Channel::ALL[..index].iter().all(|other| *other != channel),
+            "every geometry appears once"
+        );
     }
     assert!(Channel::ghz5(255, ChannelWidth::Mhz40Above).is_err());
     assert!(WifiChannel::mhz20(0).is_err());

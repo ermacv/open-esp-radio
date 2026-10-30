@@ -194,7 +194,7 @@ async fn install<W: Binding>(
     let channel = WifiChannel::new_2_4_ghz(config.channel, WifiChannelWidth::Mhz20)
         .map_err(|_| InitializationError::Channel)?;
     let initial = domain
-        .permit(channel)
+        .permit(oer_ieee80211_port::RegulatedChannel::from(channel))
         .map_err(|_| InitializationError::Channel)?;
     let limits = board::wifi_power_limits(
         i32::from(PhyConfig::production().highest_target_power_quarter_dbm()) * 25,

@@ -3,6 +3,68 @@
 
 use oer_ieee80211_wire::sequence::SequenceNumber;
 
+/// The modulo-4096 arithmetic of the sequence space.
+///
+/// SOURCE: IEEE Std 802.11-2020, 9.2.4.4.2 (sequence numbers wrap modulo
+/// 4096) and 10.24.7 (modular sequence distance and the half-space horizon).
+pub trait SequenceSpace: Sized {
+    /// Half of the sequence-number space: the comparison horizon.
+    const HALF_SPACE: u16;
+
+    /// The following sequence number.
+    fn next(self) -> Self;
+    /// `increment` numbers forward.
+    fn wrapping_add(self, increment: u16) -> Self;
+    /// `decrement` numbers back.
+    fn wrapping_sub(self, decrement: u16) -> Self;
+    /// Number of increments from `self` forward to `later`, in `0..4096`.
+    fn forward_distance(self, later: Self) -> u16;
+    /// Whether `self` strictly precedes `later` in modulo-4096 order: the
+    /// forward distance is nonzero and below [`Self::HALF_SPACE`].
+    fn precedes(self, later: Self) -> bool;
+}
+
+impl SequenceSpace for SequenceNumber {
+    const HALF_SPACE: u16 = SequenceNumber::MODULUS / 2;
+
+    fn next(self) -> Self {
+        next(self)
+    }
+
+    fn wrapping_add(self, increment: u16) -> Self {
+        wrapping_add(self, increment)
+    }
+
+    fn wrapping_sub(self, decrement: u16) -> Self {
+        SequenceNumber::from_low_bits(self.get().wrapping_sub(decrement))
+    }
+
+    fn forward_distance(self, later: Self) -> u16 {
+        forward_distance(self, later)
+    }
+
+    fn precedes(self, later: Self) -> bool {
+        let distance = self.forward_distance(later);
+        distance != 0 && distance < Self::HALF_SPACE
+    }
+}
+
+/// The following sequence number, for a constant context.
+const fn next(sequence: SequenceNumber) -> SequenceNumber {
+    wrapping_add(sequence, 1)
+}
+
+/// [`SequenceSpace::wrapping_add`] for a constant context.
+// u16 wrapping is congruent modulo this power-of-two space.
+pub const fn wrapping_add(sequence: SequenceNumber, increment: u16) -> SequenceNumber {
+    SequenceNumber::from_low_bits(sequence.get().wrapping_add(increment))
+}
+
+/// [`SequenceSpace::forward_distance`] for a constant context.
+pub const fn forward_distance(earlier: SequenceNumber, later: SequenceNumber) -> u16 {
+    SequenceNumber::from_low_bits(later.get().wrapping_sub(earlier.get())).get()
+}
+
 /// Monotonic twelve-bit owner for one IEEE 802.11 transmit sequence space.
 ///
 /// A sequence number is consumed for every newly encoded MPDU. Hardware
@@ -36,7 +98,7 @@ impl SequenceCounter {
     /// sequence space.
     pub const fn take(&mut self) -> SequenceNumber {
         let sequence = self.next;
-        self.next = sequence.next();
+        self.next = next(sequence);
         sequence
     }
 

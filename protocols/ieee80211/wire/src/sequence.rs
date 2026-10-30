@@ -1,22 +1,20 @@
-//! IEEE 802.11 sequence numbers (IEEE 802.11-2020 9.2.4.4.2) and their
-//! modulo-4096 arithmetic.
+//! IEEE 802.11 sequence numbers (IEEE 802.11-2020 9.2.4.4.2): the checked
+//! value of the Sequence Number subfield.
 //!
 //! Every constructor yields a twelve-bit value, so frame builders need no
-//! range validation and window arithmetic cannot forget to wrap.
+//! range validation. Their modulo-4096 arithmetic belongs to the MAC
+//! mechanisms (`oer_ieee80211_upper_mac::sequence::SequenceSpace`).
 
 /// One twelve-bit IEEE 802.11 sequence number.
 ///
 /// Sequence numbers are modular, so the type deliberately has no ordering;
-/// use [`Self::forward_distance`] or [`Self::precedes`] for window decisions.
+/// window decisions take the MAC's modular arithmetic.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Hash)]
 pub struct SequenceNumber(oer_wire::U16<12>);
 
 impl SequenceNumber {
     /// Size of the sequence-number space.
     pub const MODULUS: u16 = 4096;
-    /// Half of the sequence-number space: the comparison horizon of
-    /// IEEE 802.11-2020 10.24.7.
-    pub const HALF_SPACE: u16 = Self::MODULUS / 2;
     pub const ZERO: Self = Self(oer_wire::U16::ZERO);
     pub const MAX: Self = Self(oer_wire::U16::constant::<{ Self::MASK }>());
 
@@ -61,35 +59,6 @@ impl SequenceNumber {
                 .with_sequence(self.0)
                 .to_bytes(),
         )
-    }
-
-    /// The following sequence number.
-    pub const fn next(self) -> Self {
-        self.wrapping_add(1)
-    }
-
-    // SOURCE: IEEE Std 802.11-2020, 9.2.4.4.2: sequence numbers wrap
-    // modulo 4096; u16 wrapping is congruent modulo this power-of-two space.
-    pub const fn wrapping_add(self, increment: u16) -> Self {
-        Self::from_low_bits(self.get().wrapping_add(increment))
-    }
-
-    // SOURCE: IEEE Std 802.11-2020, 9.2.4.4.2 (modulo-4096 sequence space).
-    pub const fn wrapping_sub(self, decrement: u16) -> Self {
-        Self::from_low_bits(self.get().wrapping_sub(decrement))
-    }
-
-    /// Number of increments from `self` forward to `later`, in `0..4096`.
-    pub const fn forward_distance(self, later: Self) -> u16 {
-        // SOURCE: IEEE Std 802.11-2020, 10.24.7 (modular sequence distance).
-        later.get().wrapping_sub(self.get()) & Self::MASK
-    }
-
-    /// Whether `self` strictly precedes `later` in modulo-4096 order: the
-    /// forward distance is nonzero and below [`Self::HALF_SPACE`].
-    pub const fn precedes(self, later: Self) -> bool {
-        let distance = self.forward_distance(later);
-        distance != 0 && distance < Self::HALF_SPACE
     }
 }
 

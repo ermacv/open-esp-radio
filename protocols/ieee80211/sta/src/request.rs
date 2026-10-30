@@ -98,9 +98,11 @@ impl StationScanChannels {
             if !(1..=14).contains(&channel) {
                 return Err(StationScanChannelsError::InvalidPrimary(channel));
             }
-            let permitted = WifiChannel::mhz20(channel)
-                .ok()
-                .and_then(|wifi| domain.permit(wifi).ok());
+            let permitted = WifiChannel::mhz20(channel).ok().and_then(|wifi| {
+                domain
+                    .permit(oer_ieee80211_port::RegulatedChannel::from(wifi))
+                    .ok()
+            });
             let Some(permitted) = permitted else {
                 return Err(StationScanChannelsError::NotPermitted(channel));
             };
@@ -116,10 +118,11 @@ impl StationScanChannels {
             passive: 0,
         };
         for channel in 1..=14_u8 {
-            if let Some(permitted) = WifiChannel::mhz20(channel)
-                .ok()
-                .and_then(|wifi| domain.permit(wifi).ok())
-            {
+            if let Some(permitted) = WifiChannel::mhz20(channel).ok().and_then(|wifi| {
+                domain
+                    .permit(oer_ieee80211_port::RegulatedChannel::from(wifi))
+                    .ok()
+            }) {
                 set.insert(channel, permitted.initiate());
             }
         }

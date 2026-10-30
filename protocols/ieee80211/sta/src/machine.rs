@@ -4391,24 +4391,36 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
         let policy = self.policy();
         let candidates = || {
             (*self.scan)
-                .records()
-                .filter(move |record| record.ssid_bytes() == ssid)
-                .filter(move |record| select_association_rsn(record, policy).is_ok())
+                .observations()
+                .filter(move |observation| observation.record.ssid_bytes() == ssid)
+                .filter(move |observation| {
+                    select_association_rsn(&observation.record, policy).is_ok()
+                })
         };
-        let Some(strongest) = candidates().max_by_key(|record| record.rssi).copied() else {
+        let Some(strongest) = candidates()
+            .max_by_key(|observation| observation.rssi)
+            .copied()
+        else {
             return leave_unkeyed(StaDisconnectReason::NotFound { partial });
         };
         let margin = i16::from(self.config.access_point_margin_db);
+        // Within the margin of the strongest: a known level no more than the
+        // margin below it; an unknown level only beside an unknown strongest.
+        let within_margin = |rssi: Option<i8>| match (rssi, strongest.rssi) {
+            (Some(rssi), Some(strongest)) => {
+                i16::from(rssi) >= i16::from(strongest).saturating_sub(margin)
+            }
+            (_, None) => true,
+            (None, Some(_)) => false,
+        };
         let beside = access_point_channel.and_then(|channel| {
             candidates()
-                .filter(|record| record.channel == channel.channel().number())
-                .filter(|record| {
-                    i16::from(record.rssi) >= i16::from(strongest.rssi).saturating_sub(margin)
-                })
-                .max_by_key(|record| record.rssi)
+                .filter(|observation| observation.record.channel == channel.channel().number())
+                .filter(|observation| within_margin(observation.rssi))
+                .max_by_key(|observation| observation.rssi)
                 .copied()
         });
-        let access_point = beside.unwrap_or(strongest);
+        let access_point = beside.unwrap_or(strongest).record;
         let Ok(rsn) = select_association_rsn(&access_point, policy) else {
             return leave_unkeyed(StaDisconnectReason::NotFound { partial });
         };

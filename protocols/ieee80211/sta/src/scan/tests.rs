@@ -1,4 +1,4 @@
-use super::{ScanCompleteness, ScanObservation, ScanTable, best_matching_ssid};
+use super::{BssObservation, ScanCompleteness, ScanObservation, ScanTable, best_matching_ssid};
 use oer_ieee80211_wire::{
     ht::{HT_CAPABILITY_IE_LEN, HT_OPERATION_IE_LEN},
     scan::{
@@ -15,10 +15,10 @@ fn a_zero_bssid_cannot_enter_the_scan_table() {
     let mut frame = [0_u8; 42];
     frame[0] = 0x80;
     frame[36..42].copy_from_slice(&[0, 4, b't', b'e', b's', b't']);
-    assert!(parse_management(&frame, 1, -40).is_none());
+    assert!(parse_management(&frame, 1).is_none());
     let mut table = ScanTable::<1>::new();
     assert_eq!(
-        table.observe_management(&frame, 1, -40, None),
+        table.observe_management(&frame, 1, Some(-40), None),
         ScanObservation::Ignored
     );
     assert_eq!(table.summary().records, 0);
@@ -35,17 +35,17 @@ fn vacant_scan_slots_never_appear_as_observations() {
     for index in 0..2 {
         frame[21] = index as u8 + 1;
         assert_eq!(
-            table.observe_management(&frame, 6, -40, None),
+            table.observe_management(&frame, 6, Some(-40), None),
             ScanObservation::Inserted { index }
         );
     }
     assert_eq!(table.records().count(), 2);
-    assert!(best_matching_ssid(table.records(), b"test").is_some());
+    assert!(best_matching_ssid(table.observations(), b"test").is_some());
     table.clear();
     assert_eq!(table.records().count(), 0);
-    assert!(best_matching_ssid(table.records(), b"test").is_none());
+    assert!(best_matching_ssid(table.observations(), b"test").is_none());
     assert_eq!(
-        table.observe_management(&frame, 6, -40, None),
+        table.observe_management(&frame, 6, Some(-40), None),
         ScanObservation::Inserted { index: 0 }
     );
     assert_eq!(table.records().count(), 1);
@@ -63,17 +63,18 @@ fn get_returns_the_record_an_observation_names() {
     frame[16..22].copy_from_slice(&[2, 0, 0, 0, 0, 1]);
     frame[36..42].copy_from_slice(&[0, 4, b't', b'e', b's', b't']);
     assert!(table.get(0).is_none());
-    let ScanObservation::Inserted { index } = table.observe_management(&frame, 6, -40, None) else {
+    let ScanObservation::Inserted { index } = table.observe_management(&frame, 6, Some(-40), None)
+    else {
         panic!("the first observation is inserted");
     };
     frame[21] = 2;
     let ScanObservation::Inserted { index: second } =
-        table.observe_management(&frame, 6, -50, None)
+        table.observe_management(&frame, 6, Some(-50), None)
     else {
         panic!("a second BSSID is inserted");
     };
     assert_eq!(table.get(index).unwrap().bssid.get(), [2, 0, 0, 0, 0, 1]);
-    assert_eq!(table.get(second).unwrap().rssi, -50);
+    assert_eq!(table.observations().nth(second).unwrap().rssi, Some(-50));
     assert!(table.get(2).is_none());
     assert!(table.get(usize::MAX).is_none());
     table.clear();
@@ -86,10 +87,10 @@ fn a_group_bssid_cannot_enter_the_scan_table() {
     frame[0] = 0x80;
     frame[16..22].copy_from_slice(&[3, 2, 3, 4, 5, 6]);
     frame[36..42].copy_from_slice(&[0, 4, b't', b'e', b's', b't']);
-    assert!(parse_management(&frame, 1, -40).is_none());
+    assert!(parse_management(&frame, 1).is_none());
     frame[16] = 2;
     assert_eq!(
-        parse_management(&frame, 1, -40).unwrap().bssid.get(),
+        parse_management(&frame, 1).unwrap().bssid.get(),
         [2, 2, 3, 4, 5, 6]
     );
 }
@@ -101,19 +102,19 @@ fn a_record_keeps_the_time_of_its_latest_observation() {
     frame[0] = 0x80;
     frame[16..22].copy_from_slice(&[2, 2, 3, 4, 5, 6]);
     frame[36..42].copy_from_slice(&[0, 4, b't', b'e', b's', b't']);
-    table.observe_management(&frame, 1, -70, Some(Instant::from_micros(1_000)));
+    table.observe_management(&frame, 1, Some(-70), Some(Instant::from_micros(1_000)));
     assert_eq!(
         table.observations().next().unwrap().received_at,
         Some(Instant::from_micros(1_000))
     );
-    table.observe_management(&frame, 1, -60, Some(Instant::from_micros(2_500)));
+    table.observe_management(&frame, 1, Some(-60), Some(Instant::from_micros(2_500)));
     assert_eq!(
         table.observations().next().unwrap().received_at,
         Some(Instant::from_micros(2_500))
     );
     // The record's TSF comes from the latest frame, so does its reception
     // time, even when the receiver has none for it.
-    table.observe_management(&frame, 1, -60, None);
+    table.observe_management(&frame, 1, Some(-60), None);
     assert_eq!(table.observations().next().unwrap().received_at, None);
 }
 
@@ -157,7 +158,7 @@ fn parses_beacon_into_owned_bounded_record() {
     frame[36..42].copy_from_slice(&[0, 4, b't', b'e', b's', b't']);
     frame[42..45].copy_from_slice(&[3, 1, 11]);
     frame[45..47].copy_from_slice(&[48, 0]);
-    let record = parse_management(&frame[..47], 3, -42).unwrap();
+    let record = parse_management(&frame[..47], 3).unwrap();
     assert_eq!(record.ssid_bytes(), b"test");
     assert_eq!(
         record.bssid,
@@ -167,7 +168,6 @@ fn parses_beacon_into_owned_bounded_record() {
         .unwrap()
     );
     assert_eq!(record.channel, 11);
-    assert_eq!(record.rssi, -42);
     assert_eq!(record.timestamp.as_micros(), 0x0123_4567_89ab_cdef);
     assert_eq!(record.beacon_interval_tu, 100);
     assert!(record.privacy);
@@ -185,8 +185,8 @@ fn ht_control_beacon() -> std::vec::Vec<u8> {
 
 #[test]
 fn a_beacon_with_ht_control_parses_its_fixed_fields_after_it() {
-    let plain = parse_management(&rich_frame(8), 1, -40).unwrap();
-    let record = parse_management(&ht_control_beacon(), 1, -40).unwrap();
+    let plain = parse_management(&rich_frame(8), 1).unwrap();
+    let record = parse_management(&ht_control_beacon(), 1).unwrap();
     assert_eq!(record.ssid_bytes(), b"test");
     assert_eq!(record.beacon_interval_tu, 100);
     assert_eq!(record.timestamp.as_micros(), 0x0123_4567_89ab_cdef);
@@ -201,14 +201,14 @@ fn a_beacon_whose_ht_control_leaves_no_fixed_fields_is_ignored() {
     // The header with its HT Control field and eleven of the twelve fixed
     // bytes.
     frame.truncate(24 + 4 + 11);
-    assert!(parse_management(&frame, 1, -40).is_none());
+    assert!(parse_management(&frame, 1).is_none());
 }
 
 #[test]
 fn a_management_frame_of_another_protocol_version_is_ignored() {
     let mut frame = rich_frame(8);
     frame[0] |= 0x01;
-    assert!(parse_management(&frame, 1, -40).is_none());
+    assert!(parse_management(&frame, 1).is_none());
 }
 
 #[test]
@@ -218,7 +218,7 @@ fn retains_erp_use_protection_without_confusing_the_element_header() {
     frame[16..22].copy_from_slice(&[2, 2, 3, 4, 5, 6]);
     frame[36..40].copy_from_slice(&[0, 2, b'a', b'p']);
     frame[40..43].copy_from_slice(&[42, 1, 0x03]);
-    let record = parse_management(&frame, 6, -42).unwrap();
+    let record = parse_management(&frame, 6).unwrap();
     assert_eq!(record.erp_information(), Some(0x03));
 }
 
@@ -230,7 +230,6 @@ fn ht40_geometry_requires_matching_capability_and_operation() {
         )
         .unwrap(),
         6,
-        -40,
     );
     let mut capability = [0; HT_CAPABILITY_IE_LEN];
     capability[0..4].copy_from_slice(&[45, 26, 0x02, 0]);
@@ -262,7 +261,6 @@ fn ht_short_guard_intervals_are_read_from_capability_info() {
         )
         .unwrap(),
         6,
-        -40,
     );
     let mut capability = [0; HT_CAPABILITY_IE_LEN];
     capability[0..4].copy_from_slice(&[45, 26, 1 << 5, 0]);
@@ -284,19 +282,19 @@ fn table_deduplicates_by_bssid_and_retains_latest_record() {
     frame[16..22].copy_from_slice(&[2, 2, 3, 4, 5, 6]);
     frame[36..42].copy_from_slice(&[0, 4, b't', b'e', b's', b't']);
     assert_eq!(
-        table.observe_management(&frame, 1, -70, None),
+        table.observe_management(&frame, 1, Some(-70), None),
         ScanObservation::Inserted { index: 0 }
     );
     assert_eq!(
-        table.observe_management(&frame, 1, -30, None),
+        table.observe_management(&frame, 1, Some(-30), None),
         ScanObservation::Updated { index: 0 }
     );
-    assert_eq!(table.records().next().unwrap().rssi, -30);
+    assert_eq!(table.observations().next().unwrap().rssi, Some(-30));
     assert_eq!(
-        table.observe_management(&frame, 1, -60, None),
+        table.observe_management(&frame, 1, Some(-60), None),
         ScanObservation::Updated { index: 0 }
     );
-    assert_eq!(table.records().next().unwrap().rssi, -60);
+    assert_eq!(table.observations().next().unwrap().rssi, Some(-60));
     assert_eq!(table.summary().records, 1);
     assert_eq!(table.summary().completeness, ScanCompleteness::Complete);
 }
@@ -314,7 +312,7 @@ fn weaker_latest_beacon_replaces_stale_ht_protection() {
     ]);
 
     assert_eq!(
-        table.observe_management(&frame, 11, -30, None),
+        table.observe_management(&frame, 11, Some(-30), None),
         ScanObservation::Inserted { index: 0 }
     );
     assert_eq!(
@@ -330,7 +328,7 @@ fn weaker_latest_beacon_replaces_stale_ht_protection() {
 
     frame[49] = 0;
     assert_eq!(
-        table.observe_management(&frame, 11, -60, None),
+        table.observe_management(&frame, 11, Some(-60), None),
         ScanObservation::Updated { index: 0 }
     );
     assert_eq!(
@@ -343,7 +341,7 @@ fn weaker_latest_beacon_replaces_stale_ht_protection() {
             & 0x03,
         0
     );
-    assert_eq!(table.records().next().unwrap().rssi, -60);
+    assert_eq!(table.observations().next().unwrap().rssi, Some(-60));
 }
 
 #[test]
@@ -354,7 +352,7 @@ fn latest_hidden_beacon_preserves_probe_response_ssid() {
     probe[16..22].copy_from_slice(&[2, 2, 3, 4, 5, 6]);
     probe[36..42].copy_from_slice(&[0, 4, b't', b'e', b's', b't']);
     assert_eq!(
-        table.observe_management(&probe, 1, -40, None),
+        table.observe_management(&probe, 1, Some(-40), None),
         ScanObservation::Inserted { index: 0 }
     );
 
@@ -363,11 +361,11 @@ fn latest_hidden_beacon_preserves_probe_response_ssid() {
     beacon[16..22].copy_from_slice(&[2, 2, 3, 4, 5, 6]);
     beacon[36..38].copy_from_slice(&[0, 0]);
     assert_eq!(
-        table.observe_management(&beacon, 1, -55, None),
+        table.observe_management(&beacon, 1, Some(-55), None),
         ScanObservation::Updated { index: 0 }
     );
     assert_eq!(table.records().next().unwrap().ssid_bytes(), b"test");
-    assert_eq!(table.records().next().unwrap().rssi, -55);
+    assert_eq!(table.observations().next().unwrap().rssi, Some(-55));
 }
 
 #[test]
@@ -378,18 +376,31 @@ fn strongest_exact_ssid_ignores_invalid_channel() {
         )
         .unwrap(),
         6,
-        -40,
     ); 3];
-    for (record, rssi, channel) in [(-70, 1), (-25, 6), (-10, 0)]
-        .into_iter()
-        .zip(&mut records)
-        .map(|((rssi, channel), record)| (record, rssi, channel))
-    {
+    let mut observations = [None; 3];
+    for ((record, observation), (rssi, channel)) in records.iter_mut().zip(&mut observations).zip([
+        (Some(-70), 1),
+        (Some(-25), 6),
+        (Some(-10), 0),
+    ]) {
         record.set_ssid(b"test").unwrap();
-        record.rssi = rssi;
         record.channel = channel;
+        *observation = Some(BssObservation {
+            record: *record,
+            rssi,
+            received_at: None,
+        });
     }
-    assert_eq!(best_matching_ssid(&records, b"test").unwrap().channel, 6);
+    let observations = observations.map(Option::unwrap);
+    assert_eq!(
+        best_matching_ssid(&observations, b"test").unwrap().channel,
+        6
+    );
+    // An unknown level ranks below every known one.
+    let mut unknown = observations;
+    unknown[1].rssi = None;
+    unknown[0].rssi = Some(-90);
+    assert_eq!(best_matching_ssid(&unknown, b"test").unwrap().channel, 1);
 }
 
 /// A beacon (or, with `subtype` 5, a probe response) carrying every element
@@ -482,9 +493,14 @@ fn parse_management_never_panics(count: usize) {
     let seeds = scan_seeds();
     let seeds: std::vec::Vec<&[u8]> = seeds.iter().map(std::vec::Vec::as_slice).collect();
     oer_ieee80211_wire::fuzz::inputs(&seeds, count, 320, |frame| {
-        if let Some(record) = parse_management(frame, 6, -40) {
+        if let Some(record) = parse_management(frame, 6) {
             read_record(&record);
-            let _ = best_matching_ssid([&record], b"test");
+            let observation = BssObservation {
+                record,
+                rssi: None,
+                received_at: None,
+            };
+            let _ = best_matching_ssid([&observation], b"test");
         }
     });
 }
@@ -508,7 +524,9 @@ fn observe_management_never_panics(count: usize) {
     let mut observed = 0_u32;
     oer_ieee80211_wire::fuzz::inputs(&seeds, count, 320, |frame| {
         rssi = rssi.wrapping_sub(7);
-        if table.observe_management(frame, 1, rssi, Some(Instant::from_micros(1)))
+        // Every seventh frame has no signal level.
+        let level = (rssi % 7 != 0).then_some(rssi);
+        if table.observe_management(frame, 1, level, Some(Instant::from_micros(1)))
             != ScanObservation::Ignored
         {
             observed += 1;
@@ -558,7 +576,7 @@ fn he_operation_readers_never_panic_on_received_bytes_full() {
 
 #[test]
 fn a_rich_frame_keeps_every_retained_element() {
-    let record = parse_management(&rich_frame(8), 1, -40).unwrap();
+    let record = parse_management(&rich_frame(8), 1).unwrap();
     assert!(!record.information_elements_truncated);
     assert_eq!(record.channel, 6);
     assert_eq!(record.supported_rates_bytes().len(), 8);
@@ -598,7 +616,7 @@ fn an_oversized_element_marks_the_record_truncated_and_keeps_the_stored_one() {
     // A 30-byte RSNXE exceeds its 16-byte capacity.
     frame.extend_from_slice(&[244, 28]);
     frame.extend_from_slice(&[0; 28]);
-    let record = parse_management(&frame, 1, -40).unwrap();
+    let record = parse_management(&frame, 1).unwrap();
     assert!(record.information_elements_truncated);
     assert_eq!(record.rsnxe_bytes(), &[244, 1, 0x20]);
 }
@@ -652,7 +670,6 @@ fn a_setter_refuses_a_value_longer_than_its_buffer_and_keeps_the_record() {
         )
         .unwrap(),
         6,
-        -40,
     );
     for (set, get, capacity) in setters {
         let mut record = empty;
@@ -683,12 +700,12 @@ fn a_full_table_drops_a_new_bss_and_keeps_its_records() {
     let mut table = ScanTable::<1>::new();
     let mut frame = rich_frame(8);
     assert_eq!(
-        table.observe_management(&frame, 1, -40, None),
+        table.observe_management(&frame, 1, Some(-40), None),
         ScanObservation::Inserted { index: 0 }
     );
     frame[21] = 7;
     assert_eq!(
-        table.observe_management(&frame, 1, -40, None),
+        table.observe_management(&frame, 1, Some(-40), None),
         ScanObservation::Dropped
     );
     assert_eq!(table.summary().records, 1);

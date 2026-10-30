@@ -1,4 +1,5 @@
 use super::*;
+use crate::sequence::SequenceSpace;
 
 const WINDOW: usize = 64;
 const SLOTS: usize = 34;

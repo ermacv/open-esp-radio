@@ -88,6 +88,8 @@ pub mod extensions;
 pub mod operation;
 pub mod owner;
 pub mod phase;
+pub mod regulated;
+pub use regulated::RegulatedChannel;
 pub mod rx;
 pub mod tsf;
 pub mod tx;

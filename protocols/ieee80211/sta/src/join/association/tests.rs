@@ -1,5 +1,6 @@
 use super::super::test_support::{BSSID, LOCAL, association_response, deauthentication};
 use super::*;
+use oer_ieee80211_upper_mac::sequence::SequenceSpace;
 use oer_ieee80211_wire::station::StaDisconnectKind;
 use oer_time::{Duration, Instant};
 

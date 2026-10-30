@@ -36,7 +36,17 @@ fn non_he_modes_refuse_he_power_elements() {
 /// The selection a WPA2-Personal station makes for a PSK access point
 /// without RSN capabilities.
 fn wpa2_rsn() -> SelectedRsn {
-    SelectedRsn::personal(AssociationAkm::Psk, Spp::NotNegotiated, false)
+    SelectedRsn::rsn(
+        oer_ieee80211_wire::security::RsnAssociation {
+            akm: AssociationAkm::Psk,
+            spp: Spp::NotNegotiated,
+            management: None,
+            pmkid: None,
+        },
+        // SPP A-MSDU capable.
+        0x0400,
+        None,
+    )
 }
 
 fn access_point_with_rsn(akms: &[[u8; 4]], capabilities: u16) -> ScanRecord {
@@ -46,7 +56,6 @@ fn access_point_with_rsn(akms: &[[u8; 4]], capabilities: u16) -> ScanRecord {
         )
         .unwrap(),
         6,
-        -40,
     );
     record.set_ssid(b"test").unwrap();
     record.bssid = oer_ieee80211_wire::address::Bssid::new(

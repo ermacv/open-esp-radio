@@ -14,7 +14,6 @@ test-support = []
 
 [dependencies]
 oer-wire = { path = "../../../portable/wire" }
-oer-radio-regulatory = { path = "../../radio/regulatory" }
 
 [dev-dependencies]
 tempfile = "=3.27.0"

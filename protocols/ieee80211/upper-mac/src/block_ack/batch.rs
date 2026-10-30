@@ -1,4 +1,5 @@
 //! Affine completion of a bounded 32-slot MPDU batch.
+use crate::sequence::SequenceSpace;
 use oer_ieee80211_port::BlockAckReport;
 use oer_ieee80211_wire::sequence::SequenceNumber;
 const TX_AMPDU_SLOT_CAPACITY: usize = 32;

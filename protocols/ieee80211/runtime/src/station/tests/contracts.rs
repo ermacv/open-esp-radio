@@ -45,7 +45,7 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps24, ServiceContext
         } = resources;
         let (arbiter, place, absence) = PortArbiter::<ServicePort<Id>>::new(
             ArbiterPolicy::DEFAULT.checked(<ModelBackend<Id, ModelCaps24, ServiceContexts> as LowerMacBackend<Id>>::PUBLICATION_BOUND).unwrap(),
-            SupportedChannel::new(oer_radio_regulatory::TEST_DOMAIN.permit(channel6()).unwrap()).unwrap(), arbiter_authority, gate,
+            SupportedChannel::new(oer_radio_regulatory::TEST_DOMAIN.permit(oer_ieee80211_port::RegulatedChannel::from(channel6())).unwrap()).unwrap(), arbiter_authority, gate,
         );
         let mut tickets = tickets.into_iter();
         let station_tickets: [_; 4] = core::array::from_fn(|_| tickets.next().unwrap());
@@ -112,7 +112,7 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps24, ServiceContext
                 .restart(
                     SupportedChannel::new(
                         oer_radio_regulatory::TEST_DOMAIN
-                            .permit(channel6())
+                            .permit(oer_ieee80211_port::RegulatedChannel::from(channel6()))
                             .unwrap(),
                     )
                     .unwrap(),

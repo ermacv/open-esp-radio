@@ -131,7 +131,9 @@ pub fn verify<E: AsRef<[End]>>(case: Case, trace: Trace<E>) -> Result<(), Violat
                     bar.addresses[0],
                     bar.addresses[1],
                     bar.tid,
-                    bar.head.wrapping_add(1),
+                    oer_ieee80211_wire::sequence::SequenceNumber::from_low_bits(
+                        bar.head.get().wrapping_add(1),
+                    ),
                 ) => {}
         (Case::Reformation | Case::DeliveryBeforeExpiry, _) | (_, Some(_)) => {
             return Err(Violation::Bar);

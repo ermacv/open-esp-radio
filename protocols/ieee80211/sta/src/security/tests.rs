@@ -222,7 +222,6 @@ fn open_ap_needs_no_security_ie() {
         )
         .unwrap(),
         6,
-        -40,
     );
     record.set_supported_rates(&[0x82]).unwrap();
     assert!(
@@ -253,7 +252,6 @@ fn access_point_with_rsn(akms: &[[u8; 4]], capabilities: u16) -> ScanRecord {
         )
         .unwrap(),
         6,
-        -40,
     );
     record.set_ssid(b"test").unwrap();
     record.bssid = oer_ieee80211_wire::address::Bssid::new(
@@ -369,4 +367,33 @@ fn a_psk_only_owner_never_selects_sae_or_an_open_network() {
         select_association_rsn(&sae, StaSecurityPolicy::Wpa2Psk),
         Err(StaSecurityError::UnsupportedAkm)
     );
+}
+
+#[test]
+fn a_personal_selection_advertises_spp_and_the_protection_it_negotiates() {
+    use oer_ieee80211_wire::security::{AssociationAkm, AssociationSecurity, SaePwe, Spp};
+    let psk = super::personal_rsn(AssociationAkm::Psk, Spp::NotNegotiated, false);
+    // SPP A-MSDU capable only, no RSNXE.
+    assert_eq!(&psk.as_bytes()[20..22], &[0, 4]);
+    assert_eq!(psk.as_bytes().len(), 22);
+    assert!(!psk.security().protects_management());
+
+    let sae = super::personal_rsn(
+        AssociationAkm::Sae(SaePwe::HashToElement),
+        Spp::Negotiated,
+        true,
+    );
+    // MFPC, MFPR and SPP A-MSDU capable, then the RSNXE announcing H2E.
+    assert_eq!(&sae.as_bytes()[20..22], &[0xc0, 4]);
+    assert_eq!(&sae.as_bytes()[22..], &[244, 1, 0x20]);
+    let AssociationSecurity::Rsn(association) = sae.security() else {
+        panic!("a personal association");
+    };
+    assert_eq!(association.spp, Spp::Negotiated);
+    assert!(sae.security().protects_management());
+
+    // Management protection without SAE: MFPC, no MFPR, no RSNXE.
+    let psk_mfp = super::personal_rsn(AssociationAkm::PskSha256, Spp::NotNegotiated, true);
+    assert_eq!(&psk_mfp.as_bytes()[20..22], &[0x80, 4]);
+    assert_eq!(psk_mfp.as_bytes().len(), 22);
 }

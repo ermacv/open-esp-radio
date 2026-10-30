@@ -138,7 +138,7 @@ impl Config {
             .map_err(|_| InitializationError::Channel)?;
         let supported = oer_ieee80211_port::SupportedChannel::new(
             domain
-                .permit(channel_value)
+                .permit(oer_ieee80211_port::RegulatedChannel::from(channel_value))
                 .map_err(|_| InitializationError::Channel)?,
         )
         .ok_or(InitializationError::Channel)?;
@@ -189,7 +189,9 @@ impl<W: Binding> Profile<W> {
                 let Ok(ch) = oer_ieee80211_port::Channel::ghz2_4(n, WifiChannelWidth::Mhz20) else {
                     continue;
                 };
-                if let Ok(p) = config.domain.permit(ch)
+                if let Ok(p) = config
+                    .domain
+                    .permit(oer_ieee80211_port::RegulatedChannel::from(ch))
                     && let Some(c) = oer_ieee80211_port::SupportedChannel::<Caps>::new(p)
                 {
                     channels.push(c).map_err(|_| InitializationError::Channel)?;

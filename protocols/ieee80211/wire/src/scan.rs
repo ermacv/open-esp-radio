@@ -86,7 +86,6 @@ pub struct ScanRecord {
     /// Individual infrastructure BSS address, validated while parsing.
     pub bssid: Bssid,
     pub channel: u8,
-    pub rssi: i8,
     pub privacy: bool,
     pub rsn: bool,
     /// Number of complete RSN elements observed in this bounded record.
@@ -119,15 +118,14 @@ pub struct ScanRecord {
 }
 
 impl ScanRecord {
-    /// An observation's identity and signal sample, before its information
-    /// elements are decoded. Empty table slots use `None`, never this record.
-    pub const fn new(bssid: Bssid, channel: u8, rssi: i8) -> Self {
+    /// A record's identity, before its information elements are decoded.
+    /// Empty table slots use `None`, never this record.
+    pub const fn new(bssid: Bssid, channel: u8) -> Self {
         Self {
             ssid: [0; 32],
             ssid_len: oer_wire::PrefixLength::ZERO,
             bssid,
             channel,
-            rssi,
             privacy: false,
             rsn: false,
             rsn_ie_count: 0,
@@ -342,7 +340,7 @@ impl ScanRecord {
 /// with the Order bit set carries its HT Control field before them. They
 /// are checked as one array before interpreting the variable information
 /// elements.
-pub fn parse_management(frame: &[u8], fallback_channel: u8, rssi: i8) -> Option<ScanRecord> {
+pub fn parse_management(frame: &[u8], fallback_channel: u8) -> Option<ScanRecord> {
     let header = crate::frame::DecodedHeader::decode(frame)?;
     let control = header.control();
     if control.is_data() || !matches!(control.subtype(), 5 | 8) {
@@ -355,7 +353,7 @@ pub fn parse_management(frame: &[u8], fallback_channel: u8, rssi: i8) -> Option<
     let [b0, b1, b2, b3, b4, b5] = header.address3();
 
     let bssid = Bssid::new(IndividualAddress::new([b0, b1, b2, b3, b4, b5])?)?;
-    let mut record = ScanRecord::new(bssid, fallback_channel, rssi);
+    let mut record = ScanRecord::new(bssid, fallback_channel);
     record.timestamp = crate::tsf::TsfTimestamp::from_bytes([t0, t1, t2, t3, t4, t5, t6, t7]);
     record.beacon_interval_tu = u16::from_le_bytes([i0, i1]);
     record.capability_info = u16::from_le_bytes([c0, c1]);

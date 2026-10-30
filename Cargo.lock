@@ -1835,6 +1835,7 @@ dependencies = [
  "oer-bluetooth-le-port",
  "oer-esp32s31-hal",
  "oer-esp32s31-phy",
+ "oer-ieee80211-port",
  "oer-ieee80211-wire",
  "oer-memory",
  "oer-radio-regulatory",
@@ -1852,6 +1853,7 @@ dependencies = [
  "oer-esp32s31-phy",
  "oer-esp32s31-radio-client",
  "oer-espressif-coex",
+ "oer-ieee80211-port",
  "oer-ieee80211-wire",
  "oer-memory",
  "oer-radio-regulatory",
@@ -2228,6 +2230,7 @@ dependencies = [
  "oer-espressif-interrupt-table",
  "oer-espressif-staged-runtime",
  "oer-espressif-usb-serial-jtag",
+ "oer-ieee80211-port",
  "oer-ieee80211-wire",
  "oer-memory",
  "oer-radio-regulatory",
@@ -2542,7 +2545,6 @@ dependencies = [
 name = "oer-ieee80211-wire"
 version = "0.1.0"
 dependencies = [
- "oer-radio-regulatory",
  "oer-wire",
  "tempfile",
 ]

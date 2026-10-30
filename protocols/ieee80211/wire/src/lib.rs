@@ -28,7 +28,7 @@
 //! ROM ABI dependency.
 //!
 //! [`address::Bssid`] proves a nonzero individual address.
-//! [`scan::ScanRecord::new`] requires the actual BSSID, channel and RSSI.
+//! [`scan::ScanRecord::new`] requires the actual BSSID and channel.
 //! The station core owns the BSS observation table.
 //!
 //! Management and A-MSDU construction retain immutable frame parts through

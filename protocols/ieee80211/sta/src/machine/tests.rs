@@ -225,7 +225,9 @@ fn unwrap(request: StaKeyUnwrapRequest) -> crate::machine::StaKeyUnwrapResponse 
 fn channel(number: u8) -> SupportedChannel<Caps> {
     SupportedChannel::new(
         oer_radio_regulatory::TEST_DOMAIN
-            .permit(Channel::ghz2_4(number, ChannelWidth::Mhz20).unwrap())
+            .permit(oer_ieee80211_port::RegulatedChannel::from(
+                Channel::ghz2_4(number, ChannelWidth::Mhz20).unwrap(),
+            ))
             .unwrap(),
     )
     .unwrap()

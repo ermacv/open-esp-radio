@@ -2281,6 +2281,72 @@ fn ieee80211_foreign_edges(members: &[Member]) -> BTreeSet<Edge> {
         .collect()
 }
 
+/// The codecs whose every normal and build dependency is `oer-wire`.
+const STRICT_CODECS: [&str; 2] = ["protocols/ieee80211/wire", "protocols/network/wire"];
+
+/// A strict codec's dependencies other than `oer-wire`, normal or build,
+/// optional or target-specific.
+fn strict_codec_edges(members: &[Member]) -> BTreeSet<Edge> {
+    members
+        .iter()
+        .filter(|member| STRICT_CODECS.contains(&member.path.as_str()))
+        .flat_map(|member| {
+            member
+                .dependencies
+                .iter()
+                .chain(&member.build_dependencies)
+                .filter(|dependency| *dependency != "oer-wire")
+                .map(|dependency| (member.path.clone(), dependency.clone()))
+        })
+        .collect()
+}
+
+#[test]
+fn the_ieee80211_and_network_codecs_depend_on_oer_wire_alone() {
+    let members = workspace_members();
+    for path in STRICT_CODECS {
+        assert!(members.iter().any(|member| member.path == path), "{path}");
+    }
+    let edges = strict_codec_edges(&members);
+    assert!(edges.is_empty(), "{edges:?}");
+}
+
+#[test]
+fn a_strict_codec_refuses_optional_target_and_build_dependencies() {
+    let manifest: toml::Value = toml::from_str(
+        r#"
+[dependencies]
+oer-wire = { path = "../../../portable/wire" }
+regulatory = { package = "oer-radio-regulatory", path = "../../radio/regulatory", optional = true }
+[target.'cfg(target_arch = "riscv32")'.dependencies]
+zeroize = "1"
+[build-dependencies]
+cc = "1"
+[dev-dependencies]
+tempfile = "3"
+"#,
+    )
+    .expect("manifest");
+    let workspace = toml::Value::Table(toml::Table::new());
+    let codec = Member {
+        dependencies: normal_dependencies(&manifest, &workspace),
+        build_dependencies: scoped_dependencies(&manifest, &workspace, "build-dependencies"),
+        ..member("protocols/ieee80211/wire", "oer-ieee80211-wire", false, &[])
+    };
+    let other = member(
+        "protocols/ieee80211/sta",
+        "oer-ieee80211-sta",
+        false,
+        &["zeroize"],
+    );
+    assert_eq!(
+        strict_codec_edges(&[codec, other]),
+        ["cc", "oer-radio-regulatory", "zeroize"]
+            .map(|dependency| ("protocols/ieee80211/wire".to_owned(), dependency.to_owned()))
+            .into()
+    );
+}
+
 /// The workspace edges by which a protocol contract reaches another layer
 /// than portable support.
 fn contract_edges(members: &[Member], roles: &BTreeMap<String, Role>) -> BTreeSet<Edge> {

@@ -31,11 +31,14 @@ pub enum ScanObservation {
     Dropped,
 }
 
-/// One BSS observation: the decoded beacon or probe response and the time
-/// the receiver took it.
+/// One BSS observation: the decoded beacon or probe response, the signal
+/// level and the time the receiver took it.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct BssObservation {
     pub record: ScanRecord,
+    /// The received signal level in dBm, `None` when the receiver reported
+    /// none; an unknown level ranks below every known one.
+    pub rssi: Option<i8>,
     /// The receiver's monotonic time of this frame's reception, from its
     /// receive timestamp; a station advances the record's `timestamp` by the
     /// time since to set its own TSF. `None` when the receiver had no
@@ -97,16 +100,17 @@ impl<const N: usize> ScanTable<N> {
         &mut self,
         frame: &[u8],
         fallback_channel: u8,
-        rssi: i8,
+        rssi: Option<i8>,
         received_at: Option<Instant>,
     ) -> ScanObservation {
-        let Some(mut record) = parse_management(frame, fallback_channel, rssi) else {
+        let Some(mut record) = parse_management(frame, fallback_channel) else {
             return ScanObservation::Ignored;
         };
 
         for (index, existing) in self.records.iter_mut().take(self.length).enumerate() {
             let Some(BssObservation {
                 record: existing,
+                rssi: existing_rssi,
                 received_at: existing_received_at,
             }) = existing
             else {
@@ -133,16 +137,20 @@ impl<const N: usize> ScanTable<N> {
                     // observed security/protection element disappeared. Keep
                     // the complete policy, but retain the current signal
                     // sample used to select among BSSIDs.
-                    if existing.rssi == record.rssi {
+                    if *existing_rssi == rssi {
                         return ScanObservation::Duplicate { index };
                     }
-                    existing.rssi = record.rssi;
+                    *existing_rssi = rssi;
                     return ScanObservation::Updated { index };
                 }
-                if *existing == record && *existing_received_at == received_at {
+                if *existing == record
+                    && *existing_rssi == rssi
+                    && *existing_received_at == received_at
+                {
                     return ScanObservation::Duplicate { index };
                 }
                 *existing = record;
+                *existing_rssi = rssi;
                 *existing_received_at = received_at;
                 return ScanObservation::Updated { index };
             }
@@ -157,6 +165,7 @@ impl<const N: usize> ScanTable<N> {
         };
         *vacant = Some(BssObservation {
             record,
+            rssi,
             received_at,
         });
         // `index` names a cell of an array of `N` cells, so `index + 1 <= N`.
@@ -173,30 +182,36 @@ impl<const N: usize> Default for ScanTable<N> {
 
 /// Select the strongest complete observation with an exact SSID match.
 pub fn best_matching_ssid<'a>(
-    records: impl IntoIterator<Item = &'a ScanRecord>,
+    observations: impl IntoIterator<Item = &'a BssObservation>,
     ssid: &[u8],
 ) -> Option<&'a ScanRecord> {
-    records
+    observations
         .into_iter()
-        .filter(|record| record.ssid_bytes() == ssid && (1..=13).contains(&record.channel))
-        .max_by_key(|record| record.rssi)
+        .filter(|observation| {
+            observation.record.ssid_bytes() == ssid
+                && (1..=13).contains(&observation.record.channel)
+        })
+        .max_by_key(|observation| observation.rssi)
+        .map(|observation| &observation.record)
 }
 
 /// Select the strongest exact SSID match that admits the station's security
 /// policy.
 pub fn best_matching_ssid_and_security<'a>(
-    records: impl IntoIterator<Item = &'a ScanRecord>,
+    observations: impl IntoIterator<Item = &'a BssObservation>,
     ssid: &[u8],
     policy: crate::security::StaSecurityPolicy,
 ) -> Option<&'a ScanRecord> {
-    records
+    observations
         .into_iter()
-        .filter(|record| {
+        .filter(|observation| {
+            let record = &observation.record;
             record.ssid_bytes() == ssid
                 && (1..=13).contains(&record.channel)
                 && crate::security::select_association_rsn(record, policy).is_ok()
         })
-        .max_by_key(|record| record.rssi)
+        .max_by_key(|observation| observation.rssi)
+        .map(|observation| &observation.record)
 }
 
 #[cfg(test)]

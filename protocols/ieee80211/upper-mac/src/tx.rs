@@ -121,7 +121,7 @@ impl AmpduRequest {
 
     /// The sequence number of subframe `index`.
     pub const fn sequence(&self, index: u8) -> SequenceNumber {
-        self.first_sequence.wrapping_add(index as u16)
+        crate::sequence::wrapping_add(self.first_sequence, index as u16)
     }
 
     /// Octets on air of subframe `index`'s MPDU.

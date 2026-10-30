@@ -313,7 +313,7 @@ type TestConfig = (StaConfig<ModelCaps24, Callbacks>, StaSecurity);
 fn config(security: StaSecurity) -> TestConfig {
     let channels = heapless::Vec::from_slice(&[SupportedChannel::new(
         oer_radio_regulatory::TEST_DOMAIN
-            .permit(channel6())
+            .permit(oer_ieee80211_port::RegulatedChannel::from(channel6()))
             .unwrap(),
     )
     .unwrap()])
@@ -998,7 +998,7 @@ where
 
             let channel = SupportedChannel::new(
                 oer_radio_regulatory::TEST_DOMAIN
-                    .permit(channel6())
+                    .permit(oer_ieee80211_port::RegulatedChannel::from(channel6()))
                     .unwrap(),
             )
             .unwrap();
@@ -2157,7 +2157,9 @@ fn data_takes_all_its_tokens_and_eapol_null_and_deauthentication_still_go() {
         .push(
             SupportedChannel::new(
                 oer_radio_regulatory::TEST_DOMAIN
-                    .permit(Channel::ghz2_4(1, ChannelWidth::Mhz20).unwrap())
+                    .permit(oer_ieee80211_port::RegulatedChannel::from(
+                        Channel::ghz2_4(1, ChannelWidth::Mhz20).unwrap(),
+                    ))
                     .unwrap(),
             )
             .unwrap(),
@@ -2235,7 +2237,9 @@ fn a_disconnection_during_an_absence_leaves_no_old_frame_to_go_after_the_reconne
         .push(
             SupportedChannel::new(
                 oer_radio_regulatory::TEST_DOMAIN
-                    .permit(Channel::ghz2_4(1, ChannelWidth::Mhz20).unwrap())
+                    .permit(oer_ieee80211_port::RegulatedChannel::from(
+                        Channel::ghz2_4(1, ChannelWidth::Mhz20).unwrap(),
+                    ))
                     .unwrap(),
             )
             .unwrap(),
@@ -2320,7 +2324,9 @@ fn beside_an_access_point_msdus_survive_an_absence() {
         .push(
             SupportedChannel::new(
                 oer_radio_regulatory::TEST_DOMAIN
-                    .permit(Channel::ghz2_4(1, ChannelWidth::Mhz20).unwrap())
+                    .permit(oer_ieee80211_port::RegulatedChannel::from(
+                        Channel::ghz2_4(1, ChannelWidth::Mhz20).unwrap(),
+                    ))
                     .unwrap(),
             )
             .unwrap(),
@@ -2341,7 +2347,7 @@ fn beside_an_access_point_msdus_survive_an_absence() {
                 .command(ServiceCommand::AccessPoint(AccessPointFact::Running {
                     channel: SupportedChannel::new(
                         oer_radio_regulatory::TEST_DOMAIN
-                            .permit(channel6())
+                            .permit(oer_ieee80211_port::RegulatedChannel::from(channel6()))
                             .unwrap(),
                     )
                     .unwrap(),

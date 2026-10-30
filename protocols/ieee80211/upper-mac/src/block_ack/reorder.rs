@@ -29,6 +29,8 @@
     clippy::arithmetic_side_effects
 )]
 
+use crate::sequence::SequenceSpace;
+
 use core::num::NonZeroUsize;
 
 use oer_ieee80211_wire::sequence::SequenceNumber;

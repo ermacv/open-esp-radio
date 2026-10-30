@@ -66,7 +66,7 @@ pub fn classify(frame: &[u8]) -> Result<Received<'_>, RxDropReason> {
 ///
 /// A record without a DS Parameter Set element takes the channel the
 /// receiver was configured to. A frame without a received signal level is
-/// recorded with `i8::MIN`.
+/// recorded without one.
 pub fn observe_scan<const N: usize>(
     scan: &mut ScanTable<N>,
     now: Instant,
@@ -75,8 +75,8 @@ pub fn observe_scan<const N: usize>(
 ) -> ScanObservation {
     let common = meta.common();
     let rssi = match common.rssi_dbm {
-        RxEvidence::HardwareObserved(rssi) | RxEvidence::ProtocolValidated(rssi) => rssi,
-        RxEvidence::Unavailable => i8::MIN,
+        RxEvidence::HardwareObserved(rssi) | RxEvidence::ProtocolValidated(rssi) => Some(rssi),
+        RxEvidence::Unavailable => None,
     };
     scan.observe_management(management.frame(), common.channel.number(), rssi, Some(now))
 }

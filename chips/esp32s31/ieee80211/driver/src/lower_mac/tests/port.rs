@@ -1299,7 +1299,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for Tune {
                     oer_radio_regulatory::Country::new(*b"DE").expect("test country"),
                 )
                 .expect("domain fixture")
-                .permit(self.0)
+                .permit(oer_ieee80211_port::RegulatedChannel::from(self.0))
                 .expect("permitted test channel"),
             )
             .expect("supported test channel"),

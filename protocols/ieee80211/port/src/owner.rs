@@ -42,13 +42,15 @@
 //! checked against the marker:
 //!
 //! ```
-//! # use oer_ieee80211_port::{Channel, ChannelWidth, Ieee80211Capabilities, SupportedChannel};
+//! # use oer_ieee80211_port::{
+//! #     Channel, ChannelWidth, Ieee80211Capabilities, RegulatedChannel, SupportedChannel,
+//! # };
 //! # use oer_radio_regulatory::{RegulatoryDomain, Refused};
 //! fn tune<K: Ieee80211Capabilities>(
 //!     domain: &RegulatoryDomain,
 //!     channel: Channel,
 //! ) -> Option<SupportedChannel<K>> {
-//!     SupportedChannel::new(domain.permit(channel).ok()?)
+//!     SupportedChannel::new(domain.permit(RegulatedChannel::new(channel)).ok()?)
 //! }
 //! ```
 //!
@@ -91,7 +93,7 @@
 //! #     };
 //! # }
 //! let permitted = oer_radio_regulatory::TEST_DOMAIN
-//!     .permit(Channel::ghz5(36, ChannelWidth::Mhz20).unwrap())
+//!     .permit(RegulatedChannel::new(Channel::ghz5(36, ChannelWidth::Mhz20).unwrap()))
 //!     .unwrap();
 //! assert!(SupportedChannel::<TwoFourOnly>::new(permitted).is_none());
 //! ```
@@ -133,7 +135,7 @@
 //! #     };
 //! # }
 //! let permitted = oer_radio_regulatory::TEST_DOMAIN
-//!     .permit(Channel::ghz2_4(6, ChannelWidth::Mhz20).unwrap())
+//!     .permit(RegulatedChannel::new(Channel::ghz2_4(6, ChannelWidth::Mhz20).unwrap()))
 //!     .unwrap();
 //! assert!(SupportedChannel::<TwoFourOnly>::new(permitted).is_some());
 //! ```
@@ -176,7 +178,9 @@ use oer_ieee80211_wire::sequence::SequenceNumber;
 use oer_radio_port::PortBackend;
 use oer_radio_regulatory::Permitted;
 
-use crate::{Channel, LowerMacCapabilities, PhyRate, ReceiveFilter, TxPower, VifRole};
+use crate::{
+    Channel, LowerMacCapabilities, PhyRate, ReceiveFilter, RegulatedChannel, TxPower, VifRole,
+};
 
 /// What a lower-MAC backend type supports, the same for every instance: the
 /// brand of its validated values.
@@ -189,14 +193,14 @@ pub trait Ieee80211Capabilities {
 
 /// A channel the regulatory domain permits and the capabilities `K` tune to.
 pub struct SupportedChannel<K> {
-    permitted: Permitted<Channel>,
+    permitted: Permitted<RegulatedChannel>,
     brand: PhantomData<fn() -> K>,
 }
 
 impl<K: Ieee80211Capabilities> SupportedChannel<K> {
     /// `permitted`, when `K` tunes to its channel.
-    pub const fn new(permitted: Permitted<Channel>) -> Option<Self> {
-        if K::CAPS.supports_channel(permitted.channel()) {
+    pub const fn new(permitted: Permitted<RegulatedChannel>) -> Option<Self> {
+        if K::CAPS.supports_channel(permitted.channel().channel()) {
             Some(Self {
                 permitted,
                 brand: PhantomData,
@@ -208,11 +212,11 @@ impl<K: Ieee80211Capabilities> SupportedChannel<K> {
 
     /// The channel.
     pub const fn channel(&self) -> Channel {
-        self.permitted.channel()
+        self.permitted.channel().channel()
     }
 
     /// The channel with what the domain allows on it.
-    pub const fn permitted(&self) -> Permitted<Channel> {
+    pub const fn permitted(&self) -> Permitted<RegulatedChannel> {
         self.permitted
     }
 }

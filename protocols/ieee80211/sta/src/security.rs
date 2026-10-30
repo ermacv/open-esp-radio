@@ -181,7 +181,42 @@ fn select_personal_rsn(
     // Advertise support and retain the negotiated decision for key installation.
     // SOURCE[HIL_VENDOR_HE20_NDPA_CBF_2026_07_24]: frame 7624 carries RSN
     // Capabilities 0x0400 in the successful HE association request.
-    Ok(SelectedRsn::personal(akm, spp, management_protection))
+    Ok(personal_rsn(akm, spp, management_protection))
+}
+
+/// The RSN element of a personal association negotiating `akm`, and under
+/// SAE an RSNXE announcing hash to element.
+///
+/// Its RSN Capabilities advertise SPP A-MSDU capability, MFPC when
+/// `management_protection` holds and MFPR under SAE; protected management
+/// frames take BIP-CMAC-128.
+pub fn personal_rsn(
+    akm: AssociationAkm,
+    spp: oer_ieee80211_wire::security::Spp,
+    management_protection: bool,
+) -> SelectedRsn {
+    use oer_ieee80211_wire::security::rsn::{
+        RSN_CAPABILITY_MFPC, RSN_CAPABILITY_MFPR, RsnExtendedCapabilities,
+    };
+    use oer_ieee80211_wire::security::{GroupManagementCipher, RsnAssociation, SppCapability};
+    let sae = matches!(akm, AssociationAkm::Sae(_));
+    let mut capabilities = SppCapability::Capable.rsn_bits();
+    if management_protection {
+        capabilities |= RSN_CAPABILITY_MFPC;
+    }
+    if sae {
+        capabilities |= RSN_CAPABILITY_MFPR;
+    }
+    SelectedRsn::rsn(
+        RsnAssociation {
+            akm,
+            spp,
+            management: management_protection.then_some(GroupManagementCipher::BipCmac128),
+            pmkid: None,
+        },
+        capabilities,
+        sae.then(|| RsnExtendedCapabilities::from_bytes([0]).with_sae_h2e(true)),
+    )
 }
 
 /// Select the association security elements for one station request.

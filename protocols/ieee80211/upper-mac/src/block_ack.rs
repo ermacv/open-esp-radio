@@ -15,11 +15,12 @@ use oer_ieee80211_wire::sequence::SequenceNumber;
 /// sequence beyond either side of the window stays unacknowledged, so a
 /// stale report cannot release newer traffic.
 pub const fn acknowledges(report: BlockAckReport, sequence: SequenceNumber) -> bool {
-    let distance = report.start_sequence.forward_distance(sequence);
+    let distance = crate::sequence::forward_distance(report.start_sequence, sequence);
     if distance < BlockAckReport::BITMAP_BITS {
         report.bitmap & (1_u64 << distance) != 0
     } else {
-        sequence.forward_distance(report.start_sequence) <= BlockAckReport::BITMAP_BITS
+        crate::sequence::forward_distance(sequence, report.start_sequence)
+            <= BlockAckReport::BITMAP_BITS
     }
 }
 

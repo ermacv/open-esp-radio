@@ -51,7 +51,6 @@ mod associated_peer {
             )
             .unwrap(),
             6,
-            -40,
         );
         access_point
             .set_supported_rates(&[0x82, 0x84, 0x8b, 0x96])
@@ -137,7 +136,6 @@ mod associated_peer {
             )
             .unwrap(),
             6,
-            -40,
         );
         access_point.capability_info = 0x0421;
         access_point

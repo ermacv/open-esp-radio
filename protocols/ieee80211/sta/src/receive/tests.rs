@@ -95,7 +95,7 @@ fn observe_scan_takes_the_configured_channel_without_a_ds_element() {
     );
     let record = scan.records().next().unwrap();
     assert_eq!(record.channel, 6);
-    assert_eq!(record.rssi, -40);
+    assert_eq!(scan.observations().next().unwrap().rssi, Some(-40));
     assert_eq!(scan.observations().next().unwrap().received_at, Some(now));
     assert_eq!(record.ssid_bytes(), b"test");
 
@@ -107,13 +107,13 @@ fn observe_scan_takes_the_configured_channel_without_a_ds_element() {
 }
 
 #[test]
-fn observe_scan_records_an_unavailable_signal_as_the_lowest_level() {
+fn observe_scan_records_an_unavailable_signal_as_none() {
     let beacon = management(8, &[]);
     let now = Instant::from_micros(1);
     for (rssi, recorded) in [
-        (RxEvidence::Unavailable, i8::MIN),
-        (RxEvidence::HardwareObserved(-55), -55),
-        (RxEvidence::ProtocolValidated(-61), -61),
+        (RxEvidence::Unavailable, None),
+        (RxEvidence::HardwareObserved(-55), Some(-55)),
+        (RxEvidence::ProtocolValidated(-61), Some(-61)),
     ] {
         let mut scan = ScanTable::<1>::new();
         let _ = observe_scan(
@@ -122,7 +122,7 @@ fn observe_scan_records_an_unavailable_signal_as_the_lowest_level() {
             classified_management(&beacon),
             &on_channel(1, rssi),
         );
-        assert_eq!(scan.records().next().unwrap().rssi, recorded);
+        assert_eq!(scan.observations().next().unwrap().rssi, recorded);
     }
 }
 

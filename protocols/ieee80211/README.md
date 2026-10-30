@@ -30,8 +30,8 @@ the portable runtime drives role services over that port.
 | `ap/src/security_policy.rs` | Access point security policy and its advertised elements |
 | `wire/src/data.rs` | MSDU fields (`MsduHeader`, `MsduParts`), data encapsulation plans, MSDU and A-MSDU decapsulation |
 | `wire/src/station/data.rs` | Data codecs, with A-MSDU framing in `station/data/amsdu.rs` |
-| `wire/src/sequence.rs` | Twelve-bit sequence numbers and modulo-4096 arithmetic |
-| `upper-mac/src/sequence.rs` | Separate management/non-QoS and per-TID TX sequence owners of the station, the access point and ESP-NOW |
+| `wire/src/sequence.rs` | Twelve-bit sequence numbers: the checked Sequence Number subfield |
+| `upper-mac/src/sequence.rs` | Modulo-4096 sequence arithmetic (`SequenceSpace`) and the separate management/non-QoS and per-TID TX sequence owners of the station, the access point and ESP-NOW |
 | `upper-mac/src/ccmp.rs` | CCMP transmit packet numbers and the receive replay frontier of every CCMP user |
 | `contracts/security` | The CCMP-128 temporal-key owner that RSN, the port, the software cipher and a backend share |
 | `rsn/src/pmksa.rs` | The PMKSA cache of the station and of the access point |
@@ -46,6 +46,7 @@ the portable runtime drives role services over that port.
 | `esp-now/src/configuration.rs` | Exclusive station-address topology for standalone ESP-NOW |
 | `sta/src/port.rs` | The station's tokens on a lower-MAC port and its numbered pairwise key |
 | `wire/src/channel.rs` | Validated 2.4/5 GHz channels and 20/40 MHz geometry |
+| `port/src/regulated.rs` | The regulatory view of a channel: the frequencies it occupies (`RegulatedChannel`) |
 | `wire/src/channel_switch.rs` | Channel Switch Announcement parsing and encoding |
 | `wire/src/phy.rs` | Validated non-HT, HT and HE SU rates |
 | `wire/src/rates.rs` | Legacy rates of the (Extended) Supported Rates elements |
@@ -156,8 +157,8 @@ Module namespaces do not create independent owners. Tests live beside their
 owner or at the shared protocol boundary. See the
 [architecture](../../docs/architecture.md#layers) for the layering contract.
 
-## Known defects
-
-- **RSSI "unknown" is a value:** `wire/src/scan.rs` `ScanRecord` stores RSSI
-  as `i8` with `i8::MIN` as the unknown marker. `sta/src/receive.rs`
-  `observe_scan` writes it when a frame lacks a signal level.
+`ieee80211/wire` depends on `oer-wire` alone; it holds no state, profile or
+regulatory decision. The station keeps a scan observation's signal level as
+`Option<i8>` (`sta::scan::BssObservation`), and chooses the RSN capabilities
+of its association (`sta::security::personal_rsn`) that the codec encodes
+(`station::SelectedRsn::rsn`).

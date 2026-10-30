@@ -1,6 +1,6 @@
 use super::*;
 use crate::data::MsduParts;
-use crate::security::{AssociationAkm, AssociationSecurity, Pmkid, SaePwe, Spp};
+use crate::security::{AssociationAkm, AssociationSecurity, Pmkid, RsnAssociation, SaePwe, Spp};
 use crate::sequence::seq;
 
 const LOCAL: [u8; 6] = [0x02, 0, 0, 0x12, 0x34, 0x56];
@@ -656,9 +656,33 @@ fn station_encoders_admit_complete_capacity_before_writing() {
     }
 }
 
+/// The RSN association of `akm`, without management protection unless
+/// `management` holds.
+fn rsn_association(akm: AssociationAkm, spp: Spp, management: bool) -> RsnAssociation {
+    RsnAssociation {
+        akm,
+        spp,
+        management: management.then_some(crate::security::GroupManagementCipher::BipCmac128),
+        pmkid: None,
+    }
+}
+
+/// SPP A-MSDU capable, then MFPC and MFPR when `protected`.
+const fn capabilities(protected: bool) -> u16 {
+    0x0400 | if protected { 0x00c0 } else { 0 }
+}
+
+fn h2e() -> crate::security::rsn::RsnExtendedCapabilities {
+    crate::security::rsn::RsnExtendedCapabilities::from_bytes([0]).with_sae_h2e(true)
+}
+
 #[test]
-fn a_personal_selection_encodes_one_suite_and_its_capabilities() {
-    let selected = SelectedRsn::personal(AssociationAkm::Psk, Spp::NotNegotiated, false);
+fn a_selection_encodes_one_suite_and_the_chosen_capabilities() {
+    let selected = SelectedRsn::rsn(
+        rsn_association(AssociationAkm::Psk, Spp::NotNegotiated, false),
+        capabilities(false),
+        None,
+    );
     let bytes = selected.as_bytes();
     assert_eq!(bytes.len(), SELECTED_RSN_IE_LEN);
     let element = crate::security::rsn::RsnElement::parse(bytes).unwrap();
@@ -671,16 +695,20 @@ fn a_personal_selection_encodes_one_suite_and_its_capabilities() {
     assert_eq!(&bytes[20..22], &[0, 4]);
     assert!(!selected.security().protects_management());
 
-    let sae = SelectedRsn::personal(
-        AssociationAkm::Sae(SaePwe::HashToElement),
-        Spp::Negotiated,
-        true,
+    let sae = SelectedRsn::rsn(
+        rsn_association(
+            AssociationAkm::Sae(SaePwe::HashToElement),
+            Spp::Negotiated,
+            true,
+        ),
+        capabilities(true),
+        Some(h2e()),
     );
     // MFPC, MFPR and SPP A-MSDU capable, then the RSNXE announcing H2E.
     assert_eq!(&sae.as_bytes()[20..22], &[0xc0, 4]);
     assert_eq!(&sae.as_bytes()[22..], &[244, 1, 0x20]);
     let AssociationSecurity::Rsn(association) = sae.security() else {
-        panic!("personal association");
+        panic!("an RSN association");
     };
     assert_eq!(association.spp, Spp::Negotiated);
     assert!(sae.security().protects_management());
@@ -689,10 +717,14 @@ fn a_personal_selection_encodes_one_suite_and_its_capabilities() {
 
 #[test]
 fn a_resumed_sae_selection_lists_its_pmkid_before_the_rsnxe_once() {
-    let selected = SelectedRsn::personal(
-        AssociationAkm::Sae(SaePwe::HuntingAndPecking),
-        Spp::Negotiated,
-        true,
+    let selected = SelectedRsn::rsn(
+        rsn_association(
+            AssociationAkm::Sae(SaePwe::HuntingAndPecking),
+            Spp::Negotiated,
+            true,
+        ),
+        capabilities(true),
+        Some(h2e()),
     );
     let resumed = selected.with_pmkid(Pmkid([0x5a; 16])).unwrap();
     let bytes = resumed.as_bytes();
@@ -705,8 +737,12 @@ fn a_resumed_sae_selection_lists_its_pmkid_before_the_rsnxe_once() {
     // A second PMKID and a non-SAE selection are refused.
     assert_eq!(resumed.with_pmkid(Pmkid([0xa5; 16])), None);
     assert_eq!(
-        SelectedRsn::personal(AssociationAkm::Psk, Spp::Negotiated, false)
-            .with_pmkid(Pmkid([0x5a; 16])),
+        SelectedRsn::rsn(
+            rsn_association(AssociationAkm::Psk, Spp::Negotiated, false),
+            capabilities(false),
+            None,
+        )
+        .with_pmkid(Pmkid([0x5a; 16])),
         None
     );
 }

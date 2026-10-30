@@ -23,6 +23,8 @@
 //! [`compact`], [`oer_ieee80211_wire::frame::set_retry_bit`]) work on those masks and on the encoded
 //! MPDUs.
 
+use crate::sequence::SequenceSpace;
+
 use oer_ieee80211_port::BlockAckReport;
 use oer_ieee80211_wire::sequence::SequenceNumber;
 use oer_time::{Duration, Instant};
@@ -498,8 +500,10 @@ impl AmpduRetryState {
 
     /// The sequence number of the current aggregate's first subframe.
     pub const fn current_first_sequence(&self) -> SequenceNumber {
-        self.first_sequence
-            .wrapping_add(self.pending_original_indices.trailing_zeros() as u16)
+        crate::sequence::wrapping_add(
+            self.first_sequence,
+            self.pending_original_indices.trailing_zeros() as u16,
+        )
     }
 
     /// Original positions the current aggregate carries.

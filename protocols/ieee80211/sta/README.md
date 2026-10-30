@@ -83,9 +83,12 @@ handshake. The provisioned PMK is used only for a PSK offer.
 The station's security policy lives in `security.rs`: `StaSecurityPolicy`
 names what one request admits, `matches_security` admits a scanned BSS for
 one exact mode and `select_association_rsn` chooses the AKM and management
-protection, whose RSN element and RSNXE `oer-ieee80211-wire` encodes
-(`station::SelectedRsn::personal`). The scan table keeps each observation's
-reception time beside its decoded `ScanRecord` (`scan::BssObservation`).
+protection; `personal_rsn` chooses the RSN capabilities (SPP A-MSDU capable,
+MFPC under management protection, MFPR and the H2E RSNXE under SAE), whose
+RSN element and RSNXE `oer-ieee80211-wire` encodes (`station::SelectedRsn::rsn`).
+The scan table keeps each observation's signal level (`None` when the
+receiver reported none, ranked below every known level) and reception time
+beside its decoded `ScanRecord` (`scan::BssObservation`).
 
 SAE observations consume the exchange and return it only while it continues.
 Commit and confirm have checked absolute deadlines, including time waiting
