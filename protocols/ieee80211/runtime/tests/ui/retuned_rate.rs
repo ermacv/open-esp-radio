@@ -1,10 +1,10 @@
 #![no_std]
-use oer_ieee80211_port::{
+use oer_ieee80211_contracts_port::{
     Channel, ChannelWidth, LowerMacPhase, LowerMacSetup, PhyRate, SupportedChannel,
 };
 use oer_ieee80211_wire::phy::LegacyRate;
 use oer_radio_port::{SlotIdentity, LocalId, with_local_slot, Disabled, Ended, Owner, PortBody};
-use oer_ieee80211_model::{ModelBackend, ModelResources};
+use oer_ieee80211_testing_model::{ModelBackend, ModelResources};
 
 pub struct Retune;
 impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id>> for Retune {
@@ -28,7 +28,7 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id>> for Retune {
         }
         let mut owner = owner.disable(&mut |_| core::ops::ControlFlow::Continue(())).await.ok().unwrap(); // ui-error: E0505
         owner.setup().set_channel(
-            SupportedChannel::new(oer_radio_regulatory::TEST_DOMAIN.permit(oer_ieee80211_port::RegulatedChannel::new(Channel::ghz5(36, ChannelWidth::Mhz20).unwrap())).unwrap()).unwrap(),
+            SupportedChannel::new(oer_radio_regulatory::TEST_DOMAIN.permit(oer_ieee80211_contracts_port::RegulatedChannel::new(Channel::ghz5(36, ChannelWidth::Mhz20).unwrap())).unwrap()).unwrap(),
         );
         let mut owner = owner.enable().await.ok().unwrap();
         {

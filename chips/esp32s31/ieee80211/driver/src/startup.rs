@@ -43,7 +43,7 @@ pub trait WifiMacPlatform: MacDelayEntropy + MacSlowClockCalibrationSource {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct WifiColdStartConfig {
     /// The channel the regulatory domain permits.
-    pub initial_channel: Permitted<oer_ieee80211_port::RegulatedChannel<WifiChannel>>,
+    pub initial_channel: Permitted<oer_ieee80211_contracts_port::RegulatedChannel<WifiChannel>>,
     /// The most any transmission radiates: the domain's, the board's and the
     /// chip's limits together.
     pub tx_ceiling: TxCeiling,
@@ -51,7 +51,7 @@ pub struct WifiColdStartConfig {
 
 impl WifiColdStartConfig {
     pub const fn new(
-        initial_channel: Permitted<oer_ieee80211_port::RegulatedChannel<WifiChannel>>,
+        initial_channel: Permitted<oer_ieee80211_contracts_port::RegulatedChannel<WifiChannel>>,
         tx_ceiling: TxCeiling,
     ) -> Self {
         Self {

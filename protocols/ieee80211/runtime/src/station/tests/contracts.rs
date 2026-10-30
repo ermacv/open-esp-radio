@@ -1,5 +1,5 @@
 use super::*;
-use oer_ieee80211_port::{Configured, SampledTsfPermission, VifRole};
+use oer_ieee80211_contracts_port::{Configured, SampledTsfPermission, VifRole};
 
 enum ContractCase {
     Unsolicited,
@@ -45,7 +45,7 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps24, ServiceContext
         } = resources;
         let (arbiter, place, absence) = PortArbiter::<ServicePort<Id>>::new(
             ArbiterPolicy::DEFAULT.checked(<ModelBackend<Id, ModelCaps24, ServiceContexts> as LowerMacBackend<Id>>::PUBLICATION_BOUND).unwrap(),
-            SupportedChannel::new(oer_radio_regulatory::TEST_DOMAIN.permit(oer_ieee80211_port::RegulatedChannel::from(channel6())).unwrap()).unwrap(), arbiter_authority, gate,
+            SupportedChannel::new(oer_radio_regulatory::TEST_DOMAIN.permit(oer_ieee80211_contracts_port::RegulatedChannel::from(channel6())).unwrap()).unwrap(), arbiter_authority, gate,
         );
         let mut tickets = tickets.into_iter();
         let station_tickets: [_; 4] = core::array::from_fn(|_| tickets.next().unwrap());
@@ -56,14 +56,14 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps24, ServiceContext
             config,
             StationResources::<_, 4, 4, 1> {
                 configure: station_commands.configure,
-                epochs: oer_ieee80211_sta::epoch::LinkEpochSource::new(connection_epoch),
+                epochs: oer_ieee80211_core_roles_sta::epoch::LinkEpochSource::new(connection_epoch),
                 tickets: station_tickets,
                 buffers: <[_; 4]>::try_from(small).ok().unwrap(),
                 place,
                 absence_place: absence,
-                keys: oer_ieee80211_port::association::reunite_vacant(
+                keys: oer_ieee80211_contracts_port::association::reunite_vacant(
                     station_association,
-                    oer_ieee80211_port::association::VacantKeyBank::new(
+                    oer_ieee80211_contracts_port::association::VacantKeyBank::new(
                         station_pairwise,
                         station_group,
                     ),
@@ -84,7 +84,7 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps24, ServiceContext
             Box::leak(Box::new(RxBlockAckStorage::<
                 _,
                 2,
-                { oer_ieee80211_model::MODEL_RX_EVENTS },
+                { oer_ieee80211_testing_model::MODEL_RX_EVENTS },
             >::new(
                 block_acks, Duration::from_millis(100)
             )))
@@ -103,7 +103,7 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps24, ServiceContext
             let (bank, places) = service
                 .state
                 .station
-                .finish(oer_ieee80211_sta::machine::StaDisconnectReason::Requested);
+                .finish(oer_ieee80211_core_roles_sta::machine::StaDisconnectReason::Requested);
             let RetiredArbiter::Stopped(stopped) = service.arbiter.finish(ArbiterEnd::Stopped)
             else {
                 panic!()
@@ -112,7 +112,9 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps24, ServiceContext
                 .restart(
                     SupportedChannel::new(
                         oer_radio_regulatory::TEST_DOMAIN
-                            .permit(oer_ieee80211_port::RegulatedChannel::from(channel6()))
+                            .permit(oer_ieee80211_contracts_port::RegulatedChannel::from(
+                                channel6(),
+                            ))
                             .unwrap(),
                     )
                     .unwrap(),
@@ -241,16 +243,18 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps24, ServiceContext
             (
                 LowerMacTerminal::TsfSampled {
                     permission: SampledTsfPermission::Station(station_commands.tsf),
-                    sample: oer_ieee80211_port::TsfSample {
-                        tsf: oer_ieee80211_port::VifTsf::new(
+                    sample: oer_ieee80211_contracts_port::TsfSample {
+                        tsf: oer_ieee80211_contracts_port::VifTsf::new(
                             VifRole::Station,
-                            oer_ieee80211_port::tsf::TsfInstant::from_micros(0),
+                            oer_ieee80211_contracts_port::tsf::TsfInstant::from_micros(0),
                         ),
-                        local: oer_ieee80211_port::Ieee80211Stamp {
-                            at: oer_ieee80211_port::Ieee80211Instant::from_micros(0),
+                        local: oer_ieee80211_contracts_port::Ieee80211Stamp {
+                            at: oer_ieee80211_contracts_port::Ieee80211Instant::from_micros(0),
                             generation: oer_radio_port::GenerationSource::new(1).current(),
                         },
-                        uncertainty: oer_ieee80211_port::Ieee80211Duration::from_micros(0),
+                        uncertainty: oer_ieee80211_contracts_port::Ieee80211Duration::from_micros(
+                            0,
+                        ),
                         generation: oer_radio_port::GenerationSource::new(1).current(),
                     },
                 },
@@ -292,7 +296,7 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps24, ServiceContext
             station: PortStation<'id, B, C, 1>,
             data: PortData<'id, B>,
             rates: S,
-            terminal_access: oer_ieee80211_port::TerminalAccess<
+            terminal_access: oer_ieee80211_contracts_port::TerminalAccess<
                 'id,
                 <B::Types<'id> as PhaseTypes<'id>>::TicketKind,
                 <B::Types<'id> as PhaseTypes<'id>>::TicketPath,

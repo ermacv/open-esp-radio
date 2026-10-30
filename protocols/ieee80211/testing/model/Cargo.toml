@@ -1,0 +1,34 @@
+[package]
+name = "oer-ieee80211-testing-model"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Allocating host reference backend for the IEEE 802.11 lower-MAC port"
+
+[features]
+test-support = ["oer-radio-port/test-support"]
+
+[dependencies]
+heapless = "0.9.3"
+oer-ieee80211-contracts-port = { path = "../../contracts/port" }
+oer-ieee80211-testing-conformance = { path = "../conformance" }
+oer-ieee80211-wire = { path = "../../wire" }
+oer-ieee80211-contracts-security = { path = "../../contracts/security" }
+oer-ieee80211-core-security-cipher = { path = "../../core/security/cipher" }
+oer-radio-port = { path = "../../../radio/port" }
+oer-time = { path = "../../../../portable/time" }
+
+[dev-dependencies]
+oer-wire = { path = "../../../../portable/wire" }
+oer-test-ui-cases = { path = "../../../../tools/test/ui-cases" }
+oer-ieee80211-core-upper-mac = { path = "../../core/upper-mac" }
+atomic-waker = "1.1.2"
+embassy-futures = "0.1.2"
+oer-radio-port = { path = "../../../radio/port", features = ["test-support"] }
+oer-radio-regulatory = { path = "../../../radio/regulatory", features = ["test-support"] }
+oer-time-virtual = { path = "../../../../portable/time-virtual" }
+
+[lints]
+workspace = true

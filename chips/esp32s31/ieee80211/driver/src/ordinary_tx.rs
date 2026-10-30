@@ -11,7 +11,7 @@
 
 use core::pin::Pin;
 use oer_esp32s31_hal::layouts::{WifiTxMetadataHead, WifiTxMetadataHeadMut};
-use oer_ieee80211_port::backend::RetryCounters;
+use oer_ieee80211_contracts_port::backend::RetryCounters;
 use oer_time::{Clock, Instant, Timer};
 
 use crate::mac::{
@@ -27,8 +27,8 @@ use crate::mac::{
 };
 pub use crate::tx::{WifiTxEntropy, WifiTxPowerPair, WifiTxPowerProfile, WifiTxResources};
 use oer_esp32s31_hal::types::MacInterface;
-use oer_ieee80211_port::{MacTxResult, MacTxStatus};
-use oer_ieee80211_port::{ManagementTxPlan, VifRole};
+use oer_ieee80211_contracts_port::{MacTxResult, MacTxStatus};
+use oer_ieee80211_contracts_port::{ManagementTxPlan, VifRole};
 use oer_ieee80211_wire::frame::FrameControl;
 use oer_ieee80211_wire::{phy::PhyRate, qos::WmmAccessCategory};
 
@@ -176,12 +176,12 @@ impl OrdinaryTxRetryReport {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct OrdinaryTxCompleted {
     completion: TxCompletion,
-    status: oer_ieee80211_port::TxStatus,
+    status: oer_ieee80211_contracts_port::TxStatus,
     report: OrdinaryTxReport,
 }
 
 impl OrdinaryTxCompleted {
-    pub const fn status(&self) -> oer_ieee80211_port::TxStatus {
+    pub const fn status(&self) -> oer_ieee80211_contracts_port::TxStatus {
         self.status
     }
 
@@ -498,7 +498,7 @@ type OrdinaryCompletion = CompletionObservation<(TxCompletion, Option<HtBlockAck
 /// A published operation moves into this value only after Observed(status).
 struct FinishedTx {
     active: ActiveTx,
-    status: oer_ieee80211_port::TxStatus,
+    status: oer_ieee80211_contracts_port::TxStatus,
 }
 
 impl ActiveTx {
@@ -507,7 +507,7 @@ impl ActiveTx {
         completion: TxCompletion,
         block_ack: Option<HtBlockAckObservation>,
     ) -> FinishedTx {
-        use oer_ieee80211_port::TxStatus;
+        use oer_ieee80211_contracts_port::TxStatus;
         let status = match (self.response, block_ack, completion.tx_status()) {
             (MacLegacyTxResponse::BlockAck, Some(_), _) => TxStatus::Success,
             (MacLegacyTxResponse::BlockAck, None, TxStatus::Success) => TxStatus::AckTimeout,
@@ -1434,7 +1434,7 @@ where
         let decision = if active.single_attempt.is_some() {
             // One publication is the whole transaction: the retry state
             // never sees the completion, so it can never re-publish.
-            if status == oer_ieee80211_port::TxStatus::Success {
+            if status == oer_ieee80211_contracts_port::TxStatus::Success {
                 self.policy
                     .record_success(active.route.role(), active.route.queue());
             } else if !active.external_contention {
@@ -1447,7 +1447,7 @@ where
         };
         match decision {
             FixedRetryDecision::Complete => {
-                let success = status == oer_ieee80211_port::TxStatus::Success;
+                let success = status == oer_ieee80211_contracts_port::TxStatus::Success;
                 let report = OrdinaryTxReport {
                     status: MacTxStatus {
                         result: if success {
@@ -1484,7 +1484,7 @@ where
                 Ok(Step::Complete(outcome))
             }
             FixedRetryDecision::Retry { set_retry_bit } => {
-                use oer_ieee80211_port::TxStatus;
+                use oer_ieee80211_contracts_port::TxStatus;
                 match status {
                     TxStatus::AckTimeout => {
                         active.retries.ack_timeouts = active.retries.ack_timeouts.saturating_add(1);
@@ -1544,7 +1544,10 @@ where
             }
             FixedRetryDecision::Complete
         } else {
-            self.management_completion(&mut active, oer_ieee80211_port::TxStatus::Collision)
+            self.management_completion(
+                &mut active,
+                oer_ieee80211_contracts_port::TxStatus::Collision,
+            )
         };
         match decision {
             FixedRetryDecision::Retry { .. } => {
@@ -1738,13 +1741,16 @@ where
     fn management_completion(
         &mut self,
         active: &mut ActiveTx,
-        status: oer_ieee80211_port::TxStatus,
+        status: oer_ieee80211_contracts_port::TxStatus,
     ) -> FixedRetryDecision {
         let decision = active.retry.observe(status);
         match decision {
-            FixedRetryDecision::Complete if status == oer_ieee80211_port::TxStatus::Success => self
-                .policy
-                .record_success(active.route.role(), active.route.queue()),
+            FixedRetryDecision::Complete
+                if status == oer_ieee80211_contracts_port::TxStatus::Success =>
+            {
+                self.policy
+                    .record_success(active.route.role(), active.route.queue())
+            }
             FixedRetryDecision::Complete => self
                 .policy
                 .reset_terminal_exchange(active.route.role(), active.route.queue()),
@@ -1856,8 +1862,8 @@ impl FixedRateRetry {
     fn counters(&self) -> RetryCounters {
         self.counters
     }
-    fn observe(&mut self, status: oer_ieee80211_port::TxStatus) -> FixedRetryDecision {
-        use oer_ieee80211_port::TxStatus;
+    fn observe(&mut self, status: oer_ieee80211_contracts_port::TxStatus) -> FixedRetryDecision {
+        use oer_ieee80211_contracts_port::TxStatus;
         match status {
             TxStatus::Success | TxStatus::TimedOut => return FixedRetryDecision::Complete,
             TxStatus::AckTimeout => {

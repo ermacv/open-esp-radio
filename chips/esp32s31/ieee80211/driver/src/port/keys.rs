@@ -1,5 +1,5 @@
 use super::*;
-use oer_ieee80211_port::association::{self as association, *};
+use oer_ieee80211_contracts_port::association::{self as association, *};
 use oer_ieee80211_wire::security::Spp;
 
 #[derive(Clone, Copy, Debug)]

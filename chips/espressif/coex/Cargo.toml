@@ -9,7 +9,7 @@ description = "Coexistence priority table, timer policy and time-slice schedule 
 readme = "README.md"
 
 [dependencies]
-oer-ieee80211-port = { path = "../../../protocols/ieee80211/port" }
+oer-ieee80211-contracts-port = { path = "../../../protocols/ieee80211/contracts/port" }
 oer-ieee802154-port = { path = "../../../protocols/ieee802154/port" }
 oer-radio-coex = { path = "../../../protocols/radio/coex" }
 

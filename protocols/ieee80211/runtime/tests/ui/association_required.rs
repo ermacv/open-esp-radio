@@ -1,10 +1,10 @@
 #![no_std]
 use oer_ieee80211_contracts_security::Ccmp128Key;
-use oer_ieee80211_port::{InterfacePhase, KeyTypes, LowerMacPhase, Station};
+use oer_ieee80211_contracts_port::{InterfacePhase, KeyTypes, LowerMacPhase, Station};
 use oer_ieee80211_wire::address::IndividualAddress;
-use oer_ieee80211_model::{ModelAssociation, ModelKeys, ModelPhase};
+use oer_ieee80211_testing_model::{ModelAssociation, ModelKeys, ModelPhase};
 pub fn key<'p, 'id: 'p>(
-    phase: &mut ModelPhase<'p, 'id, oer_ieee80211_model::ModelCaps, Composition>,
+    phase: &mut ModelPhase<'p, 'id, oer_ieee80211_testing_model::ModelCaps, Composition>,
     association: ModelAssociation<'id, Composition, Station>,
     slot: <ModelKeys<'id, Composition, Station> as KeyTypes<'id>>::PairwiseSlot,
     peer: IndividualAddress,
@@ -21,4 +21,4 @@ pub fn key<'p, 'id: 'p>(
 }
 
 pub enum UiSlot {}
-type Composition = oer_ieee80211_model::ModelBackend<oer_radio_port::StaticId<UiSlot>>;
+type Composition = oer_ieee80211_testing_model::ModelBackend<oer_radio_port::StaticId<UiSlot>>;

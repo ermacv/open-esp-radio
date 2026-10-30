@@ -1745,9 +1745,9 @@ dependencies = [
  "oer-espressif-ieee80211-policy",
  "oer-espressif-interrupt-table",
  "oer-espressif-staged-runtime",
+ "oer-ieee80211-contracts-port",
  "oer-ieee80211-contracts-security",
- "oer-ieee80211-port",
- "oer-ieee80211-upper-mac",
+ "oer-ieee80211-core-upper-mac",
  "oer-ieee80211-wire",
  "oer-memory",
  "oer-radio-port",
@@ -1835,7 +1835,7 @@ dependencies = [
  "oer-bluetooth-le-port",
  "oer-esp32s31-hal",
  "oer-esp32s31-phy",
- "oer-ieee80211-port",
+ "oer-ieee80211-contracts-port",
  "oer-ieee80211-wire",
  "oer-memory",
  "oer-radio-regulatory",
@@ -1853,7 +1853,7 @@ dependencies = [
  "oer-esp32s31-phy",
  "oer-esp32s31-radio-client",
  "oer-espressif-coex",
- "oer-ieee80211-port",
+ "oer-ieee80211-contracts-port",
  "oer-ieee80211-wire",
  "oer-memory",
  "oer-radio-regulatory",
@@ -1883,12 +1883,12 @@ dependencies = [
  "oer-espressif-ieee80211-policy",
  "oer-espressif-interrupt-table",
  "oer-espressif-radio",
- "oer-ieee80211-arbiter",
- "oer-ieee80211-port",
- "oer-ieee80211-rsn",
+ "oer-ieee80211-contracts-port",
+ "oer-ieee80211-core-arbiter",
+ "oer-ieee80211-core-roles-sta",
+ "oer-ieee80211-core-security-rsn",
+ "oer-ieee80211-core-upper-mac",
  "oer-ieee80211-runtime",
- "oer-ieee80211-sta",
- "oer-ieee80211-upper-mac",
  "oer-ieee80211-wire",
  "oer-memory",
  "oer-network-port",
@@ -1928,7 +1928,7 @@ dependencies = [
 name = "oer-espressif-coex"
 version = "0.1.0"
 dependencies = [
- "oer-ieee80211-port",
+ "oer-ieee80211-contracts-port",
  "oer-ieee802154-port",
  "oer-radio-coex",
 ]
@@ -1976,8 +1976,8 @@ name = "oer-espressif-ieee80211-policy"
 version = "0.1.0"
 dependencies = [
  "oer-esp32s31-ieee80211-driver",
- "oer-ieee80211-port",
- "oer-ieee80211-upper-mac",
+ "oer-ieee80211-contracts-port",
+ "oer-ieee80211-core-upper-mac",
  "oer-ieee80211-wire",
  "oer-network-wire",
  "oer-test-ui-cases",
@@ -2187,8 +2187,8 @@ dependencies = [
  "oer-espressif-ieee80211-policy",
  "oer-espressif-phy",
  "oer-espressif-staged-runtime",
- "oer-ieee80211-port",
- "oer-ieee80211-upper-mac",
+ "oer-ieee80211-contracts-port",
+ "oer-ieee80211-core-upper-mac",
  "oer-ieee80211-wire",
  "oer-memory",
  "oer-probe-codegen",
@@ -2230,7 +2230,7 @@ dependencies = [
  "oer-espressif-interrupt-table",
  "oer-espressif-staged-runtime",
  "oer-espressif-usb-serial-jtag",
- "oer-ieee80211-port",
+ "oer-ieee80211-contracts-port",
  "oer-ieee80211-wire",
  "oer-memory",
  "oer-radio-regulatory",
@@ -2349,90 +2349,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-ieee80211-ap"
-version = "0.1.0"
-dependencies = [
- "oer-crypto",
- "oer-ieee80211-cipher",
- "oer-ieee80211-rsn",
- "oer-ieee80211-upper-mac",
- "oer-ieee80211-wire",
- "oer-time",
- "oer-wire",
-]
-
-[[package]]
-name = "oer-ieee80211-arbiter"
-version = "0.1.0"
-dependencies = [
- "oer-ieee80211-port",
- "oer-ieee80211-upper-mac",
- "oer-ieee80211-wire",
- "oer-radio-port",
- "oer-radio-regulatory",
- "oer-test-ui-cases",
- "oer-time",
-]
-
-[[package]]
-name = "oer-ieee80211-cipher"
-version = "0.1.0"
-dependencies = [
- "aes",
- "ccm",
- "cmac",
- "oer-crypto",
- "oer-ieee80211-contracts-security",
- "oer-ieee80211-wire",
- "oer-test-ui-cases",
- "subtle",
- "zeroize",
-]
-
-[[package]]
-name = "oer-ieee80211-contracts-security"
-version = "0.1.0"
-dependencies = [
- "oer-test-ui-cases",
- "tempfile",
- "zeroize",
-]
-
-[[package]]
-name = "oer-ieee80211-esp-now"
-version = "0.1.0"
-dependencies = [
- "oer-events",
- "oer-ieee80211-arbiter",
- "oer-ieee80211-port",
- "oer-ieee80211-upper-mac",
- "oer-ieee80211-wire",
- "oer-time",
- "zeroize",
-]
-
-[[package]]
-name = "oer-ieee80211-model"
-version = "0.1.0"
-dependencies = [
- "atomic-waker",
- "embassy-futures",
- "heapless",
- "oer-ieee80211-cipher",
- "oer-ieee80211-contracts-security",
- "oer-ieee80211-port",
- "oer-ieee80211-upper-mac",
- "oer-ieee80211-wire",
- "oer-radio-port",
- "oer-radio-regulatory",
- "oer-test-ui-cases",
- "oer-time",
- "oer-time-virtual",
- "oer-wire",
-]
-
-[[package]]
-name = "oer-ieee80211-port"
+name = "oer-ieee80211-contracts-port"
 version = "0.1.0"
 dependencies = [
  "heapless",
@@ -2448,7 +2365,93 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-ieee80211-rsn"
+name = "oer-ieee80211-contracts-security"
+version = "0.1.0"
+dependencies = [
+ "oer-test-ui-cases",
+ "tempfile",
+ "zeroize",
+]
+
+[[package]]
+name = "oer-ieee80211-core-arbiter"
+version = "0.1.0"
+dependencies = [
+ "oer-ieee80211-contracts-port",
+ "oer-ieee80211-core-upper-mac",
+ "oer-ieee80211-wire",
+ "oer-radio-port",
+ "oer-radio-regulatory",
+ "oer-test-ui-cases",
+ "oer-time",
+]
+
+[[package]]
+name = "oer-ieee80211-core-extensions-esp-now"
+version = "0.1.0"
+dependencies = [
+ "oer-events",
+ "oer-ieee80211-contracts-port",
+ "oer-ieee80211-core-arbiter",
+ "oer-ieee80211-core-upper-mac",
+ "oer-ieee80211-wire",
+ "oer-time",
+ "zeroize",
+]
+
+[[package]]
+name = "oer-ieee80211-core-roles-ap"
+version = "0.1.0"
+dependencies = [
+ "oer-crypto",
+ "oer-ieee80211-core-security-cipher",
+ "oer-ieee80211-core-security-rsn",
+ "oer-ieee80211-core-upper-mac",
+ "oer-ieee80211-wire",
+ "oer-time",
+ "oer-wire",
+]
+
+[[package]]
+name = "oer-ieee80211-core-roles-sta"
+version = "0.1.0"
+dependencies = [
+ "heapless",
+ "oer-crypto",
+ "oer-events",
+ "oer-ieee80211-contracts-port",
+ "oer-ieee80211-contracts-security",
+ "oer-ieee80211-core-arbiter",
+ "oer-ieee80211-core-security-cipher",
+ "oer-ieee80211-core-security-rsn",
+ "oer-ieee80211-core-upper-mac",
+ "oer-ieee80211-wire",
+ "oer-memory",
+ "oer-network-port",
+ "oer-radio-port",
+ "oer-radio-regulatory",
+ "oer-test-ui-cases",
+ "oer-time",
+ "oer-time-virtual",
+]
+
+[[package]]
+name = "oer-ieee80211-core-security-cipher"
+version = "0.1.0"
+dependencies = [
+ "aes",
+ "ccm",
+ "cmac",
+ "oer-crypto",
+ "oer-ieee80211-contracts-security",
+ "oer-ieee80211-wire",
+ "oer-test-ui-cases",
+ "subtle",
+ "zeroize",
+]
+
+[[package]]
+name = "oer-ieee80211-core-security-rsn"
 version = "0.1.0"
 dependencies = [
  "aes",
@@ -2458,9 +2461,9 @@ dependencies = [
  "heapless",
  "hmac",
  "oer-crypto",
- "oer-ieee80211-cipher",
  "oer-ieee80211-contracts-security",
- "oer-ieee80211-upper-mac",
+ "oer-ieee80211-core-security-cipher",
+ "oer-ieee80211-core-upper-mac",
  "oer-ieee80211-wire",
  "oer-test-ui-cases",
  "oer-time",
@@ -2471,6 +2474,20 @@ dependencies = [
  "sha2 0.10.9",
  "subtle",
  "zeroize",
+]
+
+[[package]]
+name = "oer-ieee80211-core-upper-mac"
+version = "0.1.0"
+dependencies = [
+ "heapless",
+ "oer-events",
+ "oer-ieee80211-contracts-port",
+ "oer-ieee80211-contracts-security",
+ "oer-ieee80211-wire",
+ "oer-test-ui-cases",
+ "oer-time",
+ "oer-time-virtual",
 ]
 
 [[package]]
@@ -2485,14 +2502,14 @@ dependencies = [
  "oer-crypto",
  "oer-espressif-ieee80211-policy",
  "oer-events",
- "oer-ieee80211-arbiter",
- "oer-ieee80211-cipher",
+ "oer-ieee80211-contracts-port",
  "oer-ieee80211-contracts-security",
- "oer-ieee80211-model",
- "oer-ieee80211-port",
- "oer-ieee80211-rsn",
- "oer-ieee80211-sta",
- "oer-ieee80211-upper-mac",
+ "oer-ieee80211-core-arbiter",
+ "oer-ieee80211-core-roles-sta",
+ "oer-ieee80211-core-security-cipher",
+ "oer-ieee80211-core-security-rsn",
+ "oer-ieee80211-core-upper-mac",
+ "oer-ieee80211-testing-model",
  "oer-ieee80211-wire",
  "oer-memory",
  "oer-network-port",
@@ -2505,40 +2522,36 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-ieee80211-sta"
+name = "oer-ieee80211-testing-conformance"
 version = "0.1.0"
 dependencies = [
  "heapless",
- "oer-crypto",
- "oer-events",
- "oer-ieee80211-arbiter",
- "oer-ieee80211-cipher",
- "oer-ieee80211-contracts-security",
- "oer-ieee80211-port",
- "oer-ieee80211-rsn",
- "oer-ieee80211-upper-mac",
+ "oer-ieee80211-contracts-port",
  "oer-ieee80211-wire",
- "oer-memory",
- "oer-network-port",
+ "oer-time",
+ "oer-time-virtual",
+ "oer-wire",
+]
+
+[[package]]
+name = "oer-ieee80211-testing-model"
+version = "0.1.0"
+dependencies = [
+ "atomic-waker",
+ "embassy-futures",
+ "heapless",
+ "oer-ieee80211-contracts-port",
+ "oer-ieee80211-contracts-security",
+ "oer-ieee80211-core-security-cipher",
+ "oer-ieee80211-core-upper-mac",
+ "oer-ieee80211-testing-conformance",
+ "oer-ieee80211-wire",
  "oer-radio-port",
  "oer-radio-regulatory",
  "oer-test-ui-cases",
  "oer-time",
  "oer-time-virtual",
-]
-
-[[package]]
-name = "oer-ieee80211-upper-mac"
-version = "0.1.0"
-dependencies = [
- "heapless",
- "oer-events",
- "oer-ieee80211-contracts-security",
- "oer-ieee80211-port",
- "oer-ieee80211-wire",
- "oer-test-ui-cases",
- "oer-time",
- "oer-time-virtual",
+ "oer-wire",
 ]
 
 [[package]]

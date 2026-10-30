@@ -39,7 +39,7 @@ use oer_esp32s31_ieee80211_driver::{
 };
 use oer_esp32s31_phy::{PhyConfig, PhyTxTargetPowerProfile};
 use oer_esp32s31_radio_client::{MembershipCell, wifi::Wifi};
-use oer_ieee80211_port::*;
+use oer_ieee80211_contracts_port::*;
 use oer_ieee80211_wire::{
     address::IndividualAddress,
     channel::{WifiChannel, WifiChannelWidth},
@@ -194,7 +194,9 @@ async fn install<W: Binding>(
     let channel = WifiChannel::new_2_4_ghz(config.channel, WifiChannelWidth::Mhz20)
         .map_err(|_| InitializationError::Channel)?;
     let initial = domain
-        .permit(oer_ieee80211_port::RegulatedChannel::from(channel))
+        .permit(oer_ieee80211_contracts_port::RegulatedChannel::from(
+            channel,
+        ))
         .map_err(|_| InitializationError::Channel)?;
     let limits = board::wifi_power_limits(
         i32::from(PhyConfig::production().highest_target_power_quarter_dbm()) * 25,

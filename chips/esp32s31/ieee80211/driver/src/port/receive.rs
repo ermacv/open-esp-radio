@@ -3,7 +3,7 @@ use crate::mac::rx::{
     NormalizedRxFrame, RxError, RxIngressConfig, RxSegment, view_ccmp_data,
     view_ccmp_data_fragment, view_normalized_rx_frame,
 };
-use oer_ieee80211_port::{RxCryptoStatus, RxEvidence};
+use oer_ieee80211_contracts_port::{RxCryptoStatus, RxEvidence};
 use oer_ieee80211_wire::{
     frame::{FrameControlFields, FrameType},
     sequence::SequenceControl,

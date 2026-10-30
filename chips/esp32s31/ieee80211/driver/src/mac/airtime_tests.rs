@@ -1,5 +1,5 @@
 use core::num::NonZeroU32;
-use oer_ieee80211_upper_mac::airtime::{AirtimeCandidate, AirtimeError, AirtimeStorage};
+use oer_ieee80211_core_upper_mac::airtime::{AirtimeCandidate, AirtimeError, AirtimeStorage};
 
 use crate::mac::tx_work::MacTxWork;
 

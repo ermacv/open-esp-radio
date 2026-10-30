@@ -17,7 +17,7 @@ pub(crate) fn select_wifi_channel<B: PlatformClockBackend, O: PhyTargetObserver>
     timer: &impl oer_cooperate::CooperativeTimer,
     domain: RadioDomain<B, ConcurrentPhy>,
     wifi: &mut WifiClocked,
-    channel: Permitted<oer_ieee80211_port::RegulatedChannel<WifiChannel>>,
+    channel: Permitted<oer_ieee80211_contracts_port::RegulatedChannel<WifiChannel>>,
     observer: &mut O,
 ) -> impl core::future::Future<
     Output = (

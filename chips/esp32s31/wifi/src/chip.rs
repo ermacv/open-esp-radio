@@ -5,8 +5,8 @@ use oer_esp32s31_ieee80211_driver::irq::{
 };
 use oer_espressif_executor::{Doorbell, DoorbellAcknowledger, InterruptExecutor};
 use oer_espressif_interrupt_table::{Bound, Entry, InterruptSources, signal::IrqSignal};
+use oer_ieee80211_core_roles_sta::machine::{StaCallbacks, StaConfig};
 use oer_ieee80211_runtime::station as runtime;
-use oer_ieee80211_sta::machine::{StaCallbacks, StaConfig};
 use oer_ieee80211_wire::{
     address::{IndividualAddress, OwnAddress},
     channel::WifiChannelWidth,
@@ -36,8 +36,10 @@ pub trait Binding: Sized + 'static {
     /// The sink the station service lends its cores: the protocol's events.
     /// `()` keeps none.
     type Sink: oer_ieee80211_runtime::station::StationEvents + 'static;
-    type Engine: oer_crypto::KeyUnwrap<{ oer_ieee80211_sta::machine::KEY_DATA_CAPACITY }, Operation: Unpin>
-        + 'static;
+    type Engine: oer_crypto::KeyUnwrap<
+            { oer_ieee80211_core_roles_sta::machine::KEY_DATA_CAPACITY },
+            Operation: Unpin,
+        > + 'static;
     type Events: Events + 'static;
     fn take_slot() -> Option<&'static mut radio::Slot<Self>>;
     /// Image-owned terminal policy, called with a handled construction error.
@@ -117,7 +119,7 @@ pub struct Config {
     pub(crate) target: Option<[u8; 6]>,
     pub(crate) all_channels: bool,
     pub(crate) domain: RegulatoryDomain,
-    pub(crate) supported: oer_ieee80211_port::SupportedChannel<Caps>,
+    pub(crate) supported: oer_ieee80211_contracts_port::SupportedChannel<Caps>,
 }
 impl Config {
     pub fn with_reconnect(mut self, policy: crate::ReconnectPolicy) -> Self {
@@ -134,11 +136,14 @@ impl Config {
         let domain =
             RegulatoryDomain::of(Country::new(country).map_err(|_| InitializationError::Country)?)
                 .ok_or(InitializationError::Domain)?;
-        let channel_value = oer_ieee80211_port::Channel::ghz2_4(channel, WifiChannelWidth::Mhz20)
-            .map_err(|_| InitializationError::Channel)?;
-        let supported = oer_ieee80211_port::SupportedChannel::new(
+        let channel_value =
+            oer_ieee80211_contracts_port::Channel::ghz2_4(channel, WifiChannelWidth::Mhz20)
+                .map_err(|_| InitializationError::Channel)?;
+        let supported = oer_ieee80211_contracts_port::SupportedChannel::new(
             domain
-                .permit(oer_ieee80211_port::RegulatedChannel::from(channel_value))
+                .permit(oer_ieee80211_contracts_port::RegulatedChannel::from(
+                    channel_value,
+                ))
                 .map_err(|_| InitializationError::Channel)?,
         )
         .ok_or(InitializationError::Channel)?;
@@ -160,13 +165,16 @@ impl<C: crate::Callbacks> StaCallbacks for CoreCallbacks<C> {
     fn nonce(&mut self) -> [u8; 32] {
         self.0.nonce()
     }
-    fn he_packet_padding(&self, _: &[u8]) -> oer_ieee80211_upper_mac::protection::HePacketPadding {
-        oer_ieee80211_upper_mac::protection::HePacketPadding::None
+    fn he_packet_padding(
+        &self,
+        _: &[u8],
+    ) -> oer_ieee80211_core_upper_mac::protection::HePacketPadding {
+        oer_ieee80211_core_upper_mac::protection::HePacketPadding::None
     }
 }
 pub(crate) enum Security {
     Open,
-    Wpa2Personal(oer_ieee80211_rsn::Pmk),
+    Wpa2Personal(oer_ieee80211_core_security_rsn::Pmk),
 }
 pub struct Profile<W: Binding> {
     pub(crate) station: StaConfig<Caps, CoreCallbacks<W::Callbacks>>,
@@ -186,13 +194,15 @@ impl<W: Binding> Profile<W> {
         let mut channels = heapless::Vec::new();
         if config.all_channels {
             for n in 1..=13 {
-                let Ok(ch) = oer_ieee80211_port::Channel::ghz2_4(n, WifiChannelWidth::Mhz20) else {
+                let Ok(ch) =
+                    oer_ieee80211_contracts_port::Channel::ghz2_4(n, WifiChannelWidth::Mhz20)
+                else {
                     continue;
                 };
                 if let Ok(p) = config
                     .domain
-                    .permit(oer_ieee80211_port::RegulatedChannel::from(ch))
-                    && let Some(c) = oer_ieee80211_port::SupportedChannel::<Caps>::new(p)
+                    .permit(oer_ieee80211_contracts_port::RegulatedChannel::from(ch))
+                    && let Some(c) = oer_ieee80211_contracts_port::SupportedChannel::<Caps>::new(p)
                 {
                     channels.push(c).map_err(|_| InitializationError::Channel)?;
                 }
@@ -215,8 +225,9 @@ impl<W: Binding> Profile<W> {
                 access_point_margin_db: 6,
                 supported_rates: [0x82, 0x84, 0x8b, 0x96, 0x0c, 0x12, 0x18, 0x24],
                 association: &service::ASSOCIATION,
-                listen_interval: oer_ieee80211_sta::request::StationListenInterval::DEFAULT,
-                phy: oer_ieee80211_upper_mac::phy_mode::PhyMode::Ht20,
+                listen_interval:
+                    oer_ieee80211_core_roles_sta::request::StationListenInterval::DEFAULT,
+                phy: oer_ieee80211_core_upper_mac::phy_mode::PhyMode::Ht20,
                 callbacks: CoreCallbacks(callbacks),
             },
             security: match credentials.pmk {

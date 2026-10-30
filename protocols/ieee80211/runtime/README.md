@@ -6,7 +6,7 @@ deadlines and application commands, hands each input to the cores and
 carries out their actions through the port. It decides no protocol question
 and neither parses nor builds frames: its normal dependencies are the port,
 the cores (`sta`, `upper-mac`, `arbiter`) and portable support, never
-`oer-ieee80211-wire`, `oer-ieee80211-cipher`, a chip crate, an executor or
+`oer-ieee80211-wire`, `oer-ieee80211-core-security-cipher`, a chip crate, an executor or
 Embassy time (`cargo test -p oer-test-layers`).
 
 The station's key-data unwrap runs in a `KeyUnwrapSlot`: the image's
@@ -21,8 +21,8 @@ depends on `oer-crypto`, not on the software engine in `cipher`.
 
 `station` provides `Control` and the port-generic `Runner`; `monitor` holds the capture and
 injection handoffs of a monitor. The frames a monitor keeps and the channels
-it visits are `oer-ieee80211-upper-mac`'s `monitor`; the requested owner
-topology is checked by `oer-ieee80211-arbiter`'s `configuration`.
+it visits are `oer-ieee80211-core-upper-mac`'s `monitor`; the requested owner
+topology is checked by `oer-ieee80211-core-arbiter`'s `configuration`.
 
 `station::Control` owns the sole command producer, product status and a
 cooperative stop connection. Control and its neutral network end can exist
@@ -41,9 +41,9 @@ Runner's owned result. `Control::wait_stopped` observes completion;
 `try_finish` consumes the control epoch and returns its command producer.
 The `connected-tasks` feature is enabled by the runtime, never by a core.
 
-Host tests use the allocating in-memory backend from `oer-ieee80211-model`
+Host tests use the allocating in-memory backend from `oer-ieee80211-testing-model`
 as a dev-dependency. The model's fixtures run the shared conformance cases in
-`oer-ieee80211-port`; runtime tests cover its station service over that model.
+`oer-ieee80211-contracts-port`; runtime tests cover its station service over that model.
 
 `StationPort` is a composition-owned mapping with a concrete `Backend`,
 `SlotId` and `Caps`. `station::Runner` owns that backend's lifecycle directly.

@@ -6,7 +6,7 @@ use core::{
     pin::pin,
     task::{Context, Poll, Waker},
 };
-use oer_ieee80211_port::*;
+use oer_ieee80211_contracts_port::*;
 use oer_ieee80211_wire::{
     address::IndividualAddress,
     frame::FrameControl,
@@ -1299,7 +1299,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for Tune {
                     oer_radio_regulatory::Country::new(*b"DE").expect("test country"),
                 )
                 .expect("domain fixture")
-                .permit(oer_ieee80211_port::RegulatedChannel::from(self.0))
+                .permit(oer_ieee80211_contracts_port::RegulatedChannel::from(self.0))
                 .expect("permitted test channel"),
             )
             .expect("supported test channel"),

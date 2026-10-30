@@ -9,9 +9,9 @@ description = "Espressif IEEE 802.11 transmit policy data recovered from the ven
 readme = "README.md"
 
 [dependencies]
-oer-ieee80211-port = { path = "../../../protocols/ieee80211/port" }
+oer-ieee80211-contracts-port = { path = "../../../protocols/ieee80211/contracts/port" }
 oer-ieee80211-wire = { path = "../../../protocols/ieee80211/wire" }
-oer-ieee80211-upper-mac = { path = "../../../protocols/ieee80211/upper-mac" }
+oer-ieee80211-core-upper-mac = { path = "../../../protocols/ieee80211/core/upper-mac" }
 oer-network-wire = { path = "../../../protocols/network/wire" }
 oer-time = { path = "../../../portable/time" }
 

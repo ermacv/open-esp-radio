@@ -6,7 +6,7 @@
 
 use super::{ieee802154_event, wifi_event};
 use crate::{CoexPtiTable, wifi_events};
-use oer_ieee80211_port::{ConnectionFrame, Operation, TxOperation};
+use oer_ieee80211_contracts_port::{ConnectionFrame, Operation, TxOperation};
 use oer_ieee802154_port::RadioOperation;
 
 #[test]

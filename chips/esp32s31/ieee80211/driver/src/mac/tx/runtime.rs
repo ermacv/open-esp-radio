@@ -1,6 +1,6 @@
 //! Hardware EDCA and negotiated HT/HE publication parameters.
 
-use oer_ieee80211_port::{EdcaParameterSet, VifRole};
+use oer_ieee80211_contracts_port::{EdcaParameterSet, VifRole};
 use oer_ieee80211_wire::qos::WmmAccessCategory;
 
 use crate::mac::{

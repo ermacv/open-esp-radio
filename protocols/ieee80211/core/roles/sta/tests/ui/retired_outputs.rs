@@ -1,0 +1,17 @@
+#![no_std]
+use oer_ieee80211_contracts_port::Ieee80211Capabilities;
+use oer_ieee80211_core_roles_sta::machine::{RetiredStation, StationRestart, StaTokens};
+
+pub fn retired<'id, T: StaTokens, K: Ieee80211Capabilities, C: oer_ieee80211_core_roles_sta::machine::StaCallbacks>(station: RetiredStation<'id, T, K, C>) {
+    #[cfg(ui_reject)]
+    drop(station.deferred_eapol); // ui-error: E0616
+    #[cfg(not(ui_reject))]
+    drop(station.into_outputs());
+}
+
+pub fn restarted<'id, T: StaTokens, K: Ieee80211Capabilities, C: oer_ieee80211_core_roles_sta::machine::StaCallbacks>(station: StationRestart<'id, T, K, C>) {
+    #[cfg(ui_reject)]
+    drop(station.notice); // ui-error: E0616
+    #[cfg(not(ui_reject))]
+    drop(station.into_parts());
+}

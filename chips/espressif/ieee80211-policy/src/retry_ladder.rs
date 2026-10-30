@@ -7,11 +7,11 @@
 //! the record comes from `rcUpdatePhyMode`'s mapping of that rate. The
 //! ladder is the vendor's policy and is inseparable from its schedule bytes,
 //! so it lives here beside them; the portable retry state machine
-//! (`oer-ieee80211-upper-mac::retry`) consumes it through
+//! (`oer-ieee80211-core-upper-mac::retry`) consumes it through
 //! [`RateLadder`].
 
-use oer_ieee80211_port::backend::RateScheduleKind;
-use oer_ieee80211_upper_mac::RateLadder;
+use oer_ieee80211_contracts_port::backend::RateScheduleKind;
+use oer_ieee80211_core_upper_mac::RateLadder;
 use oer_ieee80211_wire::phy::{
     FecCoding, HeGiLtf, HeRate, HtRate, LegacyRate, PhyRate, PpduBandwidth,
 };

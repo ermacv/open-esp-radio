@@ -2,10 +2,10 @@
 //!
 //! The values are those `libpp[lmac.o]::lmacInit` installs in the pinned
 //! ESP32-S31 library. They parameterize the portable algorithms of
-//! `oer-ieee80211-upper-mac`, which a backend running the Espressif policy
+//! `oer-ieee80211-core-upper-mac`, which a backend running the Espressif policy
 //! instantiates with them.
 
-use oer_ieee80211_upper_mac::{AckFailureAccounting, AmpduRetryPolicy, RetryLimits};
+use oer_ieee80211_core_upper_mac::{AckFailureAccounting, AmpduRetryPolicy, RetryLimits};
 use oer_ieee80211_wire::qos::WmmAccessCategory;
 use oer_time::Duration;
 

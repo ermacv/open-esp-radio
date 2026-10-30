@@ -19,8 +19,8 @@ pub use credentials::{
     Callbacks, CredentialsError, NonceExhausted, NonceSource, OpenCallbacks, PreparedCredentials,
     StationSettings,
 };
+use oer_ieee80211_core_roles_sta::data::{EthernetFrame as Frame, TxMsdu};
 use oer_ieee80211_runtime::station as runtime;
-use oer_ieee80211_sta::data::{EthernetFrame as Frame, TxMsdu};
 use oer_memory::WakingSpscQueue;
 use oer_network_port::{EthernetFrame, LinkSnapshot, NetDevice, TransmitRefused};
 use runtime::contract::Command;

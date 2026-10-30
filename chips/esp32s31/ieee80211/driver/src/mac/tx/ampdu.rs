@@ -52,7 +52,7 @@ pub use request::{
 };
 
 use crate::mac::tx::{LegacyTxQueue, TxCompletion, TxCookie, TxDmaState};
-use oer_ieee80211_port::backend_aggregate::{AmpduRetryDecision, AmpduRetryError};
+use oer_ieee80211_contracts_port::backend_aggregate::{AmpduRetryDecision, AmpduRetryError};
 pub const TX_AMPDU_METADATA_SIZE: usize = 8;
 const TX_FCS_SIZE: u16 = 4;
 const TX_AMPDU_DEFAULT_MAX_BYTES: u16 = 0x1fff;
@@ -398,7 +398,9 @@ impl<const SLOTS: usize> Default for HtAmpduTxStorage<SLOTS> {
 #[cfg(test)]
 mod tests;
 
-impl From<HtAmpduTxCompletion> for oer_ieee80211_port::backend_aggregate::BackendAmpduCompletion {
+impl From<HtAmpduTxCompletion>
+    for oer_ieee80211_contracts_port::backend_aggregate::BackendAmpduCompletion
+{
     fn from(completion: HtAmpduTxCompletion) -> Self {
         Self {
             status: completion.tx.tx_status(),

@@ -262,7 +262,7 @@ fn malformed_prefix_refusals_are_counted_by_reason() {
 
 mod normalized_handoff {
     use crate::mac::portable::rx_meta;
-    use oer_ieee80211_port::{Channel, ChannelWidth, RxEvidence};
+    use oer_ieee80211_contracts_port::{Channel, ChannelWidth, RxEvidence};
     use oer_time::Instant;
 
     use super::*;

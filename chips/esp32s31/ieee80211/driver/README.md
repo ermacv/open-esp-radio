@@ -13,7 +13,7 @@ in `mac::portable`.
 
 The explicit `test-support` feature enables synthetic completion evidence
 and DMA models. Portable peer airtime fairness belongs to
-[`oer-ieee80211-upper-mac::airtime`](../../../../protocols/ieee80211/upper-mac/README.md).
+[`oer-ieee80211-core-upper-mac::airtime`](../../../../protocols/ieee80211/core/upper-mac/README.md).
 The MAC exposes `mac::tx_cost` and `mac::tx_work`; it does not select peers
 or own the fairness ledger. Tests under `src/mac/airtime_tests` combine the
 upper-MAC scheduler with work receipts and network TX queues, using only
@@ -25,7 +25,7 @@ development dependencies on the upper MAC and `oer-embassy-net`.
   caller-selected single attempt and a fixed-rate `ManagementTxPlan`. The
   caller supplies RTS/CTS or CTS-to-self and its legacy control rate; the
   driver retains no BSS protection or retry ladder. ESP-NOW protocol state
-  stays in `oer-ieee80211-esp-now`, with no dedicated driver TX entry point. A protected
+  stays in `oer-ieee80211-core-extensions-esp-now`, with no dedicated driver TX entry point. A protected
   MPDU is numbered at its first launch; DMA
   is reached only through its owner type, never alongside a quiescence proof.
 - **MAC ownership.** The driver coordinates MAC stop, RX draining and the
@@ -230,4 +230,4 @@ the optional aggregate, beacon-timing, monitor or air-reservation phases.
 Its publication watchdog is 250 ms; command and retirement bounds
 are 400 ms, including the publication and the finite RX stop.
 The operation mapping and portable limits are in
-[the port's README](../../../../protocols/ieee80211/port/README.md#implementers).
+[the port's README](../../../../protocols/ieee80211/contracts/port/README.md#implementers).

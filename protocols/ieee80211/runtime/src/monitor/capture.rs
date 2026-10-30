@@ -7,7 +7,7 @@
 //! the selected chip can access that memory; the lock-free SPSC queue stores
 //! only leases and metadata, not frame-sized arrays.
 
-use oer_ieee80211_port::{
+use oer_ieee80211_contracts_port::{
     ChannelContextId, MacRxMetadata, MonitorDropReason, MonitorFrame,
     MonitorInjectionChannelBinding, MonitorPublishOutcome, MonitorSink, MonitorTapPoint,
     WifiChannel,

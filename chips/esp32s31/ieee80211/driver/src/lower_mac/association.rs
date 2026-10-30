@@ -14,7 +14,7 @@
 //! `libpp[hal_crypto.o]::hal_crypto_clr_key_entry` +0x0..+0x88.
 
 use super::TransmitKeyScope;
-use oer_ieee80211_port::{
+use oer_ieee80211_contracts_port::{
     AccessPoint, Station,
     association::{Association, GroupKeySlot, PairwiseKeySlot, VacantAssociation},
 };

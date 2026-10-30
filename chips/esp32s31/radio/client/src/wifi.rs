@@ -83,7 +83,7 @@ pub struct WifiJoined {
 /// `track`: the clocked client and the MAC bring-up inputs.
 pub struct WifiTrack {
     pub wifi: WifiClocked,
-    pub channel: Permitted<oer_ieee80211_port::RegulatedChannel<WifiChannel>>,
+    pub channel: Permitted<oer_ieee80211_contracts_port::RegulatedChannel<WifiChannel>>,
     pub tx_ceiling: TxCeiling,
     pub mac: MacColdStartConfig,
     pub slow_clock: MacSlowClockCalibration,
@@ -123,7 +123,7 @@ pub struct WifiLeft {
 /// A channel transaction with the Wi-Fi runtime completely stopped.
 pub struct WifiRetune {
     pub wifi: WifiClocked,
-    pub channel: Permitted<oer_ieee80211_port::RegulatedChannel<WifiChannel>>,
+    pub channel: Permitted<oer_ieee80211_contracts_port::RegulatedChannel<WifiChannel>>,
     pub tx_ceiling: TxCeiling,
 }
 

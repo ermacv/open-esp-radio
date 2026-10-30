@@ -65,10 +65,13 @@ pub fn refuse(root: &Path, package: &str, target: &str) -> Result<()> {
 mod tests {
     #[test]
     fn no_image_may_link_test_support_cases() {
-        let tree = "oer-ieee80211-port v0.1.0 (/port)|test-support\noer-esp32s31-hal v0.1.0 (/hal)|test-support\n";
+        let tree = "oer-ieee80211-contracts-port v0.1.0 (/port)|test-support\noer-esp32s31-hal v0.1.0 (/hal)|test-support\n";
         assert_eq!(
             super::forbidden_packages(tree),
-            ["oer-esp32s31-hal v0.1.0", "oer-ieee80211-port v0.1.0"]
+            [
+                "oer-esp32s31-hal v0.1.0",
+                "oer-ieee80211-contracts-port v0.1.0"
+            ]
         );
     }
     #[test]

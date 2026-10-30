@@ -114,8 +114,12 @@ facades, observation collectors, bindings and the agent. HAL files whose product
 layer tests that only shrinks; the HAL also still holds driver code without
 a waiting marker ([HAL](../chips/esp32s31/hal/README.md)).
 
-Wi-Fi is split into `wire` (over-the-air formats), `port` (the backend
-contract), sans-IO cores and a `runtime`. Bluetooth LE has wire formats, a
+Wi-Fi is split into `wire` (over-the-air formats), `contracts/` (the
+backend port and the installed-protection contract), the sans-IO cores under
+`core/` (`upper-mac` and `arbiter`, the security transforms and handshakes in
+`security/`, the `roles/` station and access point, and `extensions/`), a
+`runtime`, and `testing/` (the backend conformance suite and the reference
+model), which no product package depends on. Bluetooth LE has wire formats, a
 backend port, synchronous LL/controller cores, an executor-independent
 runtime and a reference model. IEEE 802.15.4 has `wire`, `port`, the `mac`
 core and a separate host reference `model`. A backend depends on its

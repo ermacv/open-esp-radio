@@ -45,9 +45,13 @@ protocols/bluetooth/hci/
 protocols/bluetooth/le/{cipher, controller, ll, model, port, runtime, wire}/
 protocols/bridges/ieee80211-ethernet/
 protocols/hil/{agent, protocol}/
-protocols/ieee80211/{ap, arbiter, cipher, esp-now, model, port, rsn, runtime,
-    sta, upper-mac, wire}/
-protocols/ieee80211/contracts/security/
+protocols/ieee80211/{runtime, wire}/
+protocols/ieee80211/contracts/{port, security}/
+protocols/ieee80211/core/{arbiter, upper-mac}/
+protocols/ieee80211/core/extensions/esp-now/
+protocols/ieee80211/core/roles/{ap, sta}/
+protocols/ieee80211/core/security/{cipher, rsn}/
+protocols/ieee80211/testing/{conformance, model}/
 protocols/ieee802154/{mac, model, port, wire}/
 protocols/network/{port, wire}/
 protocols/radio/{coex, port, regulatory}/
@@ -113,7 +117,10 @@ role in `oer-test-layers` that names its level
 grants nothing. `chips/esp32s31/wifi` assembles the S31 station backend and portable runtime as the Wi-Fi facade.
 A protocol leaf named `instrumentation` is an observation contract; a leaf
 named `hil` takes its role from the list. A package under a protocol's
-`contracts/` is a protocol contract, which a backend may use, and
+`contracts/` is a protocol contract, which a backend may use, except
+`contracts/port`, which keeps the port's role; `testing/conformance` is a
+backend conformance suite and `testing/model` a reference model, and no
+product package depends on either; and
 `protocols/bridges/*` are bridges, which stand only on the codecs they
 join.
 

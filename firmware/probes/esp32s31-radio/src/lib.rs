@@ -14,7 +14,7 @@
 //! later entries borrow the session's owners ([`session`]).
 
 use oer_esp32s31_ieee80211_driver::mac::ap_tsf::AccessPointTsf;
-use oer_ieee80211_port::backend::RetryCounters;
+use oer_ieee80211_contracts_port::backend::RetryCounters;
 
 mod calibration_leaves;
 mod coex;

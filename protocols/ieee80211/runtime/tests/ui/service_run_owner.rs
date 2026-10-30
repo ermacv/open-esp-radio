@@ -1,6 +1,6 @@
 #![no_std]
 use oer_ieee80211_runtime::station::{PortAck, PortRxMeta, Runner, ServiceIo, StationPort};
-use oer_ieee80211_upper_mac::rate_selection::RateSelection;
+use oer_ieee80211_core_upper_mac::rate_selection::RateSelection;
 use oer_radio_port::{Disabled, Owner};
 use oer_time::Timer;
 
@@ -8,7 +8,7 @@ pub fn run_once<
     'p,
     'id,
     B: StationPort<SlotId: 'id, Backend: 'id> + 'id,
-    C: oer_ieee80211_sta::machine::StaCallbacks,
+    C: oer_ieee80211_core_roles_sta::machine::StaCallbacks,
     S: RateSelection<PortRxMeta<'id, B>, PortAck<'id, B>>,
 >(
     service: Runner<'id, B, C, S>,
@@ -23,7 +23,7 @@ pub fn run_once<
     >,
     timer: &impl Timer,
     unwrap: &mut oer_ieee80211_runtime::station::KeyUnwrapSlot<
-        impl oer_crypto::KeyUnwrap<{ oer_ieee80211_sta::machine::KEY_DATA_CAPACITY }, Operation: Unpin>,
+        impl oer_crypto::KeyUnwrap<{ oer_ieee80211_core_roles_sta::machine::KEY_DATA_CAPACITY }, Operation: Unpin>,
     >,
 ) {
     let run = service.run(owner, io, timer, unwrap);

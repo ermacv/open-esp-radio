@@ -184,7 +184,7 @@ pub struct KeyUse<'core, Path: PoolPath = Root<oer_radio_port::LocalId<'core>>> 
     pub(super) ticket: TxTicket<'core, Path>,
     pub(super) index: usize,
     pub(super) selector: u8,
-    pub(super) role: oer_ieee80211_port::VifRole,
+    pub(super) role: oer_ieee80211_contracts_port::VifRole,
 }
 
 /// The encryption authority of an admitted attempt. The protected variant
@@ -200,7 +200,7 @@ pub enum TxAdmission<'core, Path: PoolPath = Root<oer_radio_port::LocalId<'core>
 impl<Path: PoolPath> TxAdmission<'_, Path> {
     pub(super) fn matches_frame(
         &self,
-        role: oer_ieee80211_port::VifRole,
+        role: oer_ieee80211_contracts_port::VifRole,
         frame: Option<&[u8]>,
     ) -> bool {
         let Some(field) = frame.and_then(|frame| frame.first_chunk::<2>()) else {

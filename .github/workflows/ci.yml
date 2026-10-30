@@ -64,7 +64,7 @@ jobs:
           # with test-support. This list records the other sets.
           cargo test --locked -p oer-esp32s31-phy --features radio-health
           cargo clippy --locked -p oer-esp32s31-phy --features radio-health --all-targets
-          cargo test --locked -p oer-ieee80211-sta
+          cargo test --locked -p oer-ieee80211-core-roles-sta
           cargo test --locked -p oer-esp32s31-ieee80211-driver
           cargo test --locked -p oer-time --features serde
           cargo test --locked -p oer-time --features schema

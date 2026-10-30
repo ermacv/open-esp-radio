@@ -412,7 +412,10 @@ fn a_function_takes_the_layer_of_the_crate_its_name_starts_with() {
             Path::new("chips/espressif/executor"),
         ),
         ("oer-time", Path::new("portable/time")),
-        ("oer-ieee80211-sta", Path::new("protocols/ieee80211/sta")),
+        (
+            "oer-ieee80211-core-roles-sta",
+            Path::new("protocols/ieee80211/core/roles/sta"),
+        ),
         (
             "oer-firmware-apps-boot-smoke",
             Path::new("firmware/apps/boot-smoke"),
@@ -437,7 +440,10 @@ fn a_function_takes_the_layer_of_the_crate_its_name_starts_with() {
             "<&oer_time::Instant as core::fmt::Debug>::fmt",
             Layer::Portable,
         ),
-        ("oer_ieee80211_sta::Station::step", Layer::Protocols),
+        (
+            "oer_ieee80211_core_roles_sta::Station::step",
+            Layer::Protocols,
+        ),
         ("oer_firmware_apps_boot_smoke::main", Layer::Firmware),
         (
             "oer_hil_scenarios_images_esp32s31_rpc::main",

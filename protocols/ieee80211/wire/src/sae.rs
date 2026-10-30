@@ -1,7 +1,7 @@
 //! SAE Authentication frame bodies: the Commit and Confirm fields as byte
 //! values and the extension elements an SAE exchange carries. What a scalar,
 //! an element or a confirm value means is the cryptography of
-//! `oer-ieee80211-rsn`.
+//! `oer-ieee80211-core-security-rsn`.
 //!
 //! SOURCE: IEEE Std 802.11-2020, 9.3.3.12, Table 9-41 (Authentication frame
 //! body), 12.4.7.4 (Encoding and decoding of SAE Commit messages) and 12.4.7.5

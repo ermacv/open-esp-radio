@@ -8,8 +8,8 @@
 //! send, fails closed instead of approximating.
 
 use oer_esp32s31_hal::types::MacLegacyRate;
-use oer_ieee80211_port::MacRxMetadata;
-use oer_ieee80211_port::RxMeta;
+use oer_ieee80211_contracts_port::MacRxMetadata;
+use oer_ieee80211_contracts_port::RxMeta;
 use oer_ieee80211_wire::{
     channel::Channel,
     phy,

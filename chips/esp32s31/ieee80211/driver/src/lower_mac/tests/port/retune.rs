@@ -56,7 +56,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for Retune {
                     oer_radio_regulatory::Country::new(*b"DE").expect("test country"),
                 )
                 .expect("domain fixture")
-                .permit(oer_ieee80211_port::RegulatedChannel::from(
+                .permit(oer_ieee80211_contracts_port::RegulatedChannel::from(
                     Channel::from_wifi_channel(channel(1)),
                 ))
                 .expect("permitted test channel"),

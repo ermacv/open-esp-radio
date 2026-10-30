@@ -27,7 +27,7 @@ use oer_esp32s31_hal::types::{
     MacTxCompletionObservation, MacTxDetachOutcome, MacTxDetachReason, MacTxQueueDetached,
 };
 use oer_espressif_ieee80211_policy::backend::EspressifAmpduRetryState as AmpduRetryState;
-use oer_ieee80211_port::backend_aggregate::AmpduRetryDecision;
+use oer_ieee80211_contracts_port::backend_aggregate::AmpduRetryDecision;
 use oer_memory::{HardwareOwnedTxDma, PinnedDmaTxPool, PinnedDmaTxRadioLease, PreparedTxDma};
 
 struct CompletionHardware {
@@ -1574,7 +1574,7 @@ fn basic_ht_assembly_rejects_he_bar_ampdu_and_bad_lengths_before_mutation() {
     );
 }
 
-use oer_ieee80211_upper_mac::block_ack::acknowledges;
+use oer_ieee80211_core_upper_mac::block_ack::acknowledges;
 
 #[test]
 fn block_ack_bitmap_handles_sequence_wrap() {

@@ -11,12 +11,12 @@ error[E0308]: mismatched types
    |              |
    |              arguments to this method are incorrect
    |
-   = note: expected struct `ConfigurePermission<'_, oer_ieee80211_port::Station, oer_radio_port::Child<oer_radio_port::Child<Root<Id>, 9>, 1>>`
-              found struct `ConfigurePermission<'_, oer_ieee80211_port::Station, oer_radio_port::Child<oer_radio_port::Child<Root<OuterId>, 9>, 1>>`
+   = note: expected struct `ConfigurePermission<'_, oer_ieee80211_contracts_port::Station, oer_radio_port::Child<oer_radio_port::Child<Root<Id>, 9>, 1>>`
+              found struct `ConfigurePermission<'_, oer_ieee80211_contracts_port::Station, oer_radio_port::Child<oer_radio_port::Child<Root<OuterId>, 9>, 1>>`
    = note: a type parameter was expected, but a different one was found; you might be missing a type parameter or trait bound
    = note: for more information, visit https://doc.rust-lang.org/book/ch10-02-traits.html#traits-as-parameters
 note: method defined here
-  --> $WORKSPACE/protocols/ieee80211/port/src/phase.rs
+  --> $WORKSPACE/protocols/ieee80211/contracts/port/src/phase.rs
    |
    |     fn configure(
    |        ^^^^^^^^^

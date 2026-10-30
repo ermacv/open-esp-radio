@@ -544,7 +544,7 @@ fn non_data_frames_use_the_association_control_schedule() {
 }
 
 mod seam {
-    use oer_ieee80211_port::{BlockAckSnr, LinkMetric, SnrSample};
+    use oer_ieee80211_contracts_port::{BlockAckSnr, LinkMetric, SnrSample};
 
     /// BlockAck evidence named by its hardware condition, as the S31's is.
     enum Evidence {
@@ -560,11 +560,11 @@ mod seam {
             }
         }
     }
-    use oer_ieee80211_upper_mac::rate_control::{
+    use oer_ieee80211_core_upper_mac::rate_control::{
         AmpduUnavailable, MpduOutcome, RateControl, RatePeer,
     };
     use {
-        oer_ieee80211_upper_mac::phy_mode::PhyMode,
+        oer_ieee80211_core_upper_mac::phy_mode::PhyMode,
         oer_ieee80211_wire::{
             ht::ht_peer_capabilities,
             phy::{HtMcs, HtRate, PhyRate, PpduBandwidth},
@@ -583,7 +583,7 @@ mod seam {
         RatePeer {
             phy: PhyMode::Ht20,
             legacy_rates:
-                oer_ieee80211_upper_mac::rate_control::NegotiatedLegacyRates::from_rate_elements(
+                oer_ieee80211_core_upper_mac::rate_control::NegotiatedLegacyRates::from_rate_elements(
                     &[2, 4, 11, 22, 12, 18, 24, 36],
                     &[48, 72, 96, 108],
                 )
@@ -699,7 +699,7 @@ mod seam {
         let peer = RatePeer {
             phy: PhyMode::Legacy,
             legacy_rates:
-                oer_ieee80211_upper_mac::rate_control::NegotiatedLegacyRates::from_rate_elements(
+                oer_ieee80211_core_upper_mac::rate_control::NegotiatedLegacyRates::from_rate_elements(
                     &[2, 4, 11, 22, 12, 18, 24, 36],
                     &[48, 72, 96, 108],
                 )
@@ -848,4 +848,4 @@ fn the_last_record_of_every_table_is_the_slowest() {
 }
 
 use crate::rate_record::RateScheduleRef;
-use oer_ieee80211_port::backend::RateScheduleKind;
+use oer_ieee80211_contracts_port::backend::RateScheduleKind;

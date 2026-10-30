@@ -197,7 +197,9 @@ impl<W> WifiStopped<W> {
     pub async fn retune(
         self,
         cell: MembershipCell<Wifi>,
-        channel: oer_radio_regulatory::Permitted<oer_ieee80211_port::RegulatedChannel<WifiChannel>>,
+        channel: oer_radio_regulatory::Permitted<
+            oer_ieee80211_contracts_port::RegulatedChannel<WifiChannel>,
+        >,
         tx_ceiling: oer_radio_regulatory::TxCeiling,
     ) -> Result<
         (
@@ -217,7 +219,9 @@ impl<W> WifiStopped<W> {
     pub fn start_retune(
         self,
         cell: MembershipCell<Wifi>,
-        channel: oer_radio_regulatory::Permitted<oer_ieee80211_port::RegulatedChannel<WifiChannel>>,
+        channel: oer_radio_regulatory::Permitted<
+            oer_ieee80211_contracts_port::RegulatedChannel<WifiChannel>,
+        >,
         tx_ceiling: oer_radio_regulatory::TxCeiling,
     ) -> WifiRetunePending<W> {
         let Self {

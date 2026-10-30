@@ -1,8 +1,8 @@
 //! The relation of an interface's TSF to the port's radio clock across the
 //! TSF writes the backend makes.
 
-use oer_ieee80211_port::tsf::{TsfDuration, TsfInstant};
-use oer_ieee80211_port::{Ieee80211Instant, TSF_DRIFT_PPM, TsfGeneration};
+use oer_ieee80211_contracts_port::tsf::{TsfDuration, TsfInstant};
+use oer_ieee80211_contracts_port::{Ieee80211Instant, TSF_DRIFT_PPM, TsfGeneration};
 
 /// The relation of one interface's TSF to the radio clock across TSF sets:
 /// its generation and its last sample, the value the TSF was last set to.
@@ -18,7 +18,7 @@ use oer_ieee80211_port::{Ieee80211Instant, TSF_DRIFT_PPM, TsfGeneration};
 /// one generation always compare in order.
 #[derive(Debug, Eq, PartialEq)]
 pub struct TsfRelation {
-    generations: oer_ieee80211_port::GenerationSource<TsfInstant, Ieee80211Instant>,
+    generations: oer_ieee80211_contracts_port::GenerationSource<TsfInstant, Ieee80211Instant>,
     last_sample: LastSample,
     sample_uncertainty: TsfDuration,
 }
@@ -56,7 +56,7 @@ impl TsfRelation {
     /// `sample_uncertainty` (the backend's TSF counter resolution).
     pub const fn new(epoch: u32, sample_uncertainty: TsfDuration) -> Self {
         Self {
-            generations: oer_ieee80211_port::GenerationSource::new(epoch),
+            generations: oer_ieee80211_contracts_port::GenerationSource::new(epoch),
             last_sample: LastSample::Unanchored,
             sample_uncertainty,
         }

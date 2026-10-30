@@ -1,7 +1,7 @@
 //! BSS protection fields of the ERP and HT Operation elements.
 //!
 //! These are the values a BSS advertises; the transmitter's per-PPDU choice
-//! of RTS/CTS or CTS-to-self is `oer-ieee80211-upper-mac`'s protection
+//! of RTS/CTS or CTS-to-self is `oer-ieee80211-core-upper-mac`'s protection
 //! policy.
 
 /// ERP Information element requirements on transmitters.

@@ -4,8 +4,8 @@ use oer_esp32s31_ieee80211_driver::mac::{
     portable::UnsupportedTxRate,
     tx::{HtChannelWidth, TxPhyRate},
 };
-use oer_ieee80211_port::{PhyRate, backend::RetryCounters};
-use oer_ieee80211_upper_mac::retry::{RateLadder, select_ordinary_retry_rate};
+use oer_ieee80211_contracts_port::{PhyRate, backend::RetryCounters};
+use oer_ieee80211_core_upper_mac::retry::{RateLadder, select_ordinary_retry_rate};
 
 /// Return word of the rate-selection probe; the vendor comparison observes
 /// descriptor writes and does not compare this additional refusal report.

@@ -2,8 +2,8 @@
 
 `oer-espressif-ieee80211-policy` is the Espressif family's policy data for
 the portable transmit algorithms above the
-[lower-MAC port](../../../protocols/ieee80211/port/README.md). The algorithms are
-written once in [`oer-ieee80211-upper-mac`](../../../protocols/ieee80211/upper-mac/README.md)
+[lower-MAC port](../../../protocols/ieee80211/contracts/port/README.md). The algorithms are
+written once in [`oer-ieee80211-core-upper-mac`](../../../protocols/ieee80211/core/upper-mac/README.md)
 and `oer-ieee80211-wire`; they take limits, rate ladders and estimates as
 parameters, and this package supplies the values the vendor stack uses. It
 is a `family` package (`family = "espressif"`): chips of the family may

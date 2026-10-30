@@ -8,7 +8,7 @@
 pub mod contention;
 
 use contention::EdcaContention;
-use oer_ieee80211_port::{EdcaAcParameters, EdcaParameterSet};
+use oer_ieee80211_contracts_port::{EdcaAcParameters, EdcaParameterSet};
 use oer_ieee80211_wire::extensions::wmm::WmmAcParameters;
 use oer_ieee80211_wire::qos::WmmAccessCategory;
 

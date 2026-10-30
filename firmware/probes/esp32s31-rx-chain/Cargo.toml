@@ -30,7 +30,7 @@ oer-esp32s31-phy = { path = "../../../chips/esp32s31/phy" }
 oer-esp32s31-radio-client = { path = "../../../chips/esp32s31/radio/client" }
 oer-esp32s31-radio-system = { path = "../../../chips/esp32s31/radio/system" }
 oer-esp32s31-ieee80211-driver = { path = "../../../chips/esp32s31/ieee80211/driver" }
-oer-ieee80211-port = { path = "../../../protocols/ieee80211/port" }
+oer-ieee80211-contracts-port = { path = "../../../protocols/ieee80211/contracts/port" }
 oer-ieee80211-wire = { path = "../../../protocols/ieee80211/wire" }
 oer-radio-regulatory = { path = "../../../protocols/radio/regulatory" }
 

@@ -3,7 +3,7 @@
 //!
 //! Every constructor yields a twelve-bit value, so frame builders need no
 //! range validation. Their modulo-4096 arithmetic belongs to the MAC
-//! mechanisms (`oer_ieee80211_upper_mac::sequence::SequenceSpace`).
+//! mechanisms (`oer_ieee80211_core_upper_mac::sequence::SequenceSpace`).
 
 /// One twelve-bit IEEE 802.11 sequence number.
 ///

@@ -1,9 +1,9 @@
 #![no_std]
-use oer_ieee80211_port::{KeyTypes, LowerMacPhase, StationPhase, Station};
-use oer_ieee80211_model::{ModelKeys, ModelPhase};
+use oer_ieee80211_contracts_port::{KeyTypes, LowerMacPhase, StationPhase, Station};
+use oer_ieee80211_testing_model::{ModelKeys, ModelPhase};
 
 pub fn installation_belongs_to_port<'p, 'a: 'p, 'b: 'p>(
-    target: &mut ModelPhase<'p, 'a, oer_ieee80211_model::ModelCaps, Composition>,
+    target: &mut ModelPhase<'p, 'a, oer_ieee80211_testing_model::ModelCaps, Composition>,
     permission: <ModelKeys<'a, Composition, Station> as KeyTypes<'a>>::GroupPermission,
     local: <ModelKeys<'a, Composition, Station> as KeyTypes<'a>>::GroupKey,
     foreign: <ModelKeys<'b, Composition, Station> as KeyTypes<'b>>::GroupKey,
@@ -15,4 +15,4 @@ pub fn installation_belongs_to_port<'p, 'a: 'p, 'b: 'p>(
 }
 
 pub enum UiSlot {}
-type Composition = oer_ieee80211_model::ModelBackend<oer_radio_port::StaticId<UiSlot>>;
+type Composition = oer_ieee80211_testing_model::ModelBackend<oer_radio_port::StaticId<UiSlot>>;

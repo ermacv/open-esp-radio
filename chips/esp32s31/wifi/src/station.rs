@@ -8,15 +8,15 @@ use core::{convert::Infallible, future::Future, marker::PhantomData, mem::MaybeU
 use oer_embassy_time::EmbassyClock;
 use oer_esp32s31_ieee80211_driver::port::{self, device::Composition};
 use oer_espressif_ieee80211_policy::rate_selection::EspressifRateSelection;
-use oer_ieee80211_port::*;
+use oer_ieee80211_contracts_port::*;
 use oer_ieee80211_runtime::station::*;
 
-use oer_ieee80211_sta::{
+use oer_ieee80211_core_roles_sta::{
     data::StaData,
     epoch::{EpochContext, LinkEpochSource},
     machine::{self, Station, StationResources},
 };
-use oer_ieee80211_upper_mac::{
+use oer_ieee80211_core_upper_mac::{
     rate_control::RatePeer,
     rate_selection::{FrameRates, RateSelection},
 };
@@ -180,7 +180,7 @@ impl<W: Binding, Id: SlotIdentity> StationPort for StationComposition<W, Id> {
 
 pub struct Rates<W: Binding>(EspressifRateSelection<Caps>, W::Observer);
 impl<W: Binding, M: SignalMetadata> RateSelection<M, port::Ack> for Rates<W> {
-    fn packet_number_step(&self) -> oer_ieee80211_upper_mac::ccmp::CcmpPacketNumberStep {
+    fn packet_number_step(&self) -> oer_ieee80211_core_upper_mac::ccmp::CcmpPacketNumberStep {
         <EspressifRateSelection<Caps> as RateSelection<M, port::Ack>>::packet_number_step(&self.0)
     }
     fn plan<R>(

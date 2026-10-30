@@ -10,7 +10,7 @@ use crate::ordinary_tx::{TX_FCS_SIZE, TX_METADATA_SIZE};
 
 use oer_esp32s31_hal::types::MacLegacyRate;
 
-use oer_ieee80211_port::{
+use oer_ieee80211_contracts_port::{
     MonitorInjectionChannelBinding, MonitorInjectionRate, MonitorInjectionRequest, MonitorSink,
 };
 
@@ -71,7 +71,7 @@ pub const fn esp32s31_monitor_injection_rate(rate: MonitorInjectionRate) -> MacL
 /// `sink` is the actual monitor task's retained capture owner. Its binding is
 /// created by `begin_channel_epoch`, not copied from the application request.
 /// The runtime's checked standalone-monitor topology
-/// (`oer_ieee80211_arbiter::configuration::WifiStandaloneMonitorPlan`)
+/// (`oer_ieee80211_core_arbiter::configuration::WifiStandaloneMonitorPlan`)
 /// excludes connected and concurrent monitor topologies before a sink exists.
 pub fn admit_esp32s31_monitor_injection<Rate, S: MonitorSink<Rate>, const TX_BUFFER_SIZE: usize>(
     sink: &S,

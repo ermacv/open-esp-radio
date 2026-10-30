@@ -21,7 +21,7 @@ use oer_esp32s31_hal::ieee80211::dma::{
     rx_ring::{RxRingError, RxSegment},
     rx_storage::{RxDmaCompletedUnit, RxDmaDetachedUnit},
 };
-use oer_ieee80211_port::MacRxMetadata;
+use oer_ieee80211_contracts_port::MacRxMetadata;
 use oer_memory::{ExternalRxHandoffPool, ExternalRxRadioLease};
 
 pub const VENDOR_LARGE_RX_SLOT_COUNT: usize = 32;

@@ -13,7 +13,7 @@
 //! minimum of the frame and slice priorities as the scheduler priority.
 
 use core::future::Future;
-use oer_ieee80211_port::ConnectionFrame;
+use oer_ieee80211_contracts_port::ConnectionFrame;
 
 /// The priorities of a connection frame under the reconnect policy.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

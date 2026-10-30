@@ -10,7 +10,7 @@ use core::{
 };
 use embassy_futures::select::{Either, select};
 use oer_bridges_ieee80211_ethernet::qos::classify_wmm;
-use oer_ieee80211_sta::data::{EthernetFrame, TxMsdu};
+use oer_ieee80211_core_roles_sta::data::{EthernetFrame, TxMsdu};
 use oer_memory::{WakingSpscReceiver, WakingSpscSender};
 use oer_network_port::{LinkSnapshot, LinkState, NetDevice, TransmitError, TransmitRefused};
 use oer_sync::PriorityWaker;

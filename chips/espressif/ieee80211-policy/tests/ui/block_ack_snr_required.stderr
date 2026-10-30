@@ -17,7 +17,7 @@ help: the trait `BlockAckSnr` is implemented for `Measured`
  8 | impl BlockAckSnr for Measured {
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 note: required by a bound in `observe_ampdu`
-  --> $WORKSPACE/protocols/ieee80211/upper-mac/src/rate_control.rs
+  --> $WORKSPACE/protocols/ieee80211/core/upper-mac/src/rate_control.rs
    |
    |     fn observe_ampdu<B: BlockAckSnr>(
    |                         ^^^^^^^^^^^ required by this bound in `RateControl::observe_ampdu`

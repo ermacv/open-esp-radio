@@ -1,0 +1,45 @@
+[package]
+name = "oer-ieee80211-core-roles-sta"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0"
+repository.workspace = true
+description = "Executor- and chip-independent Wi-Fi station MLME and policy"
+
+[features]
+default = []
+# Caller-owned construction and retirement without whole-value moves.
+placement = []
+# Resource accounting visible to host compositions that test retirement.
+test-support = []
+
+[dependencies]
+oer-network-port = { path = "../../../../network/port" }
+oer-memory = { path = "../../../../../portable/memory" }
+oer-crypto = { path = "../../../../../portable/crypto" }
+oer-ieee80211-core-security-cipher = { path = "../../security/cipher" }
+heapless = "0.9.3"
+oer-ieee80211-core-arbiter = { path = "../../arbiter" }
+oer-ieee80211-contracts-port = { path = "../../../contracts/port" }
+oer-ieee80211-wire = { path = "../../../wire" }
+oer-ieee80211-contracts-security = { path = "../../../contracts/security" }
+oer-ieee80211-core-security-rsn = { path = "../../security/rsn" }
+oer-ieee80211-core-upper-mac = { path = "../../upper-mac" }
+oer-time = { path = "../../../../../portable/time" }
+oer-events = { path = "../../../../../portable/events" }
+oer-radio-port = { path = "../../../../radio/port" }
+oer-radio-regulatory = { path = "../../../../radio/regulatory" }
+
+[dev-dependencies]
+oer-ieee80211-core-security-rsn = { path = "../../security/rsn", features = ["test-support"] }
+oer-time-virtual = { path = "../../../../../portable/time-virtual" }
+oer-radio-regulatory = { path = "../../../../radio/regulatory", features = ["test-support"] }
+oer-ieee80211-wire = { path = "../../../wire", features = ["test-support"] }
+oer-test-ui-cases = { path = "../../../../../tools/test/ui-cases" }
+
+[lints]
+workspace = true
+
+[package.metadata.open-radio]
+test-feature-sets = ["test-support"]

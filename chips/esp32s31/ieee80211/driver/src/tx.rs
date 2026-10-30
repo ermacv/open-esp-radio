@@ -159,7 +159,7 @@ mod tests {
     fn domain_antenna_chip_and_lab_cap_bound_every_rate_and_both_codes() {
         let domain = RegulatoryDomain::of(Country::new(*b"DE").expect("country")).expect("domain");
         let channel = domain
-            .permit(oer_ieee80211_port::RegulatedChannel::from(
+            .permit(oer_ieee80211_contracts_port::RegulatedChannel::from(
                 WifiChannel::new_2_4_ghz(1, WifiChannelWidth::Mhz20).expect("channel"),
             ))
             .expect("permitted");
