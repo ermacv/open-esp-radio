@@ -2705,6 +2705,7 @@ version = "0.1.0"
 dependencies = [
  "oer-lab-arbiter",
  "oer-lab-model",
+ "oer-os-process",
  "serde",
  "serde_json",
 ]

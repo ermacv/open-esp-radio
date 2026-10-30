@@ -112,7 +112,9 @@ its resources before granting them again.
     rests with its power off: its switchable hub port, found under it on the
     host and allowed by the stand's hub policy, is recorded in the stand's
     directory (`powered-off.json`), switched off, must report off and the
-    board leave USB. Its next lease powers it on and waits for it.
+    board leave USB; its chip needs no profile of the board operations for
+    this. Its next lease powers it on: the port must report power and the
+    board's port return, named by udev, before the client hears the grant.
   - A board without either, or one whose end state is not confirmed, is
     unavailable until a person returns it, with unknown emission unless its
     ROM was seen in a download mode.

@@ -11,6 +11,7 @@ description = "The LAB service's IPC protocol and client"
 [dependencies]
 oer-lab-arbiter = { path = "../arbiter" }
 oer-lab-model = { path = "../model" }
+oer-os-process = { path = "../../os/process" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 

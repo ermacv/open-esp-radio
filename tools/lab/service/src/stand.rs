@@ -256,14 +256,26 @@ impl StandDrivers {
             reason,
             emission: Emission::Unknown,
         };
-        let (board, turn) = match self.board(mac, &[Claim::board(mac)], &AtomicBool::new(false)) {
-            Ok(board) => board,
+        let stand = match self.stand() {
+            Ok(stand) => stand,
             Err(error) => return unavailable(error),
         };
-        if board.resets().contains(&ResetStep::UsbJtagRts) {
-            self.park_in_download(mac, &board, &turn)
-        } else if board.resets().contains(&ResetStep::Power) {
-            match self.park_powered_off(mac, &board) {
+        let Ok(entry) = stand.resolve(mac) else {
+            return unavailable("the stand file no longer names it".to_owned());
+        };
+        let turn = match self.owner(mac).take(&AtomicBool::new(false)) {
+            Ok(turn) => turn,
+            Err(error) => return unavailable(error),
+        };
+        // A port it rested on is closed: the proof starts anew.
+        drop(turn.parked());
+        if entry.reset.contains(&ResetStep::UsbJtagRts) {
+            match self.described(mac, &[Claim::board(mac)]) {
+                Ok((board, _)) => self.park_in_download(mac, &board, &turn),
+                Err(error) => unavailable(error),
+            }
+        } else if entry.reset.contains(&ResetStep::Power) {
+            match self.park_powered_off(mac, &stand, entry) {
                 Ok(()) => Confirmation::Ready,
                 Err(error) => unavailable(format!("its power is not confirmed off: {error}")),
             }
@@ -336,17 +348,22 @@ impl StandDrivers {
     /// Switch the board's power off and prove it: its port is recorded
     /// first, then it must report off and the board leave USB. A board this
     /// record already holds off stays off when its port still reports so.
-    fn park_powered_off(&self, mac: &str, board: &Board) -> Result<()> {
+    fn park_powered_off(
+        &self,
+        mac: &str,
+        stand: &Stand,
+        board: &oer_lab_model::Board,
+    ) -> Result<()> {
         let mut records = self.powered_off()?;
         let power = match records.get(mac) {
             Some(port) => HubPower::new(port.clone()),
             None => {
-                let power = board.hub_power().cloned().ok_or(
+                let port = oer_lab_board::power::hub_port(stand, board).ok_or(
                     "no switchable hub port the stand's hub policy allows is found under it",
                 )?;
-                records.insert(mac.to_owned(), power.port.clone());
+                records.insert(mac.to_owned(), port.clone());
                 self.record_powered_off(&records)?;
-                power
+                HubPower::new(port)
             }
         };
         if power.is_on().map_err(text)? {
@@ -358,9 +375,9 @@ impl StandDrivers {
                 power.port.port, power.port.location
             ));
         }
-        let device = board.mac();
+        let device = board.device_id().map_err(text)?;
         if !oer_lab_board::power::wait_until(POWER_LEAVE, &|| {
-            !oer_lab_board::discovery::is_attached(device)
+            !oer_lab_board::discovery::is_attached(&device)
         }) {
             return Err("it stayed on USB after its port was switched off".to_owned());
         }
@@ -425,15 +442,29 @@ impl StandDrivers {
         let _turn = owner.take(&AtomicBool::new(false))?;
         let power = HubPower::new(port);
         power.on().map_err(text)?;
-        let device = oer_lab_model::DeviceId::parse(mac).map_err(text)?;
-        if !oer_lab_board::power::wait_until(REATTACH, &|| {
-            oer_lab_board::discovery::is_attached(&device)
-        }) {
+        if !power.is_on().map_err(text)? {
             return Err(format!(
-                "it did not return on USB after port {} of hub {} was switched on",
+                "port {} of hub {} reports no power after it was switched on",
                 power.port.port, power.port.location
             ));
         }
+        // Ready for the lease once its port is there as the stand opens it:
+        // udev names the port (and hands it to the stand's group) a moment
+        // after the kernel attached the board.
+        let device = oer_lab_model::DeviceId::parse(mac).map_err(text)?;
+        if !oer_lab_board::power::wait_until(REATTACH, &|| {
+            oer_lab_board::discovery::port_of(&device)
+                .is_ok_and(|port| port.starts_with("/dev/serial/by-id") && port.exists())
+        }) {
+            return Err(format!(
+                "its port did not return after port {} of hub {} was switched on",
+                power.port.port, power.port.location
+            ));
+        }
+        eprintln!(
+            "lab-service: board {mac} powered on at port {} of hub {}",
+            power.port.port, power.port.location
+        );
         records.remove(mac);
         self.record_powered_off(&records)
     }

@@ -23,6 +23,8 @@ pub type Result<T> = std::result::Result<T, String>;
 /// Events an operation may have pending before its output slows the
 /// connection.
 const ROUTE_DEPTH: usize = 256;
+/// How often a client waiting for its lease looks whether it was cancelled.
+const WAIT_POLL: std::time::Duration = std::time::Duration::from_millis(200);
 
 pub struct Client {
     stream: UnixStream,
@@ -262,7 +264,21 @@ impl Client {
         }
         self.send(&Request::Acquire { lease })?;
         loop {
-            match self.reply()? {
+            // A command cancelled while it waits stops waiting: dropping the
+            // client takes its request out of the queue.
+            let reply = match self.replies.recv_timeout(WAIT_POLL) {
+                Ok(reply) => reply,
+                Err(mpsc::RecvTimeoutError::Timeout) => {
+                    if oer_os_process::cancellation_requested() {
+                        return Err("cancelled while waiting for the lease".to_owned());
+                    }
+                    continue;
+                }
+                Err(mpsc::RecvTimeoutError::Disconnected) => {
+                    return Err("the LAB service closed the connection".to_owned());
+                }
+            };
+            match reply {
                 Reply::Waiting { message, .. } => waiting(&message),
                 Reply::Granted { lease, token } => return Ok(Granted { lease, token }),
                 Reply::Refused { reason } => return Err(reason),

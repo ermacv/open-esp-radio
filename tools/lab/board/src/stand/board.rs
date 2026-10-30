@@ -111,17 +111,6 @@ impl Board {
     pub fn has_power(&self) -> bool {
         self.power.is_some()
     }
-
-    /// The switchable hub port that powers the board, found on the host
-    /// while the board is attached to it, when its ladder includes `power`.
-    pub fn hub_power(&self) -> Option<&HubPower> {
-        self.power.as_ref()
-    }
-
-    /// The ways the stand file lets the stand reset the board, in order.
-    pub fn resets(&self) -> &[oer_lab_model::ResetStep] {
-        &self.reset
-    }
 }
 
 /// A board's open console: it reads and writes the port

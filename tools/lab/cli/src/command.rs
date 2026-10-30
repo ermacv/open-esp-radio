@@ -592,7 +592,7 @@ pub(crate) fn devices(
                 };
                 let check = match &readiness {
                     Some(oer_lab_arbiter::readiness::Readiness::Ready { .. }) => {
-                        String::from("its ROM waits for a download over USB")
+                        String::from("the LAB service confirmed its end state")
                     }
                     Some(oer_lab_arbiter::readiness::Readiness::Unavailable { reason, .. }) => {
                         return Err(
