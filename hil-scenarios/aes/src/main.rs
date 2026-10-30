@@ -12,11 +12,12 @@ use oer_services_aes::{MAX_WRAPPED, UnwrapError, UnwrapKey, Unwrapped};
 
 mod reference;
 
-const SCENARIO: Scenario = Scenario {
+const SCENARIO: Scenario = oer_hil_harness::scenario!(
     name: "aes",
     image: "esp32s31-rpc",
     services: &[oer_services_aes::Request::KEYS],
-};
+    equipment: &[],
+);
 
 const CASES: [Case; 4] = [
     Case {

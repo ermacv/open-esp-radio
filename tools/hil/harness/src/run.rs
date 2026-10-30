@@ -4,6 +4,8 @@ use std::{io::Write, time::Duration};
 
 use oer_hil_link::{Boot, Link, LinkError};
 
+use crate::dut::{Device, Dut};
+use crate::equipment::Opened;
 use crate::finish::{Cleanup, Ending};
 use crate::{Case, Cx, Failure, Scenario, keys};
 
@@ -68,24 +70,29 @@ pub(crate) struct Run {
     pub ending: Ending,
 }
 
-/// Run `cases` on the device behind `link` after checking that it runs the
-/// image of identity `image_crc32` and that the image serves every service
-/// of `scenario`, printing each outcome to `out` as it is known. A case
-/// that sees a reboot fails and the next one runs on the new boot; a
-/// request without a response leaves the boot's remaining cases incomplete.
+/// Run `cases` on `dut` with `equipment` after checking that it runs the
+/// built image and that the image serves every service of `scenario`,
+/// printing each outcome to `out` as it is known. A case that sees a reboot
+/// fails and the next one runs on the new boot; a request without a
+/// response leaves the boot's remaining cases incomplete.
 pub(crate) fn cases(
-    link: &Link,
+    dut: &mut Dut<'_>,
+    equipment: &Opened,
     scenario: &Scenario,
-    image_crc32: u32,
     cases: &[&Case],
     out: &mut impl Write,
 ) -> Run {
+    let image_crc32 = dut.image_crc32();
     let mut outcomes = Vec::new();
     let mut record = |outcome: Outcome, out: &mut dyn Write| {
         print(&outcome, out);
         outcomes.push(outcome);
     };
-    let mut boot = match ready(link, scenario, image_crc32) {
+    let ready = match dut.link() {
+        Some(link) => ready(link, scenario, image_crc32),
+        None => Err("the device under test has no link".to_owned()),
+    };
+    let mut boot = match ready {
         Ok(boot) => boot,
         Err(reason) => {
             record(Outcome::stand(reason), out);
@@ -103,14 +110,30 @@ pub(crate) fn cases(
                 boot.boot_id
             ))
         } else {
-            let mut cx = Cx::new(link, boot);
+            let mut cx = Cx::new(dut, equipment, boot);
             let verdict = match (case.run)(&mut cx) {
                 Ok(()) => Verdict::Pass,
                 Err(Failure::Fail(reason)) => Verdict::Fail(reason),
                 Err(Failure::Incomplete(reason)) => Verdict::Incomplete(reason),
             };
+            // A reset during the case moved it to a later boot.
+            boot = cx.boot;
             unconfirmed = cx.unconfirmed;
             verdict
+        };
+        let Some(link) = dut.link() else {
+            record(
+                Outcome {
+                    case: Some(case.name),
+                    verdict,
+                },
+                out,
+            );
+            record(
+                Outcome::stand("the device under test has no link".to_owned()),
+                out,
+            );
+            break;
         };
         print_notes(link);
         record(
@@ -202,14 +225,37 @@ fn ready(link: &Link, scenario: &Scenario, image_crc32: u32) -> Result<Boot, Str
     }
 }
 
-/// Print the cleanup and the summary of `outcomes` to `out`; the
+/// What finishing the session did.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Teardown {
+    /// The device under test.
+    pub dut: Cleanup,
+    /// Each slot whose equipment was not left usable, with why.
+    pub equipment: Vec<(&'static str, String)>,
+}
+
+impl Teardown {
+    /// Each problem of the teardown; none when it was clean.
+    pub fn problems(&self) -> Vec<String> {
+        self.dut
+            .problem()
+            .into_iter()
+            .chain(
+                self.equipment
+                    .iter()
+                    .map(|(slot, problem)| format!("slot `{slot}`: {problem}")),
+            )
+            .collect()
+    }
+}
+
+/// Print the teardown and the summary of `outcomes` to `out`; the
 /// scenario's verdict: a failure over an incomplete case over a pass, and a
-/// passing scenario whose `cleanup` had to recover or judge the board is
-/// incomplete.
+/// passing scenario whose `teardown` was not clean is incomplete.
 pub fn summary(
     scenario: &Scenario,
     outcomes: &[Outcome],
-    cleanup: Option<&Cleanup>,
+    teardown: Option<&Teardown>,
     out: &mut impl Write,
 ) -> Verdict {
     let mut counts = [0_usize; 3];
@@ -228,17 +274,14 @@ pub fn summary(
     if outcomes.is_empty() {
         worst = Verdict::Incomplete("no case ran".to_owned());
     }
-    let problem = cleanup.and_then(Cleanup::problem);
-    match &problem {
-        Some(problem) => {
-            let _ = writeln!(out, "cleanup: {problem}");
-        }
-        None if cleanup.is_some() => {
-            let _ = writeln!(out, "cleanup: clean");
-        }
-        None => {}
+    let problems = teardown.map(Teardown::problems).unwrap_or_default();
+    for problem in &problems {
+        let _ = writeln!(out, "cleanup: {problem}");
     }
-    if let (Verdict::Pass, Some(problem)) = (&worst, problem) {
+    if teardown.is_some() && problems.is_empty() {
+        let _ = writeln!(out, "cleanup: clean");
+    }
+    if let (Verdict::Pass, Some(problem)) = (&worst, problems.first()) {
         worst = Verdict::Incomplete(format!("cleanup: {problem}"));
     }
     let [passed, failed, incomplete] = counts;

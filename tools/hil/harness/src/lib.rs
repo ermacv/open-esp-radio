@@ -10,35 +10,95 @@
 //! runs the cases and releases the stand: the link first, then the board,
 //! then the lease, also on an error or a cancellation.
 //!
-//! The harness knows no scenario, service or stored result. A case talks to
-//! the device through [`Cx`] and decides its own verdict; the harness prints
-//! each case's outcome and the device's diagnostic lines and exits with the
-//! scenario's verdict: 0 when every case passed, 1 when one failed, 2 when
-//! one could not finish (the stand, the link, an unconfirmed request or a
-//! cancellation) and none failed.
+//! The harness knows no scenario, service, equipment type or stored
+//! result. A case talks to the device and takes its scenario's equipment
+//! through [`Cx`] and decides its own verdict; the harness prints each
+//! case's outcome as it is known and the device's diagnostic lines,
+//! finishes the equipment and the device under the lease, and exits with
+//! the scenario's verdict: 0 when every case passed, 1 when one failed, 2
+//! when one could not finish (the stand, the link, an unconfirmed request
+//! or a cancellation) and none failed, or when the finish was not clean.
 #![forbid(unsafe_code)]
 
-use std::{process::ExitCode, time::Duration};
+use std::{cell::RefMut, process::ExitCode, time::Duration};
 
-use oer_hil_link::{Boot, CallError, Link};
-use oer_hil_protocol::{Endpoint, Key};
+use oer_hil_link::{Boot, CallError, Completeness, Cursor, Health, Link, Received};
+use oer_hil_protocol::{Endpoint, Key, Message};
 
+mod dut;
+mod equipment;
+#[cfg(test)]
+mod fakes;
 mod finish;
 mod keys;
 mod run;
 mod stand;
 
+pub use equipment::{Declared, Equipment, Resolved, Slot, TakeError};
 pub use finish::Cleanup;
-pub use run::{Outcome, Verdict};
+#[doc(hidden)]
+pub use oer_hil_protocol::Key as __Key;
+pub use run::{Outcome, Teardown, Verdict};
 
 /// What a scenario needs from the stand and the device.
 #[derive(Clone, Copy, Debug)]
 pub struct Scenario {
-    pub name: &'static str,
-    /// The image the device under test runs (`oer_image_build::images`).
-    pub image: &'static str,
-    /// The keys of each service the image must serve: its `Service::KEYS`.
-    pub services: &'static [&'static [Key]],
+    pub(crate) name: &'static str,
+    pub(crate) image: &'static str,
+    pub(crate) services: &'static [&'static [Key]],
+    pub(crate) equipment: &'static [Declared],
+}
+
+impl Scenario {
+    /// Use [`scenario!`], which checks the slots at compile time.
+    #[doc(hidden)]
+    pub const fn unchecked(
+        name: &'static str,
+        image: &'static str,
+        services: &'static [&'static [Key]],
+        equipment: &'static [Declared],
+    ) -> Self {
+        Self {
+            name,
+            image,
+            services,
+            equipment,
+        }
+    }
+
+    /// Whether every equipment slot has a name of its own.
+    pub const fn slots_distinct(&self) -> bool {
+        equipment::distinct(self.equipment)
+    }
+
+    pub const fn name(&self) -> &'static str {
+        self.name
+    }
+}
+
+/// A [`Scenario`] named `name` whose device runs `image`
+/// (`oer_image_build::images`), which must serve every service of
+/// `services` (each its `Service::KEYS`); its cases take the equipment of
+/// the `equipment` slots ([`Slot::declare`]). Two slots of one name do not
+/// compile.
+#[macro_export]
+macro_rules! scenario {
+    (
+        name: $name:expr,
+        image: $image:expr,
+        services: $services:expr,
+        equipment: $equipment:expr $(,)?
+    ) => {
+        const {
+            const SERVICES: &[&[$crate::__Key]] = $services;
+            const EQUIPMENT: &[$crate::Declared] = $equipment;
+            let scenario = $crate::Scenario::unchecked($name, $image, SERVICES, EQUIPMENT);
+            if !scenario.slots_distinct() {
+                panic!("two equipment slots of the scenario share a name");
+            }
+            scenario
+        }
+    };
 }
 
 /// One case of a scenario: its name and what it runs.
@@ -66,9 +126,11 @@ pub fn check(condition: bool, what: impl Into<String>) -> Result<(), Failure> {
     }
 }
 
-/// A case's access to the device under test: its link and running boot.
+/// A case's access to the device under test (its link, running boot and
+/// resets) and to the scenario's equipment.
 pub struct Cx<'a> {
-    link: &'a Link,
+    dut: &'a mut (dyn dut::Device + 'a),
+    equipment: &'a equipment::Opened,
     boot: Boot,
     /// A request whose outcome is unknown: the device may still run it, so
     /// the boot takes no further request.
@@ -76,12 +138,23 @@ pub struct Cx<'a> {
 }
 
 impl<'a> Cx<'a> {
-    fn new(link: &'a Link, boot: Boot) -> Self {
+    fn new(
+        dut: &'a mut (dyn dut::Device + 'a),
+        equipment: &'a equipment::Opened,
+        boot: Boot,
+    ) -> Self {
         Self {
-            link,
+            dut,
+            equipment,
             boot,
             unconfirmed: None,
         }
+    }
+
+    fn link(&self) -> Result<&Link, Failure> {
+        self.dut
+            .link()
+            .ok_or_else(|| Failure::Incomplete("the device under test has no link".to_owned()))
     }
 
     /// The running boot.
@@ -99,7 +172,12 @@ impl<'a> Cx<'a> {
         if let Some(request_id) = self.unconfirmed {
             return Err(CallError::Unconfirmed { request_id });
         }
-        let result = self.link.call(&self.boot, request, timeout);
+        let Some(link) = self.dut.link() else {
+            return Err(CallError::Link(oer_hil_link::LinkError::Transport(
+                "the device under test has no link".to_owned(),
+            )));
+        };
+        let result = link.call(&self.boot, request, timeout);
         if let Err(CallError::Unconfirmed { request_id }) = result {
             self.unconfirmed = Some(request_id);
         }
@@ -108,14 +186,85 @@ impl<'a> Cx<'a> {
 
     /// [`Cx::request`] with its errors as the case's failure: a refusal, a
     /// payload of another type or another boot refute the case; a request
-    /// without a response, a broken link or a cancellation leave it
-    /// incomplete.
+    /// that was not sent or got no response, a broken link or a
+    /// cancellation leave it incomplete.
     pub fn call<E: Endpoint>(
         &mut self,
         request: E,
         timeout: Duration,
     ) -> Result<E::Response, Failure> {
         self.request(request, timeout).map_err(failure)
+    }
+
+    /// A cursor over the running boot's messages from now on: made before
+    /// a request, it sees the request's events, also those that come
+    /// before its response.
+    pub fn events(&self) -> Result<Cursor, Failure> {
+        Ok(self.link()?.cursor(&self.boot))
+    }
+
+    /// The first message since `cursor` that `matches` accepts, waiting up
+    /// to `timeout`; `None` when none came.
+    pub fn take_message(
+        &self,
+        cursor: &Cursor,
+        matches: impl Fn(&Received) -> bool,
+        timeout: Duration,
+    ) -> Result<Option<Received>, Failure> {
+        self.link()?.take(cursor, matches, timeout).map_err(failure)
+    }
+
+    /// The first `M` since `cursor`, waiting up to `timeout`. None came:
+    /// the case fails when the cursor's interval is complete and is
+    /// incomplete when a message of it was lost, which may have been the
+    /// `M`.
+    pub fn event<M: Message>(&self, cursor: &Cursor, timeout: Duration) -> Result<M, Failure> {
+        if let Some(message) = self.take_message(cursor, Received::is::<M>, timeout)? {
+            return message
+                .decode::<M>()
+                .unwrap_or(Err(CallError::Payload { path: M::PATH }))
+                .map_err(failure);
+        }
+        match self.completeness(cursor)? {
+            Completeness::Complete => {
+                Err(Failure::Fail(format!("no {} within {timeout:?}", M::PATH)))
+            }
+            Completeness::Lossy => Err(Failure::Incomplete(format!(
+                "no {} within {timeout:?}, and a message of the interval was lost",
+                M::PATH
+            ))),
+            Completeness::Ended { boot_id } => Err(Failure::Fail(format!(
+                "the device rebooted into boot {boot_id:016x} before {}",
+                M::PATH
+            ))),
+        }
+    }
+
+    /// Whether every message of `cursor`'s interval arrived and was kept.
+    pub fn completeness(&self, cursor: &Cursor) -> Result<Completeness, Failure> {
+        Ok(self.link()?.completeness(cursor))
+    }
+
+    /// What the link observed of the wire.
+    pub fn health(&self) -> Result<Health, Failure> {
+        Ok(self.link()?.health())
+    }
+
+    /// Reset the device under test through its board and continue on the
+    /// new boot of the same image; its earlier boot's requests end.
+    pub fn reset(&mut self) -> Result<&Boot, Failure> {
+        let boot = self.dut.reset().map_err(Failure::Incomplete)?;
+        self.boot = boot;
+        self.unconfirmed = None;
+        Ok(&self.boot)
+    }
+
+    /// Borrow the equipment of `slot`; the session keeps it and finishes
+    /// it after the cases. The borrow ends with the returned guard.
+    pub fn take<T: Equipment>(&self, slot: &Slot<T>) -> Result<RefMut<'a, T>, Failure> {
+        self.equipment
+            .take(slot)
+            .map_err(|error| Failure::Incomplete(error.to_string()))
     }
 }
 
@@ -170,19 +319,17 @@ pub fn main(scenario: &Scenario, cases: &[Case]) -> ExitCode {
         }
     };
     let mut out = std::io::stdout();
-    let (outcomes, cleanup) = match stand::Session::open(scenario, arguments.board.as_deref()) {
+    let (outcomes, teardown) = match stand::Session::open(scenario, arguments.board.as_deref()) {
         Ok(mut session) => {
-            let run = match session.link() {
-                Some(link) => {
-                    run::cases(link, scenario, session.image_crc32(), &selected, &mut out)
-                }
-                None => run::Run {
-                    outcomes: Vec::new(),
-                    ending: finish::Ending::default(),
-                },
+            let link = session.take_link();
+            let (run, link) = {
+                let board = session.board();
+                let mut dut = dut::Dut::new(link, &board, session.image_crc32());
+                let run = run::cases(&mut dut, session.equipment(), scenario, &selected, &mut out);
+                (run, dut.into_link())
             };
-            let cleanup = session.finish(run.ending);
-            (run.outcomes, Some(cleanup))
+            let teardown = session.finish(link, run.ending);
+            (run.outcomes, Some(teardown))
         }
         Err(error) => {
             let outcome = Outcome::stand(error.to_string());
@@ -190,7 +337,7 @@ pub fn main(scenario: &Scenario, cases: &[Case]) -> ExitCode {
             (vec![outcome], None)
         }
     };
-    let verdict = run::summary(scenario, &outcomes, cleanup.as_ref(), &mut out);
+    let verdict = run::summary(scenario, &outcomes, teardown.as_ref(), &mut out);
     ExitCode::from(verdict.exit_code())
 }
 

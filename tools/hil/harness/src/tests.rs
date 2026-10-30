@@ -7,7 +7,7 @@ use oer_hil_protocol::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::{Case, Cleanup, Cx, Failure, Outcome, Scenario, Verdict, check, run};
+use crate::{Case, Cleanup, Cx, Failure, Outcome, Scenario, Teardown, Verdict, check, run};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, postcard_schema::Schema)]
 struct Ask(u8);
@@ -26,11 +26,26 @@ impl Message for Told {
 }
 
 const SERVICE: &[Key] = &[Ask::KEY, Told::KEY];
-const SCENARIO: Scenario = Scenario {
+const SCENARIO: Scenario = crate::scenario!(
     name: "test",
     image: "test-image",
     services: &[SERVICE],
-};
+    equipment: &[],
+);
+
+/// Run `cases` on the device behind `link`, with no equipment.
+fn run_cases(link: oer_hil_link::Link, cases: &[&Case]) -> Vec<Outcome> {
+    let board = crate::fakes::FakeBoard::new(Vec::new());
+    let mut dut = crate::dut::Dut::new(Some(link), &board, IMAGE);
+    run::cases(
+        &mut dut,
+        &crate::equipment::Opened::default(),
+        &SCENARIO,
+        cases,
+        &mut Vec::new(),
+    )
+    .outcomes
+}
 
 /// The identity of the image the tests built.
 const IMAGE: u32 = 0x5eed_0001;
@@ -119,7 +134,7 @@ fn cases_pass_fail_and_a_reboot_fails_its_case_but_not_the_next() {
         },
     ];
     let selected = cases.iter().collect::<Vec<_>>();
-    let outcomes = run::cases(&link, &SCENARIO, IMAGE, &selected, &mut Vec::new()).outcomes;
+    let outcomes = run_cases(link, &selected);
     assert_eq!(
         verdicts(&outcomes),
         [
@@ -130,7 +145,6 @@ fn cases_pass_fail_and_a_reboot_fails_its_case_but_not_the_next() {
         ],
         "{outcomes:?}"
     );
-    drop(link);
     server.join().unwrap();
 }
 
@@ -149,13 +163,12 @@ fn an_unconfirmed_request_leaves_the_rest_of_its_boot_incomplete() {
         },
     ];
     let selected = cases.iter().collect::<Vec<_>>();
-    let outcomes = run::cases(&link, &SCENARIO, IMAGE, &selected, &mut Vec::new()).outcomes;
+    let outcomes = run_cases(link, &selected);
     assert_eq!(
         verdicts(&outcomes),
         [(Some("silent"), 2), (Some("next"), 2)],
         "{outcomes:?}"
     );
-    drop(link);
     server.join().unwrap();
 }
 
@@ -177,7 +190,7 @@ fn another_image_than_the_built_one_runs_no_case() {
         run: |cx| ask(7)(cx),
     }];
     let selected = cases.iter().collect::<Vec<_>>();
-    let outcomes = run::cases(&link, &SCENARIO, IMAGE, &selected, &mut Vec::new()).outcomes;
+    let outcomes = run_cases(link, &selected);
     let [
         Outcome {
             case: None,
@@ -191,7 +204,6 @@ fn another_image_than_the_built_one_runs_no_case() {
         reason.contains("5eed0002") && reason.contains("5eed0001"),
         "{reason}"
     );
-    drop(link);
     server.join().unwrap();
 }
 
@@ -214,13 +226,12 @@ fn an_image_without_the_scenarios_service_runs_no_case() {
         run: |cx| ask(7)(cx),
     }];
     let selected = cases.iter().collect::<Vec<_>>();
-    let outcomes = run::cases(&link, &SCENARIO, IMAGE, &selected, &mut Vec::new()).outcomes;
+    let outcomes = run_cases(link, &selected);
     assert_eq!(verdicts(&outcomes), [(None, 2)], "{outcomes:?}");
     let Verdict::Incomplete(reason) = &outcomes[0].verdict else {
         panic!("{outcomes:?}");
     };
     assert!(reason.contains(&Ask::KEY.to_string()), "{reason}");
-    drop(link);
     server.join().unwrap();
 }
 
@@ -285,9 +296,8 @@ fn key_pages_other_than_the_announced_set_run_no_case() {
             run: |cx| ask(7)(cx),
         }];
         let selected = cases.iter().collect::<Vec<_>>();
-        let outcomes = run::cases(&link, &SCENARIO, IMAGE, &selected, &mut Vec::new()).outcomes;
+        let outcomes = run_cases(link, &selected);
         assert_eq!(verdicts(&outcomes), [(None, 2)], "{what}: {outcomes:?}");
-        drop(link);
         assert!(!server.join().unwrap(), "{what}: a case ran");
     }
 }
@@ -306,7 +316,10 @@ fn a_failure_outranks_an_incomplete_case_and_no_case_is_no_pass() {
             outcome("b", Verdict::Fail("wrong".into())),
             outcome("c", Verdict::Pass),
         ],
-        Some(&Cleanup::Clean),
+        Some(&Teardown {
+            dut: Cleanup::Clean,
+            equipment: Vec::new(),
+        }),
         &mut out,
     );
     assert_eq!(verdict, Verdict::Fail("wrong".into()));

@@ -21,7 +21,9 @@ use oer_lab_board::stand::{LeasedBoard, Via};
 use oer_lab_model::{BoardRole, Stand};
 
 use crate::Scenario;
-use crate::finish::{self, Cleanup, Ending, Waits};
+use crate::equipment::{self, Opened};
+use crate::finish::{self, Ending, Waits};
+use crate::run::Teardown;
 
 pub(crate) type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
@@ -49,6 +51,7 @@ const WAITS: Waits = Waits {
 pub(crate) struct Session {
     link: Option<Link>,
     image_crc32: u32,
+    equipment: Opened,
     board: LeasedBoard,
     _grant: Grant,
 }
@@ -68,9 +71,16 @@ impl Session {
         let stand_file = oer_lab_model::path()?;
         let stand = Stand::load(&stand_file)?;
         let board = device_under_test(&stand, selector)?.clone();
+        let slots = equipment::resolve(&stand, scenario.equipment)?;
         let mut request = Request::from_environment(format!("hil {}", scenario.name))?;
         request.scenarios = vec![scenario.name.to_owned()];
-        request.claims = vec![Claim::board(&board.mac)];
+        request.claims = std::iter::once(Claim::board(&board.mac))
+            .chain(
+                slots
+                    .iter()
+                    .flat_map(|(_, resolved)| resolved.claims.iter().cloned()),
+            )
+            .collect();
         eprintln!("hil: waiting for board {}", board.id);
         let mut grant = Arbiter::open()?
             .with_stand_file(stand_file)
@@ -82,6 +92,11 @@ impl Session {
             .ok_or("the lease holds no access to the board")?;
         let leased =
             oer_lab_board::stand::Board::attached(&root, &stand, &board.id)?.lease(access)?;
+        let mut equipment = Opened::default();
+        if let Err(error) = equipment.open(&slots) {
+            let problems = equipment.finish();
+            return Err(format!("{error}{}", describe(&problems)).into());
+        }
         write(&root, scenario.image, &bundle, &leased, &request.owner)?;
         let mut port = Port::open(leased.port(), DUT_CONSOLE)?;
         // Every supported chip restarts through its USB Serial/JTAG console.
@@ -90,28 +105,40 @@ impl Session {
         Ok(Self {
             link: Some(link),
             image_crc32,
+            equipment,
             board: leased,
             _grant: grant,
         })
     }
 
-    /// The link, while the device answers on one.
-    pub(crate) fn link(&self) -> Option<&Link> {
-        self.link.as_ref()
+    /// The link the session opened, for the cases.
+    pub(crate) fn take_link(&mut self) -> Option<Link> {
+        self.link.take()
     }
 
-    /// Leave the board running the built image after the cases `ending`
-    /// describes, recovering it when needed; what that took.
-    pub(crate) fn finish(&mut self, ending: Ending) -> Cleanup {
-        let (link, cleanup) = finish::finish(
+    /// The board, for resets during the cases.
+    pub(crate) fn board(&self) -> StandBoard<'_> {
+        StandBoard(&self.board)
+    }
+
+    pub(crate) fn equipment(&self) -> &Opened {
+        &self.equipment
+    }
+
+    /// Finish the equipment, then leave the board running the built image
+    /// on `link` after the cases `ending` describes, recovering it when
+    /// needed; what that took.
+    pub(crate) fn finish(&mut self, link: Option<Link>, ending: Ending) -> Teardown {
+        let equipment = self.equipment.finish();
+        let (link, dut) = finish::finish(
             &StandBoard(&self.board),
-            self.link.take(),
+            link,
             self.image_crc32,
             ending,
             WAITS,
         );
         self.link = link;
-        cleanup
+        Teardown { dut, equipment }
     }
 
     /// The built image's identity, which the board must report.
@@ -120,8 +147,16 @@ impl Session {
     }
 }
 
-/// The leased board as finishing sees it.
-struct StandBoard<'a>(&'a LeasedBoard);
+/// `problems` of finishing equipment, as a clause.
+fn describe(problems: &[(&'static str, String)]) -> String {
+    problems
+        .iter()
+        .map(|(slot, problem)| format!("; slot `{slot}` was not released: {problem}"))
+        .collect()
+}
+
+/// The leased board as the cases and finishing see it.
+pub(crate) struct StandBoard<'a>(&'a LeasedBoard);
 
 impl finish::Board for StandBoard<'_> {
     fn climb(&self, answers: &mut dyn FnMut() -> bool) -> Ladder {
@@ -135,6 +170,14 @@ impl finish::Board for StandBoard<'_> {
             &|| self.0.console(BANNER_WATCH),
             answers,
         )
+    }
+
+    fn reset(&self) -> std::result::Result<(), String> {
+        let rungs = self.0.rungs();
+        let rung = rungs
+            .first()
+            .ok_or("the board's stand file lists no reset")?;
+        rung.reset().map(drop).map_err(|error| error.to_string())
     }
 
     fn connect(&self) -> std::result::Result<Link, String> {

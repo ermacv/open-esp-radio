@@ -19,6 +19,8 @@ pub(crate) trait Board {
     /// Climb the board's reset ladder from its stand file, stopping at the
     /// first rung after which `answers` sees the image.
     fn climb(&self, answers: &mut dyn FnMut() -> bool) -> Ladder;
+    /// Reset the board through the first rung of its ladder.
+    fn reset(&self) -> Result<(), String>;
     /// A link on the board's console, opened without a reset.
     fn connect(&self) -> Result<Link, String>;
     /// Take the board out of service until a person returns it.
@@ -94,7 +96,7 @@ impl Cleanup {
 /// unconfirmed or the image does not answer. The link that ends the
 /// session, when the device answers on one.
 pub(crate) fn finish(
-    board: &impl Board,
+    board: &dyn Board,
     link: Option<Link>,
     image_crc32: u32,
     ending: Ending,
@@ -150,7 +152,7 @@ fn answers(link: &Link, image_crc32: u32, waits: Waits) -> bool {
 }
 
 /// What `ladder` means for the board.
-fn judge(board: &impl Board, ladder: &Ladder) -> Cleanup {
+fn judge(board: &dyn Board, ladder: &Ladder) -> Cleanup {
     let last = ladder.steps.last();
     match &ladder.end {
         LadderEnd::Cleared => {
