@@ -126,6 +126,7 @@ fn a_hello_that_answers_get_hello_reaches_its_request() {
     let (mut device, link) = Device::new(12);
     device.send(0, HELLO);
     let boot = link.boot(SHORT).unwrap();
+    let mut cursor = link.cursor(&boot);
     let server = thread::spawn(move || {
         let request = device.request().unwrap();
         assert_eq!(request.key, GetHello::KEY);
@@ -134,7 +135,11 @@ fn a_hello_that_answers_get_hello_reaches_its_request() {
     });
     assert_eq!(link.call(&boot, GetHello, SHORT), Ok(HELLO));
     let _device = server.join().unwrap();
-    assert_eq!(link.health().running.unwrap().unread, 0);
+    assert!(
+        link.take(&mut cursor, |_| true, Duration::ZERO)
+            .unwrap()
+            .is_none()
+    );
 }
 
 #[test]
@@ -162,7 +167,7 @@ fn a_stream_of_events_to_the_limit_cannot_displace_a_response() {
     let (mut device, link) = Device::new(8);
     device.send(0, HELLO);
     let boot = link.boot(SHORT).unwrap();
-    let cursor = link.cursor(&boot);
+    let mut cursor = link.cursor(&boot);
     let server = thread::spawn(move || {
         let request = device.request().unwrap();
         // A related event before the response, then a flood past the ring.
@@ -180,7 +185,7 @@ fn a_stream_of_events_to_the_limit_cannot_displace_a_response() {
     assert_eq!(link.completeness(&cursor), Completeness::Lossy);
     // The displaced messages were the oldest: the related event among them.
     let kept = link
-        .take(&cursor, |message| message.is::<Progress>(), SHORT)
+        .take(&mut cursor, |message| message.is::<Progress>(), SHORT)
         .unwrap()
         .unwrap();
     assert_eq!(kept.decode::<Progress>(), Some(Ok(Progress(10))));
@@ -192,9 +197,10 @@ fn a_cursor_made_before_a_request_sees_its_related_event_before_the_response() {
     device.send(0, HELLO);
     let boot = link.boot(SHORT).unwrap();
     // An event before the cursor is not the cursor's.
+    let mut earlier = link.cursor(&boot);
     device.send(0, Pong(99));
-    until(|| link.health().running.is_some_and(|boot| boot.unread == 1));
-    let cursor = link.cursor(&boot);
+    assert!(link.take(&mut earlier, |_| true, SHORT).unwrap().is_some());
+    let mut cursor = link.cursor(&boot);
     let server = thread::spawn(move || {
         let request = device.request().unwrap();
         device.send(request.request_id, Progress(1));
@@ -203,13 +209,13 @@ fn a_cursor_made_before_a_request_sees_its_related_event_before_the_response() {
     });
     assert_eq!(link.call(&boot, Ping(0), SHORT), Ok(Pong(2)));
     let related = link
-        .take(&cursor, |message| message.is::<Progress>(), SHORT)
+        .take(&mut cursor, |message| message.is::<Progress>(), SHORT)
         .unwrap()
         .unwrap();
     assert_eq!(related.request_id, 1);
     assert_eq!(related.decode::<Progress>(), Some(Ok(Progress(1))));
     assert!(
-        link.take(&cursor, |message| message.is::<Pong>(), Duration::ZERO)
+        link.take(&mut cursor, |message| message.is::<Pong>(), Duration::ZERO)
             .unwrap()
             .is_none(),
         "the event before the cursor"
@@ -223,7 +229,7 @@ fn a_new_boot_inherits_no_backlog_and_ends_the_old_boots_cursors() {
     let (mut device, link) = Device::new(1);
     device.send(0, HELLO);
     let boot = link.boot(SHORT).unwrap();
-    let cursor = link.cursor(&boot);
+    let mut cursor = link.cursor(&boot);
     for value in 0..5 {
         device.send(0, Pong(value));
     }
@@ -240,18 +246,17 @@ fn a_new_boot_inherits_no_backlog_and_ends_the_old_boots_cursors() {
         Completeness::Ended { boot_id: 2 }
     );
     assert!(matches!(
-        link.take(&cursor, |_| true, SHORT),
+        link.take(&mut cursor, |_| true, SHORT),
         Err(CallError::Rebooted { boot_id: 2 })
     ));
     let health = link.health();
     assert_eq!(health.past.len(), 1);
-    assert_eq!((health.past[0].boot_id, health.past[0].unread), (1, 5));
+    assert_eq!(health.past[0].boot_id, 1);
     // The new boot's cursor starts at its own messages; Pong(50) came before.
-    let fresh = link.cursor(&rebooted);
+    let mut fresh = link.cursor(&rebooted);
     device.send(0, Pong(51));
-    let first = link.take(&fresh, |_| true, SHORT).unwrap().unwrap();
+    let first = link.take(&mut fresh, |_| true, SHORT).unwrap().unwrap();
     assert_eq!(first.decode::<Pong>(), Some(Ok(Pong(51))));
-    assert_eq!(health.running.unwrap().unread, 1);
 }
 
 #[test]
@@ -259,23 +264,67 @@ fn a_device_gap_spoils_only_the_cursors_that_span_it() {
     let (mut device, link) = Device::new(4);
     device.send(0, HELLO);
     let boot = link.boot(SHORT).unwrap();
+    let mut before = link.cursor(&boot);
     device.sequence = 5;
     device.send(0, Pong(1));
-    until(|| link.health().running.is_some_and(|boot| boot.unread == 1));
-    let after = link.cursor(&boot);
+    assert!(link.take(&mut before, |_| true, SHORT).unwrap().is_some());
+    let mut after = link.cursor(&boot);
     device.send(0, Pong(2));
-    assert!(link.take(&after, |_| true, SHORT).unwrap().is_some());
+    assert!(link.take(&mut after, |_| true, SHORT).unwrap().is_some());
+    assert_eq!(link.completeness(&before), Completeness::Lossy);
     assert_eq!(link.completeness(&after), Completeness::Complete);
-    let spanning = after;
+    let mut spanning = after;
     device.sequence += 2;
     device.send(0, Pong(3));
-    assert!(link.take(&spanning, |_| true, SHORT).unwrap().is_some());
+    assert!(link.take(&mut spanning, |_| true, SHORT).unwrap().is_some());
     assert_eq!(link.completeness(&spanning), Completeness::Lossy);
     assert_eq!(
         link.completeness(&link.cursor(&boot)),
         Completeness::Complete
     );
     assert_eq!(link.health().running.unwrap().missing, 6);
+}
+
+#[test]
+fn two_cursors_read_independently_and_lose_only_what_they_did_not_read() {
+    let (mut device, link) = Device::new(9);
+    device.send(0, HELLO);
+    let boot = link.boot(SHORT).unwrap();
+    let mut ahead = link.cursor(&boot);
+    let mut behind = link.cursor(&boot);
+    for value in 0..3 {
+        device.send(0, Pong(value));
+    }
+    for value in 0..3 {
+        let read = link.take(&mut ahead, |_| true, SHORT).unwrap().unwrap();
+        assert_eq!(read.decode::<Pong>(), Some(Ok(Pong(value))));
+    }
+    // Reading by one cursor leaves the message for the other.
+    let read = link.take(&mut behind, |_| true, SHORT).unwrap().unwrap();
+    assert_eq!(read.decode::<Pong>(), Some(Ok(Pong(0))));
+    // The ring displaces Pong(0) and Pong(1): `ahead` read both, `behind`
+    // had not read Pong(1).
+    let flood = EVENT_CAPACITY as u32 - 1;
+    for value in 0..flood {
+        device.send(0, Progress(value));
+    }
+    let last = link
+        .take(
+            &mut ahead,
+            |message| message.decode::<Progress>() == Some(Ok(Progress(flood - 1))),
+            SHORT,
+        )
+        .unwrap();
+    assert!(last.is_some());
+    assert_eq!(link.health().running.unwrap().displaced, 2);
+    assert_eq!(link.completeness(&ahead), Completeness::Complete);
+    assert_eq!(link.completeness(&behind), Completeness::Lossy);
+    let read = link
+        .take(&mut behind, |message| message.is::<Pong>(), SHORT)
+        .unwrap()
+        .unwrap();
+    assert_eq!(read.decode::<Pong>(), Some(Ok(Pong(2))));
+    assert_eq!(link.completeness(&behind), Completeness::Lossy);
 }
 
 #[test]
@@ -327,18 +376,18 @@ fn missing_messages_are_counted_and_a_reordered_one_fails_the_link() {
     let (mut device, link) = Device::new(3);
     device.send(0, HELLO);
     let boot = link.boot(SHORT).unwrap();
-    let cursor = link.cursor(&boot);
+    let mut cursor = link.cursor(&boot);
     device.sequence = 4;
     device.send(0, Pong(1));
     assert!(
-        link.take(&cursor, |message| message.is::<Pong>(), SHORT)
+        link.take(&mut cursor, |message| message.is::<Pong>(), SHORT)
             .unwrap()
             .is_some()
     );
     assert_eq!(link.health().running.unwrap().missing, 3);
     device.sequence = 2;
     device.send(0, Pong(2));
-    let failed = link.take(&cursor, |_| false, SHORT);
+    let failed = link.take(&mut cursor, |_| false, SHORT);
     assert!(
         matches!(failed, Err(CallError::Link(LinkError::Protocol(_)))),
         "{failed:?}"

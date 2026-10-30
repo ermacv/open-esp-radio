@@ -1,7 +1,8 @@
 //! The device under test during the cases: its link and the board that
 //! resets it. A reset closes the link, takes the first rung of the board's
 //! ladder and opens the console again, so the cases see a new boot of the
-//! same image.
+//! same image. The new console answers also a device the rung did not
+//! restart, so the reset counts only when another boot answers.
 
 use std::time::Duration;
 
@@ -58,6 +59,7 @@ impl Device for Dut<'_> {
     }
 
     fn reset(&mut self) -> Result<Boot, String> {
+        let previous = self.link.as_ref().and_then(Link::running_boot_id);
         // The rung needs the console the link holds.
         self.link = None;
         self.board.reset()?;
@@ -65,6 +67,14 @@ impl Device for Dut<'_> {
         let boot = link
             .boot(self.hello)
             .map_err(|error| format!("after the reset: {error}"))?;
+        if previous == Some(boot.boot_id) {
+            // The device runs on: its link serves the cases that follow.
+            self.link = Some(link);
+            return Err(format!(
+                "the reset did not restart the device: boot {:016x} answered again",
+                boot.boot_id
+            ));
+        }
         if boot.hello.image_crc32 != self.image_crc32 {
             return Err(format!(
                 "after the reset the board runs image {:08x}, not the built {:08x}",
@@ -75,3 +85,5 @@ impl Device for Dut<'_> {
         Ok(boot)
     }
 }
+#[cfg(test)]
+mod tests;

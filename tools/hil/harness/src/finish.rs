@@ -2,6 +2,9 @@
 //! the built image, brought back through its board's reset ladder, or, when
 //! not even its ROM answers after the ladder, quarantined for a person.
 //!
+//! After a rung only another boot counts: the new console answers also a
+//! device the rung did not restart.
+//!
 //! A ROM that answers, booting from flash or waiting for a download, means
 //! the stand can write the board again, however bad its image: such a board
 //! is never quarantined. The cleanup is kept apart from the cases' verdicts:
@@ -102,6 +105,7 @@ pub(crate) fn finish(
     ending: Ending,
     waits: Waits,
 ) -> (Option<Link>, Cleanup) {
+    let mut last = link.as_ref().and_then(Link::running_boot_id);
     if let Some(link) = link {
         if !ending.unconfirmed && answers(&link, image_crc32, waits) {
             return (Some(link), Cleanup::Clean);
@@ -117,9 +121,12 @@ pub(crate) fn finish(
         let Ok(link) = board.connect() else {
             return false;
         };
-        let answered = link
-            .boot(waits.hello)
-            .is_ok_and(|boot| boot.hello.image_crc32 == image_crc32);
+        let Ok(boot) = link.boot(waits.hello) else {
+            return false;
+        };
+        let restarted = last != Some(boot.boot_id);
+        last = Some(boot.boot_id);
+        let answered = restarted && boot.hello.image_crc32 == image_crc32;
         if answered {
             found = Some(link);
         }

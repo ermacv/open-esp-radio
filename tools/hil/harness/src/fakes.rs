@@ -57,9 +57,11 @@ pub(crate) fn answer(mut device: Device, behavior: Behavior) {
     }
 }
 
-/// One rung of the fake board: whether the ROM and the image answer after it.
+/// One rung of the fake board: whether it restarts the device, and whether
+/// the ROM and the image answer after it.
 pub(crate) struct Step {
     pub step: RecoveryStep,
+    pub restarts: bool,
     pub rom: bool,
     pub image: bool,
 }
@@ -70,6 +72,7 @@ pub(crate) struct FakeBoard {
     pub records: bool,
     pub image_up: Cell<bool>,
     pub resets: Cell<usize>,
+    /// The device's running boot.
     pub boots: Cell<u64>,
     pub quarantined: RefCell<Option<String>>,
     pub recovered: RefCell<Vec<RecoveryStep>>,
@@ -100,7 +103,10 @@ impl Rung for FakeRung<'_> {
     }
     fn reset(&self) -> oer_lab_board::Result<Option<String>> {
         self.0.resets.set(self.0.resets.get() + 1);
-        self.0.image_up.set(self.1.image);
+        if self.1.restarts {
+            self.0.boots.set(self.0.boots.get() + 1);
+            self.0.image_up.set(self.1.image);
+        }
         Ok(self.1.rom.then(|| ROM_LINE.to_owned()))
     }
 }
@@ -130,7 +136,6 @@ impl Board for FakeBoard {
             .map_err(|error| error.to_string())
     }
     fn connect(&self) -> Result<Link, String> {
-        self.boots.set(self.boots.get() + 1);
         if !self.image_up.get() {
             return Ok(device(self.boots.get(), Behavior::Silent));
         }
@@ -155,6 +160,7 @@ impl Board for FakeBoard {
 pub(crate) fn rts(rom: bool, image: bool) -> Step {
     Step {
         step: RecoveryStep::RtsReset,
+        restarts: true,
         rom,
         image,
     }
@@ -163,7 +169,16 @@ pub(crate) fn rts(rom: bool, image: bool) -> Step {
 pub(crate) fn power(rom: bool, image: bool) -> Step {
     Step {
         step: RecoveryStep::PowerCycle,
+        restarts: true,
         rom,
         image,
+    }
+}
+
+/// `step` taken without restarting the device: the running boot goes on.
+pub(crate) fn unmoved(step: Step) -> Step {
+    Step {
+        restarts: false,
+        ..step
     }
 }

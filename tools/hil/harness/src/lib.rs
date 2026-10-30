@@ -203,22 +203,23 @@ impl<'a> Cx<'a> {
         Ok(self.link()?.cursor(&self.boot))
     }
 
-    /// The first message since `cursor` that `matches` accepts, waiting up
-    /// to `timeout`; `None` when none came.
+    /// The first message `cursor` has not read that `matches` accepts,
+    /// waiting up to `timeout`; `None` when none came. The cursor moves past
+    /// the messages it refused; another cursor reads them on its own.
     pub fn take_message(
         &self,
-        cursor: &Cursor,
+        cursor: &mut Cursor,
         matches: impl Fn(&Received) -> bool,
         timeout: Duration,
     ) -> Result<Option<Received>, Failure> {
         self.link()?.take(cursor, matches, timeout).map_err(failure)
     }
 
-    /// The first `M` since `cursor`, waiting up to `timeout`. None came:
+    /// The first `M` `cursor` has not read, waiting up to `timeout`. None came:
     /// the case fails when the cursor's interval is complete and is
     /// incomplete when a message of it was lost, which may have been the
     /// `M`.
-    pub fn event<M: Message>(&self, cursor: &Cursor, timeout: Duration) -> Result<M, Failure> {
+    pub fn event<M: Message>(&self, cursor: &mut Cursor, timeout: Duration) -> Result<M, Failure> {
         if let Some(message) = self.take_message(cursor, Received::is::<M>, timeout)? {
             return message
                 .decode::<M>()

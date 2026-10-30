@@ -4,9 +4,10 @@
 //! A message of the running boot has a position: its `message_sequence`
 //! extended past wrap-around. A response goes to its request's slot; every
 //! other message is kept in a bounded ring, where a newer one displaces the
-//! oldest. A position the device skipped or the ring displaced is lost, and
-//! the highest lost position tells a cursor whether its interval is
-//! complete.
+//! oldest. Reading leaves the ring as it is: each cursor keeps its own
+//! position. A position the device skipped or the ring displaced is lost;
+//! lost positions only grow, so the highest one tells a cursor whether the
+//! part it has not read lost one.
 
 use std::collections::VecDeque;
 
@@ -123,10 +124,7 @@ impl State {
         Health {
             counters: self.counters,
             boots: self.boots,
-            running: self.running.as_ref().map(|running| BootStats {
-                unread: running.kept.len() as u64,
-                ..running.stats
-            }),
+            running: self.running.as_ref().map(|running| running.stats),
             past: self.past.iter().copied().collect(),
             notes_lost: self.notes_lost,
         }
@@ -167,10 +165,7 @@ impl State {
                     if self.past.len() == PAST_BOOTS {
                         self.past.pop_front();
                     }
-                    self.past.push_back(BootStats {
-                        unread: ended.kept.len() as u64,
-                        ..ended.stats
-                    });
+                    self.past.push_back(ended.stats);
                 }
                 position
             }
@@ -243,18 +238,19 @@ impl State {
     pub(crate) fn cursor(&self, boot_id: u64) -> crate::Cursor {
         crate::Cursor {
             boot_id,
-            start: self
+            next: self
                 .running
                 .as_ref()
                 .filter(|running| running.stats.boot_id == boot_id)
                 .map_or(u64::MAX, |running| running.position),
+            lossy: false,
         }
     }
 
     pub(crate) fn completeness(&self, cursor: &crate::Cursor) -> Completeness {
         match &self.running {
             Some(running) if running.stats.boot_id == cursor.boot_id => {
-                if running.lost_through >= Some(cursor.start) {
+                if cursor.lossy || running.lost_through >= Some(cursor.next) {
                     Completeness::Lossy
                 } else {
                     Completeness::Complete
@@ -268,22 +264,33 @@ impl State {
         }
     }
 
-    /// The first kept message since `cursor` started that `matches`
-    /// accepts, removed.
+    /// The first kept message `cursor` has not read that `matches` accepts.
+    /// The cursor moves past it and past every message it passed over; the
+    /// ring keeps them all for other cursors.
     pub(crate) fn take(
-        &mut self,
-        cursor: &crate::Cursor,
+        &self,
+        cursor: &mut crate::Cursor,
         matches: impl Fn(&Received) -> bool,
     ) -> Option<Received> {
         let running = self
             .running
-            .as_mut()
+            .as_ref()
             .filter(|running| running.stats.boot_id == cursor.boot_id)?;
-        let index = running
+        let unread = running
             .kept
-            .iter()
-            .position(|(position, message)| *position >= cursor.start && matches(message))?;
-        running.kept.remove(index).map(|(_, message)| message)
+            .partition_point(|(position, _)| *position < cursor.next);
+        let found = running
+            .kept
+            .range(unread..)
+            .find(|(_, message)| matches(message));
+        let next = found.map_or(running.position, |(position, _)| position.saturating_add(1));
+        // Lost positions only grow: one at or past `cursor.next` now is
+        // either among those the cursor passes over or still ahead of it.
+        if running.lost_through >= Some(cursor.next) {
+            cursor.lossy = true;
+        }
+        cursor.next = cursor.next.max(next);
+        found.map(|(_, message)| message.clone())
     }
 
     /// Keep diagnostic `lines`, displacing the oldest beyond

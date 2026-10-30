@@ -1,7 +1,8 @@
 use oer_lab_board::reset::RecoveryStep;
 
 use super::{Cleanup, Ending, finish};
-use crate::fakes::{Behavior, FakeBoard, IMAGE, ROM_LINE, WAITS, device, power, rts};
+use crate::fakes::{Behavior, FakeBoard, IMAGE, ROM_LINE, WAITS, device, power, rts, unmoved};
+use crate::finish::Board;
 use crate::{Outcome, Scenario, Verdict, run};
 
 #[test]
@@ -41,6 +42,32 @@ fn an_unconfirmed_request_is_ended_by_the_first_rung_that_brings_the_image_back(
     );
     assert_eq!(link.unwrap().boot(WAITS.hello).unwrap().boot_id, 101);
     assert_eq!(*board.recovered.borrow(), [RecoveryStep::RtsReset]);
+}
+
+#[test]
+fn a_rung_that_did_not_restart_the_device_is_no_recovery() {
+    let board = FakeBoard::new(vec![unmoved(rts(true, true)), power(true, true)]);
+    board.image_up.set(true);
+    let running = board.connect().unwrap();
+    assert_eq!(running.boot(WAITS.hello).unwrap().boot_id, 100);
+    let (link, cleanup) = finish(
+        &board,
+        Some(running),
+        IMAGE,
+        Ending { unconfirmed: true },
+        WAITS,
+    );
+    assert!(
+        matches!(
+            cleanup,
+            Cleanup::Recovered {
+                step: RecoveryStep::PowerCycle,
+                ..
+            }
+        ),
+        "{cleanup:?}"
+    );
+    assert_eq!(link.unwrap().boot(WAITS.hello).unwrap().boot_id, 101);
 }
 
 #[test]

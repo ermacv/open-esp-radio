@@ -182,9 +182,9 @@ fn synthetic_hello() -> oer_hil_protocol::base::Hello {
 const WAIT: Duration = Duration::from_millis(500);
 
 fn early_event(cx: &mut Cx<'_>) -> Result<(), Failure> {
-    let cursor = cx.events()?;
+    let mut cursor = cx.events()?;
     let Told(answer) = cx.call(Ask(1), WAIT)?;
-    let Progress(step) = cx.event(&cursor, WAIT)?;
+    let Progress(step) = cx.event(&mut cursor, WAIT)?;
     check(
         (answer, step) == (2, 1),
         "the response and its earlier event",
@@ -211,9 +211,9 @@ fn two_lamps(cx: &mut Cx<'_>) -> Result<(), Failure> {
 }
 
 fn lost_event(cx: &mut Cx<'_>) -> Result<(), Failure> {
-    let cursor = cx.events()?;
+    let mut cursor = cx.events()?;
     cx.call(Ask(2), WAIT)?;
-    cx.event::<Done>(&cursor, Duration::from_millis(200))?;
+    cx.event::<Done>(&mut cursor, Duration::from_millis(200))?;
     Ok(())
 }
 

@@ -25,7 +25,8 @@ lists its cases; `main` then:
    no request unconfirmed is clean; otherwise the board's reset ladder from
    the stand file runs (`oer_lab_board::reset::climb`), and after each rung
    the console is opened again and the image's Hello is awaited. The first
-   rung after which the image answers recovers the board; a ROM that answers
+   rung after which another boot of the image answers recovers the board
+   (the new console answers also a device the rung did not restart); a ROM that answers
    while the image does not leaves the board in service, since the stand
    can write it again; only a ROM that stays silent after the whole ladder
    quarantines the board through the arbiter. A cancelled program judges
@@ -38,9 +39,9 @@ A case talks to the device and the equipment through `Cx`:
 | Method | Gives |
 | --- | --- |
 | `call`, `request` | A request's typed response; `call` turns errors into the case's failure, `request` returns them as they came |
-| `events`, `event`, `take_message` | A cursor over the running boot's messages from now on, made before a request to see its events, also those before its response; `event::<M>` fails the case when no `M` came in a complete interval and leaves it incomplete when a message of the interval was lost |
+| `events`, `event`, `take_message` | A cursor over the running boot's messages from now on, made before a request to see its events, also those before its response; it reads in order, past what its filter refused, and other cursors read on their own; `event::<M>` fails the case when no `M` came in a complete interval and leaves it incomplete when a message of the interval was lost |
 | `completeness`, `health` | Whether a cursor's interval lost a message or ended with its boot; the link's counters |
-| `reset` | A new boot of the same image through the first rung of the board's ladder and a reopened console |
+| `reset` | A new boot of the same image through the first rung of the board's ladder and a reopened console; the boot that answered before is no reset |
 | `take(&SLOT)` | A borrow of the slot's equipment; the session keeps it and finishes it, and a slot held already is refused |
 
 Two slots of one name do not compile; two slots of one type are two pieces

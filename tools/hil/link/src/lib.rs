@@ -14,8 +14,9 @@
 //!
 //! A request reserves the slot of its response before it is sent, so no
 //! other message can displace the response. Every other message of the
-//! running boot is kept in a bounded ring for a [`Cursor`], which tells
-//! whether its interval lost one. Every queue is bounded: the host's frames
+//! running boot is kept in a bounded ring. A [`Cursor`] reads it in order
+//! without taking from it, so cursors observe independently, and tells
+//! whether the part of its interval it has not read lost a message. Every queue is bounded: the host's frames
 //! wait in [`OUTBOUND_CAPACITY`] places and a full queue refuses a request
 //! before it leaves.
 #![forbid(unsafe_code)]
@@ -139,19 +140,20 @@ pub struct BootStats {
     pub boot_id: u64,
     /// Device messages missing from the boot's sequence.
     pub missing: u64,
-    /// Kept messages a newer one displaced before anyone took them.
+    /// Kept messages a newer one displaced from the ring.
     pub displaced: u64,
-    /// Kept messages nobody took: so far, or before the boot ended.
-    pub unread: u64,
 }
 
-/// A position in one boot's messages: [`Link::take`] returns only messages
-/// that arrived after it, and [`Link::completeness`] tells whether one of
-/// them was lost.
+/// A reader of one boot's messages from where it was made on:
+/// [`Link::take`] moves it forward, and [`Link::completeness`] tells whether
+/// its interval lost a message it had not read. A copy reads on its own.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Cursor {
     boot_id: u64,
-    start: u64,
+    /// The position of the first message it has not read.
+    next: u64,
+    /// It passed over a lost position.
+    lossy: bool,
 }
 
 impl Cursor {
@@ -320,6 +322,12 @@ impl Link {
         }
     }
 
+    /// The boot whose frames the link sees now, once a frame showed it,
+    /// without asking the device.
+    pub fn running_boot_id(&self) -> Option<u64> {
+        self.shared.lock().boot_id()
+    }
+
     /// A cursor over the messages of `boot` that arrive from now on. A
     /// cursor made before a request sees its related events, also those
     /// that come before its response.
@@ -327,12 +335,13 @@ impl Link {
         self.shared.lock().cursor(boot.boot_id)
     }
 
-    /// The first kept message since `cursor` started that `matches`
-    /// accepts, waiting up to `timeout`; `None` when none came. A cursor
-    /// whose boot ended returns `Rebooted`.
+    /// The first message `cursor` has not read that `matches` accepts,
+    /// waiting up to `timeout`; `None` when none came. The cursor moves past
+    /// it and past every message `matches` refused, which other cursors
+    /// still read. A cursor whose boot ended returns `Rebooted`.
     pub fn take(
         &self,
-        cursor: &Cursor,
+        cursor: &mut Cursor,
         matches: impl Fn(&Received) -> bool,
         timeout: Duration,
     ) -> Result<Option<Received>, CallError> {
