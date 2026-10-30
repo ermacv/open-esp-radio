@@ -1,0 +1,20 @@
+[package]
+name = "oer-lab-service"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "The LAB service: the one owner of the stand's leases and hardware access, its IPC protocol and client"
+
+[dependencies]
+oer-lab-arbiter = { path = "../arbiter" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[dev-dependencies]
+tempfile = "3"
+
+[lints]
+workspace = true

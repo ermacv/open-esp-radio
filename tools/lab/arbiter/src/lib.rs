@@ -24,7 +24,7 @@ pub mod balance;
 mod estimate;
 mod grant;
 pub mod health;
-mod history;
+pub mod history;
 
 pub mod maintenance;
 mod notify;

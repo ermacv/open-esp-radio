@@ -123,8 +123,9 @@ impl Scheduler {
         let state = match std::fs::read(path) {
             Ok(bytes) => {
                 let value: serde_json::Value = serde_json::from_slice(&bytes)?;
-                if value["schema"].as_u64() != Some(u64::from(STATE_SCHEMA)) {
-                    return Err(crate::state::unreadable(path, &value["schema"]).into());
+                let schema = value.get("schema").cloned().unwrap_or_default();
+                if schema.as_u64() != Some(u64::from(STATE_SCHEMA)) {
+                    return Err(crate::state::unreadable(path, &schema).into());
                 }
                 serde_json::from_value(value)?
             }
@@ -165,6 +166,30 @@ impl Scheduler {
 
     pub fn readiness(&self, resource: &str) -> Option<&Readiness> {
         self.state.readiness.get(resource)
+    }
+
+    /// Every stateful resource's readiness.
+    pub fn resources(&self) -> Vec<(String, Readiness)> {
+        self.state
+            .readiness
+            .iter()
+            .map(|(resource, readiness)| (resource.clone(), readiness.clone()))
+            .collect()
+    }
+
+    /// The owner, work and claims of held lease `lease`.
+    pub fn holder(&self, lease: u64) -> Option<(&str, &str, &[Claim])> {
+        self.state
+            .holders
+            .iter()
+            .find(|holder| holder.ticket.id == lease)
+            .map(|holder| {
+                (
+                    holder.ticket.owner.as_str(),
+                    holder.ticket.work.as_str(),
+                    holder.ticket.claims.as_slice(),
+                )
+            })
     }
 
     /// Queue `request` at `now_unix` and return its ticket.

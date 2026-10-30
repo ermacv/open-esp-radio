@@ -2749,6 +2749,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-lab-service"
+version = "0.1.0"
+dependencies = [
+ "oer-lab-arbiter",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
 name = "oer-memory"
 version = "0.1.0"
 dependencies = [

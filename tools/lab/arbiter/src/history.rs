@@ -75,7 +75,8 @@ impl LeaseRecord {
 
 /// Append a record. Callers hold the state lock, which also serializes the
 /// rewrite that bounds the file.
-pub(crate) fn append(path: &Path, record: &LeaseRecord) -> crate::Result<()> {
+/// Append `record` to the history at `path`, keeping it bounded.
+pub fn append(path: &Path, record: &LeaseRecord) -> crate::Result<()> {
     oer_os_durable::jsonl::append(path, record)?;
     if fs::metadata(path)?.len() > MAX_BYTES {
         oer_os_durable::jsonl::retain_newest::<LeaseRecord>(path, RETAINED_RECORDS)?;
