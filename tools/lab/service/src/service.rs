@@ -753,6 +753,9 @@ impl Service {
         };
         std::thread::spawn(move || {
             let result = service.shared.drivers.run(&operation, &claims, io);
+            if let Err(error) = &result {
+                eprintln!("lab-service: lease #{lease_id}: an operation failed: {error}");
+            }
             let lost = *lock(&lost);
             if lost > 0 {
                 outbox.push(&Reply::Lost { id, bytes: lost });

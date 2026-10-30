@@ -367,7 +367,10 @@ fn a_restart_confirms_ready_resources_again_and_leaves_unavailable_ones() {
         .map(|recovery| recovery.resource.as_str())
         .collect::<Vec<_>>();
     assert!(resources.contains(&A), "a ready board is parked again");
-    assert!(!resources.contains(&B), "an unavailable board waits for a person");
+    assert!(
+        !resources.contains(&B),
+        "an unavailable board waits for a person"
+    );
     assert!(matches!(
         scheduler.readiness(B),
         Some(Readiness::Unavailable { .. })

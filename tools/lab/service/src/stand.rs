@@ -100,9 +100,10 @@ impl StandDrivers {
         Stand::load(&self.stand_file).map_err(text)
     }
 
-    /// The board `query` names, which `claims` must hold; its parked port
-    /// is closed first.
-    fn board(&self, query: &str, claims: &[Claim]) -> Result<Board> {
+    /// The board `query` names, which `claims` must hold, and its parked
+    /// port when it rests in download: closing that port lets the chip leave
+    /// its ROM, so a console keeps using it and other operations close it.
+    fn board_and_port(&self, query: &str, claims: &[Claim]) -> Result<(Board, Option<Port>)> {
         let stand = self.stand()?;
         let entry = stand.resolve(query).map_err(text)?;
         if !covers(claims, &[Claim::board(&entry.mac)]) {
@@ -111,10 +112,19 @@ impl StandDrivers {
                 entry.id
             ));
         }
-        lock(&self.parked).remove(&entry.mac);
+        let parked = lock(&self.parked).remove(&entry.mac);
         let port = oer_lab_board::discovery::port_of(&entry.device_id().map_err(text)?)
             .unwrap_or_else(|_| PathBuf::from("/dev/null"));
-        Board::new(&self.root, &stand, entry, port).map_err(text)
+        Ok((
+            Board::new(&self.root, &stand, entry, port).map_err(text)?,
+            parked,
+        ))
+    }
+
+    /// The board `query` names, which `claims` must hold; its parked port
+    /// is closed first.
+    fn board(&self, query: &str, claims: &[Claim]) -> Result<Board> {
+        self.board_and_port(query, claims).map(|(board, _)| board)
     }
 
     /// Park `mac`'s board in its ROM's download mode and prove it.
@@ -229,13 +239,27 @@ impl StandDrivers {
     }
 
     /// Stream `board`'s console both ways until `io.stop`.
-    fn console(&self, board: &Board, start: bool, io: &OperationIo) -> Result<()> {
-        let mut port = if start {
-            let serial = board.reset_into_console().map_err(text)?;
-            serial.into_port()
-        } else {
-            board.open_console().map_err(text)?.into_port()
+    /// Stream `board`'s console both ways until `io.stop`: on its `parked`
+    /// port when it has one and is not started; when `start`, after a reset
+    /// into its image that discards what the port held before.
+    fn console(
+        &self,
+        board: &Board,
+        parked: Option<Port>,
+        start: bool,
+        io: &OperationIo,
+    ) -> Result<()> {
+        let mut port = match parked {
+            // A reset from the ROM's download mode re-enumerates the port:
+            // the console opens anew, and the reset below discards what the
+            // boot that closing the parked port started had printed.
+            Some(_) if start => board.open_console().map_err(text)?.into_port(),
+            Some(port) => port,
+            None => board.open_console().map_err(text)?.into_port(),
         };
+        if start {
+            reset::reset_usb_serial_jtag(&mut port).map_err(text)?;
+        }
         port.set_timeout(POLL).map_err(text)?;
         let mut buffer = vec![0u8; 4096];
         while !io.stop.load(Ordering::SeqCst) {
@@ -556,8 +580,8 @@ impl Drivers for StandDrivers {
                 Ok(serde_json::json!(self.rung(&board, *step)?))
             }
             Operation::Console { board, reset } => {
-                let board = self.board(board, claims)?;
-                self.console(&board, *reset, &io)?;
+                let (board, parked) = self.board_and_port(board, claims)?;
+                self.console(&board, parked, *reset, &io)?;
                 Ok(serde_json::Value::Null)
             }
             Operation::ReadConsole { board, watch_ms } => {
