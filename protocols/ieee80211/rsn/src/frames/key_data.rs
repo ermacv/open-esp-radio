@@ -12,7 +12,10 @@
 
 use super::*;
 use oer_ieee80211_wire::ccmp::GroupKeyId;
-use oer_ieee80211_wire::eapol::{GtkKdeInfo, KDE_HEADER_LEN, Kde, kde_header};
+use oer_ieee80211_wire::eapol::{
+    GTK_KDE_LEN, GtkKde, GtkKdeInfo, IGTK_KDE_LEN, IgtkKde, Kde, KeyDataElements, key_data_padding,
+    write_key_data_padding,
+};
 
 #[derive(Zeroize, ZeroizeOnDrop)]
 pub struct RsnGtk {
@@ -117,13 +120,7 @@ impl<const N: usize> RsnPlainKeyData<N> {
             .checked_add(GTK_KDE_LEN)
             .and_then(|len| len.checked_add(igtk_len))
             .ok_or(RsnFrameError::CapacityExceeded)?;
-        let padding = if unpadded_len < 16 {
-            16_usize
-                .checked_sub(unpadded_len)
-                .ok_or(RsnFrameError::CapacityExceeded)?
-        } else {
-            unpadded_len.wrapping_neg() % 8
-        };
+        let padding = key_data_padding(unpadded_len).ok_or(RsnFrameError::CapacityExceeded)?;
         let len = unpadded_len
             .checked_add(padding)
             .ok_or(RsnFrameError::CapacityExceeded)?;
@@ -141,75 +138,33 @@ impl<const N: usize> RsnPlainKeyData<N> {
         let (gtk_kde, rest) = rest
             .split_first_chunk_mut::<GTK_KDE_LEN>()
             .ok_or(RsnFrameError::CapacityExceeded)?;
-        *gtk_kde = gtk_kde_bytes(gtk);
+        *gtk_kde = GtkKde {
+            info: GtkKdeInfo::new(gtk.key_id, gtk.transmit),
+            key: gtk.key(),
+        }
+        .encode();
         let padding_bytes = match igtk {
             Some(igtk) => {
                 let (igtk_kde, rest) = rest
                     .split_first_chunk_mut::<IGTK_KDE_LEN>()
                     .ok_or(RsnFrameError::CapacityExceeded)?;
-                *igtk_kde = igtk_kde_bytes(igtk);
+                *igtk_kde = IgtkKde {
+                    key_id: u16::from(igtk.key_id()),
+                    packet_number: igtk.packet_number(),
+                    key: igtk.key(),
+                }
+                .encode();
                 rest
             }
             None => rest,
         };
-        if let Some(first) = padding_bytes.first_mut() {
-            *first = KDE_ELEMENT_ID;
-        }
+        write_key_data_padding(padding_bytes);
         Ok(Self { bytes })
     }
 
     pub fn as_bytes(&self) -> &[u8] {
         self.bytes.as_slice()
     }
-}
-
-const GTK_KDE_LEN: usize = 24;
-
-fn gtk_kde_bytes(gtk: &RsnGtk) -> [u8; GTK_KDE_LEN] {
-    const {
-        if GTK_KDE_LEN != 8 + RSN_GTK_LEN {
-            panic!("GTK KDE geometry");
-        }
-    }
-    const HEADER: [u8; KDE_HEADER_LEN] =
-        match kde_header(GTK_KDE_TYPE, GTK_KDE_LEN - KDE_HEADER_LEN) {
-            Some(header) => header,
-            None => panic!("GTK KDE geometry"),
-        };
-    let [h0, h1, h2, h3, h4, h5] = HEADER;
-    let [info] = GtkKdeInfo::new(gtk.key_id, gtk.transmit).to_bytes();
-    let mut kde = [0; GTK_KDE_LEN];
-    let header: [u8; 8] = [h0, h1, h2, h3, h4, h5, info, 0];
-    for (target, source) in kde.iter_mut().zip(header.iter().chain(gtk.key())) {
-        *target = *source;
-    }
-    kde
-}
-
-fn igtk_kde_bytes(igtk: &RsnIgtk) -> [u8; IGTK_KDE_LEN] {
-    const {
-        if IGTK_KDE_LEN != 8 + RSN_IPN_LEN + RSN_IGTK_LEN {
-            panic!("IGTK KDE geometry");
-        }
-    }
-    const HEADER: [u8; KDE_HEADER_LEN] =
-        match kde_header(IGTK_KDE_TYPE, IGTK_KDE_LEN - KDE_HEADER_LEN) {
-            Some(header) => header,
-            None => panic!("IGTK KDE geometry"),
-        };
-    let [h0, h1, h2, h3, h4, h5] = HEADER;
-    let [id0, id1] = u16::from(igtk.key_id()).to_le_bytes();
-    let mut kde = [0; IGTK_KDE_LEN];
-    let header: [u8; 8] = [h0, h1, h2, h3, h4, h5, id0, id1];
-    for (target, source) in kde.iter_mut().zip(
-        header
-            .iter()
-            .chain(igtk.packet_number().iter())
-            .chain(igtk.key()),
-    ) {
-        *target = *source;
-    }
-    kde
 }
 
 /// Which elements beside the group-key KDEs a key-data body carries.
@@ -258,26 +213,14 @@ fn parse_key_data(
     context: KeyDataContext<'_>,
     management_protection: bool,
 ) -> Result<RsnGroupKeys, RsnFrameError> {
-    let mut remaining = bytes;
     let mut saw_rsn = false;
     let mut saw_rsnxe = false;
     let mut gtk = None;
     let mut igtk = None;
 
-    while let Some((&first, after_first)) = remaining.split_first() {
-        if remaining.iter().all(|byte| *byte == 0)
-            || (first == KDE_ELEMENT_ID && after_first.iter().all(|byte| *byte == 0))
-        {
-            break;
-        }
-        let Some(&[_, length]) = remaining.first_chunk::<2>() else {
-            return Err(RsnFrameError::MalformedKeyData);
-        };
-        let Some((element, rest)) = remaining.split_at_checked(
-            usize::from(length)
-                .checked_add(2)
-                .ok_or(RsnFrameError::MalformedKeyData)?,
-        ) else {
+    for element in KeyDataElements::new(bytes) {
+        let element = element.map_err(|_| RsnFrameError::MalformedKeyData)?;
+        let Some(&first) = element.first() else {
             return Err(RsnFrameError::MalformedKeyData);
         };
         match (first, &context) {
@@ -317,15 +260,8 @@ fn parse_key_data(
                 };
                 match data_type {
                     GTK_KDE_TYPE => {
-                        let [info, reserved, key @ ..] = body else {
-                            return Err(RsnFrameError::UnsupportedKeyData);
-                        };
-                        let key = <&[u8; RSN_GTK_LEN]>::try_from(key)
-                            .map_err(|_| RsnFrameError::UnsupportedKeyData)?;
-                        let info = GtkKdeInfo::from_bytes([*info]);
-                        if *reserved != 0 || info.reserved() != 0 {
-                            return Err(RsnFrameError::UnsupportedKeyData);
-                        }
+                        let GtkKde { info, key } =
+                            GtkKde::parse(body).ok_or(RsnFrameError::UnsupportedKeyData)?;
                         if gtk.is_some() {
                             return Err(RsnFrameError::DuplicateGtk);
                         }
@@ -336,20 +272,16 @@ fn parse_key_data(
                         if !management_protection {
                             return Err(RsnFrameError::UnexpectedIgtk);
                         }
-                        let Some((&[id0, id1], rest)) = body.split_first_chunk::<2>() else {
-                            return Err(RsnFrameError::UnsupportedKeyData);
-                        };
-                        let Some((&packet_number, key)) = rest.split_first_chunk::<RSN_IPN_LEN>()
-                        else {
-                            return Err(RsnFrameError::UnsupportedKeyData);
-                        };
-                        let key = <&[u8; RSN_IGTK_LEN]>::try_from(key)
-                            .map_err(|_| RsnFrameError::UnsupportedKeyData)?;
+                        let IgtkKde {
+                            key_id,
+                            packet_number,
+                            key,
+                        } = IgtkKde::parse(body).ok_or(RsnFrameError::UnsupportedKeyData)?;
                         if igtk.is_some() {
                             return Err(RsnFrameError::DuplicateIgtk);
                         }
-                        let key_id = u8::try_from(u16::from_le_bytes([id0, id1]))
-                            .map_err(|_| RsnFrameError::InvalidKeyId)?;
+                        let key_id =
+                            u8::try_from(key_id).map_err(|_| RsnFrameError::InvalidKeyId)?;
                         igtk = Some(RsnIgtk::new(key_id, packet_number, key)?);
                     }
                     _ => return Err(RsnFrameError::UnsupportedKeyData),
@@ -357,7 +289,6 @@ fn parse_key_data(
             }
             _ => return Err(RsnFrameError::UnsupportedKeyData),
         }
-        remaining = rest;
     }
 
     if let KeyDataContext::Message3 { expected_rsnxe, .. } = context {

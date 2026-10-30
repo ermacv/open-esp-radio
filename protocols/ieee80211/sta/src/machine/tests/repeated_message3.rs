@@ -646,7 +646,7 @@ fn damaged_deferred_eapol_disconnects_on_both_rx_and_tx_terminal_paths() {
                     .filter(|event| matches!(
                         event,
                         Seen::Notify(StaNotice::Disconnected(StaDisconnectReason::InvalidEapol(
-                            oer_ieee80211_rsn::EapolParseError::Truncated
+                            oer_ieee80211_wire::eapol::EapolParseError::Truncated
                         )))
                     ))
                     .count(),

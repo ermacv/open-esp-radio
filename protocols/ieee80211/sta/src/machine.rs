@@ -72,6 +72,9 @@
 use core::marker::PhantomData;
 use oer_ieee80211_port::association::KEY_BANK_CAPACITY;
 use oer_ieee80211_wire::ccmp::GroupKeyId;
+/// Why an EAPOL-Key packet is not one, as [`StaDisconnectReason::InvalidEapol`]
+/// carries it.
+pub use oer_ieee80211_wire::eapol::EapolParseError;
 use oer_ieee80211_wire::eapol::PAE_GROUP_ADDRESS;
 use oer_ieee80211_wire::ethertype::ETHER_TYPE_EAPOL;
 use oer_ieee80211_wire::status::reason_code;
@@ -869,7 +872,7 @@ pub enum StaNotice {
 /// Why the station is not connected.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum StaDisconnectReason {
-    InvalidEapol(oer_ieee80211_rsn::EapolParseError),
+    InvalidEapol(EapolParseError),
     RetainedSecurityIes(oer_ieee80211_rsn::frames::RsnFrameError),
     /// A required frame was refused before admission.
     TransmitRefused(TxRefusal),

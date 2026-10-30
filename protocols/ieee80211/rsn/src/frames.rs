@@ -8,8 +8,7 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::state::{RsnApState, RsnStaState, RsnTransmit, RsnTxMessage};
 use crate::{
-    Akm, EAPOL_KEY_FIXED_LEN, EAPOL_KEY_PACKET_LEN, EAPOL_PACKET_TYPE_KEY, EapolKeyFrame, Ptk,
-    RSN_KCK_LEN, RSN_KEY_DESCRIPTOR_TYPE, RSN_MIC_LEN, RsnInterface, RsnKeyConfirmationKey,
+    Akm, EapolKeyFrame, Ptk, RSN_KCK_LEN, RSN_MIC_LEN, RsnInterface, RsnKeyConfirmationKey,
 };
 
 pub const RSN_IE_CAPACITY: usize = 64;
@@ -21,9 +20,6 @@ pub const RSN_IGTK_LEN: usize = 16;
 pub const RSN_IPN_LEN: usize = 6;
 pub const RSN_PLAIN_KEY_DATA_CAPACITY: usize = 128;
 pub const RSN_TX_EAPOL_CAPACITY: usize = 512;
-
-/// IGTK KDE: key id (2), IPN (6) and IGTK (16) after the OUI and type.
-const IGTK_KDE_LEN: usize = 2 + 4 + 2 + RSN_IPN_LEN + RSN_IGTK_LEN;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RsnFrameError {

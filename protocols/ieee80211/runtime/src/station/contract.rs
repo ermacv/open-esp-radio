@@ -3,10 +3,11 @@ use oer_ieee80211_arbiter::{LeaveReason as CoreLeaveReason, Refusal};
 use oer_ieee80211_port::{
     LayoutError as CoreLayoutError, PreparationError as CorePreparationError,
 };
-use oer_ieee80211_rsn::{EapolParseError as CoreEapolParseError, sae::SaeError as CoreSaeError};
+use oer_ieee80211_rsn::sae::SaeError as CoreSaeError;
 use oer_ieee80211_sta::join::sae::{
     StaPeerDisconnectKind as CorePeerDisconnectKind, StaSaePwe as CoreSaePwe,
 };
+use oer_ieee80211_sta::machine::EapolParseError as CoreEapolParseError;
 use oer_ieee80211_sta::{
     join::sae::StaSaeFailure,
     machine::{StaDisconnectReason, TxRefusal},

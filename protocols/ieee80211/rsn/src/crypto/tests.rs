@@ -5,7 +5,8 @@
     clippy::unreachable
 )]
 use super::*;
-use crate::{EAPOL_KEY_PACKET_LEN, EapolKeyFrame, EapolKeyMessage, frames};
+use crate::{EapolKeyFrame, EapolKeyMessage, frames};
+use oer_ieee80211_wire::eapol::EAPOL_KEY_PACKET_LEN;
 
 #[test]
 fn derives_known_ieee_pmk() {

@@ -15,12 +15,14 @@ fn a_message_owns_its_peer_and_the_mic_it_was_given() {
 }
 
 #[test]
-fn a_damaged_transmit_frame_returns_its_parse_error() {
-    let mut frame = RsnTxFrame::<128>::message4(crate::Akm::Psk, [1; 6], 9).unwrap();
-    frame.bytes[2] = 1;
+fn a_transmit_frame_parses_and_its_damaged_copy_returns_the_parse_error() {
+    let frame = RsnTxFrame::<128>::message4(crate::Akm::Psk, [1; 6], 9).unwrap();
+    assert!(frame.key_frame().is_ok());
+    let mut damaged = frame.as_bytes().to_vec();
+    damaged[2] = 1;
     assert_eq!(
-        frame.key_frame(),
-        Err(crate::EapolParseError::LengthMismatch)
+        crate::EapolKeyFrame::parse(&damaged),
+        Err(oer_ieee80211_wire::eapol::EapolParseError::LengthMismatch)
     );
 }
 

@@ -114,7 +114,7 @@ impl RsnStaResponseDeadline {
 pub enum RsnStaSupplicantError {
     State(RsnStateError),
     Frame(RsnFrameError),
-    InvalidFrame(crate::EapolParseError),
+    InvalidFrame(oer_ieee80211_wire::eapol::EapolParseError),
     /// A previously validated local security-IE owner lost its invariant.
     RetainedSecurityIes(RsnFrameError),
     /// The station's own Association RSN element names no supported suite.
@@ -163,13 +163,13 @@ impl<E> From<RsnStaSupplicantError> for RsnStaProcessError<E> {
     }
 }
 
-impl From<crate::EapolParseError> for RsnStaSupplicantError {
-    fn from(error: crate::EapolParseError) -> Self {
+impl From<oer_ieee80211_wire::eapol::EapolParseError> for RsnStaSupplicantError {
+    fn from(error: oer_ieee80211_wire::eapol::EapolParseError) -> Self {
         Self::InvalidFrame(error)
     }
 }
-impl<E> From<crate::EapolParseError> for RsnStaProcessError<E> {
-    fn from(error: crate::EapolParseError) -> Self {
+impl<E> From<oer_ieee80211_wire::eapol::EapolParseError> for RsnStaProcessError<E> {
+    fn from(error: oer_ieee80211_wire::eapol::EapolParseError) -> Self {
         Self::Supplicant(error.into())
     }
 }
@@ -267,7 +267,7 @@ impl<const N: usize> RsnStaKeyDataRequest<N> {
     }
 
     /// The wrapped Key Data field of Message 3.
-    pub fn wrapped_key_data(&self) -> Result<&[u8], crate::EapolParseError> {
+    pub fn wrapped_key_data(&self) -> Result<&[u8], oer_ieee80211_wire::eapol::EapolParseError> {
         Ok(self.frame.key_frame()?.key_data())
     }
 
@@ -288,13 +288,13 @@ pub type RsnKeyUnwrapRequest = KeyUnwrapRequest<RSN_KEY_DATA_CAPACITY>;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RsnKeyUnwrapRequestError {
     /// The retained frame lost its EAPOL-Key invariant.
-    InvalidFrame(crate::EapolParseError),
+    InvalidFrame(oer_ieee80211_wire::eapol::EapolParseError),
     /// The Key Data field is longer than [`RSN_KEY_DATA_CAPACITY`].
     CapacityExceeded,
 }
 
-impl From<crate::EapolParseError> for RsnKeyUnwrapRequestError {
-    fn from(error: crate::EapolParseError) -> Self {
+impl From<oer_ieee80211_wire::eapol::EapolParseError> for RsnKeyUnwrapRequestError {
+    fn from(error: oer_ieee80211_wire::eapol::EapolParseError) -> Self {
         Self::InvalidFrame(error)
     }
 }
@@ -344,7 +344,7 @@ pub enum RsnConnectedSupplicantError {
     StaleCompletion,
     InstallFailed,
     Frame(RsnFrameError),
-    InvalidFrame(crate::EapolParseError),
+    InvalidFrame(oer_ieee80211_wire::eapol::EapolParseError),
     /// A previously validated local security-IE owner lost its invariant.
     RetainedSecurityIes(RsnFrameError),
 }
@@ -361,13 +361,13 @@ impl<E> From<RsnConnectedSupplicantError> for RsnConnectedProcessError<E> {
     }
 }
 
-impl From<crate::EapolParseError> for RsnConnectedSupplicantError {
-    fn from(error: crate::EapolParseError) -> Self {
+impl From<oer_ieee80211_wire::eapol::EapolParseError> for RsnConnectedSupplicantError {
+    fn from(error: oer_ieee80211_wire::eapol::EapolParseError) -> Self {
         Self::InvalidFrame(error)
     }
 }
-impl<E> From<crate::EapolParseError> for RsnConnectedProcessError<E> {
-    fn from(error: crate::EapolParseError) -> Self {
+impl<E> From<oer_ieee80211_wire::eapol::EapolParseError> for RsnConnectedProcessError<E> {
+    fn from(error: oer_ieee80211_wire::eapol::EapolParseError) -> Self {
         Self::Supplicant(error.into())
     }
 }
@@ -433,7 +433,7 @@ impl<const N: usize> RsnGroupKeyDataRequest<N> {
     }
 
     /// The wrapped Key Data field of Group Message 1.
-    pub fn wrapped_key_data(&self) -> Result<&[u8], crate::EapolParseError> {
+    pub fn wrapped_key_data(&self) -> Result<&[u8], oer_ieee80211_wire::eapol::EapolParseError> {
         Ok(self.frame.key_frame()?.key_data())
     }
 

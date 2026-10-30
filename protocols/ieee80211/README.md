@@ -21,7 +21,7 @@ the portable runtime drives role services over that port.
 | `wire/src/security.rs` | Link protection, negotiated association security and the elements a BSS advertises |
 | `wire/src/security/rsn.rs` | RSN element and RSNXE syntax, encoders and AKM suite vocabulary |
 | `wire/src/station/security.rs` | The RSN element and RSNXE of a station's association request |
-| `wire/src/eapol.rs` | EAPOL-Key Key Information field and Key Data Encapsulations |
+| `wire/src/eapol.rs` | EAPOL-Key packets (checked view, encoder with its MIC field and MIC input), Key Information, GTK/IGTK KDEs, Key Data elements and padding |
 | `wire/src/sae.rs` | SAE Commit and Confirm body codecs (byte values of scalar, element and confirm) and SAE extension element IDs |
 | `wire/src/status.rs` | Status and reason codes |
 | `wire/src/ethertype.rs` | The EtherType values the 802.11 side names (EAPOL, WAPI) |

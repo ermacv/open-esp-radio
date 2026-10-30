@@ -13,8 +13,8 @@ crates execute its typed key-data unwrap, transmit and key-install requests.
 | `element` | Association RSN element policy and selection of its first supported suite; wire syntax is `oer_ieee80211_wire::security::rsn` |
 | `crypto` | Zeroizing PMK/PTK owners, PSK passphrase derivation and the association security binding |
 | `nonce` | Boot-seeded ChaCha20 owner for fresh supplicant nonces |
-| `eapol` | Validated borrowed/owned EAPOL-Key packets and MIC verification |
-| `frames` | EAPOL-Key/Ethernet construction, GTK key data and owned security elements; the Key Information field, KDEs, SAE element IDs and status codes are `oer-ieee80211-wire`'s |
+| `eapol` | Message classification and MIC verification of EAPOL-Key packets the codec checked (`oer_ieee80211_wire::eapol::EapolKey`), and their owned copies |
+| `frames` | Which EAPOL-Key fields each handshake message sends, the MIC it computes, which elements and KDEs a Key Data carries, and owned security elements; the EAPOL-Key layout and its MIC field, GTK/IGTK KDEs, Key Data elements and padding, SAE element IDs and status codes are `oer-ieee80211-wire`'s |
 | `state` | Station and authenticator four-way-handshake transitions |
 | `supplicant` | Station orchestration: typed key-data unwrap and key-install requests and their completions, response deadlines; each key-data request yields an owned `oer_crypto::KeyUnwrapRequest` (`RsnKeyUnwrapRequest`) |
 | `authenticator` | Access point orchestration: PTK derivation from the association's PMK, Message 2 and 4 MIC verification, the binding of the station's security IEs and the Message 3 wrap and MIC over key data the access point supplies; `authenticator::sae` is the access point's SAE responder |

@@ -5,6 +5,10 @@
     clippy::unreachable
 )]
 use super::*;
+use oer_ieee80211_wire::eapol::{
+    EAPOL_KEY_FIXED_LEN, EAPOL_KEY_PACKET_LEN, EAPOL_PACKET_TYPE_KEY, EapolParseError,
+    RSN_KEY_DESCRIPTOR_TYPE,
+};
 
 const KEY_INFO_PAIRWISE: u16 = KeyInformation::EMPTY.with_pairwise(true).raw();
 const KEY_INFO_INSTALL: u16 = KeyInformation::EMPTY.with_install(true).raw();

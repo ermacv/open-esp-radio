@@ -5,9 +5,9 @@
     clippy::unreachable
 )]
 use super::*;
-use crate::{
+use crate::frames::RsnTxFrame;
+use oer_ieee80211_wire::eapol::{
     EAPOL_KEY_FIXED_LEN, EAPOL_KEY_PACKET_LEN, EAPOL_PACKET_TYPE_KEY, RSN_KEY_DESCRIPTOR_TYPE,
-    frames::RsnTxFrame,
 };
 
 const PAIRWISE: u16 = 1 << 3;

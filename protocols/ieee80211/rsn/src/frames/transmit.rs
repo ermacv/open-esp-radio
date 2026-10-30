@@ -1,14 +1,15 @@
-//! Bounded EAPOL/Ethernet transmission and typed handshake action encoding.
+//! Bounded EAPOL transmission and typed handshake action encoding.
 
 use super::*;
 use crate::AkmKeys;
+use oer_ieee80211_wire::eapol::{EapolEncodeError, EapolKeyBuffer, EapolKeyFields};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RsnTxFrame<const N: usize = RSN_TX_EAPOL_CAPACITY> {
     interface: RsnInterface,
     peer: [u8; 6],
     retransmission: bool,
-    bytes: heapless::Vec<u8, N>,
+    packet: EapolKeyBuffer<N>,
 }
 
 impl<const N: usize> RsnTxFrame<N> {
@@ -184,49 +185,25 @@ impl<const N: usize> RsnTxFrame<N> {
         if key_info.pairwise() && key_info.ack() && nonce.iter().all(|byte| *byte == 0) {
             return Err(RsnFrameError::ZeroNonce);
         }
-        let len = EAPOL_KEY_PACKET_LEN
-            .checked_add(key_data.len())
-            .ok_or(RsnFrameError::CapacityExceeded)?;
-        let body_len = EAPOL_KEY_FIXED_LEN
-            .checked_add(key_data.len())
-            .ok_or(RsnFrameError::CapacityExceeded)?;
-        if len > N || body_len > u16::MAX as usize || key_data.len() > u16::MAX as usize {
-            return Err(RsnFrameError::CapacityExceeded);
-        }
-
-        let mut bytes = heapless::Vec::new();
-        bytes
-            .resize(len, 0)
-            .map_err(|_| RsnFrameError::CapacityExceeded)?;
-        let mut output = bytes.as_mut_slice();
-        for field in [
-            &[protocol_version, EAPOL_PACKET_TYPE_KEY][..],
-            &(body_len as u16).to_be_bytes(),
-            &[RSN_KEY_DESCRIPTOR_TYPE],
-            &key_info.to_bytes(),
-            &key_length.to_be_bytes(),
-            &replay_counter.to_be_bytes(),
-            &nonce,
-            &[0; 16],
-            &key_rsc,
-            &[0; 8],
-            &[0; RSN_MIC_LEN],
-            &(key_data.len() as u16).to_be_bytes(),
+        let packet = EapolKeyBuffer::encode(&EapolKeyFields {
+            protocol_version,
+            key_information: key_info,
+            key_length,
+            replay_counter,
+            nonce,
+            key_rsc,
             key_data,
-        ] {
-            let (front, tail) = output
-                .split_at_mut_checked(field.len())
-                .ok_or(RsnFrameError::CapacityExceeded)?;
-            for (target, source) in front.iter_mut().zip(field) {
-                *target = *source;
+        })
+        .map_err(|error| match error {
+            EapolEncodeError::KeyDataTooLong | EapolEncodeError::BufferTooSmall { .. } => {
+                RsnFrameError::CapacityExceeded
             }
-            output = tail;
-        }
+        })?;
         Ok(Self {
             interface,
             peer,
             retransmission: false,
-            bytes,
+            packet,
         })
     }
 
@@ -246,10 +223,12 @@ impl<const N: usize> RsnTxFrame<N> {
     }
 
     pub fn as_bytes(&self) -> &[u8] {
-        self.bytes.as_slice()
+        self.packet.as_bytes()
     }
 
-    pub fn key_frame(&self) -> Result<EapolKeyFrame<'_>, crate::EapolParseError> {
+    pub fn key_frame(
+        &self,
+    ) -> Result<EapolKeyFrame<'_>, oer_ieee80211_wire::eapol::EapolParseError> {
         EapolKeyFrame::parse(self.as_bytes())
     }
 
@@ -282,23 +261,7 @@ impl<const N: usize> RsnTxFrame<N> {
     }
 
     fn set_mic(&mut self, mic: &[u8; RSN_MIC_LEN]) {
-        use crate::eapol::{EAPOL_KEY_MIC_END, EAPOL_KEY_MIC_START, EAPOL_KEY_PACKET_LEN};
-        const {
-            if !(EAPOL_KEY_MIC_END - EAPOL_KEY_MIC_START == RSN_MIC_LEN
-                && EAPOL_KEY_MIC_END <= EAPOL_KEY_PACKET_LEN)
-            {
-                panic!("EAPOL MIC geometry");
-            }
-        }
-        for (target, source) in self
-            .bytes
-            .iter_mut()
-            .skip(EAPOL_KEY_MIC_START)
-            .take(RSN_MIC_LEN)
-            .zip(mic)
-        {
-            *target = *source;
-        }
+        self.packet.set_mic(mic);
     }
 }
 

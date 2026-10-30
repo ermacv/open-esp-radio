@@ -12,30 +12,14 @@
 
 use crate::AkmKeys;
 use crate::{Akm, Ptk, RSN_KCK_LEN, RsnInterface, RsnKeyConfirmationKey};
-use oer_ieee80211_wire::eapol::KeyInformation;
+use oer_ieee80211_wire::eapol::{EapolKey, EapolParseError, KeyInformation};
 
-pub const EAPOL_HEADER_LEN: usize = 4;
-pub const EAPOL_KEY_FIXED_LEN: usize = 95;
-pub const EAPOL_KEY_PACKET_LEN: usize = EAPOL_HEADER_LEN + EAPOL_KEY_FIXED_LEN;
-pub const EAPOL_PACKET_TYPE_KEY: u8 = 3;
-pub const RSN_KEY_DESCRIPTOR_TYPE: u8 = 2;
 pub const DEFAULT_EAPOL_FRAME_CAPACITY: usize = 512;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum EapolCopyError {
     CapacityExceeded,
     Invalid(EapolParseError),
-}
-
-pub(crate) const EAPOL_KEY_MIC_START: usize = 81;
-pub(crate) const EAPOL_KEY_MIC_END: usize = 97;
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum EapolParseError {
-    Truncated,
-    LengthMismatch,
-    NotKeyPacket,
-    NotRsnKeyDescriptor,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -125,160 +109,62 @@ impl EapolKeyInfo {
     }
 }
 
-/// Validated borrowed view of one complete RSN EAPOL-Key packet.
+/// Validated borrowed view of one complete RSN EAPOL-Key packet: the
+/// codec's checked fields, classified and authenticated here.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct EapolKeyFrame<'a> {
-    bytes: &'a [u8],
-    key_data: &'a [u8],
-    key_info: EapolKeyInfo,
-    fields: Fields<'a>,
-}
-
-/// The fixed EAPOL-Key fields, in wire order.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-struct Fields<'a> {
-    protocol_version: u8,
-    key_length: [u8; 2],
-    replay_counter: [u8; 8],
-    nonce: &'a [u8; 32],
-    key_iv: &'a [u8; 16],
-    key_receive_sequence: &'a [u8; 8],
-    key_identifier: &'a [u8; 8],
-    mic: &'a [u8; 16],
-}
-
-/// The parsed fields cover exactly the fixed part.
-const FIELDS_COVER_THE_FIXED_PART: () = {
-    if !(7 + 2 + 8 + 32 + 16 + 8 + 8 + 16 + 2 == EAPOL_KEY_PACKET_LEN
-        && EAPOL_KEY_MIC_START == 7 + 2 + 8 + 32 + 16 + 8 + 8
-        && EAPOL_KEY_MIC_END == EAPOL_KEY_MIC_START + 16)
-    {
-        panic!("EAPOL fixed fields must cover the packet");
-    }
-};
+pub struct EapolKeyFrame<'a>(EapolKey<'a>);
 
 impl<'a> EapolKeyFrame<'a> {
     pub fn parse(bytes: &'a [u8]) -> Result<Self, EapolParseError> {
-        let () = FIELDS_COVER_THE_FIXED_PART;
-        let (header, rest) = bytes
-            .split_first_chunk::<7>()
-            .ok_or(EapolParseError::Truncated)?;
-        let (&key_length, rest) = rest
-            .split_first_chunk::<2>()
-            .ok_or(EapolParseError::Truncated)?;
-        let (&replay_counter, rest) = rest
-            .split_first_chunk::<8>()
-            .ok_or(EapolParseError::Truncated)?;
-        let (nonce, rest) = rest
-            .split_first_chunk::<32>()
-            .ok_or(EapolParseError::Truncated)?;
-        let (key_iv, rest) = rest
-            .split_first_chunk::<16>()
-            .ok_or(EapolParseError::Truncated)?;
-        let (key_receive_sequence, rest) = rest
-            .split_first_chunk::<8>()
-            .ok_or(EapolParseError::Truncated)?;
-        let (key_identifier, rest) = rest
-            .split_first_chunk::<8>()
-            .ok_or(EapolParseError::Truncated)?;
-        let (mic, rest) = rest
-            .split_first_chunk::<16>()
-            .ok_or(EapolParseError::Truncated)?;
-        let (&[key_data_high, key_data_low], key_data) = rest
-            .split_first_chunk::<2>()
-            .ok_or(EapolParseError::Truncated)?;
-        let &[
-            protocol_version,
-            packet_type,
-            length_high,
-            length_low,
-            descriptor,
-            info_high,
-            info_low,
-        ] = header;
-        if packet_type != EAPOL_PACKET_TYPE_KEY {
-            return Err(EapolParseError::NotKeyPacket);
-        }
-
-        let body_len = usize::from(u16::from_be_bytes([length_high, length_low]));
-        let packet_len = EAPOL_HEADER_LEN
-            .checked_add(body_len)
-            .ok_or(EapolParseError::LengthMismatch)?;
-        if packet_len != bytes.len() || body_len < EAPOL_KEY_FIXED_LEN {
-            return Err(EapolParseError::LengthMismatch);
-        }
-        if descriptor != RSN_KEY_DESCRIPTOR_TYPE {
-            return Err(EapolParseError::NotRsnKeyDescriptor);
-        }
-
-        let key_data_len = usize::from(u16::from_be_bytes([key_data_high, key_data_low]));
-        if key_data_len != key_data.len() {
-            return Err(EapolParseError::LengthMismatch);
-        }
-
-        Ok(Self {
-            bytes,
-            key_data,
-            key_info: EapolKeyInfo(u16::from_be_bytes([info_high, info_low])),
-            fields: Fields {
-                protocol_version,
-                key_length,
-                replay_counter,
-                nonce,
-                key_iv,
-                key_receive_sequence,
-                key_identifier,
-                mic,
-            },
-        })
+        EapolKey::parse(bytes).map(Self)
     }
 
     pub const fn bytes(self) -> &'a [u8] {
-        self.bytes
+        self.0.bytes()
     }
 
     pub const fn protocol_version(self) -> u8 {
-        self.fields.protocol_version
+        self.0.protocol_version()
     }
 
     pub const fn key_info(self) -> EapolKeyInfo {
-        self.key_info
+        EapolKeyInfo(self.0.key_information().raw())
     }
 
     pub const fn message(self) -> EapolKeyMessage {
-        self.key_info.classify()
+        self.key_info().classify()
     }
 
-    pub fn key_length(self) -> u16 {
-        u16::from_be_bytes(self.fields.key_length)
+    pub const fn key_length(self) -> u16 {
+        self.0.key_length()
     }
 
-    pub fn replay_counter(self) -> u64 {
-        u64::from_be_bytes(self.fields.replay_counter)
+    pub const fn replay_counter(self) -> u64 {
+        self.0.replay_counter()
     }
 
-    pub fn nonce(self) -> &'a [u8; 32] {
-        self.fields.nonce
+    pub const fn nonce(self) -> &'a [u8; 32] {
+        self.0.nonce()
     }
 
-    pub fn key_iv(self) -> &'a [u8; 16] {
-        self.fields.key_iv
+    pub const fn key_iv(self) -> &'a [u8; 16] {
+        self.0.key_iv()
     }
 
-    pub fn mic(self) -> &'a [u8; 16] {
-        self.fields.mic
+    pub const fn mic(self) -> &'a [u8; 16] {
+        self.0.mic()
     }
 
-    pub fn key_receive_sequence(self) -> &'a [u8; 8] {
-        self.fields.key_receive_sequence
+    pub const fn key_receive_sequence(self) -> &'a [u8; 8] {
+        self.0.key_rsc()
     }
 
-    pub fn key_identifier(self) -> &'a [u8; 8] {
-        self.fields.key_identifier
+    pub const fn key_identifier(self) -> &'a [u8; 8] {
+        self.0.key_identifier()
     }
 
     pub const fn key_data(self) -> &'a [u8] {
-        self.key_data
+        self.0.key_data()
     }
 
     pub fn verify_mic(self, ptk: &Ptk) -> bool {
@@ -291,16 +177,10 @@ impl<'a> EapolKeyFrame<'a> {
 
     fn verify_mic_with_kck(self, akm: Akm, kck: &[u8; RSN_KCK_LEN]) -> bool {
         let mut mac = akm.mic(kck);
-        let Some(before_mic) = self.bytes.get(..EAPOL_KEY_MIC_START) else {
-            return false;
-        };
-        let Some(after_mic) = self.bytes.get(EAPOL_KEY_MIC_END..) else {
-            return false;
-        };
-        mac.update(before_mic);
-        mac.update(&[0; EAPOL_KEY_MIC_END - EAPOL_KEY_MIC_START]);
-        mac.update(after_mic);
-        mac.verify(self.fields.mic)
+        for part in self.0.mic_input() {
+            mac.update(part);
+        }
+        mac.verify(self.0.mic())
     }
 }
 

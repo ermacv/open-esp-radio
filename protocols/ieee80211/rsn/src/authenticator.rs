@@ -43,8 +43,8 @@ impl From<RsnStateError> for RsnAuthenticatorError {
     }
 }
 
-impl From<crate::EapolParseError> for RsnAuthenticatorError {
-    fn from(error: crate::EapolParseError) -> Self {
+impl From<oer_ieee80211_wire::eapol::EapolParseError> for RsnAuthenticatorError {
+    fn from(error: oer_ieee80211_wire::eapol::EapolParseError) -> Self {
         Self::State(RsnStateError::from(error))
     }
 }

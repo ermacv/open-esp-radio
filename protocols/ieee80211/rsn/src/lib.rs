@@ -83,9 +83,8 @@ pub use crypto::{
 };
 pub(crate) use crypto::{RsnKeyConfirmationKey, RsnKeyEncryptionKey};
 pub use eapol::{
-    DEFAULT_EAPOL_FRAME_CAPACITY, EAPOL_HEADER_LEN, EAPOL_KEY_FIXED_LEN, EAPOL_KEY_PACKET_LEN,
-    EAPOL_PACKET_TYPE_KEY, EapolCopyError, EapolKeyFrame, EapolKeyInfo, EapolKeyMessage,
-    EapolParseError, OwnedEapolFrame, RSN_KEY_DESCRIPTOR_TYPE,
+    DEFAULT_EAPOL_FRAME_CAPACITY, EapolCopyError, EapolKeyFrame, EapolKeyInfo, EapolKeyMessage,
+    OwnedEapolFrame,
 };
 pub(crate) use oer_ieee80211_wire::security::rsn::Akm;
 
