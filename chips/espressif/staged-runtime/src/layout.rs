@@ -10,7 +10,10 @@ include!(concat!(env!("OUT_DIR"), "/vector-markers.rs"));
 #[allow(unsafe_code, reason = "the linker script symbols")]
 // SAFETY: the runtime linker script and generated vectors define these address
 // markers. Zero-size byte arrays and repr(C) VectorEntry markers read no code,
-// stack memory or memory at an absolute symbol's value.
+// stack memory or memory at an absolute symbol's value. The one sized item,
+// `__runtime_payload_crc32`, is the stage-two header's 4-byte-aligned CRC word
+// in the loaded image (`.runtime.header`), readable for the whole runtime;
+// every bit pattern is a valid `u32`.
 unsafe extern "C" {
     safe static __runtime_image_start: [u8; 0];
     safe static __runtime_payload_end: [u8; 0];
@@ -31,6 +34,16 @@ unsafe extern "C" {
     vector_markers!();
     pub(crate) safe static _runtime_mtvt: [u8; 0];
     pub(crate) safe static _start_trap: [u8; 0];
+    safe static __runtime_payload_crc32: u32;
+}
+
+/// The image's identity: the stage-two payload CRC-32 the image packer wrote
+/// into the header and the bootstrap checked before it started the runtime
+/// (`oer_espressif_staged_layout::stage_two`). Two builds of different
+/// payloads differ in it but by chance.
+pub fn payload_crc32() -> u32 {
+    // The packer writes the word after the link: never the linked zero.
+    oer_memory::read_volatile(&__runtime_payload_crc32)
 }
 
 /// The linked image's sections and stacks, as address ranges.

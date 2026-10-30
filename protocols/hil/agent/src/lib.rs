@@ -32,5 +32,8 @@ pub mod console;
 pub mod lifecycle;
 pub mod postmortem;
 
+#[cfg(test)]
+mod test_messages;
+
 #[doc(hidden)]
 pub use oer_hil_protocol as __protocol;

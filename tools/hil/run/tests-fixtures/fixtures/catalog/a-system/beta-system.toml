@@ -1,9 +1,0 @@
-schema = 5
-id = "beta-system"
-description = "Bootstrap, PSRAM mapping, PSRAM task stack, SRAM IRQ stack and runtime startup"
-role = "investigation"
-repetitions = 3
-tags = ["smoke", "psram-stack"]
-
-[system]
-kind = "boot-smoke"

@@ -1,65 +1,12 @@
-//! Building an image of `firmware/apps` through the image pipeline: its
-//! bundle lies in `target/fw/<image>/`,
-//! described by its `bundle.json`.
+//! Building an image through the image pipeline and printing its
+//! analysis reports; where images live and what their bundle is belong to
+//! `oer_image_build::images`.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
-use serde::Deserialize;
-
-use oer_image_build::{Application, Gates, ImageSpec, Result};
-use oer_image_bundle::{ImageBundle, Purpose};
-use oer_image_checks::{Enforced, interrupts::Required};
-
-/// The chip every image of `firmware/apps` is built for.
-pub const CHIP: &str = "esp32s31";
-
-/// An image's bundle directory below the repository `root`.
-pub fn output(root: &Path, image: &str) -> PathBuf {
-    root.join("target/fw").join(image)
-}
-
-/// The package of the image `image` (`firmware/apps/<image>`).
-pub fn package(root: &Path, image: &str) -> Result<String> {
-    #[derive(Deserialize)]
-    struct Manifest {
-        package: Package,
-    }
-    #[derive(Deserialize)]
-    struct Package {
-        name: String,
-    }
-    let path = root.join("firmware/apps").join(image).join("Cargo.toml");
-    let text = std::fs::read_to_string(&path)
-        .map_err(|error| format!("no image `{image}`: {}: {error}", path.display()))?;
-    let manifest: Manifest =
-        toml::from_str(&text).map_err(|error| format!("{}: {error}", path.display()))?;
-    Ok(manifest.package.name)
-}
-
-/// The pipeline's spec of `image`, with the caller's enforcement policy. Every check runs.
-pub fn spec(root: &Path, image: &str, enforced: Enforced) -> Result<ImageSpec> {
-    let profile = oer_chip_profile::Profile::load(root, CHIP)?;
-    let package = package(root, image)?;
-    Ok(ImageSpec {
-        purpose: Purpose::Flash,
-        root: root.to_owned(),
-        chip: CHIP.to_owned(),
-        application: Application {
-            binary: package.clone(),
-            package,
-            features: Vec::new(),
-            default_features: true,
-        },
-        stack_policy: profile.stack_policy(),
-        layout_seed: None,
-        runtime_environment: Vec::new(),
-        output: output(root, image),
-        checks: Some(Gates {
-            enforced,
-            ..Gates::all(Required::Product)
-        }),
-    })
-}
+pub use oer_image_build::images::{CHIP, bundle, package};
+use oer_image_build::{Enforced, Result, images};
+use oer_image_bundle::ImageBundle;
 
 /// Build `image` into its bundle.
 pub fn build(
@@ -68,7 +15,7 @@ pub fn build(
     enforced: Enforced,
     binary: Option<&str>,
 ) -> Result<ImageBundle> {
-    let mut specification = spec(root, image, enforced)?;
+    let mut specification = images::spec(root, image, enforced)?;
     if let Some(binary) = binary {
         specification.application.binary = binary.to_owned();
     }
@@ -103,24 +50,11 @@ fn write_analysis_reports(bundle: &ImageBundle, output: &mut impl std::io::Write
     Ok(())
 }
 
-/// The built bundle of `image`, its flash files checked against its
-/// manifest.
-pub fn bundle(root: &Path, image: &str) -> Result<ImageBundle> {
-    package(root, image)?;
-    let directory = output(root, image);
-    ImageBundle::load(&directory).map_err(|error| {
-        format!(
-            "image `{image}` is not built ({}: {error}); run `cargo fw build {image}`",
-            directory.display()
-        )
-        .into()
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oer_image_checks::Check;
+    use oer_image_build::images::output;
+    use oer_image_bundle::Purpose;
 
     fn repository() -> tempfile::TempDir {
         let directory = tempfile::tempdir().unwrap();
@@ -129,12 +63,7 @@ mod tests {
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();
             std::fs::write(path, text).unwrap();
         }
-        for image in [
-            "boot-smoke",
-            "radio-root",
-            "../hil/esp32s31",
-            "../probes/esp32s31-radio",
-        ] {
+        for image in ["boot-smoke", "radio-root"] {
             let manifest = directory
                 .path()
                 .join("firmware/apps")
@@ -151,54 +80,6 @@ mod tests {
             .unwrap();
         }
         directory
-    }
-
-    #[test]
-    fn remaining_images_keep_the_pipeline_checks_and_configuration() {
-        let directory = repository();
-        for image in [
-            "boot-smoke",
-            "radio-root",
-            "../hil/esp32s31",
-            "../probes/esp32s31-radio",
-        ] {
-            for enforced in [
-                Enforced::Only([Check::Interrupts].into()),
-                Enforced::Reported,
-            ] {
-                let spec = spec(directory.path(), image, enforced.clone()).unwrap();
-                assert_eq!(spec.purpose, Purpose::Flash);
-                assert_eq!(spec.output, output(directory.path(), image));
-                assert_eq!(
-                    spec.stack_policy,
-                    Path::new("chips/esp32s31/platform/stack.toml")
-                );
-                assert!(spec.runtime_environment.is_empty());
-                let gates = spec.checks.unwrap();
-                assert_eq!(gates.enforced, enforced);
-                assert!(gates.frames && gates.stack && gates.placement);
-                assert_eq!(gates.interrupts, Some(Required::Product));
-            }
-        }
-    }
-
-    #[test]
-    fn a_saved_bundle_cannot_flash_a_removed_application() {
-        let directory = repository();
-        let profile = oer_chip_profile::Profile::load(directory.path(), CHIP).unwrap();
-        for image in ["retired-wifi-station", "retired-bluetooth-controller"] {
-            assert!(package(directory.path(), image).is_err());
-            let output = output(directory.path(), image);
-            let staging = oer_image_bundle::staging_directory(&output).unwrap();
-            std::fs::create_dir_all(&staging).unwrap();
-            let built = ImageBundle::new(&staging, &profile, profile.facts.flash.clone().unwrap());
-            for segment in built.segments() {
-                std::fs::write(segment.file, b"fixture").unwrap();
-            }
-            built.publish(&output).unwrap();
-            let error = bundle(directory.path(), image).unwrap_err().to_string();
-            assert!(error.contains("no image"), "{error}");
-        }
     }
 
     #[test]

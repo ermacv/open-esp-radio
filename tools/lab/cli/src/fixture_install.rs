@@ -60,7 +60,7 @@ pub(crate) fn run(
             "-p",
             "oer-tool-lab-fixture-install",
             "-p",
-            "oer-tool-hil-fixture",
+            "oer-tool-lab-fixture-helpers",
         ]);
         for binary in provider_binaries {
             build.args(["--bin", binary]);

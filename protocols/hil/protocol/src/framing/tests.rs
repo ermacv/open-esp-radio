@@ -171,7 +171,7 @@ fn an_intact_frame_whose_payload_is_not_its_type_is_a_payload_error() {
         9,
         42,
         9,
-        crate::system::WatchdogTest(crate::system::WatchdogTestMode::Complete),
+        crate::base::Rejected(crate::base::RejectReason::BootId),
     );
     let mut encoder = FrameEncoder::new();
     let frame = encoder.encode(&expected).unwrap();
@@ -183,7 +183,7 @@ fn an_intact_frame_whose_payload_is_not_its_type_is_a_payload_error() {
     assert_eq!(
         protected,
         WIRE_HEADER_BYTES + 1,
-        "a watchdog test mode is one variant byte"
+        "a reject reason is one variant byte"
     );
     raw[WIRE_HEADER_BYTES] = 0x7f;
     let checksum = CRC32C.checksum(&raw[..protected]).to_le_bytes();
@@ -194,7 +194,7 @@ fn an_intact_frame_whose_payload_is_not_its_type_is_a_payload_error() {
     let frame = &reencoded[..written + 3];
 
     let mut decoder = FrameDecoder::new();
-    let observed = receive::<crate::system::WatchdogTest>(&mut decoder, frame);
+    let observed = receive::<crate::base::Rejected>(&mut decoder, frame);
     assert_eq!(observed, Some(Err(DecodeError::Payload)));
     assert_eq!(decoder.counters().frames, 1);
 }

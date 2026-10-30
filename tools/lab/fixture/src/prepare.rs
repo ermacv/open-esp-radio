@@ -37,10 +37,10 @@ pub fn build_plan(root: &Path, provider: Provider, adapters: &[String]) -> Resul
         Provider::LinuxNet => vec![
             "cargo stand fixture build-hostapd".to_owned(),
             "cargo stand fixture build-udhcpc".to_owned(),
-            "cargo build --locked -p oer-tool-lab-fixture-install -p oer-tool-hil-fixture --bin open-radio-net-launcher --bin open-radio-net-client --bin open-radio-probe-launcher --bin open-radio-probe --bin open-radio-fixture-install".to_owned(),
+            "cargo build --locked -p oer-tool-lab-fixture-install -p oer-tool-lab-fixture-helpers --bin open-radio-net-launcher --bin open-radio-net-client --bin open-radio-probe-launcher --bin open-radio-probe --bin open-radio-fixture-install".to_owned(),
         ],
         Provider::LinuxBluetooth => vec![
-            "cargo build --locked -p oer-tool-lab-fixture-install -p oer-tool-hil-fixture --bin open-radio-bluetooth-launcher --bin open-radio-bluetooth --bin open-radio-fixture-install".to_owned(),
+            "cargo build --locked -p oer-tool-lab-fixture-install -p oer-tool-lab-fixture-helpers --bin open-radio-bluetooth-launcher --bin open-radio-bluetooth --bin open-radio-fixture-install".to_owned(),
         ],
     };
     Ok(InstallPlan {
@@ -69,7 +69,7 @@ pub fn prepare(
 ) -> Result<PathBuf> {
     validate_operator(operator)?;
     let adapters = validate_adapters(provider, adapters)?;
-    let output = root.join("target/hil/fixture-install");
+    let output = root.join("target/lab/fixture-install");
     fs::create_dir_all(&output)?;
     let _lock = oer_os_process::lock::FileLock::acquire(
         &output.join("prepare.lock"),

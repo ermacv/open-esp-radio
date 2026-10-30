@@ -19,7 +19,7 @@ fn a_firmware_input_has_the_digest_of_its_current_build_or_none() {
         Err(error) => assert!(
             error
                 .to_string()
-                .contains("run `cargo hil firmware build phy-tracking-reference`"),
+                .contains("run `cargo fw idf build phy-tracking-reference`"),
             "{error}"
         ),
     }

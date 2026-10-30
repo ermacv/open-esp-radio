@@ -1,0 +1,30 @@
+[package]
+name = "oer-hil-harness"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0"
+repository.workspace = true
+publish = false
+description = "The life cycle every HIL scenario program runs through: build the image, lease and flash the board, connect, run the cases, release"
+
+[dependencies]
+oer-hil-link = { path = "../link" }
+oer-hil-protocol = { path = "../../../protocols/hil/protocol" }
+oer-image-build = { path = "../../image/build" }
+oer-image-bundle = { path = "../../image/bundle" }
+oer-image-checks = { path = "../../image/checks" }
+oer-lab-arbiter = { path = "../../lab/arbiter" }
+oer-lab-board = { path = "../../lab/board" }
+oer-lab-model = { path = "../../lab/model" }
+oer-os-process = { path = "../../os/process" }
+clap = { version = "4.5", features = ["derive"] }
+
+[dev-dependencies]
+oer-hil-link = { path = "../link", features = ["test-support"] }
+postcard-schema = { version = "0.2.5", features = ["derive"] }
+serde = { version = "1.0", features = ["derive"] }
+toml = "1.1"
+
+[lints]
+workspace = true

@@ -5,7 +5,7 @@
 //! Every supported chip has `chips/<id>/platform/chip.toml`, its chip layer:
 //! it extends the ISA of its harts and its family, and its module and board
 //! extend it. A [`Profile`] is the resolved facts of the chip's board and the
-//! image registry its chip layer holds (`[hil]`, `[packages]`, `[[probe]]`).
+//! image registry its chip layer holds (`[packages]`, `[[probe]]`).
 //! Everything else follows the id by convention
 //! (`firmware/probes/<id>-<name>`, `chips/<id>/registers`), and a capability exists
 //! where its directory does.
@@ -42,9 +42,6 @@ pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + S
 pub struct Profile {
     /// The facts of the chip, its module and its board.
     pub facts: Facts,
-    /// What the chip's HIL agent may not link and the HIL image recipes;
-    /// `None` when the chip names neither.
-    pub hil: Option<Hil>,
     /// The chip's packages as the repository policies classify them.
     pub packages: Packages,
     /// The Rust probe images of the chip's vendor comparison, in build
@@ -58,36 +55,9 @@ pub struct Profile {
 #[serde(deny_unknown_fields)]
 struct Registry {
     #[serde(default)]
-    hil: Option<Hil>,
-    #[serde(default)]
     packages: Packages,
     #[serde(default)]
     probe: Vec<Probe>,
-}
-
-/// The `[hil]` table: policy of the chip's HIL agent graph.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields, rename_all = "kebab-case")]
-pub struct Hil {
-    /// Packages neither the root lock nor the agent's workspace may pull in.
-    #[serde(default)]
-    pub forbidden_packages: Vec<String>,
-    /// The vendor firmware projects the PHY calibration cross-check builds,
-    /// relative to the repository root; `None` for a chip without one.
-    #[serde(default)]
-    pub vendor_calibration: Option<PathBuf>,
-    /// Explicit image-class recipes, relative to the repository root.
-    #[serde(default)]
-    pub images: std::collections::BTreeMap<String, HilImage>,
-}
-
-/// One HIL image class's target package and policies.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields, rename_all = "kebab-case")]
-pub struct HilImage {
-    pub package: String,
-    pub manifest: PathBuf,
-    pub stack_policy: PathBuf,
 }
 
 /// The `[packages]` table: the chip's packages by the role the repository
@@ -243,7 +213,6 @@ impl Profile {
         default_task_stack(source, &mut facts)?;
         Ok(Self {
             facts,
-            hil: registry.hil,
             packages: registry.packages,
             probe: registry.probe,
         })
@@ -268,14 +237,8 @@ impl Profile {
         format!("oer-firmware-bootstrap-{}", self.facts.id)
     }
 
-    /// The explicit recipe of `class`; an unsupported class has no recipe.
-    pub fn hil_image(&self, class: &str) -> Option<&HilImage> {
-        self.hil.as_ref()?.images.get(class)
-    }
-
     /// The chip's own stack policy (`chips/<id>/platform/stack.toml`), relative
-    /// to the root: the move limit and reserves of every image of the chip,
-    /// which the HIL policy extends.
+    /// to the root: the move limit and reserves of every image of the chip.
     pub fn stack_policy(&self) -> PathBuf {
         platform_dir(&self.facts.id).join("stack.toml")
     }
@@ -484,7 +447,7 @@ mod tests {
         let source = std::fs::read_to_string(&path).unwrap();
         std::fs::write(
             &path,
-            source.replace("[hil]\n", "[hil]\nimage-names = []\n"),
+            source.replacen("[[probe]]\n", "[[probe]]\nimage-names = []\n", 1),
         )
         .unwrap();
         let error = Profile::load(repository.path(), "esp32s31")

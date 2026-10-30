@@ -22,7 +22,6 @@ GENERATED = re.compile(
     r"(?:^|/)(?:"
     r"chips/[^/]+/pac/src/generated\.rs"
     r"|chips/[^/]+/vendor/facts/(?:[^/]+/)*[^/]+\.toml"
-    r"|chips/[^/]+/vendor/phy-baselines/[^/]+/[^/]+\.json"
     r")$"
 )
 GENERATED_HINT = (
@@ -42,8 +41,6 @@ REGENERATED = [
     (re.compile(r"(?:^|/)chips/[^/]+/vendor/facts/(?:[^/]+/)*[^/]+\.toml$"),
      "no tool in this repository writes it: a machine-written vendor fact registry "
      "changes only by re-deriving it, which the owner decides"),
-    (re.compile(r"(?:^|/)chips/[^/]+/vendor/phy-baselines/[^/]+/[^/]+\.json$"),
-     "`cargo vendor-check phy-baseline generate` from complete vendor capture runs"),
 ]
 
 # Commands that print a file's contents when it is named as an argument.

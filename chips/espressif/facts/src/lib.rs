@@ -63,7 +63,7 @@ pub const SCHEMA: u32 = 2;
 /// The keys of a chip layer that hold the image registry, not facts
 /// (`oer-chip-profile` reads them): a caller takes them out of the resolved
 /// table before [`Facts::from_table`].
-pub const REGISTRY: &[&str] = &["hil", "packages", "probe"];
+pub const REGISTRY: &[&str] = &["packages", "probe"];
 
 /// Why the facts are refused.
 #[derive(Clone, Debug, Eq, PartialEq)]

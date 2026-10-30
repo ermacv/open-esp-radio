@@ -46,8 +46,8 @@ Both runtime and bootstrap outcomes export the ROM summaries their analyses
 applied and the frame coverage reviews (`stack-coverage.toml` symbols) their
 stack checks applied. The image bundle records each union, so the catalog's
 stale-summary audit includes summaries used only during bootstrap, and
-`cargo hil images check --all` without `--chip` fails on a coverage review
-no image of the chips sharing its file applied.
+an audit over every image of the chips sharing a coverage file fails on a
+review none of them applied.
 
 The stack and interrupt checks also fail when a root's walk, which follows
 calls into the ROM, reaches a function overlapping a `[rom].forbidden` range

@@ -108,9 +108,9 @@ contract over the HAL. Family policy chosen with the cores is
 is an `ObservationContract` and depends on no owner. No other chip role
 except `Composition` and `Facade` reaches a protocol core or runtime by any
 normal path. HIL has `HilProtocol` (framing and message skeleton), `HilAgent` (the
-device library), `HilBinding` (the dictionary beside one facade) and
-`HilImage`, which composes the chip's composition, facades, observation
-collectors, bindings and the agent. HAL files whose production code waits are a per-file list in the
+device library), `HilBinding` (the dictionary beside one facade or one
+test-only service) and `HilImage`, which composes the chip's composition,
+facades, observation collectors, bindings and the agent. HAL files whose production code waits are a per-file list in the
 layer tests that only shrinks; the HAL also still holds driver code without
 a waiting marker ([HAL](../chips/esp32s31/hal/README.md)).
 
@@ -205,11 +205,11 @@ including aliases, optional entries and target-specific entries:
 
 - `embassy-futures` is allowed except in wire, cipher, protocol cores,
   core-side policy, facts, PAC and HAL roles.
-- `embassy-sync` is development-only. Its four remaining normal edges are
+- `embassy-sync` is development-only. Its two remaining normal edges are
   checked against a shrinking [deviation list](repository-layout.md#known-deviations).
   Transitive uses inside `embassy-net` and `bt-hci` do not admit direct uses.
 - `embassy-time` belongs to `portable/embassy/time` and the Embassy time ABI
-  check in `firmware/hil/esp32s31`; `embassy-time-driver` belongs to
+  check in `hil-scenarios/images/esp32s31-rpc`; `embassy-time-driver` belongs to
   `chips/espressif/executor`.
 - `embassy-net`, `xarxa` and `xarxa-driver` belong to
   `portable/embassy/net` and `firmware/*`; `trouble-host` belongs to
@@ -245,8 +245,6 @@ existing local entries.
 | `oer-espressif-phy` | `chips/espressif/phy` |
 | `oer-espressif-bluetooth-engine` | `chips/espressif/bluetooth-engine` |
 | `oer-esp32s31-instrumentation` | `chips/esp32s31/instrumentation` |
-| `oer-esp32s31-instrumentation-hil` | `chips/esp32s31/instrumentation-hil` |
-| `oer-esp32s31-phy-probe` | `chips/esp32s31/phy-probe` |
 
 The console `oer-espressif-usb-serial-jtag` depends transitively on mmio
 through `oer-espressif-interrupt-table`, which owns platform interrupt
@@ -1070,16 +1068,11 @@ the existing HAL owner.
 - **Images.** Only `cargo fw` builds images (`tools/image`); it runs the
   image checks (placement and stacks), reports frames and panics, and
   `cargo fw sizes` compares builds.
-- **Stand.** HIL runs (`cargo hil`, `tools/hil`) start by hand when they answer
-  a real question. Stand roles belong to firmware, not boards; the lab router
-  is reprogrammed to each run's profile; the stand file holds no credentials
-  (each run generates and never logs them). An image announces in its
-  `Hello` the keys of the HIL services it mounts, a set computed at compile
-  time from those services; the runner accepts a flashed image whose set holds
-  every key the scenario's family requires. A performance A/B is 5 of 5
-  runs: a throughput regression above 5 %, a p95 latency regression above
-  10 % or more CPU load for the same throughput blocks the change. Bisect on
-  the stand is a manual `git bisect run` over one scenario.
+- **Stand.** HIL scenarios (`cargo hil list`, `cargo hil run NAME`) start
+  by hand when they answer a real question. Stand roles belong to firmware,
+  not boards; the stand file holds no credentials. The stand (`tools/lab`)
+  owns the boards, the arbiter's leases and every equipment driver; the HIL
+  core takes a leased board and carries data and commands over its console.
 - **Analysis.** Binary analysis is a set of building blocks (ELF view, RV32
   decoding, lifting, control-flow and value analysis, concrete execution)
   under `tools/analysis`, with Blobray as the entry point for vendor
@@ -1087,7 +1080,35 @@ the existing HAL owner.
   are compared by hand with `tools/vendor`; a scenario prints its verdict and
   keeps nothing.
 
-HIL framing and lifecycle (`protocols/hil/protocol`) and its device agent depend on no radio dictionary. The optional agent lifecycle service acknowledges a requested reset and returns its correlation only after the console write completes; the image owns the retained reason and hardware reset. Watchdog fault injections and USB pad switching are image services. Domain message codecs live beside their owners; the host registry composes their descriptors and reviewed wire locks. Radio observation values live in `chips/esp32s31/instrumentation`; its sibling `instrumentation-hil` owns the existing bounded radio-health transport and capture store. PHY capture/hold/cache experiment codecs live in `chips/esp32s31/phy-probe`, and lower-MAC conformance codecs beside the port in `protocols/ieee80211/conformance-control`. These host-safe contracts contain no hardware implementation.
+## HIL
+
+The HIL core carries data and commands between the host and the device
+under test; it stores nothing and knows no scenario, service or equipment.
+
+| Part | Where | Knows |
+| --- | --- | --- |
+| Protocol | `protocols/hil/protocol` | Keys, framing, the envelope, `base` (Hello, image keys, boot evidence, link health, refusal), `lifecycle` (requested reset) and generic capture pages |
+| Agent | `protocols/hil/agent` | The device's request intake, console, image keys and services: `service!` declares a service whose every endpoint has a required handler method, and `image_keys!` refuses two services of an image serving one request at compile time |
+| Link | `tools/hil/link` | One board's serial line: frames, their boot (`boot_id`), request/response correlation, missing-message counts and the device's diagnostic lines |
+| Harness | `tools/hil/harness` | A scenario program's life cycle: build its image through the image pipeline, lease and write the board, connect, check the image's services, run the cases, release |
+| CLI | `tools/hil/cli` | `cargo hil list` and `run`: scenarios are packages marked `hil-scenario` in their metadata |
+| Scenarios | `hil-scenarios/` | `images/` the RPC images several scenarios share, `services/` test-only service vocabularies, one host program per scenario with its cases and verdict |
+
+A boot is named by the `boot_id` every frame carries. Its first frame is its
+Hello, which also names the image (`image_crc32`, the stage-two payload
+CRC-32 the bundle records); `base::GetHello` asks a running boot for the same
+boot's Hello again.
+A frame of another boot means the device restarted: every request of the
+earlier boot ended with it. A request without a response is unconfirmed:
+its boot takes no further request in the scenario. A case's verdict is pass,
+fail (the device refutes it) or incomplete (the stand, the link, an
+unconfirmed request or a cancellation); the program exits 0, 1 or 2.
+
+Domain message codecs live beside their owners; a message's key hashes its
+path and schema, and the host checks the keys the image announces before
+any case. Radio observation values live in
+`chips/esp32s31/instrumentation`. These host-safe contracts contain no
+hardware implementation.
 
 
 ## Topic pages

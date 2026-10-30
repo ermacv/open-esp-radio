@@ -335,9 +335,8 @@ writes to captured writable ELF memory; a RAM seed cannot overlap or replace tha
 mapping. Unknown register copies and spills propagate as unknown values, even
 into filled stack memory, and stop execution only where they decide control flow,
 form an address or reach a device. The explicit-input regression in
-[session tests](../../cli/tests/execution/sessions.rs) checks both paths. The
-[PHY I2C scenario](../../../hil/acceptance/esp32s31/README.md#captured-i2c-command-memory-comparison)
-records this narrower input/observation scope and uses shipping HAL/PAC behavior.
+[session tests](../../cli/tests/execution/sessions.rs) checks both paths. The PHY I2C
+scenario has this narrower input/observation scope and uses shipping HAL/PAC behavior.
 Chip-specific setup, addresses and expectations stay with the verification owner.
 
 `DeviceDeclaration` is a caller assumption with explicit applicability, stable

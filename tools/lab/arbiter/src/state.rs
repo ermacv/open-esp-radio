@@ -57,10 +57,6 @@ pub(crate) struct Ticket {
     /// Maintenance goes before every ordinary request.
     #[serde(default, skip_serializing_if = "Priority::is_ordinary")]
     pub(crate) priority: Priority,
-    /// The `cargo hil` job whose process, or its runner, made the request
-    /// ([`crate::jobs::JOB_KEY`]).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub(crate) job: Option<String>,
     /// The HIL run the lease executes, when a runner requested it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) run: Option<String>,

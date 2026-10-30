@@ -62,8 +62,8 @@ jobs:
         run: |
           # The workspace run unifies features: sta and the S31 driver are built
           # with test-support. This list records the other sets.
-          cargo test --locked -p oer-hil-agent -p oer-esp32s31-phy --features oer-hil-agent/health,oer-esp32s31-phy/radio-health
-          cargo clippy --locked -p oer-hil-agent -p oer-esp32s31-phy --features oer-hil-agent/health,oer-esp32s31-phy/radio-health --all-targets
+          cargo test --locked -p oer-esp32s31-phy --features radio-health
+          cargo clippy --locked -p oer-esp32s31-phy --features radio-health --all-targets
           cargo test --locked -p oer-ieee80211-sta
           cargo test --locked -p oer-esp32s31-ieee80211-driver
           cargo test --locked -p oer-time --features serde
@@ -118,17 +118,14 @@ jobs:
           # with their cfgs, as `cargo fw` builds it.
           firmware() {
             jq -r '.packages[]
-              | select(.manifest_path | test("/firmware/(apps|bootstrap)/|/chips/(esp32s31/board|espressif/staged-(runtime|bootstrap))/"))
+              | select(.manifest_path | test("/firmware/(apps|bootstrap)/|/hil-scenarios/images/|/chips/(esp32s31/board|espressif/staged-(runtime|bootstrap))/"))
               | select(.metadata."open-radio".instrumentation == null)
               | "-p " + .name' <<<"$meta"
           }
-          # HIL classes use their build recipes for features and cfgs.
-          cargo hil images check --instrumented --clippy
           # `<package> <target> <cfg flags>` of each other instrumented image.
           instrumented() {
             jq -r '.packages[]
               | select(.metadata."open-radio".instrumentation != null)
-              | select(.manifest_path | contains("/firmware/hil/") | not)
               | [.name,
                  "riscv32imafc-unknown-none-elf",
                  (.metadata."open-radio".instrumentation
@@ -154,7 +151,7 @@ jobs:
           # The clippy step checks the instrumented images, with their cfgs.
           firmware() {
             jq -r '.packages[]
-              | select(.manifest_path | test("/firmware/(apps|bootstrap)/|/chips/(esp32s31/board|espressif/staged-(runtime|bootstrap))/"))
+              | select(.manifest_path | test("/firmware/(apps|bootstrap)/|/hil-scenarios/images/|/chips/(esp32s31/board|espressif/staged-(runtime|bootstrap))/"))
               | select(.metadata."open-radio".instrumentation == null)
               | "-p " + .name' <<<"$meta"
           }
@@ -165,8 +162,11 @@ jobs:
           cargo fw build boot-smoke
           cargo fw build radio-root
       - name: HIL image builds
-        # Every class, with the linked image's checks.
-        run: cargo hil images check --all
+        # Every image the HIL scenarios share, with the linked image's checks.
+        run: |
+          for image in hil-scenarios/images/*/; do
+            cargo fw build "$(basename "$image")"
+          done
       - name: Probe images
         # Compile every probe, including board self-checks, without vendor pins.
         # Discover packages from the workspace so new probes join this check.

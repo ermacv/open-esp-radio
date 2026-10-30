@@ -1,12 +1,7 @@
 //! One descriptor plus explicit command, shutdown and cancellation notifications.
 
 use mio::{Events, Interest, Poll, Token, Waker, unix::SourceFd};
-use std::{
-    io,
-    os::fd::AsRawFd,
-    sync::Arc,
-    time::{Duration, Instant},
-};
+use std::{io, os::fd::AsRawFd, sync::Arc, time::Instant};
 
 const IO: Token = Token(0);
 const CONTROL: Token = Token(1);
@@ -80,10 +75,4 @@ fn interest(writable: bool) -> Interest {
     } else {
         Interest::READABLE
     }
-}
-
-/// A deadline bounds failure detection; it never establishes successful progress.
-pub fn deadline_after(timeout: Duration) -> Instant {
-    let deadline = Instant::now() + timeout;
-    oer_os_process::cleanup_deadline().map_or(deadline, |cleanup| deadline.min(cleanup))
 }

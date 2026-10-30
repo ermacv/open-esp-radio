@@ -1,7 +1,0 @@
-schema = 5
-id = "lower-mac-conformance"
-description = "Lower-MAC hardware traces equal the same reference-model cases"
-role = "investigation"
-tags = ["conformance", "wifi", "air-exclusive"]
-[lower-mac]
-kind = "conformance"

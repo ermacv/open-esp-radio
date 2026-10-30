@@ -1,9 +1,0 @@
-schema = 5
-id = "system-panic-reset"
-description = "A host-requested reset retains HilRequested through the product reset path; the boot ROM and bootloader start again and the next boot reports the reason with the request and acknowledgement identity"
-role = "investigation"
-repetitions = 1
-tags = ["soc", "fault-injection", "post-mortem"]
-
-[system]
-kind = "panic-reset"

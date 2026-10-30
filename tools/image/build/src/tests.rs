@@ -272,10 +272,6 @@ pub(crate) fn repository() -> tempfile::TempDir {
             include_str!("../../../../firmware/vendor/esp32s31/ble-scan-reference/firmware.toml"),
         ),
         (
-            "firmware/vendor/esp32s31/calibration/firmware.toml",
-            include_str!("../../../../firmware/vendor/esp32s31/calibration/firmware.toml"),
-        ),
-        (
             "firmware/vendor/esp32s31/ieee802154-reference/firmware.toml",
             include_str!("../../../../firmware/vendor/esp32s31/ieee802154-reference/firmware.toml"),
         ),

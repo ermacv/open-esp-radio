@@ -5,7 +5,7 @@
 //! launchers (`tools/lab/fixture-install`) install and admit the software; the
 //! unprivileged runner plans and prepares through the same library, and
 //! parses the requests and reports of `open-radio-bluetooth` and
-//! `open-radio-probe` (`tools/hil/fixture`) with the same types. The programs
+//! `open-radio-probe` (`tools/lab/fixture-helpers`) with the same types. The programs
 //! are packages without a library.
 #![forbid(unsafe_code)]
 

@@ -37,7 +37,7 @@ pub fn build(root: &Path) -> Result<()> {
         .open(output.join("build.lock"))?;
     lock.try_lock()
         .map_err(|_| "another hostapd build owns the output directory")?;
-    let recipe = root.join("tools/hil/linux-net/hostapd");
+    let recipe = root.join("tools/lab/linux-net/hostapd");
     let patch = fs::read(recipe.join("300-noscan.patch"))?;
     let config = fs::read(recipe.join("build.config"))?;
     let compiler = tool_version(command(root, "cc").arg("--version"))?;

@@ -15,6 +15,9 @@ fn expected_name(path: &str, executable: bool) -> String {
     let parts = path.split('/').collect::<Vec<_>>();
     let parts = match parts.as_slice() {
         ["firmware", rest @ ..] => [&["oer", "firmware"][..], rest].concat(),
+        ["hil-scenarios", rest @ ..] if executable => {
+            [&["oer", "hil", "scenarios"][..], rest].concat()
+        }
         ["tools", rest @ ..] if executable => [&["oer", "tool"][..], rest].concat(),
         [_, rest @ ..] => [&["oer"][..], rest].concat(),
         [] => Vec::new(),
@@ -37,6 +40,8 @@ fn the_name_follows_the_path() {
             true,
             "oer-firmware-apps-boot-smoke",
         ),
+        ("hil-scenarios/aes", true, "oer-hil-scenarios-aes"),
+        ("hil-scenarios/services/aes", false, "oer-services-aes"),
         ("tools/image/build", false, "oer-image-build"),
         ("tools/image/bundle", false, "oer-image-bundle"),
         ("tools/vendor/scenario", false, "oer-vendor-scenario"),
@@ -140,7 +145,7 @@ fn the_boundary_is_named_by_package_or_domain() {
         "tools/os/durable",
         "tools/hil/link",
         "firmware/apps/boot-smoke",
-        "firmware/hil/esp32s31",
+        "hil-scenarios/images/esp32s31-rpc",
         "tools/lab/fixture-install",
     ] {
         assert!(!below_the_boundary(package), "{package}");
@@ -149,8 +154,6 @@ fn the_boundary_is_named_by_package_or_domain() {
 
 // The metadata-derived Espressif value/algorithm crates in docs/architecture.md.
 const ESPRESSIF_SANS_IO: &[&str] = &[
-    "chips/esp32s31/phy-probe",
-    "chips/esp32s31/instrumentation-hil",
     "chips/esp32s31/instrumentation",
     "chips/espressif/analog",
     "chips/espressif/boot",
@@ -887,7 +890,7 @@ enum Role {
 }
 
 /// The role of every chip and HIL package. A package under `chips/`,
-/// `protocols/hil/` or `firmware/hil/`, or a `hil` leaf, is listed here.
+/// `protocols/hil/` or `hil-scenarios/`, or a `hil` leaf, is listed here.
 const ROLES: &[(&str, Role)] = &[
     ("chips/espressif/facts", Role::Facts),
     ("chips/espressif/efuse", Role::Facts),
@@ -929,16 +932,10 @@ const ROLES: &[(&str, Role)] = &[
     ("chips/esp32s31/wifi", Role::Facade),
     ("protocols/hil/protocol", Role::HilProtocol),
     ("protocols/hil/agent", Role::HilAgent),
-    ("protocols/ieee80211/control", Role::HilBinding),
-    ("protocols/network-control", Role::HilBinding),
-    ("protocols/bluetooth/control", Role::HilBinding),
-    ("protocols/ieee80211/conformance-control", Role::HilBinding),
-    ("chips/esp32s31/phy-probe", Role::HilBinding),
-    ("chips/esp32s31/instrumentation-hil", Role::HilBinding),
     ("chips/esp32s31/instrumentation", Role::ObservationContract),
-    ("firmware/hil/esp32s31", Role::HilImage),
-    ("firmware/hil/esp32s31-lower-mac", Role::HilImage),
-    ("firmware/hil/esp32s31-phy", Role::HilImage),
+    ("hil-scenarios/images/esp32s31-rpc", Role::HilImage),
+    ("hil-scenarios/services/aes", Role::HilBinding),
+    ("hil-scenarios/aes", Role::Tool),
 ];
 
 /// Roles fixed before their package exists, with what creates it. When the
@@ -949,7 +946,7 @@ const AWAITED_ROLES: &[(&str, Role, &str)] = &[];
 fn listed_role_required(path: &str) -> bool {
     path.starts_with("chips/")
         || path.starts_with("protocols/hil/")
-        || path.starts_with("firmware/hil/")
+        || path.starts_with("hil-scenarios/")
         || path.rsplit('/').next() == Some("hil")
 }
 
@@ -1271,8 +1268,8 @@ fn protocol_roles_and_the_explicit_chip_roles_follow_the_layout() {
         // A new chip package has no role until it is listed, whatever its
         // directory says.
         ("chips/esp32s31/new/driver", None),
-        ("firmware/hil/esp32s31", Some(Role::HilImage)),
-        ("firmware/hil/new", None),
+        ("hil-scenarios/images/esp32s31-rpc", Some(Role::HilImage)),
+        ("hil-scenarios/new", None),
         ("firmware/apps/boot-smoke", Some(Role::Image)),
         ("tools/hil/cli", Some(Role::Tool)),
     ] {
@@ -2108,7 +2105,9 @@ fn external_crate_allowed(path: &str, role: Role, dependency: &str) -> bool {
                 | Role::Protocol(ProtocolRole::Wire | ProtocolRole::Cipher | ProtocolRole::Core)
         ),
         "embassy-sync" => false,
-        "embassy-time" => path == "portable/embassy/time" || path == "firmware/hil/esp32s31",
+        "embassy-time" => {
+            path == "portable/embassy/time" || path == "hil-scenarios/images/esp32s31-rpc"
+        }
         "embassy-time-driver" => path == "chips/espressif/executor",
         "embassy-net" | "xarxa" | "xarxa-driver" => {
             path == "portable/embassy/net" || path.starts_with("firmware/")
@@ -2146,17 +2145,7 @@ const EXTERNAL_ASYNC_CRATES: &[Deviation] = &[
         "console on owned queues and waiter slots (#848)",
     ),
     (
-        "firmware/hil/esp32s31",
-        "embassy-sync",
-        "HIL image on SPSC and OnceValue (#848)",
-    ),
-    (
-        "firmware/hil/esp32s31-lower-mac",
-        "embassy-sync",
-        "HIL image on SPSC and OnceValue (#848)",
-    ),
-    (
-        "firmware/hil/esp32s31-phy",
+        "hil-scenarios/images/esp32s31-rpc",
         "embassy-sync",
         "HIL image on SPSC and OnceValue (#848)",
     ),
@@ -2242,7 +2231,7 @@ fn external_crate_homes_and_futures_exclusions_are_explicit() {
     for (dependency, allowed) in [
         (
             "embassy-time",
-            vec!["portable/embassy/time", "firmware/hil/esp32s31"],
+            vec!["portable/embassy/time", "hil-scenarios/images/esp32s31-rpc"],
         ),
         ("embassy-time-driver", vec!["chips/espressif/executor"]),
         (
@@ -2251,7 +2240,7 @@ fn external_crate_homes_and_futures_exclusions_are_explicit() {
         ),
         (
             "xarxa",
-            vec!["portable/embassy/net", "firmware/hil/esp32s31"],
+            vec!["portable/embassy/net", "firmware/apps/radio-root"],
         ),
         (
             "xarxa-driver",
@@ -2266,7 +2255,7 @@ fn external_crate_homes_and_futures_exclusions_are_explicit() {
             vec![
                 "protocols/bluetooth/hci",
                 "portable/embassy/trouble",
-                "tools/hil/fixture",
+                "tools/lab/fixture-helpers",
             ],
         ),
     ] {
@@ -2302,7 +2291,7 @@ fn external_crate_homes_and_futures_exclusions_are_explicit() {
         ("portable/embassy/net", true),
         ("chips/esp32s31/bluetooth/driver", true),
         ("firmware/apps/radio-root", true),
-        ("tools/hil/fixture", true),
+        ("tools/lab/fixture-helpers", true),
     ] {
         assert_eq!(
             external_crate_allowed(path, role(path).unwrap(), "embassy-futures"),
@@ -2732,144 +2721,19 @@ const OUTSIDE_THE_ROLES: &[Deviation] = &[
         "analog-I2C model types out of the family driver (#848)",
     ),
     (
-        "firmware/hil/esp32s31",
+        "hil-scenarios/images/esp32s31-rpc",
         "chips/esp32s31/hal",
         "the Wi-Fi station image on the facade and compose (#848)",
     ),
     (
-        "firmware/hil/esp32s31",
+        "hil-scenarios/images/esp32s31-rpc",
         "chips/espressif/usb-serial-jtag",
         "the Wi-Fi station image on the facade and compose (#848)",
     ),
     (
-        "firmware/hil/esp32s31",
+        "hil-scenarios/images/esp32s31-rpc",
         "portable/riscv",
         "the Wi-Fi station image on the facade and compose (#848)",
-    ),
-    (
-        "firmware/hil/esp32s31-lower-mac",
-        "chips/esp32s31/hal",
-        "the lower-MAC conformance image (#848)",
-    ),
-    (
-        "firmware/hil/esp32s31-lower-mac",
-        "chips/esp32s31/ieee80211/driver",
-        "the lower-MAC conformance image (#848)",
-    ),
-    (
-        "firmware/hil/esp32s31-lower-mac",
-        "chips/esp32s31/phy",
-        "the lower-MAC conformance image (#848)",
-    ),
-    (
-        "firmware/hil/esp32s31-lower-mac",
-        "chips/esp32s31/radio/client",
-        "the lower-MAC conformance image (#848)",
-    ),
-    (
-        "firmware/hil/esp32s31-lower-mac",
-        "chips/esp32s31/radio/system",
-        "the lower-MAC conformance image (#848)",
-    ),
-    (
-        "firmware/hil/esp32s31-lower-mac",
-        "chips/espressif/coex",
-        "the lower-MAC conformance image (#848)",
-    ),
-    (
-        "firmware/hil/esp32s31-lower-mac",
-        "chips/espressif/ieee80211-policy",
-        "the lower-MAC conformance image (#848)",
-    ),
-    (
-        "firmware/hil/esp32s31-lower-mac",
-        "chips/espressif/usb-serial-jtag",
-        "the lower-MAC conformance image (#848)",
-    ),
-    (
-        "firmware/hil/esp32s31-lower-mac",
-        "protocols/ieee80211/port",
-        "the lower-MAC conformance image (#848)",
-    ),
-    (
-        "firmware/hil/esp32s31-lower-mac",
-        "protocols/ieee80211/runtime",
-        "the lower-MAC conformance image (#848)",
-    ),
-    (
-        "firmware/hil/esp32s31-lower-mac",
-        "protocols/ieee80211/upper-mac",
-        "the lower-MAC conformance image (#848)",
-    ),
-    (
-        "firmware/hil/esp32s31-lower-mac",
-        "protocols/ieee80211/wire",
-        "the lower-MAC conformance image (#848)",
-    ),
-    (
-        "firmware/hil/esp32s31-lower-mac",
-        "protocols/radio/port",
-        "the lower-MAC conformance image (#848)",
-    ),
-    (
-        "firmware/hil/esp32s31-lower-mac",
-        "protocols/radio/regulatory",
-        "the lower-MAC conformance image (#848)",
-    ),
-    (
-        "firmware/hil/esp32s31-phy",
-        "chips/esp32s31/hal",
-        "the PHY capture probe and instrumentation (#848)",
-    ),
-    (
-        "firmware/hil/esp32s31-phy",
-        "chips/esp32s31/ieee80211/driver",
-        "the PHY capture probe and instrumentation (#848)",
-    ),
-    (
-        "firmware/hil/esp32s31-phy",
-        "chips/esp32s31/ieee802154/driver",
-        "the PHY capture probe and instrumentation (#848)",
-    ),
-    (
-        "firmware/hil/esp32s31-phy",
-        "chips/esp32s31/knowledge",
-        "the PHY capture probe and instrumentation (#848)",
-    ),
-    (
-        "firmware/hil/esp32s31-phy",
-        "chips/esp32s31/phy",
-        "the PHY capture probe and instrumentation (#848)",
-    ),
-    (
-        "firmware/hil/esp32s31-phy",
-        "chips/espressif/ieee802154-engine",
-        "the PHY capture probe and instrumentation (#848)",
-    ),
-    (
-        "firmware/hil/esp32s31-phy",
-        "chips/espressif/ieee802154-mac-values",
-        "the PHY capture probe and instrumentation (#848)",
-    ),
-    (
-        "firmware/hil/esp32s31-phy",
-        "chips/espressif/usb-serial-jtag",
-        "the PHY capture probe and instrumentation (#848)",
-    ),
-    (
-        "firmware/hil/esp32s31-phy",
-        "portable/riscv",
-        "the PHY capture probe and instrumentation (#848)",
-    ),
-    (
-        "firmware/hil/esp32s31-phy",
-        "protocols/ieee80211/wire",
-        "the PHY capture probe and instrumentation (#848)",
-    ),
-    (
-        "firmware/hil/esp32s31-phy",
-        "protocols/radio/regulatory",
-        "the PHY capture probe and instrumentation (#848)",
     ),
 ];
 
@@ -3064,7 +2928,7 @@ fn only_a_composition_and_a_facade_assemble_runtimes_and_backends() {
                 (Role::Platform, "chips/espressif/executor", true),
                 (Role::Pac, "chips/esp32s31/pac", false),
                 (Role::HilAgent, "protocols/hil/agent", false),
-                (Role::HilImage, "firmware/hil/esp32s31", false),
+                (Role::HilImage, "hil-scenarios/images/esp32s31-rpc", false),
                 (Role::Image, "firmware/apps/radio-root", false),
             ],
         );
@@ -3238,7 +3102,7 @@ adapter = { package = "oer-esp32s31-ieee80211-driver", version = "1" }
             &["oer-ieee80211-runtime", "oer-esp32s31-ieee80211-driver"],
         ),
         member(
-            "firmware/hil/esp32s31",
+            "hil-scenarios/images/esp32s31-rpc",
             "oer-firmware-hil-esp32s31",
             true,
             &["oer-esp32s31-wifi", "oer-esp32s31-hal"],
@@ -3261,57 +3125,9 @@ adapter = { package = "oer-esp32s31-ieee80211-driver", version = "1" }
                 "chips/esp32s31/ieee80211/driver",
                 "protocols/ieee80211/runtime"
             ),
-            edge("firmware/hil/esp32s31", "chips/esp32s31/hal"),
+            edge("hil-scenarios/images/esp32s31-rpc", "chips/esp32s31/hal"),
         ])
     );
-}
-
-/// The host HIL families, which link no HAL and no
-/// PAC (`docs/repository-layout.md`, HIL).
-fn host_family(path: &str) -> bool {
-    path.starts_with("tools/hil/family-")
-}
-
-fn hal_or_pac(roles: &BTreeMap<String, Role>, name: &str) -> bool {
-    matches!(roles.get(name), Some(Role::Hal | Role::Pac))
-}
-
-#[test]
-fn host_families_link_no_hal_or_pac() {
-    let graph = workspace_dependency_graph();
-    let roles = workspace_roles();
-    let families = workspace_package_paths()
-        .into_iter()
-        .filter(|(_, path)| host_family(path))
-        .collect::<Vec<_>>();
-    assert!(!families.is_empty(), "the host families are read");
-    let violations = families
-        .iter()
-        .flat_map(|(name, _)| forbidden_paths(&graph, name, |name| hal_or_pac(&roles, name)))
-        .collect::<Vec<_>>();
-    assert!(violations.is_empty(), "{violations:?}");
-}
-
-#[test]
-fn the_host_family_rule_finds_a_transitive_hal() {
-    let roles = BTreeMap::from([
-        ("oer-esp32s31-hal".into(), Role::Hal),
-        ("oer-esp32s31-knowledge".into(), Role::Facts),
-    ]);
-    let graph = BTreeMap::from([
-        (
-            "family".into(),
-            BTreeSet::from(["helper".into(), "oer-esp32s31-knowledge".into()]),
-        ),
-        ("helper".into(), BTreeSet::from(["oer-esp32s31-hal".into()])),
-    ]);
-    assert_eq!(
-        forbidden_paths(&graph, "family", |name| hal_or_pac(&roles, name)),
-        ["family -> helper -> oer-esp32s31-hal"]
-    );
-    assert!(host_family("tools/hil/family-wifi"));
-    assert!(host_family("tools/hil/family-phy-esp32s31"));
-    assert!(!host_family("tools/hil/runner"));
 }
 
 /// A source file outside `firmware/` that includes an image source through

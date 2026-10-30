@@ -1,100 +1,97 @@
-//! Failures of the host/target exchange, distinct from scenario assertions,
-//! and operation context that keeps the typed cause.
+//! Why the link or one exchange on it failed.
 
-use std::fmt;
+use oer_hil_protocol::base::RejectReason;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum ErrorKind {
-    Transport,
-    Protocol,
+/// The link cannot carry the protocol any more: its serial line failed or
+/// closed, or the device broke the wire contract. The first cause is kept.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum LinkError {
+    /// The serial line failed, closed or made no progress.
+    Transport(String),
+    /// The device broke the wire contract: another framing, a reserved boot
+    /// identity or a payload that does not decode as its key.
+    Protocol(String),
+    /// The host process is cancelled.
+    Cancelled,
+    /// No Hello of the running boot arrived in time.
+    NoHello,
 }
 
-#[derive(Clone, Debug, serde::Serialize)]
-pub struct LinkError {
-    pub kind: ErrorKind,
-    message: String,
-}
-
-impl LinkError {
-    pub fn transport(message: impl Into<String>) -> Self {
-        Self {
-            kind: ErrorKind::Transport,
-            message: message.into(),
+impl std::fmt::Display for LinkError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Transport(cause) => write!(formatter, "HIL link transport: {cause}"),
+            Self::Protocol(cause) => write!(formatter, "HIL link protocol: {cause}"),
+            Self::Cancelled => formatter.write_str("HIL link cancelled"),
+            Self::NoHello => formatter.write_str("HIL link: no Hello of the running boot"),
         }
-    }
-
-    pub fn protocol(message: impl Into<String>) -> Self {
-        Self {
-            kind: ErrorKind::Protocol,
-            message: message.into(),
-        }
-    }
-}
-
-impl fmt::Display for LinkError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(&self.message)
     }
 }
 
 impl std::error::Error for LinkError {}
 
-/// Both causes remain available when teardown also fails. The primary cause
-/// determines the scenario outcome; the secondary cause stays in the report.
-#[derive(Debug)]
-pub(super) struct FinalizationError {
-    pub(super) primary: Box<dyn std::error::Error + Send + Sync>,
-    pub(super) finalization: Box<dyn std::error::Error + Send + Sync>,
+/// Why one request got no response.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum CallError {
+    /// The device refused the request.
+    Rejected(RejectReason),
+    /// No response within the timeout. The request may still be running on
+    /// the device: its outcome is unconfirmed until a reset ends its boot.
+    Unconfirmed { request_id: u32 },
+    /// The device runs another boot: every operation of the request's boot
+    /// ended with it.
+    Rebooted { boot_id: u64 },
+    /// The response's payload does not decode as its type.
+    Payload { path: &'static str },
+    /// The request did not leave the host: sending it again is safe.
+    NotSent(NotSent),
+    /// The link failed after the request was queued: its outcome is
+    /// unknown.
+    Link(LinkError),
 }
 
-impl fmt::Display for FinalizationError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            formatter,
-            "{}; capture finalization also failed: {}",
-            self.primary, self.finalization
-        )
+/// Why a request did not leave the host.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum NotSent {
+    /// The request does not fit a frame.
+    Encode,
+    /// [`crate::OUTBOUND_CAPACITY`] frames wait for the serial line.
+    QueueFull,
+    /// [`crate::MAX_PENDING`] requests wait for their responses.
+    PendingFull,
+    /// The link's worker ended.
+    LinkEnded,
+}
+
+impl std::fmt::Display for CallError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Rejected(reason) => {
+                write!(formatter, "the device rejected the request: {reason:?}")
+            }
+            Self::Unconfirmed { request_id } => {
+                write!(
+                    formatter,
+                    "request {request_id} got no response; its outcome is unconfirmed"
+                )
+            }
+            Self::Rebooted { boot_id } => {
+                write!(formatter, "the device rebooted into boot {boot_id:016x}")
+            }
+            Self::Payload { path } => write!(
+                formatter,
+                "{path}: the response does not decode as its type"
+            ),
+            Self::NotSent(reason) => write!(formatter, "the request was not sent: {reason:?}"),
+            Self::Link(error) => error.fmt(formatter),
+        }
     }
 }
 
-impl std::error::Error for FinalizationError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        Some(&*self.primary)
+impl std::error::Error for CallError {}
+
+impl From<LinkError> for CallError {
+    fn from(error: LinkError) -> Self {
+        Self::Link(error)
     }
-}
-
-use std::error::Error;
-
-#[derive(Debug)]
-struct Context {
-    message: String,
-    source: Box<dyn Error + Send + Sync>,
-}
-
-impl fmt::Display for Context {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(&self.message)
-    }
-}
-
-impl Error for Context {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        Some(&*self.source)
-    }
-}
-
-pub fn context(
-    operation: impl Into<String>,
-    source: Box<dyn Error + Send + Sync>,
-) -> Box<dyn Error + Send + Sync> {
-    with_message(format!("{}: {source}", operation.into()), source)
-}
-
-/// Attach a complete diagnostic without discarding the original typed cause.
-pub fn with_message(
-    message: String,
-    source: Box<dyn Error + Send + Sync>,
-) -> Box<dyn Error + Send + Sync> {
-    Box::new(Context { message, source })
 }

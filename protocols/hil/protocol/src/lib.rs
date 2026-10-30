@@ -39,50 +39,21 @@ mod framing;
 #[cfg(feature = "async-io")]
 mod io;
 mod key;
+pub use envelope::{Envelope, WireKind};
 pub use framing::{
     DecodeCounters, DecodeError, EncodeError, FRAMING_VERSION, Frame, FrameDecoder, FrameEncoder,
     MAX_POSTCARD_BYTES, MAX_WIRE_FRAME_BYTES, Outbound, RequestIdentity,
 };
 #[cfg(feature = "async-io")]
 pub use io::{WriteFrameError, write_frame};
-#[cfg(feature = "registry")]
-pub use key::MessageInfo;
-
-/// This crate's reviewed framing version, message paths, keys and kinds.
-/// The host registry combines it with the domain owners' locks and checks
-/// the complete wire contract against their descriptors.
-#[cfg(feature = "registry")]
-pub const MESSAGES_LOCK: &str = include_str!("../messages.lock");
-pub use envelope::{Envelope, WireKind};
-pub use key::{Endpoint, Key, Kind, Message};
+pub use key::{Endpoint, Key, Message};
 
 // The modules: each is a path prefix and a directory.
 pub mod base;
 pub mod capture;
 pub mod lifecycle;
 pub mod system;
-pub mod telemetry;
-
-/// The framework's descriptors; the host composes radio dictionaries separately.
-#[cfg(feature = "registry")]
-pub fn registry() -> impl Iterator<Item = &'static MessageInfo> {
-    [
-        base::MESSAGES,
-        lifecycle::MESSAGES,
-        capture::MESSAGES,
-        system::MESSAGES,
-        telemetry::MESSAGES,
-    ]
-    .into_iter()
-    .flatten()
-}
-
-#[cfg(feature = "registry")]
-#[doc(hidden)]
-pub use key::decode_json as __decode_json;
 #[doc(hidden)]
 pub use postcard_schema as __postcard_schema;
-#[doc(hidden)]
-pub use postcard_schema::Schema as __Schema;
 #[doc(hidden)]
 pub use postcard_schema::Schema as __SchemaDerive;

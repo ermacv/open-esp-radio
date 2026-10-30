@@ -19,6 +19,10 @@ pub struct Hello {
     pub keys_digest: u64,
     pub maximum_payload_bytes: u16,
     pub maximum_wire_frame_bytes: u16,
+    /// The image's identity: its build's payload checksum (on a staged
+    /// image, the stage-two payload CRC-32 the bootstrap checked). The host
+    /// compares it with the image it wrote.
+    pub image_crc32: u32,
 }
 
 /// Keys `first..` of the image's sorted capability set.
@@ -75,12 +79,14 @@ impl<'a> ImageKeySet<'a> {
         self.keys.binary_search(&key).is_ok()
     }
 
-    pub fn hello(&self, maximum_payload_bytes: u16) -> Hello {
+    /// The Hello of an image of identity `image_crc32` serving this set.
+    pub fn hello(&self, maximum_payload_bytes: u16, image_crc32: u32) -> Hello {
         Hello {
             keys: self.keys.len() as u16,
             keys_digest: digest(self.keys),
             maximum_payload_bytes,
             maximum_wire_frame_bytes: crate::MAX_WIRE_FRAME_BYTES as u16,
+            image_crc32,
         }
     }
 
@@ -108,12 +114,134 @@ impl<'a> ImageKeySet<'a> {
 
 /// FNV-1a 64 over the keys in order.
 pub fn digest(keys: &[Key]) -> u64 {
-    let mut state = 0xcbf2_9ce4_8422_2325_u64;
-    for byte in keys.iter().flat_map(|key| key.0) {
-        state ^= u64::from(byte);
-        state = state.wrapping_mul(0x0000_0100_0000_01b3);
+    keys.iter()
+        .fold(DIGEST_BASIS, |state, key| digest_key(state, *key))
+}
+
+const DIGEST_BASIS: u64 = 0xcbf2_9ce4_8422_2325;
+
+/// `state` continued over `key`'s bytes.
+fn digest_key(state: u64, key: Key) -> u64 {
+    key.0.iter().fold(state, |state, byte| {
+        (state ^ u64::from(*byte)).wrapping_mul(0x0000_0100_0000_01b3)
+    })
+}
+
+/// The receiving side's check of an image's key pages against its
+/// [`Hello`], one page at a time and without storing the keys: the pages
+/// follow one another from key 0, none is empty or runs past the set, the
+/// keys ascend strictly across pages and their digest is the Hello's. The
+/// caller keeps a page's keys only after [`Self::accept`] took it and uses
+/// them only after [`Self::finish`].
+#[derive(Clone, Copy, Debug)]
+pub struct ImageKeysCheck {
+    total: u16,
+    expected_digest: u64,
+    next: u16,
+    previous: Option<Key>,
+    state: u64,
+}
+
+/// Why an image's key pages are not the set its Hello announced.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ImageKeysError {
+    /// The page starts elsewhere than where the previous one ended.
+    First { expected: u16, first: u16 },
+    /// The page's total is not the Hello's.
+    Total { hello: u16, page: u16 },
+    /// A page before the end of the set holds no key.
+    Empty { first: u16 },
+    /// The page holds more keys than the set has left.
+    Overrun { first: u16, length: usize },
+    /// A key does not follow its predecessor in strictly ascending order.
+    Order { previous: Key, current: Key },
+    /// Fewer keys arrived than the Hello announced.
+    Incomplete { received: u16, total: u16 },
+    /// The keys' digest is not the Hello's.
+    Digest { hello: u64, keys: u64 },
+}
+
+impl ImageKeysCheck {
+    pub const fn new(hello: &Hello) -> Self {
+        Self {
+            total: hello.keys,
+            expected_digest: hello.keys_digest,
+            next: 0,
+            previous: None,
+            state: DIGEST_BASIS,
+        }
     }
-    state
+
+    /// The first key of the page to ask for next; `None` once every key
+    /// arrived.
+    pub const fn next_first(&self) -> Option<u16> {
+        if self.next < self.total {
+            Some(self.next)
+        } else {
+            None
+        }
+    }
+
+    /// Take `page` into the check.
+    pub fn accept(&mut self, page: &ImageKeyPage) -> Result<(), ImageKeysError> {
+        if page.first != self.next {
+            return Err(ImageKeysError::First {
+                expected: self.next,
+                first: page.first,
+            });
+        }
+        if page.total != self.total {
+            return Err(ImageKeysError::Total {
+                hello: self.total,
+                page: page.total,
+            });
+        }
+        let remaining = self.total.saturating_sub(self.next);
+        if page.keys.is_empty() {
+            return Err(ImageKeysError::Empty { first: page.first });
+        }
+        let length = match u16::try_from(page.keys.len()) {
+            Ok(length) if length <= remaining => length,
+            _ => {
+                return Err(ImageKeysError::Overrun {
+                    first: page.first,
+                    length: page.keys.len(),
+                });
+            }
+        };
+        let mut previous = self.previous;
+        let mut state = self.state;
+        for current in page.keys.iter().copied() {
+            if let Some(previous) = previous
+                && previous.to_u64() >= current.to_u64()
+            {
+                return Err(ImageKeysError::Order { previous, current });
+            }
+            previous = Some(current);
+            state = digest_key(state, current);
+        }
+        self.previous = previous;
+        self.state = state;
+        self.next = self.next.saturating_add(length);
+        Ok(())
+    }
+
+    /// Whether the accepted pages are exactly the announced set.
+    pub const fn finish(&self) -> Result<(), ImageKeysError> {
+        if self.next < self.total {
+            return Err(ImageKeysError::Incomplete {
+                received: self.next,
+                total: self.total,
+            });
+        }
+        if self.state != self.expected_digest {
+            return Err(ImageKeysError::Digest {
+                hello: self.expected_digest,
+                keys: self.state,
+            });
+        }
+        Ok(())
+    }
 }
 
 /// `keys` in the ascending order [`ImageKeySet`] requires, at compile time.
@@ -284,6 +412,118 @@ mod tests {
         assert_eq!(distinct_keys::<4>(&sorted), None);
         assert_eq!(distinct_keys::<2>(&[Key([2; 8]), Key([1; 8])]), None);
         assert_eq!(distinct_len(&[]), 0);
+    }
+
+    /// Ascending keys `1..=count`.
+    fn ascending(count: u64) -> heapless::Vec<Key, 128> {
+        (1..=count).map(|value| Key(value.to_be_bytes())).collect()
+    }
+
+    fn page(first: u16, total: u16, keys: &[Key]) -> ImageKeyPage {
+        ImageKeyPage {
+            first,
+            total,
+            keys: heapless::Vec::from_slice(keys).unwrap(),
+        }
+    }
+
+    /// Feed `pages` to the check of `hello`; the first refusal.
+    fn check(hello: &Hello, pages: &[ImageKeyPage]) -> Result<(), ImageKeysError> {
+        let mut check = ImageKeysCheck::new(hello);
+        for page in pages {
+            check.accept(page)?;
+        }
+        check.finish()
+    }
+
+    #[test]
+    fn the_pages_of_a_set_pass_the_check_of_its_hello() {
+        let keys = ascending(100);
+        let set = ImageKeySet::new(&keys).unwrap();
+        let hello = set.hello(0, 0);
+        let mut check = ImageKeysCheck::new(&hello);
+        let mut received = heapless::Vec::<Key, 128>::new();
+        while let Some(first) = check.next_first() {
+            let page = set.page(first);
+            check.accept(&page).unwrap();
+            received.extend_from_slice(&page.keys).unwrap();
+        }
+        assert_eq!(check.finish(), Ok(()));
+        assert_eq!(received, keys);
+        let empty = ImageKeySet::new(&[]).unwrap().hello(0, 0);
+        assert_eq!(ImageKeysCheck::new(&empty).next_first(), None);
+        assert_eq!(ImageKeysCheck::new(&empty).finish(), Ok(()));
+    }
+
+    #[test]
+    fn a_set_other_than_the_announced_one_is_refused() {
+        let keys = ascending(4);
+        let hello = ImageKeySet::new(&keys).unwrap().hello(0, 0);
+        let other = ascending(5);
+        assert_eq!(
+            check(&hello, &[page(0, 4, &other[1..])]),
+            Err(ImageKeysError::Digest {
+                hello: hello.keys_digest,
+                keys: digest(&other[1..])
+            })
+        );
+        let repeated = [keys[0], keys[1], keys[1], keys[3]];
+        assert_eq!(
+            check(
+                &hello,
+                &[page(0, 4, &repeated[..2]), page(2, 4, &repeated[2..])]
+            ),
+            Err(ImageKeysError::Order {
+                previous: keys[1],
+                current: keys[1]
+            }),
+            "a repeat across a page boundary"
+        );
+        let permuted = [keys[0], keys[2], keys[1], keys[3]];
+        assert_eq!(
+            check(&hello, &[page(0, 4, &permuted)]),
+            Err(ImageKeysError::Order {
+                previous: keys[2],
+                current: keys[1]
+            })
+        );
+    }
+
+    #[test]
+    fn pages_that_do_not_tile_the_set_are_refused() {
+        let keys = ascending(4);
+        let hello = ImageKeySet::new(&keys).unwrap().hello(0, 0);
+        let five = ascending(5);
+        assert_eq!(
+            check(&hello, &[page(0, 4, &keys[..2]), page(2, 4, &five[2..])]),
+            Err(ImageKeysError::Overrun {
+                first: 2,
+                length: 3
+            }),
+            "a last page longer than the rest of the set"
+        );
+        assert_eq!(
+            check(&hello, &[page(0, 4, &keys[..2]), page(2, 4, &[])]),
+            Err(ImageKeysError::Empty { first: 2 })
+        );
+        assert_eq!(
+            check(&hello, &[page(0, 4, &keys[..2]), page(3, 4, &keys[3..])]),
+            Err(ImageKeysError::First {
+                expected: 2,
+                first: 3
+            })
+        );
+        assert_eq!(
+            check(&hello, &[page(0, 5, &keys)]),
+            Err(ImageKeysError::Total { hello: 4, page: 5 })
+        );
+        assert_eq!(
+            check(&hello, &[page(0, 4, &keys[..3])]),
+            Err(ImageKeysError::Incomplete {
+                received: 3,
+                total: 4
+            })
+        );
     }
 
     #[test]

@@ -81,15 +81,6 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 "chips/espressif/executor/src/fault.rs:crate::fault::impl Fault::reset:terminal-reference:reset_fault:1" = { owner = "chips/espressif/executor", classes = ["software-invariant", "configuration-boot", "unexpected-hardware"] }
 "chips/espressif/executor/src/fault.rs:crate::fault::impl Failure < P , T >::reset:terminal-entry:reset:1" = { owner = "chips/espressif/executor", classes = ["software-invariant", "configuration-boot", "unexpected-hardware"] }
 
-# chips/espressif/ieee802154-engine/src/engine/fault.rs
-"chips/espressif/ieee802154-engine/src/engine/fault.rs:crate::engine::fault::Fault:retained-reason:Fault::UnhandledEvents:1" = { owner = "firmware/hil/esp32s31-phy", classes = ["unexpected-hardware"] }
-"chips/espressif/ieee802154-engine/src/engine/fault.rs:crate::engine::fault::Fault:retained-reason:Fault::Service:1" = { owner = "firmware/hil/esp32s31-phy", classes = ["unexpected-hardware", "software-invariant", "exhaustion"] }
-"chips/espressif/ieee802154-engine/src/engine/fault.rs:crate::engine::fault::ServiceError:retained-reason:ServiceError::EventState:1" = { owner = "firmware/hil/esp32s31-phy", classes = ["unexpected-hardware"] }
-"chips/espressif/ieee802154-engine/src/engine/fault.rs:crate::engine::fault::ServiceError:retained-reason:ServiceError::RxAbortUnclassified:1" = { owner = "firmware/hil/esp32s31-phy", classes = ["unexpected-hardware"] }
-"chips/espressif/ieee802154-engine/src/engine/fault.rs:crate::engine::fault::ServiceError:retained-reason:ServiceError::RxAbortState:1" = { owner = "firmware/hil/esp32s31-phy", classes = ["unexpected-hardware"] }
-"chips/espressif/ieee802154-engine/src/engine/fault.rs:crate::engine::fault::ServiceError:retained-reason:ServiceError::TxAbortUnclassified:1" = { owner = "firmware/hil/esp32s31-phy", classes = ["unexpected-hardware"] }
-"chips/espressif/ieee802154-engine/src/engine/fault.rs:crate::engine::fault::ServiceError:retained-reason:ServiceError::FrequencyCode:1" = { owner = "firmware/hil/esp32s31-phy", classes = ["unexpected-hardware"] }
-"chips/espressif/ieee802154-engine/src/engine/fault.rs:crate::engine::fault::ServiceError:retained-reason:ServiceError::Statistics:1" = { owner = "firmware/hil/esp32s31-phy", classes = ["exhaustion"] }
 
 # chips/espressif/staged-bootstrap/src/runtime.rs
 "chips/espressif/staged-bootstrap/src/runtime.rs:crate::runtime::hand_off:terminal-entry:hand_off:1" = { owner = "chips/espressif/staged-bootstrap", classes = ["configuration-boot"] }
@@ -210,212 +201,37 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 "firmware/bootstrap/esp32s31/src/entry.rs:crate::bootstrap_main:terminal-entry:bootstrap_main:1" = { owner = "firmware/bootstrap/esp32s31", classes = ["configuration-boot"] }
 "firmware/bootstrap/esp32s31/src/entry.rs:crate:terminal-binding:panic_handler:1" = { owner = "firmware/bootstrap/esp32s31", classes = ["rust-panic"] }
 
-# firmware/hil/esp32s31-lower-mac/src/entry.rs
-"firmware/hil/esp32s31-lower-mac/src/entry.rs:crate:terminal-binding:phy_fault_reporter:1" = { owner = "firmware/hil/esp32s31-lower-mac", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
-"firmware/hil/esp32s31-lower-mac/src/entry.rs:crate:terminal-reference:reset:1" = { owner = "firmware/hil/esp32s31-lower-mac", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
-"firmware/hil/esp32s31-lower-mac/src/entry.rs:crate:terminal-binding:entry:1" = { owner = "firmware/hil/esp32s31-lower-mac", classes = ["rust-panic"] }
-"firmware/hil/esp32s31-lower-mac/src/entry.rs:crate::main:terminal-entry:main:1" = { owner = "firmware/hil/esp32s31-lower-mac", classes = ["configuration-boot"] }
-"firmware/hil/esp32s31-lower-mac/src/entry.rs:crate::main:terminal-reference:reset:1" = { owner = "firmware/hil/esp32s31-lower-mac", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
-"firmware/hil/esp32s31-lower-mac/src/entry.rs:crate::main:reset-method:reset:1" = { owner = "firmware/hil/esp32s31-lower-mac", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
-"firmware/hil/esp32s31-lower-mac/src/entry.rs:crate::main:reset-method:reset:2" = { owner = "firmware/hil/esp32s31-lower-mac", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
-"firmware/hil/esp32s31-lower-mac/src/entry.rs:crate::main:terminal-reference:reset_binding:1" = { owner = "firmware/hil/esp32s31-lower-mac", classes = ["configuration-boot", "unexpected-hardware", "software-invariant"] }
-"firmware/hil/esp32s31-lower-mac/src/entry.rs:crate::main:reset-method:reset:3" = { owner = "firmware/hil/esp32s31-lower-mac", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
-"firmware/hil/esp32s31-lower-mac/src/entry.rs:crate::main:reset-method:reset:4" = { owner = "firmware/hil/esp32s31-lower-mac", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
-"firmware/hil/esp32s31-lower-mac/src/entry.rs:crate::fail:terminal-entry:fail:1" = { owner = "firmware/hil/esp32s31-lower-mac", classes = ["configuration-boot"] }
-"firmware/hil/esp32s31-lower-mac/src/entry.rs:crate::dispatch:terminal-reference:reset_request:1" = { owner = "firmware/hil/esp32s31-lower-mac", classes = ["cancellation"] }
-"firmware/hil/esp32s31-lower-mac/src/entry.rs:crate::serve_driver:panic-method:expect:1" = { owner = "firmware/hil/esp32s31-lower-mac", classes = ["rust-panic"] }
-"firmware/hil/esp32s31-lower-mac/src/entry.rs:crate::fail:terminal-reference:boot_failure:1" = { owner = "firmware/hil/esp32s31-lower-mac", classes = ["configuration-boot"] }
 
-# firmware/hil/esp32s31-lower-mac/src/irq.rs
-"firmware/hil/esp32s31-lower-mac/src/irq.rs:crate::irq::on_wifi:terminal-reference:reset:1" = { owner = "firmware/hil/esp32s31-lower-mac", classes = ["unexpected-hardware"] }
 
-# firmware/hil/esp32s31-lower-mac/src/phy_pilot.rs
-"firmware/hil/esp32s31-lower-mac/src/phy_pilot.rs:crate::phy_pilot::init:terminal-reference:reset_binding:1" = { owner = "firmware/hil/esp32s31-lower-mac", classes = ["configuration-boot", "unexpected-hardware", "software-invariant"] }
-"firmware/hil/esp32s31-lower-mac/src/phy_pilot.rs:crate::phy_pilot::interrupt:terminal-reference:reset:1" = { owner = "firmware/hil/esp32s31-lower-mac", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
-"firmware/hil/esp32s31-lower-mac/src/phy_pilot.rs:crate::phy_pilot::reset:terminal-entry:reset:1" = { owner = "firmware/hil/esp32s31-lower-mac", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
-"firmware/hil/esp32s31-lower-mac/src/phy_pilot.rs:crate::phy_pilot::reset:terminal-reference:reset:1" = { owner = "firmware/hil/esp32s31-lower-mac", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
 
-# firmware/hil/esp32s31-lower-mac/src/suite.rs
-"firmware/hil/esp32s31-lower-mac/src/suite.rs:crate::suite::channels:panic-method:expect:1" = { owner = "firmware/hil/esp32s31-lower-mac", classes = ["rust-panic"] }
-"firmware/hil/esp32s31-lower-mac/src/suite.rs:crate::suite::impl Server::frontend:panic-method:expect:1" = { owner = "firmware/hil/esp32s31-lower-mac", classes = ["rust-panic"] }
-"firmware/hil/esp32s31-lower-mac/src/suite.rs:crate::suite::impl Server::frontend:terminal-reference:reset_request:1" = { owner = "firmware/hil/esp32s31-lower-mac", classes = ["cancellation"] }
-"firmware/hil/esp32s31-lower-mac/src/suite.rs:crate::suite::drive:panic-method:expect:1" = { owner = "firmware/hil/esp32s31-lower-mac", classes = ["rust-panic"] }
-"firmware/hil/esp32s31-lower-mac/src/suite.rs:crate::suite::drive:panic-method:expect:2" = { owner = "firmware/hil/esp32s31-lower-mac", classes = ["rust-panic"] }
-"firmware/hil/esp32s31-lower-mac/src/suite.rs:crate::suite::install:terminal-reference:reset_request:1" = { owner = "firmware/hil/esp32s31-lower-mac", classes = ["cancellation"] }
 
-# firmware/hil/esp32s31-lower-mac/src/suite/barrier.rs
-"firmware/hil/esp32s31-lower-mac/src/suite/barrier.rs:crate::suite::barrier::run:panic-macro:assert:1" = { owner = "firmware/hil/esp32s31-lower-mac", classes = ["rust-panic"] }
-"firmware/hil/esp32s31-lower-mac/src/suite/barrier.rs:crate::suite::barrier::run:panic-method:expect:1" = { owner = "firmware/hil/esp32s31-lower-mac", classes = ["rust-panic"] }
 
-# firmware/hil/esp32s31-lower-mac/src/suite/configure.rs
-"firmware/hil/esp32s31-lower-mac/src/suite/configure.rs:crate::suite::configure::run:panic-macro:panic:2" = { owner = "firmware/hil/esp32s31-lower-mac", classes = ["rust-panic"] }
-"firmware/hil/esp32s31-lower-mac/src/suite/configure.rs:crate::suite::configure::run:panic-method:expect:3" = { owner = "firmware/hil/esp32s31-lower-mac", classes = ["rust-panic"] }
-"firmware/hil/esp32s31-lower-mac/src/suite/configure.rs:crate::suite::configure::run:panic-method:expect:4" = { owner = "firmware/hil/esp32s31-lower-mac", classes = ["rust-panic"] }
-"firmware/hil/esp32s31-lower-mac/src/suite/configure.rs:crate::suite::configure::run:panic-macro:assert_eq:1" = { owner = "firmware/hil/esp32s31-lower-mac", classes = ["rust-panic"] }
-"firmware/hil/esp32s31-lower-mac/src/suite/configure.rs:crate::suite::configure::run:panic-macro:panic:3" = { owner = "firmware/hil/esp32s31-lower-mac", classes = ["rust-panic"] }
-"firmware/hil/esp32s31-lower-mac/src/suite/configure.rs:crate::suite::configure::record:panic-method:expect:1" = { owner = "firmware/hil/esp32s31-lower-mac", classes = ["rust-panic"] }
-"firmware/hil/esp32s31-lower-mac/src/suite/configure.rs:crate::suite::configure::run:panic-method:expect:1" = { owner = "firmware/hil/esp32s31-lower-mac", classes = ["rust-panic"] }
-"firmware/hil/esp32s31-lower-mac/src/suite/configure.rs:crate::suite::configure::run:panic-method:expect:2" = { owner = "firmware/hil/esp32s31-lower-mac", classes = ["rust-panic"] }
-"firmware/hil/esp32s31-lower-mac/src/suite/configure.rs:crate::suite::configure::run:panic-macro:assert:1" = { owner = "firmware/hil/esp32s31-lower-mac", classes = ["rust-panic"] }
-"firmware/hil/esp32s31-lower-mac/src/suite/configure.rs:crate::suite::configure::run:panic-macro:assert:2" = { owner = "firmware/hil/esp32s31-lower-mac", classes = ["rust-panic"] }
-"firmware/hil/esp32s31-lower-mac/src/suite/configure.rs:crate::suite::configure::run:panic-macro:panic:1" = { owner = "firmware/hil/esp32s31-lower-mac", classes = ["rust-panic"] }
 
-# firmware/hil/esp32s31-lower-mac/src/suite/ownership.rs
-"firmware/hil/esp32s31-lower-mac/src/suite/ownership.rs:crate::suite::ownership::impl TxBufferMemory for PoolBuffer <'_ , Id , C >::bytes_mut:panic-method:expect:1" = { owner = "firmware/hil/esp32s31-lower-mac", classes = ["rust-panic"] }
-"firmware/hil/esp32s31-lower-mac/src/suite/ownership.rs:crate::suite::ownership::impl BodyPool::new:panic-macro:assert:1" = { owner = "firmware/hil/esp32s31-lower-mac", classes = ["rust-panic"] }
-"firmware/hil/esp32s31-lower-mac/src/suite/ownership.rs:crate::suite::ownership::pool:panic-macro:unreachable:1" = { owner = "firmware/hil/esp32s31-lower-mac", classes = ["rust-panic"] }
-"firmware/hil/esp32s31-lower-mac/src/suite/ownership.rs:crate::suite::ownership::impl Drop for FixtureBody::drop:panic-method:expect:1" = { owner = "firmware/hil/esp32s31-lower-mac", classes = ["rust-panic"] }
-"firmware/hil/esp32s31-lower-mac/src/suite/ownership.rs:crate::suite::ownership::impl TxBody for FixtureBody::bytes:panic-method:expect:1" = { owner = "firmware/hil/esp32s31-lower-mac", classes = ["rust-panic"] }
 
-# firmware/hil/esp32s31-lower-mac/src/transport.rs
-"firmware/hil/esp32s31-lower-mac/src/transport.rs:crate::transport::open_usb:terminal-reference:reset_binding:1" = { owner = "firmware/hil/esp32s31-lower-mac", classes = ["configuration-boot", "unexpected-hardware", "software-invariant"] }
-"firmware/hil/esp32s31-lower-mac/src/transport.rs:crate::transport::console_fault:terminal-entry:console_fault:1" = { owner = "firmware/hil/esp32s31-lower-mac", classes = ["software-invariant"] }
-"firmware/hil/esp32s31-lower-mac/src/transport.rs:crate::transport::console_fault:terminal-reference:reset_fault:1" = { owner = "firmware/hil/esp32s31-lower-mac", classes = ["software-invariant"] }
 
-# firmware/hil/esp32s31-phy/src/cache.rs
-"firmware/hil/esp32s31-phy/src/cache.rs:crate::cache::target:panic-method:expect:1" = { owner = "firmware/hil/esp32s31-phy", classes = ["rust-panic"] }
 
-# firmware/hil/esp32s31-phy/src/entry.rs
-"firmware/hil/esp32s31-phy/src/entry.rs:crate:terminal-binding:phy_fault_reporter:1" = { owner = "firmware/hil/esp32s31-phy", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
-"firmware/hil/esp32s31-phy/src/entry.rs:crate:terminal-reference:reset:1" = { owner = "firmware/hil/esp32s31-phy", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
-"firmware/hil/esp32s31-phy/src/entry.rs:crate:terminal-binding:entry:1" = { owner = "firmware/hil/esp32s31-phy", classes = ["rust-panic"] }
-"firmware/hil/esp32s31-phy/src/entry.rs:crate::main:terminal-entry:main:1" = { owner = "firmware/hil/esp32s31-phy", classes = ["configuration-boot"] }
-"firmware/hil/esp32s31-phy/src/entry.rs:crate::main:terminal-reference:reset:1" = { owner = "firmware/hil/esp32s31-phy", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
-"firmware/hil/esp32s31-phy/src/entry.rs:crate::main:reset-method:reset:1" = { owner = "firmware/hil/esp32s31-phy", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
-"firmware/hil/esp32s31-phy/src/entry.rs:crate::main:reset-method:reset:2" = { owner = "firmware/hil/esp32s31-phy", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
-"firmware/hil/esp32s31-phy/src/entry.rs:crate::main:reset-method:reset:3" = { owner = "firmware/hil/esp32s31-phy", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
-"firmware/hil/esp32s31-phy/src/entry.rs:crate::main:reset-method:reset:4" = { owner = "firmware/hil/esp32s31-phy", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
-"firmware/hil/esp32s31-phy/src/entry.rs:crate::fail:terminal-entry:fail:1" = { owner = "firmware/hil/esp32s31-phy", classes = ["configuration-boot"] }
-"firmware/hil/esp32s31-phy/src/entry.rs:crate::dispatch:terminal-reference:reset_request:1" = { owner = "firmware/hil/esp32s31-phy", classes = ["cancellation"] }
-"firmware/hil/esp32s31-phy/src/entry.rs:crate::dispatch:terminal-reference:reset_request:2" = { owner = "firmware/hil/esp32s31-phy", classes = ["cancellation"] }
-"firmware/hil/esp32s31-phy/src/entry.rs:crate::fail:terminal-reference:boot_failure:1" = { owner = "firmware/hil/esp32s31-phy", classes = ["configuration-boot"] }
 
-# firmware/hil/esp32s31-phy/src/health.rs
-"firmware/hil/esp32s31-phy/src/health.rs:crate::health::cut:terminal-reference:abort:1" = { owner = "firmware/hil/esp32s31-phy", classes = ["rust-panic"] }
 
-# firmware/hil/esp32s31-phy/src/health/startup.rs
-"firmware/hil/esp32s31-phy/src/health/startup.rs:crate::health::startup::dispatch:terminal-reference:reset_request:3" = { owner = "firmware/hil/esp32s31-phy", classes = ["cancellation"] }
-"firmware/hil/esp32s31-phy/src/health/startup.rs:crate::health::startup::dispatch:panic-method:expect:1" = { owner = "firmware/hil/esp32s31-phy", classes = ["rust-panic"] }
-"firmware/hil/esp32s31-phy/src/health/startup.rs:crate::health::startup::dispatch:terminal-reference:reset_request:1" = { owner = "firmware/hil/esp32s31-phy", classes = ["cancellation"] }
-"firmware/hil/esp32s31-phy/src/health/startup.rs:crate::health::startup::dispatch:terminal-reference:reset_request:2" = { owner = "firmware/hil/esp32s31-phy", classes = ["cancellation"] }
 
-# firmware/hil/esp32s31-phy/src/ieee802154.rs
-"firmware/hil/esp32s31-phy/src/ieee802154.rs:crate::ieee802154::impl Rx::new:panic-macro:assert:1" = { owner = "firmware/hil/esp32s31-phy", classes = ["rust-panic"] }
-"firmware/hil/esp32s31-phy/src/ieee802154.rs:crate::ieee802154::impl Rx::new:panic-method:expect:1" = { owner = "firmware/hil/esp32s31-phy", classes = ["rust-panic"] }
-"firmware/hil/esp32s31-phy/src/ieee802154.rs:crate::ieee802154::poll:terminal-reference:reset:1" = { owner = "firmware/hil/esp32s31-phy", classes = ["unexpected-hardware", "software-invariant", "exhaustion"] }
 
-# firmware/hil/esp32s31-phy/src/ieee802154_fault.rs
-"firmware/hil/esp32s31-phy/src/ieee802154_fault.rs:crate::ieee802154_fault:retained-slot:retained_static:1" = { owner = "firmware/hil/esp32s31-phy", classes = ["unexpected-hardware", "software-invariant", "exhaustion"] }
-"firmware/hil/esp32s31-phy/src/ieee802154_fault.rs:crate::ieee802154_fault::reset:terminal-entry:reset:1" = { owner = "firmware/hil/esp32s31-phy", classes = ["unexpected-hardware", "software-invariant", "exhaustion"] }
-"firmware/hil/esp32s31-phy/src/ieee802154_fault.rs:crate::ieee802154_fault::reset:terminal-reference:reset_recording:1" = { owner = "firmware/hil/esp32s31-phy", classes = ["unexpected-hardware", "software-invariant", "exhaustion"] }
 
-# firmware/hil/esp32s31-phy/src/phy_pilot.rs
-"firmware/hil/esp32s31-phy/src/phy_pilot.rs:crate::phy_pilot::reset:terminal-entry:reset:1" = { owner = "firmware/hil/esp32s31-phy", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
-"firmware/hil/esp32s31-phy/src/phy_pilot.rs:crate::phy_pilot::reset:terminal-reference:reset:1" = { owner = "firmware/hil/esp32s31-phy", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
-"firmware/hil/esp32s31-phy/src/phy_pilot.rs:crate::phy_pilot::init:terminal-reference:reset_binding:1" = { owner = "firmware/hil/esp32s31-phy", classes = ["configuration-boot", "unexpected-hardware", "software-invariant"] }
-"firmware/hil/esp32s31-phy/src/phy_pilot.rs:crate::phy_pilot::interrupt:terminal-reference:reset:1" = { owner = "firmware/hil/esp32s31-phy", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
 
-# firmware/hil/esp32s31-phy/src/radio.rs
 
-# firmware/hil/esp32s31-phy/src/transport.rs
-"firmware/hil/esp32s31-phy/src/transport.rs:crate::transport::open_usb:terminal-reference:reset_binding:1" = { owner = "firmware/hil/esp32s31-phy", classes = ["configuration-boot", "unexpected-hardware", "software-invariant"] }
-"firmware/hil/esp32s31-phy/src/transport.rs:crate::transport::console_fault:terminal-entry:console_fault:1" = { owner = "firmware/hil/esp32s31-phy", classes = ["software-invariant"] }
-"firmware/hil/esp32s31-phy/src/transport.rs:crate::transport::console_fault:terminal-reference:reset_fault:1" = { owner = "firmware/hil/esp32s31-phy", classes = ["software-invariant"] }
-"firmware/hil/esp32s31-phy/src/transport.rs:crate::transport::receiver_limit:terminal-entry:receiver_limit:1" = { owner = "firmware/hil/esp32s31-phy", classes = ["exhaustion"] }
-"firmware/hil/esp32s31-phy/src/transport.rs:crate::transport::receiver_limit:terminal-reference:reset_fault:1" = { owner = "firmware/hil/esp32s31-phy", classes = ["exhaustion"] }
 
-# firmware/hil/esp32s31/src/entry.rs
-"firmware/hil/esp32s31/src/entry.rs:crate:terminal-binding:phy_fault_reporter:1" = { owner = "firmware/hil/esp32s31", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
-"firmware/hil/esp32s31/src/entry.rs:crate:terminal-reference:reset:1" = { owner = "firmware/hil/esp32s31", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
-"firmware/hil/esp32s31/src/entry.rs:crate:terminal-binding:entry:1" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
-"firmware/hil/esp32s31/src/entry.rs:crate:terminal-binding:entry:2" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
-"firmware/hil/esp32s31/src/entry.rs:crate::main:terminal-entry:main:1" = { owner = "firmware/hil/esp32s31", classes = ["configuration-boot"] }
-"firmware/hil/esp32s31/src/entry.rs:crate::system_main:terminal-entry:system_main:1" = { owner = "firmware/hil/esp32s31", classes = ["configuration-boot"] }
-"firmware/hil/esp32s31/src/entry.rs:crate::system_main:reset-method:reset:1" = { owner = "firmware/hil/esp32s31", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
-"firmware/hil/esp32s31/src/entry.rs:crate::system_main:reset-method:reset:2" = { owner = "firmware/hil/esp32s31", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
-"firmware/hil/esp32s31/src/entry.rs:crate::fail:terminal-entry:fail:1" = { owner = "firmware/hil/esp32s31", classes = ["configuration-boot"] }
-"firmware/hil/esp32s31/src/entry.rs:crate::fail:terminal-reference:fatal_halt:1" = { owner = "firmware/hil/esp32s31", classes = ["configuration-boot"] }
-"firmware/hil/esp32s31/src/entry.rs:crate::fail:terminal-reference:software_reset:1" = { owner = "firmware/hil/esp32s31", classes = ["configuration-boot"] }
 
-# firmware/hil/esp32s31/src/exception.rs
 
-# firmware/hil/esp32s31/src/fatal.rs
-"firmware/hil/esp32s31/src/fatal.rs:crate::fatal::Failure:retained-reason:Failure::Layout:1" = { owner = "firmware/hil/esp32s31", classes = ["configuration-boot"] }
-"firmware/hil/esp32s31/src/fatal.rs:crate::fatal::Failure:retained-reason:Failure::TaskAllocation:1" = { owner = "firmware/hil/esp32s31", classes = ["configuration-boot"] }
-"firmware/hil/esp32s31/src/fatal.rs:crate::fatal::Failure:retained-reason:Failure::EntropySource:1" = { owner = "firmware/hil/esp32s31", classes = ["unexpected-hardware"] }
-"firmware/hil/esp32s31/src/fatal.rs:crate::fatal::Failure:retained-reason:Failure::RootTaken:1" = { owner = "firmware/hil/esp32s31", classes = ["configuration-boot"] }
-"firmware/hil/esp32s31/src/fatal.rs:crate::fatal::Failure:retained-reason:Failure::InterruptTable:1" = { owner = "firmware/hil/esp32s31", classes = ["configuration-boot"] }
-"firmware/hil/esp32s31/src/fatal.rs:crate::fatal::Failure:retained-reason:Failure::Console:1" = { owner = "firmware/hil/esp32s31", classes = ["configuration-boot"] }
-"firmware/hil/esp32s31/src/fatal.rs:crate::fatal::Failure:retained-reason:Failure::InterruptHart:1" = { owner = "firmware/hil/esp32s31", classes = ["configuration-boot"] }
-"firmware/hil/esp32s31/src/fatal.rs:crate::fatal::Failure:retained-reason:Failure::InterruptStack:1" = { owner = "firmware/hil/esp32s31", classes = ["configuration-boot"] }
-"firmware/hil/esp32s31/src/fatal.rs:crate::fatal::Failure:retained-reason:Failure::InterruptVectors:1" = { owner = "firmware/hil/esp32s31", classes = ["configuration-boot"] }
-"firmware/hil/esp32s31/src/fatal.rs:crate::fatal::Failure:retained-reason:Failure::InterruptControlBits:1" = { owner = "firmware/hil/esp32s31", classes = ["configuration-boot"] }
-"firmware/hil/esp32s31/src/fatal.rs:crate::fatal::Failure:retained-reason:Failure::InterruptCount:1" = { owner = "firmware/hil/esp32s31", classes = ["configuration-boot"] }
-"firmware/hil/esp32s31/src/fatal.rs:crate::fatal::Failure:retained-reason:Failure::InterruptLevelBits:1" = { owner = "firmware/hil/esp32s31", classes = ["configuration-boot"] }
-"firmware/hil/esp32s31/src/fatal.rs:crate::fatal::Failure:retained-reason:Failure::InterruptStackGuard:1" = { owner = "firmware/hil/esp32s31", classes = ["configuration-boot"] }
-"firmware/hil/esp32s31/src/fatal.rs:crate::fatal::Failure:retained-reason:Failure::RootInitialization:1" = { owner = "firmware/hil/esp32s31", classes = ["configuration-boot"] }
-"firmware/hil/esp32s31/src/fatal.rs:crate::fatal::Failure:retained-reason:Failure::NetworkContextAccessRefused:1" = { owner = "firmware/hil/esp32s31", classes = ["software-invariant"] }
-"firmware/hil/esp32s31/src/fatal.rs:crate::fatal::PANIC:retained-reason:PANIC:1" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
-"firmware/hil/esp32s31/src/fatal.rs:crate::fatal::EXCEPTION:retained-reason:EXCEPTION:1" = { owner = "firmware/hil/esp32s31", classes = ["cpu-exception"] }
-"firmware/hil/esp32s31/src/fatal.rs:crate::fatal::FAILURE:retained-reason:FAILURE:1" = { owner = "firmware/hil/esp32s31", classes = ["configuration-boot"] }
-"firmware/hil/esp32s31/src/fatal.rs:crate::fatal:retained-slot:retained_static:1" = { owner = "firmware/hil/esp32s31", classes = ["configuration-boot", "cpu-exception", "rust-panic"] }
 
-# firmware/hil/esp32s31/src/phy_pilot.rs
 
-# firmware/hil/esp32s31/src/system/console.rs
-"firmware/hil/esp32s31/src/system/console.rs:crate::system::console::test_watchdog:panic-method:expect:1" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
-"firmware/hil/esp32s31/src/system/console.rs:crate::system::console::start:terminal-entry:start:1" = { owner = "firmware/hil/esp32s31", classes = ["configuration-boot", "software-invariant", "rust-panic"] }
-"firmware/hil/esp32s31/src/system/console.rs:crate::system::console::start:panic-method:expect:1" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
-"firmware/hil/esp32s31/src/system/console.rs:crate::system::console::start:panic-method:expect:2" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
-"firmware/hil/esp32s31/src/system/console.rs:crate::system::console::start:panic-method:expect:3" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
-"firmware/hil/esp32s31/src/system/console.rs:crate::system::console::start:panic-method:expect:4" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
-"firmware/hil/esp32s31/src/system/console.rs:crate::system::console::start:reset-method:reset:1" = { owner = "firmware/hil/esp32s31", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
 
-# firmware/hil/esp32s31/src/system/mod.rs
-"firmware/hil/esp32s31/src/system/mod.rs:crate::system::boot_evidence:panic-method:expect:1" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
-"firmware/hil/esp32s31/src/system/mod.rs:crate::system::receiver_limit:terminal-entry:receiver_limit:1" = { owner = "firmware/hil/esp32s31", classes = ["exhaustion"] }
-"firmware/hil/esp32s31/src/system/mod.rs:crate::system::receiver_limit:terminal-reference:reset_fault:1" = { owner = "firmware/hil/esp32s31", classes = ["exhaustion"] }
 
-# firmware/hil/esp32s31/src/system/panic.rs
-"firmware/hil/esp32s31/src/system/panic.rs:crate::system::panic::reset_on_request:terminal-reference:reset_fault:1" = { owner = "firmware/hil/esp32s31", classes = ["requested-reset"] }
 
-# firmware/hil/esp32s31/src/system/panic_reset.rs
-"firmware/hil/esp32s31/src/system/panic_reset.rs:crate::system::panic_reset::start:terminal-entry:start:1" = { owner = "firmware/hil/esp32s31", classes = ["configuration-boot", "software-invariant", "rust-panic"] }
-"firmware/hil/esp32s31/src/system/panic_reset.rs:crate::system::panic_reset::start:panic-method:expect:1" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
-"firmware/hil/esp32s31/src/system/panic_reset.rs:crate::system::panic_reset::start:panic-method:expect:2" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
-"firmware/hil/esp32s31/src/system/panic_reset.rs:crate::system::panic_reset::start:reset-method:reset:1" = { owner = "firmware/hil/esp32s31", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
 
-# firmware/hil/esp32s31/src/system/postmortem.rs
-"firmware/hil/esp32s31/src/system/postmortem.rs:crate::system::postmortem:retained-slot:retained_static:1" = { owner = "firmware/hil/esp32s31", classes = ["cpu-exception", "rust-panic"] }
-"firmware/hil/esp32s31/src/system/postmortem.rs:crate::system::postmortem:retained-slot:retained_static:2" = { owner = "firmware/hil/esp32s31", classes = ["cpu-exception", "rust-panic"] }
-"firmware/hil/esp32s31/src/system/postmortem.rs:crate::system::postmortem::checkpoint:terminal-reference:reset_fault:1" = { owner = "firmware/hil/esp32s31", classes = ["software-invariant"] }
-"firmware/hil/esp32s31/src/system/postmortem.rs:crate::system::postmortem::checkpoint:terminal-reference:reset_fault:2" = { owner = "firmware/hil/esp32s31", classes = ["exhaustion"] }
 
-# firmware/hil/esp32s31/src/system/watchdog.rs
-"firmware/hil/esp32s31/src/system/watchdog.rs:crate::system::watchdog::inject:panic-macro:unreachable:1" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
-"firmware/hil/esp32s31/src/system/watchdog.rs:crate::system::watchdog::inject:panic-method:expect:1" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
-"firmware/hil/esp32s31/src/system/watchdog.rs:crate::system::watchdog::inject:panic-macro:assert:1" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
-"firmware/hil/esp32s31/src/system/watchdog.rs:crate::system::watchdog::inject:panic-method:expect:2" = { owner = "firmware/hil/esp32s31", classes = ["rust-panic"] }
 
-# firmware/hil/esp32s31/src/transport.rs
-"firmware/hil/esp32s31/src/transport.rs:crate::transport::console_fault:terminal-entry:console_fault:1" = { owner = "firmware/hil/esp32s31", classes = ["software-invariant"] }
-"firmware/hil/esp32s31/src/transport.rs:crate::transport::console_fault:terminal-reference:reset_fault:1" = { owner = "firmware/hil/esp32s31", classes = ["software-invariant"] }
 
-# firmware/hil/esp32s31/src/usb.rs
 
-# firmware/hil/esp32s31/src/wifi_station/irq.rs
-"firmware/hil/esp32s31/src/wifi_station/irq.rs:crate::wifi_station::irq::on_wifi:terminal-reference:reset:1" = { owner = "firmware/hil/esp32s31", classes = ["unexpected-hardware"] }
 
-# firmware/hil/esp32s31/src/wifi_station/mod.rs
-"firmware/hil/esp32s31/src/wifi_station/mod.rs:crate::wifi_station::start:reset-method:reset:1" = { owner = "firmware/hil/esp32s31", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
-"firmware/hil/esp32s31/src/wifi_station/mod.rs:crate::wifi_station::start:reset-method:reset:2" = { owner = "firmware/hil/esp32s31", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
-"firmware/hil/esp32s31/src/wifi_station/mod.rs:crate::wifi_station::start:terminal-reference:reset_binding:1" = { owner = "firmware/hil/esp32s31", classes = ["configuration-boot", "unexpected-hardware", "software-invariant"] }
-"firmware/hil/esp32s31/src/wifi_station/mod.rs:crate::wifi_station::start:terminal-entry:start:1" = { owner = "firmware/hil/esp32s31", classes = ["configuration-boot", "software-invariant", "rust-panic"] }
 
-# firmware/hil/esp32s31/src/wifi_station/radio.rs
-"firmware/hil/esp32s31/src/wifi_station/radio.rs:crate::wifi_station::radio::failure:terminal-entry:failure:1" = { owner = "firmware/hil/esp32s31", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
-"firmware/hil/esp32s31/src/wifi_station/radio.rs:crate::wifi_station::radio::failure:terminal-reference:reset_request:1" = { owner = "firmware/hil/esp32s31", classes = ["cancellation"] }
-"firmware/hil/esp32s31/src/wifi_station/radio.rs:crate::wifi_station::radio::failure:terminal-reference:boot_failure:1" = { owner = "firmware/hil/esp32s31", classes = ["configuration-boot"] }
 
 # firmware/probes/esp32s31-facts/src/image.rs
 "firmware/probes/esp32s31-facts/src/image.rs:crate::image::RETAINED:retained-slot:RETAINED:1" = { owner = "firmware/probes/esp32s31-facts", classes = ["requested-reset"] }
@@ -507,9 +323,41 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 "chips/esp32s31/compose/src/pilot.rs:crate::pilot::impl Storage < I >::interrupt:terminal-reference:reset:1" = { owner = "chips/esp32s31/compose", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
 "chips/esp32s31/compose/src/pilot.rs:crate::pilot::reset:terminal-entry:reset:1" = { owner = "chips/esp32s31/compose", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
 "chips/esp32s31/compose/src/pilot.rs:crate::pilot::reset:terminal-reference:reset:1" = { owner = "chips/esp32s31/compose", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
-"firmware/hil/esp32s31/src/wifi_station/radio.rs:crate::wifi_station::radio::failure:reset-method:reset:1" = { owner = "firmware/hil/esp32s31", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
 
 "chips/esp32s31/compose/src/console.rs:crate::console::impl Binding::open:terminal-reference:reset_binding:1" = { owner = "chips/esp32s31/compose", classes = ["configuration-boot", "unexpected-hardware", "software-invariant"] }
 "chips/esp32s31/compose/src/platform.rs:crate::platform::reset_request:terminal-reference:reset_request:1" = { owner = "chips/esp32s31/compose", classes = ["software-invariant", "cancellation"] }
+
+# hil-scenarios/images/esp32s31-rpc/src/entry.rs
+"hil-scenarios/images/esp32s31-rpc/src/entry.rs:crate::fail:terminal-entry:fail:1" = { owner = "hil-scenarios/images/esp32s31-rpc", classes = ["configuration-boot"] }
+"hil-scenarios/images/esp32s31-rpc/src/entry.rs:crate::fail:terminal-reference:fatal_halt:1" = { owner = "hil-scenarios/images/esp32s31-rpc", classes = ["configuration-boot"] }
+"hil-scenarios/images/esp32s31-rpc/src/entry.rs:crate::fail:terminal-reference:software_reset:1" = { owner = "hil-scenarios/images/esp32s31-rpc", classes = ["configuration-boot"] }
+"hil-scenarios/images/esp32s31-rpc/src/entry.rs:crate::main:reset-method:reset:1" = { owner = "hil-scenarios/images/esp32s31-rpc", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
+"hil-scenarios/images/esp32s31-rpc/src/entry.rs:crate::main:reset-method:reset:2" = { owner = "hil-scenarios/images/esp32s31-rpc", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
+"hil-scenarios/images/esp32s31-rpc/src/entry.rs:crate::main:terminal-entry:main:1" = { owner = "hil-scenarios/images/esp32s31-rpc", classes = ["configuration-boot"] }
+"hil-scenarios/images/esp32s31-rpc/src/entry.rs:crate:terminal-binding:entry:1" = { owner = "hil-scenarios/images/esp32s31-rpc", classes = ["rust-panic"] }
+"hil-scenarios/images/esp32s31-rpc/src/entry.rs:crate:terminal-binding:phy_fault_reporter:1" = { owner = "hil-scenarios/images/esp32s31-rpc", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
+"hil-scenarios/images/esp32s31-rpc/src/entry.rs:crate:terminal-reference:reset:1" = { owner = "hil-scenarios/images/esp32s31-rpc", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
+
+# hil-scenarios/images/esp32s31-rpc/src/fatal.rs
+"hil-scenarios/images/esp32s31-rpc/src/fatal.rs:crate::fatal::EXCEPTION:retained-reason:EXCEPTION:1" = { owner = "hil-scenarios/images/esp32s31-rpc", classes = ["cpu-exception"] }
+"hil-scenarios/images/esp32s31-rpc/src/fatal.rs:crate::fatal::FAILURE:retained-reason:FAILURE:1" = { owner = "hil-scenarios/images/esp32s31-rpc", classes = ["configuration-boot"] }
+"hil-scenarios/images/esp32s31-rpc/src/fatal.rs:crate::fatal::Failure:retained-reason:Failure::Console:1" = { owner = "hil-scenarios/images/esp32s31-rpc", classes = ["configuration-boot"] }
+"hil-scenarios/images/esp32s31-rpc/src/fatal.rs:crate::fatal::Failure:retained-reason:Failure::InterruptControlBits:1" = { owner = "hil-scenarios/images/esp32s31-rpc", classes = ["configuration-boot"] }
+"hil-scenarios/images/esp32s31-rpc/src/fatal.rs:crate::fatal::Failure:retained-reason:Failure::InterruptCount:1" = { owner = "hil-scenarios/images/esp32s31-rpc", classes = ["configuration-boot"] }
+"hil-scenarios/images/esp32s31-rpc/src/fatal.rs:crate::fatal::Failure:retained-reason:Failure::InterruptHart:1" = { owner = "hil-scenarios/images/esp32s31-rpc", classes = ["configuration-boot"] }
+"hil-scenarios/images/esp32s31-rpc/src/fatal.rs:crate::fatal::Failure:retained-reason:Failure::InterruptLevelBits:1" = { owner = "hil-scenarios/images/esp32s31-rpc", classes = ["configuration-boot"] }
+"hil-scenarios/images/esp32s31-rpc/src/fatal.rs:crate::fatal::Failure:retained-reason:Failure::InterruptStack:1" = { owner = "hil-scenarios/images/esp32s31-rpc", classes = ["configuration-boot"] }
+"hil-scenarios/images/esp32s31-rpc/src/fatal.rs:crate::fatal::Failure:retained-reason:Failure::InterruptStackGuard:1" = { owner = "hil-scenarios/images/esp32s31-rpc", classes = ["configuration-boot"] }
+"hil-scenarios/images/esp32s31-rpc/src/fatal.rs:crate::fatal::Failure:retained-reason:Failure::InterruptTable:1" = { owner = "hil-scenarios/images/esp32s31-rpc", classes = ["configuration-boot"] }
+"hil-scenarios/images/esp32s31-rpc/src/fatal.rs:crate::fatal::Failure:retained-reason:Failure::InterruptVectors:1" = { owner = "hil-scenarios/images/esp32s31-rpc", classes = ["configuration-boot"] }
+"hil-scenarios/images/esp32s31-rpc/src/fatal.rs:crate::fatal::Failure:retained-reason:Failure::Layout:1" = { owner = "hil-scenarios/images/esp32s31-rpc", classes = ["configuration-boot"] }
+"hil-scenarios/images/esp32s31-rpc/src/fatal.rs:crate::fatal::Failure:retained-reason:Failure::RootInitialization:1" = { owner = "hil-scenarios/images/esp32s31-rpc", classes = ["configuration-boot"] }
+"hil-scenarios/images/esp32s31-rpc/src/fatal.rs:crate::fatal::Failure:retained-reason:Failure::RootTaken:1" = { owner = "hil-scenarios/images/esp32s31-rpc", classes = ["configuration-boot"] }
+"hil-scenarios/images/esp32s31-rpc/src/fatal.rs:crate::fatal::Failure:retained-reason:Failure::TaskAllocation:1" = { owner = "hil-scenarios/images/esp32s31-rpc", classes = ["configuration-boot"] }
+"hil-scenarios/images/esp32s31-rpc/src/fatal.rs:crate::fatal:retained-slot:retained_static:1" = { owner = "hil-scenarios/images/esp32s31-rpc", classes = ["configuration-boot", "cpu-exception", "rust-panic"] }
+
+# hil-scenarios/images/esp32s31-rpc/src/transport.rs
+"hil-scenarios/images/esp32s31-rpc/src/transport.rs:crate::transport::console_fault:terminal-entry:console_fault:1" = { owner = "hil-scenarios/images/esp32s31-rpc", classes = ["software-invariant"] }
+"hil-scenarios/images/esp32s31-rpc/src/transport.rs:crate::transport::console_fault:terminal-reference:reset_fault:1" = { owner = "hil-scenarios/images/esp32s31-rpc", classes = ["software-invariant"] }
 
 [nonterminal]

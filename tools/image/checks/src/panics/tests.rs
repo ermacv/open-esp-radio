@@ -417,6 +417,11 @@ fn a_function_takes_the_layer_of_the_crate_its_name_starts_with() {
             "oer-firmware-apps-boot-smoke",
             Path::new("firmware/apps/boot-smoke"),
         ),
+        (
+            "oer-hil-scenarios-images-esp32s31-rpc",
+            Path::new("hil-scenarios/images/esp32s31-rpc"),
+        ),
+        ("oer-services-aes", Path::new("hil-scenarios/services/aes")),
         ("oer-image-checks", Path::new("tools/image/checks")),
     ]);
     for (name, layer) in [
@@ -434,6 +439,11 @@ fn a_function_takes_the_layer_of_the_crate_its_name_starts_with() {
         ),
         ("oer_ieee80211_sta::Station::step", Layer::Protocols),
         ("oer_firmware_apps_boot_smoke::main", Layer::Firmware),
+        (
+            "oer_hil_scenarios_images_esp32s31_rpc::main",
+            Layer::Firmware,
+        ),
+        ("oer_services_aes::Engine::unwrap_key", Layer::Protocols),
         ("core::ptr::drop_in_place<oer_time::Instant>", Layer::Core),
         ("compiler_builtins::mem::memcpy", Layer::Core),
         ("embassy_sync::signal::Signal<M,T>::wait", Layer::Embassy),

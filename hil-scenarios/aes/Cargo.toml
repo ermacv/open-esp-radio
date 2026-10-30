@@ -1,0 +1,23 @@
+[package]
+name = "oer-hil-scenarios-aes"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0"
+repository.workspace = true
+publish = false
+description = "The HIL AES scenario: the image's product RFC 3394 key unwrap against an independent host reference"
+
+[dependencies]
+oer-hil-agent = { path = "../../protocols/hil/agent" }
+oer-hil-harness = { path = "../../tools/hil/harness" }
+oer-services-aes = { path = "../services/aes" }
+aes = { version = "0.8.4", default-features = false }
+heapless = "0.9.3"
+
+[lints]
+workspace = true
+
+[package.metadata.open-radio]
+# `cargo hil` lists and runs it.
+hil-scenario = true

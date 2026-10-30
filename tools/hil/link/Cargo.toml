@@ -6,32 +6,24 @@ rust-version.workspace = true
 license = "Apache-2.0"
 repository.workspace = true
 publish = false
-description = "HIL host/target link: one session with the board under test (UART capture, generic exchange, readiness, reboots) and the reference peers' line console"
+description = "HIL host link: one board's serial line, the protocol's frames on it, their boot and request/response exchange"
 
 [features]
-# The capture fixtures of other packages' tests; the fake target reports the
-# system watchdog image's keys.
+# A simulated device for other packages' tests.
 test-support = []
 
 [dependencies]
-oer-hil-registry = { path = "../registry" }
-oer-network-control = { path = "../../../protocols/network-control" }
-oer-ieee80211-control = { path = "../../../protocols/ieee80211/control" }
 oer-diagnostics = { path = "../../../portable/diagnostics", features = ["render"] }
-oer-lab-board = { path = "../../lab/board" }
-oer-os-durable = { path = "../../os/durable" }
-oer-hil-protocol = { path = "../../../protocols/hil/protocol", features = ["registry"] }
+oer-hil-protocol = { path = "../../../protocols/hil/protocol" }
 oer-os-process = { path = "../../os/process" }
 mio = { version = "=1.2.2", features = ["os-poll", "os-ext"] }
 postcard = { version = "1.1.3", default-features = false }
-rustix = { version = "1.1.4", features = ["event", "fs", "net", "process", "stdio"] }
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
+rustix = { version = "1.1.4", features = ["fs"] }
 zeroize = "1.8.1"
 
 [dev-dependencies]
 postcard-schema = { version = "0.2.5", features = ["derive"] }
+serde = { version = "1.0", features = ["derive"] }
 
 [lints]
 workspace = true
-

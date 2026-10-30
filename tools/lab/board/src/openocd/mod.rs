@@ -38,7 +38,7 @@ impl Openocd {
         let mut versions = std::fs::read_dir(&tools)
             .map_err(|_| {
                 format!(
-                    "no OpenOCD in {}; build any ESP-IDF catalog image once (`cargo hil firmware \
+                    "no OpenOCD in {}; build any ESP-IDF catalog image once (`cargo fw idf \
                      build IMAGE`) to install the tools",
                     tools.display()
                 )

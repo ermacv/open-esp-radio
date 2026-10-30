@@ -1,8 +1,8 @@
 # HIL stand arbiter
 
-`oer-lab-arbiter` orders access to the HIL stand between every checkout of one
-host user and is the one owner of hardware exclusion. The
-[host guide](../../hil/run/stand.md) describes the commands; this crate owns the queue,
+`oer-lab-arbiter` orders access to the stand between every checkout of one
+host user and is the one owner of hardware exclusion. `cargo stand --help`
+lists the commands; this crate owns the queue,
 leases, claims, owner balances, preemption and maintenance, the lock files,
 the job tickets of deferred `cargo hil` runs and the board journal. It
 actuates no hardware: it reads the stand file through the stand model
@@ -54,14 +54,8 @@ through board I/O (`oer-lab-board`).
   release, or the reaping of a killed holder, records the preemption.
 - Device exclusion belongs to `oer-lab-board::lock::DeviceAccess`, keyed by
   board MAC. `Grant::operations()` admits each selected board through its
-  lifetime broker. `resource_lock::ResourceLock` holds fixture keys through
-  `oer-os-process::lock::FileLock`; the runner takes these locks after its
-  arbiter grant and releases them before the grant.
-- `jobs` are the deferred `cargo hil` runs: `jobs/<id>.json` records each
-  job's command, owner, order (`--after`) and outcome, and every request its
-  process and runner make carries its `stand.job` context value, so the queue
-  names each holder's and waiter's job and a job's phase is read from the
-  queue (`jobs::phase`).
+  lifetime broker. Other resources (the router, the air) are excluded by
+  their claims in the queue alone.
 
 A board can be taken out of service: under maintenance it serves only the
 owner who took it out; in quarantine it serves nobody. The runner quarantines
@@ -100,7 +94,6 @@ serializes its own appends with `board.lock`:
 | `board.jsonl` | Flashes, startup-artifact uploads and writes, automatic recoveries, quarantine releases and soaks, with owner, checkout and board MAC |
 | `owners.json` | Schema 1: checkout directory to registered owner; the innermost registered directory decides |
 | `maintenance.json` | Schema 1: boards out of service, each with its owner or quarantine, reason, trigger and evidence path |
-| `jobs/<id>.json` | One deferred `cargo hil` run: command, owner, checkout, `--after`, process, log, the files it was fixed with and its state; removed a week after it was enqueued |
 
 Each transaction first removes tickets and holders whose process no longer
 exists; the start time prevents a recycled PID from keeping a lease alive. The

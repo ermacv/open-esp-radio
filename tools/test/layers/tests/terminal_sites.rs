@@ -38,15 +38,7 @@ const REASON_ENUMS: &[(&str, &str)] = &[
         "chips/esp32s31/hal/src/domain/transaction.rs",
         "FaultReason",
     ),
-    ("firmware/hil/esp32s31/src/fatal.rs", "Failure"),
-    (
-        "chips/espressif/ieee802154-engine/src/engine/fault.rs",
-        "Fault",
-    ),
-    (
-        "chips/espressif/ieee802154-engine/src/engine/fault.rs",
-        "ServiceError",
-    ),
+    ("hil-scenarios/images/esp32s31-rpc/src/fatal.rs", "Failure"),
 ];
 
 // Numeric codecs without a reason enum: every numeric arm in their next-boot
@@ -144,7 +136,7 @@ impl Scanner<'_> {
     }
 
     fn image_panic_scope(&self) -> bool {
-        self.file.starts_with("firmware/")
+        image_file(self.file)
             || self.file.starts_with("chips/espressif/staged-runtime/")
             || self.file.starts_with("chips/espressif/staged-bootstrap/")
     }
@@ -378,8 +370,8 @@ impl<'ast> Visit<'ast> for Scanner<'_> {
                     && item.ident == "INVALID_HART")
                     || (self.file == "chips/espressif/staged-runtime/src/trap.rs" && item.ident == "CPU_EXCEPTION")
                     || (self.file == "chips/espressif/staged-runtime/src/fatal.rs" && item.ident == "BOOT_FAILURE")
-                    || (self.file == "firmware/hil/esp32s31/src/fatal.rs"
-                        && ["PANIC", "EXCEPTION", "FAILURE"]
+                    || (self.file == "hil-scenarios/images/esp32s31-rpc/src/fatal.rs"
+                        && ["EXCEPTION", "FAILURE"]
                             .iter()
                             .any(|name| item.ident == name))
                 {
@@ -525,7 +517,7 @@ impl<'ast> Visit<'ast> for Scanner<'_> {
     }
 
     fn visit_expr_method_call(&mut self, expr: &'ast syn::ExprMethodCall) {
-        if self.file.starts_with("firmware/") && expr.method == "reset" {
+        if image_file(self.file) && expr.method == "reset" {
             self.add(expr.method.span(), "reset-method", &expr.method);
         }
         if ["request_system_reset", "trigger_sys_ctrl_sys_sw_rst"]
@@ -533,8 +525,7 @@ impl<'ast> Visit<'ast> for Scanner<'_> {
         {
             self.add(expr.method.span(), "reset-trigger", &expr.method);
         }
-        if self.file.starts_with("firmware/")
-            && ["unwrap", "expect"].contains(&expr.method.to_string().as_str())
+        if image_file(self.file) && ["unwrap", "expect"].contains(&expr.method.to_string().as_str())
         {
             self.add(expr.method.span(), "panic-method", &expr.method);
         }
@@ -652,10 +643,21 @@ fn modules(
     }
 }
 
+/// Whether `path` is in an image: its decisions are the image owner's.
+fn image_file(path: &str) -> bool {
+    path.starts_with("firmware/") || path.starts_with("hil-scenarios/images/")
+}
+
 fn scan(root: &Path) -> ScannedSites {
     let root = root.canonicalize().expect("source root");
     let mut files = Vec::new();
-    for directory in ["chips", "firmware", "portable", "protocols"] {
+    for directory in [
+        "chips",
+        "firmware",
+        "hil-scenarios",
+        "portable",
+        "protocols",
+    ] {
         sources(&root.join(directory), &mut files);
     }
     let packages: BTreeSet<_> = files
@@ -822,13 +824,9 @@ fn admitted_owner(id: &str) -> Option<&str> {
         "chips/espressif/executor",
     ]
     .contains(&home)
-        || home.starts_with("firmware/")
+        || image_file(home)
     {
         Some(home)
-    } else if home == "chips/espressif/ieee802154-engine"
-        && REASON_ENUMS.iter().any(|&(path, _)| path == file)
-    {
-        Some("firmware/hil/esp32s31-phy")
     } else {
         None
     }

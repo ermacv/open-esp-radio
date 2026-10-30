@@ -38,7 +38,7 @@ pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + S
 /// The bundle's description, beside its files.
 pub const MANIFEST: &str = "bundle.json";
 /// Format of [`MANIFEST`].
-pub const SCHEMA: u32 = 7;
+pub const SCHEMA: u32 = 8;
 
 /// Whether a bundle may be written to a board.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -231,6 +231,9 @@ fn sibling(output: &Path, suffix: &str) -> Result<PathBuf> {
 pub struct Staged {
     /// The bootstrap's package, which embeds the packed runtime.
     pub bootstrap_package: String,
+    /// The packed runtime's payload CRC-32: the image's identity, which the
+    /// running image reports (HIL `base::Hello::image_crc32`).
+    pub runtime_crc32: u32,
 }
 
 /// One region a flash writes.

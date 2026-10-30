@@ -53,8 +53,6 @@ pub struct HolderStatus {
     pub estimate_secs: u64,
     pub balance_ms: i64,
     pub claims: String,
-    /// The `cargo hil` job the lease belongs to.
-    pub job: Option<String>,
     /// The HIL run the lease executes, when a runner requested it.
     pub run: Option<String>,
 }
@@ -81,8 +79,6 @@ pub struct QueuedStatus {
     pub ahead: usize,
     pub expected_start_secs: u64,
     pub claims: String,
-    /// The `cargo hil` job the request belongs to.
-    pub job: Option<String>,
 }
 
 impl Arbiter {
@@ -132,7 +128,6 @@ impl Arbiter {
                     ahead: *ahead,
                     expected_start_secs: *start,
                     claims: crate::grant::describe_claims(&ticket.claims),
-                    job: ticket.job.clone(),
                 })
             })
             .collect();
@@ -209,7 +204,6 @@ impl Arbiter {
                     balance_ms: balance::of(&state.balances, &holder.ticket.owner),
                     owner: holder.ticket.owner,
                     claims: crate::grant::describe_claims(&holder.ticket.claims),
-                    job: holder.ticket.job,
                     run: holder.ticket.run,
                 })
                 .collect(),

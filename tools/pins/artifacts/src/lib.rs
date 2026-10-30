@@ -61,7 +61,7 @@ pub enum SourceKind {
     /// A member `path` of a release asset tarball.
     Release,
     /// An output at `path` below the repository root of the tracked firmware
-    /// catalog image `image`, built by `cargo hil firmware build <image>`.
+    /// catalog image `image`, built by `cargo fw idf build <image>`.
     /// The recipe is the pin: the output carries no SHA-256.
     Firmware,
 }

@@ -57,6 +57,7 @@ SECTIONS
     LONG(STAGE_TWO_HEADER_BYTES);  /* header size in bytes */
     LONG(__runtime_text_start);     /* executable range start */
     LONG(__runtime_text_end);       /* executable range end */
+    __runtime_payload_crc32 = ABSOLUTE(.);
     LONG(0);                       /* host packer writes payload CRC-32 */
   } > PSRAM_RUNTIME
 

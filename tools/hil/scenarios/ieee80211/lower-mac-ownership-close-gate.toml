@@ -1,7 +1,0 @@
-schema = 5
-id = "lower-mac-ownership-close-gate"
-description = "Inspect publication tickets and terminal counts at the ownership gate barrier"
-role = "investigation"
-tags = ["conformance", "wifi", "diagnostic"]
-[lower-mac]
-kind = "ownership-close-gate"

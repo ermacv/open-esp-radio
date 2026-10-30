@@ -213,7 +213,6 @@ impl Arbiter {
                 enqueued_unix: oer_os_durable::unix_seconds(),
                 claims: claims.clone(),
                 priority,
-                job: crate::jobs::current()?,
                 run: request.run.clone(),
                 unknown: Default::default(),
             });
@@ -622,9 +621,6 @@ impl Grant {
                     context.set(key, value);
                 }
             }
-        }
-        if let Some(job) = crate::jobs::current()? {
-            context.set(crate::jobs::JOB_KEY, job);
         }
         for access in &self.devices {
             access.delegate(&mut context)?;

@@ -23,7 +23,6 @@ oer-os-process = { path = "../../os/process" }
 oer-os-toolchain = { path = "../../os/toolchain" }
 oer-pins-artifacts = { path = "../../pins/artifacts" }
 oer-vendor-lineage = { path = "../lineage" }
-oer-hil-family-phy-esp32s31 = { path = "../../hil/family-phy-esp32s31" }
 oer-os-durable = { path = "../../os/durable" }
 oer-vendor-provenance = { path = "../provenance" }
 clap = { version = "=4.5.48", features = ["derive"] }

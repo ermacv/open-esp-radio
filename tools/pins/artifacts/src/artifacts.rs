@@ -293,7 +293,7 @@ pub fn ensure_with_inputs(
 }
 
 /// The firmware catalog images whose outputs `chip` pins, in pin order:
-/// what `cargo hil firmware build` builds before a scenario links them.
+/// what `cargo fw idf build` builds before a scenario links them.
 pub fn firmware_images(root: &Path, chip: &str) -> Result<Vec<String>> {
     Ok(images(Manifest::load(root, chip)?))
 }
@@ -367,7 +367,7 @@ pub fn run(root: &Path, chip: &str, only: &[String]) -> Result<()> {
                 // Firmware outputs are optional here: a host builds them
                 // when a scenario needs them.
                 println!(
-                    "{:<16} skipped: not built; run `cargo hil firmware build {}`",
+                    "{:<16} skipped: not built; run `cargo fw idf build {}`",
                     artifact.id,
                     source.image.as_deref().unwrap_or_default()
                 );

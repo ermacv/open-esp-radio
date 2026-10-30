@@ -7,7 +7,7 @@ launchers' admission, and the requests and reports of the finite helpers
 
 The programs are packages without a library, so the contract has one
 definition: `tools/lab/fixture-install` (the privileged
-`open-radio-fixture-install` and the fixed launchers) and `tools/hil/fixture`
+`open-radio-fixture-install` and the fixed launchers) and `tools/lab/fixture-helpers`
 (the finite helpers). The privileged programs' repository dependencies are this library and
 `oer-os-process`, without its `linux-socket` feature; nothing else of the
 stand (SSH, the router, the boards) reaches root through them. The library's

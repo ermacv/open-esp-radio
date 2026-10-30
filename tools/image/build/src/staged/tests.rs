@@ -275,6 +275,7 @@ fn build_refuses_a_cached_bootstrap_even_with_no_or_reported_gates() {
                 Ok(Compiled {
                     bootstrap_elf,
                     runtime_elf: input.output.join(files::RUNTIME_ELF),
+                    runtime_crc32: 0,
                     values: crate::large_values::Report::new(input.policy.max_move_bytes),
                     sizes: Summary {
                         schema: crate::sizes::SCHEMA,

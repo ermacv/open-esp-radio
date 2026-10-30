@@ -1,5 +1,4 @@
-# Firmware catalog entry: `cargo hil firmware build ieee802154-peer`.
-# The runner requires this image on the IEEE 802.15.4 peer board.
+# Firmware catalog entry: `cargo fw idf build ieee802154-peer`.
 image = "ieee802154-peer"
 chip = "esp32c5"
 # The ESP32-C5 pins: the same ESP-IDF revision with the ESP32-C5 archives.

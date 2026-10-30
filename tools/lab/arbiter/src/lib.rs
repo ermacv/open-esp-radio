@@ -5,12 +5,11 @@
 //! fixtures and air it claims. Requests wait in one queue shared by every
 //! checkout of the user, ordered by their owners' balances; leases on
 //! disjoint resources run in parallel. Once granted, the holder takes the
-//! lock files of what it uses, the arbiter's final exclusion layer. State
-//! lives in one directory (the stand model's `paths::arbiter`) guarded by a
-//! lock file, so a process that dies leaves a ticket or lease that the next
-//! reader reaps. The directory also keeps the lease history, the [`jobs`] of
-//! deferred `cargo hil` runs, whose requests are tickets of that queue, and
-//! the board journal (`oer-lab-arbiter`).
+//! device locks of the boards it uses, the arbiter's final exclusion layer.
+//! State lives in one directory (the stand model's `paths::arbiter`) guarded
+//! by a lock file, so a process that dies leaves a ticket or lease that the
+//! next reader reaps. The directory also keeps the lease history and the
+//! board journal (`oer-lab-arbiter`).
 //!
 //! The arbiter reads the stand file through the stand model and returns a
 //! board's hub port to its working state through board I/O; it actuates no
@@ -20,14 +19,12 @@
 pub mod claims;
 pub mod journal;
 pub mod owner;
-pub mod resource_lock;
 
 pub mod balance;
 mod estimate;
 mod grant;
 pub mod health;
 mod history;
-pub mod jobs;
 
 pub mod maintenance;
 mod notify;
