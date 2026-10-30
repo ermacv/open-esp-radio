@@ -6,8 +6,8 @@ mod image_keys;
 
 pub use boot::*;
 pub use image_keys::{
-    Hello, IMAGE_KEYS_PER_PAGE, ImageKeyPage, ImageKeySet, ImageKeySetError, concat_keys, digest,
-    distinct_keys, distinct_len, keys_len, sorted_keys,
+    Hello, IMAGE_KEYS_PER_PAGE, ImageKeyPage, ImageKeySet, ImageKeySetError, ImageKeysCheck,
+    ImageKeysError, concat_keys, digest, distinct_keys, distinct_len, keys_len, sorted_keys,
 };
 
 use postcard_schema::Schema;

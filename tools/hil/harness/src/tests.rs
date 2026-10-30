@@ -3,7 +3,7 @@ use std::{thread, time::Duration};
 use oer_hil_link::test_support::{Device, HELLO};
 use oer_hil_protocol::{
     Endpoint, Key, Message, WireKind,
-    base::{GetImageKeys, Hello, ImageKeyPage, RejectReason, Rejected},
+    base::{GetImageKeys, Hello, ImageKeyPage, RejectReason, Rejected, digest, sorted_keys},
 };
 use serde::{Deserialize, Serialize};
 
@@ -35,10 +35,14 @@ const SCENARIO: Scenario = Scenario {
 /// The identity of the image the tests built.
 const IMAGE: u32 = 0x5eed_0001;
 
+/// The image's capability set: the service's keys, ascending.
+const SERVED: [Key; 2] = sorted_keys([Ask::KEY, Told::KEY]);
+
 /// The Hello of the built image, which serves the test service.
 fn hello() -> Hello {
     Hello {
-        keys: SERVICE.len() as u16,
+        keys: SERVED.len() as u16,
+        keys_digest: digest(&SERVED),
         image_crc32: IMAGE,
         ..HELLO
     }
@@ -50,7 +54,7 @@ fn serve(mut device: Device) {
     device.send(0, hello());
     while let Some(request) = device.request() {
         if let Some(GetImageKeys { first }) = request.decode() {
-            let keys = SERVICE
+            let keys = SERVED
                 .iter()
                 .copied()
                 .skip(usize::from(first))
@@ -60,7 +64,7 @@ fn serve(mut device: Device) {
                 request.request_id,
                 ImageKeyPage {
                     first,
-                    total: SERVICE.len() as u16,
+                    total: SERVED.len() as u16,
                     keys,
                 },
             );
@@ -198,6 +202,7 @@ fn an_image_without_the_scenarios_service_runs_no_case() {
         device.send(
             0,
             Hello {
+                keys_digest: digest(&[]),
                 image_crc32: IMAGE,
                 ..HELLO
             },
@@ -217,6 +222,74 @@ fn an_image_without_the_scenarios_service_runs_no_case() {
     assert!(reason.contains(&Ask::KEY.to_string()), "{reason}");
     drop(link);
     server.join().unwrap();
+}
+
+#[test]
+fn key_pages_other_than_the_announced_set_run_no_case() {
+    let page = |first: u16, keys: &[Key]| ImageKeyPage {
+        first,
+        total: 2,
+        keys: keys.iter().copied().collect(),
+    };
+    let [low, high] = SERVED;
+    let wrong_digest = Hello {
+        keys_digest: digest(&SERVED) ^ 1,
+        ..hello()
+    };
+    let three = Hello { keys: 3, ..hello() };
+    let three_page = |first: u16, keys: &[Key]| ImageKeyPage {
+        total: 3,
+        ..page(first, keys)
+    };
+    for (what, hello, pages) in [
+        ("wrong digest", wrong_digest, vec![page(0, &SERVED)]),
+        (
+            "repeated key",
+            hello(),
+            vec![page(0, &[low]), page(1, &[low])],
+        ),
+        ("permuted keys", hello(), vec![page(0, &[high, low])]),
+        (
+            "last page too long",
+            hello(),
+            vec![page(0, &[low]), page(1, &[high, Key([0xff; 8])])],
+        ),
+        (
+            "empty page before the end",
+            three,
+            vec![
+                three_page(0, &[low]),
+                three_page(1, &[]),
+                three_page(1, &[high]),
+            ],
+        ),
+    ] {
+        let (mut device, link) = Device::new(50);
+        let server = thread::spawn(move || {
+            device.send(0, hello);
+            let mut pages = pages.into_iter();
+            let mut asked = false;
+            while let Some(request) = device.request() {
+                if request.decode::<GetImageKeys>().is_some() {
+                    if let Some(page) = pages.next() {
+                        device.send(request.request_id, page);
+                    }
+                } else {
+                    asked = true;
+                }
+            }
+            asked
+        });
+        let cases = [Case {
+            name: "answers",
+            run: |cx| ask(7)(cx),
+        }];
+        let selected = cases.iter().collect::<Vec<_>>();
+        let outcomes = run::cases(&link, &SCENARIO, IMAGE, &selected);
+        assert_eq!(verdicts(&outcomes), [(None, 2)], "{what}: {outcomes:?}");
+        drop(link);
+        assert!(!server.join().unwrap(), "{what}: a case ran");
+    }
 }
 
 #[test]
