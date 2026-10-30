@@ -154,7 +154,7 @@ fn addressed(frame_control: [u8; 2], length: usize) -> std::vec::Vec<u8> {
 }
 
 fn address_at(frame: &[u8], at: usize) -> [u8; 6] {
-    frame[at..at + 6].try_into().unwrap()
+    *frame[at..].first_chunk::<6>().unwrap()
 }
 
 #[test]
