@@ -47,7 +47,7 @@ pub enum StaApRxRoute {
 /// exception: a connected station does not own active-scan requests, while a
 /// SoftAP must receive them before it can answer.
 pub fn classify_sta_ap_rx(mpdu: &[u8], addresses: StaApRxAddresses) -> StaApRxRoute {
-    let Some(fields) = AddressFields::parse(mpdu) else {
+    let Ok(fields) = AddressFields::parse(mpdu) else {
         return StaApRxRoute::Malformed;
     };
     let receiver = fields.receiver();

@@ -402,7 +402,7 @@ pub fn station<W: Binding>(
         .split()
         .unwrap_or_else(|_| W::fail(InitializationError::Control));
     #[cfg(oer_trace)]
-    let _ = service::TARGET.set((address, config.target, config.channel));
+    let _ = service::TARGET.set((address, config.target));
     control
         .inner
         .configure_reconnect(config.reconnect.runtime());

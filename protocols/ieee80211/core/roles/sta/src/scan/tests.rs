@@ -15,7 +15,7 @@ fn a_zero_bssid_cannot_enter_the_scan_table() {
     let mut frame = [0_u8; 42];
     frame[0] = 0x80;
     frame[36..42].copy_from_slice(&[0, 4, b't', b'e', b's', b't']);
-    assert!(parse_management(&frame, 1).is_none());
+    assert!(parse_management(&frame).is_none());
     let mut table = ScanTable::<1>::new();
     assert_eq!(
         table.observe_management(&frame, 1, Some(-40), None),
@@ -87,10 +87,10 @@ fn a_group_bssid_cannot_enter_the_scan_table() {
     frame[0] = 0x80;
     frame[16..22].copy_from_slice(&[3, 2, 3, 4, 5, 6]);
     frame[36..42].copy_from_slice(&[0, 4, b't', b'e', b's', b't']);
-    assert!(parse_management(&frame, 1).is_none());
+    assert!(parse_management(&frame).is_none());
     frame[16] = 2;
     assert_eq!(
-        parse_management(&frame, 1).unwrap().bssid.get(),
+        parse_management(&frame).unwrap().bssid.get(),
         [2, 2, 3, 4, 5, 6]
     );
 }
@@ -158,7 +158,7 @@ fn parses_beacon_into_owned_bounded_record() {
     frame[36..42].copy_from_slice(&[0, 4, b't', b'e', b's', b't']);
     frame[42..45].copy_from_slice(&[3, 1, 11]);
     frame[45..47].copy_from_slice(&[48, 0]);
-    let record = parse_management(&frame[..47], 3).unwrap();
+    let record = parse_management(&frame[..47]).unwrap();
     assert_eq!(record.ssid_bytes(), b"test");
     assert_eq!(
         record.bssid,
@@ -167,7 +167,7 @@ fn parses_beacon_into_owned_bounded_record() {
         )
         .unwrap()
     );
-    assert_eq!(record.channel, 11);
+    assert_eq!(record.ds_channel, Some(11));
     assert_eq!(record.timestamp.as_micros(), 0x0123_4567_89ab_cdef);
     assert_eq!(record.beacon_interval_tu, 100);
     assert!(record.privacy);
@@ -185,8 +185,8 @@ fn ht_control_beacon() -> std::vec::Vec<u8> {
 
 #[test]
 fn a_beacon_with_ht_control_parses_its_fixed_fields_after_it() {
-    let plain = parse_management(&rich_frame(8), 1).unwrap();
-    let record = parse_management(&ht_control_beacon(), 1).unwrap();
+    let plain = parse_management(&rich_frame(8)).unwrap();
+    let record = parse_management(&ht_control_beacon()).unwrap();
     assert_eq!(record.ssid_bytes(), b"test");
     assert_eq!(record.beacon_interval_tu, 100);
     assert_eq!(record.timestamp.as_micros(), 0x0123_4567_89ab_cdef);
@@ -201,14 +201,14 @@ fn a_beacon_whose_ht_control_leaves_no_fixed_fields_is_ignored() {
     // The header with its HT Control field and eleven of the twelve fixed
     // bytes.
     frame.truncate(24 + 4 + 11);
-    assert!(parse_management(&frame, 1).is_none());
+    assert!(parse_management(&frame).is_none());
 }
 
 #[test]
 fn a_management_frame_of_another_protocol_version_is_ignored() {
     let mut frame = rich_frame(8);
     frame[0] |= 0x01;
-    assert!(parse_management(&frame, 1).is_none());
+    assert!(parse_management(&frame).is_none());
 }
 
 #[test]
@@ -218,8 +218,43 @@ fn retains_erp_use_protection_without_confusing_the_element_header() {
     frame[16..22].copy_from_slice(&[2, 2, 3, 4, 5, 6]);
     frame[36..40].copy_from_slice(&[0, 2, b'a', b'p']);
     frame[40..43].copy_from_slice(&[42, 1, 0x03]);
-    let record = parse_management(&frame, 6).unwrap();
-    assert_eq!(record.erp_information(), Some(0x03));
+    let record = parse_management(&frame).unwrap();
+    assert_eq!(record.erp_information(), &[0x03]);
+    assert_eq!(record.erp_element_count(), 1);
+}
+
+#[test]
+fn repeated_erp_elements_are_kept_as_observed_for_the_station_to_judge() {
+    let mut frame = std::vec![0_u8; 40];
+    frame[0] = 0x80;
+    frame[16..22].copy_from_slice(&[2, 2, 3, 4, 5, 6]);
+    frame[36..40].copy_from_slice(&[0, 2, b'a', b'p']);
+    for information in [0x00, 0x02, 0x00, 0x04, 0x00] {
+        frame.extend_from_slice(&[42, 1, information]);
+    }
+    // The codec stores what it saw, up to its capacity, and counts the rest.
+    let mut record = parse_management(&frame[..46]).unwrap();
+    assert_eq!(record.erp_information(), &[0x00, 0x02]);
+    assert_eq!(record.erp_element_count(), 2);
+    // The station: any asserted bit counts.
+    let protection = crate::association::erp_protection(&record);
+    assert_eq!(
+        protection,
+        oer_ieee80211_wire::protection::ErpProtection::new(true, false)
+    );
+    // Beyond the capacity, unseen elements count as asserting both.
+    record = parse_management(&frame).unwrap();
+    assert_eq!(record.erp_information(), &[0x00, 0x02, 0x00, 0x04]);
+    assert_eq!(record.erp_element_count(), 5);
+    assert_eq!(
+        crate::association::erp_protection(&record),
+        oer_ieee80211_wire::protection::ErpProtection::new(true, true)
+    );
+    // No element: no requirement.
+    assert_eq!(
+        crate::association::erp_protection(&parse_management(&frame[..40]).unwrap()),
+        oer_ieee80211_wire::protection::ErpProtection::NONE
+    );
 }
 
 #[test]
@@ -229,7 +264,6 @@ fn ht40_geometry_requires_matching_capability_and_operation() {
             oer_ieee80211_wire::address::IndividualAddress::new([2, 0, 0, 0, 0, 1]).unwrap(),
         )
         .unwrap(),
-        6,
     );
     let mut capability = [0; HT_CAPABILITY_IE_LEN];
     capability[0..4].copy_from_slice(&[45, 26, 0x02, 0]);
@@ -238,19 +272,21 @@ fn ht40_geometry_requires_matching_capability_and_operation() {
     record.set_ht_capability_ie(Some(capability));
     record.set_ht_operation_ie(Some(operation));
     assert_eq!(
-        record.ht40_secondary_channel(),
+        record.ht40_secondary_channel(6),
         Some(HtSecondaryChannel::Above)
     );
+    // The operation must name the channel the station takes the BSS to be on.
+    assert_eq!(record.ht40_secondary_channel(7), None);
 
     operation[3] = 0x07;
     record.set_ht_operation_ie(Some(operation));
     assert_eq!(
-        record.ht40_secondary_channel(),
+        record.ht40_secondary_channel(6),
         Some(HtSecondaryChannel::Below)
     );
     capability[2] = 0;
     record.set_ht_capability_ie(Some(capability));
-    assert_eq!(record.ht40_secondary_channel(), None);
+    assert_eq!(record.ht40_secondary_channel(6), None);
 }
 
 #[test]
@@ -260,7 +296,6 @@ fn ht_short_guard_intervals_are_read_from_capability_info() {
             oer_ieee80211_wire::address::IndividualAddress::new([2, 0, 0, 0, 0, 1]).unwrap(),
         )
         .unwrap(),
-        6,
     );
     let mut capability = [0; HT_CAPABILITY_IE_LEN];
     capability[0..4].copy_from_slice(&[45, 26, 1 << 5, 0]);
@@ -375,7 +410,6 @@ fn strongest_exact_ssid_ignores_invalid_channel() {
             oer_ieee80211_wire::address::IndividualAddress::new([2, 0, 0, 0, 0, 1]).unwrap(),
         )
         .unwrap(),
-        6,
     ); 3];
     let mut observations = [None; 3];
     for ((record, observation), (rssi, channel)) in records.iter_mut().zip(&mut observations).zip([
@@ -384,9 +418,9 @@ fn strongest_exact_ssid_ignores_invalid_channel() {
         (Some(-10), 0),
     ]) {
         record.set_ssid(b"test").unwrap();
-        record.channel = channel;
         *observation = Some(BssObservation {
             record: *record,
+            channel,
             rssi,
             received_at: None,
         });
@@ -479,7 +513,7 @@ fn read_record(record: &ScanRecord) {
     let _ = record.ht_operation_ie_bytes();
     let _ = record.supports_ht_short_guard_interval_20mhz();
     let _ = record.supports_ht_short_guard_interval_40mhz();
-    let _ = record.ht40_secondary_channel();
+    let _ = record.ht40_secondary_channel(6);
     let _ = record.he_capability_ie_bytes();
     let _ = he_default_packet_extension_duration(record.he_operation_ie_bytes());
     let _ = he_extended_range_single_user_disabled(record.he_operation_ie_bytes());
@@ -493,10 +527,11 @@ fn parse_management_never_panics(count: usize) {
     let seeds = scan_seeds();
     let seeds: std::vec::Vec<&[u8]> = seeds.iter().map(std::vec::Vec::as_slice).collect();
     oer_ieee80211_wire::fuzz::inputs(&seeds, count, 320, |frame| {
-        if let Some(record) = parse_management(frame, 6) {
+        if let Some(record) = parse_management(frame) {
             read_record(&record);
             let observation = BssObservation {
                 record,
+                channel: record.ds_channel.unwrap_or(1),
                 rssi: None,
                 received_at: None,
             };
@@ -576,18 +611,18 @@ fn he_operation_readers_never_panic_on_received_bytes_full() {
 
 #[test]
 fn a_rich_frame_keeps_every_retained_element() {
-    let record = parse_management(&rich_frame(8), 1).unwrap();
+    let record = parse_management(&rich_frame(8)).unwrap();
     assert!(!record.information_elements_truncated);
-    assert_eq!(record.channel, 6);
+    assert_eq!(record.ds_channel, Some(6));
     assert_eq!(record.supported_rates_bytes().len(), 8);
     assert_eq!(
         record.extended_supported_rates_bytes(),
         &[0x30, 0x48, 0x60, 0x6c]
     );
-    assert_eq!(record.erp_information(), Some(0x02));
+    assert_eq!(record.erp_information(), &[0x02]);
     assert!(record.supports_ht_duplicate_mcs32());
     assert_eq!(
-        record.ht40_secondary_channel(),
+        record.ht40_secondary_channel(6),
         Some(HtSecondaryChannel::Above)
     );
     assert_eq!(record.rsn_ie_bytes().len(), 22);
@@ -616,7 +651,7 @@ fn an_oversized_element_marks_the_record_truncated_and_keeps_the_stored_one() {
     // A 30-byte RSNXE exceeds its 16-byte capacity.
     frame.extend_from_slice(&[244, 28]);
     frame.extend_from_slice(&[0; 28]);
-    let record = parse_management(&frame, 1).unwrap();
+    let record = parse_management(&frame).unwrap();
     assert!(record.information_elements_truncated);
     assert_eq!(record.rsnxe_bytes(), &[244, 1, 0x20]);
 }
@@ -669,7 +704,6 @@ fn a_setter_refuses_a_value_longer_than_its_buffer_and_keeps_the_record() {
             oer_ieee80211_wire::address::IndividualAddress::new([2, 0, 0, 0, 0, 1]).unwrap(),
         )
         .unwrap(),
-        6,
     );
     for (set, get, capacity) in setters {
         let mut record = empty;

@@ -20,6 +20,8 @@ const RSN_IGTK_LEN: usize = 16;
 pub enum BipError {
     /// The frame is shorter than a management header and its MIC element.
     Truncated,
+    /// The header is not that of a protocol-version-0 management frame.
+    NotManagement,
     /// The frame does not end with a BIP-CMAC-128 Management MIC element.
     MissingManagementMic,
     /// The MIC element names another IGTK.
@@ -37,6 +39,7 @@ impl<'a> BipFrame<'a> {
         let frame =
             oer_ieee80211_wire::bip::BipFrame::parse(frame).map_err(|error| match error {
                 BipFormatError::MissingManagementMic => BipError::MissingManagementMic,
+                BipFormatError::NotManagement => BipError::NotManagement,
                 BipFormatError::Truncated | BipFormatError::PacketNumberOutOfRange => {
                     BipError::Truncated
                 }

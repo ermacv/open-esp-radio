@@ -279,7 +279,7 @@ impl MonitorFilter {
             }
         }
         self.any_address
-            .is_none_or(|address| frame_contains_address(frame.bytes, control, frame_type, address))
+            .is_none_or(|address| frame_contains_address(frame.bytes, address))
     }
 }
 
@@ -305,40 +305,10 @@ fn frame_type(control: FrameControlFields) -> MonitorFrameType {
     }
 }
 
-/// Control subtypes whose frame carries a TA (Address 2): BlockAckReq,
-/// BlockAck, PS-Poll, RTS, CF-End and CF-End+CF-Ack.
-/// SOURCE: IEEE Std 802.11-2020, 9.3.1 (Control frames) and Table 9-1.
-const fn control_has_transmitter(subtype: u16) -> bool {
-    matches!(subtype, 8 | 9 | 10 | 11 | 14 | 15)
-}
-
-fn frame_contains_address(
-    bytes: &[u8],
-    control: FrameControlFields,
-    frame_type: MonitorFrameType,
-    address: [u8; 6],
-) -> bool {
-    let Some(fields) = AddressFields::parse(bytes) else {
-        return false;
-    };
-    let is = |candidate: Option<[u8; 6]>| candidate == Some(address);
-    let three_address = fields.sequence_control().is_some()
-        && (is(Some(fields.receiver())) || is(fields.transmitter()) || is(fields.address3()));
-    match frame_type {
-        MonitorFrameType::Management => three_address,
-        MonitorFrameType::Control => {
-            is(Some(fields.receiver()))
-                || (control_has_transmitter(control.subtype()) && is(fields.transmitter()))
-        }
-        MonitorFrameType::Data => {
-            three_address
-                || (fields.sequence_control().is_some()
-                    && control.to_ds()
-                    && control.from_ds()
-                    && is(fields.address4()))
-        }
-        MonitorFrameType::Extension => is(Some(fields.receiver())),
-    }
+/// Whether `address` is one of the addresses the frame holds; a frame whose
+/// address fields cannot be read holds none.
+fn frame_contains_address(bytes: &[u8], address: [u8; 6]) -> bool {
+    AddressFields::parse(bytes).is_ok_and(|fields| fields.addresses().any(|held| held == address))
 }
 
 #[cfg(test)]

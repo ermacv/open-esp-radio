@@ -71,7 +71,7 @@ fn a_wpa3_beacon_carries_its_rsne_and_rsnxe_to_the_scan_record() {
     );
     assert!(beacon.ends_with(&test_elements::SAE_H2E_RSNXE));
 
-    let record = parse_management(beacon, 6).unwrap();
+    let record = parse_management(beacon).unwrap();
     assert!(record.privacy);
     assert_eq!(record.rsn_ie_bytes(), test_elements::WPA3_PERSONAL_RSNE);
     assert_eq!(record.rsnxe_bytes(), test_elements::SAE_H2E_RSNXE);
@@ -297,7 +297,7 @@ fn a_5_ghz_beacon_carries_no_dsss_parameter_set_erp_or_dsss_rate() {
     // No DSSS Parameter Set, no ERP; the HT Operation names channel 36 with
     // its secondary above.
     assert_eq!(ids, [false, false, true]);
-    let parsed = parse_management(frame, 36).unwrap();
+    let parsed = parse_management(frame).unwrap();
     assert!(
         parsed
             .ht_operation_ie_bytes()

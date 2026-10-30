@@ -49,6 +49,9 @@ pub enum DisconnectReason {
     DeadlineOverflow,
     /// A frame the station had to send did not encode.
     Encode,
+    /// The BSS's admission control closes every access category, so the
+    /// station's EAPOL has none to contend in.
+    NoAdmittedAccessCategory,
     /// An owned EAPOL frame failed its retained parse invariant.
     InvalidEapol(EapolParseError),
     RetainedSecurityIes(RsnFrameError),
@@ -278,6 +281,7 @@ fn disconnect(reason: StaDisconnectReason) -> DisconnectReason {
         R::DeadlineOverflow => W::DeadlineOverflow,
         R::Peer { reason_code } => W::Peer { reason_code },
         R::Encode => W::Encode,
+        R::NoAdmittedAccessCategory => W::NoAdmittedAccessCategory,
         R::HandshakeFailed => W::HandshakeFailed,
         R::SaQueryTimeout => W::SaQueryTimeout,
     }

@@ -1738,13 +1738,13 @@ fn scan_without_a_ds_element_uses_the_received_channel_configuration() {
             .station
             .receive(now, &frame, metadata, |_| {}, &mut world.losses)
             .unwrap();
-        let record = world
+        let observation = world
             .station
             .scan
-            .records()
-            .find(|record| record.bssid.get() == other_bssid)
+            .observations()
+            .find(|observation| observation.record.bssid.get() == other_bssid)
             .unwrap();
-        assert_eq!(record.channel, received_channel);
+        assert_eq!(observation.channel, received_channel);
     }
     installed(|mint| {
         let mut world = World::new(mint, 3);
@@ -2298,6 +2298,48 @@ fn wpa2_connected_by<'id, const G: usize>(
     assert!(world.station.is_connected());
     world.take();
     (world, ptk)
+}
+
+#[test]
+fn a_bss_closing_every_access_category_ends_the_handshake_with_its_own_reason() {
+    installed(|mint| {
+        use oer_ieee80211_core_security_rsn::frames::RsnTxFrame;
+        use oer_ieee80211_wire::security::rsn::Akm;
+
+        let mut world = World::with_groups(
+            mint,
+            3,
+            StaSecurity::Personal {
+                password: oer_ieee80211_core_security_rsn::sae::SaePassword::new(b"password")
+                    .unwrap(),
+                pmk: Pmk::from_bytes(PMK),
+            },
+            [Slot(1)],
+        );
+        world.command(at(0), 1, StaCommand::Connect).unwrap();
+        world.run(at(0));
+        world.advance();
+        world.receive(at(13), &wpa2_beacon());
+        world.advance();
+        world.answer_authentication(at(30), 0);
+        // Admission control mandatory in all four AC records.
+        let mut wmm = wmm_element(1, 2, 10);
+        for record in [10, 14, 18, 22] {
+            wmm[record] |= 0x10;
+        }
+        world.receive(at(31), &with_element(&association_response(0), &wmm));
+        world.take();
+        let message1 = RsnTxFrame::<512>::message1(Akm::Psk, LOCAL, 1, ANONCE).unwrap();
+        world.receive(at(32), &eapol_frame(message1.as_bytes()));
+        let seen = world.take();
+        assert!(!world.station.is_connected());
+        assert!(seen.contains(&Seen::Notify(StaNotice::Disconnected(
+            StaDisconnectReason::NoAdmittedAccessCategory
+        ))));
+        assert!(!seen.contains(&Seen::Notify(StaNotice::Disconnected(
+            StaDisconnectReason::Encode
+        ))));
+    });
 }
 
 #[test]
@@ -5338,19 +5380,27 @@ fn eapol_under_a_closed_voice_category_contends_as_video_in_tid_five() {
         // A BSS that closes every category leaves EAPOL none, and no owner
         // or number is taken.
         let before = world.station.sequence;
-        assert!(
-            world
-                .station
-                .transition()
-                .0
-                .encode_eapol(
-                    bssid,
-                    closed(&WmmAccessCategory::ALL),
-                    &[],
-                    TxPurpose::HandshakeResponse,
-                    &mut (),
-                )
-                .is_err()
+        assert!(matches!(
+            world.station.transition().0.encode_eapol(
+                bssid,
+                closed(&WmmAccessCategory::ALL),
+                &[],
+                TxPurpose::HandshakeResponse,
+                &mut (),
+            ),
+            Err(EapolUnsent::NoAdmittedAccessCategory)
+        ));
+        assert_eq!(
+            EapolUnsent::NoAdmittedAccessCategory.disconnect_reason(),
+            Some(StaDisconnectReason::NoAdmittedAccessCategory)
+        );
+        assert_eq!(
+            EapolUnsent::Unsent(Unsent::Encode).disconnect_reason(),
+            Some(StaDisconnectReason::Encode)
+        );
+        assert_eq!(
+            EapolUnsent::Unsent(Unsent::NoTokens).disconnect_reason(),
+            None
         );
         assert_eq!(world.station.sequence, before);
         assert_eq!(world.station.tickets.len(), 2);

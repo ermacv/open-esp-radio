@@ -109,14 +109,21 @@ impl FrameControl {
     }
 }
 
-/// The address fields an MPDU holds, read in their general-format order:
-/// Frame Control, Duration and Address 1, then each later field only when
-/// the frame holds it. A control frame may end after Address 1 or Address 2;
-/// management and data frames carry Addresses 1 to 3 and Sequence Control.
-/// Address 4 is the six octets after Sequence Control, whatever the frame's
-/// DS bits say; its consumer decides whether the frame has one.
+/// The address fields of a protocol-version-0 MPDU, present as its type,
+/// subtype and DS bits define them:
 ///
-/// SOURCE: IEEE Std 802.11-2020, 9.2.3 (General frame format, Figure 9-1).
+/// - management: Addresses 1 to 3 and Sequence Control;
+/// - data: the same, and Address 4 when both To DS and From DS are set;
+/// - control: Address 1, and Address 2 for the subtypes that carry a TA;
+/// - extension: Address 1 alone, as this view interprets no extension layout.
+///
+/// Every field the frame's type holds must be complete; a captured prefix
+/// that ends inside one is refused, not read as a shorter frame.
+///
+/// SOURCE: IEEE Std 802.11-2020, 9.2.3 (General frame format, Figure 9-1),
+/// 9.3.2.1 (Data frame format: Address 4 with To DS and From DS set), 9.3.3.2
+/// (Management frame format) and 9.3.1 (Control frames: BlockAckReq,
+/// BlockAck, PS-Poll, RTS, CF-End and CF-End +CF-Ack carry a TA).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct AddressFields {
     control: FrameControlFields,
@@ -127,27 +134,51 @@ pub struct AddressFields {
     address4: Option<[u8; 6]>,
 }
 
+/// Why a frame's address fields cannot be read.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AddressFieldsError {
+    /// The frame ends inside a field its type holds.
+    Truncated,
+    /// A protocol version other than 0, whose layout is not defined here.
+    UnknownVersion,
+}
+
 impl AddressFields {
-    /// `None` when the frame ends before Address 1.
-    pub fn parse(frame: &[u8]) -> Option<Self> {
+    /// The address fields of `frame`.
+    pub fn parse(frame: &[u8]) -> Result<Self, AddressFieldsError> {
         let mut reader = oer_wire::Reader::new(frame);
-        let control = FrameControlFields::from_bytes(reader.read().ok()?);
-        let _duration: [u8; 2] = reader.read().ok()?;
-        let receiver = reader.read().ok()?;
-        let transmitter = reader.read().ok();
-        let address3 = transmitter.and_then(|_| reader.read().ok());
-        let sequence_control = address3
-            .and_then(|_| reader.read().ok())
-            .map(u16::from_le_bytes);
-        let address4 = sequence_control.and_then(|_| reader.read().ok());
-        Some(Self {
+        let truncated = |_| AddressFieldsError::Truncated;
+        let control = FrameControlFields::from_bytes(reader.read().map_err(truncated)?);
+        if control.version() != 0 {
+            return Err(AddressFieldsError::UnknownVersion);
+        }
+        let _duration: [u8; 2] = reader.read().map_err(truncated)?;
+        let receiver = reader.read().map_err(truncated)?;
+        let mut fields = Self {
             control,
             receiver,
-            transmitter,
-            address3,
-            sequence_control,
-            address4,
-        })
+            transmitter: None,
+            address3: None,
+            sequence_control: None,
+            address4: None,
+        };
+        match control.kind() {
+            FrameType::Management | FrameType::Data => {
+                fields.transmitter = Some(reader.read().map_err(truncated)?);
+                fields.address3 = Some(reader.read().map_err(truncated)?);
+                fields.sequence_control =
+                    Some(u16::from_le_bytes(reader.read().map_err(truncated)?));
+                if matches!(control.kind(), FrameType::Data) && control.to_ds() && control.from_ds()
+                {
+                    fields.address4 = Some(reader.read().map_err(truncated)?);
+                }
+            }
+            FrameType::Control if control_carries_transmitter(control.control_subtype()) => {
+                fields.transmitter = Some(reader.read().map_err(truncated)?);
+            }
+            FrameType::Control | FrameType::Extension | FrameType::Reserved(_) => {}
+        }
+        Ok(fields)
     }
 
     pub const fn control(&self) -> FrameControlFields {
@@ -159,23 +190,53 @@ impl AddressFields {
         self.receiver
     }
 
-    /// Address 2.
+    /// Address 2, in management and data frames and in a control frame
+    /// carrying a TA.
     pub const fn transmitter(&self) -> Option<[u8; 6]> {
         self.transmitter
     }
 
+    /// Address 3, in management and data frames.
     pub const fn address3(&self) -> Option<[u8; 6]> {
         self.address3
     }
 
-    /// Present when the frame holds a complete three-address header.
+    /// Sequence Control, in management and data frames.
     pub const fn sequence_control(&self) -> Option<u16> {
         self.sequence_control
     }
 
+    /// Address 4, in a data frame with both To DS and From DS set.
     pub const fn address4(&self) -> Option<[u8; 6]> {
         self.address4
     }
+
+    /// Every address the frame holds, in field order.
+    pub fn addresses(&self) -> impl Iterator<Item = [u8; 6]> {
+        [
+            Some(self.receiver),
+            self.transmitter,
+            self.address3,
+            self.address4,
+        ]
+        .into_iter()
+        .flatten()
+    }
+}
+
+/// Whether a control frame of `subtype` carries a TA after its RA.
+///
+/// SOURCE: IEEE Std 802.11-2020, 9.3.1 (Control frames) and Table 9-1.
+const fn control_carries_transmitter(subtype: ControlSubtype) -> bool {
+    matches!(
+        subtype,
+        ControlSubtype::BlockAckRequest
+            | ControlSubtype::BlockAck
+            | ControlSubtype::PsPoll
+            | ControlSubtype::Rts
+            | ControlSubtype::CfEnd
+            | ControlSubtype::CfEndCfAck
+    )
 }
 
 /// A complete MAC header with its checked variable-length boundary.

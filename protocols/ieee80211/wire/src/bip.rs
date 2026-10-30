@@ -17,7 +17,7 @@
     clippy::arithmetic_side_effects
 )]
 
-use crate::frame::FrameControlFields;
+use crate::frame::{FrameControl, FrameControlFields};
 
 /// Management MIC element identifier.
 pub const MANAGEMENT_MIC_ELEMENT_ID: u8 = 76;
@@ -52,10 +52,23 @@ const ZERO_MIC: [u8; BIP_MIC_LEN] = [0; BIP_MIC_LEN];
 pub enum BipFormatError {
     /// Shorter than a management header and the element.
     Truncated,
+    /// The header is not that of a protocol-version-0 management frame.
+    NotManagement,
     /// The frame does not end with a BIP-CMAC-128 Management MIC element.
     MissingManagementMic,
     /// An IPN above six octets.
     PacketNumberOutOfRange,
+}
+
+/// `header`, when it begins a protocol-version-0 management frame.
+fn management(
+    header: &[u8; MANAGEMENT_HEADER_LEN],
+) -> Result<&[u8; MANAGEMENT_HEADER_LEN], BipFormatError> {
+    let [f0, f1, ..] = *header;
+    FrameControl::new(u16::from_le_bytes([f0, f1]))
+        .filter(|control| control.is_management_frame())
+        .map(|_| header)
+        .ok_or(BipFormatError::NotManagement)
 }
 
 /// The BIP additional authentication data of a management header.
@@ -85,11 +98,12 @@ pub struct BipFrame<'a> {
 }
 
 impl<'a> BipFrame<'a> {
-    /// The header, body and Management MIC element of `frame`.
+    /// The management header, body and Management MIC element of `frame`.
     pub fn parse(frame: &'a [u8]) -> Result<Self, BipFormatError> {
         let (header, rest) = frame
             .split_first_chunk::<MANAGEMENT_HEADER_LEN>()
             .ok_or(BipFormatError::Truncated)?;
+        let header = management(header)?;
         let (body, mme) = rest
             .split_last_chunk::<MANAGEMENT_MIC_ELEMENT_LEN>()
             .ok_or(BipFormatError::Truncated)?;
@@ -146,8 +160,8 @@ pub struct BipProtection<'a> {
 
 impl<'a> BipProtection<'a> {
     /// Append the element naming `key_id` and `packet_number` after the
-    /// `length` octets of a management frame in `buffer`; a refusal writes
-    /// nothing.
+    /// `length` octets of a management frame in `buffer`; a refusal,
+    /// including a header of another frame type, writes nothing.
     pub fn append(
         buffer: &'a mut [u8],
         length: usize,
@@ -169,7 +183,7 @@ impl<'a> BipProtection<'a> {
         let (header, rest) = frame
             .split_first_chunk_mut::<MANAGEMENT_HEADER_LEN>()
             .ok_or(BipFormatError::Truncated)?;
-        let aad = aad(header);
+        let aad = aad(management(header)?);
         let (covered, mic) = rest
             .split_last_chunk_mut::<BIP_MIC_LEN>()
             .ok_or(BipFormatError::Truncated)?;

@@ -45,6 +45,7 @@ impl AssociationPhy for PhyMode {
     fn elements<'a>(
         &self,
         access_point: &ScanRecord,
+        channel: u8,
         capabilities: &'a AssociationCapabilities,
         power_capability: Option<StaPowerCapability>,
         he_ul_mu_power: Option<HeUlMuPowerCapability>,
@@ -57,7 +58,7 @@ impl AssociationPhy for PhyMode {
             PhyMode::Ht20 => {
                 return Err(AssociationRequestError::HtUnsupportedByAccessPoint);
             }
-            PhyMode::Ht40 if access_point.ht40_secondary_channel().is_some() => {
+            PhyMode::Ht40 if access_point.ht40_secondary_channel(channel).is_some() => {
                 (Some(&capabilities.ht40), None, None, None)
             }
             PhyMode::Ht40 => {

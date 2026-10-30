@@ -94,7 +94,8 @@ fn observe_scan_takes_the_configured_channel_without_a_ds_element() {
         ScanObservation::Inserted { index: 0 }
     );
     let record = scan.records().next().unwrap();
-    assert_eq!(record.channel, 6);
+    assert_eq!(record.ds_channel, None);
+    assert_eq!(scan.observations().next().unwrap().channel, 6);
     assert_eq!(scan.observations().next().unwrap().rssi, Some(-40));
     assert_eq!(scan.observations().next().unwrap().received_at, Some(now));
     assert_eq!(record.ssid_bytes(), b"test");
@@ -103,7 +104,7 @@ fn observe_scan_takes_the_configured_channel_without_a_ds_element() {
     let mut scan = ScanTable::<2>::new();
     let beacon = management(8, &[3, 1, 11]);
     let _ = observe_scan(&mut scan, now, classified_management(&beacon), &meta);
-    assert_eq!(scan.records().next().unwrap().channel, 11);
+    assert_eq!(scan.observations().next().unwrap().channel, 11);
 }
 
 #[test]

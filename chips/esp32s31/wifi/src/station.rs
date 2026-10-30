@@ -46,7 +46,7 @@ impl<W: Binding> Composition for ImageComposition<W> {
 pub struct StationComposition<W: Binding, Id: SlotIdentity>(PhantomData<(W, Id)>);
 const MANAGEMENT: u8 = 4;
 #[cfg(oer_trace)]
-pub(crate) static TARGET: oer_memory::OnceValue<([u8; 6], Option<[u8; 6]>, u8)> =
+pub(crate) static TARGET: oer_memory::OnceValue<([u8; 6], Option<[u8; 6]>)> =
     oer_memory::OnceValue::new();
 #[cfg(oer_trace)]
 fn observe_terminal<'id, W: Binding, Id: SlotIdentity + 'id>(
@@ -123,7 +123,7 @@ impl<W: Binding, Id: SlotIdentity> StationPort for StationComposition<W, Id> {
         #[cfg(oer_trace)]
         if let LowerMacEvent::Received { frame, .. } = &event {
             let bytes = frame.bytes();
-            if let Some((local, Some(target), channel)) = TARGET.get() {
+            if let Some((local, Some(target))) = TARGET.get() {
                 if oer_ieee80211_wire::station::parse_open_authentication_response(
                     bytes, local, target,
                 )
@@ -137,7 +137,7 @@ impl<W: Binding, Id: SlotIdentity> StationPort for StationComposition<W, Id> {
                 }
                 if oer_ieee80211_wire::frame::DecodedHeader::decode(bytes)
                     .is_some_and(|h| h.control().subtype() == 8)
-                    && oer_ieee80211_wire::scan::parse_management(bytes, channel, 0)
+                    && oer_ieee80211_wire::scan::parse_management(bytes)
                         .is_some_and(|r| r.bssid.get() == target)
                 {
                     #[cfg(oer_trace)]

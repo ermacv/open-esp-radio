@@ -27,7 +27,7 @@ fn non_he_modes_refuse_he_power_elements() {
     let power = StaPowerCapability::new(0, 10).unwrap();
     for mode in [PhyMode::Legacy, PhyMode::Ht20] {
         assert!(matches!(
-            mode.elements(&peer, &TEST_ASSOCIATION_CAPABILITIES, Some(power), None),
+            mode.elements(&peer, 6, &TEST_ASSOCIATION_CAPABILITIES, Some(power), None),
             Err(AssociationRequestError::UnexpectedPowerCapability)
         ));
     }
@@ -55,14 +55,13 @@ fn access_point_with_rsn(akms: &[[u8; 4]], capabilities: u16) -> ScanRecord {
             oer_ieee80211_wire::address::IndividualAddress::new(BSSID).unwrap(),
         )
         .unwrap(),
-        6,
     );
     record.set_ssid(b"test").unwrap();
     record.bssid = oer_ieee80211_wire::address::Bssid::new(
         oer_ieee80211_wire::address::IndividualAddress::new(BSSID).unwrap(),
     )
     .unwrap();
-    record.channel = 6;
+    record.ds_channel = Some(6);
     record.privacy = true;
     record.rsn = true;
     record.rsn_ie_count = 1;
@@ -101,6 +100,7 @@ fn association_request_contains_selected_rsn() {
             oer_ieee80211_wire::address::IndividualAddress::new(LOCAL).unwrap(),
         ),
         access_point: &record,
+        channel: 6,
         sequence_number: seq(2),
         listen_interval: 1,
         phy: PhyMode::Legacy,
@@ -130,6 +130,7 @@ fn ht20_request_fails_closed_when_the_ap_did_not_advertise_ht() {
                 oer_ieee80211_wire::address::IndividualAddress::new(LOCAL).unwrap()
             ),
             access_point: &record,
+            channel: 6,
             sequence_number: seq(2),
             listen_interval: 1,
             phy: PhyMode::Ht20,
@@ -155,6 +156,7 @@ fn association_encoder_uses_the_explicit_local_profile() {
             oer_ieee80211_wire::address::IndividualAddress::new(LOCAL).unwrap(),
         ),
         access_point: &record,
+        channel: 6,
         sequence_number: seq(2),
         listen_interval: 1,
         phy: PhyMode::Ht20,

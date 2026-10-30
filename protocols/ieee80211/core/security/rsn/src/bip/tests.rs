@@ -92,6 +92,18 @@ fn a_frame_without_its_mic_element_or_another_key_fails() {
 }
 
 #[test]
+fn a_data_frame_with_a_management_mic_tail_is_refused_without_advancing_the_ipn() {
+    let mut bip = receiver(8);
+    let mut data = deauthentication(MIC, 9);
+    data[0] = 0x08;
+    assert_eq!(
+        bip.verify(&data),
+        Err(BipReceiveError::Frame(BipError::NotManagement))
+    );
+    assert_eq!(bip.verify(&deauthentication(MIC, 9)), Ok(()));
+}
+
+#[test]
 fn a_repeated_igtk_keeps_its_replay_state_and_a_new_one_resets_it() {
     let mut bip = receiver(8);
     assert_eq!(bip.verify(&deauthentication(MIC, 9)), Ok(()));

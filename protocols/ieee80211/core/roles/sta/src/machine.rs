@@ -911,6 +911,9 @@ pub enum StaDisconnectReason {
     },
     /// A frame the station had to send did not encode.
     Encode,
+    /// The BSS's admission control closes every access category, so the
+    /// station's EAPOL has none to contend in.
+    NoAdmittedAccessCategory,
     /// The four-way handshake, or a group key's handshake, failed or timed
     /// out.
     HandshakeFailed,
@@ -4429,12 +4432,13 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
         };
         let beside = access_point_channel.and_then(|channel| {
             candidates()
-                .filter(|observation| observation.record.channel == channel.channel().number())
+                .filter(|observation| observation.channel == channel.channel().number())
                 .filter(|observation| within_margin(observation.rssi))
                 .max_by_key(|observation| observation.rssi)
                 .copied()
         });
-        let access_point = beside.unwrap_or(strongest).record;
+        let selected = beside.unwrap_or(strongest);
+        let access_point = selected.record;
         let Ok(rsn) = select_association_rsn(&access_point, policy) else {
             return leave_unkeyed(StaDisconnectReason::NotFound { partial });
         };
@@ -4443,7 +4447,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
             .channels
             .iter()
             .copied()
-            .find(|channel| channel.channel().number() == access_point.channel)
+            .find(|channel| channel.channel().number() == selected.channel)
         else {
             return leave_unkeyed(StaDisconnectReason::NotFound { partial });
         };
@@ -5359,8 +5363,20 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                     events,
                 ) {
                     Ok(transmit) => (HandshakeStep::AwaitSent, Some(Owed::Transmit(transmit))),
-                    Err(Unsent::NoTokens) => (HandshakeStep::Send(message), None),
-                    Err(Unsent::Encode | Unsent::NoConnection) => {
+                    Err(EapolUnsent::Unsent(Unsent::NoTokens)) => {
+                        (HandshakeStep::Send(message), None)
+                    }
+                    Err(EapolUnsent::NoAdmittedAccessCategory) => {
+                        return (
+                            leave_handshake_because(
+                                handshake,
+                                StaDisconnectReason::NoAdmittedAccessCategory,
+                                reason_code::UNSPECIFIED,
+                            ),
+                            ActionProgress::Transition,
+                        );
+                    }
+                    Err(EapolUnsent::Unsent(Unsent::Encode | Unsent::NoConnection)) => {
                         return (
                             leave_handshake(handshake, reason_code::UNSPECIFIED),
                             ActionProgress::Transition,
@@ -5493,7 +5509,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
         eapol: &[u8],
         purpose: TxPurpose,
         events: &mut impl EventSink<StaEvent>,
-    ) -> Result<StaTransmit<'id, T, K>, Unsent> {
+    ) -> Result<StaTransmit<'id, T, K>, EapolUnsent> {
         let priority = eapol_priority(admission)?;
         let credit = self.reserve_transmit(events)?;
         let address = self.config.address;
@@ -5672,11 +5688,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                 connected.sending = true;
                 Some(Ok(owed))
             }
-            Err(Unsent::NoTokens) => None,
-            Err(Unsent::Encode) => Some(Err(StaDisconnectReason::Encode)),
-            Err(Unsent::NoConnection) => Some(Err(StaDisconnectReason::TransmitRefused(
-                TxRefusal::LinkChanged,
-            ))),
+            Err(unsent) => unsent.disconnect_reason().map(Err),
         }
     }
 
@@ -5688,7 +5700,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
         response: &EapolResponse,
         purpose: TxPurpose,
         events: &mut impl EventSink<StaEvent>,
-    ) -> Result<Owed<'id, T, K>, Unsent> {
+    ) -> Result<Owed<'id, T, K>, EapolUnsent> {
         match response.protection {
             EapolProtection::Open => self
                 .encode_eapol(bssid, admission, response.frame.as_bytes(), purpose, events)
@@ -5909,13 +5921,10 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                             connected.sending = true;
                             (Rekey::AwaitSent, Some(owed))
                         }
-                        Err(Unsent::NoTokens) => (Rekey::Send(message), None),
-                        Err(Unsent::Encode) => return Some(Err(StaDisconnectReason::Encode)),
-                        Err(Unsent::NoConnection) => {
-                            return Some(Err(StaDisconnectReason::TransmitRefused(
-                                TxRefusal::LinkChanged,
-                            )));
-                        }
+                        Err(unsent) => match unsent.disconnect_reason() {
+                            Some(reason) => return Some(Err(reason)),
+                            None => (Rekey::Send(message), None),
+                        },
                     }
                 }
                 rekey => (rekey, None),
@@ -6304,6 +6313,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                         let address = self.config.address;
                         let listen_interval = self.config.listen_interval.get();
                         let access_point = &join.access_point;
+                        let channel = join.channel.channel().number();
                         let rsn = &join.rsn;
                         let encoded = self.encode_reserved(
                             credit,
@@ -6311,6 +6321,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                                 AssociationRequest {
                                     source: address,
                                     access_point,
+                                    channel,
                                     sequence_number: attempt.sequence_number,
                                     listen_interval,
                                     phy,
@@ -6591,7 +6602,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
         eapol: &[u8],
         purpose: TxPurpose,
         events: &mut impl EventSink<StaEvent>,
-    ) -> Result<StaTransmit<'id, T, K>, Unsent> {
+    ) -> Result<StaTransmit<'id, T, K>, EapolUnsent> {
         let priority = eapol_priority(admission)?;
         let credit = self.reserve_transmit(events)?;
         let peer_qos = qos.is_some();
@@ -6783,6 +6794,14 @@ fn leave_handshake<T: StaTokens, K>(handshake: &Handshake<T, K>, reason_code: u1
     } else {
         StaDisconnectReason::HandshakeFailed
     };
+    leave_handshake_because(handshake, reason, reason_code)
+}
+/// Leave a handshake for `reason`, deauthenticating with `reason_code`.
+fn leave_handshake_because<T: StaTokens, K>(
+    handshake: &Handshake<T, K>,
+    reason: StaDisconnectReason,
+    reason_code: u16,
+) -> Change<T, K> {
     leave_keyed(
         reason,
         Some(Deauthentication {
@@ -6869,13 +6888,49 @@ enum Unsent {
     Encode,
 }
 
+/// Why an EAPOL frame was not handed out.
+#[derive(Debug)]
+enum EapolUnsent {
+    /// Admission control closes every access category: EAPOL has none to
+    /// contend in. Nothing was reserved or numbered.
+    NoAdmittedAccessCategory,
+    Unsent(Unsent),
+}
+
+impl From<Unsent> for EapolUnsent {
+    fn from(unsent: Unsent) -> Self {
+        Self::Unsent(unsent)
+    }
+}
+
+impl From<EncodeError> for EapolUnsent {
+    fn from(error: EncodeError) -> Self {
+        Self::Unsent(error.into())
+    }
+}
+
+impl EapolUnsent {
+    /// The reason a connected station leaves for a refusal other than a
+    /// lack of tokens, which only defers the frame.
+    fn disconnect_reason(self) -> Option<StaDisconnectReason> {
+        match self {
+            Self::NoAdmittedAccessCategory => Some(StaDisconnectReason::NoAdmittedAccessCategory),
+            Self::Unsent(Unsent::NoTokens) => None,
+            Self::Unsent(Unsent::Encode) => Some(StaDisconnectReason::Encode),
+            Self::Unsent(Unsent::NoConnection) => {
+                Some(StaDisconnectReason::TransmitRefused(TxRefusal::LinkChanged))
+            }
+        }
+    }
+}
+
 /// The user priority of the station's EAPOL: 7, or the canonical priority of
 /// the access category admission control leaves it. A BSS that closes every
-/// category leaves EAPOL none, and the frame does not encode.
-fn eapol_priority(admission: AcAdmission) -> Result<WmmUserPriority, Unsent> {
+/// category leaves EAPOL none.
+fn eapol_priority(admission: AcAdmission) -> Result<WmmUserPriority, EapolUnsent> {
     admission
         .admitted_user_priority(WmmUserPriority::UP7)
-        .ok_or(Unsent::Encode)
+        .ok_or(EapolUnsent::NoAdmittedAccessCategory)
 }
 
 /// Encoding can fail after credit is reserved; acquiring credit cannot.

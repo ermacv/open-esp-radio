@@ -36,6 +36,9 @@ pub enum ScanObservation {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct BssObservation {
     pub record: ScanRecord,
+    /// The channel the station takes the BSS to be on: the DS Parameter
+    /// Set's channel, or the receiver's when the frame carries none.
+    pub channel: u8,
     /// The received signal level in dBm, `None` when the receiver reported
     /// none; an unknown level ranks below every known one.
     pub rssi: Option<i8>,
@@ -94,22 +97,27 @@ impl<const N: usize> ScanTable<N> {
         }
     }
 
-    /// Parse and merge one beacon/probe response by BSSID, received at
-    /// `received_at` on the receiver's monotonic clock, when known.
+    /// Parse and merge one beacon/probe response by BSSID, received on
+    /// `receive_channel` at `received_at` on the receiver's monotonic clock,
+    /// when known.
     pub fn observe_management(
         &mut self,
         frame: &[u8],
-        fallback_channel: u8,
+        receive_channel: u8,
         rssi: Option<i8>,
         received_at: Option<Instant>,
     ) -> ScanObservation {
-        let Some(mut record) = parse_management(frame, fallback_channel) else {
+        let Some(mut record) = parse_management(frame) else {
             return ScanObservation::Ignored;
         };
+        // A frame without a DS Parameter Set names no channel: the BSS is
+        // taken to be where the frame was heard.
+        let channel = record.ds_channel.unwrap_or(receive_channel);
 
         for (index, existing) in self.records.iter_mut().take(self.length).enumerate() {
             let Some(BssObservation {
                 record: existing,
+                channel: existing_channel,
                 rssi: existing_rssi,
                 received_at: existing_received_at,
             }) = existing
@@ -144,12 +152,14 @@ impl<const N: usize> ScanTable<N> {
                     return ScanObservation::Updated { index };
                 }
                 if *existing == record
+                    && *existing_channel == channel
                     && *existing_rssi == rssi
                     && *existing_received_at == received_at
                 {
                     return ScanObservation::Duplicate { index };
                 }
                 *existing = record;
+                *existing_channel = channel;
                 *existing_rssi = rssi;
                 *existing_received_at = received_at;
                 return ScanObservation::Updated { index };
@@ -165,6 +175,7 @@ impl<const N: usize> ScanTable<N> {
         };
         *vacant = Some(BssObservation {
             record,
+            channel,
             rssi,
             received_at,
         });
@@ -184,15 +195,13 @@ impl<const N: usize> Default for ScanTable<N> {
 pub fn best_matching_ssid<'a>(
     observations: impl IntoIterator<Item = &'a BssObservation>,
     ssid: &[u8],
-) -> Option<&'a ScanRecord> {
+) -> Option<&'a BssObservation> {
     observations
         .into_iter()
         .filter(|observation| {
-            observation.record.ssid_bytes() == ssid
-                && (1..=13).contains(&observation.record.channel)
+            observation.record.ssid_bytes() == ssid && (1..=13).contains(&observation.channel)
         })
         .max_by_key(|observation| observation.rssi)
-        .map(|observation| &observation.record)
 }
 
 /// Select the strongest exact SSID match that admits the station's security
@@ -201,17 +210,16 @@ pub fn best_matching_ssid_and_security<'a>(
     observations: impl IntoIterator<Item = &'a BssObservation>,
     ssid: &[u8],
     policy: crate::security::StaSecurityPolicy,
-) -> Option<&'a ScanRecord> {
+) -> Option<&'a BssObservation> {
     observations
         .into_iter()
         .filter(|observation| {
             let record = &observation.record;
             record.ssid_bytes() == ssid
-                && (1..=13).contains(&record.channel)
+                && (1..=13).contains(&observation.channel)
                 && crate::security::select_association_rsn(record, policy).is_ok()
         })
         .max_by_key(|observation| observation.rssi)
-        .map(|observation| &observation.record)
 }
 
 #[cfg(test)]

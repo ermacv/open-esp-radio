@@ -144,26 +144,90 @@ fn named_subtypes_round_trip_through_the_frame_control_field() {
     );
 }
 
-#[test]
-fn address_fields_end_where_the_frame_does() {
-    let mut frame = [0_u8; 30];
-    frame[..2].copy_from_slice(&[0x88, 0x03]);
+fn addressed(frame_control: [u8; 2], length: usize) -> std::vec::Vec<u8> {
+    let mut frame = std::vec![0_u8; length];
+    frame[..2].copy_from_slice(&frame_control);
     for (index, byte) in frame.iter_mut().enumerate().skip(4) {
         *byte = index as u8;
     }
-    let address = |at: usize| -> [u8; 6] { frame[at..at + 6].try_into().unwrap() };
+    frame
+}
 
-    assert_eq!(AddressFields::parse(&frame[..9]), None);
-    let rts = AddressFields::parse(&frame[..16]).unwrap();
-    assert_eq!(rts.receiver(), address(4));
-    assert_eq!(rts.transmitter(), Some(address(10)));
-    assert_eq!(rts.address3(), None);
-    let short = AddressFields::parse(&frame[..23]).unwrap();
-    assert_eq!(short.address3(), Some(address(16)));
-    assert_eq!(short.sequence_control(), None);
-    let full = AddressFields::parse(&frame).unwrap();
-    assert_eq!(full.control().raw(), 0x0388);
-    assert_eq!(full.sequence_control(), Some(u16::from_le_bytes([22, 23])));
-    assert_eq!(full.address4(), Some(address(24)));
-    assert_eq!(AddressFields::parse(&frame[..29]).unwrap().address4(), None);
+fn address_at(frame: &[u8], at: usize) -> [u8; 6] {
+    frame[at..at + 6].try_into().unwrap()
+}
+
+#[test]
+fn a_three_address_qos_data_frame_has_no_address4() {
+    // QoS Data, From DS: QoS Control and the body follow Sequence Control.
+    let frame = addressed([0x88, 0x02], 40);
+    let fields = AddressFields::parse(&frame).unwrap();
+    assert_eq!(fields.receiver(), address_at(&frame, 4));
+    assert_eq!(fields.transmitter(), Some(address_at(&frame, 10)));
+    assert_eq!(fields.address3(), Some(address_at(&frame, 16)));
+    assert_eq!(
+        fields.sequence_control(),
+        Some(u16::from_le_bytes([22, 23]))
+    );
+    assert_eq!(fields.address4(), None);
+    assert_eq!(fields.addresses().count(), 3);
+}
+
+#[test]
+fn a_four_address_data_frame_holds_address4_or_is_truncated() {
+    let frame = addressed([0x88, 0x03], 40);
+    let fields = AddressFields::parse(&frame).unwrap();
+    assert_eq!(fields.address4(), Some(address_at(&frame, 24)));
+    assert_eq!(fields.addresses().count(), 4);
+    assert_eq!(
+        AddressFields::parse(&frame[..29]),
+        Err(AddressFieldsError::Truncated)
+    );
+}
+
+#[test]
+fn management_and_data_frames_need_their_whole_three_address_header() {
+    for frame_control in [[0xc0, 0x00], [0x08, 0x01]] {
+        let frame = addressed(frame_control, 24);
+        let fields = AddressFields::parse(&frame).unwrap();
+        assert_eq!(fields.address4(), None);
+        assert_eq!(
+            AddressFields::parse(&frame[..23]),
+            Err(AddressFieldsError::Truncated)
+        );
+    }
+    // A management frame never has Address 4, whatever its DS bits.
+    let management = addressed([0xd0, 0x03], 40);
+    assert_eq!(AddressFields::parse(&management).unwrap().address4(), None);
+}
+
+#[test]
+fn control_frames_hold_a_transmitter_only_by_subtype() {
+    let rts = addressed([0xb4, 0x00], 16);
+    let fields = AddressFields::parse(&rts).unwrap();
+    assert_eq!(fields.transmitter(), Some(address_at(&rts, 10)));
+    assert_eq!(fields.address3(), None);
+    assert_eq!(
+        AddressFields::parse(&rts[..15]),
+        Err(AddressFieldsError::Truncated)
+    );
+    // An Ack ends after its RA; octets after it are not a TA.
+    let ack = addressed([0xd4, 0x00], 16);
+    let fields = AddressFields::parse(&ack).unwrap();
+    assert_eq!(fields.transmitter(), None);
+    assert_eq!(fields.addresses().count(), 1);
+    assert!(AddressFields::parse(&ack[..10]).is_ok());
+    assert_eq!(
+        AddressFields::parse(&ack[..9]),
+        Err(AddressFieldsError::Truncated)
+    );
+}
+
+#[test]
+fn another_protocol_version_has_no_address_layout() {
+    let frame = addressed([0x89, 0x02], 40);
+    assert_eq!(
+        AddressFields::parse(&frame),
+        Err(AddressFieldsError::UnknownVersion)
+    );
 }

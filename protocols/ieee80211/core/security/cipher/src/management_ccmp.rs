@@ -16,6 +16,7 @@ use oer_ieee80211_wire::{
     ccmp::protected::{CCMP_MIC_LEN, ProtectedMpdu, ProtectedMpduError},
     ccmp::{CCMP_HEADER_LEN, CcmpHeaderError, CcmpKeyId, CcmpPacketNumber},
     frame::DecodedHeader,
+    management::MANAGEMENT_HEADER_LEN,
     security::Spp,
 };
 /// Why a protected management frame did not open.
@@ -49,11 +50,13 @@ pub struct ManagementCcmpFrame<'a> {
 
 impl<'a> ManagementCcmpFrame<'a> {
     pub fn parse(frame: &'a mut [u8]) -> Result<Self, ManagementCcmpError> {
-        let header = DecodedHeader::decode(frame).ok_or(ManagementCcmpError::Truncated)?;
-        // Room for the CCMP header and MIC comes first, as for every frame.
-        if header.body().len() < CCMP_HEADER_LEN + CCMP_MIC_LEN {
+        // Room for a management header, the CCMP header and the MIC comes
+        // first; a frame of that length whose header does not decode is
+        // malformed, not short.
+        if frame.len() < MANAGEMENT_HEADER_LEN + CCMP_HEADER_LEN + CCMP_MIC_LEN {
             return Err(ManagementCcmpError::Truncated);
         }
+        let header = DecodedHeader::decode(frame).ok_or(ManagementCcmpError::MalformedHeader)?;
         if !header.control().is_management_frame() {
             return Err(ManagementCcmpError::MalformedHeader);
         }

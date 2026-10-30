@@ -115,6 +115,24 @@ fn data_and_reserved_ccmp_headers_never_reach_management_replay() {
         ))
     );
     assert_eq!(data, before);
+    // A full-length frame of another protocol version is malformed, not short.
+    let mut version = frame();
+    version[0] |= 0x01;
+    assert_eq!(
+        ccmp.open(&mut version),
+        Err(ManagementCcmpReceiveError::Frame(
+            ManagementCcmpError::MalformedHeader
+        ))
+    );
+    // A data header of a full management-frame length is malformed too.
+    let mut qos_data = frame();
+    qos_data[0] = 0x88;
+    assert_eq!(
+        ccmp.open(&mut qos_data),
+        Err(ManagementCcmpReceiveError::Frame(
+            ManagementCcmpError::MalformedHeader
+        ))
+    );
     let mut reserved = frame();
     reserved[26] = 1;
     assert_eq!(

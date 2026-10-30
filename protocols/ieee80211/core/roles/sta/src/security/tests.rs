@@ -221,7 +221,6 @@ fn open_ap_needs_no_security_ie() {
             oer_ieee80211_wire::address::IndividualAddress::new(BSSID).unwrap(),
         )
         .unwrap(),
-        6,
     );
     record.set_supported_rates(&[0x82]).unwrap();
     assert!(
@@ -251,14 +250,13 @@ fn access_point_with_rsn(akms: &[[u8; 4]], capabilities: u16) -> ScanRecord {
             oer_ieee80211_wire::address::IndividualAddress::new(BSSID).unwrap(),
         )
         .unwrap(),
-        6,
     );
     record.set_ssid(b"test").unwrap();
     record.bssid = oer_ieee80211_wire::address::Bssid::new(
         oer_ieee80211_wire::address::IndividualAddress::new(BSSID).unwrap(),
     )
     .unwrap();
-    record.channel = 6;
+    record.ds_channel = Some(6);
     record.privacy = true;
     record.rsn = true;
     record.rsn_ie_count = 1;

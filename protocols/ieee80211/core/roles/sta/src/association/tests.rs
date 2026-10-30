@@ -50,7 +50,6 @@ mod associated_peer {
                 oer_ieee80211_wire::address::IndividualAddress::new([2, 0, 0, 0, 0, 1]).unwrap(),
             )
             .unwrap(),
-            6,
         );
         access_point
             .set_supported_rates(&[0x82, 0x84, 0x8b, 0x96])
@@ -135,7 +134,6 @@ mod associated_peer {
                 oer_ieee80211_wire::address::IndividualAddress::new([2, 0, 0, 0, 0, 1]).unwrap(),
             )
             .unwrap(),
-            6,
         );
         access_point.capability_info = 0x0421;
         access_point
@@ -144,7 +142,7 @@ mod associated_peer {
         access_point
             .set_extended_supported_rates(&[0x30, 0x48, 0x60, 0x6c])
             .unwrap();
-        access_point.erp_information = Some(0x07);
+        access_point.push_erp_information(0x07);
         let mut ht_operation = [0; HT_OPERATION_IE_LEN];
         ht_operation[..2].copy_from_slice(&[61, 22]);
         ht_operation[4] = 0x03;

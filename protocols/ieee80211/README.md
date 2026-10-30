@@ -161,7 +161,12 @@ owner or at the shared protocol boundary. See the
 [architecture](../../docs/architecture.md#layers) for the layering contract.
 
 `ieee80211/wire` depends on `oer-wire` alone; it holds no state, profile or
-regulatory decision. The station keeps a scan observation's signal level as
-`Option<i8>` (`sta::scan::BssObservation`), and chooses the RSN capabilities
-of its association (`sta::security::personal_rsn`) that the codec encodes
+regulatory decision. A scan record holds what the frame carries: the DS
+Parameter Set's channel when present (`scan::ScanRecord::ds_channel`) and each
+ERP element as observed, with their count. The station decides the rest: a
+scan observation's signal level as `Option<i8>` and its channel, the DS
+Parameter Set's or else the receiver's (`sta::scan::BssObservation`); the ERP
+protection of repeated ERP elements, which fails closed
+(`sta::association::erp_protection`); and the RSN capabilities of its
+association (`sta::security::personal_rsn`) that the codec encodes
 (`station::SelectedRsn::rsn`).

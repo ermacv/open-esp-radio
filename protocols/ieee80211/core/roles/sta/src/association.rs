@@ -50,6 +50,22 @@ pub fn select_phy(
     }
 }
 
+/// The ERP protection the access point's ERP elements ask for. A BSS sends
+/// one ERP element; repeats are malformed, and protection fails closed while
+/// the rest of the record stays usable: every bit any of them asserts counts,
+/// and elements beyond the record's capacity, which the station did not see,
+/// count as asserting Use Protection and long preambles.
+pub fn erp_protection(
+    access_point: &oer_ieee80211_wire::scan::ScanRecord,
+) -> oer_ieee80211_wire::protection::ErpProtection {
+    use oer_ieee80211_wire::protection::ErpProtection;
+    let stored = access_point.erp_information();
+    if usize::from(access_point.erp_element_count()) > stored.len() {
+        return ErpProtection::new(true, true);
+    }
+    ErpProtection::from_information(stored.iter().copied().reduce(|merged, next| merged | next))
+}
+
 /// The mode a station associates with `access_point` in under `preference`:
 /// HE20 when the access point's HE Capabilities admit bidirectional MCS 9
 /// and its HE Operation parses, HT40 when its HT Capabilities and HT
@@ -58,6 +74,7 @@ pub fn select_phy(
 /// without HT Capabilities.
 pub fn select_association_phy(
     access_point: &oer_ieee80211_wire::scan::ScanRecord,
+    channel: u8,
     preference: Preference,
     ht40_capable: bool,
 ) -> PhyMode {
@@ -69,7 +86,7 @@ pub fn select_association_phy(
     select_phy(
         preference,
         access_point.ht_capability_ie_bytes().is_some(),
-        ht40_capable && access_point.ht40_secondary_channel().is_some(),
+        ht40_capable && access_point.ht40_secondary_channel(channel).is_some(),
         he20_available,
     )
 }
@@ -141,7 +158,7 @@ impl StaAssociatedPeer {
         use oer_ieee80211_wire::{
             extensions::wmm::WmmParameterSet,
             he::{parse_he20_capabilities, parse_he20_operation, parse_he20_peer_state},
-            protection::{ErpProtection, HtProtectionMode},
+            protection::HtProtectionMode,
         };
         if response.status_code != 0 {
             return Err(StaAssociatedPeerError::Rejected(response.status_code));
@@ -183,7 +200,7 @@ impl StaAssociatedPeer {
             he_bss_color: parse_he20_operation(access_point.he_operation_ie_bytes())
                 .map_or(0, |operation| operation.effective_bss_color()),
             protection: BssProtection {
-                erp: ErpProtection::from_information(access_point.erp_information()),
+                erp: erp_protection(access_point),
                 ht: HtProtectionMode::from_operation_ie(access_point.ht_operation_ie_bytes()),
                 he_txop_rts_threshold: he_peer_state
                     .and_then(|state| state.rts_threshold)

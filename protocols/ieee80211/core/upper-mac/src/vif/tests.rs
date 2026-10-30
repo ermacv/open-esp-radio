@@ -75,12 +75,16 @@ fn ambiguous_and_unknown_headers_fail_closed() {
         classify_sta_ap_rx(&frame(CONTROL_FRAME, STA, PEER, UPLINK), same_address),
         StaApRxRoute::Ambiguous
     );
+    let mut four_address = [0; 30];
+    four_address[..24].copy_from_slice(&frame(DATA_FRAME | TO_DS | FROM_DS, AP, PEER, UPLINK));
     assert_eq!(
-        classify_sta_ap_rx(
-            &frame(DATA_FRAME | TO_DS | FROM_DS, AP, PEER, UPLINK),
-            ADDRESSES
-        ),
+        classify_sta_ap_rx(&four_address, ADDRESSES),
         StaApRxRoute::Foreign
+    );
+    // A four-address frame that ends before Address 4 is malformed.
+    assert_eq!(
+        classify_sta_ap_rx(&four_address[..24], ADDRESSES),
+        StaApRxRoute::Malformed
     );
     assert_eq!(
         classify_sta_ap_rx(&[0; 9], ADDRESSES),
@@ -116,20 +120,29 @@ fn classify_sta_ap_rx_never_panics_on_received_bytes_full() {
 #[test]
 fn a_header_without_its_addresses_is_malformed() {
     let beacon = frame(8 << 4, GROUP, UPLINK, UPLINK);
-    for length in [0, 1, 9, 15, 21] {
+    for length in [0, 1, 9, 15, 21, 22, 23] {
         assert_eq!(
             classify_sta_ap_rx(&beacon[..length], ADDRESSES),
             StaApRxRoute::Malformed
         );
     }
     assert_eq!(
-        classify_sta_ap_rx(&beacon[..22], ADDRESSES),
+        classify_sta_ap_rx(&beacon, ADDRESSES),
         StaApRxRoute::Interface(StaApVif::Station)
     );
-    // A control frame needs only its receiver address.
-    let control = frame(CONTROL_FRAME | 0xb0, AP, PEER, PEER);
+    // An Ack needs only its receiver address; an RTS needs its TA as well.
+    let ack = frame(CONTROL_FRAME | 0xd0, AP, PEER, PEER);
     assert_eq!(
-        classify_sta_ap_rx(&control[..10], ADDRESSES),
+        classify_sta_ap_rx(&ack[..10], ADDRESSES),
+        StaApRxRoute::Interface(StaApVif::AccessPoint)
+    );
+    let rts = frame(CONTROL_FRAME | 0xb0, AP, PEER, PEER);
+    assert_eq!(
+        classify_sta_ap_rx(&rts[..15], ADDRESSES),
+        StaApRxRoute::Malformed
+    );
+    assert_eq!(
+        classify_sta_ap_rx(&rts[..16], ADDRESSES),
         StaApRxRoute::Interface(StaApVif::AccessPoint)
     );
 }

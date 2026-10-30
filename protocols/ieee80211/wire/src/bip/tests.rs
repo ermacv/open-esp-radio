@@ -70,3 +70,27 @@ fn a_frame_without_its_element_or_room_is_refused_and_untouched() {
     );
     assert_eq!(frame, before);
 }
+
+#[test]
+fn a_data_frame_or_another_version_with_a_valid_element_is_refused() {
+    let mut protected = deauthentication();
+    let length = BipProtection::append(&mut protected, 26, 4, 1)
+        .unwrap()
+        .finish(&[0xa5; 8]);
+    assert!(BipFrame::parse(&protected[..length]).is_ok());
+    for (byte, value) in [(0, 0x08), (0, 0x88), (0, 0xc1), (0, 0xc4)] {
+        let mut frame = protected;
+        frame[byte] = value;
+        assert_eq!(
+            BipFrame::parse(&frame[..length]).err(),
+            Some(BipFormatError::NotManagement),
+            "{value:#04x}"
+        );
+        let before = frame;
+        assert_eq!(
+            BipProtection::append(&mut frame, 26, 4, 1).err(),
+            Some(BipFormatError::NotManagement)
+        );
+        assert_eq!(frame, before);
+    }
+}
