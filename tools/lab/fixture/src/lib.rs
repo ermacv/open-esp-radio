@@ -13,7 +13,6 @@ mod admission;
 pub mod bluetooth;
 pub mod hostapd;
 pub mod launcher;
-pub mod local;
 mod model;
 pub mod network_client;
 mod prepare;

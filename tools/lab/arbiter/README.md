@@ -1,7 +1,7 @@
 # Stand scheduling
 
 `oer-lab-arbiter` is the scheduling library of the LAB service
-(`oer-lab-service`), the one owner of the stand's leases and hardware. It
+(`oer-tool-lab-service`), the one owner of the stand's leases and hardware. It
 decides who is granted what and when a resource may be granted again; it
 runs no hardware and reads no clock: the service passes the time, runs the
 recoveries the scheduler returns and reports each driver's confirmation.
@@ -28,8 +28,8 @@ recoveries the scheduler returns and reports each driver's confirmation.
   subtracted, and they are clamped to an hour either way.
 - A request is also granted only when every stateful resource it holds (a
   board, the router) is ready, and, when it uses the air (the air, a
-  frequency range or the whole stand), every other board of the stand is
-  quiet ([`readiness`](src/readiness.rs)).
+  frequency range or the whole stand), what every other stateful resource
+  of the stand may put on the air is known ([`readiness`](src/readiness.rs)).
 - The service ends a lease at `HARD_LIMIT` (one hour), on `cargo stand
   preempt ID --reason TEXT`, and for a waiting maintenance request that
   conflicts with it; divisible work held for `MIN_SLICE` (ten minutes) is
@@ -43,12 +43,22 @@ Each stateful resource is `Ready`, `InUse` by a lease, `Recovering`, or
 `Unavailable` with a reason. A grant puts it in use; the end of the lease
 starts its recovery, and only its driver's confirmation of an end state its
 kind declares makes it ready again. Every grant and recovery starts a new
-generation: a confirmation of an older generation changes nothing. A board
-that is recovering or unavailable, unless its driver confirmed it cannot
-radiate, closes the air to every other board. On a restart the service ends
-every lease still held as abandoned and recovers its resources, and any
-unfinished recovery, before it grants them again. A person returns an
-unavailable resource with `cargo stand devices release`.
+generation: a confirmation of an older generation changes nothing.
+
+Whether a resource may be granted is apart from what it may put on the air
+(`Emission`): a ready resource rests in an end state its driver confirmed
+(a board that cannot radiate, the router's known access point); one in use
+radiates under its lease's air claims; one recovering, or unavailable
+without a confirmation that it cannot radiate, may radiate unknown to the
+stand and closes the air to every other request that uses it.
+
+An in-use resource may carry a mark: an operation of its lease may have
+left it in a state its recovery cannot confirm. The end of the lease then
+leaves it unavailable without a recovery, also when a restart ends the
+lease. On a restart the service ends every lease still held as abandoned
+and recovers its resources, the ready ones and any unfinished recovery too,
+before it grants them again. A person returns an unavailable resource with
+`cargo stand devices release`.
 
 A board under maintenance (`cargo stand devices maintenance`) serves only
 the owner who took it out; other requests wait, a tool that acts on one
@@ -56,14 +66,21 @@ board is told at once. Maintenance never stops a lease already held.
 
 ## Records
 
-The directory is `open-esp-radio/arbiter` in the XDG cache directory
-(`$XDG_CACHE_HOME`, else `~/.cache`), or `OER_STAND_ARBITER_DIR`
-([`Arbiter`](src/store.rs)). Only the service writes it, except the owner
-registry:
+The directory is `open-esp-radio/arbiter` in the XDG state directory
+(`$XDG_STATE_HOME`, else `~/.local/state`), or `OER_STAND_ARBITER_DIR`
+([`Arbiter`](src/store.rs)): it holds restrictions on the stand that must
+not be lost with a cache. Only the service writes it, except the owner
+registry. `cargo stand install` imports once what the file-locked arbiter
+kept in the cache directory before the service ([`import`](src/import.rs)):
+balances, maintenance, and each quarantined board as unavailable with
+unknown emission; it moves the history, the journal and the registry, and
+renames the old directory to `arbiter.before-lab-service`. A record it
+cannot read, or a lease still held there, refuses the import.
 
 | File | Content |
 | --- | --- |
-| `service.json` | Schema 4: holders, balances, readiness and maintenance. Another schema is refused, never converted |
+| `service.json` | Schema 4: holders, balances, readiness (with marks) and maintenance. Another schema is refused, never converted |
+| `powered-off.json` | The service's driver: each board parked with its power off and the hub port it was switched off at |
 | `service.lock` | Held by the running service: a second instance is refused |
 | `history.jsonl` | Completed leases: owner, work, scenarios, duration, the time charged, the owner's balance at release, the grant's reason and `released`, `yielded-to-balance`, `hard-limit`, `preempted-on-request` or `abandoned` |
 | `board.jsonl` | Flashes, startup-artifact uploads and writes, automatic recoveries, returns of unavailable boards and soaks, with owner, checkout and board MAC |

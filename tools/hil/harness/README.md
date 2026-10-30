@@ -28,10 +28,11 @@ of the services that image must serve, and lists its cases; `main` then:
    while the image does not leaves the board in service, since the stand
    can write it again; a ROM that stays silent after the whole ladder is
    reported as needing a person. A cancelled program judges nothing;
-8. releases the link and the lease in that order, also on an error, a
-   cancellation or a stage of opening that failed. The service then parks
-   the board in its ROM's download mode, or keeps it out of service when
-   not even that works.
+8. releases the link, then finishes the lease: the service brings the board
+   to its end state (its ROM's download mode, or its power off) and answers
+   with what it left unavailable, which keeps a passing scenario from
+   passing (`cleanup:` names it). On an error, a cancellation or a stage of
+   opening that failed the lease is released without that answer.
 
 A case talks to the device through `Cx`:
 

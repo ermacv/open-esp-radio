@@ -13,8 +13,9 @@
 - `unix_millis` and `unix_seconds`, wall-clock time;
 - `xdg`: the user's state directories. Every cache, store, lock directory and
   configuration a tool keeps outside a checkout lies below
-  `open-esp-radio/` of `$XDG_CACHE_HOME`, `$XDG_DATA_HOME` or
-  `$XDG_CONFIG_HOME`, an empty variable counting as unset, through
+  `open-esp-radio/` of `$XDG_CACHE_HOME`, `$XDG_DATA_HOME`,
+  `$XDG_CONFIG_HOME` or `$XDG_STATE_HOME` (state a program must not lose,
+  such as the LAB service's), an empty variable counting as unset, through
   `xdg::path` or, where a tool has its own override variable,
   `xdg::overridable`.
 

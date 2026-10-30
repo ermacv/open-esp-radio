@@ -4,7 +4,7 @@
 //! apart from its hardware (reset paths, the ladder, ROM lines, the
 //! reference peers' line grammar) is the stand model's
 //! (`oer_lab_model::rom`, `oer_lab_model::peer_line`). `devices` finds boards by port, MAC and known
-//! chip. Only the LAB service (`oer-lab-service`), the one owner of the
+//! chip. Only the LAB service (`oer-tool-lab-service`), the one owner of the
 //! stand's hardware, runs these operations.
 //!
 //! A write goes through `image::write`,

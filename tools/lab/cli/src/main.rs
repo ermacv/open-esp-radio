@@ -11,6 +11,7 @@ mod discover;
 mod fixture_install;
 mod init;
 mod install;
+mod local_fixtures;
 mod service;
 mod stand_file;
 
@@ -155,7 +156,7 @@ fn run() -> Result<ExitCode> {
                 service::run(&mut lease, oer_lab_client::protocol::Operation::ProbeRouter)?,
             )?;
             lease.release()?;
-            let local = oer_lab_fixture::local::probe_local(&oer_lab_model::paths::stand_file()?);
+            let local = local_fixtures::probe_local(&oer_lab_model::paths::stand_file()?);
             println!("Equipment over SSH (the LAB service):");
             print!("{}", oer_lab_model::equipment::describe(&remote));
             println!("Host fixtures:");

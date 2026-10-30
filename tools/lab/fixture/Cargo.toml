@@ -9,7 +9,6 @@ publish = false
 description = "The Linux fixture contract of the HIL stand: versioned provisioning and the requests and reports of the finite helpers"
 
 [dependencies]
-oer-lab-model = { path = "../model" }
 oer-os-durable = { path = "../../os/durable" }
 clap = { version = "4.5", features = ["derive"] }
 libc = "0.2"

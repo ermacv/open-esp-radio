@@ -99,16 +99,16 @@ Boards and hubs come from the owner's stand file,
 `~/.config/open-esp-radio/stand.toml` (or `OER_STAND_FILE`, mode 0600),
 which `oer-lab-router` reads ([tools/lab/router/README.md](../../lab/router/README.md): its
 schema, what each command reads of it, which values are secret). Attached
-boards are found in sysfs as
-Espressif USB Serial/JTAG devices (`303a:1001`), whose serial number is the
-chip's MAC. Only ESP32-S31 boards are reset or written; other chips are only
-listed.
+boards are found by the LAB service in sysfs as Espressif USB Serial/JTAG
+devices (`303a:1001`), whose serial number is the chip's MAC. Only ESP32-S31
+boards are reset or written; other chips are only listed.
 
 Every board command leases the board and the air (shared) from the LAB
 service ([tools/lab/service/README.md](../../lab/service/README.md)), which
 runs each operation on the board: the board is used by one lease at a time,
-for every checkout. When the lease ends the service parks the board in its
-ROM's download mode, so an image runs only while its command does.
+for every checkout. When the command ends it finishes the lease: the service
+parks the board in its ROM's download mode, so an image runs only while its
+command does, and a board the service could not park fails the command.
 
 - `flash` writes the segments through one espflash connection, skipping each
   one whose flash contents already match (MD5), the OTA selection last, and
@@ -120,8 +120,9 @@ ROM's download mode, so an image runs only while its command does.
 - `monitor` opens the console without a reset: RTS is released before DTR.
   Between leases a board waits in its ROM's download mode; `--start` resets
   it into its flashed image first.
-- `boards` lists each attached board with the hub port found on the host and
-  whether that port may be power-cycled (or why not).
+- `boards` lists each attached board, as the LAB service finds it, with the
+  hub port found on the host and whether that port may be power-cycled (or
+  why not).
 - `power-cycle` switches the board's hub port off and on with `uhubctl`. The
   port is found on the host and switched only when the board is the one
   device below it and the stand file's hub policy allows it (the stand file,

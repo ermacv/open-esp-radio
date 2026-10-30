@@ -1,14 +1,12 @@
 //! The host's own fixtures the stand file uses, its Wi-Fi radios and its
 //! Bluetooth adapter, probed for `cargo stand fixtures`.
-#![forbid(unsafe_code)]
-
 use std::{path::Path, time::Duration};
 
 use oer_lab_model::equipment::{Fixture, interfaces_or_names, radio_switch};
 
 /// The fixtures of this host the stand file at `lab` uses: its Wi-Fi radios
 /// and its Bluetooth adapter.
-pub fn probe_local(lab: &Path) -> Vec<Fixture> {
+pub(crate) fn probe_local(lab: &Path) -> Vec<Fixture> {
     let adapter = oer_lab_model::Stand::load(lab)
         .ok()
         .and_then(|stand| stand.bluetooth)

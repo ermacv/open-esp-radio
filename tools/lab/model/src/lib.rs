@@ -1,7 +1,9 @@
 //! The owner's stand file (README.md): what no tool can discover about the
 //! stand. That is its identity and air policy, its hubs' port policy, its
-//! boards (name, MAC, chip, radios, roles, reset ladder), the stand router
-//! and the air observer, the Bluetooth adapter and the legacy BSS country.
+//! boards (name, MAC, chip, radios, roles, reset ladder), the lab router
+//! (`[router]`, equipment of the LAB service), the host's fixtures (its
+//! access point and station, the Bluetooth adapter, the legacy BSS country)
+//! and the air observer.
 //! Which hub port powers a board is found on the host
 //! (`oer_lab_router::hub`), not written here.
 //!
@@ -12,7 +14,13 @@
 //! that needs it and names the key. A file whose mode is not 0600 is
 //! refused unread, and a parse error names its line and never a value. SSH
 //! targets and interface names are [`Secret`]s: their `Debug` shows nothing
-//! of them. [`paths`] places the stand's state.
+//! of them. [`paths`] places the stand's state; [`convert`] rewrites a
+//! schema 1 file.
+//!
+//! What is known of a board and the stand's equipment apart from the
+//! hardware lives here too, for the LAB service's clients: reset paths and
+//! the ladder ([`rom`]), the reference peers' lines ([`peer_line`]),
+//! `uhubctl`'s report ([`hubs`]) and the equipment reports ([`equipment`]).
 
 #![forbid(unsafe_code)]
 

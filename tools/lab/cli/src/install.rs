@@ -1,5 +1,5 @@
 //! Install `cargo stand` as a prebuilt tool from `main`, and the LAB
-//! service (`oer-lab-service`) as two systemd user units: `oer-lab.socket`
+//! service (`oer-tool-lab-service`) as two systemd user units: `oer-lab.socket`
 //! holds the service's socket and hands it over, `oer-lab.service` runs the
 //! service with its control group delegated to it.
 //!
@@ -33,8 +33,8 @@ use oer_os_process::Checkout;
 const PACKAGE: &str = "oer-tool-lab-cli";
 const BINARY: &str = "stand";
 /// The LAB service's package and binary.
-const SERVICE_PACKAGE: &str = "oer-lab-service";
-const SERVICE_BINARY: &str = "oer-lab-service";
+const SERVICE_PACKAGE: &str = "oer-tool-lab-service";
+const SERVICE_BINARY: &str = "oer-tool-lab-service";
 
 fn home() -> Result<PathBuf> {
     std::env::var_os("HOME")
@@ -354,11 +354,11 @@ mod tests {
     #[test]
     fn the_unit_serves_from_the_installed_binary_and_owns_every_descendant() {
         let text = unit(
-            Path::new("/tool/bin/oer-lab-service"),
+            Path::new("/tool/bin/oer-tool-lab-service"),
             Path::new("/tool/src"),
             "/usr/bin:/bin",
         );
-        assert!(text.contains("ExecStart='/tool/bin/oer-lab-service' --root '/tool/src'"));
+        assert!(text.contains("ExecStart='/tool/bin/oer-tool-lab-service' --root '/tool/src'"));
         assert!(text.contains("Requires=oer-lab.socket"));
         assert!(text.contains("Delegate=yes"));
         assert!(text.contains("KillMode=control-group"));

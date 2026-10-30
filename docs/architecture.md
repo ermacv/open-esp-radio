@@ -1088,10 +1088,15 @@ the existing HAL owner.
   by hand when they answer a real question. Stand roles belong to firmware,
   not boards; the stand file holds no credentials. One LAB service per host
   (`tools/lab/service`) owns the stand's leases and every access to its
-  hardware: `cargo hil`, `cargo fw` and `cargo stand` lease from it and ask
-  it for every operation, and a resource is granted again only after its
-  driver confirmed an end state. The HIL core takes a leased board and
-  carries data and commands over the console the service streams.
+  hardware: `cargo hil`, `cargo fw` and `cargo stand` build against its
+  client (`tools/lab/client`) only, lease from it and ask it for every
+  operation. A resource is granted again only after its driver confirmed an
+  end state (a board in its ROM's download mode or with its power off, the
+  router's access point), a resource whose emission is unknown closes the
+  air, and a client's release answers with what was left unavailable.
+  Commands run in control groups of the service's delegated unit. The HIL
+  core takes a leased board and carries data and commands over the console
+  the service streams.
 - **Analysis.** Binary analysis is a set of building blocks (ELF view, RV32
   decoding, lifting, control-flow and value analysis, concrete execution)
   under `tools/analysis`, with Blobray as the entry point for vendor

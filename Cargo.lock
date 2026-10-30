@@ -2716,7 +2716,6 @@ dependencies = [
  "clap",
  "libc",
  "oer-ieee80211-wire",
- "oer-lab-model",
  "oer-os-durable",
  "oer-os-process",
  "oer-time",
@@ -2757,25 +2756,6 @@ dependencies = [
  "tempfile",
  "toml",
  "zeroize",
-]
-
-[[package]]
-name = "oer-lab-service"
-version = "0.1.0"
-dependencies = [
- "oer-chip-profile",
- "oer-image-bundle",
- "oer-lab-arbiter",
- "oer-lab-board",
- "oer-lab-client",
- "oer-lab-model",
- "oer-lab-router",
- "oer-os-durable",
- "oer-os-process",
- "rustix",
- "serde",
- "serde_json",
- "tempfile",
 ]
 
 [[package]]
@@ -3133,6 +3113,25 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "oer-lab-fixture",
+ "oer-os-process",
+ "rustix",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "oer-tool-lab-service"
+version = "0.1.0"
+dependencies = [
+ "oer-chip-profile",
+ "oer-image-bundle",
+ "oer-lab-arbiter",
+ "oer-lab-board",
+ "oer-lab-client",
+ "oer-lab-model",
+ "oer-lab-router",
+ "oer-os-durable",
  "oer-os-process",
  "rustix",
  "serde",

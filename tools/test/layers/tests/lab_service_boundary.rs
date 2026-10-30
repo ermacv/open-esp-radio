@@ -5,7 +5,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 /// The service's implementation and the drivers only it runs.
-const IMPLEMENTATION: [&str; 3] = ["oer-lab-service", "oer-lab-board", "oer-lab-router"];
+const IMPLEMENTATION: [&str; 3] = ["oer-tool-lab-service", "oer-lab-board", "oer-lab-router"];
 /// The service's clients.
 const CLIENTS: [&str; 5] = [
     "oer-lab-client",
@@ -75,5 +75,5 @@ fn clients_reach_the_hardware_only_through_the_lab_service() {
             "{client} builds against {forbidden:?}: use oer-lab-client and a service operation"
         );
     }
-    assert!(closure(&lock, "oer-lab-service").contains("oer-lab-board"));
+    assert!(closure(&lock, "oer-tool-lab-service").contains("oer-lab-board"));
 }
