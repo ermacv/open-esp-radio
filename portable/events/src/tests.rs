@@ -77,9 +77,10 @@ fn an_event_may_carry_a_key_borrowed_from_the_caller() {
             self.0 = Some(event.0);
         }
     }
-    let key = std::string::String::from("peer");
-    report(&mut (), || Keyed(&key));
+    let name = *b"peer";
+    let key = core::str::from_utf8(&name).unwrap();
+    report(&mut (), || Keyed(key));
     let mut last = Last(None);
-    report(&mut last, || Keyed(&key));
+    report(&mut last, || Keyed(key));
     assert_eq!(last.0, Some("peer"));
 }
