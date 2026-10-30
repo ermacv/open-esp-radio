@@ -3031,7 +3031,9 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "oer-os-process",
+ "rustix",
  "serde_json",
+ "tempfile",
 ]
 
 [[package]]

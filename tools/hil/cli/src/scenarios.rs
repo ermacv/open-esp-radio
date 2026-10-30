@@ -42,7 +42,7 @@ pub fn discover(metadata: &Value) -> Result<Vec<Scenario>> {
         .ok_or("cargo metadata lists no packages")?;
     let mut scenarios = Vec::new();
     for package in packages {
-        if package["metadata"]["open-radio"]["hil-scenario"] != Value::Bool(true) {
+        if package.pointer("/metadata/open-radio/hil-scenario") != Some(&Value::Bool(true)) {
             continue;
         }
         let name = package["name"].as_str().ok_or("a package without a name")?;

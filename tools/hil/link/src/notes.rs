@@ -104,7 +104,6 @@ mod tests {
         }
         let skip = bytes.borrow().len();
         console.note(note).unwrap();
-        drop(console);
         bytes.into_inner().split_off(skip)
     }
 

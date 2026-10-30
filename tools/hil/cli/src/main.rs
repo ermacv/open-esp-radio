@@ -3,14 +3,25 @@
 //! drop the `oer-hil-scenarios-` prefix. `list` prints them, `run NAME`
 //! builds and runs that scenario's program with the arguments that follow.
 //! The tool knows no scenario, image or result: the program's own exit code
-//! is its verdict (0 pass, 1 fail, 2 incomplete).
+//! is its verdict (0 pass, 1 fail, 2 incomplete). The program runs in a
+//! process group the tool owns: a signal to the tool stops the group after
+//! [`SCENARIO_SHUTDOWN`], and the group dies with the tool however it ends.
 #![forbid(unsafe_code)]
 
-use std::process::ExitCode;
+use std::{
+    process::{Command as Process, ExitCode},
+    time::Duration,
+};
 
 use clap::{Parser, Subcommand};
 
 mod scenarios;
+#[cfg(test)]
+mod tests;
+
+/// How long a stopped scenario may take to finish its session: end its
+/// operations, bring the board back and release its lease.
+const SCENARIO_SHUTDOWN: Duration = Duration::from_secs(60);
 
 #[derive(Parser)]
 #[command(name = "cargo hil", about = "List and run the HIL scenarios")]
@@ -43,6 +54,7 @@ fn main() -> ExitCode {
 }
 
 fn run(cli: Cli) -> scenarios::Result<ExitCode> {
+    let _signals = oer_os_process::install_signal_handlers()?;
     let root = oer_os_process::Checkout::discover("cargo hil")?.root;
     let found = scenarios::discover(&scenarios::metadata(&root)?)?;
     match cli.command {
@@ -57,22 +69,30 @@ fn run(cli: Cli) -> scenarios::Result<ExitCode> {
             arguments,
         } => {
             let scenario = scenarios::find(&found, &scenario)?;
-            let status = std::process::Command::new(
-                std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into()),
-            )
-            .current_dir(&root)
-            .args([
-                "run",
-                "--quiet",
-                "--profile",
-                "tools",
-                "-p",
-                &scenario.package,
-                "--",
-            ])
-            .args(arguments)
-            .status()?;
-            Ok(oer_os_process::exit_code(status))
+            let mut command =
+                Process::new(std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into()));
+            command
+                .current_dir(&root)
+                .args([
+                    "run",
+                    "--quiet",
+                    "--profile",
+                    "tools",
+                    "-p",
+                    &scenario.package,
+                    "--",
+                ])
+                .args(arguments);
+            owned(&mut command, SCENARIO_SHUTDOWN)
         }
     }
+}
+
+/// Run `command` in an owned process group; its exit code. A cancelled
+/// tool gives the group `shutdown` before it kills it.
+fn owned(command: &mut Process, shutdown: Duration) -> scenarios::Result<ExitCode> {
+    let mut child = oer_os_process::owned::Child::spawn_with_shutdown_grace(command, shutdown)?;
+    Ok(oer_os_process::exit_code(
+        child.wait_forwarding_cancellation()?,
+    ))
 }
