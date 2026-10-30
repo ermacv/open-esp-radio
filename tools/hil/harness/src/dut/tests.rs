@@ -53,3 +53,25 @@ fn a_failed_reset_keeps_the_boot_a_later_reset_must_leave() {
         "{refused:?}"
     );
 }
+
+#[test]
+fn a_boot_seen_without_its_hello_is_the_one_a_later_reset_must_leave() {
+    let board = FakeBoard::new(vec![unmoved(rts(true, true))]);
+    board.image_up.set(true);
+    let link = board.connect().unwrap();
+    assert_eq!(link.boot(WAITS.hello).unwrap().boot_id, 100);
+    let mut dut = Dut::new(Some(link), &board, IMAGE).with_hello(WAITS.hello);
+    // The device restarts into boot 101 during the reset, whose Hello is lost.
+    board.boots.set(101);
+    board.hellos_lost.set(1);
+    assert!(dut.reset().is_err());
+    assert_eq!(dut.last_boot(), Some(101));
+    // Boot 101 answers the next reset, which did not restart it.
+    let refused = dut.reset();
+    assert!(
+        refused
+            .as_ref()
+            .is_err_and(|reason| reason.contains("did not restart")),
+        "{refused:?}"
+    );
+}

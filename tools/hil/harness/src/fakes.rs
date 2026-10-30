@@ -8,7 +8,7 @@ use std::{
 };
 
 use oer_hil_link::{Link, test_support::Device};
-use oer_hil_protocol::base::{GetHello, Hello};
+use oer_hil_protocol::base::{GetHello, Hello, RejectReason, Rejected};
 use oer_lab_board::reset::{Ladder, RecoveryStep, Rung};
 
 use crate::finish::{Board, Waits};
@@ -74,6 +74,9 @@ pub(crate) struct FakeBoard {
     pub resets: Cell<usize>,
     /// The device's running boot.
     pub boots: Cell<u64>,
+    /// Links the board opens next on which the running image's Hello is
+    /// lost: the device shows its boot by another frame and answers nothing.
+    pub hellos_lost: Cell<usize>,
     pub quarantined: RefCell<Option<String>>,
     pub recovered: RefCell<Vec<RecoveryStep>>,
     /// How a device behaves on a link the board opens while its image runs.
@@ -89,6 +92,7 @@ impl FakeBoard {
             image_up: Cell::new(false),
             resets: Cell::new(0),
             boots: Cell::new(100),
+            hellos_lost: Cell::new(0),
             quarantined: RefCell::new(None),
             recovered: RefCell::new(Vec::new()),
         }
@@ -140,6 +144,12 @@ impl Board for FakeBoard {
             return Ok(device(self.boots.get(), Behavior::Silent));
         }
         let (mut device, link) = Device::new(self.boots.get());
+        if self.hellos_lost.get() > 0 {
+            self.hellos_lost.set(self.hellos_lost.get() - 1);
+            device.send(0, Rejected(RejectReason::Busy));
+            thread::spawn(move || answer(device, Behavior::Mute));
+            return Ok(link);
+        }
         device.send(0, hello());
         let serve = self.serve;
         thread::spawn(move || serve(device));

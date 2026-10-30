@@ -83,6 +83,13 @@ impl Device {
         self.send(0, hello);
     }
 
+    /// Restart as boot `boot_id` whose Hello is lost: its next frame shows
+    /// the boot without one.
+    pub fn reboot_without_hello(&mut self, boot_id: u64) {
+        self.boot_id = boot_id;
+        self.sequence = 0;
+    }
+
     /// Write raw bytes, such as a diagnostic line.
     pub fn write(&mut self, bytes: &[u8]) {
         self.stream.write_all(bytes).expect("the host reads");

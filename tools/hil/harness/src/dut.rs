@@ -77,10 +77,10 @@ impl Device for Dut<'_> {
         self.link = None;
         self.board.reset()?;
         let link = self.board.connect()?;
-        let boot = link
-            .boot(self.hello)
-            .map_err(|error| format!("after the reset: {error}"))?;
-        self.seen = Some(boot.boot_id);
+        let answered = link.boot(self.hello);
+        // A frame names its boot also when the boot's Hello does not come.
+        self.seen = link.running_boot_id().or(previous);
+        let boot = answered.map_err(|error| format!("after the reset: {error}"))?;
         if previous == Some(boot.boot_id) {
             // The device runs on: its link serves the cases that follow.
             self.link = Some(link);

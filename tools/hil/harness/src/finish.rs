@@ -108,14 +108,13 @@ pub(crate) fn finish(
     ending: Ending,
     waits: Waits,
 ) -> (Option<Link>, Cleanup) {
-    let mut last = link
-        .as_ref()
-        .and_then(Link::running_boot_id)
-        .or(ending.last_boot);
+    let mut last = ending.last_boot;
     if let Some(link) = link {
         if !ending.unconfirmed && answers(&link, image_crc32, waits) {
             return (Some(link), Cleanup::Clean);
         }
+        // The probe may have seen a later boot.
+        last = link.running_boot_id().or(last);
         // The rungs need the console the link holds.
         drop(link);
     }
@@ -127,11 +126,14 @@ pub(crate) fn finish(
         let Ok(link) = board.connect() else {
             return false;
         };
-        let Ok(boot) = link.boot(waits.hello) else {
+        let answered = link.boot(waits.hello);
+        let before = last;
+        // A frame names its boot also when the boot's Hello does not come.
+        last = link.running_boot_id().or(last);
+        let Ok(boot) = answered else {
             return false;
         };
-        let restarted = last != Some(boot.boot_id);
-        last = Some(boot.boot_id);
+        let restarted = before != Some(boot.boot_id);
         let answered = restarted && boot.hello.image_crc32 == image_crc32;
         if answered {
             found = Some(link);

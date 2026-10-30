@@ -208,3 +208,66 @@ fn a_boot_seen_before_a_failed_reset_is_no_recovery() {
     );
     assert_eq!(link.and_then(|link| link.running_boot_id()), Some(101));
 }
+
+#[test]
+fn a_boot_a_rung_showed_without_its_hello_is_no_recovery_on_the_next_rung() {
+    let board = FakeBoard::new(vec![
+        unmoved(rts(true, true)),
+        unmoved(rts(true, true)),
+        power(true, true),
+    ]);
+    // Boot 101 runs, and its Hello is lost on the first rung's console.
+    board.image_up.set(true);
+    board.boots.set(101);
+    board.hellos_lost.set(1);
+    let ending = Ending {
+        unconfirmed: true,
+        last_boot: Some(100),
+    };
+    let (link, cleanup) = finish(&board, None, IMAGE, ending, WAITS);
+    assert!(
+        matches!(
+            cleanup,
+            Cleanup::Recovered {
+                step: RecoveryStep::PowerCycle,
+                ..
+            }
+        ),
+        "{cleanup:?}"
+    );
+    assert_eq!(link.and_then(|link| link.running_boot_id()), Some(102));
+}
+
+#[test]
+fn a_boot_the_probe_saw_without_its_hello_is_no_recovery() {
+    let board = FakeBoard::new(vec![unmoved(rts(true, true)), power(true, true)]);
+    // Boot 100 answers its Hello, then restarts into boot 101 on the probe's
+    // request and loses that boot's Hello.
+    let (mut device, running) = oer_hil_link::test_support::Device::new(100);
+    device.send(0, crate::fakes::hello());
+    std::thread::spawn(move || {
+        if device.request().is_some() {
+            device.reboot_without_hello(101);
+            device.send(
+                0,
+                oer_hil_protocol::base::Rejected(oer_hil_protocol::base::RejectReason::Busy),
+            );
+        }
+        while device.request().is_some() {}
+    });
+    assert_eq!(running.boot(WAITS.hello).unwrap().boot_id, 100);
+    board.image_up.set(true);
+    board.boots.set(101);
+    let (link, cleanup) = finish(&board, Some(running), IMAGE, Ending::default(), WAITS);
+    assert!(
+        matches!(
+            cleanup,
+            Cleanup::Recovered {
+                step: RecoveryStep::PowerCycle,
+                ..
+            }
+        ),
+        "{cleanup:?}"
+    );
+    assert_eq!(link.and_then(|link| link.running_boot_id()), Some(102));
+}
