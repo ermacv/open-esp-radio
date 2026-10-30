@@ -1022,9 +1022,11 @@ its model and conformance case.
 
 A protocol owner reports what it decided to the sink its caller lends one
 call ([portable/events](../portable/events/README.md)). The event is a
-`Copy + 'static` value of the owner's own type, without a global identifier,
-encoding or time; the owner never stores the sink, reads nothing back and
-keeps no count. A refusal or result a call returns is its caller's to count;
+`Copy` value of the owner's own type, without a global identifier, encoding
+or time. It carries no affine owner and borrows no frame bytes or owner state;
+a field the caller supplied, such as a key, may borrow the caller's data, and
+the borrow checker keeps a sink from retaining it beyond that data. The owner
+never stores the sink, reads nothing back and keeps no count. A refusal or result a call returns is its caller's to count;
 an owner reports only what it decides and absorbs, so one fact has one place.
 A production sink runs in bounded time on the owner's context, without waits,
 locks, allocation or I/O. The caller chooses what an event becomes, binds it
