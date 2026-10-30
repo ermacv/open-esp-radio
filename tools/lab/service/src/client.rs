@@ -18,6 +18,8 @@ pub struct Client {
     writer: Arc<Mutex<UnixStream>>,
     /// Why the service ended the lease, once it did.
     revoked: Option<String>,
+    /// Why divisible work should yield, once the service asked.
+    yield_reason: Option<String>,
     next_operation: u64,
 }
 
@@ -38,6 +40,7 @@ impl Client {
             reader: stream,
             writer: Arc::new(Mutex::new(writer)),
             revoked: None,
+            yield_reason: None,
             next_operation: 1,
         };
         this.send(&Request::Hello {
@@ -54,6 +57,26 @@ impl Client {
     /// Why the service ended the lease, if it did.
     pub fn revoked(&self) -> Option<&str> {
         self.revoked.as_deref()
+    }
+
+    /// Why divisible work should release its lease at the next boundary,
+    /// if the service asked it to.
+    pub fn yield_requested(&self) -> Option<&str> {
+        self.yield_reason.as_deref()
+    }
+
+    /// End held lease `lease` for `reason`, on behalf of `by`.
+    pub fn preempt(&mut self, lease: u64, by: &str, reason: &str) -> Result<()> {
+        self.send(&Request::Preempt {
+            lease,
+            by: by.to_owned(),
+            reason: reason.to_owned(),
+        })?;
+        match self.reply()? {
+            Reply::Waiting { .. } => Ok(()),
+            Reply::Refused { reason } => Err(reason),
+            other => Err(format!("unexpected reply to preempt: {other:?}")),
+        }
     }
 
     /// Queue for a lease and wait for it; `waiting` sees each report.
@@ -181,6 +204,7 @@ impl Client {
                         return result;
                     }
                     Reply::Revoked { reason } => self.revoked = Some(reason),
+                    Reply::Yield { reason } => self.yield_reason = Some(reason),
                     _ => {}
                 },
             }
@@ -209,6 +233,7 @@ impl Client {
             if let Frame::Message(json) = self.frame()? {
                 match parse(&json)? {
                     Reply::Revoked { reason } => self.revoked = Some(reason),
+                    Reply::Yield { reason } => self.yield_reason = Some(reason),
                     reply => return Ok(reply),
                 }
             }

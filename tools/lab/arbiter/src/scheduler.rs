@@ -9,7 +9,7 @@
 //! service passes the time, runs the recoveries it returns and reports each
 //! driver's confirmation.
 
-use std::path::Path;
+use std::{path::Path, time::Duration};
 
 use crate::{
     balance,
@@ -33,6 +33,15 @@ pub struct Queued {
     pub estimate_secs: u64,
     /// The client that asked, for the status report.
     pub client: ProcessIdentity,
+}
+
+/// Why a held lease must end or yield.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum Due {
+    /// It reached the hard limit every lease has.
+    HardLimit,
+    /// Divisible work yields at its next boundary to `waiter`.
+    Yield { waiter: String, balance_ms: i64 },
 }
 
 /// A lease the scheduler just granted.
@@ -374,6 +383,85 @@ impl Scheduler {
             unknown: Default::default(),
         };
         Some(Ended { record, recoveries })
+    }
+
+    /// What held leases are due at `now_ms`: a lease held for `limit` ends,
+    /// and divisible work held for `slice` yields to a conflicting waiter
+    /// whose owner's balance is higher.
+    pub fn due(&mut self, now_ms: u64, slice: Duration, limit: Duration) -> Vec<(u64, Due)> {
+        balance::settle(&mut self.state, now_ms);
+        let now_unix = now_ms / 1000;
+        self.state
+            .holders
+            .iter()
+            .filter_map(|holder| {
+                let id = holder.ticket.id;
+                if now_unix.saturating_sub(holder.granted_unix) >= limit.as_secs() {
+                    return Some((id, Due::HardLimit));
+                }
+                crate::queue::outranked_by(&self.state, id, now_unix, slice)
+                    .map(|(waiter, balance_ms)| (id, Due::Yield { waiter, balance_ms }))
+            })
+            .collect()
+    }
+
+    /// Mark held lease `lease` preempted by `by` for `reason` at `now_ms`:
+    /// it is charged no longer. A repeated preemption keeps the first.
+    pub fn preempt(
+        &mut self,
+        lease: u64,
+        by: &str,
+        reason: &str,
+        now_ms: u64,
+    ) -> crate::Result<()> {
+        if reason.trim().is_empty() {
+            return Err("a preemption needs a reason".into());
+        }
+        balance::settle(&mut self.state, now_ms);
+        let Some(holder) = self
+            .state
+            .holders
+            .iter_mut()
+            .find(|holder| holder.ticket.id == lease)
+        else {
+            return Err(
+                if self.state.queue.iter().any(|ticket| ticket.id == lease) {
+                    format!("lease #{lease} is waiting, not held; nothing to preempt")
+                } else {
+                    format!("no lease #{lease} is held")
+                }
+                .into(),
+            );
+        };
+        holder
+            .preempted
+            .get_or_insert_with(|| crate::preempt::Preemption {
+                by: by.to_owned(),
+                reason: reason.to_owned(),
+                unix_ms: now_ms,
+                unknown: crate::Unknown::default(),
+            });
+        Ok(())
+    }
+
+    /// The held leases a waiting maintenance request conflicts with and
+    /// that are not preempted yet, each with that request's ticket.
+    pub fn maintenance_conflicts(&self) -> Vec<(u64, u64)> {
+        self.state
+            .holders
+            .iter()
+            .filter(|holder| holder.preempted.is_none())
+            .filter_map(|holder| {
+                self.state
+                    .queue
+                    .iter()
+                    .find(|ticket| {
+                        ticket.priority == Priority::Maintenance
+                            && conflict(&ticket.claims, &holder.ticket.claims)
+                    })
+                    .map(|ticket| (holder.ticket.id, ticket.id))
+            })
+            .collect()
     }
 
     /// Apply a driver's confirmation of `recovery`. A confirmation of an

@@ -116,6 +116,11 @@ pub struct LeaseRequest {
     /// holders it conflicts with.
     #[serde(default)]
     pub maintenance: Option<String>,
+    /// Work that can stop at a boundary and queue again: after
+    /// [`oer_lab_arbiter::balance::MIN_SLICE`] it is asked to yield to a
+    /// waiter whose owner's balance is higher.
+    #[serde(default)]
+    pub divisible: bool,
 }
 
 /// A request of a client.
@@ -143,6 +148,12 @@ pub enum Request {
     /// A person returns an unavailable resource: the service recovers it
     /// again.
     Return { resource: String },
+    /// End held lease `lease` for `reason`, on behalf of `by`.
+    Preempt {
+        lease: u64,
+        by: String,
+        reason: String,
+    },
 }
 
 /// Work on the leased resources, run by the service's drivers.
@@ -184,6 +195,11 @@ pub enum Reply {
     Revoked {
         reason: String,
     },
+    /// Divisible work should release the lease at its next boundary and
+    /// queue again, for `reason`.
+    Yield {
+        reason: String,
+    },
     /// The lease ended and its operations stopped.
     Ended,
     /// Operation `id` finished.
@@ -206,6 +222,8 @@ pub enum Reply {
 pub struct Status {
     pub holders: Vec<HolderStatus>,
     pub waiting: Vec<u64>,
+    /// Resources whose driver runs a recovery.
+    pub recovering: Vec<String>,
     pub resources: Vec<(String, Readiness)>,
 }
 

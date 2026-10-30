@@ -109,7 +109,8 @@ pub(crate) fn rename_owner(path: &Path, old: &str, new: &str) -> crate::Result<(
 
 /// The lease history, a telemetry view (estimates, status): lines another
 /// version cannot parse are skipped.
-pub(crate) fn read(path: &Path) -> crate::Result<Vec<LeaseRecord>> {
+/// The history at `path`, unreadable lines skipped.
+pub fn read(path: &Path) -> crate::Result<Vec<LeaseRecord>> {
     oer_os_durable::jsonl::read_lossy(path)
 }
 

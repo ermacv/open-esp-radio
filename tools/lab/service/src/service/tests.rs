@@ -88,6 +88,12 @@ impl Drivers for Fake {
                 self.hardware.pass();
                 Ok(serde_json::json!("released"))
             }
+            Some("wait") => {
+                while !io.stop.load(Ordering::SeqCst) {
+                    std::thread::park_timeout(std::time::Duration::from_millis(1));
+                }
+                Ok(serde_json::json!("stopped"))
+            }
             Some("flood") => {
                 for _ in 0..FLOOD / 1024 {
                     io.output.write(&[b'x'; 1024]);
@@ -113,12 +119,19 @@ fn command(name: &str) -> Operation {
     }
 }
 
+const START_MS: u64 = 1_700_000_000_000;
+
 fn open(directory: &std::path::Path, fake: &Arc<Fake>) -> Service {
+    open_at(directory, fake, Arc::new(AtomicU64::new(START_MS)))
+}
+
+/// A service whose clock reads `now`.
+fn open_at(directory: &std::path::Path, fake: &Arc<Fake>, now: Arc<AtomicU64>) -> Service {
     Service::open(
         directory,
         vec![board(A)],
         fake.clone(),
-        Box::new(|| 1_700_000_000_000),
+        Box::new(move || now.load(Ordering::SeqCst)),
     )
     .unwrap()
 }
@@ -135,6 +148,7 @@ fn request(owner: &str) -> LeaseRequest {
         run: None,
         claims: vec![Claim::board(A)],
         maintenance: None,
+        divisible: false,
     }
 }
 
@@ -417,4 +431,162 @@ fn a_released_lease_waits_for_its_operations() {
     ));
     fake.hardware.open();
     holder.ended().unwrap();
+}
+
+fn history(directory: &std::path::Path) -> String {
+    std::fs::read_to_string(directory.join("history.jsonl")).unwrap_or_default()
+}
+
+#[test]
+fn a_lease_at_the_hard_limit_is_revoked_and_its_work_stopped() {
+    let directory = tempfile::tempdir().unwrap();
+    let fake = Fake::new();
+    let now = Arc::new(AtomicU64::new(START_MS));
+    let service = open_at(directory.path(), &fake, now.clone());
+    service.wait_until(ready);
+    let mut holder = client(&service);
+    holder.acquire(request("ann"), &mut |_| {}).unwrap();
+    holder
+        .send(&Request::Start {
+            id: 1,
+            operation: command("wait"),
+        })
+        .unwrap();
+    service.wait_until(|status| status.holders.iter().any(|h| h.operations == 1));
+    service.tick();
+    assert!(!service.status().holders[0].ending, "not before the limit");
+    now.fetch_add(HARD_LIMIT.as_millis() as u64, Ordering::SeqCst);
+    service.tick();
+    holder.ended().unwrap();
+    assert!(holder.revoked().unwrap().contains("hard limit"));
+    assert!(history(directory.path()).contains("\"hard-limit\""));
+}
+
+#[test]
+fn waiting_maintenance_preempts_the_holders_it_conflicts_with() {
+    let directory = tempfile::tempdir().unwrap();
+    let fake = Fake::new();
+    let service = open(directory.path(), &fake);
+    service.wait_until(ready);
+    let mut holder = client(&service);
+    holder.acquire(request("ann"), &mut |_| {}).unwrap();
+    let waiter = service.clone();
+    let maintenance = std::thread::spawn(move || {
+        let mut maintenance = client(&waiter);
+        let lease = LeaseRequest {
+            maintenance: Some("install fixture software".to_owned()),
+            claims: Vec::new(),
+            ..request("bob")
+        };
+        maintenance.acquire(lease, &mut |_| {}).map(|_| maintenance)
+    });
+    holder.ended().unwrap();
+    assert!(
+        holder
+            .revoked()
+            .unwrap()
+            .contains("install fixture software")
+    );
+    let _maintenance = maintenance.join().unwrap().unwrap();
+    assert!(history(directory.path()).contains("\"preempted-on-request\""));
+}
+
+#[test]
+fn a_person_preempts_a_lease_and_its_client_hears_why() {
+    let directory = tempfile::tempdir().unwrap();
+    let fake = Fake::new();
+    let service = open(directory.path(), &fake);
+    service.wait_until(ready);
+    let mut holder = client(&service);
+    let granted = holder.acquire(request("ann"), &mut |_| {}).unwrap();
+    let mut person = client(&service);
+    assert!(person.preempt(granted.lease, "bob", " ").is_err());
+    assert!(person.preempt(granted.lease + 100, "bob", "stuck").is_err());
+    person.preempt(granted.lease, "bob", "stuck run").unwrap();
+    holder.ended().unwrap();
+    assert_eq!(holder.revoked(), Some("preempted by bob: stuck run"));
+}
+
+#[test]
+fn divisible_work_is_asked_to_yield_to_a_waiter_with_a_higher_balance() {
+    let directory = tempfile::tempdir().unwrap();
+    let fake = Fake::new();
+    let now = Arc::new(AtomicU64::new(START_MS));
+    let service = open_at(directory.path(), &fake, now.clone());
+    service.wait_until(ready);
+    let mut holder = client(&service);
+    let divisible = LeaseRequest {
+        divisible: true,
+        ..request("ann")
+    };
+    holder.acquire(divisible, &mut |_| {}).unwrap();
+    let waiter = service.clone();
+    let next = std::thread::spawn(move || {
+        let mut next = client(&waiter);
+        next.acquire(request("bob"), &mut |_| {}).map(|_| next)
+    });
+    service.wait_until(|status| !status.waiting.is_empty());
+    now.fetch_add(MIN_SLICE.as_millis() as u64, Ordering::SeqCst);
+    service.tick();
+    // The notice arrives with the next reply the holder reads.
+    holder.status().unwrap();
+    assert!(holder.yield_requested().unwrap().contains("bob"));
+    holder.release().unwrap();
+    let _next = next.join().unwrap().unwrap();
+}
+
+#[test]
+fn a_recovery_past_its_deadline_leaves_the_board_unavailable_and_untouched() {
+    let directory = tempfile::tempdir().unwrap();
+    let fake = Fake::new();
+    fake.recovery.close();
+    let now = Arc::new(AtomicU64::new(START_MS));
+    let service = Service::open_with(
+        directory.path(),
+        vec![board(A)],
+        fake.clone(),
+        Box::new(move || now.load(Ordering::SeqCst)),
+        std::time::Duration::from_millis(1),
+    )
+    .unwrap();
+    service.wait_until(|status| {
+        status.resources.iter().any(|(_, readiness)| {
+            matches!(
+                readiness,
+                oer_lab_arbiter::readiness::Readiness::Unavailable { reason, .. }
+                    if reason.contains("did not finish")
+            )
+        })
+    });
+    let mut person = client(&service);
+    let refused = person.return_resource(&board(A)).unwrap_err();
+    assert!(refused.contains("still runs"), "{refused}");
+    fake.recovery.open();
+    service.wait_until(|status| status.recovering.is_empty());
+    // The driver returned: a person may return the board.
+    person.return_resource(&board(A)).unwrap();
+}
+
+#[test]
+fn a_grant_the_service_cannot_record_is_refused() {
+    use std::os::unix::fs::PermissionsExt;
+    let directory = tempfile::tempdir().unwrap();
+    let fake = Fake::new();
+    let service = open(directory.path(), &fake);
+    service.wait_until(ready);
+    let mode = |mode| {
+        std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(mode)).unwrap()
+    };
+    mode(0o500);
+    let refused = client(&service).acquire(request("ann"), &mut |_| {});
+    mode(0o700);
+    assert_eq!(
+        refused.unwrap_err(),
+        "the LAB service cannot record its state"
+    );
+    assert!(service.status().holders.is_empty());
+    service.wait_until(ready);
+    client(&service)
+        .acquire(request("ann"), &mut |_| {})
+        .unwrap();
 }

@@ -21,11 +21,12 @@ use std::{
 };
 
 use oer_lab_arbiter::{
-    LeaseOutcome, Priority,
+    HARD_LIMIT, LeaseOutcome, Priority,
+    balance::MIN_SLICE,
     claims::{Claim, covers, normalize},
     process::ProcessIdentity,
     readiness::{Confirmation, Recovery},
-    scheduler::{Queued, Scheduler},
+    scheduler::{Due, Queued, Scheduler},
 };
 
 use crate::protocol::{
@@ -37,6 +38,9 @@ use crate::protocol::{
 const OUTPUT_BUDGET: usize = 1 << 20;
 /// Input chunks an operation may have pending.
 const INPUT_DEPTH: usize = 64;
+/// How long a driver has to confirm a recovery: the longest reset ladder,
+/// a hub power cycle with the board's return to USB included.
+const RECOVERY_DEADLINE: std::time::Duration = std::time::Duration::from_secs(180);
 
 /// The hardware the service drives: each kind of resource's recovery and
 /// every operation.
@@ -199,14 +203,23 @@ struct Shared {
     state_path: PathBuf,
     /// The lease history.
     history_path: PathBuf,
+    recovery_deadline: std::time::Duration,
 }
 
 struct Inner {
     scheduler: Scheduler,
-    /// The connection waiting for each ticket.
-    tickets: BTreeMap<u64, u64>,
+    /// The connection waiting for each ticket, and whether its work is
+    /// divisible.
+    tickets: BTreeMap<u64, (u64, bool)>,
+    /// The owner and reason of each waiting maintenance ticket.
+    maintenance: BTreeMap<u64, (String, String)>,
     leases: BTreeMap<u64, Lease>,
+    /// Each connection's outbox and its client's process.
     connections: BTreeMap<u64, Arc<Outbox>>,
+    clients: BTreeMap<u64, ProcessIdentity>,
+    /// Resources whose driver still runs a recovery, also one past its
+    /// deadline: nothing else touches them until it returns.
+    recovering: std::collections::BTreeSet<String>,
     next_connection: u64,
     next_token: u64,
 }
@@ -217,6 +230,9 @@ struct Lease {
     owner: String,
     work: String,
     claims: Vec<Claim>,
+    divisible: bool,
+    /// Whether it was asked to yield.
+    yield_asked: bool,
     /// Why it ends, once it ends.
     ending: Option<LeaseOutcome>,
     /// The connections of commands that joined it.
@@ -241,6 +257,16 @@ impl Service {
         drivers: Arc<dyn Drivers>,
         clock: Clock,
     ) -> oer_lab_arbiter::Result<Self> {
+        Self::open_with(directory, stand, drivers, clock, RECOVERY_DEADLINE)
+    }
+
+    fn open_with(
+        directory: &std::path::Path,
+        stand: Vec<String>,
+        drivers: Arc<dyn Drivers>,
+        clock: Clock,
+        recovery_deadline: std::time::Duration,
+    ) -> oer_lab_arbiter::Result<Self> {
         let state_path = directory.join("service.json");
         let history_path = directory.join("history.jsonl");
         let (scheduler, resumed) = Scheduler::open(&state_path, stand, clock())?;
@@ -253,8 +279,11 @@ impl Service {
                 inner: Mutex::new(Inner {
                     scheduler,
                     tickets: BTreeMap::new(),
+                    maintenance: BTreeMap::new(),
                     leases: BTreeMap::new(),
                     connections: BTreeMap::new(),
+                    clients: BTreeMap::new(),
+                    recovering: Default::default(),
                     next_connection: 1,
                     next_token: 1,
                 }),
@@ -263,16 +292,27 @@ impl Service {
                 clock,
                 state_path,
                 history_path,
+                recovery_deadline,
             }),
         };
-        for recovery in resumed.recoveries {
-            service.spawn_recovery(recovery);
+        {
+            let mut inner = lock(&service.shared.inner);
+            for recovery in resumed.recoveries {
+                service.spawn_recovery(&mut inner, recovery);
+            }
         }
         Ok(service)
     }
 
     /// Serve every client `listener` accepts, until it fails.
     pub fn serve(&self, listener: std::os::unix::net::UnixListener) -> io::Result<()> {
+        let ticker = self.clone();
+        std::thread::spawn(move || {
+            loop {
+                std::thread::sleep(std::time::Duration::from_secs(1));
+                ticker.tick();
+            }
+        });
         for stream in listener.incoming() {
             self.attach(stream?)?;
         }
@@ -289,11 +329,19 @@ impl Service {
     fn attach(&self, stream: UnixStream) -> io::Result<()> {
         let writer = stream.try_clone()?;
         let outbox = Outbox::new();
+        let client = rustix::net::sockopt::socket_peercred(&stream)
+            .ok()
+            .and_then(|credentials| {
+                ProcessIdentity::of(u32::try_from(credentials.pid.as_raw_nonzero().get()).ok()?)
+            });
         let id = {
             let mut inner = lock(&self.shared.inner);
             let id = inner.next_connection;
             inner.next_connection += 1;
             inner.connections.insert(id, outbox.clone());
+            if let Some(client) = client {
+                inner.clients.insert(id, client);
+            }
             id
         };
         let drain = outbox.clone();
@@ -408,12 +456,45 @@ impl Service {
             Request::Status => outbox.push(&Reply::Status {
                 status: self.status(),
             }),
+            Request::Preempt { lease, by, reason } => {
+                let mut inner = lock(&self.shared.inner);
+                let now = (self.shared.clock)();
+                match inner.scheduler.preempt(lease, &by, &reason, now) {
+                    Ok(()) => {
+                        self.end(
+                            &mut inner,
+                            lease,
+                            LeaseOutcome::PreemptedOnRequest,
+                            Some(format!("preempted by {by}: {reason}")),
+                        );
+                        outbox.push(&Reply::Waiting {
+                            ticket: 0,
+                            message: format!("lease #{lease} is being stopped"),
+                        });
+                    }
+                    Err(error) => outbox.push(&Reply::Refused {
+                        reason: error.to_string(),
+                    }),
+                }
+            }
             Request::Return { resource } => {
-                let recovery = lock(&self.shared.inner).scheduler.release(&resource);
+                let recovery = {
+                    let mut inner = lock(&self.shared.inner);
+                    if inner.recovering.contains(&resource) {
+                        outbox.push(&Reply::Refused {
+                            reason: format!(
+                                "{resource}'s last recovery still runs; return it once it ended"
+                            ),
+                        });
+                        return;
+                    }
+                    inner.scheduler.release(&resource)
+                };
                 match recovery {
                     Some(recovery) => {
-                        self.persist(&lock(&self.shared.inner));
-                        self.spawn_recovery(recovery);
+                        let mut inner = lock(&self.shared.inner);
+                        self.persist(&inner);
+                        self.spawn_recovery(&mut inner, recovery);
                         outbox.push(&Reply::Waiting {
                             ticket: 0,
                             message: format!("{resource} is being recovered"),
@@ -429,7 +510,10 @@ impl Service {
 
     fn acquire(&self, connection: u64, request: LeaseRequest, outbox: &Outbox) {
         let mut inner = lock(&self.shared.inner);
-        let busy = inner.tickets.values().any(|holder| *holder == connection)
+        let busy = inner
+            .tickets
+            .values()
+            .any(|(holder, _)| *holder == connection)
             || own_lease(&inner, connection).is_some();
         if busy {
             outbox.push(&Reply::Refused {
@@ -437,6 +521,23 @@ impl Service {
             });
             return;
         }
+        let maintenance = request
+            .maintenance
+            .clone()
+            .map(|reason| (request.owner.clone(), reason));
+        let divisible = request.divisible;
+        let history = oer_lab_arbiter::history::read(&self.shared.history_path).unwrap_or_default();
+        let estimate_secs = oer_lab_arbiter::estimate(&request.work, &request.scenarios, &history)
+            .0
+            .as_secs();
+        let client = inner
+            .clients
+            .get(&connection)
+            .copied()
+            .unwrap_or(ProcessIdentity {
+                pid: 0,
+                start_ticks: 0,
+            });
         let ticket = inner.scheduler.enqueue(
             Queued {
                 owner: request.owner,
@@ -449,15 +550,15 @@ impl Service {
                 } else {
                     Priority::Ordinary
                 },
-                estimate_secs: 0,
-                client: ProcessIdentity {
-                    pid: 0,
-                    start_ticks: 0,
-                },
+                estimate_secs,
+                client,
             },
             (self.shared.clock)() / 1000,
         );
-        inner.tickets.insert(ticket, connection);
+        inner.tickets.insert(ticket, (connection, divisible));
+        if let Some(maintenance) = maintenance {
+            inner.maintenance.insert(ticket, maintenance);
+        }
         outbox.push(&Reply::Waiting {
             ticket,
             message: format!("queued as #{ticket}"),
@@ -566,14 +667,16 @@ impl Service {
     fn disconnected(&self, connection: u64) {
         let mut inner = lock(&self.shared.inner);
         inner.connections.remove(&connection);
+        inner.clients.remove(&connection);
         let tickets = inner
             .tickets
             .iter()
-            .filter(|(_, holder)| **holder == connection)
+            .filter(|(_, (holder, _))| *holder == connection)
             .map(|(ticket, _)| *ticket)
             .collect::<Vec<_>>();
         for ticket in tickets {
             inner.tickets.remove(&ticket);
+            inner.maintenance.remove(&ticket);
             inner.scheduler.leave(ticket);
         }
         if let Some(lease) = own_lease(&inner, connection) {
@@ -636,15 +739,42 @@ impl Service {
             outbox.push(&Reply::Ended);
         }
         for recovery in ended.recoveries {
-            self.spawn_recovery(recovery);
+            self.spawn_recovery(inner, recovery);
         }
         self.pump(inner);
     }
 
-    fn spawn_recovery(&self, recovery: Recovery) {
+    /// Run `recovery` by its driver. A driver past the deadline leaves the
+    /// resource unavailable, and its resource stays untouched until the
+    /// driver returns.
+    fn spawn_recovery(&self, inner: &mut Inner, recovery: Recovery) {
+        if !inner.recovering.insert(recovery.resource.clone()) {
+            // The running recovery's result is stale; a person returns the
+            // resource once it ends.
+            return;
+        }
+        let (done, confirmed) = mpsc::channel();
+        let driver = self.clone();
+        let running = recovery.clone();
+        std::thread::spawn(move || {
+            let confirmation = driver.shared.drivers.recover(&running);
+            let _ = done.send(confirmation);
+            lock(&driver.shared.inner)
+                .recovering
+                .remove(&running.resource);
+            driver.shared.changed.notify_all();
+        });
         let service = self.clone();
         std::thread::spawn(move || {
-            let confirmation = service.shared.drivers.recover(&recovery);
+            let confirmation = confirmed
+                .recv_timeout(service.shared.recovery_deadline)
+                .unwrap_or_else(|_| Confirmation::Unavailable {
+                    reason: format!(
+                        "its recovery did not finish within {}",
+                        oer_lab_arbiter::format_duration(service.shared.recovery_deadline)
+                    ),
+                    quiet: false,
+                });
             let mut inner = lock(&service.shared.inner);
             if inner.scheduler.confirm(&recovery, confirmation) {
                 service.persist(&inner);
@@ -662,11 +792,32 @@ impl Service {
             format!("{now:x}-{next_token:x}")
         });
         inner.next_token = next_token;
-        if !granted.is_empty() {
-            self.persist(inner);
+        if !granted.is_empty() && !self.persist(inner) {
+            // A grant the service could not record would be forgotten by a
+            // restart: it is refused, and its resources recovered.
+            for grant in granted {
+                if let Some((connection, _)) = inner.tickets.remove(&grant.lease)
+                    && let Some(outbox) = inner.connections.get(&connection)
+                {
+                    outbox.push(&Reply::Refused {
+                        reason: "the LAB service cannot record its state".to_owned(),
+                    });
+                }
+                if let Some(ended) = inner
+                    .scheduler
+                    .end(grant.lease, LeaseOutcome::Abandoned, now)
+                {
+                    for recovery in ended.recoveries {
+                        self.spawn_recovery(inner, recovery);
+                    }
+                }
+            }
+            self.shared.changed.notify_all();
+            return;
         }
         for grant in granted {
-            let Some(connection) = inner.tickets.remove(&grant.lease) else {
+            inner.maintenance.remove(&grant.lease);
+            let Some((connection, divisible)) = inner.tickets.remove(&grant.lease) else {
                 continue;
             };
             let Some(holder) = inner
@@ -684,6 +835,8 @@ impl Service {
                     owner: holder.0,
                     work: holder.1,
                     claims: holder.2,
+                    divisible,
+                    yield_asked: false,
                     ending: None,
                     joined: Default::default(),
                     operations: BTreeMap::new(),
@@ -698,12 +851,70 @@ impl Service {
                 None => self.end(inner, grant.lease, LeaseOutcome::Abandoned, None),
             }
         }
+        // A waiting maintenance request preempts every holder it conflicts with.
+        for (lease, ticket) in inner.scheduler.maintenance_conflicts() {
+            let Some((by, reason)) = inner.maintenance.get(&ticket).cloned() else {
+                continue;
+            };
+            if inner.scheduler.preempt(lease, &by, &reason, now).is_ok() {
+                self.end(
+                    inner,
+                    lease,
+                    LeaseOutcome::PreemptedOnRequest,
+                    Some(format!("stand maintenance by {by}: {reason}")),
+                );
+            }
+        }
         self.shared.changed.notify_all();
     }
 
-    fn persist(&self, inner: &Inner) {
-        if let Err(error) = inner.scheduler.save(&self.shared.state_path) {
-            eprintln!("lab-service: cannot persist its state: {error}");
+    /// End the leases at the hard limit and ask divisible work held for its
+    /// slice to yield to a waiter with a higher balance.
+    pub fn tick(&self) {
+        let mut inner = lock(&self.shared.inner);
+        let now = (self.shared.clock)();
+        for (lease, due) in inner.scheduler.due(now, MIN_SLICE, HARD_LIMIT) {
+            match due {
+                Due::HardLimit => self.end(
+                    &mut inner,
+                    lease,
+                    LeaseOutcome::HardLimit,
+                    Some(format!(
+                        "the lease reached the hard limit of {}",
+                        oer_lab_arbiter::format_duration(HARD_LIMIT)
+                    )),
+                ),
+                Due::Yield { waiter, balance_ms } => {
+                    let Some(held) = inner.leases.get_mut(&lease) else {
+                        continue;
+                    };
+                    if !held.divisible || held.yield_asked || held.ending.is_some() {
+                        continue;
+                    }
+                    held.yield_asked = true;
+                    let connection = held.connection;
+                    if let Some(outbox) = inner.connections.get(&connection) {
+                        outbox.push(&Reply::Yield {
+                            reason: format!(
+                                "{waiter} waits with a higher balance ({balance_ms} ms)"
+                            ),
+                        });
+                    }
+                }
+            }
+        }
+        self.persist(&inner);
+        self.shared.changed.notify_all();
+    }
+
+    /// Persist the scheduler state; false, reported, when it failed.
+    fn persist(&self, inner: &Inner) -> bool {
+        match inner.scheduler.save(&self.shared.state_path) {
+            Ok(()) => true,
+            Err(error) => {
+                eprintln!("lab-service: cannot persist its state: {error}");
+                false
+            }
         }
     }
 }
@@ -758,6 +969,7 @@ fn status(inner: &Inner) -> Status {
             })
             .collect(),
         waiting: inner.tickets.keys().copied().collect(),
+        recovering: inner.recovering.iter().cloned().collect(),
         resources: inner.scheduler.resources(),
     }
 }

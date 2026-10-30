@@ -2753,6 +2753,7 @@ name = "oer-lab-service"
 version = "0.1.0"
 dependencies = [
  "oer-lab-arbiter",
+ "rustix",
  "serde",
  "serde_json",
  "tempfile",
