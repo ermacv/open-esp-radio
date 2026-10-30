@@ -23,8 +23,9 @@ crates execute its typed key-data unwrap, transmit and key-install requests.
 
 `oer-ieee80211-cipher` owns software CCMP, BIP-CMAC-128 and the software
 AES-128 block primitive with its key-unwrap engine; the RFC 3394 algorithm is
-`oer-crypto`'s. Key data is bounded by `RSN_KEY_DATA_CAPACITY`. It has no
-handshake state, replay frontier or clock.
+`oer-crypto`'s. The AAD, nonce and Management MIC element it authenticates
+are `oer-ieee80211-wire`'s (`ccmp::protected`, `bip`). Key data is bounded by
+`RSN_KEY_DATA_CAPACITY`. It has no handshake state, replay frontier or clock.
 
 The crate is Apache-2.0: `authenticator/sae.rs` ports the ESP-IDF access
 point's SAE handling (`NOTICE`).

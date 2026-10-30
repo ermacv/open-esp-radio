@@ -22,6 +22,9 @@ the portable runtime drives role services over that port.
 | `wire/src/security/rsn.rs` | RSN element and RSNXE syntax, encoders and AKM suite vocabulary |
 | `wire/src/station/security.rs` | The RSN element and RSNXE of a station's association request |
 | `wire/src/eapol.rs` | EAPOL-Key packets (checked view, encoder with its MIC field and MIC input), Key Information, GTK/IGTK KDEs, Key Data elements and padding |
+| `wire/src/ccmp/protected.rs` | A CCMP-protected MPDU's checked view: its AAD, CCM nonce and the protected body's range |
+| `wire/src/bip.rs` | The BIP-CMAC-128 Management MIC element: received view, in-place append and the octets its MIC covers, and the IPN encoding |
+| `wire/src/element.rs` | One complete information element: identifier, length and body |
 | `wire/src/sae.rs` | SAE Commit and Confirm body codecs (byte values of scalar, element and confirm) and SAE extension element IDs |
 | `wire/src/status.rs` | Status and reason codes |
 | `wire/src/ethertype.rs` | The EtherType values the 802.11 side names (EAPOL, WAPI) |
@@ -50,7 +53,7 @@ the portable runtime drives role services over that port.
 | `wire/src/channel_switch.rs` | Channel Switch Announcement parsing and encoding |
 | `wire/src/phy.rs` | Validated non-HT, HT and HE SU rates |
 | `wire/src/rates.rs` | Legacy rates of the (Extended) Supported Rates elements |
-| `wire/src/frame.rs` | Frame Control with named subtypes, the data/management MAC header codec, Sequence Control access and the QoS Control field |
+| `wire/src/frame.rs` | Frame Control with named subtypes, the address prefix every MPDU begins with, the data/management MAC header codec, Sequence Control access and the QoS Control field |
 | `wire/src/management.rs` | The management MAC header, Capability Information and probe requests |
 | `wire/src/beacon.rs` | Beacon encoding, DTIM/TIM stamping and template element edits |
 | `wire/src/monitor_injection.rs` | Header geometry of a monitor-injected MPDU |

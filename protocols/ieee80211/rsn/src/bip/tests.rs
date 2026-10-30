@@ -5,7 +5,7 @@
     clippy::unreachable
 )]
 use super::*;
-use oer_ieee80211_cipher::bip::MANAGEMENT_MIC_ELEMENT_LEN;
+use oer_ieee80211_wire::bip::MANAGEMENT_MIC_ELEMENT_LEN;
 
 use std::vec::Vec;
 

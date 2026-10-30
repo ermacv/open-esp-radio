@@ -17,6 +17,8 @@
     clippy::arithmetic_side_effects
 )]
 
+pub mod protected;
+
 pub const CCMP_HEADER_LEN: usize = 8;
 pub const CCMP_PACKET_NUMBER_MAX: u64 = (1_u64 << 48) - 1;
 

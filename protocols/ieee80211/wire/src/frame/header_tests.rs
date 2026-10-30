@@ -143,3 +143,27 @@ fn named_subtypes_round_trip_through_the_frame_control_field() {
         None
     );
 }
+
+#[test]
+fn address_fields_end_where_the_frame_does() {
+    let mut frame = [0_u8; 30];
+    frame[..2].copy_from_slice(&[0x88, 0x03]);
+    for (index, byte) in frame.iter_mut().enumerate().skip(4) {
+        *byte = index as u8;
+    }
+    let address = |at: usize| -> [u8; 6] { frame[at..at + 6].try_into().unwrap() };
+
+    assert_eq!(AddressFields::parse(&frame[..9]), None);
+    let rts = AddressFields::parse(&frame[..16]).unwrap();
+    assert_eq!(rts.receiver(), address(4));
+    assert_eq!(rts.transmitter(), Some(address(10)));
+    assert_eq!(rts.address3(), None);
+    let short = AddressFields::parse(&frame[..23]).unwrap();
+    assert_eq!(short.address3(), Some(address(16)));
+    assert_eq!(short.sequence_control(), None);
+    let full = AddressFields::parse(&frame).unwrap();
+    assert_eq!(full.control().raw(), 0x0388);
+    assert_eq!(full.sequence_control(), Some(u16::from_le_bytes([22, 23])));
+    assert_eq!(full.address4(), Some(address(24)));
+    assert_eq!(AddressFields::parse(&frame[..29]).unwrap().address4(), None);
+}

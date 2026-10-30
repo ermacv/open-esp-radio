@@ -11,6 +11,7 @@
 )]
 
 use super::*;
+use oer_ieee80211_wire::element::Element;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct OwnedRsnIe<const N: usize = RSN_IE_CAPACITY> {
@@ -19,10 +20,7 @@ pub struct OwnedRsnIe<const N: usize = RSN_IE_CAPACITY> {
 
 impl<const N: usize> OwnedRsnIe<N> {
     pub fn try_copy(bytes: &[u8]) -> Result<Self, RsnFrameError> {
-        let Some((&[id, length], body)) = bytes.split_first_chunk::<2>() else {
-            return Err(RsnFrameError::InvalidRsnIe);
-        };
-        if id != RSN_ELEMENT_ID || usize::from(length) != body.len() {
+        if !Element::exact(bytes).is_some_and(|element| element.id == RSN_ELEMENT_ID) {
             return Err(RsnFrameError::InvalidRsnIe);
         }
         let bytes =
@@ -53,20 +51,13 @@ impl<const N: usize> OwnedAssociationSecurityIes<N> {
 
     /// Copy the exact RSN IE plus optional RSNXE emitted by Association.
     pub fn try_copy_bytes(bytes: &[u8]) -> Result<Self, RsnFrameError> {
-        let Some(&[id, length]) = bytes.first_chunk::<2>() else {
+        let Some((rsn, rsnxe)) = Element::split(bytes) else {
             return Err(RsnFrameError::InvalidRsnIe);
         };
-        if id != RSN_ELEMENT_ID {
+        if rsn.id != RSN_ELEMENT_ID {
             return Err(RsnFrameError::InvalidRsnIe);
         }
-        let Some((rsn, rsnxe)) = bytes.split_at_checked(
-            usize::from(length)
-                .checked_add(2)
-                .ok_or(RsnFrameError::InvalidRsnIe)?,
-        ) else {
-            return Err(RsnFrameError::InvalidRsnIe);
-        };
-        let rsn = OwnedRsnIe::<RSN_IE_CAPACITY>::try_copy(rsn)?;
+        let rsn = OwnedRsnIe::<RSN_IE_CAPACITY>::try_copy(rsn.bytes)?;
         Self::try_copy(&rsn, rsnxe)
     }
 
@@ -74,13 +65,10 @@ impl<const N: usize> OwnedAssociationSecurityIes<N> {
         rsn_ie: &OwnedRsnIe<R>,
         rsnxe: &[u8],
     ) -> Result<Self, RsnFrameError> {
-        if !rsnxe.is_empty() {
-            let Some((&[id, length], body)) = rsnxe.split_first_chunk::<2>() else {
-                return Err(RsnFrameError::InvalidRsnxe);
-            };
-            if id != RSNXE_ELEMENT_ID || usize::from(length) != body.len() {
-                return Err(RsnFrameError::InvalidRsnxe);
-            }
+        if !rsnxe.is_empty()
+            && !Element::exact(rsnxe).is_some_and(|element| element.id == RSNXE_ELEMENT_ID)
+        {
+            return Err(RsnFrameError::InvalidRsnxe);
         }
         let len = rsn_ie
             .as_bytes()
@@ -104,14 +92,8 @@ impl<const N: usize> OwnedAssociationSecurityIes<N> {
 
     /// The RSN element and the RSNXE after it.
     fn split(&self) -> Result<(&[u8], &[u8]), RsnFrameError> {
-        let bytes = self.as_bytes();
-        let length = bytes.get(1).ok_or(RsnFrameError::InvalidRsnIe)?;
-        bytes
-            .split_at_checked(
-                usize::from(*length)
-                    .checked_add(2)
-                    .ok_or(RsnFrameError::InvalidRsnIe)?,
-            )
+        Element::split(self.as_bytes())
+            .map(|(rsn, rsnxe)| (rsn.bytes, rsnxe))
             .ok_or(RsnFrameError::InvalidRsnIe)
     }
     pub fn rsn_ie(&self) -> Result<&[u8], RsnFrameError> {

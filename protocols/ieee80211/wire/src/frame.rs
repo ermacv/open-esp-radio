@@ -67,6 +67,10 @@ impl FrameControl {
     pub const fn is_data(self) -> bool {
         self.fields().kind().encoding() as u16 == Self::DATA
     }
+    /// A management frame.
+    pub const fn is_management_frame(self) -> bool {
+        self.fields().kind().encoding() as u16 == Self::MANAGEMENT
+    }
     /// Payload has CCMP protection.
     pub const fn protected(self) -> bool {
         self.fields().protected()
@@ -102,6 +106,75 @@ impl FrameControl {
     pub const fn has_ht_control(self) -> bool {
         self.fields().order()
             && (self.is_qos_data() || self.fields().kind().encoding() as u16 == Self::MANAGEMENT)
+    }
+}
+
+/// The address fields an MPDU holds, read in their general-format order:
+/// Frame Control, Duration and Address 1, then each later field only when
+/// the frame holds it. A control frame may end after Address 1 or Address 2;
+/// management and data frames carry Addresses 1 to 3 and Sequence Control.
+/// Address 4 is the six octets after Sequence Control, whatever the frame's
+/// DS bits say; its consumer decides whether the frame has one.
+///
+/// SOURCE: IEEE Std 802.11-2020, 9.2.3 (General frame format, Figure 9-1).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct AddressFields {
+    control: FrameControlFields,
+    receiver: [u8; 6],
+    transmitter: Option<[u8; 6]>,
+    address3: Option<[u8; 6]>,
+    sequence_control: Option<u16>,
+    address4: Option<[u8; 6]>,
+}
+
+impl AddressFields {
+    /// `None` when the frame ends before Address 1.
+    pub fn parse(frame: &[u8]) -> Option<Self> {
+        let mut reader = oer_wire::Reader::new(frame);
+        let control = FrameControlFields::from_bytes(reader.read().ok()?);
+        let _duration: [u8; 2] = reader.read().ok()?;
+        let receiver = reader.read().ok()?;
+        let transmitter = reader.read().ok();
+        let address3 = transmitter.and_then(|_| reader.read().ok());
+        let sequence_control = address3
+            .and_then(|_| reader.read().ok())
+            .map(u16::from_le_bytes);
+        let address4 = sequence_control.and_then(|_| reader.read().ok());
+        Some(Self {
+            control,
+            receiver,
+            transmitter,
+            address3,
+            sequence_control,
+            address4,
+        })
+    }
+
+    pub const fn control(&self) -> FrameControlFields {
+        self.control
+    }
+
+    /// Address 1.
+    pub const fn receiver(&self) -> [u8; 6] {
+        self.receiver
+    }
+
+    /// Address 2.
+    pub const fn transmitter(&self) -> Option<[u8; 6]> {
+        self.transmitter
+    }
+
+    pub const fn address3(&self) -> Option<[u8; 6]> {
+        self.address3
+    }
+
+    /// Present when the frame holds a complete three-address header.
+    pub const fn sequence_control(&self) -> Option<u16> {
+        self.sequence_control
+    }
+
+    pub const fn address4(&self) -> Option<[u8; 6]> {
+        self.address4
     }
 }
 
@@ -437,6 +510,11 @@ oer_wire::bitfield! {
         /// SOURCE: IEEE Std 802.11-2020, 9.2.4.1.3 (Type and Subtype
         /// subfields).
         pub no_data, with_no_data: bool = 6..7, view;
+        /// Data subtype bits B4 and B5: CF-Ack and CF-Poll.
+        /// SOURCE: IEEE Std 802.11-2020, 9.2.4.1.3 (Type and Subtype
+        /// subfields).
+        pub cf_ack, with_cf_ack: bool = 4..5, view;
+        pub cf_poll, with_cf_poll: bool = 5..6, view;
         pub qos, with_qos: bool = 7..8, view;
         pub ds, with_ds: u16 = 8..10;
         pub more_fragments, with_more_fragments: bool = 10..11;

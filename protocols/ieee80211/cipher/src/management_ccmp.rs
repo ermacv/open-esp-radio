@@ -9,16 +9,15 @@
     clippy::arithmetic_side_effects
 )]
 
-use crate::ccm::MIC_LEN;
 use crate::ccmp_mpdu::{CcmpAssociation, CcmpMpduError};
 use oer_ieee80211_contracts_security::Ccmp128Key;
 use oer_ieee80211_wire::{
-    ccmp::{CCMP_HEADER_LEN, CcmpHeader, CcmpHeaderError, CcmpKeyId, CcmpPacketNumber},
+    address::AddressFlags,
+    ccmp::protected::{CCMP_MIC_LEN, ProtectedMpdu, ProtectedMpduError},
+    ccmp::{CCMP_HEADER_LEN, CcmpHeaderError, CcmpKeyId, CcmpPacketNumber},
     frame::DecodedHeader,
     security::Spp,
 };
-
-const HEADER_LEN: usize = 24;
 /// Why a protected management frame did not open.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ManagementCcmpError {
@@ -50,30 +49,31 @@ pub struct ManagementCcmpFrame<'a> {
 
 impl<'a> ManagementCcmpFrame<'a> {
     pub fn parse(frame: &'a mut [u8]) -> Result<Self, ManagementCcmpError> {
-        if frame.len() < HEADER_LEN + CCMP_HEADER_LEN + MIC_LEN {
+        let header = DecodedHeader::decode(frame).ok_or(ManagementCcmpError::Truncated)?;
+        // Room for the CCMP header and MIC comes first, as for every frame.
+        if header.body().len() < CCMP_HEADER_LEN + CCMP_MIC_LEN {
             return Err(ManagementCcmpError::Truncated);
         }
-        let header = DecodedHeader::decode(frame).ok_or(ManagementCcmpError::MalformedHeader)?;
-        if header.control().get() & 0x000c != 0 {
+        if !header.control().is_management_frame() {
             return Err(ManagementCcmpError::MalformedHeader);
         }
         let [first, ..] = header.receiver();
-        if first & 1 != 0 {
+        if AddressFlags::from_bytes([first]).group() {
             return Err(ManagementCcmpError::GroupAddressed);
         }
-        if !header.control().protected() {
-            return Err(ManagementCcmpError::NotProtected);
-        }
-        let ccmp = header
-            .body()
-            .first_chunk::<CCMP_HEADER_LEN>()
-            .ok_or(ManagementCcmpError::Truncated)?;
-        let ccmp = CcmpHeader::parse(*ccmp).map_err(|error| match error {
-            CcmpHeaderError::ExtIvMissing => ManagementCcmpError::MissingExtendedIv,
-            CcmpHeaderError::ReservedOctet | CcmpHeaderError::ReservedKeyBits => {
-                ManagementCcmpError::InvalidCcmpHeader
+        let mpdu = ProtectedMpdu::parse(frame).map_err(|error| match error {
+            ProtectedMpduError::MalformedHeader => ManagementCcmpError::MalformedHeader,
+            ProtectedMpduError::NotProtected => ManagementCcmpError::NotProtected,
+            ProtectedMpduError::Truncated => ManagementCcmpError::Truncated,
+            ProtectedMpduError::TooLong => ManagementCcmpError::TooLong,
+            ProtectedMpduError::InvalidCcmpHeader(CcmpHeaderError::ExtIvMissing) => {
+                ManagementCcmpError::MissingExtendedIv
             }
+            ProtectedMpduError::InvalidCcmpHeader(
+                CcmpHeaderError::ReservedOctet | CcmpHeaderError::ReservedKeyBits,
+            ) => ManagementCcmpError::InvalidCcmpHeader,
         })?;
+        let ccmp = mpdu.ccmp_header();
         if ccmp.key_id() != CcmpKeyId::PAIRWISE {
             return Err(ManagementCcmpError::UnexpectedKeyId);
         }

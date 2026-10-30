@@ -134,7 +134,10 @@ VLAN, IP and transport fields are `protocols/network/wire`'s. IEEE 802.11
 packages reach them only through `protocols/bridges/ieee80211-ethernet`,
 which joins the two codecs and depends on nothing else; `oer-test-layers`
 checks both rules. The network side's adapter reads and writes its Ethernet
-header through the network codec.
+header through the network codec. IEEE 802.11 security transforms and MAC
+consumers take what they authenticate or route from the IEEE 802.11 codec:
+the AAD and nonce of a protected MPDU, the Management MIC element, the
+EAPOL-Key MIC input and the address fields; they hold no header offsets.
 
 An outgoing frame requests a user priority from its VLAN PCP or IP DSCP
 through the bridge; the mapping is a policy, not an authorization. The

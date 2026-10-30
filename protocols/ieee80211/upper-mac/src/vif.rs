@@ -16,7 +16,7 @@
 
 use oer_ieee80211_wire::{
     address::AddressFlags,
-    frame::{FrameControlFields, FrameType, ManagementSubtype},
+    frame::{AddressFields, FrameType, ManagementSubtype},
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -47,44 +47,30 @@ pub enum StaApRxRoute {
 /// exception: a connected station does not own active-scan requests, while a
 /// SoftAP must receive them before it can answer.
 pub fn classify_sta_ap_rx(mpdu: &[u8], addresses: StaApRxAddresses) -> StaApRxRoute {
-    // Frame Control, Duration and Address 1 (IEEE 802.11-2020 9.2.3).
-    let Some((&[fc0, fc1, _, _], rest)) = mpdu.split_first_chunk::<4>() else {
+    let Some(fields) = AddressFields::parse(mpdu) else {
         return StaApRxRoute::Malformed;
     };
-    let frame_control = u16::from_le_bytes([fc0, fc1]);
-    let Some((&receiver, rest)) = rest.split_first_chunk::<6>() else {
-        return StaApRxRoute::Malformed;
-    };
-    match FrameControlFields::from_raw(frame_control).kind() {
+    let receiver = fields.receiver();
+    match fields.control().kind() {
         FrameType::Control => select(
             receiver == addresses.station,
             receiver == addresses.access_point,
         ),
-        FrameType::Management => classify_management(rest, frame_control, receiver, addresses),
-        FrameType::Data => classify_data(rest, frame_control, receiver, addresses),
+        FrameType::Management => classify_management(fields, addresses),
+        FrameType::Data => classify_data(fields, addresses),
         _ => StaApRxRoute::Foreign,
     }
 }
 
-/// Address 2 and address 3, which follow the receiver address.
-fn second_and_third(after_receiver: &[u8]) -> Option<([u8; 6], [u8; 6])> {
-    let (&second, rest) = after_receiver.split_first_chunk::<6>()?;
-    let (&third, _) = rest.split_first_chunk::<6>()?;
-    Some((second, third))
-}
-
-fn classify_management(
-    after_receiver: &[u8],
-    frame_control: u16,
-    receiver: [u8; 6],
-    addresses: StaApRxAddresses,
-) -> StaApRxRoute {
-    let Some((transmitter, bssid)) = second_and_third(after_receiver) else {
+fn classify_management(fields: AddressFields, addresses: StaApRxAddresses) -> StaApRxRoute {
+    let Some((transmitter, bssid)) = fields.transmitter().zip(fields.address3()) else {
         return StaApRxRoute::Malformed;
     };
+    let receiver = fields.receiver();
     let group_receiver = is_group(receiver);
-    let probe_request =
-        FrameControlFields::from_raw(frame_control).is_management(ManagementSubtype::ProbeRequest);
+    let probe_request = fields
+        .control()
+        .is_management(ManagementSubtype::ProbeRequest);
     let station = receiver == addresses.station
         || group_receiver
             && (transmitter == addresses.station_bssid || bssid == addresses.station_bssid);
@@ -94,20 +80,14 @@ fn classify_management(
     select(station, access_point)
 }
 
-fn classify_data(
-    after_receiver: &[u8],
-    frame_control: u16,
-    receiver: [u8; 6],
-    addresses: StaApRxAddresses,
-) -> StaApRxRoute {
-    let Some((transmitter, bssid_or_destination)) = second_and_third(after_receiver) else {
+fn classify_data(fields: AddressFields, addresses: StaApRxAddresses) -> StaApRxRoute {
+    let Some((transmitter, bssid_or_destination)) = fields.transmitter().zip(fields.address3())
+    else {
         return StaApRxRoute::Malformed;
     };
+    let receiver = fields.receiver();
     let group_receiver = is_group(receiver);
-    match (
-        FrameControlFields::from_raw(frame_control).to_ds(),
-        FrameControlFields::from_raw(frame_control).from_ds(),
-    ) {
+    match (fields.control().to_ds(), fields.control().from_ds()) {
         (false, true) => select(
             receiver == addresses.station
                 || group_receiver && transmitter == addresses.station_bssid,

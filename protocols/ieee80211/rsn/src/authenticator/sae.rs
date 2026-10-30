@@ -41,7 +41,7 @@ use crate::sae::{
 use oer_ieee80211_wire::sae::{
     SAE_ANTI_CLOGGING_TOKEN_LEN, SAE_COMMIT_LEN, SAE_CONFIRM_LEN, SAE_GROUP_P256, SAE_PRIME_LEN,
     SaeCommitRefusal, SaeCommitValues, SaeReceivedCommit, anti_clogging_token_container_header,
-    finite_cyclic_group, send_confirm,
+    finite_cyclic_group, finite_cyclic_group_field, send_confirm,
 };
 use oer_ieee80211_wire::security::rsn::RSN_PMKID_LEN;
 use oer_ieee80211_wire::station::{SAE_COMMIT_TRANSACTION, SAE_CONFIRM_TRANSACTION};
@@ -416,7 +416,7 @@ impl<const N: usize> ApSaeResponder<N> {
                     SAE_COMMIT_TRANSACTION,
                     status_code::UNSUPPORTED_FINITE_CYCLIC_GROUP,
                     ReplyBody::Group(match finite_cyclic_group(body) {
-                        Some(group) => group.to_le_bytes(),
+                        Some(group) => finite_cyclic_group_field(group),
                         None => return ApSaeOutput::fault(session.fault()),
                     }),
                 );
@@ -475,7 +475,7 @@ impl<const N: usize> ApSaeResponder<N> {
                 random.fill(&mut key);
                 key
             });
-            let group = SAE_GROUP_P256.to_le_bytes();
+            let group = finite_cyclic_group_field(SAE_GROUP_P256);
             let reply_body = if h2e {
                 const CONTAINER: [u8; 3] =
                     match anti_clogging_token_container_header(SAE_ANTI_CLOGGING_TOKEN_LEN) {

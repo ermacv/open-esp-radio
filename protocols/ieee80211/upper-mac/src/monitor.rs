@@ -12,7 +12,7 @@ use oer_ieee80211_port::{
 pub use oer_ieee80211_wire::monitor_injection::MonitorInjectionFrameError;
 use oer_ieee80211_wire::{
     channel::WifiChannel,
-    frame::{FrameControlFields, FrameType},
+    frame::{AddressFields, FrameControlFields, FrameType},
     monitor_injection::MonitorInjectionMpdu,
 };
 
@@ -305,15 +305,6 @@ fn frame_type(control: FrameControlFields) -> MonitorFrameType {
     }
 }
 
-/// Offsets of Address 1 to Address 4 in a MAC header.
-/// SOURCE: IEEE Std 802.11-2020, 9.2.3 (General frame format, Figure 9-1).
-const ADDRESS1: usize = 4;
-const ADDRESS2: usize = 10;
-const ADDRESS3: usize = 16;
-const ADDRESS4: usize = 24;
-/// Frame Control through Sequence Control of a three-address header.
-const THREE_ADDRESS_HEADER: usize = 24;
-
 /// Control subtypes whose frame carries a TA (Address 2): BlockAckReq,
 /// BlockAck, PS-Poll, RTS, CF-End and CF-End+CF-Ack.
 /// SOURCE: IEEE Std 802.11-2020, 9.3.1 (Control frames) and Table 9-1.
@@ -327,31 +318,26 @@ fn frame_contains_address(
     frame_type: MonitorFrameType,
     address: [u8; 6],
 ) -> bool {
-    let address_at = |offset: usize| {
-        bytes
-            .get(offset..)
-            .and_then(|tail| tail.first_chunk::<6>())
-            .is_some_and(|candidate| *candidate == address)
+    let Some(fields) = AddressFields::parse(bytes) else {
+        return false;
     };
+    let is = |candidate: Option<[u8; 6]>| candidate == Some(address);
+    let three_address = fields.sequence_control().is_some()
+        && (is(Some(fields.receiver())) || is(fields.transmitter()) || is(fields.address3()));
     match frame_type {
-        MonitorFrameType::Management => {
-            bytes.len() >= THREE_ADDRESS_HEADER
-                && (address_at(ADDRESS1) || address_at(ADDRESS2) || address_at(ADDRESS3))
-        }
+        MonitorFrameType::Management => three_address,
         MonitorFrameType::Control => {
-            address_at(ADDRESS1)
-                || (control_has_transmitter(control.subtype()) && address_at(ADDRESS2))
+            is(Some(fields.receiver()))
+                || (control_has_transmitter(control.subtype()) && is(fields.transmitter()))
         }
         MonitorFrameType::Data => {
-            if bytes.len() < THREE_ADDRESS_HEADER {
-                return false;
-            }
-            address_at(ADDRESS1)
-                || address_at(ADDRESS2)
-                || address_at(ADDRESS3)
-                || (control.to_ds() && control.from_ds() && address_at(ADDRESS4))
+            three_address
+                || (fields.sequence_control().is_some()
+                    && control.to_ds()
+                    && control.from_ds()
+                    && is(fields.address4()))
         }
-        MonitorFrameType::Extension => address_at(ADDRESS1),
+        MonitorFrameType::Extension => is(Some(fields.receiver())),
     }
 }
 

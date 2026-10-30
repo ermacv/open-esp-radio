@@ -30,20 +30,18 @@ pub struct BipPacketNumber(u64);
 
 impl BipPacketNumber {
     pub const fn from_bytes(bytes: [u8; RSN_IPN_LEN]) -> Self {
-        let [b0, b1, b2, b3, b4, b5] = bytes;
-        Self(u64::from_le_bytes([b0, b1, b2, b3, b4, b5, 0, 0]))
+        Self(oer_ieee80211_wire::bip::ipn_from_bytes(bytes))
     }
 
     pub const fn to_bytes(self) -> [u8; RSN_IPN_LEN] {
-        let [b0, b1, b2, b3, b4, b5, _, _] = self.0.to_le_bytes();
-        [b0, b1, b2, b3, b4, b5]
+        oer_ieee80211_wire::bip::ipn_to_bytes(self.0)
     }
 }
 
 impl PacketNumber48 for BipPacketNumber {
     fn checked_add(self, distance: u64) -> Option<Self> {
         let next = self.0.checked_add(distance)?;
-        (next <= Self::from_bytes([0xff; RSN_IPN_LEN]).0).then_some(Self(next))
+        (next <= oer_ieee80211_wire::bip::IPN_MAX).then_some(Self(next))
     }
 }
 

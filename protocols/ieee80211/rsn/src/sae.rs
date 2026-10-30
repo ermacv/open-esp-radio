@@ -552,8 +552,7 @@ impl Default for SaeComebackTokens {
     clippy::arithmetic_side_effects
 )]
 fn peer_element(element: &[u8; SAE_ELEMENT_LEN]) -> Option<AffinePoint> {
-    let (x, y) = element.split_first_chunk::<SAE_PRIME_LEN>()?;
-    let y: &[u8; SAE_PRIME_LEN] = y.try_into().ok()?;
+    let (x, y) = oer_ieee80211_wire::sae::element_coordinates(element)?;
     let x = FieldElement::from_bytes(&FieldBytes::from(*x));
     let y = FieldElement::from_bytes(&FieldBytes::from(*y));
     Option::<ProjectivePoint>::from(x.and_then(|x| y.and_then(|y| point(&x, &y))))
