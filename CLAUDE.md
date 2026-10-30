@@ -224,7 +224,7 @@ system these rules serve.
   host program holds its cases and verdict; the image it runs serves
   services whose every endpoint has a handler (`oer_hil_agent::service!`);
   several scenarios share one image. Stand equipment and its drivers belong
-  to `tools/lab`. A message owner checks its own `messages.lock`.
+  to `tools/lab`.
 
 ## Work
 

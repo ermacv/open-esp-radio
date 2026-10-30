@@ -5,9 +5,9 @@
 - [Wire contract](wire.md): framing, version checks, discovery and boot identity.
 - [Platform diagnostics](diagnostics.md): requested reset and stack measurements.
 
-Each message's key hashes its path and postcard schema. A semantic change with the same schema requires a new path. `messages!` emits typed endpoints/topics/properties and their compile-time `KEYS`; the calling crate's `descriptors` feature additionally emits its `MESSAGES` descriptors. `async-io` enables `write_frame`. There are no radio-family features or dependencies.
+Each message's key hashes its path and postcard schema. A semantic change with the same schema requires a new path. `messages!` emits typed endpoints/topics/properties and their compile-time `KEYS`. `async-io` enables `write_frame`. There are no radio-family features or dependencies.
 
-Every message owner keeps its reviewed `messages.lock` and checks it in its own test with `check_lock`: the framing version and exactly one `path key kind` line per descriptor. This crate checks its own lock the same way. Domain crates depend on the framework, never the reverse; the framework knows no other owner's messages.
+A changed path or schema changes the key, so an image and a scenario built from different vocabularies disagree on the keys the image announces, which the host checks before any case. Domain crates depend on the framework, never the reverse; the framework knows no other owner's messages.
 
 An image's advertised keys come from its mounted [services](../agent/README.md#image-keys). A scenario requires the keys of the services it uses; unrelated extra keys remain accepted. Properties are unit markers and never sent as frames. A refusal is `base::Rejected`; an endpoint has exactly one typed response, which may follow related events.
 

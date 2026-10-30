@@ -6,8 +6,8 @@ AES-128 KEK and up to 40 bytes of RFC 3394 wrapped key data and answers
 or the engine's own failure). `Engine` is the service's handler over any
 `oer_crypto::KeyUnwrap` engine: the engine moves into each operation and
 comes back with its response. The image and the host scenario share the
-crate; `messages.lock` is checked by the crate's test (`descriptors`).
+crate.
 
 ```console
-cargo test -p oer-services-aes --features descriptors
+cargo test -p oer-services-aes
 ```

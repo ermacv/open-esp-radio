@@ -108,12 +108,3 @@ fn every_engine_failure_has_its_own_answer() {
         assert_eq!(UnwrapError::from(KeyUnwrapError::Engine(error)), expected);
     }
 }
-
-#[cfg(feature = "descriptors")]
-#[test]
-fn the_reviewed_lock_lists_exactly_this_crates_descriptors() {
-    assert_eq!(
-        oer_hil_protocol::check_lock(MESSAGES_LOCK, &[MESSAGES]),
-        Ok(())
-    );
-}

@@ -1104,9 +1104,9 @@ its boot takes no further request in the scenario. A case's verdict is pass,
 fail (the device refutes it) or incomplete (the stand, the link, an
 unconfirmed request or a cancellation); the program exits 0, 1 or 2.
 
-Domain message codecs live beside their owners, each with its reviewed
-`messages.lock`, which the owner's own test checks against its descriptors
-(`check_lock`). Radio observation values live in
+Domain message codecs live beside their owners; a message's key hashes its
+path and schema, and the host checks the keys the image announces before
+any case. Radio observation values live in
 `chips/esp32s31/instrumentation`. These host-safe contracts contain no
 hardware implementation.
 

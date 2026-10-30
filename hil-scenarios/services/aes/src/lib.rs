@@ -139,9 +139,5 @@ impl<E: KeyUnwrap<MAX_WRAPPED>> Handler for Engine<E> {
     }
 }
 
-/// Reviewed paths, schemas (through keys) and message kinds.
-#[cfg(feature = "descriptors")]
-pub const MESSAGES_LOCK: &str = include_str!("../messages.lock");
-
 #[cfg(test)]
 mod tests;

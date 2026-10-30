@@ -7,7 +7,7 @@ scenario knows lives here or beside the facade it uses.
 | Directory | Contents |
 | --- | --- |
 | `images/` | RPC images: a product facade or engine, the HIL agent and the handlers of the services the image mounts. Several scenarios share one image. |
-| `services/` | Test-only service vocabularies: requests, responses, `messages.lock` and, where it is generic, the handler over a product contract. A product facade's vocabulary lives beside the facade. |
+| `services/` | Test-only service vocabularies: requests, responses and, where it is generic, the handler over a product contract. A product facade's vocabulary lives beside the facade. |
 | `<scenario>/` | One host program per scenario: its cases, its independent reference and its verdict, over `oer-hil-harness`. |
 
 | Scenario | Image | Checks |
