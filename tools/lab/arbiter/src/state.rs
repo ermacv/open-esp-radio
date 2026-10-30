@@ -23,6 +23,9 @@ pub(crate) struct State {
     /// When the balances were last advanced; 0 before the first settlement.
     #[serde(default)]
     pub(crate) settled_unix_ms: u64,
+    /// The readiness of every stateful resource the service has seen.
+    #[serde(default)]
+    pub(crate) readiness: BTreeMap<String, crate::readiness::Readiness>,
     /// Fields a newer build wrote, kept when this build rewrites the record.
     #[serde(flatten)]
     pub(crate) unknown: crate::Unknown,
@@ -37,6 +40,7 @@ impl Default for State {
             holders: Vec::new(),
             balances: BTreeMap::new(),
             settled_unix_ms: 0,
+            readiness: BTreeMap::new(),
             unknown: crate::Unknown::default(),
         }
     }
@@ -60,6 +64,9 @@ pub(crate) struct Ticket {
     /// The HIL run the lease executes, when a runner requested it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) run: Option<String>,
+    /// HIL scenarios the lease executes, for per-scenario estimates.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) scenarios: Vec<String>,
     /// Fields a newer build wrote, kept when this build rewrites the record.
     #[serde(flatten)]
     pub(crate) unknown: crate::Unknown,

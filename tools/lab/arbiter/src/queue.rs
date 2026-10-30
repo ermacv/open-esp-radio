@@ -174,6 +174,7 @@ mod tests {
             claims,
             priority: Default::default(),
             run: None,
+            scenarios: Vec::new(),
             unknown: Default::default(),
         }
     }

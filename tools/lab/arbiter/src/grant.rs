@@ -214,6 +214,7 @@ impl Arbiter {
                 claims: claims.clone(),
                 priority,
                 run: request.run.clone(),
+                scenarios: request.scenarios.clone(),
                 unknown: Default::default(),
             });
             Ok(id)
