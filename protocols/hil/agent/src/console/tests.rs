@@ -150,7 +150,7 @@ fn run_until(
     mut served: impl FnMut(RequestIdentity, Probe),
     done: impl Fn(&Host) -> bool,
 ) {
-    let intake = Intake::new(BOOT, ImageKeySet::new(&SERVED).unwrap(), 0);
+    let intake = Intake::new(BOOT, ImageKeySet::new(&SERVED).unwrap(), 0, 0);
     let run = console.run(
         Endpoint(host.clone()),
         intake,
@@ -581,7 +581,7 @@ fn invalid_read_length_returns_the_transport_without_releasing_it() {
     for length in [RX_CHUNK + 1, usize::MAX] {
         let console = console();
         let dropped = Rc::new(core::cell::Cell::new(false));
-        let intake = Intake::new(BOOT, ImageKeySet::new(&SERVED).unwrap(), 0);
+        let intake = Intake::new(BOOT, ImageKeySet::new(&SERVED).unwrap(), 0, 0);
         let failure = block_on(console.run(
             BrokenRead {
                 length,
@@ -617,7 +617,7 @@ fn counter_borrow_conflicts_return_typed_faults() {
     let dropped = Rc::new(core::cell::Cell::new(false));
     let failure = console.received.lock(|received| {
         let _reader = received.borrow();
-        let intake = Intake::new(BOOT, ImageKeySet::new(&SERVED).unwrap(), 0);
+        let intake = Intake::new(BOOT, ImageKeySet::new(&SERVED).unwrap(), 0, 0);
         block_on(console.run(
             BrokenRead {
                 length: 0,

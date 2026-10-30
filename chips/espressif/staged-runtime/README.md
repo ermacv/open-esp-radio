@@ -90,3 +90,7 @@ The runtime's generic `fatal::reset_recording` performs their final reset;
 protocol cores do not acquire that policy. The
 [bootstrap](../staged-bootstrap/README.md) owns cold initialization and
 [staged layout](../staged-layout/README.md) owns the image boundary.
+
+`layout::payload_crc32` reads the image's identity from its own stage-two
+header: the payload CRC-32 the host packer wrote after the link (the linker
+script names the word `__runtime_payload_crc32`) and the bootstrap checked.

@@ -29,7 +29,10 @@ complete a USB transfer whose final packet is full.
 ## Image keys
 
 A boot's first frame is its `base::Hello`: how many keys the image serves, a
-digest of them and its payload limits. The host pages the sorted keys with
+digest of them, its payload limits and the image's identity (`image_crc32`,
+on a staged image the stage-two payload CRC-32 the bootstrap checked and the
+image bundle records). The host refuses a board that runs another image than
+the one it built. The host pages the sorted keys with
 `base::GetImageKeys` and checks them against the digest. The set is the union
 of the keys of the services the image mounts, base module included: each
 endpoint, its response and every topic and property the service publishes.

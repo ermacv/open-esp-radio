@@ -182,7 +182,8 @@ fn capabilities_page_out_the_same_sorted_keys_every_time() {
     assert!(image_keys.page(4).keys.is_empty());
     assert!(image_keys.contains(GetLinkHealth::KEY));
     assert!(!image_keys.contains(crate::lifecycle::RequestReset::KEY));
-    let hello = image_keys.hello(0);
+    let hello = image_keys.hello(0, 0x1234_5678);
+    assert_eq!(hello.image_crc32, 0x1234_5678);
     assert_eq!(hello.keys, 4);
     assert_eq!(hello.keys_digest, digest(&SERVED));
     assert_ne!(

@@ -206,6 +206,7 @@ pub(crate) fn cargo(input: &CompileInput<'_>, bundle: &mut ImageBundle) -> Resul
     drop(bootstrap_cache);
     Ok(Compiled {
         runtime_elf,
+        runtime_crc32: crc,
         bootstrap_elf,
         values,
         sizes,

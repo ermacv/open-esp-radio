@@ -32,10 +32,14 @@ const SCENARIO: Scenario = Scenario {
     services: &[SERVICE],
 };
 
-/// The Hello of an image that serves the test service.
+/// The identity of the image the tests built.
+const IMAGE: u32 = 0x5eed_0001;
+
+/// The Hello of the built image, which serves the test service.
 fn hello() -> Hello {
     Hello {
         keys: SERVICE.len() as u16,
+        image_crc32: IMAGE,
         ..HELLO
     }
 }
@@ -111,7 +115,7 @@ fn cases_pass_fail_and_a_reboot_fails_its_case_but_not_the_next() {
         },
     ];
     let selected = cases.iter().collect::<Vec<_>>();
-    let outcomes = run::cases(&link, &SCENARIO, &selected);
+    let outcomes = run::cases(&link, &SCENARIO, IMAGE, &selected);
     assert_eq!(
         verdicts(&outcomes),
         [
@@ -141,7 +145,7 @@ fn an_unconfirmed_request_leaves_the_rest_of_its_boot_incomplete() {
         },
     ];
     let selected = cases.iter().collect::<Vec<_>>();
-    let outcomes = run::cases(&link, &SCENARIO, &selected);
+    let outcomes = run::cases(&link, &SCENARIO, IMAGE, &selected);
     assert_eq!(
         verdicts(&outcomes),
         [(Some("silent"), 2), (Some("next"), 2)],
@@ -152,10 +156,16 @@ fn an_unconfirmed_request_leaves_the_rest_of_its_boot_incomplete() {
 }
 
 #[test]
-fn an_image_without_the_scenarios_service_runs_no_case() {
-    let (mut device, link) = Device::new(30);
+fn another_image_than_the_built_one_runs_no_case() {
+    let (mut device, link) = Device::new(40);
     let server = thread::spawn(move || {
-        device.send(0, HELLO);
+        device.send(
+            0,
+            Hello {
+                image_crc32: IMAGE + 1,
+                ..hello()
+            },
+        );
         while device.request().is_some() {}
     });
     let cases = [Case {
@@ -163,7 +173,43 @@ fn an_image_without_the_scenarios_service_runs_no_case() {
         run: |cx| ask(7)(cx),
     }];
     let selected = cases.iter().collect::<Vec<_>>();
-    let outcomes = run::cases(&link, &SCENARIO, &selected);
+    let outcomes = run::cases(&link, &SCENARIO, IMAGE, &selected);
+    let [
+        Outcome {
+            case: None,
+            verdict: Verdict::Incomplete(reason),
+        },
+    ] = outcomes.as_slice()
+    else {
+        panic!("{outcomes:?}");
+    };
+    assert!(
+        reason.contains("5eed0002") && reason.contains("5eed0001"),
+        "{reason}"
+    );
+    drop(link);
+    server.join().unwrap();
+}
+
+#[test]
+fn an_image_without_the_scenarios_service_runs_no_case() {
+    let (mut device, link) = Device::new(30);
+    let server = thread::spawn(move || {
+        device.send(
+            0,
+            Hello {
+                image_crc32: IMAGE,
+                ..HELLO
+            },
+        );
+        while device.request().is_some() {}
+    });
+    let cases = [Case {
+        name: "answers",
+        run: |cx| ask(7)(cx),
+    }];
+    let selected = cases.iter().collect::<Vec<_>>();
+    let outcomes = run::cases(&link, &SCENARIO, IMAGE, &selected);
     assert_eq!(verdicts(&outcomes), [(None, 2)], "{outcomes:?}");
     let Verdict::Incomplete(reason) = &outcomes[0].verdict else {
         panic!("{outcomes:?}");

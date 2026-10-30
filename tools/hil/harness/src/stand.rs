@@ -27,6 +27,7 @@ const DUT_CONSOLE: Settings = Settings::CONSOLE
 /// Declared in drop order.
 pub(crate) struct Session {
     link: Link,
+    image_crc32: u32,
     _board: LeasedBoard,
     _grant: Grant,
 }
@@ -38,6 +39,11 @@ impl Session {
     pub(crate) fn open(scenario: &Scenario, selector: Option<&str>) -> Result<Self> {
         let root = oer_os_process::Checkout::discover("HIL scenario")?.root;
         let bundle = build(&root, scenario.image)?;
+        let image_crc32 = bundle
+            .staged
+            .as_ref()
+            .map(|staged| staged.runtime_crc32)
+            .ok_or("the image is not staged: it has no identity to check")?;
         let stand_file = oer_lab_model::path()?;
         let stand = Stand::load(&stand_file)?;
         let board = device_under_test(&stand, selector)?.clone();
@@ -62,6 +68,7 @@ impl Session {
         let link = Link::start(Box::new(port))?;
         Ok(Self {
             link,
+            image_crc32,
             _board: leased,
             _grant: grant,
         })
@@ -69,6 +76,11 @@ impl Session {
 
     pub(crate) fn link(&self) -> &Link {
         &self.link
+    }
+
+    /// The built image's identity, which the board must report.
+    pub(crate) fn image_crc32(&self) -> u32 {
+        self.image_crc32
     }
 }
 

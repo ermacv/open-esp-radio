@@ -10,7 +10,9 @@ image must serve, and lists its cases; `main` then:
 3. writes the image unless the board's receipt says it runs it, and records
    the write in the board journal;
 4. opens the board's console with a reset and starts the link;
-5. checks that the running image's key pages hold every required key;
+5. checks that the running image is the built one (Hello's `image_crc32`
+   against the bundle's runtime CRC-32, also after a reboot) and that its key
+   pages hold every required key;
 6. runs the cases (`--case` selects some, `--list` prints them);
 7. releases the link, the board and the lease in that order, also on an error
    or a cancellation.

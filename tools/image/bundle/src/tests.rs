@@ -120,7 +120,7 @@ fn purpose_round_trips_and_the_shared_flash_reader_refuses_analysis() {
         let published = bundle.publish(&output).unwrap();
         let manifest: serde_json::Value =
             serde_json::from_slice(&std::fs::read(output.join(MANIFEST)).unwrap()).unwrap();
-        assert_eq!(manifest["schema"], 7);
+        assert_eq!(manifest["schema"], 8);
         assert_eq!(manifest["purpose"], format!("{purpose:?}"));
         let loaded = ImageBundle::load(&output).unwrap();
         assert_eq!(loaded, published);
@@ -162,7 +162,7 @@ fn schema_six_and_missing_purpose_cannot_default_to_flash() {
     std::fs::write(&path, serde_json::to_vec(&manifest).unwrap()).unwrap();
     let error = ImageBundle::load(&output).unwrap_err().to_string();
     assert!(
-        error.contains("has schema 6") && error.contains("reads schema 7"),
+        error.contains("has schema 6") && error.contains("reads schema 8"),
         "{error}"
     );
     manifest["schema"] = SCHEMA.into();

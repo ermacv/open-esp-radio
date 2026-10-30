@@ -1095,7 +1095,9 @@ under test; it stores nothing and knows no scenario, service or equipment.
 | Scenarios | `hil-scenarios/` | `images/` the RPC images several scenarios share, `services/` test-only service vocabularies, one host program per scenario with its cases and verdict |
 
 A boot is named by the `boot_id` every frame carries. Its first frame is its
-Hello; `base::GetHello` asks a running boot for the same boot's Hello again.
+Hello, which also names the image (`image_crc32`, the stage-two payload
+CRC-32 the bundle records); `base::GetHello` asks a running boot for the same
+boot's Hello again.
 A frame of another boot means the device restarted: every request of the
 earlier boot ended with it. A request without a response is unconfirmed:
 its boot takes no further request in the scenario. A case's verdict is pass,

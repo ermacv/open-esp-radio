@@ -142,13 +142,19 @@ pub struct Intake<'a> {
 }
 
 impl<'a> Intake<'a> {
-    /// The intake of boot `boot_id`, whose image serves `image_keys` and
-    /// takes command payloads of up to `maximum_payload_bytes`.
-    pub fn new(boot_id: u64, image_keys: ImageKeySet<'a>, maximum_payload_bytes: u16) -> Self {
+    /// The intake of boot `boot_id` of the image of identity `image_crc32`,
+    /// which serves `image_keys` and takes command payloads of up to
+    /// `maximum_payload_bytes`.
+    pub fn new(
+        boot_id: u64,
+        image_keys: ImageKeySet<'a>,
+        maximum_payload_bytes: u16,
+        image_crc32: u32,
+    ) -> Self {
         Self {
             boot_id,
             image_keys,
-            hello: image_keys.hello(maximum_payload_bytes),
+            hello: image_keys.hello(maximum_payload_bytes, image_crc32),
             decoder: FrameDecoder::new(),
         }
     }

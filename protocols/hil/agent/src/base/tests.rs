@@ -23,7 +23,7 @@ const SERVED: [Key; 5] = sorted_keys([
 ]);
 
 fn intake() -> Intake<'static> {
-    Intake::new(BOOT, ImageKeySet::new(&SERVED).unwrap(), 0)
+    Intake::new(BOOT, ImageKeySet::new(&SERVED).unwrap(), 0, 0)
 }
 
 fn send<M: Message, C: Requests>(

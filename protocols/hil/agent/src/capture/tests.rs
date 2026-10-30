@@ -259,7 +259,7 @@ fn fake_console_serves_the_same_capture_and_a_typed_refusal() {
     host.send(4, ReadRecords(request(1, 1)));
     let run = console.run(
         Endpoint(host.clone()),
-        Intake::new(77, KEYS, 0),
+        Intake::new(77, KEYS, 0, 0),
         &Chip,
         |identity, request: Request| {
             block_on(request.serve(&collector).publish(&console, identity))

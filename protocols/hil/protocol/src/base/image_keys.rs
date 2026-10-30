@@ -19,6 +19,10 @@ pub struct Hello {
     pub keys_digest: u64,
     pub maximum_payload_bytes: u16,
     pub maximum_wire_frame_bytes: u16,
+    /// The image's identity: its build's payload checksum (on a staged
+    /// image, the stage-two payload CRC-32 the bootstrap checked). The host
+    /// compares it with the image it wrote.
+    pub image_crc32: u32,
 }
 
 /// Keys `first..` of the image's sorted capability set.
@@ -75,12 +79,14 @@ impl<'a> ImageKeySet<'a> {
         self.keys.binary_search(&key).is_ok()
     }
 
-    pub fn hello(&self, maximum_payload_bytes: u16) -> Hello {
+    /// The Hello of an image of identity `image_crc32` serving this set.
+    pub fn hello(&self, maximum_payload_bytes: u16, image_crc32: u32) -> Hello {
         Hello {
             keys: self.keys.len() as u16,
             keys_digest: digest(self.keys),
             maximum_payload_bytes,
             maximum_wire_frame_bytes: crate::MAX_WIRE_FRAME_BYTES as u16,
+            image_crc32,
         }
     }
 

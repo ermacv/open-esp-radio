@@ -60,13 +60,14 @@ pub(crate) fn select<'a>(cases: &'a [Case], names: &[String]) -> Result<Vec<&'a 
         .collect())
 }
 
-/// Run `cases` on the device behind `link` after checking that its image
-/// serves every service of `scenario`. A case that sees a reboot fails and
+/// Run `cases` on the device behind `link` after checking that it runs the
+/// image of identity `image_crc32` and that the image serves every service
+/// of `scenario`. A case that sees a reboot fails and
 /// the next one runs on the new boot; a request without a response leaves
 /// the boot's remaining cases incomplete.
-pub fn cases(link: &Link, scenario: &Scenario, cases: &[&Case]) -> Vec<Outcome> {
+pub fn cases(link: &Link, scenario: &Scenario, image_crc32: u32, cases: &[&Case]) -> Vec<Outcome> {
     let mut outcomes = Vec::new();
-    let mut boot = match ready(link, scenario) {
+    let mut boot = match ready(link, scenario, image_crc32) {
         Ok(boot) => boot,
         Err(reason) => {
             outcomes.push(Outcome::stand(reason));
@@ -103,6 +104,13 @@ pub fn cases(link: &Link, scenario: &Scenario, cases: &[&Case]) -> Vec<Outcome> 
         }
         match link.boot(HELLO_TIMEOUT) {
             Ok(next) if next.boot_id != boot.boot_id => {
+                if next.hello.image_crc32 != image_crc32 {
+                    outcomes.push(Outcome::stand(format!(
+                        "the board rebooted into image {:08x}, not the built {image_crc32:08x}",
+                        next.hello.image_crc32
+                    )));
+                    break;
+                }
                 boot = next;
                 unconfirmed = None;
             }
@@ -116,11 +124,18 @@ pub fn cases(link: &Link, scenario: &Scenario, cases: &[&Case]) -> Vec<Outcome> 
     outcomes
 }
 
-/// The running boot, once its image serves every service of `scenario`.
-fn ready(link: &Link, scenario: &Scenario) -> Result<Boot, String> {
+/// The running boot, once it runs the image of identity `image_crc32` and
+/// that image serves every service of `scenario`.
+fn ready(link: &Link, scenario: &Scenario, image_crc32: u32) -> Result<Boot, String> {
     let boot = link
         .boot(HELLO_TIMEOUT)
         .map_err(|error| error.to_string())?;
+    if boot.hello.image_crc32 != image_crc32 {
+        return Err(format!(
+            "the board runs image {:08x}, not the built {image_crc32:08x}",
+            boot.hello.image_crc32
+        ));
+    }
     let served = keys::served(link, &boot).map_err(|error| format!("image keys: {error}"))?;
     let missing = keys::missing(scenario.services, &served);
     if missing.is_empty() {

@@ -45,7 +45,12 @@ pub(crate) async fn serve<C: Requests>(
     evidence: crate::system::Evidence,
     serve: impl FnMut(RequestIdentity, C),
 ) -> ! {
-    let intake = Intake::new(boot, keys, maximum_payload_bytes);
+    let intake = Intake::new(
+        boot,
+        keys,
+        maximum_payload_bytes,
+        oer_espressif_staged_runtime::layout::payload_crc32(),
+    );
     let failure = CONSOLE.run(usb, intake, &evidence, serve).await;
     console_fault(failure.cause)
 }

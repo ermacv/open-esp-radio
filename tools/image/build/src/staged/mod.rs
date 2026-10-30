@@ -37,6 +37,8 @@ pub(crate) struct CompileInput<'a> {
 
 pub(crate) struct Compiled {
     runtime_elf: PathBuf,
+    /// The packed runtime's payload CRC-32.
+    runtime_crc32: u32,
     bootstrap_elf: PathBuf,
     values: crate::large_values::Report,
     sizes: crate::sizes::Summary,
@@ -74,6 +76,7 @@ pub(crate) fn build(
     }
     let Compiled {
         runtime_elf,
+        runtime_crc32,
         bootstrap_elf,
         mut values,
         mut sizes,
@@ -155,6 +158,7 @@ pub(crate) fn build(
         .map_err(|error| log.failed("encode the boot files", error))?;
     bundle.staged = Some(Staged {
         bootstrap_package: bootstrap_package.clone(),
+        runtime_crc32,
     });
 
     sizes.publish(&output)?;

@@ -16,6 +16,7 @@ pub const HELLO: Hello = Hello {
     keys_digest: 0,
     maximum_payload_bytes: 64,
     maximum_wire_frame_bytes: 128,
+    image_crc32: 0,
 };
 
 /// The device end of a link.

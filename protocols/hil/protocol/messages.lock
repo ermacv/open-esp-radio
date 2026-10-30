@@ -10,7 +10,7 @@ system
 base/accepted 1ac686128bebf3dd topic
 base/boot 472a6c8ee83e5591 topic
 base/boot/get 26ffe1f703e77a0f endpoint
-base/hello 8e2dcdd3a6a11774 topic
+base/hello b8d2822d634bd4be topic
 base/hello/get c394eef0bb216fb5 endpoint
 base/image-keys c080126d58dbddbb topic
 base/image-keys/get 45176bd69cd3a2e0 endpoint

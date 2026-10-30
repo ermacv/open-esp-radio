@@ -5,7 +5,8 @@
 //! cases. [`main`] builds the image through the image pipeline before it
 //! waits for the stand, leases the board, flashes the image unless the
 //! board's receipt says it already runs it, opens the board's console with
-//! a reset, checks that the running image serves every required service,
+//! a reset, checks that the running image is the built one (its Hello's
+//! identity) and serves every required service,
 //! runs the cases and releases the stand: the link first, then the board,
 //! then the lease, also on an error or a cancellation.
 //!
@@ -167,7 +168,7 @@ pub fn main(scenario: &Scenario, cases: &[Case]) -> ExitCode {
         }
     };
     let outcomes = match stand::Session::open(scenario, arguments.board.as_deref()) {
-        Ok(session) => run::cases(session.link(), scenario, &selected),
+        Ok(session) => run::cases(session.link(), scenario, session.image_crc32(), &selected),
         Err(error) => vec![Outcome::stand(error.to_string())],
     };
     let verdict = run::report(scenario, &outcomes, &mut std::io::stdout().lock());
