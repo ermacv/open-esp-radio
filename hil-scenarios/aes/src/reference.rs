@@ -19,34 +19,41 @@ pub const RFC3394_4_1_WRAPPED: [u8; 24] = [
 /// The default initial value (RFC 3394 §2.2.3.1).
 const IV: [u8; 8] = [0xa6; 8];
 
+/// Key data the reference does not wrap: not `n >= 2` whole 64-bit blocks
+/// (RFC 3394 §2).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct InvalidKeyData {
+    pub length: usize,
+}
+
 /// Wrap `data`, `n` 64-bit blocks with `n >= 2`, under `kek` (RFC 3394 §2.2.1).
-pub fn wrap(kek: &[u8; 16], data: &[u8]) -> Vec<u8> {
+pub fn wrap(kek: &[u8; 16], data: &[u8]) -> Result<Vec<u8>, InvalidKeyData> {
+    let (blocks, []) = data.as_chunks::<8>() else {
+        return Err(InvalidKeyData { length: data.len() });
+    };
+    if blocks.len() < 2 {
+        return Err(InvalidKeyData { length: data.len() });
+    }
     let cipher = aes::Aes128::new(kek.into());
-    let n = data.len() / 8;
     let mut a = IV;
-    let mut r: Vec<[u8; 8]> = data
-        .chunks_exact(8)
-        .map(|block| block.try_into().expect("an 8-byte chunk"))
-        .collect();
-    for j in 0..6 {
-        for (i, register) in r.iter_mut().enumerate() {
+    let mut r = blocks.to_vec();
+    let mut t = 0_u64;
+    for _ in 0..6 {
+        for register in &mut r {
+            t += 1;
             let mut b = [0; 16];
-            b[..8].copy_from_slice(&a);
-            b[8..].copy_from_slice(register);
+            let (high, low) = b.split_at_mut(8);
+            high.copy_from_slice(&a);
+            low.copy_from_slice(register);
             cipher.encrypt_block((&mut b).into());
-            let t = (n * j + i + 1) as u64;
-            a.copy_from_slice(&b[..8]);
-            for (byte, counter) in a.iter_mut().zip(t.to_be_bytes()) {
-                *byte ^= counter;
+            let (high, low) = b.split_at(8);
+            for ((byte, cipher), counter) in a.iter_mut().zip(high).zip(t.to_be_bytes()) {
+                *byte = cipher ^ counter;
             }
-            register.copy_from_slice(&b[8..]);
+            register.copy_from_slice(low);
         }
     }
-    let mut wrapped = a.to_vec();
-    for register in r {
-        wrapped.extend_from_slice(&register);
-    }
-    wrapped
+    Ok([a].iter().chain(&r).flatten().copied().collect())
 }
 
 /// The reference cases: key data of 16, 24 and 32 bytes under three KEKs,
@@ -76,9 +83,20 @@ mod tests {
     #[test]
     fn the_reference_wrap_reproduces_the_rfc_vector() {
         assert_eq!(
-            wrap(&RFC3394_4_1_KEK, &RFC3394_4_1_KEY_DATA),
+            wrap(&RFC3394_4_1_KEK, &RFC3394_4_1_KEY_DATA).unwrap(),
             RFC3394_4_1_WRAPPED
         );
+    }
+
+    #[test]
+    fn key_data_other_than_two_or_more_whole_blocks_is_refused() {
+        for length in [0, 8, 15, 17, 23] {
+            assert_eq!(
+                wrap(&RFC3394_4_1_KEK, &vec![0; length]),
+                Err(InvalidKeyData { length })
+            );
+        }
+        assert_eq!(wrap(&RFC3394_4_1_KEK, &[0; 24]).unwrap().len(), 32);
     }
 
     #[test]
@@ -86,7 +104,7 @@ mod tests {
         let cases = cases();
         assert_eq!(cases.len(), 9);
         for (kek, data) in &cases {
-            assert!(wrap(kek, data).len() <= oer_services_aes::MAX_WRAPPED);
+            assert!(wrap(kek, data).unwrap().len() <= oer_services_aes::MAX_WRAPPED);
         }
         assert_ne!(cases[0].0, cases[3].0);
         assert_eq!(cases, super::cases());

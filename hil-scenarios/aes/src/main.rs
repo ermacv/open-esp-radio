@@ -70,7 +70,9 @@ fn known_answer(cx: &mut Cx<'_>) -> Result<(), Failure> {
 /// Key data of 128, 192 and 256 bits under several KEKs, wrapped on the host.
 fn reference_wraps(cx: &mut Cx<'_>) -> Result<(), Failure> {
     for (index, (kek, data)) in reference::cases().into_iter().enumerate() {
-        let wrapped = reference::wrap(&kek, &data);
+        let wrapped = reference::wrap(&kek, &data).map_err(|error| {
+            Failure::Incomplete(format!("case {index}: the reference refused {error:?}"))
+        })?;
         let answer = unwrap(cx, kek, &wrapped)?;
         let expected = Unwrapped::Plaintext(heapless::Vec::from_slice(&data).unwrap_or_default());
         check(
@@ -86,11 +88,13 @@ fn reference_wraps(cx: &mut Cx<'_>) -> Result<(), Failure> {
 
 /// A changed bit anywhere fails the integrity check (RFC 3394 §2.2.3).
 fn integrity_refused(cx: &mut Cx<'_>) -> Result<(), Failure> {
-    let mut wrapped = reference::RFC3394_4_1_WRAPPED;
-    for bit in [0, 70, 8 * wrapped.len() - 1] {
-        wrapped[bit / 8] ^= 1 << (bit % 8);
+    // The first bit, one inside the key data and the last bit (8 × 24 − 1).
+    for bit in [0_usize, 70, 191] {
+        let mut wrapped = reference::RFC3394_4_1_WRAPPED;
+        if let Some(byte) = wrapped.get_mut(bit / 8) {
+            *byte ^= 1 << (bit % 8);
+        }
         let answer = unwrap(cx, reference::RFC3394_4_1_KEK, &wrapped)?;
-        wrapped[bit / 8] ^= 1 << (bit % 8);
         check(
             answer == Unwrapped::Refused(UnwrapError::IntegrityCheckFailed),
             format!("bit {bit} flipped: {answer:?}"),
