@@ -27,7 +27,10 @@ fn an_unconfirmed_request_is_ended_by_the_first_rung_that_brings_the_image_back(
         &board,
         Some(device(1, Behavior::Answers)),
         IMAGE,
-        Ending { unconfirmed: true },
+        Ending {
+            unconfirmed: true,
+            last_boot: None,
+        },
         WAITS,
     );
     assert!(
@@ -54,7 +57,10 @@ fn a_rung_that_did_not_restart_the_device_is_no_recovery() {
         &board,
         Some(running),
         IMAGE,
-        Ending { unconfirmed: true },
+        Ending {
+            unconfirmed: true,
+            last_boot: None,
+        },
         WAITS,
     );
     assert!(
@@ -170,4 +176,35 @@ fn a_cleanup_keeps_a_pass_from_passing_and_never_makes_a_failure_pass() {
         &mut Vec::new(),
     );
     assert_eq!(clean, Verdict::Pass);
+}
+
+#[test]
+fn a_boot_seen_before_a_failed_reset_is_no_recovery() {
+    let board = FakeBoard::new(vec![unmoved(rts(true, true)), power(true, true)]);
+    board.image_up.set(true);
+    let running = board.connect().unwrap();
+    assert_eq!(running.boot(WAITS.hello).unwrap().boot_id, 100);
+    let mut dut = crate::dut::Dut::new(Some(running), &board, IMAGE).with_hello(WAITS.hello);
+    // The console stays silent past the wait: the reset fails without a link.
+    board.image_up.set(false);
+    assert!(crate::dut::Device::reset(&mut dut).is_err());
+    assert!(crate::dut::Device::link(&dut).is_none());
+    // Boot 100 answers again after a rung that did not restart it.
+    board.image_up.set(true);
+    let ending = Ending {
+        unconfirmed: false,
+        last_boot: dut.last_boot(),
+    };
+    let (link, cleanup) = finish(&board, dut.into_link(), IMAGE, ending, WAITS);
+    assert!(
+        matches!(
+            cleanup,
+            Cleanup::Recovered {
+                step: RecoveryStep::PowerCycle,
+                ..
+            }
+        ),
+        "{cleanup:?}"
+    );
+    assert_eq!(link.and_then(|link| link.running_boot_id()), Some(101));
 }

@@ -33,8 +33,6 @@ mod run;
 mod stand;
 
 pub use finish::Cleanup;
-#[doc(hidden)]
-pub use oer_hil_protocol::Key as __Key;
 pub use run::{Outcome, Verdict};
 
 /// What a scenario needs from the stand and the device.

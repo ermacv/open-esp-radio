@@ -31,3 +31,25 @@ fn a_reset_into_a_new_boot_of_the_image_continues_on_it() {
     let mut dut = Dut::new(Some(link), &board, IMAGE).with_hello(WAITS.hello);
     assert_eq!(dut.reset().map(|boot| boot.boot_id), Ok(101));
 }
+
+#[test]
+fn a_failed_reset_keeps_the_boot_a_later_reset_must_leave() {
+    let board = FakeBoard::new(vec![unmoved(rts(true, true))]);
+    board.image_up.set(true);
+    let link = board.connect().unwrap();
+    assert_eq!(link.boot(WAITS.hello).unwrap().boot_id, 100);
+    let mut dut = Dut::new(Some(link), &board, IMAGE).with_hello(WAITS.hello);
+    // The console stays silent past the wait: the reset fails without a link.
+    board.image_up.set(false);
+    assert!(dut.reset().is_err());
+    assert!(dut.link().is_none());
+    // Boot 100 answers the next reset, which did not restart it.
+    board.image_up.set(true);
+    let refused = dut.reset();
+    assert!(
+        refused
+            .as_ref()
+            .is_err_and(|reason| reason.contains("did not restart")),
+        "{refused:?}"
+    );
+}

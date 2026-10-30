@@ -46,6 +46,9 @@ pub(crate) struct Waits {
 pub(crate) struct Ending {
     /// The last boot has a request whose outcome is unknown.
     pub unconfirmed: bool,
+    /// The last boot the cases saw, also when no link shows it any more: a
+    /// rung counts only when another boot answers.
+    pub last_boot: Option<u64>,
 }
 
 /// What finishing did to the device under test.
@@ -105,7 +108,10 @@ pub(crate) fn finish(
     ending: Ending,
     waits: Waits,
 ) -> (Option<Link>, Cleanup) {
-    let mut last = link.as_ref().and_then(Link::running_boot_id);
+    let mut last = link
+        .as_ref()
+        .and_then(Link::running_boot_id)
+        .or(ending.last_boot);
     if let Some(link) = link {
         if !ending.unconfirmed && answers(&link, image_crc32, waits) {
             return (Some(link), Cleanup::Clean);

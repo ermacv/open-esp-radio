@@ -35,7 +35,7 @@ A case talks to the device through `Cx`:
 | `call`, `request` | A request's typed response; `call` turns errors into the case's failure, `request` returns them as they came |
 | `events`, `event`, `take_message` | A cursor over the running boot's messages from now on, made before a request to see its events, also those before its response; it reads in order, past what its filter refused, and other cursors read on their own; `event::<M>` fails the case when no `M` came in a complete interval and leaves it incomplete when a message of the interval was lost |
 | `completeness`, `health` | Whether a cursor's interval lost a message or ended with its boot; the link's counters |
-| `reset` | A new boot of the same image through the first rung of the board's ladder and a reopened console; the boot that answered before is no reset |
+| `reset` | A new boot of the same image through the first rung of the board's ladder and a reopened console; the boot seen last, also before a failed reset, is no reset |
 
 A refusal, a payload of another type or a reboot fails the
 case; a request that was not sent, a request without a response, a broken

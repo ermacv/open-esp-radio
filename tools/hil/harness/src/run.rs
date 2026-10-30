@@ -96,7 +96,10 @@ pub(crate) fn cases(
             record(Outcome::stand(reason), out);
             return Run {
                 outcomes,
-                ending: Ending::default(),
+                ending: Ending {
+                    unconfirmed: false,
+                    last_boot: dut.last_boot(),
+                },
             };
         }
     };
@@ -171,6 +174,7 @@ pub(crate) fn cases(
         outcomes,
         ending: Ending {
             unconfirmed: unconfirmed.is_some(),
+            last_boot: dut.last_boot(),
         },
     }
 }
