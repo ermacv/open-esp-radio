@@ -2464,6 +2464,7 @@ dependencies = [
  "embassy-futures",
  "embassy-sync",
  "heapless",
+ "oer-bridges-ieee80211-ethernet",
  "oer-crypto",
  "oer-espressif-ieee80211-policy",
  "oer-events",

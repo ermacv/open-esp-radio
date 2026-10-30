@@ -130,6 +130,17 @@ which joins the two codecs and depends on nothing else; `oer-test-layers`
 checks both rules. The network side's adapter reads and writes its Ethernet
 header through the network codec.
 
+An outgoing frame requests a user priority from its VLAN PCP or IP DSCP
+through the bridge; the mapping is a policy, not an authorization. The
+station decides the final priority before it takes an owner or a sequence
+number: a link without QoS sends best effort, and an access category whose
+admission control is mandatory is closed to the station, which holds no
+admission, so the frame takes the canonical priority of the next lower open
+category. That priority names the frame's TID, its sequence space and its
+access category together; the station's own EAPOL follows the same rule,
+management frames keep the Voice queue. A changed ACM applies to the next
+MSDU; a numbered one keeps its TID.
+
 Cryptographic operations shared by protocols have one contract each in
 `portable/crypto` (`oer-crypto`). One operation is one request: the request
 owns its key and buffers and moves by value into an engine, which moves itself

@@ -10,6 +10,7 @@ use oer_ieee80211_port::{
     PhyFormatSet, RateSupport, ReceiveFilter, RxEvidence, WidthSet,
 };
 use oer_ieee80211_port::{IndeterminateCause, WithdrawCause};
+use oer_ieee80211_upper_mac::qos::AcAdmission;
 use oer_ieee80211_upper_mac::sequence::SequenceCounter;
 use oer_ieee80211_wire::data::MsduParts;
 use oer_ieee80211_wire::phy::{HeMcs, HtMcs, LegacyRate, PhyRate};
@@ -191,6 +192,7 @@ fn qos_link<'a>(
         mode: LinkMode::Qos(std::boxed::Box::leak(std::boxed::Box::new(
             [SequenceCounter::new(SequenceNumber::ZERO); 8],
         ))),
+        admission: AcAdmission::OPEN,
         protection: LinkProtection::Ccmp { key, replay },
     }
 }
@@ -207,6 +209,7 @@ fn open_link(counter: &mut SequenceCounter) -> LinkView<'_, 'static, Station<'st
         .unwrap(),
         association_id: 1,
         mode: LinkMode::NonQos(counter),
+        admission: AcAdmission::OPEN,
         protection: LinkProtection::Open,
     }
 }
@@ -1343,4 +1346,123 @@ fn data_losses_arrive_in_the_order_they_happen() {
             StaEvent::DataLost(DataLoss::LeftBehind),
         ]
     );
+}
+
+/// `restricted` closed to the station's QoS data.
+fn closed(restricted: &[WmmAccessCategory]) -> AcAdmission {
+    let defaults = oer_ieee80211_wire::extensions::wmm::WmmParameterSet::STANDARD_DEFAULT;
+    let record = |category| oer_ieee80211_wire::extensions::wmm::WmmAcParameters {
+        admission_control_mandatory: restricted.contains(&category),
+        ..defaults.access_category(category)
+    };
+    AcAdmission::from_edca(oer_ieee80211_wire::extensions::wmm::WmmParameterSet::new(
+        1,
+        false,
+        WmmAccessCategory::ALL.map(record),
+    ))
+}
+
+#[test]
+fn a_closed_voice_category_sends_voice_msdus_as_video_in_tid_five() {
+    let mut events = Kept::default();
+    let mut data = machine();
+    let mut replay = epoch();
+    let mut link = qos_link(&(), &mut replay);
+    link.admission = closed(&[WmmAccessCategory::Voice]);
+    if let LinkMode::Qos(counters) = &mut link.mode {
+        counters[5] = SequenceCounter::new(SequenceNumber::new(77).unwrap());
+    }
+    for priority in [6, 7] {
+        data.input(
+            DataInput {
+                msdu: msdu(priority),
+                link: &mut link,
+            },
+            &mut events,
+        )
+        .unwrap();
+    }
+    for sequence in [77, 78] {
+        let sent = transmit(&mut data);
+        let frame = memory(&sent.buffer);
+        // The TID, its sequence space and the category agree on UP5.
+        assert_eq!(tid_and_sequence(frame), (5, sequence));
+        assert_eq!(sent.context.access_category(), WmmAccessCategory::Video);
+    }
+    // Neither MSDU took a number in TID 6 or 7.
+    if let LinkMode::Qos(counters) = &mut link.mode {
+        assert_eq!(counters[6].take().get(), 0);
+        assert_eq!(counters[7].take().get(), 0);
+    }
+}
+
+#[test]
+fn an_msdu_without_an_open_category_is_refused_before_taking_an_owner() {
+    let mut events = Kept::default();
+    let mut data = machine();
+    let mut replay = epoch();
+    let mut link = qos_link(&(), &mut replay);
+    link.admission = closed(&WmmAccessCategory::ALL);
+    let available = data.available(WmmAccessCategory::Voice);
+    assert_eq!(
+        data.input(
+            DataInput {
+                msdu: msdu(6),
+                link: &mut link,
+            },
+            &mut events,
+        ),
+        Err(DataRefusal::NoAdmittedAccessCategory)
+    );
+    assert!(data.poll_action().is_none());
+    assert_eq!(data.available(WmmAccessCategory::Voice), available);
+    assert!(events.0.is_empty());
+    // A non-QoS link has no categories to close: its data goes as before.
+    let mut counter = SequenceCounter::new(SequenceNumber::ZERO);
+    let mut open = open_link(&mut counter);
+    open.admission = closed(&WmmAccessCategory::ALL);
+    data.input(
+        DataInput {
+            msdu: msdu(6),
+            link: &mut open,
+        },
+        &mut events,
+    )
+    .unwrap();
+    assert_eq!(
+        transmit(&mut data).context.access_category(),
+        WmmAccessCategory::BestEffort
+    );
+}
+
+#[test]
+fn a_changed_admission_applies_to_the_next_msdu_and_keeps_a_numbered_one() {
+    let mut events = Kept::default();
+    let mut data = machine();
+    let mut replay = epoch();
+    let mut link = qos_link(&(), &mut replay);
+    data.input(
+        DataInput {
+            msdu: msdu(6),
+            link: &mut link,
+        },
+        &mut events,
+    )
+    .unwrap();
+    // The access point closes Voice after the first MSDU took its number.
+    link.admission = closed(&[WmmAccessCategory::Voice]);
+    data.input(
+        DataInput {
+            msdu: msdu(6),
+            link: &mut link,
+        },
+        &mut events,
+    )
+    .unwrap();
+    let mut sent = [transmit(&mut data), transmit(&mut data)];
+    sent.sort_by_key(|operation| tid_and_sequence(memory(&operation.buffer)).0);
+    assert_eq!(tid_and_sequence(memory(&sent[0].buffer)), (5, 0));
+    assert_eq!(sent[0].context.access_category(), WmmAccessCategory::Video);
+    assert_eq!(tid_and_sequence(memory(&sent[1].buffer)), (6, 0));
+    assert_eq!(sent[1].context.access_category(), WmmAccessCategory::Voice);
 }

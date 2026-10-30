@@ -100,13 +100,14 @@ impl oer_network_port::EthernetFrame for EthernetFrame {
 }
 
 impl TxMsdu {
-    /// Copy a neutral network frame into this station's checked queue owner.
-    /// UP0 preserves the network port's default user priority.
+    /// Copy a neutral network frame into this station's checked queue owner,
+    /// with the user priority its classification requests.
     pub fn from_network(
         frame: oer_network_port::EthernetFrameView<'_>,
+        priority: WmmUserPriority,
     ) -> Result<Self, FrameTooLong> {
         Ok(Self {
-            priority: WmmUserPriority::UP0,
+            priority,
             frame: EthernetFrame::from_parts(MsduParts {
                 destination: frame.destination,
                 source: frame.source,

@@ -102,9 +102,10 @@ use oer_ieee80211_rsn::{
     },
 };
 use oer_ieee80211_upper_mac::protection::HePacketPadding;
+use oer_ieee80211_upper_mac::qos::AcAdmission;
 use oer_ieee80211_upper_mac::rate_selection::{FrameRates, RateSelection};
 use oer_ieee80211_wire::address::{Bssid, IndividualAddress, OwnAddress};
-use oer_ieee80211_wire::qos::WmmAccessCategory;
+use oer_ieee80211_wire::qos::{WmmAccessCategory, WmmUserPriority};
 use {
     crate::{
         scan::ScanTable,
@@ -595,6 +596,9 @@ pub struct StaTransmit<'id, T: StaTokens, K> {
     pub class: StaFrameClass,
     /// Its rate and retry plan.
     pub plan: StaRatePlan,
+    /// The access category it contends in: [`Self::ACCESS_CATEGORY`] for a
+    /// management frame, the admitted one of its user priority for EAPOL.
+    pub access_category: WmmAccessCategory,
 }
 
 /// Reserve both owners before consuming a sequence or starting an attempt.
@@ -762,7 +766,8 @@ impl<K: Ieee80211Capabilities, C> StaFrame<K, C> {
 }
 
 impl<T: StaTokens, K: Ieee80211Capabilities> StaTransmit<'_, T, K> {
-    /// Station frames contend in the Voice queue.
+    /// Station management frames contend in the Voice queue; admission
+    /// control governs QoS data only.
     pub const ACCESS_CATEGORY: WmmAccessCategory = WmmAccessCategory::Voice;
     /// A station frame goes without an RTS/CTS or CTS-to-self exchange.
     pub const PROTECTION: oer_ieee80211_port::Protection = oer_ieee80211_port::Protection::None;
@@ -814,6 +819,9 @@ pub struct LinkView<'a, 'id, T: StaTokens> {
     pub association_id: u16,
     /// How data is sequenced on the BSS.
     pub mode: LinkMode<'a>,
+    /// The access categories the link's EDCA parameters close to the
+    /// station's QoS data, which holds no admission.
+    pub admission: AcAdmission,
     /// How data is protected.
     pub protection: LinkProtection<'a, T>,
 }
@@ -3052,6 +3060,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
             } else {
                 LinkMode::NonQos(&mut self.sequence)
             },
+            admission: AcAdmission::from_edca(connected.peer.associated.edca),
             protection,
         })
     }
@@ -5316,6 +5325,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
             HandshakeStep::Send(message) => {
                 match self.encode_eapol(
                     handshake.bssid,
+                    AcAdmission::from_edca(handshake.peer.associated.edca),
                     message.as_bytes(),
                     TxPurpose::HandshakeResponse,
                     events,
@@ -5446,36 +5456,44 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
         (Change::Keep, owed.into())
     }
 
-    /// An EAPOL frame to `bssid` in a data frame, in a buffer.
+    /// An EAPOL frame to `bssid` in a data frame, in a buffer, contending in
+    /// the access category `admission` leaves its user priority 7.
     fn encode_eapol(
         &mut self,
         bssid: Bssid,
+        admission: AcAdmission,
         eapol: &[u8],
         purpose: TxPurpose,
         events: &mut impl EventSink<StaEvent>,
     ) -> Result<StaTransmit<'id, T, K>, Unsent> {
+        let priority = eapol_priority(admission)?;
         let credit = self.reserve_transmit(events)?;
         let address = self.config.address;
         let sequence_number = self.sequence.take();
-        Ok(self.encode_reserved(
-            credit,
-            |frame| {
-                oer_ieee80211_wire::station::StaDataFrame {
-                    source: address,
-                    bssid,
-                    destination: bssid.get(),
-                    sequence_number,
-                    ether_type: ETHER_TYPE_EAPOL,
-                    payload: eapol,
-                }
-                .encode(frame)
-                .ok()
-            },
-            StaFrameClass::Connection(ConnectionFrame::Eapol),
-            purpose,
-            StaRatePlan::Management,
-            events,
-        )?)
+        Ok(self
+            .encode_reserved(
+                credit,
+                |frame| {
+                    oer_ieee80211_wire::station::StaDataFrame {
+                        source: address,
+                        bssid,
+                        destination: bssid.get(),
+                        sequence_number,
+                        ether_type: ETHER_TYPE_EAPOL,
+                        payload: eapol,
+                    }
+                    .encode(frame)
+                    .ok()
+                },
+                StaFrameClass::Connection(ConnectionFrame::Eapol),
+                purpose,
+                StaRatePlan::Management,
+                events,
+            )
+            .map(|transmit| StaTransmit {
+                access_category: priority.access_category(),
+                ..transmit
+            })?)
     }
 
     /// The action the connected state owes.
@@ -5616,8 +5634,10 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
         let DuplicateMessage4::Send(message) = &rsn.message4 else {
             return None;
         };
+        let admission = AcAdmission::from_edca(connected.peer.associated.edca);
         let qos = connected.qos.then_some(&mut connected.qos_sequences);
-        match self.encode_eapol_response(connected.bssid, qos, message, purpose, events) {
+        match self.encode_eapol_response(connected.bssid, qos, admission, message, purpose, events)
+        {
             Ok(owed) => {
                 rsn.message4 = DuplicateMessage4::AwaitSent;
                 connected.sending = true;
@@ -5635,16 +5655,24 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
         &mut self,
         bssid: Bssid,
         qos: Option<&mut [SequenceCounter; 8]>,
+        admission: AcAdmission,
         response: &EapolResponse,
         purpose: TxPurpose,
         events: &mut impl EventSink<StaEvent>,
     ) -> Result<Owed<'id, T, K>, Unsent> {
         match response.protection {
             EapolProtection::Open => self
-                .encode_eapol(bssid, response.frame.as_bytes(), purpose, events)
+                .encode_eapol(bssid, admission, response.frame.as_bytes(), purpose, events)
                 .map(Owed::Transmit),
             EapolProtection::Pairwise => self
-                .encode_protected_eapol(bssid, qos, response.frame.as_bytes(), purpose, events)
+                .encode_protected_eapol(
+                    bssid,
+                    qos,
+                    admission,
+                    response.frame.as_bytes(),
+                    purpose,
+                    events,
+                )
                 .map(Owed::TransmitProtected),
         }
     }
@@ -5831,10 +5859,12 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                         Ok(frame) => frame.message(),
                         Err(error) => return Some(Err(StaDisconnectReason::InvalidEapol(error))),
                     };
+                    let admission = AcAdmission::from_edca(connected.peer.associated.edca);
                     let qos = connected.qos.then_some(&mut connected.qos_sequences);
                     match self.encode_eapol_response(
                         connected.bssid,
                         qos,
+                        admission,
                         &message,
                         if message_kind == oer_ieee80211_rsn::EapolKeyMessage::PairwiseMessage4 {
                             pairwise_purpose
@@ -6497,6 +6527,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                 frame,
                 class,
                 plan,
+                access_category: StaTransmit::<'id, T, K>::ACCESS_CATEGORY,
             }),
             None => {
                 self.tickets.put(ticket, events);
@@ -6514,27 +6545,26 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
 
     /// An EAPOL frame of the connected station under its pairwise key: the
     /// Protected bit and the CCMP header's room, which the backend fills;
-    /// QoS Data at user priority 7 on a QoS BSS.
+    /// QoS Data at the user priority `admission` leaves priority 7 on a QoS
+    /// BSS.
     ///
-    /// On a QoS BSS it takes TID 7's number, which data at priority 7
-    /// shares. Allocating from TID 0 instead would leave holes in that TID's
-    /// sequence under its Block Ack.
+    /// On a QoS BSS it takes that priority's TID number, which data at the
+    /// same priority shares. Allocating from TID 0 instead would leave holes
+    /// in that TID's sequence under its Block Ack.
     fn encode_protected_eapol(
         &mut self,
         bssid: Bssid,
         qos: Option<&mut [SequenceCounter; 8]>,
+        admission: AcAdmission,
         eapol: &[u8],
         purpose: TxPurpose,
         events: &mut impl EventSink<StaEvent>,
     ) -> Result<StaTransmit<'id, T, K>, Unsent> {
-        const PRIORITY: u8 = 7;
+        let priority = eapol_priority(admission)?;
         let credit = self.reserve_transmit(events)?;
         let peer_qos = qos.is_some();
         let sequence_number = match qos {
-            Some(sequences) => {
-                let [_, _, _, _, _, _, _, voice] = sequences;
-                voice.take()
-            }
+            Some(sequences) => priority.select_mut(sequences).take(),
             None => self.sequence.take(),
         };
         let frame = oer_ieee80211_wire::station::StaProtectedDataFrame {
@@ -6542,20 +6572,25 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
             bssid,
             destination: bssid.get(),
             sequence_number,
-            user_priority: PRIORITY,
+            user_priority: priority.value(),
             peer_qos,
             ccmp_header: [0; 8],
             ether_type: ETHER_TYPE_EAPOL,
             payload: eapol,
         };
-        Ok(self.encode_reserved(
-            credit,
-            |buffer| frame.encode(buffer).ok(),
-            StaFrameClass::Connection(ConnectionFrame::Eapol),
-            purpose,
-            StaRatePlan::Management,
-            events,
-        )?)
+        Ok(self
+            .encode_reserved(
+                credit,
+                |buffer| frame.encode(buffer).ok(),
+                StaFrameClass::Connection(ConnectionFrame::Eapol),
+                purpose,
+                StaRatePlan::Management,
+                events,
+            )
+            .map(|transmit| StaTransmit {
+                access_category: priority.access_category(),
+                ..transmit
+            })?)
     }
 
     /// A Probe Request reserves credit before consuming its sequence.
@@ -6800,6 +6835,15 @@ enum Unsent {
     NoTokens,
     /// The frame did not encode.
     Encode,
+}
+
+/// The user priority of the station's EAPOL: 7, or the canonical priority of
+/// the access category admission control leaves it. A BSS that closes every
+/// category leaves EAPOL none, and the frame does not encode.
+fn eapol_priority(admission: AcAdmission) -> Result<WmmUserPriority, Unsent> {
+    admission
+        .admitted_user_priority(WmmUserPriority::UP7)
+        .ok_or(Unsent::Encode)
 }
 
 /// Encoding can fail after credit is reserved; acquiring credit cannot.

@@ -9,6 +9,7 @@ use core::{
     task::{Context, Poll},
 };
 use embassy_futures::select::{Either, select};
+use oer_bridges_ieee80211_ethernet::qos::classify_wmm;
 use oer_ieee80211_sta::data::{EthernetFrame, TxMsdu};
 use oer_memory::{WakingSpscReceiver, WakingSpscSender};
 use oer_network_port::{LinkSnapshot, LinkState, NetDevice, TransmitError, TransmitRefused};
@@ -406,7 +407,10 @@ impl<const TX: usize, const RX: usize> NetDevice for Device<'_, TX, RX> {
                 .view()
                 .map_err(TransmitError::InvalidLength)
                 .and_then(|view| {
-                    TxMsdu::from_network(view)
+                    // The frame requests a priority from its VLAN or IP
+                    // marking; the station decides the final one.
+                    let requested = classify_wmm(view.ether_type, view.payload);
+                    TxMsdu::from_network(view, requested.user_priority)
                         .map_err(|_| {
                             TransmitError::InvalidLength(
                                 oer_network_port::FrameLengthError::TooLong,

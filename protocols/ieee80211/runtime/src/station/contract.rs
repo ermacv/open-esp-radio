@@ -242,6 +242,8 @@ pub enum Notice {
 pub enum MsduRefusal {
     NoTokens,
     TooLong,
+    /// Admission control leaves the MSDU no access category.
+    NoAdmittedAccessCategory,
 }
 /// Original refused Ethernet owner. Its private implementation is not a station-core API.
 #[derive(Debug)]
@@ -478,6 +480,9 @@ impl From<oer_ieee80211_sta::data::DataRefusal> for MsduRefusal {
         match value {
             oer_ieee80211_sta::data::DataRefusal::NoTokens => Self::NoTokens,
             oer_ieee80211_sta::data::DataRefusal::TooLong => Self::TooLong,
+            oer_ieee80211_sta::data::DataRefusal::NoAdmittedAccessCategory => {
+                Self::NoAdmittedAccessCategory
+            }
         }
     }
 }

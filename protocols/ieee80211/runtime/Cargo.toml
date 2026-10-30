@@ -25,6 +25,7 @@ oer-ieee80211-arbiter = { path = "../arbiter" }
 oer-ieee80211-sta = { path = "../sta" }
 oer-crypto = { path = "../../../portable/crypto" }
 oer-ieee80211-upper-mac = { path = "../upper-mac" }
+oer-bridges-ieee80211-ethernet = { path = "../../bridges/ieee80211-ethernet" }
 oer-ieee80211-rsn = { path = "../rsn" }
 
 [dev-dependencies]

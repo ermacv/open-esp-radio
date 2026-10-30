@@ -2788,6 +2788,7 @@ where
         frame,
         class,
         plan,
+        access_category,
     } = transmit;
     let frame = match frame
         .rated(plan, rates, |rate| phase.rate(rate))
@@ -2840,7 +2841,7 @@ where
             context: TxContext::Station(context),
             ticket,
             source,
-            access_category: StationTransmit::<'id, B, GROUPS>::ACCESS_CATEGORY,
+            access_category,
             protection: StationTransmit::<'id, B, GROUPS>::PROTECTION,
             power: StationTransmit::<'id, B, GROUPS>::POWER,
             coex_operation: class.coex_operation(),

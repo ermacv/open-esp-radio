@@ -79,13 +79,15 @@ impl WmmTrafficClass {
     }
 }
 
-/// Classify an Ethernet frame, given as its EtherType and the payload after
-/// its header, from an outer 802.1D PCP or an IP DSCP.
+/// Classify an Ethernet frame, given as its EtherType (the number an MSDU
+/// carries) and the payload after its header, from an outer 802.1D PCP or an
+/// IP DSCP.
 ///
 /// A valid frame of another type is `Unmarked`, one the codec refuses is
 /// `Malformed`; both request best effort.
-pub fn classify_wmm(ether_type: EtherType, payload: &[u8]) -> WmmTrafficClass {
+pub fn classify_wmm(ether_type: u16, payload: &[u8]) -> WmmTrafficClass {
     use WmmClassificationSource::{Malformed, Unmarked};
+    let ether_type = EtherType::new(ether_type);
     if ether_type.is_vlan_tag() {
         let Ok((tag, _)) = VlanTag::parse(payload) else {
             return WmmTrafficClass::best_effort(Malformed);

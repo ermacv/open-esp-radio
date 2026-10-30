@@ -241,6 +241,9 @@ pub enum DataRefusal {
     NoTokens,
     /// The MSDU does not fit a buffer.
     TooLong,
+    /// Admission control closes the MSDU's access category and every lower
+    /// one: the link leaves it no category to contend in.
+    NoAdmittedAccessCategory,
 }
 
 /// The original data operation. It travels by value with the attempt;
@@ -724,6 +727,19 @@ impl<'id, D: StaDataTokens, K: oer_ieee80211_port::Ieee80211Capabilities, const 
             self.leave(events);
             self.link = Some(link.epoch);
         }
+        let qos = matches!(link.mode, LinkMode::Qos(_));
+        // The final priority, before any owner or number is taken: the
+        // requested one, or the one admission control leaves it. It names
+        // the frame's TID, its sequence space and its access category.
+        let msdu = if qos {
+            let priority = link
+                .admission
+                .admitted_user_priority(msdu.priority)
+                .ok_or(DataRefusal::NoAdmittedAccessCategory)?;
+            Msdu { priority, ..msdu }
+        } else {
+            msdu
+        };
         let ticket = self.tickets.take().ok_or(DataRefusal::NoTokens)?;
         let Some(mut buffer) = self.buffers.take() else {
             self.tickets.put(ticket, events);
@@ -731,7 +747,6 @@ impl<'id, D: StaDataTokens, K: oer_ieee80211_port::Ieee80211Capabilities, const 
         };
         let tid = msdu.priority;
         let admitted = msdu.admitted;
-        let qos = matches!(link.mode, LinkMode::Qos(_));
         // A non-QoS link has one queue, best effort.
         let (slot, access_category) = if qos {
             (tid, msdu.priority.access_category())

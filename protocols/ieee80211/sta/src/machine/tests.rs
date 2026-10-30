@@ -3673,6 +3673,7 @@ fn every_control_encoder_reserves_credit_before_consuming_its_sequence() {
                                         .unwrap(),
                                 )
                                 .unwrap(),
+                                oer_ieee80211_upper_mac::qos::AcAdmission::OPEN,
                                 &[],
                                 TxPurpose::HandshakeResponse,
                                 &mut (),
@@ -3701,6 +3702,7 @@ fn every_control_encoder_reserves_credit_before_consuming_its_sequence() {
                                 )
                                 .unwrap(),
                                 None,
+                                oer_ieee80211_upper_mac::qos::AcAdmission::OPEN,
                                 &[],
                                 TxPurpose::Connected(Sending::GroupResponse),
                                 &mut (),
@@ -3716,6 +3718,7 @@ fn every_control_encoder_reserves_credit_before_consuming_its_sequence() {
                                 )
                                 .unwrap(),
                                 Some(qos),
+                                oer_ieee80211_upper_mac::qos::AcAdmission::OPEN,
                                 &[],
                                 TxPurpose::Connected(Sending::GroupResponse),
                                 &mut (),
@@ -5219,5 +5222,84 @@ fn an_overfull_returned_bank_reports_its_fault_and_keeps_owners_quarantined() {
             KeyCell::UnreturnedBank { .. }
         ));
         assert!(!world.station.keys.clear());
+    });
+}
+
+#[test]
+fn eapol_under_a_closed_voice_category_contends_as_video_in_tid_five() {
+    use oer_ieee80211_upper_mac::qos::AcAdmission;
+    use oer_ieee80211_wire::extensions::wmm::{WmmAcParameters, WmmParameterSet};
+    fn closed(restricted: &[WmmAccessCategory]) -> AcAdmission {
+        let defaults = WmmParameterSet::STANDARD_DEFAULT;
+        AcAdmission::from_edca(WmmParameterSet::new(
+            1,
+            false,
+            WmmAccessCategory::ALL.map(|category| WmmAcParameters {
+                admission_control_mandatory: restricted.contains(&category),
+                ..defaults.access_category(category)
+            }),
+        ))
+    }
+    installed(|mint| {
+        let mut world = connected_world(mint);
+        let bssid = oer_ieee80211_wire::address::Bssid::new(
+            oer_ieee80211_wire::address::IndividualAddress::new(BSSID).unwrap(),
+        )
+        .unwrap();
+        let voice = closed(&[WmmAccessCategory::Voice]);
+        let mut qos = [SequenceCounter::new(SequenceNumber::ZERO); 8];
+        let transmit = world
+            .station
+            .transition()
+            .0
+            .encode_protected_eapol(
+                bssid,
+                Some(&mut qos),
+                voice,
+                &[],
+                TxPurpose::Connected(Sending::GroupResponse),
+                &mut (),
+            )
+            .ok()
+            .unwrap();
+        assert_eq!(transmit.access_category, WmmAccessCategory::Video);
+        // TID 5 took the number; TID 7 kept its own.
+        let mut expected = [SequenceCounter::new(SequenceNumber::ZERO); 8];
+        expected[5].take();
+        assert_eq!(qos, expected);
+        world.transmitted(transmit, true);
+        world.end_transmissions(at(50));
+
+        let open = world
+            .station
+            .transition()
+            .0
+            .encode_eapol(bssid, voice, &[], TxPurpose::HandshakeResponse, &mut ())
+            .ok()
+            .unwrap();
+        assert_eq!(open.access_category, WmmAccessCategory::Video);
+        world.transmitted(open, false);
+        world.end_transmissions(at(60));
+
+        // A BSS that closes every category leaves EAPOL none, and no owner
+        // or number is taken.
+        let before = world.station.sequence;
+        assert!(
+            world
+                .station
+                .transition()
+                .0
+                .encode_eapol(
+                    bssid,
+                    closed(&WmmAccessCategory::ALL),
+                    &[],
+                    TxPurpose::HandshakeResponse,
+                    &mut (),
+                )
+                .is_err()
+        );
+        assert_eq!(world.station.sequence, before);
+        assert_eq!(world.station.tickets.len(), 2);
+        assert_eq!(world.station.buffers.len(), 2);
     });
 }

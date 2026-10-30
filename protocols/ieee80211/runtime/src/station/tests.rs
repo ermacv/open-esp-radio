@@ -2414,6 +2414,62 @@ fn data_before(air: &[AirFrame], from: usize, until: impl Fn(&AirFrame) -> bool)
 }
 
 #[test]
+fn a_frame_marked_for_voice_under_a_closed_voice_category_goes_as_video_in_tid_five() {
+    run(
+        StaSecurity::Personal {
+            password: oer_ieee80211_rsn::sae::SaePassword::new(b"password").unwrap(),
+            pmk: Pmk::from_bytes(PMK),
+        },
+        |world| {
+            Box::pin(async move {
+                // The access point's WMM Parameter element sets ACM for
+                // Voice; the station holds no admission.
+                let mut wmm = WMM;
+                wmm[22] |= 0x10;
+                let mut beacon = beacon(true);
+                beacon.extend_from_slice(&wmm);
+                let mut seen = 0;
+                world.associate_with(&mut seen, beacon, true).await;
+                let ptk = world.handshake(&mut seen).await;
+                // Voice never opens: what goes, goes in another category.
+                world.air.hold(WmmAccessCategory::Voice, true);
+                // An IPv4 header marked EF (DSCP 46), total length 20.
+                let mut ip = [0_u8; 20];
+                ip[0] = 0x45;
+                ip[1] = 46 << 2;
+                ip[3] = 20;
+                let view = oer_network_port::EthernetFrameView {
+                    destination: [2, 0, 0, 0, 0, 9],
+                    source: LOCAL,
+                    ether_type: 0x0800,
+                    payload: &ip,
+                };
+                let requested = oer_bridges_ieee80211_ethernet::qos::classify_wmm(
+                    view.ether_type,
+                    view.payload,
+                );
+                assert_eq!(requested.user_priority, WmmUserPriority::UP6);
+                let packet = TxMsdu::from_network(view, requested.user_priority).unwrap();
+                assert!(world.stack.borrow().try_send(packet).is_ok());
+                let data = world.sent(&mut seen, QOS_DATA).await;
+                assert!(!carries_eapol(&data));
+                assert_eq!(data.plaintext[21], 9);
+                assert_eq!(data.plaintext[24] & 0x0f, 5, "TID 5, not 6");
+                // The station's own EAPOL takes the same admitted priority.
+                world
+                    .air
+                    .receive(&protected_group_message1(&ptk, 3, 2), decrypted());
+                let response = world.sent(&mut seen, QOS_DATA).await;
+                assert!(carries_eapol(&response));
+                assert_eq!(response.plaintext[24] & 0x0f, 5, "TID 5, not 7");
+                world.air.hold(WmmAccessCategory::Voice, false);
+                world.command(ServiceCommand::Stop).await;
+            })
+        },
+    );
+}
+
+#[test]
 fn interleaved_station_and_data_terminals_keep_their_owner_and_voice_order() {
     run(
         StaSecurity::Personal {

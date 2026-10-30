@@ -3,7 +3,7 @@ use std::{vec, vec::Vec};
 
 /// The class of a frame of `ether_type` around `payload`.
 fn classify(ether_type: u16, payload: &[u8]) -> WmmTrafficClass {
-    classify_wmm(EtherType::new(ether_type), payload)
+    classify_wmm(ether_type, payload)
 }
 
 /// A valid IPv4 header with the services octet and `ihl` words, no payload.
