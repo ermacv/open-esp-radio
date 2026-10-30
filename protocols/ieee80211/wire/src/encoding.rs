@@ -1,6 +1,6 @@
 //! A frame's immutable parts are its sizing and writing authority.
 
-use oer_network::ETHERNET_HEADER_LEN;
+use oer_network_port::ETHERNET_HEADER_LEN;
 mod fixed;
 pub(crate) use fixed::write_array;
 

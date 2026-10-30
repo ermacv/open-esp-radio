@@ -22,7 +22,7 @@ pub use credentials::{
 use oer_ieee80211_runtime::station as runtime;
 use oer_ieee80211_sta::data::{EthernetFrame as Frame, TxMsdu};
 use oer_memory::WakingSpscQueue;
-use oer_network::{EthernetFrame, LinkSnapshot, NetDevice, TransmitRefused};
+use oer_network_port::{EthernetFrame, LinkSnapshot, NetDevice, TransmitRefused};
 use runtime::contract::Command;
 
 pub const RX_DEPTH: usize = 8;
@@ -114,7 +114,9 @@ pub struct Received {
     inner: Frame,
 }
 impl EthernetFrame for Received {
-    fn view(&self) -> Result<oer_network::EthernetFrameView<'_>, oer_network::FrameLengthError> {
+    fn view(
+        &self,
+    ) -> Result<oer_network_port::EthernetFrameView<'_>, oer_network_port::FrameLengthError> {
         self.inner.view()
     }
 }
@@ -308,8 +310,9 @@ mod tests {
     impl EthernetFrame for Packet {
         fn view(
             &self,
-        ) -> Result<oer_network::EthernetFrameView<'_>, oer_network::FrameLengthError> {
-            Ok(oer_network::EthernetFrameView {
+        ) -> Result<oer_network_port::EthernetFrameView<'_>, oer_network_port::FrameLengthError>
+        {
+            Ok(oer_network_port::EthernetFrameView {
                 destination: [2; 6],
                 source: [4; 6],
                 ether_type: 0x0800,
@@ -326,7 +329,7 @@ mod tests {
         assert_eq!(net.link(), LinkSnapshot::DOWN);
         let dropped = Rc::new(Cell::new(0));
         let refused = net.try_transmit(Packet(dropped.clone())).err().unwrap();
-        assert_eq!(refused.reason, oer_network::TransmitError::LinkDown);
+        assert_eq!(refused.reason, oer_network_port::TransmitError::LinkDown);
         assert!(Rc::ptr_eq(&refused.frame.0, &dropped));
         assert_eq!(dropped.get(), 0);
         assert_eq!(control.try_connect(41), Ok(()));

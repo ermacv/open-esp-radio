@@ -179,7 +179,7 @@ Policy requests use the Runner's existing affine command credits and normal
 Control events. A facade Stop disconnects once, waits for link-down and then
 retires Runner. HIL retains command correlation and socket workload lifetime,
 without its own station policy loop or product counters.
-The neutral `oer-network::NetDevice` transfers Ethernet owners and publishes
+The neutral `oer-network-port::NetDevice` transfers Ethernet owners and publishes
 the link epoch. `oer_embassy_net::ip` builds its pools, one pinned IP stack
 and `EthernetBridge` once. The service selects DHCPv4 or static IPv4 and
 reports link epoch, IPv4 configuration and stop/error through typed product

@@ -1592,7 +1592,7 @@ dependencies = [
  "embassy-net",
  "embassy-time",
  "oer-memory",
- "oer-network",
+ "oer-network-port",
  "oer-sync",
  "oer-time",
  "oer-time-virtual",
@@ -1879,7 +1879,7 @@ dependencies = [
  "oer-ieee80211-upper-mac",
  "oer-ieee80211-wire",
  "oer-memory",
- "oer-network",
+ "oer-network-port",
  "oer-radio-port",
  "oer-radio-regulatory",
  "oer-sync",
@@ -2466,7 +2466,7 @@ dependencies = [
  "oer-ieee80211-upper-mac",
  "oer-ieee80211-wire",
  "oer-memory",
- "oer-network",
+ "oer-network-port",
  "oer-radio-port",
  "oer-radio-regulatory",
  "oer-sync",
@@ -2489,7 +2489,7 @@ dependencies = [
  "oer-ieee80211-upper-mac",
  "oer-ieee80211-wire",
  "oer-memory",
- "oer-network",
+ "oer-network-port",
  "oer-radio-port",
  "oer-radio-regulatory",
  "oer-test-ui-cases",
@@ -2505,7 +2505,7 @@ dependencies = [
  "oer-events",
  "oer-ieee80211-port",
  "oer-ieee80211-wire",
- "oer-network",
+ "oer-network-port",
  "oer-test-ui-cases",
  "oer-time",
  "oer-time-virtual",
@@ -2515,7 +2515,7 @@ dependencies = [
 name = "oer-ieee80211-wire"
 version = "0.1.0"
 dependencies = [
- "oer-network",
+ "oer-network-port",
  "oer-radio-regulatory",
  "oer-test-ui-cases",
  "oer-wire",
@@ -2766,7 +2766,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-network"
+name = "oer-network-port"
 version = "0.1.0"
 
 [[package]]

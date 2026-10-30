@@ -876,7 +876,7 @@ enum Role {
     /// A HIL test image.
     HilImage,
     Protocol(ProtocolRole),
-    /// `protocols/radio/*` and `protocols/network`: vocabulary shared by the
+    /// `protocols/radio/*` and `protocols/network/*`: vocabulary shared by the
     /// protocols.
     SharedVocabulary,
     Portable,
@@ -1240,7 +1240,7 @@ fn protocol_roles_and_the_explicit_chip_roles_follow_the_layout() {
     for path in [
         "protocols/radio/port",
         "protocols/hil/protocol",
-        "protocols/network",
+        "protocols/network/port",
         "portable/wire",
         "chips/esp32s31/hal",
     ] {
@@ -1248,7 +1248,7 @@ fn protocol_roles_and_the_explicit_chip_roles_follow_the_layout() {
     }
     for (path, expected) in [
         ("protocols/radio/port", Some(Role::SharedVocabulary)),
-        ("protocols/network", Some(Role::SharedVocabulary)),
+        ("protocols/network/port", Some(Role::SharedVocabulary)),
         ("protocols/hil/protocol", Some(Role::HilProtocol)),
         ("protocols/hil/agent", Some(Role::HilAgent)),
         ("protocols/hil/new", None),

@@ -40,7 +40,7 @@ aliases and include optional and target-specific dependencies.
 
 | Crate | Owns | Does not own |
 | --- | --- | --- |
-| `oer-network` (`protocols/network`) | logical interfaces, link state, frame and admission errors, `TransportFlow` | queues, allocator, executor, hardware |
+| `oer-network-port` (`protocols/network/port`) | logical interfaces, link state, frame and admission errors, `TransportFlow` | queues, allocator, executor, hardware |
 | `oer-embassy-net` (`portable/embassy/net`) | the Xarxa `PacketBuf` handoff, destination/flow TX queues, stack wake registration, RX copying into packet pools; in `datapath`, the software/physical TX ownership traits and `TxQueues` | radio scheduling, DMA descriptors, a concrete physical allocator |
 | `oer-embassy-net::ip` | final pool/stack storage, one `EthernetBridge` over `NetDevice`, DHCP/static IPv4, link epoch and typed configuration/stop/error status | radio installation, a second stack, a common TCP/UDP API |
 | `oer-esp32s31-ieee80211-driver::mac` | the TX cost model (`mac::tx_cost`) and work receipts (`mac::tx_work`) of its publications | packet storage |

@@ -3069,7 +3069,7 @@ fn control_and_runner_publish_status_and_distinct_core_epochs_on_reconnect() {
             let mut previous = 0;
             for _ in 0..2 {
                 world.outputs.borrow_mut().clear();
-                assert_eq!(world.status().link.state, oer_network::LinkState::Down);
+                assert_eq!(world.status().link.state, oer_network_port::LinkState::Down);
                 world.associate(&mut seen, false).await;
                 world
                     .notice(StaNotice::Connected {
@@ -3078,7 +3078,7 @@ fn control_and_runner_publish_status_and_distinct_core_epochs_on_reconnect() {
                     })
                     .await;
                 let connected = world.status();
-                assert_eq!(connected.link.state, oer_network::LinkState::Up);
+                assert_eq!(connected.link.state, oer_network_port::LinkState::Up);
                 assert_ne!(connected.link.epoch, previous);
                 previous = connected.link.epoch;
                 world.station_command(9, StaCommand::Disconnect).await;
@@ -3087,8 +3087,8 @@ fn control_and_runner_publish_status_and_distinct_core_epochs_on_reconnect() {
                     .await;
                 assert_eq!(
                     world.status().link,
-                    oer_network::LinkSnapshot {
-                        state: oer_network::LinkState::Down,
+                    oer_network_port::LinkSnapshot {
+                        state: oer_network_port::LinkState::Down,
                         epoch: previous
                     }
                 );
@@ -3109,7 +3109,7 @@ fn control_cooperative_stop_retires_the_model_runner_and_publishes_the_last_noti
             world
                 .notice(StaNotice::Disconnected(StaDisconnectReason::LocalRequest))
                 .await;
-            assert_eq!(world.status().link.state, oer_network::LinkState::Down);
+            assert_eq!(world.status().link.state, oer_network_port::LinkState::Down);
         })
     });
 }

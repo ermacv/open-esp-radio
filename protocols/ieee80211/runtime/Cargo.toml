@@ -14,7 +14,7 @@ placement = ["oer-ieee80211-sta/placement"]
 [dependencies]
 oer-events = { path = "../../../portable/events" }
 oer-sync = { path = "../../../portable/sync" }
-oer-network = { path = "../../network" }
+oer-network-port = { path = "../../network/port" }
 heapless = "0.9.3"
 embassy-futures = "0.1.2"
 oer-memory = { path = "../../../portable/memory" }

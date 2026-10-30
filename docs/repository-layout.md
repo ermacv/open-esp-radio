@@ -47,7 +47,7 @@ protocols/hil/{agent, protocol}/
 protocols/ieee80211/{ap, arbiter, cipher, esp-now, model, port, rsn, runtime,
     sta, upper-mac, wire}/
 protocols/ieee802154/{mac, model, port, wire}/
-protocols/network/
+protocols/network/port/
 protocols/radio/{coex, port, regulatory}/
 tools/analysis/{blobray-analysis, blobray-application, blobray-artifacts,
     blobray-domain, blobray-linker, blobray-riscv, blobray-verification, cli, elf,

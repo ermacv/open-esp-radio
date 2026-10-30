@@ -1,6 +1,6 @@
 use super::*;
 use oer_memory::WakingSpscQueue;
-use oer_network::{EthernetFrameView, FrameLengthError};
+use oer_network_port::{EthernetFrameView, FrameLengthError};
 use std::{cell::Cell, rc::Rc};
 
 struct Frame {
@@ -12,7 +12,7 @@ impl Drop for Frame {
         self.owner.set(self.owner.get() + 1);
     }
 }
-impl oer_network::EthernetFrame for Frame {
+impl oer_network_port::EthernetFrame for Frame {
     fn view(&self) -> Result<EthernetFrameView<'_>, FrameLengthError> {
         Ok(EthernetFrameView {
             destination: [2; 6],

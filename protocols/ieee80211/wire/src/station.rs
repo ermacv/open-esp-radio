@@ -17,7 +17,7 @@ use crate::{
     security::LinkProtection,
     sequence::SequenceNumber,
 };
-use oer_network::ETHERNET_HEADER_LEN;
+use oer_network_port::ETHERNET_HEADER_LEN;
 
 const OPEN_AUTHENTICATION_FRAME_CONTROL: u16 = 0x00b0;
 #[cfg(test)]

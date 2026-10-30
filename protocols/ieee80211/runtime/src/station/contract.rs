@@ -246,8 +246,10 @@ pub enum MsduRefusal {
 /// Original refused Ethernet owner. Its private implementation is not a station-core API.
 #[derive(Debug)]
 pub struct TransmitPacket(pub(crate) oer_ieee80211_sta::data::TxMsdu);
-impl oer_network::EthernetFrame for TransmitPacket {
-    fn view(&self) -> Result<oer_network::EthernetFrameView<'_>, oer_network::FrameLengthError> {
+impl oer_network_port::EthernetFrame for TransmitPacket {
+    fn view(
+        &self,
+    ) -> Result<oer_network_port::EthernetFrameView<'_>, oer_network_port::FrameLengthError> {
         self.0.frame.view()
     }
 }

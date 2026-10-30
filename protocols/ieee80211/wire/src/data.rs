@@ -22,7 +22,7 @@ use crate::frame::QosControl;
 
 use crate::qos::{WmmAccessCategory, WmmUserPriority};
 
-use oer_network::ETHERNET_HEADER_LEN;
+use oer_network_port::ETHERNET_HEADER_LEN;
 pub const IEEE80211_LEGACY_DATA_HEADER_LEN: usize = 24;
 pub const IEEE80211_QOS_DATA_HEADER_LEN: usize = 26;
 pub const IEEE80211_HE_CONTROL_LEN: usize = 4;

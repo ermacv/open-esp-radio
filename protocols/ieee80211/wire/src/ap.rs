@@ -7,7 +7,7 @@
 //! before accessing fields; variable information elements remain borrowed slices.
 
 use crate::frame::{FrameControlFields, FrameType};
-use oer_network::ETHERNET_HEADER_LEN;
+use oer_network_port::ETHERNET_HEADER_LEN;
 
 use crate::{
     block_ack::{BlockAckAction, parse_block_ack_action},

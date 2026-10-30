@@ -4,7 +4,7 @@
 use core::{future::Future, task::Poll};
 use oer_embassy_net::{NetworkInterfaceId, OwnedEndpointResources, ethernet::EthernetBridge};
 use oer_memory::HostContext;
-use oer_network::{
+use oer_network_port::{
     EthernetFrame, EthernetFrameView, FrameLengthError, LinkSnapshot, LinkState, NetDevice,
     TransmitError, TransmitRefused,
 };

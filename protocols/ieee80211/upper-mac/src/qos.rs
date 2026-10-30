@@ -10,7 +10,7 @@ use oer_ieee80211_wire::{
         WmmUserPriority,
     },
 };
-use oer_network::ETHERNET_HEADER_LEN;
+use oer_network_port::ETHERNET_HEADER_LEN;
 
 /// Next lower access category used when the requested AC requires an
 /// admission which the station does not own.

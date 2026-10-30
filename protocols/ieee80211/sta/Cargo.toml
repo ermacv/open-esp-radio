@@ -15,7 +15,7 @@ placement = []
 test-support = []
 
 [dependencies]
-oer-network = { path = "../../network" }
+oer-network-port = { path = "../../network/port" }
 oer-memory = { path = "../../../portable/memory" }
 oer-crypto = { path = "../../../portable/crypto" }
 oer-ieee80211-cipher = { path = "../cipher" }
