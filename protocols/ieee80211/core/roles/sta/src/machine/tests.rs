@@ -3426,10 +3426,12 @@ fn association_waits_for_credit_without_consuming_a_request_and_still_expires() 
         while let Some(ticket) = world.station.tickets.take() {
             held.push(ticket);
         }
-        let access_point = *world.station.scan.records().next().unwrap();
+        let observation = *world.station.scan.observations().next().unwrap();
+        let access_point = observation.record;
         let join = || Join {
             rsn: select_association_rsn(&access_point, world.station.policy()).unwrap(),
             access_point,
+            erp: observation.erp,
             channel: world.station.config.channels[0],
             step: JoinStep::Associate(
                 StaAssociationRuntime::new(

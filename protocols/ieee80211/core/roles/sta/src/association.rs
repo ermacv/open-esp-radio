@@ -50,20 +50,16 @@ pub fn select_phy(
     }
 }
 
-/// The ERP protection the access point's ERP elements ask for. A BSS sends
-/// one ERP element; repeats are malformed, and protection fails closed while
-/// the rest of the record stays usable: every bit any of them asserts counts,
-/// and elements beyond the record's capacity, which the station did not see,
-/// count as asserting Use Protection and long preambles.
+/// The ERP protection a BSS's ERP Information fields ask for, in frame
+/// order. A BSS sends one ERP element; repeats are malformed, and protection
+/// fails closed while the rest of the record stays usable: every bit any of
+/// them asserts counts. No element asks for nothing.
 pub fn erp_protection(
-    access_point: &oer_ieee80211_wire::scan::ScanRecord,
+    information: impl IntoIterator<Item = u8>,
 ) -> oer_ieee80211_wire::protection::ErpProtection {
-    use oer_ieee80211_wire::protection::ErpProtection;
-    let stored = access_point.erp_information();
-    if usize::from(access_point.erp_element_count()) > stored.len() {
-        return ErpProtection::new(true, true);
-    }
-    ErpProtection::from_information(stored.iter().copied().reduce(|merged, next| merged | next))
+    oer_ieee80211_wire::protection::ErpProtection::from_information(
+        information.into_iter().reduce(|merged, next| merged | next),
+    )
 }
 
 /// The mode a station associates with `access_point` in under `preference`:
@@ -142,12 +138,13 @@ impl StaAssociatedPeer {
         }
     }
 
-    /// The peer `access_point` became by `response` to an association with
-    /// `phy`. `he_packet_padding` reads the nominal packet padding from the
+    /// The peer `access_point`, whose ERP elements ask for `erp`, became by
+    /// `response` to an association with `phy`. `he_packet_padding` reads the nominal packet padding from the
     /// access point's HE Capabilities element, an integrator's policy (the
     /// Espressif stack's is `oer-espressif-ieee80211-policy`'s).
     pub fn derive(
         access_point: &oer_ieee80211_wire::scan::ScanRecord,
+        erp: oer_ieee80211_wire::protection::ErpProtection,
         response: &oer_ieee80211_wire::station::AssociationResponse,
         phy: PhyMode,
         he_packet_padding: impl FnOnce(
@@ -200,7 +197,7 @@ impl StaAssociatedPeer {
             he_bss_color: parse_he20_operation(access_point.he_operation_ie_bytes())
                 .map_or(0, |operation| operation.effective_bss_color()),
             protection: BssProtection {
-                erp: erp_protection(access_point),
+                erp,
                 ht: HtProtectionMode::from_operation_ie(access_point.ht_operation_ie_bytes()),
                 he_txop_rts_threshold: he_peer_state
                     .and_then(|state| state.rts_threshold)

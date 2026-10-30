@@ -3,8 +3,8 @@ use oer_ieee80211_wire::{
     ht::{HT_CAPABILITY_IE_LEN, HT_OPERATION_IE_LEN},
     scan::{
         EXTENDED_RATES_CAPACITY, HE_CAPABILITY_IE_CAPACITY, HE_OPERATION_IE_CAPACITY,
-        HtSecondaryChannel, RSN_IE_CAPACITY, RSNXE_CAPACITY, ScanRecord, ScanRecordError,
-        WMM_IE_CAPACITY, he_default_packet_extension_duration,
+        HtSecondaryChannel, RSN_IE_CAPACITY, RSNXE_CAPACITY, ScanFrame, ScanRecord,
+        ScanRecordError, WMM_IE_CAPACITY, he_default_packet_extension_duration,
         he_extended_range_single_user_disabled, parse_management,
     },
 };
@@ -211,49 +211,64 @@ fn a_management_frame_of_another_protocol_version_is_ignored() {
     assert!(parse_management(&frame).is_none());
 }
 
-#[test]
-fn retains_erp_use_protection_without_confusing_the_element_header() {
-    let mut frame = [0_u8; 43];
-    frame[0] = 0x80;
-    frame[16..22].copy_from_slice(&[2, 2, 3, 4, 5, 6]);
-    frame[36..40].copy_from_slice(&[0, 2, b'a', b'p']);
-    frame[40..43].copy_from_slice(&[42, 1, 0x03]);
-    let record = parse_management(&frame).unwrap();
-    assert_eq!(record.erp_information(), &[0x03]);
-    assert_eq!(record.erp_element_count(), 1);
-}
-
-#[test]
-fn repeated_erp_elements_are_kept_as_observed_for_the_station_to_judge() {
+fn erp_beacon(information: &[u8]) -> std::vec::Vec<u8> {
     let mut frame = std::vec![0_u8; 40];
     frame[0] = 0x80;
     frame[16..22].copy_from_slice(&[2, 2, 3, 4, 5, 6]);
     frame[36..40].copy_from_slice(&[0, 2, b'a', b'p']);
-    for information in [0x00, 0x02, 0x00, 0x04, 0x00] {
-        frame.extend_from_slice(&[42, 1, information]);
+    for information in information {
+        frame.extend_from_slice(&[42, 1, *information]);
     }
-    // The codec stores what it saw, up to its capacity, and counts the rest.
-    let mut record = parse_management(&frame[..46]).unwrap();
-    assert_eq!(record.erp_information(), &[0x00, 0x02]);
-    assert_eq!(record.erp_element_count(), 2);
-    // The station: any asserted bit counts.
-    let protection = crate::association::erp_protection(&record);
+    frame
+}
+
+#[test]
+fn retains_erp_use_protection_without_confusing_the_element_header() {
+    let frame = erp_beacon(&[0x03]);
+    let scan = ScanFrame::parse(&frame).unwrap();
+    assert!(scan.erp_information().eq([0x03]));
+}
+
+#[test]
+fn every_repeated_erp_element_reaches_the_station_without_a_limit() {
+    // Five elements, every one of them seen: no storage threshold.
+    let five_clear = erp_beacon(&[0; 5]);
+    let scan = ScanFrame::parse(&five_clear).unwrap();
+    assert_eq!(scan.erp_information().count(), 5);
     assert_eq!(
-        protection,
-        oer_ieee80211_wire::protection::ErpProtection::new(true, false)
+        crate::association::erp_protection(scan.erp_information()),
+        oer_ieee80211_wire::protection::ErpProtection::NONE
     );
-    // Beyond the capacity, unseen elements count as asserting both.
-    record = parse_management(&frame).unwrap();
-    assert_eq!(record.erp_information(), &[0x00, 0x02, 0x00, 0x04]);
-    assert_eq!(record.erp_element_count(), 5);
+    // Any asserted bit counts, wherever it stands.
+    let late = erp_beacon(&[0, 0, 0, 0, 0, 0, 0x04, 0, 0x02]);
+    let scan = ScanFrame::parse(&late).unwrap();
+    assert!(scan.erp_information().eq([0, 0, 0, 0, 0, 0, 0x04, 0, 0x02]));
     assert_eq!(
-        crate::association::erp_protection(&record),
+        crate::association::erp_protection(scan.erp_information()),
         oer_ieee80211_wire::protection::ErpProtection::new(true, true)
     );
-    // No element: no requirement.
+    // An element of another length is no ERP Information.
+    let mut odd = erp_beacon(&[]);
+    odd.extend_from_slice(&[42, 2, 0x02, 0x02]);
+    assert_eq!(ScanFrame::parse(&odd).unwrap().erp_information().count(), 0);
+    // No element asks for nothing.
     assert_eq!(
-        crate::association::erp_protection(&parse_management(&frame[..40]).unwrap()),
+        crate::association::erp_protection(ScanFrame::parse(&odd).unwrap().erp_information()),
         oer_ieee80211_wire::protection::ErpProtection::NONE
+    );
+}
+
+#[test]
+fn the_scan_table_keeps_the_stations_erp_decision() {
+    let mut table = ScanTable::<1>::new();
+    let frame = erp_beacon(&[0, 0, 0, 0, 0, 0x02]);
+    assert!(matches!(
+        table.observe_management(&frame, 6, None, None),
+        ScanObservation::Inserted { .. }
+    ));
+    assert_eq!(
+        table.observations().next().unwrap().erp,
+        oer_ieee80211_wire::protection::ErpProtection::new(true, false)
     );
 }
 
@@ -421,6 +436,7 @@ fn strongest_exact_ssid_ignores_invalid_channel() {
         *observation = Some(BssObservation {
             record: *record,
             channel,
+            erp: oer_ieee80211_wire::protection::ErpProtection::NONE,
             rssi,
             received_at: None,
         });
@@ -504,7 +520,6 @@ fn read_record(record: &ScanRecord) {
     );
     let _ = record.supported_rates_bytes();
     let _ = record.extended_supported_rates_bytes();
-    let _ = record.erp_information();
     let _ = record.ht_capability_ie_bytes();
     let _ = record
         .ht_peer_capabilities()
@@ -532,6 +547,7 @@ fn parse_management_never_panics(count: usize) {
             let observation = BssObservation {
                 record,
                 channel: record.ds_channel.unwrap_or(1),
+                erp: oer_ieee80211_wire::protection::ErpProtection::NONE,
                 rssi: None,
                 received_at: None,
             };
@@ -619,7 +635,12 @@ fn a_rich_frame_keeps_every_retained_element() {
         record.extended_supported_rates_bytes(),
         &[0x30, 0x48, 0x60, 0x6c]
     );
-    assert_eq!(record.erp_information(), &[0x02]);
+    assert!(
+        ScanFrame::parse(&rich_frame(8))
+            .unwrap()
+            .erp_information()
+            .eq([0x02])
+    );
     assert!(record.supports_ht_duplicate_mcs32());
     assert_eq!(
         record.ht40_secondary_channel(6),

@@ -25,10 +25,6 @@ pub const EXTENDED_RATES_CAPACITY: usize = 16;
 pub const HE_CAPABILITY_IE_CAPACITY: usize = 64;
 pub const HE_OPERATION_IE_CAPACITY: usize = 32;
 pub const WMM_IE_CAPACITY: usize = 26;
-/// ERP Information payloads a record stores. A BSS sends one ERP element;
-/// a malformed frame may repeat it, and the receiver decides what repeats
-/// mean.
-pub const ERP_CAPACITY: usize = 4;
 
 const HE_CAPABILITIES_EXTENSION_ID: u8 = 35;
 const HE_OPERATION_EXTENSION_ID: u8 = 36;
@@ -107,13 +103,6 @@ pub struct ScanRecord {
     supported_rates_len: oer_wire::PrefixLength<8>,
     extended_supported_rates: [u8; EXTENDED_RATES_CAPACITY],
     extended_supported_rates_len: oer_wire::PrefixLength<EXTENDED_RATES_CAPACITY>,
-    /// The one-byte ERP Information payloads in frame order, the first
-    /// [`ERP_CAPACITY`] of them.
-    erp_information: [u8; ERP_CAPACITY],
-    erp_information_len: oer_wire::PrefixLength<ERP_CAPACITY>,
-    /// Number of ERP elements observed, stored or not; more than one is
-    /// malformed.
-    erp_element_count: u8,
     ht_capability_ie: Option<[u8; HT_CAPABILITY_IE_LEN]>,
     ht_operation_ie: Option<[u8; HT_OPERATION_IE_LEN]>,
     he_capability_ie: [u8; HE_CAPABILITY_IE_CAPACITY],
@@ -149,9 +138,6 @@ impl ScanRecord {
             supported_rates_len: oer_wire::PrefixLength::ZERO,
             extended_supported_rates: [0; EXTENDED_RATES_CAPACITY],
             extended_supported_rates_len: oer_wire::PrefixLength::ZERO,
-            erp_information: [0; ERP_CAPACITY],
-            erp_information_len: oer_wire::PrefixLength::ZERO,
-            erp_element_count: 0,
             ht_capability_ie: None,
             ht_operation_ie: None,
             he_capability_ie: [0; HE_CAPABILITY_IE_CAPACITY],
@@ -186,31 +172,6 @@ impl ScanRecord {
             &self.extended_supported_rates,
             self.extended_supported_rates_len,
         )
-    }
-
-    /// The stored ERP Information payloads, in frame order.
-    pub fn erp_information(&self) -> &[u8] {
-        self.erp_information_len.borrow(&self.erp_information)
-    }
-
-    /// Number of ERP elements observed; above [`Self::erp_information`]'s
-    /// length when the frame repeated it beyond the record's capacity.
-    pub const fn erp_element_count(&self) -> u8 {
-        self.erp_element_count
-    }
-
-    /// Record one ERP element's Information payload; one beyond the
-    /// record's capacity is counted, not stored.
-    pub fn push_erp_information(&mut self, information: u8) {
-        self.erp_element_count = self.erp_element_count.saturating_add(1);
-        let length = self.erp_information_len.get();
-        if let (Some(slot), Some(next)) = (
-            self.erp_information.get_mut(length),
-            length.checked_add(1).and_then(oer_wire::PrefixLength::new),
-        ) {
-            *slot = information;
-            self.erp_information_len = next;
-        }
     }
 
     pub fn ht_capability_ie_bytes(&self) -> Option<&[u8; HT_CAPABILITY_IE_LEN]> {
@@ -370,12 +331,66 @@ impl ScanRecord {
 }
 
 /// Decode one beacon or probe response into an owned bounded record.
+pub fn parse_management(frame: &[u8]) -> Option<ScanRecord> {
+    ScanFrame::parse(frame).map(ScanFrame::into_record)
+}
+
+/// A decoded beacon or probe response: its bounded record, and the frame's
+/// information elements for what the record does not keep.
+#[derive(Clone, Copy, Debug)]
+pub struct ScanFrame<'a> {
+    record: ScanRecord,
+    elements: &'a [u8],
+}
+
+impl<'a> ScanFrame<'a> {
+    /// Decode `frame`; `None` for another frame or a malformed header.
+    pub fn parse(frame: &'a [u8]) -> Option<Self> {
+        let (record, elements) = decode_management(frame)?;
+        Some(Self { record, elements })
+    }
+
+    pub const fn record(&self) -> &ScanRecord {
+        &self.record
+    }
+
+    pub const fn into_record(self) -> ScanRecord {
+        self.record
+    }
+
+    /// Every ERP element's one-octet ERP Information field, in frame order.
+    /// A BSS sends one; a malformed frame may repeat it, and what repeats
+    /// mean is the receiver's decision. An element of another length is no
+    /// ERP Information and is skipped, and the walk ends where the elements
+    /// stop parsing.
+    ///
+    /// SOURCE: IEEE Std 802.11-2020, 9.4.2 (the ERP element: one octet of
+    /// ERP Information).
+    pub fn erp_information(&self) -> impl Iterator<Item = u8> + 'a {
+        let mut remaining = self.elements;
+        core::iter::from_fn(move || {
+            let (element, rest) = crate::element::Element::split(remaining)?;
+            remaining = rest;
+            Some(element)
+        })
+        .filter_map(|element| match element {
+            crate::element::Element {
+                id: crate::protection::ERP_ELEMENT_ID,
+                body: &[information],
+                ..
+            } => Some(information),
+            _ => None,
+        })
+    }
+}
+
+/// The record of a beacon or probe response and its information elements.
 ///
 /// The fixed fields start where the decoded MAC header ends, so a frame
 /// with the Order bit set carries its HT Control field before them. They
 /// are checked as one array before interpreting the variable information
 /// elements.
-pub fn parse_management(frame: &[u8]) -> Option<ScanRecord> {
+fn decode_management(frame: &[u8]) -> Option<(ScanRecord, &[u8])> {
     let header = crate::frame::DecodedHeader::decode(frame)?;
     let control = header.control();
     if control.is_data() || !matches!(control.subtype(), 5 | 8) {
@@ -383,7 +398,8 @@ pub fn parse_management(frame: &[u8]) -> Option<ScanRecord> {
     }
     let mut reader = oer_wire::Reader::new(header.body());
     let fixed = reader.array::<12>().ok()?;
-    let mut elements = oer_wire::Reader::new(reader.remaining());
+    let element_bytes = reader.remaining();
+    let mut elements = oer_wire::Reader::new(element_bytes);
     let [t0, t1, t2, t3, t4, t5, t6, t7, i0, i1, c0, c1] = *fixed;
     let [b0, b1, b2, b3, b4, b5] = header.address3();
 
@@ -414,7 +430,6 @@ pub fn parse_management(frame: &[u8]) -> Option<ScanRecord> {
                 }
             }
             (3, &[channel]) => record.ds_channel = Some(channel),
-            (42, &[information]) => record.push_erp_information(information),
             (45, _) => {
                 if let Some(element) = exact_element(element_header, value) {
                     record.ht_capability_ie = Some(element);
@@ -472,7 +487,7 @@ pub fn parse_management(frame: &[u8]) -> Option<ScanRecord> {
     // One trailing byte cannot form an IE header. Treat it as malformed,
     // rather than silently accepting it as absence of a later RSN/WPA IE.
     record.information_elements_truncated |= !elements.is_empty();
-    Some(record)
+    Some((record, element_bytes))
 }
 
 /// The first `length` bytes of a record buffer: the bytes it holds.

@@ -114,16 +114,18 @@ impl FrameControl {
 ///
 /// - management: Addresses 1 to 3 and Sequence Control;
 /// - data: the same, and Address 4 when both To DS and From DS are set;
-/// - control: Address 1, and Address 2 for the subtypes that carry a TA;
-/// - extension: Address 1 alone, as this view interprets no extension layout.
+/// - control: Address 1, and Address 2 for the subtypes that carry a TA
+///   ([`ControlLayout`]).
 ///
 /// Every field the frame's type holds must be complete; a captured prefix
-/// that ends inside one is refused, not read as a shorter frame.
+/// that ends inside one is refused, not read as a shorter frame. A frame
+/// whose address layout this view does not know (a TACK, a Control Frame
+/// Extension, a reserved control subtype or an extension frame) is refused
+/// as such, never read as Address 1 alone.
 ///
 /// SOURCE: IEEE Std 802.11-2020, 9.2.3 (General frame format, Figure 9-1),
 /// 9.3.2.1 (Data frame format: Address 4 with To DS and From DS set), 9.3.3.2
-/// (Management frame format) and 9.3.1 (Control frames: BlockAckReq,
-/// BlockAck, PS-Poll, RTS, CF-End and CF-End +CF-Ack carry a TA).
+/// (Management frame format) and 9.3.1 (Control frames).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct AddressFields {
     control: FrameControlFields,
@@ -141,6 +143,9 @@ pub enum AddressFieldsError {
     Truncated,
     /// A protocol version other than 0, whose layout is not defined here.
     UnknownVersion,
+    /// A frame type or control subtype whose address layout this view does
+    /// not know.
+    UnknownLayout,
 }
 
 impl AddressFields {
@@ -173,10 +178,16 @@ impl AddressFields {
                     fields.address4 = Some(reader.read().map_err(truncated)?);
                 }
             }
-            FrameType::Control if control_carries_transmitter(control.control_subtype()) => {
-                fields.transmitter = Some(reader.read().map_err(truncated)?);
+            FrameType::Control => match control_layout(control.control_subtype()) {
+                ControlLayout::ReceiverAndTransmitter => {
+                    fields.transmitter = Some(reader.read().map_err(truncated)?);
+                }
+                ControlLayout::Receiver => {}
+                ControlLayout::Unknown => return Err(AddressFieldsError::UnknownLayout),
+            },
+            FrameType::Extension | FrameType::Reserved(_) => {
+                return Err(AddressFieldsError::UnknownLayout);
             }
-            FrameType::Control | FrameType::Extension | FrameType::Reserved(_) => {}
         }
         Ok(fields)
     }
@@ -224,19 +235,43 @@ impl AddressFields {
     }
 }
 
-/// Whether a control frame of `subtype` carries a TA after its RA.
+/// The addresses a control frame of one subtype carries.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ControlLayout {
+    /// The RA alone.
+    Receiver,
+    /// The RA, then the TA.
+    ReceiverAndTransmitter,
+    /// A layout this codec does not interpret.
+    Unknown,
+}
+
+/// The addresses a control frame of `subtype` carries.
 ///
-/// SOURCE: IEEE Std 802.11-2020, 9.3.1 (Control frames) and Table 9-1.
-const fn control_carries_transmitter(subtype: ControlSubtype) -> bool {
-    matches!(
-        subtype,
-        ControlSubtype::BlockAckRequest
-            | ControlSubtype::BlockAck
-            | ControlSubtype::PsPoll
-            | ControlSubtype::Rts
-            | ControlSubtype::CfEnd
-            | ControlSubtype::CfEndCfAck
-    )
+/// SOURCE: IEEE Std 802.11-2020, 9.3.1 (Control frames): RTS, PS-Poll,
+/// CF-End, BlockAckReq, BlockAck, VHT NDP Announcement and Beamforming
+/// Report Poll carry RA and TA; CTS and Ack carry RA alone; Control Wrapper
+/// carries Address 1, then the carried frame's fields. IEEE Std
+/// 802.11ax-2021, 9.3.1 (Trigger frame format): RA and TA. TACK and the
+/// Control Frame Extension subtypes are not interpreted here.
+pub const fn control_layout(subtype: ControlSubtype) -> ControlLayout {
+    match subtype {
+        ControlSubtype::Trigger
+        | ControlSubtype::BeamformingReportPoll
+        | ControlSubtype::VhtNdpAnnouncement
+        | ControlSubtype::BlockAckRequest
+        | ControlSubtype::BlockAck
+        | ControlSubtype::PsPoll
+        | ControlSubtype::Rts
+        | ControlSubtype::CfEnd
+        | ControlSubtype::CfEndCfAck => ControlLayout::ReceiverAndTransmitter,
+        ControlSubtype::Cts | ControlSubtype::Ack | ControlSubtype::ControlWrapper => {
+            ControlLayout::Receiver
+        }
+        ControlSubtype::Tack
+        | ControlSubtype::ControlFrameExtension
+        | ControlSubtype::Reserved(_) => ControlLayout::Unknown,
+    }
 }
 
 /// A complete MAC header with its checked variable-length boundary.

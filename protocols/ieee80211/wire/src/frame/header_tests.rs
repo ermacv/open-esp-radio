@@ -231,3 +231,44 @@ fn another_protocol_version_has_no_address_layout() {
         Err(AddressFieldsError::UnknownVersion)
     );
 }
+
+#[test]
+fn every_control_subtype_has_a_known_or_refused_layout() {
+    for subtype in 0..16_u8 {
+        let frame = addressed([(subtype << 4) | 0x04, 0x00], 16);
+        let expected = match control_layout(ControlSubtype::from_encoding(subtype)) {
+            ControlLayout::ReceiverAndTransmitter => Ok(Some(address_at(&frame, 10))),
+            ControlLayout::Receiver => Ok(None),
+            ControlLayout::Unknown => Err(AddressFieldsError::UnknownLayout),
+        };
+        assert_eq!(
+            AddressFields::parse(&frame).map(|fields| fields.transmitter()),
+            expected,
+            "subtype {subtype}"
+        );
+    }
+    // Trigger, Beamforming Report Poll and NDP Announcement carry a TA.
+    for subtype in [2, 4, 5] {
+        let frame = addressed([(subtype << 4) | 0x04, 0x00], 16);
+        assert_eq!(
+            AddressFields::parse(&frame).unwrap().transmitter(),
+            Some(address_at(&frame, 10))
+        );
+        assert_eq!(
+            AddressFields::parse(&frame[..10]),
+            Err(AddressFieldsError::Truncated)
+        );
+    }
+    // TACK, Control Frame Extension and the reserved subtypes are refused.
+    for subtype in [0, 1, 3, 6] {
+        assert_eq!(
+            AddressFields::parse(&addressed([(subtype << 4) | 0x04, 0x00], 16)),
+            Err(AddressFieldsError::UnknownLayout)
+        );
+    }
+    // So is an extension frame.
+    assert_eq!(
+        AddressFields::parse(&addressed([0x0c, 0x00], 40)),
+        Err(AddressFieldsError::UnknownLayout)
+    );
+}

@@ -256,7 +256,7 @@ pub fn write_ht_beacon(
     .map_err(|required| ApBeaconBuildError::OutputTooSmall { required })
 }
 
-const ERP_ELEMENT_ID: u8 = 42;
+use crate::protection::ERP_ELEMENT_ID;
 const DSSS_PARAMETER_SET_ELEMENT_ID: u8 = 3;
 const HT_OPERATION_ELEMENT_ID: u8 = 61;
 

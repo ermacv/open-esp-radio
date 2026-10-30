@@ -1,6 +1,6 @@
 //! Station-owned BSS observations and candidate selection.
 
-use oer_ieee80211_wire::scan::{ScanRecord, parse_management};
+use oer_ieee80211_wire::scan::{ScanFrame, ScanRecord};
 use oer_time::Instant;
 
 pub const SCAN_RECORD_CAPACITY: usize = 32;
@@ -39,6 +39,9 @@ pub struct BssObservation {
     /// The channel the station takes the BSS to be on: the DS Parameter
     /// Set's channel, or the receiver's when the frame carries none.
     pub channel: u8,
+    /// The ERP protection the frame's ERP elements ask for
+    /// ([`crate::association::erp_protection`]).
+    pub erp: oer_ieee80211_wire::protection::ErpProtection,
     /// The received signal level in dBm, `None` when the receiver reported
     /// none; an unknown level ranks below every known one.
     pub rssi: Option<i8>,
@@ -107,9 +110,11 @@ impl<const N: usize> ScanTable<N> {
         rssi: Option<i8>,
         received_at: Option<Instant>,
     ) -> ScanObservation {
-        let Some(mut record) = parse_management(frame) else {
+        let Some(frame) = ScanFrame::parse(frame) else {
             return ScanObservation::Ignored;
         };
+        let erp = crate::association::erp_protection(frame.erp_information());
+        let mut record = frame.into_record();
         // A frame without a DS Parameter Set names no channel: the BSS is
         // taken to be where the frame was heard.
         let channel = record.ds_channel.unwrap_or(receive_channel);
@@ -118,6 +123,7 @@ impl<const N: usize> ScanTable<N> {
             let Some(BssObservation {
                 record: existing,
                 channel: existing_channel,
+                erp: existing_erp,
                 rssi: existing_rssi,
                 received_at: existing_received_at,
             }) = existing
@@ -153,6 +159,7 @@ impl<const N: usize> ScanTable<N> {
                 }
                 if *existing == record
                     && *existing_channel == channel
+                    && *existing_erp == erp
                     && *existing_rssi == rssi
                     && *existing_received_at == received_at
                 {
@@ -160,6 +167,7 @@ impl<const N: usize> ScanTable<N> {
                 }
                 *existing = record;
                 *existing_channel = channel;
+                *existing_erp = erp;
                 *existing_rssi = rssi;
                 *existing_received_at = received_at;
                 return ScanObservation::Updated { index };
@@ -176,6 +184,7 @@ impl<const N: usize> ScanTable<N> {
         *vacant = Some(BssObservation {
             record,
             channel,
+            erp,
             rssi,
             received_at,
         });

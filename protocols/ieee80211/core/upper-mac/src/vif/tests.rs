@@ -72,13 +72,25 @@ fn ambiguous_and_unknown_headers_fail_closed() {
         StaApRxRoute::Interface(StaApVif::AccessPoint)
     );
     assert_eq!(
-        classify_sta_ap_rx(&frame(CONTROL_FRAME, STA, PEER, UPLINK), same_address),
+        classify_sta_ap_rx(
+            &frame(CONTROL_FRAME | 0xd0, STA, PEER, UPLINK),
+            same_address
+        ),
         StaApRxRoute::Ambiguous
     );
     let mut four_address = [0; 30];
     four_address[..24].copy_from_slice(&frame(DATA_FRAME | TO_DS | FROM_DS, AP, PEER, UPLINK));
     assert_eq!(
         classify_sta_ap_rx(&four_address, ADDRESSES),
+        StaApRxRoute::Foreign
+    );
+    // A Control Frame Extension or an extension frame proves no interface.
+    assert_eq!(
+        classify_sta_ap_rx(&frame(CONTROL_FRAME | 0x60, STA, PEER, UPLINK), ADDRESSES),
+        StaApRxRoute::Foreign
+    );
+    assert_eq!(
+        classify_sta_ap_rx(&frame(0x000c, STA, PEER, UPLINK), ADDRESSES),
         StaApRxRoute::Foreign
     );
     // A four-address frame that ends before Address 4 is malformed.

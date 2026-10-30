@@ -4,6 +4,11 @@
 //! of RTS/CTS or CTS-to-self is `oer-ieee80211-core-upper-mac`'s protection
 //! policy.
 
+/// ERP element identifier.
+///
+/// SOURCE: IEEE Std 802.11-2020, 9.4.2.1 (Element IDs).
+pub const ERP_ELEMENT_ID: u8 = 42;
+
 /// ERP Information element requirements on transmitters.
 ///
 /// Stored as the element's Use_Protection (bit one) and Barker_Preamble_Mode

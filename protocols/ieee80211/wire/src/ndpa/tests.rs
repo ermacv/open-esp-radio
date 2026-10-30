@@ -26,6 +26,14 @@ fn decodes_the_complete_blob_geometry_and_aid_membership() {
     assert_eq!(ndpa.duration(), 0x1234);
     assert_eq!(ndpa.receiver_address(), &RA);
     assert_eq!(ndpa.transmitter_address(), &TA);
+    // The general address view reads the same RA and TA, and requires both.
+    let fields = crate::frame::AddressFields::parse(&frame).unwrap();
+    assert_eq!(fields.receiver(), RA);
+    assert_eq!(fields.transmitter(), Some(TA));
+    assert_eq!(
+        crate::frame::AddressFields::parse(&frame[..10]),
+        Err(crate::frame::AddressFieldsError::Truncated)
+    );
     assert_eq!(ndpa.dialog_token(), 0x2a);
     assert_eq!(ndpa.stations().len(), 2);
     let mut stations = ndpa.stations();

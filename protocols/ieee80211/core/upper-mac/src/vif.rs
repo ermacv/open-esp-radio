@@ -16,7 +16,7 @@
 
 use oer_ieee80211_wire::{
     address::AddressFlags,
-    frame::{AddressFields, FrameType, ManagementSubtype},
+    frame::{AddressFields, AddressFieldsError, FrameType, ManagementSubtype},
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -47,8 +47,13 @@ pub enum StaApRxRoute {
 /// exception: a connected station does not own active-scan requests, while a
 /// SoftAP must receive them before it can answer.
 pub fn classify_sta_ap_rx(mpdu: &[u8], addresses: StaApRxAddresses) -> StaApRxRoute {
-    let Ok(fields) = AddressFields::parse(mpdu) else {
-        return StaApRxRoute::Malformed;
+    let fields = match AddressFields::parse(mpdu) {
+        Ok(fields) => fields,
+        // An address layout the codec does not know proves no interface.
+        Err(AddressFieldsError::UnknownLayout) => return StaApRxRoute::Foreign,
+        Err(AddressFieldsError::Truncated | AddressFieldsError::UnknownVersion) => {
+            return StaApRxRoute::Malformed;
+        }
     };
     let receiver = fields.receiver();
     match fields.control().kind() {

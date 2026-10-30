@@ -19,7 +19,7 @@ use crate::frame::FrameControlFields;
 const BEACON_FRAME_CONTROL: u16 = 0x0080;
 const FIXED_BEACON_LENGTH: usize = 36;
 const TIM_ELEMENT_ID: u8 = 5;
-const ERP_ELEMENT_ID: u8 = 42;
+use crate::protection::ERP_ELEMENT_ID;
 const HT_OPERATION_ELEMENT_ID: u8 = 61;
 const EXTENSION_ELEMENT_ID: u8 = 255;
 const VENDOR_ELEMENT_ID: u8 = 221;

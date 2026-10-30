@@ -87,6 +87,7 @@ mod associated_peer {
         let padding = std::boxed::Box::new(HePacketPadding::Us8);
         let peer = StaAssociatedPeer::derive(
             &he20_access_point(),
+            oer_ieee80211_wire::protection::ErpProtection::NONE,
             &response(0),
             PhyMode::He20,
             move |capability| {
@@ -106,6 +107,7 @@ mod associated_peer {
         // An HT association keeps the HE capabilities but no HE state.
         let ht = StaAssociatedPeer::derive(
             &he20_access_point(),
+            oer_ieee80211_wire::protection::ErpProtection::NONE,
             &response(0),
             PhyMode::Ht20,
             eight_microseconds,
@@ -119,6 +121,7 @@ mod associated_peer {
         assert_eq!(
             StaAssociatedPeer::derive(
                 &he20_access_point(),
+                oer_ieee80211_wire::protection::ErpProtection::NONE,
                 &response(17),
                 PhyMode::He20,
                 eight_microseconds,
@@ -142,13 +145,13 @@ mod associated_peer {
         access_point
             .set_extended_supported_rates(&[0x30, 0x48, 0x60, 0x6c])
             .unwrap();
-        access_point.push_erp_information(0x07);
         let mut ht_operation = [0; HT_OPERATION_IE_LEN];
         ht_operation[..2].copy_from_slice(&[61, 22]);
         ht_operation[4] = 0x03;
         access_point.set_ht_operation_ie(Some(ht_operation));
         let peer = StaAssociatedPeer::derive(
             &access_point,
+            crate::association::erp_protection([0x07]),
             &response(0),
             PhyMode::Ht20,
             eight_microseconds,

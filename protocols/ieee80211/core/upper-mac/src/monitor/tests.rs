@@ -74,6 +74,20 @@ fn qos_control_and_payload_of_a_three_address_frame_are_no_address4() {
         bytes: &ack,
         ..frame
     }));
+    // So do a Trigger and an NDP Announcement.
+    for frame_control in [0x24, 0x54] {
+        ack[0] = frame_control;
+        assert!(filter.accepts(&MonitorFrame {
+            bytes: &ack,
+            ..frame
+        }));
+    }
+    // A Control Frame Extension's layout is not interpreted: no match.
+    ack[0] = 0x64;
+    assert!(!filter.accepts(&MonitorFrame {
+        bytes: &ack,
+        ..frame
+    }));
 }
 
 #[test]

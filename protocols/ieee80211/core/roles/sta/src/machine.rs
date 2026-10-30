@@ -1840,6 +1840,8 @@ enum ScanStep {
 /// The join of one access point.
 struct Join<T: StaTokens, K> {
     access_point: ScanRecord,
+    /// The ERP protection the access point's ERP elements ask for.
+    erp: oer_ieee80211_wire::protection::ErpProtection,
     rsn: SelectedRsn,
     channel: SupportedChannel<K>,
     step: JoinStep<T::RxMeta>,
@@ -4453,6 +4455,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
         };
         Change::Join(Join {
             access_point,
+            erp: selected.erp,
             rsn,
             channel,
             step: JoinStep::NeedLease,
@@ -4833,6 +4836,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                             StaAssociationEvent::Associated { response, .. } => {
                                 match StaAssociatedPeer::derive(
                                     &join.access_point,
+                                    join.erp,
                                     &response,
                                     self.config.phy,
                                     |capability| {
