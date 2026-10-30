@@ -2,7 +2,7 @@
 
 The stand, for the host tools that use it (`cargo fw` and HIL): the owner's
 stand file, the OpenWrt lab router that serves the stand's access point,
-the SSH that reaches it, and a lock per router.
+and the SSH that reaches it.
 
 ## The stand
 
@@ -173,9 +173,8 @@ and the host refuses any line outside the allowlist. In order:
 A second run against a router already in the profile sends the same
 scripts; nothing changes and the checks pass the same.
 
-One process at a time drives the router: HIL holds an exclusive lock
-`$XDG_RUNTIME_DIR/open-esp-radio/routers/router-<hash of the target>.lock` for the whole
-run, and a second holder is refused, naming the first.
+One process at a time drives the router: the one holding the arbiter's
+lease on its claim.
 
 ## Isolated station network
 

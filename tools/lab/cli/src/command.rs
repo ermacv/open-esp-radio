@@ -95,18 +95,10 @@ pub(crate) struct QueueCli {
 pub(crate) fn queue(cli: QueueCli) -> Result<std::process::ExitCode> {
     let arbiter = oer_lab_arbiter::Arbiter::open()?;
     let status = arbiter.status()?;
-    let store = arbiter.jobs();
-    let jobs = store.unfinished();
-    let ended = store.recently_ended_unjudged(std::time::Duration::from_secs(3600), 5);
     if cli.json {
-        let mut value = serde_json::to_value(&status)?;
-        value["jobs"] = serde_json::to_value(oer_lab_arbiter::jobs::views(&jobs, &status))?;
-        value["ended_jobs"] = serde_json::to_value(&ended)?;
-        println!("{}", serde_json::to_string_pretty(&value)?);
+        println!("{}", serde_json::to_string_pretty(&status)?);
     } else {
         println!("{status}");
-        print!("{}", oer_lab_arbiter::jobs::describe(&jobs, &status));
-        print!("{}", oer_lab_arbiter::jobs::describe_ended(&ended));
     }
     Ok(std::process::ExitCode::SUCCESS)
 }

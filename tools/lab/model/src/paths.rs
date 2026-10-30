@@ -2,7 +2,7 @@
 //! (`oer-os-durable`'s `xdg`): every checkout of the user shares them.
 //!
 //! - the stand file: [`crate::path`];
-//! - the arbiter's state (queue, holders, history, board journal, jobs):
+//! - the arbiter's state (queue, holders, history, board journal):
 //!   `open-esp-radio/arbiter` in `$XDG_CACHE_HOME` (else `~/.cache`), or
 //!   `$OER_STAND_ARBITER_DIR`, which tests and a nested private arbiter use;
 //! - the lock files, the arbiter's final exclusion layer:

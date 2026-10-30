@@ -14,7 +14,6 @@ pub mod hostapd;
 pub mod boards;
 pub mod credentials;
 pub mod hub;
-pub mod lock;
 pub mod mac;
 pub mod router;
 pub mod ssh;

@@ -13,7 +13,6 @@ shlex = "=2.0.1"
 hex = "=0.4.3"
 oer-lab-model = { path = "../model" }
 oer-os-process = { path = "../../os/process" }
-sha2 = "=0.10.9"
 oer-os-durable = { path = "../../os/durable" }
 serde_json = "1.0"
 tempfile = "3"

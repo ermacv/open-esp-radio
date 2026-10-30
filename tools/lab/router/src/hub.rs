@@ -259,22 +259,5 @@ fn read(path: &Path) -> Option<String> {
         .map(|text| text.trim().to_owned())
 }
 
-/// Switch `port` of the hub at `location` on or off.
-pub fn switch(location: &str, port: u32, on: bool) -> crate::Result<()> {
-    let action = if on { "on" } else { "off" };
-    let output = Command::new("uhubctl")
-        .args(["-l", location, "-p", &port.to_string(), "-a", action])
-        .output()
-        .map_err(|error| format!("run uhubctl: {error}"))?;
-    if !output.status.success() {
-        return Err(format!(
-            "uhubctl -l {location} -p {port} -a {action} failed: {}",
-            String::from_utf8_lossy(&output.stderr).trim()
-        )
-        .into());
-    }
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests;
