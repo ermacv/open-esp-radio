@@ -122,6 +122,22 @@ fn no_response_leaves_the_request_unconfirmed_and_a_late_one_answers_nothing_els
 }
 
 #[test]
+fn a_hello_that_answers_get_hello_reaches_its_request() {
+    let (mut device, link) = Device::new(12);
+    device.send(0, HELLO);
+    let boot = link.boot(SHORT).unwrap();
+    let server = thread::spawn(move || {
+        let request = device.request().unwrap();
+        assert_eq!(request.key, GetHello::KEY);
+        device.send(request.request_id, HELLO);
+        device
+    });
+    assert_eq!(link.call(&boot, GetHello, SHORT), Ok(HELLO));
+    let _device = server.join().unwrap();
+    assert_eq!(link.health().running.unwrap().unread, 0);
+}
+
+#[test]
 fn another_boot_ends_the_requests_of_the_earlier_one() {
     let (mut device, link) = Device::new(5);
     device.send(0, HELLO);

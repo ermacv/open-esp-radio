@@ -1,19 +1,27 @@
 //! The scenario's session on the stand: its image built, its board leased
-//! and written, and the link on the board's console. Dropping the session
-//! releases them in that reverse order: the link, the board, the lease.
+//! and written, and the link on the board's console. [`Session::finish`]
+//! leaves the board running the image or recovers it under the same lease;
+//! dropping the session then releases the link, the board and the lease in
+//! that order, also when a stage of opening failed.
 
 use std::{path::Path, time::Duration};
 
 use oer_hil_link::Link;
 use oer_image_build::images;
 use oer_image_bundle::ImageBundle;
-use oer_lab_arbiter::{Arbiter, Grant, Request, claims::Claim, journal::ImageIdentity};
+use oer_lab_arbiter::{
+    Arbiter, Grant, QuarantineTrigger, Request,
+    claims::Claim,
+    journal::{BoardEventKind, ImageIdentity},
+};
 use oer_lab_board::lock::DeviceId;
 use oer_lab_board::port::{Lines, Port, Settings};
+use oer_lab_board::reset::{Ladder, RecoveryStep};
 use oer_lab_board::stand::{LeasedBoard, Via};
 use oer_lab_model::{BoardRole, Stand};
 
 use crate::Scenario;
+use crate::finish::{self, Cleanup, Ending, Waits};
 
 pub(crate) type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
@@ -24,11 +32,24 @@ const DUT_CONSOLE: Settings = Settings::CONSOLE
     .timeout(Duration::ZERO)
     .busy(Duration::from_secs(2));
 
+/// How long the board's port may take to return after a reset.
+const REATTACH: Duration = Duration::from_secs(10);
+
+/// How long the console is read for the ROM's line after a rung that does
+/// not return one itself.
+const BANNER_WATCH: Duration = Duration::from_secs(2);
+
+/// How long finishing waits for the device under test.
+const WAITS: Waits = Waits {
+    probe: Duration::from_secs(2),
+    hello: Duration::from_secs(10),
+};
+
 /// Declared in drop order.
 pub(crate) struct Session {
-    link: Link,
+    link: Option<Link>,
     image_crc32: u32,
-    _board: LeasedBoard,
+    board: LeasedBoard,
     _grant: Grant,
 }
 
@@ -67,20 +88,95 @@ impl Session {
         oer_lab_board::reset::reset_usb_serial_jtag(&mut port)?;
         let link = Link::start(Box::new(port))?;
         Ok(Self {
-            link,
+            link: Some(link),
             image_crc32,
-            _board: leased,
+            board: leased,
             _grant: grant,
         })
     }
 
-    pub(crate) fn link(&self) -> &Link {
-        &self.link
+    /// The link, while the device answers on one.
+    pub(crate) fn link(&self) -> Option<&Link> {
+        self.link.as_ref()
+    }
+
+    /// Leave the board running the built image after the cases `ending`
+    /// describes, recovering it when needed; what that took.
+    pub(crate) fn finish(&mut self, ending: Ending) -> Cleanup {
+        let (link, cleanup) = finish::finish(
+            &StandBoard(&self.board),
+            self.link.take(),
+            self.image_crc32,
+            ending,
+            WAITS,
+        );
+        self.link = link;
+        cleanup
     }
 
     /// The built image's identity, which the board must report.
     pub(crate) fn image_crc32(&self) -> u32 {
         self.image_crc32
+    }
+}
+
+/// The leased board as finishing sees it.
+struct StandBoard<'a>(&'a LeasedBoard);
+
+impl finish::Board for StandBoard<'_> {
+    fn climb(&self, answers: &mut dyn FnMut() -> bool) -> Ladder {
+        let rungs = self.0.rungs();
+        let download_entry = self.0.download_entry_if_powered();
+        oer_lab_board::reset::climb(
+            &rungs.iter().map(Box::as_ref).collect::<Vec<_>>(),
+            download_entry
+                .as_ref()
+                .map(|entry| entry as &dyn Fn() -> oer_lab_board::Result<String>),
+            &|| self.0.console(BANNER_WATCH),
+            answers,
+        )
+    }
+
+    fn connect(&self) -> std::result::Result<Link, String> {
+        let port = self
+            .0
+            .current_port(REATTACH)
+            .ok_or("the board's port did not return")?;
+        let port = Port::open(&port, DUT_CONSOLE).map_err(|error| error.to_string())?;
+        Link::start(Box::new(port)).map_err(|error| error.to_string())
+    }
+
+    fn quarantine(&self, reason: String) -> std::result::Result<(), String> {
+        Arbiter::open()
+            .and_then(|arbiter| {
+                arbiter.quarantine(
+                    self.0.mac().as_ref(),
+                    QuarantineTrigger::Unreachable,
+                    reason,
+                    None,
+                )
+            })
+            .map_err(|error| error.to_string())
+    }
+
+    fn recovered(&self, step: RecoveryStep, reset_line: Option<String>) {
+        let recorded = Arbiter::open().and_then(|arbiter| {
+            arbiter.journal().record_by(
+                String::from("stand"),
+                Some(self.0.mac().to_string()),
+                BoardEventKind::Recovered {
+                    step,
+                    hardware: reset_line
+                        .as_deref()
+                        .is_some_and(|line| line.contains("DOWNLOAD")),
+                    reset_line,
+                    origin: std::env::args().collect::<Vec<_>>().join(" "),
+                },
+            )
+        });
+        if let Err(error) = recorded {
+            eprintln!("hil: cannot journal the recovery: {error}");
+        }
     }
 }
 

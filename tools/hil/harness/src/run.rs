@@ -4,6 +4,7 @@ use std::{io::Write, time::Duration};
 
 use oer_hil_link::{Boot, Link, LinkError};
 
+use crate::finish::{Cleanup, Ending};
 use crate::{Case, Cx, Failure, Scenario, keys};
 
 /// How long the running boot may take to say Hello.
@@ -60,18 +61,38 @@ pub(crate) fn select<'a>(cases: &'a [Case], names: &[String]) -> Result<Vec<&'a 
         .collect())
 }
 
+/// What running the cases came to.
+pub(crate) struct Run {
+    pub outcomes: Vec<Outcome>,
+    /// How the cases left the device, for finishing.
+    pub ending: Ending,
+}
+
 /// Run `cases` on the device behind `link` after checking that it runs the
 /// image of identity `image_crc32` and that the image serves every service
-/// of `scenario`. A case that sees a reboot fails and
-/// the next one runs on the new boot; a request without a response leaves
-/// the boot's remaining cases incomplete.
-pub fn cases(link: &Link, scenario: &Scenario, image_crc32: u32, cases: &[&Case]) -> Vec<Outcome> {
+/// of `scenario`, printing each outcome to `out` as it is known. A case
+/// that sees a reboot fails and the next one runs on the new boot; a
+/// request without a response leaves the boot's remaining cases incomplete.
+pub(crate) fn cases(
+    link: &Link,
+    scenario: &Scenario,
+    image_crc32: u32,
+    cases: &[&Case],
+    out: &mut impl Write,
+) -> Run {
     let mut outcomes = Vec::new();
+    let mut record = |outcome: Outcome, out: &mut dyn Write| {
+        print(&outcome, out);
+        outcomes.push(outcome);
+    };
     let mut boot = match ready(link, scenario, image_crc32) {
         Ok(boot) => boot,
         Err(reason) => {
-            outcomes.push(Outcome::stand(reason));
-            return outcomes;
+            record(Outcome::stand(reason), out);
+            return Run {
+                outcomes,
+                ending: Ending::default(),
+            };
         }
     };
     let mut unconfirmed = None;
@@ -91,28 +112,28 @@ pub fn cases(link: &Link, scenario: &Scenario, image_crc32: u32, cases: &[&Case]
             unconfirmed = cx.unconfirmed;
             verdict
         };
-        let notes = link.take_notes();
-        for note in notes.lines {
-            eprintln!("device: {note}");
-        }
-        if notes.lost > 0 {
-            eprintln!("device: {} diagnostic lines lost", notes.lost);
-        }
-        outcomes.push(Outcome {
-            case: Some(case.name),
-            verdict,
-        });
+        print_notes(link);
+        record(
+            Outcome {
+                case: Some(case.name),
+                verdict,
+            },
+            out,
+        );
         if oer_os_process::cancellation_requested() {
-            outcomes.push(Outcome::stand(LinkError::Cancelled.to_string()));
+            record(Outcome::stand(LinkError::Cancelled.to_string()), out);
             break;
         }
         match link.boot(HELLO_TIMEOUT) {
             Ok(next) if next.boot_id != boot.boot_id => {
                 if next.hello.image_crc32 != image_crc32 {
-                    outcomes.push(Outcome::stand(format!(
-                        "the board rebooted into image {:08x}, not the built {image_crc32:08x}",
-                        next.hello.image_crc32
-                    )));
+                    record(
+                        Outcome::stand(format!(
+                            "the board rebooted into image {:08x}, not the built {image_crc32:08x}",
+                            next.hello.image_crc32
+                        )),
+                        out,
+                    );
                     break;
                 }
                 boot = next;
@@ -120,12 +141,40 @@ pub fn cases(link: &Link, scenario: &Scenario, image_crc32: u32, cases: &[&Case]
             }
             Ok(_) => {}
             Err(error) => {
-                outcomes.push(Outcome::stand(error.to_string()));
+                record(Outcome::stand(error.to_string()), out);
                 break;
             }
         }
     }
-    outcomes
+    Run {
+        outcomes,
+        ending: Ending {
+            unconfirmed: unconfirmed.is_some(),
+        },
+    }
+}
+
+/// Print the device's diagnostic lines and how many were lost.
+fn print_notes(link: &Link) {
+    let notes = link.take_notes();
+    for note in notes.lines {
+        eprintln!("device: {note}");
+    }
+    if notes.lost > 0 {
+        eprintln!("device: {} diagnostic lines lost", notes.lost);
+    }
+}
+
+/// Print one outcome as a line of `out`.
+pub(crate) fn print(outcome: &Outcome, out: &mut dyn Write) {
+    let name = outcome.case.unwrap_or("stand");
+    let line = match &outcome.verdict {
+        Verdict::Pass => format!("case {name}: pass"),
+        Verdict::Fail(reason) => format!("case {name}: fail: {reason}"),
+        Verdict::Incomplete(reason) => format!("case {name}: incomplete: {reason}"),
+    };
+    let _ = writeln!(out, "{line}");
+    let _ = out.flush();
 }
 
 /// The running boot, once it runs the image of identity `image_crc32` and
@@ -153,19 +202,19 @@ fn ready(link: &Link, scenario: &Scenario, image_crc32: u32) -> Result<Boot, Str
     }
 }
 
-/// Print every outcome and the summary to `out`; the scenario's verdict:
-/// a failure over an incomplete case over a pass.
-pub fn report(scenario: &Scenario, outcomes: &[Outcome], out: &mut impl Write) -> Verdict {
+/// Print the cleanup and the summary of `outcomes` to `out`; the
+/// scenario's verdict: a failure over an incomplete case over a pass, and a
+/// passing scenario whose `cleanup` had to recover or judge the board is
+/// incomplete.
+pub fn summary(
+    scenario: &Scenario,
+    outcomes: &[Outcome],
+    cleanup: Option<&Cleanup>,
+    out: &mut impl Write,
+) -> Verdict {
     let mut counts = [0_usize; 3];
     let mut worst = Verdict::Pass;
     for outcome in outcomes {
-        let name = outcome.case.unwrap_or("stand");
-        let line = match &outcome.verdict {
-            Verdict::Pass => format!("case {name}: pass"),
-            Verdict::Fail(reason) => format!("case {name}: fail: {reason}"),
-            Verdict::Incomplete(reason) => format!("case {name}: incomplete: {reason}"),
-        };
-        let _ = writeln!(out, "{line}");
         let index = usize::from(outcome.verdict.exit_code());
         if let Some(count) = counts.get_mut(index) {
             *count += 1;
@@ -178,6 +227,19 @@ pub fn report(scenario: &Scenario, outcomes: &[Outcome], out: &mut impl Write) -
     }
     if outcomes.is_empty() {
         worst = Verdict::Incomplete("no case ran".to_owned());
+    }
+    let problem = cleanup.and_then(Cleanup::problem);
+    match &problem {
+        Some(problem) => {
+            let _ = writeln!(out, "cleanup: {problem}");
+        }
+        None if cleanup.is_some() => {
+            let _ = writeln!(out, "cleanup: clean");
+        }
+        None => {}
+    }
+    if let (Verdict::Pass, Some(problem)) = (&worst, problem) {
+        worst = Verdict::Incomplete(format!("cleanup: {problem}"));
     }
     let [passed, failed, incomplete] = counts;
     let _ = writeln!(

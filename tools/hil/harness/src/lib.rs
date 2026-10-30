@@ -23,10 +23,12 @@ use std::{process::ExitCode, time::Duration};
 use oer_hil_link::{Boot, CallError, Link};
 use oer_hil_protocol::{Endpoint, Key};
 
+mod finish;
 mod keys;
 mod run;
 mod stand;
 
+pub use finish::Cleanup;
 pub use run::{Outcome, Verdict};
 
 /// What a scenario needs from the stand and the device.
@@ -167,11 +169,28 @@ pub fn main(scenario: &Scenario, cases: &[Case]) -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    let outcomes = match stand::Session::open(scenario, arguments.board.as_deref()) {
-        Ok(session) => run::cases(session.link(), scenario, session.image_crc32(), &selected),
-        Err(error) => vec![Outcome::stand(error.to_string())],
+    let mut out = std::io::stdout();
+    let (outcomes, cleanup) = match stand::Session::open(scenario, arguments.board.as_deref()) {
+        Ok(mut session) => {
+            let run = match session.link() {
+                Some(link) => {
+                    run::cases(link, scenario, session.image_crc32(), &selected, &mut out)
+                }
+                None => run::Run {
+                    outcomes: Vec::new(),
+                    ending: finish::Ending::default(),
+                },
+            };
+            let cleanup = session.finish(run.ending);
+            (run.outcomes, Some(cleanup))
+        }
+        Err(error) => {
+            let outcome = Outcome::stand(error.to_string());
+            run::print(&outcome, &mut out);
+            (vec![outcome], None)
+        }
     };
-    let verdict = run::report(scenario, &outcomes, &mut std::io::stdout().lock());
+    let verdict = run::summary(scenario, &outcomes, cleanup.as_ref(), &mut out);
     ExitCode::from(verdict.exit_code())
 }
 

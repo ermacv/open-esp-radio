@@ -180,9 +180,9 @@ impl State {
         };
         running.sequence = message.message_sequence.wrapping_add(1);
         running.position = position.saturating_add(1);
-        if let Some(Ok(hello)) = message.decode::<Hello>() {
-            running.hello = Some(hello);
-            return;
+        let hello = message.decode::<Hello>().and_then(Result::ok);
+        if hello.is_some() {
+            running.hello = hello;
         }
         if let Some(slot) = self.pending.iter_mut().find(|slot| {
             slot.message.is_none()
@@ -193,6 +193,10 @@ impl State {
                     || message.key == <oer_hil_protocol::base::Rejected as Message>::KEY)
         }) {
             slot.message = Some(message);
+            return;
+        }
+        // A Hello outside a request is the boot's, which the link holds.
+        if hello.is_some() {
             return;
         }
         if running.kept.len() == EVENT_CAPACITY
