@@ -115,14 +115,15 @@ Each package under `chips/`, `protocols/hil/` and `hil-scenarios/` has one
 role in `oer-test-layers` that names its level
 ([architecture](architecture.md#layers)); a directory name such as `driver`
 grants nothing. `chips/esp32s31/wifi` assembles the S31 station backend and portable runtime as the Wi-Fi facade.
-A protocol leaf named `instrumentation` is an observation contract; a leaf
-named `hil` takes its role from the list. A package under a protocol's
+A protocol leaf named `hil` takes its role from the list. A package under a protocol's
 `contracts/` is a protocol contract, which a backend may use, except
 `contracts/port`, which keeps the port's role; `testing/conformance` is a
 backend conformance suite and `testing/model` a reference model, and no
 product package depends on either; and
 `protocols/bridges/*` are bridges, which stand only on the codecs they
-join.
+join. Each `protocols/network/*` package has an explicit layer in
+`oer-test-layers`: the network codec stands on `oer-wire` alone and the
+network contract on the codec.
 
 ## Known deviations
 

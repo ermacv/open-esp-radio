@@ -1,8 +1,8 @@
 warning: unused import: `InterfacePhase`
- --> tests/ui/participating_group_owner.rs:2:26
+ --> tests/ui/participating_group_owner.rs:2:36
   |
 2 | use oer_ieee80211_contracts_port::{InterfacePhase, KeyTypes, LowerMacPhase, StationPhase, Station};
-  |                          ^^^^^^^^^^^^^^
+  |                                    ^^^^^^^^^^^^^^
   |
   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
 

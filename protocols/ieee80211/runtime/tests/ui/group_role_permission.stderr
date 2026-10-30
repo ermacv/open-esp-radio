@@ -2,7 +2,7 @@ error[E0308]: mismatched types
   --> tests/ui/group_role_permission.rs:12:38
    |
 12 |     phase.station().select_group_key(ap, selected); // ui-error: E0308
-   |                     ---------------- ^^ expected `oer_ieee80211_contracts_port::Station`, found `oer_ieee80211_contracts_port::AccessPoint`
+   |                     ---------------- ^^ expected `oer_ieee80211_contracts_port::Station`, found `AccessPoint`
    |                     |
    |                     arguments to this method are incorrect
    |

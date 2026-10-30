@@ -1,8 +1,8 @@
 warning: unused import: `end_association`
- --> tests/ui/association_next_mode.rs:2:82
+ --> tests/ui/association_next_mode.rs:2:92
   |
 2 | use oer_ieee80211_contracts_port::{Station, association::{AssociationStart, VacantKeyBank, end_association}};
-  |                                                                                  ^^^^^^^^^^^^^^^
+  |                                                                                            ^^^^^^^^^^^^^^^
   |
   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
 

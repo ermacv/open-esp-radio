@@ -840,8 +840,8 @@ fn protocol_role(path: &str) -> Option<ProtocolRole> {
         _ => {}
     }
     Some(match leaf {
-        // An event vocabulary and a HIL binding are no protocol layer.
-        "instrumentation" | "hil" => return None,
+        // A HIL binding is no protocol layer.
+        "hil" => return None,
         "wire" => ProtocolRole::Wire,
         "cipher" => ProtocolRole::Cipher,
         "port" => ProtocolRole::Port,
@@ -985,7 +985,6 @@ fn role(path: &str) -> Option<Role> {
     }
     let mut parts = path.split('/');
     Some(match (parts.next(), parts.next()) {
-        (Some("protocols"), _) if path.ends_with("/instrumentation") => Role::ObservationContract,
         (Some("protocols"), Some("radio" | "network")) => Role::SharedVocabulary,
         (Some("protocols"), Some("bridges")) => Role::Bridge,
         (Some("protocols"), _) => Role::Protocol(protocol_role(path)?),
@@ -1261,10 +1260,6 @@ fn protocol_roles_and_the_explicit_chip_roles_follow_the_layout() {
             assert_eq!(protocol_role(&path), Some(protocol));
             assert_eq!(role(&path), Some(Role::Protocol(protocol)));
         }
-        assert_eq!(
-            role(&format!("{prefix}/instrumentation")),
-            Some(Role::ObservationContract)
-        );
         assert_eq!(role(&format!("{prefix}/hil")), None);
     }
     assert_eq!(
@@ -3842,5 +3837,183 @@ fn the_hal_ratchet_fails_on_a_new_file_a_changed_count_and_a_gone_entry() {
             ]
         )
         .is_empty()
+    );
+}
+
+/// Whether `role` is a testing package: a backend conformance suite or a
+/// reference model.
+fn testing_role(role: Role) -> bool {
+    matches!(
+        role,
+        Role::Protocol(ProtocolRole::Conformance | ProtocolRole::Model)
+    )
+}
+
+/// The normal or build edges by which a package other than a testing
+/// package reaches one; dev dependencies are outside `Member`.
+fn testing_edges(members: &[Member], roles: &BTreeMap<String, Role>) -> BTreeSet<Edge> {
+    members
+        .iter()
+        .filter(|member| !role(&member.path).is_some_and(testing_role))
+        .flat_map(|member| {
+            member
+                .dependencies
+                .iter()
+                .chain(&member.build_dependencies)
+                .filter(|dependency| roles.get(*dependency).copied().is_some_and(testing_role))
+                .map(|dependency| (member.path.clone(), dependency.clone()))
+        })
+        .collect()
+}
+
+#[test]
+fn no_product_package_depends_on_a_conformance_suite_or_a_model() {
+    let members = workspace_members();
+    assert!(
+        members
+            .iter()
+            .any(|member| member.path == "protocols/ieee80211/testing/conformance")
+    );
+    let edges = testing_edges(&members, &workspace_roles());
+    assert!(edges.is_empty(), "{edges:?}");
+}
+
+#[test]
+fn a_product_edge_to_a_testing_package_is_found_and_one_between_them_is_not() {
+    let model = member(
+        "protocols/ieee80211/testing/model",
+        "oer-ieee80211-testing-model",
+        false,
+        &["oer-ieee80211-testing-conformance"],
+    );
+    let mut runtime = member(
+        "protocols/ieee80211/runtime",
+        "oer-ieee80211-runtime",
+        false,
+        &["oer-ieee80211-contracts-port"],
+    );
+    runtime
+        .build_dependencies
+        .insert("oer-ieee80211-testing-model".to_owned());
+    let core = member(
+        "protocols/ieee80211/core/upper-mac",
+        "oer-ieee80211-core-upper-mac",
+        false,
+        &["oer-ieee80211-testing-conformance"],
+    );
+    let roles = BTreeMap::from([
+        (
+            "oer-ieee80211-testing-conformance".to_owned(),
+            Role::Protocol(ProtocolRole::Conformance),
+        ),
+        (
+            "oer-ieee80211-testing-model".to_owned(),
+            Role::Protocol(ProtocolRole::Model),
+        ),
+        (
+            "oer-ieee80211-contracts-port".to_owned(),
+            Role::Protocol(ProtocolRole::Port),
+        ),
+    ]);
+    assert_eq!(
+        testing_edges(&[model, runtime, core], &roles),
+        [
+            (
+                "protocols/ieee80211/core/upper-mac",
+                "oer-ieee80211-testing-conformance"
+            ),
+            ("protocols/ieee80211/runtime", "oer-ieee80211-testing-model"),
+        ]
+        .map(|(path, dependency)| (path.to_owned(), dependency.to_owned()))
+        .into()
+    );
+}
+
+/// Every network package and the workspace packages it may take, normal or
+/// build: the codec stands on `oer-wire` alone and the contract on the codec.
+const NETWORK_LAYERS: [(&str, &[&str]); 2] = [
+    ("protocols/network/wire", &["oer-wire"]),
+    ("protocols/network/port", &["oer-network-wire"]),
+];
+
+/// The network packages missing from [`NETWORK_LAYERS`], and the workspace
+/// edges a listed one takes beyond its entry.
+fn network_layer_violations(
+    members: &[Member],
+    workspace: &BTreeSet<String>,
+) -> (BTreeSet<String>, BTreeSet<Edge>) {
+    let network = members
+        .iter()
+        .filter(|member| member.path.starts_with("protocols/network/"));
+    let unlisted = network
+        .clone()
+        .filter(|member| !NETWORK_LAYERS.iter().any(|(path, _)| *path == member.path))
+        .map(|member| member.path.clone())
+        .collect();
+    let edges = network
+        .filter_map(|member| {
+            let (_, allowed) = NETWORK_LAYERS
+                .iter()
+                .find(|(path, _)| *path == member.path)?;
+            Some((member, *allowed))
+        })
+        .flat_map(|(member, allowed)| {
+            member
+                .dependencies
+                .iter()
+                .chain(&member.build_dependencies)
+                .filter(|dependency| {
+                    workspace.contains(*dependency) && !allowed.contains(&dependency.as_str())
+                })
+                .map(|dependency| (member.path.clone(), dependency.clone()))
+        })
+        .collect();
+    (unlisted, edges)
+}
+
+#[test]
+fn every_network_package_has_an_explicit_layer() {
+    let members = workspace_members();
+    let workspace = members.iter().map(|member| member.name.clone()).collect();
+    let (unlisted, edges) = network_layer_violations(&members, &workspace);
+    assert!(
+        unlisted.is_empty(),
+        "unlisted network packages: {unlisted:?}"
+    );
+    assert!(edges.is_empty(), "{edges:?}");
+}
+
+#[test]
+fn an_unlisted_network_package_and_a_contract_on_another_protocol_are_found() {
+    let port = member(
+        "protocols/network/port",
+        "oer-network-port",
+        false,
+        &["oer-network-wire", "oer-ieee80211-wire", "heapless"],
+    );
+    let codec = member(
+        "protocols/network/wire",
+        "oer-network-wire",
+        false,
+        &["oer-wire"],
+    );
+    let stack = member("protocols/network/stack", "oer-network-stack", false, &[]);
+    let workspace = [
+        "oer-network-wire",
+        "oer-network-port",
+        "oer-ieee80211-wire",
+        "oer-wire",
+    ]
+    .map(str::to_owned)
+    .into();
+    let (unlisted, edges) = network_layer_violations(&[port, codec, stack], &workspace);
+    assert_eq!(unlisted, ["protocols/network/stack".to_owned()].into());
+    assert_eq!(
+        edges,
+        [(
+            "protocols/network/port".to_owned(),
+            "oer-ieee80211-wire".to_owned()
+        )]
+        .into()
     );
 }
