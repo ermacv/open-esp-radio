@@ -336,19 +336,24 @@ pub fn parse_management(frame: &[u8]) -> Option<ScanRecord> {
     ScanFrame::parse(frame).map(ScanFrame::into_record)
 }
 
-/// A decoded beacon or probe response: its bounded record, and the frame's
-/// information elements for what the record does not keep.
+/// A decoded beacon or probe response: its bounded record, and its ERP
+/// elements checked when the view is made. A damaged ERP element is reported
+/// here and leaves the record valid: the receiver decides what it requires
+/// without one.
 #[derive(Clone, Copy, Debug)]
 pub struct ScanFrame<'a> {
     record: ScanRecord,
-    elements: &'a [u8],
+    erp: Result<ErpElements<'a>, ErpElementsError>,
 }
 
 impl<'a> ScanFrame<'a> {
     /// Decode `frame`; `None` for another frame or a malformed header.
     pub fn parse(frame: &'a [u8]) -> Option<Self> {
         let (record, elements) = decode_management(frame)?;
-        Some(Self { record, elements })
+        Some(Self {
+            record,
+            erp: ErpElements::parse(elements),
+        })
     }
 
     pub const fn record(&self) -> &ScanRecord {
@@ -359,11 +364,10 @@ impl<'a> ScanFrame<'a> {
         self.record
     }
 
-    /// The frame's ERP elements, checked: a damaged element or an ERP
-    /// element of another length is refused here, for the receiver to
-    /// decide what that means.
-    pub fn erp_elements(&self) -> Result<ErpElements<'a>, ErpElementsError> {
-        ErpElements::parse(self.elements)
+    /// The frame's ERP elements as checked by [`Self::parse`]: a damaged
+    /// element or an ERP element of another length is its typed error.
+    pub const fn erp_elements(&self) -> Result<ErpElements<'a>, ErpElementsError> {
+        self.erp
     }
 }
 

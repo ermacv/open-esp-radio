@@ -149,12 +149,16 @@ impl<const N: usize> ScanTable<N> {
                 {
                     // A malformed suffix cannot prove that a previously
                     // observed security/protection element disappeared. Keep
-                    // the complete policy, but retain the current signal
-                    // sample used to select among BSSIDs.
-                    if *existing_rssi == rssi {
+                    // the complete record, but retain the current signal
+                    // sample used to select among BSSIDs and this frame's
+                    // ERP decision: either its ERP elements were checked
+                    // whole, or their damage asks for protection. The next
+                    // complete frame sets it anew.
+                    if *existing_rssi == rssi && *existing_erp == erp {
                         return ScanObservation::Duplicate { index };
                     }
                     *existing_rssi = rssi;
+                    *existing_erp = erp;
                     return ScanObservation::Updated { index };
                 }
                 if *existing == record

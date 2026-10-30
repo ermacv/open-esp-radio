@@ -288,6 +288,44 @@ fn damaged_erp_elements_fail_closed() {
 }
 
 #[test]
+fn a_damaged_frame_keeps_the_record_but_fails_its_erp_closed_until_a_sound_one() {
+    use oer_ieee80211_wire::protection::ErpProtection;
+    let mut table = ScanTable::<1>::new();
+    let erp = |table: &ScanTable<1>| table.observations().next().unwrap().erp;
+    // A sound frame: Use Protection clear.
+    let sound = erp_beacon(&[0x00]);
+    assert!(matches!(
+        table.observe_management(&sound, 6, Some(-50), None),
+        ScanObservation::Inserted { index: 0 }
+    ));
+    assert_eq!(erp(&table), ErpProtection::NONE);
+    // The same BSS, the same signal, an element whose Length runs past the
+    // frame: the complete record stays, the ERP decision fails closed, and
+    // the change is no duplicate.
+    let mut damaged = erp_beacon(&[0x00]);
+    damaged.extend_from_slice(&[221, 9, 0]);
+    assert_eq!(
+        table.observe_management(&damaged, 6, Some(-50), None),
+        ScanObservation::Updated { index: 0 }
+    );
+    let kept = table.observations().next().unwrap();
+    assert!(!kept.record.information_elements_truncated);
+    assert_eq!(kept.record.ssid_bytes(), b"ap");
+    assert_eq!(erp(&table), ErpProtection::new(true, true));
+    // Repeating the damaged frame changes nothing.
+    assert_eq!(
+        table.observe_management(&damaged, 6, Some(-50), None),
+        ScanObservation::Duplicate { index: 0 }
+    );
+    // The next sound frame lifts the requirement again.
+    assert_eq!(
+        table.observe_management(&sound, 6, Some(-50), None),
+        ScanObservation::Updated { index: 0 }
+    );
+    assert_eq!(erp(&table), ErpProtection::NONE);
+}
+
+#[test]
 fn the_scan_table_keeps_the_stations_erp_decision() {
     let mut table = ScanTable::<1>::new();
     let frame = erp_beacon(&[0, 0, 0, 0, 0, 0x02]);
