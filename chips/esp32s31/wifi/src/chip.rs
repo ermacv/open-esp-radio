@@ -24,14 +24,18 @@ pub const Q: usize = 32;
 pub const TX: usize = crate::FRAME_CAPACITY;
 pub type RadioExecutor = InterruptExecutor<Esp32s31, 2>;
 pub(crate) type Rng = oer_esp32s31_compose::platform::Entropy;
-/// Image-selected entries, callbacks, observers and key-unwrap engine.
+/// Image-selected entries, callbacks, observers, event sink and key-unwrap engine.
 pub trait Binding: Sized + 'static {
     type Id: SlotIdentity + 'static;
     type Wifi: Entry<Part = WifiIrqPart<Lower>>;
     type Radio: Entry;
     type Callbacks: crate::Callbacks + 'static;
+    /// Receives the facade's own trace events ([`crate::observation`]).
     type Observer: Observer + Clone + 'static;
     type DriverObserver: Observer + Default + 'static;
+    /// The sink the station service lends its cores: the protocol's events.
+    /// `()` keeps none.
+    type Sink: oer_ieee80211_runtime::station::StationEvents + 'static;
     type Engine: oer_crypto::KeyUnwrap<{ oer_ieee80211_sta::machine::KEY_DATA_CAPACITY }, Operation: Unpin>
         + 'static;
     type Events: Events + 'static;
@@ -165,8 +169,10 @@ pub(crate) enum Security {
     Wpa2Personal(oer_ieee80211_rsn::Pmk),
 }
 pub struct Profile<W: Binding> {
-    pub(crate) station: StaConfig<Caps, CoreCallbacks<W::Callbacks>, W::Observer>,
+    pub(crate) station: StaConfig<Caps, CoreCallbacks<W::Callbacks>>,
     pub(crate) security: Security,
+    pub(crate) observer: W::Observer,
+    pub(crate) sink: W::Sink,
 }
 impl<W: Binding> Profile<W> {
     pub fn new(
@@ -175,6 +181,7 @@ impl<W: Binding> Profile<W> {
         credentials: crate::PreparedCredentials,
         callbacks: W::Callbacks,
         observer: W::Observer,
+        sink: W::Sink,
     ) -> Result<Self, InitializationError> {
         let mut channels = heapless::Vec::new();
         if config.all_channels {
@@ -209,12 +216,13 @@ impl<W: Binding> Profile<W> {
                 listen_interval: oer_ieee80211_sta::request::StationListenInterval::DEFAULT,
                 phy: oer_ieee80211_upper_mac::phy_mode::PhyMode::Ht20,
                 callbacks: CoreCallbacks(callbacks),
-                observer,
             },
             security: match credentials.pmk {
                 None => Security::Open,
                 Some(pmk) => Security::Wpa2Personal(pmk),
             },
+            observer,
+            sink,
         })
     }
 }

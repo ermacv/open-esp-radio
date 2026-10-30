@@ -52,12 +52,15 @@ implementing a foreign trait for a foreign backend or replacing its body-loan
 identity. The radio and lower-MAC port contracts remain the common boundary.
 
 `station::Runner` retains the station's concrete `StaCallbacks` provider with
-its resource bank across stop/restart. It keeps no counters: it takes an
-`O: oer_trace::Observer` (by default `Noop`, the observer of its station and
-data machine too) and reports lost port events, receive drops with their
-reason, MSDU refusals, unsent frames, group key installations and the ARP
-correlation of the protected link as events of
-`oer-ieee80211-instrumentation`. `ServiceOutput` carries only what the
+its resource bank across stop/restart. It keeps no counters: it holds the
+composition's `O: StationEvents` sink (by default `()`), lends it to each call
+of its station, data machine and receive agreements, and reports lost port
+events, receive drops with their reason, the MSDUs of a received frame the
+network queue did not take (one `RxMsdusRefused` count per reason and frame,
+after the station's own events of that frame) and group key installations as
+`ServiceEvent`s. A refusal it returns to the application (`MsduRefused`,
+`TxRefused`) is the application's to count and is no event. Its types carry no transport
+encoding. `ServiceOutput` carries only what the
 application acts on: notices, command terminals, refusals that return an
 owner, and the arbiter's access-point commands. `ServiceIo` borrows a concrete
 `ServiceOutputSink`; closures implement that trait without erasing their type.

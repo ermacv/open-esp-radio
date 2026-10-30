@@ -279,19 +279,39 @@ fn anti_clogging_response_waits_for_credit_without_extending_the_deadline() {
         begin(&mut world, &advertised(true, false), 0, 91);
         let first_commit = world.frames.last().unwrap().clone();
         let deadline = world.station.poll_deadline().unwrap();
-        let first = world.station.transition().0.reserve_transmit().unwrap();
-        let second = world.station.transition().0.reserve_transmit().unwrap();
+        let first = world
+            .station
+            .transition()
+            .0
+            .reserve_transmit(&mut world.losses)
+            .unwrap();
+        let second = world
+            .station
+            .transition()
+            .0
+            .reserve_transmit(&mut world.losses)
+            .unwrap();
         let before = world.frames.len();
         world.receive(at(30), &peer_authentication(1, 76, &[19, 0, 7, 8, 9]));
         assert_eq!(world.frames.len(), before);
         assert_eq!(world.station.poll_deadline(), Some(deadline));
-        world.station.transition().0.return_credit(first);
+        world
+            .station
+            .transition()
+            .0
+            .return_credit(first, &mut world.losses);
         world.run(at(31));
         let (_, token_commit) = outgoing_authentication(world.frames.last().unwrap(), 3, 1);
         assert_eq!(&token_commit[2..5], &[7, 8, 9]);
         assert_eq!(&token_commit[5..], &first_commit[32..]);
-        world.station.transition().0.return_credit(second);
-        world.station.input(deadline, StaInput::Tick);
+        world
+            .station
+            .transition()
+            .0
+            .return_credit(second, &mut world.losses);
+        world
+            .station
+            .input(deadline, StaInput::Tick, &mut world.losses);
         world.run(deadline);
         assert!(world.seen.contains(&Seen::Notify(StaNotice::Disconnected(
             StaDisconnectReason::Sae(StaSaeFailure::Timeout)

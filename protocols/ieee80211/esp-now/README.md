@@ -17,10 +17,11 @@ authentication or network-stack authority.
 
 `extensions/espressif/esp_now/protocol.rs` owns plaintext v1/v2 peers and
 protocol state. Its `security.rs` sibling owns zeroizing secrets, encrypted
-peer generations and anti-replay state; its peer table reports peer
-changes, transmit packet-number allocations and replay admission to an
-`oer_trace::Observer` (by default `Noop`) with the ESP-NOW events of
-`oer-ieee80211-instrumentation`, and keeps no counters. These owners do not claim to produce
+peer generations and anti-replay state. Peer changes, transmit
+packet-number allocations and replay admission are their calls' results;
+only `EspNowEncryptedProtocol::shutdown`, which returns the configuration,
+reports the keys it cleared (`EspNowPeersCleared`) to the caller's sink. The
+table keeps no counters and no sink. These owners do not claim to produce
 or authenticate encrypted on-air bytes: the encrypted Action-frame CCMP
 and backend callback contract remain unavailable. Caller-owned v2 datagram
 storage lives in `reassembly.rs`; `extensions/espressif/phy.rs` contains peer

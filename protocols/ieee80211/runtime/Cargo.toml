@@ -12,8 +12,7 @@ description = "Wi-Fi async glue between the lower-MAC port and the sans-IO cores
 placement = ["oer-ieee80211-sta/placement"]
 
 [dependencies]
-serde = { version = "1.0.219", default-features = false, features = ["derive"] }
-postcard-schema = { version = "0.2.5", default-features = false, features = ["derive"] }
+oer-events = { path = "../../../portable/events" }
 oer-sync = { path = "../../../portable/sync" }
 oer-network = { path = "../../network" }
 heapless = "0.9.3"
@@ -27,11 +26,8 @@ oer-ieee80211-sta = { path = "../sta" }
 oer-crypto = { path = "../../../portable/crypto" }
 oer-ieee80211-upper-mac = { path = "../upper-mac" }
 oer-ieee80211-rsn = { path = "../rsn" }
-oer-ieee80211-instrumentation = { path = "../instrumentation" }
-oer-trace = { path = "../../../portable/trace" }
 
 [dev-dependencies]
-oer-ieee80211-instrumentation = { path = "../instrumentation", features = ["test-support"] }
 oer-crypto = { path = "../../../portable/crypto", features = ["test-support"] }
 # The compile-fail example of a shareable command channel.
 embassy-sync = "0.8.0"

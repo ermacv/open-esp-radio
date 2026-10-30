@@ -148,7 +148,7 @@ fn deferred_kinds_follow_the_shared_replay_order_without_dropping_either_frame()
 
 fn security_drops(world: &World<'_>) -> u32 {
     match &world.station.state {
-        State::Connected(_) => world.station.config.observer.rsn.get(),
+        State::Connected(_) => world.losses.rsn,
         _ => panic!("the security exchange must stay alive after a protocol drop"),
     }
 }
@@ -200,19 +200,22 @@ fn invalid_mic_and_non_increasing_counters_never_replace_a_deferred_frame() {
                             at(51),
                             &protected_received(frame, 101 + index as u64),
                             verified_meta(),
-                            |_| {}
+                            |_| {},
+                            &mut world.losses,
                         ),
                         Err(StaRxError::Security(RsnConnectedProcessError::Supplicant(
                             reason
                         )))
                     );
-                    assert_eq!(security_drops(&world), traced(1 + index as u32));
+                    // The refusal is the call's result: the caller counts
+                    // it, and the station reports no second event.
+                    assert_eq!(security_drops(&world), 0);
                 }
                 assert_eq!(world.frames.len(), before);
                 world.end_transmissions(at(52));
                 world.run(at(52));
                 assert_eq!(response_counters(&world, before), [5]);
-                assert_eq!(security_drops(&world), traced(3));
+                assert_eq!(security_drops(&world), 0);
             });
         }
     }
@@ -234,7 +237,7 @@ fn connected_deferral_has_no_station_timeout_and_waits_for_the_port_terminal() {
             world.take();
             assert!(world.station.poll_deadline().is_none());
             let late = Instant::from_micros(u64::MAX);
-            world.station.input(late, StaInput::Tick);
+            world.station.input(late, StaInput::Tick, &mut world.losses);
             world.run(late);
             assert!(world.station.is_connected());
             assert!(world.take().is_empty());
@@ -263,11 +266,15 @@ fn original_d4_deadline_with_a_deferred_m3_fails_once_even_if_the_old_m4_later_d
             assert_eq!(world.station.poll_deadline(), Some(deadline));
         }
         let before = world.frames.len();
-        world.station.input(deadline, StaInput::Tick);
+        world
+            .station
+            .input(deadline, StaInput::Tick, &mut world.losses);
         world.hold_transmissions = false;
         world.run(deadline);
         for _ in 0..2 {
-            world.station.input(deadline, StaInput::Tick);
+            world
+                .station
+                .input(deadline, StaInput::Tick, &mut world.losses);
             world.run(deadline);
         }
         assert!(!world.station.is_connected());
@@ -479,9 +486,10 @@ fn a_removal_terminal_preserves_an_encoded_group_response_waiting_for_credit() {
                 slot,
                 permission,
             },
+            &mut world.losses,
         );
         for buffer in buffers {
-            world.station.buffers.put(buffer, &oer_trace::Noop);
+            world.station.buffers.put(buffer, &mut ());
         }
         world.run(at(52));
         assert_eq!(world.frames.len(), before + 1);
@@ -600,7 +608,13 @@ fn damaged_deferred_eapol_disconnects_on_both_rx_and_tx_terminal_paths() {
                 rsn.rekey = Rekey::None;
                 let error = world
                     .station
-                    .receive(at(52), &retry_message3(&ptk, 1, 0x99), meta(), |_| {})
+                    .receive(
+                        at(52),
+                        &retry_message3(&ptk, 1, 0x99),
+                        meta(),
+                        |_| {},
+                        &mut world.losses,
+                    )
                     .unwrap_err();
                 // The triggering peer rejection survives the deferred local fault.
                 assert_eq!(
@@ -658,9 +672,16 @@ fn retained_security_ies_are_terminal_without_counting_a_peer_drop() {
         let before = security_drops(&world);
         world
             .station
-            .receive(at(50), &retry_message3(&ptk, 3, 0x99), meta(), |_| {})
+            .receive(
+                at(50),
+                &retry_message3(&ptk, 3, 0x99),
+                meta(),
+                |_| {},
+                &mut world.losses,
+            )
             .unwrap();
-        let Some(StaAction::UnwrapKeyData { id, request }) = world.station.poll_action(at(50))
+        let Some(StaAction::UnwrapKeyData { id, request }) =
+            world.station.poll_action(at(50), &mut world.losses)
         else {
             panic!("the authenticated M3 asks for its key data")
         };
@@ -670,6 +691,7 @@ fn retained_security_ies_are_terminal_without_counting_a_peer_drop() {
                 id,
                 result: super::unwrap(request),
             },
+            &mut world.losses,
         );
         assert_eq!(security_drops(&world), before);
         let State::Connected(connected) = &world.station.state else {

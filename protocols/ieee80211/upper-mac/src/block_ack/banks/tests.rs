@@ -161,7 +161,7 @@ fn an_admitted_request_installs_one_agreement_and_owes_its_success_response() {
     let mut storage = RxBlockAckStorage::<Types, u32, 2, 8>::new([10, 11], GAP);
     let mut view = storage.view();
     let mut port = Recording::default();
-    view.offer(now(1), 7, bssid(), addba(3, 0), true, &mut port)
+    view.offer(now(1), 7, bssid(), addba(3, 0), true, &mut port, &mut ())
         .unwrap();
     assert_eq!(
         port.0,
@@ -188,7 +188,7 @@ fn a_station_without_agreements_declines_through_the_reply_queue() {
     let mut storage = RxBlockAckStorage::<Types, u32, 1, 8>::new([10], GAP);
     let mut view = storage.view();
     let mut port = Recording::default();
-    view.offer(now(1), 7, bssid(), addba(3, 0), false, &mut port)
+    view.offer(now(1), 7, bssid(), addba(3, 0), false, &mut port, &mut ())
         .unwrap();
     assert!(port.0.is_empty());
     let reply = view.next_reply().unwrap();
@@ -206,16 +206,16 @@ fn reordered_data_is_retained_then_released_in_sequence_order() {
     let mut storage = RxBlockAckStorage::<Types, u32, 1, 8>::new([10], GAP);
     let mut view = storage.view();
     let mut port = Recording::default();
-    view.offer(now(1), 7, bssid(), addba(0, 0), true, &mut port)
+    view.offer(now(1), 7, bssid(), addba(0, 0), true, &mut port, &mut ())
         .unwrap();
     assert!(matches!(
-        view.receive(now(2), Some(LOCAL), qos_data(0, 101), meta()),
+        view.receive(now(2), Some(LOCAL), qos_data(0, 101), meta(), &mut ()),
         RxDisposition::Retained
     ));
     assert!(view.pop_ready().is_none());
     assert!(view.deadline().is_some());
     assert!(matches!(
-        view.receive(now(3), Some(LOCAL), qos_data(0, 100), meta()),
+        view.receive(now(3), Some(LOCAL), qos_data(0, 100), meta(), &mut ()),
         RxDisposition::Retained
     ));
     let order: Vec<_> = core::iter::from_fn(|| view.pop_ready())
@@ -224,7 +224,7 @@ fn reordered_data_is_retained_then_released_in_sequence_order() {
     assert_eq!(order, [qos_data(0, 100).0, qos_data(0, 101).0]);
     // Before a link exists nothing is reordered.
     assert_eq!(
-        delivered(view.receive(now(4), None, qos_data(0, 103), meta())),
+        delivered(view.receive(now(4), None, qos_data(0, 103), meta(), &mut ())),
         Some(qos_data(0, 103).0)
     );
 }
@@ -234,15 +234,15 @@ fn a_forward_block_ack_request_releases_the_hole_and_is_recycled() {
     let mut storage = RxBlockAckStorage::<Types, u32, 1, 8>::new([10], GAP);
     let mut view = storage.view();
     let mut port = Recording::default();
-    view.offer(now(1), 7, bssid(), addba(0, 0), true, &mut port)
+    view.offer(now(1), 7, bssid(), addba(0, 0), true, &mut port, &mut ())
         .unwrap();
     assert!(matches!(
-        view.receive(now(2), Some(LOCAL), qos_data(0, 101), meta()),
+        view.receive(now(2), Some(LOCAL), qos_data(0, 101), meta(), &mut ()),
         RxDisposition::Retained
     ));
     let bar = encode_block_ack_request(LOCAL, AP, 0, SequenceNumber::new(102).unwrap());
     assert!(matches!(
-        view.receive(now(3), Some(LOCAL), Frame(bar.to_vec()), meta()),
+        view.receive(now(3), Some(LOCAL), Frame(bar.to_vec()), meta(), &mut ()),
         RxDisposition::Recycle(_)
     ));
     assert_eq!(view.pop_ready().unwrap().0.0, qos_data(0, 101).0);
@@ -253,11 +253,11 @@ fn inactivity_ends_the_agreement_with_a_delba_and_returns_its_slot() {
     let mut storage = RxBlockAckStorage::<Types, u32, 1, 8>::new([10], GAP);
     let mut view = storage.view();
     let mut port = Recording::default();
-    view.offer(now(1), 7, bssid(), addba(2, 1), true, &mut port)
+    view.offer(now(1), 7, bssid(), addba(2, 1), true, &mut port, &mut ())
         .unwrap();
     let response = view.next_reply().unwrap();
     view.sent(response.place);
-    view.tick(now(1 + 1024), &mut port);
+    view.tick(now(1 + 1024), &mut port, &mut ());
     assert_eq!(port.0.last(), Some(&Call::Remove(10)));
     let reply = view.next_reply().unwrap();
     assert_eq!(reply.place, ReplyPlace::Queued);
@@ -276,13 +276,13 @@ fn a_new_association_returns_every_bank_and_retained_frame_first() {
     let mut storage = RxBlockAckStorage::<Types, u32, 1, 8>::new([10], GAP);
     let mut view = storage.view();
     let mut port = Recording::default();
-    view.offer(now(1), 7, bssid(), addba(0, 0), true, &mut port)
+    view.offer(now(1), 7, bssid(), addba(0, 0), true, &mut port, &mut ())
         .unwrap();
     assert!(matches!(
-        view.receive(now(2), Some(LOCAL), qos_data(0, 101), meta()),
+        view.receive(now(2), Some(LOCAL), qos_data(0, 101), meta(), &mut ()),
         RxDisposition::Retained
     ));
-    view.offer(now(3), 8, bssid(), addba(0, 0), true, &mut port)
+    view.offer(now(3), 8, bssid(), addba(0, 0), true, &mut port, &mut ())
         .unwrap();
     assert_eq!(
         port.0,
@@ -310,7 +310,7 @@ fn an_action_waits_retained_while_no_reply_place_is_free() {
     let mut view = storage.view();
     let mut port = Recording::default();
     for _ in 0..PENDING {
-        view.offer(now(1), 7, bssid(), addba(3, 0), false, &mut port)
+        view.offer(now(1), 7, bssid(), addba(3, 0), false, &mut port, &mut ())
             .unwrap();
     }
     assert!(!view.can_receive_management());
@@ -320,7 +320,7 @@ fn an_action_waits_retained_while_no_reply_place_is_free() {
     action.extend_from_slice(&AP);
     action.extend_from_slice(&[0, 0, 3, 0]);
     assert!(matches!(
-        view.receive(now(2), Some(LOCAL), Frame(action.clone()), meta()),
+        view.receive(now(2), Some(LOCAL), Frame(action.clone()), meta(), &mut ()),
         RxDisposition::Retained
     ));
     assert!(view.pop_deferred().is_none());
@@ -334,82 +334,98 @@ fn an_external_reply_place_never_panics_or_changes_another_bank() {
     let mut storage = RxBlockAckStorage::<Types, u32, 1, 8>::new([10], GAP);
     let mut view = storage.view();
     let mut port = Recording::default();
-    view.offer(now(1), 7, bssid(), addba(0, 0), true, &mut port)
+    view.offer(now(1), 7, bssid(), addba(0, 0), true, &mut port, &mut ())
         .unwrap();
     view.sent(ReplyPlace::Bank(usize::MAX));
     assert_eq!(view.next_reply().unwrap().place, ReplyPlace::Bank(0));
 }
 
-#[test]
-fn observations_follow_real_ba_reorder_timeout_duplicate_and_clear_decisions() {
-    use oer_ieee80211_instrumentation::{Observation, Recorder, ReorderCause};
-    let recorder = Recorder::<32>::new();
-    let mut storage = RxBlockAckStorage::<Types, u8, 1, 8>::new([0], GAP);
-    let mut base = storage.view();
-    let mut view = base.observed(&recorder);
-    let mut port = Recording::default();
-    view.offer(now(1), 7, bssid(), addba(0, 0), true, &mut port)
-        .unwrap();
-    assert!(matches!(
-        view.receive(now(2), Some(LOCAL), qos_data(0, 101), meta()),
-        RxDisposition::Retained
-    ));
-    assert!(matches!(
-        view.receive(now(3), Some(LOCAL), qos_data(0, 101), meta()),
-        RxDisposition::Recycle(_)
-    ));
-    view.tick(now(20_000), &mut port);
-    assert!(view.pop_ready().is_some());
-    view.clear(&mut port);
-    let events: Vec<_> = recorder.observations().collect();
-    if cfg!(oer_trace) {
-        assert_eq!(
-            events
-                .iter()
-                .filter(|event| matches!(event, Observation::RxBaStarted(_)))
-                .count(),
-            1
-        );
-        assert_eq!(
-            events
-                .iter()
-                .filter(|event| matches!(event, Observation::RxBaStopped(_)))
-                .count(),
-            1
-        );
-        let reorder: Vec<_> = events
-            .iter()
-            .filter_map(|event| match event {
-                Observation::RxReorder(event) => Some(*event),
-                _ => None,
-            })
-            .collect();
-        assert!(
-            reorder
-                .iter()
-                .any(|event| event.cause == ReorderCause::Receive && event.held == 1)
-        );
-        assert!(
-            reorder
-                .iter()
-                .any(|event| event.cause == ReorderCause::Duplicate)
-        );
-        assert!(
-            reorder
-                .iter()
-                .any(|event| event.cause == ReorderCause::Timeout
-                    && event.released == 1
-                    && event.missing == 1)
-        );
-    } else {
-        assert!(events.is_empty());
+#[derive(Default)]
+struct Kept(Vec<RxBlockAckEvent>);
+
+impl EventSink<RxBlockAckEvent> for Kept {
+    fn event(&mut self, event: RxBlockAckEvent) {
+        self.0.push(event);
     }
 }
 
 #[test]
-fn containment_arguments_are_not_read_without_trace_and_noop_adds_no_storage() {
+fn events_follow_real_ba_reorder_timeout_duplicate_and_clear_decisions() {
+    let mut events = Kept::default();
+    let mut storage = RxBlockAckStorage::<Types, u8, 1, 8>::new([0], GAP);
+    let mut view = storage.view();
+    let mut port = Recording::default();
+    view.offer(
+        now(1),
+        7,
+        bssid(),
+        addba(0, 0),
+        true,
+        &mut port,
+        &mut events,
+    )
+    .unwrap();
+    assert!(matches!(
+        view.receive(now(2), Some(LOCAL), qos_data(0, 101), meta(), &mut events),
+        RxDisposition::Retained
+    ));
+    assert!(matches!(
+        view.receive(now(3), Some(LOCAL), qos_data(0, 101), meta(), &mut events),
+        RxDisposition::Recycle(_)
+    ));
+    view.tick(now(20_000), &mut port, &mut events);
+    assert!(view.pop_ready().is_some());
+    view.clear(&mut port, &mut events);
+    let events = events.0;
+    assert_eq!(
+        events
+            .iter()
+            .filter(|event| matches!(event, RxBlockAckEvent::Started { tid: 0, window: 8 }))
+            .count(),
+        1
+    );
+    assert_eq!(
+        events
+            .iter()
+            .filter(|event| matches!(
+                event,
+                RxBlockAckEvent::Stopped {
+                    tid: 0,
+                    reason: AgreementStop::Clear
+                }
+            ))
+            .count(),
+        1
+    );
+    assert!(events.iter().any(|event| matches!(
+        event,
+        RxBlockAckEvent::Reordered {
+            cause: ReorderCause::Receive,
+            held: 1,
+            ..
+        }
+    )));
+    assert!(events.iter().any(|event| matches!(
+        event,
+        RxBlockAckEvent::Reordered {
+            cause: ReorderCause::Duplicate,
+            ..
+        }
+    )));
+    assert!(events.iter().any(|event| matches!(
+        event,
+        RxBlockAckEvent::Reordered {
+            cause: ReorderCause::Timeout,
+            released: 1,
+            missing: 1,
+            ..
+        }
+    )));
+}
+
+#[test]
+fn containment_is_built_only_for_an_enabled_sink_and_the_view_holds_no_sink() {
     use core::cell::Cell;
-    use oer_ieee80211_instrumentation::{Evidence, Observation, Recorder};
     #[derive(Clone, Copy)]
     struct Counted<'a> {
         meta: RxMeta,
@@ -433,27 +449,25 @@ fn containment_arguments_are_not_read_without_trace_and_noop_adds_no_storage() {
     let reads = Cell::new(0);
     let mut common = meta();
     common.ampdu = RxEvidence::HardwareObserved(true);
-    let recorder = Recorder::<2>::new();
     let mut storage = RxBlockAckStorage::<CountedTypes<'_>, u8, 1, 8>::new([0], GAP);
-    let mut base = storage.view();
-    let mut observed = base.observed(&recorder);
-    let _received = observed.receive(
-        now(1),
-        None,
-        qos_data(0, 100),
-        Counted {
-            meta: common,
-            reads: &reads,
-        },
-    );
-    assert_eq!(reads.get(), u32::from(cfg!(oer_trace)));
-    if cfg!(oer_trace) {
-        assert!(
-            matches!(recorder.observations().next(), Some(Observation::RxContainment(event)) if event.ampdu == Evidence::HardwareYes && event.bytes.is_some())
-        );
-    } else {
-        assert_eq!(recorder.observations().count(), 0);
-    }
+    let mut view = storage.view();
+    let counted = Counted {
+        meta: common,
+        reads: &reads,
+    };
+    let _received = view.receive(now(1), None, qos_data(0, 100), counted, &mut ());
+    assert_eq!(reads.get(), 0);
+    let mut events = Kept::default();
+    let _received = view.receive(now(2), None, qos_data(0, 100), counted, &mut events);
+    assert_eq!(reads.get(), 1);
+    assert!(matches!(
+        events.0.as_slice(),
+        [RxBlockAckEvent::Contained {
+            ampdu: RxEvidence::HardwareObserved(true),
+            bytes: Some(_),
+            ..
+        }]
+    ));
     assert_eq!(
         core::mem::size_of::<RxBlockAckView<'_, Types, u8>>(),
         core::mem::size_of::<(

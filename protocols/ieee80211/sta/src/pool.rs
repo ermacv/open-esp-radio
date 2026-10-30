@@ -1,6 +1,7 @@
 //! A bounded pool of tokens, whose capacity a const check proves.
 
-use oer_trace::Observer;
+use crate::events::StaEvent;
+use oer_events::{EventSink, report};
 
 /// The tokens of one kind a machine holds at most.
 pub(crate) const POOL_CAPACITY: usize = 8;
@@ -72,11 +73,11 @@ impl<X> Pool<X> {
     /// Keep `item`, a token of its kind the machine was granted and gave
     /// out: the tokens are unique and their number checked at the pool's
     /// creation, so a free entry waits for it. A token beyond them (not
-    /// one of the machine's) is dropped and reported to `observer`.
-    pub(crate) fn put(&mut self, item: X, observer: &impl Observer) {
+    /// one of the machine's) is dropped and reported to `events`.
+    pub(crate) fn put(&mut self, item: X, events: &mut impl EventSink<StaEvent>) {
         match self.items.iter_mut().find(|slot| slot.is_none()) {
             Some(slot) => *slot = Some(item),
-            None => oer_trace::observe!(observer, oer_ieee80211_instrumentation::TokenLost),
+            None => report(events, || StaEvent::TokenLost),
         }
     }
 }

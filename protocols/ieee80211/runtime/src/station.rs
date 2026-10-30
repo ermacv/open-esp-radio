@@ -90,6 +90,8 @@
 
 mod commands;
 pub mod contract;
+mod events;
+pub use events::{RxDrop, RxMsdusRefused, ServiceEvent, StationEvents};
 mod control;
 mod reconnect;
 use commands::CommandCredits;
@@ -101,10 +103,7 @@ pub use control::{
 pub use reconnect::{ReconnectPolicy, ZeroReconnectInterval};
 
 use core::marker::PhantomData;
-use oer_trace::{Noop, Observer};
-// The ARP observation reads a prepared buffer's octets.
-#[cfg(oer_trace)]
-use oer_ieee80211_port::TxBufferMemory as _;
+use oer_events::{EventSink, report};
 use oer_ieee80211_sta::machine::TxRefusal;
 
 use core::future::{Future, poll_fn};
@@ -124,8 +123,8 @@ use oer_ieee80211_sta::port::{PortDataTokens, PortStaTokens, StationPairwiseKey}
 use oer_ieee80211_sta::{
     data,
     data::{
-        DataInput, DataProtection, DataRefusal, DataReturn, DataTxContext, EthernetFrame,
-        FrameTooLong, Msdu, StaData, TxMsdu,
+        DataInput, DataProtection, DataReturn, DataTxContext, EthernetFrame, FrameTooLong, Msdu,
+        StaData, TxMsdu,
     },
     machine::{
         KEY_DATA_CAPACITY, KeyUnwrapId, Peer, RxBlockAckReply, StaAction, StaCallbacks, StaInput,
@@ -320,22 +319,20 @@ pub type PortRxMeta<'id, B> = <<B as StationPort>::Types<'id> as PhaseTypes<'id>
 pub type PortAck<'id, B> = <<B as StationPort>::Types<'id> as PhaseTypes<'id>>::AckEvidence;
 
 /// The station of the service on the port `B`.
-pub type PortStation<'id, B, C, const GROUPS: usize = 2, O = Noop> = Station<
+pub type PortStation<'id, B, C, const GROUPS: usize = 2> = Station<
     'id,
     PortStaTokens<'id, <B as StationPort>::Types<'id>, <B as StationPort>::Small, GROUPS>,
     <B as StationPort>::Caps,
     C,
-    O,
 >;
 
 /// The terminal bank of the service's station on the port `B`.
-pub type PortRetiredStation<'id, B, C, const GROUPS: usize = 2, O = Noop> =
+pub type PortRetiredStation<'id, B, C, const GROUPS: usize = 2> =
     oer_ieee80211_sta::machine::RetiredStation<
         'id,
         PortStaTokens<'id, <B as StationPort>::Types<'id>, <B as StationPort>::Small, GROUPS>,
         <B as StationPort>::Caps,
         C,
-        O,
     >;
 
 /// A stopped service's restart: the running service, or the bank it could
@@ -352,12 +349,11 @@ type Uninstalled<'id, B, C, S, const GROUPS: usize, O, Out> = (
 );
 
 /// The data machine of the service on the port `B`.
-pub type PortData<'id, B, O = Noop> = StaData<
+pub type PortData<'id, B> = StaData<
     'id,
     PortDataTokens<'id, <B as StationPort>::Types<'id>, <B as StationPort>::Large>,
     <B as StationPort>::Caps,
     8,
-    O,
 >;
 
 /// The arbiter of the service on the port `B`.
@@ -396,18 +392,6 @@ mod rx_block_ack;
 use admissions::Admissions;
 pub use admissions::{ControlTerminal, PendingTerminal};
 use rx_block_ack::PhaseBlockAcks;
-
-// The non-trace branch borrows the original view directly: no observer
-// argument or temporary observer field exists in the product call path.
-macro_rules! rx_ba {
-    ($view:expr, $observer:expr, $method:ident($($argument:expr),* $(,)?)) => {{
-        #[cfg(oer_trace)]
-        let mut receive = $view.observed($observer);
-        #[cfg(not(oer_trace))]
-        let receive = &mut $view;
-        receive.$method($($argument),*)
-    }};
-}
 
 pub use rx_block_ack::{PortRxBlockAck, RxBlockAckStorage, RxBlockAckView};
 
@@ -487,9 +471,7 @@ pub type PortReturnedTx<'id, B> =
     ReturnedTx<PhaseSingleOutcome<'id, <B as StationPort>::Types<'id>>>;
 
 /// A backend returned owners that cannot belong to the submitted operation.
-#[derive(
-    Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize, postcard_schema::Schema,
-)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum BackendContractViolation {
     UnexpectedAggregate,
     UnexpectedTerminal(PendingTerminal),
@@ -738,7 +720,7 @@ pub struct ServiceCompleted<
     C: StaCallbacks,
     S,
     const GROUPS: usize = 2,
-    O: Observer = Noop,
+    O: StationEvents = (),
 > {
     pub end: ServiceEnd<'p, 'id, B>,
     pub retired: RetiredService<'id, B, C, S, GROUPS, O>,
@@ -752,7 +734,7 @@ pub struct StoppedService<
     C: StaCallbacks,
     S,
     const GROUPS: usize = 2,
-    O: Observer = Noop,
+    O: StationEvents = (),
 > {
     owner: Owner<'p, 'id, B::SlotId, B::Backend, Disabled>,
     retired: RetiredService<'id, B, C, S, GROUPS, O>,
@@ -767,7 +749,7 @@ pub struct RestartedService<
     C: StaCallbacks,
     S,
     const GROUPS: usize = 2,
-    O: Observer = Noop,
+    O: StationEvents = (),
 > {
     pub owner: Owner<'p, 'id, B::SlotId, B::Backend, Disabled>,
     pub service: Runner<'id, B, C, S, GROUPS, O>,
@@ -792,7 +774,7 @@ pub struct RestartFailed<
     C: StaCallbacks,
     S,
     const GROUPS: usize = 2,
-    O: Observer = Noop,
+    O: StationEvents = (),
 > {
     pub reason: RestartFailure,
     pub owner: FailedInstallation<'p, 'id, B>,
@@ -806,7 +788,7 @@ impl<
     C: StaCallbacks,
     S,
     const GROUPS: usize,
-    O: Observer,
+    O: StationEvents,
 > ServiceCompleted<'p, 'id, B, C, S, GROUPS, O>
 {
     /// Extract the reusable continuation only from the ordinary Stop outcome.
@@ -835,7 +817,7 @@ impl<
     C: StaCallbacks,
     S: RateSelection<PortRxMeta<'id, B>, PortAck<'id, B>>,
     const GROUPS: usize,
-    O: Observer,
+    O: StationEvents,
 > StoppedService<'p, 'id, B, C, S, GROUPS, O>
 {
     /// Resume on the selected channel without minting pools, epochs, leases,
@@ -895,7 +877,7 @@ impl<
         let (station, deferred_eapol, notice) = retired.station.restart(places).into_parts();
         let RetiredService {
             data,
-            observer,
+            events,
             rates,
             _pending: pending,
             _terminal_access: terminal_access,
@@ -912,7 +894,7 @@ impl<
                 state: ServiceState {
                     station,
                     data: data.restart(),
-                    observer,
+                    events,
                     rates,
                     pending,
                     terminal_access,
@@ -941,19 +923,18 @@ pub struct RetiredService<
     C: StaCallbacks,
     S,
     const GROUPS: usize = 2,
-    O: Observer = Noop,
+    O: StationEvents = (),
 > {
-    pub station: PortRetiredStation<'id, B, C, GROUPS, O>,
+    pub station: PortRetiredStation<'id, B, C, GROUPS>,
     pub data: oer_ieee80211_sta::data::RetiredData<
         'id,
         PortDataTokens<'id, B::Types<'id>, B::Large>,
         B::Caps,
         8,
-        O,
     >,
     pub rates: S,
-    /// The service's observer, which a restart carries on.
-    observer: O,
+    /// The composition's event sink, which a restart carries on.
+    events: O,
     _places: oer_ieee80211_arbiter::StationPlaceReturns<
         'id,
         <B::Types<'id> as PhaseTypes<'id>>::GatePath,
@@ -969,8 +950,8 @@ pub struct RetiredService<
 }
 
 /// A constructed station and the original permissions issued with it.
-pub type ConstructedStation<'id, B, C, const GROUPS: usize, O> = (
-    PortStation<'id, B, C, GROUPS, O>,
+pub type ConstructedStation<'id, B, C, const GROUPS: usize> = (
+    PortStation<'id, B, C, GROUPS>,
     oer_ieee80211_sta::machine::StaCommandCredits<
         'id,
         <<B as StationPort>::Types<'id> as PhaseTypes<'id>>::StationCommandPath,
@@ -985,7 +966,7 @@ pub struct Runner<
     C: StaCallbacks,
     S,
     const GROUPS: usize = 2,
-    O: Observer = Noop,
+    O: StationEvents = (),
 > {
     arbiter: PortArbiter<'id, B>,
     state: ServiceState<'id, B, C, S, GROUPS, O>,
@@ -997,16 +978,17 @@ struct ServiceState<
     C: StaCallbacks,
     S,
     const GROUPS: usize = 2,
-    O: Observer = Noop,
+    O: StationEvents = (),
 > {
     /// The station.
-    station: PortStation<'id, B, C, GROUPS, O>,
+    station: PortStation<'id, B, C, GROUPS>,
     /// Its data machine.
-    data: PortData<'id, B, O>,
+    data: PortData<'id, B>,
     /// The rates of the station's frames and data.
     rates: S,
-    /// Receives what the service dropped, refused or could not send.
-    observer: O,
+    /// The composition's sink, lent to each call of the station, its data
+    /// machine and its receive agreements, and the service's own events.
+    events: O,
     terminal_access: oer_ieee80211_port::TerminalAccess<
         'id,
         <B::Types<'id> as PhaseTypes<'id>>::TicketKind,
@@ -1067,14 +1049,14 @@ impl<
     C: StaCallbacks,
     S: RateSelection<PortRxMeta<'id, B>, PortAck<'id, B>>,
     const GROUPS: usize,
-    O: Observer,
+    O: StationEvents,
 > Runner<'id, B, C, S, GROUPS, O>
 {
     /// The service of the machines the composition built, its frames at
     /// the rates `rates` selects.
     pub fn new(
-        station: ConstructedStation<'id, B, C, GROUPS, O>,
-        data: PortData<'id, B, O>,
+        station: ConstructedStation<'id, B, C, GROUPS>,
+        data: PortData<'id, B>,
         arbiter: PortArbiter<'id, B>,
         rates: S,
         terminal_access: oer_ieee80211_port::TerminalAccess<
@@ -1083,7 +1065,7 @@ impl<
             <B::Types<'id> as PhaseTypes<'id>>::TicketPath,
         >,
         receive: RxBlockAckView<'id, B::Types<'id>>,
-        observer: O,
+        events: O,
     ) -> Self {
         // The port's values, checked as the type is built.
         const {
@@ -1102,7 +1084,7 @@ impl<
                 data,
                 rates,
                 terminal_access,
-                observer,
+                events,
                 pending: PendingActions {
                     receive,
                     commands: CommandCredits::new(credits),
@@ -1123,17 +1105,17 @@ impl<
     pub fn init_in_place<'s>(
         storage: &'s mut core::mem::MaybeUninit<Self>,
         station: impl for<'a> FnOnce(
-            &'a mut core::mem::MaybeUninit<PortStation<'id, B, C, GROUPS, O>>,
+            &'a mut core::mem::MaybeUninit<PortStation<'id, B, C, GROUPS>>,
         ) -> (
-            &'a mut PortStation<'id, B, C, GROUPS, O>,
+            &'a mut PortStation<'id, B, C, GROUPS>,
             oer_ieee80211_sta::machine::StaCommandCredits<
                 'id,
                 <B::Types<'id> as PhaseTypes<'id>>::StationCommandPath,
             >,
         ),
         data: impl for<'a> FnOnce(
-            &'a mut core::mem::MaybeUninit<PortData<'id, B, O>>,
-        ) -> &'a mut PortData<'id, B, O>,
+            &'a mut core::mem::MaybeUninit<PortData<'id, B>>,
+        ) -> &'a mut PortData<'id, B>,
         arbiter: PortArbiter<'id, B>,
         rates: S,
         terminal_access: oer_ieee80211_port::TerminalAccess<
@@ -1142,7 +1124,7 @@ impl<
             <B::Types<'id> as PhaseTypes<'id>>::TicketPath,
         >,
         receive: RxBlockAckView<'id, B::Types<'id>>,
-        observer: O,
+        events: O,
     ) -> oer_memory::Placed<'s, Self> {
         const {
             let _power = DataContext::<'id, B>::POWER;
@@ -1161,7 +1143,7 @@ impl<
                     data => data,
                     rates: rates,
                     terminal_access: terminal_access,
-                    observer: observer,
+                    events: events,
                     pending: PendingActions { receive, commands: credits.into_inner(), admissions: Admissions::default(), retune: None, group: None, unwrap: None },
                 }),
             })
@@ -1208,13 +1190,13 @@ impl<
                 oer_ieee80211_arbiter::LeaveReason::PortFailed,
             ),
         };
-        let (station, data, mut rates, observer, terminal_access, pending) = oer_memory::unpack_placed!(
+        let (station, data, mut rates, mut events, terminal_access, pending) = oer_memory::unpack_placed!(
             state,
             ServiceState {
                 station,
                 data,
                 rates,
-                observer,
+                events,
                 terminal_access,
                 pending
             }
@@ -1229,9 +1211,9 @@ impl<
                     let (station, places) = Station::finish_placed(station, &mut station_storage, reason);
                     let mut retired = oer_memory::Placed::init(place, |place| oer_memory::init_in_place!(place, RetiredService {
                         station => |place| station.move_to(place).into_mut(),
-                        data => |place| StaData::finish_placed(data, place).into_mut(),
+                        data => |place| StaData::finish_placed(data, place, &mut *events).into_mut(),
                         rates: { rates.disconnected(); rates.read() },
-                        observer: observer.read(),
+                        events: events.read(),
                         _places: places,
                         _arbiter: arbiter,
                         _pending: pending.read(),
@@ -1301,12 +1283,12 @@ impl<
             station,
             data,
             mut rates,
-            observer,
+            mut events,
             mut pending,
             terminal_access,
         } = state;
         let (mut station, mut places) = station.finish(reason);
-        let data = data.finish();
+        let data = data.finish(&mut events);
         rates.disconnected();
         while let Some(notice) = arbiter.poll_notice() {
             match notice {
@@ -1335,7 +1317,7 @@ impl<
                 station,
                 data,
                 rates,
-                observer,
+                events,
                 _arbiter: arbiter,
                 _places: places,
                 _pending: pending,
@@ -1351,7 +1333,7 @@ impl<
     C: StaCallbacks,
     S: RateSelection<PortRxMeta<'id, B>, PortAck<'id, B>>,
     const GROUPS: usize,
-    O: Observer,
+    O: StationEvents,
 > ServiceState<'id, B, C, S, GROUPS, O>
 {
     async fn run_loop<
@@ -1758,8 +1740,11 @@ impl<
             // The response returns the station's ticket before any other
             // input can end the phase.
             if let Some((id, result)) = unwrapped {
-                self.station
-                    .input(now, StaInput::KeyDataUnwrapped { id, result });
+                self.station.input(
+                    now,
+                    StaInput::KeyDataUnwrapped { id, result },
+                    &mut self.events,
+                );
             }
             match event {
                 Some(Ok(Ok(event))) => match self.event(arbiter, now, B::event(event), phase, io) {
@@ -1767,10 +1752,7 @@ impl<
                     Ok(None) => {}
                     Err(fault) => return Served::Failed(fault.into()),
                 },
-                Some(Ok(Err(_))) => oer_trace::observe!(
-                    self.observer,
-                    oer_ieee80211_instrumentation::PortEventsLost
-                ),
+                Some(Ok(Err(_))) => report(&mut self.events, || ServiceEvent::PortEventsLost),
                 None => {}
                 Some(Err(end)) => {
                     let cause = match end {
@@ -1783,7 +1765,7 @@ impl<
                 }
             }
             if tick {
-                self.station.input(now, StaInput::Tick);
+                self.station.input(now, StaInput::Tick, &mut self.events);
             }
             // A ready command stays in its sole-consumer queue until the
             // event was accepted. An event fault above cannot discard it.
@@ -1817,11 +1799,9 @@ impl<
                     ServiceCommand::AccessPoint(fact) => arbiter.access_point(now, fact.into()),
                     ServiceCommand::WantAccessPoint => arbiter.want_access_point(),
                     ServiceCommand::Stop => {
-                        rx_ba!(
-                            self.pending.receive,
-                            &self.observer,
-                            clear(&mut PhaseBlockAcks::new(phase))
-                        );
+                        self.pending
+                            .receive
+                            .clear(&mut PhaseBlockAcks::new(phase), &mut self.events);
                         return Served::Stop;
                     }
                 }
@@ -1852,9 +1832,11 @@ impl<
                 self.pending.unwrap = Some(waiting);
             }
             match unwrap.finish().await {
-                Some((id, result)) => self
-                    .station
-                    .input(timer.now(), StaInput::KeyDataUnwrapped { id, result }),
+                Some((id, result)) => self.station.input(
+                    timer.now(),
+                    StaInput::KeyDataUnwrapped { id, result },
+                    &mut self.events,
+                ),
                 None if self.pending.unwrap.is_none() => return,
                 None => {}
             }
@@ -1884,18 +1866,12 @@ impl<
                     }
                     Ok(Ok(LowerMacEvent::Received { frame, .. })) => {
                         phase.recycle(frame);
-                        oer_trace::observe!(
-                            self.observer,
-                            oer_ieee80211_instrumentation::RxFrameDropped {
-                                reason: oer_ieee80211_instrumentation::RxDrop::Draining
-                            }
-                        );
+                        report(&mut self.events, || {
+                            ServiceEvent::RxFrameDropped(RxDrop::Draining)
+                        });
                     }
                     Ok(Ok(LowerMacEvent::Tbtt(_))) => {}
-                    Ok(Err(_)) => oer_trace::observe!(
-                        self.observer,
-                        oer_ieee80211_instrumentation::PortEventsLost
-                    ),
+                    Ok(Err(_)) => report(&mut self.events, || ServiceEvent::PortEventsLost),
                     Err(end) => {
                         return Served::StreamEnd { end, fault };
                     }
@@ -1938,18 +1914,15 @@ impl<
         };
         // Admission was polled immediately above under this same exclusive
         // service borrow. A too-long MSDU is refused without changing bytes.
-        match self.data.input(DataInput {
-            msdu,
-            link: &mut link,
-        }) {
+        match self.data.input(
+            DataInput {
+                msdu,
+                link: &mut link,
+            },
+            &mut self.events,
+        ) {
             Ok(()) => {}
             Err(reason) => {
-                if reason == DataRefusal::TooLong {
-                    oer_trace::observe!(
-                        self.observer,
-                        oer_ieee80211_instrumentation::TxMsduTooLong
-                    );
-                }
                 // The available-pool observation is dynamic and the public
                 // data input can refuse it. Return the original owned packet,
                 // rather than manufacturing a terminal or losing its bytes.
@@ -1988,17 +1961,16 @@ impl<
                 return Next::Failed(ServiceFault::RxBlockAckCapacity.into());
             }
             if !self.station.is_connected() && self.pending.receive.association().is_some() {
-                rx_ba!(
-                    self.pending.receive,
-                    &self.observer,
-                    clear(&mut PhaseBlockAcks::new(phase))
-                );
+                self.pending
+                    .receive
+                    .clear(&mut PhaseBlockAcks::new(phase), &mut self.events);
             }
             while let Some(action) = arbiter.poll_action(now) {
                 progress = true;
                 match action {
                     ArbiterAction::Station(notice) => {
-                        self.station.input(now, StaInput::Arbiter(notice));
+                        self.station
+                            .input(now, StaInput::Arbiter(notice), &mut self.events);
                     }
                     ArbiterAction::AccessPoint(command) => {
                         io.output.emit(ServiceOutput::AccessPoint(command.into()));
@@ -2016,7 +1988,7 @@ impl<
                     }
                 }
             }
-            while let Some(action) = self.station.poll_action(now) {
+            while let Some(action) = self.station.poll_action(now, &mut self.events) {
                 progress = true;
                 let submitted = station_action(
                     now,
@@ -2024,8 +1996,7 @@ impl<
                     io,
                     arbiter,
                     &self.rates,
-                    #[cfg(oer_trace)]
-                    &self.observer,
+                    &mut self.events,
                     &mut self.pending,
                     action,
                 )
@@ -2035,17 +2006,15 @@ impl<
                     return Next::Failed(fault);
                 }
             }
-            rx_ba!(
-                self.pending.receive,
-                &self.observer,
-                tick(now, &mut PhaseBlockAcks::new(phase))
-            );
+            self.pending
+                .receive
+                .tick(now, &mut PhaseBlockAcks::new(phase), &mut self.events);
             if let Some(owed) = self.pending.receive.next_reply()
                 && let Some(reply) =
                     RxBlockAckReply::from_body(owed.association, owed.bssid, owed.body)
             {
                 let place = owed.place;
-                match self.station.try_block_ack_reply(reply) {
+                match self.station.try_block_ack_reply(reply, &mut self.events) {
                     Ok(action) => {
                         self.pending.receive.sent(place);
                         progress = true;
@@ -2055,8 +2024,7 @@ impl<
                             io,
                             arbiter,
                             &self.rates,
-                            #[cfg(oer_trace)]
-                            &self.observer,
+                            &mut self.events,
                             &mut self.pending,
                             action,
                         )
@@ -2098,8 +2066,6 @@ impl<
                         ticket,
                         buffer,
                     } = transmit.into_parts();
-                    #[cfg(oer_trace)]
-                    let mut arp = None;
                     let access_category = context.access_category();
                     let plan = context.protection(&link).and_then(|protection| {
                         self.rates
@@ -2115,20 +2081,6 @@ impl<
                             };
                             match protection {
                                 Some(protection) => {
-                                    #[cfg(oer_trace)]
-                                    let mut buffer = buffer;
-                                    #[cfg(oer_trace)]
-                                    if let TxProtection::Ccmp(numbered) = &protection {
-                                        arp = buffer
-                                            .bytes_mut()
-                                            .get(..context.frame().frame().len().get())
-                                            .and_then(|bytes| {
-                                                oer_ieee80211_sta::data::transmitted_arp(
-                                                    bytes,
-                                                    numbered.packet_number,
-                                                )
-                                            });
-                                    }
                                     prepare_source::<B, B::Large>(TxSource::Fresh {
                                         buffer,
                                         frame: ClassFrame::individual(*context.frame(), plan),
@@ -2184,11 +2136,7 @@ impl<
                                 .admit(),
                             );
                             match submitted {
-                                Ok(()) => {
-                                    #[cfg(oer_trace)]
-                                    observe_arp(&self.observer, arp);
-                                    Ok(Follow::Nothing)
-                                }
+                                Ok(()) => Ok(Follow::Nothing),
                                 Err(poisoned) => Err(ServiceFault::Submission(poisoned.cause)),
                             }
                         }
@@ -2228,7 +2176,7 @@ impl<
     ) -> Result<(), ContractFault<'id, B>> {
         match follow {
             Follow::Nothing => {}
-            Follow::Input(input) => self.station.input(now, input),
+            Follow::Input(input) => self.station.input(now, input, &mut self.events),
             // The rates start from what the association made known.
             Follow::Associated(peer) => {
                 self.rates
@@ -2243,7 +2191,7 @@ impl<
                 io.output.emit(ServiceOutput::Notice(notice.into()));
                 if let StaNotice::Disconnected(_) = notice {
                     self.rates.disconnected();
-                    self.data.leave();
+                    self.data.leave(&mut self.events);
                 }
             }
             Follow::Refused {
@@ -2252,7 +2200,6 @@ impl<
                 buffer,
                 reason,
             } => {
-                oer_trace::observe!(self.observer, oer_ieee80211_instrumentation::TxUnsent);
                 let operation = match &context {
                     TxContext::Station(_) => TxOperation::Station,
                     TxContext::Data(_) => TxOperation::Data,
@@ -2287,7 +2234,8 @@ impl<
         while let Some(notice) = arbiter.poll_notice(now) {
             match notice {
                 ArbiterNotice::Station(notice) => {
-                    self.station.input(now, StaInput::Arbiter(notice))
+                    self.station
+                        .input(now, StaInput::Arbiter(notice), &mut self.events)
                 }
                 ArbiterNotice::AccessPoint(command) => {
                     io.output.emit(ServiceOutput::AccessPoint(command.into()))
@@ -2367,19 +2315,20 @@ impl<
         match event {
             LowerMacEvent::Received { frame, meta } => {
                 let local = self.station.link().map(|link| link.address.get());
-                let (frame, meta) = match rx_ba!(
-                    self.pending.receive,
-                    &self.observer,
-                    receive(now, local, frame, meta)
-                ) {
-                    RxDisposition::Deliver(received) => received,
-                    RxDisposition::Retained => return Ok(None),
-                    RxDisposition::Recycle(frame) => return Ok(Some(frame)),
-                    RxDisposition::Capacity(frame) => {
-                        phase.recycle(frame);
-                        return Err(ServiceFault::RxBlockAckCapacity.into());
-                    }
-                };
+                let (frame, meta) =
+                    match self
+                        .pending
+                        .receive
+                        .receive(now, local, frame, meta, &mut self.events)
+                    {
+                        RxDisposition::Deliver(received) => received,
+                        RxDisposition::Retained => return Ok(None),
+                        RxDisposition::Recycle(frame) => return Ok(Some(frame)),
+                        RxDisposition::Capacity(frame) => {
+                            phase.recycle(frame);
+                            return Err(ServiceFault::RxBlockAckCapacity.into());
+                        }
+                    };
                 self.deliver_received(now, &frame, meta, io);
                 Ok(Some(frame))
             }
@@ -2410,32 +2359,35 @@ impl<
             COMMAND_DEPTH,
         >,
     ) {
-        let bytes = frame.bytes();
-        let observer = &self.observer;
-        let result = self.station.receive(now, bytes, meta, |parts| {
-            #[cfg(oer_trace)]
-            observe_arp(
-                observer,
-                oer_ieee80211_sta::data::received_arp(bytes, &parts),
-            );
-            Self::queue_received(observer, io, EthernetFrame::from_parts(parts));
-        });
-        if result.is_err() {
-            oer_trace::observe!(
-                self.observer,
-                oer_ieee80211_instrumentation::RxFrameDropped {
-                    reason: match result {
-                        Err(reason) => rx_drop(reason),
-                        Ok(()) => return,
-                    }
-                }
-            );
+        let mut refused = RxMsdusRefused::default();
+        let result = self.station.receive(
+            now,
+            frame.bytes(),
+            meta,
+            |parts| {
+                count_refusal(
+                    &mut refused,
+                    Self::queue_received(io, EthernetFrame::from_parts(parts)),
+                )
+            },
+            &mut self.events,
+        );
+        // The sink is the station's during delivery: the frame's refusals
+        // follow its events as one aggregate.
+        if refused != RxMsdusRefused::default() {
+            report(&mut self.events, || ServiceEvent::RxMsdusRefused(refused));
+        }
+        if let Err(reason) = result {
+            report(&mut self.events, || {
+                ServiceEvent::RxFrameDropped(RxDrop::Station(reason))
+            });
         }
     }
 
+    /// Hand one received MSDU to the network queue; a refusal returns its
+    /// reason.
     #[inline(never)]
     fn queue_received<const TX_DEPTH: usize, const RX_DEPTH: usize, const COMMAND_DEPTH: usize>(
-        observer: &O,
         io: &mut ServiceIo<
             '_,
             B::Caps,
@@ -2445,24 +2397,14 @@ impl<
             COMMAND_DEPTH,
         >,
         frame: Result<EthernetFrame, FrameTooLong>,
-    ) {
+    ) -> Option<MsduRefusal> {
         match frame {
-            Ok(frame) => {
-                if io.receive.try_send(frame).is_err() {
-                    oer_trace::observe!(
-                        observer,
-                        oer_ieee80211_instrumentation::RxMsduRefused {
-                            reason: oer_ieee80211_instrumentation::RxMsduRefusal::QueueFull
-                        }
-                    );
-                }
-            }
-            Err(_) => oer_trace::observe!(
-                observer,
-                oer_ieee80211_instrumentation::RxMsduRefused {
-                    reason: oer_ieee80211_instrumentation::RxMsduRefusal::TooLong
-                }
-            ),
+            Ok(frame) => io
+                .receive
+                .try_send(frame)
+                .is_err()
+                .then_some(MsduRefusal::QueueFull),
+            Err(_) => Some(MsduRefusal::TooLong),
         }
     }
 
@@ -2530,14 +2472,18 @@ impl<
             }
             LowerMacTerminal::GateClosed(closed) => arbiter.gate_closed(closed),
             LowerMacTerminal::Configured(oer_ieee80211_port::Configured::Station(permission)) => {
-                self.station.input(now, StaInput::Configured(permission));
+                self.station
+                    .input(now, StaInput::Configured(permission), &mut self.events);
             }
             LowerMacTerminal::KeyRemoved(Removed::Station(RemovedKey::Pairwise {
                 slot,
                 association,
             })) => {
-                self.station
-                    .input(now, StaInput::PairwiseKeyRemoved { slot, association });
+                self.station.input(
+                    now,
+                    StaInput::PairwiseKeyRemoved { slot, association },
+                    &mut self.events,
+                );
             }
             terminal @ (LowerMacTerminal::KeyRemoved(Removed::Station(RemovedKey::Group {
                 ..
@@ -2619,13 +2565,10 @@ impl<
                 LowerMacTerminal::GroupKeyInstalled(InstalledGroup::Station { key, permission }),
             ) => {
                 if pending.key_id.is_some() {
-                    oer_trace::observe!(
-                        self.observer,
-                        oer_ieee80211_instrumentation::GroupKeyInstalled {
-                            key_id: pending.key_id.map_or(0, |id| id.get()),
-                            replaced: false,
-                        }
-                    );
+                    report(&mut self.events, || ServiceEvent::GroupKeyInstalled {
+                        key_id: pending.key_id.map_or(0, |id| id.get()),
+                        replaced: false,
+                    });
                 }
                 StaInput::GroupKeyInstalled {
                     pending: installed,
@@ -2638,13 +2581,10 @@ impl<
                 LowerMacTerminal::GroupKeyReplaced { key, permission },
             ) => {
                 if pending.key_id.is_some() {
-                    oer_trace::observe!(
-                        self.observer,
-                        oer_ieee80211_instrumentation::GroupKeyInstalled {
-                            key_id: pending.key_id.map_or(0, |id| id.get()),
-                            replaced: true,
-                        }
-                    );
+                    report(&mut self.events, || ServiceEvent::GroupKeyInstalled {
+                        key_id: pending.key_id.map_or(0, |id| id.get()),
+                        replaced: true,
+                    });
                 }
                 StaInput::GroupKeyReplaced {
                     pending: replaced,
@@ -2675,7 +2615,7 @@ impl<
         self.pending
             .admissions
             .remove(PendingTerminal::Control(ControlTerminal::GroupChange));
-        self.station.input(now, input);
+        self.station.input(now, input, &mut self.events);
         Ok(())
     }
 
@@ -2716,7 +2656,7 @@ impl<
                         reason,
                     },
                 };
-                self.station.input(now, input);
+                self.station.input(now, input, &mut self.events);
                 Ok(())
             }
             (TxContext::Data(context), StationTxBuffer::Large(buffer)) => {
@@ -2738,7 +2678,7 @@ impl<
                         reason,
                     },
                 };
-                self.data.returned(input);
+                self.data.returned(input, &mut self.events);
                 Ok(())
             }
             (context @ TxContext::Station(_), buffer @ StationTxBuffer::Large(_))
@@ -2915,7 +2855,7 @@ where
 /// it at once.
 #[allow(
     clippy::too_many_arguments,
-    reason = "the existing service action inputs also lend their observer"
+    reason = "the existing service action inputs also lend their event sink"
 )]
 fn station_action<
     'p,
@@ -2940,7 +2880,7 @@ fn station_action<
     >,
     arbiter: &mut PortArbiter<'id, B>,
     rates: &S,
-    #[cfg(oer_trace)] observer: &impl oer_trace::Observer,
+    events: &mut impl EventSink<oer_ieee80211_upper_mac::block_ack::RxBlockAckEvent>,
     pending_actions: &mut PendingActions<'id, B>,
     action: StaAction<'_, 'id, PortStaTokens<'id, B::Types<'id>, B::Small, GROUPS>, B::Caps>,
 ) -> Result<Follow<'id, B, GROUPS>, ServiceFault<B>>
@@ -2951,19 +2891,18 @@ where
 {
     let input = match action {
         StaAction::BlockAck(request) => {
-            rx_ba!(
-                pending_actions.receive,
-                observer,
-                offer(
+            pending_actions
+                .receive
+                .offer(
                     now,
                     request.epoch(),
                     request.bssid(),
                     request.action(),
                     request.supported(),
                     &mut PhaseBlockAcks::new(phase),
+                    events,
                 )
-            )
-            .map_err(|_| ServiceFault::RxBlockAckCapacity)?;
+                .map_err(|_| ServiceFault::RxBlockAckCapacity)?;
             return Ok(Follow::Nothing);
         }
         StaAction::RequestChannel(request, place) => {
@@ -3197,45 +3136,17 @@ fn stop_disabled<'p, 'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id>(
     }
 }
 
-/// The receive-drop observation of a station refusal.
-#[cfg(oer_trace)]
-fn rx_drop(
-    reason: oer_ieee80211_sta::machine::StaRxError,
-) -> oer_ieee80211_instrumentation::RxDrop {
-    use oer_ieee80211_instrumentation::{FrameDrop, RxDrop, SecurityDrop};
-    use oer_ieee80211_rsn::supplicant::{RsnConnectedProcessError, RsnConnectedSupplicantError};
-    use oer_ieee80211_sta::machine::StaRxError;
-    use oer_ieee80211_upper_mac::receive::RxDropReason;
-    match reason {
-        StaRxError::Frame(reason) => RxDrop::Frame(match reason {
-            RxDropReason::Header => FrameDrop::Header,
-            RxDropReason::FrameKind => FrameDrop::FrameKind,
-            RxDropReason::Address => FrameDrop::Address,
-            RxDropReason::Fragmented => FrameDrop::Fragmented,
-            RxDropReason::Protection => FrameDrop::Protection,
-            RxDropReason::Integrity => FrameDrop::Integrity,
-            RxDropReason::Replay => FrameDrop::Replay,
-            RxDropReason::Payload => FrameDrop::Payload,
-            RxDropReason::NotConnected => FrameDrop::NotConnected,
-        }),
-        StaRxError::Security(RsnConnectedProcessError::Supplicant(
-            RsnConnectedSupplicantError::InvalidMic,
-        )) => RxDrop::Security(SecurityDrop::InvalidMic),
-        StaRxError::Security(RsnConnectedProcessError::Supplicant(
-            RsnConnectedSupplicantError::StaleReplayCounter,
-        )) => RxDrop::Security(SecurityDrop::StaleReplay),
-        StaRxError::Security(_) => RxDrop::Security(SecurityDrop::Other),
-    }
+/// Why the service did not deliver one received MSDU.
+#[derive(Clone, Copy)]
+enum MsduRefusal {
+    TooLong,
+    QueueFull,
 }
 
-/// Report an ARP MSDU: its addresses, then the identity of its MPDU.
-#[cfg(oer_trace)]
-fn observe_arp<E: oer_trace::Event + Copy + 'static>(
-    observer: &impl Observer,
-    arp: Option<(oer_ieee80211_instrumentation::ArpAddresses, E)>,
-) {
-    if let Some((addresses, identity)) = arp {
-        oer_trace::observe!(observer, addresses);
-        oer_trace::observe!(observer, identity);
+fn count_refusal(refused: &mut RxMsdusRefused, refusal: Option<MsduRefusal>) {
+    match refusal {
+        Some(MsduRefusal::TooLong) => refused.too_long = refused.too_long.saturating_add(1),
+        Some(MsduRefusal::QueueFull) => refused.queue_full = refused.queue_full.saturating_add(1),
+        None => {}
     }
 }

@@ -61,6 +61,8 @@ cancelled, while published work retains an affine completion owner until the
 caller supplies its modelled charge. Keys include the association generation,
 not a transport flow. Idle peers lose positive surplus but retain debt;
 retired accounts remain pinned until their outstanding work is settled.
+`reserve`, `settle` and `cancel` report each successful transition as an
+`AirtimeObservation` to the caller's `EventSink`; the ledger holds no sink.
 The module accepts generic receipts and has no chip, ESP-NOW or packet-storage
 dependency. It has no production consumer. Its unit tests and compile-fail
 doc-tests live here; integration tests with chip work receipts, cost estimates
@@ -205,9 +207,10 @@ selection stays here and passes its exact control-frame rate to the port.
   `CONTEXTS == 0` at run time (`NoReassemblyContexts`) instead of a const
   assert; `ccmp.rs` has `impl Default for CcmpRxReplayState`.
 
-The receive BA view can be reborrowed with `observed(&observer)` for one
-operation. Its default observer is zero-sized `Noop`; placed backing is
-unchanged. `oer_trace` gates containment classification, release counts and
-BA lifecycle observations in `oer-ieee80211-instrumentation`. The image owns
-all resulting diagnostic counters. No observation changes an agreement,
-receive disposition, gap deadline or frame owner.
+The receive BA view's `receive`, `offer`, `tick` and `clear` take the
+caller's `&mut impl EventSink<RxBlockAckEvent>` and report containment
+evidence, reorder decisions with their held, released and missing counts, and
+agreement start and stop; the view and its placed backing hold no sink. With
+`()` no event is built and no metadata is read for one. The caller owns all
+resulting diagnostic counters. No event changes an agreement, receive
+disposition, gap deadline or frame owner.

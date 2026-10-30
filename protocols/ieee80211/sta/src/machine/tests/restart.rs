@@ -45,9 +45,11 @@ fn stopped_bank_reclaims_old_keys_then_connects_using_the_same_installation() {
                 ..
             })
         ));
-        world
-            .station
-            .input(at(52), world.pending_removals.pop().unwrap());
+        world.station.input(
+            at(52),
+            world.pending_removals.pop().unwrap(),
+            &mut world.losses,
+        );
         world.hold_group_removals = false;
         world.run(at(52));
         assert!(!world.station.is_reclaiming());
@@ -94,7 +96,7 @@ fn stopped_bank_reclaims_old_keys_then_connects_using_the_same_installation() {
                 .any(|terminal| terminal.request.correlation() == 1000
                     && matches!(terminal.outcome, StaCommandOutcome::Connected { .. }))
         );
-        assert_eq!(world.station.config.observer.tokens.get(), 0);
+        assert_eq!(world.losses.tokens, 0);
     });
 }
 

@@ -66,7 +66,11 @@ fn an_encoder_refusal_returns_the_reply_and_every_credit_without_marking_tx_busy
             },
         )
         .unwrap();
-        let (reply, reason) = world.station.try_block_ack_reply(reply).err().unwrap();
+        let (reply, reason) = world
+            .station
+            .try_block_ack_reply(reply, &mut world.losses)
+            .err()
+            .unwrap();
         assert_eq!(reason, BlockAckReplyRefusal::Encode);
         assert!(world.station.is_connected());
         assert!(matches!(&world.station.state, State::Connected(connected) if !connected.sending));
@@ -78,7 +82,9 @@ fn an_encoder_refusal_returns_the_reply_and_every_credit_without_marking_tx_busy
         }
         world.station.buffers =
             crate::pool::Pool::from_collection(buffers.into_iter().flatten().collect());
-        let Ok(StaAction::Transmit(transmit)) = world.station.try_block_ack_reply(reply) else {
+        let Ok(StaAction::Transmit(transmit)) =
+            world.station.try_block_ack_reply(reply, &mut world.losses)
+        else {
             panic!("the same reply fits the restored control buffer");
         };
         world.transmitted(transmit, false);

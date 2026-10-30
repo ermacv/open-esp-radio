@@ -47,15 +47,15 @@ mod tests {
         let old = keys.replace().unwrap();
         assert_eq!(old.key, 0);
         assert_eq!(keys.current_id(), Some(id));
-        keys.release(old.place, &oer_trace::Noop);
+        keys.release(old.place, &mut ());
         let next = keys.take_retiring().unwrap();
         assert_eq!(next.key, 1);
-        keys.release(next.place, &oer_trace::Noop);
+        keys.release(next.place, &mut ());
         let single = keys.replace().unwrap();
         assert_eq!(single.key, 2);
         keys.install(single, true);
         let last = keys.take_any().unwrap();
-        keys.release(last.place, &oer_trace::Noop);
+        keys.release(last.place, &mut ());
         assert_eq!(keys.vacant.len(), 8);
     }
 }
@@ -195,8 +195,12 @@ impl<Key> GroupKeys<Key> {
         // replaced; its frontier legitimately ends with that installation.
     }
 
-    pub(super) fn release(&mut self, place: GroupPlace, observer: &impl oer_trace::Observer) {
-        self.vacant.put(place, observer);
+    pub(super) fn release(
+        &mut self,
+        place: GroupPlace,
+        events: &mut impl oer_events::EventSink<crate::events::StaEvent>,
+    ) {
+        self.vacant.put(place, events);
     }
 
     pub(super) fn has_active(&self, id: GroupKeyId) -> bool {

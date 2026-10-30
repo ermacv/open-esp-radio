@@ -552,9 +552,7 @@ impl<K> From<AccessPointFact<K>> for oer_ieee80211_arbiter::AccessPointFact<K> {
     }
 }
 
-#[derive(
-    Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize, postcard_schema::Schema,
-)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum KeyContractViolation {
     IncompleteBank,
     MissingAssociation,

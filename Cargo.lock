@@ -1872,7 +1872,6 @@ dependencies = [
  "oer-espressif-interrupt-table",
  "oer-espressif-radio",
  "oer-ieee80211-arbiter",
- "oer-ieee80211-instrumentation",
  "oer-ieee80211-port",
  "oer-ieee80211-rsn",
  "oer-ieee80211-runtime",
@@ -1887,9 +1886,6 @@ dependencies = [
  "oer-time",
  "oer-time-virtual",
  "oer-trace",
- "postcard",
- "postcard-schema",
- "serde",
  "static_cell",
  "zeroize",
 ]
@@ -2101,6 +2097,10 @@ dependencies = [
  "oer-time",
  "oer-time-virtual",
 ]
+
+[[package]]
+name = "oer-events"
+version = "0.1.0"
 
 [[package]]
 name = "oer-firmware-apps-boot-smoke"
@@ -2378,25 +2378,13 @@ dependencies = [
 name = "oer-ieee80211-esp-now"
 version = "0.1.0"
 dependencies = [
+ "oer-events",
  "oer-ieee80211-arbiter",
- "oer-ieee80211-instrumentation",
  "oer-ieee80211-port",
  "oer-ieee80211-upper-mac",
  "oer-ieee80211-wire",
  "oer-time",
- "oer-trace",
  "zeroize",
-]
-
-[[package]]
-name = "oer-ieee80211-instrumentation"
-version = "0.1.0"
-dependencies = [
- "oer-hil-agent",
- "oer-hil-protocol",
- "oer-time",
- "oer-time-virtual",
- "oer-trace",
 ]
 
 [[package]]
@@ -2468,9 +2456,9 @@ dependencies = [
  "heapless",
  "oer-crypto",
  "oer-espressif-ieee80211-policy",
+ "oer-events",
  "oer-ieee80211-arbiter",
  "oer-ieee80211-cipher",
- "oer-ieee80211-instrumentation",
  "oer-ieee80211-model",
  "oer-ieee80211-port",
  "oer-ieee80211-rsn",
@@ -2485,9 +2473,6 @@ dependencies = [
  "oer-test-ui-cases",
  "oer-time",
  "oer-time-virtual",
- "oer-trace",
- "postcard-schema",
- "serde",
 ]
 
 [[package]]
@@ -2496,9 +2481,9 @@ version = "0.1.0"
 dependencies = [
  "heapless",
  "oer-crypto",
+ "oer-events",
  "oer-ieee80211-arbiter",
  "oer-ieee80211-cipher",
- "oer-ieee80211-instrumentation",
  "oer-ieee80211-port",
  "oer-ieee80211-rsn",
  "oer-ieee80211-upper-mac",
@@ -2510,7 +2495,6 @@ dependencies = [
  "oer-test-ui-cases",
  "oer-time",
  "oer-time-virtual",
- "oer-trace",
 ]
 
 [[package]]
@@ -2518,14 +2502,13 @@ name = "oer-ieee80211-upper-mac"
 version = "0.1.0"
 dependencies = [
  "heapless",
- "oer-ieee80211-instrumentation",
+ "oer-events",
  "oer-ieee80211-port",
  "oer-ieee80211-wire",
  "oer-network",
  "oer-test-ui-cases",
  "oer-time",
  "oer-time-virtual",
- "oer-trace",
 ]
 
 [[package]]

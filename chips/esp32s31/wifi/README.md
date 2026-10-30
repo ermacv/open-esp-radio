@@ -51,10 +51,12 @@ interrupt binding and spawns `RadioActor`. The facade has no diagnostic
 counters: its copied trace observations reach image-owned collectors, and its
 product events are immediate callbacks. Bridge timers, polling, protocol
 parameters, DMA geometry and rate-selection policy retain their values.
-The observation vocabulary is `oer-ieee80211-instrumentation`, including
-`StationActivity`; the facade exports no observation dictionary. The target
-used to correlate raw authentication/beacon observations and all diagnostic
-TX classification exist only under `cfg(oer_trace)`.
+The facade's own trace events (station activity and the selected data rate)
+are its `observation` module, reported to `Binding::Observer` and
+`Binding::DriverObserver`. The protocol's events go to `Binding::Sink`, which
+the station service lends its cores; `()` keeps none. The target used to
+correlate raw authentication/beacon observations and all diagnostic TX
+classification exist only under `cfg(oer_trace)`.
 
 Typed constructors reject invalid regulatory channels, addresses and SSIDs.
 The existing backend terminal capacity has one public canonical constant;
@@ -78,5 +80,5 @@ stays with Runner until refusal or completion, including policy attempts.
 capacity: disconnect once, wait for link-down, then retire Runner and its
 installation owners. Terminal errors do not reconnect or recreate resources.
 `StationExit` retains the facade's original typed failure. Its public failure
-values have a fixed-width serde/schema encoding; no HIL dependency, observation
-counter or collector is part of the facade.
+values carry no transport encoding; no HIL dependency, observation counter or
+collector is part of the facade.

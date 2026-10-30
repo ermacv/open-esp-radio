@@ -147,7 +147,8 @@ fn a_group_rekey_waits_for_its_unwrap_and_takes_the_next_frame_after_its_respons
                 at(51),
                 &group_message1_at(&ptk, 3, 2, 4),
                 verified_meta(),
-                |_| {}
+                |_| {},
+                &mut world.losses,
             ),
             Err(StaRxError::Security(RsnConnectedProcessError::Supplicant(
                 RsnConnectedSupplicantError::StaleReplayCounter

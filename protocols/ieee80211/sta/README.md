@@ -46,14 +46,18 @@ work still owned by the backend remains in that installation's retirement custod
 The `test-support` feature exposes the retired station's resource counts for
 composition tests; those diagnostic methods are absent from product builds.
 
-The station and its data machine keep no diagnostic counters. Each holds an
-`O: oer_trace::Observer`, by default `Noop`: the station's comes in
-`StaConfig::observer`, the data machine's with its constructor, and the
-retired banks keep it for a restart. They report a token returned to a full
-pool (`TokenLost`), a lost data MSDU or MPDU with its reason
-(`DataMsduLost`), a dropped RSN input (`RsnInputDropped`) and each beacon or
-probe response the scan table took (`ScanBssObserved`), events of
-`oer-ieee80211-instrumentation`. The scan result keeps its typed
+The station and its data machine keep no diagnostic counters and hold no
+sink. The calls that can lose or drop something (`Station::input`,
+`receive`, `poll_action`, `try_block_ack_reply` and the data machine's
+`input`, `returned`, `leave` and `finish`) take the caller's
+`&mut impl EventSink<StaEvent>`. They report a token returned to a full pool
+(`TokenLost`), a lost data MSDU or MPDU with its reason (`DataLost`), an RSN
+input dropped without a returned error (`RsnInputDropped`: key data that did
+not unwrap, fit or install, or a refused unwrap result) and each beacon or
+probe response the scan table took (`ScanBssObserved`), values of
+`events::StaEvent`. A refusal a call returns, such as an EAPOL frame's
+`StaRxError` or a preparation refusal the service passes to `returned`, is
+its caller's to count and is no event. The scan result keeps its typed
 completeness (`ScanSummary::completeness`: `Complete`, or `Truncated` when a
 new BSS found the table full); how many frames or BSSs a scan heard are
 events only.
@@ -145,10 +149,8 @@ Module map:
   non-QoS Data MPDUs in its own tickets and buffers, under the pairwise key
   the station's `LinkView` lends, and the BSS's data MPDUs into MSDUs; no
   A-MPDU, Block Ack, reorder, replay check or power save yet. It owns the
-  network boundary's checked `EthernetFrame` and `TxMsdu`, the ARP
-  correlation of a protected ARP MSDU as observation events
-  (`transmitted_arp`, `received_arp`), and a data attempt's protection
-  exchange, power and coexistence class;
+  network boundary's checked `EthernetFrame` and `TxMsdu`, and a data
+  attempt's protection exchange, power and coexistence class;
 - `port`: the station's and data machine's tokens on a lower-MAC port
   (`PortStaTokens`, `PortDataTokens`) and the installed pairwise key
   (`StationPairwiseKey`), which numbers each fresh protected MPDU from its
@@ -622,7 +624,7 @@ configuration replies.
 - **`machine.rs::Owed` variants carry no proof**; they re-read `self.lease`
   and `self.keys.pairwise` behind `_ =>` arms.
 - **Silent losses:** `pool.rs::Pool::put` drops a token beyond a full pool
-  and reports only a `TokenLost` observation; unreachable `data.rs`
+  and reports only a `TokenLost` event; unreachable `data.rs`
   `overflowed` sites.
 - **Authentication attempts matched by number:**
   `machine.rs::TxPurpose::Authentication { attempt: u16 }`, with

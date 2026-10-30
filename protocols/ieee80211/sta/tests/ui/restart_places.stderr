@@ -11,5 +11,5 @@ error[E0308]: mismatched types
 note: method defined here
   --> src/machine.rs
    |
-   |     pub fn restart(
+   |     pub fn restart(self, places: StationPlaces<'id, T::GatePath>) -> StationRestart<'id, T, K, C> {
    |            ^^^^^^^
