@@ -293,6 +293,21 @@ impl Observations {
 
 type Observed = &'static Observations;
 
+/// The sink a case lends its service: the case's observations, or `()`.
+trait CaseSink: StationEvents + 'static {
+    fn of(observed: Observed) -> Self;
+}
+
+impl CaseSink for Observed {
+    fn of(observed: Observed) -> Self {
+        observed
+    }
+}
+
+impl CaseSink for () {
+    fn of(_: Observed) -> Self {}
+}
+
 type TestConfig = (StaConfig<ModelCaps24, Callbacks>, StaSecurity);
 
 fn config(security: StaSecurity) -> TestConfig {
@@ -921,8 +936,9 @@ impl Application<'_, '_, '_> {
 }
 
 /// The body that runs the service beside the test's script.
-struct Body<'w, 'b, S, const GROUPS: usize> {
+struct Body<'w, 'b, S, O, const GROUPS: usize> {
     world: &'w World<'b>,
+    sink: PhantomData<O>,
     transmit: WakingSpscReceiver<'b, TxMsdu, 2>,
     receive: WakingSpscSender<'b, EthernetFrame, 8>,
     config: TestConfig,
@@ -934,9 +950,9 @@ struct Body<'w, 'b, S, const GROUPS: usize> {
 /// A test's script: the access point and the application, on the world.
 type Script<'w> = Pin<Box<dyn Future<Output = ()> + 'w>>;
 
-impl<'scope, 'w, 'b, S, const GROUPS: usize>
+impl<'scope, 'w, 'b, S, O: CaseSink, const GROUPS: usize>
     PortBody<LocalId<'scope>, ModelBackend<LocalId<'scope>, ModelCaps24, ServiceContexts>>
-    for Body<'w, 'b, S, GROUPS>
+    for Body<'w, 'b, S, O, GROUPS>
 where
     S: for<'a, 'q> FnOnce(&'a Application<'a, 'b, 'q>) -> Script<'a>,
 {
@@ -1024,7 +1040,7 @@ where
                     Station::new_wpa2_personal(config, pmk, resources, GroupCapacity::new())
                 }
             };
-            let mut service = Runner::<ServicePort<LocalId<'scope>>, _, _, GROUPS, Observed>::new(
+            let mut service = Runner::<ServicePort<LocalId<'scope>>, _, _, GROUPS, O>::new(
                 (station, credits),
                 StaData::new(data_tickets, large, MODEL_TX_QUEUE_DEPTH),
                 arbiter,
@@ -1044,7 +1060,7 @@ where
                     block_acks, Duration::from_millis(100)
                 )))
                 .view(),
-                self.world.observed,
+                O::of(self.world.observed),
             );
             if self.refuse_initial_enable {
                 let request = service
@@ -1372,7 +1388,12 @@ where
         std::thread::Builder::new()
             .stack_size(16 << 20)
             .spawn_scoped(scope, move || {
-                run_case_on_this_thread::<S, GROUPS>(config, script, refuse_initial_enable, placed)
+                run_case_on_this_thread::<S, Observed, GROUPS>(
+                    config,
+                    script,
+                    refuse_initial_enable,
+                    placed,
+                )
             })
             .expect("a thread with a stack for the case")
             .join()
@@ -1380,7 +1401,25 @@ where
     })
 }
 
-fn run_case_on_this_thread<S, const GROUPS: usize>(
+/// Run a case whose service holds the empty sink `()`: the returned
+/// observations stay empty.
+fn run_with_empty_sink<S>(config: TestConfig, script: S) -> Observed
+where
+    S: for<'w, 'b, 'q> FnOnce(&'w Application<'w, 'b, 'q>) -> Script<'w> + Send,
+{
+    std::thread::scope(|scope| {
+        std::thread::Builder::new()
+            .stack_size(16 << 20)
+            .spawn_scoped(scope, move || {
+                run_case_on_this_thread::<S, (), 2>(config, script, false, false)
+            })
+            .expect("a thread with a stack for the case")
+            .join()
+            .unwrap_or_else(|panic| std::panic::resume_unwind(panic))
+    })
+}
+
+fn run_case_on_this_thread<S, O: CaseSink, const GROUPS: usize>(
     config: TestConfig,
     script: S,
     refuse_initial_enable: bool,
@@ -1433,8 +1472,9 @@ where
                 async |frontend| {
                     run_port(
                         frontend,
-                        Body::<S, GROUPS> {
+                        Body::<S, O, GROUPS> {
                             world: &world,
+                            sink: PhantomData,
                             transmit,
                             receive,
                             config,

@@ -2365,10 +2365,11 @@ impl<
             frame.bytes(),
             meta,
             |parts| {
-                count_refusal(
-                    &mut refused,
-                    Self::queue_received(io, EthernetFrame::from_parts(parts)),
-                )
+                let refusal = Self::queue_received(io, EthernetFrame::from_parts(parts));
+                // Delivery runs for every sink; only an enabled one counts.
+                if <O as EventSink<ServiceEvent>>::ENABLED {
+                    count_refusal(&mut refused, refusal);
+                }
             },
             &mut self.events,
         );
