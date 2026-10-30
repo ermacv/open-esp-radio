@@ -10,23 +10,21 @@
 //! runs the cases and releases the stand: the link first, then the board,
 //! then the lease, also on an error or a cancellation.
 //!
-//! The harness knows no scenario, service, equipment type or stored
-//! result. A case talks to the device and takes its scenario's equipment
-//! through [`Cx`] and decides its own verdict; the harness prints each
-//! case's outcome as it is known and the device's diagnostic lines,
-//! finishes the equipment and the device under the lease, and exits with
+//! The harness knows no scenario, service or stored result. A case talks
+//! to the device through [`Cx`] and decides its own verdict; the harness
+//! prints each case's outcome as it is known and the device's diagnostic
+//! lines, finishes the device under the lease, and exits with
 //! the scenario's verdict: 0 when every case passed, 1 when one failed, 2
 //! when one could not finish (the stand, the link, an unconfirmed request
 //! or a cancellation) and none failed, or when the finish was not clean.
 #![forbid(unsafe_code)]
 
-use std::{cell::RefMut, process::ExitCode, time::Duration};
+use std::{process::ExitCode, time::Duration};
 
 use oer_hil_link::{Boot, CallError, Completeness, Cursor, Health, Link, Received};
 use oer_hil_protocol::{Endpoint, Key, Message};
 
 mod dut;
-mod equipment;
 #[cfg(test)]
 mod fakes;
 mod finish;
@@ -34,11 +32,10 @@ mod keys;
 mod run;
 mod stand;
 
-pub use equipment::{Declared, Equipment, Resolved, Slot, TakeError};
 pub use finish::Cleanup;
 #[doc(hidden)]
 pub use oer_hil_protocol::Key as __Key;
-pub use run::{Outcome, Teardown, Verdict};
+pub use run::{Outcome, Verdict};
 
 /// What a scenario needs from the stand and the device.
 #[derive(Clone, Copy, Debug)]
@@ -46,59 +43,27 @@ pub struct Scenario {
     pub(crate) name: &'static str,
     pub(crate) image: &'static str,
     pub(crate) services: &'static [&'static [Key]],
-    pub(crate) equipment: &'static [Declared],
 }
 
 impl Scenario {
-    /// Use [`scenario!`], which checks the slots at compile time.
-    #[doc(hidden)]
-    pub const fn unchecked(
+    /// A scenario named `name` whose device runs `image`
+    /// (`oer_image_build::images`), which must serve every service of
+    /// `services` (each its `Service::KEYS`).
+    pub const fn new(
         name: &'static str,
         image: &'static str,
         services: &'static [&'static [Key]],
-        equipment: &'static [Declared],
     ) -> Self {
         Self {
             name,
             image,
             services,
-            equipment,
         }
-    }
-
-    /// Whether every equipment slot has a name of its own.
-    pub const fn slots_distinct(&self) -> bool {
-        equipment::distinct(self.equipment)
     }
 
     pub const fn name(&self) -> &'static str {
         self.name
     }
-}
-
-/// A [`Scenario`] named `name` whose device runs `image`
-/// (`oer_image_build::images`), which must serve every service of
-/// `services` (each its `Service::KEYS`); its cases take the equipment of
-/// the `equipment` slots ([`Slot::declare`]). Two slots of one name do not
-/// compile.
-#[macro_export]
-macro_rules! scenario {
-    (
-        name: $name:expr,
-        image: $image:expr,
-        services: $services:expr,
-        equipment: $equipment:expr $(,)?
-    ) => {
-        const {
-            const SERVICES: &[&[$crate::__Key]] = $services;
-            const EQUIPMENT: &[$crate::Declared] = $equipment;
-            let scenario = $crate::Scenario::unchecked($name, $image, SERVICES, EQUIPMENT);
-            if !scenario.slots_distinct() {
-                panic!("two equipment slots of the scenario share a name");
-            }
-            scenario
-        }
-    };
 }
 
 /// One case of a scenario: its name and what it runs.
@@ -126,11 +91,10 @@ pub fn check(condition: bool, what: impl Into<String>) -> Result<(), Failure> {
     }
 }
 
-/// A case's access to the device under test (its link, running boot and
-/// resets) and to the scenario's equipment.
+/// A case's access to the device under test: its link, running boot and
+/// resets.
 pub struct Cx<'a> {
     dut: &'a mut (dyn dut::Device + 'a),
-    equipment: &'a equipment::Opened,
     boot: Boot,
     /// A request whose outcome is unknown: the device may still run it, so
     /// the boot takes no further request.
@@ -138,14 +102,9 @@ pub struct Cx<'a> {
 }
 
 impl<'a> Cx<'a> {
-    fn new(
-        dut: &'a mut (dyn dut::Device + 'a),
-        equipment: &'a equipment::Opened,
-        boot: Boot,
-    ) -> Self {
+    fn new(dut: &'a mut (dyn dut::Device + 'a), boot: Boot) -> Self {
         Self {
             dut,
-            equipment,
             boot,
             unconfirmed: None,
         }
@@ -259,14 +218,6 @@ impl<'a> Cx<'a> {
         self.unconfirmed = None;
         Ok(&self.boot)
     }
-
-    /// Borrow the equipment of `slot`; the session keeps it and finishes
-    /// it after the cases. The borrow ends with the returned guard.
-    pub fn take<T: Equipment>(&self, slot: &Slot<T>) -> Result<RefMut<'a, T>, Failure> {
-        self.equipment
-            .take(slot)
-            .map_err(|error| Failure::Incomplete(error.to_string()))
-    }
 }
 
 /// The failure a request's error makes of its case.
@@ -320,17 +271,17 @@ pub fn main(scenario: &Scenario, cases: &[Case]) -> ExitCode {
         }
     };
     let mut out = std::io::stdout();
-    let (outcomes, teardown) = match stand::Session::open(scenario, arguments.board.as_deref()) {
+    let (outcomes, cleanup) = match stand::Session::open(scenario, arguments.board.as_deref()) {
         Ok(mut session) => {
             let link = session.take_link();
             let (run, link) = {
                 let board = session.board();
                 let mut dut = dut::Dut::new(link, &board, session.image_crc32());
-                let run = run::cases(&mut dut, session.equipment(), scenario, &selected, &mut out);
+                let run = run::cases(&mut dut, scenario, &selected, &mut out);
                 (run, dut.into_link())
             };
-            let teardown = session.finish(link, run.ending);
-            (run.outcomes, Some(teardown))
+            let cleanup = session.finish(link, run.ending);
+            (run.outcomes, Some(cleanup))
         }
         Err(error) => {
             let outcome = Outcome::stand(error.to_string());
@@ -338,7 +289,7 @@ pub fn main(scenario: &Scenario, cases: &[Case]) -> ExitCode {
             (vec![outcome], None)
         }
     };
-    let verdict = run::summary(scenario, &outcomes, teardown.as_ref(), &mut out);
+    let verdict = run::summary(scenario, &outcomes, cleanup.as_ref(), &mut out);
     ExitCode::from(verdict.exit_code())
 }
 

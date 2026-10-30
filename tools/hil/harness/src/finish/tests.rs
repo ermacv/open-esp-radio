@@ -138,24 +138,15 @@ fn a_quarantine_the_arbiter_did_not_record_is_kept_in_the_result() {
 
 #[test]
 fn a_cleanup_keeps_a_pass_from_passing_and_never_makes_a_failure_pass() {
-    const SCENARIO: Scenario = crate::scenario!(
-        name: "test",
-        image: "test-image",
-        services: &[],
-        equipment: &[],
-    );
+    const SCENARIO: Scenario = Scenario::new("test", "test-image", &[]);
     let outcome = |verdict| Outcome {
         case: Some("a"),
         verdict,
     };
-    let teardown = |dut| crate::Teardown {
-        dut,
-        equipment: Vec::new(),
-    };
-    let recovered = teardown(Cleanup::Recovered {
+    let recovered = Cleanup::Recovered {
         step: RecoveryStep::RtsReset,
         reset_line: None,
-    });
+    };
     let mut out = Vec::new();
     let passed = run::summary(
         &SCENARIO,
@@ -175,7 +166,7 @@ fn a_cleanup_keeps_a_pass_from_passing_and_never_makes_a_failure_pass() {
     let clean = run::summary(
         &SCENARIO,
         &[outcome(Verdict::Pass)],
-        Some(&teardown(Cleanup::Clean)),
+        Some(&Cleanup::Clean),
         &mut Vec::new(),
     );
     assert_eq!(clean, Verdict::Pass);

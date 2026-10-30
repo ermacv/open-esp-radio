@@ -1,15 +1,12 @@
 # HIL harness
 
 `oer-hil-harness` is the life cycle of a HIL scenario program. A scenario
-(`scenario!`) names its image (`oer_image_build::images`), the keys of the
-services that image must serve and the equipment slots its cases take, and
-lists its cases; `main` then:
+(`Scenario::new`) names its image (`oer_image_build::images`) and the keys
+of the services that image must serve, and lists its cases; `main` then:
 
 1. builds the image through the image pipeline, before it waits for the stand;
-2. resolves every equipment slot from the stand file, refusing two slots on
-   one resource, and leases the board (`--board`, or the one board of the
-   image's chip with the `dut` role) and the slots' claims in one request;
-   then opens the equipment, finishing what it opened when a slot fails;
+2. leases the board (`--board`, or the one board of the image's chip with
+   the `dut` role);
 3. writes the image unless the board's receipt says it runs it, and records
    the write in the board journal;
 4. opens the board's console with a reset and starts the link;
@@ -18,11 +15,8 @@ lists its cases; `main` then:
    pages hold every required key;
 6. runs the cases (`--case` selects some, `--list` prints them), printing
    each outcome as soon as it is known;
-7. finishes under the same lease: first the equipment, which ends every
-   operation the cases left (a handle dropped without `finish` or `cancel`
-   is abandoned, stopped and reported); then the device: one that runs the
-   built image and left
-   no request unconfirmed is clean; otherwise the board's reset ladder from
+7. finishes the device under the same lease: one that runs the built image
+   and left no request unconfirmed is clean; otherwise the board's reset ladder from
    the stand file runs (`oer_lab_board::reset::climb`), and after each rung
    the console is opened again and the image's Hello is awaited. The first
    rung after which another boot of the image answers recovers the board
@@ -34,7 +28,7 @@ lists its cases; `main` then:
 8. releases the link, the board and the lease in that order, also on an error,
    a cancellation or a stage of opening that failed.
 
-A case talks to the device and the equipment through `Cx`:
+A case talks to the device through `Cx`:
 
 | Method | Gives |
 | --- | --- |
@@ -42,10 +36,8 @@ A case talks to the device and the equipment through `Cx`:
 | `events`, `event`, `take_message` | A cursor over the running boot's messages from now on, made before a request to see its events, also those before its response; it reads in order, past what its filter refused, and other cursors read on their own; `event::<M>` fails the case when no `M` came in a complete interval and leaves it incomplete when a message of the interval was lost |
 | `completeness`, `health` | Whether a cursor's interval lost a message or ended with its boot; the link's counters |
 | `reset` | A new boot of the same image through the first rung of the board's ladder and a reopened console; the boot that answered before is no reset |
-| `take(&SLOT)` | A borrow of the slot's equipment; the session keeps it and finishes it, and a slot held already is refused |
 
-Two slots of one name do not compile; two slots of one type are two pieces
-of equipment. A refusal, a payload of another type or a reboot fails the
+A refusal, a payload of another type or a reboot fails the
 case; a request that was not sent, a request without a response, a broken
 link or a cancellation leaves it incomplete, and an unconfirmed request
 leaves the rest of its boot incomplete. The program prints the device's

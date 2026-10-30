@@ -7,7 +7,7 @@ use oer_hil_protocol::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::{Case, Cleanup, Cx, Failure, Outcome, Scenario, Teardown, Verdict, check, run};
+use crate::{Case, Cleanup, Cx, Failure, Outcome, Scenario, Verdict, check, run};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, postcard_schema::Schema)]
 struct Ask(u8);
@@ -26,25 +26,13 @@ impl Message for Told {
 }
 
 const SERVICE: &[Key] = &[Ask::KEY, Told::KEY];
-const SCENARIO: Scenario = crate::scenario!(
-    name: "test",
-    image: "test-image",
-    services: &[SERVICE],
-    equipment: &[],
-);
+const SCENARIO: Scenario = Scenario::new("test", "test-image", &[SERVICE]);
 
-/// Run `cases` on the device behind `link`, with no equipment.
+/// Run `cases` on the device behind `link`.
 fn run_cases(link: oer_hil_link::Link, cases: &[&Case]) -> Vec<Outcome> {
     let board = crate::fakes::FakeBoard::new(Vec::new());
     let mut dut = crate::dut::Dut::new(Some(link), &board, IMAGE);
-    run::cases(
-        &mut dut,
-        &crate::equipment::Opened::default(),
-        &SCENARIO,
-        cases,
-        &mut Vec::new(),
-    )
-    .outcomes
+    run::cases(&mut dut, &SCENARIO, cases, &mut Vec::new()).outcomes
 }
 
 /// The identity of the image the tests built.
@@ -316,10 +304,7 @@ fn a_failure_outranks_an_incomplete_case_and_no_case_is_no_pass() {
             outcome("b", Verdict::Fail("wrong".into())),
             outcome("c", Verdict::Pass),
         ],
-        Some(&Teardown {
-            dut: Cleanup::Clean,
-            equipment: Vec::new(),
-        }),
+        Some(&Cleanup::Clean),
         &mut out,
     );
     assert_eq!(verdict, Verdict::Fail("wrong".into()));
