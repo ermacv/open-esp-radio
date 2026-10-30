@@ -11,10 +11,16 @@
 //! (`base::GetHello`), which answers with the same boot's Hello. A frame of
 //! another boot means the device restarted, and every request of the earlier
 //! boot ended with it.
+//!
+//! A request reserves the slot of its response before it is sent, so no
+//! other message can displace the response. Every other message of the
+//! running boot is kept in a bounded ring for a [`Cursor`], which tells
+//! whether its interval lost one. Every queue is bounded: the host's frames
+//! wait in [`OUTBOUND_CAPACITY`] places and a full queue refuses a request
+//! before it leaves.
 #![forbid(unsafe_code)]
 
 use std::{
-    collections::VecDeque,
     sync::{
         Arc, Condvar, Mutex,
         atomic::{AtomicBool, AtomicU32, Ordering},
@@ -28,20 +34,22 @@ use oer_hil_protocol::{
     DecodeCounters, Endpoint, Envelope, Frame, FrameEncoder, Key, Message,
     base::{GetHello, Hello, Rejected},
 };
+use state::State;
 use zeroize::Zeroizing;
 
 mod error;
 mod notes;
+mod state;
 mod target;
 mod transport;
 mod worker;
 
-pub use error::{CallError, LinkError};
+pub use error::{CallError, LinkError, NotSent};
+pub use state::{Completeness, EVENT_CAPACITY, MAX_PENDING, NOTES_CAPACITY, PAST_BOOTS};
 pub use target::SerialLine;
 
-/// Device messages the link keeps until a caller takes them; one more is
-/// counted in [`Health::dropped`] instead.
-pub const RECEIVED_CAPACITY: usize = 4096;
+/// Host frames waiting for the worker to write them.
+pub const OUTBOUND_CAPACITY: usize = 64;
 
 /// How often a waiting caller looks at cancellation.
 const CANCEL_POLL: Duration = Duration::from_millis(100);
@@ -110,80 +118,55 @@ pub struct Boot {
 }
 
 /// What the link observed of the wire.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct Health {
     /// The host decoder's counters over the whole line.
     pub counters: DecodeCounters,
-    /// Device messages missing from a boot's sequence numbers.
-    pub missing: u32,
-    /// Device messages the host dropped because nobody took them.
-    pub dropped: u32,
     /// Boots seen on the line.
     pub boots: u32,
+    /// The running boot's counters.
+    pub running: Option<BootStats>,
+    /// The counters of the last [`PAST_BOOTS`] boots that ended, oldest
+    /// first.
+    pub past: Vec<BootStats>,
+    /// Diagnostic lines displaced before anyone took them.
+    pub notes_lost: u64,
 }
 
-#[derive(Default)]
-struct State {
-    received: VecDeque<Received>,
-    /// The boot of the newest frame and the sequence number its next one
-    /// carries.
-    boot: Option<(u64, u32)>,
-    /// The newest boot's Hello, once seen.
-    hello: Option<Boot>,
-    health: Health,
-    notes: Vec<String>,
-    failure: Option<LinkError>,
+/// One boot's message counters.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct BootStats {
+    pub boot_id: u64,
+    /// Device messages missing from the boot's sequence.
+    pub missing: u64,
+    /// Kept messages a newer one displaced before anyone took them.
+    pub displaced: u64,
+    /// Kept messages nobody took: so far, or before the boot ended.
+    pub unread: u64,
 }
 
-impl State {
-    fn fail(&mut self, error: LinkError) {
-        self.failure.get_or_insert(error);
-    }
+/// A position in one boot's messages: [`Link::take`] returns only messages
+/// that arrived after it, and [`Link::completeness`] tells whether one of
+/// them was lost.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Cursor {
+    boot_id: u64,
+    start: u64,
+}
 
-    /// Takes `message` into the boot and sequence accounting.
-    fn receive(&mut self, message: Received) {
-        if message.boot_id == 0 {
-            self.fail(LinkError::Protocol(
-                "the device sent the reserved boot identity 0".to_owned(),
-            ));
-            return;
-        }
-        match self.boot {
-            Some((boot_id, next)) if boot_id == message.boot_id => {
-                let missing = message.message_sequence.wrapping_sub(next);
-                if missing > u32::MAX / 2 {
-                    self.fail(LinkError::Protocol(format!(
-                        "device message {} repeats or reorders boot {boot_id:016x}'s sequence",
-                        message.message_sequence
-                    )));
-                    return;
-                }
-                self.health.missing = self.health.missing.saturating_add(missing);
-            }
-            _ => {
-                self.health.boots = self.health.boots.saturating_add(1);
-                self.hello = None;
-            }
-        }
-        self.boot = Some((message.boot_id, message.message_sequence.wrapping_add(1)));
-        if let Some(Ok(hello)) = message.decode::<Hello>() {
-            self.hello = Some(Boot {
-                boot_id: message.boot_id,
-                hello,
-            });
-        }
-        if self.received.len() < RECEIVED_CAPACITY {
-            self.received.push_back(message);
-        } else {
-            self.health.dropped = self.health.dropped.saturating_add(1);
-        }
+impl Cursor {
+    pub fn boot_id(&self) -> u64 {
+        self.boot_id
     }
+}
 
-    /// The first kept message `matches` accepts, removed.
-    fn take(&mut self, matches: impl Fn(&Received) -> bool) -> Option<Received> {
-        let index = self.received.iter().position(matches)?;
-        self.received.remove(index)
-    }
+/// The device's diagnostic lines since the last [`Link::take_notes`].
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct DeviceNotes {
+    /// Each line rendered as text.
+    pub lines: Vec<String>,
+    /// Lines displaced before this call took them.
+    pub lost: u64,
 }
 
 struct Shared {
@@ -202,7 +185,7 @@ impl Shared {
 /// The link to one board: a worker thread owns its serial line.
 pub struct Link {
     shared: Arc<Shared>,
-    outbound: mpsc::Sender<Zeroizing<Vec<u8>>>,
+    outbound: mpsc::SyncSender<Zeroizing<Vec<u8>>>,
     wake: Arc<mio::Waker>,
     stop: Arc<AtomicBool>,
     worker: Option<thread::JoinHandle<()>>,
@@ -220,7 +203,7 @@ impl Link {
             changed: Condvar::new(),
         });
         let stop = Arc::new(AtomicBool::new(false));
-        let (outbound, commands) = mpsc::channel();
+        let (outbound, commands) = mpsc::sync_channel(OUTBOUND_CAPACITY);
         let poll = transport::events::EventPoll::new().map_err(|error| {
             LinkError::Transport(format!("cannot poll the serial line: {error}"))
         })?;
@@ -254,10 +237,10 @@ impl Link {
         let mut asked = false;
         let mut state = self.shared.lock();
         loop {
-            if let Some(error) = &state.failure {
+            if let Some(error) = state.failure() {
                 return Err(error.clone());
             }
-            if let Some(boot) = state.hello {
+            if let Some(boot) = state.hello() {
                 return Ok(boot);
             }
             let now = Instant::now();
@@ -267,8 +250,10 @@ impl Link {
             if !asked && now >= ask_at {
                 drop(state);
                 // Discovery names no boot: any running boot answers it.
-                self.send(0, GetHello)
-                    .map_err(|_| LinkError::Protocol("GetHello does not encode".to_owned()))?;
+                let request_id = self.next_request.fetch_add(1, Ordering::Relaxed);
+                self.send(0, request_id, GetHello).map_err(|error| {
+                    LinkError::Transport(format!("GetHello was not sent: {error}"))
+                })?;
                 asked = true;
                 state = self.shared.lock();
                 continue;
@@ -278,25 +263,39 @@ impl Link {
     }
 
     /// Send `request` to `boot` and wait up to `timeout` for its response.
-    /// Other messages of the same request (related events) stay for
-    /// [`Link::take`].
+    /// The response's slot is reserved before the request leaves; other
+    /// messages of the same request (related events) stay for a cursor.
     pub fn call<E: Endpoint>(
         &self,
         boot: &Boot,
         request: E,
         timeout: Duration,
     ) -> Result<E::Response, CallError> {
-        let request_id = self.send(boot.boot_id, request)?;
+        let request_id = self.next_request.fetch_add(1, Ordering::Relaxed);
+        if !self
+            .shared
+            .lock()
+            .expect(boot.boot_id, request_id, <E::Response as Message>::KEY)
+        {
+            return Err(CallError::NotSent(NotSent::PendingFull));
+        }
+        let result = self.exchange::<E>(boot, request_id, request, timeout);
+        self.shared.lock().forget(request_id);
+        result
+    }
+
+    fn exchange<E: Endpoint>(
+        &self,
+        boot: &Boot,
+        request_id: u32,
+        request: E,
+        timeout: Duration,
+    ) -> Result<E::Response, CallError> {
+        self.send(boot.boot_id, request_id, request)?;
         let deadline = Instant::now() + timeout;
-        let ours = |message: &Received| {
-            message.boot_id == boot.boot_id
-                && message.session_id == 0
-                && message.request_id == request_id
-                && (message.is::<E::Response>() || message.is::<Rejected>())
-        };
         let mut state = self.shared.lock();
         loop {
-            if let Some(message) = state.take(ours) {
+            if let Some(message) = state.response(request_id) {
                 if let Some(rejected) = message.decode::<Rejected>() {
                     return Err(CallError::Rejected(rejected?.0));
                 }
@@ -306,10 +305,10 @@ impl Link {
                         path: <E::Response as Message>::PATH,
                     }));
             }
-            if let Some(error) = &state.failure {
+            if let Some(error) = state.failure() {
                 return Err(error.clone().into());
             }
-            if let Some((boot_id, _)) = state.boot
+            if let Some(boot_id) = state.boot_id()
                 && boot_id != boot.boot_id
             {
                 return Err(CallError::Rebooted { boot_id });
@@ -321,28 +320,32 @@ impl Link {
         }
     }
 
-    /// The first kept message of `boot` that `matches` accepts, waiting up
-    /// to `timeout`; `None` when none came.
+    /// A cursor over the messages of `boot` that arrive from now on. A
+    /// cursor made before a request sees its related events, also those
+    /// that come before its response.
+    pub fn cursor(&self, boot: &Boot) -> Cursor {
+        self.shared.lock().cursor(boot.boot_id)
+    }
+
+    /// The first kept message since `cursor` started that `matches`
+    /// accepts, waiting up to `timeout`; `None` when none came. A cursor
+    /// whose boot ended returns `Rebooted`.
     pub fn take(
         &self,
-        boot: &Boot,
+        cursor: &Cursor,
         matches: impl Fn(&Received) -> bool,
         timeout: Duration,
     ) -> Result<Option<Received>, CallError> {
         let deadline = Instant::now() + timeout;
         let mut state = self.shared.lock();
         loop {
-            if let Some(message) =
-                state.take(|message| message.boot_id == boot.boot_id && matches(message))
-            {
+            if let Some(message) = state.take(cursor, &matches) {
                 return Ok(Some(message));
             }
-            if let Some(error) = &state.failure {
+            if let Some(error) = state.failure() {
                 return Err(error.clone().into());
             }
-            if let Some((boot_id, _)) = state.boot
-                && boot_id != boot.boot_id
-            {
+            if let Completeness::Ended { boot_id } = state.completeness(cursor) {
                 return Err(CallError::Rebooted { boot_id });
             }
             if Instant::now() >= deadline {
@@ -352,18 +355,25 @@ impl Link {
         }
     }
 
+    /// Whether every message of `cursor`'s interval arrived and was kept.
+    pub fn completeness(&self, cursor: &Cursor) -> Completeness {
+        self.shared.lock().completeness(cursor)
+    }
+
     /// What the link observed of the wire so far.
     pub fn health(&self) -> Health {
-        self.shared.lock().health
+        self.shared.lock().health()
     }
 
-    /// The device's diagnostic lines since the last call, as text.
-    pub fn take_notes(&self) -> Vec<String> {
-        std::mem::take(&mut self.shared.lock().notes)
+    /// The device's diagnostic lines since the last call, as text, and how
+    /// many were lost.
+    pub fn take_notes(&self) -> DeviceNotes {
+        self.shared.lock().take_notes()
     }
 
-    fn send<M: Message>(&self, boot_id: u64, message: M) -> Result<u32, CallError> {
-        let request_id = self.next_request.fetch_add(1, Ordering::Relaxed);
+    /// Queue `message` for the worker without waiting: an error means the
+    /// frame did not leave the host.
+    fn send<M: Message>(&self, boot_id: u64, request_id: u32, message: M) -> Result<(), CallError> {
         let sequence = self.next_sequence.fetch_add(1, Ordering::Relaxed);
         let envelope = Envelope::new(boot_id, sequence, 0, request_id, message);
         let frame = {
@@ -374,17 +384,21 @@ impl Link {
             Zeroizing::new(
                 encoder
                     .encode(&envelope)
-                    .map_err(|_| CallError::Encode)?
+                    .map_err(|_| CallError::NotSent(NotSent::Encode))?
                     .to_vec(),
             )
         };
-        self.outbound
-            .send(frame)
-            .map_err(|_| LinkError::Transport("the link's worker ended".to_owned()))?;
+        self.outbound.try_send(frame).map_err(|error| {
+            CallError::NotSent(match error {
+                mpsc::TrySendError::Full(_) => NotSent::QueueFull,
+                mpsc::TrySendError::Disconnected(_) => NotSent::LinkEnded,
+            })
+        })?;
+        // The frame is queued: from here on its outcome is unknown.
         self.wake
             .wake()
             .map_err(|error| LinkError::Transport(format!("cannot wake the link: {error}")))?;
-        Ok(request_id)
+        Ok(())
     }
 
     /// Wait for a change until `deadline`, looking at cancellation.

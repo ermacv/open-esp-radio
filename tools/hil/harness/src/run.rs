@@ -91,8 +91,12 @@ pub fn cases(link: &Link, scenario: &Scenario, image_crc32: u32, cases: &[&Case]
             unconfirmed = cx.unconfirmed;
             verdict
         };
-        for note in link.take_notes() {
+        let notes = link.take_notes();
+        for note in notes.lines {
             eprintln!("device: {note}");
+        }
+        if notes.lost > 0 {
+            eprintln!("device: {} diagnostic lines lost", notes.lost);
         }
         outcomes.push(Outcome {
             case: Some(case.name),

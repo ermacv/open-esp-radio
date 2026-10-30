@@ -37,21 +37,30 @@ pub enum CallError {
     Rejected(RejectReason),
     /// No response within the timeout. The request may still be running on
     /// the device: its outcome is unconfirmed until a reset ends its boot.
-    Unconfirmed {
-        request_id: u32,
-    },
+    Unconfirmed { request_id: u32 },
     /// The device runs another boot: every operation of the request's boot
     /// ended with it.
-    Rebooted {
-        boot_id: u64,
-    },
+    Rebooted { boot_id: u64 },
     /// The response's payload does not decode as its type.
-    Payload {
-        path: &'static str,
-    },
+    Payload { path: &'static str },
+    /// The request did not leave the host: sending it again is safe.
+    NotSent(NotSent),
+    /// The link failed after the request was queued: its outcome is
+    /// unknown.
+    Link(LinkError),
+}
+
+/// Why a request did not leave the host.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum NotSent {
     /// The request does not fit a frame.
     Encode,
-    Link(LinkError),
+    /// [`crate::OUTBOUND_CAPACITY`] frames wait for the serial line.
+    QueueFull,
+    /// [`crate::MAX_PENDING`] requests wait for their responses.
+    PendingFull,
+    /// The link's worker ended.
+    LinkEnded,
 }
 
 impl std::fmt::Display for CallError {
@@ -73,7 +82,7 @@ impl std::fmt::Display for CallError {
                 formatter,
                 "{path}: the response does not decode as its type"
             ),
-            Self::Encode => formatter.write_str("the request does not fit a frame"),
+            Self::NotSent(reason) => write!(formatter, "the request was not sent: {reason:?}"),
             Self::Link(error) => error.fmt(formatter),
         }
     }

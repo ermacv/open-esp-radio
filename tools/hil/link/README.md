@@ -11,10 +11,20 @@ stores nothing.
 | --- | --- |
 | `Link::start` | The worker thread that owns the serial line the stand opened |
 | `Link::boot` | The running boot: its own Hello, or the answer to `base::GetHello` asked once at half the timeout |
-| `Link::call` | One request and its typed response or `Rejected`; `Unconfirmed` without a response, `Rebooted` when another boot's frame arrives |
-| `Link::take` | A kept message of the boot, such as an event of a request |
-| `Health` | Decoder counters, device messages missing from a boot's sequence, host drops and boots seen |
-| `Link::take_notes` | The device's `OER-DIAG` lines rendered as text; a garbled one stays visible as `OER-DIAG-ERROR` |
+| `Link::call` | One request and its typed response or `Rejected`, in a slot reserved before the request leaves; `NotSent` when it did not leave the host, `Unconfirmed` without a response, `Rebooted` when another boot's frame arrives |
+| `Link::cursor`, `Link::take` | The running boot's other messages from a point on, such as a request's related events, also those before its response |
+| `Link::completeness` | Whether a cursor's interval lost a message (`Lossy`) or its boot ended (`Ended`) |
+| `Health` | Decoder counters, boots seen, the running boot's and the last ended boots' missing, displaced and unread messages, lost diagnostic lines |
+| `Link::take_notes` | The device's `OER-DIAG` lines rendered as text and how many were lost; a garbled one stays visible as `OER-DIAG-ERROR` |
+
+Every queue is bounded. Host frames wait in `OUTBOUND_CAPACITY` places and
+at most `MAX_PENDING` requests wait for responses; either limit refuses a
+request before it leaves (`NotSent`), so sending it again is safe. The
+running boot keeps `EVENT_CAPACITY` messages: a newer one displaces the
+oldest, which is lost for every cursor whose interval holds it, as is a
+message the device's sequence skipped. A new boot starts with nothing kept;
+the ended boot's counters stay in `Health` for `PAST_BOOTS` boots.
+Diagnostic lines keep `NOTES_CAPACITY` lines the same way.
 
 A frame of boot 0, another framing version or a repeated or reordered device
 sequence fails the link. A late response to an unconfirmed request answers no

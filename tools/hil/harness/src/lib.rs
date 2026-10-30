@@ -123,7 +123,7 @@ fn failure(error: CallError) -> Failure {
         CallError::Rejected(_) | CallError::Payload { .. } | CallError::Rebooted { .. } => {
             Failure::Fail(error.to_string())
         }
-        CallError::Unconfirmed { .. } | CallError::Encode | CallError::Link(_) => {
+        CallError::Unconfirmed { .. } | CallError::NotSent(_) | CallError::Link(_) => {
             Failure::Incomplete(error.to_string())
         }
     }

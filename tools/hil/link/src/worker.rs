@@ -2,7 +2,6 @@
 //! every device frame into the shared state and renders diagnostic lines.
 
 use std::{
-    collections::VecDeque,
     fs,
     io::{Read, Write},
     sync::{
@@ -60,7 +59,9 @@ fn serve(
     let mut decoder = FrameDecoder::new();
     let mut notes = Notes::new();
     let mut buffer = [0_u8; 2048];
-    let mut pending = VecDeque::<Zeroizing<Vec<u8>>>::new();
+    // The frame being written: the worker takes the next one from the
+    // bounded queue only when this one left, so the queue's bound holds.
+    let mut current: Option<Zeroizing<Vec<u8>>> = None;
     let mut offset = 0;
     let mut write_deadline = None;
     let mut writable_interest = false;
@@ -69,8 +70,13 @@ fn serve(
         if stop.load(Ordering::Acquire) {
             return Ok(());
         }
-        pending.extend(commands.try_iter());
-        while let Some(frame) = pending.front() {
+        loop {
+            if current.is_none() {
+                current = commands.try_recv().ok();
+            }
+            let Some(frame) = &current else {
+                break;
+            };
             let deadline = *write_deadline.get_or_insert_with(|| Instant::now() + WRITE_DEADLINE);
             if Instant::now() >= deadline {
                 return Err(LinkError::Transport(
@@ -91,7 +97,7 @@ fn serve(
                 Ok(length) => {
                     offset += length;
                     if offset == frame.len() {
-                        pending.pop_front();
+                        current = None;
                         offset = 0;
                         write_deadline = None;
                     }
@@ -105,7 +111,7 @@ fn serve(
                 }
             }
         }
-        let wants_write = !pending.is_empty();
+        let wants_write = current.is_some();
         if wants_write != writable_interest {
             poll.interest(serial, wants_write).map_err(transport)?;
             writable_interest = wants_write;
@@ -126,7 +132,7 @@ fn serve(
         };
         let chunk = buffer.get(..length).unwrap_or_default();
         let mut state = shared.lock();
-        let boots = state.health.boots;
+        let boot = state.boot_id();
         decoder.feed(WireKind::Event, chunk, |frame| match frame {
             Ok(frame) => state.receive(Received::from_frame(&frame)),
             // Another framing is an image of another protocol.
@@ -136,13 +142,15 @@ fn serve(
             // Boot text and torn frames show in the counters.
             Err(_) => {}
         });
-        if state.health.boots != boots {
+        if state.boot_id() != boot {
             notes.restart();
         }
-        notes.feed(chunk, &mut state.notes);
-        state.health.counters = decoder.counters();
+        let mut lines = Vec::new();
+        notes.feed(chunk, &mut lines);
+        state.note(lines);
+        state.counters = decoder.counters();
         shared.changed.notify_all();
-        if let Some(error) = &state.failure {
+        if let Some(error) = state.failure() {
             return Err(error.clone());
         }
     }
