@@ -43,14 +43,14 @@ fn queue_heads_are_read_only_and_once_per_peer_across_transport_flows() {
     let mut storage = AirtimeStorage::<_, 2>::new(us(1000));
     let mut scheduler = storage.scheduler();
     let grant = scheduler
-        .reserve(queue.heads().map(|(key, _)| candidate(key, 100)))
+        .reserve(queue.heads().map(|(key, _)| candidate(key, 100)), &mut ())
         .unwrap()
         .unwrap();
     assert_eq!(queue.len(), 3);
     assert_eq!(queue.pop(grant.key()), Some(100));
     assert_eq!(queue.pop(grant.key()), Some(101));
     scheduler
-        .settle(grant.published().completed(()), us(900))
+        .settle(grant.published().completed(()), us(900), &mut ())
         .unwrap();
     assert_eq!(queue.pop(2), Some(200));
 }
@@ -81,7 +81,7 @@ fn ht_grants_limit_bursts_and_retry_receipts_equalize_service_not_packet_counts(
             .unwrap();
             candidate(key, minimum)
         });
-        let grant = scheduler.reserve(candidates).unwrap().unwrap();
+        let grant = scheduler.reserve(candidates, &mut ()).unwrap().unwrap();
         let key = grant.key();
         let limit = TxCost::maximum_psdu_bytes(
             grant.budget_micros().get(),
@@ -114,7 +114,7 @@ fn ht_grants_limit_bursts_and_retry_receipts_equalize_service_not_packet_counts(
         charged[index] += u64::from(charge.get());
         packets[index] += u32::from(frames);
         scheduler
-            .settle(grant.published().completed(receipt), charge)
+            .settle(grant.published().completed(receipt), charge, &mut ())
             .unwrap();
         for flow in 0..frames {
             queue
@@ -148,16 +148,16 @@ fn failed_reservation_and_cancelled_preparation_preserve_packet_ownership() {
     let mut storage = AirtimeStorage::<_, 2, 1>::new(us(1000));
     let mut scheduler = storage.scheduler();
     let grant = scheduler
-        .reserve(queue.heads().map(|(key, _)| candidate(key, 100)))
+        .reserve(queue.heads().map(|(key, _)| candidate(key, 100)), &mut ())
         .unwrap()
         .unwrap();
     assert_eq!(
-        scheduler.reserve(queue.heads().map(|(key, _)| candidate(key, 100))),
+        scheduler.reserve(queue.heads().map(|(key, _)| candidate(key, 100)), &mut ()),
         Err(AirtimeError::ReservationCapacity)
     );
     assert_eq!(queue.len(), 2);
     assert_eq!(drops.get(), 0);
-    scheduler.cancel(grant).unwrap();
+    scheduler.cancel(grant, &mut ()).unwrap();
     assert_eq!(queue.len(), 2);
     assert_eq!(drops.get(), 0);
     drop(queue.pop(1).unwrap());

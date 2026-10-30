@@ -65,6 +65,15 @@ is gone both fail, so every list only shrinks:
 - `EXTERNAL_ASYNC_CRATES`: direct normal `embassy-sync` edges in cooperate,
   the network adapter, the HIL agent and the three HIL images.
 
+## IEEE 802.11 foreign dependencies
+
+`ieee80211_protocol_packages_take_no_trace_serialization_or_hil` rejects a
+direct normal edge from any package under `protocols/ieee80211/` to
+`oer-trace`, `serde`, `postcard`, `postcard-schema` or an `oer-hil-*`
+package, resolving `package =` and including optional and target-specific
+entries. Development and build edges are outside the rule. Protocol owners
+report to a caller-lent `oer-events` sink instead.
+
 ## External async crates
 
 `external_embassy_crates_follow_the_role_table` checks direct normal edges

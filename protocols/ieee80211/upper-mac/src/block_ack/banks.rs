@@ -8,29 +8,7 @@
 //! receive owners; their payloads are never copied. A receive credit stays
 //! free to close a reorder hole.
 
-#[cfg(oer_trace)]
-use oer_ieee80211_instrumentation::BaStop;
-#[cfg(oer_trace)]
-use oer_ieee80211_instrumentation::ReorderCause;
-#[cfg(oer_trace)]
-use oer_ieee80211_instrumentation::{Evidence, RxBaStarted, RxBaStopped, RxContainment, RxReorder};
-use oer_trace::{Noop, Observer};
-
-macro_rules! release {
-    ($owner:ident, $release:ident, $tid:expr, $cause:expr) => {{
-        oer_trace::observe!(
-            $owner.observer,
-            RxReorder {
-                tid: $tid,
-                cause: $cause,
-                held: u8::from($release.buffered),
-                released: $release.iter().count() as u8,
-                missing: $release.missing
-            }
-        );
-        $owner.release($release);
-    }};
-}
+use oer_events::{EventSink, report};
 
 use super::{
     AddbaResponse, AddbaStatus, RxAddbaRequest, RxBlockAckNegotiation, RxBlockAckSession,
@@ -49,6 +27,62 @@ use oer_ieee80211_wire::{
     status::reason_code,
 };
 use oer_time::{Duration, Instant};
+
+/// What the receive agreements decided, reported to the sink the caller lends
+/// a call. The owner keeps no count of these.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RxBlockAckEvent {
+    /// A received MPDU's aggregation evidence, for each admitted MPDU, never
+    /// a physical aggregate or member count. `bytes` is the port's MPDU
+    /// length, `None` when it does not fit.
+    Contained {
+        ampdu: RxEvidence<bool>,
+        s_mpdu: RxEvidence<bool>,
+        bytes: Option<u32>,
+    },
+    /// One reorder decision of the agreement for `tid`. `released` counts
+    /// MPDUs the reorder owner released, not application deliveries;
+    /// `missing` counts skipped sequences, not dropped buffered MPDUs.
+    Reordered {
+        tid: u8,
+        cause: ReorderCause,
+        held: u8,
+        released: u8,
+        missing: u16,
+    },
+    /// An agreement became active: the logical owner, not a confirmed
+    /// hardware register write.
+    Started { tid: u8, window: u16 },
+    /// An agreement ended.
+    Stopped { tid: u8, reason: AgreementStop },
+}
+
+/// What a reorder decision answered.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ReorderCause {
+    Receive,
+    /// The reorder gap timed out: buffered MPDUs are released and missing
+    /// sequences skipped.
+    Timeout,
+    Bar,
+    Stop,
+    /// Clear recycles its buffered owners.
+    Clear,
+    /// A buffered duplicate.
+    Duplicate,
+    /// Other rejected or stale input.
+    Rejected,
+}
+
+/// Why an agreement ended.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AgreementStop {
+    Peer,
+    Replaced,
+    Timeout,
+    InvalidGap,
+    Clear,
+}
 
 /// The most frames one agreement retains, and the most in-order releases
 /// waiting for delivery. The station's frame/token bank admits at most eight
@@ -147,7 +181,6 @@ impl<T: RxBlockAckTypes, E: Copy + Eq, const BANKS: usize, const FRAMES: usize>
             header: &mut self.header,
             banks: &mut self.banks,
             frames: &mut self.frames,
-            observer: Noop,
         }
     }
 
@@ -164,8 +197,7 @@ impl<T: RxBlockAckTypes, E: Copy + Eq, const BANKS: usize, const FRAMES: usize>
 }
 
 /// The loans a service carries, including through stop and restart.
-pub struct RxBlockAckView<'a, T: RxBlockAckTypes, E, O = Noop> {
-    observer: O,
+pub struct RxBlockAckView<'a, T: RxBlockAckTypes, E> {
     header: &'a mut Header<E>,
     banks: &'a mut [Bank<T>],
     frames: &'a mut [Option<Retained<T>>],
@@ -204,18 +236,7 @@ pub enum RxDisposition<T: RxBlockAckTypes> {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct RxBlockAckCapacity;
 
-impl<T: RxBlockAckTypes, E: Copy + Eq, O: Observer> RxBlockAckView<'_, T, E, O> {
-    /// Reborrow the owner with the caller's observer, without storing counters
-    /// or changing its placed storage.
-    pub fn observed<P: Observer>(&mut self, observer: P) -> RxBlockAckView<'_, T, E, P> {
-        RxBlockAckView {
-            header: self.header,
-            banks: self.banks,
-            frames: self.frames,
-            observer,
-        }
-    }
-
+impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
     fn queue(&mut self, response: [u8; ADDBA_ACTION_BODY_LEN]) -> bool {
         self.header.pending.push_back(response).is_ok()
     }
@@ -228,6 +249,24 @@ impl<T: RxBlockAckTypes, E: Copy + Eq, O: Observer> RxBlockAckView<'_, T, E, O> 
     /// A release overflowed its delivery order: the service must stop.
     pub fn failed(&self) -> bool {
         self.header.failed
+    }
+
+    /// Report one reorder decision and queue what it released.
+    fn released<const N: usize>(
+        &mut self,
+        release: RxReorderRelease<N>,
+        tid: u8,
+        cause: ReorderCause,
+        events: &mut impl EventSink<RxBlockAckEvent>,
+    ) {
+        report(events, || RxBlockAckEvent::Reordered {
+            tid,
+            cause,
+            held: u8::from(release.buffered),
+            released: u8::try_from(release.iter().count()).unwrap_or(u8::MAX),
+            missing: release.missing,
+        });
+        self.release(release);
     }
 
     fn release<const N: usize>(&mut self, release: RxReorderRelease<N>) {
@@ -302,29 +341,26 @@ impl<T: RxBlockAckTypes, E: Copy + Eq, O: Observer> RxBlockAckView<'_, T, E, O> 
 
     /// End only this role's agreements; every bank and retained frame returns
     /// through the same port before a healthy Stop; temporary absences keep them.
-    pub fn clear(&mut self, port: &mut impl RxBlockAckPort<T>) {
+    pub fn clear(
+        &mut self,
+        port: &mut impl RxBlockAckPort<T>,
+        events: &mut impl EventSink<RxBlockAckEvent>,
+    ) {
         for bank in self.banks.iter_mut() {
             if let Some(active) = bank.active.take() {
-                oer_trace::observe!(
-                    self.observer,
-                    RxBaStopped {
-                        tid: active.tid(),
-                        reason: BaStop::Clear
-                    }
-                );
-                #[cfg(oer_trace)]
                 let tid = active.tid();
-                let (running, _released) = active.stop();
-                oer_trace::observe!(
-                    self.observer,
-                    RxReorder {
-                        tid,
-                        cause: ReorderCause::Clear,
-                        held: 0,
-                        released: _released.iter().count() as u8,
-                        missing: 0
-                    }
-                );
+                report(events, || RxBlockAckEvent::Stopped {
+                    tid,
+                    reason: AgreementStop::Clear,
+                });
+                let (running, released) = active.stop();
+                report(events, || RxBlockAckEvent::Reordered {
+                    tid,
+                    cause: ReorderCause::Clear,
+                    held: 0,
+                    released: u8::try_from(released.iter().count()).unwrap_or(u8::MAX),
+                    missing: 0,
+                });
                 bank.free = Some(port.remove(running));
             }
             bank.response = false;
@@ -348,6 +384,10 @@ impl<T: RxBlockAckTypes, E: Copy + Eq, O: Observer> RxBlockAckView<'_, T, E, O> 
     /// with `bssid`; `supported` is whether the station admits agreements.
     /// A new association first ends every agreement of the previous one.
     #[inline(never)]
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "the validated action's fields, the port and the caller's event sink"
+    )]
     pub fn offer<P: RxBlockAckPort<T>>(
         &mut self,
         now: Instant,
@@ -356,9 +396,10 @@ impl<T: RxBlockAckTypes, E: Copy + Eq, O: Observer> RxBlockAckView<'_, T, E, O> 
         action: BlockAckAction,
         supported: bool,
         port: &mut P,
+        events: &mut impl EventSink<RxBlockAckEvent>,
     ) -> Result<(), RxBlockAckCapacity> {
         if self.association() != Some(association) {
-            self.clear(port);
+            self.clear(port, events);
             self.header.association = Some((association, bssid));
         }
         match action {
@@ -369,12 +410,7 @@ impl<T: RxBlockAckTypes, E: Copy + Eq, O: Observer> RxBlockAckView<'_, T, E, O> 
                         .is_some_and(|active| active.peer_delba(action))
                 });
                 if let Some(index) = found {
-                    self.stop(
-                        index,
-                        port,
-                        #[cfg(oer_trace)]
-                        BaStop::Peer,
-                    );
+                    self.stop(index, port, AgreementStop::Peer, events);
                 }
                 return Ok(());
             }
@@ -447,12 +483,7 @@ impl<T: RxBlockAckTypes, E: Copy + Eq, O: Observer> RxBlockAckView<'_, T, E, O> 
             return Err(RxBlockAckCapacity);
         };
         if existing.is_some() {
-            self.stop(
-                index,
-                port,
-                #[cfg(oer_trace)]
-                BaStop::Replaced,
-            );
+            self.stop(index, port, AgreementStop::Replaced, events);
         }
         let Some(bank) = self.banks.get_mut(index) else {
             return Err(RxBlockAckCapacity);
@@ -463,13 +494,8 @@ impl<T: RxBlockAckTypes, E: Copy + Eq, O: Observer> RxBlockAckView<'_, T, E, O> 
         let running = port.add(slot, agreement);
         match RxBlockAckSession::activate(negotiation, running) {
             Ok(active) => {
-                oer_trace::observe!(
-                    self.observer,
-                    RxBaStarted {
-                        tid: active.tid(),
-                        window: active.window()
-                    }
-                );
+                let (tid, window) = (active.tid(), active.window());
+                report(events, || RxBlockAckEvent::Started { tid, window });
                 bank.active = Some(active);
                 bank.response = true;
                 Ok(())
@@ -495,23 +521,17 @@ impl<T: RxBlockAckTypes, E: Copy + Eq, O: Observer> RxBlockAckView<'_, T, E, O> 
         &mut self,
         index: usize,
         port: &mut impl RxBlockAckPort<T>,
-        #[cfg(oer_trace)] _reason: BaStop,
+        reason: AgreementStop,
+        events: &mut impl EventSink<RxBlockAckEvent>,
     ) {
         if let Some(bank) = self.banks.get_mut(index) {
             bank.response = false;
             if let Some(active) = bank.active.take() {
-                #[cfg(oer_trace)]
                 let tid = active.tid();
-                oer_trace::observe!(
-                    self.observer,
-                    RxBaStopped {
-                        tid: active.tid(),
-                        reason: _reason
-                    }
-                );
+                report(events, || RxBlockAckEvent::Stopped { tid, reason });
                 let (running, released) = active.stop();
                 bank.free = Some(port.remove(running));
-                release!(self, released, tid, ReorderCause::Stop);
+                self.released(released, tid, ReorderCause::Stop, events);
             }
         }
     }
@@ -557,7 +577,12 @@ impl<T: RxBlockAckTypes, E: Copy + Eq, O: Observer> RxBlockAckView<'_, T, E, O> 
 
     /// Expire inactive agreements, each with a DELBA, and reorder gaps.
     #[inline(never)]
-    pub fn tick(&mut self, now: Instant, port: &mut impl RxBlockAckPort<T>) {
+    pub fn tick(
+        &mut self,
+        now: Instant,
+        port: &mut impl RxBlockAckPort<T>,
+        events: &mut impl EventSink<RxBlockAckEvent>,
+    ) {
         for index in 0..self.banks.len() {
             let Some(active) = self.banks.get(index).and_then(|bank| bank.active.as_ref()) else {
                 continue;
@@ -567,12 +592,7 @@ impl<T: RxBlockAckTypes, E: Copy + Eq, O: Observer> RxBlockAckView<'_, T, E, O> 
                     continue;
                 }
                 let tid = active.tid();
-                self.stop(
-                    index,
-                    port,
-                    #[cfg(oer_trace)]
-                    BaStop::Timeout,
-                );
+                self.stop(index, port, AgreementStop::Timeout, events);
                 if let Ok(delba) = encode_delba(tid, false, reason_code::TIMEOUT) {
                     // The reply queue holds ADDBA-sized bodies; the DELBA
                     // fills its prefix.
@@ -589,17 +609,11 @@ impl<T: RxBlockAckTypes, E: Copy + Eq, O: Observer> RxBlockAckView<'_, T, E, O> 
             {
                 match active.expire_gap(now, self.header.gap_timeout) {
                     Ok(Some(release)) => {
-                        #[cfg(oer_trace)]
                         let tid = active.tid();
-                        release!(self, release, tid, ReorderCause::Timeout);
+                        self.released(release, tid, ReorderCause::Timeout, events);
                     }
                     Ok(None) => {}
-                    Err(_) => self.stop(
-                        index,
-                        port,
-                        #[cfg(oer_trace)]
-                        BaStop::InvalidGap,
-                    ),
+                    Err(_) => self.stop(index, port, AgreementStop::InvalidGap, events),
                 }
             }
         }
@@ -615,6 +629,7 @@ impl<T: RxBlockAckTypes, E: Copy + Eq, O: Observer> RxBlockAckView<'_, T, E, O> 
         local: Option<[u8; 6]>,
         frame: T::Frame,
         meta: T::Meta,
+        events: &mut impl EventSink<RxBlockAckEvent>,
     ) -> RxDisposition<T> {
         let action = DecodedHeader::decode(frame.bytes()).is_some_and(|header| {
             !header.control().is_data() && header.control().subtype() == ACTION_SUBTYPE
@@ -625,23 +640,16 @@ impl<T: RxBlockAckTypes, E: Copy + Eq, O: Observer> RxBlockAckView<'_, T, E, O> 
                 Err((frame, _)) => RxDisposition::Capacity(frame),
             };
         }
-        oer_trace::observe!(self.observer, {
+        report(events, || {
             let common = meta.common();
-            let evidence = |value| match value {
-                RxEvidence::Unavailable => Evidence::Unavailable,
-                RxEvidence::HardwareObserved(true) => Evidence::HardwareYes,
-                RxEvidence::HardwareObserved(false) => Evidence::HardwareNo,
-                RxEvidence::ProtocolValidated(true) => Evidence::ProtocolYes,
-                RxEvidence::ProtocolValidated(false) => Evidence::ProtocolNo,
-            };
-            RxContainment {
-                ampdu: evidence(common.ampdu),
-                s_mpdu: evidence(common.s_mpdu),
+            RxBlockAckEvent::Contained {
+                ampdu: common.ampdu,
+                s_mpdu: common.s_mpdu,
                 bytes: u32::try_from(frame.bytes().len()).ok(),
             }
         });
         match local {
-            Some(local) => self.ingest(now, local, frame, meta),
+            Some(local) => self.ingest(now, local, frame, meta, events),
             None => RxDisposition::Deliver((frame, meta)),
         }
     }
@@ -652,6 +660,7 @@ impl<T: RxBlockAckTypes, E: Copy + Eq, O: Observer> RxBlockAckView<'_, T, E, O> 
         local: [u8; 6],
         frame: T::Frame,
         meta: T::Meta,
+        events: &mut impl EventSink<RxBlockAckEvent>,
     ) -> RxDisposition<T> {
         if let Some((tid, sequence)) = self.bar(frame.bytes(), local) {
             if let Some(active) = self
@@ -661,7 +670,7 @@ impl<T: RxBlockAckTypes, E: Copy + Eq, O: Observer> RxBlockAckView<'_, T, E, O> 
                 && let Ok(Some(release)) =
                     active.block_ack_request(now, sequence, self.header.gap_timeout)
             {
-                release!(self, release, tid, ReorderCause::Bar);
+                self.released(release, tid, ReorderCause::Bar, events);
             }
             return RxDisposition::Recycle(frame);
         }
@@ -728,36 +737,33 @@ impl<T: RxBlockAckTypes, E: Copy + Eq, O: Observer> RxBlockAckView<'_, T, E, O> 
             },
             self.header.gap_timeout,
         );
-        #[cfg(oer_trace)]
         let tid = active.tid();
         match release {
             Ok(release) if release.rejected.is_none() => {
                 if let Some(place) = self.frames.get_mut(slot) {
                     *place = Some((frame, meta));
                 }
-                release!(self, release, tid, ReorderCause::Receive);
+                self.released(release, tid, ReorderCause::Receive, events);
                 RxDisposition::Retained
             }
-            _other => {
-                oer_trace::observe!(
-                    self.observer,
-                    RxReorder {
-                        tid,
-                        cause: if matches!(
-                            _other,
-                            Err(super::RxBlockAckError::Reorder(
-                                super::RxReorderError::DuplicateSequence(_)
-                            ))
-                        ) {
-                            ReorderCause::Duplicate
-                        } else {
-                            ReorderCause::Rejected
-                        },
-                        held: 0,
-                        released: 0,
-                        missing: 0
-                    }
-                );
+            other => {
+                let cause = if matches!(
+                    other,
+                    Err(super::RxBlockAckError::Reorder(
+                        super::RxReorderError::DuplicateSequence(_)
+                    ))
+                ) {
+                    ReorderCause::Duplicate
+                } else {
+                    ReorderCause::Rejected
+                };
+                report(events, || RxBlockAckEvent::Reordered {
+                    tid,
+                    cause,
+                    held: 0,
+                    released: 0,
+                    missing: 0,
+                });
                 RxDisposition::Recycle(frame)
             }
         }

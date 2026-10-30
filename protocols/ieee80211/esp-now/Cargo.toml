@@ -9,17 +9,13 @@ description = "Portable ESP-NOW and Espressif long-range protocol owners"
 readme = "README.md"
 
 [dependencies]
+oer-events = { path = "../../../portable/events" }
 oer-ieee80211-arbiter = { path = "../arbiter" }
-oer-ieee80211-instrumentation = { path = "../instrumentation" }
 oer-ieee80211-port = { path = "../port" }
 oer-ieee80211-upper-mac = { path = "../upper-mac" }
 oer-ieee80211-wire = { path = "../wire" }
 oer-time = { path = "../../../portable/time" }
-oer-trace = { path = "../../../portable/trace" }
 zeroize = { version = "1.9.0", default-features = false, features = ["derive"] }
-
-[dev-dependencies]
-oer-ieee80211-instrumentation = { path = "../instrumentation", features = ["test-support"] }
 
 [lints]
 workspace = true

@@ -54,7 +54,10 @@ the portable runtime drives role services over that port.
 | `wire/src/extensions/wmm.rs` | WMM AC parameters and vendor IE parsing |
 | `wire/src/extensions/espressif/esp_now.rs` | ESP-NOW framing and protected-envelope validation |
 | `esp-now/src/extensions/espressif/esp_now/reassembly.rs` | Caller-owned ESP-NOW v2 datagram storage |
-| `instrumentation/src/lib.rs` | The observation events of the cores and runtime, shared by owners, collectors and host decoders |
+| `sta/src/events.rs` | The station core's events: lost tokens and data, dropped RSN input, scan table outcomes |
+| `upper-mac/src/block_ack/banks.rs` (`RxBlockAckEvent`) | The receive agreements' events: containment, reorder decisions, agreement start and stop |
+| `esp-now/src/extensions/espressif/esp_now/security.rs` (`EspNowSecurityEvent`) | The encrypted peer table's events |
+| `runtime/src/station/events.rs` | The station service's events and `StationEvents`, the sink a composition lends the service |
 
 Frame builders, sequence owners and reorder windows use
 `wire::sequence::SequenceNumber`, validating the twelve-bit range at
@@ -114,13 +117,17 @@ peer's packet numbers and replay frontier are `upper-mac`'s CCMP owners. Both us
 the arbiter's checked `WifiPlan` to exclusive standalone ESP-NOW ownership.
 
 The cores and the runtime keep no counters or diagnostics of their own work.
-An owner (the station, its data machine, the station service, the ESP-NOW
-peer table) holds an `O: oer_trace::Observer`, by default `Noop`, and reports
-what it dropped, refused or observed as an event of
-[`instrumentation`](instrumentation/README.md); an image that declares the
-`trace` class collects counts from those events. Counts that decide protocol
-behaviour (packet numbers, replay frontiers, retry and probe budgets, beacon
-deadlines) stay in their owners.
+An owner (the station, its data machine, the receive agreements, the
+ESP-NOW peer table) takes `&mut impl oer_events::EventSink<E>` as a call
+parameter and reports what it dropped, refused or decided as a value of its
+own event type `E`; it never stores the sink. The station service holds the
+sink its composition chose (`O: StationEvents`, by default `()`) and lends it
+to each call of its cores. What an event becomes, the time it is bound to and
+how it leaves the device belong to the facade or image; `()` keeps nothing and
+builds no event. No IEEE 802.11 package depends on `oer-trace`, transport
+serialization or HIL. Counts that decide protocol behaviour (packet numbers,
+replay frontiers, retry and probe budgets, beacon deadlines) stay in their
+owners.
 
 The [`runtime`](runtime/README.md) is the asynchronous glue: it waits on
 port events, deadlines and commands, hands each input to the cores and

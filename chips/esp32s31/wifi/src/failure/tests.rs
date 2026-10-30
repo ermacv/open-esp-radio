@@ -69,29 +69,3 @@ fn radio_origin_and_tracking_class_keep_their_original_clock_values() {
         }
     );
 }
-
-#[test]
-fn serialized_product_failure_retains_full_receive_and_radio_observations() {
-    let faults = [
-        StationFailure::PolicyDeadlineOverflow,
-        StationFailure::Backend(BackendFault::Receive(ReceiveFault::Service(
-            RxStageTransactionError::InvalidCreditReserve {
-                reserved: u64::MAX,
-                pool_slots: u64::MAX,
-                queue_depth: u64::MAX,
-            },
-        ))),
-        StationFailure::DrainedWithOutstanding {
-            cause: BackendFault::Clock,
-            missing: oer_ieee80211_runtime::station::PendingTerminal::Transmit(u8::MAX),
-        },
-    ];
-    for fault in faults {
-        let mut bytes = [0; 128];
-        let encoded = postcard::to_slice(&fault, &mut bytes).unwrap();
-        assert_eq!(
-            postcard::from_bytes::<StationFailure>(encoded).unwrap(),
-            fault
-        );
-    }
-}

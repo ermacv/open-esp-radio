@@ -18,7 +18,7 @@ its cyclic tags.
 
 ## Observers
 
-An owner (a core, runtime, driver or PHY owner) holds an `O: Observer`
+A chip or platform owner (a driver, executor or PHY owner) holds an `O: Observer`
 field, by default `Noop`, and passes `&O` to its children. It reports with
 
 ```rust

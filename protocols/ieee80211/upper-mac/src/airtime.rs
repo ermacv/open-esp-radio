@@ -6,6 +6,7 @@
 //! transport flow identity. All methods are synchronous and allocation-free.
 
 use core::num::NonZeroU32;
+use oer_events::EventSink;
 
 mod observation;
 pub use observation::{AirtimeAction, AirtimeObservation};
@@ -81,9 +82,9 @@ impl<'owner, K: Copy> AirtimeReservation<'owner, K> {
 /// let us = NonZeroU32::new(100).unwrap();
 /// let mut storage = AirtimeStorage::<_, 1>::new(us);
 /// let mut scheduler = storage.scheduler();
-/// let reservation = scheduler.reserve([AirtimeCandidate { key: 1, minimum_micros: us }])
+/// let reservation = scheduler.reserve([AirtimeCandidate { key: 1, minimum_micros: us }], &mut ())
 ///     .unwrap().unwrap();
-/// scheduler.cancel(reservation.published());
+/// scheduler.cancel(reservation.published(), &mut ());
 /// ```
 #[must_use = "settle committed transmission work after terminal release"]
 #[derive(Debug, Eq, PartialEq)]
@@ -178,7 +179,7 @@ fn funded_account<K>(
 /// let us = NonZeroU32::new(100).unwrap();
 /// let mut storage = AirtimeStorage::<_, 1>::new(us);
 /// let mut scheduler = storage.scheduler();
-/// let reservation = scheduler.reserve([AirtimeCandidate { key: 1, minimum_micros: us }])
+/// let reservation = scheduler.reserve([AirtimeCandidate { key: 1, minimum_micros: us }], &mut ())
 ///     .unwrap().unwrap();
 /// drop(scheduler);
 /// drop(storage);
@@ -187,7 +188,6 @@ fn funded_account<K>(
 pub struct AirtimeStorage<K, const PEERS: usize, const RESERVATIONS: usize = 2> {
     identity: u8,
     state: State<K, PEERS, RESERVATIONS>,
-    observer: Option<fn(AirtimeObservation<K>)>,
 }
 
 struct State<K, const PEERS: usize, const RESERVATIONS: usize> {
@@ -227,7 +227,6 @@ impl<K: Copy + Eq, const PEERS: usize, const RESERVATIONS: usize>
         }
         Self {
             identity: 0,
-            observer: None,
             state: State {
                 accounts: [None; PEERS],
                 pending: [None; RESERVATIONS],
@@ -242,15 +241,7 @@ impl<K: Copy + Eq, const PEERS: usize, const RESERVATIONS: usize>
         AirtimeScheduler {
             origin: Origin(&self.identity),
             state: &mut self.state,
-            observer: self.observer,
         }
-    }
-
-    /// Observe successful ledger transitions. The synchronous callback must
-    /// remain bounded and must not log, wait, or re-enter the scheduler.
-    pub const fn with_observer(mut self, observer: Option<fn(AirtimeObservation<K>)>) -> Self {
-        self.observer = observer;
-        self
     }
 }
 
@@ -267,7 +258,6 @@ impl<K: Copy + Eq, const PEERS: usize, const RESERVATIONS: usize>
 pub struct AirtimeScheduler<'owner, K, const PEERS: usize, const RESERVATIONS: usize = 2> {
     origin: Origin<'owner>,
     state: &'owner mut State<K, PEERS, RESERVATIONS>,
-    observer: Option<fn(AirtimeObservation<K>)>,
 }
 
 impl<'owner, K: Copy + Eq, const PEERS: usize, const RESERVATIONS: usize>
@@ -276,10 +266,16 @@ impl<'owner, K: Copy + Eq, const PEERS: usize, const RESERVATIONS: usize>
     /// Select once per outer key; packet queues are inspected but untouched.
     /// Errors are transactional, including capacity/overflow failures. A full
     /// reservation horizon requires a completion/cancellation edge, not polling.
+    /// Each successful transition is reported to `events` as an
+    /// [`AirtimeObservation`].
     pub fn reserve(
         &mut self,
         candidates: impl IntoIterator<Item = AirtimeCandidate<K>>,
-    ) -> Result<Option<AirtimeReservation<'owner, K>>, AirtimeError> {
+        events: &mut impl EventSink<AirtimeObservation<K>>,
+    ) -> Result<Option<AirtimeReservation<'owner, K>>, AirtimeError>
+    where
+        K: 'static,
+    {
         let pending = self
             .state
             .pending
@@ -383,7 +379,7 @@ impl<'owner, K: Copy + Eq, const PEERS: usize, const RESERVATIONS: usize>
         });
         self.state.next_id = id;
         self.state.cursor = cursor;
-        self.observe(observed, AirtimeAction::Granted, budget.get(), 0);
+        self.observe(observed, AirtimeAction::Granted, budget.get(), 0, events);
         Ok(Some(reservation))
     }
 
@@ -396,9 +392,13 @@ impl<'owner, K: Copy + Eq, const PEERS: usize, const RESERVATIONS: usize>
         &mut self,
         completion: AirtimeCompletion<'owner, K, W>,
         charged_micros: NonZeroU32,
-    ) -> Result<W, (AirtimeError, AirtimeCompletion<'owner, K, W>)> {
+        events: &mut impl EventSink<AirtimeObservation<K>>,
+    ) -> Result<W, (AirtimeError, AirtimeCompletion<'owner, K, W>)>
+    where
+        K: 'static,
+    {
         let AirtimeCompletion { publication, work } = completion;
-        match self.finish(publication.reservation, charged_micros.get()) {
+        match self.finish(publication.reservation, charged_micros.get(), events) {
             Ok(()) => Ok(work),
             Err((error, reservation)) => Err((
                 error,
@@ -415,15 +415,23 @@ impl<'owner, K: Copy + Eq, const PEERS: usize, const RESERVATIONS: usize>
     pub fn cancel(
         &mut self,
         reservation: AirtimeReservation<'owner, K>,
-    ) -> Result<(), (AirtimeError, AirtimeReservation<'owner, K>)> {
-        self.finish(reservation, 0)
+        events: &mut impl EventSink<AirtimeObservation<K>>,
+    ) -> Result<(), (AirtimeError, AirtimeReservation<'owner, K>)>
+    where
+        K: 'static,
+    {
+        self.finish(reservation, 0, events)
     }
 
     fn finish(
         &mut self,
         reservation: AirtimeReservation<'owner, K>,
         charged: u32,
-    ) -> Result<(), (AirtimeError, AirtimeReservation<'owner, K>)> {
+        events: &mut impl EventSink<AirtimeObservation<K>>,
+    ) -> Result<(), (AirtimeError, AirtimeReservation<'owner, K>)>
+    where
+        K: 'static,
+    {
         if reservation.origin != self.origin {
             return Err((AirtimeError::WrongScheduler, reservation));
         }
@@ -479,6 +487,7 @@ impl<'owner, K: Copy + Eq, const PEERS: usize, const RESERVATIONS: usize>
             },
             reservation.budget.get(),
             charged,
+            events,
         );
         Ok(())
     }

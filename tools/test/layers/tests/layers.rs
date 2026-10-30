@@ -2226,6 +2226,78 @@ embassy-sync = "1"
     ));
 }
 
+/// What an IEEE 802.11 protocol package never takes as a direct normal
+/// dependency: trace records, transport serialization and HIL. Its owners
+/// report to the sink their caller lends a call (`oer-events`); a facade or
+/// an image chooses what an event becomes and how it leaves the device.
+fn ieee80211_foreign_dependency(dependency: &str) -> bool {
+    matches!(
+        dependency,
+        "oer-trace" | "serde" | "postcard" | "postcard-schema"
+    ) || dependency.starts_with("oer-hil-")
+}
+
+fn ieee80211_foreign_edges(members: &[Member]) -> BTreeSet<Edge> {
+    members
+        .iter()
+        .filter(|member| member.path.starts_with("protocols/ieee80211/"))
+        .flat_map(|member| {
+            member
+                .dependencies
+                .iter()
+                .filter(|dependency| ieee80211_foreign_dependency(dependency))
+                .map(|dependency| (member.path.clone(), dependency.clone()))
+        })
+        .collect()
+}
+
+#[test]
+fn ieee80211_protocol_packages_take_no_trace_serialization_or_hil() {
+    let edges = ieee80211_foreign_edges(&workspace_members());
+    assert!(edges.is_empty(), "{edges:?}");
+}
+
+#[test]
+fn ieee80211_foreign_dependencies_include_aliases_and_spare_other_families() {
+    let manifest: toml::Value = toml::from_str(
+        r#"
+[dependencies]
+events = { package = "oer-events", path = "../../../portable/events" }
+records = { package = "oer-trace", path = "../../../portable/trace" }
+[target.'cfg(target_arch = "riscv32")'.dependencies]
+schema = { package = "postcard-schema", version = "0.2", optional = true }
+agent = { package = "oer-hil-agent", path = "../../hil/agent" }
+[dev-dependencies]
+serde = "1"
+"#,
+    )
+    .expect("manifest");
+    let workspace = toml::Value::Table(toml::Table::new());
+    let dependencies = normal_dependencies(&manifest, &workspace);
+    let runtime = Member {
+        dependencies: dependencies.clone(),
+        ..member(
+            "protocols/ieee80211/runtime",
+            "oer-ieee80211-runtime",
+            false,
+            &[],
+        )
+    };
+    let facade = Member {
+        dependencies,
+        ..member("chips/esp32s31/wifi", "oer-esp32s31-wifi", false, &[])
+    };
+    assert_eq!(
+        ieee80211_foreign_edges(&[runtime, facade]),
+        ["oer-hil-agent", "oer-trace", "postcard-schema"]
+            .map(|dependency| (
+                "protocols/ieee80211/runtime".to_owned(),
+                dependency.to_owned()
+            ))
+            .into()
+    );
+}
+
 #[test]
 fn external_crate_homes_and_futures_exclusions_are_explicit() {
     for (dependency, allowed) in [
@@ -2834,7 +2906,7 @@ fn drivers_and_adapters_stand_on_the_hal_and_the_port_never_above_it() {
         ),
         (
             Role::ObservationContract,
-            "protocols/ieee80211/instrumentation",
+            "chips/esp32s31/instrumentation",
             true,
         ),
         (PROTOCOL_PORT, "protocols/ieee80211/port", true),
@@ -3044,7 +3116,7 @@ fn hil_roles_keep_radio_out_of_the_framework_and_images_behind_the_facade() {
             (Role::EmbassyAdapter, "portable/embassy/net", true),
             (
                 Role::ObservationContract,
-                "protocols/ieee80211/instrumentation",
+                "chips/esp32s31/instrumentation",
                 true,
             ),
             (Role::Hal, "chips/esp32s31/hal", false),

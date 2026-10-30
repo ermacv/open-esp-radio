@@ -160,7 +160,7 @@ fn sa_query_deadline_overflow_disconnects_once_and_returns_every_key_and_credit(
             "no unschedulable SA Query is sent"
         );
         assert!(world.station.poll_deadline().is_none());
-        assert!(world.station.poll_action(late).is_none());
+        assert!(world.station.poll_action(late, &mut world.losses).is_none());
     });
 }
 
@@ -310,7 +310,7 @@ fn same_igtk_rekey_keeps_its_ipn_and_a_new_igtk_activates_at_the_terminal() {
         );
         world.hold_key_installs = false;
         for input in world.pending_installs.drain(..).collect::<Vec<_>>() {
-            world.station.input(at(45), input);
+            world.station.input(at(45), input, &mut world.losses);
         }
         world.run(at(45));
         world.receive(at(46), &wire(GROUP_DEAUTH_NEXT));
@@ -361,21 +361,23 @@ fn query_timeout_and_local_leave_keep_the_pairwise_key_until_protected_tx_return
                 let (mut world, _, _) = connected(mint);
                 let now = if timeout {
                     world.receive(at(50), &plain_disconnect(0xa0, 6));
-                    world.station.input(at(1074), StaInput::Tick);
+                    world
+                        .station
+                        .input(at(1074), StaInput::Tick, &mut world.losses);
                     at(1074)
                 } else {
                     world.command(at(50), 8, StaCommand::Disconnect).unwrap();
                     at(50)
                 };
                 let Some(StaAction::TransmitProtected { transmit, .. }) =
-                    world.station.poll_action(now)
+                    world.station.poll_action(now, &mut world.losses)
                 else {
                     panic!("protected Deauthentication");
                 };
                 world.transmitted(transmit, true);
                 assert_eq!(world.frames.last().unwrap()[..2], [0xc0, 0x40]);
                 assert!(matches!(world.station.keys.pairwise, KeyCell::Installed(_)));
-                assert!(world.station.poll_action(now).is_none());
+                assert!(world.station.poll_action(now, &mut world.losses).is_none());
                 match outcome {
                     Some(outcome) => world.outcomes.push_back((outcome, true)),
                     None => world.unsend_next = true,

@@ -51,7 +51,7 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps24, ServiceContext
         let station_tickets: [_; 4] = core::array::from_fn(|_| tickets.next().unwrap());
         let data_tickets: [_; 4] = core::array::from_fn(|_| tickets.next().unwrap());
         let (config, _) = config(StaSecurity::Open);
-        let observed = config.observer;
+        let observed: Observed = &*Box::leak(Box::new(Observations::default()));
         let (station, credits) = Station::new_open(
             config,
             StationResources::<_, 4, 4, 1> {
@@ -77,7 +77,6 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps24, ServiceContext
                 data_tickets,
                 <[_; 4]>::try_from(large).ok().unwrap(),
                 MODEL_TX_QUEUE_DEPTH,
-                observed,
             ),
             arbiter,
             EspressifRateSelection::<ModelCaps24>::new(),
@@ -125,7 +124,7 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps24, ServiceContext
             service.arbiter = arbiter;
             service.state.station = bank.restart(places).into_parts().0;
             let Some(StaAction::Configure(receive, pending)) =
-                service.state.station.poll_action(Instant::EPOCH)
+                service.state.station.poll_action(Instant::EPOCH, &mut ())
             else {
                 panic!("the restart reclaims receive configuration")
             };
@@ -287,7 +286,7 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps24, ServiceContext
             );
         }
         assert_eq!(observed.tokens_lost(), 0);
-        // A `Noop` observer adds nothing to the service's state.
+        // The empty sink adds nothing to the service's state.
         #[allow(dead_code)]
         struct Unobserved<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id, C: StaCallbacks, S> {
             station: PortStation<'id, B, C, 1>,
@@ -308,7 +307,7 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps24, ServiceContext
                     Callbacks,
                     EspressifRateSelection<ModelCaps24>,
                     1,
-                    oer_trace::Noop,
+                    (),
                 >,
             >(),
             core::mem::size_of::<

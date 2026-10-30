@@ -108,8 +108,8 @@ radio runner (P2)
   `settle` needs an explicit nonzero modelled cost. Unknown cost is never zero
   or a refund; dropping a token refunds nothing. Retiring a generation pins it
   while work is outstanding.
-- `with_observer` attaches a bounded synchronous observer of grants,
-  settlements and cancellations; it must not log, await or re-enter.
+- `reserve`, `settle` and `cancel` report each grant, settlement and
+  cancellation to the caller's `EventSink`; the ledger holds no sink.
 
 ## TX cost model (`oer-esp32s31-ieee80211-driver::mac`)
 

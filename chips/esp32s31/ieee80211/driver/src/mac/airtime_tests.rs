@@ -20,7 +20,10 @@ mod queues;
 fn unknown_receipt_keeps_the_reservation_until_an_explicit_charge_is_supplied() {
     let mut storage = AirtimeStorage::<_, 1, 1>::new(us(1000));
     let mut scheduler = storage.scheduler();
-    let reservation = scheduler.reserve([candidate(1, 100)]).unwrap().unwrap();
+    let reservation = scheduler
+        .reserve([candidate(1, 100)], &mut ())
+        .unwrap()
+        .unwrap();
     let mut receipt = MacTxWork::new();
     receipt.record(1000, 1, None);
     let completion = reservation.published().completed(receipt);
@@ -28,12 +31,12 @@ fn unknown_receipt_keeps_the_reservation_until_an_explicit_charge_is_supplied() 
     assert_eq!(completion.reserved_micros(), us(1000));
     assert!(completion.work().estimated_exchange_micros(0).is_none());
     assert!(matches!(
-        scheduler.reserve([]),
+        scheduler.reserve([], &mut ()),
         Err(AirtimeError::ReservationCapacity)
     ));
     assert_eq!(scheduler.balance_micros(1), Some(0));
     // Synthetic caller policy for this ownership test, not a PHY estimate.
-    let retained = scheduler.settle(completion, us(1700)).unwrap();
+    let retained = scheduler.settle(completion, us(1700), &mut ()).unwrap();
     assert_eq!(retained, receipt);
     assert_eq!(scheduler.balance_micros(1), Some(-700));
 }

@@ -146,10 +146,7 @@ fn addba_programs_an_owned_bank_before_response_and_reorders_downlink() {
         })
     });
     assert_eq!(counters.rx_frames_dropped(), 0);
-    assert_eq!(
-        counters.rx_msdus_refused(oer_ieee80211_instrumentation::RxMsduRefusal::QueueFull),
-        0
-    );
+    assert_eq!(counters.rx_msdus_refused(RxMsduRefusal::QueueFull), 0);
 }
 
 #[test]

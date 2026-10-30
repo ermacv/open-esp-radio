@@ -19,6 +19,8 @@
 //! names the lent one when it submits, and only the station removes it),
 //! the replay check and, on a non-QoS BSS, the station's sequence space.
 
+use crate::events::{DataLoss, StaEvent};
+use oer_events::{EventSink, report};
 use oer_ieee80211_port::{
     AckHeader, HeaderSpec, MpduLength, ReturnedMpdu, RxCryptoStatus, RxEvidence, RxMeta, SingleEnd,
     SingleOutcome, SizedFrame, TxBufferMemory, TxOutcome,
@@ -29,7 +31,6 @@ use oer_ieee80211_wire::{
     sequence::SequenceNumber,
     station::StaProtectedDataFrame,
 };
-use oer_trace::{Noop, Observer};
 
 use crate::epoch::LinkEpoch;
 use crate::machine::{LinkMode, LinkProtection, LinkView, StaTokens};
@@ -444,7 +445,7 @@ impl<'id, K, C, A, Path: PoolPath> DataTxContext<'id, K, C, A, Path> {
 ///     data.poll_action()
 /// }
 /// ```
-pub struct StaData<'id, D: StaDataTokens, K, const CAP: usize = 8, O: Observer = Noop> {
+pub struct StaData<'id, D: StaDataTokens, K, const CAP: usize = 8> {
     tickets: Pool<D::Ticket>,
     buffers: Pool<D::Buffer>,
     /// The attempts owed, by TID (a non-QoS link's in the first), each in
@@ -455,29 +456,20 @@ pub struct StaData<'id, D: StaDataTokens, K, const CAP: usize = 8, O: Observer =
     next_order: u32,
     /// The current link: [`Self::leave`] ends it.
     link: Option<LinkEpoch<'id, D::EpochPath>>,
-    /// Receives what the machine lost.
-    observer: O,
 }
 
 /// Terminal data bank. Queued work has returned its frame credits; it has no
 /// admission, input or transmission methods and cannot begin another link.
-pub struct RetiredData<'id, D: StaDataTokens, K, const CAP: usize = 8, O: Observer = Noop> {
+pub struct RetiredData<'id, D: StaDataTokens, K, const CAP: usize = 8> {
     tickets: Pool<D::Ticket>,
     buffers: Pool<D::Buffer>,
     owed: [Fifo<DataTransmit<'id, D, K, ()>, CAP>; 8],
     admission: Admissions,
     next_order: u32,
-    /// Receives what the machine lost.
-    observer: O,
 }
 
-impl<
-    'id,
-    D: StaDataTokens,
-    K: oer_ieee80211_port::Ieee80211Capabilities,
-    const CAP: usize,
-    O: Observer,
-> RetiredData<'id, D, K, CAP, O>
+impl<'id, D: StaDataTokens, K: oer_ieee80211_port::Ieee80211Capabilities, const CAP: usize>
+    RetiredData<'id, D, K, CAP>
 {
     pub fn available(&self, category: WmmAccessCategory) -> u32 {
         self.admission.available(category).count_ones()
@@ -485,14 +477,13 @@ impl<
 
     /// Move the same credits, ordering frontier and admission permissions into
     /// another run on this installation. No pool or permission is minted.
-    pub fn restart(self) -> StaData<'id, D, K, CAP, O> {
+    pub fn restart(self) -> StaData<'id, D, K, CAP> {
         let Self {
             tickets,
             buffers,
             owed,
             admission,
             next_order,
-            observer,
         } = self;
         StaData {
             tickets,
@@ -500,29 +491,24 @@ impl<
             owed,
             admission,
             next_order,
-            observer,
             link: None,
         }
     }
 }
 
-impl<
-    'id,
-    D: StaDataTokens,
-    K: oer_ieee80211_port::Ieee80211Capabilities,
-    const CAP: usize,
-    O: Observer,
-> StaData<'id, D, K, CAP, O>
+impl<'id, D: StaDataTokens, K: oer_ieee80211_port::Ieee80211Capabilities, const CAP: usize>
+    StaData<'id, D, K, CAP>
 {
     /// Retire the machine into caller-owned storage without copying its
     /// queued-work banks through the CPU stack.
     #[cfg(feature = "placement")]
     pub fn finish_placed<'a, 'b>(
         mut machine: oer_memory::Placed<'a, Self>,
-        destination: &'b mut core::mem::MaybeUninit<RetiredData<'id, D, K, CAP, O>>,
-    ) -> oer_memory::Placed<'b, RetiredData<'id, D, K, CAP, O>> {
-        machine.leave();
-        let (tickets, buffers, owed, admission, next_order, link, observer) = oer_memory::unpack_placed!(
+        destination: &'b mut core::mem::MaybeUninit<RetiredData<'id, D, K, CAP>>,
+        events: &mut impl EventSink<StaEvent>,
+    ) -> oer_memory::Placed<'b, RetiredData<'id, D, K, CAP>> {
+        machine.leave(events);
+        let (tickets, buffers, owed, admission, next_order, link) = oer_memory::unpack_placed!(
             machine,
             Self {
                 tickets,
@@ -530,8 +516,7 @@ impl<
                 owed,
                 admission,
                 next_order,
-                link,
-                observer
+                link
             }
         );
         drop(link);
@@ -542,22 +527,20 @@ impl<
                 owed => |place| owed.move_to(place).into_mut(),
                 admission: admission.read(),
                 next_order: next_order.read(),
-                observer: observer.read(),
             })
         })
     }
 
     /// End admission and reclaim queued frames after the backend returned its
     /// submitted terminals. Returned owners remain in the terminal resource bank.
-    pub fn finish(mut self) -> RetiredData<'id, D, K, CAP, O> {
-        self.leave();
+    pub fn finish(mut self, events: &mut impl EventSink<StaEvent>) -> RetiredData<'id, D, K, CAP> {
+        self.leave(events);
         let Self {
             tickets,
             buffers,
             owed,
             admission,
             next_order,
-            observer,
             link: _,
         } = self;
         RetiredData {
@@ -566,7 +549,6 @@ impl<
             owed,
             admission,
             next_order,
-            observer,
         }
     }
 
@@ -577,7 +559,6 @@ impl<
         tickets: [D::Ticket; TICKETS],
         buffers: [D::Buffer; BUFFERS],
         depth: core::num::NonZeroU8,
-        observer: O,
     ) -> Self {
         const {
             if TICKETS > CAP {
@@ -591,7 +572,6 @@ impl<
             admission: Admissions::new(depth, TICKETS),
             next_order: 0,
             link: None,
-            observer,
         }
     }
 
@@ -602,7 +582,6 @@ impl<
         tickets: [D::Ticket; TICKETS],
         buffers: [D::Buffer; BUFFERS],
         depth: core::num::NonZeroU8,
-        observer: O,
     ) -> &mut Self {
         const {
             if TICKETS > CAP {
@@ -616,41 +595,33 @@ impl<
             admission: Admissions::new(depth, TICKETS),
             next_order: 0,
             link: None,
-            observer: observer,
         })
     }
 
     /// The station's link ended: the queue belongs to it. Every MPDU owed
     /// for it drains into its tokens, counted; its submitted ones return
     /// their tokens with their terminals and never go again.
-    pub fn leave(&mut self) {
+    pub fn leave(&mut self, events: &mut impl EventSink<StaEvent>) {
         for queue in &mut self.owed {
             while let Some(owed) = queue.pop() {
-                oer_trace::observe!(
-                    self.observer,
-                    oer_ieee80211_instrumentation::DataMsduLost {
-                        reason: oer_ieee80211_instrumentation::DataLoss::LeftBehind
-                    }
-                );
-                self.tickets.put(owed.ticket, &self.observer);
-                self.buffers
-                    .put(owed.buffer.into_fresh(D::renew), &self.observer);
+                report(events, || StaEvent::DataLost(DataLoss::LeftBehind));
+                self.tickets.put(owed.ticket, events);
+                self.buffers.put(owed.buffer.into_fresh(D::renew), events);
             }
         }
         self.link = None;
     }
 
     /// An MPDU a full queue did not take: its tokens come back, counted.
-    fn overflowed(&mut self, transmit: DataTransmit<'id, D, K, ()>) {
-        oer_trace::observe!(
-            self.observer,
-            oer_ieee80211_instrumentation::DataMsduLost {
-                reason: oer_ieee80211_instrumentation::DataLoss::Overflow
-            }
-        );
-        self.tickets.put(transmit.ticket, &self.observer);
+    fn overflowed(
+        &mut self,
+        transmit: DataTransmit<'id, D, K, ()>,
+        events: &mut impl EventSink<StaEvent>,
+    ) {
+        report(events, || StaEvent::DataLost(DataLoss::Overflow));
+        self.tickets.put(transmit.ticket, events);
         self.buffers
-            .put(transmit.buffer.into_fresh(D::renew), &self.observer);
+            .put(transmit.buffer.into_fresh(D::renew), events);
     }
 
     /// Whether the machine takes one more MSDU now.
@@ -660,7 +631,11 @@ impl<
 
     /// Return an accepted terminal or a local refusal and all its owners.
     /// This operation always consumes the resources; it has no refusal result.
-    pub fn returned(&mut self, input: DataReturn<'id, D, K>) {
+    pub fn returned(
+        &mut self,
+        input: DataReturn<'id, D, K>,
+        events: &mut impl EventSink<StaEvent>,
+    ) {
         match input {
             DataReturn::Refused {
                 context,
@@ -671,16 +646,10 @@ impl<
                 let (context, permit) = context.admission(());
                 self.admission.put(context.access_category, permit);
                 if self.is_current(&context) {
-                    oer_trace::observe!(
-                        self.observer,
-                        oer_ieee80211_instrumentation::DataMsduLost {
-                            reason: oer_ieee80211_instrumentation::DataLoss::PreparationRefused
-                        }
-                    );
+                    report(events, || StaEvent::DataLost(DataLoss::PreparationRefused));
                 }
-                self.tickets.put(ticket, &self.observer);
-                self.buffers
-                    .put(buffer.into_fresh(D::renew), &self.observer);
+                self.tickets.put(ticket, events);
+                self.buffers.put(buffer.into_fresh(D::renew), events);
             }
             DataReturn::TxDone {
                 context,
@@ -692,42 +661,21 @@ impl<
                 self.admission.put(context.access_category, permit);
                 if !self.is_current(&context) {
                     if matches!(completion, TxOutcome::Withdrawn(_)) {
-                        oer_trace::observe!(
-                            self.observer,
-                            oer_ieee80211_instrumentation::DataMsduLost {
-                                reason: oer_ieee80211_instrumentation::DataLoss::LeftBehind
-                            }
-                        );
+                        report(events, || StaEvent::DataLost(DataLoss::LeftBehind));
                     }
-                    self.tickets.put(ticket, &self.observer);
-                    self.buffers
-                        .put(buffer.into_fresh(D::renew), &self.observer);
+                    self.tickets.put(ticket, events);
+                    self.buffers.put(buffer.into_fresh(D::renew), events);
                     return;
                 }
                 match completion {
                     TxOutcome::Expired { .. } => {
-                        oer_trace::observe!(
-                            self.observer,
-                            oer_ieee80211_instrumentation::DataMsduLost {
-                                reason: oer_ieee80211_instrumentation::DataLoss::Expired
-                            }
-                        );
+                        report(events, || StaEvent::DataLost(DataLoss::Expired));
                     }
                     TxOutcome::Indeterminate(_) => {
-                        oer_trace::observe!(
-                            self.observer,
-                            oer_ieee80211_instrumentation::DataMsduLost {
-                                reason: oer_ieee80211_instrumentation::DataLoss::Indeterminate
-                            }
-                        );
+                        report(events, || StaEvent::DataLost(DataLoss::Indeterminate));
                     }
                     TxOutcome::Ended(SingleEnd::ContentionLimit(_)) => {
-                        oer_trace::observe!(
-                            self.observer,
-                            oer_ieee80211_instrumentation::DataMsduLost {
-                                reason: oer_ieee80211_instrumentation::DataLoss::ContentionLimited
-                            }
-                        );
+                        report(events, || StaEvent::DataLost(DataLoss::ContentionLimited));
                     }
                     _ => {}
                 }
@@ -752,13 +700,12 @@ impl<
                         a.context.order.wrapping_sub(next_order)
                             < b.context.order.wrapping_sub(next_order)
                     }) {
-                        self.overflowed(again);
+                        self.overflowed(again, events);
                     }
                     return;
                 }
-                self.tickets.put(ticket, &self.observer);
-                self.buffers
-                    .put(buffer.into_fresh(D::renew), &self.observer);
+                self.tickets.put(ticket, events);
+                self.buffers.put(buffer.into_fresh(D::renew), events);
             }
         }
     }
@@ -772,15 +719,16 @@ impl<
     pub fn input<T: StaTokens<EpochPath = D::EpochPath>>(
         &mut self,
         input: DataInput<'_, '_, '_, 'id, T>,
+        events: &mut impl EventSink<StaEvent>,
     ) -> Result<(), DataRefusal> {
         let DataInput { msdu, link } = input;
         if self.link != Some(link.epoch) {
-            self.leave();
+            self.leave(events);
             self.link = Some(link.epoch);
         }
         let ticket = self.tickets.take().ok_or(DataRefusal::NoTokens)?;
         let Some(mut buffer) = self.buffers.take() else {
-            self.tickets.put(ticket, &self.observer);
+            self.tickets.put(ticket, events);
             return Err(DataRefusal::NoTokens);
         };
         let tid = msdu.priority;
@@ -798,8 +746,8 @@ impl<
         if mpdu_len(qos, protection, msdu.payload.len())
             .is_none_or(|length| length > buffer.bytes_mut().len())
         {
-            self.tickets.put(ticket, &self.observer);
-            self.buffers.put(buffer, &self.observer);
+            self.tickets.put(ticket, events);
+            self.buffers.put(buffer, events);
             return Err(DataRefusal::TooLong);
         }
         let sequence_number = match &mut link.mode {
@@ -834,13 +782,13 @@ impl<
                     buffer: ReturnedMpdu::Fresh(buffer),
                 };
                 if let Err(owed) = slot.select_mut(&mut self.owed).push(owed) {
-                    self.overflowed(owed);
+                    self.overflowed(owed, events);
                 }
                 Ok(())
             }
             None => {
-                self.tickets.put(ticket, &self.observer);
-                self.buffers.put(buffer, &self.observer);
+                self.tickets.put(ticket, events);
+                self.buffers.put(buffer, events);
                 Err(DataRefusal::TooLong)
             }
         }
@@ -986,9 +934,7 @@ fn sized<K: oer_ieee80211_port::Ieee80211Capabilities, C: oer_ieee80211_port::Tx
     .ok()
 }
 
-mod arp;
 mod ethernet;
-pub use arp::{received_arp, transmitted_arp};
 pub use ethernet::{EthernetFrame, FrameTooLong, MAX_ETHERNET_PAYLOAD_LEN, TxMsdu};
 
 #[cfg(test)]

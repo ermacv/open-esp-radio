@@ -157,15 +157,14 @@ pub(super) fn unprotected_action(
     parse_block_ack_action(header.body())
 }
 
-impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks, O: Observer>
-    Station<'id, T, K, C, O>
-{
+impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, T, K, C> {
     /// Attempt a response using the station's existing control credits and,
     /// when negotiated, its management protection. Busy returns the owner.
     #[inline(never)]
     pub fn try_block_ack_reply(
         &mut self,
         reply: RxBlockAckReply<'id, T::EpochPath>,
+        events: &mut impl EventSink<StaEvent>,
     ) -> BlockAckReplyResult<'_, 'id, T, K> {
         if self.epoch != Some(reply.epoch) || !self.is_connected() {
             return Err((reply, BlockAckReplyRefusal::LinkChanged));
@@ -198,6 +197,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks, O: Observer>
             body,
             TxPurpose::Connected(Sending::BlockAck),
             protected,
+            events,
         ) {
             Ok(transmit) => transmit,
             Err(Unsent::NoTokens) => return Err((reply, BlockAckReplyRefusal::Busy)),
@@ -205,8 +205,8 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks, O: Observer>
             Err(Unsent::NoConnection) => return Err((reply, BlockAckReplyRefusal::LinkChanged)),
         };
         if protected && !matches!(&self.keys.pairwise, KeyCell::Installed(_)) {
-            self.tickets.put(transmit.ticket, &self.config.observer);
-            self.buffers.put(transmit.buffer, &self.config.observer);
+            self.tickets.put(transmit.ticket, events);
+            self.buffers.put(transmit.buffer, events);
             return Err((reply, BlockAckReplyRefusal::LinkChanged));
         }
         if let State::Connected(connected) = &mut self.state {
@@ -216,8 +216,8 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks, O: Observer>
             match &self.keys.pairwise {
                 KeyCell::Installed(key) => Ok(StaAction::TransmitProtected { transmit, key }),
                 _ => {
-                    self.tickets.put(transmit.ticket, &self.config.observer);
-                    self.buffers.put(transmit.buffer, &self.config.observer);
+                    self.tickets.put(transmit.ticket, events);
+                    self.buffers.put(transmit.buffer, events);
                     Err((reply, BlockAckReplyRefusal::LinkChanged))
                 }
             }

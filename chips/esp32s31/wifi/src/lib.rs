@@ -13,6 +13,7 @@
 //! ESP32-S31 station composition. Installation owners stay in its runners.
 mod credentials;
 pub mod failure;
+pub mod observation;
 use core::task::{Context, Poll};
 pub use credentials::{
     Callbacks, CredentialsError, NonceExhausted, NonceSource, OpenCallbacks, PreparedCredentials,
@@ -261,13 +262,13 @@ pub use chip::{
 #[cfg(target_arch = "riscv32")]
 #[macro_export]
 macro_rules! bind_station {
- ($vis:vis mod $name:ident {wifi:$wifi:ty,radio:$radio:ty,callbacks:$callbacks:ty,observer:$observer:ty,driver_observer:$driver_observer:ty,engine:$engine:ty,events:$events:ty,fail:$fail:path $(,)?})=>{
+ ($vis:vis mod $name:ident {wifi:$wifi:ty,radio:$radio:ty,callbacks:$callbacks:ty,observer:$observer:ty,driver_observer:$driver_observer:ty,sink:$sink:ty,engine:$engine:ty,events:$events:ty,fail:$fail:path $(,)?})=>{
   $vis mod $name {
    use super::*;
    pub struct Binding;
    oer_espressif_executor::declare_port_slot!(pub slot:$crate::radio::Backend<Id,super::Binding>);
    impl $crate::Binding for Binding {
-    type Id=slot::Id;type Wifi=$wifi;type Radio=$radio;type Callbacks=$callbacks;type Observer=$observer;type DriverObserver=$driver_observer;type Engine=$engine;type Events=$events;
+    type Id=slot::Id;type Wifi=$wifi;type Radio=$radio;type Callbacks=$callbacks;type Observer=$observer;type DriverObserver=$driver_observer;type Sink=$sink;type Engine=$engine;type Events=$events;
     fn take_slot()->Option<&'static mut $crate::radio::Slot<Self>>{slot::take_static()}
     fn fail(error:$crate::InitializationError)->!{$fail(error)}
    }

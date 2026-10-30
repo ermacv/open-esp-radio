@@ -35,8 +35,8 @@ chips/espressif/{analog, boot, coex, efuse, executor, facts, ieee80211-policy,
 firmware/apps/{boot-smoke, radio-root}/
 firmware/bootstrap/esp32s31/
 firmware/probes/{esp32s31-facts, esp32s31-radio, esp32s31-register, esp32s31-rx-chain}/
-portable/{cooperate, crypto, diagnostics, memory, mmio, riscv, sort, sync, time,
-    time-virtual, trace, wire}/
+portable/{cooperate, crypto, diagnostics, events, memory, mmio, riscv, sort, sync,
+    time, time-virtual, trace, wire}/
 portable/embassy/{net, time}/
 hil-scenarios/aes/
 hil-scenarios/images/esp32s31-rpc/
@@ -44,9 +44,8 @@ hil-scenarios/services/aes/
 protocols/bluetooth/hci/
 protocols/bluetooth/le/{cipher, controller, ll, model, port, runtime, wire}/
 protocols/hil/{agent, protocol}/
-protocols/ieee80211/{ap, arbiter, cipher, esp-now,
-    instrumentation, model, port, rsn, runtime, sta,
-    upper-mac, wire}/
+protocols/ieee80211/{ap, arbiter, cipher, esp-now, model, port, rsn, runtime,
+    sta, upper-mac, wire}/
 protocols/ieee802154/{mac, model, port, wire}/
 protocols/network/
 protocols/radio/{coex, port, regulatory}/

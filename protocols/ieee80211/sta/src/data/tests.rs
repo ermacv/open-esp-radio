@@ -1,8 +1,8 @@
 //! The data machine's encapsulation, tokens and admission.
 
 use super::*;
+use crate::events::{DataLoss, StaEvent};
 use core::num::NonZeroU16;
-use oer_ieee80211_instrumentation::DataLoss;
 use oer_ieee80211_port::ResponseHeader;
 use oer_ieee80211_port::association::KEY_BANK_CAPACITY;
 use oer_ieee80211_port::{
@@ -19,42 +19,29 @@ use {oer_ieee80211_upper_mac::ccmp::CcmpRxReplayEpoch, oer_ieee80211_wire::ccmp:
 
 struct Caps;
 
-/// Each test's own recorder of the machine's observations.
-type Observed = &'static oer_ieee80211_instrumentation::Recorder<64>;
+/// The events each test's calls reported, in order.
+#[derive(Default)]
+struct Kept(Vec<StaEvent>);
 
-fn observer() -> Observed {
-    std::boxed::Box::leak(std::boxed::Box::new(
-        oer_ieee80211_instrumentation::Recorder::new(),
-    ))
+impl EventSink<StaEvent> for Kept {
+    fn event(&mut self, event: StaEvent) {
+        self.0.push(event);
+    }
 }
 
-/// `count` with `cfg(oer_trace)`, and 0 without it: observations exist only
-/// in an instrumented build.
-fn traced(count: u32) -> u32 {
-    if cfg!(oer_trace) { count } else { 0 }
-}
-
-fn losses(observer: Observed, reason: oer_ieee80211_instrumentation::DataLoss) -> u32 {
-    assert!(!observer.overflowed());
-    let lost = oer_ieee80211_instrumentation::Observation::DataMsduLost(
-        oer_ieee80211_instrumentation::DataMsduLost { reason },
-    );
-    observer
-        .observations()
-        .filter(|observation| *observation == lost)
+fn losses(events: &Kept, reason: DataLoss) -> u32 {
+    events
+        .0
+        .iter()
+        .filter(|event| **event == StaEvent::DataLost(reason))
         .count() as u32
 }
 
-fn tokens_lost(observer: Observed) -> u32 {
-    assert!(!observer.overflowed());
-    observer
-        .observations()
-        .filter(|observation| {
-            matches!(
-                observation,
-                oer_ieee80211_instrumentation::Observation::TokenLost(_)
-            )
-        })
+fn tokens_lost(events: &Kept) -> u32 {
+    events
+        .0
+        .iter()
+        .filter(|event| **event == StaEvent::TokenLost)
         .count() as u32
 }
 
@@ -224,12 +211,11 @@ fn open_link(counter: &mut SequenceCounter) -> LinkView<'_, 'static, Station<'st
     }
 }
 
-fn machine() -> StaData<'static, Data<'static>, Caps, 8, Observed> {
+fn machine() -> StaData<'static, Data<'static>, Caps, 8> {
     StaData::new(
         [1, 2],
         [Buffer(std::vec![0; 1600]), Buffer(std::vec![0; 1600])],
         core::num::NonZeroU8::new(8).unwrap(),
-        observer(),
     )
 }
 
@@ -248,7 +234,7 @@ fn epoch() -> CcmpRxReplayEpoch {
 }
 
 fn transmit(
-    data: &mut StaData<'static, Data<'static>, Caps, 8, Observed>,
+    data: &mut StaData<'static, Data<'static>, Caps, 8>,
 ) -> DataTransmit<'static, Data<'static>, Caps> {
     match data.poll_action() {
         Some(transmit) => transmit,
@@ -258,49 +244,60 @@ fn transmit(
 
 #[test]
 fn stopped_data_bank_reuses_credits_permissions_and_the_order_frontier() {
+    let mut events = Kept::default();
     let mut data = machine();
     let mut replay = epoch();
     let mut link = qos_link(&(), &mut replay);
     for _ in 0..2 {
-        data.input(DataInput {
-            msdu: msdu(6),
-            link: &mut link,
-        })
+        data.input(
+            DataInput {
+                msdu: msdu(6),
+                link: &mut link,
+            },
+            &mut events,
+        )
         .unwrap();
     }
     let next_order = data.next_order;
     let outstanding = transmit(&mut data);
     assert_eq!(data.available(WmmAccessCategory::Voice), 1);
-    let bank = data.finish();
+    let bank = data.finish(&mut events);
     assert_eq!(bank.available(WmmAccessCategory::Voice), 1);
-    assert_eq!(losses(bank.observer, DataLoss::LeftBehind), traced(1));
+    assert_eq!(losses(&events, DataLoss::LeftBehind), 1);
     let mut data = bank.restart();
     assert_eq!(data.next_order, next_order);
     assert_eq!(data.available(WmmAccessCategory::Voice), 1);
     assert_eq!(data.tickets.len(), 1);
-    data.returned(DataReturn::TxDone {
-        context: outstanding.context,
-        ticket: outstanding.ticket,
-        buffer: outstanding.buffer,
-        completion: ended(End::Delivered, 1),
-    });
+    data.returned(
+        DataReturn::TxDone {
+            context: outstanding.context,
+            ticket: outstanding.ticket,
+            buffer: outstanding.buffer,
+            completion: ended(End::Delivered, 1),
+        },
+        &mut events,
+    );
     assert_eq!(data.available(WmmAccessCategory::Voice), 2);
     assert_eq!(data.tickets.len(), 2);
     assert_eq!(data.buffers.len(), 2);
-    data.input(DataInput {
-        msdu: msdu(6),
-        link: &mut link,
-    })
+    data.input(
+        DataInput {
+            msdu: msdu(6),
+            link: &mut link,
+        },
+        &mut events,
+    )
     .unwrap();
     let transmit = transmit(&mut data);
     assert_eq!(transmit.context.order, next_order);
-    assert_eq!(tokens_lost(data.observer), 0);
+    assert_eq!(tokens_lost(&events), 0);
 }
 
 #[test]
 fn a_changed_link_refuses_data_without_reinterpreting_the_encoding_or_losing_resources() {
     for encoded_protected in [false, true] {
         for change_epoch in [false, true] {
+            let mut events = Kept::default();
             let mut data = machine();
             let capacity = data.available(WmmAccessCategory::Voice);
             let mut replay = epoch();
@@ -308,10 +305,13 @@ fn a_changed_link_refuses_data_without_reinterpreting_the_encoding_or_losing_res
             if !encoded_protected {
                 link.protection = LinkProtection::Open;
             }
-            data.input(DataInput {
-                msdu: msdu(6),
-                link: &mut link,
-            })
+            data.input(
+                DataInput {
+                    msdu: msdu(6),
+                    link: &mut link,
+                },
+                &mut events,
+            )
             .unwrap();
             let DataTransmitParts {
                 context,
@@ -340,17 +340,17 @@ fn a_changed_link_refuses_data_without_reinterpreting_the_encoding_or_losing_res
             assert_eq!(reason, crate::machine::TxRefusal::LinkChanged);
             assert_eq!(memory(&buffer), encoded);
             assert_eq!(data.available(WmmAccessCategory::Voice), capacity - 1);
-            data.returned(DataReturn::Refused {
-                context,
-                ticket,
-                buffer,
-                reason,
-            });
-            assert_eq!(data.available(WmmAccessCategory::Voice), capacity);
-            assert_eq!(
-                losses(data.observer, DataLoss::PreparationRefused),
-                traced(1)
+            data.returned(
+                DataReturn::Refused {
+                    context,
+                    ticket,
+                    buffer,
+                    reason,
+                },
+                &mut events,
             );
+            assert_eq!(data.available(WmmAccessCategory::Voice), capacity);
+            assert_eq!(losses(&events, DataLoss::PreparationRefused), 1);
             assert!(data.poll_action().is_none());
             assert_eq!(core::iter::from_fn(|| data.tickets.take()).count(), 2);
             assert_eq!(core::iter::from_fn(|| data.buffers.take()).count(), 2);
@@ -360,20 +360,23 @@ fn a_changed_link_refuses_data_without_reinterpreting_the_encoding_or_losing_res
 
 #[test]
 fn interleaved_returns_keep_the_original_tid_order_and_admission_count() {
-    let mut data = StaData::<Data, Caps, 8, Observed>::new(
+    let mut events = Kept::default();
+    let mut data = StaData::<Data, Caps, 8>::new(
         [1, 2, 3, 4],
         core::array::from_fn::<_, 4, _>(|_| Buffer(std::vec![0; 1600])),
         core::num::NonZeroU8::new(8).unwrap(),
-        observer(),
     );
     let capacity = data.available(WmmAccessCategory::Voice);
     let mut replay = epoch();
     let mut link = qos_link(&(), &mut replay);
     for priority in [6, 4, 6, 7] {
-        data.input(DataInput {
-            msdu: msdu(priority),
-            link: &mut link,
-        })
+        data.input(
+            DataInput {
+                msdu: msdu(priority),
+                link: &mut link,
+            },
+            &mut events,
+        )
         .unwrap();
     }
     let mut operations: Vec<_> = (0..4).map(|_| transmit(&mut data)).collect();
@@ -385,12 +388,15 @@ fn interleaved_returns_keep_the_original_tid_order_and_admission_count() {
     operations.insert(0, video);
     for mut operation in operations {
         fresh_memory(&mut operation.buffer)[..26].fill(0);
-        data.returned(DataReturn::TxDone {
-            context: operation.context,
-            ticket: operation.ticket,
-            buffer: operation.buffer,
-            completion: TxOutcome::Withdrawn(WithdrawCause::GateClosed),
-        });
+        data.returned(
+            DataReturn::TxDone {
+                context: operation.context,
+                ticket: operation.ticket,
+                buffer: operation.buffer,
+                completion: TxOutcome::Withdrawn(WithdrawCause::GateClosed),
+            },
+            &mut events,
+        );
     }
     assert_eq!(data.available(WmmAccessCategory::Voice), capacity);
     assert_eq!(data.available(WmmAccessCategory::Video), capacity);
@@ -411,40 +417,50 @@ fn interleaved_returns_keep_the_original_tid_order_and_admission_count() {
         let mut header = [0; 26];
         AckHeader::new(*spec).unwrap().encode(&mut header).unwrap();
         assert_eq!(tid_and_sequence(&header), (tid, sequence));
-        data.returned(DataReturn::TxDone {
-            context: operation.context,
-            ticket: operation.ticket,
-            buffer: operation.buffer,
-            completion: ended(End::Delivered, 1),
-        });
+        data.returned(
+            DataReturn::TxDone {
+                context: operation.context,
+                ticket: operation.ticket,
+                buffer: operation.buffer,
+                completion: ended(End::Delivered, 1),
+            },
+            &mut events,
+        );
     }
-    assert_eq!(tokens_lost(data.observer), 0);
-    assert_eq!(losses(data.observer, DataLoss::Overflow), traced(0));
+    assert_eq!(tokens_lost(&events), 0);
+    assert_eq!(losses(&events, DataLoss::Overflow), 0);
     assert!(data.accepts());
 }
 
 #[test]
 fn repeated_unpublished_returns_keep_the_checked_frame_and_payload() {
+    let mut events = Kept::default();
     let mut data = machine();
     let capacity = data.available(WmmAccessCategory::Voice);
     let mut replay = epoch();
     let mut link = qos_link(&(), &mut replay);
-    data.input(DataInput {
-        msdu: msdu(6),
-        link: &mut link,
-    })
+    data.input(
+        DataInput {
+            msdu: msdu(6),
+            link: &mut link,
+        },
+        &mut events,
+    )
     .unwrap();
     let mut operation = transmit(&mut data);
     let len = operation.context.frame().frame().len().get();
     let payload = memory(&operation.buffer)[34..len].to_vec();
     for _ in 0..3 {
         fresh_memory(&mut operation.buffer)[..26].fill(0);
-        data.returned(DataReturn::TxDone {
-            context: operation.context,
-            ticket: operation.ticket,
-            buffer: operation.buffer,
-            completion: TxOutcome::Withdrawn(WithdrawCause::GateClosed),
-        });
+        data.returned(
+            DataReturn::TxDone {
+                context: operation.context,
+                ticket: operation.ticket,
+                buffer: operation.buffer,
+                completion: TxOutcome::Withdrawn(WithdrawCause::GateClosed),
+            },
+            &mut events,
+        );
         operation = transmit(&mut data);
         assert_eq!(operation.context.frame().frame().len().get(), len);
         let spec = operation.context.frame().frame().header().header();
@@ -453,12 +469,15 @@ fn repeated_unpublished_returns_keep_the_checked_frame_and_payload() {
         assert_eq!(tid_and_sequence(&header), (6, 0));
         assert_eq!(&memory(&operation.buffer)[34..len], payload.as_slice());
     }
-    data.returned(DataReturn::TxDone {
-        context: operation.context,
-        ticket: operation.ticket,
-        buffer: operation.buffer,
-        completion: ended(End::Delivered, 1),
-    });
+    data.returned(
+        DataReturn::TxDone {
+            context: operation.context,
+            ticket: operation.ticket,
+            buffer: operation.buffer,
+            completion: ended(End::Delivered, 1),
+        },
+        &mut events,
+    );
     assert_eq!(core::iter::from_fn(|| data.tickets.take()).count(), 2);
     assert_eq!(core::iter::from_fn(|| data.buffers.take()).count(), 2);
     assert_eq!(data.available(WmmAccessCategory::Voice), capacity);
@@ -466,49 +485,65 @@ fn repeated_unpublished_returns_keep_the_checked_frame_and_payload() {
 
 #[test]
 fn a_late_old_link_terminal_does_not_take_a_new_links_metadata() {
+    let mut events = Kept::default();
     let mut data = machine();
     let capacity = data.available(WmmAccessCategory::Voice);
     let mut replay = epoch();
     let mut link = qos_link(&(), &mut replay);
-    data.input(DataInput {
-        msdu: msdu(6),
-        link: &mut link,
-    })
+    data.input(
+        DataInput {
+            msdu: msdu(6),
+            link: &mut link,
+        },
+        &mut events,
+    )
     .unwrap();
     let old = transmit(&mut data);
-    data.leave();
+    data.leave(&mut events);
     link.epoch = LinkEpoch::for_test(2);
-    data.input(DataInput {
-        msdu: msdu(6),
-        link: &mut link,
-    })
+    data.input(
+        DataInput {
+            msdu: msdu(6),
+            link: &mut link,
+        },
+        &mut events,
+    )
     .unwrap();
     let new = transmit(&mut data);
     assert!(!data.is_current(&old.context));
     assert!(data.is_current(&new.context));
-    data.returned(DataReturn::TxDone {
-        context: new.context,
-        ticket: new.ticket,
-        buffer: new.buffer,
-        completion: TxOutcome::Withdrawn(WithdrawCause::GateClosed),
-    });
-    data.returned(DataReturn::TxDone {
-        context: old.context,
-        ticket: old.ticket,
-        buffer: old.buffer,
-        completion: TxOutcome::Withdrawn(WithdrawCause::GateClosed),
-    });
+    data.returned(
+        DataReturn::TxDone {
+            context: new.context,
+            ticket: new.ticket,
+            buffer: new.buffer,
+            completion: TxOutcome::Withdrawn(WithdrawCause::GateClosed),
+        },
+        &mut events,
+    );
+    data.returned(
+        DataReturn::TxDone {
+            context: old.context,
+            ticket: old.ticket,
+            buffer: old.buffer,
+            completion: TxOutcome::Withdrawn(WithdrawCause::GateClosed),
+        },
+        &mut events,
+    );
     let again = transmit(&mut data);
     assert_eq!(again.ticket, 2);
     assert_eq!(again.context.order, 1);
     assert!(data.poll_action().is_none());
-    assert_eq!(losses(data.observer, DataLoss::LeftBehind), traced(1));
-    data.returned(DataReturn::TxDone {
-        context: again.context,
-        ticket: again.ticket,
-        buffer: again.buffer,
-        completion: ended(End::Delivered, 1),
-    });
+    assert_eq!(losses(&events, DataLoss::LeftBehind), 1);
+    data.returned(
+        DataReturn::TxDone {
+            context: again.context,
+            ticket: again.ticket,
+            buffer: again.buffer,
+            completion: ended(End::Delivered, 1),
+        },
+        &mut events,
+    );
     assert_eq!(data.available(WmmAccessCategory::Voice), capacity);
     assert!(data.tickets.take().is_some());
     assert!(data.tickets.take().is_some());
@@ -516,84 +551,102 @@ fn a_late_old_link_terminal_does_not_take_a_new_links_metadata() {
     assert!(data.buffers.take().is_some());
     assert!(data.buffers.take().is_some());
     assert!(data.buffers.take().is_none());
-    assert_eq!(tokens_lost(data.observer), 0);
+    assert_eq!(tokens_lost(&events), 0);
 }
 
 #[test]
 fn a_local_refusal_releases_admission_with_the_operation_resources() {
+    let mut events = Kept::default();
     let mut data = machine();
     let capacity = data.available(WmmAccessCategory::Voice);
     let mut replay = epoch();
     let mut link = qos_link(&(), &mut replay);
     for _ in 0..8 {
-        data.input(DataInput {
-            msdu: msdu(6),
-            link: &mut link,
-        })
+        data.input(
+            DataInput {
+                msdu: msdu(6),
+                link: &mut link,
+            },
+            &mut events,
+        )
         .unwrap();
         let operation = transmit(&mut data);
         assert_eq!(data.available(WmmAccessCategory::Voice), capacity - 1);
-        data.returned(DataReturn::Refused {
-            context: operation.context,
-            ticket: operation.ticket,
-            buffer: operation.buffer,
-            reason: crate::machine::TxRefusal::NoRate,
-        });
+        data.returned(
+            DataReturn::Refused {
+                context: operation.context,
+                ticket: operation.ticket,
+                buffer: operation.buffer,
+                reason: crate::machine::TxRefusal::NoRate,
+            },
+            &mut events,
+        );
         assert_eq!(data.available(WmmAccessCategory::Voice), capacity);
         assert!(data.accepts());
         assert!(data.poll_action().is_none());
     }
-    assert_eq!(tokens_lost(data.observer), 0);
+    assert_eq!(tokens_lost(&events), 0);
 }
 
 #[test]
 fn preparation_refusal_ends_only_its_msdu_without_a_radio_terminal_or_retry() {
+    let mut events = Kept::default();
     let mut data = machine();
     let capacity = data.available(WmmAccessCategory::Voice);
     let mut replay = epoch();
     let mut link = qos_link(&(), &mut replay);
     for priority in [6, 4] {
-        data.input(DataInput {
-            msdu: msdu(priority),
-            link: &mut link,
-        })
+        data.input(
+            DataInput {
+                msdu: msdu(priority),
+                link: &mut link,
+            },
+            &mut events,
+        )
         .unwrap();
     }
     let rejected = transmit(&mut data);
     let accepted = transmit(&mut data);
-    data.returned(DataReturn::Refused {
-        context: rejected.context,
-        ticket: rejected.ticket,
-        buffer: rejected.buffer,
-        reason: crate::machine::TxRefusal::Layout(oer_ieee80211_port::LayoutError::BodyOverlap),
-    });
+    data.returned(
+        DataReturn::Refused {
+            context: rejected.context,
+            ticket: rejected.ticket,
+            buffer: rejected.buffer,
+            reason: crate::machine::TxRefusal::Layout(oer_ieee80211_port::LayoutError::BodyOverlap),
+        },
+        &mut events,
+    );
     assert_eq!(data.available(WmmAccessCategory::Voice), capacity);
     assert_eq!(data.available(WmmAccessCategory::Video), capacity - 1);
-    assert_eq!(
-        losses(data.observer, DataLoss::PreparationRefused),
-        traced(1)
-    );
+    assert_eq!(losses(&events, DataLoss::PreparationRefused), 1);
     assert!(data.poll_action().is_none());
-    data.returned(DataReturn::TxDone {
-        context: accepted.context,
-        ticket: accepted.ticket,
-        buffer: accepted.buffer,
-        completion: ended(End::Delivered, 1),
-    });
+    data.returned(
+        DataReturn::TxDone {
+            context: accepted.context,
+            ticket: accepted.ticket,
+            buffer: accepted.buffer,
+            completion: ended(End::Delivered, 1),
+        },
+        &mut events,
+    );
     assert_eq!(core::iter::from_fn(|| data.tickets.take()).count(), 2);
     assert_eq!(core::iter::from_fn(|| data.buffers.take()).count(), 2);
-    assert_eq!(tokens_lost(data.observer), 0);
+    assert_eq!(tokens_lost(&events), 0);
 }
 
 #[test]
 fn a_protected_qos_msdu_leaves_room_for_the_ccmp_header_and_contends_by_its_priority() {
+    let mut events = Kept::default();
     let mut data = machine();
     let mut replay = epoch();
     let mut link = qos_link(&(), &mut replay);
-    data.input(DataInput {
-        msdu: msdu(6),
-        link: &mut link,
-    })
+    data.input(
+        DataInput {
+            msdu: msdu(6),
+            link: &mut link,
+        },
+        &mut events,
+    )
     .unwrap();
     let sent = transmit(&mut data);
     assert!(data.poll_action().is_none());
@@ -616,13 +669,17 @@ fn a_protected_qos_msdu_leaves_room_for_the_ccmp_header_and_contends_by_its_prio
 
 #[test]
 fn an_open_non_qos_msdu_takes_the_stations_sequence_number_and_no_ccmp_room() {
+    let mut events = Kept::default();
     let mut data = machine();
     let mut counter = SequenceCounter::new(SequenceNumber::new(42).unwrap());
     let mut link = open_link(&mut counter);
-    data.input(DataInput {
-        msdu: msdu(0),
-        link: &mut link,
-    })
+    data.input(
+        DataInput {
+            msdu: msdu(0),
+            link: &mut link,
+        },
+        &mut events,
+    )
     .unwrap();
     let sent = transmit(&mut data);
     let frame = memory(&sent.buffer);
@@ -635,11 +692,11 @@ fn an_open_non_qos_msdu_takes_the_stations_sequence_number_and_no_ccmp_room() {
 
 #[test]
 fn an_msdu_too_long_for_its_buffer_takes_no_sequence_number() {
-    let mut data = StaData::<Data, Caps, 8, Observed>::new(
+    let mut events = Kept::default();
+    let mut data = StaData::<Data, Caps, 8>::new(
         [1],
         [Buffer(std::vec![0; 200])],
         core::num::NonZeroU8::new(8).unwrap(),
-        observer(),
     );
     let mut counter = SequenceCounter::new(SequenceNumber::new(42).unwrap());
     let long = Msdu {
@@ -647,18 +704,24 @@ fn an_msdu_too_long_for_its_buffer_takes_no_sequence_number() {
         ..msdu(0)
     };
     assert_eq!(
-        data.input(DataInput {
-            msdu: long,
-            link: &mut open_link(&mut counter)
-        }),
+        data.input(
+            DataInput {
+                msdu: long,
+                link: &mut open_link(&mut counter)
+            },
+            &mut events
+        ),
         Err(DataRefusal::TooLong)
     );
     assert_eq!(counter.peek(), SequenceNumber::new(42).unwrap());
     // The tokens stay, and a short MSDU takes the number.
-    data.input(DataInput {
-        msdu: msdu(0),
-        link: &mut open_link(&mut counter),
-    })
+    data.input(
+        DataInput {
+            msdu: msdu(0),
+            link: &mut open_link(&mut counter),
+        },
+        &mut events,
+    )
     .unwrap();
     let sent = transmit(&mut data);
     assert_eq!(
@@ -669,17 +732,20 @@ fn an_msdu_too_long_for_its_buffer_takes_no_sequence_number() {
 
 #[test]
 fn open_mpdu_fits_exactly_without_a_temporary_ccmp_gap() {
-    let mut data = StaData::<Data, Caps, 8, Observed>::new(
+    let mut events = Kept::default();
+    let mut data = StaData::<Data, Caps, 8>::new(
         [1],
         [Buffer(std::vec![0; 24 + 8 + 100])],
         core::num::NonZeroU8::new(8).unwrap(),
-        observer(),
     );
     let mut counter = SequenceCounter::new(SequenceNumber::new(42).unwrap());
-    data.input(DataInput {
-        msdu: msdu(0),
-        link: &mut open_link(&mut counter),
-    })
+    data.input(
+        DataInput {
+            msdu: msdu(0),
+            link: &mut open_link(&mut counter),
+        },
+        &mut events,
+    )
     .unwrap();
     let sent = transmit(&mut data);
     let bytes = memory(&sent.buffer);
@@ -696,34 +762,47 @@ fn open_mpdu_fits_exactly_without_a_temporary_ccmp_gap() {
 
 #[test]
 fn msdus_wait_while_the_tokens_are_out() {
+    let mut events = Kept::default();
     let mut data = machine();
     let mut replay = epoch();
     let mut link = qos_link(&(), &mut replay);
-    data.input(DataInput {
-        msdu: msdu(0),
-        link: &mut link,
-    })
+    data.input(
+        DataInput {
+            msdu: msdu(0),
+            link: &mut link,
+        },
+        &mut events,
+    )
     .unwrap();
-    data.input(DataInput {
-        msdu: msdu(0),
-        link: &mut link,
-    })
+    data.input(
+        DataInput {
+            msdu: msdu(0),
+            link: &mut link,
+        },
+        &mut events,
+    )
     .unwrap();
     assert!(!data.accepts());
     assert_eq!(
-        data.input(DataInput {
-            msdu: msdu(0),
-            link: &mut link
-        }),
+        data.input(
+            DataInput {
+                msdu: msdu(0),
+                link: &mut link
+            },
+            &mut events
+        ),
         Err(DataRefusal::NoTokens)
     );
     let first = transmit(&mut data);
-    data.returned(DataReturn::TxDone {
-        context: first.context,
-        ticket: first.ticket,
-        buffer: first.buffer,
-        completion: ended(End::Delivered, 1),
-    });
+    data.returned(
+        DataReturn::TxDone {
+            context: first.context,
+            ticket: first.ticket,
+            buffer: first.buffer,
+            completion: ended(End::Delivered, 1),
+        },
+        &mut events,
+    );
     assert!(data.accepts());
 }
 
@@ -878,7 +957,8 @@ fn tid_and_sequence(frame: &[u8]) -> (u8, u16) {
 
 #[test]
 fn an_attempt_aborted_before_the_air_goes_again_first_with_its_sequence_number() {
-    let mut data = StaData::<Data, Caps, 8, Observed>::new(
+    let mut events = Kept::default();
+    let mut data = StaData::<Data, Caps, 8>::new(
         [1, 2, 3],
         [
             Buffer(std::vec![0; 1600]),
@@ -886,30 +966,38 @@ fn an_attempt_aborted_before_the_air_goes_again_first_with_its_sequence_number()
             Buffer(std::vec![0; 1600]),
         ],
         core::num::NonZeroU8::new(8).unwrap(),
-        observer(),
     );
     let mut replay = epoch();
     let mut link = qos_link(&(), &mut replay);
     // Two MSDUs of TID 6: the first is submitted, then a newer one waits.
-    data.input(DataInput {
-        msdu: msdu(6),
-        link: &mut link,
-    })
+    data.input(
+        DataInput {
+            msdu: msdu(6),
+            link: &mut link,
+        },
+        &mut events,
+    )
     .unwrap();
     let first = transmit(&mut data);
     let sent = tid_and_sequence(memory(&first.buffer));
-    data.input(DataInput {
-        msdu: msdu(6),
-        link: &mut link,
-    })
+    data.input(
+        DataInput {
+            msdu: msdu(6),
+            link: &mut link,
+        },
+        &mut events,
+    )
     .unwrap();
     // A closing gate aborts the first before any transmission.
-    data.returned(DataReturn::TxDone {
-        context: first.context,
-        ticket: first.ticket,
-        buffer: first.buffer,
-        completion: TxOutcome::Withdrawn(WithdrawCause::GateClosed),
-    });
+    data.returned(
+        DataReturn::TxDone {
+            context: first.context,
+            ticket: first.ticket,
+            buffer: first.buffer,
+            completion: TxOutcome::Withdrawn(WithdrawCause::GateClosed),
+        },
+        &mut events,
+    );
     // It goes again at the head of its TID's queue, before the newer MSDU,
     // with the same sequence number, in its buffer.
     let again = transmit(&mut data);
@@ -918,18 +1006,22 @@ fn an_attempt_aborted_before_the_air_goes_again_first_with_its_sequence_number()
     assert_eq!(tid_and_sequence(memory(&newer.buffer)), (6, sent.1 + 1));
     assert!(data.poll_action().is_none());
     // One that made a transmission ends: its tokens come back.
-    data.returned(DataReturn::TxDone {
-        context: again.context,
-        ticket: again.ticket,
-        buffer: again.buffer,
-        completion: ended(End::AckTimeout, 3),
-    });
+    data.returned(
+        DataReturn::TxDone {
+            context: again.context,
+            ticket: again.ticket,
+            buffer: again.buffer,
+            completion: ended(End::AckTimeout, 3),
+        },
+        &mut events,
+    );
     assert!(data.poll_action().is_none());
 }
 
 #[test]
 fn a_link_that_ends_drains_its_queue_and_its_submitted_attempts_never_go_again() {
-    let mut data = StaData::<Data, Caps, 8, Observed>::new(
+    let mut events = Kept::default();
+    let mut data = StaData::<Data, Caps, 8>::new(
         [1, 2, 3],
         [
             Buffer(std::vec![0; 1600]),
@@ -937,51 +1029,65 @@ fn a_link_that_ends_drains_its_queue_and_its_submitted_attempts_never_go_again()
             Buffer(std::vec![0; 1600]),
         ],
         core::num::NonZeroU8::new(8).unwrap(),
-        observer(),
     );
     let mut replay = epoch();
     let mut link = qos_link(&(), &mut replay);
     // One MPDU submitted and two owed on the link.
-    data.input(DataInput {
-        msdu: msdu(0),
-        link: &mut link,
-    })
+    data.input(
+        DataInput {
+            msdu: msdu(0),
+            link: &mut link,
+        },
+        &mut events,
+    )
     .unwrap();
     let submitted = transmit(&mut data);
-    data.input(DataInput {
-        msdu: msdu(0),
-        link: &mut link,
-    })
+    data.input(
+        DataInput {
+            msdu: msdu(0),
+            link: &mut link,
+        },
+        &mut events,
+    )
     .unwrap();
-    data.input(DataInput {
-        msdu: msdu(6),
-        link: &mut link,
-    })
+    data.input(
+        DataInput {
+            msdu: msdu(6),
+            link: &mut link,
+        },
+        &mut events,
+    )
     .unwrap();
     assert!(!data.accepts());
     // The link ends: the owed ones drain into their tokens, counted.
-    data.leave();
+    data.leave(&mut events);
     assert!(data.poll_action().is_none());
-    assert_eq!(losses(data.observer, DataLoss::LeftBehind), traced(2));
+    assert_eq!(losses(&events, DataLoss::LeftBehind), 2);
     // The submitted one, aborted before the air, returns its tokens and
     // does not go again: the retry rule holds within one link.
-    data.returned(DataReturn::TxDone {
-        context: submitted.context,
-        ticket: submitted.ticket,
-        buffer: submitted.buffer,
-        completion: TxOutcome::Withdrawn(WithdrawCause::GateClosed),
-    });
+    data.returned(
+        DataReturn::TxDone {
+            context: submitted.context,
+            ticket: submitted.ticket,
+            buffer: submitted.buffer,
+            completion: TxOutcome::Withdrawn(WithdrawCause::GateClosed),
+        },
+        &mut events,
+    );
     assert!(data.poll_action().is_none());
-    assert_eq!(losses(data.observer, DataLoss::LeftBehind), traced(3));
-    assert_eq!(tokens_lost(data.observer), 0);
+    assert_eq!(losses(&events, DataLoss::LeftBehind), 3);
+    assert_eq!(tokens_lost(&events), 0);
     // Every token is back: a new link takes three MSDUs again.
     let mut replay = epoch();
     let mut link = qos_link(&(), &mut replay);
     for _ in 0..3 {
-        data.input(DataInput {
-            msdu: msdu(0),
-            link: &mut link,
-        })
+        data.input(
+            DataInput {
+                msdu: msdu(0),
+                link: &mut link,
+            },
+            &mut events,
+        )
         .unwrap();
     }
     assert!(!data.accepts());
@@ -989,7 +1095,8 @@ fn a_link_that_ends_drains_its_queue_and_its_submitted_attempts_never_go_again()
 
 #[test]
 fn a_category_the_service_does_not_admit_waits_and_the_others_go_in_their_order() {
-    let mut data = StaData::<Data, Caps, 8, Observed>::new(
+    let mut events = Kept::default();
+    let mut data = StaData::<Data, Caps, 8>::new(
         [1, 2, 3],
         [
             Buffer(std::vec![0; 1600]),
@@ -997,17 +1104,19 @@ fn a_category_the_service_does_not_admit_waits_and_the_others_go_in_their_order(
             Buffer(std::vec![0; 1600]),
         ],
         core::num::NonZeroU8::new(8).unwrap(),
-        observer(),
     );
     let capacity = data.available(WmmAccessCategory::Voice);
     let mut replay = epoch();
     let mut link = qos_link(&(), &mut replay);
     // Voice (TID 6), then best effort (TID 0), then Voice again.
     for priority in [6, 0, 7] {
-        data.input(DataInput {
-            msdu: msdu(priority),
-            link: &mut link,
-        })
+        data.input(
+            DataInput {
+                msdu: msdu(priority),
+                link: &mut link,
+            },
+            &mut events,
+        )
         .unwrap();
     }
     // Voice is full at the port: best effort goes, Voice waits.
@@ -1047,50 +1156,53 @@ fn terminal_failures_retire_the_msdu_and_release_admission() {
         (ended(End::ContentionLimit, 0), 0, 1, 0),
         (TxOutcome::Expired { msdus: 1 }, 0, 0, 1),
     ] {
-        let mut data = StaData::<Data, Caps, 8, Observed>::new(
+        let mut events = Kept::default();
+        let mut data = StaData::<Data, Caps, 8>::new(
             [1],
             [Buffer(std::vec![0; 1600])],
             core::num::NonZeroU8::new(8).unwrap(),
-            observer(),
         );
         let capacity = data.available(WmmAccessCategory::Voice);
         let mut replay = epoch();
         let mut link = qos_link(&(), &mut replay);
-        data.input(DataInput {
-            msdu: msdu(6),
-            link: &mut link,
-        })
+        data.input(
+            DataInput {
+                msdu: msdu(6),
+                link: &mut link,
+            },
+            &mut events,
+        )
         .unwrap();
         let operation = transmit(&mut data);
         let buffer = match operation.buffer {
             ReturnedMpdu::Fresh(buffer) => buffer,
             ReturnedMpdu::Sent(_) => panic!("a new MSDU is fresh"),
         };
-        data.returned(DataReturn::TxDone {
-            context: operation.context,
-            ticket: operation.ticket,
-            buffer: ReturnedMpdu::Sent(buffer),
-            completion: outcome,
-        });
+        data.returned(
+            DataReturn::TxDone {
+                context: operation.context,
+                ticket: operation.ticket,
+                buffer: ReturnedMpdu::Sent(buffer),
+                completion: outcome,
+            },
+            &mut events,
+        );
         assert_eq!(data.available(WmmAccessCategory::Voice), capacity);
-        assert_eq!(
-            losses(data.observer, DataLoss::Indeterminate),
-            traced(indeterminate)
-        );
-        assert_eq!(
-            losses(data.observer, DataLoss::ContentionLimited),
-            traced(contention)
-        );
-        assert_eq!(losses(data.observer, DataLoss::Expired), traced(expired));
-        assert_eq!(tokens_lost(data.observer), 0);
+        assert_eq!(losses(&events, DataLoss::Indeterminate), indeterminate);
+        assert_eq!(losses(&events, DataLoss::ContentionLimited), contention);
+        assert_eq!(losses(&events, DataLoss::Expired), expired);
+        assert_eq!(tokens_lost(&events), 0);
         assert!(
             data.poll_action().is_none(),
             "final outcomes never retry the MSDU"
         );
-        data.input(DataInput {
-            msdu: msdu(6),
-            link: &mut link,
-        })
+        data.input(
+            DataInput {
+                msdu: msdu(6),
+                link: &mut link,
+            },
+            &mut events,
+        )
         .unwrap();
         assert_eq!(
             transmit(&mut data).ticket,
@@ -1102,31 +1214,38 @@ fn terminal_failures_retire_the_msdu_and_release_admission() {
 
 #[test]
 fn key_removal_drops_a_published_msdu_and_returns_admission_once() {
+    let mut events = Kept::default();
     let mut data = machine();
     let capacity = data.available(WmmAccessCategory::Voice);
     let mut replay = epoch();
     let mut link = qos_link(&(), &mut replay);
-    data.input(DataInput {
-        msdu: msdu(6),
-        link: &mut link,
-    })
+    data.input(
+        DataInput {
+            msdu: msdu(6),
+            link: &mut link,
+        },
+        &mut events,
+    )
     .unwrap();
     let operation = transmit(&mut data);
     let ReturnedMpdu::Fresh(buffer) = operation.buffer else {
         unreachable!()
     };
-    data.returned(DataReturn::TxDone {
-        context: operation.context,
-        ticket: operation.ticket,
-        buffer: ReturnedMpdu::Sent(buffer),
-        completion: TxOutcome::Withdrawn(WithdrawCause::KeyRemoved),
-    });
+    data.returned(
+        DataReturn::TxDone {
+            context: operation.context,
+            ticket: operation.ticket,
+            buffer: ReturnedMpdu::Sent(buffer),
+            completion: TxOutcome::Withdrawn(WithdrawCause::KeyRemoved),
+        },
+        &mut events,
+    );
     assert!(
         data.poll_action().is_none(),
         "the removed key's MSDU is not retried"
     );
     assert_eq!(data.available(WmmAccessCategory::Voice), capacity);
-    assert_eq!(tokens_lost(data.observer), 0);
+    assert_eq!(tokens_lost(&events), 0);
     for _ in 0..2 {
         assert!(data.tickets.take().is_some());
         assert!(data.buffers.take().is_some());
@@ -1173,14 +1292,18 @@ fn received<'f, T: StaTokens>(
 
 #[test]
 fn data_losses_arrive_in_the_order_they_happen() {
+    let mut events = Kept::default();
     let mut data = machine();
     let mut replay = epoch();
     let mut link = qos_link(&(), &mut replay);
     for _ in 0..2 {
-        data.input(DataInput {
-            msdu: msdu(6),
-            link: &mut link,
-        })
+        data.input(
+            DataInput {
+                msdu: msdu(6),
+                link: &mut link,
+            },
+            &mut events,
+        )
         .unwrap();
     }
     let first = transmit(&mut data);
@@ -1192,65 +1315,31 @@ fn data_losses_arrive_in_the_order_they_happen() {
             TxOutcome::Indeterminate(IndeterminateCause::HardwareTimeout),
         ),
     ] {
-        data.returned(DataReturn::TxDone {
-            context: operation.context,
-            ticket: operation.ticket,
-            buffer: operation.buffer,
-            completion,
-        });
-    }
-    data.input(DataInput {
-        msdu: msdu(6),
-        link: &mut link,
-    })
-    .unwrap();
-    data.leave();
-    let observed: Vec<_> = data.observer.observations().collect();
-    let lost = |reason| {
-        oer_ieee80211_instrumentation::Observation::DataMsduLost(
-            oer_ieee80211_instrumentation::DataMsduLost { reason },
-        )
-    };
-    if cfg!(oer_trace) {
-        assert_eq!(
-            observed,
-            [
-                lost(DataLoss::Expired),
-                lost(DataLoss::Indeterminate),
-                lost(DataLoss::LeftBehind),
-            ]
+        data.returned(
+            DataReturn::TxDone {
+                context: operation.context,
+                ticket: operation.ticket,
+                buffer: operation.buffer,
+                completion,
+            },
+            &mut events,
         );
-    } else {
-        assert!(observed.is_empty());
     }
-}
-
-#[test]
-fn the_noop_observer_adds_nothing_to_the_machines() {
-    // The machines' fields other than their observer.
-    #[allow(dead_code)]
-    struct Live<'id, D: StaDataTokens, K, const CAP: usize> {
-        tickets: Pool<D::Ticket>,
-        buffers: Pool<D::Buffer>,
-        owed: [Fifo<DataTransmit<'id, D, K, ()>, CAP>; 8],
-        admission: Admissions,
-        next_order: u32,
-        link: Option<LinkEpoch<'id, D::EpochPath>>,
-    }
-    #[allow(dead_code)]
-    struct Retired<'id, D: StaDataTokens, K, const CAP: usize> {
-        tickets: Pool<D::Ticket>,
-        buffers: Pool<D::Buffer>,
-        owed: [Fifo<DataTransmit<'id, D, K, ()>, CAP>; 8],
-        admission: Admissions,
-        next_order: u32,
-    }
+    data.input(
+        DataInput {
+            msdu: msdu(6),
+            link: &mut link,
+        },
+        &mut events,
+    )
+    .unwrap();
+    data.leave(&mut events);
     assert_eq!(
-        core::mem::size_of::<StaData<'static, Data<'static>, Caps, 8, oer_trace::Noop>>(),
-        core::mem::size_of::<Live<'static, Data<'static>, Caps, 8>>()
-    );
-    assert_eq!(
-        core::mem::size_of::<RetiredData<'static, Data<'static>, Caps, 8, oer_trace::Noop>>(),
-        core::mem::size_of::<Retired<'static, Data<'static>, Caps, 8>>()
+        events.0,
+        [
+            StaEvent::DataLost(DataLoss::Expired),
+            StaEvent::DataLost(DataLoss::Indeterminate),
+            StaEvent::DataLost(DataLoss::LeftBehind),
+        ]
     );
 }

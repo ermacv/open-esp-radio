@@ -207,23 +207,51 @@ fn channel6() -> Channel {
     Channel::ghz2_4(6, ChannelWidth::Mhz20).unwrap()
 }
 
-/// The station's, data machine's and service's observations of one case,
-/// in order; each case has its own.
-#[derive(Default)]
-struct Observations {
-    events: std::sync::Mutex<Vec<oer_ieee80211_instrumentation::Observation>>,
+/// One event the service or a core reported.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Observation {
+    Service(ServiceEvent),
+    Station(oer_ieee80211_sta::events::StaEvent),
+    BlockAck(oer_ieee80211_upper_mac::block_ack::RxBlockAckEvent),
 }
 
-impl oer_trace::Observer for Observations {
-    fn event<E: oer_trace::Event + Copy + 'static>(&self, event: E) {
-        if let Some(observation) = oer_ieee80211_instrumentation::Observation::of(&event) {
-            self.events.lock().unwrap().push(observation);
-        }
+/// The station's, data machine's and service's events of one case, in
+/// order; each case has its own. The test reads them while the service
+/// runs, so this test-only sink is shared behind a lock.
+#[derive(Default)]
+struct Observations {
+    events: std::sync::Mutex<Vec<Observation>>,
+}
+
+impl EventSink<ServiceEvent> for &Observations {
+    fn event(&mut self, event: ServiceEvent) {
+        self.events
+            .lock()
+            .unwrap()
+            .push(Observation::Service(event));
+    }
+}
+
+impl EventSink<oer_ieee80211_sta::events::StaEvent> for &Observations {
+    fn event(&mut self, event: oer_ieee80211_sta::events::StaEvent) {
+        self.events
+            .lock()
+            .unwrap()
+            .push(Observation::Station(event));
+    }
+}
+
+impl EventSink<oer_ieee80211_upper_mac::block_ack::RxBlockAckEvent> for &Observations {
+    fn event(&mut self, event: oer_ieee80211_upper_mac::block_ack::RxBlockAckEvent) {
+        self.events
+            .lock()
+            .unwrap()
+            .push(Observation::BlockAck(event));
     }
 }
 
 impl Observations {
-    fn count(&self, kind: impl Fn(&oer_ieee80211_instrumentation::Observation) -> bool) -> u32 {
+    fn count(&self, kind: impl Fn(&Observation) -> bool) -> u32 {
         self.events
             .lock()
             .unwrap()
@@ -233,60 +261,31 @@ impl Observations {
     }
 
     fn rx_frames_dropped(&self) -> u32 {
-        self.count(|event| {
-            matches!(
-                event,
-                oer_ieee80211_instrumentation::Observation::RxFrameDropped(_)
-            )
-        })
+        self.count(|event| matches!(event, Observation::Service(ServiceEvent::RxFrameDropped(_))))
     }
 
     fn port_events_lost(&self) -> u32 {
-        self.count(|event| {
-            matches!(
-                event,
-                oer_ieee80211_instrumentation::Observation::PortEventsLost(_)
-            )
-        })
+        self.count(|event| *event == Observation::Service(ServiceEvent::PortEventsLost))
     }
 
-    fn rx_msdus_refused(&self, reason: oer_ieee80211_instrumentation::RxMsduRefusal) -> u32 {
-        self.count(|event| {
-            *event
-                == oer_ieee80211_instrumentation::Observation::RxMsduRefused(
-                    oer_ieee80211_instrumentation::RxMsduRefused { reason },
-                )
-        })
+    fn rx_msdus_refused(&self, reason: RxMsduRefusal) -> u32 {
+        self.count(|event| *event == Observation::Service(ServiceEvent::RxMsduRefused(reason)))
     }
 
     fn tokens_lost(&self) -> u32 {
         self.count(|event| {
-            matches!(
-                event,
-                oer_ieee80211_instrumentation::Observation::TokenLost(_)
-            )
+            *event == Observation::Station(oer_ieee80211_sta::events::StaEvent::TokenLost)
         })
     }
 
-    fn contains(&self, observation: oer_ieee80211_instrumentation::Observation) -> bool {
+    fn contains(&self, observation: Observation) -> bool {
         self.events.lock().unwrap().contains(&observation)
     }
 }
 
 type Observed = &'static Observations;
 
-/// An Ethernet/IPv4 ARP request from 10.0.0.2 for 10.0.0.1 (RFC 826).
-const ARP_REQUEST: [u8; 28] = [
-    0, 1, 8, 0, 6, 4, 0, 1, 2, 0, 0, 0, 0, 1, 10, 0, 0, 2, 0, 0, 0, 0, 0, 0, 10, 0, 0, 1,
-];
-
-/// `count` with `cfg(oer_trace)`, and 0 without it: observations exist only
-/// in an instrumented build.
-fn traced(count: u32) -> u32 {
-    if cfg!(oer_trace) { count } else { 0 }
-}
-
-type TestConfig = (StaConfig<ModelCaps24, Callbacks, Observed>, StaSecurity);
+type TestConfig = (StaConfig<ModelCaps24, Callbacks>, StaSecurity);
 
 fn config(security: StaSecurity) -> TestConfig {
     let channels = heapless::Vec::from_slice(&[SupportedChannel::new(
@@ -311,7 +310,6 @@ fn config(security: StaSecurity) -> TestConfig {
             listen_interval: oer_ieee80211_sta::request::StationListenInterval::new(10).unwrap(),
             phy: PhyMode::Legacy,
             callbacks: Callbacks,
-            observer: &*Box::leak(Box::new(Observations::default())),
         },
         security,
     )
@@ -1020,12 +1018,7 @@ where
             };
             let mut service = Runner::<ServicePort<LocalId<'scope>>, _, _, GROUPS, Observed>::new(
                 (station, credits),
-                StaData::new(
-                    data_tickets,
-                    large,
-                    MODEL_TX_QUEUE_DEPTH,
-                    self.world.observed,
-                ),
+                StaData::new(data_tickets, large, MODEL_TX_QUEUE_DEPTH),
                 arbiter,
                 RecordingRates {
                     inner: EspressifRateSelection::<ModelCaps24>::new(),
@@ -1410,7 +1403,7 @@ where
             completions: RefCell::new(Vec::new()),
             refuse_rate: Cell::new(false),
             fail_submission: Cell::new(false),
-            observed: config.0.observer,
+            observed: &*Box::leak(Box::new(Observations::default())),
             disables_at_body_end: Cell::new(None),
             expect_queued_command_on_poison: Cell::new(false),
             expected_stream_end: Cell::new(None),
@@ -1771,7 +1764,7 @@ fn a_delayed_unwrap_leaves_the_loop_serving_the_port_and_completes_the_handshake
                 for _ in 0..50 {
                     yield_now().await;
                 }
-                assert_eq!(world.observed.rx_frames_dropped() > 0, cfg!(oer_trace));
+                assert!(world.observed.rx_frames_dropped() > 0);
                 assert_eq!(world.unwraps.borrow().len(), 1, "still unwrapping");
                 {
                     use oer_time::Clock as _;
@@ -1864,17 +1857,12 @@ fn a_one_slot_station_completes_group_replacement_through_the_service_event_stre
                     .receive(&protected_group_message1(&ptk, 3, 2), decrypted());
                 let response = world.sent(&mut seen, DATA).await;
                 assert!(matches!(response.key, Some((_, true))));
-                assert_eq!(
-                    world.observed.contains(
-                        oer_ieee80211_instrumentation::Observation::GroupKeyInstalled(
-                            oer_ieee80211_instrumentation::GroupKeyInstalled {
-                                key_id: 2,
-                                replaced: true,
-                            }
-                        )
-                    ),
-                    cfg!(oer_trace)
-                );
+                assert!(world.observed.contains(Observation::Service(
+                    ServiceEvent::GroupKeyInstalled {
+                        key_id: 2,
+                        replaced: true,
+                    }
+                )));
                 world.station_command(2, StaCommand::Disconnect).await;
                 world.sent(&mut seen, DEAUTHENTICATION).await;
                 world
@@ -2594,7 +2582,7 @@ fn lost_port_events_are_counted_and_the_service_keeps_running() {
             assert_eq!(data.plaintext[4..10], BSSID);
         })
     });
-    assert_eq!(counters.port_events_lost(), traced(1));
+    assert_eq!(counters.port_events_lost(), 1);
 }
 
 #[test]
@@ -2658,18 +2646,13 @@ fn protected_qos_ht_group_message_rekeys_once_after_integrity_and_replay_admissi
                 for _ in 0..20 {
                     yield_now().await;
                 }
-                assert_eq!(
-                    world.observed.contains(
-                        oer_ieee80211_instrumentation::Observation::RxFrameDropped(
-                            oer_ieee80211_instrumentation::RxFrameDropped {
-                                reason: oer_ieee80211_instrumentation::RxDrop::Frame(
-                                    oer_ieee80211_instrumentation::FrameDrop::Integrity
-                                )
-                            }
+                assert!(world.observed.contains(Observation::Service(
+                    ServiceEvent::RxFrameDropped(RxDrop::Station(
+                        oer_ieee80211_sta::machine::StaRxError::Frame(
+                            oer_ieee80211_upper_mac::receive::RxDropReason::Integrity
                         )
-                    ),
-                    cfg!(oer_trace)
-                );
+                    ))
+                )));
                 world.air.receive(&protected, decrypted());
                 let reply = world.sent(&mut seen, DATA).await;
                 assert!(reply.key.is_some());
@@ -2682,22 +2665,17 @@ fn protected_qos_ht_group_message_rekeys_once_after_integrity_and_replay_admissi
                     yield_now().await;
                 }
                 assert_eq!(world.air.sent().len(), after);
-                assert_eq!(
-                    world.observed.contains(
-                        oer_ieee80211_instrumentation::Observation::RxFrameDropped(
-                            oer_ieee80211_instrumentation::RxFrameDropped {
-                                reason: oer_ieee80211_instrumentation::RxDrop::Frame(
-                                    oer_ieee80211_instrumentation::FrameDrop::Replay
-                                )
-                            }
+                assert!(world.observed.contains(Observation::Service(
+                    ServiceEvent::RxFrameDropped(RxDrop::Station(
+                        oer_ieee80211_sta::machine::StaRxError::Frame(
+                            oer_ieee80211_upper_mac::receive::RxDropReason::Replay
                         )
-                    ),
-                    cfg!(oer_trace)
-                );
+                    ))
+                )));
             })
         },
     );
-    assert_eq!(counters.rx_frames_dropped(), traced(2));
+    assert_eq!(counters.rx_frames_dropped(), 2);
 }
 
 #[test]
@@ -3033,98 +3011,6 @@ fn placed_service_retires_its_banks_on_stop_drained_and_quarantined_ports() {
             true,
         );
     }
-}
-
-#[test]
-fn arp_transmit_observation_matches_the_admitted_mpdu_and_omits_refused_transmits() {
-    run(
-        StaSecurity::Personal {
-            password: oer_ieee80211_rsn::sae::SaePassword::new(b"password").expect("password"),
-            pmk: Pmk::from_bytes(PMK),
-        },
-        |world| {
-            Box::pin(async move {
-                let mut seen = 0;
-                world.associate(&mut seen, true).await;
-                world.handshake(&mut seen).await;
-                let send = || {
-                    let frame =
-                        EthernetFrame::from_parts(oer_ieee80211_wire::data::EthernetFrameParts {
-                            destination: ACCESS_POINT_ADDRESS,
-                            source: LOCAL,
-                            ether_type: 0x0806,
-                            payload: &ARP_REQUEST,
-                        })
-                        .expect("ARP MSDU");
-                    assert!(
-                        world
-                            .stack
-                            .borrow()
-                            .try_send(TxMsdu {
-                                priority: WmmUserPriority::new(0).expect("priority"),
-                                frame,
-                            })
-                            .is_ok()
-                    );
-                };
-                world.refuse_rate.set(true);
-                send();
-                for _ in 0..50 {
-                    yield_now().await;
-                }
-                let arp = |event: &oer_ieee80211_instrumentation::Observation| {
-                    use oer_ieee80211_instrumentation::Observation;
-                    matches!(
-                        event,
-                        Observation::ArpAddresses(_)
-                            | Observation::ArpTransmitted(_)
-                            | Observation::ArpReceived(_)
-                    )
-                };
-                assert_eq!(world.observed.count(arp), 0);
-                world.refuse_rate.set(false);
-                send();
-                let data = world.sent(&mut seen, DATA).await;
-                let header = oer_ieee80211_wire::frame::DecodedHeader::decode(&data.plaintext)
-                    .expect("MPDU header");
-                let sequence = oer_ieee80211_wire::sequence::SequenceNumber::from_sequence_control(
-                    header.sequence_control(),
-                )
-                .get();
-                use oer_ieee80211_instrumentation::{
-                    ArpAddresses, ArpOperation, ArpTransmitted, Observation,
-                };
-                let observations = world
-                    .observed
-                    .events
-                    .lock()
-                    .unwrap()
-                    .iter()
-                    .copied()
-                    .filter(|event| arp(event))
-                    .collect::<Vec<_>>();
-                if cfg!(oer_trace) {
-                    // The addresses come first, then the MPDU's identity.
-                    assert_eq!(
-                        observations,
-                        [
-                            Observation::ArpAddresses(ArpAddresses {
-                                sender: [10, 0, 0, 2],
-                                target: [10, 0, 0, 1],
-                            }),
-                            Observation::ArpTransmitted(ArpTransmitted {
-                                operation: ArpOperation::Request,
-                                sequence,
-                                packet_number: data.packet_number.expect("protected"),
-                            }),
-                        ]
-                    );
-                } else {
-                    assert!(observations.is_empty());
-                }
-            })
-        },
-    );
 }
 
 #[test]

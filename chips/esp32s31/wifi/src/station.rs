@@ -56,7 +56,7 @@ fn observe_terminal<'id, W: Binding, Id: SlotIdentity + 'id>(
         && matches!(completed.outcome(), TxOutcome::Indeterminate(_))
     {
         let observer = W::DriverObserver::default();
-        oer_trace::observe!(observer, oer_ieee80211_instrumentation::TxIndeterminate);
+        oer_trace::observe!(observer, crate::observation::TxIndeterminate);
     }
 }
 impl<W: Binding, Id: SlotIdentity> StationPort for StationComposition<W, Id> {
@@ -132,10 +132,7 @@ impl<W: Binding, Id: SlotIdentity> StationPort for StationComposition<W, Id> {
                     #[cfg(oer_trace)]
                     {
                         let observer = W::DriverObserver::default();
-                        oer_trace::observe!(
-                            observer,
-                            oer_ieee80211_instrumentation::StationAuthenticated
-                        );
+                        oer_trace::observe!(observer, crate::observation::StationAuthenticated);
                     }
                 }
                 if oer_ieee80211_wire::frame::DecodedHeader::decode(bytes)
@@ -148,7 +145,7 @@ impl<W: Binding, Id: SlotIdentity> StationPort for StationComposition<W, Id> {
                         let observer = W::DriverObserver::default();
                         oer_trace::observe!(
                             observer,
-                            oer_ieee80211_instrumentation::StationBeacon {
+                            crate::observation::StationBeacon {
                                 at_millis: (EmbassyClock.now().as_micros() / 1000) as u32
                             }
                         );
@@ -194,7 +191,7 @@ impl<W: Binding, M: SignalMetadata> RateSelection<M, port::Ack> for Rates<W> {
         <EspressifRateSelection<Caps> as RateSelection<M, port::Ack>>::plan(&self.0, frame, carried)
     }
     fn associated(&mut self, peer: &RatePeer, response: &M) {
-        oer_trace::observe!(self.1, oer_ieee80211_instrumentation::StationAssociated);
+        oer_trace::observe!(self.1, crate::observation::StationAssociated);
         <EspressifRateSelection<Caps> as RateSelection<M, port::Ack>>::associated(
             &mut self.0,
             peer,
@@ -215,14 +212,14 @@ impl<W: Binding, M: SignalMetadata> RateSelection<M, port::Ack> for Rates<W> {
         if frame == FrameRates::Control
             && matches!(completion, TxOutcome::Ended(SingleEnd::Delivered { .. }))
         {
-            oer_trace::observe!(self.1, oer_ieee80211_instrumentation::ControlDelivered);
+            oer_trace::observe!(self.1, crate::observation::ControlDelivered);
         }
         #[cfg(oer_trace)]
         if matches!(
             completion,
             TxOutcome::Indeterminate(IndeterminateCause::HardwareTimeout)
         ) {
-            oer_trace::observe!(self.1, oer_ieee80211_instrumentation::TxHardwareTimeout);
+            oer_trace::observe!(self.1, crate::observation::TxHardwareTimeout);
         }
         <EspressifRateSelection<Caps> as RateSelection<M, port::Ack>>::completed(
             &mut self.0,
@@ -240,9 +237,9 @@ impl<W: Binding, M: SignalMetadata> RateSelection<M, port::Ack> for Rates<W> {
 #[cfg(oer_trace)]
 fn selected_rate<M: SignalMetadata>(
     selection: &EspressifRateSelection<Caps>,
-) -> oer_ieee80211_instrumentation::TxRateSelected {
+) -> crate::observation::TxRateSelected {
     use oer_ieee80211_wire::phy::PhyRate;
-    oer_ieee80211_instrumentation::TxRateSelected {
+    crate::observation::TxRateSelected {
         kbps: <EspressifRateSelection<Caps> as RateSelection<M, port::Ack>>::plan(
             selection,
             FrameRates::Data,
@@ -280,7 +277,7 @@ type Service<'id, W> = Runner<
     crate::chip::CoreCallbacks<<W as Binding>::Callbacks>,
     Rates<W>,
     1,
-    <W as Binding>::Observer,
+    <W as Binding>::Sink,
 >;
 type Completed<'p, 'id, W> = ServiceCompleted<
     'p,
@@ -289,7 +286,7 @@ type Completed<'p, 'id, W> = ServiceCompleted<
     crate::chip::CoreCallbacks<<W as Binding>::Callbacks>,
     Rates<W>,
     1,
-    <W as Binding>::Observer,
+    <W as Binding>::Sink,
 >;
 type Io<'c, W> = ServiceIo<'c, Caps, Events<'static, Output<<W as Binding>::Events>>, 2, 8, 2>;
 type Running<'s, 'c: 's, 'p: 's, 'id: 'p, W: Binding> =
@@ -353,16 +350,19 @@ fn initialize_service<'id, W: Binding>(
     );
     let [t0, t1, t2, t3, t4, t5, t6, t7] = resources.tickets;
     let [b0, b1, b2, b3, b4, b5, b6, b7] = resources.buffers;
-    let observer = profile.station.observer.clone();
-    let data_observer = observer.clone();
-    let rates_observer = observer.clone();
+    let Profile {
+        station,
+        security,
+        observer,
+        sink,
+    } = profile;
     let receive = RxBlockAckStorage::<Family<W::Id, W>, RX_BA_BANKS, RX_BA_FRAMES>::init_in_place(
         receive.uninit(),
         resources.block_acks,
         Duration::from_millis(100),
     )
     .view();
-    Runner::<StationComposition<W, W::Id>, _, _, 1, W::Observer>::init_in_place(
+    Runner::<StationComposition<W, W::Id>, _, _, 1, W::Sink>::init_in_place(
         storage.uninit(),
         |station_storage| {
             let station_resources = StationResources::<_, 4, 4, 1> {
@@ -375,13 +375,11 @@ fn initialize_service<'id, W: Binding>(
                 keys: resources.station_association,
                 group_permission: resources.station_group_permission,
             };
-            match profile.security {
-                Security::Open => {
-                    Station::init_open(station_storage, profile.station, station_resources)
-                }
+            match security {
+                Security::Open => Station::init_open(station_storage, station, station_resources),
                 Security::Wpa2Personal(pmk) => Station::init_wpa2_personal(
                     station_storage,
-                    profile.station,
+                    station,
                     pmk,
                     station_resources,
                     machine::GroupCapacity::new(),
@@ -394,14 +392,13 @@ fn initialize_service<'id, W: Binding>(
                 [t4, t5, t6, t7],
                 [b4, b5, b6, b7],
                 Backend::<W::Id, W>::TX_QUEUE_DEPTH,
-                data_observer,
             )
         },
         arbiter,
-        Rates(EspressifRateSelection::new(), rates_observer),
+        Rates(EspressifRateSelection::new(), observer),
         resources.terminal_access,
         receive,
-        observer,
+        sink,
     )
 }
 impl<W: Binding> rp::PortBody<W::Id, Backend<W::Id, W>> for Body<W> {

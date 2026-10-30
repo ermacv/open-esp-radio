@@ -1,9 +1,7 @@
+extern crate std;
+
 use super::*;
 use oer_ieee80211_arbiter::interface::{VifId, VirtualInterface};
-use oer_ieee80211_instrumentation::{
-    EspNowPeerTableChanged, EspNowPeersCleared, EspNowReplay, EspNowTxPacketNumber, Observation,
-    PacketNumberOutcome, PeerChange, Recorder, ReplayOutcome,
-};
 use oer_ieee80211_port::VifRole;
 use oer_ieee80211_wire::ccmp::CCMP_PACKET_NUMBER_MAX;
 use oer_ieee80211_wire::channel::ChannelWidth;
@@ -24,33 +22,34 @@ fn pn(value: u64) -> EspNowCcmpPacketNumber {
     EspNowCcmpPacketNumber::new(value).unwrap()
 }
 
-const fn changed(change: PeerChange) -> Observation {
-    Observation::EspNowPeerTableChanged(EspNowPeerTableChanged { change })
+const fn changed(change: EspNowPeerChange) -> EspNowSecurityEvent {
+    EspNowSecurityEvent::PeerTableChanged(change)
 }
 
-const fn cleared(count: u32) -> Observation {
-    Observation::EspNowPeersCleared(EspNowPeersCleared { count })
+const fn cleared(count: u32) -> EspNowSecurityEvent {
+    EspNowSecurityEvent::PeersCleared { count }
 }
 
-const fn tx_packet_number(outcome: PacketNumberOutcome) -> Observation {
-    Observation::EspNowTxPacketNumber(EspNowTxPacketNumber { outcome })
+const fn tx_packet_number(outcome: EspNowPacketNumberOutcome) -> EspNowSecurityEvent {
+    EspNowSecurityEvent::TxPacketNumber(outcome)
 }
 
-const fn replay(outcome: ReplayOutcome) -> Observation {
-    Observation::EspNowReplay(EspNowReplay { outcome })
+const fn replay(outcome: EspNowReplayOutcome) -> EspNowSecurityEvent {
+    EspNowSecurityEvent::Replay(outcome)
 }
 
-/// With `cfg(oer_trace)` the recorder holds exactly `expected`, in order;
-/// without it the observation points leave nothing.
-fn assert_observed<const M: usize>(recorder: &Recorder<M>, expected: &[Observation]) {
-    let mut observed = recorder.observations();
-    if cfg!(oer_trace) {
-        for (index, expected) in expected.iter().enumerate() {
-            assert_eq!(observed.next(), Some(*expected), "observation {index}");
-        }
-        assert!(!recorder.overflowed());
+/// The events a test's calls reported, in order.
+#[derive(Default)]
+struct Kept(std::vec::Vec<EspNowSecurityEvent>);
+
+impl EventSink<EspNowSecurityEvent> for Kept {
+    fn event(&mut self, event: EspNowSecurityEvent) {
+        self.0.push(event);
     }
-    assert_eq!(observed.next(), None);
+}
+
+fn assert_reported(events: &Kept, expected: &[EspNowSecurityEvent]) {
+    assert_eq!(events.0, expected);
 }
 
 #[test]
@@ -95,10 +94,13 @@ fn pmk_replace_returns_old_key_and_retains_proposal_on_each_refusal() {
 
 #[test]
 fn invalid_counts_refuse_encrypted_mutations_without_losing_keys() {
-    let recorder = Recorder::<16>::new();
-    let mut table = EspNowEncryptedPeerTable::<2, _>::new(channel(), &recorder);
+    let mut events = Kept::default();
+    let mut table = EspNowEncryptedPeerTable::<2>::new(channel());
     table.length = usize::MAX;
-    let (error, proposed) = table.install(peer(2, 1)).unwrap_err().into_parts();
+    let (error, proposed) = table
+        .install(peer(2, 1), &mut events)
+        .unwrap_err()
+        .into_parts();
     assert_eq!(
         error,
         EspNowEncryptedPeerError::InvalidCount {
@@ -114,7 +116,10 @@ fn invalid_counts_refuse_encrypted_mutations_without_losing_keys() {
             .all(|slot| slot.state.is_none() && slot.generation == 0)
     );
     table.length = 2;
-    let (error, proposed) = table.install(peer(2, 1)).unwrap_err().into_parts();
+    let (error, proposed) = table
+        .install(peer(2, 1), &mut events)
+        .unwrap_err()
+        .into_parts();
     assert_eq!(
         error,
         EspNowEncryptedPeerError::InvalidCount {
@@ -124,12 +129,12 @@ fn invalid_counts_refuse_encrypted_mutations_without_losing_keys() {
     );
     assert_eq!(proposed.lmk().expose_secret(), &[1; 16]);
     table.length = 0;
-    let first = table.install(peer(2, 1)).unwrap();
+    let first = table.install(peer(2, 1), &mut events).unwrap();
     assert_eq!(table.len(), 1);
-    let second = table.install(peer(3, 2)).unwrap();
+    let second = table.install(peer(3, 2), &mut events).unwrap();
     table.length = 0;
     assert_eq!(
-        table.remove(first).unwrap_err(),
+        table.remove(first, &mut events).unwrap_err(),
         EspNowEncryptedPeerError::InvalidCount {
             count: 0,
             capacity: 2
@@ -138,17 +143,20 @@ fn invalid_counts_refuse_encrypted_mutations_without_losing_keys() {
     assert_eq!(table.lmk(first).unwrap().expose_secret(), &[1; 16]);
     table.length = 3;
     assert_eq!(
-        table.remove(first).unwrap_err(),
+        table.remove(first, &mut events).unwrap_err(),
         EspNowEncryptedPeerError::InvalidCount {
             count: 3,
             capacity: 2
         }
     );
     table.length = 2;
-    let removed = table.remove(first).unwrap();
+    let removed = table.remove(first, &mut events).unwrap();
     assert_eq!(table.len(), 1);
     table.length = usize::MAX;
-    let (error, removed) = table.restore_removed(removed).unwrap_err().into_parts();
+    let (error, removed) = table
+        .restore_removed(removed, &mut events)
+        .unwrap_err()
+        .into_parts();
     assert_eq!(
         error,
         EspNowEncryptedPeerError::InvalidCount {
@@ -159,7 +167,10 @@ fn invalid_counts_refuse_encrypted_mutations_without_losing_keys() {
     assert_eq!(removed.config().lmk().expose_secret(), &[1; 16]);
     assert!(table.slots[0].state.is_none());
     table.length = 2;
-    let (error, removed) = table.restore_removed(removed).unwrap_err().into_parts();
+    let (error, removed) = table
+        .restore_removed(removed, &mut events)
+        .unwrap_err()
+        .into_parts();
     assert_eq!(
         error,
         EspNowEncryptedPeerError::InvalidCount {
@@ -169,25 +180,25 @@ fn invalid_counts_refuse_encrypted_mutations_without_losing_keys() {
     );
     assert_eq!(removed.config().lmk().expose_secret(), &[1; 16]);
     table.length = 1;
-    let restored = table.restore_removed(removed).unwrap();
+    let restored = table.restore_removed(removed, &mut events).unwrap();
     assert_eq!(table.len(), 2);
     assert_eq!(table.lmk(restored).unwrap().expose_secret(), &[1; 16]);
     assert_eq!(table.lmk(second).unwrap().expose_secret(), &[2; 16]);
     assert_ne!(restored, first);
-    assert_eq!(table.clear_on_shutdown(), 2);
-    assert_eq!(table.clear_on_shutdown(), 0);
+    assert_eq!(table.clear_on_shutdown(&mut events), 2);
+    assert_eq!(table.clear_on_shutdown(&mut events), 0);
     assert_eq!(table.len(), 0);
     // Refused removals and restorations return their error without an
     // observation; refused installs report a rejected mutation.
-    assert_observed(
-        &recorder,
+    assert_reported(
+        &events,
         &[
-            changed(PeerChange::MutationRejected),
-            changed(PeerChange::MutationRejected),
-            changed(PeerChange::Installed),
-            changed(PeerChange::Installed),
-            changed(PeerChange::Removed),
-            changed(PeerChange::RemoveRolledBack),
+            changed(EspNowPeerChange::MutationRejected),
+            changed(EspNowPeerChange::MutationRejected),
+            changed(EspNowPeerChange::Installed),
+            changed(EspNowPeerChange::Installed),
+            changed(EspNowPeerChange::Removed),
+            changed(EspNowPeerChange::RemoveRolledBack),
             cleared(2),
             cleared(0),
         ],
@@ -196,15 +207,15 @@ fn invalid_counts_refuse_encrypted_mutations_without_losing_keys() {
 
 #[test]
 fn encrypted_capacity_and_generation_refusals_retain_proposed_key() {
-    let (error, proposed) = EspNowEncryptedPeerTable::<0>::new(channel(), Noop)
-        .install(peer(2, 7))
+    let (error, proposed) = EspNowEncryptedPeerTable::<0>::new(channel())
+        .install(peer(2, 7), &mut ())
         .unwrap_err()
         .into_parts();
     assert_eq!(error, EspNowEncryptedPeerError::Full);
     assert_eq!(proposed.lmk().expose_secret(), &[7; 16]);
-    let mut table = EspNowEncryptedPeerTable::<1>::new(channel(), Noop);
+    let mut table = EspNowEncryptedPeerTable::<1>::new(channel());
     table.slots[0].generation = u32::MAX;
-    let (error, proposed) = table.install(peer(2, 8)).unwrap_err().into_parts();
+    let (error, proposed) = table.install(peer(2, 8), &mut ()).unwrap_err().into_parts();
     assert_eq!(error, EspNowEncryptedPeerError::GenerationExhausted);
     assert_eq!(proposed.lmk().expose_secret(), &[8; 16]);
     assert!(table.is_empty());
@@ -212,31 +223,43 @@ fn encrypted_capacity_and_generation_refusals_retain_proposed_key() {
 
 #[test]
 fn encrypted_replacement_preserves_packet_number_spaces_and_old_key() {
-    let recorder = Recorder::<16>::new();
-    let mut table = EspNowEncryptedPeerTable::<1, _>::new(channel(), &recorder);
-    let first = table.install(peer(2, 1)).unwrap();
-    assert_eq!(table.allocate_tx_packet_number(first), Ok(pn(1)));
+    let mut events = Kept::default();
+    let mut table = EspNowEncryptedPeerTable::<1>::new(channel());
+    let first = table.install(peer(2, 1), &mut events).unwrap();
+    assert_eq!(
+        table.allocate_tx_packet_number(first, &mut events),
+        Ok(pn(1))
+    );
     table
-        .prepare_rx_replay(first, pn(50))
+        .prepare_rx_replay(first, pn(50), &mut events)
         .unwrap()
-        .commit_authenticated();
-    let replacement = table.replace(first, peer(2, 2)).unwrap();
+        .commit_authenticated(&mut events);
+    let replacement = table.replace(first, peer(2, 2), &mut events).unwrap();
     assert_eq!(replacement.replaced.lmk().expose_secret(), &[1; 16]);
     assert_eq!(
         table.lmk(replacement.peer).unwrap().expose_secret(),
         &[2; 16]
     );
-    assert_eq!(table.allocate_tx_packet_number(replacement.peer), Ok(pn(2)));
+    assert_eq!(
+        table.allocate_tx_packet_number(replacement.peer, &mut events),
+        Ok(pn(2))
+    );
     assert!(matches!(
-        table.prepare_rx_replay(replacement.peer, pn(50)),
+        table.prepare_rx_replay(replacement.peer, pn(50), &mut events),
         Err(EspNowEncryptedPeerError::Replay { .. })
     ));
-    let (error, proposed) = table.replace(first, peer(2, 3)).unwrap_err().into_parts();
+    let (error, proposed) = table
+        .replace(first, peer(2, 3), &mut events)
+        .unwrap_err()
+        .into_parts();
     assert_eq!(error, EspNowEncryptedPeerError::Stale(first));
     assert_eq!(proposed.lmk().expose_secret(), &[3; 16]);
     let current = replacement.peer;
     let view = table.get(current).unwrap();
-    let (error, proposed) = table.replace(current, peer(3, 4)).unwrap_err().into_parts();
+    let (error, proposed) = table
+        .replace(current, peer(3, 4), &mut events)
+        .unwrap_err()
+        .into_parts();
     assert!(matches!(
         error,
         EspNowEncryptedPeerError::ReplacementDestinationMismatch { .. }
@@ -248,87 +271,108 @@ fn encrypted_replacement_preserves_packet_number_spaces_and_old_key() {
         index: 0,
         generation: u32::MAX,
     };
-    let (error, proposed) = table.replace(last, peer(2, 5)).unwrap_err().into_parts();
+    let (error, proposed) = table
+        .replace(last, peer(2, 5), &mut events)
+        .unwrap_err()
+        .into_parts();
     assert_eq!(error, EspNowEncryptedPeerError::GenerationExhausted);
     assert_eq!(proposed.lmk().expose_secret(), &[5; 16]);
     assert_eq!(table.lmk(last).unwrap().expose_secret(), &[2; 16]);
-    assert_observed(
-        &recorder,
+    assert_reported(
+        &events,
         &[
-            changed(PeerChange::Installed),
-            tx_packet_number(PacketNumberOutcome::Allocated),
-            replay(ReplayOutcome::Candidate),
-            replay(ReplayOutcome::Committed),
-            changed(PeerChange::Replaced),
-            tx_packet_number(PacketNumberOutcome::Allocated),
-            replay(ReplayOutcome::Replayed),
-            changed(PeerChange::MutationRejected),
-            changed(PeerChange::MutationRejected),
-            changed(PeerChange::MutationRejected),
+            changed(EspNowPeerChange::Installed),
+            tx_packet_number(EspNowPacketNumberOutcome::Allocated),
+            replay(EspNowReplayOutcome::Candidate),
+            replay(EspNowReplayOutcome::Committed),
+            changed(EspNowPeerChange::Replaced),
+            tx_packet_number(EspNowPacketNumberOutcome::Allocated),
+            replay(EspNowReplayOutcome::Replayed),
+            changed(EspNowPeerChange::MutationRejected),
+            changed(EspNowPeerChange::MutationRejected),
+            changed(EspNowPeerChange::MutationRejected),
         ],
     );
 }
 
 #[test]
 fn invalid_or_vacant_encrypted_slots_refuse_without_consuming_secrets() {
-    let mut table = EspNowEncryptedPeerTable::<1>::new(channel(), Noop);
+    let mut table = EspNowEncryptedPeerTable::<1>::new(channel());
     for index in [0, usize::MAX] {
         let stale = EspNowEncryptedPeerId {
             index,
             generation: 0,
         };
-        let (error, proposed) = table.replace(stale, peer(2, 9)).unwrap_err().into_parts();
+        let (error, proposed) = table
+            .replace(stale, peer(2, 9), &mut ())
+            .unwrap_err()
+            .into_parts();
         assert_eq!(error, EspNowEncryptedPeerError::Stale(stale));
         assert_eq!(proposed.lmk().expose_secret(), &[9; 16]);
     }
-    let installed = table.install(peer(2, 1)).unwrap();
-    let mut removed = table.remove(installed).unwrap();
+    let installed = table.install(peer(2, 1), &mut ()).unwrap();
+    let mut removed = table.remove(installed, &mut ()).unwrap();
     removed.index = usize::MAX;
     let previous = removed.previous_id();
-    let (error, removed) = table.restore_removed(removed).unwrap_err().into_parts();
+    let (error, removed) = table
+        .restore_removed(removed, &mut ())
+        .unwrap_err()
+        .into_parts();
     assert_eq!(error, EspNowEncryptedPeerError::Stale(previous));
     assert_eq!(removed.config().lmk().expose_secret(), &[1; 16]);
 }
 
 #[test]
 fn stale_peers_refuse_numbers_and_each_peer_numbers_from_one() {
-    let recorder = Recorder::<16>::new();
-    let mut table = EspNowEncryptedPeerTable::<2, _>::new(channel(), &recorder);
-    let first = table.install(peer(2, 1)).unwrap();
-    let second = table.install(peer(3, 2)).unwrap();
-    assert_eq!(table.allocate_tx_packet_number(first), Ok(pn(1)));
-    assert_eq!(table.allocate_tx_packet_number(first), Ok(pn(2)));
-    assert_eq!(table.allocate_tx_packet_number(second), Ok(pn(1)));
-    let removed = table.remove(first).unwrap();
+    let mut events = Kept::default();
+    let mut table = EspNowEncryptedPeerTable::<2>::new(channel());
+    let first = table.install(peer(2, 1), &mut events).unwrap();
+    let second = table.install(peer(3, 2), &mut events).unwrap();
     assert_eq!(
-        table.allocate_tx_packet_number(first),
+        table.allocate_tx_packet_number(first, &mut events),
+        Ok(pn(1))
+    );
+    assert_eq!(
+        table.allocate_tx_packet_number(first, &mut events),
+        Ok(pn(2))
+    );
+    assert_eq!(
+        table.allocate_tx_packet_number(second, &mut events),
+        Ok(pn(1))
+    );
+    let removed = table.remove(first, &mut events).unwrap();
+    assert_eq!(
+        table.allocate_tx_packet_number(first, &mut events),
         Err(EspNowEncryptedPeerError::Stale(first))
     );
     // Restoring a removed peer continues its numbers.
-    let restored = table.restore_removed(removed).unwrap();
-    assert_eq!(table.allocate_tx_packet_number(restored), Ok(pn(3)));
+    let restored = table.restore_removed(removed, &mut events).unwrap();
+    assert_eq!(
+        table.allocate_tx_packet_number(restored, &mut events),
+        Ok(pn(3))
+    );
     assert_eq!(table.get(restored).unwrap().last_tx_packet_number, 3);
     // A stale peer's refusal allocates nothing and reports nothing.
-    assert_observed(
-        &recorder,
+    assert_reported(
+        &events,
         &[
-            changed(PeerChange::Installed),
-            changed(PeerChange::Installed),
-            tx_packet_number(PacketNumberOutcome::Allocated),
-            tx_packet_number(PacketNumberOutcome::Allocated),
-            tx_packet_number(PacketNumberOutcome::Allocated),
-            changed(PeerChange::Removed),
-            changed(PeerChange::RemoveRolledBack),
-            tx_packet_number(PacketNumberOutcome::Allocated),
+            changed(EspNowPeerChange::Installed),
+            changed(EspNowPeerChange::Installed),
+            tx_packet_number(EspNowPacketNumberOutcome::Allocated),
+            tx_packet_number(EspNowPacketNumberOutcome::Allocated),
+            tx_packet_number(EspNowPacketNumberOutcome::Allocated),
+            changed(EspNowPeerChange::Removed),
+            changed(EspNowPeerChange::RemoveRolledBack),
+            tx_packet_number(EspNowPacketNumberOutcome::Allocated),
         ],
     );
 }
 
 #[test]
 fn replay_admits_only_numbers_above_the_frontier_and_cancel_keeps_it() {
-    let recorder = Recorder::<16>::new();
-    let mut table = EspNowEncryptedPeerTable::<1, _>::new(channel(), &recorder);
-    let peer = table.install(peer(2, 1)).unwrap();
+    let mut events = Kept::default();
+    let mut table = EspNowEncryptedPeerTable::<1>::new(channel());
+    let peer = table.install(peer(2, 1), &mut events).unwrap();
     assert_eq!(
         table
             .get(peer)
@@ -337,12 +381,14 @@ fn replay_admits_only_numbers_above_the_frontier_and_cancel_keeps_it() {
         None
     );
     table
-        .prepare_rx_replay(peer, pn(1))
+        .prepare_rx_replay(peer, pn(1), &mut events)
         .unwrap()
-        .commit_authenticated();
+        .commit_authenticated(&mut events);
     // A repeated number is refused.
     assert_eq!(
-        table.prepare_rx_replay(peer, pn(1)).unwrap_err(),
+        table
+            .prepare_rx_replay(peer, pn(1), &mut events)
+            .unwrap_err(),
         EspNowEncryptedPeerError::Replay {
             peer,
             packet_number: pn(1),
@@ -350,28 +396,28 @@ fn replay_admits_only_numbers_above_the_frontier_and_cancel_keeps_it() {
         }
     );
     table
-        .prepare_rx_replay(peer, pn(64))
+        .prepare_rx_replay(peer, pn(64), &mut events)
         .unwrap()
-        .commit_authenticated();
+        .commit_authenticated(&mut events);
     // An earlier, never seen number is refused too: the frontier is strict.
     assert!(matches!(
-        table.prepare_rx_replay(peer, pn(2)),
+        table.prepare_rx_replay(peer, pn(2), &mut events),
         Err(EspNowEncryptedPeerError::Replay { .. })
     ));
     // A dropped candidate does not advance the frontier.
-    let cancelled = table.prepare_rx_replay(peer, pn(100)).unwrap();
+    let cancelled = table.prepare_rx_replay(peer, pn(100), &mut events).unwrap();
     assert_eq!(cancelled.packet_number(), pn(100));
     drop(cancelled);
     table
-        .prepare_rx_replay(peer, pn(65))
+        .prepare_rx_replay(peer, pn(65), &mut events)
         .unwrap()
-        .commit_authenticated();
+        .commit_authenticated(&mut events);
     table
-        .prepare_rx_replay(peer, pn(CCMP_PACKET_NUMBER_MAX))
+        .prepare_rx_replay(peer, pn(CCMP_PACKET_NUMBER_MAX), &mut events)
         .unwrap()
-        .commit_authenticated();
+        .commit_authenticated(&mut events);
     assert!(matches!(
-        table.prepare_rx_replay(peer, pn(CCMP_PACKET_NUMBER_MAX)),
+        table.prepare_rx_replay(peer, pn(CCMP_PACKET_NUMBER_MAX), &mut events),
         Err(EspNowEncryptedPeerError::Replay { .. })
     ));
     assert_eq!(
@@ -382,22 +428,22 @@ fn replay_admits_only_numbers_above_the_frontier_and_cancel_keeps_it() {
         Some(CCMP_PACKET_NUMBER_MAX)
     );
     // The cancelled candidate (PN 100) reports no commit.
-    assert_observed(
-        &recorder,
+    assert_reported(
+        &events,
         &[
-            changed(PeerChange::Installed),
-            replay(ReplayOutcome::Candidate),
-            replay(ReplayOutcome::Committed),
-            replay(ReplayOutcome::Replayed),
-            replay(ReplayOutcome::Candidate),
-            replay(ReplayOutcome::Committed),
-            replay(ReplayOutcome::Replayed),
-            replay(ReplayOutcome::Candidate),
-            replay(ReplayOutcome::Candidate),
-            replay(ReplayOutcome::Committed),
-            replay(ReplayOutcome::Candidate),
-            replay(ReplayOutcome::Committed),
-            replay(ReplayOutcome::Replayed),
+            changed(EspNowPeerChange::Installed),
+            replay(EspNowReplayOutcome::Candidate),
+            replay(EspNowReplayOutcome::Committed),
+            replay(EspNowReplayOutcome::Replayed),
+            replay(EspNowReplayOutcome::Candidate),
+            replay(EspNowReplayOutcome::Committed),
+            replay(EspNowReplayOutcome::Replayed),
+            replay(EspNowReplayOutcome::Candidate),
+            replay(EspNowReplayOutcome::Candidate),
+            replay(EspNowReplayOutcome::Committed),
+            replay(EspNowReplayOutcome::Candidate),
+            replay(EspNowReplayOutcome::Committed),
+            replay(EspNowReplayOutcome::Replayed),
         ],
     );
 }
@@ -416,12 +462,12 @@ fn encrypted_length_validation_precedes_packet_and_sequence_consumption() {
         channel(),
     )
     .unwrap();
-    let mut protocol = EspNowEncryptedProtocol::<1>::new(config, EspNowPmk::new([1; 16]), Noop);
-    let peer = protocol.add_peer(peer(2, 2)).unwrap();
+    let mut protocol = EspNowEncryptedProtocol::<1>::new(config, EspNowPmk::new([1; 16]));
+    let peer = protocol.add_peer(peer(2, 2), &mut ()).unwrap();
     let mut sequence = SequenceCounter::new(SequenceNumber::ZERO);
     let random = EspNowRandomValue::new([1; 4]);
     assert!(matches!(
-        protocol.prepare_v1_tx(peer, &mut sequence, random, &[0; 251]),
+        protocol.prepare_v1_tx(peer, &mut sequence, random, &[0; 251], &mut ()),
         Err(EspNowEncryptedSendError::Wire(
             EspNowV1WireError::PayloadTooLong { .. }
         ))
@@ -429,37 +475,13 @@ fn encrypted_length_validation_precedes_packet_and_sequence_consumption() {
     assert_eq!(sequence.peek(), SequenceNumber::ZERO);
     assert_eq!(protocol.peers().get(peer).unwrap().last_tx_packet_number, 0);
     let empty = protocol
-        .prepare_v1_tx(peer, &mut sequence, random, &[])
+        .prepare_v1_tx(peer, &mut sequence, random, &[], &mut ())
         .unwrap();
     assert_eq!(empty.encoded_len(), 55);
     let payload = [0; 250];
     let full = protocol
-        .prepare_v1_tx(peer, &mut sequence, random, &payload)
+        .prepare_v1_tx(peer, &mut sequence, random, &payload, &mut ())
         .unwrap();
     assert_eq!(full.encoded_len(), 305);
     assert_eq!(full.packet_number(), pn(2));
-}
-
-/// The table's fields other than its observer, in the same order.
-#[allow(dead_code)]
-struct TableWithoutObserver<const N: usize> {
-    home_channel: WifiChannel,
-    slots: [EspNowEncryptedPeerSlot; N],
-    length: usize,
-}
-
-#[test]
-fn the_noop_observer_adds_no_size_or_alignment_to_the_table() {
-    fn check<const N: usize>() {
-        assert!(
-            size_of::<EspNowEncryptedPeerTable<N, Noop>>() <= size_of::<TableWithoutObserver<N>>()
-        );
-        assert!(
-            align_of::<EspNowEncryptedPeerTable<N, Noop>>()
-                <= align_of::<TableWithoutObserver<N>>()
-        );
-    }
-    check::<0>();
-    check::<1>();
-    check::<ESP_NOW_DEFAULT_ENCRYPTED_PEER_CAPACITY>();
 }

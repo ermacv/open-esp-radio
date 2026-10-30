@@ -1,9 +1,7 @@
 //! Facade-owned failures. Every source variant and observation is retained.
 //! No backend, HAL, STA or RSN type appears in this public vocabulary.
 use oer_ieee80211_runtime::station::{BackendContractViolation, PendingTerminal};
-#[derive(
-    Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize, postcard_schema::Schema,
-)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum StationFailure {
     PolicyDeadlineOverflow,
     RxBlockAckCapacity,
@@ -17,9 +15,7 @@ pub enum StationFailure {
         missing: PendingTerminal,
     },
 }
-#[derive(
-    Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize, postcard_schema::Schema,
-)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum BackendFault {
     Core(LowerMacFault),
     Receive(ReceiveFault),
@@ -29,9 +25,7 @@ pub enum BackendFault {
     Retune(RetuneError),
     Abandoned,
 }
-#[derive(
-    Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize, postcard_schema::Schema,
-)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum LowerMacFault {
     Tx(OrdinaryTxError),
     RxBlockAckReadback,
@@ -41,9 +35,7 @@ pub enum LowerMacFault {
     Abandoned,
     KeyUseMismatch,
 }
-#[derive(
-    Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize, postcard_schema::Schema,
-)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum OrdinaryTxError {
     BufferSizeOverflow,
     UnsupportedPhyRate,
@@ -53,9 +45,7 @@ pub enum OrdinaryTxError {
     BlockAckRequestRate,
     InvalidRetryHeader,
 }
-#[derive(
-    Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize, postcard_schema::Schema,
-)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TxError {
     Invalid,
     QueueActive,
@@ -65,34 +55,26 @@ pub enum TxError {
     ResetRequired,
     Completion(CompletionFault),
 }
-#[derive(
-    Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize, postcard_schema::Schema,
-)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CompletionFault {
     SecurityKeyError,
     InvalidStatus { status: u8 },
 }
-#[derive(
-    Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize, postcard_schema::Schema,
-)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TxResetReason {
     CompletionInterruptWithoutState,
     TimeoutInterruptWithoutState,
     ConflictingInterruptEvents(u32),
     ExecutorDeadline,
 }
-#[derive(
-    Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize, postcard_schema::Schema,
-)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CryptoKeyError {
     InvalidGroupKeyId,
     InvalidAccessPointAssociationId,
     Occupied,
     HardwareRejected,
 }
-#[derive(
-    Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize, postcard_schema::Schema,
-)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RxBlockAckError {
     HardwareIndex(u8),
     MulticastPeer,
@@ -100,9 +82,7 @@ pub enum RxBlockAckError {
     Window(u16),
     HardwareReadbackMismatch,
 }
-#[derive(
-    Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize, postcard_schema::Schema,
-)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ReceiveFault {
     StopRequested,
     Prepare(RxRingError),
@@ -111,9 +91,7 @@ pub enum ReceiveFault {
     Service(RxStageTransactionError),
     ForeignExecutor,
 }
-#[derive(
-    Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize, postcard_schema::Schema,
-)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RxRingError {
     Empty,
     Count,
@@ -129,26 +107,20 @@ pub enum RxRingError {
     Corrupt,
     ResetRequired,
 }
-#[derive(
-    Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize, postcard_schema::Schema,
-)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RxFrontierError {
     AlreadyStarted,
     OwnerUnavailable,
     Ring(RxRingError),
 }
-#[derive(
-    Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize, postcard_schema::Schema,
-)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RxStageError {
     Exhausted,
     Empty,
     TooLong,
     Chained,
 }
-#[derive(
-    Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize, postcard_schema::Schema,
-)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RxStageTransactionError {
     Stage(RxStageError),
     Ring(RxRingError),
@@ -158,38 +130,28 @@ pub enum RxStageTransactionError {
         queue_depth: u64,
     },
 }
-#[derive(
-    Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize, postcard_schema::Schema,
-)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RetuneError {
     NotStopped(MaintenanceError),
     Radio(RadioFailure),
 }
-#[derive(
-    Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize, postcard_schema::Schema,
-)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MaintenanceError {
     MacActive { state: u8 },
     RxWalkerEnabled,
 }
-#[derive(
-    Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize, postcard_schema::Schema,
-)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RadioFailure {
     Refused,
     ClientFailed,
     Poisoned(RadioPoison),
 }
-#[derive(
-    Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize, postcard_schema::Schema,
-)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct RadioPoison {
     pub origin: RadioOperation,
     pub cause: RadioPoisonCause,
 }
-#[derive(
-    Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize, postcard_schema::Schema,
-)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RadioOperation {
     TrackingTick,
     Prepare,
@@ -199,26 +161,20 @@ pub enum RadioOperation {
         request: RadioRequest,
     },
 }
-#[derive(
-    Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize, postcard_schema::Schema,
-)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RadioRequest {
     Join,
     Track,
     Retune,
     Leave,
 }
-#[derive(
-    Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize, postcard_schema::Schema,
-)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RadioClient {
     Wifi,
     Bluetooth,
     Ieee802154,
 }
-#[derive(
-    Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize, postcard_schema::Schema,
-)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RadioPoisonCause {
     TrackingRefused(PhyDomainError),
     Tracking(PhyFault),
@@ -233,9 +189,7 @@ pub enum RadioPoisonCause {
     Controller,
     Custody,
 }
-#[derive(
-    Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize, postcard_schema::Schema,
-)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyFault {
     EdgeTimedOut,
     CapabilityUnavailable,
@@ -246,16 +200,12 @@ pub enum PhyFault {
     DeadlineOverflow,
     Sequence,
 }
-#[derive(
-    Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize, postcard_schema::Schema,
-)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CalibrationTrackingFault {
     Step(PhyFault),
     Radio(CalibrationTrackingFailure),
 }
-#[derive(
-    Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize, postcard_schema::Schema,
-)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CalibrationTrackingFailure {
     PbusClearTimedOut,
     Dcode,
@@ -263,9 +213,7 @@ pub enum CalibrationTrackingFailure {
     Channel,
     TxDcPwdet,
 }
-#[derive(
-    Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize, postcard_schema::Schema,
-)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RegistrationFault {
     Step(PhyFault),
     Lowering {
@@ -274,9 +222,7 @@ pub enum RegistrationFault {
     },
     Radio(RegistrationFailure),
 }
-#[derive(
-    Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize, postcard_schema::Schema,
-)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RegistrationFailure {
     I2cMasterResetTimedOut { index: u8, samples: u16 },
     Rf,
@@ -284,9 +230,7 @@ pub enum RegistrationFailure {
     Temperature,
     FinalI2cDeadlineExceeded,
 }
-#[derive(
-    Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize, postcard_schema::Schema,
-)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyRegisterStage {
     Mmio,
     Delay,
@@ -296,17 +240,13 @@ pub enum PhyRegisterStage {
     Temperature,
     FinalI2cRead,
 }
-#[derive(
-    Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize, postcard_schema::Schema,
-)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyRegisterBindingError {
     UnsupportedAction,
     IncompleteTransaction,
     UnexpectedOutcome,
 }
-#[derive(
-    Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize, postcard_schema::Schema,
-)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyDomainError {
     NotRegistered,
     AlreadyRegistered,
@@ -322,9 +262,7 @@ pub enum PhyDomainError {
     Time(PhyTrackTimeError),
     ClientAbsent(RadioClient),
 }
-#[derive(
-    Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize, postcard_schema::Schema,
-)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyTrackTimeError {
     DeadlineOverflow {
         class: PhyPllTrackClass,
@@ -335,48 +273,36 @@ pub enum PhyTrackTimeError {
         now_micros: u64,
     },
 }
-#[derive(
-    Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize, postcard_schema::Schema,
-)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyClientAcquireError {
     TrackingTime(PhyTrackTimeError),
 }
-#[derive(
-    Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize, postcard_schema::Schema,
-)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyPllTrackClass {
     Wifi,
     BluetoothIeee802154,
 }
-#[derive(
-    Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize, postcard_schema::Schema,
-)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CommonRadioPowerError {
     AlreadyEntered,
     Power(PowerError),
     Restore(PowerRestoreCheckpoint),
     Release(PlatformClock),
 }
-#[derive(
-    Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize, postcard_schema::Schema,
-)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ModemClockError {
     AlreadyEnabled,
     NotEnabled,
     Rejected,
     Poisoned,
 }
-#[derive(
-    Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize, postcard_schema::Schema,
-)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PowerError {
     pub checkpoint: PowerCheckpoint,
     pub expected: bool,
     pub observed: bool,
 }
-#[derive(
-    Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize, postcard_schema::Schema,
-)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PowerCheckpoint {
     Mpll,
     ResetReleased,
@@ -390,17 +316,13 @@ pub enum PowerCheckpoint {
     I2cSource,
     I2cClock,
 }
-#[derive(
-    Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize, postcard_schema::Schema,
-)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PowerRestoreCheckpoint {
     ModemSyscon,
     ModemSourceClocks,
     ModemRegisterBusClock,
 }
-#[derive(
-    Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize, postcard_schema::Schema,
-)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PlatformClock {
     Pll160m,
     AnalogI2cMaster,

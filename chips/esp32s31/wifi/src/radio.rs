@@ -367,10 +367,7 @@ impl<W: Binding> port::Device<TX> for Device<W> {
                 {
                     {
                         let observer = W::DriverObserver::default();
-                        oer_trace::observe!(
-                            observer,
-                            oer_ieee80211_instrumentation::TxQueueCollision
-                        );
+                        oer_trace::observe!(observer, crate::observation::TxQueueCollision);
                     }
                 }
             }

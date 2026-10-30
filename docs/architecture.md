@@ -1020,18 +1020,27 @@ its model and conformance case.
 
 ## Instrumentation and probes
 
+A protocol owner reports what it decided to the sink its caller lends one
+call ([portable/events](../portable/events/README.md)). The event is a
+`Copy + 'static` value of the owner's own type, without a global identifier,
+encoding or time; the owner never stores the sink, reads nothing back and
+keeps no count. The caller chooses what an event becomes, binds it to the time
+of its step and synchronizes only where another context reads the result.
+`()` is the empty sink: no event is built and the point leaves no code. IEEE
+802.11 packages depend on no `oer-trace`, transport serialization or HIL;
+`oer-test-layers` checks it. A runtime holds its composition's sink and lends
+it to its cores; a facade maps protocol events into its image's collection.
+
 `oer-trace` contains only event values, encoding, decoding, ordering of
 caller-owned record slices and the observer contract
-([portable/trace](../portable/trace/README.md)). An owner holds an
-`O: Observer` field, by default the zero-sized `Noop`, and reports through
-`observe!`. The observer receives a `Copy + 'static` event value and returns
-`()`: it holds no owner, register block or lease and cannot steer the owner.
-Without `cfg(oer_trace)` an observation point evaluates no argument and
-leaves no code. Owners keep no counters of observations: a count is the
-number of events of a kind, which the collector of an image declaring the
-`trace` class keeps. A protocol family's events are a host-safe vocabulary
-crate without cores, runtime or driver
-([IEEE 802.11](../protocols/ieee80211/instrumentation/README.md)).
+([portable/trace](../portable/trace/README.md)) of chip and platform owners.
+Such an owner holds an `O: Observer` field, by default the zero-sized `Noop`,
+and reports through `observe!`. The observer receives a `Copy + 'static`
+event value and returns `()`: it holds no owner, register block or lease and
+cannot steer the owner. Without `cfg(oer_trace)` an observation point
+evaluates no argument and leaves no code. Owners keep no counters of
+observations: a count is the number of events of a kind, which the collector
+of an image declaring the `trace` class keeps.
 Instrumentation is never a Cargo feature of a library under
 `chips/`, `protocols/` or `portable/`; `oer-test-layers` rejects feature
 names carrying an instrumentation word, and its list of remaining ones only
@@ -1043,8 +1052,8 @@ header, 16-byte entries, three-word snapshot headers and snapshot payload words.
 Retained storage uses plain atomic loads/stores; the recorder's read-modify-write
 counters and global pointer/mask stay in ordinary atomic RAM.
 
-`trace` is the single observation mechanism, including execution cost and CPU
-load. Under image cfg `oer_trace`, owners emit event values through `observe!`;
+`trace` is the observation mechanism of chip and platform owners, including
+execution cost and CPU load. Under image cfg `oer_trace`, they emit event values through `observe!`;
 only image collectors retain measurement counters and window state. Executor
 idle boundaries use the monotonic platform clock with interrupts masked through
 the second reading; whole-hart load is one minus the idle fraction. Executor

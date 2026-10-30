@@ -1,5 +1,7 @@
-//! Value-only observations; optional consumers own cumulative telemetry.
+//! Value-only observations, reported to the sink each transition's caller
+//! lends; that caller owns cumulative telemetry.
 use super::*;
+use oer_events::report;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AirtimeAction {
@@ -31,10 +33,24 @@ impl<K: Copy + Eq, const PEERS: usize, const RESERVATIONS: usize>
         action: AirtimeAction,
         grant_micros: u32,
         charged_micros: u32,
-    ) {
-        let Some(observer) = self.observer else {
-            return;
-        };
+        events: &mut impl EventSink<AirtimeObservation<K>>,
+    ) where
+        K: 'static,
+    {
+        // The reservation count is bounded by `RESERVATIONS`; it is summed
+        // only for an enabled sink.
+        report(events, || {
+            self.observation(account, action, grant_micros, charged_micros)
+        });
+    }
+
+    fn observation(
+        &self,
+        account: Account<K>,
+        action: AirtimeAction,
+        grant_micros: u32,
+        charged_micros: u32,
+    ) -> AirtimeObservation<K> {
         let mut event = AirtimeObservation {
             key: account.key,
             action,
@@ -58,6 +74,6 @@ impl<K: Copy + Eq, const PEERS: usize, const RESERVATIONS: usize>
                 .outstanding_micros
                 .saturating_add(u64::from(pending.budget));
         }
-        observer(event);
+        event
     }
 }

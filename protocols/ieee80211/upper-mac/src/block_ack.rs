@@ -30,8 +30,9 @@ pub mod reorder;
 pub mod session;
 
 pub use banks::{
-    RX_BLOCK_ACK_WINDOW, ReplyPlace, RxBlockAckCapacity, RxBlockAckPort, RxBlockAckReplyBody,
-    RxBlockAckStorage, RxBlockAckTypes, RxBlockAckView, RxDisposition,
+    AgreementStop, RX_BLOCK_ACK_WINDOW, ReorderCause, ReplyPlace, RxBlockAckCapacity,
+    RxBlockAckEvent, RxBlockAckPort, RxBlockAckReplyBody, RxBlockAckStorage, RxBlockAckTypes,
+    RxBlockAckView, RxDisposition,
 };
 pub use originator::{
     TX_BLOCK_ACK_MAX_TIDS, TxBlockAckOriginator, TxBlockAckOriginatorConfig,
