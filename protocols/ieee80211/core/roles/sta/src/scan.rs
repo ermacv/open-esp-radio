@@ -113,7 +113,7 @@ impl<const N: usize> ScanTable<N> {
         let Some(frame) = ScanFrame::parse(frame) else {
             return ScanObservation::Ignored;
         };
-        let erp = crate::association::erp_protection(frame.erp_information());
+        let erp = crate::association::erp_protection(frame.erp_elements());
         let mut record = frame.into_record();
         // A frame without a DS Parameter Set names no channel: the BSS is
         // taken to be where the frame was heard.

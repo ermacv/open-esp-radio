@@ -5,7 +5,7 @@
 //! owns the resulting disconnect edge. Power-save policy can consume the same
 //! TIM observation without importing vendor PM contexts or RTOS timers.
 
-use oer_ieee80211_wire::station_beacon::{StaBeaconObservation, StaTimObservation};
+use oer_ieee80211_wire::station_beacon::{StaBeaconFrame, StaBeaconObservation, StaTimObservation};
 use oer_time::{Duration, Instant};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -66,11 +66,31 @@ impl StaBeaconLossConfig {
     }
 }
 
+/// What the station keeps of one beacon: its fixed fields and the ERP
+/// protection its ERP elements ask for. Each beacon replaces the last one's
+/// whole; requirements never accumulate across beacons.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct StaBeacon {
+    pub observation: StaBeaconObservation,
+    pub erp: oer_ieee80211_wire::protection::ErpProtection,
+}
+
+impl StaBeacon {
+    /// The station's reading of one parsed beacon
+    /// ([`crate::association::erp_protection`] for its ERP elements).
+    pub fn new(beacon: StaBeaconFrame<'_>) -> Self {
+        Self {
+            observation: beacon.observation,
+            erp: crate::association::erp_protection(beacon.erp),
+        }
+    }
+}
+
 /// Finite beacon/TIM state owned by the connected executor task.
 pub struct StaBeaconMonitor {
     config: StaBeaconLossConfig,
     deadline: Option<Instant>,
-    last_observation: Option<StaBeaconObservation>,
+    last_observation: Option<StaBeacon>,
 }
 
 impl StaBeaconMonitor {
@@ -90,13 +110,13 @@ impl StaBeaconMonitor {
         self.deadline
     }
 
-    pub const fn last_observation(&self) -> Option<StaBeaconObservation> {
+    pub const fn last_observation(&self) -> Option<StaBeacon> {
         self.last_observation
     }
 
     pub const fn last_tim(&self) -> Option<StaTimObservation> {
         match self.last_observation {
-            Some(observation) => observation.tim,
+            Some(beacon) => beacon.observation.tim,
             None => None,
         }
     }
@@ -118,7 +138,7 @@ impl StaBeaconMonitor {
     pub fn observe(
         &mut self,
         now: Instant,
-        observation: StaBeaconObservation,
+        observation: StaBeacon,
     ) -> Result<(), StaBeaconLossConfigError> {
         self.deadline = Some(
             now.checked_add(self.config.window)
@@ -231,7 +251,7 @@ impl StaLinkMonitor {
     pub fn observe_beacon(
         &mut self,
         now: Instant,
-        observation: StaBeaconObservation,
+        observation: StaBeacon,
     ) -> Result<(), StaBeaconLossConfigError> {
         self.probes_sent = 0;
         self.beacons.observe(now, observation)

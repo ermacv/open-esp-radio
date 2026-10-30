@@ -234,41 +234,70 @@ fn another_protocol_version_has_no_address_layout() {
 
 #[test]
 fn every_control_subtype_has_a_known_or_refused_layout() {
-    for subtype in 0..16_u8 {
+    // The layouts of IEEE Std 802.11-2020, 9.3.1, written out independently
+    // of `control_layout`: Some(true) RA and TA, Some(false) RA alone, None
+    // not interpreted.
+    const EXPECTED: [(u8, Option<bool>); 16] = [
+        (0, None),         // Reserved
+        (1, None),         // Reserved
+        (2, Some(true)),   // Trigger
+        (3, None),         // TACK
+        (4, Some(true)),   // Beamforming Report Poll
+        (5, Some(true)),   // VHT/HE NDP Announcement
+        (6, None),         // Control Frame Extension
+        (7, Some(false)),  // Control Wrapper
+        (8, Some(true)),   // BlockAckReq
+        (9, Some(true)),   // BlockAck
+        (10, Some(true)),  // PS-Poll
+        (11, Some(true)),  // RTS
+        (12, Some(false)), // CTS
+        (13, Some(false)), // Ack
+        (14, Some(true)),  // CF-End
+        (15, Some(true)),  // CF-End +CF-Ack
+    ];
+    for (subtype, layout) in EXPECTED {
         let frame = addressed([(subtype << 4) | 0x04, 0x00], 16);
-        let expected = match control_layout(ControlSubtype::from_encoding(subtype)) {
-            ControlLayout::ReceiverAndTransmitter => Ok(Some(address_at(&frame, 10))),
-            ControlLayout::Receiver => Ok(None),
-            ControlLayout::Unknown => Err(AddressFieldsError::UnknownLayout),
-        };
-        assert_eq!(
-            AddressFields::parse(&frame).map(|fields| fields.transmitter()),
-            expected,
-            "subtype {subtype}"
-        );
+        match layout {
+            Some(true) => {
+                assert_eq!(
+                    AddressFields::parse(&frame).unwrap().transmitter(),
+                    Some(address_at(&frame, 10)),
+                    "subtype {subtype}"
+                );
+                assert_eq!(
+                    AddressFields::parse(&frame[..15]),
+                    Err(AddressFieldsError::Truncated),
+                    "subtype {subtype}"
+                );
+            }
+            Some(false) => {
+                let fields = AddressFields::parse(&frame[..10]).unwrap();
+                assert_eq!(fields.transmitter(), None, "subtype {subtype}");
+                assert_eq!(fields.addresses().count(), 1, "subtype {subtype}");
+            }
+            None => {
+                // Refused from Frame Control alone, before any field it
+                // governs is read.
+                for length in [2, 3, 9, 16] {
+                    assert_eq!(
+                        AddressFields::parse(&frame[..length]),
+                        Err(AddressFieldsError::UnknownLayout),
+                        "subtype {subtype}, {length} octets"
+                    );
+                }
+            }
+        }
     }
-    // Trigger, Beamforming Report Poll and NDP Announcement carry a TA.
-    for subtype in [2, 4, 5] {
-        let frame = addressed([(subtype << 4) | 0x04, 0x00], 16);
+    // An extension frame is refused as early.
+    for length in [2, 9, 40] {
         assert_eq!(
-            AddressFields::parse(&frame).unwrap().transmitter(),
-            Some(address_at(&frame, 10))
-        );
-        assert_eq!(
-            AddressFields::parse(&frame[..10]),
-            Err(AddressFieldsError::Truncated)
-        );
-    }
-    // TACK, Control Frame Extension and the reserved subtypes are refused.
-    for subtype in [0, 1, 3, 6] {
-        assert_eq!(
-            AddressFields::parse(&addressed([(subtype << 4) | 0x04, 0x00], 16)),
+            AddressFields::parse(&addressed([0x0c, 0x00], 40)[..length]),
             Err(AddressFieldsError::UnknownLayout)
         );
     }
-    // So is an extension frame.
+    // Only a frame shorter than Frame Control is truncated before its layout.
     assert_eq!(
-        AddressFields::parse(&addressed([0x0c, 0x00], 40)),
-        Err(AddressFieldsError::UnknownLayout)
+        AddressFields::parse(&[0x64]),
+        Err(AddressFieldsError::Truncated)
     );
 }

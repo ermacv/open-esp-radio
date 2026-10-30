@@ -93,6 +93,11 @@ fn ambiguous_and_unknown_headers_fail_closed() {
         classify_sta_ap_rx(&frame(0x000c, STA, PEER, UPLINK), ADDRESSES),
         StaApRxRoute::Foreign
     );
+    // A Control Frame Extension's Frame Control alone already is foreign.
+    assert_eq!(
+        classify_sta_ap_rx(&[0x64, 0x00], ADDRESSES),
+        StaApRxRoute::Foreign
+    );
     // A four-address frame that ends before Address 4 is malformed.
     assert_eq!(
         classify_sta_ap_rx(&four_address[..24], ADDRESSES),

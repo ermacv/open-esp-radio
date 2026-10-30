@@ -151,7 +151,7 @@ mod associated_peer {
         access_point.set_ht_operation_ie(Some(ht_operation));
         let peer = StaAssociatedPeer::derive(
             &access_point,
-            crate::association::erp_protection([0x07]),
+            oer_ieee80211_wire::protection::ErpProtection::from_information(Some(0x07)),
             &response(0),
             PhyMode::Ht20,
             eight_microseconds,

@@ -157,6 +157,25 @@ impl AddressFields {
         if control.version() != 0 {
             return Err(AddressFieldsError::UnknownVersion);
         }
+        // Frame Control alone decides the layout, before any field it
+        // governs is read: an unknown layout is refused as such, however
+        // short the frame.
+        let layout = match control.kind() {
+            FrameType::Management => AddressLayout::ThreeAddress { address4: false },
+            FrameType::Data => AddressLayout::ThreeAddress {
+                address4: control.to_ds() && control.from_ds(),
+            },
+            FrameType::Control => match control_layout(control.control_subtype()) {
+                ControlLayout::ReceiverAndTransmitter => {
+                    AddressLayout::Control { transmitter: true }
+                }
+                ControlLayout::Receiver => AddressLayout::Control { transmitter: false },
+                ControlLayout::Unknown => return Err(AddressFieldsError::UnknownLayout),
+            },
+            FrameType::Extension | FrameType::Reserved(_) => {
+                return Err(AddressFieldsError::UnknownLayout);
+            }
+        };
         let _duration: [u8; 2] = reader.read().map_err(truncated)?;
         let receiver = reader.read().map_err(truncated)?;
         let mut fields = Self {
@@ -167,27 +186,20 @@ impl AddressFields {
             sequence_control: None,
             address4: None,
         };
-        match control.kind() {
-            FrameType::Management | FrameType::Data => {
+        match layout {
+            AddressLayout::ThreeAddress { address4 } => {
                 fields.transmitter = Some(reader.read().map_err(truncated)?);
                 fields.address3 = Some(reader.read().map_err(truncated)?);
                 fields.sequence_control =
                     Some(u16::from_le_bytes(reader.read().map_err(truncated)?));
-                if matches!(control.kind(), FrameType::Data) && control.to_ds() && control.from_ds()
-                {
+                if address4 {
                     fields.address4 = Some(reader.read().map_err(truncated)?);
                 }
             }
-            FrameType::Control => match control_layout(control.control_subtype()) {
-                ControlLayout::ReceiverAndTransmitter => {
-                    fields.transmitter = Some(reader.read().map_err(truncated)?);
-                }
-                ControlLayout::Receiver => {}
-                ControlLayout::Unknown => return Err(AddressFieldsError::UnknownLayout),
-            },
-            FrameType::Extension | FrameType::Reserved(_) => {
-                return Err(AddressFieldsError::UnknownLayout);
+            AddressLayout::Control { transmitter: true } => {
+                fields.transmitter = Some(reader.read().map_err(truncated)?);
             }
+            AddressLayout::Control { transmitter: false } => {}
         }
         Ok(fields)
     }
@@ -233,6 +245,15 @@ impl AddressFields {
         .into_iter()
         .flatten()
     }
+}
+
+/// The address fields a known frame layout holds after Address 1.
+#[derive(Clone, Copy)]
+enum AddressLayout {
+    /// Addresses 2 and 3 and Sequence Control, then Address 4 when set.
+    ThreeAddress { address4: bool },
+    /// Address 2 when set.
+    Control { transmitter: bool },
 }
 
 /// The addresses a control frame of one subtype carries.

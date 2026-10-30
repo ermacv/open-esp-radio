@@ -1,15 +1,63 @@
 use super::*;
-use oer_ieee80211_wire::station_beacon::StaBeaconProtection;
+use oer_ieee80211_wire::{protection::ErpProtection, station_beacon::StaBeaconProtection};
 
-const BEACON: StaBeaconObservation = StaBeaconObservation {
-    timestamp_tsf: oer_ieee80211_wire::tsf::TsfTimestamp::from_micros(10),
-    interval_tu: 100,
-    capability_information: 0,
-    tim: None,
-    protection: StaBeaconProtection::UNPROTECTED,
-    edca: None,
-    channel_switch: None,
+const BEACON: StaBeacon = StaBeacon {
+    observation: StaBeaconObservation {
+        timestamp_tsf: oer_ieee80211_wire::tsf::TsfTimestamp::from_micros(10),
+        interval_tu: 100,
+        capability_information: 0,
+        tim: None,
+        protection: StaBeaconProtection::UNPROTECTED,
+        edca: None,
+        channel_switch: None,
+    },
+    erp: ErpProtection::NONE,
 };
+
+const BSSID: [u8; 6] = [0x20, 0x21, 0x22, 0x23, 0x24, 0x25];
+
+/// The station's reading of a beacon from `BSSID` carrying `elements`.
+fn read(elements: &[u8]) -> StaBeacon {
+    let mut frame = std::vec![0_u8; 36];
+    frame[..2].copy_from_slice(&[0x80, 0x00]);
+    frame[4..10].fill(0xff);
+    frame[10..16].copy_from_slice(&BSSID);
+    frame[16..22].copy_from_slice(&BSSID);
+    frame[32..34].copy_from_slice(&100_u16.to_le_bytes());
+    frame.extend_from_slice(elements);
+    StaBeacon::new(oer_ieee80211_wire::station_beacon::parse_sta_beacon(&frame, BSSID, 1).unwrap())
+}
+
+#[test]
+fn each_beacon_sets_its_own_erp_requirements() {
+    let config =
+        StaBeaconLossConfig::new(100, 3, oer_time::Duration::from_micros(307_200)).unwrap();
+    let mut monitor = StaBeaconMonitor::new(config);
+    let mut last_erp = |elements: &[u8]| {
+        monitor
+            .observe(oer_time::Instant::from_micros(1_000), read(elements))
+            .unwrap();
+        monitor.last_observation().unwrap().erp
+    };
+    // Within one beacon every ERP element counts, in either order.
+    assert_eq!(
+        last_erp(&[42, 1, 0x02, 42, 1, 0x00]),
+        ErpProtection::new(true, false)
+    );
+    assert_eq!(
+        last_erp(&[42, 1, 0x00, 42, 1, 0x02]),
+        ErpProtection::new(true, false)
+    );
+    // The next sound beacon sets the requirements anew: none accumulate.
+    assert_eq!(last_erp(&[42, 1, 0x00]), ErpProtection::NONE);
+    assert_eq!(last_erp(&[]), ErpProtection::NONE);
+    // A damaged ERP element fails closed for that beacon alone.
+    assert_eq!(
+        last_erp(&[42, 2, 0x02, 0x02]),
+        ErpProtection::new(true, true)
+    );
+    assert_eq!(last_erp(&[42, 1, 0x04]), ErpProtection::new(false, true));
+}
 
 #[test]
 fn exact_deadline_is_lost_but_an_observation_refreshes_the_window() {

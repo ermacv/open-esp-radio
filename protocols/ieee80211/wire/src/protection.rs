@@ -149,5 +149,57 @@ oer_wire::bitfield! {
     }
 }
 
+/// The ERP elements of a run of information elements, checked once: every
+/// element's Length stays within the run and every ERP element carries one
+/// octet of ERP Information. Elements of other identifiers stay opaque.
+///
+/// SOURCE: IEEE Std 802.11-2020, 9.4.2.1 (element format: Element ID,
+/// Length, body) and 9.4.2 (the ERP element: one octet of ERP Information).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ErpElements<'a> {
+    elements: &'a [u8],
+}
+
+/// Information elements whose ERP elements cannot be read.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ErpElementsError {
+    /// An element's Length runs past the elements, or a lone octet trails
+    /// them.
+    MalformedElements,
+    /// An ERP element whose body is not one octet.
+    ErpLength,
+}
+
+impl<'a> ErpElements<'a> {
+    /// Check `elements`, a frame's information elements.
+    pub fn parse(elements: &'a [u8]) -> Result<Self, ErpElementsError> {
+        let mut remaining = elements;
+        while !remaining.is_empty() {
+            let (element, rest) = crate::element::Element::split(remaining)
+                .ok_or(ErpElementsError::MalformedElements)?;
+            if element.id == ERP_ELEMENT_ID && element.body.len() != 1 {
+                return Err(ErpElementsError::ErpLength);
+            }
+            remaining = rest;
+        }
+        Ok(Self { elements })
+    }
+
+    /// Every ERP element's ERP Information field, in frame order. A BSS
+    /// sends one; what repeats mean is the receiver's decision.
+    pub fn information(&self) -> impl Iterator<Item = u8> + 'a {
+        let mut remaining = self.elements;
+        core::iter::from_fn(move || {
+            let (element, rest) = crate::element::Element::split(remaining)?;
+            remaining = rest;
+            Some(element)
+        })
+        .filter_map(|element| match (element.id, element.body) {
+            (ERP_ELEMENT_ID, &[information]) => Some(information),
+            _ => None,
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests;

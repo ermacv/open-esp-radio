@@ -162,12 +162,15 @@ owner or at the shared protocol boundary. See the
 
 `ieee80211/wire` depends on `oer-wire` alone; it holds no state, profile or
 regulatory decision. A scan record holds what the frame carries, such as the
-DS Parameter Set's channel when present (`scan::ScanRecord::ds_channel`); the
-frame's view yields every ERP element's ERP Information in frame order
-(`scan::ScanFrame::erp_information`). The station decides the rest: a scan
-observation's signal level as `Option<i8>`, its channel (the DS Parameter
-Set's or else the receiver's) and its ERP protection, which folds every ERP
-element and fails closed on repeats (`sta::scan::BssObservation`,
-`sta::association::erp_protection`); and the RSN capabilities of its
-association (`sta::security::personal_rsn`) that the codec encodes
-(`station::SelectedRsn::rsn`).
+DS Parameter Set's channel when present (`scan::ScanRecord::ds_channel`).
+Scan results and connected beacons hand their ERP elements over as one
+checked view (`protection::ErpElements`): every ERP Information field in
+frame order, or a typed error for a damaged element. The station decides the
+rest: a scan observation's signal level as `Option<i8>` and its channel (the
+DS Parameter Set's or else the receiver's), and one ERP fold for scan
+results and beacons alike (`sta::association::erp_protection`). Within a
+frame every asserted bit counts, damaged elements ask for Use Protection and
+long preambles, and each beacon replaces the last one's requirements
+(`sta::link_monitor::StaBeacon`). The station also chooses the RSN
+capabilities of its association (`sta::security::personal_rsn`) that the
+codec encodes (`station::SelectedRsn::rsn`).

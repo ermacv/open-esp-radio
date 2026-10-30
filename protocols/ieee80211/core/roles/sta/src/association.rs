@@ -50,16 +50,26 @@ pub fn select_phy(
     }
 }
 
-/// The ERP protection a BSS's ERP Information fields ask for, in frame
-/// order. A BSS sends one ERP element; repeats are malformed, and protection
-/// fails closed while the rest of the record stays usable: every bit any of
-/// them asserts counts. No element asks for nothing.
+/// The ERP protection one frame's ERP elements ask for: the station's one
+/// fold for scan results and beacons alike. A BSS sends one ERP element;
+/// repeats are malformed, and protection fails closed while the rest of the
+/// frame stays usable: every bit any of them asserts counts. No element asks
+/// for nothing. Elements that cannot be read ask for Use Protection and long
+/// preambles. Each frame decides on its own; a later frame's elements
+/// replace an earlier one's.
 pub fn erp_protection(
-    information: impl IntoIterator<Item = u8>,
+    elements: Result<
+        oer_ieee80211_wire::protection::ErpElements<'_>,
+        oer_ieee80211_wire::protection::ErpElementsError,
+    >,
 ) -> oer_ieee80211_wire::protection::ErpProtection {
-    oer_ieee80211_wire::protection::ErpProtection::from_information(
-        information.into_iter().reduce(|merged, next| merged | next),
-    )
+    use oer_ieee80211_wire::protection::ErpProtection;
+    match elements {
+        Ok(elements) => ErpProtection::from_information(
+            elements.information().reduce(|merged, next| merged | next),
+        ),
+        Err(_) => ErpProtection::new(true, true),
+    }
 }
 
 /// The mode a station associates with `access_point` in under `preference`:

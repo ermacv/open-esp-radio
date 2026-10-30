@@ -4987,13 +4987,13 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
         }
         if let Ok(beacon) = parse_sta_beacon(frame, connected.bssid.get(), connected.association_id)
         {
-            if let Some(edca) = beacon.edca
+            if let Some(edca) = beacon.observation.edca
                 && edca != connected.peer.associated.edca
             {
                 connected.peer.associated.edca = edca;
                 connected.edca = true;
             }
-            if connected.power.beacon(beacon.tim) == PowerSaveDecision::SendActive
+            if connected.power.beacon(beacon.observation.tim) == PowerSaveDecision::SendActive
                 && !connected.waking
             {
                 connected.wake = true;

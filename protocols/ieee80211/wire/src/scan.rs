@@ -18,6 +18,7 @@ use crate::address::{Bssid, IndividualAddress};
 use crate::ht::{
     HT_CAPABILITY_IE_LEN, HT_OPERATION_IE_LEN, HtPeerCapabilities, ht_peer_capabilities,
 };
+use crate::protection::{ErpElements, ErpElementsError};
 
 pub const RSN_IE_CAPACITY: usize = 64;
 pub const RSNXE_CAPACITY: usize = 16;
@@ -358,29 +359,11 @@ impl<'a> ScanFrame<'a> {
         self.record
     }
 
-    /// Every ERP element's one-octet ERP Information field, in frame order.
-    /// A BSS sends one; a malformed frame may repeat it, and what repeats
-    /// mean is the receiver's decision. An element of another length is no
-    /// ERP Information and is skipped, and the walk ends where the elements
-    /// stop parsing.
-    ///
-    /// SOURCE: IEEE Std 802.11-2020, 9.4.2 (the ERP element: one octet of
-    /// ERP Information).
-    pub fn erp_information(&self) -> impl Iterator<Item = u8> + 'a {
-        let mut remaining = self.elements;
-        core::iter::from_fn(move || {
-            let (element, rest) = crate::element::Element::split(remaining)?;
-            remaining = rest;
-            Some(element)
-        })
-        .filter_map(|element| match element {
-            crate::element::Element {
-                id: crate::protection::ERP_ELEMENT_ID,
-                body: &[information],
-                ..
-            } => Some(information),
-            _ => None,
-        })
+    /// The frame's ERP elements, checked: a damaged element or an ERP
+    /// element of another length is refused here, for the receiver to
+    /// decide what that means.
+    pub fn erp_elements(&self) -> Result<ErpElements<'a>, ErpElementsError> {
+        ErpElements::parse(self.elements)
     }
 }
 

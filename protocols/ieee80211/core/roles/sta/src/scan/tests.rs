@@ -222,40 +222,69 @@ fn erp_beacon(information: &[u8]) -> std::vec::Vec<u8> {
     frame
 }
 
+fn erp_of(frame: &[u8]) -> oer_ieee80211_wire::protection::ErpProtection {
+    crate::association::erp_protection(ScanFrame::parse(frame).unwrap().erp_elements())
+}
+
 #[test]
 fn retains_erp_use_protection_without_confusing_the_element_header() {
     let frame = erp_beacon(&[0x03]);
     let scan = ScanFrame::parse(&frame).unwrap();
-    assert!(scan.erp_information().eq([0x03]));
+    assert!(scan.erp_elements().unwrap().information().eq([0x03]));
 }
 
 #[test]
-fn every_repeated_erp_element_reaches_the_station_without_a_limit() {
-    // Five elements, every one of them seen: no storage threshold.
+fn every_erp_element_of_a_frame_counts_in_either_order_and_without_a_limit() {
+    use oer_ieee80211_wire::protection::ErpProtection;
+    // Use Protection asserted first or last: it counts either way.
+    assert_eq!(
+        erp_of(&erp_beacon(&[0x02, 0x00])),
+        ErpProtection::new(true, false)
+    );
+    assert_eq!(
+        erp_of(&erp_beacon(&[0x00, 0x02])),
+        ErpProtection::new(true, false)
+    );
+    // Five clear elements ask for nothing; there is no storage threshold.
     let five_clear = erp_beacon(&[0; 5]);
-    let scan = ScanFrame::parse(&five_clear).unwrap();
-    assert_eq!(scan.erp_information().count(), 5);
     assert_eq!(
-        crate::association::erp_protection(scan.erp_information()),
-        oer_ieee80211_wire::protection::ErpProtection::NONE
+        ScanFrame::parse(&five_clear)
+            .unwrap()
+            .erp_elements()
+            .unwrap()
+            .information()
+            .count(),
+        5
     );
-    // Any asserted bit counts, wherever it stands.
-    let late = erp_beacon(&[0, 0, 0, 0, 0, 0, 0x04, 0, 0x02]);
-    let scan = ScanFrame::parse(&late).unwrap();
-    assert!(scan.erp_information().eq([0, 0, 0, 0, 0, 0, 0x04, 0, 0x02]));
-    assert_eq!(
-        crate::association::erp_protection(scan.erp_information()),
-        oer_ieee80211_wire::protection::ErpProtection::new(true, true)
-    );
-    // An element of another length is no ERP Information.
+    assert_eq!(erp_of(&five_clear), ErpProtection::NONE);
+    // Many elements: a bit asserted late among them still counts.
+    let mut many = [0_u8; 200];
+    many[180] = 0x04;
+    many[199] = 0x02;
+    assert_eq!(erp_of(&erp_beacon(&many)), ErpProtection::new(true, true));
+    // No element asks for nothing.
+    assert_eq!(erp_of(&erp_beacon(&[])), ErpProtection::NONE);
+}
+
+#[test]
+fn damaged_erp_elements_fail_closed() {
+    use oer_ieee80211_wire::protection::{ErpElementsError, ErpProtection};
+    // An ERP element of another length is refused, not taken as absent.
     let mut odd = erp_beacon(&[]);
     odd.extend_from_slice(&[42, 2, 0x02, 0x02]);
-    assert_eq!(ScanFrame::parse(&odd).unwrap().erp_information().count(), 0);
-    // No element asks for nothing.
     assert_eq!(
-        crate::association::erp_protection(ScanFrame::parse(&odd).unwrap().erp_information()),
-        oer_ieee80211_wire::protection::ErpProtection::NONE
+        ScanFrame::parse(&odd).unwrap().erp_elements(),
+        Err(ErpElementsError::ErpLength)
     );
+    assert_eq!(erp_of(&odd), ErpProtection::new(true, true));
+    // So is an element whose Length runs past the frame.
+    let mut overrun = erp_beacon(&[0x00]);
+    overrun.extend_from_slice(&[221, 9, 0]);
+    assert_eq!(
+        ScanFrame::parse(&overrun).unwrap().erp_elements(),
+        Err(ErpElementsError::MalformedElements)
+    );
+    assert_eq!(erp_of(&overrun), ErpProtection::new(true, true));
 }
 
 #[test]
@@ -638,7 +667,9 @@ fn a_rich_frame_keeps_every_retained_element() {
     assert!(
         ScanFrame::parse(&rich_frame(8))
             .unwrap()
-            .erp_information()
+            .erp_elements()
+            .unwrap()
+            .information()
             .eq([0x02])
     );
     assert!(record.supports_ht_duplicate_mcs32());
