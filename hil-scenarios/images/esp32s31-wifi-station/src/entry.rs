@@ -46,10 +46,11 @@ mod transport;
 mod usb;
 
 oer_espressif_executor::tasks! {
-    /// The application executor's tasks: the console, the station's work and
-    /// the RTC watchdog's feed.
+    /// The application executor's tasks: the console, the station's work
+    /// with the load server, and the RTC watchdog's feed.
     AppTasks: Executor<Esp32s31, 0> {
-        console(usb: transport::Usb, boot: u64, evidence: system::Evidence, requests: station::Sender) = console;
+        @observer: load::cpu::Observer::<{ load::cpu::APPLICATION }>;
+        console(usb: transport::Usb, boot: u64, evidence: system::Evidence, requests: Requests) = console;
         station_work(work: oer_memory::PlacedFuture<'static, station::Work>) = station::run;
         rtc_watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) = feed_rtc_watchdog;
     }
@@ -234,6 +235,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
     let dma = wifi::DmaResources::claim()
         .unwrap_or_else(|error| station::radio::failure(wifi::InitializationError::Dma(error)));
     let (sender, receiver) = station::requests();
+    let (load_sender, load_receiver) = load::serve::requests();
     let inputs = station::Inputs {
         requests: receiver,
         deferred: station::Deferred {
@@ -267,8 +269,13 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
             software.irq0,
             urgent,
             move |spawner| {
-                if AppTasks::console(spawner, usb, boot, evidence, sender).is_err()
-                    || AppTasks::station_work(spawner, station::place(inputs)).is_err()
+                let requests = Requests {
+                    station: sender,
+                    load: load_sender,
+                };
+                if AppTasks::console(spawner, usb, boot, evidence, requests).is_err()
+                    || AppTasks::station_work(spawner, station::place(inputs, load_receiver))
+                        .is_err()
                     || AppTasks::rtc_watchdog(spawner, rtc_watchdog).is_err()
                 {
                     fail(fatal::Failure::TaskAllocation);
@@ -278,21 +285,29 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
         .unwrap_or_else(|failure| failure.reset()) {}
 }
 
+/// The console's ends of the services' request queues.
+struct Requests {
+    station: station::Sender,
+    load: load::serve::Sender,
+}
+
 /// Serve the host until the chip resets; the station's requests go to its
-/// work.
-async fn console(
-    usb: transport::Usb,
-    boot: u64,
-    evidence: system::Evidence,
-    requests: station::Sender,
-) {
+/// work, the load requests to the load server beside it.
+async fn console(usb: transport::Usb, boot: u64, evidence: system::Evidence, requests: Requests) {
+    use oer_hil_agent::base::Either;
     transport::serve(
         usb,
         boot,
         services::KEYS,
         services::MAXIMUM_PAYLOAD_BYTES,
         evidence,
-        move |identity, request| station::queue(&requests, identity, request),
+        move |identity,
+              request: Either<oer_services_wifi_station::Request, oer_services_load::Request>| {
+            match request {
+                Either::First(request) => station::queue(&requests.station, identity, request),
+                Either::Second(request) => load::serve::queue(&requests.load, identity, request),
+            }
+        },
     )
     .await
 }

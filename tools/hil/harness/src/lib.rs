@@ -42,10 +42,11 @@ pub struct Scenario {
     pub(crate) name: &'static str,
     pub(crate) image: &'static str,
     pub(crate) services: &'static [&'static [Key]],
-    /// Whether its cases turn a radio on: its lease then holds the air,
-    /// shared. An image's radio works only on its command, so a scenario
-    /// that never commands one leases the board alone.
-    pub(crate) air: bool,
+    /// How its cases use the air: none (an image's radio works only on its
+    /// command, so a scenario that never commands one leases the board
+    /// alone), shared when they turn a radio on, exclusive when they
+    /// measure it.
+    pub(crate) air: Option<oer_lab_arbiter::claims::Mode>,
     /// Whether its cases use the lab router ([`Cx::router`]): its lease
     /// then holds the router and the air, shared.
     pub(crate) router: bool,
@@ -64,14 +65,26 @@ impl Scenario {
             name,
             image,
             services,
-            air: false,
+            air: None,
             router: false,
         }
     }
 
     /// This scenario, whose cases turn a radio on.
     pub const fn using_air(self) -> Self {
-        Self { air: true, ..self }
+        Self {
+            air: Some(oer_lab_arbiter::claims::Mode::Shared),
+            ..self
+        }
+    }
+
+    /// This scenario, whose cases measure the radio: no other radio work
+    /// runs beside it.
+    pub const fn using_air_exclusively(self) -> Self {
+        Self {
+            air: Some(oer_lab_arbiter::claims::Mode::Exclusive),
+            ..self
+        }
     }
 
     /// This scenario, whose cases use the lab router.
@@ -120,6 +133,8 @@ pub struct Cx<'a> {
     /// A request whose outcome is unknown: the device may still run it, so
     /// the boot takes no further request.
     unconfirmed: Option<u32>,
+    /// What the case measured, in the order it measured it.
+    measurements: Vec<(String, serde_json::Value)>,
 }
 
 impl<'a> Cx<'a> {
@@ -128,6 +143,7 @@ impl<'a> Cx<'a> {
             dut,
             boot,
             unconfirmed: None,
+            measurements: Vec::new(),
         }
     }
 
@@ -231,6 +247,15 @@ impl<'a> Cx<'a> {
         Ok(self.link()?.health())
     }
 
+    /// Record a measurement `name` of the case: printed at once, and kept in
+    /// the run's results file (`target/hil/results/`) with the case's name.
+    /// A measurement reports; it never decides the case.
+    pub fn measure(&mut self, name: impl Into<String>, value: serde_json::Value) {
+        let name = name.into();
+        println!("  measure {name}: {value}");
+        self.measurements.push((name, value));
+    }
+
     /// Run `request` on the lab router under the run's lease (a scenario
     /// [`Scenario::using_router`]): its result as the operation returns it.
     /// A router that does not answer leaves the case incomplete.
@@ -301,6 +326,7 @@ pub fn main(scenario: &Scenario, cases: &[Case]) -> ExitCode {
         }
     };
     let mut out = std::io::stdout();
+    let mut measured = None;
     let (outcomes, cleanup) = match stand::Session::open(scenario, arguments.board.as_deref()) {
         Ok(mut session) => {
             let link = session.take_link();
@@ -310,6 +336,13 @@ pub fn main(scenario: &Scenario, cases: &[Case]) -> ExitCode {
                 let run = run::cases(&mut dut, scenario, &selected, &mut out);
                 (run, dut.into_link())
             };
+            if !run.measurements.is_empty() {
+                measured = Some((
+                    session.root().to_owned(),
+                    session.board_id().to_owned(),
+                    run.measurements,
+                ));
+            }
             let cleanup = session.finish(link, run.ending);
             let cleanup = cleanup.released(session.release());
             (run.outcomes, Some(cleanup))
@@ -321,7 +354,58 @@ pub fn main(scenario: &Scenario, cases: &[Case]) -> ExitCode {
         }
     };
     let verdict = run::summary(scenario, &outcomes, cleanup.as_ref(), &mut out);
+    if let Some((root, board, measurements)) = measured {
+        let mut results = run::results(scenario, &board, &outcomes, &measurements);
+        if let Some(object) = results.as_object_mut() {
+            object.insert(
+                "cleanup".to_owned(),
+                cleanup
+                    .as_ref()
+                    .and_then(Cleanup::problem)
+                    .map_or(serde_json::Value::from("clean"), serde_json::Value::from),
+            );
+            object.insert("verdict".to_owned(), verdict_name(&verdict).into());
+        }
+        write_results(&root, scenario, &results);
+    }
     ExitCode::from(verdict.exit_code())
+}
+
+fn verdict_name(verdict: &Verdict) -> &'static str {
+    match verdict {
+        Verdict::Pass => "pass",
+        Verdict::Fail(_) => "fail",
+        Verdict::Incomplete(_) => "incomplete",
+    }
+}
+
+/// Write `results` to `target/hil/results/<scenario>-<time>.json` of the
+/// checkout `root` and print where; a file that cannot be written is
+/// reported, never the run's verdict. The time is in nanoseconds: two runs
+/// never share a file.
+fn write_results(root: &std::path::Path, scenario: &Scenario, results: &serde_json::Value) {
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |elapsed| elapsed.as_nanos());
+    let directory = root.join("target/hil/results");
+    let path = directory.join(format!("{}-{nanos}.json", scenario.name));
+    let written = std::fs::create_dir_all(&directory).and_then(|()| {
+        std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)
+            .and_then(|mut file| {
+                use std::io::Write as _;
+                writeln!(file, "{results:#}")
+            })
+    });
+    match written {
+        Ok(()) => println!("results: {}", path.display()),
+        Err(error) => eprintln!(
+            "hil: the results file {} was not written: {error}",
+            path.display()
+        ),
+    }
 }
 
 #[cfg(test)]

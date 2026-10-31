@@ -2379,6 +2379,7 @@ dependencies = [
  "bytemuck",
  "critical-section",
  "embassy-futures",
+ "embassy-net",
  "heapless",
  "oer-diagnostics",
  "oer-embassy-net",
@@ -2395,11 +2396,26 @@ dependencies = [
  "oer-hil-protocol",
  "oer-memory",
  "oer-riscv",
+ "oer-services-load",
  "oer-services-wifi-station",
  "oer-time",
  "oer-trace",
  "postcard",
  "static_cell",
+ "xarxa",
+]
+
+[[package]]
+name = "oer-hil-scenarios-wifi-load"
+version = "0.1.0"
+dependencies = [
+ "heapless",
+ "oer-hil-agent",
+ "oer-hil-harness",
+ "oer-lab-model",
+ "oer-services-load",
+ "oer-services-wifi-station",
+ "serde_json",
 ]
 
 [[package]]
@@ -3055,6 +3071,18 @@ dependencies = [
  "oer-crypto",
  "oer-hil-agent",
  "oer-hil-protocol",
+ "postcard-schema",
+ "serde",
+]
+
+[[package]]
+name = "oer-services-load"
+version = "0.1.0"
+dependencies = [
+ "heapless",
+ "oer-hil-agent",
+ "oer-hil-protocol",
+ "postcard",
  "postcard-schema",
  "serde",
 ]

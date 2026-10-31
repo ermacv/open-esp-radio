@@ -6,10 +6,11 @@
 //! station work answers each request; the boot's one join constructs the
 //! station for its channel, spawns its driver on the radio executor and runs
 //! the station and the IP stack beside the requests until the station ends.
-//! Nothing radiates before the join.
+//! Nothing radiates before the join. The load server shares the work's
+//! task and opens its sockets on the IP stack the work lends it.
 
 mod future;
-mod ip;
+pub(crate) mod ip;
 pub(crate) mod irq;
 pub(crate) mod radio;
 
@@ -46,6 +47,7 @@ oer_espressif_executor::tasks! {
     /// The radio executor's tasks (P2): the shared RF actor from the boot,
     /// the station's driver from its join.
     pub(crate) RadioTasks: InterruptExecutor<Esp32s31, 2> {
+        @observer: crate::load::cpu::Observer::<{ crate::load::cpu::RADIO }>;
         radio_actor(actor: &'static mut Actor) = radio_actor;
         driver(driver: wifi::Driver<radio::binding::Binding>) = radio::drive;
     }
@@ -105,16 +107,24 @@ pub(crate) struct Inputs {
 pub(crate) type Work = impl core::future::Future<Output = ()>;
 static WORK: ConstStaticCell<StaticPlace<Work>> = ConstStaticCell::new(StaticPlace::new());
 
-/// The station work, written in its own static place.
-pub(crate) fn place(inputs: Inputs) -> PlacedFuture<'static, Work> {
+/// The station work and the load server beside it, written in their own
+/// static place.
+pub(crate) fn place(inputs: Inputs, load: crate::load::serve::Receiver) -> PlacedFuture<'static, Work> {
     WORK.try_take()
         .unwrap_or_else(|| crate::fail(Failure::Storage))
-        .future(|| work_future(inputs))
+        .future(|| work_future(inputs, load))
 }
 
 #[define_opaque(Work)]
-fn work_future(inputs: Inputs) -> Work {
-    work(inputs)
+fn work_future(inputs: Inputs, load: crate::load::serve::Receiver) -> Work {
+    async move {
+        let network = crate::load::serve::Network::new();
+        let station = core::pin::pin!(work(inputs, &network));
+        let load = core::pin::pin!(crate::load::serve::serve(load, &network));
+        match select(Boundary(station), Boundary(load)).await {
+            Either::First(never) | Either::Second(never) => match never {},
+        }
+    }
 }
 
 /// The station's task: its work lives in its own static place.
@@ -172,7 +182,7 @@ async fn answer_connect(join: RequestIdentity, operation: Option<wifi::Operation
     }
 }
 
-async fn work(inputs: Inputs) {
+async fn work(inputs: Inputs, network: &crate::load::serve::Network) -> Infallible {
     let Inputs {
         mut requests,
         deferred,
@@ -264,13 +274,14 @@ async fn work(inputs: Inputs) {
     if RadioTasks::driver(&radio, runners.driver).is_err() {
         crate::fail(Failure::TaskAllocation);
     }
-    let (network, running) = match ip::start(address, seed, net) {
+    let (ip, interface, running) = match ip::start(address, seed, net) {
         Ok(started) => started,
         Err(error) => {
             answer_join(join, &Joined::Refused(network_failed(error)));
             stopped(&mut requests, down).await
         }
     };
+    network.lend(interface);
     let connect = match control.connect().await {
         Ok(operation) => Some(operation),
         Err(error) => {
@@ -285,7 +296,7 @@ async fn work(inputs: Inputs) {
     let up = || Status {
         address,
         link: answers::link(&status.status()),
-        ipv4: ipv4(network.status().ipv4),
+        ipv4: ipv4(ip.status().ipv4),
     };
     let leaving = Cell::new(None);
     let network_done = Cell::new(false);
@@ -319,12 +330,13 @@ async fn work(inputs: Inputs) {
             exit => emit(leave, &Left::Refused(ended(&exit))),
         }
     }
-    network.stop();
+    ip.stop();
     Tracked {
         future: core::pin::Pin::new(&mut running),
         done: &network_done,
     }
     .await;
+    network.withdraw();
     stopped(&mut requests, down).await
 }
 
@@ -334,8 +346,12 @@ fn validate(join: &Join) -> Result<(wifi::StationSettings, wifi::Config), Statio
     let settings =
         wifi::StationSettings::wpa2_passphrase(join.ssid.as_bytes(), join.passphrase.as_bytes())
             .map_err(|_| StationError::InvalidSettings)?;
-    let config = wifi::Config::new(join.channel, COUNTRY, TX_CAP_DBM, false)
-        .map_err(|_| StationError::InvalidSettings)?;
+    // A trace build's configuration names no access point to observe.
+    #[cfg(oer_trace)]
+    let config = wifi::Config::new(join.channel, COUNTRY, TX_CAP_DBM, None, false);
+    #[cfg(not(oer_trace))]
+    let config = wifi::Config::new(join.channel, COUNTRY, TX_CAP_DBM, false);
+    let config = config.map_err(|_| StationError::InvalidSettings)?;
     Ok((settings, config))
 }
 
@@ -511,6 +527,6 @@ fn network_failed(error: oer_embassy_net::ip::Error) -> StationError {
 
 // Keep the bounded wire-record constructor out of the station's poll frames.
 #[inline(never)]
-fn emit<M: oer_hil_protocol::Message>(identity: RequestIdentity, body: &M) {
+pub(crate) fn emit<M: oer_hil_protocol::Message>(identity: RequestIdentity, body: &M) {
     let _sequence = CONSOLE.publish(identity.session_id, identity.request_id, body);
 }

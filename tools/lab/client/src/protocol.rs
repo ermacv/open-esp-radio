@@ -24,7 +24,7 @@ use oer_lab_arbiter::readiness::Readiness;
 use serde::{Deserialize, Serialize};
 
 /// The protocol version; another one is refused.
-pub const PROTOCOL: u32 = 1;
+pub const PROTOCOL: u32 = 2;
 /// The token a command runs under: its client joins the lease the token
 /// belongs to, for no more than the token allows, instead of queueing.
 pub const LEASE_ENV: &str = "OER_LAB_LEASE";
@@ -391,12 +391,16 @@ pub struct HolderStatus {
 #[serde(tag = "router", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum RouterOperation {
     /// Apply the WPA2 station profile with `ssid` and `passphrase` on
-    /// `channel`, one the stand file's `[router]` allows, to the stand's AP.
+    /// `channel`, one the stand file's `[router]` allows, to the stand's AP;
+    /// its isolated network forwards UDP between its stations and
+    /// `forward_host` when given (a run's load generator on the host).
     /// Result: the applied profile's description.
     ApplyStationProfile {
         ssid: String,
         passphrase: String,
         channel: u8,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        forward_host: Option<Ipv4Addr>,
     },
     /// Check that the router has its observation tools.
     VerifyObservationTools,

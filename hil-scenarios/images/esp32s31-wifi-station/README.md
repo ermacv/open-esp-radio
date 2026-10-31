@@ -2,18 +2,20 @@
 
 The image the HIL Wi-Fi station scenarios of the ESP32-S31 share. It starts
 the shared staged platform, serves the HIL base module over the USB
-Serial/JTAG console and mounts one service:
+Serial/JTAG console and mounts two services:
 
 | Service | Handler |
 | --- | --- |
 | [Wi-Fi station](../../services/wifi-station/src/lib.rs) | The product station facade (`oer-esp32s31-wifi`) with IPv4 by DHCP (`oer_embassy_net::ip`); one request at a time, a request while one waits is refused as `Busy` |
+| [Load](../../services/load/src/lib.rs) | UDP load on the station's address and the executors' CPU (`src/load`); one request at a time, likewise |
 
 ## Composition
 
 The boot composes the shared RF actor with its SAR/PWDET binding, the radio
 executor (P2), the Wi-Fi interrupt (P3) and its doorbell, and keeps every
 owner the station's construction takes; the application executor (P1) runs
-the console, the station's work and the RTC watchdog's feed. Hart 0 lines:
+the console, the station's work with the load server beside it in one task,
+and the RTC watchdog's feed. Hart 0 lines:
 P3 Wi-Fi handler 21 and radio alarm 19; P2 radio executor 17 and TIMG0
 SAR/PWDET steps 16; P1 executor wake 40, alarm 41 and console 42
 (`docs/architecture.md`, Execution).
@@ -32,6 +34,61 @@ request after the station stopped, is refused (`AlreadyJoined`,
 The image builds in no credentials. It does not radiate before `Join`: the
 RF actor calibrates and the radio starts at the station's first
 registration, which the join's station makes.
+
+## Load
+
+The image declares the `trace` instrumentation class: `cargo fw` builds it
+with `oer_trace`, under which the executors report their activity
+boundaries, and the station configuration names no access point to observe.
+Every other observer of the station stays `Noop`.
+
+`Start` binds one UDP socket on its port of the station's DHCP address and
+answers `Running` at once; without a lease it is refused (`NoAddress`), and
+while a run runs (`Busy`). Its parameters are refused (`InvalidParameters`)
+for a zero port or peer port, a delay, window or drain past the service's
+maximum, or a payload below the 28-byte load header or above 1472 bytes,
+the UDP payload of one 1514-byte Ethernet frame (the stack fragments
+nothing). The run's window opens `delay_ms` after the start and closes
+`duration_ms` later; the image reads its CPU at both ends, after opening
+and after closing, and keeps the times. It receives and echoes from the
+start until `drain_ms` after the window, then closes the socket and keeps
+the report until the next run starts. `Collect` of the running run answers
+`Running`, of the kept one its report, of any other `UnknownRun`.
+
+- **Receive.** A datagram whose header asks for an echo, of any run, goes
+  back to its source at once with the reply flag instead (`echoed`, or
+  `echo_refused` when the socket has no room) and is never load. Every
+  other datagram with the run's header is load, counted by the service's
+  shared tally of 8192 words (64 KiB, sequence numbers below 524 288, some
+  90 s at 65 Mbit/s of 1400-byte datagrams): distinct, late, duplicate,
+  lost or, past its capacity, untracked. A distinct one that arrives within
+  the window also counts as the window's. Anything else on the port is
+  `foreign`.
+- **Transmit.** Within the window, datagrams of `payload` bytes (header
+  and zero filler) go to the peer from the bound port, with sequence
+  numbers from 0 counting only the datagrams the socket took. At a nonzero
+  rate datagram `n` is due `n` payload times after the window opened: the
+  sender wakes on the Embassy timer, sends what is due, at most 16 a batch,
+  and sleeps at least 1 ms between batches. A datagram the socket has no
+  room for is dropped (`refused`) and its time passes; nothing is sent
+  after the window ends, and what was due but not yet sent then is
+  `missed`; other errors count
+  as `failed`. At rate 0 it sends as fast as the socket takes datagrams,
+  yielding every 16.
+- **CPU.** Each executor's task set selects the observer of its own slot,
+  which accumulates the executor's work spans and, for the hart's thread
+  executor, its idle spans (masked WFI), in 64-bit totals. `GetCpu` and
+  each window end read them since boot with the image's time. Work spans
+  include preemption and overlap between executors, so they never add up
+  to busy time; only a hart's idle time gives its utilisation
+  (`1 - idle / window` between two reports). A build without `oer_trace`
+  reports no harts or executors.
+
+The IP stack's pools are sized for about 65 Mbit/s of 1400-byte datagrams
+each way (`src/station/ip.rs`): 32 receive slots for the station's bursts,
+16 transmit credits, 32 general slots, and 16 datagrams queued per socket.
+The stack's storage is written from a constant image, never built on the
+task stack. The load runs on P1 beside the station and its IP stack.
 
 ## Regulatory configuration
 

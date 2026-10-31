@@ -118,6 +118,8 @@ pub struct Profile {
     ssid: Zeroizing<String>,
     security: Security,
     group_rekey_seconds: u32,
+    /// The host whose UDP the station network forwards both ways.
+    forward_host: Option<std::net::Ipv4Addr>,
 }
 
 impl fmt::Debug for Profile {
@@ -178,6 +180,7 @@ impl Profile {
             ssid: Zeroizing::new(ssid.to_owned()),
             security: Security::Unchanged,
             group_rekey_seconds: crate::station_wpa2::GROUP_REKEY_SECONDS,
+            forward_host: None,
         })
     }
 
@@ -200,6 +203,13 @@ impl Profile {
         let mut profile = Self::new(radio, ap_section, interface, channel, ssid)?;
         profile.security = Security::Wpa2(Zeroizing::new(passphrase.to_owned()));
         Ok(profile)
+    }
+
+    /// This profile, whose station network forwards UDP between its
+    /// stations and `host`, a run's load generator.
+    pub fn forwarding_host(mut self, host: std::net::Ipv4Addr) -> Self {
+        self.forward_host = Some(host);
+        self
     }
 
     fn station_network(&self) -> bool {
@@ -317,6 +327,7 @@ pub fn plan() -> Result<Vec<String>> {
         ssid: Zeroizing::new("<ssid>".to_owned()),
         security: Security::Unchanged,
         group_rekey_seconds: crate::station_wpa2::GROUP_REKEY_SECONDS,
+        forward_host: None,
     };
     Ok(vec![
         CHANGES.to_owned(),
@@ -384,7 +395,7 @@ fn apply_inner(remote: &mut dyn Remote, profile: &Profile) -> Result<Applied> {
     let previous_network = if profile.station_network() {
         let fingerprint = crate::station::network::prepare(remote)?;
         remote
-            .run(&crate::station::network::render()?)
+            .run(&crate::station::network::render(profile.forward_host)?)
             .map_err(step("applying the isolated station network"))?;
         Some(fingerprint)
     } else {
@@ -405,7 +416,7 @@ fn apply_inner(remote: &mut dyn Remote, profile: &Profile) -> Result<Applied> {
     let country = country_of(after.sections(profile)?.0)?;
     let applied = settle(remote, profile, country)?;
     if let Some(before) = previous_network {
-        crate::station::network::verify(remote, &profile.interface, &before)?;
+        crate::station::network::verify(remote, &profile.interface, &before, profile.forward_host)?;
     }
     Ok(applied)
 }

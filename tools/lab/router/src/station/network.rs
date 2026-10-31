@@ -1,5 +1,7 @@
 //! The dedicated station BSS network. All non-station network sections are fingerprinted
 //! before and after applying it; no LAN address, port or route is rewritten.
+//! Forwarding is rejected both ways, except UDP between the station network
+//! and one host address when a run asks for it (its load traffic).
 
 use crate::{
     router::quote,
@@ -19,7 +21,7 @@ struct Setting {
     list: bool,
 }
 
-fn settings() -> Vec<Setting> {
+fn settings(host: Option<Ipv4Addr>) -> Vec<Setting> {
     let scalar = [
         ("network.oer_station_device", "device"),
         ("network.oer_station_device.name", BRIDGE),
@@ -114,6 +116,36 @@ fn settings() -> Vec<Setting> {
             list: true,
         });
     }
+    if let Some(host) = host {
+        let host = host.to_string();
+        // Both sit in the chains the rejecting rules sit in (`src` `*`
+        // forwards in `forward`, `src` station in `forward_oer_station`),
+        // reordered before them.
+        for (path, value) in [
+            ("firewall.oer_station_host_in", "rule"),
+            ("firewall.oer_station_host_in.name", "oer-station-host-in"),
+            ("firewall.oer_station_host_in.src", "*"),
+            ("firewall.oer_station_host_in.src_ip", host.as_str()),
+            ("firewall.oer_station_host_in.dest", NAME),
+            ("firewall.oer_station_host_in.proto", "udp"),
+            ("firewall.oer_station_host_in.family", "ipv4"),
+            ("firewall.oer_station_host_in.target", "ACCEPT"),
+            ("firewall.oer_station_host_out", "rule"),
+            ("firewall.oer_station_host_out.name", "oer-station-host-out"),
+            ("firewall.oer_station_host_out.src", NAME),
+            ("firewall.oer_station_host_out.dest", "*"),
+            ("firewall.oer_station_host_out.dest_ip", host.as_str()),
+            ("firewall.oer_station_host_out.proto", "udp"),
+            ("firewall.oer_station_host_out.family", "ipv4"),
+            ("firewall.oer_station_host_out.target", "ACCEPT"),
+        ] {
+            values.push(Setting {
+                path: path.into(),
+                value: value.into(),
+                list: false,
+            });
+        }
+    }
     values
 }
 
@@ -127,14 +159,17 @@ const SECTIONS: &[&str] = &[
     "firewall.oer_station_ping",
     "firewall.oer_station_out",
     "firewall.oer_station_in",
+    "firewall.oer_station_host_in",
+    "firewall.oer_station_host_out",
 ];
 
-pub fn render() -> Result<String> {
+/// The station network, forwarding UDP to and from `host` when given.
+pub fn render(host: Option<Ipv4Addr>) -> Result<String> {
     let mut script = String::from("set -e\n");
     for section in SECTIONS {
         script.push_str(&format!("uci delete {} || :\n", quote(section)?));
     }
-    for value in settings() {
+    for value in settings(host) {
         script.push_str(&format!(
             "uci {} {}\n",
             if value.list { "add_list" } else { "set" },
@@ -142,8 +177,16 @@ pub fn render() -> Result<String> {
         ));
     }
     script.push_str(
-        "uci reorder firewall.oer_station_out=0\nuci reorder firewall.oer_station_in=0\n\
-        fw4 check >/dev/null\n\
+        "uci reorder firewall.oer_station_out=0\nuci reorder firewall.oer_station_in=0\n",
+    );
+    if host.is_some() {
+        script.push_str(
+            "uci reorder firewall.oer_station_host_out=0\n\
+             uci reorder firewall.oer_station_host_in=0\n",
+        );
+    }
+    script.push_str(
+        "fw4 check >/dev/null\n\
         uci commit firewall\n/etc/init.d/firewall reload >/dev/null\n\
         uci commit network\nuci commit dhcp\nubus call network reload >/dev/null\n\
         ifup oer_station\n",
@@ -200,11 +243,11 @@ pub fn prepare(remote: &mut dyn Remote) -> Result<String> {
     fingerprint(remote)
 }
 
-fn verify_script(interface: &str) -> Result<String> {
+fn verify_script(interface: &str, host: Option<Ipv4Addr>) -> Result<String> {
     let mut script = String::from("set -e\n");
     // Check each scalar and list as committed, not only the rendered script.
     let mut expected = std::collections::BTreeMap::<String, String>::new();
-    for value in settings() {
+    for value in settings(host) {
         if value.list {
             let entry = expected.entry(value.path).or_default();
             if !entry.is_empty() {
@@ -227,24 +270,36 @@ fn verify_script(interface: &str) -> Result<String> {
          test \"$(ls /sys/class/net/{}/brif)\" = {}\n\
          test \"$(ip -4 -o addr show dev {} | awk '{{print $4}}')\" = 10.231.0.1/24\n\
          nft list chain inet fw4 forward_oer_station | grep -qF oer-station-no-forward-out\n\
-         nft list chain inet fw4 forward | grep -qF oer-station-no-forward-in\n\
-         printf 'verified\\n'\n",
+         nft list chain inet fw4 forward | grep -qF oer-station-no-forward-in\n",
         quote(interface)?,
         BRIDGE,
         BRIDGE,
         quote(interface)?,
         BRIDGE
     ));
+    if host.is_some() {
+        script.push_str(
+            "nft list chain inet fw4 forward_oer_station | grep -qF oer-station-host-out\n\
+             nft list chain inet fw4 forward | grep -qF oer-station-host-in\n",
+        );
+    }
+    script.push_str("printf 'verified\\n'\n");
     Ok(script)
 }
 
-pub fn verify(remote: &mut dyn Remote, interface: &str, before: &str) -> Result<()> {
+/// Verify the applied network, the forwarding for `host` included.
+pub fn verify(
+    remote: &mut dyn Remote,
+    interface: &str,
+    before: &str,
+    host: Option<Ipv4Addr>,
+) -> Result<()> {
     // fw4 resolves the source-zone device set again now that netifd has
     // created the bridge. The initial reload precedes station activation.
     remote
         .run("/etc/init.d/firewall reload >/dev/null")
         .map_err(|_| "cannot reload firewall for the active station device")?;
-    let script = verify_script(interface)?;
+    let script = verify_script(interface, host)?;
     let mut verified = false;
     for attempt in 0..10 {
         if remote
@@ -291,7 +346,7 @@ mod tests {
     use super::*;
     #[test]
     fn rendered_network_is_dedicated_and_exposes_only_dhcp_and_gateway_echo() {
-        let script = render().unwrap();
+        let script = render(None).unwrap();
         assert!(script.contains("network.oer_station_device.type=bridge"));
         assert!(!script.contains(".ports="));
         assert!(script.contains("network.oer_station.ipaddr=10.231.0.1"));
@@ -307,7 +362,8 @@ mod tests {
         assert!(!script.contains("network.wan"));
         assert!(script.find("firewall reload").unwrap() < script.find("network reload").unwrap());
         assert!(!script.contains("network restart"));
-        for setting in settings() {
+        assert!(!script.contains("oer-station-host"));
+        for setting in settings(Some(Ipv4Addr::new(192, 168, 178, 129))) {
             assert!(SECTIONS.iter().any(|section| setting.path == *section
                 || setting.path.starts_with(&format!("{section}."))));
         }
@@ -328,10 +384,37 @@ mod tests {
     }
     #[test]
     fn runtime_verification_quotes_the_interface_and_checks_isolation() {
-        let script = verify_script("made-up'interface").unwrap();
+        let script = verify_script("made-up'interface", None).unwrap();
         assert!(script.contains(&quote("made-up'interface").unwrap()));
         assert!(script.contains("forward_oer_station | grep -qF oer-station-no-forward-out"));
         assert!(script.contains("fw4 forward | grep -qF oer-station-no-forward-in"));
+        assert!(!script.contains("oer-station-host"));
+    }
+
+    #[test]
+    fn a_host_gets_udp_forwarding_both_ways_ahead_of_the_rejections() {
+        let host = Ipv4Addr::new(192, 168, 178, 129);
+        let script = render(Some(host)).unwrap();
+        for line in [
+            "firewall.oer_station_host_in.src_ip=192.168.178.129",
+            "firewall.oer_station_host_in.dest=oer_station",
+            "firewall.oer_station_host_out.dest_ip=192.168.178.129",
+            "firewall.oer_station_host_out.src=oer_station",
+        ] {
+            assert!(script.contains(line), "{line}");
+        }
+        assert!(script.contains("firewall.oer_station_host_in.proto=udp"));
+        assert!(script.contains("firewall.oer_station_host_out.proto=udp"));
+        // Reordered to the front after the rejections were.
+        assert!(
+            script.find("reorder firewall.oer_station_in=0").unwrap()
+                < script
+                    .find("reorder firewall.oer_station_host_in=0")
+                    .unwrap()
+        );
+        let verify = verify_script("phy0-ap0", Some(host)).unwrap();
+        assert!(verify.contains("grep -qF oer-station-host-out"));
+        assert!(verify.contains("uci get firewall.oer_station_host_in.src_ip"));
     }
 
     struct Fake {
@@ -389,7 +472,7 @@ mod tests {
             .into(),
             scripts: vec![],
         };
-        verify(&mut remote, "made-up-interface", &hash).unwrap();
+        verify(&mut remote, "made-up-interface", &hash, None).unwrap();
         assert!(remote.scripts.first().unwrap().contains("firewall reload"));
         assert!(remote.scripts.iter().any(|s| s.contains("/master")));
         assert!(
@@ -408,7 +491,7 @@ mod tests {
             replies: ["".into(), "verified\n".into(), "b".repeat(64)].into(),
             scripts: vec![],
         };
-        assert!(verify(&mut remote, "made-up-interface", &hash).is_err());
+        assert!(verify(&mut remote, "made-up-interface", &hash, None).is_err());
         assert!(!remote.scripts.iter().any(|s| s.contains("dnsmasq reload")));
     }
 }
