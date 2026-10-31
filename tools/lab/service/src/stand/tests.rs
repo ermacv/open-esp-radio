@@ -93,3 +93,88 @@ fn parkings_of_two_boards_keep_both_records_of_their_power() {
     }
     assert_eq!(drivers.powered_off(|records| Ok(records.len())).unwrap(), 8);
 }
+
+#[test]
+fn what_may_radiate_needs_the_air() {
+    use oer_lab_model::rom::ResetPath;
+    let board = || "02:00:00:00:00:01".to_owned();
+    let alone = [Claim::board(&board())];
+    let with_air = [Claim::board(&board()), Claim::shared(AIR)];
+    let starting = [
+        Operation::Reset {
+            board: board(),
+            path: None,
+        },
+        Operation::Reset {
+            board: board(),
+            path: Some(ResetPath::Rts),
+        },
+        Operation::Console {
+            board: board(),
+            reset: true,
+        },
+        Operation::PowerCycle { board: board() },
+        Operation::HubPort {
+            hub: "top".to_owned(),
+            port: 1,
+            off_secs: 1,
+        },
+    ];
+    for operation in &starting {
+        assert!(air_refusal(operation, &alone).is_some(), "{operation:?}");
+        assert!(air_refusal(operation, &with_air).is_none(), "{operation:?}");
+    }
+    let quiet = [
+        Operation::Reset {
+            board: board(),
+            path: Some(ResetPath::Download),
+        },
+        Operation::Console {
+            board: board(),
+            reset: false,
+        },
+        Operation::Describe { board: board() },
+    ];
+    for operation in &quiet {
+        assert!(air_refusal(operation, &alone).is_none(), "{operation:?}");
+    }
+}
+
+#[test]
+fn a_board_parked_off_is_powered_only_for_a_lease_of_the_air() {
+    let directory = tempfile::tempdir().unwrap();
+    let journal = oer_lab_arbiter::Arbiter::at(directory.path())
+        .unwrap()
+        .journal();
+    let drivers = StandDrivers::new(
+        directory.path().to_owned(),
+        directory.path().join("stand.toml"),
+        directory.path().to_owned(),
+        journal,
+    );
+    let mac = "02:00:00:00:00:01";
+    drivers
+        .powered_off(|records| {
+            records.insert(
+                mac.to_owned(),
+                HubPort {
+                    location: "3-8".to_owned(),
+                    port: 1,
+                },
+            );
+            Ok(())
+        })
+        .unwrap();
+    let refused = drivers
+        .prepare(&format!("board:{mac}"), &[Claim::board(mac)])
+        .unwrap_err();
+    assert!(refused.contains("must hold the air"), "{refused}");
+    // A board that rests powered keeps its lease without the air.
+    assert_eq!(
+        drivers.prepare(
+            "board:02:00:00:00:00:02",
+            &[Claim::board("02:00:00:00:00:02")]
+        ),
+        Ok(())
+    );
+}

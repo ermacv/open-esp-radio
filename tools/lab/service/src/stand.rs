@@ -34,7 +34,7 @@ use std::{
 };
 
 use oer_lab_arbiter::{
-    claims::{Claim, covers},
+    claims::{AIR, Claim, covers},
     journal::{ImageIdentity, Journal},
     readiness::{Confirmation, Emission, ROUTER, Recovery},
 };
@@ -691,13 +691,19 @@ impl Drivers for StandDrivers {
         Ok(Self::resources(&self.stand()?))
     }
 
-    fn prepare(&self, resource: &str) -> std::result::Result<(), String> {
-        match resource.strip_prefix("board:") {
-            Some(mac) => self
-                .power_on(mac)
-                .map_err(|error| format!("its power did not come back: {error}")),
-            None => Ok(()),
+    fn prepare(&self, resource: &str, claims: &[Claim]) -> std::result::Result<(), String> {
+        let Some(mac) = resource.strip_prefix("board:") else {
+            return Ok(());
+        };
+        let parked_off = self.powered_off(|records| Ok(records.contains_key(mac)))?;
+        if parked_off && !covers(claims, &[Claim::shared(AIR)]) {
+            return Err(format!(
+                "board {mac} rests with its power off, and powering it on starts its \
+                 image, which may radiate: the lease must hold the air"
+            ));
         }
+        self.power_on(mac)
+            .map_err(|error| format!("its power did not come back: {error}"))
     }
 
     fn attached(&self) -> Vec<(String, String)> {
@@ -713,6 +719,9 @@ impl Drivers for StandDrivers {
         claims: &[Claim],
         io: OperationIo,
     ) -> std::result::Result<serde_json::Value, String> {
+        if let Some(refusal) = air_refusal(operation, claims) {
+            return Err(refusal);
+        }
         let stop = io.stop.clone();
         match operation {
             Operation::Flash {
@@ -792,6 +801,29 @@ impl Drivers for StandDrivers {
             }
         }
     }
+}
+
+/// Why a lease holding `claims` may not run `operation`: one that starts an
+/// image, powers a board or drives the router may put it on the air, so the
+/// lease must hold the air. A resource in use radiates only under its
+/// lease's air claims.
+fn air_refusal(operation: &Operation, claims: &[Claim]) -> Option<String> {
+    use oer_lab_model::rom::ResetPath;
+    let radiates = match operation {
+        Operation::Flash { .. }
+        | Operation::PowerCycle { .. }
+        | Operation::ProvePowerLoss { .. }
+        | Operation::HubPort { .. }
+        | Operation::Router { .. } => true,
+        Operation::Reset { path, .. } => *path != Some(ResetPath::Download),
+        Operation::Console { reset, .. } => *reset,
+        Operation::ReadConsole { .. }
+        | Operation::ProbeRouter
+        | Operation::Detect
+        | Operation::Describe { .. } => false,
+    };
+    (radiates && !covers(claims, &[Claim::shared(AIR)]))
+        .then(|| "this operation may start what radiates: the lease must hold the air".to_owned())
 }
 
 #[cfg(test)]

@@ -53,11 +53,11 @@ pub trait Drivers: Send + Sync + 'static {
     /// Bring `recovery`'s resource to an end state its kind declares and
     /// confirm it; within the kind's deadline.
     fn recover(&self, recovery: &Recovery) -> Confirmation;
-    /// Make `resource`, just granted, ready for its lease from its end
-    /// state, such as a board parked with its power off. The grant reaches
-    /// its client only after this; an error leaves the resource unavailable
-    /// and refuses the lease.
-    fn prepare(&self, resource: &str) -> Result<(), String>;
+    /// Make `resource`, just granted to a lease holding `claims`, ready for
+    /// it from its end state, such as a board parked with its power off. The
+    /// grant reaches its client only after this; an error refuses the lease,
+    /// which parks the resource again.
+    fn prepare(&self, resource: &str, claims: &[Claim]) -> Result<(), String>;
     /// The boards attached to the host now, each by its port and MAC.
     fn attached(&self) -> Vec<(String, String)>;
     /// The boards attached to the host, with their hub ports.
@@ -570,8 +570,13 @@ impl Service {
                 lock(&self.shared.inner).draining = true;
                 let service = self.clone();
                 let outbox = outbox_of(&self.shared, connection);
+                // Drained once no lease is held and no driver works: a
+                // recovery, even one past its deadline, still uses what an
+                // update would replace.
                 std::thread::spawn(move || {
-                    service.wait_until(|status| status.holders.is_empty());
+                    service.wait_until(|status| {
+                        status.holders.is_empty() && status.recovering.is_empty()
+                    });
                     if let Some(outbox) = outbox {
                         outbox.push(&Reply::Done { changed: true });
                     }
@@ -1195,6 +1200,7 @@ impl Service {
         let Some(held) = inner.leases.get_mut(&lease) else {
             return;
         };
+        let claims = held.claims.clone();
         let stop = Arc::new(AtomicBool::new(false));
         held.operations.insert(
             (connection, PREPARATION),
@@ -1213,7 +1219,7 @@ impl Service {
                 service
                     .shared
                     .drivers
-                    .prepare(resource)
+                    .prepare(resource, &claims)
                     .err()
                     .map(|reason| (resource.clone(), reason))
             });

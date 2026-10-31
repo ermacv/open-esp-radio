@@ -18,7 +18,10 @@ use std::{
 use oer_hil_link::Link;
 use oer_image_build::images;
 use oer_image_bundle::ImageBundle;
-use oer_lab_arbiter::{claims::Claim, journal::ImageIdentity};
+use oer_lab_arbiter::{
+    claims::{AIR, Claim},
+    journal::ImageIdentity,
+};
 use oer_lab_client::{
     client::{Client, Running},
     protocol::{FlashVia, LeaseRequest, Operation},
@@ -66,7 +69,8 @@ impl Session {
                 work: format!("hil {}", scenario.name),
                 scenarios: vec![scenario.name.to_owned()],
                 run: None,
-                claims: vec![Claim::board(&board.mac)],
+                // The scenario's image radiates under the air, shared.
+                claims: vec![Claim::board(&board.mac), Claim::shared(AIR)],
                 maintenance: None,
                 divisible: false,
             },

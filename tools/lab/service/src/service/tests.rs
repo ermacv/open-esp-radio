@@ -99,7 +99,7 @@ impl Drivers for Fake {
         Ok(vec![board(A)])
     }
 
-    fn prepare(&self, _: &str) -> Result<(), String> {
+    fn prepare(&self, _: &str, _: &[Claim]) -> Result<(), String> {
         lock(&self.prepared).clone()
     }
 
@@ -840,4 +840,30 @@ fn an_unread_operation_never_holds_the_replies_behind_it() {
     service.wait_until(|status| status.holders.iter().all(|holder| holder.operations == 0));
     holder.release().unwrap();
     drop(flood);
+}
+
+#[test]
+fn a_drain_answers_only_once_every_recovery_returned() {
+    let directory = tempfile::tempdir().unwrap();
+    let fake = Fake::new();
+    let service = open(directory.path(), &fake);
+    service.wait_until(ready);
+    let mut holder = client(&service);
+    holder.acquire(request("ann"), &mut |_| {}).unwrap();
+    fake.recovery.close();
+    drop(holder);
+    service.wait_until(|status| status.holders.is_empty() && !status.recovering.is_empty());
+    let (drained, done) = std::sync::mpsc::channel();
+    let draining = service.clone();
+    std::thread::spawn(move || {
+        let result = client(&draining).administer(Request::Drain);
+        let _ = drained.send(result.is_ok());
+    });
+    assert_eq!(
+        done.recv_timeout(std::time::Duration::from_millis(200)),
+        Err(std::sync::mpsc::RecvTimeoutError::Timeout),
+        "drained while the board's recovery ran"
+    );
+    fake.recovery.open();
+    assert_eq!(done.recv(), Ok(true));
 }

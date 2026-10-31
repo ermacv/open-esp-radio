@@ -27,7 +27,8 @@ itself (`$OER_LAB_SOCKET` moves it). A lock in the stand's directory
 (`service.lock`) keeps a second instance out. A checkout never replaces the
 service: an update builds the new version beside the installed one, asks
 the running service to drain (it grants nothing more and answers once no
-lease is held), and only then switches and restarts the unit. A running
+lease is held and no driver works, a recovery past its deadline included),
+and only then switches and restarts the unit. A running
 service of another protocol cannot be asked: the update stops with the
 installation unchanged.
 
@@ -47,7 +48,10 @@ client's protocol version; another version is refused with the reason and
 the connection ends.
 
 - A lease belongs to the connection that acquired it, with a token. A
-  command the client runs under the lease gets a token in `OER_LAB_LEASE`;
+  command the client runs under the lease (`cargo stand lease -- CMD`) is
+  the client's own child: on a terminal it shares the terminal's
+  foreground job, reads it and takes its Ctrl-C itself; otherwise it owns a
+  process group. It gets a token in `OER_LAB_LEASE`;
   a client inside it joins the lease for the claims it names, which the
   token must allow, and gets a token of its own allowing those claims only:
   each level of delegation narrows. An ended lease's tokens join nothing.
@@ -86,6 +90,13 @@ held as abandoned and recovers its resources before granting them again.
 
 [`stand`](src/stand.rs) drives the real stand through `oer-lab-board` and
 `oer-lab-router`. Every end state is quiet: no parked resource radiates.
+A resource in use radiates only under its lease's air claims: an operation
+that starts an image (a flash, a reset other than into download, a
+console's reset), switches a board's power (a power cycle, a hub port) or
+drives the router needs a lease that holds the air, shared at least, and so
+does a board parked with its power off, since powering it starts its image.
+`cargo hil`, `cargo fw` and the board commands of `cargo stand` claim it;
+`cargo stand lease --air none` keeps to the rest.
 
 - **Boards.** Each board has one owner in the service: its operations take
   turns in the order they asked (two operations of one lease never drive one
@@ -119,8 +130,11 @@ held as abandoned and recovers its resources before granting them again.
   `hub-port:LOCATION:PORT`. The service runs `uhubctl` for every report.
 - **The router.** It is a resource when the stand file names a `[router]`.
   Its end state: the stand's AP section disabled with the rest of its
-  configuration kept, and no access point on the AP's interface; a run's
-  profile enables the section again. Its operations are the logic of
+  configuration kept, and no access point on its radio: netifd's status
+  (`ubus call network.wireless status`) lists no interface for the section
+  and `iw dev` no AP on the radio's interfaces or the AP's interface. Both
+  views must answer; one that fails leaves the router unavailable, never
+  parked. A run's profile enables the section again. Its operations are the logic of
   `oer-lab-router`: the AP profile on a channel the stand file allows, the
   station, DHCP and ping views, the WPA2 checks, a deauthentication, the
   routed network's check and the echo and departure observers. The service
@@ -140,6 +154,7 @@ a client lost during hardware work, a failed and a late recovery, a restart
 with a lease held, stale confirmations, a slow reader and an unread
 operation, revocations, joined clients and the narrowing of their tokens,
 input by credit and beyond the window, a release that waits for its
-recoveries, a grant that cannot be prepared, the first operation after a
-grant and an unrecordable grant; the turns of operations on one board and
-the record of boards parked with their power off.
+recoveries, a drain that waits for them, a grant that cannot be prepared,
+the first operation after a grant and an unrecordable grant; the turns of
+operations on one board, the record of boards parked with their power off,
+the operations that need the air, and the router's two views judged.

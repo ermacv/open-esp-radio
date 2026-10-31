@@ -472,7 +472,8 @@ impl Stand {
             & 0o777;
         if mode != MODE {
             return Err(format!(
-                "stand file {} has mode {mode:04o}: it holds the stand's credentials and must be                  {MODE:04o} (`chmod 600 {}`)",
+                "stand file {} has mode {mode:04o}: it holds the stand's credentials and must be \
+                 {MODE:04o} (`chmod 600 {}`)",
                 path.display(),
                 path.display()
             )
