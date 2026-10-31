@@ -648,6 +648,90 @@ fn an_attempt_names_a_key_only_after_its_installation_terminal() {
     assert_eq!(sent[0].key, Some((0, true)));
 }
 
+/// Two PTK installations: each numbering token pairs only with the key its
+/// own installation terminal returned.
+struct ForeignPairwiseKey(Rc<Cell<bool>>);
+
+impl Work for ForeignPairwiseKey {
+    async fn work<'p, 'id: 'p, Id: SlotIdentity + 'id>(
+        self,
+        phase: &mut ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
+        resources: ModelResources<'id, ModelBackend<Id>>,
+    ) {
+        use oer_ieee80211_core_upper_mac::ccmp::{
+            CcmpPacketNumberStep, ForeignCcmpTxKey, request_ccmp_pairwise_key,
+        };
+        type Keys<'id, Id> = ModelKeys<'id, ModelBackend<Id>, Station>;
+        let association = Keys::<Id>::begin_association(
+            resources.station_association,
+            oer_ieee80211_wire::security::Spp::NotNegotiated,
+        );
+        let [first_slot, second_slot] = resources.station_pairwise;
+        let peer = IndividualAddress::new(PEER).unwrap();
+        let mut station = phase.station();
+        let first = request_ccmp_pairwise_key(
+            &mut station,
+            &association,
+            first_slot,
+            peer,
+            Ccmp128Key::new(&[1; 16]),
+            CcmpPacketNumberStep::ONE,
+        );
+        let second = request_ccmp_pairwise_key(
+            &mut station,
+            &association,
+            second_slot,
+            peer,
+            Ccmp128Key::new(&[2; 16]),
+            CcmpPacketNumberStep::ONE,
+        );
+        let mut keys = Vec::new();
+        while keys.len() < 2 {
+            if let Ok(Ok(LowerMacEvent::Terminal(LowerMacTerminal::PairwiseKeyInstalled(
+                oer_ieee80211_contracts_port::InstalledPairwise::Station(key),
+            )))) = phase.next_event().await
+            {
+                keys.push(key);
+            }
+        }
+        let second_key = keys.pop().unwrap();
+        let first_key = keys.pop().unwrap();
+        // The second installation's token refuses the first key, returning
+        // both unchanged; nothing is numbered.
+        let Err(ForeignCcmpTxKey {
+            pending: second,
+            key: first_key,
+        }) = second.installed::<Keys<Id>>(first_key)
+        else {
+            panic!("a foreign key gains no numbering")
+        };
+        assert_eq!(first_key.slot.index(), 0);
+        let first = first.installed::<Keys<Id>>(first_key).ok().unwrap();
+        let second = second.installed::<Keys<Id>>(second_key).ok().unwrap();
+        assert_eq!(first.key().slot.index(), 0);
+        assert_eq!(second.key().slot.index(), 1);
+        // Each real installation starts exactly one numbering.
+        for installed in [&first, &second] {
+            assert_eq!(
+                installed.packet_numbers().last(),
+                oer_ieee80211_wire::ccmp::CcmpPacketNumber::ZERO
+            );
+        }
+        self.0.set(true);
+    }
+}
+
+#[test]
+fn a_pairwise_numbering_token_refuses_the_key_of_another_installation() {
+    let (backend, _) = backend();
+    let checked = Rc::new(Cell::new(false));
+    let _port_end = block_on(run_model(
+        backend,
+        Body(ForeignPairwiseKey(checked.clone())),
+    ));
+    assert!(checked.get());
+}
+
 /// A PTK installation reserves its FIFO terminal behind earlier commands.
 struct ConfigureThenKey(Rc<Cell<bool>>);
 

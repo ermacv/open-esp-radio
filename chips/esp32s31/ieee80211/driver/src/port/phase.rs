@@ -203,7 +203,7 @@ where
         slot: <PortKeys<Id, R> as KeyTypes<'id>>::PairwiseSlot,
         peer: IndividualAddress,
         key: Ccmp128Key,
-    ) {
+    ) -> <PortKeys<Id, R> as KeyTypes<'id>>::Identity {
         // P2 activates the identity after the write and returns the key in
         // the installation terminal; until then no attempt can name it.
         let identity = R::identity(
@@ -218,6 +218,10 @@ where
             installation,
             material: key,
         });
+        KeyIdentity {
+            owned: identity,
+            brand: PhantomData,
+        }
     }
     fn install_group_key(
         &mut self,

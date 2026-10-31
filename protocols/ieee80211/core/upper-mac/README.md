@@ -175,9 +175,11 @@ receive candidates commit only after authentication.
 The planner holds no frame bytes. The caller encodes each MPDU's sequence
 number and reserves its CCMP PN with the key's unique `ccmp::CcmpTxPacketNumber`.
 `ccmp::request_ccmp_pairwise_key` enqueues new material through the port and
-returns a `PendingCcmpTxKey`; only that token, spent with the key the
-installation terminal returns, creates the allocator and retains it in
-`InstalledCcmpTxKey` with that backend key;
+returns a `PendingCcmpTxKey` holding the installation identity the port
+returned; only that token, spent with the key the installation terminal
+returns, creates the allocator and retains it in `InstalledCcmpTxKey` with
+that backend key. A key whose `pairwise_identity` differs, another
+installation's, is refused as `ForeignCcmpTxKey` with the token and the key;
 `InstalledCcmpTxKey::install` does the same for a `SoftwareCcmpKey`, key
 material moved into its software owner (an ESP-NOW peer), and `replace_key`
 replaces that material without restarting its numbers. `number` hands out a

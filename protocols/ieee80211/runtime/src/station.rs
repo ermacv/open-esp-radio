@@ -494,6 +494,9 @@ pub enum BackendContractViolation {
     /// The station asked for a second key-data unwrap while one was waiting
     /// to start; it owns one ticket.
     StationKeyUnwrap,
+    /// The pairwise installation terminal returned a key of another
+    /// installation; the outstanding request stays retained.
+    ForeignPairwiseKey,
 }
 
 /// The original failure that ended this service. A poisoned disabled owner
@@ -2542,12 +2545,26 @@ impl<
                         LowerMacTerminal::PairwiseKeyInstalled(InstalledPairwise::Station(key)),
                     ));
                 };
+                let key = match request.installed(key) {
+                    Ok(key) => key,
+                    Err(foreign) => {
+                        // The request keeps its association and numbering
+                        // token; the foreign key is returned with the fault.
+                        self.pending.pairwise = Some(PendingPairwise {
+                            pending,
+                            key: foreign.pending,
+                        });
+                        return Err(ContractFault::sealed(
+                            BackendContractViolation::ForeignPairwiseKey,
+                            LowerMacTerminal::PairwiseKeyInstalled(InstalledPairwise::Station(
+                                foreign.key,
+                            )),
+                        ));
+                    }
+                };
                 self.station.input(
                     now,
-                    StaInput::PairwiseKeyInstalled {
-                        pending,
-                        key: request.installed(key),
-                    },
+                    StaInput::PairwiseKeyInstalled { pending, key },
                     &mut self.events,
                 );
             }

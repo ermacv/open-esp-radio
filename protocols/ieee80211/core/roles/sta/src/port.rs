@@ -9,7 +9,8 @@ use oer_ieee80211_contracts_port::{
 };
 use oer_ieee80211_contracts_security::Ccmp128Key;
 use oer_ieee80211_core_upper_mac::ccmp::{
-    CcmpPacketNumberStep, InstalledCcmpTxKey, PendingCcmpTxKey, request_ccmp_pairwise_key,
+    CcmpPacketNumberStep, ForeignCcmpTxKey, InstalledCcmpTxKey, PendingCcmpTxKey,
+    request_ccmp_pairwise_key,
 };
 use oer_ieee80211_wire::address::IndividualAddress;
 use oer_radio_port::Slot;
@@ -33,17 +34,38 @@ pub struct StationPairwiseKey<'id, K: KeyTypes<'id>> {
 /// A station PTK installation the port accepted, retaining the association
 /// owner until the installation terminal returns the key.
 pub struct PendingStationPairwiseKey<'id, K: KeyTypes<'id>> {
-    key: PendingCcmpTxKey,
+    key: PendingCcmpTxKey<K::Identity>,
     association: K::Association,
+}
+
+/// A key the station's installation did not return: the pending
+/// installation and the key, both unchanged.
+pub struct ForeignStationPairwiseKey<'id, K: KeyTypes<'id>> {
+    pub pending: PendingStationPairwiseKey<'id, K>,
+    pub key: K::PairwiseKey,
 }
 
 impl<'id, K: KeyTypes<'id>> PendingStationPairwiseKey<'id, K> {
     /// The installed PTK, from the key its installation terminal returned;
-    /// its MPDUs are numbered from the request's step.
-    pub fn installed(self, key: K::PairwiseKey) -> StationPairwiseKey<'id, K> {
-        StationPairwiseKey {
-            key: self.key.installed(key),
-            association: self.association,
+    /// its MPDUs are numbered from the request's step. A key of another
+    /// installation is refused with both owners.
+    pub fn installed(
+        self,
+        key: K::PairwiseKey,
+    ) -> Result<StationPairwiseKey<'id, K>, ForeignStationPairwiseKey<'id, K>> {
+        let Self {
+            key: pending,
+            association,
+        } = self;
+        match pending.installed::<K>(key) {
+            Ok(key) => Ok(StationPairwiseKey { key, association }),
+            Err(ForeignCcmpTxKey { pending, key }) => Err(ForeignStationPairwiseKey {
+                pending: Self {
+                    key: pending,
+                    association,
+                },
+                key,
+            }),
         }
     }
 }
@@ -63,8 +85,12 @@ impl<'id, K: KeyTypes<'id>> StationPairwiseKey<'id, K> {
     where
         'id: 'p,
         P: InterfacePhase<'p, 'id>,
-        InterfaceKeys<'p, 'id, P>:
-            KeyTypes<'id, Association = K::Association, PairwiseKey = K::PairwiseKey>,
+        InterfaceKeys<'p, 'id, P>: KeyTypes<
+                'id,
+                Association = K::Association,
+                PairwiseKey = K::PairwiseKey,
+                Identity = K::Identity,
+            >,
     {
         PendingStationPairwiseKey {
             key: request_ccmp_pairwise_key(phase, &association, slot, peer, key, step),

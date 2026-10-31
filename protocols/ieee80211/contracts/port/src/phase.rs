@@ -541,7 +541,9 @@ pub trait KeyTypes<'id> {
     /// Every group operation holds it until its terminal; RX needs no loan.
     type GroupPermission: 'id;
     /// Backend identity of one installation, distinct from its reusable slot.
-    type Identity;
+    /// Equal identities name the same installation; no two installations of
+    /// one port installation share one.
+    type Identity: PartialEq;
     /// Stable identity of a group slot within this installation, retained
     /// across replacement. It correlates the consumed key with its terminal.
     type GroupSlotIdentity: Copy + Eq;
@@ -1308,13 +1310,16 @@ pub trait InterfacePhase<'p, 'id: 'p> {
     /// poisons with the slot and its association retained for teardown;
     /// disable completes the accepted installation within the same bound or
     /// retains its resources, never fabricating an installed key.
+    ///
+    /// Returns the identity the installed key carries: the terminal's key
+    /// is this installation's when its `pairwise_identity` equals it.
     fn install_pairwise_key(
         &mut self,
         association: &<InterfaceKeys<'p, 'id, Self> as KeyTypes<'id>>::Association,
         slot: <InterfaceKeys<'p, 'id, Self> as KeyTypes<'id>>::PairwiseSlot,
         peer: IndividualAddress,
         key: Ccmp128Key,
-    );
+    ) -> <InterfaceKeys<'p, 'id, Self> as KeyTypes<'id>>::Identity;
 
     /// Enqueue a group installation, consuming its vacant slot and the
     /// interface's unique permission. The call reserves a FIFO terminal.

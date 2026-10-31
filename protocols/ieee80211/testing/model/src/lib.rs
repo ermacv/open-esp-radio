@@ -4311,8 +4311,12 @@ where
         >,
         peer: IndividualAddress,
         key: Ccmp128Key,
-    ) {
+    ) -> KeyIdentity<'id, B::Identity> {
         let identity = RawKeyIdentity::new(slot.index(), 0, R::ROLE, peer, &self.held.air);
+        let installation = KeyIdentity {
+            owned: identity.clone(),
+            loan: PhantomData,
+        };
         self.held.command(Command::InstallKey {
             spp: association.owner.spp(),
             material: key,
@@ -4322,6 +4326,7 @@ where
                 slot: slot.into_owned(&self.loan),
             }),
         });
+        installation
     }
 
     fn install_group_key(

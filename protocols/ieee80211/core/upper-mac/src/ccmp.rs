@@ -118,30 +118,47 @@ pub fn request_ccmp_pairwise_key<'p, 'id: 'p, P>(
     peer: oer_ieee80211_wire::address::IndividualAddress,
     key: oer_ieee80211_contracts_security::Ccmp128Key,
     step: CcmpPacketNumberStep,
-) -> PendingCcmpTxKey
+) -> PendingCcmpTxKey<<oer_ieee80211_contracts_port::InterfaceKeys<'p, 'id, P> as oer_ieee80211_contracts_port::KeyTypes<'id>>::Identity>
 where
     P: oer_ieee80211_contracts_port::InterfacePhase<'p, 'id>,
 {
-    phase.install_pairwise_key(association, slot, peer, key);
-    PendingCcmpTxKey { step }
+    let installation = phase.install_pairwise_key(association, slot, peer, key);
+    PendingCcmpTxKey { step, installation }
 }
 
 /// A pairwise installation the port accepted, until its terminal returns
-/// the installed key.
+/// the installed key: the step of its numbering and the identity `I` of
+/// the installation, which only that installation's key carries.
 #[derive(Debug, Eq, PartialEq)]
 #[must_use = "only the accepted installation's token numbers its key"]
-pub struct PendingCcmpTxKey {
+pub struct PendingCcmpTxKey<I> {
     step: CcmpPacketNumberStep,
+    installation: I,
 }
 
-impl PendingCcmpTxKey {
+/// A key that is not the installation's: the token and the key, both
+/// returned unchanged.
+#[derive(Debug, Eq, PartialEq)]
+pub struct ForeignCcmpTxKey<I, K> {
+    pub pending: PendingCcmpTxKey<I>,
+    pub key: K,
+}
+
+impl<I: PartialEq> PendingCcmpTxKey<I> {
     /// Pair the key the installation terminal returned with its new PN
-    /// allocator; the token is spent.
-    pub fn installed<K>(self, key: K) -> InstalledCcmpTxKey<K> {
-        InstalledCcmpTxKey {
+    /// allocator; the token is spent. A key of another installation, which
+    /// may already own a numbering, is refused with both owners.
+    pub fn installed<'id, Keys: oer_ieee80211_contracts_port::KeyTypes<'id, Identity = I>>(
+        self,
+        key: Keys::PairwiseKey,
+    ) -> Result<InstalledCcmpTxKey<Keys::PairwiseKey>, ForeignCcmpTxKey<I, Keys::PairwiseKey>> {
+        if Keys::pairwise_identity(&key) != self.installation {
+            return Err(ForeignCcmpTxKey { pending: self, key });
+        }
+        Ok(InstalledCcmpTxKey {
             key,
             packet_numbers: CcmpTxPacketNumber::new(self.step),
-        }
+        })
     }
 }
 

@@ -783,7 +783,7 @@ async fn installed_pairwise<'p, 'id: 'p, Id: radio::SlotIdentity + 'id>(
     slot: <PortKeys<Id, Station> as KeyTypes<'id>>::PairwiseSlot,
     material: u8,
 ) -> PairwiseKey<'id, Id, Station> {
-    phase.station().install_pairwise_key(
+    let installation = phase.station().install_pairwise_key(
         association,
         slot,
         IndividualAddress::new(BSSID).expect("peer"),
@@ -792,7 +792,13 @@ async fn installed_pairwise<'p, 'id: 'p, Id: radio::SlotIdentity + 'id>(
     match phase.next_event().await {
         Ok(Ok(LowerMacEvent::Terminal(LowerMacTerminal::PairwiseKeyInstalled(
             InstalledPairwise::Station(key),
-        )))) => key,
+        )))) => {
+            // The terminal's key is this installation's.
+            assert!(
+                <PortKeys<Id, Station> as KeyTypes<'id>>::pairwise_identity(&key) == installation
+            );
+            key
+        }
         _ => panic!("the installation terminal returns the key"),
     }
 }
