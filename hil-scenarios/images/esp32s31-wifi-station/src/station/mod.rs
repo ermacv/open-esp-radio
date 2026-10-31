@@ -342,11 +342,8 @@ fn validate(join: &Join) -> Result<(wifi::StationSettings, wifi::Config), Statio
         wifi::StationSettings::wpa2_passphrase(join.ssid.as_bytes(), join.passphrase.as_bytes())
             .map_err(|_| StationError::InvalidSettings)?;
     // A trace build's configuration names no access point to observe.
-    #[cfg(oer_trace)]
-    let config = wifi::Config::new(join.channel, COUNTRY, TX_CAP_DBM, None, false);
-    #[cfg(not(oer_trace))]
-    let config = wifi::Config::new(join.channel, COUNTRY, TX_CAP_DBM, false);
-    let config = config.map_err(|_| StationError::InvalidSettings)?;
+    let config = wifi::Config::new(join.channel, COUNTRY, TX_CAP_DBM, false)
+        .map_err(|_| StationError::InvalidSettings)?;
     Ok((settings, config))
 }
 

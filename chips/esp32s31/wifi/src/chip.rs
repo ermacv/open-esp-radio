@@ -126,11 +126,19 @@ impl Config {
         self.reconnect = policy;
         self
     }
+    /// Name the access point whose frames a trace build observes; without
+    /// it, none is selected.
+    #[cfg(oer_trace)]
+    pub fn with_trace_target(mut self, target: [u8; 6]) -> Self {
+        self.target = Some(target);
+        self
+    }
+    /// The same signature in every build; a trace build's target is chosen
+    /// with [`Self::with_trace_target`].
     pub fn new(
         channel: u8,
         country: [u8; 2],
         cap_dbm: i8,
-        #[cfg(oer_trace)] target: Option<[u8; 6]>,
         all_channels: bool,
     ) -> Result<Self, InitializationError> {
         let domain =
@@ -153,7 +161,7 @@ impl Config {
             country,
             cap_dbm,
             #[cfg(oer_trace)]
-            target,
+            target: None,
             all_channels,
             domain,
             supported,
