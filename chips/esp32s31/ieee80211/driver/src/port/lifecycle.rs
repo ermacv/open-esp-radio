@@ -59,7 +59,8 @@ pub struct RawFrontend<'s, Id: SlotIdentity, D: Device<B>, const B: usize, O: Ob
     >,
     failed_command: &'s oer_memory::OnceValue<driver::Command<'static, Id, D, B, O>>,
     failed_terminal: &'s oer_memory::OnceValue<owned::OwnedTerminal<'static, Id, D, B, O>>,
-    gate: &'s Prepared<GateIssuer<'static, Part<Id, 1>>>,
+    gate: &'s GateIssuer<'static, Part<Id, 1>>,
+    tuned: &'s mut Cell<Channel>,
     identity: &'s mut Cell<u64>,
     timer: D::Timer,
     clock_replies:
@@ -253,12 +254,22 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotOwner<
         Self: 's,
         Id: 's,
     {
-        if queues.resources.is_none() {
+        // Preparation attached the storage and gate together with the
+        // resources; without them there are no views to split.
+        let (
+            true,
+            Some(Attached {
+                storage,
+                gate,
+                tuned,
+            }),
+        ) = (queues.resources.is_some(), queues.held.attached.as_mut())
+        else {
             return Err(oer_radio_port::SlotInitError::MissingResource(
                 "Wi-Fi installation resources",
             ));
-        }
-        let storage = *queues.held.storage;
+        };
+        let (storage, gate) = (*storage, &*gate);
         let (commands, driver_commands) = queues.held.commands.split();
         let (driver_events, events) = queues.held.events.split();
         let (recycled, driver_recycled) = queues.held.recycled.split();
@@ -272,7 +283,8 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotOwner<
                 recycled,
                 failed_command: &queues.held.failed_command,
                 failed_terminal: &queues.held.failed_terminal,
-                gate: &queues.held.gate,
+                gate,
+                tuned,
                 identity: &mut queues.held.frontend_identity,
                 timer: storage.device.borrow().timer().clone(),
                 clock_replies,
@@ -288,7 +300,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotOwner<
                     events: Outgoing(driver_events),
                     recycled: Incoming(driver_recycled),
                     rx_out: &queues.held.rx_out,
-                    gate: &queues.held.gate,
+                    gate,
                     failed_terminal: &queues.held.failed_terminal,
                     clock_replies: Outgoing(driver_clock_replies),
                 },
@@ -396,7 +408,12 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotOwner<
             retire.request_failure(oer_radio_port::LifecycleError::StopUnconfirmed);
             core::future::pending::<()>().await;
         }
-        self.channel = held.channel.get();
+        let Ok(channel) = held.channel.get() else {
+            storage.poison(Fault::Setting(settings::SettingFault::ChannelUnset));
+            retire.request_failure(oer_radio_port::LifecycleError::StopUnconfirmed);
+            match core::future::pending::<core::convert::Infallible>().await {}
+        };
+        self.channel = channel;
         for activity in &storage.shared.key_live {
             activity.set(0);
         }
@@ -464,6 +481,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotBodyOw
                     failed_command: frontend.failed_command,
                     failed_terminal: frontend.failed_terminal,
                     gate: frontend.gate,
+                    tuned: frontend.tuned,
                     identity: frontend.identity,
                     timer: frontend.timer.clone(),
                     clock_replies: frontend.clock_replies.borrow_local(),

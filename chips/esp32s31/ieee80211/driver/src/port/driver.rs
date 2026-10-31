@@ -594,7 +594,12 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         }
         if held.want_enabled.get() && !held.enabled.get() {
             self.transition.get_or_insert(now);
-            let channel = held.channel.get().wifi_channel().ok_or(Fault::Capacity)?;
+            let channel = held
+                .channel
+                .get()
+                .map_err(Fault::Setting)?
+                .wifi_channel()
+                .ok_or(Fault::Capacity)?;
             match device.poll_start(cx, channel) {
                 Poll::Pending => return Ok(()),
                 Poll::Ready(Err(cause)) => return Err(cause),
@@ -686,10 +691,14 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         }
         if held.dirty_edca.replace(false) {
             for role in [VifRole::Station, VifRole::AccessPoint] {
+                let Some(table) = held.edca.get(vif(role)) else {
+                    // P1 is publishing it: its commit wake serves it again.
+                    held.dirty_edca.set(true);
+                    break;
+                };
                 let _installed = idle_command!(self.core, |view| view.set_checked_edca(
                     role,
-                    SupportedEdca::<Esp32s31Caps<B>>::new(held.edca.get(vif(role)))
-                        .ok_or(Fault::Capacity)?,
+                    SupportedEdca::<Esp32s31Caps<B>>::new(table).ok_or(Fault::Capacity)?,
                 ))
                 .map_err(|_| Fault::Capacity)?;
                 #[cfg(test)]
@@ -701,7 +710,15 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         }
         if held.dirty_ba.replace(false) {
             for (index, old) in self.applied_ba.iter_mut().enumerate() {
-                let wanted = held.block_acks.get(index);
+                let wanted = match held.block_acks.get(index) {
+                    Ok(wanted) => wanted,
+                    // P1 is publishing it: its commit wake serves it again.
+                    Err(None) => {
+                        held.dirty_ba.set(true);
+                        break;
+                    }
+                    Err(Some(fault)) => return Err(Fault::Setting(fault)),
+                };
                 if *old == wanted {
                     continue;
                 }

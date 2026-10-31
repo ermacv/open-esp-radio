@@ -110,22 +110,14 @@ macro_rules! keys {
                 }
                 let (start, bank) = vacant.into_parts();
                 let (pairwise, group) = bank.into_parts();
-                let mut pairwise = pairwise.into_iter();
-                let first = pairwise.next().expect("association has a PTK slot");
-                let mut parts = KeyBankParts {
-                    pairwise: heapless::Vec::new(),
-                    group: heapless::Vec::new(),
+                // The pool's geometry is fixed at compile time: the station's
+                // PTK slot is the first, and `from_array` checks that the
+                // spare slots fit the bank's capacity during monomorphization.
+                let [first, spare @ ..] = pairwise;
+                let parts = KeyBankParts {
+                    pairwise: heapless::Vec::from_array(spare),
+                    group: heapless::Vec::from_array(group),
                 };
-                for slot in pairwise {
-                    if let Err(_slot) = parts.pairwise.push(slot) {
-                        panic!("consumer key bank fits the advertised association pool");
-                    }
-                }
-                for slot in group {
-                    if let Err(_slot) = parts.group.push(slot) {
-                        panic!("consumer key bank fits the advertised association pool");
-                    }
-                }
                 (start, first, parts)
             }
             fn pairwise_identity(key: &Self::PairwiseKey) -> Self::Identity {

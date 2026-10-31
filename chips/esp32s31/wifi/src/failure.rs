@@ -28,6 +28,15 @@ pub enum BackendFault {
     Abandoned,
     UnexpectedAggregate,
     TuneNotRecorded,
+    Setting(SettingFault),
+}
+/// Why a P1 setting of the port could not be published or read back.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SettingFault {
+    UnsupportedChannel,
+    ChannelUnset,
+    EdcaLifetime,
+    BlockAckSequence,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum LowerMacFault {

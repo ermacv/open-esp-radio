@@ -43,12 +43,10 @@ mod lifecycle;
 mod registration;
 pub use registration::{Registration, RegistrationError};
 mod phase;
-mod placement;
 #[cfg(any(target_arch = "riscv32", test))]
 mod receive;
 mod settings;
 use oer_sync::PriorityWaker;
-use placement::Prepared;
 #[cfg(all(oer_trace, oer_debug_control))]
 pub mod trace;
 pub use buffer::*;
@@ -57,6 +55,7 @@ mod loan;
 mod owned;
 pub use crate::lower_mac::{ContentionDraw, Observations};
 pub use phase::{Esp32s31Interface, Esp32s31Phase, Esp32s31Setup};
+pub use settings::SettingFault;
 
 /// Shared admission capacity across the four access categories.
 pub const TX_TICKETS: usize = 8;
@@ -178,6 +177,8 @@ pub enum Fault {
     /// The core asked for a retune right after recording the channel it was
     /// tuned to.
     TuneNotRecorded,
+    /// A P1 setting could not be published or read back.
+    Setting(settings::SettingFault),
 }
 
 /// Why the radio front end did not retune a stopped Wi-Fi client.
@@ -516,7 +517,7 @@ type Terminal<'id, Id: SlotIdentity, D, const B: usize, O: Observations> =
     LowerMacTerminal<'id, Types<Id, D, B, O>>;
 
 mod handoff;
-use handoff::{FrontHeld, Held, HeldBacking, Incoming, Outgoing};
+use handoff::{Attached, FrontHeld, Held, HeldBacking, Incoming, Outgoing};
 
 pub struct ReceiveBuffer<'id, Id: SlotIdentity, R> {
     brand: PhantomData<fn(&'id (), Id) -> (&'id (), Id)>,

@@ -13,8 +13,13 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> LowerMacSe
     type Caps = Esp32s31Caps<B>;
     fn set_channel(&mut self, channel: SupportedChannel<Self::Caps>) {
         self.held.publishing.set(true);
-        self.held.channel.set(channel.channel());
+        let published = self.held.channel.set(channel.channel());
         self.held.publishing.set(false);
+        match published {
+            // P1 alone writes the channel; its own view follows the store.
+            Ok(()) => self.held.tuned.set(channel.channel()),
+            Err(fault) => self.held.storage.poison(Fault::Setting(fault)),
+        }
         self.held.storage.driver.wake();
     }
 }
@@ -92,7 +97,7 @@ impl<'p, 'id: 'p, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Obser
     where
         Self: 'v;
     fn channel(&self) -> Channel {
-        self.held.channel.get()
+        self.held.tuned.get()
     }
     fn recycle(&mut self, buffer: ReceiveBuffer<'id, Id, D::Receive>) {
         if let Err(buffer) = self
@@ -188,12 +193,17 @@ where
     }
     fn set_edca(&mut self, parameters: SupportedEdca<Self::Caps>) -> SupportedEdca<Self::Caps> {
         self.held.publishing.set(true);
-        self.held.edca.set(
+        let published = self.held.edca.set(
             if R::ROLE == VifRole::Station { 0 } else { 1 },
             parameters.get(),
         );
         self.held.dirty_edca.set(true);
         self.held.publishing.set(false);
+        // A supported table's lifetimes are at most 500 TU and fit their
+        // words; the port is not served with a table it did not store.
+        if let Err(fault) = published {
+            self.held.storage.poison(Fault::Setting(fault));
+        }
         self.held.storage.driver.wake();
         parameters
     }

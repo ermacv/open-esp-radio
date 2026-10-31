@@ -43,6 +43,19 @@ pub(super) fn backend_fault(value: oer_esp32s31_ieee80211_driver::port::Fault) -
         Source::Abandoned => BackendFault::Abandoned,
         Source::UnexpectedAggregate => BackendFault::UnexpectedAggregate,
         Source::TuneNotRecorded => BackendFault::TuneNotRecorded,
+        Source::Setting(v0) => BackendFault::Setting(setting_fault(v0)),
+    }
+}
+
+pub(super) fn setting_fault(
+    value: oer_esp32s31_ieee80211_driver::port::SettingFault,
+) -> SettingFault {
+    use oer_esp32s31_ieee80211_driver::port::SettingFault as Source;
+    match value {
+        Source::UnsupportedChannel => SettingFault::UnsupportedChannel,
+        Source::ChannelUnset => SettingFault::ChannelUnset,
+        Source::EdcaLifetime => SettingFault::EdcaLifetime,
+        Source::BlockAckSequence => SettingFault::BlockAckSequence,
     }
 }
 
