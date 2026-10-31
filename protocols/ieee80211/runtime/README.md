@@ -26,8 +26,14 @@ topology is checked by `oer-ieee80211-core-arbiter`'s `configuration`.
 
 `station::Control` owns the sole command producer, product status and a
 cooperative stop connection. Control and its neutral network end can exist
-before installation: connect, disconnect and scan submit only a kind and
-correlation. Runner receives the original station command credits during
+before installation: connect, disconnect and scan submit only a kind and an
+internal correlation, and return an `Operation` that resolves exactly once to
+that request's `OperationEnd`. Each kind has one permission: an admitted
+request holds it until its terminal, so a second request of the kind waits
+for it instead of posting a duplicate. Dropping the operation detaches its
+observer without returning the permission; the late terminal returns it and
+never reaches the next request. A service end resolves waiting operations
+with `ServiceEnded`. Runner receives the original station command credits during
 construction. It retains them through core refusal/completion and retirement,
 restores them before delivering a concrete callback, and reports a duplicate
 in-flight kind without minting a permission. No installation lifetime or
@@ -118,8 +124,8 @@ network wiring constructor. The HIL binding translates only the public contract.
 
 The station runtime owns its optional reconnect policy through the existing
 `oer-time` timer and command-credit admission. Policy requests use correlations
-1 (connect) and 65535 (graceful disconnect); explicit callers retain their
-correlations. `CommandStarted` precedes the core call after credit admission.
+1 (connect) and 65535 (graceful disconnect); operations draw theirs from
+2^32 upward, and raw producers retain their correlations. `CommandStarted` precedes the core call after credit admission.
 Explicit Disconnect pauses the policy and Connect resumes it. Graceful Stop
 has its own wake, admits one disconnect and retires after link-down. The raw
 runtime `Control::stop` still requests immediate cooperative retirement.

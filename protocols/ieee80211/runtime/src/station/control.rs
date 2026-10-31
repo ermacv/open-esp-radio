@@ -1,6 +1,10 @@
 //! Application control, lossless callback events, and the neutral network end.
 
+use super::Request;
 use super::contract::{Command, Notice};
+pub use operation::{Operation, OperationEnd};
+
+mod operation;
 use super::{ServiceCommand, ServiceOutput, ServiceOutputSink};
 use core::{
     cell::Cell,
@@ -34,6 +38,7 @@ pub struct State {
     link_waker: PriorityWaker,
     policy: Cell<super::reconnect::Policy>,
     policy_waker: PriorityWaker,
+    operations: operation::Operations,
 }
 
 impl State {
@@ -50,13 +55,20 @@ impl State {
                 super::ReconnectPolicy::DISABLED,
             )),
             policy_waker: PriorityWaker::new(),
+            operations: operation::Operations::new(),
         }
+    }
+    /// The service retired or its runner was lost.
+    fn ended(&self) -> bool {
+        self.status.get().stopped || self.tasks.is_poisoned()
     }
     pub(super) fn split(
         &self,
     ) -> Result<(ConnectedTaskController<'_, ()>, RunnerControl<'_>), ConnectedTaskControlError>
     {
         let (task, endpoint) = self.tasks.split()?;
+        // A new epoch's requests never wait for an ended epoch's terminals.
+        self.operations.reset();
         self.status.set(Status {
             link: LinkSnapshot::DOWN,
             notice: None,
@@ -172,11 +184,19 @@ impl<'c> RunnerControl<'c> {
         status.link.state = LinkState::Down;
         self.state.status.set(status);
         self.state.link_waker.wake();
+        self.state.operations.service_ended();
         if let Some(endpoint) = self.endpoint.take() {
             // A duplicate completion refuses its unit owner and poisons reuse;
             // no radio owner is released through this notification.
             let _completion = endpoint.complete(());
         }
+    }
+}
+
+impl Drop for RunnerControl<'_> {
+    fn drop(&mut self) {
+        // A lost runner poisons the epoch; its waiting operations read that.
+        self.state.operations.service_ended();
     }
 }
 
@@ -291,26 +311,39 @@ impl<'c, K, const DEPTH: usize> Control<'c, K, DEPTH> {
             }),
         }
     }
-    pub async fn connect(&mut self, correlation: u64) -> Result<(), ControlRefused<K>> {
-        self.command(ServiceCommand::Station(super::Request::new(
-            correlation,
-            Command::Connect,
-        )))
-        .await
+    /// Admit a connect request once the previous one's terminal returned
+    /// its permission; the operation resolves to this request's terminal.
+    pub async fn connect(&mut self) -> Result<Operation<'c>, ControlError> {
+        self.operation(Command::Connect).await
     }
-    pub async fn disconnect(&mut self, correlation: u64) -> Result<(), ControlRefused<K>> {
-        self.command(ServiceCommand::Station(super::Request::new(
-            correlation,
-            Command::Disconnect,
-        )))
-        .await
+    /// Admit a disconnect request, as [`Self::connect`].
+    pub async fn disconnect(&mut self) -> Result<Operation<'c>, ControlError> {
+        self.operation(Command::Disconnect).await
     }
-    pub async fn scan(&mut self, correlation: u64) -> Result<(), ControlRefused<K>> {
-        self.command(ServiceCommand::Station(super::Request::new(
-            correlation,
-            Command::BackgroundScan,
-        )))
+    /// Admit a background scan request, as [`Self::connect`].
+    pub async fn scan(&mut self) -> Result<Operation<'c>, ControlError> {
+        self.operation(Command::BackgroundScan).await
+    }
+    async fn operation(&mut self, command: Command) -> Result<Operation<'c>, ControlError> {
+        if self.state.ended() {
+            return Err(ControlError::Stopped);
+        }
+        let operations = &self.state.operations;
+        let correlation = match select(
+            core::future::poll_fn(|cx| operations.poll_free(command, cx)),
+            self.task.wait_stopped(),
+        )
         .await
+        {
+            Either::First(correlation) => correlation,
+            Either::Second(()) => return Err(ControlError::Stopped),
+        };
+        self.command(ServiceCommand::Station(Request::new(correlation, command)))
+            .await
+            .map_err(|refused| refused.reason)?;
+        // Sent and recorded in the same poll: no terminal can precede it.
+        self.state.operations.admitted(command, correlation);
+        Ok(Operation::new(self.state, command, correlation))
     }
     pub fn stop(&mut self) {
         self.task.request_stop();
@@ -340,6 +373,7 @@ impl<K, O: ServiceOutputSink<K>> ServiceOutputSink<K> for Events<'_, O> {
         policy.observe(&output, self.state.status.get().link.state == LinkState::Up);
         self.state.policy.set(policy);
         self.state.policy_waker.wake();
+        self.state.operations.observe(&output);
         self.output.emit(output);
     }
 }

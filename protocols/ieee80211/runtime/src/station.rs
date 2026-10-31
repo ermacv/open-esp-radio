@@ -97,8 +97,8 @@ mod reconnect;
 use commands::CommandCredits;
 pub use commands::{CommandRefused, CommandTerminal, Request};
 pub use control::{
-    Control, ControlCreateRefused, ControlError, ControlRefused, Device, Events, RunnerControl,
-    State, Status, StatusReader,
+    Control, ControlCreateRefused, ControlError, ControlRefused, Device, Events, Operation,
+    OperationEnd, RunnerControl, State, Status, StatusReader,
 };
 pub use reconnect::{ReconnectPolicy, ZeroReconnectInterval};
 

@@ -1,4 +1,4 @@
-use crate::{Caps, Channels, Connection, Control, Network, radio, station as service};
+use crate::{Caps, Channels, Control, Network, ServiceConnection, radio, station as service};
 use oer_esp32s31_compose::Esp32s31;
 use oer_esp32s31_ieee80211_driver::irq::{
     DoorbellAcknowledge, RadioDoorbell, WifiIrqLine, WifiIrqPart, service_wifi_line,
@@ -362,12 +362,14 @@ pub struct StationRunner<W: Binding> {
     /// radio release has ended.
     pub(crate) retire:
         oer_memory::Poster<radio::Retire<W>, Result<(), crate::failure::ReleaseCause>>,
+    /// Publishes the exit to Control once it is final.
+    pub(crate) stop: crate::StopGuard<'static, StationExit>,
 }
 pub(crate) struct ServiceRunner<W: Binding> {
     pub(crate) engine: W::Engine,
     pub(crate) frontend: oer_memory::Poster<(), Result<radio::Front<W>, InitializationError>>,
     pub(crate) config: Config,
-    pub(crate) connection: Connection<'static>,
+    pub(crate) connection: ServiceConnection<'static>,
     pub(crate) storage: &'static mut service::ServiceStorage<W>,
     pub(crate) output: runtime::Events<'static, Output<W::Events>>,
 }
@@ -415,6 +417,10 @@ pub fn station<W: Binding>(
         .channels
         .split()
         .unwrap_or_else(|_| W::fail(InitializationError::Control));
+    let crate::Connection {
+        service: connection,
+        stop,
+    } = connection;
     #[cfg(oer_trace)]
     let _ = service::TARGET.set((address, config.target));
     control
@@ -474,6 +480,7 @@ pub fn station<W: Binding>(
                     output,
                 },
                 retire: retire_poster,
+                stop,
             },
         },
     )

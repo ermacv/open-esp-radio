@@ -7,7 +7,11 @@ composition; its explicit layer role is `Facade`.
 
 Control and the affine neutral Ethernet end exist before installation. `Control::wait_started` gates image workload startup on
 the completed station construction; cancellation retains the waiter, and losing
-an uninstalled runner wakes it with a typed failure. Commands contain only a kind and correlation. The runtime receives the
+an uninstalled runner wakes it with a typed failure. `connect`, `disconnect`
+and `scan` return an `Operation` that resolves once to its request's terminal;
+the correlation stays internal. `wait_stopped` returns a copy of the exit
+the runner publishes after the radio release, or `RunnerLost` if the runner
+ended without one; owners stay with the runner. The runtime receives the
 station's installation-scoped permissions when the P1 runner constructs the
 station, retains them through each terminal, and delivers every completion
 or refusal directly to the image's concrete callback. No scoped application

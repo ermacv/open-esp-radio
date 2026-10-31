@@ -422,7 +422,7 @@ impl<W: Binding> rp::PortBody<W::Id, Backend<W::Id, W>> for Body<W> {
             mut output,
             ..
         } = runner;
-        let crate::Connection {
+        let crate::ServiceConnection {
             start,
             commands,
             transmit,
@@ -463,13 +463,14 @@ pub async fn serve<W: Binding>(runner: StationRunner<W>, profile: Profile<W>) ->
     let StationRunner {
         service: mut runner,
         retire,
+        stop,
     } = runner;
     let mut pending = runner.frontend.post(());
     let (poster, front) = core::future::poll_fn(|cx| pending.poll_answer(cx))
         .await
         .unwrap_or_else(|error| W::fail(InitializationError::Request(error)));
     runner.frontend = poster;
-    match front {
+    let exit = match front {
         Ok(front) => match rp::run_port(front, Body { runner, profile }).await {
             rp::PortEnd::Uninstalled { joined, output } => {
                 // The exit is published only after the radio release ended.
@@ -509,7 +510,10 @@ pub async fn serve<W: Binding>(runner: StationRunner<W>, profile: Profile<W>) ->
                 .complete(Err(crate::StartError::Unavailable));
             StationExit::Unavailable(UnavailableCause::Initialization(error))
         }
-    }
+    };
+    // Every release and retirement step ended: Control reads this copy.
+    stop.publish(exit);
+    exit
 }
 
 /// An uninstalled station's exit once its radio release ended: a failed

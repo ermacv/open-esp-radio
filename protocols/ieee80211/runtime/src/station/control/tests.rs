@@ -233,3 +233,109 @@ fn a_network_frame_requests_the_priority_of_its_marking() {
         assert_eq!(receiver.try_receive().unwrap().priority, priority);
     }
 }
+
+fn terminal(request: Request) -> ServiceOutput<()> {
+    ServiceOutput::CommandCompleted(super::super::CommandTerminal {
+        request,
+        outcome: super::super::contract::CommandOutcome::Connected {
+            bssid: [2; 6],
+            channel: 6,
+        },
+    })
+}
+
+fn poll_now<F: Future>(future: core::pin::Pin<&mut F>) -> Poll<F::Output> {
+    future.poll(&mut Context::from_waker(core::task::Waker::noop()))
+}
+
+#[test]
+fn an_operation_resolves_once_to_its_own_terminal_and_returns_the_permission() {
+    let mut commands = WakingSpscQueue::<ServiceCommand<()>, 2>::new();
+    let state = State::new();
+    let (sender, mut receiver) = commands.split();
+    let (mut control, _runner) = Control::new(sender, &state).unwrap();
+    let mut events = state.events(|_: ServiceOutput<()>| {});
+    let mut first = embassy_futures::block_on(control.connect()).unwrap();
+    let Some(ServiceCommand::Station(request)) = receiver.try_receive() else {
+        panic!("the request is admitted")
+    };
+    assert_eq!(request.command(), Command::Connect);
+    {
+        // The permission stays held: the next connect waits for it.
+        let mut second = core::pin::pin!(control.connect());
+        assert!(poll_now(second.as_mut()).is_pending());
+    }
+    assert!(receiver.try_receive().is_none(), "no duplicate is posted");
+    // Another producer's terminal of the same kind is not this operation's.
+    events.emit(terminal(Request::new(1, Command::Connect)));
+    assert!(poll_now(core::pin::Pin::new(&mut first)).is_pending());
+    events.emit(terminal(request));
+    assert_eq!(
+        poll_now(core::pin::Pin::new(&mut first)),
+        Poll::Ready(OperationEnd::Completed(
+            super::super::contract::CommandOutcome::Connected {
+                bssid: [2; 6],
+                channel: 6
+            }
+        ))
+    );
+    assert!(
+        poll_now(core::pin::Pin::new(&mut first)).is_pending(),
+        "a resolved operation never takes a later terminal"
+    );
+    let _next = embassy_futures::block_on(control.connect()).unwrap();
+    let Some(ServiceCommand::Station(next)) = receiver.try_receive() else {
+        panic!("the returned permission admits the next request")
+    };
+    assert_ne!(next.correlation(), request.correlation());
+}
+
+#[test]
+fn a_detached_operation_keeps_its_permission_until_the_late_terminal() {
+    let mut commands = WakingSpscQueue::<ServiceCommand<()>, 2>::new();
+    let state = State::new();
+    let (sender, mut receiver) = commands.split();
+    let (mut control, _runner) = Control::new(sender, &state).unwrap();
+    let mut events = state.events(|_: ServiceOutput<()>| {});
+    drop(embassy_futures::block_on(control.scan()).unwrap());
+    let Some(ServiceCommand::Station(detached)) = receiver.try_receive() else {
+        panic!("the request is admitted")
+    };
+    let mut next = core::pin::pin!(control.scan());
+    assert!(
+        poll_now(next.as_mut()).is_pending(),
+        "dropping freed nothing"
+    );
+    events.emit(ServiceOutput::CommandRefused(
+        super::super::CommandRefused {
+            request: detached,
+            reason: super::super::contract::CommandRefusal::NotConnected,
+        },
+    ));
+    let Poll::Ready(Ok(mut operation)) = poll_now(next.as_mut()) else {
+        panic!("the late terminal returned the permission")
+    };
+    assert!(
+        poll_now(core::pin::Pin::new(&mut operation)).is_pending(),
+        "the detached request's terminal is not delivered to the next one"
+    );
+}
+
+#[test]
+fn a_service_end_wakes_its_operations_with_the_cause() {
+    let mut commands = WakingSpscQueue::<ServiceCommand<()>, 2>::new();
+    let state = State::new();
+    let (sender, _receiver) = commands.split();
+    let (mut control, mut runner) = Control::new(sender, &state).unwrap();
+    let mut operation = embassy_futures::block_on(control.disconnect()).unwrap();
+    assert!(poll_now(core::pin::Pin::new(&mut operation)).is_pending());
+    runner.complete();
+    assert_eq!(
+        poll_now(core::pin::Pin::new(&mut operation)),
+        Poll::Ready(OperationEnd::ServiceEnded)
+    );
+    assert_eq!(
+        embassy_futures::block_on(control.connect()).err(),
+        Some(ControlError::Stopped)
+    );
+}

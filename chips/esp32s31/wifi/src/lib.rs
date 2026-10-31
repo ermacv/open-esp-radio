@@ -23,7 +23,7 @@ use oer_ieee80211_core_roles_sta::data::{EthernetFrame as Frame, TxMsdu};
 use oer_ieee80211_runtime::station as runtime;
 use oer_memory::WakingSpscQueue;
 use oer_network_port::{EthernetFrame, LinkSnapshot, NetDevice, TransmitRefused};
-use runtime::contract::Command;
+pub use runtime::{ControlError, Operation, OperationEnd};
 
 pub const RX_DEPTH: usize = 8;
 pub const FRAME_CAPACITY: usize = 1664;
@@ -31,10 +31,16 @@ pub const FRAME_CAPACITY: usize = 1664;
 type Caps = oer_esp32s31_ieee80211_driver::port::Esp32s31Caps<FRAME_CAPACITY>;
 #[cfg(not(target_arch = "riscv32"))]
 type Caps = ();
+/// The station's exit, as its runner publishes it.
+#[cfg(target_arch = "riscv32")]
+pub type Exit = chip::StationExit;
+#[cfg(not(target_arch = "riscv32"))]
+pub type Exit = core::convert::Infallible;
 
 /// The sole product command end. Its type carries no port identity or loan.
 pub struct Control<'a> {
     start: &'a StartState,
+    stop: &'a StopState<Exit>,
     inner: runtime::Control<'a, Caps, 2>,
 }
 impl<'a> Control<'a> {
@@ -63,37 +69,71 @@ impl<'a> Control<'a> {
     pub fn stopped(&self) -> bool {
         self.inner.status().stopped
     }
-    pub fn try_connect(&mut self, correlation: u64) -> Result<(), runtime::ControlError> {
-        self.request(correlation, Command::Connect)
+    /// Admit a connect once the previous connect's terminal returned its
+    /// permission; the operation resolves exactly once to this request's
+    /// terminal. Dropping it detaches the observer: the request continues.
+    pub async fn connect(&mut self) -> Result<Operation<'a>, ControlError> {
+        self.inner.connect().await
     }
-    pub fn try_disconnect(&mut self, correlation: u64) -> Result<(), runtime::ControlError> {
-        self.request(correlation, Command::Disconnect)
+    /// Admit a disconnect, as [`Self::connect`].
+    pub async fn disconnect(&mut self) -> Result<Operation<'a>, ControlError> {
+        self.inner.disconnect().await
     }
-    pub fn try_scan(&mut self, correlation: u64) -> Result<(), runtime::ControlError> {
-        self.request(correlation, Command::BackgroundScan)
-    }
-    fn request(&mut self, correlation: u64, command: Command) -> Result<(), runtime::ControlError> {
-        self.inner
-            .try_command(runtime::ServiceCommand::Station(runtime::Request::new(
-                correlation,
-                command,
-            )))
-            .map_err(|r| r.reason)
-    }
-    pub async fn connect(&mut self, correlation: u64) -> Result<(), runtime::ControlError> {
-        self.inner.connect(correlation).await.map_err(|r| r.reason)
-    }
-    pub async fn disconnect(&mut self, correlation: u64) -> Result<(), runtime::ControlError> {
-        self.inner
-            .disconnect(correlation)
-            .await
-            .map_err(|r| r.reason)
+    /// Admit a background scan, as [`Self::connect`].
+    pub async fn scan(&mut self) -> Result<Operation<'a>, ControlError> {
+        self.inner.scan().await
     }
     pub fn stop(&mut self) {
         self.inner.stop_gracefully();
     }
-    pub async fn wait_stopped(&mut self) {
-        self.inner.wait_stopped().await;
+    /// The station's exit, published by its runner after the radio release
+    /// ended. The copy reports the result; the runner keeps every owner.
+    pub async fn wait_stopped(&mut self) -> Result<Exit, RunnerLost> {
+        self.stop.wait().await
+    }
+}
+/// The station runner ended without publishing its exit.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct RunnerLost;
+/// The one exit a runner publishes, and its waiter.
+struct StopState<E> {
+    result: core::cell::Cell<Option<Result<E, RunnerLost>>>,
+    waker: oer_sync::PriorityWaker,
+}
+impl<E: Copy> StopState<E> {
+    const fn new() -> Self {
+        Self {
+            result: core::cell::Cell::new(None),
+            waker: oer_sync::PriorityWaker::new(),
+        }
+    }
+    async fn wait(&self) -> Result<E, RunnerLost> {
+        core::future::poll_fn(|cx| {
+            self.waker.register(cx.waker());
+            match self.result.get() {
+                Some(result) => Poll::Ready(result),
+                None => Poll::Pending,
+            }
+        })
+        .await
+    }
+}
+/// The runner's affine duty to publish its exit; losing it publishes
+/// [`RunnerLost`].
+pub(crate) struct StopGuard<'a, E: Copy>(&'a StopState<E>);
+impl<E: Copy> StopGuard<'_, E> {
+    #[cfg_attr(not(target_arch = "riscv32"), allow(dead_code))]
+    pub(crate) fn publish(self, exit: E) {
+        self.0.result.set(Some(Ok(exit)));
+        self.0.waker.wake();
+    }
+}
+impl<E: Copy> Drop for StopGuard<'_, E> {
+    fn drop(&mut self) {
+        if self.0.result.get().is_none() {
+            self.0.result.set(Some(Err(RunnerLost)));
+            self.0.waker.wake();
+        }
     }
 }
 /// Read-only product state in the Control/Runner context.
@@ -180,6 +220,7 @@ impl Drop for StartGuard<'_> {
 }
 pub struct Channels {
     start: StartState,
+    stop: StopState<Exit>,
     commands: WakingSpscQueue<runtime::ServiceCommand<Caps>, 2>,
     tx: WakingSpscQueue<TxMsdu, 2>,
     rx: WakingSpscQueue<Frame, RX_DEPTH>,
@@ -189,6 +230,7 @@ impl Channels {
     pub const fn new() -> Self {
         Self {
             start: StartState::new(),
+            stop: StopState::new(),
             commands: WakingSpscQueue::new(),
             tx: WakingSpscQueue::new(),
             rx: WakingSpscQueue::new(),
@@ -210,14 +252,18 @@ impl Channels {
             Control {
                 inner: control,
                 start: &self.start,
+                stop: &self.stop,
             },
             Network { inner: network },
             Connection {
-                start: StartGuard(&self.start),
-                commands,
-                transmit,
-                receive,
-                runner,
+                service: ServiceConnection {
+                    start: StartGuard(&self.start),
+                    commands,
+                    transmit,
+                    receive,
+                    runner,
+                },
+                stop: StopGuard(&self.stop),
             },
         ))
     }
@@ -227,8 +273,14 @@ impl Default for Channels {
         Self::new()
     }
 }
+/// The runner's ends of the channels and its duty to publish the exit.
 #[cfg_attr(not(target_arch = "riscv32"), allow(dead_code))]
 pub struct Connection<'a> {
+    service: ServiceConnection<'a>,
+    stop: StopGuard<'a, Exit>,
+}
+#[cfg_attr(not(target_arch = "riscv32"), allow(dead_code))]
+struct ServiceConnection<'a> {
     start: StartGuard<'a>,
     commands: oer_memory::WakingSpscReceiver<'a, runtime::ServiceCommand<Caps>, 2>,
     transmit: oer_memory::WakingSpscReceiver<'a, TxMsdu, 2>,
@@ -332,22 +384,38 @@ mod tests {
         assert_eq!(refused.reason, oer_network_port::TransmitError::LinkDown);
         assert!(Rc::ptr_eq(&refused.frame.0, &dropped));
         assert_eq!(dropped.get(), 0);
-        assert_eq!(control.try_connect(41), Ok(()));
-        assert_eq!(control.try_disconnect(42), Ok(()));
-        assert_eq!(control.try_scan(43), Err(runtime::ControlError::QueueFull));
+        let _connect = embassy_futures::block_on(control.connect()).unwrap();
+        let _disconnect = embassy_futures::block_on(control.disconnect()).unwrap();
+        {
+            // Both command cells are taken: the scan waits for room.
+            let mut scan = core::pin::pin!(control.scan());
+            assert!(
+                core::future::Future::poll(
+                    scan.as_mut(),
+                    &mut Context::from_waker(core::task::Waker::noop())
+                )
+                .is_pending()
+            );
+        }
         let crate::Connection {
-            start,
-            commands,
-            transmit: _,
-            receive: _,
-            runner,
+            service:
+                crate::ServiceConnection {
+                    start,
+                    commands,
+                    transmit: _,
+                    receive: _,
+                    runner,
+                },
+            stop,
         } = connection;
-        assert!(
-            matches!(commands.try_receive(),Some(runtime::ServiceCommand::Station(r)) if r.correlation()==41)
-        );
-        assert!(
-            matches!(commands.try_receive(),Some(runtime::ServiceCommand::Station(r)) if r.correlation()==42)
-        );
+        assert!(matches!(
+            commands.try_receive(),
+            Some(runtime::ServiceCommand::Station(r)) if r.command() == runtime::contract::Command::Connect
+        ));
+        assert!(matches!(
+            commands.try_receive(),
+            Some(runtime::ServiceCommand::Station(r)) if r.command() == runtime::contract::Command::Disconnect
+        ));
         assert!(commands.try_receive().is_none());
         start.complete(Ok(()));
         assert_eq!(embassy_futures::block_on(control.wait_started()), Ok(()));
@@ -355,9 +423,30 @@ mod tests {
         // Losing the uninstalled runner poisons its control connection, not a new
         // backend installation or a replacement command producer.
         drop(runner);
-        assert_eq!(control.try_connect(44), Err(runtime::ControlError::Stopped));
+        assert_eq!(
+            embassy_futures::block_on(control.scan()).err(),
+            Some(ControlError::Stopped)
+        );
+        // A runner that never published its exit reports its loss.
+        drop(stop);
+        assert_eq!(
+            embassy_futures::block_on(control.wait_stopped()),
+            Err(RunnerLost)
+        );
         drop(refused.frame);
         assert_eq!(dropped.get(), 1);
+    }
+    #[test]
+    fn the_published_exit_is_a_copy_waiters_read_once_it_exists() {
+        let state = StopState::<u8>::new();
+        let mut cx = Context::from_waker(core::task::Waker::noop());
+        {
+            let mut waiting = core::pin::pin!(state.wait());
+            assert!(core::future::Future::poll(waiting.as_mut(), &mut cx).is_pending());
+        }
+        StopGuard(&state).publish(7);
+        assert_eq!(embassy_futures::block_on(state.wait()), Ok(7));
+        assert_eq!(embassy_futures::block_on(state.wait()), Ok(7));
     }
     #[test]
     fn start_wait_is_cancellation_safe_and_a_dropped_uninstalled_runner_wakes_it_with_a_typed_failure()
