@@ -90,19 +90,20 @@ held as abandoned and recovers its resources before granting them again.
 
 [`stand`](src/stand.rs) drives the real stand through `oer-lab-board` and
 `oer-lab-router`. A board's radio works only on its image's command, so a
-board has no end state to prove. A resource in use radiates only under its
-lease's air claims: an operation that starts an image (a flash, any reset,
-a console's reset), switches a board's power (a power cycle, a hub port)
-or drives the router needs a lease that holds the air, shared at least.
-`cargo hil`, `cargo fw` and the board commands of `cargo stand` claim it;
-`cargo stand lease --air none` keeps to the rest.
+board has no end state to prove, and an operation on a board (a flash, a
+reset, a console, a power cycle) needs only the board: the air is claimed
+by the run that commands a radio (a HIL scenario declares it). A router
+operation turns the router's own radio on and needs a lease that holds
+the air, shared at least.
 
 - **Boards.** Each board has one owner in the service: its operations take
   turns in the order they asked (two operations of one lease never drive one
   board at once). After a lease, a board that resets over its USB
   Serial/JTAG (`usb-jtag-rts`) is reset into its image, which stops what
   the lease left running; it is ready again whatever the reset did, and a
-  failed reset is only logged. Any other board is ready at once.
+  failed reset is only logged. Any other board (an ESP32-C5, reset only by
+  JTAG and power) is not reset: it is ready at once. A release that
+  answers without an unavailable resource does not confirm a reset.
 
   Operations: write and start an image (journaled), reset (through a path,
   or the first reset the stand file lists), the console as a duplex stream,
@@ -140,5 +141,6 @@ operation, revocations, joined clients and the narrowing of their tokens,
 input by credit and beyond the window, a release that waits for its
 recoveries, a drain that waits for them, a grant that cannot be prepared,
 the first operation after a grant and an unrecordable grant; the turns of
-operations on one board, the operations that need the air, and the
-router's PHY judged by both views.
+operations on one board, a board leased and used while the router is
+unreachable, the operations that need the air, and the router's PHY judged
+by both views.

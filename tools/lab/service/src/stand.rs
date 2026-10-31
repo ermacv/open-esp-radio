@@ -502,28 +502,13 @@ impl Drivers for StandDrivers {
     }
 }
 
-/// Why a lease holding `claims` may not run `operation`: one that starts an
-/// image, powers a board or drives the router may put it on the air, so the
-/// lease must hold the air. A resource in use radiates only under its
-/// lease's air claims.
+/// Why a lease holding `claims` may not run `operation`. A board's radio
+/// works only on its image's command, which the scenario that gives it
+/// claims the air for; a router operation turns the router's own radio on,
+/// so its lease must hold the air.
 fn air_refusal(operation: &Operation, claims: &[Claim]) -> Option<String> {
-    let radiates = match operation {
-        Operation::Flash { .. }
-        | Operation::PowerCycle { .. }
-        | Operation::ProvePowerLoss { .. }
-        | Operation::HubPort { .. }
-        | Operation::Router { .. }
-        // Even into download: the way there may boot the image (a power
-        // cycle, or a closed port).
-        | Operation::Reset { .. } => true,
-        Operation::Console { reset, .. } => *reset,
-        Operation::ReadConsole { .. }
-        | Operation::ProbeRouter
-        | Operation::Detect
-        | Operation::Describe { .. } => false,
-    };
-    (radiates && !covers(claims, &[Claim::shared(AIR)]))
-        .then(|| "this operation may start what radiates: the lease must hold the air".to_owned())
+    (matches!(operation, Operation::Router { .. }) && !covers(claims, &[Claim::shared(AIR)]))
+        .then(|| "a router operation radiates: the lease must hold the air".to_owned())
 }
 
 #[cfg(test)]

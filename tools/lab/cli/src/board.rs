@@ -113,14 +113,12 @@ fn target(board: &str) -> Result<Target> {
     })
 }
 
-/// A lease of `target`'s board and of the air shared: a reset or a
-/// console's reset starts its image.
+/// A lease of `target`'s board.
 fn lease(target: &Target, owner: String, work: String) -> Result<Client> {
-    use oer_lab_arbiter::claims::{AIR, Claim};
     crate::service::lease(
         owner,
         work,
-        vec![Claim::board(&target.board.mac), Claim::shared(AIR)],
+        vec![oer_lab_arbiter::claims::Claim::board(&target.board.mac)],
     )
 }
 

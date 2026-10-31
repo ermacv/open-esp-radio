@@ -69,8 +69,7 @@ impl Session {
                 work: format!("hil {}", scenario.name),
                 scenarios: vec![scenario.name.to_owned()],
                 run: None,
-                // The scenario's image radiates under the air, shared.
-                claims: vec![Claim::board(&board.mac), Claim::shared(AIR)],
+                claims: claims(&board.mac, scenario),
                 maintenance: None,
                 divisible: false,
             },
@@ -235,6 +234,16 @@ impl finish::Board for StandBoard {
     }
 }
 
+/// What a run of `scenario` on the board with `mac` leases: the board, and
+/// the air shared when its cases turn a radio on.
+fn claims(mac: &str, scenario: &Scenario) -> Vec<Claim> {
+    let mut claims = vec![Claim::board(mac)];
+    if scenario.air {
+        claims.push(Claim::shared(AIR));
+    }
+    claims
+}
+
 /// Build `image` through the image pipeline into its bundle.
 fn build(root: &Path, image: &str) -> Result<ImageBundle> {
     eprintln!("hil: building {image}");
@@ -274,5 +283,21 @@ fn device_under_test<'a>(
             images::CHIP
         )
         .into()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_run_leases_the_air_only_for_a_scenario_that_turns_a_radio_on() {
+        let mac = "02:00:00:00:00:01";
+        let quiet = Scenario::new("aes", "esp32s31-rpc", &[]);
+        assert_eq!(claims(mac, &quiet), [Claim::board(mac)]);
+        assert_eq!(
+            claims(mac, &quiet.using_air()),
+            [Claim::board(mac), Claim::shared(AIR)]
+        );
     }
 }

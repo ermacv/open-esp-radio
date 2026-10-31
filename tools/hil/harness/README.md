@@ -6,7 +6,8 @@ of the services that image must serve, and lists its cases; `main` then:
 
 1. builds the image through the image pipeline, before it waits for the stand;
 2. leases the board (`--board`, or the one board of the image's chip with
-   the `dut` role) and the air, shared, from the LAB service
+   the `dut` role) from the LAB service, and the air, shared, only for a
+   scenario whose cases turn a radio on (`Scenario::using_air`)
    ([tools/lab/service](../../lab/service/README.md)), which runs every
    operation on it;
 3. has the service write the image unless the board's receipt says it runs

@@ -44,51 +44,41 @@ fn a_stopped_operation_leaves_the_queue_without_its_turn() {
 }
 
 #[test]
-fn what_may_radiate_needs_the_air() {
-    use oer_lab_model::rom::ResetPath;
+fn only_a_router_operation_needs_the_air() {
+    use oer_lab_client::protocol::RouterOperation;
     let board = || "02:00:00:00:00:01".to_owned();
-    let alone = [Claim::board(&board())];
-    let with_air = [Claim::board(&board()), Claim::shared(AIR)];
-    let starting = [
-        Operation::Reset {
+    let alone = [Claim::board(&board()), Claim::shared(ROUTER)];
+    let router = Operation::Router {
+        request: RouterOperation::VerifyRuntime,
+    };
+    assert!(air_refusal(&router, &alone).is_some());
+    assert!(air_refusal(&router, &[Claim::shared(ROUTER), Claim::shared(AIR)]).is_none());
+    // A board's radio works only on its image's command.
+    for operation in [
+        Operation::Flash {
             board: board(),
-            path: None,
+            bundle: "bundle".to_owned(),
+            image: oer_lab_arbiter::journal::ImageIdentity {
+                name: "aes".to_owned(),
+                sha256: String::new(),
+                commit: None,
+                dirty: None,
+                origin: "test".to_owned(),
+            },
+            owner: "ann".to_owned(),
+            via: FlashVia::Usb,
+            skip_carried: false,
         },
         Operation::Reset {
             board: board(),
-            path: Some(ResetPath::Rts),
+            path: None,
         },
         Operation::Console {
             board: board(),
             reset: true,
         },
-        Operation::Reset {
-            board: board(),
-            path: Some(ResetPath::Download),
-        },
         Operation::PowerCycle { board: board() },
-        Operation::HubPort {
-            hub: "top".to_owned(),
-            port: 1,
-            off_secs: 1,
-        },
-    ];
-    for operation in &starting {
-        assert!(air_refusal(operation, &alone).is_some(), "{operation:?}");
-        assert!(air_refusal(operation, &with_air).is_none(), "{operation:?}");
-    }
-    let quiet = [
-        Operation::ReadConsole {
-            board: board(),
-            watch_ms: 1,
-        },
-        Operation::Console {
-            board: board(),
-            reset: false,
-        },
-        Operation::Describe { board: board() },
-    ];
-    for operation in &quiet {
-        assert!(air_refusal(operation, &alone).is_none(), "{operation:?}");
+    ] {
+        assert!(air_refusal(&operation, &alone).is_none(), "{operation:?}");
     }
 }

@@ -59,6 +59,8 @@ struct Fake {
     claims: Mutex<Vec<Vec<Claim>>>,
     /// What preparing a granted resource returns.
     prepared: Mutex<Result<(), String>>,
+    /// Resources whose recovery leaves them unavailable, emission unknown.
+    unavailable: Mutex<Vec<String>>,
 }
 
 impl Fake {
@@ -70,6 +72,7 @@ impl Fake {
             recoveries: AtomicU64::new(0),
             claims: Mutex::new(Vec::new()),
             prepared: Mutex::new(Ok(())),
+            unavailable: Mutex::new(Vec::new()),
         })
     }
 }
@@ -77,9 +80,15 @@ impl Fake {
 const FLOOD: usize = 4 * OUTPUT_BUDGET;
 
 impl Drivers for Fake {
-    fn recover(&self, _: &Recovery) -> Confirmation {
+    fn recover(&self, recovery: &Recovery) -> Confirmation {
         self.recovery.pass();
         self.recoveries.fetch_add(1, Ordering::SeqCst);
+        if lock(&self.unavailable).contains(&recovery.resource) {
+            return Confirmation::Unavailable {
+                reason: "unreachable".to_owned(),
+                emission: oer_lab_arbiter::readiness::Emission::Unknown,
+            };
+        }
         lock(&self.confirmation).clone()
     }
 
@@ -866,4 +875,38 @@ fn a_drain_answers_only_once_every_recovery_returned() {
     );
     fake.recovery.open();
     assert_eq!(done.recv(), Ok(true));
+}
+
+#[test]
+fn a_board_alone_is_granted_and_used_while_the_router_is_unreachable() {
+    use oer_lab_arbiter::readiness::{ROUTER, Readiness};
+    let directory = tempfile::tempdir().unwrap();
+    let fake = Fake::new();
+    lock(&fake.unavailable).push(ROUTER.to_owned());
+    let service = Service::open(
+        oer_lab_arbiter::Arbiter::at(directory.path()).unwrap(),
+        vec![board(A), ROUTER.to_owned()],
+        fake.clone(),
+        Box::new(|| START_MS),
+    )
+    .unwrap();
+    service.wait_until(|status| {
+        status.resources.iter().all(|(resource, readiness)| {
+            matches!(
+                (resource.as_str(), readiness),
+                (ROUTER, Readiness::Unavailable { .. }) | (_, Readiness::Ready { .. })
+            )
+        })
+    });
+    // An image's radio works only on its command: a run that commands none
+    // leases the board alone, and the router's unknown emission keeps it
+    // waiting for nothing.
+    let mut run = client(&service);
+    run.acquire(request("ann"), &mut |_| {}).unwrap();
+    assert_eq!(
+        run.run(command("hold"), &mut std::io::sink(), None)
+            .unwrap(),
+        serde_json::json!("released")
+    );
+    run.release().unwrap();
 }

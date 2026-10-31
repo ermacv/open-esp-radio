@@ -9,7 +9,7 @@ use std::{
 
 use oer_lab_model as stand;
 
-use oer_lab_arbiter::claims::{AIR, Claim};
+use oer_lab_arbiter::claims::Claim;
 use oer_lab_client::client::{Client, Running};
 use oer_lab_client::protocol::{FlashVia, LeaseRequest, Operation};
 
@@ -65,7 +65,8 @@ fn lease(board: &stand::Board) -> Result<Client> {
             work: command,
             scenarios: Vec::new(),
             run: None,
-            claims: vec![Claim::board(&board.mac), Claim::shared(AIR)],
+            // An image's radio works only on its command: the board alone.
+            claims: vec![Claim::board(&board.mac)],
             maintenance: None,
             divisible: false,
         },

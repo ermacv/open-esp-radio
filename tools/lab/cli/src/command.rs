@@ -261,8 +261,7 @@ pub(crate) struct LeaseCli {
     stand: bool,
     /// How the command uses the radio environment: `shared` (default with
     /// boards), `exclusive` for RF measurements, or `none` for work that
-    /// never enables a radio, which then runs beside an exclusive air lease;
-    /// the service refuses it what starts an image or powers a board.
+    /// never enables a radio, which then runs beside an exclusive air lease.
     #[arg(long, value_parser = parse_air)]
     air: Option<AirArg>,
     /// Journal a flash that COMMAND performs when it succeeds.

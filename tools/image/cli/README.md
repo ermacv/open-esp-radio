@@ -103,7 +103,7 @@ boards are found by the LAB service in sysfs as Espressif USB Serial/JTAG
 devices (`303a:1001`), whose serial number is the chip's MAC. Only ESP32-S31
 boards are reset or written; other chips are only listed.
 
-Every board command leases the board and the air (shared) from the LAB
+Every board command leases the board from the LAB
 service ([tools/lab/service/README.md](../../lab/service/README.md)), which
 runs each operation on the board: the board is used by one lease at a time,
 for every checkout. When the command ends it finishes the lease: the service
