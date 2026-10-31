@@ -295,7 +295,7 @@ struct Requests {
 /// work, the load requests to the load server beside it.
 async fn console(usb: transport::Usb, boot: u64, evidence: system::Evidence, requests: Requests) {
     use oer_hil_agent::base::Either;
-    transport::serve(
+    let serve = core::pin::pin!(transport::serve(
         usb,
         boot,
         services::KEYS,
@@ -308,7 +308,11 @@ async fn console(usb: transport::Usb, boot: u64, evidence: system::Evidence, req
                 Either::Second(request) => load::serve::queue(&requests.load, identity, request),
             }
         },
-    )
+    ));
+    load::parts::Polled {
+        part: load::parts::Part::Console,
+        future: serve,
+    }
     .await
 }
 
@@ -339,9 +343,12 @@ fn finish_startup<R>(
 /// polling.
 pub(crate) async fn feed_rtc_watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) {
     let period = oer_time::Duration::from_millis(RTC_WATCHDOG_FEED_PERIOD_MS);
-    match watchdog
-        .feed_every(&oer_embassy_time::EmbassyClock, period)
-        .await {}
+    let feed = core::pin::pin!(watchdog.feed_every(&oer_embassy_time::EmbassyClock, period));
+    match (load::parts::Polled {
+        part: load::parts::Part::RtcWatchdog,
+        future: feed,
+    })
+    .await {}
 }
 
 fn validate_runtime_layout() {

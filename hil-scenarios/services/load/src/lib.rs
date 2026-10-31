@@ -43,6 +43,9 @@ pub mod tally;
 pub const MAX_EXECUTORS: usize = 8;
 /// The most harts a [`Load`] reports.
 pub const MAX_HARTS: usize = 2;
+/// The most named parts a [`Parts`] report holds, and the longest name.
+pub const MAX_PARTS: usize = 12;
+pub const MAX_PART_NAME: usize = 12;
 
 oer_hil_protocol::messages! {
     endpoint Start = "load/start" => Started;
@@ -51,6 +54,8 @@ oer_hil_protocol::messages! {
     topic Collected = "load/collected";
     endpoint GetCpu = "load/cpu" => Load;
     topic Load = "load/cpu-report";
+    endpoint CollectParts = "load/parts" => PartsCollected;
+    topic PartsCollected = "load/parts-report";
 }
 
 /// The longest measuring window, start delay and drain a run may ask for.
@@ -205,6 +210,48 @@ pub struct ExecutorLoad {
     pub work_us: u64,
 }
 
+/// The polls of the image's named parts within run `run`'s window.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct CollectParts {
+    pub run: u32,
+}
+
+/// The answer to [`CollectParts`].
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+#[allow(
+    clippy::large_enum_variant,
+    reason = "a wire message of a no_std crate without allocation: the parts go by value"
+)]
+pub enum PartsCollected {
+    Report(Parts),
+    /// The run's window or drain has not ended yet.
+    Running,
+    Refused(LoadError),
+}
+
+/// What the image's named parts did within one run's measuring window. A
+/// part is a task or a future inside one; its poll time runs from the start
+/// to the end of each poll, preemption by higher executors and interrupts
+/// included. Nested parts and the parts of different executors overlap, so
+/// their times do not add up to a hart's busy time.
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct Parts {
+    pub parts: heapless::Vec<PartWindow, MAX_PARTS>,
+}
+
+/// One part within the window.
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct PartWindow {
+    pub name: heapless::String<MAX_PART_NAME>,
+    /// Polls that ended within the window.
+    pub polls: u32,
+    /// Time inside its polls within the window, an open poll's share
+    /// included.
+    pub poll_us: u32,
+    /// The longest poll that ended within the window; `None` without one.
+    pub longest_poll_us: Option<u32>,
+}
+
 /// Why the image refused a request.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub enum LoadError {
@@ -228,6 +275,7 @@ oer_hil_agent::service! {
         Start(Start) => start,
         Collect(Collect) => collect,
         GetCpu(GetCpu) => cpu,
+        CollectParts(CollectParts) => parts,
     }
 }
 

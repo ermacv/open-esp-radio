@@ -1,8 +1,8 @@
 //! Which requests the load server answers by itself, idle or running.
 
 use oer_services_load::{
-    Collect, LoadError, MAX_DELAY_MS, MAX_DRAIN_MS, MAX_DURATION_MS, Request, Start, Started,
-    header,
+    Collect, CollectParts, LoadError, MAX_DELAY_MS, MAX_DRAIN_MS, MAX_DURATION_MS, Request, Start,
+    Started, header,
 };
 
 /// The largest UDP payload the image sends or receives: one 1514-byte
@@ -28,22 +28,29 @@ pub(crate) enum Action {
     Cpu,
     /// Start this run, once the station has its address.
     Start(Start),
-    /// Answer with the kept report.
+    /// Answer with the kept report or parts.
+    Kept(Kept),
+}
+
+/// What a run keeps once it ended: its report and its parts' window.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum Kept {
     Report,
+    Parts,
 }
 
 #[derive(Debug, Eq, PartialEq)]
 pub(crate) enum Answer {
     Started(Started),
-    /// `Collected::Running`: the collected run has not ended.
-    Running,
-    /// `Collected::Refused(UnknownRun)`.
-    UnknownRun,
+    /// `Running` of the collected kind: the collected run has not ended.
+    Running(Kept),
+    /// `Refused(UnknownRun)` of the collected kind.
+    UnknownRun(Kept),
 }
 
 /// What the server does with `request` in `phase`: one run at a time; a
-/// collect of the running run answers that it runs, of the kept one its
-/// report.
+/// collect of the running run answers that it runs, of the kept one what
+/// it kept.
 pub(crate) fn action(phase: Phase, request: Request) -> Action {
     let refuse_start = |error| Action::Answer(Answer::Started(Started::Refused(error)));
     match (phase, request) {
@@ -53,15 +60,16 @@ pub(crate) fn action(phase: Phase, request: Request) -> Action {
             Err(error) => refuse_start(error),
         },
         (Phase::Running { .. }, Request::Start(_)) => refuse_start(LoadError::Busy),
-        (Phase::Running { run }, Request::Collect(Collect { run: asked })) if asked == run => {
-            Action::Answer(Answer::Running)
-        }
-        (Phase::Idle { kept: Some(run) }, Request::Collect(Collect { run: asked }))
-            if asked == run =>
-        {
-            Action::Report
-        }
-        (_, Request::Collect(_)) => Action::Answer(Answer::UnknownRun),
+        (phase, Request::Collect(Collect { run })) => collect(phase, run, Kept::Report),
+        (phase, Request::CollectParts(CollectParts { run })) => collect(phase, run, Kept::Parts),
+    }
+}
+
+fn collect(phase: Phase, asked: u32, kind: Kept) -> Action {
+    match phase {
+        Phase::Running { run } if asked == run => Action::Answer(Answer::Running(kind)),
+        Phase::Idle { kept: Some(run) } if asked == run => Action::Kept(kind),
+        _ => Action::Answer(Answer::UnknownRun(kind)),
     }
 }
 
@@ -191,15 +199,27 @@ mod tests {
     }
 
     #[test]
-    fn a_collect_answers_running_then_the_kept_report_of_its_own_run_only() {
-        let unknown = Action::Answer(Answer::UnknownRun);
-        let collect = |run| Request::Collect(Collect { run });
-        assert_eq!(action(RUNNING, collect(7)), Action::Answer(Answer::Running));
-        assert_eq!(action(RUNNING, collect(6)), unknown);
+    fn a_collect_answers_running_then_the_kept_report_or_parts_of_its_own_run_only() {
+        type Asks = fn(u32) -> Request;
+        let requests: [(Kept, Asks); 2] = [
+            (Kept::Report, |run| Request::Collect(Collect { run })),
+            (Kept::Parts, |run| {
+                Request::CollectParts(CollectParts { run })
+            }),
+        ];
+        for (kind, collect) in requests {
+            let unknown = Action::Answer(Answer::UnknownRun(kind));
+            assert_eq!(
+                action(RUNNING, collect(7)),
+                Action::Answer(Answer::Running(kind))
+            );
+            assert_eq!(action(RUNNING, collect(6)), unknown);
+            let kept = Phase::Idle { kept: Some(7) };
+            assert_eq!(action(kept, collect(7)), Action::Kept(kind));
+            assert_eq!(action(kept, collect(8)), unknown);
+            assert_eq!(action(IDLE, collect(7)), unknown);
+        }
         let kept = Phase::Idle { kept: Some(7) };
-        assert_eq!(action(kept, collect(7)), Action::Report);
-        assert_eq!(action(kept, collect(8)), unknown);
-        assert_eq!(action(IDLE, collect(7)), unknown);
         assert_eq!(
             action(kept, Request::Start(start(None))),
             Action::Start(start(None)),
