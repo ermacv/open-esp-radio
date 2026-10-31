@@ -216,7 +216,8 @@ async fn release<W: Binding>(
         let _quarantined = core::mem::ManuallyDrop::new(refused.joined);
         ReleaseCause::Retire(cause)
     })?;
-    let Some((stopped, cell)) = vacant.with_device(|device| device.0.take_stopped()) else {
+    // A device another borrow holds is as unconfirmed as one still running.
+    let Ok(Some((stopped, cell))) = vacant.with_device(|device| device.0.take_stopped()) else {
         let _quarantined = core::mem::ManuallyDrop::new(vacant);
         return Err(ReleaseCause::NotStopped);
     };

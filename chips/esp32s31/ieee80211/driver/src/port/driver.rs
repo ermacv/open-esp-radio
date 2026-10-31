@@ -259,7 +259,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         self.transition = None;
         transmitter.zip(observations)
     }
-    pub(super) fn deadline(&mut self, held: &Held<'_, 'id, Id, D, B, O>) -> Instant {
+    pub(super) fn deadline(&mut self, held: &Held<'_, 'id, Id, D, B, O>) -> Result<Instant, Fault> {
         // The clock sample waits for a start in flight; its own bound wakes
         // the driver meanwhile.
         let clock = if starting(held) {
@@ -270,7 +270,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         let mut deadline = core_views::deadline::<Id, D, B>(self.core.view())
             .unwrap_or(clock)
             .min(clock);
-        if let Some(device) = held.storage.device.borrow().next_deadline() {
+        if let Some(device) = held.storage.device()?.next_deadline() {
             deadline = deadline.min(device);
         }
         if let Some(start) = self.transition {
@@ -287,7 +287,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                 }
             }
         }
-        deadline
+        Ok(deadline)
     }
     fn finish(
         &mut self,

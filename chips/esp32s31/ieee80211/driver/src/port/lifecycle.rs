@@ -226,7 +226,9 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotOwner<
             initial.observations,
             self.timer.now(),
         );
-        backing.held.prepare(self.storage, issuer, self.channel);
+        backing
+            .held
+            .prepare(self.storage, issuer, self.channel, self.timer.clone());
         backing.resources = Some(Resources {
             tickets,
             terminal_access,
@@ -261,6 +263,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotOwner<
                 storage,
                 gate,
                 tuned,
+                timer,
             }),
         ) = (queues.resources.is_some(), queues.held.attached.as_mut())
         else {
@@ -285,7 +288,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotOwner<
                 gate,
                 tuned,
                 identity: &mut queues.held.frontend_identity,
-                timer: storage.device.borrow().timer().clone(),
+                timer: timer.clone(),
                 clock_replies,
                 clock_use: &mut queues.held.clock_use,
                 addresses: queues.addresses.ok_or(
@@ -334,7 +337,14 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotOwner<
                 }
             })
             .await;
-            let deadline = state.deadline(held);
+            let deadline = match state.deadline(held) {
+                Ok(deadline) => deadline,
+                Err(cause) => {
+                    storage.poison(cause);
+                    retire.request_failure(oer_radio_port::LifecycleError::StopUnconfirmed);
+                    match core::future::pending::<core::convert::Infallible>().await {}
+                }
+            };
             let timer = self.timer.clone();
             let mut delay = core::pin::pin!(timer.wait_until(deadline));
             let done = poll_fn(|cx| {
@@ -348,7 +358,14 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotOwner<
                 }
                 if held.clock_replies.0.free_capacity() != 0 && held.clock_requested.replace(false)
                 {
-                    let answer = storage.device.borrow_mut().radio_now();
+                    let answer = match storage.device() {
+                        Ok(mut device) => device.radio_now(),
+                        Err(fault) => {
+                            storage.poison(fault);
+                            retire.request_failure(oer_radio_port::LifecycleError::StopUnconfirmed);
+                            return Poll::Pending;
+                        }
+                    };
                     // Room was checked above: one outstanding clock latch.
                     if held.clock_replies.push(answer).is_err() {
                         storage.poison(Fault::Capacity);
@@ -358,7 +375,11 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotOwner<
                     storage.shared.wake_body();
                 }
                 if retire.is_requested() {
-                    match storage.device.borrow_mut().poll_stop(cx) {
+                    let stopped = match storage.device() {
+                        Ok(mut device) => device.poll_stop(cx),
+                        Err(fault) => Poll::Ready(Err(fault)),
+                    };
+                    match stopped {
                         Poll::Ready(Ok(())) => return Poll::Ready(true),
                         Poll::Ready(Err(cause)) => {
                             storage.poison(cause);
@@ -373,14 +394,19 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotOwner<
                         }
                     }
                 }
-                let mut device = storage.device.borrow_mut();
-                if let Err(cause) = state.poll(cx, held, &mut *device) {
-                    storage.poison(cause);
-                    retire.request_failure(oer_radio_port::LifecycleError::StopUnconfirmed);
-                    return Poll::Pending;
-                }
-                drop(device);
-                if state.deadline(held) < deadline {
+                let polled = match storage.device() {
+                    Ok(mut device) => state.poll(cx, held, &mut **device),
+                    Err(fault) => Err(fault),
+                };
+                let next = match polled.and_then(|()| state.deadline(held)) {
+                    Ok(next) => next,
+                    Err(cause) => {
+                        storage.poison(cause);
+                        retire.request_failure(oer_radio_port::LifecycleError::StopUnconfirmed);
+                        return Poll::Pending;
+                    }
+                };
+                if next < deadline {
                     return Poll::Ready(false);
                 }
                 let mut retiring = core::pin::pin!(retire.wait());
@@ -416,7 +442,14 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotOwner<
         for activity in &storage.shared.key_live {
             activity.set(0);
         }
-        storage.device.borrow_mut().detach();
+        match storage.device() {
+            Ok(mut device) => device.detach(),
+            Err(fault) => {
+                storage.poison(fault);
+                retire.request_failure(oer_radio_port::LifecycleError::StopUnconfirmed);
+                match core::future::pending::<core::convert::Infallible>().await {}
+            }
+        }
         retire.requested().await
     }
 
@@ -438,6 +471,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotOwner<
         }
         StoppedPort {
             storage: self.storage,
+            timer: self.timer.clone(),
             reusable,
             config,
             addresses: self.addresses,

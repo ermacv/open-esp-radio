@@ -64,8 +64,10 @@ impl<T, const N: usize> Outgoing<'_, T, N> {
 
 /// What one installation attaches to the placed backing: its storage and
 /// its gate issuer, present together from preparation on.
-pub(super) struct Attached<'id, Id: SlotIdentity, D: 'static, const B: usize> {
+pub(super) struct Attached<'id, Id: SlotIdentity, D: Device<B>, const B: usize> {
     pub(super) storage: &'static PortStorage<D, B>,
+    /// The device's timer, cloned once at preparation.
+    pub(super) timer: D::Timer,
     pub(super) gate: GateIssuer<'id, Part<Id, 1>>,
     /// P1's view of the channel it last published; P1 alone writes it.
     pub(super) tuned: Cell<Channel>,
@@ -129,6 +131,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         storage: &'static PortStorage<D, B>,
         issuer: GateIssuer<'id, Part<Id, 1>>,
         channel: Channel,
+        timer: D::Timer,
     ) {
         // Pure clock readings carry no affine owner. A cancelled P1 read may
         // leave one reply after its endpoint epoch ended; discard it only
@@ -136,6 +139,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         let _ = self.clock_replies.split().1.try_receive();
         self.attached = Some(Attached {
             storage,
+            timer,
             gate: issuer,
             tuned: Cell::new(channel),
         });

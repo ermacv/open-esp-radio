@@ -133,7 +133,11 @@ impl<'s, Id: SlotIdentity + 's, D: Device<B> + 's, const B: usize, O: Observatio
                     owner.storage.poison(Fault::Abandoned);
                     // The P2 runner ended its poll loan before invoking this guard. P1
                     // has no device reference, so cleanup has exclusive hardware access.
-                    if owner.storage.device.borrow_mut().abandon() {
+                    if owner
+                        .storage
+                        .device()
+                        .is_ok_and(|mut device| device.abandon())
+                    {
                         return radio::Abandon::Stopped(authority.stopped());
                     }
                     radio::Abandon::Unconfirmed(authority)

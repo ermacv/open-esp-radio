@@ -285,6 +285,12 @@ impl<D: Device<B>, const B: usize> PortStorage<D, B> {
     fn poison(&self, cause: Fault) {
         self.shared.poison(cause);
     }
+    /// The device, unless another borrow holds it.
+    fn device(&self) -> Result<core::cell::RefMut<'_, &'static mut D>, Fault> {
+        self.device
+            .try_borrow_mut()
+            .map_err(|_| Fault::HardwareUnavailable)
+    }
     fn check(&self) -> Result<(), radio::Poisoned<Fault>> {
         self.shared.check()
     }
@@ -413,7 +419,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> Esp32s31Ba
         {
             return Err(parts);
         }
-        let timer = parts.storage.device.borrow().timer().clone();
+        let timer = parts.storage.device.get_mut().timer().clone();
         let PortParts {
             storage,
             transmitter,
@@ -423,12 +429,16 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> Esp32s31Ba
             coex,
             observations,
         } = parts;
+        // Every slot was checked free above. A slot that is not, or a place
+        // the bank already holds, poisons this installation: the allocation
+        // stays out of the bank and enable refuses with the fault.
         for (index, slot) in buffers.into_iter().enumerate() {
-            let TxSlotAccess::Free(memory) = slot.access() else {
-                panic!("installation takes only idle TX allocations")
+            let seeded = match slot.access() {
+                TxSlotAccess::Free(memory) => storage.shared.returned.seed(index, memory).is_ok(),
+                _ => false,
             };
-            if storage.shared.returned.seed(index, memory).is_err() {
-                panic!("initial installation seeds each return place once");
+            if !seeded {
+                storage.shared.poison(Fault::Capacity);
             }
         }
         let channel = Channel::from_wifi_channel(config.channel);
@@ -453,6 +463,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> Esp32s31Ba
 /// Hardware and reusable DMA owners returned after confirmed normal stopping.
 pub struct StoppedPort<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> {
     storage: &'static PortStorage<D, B>,
+    timer: D::Timer,
     reusable: Option<Reusable<D, B, O>>,
     config: LowerMacConfig,
     addresses: [IndividualAddress; 2],
@@ -463,9 +474,10 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> StoppedPor
     pub fn expired_msdus(&self) -> u32 {
         self.storage.expired.get()
     }
-    /// The returned device may recover its stopped PHY/IRQ ownership here.
-    pub fn with_device<R>(&mut self, use_device: impl FnOnce(&mut D) -> R) -> R {
-        use_device(&mut *self.storage.device.borrow_mut())
+    /// The returned device may recover its stopped PHY/IRQ ownership here;
+    /// `HardwareUnavailable` while another borrow holds it.
+    pub fn with_device<R>(&mut self, use_device: impl FnOnce(&mut D) -> R) -> Result<R, Fault> {
+        Ok(use_device(&mut **self.storage.device()?))
     }
 
     /// Begin a fresh installation on the same static hardware/RX backing.
@@ -484,7 +496,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> StoppedPor
         };
         self.config.tsf_epoch = tsf_epoch;
         let channel = Channel::from_wifi_channel(self.config.channel);
-        let timer = self.storage.device.borrow().timer().clone();
+        let timer = self.timer.clone();
         Ok(Esp32s31Backend {
             storage: self.storage,
             state: BackendState::Initial(Some(Initial {
