@@ -173,6 +173,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotOwner<
         backing.addresses = None;
         if !matches!(self.state, BackendState::Initial(Some(_)))
             || !self.storage.shared.returned.all_returned()
+            || self.storage.shared.network.held() != 0
             || !backing.driver.retired()
             || !backing.held.drained()
         {
@@ -428,6 +429,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotOwner<
             || !held.recycled.empty()
             || held.failed_terminal.is_requested()
             || held.rx_out.get() != 0
+            || storage.shared.network.held() != 0
             || !storage.shared.returned.all_returned()
         {
             retire.request_failure(oer_radio_port::LifecycleError::StopUnconfirmed);

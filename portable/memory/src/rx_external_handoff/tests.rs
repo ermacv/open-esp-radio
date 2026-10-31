@@ -343,3 +343,24 @@ fn invalid_software_state_is_a_typed_refusal_with_its_observation() {
     );
     assert_eq!(ret.0.load(Ordering::Relaxed), 7);
 }
+
+#[test]
+fn a_radio_lease_lends_its_whole_allocation_and_keeps_its_view() {
+    let allocation = Allocation::new();
+    let pool = ExternalRxHandoffPool::<64, 1>::new();
+    let mut radio = pool
+        .try_claim_radio(allocation.detach(20).unwrap(), 0)
+        .ok()
+        .unwrap();
+    assert_eq!(radio.frame().len(), 20);
+    assert_eq!(radio.storage().len(), 64);
+    let storage = radio.storage_mut();
+    assert_eq!(storage.len(), 64);
+    storage[0] = 0xa5;
+    storage[63] = 0x5a;
+    assert_eq!(radio.frame().len(), 20);
+    assert_eq!(radio.frame()[0], 0xa5);
+    assert_eq!(radio.storage()[63], 0x5a);
+    drop(radio);
+    assert_eq!(allocation.ret.state(), ExternalRxReturnState::Returned);
+}

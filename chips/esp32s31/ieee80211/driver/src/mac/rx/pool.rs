@@ -276,4 +276,15 @@ impl<const SLOTS: usize, const CAPACITY: usize> NetworkRxFrame<'_, SLOTS, CAPACI
     pub const fn length(&self) -> usize {
         self.metadata.length
     }
+
+    /// The received bytes, then the rest of the DMA allocation; every byte
+    /// is initialized ([`ExternalRxRadioLease::storage`]).
+    pub fn storage(&self) -> &[u8] {
+        self.lease.storage()
+    }
+
+    /// [`Self::storage`], mutably.
+    pub fn storage_mut(&mut self) -> &mut [u8] {
+        self.lease.storage_mut()
+    }
 }

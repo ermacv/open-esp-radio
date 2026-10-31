@@ -63,6 +63,8 @@ struct Observed {
     stops: usize,
     abandoned: bool,
     detached: bool,
+    /// Times the driver rearmed units the network returned.
+    returned: usize,
     hold_start: bool,
     /// The next start fails with this fault, as a refused retune does.
     fail_start: Option<Fault>,
@@ -193,7 +195,7 @@ impl TestDevice {
 }
 struct TestReceive {
     bytes: [u8; 26],
-    released: Rc<Cell<usize>>,
+    released: std::sync::Arc<core::sync::atomic::AtomicUsize>,
 }
 impl ReceiveUnit for TestReceive {
     fn normalized(&self) -> Result<crate::mac::rx::NormalizedRxFrame<'_>, crate::mac::rx::RxError> {
@@ -202,10 +204,17 @@ impl ReceiveUnit for TestReceive {
     fn bytes(&self) -> &[u8] {
         &self.bytes
     }
+    fn storage(&self) -> &[u8] {
+        &self.bytes
+    }
+    fn storage_mut(&mut self) -> &mut [u8] {
+        &mut self.bytes
+    }
 }
 impl Drop for TestReceive {
     fn drop(&mut self) {
-        self.released.set(self.released.get() + 1);
+        self.released
+            .fetch_add(1, core::sync::atomic::Ordering::Relaxed);
     }
 }
 impl Device<512> for TestDevice {
@@ -216,6 +225,7 @@ impl Device<512> for TestDevice {
     type Hardware = Hardware;
     type Receive = TestReceive;
     type Body = Payload;
+    const LENT_RX: usize = 2;
     type OwnedContext<Id: radio::SlotIdentity> = Tag;
     type Context<'p, Id: radio::SlotIdentity + 'p> = Tag;
     type OwnedConfigureContext<Id: radio::SlotIdentity> = Tag;
@@ -416,6 +426,10 @@ impl Device<512> for TestDevice {
     fn recycle(&mut self, frame: TestReceive) {
         self.assert_driver_context();
         drop(frame);
+    }
+    fn returned(&mut self) {
+        self.assert_driver_context();
+        self.observed.borrow_mut().returned += 1;
     }
     fn abandon(&mut self) -> bool {
         self.assert_driver_context();
@@ -1155,10 +1169,28 @@ fn queued_msdu_expires_from_submit_without_publication_behind_a_closed_gate() {
     assert_eq!(observed.borrow().publications, 0);
 }
 
+#[derive(Clone, Copy, PartialEq)]
+enum ReceiveMode {
+    Recycle,
+    Lose,
+    /// Lend the unit to the network and drop it there before disabling.
+    Lend,
+    /// Lend the unit and keep it held across the disable.
+    LendHeld,
+}
+/// How many receive units were released, shared with the units.
+pub(super) type Released = std::sync::Arc<core::sync::atomic::AtomicUsize>;
+pub(super) fn count(released: &Released) -> usize {
+    released.load(core::sync::atomic::Ordering::Relaxed)
+}
+
+type Stash = Rc<RefCell<Option<crate::port::LentReceive<TestReceive>>>>;
 struct ReceiveBody {
     observed: Rc<RefCell<Observed>>,
-    released: Rc<Cell<usize>>,
-    lose: bool,
+    released: Released,
+    mode: ReceiveMode,
+    /// Where a held unit outlives the body.
+    stash: Stash,
 }
 impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for ReceiveBody {
     type Output = ();
@@ -1172,6 +1204,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for ReceiveBody {
         Id: 'id,
         'id: 'p,
     {
+        use oer_ieee80211_contracts_port::LentRxBuffer;
         let mut owner = match owner.enable().await {
             Ok(owner) => owner,
             Err(_) => panic!("enable"),
@@ -1205,18 +1238,35 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for ReceiveBody {
                 _ => panic!("received MPDU"),
             };
             assert_eq!(frame.bytes(), &super::data_frame(STATION));
-            assert_eq!(self.released.get(), 0);
-            if self.lose {
-                drop(frame);
-                assert!(matches!(
-                    phase.next_event().await,
-                    Err(radio::EventEnd::Quarantined { .. })
-                ));
-            } else {
-                phase.recycle(frame);
+            assert_eq!(count(&self.released), 0);
+            match self.mode {
+                ReceiveMode::Lose => {
+                    drop(frame);
+                    assert!(matches!(
+                        phase.next_event().await,
+                        Err(radio::EventEnd::Quarantined { .. })
+                    ));
+                }
+                ReceiveMode::Recycle => phase.recycle(frame),
+                ReceiveMode::Lend | ReceiveMode::LendHeld => {
+                    let Ok(mut lent) = phase.lend(frame) else {
+                        panic!("lent");
+                    };
+                    assert_eq!(lent.mpdu_len(), super::data_frame(STATION).len());
+                    assert_eq!(lent.storage(), &super::data_frame(STATION));
+                    lent.storage_mut()[0] = 0xa5;
+                    assert_eq!(lent.storage()[0], 0xa5);
+                    assert_eq!(count(&self.released), 0);
+                    if self.mode == ReceiveMode::Lend {
+                        drop(lent);
+                        assert_eq!(count(&self.released), 1);
+                    } else {
+                        *self.stash.borrow_mut() = Some(lent);
+                    }
+                }
             }
         }
-        if self.lose {
+        if self.mode == ReceiveMode::Lose {
             return radio::Ended::fail_stop(owner.fail_stop(), ());
         }
         let owner = match owner
@@ -1226,37 +1276,84 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for ReceiveBody {
             Ok(owner) => owner,
             Err(_) => panic!("disable"),
         };
-        assert_eq!(self.released.get(), 1);
+        let returned = if self.mode == ReceiveMode::LendHeld {
+            0
+        } else {
+            1
+        };
+        assert_eq!(count(&self.released), returned);
         radio::Ended::uninstall(owner, (), ())
     }
 }
 #[test]
 fn received_bss_mpdu_keeps_its_original_owner_until_explicit_recycling() {
     let (backend, observed, _) = installed(Vec::new());
-    let released = Rc::new(Cell::new(0));
+    let released = Released::default();
     assert!(matches!(
         block_on(run_body(
             backend,
             ReceiveBody {
                 observed,
                 released: released.clone(),
-                lose: false
+                mode: ReceiveMode::Recycle,
+                stash: Stash::default(),
             }
         )),
         Report::Uninstalled { .. }
     ));
-    assert_eq!(released.get(), 1);
+    assert_eq!(count(&released), 1);
+}
+#[test]
+fn a_lent_unit_returns_to_its_ring_when_the_network_drops_it() {
+    let (backend, observed, _) = installed(Vec::new());
+    let released = Released::default();
+    assert!(matches!(
+        block_on(run_body(
+            backend,
+            ReceiveBody {
+                observed: observed.clone(),
+                released: released.clone(),
+                mode: ReceiveMode::Lend,
+                stash: Stash::default(),
+            }
+        )),
+        Report::Uninstalled { .. }
+    ));
+    assert_eq!(count(&released), 1);
+    assert!(observed.borrow().returned >= 1);
+}
+#[test]
+fn a_unit_the_network_still_holds_refuses_retirement() {
+    let (backend, observed, _) = installed(Vec::new());
+    let released = Released::default();
+    let stash = Stash::default();
+    let result = block_on(run_body(
+        backend,
+        ReceiveBody {
+            observed,
+            released: released.clone(),
+            mode: ReceiveMode::LendHeld,
+            stash: stash.clone(),
+        },
+    ));
+    // A unit the network still holds keeps its memory: the installation
+    // cannot confirm its stop, and the late return changes nothing.
+    assert!(!matches!(result, Report::Uninstalled { .. }));
+    assert_eq!(count(&released), 0);
+    drop(stash.borrow_mut().take());
+    assert_eq!(count(&released), 1);
 }
 #[test]
 fn dropping_a_received_owner_quarantines_its_allocation_and_poison_is_permanent() {
     let (backend, observed, _) = installed(Vec::new());
-    let released = Rc::new(Cell::new(0));
+    let released = Released::default();
     let result = block_on(run_body(
         backend,
         ReceiveBody {
             observed: observed.clone(),
             released: released.clone(),
-            lose: true,
+            mode: ReceiveMode::Lose,
+            stash: Stash::default(),
         },
     ));
     assert!(matches!(
@@ -1267,7 +1364,7 @@ fn dropping_a_received_owner_quarantines_its_allocation_and_poison_is_permanent(
         }
     ));
     drop(result);
-    assert_eq!(released.get(), 0);
+    assert_eq!(count(&released), 0);
     assert!(observed.borrow().abandoned);
 }
 

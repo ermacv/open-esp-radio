@@ -50,6 +50,12 @@ impl<const Q: usize, const RB: usize> ReceiveUnit for StagedReceive<Q, RB> {
     fn bytes(&self) -> &[u8] {
         self.0.segment().buffer
     }
+    fn storage(&self) -> &[u8] {
+        self.0.storage()
+    }
+    fn storage_mut(&mut self) -> &mut [u8] {
+        self.0.storage_mut()
+    }
 }
 
 struct Received<const Q: usize, const RB: usize>(
@@ -255,6 +261,9 @@ where
     type Timer = T;
     type Hardware = RadioAccess;
     type Receive = StagedReceive<Q, RB>;
+    // The network leaves the radio one receive event's worth of units per
+    // ticket, for its events and their reordering.
+    const LENT_RX: usize = Q.saturating_sub(super::TX_TICKETS);
     type Body = C::Body;
     type OwnedContext<Id: SlotIdentity> = C::OwnedContext<Id>;
     type Context<'p, Id: SlotIdentity + 'p> = C::Context<'p, Id>;
@@ -554,6 +563,9 @@ where
     }
     fn recycle(&mut self, frame: Self::Receive) {
         drop(frame);
+        self.rx_pending = true;
+    }
+    fn returned(&mut self) {
         self.rx_pending = true;
     }
     fn finish_rx_cut(&mut self) -> Result<(), Fault> {

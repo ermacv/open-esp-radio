@@ -179,6 +179,7 @@ impl<Id: SlotIdentity, C: Ieee80211Capabilities, X: ModelContext> SlotOwner<Id>
             failed_group: Bounded::new(2, "failed GTK command"),
             failed_group_terminal: Bounded::new(2, "uncertain GTK terminal"),
             rx_out: Cell::new(0),
+            network: Default::default(),
             lost: Cell::new(false),
             body: Cell::default(),
             gate_issuer,
@@ -305,6 +306,7 @@ impl<Id: SlotIdentity, C: Ieee80211Capabilities, X: ModelContext> SlotOwner<Id>
             || !held.failed_group.is_empty()
             || !held.failed_group_terminal.is_empty()
             || held.rx_out.get() != 0
+            || held.network.held() != 0
         {
             retire.request_failure(oer_radio_port::LifecycleError::StopUnconfirmed);
             core::future::pending::<()>().await;

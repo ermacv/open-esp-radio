@@ -579,14 +579,24 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         device: &mut D,
     ) -> Result<(), Fault> {
         while let Some(mut frame) = held.recycled.pop() {
-            device.recycle(
-                frame
-                    .unit
-                    .take()
-                    .expect("recycle consumes the original RX unit"),
-            );
+            // A recycled buffer always carries its unit; one without it was
+            // already returned, and only the receive count moves.
+            if let Some(unit) = frame.unit.take() {
+                device.recycle(unit);
+            }
             held.rx_out
                 .set(held.rx_out.get().checked_sub(1).ok_or(Fault::Capacity)?);
+        }
+        let network = &held.storage.shared.network;
+        let transferred = network.take_transferred();
+        held.rx_out.set(
+            held.rx_out
+                .get()
+                .checked_sub(transferred)
+                .ok_or(Fault::Capacity)?,
+        );
+        if network.take_returned() {
+            device.returned();
         }
         let now = device.timer().now();
         // A start in flight may lend the device's registers to the radio

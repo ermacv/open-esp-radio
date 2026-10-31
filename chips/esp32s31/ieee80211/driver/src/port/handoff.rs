@@ -145,6 +145,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         });
         self.clock_use.set(ClockUse::Idle);
         self.rx_out.set(0);
+        storage.shared.network.reset();
         let settings = &storage.shared.settings;
         settings.clock_requested.set(false);
         settings.enabled.set(false);

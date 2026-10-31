@@ -690,7 +690,7 @@ fn a_rejected_gtk_replacement_restores_the_old_entry_and_quarantines_its_owners(
 }
 
 /// A station data frame labelled with the material byte it travels under.
-fn labelled(material: u8, released: &Rc<Cell<usize>>) -> TestReceive {
+fn labelled(material: u8, released: &super::super::Released) -> TestReceive {
     let mut bytes = super::super::super::data_frame(STATION);
     bytes[25] = material;
     TestReceive {
@@ -708,7 +708,7 @@ struct CutBody {
     case: oer_ieee80211_testing_conformance::group_keys::Case,
     timer: TestTimer,
     observed: Rc<RefCell<Observed>>,
-    released: Rc<Cell<usize>>,
+    released: super::super::Released,
     seen: Rc<RefCell<Option<oer_ieee80211_testing_conformance::group_keys::Trace<Vec<Event>>>>>,
 }
 use oer_ieee80211_testing_conformance::group_keys::{Event, Installation};
@@ -901,7 +901,7 @@ fn the_s31_receive_cut_brackets_every_captured_stage_around_the_gtk_terminal() {
             case,
             timer,
             observed: observed.clone(),
-            released: Rc::new(Cell::new(0)),
+            released: Default::default(),
             seen: seen.clone(),
         };
         assert!(matches!(

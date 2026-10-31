@@ -39,6 +39,8 @@ mod buffer;
 pub mod device;
 mod driver;
 mod keys;
+mod lent;
+pub use lent::LentReceive;
 mod lifecycle;
 mod registration;
 pub use registration::{Registration, RegistrationError};
@@ -103,6 +105,11 @@ type Core<'id, Id: SlotIdentity, D, const B: usize> = LowerMacCore<
 pub trait ReceiveUnit: 'static {
     fn normalized(&self) -> Result<NormalizedRxFrame<'_>, RxError>;
     fn bytes(&self) -> &[u8];
+    /// [`Self::bytes`], then the rest of the unit's allocation; every byte
+    /// is initialized.
+    fn storage(&self) -> &[u8];
+    /// [`Self::storage`], mutably, for a network owner that rewrites it.
+    fn storage_mut(&mut self) -> &mut [u8];
 }
 
 /// One bounded P2 hardware step. Implementations retain all progress in
@@ -115,8 +122,12 @@ pub trait Device<const B: usize>: Sized + 'static {
     type Entropy: WifiTxEntropy;
     type Timer: Timer + Clone + 'static;
     type Hardware: LowerMacHardware;
-    type Receive: ReceiveUnit;
+    type Receive: ReceiveUnit + Send;
     type Body: TxBody + 'static;
+    /// The receive units the network may hold at once. The device's other
+    /// units stay with the radio, for its receive events and their
+    /// reordering.
+    const LENT_RX: usize;
     type OwnedContext<Id: SlotIdentity>;
     type Context<'p, Id: SlotIdentity + 'p>: LoanedContext<'p, Id, Owned = Self::OwnedContext<Id>>
         + 'p;
@@ -150,6 +161,8 @@ pub trait Device<const B: usize>: Sized + 'static {
     ) -> Poll<Result<Option<Self::Receive>, Fault>>;
     fn finish_rx_cut(&mut self) -> Result<(), Fault>;
     fn recycle(&mut self, frame: Self::Receive);
+    /// The network dropped a lent unit: rearm what the ring got back.
+    fn returned(&mut self);
     /// Mask requests and erase keys synchronously. A successful stop must
     /// include both DMA and entered IRQ operations; otherwise return false.
     fn abandon(&mut self) -> bool;
@@ -228,6 +241,8 @@ pub struct PortSharedStorage<const B: usize> {
     body: AtomicWaker,
     key_live: [KeyActivity; 20],
     returned: oer_memory::ReturnBank<TxSlotFree<'static, B>, TX_TICKETS>,
+    /// The receive units lent to the network.
+    network: lent::NetworkCredit,
     settings: settings::Settings,
     /// Slot and permission of a GTK command the installation quarantined.
     #[cfg(test)]
@@ -310,6 +325,7 @@ impl<const B: usize> PortSharedStorage<B> {
             body: AtomicWaker::new(),
             key_live: [const { KeyActivity::new() }; 20],
             returned: oer_memory::ReturnBank::new(),
+            network: lent::NetworkCredit::new(),
             settings: settings::Settings::new(),
             #[cfg(test)]
             retained_group: oer_memory::OnceValue::new(),

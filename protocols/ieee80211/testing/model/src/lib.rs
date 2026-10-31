@@ -1086,6 +1086,7 @@ impl<'id, B: ModelComposition + 'id> PhaseTypes<'id> for ModelTypes<B> {
     type TxMpdu = ModelMpdu<'id, B>;
     type TxAggregate = ModelSubframes<'id, B>;
     type RxBuffer = ModelRxBuffer<'id, B::Identity>;
+    type LentRx = ModelLentRx;
     type RxMeta = ModelRxMeta;
     type StationKeys = ModelKeys<'id, B, Station>;
     type AccessPointKeys = ModelKeys<'id, B, AccessPoint>;
@@ -1331,6 +1332,52 @@ impl<Id: SlotIdentity> Drop for OwnedRxBuffer<Id> {
         {
             air.poison();
         }
+    }
+}
+
+/// The bytes a lent model buffer holds: its MPDU, then spare allocation up
+/// to this length, as a DMA receive buffer has.
+pub const MODEL_RX_STORAGE: usize = 1664;
+
+/// The model's count of the receive buffers the network holds.
+#[derive(Default)]
+struct ModelNetwork {
+    held: core::sync::atomic::AtomicUsize,
+    waker: atomic_waker::AtomicWaker,
+}
+
+impl ModelNetwork {
+    fn held(&self) -> usize {
+        self.held.load(core::sync::atomic::Ordering::Acquire)
+    }
+}
+
+/// A model receive buffer lent to the network
+/// ([`LowerMacPhase::lend`](oer_ieee80211_contracts_port::LowerMacPhase::lend)).
+pub struct ModelLentRx {
+    bytes: Vec<u8>,
+    mpdu_len: usize,
+    network: alloc::sync::Arc<ModelNetwork>,
+}
+
+impl oer_ieee80211_contracts_port::LentRxBuffer for ModelLentRx {
+    fn storage(&self) -> &[u8] {
+        &self.bytes
+    }
+    fn storage_mut(&mut self) -> &mut [u8] {
+        &mut self.bytes
+    }
+    fn mpdu_len(&self) -> usize {
+        self.mpdu_len
+    }
+}
+
+impl Drop for ModelLentRx {
+    fn drop(&mut self) {
+        self.network
+            .held
+            .fetch_sub(1, core::sync::atomic::Ordering::AcqRel);
+        self.network.waker.wake();
     }
 }
 
@@ -2592,6 +2639,8 @@ pub struct ModelHeld<'id, B: ModelComposition> {
     failed_group_terminal: Bounded<OwnedLowerMacEvent<'id, B>>,
     /// The receive buffers out with the body, queued or held.
     rx_out: Cell<usize>,
+    /// The receive buffers lent to the network.
+    network: alloc::sync::Arc<ModelNetwork>,
     /// Received frames dropped since the stream last said so.
     lost: Cell<bool>,
     body: Cell<Option<Waker>>,
@@ -3883,6 +3932,54 @@ impl<'p, 'id: 'p, C: Ieee80211Capabilities, B: ModelComposition + 'id> LowerMacP
             self.held.poison();
         }
         self.held.air.wake_driver();
+    }
+
+    fn lend(
+        &mut self,
+        buffer: ModelRxBuffer<'id, B::Identity>,
+    ) -> Result<
+        ModelLentRx,
+        oer_ieee80211_contracts_port::LendRefused<ModelRxBuffer<'id, B::Identity>>,
+    > {
+        use oer_ieee80211_contracts_port::{LendRefusal, LendRefused};
+        let reason = if self.held.air.failed() {
+            Some(LendRefusal::Stopping)
+        } else if self.held.network.held() >= MODEL_RX_EVENTS {
+            Some(LendRefusal::Capacity)
+        } else {
+            None
+        };
+        if let Some(reason) = reason {
+            return Err(LendRefused { buffer, reason });
+        }
+        let mut owner = buffer.owner;
+        owner.recycled = true;
+        let mut bytes = core::mem::take(&mut owner.bytes);
+        let mpdu_len = bytes.len();
+        bytes.resize(mpdu_len.max(MODEL_RX_STORAGE), 0);
+        // Credit first: the network counts the buffer before the body's
+        // receive count lets it go.
+        self.held
+            .network
+            .held
+            .fetch_add(1, core::sync::atomic::Ordering::AcqRel);
+        drop(owner);
+        self.held.release_rx();
+        self.held.air.wake_driver();
+        Ok(ModelLentRx {
+            bytes,
+            mpdu_len,
+            network: self.held.network.clone(),
+        })
+    }
+
+    fn poll_lent_returned(&mut self, cx: &mut core::task::Context<'_>) -> core::task::Poll<()> {
+        self.held.network.waker.register(cx.waker());
+        if self.held.network.held() == 0 {
+            core::task::Poll::Ready(())
+        } else {
+            core::task::Poll::Pending
+        }
     }
 
     fn close_gate(&mut self, gate: GateOpen<'id, ModelPool<<B as ModelComposition>::Identity, 0>>) {

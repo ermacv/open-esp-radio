@@ -370,6 +370,7 @@ impl<W: Binding> port::Device<TX> for Device<W> {
     type Hardware = <Inner<W> as port::Device<TX>>::Hardware;
     type Receive = <Inner<W> as port::Device<TX>>::Receive;
     type Body = core::convert::Infallible;
+    const LENT_RX: usize = <Inner<W> as port::Device<TX>>::LENT_RX;
     type OwnedContext<Id: SlotIdentity> = <Inner<W> as port::Device<TX>>::OwnedContext<Id>;
     type Context<'p, Id: SlotIdentity + 'p> = <Inner<W> as port::Device<TX>>::Context<'p, Id>;
     type OwnedConfigureContext<Id: SlotIdentity> =
@@ -441,6 +442,9 @@ impl<W: Binding> port::Device<TX> for Device<W> {
     }
     fn recycle(&mut self, frame: Self::Receive) {
         <Inner<W> as port::Device<TX>>::recycle(&mut self.0, frame)
+    }
+    fn returned(&mut self) {
+        <Inner<W> as port::Device<TX>>::returned(&mut self.0)
     }
     fn abandon(&mut self) -> bool {
         <Inner<W> as port::Device<TX>>::abandon(&mut self.0)

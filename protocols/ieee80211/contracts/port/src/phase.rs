@@ -796,6 +796,9 @@ pub trait PhaseTypes<'id>: Sized {
     /// The memory of one received MPDU, which goes back through
     /// [`LowerMacPhase::recycle`].
     type RxBuffer: crate::RxBuffer;
+    /// A received buffer lent to a network owner
+    /// ([`LowerMacPhase::lend`]).
+    type LentRx: crate::LentRxBuffer;
     /// The metadata of one received MPDU: the portable fields and what the
     /// backend's type guarantees beyond them.
     type RxMeta: crate::RxMetadata;
@@ -871,6 +874,23 @@ pub trait LowerMacPhase<'p, 'id: 'p>:
     /// it occupies that capacity; dropping it does not recycle it. The host
     /// model poisons the installation when an unrecycled owner is dropped.
     fn recycle(&mut self, buffer: <Self::Types as PhaseTypes<'id>>::RxBuffer);
+
+    /// Move a received buffer out of the receive capacity to a network
+    /// owner, without copying its bytes. The buffer then counts as held by
+    /// the network until its owner is dropped, and the installation's
+    /// retirement waits for every lent buffer. A refusal returns the
+    /// unchanged buffer, still owed to [`Self::recycle`].
+    fn lend(
+        &mut self,
+        buffer: <Self::Types as PhaseTypes<'id>>::RxBuffer,
+    ) -> Result<
+        <Self::Types as PhaseTypes<'id>>::LentRx,
+        crate::LendRefused<<Self::Types as PhaseTypes<'id>>::RxBuffer>,
+    >;
+
+    /// Ready once the network holds no buffer [`Self::lend`] moved to it;
+    /// otherwise registers `cx` for the drop of the last one.
+    fn poll_lent_returned(&mut self, cx: &mut core::task::Context<'_>) -> core::task::Poll<()>;
 
     /// Close publication in every queue. A current publication is waited for,
     /// at most the backend's PUBLICATION_BOUND, before GateClosed is emitted.
