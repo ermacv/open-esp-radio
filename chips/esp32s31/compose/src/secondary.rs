@@ -1,17 +1,17 @@
-//! Hart 1's launch during boot, before the executor starts: a boot deadline
-//! of its own over the system timer's counter, the launch waits below and the
-//! staged runtime's launch ([`oer_espressif_staged_runtime::launch`]), which
-//! hands hart 1 its interrupt grant and the image's parts through the
-//! image's mailbox (`secondary_entry!`). The counter returns unchanged for
-//! the executor's time driver.
+//! Hart 1's launch during boot, before the executors start: a boot deadline
+//! of its own on the time driver's clock, which [`launch_hart1`] requires
+//! installed (its `TimeDriverReady` authority), the launch waits below and
+//! the staged runtime's launch ([`oer_espressif_staged_runtime::launch`]),
+//! which hands hart 1 its interrupt grant and the image's parts through the
+//! image's mailbox (`secondary_entry!`). The parts may carry a timer grant
+//! for hart 1's executor (`oer_espressif_executor::grant`), which the time
+//! driver issues only once installed, and hardware such as `AesParts` that
+//! the image places on hart 1.
 
 #[cfg(target_arch = "riscv32")]
 use oer_esp32s31_hal::{
     cores::{Cores, LaunchPermit, StartError},
-    peripherals::{
-        reset_cause::ResetCauses,
-        system_timer::{SystimerCounter, TICKS_PER_MICROSECOND},
-    },
+    peripherals::reset_cause::ResetCauses,
     platform::Port,
 };
 #[cfg(target_arch = "riscv32")]
@@ -71,34 +71,24 @@ const _: () = {
     }
 };
 
-/// Why hart 1 did not start.
+/// Why hart 1 did not start: its launch failed after its deadline started.
 #[cfg(target_arch = "riscv32")]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum Hart1Failure {
-    /// The counter's latch never settled: the launch has no deadline.
-    Clock,
-    /// The launch failed after its deadline started.
-    Launch(LaunchFailure<StartError>),
-}
+pub struct Hart1Failure(pub LaunchFailure<StartError>);
 
 #[cfg(target_arch = "riscv32")]
 impl Hart1Failure {
     /// Record the failure and reset the chip: a released hart is not
     /// confirmed held again.
     pub fn reset(self) -> ! {
-        match self {
-            Self::Clock => oer_espressif_staged_runtime::panic::reset_fault::<Port>(
-                oer_espressif_staged_runtime::panic::FaultReason::CounterLatchStuck,
-                [0; 4],
-            ),
-            Self::Launch(failure) => failure.reset::<Port>(),
-        }
+        self.0.reset::<Port>()
     }
 }
 
 /// Launch hart 1 with the root's one-shot `permit`, under a deadline of its
-/// own on `counter`, handing it its interrupt grant and `parts` through
-/// `mailbox`, and return the running hart and the counter.
+/// own on the time driver's clock, which `_timers` proves installed (the
+/// counter latch checked and published), handing it its interrupt grant and
+/// `parts` through `mailbox`, and return the running hart.
 ///
 /// # Errors
 ///
@@ -108,17 +98,13 @@ pub fn launch_hart1<T: Send>(
     cores: &mut Cores,
     permit: LaunchPermit,
     causes: ResetCauses,
-    counter: SystimerCounter,
+    _timers: &oer_espressif_executor::TimeDriverReady<crate::Esp32s31>,
     mailbox: &'static Mailbox<oer_esp32s31_hal::platform::Hart1Grant, T>,
     parts: T,
-) -> Result<(Running<Port, 1>, SystimerCounter), Hart1Failure> {
-    let clock = oer_espressif_boot::drivers::system_timer::Monotonic::<
-        SystimerCounter,
-        TICKS_PER_MICROSECOND,
-    >::start_initial_latch_check(counter)
-    .map_err(|_| Hart1Failure::Clock)?;
+) -> Result<Running<Port, 1>, Hart1Failure> {
+    let clock = oer_embassy_time::EmbassyClock;
     let deadline = oer_espressif_boot::wait::BootDeadline::start(&clock, LAUNCH_BUDGET);
-    let running = oer_espressif_staged_runtime::launch::<Port, _, 1, T>(
+    oer_espressif_staged_runtime::launch::<Port, _, 1, T>(
         cores,
         permit,
         causes,
@@ -130,6 +116,5 @@ pub fn launch_hart1<T: Send>(
         mailbox,
         parts,
     )
-    .map_err(Hart1Failure::Launch)?;
-    Ok((running, clock.into_counter()))
+    .map_err(Hart1Failure)
 }

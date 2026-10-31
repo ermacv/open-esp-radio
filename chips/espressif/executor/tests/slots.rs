@@ -18,7 +18,7 @@ fn static_slot_claims_and_backing_are_affine_on_rv32() {
 }
 
 #[test]
-fn alarm_startup_requires_the_initialized_time_driver_authority() {
+fn alarm_startup_requires_the_initialized_time_driver_authority_and_grants_move_alone() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
     let scratch = tempfile::Builder::new()
         .prefix("time-driver-ready-")
@@ -32,6 +32,9 @@ fn alarm_startup_requires_the_initialized_time_driver_authority() {
             ("oer-espressif-executor", "chip"),
             ("oer-espressif-platform-port", "esp32s31"),
         ],
-        &["chips/espressif/executor/tests/chip-ui/time_driver_ready.rs"],
+        &[
+            "chips/espressif/executor/tests/chip-ui/time_driver_ready.rs",
+            "chips/espressif/executor/tests/chip-ui/alarm_grant.rs",
+        ],
     );
 }

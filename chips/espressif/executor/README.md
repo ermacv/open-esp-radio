@@ -107,19 +107,50 @@ its answer between two such tasks over an `oer-memory` in-place request
 slot: a successful `post` creates the obligation of one answer; the slot is
 `WORKING` only inside the server's call; the client gets the answer or, at
 its deadline on its own executor's timer, the terminal `PeerError::Expired`.
-Completion supervision beyond that deadline (timers on the server's hart, a
-durable supervisor) does not exist yet. The time driver consumes `SystemTimer`, containing
+`PeerServer::serve_one` answers one request; work that waits (an AES
+operation on the server's timers) runs between two answers, on what the
+first one handed over, never inside the in-place call.
+
+[`peer::liveness`](src/peer/liveness.rs) is the durable supervision of a
+peer hart: the image declares a static seat, which `liveness::pair` claims
+once, and a never-ending supervisor task that owns it and its executor's
+timer. Every stated `Period` it posts a `Beat`, which the `Responder` task
+echoes within the stated deadline; an unechoed beat ends supervision with
+`LivenessError::Overdue` (its sequence, deadline and completed rounds), which
+the image records (`LivenessOverdue`) and resets on. A completed round
+proves that the responder's hart runs its executor and polls the responder
+and that both signals cross; it proves nothing about other drivers there.
+When the supervisor's executor stops, nothing supervises: the RTC watchdog
+that executor feeds remains the bound.
+
+The time driver consumes `SystemTimer`, containing
 the running timer's disjoint owners from the reset root: our comparator writer, three alarm
 acknowledgers that each strobe their own bit of the shared
 acknowledgement block, and the shared counter latch, which every context
-reads through `oer-espressif-boot::drivers::system_timer`: strobe, 64 bounded
+of every hart reads through `oer-espressif-boot::drivers::system_timer`: strobe, 64 bounded
 VALID polls per settle, then up to 16 LO/HI/LO rounds, retaining a
-monotonic floor when preempting strobes prevent verification. The binding
+monotonic floor when other strobes (a preempting context's, or another
+hart's between any two accesses) prevent verification. The binding
 requires the family driver's latch atoms on the platform port's counter owner;
 HAL performs no retry. S31 selects 16 ticks per microsecond. Alarm
 interrupts never borrow the comparator writer or a task's timer queue.
 Successful `init` returns the affine, hart-local `TimeDriverReady<B>` authority;
 each additional `bind` borrows it. A timer binding cannot precede initialization.
+An executor on another hart gets its comparator through `grant`, which
+borrows the same authority on the writer's hart, publishes the assignment
+and binds the comparator in the writer's bank, and returns an affine,
+`Send` `AlarmGrant<B, SWI, Entry>`; on the alarm entry's hart,
+`AlarmGrant::bind(&Hart<H>, router)` checks the entry's hart against `H` at
+compile time and routes the alarm with that hart's router. The alarm's
+handler there acknowledges only its own bit; the writer remains the one
+writer of the SYSTIMER configuration. That executor's timer latency past a
+deadline adds, as stated parts and not measured numbers, the cross-hart
+raise of its publication, the writer's preemption on its hart and the
+writer executor's round in progress, since the writer programs published
+deadlines when it serves its timers at the start of a round. The time
+driver's statics that contexts of different harts touch, the executors'
+`CURRENT` and interrupt-mode flags and the binding's storage sit in critical
+SRAM (`placed_static!`).
 Software line identities use `SoftwareInterrupt`, and comparator selection uses
 the platform's `Comparator`; fixed source numbers are checked in const contexts.
 
@@ -133,7 +164,7 @@ claims hardware.
 
 ## Setup and invariant failures
 
-`init`, `bind`, `ComparatorWriter::adopt`, `InterruptExecutor::start` and
+`init`, `bind`, `AlarmGrant::bind`, `ComparatorWriter::adopt`, `InterruptExecutor::start` and
 `Executor::run` return `Result` for counter-latch and routing refusals. A
 `Failure<P, T>` retains its inputs in quarantine even when dropped; the image
 calls its never-returning `reset` to record the named `Fault` through the

@@ -168,7 +168,13 @@ back immediately. The chip composition chooses the engine as a static type.
 The S31 Typical AES engine lives in `chips/esp32s31/crypto`, over the HAL's
 `peripherals::aes` atoms and exclusive crypto clock/reset word. The shared
 `compose::crypto` selects it and supplies it to the Wi-Fi facade in
-`Resources`. The station runner retains the engine from
+`Resources`. The image's composition places the AES owner on a hart: the
+boot hart takes it from `Hardware` (Wi-Fi images), or an image that
+launches hart 1 moves `AesParts` into hart 1's launch parts and builds the
+engine there over hart 1's router (boot-smoke). Its `Silent` proof holds on
+either hart: the proof checks the table's entries of every hart and that
+router's own bank, and every hart's router silences its own bank at install,
+before that hart first unmasks. The station runner retains the engine from
 construction; images supply no separate engine when starting it. It owns AES by value,
 retains IRQ55 with `Silent`, uses timer-woken completion samples and erases
 the hardware key and intermediates on completion or cancellation. A failed
@@ -346,7 +352,7 @@ run its own executor.
 | P2, boot hart, TIMG0 T0 CPU line 16 | SAR/PWDET conversion steps in `Exempt(ExecutorLevel)` | one bounded step per event; below FROM_CPU2 CPU line 17 |
 | P2, boot hart | one radio executor on `FROM_CPU2`, CPU line 17: Wi-Fi driver, BLE lower link layer, the radio-system actor, including PHY calibration and tracking | cooperative admission between hardware atoms; long waits use timers |
 | P1 / thread, boot hart | role bodies, network stack, application | — |
-| hart 1, images that declare it | the image's hart-1 main on its own PSRAM task stack, with its SRAM interrupt stack and the common exception path installed; its own router and, in boot-smoke, an interrupt-mode executor on `FROM_CPU1` (hart 1's line 16, P2) with one task | its sources route only to hart 1's bank; it reaches the boot hart's tasks only by raising their executor's signal (`FromPeerHart`); no timer, `critical-section` or SYSTIMER comparator on hart 1 |
+| hart 1, images that declare it | the image's hart-1 main on its own PSRAM task stack, with its SRAM interrupt stack and the common exception path installed; its own router and, in boot-smoke, an interrupt-mode executor on `FROM_CPU1` (hart 1's line 16, P2) with its tasks (the exchange's server, the AES engine and the liveness responder), and that executor's SYSTIMER alarm 1 on hart 1's line 17 (P3) | its sources route only to hart 1's bank; it reaches the boot hart's tasks only by raising their executor's signal (`FromPeerHart`); its timers come through an alarm grant, and the boot hart's writer executor programs its comparator; no `critical-section` and no SYSTIMER register write on hart 1 but its own alarm's acknowledgement |
 
 - `oer-memory::ExecutionContext` owns the unsafe memory-exclusion contract.
   `Entered<X>` is non-transferable, checks entry and rechecks each
@@ -375,7 +381,8 @@ run its own executor.
   signal, declared with a `FromPeerHart` raiser
   (`oer-espressif-executor::peer` carries one request and its answer that
   way, over an in-place request slot, with a deadline on the client's
-  executor timer). Every software-interrupt raise fences `w, o` after the
+  executor timer; `peer::liveness` supervises a peer hart with a periodic
+  such request, below). Every software-interrupt raise fences `w, o` after the
   raiser's facts, and every handler lowers its line and fences `o, rw`
   before it takes them; across harts the order holds on two preconditions
   the repository has not established: the core honors FENCE's I/O bits with
@@ -392,6 +399,41 @@ run its own executor.
   those sources and its own wake source from the current hart's pending bank;
   an idle wait checks that hart's debug status. These read-only selections use
   the PAC's checked hart identity; invalid raw IDs take the retained fatal path.
+- Each executor has its own timer queue and SYSTIMER comparator; one
+  writer executor, named at the time driver's `init`, writes every SYSTIMER
+  configuration word. Another executor publishes its next deadline to the
+  writer and pends it. An executor on another hart than the writer's gets
+  its comparator through an affine `AlarmGrant`: `grant` borrows the
+  writer's hart-local `TimeDriverReady` on the writer's hart, publishes the
+  assignment and binds the comparator there; the grant moves to the
+  executor's hart (`Send`), whose own router routes the alarm
+  (`AlarmGrant::bind` with that hart's `Hart<H>`, its entry's hart checked
+  at compile time). That hart's alarm handler writes only its own
+  `INT_CLR` bit. Its timer latency past a deadline is, as stated parts of
+  the bound and not measured numbers: the cross-hart raise of the
+  publication, the writer context's preemption on its hart, the writer
+  executor's longest round in progress (it programs published deadlines
+  when it serves its timers at the start of a round), then the alarm
+  interrupt and the receiving executor's round. Every context of every hart
+  reads the one SYSTIMER counter latch through
+  `oer-espressif-boot::drivers::system_timer`: across harts strobes and reads
+  interleave access by access, and the LO/HI/LO verification still returns
+  one whole copy completed during the read, monotonic across harts, or an
+  unverified monotonic floor once another hart's strobes exhaust its rounds
+  (its module documentation and host tests state the latch properties used).
+- `peer::liveness` supervises a peer hart. The image declares its seat, a
+  static in-place slot that `liveness::pair` claims once, and a supervisor
+  task of its own that never ends and owns the seat and its executor's
+  timer, independently of the image's other futures. Every stated period it
+  posts a beat that the responder task on the other hart echoes within the
+  stated deadline; an unechoed beat ends supervision with a typed
+  `Overdue`, and the image records `LivenessOverdue` and resets. A completed
+  round proves that the responder's hart runs its executor, polls the
+  responder and that notifications cross in both directions within the
+  deadline; it proves nothing about other drivers on that hart. When the
+  supervisor's own executor stops nothing supervises, and the RTC watchdog
+  that executor feeds is the only bound. Period and deadline are stated
+  configuration.
 - Drivers never block or spin. A named settle of a known length up to 20 µs
   may busy-wait and counts against its context's step bound; a wait of
   unknown length is a timer-woken step with a deadline.

@@ -15,7 +15,6 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 
 # chips/esp32s31/compose/src/secondary.rs
 "chips/esp32s31/compose/src/secondary.rs:crate::secondary::impl Hart1Failure::reset:terminal-entry:reset:1" = { owner = "chips/esp32s31/compose", classes = ["configuration-boot", "unexpected-hardware"] }
-"chips/esp32s31/compose/src/secondary.rs:crate::secondary::impl Hart1Failure::reset:terminal-reference:reset_fault:1" = { owner = "chips/esp32s31/compose", classes = ["unexpected-hardware"] }
 
 # chips/esp32s31/compose/src/wifi_fault.rs
 "chips/esp32s31/compose/src/wifi_fault.rs:crate::wifi_fault:retained-slot:retained_static:1" = { owner = "chips/esp32s31/compose", classes = ["unexpected-hardware"] }
@@ -174,6 +173,8 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 "chips/espressif/staged-runtime/src/panic/fault.rs:crate::panic::fault::FaultReason:retained-reason:FaultReason::SecondaryLaunch:1" = { owner = "chips/espressif/staged-runtime", classes = ["configuration-boot"] }
 "chips/espressif/staged-runtime/src/panic/fault.rs:crate::panic::fault::FaultReason:retained-reason:FaultReason::SecondaryEarlyFault:1" = { owner = "chips/espressif/staged-runtime", classes = ["unexpected-hardware"] }
 "chips/espressif/staged-runtime/src/panic/fault.rs:crate::panic::fault::FaultReason:retained-reason:FaultReason::PeerUnanswered:1" = { owner = "chips/espressif/staged-runtime", classes = ["cancellation"] }
+"chips/espressif/staged-runtime/src/panic/fault.rs:crate::panic::fault::FaultReason:retained-reason:FaultReason::LivenessOverdue:1" = { owner = "chips/espressif/staged-runtime", classes = ["cancellation"] }
+"chips/espressif/staged-runtime/src/panic/fault.rs:crate::panic::fault::FaultReason:retained-reason:FaultReason::LivenessBroken:1" = { owner = "chips/espressif/staged-runtime", classes = ["software-invariant"] }
 "chips/espressif/staged-runtime/src/panic/fault.rs:crate::panic::fault::FaultReason:retained-reason:FaultReason::BindingRefused:1" = { owner = "chips/espressif/staged-runtime", classes = ["configuration-boot"] }
 "chips/espressif/staged-runtime/src/panic/fault.rs:crate::panic::fault::FaultReason:retained-reason:FaultReason::BindingStorageClaimed:1" = { owner = "chips/espressif/staged-runtime", classes = ["software-invariant"] }
 "chips/espressif/staged-runtime/src/panic/fault.rs:crate::panic::fault::FaultReason:retained-reason:FaultReason::BindingHandlerOccupied:1" = { owner = "chips/espressif/staged-runtime", classes = ["software-invariant"] }
@@ -204,9 +205,13 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 "firmware/apps/boot-smoke/src/entry.rs:crate::fail:terminal-reference:boot_failure:1" = { owner = "firmware/apps/boot-smoke", classes = ["configuration-boot"] }
 "firmware/apps/boot-smoke/src/entry.rs:crate::hart1_main:terminal-entry:hart1_main:1" = { owner = "firmware/apps/boot-smoke", classes = ["configuration-boot"] }
 "firmware/apps/boot-smoke/src/entry.rs:crate::hart1_main:reset-method:reset:1" = { owner = "firmware/apps/boot-smoke", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
-"firmware/apps/boot-smoke/src/entry.rs:crate::exchange_with_hart1:terminal-reference:reset_fault:1" = { owner = "firmware/apps/boot-smoke", classes = ["cancellation"] }
-"firmware/apps/boot-smoke/src/entry.rs:crate::exchange_with_hart1:terminal-reference:reset_fault:2" = { owner = "firmware/apps/boot-smoke", classes = ["software-invariant"] }
+"firmware/apps/boot-smoke/src/entry.rs:crate::hart1_main:reset-method:reset:2" = { owner = "firmware/apps/boot-smoke", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
+"firmware/apps/boot-smoke/src/entry.rs:crate::answer:terminal-reference:reset_fault:1" = { owner = "firmware/apps/boot-smoke", classes = ["cancellation"] }
+"firmware/apps/boot-smoke/src/entry.rs:crate::answer:terminal-reference:reset_fault:2" = { owner = "firmware/apps/boot-smoke", classes = ["software-invariant"] }
 "firmware/apps/boot-smoke/src/entry.rs:crate::respond:terminal-reference:reset_fault:1" = { owner = "firmware/apps/boot-smoke", classes = ["software-invariant"] }
+"firmware/apps/boot-smoke/src/entry.rs:crate::serve_aes:terminal-reference:reset_fault:1" = { owner = "firmware/apps/boot-smoke", classes = ["software-invariant"] }
+"firmware/apps/boot-smoke/src/entry.rs:crate::answer_beats:terminal-reference:reset_fault:1" = { owner = "firmware/apps/boot-smoke", classes = ["software-invariant"] }
+"firmware/apps/boot-smoke/src/entry.rs:crate::supervise_hart1:terminal-reference:reset_fault:1" = { owner = "firmware/apps/boot-smoke", classes = ["cancellation", "software-invariant"] }
 
 # firmware/apps/radio-root/src/entry.rs
 "firmware/apps/radio-root/src/entry.rs:crate::main:reset-method:reset:2" = { owner = "firmware/apps/radio-root", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }

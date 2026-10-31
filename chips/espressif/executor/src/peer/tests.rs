@@ -181,3 +181,39 @@ fn a_client_polled_outside_its_executor_is_refused() {
         Poll::Ready(Err(PeerError::Foreign(_)))
     ));
 }
+
+#[test]
+fn serving_one_request_keeps_its_callback_across_a_raise_without_a_post() {
+    let (request, raiser) = host::signal();
+    let (reply, _) = host::deferred_signal();
+    let (mut client, mut server) = pair(slot(), request, reply).expect("a fresh slot");
+    let (_, waker) = task();
+    let mut cx = Context::from_waker(&waker);
+    let mut calls = 0_u32;
+    {
+        let mut serving = pin!(server.serve_one(|exchange| {
+            calls += 1;
+            square(exchange);
+        }));
+        assert_eq!(serving.as_mut().poll(&mut cx), Poll::Pending);
+        // A raise that announces no post answers nothing.
+        assert!(raiser.raise(super::POSTED));
+        assert_eq!(serving.as_mut().poll(&mut cx), Poll::Pending);
+        assert_eq!(
+            client.post(Square {
+                value: 6,
+                answer: None
+            }),
+            Ok(())
+        );
+        assert_eq!(serving.as_mut().poll(&mut cx), Poll::Ready(Ok(())));
+    }
+    assert_eq!(calls, 1);
+    assert_eq!(
+        client.client.try_take_if(|_| Ok::<(), ()>(())),
+        Some(Ok(Square {
+            value: 6,
+            answer: Some(36)
+        }))
+    );
+}

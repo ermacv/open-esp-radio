@@ -1,7 +1,9 @@
 //! The one conversion of a retained panic to a boot-console diagnostic.
 //! This reads the existing record; it changes neither capture nor storage.
 
-pub use oer_diagnostics::{BootSmokePassed, Console, HartExchange, SecondaryReady};
+pub use oer_diagnostics::{
+    BootSmokePassed, Console, HartAes, HartExchange, HartLiveness, SecondaryReady,
+};
 
 pub fn previous_panic<F, E>(
     console: &mut Console<F>,

@@ -17,8 +17,8 @@
 //! through the other executor's signal, which only that executor's handler
 //! services.
 //!
-//! Completion supervision beyond one deadline (a durable supervisor, timers
-//! on the server's hart) is not part of this contract.
+//! [`liveness`] builds the durable supervision of a peer hart on one such
+//! slot: a periodic request with its own deadline.
 
 use core::{
     convert::Infallible,
@@ -143,15 +143,43 @@ impl<Req, S: SignalExecutor, C: SignalExecutor> PeerServer<Req, S, C> {
     /// Returns only when polled outside its executor's context.
     pub async fn serve(&mut self, mut process: impl FnMut(&mut Req)) -> ForeignContext {
         loop {
-            if let Err(error) = self.request.wait().await {
+            if let Err(error) = self.serve_one(&mut process).await {
                 return error;
             }
-            if self.server.service(&mut process) {
+        }
+    }
+
+    /// Serve one request, in the server executor's context: wait for a
+    /// post, answer it in place with `process` and pend the client. Work
+    /// that waits (a hardware operation under timers) runs between two
+    /// calls, on what one answer handed over, never inside `process`.
+    ///
+    /// # Errors
+    ///
+    /// [`ForeignContext`] when polled outside its executor's context.
+    pub async fn serve_one(
+        &mut self,
+        process: impl FnOnce(&mut Req),
+    ) -> Result<(), ForeignContext> {
+        let mut process = Some(process);
+        loop {
+            self.request.wait().await?;
+            // A raise without a post (a fact coalesced into an earlier
+            // round) leaves `process` for the next post.
+            let answered = self.server.service(|request| {
+                if let Some(process) = process.take() {
+                    process(request);
+                }
+            });
+            if answered {
                 let _pended = self.reply.raise(ANSWERED);
+                return Ok(());
             }
         }
     }
 }
+
+pub mod liveness;
 
 #[cfg(test)]
 mod tests;

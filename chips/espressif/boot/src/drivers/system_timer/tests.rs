@@ -365,3 +365,5 @@ fn verification_accepts_the_last_round_and_exhausts_after_exactly_the_bound() {
     assert_eq!(exhausted.left.get(), 1, "no seventeenth verification round");
     assert_eq!(exhausted.latched.get(), u64::from(READ_ROUNDS));
 }
+
+mod harts;

@@ -17,6 +17,23 @@
 //! floor instead: a count between two copies it saw, which no earlier read
 //! exceeds and no later read undercuts.
 //!
+//! Two harts read the latch at once: their strobes and reads interleave
+//! access by access, not as whole reads. The argument above holds for that
+//! too, since it uses only these properties of the latch: copies complete
+//! in strobe order with counts that never decrease, each value-register read
+//! sees a word of the newest completed copy, VALID reads false while a
+//! hart's own strobe has not completed, and one hart's strobe reaches the
+//! latch before its next read of it. These are the same model's assumptions
+//! as for one hart; no stand run has measured concurrent strobes. A
+//! verified read returns one whole copy that completed during the read,
+//! whichever hart strobed it; a read that starts after another returned, on
+//! either hart, returns no less. What
+//! changes is the round bound: another hart can strobe between any two
+//! accesses, without preempting, so a read can end unverified under
+//! cross-hart contention alone; its floor keeps time monotonic. The host
+//! tests run both harts' reads under seeded and alternating schedules, with
+//! queued and absorbed strobes.
+//!
 //! SOURCE: ESP-IDF 4d59230d `esp_hal_systimer/systimer_hal.c`
 //! (`systimer_hal_get_counter_value`: update, wait for valid, LO/HI/LO) and
 //! esp-hal 1f646c5 `timer/systimer.rs` (`Unit::read_count`).

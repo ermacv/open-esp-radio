@@ -57,10 +57,15 @@ facts at build time; the host checks read the same facts.
   representation independently of its payload. The runtime's
   zero-sized hart token survives interrupt enable while stack-install authority
   is consumed. Each executor's tasks and wakers stay on its own hart;
-  boot-smoke runs an interrupt-mode executor on hart 1. Statics that two
-  harts share (a cross-hart signal's facts word, the in-place request slot,
-  a secondary hart's launch mailbox) sit in critical SRAM
-  (`placed_static!`, `secondary_entry!`).
+  boot-smoke runs an interrupt-mode executor on hart 1, with its own timer.
+  Statics that two harts share (a cross-hart signal's facts word, the
+  in-place request slot, the liveness seat, a secondary hart's launch
+  mailbox, the executor binding's storage of lines and counter latch, the
+  executors' interrupt-mode flags, and the time driver's assignments and
+  published deadlines) sit in critical SRAM (`placed_static!`,
+  `secondary_entry!`), and so do per-executor or per-comparator arrays
+  whose neighbouring entries contexts of different harts write (the
+  executors' current tasks, the time driver's slots and fired flags).
 
 Memory shared with hardware has its own layout, placement and ownership
 contracts: [Hardware memory](hardware-memory.md).

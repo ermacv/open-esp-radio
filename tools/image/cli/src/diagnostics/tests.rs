@@ -260,3 +260,32 @@ fn a_hart_exchange_event_renders_its_hart_request_and_answer() {
     );
     assert!(text.contains("OER-RESULT: pass boot-smoke"), "{text}");
 }
+
+#[test]
+fn hart_aes_and_liveness_events_render_their_hart_and_result() {
+    let mut bytes = Vec::new();
+    {
+        let mut console = Console::new(write(&mut bytes));
+        console
+            .event(&oer_diagnostics::HartAes {
+                hart: 1,
+                matched: true,
+            })
+            .unwrap();
+        console
+            .event(&oer_diagnostics::HartAes {
+                hart: 1,
+                matched: false,
+            })
+            .unwrap();
+        console
+            .event(&oer_diagnostics::HartLiveness { hart: 1, rounds: 2 })
+            .unwrap();
+        console.event(&BootSmokePassed).unwrap();
+    }
+    let text = rendered(&bytes).unwrap();
+    assert!(text.contains("OER-HART aes hart=1 ok"), "{text}");
+    assert!(text.contains("OER-HART aes hart=1 mismatch"), "{text}");
+    assert!(text.contains("OER-HART liveness hart=1 rounds=2"), "{text}");
+    assert!(text.contains("OER-RESULT: pass boot-smoke"), "{text}");
+}

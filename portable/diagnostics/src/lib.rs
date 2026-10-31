@@ -43,7 +43,8 @@ pub use fifo::{Fifo, FifoWriter, Lost, Patience};
 pub use note::{Note, Topic};
 pub use path::{DiagPath, DiagnosticPath};
 pub use record::{
-    BootSmokePassed, HartExchange, MAX_PAYLOAD, PreviousPanic, Record, SecondaryReady,
+    BootSmokePassed, HartAes, HartExchange, HartLiveness, MAX_PAYLOAD, PreviousPanic, Record,
+    SecondaryReady,
 };
 pub use text::Name;
 

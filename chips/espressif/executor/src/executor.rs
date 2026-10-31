@@ -84,14 +84,20 @@ oer_memory::zeroed_static! {
         zeroed in ".critical.bss.executor";
 }
 
-/// The task each executor polls now; only that executor's context reads it,
-/// to name a polling task for its signals.
-static CURRENT: [Current; SOFTWARE_INTERRUPT_COUNT] =
-    [const { Current::new() }; SOFTWARE_INTERRUPT_COUNT];
+oer_espressif_staged_runtime::placed_static! {
+    /// The task each executor polls now; only that executor's context reads
+    /// it, to name a polling task for its signals. Executors of different
+    /// harts write neighbouring entries.
+    static CURRENT: [Current; SOFTWARE_INTERRUPT_COUNT] =
+        [const { Current::new() }; SOFTWARE_INTERRUPT_COUNT], in critical_data "executor";
+}
 
-/// Whether each software interrupt serves a started interrupt-mode executor.
-static INTERRUPT_MODE: [AtomicBool; SOFTWARE_INTERRUPT_COUNT] =
-    [const { AtomicBool::new(false) }; SOFTWARE_INTERRUPT_COUNT];
+oer_espressif_staged_runtime::placed_static! {
+    /// Whether each software interrupt serves a started interrupt-mode
+    /// executor; a pend reads it on any hart.
+    static INTERRUPT_MODE: [AtomicBool; SOFTWARE_INTERRUPT_COUNT] =
+        [const { AtomicBool::new(false) }; SOFTWARE_INTERRUPT_COUNT], in critical_data "executor";
+}
 
 /// The executor whose context the caller runs in: [`NO_EXECUTOR`] outside
 /// every executor and in a hardware interrupt that preempts one.

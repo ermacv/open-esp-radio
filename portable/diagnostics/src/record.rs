@@ -94,6 +94,71 @@ impl Event for HartExchange {
     }
 }
 
+/// A known-answer operation one hart's task asked a task on another hart to
+/// run on its hardware, and whether its result matched: the answering hart
+/// and the verdict. The boot console renders it as
+/// `OER-HART aes hart=<n> ok` or `OER-HART aes hart=<n> mismatch`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct HartAes {
+    pub hart: u16,
+    pub matched: bool,
+}
+
+impl Event for HartAes {
+    const KIND: Kind = Kind::new(Domain::Platform, 5);
+    const CHANNEL: Channel = const {
+        match Channel::new(Domain::Platform, 0) {
+            Ok(channel) => channel,
+            Err(_) => panic!("invalid trace channel"),
+        }
+    };
+
+    fn encode(&self) -> [u32; 2] {
+        [u32::from(self.hart), u32::from(self.matched)]
+    }
+
+    fn decode([hart, matched]: [u32; 2]) -> Option<Self> {
+        Some(Self {
+            hart: u16::try_from(hart).ok()?,
+            matched: match matched {
+                0 => false,
+                1 => true,
+                _ => return None,
+            },
+        })
+    }
+}
+
+/// The liveness rounds one hart's supervisor completed with a task on
+/// another hart so far: the supervised hart and the count. The boot console
+/// renders it as `OER-HART liveness hart=<n> rounds=<r>`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct HartLiveness {
+    pub hart: u16,
+    pub rounds: u32,
+}
+
+impl Event for HartLiveness {
+    const KIND: Kind = Kind::new(Domain::Platform, 6);
+    const CHANNEL: Channel = const {
+        match Channel::new(Domain::Platform, 0) {
+            Ok(channel) => channel,
+            Err(_) => panic!("invalid trace channel"),
+        }
+    };
+
+    fn encode(&self) -> [u32; 2] {
+        [u32::from(self.hart), self.rounds]
+    }
+
+    fn decode([hart, rounds]: [u32; 2]) -> Option<Self> {
+        Some(Self {
+            hart: u16::try_from(hart).ok()?,
+            rounds,
+        })
+    }
+}
+
 /// A borrowed view of the previous panic. The retained record stays its
 /// platform owner's; the same view can be sent by any staged image.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

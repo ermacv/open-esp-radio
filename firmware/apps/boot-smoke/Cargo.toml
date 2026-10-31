@@ -20,6 +20,7 @@ oer-embassy-time = { path = "../../../portable/embassy/time" }
 oer-time = { path = "../../../portable/time" }
 oer-espressif-interrupt-table = { path = "../../../chips/espressif/interrupt-table" }
 oer-memory = { path = "../../../portable/memory" }
+oer-crypto = { path = "../../../portable/crypto" }
 
 [build-dependencies]
 oer-esp32s31-layout = { workspace = true, features = ["build"] }
@@ -30,7 +31,8 @@ workspace = true
 [package.metadata.open-radio]
 critical-section-hart = "boot"
 # The harts this image runs: hart 1 starts during boot, runs its own
-# interrupt-mode executor and answers the boot hart's request.
+# interrupt-mode executor with its own timer, holds the AES block and answers
+# the boot hart's requests and liveness beats.
 harts = ["boot", 1]
 # Every task stack of this image is fully analysed: an unresolved path fails `cargo fw build`.
 task-stack = "proven"

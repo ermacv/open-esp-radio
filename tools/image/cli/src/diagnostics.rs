@@ -5,7 +5,9 @@ use std::borrow::Cow;
 
 use oer_diagnostics::radio_root::RadioRoot;
 use oer_diagnostics::render::{Gap, Next};
-use oer_diagnostics::{BootSmokePassed, HartExchange, MAX_PAYLOAD, Record, SecondaryReady};
+use oer_diagnostics::{
+    BootSmokePassed, HartAes, HartExchange, HartLiveness, MAX_PAYLOAD, Record, SecondaryReady,
+};
 use oer_trace::Event;
 
 #[derive(Default)]
@@ -93,6 +95,19 @@ impl Decoder {
                 {
                     return Ok(Cow::Owned(format!(
                         "OER-HART exchange hart={hart} request={request} answer={answer}"
+                    )));
+                }
+                if kind == HartAes::KIND
+                    && let Some(HartAes { hart, matched }) = HartAes::decode(words)
+                {
+                    let verdict = if matched { "ok" } else { "mismatch" };
+                    return Ok(Cow::Owned(format!("OER-HART aes hart={hart} {verdict}")));
+                }
+                if kind == HartLiveness::KIND
+                    && let Some(HartLiveness { hart, rounds }) = HartLiveness::decode(words)
+                {
+                    return Ok(Cow::Owned(format!(
+                        "OER-HART liveness hart={hart} rounds={rounds}"
                     )));
                 }
                 let event = (kind == RadioRoot::KIND)

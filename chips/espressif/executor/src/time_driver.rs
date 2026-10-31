@@ -21,6 +21,33 @@
 //!   programs that executor's comparator. A torn read is skipped: the
 //!   publisher pends the writer again after every write.
 //!
+//! - An executor on another hart than the writer's gets its comparator
+//!   through an [`AlarmGrant`]: [`grant`] borrows the writer's
+//!   [`TimeDriverReady`] on the writer's hart, publishes the assignment and
+//!   binds the comparator in the writer's bank (its mode, enable and
+//!   interrupt enable, the shared words); the affine grant then moves to the
+//!   executor's hart, whose own router routes the alarm there
+//!   ([`AlarmGrant::bind`]). The alarm handler on that hart acknowledges its
+//!   own `INT_CLR` bit; it writes no shared word, so the writer stays the
+//!   one writer of the SYSTIMER configuration on every hart. The executor
+//!   publishes its deadlines to the writer, whose pend crosses harts through
+//!   its software line (`fence w, o`, then the raise).
+//!
+//! A timer on a hart other than the writer's waits, past its deadline, for
+//! the publication's raise to reach the writer's hart, for the writer's
+//! context to run there (it can be preempted by every handler above it) and
+//! for the writer executor's round in progress to end, since the writer
+//! programs published deadlines only when it serves its timers at the start
+//! of a round; then for the alarm's own interrupt and the receiving
+//! executor's round. The writer's longest round is therefore part of every
+//! other hart's timer latency. These are stated parts of the bound, not
+//! measured numbers.
+//!
+//! The time driver's statics that contexts of different harts touch (the
+//! assignments, the published deadlines, the fired flags and the per-executor
+//! slots, whose neighbours belong to other harts) sit in critical SRAM, like
+//! every other cross-hart static.
+//!
 //! [`init`] owns the running timer's blocks from the reset root without
 //! resetting its counter or clock. The binding's platform port supplies the
 //! source identities.
@@ -106,13 +133,16 @@ unsafe impl ContextProof for SlotContext {
     }
 }
 
-static SLOTS: [ContextCell<Slot, SlotContext>; SOFTWARE_INTERRUPT_COUNT] = [const {
-    ContextCell::new(Slot {
-        queue: WakeQueue::new(),
-        programmed: [None; COMPARATOR_COUNT],
-    })
-};
-    SOFTWARE_INTERRUPT_COUNT];
+oer_espressif_staged_runtime::placed_static! {
+    /// Each executor's timers. Executors of different harts touch
+    /// neighbouring slots, so the array sits in critical SRAM.
+    static SLOTS: [ContextCell<Slot, SlotContext>; SOFTWARE_INTERRUPT_COUNT] = [const {
+        ContextCell::new(Slot {
+            queue: WakeQueue::new(),
+            programmed: [None; COMPARATOR_COUNT],
+        })
+    }; SOFTWARE_INTERRUPT_COUNT], in critical_data "executor_time";
+}
 
 /// A successful assignment always carries both bounded identities.
 #[derive(Clone, Copy)]
@@ -120,20 +150,29 @@ struct Assignment {
     comparator: Comparator,
     writer: SoftwareInterrupt,
 }
-/// No assignment exists before the executor's alarm is bound.
-static COMPARATOR_OF: [OnceValue<Assignment>; SOFTWARE_INTERRUPT_COUNT] =
-    [const { OnceValue::new() }; SOFTWARE_INTERRUPT_COUNT];
-/// An alarm has no receiving executor until its assignment is published.
-static EXECUTOR_OF: [OnceValue<SoftwareInterrupt>; COMPARATOR_COUNT] =
-    [const { OnceValue::new() }; COMPARATOR_COUNT];
+oer_espressif_staged_runtime::placed_static! {
+    /// No assignment exists before the executor's alarm is bound. A grant
+    /// publishes it on the writer's hart; the executor's hart reads it.
+    static COMPARATOR_OF: [OnceValue<Assignment>; SOFTWARE_INTERRUPT_COUNT] =
+        [const { OnceValue::new() }; SOFTWARE_INTERRUPT_COUNT], in critical_data "executor_time";
+    /// An alarm has no receiving executor until its assignment is published.
+    /// The alarm's handler reads it on its own hart.
+    static EXECUTOR_OF: [OnceValue<SoftwareInterrupt>; COMPARATOR_COUNT] =
+        [const { OnceValue::new() }; COMPARATOR_COUNT], in critical_data "executor_time";
+    /// Each executor's next deadline, published to the writer, on any hart.
+    static PUBLISHED: [DeadlineCell; SOFTWARE_INTERRUPT_COUNT] =
+        [const { DeadlineCell::new(u64::MAX) }; SOFTWARE_INTERRUPT_COUNT], in critical_data "executor_time";
+}
 /// The one executor that writes the SYSTIMER registers.
 static WRITER: AtomicU8 = AtomicU8::new(NO_EXECUTOR);
-/// Each executor's next deadline, published to the writer.
-static PUBLISHED: [DeadlineCell; SOFTWARE_INTERRUPT_COUNT] =
-    [const { DeadlineCell::new(u64::MAX) }; SOFTWARE_INTERRUPT_COUNT];
 
-static ALARM_FIRED: [AtomicBool; COMPARATOR_COUNT] =
-    [const { AtomicBool::new(false) }; COMPARATOR_COUNT];
+oer_espressif_staged_runtime::placed_static! {
+    /// Each comparator's fired flag, set by its alarm handler for its
+    /// executor, on the alarm's hart; neighbouring flags belong to other
+    /// harts' alarms.
+    static ALARM_FIRED: [AtomicBool; COMPARATOR_COUNT] =
+        [const { AtomicBool::new(false) }; COMPARATOR_COUNT], in critical_data "executor_time";
+}
 
 /// Run `f` on executor `swi`'s slot in its context; refuse a nested borrow.
 fn with_slot<B: Binding, R>(swi: SoftwareInterrupt, f: impl FnOnce(&mut Slot) -> R) -> Option<R> {
@@ -180,7 +219,8 @@ type SetupFailure<B, A> = Failure<PortOf<B>, TimeSetup<PortOf<B>, A>>;
 
 /// Affine startup authority for binding more alarms after successful init.
 /// Its private constructor runs only after counter publication and the writer's
-/// first alarm binding succeed. It remains on the initialization hart.
+/// first alarm binding succeed. It remains on the initialization hart, the
+/// writer's: an alarm of another hart leaves it as an [`AlarmGrant`].
 #[must_use = "retain the startup authority while binding additional alarms"]
 pub struct TimeDriverReady<B: Binding> {
     writer: SoftwareInterrupt,
@@ -239,7 +279,11 @@ where
     {
         Fault::TimerInstalled { writer }.reset::<PortOf<B>>();
     }
-    bind_inner::<B, WRITER_SWI, A, C>(identity, router, alarm, part)
+    here::<B, A>(alarm, part)
+        .and_then(|(alarm, mut part)| {
+            assign::<B, WRITER_SWI, A>(identity, &mut part);
+            route::<B, WRITER_SWI, A, C>(router, alarm, part)
+        })
         .map(|()| TimeDriverReady {
             writer: identity,
             _binding: PhantomData,
@@ -271,19 +315,82 @@ where
     A::Part: AlarmPart,
     C: oer_espressif_interrupt_table::Controller,
 {
-    bind_inner::<B, SWI, A, C>(ready.writer, router, alarm, part)
+    let (alarm, mut part) = here::<B, A>(alarm, part)?;
+    assign::<B, SWI, A>(ready.writer, &mut part);
+    route::<B, SWI, A, C>(router, alarm, part)
 }
 
-fn bind_inner<B: Binding, const SWI: u8, A, C>(
-    writer: SoftwareInterrupt,
-    router: &mut oer_espressif_interrupt_table::Router<C>,
+/// Executor `SWI`'s comparator, bound by the writer and ready to be routed
+/// on the alarm entry's hart: the alarm's table token and part. It is
+/// affine; it moves to that hart (`Send` with its token and part) and only
+/// [`AlarmGrant::bind`] there, with that hart's router, consumes it.
+#[must_use = "an unbound grant leaves its executor's alarm unrouted"]
+pub struct AlarmGrant<B: Binding, const SWI: u8, A: Entry> {
+    alarm: A,
+    part: A::Part,
+    _binding: PhantomData<fn() -> B>,
+}
+
+/// Give executor `SWI`, which runs on the hart of `alarm`'s table entry,
+/// the comparator of `alarm`'s source: on the writer's hart, publish the
+/// assignment and bind the comparator in the writer's bank, and return the
+/// grant that hart routes with [`AlarmGrant::bind`].
+///
+/// Borrow the authority returned by [`init`], before the writer's
+/// interrupts are enabled and before the executor's hart binds the grant.
+///
+/// Duplicate assignment or an unavailable timer bank records a fault and
+/// resets.
+pub fn grant<B: Binding, const SWI: u8, A>(
+    ready: &mut TimeDriverReady<B>,
     alarm: A,
     mut part: A::Part,
-) -> Result<(), Failure<PortOf<B>, oer_espressif_interrupt_table::BindError<A>>>
+) -> AlarmGrant<B, SWI, A>
 where
     A: Entry,
     A::Part: AlarmPart,
-    C: oer_espressif_interrupt_table::Controller,
+{
+    assign::<B, SWI, A>(ready.writer, &mut part);
+    AlarmGrant {
+        alarm,
+        part,
+        _binding: PhantomData,
+    }
+}
+
+impl<B: Binding, const SWI: u8, A> AlarmGrant<B, SWI, A>
+where
+    A: Entry,
+    A::Part: AlarmPart,
+{
+    /// Route the granted alarm on hart `H`, the alarm entry's (checked when
+    /// the image compiles), with that hart's router, before the hart's
+    /// interrupts are enabled. `hart` is the hart's own execution token, so
+    /// the call runs there.
+    ///
+    /// # Errors
+    /// A refused route returns its token and part in quarantine.
+    pub fn bind<const H: u8, C>(
+        self,
+        _hart: &oer_espressif_staged_runtime::Hart<H>,
+        router: &mut oer_espressif_interrupt_table::Router<C>,
+    ) -> Result<(), Failure<PortOf<B>, oer_espressif_interrupt_table::BindError<A>>>
+    where
+        C: oer_espressif_interrupt_table::Controller,
+    {
+        crate::hart_binding::check::<H, A>();
+        let (alarm, part) = here::<B, A>(self.alarm, self.part)?;
+        route::<B, SWI, A, C>(router, alarm, part)
+    }
+}
+
+/// The writer's half of a binding, on the writer's hart: publish executor
+/// `SWI`'s assignment and its comparator's receiving executor, then bind the
+/// comparator in one-shot mode (the writer's shared words).
+fn assign<B: Binding, const SWI: u8, A>(writer: SoftwareInterrupt, part: &mut A::Part)
+where
+    A: Entry,
+    A::Part: AlarmPart,
 {
     let comparator = const {
         let comparator = comparator_of_source::<PortOf<B>>(
@@ -303,10 +410,11 @@ where
         .set(Assignment { comparator, writer })
         .is_err()
     {
-        // init creates the only authority; bind borrows it exclusively and
-        // neither call yields. A duplicate therefore sees a completed earlier
-        // publication. The sentinel also keeps diagnostics nonblocking if a
-        // fault interrupts publication before its READY marker.
+        // init creates the only authority; bind and grant borrow it
+        // exclusively and neither call yields. A duplicate therefore sees a
+        // completed earlier publication. The sentinel also keeps diagnostics
+        // nonblocking if a fault interrupts publication before its READY
+        // marker.
         let previous = executor
             .at(&COMPARATOR_OF)
             .get()
@@ -332,34 +440,59 @@ where
         }
         .reset::<PortOf<B>>();
     }
-    let actual = crate::chip::current_core::<B>();
-    if A::HART as usize != actual {
-        return Err(Failure::new(
-            Fault::AlarmHart {
-                expected: A::HART,
-                actual,
-            },
-            oer_espressif_interrupt_table::BindError::Refused {
-                error: oer_espressif_interrupt_table::Error::WrongHart {
-                    source: <A::Part as oer_espressif_interrupt_table::InterruptSource>::SOURCE,
-                    hart: A::HART,
-                    current: actual as u8,
-                },
-                token: alarm,
-                part,
-            },
-        ));
-    }
-    if B::storage()
-        .bank
-        .with(|bank| bank.bind(&mut part))
-        .is_none()
-    {
+    if B::storage().bank.with(|bank| bank.bind(part)).is_none() {
         Fault::TimerBankUnavailable {
             comparator: comparator as u8,
         }
         .reset::<PortOf<B>>();
     }
+}
+
+/// Refuse an alarm whose table entry names another hart than the running one.
+#[allow(
+    clippy::type_complexity,
+    reason = "the refusal carries the same quarantined inputs as a refused route"
+)]
+fn here<B: Binding, A>(
+    alarm: A,
+    part: A::Part,
+) -> Result<(A, A::Part), Failure<PortOf<B>, oer_espressif_interrupt_table::BindError<A>>>
+where
+    A: Entry,
+    A::Part: AlarmPart,
+{
+    let actual = crate::chip::current_core::<B>();
+    if A::HART as usize == actual {
+        return Ok((alarm, part));
+    }
+    Err(Failure::new(
+        Fault::AlarmHart {
+            expected: A::HART,
+            actual,
+        },
+        oer_espressif_interrupt_table::BindError::Refused {
+            error: oer_espressif_interrupt_table::Error::WrongHart {
+                source: <A::Part as oer_espressif_interrupt_table::InterruptSource>::SOURCE,
+                hart: A::HART,
+                current: actual as u8,
+            },
+            token: alarm,
+            part,
+        },
+    ))
+}
+
+/// Route `alarm` with the running hart's router.
+fn route<B: Binding, const SWI: u8, A, C>(
+    router: &mut oer_espressif_interrupt_table::Router<C>,
+    alarm: A,
+    part: A::Part,
+) -> Result<(), Failure<PortOf<B>, oer_espressif_interrupt_table::BindError<A>>>
+where
+    A: Entry,
+    A::Part: AlarmPart,
+    C: oer_espressif_interrupt_table::Controller,
+{
     router
         .bind(alarm, part)
         .map(|_bound| ())
