@@ -35,7 +35,8 @@ them). The idle baseline records the parts and counters too. With
 `OER_WIFI_LOAD_PROFILE_US=1000` (250 to 10000) each level also samples the
 image's hart every period over the window and records a `profile`: ticks,
 stride and effective period, the samples by interrupted raw CLIC level
-(0 task code; with three level bits P1 `0x3f`, P2 `0x5f`, P3 `0x7f`), the 40
+(0 task code; with three level bits P1 `0x1f`, P2 `0x3f`, P3 `0x5f`, as
+the CPU report's executor levels), the 40
 functions and the 40 innermost inlined functions with the most samples, and
 every raw sample as `[tick, pc, level]`. Ticks are due every period on the
 timer's own schedule; one due while the hart's interrupts were masked
