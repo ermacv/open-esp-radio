@@ -195,6 +195,21 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 "chips/espressif/staged-runtime/src/stacks.rs:crate::stacks::current_hart_interrupt_stack_free_bytes:panic-macro:assert:1" = { owner = "chips/espressif/staged-runtime", classes = ["rust-panic"] }
 "chips/espressif/staged-runtime/src/stacks.rs:crate::stacks::current_hart_interrupt_stack_free_bytes:panic-macro:assert:2" = { owner = "chips/espressif/staged-runtime", classes = ["rust-panic"] }
 
+# firmware/probes/esp32s31-peer-overdue/src/entry.rs
+"firmware/probes/esp32s31-peer-overdue/src/entry.rs:crate::fail:terminal-entry:fail:1" = { owner = "firmware/probes/esp32s31-peer-overdue", classes = ["configuration-boot"] }
+"firmware/probes/esp32s31-peer-overdue/src/entry.rs:crate:terminal-binding:entry:1" = { owner = "firmware/probes/esp32s31-peer-overdue", classes = ["rust-panic"] }
+"firmware/probes/esp32s31-peer-overdue/src/entry.rs:crate::main:terminal-entry:main:1" = { owner = "firmware/probes/esp32s31-peer-overdue", classes = ["configuration-boot"] }
+"firmware/probes/esp32s31-peer-overdue/src/entry.rs:crate::main:reset-method:reset:1" = { owner = "firmware/probes/esp32s31-peer-overdue", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
+"firmware/probes/esp32s31-peer-overdue/src/entry.rs:crate::main:reset-method:reset:2" = { owner = "firmware/probes/esp32s31-peer-overdue", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
+"firmware/probes/esp32s31-peer-overdue/src/entry.rs:crate::main:reset-method:reset:3" = { owner = "firmware/probes/esp32s31-peer-overdue", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
+"firmware/probes/esp32s31-peer-overdue/src/entry.rs:crate::main:reset-method:reset:4" = { owner = "firmware/probes/esp32s31-peer-overdue", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
+"firmware/probes/esp32s31-peer-overdue/src/entry.rs:crate::fail:terminal-reference:boot_failure:1" = { owner = "firmware/probes/esp32s31-peer-overdue", classes = ["configuration-boot"] }
+"firmware/probes/esp32s31-peer-overdue/src/entry.rs:crate::hart1_main:terminal-entry:hart1_main:1" = { owner = "firmware/probes/esp32s31-peer-overdue", classes = ["configuration-boot"] }
+"firmware/probes/esp32s31-peer-overdue/src/entry.rs:crate::hart1_main:reset-method:reset:1" = { owner = "firmware/probes/esp32s31-peer-overdue", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
+"firmware/probes/esp32s31-peer-overdue/src/entry.rs:crate::respond:terminal-reference:reset_fault:1" = { owner = "firmware/probes/esp32s31-peer-overdue", classes = ["software-invariant"] }
+"firmware/probes/esp32s31-peer-overdue/src/entry.rs:crate::answer_beats:terminal-reference:reset_fault:1" = { owner = "firmware/probes/esp32s31-peer-overdue", classes = ["software-invariant"] }
+"firmware/probes/esp32s31-peer-overdue/src/entry.rs:crate::supervise_hart1:terminal-reference:reset_fault:1" = { owner = "firmware/probes/esp32s31-peer-overdue", classes = ["cancellation", "software-invariant"] }
+"firmware/probes/esp32s31-peer-overdue/src/entry.rs:crate:retained-slot:retained_static:1" = { owner = "firmware/probes/esp32s31-peer-overdue", classes = ["cancellation"] }
 # firmware/apps/boot-smoke/src/entry.rs
 "firmware/apps/boot-smoke/src/entry.rs:crate::fail:terminal-entry:fail:1" = { owner = "firmware/apps/boot-smoke", classes = ["configuration-boot"] }
 "firmware/apps/boot-smoke/src/entry.rs:crate:terminal-binding:entry:1" = { owner = "firmware/apps/boot-smoke", classes = ["rust-panic"] }

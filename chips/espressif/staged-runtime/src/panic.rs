@@ -143,6 +143,30 @@ pub fn peek_previous() -> Option<PanicRecord> {
     decode_panic(payload)
 }
 
+/// A named runtime fault the previous boot retained.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PreviousFault {
+    pub reason: FaultReason,
+    /// The hart that recorded it.
+    pub hart: u32,
+    /// Its four observation words.
+    pub observations: [u32; 4],
+}
+
+/// Read the previous boot's named runtime fault, if the retained slot holds
+/// one, without writing or clearing anything: the runtime still reports it
+/// once the console exists (`adoption::run`).
+pub fn peek_previous_fault() -> Option<PreviousFault> {
+    let slot = retained_fault::peek(&SLOT)?;
+    let view = slot.peek().ok()?;
+    let observations = view.decode::<[u32; 4]>(Domain::Runtime).ok()?;
+    Some(PreviousFault {
+        reason: FaultReason::from_code(view.reason)?,
+        hart: view.hart,
+        observations,
+    })
+}
+
 fn decode_panic(p: Payload) -> Option<PanicRecord> {
     if p.in_interrupt > 1
         || p.file_length > FILE_BYTES as u32
@@ -483,6 +507,17 @@ mod tests {
         let slot = retained_fault::peek(&SLOT).expect("the read released the slot");
         let view = slot.peek().expect("the read left the record complete");
         assert_eq!(view.reason, FaultReason::PeerUnanswered as u32);
+        drop(slot);
+        assert_eq!(
+            peek_previous_fault(),
+            Some(PreviousFault {
+                reason: FaultReason::PeerUnanswered,
+                hart: 0,
+                observations: [1, 0, 0, 0],
+            })
+        );
+        let slot = retained_fault::peek(&SLOT).expect("the read released the slot");
+        assert!(slot.peek().is_ok(), "the read left the record complete");
     }
 
     #[test]
