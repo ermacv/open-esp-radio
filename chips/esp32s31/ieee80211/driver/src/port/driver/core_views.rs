@@ -172,9 +172,8 @@ pub(super) fn tune<'id, Id: SlotIdentity, D: Device<B>, const B: usize>(
             view.radio_tuned_to(channel);
             match view.enable_checked() {
                 LifecycleStart::Enabled(_) => Ok(()),
-                LifecycleStart::Retune(_) => {
-                    panic!("radio start recorded the requested channel")
-                }
+                // The view recorded `channel` as tuned just above.
+                LifecycleStart::Retune(_) => Err(Fault::TuneNotRecorded),
             }
         }
         CoreView::DisabledClosing(mut view) => {
@@ -185,9 +184,8 @@ pub(super) fn tune<'id, Id: SlotIdentity, D: Device<B>, const B: usize>(
             view.radio_tuned_to(channel);
             match view.enable_checked() {
                 LifecycleStart::Enabled(_) => Ok(()),
-                LifecycleStart::Retune(_) => {
-                    panic!("radio start recorded the requested channel")
-                }
+                // The view recorded `channel` as tuned just above.
+                LifecycleStart::Retune(_) => Err(Fault::TuneNotRecorded),
             }
         }
         CoreView::DisabledClosed(mut view) => {
@@ -198,9 +196,8 @@ pub(super) fn tune<'id, Id: SlotIdentity, D: Device<B>, const B: usize>(
             view.radio_tuned_to(channel);
             match view.enable_checked() {
                 LifecycleStart::Enabled(_) => Ok(()),
-                LifecycleStart::Retune(_) => {
-                    panic!("radio start recorded the requested channel")
-                }
+                // The view recorded `channel` as tuned just above.
+                LifecycleStart::Retune(_) => Err(Fault::TuneNotRecorded),
             }
         }
         _ => Err(Fault::Capacity),

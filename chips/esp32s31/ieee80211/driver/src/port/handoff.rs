@@ -25,10 +25,11 @@ pub(super) fn retain_terminal<'id, Id: SlotIdentity, D: Device<B>, const B: usiz
     cell: &FailedTerminal<'id, Id, D, B>,
     terminal: owned::OwnedTerminal<'id, Id, D, B>,
 ) {
-    assert!(
-        cell.set(terminal).is_ok(),
-        "one failed terminal per installation"
-    );
+    // The first failed terminal already poisoned the installation; a later
+    // one stays quarantined with it.
+    if let Err(terminal) = cell.set(terminal) {
+        let _quarantined = core::mem::ManuallyDrop::new(terminal);
+    }
 }
 
 pub(super) struct Incoming<'s, T, const N: usize>(
@@ -103,22 +104,21 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> HeldBacking<'id, Id, D
             clock_use: Cell::new(ClockUse::Idle),
         }
     }
+    /// A joined installation drained its rings and returned no failed owner.
+    pub(super) fn drained(&mut self) -> bool {
+        self.commands.split().0.is_empty()
+            && self.events.split().0.is_empty()
+            && self.recycled.split().0.is_empty()
+            && !self.failed_command.is_requested()
+            && !self.failed_terminal.is_requested()
+    }
+    /// The one caller checked `drained` before taking any resource.
     pub(super) fn prepare(
         &mut self,
         storage: &'static PortStorage<D, B>,
         issuer: GateIssuer<'id, Part<Id, 1>>,
         channel: Channel,
     ) {
-        assert!(
-            self.commands.split().0.is_empty()
-                && self.events.split().0.is_empty()
-                && self.recycled.split().0.is_empty(),
-            "joined installation drained its rings"
-        );
-        assert!(
-            !self.failed_command.is_requested() && !self.failed_terminal.is_requested(),
-            "joined installation returned failed owners"
-        );
         // Pure clock readings carry no affine owner. A cancelled P1 read may
         // leave one reply after its endpoint epoch ended; discard it only
         // under this exclusive, joined preparation borrow.
@@ -223,10 +223,11 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> FrontHeld<'_, Id, D, B> {
     }
     pub(super) fn command(&self, command: Cmd<'static, Id, D, B>) {
         if let Err(error) = self.commands.try_send(command) {
-            assert!(
-                self.failed_command.set(error.0).is_ok(),
-                "one failed command per installation"
-            );
+            // The first failed command already poisoned the installation; a
+            // later one stays quarantined with it.
+            if let Err(command) = self.failed_command.set(error.0) {
+                let _quarantined = core::mem::ManuallyDrop::new(command);
+            }
             self.storage.poison(Fault::Capacity);
         }
         self.storage.driver.wake();

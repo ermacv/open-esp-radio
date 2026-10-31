@@ -159,6 +159,24 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> SlotOwner<Id> for Esp32s31B
         backing: &mut Self::Queues,
         mint: radio::Mint<'static, Self::Pools, Id>,
     ) {
+        // Refuse before taking any resource: a second installation from this
+        // backend, outstanding DMA or a joined installation's leftovers. The
+        // mint drops unissued, and split reports the missing resources.
+        backing.resources = None;
+        backing.addresses = None;
+        if !matches!(self.state, BackendState::Initial(Some(_)))
+            || !self.storage.shared.returned.all_returned()
+            || !backing.driver.retired()
+            || !backing.held.drained()
+        {
+            return;
+        }
+        let BackendState::Initial(initial) = &mut self.state else {
+            return;
+        };
+        let Some(initial) = initial.take() else {
+            return;
+        };
         self.storage.expired.set(0);
         let (
             core,
@@ -179,26 +197,18 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> SlotOwner<Id> for Esp32s31B
             access_point_association,
             queues,
         } = core;
-        let BackendState::Initial(initial) = &mut self.state else {
-            panic!("installation consumes initial resources once");
-        };
-        let initial = initial
-            .take()
-            .expect("installation retains initial resources");
         let core = LowerMacCore::new(authority, initial.transmitter, initial.config, initial.coex);
+        // Every allocation was returned (checked above): each place takes its own.
         let buffers = buffers.map(|place| {
             let (memory, returned) = self
                 .storage
                 .shared
                 .returned
                 .take(usize::from(place.index()))
-                .expect("one returned DMA allocation per buffer place");
+                .unzip();
             Buffer {
                 place,
-                dma: buffer::ReturnableBuffer {
-                    memory: Some(memory),
-                    returned: Some(returned),
-                },
+                dma: buffer::ReturnableBuffer { memory, returned },
                 loan: None,
                 admission: None,
             }
@@ -233,6 +243,11 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> SlotOwner<Id> for Esp32s31B
         Self: 's,
         Id: 's,
     {
+        if queues.resources.is_none() {
+            return Err(oer_radio_port::SlotInitError::MissingResource(
+                "Wi-Fi installation resources",
+            ));
+        }
         let storage = *queues.held.storage;
         let (commands, driver_commands) = queues.held.commands.split();
         let (driver_events, events) = queues.held.events.split();
@@ -282,10 +297,11 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> SlotOwner<Id> for Esp32s31B
     {
         let held = &invocation.held;
         let storage = self.storage;
-        assert!(
-            matches!(self.state, BackendState::Running),
-            "registered driver retains its state"
-        );
+        if !matches!(self.state, BackendState::Running) {
+            // Only a prepared installation registers; nothing to drive.
+            retire.request_failure(oer_radio_port::LifecycleError::StopUnconfirmed);
+            match core::future::pending::<core::convert::Infallible>().await {}
+        }
         let state = &mut *invocation.driver;
         loop {
             poll_fn(|cx| {
@@ -312,10 +328,12 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> SlotOwner<Id> for Esp32s31B
                 if held.clock_replies.0.free_capacity() != 0 && held.clock_requested.replace(false)
                 {
                     let answer = storage.device.borrow_mut().radio_now();
-                    assert!(
-                        held.clock_replies.push(answer).is_ok(),
-                        "one outstanding clock latch"
-                    );
+                    // Room was checked above: one outstanding clock latch.
+                    if held.clock_replies.push(answer).is_err() {
+                        storage.poison(Fault::Capacity);
+                        retire.request_failure(oer_radio_port::LifecycleError::StopUnconfirmed);
+                        return Poll::Pending;
+                    }
                     storage.shared.wake_body();
                 }
                 if retire.is_requested() {
@@ -381,19 +399,20 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> SlotOwner<Id> for Esp32s31B
         Self: 's,
         Id: 's,
     {
-        assert!(
-            matches!(self.state, BackendState::Running),
-            "stopped slot retains its driver"
-        );
-        let transmitter = invocation.driver.retire();
+        // A stopped port without its transmitter or channel refuses reinstall;
+        // release still takes its device.
+        let mut transmitter = match self.state {
+            BackendState::Running => invocation.driver.retire(),
+            _ => None,
+        };
         let mut config = self.config;
-        config.channel = self
-            .channel
-            .wifi_channel()
-            .expect("S31 channel retained through setup");
+        match self.channel.wifi_channel() {
+            Some(channel) => config.channel = channel,
+            None => transmitter = None,
+        }
         StoppedPort {
             storage: self.storage,
-            transmitter: Some(transmitter),
+            transmitter,
             config,
             addresses: self.addresses,
             coex: self.coex,

@@ -25,6 +25,7 @@ pub enum BackendFault {
     Retune(RetuneError),
     Abandoned,
     UnexpectedAggregate,
+    TuneNotRecorded,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum LowerMacFault {

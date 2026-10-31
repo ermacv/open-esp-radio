@@ -178,15 +178,21 @@ pub(super) struct Driver<'id, Id: SlotIdentity, D: Device<B>, const B: usize> {
     clock_deadline: Instant,
 }
 impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Driver<'id, Id, D, B> {
+    /// The transmitter of a disabled core; any other core keeps it, and the
+    /// stopped port then refuses reinstallation.
     pub(super) fn take_transmitter(
         &mut self,
-    ) -> OrdinaryTxIdleOwner<'static, D::Power, D::Entropy, D::Timer, B> {
+    ) -> Option<OrdinaryTxIdleOwner<'static, D::Power, D::Entropy, D::Timer, B>> {
         match self.core.view() {
-            CoreView::Disabled(view) => view.dismantle().into_transmitter(),
-            CoreView::DisabledClosing(view) => view.dismantle().into_transmitter(),
-            CoreView::DisabledClosed(view) => view.dismantle().into_transmitter(),
-            _ => panic!("normal uninstall retains its disabled core"),
+            CoreView::Disabled(view) => Some(view.dismantle().into_transmitter()),
+            CoreView::DisabledClosing(view) => Some(view.dismantle().into_transmitter()),
+            CoreView::DisabledClosed(view) => Some(view.dismantle().into_transmitter()),
+            _ => None,
         }
+    }
+    /// A retired driver holds no admitted work for a new installation.
+    pub(super) fn retired(&self) -> bool {
+        self.queues.iter().all(|q| q.is_empty()) && self.running.iter().all(Option::is_none)
     }
     pub(super) const fn vacant() -> Self {
         Self {
@@ -213,10 +219,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Driver<'id, Id, D, B> 
         queues: [FreeQueue<'id, CorePath<Id>>; 4],
         now: Instant,
     ) {
-        assert!(
-            self.queues.iter().all(|q| q.is_empty()) && self.running.iter().all(Option::is_none),
-            "retired driver has no admitted work"
-        );
+        // The one caller checked `retired` before taking any resource.
         self.core = core;
         self.tickets = tickets.map(Some);
         self.free = queues.map(Some);
@@ -224,7 +227,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Driver<'id, Id, D, B> 
     }
     pub(super) fn retire(
         &mut self,
-    ) -> OrdinaryTxIdleOwner<'static, D::Power, D::Entropy, D::Timer, B> {
+    ) -> Option<OrdinaryTxIdleOwner<'static, D::Power, D::Entropy, D::Timer, B>> {
         let transmitter = self.take_transmitter();
         for queue in &mut self.queues {
             queue.clear();

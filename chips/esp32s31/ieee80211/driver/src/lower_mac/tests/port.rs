@@ -1312,6 +1312,34 @@ fn emergency_erasure_reaches_the_last_ap_peer_as_well_as_station_and_group_keys(
 }
 
 #[test]
+fn an_outstanding_dma_allocation_refuses_installation_with_a_typed_error() {
+    let (parts, observed, _) = installed(Vec::new());
+    let refused = block_on(radio::with_local_slot(async |claim| {
+        let mut slot = claim.place();
+        let backend = Backend::new(parts).ok().expect("valid construction");
+        assert!(backend.withhold_dma(3));
+        match crate::port::Registration::guard_result(slot.register(backend)) {
+            Err(crate::port::RegistrationError::Initialization {
+                cause,
+                registration,
+            }) => {
+                drop(registration);
+                Some(cause)
+            }
+            _ => None,
+        }
+    }));
+    assert_eq!(
+        refused,
+        Some(radio::SlotInitError::MissingResource(
+            "Wi-Fi installation resources"
+        )),
+        "no endpoint is published without every buffer's DMA"
+    );
+    assert_eq!(observed.borrow().starts, 0, "no radio start");
+}
+
+#[test]
 fn clean_uninstall_returns_all_dma_and_core_owners_for_a_fresh_installation() {
     let (parts, observed, _) = installed(Vec::new());
     let _ = block_on(reinstalled(

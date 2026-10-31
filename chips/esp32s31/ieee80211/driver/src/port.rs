@@ -174,6 +174,9 @@ pub enum Fault {
     /// The lower MAC completed an aggregate the ordinary port never
     /// publishes; its queue and ticket stay quarantined.
     UnexpectedAggregate,
+    /// The core asked for a retune right after recording the channel it was
+    /// tuned to.
+    TuneNotRecorded,
 }
 
 /// Why the radio front end did not retune a stopped Wi-Fi client.
@@ -217,6 +220,19 @@ pub struct PortSharedStorage<const B: usize> {
     key_live: [KeyActivity; 20],
     returned: oer_memory::ReturnBank<TxSlotFree<'static, B>, TX_TICKETS>,
     settings: settings::Settings,
+}
+#[cfg(test)]
+impl<Id: SlotIdentity, D: Device<B>, const B: usize> Esp32s31Backend<Id, D, B> {
+    /// Keep one DMA allocation outside the bank, as a lost return would.
+    pub(crate) fn withhold_dma(&self, index: usize) -> bool {
+        match self.storage.shared.returned.take(index) {
+            Some(taken) => {
+                let _withheld = core::mem::ManuallyDrop::new(taken);
+                true
+            }
+            None => false,
+        }
+    }
 }
 impl<D: Device<B>, const B: usize> PortStorage<D, B> {
     // Keep storage construction outside the install future's poll frame.
