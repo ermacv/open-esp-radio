@@ -6,6 +6,7 @@ use super::*;
 use oer_ieee80211_testing_conformance::{Environment, MpduState, outcomes};
 
 mod barrier;
+mod interface_commands;
 
 /// One single-MPDU outcome case per fresh installation.
 struct Outcomes;
@@ -53,7 +54,10 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for OutcomeBody {
         let mut resources = resources;
         {
             let mut phase = owner.phase();
-            let permission = resources.station_commands.configure.with_context(Tag(42));
+            let permission = resources
+                .station_commands
+                .configure
+                .with_context(Tag(42, None));
             phase.station().configure(
                 permission,
                 StationReceive::Bss {

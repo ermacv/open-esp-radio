@@ -87,7 +87,7 @@ fn submit_ap<'k, 'p, 'id: 'p + 'k, Id: radio::SlotIdentity + 'id>(
         .access_point()
         .submit(
             Attempt {
-                context: Tag(92),
+                context: Tag(92, None),
                 ticket,
                 source,
                 access_category: WmmAccessCategory::BestEffort,
@@ -214,7 +214,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for Withdraw {
                         resources
                             .access_point_commands
                             .configure
-                            .with_context(Tag(314)),
+                            .with_context(Tag(314, None)),
                         SupportedFilter::new(ReceiveFilter::NONE).expect("filter"),
                     )
                 }

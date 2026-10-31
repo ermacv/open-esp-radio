@@ -54,7 +54,10 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for Barrier {
             submit_mpdu(&mut phase, last, last_ticket, None, None);
             if self.configure {
                 phase.station().configure(
-                    resources.station_commands.configure.with_context(Tag(314)),
+                    resources
+                        .station_commands
+                        .configure
+                        .with_context(Tag(314, None)),
                     StationReceive::Off,
                 );
             } else {

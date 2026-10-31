@@ -79,8 +79,17 @@ struct Observed {
     rx_delivered: usize,
 }
 struct Payload(Rc<Cell<usize>>);
+/// An opaque context: its value, and the destructor count of a fixture
+/// that watches it. The backend returns the same object it was lent.
 #[derive(Debug)]
-struct Tag(usize);
+struct Tag(usize, Option<Rc<Cell<usize>>>);
+impl Drop for Tag {
+    fn drop(&mut self) {
+        if let Some(drops) = &self.1 {
+            drops.set(drops.get() + 1);
+        }
+    }
+}
 impl PartialEq<usize> for Tag {
     fn eq(&self, other: &usize) -> bool {
         self.0 == *other
@@ -93,7 +102,7 @@ impl<Id: radio::SlotIdentity> radio::ContextProjection<Id> for Tag {
         Id: 'p,
         'p: 'a;
     type Parts<'p>
-        = usize
+        = Self
     where
         Id: 'p;
     fn view<'a, 'p>(&'a self, _: radio::ContextLoan<'p, Id>) -> usize
@@ -103,11 +112,11 @@ impl<Id: radio::SlotIdentity> radio::ContextProjection<Id> for Tag {
     {
         self.0
     }
-    fn into_parts<'p>(self, _: radio::ContextLoan<'p, Id>) -> usize
+    fn into_parts<'p>(self, _: radio::ContextLoan<'p, Id>) -> Self
     where
         Id: 'p,
     {
-        self.0
+        self
     }
 }
 impl<'p, Id: radio::SlotIdentity + 'p> radio::LoanedContext<'p, Id> for Tag {
@@ -116,7 +125,7 @@ impl<'p, Id: radio::SlotIdentity + 'p> radio::LoanedContext<'p, Id> for Tag {
         radio::PortContext::new(self)
     }
     fn restore(context: radio::PortContext<'p, Id, Self>) -> Self {
-        Self(context.into_parts())
+        context.into_parts()
     }
 }
 impl TxBody for Payload {
@@ -494,7 +503,10 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for Exchange {
         let mut outcomes = Vec::new();
         {
             let mut phase = owner.phase();
-            let permission = resources.station_commands.configure.with_context(Tag(42));
+            let permission = resources
+                .station_commands
+                .configure
+                .with_context(Tag(42, None));
             phase.station().configure(
                 permission,
                 StationReceive::Bss {
@@ -568,7 +580,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for Exchange {
                 .station()
                 .submit(
                     Attempt {
-                        context: Tag(71),
+                        context: Tag(71, None),
                         ticket,
                         source: prepared,
                         access_category: oer_ieee80211_wire::qos::WmmAccessCategory::BestEffort,
@@ -727,7 +739,7 @@ fn submit_mpdu_budget<'k, 'p, 'id: 'p + 'k, Id: radio::SlotIdentity + 'id>(
         .station()
         .submit(
             Attempt {
-                context: Tag(91),
+                context: Tag(91, None),
                 ticket,
                 source,
                 access_category: oer_ieee80211_wire::qos::WmmAccessCategory::BestEffort,
@@ -1026,7 +1038,10 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for ReceiveBody {
         {
             let mut phase = owner.phase();
             phase.station().configure(
-                resources.station_commands.configure.with_context(Tag(7)),
+                resources
+                    .station_commands
+                    .configure
+                    .with_context(Tag(7, None)),
                 StationReceive::Bss {
                     bssid: IndividualAddress::new(BSSID).expect("BSSID"),
                     filter: SupportedFilter::new(ReceiveFilter::BSS_MEMBER).expect("filter"),
@@ -1140,7 +1155,10 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for Protected {
             let ([slot], _) = bank.into_parts();
             let association = start.begin(oer_ieee80211_wire::security::Spp::NotNegotiated);
             phase.station().configure(
-                resources.station_commands.configure.with_context(Tag(19)),
+                resources
+                    .station_commands
+                    .configure
+                    .with_context(Tag(19, None)),
                 StationReceive::Bss {
                     bssid: IndividualAddress::new(BSSID).expect("BSSID"),
                     filter: SupportedFilter::new(ReceiveFilter::BSS_MEMBER).expect("filter"),
