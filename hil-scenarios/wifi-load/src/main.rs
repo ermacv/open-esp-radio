@@ -19,7 +19,8 @@ use std::{
 use oer_hil_agent::base::Service as _;
 use oer_hil_harness::{Case, Cx, Failure, RouterOperation, Scenario, check};
 use oer_services_load::{
-    Collect, CollectParts, Collected, Load, Parts, PartsCollected, Report, Start, Started, Transmit,
+    Collect, CollectCounters, CollectParts, Collected, Counters, CountersCollected, Load,
+    MAX_PARTS, PartWindow, PartsCollected, Report, Start, Started, Transmit,
 };
 use oer_services_wifi_station::{GetStatus, Join, Joined, Status};
 
@@ -193,7 +194,14 @@ fn device_address(cx: &mut Cx<'_>) -> Result<Ipv4Addr, Failure> {
 }
 
 /// The report of `run` and its parts' window, once the image ended it.
-fn collect(cx: &mut Cx<'_>, run: u32) -> Result<(Report, Parts), Failure> {
+/// What the image kept of one run.
+struct Ended {
+    report: Report,
+    parts: Vec<PartWindow>,
+    counters: Counters,
+}
+
+fn collect(cx: &mut Cx<'_>, run: u32) -> Result<Ended, Failure> {
     let started = Instant::now();
     let report = loop {
         match cx.call(Collect { run }, CALL)? {
@@ -206,9 +214,28 @@ fn collect(cx: &mut Cx<'_>, run: u32) -> Result<(Report, Parts), Failure> {
             }
         }
     };
-    match cx.call(CollectParts { run }, CALL)? {
-        PartsCollected::Report(parts) => Ok((report, parts)),
-        other => Err(Failure::Fail(format!("the image's parts: {other:?}"))),
+    let mut parts = Vec::new();
+    loop {
+        let from = u8::try_from(parts.len())
+            .map_err(|_| Failure::Fail("the image names too many parts".to_owned()))?;
+        match cx.call(CollectParts { run, from }, CALL)? {
+            PartsCollected::Report(page) => {
+                let full = page.parts.len() == MAX_PARTS;
+                parts.extend(page.parts);
+                if !full {
+                    break;
+                }
+            }
+            other => return Err(Failure::Fail(format!("the image's parts: {other:?}"))),
+        }
+    }
+    match cx.call(CollectCounters { run }, CALL)? {
+        CountersCollected::Report(counters) => Ok(Ended {
+            report,
+            parts,
+            counters,
+        }),
+        other => Err(Failure::Fail(format!("the image's counters: {other:?}"))),
     }
 }
 
@@ -296,10 +323,9 @@ fn window_us(report: &Report) -> u64 {
 /// executors overlap and their shares do not add up. The share counts the
 /// window's time inside polls, an open one's included; the mean counts only
 /// the polls that ended, whole.
-fn polls(parts: &Parts, window_us: u64) -> serde_json::Value {
+fn polls(parts: &[PartWindow], window_us: u64) -> serde_json::Value {
     let window = window_us.max(1) as f64;
     parts
-        .parts
         .iter()
         .map(|part| {
             serde_json::json!({
@@ -312,6 +338,32 @@ fn polls(parts: &Parts, window_us: u64) -> serde_json::Value {
             })
         })
         .collect()
+}
+
+/// The window's counters: the serving hart's cycles and retired
+/// instructions with their rate per microsecond (MHz) and per cycle, what
+/// the network bridge did with the station's frames, and the frames the IP
+/// stack took with the hart's instructions over them. The hart's counts
+/// include all its work, interrupts and the load service's own included.
+fn counters(counters: &Counters, window_us: u64) -> serde_json::Value {
+    let window = window_us.max(1) as f64;
+    let cycles = counters.cycles as f64;
+    let instructions = counters.instructions as f64;
+    serde_json::json!({
+        "cycles": counters.cycles,
+        "instructions": counters.instructions,
+        "cycles_per_us": round(cycles / window),
+        "instructions_per_cycle": (counters.cycles != 0).then(|| round(instructions / cycles)),
+        "bridge": {
+            "received": counters.bridge_received,
+            "refused_pool": counters.bridge_refused_pool,
+            "refused_queue": counters.bridge_refused_queue,
+            "refused_other": counters.bridge_refused_other,
+        },
+        "stack_received": counters.stack_received,
+        "instructions_per_stack_frame": (counters.stack_received != 0)
+            .then(|| round(instructions / f64::from(counters.stack_received))),
+    })
 }
 
 fn round(value: f64) -> f64 {
@@ -427,7 +479,7 @@ fn path(cx: &mut Cx<'_>) -> Result<(), Failure> {
         stop.store(true, Ordering::Relaxed);
         probes.join().unwrap_or(0)
     });
-    let (report, _parts) = collect(cx, run)?;
+    let report = collect(cx, run)?.report;
     let mut host = endpoint.close();
     host.echoes.sent = sent;
     cx.measure(
@@ -488,10 +540,12 @@ fn path(cx: &mut Cx<'_>) -> Result<(), Failure> {
         format!("the image's idle run: {started:?}"),
     )?;
     std::thread::sleep(Duration::from_millis(u64::from(DURATION_MS)));
-    let (idle, parts) = collect(cx, idle)?;
-    let mut cpu = utilisation(&idle.cpu_start, &idle.cpu_end);
+    let idle = collect(cx, idle)?;
+    let window = window_us(&idle.report);
+    let mut cpu = utilisation(&idle.report.cpu_start, &idle.report.cpu_end);
     if let Some(object) = cpu.as_object_mut() {
-        object.insert("parts".to_owned(), polls(&parts, window_us(&idle)));
+        object.insert("parts".to_owned(), polls(&idle.parts, window));
+        object.insert("counters".to_owned(), counters(&idle.counters, window));
     }
     cx.measure("idle cpu", cpu);
     Ok(())
@@ -609,12 +663,12 @@ fn level(
         std::thread::sleep(Duration::from_millis(u64::from(DRAIN_MS)));
         (sent, probes)
     });
-    let (report, parts) = collect(cx, run)?;
+    let ended = collect(cx, run)?;
     let mut received = endpoint.close();
     received.echoes.sent = probes;
     cx.measure(
         format!("{} {total_mbps} Mbit/s", mode.name()),
-        measurement(mode, total_mbps, &sent, &received, &report, &parts),
+        measurement(mode, total_mbps, &sent, &received, &ended),
     );
     Ok(())
 }
@@ -623,15 +677,15 @@ fn level(
 /// image's window for what it received and sent, the host's own sending
 /// time for what the host sent, the image's window for what the host
 /// received (the image sends only within it). CPU is the image's, at the
-/// window's two ends, the parts' polls within it.
+/// window's two ends, the parts' polls and the counters within it.
 fn measurement(
     mode: Mode,
     total_mbps: u64,
     sent: &traffic::Sent,
     received: &traffic::Received,
-    report: &Report,
-    parts: &Parts,
+    ended: &Ended,
 ) -> serde_json::Value {
+    let report = &ended.report;
     let directions = if mode == Mode::RxTx { 2 } else { 1 };
     let offered_each = round(total_mbps as f64 / directions as f64);
     let window = window_us(report) as f64 / 1e6;
@@ -641,7 +695,8 @@ fn measurement(
         "window_s": round(window),
         "rtt": rtt(&received.echoes),
         "cpu": utilisation(&report.cpu_start, &report.cpu_end),
-        "polls": polls(parts, window_us(report)),
+        "polls": polls(&ended.parts, window_us(report)),
+        "counters": counters(&ended.counters, window_us(report)),
     });
     let mut sides = serde_json::Map::new();
     if mode != Mode::Tx {
@@ -724,14 +779,12 @@ mod tests {
             failed: 0,
             elapsed: Duration::from_secs(5),
         };
-        let value = measurement(
-            Mode::Rx,
-            65,
-            &sent,
-            &traffic::Received::default(),
-            &report,
-            &Parts::default(),
-        );
+        let ended = Ended {
+            report,
+            parts: Vec::new(),
+            counters: Counters::default(),
+        };
+        let value = measurement(Mode::Rx, 65, &sent, &traffic::Received::default(), &ended);
         assert_eq!(value["window_s"], 5.0);
         assert_eq!(value["rx"]["device_received_mbps"], 13.0);
         assert!(value.get("tx").is_none());
@@ -762,6 +815,28 @@ mod tests {
     }
 
     #[test]
+    fn the_counters_give_the_clock_the_instructions_per_cycle_and_per_stack_frame() {
+        let value = counters(
+            &Counters {
+                cycles: 1_600_000_000,
+                instructions: 480_000_000,
+                bridge_received: 900,
+                bridge_refused_pool: 400,
+                stack_received: 500,
+                ..Counters::default()
+            },
+            5_000_000,
+        );
+        assert_eq!(value["cycles_per_us"], 320.0);
+        assert_eq!(value["instructions_per_cycle"], 0.3);
+        assert_eq!(value["instructions_per_stack_frame"], 960_000.0);
+        assert_eq!(value["bridge"]["refused_pool"], 400);
+        let none = counters(&Counters::default(), 5_000_000);
+        assert!(none["instructions_per_cycle"].is_null());
+        assert!(none["instructions_per_stack_frame"].is_null());
+    }
+
+    #[test]
     fn a_part_s_polls_are_rated_over_the_window() {
         let part = oer_services_load::PartWindow {
             name: "ip".try_into().unwrap(),
@@ -774,10 +849,7 @@ mod tests {
             name: "console".try_into().unwrap(),
             ..Default::default()
         };
-        let parts = Parts {
-            parts: [part, idle].into_iter().collect(),
-        };
-        let value = polls(&parts, 5_000_000);
+        let value = polls(&[part, idle], 5_000_000);
         assert_eq!(value[0]["part"], "ip");
         assert_eq!(value[0]["polls_per_s"], 400.0);
         assert_eq!(value[0]["poll_time_percent"], 30.0);
@@ -796,10 +868,7 @@ mod tests {
             ended_poll_us: 10,
             longest_poll_us: Some(10),
         };
-        let parts = Parts {
-            parts: [part].into_iter().collect(),
-        };
-        let value = polls(&parts, 1_000);
+        let value = polls(&[part], 1_000);
         assert_eq!(value[0]["poll_time_percent"], 98.9);
         assert_eq!(value[0]["mean_poll_us"], 10.0);
         assert_eq!(value[0]["longest_poll_us"], 10);

@@ -39,9 +39,11 @@ registration, which the join's station makes.
 
 The image declares the `trace` instrumentation class: `cargo fw` builds it
 with `oer_trace`, under which the executors report their activity
-boundaries, the image's named parts their poll boundaries, and the station
-configuration names no access point to observe. The station's and its
-driver's observers stay `Noop`.
+boundaries, the image's named parts their poll boundaries, the station
+service its spans and the network bridge its frames, and the station
+configuration names no access point to observe. The driver's observer is the
+image's, which counts the spans and the bridge's frames; the station's stays
+`Noop`.
 
 `Start` binds one UDP socket on its port of the station's DHCP address and
 answers `Running` at once; without a lease it is refused (`NoAddress`), and
@@ -50,12 +52,13 @@ for a zero port or peer port, a delay, window or drain past the service's
 maximum, or a payload below the 28-byte load header or above 1472 bytes,
 the UDP payload of one 1514-byte Ethernet frame (the stack fragments
 nothing). The run's window opens `delay_ms` after the start and closes
-`duration_ms` later; the image reads its CPU and its parts at both ends,
-after opening and after closing, and keeps the times. It receives and
-echoes from the start until `drain_ms` after the window, then closes the
-socket and keeps the report and the parts' window until the next run
-starts. `Collect` and `CollectParts` of the running run answer `Running`,
-of the kept one what it kept, of any other `UnknownRun`.
+`duration_ms` later; the image reads its CPU, its parts and its counters at
+both ends, after opening and after closing, and keeps the times. It receives
+and echoes from the start until `drain_ms` after the window, then closes the
+socket and keeps the report, the parts' and the counters' window until the
+next run starts. `Collect`, `CollectParts` (twelve parts an answer, from the
+asked number) and `CollectCounters` of the running run answer `Running`, of
+the kept one what it kept, of any other `UnknownRun`.
 
 - **Receive.** A datagram whose header asks for an echo, of any run, goes
   back to its source at once with the reply flag instead (`echoed`, or
@@ -93,7 +96,17 @@ of the kept one what it kept, of any other `UnknownRun`.
   longest poll; the window's start begins a new epoch for the longest. A
   poll's time includes its preemption, so the station work's futures nest
   inside `station-work` and P2's parts preempt P1's: shares do not add up.
-  A build without `oer_trace` keeps no part.
+  Inside `station` the service's spans (`step`, `pending`, `sources`,
+  `received`, `deliver`, `queue`, `terminal`, `transmit`, `recycle`) count the
+  same way, reported through the driver's observer. A build without
+  `oer_trace` keeps no part.
+- **Counters** (`src/load/counters.rs`). At both window ends the image reads
+  the hart's 64-bit cycle and retired-instruction counters (all its work,
+  interrupts and the load service's own included), the frames the IP stack
+  took from its device, and what the network bridge did with the station's
+  frames: taken, or refused for want of a pool packet, of queue room or for
+  their length or a down link. The bridge reports each frame through
+  `oer_trace::observe!`; a build without `oer_trace` counts none of them.
 
 The IP stack's pools are sized for about 65 Mbit/s of 1400-byte datagrams
 each way (`src/station/ip.rs`): 32 receive slots for the station's bursts,

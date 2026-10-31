@@ -1,8 +1,8 @@
 //! Which requests the load server answers by itself, idle or running.
 
 use oer_services_load::{
-    Collect, CollectParts, LoadError, MAX_DELAY_MS, MAX_DRAIN_MS, MAX_DURATION_MS, Request, Start,
-    Started, header,
+    Collect, CollectCounters, CollectParts, LoadError, MAX_DELAY_MS, MAX_DRAIN_MS, MAX_DURATION_MS,
+    Request, Start, Started, header,
 };
 
 /// The largest UDP payload the image sends or receives: one 1514-byte
@@ -28,15 +28,20 @@ pub(crate) enum Action {
     Cpu,
     /// Start this run, once the station has its address.
     Start(Start),
-    /// Answer with the kept report or parts.
+    /// Answer with what the run kept.
     Kept(Kept),
 }
 
-/// What a run keeps once it ended: its report and its parts' window.
+/// What a run keeps once it ended: its report, its parts' window and its
+/// counters.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum Kept {
     Report,
-    Parts,
+    /// The parts from the one numbered `from`.
+    Parts {
+        from: u8,
+    },
+    Counters,
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -61,7 +66,12 @@ pub(crate) fn action(phase: Phase, request: Request) -> Action {
         },
         (Phase::Running { .. }, Request::Start(_)) => refuse_start(LoadError::Busy),
         (phase, Request::Collect(Collect { run })) => collect(phase, run, Kept::Report),
-        (phase, Request::CollectParts(CollectParts { run })) => collect(phase, run, Kept::Parts),
+        (phase, Request::CollectParts(CollectParts { run, from })) => {
+            collect(phase, run, Kept::Parts { from })
+        }
+        (phase, Request::CollectCounters(CollectCounters { run })) => {
+            collect(phase, run, Kept::Counters)
+        }
     }
 }
 
@@ -199,12 +209,15 @@ mod tests {
     }
 
     #[test]
-    fn a_collect_answers_running_then_the_kept_report_or_parts_of_its_own_run_only() {
+    fn a_collect_answers_running_then_what_its_own_run_kept_only() {
         type Asks = fn(u32) -> Request;
-        let requests: [(Kept, Asks); 2] = [
+        let requests: [(Kept, Asks); 3] = [
             (Kept::Report, |run| Request::Collect(Collect { run })),
-            (Kept::Parts, |run| {
-                Request::CollectParts(CollectParts { run })
+            (Kept::Parts { from: 12 }, |run| {
+                Request::CollectParts(CollectParts { run, from: 12 })
+            }),
+            (Kept::Counters, |run| {
+                Request::CollectCounters(CollectCounters { run })
             }),
         ];
         for (kind, collect) in requests {

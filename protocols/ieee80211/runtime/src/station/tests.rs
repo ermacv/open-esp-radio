@@ -3344,3 +3344,11 @@ fn msdu_refusals_of_one_frame_aggregate_by_reason_whatever_their_order() {
     count_refusal(&mut saturated, Some(MsduRefusal::TooLong));
     assert_eq!(saturated.too_long, u16::MAX);
 }
+
+#[test]
+fn every_service_span_is_found_by_its_number_and_no_other_number_is() {
+    for span in ServiceSpan::ALL {
+        assert_eq!(ServiceSpan::from_number(span as u8), Some(span));
+    }
+    assert_eq!(ServiceSpan::from_number(ServiceSpan::ALL.len() as u8), None);
+}

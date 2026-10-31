@@ -56,6 +56,10 @@ as a dev-dependency. The model's fixtures run the shared conformance cases in
 This permits a composition to select station buffers and resource types without
 implementing a foreign trait for a foreign backend or replacing its body-loan
 identity. The radio and lower-MAC port contracts remain the common boundary.
+The service reports the start and end of each stretch of its own work
+(`ServiceSpan`: a step, the pending frames, a sources poll, a received frame,
+its delivery and network hand-off, a terminal, a transmit, a recycle) to
+`StationPort::span`, which by default observes nothing.
 
 `station::Runner` retains the station's concrete `StaCallbacks` provider with
 its resource bank across stop/restart. It keeps no counters: it holds the
