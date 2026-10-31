@@ -69,6 +69,7 @@ impl RuntimeRegisters for Fake {
     type Hart = usize;
     type Stops = [Option<Stopped>; 3];
     const HARTS: &'static [usize] = &[0, 1, 2];
+    const BOOT: usize = 0;
     fn hart(hart: usize) -> usize {
         hart
     }
@@ -263,9 +264,16 @@ fn reset_clears_all_entries_before_peer_pulses_from_every_hart() {
         prepare_reset(&mut fake, this);
         let mut expected = std::vec![Event::Clear(1), Event::Clear(2)];
         for hart in 0..3 {
-            if hart != this {
-                expected.extend([Event::Reset(hart), Event::Stall(hart)]);
+            if hart == this {
+                continue;
             }
+            // The boot hart's stall would survive the system reset.
+            let then = if hart == 0 {
+                Event::Run(hart)
+            } else {
+                Event::Stall(hart)
+            };
+            expected.extend([Event::Reset(hart), then]);
         }
         assert_eq!(*fake.events.borrow(), expected);
     }

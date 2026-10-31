@@ -650,3 +650,22 @@ mod launch {
         assert_eq!(permit.routed(), 1);
     }
 }
+
+#[test]
+fn a_reset_from_hart_one_lets_the_boot_hart_run_after_its_pulse() {
+    let mut memory = Memory::new(0);
+    let secondary = Hart::SECONDARIES[0].hart();
+    prepare_reset(&mut memory.registers(), secondary);
+    assert_eq!(memory.0[4][0x164 / 4], 0);
+    let registers = memory.registers();
+    // A stall request for the boot hart would survive the system reset.
+    assert!(!registers.stall_requested(crate::platform::BOOT_HART));
+    assert!(!registers.stall_requested(secondary));
+    drop(registers);
+    let [_, _, _, reset, _] = &memory.0;
+    assert_eq!(
+        reset.iter().filter(|word| **word != 0).count(),
+        1,
+        "only the boot hart's reset pulsed"
+    );
+}

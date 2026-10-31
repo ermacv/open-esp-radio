@@ -347,3 +347,37 @@ fn a_panic_sink_error_retains_its_value_and_consumes_the_sequence() {
     );
     assert_eq!(console.sequence, 0);
 }
+
+#[test]
+fn a_console_started_at_the_next_sequence_continues_the_frames() {
+    let mut first_bytes = Vec::new();
+    let mut first = Console::new(|bytes: &[u8]| {
+        first_bytes.extend_from_slice(bytes);
+        Ok::<(), ()>(())
+    });
+    first.event(&BootSmokePassed).unwrap();
+    let next = first.next_sequence();
+    assert_eq!(next, 1);
+    let mut second_bytes = Vec::new();
+    let mut second = Console::starting_at(
+        |bytes: &[u8]| {
+            second_bytes.extend_from_slice(bytes);
+            Ok::<(), ()>(())
+        },
+        next,
+    );
+    second.event(&BootSmokePassed).unwrap();
+    assert_eq!(second.next_sequence(), 2);
+    let hex: Vec<u8> = 1u32
+        .to_le_bytes()
+        .iter()
+        .flat_map(|byte| format!("{byte:02x}").into_bytes())
+        .collect();
+    let line = second_bytes
+        .strip_prefix(b"\r\nOER-DIAG:01".as_slice())
+        .unwrap();
+    assert!(
+        line.starts_with(&hex),
+        "the second console's first frame carries sequence 1"
+    );
+}

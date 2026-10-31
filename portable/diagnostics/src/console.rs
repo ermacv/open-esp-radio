@@ -58,6 +58,12 @@ where
         Self { write, sequence }
     }
 
+    /// The sequence the next frame carries: a producer that continues this
+    /// boot's frames elsewhere starts there with [`Console::starting_at`].
+    pub const fn next_sequence(&self) -> u32 {
+        self.sequence
+    }
+
     pub fn note(&mut self, note: &Note<'_>) -> Result<(), E> {
         let mut crc = self.begin()?;
         record::encode_note(note, |bytes| self.hex(bytes, &mut crc))?;

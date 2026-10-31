@@ -51,6 +51,8 @@ pub trait RuntimeRegisters: Registers {
     type Hart: Copy + Eq + 'static;
     type Stops: Default;
     const HARTS: &'static [Self::Hart];
+    /// The hart the ROM boots after a reset.
+    const BOOT: Self::Hart;
     fn hart(secondary: Self::Secondary) -> Self::Hart;
     fn save_stop(stops: &mut Self::Stops, hart: Self::Hart, stopped: Stopped);
     fn fence(&self, access: Access<'_>);
@@ -138,13 +140,24 @@ pub fn stop_other<R: RuntimeRegisters>(
 
 /// Clear every secondary ROM entry before any peer reset pulse. The owner
 /// issues the final fence and system reset; the driver never resets the chip.
-/// SOURCE: ESP-IDF 4d80c1b2 `system_internal.c:61-100`.
+/// Every peer is pulsed; a secondary peer stays stalled, while the boot hart
+/// is let run again after its pulse: its stall request is a PMU word that the
+/// system reset keeps, and a stalled boot hart never boots again (stand run
+/// 20261031T183441Z: code 0x86 survived a system reset and held hart 0 at the
+/// ROM's first instructions). The boot hart restarts from its ROM vector.
+/// SOURCE: ESP-IDF 4d80c1b2 `system_internal.c:61-100` (clear the secondary
+/// entry, pulse and stall the other core) and `:120-134` (on the second core:
+/// reset the first core, let it run, then reset).
 pub fn prepare_reset<R: RuntimeRegisters>(registers: &mut R, this: R::Hart) {
     clear_boot_addresses(registers);
     for &hart in R::HARTS {
         if hart != this {
             registers.reset_core(Access::new(), hart);
-            registers.request_peer_stall(Access::new(), hart);
+            if hart == R::BOOT {
+                registers.request_run(Access::new(), hart);
+            } else {
+                registers.request_peer_stall(Access::new(), hart);
+            }
         }
     }
 }

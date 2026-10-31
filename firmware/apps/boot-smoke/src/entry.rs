@@ -41,7 +41,7 @@ oer_espressif_executor::tasks! {
     /// The boot hart's tasks.
     Tasks: Executor<Esp32s31, 0> {
         rtc_watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) = feed_rtc_watchdog;
-        exchange(client: Client) = exchange_with_hart1;
+        exchange(client: Client, sequence: u32) = exchange_with_hart1;
     }
 }
 
@@ -179,6 +179,8 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<Port>) -> ! {
         hart: u32::from(hart1.hart()),
         sp: hart1.ready_sp(),
     });
+    // The exchange task's records continue this boot's frame sequence.
+    let sequence = diagnostics.next_sequence();
     let _timer_ready = oer_espressif_executor::init::<Esp32s31, 0, _, _>(
         oer_espressif_executor::systimer::SystemTimer {
             comparators: timer.comparators,
@@ -204,7 +206,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<Port>) -> ! {
             (),
             move |spawner| {
                 if Tasks::rtc_watchdog(spawner, watchdog).is_err()
-                    || Tasks::exchange(spawner, client).is_err()
+                    || Tasks::exchange(spawner, client, sequence).is_err()
                 {
                     fail(oer_diagnostics::name!("task-start"; 32));
                 }
@@ -261,7 +263,7 @@ async fn respond(mut server: Server, hart: u16) {
 /// under the executor's timer, report both and pass. No answer by the
 /// deadline records and resets: completion supervision beyond one deadline
 /// is not part of this image.
-async fn exchange_with_hart1(mut client: Client) {
+async fn exchange_with_hart1(mut client: Client, sequence: u32) {
     if client
         .post(Exchange {
             value: REQUEST,
@@ -294,14 +296,15 @@ async fn exchange_with_hart1(mut client: Client) {
         }
     };
     // boot-smoke runs no console driver: its last two records go through
-    // the early writer, within its bounded budget per record.
-    let mut console = Console::new(|bytes| {
+    // the early writer, within its bounded budget per record, and continue
+    // the boot console's sequence, which the host checks for loss and order.
+    let mut console = Console::starting_at(|bytes| {
         if usb_serial_jtag::early_text(bytes) {
             Ok(())
         } else {
             Err(())
         }
-    });
+    }, sequence);
     let _ = console.event(&HartExchange {
         hart: reply.hart,
         request: reply.value,

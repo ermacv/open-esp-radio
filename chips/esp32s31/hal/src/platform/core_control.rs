@@ -312,6 +312,7 @@ impl<P: Placement, Q: Placement, R: Placement, S: Placement, T: Placement>
     type Hart = Hart;
     type Stops = [Option<oer_espressif_boot::drivers::cores::Stopped>; super::HARTS];
     const HARTS: &'static [Hart] = &Hart::ALL;
+    const BOOT: Hart = super::BOOT_HART;
     fn hart(secondary: SecondaryHart) -> Hart {
         secondary.hart()
     }
