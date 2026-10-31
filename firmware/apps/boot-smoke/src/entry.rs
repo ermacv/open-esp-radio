@@ -18,7 +18,7 @@ use oer_esp32s31_hal::peripherals::{
 use oer_esp32s31_hal::platform::Port;
 use oer_esp32s31_hal::root::Root;
 use oer_espressif_executor::peer::liveness::{self, Beat, Period, Responder, Supervisor};
-use oer_espressif_executor::peer::{PeerClient, PeerError, PeerServer};
+use oer_espressif_executor::peer::{Obligations, PeerClient, PeerError, PeerServer};
 use oer_espressif_executor::{AlarmGrant, Executor, InterruptExecutor};
 use oer_espressif_interrupt_table::signal::{FromPeerHart, IrqSignal};
 use oer_espressif_staged_runtime::diagnostics::{
@@ -135,7 +135,7 @@ type AesClient = PeerClient<AesExchange, Hart1Executor, Hart0Executor>;
 /// Hart 1's end of the key unwrap.
 type AesServer = PeerServer<AesExchange, Hart1Executor, Hart0Executor>;
 /// The boot hart's liveness supervisor of hart 1.
-type LivenessSupervisor = Supervisor<Hart1Executor, Hart0Executor>;
+type LivenessSupervisor = Supervisor<Hart1Executor, Hart0Executor, WATCHED>;
 /// Hart 1's end of the liveness supervision.
 type LivenessResponder = Responder<Hart1Executor, Hart0Executor>;
 
@@ -165,6 +165,13 @@ oer_espressif_staged_runtime::placed_static! {
     /// The liveness supervision's durable seat, claimed once.
     static BEAT_SEAT: RequestSlot<Beat, (), InPlace> = RequestSlot::new_in_place(), in critical_data "hart_exchange";
 }
+
+/// The boot hart's watched channels: the exchange and the key unwrap.
+const WATCHED: usize = 2;
+
+/// The seats of the boot hart's watched requests, which the liveness
+/// supervisor checks: written and read on the boot hart only.
+static OBLIGATIONS: Obligations<WATCHED> = Obligations::new();
 
 /// The liveness rounds the supervisor completed: written and read on the
 /// boot hart only.
@@ -248,19 +255,24 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<Port>) -> ! {
     // Hart 1's executor owns `FROM_CPU1`'s line from here, so the boot
     // hart's raise reaches it once hart 1 routes the line's source.
     let hart1_executor = InterruptExecutor::<Esp32s31, 1>::new(software.line1);
-    let Some((exchange, server)) = oer_espressif_executor::peer::pair(&SLOT, &POSTED, &ANSWERED)
+    // The supervisor first: it issues the seat every watched channel needs.
+    let Some((supervisor, responder)) =
+        liveness::pair(&BEAT_SEAT, &BEAT_POSTED, &BEAT_ANSWERED, LIVENESS, &OBLIGATIONS)
+    else {
+        fail(oer_diagnostics::name!("liveness-claimed"; 32));
+    };
+    let (Some(exchange_seat), Some(aes_seat)) = (supervisor.watch(), supervisor.watch()) else {
+        fail(oer_diagnostics::name!("obligation-seats"; 32));
+    };
+    let Some((exchange, server)) =
+        oer_espressif_executor::peer::pair(&SLOT, &POSTED, &ANSWERED, exchange_seat)
     else {
         fail(oer_diagnostics::name!("exchange-claimed"; 32));
     };
     let Some((aes_client, aes_server)) =
-        oer_espressif_executor::peer::pair(&AES_SLOT, &AES_POSTED, &AES_ANSWERED)
+        oer_espressif_executor::peer::pair(&AES_SLOT, &AES_POSTED, &AES_ANSWERED, aes_seat)
     else {
         fail(oer_diagnostics::name!("aes-claimed"; 32));
-    };
-    let Some((supervisor, responder)) =
-        liveness::pair(&BEAT_SEAT, &BEAT_POSTED, &BEAT_ANSWERED, LIVENESS)
-    else {
-        fail(oer_diagnostics::name!("liveness-claimed"; 32));
     };
     // The boot hart's executor writes the SYSTIMER registers; hart 1's
     // executor gets comparator 1 through a grant it routes on hart 1.

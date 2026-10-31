@@ -126,6 +126,21 @@ and that both signals cross; it proves nothing about other drivers there.
 When the supervisor's executor stops, nothing supervises: the RTC watchdog
 that executor feeds remains the bound.
 
+The supervisor also watches the requests of its executor's clients
+([`peer::obligation`](src/peer/obligation.rs)). It owns a static
+`Obligations<N>` table, claimed once, and issues one seat per channel
+(`Supervisor::watch`), which `peer::pair` requires. The client publishes the
+request's deadline into its seat before the server sees the request and
+withdraws it only for an answer taken before the deadline; an expiry, a late
+answer, or a wait abandoned or never started leave it there. The supervisor
+wakes at the earliest watched deadline and at every seat write, during the
+beat's wait as between rounds, and ends with
+`LivenessError::RequestOverdue` (channel and deadline), which the image
+records (`PeerUnanswered`, last word 2) and resets on. Client and supervisor
+are tasks of one executor, so the wake never leaves its hart; a seat's
+64-bit deadline is read whole or skipped and read again after the writer's
+wake.
+
 The time driver consumes `SystemTimer`, containing
 the running timer's disjoint owners from the reset root: our comparator writer, three alarm
 acknowledgers that each strobe their own bit of the shared

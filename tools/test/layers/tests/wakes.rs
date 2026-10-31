@@ -59,6 +59,7 @@ fn raw_atomic_wakers_stay_within_the_reviewed_inventory() {
         ("chips/esp32s31/ieee80211/driver/src/port.rs", 5),
         ("chips/esp32s31/ieee80211/driver/src/rx/control.rs", 7),
         ("chips/esp32s31/ieee80211/driver/src/rx/upper.rs", 7),
+        ("chips/espressif/executor/src/peer/obligation.rs", 5),
         ("portable/memory/src/waking_spsc.rs", 13),
         ("portable/sync/src/lib.rs", 6),
         ("protocols/radio/port/src/slot.rs", 4),

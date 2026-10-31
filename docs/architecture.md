@@ -430,7 +430,13 @@ run its own executor.
   (its timer read after the take) ends supervision with a typed `Overdue`
   and quarantines the seat, and the image records `LivenessOverdue` and
   resets. Every `peer` request carries its deadline from its post: the
-  client keeps it across cancelled waits and never returns a late answer. A completed
+  client keeps it across cancelled waits and never returns a late answer.
+  The supervisor also watches every request of its executor's clients:
+  each channel holds a seat of the supervisor's static obligation table,
+  filled before the server sees the request and emptied only for an answer
+  taken in time, so a request whose wait was abandoned or never started,
+  expired or answered late still ends supervision with `RequestOverdue` at
+  its deadline, recorded as `PeerUnanswered`. A completed
   round proves that the responder's hart runs its executor, polls the
   responder and that notifications cross in both directions within the
   deadline; it proves nothing about other drivers on that hart. When the

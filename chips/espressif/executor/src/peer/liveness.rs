@@ -24,11 +24,18 @@
 //! The period and the deadline are the image's stated configuration
 //! ([`Period`]), not measured latencies.
 
+use core::{
+    future::{Future, poll_fn},
+    pin::pin,
+    task::Poll,
+};
+
 use oer_espressif_interrupt_table::signal::{ForeignContext, IrqSignal, SignalExecutor};
 use oer_espressif_staged_runtime::panic::FaultReason;
 use oer_memory::{InPlace, RequestSlot};
 use oer_time::{Duration, Instant, TimeOverflow, Timer};
 
+use super::obligation::{Obligations, Scan, Watch};
 use super::{PeerClient, PeerError, PeerServer, PostError};
 
 /// One round's request: its sequence, which the responder echoes.
@@ -96,11 +103,24 @@ pub struct Overdue {
     pub completed: u32,
 }
 
+/// A watched channel's request whose deadline passed before its client took
+/// the answer: never waited for, abandoned, expired or answered late. The
+/// seat cannot tell a forgotten wait from a slow server.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct RequestOverdue {
+    /// The channel's seat ([`Watch::channel`]).
+    pub channel: u32,
+    /// The request's deadline.
+    pub deadline: Instant,
+}
+
 /// Why supervision ended. Every variant is terminal for the image.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum LivenessError {
     /// The responder did not echo a beat by its deadline.
     Overdue(Overdue),
+    /// A watched channel's request passed its deadline unanswered.
+    RequestOverdue(RequestOverdue),
     /// The supervisor was polled outside its executor's context.
     Foreign(ForeignContext),
     /// The slot still held an earlier beat when the next was posted.
@@ -129,7 +149,10 @@ impl LivenessError {
     /// with the beat's sequence, its deadline in microseconds (low, high
     /// word) and the rounds completed before it; `SignalContext` for a
     /// foreign poll; `LivenessBroken` with a kind (1 seat occupied, 2 wrong
-    /// echo, 3 time range, 4 no beat posted), the sequence and the echo.
+    /// echo, 3 time range, 4 no beat posted), the sequence and the echo;
+    /// `PeerUnanswered` for a watched request, with its channel, its
+    /// deadline in microseconds (low, high word) and 2, the supervisor's
+    /// mark (a client's own expiry records 0).
     pub const fn diagnostic(self) -> (FaultReason, [u32; 4]) {
         match self {
             Self::Overdue(Overdue {
@@ -141,6 +164,13 @@ impl LivenessError {
                 (
                     FaultReason::LivenessOverdue,
                     [sequence, micros as u32, (micros >> 32) as u32, completed],
+                )
+            }
+            Self::RequestOverdue(RequestOverdue { channel, deadline }) => {
+                let micros = deadline.as_micros();
+                (
+                    FaultReason::PeerUnanswered,
+                    [channel, micros as u32, (micros >> 32) as u32, 2],
                 )
             }
             Self::Foreign(_) => (FaultReason::SignalContext, [0, 0, 0, 0]),
@@ -155,10 +185,12 @@ impl LivenessError {
 }
 
 /// The supervising side, a task of executor `C` on one hart; it supervises
-/// the responder, a task of executor `S` on another.
+/// the responder, a task of executor `S` on another, and the `N` watched
+/// channels of executor `C`'s clients.
 #[must_use = "dropping the supervisor ends supervision and retains the seat"]
-pub struct Supervisor<S: SignalExecutor, C: SignalExecutor> {
+pub struct Supervisor<S: SignalExecutor, C: SignalExecutor, const N: usize> {
     client: PeerClient<Beat, S, C>,
+    obligations: &'static Obligations<N>,
     period: Period,
     sequence: u32,
     completed: u32,
@@ -171,18 +203,24 @@ pub struct Responder<S: SignalExecutor, C: SignalExecutor> {
 }
 
 /// Claim `slot`'s supervisor and responder, with the responder executor's
-/// `request` signal, the supervisor executor's `reply` signal and the
-/// stated `period`; `None` when the slot was claimed before.
-pub fn pair<S: SignalExecutor, C: SignalExecutor>(
+/// `request` signal, the supervisor executor's `reply` signal, the stated
+/// `period` and the obligation table of executor `C`'s watched channels;
+/// `None` when the slot or the table was claimed before.
+pub fn pair<S: SignalExecutor, C: SignalExecutor, const N: usize>(
     slot: &'static RequestSlot<Beat, (), InPlace>,
     request: &'static IrqSignal<S>,
     reply: &'static IrqSignal<C>,
     period: Period,
-) -> Option<(Supervisor<S, C>, Responder<S, C>)> {
-    let (client, server) = super::pair(slot, request, reply)?;
+    obligations: &'static Obligations<N>,
+) -> Option<(Supervisor<S, C, N>, Responder<S, C>)> {
+    if !obligations.claim() {
+        return None;
+    }
+    let (client, server) = super::claim(slot, request, reply, None)?;
     Some((
         Supervisor {
             client,
+            obligations,
             period,
             sequence: 0,
             completed: 0,
@@ -191,7 +229,13 @@ pub fn pair<S: SignalExecutor, C: SignalExecutor>(
     ))
 }
 
-impl<S: SignalExecutor, C: SignalExecutor> Supervisor<S, C> {
+impl<S: SignalExecutor, C: SignalExecutor, const N: usize> Supervisor<S, C, N> {
+    /// Issue the next seat of this supervisor's table, for one channel of
+    /// executor `C` ([`super::pair`]); `None` once all `N` are issued.
+    pub fn watch(&self) -> Option<Watch<C>> {
+        self.obligations.issue()
+    }
+
     /// Run one round now: post the next beat and wait for its echo until
     /// the deadline on `timer`.
     ///
@@ -217,7 +261,8 @@ impl<S: SignalExecutor, C: SignalExecutor> Supervisor<S, C> {
             }
         }
         self.sequence = sequence;
-        let beat = match self.client.answer(timer).await {
+        let obligations = self.obligations;
+        let beat = match watched(obligations, timer, self.client.answer(timer)).await? {
             Ok(beat) => beat,
             Err(PeerError::Expired { deadline }) => {
                 return Err(LivenessError::Overdue(Overdue {
@@ -259,7 +304,60 @@ impl<S: SignalExecutor, C: SignalExecutor> Supervisor<S, C> {
             let Some(next) = round.posted.checked_add(self.period.period) else {
                 return LivenessError::Time(TimeOverflow);
             };
-            timer.wait_until(next).await;
+            if let Err(error) = watched(self.obligations, timer, timer.wait_until(next)).await {
+                return error;
+            }
+        }
+    }
+}
+
+/// Drive `inner` to its end while watching `obligations`: a watched request
+/// whose deadline the clock reaches first ends the wait with
+/// [`LivenessError::RequestOverdue`]. The task wakes at the earliest
+/// watched deadline and at every write to a seat, so a newly posted request
+/// with an earlier deadline is watched from its post on.
+async fn watched<T: Timer, F: Future, const N: usize>(
+    obligations: &Obligations<N>,
+    timer: &T,
+    inner: F,
+) -> Result<F::Output, LivenessError> {
+    let mut inner = pin!(inner);
+    loop {
+        // Registered before the scan, so a write after it wakes the task.
+        poll_fn(|cx| {
+            obligations.register(cx);
+            Poll::Ready(())
+        })
+        .await;
+        let _changed = obligations.take_changed();
+        let earliest = match obligations.scan(timer.now()) {
+            Scan::Overdue { channel, deadline } => {
+                return Err(LivenessError::RequestOverdue(RequestOverdue {
+                    channel,
+                    deadline,
+                }));
+            }
+            Scan::Pending(earliest) => earliest,
+        };
+        let mut due = pin!(async {
+            match earliest {
+                Some(deadline) => timer.wait_until(deadline).await,
+                None => core::future::pending::<()>().await,
+            }
+        });
+        let finished = poll_fn(|cx| {
+            obligations.register(cx);
+            if let Poll::Ready(output) = inner.as_mut().poll(cx) {
+                return Poll::Ready(Some(output));
+            }
+            if obligations.take_changed() || due.as_mut().poll(cx).is_ready() {
+                return Poll::Ready(None);
+            }
+            Poll::Pending
+        })
+        .await;
+        if let Some(output) = finished {
+            return Ok(output);
         }
     }
 }

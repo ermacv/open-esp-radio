@@ -26,6 +26,12 @@ fn slot() -> &'static RequestSlot<Square, (), InPlace> {
     Box::leak(Box::new(RequestSlot::new_in_place()))
 }
 
+/// A seat of a fresh obligation table, for a client of executor `C`.
+fn watch<C>() -> super::Watch<C> {
+    let table: &'static super::Obligations<1> = Box::leak(Box::new(super::Obligations::new()));
+    table.issue().expect("a fresh table has a seat")
+}
+
 #[derive(Default)]
 struct Counting(AtomicU32);
 
@@ -51,7 +57,7 @@ fn square(request: &mut Square) {
 fn a_posted_request_is_answered_in_place_and_wakes_the_client_through_its_signal() {
     let (request, _) = host::deferred_signal();
     let (reply, _) = host::signal();
-    let (mut client, mut server) = pair(slot(), request, reply).expect("a fresh slot");
+    let (mut client, mut server) = pair(slot(), request, reply, watch()).expect("a fresh slot");
     let clock = VirtualClock::<4>::new();
     let deadline = clock
         .deadline_after(Duration::from_millis(10))
@@ -107,7 +113,7 @@ fn a_posted_request_is_answered_in_place_and_wakes_the_client_through_its_signal
 fn a_second_post_before_the_answer_returns_its_request() {
     let (request, _) = host::deferred_signal();
     let (reply, _) = host::deferred_signal();
-    let (mut client, _server) = pair(slot(), request, reply).expect("a fresh slot");
+    let (mut client, _server) = pair(slot(), request, reply, watch()).expect("a fresh slot");
     let clock = VirtualClock::<4>::new();
     let deadline = clock
         .deadline_after(Duration::from_millis(10))
@@ -141,7 +147,7 @@ fn a_second_post_before_the_answer_returns_its_request() {
 fn an_unanswered_request_ends_in_a_terminal_expiry_at_its_deadline() {
     let (request, _) = host::deferred_signal();
     let (reply, _) = host::deferred_signal();
-    let (mut client, _server) = pair(slot(), request, reply).expect("a fresh slot");
+    let (mut client, _server) = pair(slot(), request, reply, watch()).expect("a fresh slot");
     let clock = VirtualClock::<4>::new();
     let deadline = clock
         .deadline_after(Duration::from_millis(10))
@@ -178,16 +184,16 @@ fn a_slot_pairs_once() {
     let slot = slot();
     let (request, _) = host::deferred_signal();
     let (reply, _) = host::deferred_signal();
-    let first = pair(slot, request, reply);
+    let first = pair(slot, request, reply, watch());
     assert!(first.is_some());
-    assert!(pair(slot, request, reply).is_none());
+    assert!(pair(slot, request, reply, watch()).is_none());
 }
 
 #[test]
 fn a_client_polled_outside_its_executor_is_refused() {
     let (request, _) = host::deferred_signal();
     let reply = host::foreign_signal();
-    let (mut client, _server) = pair(slot(), request, reply).expect("a fresh slot");
+    let (mut client, _server) = pair(slot(), request, reply, watch()).expect("a fresh slot");
     let clock = VirtualClock::<4>::new();
     let deadline = clock
         .deadline_after(Duration::from_millis(1))
@@ -215,7 +221,7 @@ fn a_client_polled_outside_its_executor_is_refused() {
 fn serving_one_request_keeps_its_callback_across_a_raise_without_a_post() {
     let (request, raiser) = host::signal();
     let (reply, _) = host::deferred_signal();
-    let (mut client, mut server) = pair(slot(), request, reply).expect("a fresh slot");
+    let (mut client, mut server) = pair(slot(), request, reply, watch()).expect("a fresh slot");
     let (_, waker) = task();
     let mut cx = Context::from_waker(&waker);
     let mut calls = 0_u32;
@@ -265,7 +271,7 @@ fn posted(
 ) {
     let (request, _) = host::deferred_signal();
     let (reply, _) = host::signal();
-    let (mut client, server) = pair(slot(), request, reply).expect("a fresh slot");
+    let (mut client, server) = pair(slot(), request, reply, watch()).expect("a fresh slot");
     let deadline = clock
         .deadline_after(Duration::from_millis(10))
         .expect("in range");
@@ -400,7 +406,7 @@ fn a_cancelled_wait_keeps_the_request_and_its_deadline() {
 fn a_wait_without_a_posted_request_is_refused() {
     let (request, _) = host::deferred_signal();
     let (reply, _) = host::signal();
-    let (mut client, _server) = pair(slot(), request, reply).expect("a fresh slot");
+    let (mut client, _server) = pair(slot(), request, reply, watch()).expect("a fresh slot");
     let clock = VirtualClock::<4>::new();
     let (_, waker) = task();
     let mut cx = Context::from_waker(&waker);

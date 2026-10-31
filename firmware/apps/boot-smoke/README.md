@@ -31,7 +31,10 @@ The boot hart's executor runs three tasks:
 - the liveness supervisor (`peer::liveness`), which owns its static seat and
   never ends: a beat every 100 ms, each echoed by hart 1's responder within
   50 ms (stated configuration); an overdue beat records `LivenessOverdue`
-  and resets;
+  and resets. It also watches the check's two channels (the exchange and
+  the key unwrap, seats 0 and 1 of its table): a request still unanswered
+  at its deadline records `PeerUnanswered` and resets, whether or not the
+  check still waits;
 - the check: it posts a request (7) that hart 1's task answers in place (the
   square and its hart); it hands hart 1's AES task the RFC 3394 §4.1 unwrap
   request (KEK `000102…0F`, ciphertext `1FA68B0A…CFE5`); hart 1 waits 2 ms

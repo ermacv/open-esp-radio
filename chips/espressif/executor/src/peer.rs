@@ -23,6 +23,12 @@
 //! through the other executor's signal, which only that executor's handler
 //! services.
 //!
+//! Every channel holds a seat of its executor's obligation table
+//! ([`obligation`]), which the client fills before the request reaches the
+//! server and empties only for an answer taken in time: the liveness
+//! supervisor of the same executor reports a request whose deadline passed,
+//! whether or not anyone still waits for it.
+//!
 //! [`liveness`] builds the durable supervision of a peer hart on one such
 //! slot: a periodic request with its own deadline.
 
@@ -90,6 +96,9 @@ enum Obligation<Req> {
 pub struct PeerClient<Req: 'static, S: SignalExecutor, C: SignalExecutor> {
     client: InPlaceClient<Req>,
     obligation: Obligation<Req>,
+    /// The channel's supervised seat; only the liveness beat, which its own
+    /// round supervises, has none.
+    watch: Option<Watch<C>>,
     request: &'static IrqSignal<S>,
     reply: &'static IrqSignal<C>,
 }
@@ -103,18 +112,31 @@ pub struct PeerServer<Req: 'static, S: SignalExecutor, C: SignalExecutor> {
 }
 
 /// Claim `slot`'s two endpoints with the server executor's `request` signal
-/// and the client executor's `reply` signal; `None` when the slot was
+/// and the client executor's `reply` signal; every request the client posts
+/// is watched in `watch`, a seat the liveness supervisor of executor `C`
+/// issued ([`liveness::Supervisor::watch`]). `None` when the slot was
 /// claimed before.
 pub fn pair<Req, S: SignalExecutor, C: SignalExecutor>(
     slot: &'static RequestSlot<Req, (), InPlace>,
     request: &'static IrqSignal<S>,
     reply: &'static IrqSignal<C>,
+    watch: Watch<C>,
+) -> Option<(PeerClient<Req, S, C>, PeerServer<Req, S, C>)> {
+    claim(slot, request, reply, Some(watch))
+}
+
+fn claim<Req, S: SignalExecutor, C: SignalExecutor>(
+    slot: &'static RequestSlot<Req, (), InPlace>,
+    request: &'static IrqSignal<S>,
+    reply: &'static IrqSignal<C>,
+    watch: Option<Watch<C>>,
 ) -> Option<(PeerClient<Req, S, C>, PeerServer<Req, S, C>)> {
     let (client, server) = slot.claim_in_place()?;
     Some((
         PeerClient {
             client,
             obligation: Obligation::Idle,
+            watch,
             request,
             reply,
         },
@@ -143,7 +165,16 @@ impl<Req, S: SignalExecutor, C: SignalExecutor> PeerClient<Req, S, C> {
                 return Err(PostError::Expired { request, deadline });
             }
         }
-        self.client.post(request).map_err(PostError::Occupied)?;
+        // The supervisor watches the obligation before the server sees it.
+        if let Some(watch) = &self.watch {
+            watch.oblige(deadline);
+        }
+        if let Err(request) = self.client.post(request) {
+            if let Some(watch) = &self.watch {
+                watch.discharge();
+            }
+            return Err(PostError::Occupied(request));
+        }
         self.obligation = Obligation::Posted(deadline);
         let _pended = self.request.raise(POSTED);
         Ok(())
@@ -190,6 +221,11 @@ impl<Req, S: SignalExecutor, C: SignalExecutor> PeerClient<Req, S, C> {
             }
             match taken {
                 Some(answer) => {
+                    // Only an answer taken before its deadline discharges
+                    // the obligation; an expiry keeps it for the supervisor.
+                    if let Some(watch) = &self.watch {
+                        watch.discharge();
+                    }
                     self.obligation = Obligation::Idle;
                     Poll::Ready(Ok(answer))
                 }
@@ -246,6 +282,9 @@ impl<Req, S: SignalExecutor, C: SignalExecutor> PeerServer<Req, S, C> {
 }
 
 pub mod liveness;
+pub mod obligation;
+
+pub use obligation::{Obligations, Watch};
 
 #[cfg(test)]
 mod tests;
