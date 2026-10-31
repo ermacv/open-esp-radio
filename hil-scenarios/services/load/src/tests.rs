@@ -89,12 +89,30 @@ fn the_largest_reports_fit_one_response() {
         stack_received: u32::MAX,
     });
     assert!(postcard::to_slice(&counters, &mut buffer).unwrap().len() <= 512);
+    let samples = SamplesCollected::Page(Samples {
+        period_us: u32::MAX,
+        ticks: u32::MAX,
+        stride: u32::MAX,
+        kept: u16::MAX,
+        stray: u32::MAX,
+        cut: true,
+        samples: core::iter::repeat_n(
+            Sample {
+                tick: u32::MAX,
+                pc: u32::MAX,
+                level: u8::MAX,
+            },
+            MAX_PAGE_SAMPLES,
+        )
+        .collect(),
+    });
+    assert!(postcard::to_slice(&samples, &mut buffer).unwrap().len() <= 512);
 }
 
 #[test]
-fn the_service_names_five_endpoints_and_their_answers_by_distinct_keys() {
+fn the_service_names_six_endpoints_and_their_answers_by_distinct_keys() {
     let keys = <Request as oer_hil_agent::base::Service>::KEYS;
-    assert_eq!(keys.len(), 10);
+    assert_eq!(keys.len(), 12);
     let distinct: std::collections::BTreeSet<_> = keys.iter().collect();
     assert_eq!(distinct.len(), keys.len());
 }

@@ -12,12 +12,13 @@ use oer_esp32s31_hal::peripherals::{
     software_interrupt::{FromCpu0Irq, FromCpu2Irq, FromCpu3Irq},
     system_timer::{SystimerAlarm0, SystimerAlarm1},
     timg0_alarm::Timg0AlarmInterrupt,
+    timg1_alarm::Timg1AlarmInterrupt,
 };
 use oer_esp32s31_wifi::{self as wifi, InterruptTypes as _};
 use oer_espressif_executor::{Doorbell, DoorbellLine, Executor, InterruptExecutor};
 
 oer_espressif_staged_runtime::interrupt_table! {
-    contexts { app_wake: 1; radio_executor: 2; radio: 3; }
+    contexts { app_wake: 1; radio_executor: 2; radio: 3; profile: 4; }
     // SOURCE: family.toml [interrupts] highest-line; HW23_S31_P2_ARBITRATION_20261027
     // measures only this P2 pair on S31: FROM_CPU2 line17 before TIMG0 line16.
     /// The SAR/PWDET conversion steps between radio executor rounds.
@@ -28,6 +29,9 @@ oer_espressif_staged_runtime::interrupt_table! {
     radio_alarm: RadioAlarmToken = SystimerAlarm0 => oer_espressif_executor::alarm_interrupt::<station::RadioTasks, 0, SystimerAlarm0>, line 19, context radio, hart 0, Hardware;
     /// The radio handler (P3): both Wi-Fi MAC banks and the doorbell.
     wifi: WifiToken = station::irq::WifiPart => crate::station::irq::on_wifi, line 21, context radio, hart 0, Hardware;
+    /// The PC sampler (TIMG1 T0), above every other level so that it sees
+    /// what it interrupts; it ticks only while a run samples.
+    sampler: SamplerToken = Timg1AlarmInterrupt => load::sampler::interrupt, line 22, context profile, hart 0, Hardware;
     /// Wakes the application executor.
     wake: ExecutorWake = FromCpu0Irq => oer_espressif_executor::wake_handler::<Esp32s31, 0, FromCpu0Irq>, line 40, context app_wake, hart 0, Hardware;
     /// The application executor's alarm (system timer comparator 1).
@@ -106,6 +110,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
             radio,
             clocks,
             timg0_alarm,
+            timg1_alarm,
             system_timer,
             software,
             wifi_interrupts,
@@ -133,6 +138,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
                     runtime.radio,
                     runtime.clocks,
                     runtime.timg0_alarm,
+                    runtime.timg1_alarm,
                     runtime.system_timer,
                     runtime.software_interrupts,
                     runtime.wifi_interrupts,
@@ -191,6 +197,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
             >(error)
         });
     let (bell, urgent) = Doorbell::new::<FromCpu3Irq>(line, &bound);
+    let sampler = load::sampler::init(timg1_alarm, adopted.router(), interrupts.sampler);
     let (hart, router) = adopted.parts();
     let radio = InterruptExecutor::<Esp32s31, 2>::new(software.line2)
         .start(hart, router, interrupts.radio, software.irq2, urgent)
@@ -274,8 +281,11 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
                     load: load_sender,
                 };
                 if AppTasks::console(spawner, usb, boot, evidence, requests).is_err()
-                    || AppTasks::station_work(spawner, station::place(inputs, load_receiver))
-                        .is_err()
+                    || AppTasks::station_work(
+                        spawner,
+                        station::place(inputs, load_receiver, sampler),
+                    )
+                    .is_err()
                     || AppTasks::rtc_watchdog(spawner, rtc_watchdog).is_err()
                 {
                     fail(fatal::Failure::TaskAllocation);

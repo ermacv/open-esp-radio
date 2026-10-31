@@ -200,6 +200,27 @@ description = "The group's whole raw/masked status words and T0's acknowledgemen
 sources = ["ESP_IDF_4D59230D_S31_TIMER0_LL", "HW7_S31_TIMG0_20261026"]
 
 [[partitions]]
+name = "TimerGroup1Peripherals"
+member = "timer_group1"
+description = "Timer group one's movable T0 program owner (counter, alarm, load and whole ENA word) and permanent interrupt owner (whole RAW/ST words and only T0 CLR). Each word has one owner. WatchdogPeripherals retains the group clock/reset word and the group's main watchdog."
+
+[[partitions.parts]]
+name = "Timg1Timer0"
+instance = "TIMG1"
+registers = ["T0CONFIG", "T0LO", "T0HI", "T0UPDATE", "T0ALARMLO", "T0ALARMHI", "T0LOADLO", "T0LOADHI", "T0LOAD", "INT_ENA_TIMERS"]
+sources = ["ESP_IDF_4D59230D_S31_TIMER0_LL"]
+
+[[partitions.parts]]
+name = "Timg1InterruptBank"
+instance = "TIMG1"
+registers = ["INT_RAW_TIMERS", "INT_ST_TIMERS"]
+triggers = [{ register = "INT_CLR_TIMERS", fields = ["T0_INT_CLR"] }]
+interrupt = "TIMERGRP1_T0"
+irq-side = true
+description = "The group's whole raw/masked status words and T0's acknowledgement strobe; the program owner holds the enable word. T0 is the only interrupt consumer; the watchdog uses reset actions, and T1/WDT CLR strobes remain unclaimed."
+sources = ["ESP_IDF_4D59230D_S31_TIMER0_LL"]
+
+[[partitions]]
 name = "SystemTimerPeripherals"
 member = "system_timer"
 description = "The system timer: the comparators the time driver programs and the shared counter latch every context reads."
@@ -1373,7 +1394,8 @@ reason = "No owner yet: no driver reaches these words."
 
 [[unclaimed]]
 instance = "TIMG1"
-registers = ["T0CONFIG", "T0LO", "T0HI", "T0UPDATE", "T0ALARMLO", "T0ALARMHI", "T0LOADLO", "T0LOADHI", "T0LOAD", "T1CONFIG", "T1LO", "T1HI", "T1UPDATE", "T1ALARMLO", "T1ALARMHI", "T1LOADLO", "T1LOADHI", "T1LOAD", "WDTCONFIG3", "WDTCONFIG4", "WDTCONFIG5", "RTCCALICFG", "RTCCALICFG1", "INT_ENA_TIMERS", "INT_RAW_TIMERS", "INT_ST_TIMERS", "INT_CLR_TIMERS", "RTCCALICFG2", "NTIMERS_DATE", "REGCLK"]
+registers = ["T1CONFIG", "T1LO", "T1HI", "T1UPDATE", "T1ALARMLO", "T1ALARMHI", "T1LOADLO", "T1LOADHI", "T1LOAD", "WDTCONFIG3", "WDTCONFIG4", "WDTCONFIG5", "RTCCALICFG", "RTCCALICFG1", "RTCCALICFG2", "NTIMERS_DATE", "REGCLK"]
+triggers = [{ register = "INT_CLR_TIMERS", fields = ["T1_INT_CLR", "WDT_INT_CLR"] }]
 reason = "No owner yet: no driver reaches these words."
 
 [[unclaimed]]
@@ -2944,6 +2966,24 @@ name = "configure_timg0_timer0_armed"
 register = "TIMG0.T0CONFIG"
 value = 0xc0051400
 sources = ["ESP_IDF_4D59230D_S31_TIMER0_LL", "HW23_S31_TIMG0_RELOAD_20261027"]
+
+[[fixed-register-images]]
+name = "configure_timg1_timer0_stopped"
+register = "TIMG1.T0CONFIG"
+value = 0x40051000
+sources = ["ESP_IDF_4D59230D_S31_TIMER0_LL"]
+
+[[fixed-register-images]]
+name = "configure_timg1_timer0_armed"
+register = "TIMG1.T0CONFIG"
+value = 0xc0051400
+sources = ["ESP_IDF_4D59230D_S31_TIMER0_LL"]
+
+[[fixed-register-images]]
+name = "configure_timg1_timer0_alarm_running"
+register = "TIMG1.T0CONFIG"
+value = 0xc0050400
+sources = ["ESP_IDF_4D59230D_S31_TIMER0_LL"]
 
 [[fixed-register-images]]
 name = "capture_timg0_timer0"

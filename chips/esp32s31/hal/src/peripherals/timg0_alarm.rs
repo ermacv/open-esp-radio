@@ -138,19 +138,23 @@ impl<P: Placement> Timg0AlarmInterrupt<P> {
 
 // Separate private contracts preserve the production ownership split in the
 // virtual hardware model. Neither backend nor PAC access escapes into protocols.
-trait ProgramRegisters {
+// TIMG1 T0 (`timg1_alarm`) runs the same operations on its own group's words.
+pub(super) trait ProgramRegisters {
     fn stop(&mut self);
     fn enable(&mut self, enabled: bool);
     fn load_interval(&mut self, micros: u64);
     fn start(&mut self);
 }
 
-trait InterruptRegisters {
+pub(super) trait InterruptRegisters {
     fn observe(&self) -> Observation;
     fn clear_timer0(&mut self);
 }
 
-fn arm_after(registers: &mut impl ProgramRegisters, delay: Duration) -> Result<(), InvalidDelay> {
+pub(super) fn arm_after(
+    registers: &mut impl ProgramRegisters,
+    delay: Duration,
+) -> Result<(), InvalidDelay> {
     let micros = delay.as_micros();
     if micros == 0 || micros > MAX_DELAY_MICROS {
         return Err(InvalidDelay { requested: delay });
@@ -165,13 +169,13 @@ fn arm_after(registers: &mut impl ProgramRegisters, delay: Duration) -> Result<(
     Ok(())
 }
 
-fn disarm(registers: &mut impl ProgramRegisters) {
+pub(super) fn disarm(registers: &mut impl ProgramRegisters) {
     registers.stop();
     registers.enable(false);
     oer_riscv::fence();
 }
 
-fn acknowledge(registers: &mut impl InterruptRegisters) -> Observation {
+pub(super) fn acknowledge(registers: &mut impl InterruptRegisters) -> Observation {
     let observation = registers.observe();
     if observation.pending {
         registers.clear_timer0();

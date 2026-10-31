@@ -5,8 +5,11 @@
 //! RX and TX are named from the image's side. Every level of every mode is
 //! measured and reported (`target/hil/results/`): the measurements never
 //! decide a case, only a path or an exchange that does not work does.
+//! With `OER_WIFI_LOAD_PROFILE_US` each level also samples where the
+//! image's hart spends its window ([`profile`]).
 #![forbid(unsafe_code)]
 
+mod profile;
 mod traffic;
 
 use std::{
@@ -24,9 +27,12 @@ use oer_services_load::{
 };
 use oer_services_wifi_station::{GetStatus, Join, Joined, Status};
 
+/// The image the scenario runs.
+const IMAGE: &str = "esp32s31-wifi-station";
+
 const SCENARIO: Scenario = Scenario::new(
     "wifi-load",
-    "esp32s31-wifi-station",
+    IMAGE,
     &[
         oer_services_wifi_station::Request::KEYS,
         oer_services_load::Request::KEYS,
@@ -464,6 +470,7 @@ fn path(cx: &mut Cx<'_>) -> Result<(), Failure> {
                 payload: PAYLOAD as u16,
                 rate_bps: 100_000,
             }),
+            profile: None,
         },
         CALL,
     )?;
@@ -532,6 +539,7 @@ fn path(cx: &mut Cx<'_>) -> Result<(), Failure> {
             duration_ms: DURATION_MS,
             drain_ms: 0,
             transmit: None,
+            profile: None,
         },
         CALL,
     )?;
@@ -613,6 +621,7 @@ fn level(
         .map(|bps| bps / directions)
         .filter(|bps| u32::try_from(*bps).is_ok())
         .ok_or_else(|| Failure::Incomplete(format!("{total_mbps} Mbit/s is out of range")))?;
+    let profile = profile::requested()?;
     let run = run_id();
     let endpoint = traffic::Endpoint::open(SocketAddrV4::new(host, 0), run)
         .map_err(|error| Failure::Incomplete(format!("the host socket: {error}")))?;
@@ -635,6 +644,7 @@ fn level(
             duration_ms: DURATION_MS,
             drain_ms: DRAIN_MS,
             transmit,
+            profile,
         },
         CALL,
     )?;
@@ -664,12 +674,26 @@ fn level(
         (sent, probes)
     });
     let ended = collect(cx, run)?;
+    let samples = match profile {
+        Some(_) => Some(profile::collect(cx, run, CALL)?),
+        None => None,
+    };
     let mut received = endpoint.close();
     received.echoes.sent = probes;
-    cx.measure(
-        format!("{} {total_mbps} Mbit/s", mode.name()),
-        measurement(mode, total_mbps, &sent, &received, &ended),
-    );
+    let mut value = measurement(mode, total_mbps, &sent, &received, &ended);
+    if let (Some(samples), Some(object)) = (samples, value.as_object_mut()) {
+        let elf = profile::elf(IMAGE);
+        let symbols = elf
+            .as_ref()
+            .map_err(Clone::clone)
+            .and_then(|elf| profile::symbolize(elf, &samples.samples));
+        let elf = elf.unwrap_or_default();
+        object.insert(
+            "profile".to_owned(),
+            profile::report(&samples, &elf, &symbols),
+        );
+    }
+    cx.measure(format!("{} {total_mbps} Mbit/s", mode.name()), value);
     Ok(())
 }
 

@@ -152,7 +152,7 @@ fn arming_a_main_watchdog_writes_its_timeout_stages_and_reset_lengths() {
 }
 
 #[test]
-fn group_one_runs_out_of_reset_with_its_watchdog_on_xtal() {
+fn group_one_runs_out_of_reset_with_its_watchdog_and_timer0_on_xtal() {
     let mut words = memory(instances::timg1::SIZE, 0);
     let mut clock = memory(instances::hp_sys_clkrst::SIZE, u32::MAX);
     let before = clock.clone();
@@ -166,6 +166,14 @@ fn group_one_runs_out_of_reset_with_its_watchdog_on_xtal() {
             && control.reg_timergrp1_wdt_clk_en()
     );
     assert_eq!(control.reg_timergrp1_wdt_src_sel().get(), 0, "XTAL");
+    assert!(control.reg_timergrp1_t0_clk_en());
+    assert_eq!(control.reg_timergrp1_t0_src_sel().get(), 0, "XTAL");
+    assert!(control.reg_timergrp1_t1_clk_en(), "T1's lanes are kept");
+    assert_eq!(
+        control.reg_timergrp1_t1_src_sel().get(),
+        3,
+        "T1's lanes are kept"
+    );
     assert!(control.reg_timergrp1_force_norst(), "other fields are kept");
     drop(mwdt);
     assert_eq!(changed(&before, &clock), [0x11c]);

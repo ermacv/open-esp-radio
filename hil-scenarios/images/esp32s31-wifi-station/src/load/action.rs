@@ -1,8 +1,8 @@
 //! Which requests the load server answers by itself, idle or running.
 
 use oer_services_load::{
-    Collect, CollectCounters, CollectParts, LoadError, MAX_DELAY_MS, MAX_DRAIN_MS, MAX_DURATION_MS,
-    Request, Start, Started, header,
+    Collect, CollectCounters, CollectParts, CollectSamples, LoadError, MAX_DELAY_MS, MAX_DRAIN_MS,
+    MAX_DURATION_MS, MAX_SAMPLE_PERIOD_US, MIN_SAMPLE_PERIOD_US, Request, Start, Started, header,
 };
 
 /// The largest UDP payload the image sends or receives: one 1514-byte
@@ -32,8 +32,8 @@ pub(crate) enum Action {
     Kept(Kept),
 }
 
-/// What a run keeps once it ended: its report, its parts' window and its
-/// counters.
+/// What a run keeps once it ended: its report, its parts' window, its
+/// counters and its samples.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum Kept {
     Report,
@@ -42,6 +42,10 @@ pub(crate) enum Kept {
         from: u8,
     },
     Counters,
+    /// The samples from the one numbered `from`.
+    Samples {
+        from: u16,
+    },
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -72,6 +76,9 @@ pub(crate) fn action(phase: Phase, request: Request) -> Action {
         (phase, Request::CollectCounters(CollectCounters { run })) => {
             collect(phase, run, Kept::Counters)
         }
+        (phase, Request::CollectSamples(CollectSamples { run, from })) => {
+            collect(phase, run, Kept::Samples { from })
+        }
     }
 }
 
@@ -84,13 +91,16 @@ fn collect(phase: Phase, asked: u32, kind: Kept) -> Action {
 }
 
 /// A run's parameters: nonzero ports, a window, delay and drain within
-/// their maxima, and a transmitted payload that holds the header and fits
-/// one datagram of the image.
+/// their maxima, a transmitted payload that holds the header and fits one
+/// datagram of the image, and a sampling period within its range.
 fn validate(start: &Start) -> Result<(), LoadError> {
+    let period = start.profile.map(|profile| profile.period_us);
     if start.port == 0
         || start.delay_ms > MAX_DELAY_MS
         || start.duration_ms > MAX_DURATION_MS
         || start.drain_ms > MAX_DRAIN_MS
+        || period
+            .is_some_and(|period| !(MIN_SAMPLE_PERIOD_US..=MAX_SAMPLE_PERIOD_US).contains(&period))
     {
         return Err(LoadError::InvalidParameters);
     }
@@ -109,7 +119,7 @@ fn validate(start: &Start) -> Result<(), LoadError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oer_services_load::{GetCpu, Transmit};
+    use oer_services_load::{GetCpu, Profile, Transmit};
 
     const IDLE: Phase = Phase::Idle { kept: None };
     const RUNNING: Phase = Phase::Running { run: 7 };
@@ -122,6 +132,7 @@ mod tests {
             duration_ms: 10_000,
             drain_ms: 1_000,
             transmit,
+            profile: None,
         }
     }
 
@@ -158,6 +169,16 @@ mod tests {
             let valid = start(Some(transmit(payload)));
             assert_eq!(action(IDLE, Request::Start(valid)), Action::Start(valid));
         }
+        for period_us in [MIN_SAMPLE_PERIOD_US, MAX_SAMPLE_PERIOD_US] {
+            let sampled = Start {
+                profile: Some(Profile { period_us }),
+                ..start(None)
+            };
+            assert_eq!(
+                action(IDLE, Request::Start(sampled)),
+                Action::Start(sampled)
+            );
+        }
         let mut invalid = [0, header::LENGTH as u16 - 1, MAX_PAYLOAD + 1]
             .map(|payload| start(Some(transmit(payload))))
             .to_vec();
@@ -180,6 +201,18 @@ mod tests {
             },
             Start {
                 drain_ms: MAX_DRAIN_MS + 1,
+                ..start(None)
+            },
+            Start {
+                profile: Some(Profile {
+                    period_us: MIN_SAMPLE_PERIOD_US - 1,
+                }),
+                ..start(None)
+            },
+            Start {
+                profile: Some(Profile {
+                    period_us: MAX_SAMPLE_PERIOD_US + 1,
+                }),
                 ..start(None)
             },
         ]);
@@ -211,13 +244,16 @@ mod tests {
     #[test]
     fn a_collect_answers_running_then_what_its_own_run_kept_only() {
         type Asks = fn(u32) -> Request;
-        let requests: [(Kept, Asks); 3] = [
+        let requests: [(Kept, Asks); 4] = [
             (Kept::Report, |run| Request::Collect(Collect { run })),
             (Kept::Parts { from: 12 }, |run| {
                 Request::CollectParts(CollectParts { run, from: 12 })
             }),
             (Kept::Counters, |run| {
                 Request::CollectCounters(CollectCounters { run })
+            }),
+            (Kept::Samples { from: 40 }, |run| {
+                Request::CollectSamples(CollectSamples { run, from: 40 })
             }),
         ];
         for (kind, collect) in requests {

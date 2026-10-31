@@ -22,6 +22,8 @@ oer-espressif-interrupt-table = { path = "../../espressif/interrupt-table" }
 bytemuck = { version = "1.25.2", default-features = false, features = ["derive"] }
 oer-esp32s31-hal = { path = "../hal" }
 oer-espressif-staged-runtime.workspace = true
+oer-memory = { path = "../../../portable/memory" }
+oer-trace = { path = "../../../portable/trace" }
 
 # The executor runs on the chip target only.
 [target.'cfg(target_arch = "riscv32")'.dependencies]
@@ -32,6 +34,7 @@ oer-esp32s31-phy = { path = "../phy" }
 oer-espressif-interrupt-table = { path = "../../espressif/interrupt-table" }
 oer-espressif-platform-port = { path = "../../espressif/platform-port" }
 oer-memory = { path = "../../../portable/memory" }
+oer-riscv = { path = "../../../portable/riscv" }
 oer-time = { path = "../../../portable/time" }
 static_cell.workspace = true
 oer-espressif-executor = { path = "../../espressif/executor", features = ["chip"] }

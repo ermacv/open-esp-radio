@@ -328,7 +328,7 @@ pub(crate) static COUNTERS: [PartCounter; COUNT] = [const { PartCounter::new() }
 pub(crate) static EPOCH: AtomicU32 = AtomicU32::new(0);
 
 /// The image's observer: the parts' boundaries, the station service's
-/// spans and the network bridge's frames.
+/// spans, the network bridge's frames and the PC sampler's samples.
 #[cfg(all(target_arch = "riscv32", oer_trace))]
 #[derive(Clone, Copy, Default)]
 pub struct Observer;
@@ -359,6 +359,9 @@ impl oer_trace::Observer for Observer {
         }
         if let Some(frame) = Self::decoded::<E, super::counters::BridgeFrame>(event) {
             super::counters::observe(frame);
+        }
+        if let Some(sample) = Self::decoded::<E, oer_trace::profile::PcSample>(event) {
+            super::sampler::record(sample);
         }
     }
 }

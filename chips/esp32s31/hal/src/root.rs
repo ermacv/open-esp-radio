@@ -46,6 +46,7 @@ use crate::{
         software_interrupt::SoftwareInterrupts,
         system_timer::{BootstrapTimer, SystemTimer},
         timg0_alarm::Timg0AlarmParts,
+        timg1_alarm::Timg1AlarmParts,
         usb_serial_jtag::ConsoleRegisters,
         watchdog::{Mwdt0Registers, RwdtRegisters, SwdRegisters, WatchdogRegisters},
     },
@@ -187,6 +188,7 @@ impl Root {
             debug,
             chip_clocks,
             timer_group0,
+            timer_group1,
             aes,
             crypto_clock,
         } = self.partitions;
@@ -220,6 +222,7 @@ impl Root {
                 aes: crate::peripherals::aes::AesParts::new(aes, crypto_clock),
                 system_timer: SystemTimer::new(system_timer),
                 timg0_alarm: Timg0AlarmParts::new(timer_group0),
+                timg1_alarm: Timg1AlarmParts::new(timer_group1),
                 software_interrupts: SoftwareInterrupts::new(
                     software_interrupt_0,
                     software_interrupt_1,

@@ -350,6 +350,7 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 "chips/esp32s31/compose/src/pilot.rs:crate::pilot::impl Storage < I >::interrupt:terminal-reference:reset:1" = { owner = "chips/esp32s31/compose", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
 "chips/esp32s31/compose/src/pilot.rs:crate::pilot::reset:terminal-entry:reset:1" = { owner = "chips/esp32s31/compose", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
 "chips/esp32s31/compose/src/pilot.rs:crate::pilot::reset:terminal-reference:reset:1" = { owner = "chips/esp32s31/compose", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
+"chips/esp32s31/compose/src/sampler.rs:crate::sampler::chip::impl Storage < I , O >::init:terminal-reference:reset_binding:1" = { owner = "chips/esp32s31/compose", classes = ["configuration-boot", "unexpected-hardware", "software-invariant"] }
 
 "chips/esp32s31/compose/src/console.rs:crate::console::impl Binding::open:terminal-reference:reset_binding:1" = { owner = "chips/esp32s31/compose", classes = ["configuration-boot", "unexpected-hardware", "software-invariant"] }
 "chips/esp32s31/compose/src/platform.rs:crate::platform::reset_request:terminal-reference:reset_request:1" = { owner = "chips/esp32s31/compose", classes = ["software-invariant", "cancellation"] }

@@ -28,6 +28,9 @@
 //!   which the image passes to `adoption::run`;
 //! - `wifi_fault` (feature `wifi-fault`): the Wi-Fi MAC's fatal assertion
 //!   record, its reset and the next boot's report.
+//!
+//! [`sampler`] is the program-counter sampler on TIMG1 T0 an image may
+//! select, reporting through its observer.
 
 pub mod crypto;
 pub mod phy_fault;
@@ -58,6 +61,7 @@ impl oer_espressif_staged_runtime::adoption::Binding for Esp32s31 {
 pub mod wifi_fault;
 
 pub mod reset_causes;
+pub mod sampler;
 
 #[cfg(target_arch = "riscv32")]
 pub mod pilot;

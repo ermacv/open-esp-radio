@@ -1678,7 +1678,9 @@ dependencies = [
  "oer-espressif-staged-runtime",
  "oer-espressif-usb-serial-jtag",
  "oer-memory",
+ "oer-riscv",
  "oer-time",
+ "oer-trace",
  "static_cell",
 ]
 
@@ -2412,9 +2414,12 @@ name = "oer-hil-scenarios-wifi-load"
 version = "0.1.0"
 dependencies = [
  "heapless",
+ "oer-analysis-elf",
  "oer-hil-agent",
  "oer-hil-harness",
+ "oer-image-build",
  "oer-lab-model",
+ "oer-os-process",
  "oer-services-load",
  "oer-services-wifi-station",
  "serde_json",

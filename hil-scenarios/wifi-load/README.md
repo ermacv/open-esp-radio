@@ -31,7 +31,19 @@ with an open poll's part, and the mean and longest of the ended polls), and
 the window's counters (the hart's cycles and retired instructions, their
 rate per microsecond and per cycle, the network bridge's taken and refused
 frames, and the IP stack's received frames with the hart's instructions over
-them). The idle baseline records the parts and counters too. The scenario holds the air exclusively. Executors' work spans and
+them). The idle baseline records the parts and counters too. With
+`OER_WIFI_LOAD_PROFILE_US=1000` (250 to 10000) each level also samples the
+image's hart every period over the window and records a `profile`: ticks,
+stride and effective period, the samples by interrupted raw CLIC level
+(0 task code; with three level bits P1 `0x1f`, P2 `0x3f`, P3 `0x5f`, as
+the CPU report's executor levels), the 40
+functions and the 40 innermost inlined functions with the most samples, and
+every raw sample as `[tick, pc, level]`. Ticks are due every period on the
+timer's own schedule; one due while the hart's interrupts were masked
+samples where they open. The functions are named from the DWARF of the
+runtime ELF the harness built (`target/fw/esp32s31-wifi-station/runtime.elf`,
+`oer_analysis_elf::dwarf::Symbolizer`); without it the profile records why
+and keeps the raw samples. The scenario holds the air exclusively. Executors' work spans and
 parts' polls include preemption and overlap: only a hart's idle time gives
 its utilisation. The router forwards the load: its CPU can limit it.
 
