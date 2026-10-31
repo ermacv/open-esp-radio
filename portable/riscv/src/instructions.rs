@@ -1,5 +1,6 @@
 //! SOURCE: RISC-V Privileged Architecture, machine CSRs (`mhartid`,
-//! `mstatus`, trap CSRs, `mcycle`, `mcycleh`) and Wait for Interrupt; RISC-V
+//! `mstatus`, trap CSRs, `mcycle`, `mcycleh`, `minstret`, `minstreth`) and
+//! Wait for Interrupt; RISC-V
 //! Unprivileged ISA, Zicntr (stable RV32 high/low/high counter read), FENCE and
 //! Zifencei; RISC-V CLIC specification (threshold and status); RISC-V Debug
 //! Specification, Sdtrig (trigger selection, control and NAPOT store matching).
@@ -30,6 +31,32 @@ pub fn cycle64() -> u64 {
         let low = cycle32();
         // SAFETY: the second high read detects rollover during the low read.
         unsafe { asm!("csrr {value}, mcycleh", value = out(reg) after, options(nomem, nostack)) };
+        if before == after {
+            return (u64::from(before) << 32) | u64::from(low);
+        }
+    }
+}
+
+/// The machine retired-instruction counter, read high/low/high like
+/// [`cycle64`].
+pub fn instret64() -> u64 {
+    loop {
+        let before: u32;
+        let low: u32;
+        let after: u32;
+        // SAFETY: reading the instruction counter's words changes no state;
+        // the second high read detects rollover during the low read.
+        unsafe {
+            asm!(
+                "csrr {before}, minstreth",
+                "csrr {low}, minstret",
+                "csrr {after}, minstreth",
+                before = out(reg) before,
+                low = out(reg) low,
+                after = out(reg) after,
+                options(nomem, nostack),
+            )
+        };
         if before == after {
             return (u64::from(before) << 32) | u64::from(low);
         }

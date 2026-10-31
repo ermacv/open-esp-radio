@@ -2,10 +2,10 @@
 //! socket bound to the station's DHCP address.
 //!
 //! The server shares the station work's task (P1). A run receives and
-//! echoes from its start, sends within its window and reads the CPU and the
-//! named parts at the window's ends; after its drain it closes the socket
-//! and keeps its report and parts until the next run starts. Every answer
-//! is published without waiting.
+//! echoes from its start, sends within its window and reads the CPU, the
+//! named parts and the counters at the window's ends; after its drain it
+//! closes the socket and keeps what it read until the next run starts.
+//! Every answer is published without waiting.
 
 use core::cell::Cell;
 use core::convert::Infallible;
@@ -25,8 +25,8 @@ use oer_memory::{WakingSpscQueue, WakingSpscReceiver, WakingSpscSender};
 use oer_services_load::header::Header;
 use oer_services_load::tally::Tally;
 use oer_services_load::{
-    Collected, Load, LoadError, Parts, PartsCollected, Report, Request, Sent, Start, Started,
-    Transmit,
+    Collected, Counters, CountersCollected, Load, LoadError, PartsCollected, Report, Request, Sent,
+    Start, Started, Transmit,
 };
 use oer_time::{CLOCK_EPOCH_OFFSET, Instant, Timer as _};
 use static_cell::ConstStaticCell;
@@ -34,7 +34,7 @@ use static_cell::ConstStaticCell;
 use super::action::{Action, Answer, Kept, MAX_PAYLOAD, Phase, action};
 use super::pace::{GRANULARITY_US, MAX_BATCH, Next, Schedule};
 use super::receive::{Datagram, Receiving, classify, echo};
-use super::{cpu, parts};
+use super::{counters, cpu, parts};
 use crate::fatal::Failure;
 use crate::station::emit;
 use crate::station::ip::{Device, Interface};
@@ -104,29 +104,35 @@ pub(crate) async fn serve(mut requests: Receiver, network: &Network) -> Infallib
     let tally = TALLY
         .try_take()
         .unwrap_or_else(|| crate::fail(Failure::Storage));
-    let mut kept: Option<(u32, Report, Parts)> = None;
+    let mut kept: Option<(u32, Ended)> = None;
     loop {
         let (identity, request) = next(&mut requests).await;
         let phase = Phase::Idle {
-            kept: kept.as_ref().map(|(run, _, _)| *run),
+            kept: kept.as_ref().map(|(run, _)| *run),
         };
         match action(phase, request) {
             Action::Start(start) => match open(network, &start) {
                 Ok(socket) => {
                     emit(identity, &Started::Running);
-                    let (report, parts) = run(&mut requests, socket, start, tally).await;
-                    kept = Some((start.run, report, parts));
+                    let ended = run(&mut requests, socket, start, tally, network).await;
+                    kept = Some((start.run, ended));
                 }
                 Err(error) => emit(identity, &Started::Refused(error)),
             },
             Action::Answer(answer) => publish(identity, answer),
             Action::Cpu => emit(identity, &cpu_load().await),
             Action::Kept(kind) => match (&kept, kind) {
-                (Some((_, report, _)), Kept::Report) => {
-                    emit(identity, &Collected::Report(report.clone()));
+                (Some((_, ended)), Kept::Report) => {
+                    emit(identity, &Collected::Report(ended.report.clone()));
                 }
-                (Some((_, _, parts)), Kept::Parts) => {
-                    emit(identity, &PartsCollected::Report(parts.clone()));
+                (Some((_, ended)), Kept::Parts { from }) => {
+                    emit(
+                        identity,
+                        &PartsCollected::Report(parts::page(&ended.parts, from)),
+                    );
+                }
+                (Some((_, ended)), Kept::Counters) => {
+                    emit(identity, &CountersCollected::Report(ended.counters));
                 }
                 (None, kind) => publish(identity, Answer::UnknownRun(kind)),
             },
@@ -148,12 +154,16 @@ fn publish(identity: RequestIdentity, answer: Answer) {
     match answer {
         Answer::Started(started) => emit(identity, &started),
         Answer::Running(Kept::Report) => emit(identity, &Collected::Running),
-        Answer::Running(Kept::Parts) => emit(identity, &PartsCollected::Running),
+        Answer::Running(Kept::Parts { .. }) => emit(identity, &PartsCollected::Running),
+        Answer::Running(Kept::Counters) => emit(identity, &CountersCollected::Running),
         Answer::UnknownRun(Kept::Report) => {
             emit(identity, &Collected::Refused(LoadError::UnknownRun));
         }
-        Answer::UnknownRun(Kept::Parts) => {
+        Answer::UnknownRun(Kept::Parts { .. }) => {
             emit(identity, &PartsCollected::Refused(LoadError::UnknownRun));
+        }
+        Answer::UnknownRun(Kept::Counters) => {
+            emit(identity, &CountersCollected::Refused(LoadError::UnknownRun));
         }
     }
 }
@@ -191,17 +201,26 @@ struct Ends {
     end_us: u64,
     cpu_start: Load,
     cpu_end: Load,
-    parts: Parts,
+    parts: parts::Windows,
+    counters: Counters,
+}
+
+/// What an ended run keeps until the next starts.
+struct Ended {
+    report: Report,
+    parts: parts::Windows,
+    counters: Counters,
 }
 
 /// Run `start` on `socket` beside the requests until its drain ended, with
-/// `tally` cleared for it; its report and its parts' window.
+/// `tally` cleared for it; what it keeps.
 async fn run(
     requests: &mut Receiver,
     mut socket: Socket,
     start: Start,
     tally: &mut Tally<TALLY_WORDS>,
-) -> (Report, Parts) {
+    network: &Network,
+) -> Ended {
     tally.clear();
     let window = Window {
         start_us: Cell::new(None),
@@ -212,7 +231,7 @@ async fn run(
     let ends = {
         let mut activity = pin!(select(
             receive(&socket, start.run, tally, &mut receiving, &window),
-            measure(&socket, &start, &window, &mut sent),
+            measure(&socket, &start, &window, &mut sent, network),
         ));
         loop {
             let running = Phase::Running { run: start.run };
@@ -238,7 +257,11 @@ async fn run(
         received: receiving.received(tally),
         sent,
     };
-    (report, ends.parts)
+    Ended {
+        report,
+        parts: ends.parts,
+        counters: ends.counters,
+    }
 }
 
 /// Count every datagram on the port and echo those that ask for it, at once.
@@ -281,14 +304,21 @@ async fn receive(
 }
 
 /// The run's window and drain: open the window `delay_ms` after now, read
-/// the CPU and the parts, send within it, close it after `duration_ms`,
-/// read them again, then wait out the drain.
-async fn measure(socket: &Socket, start: &Start, window: &Window, sent: &mut Sent) -> Ends {
+/// the CPU, the parts and the counters, send within it, close it after
+/// `duration_ms`, read them again, then wait out the drain.
+async fn measure(
+    socket: &Socket,
+    start: &Start,
+    window: &Window,
+    sent: &mut Sent,
+    network: &Network,
+) -> Ends {
     let planned_start = now_us().saturating_add(millis(start.delay_ms));
     let planned_end = planned_start.saturating_add(millis(start.duration_ms));
     wait_until(planned_start).await;
     let cpu_start = cpu_load().await;
     let parts_start = parts_sample(true).await;
+    let counters_start = counters::snapshot(stack_received(network));
     let start_us = now_us();
     window.start_us.set(Some(start_us));
     if let Some(transmit) = start.transmit {
@@ -299,6 +329,7 @@ async fn measure(socket: &Socket, start: &Start, window: &Window, sent: &mut Sen
     window.end_us.set(Some(end_us));
     let cpu_end = cpu_load().await;
     let parts_end = parts_sample(false).await;
+    let counters_end = counters::snapshot(stack_received(network));
     wait_until(end_us.saturating_add(millis(start.drain_ms))).await;
     Ends {
         start_us,
@@ -306,7 +337,17 @@ async fn measure(socket: &Socket, start: &Start, window: &Window, sent: &mut Sen
         cpu_start,
         cpu_end,
         parts: parts::window(&parts_start, &parts_end),
+        counters: counters::window(&counters_start, &counters_end),
     }
+}
+
+/// The frames the IP stack took from its device so far; none before it
+/// has an interface.
+fn stack_received(network: &Network) -> u32 {
+    network
+        .0
+        .get()
+        .map_or(0, |interface| interface.stack().statistics().rx_frames)
 }
 
 fn millis(ms: u32) -> u64 {

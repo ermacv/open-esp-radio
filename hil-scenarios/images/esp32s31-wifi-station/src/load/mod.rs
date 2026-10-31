@@ -4,10 +4,12 @@
 //!
 //! [`action`] decides each request, [`receive`] counts received load,
 //! [`pace`] schedules paced transmission, [`cpu`] accumulates the
-//! executors' activity and [`parts`] the polls of the image's named parts;
-//! `serve` runs them on the station's IP stack.
+//! executors' activity, [`parts`] the polls of the image's named parts and
+//! [`counters`] the hart's and the network bridge's counts; `serve` runs
+//! them on the station's IP stack.
 
 pub(crate) mod action;
+pub(crate) mod counters;
 pub(crate) mod cpu;
 pub(crate) mod pace;
 pub(crate) mod parts;
