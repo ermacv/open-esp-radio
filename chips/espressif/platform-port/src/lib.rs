@@ -53,9 +53,12 @@ pub use geometry::{BOOT_HART, HARTS, Hart, InvalidHart, SecondaryHart};
 /// the console.
 pub trait EarlyText {
     /// Writes `bytes` as they are, or drops and counts them while another
-    /// record holds the console; it never waits beyond the writer's
-    /// per-record budget. `false` once a driver or the fatal path took the
-    /// console for good.
+    /// record holds the console or before it exists; it never waits beyond
+    /// the writer's per-record budget. `true` only when every byte went out
+    /// (the FIFO took them and sending started): a caller acknowledges what
+    /// it reports, such as a retained record, only then. `false` for a
+    /// dropped record, a dropped tail, and once a driver or the fatal path
+    /// took the console for good.
     fn text(bytes: &[u8]) -> bool;
 }
 

@@ -180,8 +180,8 @@ fn fake_console_serves_the_same_capture_and_a_typed_refusal() {
     use std::{cell::RefCell, collections::VecDeque, rc::Rc, vec::Vec};
     struct Early;
     impl Immediate for Early {
-        fn note(_: &oer_diagnostics::Note<'_>) -> bool {
-            false
+        fn note(_: &oer_diagnostics::Note<'_>) -> oer_diagnostics::Written {
+            oer_diagnostics::Written::Retired
         }
         fn take_lost() -> u32 {
             0

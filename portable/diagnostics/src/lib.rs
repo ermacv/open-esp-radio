@@ -39,7 +39,7 @@ pub mod text;
 pub use console::{
     Console, DecodeError, MAX_NOTE_LINE, PREFIX, decode, emit_note, emit_previous_panic,
 };
-pub use fifo::{Fifo, FifoWriter, Lost, Patience};
+pub use fifo::{Fifo, FifoWriter, Lost, Patience, Written};
 pub use note::{Note, Topic};
 pub use path::{DiagPath, DiagnosticPath};
 pub use record::{

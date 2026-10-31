@@ -6,7 +6,7 @@ use std::sync::Barrier;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::vec::Vec;
 
-use oer_diagnostics::Note;
+use oer_diagnostics::{Note, Written};
 
 use super::{Console, Ownership, RetireError};
 use crate::EndpointRegisters;
@@ -104,7 +104,10 @@ fn installed(block: &Shared) -> Ownership<Parts<Task>> {
 fn the_early_writer_writes_and_hands_the_record_over() {
     let block = Shared::default();
     let early = installed(&block);
-    assert!(early.write(|writer| writer.text(b"OER_BOOT bootstrap=START\r\n")));
+    assert_eq!(
+        early.write(|writer| writer.text(b"OER_BOOT bootstrap=START\r\n")),
+        Written::Whole
+    );
     assert!(block.lock().in_flight, "the record went to the host");
     assert_eq!(sent(&block), b"OER_BOOT bootstrap=START\r\n");
     assert_eq!(early.take_lost(), 0);
@@ -121,7 +124,11 @@ fn parts_are_installed_once() {
 #[test]
 fn a_record_before_the_parts_are_installed_is_dropped_and_counted() {
     let early = Ownership::<Parts<Task>>::new();
-    assert!(early.write(|writer| writer.text(b"start")));
+    assert_eq!(
+        early.write(|writer| writer.text(b"start")),
+        Written::NoConsole,
+        "no console acknowledges nothing"
+    );
     assert_eq!(early.take_lost(), 5, "the record is counted");
     assert_eq!(early.retire().err(), Some(RetireError::Empty));
     assert!(
@@ -135,8 +142,9 @@ fn a_retired_writer_hands_the_record_to_the_driver() {
     let block = Shared::default();
     let early = installed(&block);
     let _driver = early.retire().expect("a free block retires");
-    assert!(
-        !early.write(|writer| writer.text(b"late")),
+    assert_eq!(
+        early.write(|writer| writer.text(b"late")),
+        Written::Retired,
         "the driver owns it"
     );
     assert_eq!(early.take_lost(), 0, "the driver writes the record");
@@ -157,7 +165,11 @@ fn what_finds_no_room_is_dropped_and_counted_after_the_wait() {
     let early = installed(&block);
     // The host never reads: after one packet the FIFO stays full.
     let record = [b'x'; 100];
-    assert!(early.write(|writer| writer.text(&record)));
+    assert_eq!(
+        early.write(|writer| writer.text(&record)),
+        Written::Partial { dropped: 36 },
+        "a prefix acknowledges nothing"
+    );
     assert_eq!(block.lock().fifo.len(), 64, "the FIFO took what fit");
     assert_eq!(early.take_lost(), 36, "the rest is counted");
     assert_eq!(early.take_lost(), 0, "the count is taken once");
@@ -167,12 +179,15 @@ fn what_finds_no_room_is_dropped_and_counted_after_the_wait() {
 fn a_record_that_interrupts_a_record_is_dropped_and_counted() {
     let early = Ownership::new();
     assert!(early.install(Parts(Counting::default())).is_ok());
-    assert!(early.write(|outer| {
-        // An interrupt handler's record, while the boot's one holds the
-        // block.
-        assert!(early.write(|inner| inner.text(b"inner")));
-        outer.text(b"outer");
-    }));
+    assert_eq!(
+        early.write(|outer| {
+            // An interrupt handler's record, while the boot's one holds the
+            // block.
+            assert_eq!(early.write(|inner| inner.text(b"inner")), Written::Busy);
+            outer.text(b"outer")
+        }),
+        Written::Whole
+    );
     assert_eq!(early.take_lost(), 5, "the inner record is counted");
     let Parts(endpoint) = early.retire().expect("the block is free again");
     assert_eq!(
@@ -186,13 +201,16 @@ fn a_record_that_interrupts_a_record_is_dropped_and_counted() {
 fn the_driver_is_refused_while_a_record_holds_the_block() {
     let early = Ownership::new();
     assert!(early.install(Parts(Counting::default())).is_ok());
-    assert!(early.write(|writer| {
-        assert_eq!(early.retire().err(), Some(RetireError::Busy));
-        writer.text(b"record");
-    }));
+    assert_eq!(
+        early.write(|writer| {
+            assert_eq!(early.retire().err(), Some(RetireError::Busy));
+            writer.text(b"record")
+        }),
+        Written::Whole
+    );
     assert!(early.retire().is_ok(), "the ended record freed the block");
     assert_eq!(early.retire().err(), Some(RetireError::Taken));
-    assert!(!early.write(|writer| writer.text(b"late")));
+    assert_eq!(early.write(|writer| writer.text(b"late")), Written::Retired);
 }
 
 #[test]
@@ -209,7 +227,7 @@ fn records_of_two_harts_and_the_driver_never_hold_the_block_together() {
     );
     // Ensure at least one early record reaches the endpoint even when the
     // driver wins the concurrent race immediately.
-    assert!(early.write(|writer| writer.text(b"[]")));
+    assert_eq!(early.write(|writer| writer.text(b"[]")), Written::Whole);
     let start = Barrier::new(3);
     let finished = Barrier::new(3);
     let driver = AtomicBool::new(false);
@@ -218,12 +236,12 @@ fn records_of_two_harts_and_the_driver_never_hold_the_block_together() {
             scope.spawn(|| {
                 start.wait();
                 for _ in 0..2_000 {
-                    early.write(|writer| {
+                    let _written = early.write(|writer| {
                         // Refused callbacks use an empty FIFO and never
                         // enter the endpoint's occupancy interval.
-                        writer.text(b"[");
+                        let opened = writer.text(b"[");
                         std::thread::yield_now();
-                        writer.text(b"]");
+                        opened + writer.text(b"]")
                     });
                 }
                 finished.wait();
@@ -247,7 +265,10 @@ fn records_of_two_harts_and_the_driver_never_hold_the_block_together() {
     });
     assert!(driver.load(Ordering::SeqCst));
     holders.assert_exclusive();
-    assert!(!early.write(|_| panic!("the driver keeps the block")));
+    assert_eq!(
+        early.write(|_| panic!("the driver keeps the block")),
+        Written::Retired
+    );
 }
 
 #[test]
@@ -273,15 +294,17 @@ fn overlapping_callbacks_lend_only_one_endpoint_and_count_every_refused_byte() {
                     // Every previous write has returned before the next
                     // round; exactly one callback gets the real endpoint.
                     barrier.wait();
-                    assert!(early.write(|writer| {
+                    let written = early.write(|writer| {
                         callbacks.enter();
-                        writer.text(b"[");
+                        let opened = writer.text(b"[");
                         // Keep the winning loan until every refused
                         // callback is also running, without using time.
                         barrier.wait();
-                        writer.text(b"]");
+                        let closed = writer.text(b"]");
                         callbacks.leave();
-                    }));
+                        opened + closed
+                    });
+                    assert!(matches!(written, Written::Whole | Written::Busy));
                 }
             });
         }
@@ -323,10 +346,13 @@ fn the_fatal_path_never_takes_the_block_from_the_driver() {
 fn a_fatal_note_during_a_record_and_a_second_one_are_refused() {
     let early = Ownership::new();
     assert!(early.install(Parts(Counting::default())).is_ok());
-    assert!(early.write(|writer| {
-        assert!(!early.write_fatal(&Note::runtime_fail(oer_diagnostics::name!("a"))));
-        writer.text(b"record");
-    }));
+    assert_eq!(
+        early.write(|writer| {
+            assert!(!early.write_fatal(&Note::runtime_fail(oer_diagnostics::name!("a"))));
+            writer.text(b"record")
+        }),
+        Written::Whole
+    );
     assert!(early.write_fatal(&Note::runtime_fail(oer_diagnostics::name!("b"))));
     assert!(!early.write_fatal(&Note::runtime_fail(oer_diagnostics::name!("c"))));
     assert_eq!(
@@ -345,7 +371,7 @@ fn a_fatal_note_before_the_driver_writes_and_keeps_the_block() {
     assert!(!sent(&block).is_empty(), "the note went out");
     assert_eq!(early.take_lost(), 0);
     assert_eq!(early.retire().err(), Some(RetireError::Taken));
-    assert!(!early.write(|writer| writer.text(b"late")));
+    assert_eq!(early.write(|writer| writer.text(b"late")), Written::Retired);
 }
 
 #[test]

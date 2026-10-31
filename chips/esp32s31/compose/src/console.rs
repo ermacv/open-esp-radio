@@ -71,10 +71,10 @@ impl embedded_io_async::Write for Console {
         self.0.flush().await
     }
 }
-pub fn early(note: &oer_diagnostics::Note<'_>) -> bool {
+pub fn early(note: &oer_diagnostics::Note<'_>) -> oer_diagnostics::Written {
     hw::early_note(note)
 }
-pub fn early_text(bytes: &[u8]) -> bool {
+pub fn early_text(bytes: &[u8]) -> oer_diagnostics::Written {
     hw::early_text(bytes)
 }
 pub fn take_early_lost() -> u32 {

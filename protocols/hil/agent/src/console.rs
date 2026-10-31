@@ -26,7 +26,7 @@ use embassy_sync::blocking_mutex::{Mutex, raw::CriticalSectionRawMutex};
 use embassy_sync::channel::Channel;
 use embassy_sync::mutex::Mutex as AsyncMutex;
 use embedded_io_async::{Read, Write};
-use oer_diagnostics::{MAX_NOTE_LINE, Note, emit_note};
+use oer_diagnostics::{MAX_NOTE_LINE, Note, Written, emit_note};
 use oer_hil_protocol::base::{ImageKeySet, LinkHealth, Rejected};
 use oer_hil_protocol::{DecodeCounters, FrameEncoder, Message, Outbound, RequestIdentity};
 
@@ -57,9 +57,10 @@ const RX_CHUNK: usize = 128;
 /// the early writer, which drops what the FIFO has no room for and counts it.
 /// A type, not a pointer, so that the call is a direct one.
 pub trait Immediate {
-    /// Writes `note` now. Returns `false` when the early writer no longer
-    /// owns the peripheral, which the transport has taken.
-    fn note(note: &Note<'_>) -> bool;
+    /// Writes `note` now. [`Written::Retired`] when the early writer no
+    /// longer owns the peripheral, which the transport has taken; every
+    /// other outcome is the early writer's, a dropped one counted by it.
+    fn note(note: &Note<'_>) -> Written;
 
     /// The bytes the early writer dropped since the last call.
     fn take_lost() -> u32;
@@ -199,7 +200,7 @@ impl<const NOTES: usize, const MESSAGES: usize, P: Immediate> Console<NOTES, MES
     /// does, waiting for room instead of losing it. Only for reporting
     /// outside measured hot paths, which must not depend on USB progress.
     pub async fn note_reliably(&self, note: &Note<'static>) {
-        if !self.running.load(Ordering::Acquire) && P::note(note) {
+        if !self.running.load(Ordering::Acquire) && P::note(note) != Written::Retired {
             return;
         }
         loop {
@@ -219,7 +220,7 @@ impl<const NOTES: usize, const MESSAGES: usize, P: Immediate> Console<NOTES, MES
     /// owns the USB peripheral, otherwise in the note queue, where a full
     /// queue drops it and counts the loss. For synchronous callers.
     pub fn note_immediately(&self, note: &Note<'static>) {
-        if !self.running.load(Ordering::Acquire) && P::note(note) {
+        if !self.running.load(Ordering::Acquire) && P::note(note) != Written::Retired {
             return;
         }
         if self.notes.try_send(*note).is_err() {

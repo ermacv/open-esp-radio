@@ -109,9 +109,14 @@ payload bytes and a checksum, 316 bytes in total. The largest payload is the exi
 publishes completion last; unsupported versions, oversized payloads and corrupt
 records return typed errors. There is no previous-layout decoder.
 
-`panic::peek_previous` reads without consuming. The diagnostics renderers clear
-an ordinary panic only after successful output of its exact snapshot; named
-faults and image reporters likewise clear after their complete output succeeds.
+`panic::peek_previous` only reads: it returns a retained panic and writes or
+clears nothing. Every other retained fault is reported by `adoption::run`
+after the console's parts are installed. The diagnostics renderers clear an
+ordinary panic only after whole output of its exact snapshot; named faults and
+image reporters likewise clear only after their complete output went out whole
+(`oer_diagnostics::Written::Whole`: the FIFO took every byte and sending
+started, the host's receipt is not observed). A dropped, refused or partly
+written report keeps the record for a later boot.
 HIL acknowledges its platform panic and postmortem after the full boot-evidence
 frame and CRLF are written. Output refusal retains diagnostic bytes. A new boot's
 first terminal may replace an unreported older record. Retention is best effort;

@@ -189,7 +189,7 @@ oer_espressif_staged_runtime::secondary_entry!(1, HART1: Port, Hart1Parts => har
 
 fn main(handoff: oer_espressif_staged_runtime::Handoff<Port>) -> ! {
     // Before anything can panic and overwrite it.
-    let previous = panic::peek_previous::<Port>();
+    let previous = panic::peek_previous();
     let Some(root) = Root::take() else {
         fail(oer_diagnostics::name!("root-taken"; 32));
     };
@@ -216,7 +216,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<Port>) -> ! {
             // The executor is not running yet: the early writer waits for room
             // within its budget and counts what it drops.
             let mut diagnostics = Console::new(|bytes| {
-                if usb_serial_jtag::early_text(bytes) {
+                if usb_serial_jtag::early_text(bytes).is_whole() {
                     Ok(())
                 } else {
                     Err(())
@@ -554,7 +554,7 @@ async fn check_hart1(peers: Peers, sequence: u32) {
     // early writer, within its bounded budget per record, and continue the
     // boot console's sequence, which the host checks for loss and order.
     let mut console = Console::starting_at(|bytes| {
-        if usb_serial_jtag::early_text(bytes) {
+        if usb_serial_jtag::early_text(bytes).is_whole() {
             Ok(())
         } else {
             Err(())

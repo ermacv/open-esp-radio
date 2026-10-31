@@ -14,7 +14,7 @@ pub(crate) fn interrupt(part: &mut <Esp32s31 as InterruptTypes>::Console) {
 }
 
 /// Writes `note` before the console opens.
-pub(crate) fn early(note: &oer_diagnostics::Note<'_>) -> bool {
+pub(crate) fn early(note: &oer_diagnostics::Note<'_>) -> oer_diagnostics::Written {
     console::early(note)
 }
 

@@ -81,6 +81,48 @@ impl Patience {
     }
 }
 
+/// What became of one record of an early writer. Only [`Written::Whole`]
+/// acknowledges the record: the FIFO took every byte and its sending was
+/// started (the host's receipt is not observed). Every other outcome keeps
+/// whatever the record reports, such as a retained diagnostic, for a later
+/// attempt.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[must_use = "only a whole record acknowledges what it reports"]
+pub enum Written {
+    /// Every byte is in the FIFO and on its way.
+    Whole,
+    /// The FIFO took a prefix; the rest was dropped and counted.
+    Partial {
+        /// The bytes of this record dropped.
+        dropped: u32,
+    },
+    /// No console exists yet: the record was dropped and counted.
+    NoConsole,
+    /// Another record held the FIFO: this one was dropped and counted.
+    Busy,
+    /// The console's driver (or the fatal path) owns the FIFO for good:
+    /// nothing was written or counted, and the record belongs to the driver.
+    Retired,
+}
+
+impl Written {
+    /// Whether the record went out whole.
+    pub const fn is_whole(self) -> bool {
+        matches!(self, Self::Whole)
+    }
+
+    /// The outcome of a record written over an owned FIFO that dropped
+    /// `dropped` of its bytes.
+    pub fn of_dropped(dropped: usize) -> Self {
+        match dropped {
+            0 => Self::Whole,
+            dropped => Self::Partial {
+                dropped: u32::try_from(dropped).unwrap_or(u32::MAX),
+            },
+        }
+    }
+}
+
 /// The one writer of a FIFO at a time.
 pub struct FifoWriter<'a, F> {
     fifo: F,
@@ -135,18 +177,20 @@ impl<'a, F: Fifo> FifoWriter<'a, F> {
     }
 
     /// Writes `bytes` and flushes, counting what did not fit: for text that
-    /// is not a note.
-    pub fn text(&mut self, bytes: &[u8]) {
+    /// is not a note. Returns the bytes dropped.
+    pub fn text(&mut self, bytes: &[u8]) -> usize {
         self.budget = self.patience.0;
         let dropped = self.push_all(bytes);
         self.lost.add(dropped);
         self.fifo.flush();
+        dropped
     }
 
     /// Writes `note` as one `OER-DIAG:01` line, after the report of earlier
     /// losses if there are any, and flushes. A line the FIFO has no room for
-    /// is dropped whole or in its tail, never waited for.
-    pub fn note(&mut self, note: &Note<'_>) {
+    /// is dropped whole or in its tail, never waited for. Returns the bytes
+    /// of `note` dropped; the loss report's own are counted, not returned.
+    pub fn note(&mut self, note: &Note<'_>) -> usize {
         let pending = self.lost.pending();
         if pending != 0 && self.emit(&Note::diag_lost(pending)) == 0 {
             self.lost.settle(pending);
@@ -154,6 +198,7 @@ impl<'a, F: Fifo> FifoWriter<'a, F> {
         let dropped = self.emit(note);
         self.lost.add(dropped);
         self.fifo.flush();
+        dropped
     }
 
     /// Emits `note` and returns the bytes dropped.

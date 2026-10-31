@@ -23,9 +23,7 @@ impl Evidence {
     ) -> Self {
         Self {
             causes: oer_esp32s31_compose::reset_causes::read(registers),
-            platform_panic: oer_espressif_staged_runtime::panic::peek_previous::<
-                oer_esp32s31_hal::platform::Port,
-            >(),
+            platform_panic: oer_espressif_staged_runtime::panic::peek_previous(),
         }
     }
 }

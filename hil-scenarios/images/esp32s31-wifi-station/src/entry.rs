@@ -447,7 +447,7 @@ fn bounds(range: &Range<usize>) -> [u32; 2] {
 
 /// Writes `note` before the console opens.
 fn early(note: &Note<'_>) {
-    usb::early(note);
+    let _written = usb::early(note);
 }
 
 /// Retain every failed boot check before best-effort output and explicit reset.

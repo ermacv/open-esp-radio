@@ -28,10 +28,9 @@ fn encode(raw: u32) -> Result<Record, oer_diagnostics::fault::Error> {
 }
 pub fn report_previous() {
     if let Some(mut record) = retained_fault::peek(&WIFI_FAULT) {
-        let _reported = report(
-            &mut record,
-            oer_esp32s31_hal::peripherals::usb_serial_jtag::early_text,
-        );
+        let _reported = report(&mut record, |bytes: &[u8]| {
+            oer_esp32s31_hal::peripherals::usb_serial_jtag::early_text(bytes).is_whole()
+        });
     }
 }
 fn report(record: &mut Record, mut write: impl FnMut(&[u8]) -> bool) -> Result<(), ()> {
