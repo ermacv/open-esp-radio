@@ -22,6 +22,7 @@ mod ble_inherited;
 mod ble_masked;
 mod ble_wave2;
 mod generic;
+mod hart1_entry;
 mod irq_observer;
 mod lp_ack_race;
 mod lp_lanes;
@@ -206,6 +207,7 @@ struct Session<'a> {
     uart0_clock: pac::ownership::Uart0ClockPeripherals,
     reset_cause: pac::ownership::ResetCausePeripherals,
     wake_status: pac::pmu::PmuWakeStatus,
+    wake_stub: pac::lp_system_reg::LpWakeStub,
     modem_wake_status: pac::modem_lpcon::ModemWakeStatus,
     ble: ble::Ble,
     radio: radio_local::Radio,
@@ -224,6 +226,14 @@ enum Action {
 // The sole registration point. Reset is selected explicitly; it cannot run
 // accidentally as part of the non-reset batch (request 0).
 const PROBES: &[Probe] = &[
+    Probe {
+        id: 232,
+        run: Action::Thread(hart1_entry::main_path),
+    },
+    Probe {
+        id: 233,
+        run: Action::Thread(hart1_entry::direct_path),
+    },
     Probe {
         id: 240,
         run: Action::Thread(pb1::bank1),
@@ -853,6 +863,7 @@ extern "C" fn facts_main() -> ! {
         uart0_clock: p.uart0_clock,
         reset_cause: p.reset_cause,
         wake_status: p.pmu_wake.pmu_wake_status,
+        wake_stub: p.pmu_wake.lp_wake_stub,
         modem_wake_status: p.pmu_wake.modem_wake_status,
         radio: radio_local::Radio {
             local_time: p.mac_local_time.wifi_mac_local_time,
