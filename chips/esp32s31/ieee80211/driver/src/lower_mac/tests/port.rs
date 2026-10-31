@@ -63,6 +63,9 @@ struct Observed {
     /// The next start fails with this fault, as a refused retune does.
     fail_start: Option<Fault>,
     hold_completion: bool,
+    /// The next publication ends in the hardware's TX-timeout edge instead
+    /// of a completion.
+    timeout_edge: bool,
     hold_cut: bool,
     hold_stop: bool,
     cut_calls: usize,
@@ -272,6 +275,19 @@ impl Device<512> for TestDevice {
             .map(|(_, program)| program.contention_window())
             .collect();
         self.observed.borrow_mut().publications = publications;
+        if self.completed < publications && self.observed.borrow().timeout_edge {
+            let queue = self
+                .hardware
+                .legacy
+                .get(self.completed)
+                .map(|p| p.0)
+                .unwrap_or(2);
+            self.hardware.timeout_pending[usize::from(queue)] = true;
+            self.completed += 1;
+            return Poll::Ready(Ok(DeviceEvent::Tx(crate::tx::WifiTxWake::Interrupt {
+                events: crate::mac::irq::EVENT_TX_TIMEOUT,
+            })));
+        }
         if self.completed < publications && !self.observed.borrow().hold_completion {
             let (status, detail) = self
                 .observed
@@ -343,6 +359,7 @@ type Res<'id, Id> = <Backend<Id> as PortBackend<Id>>::Resources<'id>;
 
 mod abandon;
 mod barriers;
+mod conformance;
 mod retune;
 mod rx_capacity;
 

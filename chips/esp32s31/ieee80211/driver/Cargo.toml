@@ -43,6 +43,7 @@ oer-esp32s31-hal = { path = "../../hal", features = ["test-support"] }
 oer-ieee80211-wire = { path = "../../../../protocols/ieee80211/wire", features = ["test-support"] }
 oer-espressif-ieee80211-policy = { path = "../../../espressif/ieee80211-policy" }
 oer-ieee80211-core-upper-mac = { path = "../../../../protocols/ieee80211/core/upper-mac" }
+oer-ieee80211-testing-conformance = { path = "../../../../protocols/ieee80211/testing/conformance" }
 
 oer-espressif-interrupt-table = { path = "../../../espressif/interrupt-table", features = ["host-signal"] }
 oer-time-virtual = { path = "../../../../portable/time-virtual" }

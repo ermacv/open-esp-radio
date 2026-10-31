@@ -1748,6 +1748,7 @@ dependencies = [
  "oer-ieee80211-contracts-port",
  "oer-ieee80211-contracts-security",
  "oer-ieee80211-core-upper-mac",
+ "oer-ieee80211-testing-conformance",
  "oer-ieee80211-wire",
  "oer-memory",
  "oer-radio-port",
