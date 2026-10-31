@@ -637,7 +637,14 @@ fn stop_under_load(cx: &mut Cx<'_>) -> Result<(), Failure> {
     let offered_bps = 65_000_000;
     let (sent, left, took) = std::thread::scope(|scope| {
         let sender = scope.spawn(|| {
-            traffic::send(&endpoint, peer, run, PAYLOAD, offered_bps, STOP_AFTER + LEAVE_TIMEOUT)
+            traffic::send(
+                &endpoint,
+                peer,
+                run,
+                PAYLOAD,
+                offered_bps,
+                STOP_AFTER + LEAVE_TIMEOUT,
+            )
         });
         std::thread::sleep(Duration::from_millis(u64::from(DELAY_MS)) + STOP_AFTER);
         let leaving = Instant::now();
