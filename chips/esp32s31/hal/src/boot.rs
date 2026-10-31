@@ -132,13 +132,21 @@ pub const CPLL_320: CpllDividers = CpllDividers {
 /// An image's CPU clock profile.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CpuProfile {
-    /// 160 MHz, the default of every image.
+    /// 160 MHz, for an image that asks for it.
     Mhz160,
-    /// 320 MHz, for the HIL images that ask for it.
+    /// 320 MHz, the [default](Self::DEFAULT).
     Mhz320,
 }
 
 impl CpuProfile {
+    /// Every image's profile unless it asks for another.
+    ///
+    /// SOURCE: ESP-IDF v6.1.0 fff9895c
+    /// `components/esp_system/port/soc/esp32s31/Kconfig.cpu:1-4`
+    /// (`ESP_DEFAULT_CPU_FREQ_MHZ` defaults to 320 MHz outside FPGA and
+    /// clock bring-up bypass).
+    pub const DEFAULT: Self = Self::Mhz320;
+
     /// The profile's root, PLL, dividers and rates.
     ///
     /// SOURCE: ESP-IDF 4d80c1b2

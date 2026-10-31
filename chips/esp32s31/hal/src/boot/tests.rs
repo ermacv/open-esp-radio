@@ -6,7 +6,12 @@ use super::{
 };
 
 #[test]
-fn the_default_profile_runs_the_cpu_at_160_mhz_from_the_cpll() {
+fn the_default_profile_is_the_fast_one() {
+    assert_eq!(CpuProfile::DEFAULT, CpuProfile::Mhz320);
+}
+
+#[test]
+fn the_slow_profile_runs_the_cpu_at_160_mhz_from_the_cpll() {
     let profile = CpuProfile::Mhz160.clock();
     assert_eq!(profile.root, CpuRoot::Cpll);
     assert_eq!(
@@ -21,7 +26,7 @@ fn the_default_profile_runs_the_cpu_at_160_mhz_from_the_cpll() {
 }
 
 #[test]
-fn the_fast_profile_halves_the_memory_clock_to_its_limit() {
+fn the_fast_profile_runs_the_cpu_at_320_mhz_and_halves_the_memory_clock_to_its_limit() {
     let profile = CpuProfile::Mhz320.clock();
     assert_eq!(profile.dividers.mem, MemDivider::Half);
     assert_eq!(profile.rates.cpu_hz, 320_000_000);
