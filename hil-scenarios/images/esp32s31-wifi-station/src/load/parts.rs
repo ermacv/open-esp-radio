@@ -10,6 +10,10 @@
 //! times wrap at 2^32; a window takes their differences, which hold for a
 //! window shorter than some 71 minutes.
 //!
+//! The station service reports its own spans (`ServiceSpan` of the Wi-Fi
+//! facade) through the driver's observer; each span is a part here, nested
+//! in `station`, with the same counter.
+//!
 //! The longest poll belongs to an epoch: the reader starts a new one at the
 //! window's start, and a part's longest counts only for the epoch it was
 //! written in. A poll that ends while the reader starts an epoch may be kept
@@ -36,6 +40,17 @@ pub(crate) enum Part {
     Ip,
     Requests,
     Load,
+    /// Inside the station: its service's spans (the Wi-Fi facade's
+    /// `observation::Span`).
+    Step,
+    Pending,
+    Sources,
+    Received,
+    Deliver,
+    Queue,
+    Terminal,
+    Transmit,
+    Recycle,
 }
 
 impl Part {
@@ -49,6 +64,15 @@ impl Part {
         Part::Ip,
         Part::Requests,
         Part::Load,
+        Part::Step,
+        Part::Pending,
+        Part::Sources,
+        Part::Received,
+        Part::Deliver,
+        Part::Queue,
+        Part::Terminal,
+        Part::Transmit,
+        Part::Recycle,
     ];
 
     pub(crate) const fn name(self) -> &'static str {
@@ -62,6 +86,32 @@ impl Part {
             Part::Ip => "ip",
             Part::Requests => "requests",
             Part::Load => "load",
+            Part::Step => "step",
+            Part::Pending => "pending",
+            Part::Sources => "sources",
+            Part::Received => "received",
+            Part::Deliver => "deliver",
+            Part::Queue => "queue",
+            Part::Terminal => "terminal",
+            Part::Transmit => "transmit",
+            Part::Recycle => "recycle",
+        }
+    }
+
+    /// The part of the station service's span `span`.
+    #[cfg(all(target_arch = "riscv32", oer_trace))]
+    fn of_span(span: oer_esp32s31_wifi::observation::Span) -> Self {
+        use oer_esp32s31_wifi::observation::Span;
+        match span {
+            Span::Step => Part::Step,
+            Span::Pending => Part::Pending,
+            Span::Sources => Part::Sources,
+            Span::Received => Part::Received,
+            Span::Deliver => Part::Deliver,
+            Span::Queue => Part::Queue,
+            Span::Terminal => Part::Terminal,
+            Span::Transmit => Part::Transmit,
+            Span::Recycle => Part::Recycle,
         }
     }
 
@@ -71,10 +121,10 @@ impl Part {
     }
 }
 
-pub(crate) const COUNT: usize = 9;
+pub(crate) const COUNT: usize = 18;
 const _: () = {
-    if COUNT > MAX_PARTS {
-        panic!("every part fits one parts report");
+    if COUNT > u8::MAX as usize {
+        panic!("every part has a number for a page's start");
     }
     let mut index = 0;
     let mut rest: &[Part] = &Part::ALL;
@@ -238,14 +288,29 @@ fn bump(total: &AtomicU32, by: u32) {
     );
 }
 
+/// Every part's window, in the order of its number.
+pub(crate) type Windows = heapless::Vec<PartWindow, COUNT>;
+
+/// The windows from the part numbered `from`, as many as one answer holds.
+pub(crate) fn page(windows: &Windows, from: u8) -> Parts {
+    Parts {
+        parts: windows
+            .iter()
+            .skip(usize::from(from))
+            .take(MAX_PARTS)
+            .cloned()
+            .collect(),
+    }
+}
+
 /// Every part between the samples `start` and `end` of one window, the
 /// longest polls from `end`.
-pub(crate) fn window(start: &[Sample; COUNT], end: &[Sample; COUNT]) -> Parts {
-    let mut parts = Parts::default();
+pub(crate) fn window(start: &[Sample; COUNT], end: &[Sample; COUNT]) -> Windows {
+    let mut parts = Windows::new();
     for ((part, start), end) in Part::ALL.iter().zip(start).zip(end) {
-        // COUNT <= MAX_PARTS and every name fits: neither push nor name
-        // is refused.
-        let _room = parts.parts.push(PartWindow {
+        // There is room for every part and every name fits: neither push
+        // nor name is refused.
+        let _room = parts.push(PartWindow {
             name: heapless::String::try_from(part.name()).unwrap_or_default(),
             polls: end.polls.wrapping_sub(start.polls),
             poll_us: end.poll_us.wrapping_sub(start.poll_us),
@@ -262,33 +327,66 @@ pub(crate) static COUNTERS: [PartCounter; COUNT] = [const { PartCounter::new() }
 #[cfg(target_arch = "riscv32")]
 pub(crate) static EPOCH: AtomicU32 = AtomicU32::new(0);
 
-/// The observer of the parts' boundaries.
+/// The image's observer: the parts' boundaries, the station service's
+/// spans and the network bridge's frames.
 #[cfg(all(target_arch = "riscv32", oer_trace))]
-#[derive(Clone, Copy)]
-struct Observer;
+#[derive(Clone, Copy, Default)]
+pub struct Observer;
+
+#[cfg(all(target_arch = "riscv32", oer_trace))]
+impl Observer {
+    fn decoded<E: oer_trace::Event + Copy, D: oer_trace::Event>(event: E) -> Option<D> {
+        (E::KIND == D::KIND)
+            .then(|| D::decode(event.encode()))
+            .flatten()
+    }
+}
 
 #[cfg(all(target_arch = "riscv32", oer_trace))]
 impl oer_trace::Observer for Observer {
     fn event<E: oer_trace::Event + Copy + 'static>(&self, event: E) {
-        let boundary = (E::KIND == <Boundary as oer_trace::Event>::KIND)
-            .then(|| <Boundary as oer_trace::Event>::decode(event.encode()))
-            .flatten();
-        if let Some(boundary) = boundary
+        let epoch = EPOCH.load(Ordering::Relaxed);
+        if let Some(boundary) = Self::decoded::<E, Boundary>(event)
             && let Some(counter) = COUNTERS.get(usize::from(boundary.part as u8))
         {
-            counter.observe(
-                boundary.at_micros,
-                boundary.end,
-                EPOCH.load(Ordering::Relaxed),
-            );
+            counter.observe(boundary.at_micros, boundary.end, epoch);
+        }
+        type SpanEvent = oer_esp32s31_wifi::observation::ServiceSpan;
+        if let Some(span) = Self::decoded::<E, SpanEvent>(event)
+            && let Some(counter) = COUNTERS.get(usize::from(Part::of_span(span.span) as u8))
+        {
+            counter.observe(super::serve::activity_now(), span.end, epoch);
+        }
+        if let Some(frame) = Self::decoded::<E, super::counters::BridgeFrame>(event) {
+            super::counters::observe(frame);
         }
     }
 }
+
+/// The observer the image gives the station's driver and service.
+#[cfg(all(target_arch = "riscv32", oer_trace))]
+pub type DriverObserver = Observer;
+#[cfg(all(target_arch = "riscv32", not(oer_trace)))]
+pub type DriverObserver = oer_trace::Noop;
 
 #[cfg(all(target_arch = "riscv32", oer_trace))]
 const OBSERVER: Observer = Observer;
 #[cfg(all(target_arch = "riscv32", not(oer_trace)))]
 const OBSERVER: oer_trace::Noop = oer_trace::Noop;
+
+/// Report what the network bridge did with one frame.
+#[cfg(target_arch = "riscv32")]
+#[cfg_attr(
+    not(oer_trace),
+    allow(
+        unused_variables,
+        reason = "only a trace build counts the bridge's frames"
+    )
+)]
+pub(crate) fn bridged(outcome: super::counters::Bridged) {
+    let observer = OBSERVER;
+    oer_trace::observe!(observer, super::counters::BridgeFrame { outcome });
+}
 
 /// `future`, observed as part `part`: each poll's start and end.
 #[cfg(target_arch = "riscv32")]
@@ -386,6 +484,24 @@ mod tests {
     }
 
     #[test]
+    fn pages_cover_every_part_once_in_order() {
+        let windows = window(&[Sample::default(); COUNT], &[Sample::default(); COUNT]);
+        let first = page(&windows, 0);
+        let second = page(&windows, MAX_PARTS as u8);
+        assert_eq!(first.parts.len(), MAX_PARTS);
+        assert_eq!(second.parts.len(), COUNT - MAX_PARTS);
+        let names: Vec<_> = first
+            .parts
+            .iter()
+            .chain(&second.parts)
+            .map(|part| part.name.as_str())
+            .collect();
+        let expected: Vec<_> = Part::ALL.iter().map(|part| part.name()).collect();
+        assert_eq!(names, expected);
+        assert!(page(&windows, COUNT as u8).parts.is_empty());
+    }
+
+    #[test]
     fn a_window_names_every_part_and_takes_differences_across_the_wrap() {
         let mut start = [Sample::default(); COUNT];
         let mut end = [Sample::default(); COUNT];
@@ -402,8 +518,8 @@ mod tests {
             longest_us: Some(3),
         };
         let parts = window(&start, &end);
-        assert_eq!(parts.parts.len(), COUNT);
-        let station_work = &parts.parts[1];
+        assert_eq!(parts.len(), COUNT);
+        let station_work = &parts[1];
         assert_eq!(station_work.name.as_str(), "station-work");
         assert_eq!(
             (
@@ -415,7 +531,7 @@ mod tests {
             "differences across the wrap"
         );
         assert_eq!(station_work.longest_poll_us, Some(3), "from the end");
-        assert_eq!(parts.parts[0].longest_poll_us, None);
+        assert_eq!(parts[0].longest_poll_us, None);
     }
 
     #[test]

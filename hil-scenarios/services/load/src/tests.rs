@@ -79,12 +79,22 @@ fn the_largest_reports_fit_one_response() {
         parts: core::iter::repeat_n(part, MAX_PARTS).collect(),
     });
     assert!(postcard::to_slice(&parts, &mut buffer).unwrap().len() <= 512);
+    let counters = CountersCollected::Report(Counters {
+        cycles: u64::MAX,
+        instructions: u64::MAX,
+        bridge_received: u32::MAX,
+        bridge_refused_pool: u32::MAX,
+        bridge_refused_queue: u32::MAX,
+        bridge_refused_other: u32::MAX,
+        stack_received: u32::MAX,
+    });
+    assert!(postcard::to_slice(&counters, &mut buffer).unwrap().len() <= 512);
 }
 
 #[test]
-fn the_service_names_four_endpoints_and_their_answers_by_distinct_keys() {
+fn the_service_names_five_endpoints_and_their_answers_by_distinct_keys() {
     let keys = <Request as oer_hil_agent::base::Service>::KEYS;
-    assert_eq!(keys.len(), 8);
+    assert_eq!(keys.len(), 10);
     let distinct: std::collections::BTreeSet<_> = keys.iter().collect();
     assert_eq!(distinct.len(), keys.len());
 }

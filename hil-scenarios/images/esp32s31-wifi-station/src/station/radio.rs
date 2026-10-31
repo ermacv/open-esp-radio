@@ -29,7 +29,7 @@ wifi::bind_station! {
         radio: crate::RadioToken,
         callbacks: crate::station::Callbacks,
         observer: oer_trace::Noop,
-        driver_observer: oer_trace::Noop,
+        driver_observer: crate::load::parts::DriverObserver,
         sink: (),
         engine: oer_esp32s31_compose::crypto::KeyUnwrapEngine,
         events: crate::station::Events,

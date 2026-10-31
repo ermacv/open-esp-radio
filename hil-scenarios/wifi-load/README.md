@@ -25,10 +25,13 @@ and untracked datagrams (an exact tally, shared by both ends), the sender's
 refused and missed sends, RTT of 20 probes per second within the window
 (replies read through the drain) echoed by the image (min, median,
 p95, max, replies), each hart's busy share (1 − idle/window) with each
-executor's work share, and each named part's polls (tasks and the station
-work's futures: count, rate, share of the window with an open poll's part,
-and the mean and longest of the ended polls). The idle baseline records the
-parts too. The scenario holds the air exclusively. Executors' work spans and
+executor's work share, each named part's polls (tasks, the station work's
+futures and the station service's spans: count, rate, share of the window
+with an open poll's part, and the mean and longest of the ended polls), and
+the window's counters (the hart's cycles and retired instructions, their
+rate per microsecond and per cycle, the network bridge's taken and refused
+frames, and the IP stack's received frames with the hart's instructions over
+them). The idle baseline records the parts and counters too. The scenario holds the air exclusively. Executors' work spans and
 parts' polls include preemption and overlap: only a hart's idle time gives
 its utilisation. The router forwards the load: its CPU can limit it.
 

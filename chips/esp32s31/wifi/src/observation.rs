@@ -138,6 +138,45 @@ impl core::fmt::Display for TxRateSelected {
     }
 }
 
+/// The station service's spans, which [`ServiceSpan`] reports.
+pub use oer_ieee80211_runtime::station::ServiceSpan as Span;
+
+/// The start or end of a stretch of the station service's work.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ServiceSpan {
+    pub span: oer_ieee80211_runtime::station::ServiceSpan,
+    pub end: bool,
+}
+
+impl Event for ServiceSpan {
+    const KIND: Kind = Kind::new(Domain::Ieee80211, 29);
+    const CHANNEL: Channel = SERVICE;
+
+    fn encode(&self) -> [u32; 2] {
+        [u32::from(self.span as u8), u32::from(self.end)]
+    }
+
+    fn decode([span, end]: [u32; 2]) -> Option<Self> {
+        Some(Self {
+            span: oer_ieee80211_runtime::station::ServiceSpan::from_number(
+                u8::try_from(span).ok()?,
+            )?,
+            end: match end {
+                0 => false,
+                1 => true,
+                _ => return None,
+            },
+        })
+    }
+}
+
+impl core::fmt::Display for ServiceSpan {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let edge = if self.end { "end" } else { "start" };
+        write!(f, "station.span {:?} {edge}", self.span)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -157,6 +196,12 @@ mod tests {
         round_trip(ControlDelivered);
         round_trip(TxRateSelected { kbps: None });
         round_trip(TxRateSelected { kbps: Some(65_000) });
+        for span in oer_ieee80211_runtime::station::ServiceSpan::ALL {
+            round_trip(ServiceSpan { span, end: false });
+            round_trip(ServiceSpan { span, end: true });
+        }
+        assert_eq!(ServiceSpan::decode([0, 2]), None);
+        assert_eq!(ServiceSpan::decode([9, 0]), None);
         assert_eq!(StationBeacon::decode([7, 1]), None);
         assert_eq!(TxRateSelected::decode([1, 0]), None);
     }

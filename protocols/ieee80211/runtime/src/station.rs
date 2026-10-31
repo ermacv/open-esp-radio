@@ -224,6 +224,9 @@ pub trait StationPort: Sized {
         Self: 'id,
         Self::Backend: 'id,
         Self::SlotId: 'id;
+    /// Observe the start (`end` false) or end of a stretch of the service's
+    /// work; by default nothing observes it.
+    fn span(_span: ServiceSpan, _end: bool) {}
     /// Recover either complete resource class, without an unknown-class branch.
     fn tx_buffer<'id>(
         buffer: <Self::Types<'id> as PhaseTypes<'id>>::AnyTxBuffer,
@@ -296,6 +299,51 @@ where
                 Self::Data(DataTxContext::restore(context))
             }
         }
+    }
+}
+
+/// A stretch of the service's own work, which it reports to its port at
+/// both ends ([`StationPort::span`]).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(u8)]
+pub enum ServiceSpan {
+    /// The machines' owed actions.
+    Step,
+    /// Released and deferred received frames.
+    Pending,
+    /// One poll of every input source.
+    Sources,
+    /// A received frame's event, its delivery included.
+    Received,
+    /// A frame's delivery through the station machine.
+    Deliver,
+    /// One MSDU's hand-off to the network queue.
+    Queue,
+    /// A transmission's terminal.
+    Terminal,
+    /// The network stack's MSDU into the data machine.
+    Transmit,
+    /// A received buffer's return to the port.
+    Recycle,
+}
+
+impl ServiceSpan {
+    /// Every span, each at the position of its number.
+    pub const ALL: [Self; 9] = [
+        Self::Step,
+        Self::Pending,
+        Self::Sources,
+        Self::Received,
+        Self::Deliver,
+        Self::Queue,
+        Self::Terminal,
+        Self::Transmit,
+        Self::Recycle,
+    ];
+
+    /// The span numbered `number`.
+    pub fn from_number(number: u8) -> Option<Self> {
+        Self::ALL.into_iter().find(|span| *span as u8 == number)
     }
 }
 
@@ -1641,7 +1689,10 @@ impl<
         // cooperative yield lets the driver and application progress.
         let mut batch = 0_u8;
         loop {
-            match self.step(arbiter, timer.now(), phase, io) {
+            B::span(ServiceSpan::Step, false);
+            let stepped = self.step(arbiter, timer.now(), phase, io);
+            B::span(ServiceSpan::Step, true);
+            match stepped {
                 Next::Wait => {}
                 Next::Retune(pending) => return Served::Retune(pending),
                 Next::Failed(StepFailure::Port(
@@ -1653,7 +1704,10 @@ impl<
             }
             // Releasing RX owners is a separate input source. Its receive
             // transition must not nest inside the control-action step frame.
-            match self.receive_pending(arbiter, timer.now(), phase, io) {
+            B::span(ServiceSpan::Pending, false);
+            let pending = self.receive_pending(arbiter, timer.now(), phase, io);
+            B::span(ServiceSpan::Pending, true);
+            match pending {
                 Ok(true) => continue,
                 Ok(false) => {}
                 Err(fault) => return Served::Failed(fault),
@@ -1711,6 +1765,7 @@ impl<
                 let mut command = core::pin::pin!(command);
                 let mut alarm = core::pin::pin!(alarm);
                 poll_fn(|cx| {
+                    B::span(ServiceSpan::Sources, false);
                     let event = match event.as_mut().poll(cx) {
                         Poll::Ready(event) => Some(event),
                         Poll::Pending => None,
@@ -1740,8 +1795,10 @@ impl<
                         || transmit
                         || unwrapped.is_some()
                     {
+                        B::span(ServiceSpan::Sources, true);
                         Poll::Ready((event, command_ready, tick, transmit, unwrapped))
                     } else {
+                        B::span(ServiceSpan::Sources, true);
                         Poll::Pending
                     }
                 })
@@ -1759,7 +1816,11 @@ impl<
             }
             match event {
                 Some(Ok(Ok(event))) => match self.event(arbiter, now, B::event(event), phase, io) {
-                    Ok(Some(buffer)) => phase.recycle(buffer),
+                    Ok(Some(buffer)) => {
+                        B::span(ServiceSpan::Recycle, false);
+                        phase.recycle(buffer);
+                        B::span(ServiceSpan::Recycle, true);
+                    }
                     Ok(None) => {}
                     Err(fault) => return Served::Failed(fault.into()),
                 },
@@ -1818,7 +1879,9 @@ impl<
                 }
             }
             if transmit && self.data.accepts() && self.station.link().is_some() {
+                B::span(ServiceSpan::Transmit, false);
                 self.send(now, io);
+                B::span(ServiceSpan::Transmit, true);
             }
             batch = batch.saturating_add(1);
             if batch == MAX_INPUT_STEPS_PER_BATCH {
@@ -2286,7 +2349,9 @@ impl<
     {
         if let Some((frame, meta)) = self.pending.receive.pop_ready() {
             self.deliver_received(now, &frame, meta, io);
+            B::span(ServiceSpan::Recycle, false);
             phase.recycle(frame);
+            B::span(ServiceSpan::Recycle, true);
             return Ok(true);
         }
         if let Some((frame, meta)) = self.pending.receive.pop_deferred() {
@@ -2297,7 +2362,9 @@ impl<
                 phase,
                 io,
             )? {
+                B::span(ServiceSpan::Recycle, false);
                 phase.recycle(frame);
+                B::span(ServiceSpan::Recycle, true);
             }
             return Ok(true);
         }
@@ -2329,30 +2396,61 @@ impl<
     {
         match event {
             LowerMacEvent::Received { frame, meta } => {
-                let local = self.station.link().map(|link| link.address.get());
-                let (frame, meta) =
-                    match self
-                        .pending
-                        .receive
-                        .receive(now, local, frame, meta, &mut self.events)
-                    {
-                        RxDisposition::Deliver(received) => received,
-                        RxDisposition::Retained => return Ok(None),
-                        RxDisposition::Recycle(frame) => return Ok(Some(frame)),
-                        RxDisposition::Capacity(frame) => {
-                            phase.recycle(frame);
-                            return Err(ServiceFault::RxBlockAckCapacity.into());
-                        }
-                    };
-                self.deliver_received(now, &frame, meta, io);
-                Ok(Some(frame))
+                B::span(ServiceSpan::Received, false);
+                let received = self.received(now, frame, meta, phase, io);
+                B::span(ServiceSpan::Received, true);
+                received
             }
             LowerMacEvent::Tbtt(_) => Ok(None),
             LowerMacEvent::Terminal(terminal) => {
-                self.terminal(arbiter, now, terminal)?;
+                B::span(ServiceSpan::Terminal, false);
+                let accepted = self.terminal(arbiter, now, terminal);
+                B::span(ServiceSpan::Terminal, true);
+                accepted?;
                 Ok(None)
             }
         }
+    }
+
+    /// Take one received frame: hold it for reordering or deliver it; its
+    /// buffer comes back for its recycle.
+    #[inline(never)]
+    fn received<'p, P, const TX_DEPTH: usize, const RX_DEPTH: usize, const COMMAND_DEPTH: usize>(
+        &mut self,
+        now: Instant,
+        frame: <B::Types<'id> as PhaseTypes<'id>>::RxBuffer,
+        meta: <B::Types<'id> as PhaseTypes<'id>>::RxMeta,
+        phase: &mut P,
+        io: &mut ServiceIo<
+            '_,
+            B::Caps,
+            impl ServiceOutputSink<B::Caps>,
+            TX_DEPTH,
+            RX_DEPTH,
+            COMMAND_DEPTH,
+        >,
+    ) -> Result<Option<<B::Types<'id> as PhaseTypes<'id>>::RxBuffer>, StepFailure<'id, B>>
+    where
+        'id: 'p,
+        P: LowerMacPhase<'p, 'id, Caps = B::Caps, Types = B::Types<'id>>,
+    {
+        let local = self.station.link().map(|link| link.address.get());
+        let (frame, meta) =
+            match self
+                .pending
+                .receive
+                .receive(now, local, frame, meta, &mut self.events)
+            {
+                RxDisposition::Deliver(received) => received,
+                RxDisposition::Retained => return Ok(None),
+                RxDisposition::Recycle(frame) => return Ok(Some(frame)),
+                RxDisposition::Capacity(frame) => {
+                    phase.recycle(frame);
+                    return Err(ServiceFault::RxBlockAckCapacity.into());
+                }
+            };
+        self.deliver_received(now, &frame, meta, io);
+        Ok(Some(frame))
     }
 
     #[inline(never)]
@@ -2374,13 +2472,16 @@ impl<
             COMMAND_DEPTH,
         >,
     ) {
+        B::span(ServiceSpan::Deliver, false);
         let mut refused = RxMsdusRefused::default();
         let result = self.station.receive(
             now,
             frame.bytes(),
             meta,
             |parts| {
+                B::span(ServiceSpan::Queue, false);
                 let refusal = Self::queue_received(io, EthernetFrame::from_parts(parts));
+                B::span(ServiceSpan::Queue, true);
                 // Delivery runs for every sink; only an enabled one counts.
                 if <O as EventSink<ServiceEvent>>::ENABLED {
                     count_refusal(&mut refused, refusal);
@@ -2388,6 +2489,7 @@ impl<
             },
             &mut self.events,
         );
+        B::span(ServiceSpan::Deliver, true);
         // The sink is the station's during delivery: the frame's refusals
         // follow its events as one aggregate.
         if refused != RxMsdusRefused::default() {

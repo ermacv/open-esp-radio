@@ -43,7 +43,8 @@ pub mod tally;
 pub const MAX_EXECUTORS: usize = 8;
 /// The most harts a [`Load`] reports.
 pub const MAX_HARTS: usize = 2;
-/// The most named parts a [`Parts`] report holds, and the longest name.
+/// The most named parts one [`Parts`] answer holds, and the longest name.
+/// An image with more parts answers them in pages ([`CollectParts::from`]).
 pub const MAX_PARTS: usize = 12;
 pub const MAX_PART_NAME: usize = 12;
 
@@ -56,6 +57,8 @@ oer_hil_protocol::messages! {
     topic Load = "load/cpu-report";
     endpoint CollectParts = "load/parts" => PartsCollected;
     topic PartsCollected = "load/parts-report";
+    endpoint CollectCounters = "load/counters" => CountersCollected;
+    topic CountersCollected = "load/counters-report";
 }
 
 /// The longest measuring window, start delay and drain a run may ask for.
@@ -210,10 +213,12 @@ pub struct ExecutorLoad {
     pub work_us: u64,
 }
 
-/// The polls of the image's named parts within run `run`'s window.
+/// The polls of the image's named parts within run `run`'s window, from the
+/// part numbered `from`: at most [`MAX_PARTS`] an answer, fewer at the end.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub struct CollectParts {
     pub run: u32,
+    pub from: u8,
 }
 
 /// The answer to [`CollectParts`].
@@ -255,6 +260,42 @@ pub struct PartWindow {
     pub longest_poll_us: Option<u32>,
 }
 
+/// The hardware and frame counters within run `run`'s window.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct CollectCounters {
+    pub run: u32,
+}
+
+/// The answer to [`CollectCounters`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub enum CountersCollected {
+    Report(Counters),
+    /// The run's window or drain has not ended yet.
+    Running,
+    Refused(LoadError),
+}
+
+/// Counts within one run's measuring window.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct Counters {
+    /// Machine cycles of the hart that serves the load, wait-for-interrupt
+    /// time included.
+    pub cycles: u64,
+    /// Instructions that hart retired.
+    pub instructions: u64,
+    /// Frames the image's network bridge took from the station, those it
+    /// then had refused included.
+    pub bridge_received: u32,
+    /// Bridge frames the IP stack's receive pool had no packet for.
+    pub bridge_refused_pool: u32,
+    /// Bridge frames the IP stack's receive queue had no room for.
+    pub bridge_refused_queue: u32,
+    /// Bridge frames refused for their length or a down link.
+    pub bridge_refused_other: u32,
+    /// Frames the IP stack took from its device.
+    pub stack_received: u32,
+}
+
 /// Why the image refused a request.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub enum LoadError {
@@ -279,6 +320,7 @@ oer_hil_agent::service! {
         Collect(Collect) => collect,
         GetCpu(GetCpu) => cpu,
         CollectParts(CollectParts) => parts,
+        CollectCounters(CollectCounters) => counters,
     }
 }
 

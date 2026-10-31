@@ -155,6 +155,14 @@ impl<W: Binding, Id: SlotIdentity> StationPort for StationComposition<W, Id> {
         }
         event
     }
+    #[cfg_attr(
+        not(oer_trace),
+        allow(unused_variables, reason = "only a trace build observes the span")
+    )]
+    fn span(span: ServiceSpan, end: bool) {
+        let observer = W::DriverObserver::default();
+        oer_trace::observe!(observer, crate::observation::ServiceSpan { span, end });
+    }
     fn tx_buffer<'id>(buffer: port::AnyBuffer<'id, Id, Device<W>, TX>) -> StationTxBuffer<'id, Self>
     where
         Self: 'id,

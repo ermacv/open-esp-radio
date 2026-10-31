@@ -9,13 +9,14 @@
 //! transmit credits and the 32 general slots hold some 2.7 ms of transmit
 //! batches beside the stack's own packets. Each slot holds one 1514-byte
 //! Ethernet frame.
-use oer_embassy_net::NetworkInterfaceId;
+use oer_embassy_net::{NetworkInterfaceId, RxEnqueueError};
 use oer_embassy_net::ip::{Configuration, Control, Error, Resources, Service};
 use oer_esp32s31_wifi::Network;
 use oer_memory::{PlacedFuture, StaticPlace};
 use static_cell::{ConstStaticCell, StaticCell};
 
 use crate::fatal::Failure;
+use crate::load::counters::Bridged;
 
 const RX: usize = 32;
 const TX: usize = 16;
@@ -60,11 +61,25 @@ pub(crate) fn start(
     Ok((control, interface, place.future(|| running_future(service))))
 }
 
+/// The bridge took a frame from the station: the load service counts it.
+fn received(_: oer_embassy_net::EthernetFrameView<'_>) {
+    crate::load::parts::bridged(Bridged::Received);
+}
+
+/// The bridge refused a frame from the station for `reason`.
+fn refused(reason: RxEnqueueError) {
+    crate::load::parts::bridged(match reason {
+        RxEnqueueError::PoolExhausted => Bridged::RefusedPool,
+        RxEnqueueError::QueueFull => Bridged::RefusedQueue,
+        RxEnqueueError::InvalidLength(_) | RxEnqueueError::LinkDown => Bridged::RefusedOther,
+    });
+}
+
 #[define_opaque(Running)]
 fn running_future(mut service: Service<Context, RX, TX, Network<'static>>) -> Running {
     async move {
         // Only an access from another context than its executor's fails it.
-        if service.run(|_| {}, |_| {}, |_| {}, |_| {}).await.is_err() {
+        if service.run(|_| {}, received, refused, |_| {}).await.is_err() {
             crate::fail(Failure::Network);
         }
     }
