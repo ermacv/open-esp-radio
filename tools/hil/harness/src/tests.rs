@@ -404,7 +404,7 @@ fn a_case_s_measurements_reach_the_results_with_its_name_and_never_decide_it() {
             value: serde_json::json!({ "mbps": 42.5 }),
         }]
     );
-    let results = run::results(&SCENARIO, "s31-a", 1, &ran.outcomes, &ran.measurements);
+    let results = run::results(&SCENARIO, "s31-a", &ran.outcomes, &ran.measurements);
     assert_eq!(results["board"], "s31-a");
     assert_eq!(results["outcomes"][0]["verdict"], "fail");
     assert_eq!(results["measurements"][0]["case"], "load");

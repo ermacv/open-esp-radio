@@ -18,7 +18,7 @@ use std::{
 
 use oer_hil_agent::base::Service as _;
 use oer_hil_harness::{Case, Cx, Failure, RouterOperation, Scenario, check};
-use oer_services_load::{Collect, Collected, GetCpu, Load, Report, Start, Started, Transmit};
+use oer_services_load::{Collect, Collected, Load, Report, Start, Started, Transmit};
 use oer_services_wifi_station::{GetStatus, Join, Joined, Status};
 
 const SCENARIO: Scenario = Scenario::new(
@@ -29,7 +29,8 @@ const SCENARIO: Scenario = Scenario::new(
         oer_services_load::Request::KEYS,
     ],
 )
-.using_router();
+.using_router()
+.using_air_exclusively();
 
 const CASES: [Case; 4] = [
     Case {
@@ -58,14 +59,15 @@ const DEVICE_PORT: u16 = 5001;
 /// UDP payload of a load datagram.
 const PAYLOAD: usize = 1400;
 /// Total offered load of each level, Mbit/s; a mode with two directions
-/// offers half each way. The last is above what HT20 carries.
-const LEVELS_MBPS: [u64; 5] = [10, 30, 50, 65, 100];
-/// How long each level sends.
-const DURATION: Duration = Duration::from_secs(5);
-/// How long the image waits after `Start` before it sends.
-const DEVICE_DELAY_MS: u32 = 300;
-/// What may still be in flight after the senders stop.
-const DRAIN: Duration = Duration::from_millis(500);
+/// offers half each way. `OER_WIFI_LOAD_MBPS` (comma-separated) replaces
+/// them, e.g. to offer more than HT20 carries.
+const LEVELS_MBPS: [u64; 4] = [10, 30, 50, 65];
+const LEVELS_ENV: &str = "OER_WIFI_LOAD_MBPS";
+/// Each level's measuring window, the time before it opens and the drain
+/// after it (the image's run, `oer_services_load::Start`).
+const DURATION_MS: u32 = 5000;
+const DELAY_MS: u32 = 300;
+const DRAIN_MS: u32 = 500;
 /// RTT probes during a level.
 const PROBE_PERIOD: Duration = Duration::from_millis(50);
 const JOIN_TIMEOUT: Duration = Duration::from_secs(30);
@@ -76,46 +78,86 @@ fn main() -> ExitCode {
     oer_hil_harness::main(&SCENARIO, &CASES)
 }
 
-/// The host's source address toward the station network and the route the
-/// kernel takes there, as `ip -4 route get` prints it. The route must be an
-/// explicit one through a gateway (the router), never the default.
-fn host_route(to: Ipv4Addr) -> Result<(Ipv4Addr, String), Failure> {
+/// The route the host takes to an address of the station network, as
+/// `ip -4 route get` shows it.
+struct Route {
+    source: Ipv4Addr,
+    device: String,
+    gateway: Ipv4Addr,
+    line: String,
+}
+
+/// The host's route to `to`: it must go through the router's LAN address
+/// the stand file names, over a wired interface (one hop over the air), and
+/// leave from one source address.
+fn host_route(to: Ipv4Addr) -> Result<Route, Failure> {
     let output = std::process::Command::new("ip")
         .args(["-4", "route", "get", &to.to_string()])
         .output()
         .map_err(|error| Failure::Incomplete(format!("ip route get: {error}")))?;
-    let route = String::from_utf8_lossy(&output.stdout)
+    let line = String::from_utf8_lossy(&output.stdout)
         .lines()
         .next()
         .unwrap_or_default()
         .trim()
         .to_owned();
     let field = |name: &str| {
-        let mut words = route.split_whitespace();
+        let mut words = line.split_whitespace();
         words.find(|word| *word == name).and(words.next())
     };
-    let source = field("src")
-        .and_then(|source| source.parse().ok())
-        .ok_or_else(|| Failure::Incomplete(format!("no source address toward {to}: `{route}`")))?;
-    let explicit = std::process::Command::new("ip")
-        .args(["-4", "route", "show", STATION_NETWORK])
-        .output()
-        .map(|output| !String::from_utf8_lossy(&output.stdout).trim().is_empty())
-        .unwrap_or(false);
-    if field("via").is_none() || !explicit {
+    let route = Route {
+        source: field("src")
+            .and_then(|source| source.parse().ok())
+            .ok_or_else(|| {
+                Failure::Incomplete(format!("no source address toward {to}: `{line}`"))
+            })?,
+        device: field("dev").unwrap_or_default().to_owned(),
+        gateway: field("via")
+            .and_then(|via| via.parse().ok())
+            .ok_or_else(|| {
+                Failure::Incomplete(format!(
+                    "the host reaches {to} without a gateway, not through the lab router: `{line}`"
+                ))
+            })?,
+        line: line.clone(),
+    };
+    let lan_address = stand()?
+        .router
+        .and_then(|router| router.lan_address)
+        .ok_or_else(|| {
+            Failure::Incomplete(
+                "the stand file's [router] names no lan_address: the router's address on the \
+                 wired network the host reaches it by"
+                    .into(),
+            )
+        })?;
+    if route.gateway != lan_address {
         return Err(Failure::Incomplete(format!(
-            "the host has no route to {STATION_NETWORK} through the lab router \
-             (`ip route add {STATION_NETWORK} via <router LAN address>`, once): `{route}`"
+            "the host reaches {to} through {}, not the lab router {lan_address} \
+             (`ip route add {STATION_NETWORK} via {lan_address}`, once): `{line}`",
+            route.gateway
         )));
     }
-    Ok((source, route))
+    let wireless = std::path::Path::new("/sys/class/net")
+        .join(&route.device)
+        .join("wireless");
+    if route.device.is_empty() || wireless.exists() {
+        return Err(Failure::Incomplete(format!(
+            "the host reaches {to} over `{}`, not a wired interface: `{line}`",
+            route.device
+        )));
+    }
+    Ok(route)
+}
+
+fn stand() -> Result<oer_lab_model::Stand, Failure> {
+    oer_lab_model::path()
+        .and_then(|path| oer_lab_model::Stand::load(&path))
+        .map_err(|error| Failure::Incomplete(format!("the stand file: {error}")))
 }
 
 fn channel() -> Result<u8, Failure> {
-    let stand = oer_lab_model::path()
-        .and_then(|path| oer_lab_model::Stand::load(&path))
-        .map_err(|error| Failure::Incomplete(format!("the stand file: {error}")))?;
-    stand
+    stand()?
         .router
         .as_ref()
         .and_then(|router| router.channels.first().copied())
@@ -148,8 +190,32 @@ fn device_address(cx: &mut Cx<'_>) -> Result<Ipv4Addr, Failure> {
         .ok_or_else(|| Failure::Incomplete("the station has no address: run `path` first".into()))
 }
 
-fn cpu(cx: &mut Cx<'_>) -> Result<Load, Failure> {
-    cx.call(GetCpu, CALL)
+/// The report of `run`, once the image ended it.
+fn collect(cx: &mut Cx<'_>, run: u32) -> Result<Report, Failure> {
+    let started = Instant::now();
+    loop {
+        match cx.call(Collect { run }, CALL)? {
+            Collected::Report(report) => return Ok(report),
+            Collected::Running if started.elapsed() < Duration::from_secs(10) => {
+                std::thread::sleep(Duration::from_millis(100));
+            }
+            other => {
+                return Err(Failure::Fail(format!("the image's report: {other:?}")));
+            }
+        }
+    }
+}
+
+/// The levels to offer: [`LEVELS_MBPS`], or `OER_WIFI_LOAD_MBPS`.
+fn levels_mbps() -> Result<Vec<u64>, Failure> {
+    let Ok(text) = std::env::var(LEVELS_ENV) else {
+        return Ok(LEVELS_MBPS.to_vec());
+    };
+    text.split(',')
+        .map(|level| level.trim().parse::<u64>().ok().filter(|level| *level > 0))
+        .collect::<Option<Vec<_>>>()
+        .filter(|levels| !levels.is_empty())
+        .ok_or_else(|| Failure::Incomplete(format!("{LEVELS_ENV}=`{text}` is no list of Mbit/s")))
 }
 
 /// Each hart's busy share and each executor's work share between two CPU
@@ -228,7 +294,7 @@ fn rtt(echoes: &traffic::Echoes) -> serde_json::Value {
 /// and this host; the route, the addresses and both directions of the path
 /// are checked with probe datagrams before any load.
 fn path(cx: &mut Cx<'_>) -> Result<(), Failure> {
-    let (host, _) = host_route(Ipv4Addr::from(ROUTER_ADDRESS))?;
+    let host = host_route(Ipv4Addr::from(ROUTER_ADDRESS))?.source;
     let channel = channel()?;
     let (ssid, passphrase) = (generated("oer-load-"), generated("oer-"));
     cx.router(RouterOperation::ApplyStationProfile {
@@ -263,15 +329,13 @@ fn path(cx: &mut Cx<'_>) -> Result<(), Failure> {
         std::thread::sleep(Duration::from_millis(500));
     };
     let device = Ipv4Addr::from(ipv4.address);
-    let (source, route) = match host_route(device) {
-        Ok((source, device_route)) if source == host => (source, device_route),
-        Ok((source, _)) => {
-            return Err(Failure::Fail(format!(
-                "the host reaches the device from {source}, the router forwards {host}"
-            )));
-        }
-        Err(failure) => return Err(failure),
-    };
+    let route = host_route(device)?;
+    let source = route.source;
+    if source != host {
+        return Err(Failure::Fail(format!(
+            "the host reaches the device from {source}, the router forwards {host}"
+        )));
+    }
     // Both ways: the host's probes come back echoed, the image's datagrams
     // reach the host.
     let run = run_id();
@@ -286,13 +350,14 @@ fn path(cx: &mut Cx<'_>) -> Result<(), Failure> {
         Start {
             run,
             port: DEVICE_PORT,
+            delay_ms: 0,
+            duration_ms: 1000,
+            drain_ms: DRAIN_MS,
             transmit: Some(Transmit {
                 peer: source.octets(),
                 peer_port: host_port,
                 payload: PAYLOAD as u16,
                 rate_bps: 100_000,
-                delay_ms: 0,
-                duration_ms: 1000,
             }),
         },
         CALL,
@@ -309,8 +374,7 @@ fn path(cx: &mut Cx<'_>) -> Result<(), Failure> {
         stop.store(true, Ordering::Relaxed);
         probes.join().unwrap_or(0)
     });
-    std::thread::sleep(DRAIN);
-    let collected = cx.call(Collect { run }, CALL)?;
+    let report = collect(cx, run)?;
     let mut host = endpoint.close();
     host.echoes.sent = sent;
     cx.measure(
@@ -318,7 +382,9 @@ fn path(cx: &mut Cx<'_>) -> Result<(), Failure> {
         serde_json::json!({
             "topology": "host -> Ethernet -> OpenWrt AP -> Wi-Fi -> DUT station",
             "host": source.to_string(),
-            "host_route": route,
+            "host_interface": route.device,
+            "host_gateway": route.gateway.to_string(),
+            "host_route": route.line,
             "device": device.to_string(),
             "device_mac": mac(address),
             "bssid": mac(bssid),
@@ -326,12 +392,10 @@ fn path(cx: &mut Cx<'_>) -> Result<(), Failure> {
             "gateway": ipv4.gateway.map(|gateway| Ipv4Addr::from(gateway).to_string()),
             "rtt": rtt(&host.echoes),
             "device_to_host_datagrams": host.load.datagrams,
-            "device_report": format!("{collected:?}"),
+            "device_echoed": report.received.echoed,
+            "device_sent_datagrams": report.sent.datagrams,
         }),
     );
-    let Collected::Report(report) = collected else {
-        return Err(Failure::Fail(format!("the image's report: {collected:?}")));
-    };
     check(
         linked == channel,
         format!("linked on channel {linked}, the network is on {channel}"),
@@ -394,15 +458,15 @@ fn rx_tx(cx: &mut Cx<'_>) -> Result<(), Failure> {
 
 fn levels(cx: &mut Cx<'_>, mode: Mode) -> Result<(), Failure> {
     let device = device_address(cx)?;
-    let (host, _) = host_route(device)?;
-    for total in LEVELS_MBPS {
+    let host = host_route(device)?.source;
+    for total in levels_mbps()? {
         level(cx, mode, device, host, total)?;
     }
     Ok(())
 }
 
 /// One level: `total_mbps` offered, split over the mode's directions, for
-/// [`DURATION`], with RTT probes throughout.
+/// the window, with RTT probes from the start to the end of the drain.
 fn level(
     cx: &mut Cx<'_>,
     mode: Mode,
@@ -425,14 +489,14 @@ fn level(
         peer_port: host_port,
         payload: PAYLOAD as u16,
         rate_bps: u32::try_from(each_bps).unwrap_or(u32::MAX),
-        delay_ms: DEVICE_DELAY_MS,
-        duration_ms: u32::try_from(DURATION.as_millis()).unwrap_or(u32::MAX),
     });
-    let before = cpu(cx)?;
     let started = cx.call(
         Start {
             run,
             port: DEVICE_PORT,
+            delay_ms: DELAY_MS,
+            duration_ms: DURATION_MS,
+            drain_ms: DRAIN_MS,
             transmit,
         },
         CALL,
@@ -443,103 +507,166 @@ fn level(
     )?;
     let peer = SocketAddrV4::new(device, DEVICE_PORT);
     let stop = AtomicBool::new(false);
+    let window = Duration::from_millis(u64::from(DURATION_MS));
     let (sent, probes) = std::thread::scope(|scope| {
         let probes = scope.spawn(|| traffic::probe(&endpoint, peer, run, PROBE_PERIOD, &stop));
+        // The host's window starts with the image's, as near as the HIL
+        // answer's latency allows; the image counts only its own window.
+        std::thread::sleep(Duration::from_millis(u64::from(DELAY_MS)));
         let sent = if mode == Mode::Tx {
-            std::thread::sleep(DURATION + Duration::from_millis(u64::from(DEVICE_DELAY_MS)));
+            std::thread::sleep(window);
             traffic::Sent::default()
         } else {
-            std::thread::sleep(Duration::from_millis(u64::from(DEVICE_DELAY_MS)));
-            traffic::send(&endpoint, peer, run, PAYLOAD, each_bps, DURATION)
+            traffic::send(&endpoint, peer, run, PAYLOAD, each_bps, window)
         };
+        std::thread::sleep(Duration::from_millis(u64::from(DRAIN_MS)));
         stop.store(true, Ordering::Relaxed);
         (sent, probes.join().unwrap_or(0))
     });
-    std::thread::sleep(DRAIN);
-    let collected = cx.call(Collect { run }, CALL)?;
-    let after = cpu(cx)?;
+    let report = collect(cx, run)?;
     let mut received = endpoint.close();
     received.echoes.sent = probes;
-    let Collected::Report(report) = collected else {
-        return Err(Failure::Fail(format!("the image's report: {collected:?}")));
-    };
     cx.measure(
         format!("{} {total_mbps} Mbit/s", mode.name()),
-        measurement(mode, total_mbps, &sent, &received, &report, &before, &after),
+        measurement(mode, total_mbps, &sent, &received, &report),
     );
     Ok(())
 }
 
-fn span_seconds(first: Option<u64>, last: Option<u64>) -> f64 {
-    match (first, last) {
-        (Some(first), Some(last)) => last.saturating_sub(first) as f64 / 1e6,
-        _ => 0.0,
-    }
-}
-
+/// One level's measurement. Throughput is over the measuring window: the
+/// image's window for what it received and sent, the host's own sending
+/// time for what the host sent, the image's window for what the host
+/// received (the image sends only within it). CPU is the image's, at the
+/// window's two ends.
 fn measurement(
     mode: Mode,
     total_mbps: u64,
     sent: &traffic::Sent,
     received: &traffic::Received,
     report: &Report,
-    before: &Load,
-    after: &Load,
 ) -> serde_json::Value {
     let directions = if mode == Mode::RxTx { 2 } else { 1 };
     let offered_each = round(total_mbps as f64 / directions as f64);
+    let window = report.window_end_us.saturating_sub(report.window_start_us) as f64 / 1e6;
     let mut value = serde_json::json!({
         "offered_total_mbps": total_mbps,
         "payload_bytes": PAYLOAD,
+        "window_s": round(window),
         "rtt": rtt(&received.echoes),
-        "cpu": utilisation(before, after),
+        "cpu": utilisation(&report.cpu_start, &report.cpu_end),
     });
     let mut sides = serde_json::Map::new();
     if mode != Mode::Tx {
         let device = &report.received;
-        let expected = device.highest.map_or(0, |highest| highest + 1);
-        sides.insert("rx".to_owned(), serde_json::json!({
-            "offered_mbps": offered_each,
-            "host_sent_mbps": mbps(sent.bytes, sent.elapsed.as_secs_f64()),
-            "host_sent_datagrams": sent.datagrams,
-            "host_send_failed": sent.failed,
-            "device_received_mbps": mbps(device.bytes, span_seconds(device.first_us, device.last_us)),
-            "device_received_datagrams": device.datagrams,
-            "lost": sent.datagrams.saturating_sub(device.datagrams),
-            "lost_below_highest": device.lost,
-            "lost_percent": round(100.0 * sent.datagrams.saturating_sub(device.datagrams) as f64
-                / sent.datagrams.max(1) as f64),
-            "reordered": device.reordered,
-            "duplicates": device.duplicates,
-            "foreign": device.foreign,
-            "highest_plus_one": expected,
-        }));
+        sides.insert(
+            "rx".to_owned(),
+            serde_json::json!({
+                "offered_mbps": offered_each,
+                "host_sent_mbps": mbps(sent.bytes, sent.elapsed.as_secs_f64()),
+                "host_sent_datagrams": sent.datagrams,
+                "host_send_failed": sent.failed,
+                "device_received_mbps": mbps(device.window_bytes, window),
+                "device_received_datagrams": device.datagrams,
+                "device_received_in_window": device.window_datagrams,
+                "lost": sent.datagrams.saturating_sub(device.datagrams),
+                "lost_percent": percent(sent.datagrams.saturating_sub(device.datagrams), sent.datagrams),
+                "lost_below_highest": device.lost,
+                "reordered": device.reordered,
+                "duplicates": device.duplicates,
+                "untracked": device.untracked,
+                "foreign": device.foreign,
+            }),
+        );
     }
     if mode != Mode::Rx {
         let host = &received.load;
         let device = &report.sent;
-        let seconds = match (host.first, host.last) {
-            (Some(first), Some(last)) => last.saturating_duration_since(first).as_secs_f64(),
-            _ => 0.0,
-        };
-        sides.insert("tx".to_owned(), serde_json::json!({
-            "offered_mbps": offered_each,
-            "device_sent_mbps": mbps(device.bytes, span_seconds(device.first_us, device.last_us)),
-            "device_sent_datagrams": device.datagrams,
-            "device_send_refused": device.refused,
-            "device_send_failed": device.failed,
-            "host_received_mbps": mbps(host.bytes, seconds),
-            "host_received_datagrams": host.datagrams,
-            "lost": device.datagrams.saturating_sub(host.datagrams),
-            "lost_percent": round(100.0 * device.datagrams.saturating_sub(host.datagrams) as f64
-                / device.datagrams.max(1) as f64),
-            "lost_below_highest": host.lost(),
-            "reordered": host.reordered,
-            "duplicates": host.duplicates,
-        }));
+        sides.insert(
+            "tx".to_owned(),
+            serde_json::json!({
+                "offered_mbps": offered_each,
+                "device_sent_mbps": mbps(device.bytes, window),
+                "device_sent_datagrams": device.datagrams,
+                "device_send_refused": device.refused,
+                "device_send_failed": device.failed,
+                "host_received_mbps": mbps(host.bytes, window),
+                "host_received_datagrams": host.datagrams,
+                "lost": device.datagrams.saturating_sub(host.datagrams),
+                "lost_percent": percent(device.datagrams.saturating_sub(host.datagrams), device.datagrams),
+                "lost_below_highest": host.lost(),
+                "reordered": host.reordered,
+                "duplicates": host.duplicates,
+                "untracked": host.untracked,
+            }),
+        );
     }
     if let Some(object) = value.as_object_mut() {
         object.extend(sides);
     }
     value
+}
+
+fn percent(part: u64, whole: u64) -> f64 {
+    round(100.0 * part as f64 / whole.max(1) as f64)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn throughput_is_over_the_window_not_between_the_first_and_last_datagram() {
+        let report = Report {
+            window_start_us: 1_000_000,
+            window_end_us: 6_000_000,
+            received: oer_services_load::Received {
+                // 65 Mbit in the window's first second, nothing after.
+                window_bytes: 65_000_000 / 8,
+                datagrams: 5804,
+                first_us: Some(1_000_000),
+                last_us: Some(2_000_000),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let sent = traffic::Sent {
+            datagrams: 5804,
+            bytes: 65_000_000 / 8,
+            failed: 0,
+            elapsed: Duration::from_secs(5),
+        };
+        let value = measurement(Mode::Rx, 65, &sent, &traffic::Received::default(), &report);
+        assert_eq!(value["window_s"], 5.0);
+        assert_eq!(value["rx"]["device_received_mbps"], 13.0);
+        assert!(value.get("tx").is_none());
+    }
+
+    #[test]
+    fn a_hart_s_busy_share_is_its_window_less_its_idle_time() {
+        let at = |now_us, idle_us, work_us| Load {
+            now_us,
+            harts: [oer_services_load::HartLoad { hart: 0, idle_us }]
+                .into_iter()
+                .collect(),
+            executors: [oer_services_load::ExecutorLoad {
+                executor: 1,
+                hart: 0,
+                level: 2,
+                work_us,
+            }]
+            .into_iter()
+            .collect(),
+        };
+        let value = utilisation(
+            &at(1_000_000, 400_000, 0),
+            &at(2_000_000, 1_000_000, 300_000),
+        );
+        assert_eq!(value["harts"][0]["busy_percent"], 40.0);
+        assert_eq!(value["executors"][0]["work_percent"], 30.0);
+    }
+
+    #[test]
+    fn levels_come_from_the_environment_list_or_stay_at_65_mbps_at_most() {
+        assert_eq!(LEVELS_MBPS.iter().max(), Some(&65));
+    }
 }

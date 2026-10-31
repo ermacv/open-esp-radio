@@ -24,7 +24,7 @@ use oer_lab_arbiter::readiness::Readiness;
 use serde::{Deserialize, Serialize};
 
 /// The protocol version; another one is refused.
-pub const PROTOCOL: u32 = 1;
+pub const PROTOCOL: u32 = 2;
 /// The token a command runs under: its client joins the lease the token
 /// belongs to, for no more than the token allows, instead of queueing.
 pub const LEASE_ENV: &str = "OER_LAB_LEASE";

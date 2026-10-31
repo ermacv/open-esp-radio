@@ -13,65 +13,15 @@ use std::{
 
 use oer_services_load::header::{self, Header};
 
-/// How far behind the highest sequence a late datagram is still told
-/// apart from a duplicate.
-const WINDOW: u64 = 128;
 /// How long the sender sleeps at most between two batches.
 const BATCH: Duration = Duration::from_millis(1);
 
-/// The count of one sequence of datagrams as they arrive.
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct Tally {
-    pub datagrams: u64,
-    pub bytes: u64,
-    pub reordered: u64,
-    pub duplicates: u64,
-    pub highest: Option<u64>,
-    /// Bit `n` stands for sequence `highest - n`.
-    seen: u128,
-    pub first: Option<Instant>,
-    pub last: Option<Instant>,
-}
-
-impl Tally {
-    pub fn count(&mut self, sequence: u64, bytes: usize, at: Instant) {
-        match self.highest {
-            Some(highest) if sequence <= highest => {
-                let behind = highest - sequence;
-                if behind >= WINDOW {
-                    // Too late to tell: counted as a late arrival.
-                    self.reordered += 1;
-                } else if self.seen & (1 << behind) != 0 {
-                    self.duplicates += 1;
-                    return;
-                } else {
-                    self.seen |= 1 << behind;
-                    self.reordered += 1;
-                }
-            }
-            highest => {
-                let ahead = highest.map_or(WINDOW, |highest| sequence - highest);
-                self.seen = if ahead >= WINDOW {
-                    0
-                } else {
-                    self.seen << ahead
-                };
-                self.seen |= 1;
-                self.highest = Some(sequence);
-            }
-        }
-        self.datagrams += 1;
-        self.bytes += bytes as u64;
-        self.first.get_or_insert(at);
-        self.last = Some(at);
-    }
-
-    /// Sequence numbers up to the highest that never arrived.
-    pub fn lost(&self) -> u64 {
-        self.highest
-            .map_or(0, |highest| (highest + 1).saturating_sub(self.datagrams))
-    }
-}
+/// The host's tally: 2^19 sequences, far more than the longest window
+/// sends (60 s at 65 Mbit/s of 1400-byte datagrams is about 350 000).
+pub type Tally = oer_services_load::tally::Tally<8192>;
+const _: () = if Tally::CAPACITY < 60 * 65_000_000 / (1400 * 8) {
+    panic!("the host tally covers the longest window");
+};
 
 /// The echo replies of the RTT probes.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -85,6 +35,9 @@ pub struct Echoes {
 #[derive(Clone, Debug, Default)]
 pub struct Received {
     pub load: Tally,
+    /// When the first and the last distinct load datagram arrived.
+    pub first: Option<Instant>,
+    pub last: Option<Instant>,
     pub echoes: Echoes,
     /// Datagrams of other runs or without a header.
     pub foreign: u64,
@@ -127,7 +80,12 @@ impl Endpoint {
                                 .push(now.saturating_sub(header.sent_us));
                         }
                         Some(header) if header.run == run && !header.echo_request => {
-                            received.load.count(header.sequence, length, at);
+                            use oer_services_load::tally::Arrival;
+                            let arrival = received.load.count(header.sequence, length as u64);
+                            if matches!(arrival, Arrival::New | Arrival::Late) {
+                                received.first.get_or_insert(at);
+                                received.last = Some(at);
+                            }
                         }
                         _ => received.foreign += 1,
                     }
@@ -150,11 +108,23 @@ impl Endpoint {
 
     /// Stop reading and return what arrived.
     pub fn close(mut self) -> Received {
+        self.stop_reading();
+        std::mem::take(&mut *self.received.lock().unwrap_or_else(PoisonError::into_inner))
+    }
+
+    fn stop_reading(&mut self) {
         self.stop.store(true, Ordering::Relaxed);
         if let Some(reader) = self.reader.take() {
             let _ = reader.join();
         }
-        std::mem::take(&mut *self.received.lock().unwrap_or_else(PoisonError::into_inner))
+    }
+}
+
+/// An endpoint left on an error stops its reader too: no thread keeps the
+/// socket.
+impl Drop for Endpoint {
+    fn drop(&mut self) {
+        self.stop_reading();
     }
 }
 
@@ -240,36 +210,4 @@ pub fn probe(
         std::thread::sleep(period);
     }
     sequence
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_tally_tells_loss_reordering_and_duplicates_apart() {
-        let at = Instant::now();
-        let mut tally = Tally::default();
-        for sequence in [0, 1, 2, 4, 3, 3, 7, 6] {
-            tally.count(sequence, 100, at);
-        }
-        assert_eq!(tally.datagrams, 7);
-        assert_eq!(tally.bytes, 700);
-        assert_eq!(tally.duplicates, 1);
-        assert_eq!(tally.reordered, 2, "3 after 4, 6 after 7");
-        assert_eq!(tally.highest, Some(7));
-        assert_eq!(tally.lost(), 1, "5 never came");
-    }
-
-    #[test]
-    fn a_jump_past_the_window_forgets_what_came_before() {
-        let at = Instant::now();
-        let mut tally = Tally::default();
-        tally.count(0, 1, at);
-        tally.count(1000, 1, at);
-        tally.count(999, 1, at);
-        assert_eq!(tally.duplicates, 0);
-        assert_eq!(tally.reordered, 1);
-        assert_eq!(tally.lost(), 998);
-    }
 }

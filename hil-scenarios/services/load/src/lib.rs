@@ -102,6 +102,10 @@ pub struct Collect {
 
 /// The answer to [`Collect`].
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+#[allow(
+    clippy::large_enum_variant,
+    reason = "a wire message of a no_std crate without allocation: the report goes by value"
+)]
 pub enum Collected {
     Report(Report),
     /// The run's window or drain has not ended yet.

@@ -395,6 +395,11 @@ pub struct Router {
     /// never applied or restored.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub read_only: Option<bool>,
+    /// Its address on the wired network this host reaches it by: the
+    /// gateway of this host's route to the station network, which a load
+    /// run checks.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lan_address: Option<std::net::Ipv4Addr>,
 }
 
 /// `[local_station]`: a station on this host: its interface, country,

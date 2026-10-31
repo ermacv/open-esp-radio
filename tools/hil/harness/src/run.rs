@@ -201,10 +201,12 @@ pub(crate) fn cases(
 pub(crate) fn results(
     scenario: &Scenario,
     board: &str,
-    unix: u64,
     outcomes: &[Outcome],
     measurements: &[Measurement],
 ) -> serde_json::Value {
+    let unix = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |elapsed| elapsed.as_secs());
     serde_json::json!({
         "scenario": scenario.name,
         "image": scenario.image,
