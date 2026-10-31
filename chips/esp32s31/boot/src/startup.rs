@@ -18,7 +18,7 @@ type WatchdogParts = (
 type Watchdogs =
     BootWatchdogs<watchdog::Mwdt0Registers, watchdog::RwdtRegisters, watchdog::SwdRegisters>;
 
-/// The existing 160 MHz S31 cold-start profile.
+/// The S31 cold-start profile, at the default CPU clock.
 pub struct S31;
 
 impl BootProfile for S31 {
@@ -45,7 +45,7 @@ impl BootProfile for S31 {
     const ENTROPY: oer_espressif_boot::drivers::entropy::Profile<boot::Bits<5>, boot::Bits<9>> =
         crate::ENTROPY;
     const CPU: boot::CpuClockProfile<boot::CpuRoot, boot::BusDividers, boot::CpllDividers> =
-        boot::CpuProfile::Mhz160.clock();
+        boot::CpuProfile::DEFAULT.clock();
     const CLOCK_WAITS: boot::ClockWaits = boot::CLOCK_WAITS;
     const PSRAM_WAITS: boot::PsramWaits = boot::PSRAM_WAITS;
     const CACHE: boot::CacheGeometry<boot::CacheMap> = boot::CACHE_GEOMETRY;
