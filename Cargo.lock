@@ -2995,6 +2995,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-services-wifi-station"
+version = "0.1.0"
+dependencies = [
+ "heapless",
+ "oer-hil-agent",
+ "oer-hil-protocol",
+ "postcard",
+ "postcard-schema",
+ "serde",
+]
+
+[[package]]
 name = "oer-sort"
 version = "0.1.0"
 
