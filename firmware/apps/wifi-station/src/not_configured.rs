@@ -32,7 +32,7 @@ oer_espressif_executor::tasks! {
 oer_espressif_staged_runtime::entry!(main, oer_esp32s31_hal::platform::Port);
 
 fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platform::Port>) -> ! {
-    let previous = panic::peek_previous::<oer_esp32s31_hal::platform::Port>();
+    let previous = panic::peek_previous();
     let Some(root) = Root::take() else {
         fail(oer_diagnostics::name!("root-taken"; 32));
     };
@@ -47,7 +47,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
                 let _reset_causes = oer_esp32s31_compose::reset_causes::read(hardware.reset_cause);
                 oer_esp32s31_compose::wifi_fault::report_previous();
                 let mut early = |bytes: &[u8]| {
-                    if usb_serial_jtag::early_text(bytes) {
+                    if usb_serial_jtag::early_text(bytes).is_whole() {
                         Ok(())
                     } else {
                         Err(())

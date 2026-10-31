@@ -56,7 +56,16 @@ facts at build time; the host checks read the same facts.
   SRAM through `zeroed_static!`; `OnceValue` derives its unpublished zero
   representation independently of its payload. The runtime's
   zero-sized hart token survives interrupt enable while stack-install authority
-  is consumed. Current images retain every task and waker on the boot hart.
+  is consumed. Each executor's tasks and wakers stay on its own hart;
+  boot-smoke runs an interrupt-mode executor on hart 1, with its own timer.
+  Statics that two harts share (a cross-hart signal's facts word, the
+  in-place request slot, the liveness seat, a secondary hart's launch
+  mailbox, the executor binding's storage of lines and counter latch, the
+  executors' interrupt-mode flags, and the time driver's assignments and
+  published deadlines) sit in critical SRAM (`placed_static!`,
+  `secondary_entry!`), and so do per-executor or per-comparator arrays
+  whose neighbouring entries contexts of different harts write (the
+  executors' current tasks, the time driver's slots and fired flags).
 
 Memory shared with hardware has its own layout, placement and ownership
 contracts: [Hardware memory](hardware-memory.md).
@@ -66,18 +75,28 @@ contracts: [Hardware memory](hardware-memory.md).
 - **Every image accounts for every hart** in the chip facts' `[interrupts] harts`.
   Each hart has a task stack and an interrupt stack. The policy
   (`[core.N.task_stack]`, `[core.N.interrupt_stack]`) declares both used
-  or both `unused = true`. Unused ranges link zero
-  bytes; the image gate rejects linked starters, routes or storage that
-  would use them. Every current S31 image runs on the boot hart and keeps
-  all secondary harts contained: the HAL stalls them, gates their clocks,
-  holds their resets and clears their ROM boot addresses
-  ([secondary boot](../chips/esp32s31/platform/README.md#secondary-hart-containment)). Staged entries
-  admit only the boot hart. The runtime's critical section masks only its
+  or both `unused = true`, or, for a secondary hart, both a launch template
+  (`launch = "declared"`): the hart runs only in an image that declares it
+  in `[package.metadata.open-radio] harts`, and is unused in every other.
+  Unused ranges link zero bytes; the image gate rejects linked starters,
+  routes or storage that would use them. The bootstrap contains every
+  secondary hart: it stalls them, gates their clocks, holds their resets and
+  clears their ROM boot addresses
+  ([secondary boot](../chips/esp32s31/platform/README.md#secondary-hart-launch-and-containment)),
+  and opens a declared hart's instruction bus after it published the
+  runtime's code, with the ROM's suspension and resumption of that hart's
+  instruction cache: the data cache keeps running and keeps the PSRAM lines
+  the bootstrap wrote. A declared hart starts during boot, before any executor,
+  through its generated entry, which installs its own PSRAM task stack and
+  calls the image's root for the hart (`secondary_entry!`); the boot hart's
+  staged entries admit only the boot hart. A secondary hart's task root,
+  interrupt handlers and exception root have complete stack bounds, and its
+  interrupt stack is sized by the image linker like the boot hart's. The runtime's critical section masks only its
   executing hart and takes no cross-hart lock
   ([critical-section rustdoc](../chips/espressif/staged-runtime/src/critical.rs)).
   The staged build/run check confines linked critical-section entry points to
-  the hart roots declared through `[package.metadata.open-radio] critical-section-hart`.
-  The public HAL cannot start or release a secondary hart.
+  the hart roots declared through `[package.metadata.open-radio] critical-section-hart`;
+  a secondary hart's roots must not reach it.
 - `oer-staged-runtime-stacks.x` is generated from the same hart geometry as
   the vectors. It places each task stack in PSRAM and each interrupt stack
   in SRAM, with exact-size, memory-range, alignment and guard assertions.
@@ -91,7 +110,10 @@ contracts: [Hardware memory](hardware-memory.md).
   must fit and unresolved sites are reported. Secondary task roots require
   complete bounds.
   Defaults cover the entire geometry, including explicit zeroes for contained
-  harts. See the [image linker](../tools/image/linker/README.md).
+  harts; a declared launch template takes its `launch_bytes` before a proven
+  bound sizes it, and its interrupt stack the contract maximum. The
+  stage-two header's used-hart word names every hart with a task stack, and
+  the image gate holds it to the policy. See the [image linker](../tools/image/linker/README.md).
 - The staged runtime exports `_runtime_exception_frames` from its trap policy.
   The IRQ bound adds that many complete exception entry/handler bounds above
   the per-level interrupt sum. Its reset gate permits one platform reset attempt;

@@ -5,8 +5,11 @@ It drives the sole RFC 3394 machine in `oer-crypto`: submit its owned input,
 wait through an owned timer, then feed back the output or a typed block error.
 The mode machine contains no async code. `compose::crypto::key_unwrap`
 builds the hardware engine for its one client: the Wi-Fi facade's station
-runner, which uses it for RSN key-data unwrap operations, or the HIL AES
-image (`hil-scenarios/images/esp32s31`), which serves it to the host.
+runner, which uses it for RSN key-data unwrap operations, the HIL AES
+image (`hil-scenarios/images/esp32s31`), which serves it to the host, or
+boot-smoke's hart-1 task, which unwraps RFC 3394 §4.1 for the boot hart. The
+engine runs on the hart its composition places the AES owner on; its timer
+waits are that hart's executor's timers.
 
 There is no sourced <=20 us completion bound in TRM v0.1 §10.5.3 or the
 pinned ESP-IDF 4d80c1b2 AES HAL. Every block therefore yields before its first

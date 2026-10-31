@@ -35,6 +35,9 @@ pub trait Registers {
 }
 
 /// AES and its exclusive crypto clock/reset word, split once from Root.
+/// The image's composition places it: the boot hart keeps it in `Hardware`,
+/// or the image moves it to a secondary hart through that hart's launch
+/// parts, whose router then gives the polling engine its `Silent` proof.
 pub struct AesParts {
     program: aes::AesProgram,
     clock: hp_sys_clkrst::CryptoClock,
@@ -161,5 +164,18 @@ impl Registers for AesRegisters {
     }
     fn read_block(&self) -> BlockWords {
         WORDS.map(|index| self.program.read_text_out(index).data())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    /// The image's composition places AES on a hart: the parts move by value
+    /// through a secondary hart's launch mailbox, and the polled owner and
+    /// its silence proof into that hart's task.
+    #[test]
+    fn aes_owners_move_to_the_hart_the_composition_places_them_on() {
+        fn movable<T: Send>() {}
+        movable::<super::AesParts>();
+        movable::<super::AesRegisters>();
     }
 }

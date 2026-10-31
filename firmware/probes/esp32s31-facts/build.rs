@@ -72,7 +72,7 @@ SECTIONS {{
 .rodata : ALIGN(4) {{ *(.rodata .rodata.*) }} > SRAM
 .data : ALIGN(4) {{ __global_pointer$ = . + 0x800; *(.sdata .sdata.*) *(.data .data.*) }} > SRAM
 .bss (NOLOAD) : ALIGN(4) {{ __bss_start = .; *(.sbss .sbss.*) *(.bss .bss.*) . = ALIGN(4); __bss_end = .; }} > SRAM
-.stacks (NOLOAD) : ALIGN(16) {{ __runtime_cpu0_irq_stack_bottom = .; . += 8192; __runtime_cpu0_irq_stack_top = .; __runtime_cpu0_task_stack_bottom = .; . += 16384; __runtime_cpu0_task_stack_top = .; }} > SRAM
+.stacks (NOLOAD) : ALIGN(16) {{ __runtime_cpu0_irq_stack_bottom = .; . += 8192; __runtime_cpu0_irq_stack_top = .; __runtime_cpu0_task_stack_bottom = .; . += 16384; __runtime_cpu0_task_stack_top = .; __facts_hart1_stack_bottom = .; . += 2048; __facts_hart1_stack_top = .; }} > SRAM
 .noinit (NOLOAD) : ALIGN(4) {{ KEEP(*(.noinit.facts)) }} > LP
 /DISCARD/ : {{ *(.eh_frame .eh_frame.*) }}
 }}
@@ -84,7 +84,7 @@ SECTIONS {{
     if std::env::var("CARGO_CFG_TARGET_ARCH")? == "riscv32" {
         println!("cargo:rustc-link-arg=-T{}", out.join("facts.x").display());
     }
-    for file in ["src/trap.rs", "src/trap.s"] {
+    for file in ["src/trap.rs", "src/trap.s", "src/hart1-entry.s"] {
         println!("cargo:rerun-if-changed={}", dir.join(file).display());
     }
     for file in [

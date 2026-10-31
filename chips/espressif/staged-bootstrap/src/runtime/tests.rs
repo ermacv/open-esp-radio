@@ -35,6 +35,7 @@ fn image() -> [u8; 64] {
         header_size: stage_two::HEADER_BYTES as u32,
         text_start: load_address + 48,
         text_end: load_address + 64,
+        harts: 1,
         payload_crc32: 0,
     };
     payload[..stage_two::HEADER_BYTES].copy_from_slice(&header.to_le_bytes());
@@ -126,6 +127,8 @@ fn malformed_header_ranges_are_rejected_before_copying() {
         |header: &mut RuntimeHeader| header.bss_end = LAYOUT.psram.end() + 1,
         |header: &mut RuntimeHeader| header.entry = header.text_end,
         |header: &mut RuntimeHeader| header.text_start = header.load_address,
+        |header: &mut RuntimeHeader| header.harts = 0,
+        |header: &mut RuntimeHeader| header.harts = 0b11,
     ] {
         let mut payload = image();
         let mut header = RuntimeHeader::from_le_bytes(&payload).expect("header");
@@ -225,4 +228,12 @@ fn xip_and_scratch_failures_keep_their_typed_reason_and_full_width_bounds() {
         boot_failure_record(FlashFailure::ScratchClaimed.into()),
         "OER_BOOT bootstrap=FAIL reason=flash-tuning-scratch-claimed\r\n",
     );
+}
+
+#[test]
+fn the_used_harts_are_a_constant_of_the_payload() {
+    const SHORT: u32 = runtime_harts(&[0; 4]);
+    assert_eq!(SHORT, 0, "a stand-in payload opens no secondary");
+    let payload = image();
+    assert_eq!(runtime_harts(&payload), 1);
 }

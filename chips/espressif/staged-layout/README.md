@@ -20,7 +20,8 @@ runtime PSRAM window through its header failure path.
 | Module | Owns |
 | --- | --- |
 | `memory` | `Region` and `Layout`: SRAM, Flash XIP, PSRAM and retained regions, the second-stage loader bound, the bootstrap PSRAM probe page, the MMU page, the image headers before the bootstrap's text, the handoff SRAM margin, the stage-two PSRAM window, stack sizes, hart count and the chip's ROM script |
-| `stage_two` | The little-endian image `Header`, its magic, ABI version and size, and the payload CRC-32 with the checksum field read as zero |
+| `stage_two` | The little-endian image `Header`, its magic, ABI version (2) and size, the used-hart word (`harts_of`: one bit per hart with a task stack, which the bootstrap reads as a constant), and the payload CRC-32 with the checksum field read as zero |
+| `handoff` | The stage-two handoff proof, a board's mapping adoption and `SecondaryEntry`, the generated entry a secondary hart's launch writes to its boot word (minted only by the runtime; the boot hart is refused at monomorphization) |
 | `zeroed` | The input sections the runtime linker script places in regions the boot zeroes |
 | `build` (feature `build`) | `configure_runtime` and `configure_bootstrap`, which link a binary with the shared scripts under [`linker`](linker) and the chip's ROM script, define every layout value as a `--defsym` symbol and keep the link's relocations (`--emit-relocs`) for the stack analysis |
 

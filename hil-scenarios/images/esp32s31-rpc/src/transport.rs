@@ -14,7 +14,7 @@ const MESSAGES: usize = 8;
 pub(crate) struct EarlyUsb;
 
 impl Immediate for EarlyUsb {
-    fn note(note: &oer_diagnostics::Note<'_>) -> bool {
+    fn note(note: &oer_diagnostics::Note<'_>) -> oer_diagnostics::Written {
         crate::usb::early(note)
     }
 

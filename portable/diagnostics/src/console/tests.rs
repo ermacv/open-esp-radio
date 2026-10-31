@@ -325,7 +325,7 @@ fn invalid_retained_text_writes_nothing_and_preserves_the_local_sequence() {
             bytes: 65
         }))
     );
-    assert_eq!(console.sequence, 42);
+    assert_eq!(console.sequence, Sequence::Own(42));
     assert!(bytes.is_empty());
 }
 
@@ -345,5 +345,57 @@ fn a_panic_sink_error_retains_its_value_and_consumes_the_sequence() {
         console.previous_panic(&panic),
         Err(record::EncodeError::Sink("sink"))
     );
-    assert_eq!(console.sequence, 0);
+    assert_eq!(console.sequence, Sequence::Own(0));
+}
+
+#[test]
+fn shared_consoles_and_notes_take_increasing_numbers_of_one_sequence() {
+    // The shared sequence is this boot's one counter; other tests may take
+    // numbers in between, so only the order is checked.
+    fn sequence_of(line: &[u8]) -> u32 {
+        let start = line
+            .windows(PREFIX.len())
+            .position(|window| window == PREFIX)
+            .expect("a frame")
+            + PREFIX.len();
+        let hex = core::str::from_utf8(&line[start..start + 8]).unwrap();
+        let bytes: Vec<u8> = (0..4)
+            .map(|i| u8::from_str_radix(&hex[2 * i..2 * i + 2], 16).unwrap())
+            .collect();
+        u32::from_le_bytes(bytes.try_into().unwrap())
+    }
+    let mut note = Vec::new();
+    crate::emit_note(&Note::placement_pass(), |bytes: &[u8]| {
+        note.extend_from_slice(bytes);
+        Ok::<(), ()>(())
+    })
+    .unwrap();
+    let mut first = Vec::new();
+    Console::shared(|bytes: &[u8]| {
+        first.extend_from_slice(bytes);
+        Ok::<(), ()>(())
+    })
+    .event(&BootSmokePassed)
+    .unwrap();
+    let mut second = Vec::new();
+    {
+        let mut console = Console::shared(|bytes: &[u8]| {
+            second.extend_from_slice(bytes);
+            Ok::<(), ()>(())
+        });
+        console.event(&BootSmokePassed).unwrap();
+        console.event(&BootSmokePassed).unwrap();
+    }
+    let lines: Vec<u32> = [&note, &first]
+        .into_iter()
+        .map(|bytes| sequence_of(bytes))
+        .chain(
+            second
+                .split(|&byte| byte == b'\n')
+                .filter(|line| line.windows(PREFIX.len()).any(|w| w == PREFIX))
+                .map(sequence_of),
+        )
+        .collect();
+    assert_eq!(lines.len(), 4);
+    assert!(lines.windows(2).all(|pair| pair[0] < pair[1]), "{lines:?}");
 }

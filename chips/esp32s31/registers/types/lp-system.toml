@@ -5,7 +5,7 @@ schema = 3
 [type]
 name = "LP_SYSTEM_REG"
 description = "Low-power system control and the HP core 1 boot handoff word."
-sources = ["ESP_IDF_4D59230D_S31_LP_SYSTEM_REG", "ROM_REV0_CORE_BOOT_ADDRESS", "HW1_S31_BOOT_ADDRESS_20261026", "HW1_S31_RESET_20261026"]
+sources = ["ESP_IDF_4D59230D_S31_LP_SYSTEM_REG", "ROM_REV0_CORE_BOOT_ADDRESS", "HW1_S31_BOOT_ADDRESS_20261026", "HW1_S31_RESET_20261026", "ESP_IDF_4D80C1B2_S31_ROM_RTC_SLEEP_WAKE_STUB", "ROM_REV0_SECONDARY_WAKE_STUB"]
 
 [review]
 sources = ["ESP_IDF_4D59230D_S31_LP_SYSTEM_REG"]
@@ -69,6 +69,17 @@ class = "write-one-to-clear"
 [[registers.fields]]
 name = "LP_SYSTEM_REG_SYSTIMER_STALL_SEL"
 bits = "31"
+class = "plain"
+
+[[registers]]
+name = "LP_SYSTEM_REG_LP_STORE8"
+offset = 0x4c
+description = "LP retention word 8, the light-sleep wake stub address (bits 31:2) and sleep mode (bit 0, deep sleep when set). On a secondary-hart reset entry the rev0 ROM jumps to bits 31:2 instead of its boot-address path when HP core 0's reset cause is 5 or 6, bit 0 is clear and the address is nonzero. SOURCE: ESP_IDF_4D80C1B2_S31_ROM_RTC_SLEEP_WAKE_STUB, ROM_REV0_SECONDARY_WAKE_STUB."
+reset = { value = 0 }
+
+[[registers.fields]]
+name = "LP_SYSTEM_REG_LP_SCRATCH8"
+bits = "31:0"
 class = "plain"
 
 [[registers]]

@@ -83,18 +83,97 @@ Constructing an executor or the doorbell consumes its line's typed block (`FROM_
 shared block: every context raises it through `&self`). Wakers raise the
 published line; only the line's handler lowers it, and it lowers it before it
 takes the work, so a raise during the work runs another round. A raise
-reads the line back. The time driver consumes `SystemTimer`, containing
+reads the line back. Every raise (`raise_interrupt`, `Doorbell::ring`)
+fences `w, o` after the raiser's published facts and before the device
+write, and every handler round (`serve`, the acknowledgers) lowers, fences
+`o, rw` and only then takes the facts: a memory fence alone orders no MMIO
+access. Across harts this order is conditional on two hardware
+preconditions the repository does not establish: the core honors the I/O
+bits of FENCE and the two harts' writes of one `HP_CPU_INT_FROM_CPU_n` word
+are serialized (H1), and a level last written 1 eventually pends on the
+receiving hart (H2).
+
+## Harts
+
+Each executor starts with its hart's `Hart<H>` (from that hart's interrupt
+enable) and const-checks that its table entry names hart `H`; an executor
+runs on any hart that has its own router, including a secondary hart's
+interrupt-mode executor on its own `FROM_CPU` line routed to that hart's
+bank. Each executor's running context, ready mask and task slots are its
+own, and its task wakers stay on its hart. A task on one hart reaches a
+task on another only by raising the other executor's `IrqSignal`, declared
+with a `FromPeerHart` raiser. [`peer`](src/peer.rs) carries one request and
+its answer between two such tasks over an `oer-memory` in-place request
+slot: a successful `post` creates the obligation of one answer by the
+deadline it names, which the client keeps across cancelled waits; the slot
+is `WORKING` only inside the server's call. The client returns an answer
+only when its own executor's timer, read after taking it, is still before
+the deadline; otherwise it ends in the terminal `PeerError::Expired` and
+stays quarantined: a late answer is never returned and nothing more posts.
+`PeerServer::serve_one` answers one request; work that waits (an AES
+operation on the server's timers) runs between two answers, on what the
+first one handed over, never inside the in-place call.
+
+[`peer::liveness`](src/peer/liveness.rs) is the durable supervision of a
+peer hart: the image declares a static seat, which `liveness::pair` claims
+once, and a never-ending supervisor task that owns it and its executor's
+timer. Every stated `Period` it posts a `Beat`, which the `Responder` task
+echoes within the stated deadline; an echo not taken before the deadline
+ends supervision with `LivenessError::Overdue` (its sequence, deadline and completed rounds), which
+the image records (`LivenessOverdue`) and resets on. A completed round
+proves that the responder's hart runs its executor and polls the responder
+and that both signals cross; it proves nothing about other drivers there.
+When the supervisor's executor stops, nothing supervises: the RTC watchdog
+that executor feeds remains the bound.
+
+The supervisor also watches the requests of its executor's clients
+([`peer::obligation`](src/peer/obligation.rs)). It owns a static
+`Obligations<N>` table, claimed once, and issues one seat per channel
+(`Supervisor::watch`), which `peer::pair` requires. The client publishes the
+request's deadline into its seat before the server sees the request and
+withdraws it only for an answer taken before the deadline; an expiry, a late
+answer, or a wait abandoned or never started leave it there. The supervisor
+wakes at the earliest watched deadline and at every seat write, during the
+beat's wait as between rounds, and ends with
+`LivenessError::RequestOverdue` (channel and deadline), which the image
+records (`PeerUnanswered`, last word 2) and resets on. Executor locality is
+checked: `post` and the discharge take the proof that the caller runs in
+the client executor's context (`signal::enter`), and the supervisor
+registers its waker only after proving that one of that executor's tasks
+polls (`signal::enter_task`); outside it, `post` returns
+`PostError::Foreign` before publishing anything. A seat keeps its posted
+flag apart from the deadline, so every `Instant` is watched unchanged; the
+64-bit deadline is read whole or skipped and read again after the writer's
+wake.
+
+The time driver consumes `SystemTimer`, containing
 the running timer's disjoint owners from the reset root: our comparator writer, three alarm
 acknowledgers that each strobe their own bit of the shared
 acknowledgement block, and the shared counter latch, which every context
-reads through `oer-espressif-boot::drivers::system_timer`: strobe, 64 bounded
+of every hart reads through `oer-espressif-boot::drivers::system_timer`: strobe, 64 bounded
 VALID polls per settle, then up to 16 LO/HI/LO rounds, retaining a
-monotonic floor when preempting strobes prevent verification. The binding
+monotonic floor when other strobes (a preempting context's, or another
+hart's between any two accesses) prevent verification. The binding
 requires the family driver's latch atoms on the platform port's counter owner;
 HAL performs no retry. S31 selects 16 ticks per microsecond. Alarm
 interrupts never borrow the comparator writer or a task's timer queue.
 Successful `init` returns the affine, hart-local `TimeDriverReady<B>` authority;
 each additional `bind` borrows it. A timer binding cannot precede initialization.
+An executor on another hart gets its comparator through `grant`, which
+borrows the same authority on the writer's hart, publishes the assignment
+and binds the comparator in the writer's bank, and returns an affine,
+`Send` `AlarmGrant<B, SWI, Entry>`; on the alarm entry's hart,
+`AlarmGrant::bind(&Hart<H>, router)` checks the entry's hart against `H` at
+compile time and routes the alarm with that hart's router. The alarm's
+handler there acknowledges only its own bit; the writer remains the one
+writer of the SYSTIMER configuration. That executor's timer latency past a
+deadline adds, as stated parts and not measured numbers, the cross-hart
+raise of its publication, the writer's preemption on its hart and the
+writer executor's round in progress, since the writer programs published
+deadlines when it serves its timers at the start of a round. The time
+driver's statics that contexts of different harts touch, the executors'
+`CURRENT` and interrupt-mode flags and the binding's storage sit in critical
+SRAM (`placed_static!`).
 Software line identities use `SoftwareInterrupt`, and comparator selection uses
 the platform's `Comparator`; fixed source numbers are checked in const contexts.
 
@@ -108,7 +187,7 @@ claims hardware.
 
 ## Setup and invariant failures
 
-`init`, `bind`, `ComparatorWriter::adopt`, `InterruptExecutor::start` and
+`init`, `bind`, `AlarmGrant::bind`, `ComparatorWriter::adopt`, `InterruptExecutor::start` and
 `Executor::run` return `Result` for counter-latch and routing refusals. A
 `Failure<P, T>` retains its inputs in quarantine even when dropped; the image
 calls its never-returning `reset` to record the named `Fault` through the

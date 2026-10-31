@@ -112,7 +112,10 @@ macro_rules! bind {
             type Port = $port;
             #[inline(always)]
             fn storage() -> &'static $crate::Storage<$port> {
-                static STORAGE: $crate::Storage<$port> = $crate::Storage::new();
+                // Every hart reads the lines and the counter latch.
+                $crate::__bind::placed_static! {
+                    static STORAGE: $crate::Storage<$port> = $crate::Storage::new(), in critical_data "executor_binding";
+                }
                 &STORAGE
             }
             #[inline(always)]

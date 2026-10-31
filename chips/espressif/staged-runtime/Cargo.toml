@@ -15,6 +15,7 @@ oer-espressif-boot = { path = "../boot" }
 oer-espressif-staged-layout.workspace = true
 oer-memory = { path = "../../../portable/memory" }
 oer-riscv = { path = "../../../portable/riscv" }
+oer-time = { path = "../../../portable/time" }
 oer-espressif-interrupt-table = { path = "../interrupt-table" }
 # The chip the HAL selects reaches the build script as this package's
 # `chip` metadata; the fatal path's primitives are its `Platform`.
@@ -28,7 +29,6 @@ oer-espressif-facts = { path = "../facts" }
 
 [dev-dependencies]
 tempfile = "=3.27.0"
-oer-time = { path = "../../../portable/time" }
 oer-time-virtual = { path = "../../../portable/time-virtual" }
 oer-test-ui-cases = { path = "../../../tools/test/ui-cases" }
 oer-espressif-watchdog = { path = "../watchdog" }

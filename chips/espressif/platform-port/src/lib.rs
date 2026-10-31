@@ -31,9 +31,16 @@
 //!   debugger reads and its owned blocks: the software interrupt lines
 //!   ([`SoftwareLine`]), the counter owner (the binding requires its family
 //!   driver's latch atoms), the comparators ([`Comparators`]) and their alarm
-//!   parts ([`AlarmPart`]).
+//!   parts ([`AlarmPart`]);
+//! - [`SecondaryStart`]: the release of a secondary hart into the staged
+//!   runtime's generated entry ([`SecondaryEntry`]), consuming the root's
+//!   one-shot launch permit, the retirement of its ROM boot word and the
+//!   hand-over of its interrupt grant, which only the hart itself makes into
+//!   its controller.
 
 use oer_mmio::InterruptSource;
+
+pub use oer_espressif_staged_layout::handoff::SecondaryEntry;
 
 #[cfg(chip_geometry)]
 mod geometry {
@@ -46,9 +53,12 @@ pub use geometry::{BOOT_HART, HARTS, Hart, InvalidHart, SecondaryHart};
 /// the console.
 pub trait EarlyText {
     /// Writes `bytes` as they are, or drops and counts them while another
-    /// record holds the console; it never waits beyond the writer's
-    /// per-record budget. `false` once a driver or the fatal path took the
-    /// console for good.
+    /// record holds the console or before it exists; it never waits beyond
+    /// the writer's per-record budget. `true` only when every byte went out
+    /// (the FIFO took them and sending started): a caller acknowledges what
+    /// it reports, such as a retained record, only then. `false` for a
+    /// dropped record, a dropped tail, and once a driver or the fatal path
+    /// took the console for good.
     fn text(bytes: &[u8]) -> bool;
 }
 
@@ -148,6 +158,82 @@ pub trait Platform: EarlyText + 'static {
     /// Reset the chip from `fatal`'s path. It returns only when the reset
     /// could not be prepared and is left to the armed watchdog.
     fn software_reset(fatal: Self::Fatal<'_>) -> AwaitWatchdog<Self::StopError>;
+}
+
+/// A secondary hart's release, which the staged runtime's launch orders
+/// around its handshake. The chip HAL checks the hart's preconditions,
+/// disconnects its interrupt routes and releases it into `entry`, consuming
+/// the root's one-shot `Permit`; the runtime then waits for the entry, retires
+/// the boot word and acknowledges. No other path starts a hart.
+#[cfg(chip_geometry)]
+pub trait SecondaryStart: Platform {
+    /// The cores' owner, on the boot hart.
+    type Cores;
+    /// The root's one-shot authority to launch a secondary hart.
+    type Permit;
+    /// What the preconditions read besides the owned words (the reset causes).
+    type Preconditions: Copy;
+    /// A released hart's retained owners (its interrupt grant until the
+    /// runtime hands it to the hart).
+    type Released;
+    /// A refused or unconfirmed step, with its observations.
+    type StartError: Copy;
+    /// A released hart's interrupt grant: its route bank and its own local
+    /// interrupt controller's parts, inert until the hart makes its
+    /// controller from them.
+    type Interrupts: Send;
+    /// A secondary hart's interrupt controller, which only that hart makes
+    /// and which never leaves it.
+    type Controller;
+
+    /// Check the preconditions and release `entry`'s hart into it; the boot
+    /// word is written last.
+    ///
+    /// # Errors
+    ///
+    /// A refused precondition leaves the hart held and its boot word zero; an
+    /// unconfirmed release step returns its observation.
+    fn release(
+        cores: &mut Self::Cores,
+        permit: Self::Permit,
+        preconditions: Self::Preconditions,
+        entry: SecondaryEntry,
+    ) -> Result<Self::Released, Self::StartError>;
+
+    /// Clear the released hart's boot word and read it back as zero, so the
+    /// ROM cannot enter the hart's entry again.
+    ///
+    /// # Errors
+    ///
+    /// The word read back nonzero, or the words are unavailable.
+    fn retire_boot_word(
+        cores: &mut Self::Cores,
+        released: &mut Self::Released,
+    ) -> Result<(), Self::StartError>;
+
+    /// A refused step's code and observations, for the retained record.
+    fn observations(error: Self::StartError) -> [u32; 3];
+
+    /// Move the released hart's interrupt grant out, once; `None` after.
+    fn interrupts(released: &mut Self::Released) -> Option<Self::Interrupts>;
+
+    /// Make the hart's interrupt controller from its grant, on the hart
+    /// itself: its local controller is reachable only from its own hart.
+    ///
+    /// # Errors
+    ///
+    /// [`ForeignHart`] on another hart than the grant's; nothing is written.
+    fn controller(interrupts: Self::Interrupts) -> Result<Self::Controller, ForeignHart>;
+}
+
+/// An interrupt grant made into a controller on another hart than its own:
+/// its local controller's words would reach the running hart's controller.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ForeignHart {
+    /// The hart that ran the call.
+    pub actual: usize,
+    /// The grant's hart.
+    pub expected: usize,
 }
 
 /// The executor's platform: the source identities of the software

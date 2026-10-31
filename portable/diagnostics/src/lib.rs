@@ -39,10 +39,13 @@ pub mod text;
 pub use console::{
     Console, DecodeError, MAX_NOTE_LINE, PREFIX, decode, emit_note, emit_previous_panic,
 };
-pub use fifo::{Fifo, FifoWriter, Lost, Patience};
+pub use fifo::{Fifo, FifoWriter, Lost, Patience, Written};
 pub use note::{Note, Topic};
 pub use path::{DiagPath, DiagnosticPath};
-pub use record::{BootSmokePassed, MAX_PAYLOAD, PreviousPanic, Record};
+pub use record::{
+    BootSmokePassed, HartAes, HartExchange, HartLiveness, MAX_PAYLOAD, PreviousPanic, Record,
+    SecondaryReady,
+};
 pub use text::Name;
 
 #[cfg(test)]

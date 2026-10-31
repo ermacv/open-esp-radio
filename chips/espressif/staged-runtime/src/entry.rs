@@ -1,6 +1,7 @@
 // Stage two does not return through the bootloader reset entry. It owns data,
 // BSS, the SRAM interrupt closure and vector registers, and initializes each
-// one before entering Rust or enabling interrupts. It runs on the facts-defined boot hart only.
+// one before entering Rust or enabling interrupts. It runs on the facts-defined
+// boot hart only; a secondary hart enters only through its generated entry.
 core::arch::global_asm!(
     r#"
     .section .text._start, "ax", @progbits
@@ -103,10 +104,11 @@ _runtime_start:
     .option pop
     call _runtime_enable_fpu
     tail runtime_main
-    // Only the facts-defined boot hart runs the runtime:
-    // a stale boot address that ROM hands to another hart stops here, before
-    // the hart touches data, the stacks or any peripheral. It spins: the
-    // handoff scan decodes no `wfi`.
+    // Only the facts-defined boot hart runs the runtime from here: a
+    // secondary hart's boot word names only its own generated entry
+    // (`_runtime_start_h<N>`, below) or zero, so a stale address that ROM
+    // hands to another hart stops here, before the hart touches data, the
+    // stacks or any peripheral. It spins: the handoff scan decodes no `wfi`.
 99:
     j 99b
     .size _runtime_start, . - _runtime_start
@@ -152,3 +154,115 @@ _runtime_enable_fpu:
     .size _runtime_enable_fpu, . - _runtime_enable_fpu
 "#
 );
+
+// A secondary hart's entry, instantiated once per secondary hart from the chip
+// facts (`secondary.s`, after the PMA program it expands). The ROM's `main`
+// path jumps here with interrupts enabled, its own trap vector and stack. The
+// entry touches no stack and no data but the SRAM handshake until it installs
+// its own: it masks interrupts with its first instruction, installs its
+// 64-byte aligned fault stub (keeping the inherited vector mode), reports
+// ENTERED and waits for the boot hart's ACK, which follows the boot word's
+// retirement. It then refuses any PMP entry, disables every PMA entry and
+// programs the chip's chain with a read-back of each write, synchronizes its
+// instruction fetch, installs `gp`, its PSRAM task stack and the FPU, and
+// tail-calls its Rust root. It never initializes data or BSS: the boot hart
+// did. Any fault stores its kind and observations, then FAULT, and waits.
+// The section is not kept: an image that never launches the hart links none
+// of it.
+#[cfg(chip_vectors)]
+core::arch::global_asm!(
+    r#"
+    .macro SECONDARY_ENTRY hart
+    .pushsection .rwtext.secondary_h\hart, "ax", @progbits
+    .balign 64
+    .global _runtime_secondary_fault_h\hart
+    .type _runtime_secondary_fault_h\hart, @function
+_runtime_secondary_fault_h\hart:
+    li a0, {kind_exception}
+    csrr a1, mcause
+    csrr t0, mepc
+    csrr t1, mtval
+    .size _runtime_secondary_fault_h\hart, . - _runtime_secondary_fault_h\hart
+    .global _runtime_secondary_report_h\hart
+    .type _runtime_secondary_report_h\hart, @function
+_runtime_secondary_report_h\hart:
+    la t2, {handshake}
+    sw a0, {kind}(t2)
+    sw a1, {cause}(t2)
+    sw t0, {pc}(t2)
+    sw t1, {value}(t2)
+    fence w, w
+    li t3, {fault}
+    sw t3, {ready}(t2)
+1:
+    wfi
+    j 1b
+    .size _runtime_secondary_report_h\hart, . - _runtime_secondary_report_h\hart
+
+    .balign 4
+    .global _runtime_start_h\hart
+    .type _runtime_start_h\hart, @function
+_runtime_start_h\hart:
+    csrrci zero, mstatus, {mie}
+    csrr t0, mtvec
+    andi t0, t0, 3
+    la t1, _runtime_secondary_fault_h\hart
+    or t1, t1, t0
+    csrw mtvec, t1
+    la t2, {handshake}
+    li t3, {entered_value}
+    sw t3, {entered}(t2)
+    li t4, {ack_value}
+2:
+    lw t3, {ack}(t2)
+    bne t3, t4, 2b
+    fence r, iorw
+    li a0, {kind_pmp}
+    li t0, 0
+    li a1, 0
+    csrr t1, pmpcfg0
+    bne t1, t0, _runtime_secondary_report_h\hart
+    li a1, 1
+    csrr t1, pmpcfg1
+    bne t1, t0, _runtime_secondary_report_h\hart
+    li a1, 2
+    csrr t1, pmpcfg2
+    bne t1, t0, _runtime_secondary_report_h\hart
+    li a1, 3
+    csrr t1, pmpcfg3
+    bne t1, t0, _runtime_secondary_report_h\hart
+    PMA_PROGRAM _runtime_secondary_report_h\hart, {kind_pma}
+    fence.i
+    .option push
+    .option norelax
+    la gp, __global_pointer$
+    .option pop
+    la sp, __runtime_cpu\hart\()_task_stack_top
+    call _runtime_enable_fpu
+    tail runtime_secondary_main_h\hart
+    .size _runtime_start_h\hart, . - _runtime_start_h\hart
+    .popsection
+    .endm
+"#,
+    include_str!(concat!(env!("OUT_DIR"), "/secondary.s")),
+    handshake = sym crate::secondary::HANDSHAKE,
+    mie = const oer_riscv::machine::status::MIE,
+    entered = const core::mem::offset_of!(crate::secondary::Handshake, entered),
+    ack = const core::mem::offset_of!(crate::secondary::Handshake, ack),
+    ready = const core::mem::offset_of!(crate::secondary::Handshake, ready),
+    kind = const core::mem::offset_of!(crate::secondary::Handshake, kind),
+    cause = const core::mem::offset_of!(crate::secondary::Handshake, cause),
+    pc = const core::mem::offset_of!(crate::secondary::Handshake, pc),
+    value = const core::mem::offset_of!(crate::secondary::Handshake, value),
+    entered_value = const crate::secondary::ENTERED,
+    ack_value = const crate::secondary::ACK,
+    fault = const crate::secondary::FAULT,
+    kind_exception = const crate::secondary::KIND_EXCEPTION,
+    kind_pmp = const crate::secondary::KIND_PMP,
+    kind_pma = const crate::secondary::KIND_PMA,
+);
+
+// Each secondary hart's entry marker, its one `SecondaryEntry` mint and its
+// Rust root, generated from the chip's hart geometry.
+#[cfg(chip_vectors)]
+include!(concat!(env!("OUT_DIR"), "/secondary.rs"));

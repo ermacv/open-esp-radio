@@ -1,6 +1,7 @@
-//! The chip's HP cores (harts): the cores' owner ([`Cores`]), the fatal
-//! path's stop of every other hart ([`StopTheWorld`]) and the chip's software
-//! reset ([`software_reset`]).
+//! The chip's HP cores (harts): the cores' owner ([`Cores`]), a secondary
+//! hart's one-shot start ([`Cores::start_secondary`], with the runtime root's
+//! [`LaunchPermit`]), the fatal path's stop of every other hart
+//! ([`StopTheWorld`]) and the chip's software reset ([`software_reset`]).
 //!
 //! The reset root installs the core-control words once ([`install`]) in one
 //! [`ClaimCell`], whose state only a compare-and-swap changes and nothing
@@ -62,8 +63,12 @@ use oer_mmio::Placement;
 use crate::platform::core_control::{CoreControlRegisters, Uart0ClockRegisters};
 pub use crate::platform::{BOOT_HART, HARTS, Hart, SecondaryHart};
 
+mod launch;
 #[cfg(test)]
 mod tests;
+
+pub use launch::{LaunchPermit, Released, StartError};
+pub use oer_espressif_platform_port::SecondaryEntry;
 
 /// Keeps a value on the hart that made it: not `Send`.
 type ThisHart = PhantomData<*const ()>;
@@ -177,6 +182,44 @@ impl Cores {
     pub fn stall(&mut self, hart: SecondaryHart) -> Result<(), CoresError> {
         self.operate(|words| driver::stall(words, hart.hart(), STALL_POLLS))?
             .map_err(|Unconfirmed| CoresError::Unconfirmed)
+    }
+
+    /// Start a held secondary hart in `entry`, the staged runtime's generated
+    /// entry of that hart, consuming the root's one-shot `permit`. In order:
+    /// the hart is held; its instruction bus and the shared data bus reach
+    /// the cache; the ROM takes its boot-word path, not the light-sleep wake
+    /// stub (`causes` and `LP_STORE8`); every connected route of its bank is
+    /// disconnected; the ROM's printf slots are cleared; then the hart is
+    /// released, its boot word written last. The caller retires the boot word
+    /// ([`Self::retire_boot_word`]) once the hart reports its entry.
+    ///
+    /// # Errors
+    ///
+    /// [`StartError`] with its observations. A refusal before the release
+    /// leaves the hart held and its boot word zero; the permit is consumed
+    /// either way, so its owners stay out of reach until reset.
+    #[inline(never)]
+    pub fn start_secondary(
+        &mut self,
+        permit: LaunchPermit,
+        causes: crate::peripherals::reset_cause::ResetCauses,
+        entry: SecondaryEntry,
+    ) -> Result<Released, StartError> {
+        launch::start_with(&CORE_CONTROL, permit, causes, entry, || {
+            #[cfg(target_arch = "riscv32")]
+            crate::rom::clear_printf_slots();
+        })
+    }
+
+    /// Clear a released hart's boot word and read it back as zero, so the ROM
+    /// cannot enter its entry a second time.
+    ///
+    /// # Errors
+    ///
+    /// [`StartError::BootWordKept`] with the value read back, or
+    /// [`StartError::Cores`] when the words are unavailable.
+    pub fn retire_boot_word(&mut self, released: &mut Released) -> Result<(), StartError> {
+        launch::retire_with(&CORE_CONTROL, released)
     }
 
     /// Let a secondary hart run and wait for the hardware to report it no longer

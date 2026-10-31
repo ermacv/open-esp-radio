@@ -85,12 +85,12 @@ pub fn configure_runtime(
 ) -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     for (hart, &default_task) in layout.task_stack_bytes.iter().enumerate() {
         let task = stack_allocation("TASK", hart, default_task, layout.psram.length())?;
-        let default_irq = if default_task == 0 {
-            0
-        } else {
-            layout.irq_stack_bytes
-        };
-        let irq = stack_allocation("IRQ", hart, default_irq, layout.sram.length())?;
+        let irq = stack_allocation(
+            "IRQ",
+            hart,
+            irq_default(task, layout.irq_stack_bytes),
+            layout.sram.length(),
+        )?;
         defsym(bin, &std::format!("TASK_STACK_HART{hart}_BYTES"), task);
         defsym(bin, &std::format!("IRQ_STACK_HART{hart}_BYTES"), irq);
     }
@@ -135,6 +135,13 @@ pub fn configure_runtime(
         println!("cargo:rustc-link-arg-bin={bin}={argument}");
     }
     Ok(())
+}
+
+/// A hart's interrupt allocation without an explicit one: the contract
+/// `maximum` for a hart with a task stack (the resolved `task` allocation,
+/// the image's included), none for a hart without.
+fn irq_default(task: u32, maximum: u32) -> u32 {
+    if task == 0 { 0 } else { maximum }
 }
 
 fn stack_allocation(
@@ -254,6 +261,14 @@ mod tests {
         for value in ["", "-1", "17", "16777216", "4294967296"] {
             assert!(image_stack_bytes(value, 1 << 24).is_err(), "{value}");
         }
+    }
+
+    #[test]
+    fn the_interrupt_default_follows_the_resolved_task_allocation() {
+        // An image allocation of a hart whose default is zero still gets its
+        // interrupt stack; a hart without a task stack gets none.
+        assert_eq!(irq_default(0x4000, 0x8000), 0x8000);
+        assert_eq!(irq_default(0, 0x8000), 0);
     }
 
     #[test]

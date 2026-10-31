@@ -265,7 +265,7 @@ pub(crate) fn report_previous() {
         let _reported = slot.report(|view| {
             let payload: Payload = view.decode(Domain::Hil).map_err(|_| ())?;
             report_payload(payload, |note| {
-                crate::usb::early(note).then_some(()).ok_or(())
+                crate::usb::early(note).is_whole().then_some(()).ok_or(())
             })
         });
     }

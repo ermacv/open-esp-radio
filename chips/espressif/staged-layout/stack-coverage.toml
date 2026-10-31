@@ -15,6 +15,12 @@ source = "chips/espressif/staged-runtime/src/entry.rs"
 reason = "Assembly boot entry and FPU enable run before normal tasks; no compiler frame is claimed."
 
 [[reviewed]]
+symbols = ["_runtime_start_h1", "_runtime_secondary_fault_h1", "_runtime_secondary_report_h1"]
+category = "assembly"
+source = "chips/espressif/staged-runtime/src/entry.rs"
+reason = "Each secondary hart's generated entry (`SECONDARY_ENTRY`), its fault stub and its fault report run before the hart has a stack: they store only to the SRAM handshake and CSRs, install the hart's own PSRAM task stack and tail-call its Rust root `runtime_secondary_main_h<N>`, which the stack analysis bounds. No compiler frame is claimed."
+
+[[reviewed]]
 symbols = ["strlen", "memcpy", "compiler_builtins::mem::memcpy", "memset", "memcmp", "memmove", "compiler_builtins::mem::memmove"]
 category = "compiler-runtime"
 source = "rustc 1.97.1 library/compiler-builtins/compiler-builtins/src/mem/mod.rs and src/macros.rs"

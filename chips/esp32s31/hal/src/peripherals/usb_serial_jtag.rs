@@ -22,7 +22,7 @@
 
 use core::marker::PhantomData;
 
-use oer_diagnostics::Note;
+use oer_diagnostics::{Note, Written};
 use oer_esp32s31_pac::{
     instances,
     ownership::UsbSerialJtagPeripherals,
@@ -227,17 +227,17 @@ fn install_in<T: Console>(ownership: &Ownership<T>, registers: T) -> Result<(), 
 }
 
 /// Writes `note` as one `OER-DIAG:01` line through the early writer, or
-/// drops and counts it while another record holds the block. Returns
-/// `false` once the driver or the fatal path took the block: the driver
-/// writes notes after [`retire_early_writer`].
-pub fn early_note(note: &Note<'_>) -> bool {
+/// drops and counts it while another record holds the block or before the
+/// root installed the parts. Only [`Written::Whole`] acknowledges the note;
+/// [`Written::Retired`] means the driver or the fatal path took the block:
+/// the driver writes notes after [`retire_early_writer`].
+pub fn early_note(note: &Note<'_>) -> Written {
     OWNERSHIP.write(|writer| writer.note(note))
 }
 
-/// Writes `bytes` as they are, for the bootstrap's `OER_BOOT` lines, or
-/// drops and counts them while another record holds the block. Returns
-/// `false` once the driver or the fatal path took the block.
-pub fn early_text(bytes: &[u8]) -> bool {
+/// Writes `bytes` as they are, for the bootstrap's `OER_BOOT` lines, with
+/// the outcomes of [`early_note`].
+pub fn early_text(bytes: &[u8]) -> Written {
     OWNERSHIP.write(|writer| writer.text(bytes))
 }
 

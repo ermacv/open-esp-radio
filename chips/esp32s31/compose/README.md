@@ -10,6 +10,17 @@ owned partitions; they do not claim replacement hardware or hide a fallback.
 `phy_fault::Failure` carries a copied failure observation to an image-selected
 retained reset, without exposing the HAL's fault type in the Wi-Fi API.
 
+`secondary::launch_hart1` starts hart 1 during boot under its own deadline
+on the time driver's clock: it takes the installed time driver's
+`TimeDriverReady` as the proof that the counter latch is checked and
+published, so an image initializes its timers, and may grant hart 1's
+executor its comparator (`oer_espressif_executor::grant`), before the
+launch hands hart 1 its parts. The image's composition places hardware on
+hart 1 by moving it into those parts: boot-smoke moves `AesParts` and builds
+`crypto::key_unwrap` there over hart 1's router's `Silent` proof, which
+holds because every hart's router silences its own bank at install; images
+that do not launch hart 1 keep AES on the boot hart.
+
 `console::Binding` mounts the family USB driver on image-selected interrupt and
 executor entries. The nominal `Console` implements async Read/Write, and `Pads`
 retains the independent right to disconnect USB. Early output and lost-record

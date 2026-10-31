@@ -977,6 +977,14 @@ What a write does with the lanes it does not set:
   never stands where one source is expected. A
   part that reaches an 8- or 16-bit word is refused: owners reach 32-bit
   words only.
+- **Hart-local claims.** A part or division on a `hart-local` instance is
+  claimed once per hart: its partition member is
+  `[Owner; super::HARTS]`, element `h` hart `h`'s own copy, accessed only
+  on hart `h`. `Claims` lists its claim once per hart, hart 0 first. The
+  ownership module then has one `disjoint_blocks` check per hart context,
+  over every other block and that hart's hart-local blocks, so two harts'
+  copies at one address are never compared. A `shared` part on a
+  hart-local instance is refused.
 - **Policy items.** Only the items field accessors cannot express render:
   `whole-word` fixed images, each `whole-word` step of a fixed sequence
   (one method per image, `<sequence>_<element>`; the HAL orders the
@@ -1110,6 +1118,14 @@ complete reset images of a top-level register family; list length and reset
 geometry must agree with the family. The common reset still governs reserved-bit writes.
 An instance may have `dim`, expanding its `%s` name and base by the given
 count and byte stride before overlap and ownership validation.
+
+An instance may be `hart-local = { sources = [...] }`: each hart reaches
+its own copy of the instance's words at the same address (the S31 CLIC).
+The sources are checked like the instance's others and may not be empty;
+the root must name `hart-facts`, and an instance with `dim` is refused.
+Overlap validation is unchanged: one instance, one address range. The
+PAC claims each of its parts and divisions once per hart
+([Owners](#owners-names-and-policy-items)).
 
 A native plain/read-only field may have `dim = { count = "harts", stride = -8 }`:
 its `%s` name expands from zero, its `bits` select the first lane, and the

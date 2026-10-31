@@ -17,11 +17,22 @@ pub struct FromExecutorLevel<E>(PhantomData<E>);
 /// A task of executor `X`, whose interrupt or thread-wake entry is `E`.
 pub struct FromTask<X, E>(PhantomData<(X, E)>);
 
+/// A task of executor `X` (interrupt or thread-wake entry `E`) on another
+/// hart than the receiving executor's. No level relation holds across harts:
+/// the raise only publishes facts and pends the receiver, whose own handler
+/// alone lowers its line and services them. The raiser never calls the
+/// receiver's waker; wakers stay on their executor's hart.
+pub struct FromPeerHart<X, E>(PhantomData<(X, E)>);
+
 mod sealed {
     pub trait Sealed {}
     impl<E: crate::Entry> Sealed for super::FromHandler<E> {}
     impl<E: crate::Entry> Sealed for super::FromExecutorLevel<E> {}
     impl<X: super::SignalExecutor, E: crate::Entry> Sealed for super::FromTask<X, E> where
+        E::Part: crate::InterruptSource
+    {
+    }
+    impl<X: super::SignalExecutor, E: crate::Entry> Sealed for super::FromPeerHart<X, E> where
         E::Part: crate::InterruptSource
     {
     }
@@ -41,6 +52,7 @@ pub enum Raising {
     Handler(Context),
     ExecutorLevel(Context),
     Task(Context),
+    PeerHart(Context),
     Pair(&'static Raising, &'static Raising),
 }
 
@@ -63,6 +75,13 @@ where
     E::Part: InterruptSource,
 {
     const CONTEXTS: Raising = Raising::Task(executor_context::<X, E>());
+}
+
+impl<X: SignalExecutor, E: Entry> Raisers for FromPeerHart<X, E>
+where
+    E::Part: InterruptSource,
+{
+    const CONTEXTS: Raising = Raising::PeerHart(executor_context::<X, E>());
 }
 
 impl<A: Raisers, B: Raisers> Raisers for (A, B) {
@@ -127,6 +146,12 @@ impl Raising {
                 assert!(
                     from.level == executor.level,
                     "a same-level signal handler must be on its receiving executor's level"
+                );
+            }
+            Self::PeerHart(from) => {
+                assert!(
+                    from.hart != executor.hart,
+                    "a peer-hart raiser must run on another hart than its executor"
                 );
             }
             Self::Pair(a, b) => {

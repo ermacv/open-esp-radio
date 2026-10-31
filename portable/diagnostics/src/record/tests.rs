@@ -196,3 +196,78 @@ fn oversize_retained_text_is_refused_before_the_sink_is_called() {
         assert_eq!(writes, 0);
     }
 }
+
+#[test]
+fn a_secondary_ready_event_keeps_its_hart_and_stack_pointer() {
+    let ready = SecondaryReady {
+        hart: 1,
+        sp: 0x5012_3450,
+    };
+    let words = ready.encode();
+    assert_eq!(SecondaryReady::decode(words), Some(ready));
+    assert_ne!(SecondaryReady::KIND, BootSmokePassed::KIND);
+    let record = Record::Event {
+        kind: SecondaryReady::KIND,
+        words,
+    };
+    assert_eq!(decode(&encoded(&record)), Ok(record));
+}
+
+#[test]
+fn a_hart_exchange_event_keeps_its_hart_request_and_answer() {
+    let exchange = crate::HartExchange {
+        hart: 1,
+        request: 0xbeef,
+        answer: 0xdead_0001,
+    };
+    let words = exchange.encode();
+    assert_eq!(crate::HartExchange::decode(words), Some(exchange));
+    assert_ne!(crate::HartExchange::KIND, SecondaryReady::KIND);
+    assert_ne!(crate::HartExchange::KIND, BootSmokePassed::KIND);
+    let record = Record::Event {
+        kind: crate::HartExchange::KIND,
+        words,
+    };
+    assert_eq!(decode(&encoded(&record)), Ok(record));
+}
+
+#[test]
+fn hart_aes_and_liveness_events_keep_their_words_and_refuse_others() {
+    for event in [
+        crate::HartAes {
+            hart: 1,
+            matched: true,
+        },
+        crate::HartAes {
+            hart: 1,
+            matched: false,
+        },
+    ] {
+        assert_eq!(crate::HartAes::decode(event.encode()), Some(event));
+    }
+    assert_eq!(crate::HartAes::decode([1, 2]), None);
+    assert_eq!(crate::HartAes::decode([0x1_0000, 1]), None);
+    let liveness = crate::HartLiveness {
+        hart: 1,
+        rounds: u32::MAX,
+    };
+    assert_eq!(
+        crate::HartLiveness::decode(liveness.encode()),
+        Some(liveness)
+    );
+    let kinds = [
+        BootSmokePassed::KIND,
+        SecondaryReady::KIND,
+        crate::HartExchange::KIND,
+        crate::HartAes::KIND,
+        crate::HartLiveness::KIND,
+    ];
+    for (index, kind) in kinds.iter().enumerate() {
+        assert!(!kinds[index + 1..].contains(kind), "{kind:?}");
+    }
+    let record = Record::Event {
+        kind: crate::HartLiveness::KIND,
+        words: liveness.encode(),
+    };
+    assert_eq!(decode(&encoded(&record)), Ok(record));
+}

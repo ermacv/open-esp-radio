@@ -41,6 +41,28 @@ pub enum FaultReason {
     /// Observations: request kind/site, doorbell slot index, caller epoch (or zero
     /// when no epoch is held), wrapping per-slot post sequence.
     RequestUnanswered = 34,
+    /// A secondary hart's launch did not complete; the hart is not confirmed
+    /// held again. Observations: the stage (1 unprovisioned, 2 no entry, 3
+    /// handshake used, 4 start refused, 5 not entered, 6 boot word kept, 7
+    /// not ready, 8 stack outside, 9 hand-over refused) and its words.
+    SecondaryLaunch = 35,
+    /// A starting secondary hart stopped in its fault stub. Observations:
+    /// kind (1 exception, 2 PMP, 3 PMA, 4 interrupt stack, 5 hand-over),
+    /// cause, PC and value.
+    SecondaryEarlyFault = 36,
+    /// A request to a task on another hart got no answer by its deadline;
+    /// the request stays posted. Observations: the request kind/site, the
+    /// deadline in microseconds (low, high word) and zero.
+    PeerUnanswered = 37,
+    /// A liveness supervisor's beat to a task on another hart was not echoed
+    /// by its deadline; the beat stays posted. Observations: the beat's
+    /// sequence, its deadline in microseconds (low, high word) and the
+    /// rounds completed before it.
+    LivenessOverdue = 38,
+    /// A liveness supervisor's own invariant failed. Observations: the kind
+    /// (1 seat occupied, 2 wrong echo, 3 time range), the beat's sequence,
+    /// the echo (or zero) and zero.
+    LivenessBroken = 39,
     BindingRefused = 256,
     BindingStorageClaimed = 257,
     BindingHandlerOccupied = 258,
@@ -80,6 +102,11 @@ impl FaultReason {
             Self::RouteHandlerCellMismatch => oer_diagnostics::fault::Class::ConfigurationBoot,
             Self::HilRequested => oer_diagnostics::fault::Class::RequestedReset,
             Self::RequestUnanswered => oer_diagnostics::fault::Class::Cancellation,
+            Self::SecondaryLaunch => oer_diagnostics::fault::Class::ConfigurationBoot,
+            Self::SecondaryEarlyFault => oer_diagnostics::fault::Class::UnexpectedHardware,
+            Self::PeerUnanswered => oer_diagnostics::fault::Class::Cancellation,
+            Self::LivenessOverdue => oer_diagnostics::fault::Class::Cancellation,
+            Self::LivenessBroken => oer_diagnostics::fault::Class::SoftwareInvariant,
             Self::BindingRefused => oer_diagnostics::fault::Class::ConfigurationBoot,
             Self::BindingStorageClaimed => oer_diagnostics::fault::Class::SoftwareInvariant,
             Self::BindingHandlerOccupied => oer_diagnostics::fault::Class::SoftwareInvariant,
@@ -123,6 +150,11 @@ impl FaultReason {
             32 => Some(Self::RouteHandlerCellMismatch),
             33 => Some(Self::HilRequested),
             34 => Some(Self::RequestUnanswered),
+            35 => Some(Self::SecondaryLaunch),
+            36 => Some(Self::SecondaryEarlyFault),
+            37 => Some(Self::PeerUnanswered),
+            38 => Some(Self::LivenessOverdue),
+            39 => Some(Self::LivenessBroken),
             256 => Some(Self::BindingRefused),
             257 => Some(Self::BindingStorageClaimed),
             258 => Some(Self::BindingHandlerOccupied),
@@ -166,6 +198,11 @@ impl FaultReason {
             Self::RouteHandlerCellMismatch => "RouteHandlerCellMismatch",
             Self::HilRequested => "HilRequested",
             Self::RequestUnanswered => "RequestUnanswered",
+            Self::SecondaryLaunch => "SecondaryLaunch",
+            Self::SecondaryEarlyFault => "SecondaryEarlyFault",
+            Self::PeerUnanswered => "PeerUnanswered",
+            Self::LivenessOverdue => "LivenessOverdue",
+            Self::LivenessBroken => "LivenessBroken",
             Self::BindingRefused => "BindingRefused",
             Self::BindingStorageClaimed => "BindingStorageClaimed",
             Self::BindingHandlerOccupied => "BindingHandlerOccupied",
@@ -195,5 +232,25 @@ mod tests {
         let reason = FaultReason::RequestUnanswered;
         assert_eq!(FaultReason::from_code(reason as u32), Some(reason));
         assert_eq!(reason.name(), "RequestUnanswered");
+    }
+
+    #[test]
+    fn liveness_reasons_round_trip_their_retained_codes_and_classes() {
+        for (reason, name, class) in [
+            (
+                FaultReason::LivenessOverdue,
+                "LivenessOverdue",
+                oer_diagnostics::fault::Class::Cancellation,
+            ),
+            (
+                FaultReason::LivenessBroken,
+                "LivenessBroken",
+                oer_diagnostics::fault::Class::SoftwareInvariant,
+            ),
+        ] {
+            assert_eq!(FaultReason::from_code(reason as u32), Some(reason));
+            assert_eq!(reason.name(), name);
+            assert_eq!(reason.class(), class);
+        }
     }
 }

@@ -52,3 +52,40 @@ fn a_raise_after_the_drain_is_not_lowered_by_it() {
     line.raise();
     assert!(line.raised.get());
 }
+
+/// A line that records its raises and lowers beside the fences around them.
+struct Recorded<'a> {
+    log: &'a core::cell::RefCell<std::vec::Vec<&'static str>>,
+}
+
+impl SoftwareLine for Recorded<'_> {
+    fn raise(&self) {
+        self.log.borrow_mut().push("raise");
+    }
+    fn lower(&self) {
+        self.log.borrow_mut().push("lower");
+    }
+}
+
+extern crate std;
+
+#[test]
+fn a_raiser_fences_its_published_facts_before_the_raise() {
+    let log = core::cell::RefCell::new(std::vec::Vec::new());
+    let line = Recorded { log: &log };
+    log.borrow_mut().push("publish");
+    super::raise_with(&line, || log.borrow_mut().push("fence w,o"));
+    assert_eq!(*log.borrow(), ["publish", "fence w,o", "raise"]);
+}
+
+#[test]
+fn a_handler_lowers_then_fences_before_it_takes_the_facts() {
+    let log = core::cell::RefCell::new(std::vec::Vec::new());
+    let line = Recorded { log: &log };
+    super::serve_with(
+        &line,
+        || log.borrow_mut().push("fence o,rw"),
+        || log.borrow_mut().push("take"),
+    );
+    assert_eq!(*log.borrow(), ["lower", "fence o,rw", "take"]);
+}

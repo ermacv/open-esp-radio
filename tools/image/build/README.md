@@ -90,7 +90,11 @@ foreign task, interrupt-table handler and exception roots must have complete
 resolved paths excluding linked critical-section entries, including inline copies.
 `critical-section.txt` records the result.
 This prerequisite and unused-hart containment apply even when optional checks
-are reported or absent. The public HAL cannot start or release a secondary hart.
+are reported or absent. `[package.metadata.open-radio] harts` (hart IDs or
+`"boot"`, the boot hart required; absent, the boot hart alone) names the harts
+an image runs: each declared secondary uses its stack policy's launch template
+(`StackPolicy::for_image`), and every undeclared template stays unused. The
+image linker's analysis specification carries the same set.
 `cargo fw probe` emits reachability reports only, even for runtime-linked binaries;
 it does not run this gate.
 `cargo fw flash` uses an existing bundle without rerunning its checks.
@@ -238,8 +242,9 @@ and reasons, including warnings or configuration errors. This report changes no 
 flags, frame coverage, IRQ guards, stack allocations or stack bounds.
 
 The policy is a chip's `chips/<chip>/platform/stack.toml` (schema 6), extended
-by the HIL target's policy. Every image runs its tasks on the boot hart;
-secondary harts remain contained. Each stack names the function that
+by the HIL target's policy. A secondary hart runs only in an image that
+declares it, from its launch template's root (the image's
+`secondary_entry!`), where it may run its own executor's tasks. Each stack names the function that
 runs on it from its top (its root, by symbol), its storage (a sized symbol, or a
 linker script's bottom and top symbols) and `minimum_free_bytes`: the root's
 worst-case call chain (`Analysis::bound_with`) must leave the storage that

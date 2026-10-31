@@ -1,6 +1,17 @@
-//! The hart's interrupt controller: its interrupt-matrix bank and its CLIC,
-//! which the interrupt table's router (`oer_espressif_interrupt_table::Router`)
-//! writes through the typed blocks.
+//! Each hart's interrupt controller: its interrupt-matrix bank and its own
+//! CLIC, which the interrupt table's router
+//! (`oer_espressif_interrupt_table::Router`) writes through the typed blocks.
+//!
+//! The CLIC is context-relative: every hart reaches its own controller at
+//! the same address (SOURCE: `HW1_S31_CLIC_20261026` and
+//! `ESP_IDF_4D59230D_S31_CLIC`), and the PAC claims its parts once per hart.
+//! The root pairs each hart's CLIC parts with that hart's route bank in one
+//! [`InterruptGrant`], once per hart: hart 0's in [`InterruptBlocks`], hart
+//! 1's in the secondary launch permit, which the launch hands to hart 1.
+//! A grant is inert: only [`InterruptGrant::into_controller`], on the
+//! grant's own hart, makes its [`InterruptController`], which cannot leave
+//! that hart (`!Send`). The staged runtime calls it in each hart's handoff,
+//! so each hart has one controller and one router.
 //!
 //! Each method of [`Controller`] reads or read-modify-writes one word: a
 //! route keeps its source's `PASS_LEVEL` field and the reserved bits
@@ -9,16 +20,19 @@
 //! ([`Error::NoSuchSource`], [`Error::NoSuchLine`]) and nothing is written;
 //! it reads as silent or disabled.
 //!
-//! A fatal path observes hart 0's routes and lines as they are
+//! A fatal path of hart 0 observes hart 0's routes and lines as they are
 //! ([`fatal_view`]): the root publishes the observers of the route and line
 //! words once, and only a fatal path that stopped the other hart
-//! ([`StopTheWorld`]) reads them, without writing.
+//! ([`StopTheWorld`]) reads them, without writing. Hart 1's routes have no
+//! claimed observer and its CLIC is reachable only from hart 1, so a fatal
+//! path of hart 1 gets no view.
+
+use core::marker::PhantomData;
 
 use oer_esp32s31_pac::{
     clic::{self, Clic, ClicObserver},
     instances,
     interrupt_core::{self, InterruptCore0, InterruptCore0Observer, InterruptCore1},
-    ownership::InterruptMatrixPeripherals,
 };
 use oer_espressif_interrupt_table::{Controller, Error};
 use oer_memory::{ClaimCell, zeroed::ZeroedOnce};
@@ -33,15 +47,26 @@ pub mod facts {
     include!(concat!(env!("OUT_DIR"), "/interrupts.rs"));
 }
 
-/// The interrupt matrix's blocks, split from the root: hart 0's controller
-/// and hart 1's bank. Every hart's pending sources are published for every
-/// context ([`is_pending`]).
-#[must_use = "dropping the interrupt controller permanently loses the routes and lines"]
+/// The interrupt matrix's blocks, split from the root: hart 0's grant.
+/// Hart 1's route bank and CLIC parts belong to the root's secondary launch
+/// permit ([`LaunchPermit`](crate::cores::LaunchPermit)). Every hart's
+/// pending sources are published for every context ([`is_pending`]).
+#[must_use = "dropping the interrupt grant permanently loses the routes and lines"]
 pub struct InterruptBlocks {
-    /// The controller of hart 0, the hart stage two runs on.
-    pub controller: InterruptController,
-    /// Hart 1's bank, which nothing writes while hart 1 runs no code.
-    pub hart1: Hart1Interrupts,
+    /// The grant of hart 0, the hart stage two runs on.
+    pub grant: InterruptGrant<InterruptCore0>,
+}
+
+/// The interrupt matrix's parts as the root splits them: hart 0's route
+/// bank and route observer, hart 0's CLIC parts and every hart's pending
+/// sources. Hart 1's CLIC parts go to the launch permit.
+pub(crate) struct MatrixParts {
+    pub(crate) clic: Clic,
+    pub(crate) clic_observer: ClicObserver,
+    pub(crate) interrupt_core0: InterruptCore0,
+    pub(crate) interrupt_core0_observer: InterruptCore0Observer,
+    pub(crate) interrupt_core0_status: oer_esp32s31_pac::interrupt_core::InterruptCore0Status,
+    pub(crate) interrupt_core1_status: oer_esp32s31_pac::interrupt_core::InterruptCore1Status,
 }
 
 /// Every hart's read-only pending sources, published once at partition split.
@@ -95,24 +120,24 @@ fn pending_in(status: &impl PendingStatus, source: u16) -> bool {
 }
 
 impl InterruptBlocks {
-    /// Split the root's partition: give the CLIC [`facts::LEVEL_BITS`] level bits,
-    /// keeping its other configuration fields, and publish every hart's pending
-    /// sources and the observers of its routes and lines for a fatal path.
-    /// Every route and line stays as it is until the router installs the
-    /// controller.
+    /// Split the root's partition on the boot hart, the only hart stage two
+    /// runs on before a launch: give hart 0's CLIC [`facts::LEVEL_BITS`]
+    /// level bits, keeping its other configuration fields, and publish every
+    /// hart's pending sources and the observers of hart 0's routes and lines
+    /// for a fatal path. Every route and line stays as it is until the
+    /// router installs the controller.
     ///
     /// # Panics
     ///
     /// When the pending sources were published before: the root splits the
     /// partition once.
-    pub fn new(peripherals: InterruptMatrixPeripherals) -> Self {
+    pub(crate) fn new(peripherals: MatrixParts) -> Self {
         let pending = take_pending!(peripherals);
-        let InterruptMatrixPeripherals {
+        let MatrixParts {
             clic,
             mut clic_observer,
             interrupt_core0,
             interrupt_core0_observer,
-            interrupt_core1,
             ..
         } = peripherals;
         assert!(
@@ -128,10 +153,7 @@ impl InterruptBlocks {
             lines: clic_observer,
         });
         Self {
-            controller: InterruptController::new(interrupt_core0, clic),
-            hart1: Hart1Interrupts {
-                _routes: interrupt_core1,
-            },
+            grant: InterruptGrant::new(interrupt_core0, clic, None),
         }
     }
 }
@@ -214,14 +236,20 @@ impl<M: Placement, C: Placement> InterruptView<'_, M, C> {
     }
 }
 
-/// Read hart 0's routes and lines in `stop`'s fatal path: the other hart
-/// stopped and the image's router writes no more, so the words hold what
-/// the hardware dispatches. The view only reads. `None` before the root
-/// published the observers, or when another hart's fatal path holds them.
+/// Read hart 0's routes and lines in hart 0's fatal path (`stop`): the
+/// other hart stopped and the image's router writes no more, so the words
+/// hold what the hardware dispatches. The view only reads. `None` before
+/// the root published the observers, when another hart's fatal path holds
+/// them, or in a fatal path of another hart: hart 0's line words are
+/// reachable only from hart 0, and no other hart's route observer is
+/// claimed.
 pub fn fatal_view<R>(
     stop: &StopTheWorld<'_>,
     observe: impl FnOnce(&InterruptView<'_>) -> R,
 ) -> Option<R> {
+    if stop.hart() != crate::platform::BOOT_HART {
+        return None;
+    }
     OBSERVER
         .hold(key(stop.hart()), |observer| {
             observe(&InterruptView { observer })
@@ -230,33 +258,161 @@ pub fn fatal_view<R>(
         .map(|held| held.value)
 }
 
-/// Hart 1's interrupt-matrix route bank. Its read-only pending sources are
-/// published with every hart's status. Hart 1 runs no
-/// code (the image declares hart 1's stacks unused): nothing writes the bank,
-/// and holding it keeps every other owner from it.
-#[must_use = "dropping hart 1's bank permanently loses its routes"]
-pub struct Hart1Interrupts {
-    _routes: InterruptCore1,
+/// A hart's route bank in the interrupt matrix: `INTERRUPT_CORE0` for hart
+/// 0, `INTERRUPT_CORE1` for hart 1. Sealed: only those banks are.
+pub trait RouteBank: sealed::Sealed {
+    /// The hart whose routes the bank holds.
+    const HART: u8;
+    #[doc(hidden)]
+    fn read_route(
+        &self,
+        index: Index<{ interrupt_core::route::COUNT }>,
+    ) -> interrupt_core::route::R;
+    #[doc(hidden)]
+    fn modify_route(
+        &mut self,
+        index: Index<{ interrupt_core::route::COUNT }>,
+        change: impl FnOnce(&mut interrupt_core::route::W),
+    );
 }
 
-/// Hart 0's interrupt-matrix bank and the CLIC hart 0 reaches, the router's
-/// [`Controller`].
-#[must_use = "dropping the interrupt controller permanently loses the routes and lines"]
-pub struct InterruptController<
-    M: Placement = Fixed<{ instances::interrupt_core0::BASE }>,
-    C: Placement = Fixed<{ instances::clic::BASE }>,
-> {
-    matrix: InterruptCore0<M>,
-    clic: Clic<C>,
+mod sealed {
+    pub trait Sealed {}
+    impl<M: oer_mmio::Placement> Sealed for super::InterruptCore0<M> {}
+    impl<M: oer_mmio::Placement> Sealed for super::InterruptCore1<M> {}
 }
 
-impl<M: Placement, C: Placement> InterruptController<M, C> {
-    /// Own the bank and the CLIC's lines. Every route and line stays as it
+macro_rules! route_bank {
+    ($bank:ident, $hart:literal) => {
+        impl<M: Placement> RouteBank for $bank<M> {
+            const HART: u8 = $hart;
+            fn read_route(
+                &self,
+                index: Index<{ interrupt_core::route::COUNT }>,
+            ) -> interrupt_core::route::R {
+                $bank::read_route(self, index)
+            }
+            fn modify_route(
+                &mut self,
+                index: Index<{ interrupt_core::route::COUNT }>,
+                change: impl FnOnce(&mut interrupt_core::route::W),
+            ) {
+                $bank::modify_route(self, index, change);
+            }
+        }
+    };
+}
+
+route_bank!(InterruptCore0, 0);
+route_bank!(InterruptCore1, 1);
+
+/// One hart's interrupt grant: its route bank and its own CLIC's parts,
+/// which the root pairs once per hart. Inert: it reads and writes nothing
+/// until [`into_controller`](Self::into_controller) runs on its hart.
+#[must_use = "dropping the grant permanently loses the hart's routes and lines"]
+pub struct InterruptGrant<B: RouteBank, C: Placement = Fixed<{ instances::clic::BASE }>> {
+    bank: B,
+    lines: Clic<C>,
+    /// The hart's level-bits writer, when its controller sets them: hart
+    /// 1's. Hart 0's are set when the root splits the partition, where its
+    /// observer is published for hart 0's fatal path.
+    config: Option<ClicObserver<C>>,
+}
+
+pub use oer_espressif_platform_port::ForeignHart;
+
+impl<B: RouteBank, C: Placement> InterruptGrant<B, C> {
+    /// The root's pairing of a hart's bank with that hart's CLIC parts.
+    pub(crate) const fn new(bank: B, lines: Clic<C>, config: Option<ClicObserver<C>>) -> Self {
+        Self {
+            bank,
+            lines,
+            config,
+        }
+    }
+
+    /// The grant's hart.
+    pub const fn hart(&self) -> u8 {
+        B::HART
+    }
+
+    /// The grant's bank, before its hart's controller exists: the launch
+    /// disconnects the bank's routes before it releases the hart.
+    pub(crate) fn bank(&mut self) -> &mut B {
+        &mut self.bank
+    }
+
+    /// Make the hart's controller on the hart itself: give its CLIC
+    /// [`facts::LEVEL_BITS`] level bits when the grant holds its writer, and
+    /// own the bank and the CLIC's lines. Every route and line stays as it
     /// is until the router installs the controller.
-    pub const fn new(matrix: InterruptCore0<M>, clic: Clic<C>) -> Self {
-        Self { matrix, clic }
+    ///
+    /// # Errors
+    ///
+    /// [`ForeignHart`] on another hart than the grant's: nothing is written
+    /// and the grant is lost (each hart has one).
+    #[cfg(target_arch = "riscv32")]
+    pub fn into_controller(self) -> Result<InterruptController<B, C>, ForeignHart> {
+        self.into_controller_on(oer_riscv::hart_id())
+    }
+
+    /// [`into_controller`](Self::into_controller) on hart `current`.
+    pub(crate) fn into_controller_on(
+        self,
+        current: usize,
+    ) -> Result<InterruptController<B, C>, ForeignHart> {
+        let expected = usize::from(B::HART);
+        if current != expected {
+            return Err(ForeignHart {
+                actual: current,
+                expected,
+            });
+        }
+        let Self {
+            bank,
+            lines,
+            mut config,
+        } = self;
+        if let Some(config) = config.as_mut() {
+            set_level_bits(config);
+        }
+        Ok(InterruptController {
+            matrix: bank,
+            clic: lines,
+            _config: config,
+            _local: PhantomData,
+        })
     }
 }
+
+/// One hart's interrupt-matrix bank and that hart's own CLIC, the router's
+/// [`Controller`]: hart 0's by default ([`InterruptCore0`]), hart 1's over
+/// [`InterruptCore1`] ([`Hart1Controller`]). It stays on its hart
+/// (`!Send`).
+///
+/// ```compile_fail
+/// fn send<T: Send>() {}
+/// send::<oer_esp32s31_hal::platform::InterruptController>();
+/// ```
+#[must_use = "dropping the interrupt controller permanently loses the routes and lines"]
+pub struct InterruptController<
+    B: RouteBank = InterruptCore0,
+    C: Placement = Fixed<{ instances::clic::BASE }>,
+> {
+    matrix: B,
+    clic: Clic<C>,
+    /// Hart 1's level-bits writer, retained once it set them.
+    _config: Option<ClicObserver<C>>,
+    /// The CLIC words reach the running hart's own controller.
+    _local: PhantomData<*mut ()>,
+}
+
+/// Hart 1's controller.
+pub type Hart1Controller = InterruptController<InterruptCore1>;
+/// Hart 0's grant.
+pub type Hart0Grant = InterruptGrant<InterruptCore0>;
+/// Hart 1's grant.
+pub type Hart1Grant = InterruptGrant<InterruptCore1>;
 
 /// The trigger field (`ATTR_TRIG`) of `trigger`: bit 0 set for an edge, bit
 /// 1 set for the negative polarity.
@@ -281,13 +437,13 @@ const fn trigger_of(bits: Bits<2>) -> Trigger {
     }
 }
 
-impl<M: Placement, C: Placement> Controller for InterruptController<M, C> {
+impl<B: RouteBank, C: Placement> Controller for InterruptController<B, C> {
     const SOURCES: u16 = interrupt_core::route::COUNT as u16;
     const LINES: u8 = clic::ctrl::COUNT as u8;
     const LEVEL_BITS: LevelBits = LevelBits::constant::<{ facts::LEVEL_BITS }>();
 
     fn hart(&self) -> u8 {
-        crate::platform::BOOT_HART.get() as u8
+        B::HART
     }
 
     fn verify_configuration(&self) -> Result<(), Error> {
@@ -326,7 +482,7 @@ impl<M: Placement, C: Placement> Controller for InterruptController<M, C> {
             .then(|| Bits::new(u32::from(line)).ok())
             .flatten()
             .ok_or(Error::NoSuchLine { line })?;
-        self.matrix.modify_route(index, |route| {
+        RouteBank::modify_route(&mut self.matrix, index, |route| {
             route.set_map(map);
         });
         Ok(())
@@ -334,7 +490,7 @@ impl<M: Placement, C: Placement> Controller for InterruptController<M, C> {
 
     fn silence(&mut self, source: u16) -> Result<(), Error> {
         let index = Index::new(usize::from(source)).map_err(|_| Error::NoSuchSource { source })?;
-        self.matrix.modify_route(index, |route| {
+        RouteBank::modify_route(&mut self.matrix, index, |route| {
             route.set_map(Bits::truncate(
                 interrupt_core::route::Map::Disconnected.bits(),
             ));
@@ -345,7 +501,7 @@ impl<M: Placement, C: Placement> Controller for InterruptController<M, C> {
     fn routed(&self, source: u16) -> Option<u8> {
         let index = Index::new(usize::from(source)).ok()?;
         // MAP is six bits wide.
-        let line = self.matrix.read_route(index).map().get() as u8;
+        let line = RouteBank::read_route(&self.matrix, index).map().get() as u8;
         (line != 0).then_some(line)
     }
 

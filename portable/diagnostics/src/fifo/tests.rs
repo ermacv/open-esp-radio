@@ -187,3 +187,28 @@ fn a_writer_without_patience_never_waits() {
     assert_eq!(fifo.0.borrow().polls.get(), lost.pending());
     assert_eq!(fifo.0.borrow().flushes, 1);
 }
+
+#[test]
+fn a_record_reports_the_bytes_it_dropped_and_only_none_is_whole() {
+    let lost = Lost::new();
+    let full = Fake::with_room(5);
+    let dropped = FifoWriter::new(full.clone(), &lost, Patience::NONE).text(b"OER_BOOT\r\n");
+    assert_eq!(dropped, 5);
+    assert_eq!(
+        super::Written::of_dropped(dropped),
+        super::Written::Partial { dropped: 5 }
+    );
+    assert!(!super::Written::of_dropped(dropped).is_whole());
+    let _ = lost.take();
+    let roomy = Fake::with_room(64);
+    let dropped = FifoWriter::new(roomy, &lost, Patience::NONE).note(&Note::placement_pass());
+    assert_eq!(dropped, 0);
+    assert!(super::Written::of_dropped(dropped).is_whole());
+    for refused in [
+        super::Written::NoConsole,
+        super::Written::Busy,
+        super::Written::Retired,
+    ] {
+        assert!(!refused.is_whole(), "{refused:?} acknowledges nothing");
+    }
+}

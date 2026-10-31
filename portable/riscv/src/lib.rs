@@ -188,3 +188,43 @@ pub fn fence() {
     #[cfg(not(target_arch = "riscv32"))]
     core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
 }
+
+/// Order every memory write before this call against every device output
+/// after it (`fence w, o`): a producer's published facts or payload before
+/// the device write that announces them (a software interrupt's raise).
+/// Without the `o` bit no memory fence orders an MMIO store.
+///
+/// SOURCE: RISC-V Unprivileged ISA, FENCE (predecessor and successor sets
+/// I, O, R, W; device accesses order only through I and O).
+#[inline(always)]
+pub fn fence_w_o() {
+    #[cfg(target_arch = "riscv32")]
+    #[allow(unsafe_code, reason = "an ordering instruction")]
+    // SAFETY: the instruction only orders memory writes before device
+    // outputs; it reads and writes no memory and changes no register Rust
+    // relies on. Without `nomem` it is also a compiler barrier.
+    unsafe {
+        core::arch::asm!("fence w, o", options(nostack, preserves_flags))
+    }
+    #[cfg(not(target_arch = "riscv32"))]
+    core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+}
+
+/// Order every device output before this call against every memory access
+/// after it (`fence o, rw`): a consumer's lowering of its software
+/// interrupt before it reads the facts the raises announced.
+///
+/// SOURCE: RISC-V Unprivileged ISA, FENCE (predecessor and successor sets).
+#[inline(always)]
+pub fn fence_o_rw() {
+    #[cfg(target_arch = "riscv32")]
+    #[allow(unsafe_code, reason = "an ordering instruction")]
+    // SAFETY: the instruction only orders device outputs before memory
+    // accesses; it reads and writes no memory and changes no register Rust
+    // relies on. Without `nomem` it is also a compiler barrier.
+    unsafe {
+        core::arch::asm!("fence o, rw", options(nostack, preserves_flags))
+    }
+    #[cfg(not(target_arch = "riscv32"))]
+    core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+}

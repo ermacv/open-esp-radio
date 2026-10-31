@@ -31,6 +31,10 @@
 //!
 //! [`sampler`] is the program-counter sampler on TIMG1 T0 an image may
 //! select, reporting through its observer.
+//!
+//! [`secondary`] launches hart 1 during boot, under its own deadline over the
+//! system timer, before the image starts its executor, and hands it its
+//! interrupt grant and the image's parts for it.
 
 pub mod crypto;
 pub mod phy_fault;
@@ -49,10 +53,17 @@ impl oer_espressif_staged_runtime::adoption::Binding for Esp32s31 {
     type Platform = oer_esp32s31_hal::platform::Port;
     type Driver = oer_esp32s31_hal::root::RuntimePort;
     type Hardware = oer_esp32s31_hal::root::Hardware;
+    type Interrupts = oer_esp32s31_hal::platform::Hart0Grant;
     type Controller = oer_esp32s31_hal::platform::InterruptController;
 
-    fn split(parts: oer_esp32s31_hal::root::PlatformParts) -> (Self::Hardware, Self::Controller) {
-        (parts.hardware, parts.interrupts.controller)
+    fn split(parts: oer_esp32s31_hal::root::PlatformParts) -> (Self::Hardware, Self::Interrupts) {
+        (parts.hardware, parts.interrupts.grant)
+    }
+
+    fn controller(
+        interrupts: Self::Interrupts,
+    ) -> Result<Self::Controller, oer_espressif_platform_port::ForeignHart> {
+        interrupts.into_controller()
     }
 }
 
@@ -62,6 +73,7 @@ pub mod wifi_fault;
 
 pub mod reset_causes;
 pub mod sampler;
+pub mod secondary;
 
 #[cfg(target_arch = "riscv32")]
 pub mod pilot;

@@ -1,9 +1,7 @@
 //! Owned adapters of the family adoption driver. Startup order is not HAL policy.
 use super::*;
 use crate::{cores, power::PsramMpll};
-use oer_esp32s31_pac::ownership::{
-    ChipClockPeripherals, DebugPeripherals, InterruptMatrixPeripherals,
-};
+use oer_esp32s31_pac::ownership::{ChipClockPeripherals, DebugPeripherals};
 use oer_espressif_boot::adoption::{self, InitError, Port};
 
 /// The HAL's adoption port over the root's unique parts.
@@ -26,10 +24,11 @@ pub struct RuntimeResources {
     pub(super) timg0_alarm: Timg0AlarmParts,
     pub(super) timg1_alarm: Timg1AlarmParts,
     pub(super) software_interrupts: SoftwareInterrupts,
-    pub(super) interrupt_matrix: InterruptMatrixPeripherals,
+    pub(super) interrupt_matrix: crate::platform::interrupt_controller::MatrixParts,
     pub(super) efuse: EfuseRegisters,
     pub(super) entropy: EntropyRegisters,
     pub(super) reset_cause: ResetCauseRegisters,
+    pub(super) hart1: crate::cores::LaunchPermit,
     pub(super) wifi_interrupts: WifiInterruptBanks,
     pub(super) radio: RadioHardware,
 }
@@ -59,6 +58,10 @@ pub struct Hardware {
     pub efuse: EfuseRegisters,
     pub entropy: EntropyRegisters,
     pub reset_cause: ResetCauseRegisters,
+    /// The one-shot authority to start hart 1 (`Cores::start_secondary`):
+    /// hart 1's interrupt grant (its route bank and CLIC parts), the ROM
+    /// wake-stub word and the cache bus observer.
+    pub hart1: crate::cores::LaunchPermit,
     pub wifi_interrupts: WifiInterruptBanks,
     pub clocks: ChipClocks,
     pub radio: RadioHardware,
@@ -111,6 +114,7 @@ impl Port for RuntimePort {
             efuse,
             entropy,
             reset_cause,
+            hart1,
             wifi_interrupts,
             radio,
         } = resources;
@@ -126,6 +130,7 @@ impl Port for RuntimePort {
                 efuse,
                 entropy,
                 reset_cause,
+                hart1,
                 wifi_interrupts,
                 clocks,
                 radio,

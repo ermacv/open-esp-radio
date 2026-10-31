@@ -50,7 +50,7 @@ fn state(s: &Session<'_>, tag: u32) {
         .into_iter()
         .enumerate()
         .fold(0, |a, (n, i)| {
-            a | (u32::from(s.interrupt_matrix.clic.read_ctrl(i).ie()) << n)
+            a | (u32::from(s.interrupt_matrix.clic[0].read_ctrl(i).ie()) << n)
         });
     emit(
         tag + 2,

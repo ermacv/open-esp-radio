@@ -39,6 +39,8 @@ pub(super) struct Owner<'p> {
     pub(super) division: Option<usize>,
     /// The interrupt sources the policy names for the part.
     pub(super) sources: Vec<u16>,
+    /// Whether each hart reaches its own copy of the part's words.
+    pub(super) hart_local: bool,
 }
 
 impl Owner<'_> {
@@ -86,6 +88,8 @@ pub(super) struct Division {
     pub(super) base: u64,
     /// Owner indices, in part order.
     pub(super) members: Vec<usize>,
+    /// Whether each hart reaches its own copy of the divided words.
+    pub(super) hart_local: bool,
 }
 
 impl Division {
@@ -111,6 +115,8 @@ impl Division {
 pub(super) struct Ownership<'p> {
     pub(super) owners: Vec<Owner<'p>>,
     pub(super) divisions: Vec<Division>,
+    /// The hart count: the claims of a hart-local part or division.
+    pub(super) harts: u32,
 }
 
 pub(super) fn plan<'p>(model: &ChipModel, policy: &'p ChipPolicy) -> Result<Ownership<'p>, Error> {
@@ -148,6 +154,13 @@ pub(super) fn plan<'p>(model: &ChipModel, policy: &'p ChipPolicy) -> Result<Owne
                     format!("instance {} is no MMIO instance", part.instance),
                 )
             })?;
+            let hart_local = instance.hart_local.is_some();
+            if hart_local && part.shared {
+                return Err(Error::new(
+                    &entity,
+                    "a shared part is reached from every hart; a hart-local instance's words are each hart's own",
+                ));
+            }
             // The policy names each part's interrupts; its loader checked
             // each source is bound to the part's instance.
             let sources = part
@@ -175,6 +188,7 @@ pub(super) fn plan<'p>(model: &ChipModel, policy: &'p ChipPolicy) -> Result<Owne
                 },
                 division: None,
                 sources,
+                hart_local,
             });
         }
     }
@@ -323,6 +337,7 @@ pub(super) fn plan<'p>(model: &ChipModel, policy: &'p ChipPolicy) -> Result<Owne
             type_name: first.type_name.clone(),
             base: first.base,
             members: members.clone(),
+            hart_local: first.hart_local,
         };
         for member in &members {
             if let Some(owner) = owners.get_mut(*member) {
@@ -331,7 +346,11 @@ pub(super) fn plan<'p>(model: &ChipModel, policy: &'p ChipPolicy) -> Result<Owne
         }
         divisions.push(division);
     }
-    Ok(Ownership { owners, divisions })
+    Ok(Ownership {
+        owners,
+        divisions,
+        harts: model.hart_geometry.map_or(1, |geometry| geometry.harts),
+    })
 }
 
 /// The owner items of the parts on instances of `plan`'s type, inside its
@@ -755,7 +774,8 @@ fn nest(items: &[String]) -> String {
 
 /// The partitions, the one claim of every owned word and the partition of
 /// that claim, with the compile-time check that no two claimed blocks list
-/// one word.
+/// one word. A part or division on a hart-local instance is claimed once
+/// per hart: its member is an array indexed by hart.
 pub(super) fn render_root(
     output: &mut String,
     ownership: &Ownership<'_>,
@@ -766,6 +786,17 @@ pub(super) fn render_root(
         plans
             .get(type_name)
             .map_or_else(|| names::snake(type_name), |plan| plan.module.clone())
+    };
+    // The harts that claim a copy and each copy's binding suffix.
+    let copies = |hart_local: bool| {
+        let harts = if hart_local { ownership.harts } else { 1 };
+        (0..harts).map(move |hart| {
+            if hart_local {
+                format!("_{hart}")
+            } else {
+                String::new()
+            }
+        })
     };
     output.push_str(
         "/// The ownership partitions of the typed register blocks and the one\n\
@@ -796,13 +827,22 @@ pub(super) fn render_root(
                     "its member name is another part's",
                 ));
             }
-            let _ = writeln!(
-                output,
-                "/// The `{}` part.\npub {field}: super::{}::{},",
-                owner.name(),
-                module(&owner.type_name),
-                owner.name()
-            );
+            let path = format!("super::{}::{}", module(&owner.type_name), owner.name());
+            if owner.hart_local {
+                let _ = writeln!(
+                    output,
+                    "/// The `{}` part of each hart: element `h` is hart `h`'s own copy\n\
+                     /// of its words, accessed only on hart `h`.\n\
+                     pub {field}: [{path}; super::HARTS],",
+                    owner.name(),
+                );
+            } else {
+                let _ = writeln!(
+                    output,
+                    "/// The `{}` part.\npub {field}: {path},",
+                    owner.name()
+                );
+            }
         }
         output.push_str("}\n\n");
     }
@@ -817,24 +857,38 @@ pub(super) fn render_root(
         );
     }
     output.push_str("}\n\n");
-    // One claim per standalone part and per division.
+    // One claim per standalone part and per division, per hart when its
+    // instance is hart-local.
     let mut claims = Vec::new();
     let mut bindings = Vec::new();
-    let mut blocks = Vec::new();
+    // The blocks every hart's context holds, and the blocks of one hart's
+    // own copies (the same list for every hart).
+    let mut common = Vec::new();
+    let mut local = Vec::new();
     let mut statements = String::new();
     for (position, owner) in ownership.owners.iter().enumerate() {
         if owner.division.is_some() {
             continue;
         }
         let path = format!("super::{}::{}", module(&owner.type_name), owner.name());
-        claims.push(format!("{path}Claim"));
-        let binding = format!("claim_{position}");
-        let _ = writeln!(statements, "let owner_{position} = {path}::new({binding});");
-        bindings.push(binding);
-        blocks.push(format!(
+        for suffix in copies(owner.hart_local) {
+            claims.push(format!("{path}Claim"));
+            let binding = format!("claim_{position}{suffix}");
+            let _ = writeln!(
+                statements,
+                "let owner_{position}{suffix} = {path}::new({binding});"
+            );
+            bindings.push(binding);
+        }
+        let block = format!(
             "(0x{:x}, <{path}Words as oer_mmio::Registers>::WORDS)",
             owner.base
-        ));
+        );
+        if owner.hart_local {
+            local.push(block);
+        } else {
+            common.push(block);
+        }
     }
     for (position, division) in ownership.divisions.iter().enumerate() {
         let path = format!(
@@ -842,30 +896,42 @@ pub(super) fn render_root(
             module(&division.type_name),
             division.camel()
         );
-        claims.push(format!("{path}Claim"));
-        let binding = format!("division_{position}");
-        let owners = division
-            .members
-            .iter()
-            .map(|member| format!("owner_{member}"))
-            .collect::<Vec<_>>()
-            .join(", ");
-        let _ = writeln!(
-            statements,
-            "let ({owners},) = super::{}::{}_divide({binding});",
-            module(&division.type_name),
-            division.snake()
-        );
-        bindings.push(binding);
-        blocks.push(format!(
+        for suffix in copies(division.hart_local) {
+            claims.push(format!("{path}Claim"));
+            let binding = format!("division_{position}{suffix}");
+            let owners = division
+                .members
+                .iter()
+                .map(|member| format!("owner_{member}{suffix}"))
+                .collect::<Vec<_>>()
+                .join(", ");
+            let _ = writeln!(
+                statements,
+                "let ({owners},) = super::{}::{}_divide({binding});",
+                module(&division.type_name),
+                division.snake()
+            );
+            bindings.push(binding);
+        }
+        let block = format!(
             "(0x{:x}, <{path} as oer_mmio::Registers>::WORDS)",
             division.base
-        ));
+        );
+        if division.hart_local {
+            local.push(block);
+        } else {
+            common.push(block);
+        }
     }
+    let per_hart = if local.is_empty() {
+        ""
+    } else {
+        "\n/// A hart-local part's or division's claim is listed once per hart, hart 0 first."
+    };
     let _ = writeln!(
         output,
         "/// The device registers of every part, which the PAC root takes with\n\
-         /// one `oer_mmio::assume_owned`.\n\
+         /// one `oer_mmio::assume_owned`.{per_hart}\n\
          pub type Claims = {};\n",
         nest(&claims)
     );
@@ -883,11 +949,16 @@ pub(super) fn render_root(
             .enumerate()
             .filter(|(_, owner)| owner.partition == partition.name)
         {
-            let _ = writeln!(
-                built,
-                "{}: owner_{position},",
-                names::ident(&names::camel_snake(owner.name()))
-            );
+            let field = names::ident(&names::camel_snake(owner.name()));
+            if owner.hart_local {
+                let elements = copies(true)
+                    .map(|suffix| format!("owner_{position}{suffix}"))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                let _ = writeln!(built, "{field}: [{elements}],");
+            } else {
+                let _ = writeln!(built, "{field}: owner_{position},");
+            }
         }
         built.push_str("},\n");
     }
@@ -896,12 +967,37 @@ pub(super) fn render_root(
         output,
         "/// Give every claimed part to its owner in its partition.\n\
          #[inline]\npub fn partition(claims: Claims) -> Partitions {{\n\
-         let {} = claims;\n{statements}{built}}}\n\n\
-         const _: () = assert!(\n\
-         oer_mmio::check::disjoint_blocks(&[{}]),\n\
-         \"no two claimed blocks list the same word\"\n);\n}}\n",
+         let {} = claims;\n{statements}{built}}}\n",
         nest(&bindings),
-        blocks.join(", ")
     );
+    if local.is_empty() {
+        let _ = writeln!(
+            output,
+            "const _: () = assert!(\n\
+             oer_mmio::check::disjoint_blocks(&[{}]),\n\
+             \"no two claimed blocks list the same word\"\n);",
+            common.join(", ")
+        );
+    } else {
+        output.push_str(
+            "// Each hart reaches its own copy of a hart-local block at one address, so\n\
+             // each hart's context is checked alone: every other block with that hart's copies.\n",
+        );
+        for hart in 0..ownership.harts {
+            let _ = writeln!(
+                output,
+                "const _: () = assert!(\n\
+                 oer_mmio::check::disjoint_blocks(&[{}]),\n\
+                 \"no two claimed blocks of hart {hart}'s context list the same word\"\n);",
+                common
+                    .iter()
+                    .chain(&local)
+                    .cloned()
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+        }
+    }
+    output.push_str("}\n\n");
     Ok(())
 }

@@ -15,7 +15,10 @@ use core::fmt::Write;
 
 use crate::{Facts, Region, Result, Rom};
 
+mod pma;
 mod stacks;
+
+pub use pma::{PMA_ADDRESS_INDEX, Pma, PmaEntry, PmaWrite};
 
 /// A typed PAC selection for the boot clock owner. Register encodings stay
 /// in the register model; a missing policy is an error, never an inherited root.
@@ -196,6 +199,14 @@ impl Vectors {
         if !interrupts.harts.iter().copied().eq(0..harts) {
             return Err(format!("{}: the harts must be 0 to n - 1", facts.id).into());
         }
+        if harts > u32::BITS {
+            return Err(format!(
+                "{}: the stage-two header's used-hart mask is one word, for at most {} harts",
+                facts.id,
+                u32::BITS
+            )
+            .into());
+        }
         Ok(Self {
             lines: interrupts.lines,
             first_source_line: interrupts.first_source_line,
@@ -225,8 +236,8 @@ impl Vectors {
     }
 
     /// Assembly entry instantiations and boot-stack operands. Vector data
-    /// is emitted separately as typed Rust; secondary entries are unreferenced
-    /// containment stubs, with no launcher or Rust admission path.
+    /// is emitted separately as typed Rust; secondary entries are
+    /// [`Vectors::secondary_assembly`]'s.
     pub fn assembly(&self) -> String {
         let mut text = String::from("    // Generated from the chip facts' interrupt contract.\n");
         for (kind, suffix) in [
@@ -245,12 +256,55 @@ impl Vectors {
             let _ = writeln!(text, "    IRQ_ENTRY {hart}, {line}");
         }
         text.push_str("    .endm\n");
-        for hart in (0..self.harts).filter(|hart| *hart != self.boot_hart) {
+        text
+    }
+
+    /// Every hart but the boot hart, in order.
+    pub fn secondaries(&self) -> impl Iterator<Item = u32> + '_ {
+        (0..self.harts).filter(move |hart| *hart != self.boot_hart)
+    }
+
+    /// The entry symbol a secondary hart's ROM boot word names.
+    pub fn secondary_entry(hart: u32) -> String {
+        format!("_runtime_start_h{hart}")
+    }
+
+    /// The secondary entries' assembly: the PMA program `pma` and one
+    /// `SECONDARY_ENTRY <hart>` instantiation of the runtime's entry macro
+    /// per secondary hart, expanded after that macro's definition.
+    pub fn secondary_assembly(&self, pma: &Pma) -> String {
+        let mut text = pma.assembly();
+        for hart in self.secondaries() {
+            let _ = writeln!(text, "    SECONDARY_ENTRY {hart}");
+        }
+        text
+    }
+
+    /// The runtime's Rust for each secondary entry: the entry's address
+    /// marker and minted `SecondaryEntry` (inside the runtime's entry module,
+    /// which owns the mint). The `runtime_secondary_main_h<N>` root the entry
+    /// tail-calls is the image's (`secondary_entry!`).
+    pub fn secondary_rust(&self) -> String {
+        let mut text =
+            String::from("// Generated from the chip hart geometry.\nunsafe extern \"C\" {\n");
+        for hart in self.secondaries() {
             let _ = writeln!(
                 text,
-                "    .section .text.secondary._runtime_start_h{hart}, \"ax\", @progbits\n    .balign 4\n    .global _runtime_start_h{hart}\n    .type _runtime_start_h{hart}, @function\n_runtime_start_h{hart}:\n    csrci mstatus, {{mie}}\n    // Every entrant parks: no launcher or admission path is linked.\n    // Touch no stack or data.\n99:\n    j 99b\n    .size _runtime_start_h{hart}, . - _runtime_start_h{hart}"
+                "    safe static {}: [u8; 0];",
+                Self::secondary_entry(hart)
             );
         }
+        text.push_str(
+            "}\n\n/// The generated entry of secondary hart `H`; `None` for the boot hart\n/// or a hart outside the geometry.\npub(crate) fn secondary_entry<const H: u8>() -> Option<oer_espressif_staged_layout::handoff::SecondaryEntry> {\n    match H {\n",
+        );
+        for hart in self.secondaries() {
+            let _ = writeln!(
+                text,
+                "        // SAFETY: `{entry}` is the generated entry of hart {hart} in this\n        // module's assembly: it implements the ROM-entry and launch handshake\n        // contract of `SecondaryEntry::new` and runs only from internal SRAM.\n        {hart} => Some(unsafe {{\n            oer_espressif_staged_layout::handoff::SecondaryEntry::new::<{hart}>(\n                core::ptr::addr_of!({entry}) as usize as u32,\n            )\n        }}),",
+                entry = Self::secondary_entry(hart),
+            );
+        }
+        text.push_str("        _ => None,\n    }\n}\n");
         text
     }
 
@@ -618,13 +672,42 @@ mod tests {
             // The table's unsafe attributes are constant in N, including generated instances.
             assert_eq!(tables.matches("#[unsafe(").count(), 1);
             assert!(!markers.contains("unsafe"));
+            // Secondary entries are instantiated for exactly the secondaries,
+            // after the PMA program, and no longer park in the vector assembly.
+            assert!(!assembly.contains("_runtime_start_h"));
+            let pma = Pma::of(&tracked("esp32s31")).expect("PMA chain");
+            let secondary = vectors.secondary_assembly(&pma);
             assert_eq!(
-                assembly.matches(".global _runtime_start_h").count(),
+                secondary.matches("SECONDARY_ENTRY ").count(),
                 (harts - 1) as usize
             );
             assert!(
-                !assembly.contains(&format!(".global _runtime_start_h{}\n", vectors.boot_hart))
+                secondary.find(".endm").unwrap()
+                    < secondary.find("SECONDARY_ENTRY").unwrap_or(usize::MAX)
             );
+            assert!(!secondary.contains(&format!("SECONDARY_ENTRY {}\n", vectors.boot_hart)));
+            let rust = vectors.secondary_rust();
+            syn::parse_file(&rust).expect("secondary Rust");
+            // The roots are the images' (`secondary_entry!`), not generated.
+            assert!(!rust.contains("runtime_secondary_main_h"));
+            for hart in vectors.secondaries() {
+                assert!(secondary.contains(&format!("SECONDARY_ENTRY {hart}\n")));
+                assert!(rust.contains(&format!("safe static _runtime_start_h{hart}: [u8; 0];")));
+                assert!(linker.contains(&format!(
+                    "hart {hart}'s entry in .isr.text takes the ROM main path"
+                )));
+            }
+            // The used-hart mask covers every hart and requires the boot hart.
+            for hart in 0..harts {
+                assert!(linker.contains(&format!(
+                    "(TASK_STACK_HART{hart}_BYTES > 0 ? {} : 0)",
+                    1_u64 << hart
+                )));
+            }
+            assert!(linker.contains(&format!(
+                "ASSERT((__runtime_used_harts & {}) != 0",
+                1_u64 << vectors.boot_hart
+            )));
             for hart in 0..harts {
                 for line in 1..vectors.lines {
                     assert!(defaults.contains(&format!(
@@ -633,6 +716,10 @@ mod tests {
                     )));
                     assert!(coverage.contains(&format!("{:?}", Vectors::entry(hart, line))));
                 }
+                assert_eq!(
+                    coverage.contains(&format!("\"_runtime_start_h{hart}\"")),
+                    hart != vectors.boot_hart
+                );
                 assert!(symbols.contains(&format!("__runtime_cpu{hart}_task_stack_bottom")));
                 assert!(linker.contains(&format!("TASK_STACK_HART{hart}_BYTES")));
             }

@@ -9,10 +9,12 @@
 //! never rebuilt from the running level. The three instructions after the
 //! release give a pending interrupt its window.
 //!
-//! The section is hart-local and takes no lock. The public HAL cannot start
-//! or release a secondary hart. The staged build/run pipeline checks linked
-//! critical-section entry symbols and their inline copies against the image's
-//! declared per-hart task roots, interrupt-table handlers and exception roots.
+//! The section is hart-local and takes no lock. A secondary hart starts only
+//! in an image that declares it, through the root's one-shot launch permit.
+//! The staged build/run pipeline checks linked critical-section entry symbols
+//! and their inline copies against the image's declared per-hart task roots,
+//! interrupt-table handlers and exception roots: a secondary hart's roots must
+//! not reach them.
 //!
 //! SOURCE: esp-hal 1f646c5 `esp-sync/src/raw.rs` (`SingleCoreInterruptLock`:
 //! the raised threshold, the token's layout, the order of release and the
@@ -84,9 +86,10 @@ pub(crate) mod hart {
 
     // SAFETY: `acquire` masks every interrupt of the hart and returns the
     // state `release` restores; `critical-section` releases in reverse order
-    // on the acquiring hart. Bootstrap keeps secondary harts contained, and
-    // the public HAL exposes neither secondary start nor reset release, so
-    // only the boot hart executes this implementation, including in probes.
+    // on the acquiring hart. Bootstrap keeps secondary harts contained; an
+    // image starts one only through its declared hart set, and the image gate
+    // proves that no root of a hart but the declared `critical-section-hart`
+    // reaches this implementation, so only that hart executes it.
     unsafe impl critical_section::Impl for Section {
         unsafe fn acquire() -> critical_section::RawRestoreState {
             let token = super::acquire(&mut Csrs);

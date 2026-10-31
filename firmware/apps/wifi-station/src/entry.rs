@@ -74,7 +74,7 @@ oer_espressif_staged_runtime::entry!(main, oer_esp32s31_hal::platform::Port);
 
 fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platform::Port>) -> ! {
     let previous =
-        oer_espressif_staged_runtime::panic::peek_previous::<oer_esp32s31_hal::platform::Port>();
+        oer_espressif_staged_runtime::panic::peek_previous();
     let Some(root) = Root::take() else {
         fail(oer_diagnostics::name!("root-taken"; 32));
     };
@@ -105,7 +105,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
             if let Some(record) = previous {
                 let _ = oer_espressif_staged_runtime::diagnostics::emit_previous_panic(
                     |bytes| {
-                        if oer_esp32s31_hal::peripherals::usb_serial_jtag::early_text(bytes) {
+                        if oer_esp32s31_hal::peripherals::usb_serial_jtag::early_text(bytes).is_whole() {
                             Ok(())
                         } else {
                             Err(())

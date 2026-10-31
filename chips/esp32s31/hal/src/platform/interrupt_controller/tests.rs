@@ -11,9 +11,12 @@ use oer_espressif_interrupt_table::{Binding, Class, Controller, Error, Router, T
 use oer_mmio::{Bits, Host, Index, InterruptSource};
 
 use super::{
-    InterruptController, InterruptView, LineObservation, Observer,
+    ForeignHart, InterruptController, InterruptGrant, InterruptView, LineObservation, Observer,
     facts::{self, LEVEL_BITS, LINES},
 };
+
+/// Hart 0's controller over host memory.
+type Ours<'a> = InterruptController<InterruptCore0<Host<'a>>, Host<'a>>;
 
 /// Host memory of hart 0's bank and of the CLIC.
 struct Memory {
@@ -30,15 +33,18 @@ impl Memory {
         }
     }
 
-    fn controller(&mut self) -> InterruptController<Host<'_>, Host<'_>> {
-        InterruptController::new(
+    fn controller(&mut self) -> Ours<'_> {
+        InterruptGrant::new(
             interrupt_core::interrupt_core0_host(&mut self.matrix)
                 .expect("the memory holds the bank")
                 .0,
             clic::clic_host(&mut self.clic)
                 .expect("the memory holds the CLIC")
                 .0,
+            None,
         )
+        .into_controller_on(0)
+        .expect("hart 0 builds its own controller")
     }
 
     fn matrix(&mut self) -> InterruptCore0<Host<'_>> {
@@ -162,7 +168,9 @@ fn verification_rechecks_mnlbits_after_installation() {
         .expect("matrix")
         .0;
     let (clic, mut config) = clic::clic_host(&mut memory.clic).expect("CLIC");
-    let controller = InterruptController::new(matrix, clic);
+    let controller = InterruptGrant::new(matrix, clic, None)
+        .into_controller_on(0)
+        .expect("hart 0 builds its own controller");
     let router = Router::install(controller, &[]).expect("matching geometry installs");
     assert_eq!(router.verify(), Ok(()));
     config.modify_int_config(|config| {
@@ -295,7 +303,6 @@ fn a_route_writes_its_source_s_line_alone_and_keeps_the_rest_of_its_word() {
 
 #[test]
 fn a_silenced_source_is_routed_nowhere_and_an_index_past_the_bank_is_refused() {
-    type Ours = InterruptController<Host<'static>, Host<'static>>;
     let mut memory = Memory::filled(u32::MAX);
     let mut controller = memory.controller();
     controller.silence(5).expect("source 5 is the bank's");
@@ -312,10 +319,7 @@ fn a_silenced_source_is_routed_nowhere_and_an_index_past_the_bank_is_refused() {
             source: Ours::SOURCES
         })
     );
-    assert_eq!(
-        controller.routed(InterruptController::<Host<'_>, Host<'_>>::SOURCES),
-        None
-    );
+    assert_eq!(controller.routed(Ours::SOURCES), None);
     // MAP holds 63, the CLIC has 48 lines: line 48 is refused, not written.
     assert_eq!(Ours::LINES, 48);
     assert_eq!(
@@ -326,10 +330,7 @@ fn a_silenced_source_is_routed_nowhere_and_an_index_past_the_bank_is_refused() {
         controller.set_line(Ours::LINES, LineState::DISABLED),
         Err(Error::NoSuchLine { line: Ours::LINES })
     );
-    assert_eq!(
-        controller.line(InterruptController::<Host<'_>, Host<'_>>::LINES),
-        LineState::DISABLED
-    );
+    assert_eq!(controller.line(Ours::LINES), LineState::DISABLED);
     drop(controller);
     let changed = memory
         .matrix
@@ -437,12 +438,12 @@ fn the_router_silences_boot_leftovers_then_binds_a_line_on_its_level() {
     let mut memory = configured_memory(facts::CONTROL_BITS, u16::from(LINES.count), LEVEL_BITS);
     {
         let mut controller = memory.controller();
-        for number in 0..InterruptController::<Host<'_>, Host<'_>>::SOURCES {
+        for number in 0..Ours::SOURCES {
             controller
                 .route(number, 20)
                 .expect("every source of the bank routes to line 20");
         }
-        for number in 0..InterruptController::<Host<'_>, Host<'_>>::LINES {
+        for number in 0..Ours::LINES {
             controller
                 .set_line(
                     number,
@@ -462,11 +463,11 @@ fn the_router_silences_boot_leftovers_then_binds_a_line_on_its_level() {
     }
 
     let controller = memory.controller();
-    for number in 0..InterruptController::<Host<'_>, Host<'_>>::SOURCES {
+    for number in 0..Ours::SOURCES {
         let expected = (number == WakeIrq::SOURCE).then_some(20);
         assert_eq!(controller.routed(number), expected, "source {number}");
     }
-    for number in 0..InterruptController::<Host<'_>, Host<'_>>::LINES {
+    for number in 0..Ours::LINES {
         let expected = if number == 20 {
             LineState::vectored(Control::level::<3, LEVEL_BITS>())
         } else {
@@ -501,7 +502,7 @@ fn table_of(source: u16, line: u8) -> &'static Table {
 #[test]
 fn the_router_refuses_a_table_outside_the_matrix_or_the_clic_before_any_write() {
     // A table of `Lines { count: 64, .. }`: line 60 lies outside the CLIC.
-    let sources = InterruptController::<Host<'_>, Host<'_>>::SOURCES;
+    let sources = Ours::SOURCES;
     for (table, error) in [
         (
             table_of(sources, 60),
@@ -560,4 +561,42 @@ fn pending_reads_select_only_the_named_harts_bank() {
             assert!(!banks.is_pending(observed, u16::MAX));
         }
     }
+}
+
+#[test]
+fn a_grant_builds_its_controller_only_on_its_own_hart() {
+    let mut bank = vec![0; instances::interrupt_core0::SIZE / 4];
+    let mut clic_words = vec![0; instances::clic::SIZE / 4];
+    let grant = InterruptGrant::new(
+        interrupt_core::interrupt_core0_host(&mut bank)
+            .expect("hart 0's bank")
+            .0,
+        clic::clic_host(&mut clic_words).expect("CLIC").0,
+        None,
+    );
+    assert_eq!(grant.hart(), 0);
+    assert_eq!(
+        grant.into_controller_on(1).err(),
+        Some(ForeignHart {
+            actual: 1,
+            expected: 0
+        })
+    );
+}
+
+#[test]
+fn each_banks_controller_names_its_own_hart() {
+    let mut memory = Memory::filled(0);
+    assert_eq!(memory.controller().hart(), 0);
+    let mut bank = vec![0; instances::interrupt_core1::SIZE / 4];
+    let mut clic_words = vec![0; instances::clic::SIZE / 4];
+    let (lines, config) = clic::clic_host(&mut clic_words).expect("CLIC");
+    let controller = InterruptGrant::new(
+        interrupt_core::InterruptCore1::host(&mut bank).expect("hart 1's bank"),
+        lines,
+        Some(config),
+    )
+    .into_controller_on(1)
+    .expect("hart 1 builds its own controller");
+    assert_eq!(controller.hart(), 1);
 }

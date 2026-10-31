@@ -35,6 +35,10 @@ pub struct Spec {
     /// the bound of the first ELF.
     #[serde(default)]
     pub task_stack_proven: bool,
+    /// The harts the image declares: they resolve the stack policy's launch
+    /// templates (`StackPolicy::for_image`).
+    #[serde(default)]
+    pub harts: Vec<u32>,
 }
 
 impl Spec {
@@ -52,7 +56,8 @@ impl Spec {
             return Ok(None);
         }
         let policy =
-            oer_chip_profile::policy::StackPolicy::load_with_inputs(&self.stack_policy, inputs)?;
+            oer_chip_profile::policy::StackPolicy::load_with_inputs(&self.stack_policy, inputs)?
+                .for_image(&self.harts)?;
         let profile = policy.runtime_profile(&profile)?;
         let image = Image::read_with_inputs(&self.root, &profile, elf, inputs)?;
         Ok(Some((image, profile, policy)))

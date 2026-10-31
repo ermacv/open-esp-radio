@@ -111,6 +111,11 @@ fn executable_at(text_address: u32, code: &[Code], data: &[(&str, u32, u32)]) ->
         .max(4);
     let rodata = vec![0_u8; rodata_len as usize];
     for &(name, offset, size) in data {
+        // The linker script's absolute header word: its value is the offset.
+        if name == "__runtime_used_harts" {
+            symbols.push((name, offset, 0, 0x10, 0xfff1));
+            continue;
+        }
         // STB_GLOBAL with STT_OBJECT, or STT_NOTYPE for a label.
         let info = if size == 0 { 0x10 } else { 0x11 };
         symbols.push((name, RODATA + offset, size, info, 6));
@@ -753,6 +758,29 @@ fn a_bound_over_its_budget_fails() {
 }
 
 #[test]
+fn a_frameless_root_fits_storage_that_is_exactly_its_reserve() {
+    let (_directory, policy) = policy_with(BASE, ASM_REVIEW);
+    let frameless = [Code {
+        name: "runtime_main",
+        words: vec![RET],
+        frame: Some(0),
+    }];
+    let exact = image(&frameless, &[("boot_stack", 0, 512)]);
+    audit(&policy, &exact, |policy| policy.task_stack(0).unwrap())
+        .unwrap()
+        .check()
+        .unwrap();
+    // Less than the reserve still fails, even for a frameless root.
+    let short = image(&frameless, &[("boot_stack", 0, 496)]);
+    assert!(
+        audit(&policy, &short, |policy| policy.task_stack(0).unwrap())
+            .unwrap()
+            .check()
+            .is_err()
+    );
+}
+
+#[test]
 fn a_root_the_image_lacks_fails() {
     let (_directory, policy) = policy_with(
         &BASE.replace("\"runtime_main\"\nstorage", "\"absent\"\nstorage"),
@@ -1204,6 +1232,11 @@ minimum_free_bytes = 16
 [core.1.interrupt_stack]
 "#;
 
+    /// The stage-two header's used-hart word of a boot-only image.
+    const BOOT_ONLY: (&str, u32, u32) = ("__runtime_used_harts", 0b01, 0);
+    /// The same word of an image that also runs core 1.
+    const BOTH: (&str, u32, u32) = ("__runtime_used_harts", 0b11, 0);
+
     fn chip() -> oer_chip_profile::Profile {
         oer_chip_profile::Profile::load(
             &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.."),
@@ -1229,7 +1262,7 @@ minimum_free_bytes = 16
     #[test]
     fn an_image_that_links_no_starter_proves_core_one_unused() {
         let (_directory, policy) = policy_with(POLICY, "");
-        let image = image(&with(None), &[("boot_stack", 0, 1024)]);
+        let image = image(&with(None), &[("boot_stack", 0, 1024), BOOT_ONLY]);
         let report = cores::audit_runtime(&image, &policy, &chip()).unwrap();
         assert!(report.contains("1\tunused"), "{report}");
         // An empty linked range is an explicit 0.
@@ -1242,6 +1275,7 @@ minimum_free_bytes = 16
                 ("boot_stack", 0, 1024),
                 (&bottom, 0x800, 0),
                 (&top, 0x800, 0),
+                BOOT_ONLY,
             ],
         );
         cores::audit_runtime(&empty, &policy, &chip()).unwrap();
@@ -1256,7 +1290,10 @@ minimum_free_bytes = 16
             "<oer_esp32s31_hal::cores::Cores>::start_hart1",
             "oer_esp32s31_hal::cores::Cores::start_hart1",
         ] {
-            let image = image(&with(Some(starter(name))), &[("boot_stack", 0, 1024)]);
+            let image = image(
+                &with(Some(starter(name))),
+                &[("boot_stack", 0, 1024), BOOT_ONLY],
+            );
             let error = cores::audit_runtime(&image, &policy, &chip())
                 .unwrap_err()
                 .to_string();
@@ -1270,7 +1307,7 @@ minimum_free_bytes = 16
         // A function that only resembles a starter is none.
         let image = image(
             &with(Some(starter("oer_esp32s31_hal::cores::Cores::park"))),
-            &[("boot_stack", 0, 1024)],
+            &[("boot_stack", 0, 1024), BOOT_ONLY],
         );
         cores::audit_runtime(&image, &policy, &chip()).unwrap();
     }
@@ -1288,6 +1325,7 @@ minimum_free_bytes = 16
                     ("boot_stack", 0, 1024),
                     (&bottom, 0x800, 0),
                     (&top, 0x900, 0),
+                    BOOT_ONLY,
                 ],
             );
             let error = cores::audit_runtime(&image, &policy, &chip())
@@ -1304,7 +1342,7 @@ minimum_free_bytes = 16
     fn a_policy_that_omits_a_core_of_the_chip_fails() {
         let one_core = POLICY.split("[core.1").next().unwrap();
         let (_directory, policy) = policy_with(one_core, "");
-        let image = image(&with(None), &[("boot_stack", 0, 1024)]);
+        let image = image(&with(None), &[("boot_stack", 0, 1024), BOOT_ONLY]);
         let error = cores::audit_runtime(&image, &policy, &chip())
             .unwrap_err()
             .to_string();
@@ -1321,7 +1359,11 @@ minimum_free_bytes = 16
             let (_directory, policy) = policy_with(&USED.replace("ROOT", root), ASM_REVIEW);
             let image = image(
                 &with(Some(starter("oer_esp32s31_hal::cores::Cores::start_hart1"))),
-                &[("boot_stack", 0, 1024), ("secondary_stack", 0x400, 1024)],
+                &[
+                    ("boot_stack", 0, 1024),
+                    ("secondary_stack", 0x400, 1024),
+                    BOTH,
+                ],
             );
             cores::audit_runtime(&image, &policy, &chip()).unwrap();
             let audit = StackAudit::of(&image, &policy, &policy.runtime_task_stacks()).unwrap();
@@ -1335,6 +1377,26 @@ minimum_free_bytes = 16
                     "{error}"
                 );
             }
+        }
+    }
+
+    #[test]
+    fn a_header_word_that_disagrees_with_the_policy_fails() {
+        let (_directory, policy) = policy_with(POLICY, "");
+        for data in [
+            vec![("boot_stack", 0, 1024), BOTH],
+            vec![("boot_stack", 0, 1024)],
+        ] {
+            let image = image(&with(None), &data);
+            let error = cores::audit_runtime(&image, &policy, &chip())
+                .unwrap_err()
+                .to_string();
+            assert!(
+                error.contains("used harts")
+                    || error.contains("used-hart")
+                    || error.contains("__runtime_used_harts"),
+                "{error}"
+            );
         }
     }
 }

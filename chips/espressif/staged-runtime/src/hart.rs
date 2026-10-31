@@ -28,11 +28,18 @@ impl<const H: u8> Hart<H> {
 }
 
 /// The hart's unique authority to install its inactive interrupt stack.
-/// Only the handoff constructs it; interrupt admission consumes it.
+/// Only the boot hart's handoff or a secondary hart's `SecondaryHandoff`
+/// constructs it; interrupt admission consumes it.
 ///
 /// ```compile_fail
 /// use oer_espressif_staged_runtime::{PreAdmission, BOOT_HART};
 /// let admission = PreAdmission::<BOOT_HART>::new();
+/// ```
+/// A secondary hart's authority comes only from its root's
+/// `SecondaryHandoff` (`secondary_entry!`):
+/// ```compile_fail
+/// use oer_espressif_staged_runtime::PreAdmission;
+/// let admission = PreAdmission::<1>::new();
 /// ```
 /// ```compile_fail
 /// use oer_espressif_staged_runtime::Handoff;
@@ -48,7 +55,8 @@ pub struct PreAdmission<const H: u8> {
 }
 
 impl<const H: u8> PreAdmission<H> {
-    /// Called only while wrapping the entry's unique handoff proof.
+    /// Called only while wrapping the boot entry's handoff proof or minting a
+    /// secondary hart's `SecondaryHandoff`.
     pub(crate) const fn new() -> Self {
         const { assert!((H as usize) < oer_espressif_platform_port::HARTS) };
         Self {

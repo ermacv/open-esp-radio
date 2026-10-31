@@ -38,6 +38,7 @@ oer-riscv = { path = "../../../portable/riscv" }
 oer-time = { path = "../../../portable/time" }
 static_cell.workspace = true
 oer-espressif-executor = { path = "../../espressif/executor", features = ["chip"] }
+oer-espressif-boot = { path = "../../espressif/boot" }
 
 [lints]
 workspace = true

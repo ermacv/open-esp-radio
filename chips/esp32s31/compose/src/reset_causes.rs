@@ -10,6 +10,7 @@ pub fn read(registers: ResetCauseRegisters) -> ResetCauses {
     let causes = ResetCauses::read(registers);
     let _reported = report(causes, |bytes| {
         oer_esp32s31_hal::peripherals::usb_serial_jtag::early_text(bytes)
+            .is_whole()
             .then_some(())
             .ok_or(())
     });

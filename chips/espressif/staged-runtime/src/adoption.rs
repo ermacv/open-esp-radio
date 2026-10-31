@@ -3,14 +3,29 @@ use crate::{Adopted, BootError};
 use oer_espressif_boot::adoption::{self as driver, Port};
 use oer_espressif_interrupt_table::Controller;
 
-/// Chip composition of the driver's hardware output and the runtime's controller.
+/// Chip composition of the driver's hardware output and the boot hart's
+/// interrupt grant, which only the boot hart's handoff makes into the
+/// runtime's controller.
 pub trait Binding {
     type Platform: oer_espressif_platform_port::EarlyText;
     type Driver: Port;
     type Hardware;
+    /// The boot hart's interrupt grant: its route bank and its own local
+    /// interrupt controller's parts, inert until its handoff.
+    type Interrupts;
     type Controller: Controller;
 
-    fn split(parts: <Self::Driver as Port>::Output) -> (Self::Hardware, Self::Controller);
+    fn split(parts: <Self::Driver as Port>::Output) -> (Self::Hardware, Self::Interrupts);
+
+    /// Make the boot hart's controller from its grant, on the boot hart.
+    ///
+    /// # Errors
+    ///
+    /// [`ForeignHart`](oer_espressif_platform_port::ForeignHart) on another
+    /// hart; nothing is written.
+    fn controller(
+        interrupts: Self::Interrupts,
+    ) -> Result<Self::Controller, oer_espressif_platform_port::ForeignHart>;
 }
 
 /// Initialized hardware held before mapping/context adoption. Images can
@@ -41,19 +56,19 @@ impl<B: Binding> Prepared<B> {
         previous_records: impl FnOnce(),
         before_adoption: impl FnOnce(B::Hardware) -> H,
     ) -> Result<Runtime<H, B::Controller, Board::Mapping>, BootError> {
-        self.finish(before_adoption, |controller| {
-            handoff.adopt(table, controller, board, previous_records)
+        self.finish(before_adoption, |interrupts| {
+            handoff.adopt(table, interrupts, B::controller, board, previous_records)
         })
     }
 
     fn finish<H, M>(
         self,
         before_adoption: impl FnOnce(B::Hardware) -> H,
-        adopt: impl FnOnce(B::Controller) -> Result<(M, Adopted<B::Controller>), BootError>,
+        adopt: impl FnOnce(B::Interrupts) -> Result<(M, Adopted<B::Controller>), BootError>,
     ) -> Result<Runtime<H, B::Controller, M>, BootError> {
-        let (hardware, controller) = B::split(self.parts);
+        let (hardware, grant) = B::split(self.parts);
         let hardware = before_adoption(hardware);
-        let (mapping, interrupts) = adopt(controller)?;
+        let (mapping, interrupts) = adopt(grant)?;
         Ok(Runtime {
             hardware,
             mapping,
@@ -109,8 +124,8 @@ pub fn run<B: Binding, Board: crate::AdoptsBootstrapMapping, H>(
     previous_records: impl FnOnce(),
     before_adoption: impl FnOnce(B::Hardware) -> H,
 ) -> Result<Runtime<H, B::Controller, Board::Mapping>, Error> {
-    complete::<B, _, _>(owners, before_adoption, |controller| {
-        handoff.adopt(table, controller, board, previous_records)
+    complete::<B, _, _>(owners, before_adoption, |interrupts| {
+        handoff.adopt(table, interrupts, B::controller, board, previous_records)
     })
 }
 
@@ -119,7 +134,7 @@ pub fn run<B: Binding, Board: crate::AdoptsBootstrapMapping, H>(
 fn complete<B: Binding, H, M>(
     owners: driver::Owners<B::Driver>,
     before_adoption: impl FnOnce(B::Hardware) -> H,
-    adopt: impl FnOnce(B::Controller) -> Result<(M, Adopted<B::Controller>), BootError>,
+    adopt: impl FnOnce(B::Interrupts) -> Result<(M, Adopted<B::Controller>), BootError>,
 ) -> Result<Runtime<H, B::Controller, M>, Error> {
     prepare::<B>(owners)
         .map_err(Error::Initialization)?

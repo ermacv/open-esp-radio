@@ -8,9 +8,22 @@ memory core. A sequence that waits, polls, retries or decides on a read value
 is driver code.
 
 `root` claims the chip and splits its partitions. `platform` holds the chip
-bindings: the hart geometry, core control, the interrupt controller and the
-family platform contracts (`platform::Port`); `cores` holds the fatal path's
-stop and the software reset. Ordinary blocks are `peripherals::<block>`:
+bindings: the hart geometry, core control, each hart's interrupt grant and
+controller and the family platform contracts (`platform::Port`); `cores`
+holds the fatal path's stop, the software reset and the secondary launch.
+
+The CLIC is context-relative: each hart reaches its own at one address
+(`HW1_S31_CLIC_20261026`), and the PAC claims its parts once per hart. The
+root pairs each hart's CLIC parts with that hart's route bank in one
+`InterruptGrant` (hart 0's in `InterruptBlocks`, hart 1's in the
+`LaunchPermit`, which the launch hands to hart 1). A grant reads and writes
+nothing until `into_controller` runs on its own hart (a `ForeignHart`
+refusal otherwise); the controller (`InterruptController`, hart 1's
+`Hart1Controller`) is `!Send`. The staged runtime calls it in each hart's
+handoff. Hart 0's level bits are set when the root splits the partition on
+the boot hart, hart 1's when hart 1 makes its controller. `fatal_view`
+observes hart 0's routes and lines in hart 0's fatal path only: hart 1's
+routes have no claimed observer and its lines are reachable only from it. Ordinary blocks are `peripherals::<block>`:
 `aes`, `efuse`, `entropy`, `reset_cause`, `software_interrupt`, `system_timer`,
 `timg0_alarm`, `timg1_alarm`, `usb_serial_jtag` and `watchdog`. `memory` is
 the DMA memory core (`dma_address`, `dma_static`); the `dma_static!` macro is
@@ -154,8 +167,11 @@ The chip profile supplies TRNG noise selectors and health-test settings.
 `drivers::cores` also owns runtime status, park/run/stall confirmation and
 fatal peer-stop/reset preparation. HAL `cores` retains the affine owner,
 CAS election, `ClaimCell` quarantine, masked fatal proof and final system-reset
-trigger. Its core-control port clears ROM entries but cannot publish a
-secondary-hart launcher. Confirmation counts at most 10,000 completed status reads, with a fence
+trigger. Its containment port only clears ROM entries; the launch port
+(`drivers::cores::release`, boot word last, and `retire_boot_address`) is
+reached only through `Cores::start_secondary`, which consumes the runtime
+root's one-shot `LaunchPermit`; the released hart's grant moves out once
+(`Released::take_interrupts`). Confirmation counts at most 10,000 completed status reads, with a fence
 before sampling and after success, and no peripheral takeover authority.
 
 `drivers::system_timer` owns latch settling and LO/HI/LO verification: 64

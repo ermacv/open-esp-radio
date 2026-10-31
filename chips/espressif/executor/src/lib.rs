@@ -33,7 +33,12 @@
 //!   applied there; its handler starts with `DoorbellAcknowledger::acknowledge`. Its line
 //!   is a source of the radio handler's part: the ringing half takes the
 //!   router's `Bound` proof of that part (`Doorbell::new`).
-//! - The time driver (`init`, `bind`) gives each executor its own timer
+//! - [`peer`]: a request from a task on one hart to a task on another over
+//!   one in-place request slot, both directions notified by raising the
+//!   other executor's signal (`FromPeerHart`); wakers never cross harts.
+//!   [`peer::liveness`] supervises a peer hart with a periodic such request.
+//! - The time driver (`init`, `bind`, and `grant` for an executor on
+//!   another hart than the writer's) gives each executor its own timer
 //!   queue and SYSTIMER comparator, whose alarm (`alarm_interrupt::<B, N, _>`) only
 //!   acknowledges and pends; one executor writes the SYSTIMER registers. No
 //!   lock is taken on any of these paths; the module documentation of
@@ -64,6 +69,8 @@ mod fault;
 pub use fault::{Failure, Fault};
 #[cfg(feature = "chip")]
 mod hart_binding;
+#[cfg(any(feature = "chip", test))]
+pub mod peer;
 #[cfg(any(feature = "chip", test))]
 mod poll_stamp;
 #[cfg(feature = "port-slots")]
@@ -97,7 +104,7 @@ pub use executor::{
 #[cfg(any(feature = "chip", test))]
 pub use task::{AlreadyStarted, Spawner, TaskId, Tasks};
 #[cfg(feature = "chip")]
-pub use time_driver::{TimeDriverReady, TimeSetup, alarm_interrupt, bind, init};
+pub use time_driver::{AlarmGrant, TimeDriverReady, TimeSetup, alarm_interrupt, bind, grant, init};
 #[cfg(feature = "chip")]
 pub use urgent_sources::{UrgentSource, UrgentSources};
 
@@ -106,4 +113,5 @@ pub use urgent_sources::{UrgentSource, UrgentSources};
 #[doc(hidden)]
 pub mod __bind {
     pub use embassy_time_driver::Driver;
+    pub use oer_espressif_staged_runtime::placed_static;
 }

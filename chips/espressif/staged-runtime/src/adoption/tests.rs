@@ -20,9 +20,15 @@ impl<'a> Binding for Chip<'a> {
     type Platform = Platform;
     type Driver = Fake<'a>;
     type Hardware = Hardware<'a>;
+    type Interrupts = FakeController;
     type Controller = FakeController;
     fn split(hardware: Hardware<'a>) -> (Hardware<'a>, FakeController) {
         (hardware, FakeController::new(0))
+    }
+    fn controller(
+        interrupts: FakeController,
+    ) -> Result<FakeController, oer_espressif_platform_port::ForeignHart> {
+        Ok(interrupts)
     }
 }
 fn context(controller: FakeController) -> Adopted<FakeController> {

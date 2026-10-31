@@ -9,7 +9,8 @@
 //! - Free → lent for one early record ([`Ownership::write`]), free again
 //!   once the record ends. A record that finds the block lent to another
 //!   one, on another hart or the one it interrupted, or not installed yet,
-//!   is dropped and counted.
+//!   is dropped and counted. The record's [`Written`] says which: only a
+//!   whole one acknowledges what it reports.
 //! - Free → the driver's, for good: the console's driver takes the parts
 //!   out ([`Ownership::retire`]). While a record holds them the driver is
 //!   refused ([`RetireError::Busy`]); afterwards every early record is
@@ -26,7 +27,7 @@
 //! there is nothing to yield to, so it waits for room within
 //! [`EARLY_PATIENCE`] per record. A fatal note never waits.
 
-use oer_diagnostics::{FifoWriter, Lost, Note, Patience};
+use oer_diagnostics::{FifoWriter, Lost, Note, Patience, Written};
 use oer_memory::{Claim, ClaimCell};
 
 use crate::EndpointRegisters;
@@ -108,33 +109,37 @@ impl<T: Console> Ownership<T> {
     }
 
     /// Runs `write` with a writer over the endpoint, if the block is free;
-    /// the block is free again once `write` returns. While another early
-    /// record holds the block, or before the parts are installed, `write`
-    /// runs over no endpoint and its bytes are counted. Once the driver or
-    /// the fatal path took the block, nothing is called and nothing
-    /// counted. Returns whether the early writer took the record: `false`
-    /// hands it to the driver.
-    pub fn write(&self, write: impl FnOnce(&mut FifoWriter<'_, Fifo<'_, T::Endpoint>>)) -> bool {
+    /// the block is free again once `write` returns, which reports the
+    /// bytes it dropped. While another early record holds the block, or
+    /// before the parts are installed, `write` runs over no endpoint and its
+    /// bytes are counted. Once the driver or the fatal path took the block,
+    /// nothing is called and nothing counted. Only [`Written::Whole`]
+    /// acknowledges the record; [`Written::Retired`] hands it to the driver.
+    pub fn write(
+        &self,
+        write: impl FnOnce(&mut FifoWriter<'_, Fifo<'_, T::Endpoint>>) -> usize,
+    ) -> Written {
         let mut write = Some(write);
+        let mut dropped = 0;
         let lent = self.parts.lend(|parts| {
             if let Some(write) = write.take() {
-                write(&mut FifoWriter::new(
+                dropped = write(&mut FifoWriter::new(
                     Fifo(Some(parts.endpoint())),
                     &self.lost,
                     EARLY_PATIENCE,
                 ));
             }
         });
-        match lent {
-            Ok(()) => true,
-            Err(Claim::Empty | Claim::Lent) => {
-                if let Some(write) = write.take() {
-                    write(&mut FifoWriter::new(Fifo(None), &self.lost, Patience::NONE));
-                }
-                true
-            }
-            Err(Claim::Kept) => false,
+        let refused = match lent {
+            Ok(()) => return Written::of_dropped(dropped),
+            Err(Claim::Kept) => return Written::Retired,
+            Err(Claim::Empty) => Written::NoConsole,
+            Err(Claim::Lent) => Written::Busy,
+        };
+        if let Some(write) = write.take() {
+            let _dropped = write(&mut FifoWriter::new(Fifo(None), &self.lost, Patience::NONE));
         }
+        refused
     }
 
     /// Writes `note` without waiting over the endpoint, if the block is

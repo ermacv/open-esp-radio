@@ -26,18 +26,54 @@ size register, field and instance families. PAC `HARTS`, `Hart::ALL`,
 `Hart::new` refuses unknown raw IDs without truncation; `Hart::constant` checks
 fixed IDs at monomorphization. These are identities, not launch permits.
 
-## Secondary-hart containment
+## Secondary-hart launch and containment
 
 The bootstrap contains every secondary and clears its indexed ROM boot word.
-The public HAL exposes no start or release operation. Both staged entries stop
-non-boot harts before Rust memory access. Current images declare secondary
-task and interrupt stacks as zero; their linked-image checks reject secondary
-starters, routes and storage and confine hart-local critical-section entries
-to declared hart roots. The symbol inventory does not identify inlined launch
-code. SOURCE: `hal/src/boot/soc.rs::contain_secondaries`, staged entry code,
-and the image checks' critical-section and unused-stack gates.
+Both staged entries stop non-boot harts before Rust memory access. An image
+declares the harts it runs (`[package.metadata.open-radio] harts`); the stack
+policy holds hart 1 as a launch template that only a declaring image uses.
+Every other image links zero bytes for hart 1's stacks, and its checks reject
+secondary starters, routes and storage. The stage-two header carries the used
+harts; after it published the runtime's code the bootstrap opens a used
+secondary's instruction bus (`L1_ICACHE_SHUT_IBUS1`) by the ROM's
+`Cache_Suspend_L1_CORE1_ICache` and `Cache_Resume_L1_CORE1_ICache` steps,
+which never touch the data cache; the data bus (`SHUT_DBUS0`) serves every
+hart.
+
+`Root::into_runtime` mints one `LaunchPermit`: hart 1's interrupt grant (its
+interrupt-matrix route bank and its own CLIC's parts), the ROM wake-stub word
+`LP_STORE8` and the cache-bus observer.
+During boot, before any executor, the staged runtime's `launch` consumes it
+through `Cores::start_secondary`, which refuses unless hart 1 is held, its
+instruction bus and the data bus are open and the ROM would not take its
+light-sleep wake stub (HP core 0 reset cause 5 or 6, `LP_STORE8` bit 0 clear
+and an address set); it then disconnects every hart-1 route, clears the ROM's
+`ets_printf` slots and releases the hart in ESP-IDF's `start_other_core`
+order with the boot word last. The ROM `main` path enters the generated
+`_runtime_start_h1` in SRAM (boot word bit 31 clear). The entry masks
+interrupts first, installs a stack-free fault stub, reports ENTERED and waits
+for the boot hart's ACK, which follows the boot word's retirement and its
+read-back of zero. It refuses any PMP entry, disables every PMA entry and
+programs `[hart-entry] pma` as an ascending top-of-range chain with a
+read-back of each write, then installs `gp`, its PSRAM task stack and the FPU
+and calls `runtime_secondary_main_h1`, the image's root (`secondary_entry!`).
+Before its ACK the boot hart moves hart 1's grant and the image's parts into
+the image's SRAM mailbox; the root takes them, installs hart 1's interrupt
+stack and the common exception path, reports READY and calls the image's
+hart-1 main, which makes hart 1's own controller and router on hart 1 and
+may start an executor there. The boot hart waits for each report as a named
+boot wait (`secondary-entered` 10 ms, `secondary-ready` 50 ms) under a 100
+ms launch deadline; any failure after the release records its stage and
+observations and resets.
+SOURCE: `hal/src/cores/launch.rs`, `staged-runtime/src/secondary.rs` and
+`entry.rs`, HW E1 of 2026-10-31 (oer-notes research/hw-hart1-entry-e1.md)
+for the ROM entry state, and the image checks' cores, critical-section and
+stack gates.
 
 The local CLIC is context-relative; indexed matrix/boot-word families do not
-grant another hart's execution authority. HAL explicitly selects MNLBITS.
+grant another hart's execution authority. The model marks the CLIC instance
+`hart-local`, and the PAC claims its parts once per hart; element `h` is used
+only on hart `h` (the HAL's per-hart grant). HAL explicitly selects MNLBITS,
+each hart for its own CLIC.
 SOURCE: `HW1_S31_CLIC_20261026` in `registers/evidence/hw-interrupts.toml`;
 inherited rev0 MNLBITS is one, independently of the header reset value.

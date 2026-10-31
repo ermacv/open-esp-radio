@@ -56,9 +56,12 @@ of `chip.toml`, naming the path that reached it.
 The stack check also proves each core of the chip: `cores.txt` lists every
 core's task stack and interrupt stack, used with its linked bytes or `unused`
 (0 bytes). An unused stack fails the build when the image links a core starter
-(`[core-start]` of `chip.toml`), links storage for it, or routes an interrupt
+(`[core-start]` of `chip.toml`: the HAL's `Cores::start*` and the runtime's
+generated `_runtime_start_h*`), links storage for it, or routes an interrupt
 to its core; a used secondary core runs only with a proven bound. The
-bootstrap links no starter.
+stage-two header's used-hart word (`__runtime_used_harts`) must name exactly
+the policy's used task stacks. A proven frameless root fits a stack that is
+exactly its reserve. The bootstrap links no starter.
 
 Every firmware package depending on the staged runtime declares
 `[package.metadata.open-radio] critical-section-hart`.
@@ -70,8 +73,8 @@ task root, every interrupt-table handler (including shorter handlers at the same
 level) and exception root must have complete resolved paths excluding both linked critical-section entry points. Task polls
 follow their owning entry or handler's existing call resolutions. Linked aliases
 and DWARF inline copies are checked. Partial bounds on the declared hart remain
-permitted. Unused harts' containment is also required independently of the optional stack gate. The public HAL cannot start or release
-secondary harts. `cargo fw probe` emits reachability reports only, including for
+permitted. Unused harts' containment is also required independently of the optional stack gate. A secondary hart starts only in an
+image that declares it. `cargo fw probe` emits reachability reports only, including for
 runtime-linked binaries; it does not run this critical-section gate.
 
 An image's `stack.toml` (schema 6) may name exact exceptions:

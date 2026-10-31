@@ -50,6 +50,17 @@ pub const fn runtime_entry(payload: &[u8]) -> usize {
     }
 }
 
+/// The used-hart mask of the packed runtime `payload` (one bit per hart),
+/// for the bootstrap's constant: it opens the instruction bus of each used
+/// secondary. A payload too short to hold a header (an empty stand-in) uses
+/// none, and [`stage`] rejects it.
+pub const fn runtime_harts(payload: &[u8]) -> u32 {
+    match oer_espressif_staged_layout::stage_two::harts_of(payload) {
+        Some(harts) => harts,
+        None => 0,
+    }
+}
+
 /// A completed step, reported before the next staging operation begins.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum StageProgress {
@@ -247,6 +258,7 @@ fn validate_header(header: RuntimeHeader, layout: &Layout) -> Result<ValidatedLa
         || header.bss_end < header.bss_start
         || header.payload_end > layout.psram.end()
         || header.bss_end > layout.psram.end()
+        || !uses_valid_harts(header.harts, layout)
     {
         return Err(StageError::Header);
     }
@@ -261,6 +273,17 @@ fn validate_header(header: RuntimeHeader, layout: &Layout) -> Result<ValidatedLa
         payload_len: (header.payload_end - load_address) as usize,
         bss: offset(header.bss_start)?..offset(header.bss_end)?,
     })
+}
+
+/// The image uses the boot hart and no hart outside the layout's geometry.
+fn uses_valid_harts(harts: u32, layout: &Layout) -> bool {
+    let boot = 1_u32
+        .checked_shl(layout.boot_hart)
+        .is_some_and(|bit| harts & bit != 0);
+    let outside = 1_u32
+        .checked_shl(layout.harts)
+        .map_or(0, |bit| harts & !bit.wrapping_sub(1));
+    boot && outside == 0
 }
 
 fn verify_psram_probe(psram: &mut [u8]) -> Result<(), StageError> {

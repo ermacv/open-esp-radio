@@ -128,17 +128,43 @@ impl Payload {
 }
 crate::retained_static! { pub(crate) static SLOT: Record; }
 
-/// Inspect without consuming. Output acknowledgement, through diagnostics,
-/// clears an ordinary panic; a refused output leaves its retained bytes intact.
-pub fn peek_previous<P: oer_espressif_platform_port::EarlyText>() -> Option<PanicRecord> {
-    let mut slot = retained_fault::peek(&SLOT)?;
+/// Read the previous boot's panic, if the retained slot holds one, without
+/// writing or clearing anything. Output acknowledgement, through
+/// diagnostics, clears it; a refused output leaves its retained bytes
+/// intact. Any other retained fault stays for the runtime's report once the
+/// console exists (`adoption::run`).
+pub fn peek_previous() -> Option<PanicRecord> {
+    let slot = retained_fault::peek(&SLOT)?;
     let view = slot.peek().ok()?;
     if view.domain != Domain::Panic as u32 {
-        report_fault_early::<P>(&mut slot);
         return None;
     }
     let payload: Payload = view.decode(Domain::Panic).ok()?;
     decode_panic(payload)
+}
+
+/// A named runtime fault the previous boot retained.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PreviousFault {
+    pub reason: FaultReason,
+    /// The hart that recorded it.
+    pub hart: u32,
+    /// Its four observation words.
+    pub observations: [u32; 4],
+}
+
+/// Read the previous boot's named runtime fault, if the retained slot holds
+/// one, without writing or clearing anything: the runtime still reports it
+/// once the console exists (`adoption::run`).
+pub fn peek_previous_fault() -> Option<PreviousFault> {
+    let slot = retained_fault::peek(&SLOT)?;
+    let view = slot.peek().ok()?;
+    let observations = view.decode::<[u32; 4]>(Domain::Runtime).ok()?;
+    Some(PreviousFault {
+        reason: FaultReason::from_code(view.reason)?,
+        hart: view.hart,
+        observations,
+    })
 }
 
 fn decode_panic(p: Payload) -> Option<PanicRecord> {
@@ -428,6 +454,72 @@ fn message_head(message: &str) -> ([u8; MESSAGE_BYTES], u32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// An early writer that refuses every record, as before the console's
+    /// parts are installed, while another record holds it, or after a
+    /// dropped tail.
+    struct Refusing;
+    impl oer_espressif_platform_port::EarlyText for Refusing {
+        fn text(_: &[u8]) -> bool {
+            false
+        }
+    }
+
+    /// An early writer whose every record went out whole.
+    struct Whole;
+    impl oer_espressif_platform_port::EarlyText for Whole {
+        fn text(_: &[u8]) -> bool {
+            true
+        }
+    }
+
+    fn committed(reason: FaultReason, observations: [u32; 4]) -> Record {
+        let record = Record::encode(
+            reason.class(),
+            Domain::Runtime,
+            reason as u32,
+            0,
+            0,
+            &observations,
+        )
+        .unwrap();
+        let mut slot = Record::EMPTY;
+        slot.commit(record).unwrap();
+        slot
+    }
+
+    #[test]
+    fn a_named_fault_survives_a_refused_report_and_clears_after_a_whole_one() {
+        let mut slot = committed(FaultReason::LivenessOverdue, [2, 3, 0, 1]);
+        report_fault_early::<Refusing>(&mut slot);
+        let view = slot.peek().expect("a refused report keeps the record");
+        assert_eq!(view.reason, FaultReason::LivenessOverdue as u32);
+        report_fault_early::<Whole>(&mut slot);
+        assert!(slot.peek().is_err(), "a whole report clears it");
+    }
+
+    #[test]
+    fn reading_the_previous_panic_never_writes_or_clears_a_named_fault() {
+        // The only test of the retained slot itself.
+        *retained_fault::peek(&SLOT).expect("the slot is free") =
+            committed(FaultReason::PeerUnanswered, [1, 0, 0, 0]);
+        assert!(peek_previous().is_none(), "a named fault is no panic");
+        let slot = retained_fault::peek(&SLOT).expect("the read released the slot");
+        let view = slot.peek().expect("the read left the record complete");
+        assert_eq!(view.reason, FaultReason::PeerUnanswered as u32);
+        drop(slot);
+        assert_eq!(
+            peek_previous_fault(),
+            Some(PreviousFault {
+                reason: FaultReason::PeerUnanswered,
+                hart: 0,
+                observations: [1, 0, 0, 0],
+            })
+        );
+        let slot = retained_fault::peek(&SLOT).expect("the read released the slot");
+        assert!(slot.peek().is_ok(), "the read left the record complete");
+    }
+
     #[test]
     fn invalid_hart_keeps_its_full_raw_observation_and_registered_reason() {
         let mut record = encode_invalid_hart(u32::MAX).unwrap();
@@ -480,7 +572,7 @@ mod tests {
         for retired in [5, 10, 30] {
             assert_eq!(FaultReason::from_code(retired), None);
         }
-        for code in (1..=34)
+        for code in (1..=36)
             .filter(|code| ![5, 10, 30].contains(code))
             .chain(256..=260)
         {

@@ -144,6 +144,7 @@ pub fn build(root: &Path, package: &str, jobs: Option<usize>) -> Result<PathBuf>
         stack_policy: profile.stack_policy(),
         diagnostic: true,
         task_stack_proven: false,
+        harts: Vec::new(),
     };
     let specification = strict::configure(&mut cargo, &analysis, &output, true)?;
     let mut cargo = command(cargo, root, package, target, jobs)?;

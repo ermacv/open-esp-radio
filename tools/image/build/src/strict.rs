@@ -19,6 +19,7 @@ pub(crate) fn configure(
         stack_policy: std::fs::canonicalize(spec.root.join(&spec.stack_policy))?,
         diagnostic: spec.diagnostic,
         task_stack_proven: spec.task_stack_proven,
+        harts: spec.harts.clone(),
     };
     let path = std::path::absolute(output.join(SPEC_FILE))?;
     std::fs::write(&path, toml::to_string(&analysis)?)?;
@@ -111,6 +112,7 @@ mod tests {
             stack_policy: "stack.toml".into(),
             diagnostic: false,
             task_stack_proven: false,
+            harts: Vec::new(),
         };
         let mut command = Command::new("not-executed");
         configure(&mut command, &spec, root, true).unwrap();

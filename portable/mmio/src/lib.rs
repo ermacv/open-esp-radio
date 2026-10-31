@@ -368,6 +368,9 @@ tuple_claims!(A, B, C, D, E, F, G, H);
 /// taken from it exists, except a word the chip's reviewed shared-word list
 /// names with the coordination of its writers; no word is listed by two
 /// blocks of `C` or by a block of another claim that exists at the same time.
+/// A hart-local word (each hart reaches its own copy at one address) is
+/// listed once per hart, and the block listing hart `h`'s copy is accessed
+/// only on hart `h`.
 #[allow(unsafe_code, reason = "the caller promises exclusive registers")]
 pub unsafe fn assume_owned<C: Claim>() -> C {
     C::claimed(&sealed::Promise(()))

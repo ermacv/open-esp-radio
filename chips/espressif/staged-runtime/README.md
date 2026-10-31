@@ -8,6 +8,36 @@ vectors, stack symbols and default handlers.
 
 `_runtime_start` initializes application data and SRAM interrupt/DMA sections,
 selects the boot hart's PSRAM task stack and calls the image's `runtime_main`.
+
+An image that declares a secondary hart starts it during boot, before any
+executor, with `secondary::launch` over the platform's `SecondaryStart`: the
+hart's linked stacks and a fresh SRAM handshake are checked, the platform
+releases the hart into its generated `_runtime_start_h<N>`, the boot hart
+waits for ENTERED (`secondary-entered`), retires the boot word, moves the
+hart's interrupt grant and the image's parts for it into the hart's
+`Mailbox`, fences, publishes ACK and waits for READY (`secondary-ready`)
+under the image's deadline. The entry (`entry.rs`, generated per secondary
+from the facts) masks interrupts first, installs a stack-free fault stub,
+checks PMP, programs the facts' PMA chain with read-back, installs `gp`, its
+PSRAM task stack and the FPU and tail-calls `runtime_secondary_main_h<N>`,
+the root the image declares with `secondary_entry!` beside its mailbox (in
+SRAM). The root checks its hart, takes the mailbox once, mints the hart's one
+`SecondaryHandoff`, installs the hart's interrupt stack and the common
+exception path, reports READY and calls the image's hart main. A fault
+before READY stores its kind and observations; `LaunchFailure::reset`
+records any failure (`SecondaryLaunch` or `SecondaryEarlyFault`) and resets.
+Only an image that launches a hart links its entry.
+
+The hart main makes the hart's own interrupt context:
+`SecondaryHandoff::adopt` makes the hart's controller from its grant on the
+hart itself (its CLIC is reachable only from it, `HW1_S31_CLIC_20261026`),
+installs a router over it that silences the hart's bank and disables its
+lines, and returns the hart's `Adopted<C, H>`. Like the boot hart's, it
+lends the router with `Hart<H>` for executor startup, and
+`enable_interrupts` checks the hart's vectors, routes and lines, consumes
+pre-admission authority and returns the router with `Hart<H>`. Each hart has
+one grant, so one controller and one router. `SecondaryHandoff::idle`
+leaves a hart masked with its grant unused.
 `entry!` supplies that entry, the image's single panic handler and the common
 CPU-exception handler. The image
 passes the HAL reset root's unstarted runtime partition to `adoption::run`,
@@ -33,8 +63,10 @@ layout checks after successful adoption. `run` uses the same preparation and
 completion implementation.
 Adoption writes no CPU clock, PSRAM, cache or MMU register and repeats no cold boot.
 
-Adoption installs the SRAM interrupt stack and vectors, silences sources and
-disables lines through the interrupt controller. Geometry and level-bit
+Adoption makes the boot hart's controller from its grant
+(`adoption::Binding::controller`, on the boot hart), installs the SRAM
+interrupt stack and vectors, silences sources and disables lines through
+that controller. Geometry and level-bit
 mismatches return `BootError`. The returned `Adopted` lends its router and
 affine hart token for executor setup. `enable_interrupts` checks vectors,
 routes and lines, consumes pre-admission authority and returns the router
@@ -77,9 +109,14 @@ payload bytes and a checksum, 316 bytes in total. The largest payload is the exi
 publishes completion last; unsupported versions, oversized payloads and corrupt
 records return typed errors. There is no previous-layout decoder.
 
-`panic::peek_previous` reads without consuming. The diagnostics renderers clear
-an ordinary panic only after successful output of its exact snapshot; named
-faults and image reporters likewise clear after their complete output succeeds.
+`panic::peek_previous` only reads: it returns a retained panic and writes or
+clears nothing. Every other retained fault is reported by `adoption::run`
+after the console's parts are installed. The diagnostics renderers clear an
+ordinary panic only after whole output of its exact snapshot; named faults and
+image reporters likewise clear only after their complete output went out whole
+(`oer_diagnostics::Written::Whole`: the FIFO took every byte and sending
+started, the host's receipt is not observed). A dropped, refused or partly
+written report keeps the record for a later boot.
 HIL acknowledges its platform panic and postmortem after the full boot-evidence
 frame and CRLF are written. Output refusal retains diagnostic bytes. A new boot's
 first terminal may replace an unreported older record. Retention is best effort;

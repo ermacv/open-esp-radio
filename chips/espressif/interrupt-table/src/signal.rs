@@ -24,12 +24,22 @@
 //! that executor's hart and level. Equal-level handlers cannot preempt the
 //! executor's round: the handler publishes facts and pends the next round,
 //! which services them in the executor's own context. [`FromTask`] admits
-//! tasks strictly below the receiver. Construction checks the same-level
-//! class, each raiser's hart and direction at compile time, including runtime constructors
-//! through inline const evaluation at monomorphization.
+//! tasks strictly below the receiver on its hart; [`FromPeerHart`] admits a
+//! task of an executor on another hart, which pends the receiver through its
+//! software line (a cross-hart wake is a raise of the peer executor's
+//! signal, never a waker call). Construction checks the same-level class,
+//! each raiser's hart and direction at compile time, including runtime
+//! constructors through inline const evaluation at monomorphization.
+//!
+//! A raise publishes its facts (fetch-or, Release), then the executor's
+//! pend fences `w, o` before its software interrupt's raise; the
+//! receiving handler lowers its line and fences `o, rw` before it swaps
+//! the facts (`oer-espressif-executor`'s software line). Across harts this
+//! order is conditional on the line's hardware preconditions stated
+//! there.
 
 mod binding;
-pub use binding::{FromExecutorLevel, FromHandler, FromTask, Raisers};
+pub use binding::{FromExecutorLevel, FromHandler, FromPeerHart, FromTask, Raisers};
 
 use core::{
     marker::PhantomData,
@@ -77,6 +87,28 @@ fn context<E: SignalExecutor>() -> Result<ContextToken<E::Context>, ForeignConte
     Entered::enter().map(ContextToken).ok_or(ForeignContext)
 }
 
+/// Enter executor `E`'s context: the proof that the caller runs in it now,
+/// for state that only `E`'s tasks may change.
+///
+/// # Errors
+/// The caller runs outside `E`'s context, including another executor on
+/// the same hart.
+pub fn enter<E: SignalExecutor>() -> Result<ContextToken<E::Context>, ForeignContext> {
+    context::<E>()
+}
+
+/// Enter executor `E`'s context as the task `cx`'s waker names: the proof
+/// that one of `E`'s tasks polls now, before it registers that waker.
+///
+/// # Errors
+/// The caller runs outside `E`'s context, or `cx`'s waker names no task
+/// `E` polls now.
+pub fn enter_task<E: SignalExecutor>(
+    cx: &Context<'_>,
+) -> Result<ContextToken<E::Context>, ForeignContext> {
+    context_task::<E>(cx).map(|(token, _)| token)
+}
+
 /// The context proof and the polling task's handle.
 fn context_task<E: SignalExecutor>(
     cx: &Context<'_>,
@@ -110,7 +142,7 @@ pub struct ForeignTask;
 impl<E: SignalExecutor> IrqSignal<E> {
     /// A signal of `E` with no fact. `Target` is its executor's table entry;
     /// `R` names every raising handler or task (`FromHandler`,
-    /// `FromExecutorLevel`, `FromTask`, or nested pairs).
+    /// `FromExecutorLevel`, `FromTask`, `FromPeerHart`, or nested pairs).
     /// The software source, class, hart and directions are checked
     /// at compile time. No scheduling metadata is stored in the signal.
     pub const fn new<R: Raisers, Target: crate::Entry>() -> Self

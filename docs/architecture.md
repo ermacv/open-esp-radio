@@ -53,8 +53,8 @@ image                interrupt table, tasks, chosen facades and engines
 ```
 
 The family's `oer-espressif-boot::drivers` holds LP-fast, brownout,
-secondary containment, access-filter and TRNG startup operations over register
-ports implemented by the HAL's owned boot parts. `oer-esp32s31-boot` supplies
+secondary containment and release, access-filter and TRNG startup operations
+over register ports implemented by the HAL's owned boot parts. `oer-esp32s31-boot` supplies
 S31 profiles, including the generated LP-fast source. This chip binding sits
 above HAL and family drivers so neither HAL nor chip knowledge chooses or
 executes those policies. The family staged-bootstrap cold-start runner owns
@@ -168,7 +168,13 @@ back immediately. The chip composition chooses the engine as a static type.
 The S31 Typical AES engine lives in `chips/esp32s31/crypto`, over the HAL's
 `peripherals::aes` atoms and exclusive crypto clock/reset word. The shared
 `compose::crypto` selects it and supplies it to the Wi-Fi facade in
-`Resources`. The station runner retains the engine from
+`Resources`. The image's composition places the AES owner on a hart: the
+boot hart takes it from `Hardware` (Wi-Fi images), or an image that
+launches hart 1 moves `AesParts` into hart 1's launch parts and builds the
+engine there over hart 1's router (boot-smoke). Its `Silent` proof holds on
+either hart: the proof checks the table's entries of every hart and that
+router's own bank, and every hart's router silences its own bank at install,
+before that hart first unmasks. The station runner retains the engine from
 construction; images supply no separate engine when starting it. It owns AES by value,
 retains IRQ55 with `Silent`, uses timer-woken completion samples and erases
 the hardware key and intermediates on completion or cancellation. A failed
@@ -286,8 +292,10 @@ contract;
 staged-bootstrap, staged-runtime and executor depend on the platform.
 `oer-espressif-platform-port` holds the family's platform contracts (the
 early console writer, the fatal path's mask, stop of the other harts and
-software reset, and the executor's sources, reads and owned blocks) and the
-hart geometry of the chip its HAL selects. The family sits above the port
+software reset, a secondary hart's release, boot-word retirement and the
+hand-over of its interrupt grant, which only that hart makes into its
+controller, and the executor's sources, reads and owned blocks) and the hart geometry of the chip
+its HAL selects. The family sits above the port
 and the chip implements it: the chip's HAL implements the contracts on its
 own types, and the staged bootstrap, staged runtime and executor reach the
 chip only through them; no family crate depends on a chip crate. The staged
@@ -330,8 +338,13 @@ moves; ownership, orchestration and wiring are rebuilt.
 ## Execution
 
 The critical section is hart-local; staged build/run checks confine linked section
-entry points to the image's declared hart roots. The public HAL cannot start or
-release a secondary hart.
+entry points to the image's declared hart roots. A secondary hart starts only
+through the image's declared hart set and the root's one-shot launch permit,
+during boot, before executors; any failure after release records and resets.
+Before its acknowledgement the launch hands the hart its interrupt grant and
+the image's parts for it through the image's SRAM mailbox
+(`secondary_entry!`); the hart then makes its own interrupt context and may
+run its own executor.
 
 | Context | Runs | Rule |
 | --- | --- | --- |
@@ -339,6 +352,7 @@ release a secondary hart.
 | P2, boot hart, TIMG0 T0 CPU line 16 | SAR/PWDET conversion steps in `Exempt(ExecutorLevel)` | one bounded step per event; below FROM_CPU2 CPU line 17 |
 | P2, boot hart | one radio executor on `FROM_CPU2`, CPU line 17: Wi-Fi driver, BLE lower link layer, the radio-system actor, including PHY calibration and tracking | cooperative admission between hardware atoms; long waits use timers |
 | P1 / thread, boot hart | role bodies, network stack, application | — |
+| hart 1, images that declare it | the image's hart-1 main on its own PSRAM task stack, with its SRAM interrupt stack and the common exception path installed; its own router and, in boot-smoke, an interrupt-mode executor on `FROM_CPU1` (hart 1's line 16, P2) with its tasks (the exchange's server, the AES engine and the liveness responder), and that executor's SYSTIMER alarm 1 on hart 1's line 17 (P3) | its sources route only to hart 1's bank; it reaches the boot hart's tasks only by raising their executor's signal (`FromPeerHart`); its timers come through an alarm grant, and the boot hart's writer executor programs its comparator; no `critical-section` and no SYSTIMER register write on hart 1 but its own alarm's acknowledgement |
 
 - `oer-memory::ExecutionContext` owns the unsafe memory-exclusion contract.
   `Entered<X>` is non-transferable, checks entry and rechecks each
@@ -351,9 +365,29 @@ release a secondary hart.
   or waker. Each executor mode and software line has its own typed list.
 - An interrupt handler never shares a lock with a task and reaches tasks
   through static typed signals, never through an executor's waker.
+- Each hart has its own local interrupt controller (the S31 CLIC is
+  context-relative) and one router. The root pairs each hart's CLIC parts,
+  which the PAC claims once per hart, with that hart's route bank in one
+  `InterruptGrant`; only that hart's handoff (`Handoff::adopt` for the boot
+  hart, `SecondaryHandoff::adopt` for a secondary hart) makes it a
+  controller, on that hart (a runtime hart check), and the controller and
+  its router stay there (`!Send`). Each hart sets its own CLIC's level bits.
+  A hart's interrupt enable consumes its `PreAdmission<H>` and returns its
+  router with `Hart<H>`.
 - Each executor starts with a borrowed affine `Hart<H>`; its interrupt entry
   must name that hart at compile time. A software source identifies one
-  executor globally, and its task wakers stay on its owning hart. Current
+  executor globally, and its task wakers stay on its owning hart. A task
+  reaches an executor on another hart only by raising that executor's
+  signal, declared with a `FromPeerHart` raiser
+  (`oer-espressif-executor::peer` carries one request and its answer that
+  way, over an in-place request slot, with a deadline on the client's
+  executor timer; `peer::liveness` supervises a peer hart with a periodic
+  such request, below). Every software-interrupt raise fences `w, o` after the
+  raiser's facts, and every handler lowers its line and fences `o, rw`
+  before it takes them; across harts the order holds on two preconditions
+  the repository has not established: the core honors FENCE's I/O bits with
+  both harts' writes of one `HP_CPU_INT_FROM_CPU_n` word serialized, and a
+  level last written 1 eventually pends on the receiving hart. Current
   execution state has one slot per facts-defined `HARTS`; its packed poll
   stamp reserves enough low bits for every hart and an unassigned sentinel.
   The remaining timestamp bits must hold the cooperative admission budget.
@@ -365,6 +399,50 @@ release a secondary hart.
   those sources and its own wake source from the current hart's pending bank;
   an idle wait checks that hart's debug status. These read-only selections use
   the PAC's checked hart identity; invalid raw IDs take the retained fatal path.
+- Each executor has its own timer queue and SYSTIMER comparator; one
+  writer executor, named at the time driver's `init`, writes every SYSTIMER
+  configuration word. Another executor publishes its next deadline to the
+  writer and pends it. An executor on another hart than the writer's gets
+  its comparator through an affine `AlarmGrant`: `grant` borrows the
+  writer's hart-local `TimeDriverReady` on the writer's hart, publishes the
+  assignment and binds the comparator there; the grant moves to the
+  executor's hart (`Send`), whose own router routes the alarm
+  (`AlarmGrant::bind` with that hart's `Hart<H>`, its entry's hart checked
+  at compile time). That hart's alarm handler writes only its own
+  `INT_CLR` bit. Its timer latency past a deadline is, as stated parts of
+  the bound and not measured numbers: the cross-hart raise of the
+  publication, the writer context's preemption on its hart, the writer
+  executor's longest round in progress (it programs published deadlines
+  when it serves its timers at the start of a round), then the alarm
+  interrupt and the receiving executor's round. Every context of every hart
+  reads the one SYSTIMER counter latch through
+  `oer-espressif-boot::drivers::system_timer`: across harts strobes and reads
+  interleave access by access, and the LO/HI/LO verification still returns
+  one whole copy completed during the read, monotonic across harts, or an
+  unverified monotonic floor once another hart's strobes exhaust its rounds
+  (its module documentation and host tests state the latch properties used).
+- `peer::liveness` supervises a peer hart. The image declares its seat, a
+  static in-place slot that `liveness::pair` claims once, and a supervisor
+  task of its own that never ends and owns the seat and its executor's
+  timer, independently of the image's other futures. Every stated period it
+  posts a beat that the responder task on the other hart echoes within the
+  stated deadline; an echo the supervisor does not take before the deadline
+  (its timer read after the take) ends supervision with a typed `Overdue`
+  and quarantines the seat, and the image records `LivenessOverdue` and
+  resets. Every `peer` request carries its deadline from its post: the
+  client keeps it across cancelled waits and never returns a late answer.
+  The supervisor also watches every request of its executor's clients:
+  each channel holds a seat of the supervisor's static obligation table,
+  filled before the server sees the request and emptied only for an answer
+  taken in time, so a request whose wait was abandoned or never started,
+  expired or answered late still ends supervision with `RequestOverdue` at
+  its deadline, recorded as `PeerUnanswered`. A completed
+  round proves that the responder's hart runs its executor, polls the
+  responder and that notifications cross in both directions within the
+  deadline; it proves nothing about other drivers on that hart. When the
+  supervisor's own executor stops nothing supervises, and the RTC watchdog
+  that executor feeds is the only bound. Period and deadline are stated
+  configuration.
 - Drivers never block or spin. A named settle of a known length up to 20 µs
   may busy-wait and counts against its context's step bound; a wait of
   unknown length is a timer-woken step with a deadline.
@@ -427,8 +505,11 @@ release a secondary hart.
   cannot preempt the executor's round: the handler publishes atomic facts
   and pends the executor, whose next round observes the signal and wakes its
   task. The handler never calls the task's waker or touches task-owned state.
+  `FromPeerHart<X, Entry>` admits a task of executor `X` on another hart
+  than the receiving executor; no level relation holds across harts.
   The declaration checks the executor's software source, the same-level
-  raiser's class, the directions and common hart.
+  raiser's class, the directions and the common hart, or for a peer-hart
+  raiser a different one.
   Doorbell construction, Wi-Fi activation and BLE gate exchange check that
   the request handler is above the requesting executor on the same hart;
   the driver also checks the doorbell against the bound handler. These are
@@ -454,9 +535,11 @@ release a secondary hart.
   increasing arbitration priority. The table checks their line IDs against
   the facts' highest-line tie-break. Inputs
   below the facts' first source line are reserved for core-local use. The HAL
-  writes its selected MNLBITS on partition split without assuming the ROM
-  left the reset configuration; the router checks INT_INFO and MNLBITS against
-  the facts at install and verify.
+  writes its selected MNLBITS without assuming the ROM left the reset
+  configuration, each hart into its own CLIC: hart 0's on partition split,
+  hart 1's when hart 1 makes its controller, and hart 1's handoff sets its
+  threshold to admit every level; the router checks INT_INFO and MNLBITS
+  against the facts at install and verify.
   Stage-two adoption and interrupt enable return typed boot failures to the
   image's existing failure reporter when geometry, configuration, vectors,
   routes or lines disagree; they never enable interrupts on a mismatch.
@@ -667,6 +750,10 @@ The current mechanisms have narrower guarantees than the policy:
   HIL and RX-chain exception supplements use the entry-time cause/PC/trap value;
   HIL samples pending/routes after stop as additional observations. Neither
   the frame nor those sequential samples are an atomic snapshot of all hardware.
+  The route and line view (`fatal_view`) exists only in the boot hart's
+  fatal path: hart 1's routes have no claimed observer and its CLIC lines
+  are reachable only from hart 1, so a fault on hart 1 records the common
+  exception frame and stops the boot hart, without that view.
   Trace and checkpoint rings have independent, non-fault formats.
 - `NOLOAD` prevents startup initialization; it promises no hardware
   retention. `HW1_S31_RESET_20261026` in the register evidence observes a
@@ -733,10 +820,14 @@ defines the scan's scope and limits.
   their counts from that list. Secondary boot-word labels also derive from
   its explicit boot role. Typed indices connect their geometry to HAL reads
   and writes. Fixed indices
-  and list/count mismatches fail during the build. Every current image keeps
-  secondary harts contained. The HAL holds secondary harts, and the image gate rejects
-  starters, routes or storage for harts declared unused
-  ([secondary boot](../chips/esp32s31/platform/README.md#secondary-hart-containment)).
+  and list/count mismatches fail during the build. An image declares the harts
+  it runs (`[package.metadata.open-radio] harts`); the bootstrap holds every
+  secondary hart, and one an image does not declare stays contained: the image
+  gate rejects starters, routes or storage for it. The runtime root mints one
+  launch permit (hart 1's route bank, the ROM wake-stub word and the cache-bus
+  observer); `Cores::start_secondary` consumes it to release a declared hart
+  into its generated entry during boot, before any executor
+  ([secondary launch](../chips/esp32s31/platform/README.md#secondary-hart-launch-and-containment)).
   An architectural ID outside this list is `InvalidHart { raw }`, never a
   different hart. The fatal path records the full raw ID, quarantines free
   control owners and requests reset; it never takes a lent or held owner.
@@ -749,8 +840,15 @@ defines the scan's scope and limits.
   `Adopted::parts` lends the hart and mutable router together for executor
   setup. Facts generate one typed, aligned Rust vector-table row per
   hart, with assembly entry/exit and compiler-derived frame offsets.
-  Generated secondary entry stubs admit no Rust code or interrupts and have
-  no linked launcher.
+  Generated secondary entries admit only the launch handshake and their
+  hart's root, which the image declares (`secondary_entry!`): an entry masks
+  interrupts first, reports itself, waits for the boot hart's
+  acknowledgement after the boot word's retirement and the hand-over of the
+  hart's mailbox, programs its PMA chain from the facts and installs its own
+  stack; the root checks its hart, takes the mailbox once, mints that hart's
+  `PreAdmission<H>`, installs its interrupt stack and the common exception
+  path, reports ready and runs the image's hart main. Only an image that
+  launches the hart links its entry.
 - **Register model.** The chip is block types (one hardware block each,
   offsets from its base) placed by a root at their addresses, with its
   interrupt sources, analog-I2C bytes (a separate space addressed by block

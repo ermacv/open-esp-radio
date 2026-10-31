@@ -22,7 +22,8 @@
 //! ```
 
 use oer_esp32s31_pac::ownership::{
-    BootPeripherals, MacLocalTimePeripherals, ModemEtmPeripherals, Partitions, SocPeripherals,
+    BootPeripherals, InterruptMatrixPeripherals, MacLocalTimePeripherals, ModemEtmPeripherals,
+    Partitions, SocPeripherals,
 };
 
 use crate::{
@@ -191,6 +192,7 @@ impl Root {
             timer_group1,
             aes,
             crypto_clock,
+            secondary_launch,
         } = self.partitions;
         let WatchdogRegisters {
             main0,
@@ -198,6 +200,24 @@ impl Root {
             rtc,
             super_watchdog,
         } = WatchdogRegisters::new(watchdog);
+        // Each hart's CLIC parts go with its own route bank: hart 0's to the
+        // interrupt blocks, hart 1's to the launch permit.
+        let InterruptMatrixPeripherals {
+            clic: [clic0, clic1],
+            clic_observer: [clic_observer0, clic_observer1],
+            interrupt_core0,
+            interrupt_core0_observer,
+            interrupt_core0_status,
+            interrupt_core1_status,
+        } = interrupt_matrix;
+        let interrupt_matrix = crate::platform::interrupt_controller::MatrixParts {
+            clic: clic0,
+            clic_observer: clic_observer0,
+            interrupt_core0,
+            interrupt_core0_observer,
+            interrupt_core0_status,
+            interrupt_core1_status,
+        };
         oer_espressif_boot::adoption::Owners {
             cpu_clock: crate::boot::RuntimeCpuClock::new(ClockRegisters::new(
                 boot.hp_sys_clkrst_boot_clock,
@@ -233,6 +253,7 @@ impl Root {
                 efuse: EfuseRegisters::new(efuse),
                 entropy: EntropyRegisters::new(entropy, soc.lp_periclkrst_rng_init),
                 reset_cause: ResetCauseRegisters::new(reset_cause),
+                hart1: crate::cores::LaunchPermit::new(secondary_launch, clic1, clic_observer1),
                 wifi_interrupts: WifiInterruptBanks::new(wifi_interrupts),
                 radio: RadioHardware::new(RadioPartitions::compose(RadioParts {
                     wifi_mac,

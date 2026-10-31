@@ -34,7 +34,7 @@ oer_espressif_staged_runtime::entry!(main, oer_esp32s31_hal::platform::Port);
 
 fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platform::Port>) -> ! {
     // Before anything can panic and overwrite it.
-    let previous = panic::peek_previous::<oer_esp32s31_hal::platform::Port>();
+    let previous = panic::peek_previous();
     let Some(root) = Root::take() else {
         fail(oer_diagnostics::name!("root-taken"; 32));
     };
@@ -59,8 +59,10 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
             let _reset_causes = oer_esp32s31_compose::reset_causes::read(hardware.reset_cause);
             // The executor is not running yet: the early writer waits for room
             // within its budget and counts what it drops.
-            let mut diagnostics = Console::new(|bytes| {
-                if usb_serial_jtag::early_text(bytes) {
+            // Every frame of this boot, the runtime's report of a previous
+            // fault included, takes the next number of one shared sequence.
+            let mut diagnostics = Console::shared(|bytes| {
+                if usb_serial_jtag::early_text(bytes).is_whole() {
                     Ok(())
                 } else {
                     Err(())

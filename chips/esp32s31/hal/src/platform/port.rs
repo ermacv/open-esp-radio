@@ -57,7 +57,7 @@ pub(crate) fn publish_debug_status(peripherals: DebugPeripherals) {
 impl port::EarlyText for Port {
     #[inline(always)]
     fn text(bytes: &[u8]) -> bool {
-        crate::peripherals::usb_serial_jtag::early_text(bytes)
+        crate::peripherals::usb_serial_jtag::early_text(bytes).is_whole()
     }
 }
 
@@ -95,6 +95,54 @@ impl port::Platform for Port {
     fn software_reset(fatal: Self::Fatal<'_>) -> port::AwaitWatchdog<Self::StopError> {
         let cores::AwaitWatchdog { reason } = cores::software_reset(fatal);
         port::AwaitWatchdog { reason }
+    }
+}
+
+impl port::SecondaryStart for Port {
+    type Cores = cores::Cores;
+    type Permit = cores::LaunchPermit;
+    type Preconditions = crate::peripherals::reset_cause::ResetCauses;
+    type Released = cores::Released;
+    type StartError = cores::StartError;
+    type Interrupts = crate::platform::Hart1Grant;
+    type Controller = crate::platform::Hart1Controller;
+
+    #[inline(always)]
+    fn release(
+        cores: &mut cores::Cores,
+        permit: cores::LaunchPermit,
+        preconditions: Self::Preconditions,
+        entry: port::SecondaryEntry,
+    ) -> Result<cores::Released, cores::StartError> {
+        cores.start_secondary(permit, preconditions, entry)
+    }
+
+    #[inline(always)]
+    fn retire_boot_word(
+        cores: &mut cores::Cores,
+        released: &mut cores::Released,
+    ) -> Result<(), cores::StartError> {
+        cores.retire_boot_word(released)
+    }
+
+    #[inline(always)]
+    fn observations(error: cores::StartError) -> [u32; 3] {
+        error.observations()
+    }
+
+    fn interrupts(released: &mut cores::Released) -> Option<Self::Interrupts> {
+        released.take_interrupts()
+    }
+
+    #[cfg(target_arch = "riscv32")]
+    fn controller(interrupts: Self::Interrupts) -> Result<Self::Controller, port::ForeignHart> {
+        interrupts.into_controller()
+    }
+
+    /// The host has no hart identity: no controller is made off the chip.
+    #[cfg(not(target_arch = "riscv32"))]
+    fn controller(interrupts: Self::Interrupts) -> Result<Self::Controller, port::ForeignHart> {
+        interrupts.into_controller_on(usize::MAX)
     }
 }
 

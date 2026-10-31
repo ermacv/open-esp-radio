@@ -9,7 +9,7 @@ use oer_espressif_staged_runtime::trap::{self, TrapFrame};
 pub fn report_stack_guard() {
     let (control, address) = oer_riscv::selected_trigger_data();
     let hart = trap::TrapRegisters::read().hart;
-    crate::usb::early(&Note::stack_guard(
+    let _written = crate::usb::early(&Note::stack_guard(
         hart as u32,
         control as u32,
         address as u32,

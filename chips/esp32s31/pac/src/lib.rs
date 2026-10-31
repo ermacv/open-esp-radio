@@ -159,9 +159,12 @@ pub fn take() -> Option<ownership::Partitions> {
         reason = "the PAC root takes its one claim"
     )]
     // SAFETY: `TAKEN` lets this run once per boot, so no other claim of
-    // these blocks exists; the generated `disjoint_blocks` check proves no
-    // two blocks of the claim list one word, and no other code of an image
-    // accesses a claimed word (the PAC is the only constructor of a block).
+    // these blocks exists; the generated per-hart `disjoint_blocks` checks
+    // prove no two blocks of one hart's context list one word, and no other
+    // code of an image accesses a claimed word (the PAC is the only
+    // constructor of a block). A hart-local word is listed once per hart:
+    // element `h` of a hart-local part is accessed only on hart `h`, which
+    // the HAL's per-hart grant enforces.
     let claims = unsafe { oer_mmio::assume_owned::<ownership::Claims>() };
     Some(ownership::partition(claims))
 }

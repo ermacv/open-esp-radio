@@ -47,6 +47,7 @@ pub mod cores;
 pub mod domain;
 pub mod modem;
 pub mod power;
+mod rom;
 pub mod root;
 pub mod types;
 

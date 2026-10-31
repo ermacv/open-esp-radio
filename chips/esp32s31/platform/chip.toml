@@ -132,12 +132,48 @@ boot-hart = 0
 harts = [0, 1]
 irq-stack-guard-bytes = { "0" = 4096, "1" = 1024 }
 
-# The HAL exposes no way to release hart 1. The starter pattern below is a
-# name check that stays in force for any starter an image links itself; an
-# image must declare that hart's roots and prove its stack policy first.
+# A secondary hart starts only through the image's declared hart set and the
+# runtime root's one-shot launch permit: the HAL's `Cores::start_secondary`
+# releases it into the runtime's generated `_runtime_start_h<N>`. An image
+# that links either declares that hart (`[package.metadata.open-radio] harts`)
+# and proves its stack policy; any other image links neither.
 [core-start]
 ipc = []
-starters = ["*Cores*::start*"]
+starters = ["*Cores*::start*", "_runtime_start_h*"]
+
+# What a secondary hart's generated entry programs before it leaves SRAM: the
+# rev0 ROM `main` path hands hart 1 four NAPOT PMA entries (LP RAM RW, ROM RX,
+# SRAM RWX, 0x40000000 + 512 MiB RX) and no writable PSRAM entry, so PSRAM
+# data cannot be reached (SOURCE: HW E1 of 2026-10-31, oer-notes
+# research/hw-hart1-entry-e1.md; ESP-IDF fff9895c
+# `components/esp_hw_support/port/esp32s31/cpu_region_protect.c`: "without
+# setting this, psram cannot be reached"). The entry disables every entry,
+# then programs this ascending top-of-range chain, each gap between two
+# ranges an enabled entry without access, as ESP-IDF's invalid regions are.
+# A `region` names a `[memory]` region and takes its bounds and attributes
+# (`internal-sram` the whole internal SRAM, with `sram`'s attributes); a
+# range without one states its bounds, access and cacheability.
+[hart-entry]
+pma = [
+    # SOURCE: ESP-IDF 4d80c1b2 `components/soc/esp32s31/include/soc/soc.h:208-209`
+    # (`SOC_CPU_SUBSYSTEM_LOW 0x10000000`..`SOC_CPU_SUBSYSTEM_HIGH 0x20000000`:
+    # debug mode code and the hart's CLIC) and `cpu_region_protect.c:165-179`
+    # (the application grants this window RWX). Hart 1 reaches its own CLIC here;
+    # stand run 20261031T183441Z faulted with mtval 0x10800000 without it.
+    { name = "cpu-subsystem", start = 0x10000000, end = 0x20000000, access = "rwx", cached = false },
+    # SOURCE: ESP-IDF 4d80c1b2 `components/soc/esp32s31/include/soc/soc.h:193-201`
+    # (`SOC_PERIPHERAL_LOW 0x20100000`..`SOC_PERIPHERAL_HIGH 0x2E000000`, the
+    # on-chip peripherals, the CPU peripherals and the debug space). The
+    # entry's fatal path reaches the core-control words through it.
+    { name = "peripherals", start = 0x20100000, end = 0x2e000000, access = "rw", cached = false },
+    { name = "lp-ram", region = "retained" },
+    { name = "internal-sram", region = "internal-sram" },
+    # SOURCE: ESP-IDF 4d80c1b2 `components/soc/esp32s31/include/soc/soc.h:147-150`
+    # (`SOC_IROM_MASK_LOW 0x2F800000`..`SOC_IROM_MASK_HIGH 0x2F850000`).
+    { name = "rom", start = 0x2f800000, end = 0x2f850000, access = "rx", cached = false },
+    { name = "flash", region = "flash-xip" },
+    { name = "psram", region = "psram" },
+]
 
 # The Rust probe images of the vendor comparison (firmware/probes),
 # in build order: the artifact role each serves. The Bluetooth probe returns

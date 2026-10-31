@@ -1,0 +1,40 @@
+[package]
+name = "oer-firmware-probes-esp32s31-peer-overdue"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0"
+repository.workspace = true
+publish.workspace = true
+description = "A staged image whose boot-hart client posts one watched request to hart 1 and never takes the answer, once the stand arms it; the next boot checks the supervisor's retained `PeerUnanswered`"
+build = "build.rs"
+
+[target.'cfg(target_arch = "riscv32")'.dependencies]
+oer-esp32s31-board = { path = "../../../chips/esp32s31/board" }
+oer-esp32s31-hal = { path = "../../../chips/esp32s31/hal" }
+oer-espressif-staged-runtime = { path = "../../../chips/espressif/staged-runtime" }
+oer-esp32s31-compose = { path = "../../../chips/esp32s31/compose" }
+oer-diagnostics = { path = "../../../portable/diagnostics" }
+oer-espressif-executor = { path = "../../../chips/espressif/executor" }
+oer-embassy-time = { path = "../../../portable/embassy/time" }
+oer-time = { path = "../../../portable/time" }
+oer-espressif-interrupt-table = { path = "../../../chips/espressif/interrupt-table" }
+oer-memory = { path = "../../../portable/memory" }
+
+[build-dependencies]
+oer-esp32s31-layout = { workspace = true, features = ["build"] }
+
+[lints]
+workspace = true
+
+[package.metadata.open-radio]
+critical-section-hart = "boot"
+# Hart 1 starts during boot, runs its own interrupt-mode executor and serves
+# the boot hart's request and liveness beats.
+harts = ["boot", 1]
+task-stack = "proven"
+
+[package.metadata.open-radio.panic-budget]
+# Reachable panic sites by layer (the image check's `*-panics.txt`): each only shrinks, toward 0.
+runtime = { firmware = 4 }
+bootstrap = { unnamed = 0 }

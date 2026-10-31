@@ -620,9 +620,11 @@ impl StackAudit {
         let mut warnings = Vec::new();
         for stack in &self.stacks {
             let (capacity, bound) = &stack.linked;
+            // A proven frameless root needs no byte: its stack is exactly the
+            // reserve it keeps free.
             let budget = capacity
                 .checked_sub(stack.minimum_free_bytes)
-                .filter(|budget| *budget != 0)
+                .filter(|budget| *budget != 0 || bound.bytes == Some(0))
                 .ok_or_else(|| {
                     format!(
                         "the {} has {capacity} bytes ({}) and cannot keep {} bytes free",

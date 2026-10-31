@@ -13,7 +13,7 @@ use oer_hil_protocol::base::{
 use oer_hil_protocol::{Envelope, FrameDecoder, Key, WireKind};
 
 use super::*;
-use oer_diagnostics::Note;
+use oer_diagnostics::{Note, Written};
 
 crate::requests! {
     enum WatchdogRequest (sessions = false) {
@@ -28,12 +28,12 @@ const BOOT: u64 = 77;
 struct Captured;
 
 impl Immediate for Captured {
-    fn note(note: &Note<'_>) -> bool {
+    fn note(note: &Note<'_>) -> Written {
         if !EARLY_OWNS.get() {
-            return false;
+            return Written::Retired;
         }
         EARLY.with(|notes| notes.borrow_mut().push(note.words().to_vec()));
-        true
+        Written::Whole
     }
 
     fn take_lost() -> u32 {
