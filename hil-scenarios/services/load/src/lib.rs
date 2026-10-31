@@ -248,6 +248,9 @@ pub struct PartWindow {
     /// Time inside its polls within the window, an open poll's share
     /// included.
     pub poll_us: u32,
+    /// The whole time of the polls that ended within the window, the
+    /// counterpart of `polls` for a mean.
+    pub ended_poll_us: u32,
     /// The longest poll that ended within the window; `None` without one.
     pub longest_poll_us: Option<u32>,
 }

@@ -72,6 +72,7 @@ fn the_largest_reports_fit_one_response() {
         name: heapless::String::try_from("x".repeat(MAX_PART_NAME).as_str()).unwrap(),
         polls: u32::MAX,
         poll_us: u32::MAX,
+        ended_poll_us: u32::MAX,
         longest_poll_us: Some(u32::MAX),
     };
     let parts = PartsCollected::Report(Parts {

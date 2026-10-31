@@ -293,7 +293,9 @@ fn window_us(report: &Report) -> u64 {
 
 /// Each named part's polls within a window of `window_us`. A poll's time
 /// includes its preemption, so nested parts and the parts of different
-/// executors overlap and their shares do not add up.
+/// executors overlap and their shares do not add up. The share counts the
+/// window's time inside polls, an open one's included; the mean counts only
+/// the polls that ended, whole.
 fn polls(parts: &Parts, window_us: u64) -> serde_json::Value {
     let window = window_us.max(1) as f64;
     parts
@@ -305,7 +307,7 @@ fn polls(parts: &Parts, window_us: u64) -> serde_json::Value {
                 "polls": part.polls,
                 "polls_per_s": round(f64::from(part.polls) * 1e6 / window),
                 "poll_time_percent": round(100.0 * f64::from(part.poll_us) / window),
-                "mean_poll_us": round(f64::from(part.poll_us) / f64::from(part.polls.max(1))),
+                "mean_poll_us": round(f64::from(part.ended_poll_us) / f64::from(part.polls.max(1))),
                 "longest_poll_us": part.longest_poll_us,
             })
         })
@@ -765,6 +767,7 @@ mod tests {
             name: "ip".try_into().unwrap(),
             polls: 2000,
             poll_us: 1_500_000,
+            ended_poll_us: 1_500_000,
             longest_poll_us: Some(900),
         };
         let idle = oer_services_load::PartWindow {
@@ -782,6 +785,24 @@ mod tests {
         assert_eq!(value[0]["longest_poll_us"], 900);
         assert_eq!(value[1]["mean_poll_us"], 0.0);
         assert!(value[1]["longest_poll_us"].is_null());
+    }
+
+    #[test]
+    fn a_poll_open_at_the_window_s_end_counts_in_the_share_not_the_mean() {
+        let part = oer_services_load::PartWindow {
+            name: "station".try_into().unwrap(),
+            polls: 1,
+            poll_us: 10 + 979,
+            ended_poll_us: 10,
+            longest_poll_us: Some(10),
+        };
+        let parts = Parts {
+            parts: [part].into_iter().collect(),
+        };
+        let value = polls(&parts, 1_000);
+        assert_eq!(value[0]["poll_time_percent"], 98.9);
+        assert_eq!(value[0]["mean_poll_us"], 10.0);
+        assert_eq!(value[0]["longest_poll_us"], 10);
     }
 
     #[test]

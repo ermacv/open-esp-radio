@@ -135,11 +135,13 @@ impl oer_trace::Event for Boundary {
 }
 
 /// What one part accumulated: wrapping counts and microseconds, and the
-/// longest poll of the current epoch.
+/// longest poll of the current epoch. `poll_us` includes the open poll's
+/// time so far; `ended_us` holds only the ended polls, as `polls` does.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub(crate) struct Sample {
     pub polls: u32,
     pub poll_us: u32,
+    pub ended_us: u32,
     pub longest_us: Option<u32>,
 }
 
@@ -222,6 +224,7 @@ impl PartCounter {
         Ok(Sample {
             polls,
             poll_us: poll_us.wrapping_add(open_us),
+            ended_us: poll_us,
             longest_us: (polls != 0 && longest_epoch == epoch).then_some(longest),
         })
     }
@@ -246,6 +249,7 @@ pub(crate) fn window(start: &[Sample; COUNT], end: &[Sample; COUNT]) -> Parts {
             name: heapless::String::try_from(part.name()).unwrap_or_default(),
             polls: end.polls.wrapping_sub(start.polls),
             poll_us: end.poll_us.wrapping_sub(start.poll_us),
+            ended_poll_us: end.ended_us.wrapping_sub(start.ended_us),
             longest_poll_us: end.longest_us,
         });
     }
@@ -345,6 +349,7 @@ mod tests {
             Ok(Sample {
                 polls: 2,
                 poll_us: 15 + 40 + 4,
+                ended_us: 15 + 40,
                 longest_us: Some(40),
             })
         );
@@ -387,11 +392,13 @@ mod tests {
         start[1] = Sample {
             polls: u32::MAX,
             poll_us: u32::MAX - 9,
+            ended_us: u32::MAX - 19,
             longest_us: Some(7),
         };
         end[1] = Sample {
             polls: 4,
             poll_us: 20,
+            ended_us: 5,
             longest_us: Some(3),
         };
         let parts = window(&start, &end);
@@ -399,8 +406,12 @@ mod tests {
         let station_work = &parts.parts[1];
         assert_eq!(station_work.name.as_str(), "station-work");
         assert_eq!(
-            (station_work.polls, station_work.poll_us),
-            (5, 30),
+            (
+                station_work.polls,
+                station_work.poll_us,
+                station_work.ended_poll_us
+            ),
+            (5, 30, 25),
             "differences across the wrap"
         );
         assert_eq!(station_work.longest_poll_us, Some(3), "from the end");
