@@ -13,7 +13,7 @@ cargo fw build <image>
 cargo fw build <probe-image> --bin <binary> --diagnostic
 cargo fw flash <image> --board <id|MAC>
 cargo fw run <image> --board <id|MAC> [--timeout <duration>]
-cargo fw monitor --board <id|MAC>
+cargo fw monitor --board <id|MAC> [--start]
 cargo fw boards
 cargo fw power-cycle --board <id|MAC>
 ```
@@ -99,27 +99,28 @@ Boards and hubs come from the owner's stand file,
 `~/.config/open-esp-radio/stand.toml` (or `OER_STAND_FILE`, mode 0600),
 which `oer-lab-router` reads ([tools/lab/router/README.md](../../lab/router/README.md): its
 schema, what each command reads of it, which values are secret). Attached
-boards are found in sysfs as
-Espressif USB Serial/JTAG devices (`303a:1001`), whose serial number is the
-chip's MAC. Only ESP32-S31 boards are reset or written; other chips are only
-listed.
+boards are found by the LAB service in sysfs as Espressif USB Serial/JTAG
+devices (`303a:1001`), whose serial number is the chip's MAC. Only ESP32-S31
+boards are reset or written; other chips are only listed.
 
-A board is used by one process at a time: `cargo fw` holds it through the
-device lock (`oer-lab-board`,
-`$XDG_RUNTIME_DIR/open-esp-radio/devices/<MAC>.lock`) that HIL leases and the
-stand's flashes take too, shared by every checkout, which names its holder
-when it refuses.
+Every board command leases the board from the LAB
+service ([tools/lab/service/README.md](../../lab/service/README.md)), which
+runs each operation on the board: the board is used by one lease at a time,
+for every checkout. When the command ends it finishes the lease: the service
+resets the board into its image, which stops what the command left running.
 
 - `flash` writes the segments through one espflash connection, skipping each
   one whose flash contents already match (MD5), the OTA selection last, and
-  hard-resets the board.
+  starts the image.
 - `run` builds and writes the image, leaves the chip in the flasher stub,
   opens the console and resets the chip into the image with an RTS pulse, then
   reads until `OER-RESULT: pass …` (exit 0), `OER-RESULT: fail …` (1) or the
   timeout (2): `--timeout`, or 30 s by default. The console goes to `target/fw/runs/<time>-<image>/log.txt`.
 - `monitor` opens the console without a reset: RTS is released before DTR.
-- `boards` lists each attached board with the hub port found on the host and
-  whether that port may be power-cycled (or why not).
+  `--start` resets it into its flashed image first.
+- `boards` lists each attached board, as the LAB service finds it, with the
+  hub port found on the host and whether that port may be power-cycled (or
+  why not).
 - `power-cycle` switches the board's hub port off and on with `uhubctl`. The
   port is found on the host and switched only when the board is the one
   device below it and the stand file's hub policy allows it (the stand file,

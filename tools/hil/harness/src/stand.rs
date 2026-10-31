@@ -1,23 +1,32 @@
 //! The scenario's session on the stand: its image built, its board leased
-//! and written, and the link on the board's console. [`Session::finish`]
-//! leaves the board running the image or recovers it under the same lease;
-//! dropping the session then releases the link, the board and the lease in
-//! that order, also when a stage of opening failed.
+//! from the LAB service and written, and the link on the board's console.
+//! [`Session::finish`] checks the device under test at the end of the
+//! cases and [`Session::release`] ends the lease with the LAB service's
+//! report of the board's end state; dropping the session releases the link
+//! and the lease without that report, also when a stage of opening failed.
+//! The service owns the board throughout: every write, reset and console
+//! goes through it, and it alone brings the board to its end state.
 
-use std::{path::Path, time::Duration};
+use std::{
+    io::{Read, Write},
+    os::unix::net::UnixStream,
+    path::Path,
+    sync::{Mutex, PoisonError},
+    time::Duration,
+};
 
 use oer_hil_link::Link;
 use oer_image_build::images;
 use oer_image_bundle::ImageBundle;
 use oer_lab_arbiter::{
-    Arbiter, Grant, QuarantineTrigger, Request,
-    claims::Claim,
-    journal::{BoardEventKind, ImageIdentity},
+    claims::{AIR, Claim},
+    journal::ImageIdentity,
+    readiness::ROUTER,
 };
-use oer_lab_board::lock::DeviceId;
-use oer_lab_board::port::{Lines, Port, Settings};
-use oer_lab_board::reset::{Ladder, RecoveryStep};
-use oer_lab_board::stand::{LeasedBoard, Via};
+use oer_lab_client::{
+    client::{Client, Running},
+    protocol::{FlashVia, LeaseRequest, Operation},
+};
 use oer_lab_model::{BoardRole, Stand};
 
 use crate::Scenario;
@@ -25,32 +34,17 @@ use crate::finish::{self, Cleanup, Ending, Waits};
 
 pub(crate) type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
-/// The device under test's console: its lines as they are, retried while a
-/// previous reader still holds the port.
-const DUT_CONSOLE: Settings = Settings::CONSOLE
-    .lines(Lines::Kept)
-    .timeout(Duration::ZERO)
-    .busy(Duration::from_secs(2));
-
-/// How long the board's port may take to return after a reset.
-const REATTACH: Duration = Duration::from_secs(10);
-
-/// How long the console is read for the ROM's line after a rung that does
-/// not return one itself.
-const BANNER_WATCH: Duration = Duration::from_secs(2);
-
-/// How long finishing waits for the device under test.
+/// How finishing waits for the device under test.
 const WAITS: Waits = Waits {
     probe: Duration::from_secs(2),
-    hello: Duration::from_secs(10),
 };
 
-/// Declared in drop order.
+/// Declared in drop order: the link closes its console before the lease
+/// ends with the client.
 pub(crate) struct Session {
     link: Option<Link>,
     image_crc32: u32,
-    board: LeasedBoard,
-    _grant: Grant,
+    board: StandBoard,
 }
 
 impl Session {
@@ -65,33 +59,34 @@ impl Session {
             .as_ref()
             .map(|staged| staged.runtime_crc32)
             .ok_or("the image is not staged: it has no identity to check")?;
-        let stand_file = oer_lab_model::path()?;
-        let stand = Stand::load(&stand_file)?;
+        let stand = Stand::load(&oer_lab_model::path()?)?;
         let board = device_under_test(&stand, selector)?.clone();
-        let mut request = Request::from_environment(format!("hil {}", scenario.name))?;
-        request.scenarios = vec![scenario.name.to_owned()];
-        request.claims = vec![Claim::board(&board.mac)];
+        let owner = oer_lab_arbiter::owner::from_environment()?.to_string();
+        let mut client = Client::open(&format!("hil {}", scenario.name))?;
         eprintln!("hil: waiting for board {}", board.id);
-        let mut grant = Arbiter::open()?
-            .with_stand_file(stand_file)
-            .acquire(&request)?;
-        grant.supervise_self(false);
-        let mac = DeviceId::parse(&board.mac)?;
-        let access = grant
-            .device(&mac)
-            .ok_or("the lease holds no access to the board")?;
-        let leased =
-            oer_lab_board::stand::Board::attached(&root, &stand, &board.id)?.lease(access)?;
-        write(&root, scenario.image, &bundle, &leased, &request.owner)?;
-        let mut port = Port::open(leased.port(), DUT_CONSOLE)?;
-        // Every supported chip restarts through its USB Serial/JTAG console.
-        oer_lab_board::reset::reset_usb_serial_jtag(&mut port)?;
-        let link = Link::start(Box::new(port))?;
+        client.acquire(
+            LeaseRequest {
+                owner: owner.clone(),
+                work: format!("hil {}", scenario.name),
+                scenarios: vec![scenario.name.to_owned()],
+                run: None,
+                claims: claims(&board.mac, scenario),
+                maintenance: None,
+                divisible: false,
+            },
+            &mut |message| eprintln!("hil: {message}"),
+        )?;
+        let stand_board = StandBoard {
+            client: Mutex::new(client),
+            board: board.mac.clone(),
+            owner,
+        };
+        stand_board.write(&root, scenario.image, &bundle)?;
+        let link = stand_board.link(true)?;
         Ok(Self {
             link: Some(link),
             image_crc32,
-            board: leased,
-            _grant: grant,
+            board: stand_board,
         })
     }
 
@@ -101,20 +96,14 @@ impl Session {
     }
 
     /// The board, for resets during the cases.
-    pub(crate) fn board(&self) -> StandBoard<'_> {
-        StandBoard(&self.board)
+    pub(crate) fn board(&self) -> &StandBoard {
+        &self.board
     }
 
-    /// Leave the board running the built image on `link` after the cases
-    /// `ending` describes, recovering it when needed; what that took.
+    /// How the device under test on `link` ended the cases `ending`
+    /// describes; the link stays with the session until its lease ends.
     pub(crate) fn finish(&mut self, link: Option<Link>, ending: Ending) -> Cleanup {
-        let (link, cleanup) = finish::finish(
-            &StandBoard(&self.board),
-            link,
-            self.image_crc32,
-            ending,
-            WAITS,
-        );
+        let cleanup = finish::finish(link.as_ref(), self.image_crc32, ending, WAITS);
         self.link = link;
         cleanup
     }
@@ -123,74 +112,148 @@ impl Session {
     pub(crate) fn image_crc32(&self) -> u32 {
         self.image_crc32
     }
+
+    /// Close the link and finish the lease: the LAB service stops its
+    /// operations and confirms the board's end state, or says why not.
+    pub(crate) fn release(&mut self) -> std::result::Result<(), String> {
+        drop(self.link.take());
+        self.board.client().release()
+    }
 }
 
-/// The leased board as the cases and finishing see it.
-pub(crate) struct StandBoard<'a>(&'a LeasedBoard);
+/// The leased board, reached through the service.
+pub(crate) struct StandBoard {
+    client: Mutex<Client>,
+    /// The board's MAC.
+    board: String,
+    owner: String,
+}
 
-impl finish::Board for StandBoard<'_> {
-    fn climb(&self, answers: &mut dyn FnMut() -> bool) -> Ladder {
-        let rungs = self.0.rungs();
-        let download_entry = self.0.download_entry_if_powered();
-        oer_lab_board::reset::climb(
-            &rungs.iter().map(Box::as_ref).collect::<Vec<_>>(),
-            download_entry
-                .as_ref()
-                .map(|entry| entry as &dyn Fn() -> oer_lab_board::Result<String>),
-            &|| self.0.console(BANNER_WATCH),
-            answers,
-        )
+impl StandBoard {
+    fn client(&self) -> std::sync::MutexGuard<'_, Client> {
+        self.client.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
+    /// Run `operation` to its result, its output discarded.
+    fn run(&self, operation: Operation) -> std::result::Result<serde_json::Value, String> {
+        self.client().run(operation, &mut std::io::sink(), None)
+    }
+
+    /// Write `bundle` unless the board runs it; the service journals it.
+    fn write(&self, root: &Path, image: &str, bundle: &ImageBundle) -> Result<()> {
+        eprintln!("hil: writing {image} unless the board runs it");
+        let git = |arguments: &[&str]| oer_os_process::git::text(root, arguments).ok();
+        let written = self.run(Operation::Flash {
+            board: self.board.clone(),
+            bundle: bundle.directory().display().to_string(),
+            image: ImageIdentity {
+                name: image.to_owned(),
+                sha256: String::new(),
+                commit: git(&["rev-parse", "HEAD"]),
+                dirty: git(&["status", "--porcelain"]).map(|status| !status.is_empty()),
+                origin: std::env::args().collect::<Vec<_>>().join(" "),
+            },
+            owner: self.owner.clone(),
+            via: FlashVia::Usb,
+            skip_carried: true,
+        })?;
+        if written.get("written") == Some(&serde_json::Value::Bool(false)) {
+            eprintln!("hil: the board runs {image} already");
+        }
+        Ok(())
+    }
+
+    /// A link on the board's console, opened with a reset into its image
+    /// when `reset`.
+    fn link(&self, reset: bool) -> std::result::Result<Link, String> {
+        let console = self.client().start(Operation::Console {
+            board: self.board.clone(),
+            reset,
+        })?;
+        let line = bridge(console).map_err(|error| error.to_string())?;
+        Link::start(Box::new(line)).map_err(|error| error.to_string())
+    }
+}
+
+/// A local socket the link reads and writes as its serial line, joined to
+/// the service's console operation: closing the link's end cancels it.
+fn bridge(console: Running) -> std::io::Result<UnixStream> {
+    let (line, served) = UnixStream::pair()?;
+    let mut to_link = served.try_clone()?;
+    let mut from_link = served;
+    let input = console.input();
+    let mut output = console;
+    std::thread::spawn(move || {
+        let mut buffer = vec![0u8; 4096];
+        loop {
+            match output.read(&mut buffer) {
+                Ok(0) | Err(_) => break,
+                Ok(read) => {
+                    let Some(chunk) = buffer.get(..read) else {
+                        break;
+                    };
+                    if to_link.write_all(chunk).is_err() {
+                        break;
+                    }
+                }
+            }
+        }
+        let _ = to_link.shutdown(std::net::Shutdown::Both);
+    });
+    std::thread::spawn(move || {
+        let mut buffer = vec![0u8; 4096];
+        loop {
+            match from_link.read(&mut buffer) {
+                Ok(0) | Err(_) => break,
+                Ok(read) => {
+                    let Some(chunk) = buffer.get(..read) else {
+                        break;
+                    };
+                    if input.send(chunk).is_err() {
+                        break;
+                    }
+                }
+            }
+        }
+        // The link is gone: its console stops.
+        let _ = input.cancel();
+    });
+    Ok(line)
+}
+
+impl finish::Board for StandBoard {
     fn reset(&self) -> std::result::Result<(), String> {
-        let rungs = self.0.rungs();
-        let rung = rungs
-            .first()
-            .ok_or("the board's stand file lists no reset")?;
-        rung.reset().map(drop).map_err(|error| error.to_string())
+        self.run(Operation::Reset {
+            board: self.board.clone(),
+            path: None,
+        })
+        .map(drop)
     }
 
     fn connect(&self) -> std::result::Result<Link, String> {
-        let port = self
-            .0
-            .current_port(REATTACH)
-            .ok_or("the board's port did not return")?;
-        let port = Port::open(&port, DUT_CONSOLE).map_err(|error| error.to_string())?;
-        Link::start(Box::new(port)).map_err(|error| error.to_string())
+        self.link(false)
     }
 
-    fn quarantine(&self, reason: String) -> std::result::Result<(), String> {
-        Arbiter::open()
-            .and_then(|arbiter| {
-                arbiter.quarantine(
-                    self.0.mac().as_ref(),
-                    QuarantineTrigger::Unreachable,
-                    reason,
-                    None,
-                )
-            })
-            .map_err(|error| error.to_string())
+    fn router(
+        &self,
+        request: oer_lab_client::protocol::RouterOperation,
+    ) -> std::result::Result<serde_json::Value, String> {
+        self.run(Operation::Router { request })
     }
+}
 
-    fn recovered(&self, step: RecoveryStep, reset_line: Option<String>) {
-        let recorded = Arbiter::open().and_then(|arbiter| {
-            arbiter.journal().record_by(
-                String::from("stand"),
-                Some(self.0.mac().to_string()),
-                BoardEventKind::Recovered {
-                    step,
-                    hardware: reset_line
-                        .as_deref()
-                        .is_some_and(|line| line.contains("DOWNLOAD")),
-                    reset_line,
-                    origin: std::env::args().collect::<Vec<_>>().join(" "),
-                },
-            )
-        });
-        if let Err(error) = recorded {
-            eprintln!("hil: cannot journal the recovery: {error}");
-        }
+/// What a run of `scenario` on the board with `mac` leases: the board, the
+/// router exclusively when its cases use it (they change its network), and
+/// the air shared when its cases turn a radio on (the router's included).
+fn claims(mac: &str, scenario: &Scenario) -> Vec<Claim> {
+    let mut claims = vec![Claim::board(mac)];
+    if scenario.router {
+        claims.push(Claim::exclusive(ROUTER));
     }
+    if scenario.air || scenario.router {
+        claims.push(Claim::shared(AIR));
+    }
+    claims
 }
 
 /// Build `image` through the image pipeline into its bundle.
@@ -235,37 +298,40 @@ fn device_under_test<'a>(
     }
 }
 
-/// Write `bundle` into `board` unless its receipt says it runs it, and
-/// journal the write.
-fn write(
-    root: &Path,
-    image: &str,
-    bundle: &ImageBundle,
-    board: &LeasedBoard,
-    owner: &str,
-) -> Result<()> {
-    let store = oer_lab_board::image::Store::open()?;
-    if board.carries(&store, bundle)?.is_some() {
-        eprintln!("hil: the board runs {image} already");
-        return Ok(());
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_run_leases_the_air_only_for_a_scenario_that_turns_a_radio_on() {
+        let mac = "02:00:00:00:00:01";
+        let quiet = Scenario::new("aes", "esp32s31-rpc", &[]);
+        assert_eq!(claims(mac, &quiet), [Claim::board(mac)]);
+        assert_eq!(
+            claims(mac, &quiet.using_air()),
+            [Claim::board(mac), Claim::shared(AIR)]
+        );
+        assert_eq!(
+            claims(mac, &quiet.using_router()),
+            [
+                Claim::board(mac),
+                Claim::exclusive(ROUTER),
+                Claim::shared(AIR)
+            ]
+        );
     }
-    eprintln!("hil: writing {image}");
-    let origin = std::env::args().collect::<Vec<_>>().join(" ");
-    let receipt = board.flash(&store, bundle, image, Via::Usb, &origin)?;
-    let application = receipt
-        .segment("application")
-        .ok_or("the receipt names no application segment")?;
-    let git = |arguments: &[&str]| oer_os_process::git::text(root, arguments).ok();
-    oer_lab_arbiter::journal::Journal::open()?.record_flash(
-        owner.to_owned(),
-        board.mac(),
-        &ImageIdentity {
-            name: image.to_owned(),
-            sha256: application.sha256.clone(),
-            commit: git(&["rev-parse", "HEAD"]),
-            dirty: git(&["status", "--porcelain"]).map(|status| !status.is_empty()),
-            origin,
-        },
-    )?;
-    Ok(())
+
+    #[test]
+    fn two_router_runs_on_different_boards_conflict_on_the_router() {
+        use oer_lab_arbiter::claims::{conflict, normalize};
+        let station = Scenario::new("wifi-station", "image", &[]).using_router();
+        let one = normalize(&claims("02:00:00:00:00:01", &station));
+        let other = normalize(&claims("02:00:00:00:00:02", &station));
+        assert!(conflict(&one, &other), "both change the router's network");
+        let quiet = Scenario::new("aes", "esp32s31-rpc", &[]);
+        assert!(!conflict(
+            &one,
+            &normalize(&claims("02:00:00:00:00:02", &quiet))
+        ));
+    }
 }

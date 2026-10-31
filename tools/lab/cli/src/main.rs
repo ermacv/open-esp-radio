@@ -11,6 +11,9 @@ mod discover;
 mod fixture_install;
 mod init;
 mod install;
+mod local_fixtures;
+mod service;
+mod stand_file;
 
 use std::process::ExitCode;
 
@@ -58,8 +61,27 @@ enum StandCommand {
     Fixtures,
     #[command(subcommand)]
     Fixture(FixtureCli),
+    #[command(subcommand, name = "stand-file")]
+    StandFile(StandFileCli),
     #[command(name = "__command-tree", hide = true)]
     CommandTree,
+}
+
+/// `cargo stand stand-file convert`.
+#[derive(clap::Parser)]
+#[command(name = "cargo stand stand-file", no_binary_name = true)]
+enum StandFileCli {
+    /// Rewrite a schema 1 stand file to schema 2, keeping its comments:
+    /// the lab router becomes `[router]`, the run's channel an allowed one.
+    Convert {
+        /// Write the schema 2 file here (mode 0600) and leave the stand
+        /// file as it is.
+        #[arg(long, conflicts_with = "in_place")]
+        output: Option<std::path::PathBuf>,
+        /// Replace the stand file, keeping the schema 1 file beside it.
+        #[arg(long)]
+        in_place: bool,
+    },
 }
 
 /// `cargo stand fixture install|build-hostapd|build-udhcpc`.
@@ -121,11 +143,24 @@ fn run() -> Result<ExitCode> {
             Ok(ExitCode::SUCCESS)
         }
         Some(StandCommand::Fixtures) => {
-            let stand_file = oer_lab_model::paths::stand_file()?;
-            print!(
-                "{}",
-                oer_lab_router::fixtures::describe(&oer_lab_router::fixtures::probe(&stand_file))
-            );
+            // The equipment reached over SSH is the service's: its probe
+            // holds the router shared. The host's own radios are fixtures.
+            let mut lease = service::lease(
+                options.owner(&ctx)?,
+                String::from("stand fixtures"),
+                vec![oer_lab_arbiter::claims::Claim::shared(
+                    oer_lab_arbiter::readiness::ROUTER,
+                )],
+            )?;
+            let remote: Vec<oer_lab_model::equipment::Fixture> = serde_json::from_value(
+                service::run(&mut lease, oer_lab_client::protocol::Operation::ProbeRouter)?,
+            )?;
+            lease.release()?;
+            let local = local_fixtures::probe_local(&oer_lab_model::paths::stand_file()?);
+            println!("Equipment over SSH (the LAB service):");
+            print!("{}", oer_lab_model::equipment::describe(&remote));
+            println!("Host fixtures:");
+            print!("{}", oer_lab_model::equipment::describe(&local));
             Ok(ExitCode::SUCCESS)
         }
         Some(StandCommand::Fixture(FixtureCli::Install {
@@ -136,12 +171,22 @@ fn run() -> Result<ExitCode> {
             fixture_install::run(&ctx.root, provider, dry_run, &adapter)?;
             Ok(ExitCode::SUCCESS)
         }
+        Some(StandCommand::StandFile(StandFileCli::Convert { output, in_place })) => {
+            let path = oer_lab_model::paths::stand_file()?;
+            let output = match (output, in_place) {
+                (Some(output), _) => output,
+                (None, true) => path.clone(),
+                (None, false) => return Err("name --output PATH or --in-place".into()),
+            };
+            stand_file::convert(&path, &output)?;
+            Ok(ExitCode::SUCCESS)
+        }
         Some(StandCommand::Fixture(FixtureCli::BuildHostapd)) => {
-            oer_lab_router::hostapd::build(&ctx.root)?;
+            oer_lab_fixture::hostapd::build(&ctx.root)?;
             Ok(ExitCode::SUCCESS)
         }
         Some(StandCommand::Fixture(FixtureCli::BuildUdhcpc)) => {
-            oer_lab_router::udhcpc::build(&ctx.root)?;
+            oer_lab_fixture::udhcpc::build(&ctx.root)?;
             Ok(ExitCode::SUCCESS)
         }
         Some(StandCommand::CommandTree) => {

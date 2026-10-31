@@ -63,7 +63,8 @@ enum Command {
         #[arg(long)]
         jobs: Option<usize>,
     },
-    /// Write a built image into a board's flash and reset it.
+    /// Write a built image into a board's flash and start it; it runs until
+    /// the command ends, then the board rests in its ROM's download mode.
     Flash {
         image: String,
         /// The board's stand id or MAC.
@@ -81,10 +82,15 @@ enum Command {
         #[arg(long, value_parser = parse_duration)]
         timeout: Option<Duration>,
     },
-    /// Print a board's console without resetting it.
+    /// Print a board's console without resetting it, or after a reset into
+    /// its flashed image with `--start`. A board rests in its ROM's download
+    /// mode between leases.
     Monitor {
         #[arg(long)]
         board: String,
+        /// Reset the board into its flashed image first.
+        #[arg(long)]
+        start: bool,
     },
     /// List the attached boards and their stand ids.
     Boards,
@@ -179,9 +185,9 @@ fn main() -> ExitCode {
                 let timeout = timeout.unwrap_or(Duration::from_secs(30));
                 return command::run(&root, &image, &board, timeout);
             }
-            Command::Monitor { board } => command::monitor(&root, &board)?,
+            Command::Monitor { board, start } => command::monitor(&board, start)?,
             Command::Boards => command::list_boards()?,
-            Command::PowerCycle { board } => command::power_cycle(&root, &board)?,
+            Command::PowerCycle { board } => command::power_cycle(&board)?,
             Command::Idf {
                 command: IdfCommand::List,
             } => idf::list(&root)?,

@@ -1,15 +1,11 @@
 //! Stand doubles for the harness's tests: devices behind real links and a
-//! board whose reset ladder runs through `oer_lab_board::reset::climb`.
+//! board whose first reset restarts its device.
 
-use std::{
-    cell::{Cell, RefCell},
-    thread,
-    time::Duration,
-};
+use std::{cell::Cell, thread, time::Duration};
 
 use oer_hil_link::{Link, test_support::Device};
 use oer_hil_protocol::base::{GetHello, Hello, RejectReason, Rejected};
-use oer_lab_board::reset::{Ladder, RecoveryStep, Rung};
+use oer_lab_model::rom::{RecoveryStep, Rung};
 
 use crate::finish::{Board, Waits};
 
@@ -17,8 +13,9 @@ pub(crate) const IMAGE: u32 = 0x5eed_0002;
 pub(crate) const ROM_LINE: &str = "rst:0x17 (CHIP_USB_UART_RESET),boot:0x5f (SPI_FAST_FLASH_BOOT)";
 pub(crate) const WAITS: Waits = Waits {
     probe: Duration::from_millis(200),
-    hello: Duration::from_millis(400),
 };
+/// How long a test waits for a boot's Hello.
+pub(crate) const HELLO: Duration = Duration::from_millis(400);
 
 pub(crate) fn hello() -> Hello {
     Hello {
@@ -66,10 +63,9 @@ pub(crate) struct Step {
     pub image: bool,
 }
 
-/// A board whose ladder is `steps`, with an arbiter that `records` or not.
+/// A board whose ladder is `steps`.
 pub(crate) struct FakeBoard {
     pub steps: Vec<Step>,
-    pub records: bool,
     pub image_up: Cell<bool>,
     pub resets: Cell<usize>,
     /// The device's running boot.
@@ -77,10 +73,11 @@ pub(crate) struct FakeBoard {
     /// Links the board opens next on which the running image's Hello is
     /// lost: the device shows its boot by another frame and answers nothing.
     pub hellos_lost: Cell<usize>,
-    pub quarantined: RefCell<Option<String>>,
-    pub recovered: RefCell<Vec<RecoveryStep>>,
     /// How a device behaves on a link the board opens while its image runs.
     pub serve: fn(Device),
+    /// The router operations the cases ran, and how the router answers.
+    pub routed: std::cell::RefCell<Vec<oer_lab_client::protocol::RouterOperation>>,
+    pub router: fn(&oer_lab_client::protocol::RouterOperation) -> Result<serde_json::Value, String>,
 }
 
 impl FakeBoard {
@@ -88,13 +85,12 @@ impl FakeBoard {
         Self {
             serve: |device| answer(device, Behavior::Answers),
             steps,
-            records: true,
             image_up: Cell::new(false),
             resets: Cell::new(0),
             boots: Cell::new(100),
             hellos_lost: Cell::new(0),
-            quarantined: RefCell::new(None),
-            recovered: RefCell::new(Vec::new()),
+            routed: std::cell::RefCell::new(Vec::new()),
+            router: |_| Err("no router".to_owned()),
         }
     }
 }
@@ -105,7 +101,7 @@ impl Rung for FakeRung<'_> {
     fn step(&self) -> RecoveryStep {
         self.1.step
     }
-    fn reset(&self) -> oer_lab_board::Result<Option<String>> {
+    fn reset(&self) -> oer_lab_model::Result<Option<String>> {
         self.0.resets.set(self.0.resets.get() + 1);
         if self.1.restarts {
             self.0.boots.set(self.0.boots.get() + 1);
@@ -116,22 +112,15 @@ impl Rung for FakeRung<'_> {
 }
 
 impl Board for FakeBoard {
-    fn climb(&self, answers: &mut dyn FnMut() -> bool) -> Ladder {
-        let rungs = self
-            .steps
-            .iter()
-            .map(|step| FakeRung(self, step))
-            .collect::<Vec<_>>();
-        oer_lab_board::reset::climb(
-            &rungs
-                .iter()
-                .map(|rung| rung as &dyn Rung)
-                .collect::<Vec<_>>(),
-            None,
-            &String::new,
-            answers,
-        )
+    fn router(
+        &self,
+        request: oer_lab_client::protocol::RouterOperation,
+    ) -> Result<serde_json::Value, String> {
+        let answer = (self.router)(&request);
+        self.routed.borrow_mut().push(request);
+        answer
     }
+
     fn reset(&self) -> Result<(), String> {
         let step = self.steps.first().ok_or("no rung")?;
         FakeRung(self, step)
@@ -155,30 +144,11 @@ impl Board for FakeBoard {
         thread::spawn(move || serve(device));
         Ok(link)
     }
-    fn quarantine(&self, reason: String) -> Result<(), String> {
-        if !self.records {
-            return Err("the arbiter is unavailable".to_owned());
-        }
-        *self.quarantined.borrow_mut() = Some(reason);
-        Ok(())
-    }
-    fn recovered(&self, step: RecoveryStep, _reset_line: Option<String>) {
-        self.recovered.borrow_mut().push(step);
-    }
 }
 
 pub(crate) fn rts(rom: bool, image: bool) -> Step {
     Step {
         step: RecoveryStep::RtsReset,
-        restarts: true,
-        rom,
-        image,
-    }
-}
-
-pub(crate) fn power(rom: bool, image: bool) -> Step {
-    Step {
-        step: RecoveryStep::PowerCycle,
         restarts: true,
         rom,
         image,

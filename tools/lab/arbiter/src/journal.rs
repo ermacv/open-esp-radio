@@ -20,7 +20,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use oer_lab_board::reset::{RecoveryStep, ResetPath};
+use oer_lab_model::rom::{RecoveryStep, ResetPath};
 use oer_os_process::lock::{FileLock, Mode};
 use serde::{Deserialize, Serialize};
 
@@ -240,7 +240,7 @@ pub fn device_label(device: Option<&str>, stand: Option<&oer_lab_model::Stand>) 
 /// What an image written into a board is: the name the journal knows it
 /// by (a HIL image class, a catalog image, an example), the SHA-256 of its
 /// application, the source it was built from and who wrote it.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct ImageIdentity {
     pub name: String,
     pub sha256: String,
@@ -413,7 +413,7 @@ mod tests {
         assert_eq!(flashes, [&newer, &peer]);
         assert_eq!(artifacts, [&artifact, &other_checkout]);
         let stand = oer_lab_model::Stand::parse(
-            "schema = 1\n[stand]\nid = \"t\"\nair = \"exclusive\"\n\
+            "schema = 2\n[stand]\nid = \"t\"\nair = \"exclusive\"\n\
              [[hub]]\nid = \"h\"\nusb2 = \"1-1\"\n\
              [[board]]\nid = \"peer-a\"\nusb-serial = \"02:00:00:00:25:64\"\nchip = \"chip-b\"\n\
              radios = [\"ble\"]\nroles = [\"peer\"]\nport = { hub = \"h\", port = 1 }\nreset = [\"jtag\"]\n",

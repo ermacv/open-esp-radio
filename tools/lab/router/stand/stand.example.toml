@@ -2,7 +2,7 @@
 # private (chmod 600); it holds Wi-Fi credentials. Every checkout of the host
 # reads the same file. `cargo stand discover` prints the [[board]] of each
 # attached board; `cargo stand doctor` checks the host around it.
-schema = 1
+schema = 2
 
 [stand]
 id = "example-lab"
@@ -81,10 +81,11 @@ mode = "dhcp"
 [access_point]
 ssid = "open-radio-device"
 passphrase = "replace-me-too"
-channel = 13
-# `mhz20`, `mhz40-above`, or `mhz40-below`; HT40 geometry must keep the
-# secondary channel inside channels 1..=13.
-channel_width = "mhz40-below"
+# The channels and widths a run may choose: `mhz20`, `mhz40-above`, or
+# `mhz40-below`; HT40 geometry must keep the secondary channel inside
+# channels 1..=13.
+channels = [13]
+widths = ["mhz40-below"]
 # Admission limit enforced before an association obtains an AID/key slot.
 # The ESP32-S31 AP implementation accepts 1..=15.
 client_limit = 4
@@ -94,16 +95,14 @@ client_address = "10.43.0.2/24"
 # only by scenarios whose minimum_concurrent_ap_clients is two.
 secondary_client_address = "10.43.0.3/24"
 
-[station_fixture]
-# Select exactly one explicit owner. Other valid forms are:
-# kind = "local-linux"
+# The lab's OpenWrt router: equipment the LAB service owns and reaches over
+# SSH. A station on this host is `[local_station]` instead:
+# [local_station]
 # interface = "wlan0"
 # country = "DE"
-# channel = 13
 # address = "10.42.0.1/24"
 # coexistence = "respect" # or "force-ht40" for an explicit lab override
-# phys = ["ht20", "ht40", "he20"]
-# or `kind = "external"` with `phys = ["he20"]` for a FRITZ fixture.
+[router]
 kind = "open-wrt"
 # Optional protected AP: verify existing identity/security/channel, never apply
 # or restore settings. Incompatible profiles fail; AP control, rate changes and
@@ -112,21 +111,23 @@ kind = "open-wrt"
 # Stable UCI ownership; discovery also works when the netdev is absent.
 radio = "radio0"
 ap_section = "default_radio0"
-channel = 13
+# The channels a run may choose on it.
+channels = [13]
 ssh_target = "open-radio-ap"
 wireless_interface = "phy0-ap0"
 ingress_interface = "br-lan"
 monitor_interface = "open-radio-mon"
-# Allowed scenario modes; actual AP capabilities are discovered from OpenWrt.
-# The runner applies channel, mode, WPA2 credentials and WMM, verifies hostapd
-# and channel geometry, then restores the original settings.
+# The AP modes its radio supports; a run chooses its mode among them, and
+# actual AP capabilities are discovered from OpenWrt. The run applies its
+# channel, mode, WPA2 credentials and WMM, verifies hostapd and channel
+# geometry, then restores the original settings.
 phys = ["legacy", "ht20", "ht40", "he20"]
 # Uses the laptop's Intel adapter as an independent passive observer while
 # OpenWrt remains the AP. Requires the schema-10 open-radio-net helper.
 independent_laptop_monitor = true
 
-# Optional: the laptop radio may host a non-ERP 802.11b BSS on the station
-# fixture's channel, a real overlapping legacy BSS for protection scenarios.
+# Optional: the laptop radio may host a non-ERP 802.11b BSS on the router's
+# channel, a real overlapping legacy BSS for protection scenarios.
 # Requires the schema-13 open-radio-net helper.
 [legacy_bss]
 country = "DE"

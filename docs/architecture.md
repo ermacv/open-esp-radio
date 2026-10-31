@@ -206,7 +206,7 @@ resources. Images declare its composed static type, select the interrupt entries
 callbacks and observers, and spawn the returned runners.
 Automatic reconnect and graceful station shutdown belong to the product
 runtime. The facade configures reconnect with its own policy values; disabled
-is the default, and the HIL station selects a one-second interval. Explicit
+is the default, which the HIL station image keeps: it joins once per boot. Explicit
 Disconnect pauses reconnect and Connect resumes the configured policy.
 Policy requests use the Runner's existing affine command credits and normal
 Control events. A facade Stop disconnects once, waits for link-down and then
@@ -1119,9 +1119,18 @@ the existing HAL owner.
   `cargo fw sizes` compares builds.
 - **Stand.** HIL scenarios (`cargo hil list`, `cargo hil run NAME`) start
   by hand when they answer a real question. Stand roles belong to firmware,
-  not boards; the stand file holds no credentials. The stand (`tools/lab`)
-  owns the boards, the arbiter's leases and every equipment driver; the HIL
-  core takes a leased board and carries data and commands over its console.
+  not boards; the stand file holds no credentials. One LAB service per host
+  (`tools/lab/service`) owns the stand's leases and every access to its
+  hardware: `cargo hil`, `cargo fw` and `cargo stand` build against its
+  client (`tools/lab/client`) only, lease from it and ask it for every
+  operation; the tools are trusted, and their own commands stay their
+  processes. A board's radio works only on its image's command: after a
+  lease a board is reset into its image and is ready again, nothing proven.
+  The router is granted again only with its AP down, a resource whose
+  emission is unknown closes the air, and a client's release answers with
+  what was left unavailable. The board's hardware end is the service's alone. The HIL
+  core takes a leased board and carries data and commands over the console
+  the service streams.
 - **Analysis.** Binary analysis is a set of building blocks (ELF view, RV32
   decoding, lifting, control-flow and value analysis, concrete execution)
   under `tools/analysis`, with Blobray as the entry point for vendor

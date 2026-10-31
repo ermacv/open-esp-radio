@@ -2,14 +2,8 @@ use super::*;
 
 const MAC: &str = "02:00:00:00:25:64";
 
-fn access(directory: &Path) -> DeviceAccess {
-    DeviceAccess::try_acquire_in(
-        &directory.join("locks"),
-        &DeviceId::parse(MAC).unwrap(),
-        "test",
-    )
-    .unwrap()
-    .unwrap()
+fn device() -> DeviceId {
+    DeviceId::parse(MAC).unwrap()
 }
 
 fn receipt(image: &str) -> Receipt {
@@ -25,7 +19,7 @@ fn receipt(image: &str) -> Receipt {
 
 /// A write of `image` that the store committed as `Written`, as [`write`]
 /// leaves it once its transport wrote the flash.
-fn written<'a>(store: &'a Store, access: &'a DeviceAccess, image: &str) -> Written<'a> {
+fn written<'a>(store: &'a Store, access: &'a DeviceId, image: &str) -> Written<'a> {
     let generation = store.begin(access, "test").unwrap();
     let receipt = receipt(image);
     store
@@ -40,11 +34,10 @@ fn written<'a>(store: &'a Store, access: &'a DeviceAccess, image: &str) -> Writt
         .unwrap();
     Written {
         store,
-        access,
+        device: access,
         receipt,
         generation,
         pending: Start::Reset,
-        _operation: access.operation().unwrap(),
     }
 }
 
@@ -52,21 +45,21 @@ fn written<'a>(store: &'a Store, access: &'a DeviceAccess, image: &str) -> Writt
 fn a_confirmation_that_a_later_write_overtook_is_a_stale_write() {
     let directory = tempfile::tempdir().unwrap();
     let store = Store::at(directory.path().join("receipts"));
-    let access = access(directory.path());
+    let access = device();
     let a = written(&store, &access, "a");
     let b = written(&store, &access, "b");
     assert_eq!(b.generation(), a.generation() + 1);
     b.started().unwrap();
     let error = a.started().unwrap_err().to_string();
     assert!(error.contains("stale write"), "{error}");
-    assert_eq!(store.started(access.id()).unwrap(), Some(receipt("b")));
+    assert_eq!(store.started(&access).unwrap(), Some(receipt("b")));
 }
 
 #[test]
 fn a_write_whose_flash_a_later_write_began_over_commits_nothing() {
     let directory = tempfile::tempdir().unwrap();
     let store = Store::at(directory.path().join("receipts"));
-    let access = access(directory.path());
+    let access = device();
     let first = store.begin(&access, "first").unwrap();
     let _second = store.begin(&access, "second").unwrap();
     assert!(
@@ -82,7 +75,7 @@ fn a_write_whose_flash_a_later_write_began_over_commits_nothing() {
             .is_err()
     );
     assert!(matches!(
-        store.state(access.id()).unwrap(),
+        store.state(&access).unwrap(),
         Some(State::Writing { by, .. }) if by == "second"
     ));
 }
@@ -91,15 +84,14 @@ fn a_write_whose_flash_a_later_write_began_over_commits_nothing() {
 fn a_started_write_is_confirmed_once() {
     let directory = tempfile::tempdir().unwrap();
     let store = Store::at(directory.path().join("receipts"));
-    let access = access(directory.path());
+    let access = device();
     let a = written(&store, &access, "a");
     let generation = a.generation();
     assert_eq!(a.started().unwrap(), receipt("a"));
     // A confirmation replays nothing: the state is no longer `Written`.
     let replay = Written {
-        _operation: access.operation().unwrap(),
         store: &store,
-        access: &access,
+        device: &access,
         receipt: receipt("a"),
         generation,
         pending: Start::Reset,
@@ -111,13 +103,13 @@ fn a_started_write_is_confirmed_once() {
 fn a_write_replaces_a_receipt_of_another_schema() {
     let directory = tempfile::tempdir().unwrap();
     let store = Store::at(directory.path().join("receipts"));
-    let access = access(directory.path());
+    let access = device();
     std::fs::create_dir_all(directory.path().join("receipts")).unwrap();
-    std::fs::write(store.path(access.id()), br#"{"schema":1}"#).unwrap();
-    assert!(store.state(access.id()).is_err());
+    std::fs::write(store.path(&access), br#"{"schema":1}"#).unwrap();
+    assert!(store.state(&access).is_err());
     assert_eq!(store.begin(&access, "test").unwrap(), 1);
     assert!(matches!(
-        store.state(access.id()).unwrap(),
+        store.state(&access).unwrap(),
         Some(State::Writing { .. })
     ));
 }

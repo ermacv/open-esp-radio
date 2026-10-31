@@ -1,6 +1,7 @@
 //! `cargo stand fixture install`: offline planning and unprivileged
 //! preparation of a Linux fixture software bundle, then the foreground sudo
-//! handoff to the privileged installer under a stand-maintenance lease.
+//! handoff to the privileged installer under a maintenance lease of the
+//! fixture.
 
 use std::path::Path;
 
@@ -40,8 +41,8 @@ pub(crate) fn run(
         // All downloads, patching and compilation happen without root, before
         // the installer takes terminal control for its narrow system writes.
         if provider == Provider::LinuxNet {
-            oer_lab_router::hostapd::build(root)?;
-            oer_lab_router::udhcpc::build(root)?;
+            oer_lab_fixture::hostapd::build(root)?;
+            oer_lab_fixture::udhcpc::build(root)?;
         }
 
         let provider_binaries: &[&str] = match provider {
@@ -73,25 +74,22 @@ pub(crate) fn run(
         oer_os_process::run(&mut build)?;
         let operator = current_operator()?;
         let bundle = prepare(root, provider, &operator, &plan.allowed_bluetooth_adapters)?;
-        // Queue behind the runs using the provider; runs queued later wait
-        // for the installation. Nothing supervises this lease: the operator
-        // may take a while to answer sudo, and a partial installation is
-        // worse than a late one.
         eprintln!(
             "stand: queueing for {}",
             oer_lab_fixture::resource(provider)
         );
-        let grant = install_grant(provider)?;
+        let mut lease = install_lease(provider)?;
         // sudo runs in this foreground process group with the terminal's
         // standard streams, so it owns password echo, input and job control,
-        // and its exit status is the command's.
+        // and its exit status is the command's. Nothing stops it: a partial
+        // installation is worse than a late one.
         let status = oer_os_process::command("sudo")
             .arg(root.join("target/debug").join(INSTALLER_BINARY))
             .args(["--provider", provider.as_str(), "--bundle"])
             .arg(bundle)
             .status()
             .map_err(|error| format!("cannot start the Linux fixture installer: {error}"))?;
-        drop(grant);
+        lease.release()?;
         if !status.success() {
             std::process::exit(status.code().unwrap_or(1));
         }
@@ -104,25 +102,31 @@ pub(crate) fn run(
     }
 }
 
-/// Take the stand for installing `provider`: stand maintenance, served
-/// before every waiting request, and every run that uses the provider is
-/// preempted with the ordinary cleanup and a notice. The grant keeps later
-/// runs of the provider queued until it is dropped.
+/// The lease for installing `provider`: stand maintenance of its fixture,
+/// served before every waiting request; every run that uses the fixture is
+/// preempted, its client told why, and the lease is granted once they ended.
 #[cfg(target_os = "linux")]
-fn install_grant(provider: Provider) -> Result<oer_lab_arbiter::Grant> {
-    let mut request = oer_lab_arbiter::Request::from_environment(format!(
-        "fixture install --provider {}",
-        provider.as_str()
-    ))?;
-    request.claims = vec![oer_lab_arbiter::claims::Claim::exclusive(
-        oer_lab_fixture::resource(provider),
-    )];
-    let reason = format!(
-        "fixture maintenance: {} install by {}",
-        provider.as_str(),
-        request.owner
-    );
-    oer_lab_arbiter::Arbiter::open()?.acquire_maintenance(&request, &reason)
+fn install_lease(provider: Provider) -> Result<oer_lab_client::client::Client> {
+    let owner = oer_lab_arbiter::owner::from_environment()?.to_string();
+    let mut client = crate::service::client()?;
+    client.acquire(
+        oer_lab_client::protocol::LeaseRequest {
+            owner: owner.clone(),
+            work: format!("fixture install --provider {}", provider.as_str()),
+            scenarios: Vec::new(),
+            run: None,
+            claims: vec![oer_lab_arbiter::claims::Claim::exclusive(
+                oer_lab_fixture::resource(provider),
+            )],
+            maintenance: Some(format!(
+                "fixture maintenance: {} install by {owner}",
+                provider.as_str()
+            )),
+            divisible: false,
+        },
+        &mut |message| eprintln!("stand: {message}"),
+    )?;
+    Ok(client)
 }
 
 #[cfg(target_os = "linux")]

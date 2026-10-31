@@ -1,10 +1,9 @@
 //! A board's hub port power through `uhubctl`, and `uhubctl`'s report, read
 //! by one parser.
 //!
-//! Only stand code switches a hub port: the arbiter returning a board's port
-//! to its working state when a lease changes hands, a reset ladder's `power`
-//! rung, the power-on start of a written image and `cargo stand
-//! discover --blink`. A lease runs no `uhubctl` itself.
+//! Only the LAB service switches a hub port: a reset through power, the
+//! power-on start of a written image and `cargo stand discover --blink`. A
+//! lease runs no `uhubctl` itself.
 #![forbid(unsafe_code)]
 
 use std::time::{Duration, Instant};
@@ -58,15 +57,14 @@ impl HubPower {
     }
 
     /// Whether the port is powered.
-    pub fn is_on(&self, lifetime: &oer_os_process::IoLifetime) -> crate::power::Result<bool> {
+    pub fn is_on(&self) -> crate::power::Result<bool> {
         let mut command = oer_os_process::command("uhubctl");
         command
             .args(["--location", &self.port.location, "--ports"])
             .arg(self.port.port.to_string());
-        lifetime.pin(&mut command)?;
         let output = oer_os_process::output(&mut command, Some(Duration::from_secs(30)))?;
-        powered(
-            &parse(&String::from_utf8_lossy(&output.stdout)),
+        oer_lab_model::hubs::powered(
+            &oer_lab_model::hubs::parse(&String::from_utf8_lossy(&output.stdout)),
             &self.port.location,
             self.port.port,
         )
@@ -80,23 +78,19 @@ impl HubPower {
     }
 
     /// Power the port on.
-    pub fn on(&self, lifetime: &oer_os_process::IoLifetime) -> crate::power::Result<()> {
-        self.action("on", 2, lifetime)
+    pub fn on(&self) -> crate::power::Result<()> {
+        self.action("on", 2)
     }
 
     /// Power the port off and on again.
-    pub fn cycle(&self, lifetime: &oer_os_process::IoLifetime) -> crate::power::Result<()> {
-        self.action("cycle", 2, lifetime)
+    pub fn cycle(&self) -> crate::power::Result<()> {
+        self.action("cycle", 2)
     }
 
     /// Power the port off for `off`, then on again: long enough for a person
     /// to see which button's light goes out.
-    pub fn cycle_holding(
-        &self,
-        off: Duration,
-        lifetime: &oer_os_process::IoLifetime,
-    ) -> crate::power::Result<()> {
-        self.action("cycle", off.as_secs().max(1), lifetime)
+    pub fn cycle_holding(&self, off: Duration) -> crate::power::Result<()> {
+        self.action("cycle", off.as_secs().max(1))
     }
 
     /// Power the port off and on again while watching the board with `mac`
@@ -106,13 +100,12 @@ impl HubPower {
     pub fn cycle_observed(
         &self,
         mac: &oer_lab_model::device_id::DeviceId,
-        lifetime: &oer_os_process::IoLifetime,
     ) -> crate::power::Result<PowerCycle> {
-        self.action("off", 2, lifetime)?;
+        self.action("off", 2)?;
         let left = wait_until(POWER_LEAVE, &|| !crate::discovery::is_attached(mac));
         // From the moment the port is told to power on.
         let started = Instant::now();
-        self.action("on", 2, lifetime)?;
+        self.action("on", 2)?;
         let returned = wait_until(POWER_RETURN, &|| crate::discovery::is_attached(mac))
             .then(|| started.elapsed());
         Ok(PowerCycle { left, returned })
@@ -127,10 +120,9 @@ impl HubPower {
     pub fn prove_power_loss(
         &self,
         mac: &oer_lab_model::device_id::DeviceId,
-        lifetime: &oer_os_process::IoLifetime,
         reset_cause: impl FnOnce() -> crate::power::Result<ResetCause>,
     ) -> crate::power::Result<PowerLoss> {
-        let cycle = self.cycle_observed(mac, lifetime)?;
+        let cycle = self.cycle_observed(mac)?;
         let reset = cycle
             .returned
             .is_some()
@@ -138,19 +130,13 @@ impl HubPower {
         Ok(PowerLoss { cycle, reset })
     }
 
-    fn action(
-        &self,
-        action: &str,
-        delay_secs: u64,
-        lifetime: &oer_os_process::IoLifetime,
-    ) -> crate::power::Result<()> {
+    fn action(&self, action: &str, delay_secs: u64) -> crate::power::Result<()> {
         let mut command = oer_os_process::command("uhubctl");
         command
             .args(["--location", &self.port.location, "--ports"])
             .arg(self.port.port.to_string())
             .args(["--action", action, "--delay"])
             .arg(delay_secs.to_string());
-        lifetime.pin(&mut command)?;
         let output =
             oer_os_process::output(&mut command, Some(Duration::from_secs(30 + delay_secs)))?;
         if !output.status.success() {
@@ -313,25 +299,13 @@ pub fn wait_until(within: Duration, condition: &dyn Fn() -> bool) -> bool {
     }
 }
 
-/// One hub section of `uhubctl`'s report.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct HubStatus {
-    pub location: String,
-    pub ports: Vec<PortStatus>,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct PortStatus {
-    pub port: u8,
-    pub powered: bool,
-    pub connected: bool,
-    /// The attached device's `vid:pid` and, when its description ends in
-    /// one, its MAC (an Espressif USB Serial/JTAG port's serial number).
-    pub device: Option<(String, Option<oer_lab_model::device_id::DeviceId>)>,
-}
-
 /// `uhubctl`'s report of every hub it reaches.
-pub fn report() -> crate::power::Result<Vec<HubStatus>> {
+pub fn report() -> crate::power::Result<Vec<oer_lab_model::hubs::HubStatus>> {
+    Ok(oer_lab_model::hubs::parse(&report_text()?))
+}
+
+/// `uhubctl`'s report of every hub it reaches, as it printed it.
+pub fn report_text() -> crate::power::Result<String> {
     let output = oer_os_process::output(
         &mut oer_os_process::command("uhubctl"),
         Some(Duration::from_secs(30)),
@@ -343,70 +317,7 @@ pub fn report() -> crate::power::Result<Vec<HubStatus>> {
         )
         .into());
     }
-    Ok(parse(&String::from_utf8_lossy(&output.stdout)))
-}
-
-/// `uhubctl`'s report: per hub its ports' power and connection state and
-/// the device each holds.
-pub fn parse(report: &str) -> Vec<HubStatus> {
-    let mut hubs: Vec<HubStatus> = Vec::new();
-    for line in report.lines() {
-        if let Some(rest) = line.strip_prefix("Current status for hub ") {
-            if let Some(location) = rest.split_whitespace().next() {
-                hubs.push(HubStatus {
-                    location: location.to_owned(),
-                    ports: Vec::new(),
-                });
-            }
-            continue;
-        }
-        let Some(hub) = hubs.last_mut() else {
-            continue;
-        };
-        let Some(rest) = line.trim_start().strip_prefix("Port ") else {
-            continue;
-        };
-        let Some((number, state)) = rest.split_once(':') else {
-            continue;
-        };
-        let Ok(port) = number.trim().parse::<u8>() else {
-            continue;
-        };
-        let (flags, device) = match state.split_once('[') {
-            Some((flags, device)) => (flags, Some(device.trim_end().trim_end_matches(']'))),
-            None => (state, None),
-        };
-        let words = flags.split_whitespace().collect::<Vec<_>>();
-        let device = device.and_then(|device| {
-            let id = device.split_whitespace().next()?.to_owned();
-            // An Espressif USB Serial/JTAG port reports its MAC as the last
-            // word; other devices' descriptions end otherwise.
-            let serial = device
-                .split_whitespace()
-                .last()
-                .and_then(|last| oer_lab_model::device_id::DeviceId::parse(last).ok());
-            Some((id, serial))
-        });
-        hub.ports.push(PortStatus {
-            port,
-            powered: words.contains(&"power"),
-            connected: words.contains(&"connect"),
-            device,
-        });
-    }
-    hubs
-}
-
-/// Whether port `port` of hub `location` is powered in `report`: that
-/// hub's own section, not its USB 3 companion's.
-pub fn powered(report: &[HubStatus], location: &str, port: u8) -> Option<bool> {
-    report
-        .iter()
-        .find(|hub| hub.location == location)?
-        .ports
-        .iter()
-        .find(|status| status.port == port)
-        .map(|status| status.powered)
+    Ok(String::from_utf8_lossy(&output.stdout).into_owned())
 }
 
 #[cfg(test)]

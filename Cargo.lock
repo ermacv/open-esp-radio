@@ -2292,11 +2292,12 @@ dependencies = [
  "oer-image-bundle",
  "oer-image-checks",
  "oer-lab-arbiter",
- "oer-lab-board",
+ "oer-lab-client",
  "oer-lab-model",
  "oer-os-process",
  "postcard-schema",
  "serde",
+ "serde_json",
  "toml",
 ]
 
@@ -2368,6 +2369,48 @@ dependencies = [
  "oer-time",
  "postcard",
  "static_cell",
+]
+
+[[package]]
+name = "oer-hil-scenarios-images-esp32s31-wifi-station"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "critical-section",
+ "embassy-futures",
+ "heapless",
+ "oer-diagnostics",
+ "oer-embassy-net",
+ "oer-embassy-time",
+ "oer-esp32s31-board",
+ "oer-esp32s31-compose",
+ "oer-esp32s31-hal",
+ "oer-esp32s31-layout",
+ "oer-esp32s31-wifi",
+ "oer-espressif-executor",
+ "oer-espressif-interrupt-table",
+ "oer-espressif-staged-runtime",
+ "oer-hil-agent",
+ "oer-hil-protocol",
+ "oer-memory",
+ "oer-riscv",
+ "oer-services-wifi-station",
+ "oer-time",
+ "oer-trace",
+ "postcard",
+ "static_cell",
+]
+
+[[package]]
+name = "oer-hil-scenarios-wifi-station"
+version = "0.1.0"
+dependencies = [
+ "heapless",
+ "oer-hil-agent",
+ "oer-hil-harness",
+ "oer-lab-model",
+ "oer-services-wifi-station",
+ "serde_json",
 ]
 
 [[package]]
@@ -2728,12 +2771,9 @@ dependencies = [
 name = "oer-lab-arbiter"
 version = "0.1.0"
 dependencies = [
- "hex",
- "oer-lab-board",
  "oer-lab-model",
  "oer-os-durable",
  "oer-os-process",
- "rustix",
  "serde",
  "serde_json",
  "tempfile",
@@ -2761,6 +2801,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-lab-client"
+version = "0.1.0"
+dependencies = [
+ "oer-lab-arbiter",
+ "oer-lab-model",
+ "oer-os-process",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "oer-lab-fixture"
 version = "0.1.0"
 dependencies = [
@@ -2782,6 +2833,7 @@ dependencies = [
 name = "oer-lab-model"
 version = "0.1.0"
 dependencies = [
+ "hex",
  "oer-chip-profile",
  "oer-espressif-facts",
  "oer-os-durable",
@@ -2789,6 +2841,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "toml",
+ "toml_edit",
 ]
 
 [[package]]
@@ -3006,6 +3059,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-services-wifi-station"
+version = "0.1.0"
+dependencies = [
+ "heapless",
+ "oer-hil-agent",
+ "oer-hil-protocol",
+ "oer-ieee80211-runtime",
+ "oer-network-port",
+ "postcard",
+ "postcard-schema",
+ "serde",
+]
+
+[[package]]
 name = "oer-sort"
 version = "0.1.0"
 
@@ -3101,10 +3168,11 @@ dependencies = [
  "oer-image-bundle",
  "oer-image-checks",
  "oer-image-esp-idf",
- "oer-lab-board",
+ "oer-lab-arbiter",
+ "oer-lab-client",
  "oer-lab-model",
- "oer-lab-router",
  "oer-os-command-tree",
+ "oer-os-process",
  "oer-trace",
  "serde_json",
  "tempfile",
@@ -3135,10 +3203,9 @@ dependencies = [
  "oer-chip-profile",
  "oer-espressif-facts",
  "oer-lab-arbiter",
- "oer-lab-board",
+ "oer-lab-client",
  "oer-lab-fixture",
  "oer-lab-model",
- "oer-lab-router",
  "oer-os-command-tree",
  "oer-os-durable",
  "oer-os-process",
@@ -3172,6 +3239,25 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "oer-lab-fixture",
+ "oer-os-process",
+ "rustix",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "oer-tool-lab-service"
+version = "0.1.0"
+dependencies = [
+ "oer-chip-profile",
+ "oer-image-bundle",
+ "oer-lab-arbiter",
+ "oer-lab-board",
+ "oer-lab-client",
+ "oer-lab-model",
+ "oer-lab-router",
+ "oer-os-durable",
  "oer-os-process",
  "rustix",
  "serde",

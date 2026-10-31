@@ -33,6 +33,7 @@ mod run;
 mod stand;
 
 pub use finish::Cleanup;
+pub use oer_lab_client::protocol::RouterOperation;
 pub use run::{Outcome, Verdict};
 
 /// What a scenario needs from the stand and the device.
@@ -41,6 +42,13 @@ pub struct Scenario {
     pub(crate) name: &'static str,
     pub(crate) image: &'static str,
     pub(crate) services: &'static [&'static [Key]],
+    /// Whether its cases turn a radio on: its lease then holds the air,
+    /// shared. An image's radio works only on its command, so a scenario
+    /// that never commands one leases the board alone.
+    pub(crate) air: bool,
+    /// Whether its cases use the lab router ([`Cx::router`]): its lease
+    /// then holds the router and the air, shared.
+    pub(crate) router: bool,
 }
 
 impl Scenario {
@@ -56,6 +64,21 @@ impl Scenario {
             name,
             image,
             services,
+            air: false,
+            router: false,
+        }
+    }
+
+    /// This scenario, whose cases turn a radio on.
+    pub const fn using_air(self) -> Self {
+        Self { air: true, ..self }
+    }
+
+    /// This scenario, whose cases use the lab router.
+    pub const fn using_router(self) -> Self {
+        Self {
+            router: true,
+            ..self
         }
     }
 
@@ -208,6 +231,15 @@ impl<'a> Cx<'a> {
         Ok(self.link()?.health())
     }
 
+    /// Run `request` on the lab router under the run's lease (a scenario
+    /// [`Scenario::using_router`]): its result as the operation returns it.
+    /// A router that does not answer leaves the case incomplete.
+    pub fn router(&self, request: RouterOperation) -> Result<serde_json::Value, Failure> {
+        self.dut
+            .router(request)
+            .map_err(|error| Failure::Incomplete(format!("the lab router: {error}")))
+    }
+
     /// Reset the device under test through its board and continue on the
     /// new boot of the same image; its earlier boot's requests end.
     pub fn reset(&mut self) -> Result<&Boot, Failure> {
@@ -274,11 +306,12 @@ pub fn main(scenario: &Scenario, cases: &[Case]) -> ExitCode {
             let link = session.take_link();
             let (run, link) = {
                 let board = session.board();
-                let mut dut = dut::Dut::new(link, &board, session.image_crc32());
+                let mut dut = dut::Dut::new(link, board, session.image_crc32());
                 let run = run::cases(&mut dut, scenario, &selected, &mut out);
                 (run, dut.into_link())
             };
             let cleanup = session.finish(link, run.ending);
+            let cleanup = cleanup.released(session.release());
             (run.outcomes, Some(cleanup))
         }
         Err(error) => {

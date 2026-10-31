@@ -49,7 +49,7 @@ impl Ssh {
     pub fn new(target: &str) -> Result<Self> {
         if !token(target) {
             return Err(
-                "[station_fixture].ssh_target holds characters other than letters, digits, \
+                "[router].ssh_target holds characters other than letters, digits, \
                  `.`, `_`, `-` and `@`, or starts with `-`"
                     .to_owned(),
             );

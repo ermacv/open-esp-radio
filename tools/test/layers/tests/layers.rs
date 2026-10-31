@@ -46,6 +46,16 @@ fn the_name_follows_the_path() {
         ),
         ("hil-scenarios/aes", true, "oer-hil-scenarios-aes"),
         ("hil-scenarios/services/aes", false, "oer-services-aes"),
+        (
+            "hil-scenarios/wifi-station",
+            true,
+            "oer-hil-scenarios-wifi-station",
+        ),
+        (
+            "hil-scenarios/services/wifi-station",
+            false,
+            "oer-services-wifi-station",
+        ),
         ("tools/image/build", false, "oer-image-build"),
         ("tools/image/bundle", false, "oer-image-bundle"),
         ("tools/vendor/scenario", false, "oer-vendor-scenario"),
@@ -955,8 +965,11 @@ const ROLES: &[(&str, Role)] = &[
     ("protocols/hil/agent", Role::HilAgent),
     ("chips/esp32s31/instrumentation", Role::ObservationContract),
     ("hil-scenarios/images/esp32s31-rpc", Role::HilImage),
+    ("hil-scenarios/images/esp32s31-wifi-station", Role::HilImage),
     ("hil-scenarios/services/aes", Role::HilBinding),
+    ("hil-scenarios/services/wifi-station", Role::HilBinding),
     ("hil-scenarios/aes", Role::Tool),
+    ("hil-scenarios/wifi-station", Role::Tool),
 ];
 
 /// Roles fixed before their package exists, with what creates it. When the
@@ -3012,6 +3025,16 @@ const OUTSIDE_THE_ROLES: &[Deviation] = &[
     ),
     (
         "hil-scenarios/images/esp32s31-rpc",
+        "portable/riscv",
+        "the Wi-Fi station image on the facade and compose (#848)",
+    ),
+    (
+        "hil-scenarios/images/esp32s31-wifi-station",
+        "chips/esp32s31/hal",
+        "the Wi-Fi station image on the facade and compose (#848)",
+    ),
+    (
+        "hil-scenarios/images/esp32s31-wifi-station",
         "portable/riscv",
         "the Wi-Fi station image on the facade and compose (#848)",
     ),

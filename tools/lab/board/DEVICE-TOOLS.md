@@ -1,27 +1,25 @@
 # Devices
 
-The device group owns board identity, locking and host operations shared by
-the dev kit, stand and HIL.
+The device group owns board identity and the host operations on a board.
+The LAB service (`oer-tool-lab-service`) is their one caller on the stand: it
+owns every board, so no operation here takes a lock.
 
 | Package | Boundary |
 | --- | --- |
-| `devices/` (`oer-lab-board`) | Board operations as modules: `discovery`, `port`, `console`, `reset` and `openocd`; feature `image` adds `flash`, receipted `image` writes and the held-board `device` facade |
-| `mac/` (`oer-lab-model`) | `DeviceId` and its canonical MAC form, with only serde; stand files, journals and power records use it without serial I/O or process locking |
-| `lock/` (`oer-lab-board`) | Board ownership and delegation, using identity, durable state and processes; leases and workload contexts use it without serial I/O or espflash |
-| `peer-line/` (`oer-lab-board`) | The reference peers' line grammar, with no dependencies; CLI and protocol consumers need no board operations |
+| `devices/` (`oer-lab-board`) | Board operations as modules: `discovery`, `port`, `console`, `reset`, `openocd`, `flash`, receipted `image` writes and the stand file's board with every operation on it (`stand`) |
+| `oer-lab-model` | `DeviceId` and its canonical MAC form; what is known of a board apart from its hardware: reset paths, recovery steps and a board's rungs, the ROM's reset lines (`rom`), the reference peers' line grammar (`peer_line`) and `uhubctl`'s report (`hubs`); the clients of the LAB service use them without the board operations |
 
-A console or reset consumer uses the modules directly, for example
-`oer_lab_board::console` or `oer_lab_board::reset`.
+The LAB service uses the modules directly, for example
+`oer_lab_board::console` or `oer_lab_board::reset`; its clients do not
+build against this crate.
 
-`image::write` takes a held `DeviceAccess`, reads a verified bundle snapshot
-once, invalidates the previous receipt before the write and publishes a new
-receipt only after the whole write succeeds. The facade and stand call the
-same operation; the stand and HIL retain their own power and recovery policy.
+`image::write` takes the board's `DeviceId`, reads a verified bundle
+snapshot once, invalidates the previous receipt before the write and
+publishes a new receipt only after the whole write succeeds.
 
 Keep operations inside `oer-lab-board` unless a separate consumer needs a
 smaller dependency boundary or a measured compilation benefit warrants a
 package. A single operation does not by itself warrant another crate.
 
-Run device regressions with `cargo test -p oer-lab-board` and
-`cargo test -p oer-lab-board --features image`. Identity, locking and peer
-grammar tests live in their respective packages.
+Run device regressions with `cargo test -p oer-lab-board`. Identity and
+peer grammar tests live in their respective packages.

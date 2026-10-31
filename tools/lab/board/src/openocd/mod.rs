@@ -82,13 +82,8 @@ impl Openocd {
     /// low-power and PMU state which an RTS reset through the USB
     /// Serial/JTAG port, and a reflash, leave in place (a powered-down MPLL
     /// kept the second-stage bootloader in a watchdog loop until it).
-    pub fn reset(
-        &self,
-        chip: &str,
-        mac: &str,
-        lifetime: &oer_os_process::IoLifetime,
-    ) -> crate::Result<()> {
-        self.run(&self.reset_arguments(chip, mac), RESET_TIMEOUT, lifetime)
+    pub fn reset(&self, chip: &str, mac: &str) -> crate::Result<()> {
+        self.run(&self.reset_arguments(chip, mac), RESET_TIMEOUT)
             .map(drop)
     }
 
@@ -120,11 +115,9 @@ impl Openocd {
         mac: &str,
         registers: &[&str],
         timeout: Duration,
-        lifetime: &oer_os_process::IoLifetime,
     ) -> crate::Result<Vec<(String, u32)>> {
         let mut command = oer_os_process::command(&self.program);
         command.args(self.register_arguments(chip, mac, registers));
-        lifetime.pin(&mut command)?;
         let output = oer_os_process::output(&mut command, Some(timeout))?;
         let log = String::from_utf8_lossy(&output.stderr).into_owned()
             + &String::from_utf8_lossy(&output.stdout);
@@ -164,11 +157,9 @@ impl Openocd {
         mac: &str,
         address: u32,
         timeout: Duration,
-        lifetime: &oer_os_process::IoLifetime,
     ) -> crate::Result<u32> {
         let mut command = oer_os_process::command(&self.program);
         command.args(self.word_arguments(chip, mac, address));
-        lifetime.pin(&mut command)?;
         let output = oer_os_process::output(&mut command, Some(timeout))?;
         let log = String::from_utf8_lossy(&output.stderr).into_owned()
             + &String::from_utf8_lossy(&output.stdout);
@@ -204,36 +195,20 @@ impl Openocd {
     }
 
     /// Write `files` to the board and reset it into the application.
-    pub fn program(
-        &self,
-        chip: &str,
-        mac: &str,
-        files: &[(u32, PathBuf)],
-        lifetime: &oer_os_process::IoLifetime,
-    ) -> crate::Result<()> {
+    pub fn program(&self, chip: &str, mac: &str, files: &[(u32, PathBuf)]) -> crate::Result<()> {
         if files.is_empty() {
             return Err("nothing to flash".into());
         }
-        self.run(
-            &self.program_arguments(chip, mac, files),
-            PROGRAM_TIMEOUT,
-            lifetime,
-        )
-        .map(drop)
+        self.run(&self.program_arguments(chip, mac, files), PROGRAM_TIMEOUT)
+            .map(drop)
     }
 
     /// Run OpenOCD with `arguments`, terminating it after `timeout`: a debug
     /// session on a wedged target can block forever, even against `SIGTERM`.
     /// Its log is shown only when it fails.
-    fn run(
-        &self,
-        arguments: &[String],
-        timeout: Duration,
-        lifetime: &oer_os_process::IoLifetime,
-    ) -> crate::Result<std::process::Output> {
+    fn run(&self, arguments: &[String], timeout: Duration) -> crate::Result<std::process::Output> {
         let mut command = oer_os_process::command(&self.program);
         command.args(arguments);
-        lifetime.pin(&mut command)?;
         let output = oer_os_process::output(&mut command, Some(timeout)).map_err(|error| {
             if error.is::<oer_os_process::owned::DeadlineExceeded>() {
                 format!(

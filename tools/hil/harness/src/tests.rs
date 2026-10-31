@@ -346,3 +346,37 @@ fn a_case_filter_keeps_the_scenarios_order_and_refuses_an_unknown_name() {
     );
     assert!(run::select(&cases, &["c".into()]).is_err());
 }
+
+#[test]
+fn a_case_runs_router_operations_and_an_unanswered_router_leaves_it_incomplete() {
+    use oer_lab_client::protocol::RouterOperation;
+    fn probe(cx: &mut Cx<'_>) -> Result<(), Failure> {
+        let answer = cx.router(RouterOperation::VerifyRuntime)?;
+        check(answer == serde_json::json!(null), format!("{answer}"))?;
+        cx.router(RouterOperation::GroupRekeySeconds).map(drop)
+    }
+    let (device, link) = Device::new(7);
+    thread::spawn(move || serve(device));
+    let mut board = crate::fakes::FakeBoard::new(Vec::new());
+    board.router = |request| match request {
+        RouterOperation::VerifyRuntime => Ok(serde_json::Value::Null),
+        _ => Err("ssh refused".to_owned()),
+    };
+    let mut dut = crate::dut::Dut::new(Some(link), &board, IMAGE);
+    let case = Case {
+        name: "router",
+        run: probe,
+    };
+    let outcomes = run::cases(&mut dut, &SCENARIO, &[&case], &mut Vec::new()).outcomes;
+    assert!(
+        matches!(&outcomes[..], [Outcome { verdict: Verdict::Incomplete(why), .. }] if why.contains("ssh refused")),
+        "{outcomes:?}"
+    );
+    assert_eq!(
+        *board.routed.borrow(),
+        [
+            RouterOperation::VerifyRuntime,
+            RouterOperation::GroupRekeySeconds
+        ]
+    );
+}

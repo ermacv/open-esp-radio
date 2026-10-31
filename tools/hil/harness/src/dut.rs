@@ -63,6 +63,11 @@ pub(crate) trait Device {
     fn link(&self) -> Option<&Link>;
     /// Reset the device and return its new boot of the built image.
     fn reset(&mut self) -> Result<Boot, String>;
+    /// Run `request` on the lab router under the run's lease.
+    fn router(
+        &self,
+        request: oer_lab_client::protocol::RouterOperation,
+    ) -> Result<serde_json::Value, String>;
 }
 
 impl Device for Dut<'_> {
@@ -97,6 +102,13 @@ impl Device for Dut<'_> {
         }
         self.link = Some(link);
         Ok(boot)
+    }
+
+    fn router(
+        &self,
+        request: oer_lab_client::protocol::RouterOperation,
+    ) -> Result<serde_json::Value, String> {
+        self.board.router(request)
     }
 }
 #[cfg(test)]
