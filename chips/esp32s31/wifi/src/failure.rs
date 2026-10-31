@@ -330,6 +330,41 @@ pub enum PlatformClock {
     ModemCoexistence,
     ModemLowPowerTimer,
 }
+/// A station that ended for uninstall whose installation fail-stopped
+/// instead of retiring: the slot stays quarantined and the radio is not
+/// released.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct RetirementFailure {
+    /// The station's own failure, when it ended with one.
+    pub failure: Option<StationFailure>,
+    /// Why the ordinary retirement did not complete.
+    pub cause: RetirementCause,
+    /// The P2 owner confirmed the hardware stopped before quarantine.
+    pub hardware_stopped: bool,
+}
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RetirementCause {
+    Cancelled,
+    FailStopRequested,
+    Construction,
+    BodyAlreadyIssued,
+    Deadline,
+    StopUnconfirmed,
+    InvalidState(SlotObservation),
+}
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct SlotObservation {
+    pub phase: u8,
+    pub storage: SlotStorage,
+    pub invocation_present: bool,
+}
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SlotStorage {
+    Empty,
+    Registered,
+    Vacant,
+    Unavailable,
+}
 #[cfg(any(test, target_arch = "riscv32"))]
 pub(crate) mod convert;
 #[cfg(test)]

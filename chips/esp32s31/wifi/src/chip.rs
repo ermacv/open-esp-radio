@@ -368,6 +368,8 @@ pub enum StationExit {
     Failed(crate::failure::StationFailure),
     Poisoned(crate::failure::StationFailure),
     Quarantined(crate::failure::StationFailure),
+    /// Ended for uninstall, but the installation fail-stopped instead.
+    RetirementFailed(crate::failure::RetirementFailure),
     Unavailable(UnavailableCause),
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

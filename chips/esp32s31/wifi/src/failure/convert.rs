@@ -526,3 +526,34 @@ pub(super) fn rx_stage_transaction_error(
         },
     }
 }
+
+pub(crate) fn retirement(
+    failure: Option<StationFailure>,
+    cause: oer_radio_port::LifecycleError,
+    hardware_stopped: bool,
+) -> RetirementFailure {
+    use oer_radio_port::{LifecycleError as Source, SlotStorageState as Storage};
+    let cause = match cause {
+        Source::Cancelled => RetirementCause::Cancelled,
+        Source::FailStopRequested => RetirementCause::FailStopRequested,
+        Source::Construction => RetirementCause::Construction,
+        Source::BodyAlreadyIssued => RetirementCause::BodyAlreadyIssued,
+        Source::Deadline => RetirementCause::Deadline,
+        Source::StopUnconfirmed => RetirementCause::StopUnconfirmed,
+        Source::InvalidState(observed) => RetirementCause::InvalidState(SlotObservation {
+            phase: observed.phase,
+            storage: match observed.storage {
+                Storage::Empty => SlotStorage::Empty,
+                Storage::Registered => SlotStorage::Registered,
+                Storage::Vacant => SlotStorage::Vacant,
+                Storage::Unavailable => SlotStorage::Unavailable,
+            },
+            invocation_present: observed.invocation_present,
+        }),
+    };
+    RetirementFailure {
+        failure,
+        cause,
+        hardware_stopped,
+    }
+}

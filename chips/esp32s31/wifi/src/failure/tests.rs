@@ -69,3 +69,48 @@ fn radio_origin_and_tracking_class_keep_their_original_clock_values() {
         }
     );
 }
+#[test]
+fn a_failed_retirement_keeps_the_station_failure_and_every_lifecycle_observation() {
+    use oer_radio_port::{LifecycleError as Source, SlotObservation as Observed, SlotStorageState};
+    let observed = Observed {
+        phase: 7,
+        storage: SlotStorageState::Vacant,
+        invocation_present: true,
+    };
+    assert_eq!(
+        super::convert::retirement(None, Source::InvalidState(observed), false),
+        RetirementFailure {
+            failure: None,
+            cause: RetirementCause::InvalidState(SlotObservation {
+                phase: 7,
+                storage: SlotStorage::Vacant,
+                invocation_present: true,
+            }),
+            hardware_stopped: false,
+        }
+    );
+    let failure = StationFailure::Backend(BackendFault::Deadline);
+    for (source, cause) in [
+        (Source::Cancelled, RetirementCause::Cancelled),
+        (
+            Source::FailStopRequested,
+            RetirementCause::FailStopRequested,
+        ),
+        (Source::Construction, RetirementCause::Construction),
+        (
+            Source::BodyAlreadyIssued,
+            RetirementCause::BodyAlreadyIssued,
+        ),
+        (Source::Deadline, RetirementCause::Deadline),
+        (Source::StopUnconfirmed, RetirementCause::StopUnconfirmed),
+    ] {
+        assert_eq!(
+            super::convert::retirement(Some(failure), source, true),
+            RetirementFailure {
+                failure: Some(failure),
+                cause,
+                hardware_stopped: true,
+            }
+        );
+    }
+}

@@ -467,8 +467,25 @@ pub async fn serve<W: Binding>(mut runner: StationRunner<W>, profile: Profile<W>
     runner.frontend = poster;
     match front {
         Ok(front) => match rp::run_port(front, Body { runner, profile }).await {
-            rp::PortEnd::Uninstalled { output, .. } | rp::PortEnd::FailStopped { output, .. } => {
-                output
+            rp::PortEnd::Uninstalled { output, .. } => output,
+            rp::PortEnd::FailStopped { outcome, output } => {
+                // A body that ended for uninstall reports the fail-stop; a
+                // body that requested one already reports its own cause.
+                let retirement = |failure| {
+                    StationExit::RetirementFailed(crate::failure::convert::retirement(
+                        failure,
+                        outcome.cause(),
+                        matches!(outcome.outcome(), rp::Abandon::Stopped(_)),
+                    ))
+                };
+                match output {
+                    StationExit::Stopped => retirement(None),
+                    StationExit::Failed(failure) => retirement(Some(failure)),
+                    StationExit::Poisoned(_)
+                    | StationExit::Quarantined(_)
+                    | StationExit::RetirementFailed(_)
+                    | StationExit::Unavailable(_) => output,
+                }
             }
             rp::PortEnd::Abandoned { .. } => StationExit::Unavailable(UnavailableCause::Abandoned),
         },
