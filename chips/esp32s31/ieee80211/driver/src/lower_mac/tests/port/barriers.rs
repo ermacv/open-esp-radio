@@ -1,6 +1,6 @@
 use super::*;
 
-mod withdraw;
+pub(super) mod withdraw;
 
 pub(super) async fn yield_once() {
     let mut yielded = false;

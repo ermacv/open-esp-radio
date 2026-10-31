@@ -33,7 +33,12 @@ impl Kind {
     }
 }
 
-fn submit_ap<'k, 'p, 'id: 'p + 'k, Id: radio::SlotIdentity + 'id>(
+pub(in crate::lower_mac::tests::port) fn submit_ap<
+    'k,
+    'p,
+    'id: 'p + 'k,
+    Id: radio::SlotIdentity + 'id,
+>(
     phase: &mut Esp32s31Phase<'p, 'id, Id, TestDevice, 512>,
     buffer: Buffer<'id, Id, TestDevice, 512>,
     ticket: radio::Slot<'id, Tickets, radio::Child<radio::Root<Id>, 2>>,
