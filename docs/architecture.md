@@ -206,7 +206,7 @@ resources. Images declare its composed static type, select the interrupt entries
 callbacks and observers, and spawn the returned runners.
 Automatic reconnect and graceful station shutdown belong to the product
 runtime. The facade configures reconnect with its own policy values; disabled
-is the default, and the HIL station selects a one-second interval. Explicit
+is the default, which the HIL station image keeps: it joins once per boot. Explicit
 Disconnect pauses reconnect and Connect resumes the configured policy.
 Policy requests use the Runner's existing affine command credits and normal
 Control events. A facade Stop disconnects once, waits for link-down and then

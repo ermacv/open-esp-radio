@@ -9,7 +9,8 @@ of the services that image must serve, and lists its cases; `main` then:
    the `dut` role) from the LAB service
    ([tools/lab/service](../../lab/service/README.md)), which runs every
    operation on it; the air, shared, only for a scenario whose cases turn a
-   radio on (`Scenario::using_air`); the lab router and the air for one
+   radio on (`Scenario::using_air`); the lab router exclusively (its cases
+   change its network) and the air for one
    whose cases use the router (`Scenario::using_router`), which they reach
    through `Cx::router` — a router that does not answer leaves the case
    incomplete;
