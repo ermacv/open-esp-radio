@@ -818,28 +818,89 @@ fn a_thaw_that_never_reports_restores_fetch_autoload_and_freeze() {
 }
 
 #[test]
-fn opening_hart_1_s_fetch_clears_only_its_instruction_bus_gate() {
+fn a_mask_without_hart_1_leaves_every_cache_word_alone() {
     use oer_espressif_boot::cache::open_secondary_fetch;
-    let mut words = memory(instances::cache::SIZE, u32::MAX);
+    let mut words = memory(instances::cache::SIZE, 0);
+    let before = words.clone();
+    let virtual_clock = VirtualClock::new();
+    let ticking = Ticking(&virtual_clock);
+    let deadline = BootDeadline::start(&ticking, budget());
     let mut owner = CacheRegisters::host(&mut words).expect("host memory holds it");
-    // A mask without hart 1 opens nothing.
-    open_secondary_fetch(&mut owner, 0b01);
-    drop(owner);
-    let (_buses, view) = cache_host(&mut words).expect("host memory holds it");
-    assert!(view.read_l1_icache_ctrl().l1_icache_shut_ibus1());
-    drop(view);
-    let mut owner = CacheRegisters::host(&mut words).expect("host memory holds it");
-    open_secondary_fetch(&mut owner, 0b11);
-    drop(owner);
-    let (buses, _cache) = cache_host(&mut words).expect("host memory holds it");
-    let control = buses.read_l1_icache_ctrl();
-    assert!(!control.l1_icache_shut_ibus1(), "hart 1's bus open");
-    assert!(control.l1_icache_shut_ibus0(), "hart 0's bus kept");
-    assert!(control.l1_icache_shut_ibus2() && control.l1_icache_shut_ibus3());
-    assert!(
-        buses.read_l1_dcache_ctrl().l1_dcache_shut_dbus0(),
-        "the data bus is not the instruction gate's"
+    assert_eq!(
+        open_secondary_fetch(&mut owner, 0b01, SUSPEND, &deadline),
+        Ok(())
     );
+    drop(owner);
+    assert_eq!(words, before);
+}
+
+#[test]
+fn hart_1_s_suspension_shuts_only_its_bus_and_keeps_it_shut_on_a_failed_wait() {
+    use oer_espressif_boot::cache::open_secondary_fetch;
+    // All zeros: hart 1's autoload is off and never reports done.
+    let mut words = memory(instances::cache::SIZE, 0);
+    let virtual_clock = VirtualClock::new();
+    let ticking = Ticking(&virtual_clock);
+    let deadline = BootDeadline::start(&ticking, budget());
+    let mut owner = CacheRegisters::host(&mut words).expect("host memory holds it");
+    assert_eq!(
+        open_secondary_fetch(&mut owner, 0b11, SUSPEND, &deadline),
+        Err(BootFailure::Wait(WaitFailure::TimedOut("icache-autoload")))
+    );
+    drop(owner);
+    let (buses, view) = cache_host(&mut words).expect("host memory holds it");
+    let control = buses.read_l1_icache_ctrl();
+    assert!(control.l1_icache_shut_ibus1(), "hart 1's bus shut");
+    assert!(!control.l1_icache_shut_ibus0(), "hart 0's bus kept");
+    assert!(!control.l1_icache_shut_ibus2() && !control.l1_icache_shut_ibus3());
+    assert!(!buses.read_l1_dcache_ctrl().l1_dcache_shut_dbus0());
+    assert!(
+        !view
+            .read_l1_icache1_autoload_ctrl()
+            .l1_icache1_autoload_ena()
+    );
+}
+
+#[test]
+fn hart_1_s_thaw_that_never_reports_restores_its_cache_and_keeps_its_bus_shut() {
+    use oer_espressif_boot::cache::open_secondary_fetch;
+    // All ones but hart 1's open bus: its autoload runs, every idle flag
+    // and the freeze's done flag read set, so its thaw never reports.
+    let mut words = memory(instances::cache::SIZE, u32::MAX);
+    {
+        let (_buses, mut view) = cache_host(&mut words).expect("host memory holds it");
+        view.modify_l1_icache_ctrl(|w| {
+            w.set_l1_icache_shut_ibus1(false);
+        });
+    }
+    let virtual_clock = VirtualClock::new();
+    let ticking = Ticking(&virtual_clock);
+    let deadline = BootDeadline::start(&ticking, budget());
+    let mut owner = CacheRegisters::host(&mut words).expect("host memory holds it");
+    assert_eq!(
+        open_secondary_fetch(&mut owner, 0b10, SUSPEND, &deadline),
+        Err(BootFailure::Wait(WaitFailure::TimedOut("icache-thaw")))
+    );
+    drop(owner);
+    let (buses, view) = cache_host(&mut words).expect("host memory holds it");
+    let control = buses.read_l1_icache_ctrl();
+    assert!(control.l1_icache_shut_ibus1(), "hart 1's bus shut");
+    assert!(control.l1_icache_shut_ibus0(), "hart 0's bus kept");
+    assert!(
+        view.read_l1_icache1_autoload_ctrl()
+            .l1_icache1_autoload_ena(),
+        "autoload restarted"
+    );
+    assert!(
+        view.read_l1_icache0_autoload_ctrl()
+            .l1_icache0_autoload_ena(),
+        "hart 0's autoload kept"
+    );
+    let freeze = view.read_l1_cache_freeze_ctrl();
+    assert!(!freeze.l1_icache1_freeze_en(), "thawed");
+    assert!(!freeze.l1_icache1_freeze_mode(), "mode 0");
+    assert!(freeze.l1_icache0_freeze_en(), "hart 0's freeze kept");
+    assert!(freeze.l1_dcache_freeze_en(), "the data cache's freeze kept");
 }
 
 /// The boot sequence keeps its PLL powered without changing the radio's other fields.

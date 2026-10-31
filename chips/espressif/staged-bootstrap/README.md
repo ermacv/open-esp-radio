@@ -22,7 +22,9 @@ takes over watchdogs with RTC still armed, applies brownout policy, brings up
 the CPU PLL and PSRAM, stages and checks CRCs, tunes flash, publishes code,
 opens the instruction bus of each secondary hart the runtime's header names
 as used (`runtime_harts`, the stage-two header's used-hart word; staging
-refuses a word without the boot hart or with a hart outside the layout),
+refuses a word without the boot hart or with a hart outside the layout)
+with the ROM's suspension and resumption of that hart's instruction cache,
+which leave the data cache and its PSRAM lines as they are,
 and disables RTC immediately before the jump. Staging precedes flash tuning.
 All waits keep their existing bounds under the same boot budget.
 

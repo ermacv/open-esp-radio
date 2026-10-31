@@ -84,7 +84,9 @@ contracts: [Hardware memory](hardware-memory.md).
   clears their ROM boot addresses
   ([secondary boot](../chips/esp32s31/platform/README.md#secondary-hart-launch-and-containment)),
   and opens a declared hart's instruction bus after it published the
-  runtime's code. A declared hart starts during boot, before any executor,
+  runtime's code, with the ROM's suspension and resumption of that hart's
+  instruction cache: the data cache keeps running and keeps the PSRAM lines
+  the bootstrap wrote. A declared hart starts during boot, before any executor,
   through its generated entry, which installs its own PSRAM task stack and
   calls the image's root for the hart (`secondary_entry!`); the boot hart's
   staged entries admit only the boot hart. A secondary hart's task root,

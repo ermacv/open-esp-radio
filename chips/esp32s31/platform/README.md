@@ -35,8 +35,10 @@ policy holds hart 1 as a launch template that only a declaring image uses.
 Every other image links zero bytes for hart 1's stacks, and its checks reject
 secondary starters, routes and storage. The stage-two header carries the used
 harts; after it published the runtime's code the bootstrap opens a used
-secondary's instruction bus (`L1_ICACHE_SHUT_IBUS1`); the data bus
-(`SHUT_DBUS0`) serves every hart.
+secondary's instruction bus (`L1_ICACHE_SHUT_IBUS1`) by the ROM's
+`Cache_Suspend_L1_CORE1_ICache` and `Cache_Resume_L1_CORE1_ICache` steps,
+which never touch the data cache; the data bus (`SHUT_DBUS0`) serves every
+hart.
 
 `Root::into_runtime` mints one `LaunchPermit`: hart 1's interrupt grant (its
 interrupt-matrix route bank and its own CLIC's parts), the ROM wake-stub word

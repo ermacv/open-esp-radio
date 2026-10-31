@@ -37,6 +37,35 @@
 //! A wait that fails restores what the sequence changed before the failure
 //! returns.
 //!
+//! **A secondary hart's instruction bus.** The bootstrap opens it with the
+//! ROM's pair for that hart's instruction cache, the same steps on its own
+//! words: `Cache_Suspend_L1_CORE1_ICache` (shut `L1_ICACHE_SHUT_IBUS1`,
+//! stop and wait for `L1_ICACHE1` autoload, wait for its preload and the
+//! shared sync and lock engines, freeze it in mode 0 and thaw it), then
+//! `Cache_Resume_L1_CORE1_ICache` (clear `L1_ICACHE_SHUT_IBUS1`, restart
+//! autoload if it ran). Neither touches the data cache, so the PSRAM lines
+//! the bootstrap wrote stay in it; the ROM runs the pair with the caches
+//! enabled. ESP-IDF's `do_multicore_settings` instead disables every L1
+//! cache around the bus change, which drops all their tags: it runs before
+//! PSRAM exists, while the bootstrap has written the runtime into PSRAM.
+//!
+//! SOURCE(esp32s31): the same pinned rev0 ROM, Blobray function records of
+//! `Cache_Suspend_L1_CORE1_ICache` @0x2f8028c2 and
+//! `Cache_Resume_L1_CORE1_ICache` @0x2f8028ac with their callees through
+//! `rom_cache_internal_table_ptr` (initially
+//! `rom_default_cache_internal_table` @0x2f8487e4: +28
+//! `Cache_Suspend_L1_CORE1_ICache_Autoload` @0x2f801cc6, +32
+//! `Cache_Resume_L1_CORE1_ICache_Autoload` @0x2f801eb4, +52
+//! `Cache_Freeze_L1_ICache1_Enable` @0x2f801d94 with argument 0, +56
+//! `Cache_Freeze_L1_ICache1_Disable` @0x2f801dbe). Words: `0x2c000000`
+//! bit 1, `0x2c0000fc` bits 0-1 (`L1_ICACHE1_AUTOLOAD_ENA`/`_DONE`),
+//! `0x2c0000b8` bit 1 (`L1_ICACHE1_PRELOAD_DONE`), `0x2c00009c` bit 4,
+//! `0x2c00008c` bit 2, `0x2c000030` bits 4-6 (`L1_ICACHE1_FREEZE_EN`/
+//! `_MODE`/`_DONE`). ESP-IDF 4d80c1b2
+//! `components/esp_system/port/cpu_start.c:364-399` (`do_multicore_settings`)
+//! and `components/esp_rom/esp32s31/include/esp32s31/rom/cache.h:1014-1021`
+//! (disabling a cache invalidates its tags).
+//!
 //! SOURCE(esp32s31): pinned rev0 ROM (esp-rom-elfs 20260528, SHA-256
 //! a52ad751...ab87), Blobray function records of
 //! `Cache_Suspend_L1_CORE0_ICache` @0x2f8027dc and its default-table
@@ -326,7 +355,7 @@ where
     R: FetchSuspendRegisters,
     C: Clock + ?Sized,
 {
-    suspend(registers, waits, deadline).map(|autoload| SuspendedFetch { autoload })
+    suspend(registers, waits, deadline, true).map(|autoload| SuspendedFetch { autoload })
 }
 
 /// Resume the instruction fetch `suspended` stopped.
@@ -334,10 +363,14 @@ pub fn resume_fetch<R: FetchSuspendRegisters>(registers: &mut R, suspended: Susp
     resume(registers, suspended.autoload, false);
 }
 
+/// The ROM's suspension of one instruction cache. A failed wait undoes
+/// what the sequence changed; the bus opens again only when `reopen` (it
+/// was open before).
 fn suspend<R, C>(
     registers: &mut R,
     waits: SuspendWaits,
     deadline: &BootDeadline<'_, C>,
+    reopen: bool,
 ) -> Result<bool, BootFailure>
 where
     R: FetchSuspendRegisters,
@@ -359,7 +392,7 @@ where
     ];
     for (wait, idle) in idle {
         if let Err(failure) = deadline.poll(wait, || idle(registers, Access::new()).then_some(())) {
-            resume(registers, autoload, false);
+            undo(registers, autoload, false, reopen);
             return Err(failure.into());
         }
     }
@@ -368,14 +401,14 @@ where
     if let Err(failure) = deadline.poll(waits.freeze, || {
         registers.freeze_done(Access::new()).then_some(())
     }) {
-        resume(registers, autoload, true);
+        undo(registers, autoload, true, reopen);
         return Err(failure.into());
     }
     registers.set_freeze(Access::new(), false);
     if let Err(failure) = deadline.poll(waits.thaw, || {
         (!registers.freeze_done(Access::new())).then_some(())
     }) {
-        resume(registers, autoload, false);
+        undo(registers, autoload, false, reopen);
         return Err(failure.into());
     }
     Ok(autoload)
@@ -384,17 +417,26 @@ where
 /// Undo a suspension: thaw if still frozen, open the instruction bus, then
 /// restart autoload if it ran.
 fn resume<R: FetchSuspendRegisters>(registers: &mut R, autoload: bool, frozen: bool) {
+    undo(registers, autoload, frozen, true);
+}
+
+/// Thaw if still frozen, open the instruction bus when `reopen`, then
+/// restart autoload if it ran.
+fn undo<R: FetchSuspendRegisters>(registers: &mut R, autoload: bool, frozen: bool, reopen: bool) {
     if frozen {
         registers.set_freeze(Access::new(), false);
     }
-    registers.shut_fetch(Access::new(), false);
+    if reopen {
+        registers.shut_fetch(Access::new(), false);
+    }
     if autoload {
         registers.set_autoload(Access::new(), true);
     }
 }
 
-/// The instruction-bus gate of each secondary hart. A used secondary hart
-/// fetches its code from cached PSRAM through its own instruction bus; its
+/// Each secondary hart's instruction cache and the gate of its
+/// instruction bus to it. A used secondary hart fetches its code from
+/// cached PSRAM through its own instruction bus and instruction cache; its
 /// data goes through the data bus every hart shares.
 ///
 /// SOURCE: ESP-IDF fff9895c `components/hal/esp32s31/include/hal/cache_ll.h:951-990`
@@ -406,20 +448,101 @@ pub trait SecondaryFetchRegisters {
     const SECONDARIES: &'static [Self::Secondary];
     /// The architectural index of `hart`, its bit in a used-hart mask.
     fn index(hart: Self::Secondary) -> u32;
-    /// Open `hart`'s instruction bus to the cache, keeping every other gate.
-    fn open_fetch(&mut self, access: Access<'_>, hart: Self::Secondary);
+    /// Shut (or open) `hart`'s instruction bus to its cache, keeping every
+    /// other gate.
+    fn shut_fetch(&mut self, access: Access<'_>, hart: Self::Secondary, shut: bool);
+    /// Whether `hart`'s instruction-cache autoload is enabled.
+    fn autoload_enabled(&self, access: Access<'_>, hart: Self::Secondary) -> bool;
+    /// Enable or disable `hart`'s instruction-cache autoload.
+    fn set_autoload(&mut self, access: Access<'_>, hart: Self::Secondary, enabled: bool);
+    /// Whether `hart`'s autoload is idle.
+    fn autoload_done(&self, access: Access<'_>, hart: Self::Secondary) -> bool;
+    /// Whether `hart`'s instruction-cache preload is idle.
+    fn preload_done(&self, access: Access<'_>, hart: Self::Secondary) -> bool;
+    /// Select freeze mode 0 for `hart`'s instruction cache.
+    fn select_freeze_mode_zero(&mut self, access: Access<'_>, hart: Self::Secondary);
+    /// Freeze (or thaw) `hart`'s instruction cache.
+    fn set_freeze(&mut self, access: Access<'_>, hart: Self::Secondary, frozen: bool);
+    /// Whether `hart`'s freeze has taken effect (true) or its thaw (false).
+    fn freeze_done(&self, access: Access<'_>, hart: Self::Secondary) -> bool;
+}
+
+/// One secondary hart's instruction cache through the suspension words;
+/// the sync and lock engines are the ones every cache shares.
+struct SecondaryCache<'a, R: SecondaryFetchRegisters> {
+    registers: &'a mut R,
+    hart: R::Secondary,
+}
+
+impl<R: SecondaryFetchRegisters + FetchSuspendRegisters> FetchSuspendRegisters
+    for SecondaryCache<'_, R>
+{
+    fn shut_fetch(&mut self, access: Access<'_>, shut: bool) {
+        SecondaryFetchRegisters::shut_fetch(self.registers, access, self.hart, shut);
+    }
+    fn autoload_enabled(&self, access: Access<'_>) -> bool {
+        SecondaryFetchRegisters::autoload_enabled(self.registers, access, self.hart)
+    }
+    fn set_autoload(&mut self, access: Access<'_>, enabled: bool) {
+        SecondaryFetchRegisters::set_autoload(self.registers, access, self.hart, enabled);
+    }
+    fn autoload_done(&self, access: Access<'_>) -> bool {
+        SecondaryFetchRegisters::autoload_done(self.registers, access, self.hart)
+    }
+    fn preload_done(&self, access: Access<'_>) -> bool {
+        SecondaryFetchRegisters::preload_done(self.registers, access, self.hart)
+    }
+    fn sync_done(&self, access: Access<'_>) -> bool {
+        FetchSuspendRegisters::sync_done(self.registers, access)
+    }
+    fn lock_done(&self, access: Access<'_>) -> bool {
+        FetchSuspendRegisters::lock_done(self.registers, access)
+    }
+    fn select_freeze_mode_zero(&mut self, access: Access<'_>) {
+        SecondaryFetchRegisters::select_freeze_mode_zero(self.registers, access, self.hart);
+    }
+    fn set_freeze(&mut self, access: Access<'_>, frozen: bool) {
+        SecondaryFetchRegisters::set_freeze(self.registers, access, self.hart, frozen);
+    }
+    fn freeze_done(&self, access: Access<'_>) -> bool {
+        SecondaryFetchRegisters::freeze_done(self.registers, access, self.hart)
+    }
 }
 
 /// Open the instruction bus of every secondary hart `harts` (one bit per
-/// hart, the stage-two header's used-hart mask) names; a hart outside the
-/// chip's secondaries opens nothing.
-pub fn open_secondary_fetch<R: SecondaryFetchRegisters>(registers: &mut R, harts: u32) {
+/// hart, the stage-two header's used-hart mask) names, by the ROM's own
+/// pair for that hart's cache: suspend it, then resume it. The resume is
+/// what opens the bus. The pair touches only that hart's instruction
+/// cache, its bus gate and the idle flags of the shared engines; the data
+/// cache and its dirty lines stay as they are, so the caches keep running.
+/// A hart outside the chip's secondaries opens nothing. A failed wait
+/// keeps the bus shut, restores the rest and returns the failure.
+///
+/// # Errors
+///
+/// The [`BootFailure`] of the first wait that does not complete.
+pub fn open_secondary_fetch<R, C>(
+    registers: &mut R,
+    harts: u32,
+    waits: SuspendWaits,
+    deadline: &BootDeadline<'_, C>,
+) -> Result<(), BootFailure>
+where
+    R: FetchSuspendRegisters + SecondaryFetchRegisters,
+    C: Clock + ?Sized,
+{
     for &hart in R::SECONDARIES {
         let used = 1_u32
             .checked_shl(R::index(hart))
             .is_some_and(|bit| harts & bit != 0);
         if used {
-            registers.open_fetch(Access::new(), hart);
+            let mut cache = SecondaryCache {
+                registers: &mut *registers,
+                hart,
+            };
+            let autoload = suspend(&mut cache, waits, deadline, false)?;
+            resume(&mut cache, autoload, false);
         }
     }
+    Ok(())
 }

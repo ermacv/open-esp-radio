@@ -51,6 +51,7 @@ impl BootProfile for S31 {
     const CACHE: boot::CacheGeometry<boot::CacheMap> = boot::CACHE_GEOMETRY;
     const CACHE_SYNC: boot::BootWait = boot::CACHE_SYNC;
     const TUNING_WAITS: boot::TuningWaits = boot::TUNING_WAITS;
+    const SECONDARY_FETCH_WAITS: boot::SuspendWaits = boot::SUSPEND_WAITS;
 
     fn timings() -> &'static [boot::FlashTimingCandidate] {
         &boot::FLASH_TIMING_CANDIDATES

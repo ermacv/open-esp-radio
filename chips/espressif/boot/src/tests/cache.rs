@@ -8,8 +8,9 @@ use super::Ticking;
 use crate::{
     Access, BootFailure, Busy, CacheFailure, WaitFailure,
     cache::{
-        CacheGeometry, CacheSyncRegisters, FetchSuspendRegisters, LineRange, SuspendWaits,
-        SyncCommand, publish_code, with_fetch_suspended,
+        CacheGeometry, CacheSyncRegisters, FetchSuspendRegisters, LineRange,
+        SecondaryFetchRegisters, SuspendWaits, SyncCommand, open_secondary_fetch, publish_code,
+        with_fetch_suspended,
     },
     wait::{BootBudget, BootDeadline, BootWait},
 };
@@ -449,32 +450,178 @@ fn a_freeze_that_never_takes_effect_is_undone_and_the_operation_never_runs() {
     );
 }
 
-struct Buses {
-    opened: Vec<u8>,
+/// Core 0's instruction cache and two secondaries' (harts 1 and 2), each
+/// with its own log; hart 40 lies outside a used-hart mask.
+struct Harts {
+    caches: [Fetch; 3],
 }
 
-impl crate::cache::SecondaryFetchRegisters for Buses {
+impl Harts {
+    fn new(autoload: bool) -> Self {
+        Self {
+            caches: [
+                Fetch::new(autoload),
+                Fetch::new(autoload),
+                Fetch::new(autoload),
+            ],
+        }
+    }
+
+    fn cache(&self, hart: u8) -> &Fetch {
+        self.caches.get(usize::from(hart)).expect("a modelled hart")
+    }
+
+    fn cache_mut(&mut self, hart: u8) -> &mut Fetch {
+        self.caches
+            .get_mut(usize::from(hart))
+            .expect("a modelled hart")
+    }
+
+    fn log(&self, hart: u8) -> Vec<FetchOp> {
+        self.cache(hart).log.take()
+    }
+}
+
+impl FetchSuspendRegisters for Harts {
+    fn shut_fetch(&mut self, access: Access<'_>, shut: bool) {
+        self.cache_mut(0).shut_fetch(access, shut);
+    }
+    fn autoload_enabled(&self, access: Access<'_>) -> bool {
+        self.cache(0).autoload_enabled(access)
+    }
+    fn set_autoload(&mut self, access: Access<'_>, enabled: bool) {
+        self.cache_mut(0).set_autoload(access, enabled);
+    }
+    fn autoload_done(&self, access: Access<'_>) -> bool {
+        self.cache(0).autoload_done(access)
+    }
+    fn preload_done(&self, access: Access<'_>) -> bool {
+        self.cache(0).preload_done(access)
+    }
+    fn sync_done(&self, access: Access<'_>) -> bool {
+        self.cache(0).sync_done(access)
+    }
+    fn lock_done(&self, access: Access<'_>) -> bool {
+        self.cache(0).lock_done(access)
+    }
+    fn select_freeze_mode_zero(&mut self, access: Access<'_>) {
+        self.cache_mut(0).select_freeze_mode_zero(access);
+    }
+    fn set_freeze(&mut self, access: Access<'_>, frozen: bool) {
+        self.cache_mut(0).set_freeze(access, frozen);
+    }
+    fn freeze_done(&self, access: Access<'_>) -> bool {
+        self.cache(0).freeze_done(access)
+    }
+}
+
+impl SecondaryFetchRegisters for Harts {
     type Secondary = u8;
     const SECONDARIES: &'static [u8] = &[1, 2, 40];
     fn index(hart: u8) -> u32 {
         u32::from(hart)
     }
-    fn open_fetch(&mut self, _: Access<'_>, hart: u8) {
-        self.opened.push(hart);
+    fn shut_fetch(&mut self, access: Access<'_>, hart: u8, shut: bool) {
+        self.cache_mut(hart).shut_fetch(access, shut);
+    }
+    fn autoload_enabled(&self, access: Access<'_>, hart: u8) -> bool {
+        self.cache(hart).autoload_enabled(access)
+    }
+    fn set_autoload(&mut self, access: Access<'_>, hart: u8, enabled: bool) {
+        self.cache_mut(hart).set_autoload(access, enabled);
+    }
+    fn autoload_done(&self, access: Access<'_>, hart: u8) -> bool {
+        self.cache(hart).autoload_done(access)
+    }
+    fn preload_done(&self, access: Access<'_>, hart: u8) -> bool {
+        self.cache(hart).preload_done(access)
+    }
+    fn select_freeze_mode_zero(&mut self, access: Access<'_>, hart: u8) {
+        self.cache_mut(hart).select_freeze_mode_zero(access);
+    }
+    fn set_freeze(&mut self, access: Access<'_>, hart: u8, frozen: bool) {
+        self.cache_mut(hart).set_freeze(access, frozen);
+    }
+    fn freeze_done(&self, access: Access<'_>, hart: u8) -> bool {
+        self.cache(hart).freeze_done(access)
     }
 }
 
 #[test]
 fn only_declared_secondaries_have_their_fetch_opened() {
+    let clock = VirtualClock::new();
+    let ticking = Ticking::new(&clock);
     for (harts, opened) in [
-        (0b001, &[][..]),
-        (0b011, &[1][..]),
-        (0b111, &[1, 2][..]),
-        (0b100, &[2][..]),
-        (u32::MAX, &[1, 2][..]),
+        (0b001, [false, false]),
+        (0b011, [true, false]),
+        (0b111, [true, true]),
+        (0b100, [false, true]),
+        (u32::MAX, [true, true]),
     ] {
-        let mut buses = Buses { opened: Vec::new() };
-        crate::cache::open_secondary_fetch(&mut buses, harts);
-        assert_eq!(buses.opened, opened, "{harts:#b}");
+        let mut caches = Harts::new(false);
+        assert_eq!(
+            open_secondary_fetch(&mut caches, harts, SUSPEND, &deadline(&ticking)),
+            Ok(())
+        );
+        for (hart, opened) in [1, 2].into_iter().zip(opened) {
+            assert_eq!(
+                caches.log(hart).last() == Some(&FetchOp::Shut(false)),
+                opened,
+                "{harts:#b} hart {hart}"
+            );
+        }
     }
+}
+
+#[test]
+fn a_secondary_s_bus_opens_by_the_rom_s_suspension_and_resumption_of_its_cache() {
+    let clock = VirtualClock::new();
+    let ticking = Ticking::new(&clock);
+    let mut caches = Harts::new(true);
+    assert_eq!(
+        open_secondary_fetch(&mut caches, 0b10, SUSPEND, &deadline(&ticking)),
+        Ok(())
+    );
+    assert_eq!(
+        caches.log(1),
+        [
+            FetchOp::Shut(true),
+            FetchOp::Autoload(false),
+            FetchOp::Idle("autoload"),
+            FetchOp::Idle("preload"),
+            FetchOp::FreezeModeZero,
+            FetchOp::Freeze(true),
+            FetchOp::FreezeSeen(true),
+            FetchOp::Freeze(false),
+            FetchOp::FreezeSeen(false),
+            FetchOp::Shut(false),
+            FetchOp::Autoload(true),
+        ]
+    );
+    // Core 0's cache is only asked whether the shared engines are idle.
+    assert_eq!(
+        caches.log(0),
+        [FetchOp::Idle("sync"), FetchOp::Idle("lock")]
+    );
+    assert!(caches.log(2).is_empty());
+}
+
+#[test]
+fn a_secondary_s_failed_freeze_keeps_its_bus_shut_and_restores_the_rest() {
+    let clock = VirtualClock::new();
+    let ticking = Ticking::new(&clock);
+    let mut caches = Harts::new(true);
+    caches.cache_mut(1).freeze_responds = false;
+    assert_eq!(
+        open_secondary_fetch(&mut caches, 0b110, SUSPEND, &deadline(&ticking)),
+        Err(BootFailure::Wait(WaitFailure::TimedOut("icache-freeze")))
+    );
+    let ops = caches.log(1);
+    assert_eq!(
+        &ops[ops.len() - 2..],
+        &[FetchOp::Freeze(false), FetchOp::Autoload(true)]
+    );
+    assert!(!ops.contains(&FetchOp::Shut(false)), "the bus stays shut");
+    // The first failure ends the opening: hart 2 is untouched.
+    assert!(caches.log(2).is_empty());
 }

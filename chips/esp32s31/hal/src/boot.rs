@@ -281,7 +281,8 @@ pub const CACHE_SYNC: BootWait = const {
 
 /// The fetch suspension's waits: each replaces an unbounded poll of the
 /// pinned rev0 ROM's `Cache_Suspend_L1_CORE0_ICache` and its callees
-/// (`oer_espressif_boot::cache`).
+/// (`oer_espressif_boot::cache`), and the same polls of
+/// `Cache_Suspend_L1_CORE1_ICache` when the bootstrap opens hart 1's bus.
 pub const SUSPEND_WAITS: SuspendWaits = SuspendWaits {
     autoload: const {
         match BootWait::new("icache-autoload", Duration::from_millis(1)) {

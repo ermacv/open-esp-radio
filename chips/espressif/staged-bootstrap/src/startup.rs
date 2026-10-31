@@ -57,6 +57,9 @@ pub trait BootProfile: Sized {
     const CACHE: cache::CacheGeometry<<Self::Cache as cache::CacheSyncRegisters>::Map>;
     const CACHE_SYNC: BootWait;
     const TUNING_WAITS: flash::TuningWaits;
+    /// The waits of the suspension and resumption that open a secondary
+    /// hart's instruction bus.
+    const SECONDARY_FETCH_WAITS: cache::SuspendWaits;
     fn timings() -> &'static [<Self::Flash as flash::FlashTimingRegisters>::Timing];
     fn psram_profile(
         size: u32,
@@ -246,7 +249,12 @@ where
         B::CACHE_SYNC,
         &deadline,
     ));
-    cache::open_secondary_fetch(&mut cache, HARTS);
+    checked::<B, _>(cache::open_secondary_fetch(
+        &mut cache,
+        HARTS,
+        B::SECONDARY_FETCH_WAITS,
+        &deadline,
+    ));
     crate::hand_off::<B::Port, ENTRY>(image, published, || B::hand_off_watchdogs(watchdogs))
 }
 

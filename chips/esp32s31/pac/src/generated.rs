@@ -53443,7 +53443,9 @@ pub mod cache {
     pub struct CacheBootWords;
 
     impl oer_mmio::Words for CacheBootWords {
-        const OWNED: &'static [usize] = &[0x0, 0x30, 0x8c, 0x9c, 0xa0, 0xa4, 0xa8, 0xac, 0xe8];
+        const OWNED: &'static [usize] = &[
+            0x0, 0x30, 0x8c, 0x9c, 0xa0, 0xa4, 0xa8, 0xac, 0xb8, 0xe8, 0xfc,
+        ];
         const OBSERVED: &'static [usize] = &[];
     }
 
@@ -53642,6 +53644,12 @@ pub mod cache {
             l1_icache0_preload_ctrl::R(self.0.read::<0xac>())
         }
 
+        /// Read `L1_ICACHE1_PRELOAD_CTRL`.
+        #[inline]
+        pub fn read_l1_icache1_preload_ctrl(&self) -> l1_icache1_preload_ctrl::R {
+            l1_icache1_preload_ctrl::R(self.0.read::<0xb8>())
+        }
+
         /// Read `L1_ICACHE0_AUTOLOAD_CTRL`.
         #[inline]
         pub fn read_l1_icache0_autoload_ctrl(&self) -> l1_icache0_autoload_ctrl::R {
@@ -53659,6 +53667,24 @@ pub mod cache {
             change(&mut value);
             self.0.write::<0xe8>(value.0);
         }
+
+        /// Read `L1_ICACHE1_AUTOLOAD_CTRL`.
+        #[inline]
+        pub fn read_l1_icache1_autoload_ctrl(&self) -> l1_icache1_autoload_ctrl::R {
+            l1_icache1_autoload_ctrl::R(self.0.read::<0xfc>())
+        }
+
+        /// Read `L1_ICACHE1_AUTOLOAD_CTRL`, change fields and write it back; every other bit keeps
+        /// the value read, every write-trigger field is zero.
+        #[inline]
+        pub fn modify_l1_icache1_autoload_ctrl(
+            &mut self,
+            change: impl FnOnce(&mut l1_icache1_autoload_ctrl::W),
+        ) {
+            let mut value = l1_icache1_autoload_ctrl::W(self.0.read::<0xfc>());
+            change(&mut value);
+            self.0.write::<0xfc>(value.0);
+        }
     }
 
     /// The words of `CACHE` its parts [`CacheBusObserver`], [`CacheBoot`] hold, which one block divides:
@@ -53667,7 +53693,9 @@ pub mod cache {
 
     impl oer_mmio::Registers for CacheDivision {
         type Sharing = oer_mmio::sharing::Owned;
-        const WORDS: &'static [usize] = &[0x0, 0x4, 0x30, 0x8c, 0x9c, 0xa0, 0xa4, 0xa8, 0xac, 0xe8];
+        const WORDS: &'static [usize] = &[
+            0x0, 0x4, 0x30, 0x8c, 0x9c, 0xa0, 0xa4, 0xa8, 0xac, 0xb8, 0xe8, 0xfc,
+        ];
     }
 
     /// The divided words' device registers, as the PAC root claims them.
