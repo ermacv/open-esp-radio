@@ -9,7 +9,9 @@ pub fn start<P: WifiTxPowerProfile, E: WifiTxEntropy, T: Timer, H: TxHardware>(
     hardware: &mut H,
     plan: OrdinaryTxPlan,
 ) {
-    idle.buffer_mut()[0] = 1;
+    if let Ok(buffer) = idle.buffer_mut() {
+        buffer[0] = 1;
+    }
     let _ = idle.start_single_attempt(hardware, plan, oer_esp32s31_ieee80211_driver::ordinary_tx::SingleAttempt::new(oer_esp32s31_ieee80211_driver::ordinary_tx::SingleAttemptProtection::None));
     #[cfg(ui_reject)]
     let _ = idle.start_single_attempt(hardware, plan, oer_esp32s31_ieee80211_driver::ordinary_tx::SingleAttempt::new(oer_esp32s31_ieee80211_driver::ordinary_tx::SingleAttemptProtection::None)); // ui-error: E0382

@@ -72,6 +72,7 @@ pub(super) fn lower_mac_fault(
         Source::NoRxBlockAckBank => LowerMacFault::NoRxBlockAckBank,
         Source::Abandoned => LowerMacFault::Abandoned,
         Source::KeyUseMismatch => LowerMacFault::KeyUseMismatch,
+        Source::KeyBank => LowerMacFault::KeyBank,
     }
 }
 

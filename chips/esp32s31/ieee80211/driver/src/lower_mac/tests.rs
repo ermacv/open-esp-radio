@@ -665,7 +665,7 @@ impl<'core> Core<'core> {
         let queue = self.free[queue_of(request.category)].take().unwrap();
         let ticket = self.take_ticket();
         let key_use = self.inner.admit_key(key, ticket).ok().expect("TX key");
-        let frame = &mut request.slot.buffer_mut()[TX_METADATA_SIZE..];
+        let frame = &mut request.slot.buffer_mut().unwrap()[TX_METADATA_SIZE..];
         let control =
             oer_ieee80211_wire::frame::FrameControl::new(u16::from_le_bytes([frame[0], frame[1]]))
                 .unwrap();
@@ -969,7 +969,8 @@ fn classic_transmitter_lends_only_its_current_phase_and_returns_idle_after_detac
     let OrdinaryTxAccess::Idle(mut idle) = owner.access() else {
         panic!("a fresh transmitter lends its idle phase");
     };
-    idle.buffer_mut()[TX_METADATA_SIZE..TX_METADATA_SIZE + frame.len()].copy_from_slice(&frame);
+    idle.buffer_mut().unwrap()[TX_METADATA_SIZE..TX_METADATA_SIZE + frame.len()]
+        .copy_from_slice(&frame);
     assert_eq!(
         idle.start_single_attempt(
             &mut hardware,
@@ -1091,7 +1092,8 @@ fn check_management_transmissions(
     let OrdinaryTxAccess::Idle(mut idle) = owner.access() else {
         panic!("a fresh transmitter is idle");
     };
-    idle.buffer_mut()[TX_METADATA_SIZE..TX_METADATA_SIZE + frame.len()].copy_from_slice(&frame);
+    idle.buffer_mut().unwrap()[TX_METADATA_SIZE..TX_METADATA_SIZE + frame.len()]
+        .copy_from_slice(&frame);
     assert_eq!(
         idle.start_management(&mut hardware, plan, management)
             .unwrap(),
@@ -1211,7 +1213,7 @@ fn check_management_transmissions(
     let OrdinaryTxAccess::Idle(mut idle) = owner.access() else {
         panic!("a terminal management exchange returns its buffer");
     };
-    let returned = &idle.buffer_mut()[TX_METADATA_SIZE..TX_METADATA_SIZE + frame.len()];
+    let returned = &idle.buffer_mut().unwrap()[TX_METADATA_SIZE..TX_METADATA_SIZE + frame.len()];
     let control = FrameControl::new(u16::from_le_bytes(returned[..2].try_into().unwrap())).unwrap();
     assert_eq!(control.retry(), expected_retries.ack_timeouts != 0);
     assert_eq!(control.with_retry(false).get().to_le_bytes(), frame[..2]);
@@ -1297,7 +1299,8 @@ fn management_broadcast_never_retries() {
 /// slot, acknowledged unless `no_ack`.
 fn values(frame: &[u8], no_ack: bool) -> Request {
     let mut slot = slot();
-    queued_free_slot(slot.as_mut()).into_buffer()[TX_METADATA_SIZE..TX_METADATA_SIZE + frame.len()]
+    queued_free_slot(slot.as_mut()).into_buffer().unwrap()
+        [TX_METADATA_SIZE..TX_METADATA_SIZE + frame.len()]
         .copy_from_slice(frame);
     Request {
         category: WmmAccessCategory::BestEffort,
@@ -1523,14 +1526,10 @@ fn an_unacknowledged_attempt_is_reported_and_never_published_again() {
             slots.extend(events.slots);
         }
         // The core sets no Retry bit of its own.
-        assert!(
-            slots
-                .iter_mut()
-                .all(
-                    |slot| queued_free_slot(slot.as_mut()).into_buffer()[TX_METADATA_SIZE + 1]
-                        == 0x01
-                )
-        );
+        assert!(slots.iter_mut().all(
+            |slot| queued_free_slot(slot.as_mut()).into_buffer().unwrap()[TX_METADATA_SIZE + 1]
+                == 0x01
+        ));
     });
 }
 
@@ -1658,7 +1657,9 @@ fn a_transmission_the_plan_sends_again_carries_the_retry_bit() {
         let mut events = Events::default();
         core.service(&mut hardware, interrupt(EVENT_TX_COMPLETE), &mut events)
             .unwrap();
-        let returned = queued_free_slot(events.slots[0].as_mut()).into_buffer();
+        let returned = queued_free_slot(events.slots[0].as_mut())
+            .into_buffer()
+            .unwrap();
         let returned = &returned[TX_METADATA_SIZE..TX_METADATA_SIZE + frame.len()];
         let control =
             FrameControl::new(u16::from_le_bytes(returned[..2].try_into().unwrap())).unwrap();
@@ -1681,7 +1682,7 @@ fn an_invalid_retry_header_returns_its_slot_without_publishing_or_rewriting() {
             let mut hardware = Hardware::default();
             let mut core = enabled(&mut hardware, pools);
             let mut request = values(frame, false);
-            let original = request.slot.buffer_mut().to_vec();
+            let original = request.slot.buffer_mut().unwrap().to_vec();
             request.retry = true;
             let Err(mut refused) = core.submit_checked(&mut hardware, request) else {
                 panic!("an invalid retry header must be refused before publication");
@@ -1692,7 +1693,9 @@ fn an_invalid_retry_header_returns_its_slot_without_publishing_or_rewriting() {
             );
             assert_eq!(hardware.publications(), 0);
             assert_eq!(
-                queued_free_slot(refused.slot.as_mut()).into_buffer()[..],
+                queued_free_slot(refused.slot.as_mut())
+                    .into_buffer()
+                    .unwrap()[..],
                 original
             );
             assert!(core.queues.iter().all(Option::is_none));
@@ -2348,8 +2351,8 @@ fn a_fresh_protected_mpdu_is_numbered_and_receive_only_group_removal_has_its_fif
                 ),
                 Ok(())
             );
-            let header =
-                &queued_free_slot(slot.as_mut()).into_buffer()[TX_METADATA_SIZE + 26..][..8];
+            let header = &queued_free_slot(slot.as_mut()).into_buffer().unwrap()
+                [TX_METADATA_SIZE + 26..][..8];
             let header =
                 oer_ieee80211_wire::ccmp::CcmpHeader::parse(header.try_into().unwrap()).unwrap();
             assert_eq!(header.packet_number().value(), expected);
@@ -2383,7 +2386,10 @@ fn reserved_slot_carries_no_numbering_authority_and_retains_the_packet_number() 
             )
             .unwrap();
         let mut slot = slot();
-        queued_free_slot(slot.as_mut()).into_buffer().fill(0xee);
+        queued_free_slot(slot.as_mut())
+            .into_buffer()
+            .unwrap()
+            .fill(0xee);
         let cookie = queued_free_slot(slot.as_mut()).reserve(512, 64).unwrap();
 
         assert!(matches!(
@@ -2391,7 +2397,10 @@ fn reserved_slot_carries_no_numbering_authority_and_retains_the_packet_number() 
             crate::mac::tx::TxSlotAccess::Reserved
         ));
         slot.as_mut().cancel_reservation(cookie).unwrap();
-        assert_eq!(queued_free_slot(slot.as_mut()).into_buffer(), &[0xee; 512]);
+        assert_eq!(
+            queued_free_slot(slot.as_mut()).into_buffer().unwrap(),
+            &[0xee; 512]
+        );
         assert_eq!(
             core.write_ccmp_header(
                 &key,
@@ -2402,7 +2411,7 @@ fn reserved_slot_carries_no_numbering_authority_and_retains_the_packet_number() 
             Ok(())
         );
         assert_eq!(
-            queued_free_slot(slot.as_mut()).into_buffer()[TX_METADATA_SIZE + 26..][..8],
+            queued_free_slot(slot.as_mut()).into_buffer().unwrap()[TX_METADATA_SIZE + 26..][..8],
             [3, 0, 0, 0x20, 0, 0, 0, 0]
         );
     });
@@ -2422,7 +2431,10 @@ fn supplied_packet_number_is_written_only_when_the_complete_header_fits() {
             )
             .unwrap();
         let mut slot = slot();
-        queued_free_slot(slot.as_mut()).into_buffer().fill(0xee);
+        queued_free_slot(slot.as_mut())
+            .into_buffer()
+            .unwrap()
+            .fill(0xee);
         let last_header_len = 512 - TX_METADATA_SIZE - CCMP_HEADER_LEN;
 
         for header_len in [
@@ -2440,7 +2452,10 @@ fn supplied_packet_number_is_written_only_when_the_complete_header_fits() {
                 ),
                 Err(CcmpHeaderWriteError::InsufficientSpace)
             );
-            assert_eq!(queued_free_slot(slot.as_mut()).into_buffer(), &[0xee; 512]);
+            assert_eq!(
+                queued_free_slot(slot.as_mut()).into_buffer().unwrap(),
+                &[0xee; 512]
+            );
         }
         assert_eq!(
             core.write_ccmp_header(
@@ -2452,7 +2467,7 @@ fn supplied_packet_number_is_written_only_when_the_complete_header_fits() {
             Ok(())
         );
         assert_eq!(
-            queued_free_slot(slot.as_mut()).into_buffer()[512 - CCMP_HEADER_LEN..],
+            queued_free_slot(slot.as_mut()).into_buffer().unwrap()[512 - CCMP_HEADER_LEN..],
             [3, 0, 0, 0x20, 0, 0, 0, 0]
         );
     });
@@ -4587,4 +4602,53 @@ fn group_replacement_keeps_exact_material_and_poisons_even_after_a_successful_ro
             }
         });
     }
+}
+
+fn queued_free_slot<const N: usize>(
+    slot: Pin<&mut TxSlot<N>>,
+) -> crate::mac::tx::TxSlotFree<'_, N> {
+    let crate::mac::tx::TxSlotAccess::Free(free) = slot.access() else {
+        panic!("the fixture's queued slot is free")
+    };
+    free
+}
+
+#[test]
+fn an_announced_tbtt_is_the_first_one_at_or_after_the_event() {
+    let tbtt = StationTbtt {
+        first: 1_000,
+        interval: core::num::NonZeroU64::new(100).unwrap(),
+    };
+    for (now, announced) in [
+        (0, 1_000),
+        (1_000, 1_000),
+        (1_001, 1_100),
+        (1_100, 1_100),
+        (1_101, 1_200),
+        (u64::MAX, u64::MAX),
+    ] {
+        assert_eq!(tbtt.announced(now), announced);
+    }
+}
+
+#[test]
+fn a_key_handle_naming_no_bank_position_poisons_instead_of_admitting() {
+    installed(|pools| {
+        let mut hardware = Hardware::default();
+        let mut core = enabled(&mut hardware, pools);
+        let mut key = core
+            .install_key(
+                &mut hardware,
+                TransmitKeyScope::StationPairwise { peer: BSSID },
+                &[0x3a; 16],
+            )
+            .unwrap();
+        key.index = LOWER_MAC_KEY_SLOTS;
+        let ticket = core.take_ticket();
+        let Err(refused) = core.admit_key(&key, ticket) else {
+            panic!("a foreign position admits no right")
+        };
+        assert_eq!(refused.reason, KeyAdmissionError::Poisoned);
+        assert_eq!(core.fault, Some(LowerMacFault::KeyBank));
+    });
 }

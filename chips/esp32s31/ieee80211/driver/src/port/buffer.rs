@@ -111,6 +111,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> TxBufferMe
             .memory_mut()
             .ok_or(BufferMemoryUnavailable)?
             .buffer_mut()
+            .map_err(|_| BufferMemoryUnavailable)?
             .get_mut(crate::ordinary_tx::TX_METADATA_SIZE..)
             .and_then(|bytes| bytes.get_mut(..BufferClass::<B>::CAPACITY))
             .ok_or(BufferMemoryUnavailable)

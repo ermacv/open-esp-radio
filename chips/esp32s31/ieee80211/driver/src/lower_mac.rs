@@ -528,6 +528,8 @@ pub enum LowerMacFault {
     Abandoned,
     /// The MPDU protection or interface does not match its admitted key right.
     KeyUseMismatch,
+    /// A key owner named no position of its core's key bank.
+    KeyBank,
 }
 
 /// How one attempt ended, as the ESP32-S31 observed it. The backend maps it
@@ -653,6 +655,7 @@ fn frame_bssid(frame: &[u8]) -> Option<[u8; 6]> {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CcmpHeaderWriteError {
     /// Software cannot currently write the slot's buffer.
+    Unavailable,
     /// The CCMP header does not fit after the metadata and MAC header,
     /// including when the offset overflows.
     InsufficientSpace,
@@ -817,19 +820,21 @@ struct Attempt<'core, 'slot, const BUFFER_SIZE: usize, Path: PoolPath> {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct StationTbtt {
     first: u64,
-    interval: u64,
+    interval: core::num::NonZeroU64,
 }
 
 impl StationTbtt {
     /// The TBTT an event at station TSF `now` announces: the first one at
     /// or after `now`, since the event fires its lead before it.
-    const fn announced(self, now: u64) -> u64 {
-        if now <= self.first {
+    fn announced(self, now: u64) -> u64 {
+        let Some(after) = now.checked_sub(self.first).filter(|&after| after != 0) else {
             return self.first;
-        }
-        let periods = (now - self.first).div_ceil(self.interval);
+        };
+        // A nonzero divisor: the quotient of `after - 1` plus one is the
+        // ceiling of `after / interval`, without a division-by-zero path.
+        let periods = ((after - 1) / self.interval).saturating_add(1);
         self.first
-            .saturating_add(periods.saturating_mul(self.interval))
+            .saturating_add(periods.saturating_mul(self.interval.get()))
     }
 }
 
@@ -1113,7 +1118,9 @@ where
         header_len: usize,
         packet_number: oer_ieee80211_wire::ccmp::CcmpPacketNumber,
     ) -> Result<(), CcmpHeaderWriteError> {
-        let buffer = slot.buffer_mut();
+        let buffer = slot
+            .buffer_mut()
+            .map_err(|_| CcmpHeaderWriteError::Unavailable)?;
         let at = TX_METADATA_SIZE
             .checked_add(header_len)
             .ok_or(CcmpHeaderWriteError::InsufficientSpace)?;
@@ -1175,25 +1182,17 @@ where
             });
         }
         let access_category = queue.category();
-        if retry {
-            let marked =
-                crate::ordinary_tx::mark_retry(queued_free_slot(slot.as_mut()).into_buffer(), len);
-            if let Err(error) = marked {
-                return Err(SubmitFault {
-                    queue,
-                    admission,
-                    fault: LowerMacFault::Tx(error),
-                    slot,
-                });
+        let matches_admission = queued_free_buffer(slot.as_mut()).and_then(|buffer| {
+            if retry {
+                crate::ordinary_tx::mark_retry(buffer, len)?;
             }
-        }
-        let matches_admission: Result<bool, OrdinaryTxError> = Ok(admission.matches_frame(
-            role,
-            queued_free_slot(slot.as_mut())
-                .into_buffer()
-                .get(TX_METADATA_SIZE..)
-                .and_then(|frame| frame.get(..len)),
-        ));
+            Ok(admission.matches_frame(
+                role,
+                buffer
+                    .get(TX_METADATA_SIZE..)
+                    .and_then(|frame| frame.get(..len)),
+            ))
+        });
         match matches_admission {
             Ok(true) => {}
             Ok(false) => {
@@ -1411,8 +1410,7 @@ where
         match admission {
             TxAdmission::Open(ticket) => sink.ampdu_completed(queue, ticket, outcome.end()),
             TxAdmission::Protected(key) => {
-                let index = key.index;
-                let ticket = self.keys.uses[index].release(key);
+                let (index, ticket) = self.release_key(key);
                 sink.ampdu_completed(queue, ticket, outcome.end());
                 self.finish_key_removal(hardware, index, sink);
             }
@@ -1450,8 +1448,7 @@ where
                 sink.ampdu_completed(plan.queue, ticket, PublicationEnd::Expired { msdus })
             }
             TxAdmission::Protected(key) => {
-                let index = key.index;
-                let ticket = self.keys.uses[index].release(key);
+                let (index, ticket) = self.release_key(key);
                 sink.ampdu_completed(plan.queue, ticket, PublicationEnd::Expired { msdus });
                 self.finish_key_removal(hardware, index, sink);
             }
@@ -1762,8 +1759,7 @@ where
         match admission {
             TxAdmission::Open(ticket) => sink.tx_completed(queue, ticket, slot, end, rate),
             TxAdmission::Protected(key) => {
-                let index = key.index;
-                let ticket = self.keys.uses[index].release(key);
+                let (index, ticket) = self.release_key(key);
                 sink.tx_completed(queue, ticket, slot, end, rate);
                 self.finish_key_removal(hardware, index, sink);
             }
@@ -1951,8 +1947,8 @@ where
         slot: association::VacantKeySlot<'core, Path>,
         temporal_key: &[u8; CCMP_128_KEY_BYTES],
     ) -> Result<KeyHandle<'core, Path>, association::KeyInstallRefused<'core, Path>> {
-        let free = match self.vacant_key(scope.into()) {
-            Ok(index) => index,
+        let (free, place) = match self.vacant_key(scope.into()) {
+            Ok(vacant) => vacant,
             Err(fault) => return Err(association::KeyInstallRefused { fault, slot }),
         };
         hardware.configure_ccmp_association(
@@ -1987,7 +1983,7 @@ where
                 });
             }
         };
-        self.keys.installed[free] = Some(scope.into());
+        *place = Some(scope.into());
         Ok(KeyHandle {
             slot,
             index: free,
@@ -2020,8 +2016,8 @@ where
     ) -> Result<ReceiveKeyHandle<'core, Path>, association::KeyInstallRefused<'core, Path>> {
         let scope = CheckedKeyScope::StationGroup { key_id };
         let slot = association::VacantKeySlot::StationGroup(slot);
-        let index = match self.vacant_key(scope) {
-            Ok(index) => index,
+        let (index, place) = match self.vacant_key(scope) {
+            Ok(vacant) => vacant,
             Err(fault) => return Err(association::KeyInstallRefused { fault, slot }),
         };
         hardware.configure_ccmp_association(
@@ -2037,7 +2033,7 @@ where
                 });
             }
         };
-        self.keys.installed[index] = Some(scope);
+        *place = Some(scope);
         Ok(ReceiveKeyHandle {
             slot,
             index,
@@ -2086,7 +2082,10 @@ where
         result
     }
 
-    fn vacant_key(&self, scope: CheckedKeyScope) -> Result<usize, LowerMacFault> {
+    fn vacant_key(
+        &mut self,
+        scope: CheckedKeyScope,
+    ) -> Result<(usize, &mut Option<CheckedKeyScope>), LowerMacFault> {
         if let Some(fault) = self.fault {
             return Err(fault);
         }
@@ -2101,9 +2100,24 @@ where
         }
         self.keys
             .installed
-            .iter()
-            .position(Option::is_none)
+            .iter_mut()
+            .enumerate()
+            .find(|(_, place)| place.is_none())
             .ok_or(LowerMacFault::Key(CryptoKeyError::Occupied))
+    }
+
+    /// Return one admitted right to its key's count. A right naming no bank
+    /// position poisons the core; its ticket still returns.
+    fn release_key(&mut self, key: KeyUse<'core, Path>) -> (usize, TxTicket<'core, Path>) {
+        let index = key.index;
+        let ticket = match self.keys.uses.get_mut(index) {
+            Some(uses) => uses.release(key),
+            None => {
+                self.fault.get_or_insert(LowerMacFault::KeyBank);
+                key.ticket
+            }
+        };
+        (index, ticket)
     }
 
     /// Admit one protected attempt from the live handle and one TX ticket.
@@ -2121,7 +2135,14 @@ where
                 reason: KeyAdmissionError::Poisoned,
             });
         }
-        Ok(self.keys.uses[key.index].admit(key, ticket))
+        let Some(uses) = self.keys.uses.get_mut(key.index) else {
+            self.fault.get_or_insert(LowerMacFault::KeyBank);
+            return Err(KeyAdmissionRefused {
+                ticket,
+                reason: KeyAdmissionError::Poisoned,
+            });
+        };
+        Ok(uses.admit(key, ticket))
     }
 
     /// Consume the sole installed handle at removal's FIFO position. The
@@ -2138,7 +2159,13 @@ where
     ) {
         let key = key.into();
         let index = key.index;
-        self.keys.removals[index] = Some(key);
+        let Some(removal) = self.keys.removals.get_mut(index) else {
+            // No position can retain it; the poisoned core keeps the
+            // programmed material until reset.
+            self.fault.get_or_insert(LowerMacFault::KeyBank);
+            return;
+        };
+        *removal = Some(key);
         self.finish_key_removal(hardware, index, sink);
     }
 
@@ -2148,12 +2175,19 @@ where
         index: usize,
         sink: &mut K,
     ) {
-        if self.fault.is_some() || !self.keys.uses[index].is_empty() {
+        let (Some(uses), Some(removal), Some(installed)) = (
+            self.keys.uses.get(index),
+            self.keys.removals.get_mut(index),
+            self.keys.installed.get_mut(index),
+        ) else {
+            return;
+        };
+        if self.fault.is_some() || !uses.is_empty() {
             return;
         }
-        if let Some(key) = self.keys.removals[index].take() {
+        if let Some(key) = removal.take() {
             key.token.clear(hardware);
-            self.keys.installed[index] = None;
+            *installed = None;
             sink.key_removed(KeyRemoved {
                 slot: key.slot,
                 scope: key.scope,
@@ -2182,8 +2216,7 @@ where
         Ok(match admission {
             TxAdmission::Open(ticket) => ticket,
             TxAdmission::Protected(key) => {
-                let index = key.index;
-                let ticket = self.keys.uses[index].release(key);
+                let (index, ticket) = self.release_key(key);
                 self.finish_key_removal(hardware, index, sink);
                 ticket
             }
@@ -2323,10 +2356,9 @@ where
         beacon_interval_micros: u64,
         lead_micros: u64,
     ) -> Result<(), UnsupportedTbtt> {
-        let interval_micros = u32::try_from(beacon_interval_micros)
-            .ok()
-            .filter(|&interval| interval != 0)
-            .ok_or(UnsupportedTbtt)?;
+        let interval_micros = u32::try_from(beacon_interval_micros).map_err(|_| UnsupportedTbtt)?;
+        let interval =
+            core::num::NonZeroU64::new(u64::from(interval_micros)).ok_or(UnsupportedTbtt)?;
         let ahead_micros = u16::try_from(lead_micros).map_err(|_| UnsupportedTbtt)?;
         let wake_ahead_micros = ahead_micros
             .checked_add(STATION_TBTT_WAKE_WINDOW_MICROS)
@@ -2338,10 +2370,7 @@ where
             ahead_micros,
             wake_ahead_micros,
         });
-        self.tbtt = Some(StationTbtt {
-            first,
-            interval: u64::from(interval_micros),
-        });
+        self.tbtt = Some(StationTbtt { first, interval });
         Ok(())
     }
 
@@ -2764,13 +2793,13 @@ fn spp_mode(spp: oer_ieee80211_wire::security::Spp) -> oer_esp32s31_hal::types::
 }
 
 // The private queued path received its slot through MpduValues' consumed free
-// loan or a successful queue-detach completion. It never lends the owner out
-// while an attempt is held here.
-fn queued_free_slot<const N: usize>(
+// loan or a successful queue-detach completion. A slot whose DMA owner left
+// its free phase is stale.
+fn queued_free_buffer<const N: usize>(
     slot: Pin<&mut TxSlot<N>>,
-) -> crate::mac::tx::TxSlotFree<'_, N> {
+) -> Result<&mut [u8; N], OrdinaryTxError> {
     match slot.access() {
-        crate::mac::tx::TxSlotAccess::Free(free) => free,
-        _ => panic!("queued publication retains its admitted free slot"),
+        crate::mac::tx::TxSlotAccess::Free(free) => Ok(free.into_buffer()?),
+        _ => Err(OrdinaryTxError::Tx(crate::mac::tx::TxError::Stale)),
     }
 }

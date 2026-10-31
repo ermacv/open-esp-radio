@@ -48,6 +48,7 @@ pub enum LowerMacFault {
     NoRxBlockAckBank,
     Abandoned,
     KeyUseMismatch,
+    KeyBank,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum OrdinaryTxError {

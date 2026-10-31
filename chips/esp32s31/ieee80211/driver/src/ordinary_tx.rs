@@ -568,8 +568,10 @@ pub struct OrdinaryTxIdleOwner<'slot, P, E, T, const N: usize, const LEGACY_ONLY
 impl<P: WifiTxPowerProfile, E: WifiTxEntropy, T: Timer, const N: usize, const LEGACY_ONLY: bool>
     OrdinaryTxIdle<'_, '_, P, E, T, N, LEGACY_ONLY>
 {
-    pub fn buffer_mut(&mut self) -> &mut [u8; N] {
-        self.owner.free_slot().into_buffer()
+    /// The idle slot's buffer; a DMA owner that left its free phase is
+    /// stale.
+    pub fn buffer_mut(&mut self) -> Result<&mut [u8; N], OrdinaryTxError> {
+        self.owner.free_buffer()
     }
 
     /// Send management at the rate and budget selected above the driver.
@@ -713,11 +715,15 @@ where
         }
     }
 
-    fn free_slot(&mut self) -> TxSlotFree<'_, BUFFER_SIZE> {
+    fn free_slot(&mut self) -> Result<TxSlotFree<'_, BUFFER_SIZE>, OrdinaryTxError> {
         match self.slot.as_mut().access() {
-            TxSlotAccess::Free(free) => free,
-            _ => panic!("ordinary transaction owns its free encoding phase"),
+            TxSlotAccess::Free(free) => Ok(free),
+            _ => Err(OrdinaryTxError::Tx(TxError::Stale)),
         }
+    }
+
+    fn free_buffer(&mut self) -> Result<&mut [u8; BUFFER_SIZE], OrdinaryTxError> {
+        Ok(self.free_slot()?.into_buffer()?)
     }
 
     /// Observe the bounded retry state retained by the active TX owner.
@@ -945,10 +951,12 @@ where
         QueuedSingleAttempt<'slot, BUFFER_SIZE>,
         QueuedSingleAttemptRefused<'slot, BUFFER_SIZE>,
     > {
-        assert!(
-            self.active.is_none(),
-            "queued mode retains an idle ordinary transmitter"
-        );
+        if self.active.is_some() {
+            return Err(QueuedSingleAttemptRefused {
+                error: OrdinaryTxError::Tx(TxError::QueueActive),
+                slot,
+            });
+        }
         core::mem::swap(&mut self.slot, &mut slot);
         let result = self.start_single_active(hardware, plan, attempt);
         // `slot` is the owner's idle slot again; hand the caller's back.
@@ -992,11 +1000,13 @@ where
         QueuedSingleAttemptProgress<'slot, BUFFER_SIZE>,
         QueuedSingleAttemptFailed<'slot, BUFFER_SIZE>,
     > {
-        assert!(
-            self.active.is_none(),
-            "queued mode retains an idle ordinary transmitter"
-        );
         let QueuedSingleAttempt { mut slot, active } = queued;
+        if self.active.is_some() {
+            return Err(QueuedSingleAttemptFailed {
+                error: OrdinaryTxError::Tx(TxError::QueueActive),
+                quarantine: QuarantinedSingleAttempt { _slot: slot },
+            });
+        }
         core::mem::swap(&mut self.slot, &mut slot);
         let result = self.service_shared_edge(hardware, active, wake, may_begin_timeout_abort);
         core::mem::swap(&mut self.slot, &mut slot);
@@ -1111,10 +1121,9 @@ where
             return Err(OrdinaryTxError::UnsupportedPhyRate);
         }
 
-        assert!(
-            self.active.is_none(),
-            "idle authority excludes an active ordinary transaction"
-        );
+        if self.active.is_some() {
+            return Err(OrdinaryTxError::Tx(TxError::QueueActive));
+        }
         let hardware_frame_length = plan
             .frame_length
             .checked_add(plan.hardware_mic_length + TX_FCS_SIZE)
@@ -1138,15 +1147,19 @@ where
         let hardware_frame_length = u32::try_from(hardware_frame_length)
             .map_err(|_| OrdinaryTxError::BufferSizeOverflow)?;
         let (receiver, response) = {
-            let buffer = self.free_slot().into_buffer();
-            let address1: [u8; 6] = buffer[TX_METADATA_SIZE + 4..TX_METADATA_SIZE + 10]
-                .try_into()
-                .expect("an encoded MPDU carries Address 1");
-            let receiver = TxReceiver::from_address1(&address1);
+            let frame = self
+                .free_buffer()?
+                .get(TX_METADATA_SIZE..)
+                .ok_or(OrdinaryTxError::BufferSizeOverflow)?;
+            let address1 = frame
+                .get(4..)
+                .and_then(<[u8]>::first_chunk::<6>)
+                .ok_or(OrdinaryTxError::BufferSizeOverflow)?;
+            let receiver = TxReceiver::from_address1(address1);
             let no_ack = single_attempt.is_some_and(|attempt| attempt.no_ack);
             let response = if receiver == TxReceiver::Group || no_ack {
                 MacLegacyTxResponse::None
-            } else if buffer[TX_METADATA_SIZE] == BLOCK_ACK_REQUEST_FRAME_CONTROL {
+            } else if frame.first() == Some(&BLOCK_ACK_REQUEST_FRAME_CONTROL) {
                 MacLegacyTxResponse::BlockAck
             } else {
                 MacLegacyTxResponse::Ack
@@ -1169,11 +1182,17 @@ where
         let retry =
             FixedRateRetry::new(plan.exchange.initial_rate, plan.exchange.publication_limit);
         {
-            let buffer = self.free_slot().into_buffer();
-            buffer[..4].copy_from_slice(&hardware_frame_length.to_le_bytes());
-            buffer[4..TX_METADATA_SIZE].fill(0);
-            buffer[TX_METADATA_SIZE + plan.frame_length
-                ..TX_METADATA_SIZE + hardware_frame_length as usize]
+            let buffer = self.free_buffer()?;
+            let (length, metadata) = buffer
+                .get_mut(..TX_METADATA_SIZE)
+                .and_then(<[u8]>::split_first_chunk_mut::<4>)
+                .ok_or(OrdinaryTxError::BufferSizeOverflow)?;
+            *length = hardware_frame_length.to_le_bytes();
+            metadata.fill(0);
+            buffer
+                .get_mut(..transfer_length)
+                .and_then(|transfer| transfer.get_mut(TX_METADATA_SIZE + plan.frame_length..))
+                .ok_or(OrdinaryTxError::BufferSizeOverflow)?
                 .fill(0);
         }
 
@@ -1203,7 +1222,7 @@ where
             phase: OrdinaryTxPhase::Published,
             retries: OrdinaryTxRetryReport::default(),
         };
-        self.free_slot().reset_work();
+        self.free_slot()?.reset_work();
         self.publish_attempt(hardware, &mut active)?;
         self.last_outcome = None;
         Ok(active)
@@ -1498,7 +1517,7 @@ where
                     TxStatus::Success | TxStatus::TimedOut => {}
                 }
                 if set_retry_bit {
-                    mark_retry(self.free_slot().into_buffer(), active.frame_length)?;
+                    mark_retry(self.free_buffer()?, active.frame_length)?;
                 }
                 self.publish_attempt(hardware, &mut active)?;
                 Ok(Step::Pending(active))
@@ -1587,11 +1606,10 @@ where
             .checked_add(active.completion_timeout)
             .ok_or(OrdinaryTxError::DeadlineOverflow)?;
         let rate = active.retry.current_rate();
-        let metadata = self.free_slot().into_buffer();
-        let head = <&mut [u8; WifiTxMetadataHead::SIZE]>::try_from(
-            &mut metadata[..WifiTxMetadataHead::SIZE],
-        )
-        .expect("TX metadata begins with its fixed head");
+        let metadata = self.free_buffer()?;
+        let head = metadata
+            .first_chunk_mut::<{ WifiTxMetadataHead::SIZE }>()
+            .ok_or(OrdinaryTxError::BufferSizeOverflow)?;
         // The HE S-MPDU bit selects the single-MPDU container geometry; the
         // low bits keep the MPDU+MIC+FCS length.
         let mut head = WifiTxMetadataHeadMut::new(head);
@@ -1607,7 +1625,7 @@ where
             crate::port::trace::encoded_mpdu(frame);
         }
         let cookie = self
-            .free_slot()
+            .free_slot()?
             .reserve(active.descriptor_capacity, active.transfer_length)?;
         let protection = match self.submit_reserved_attempt(hardware, cookie, active) {
             Ok(protection) => protection,
