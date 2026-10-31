@@ -34,6 +34,7 @@ use oer_services_wifi_station::{Ipv4, Join, Joined, Left, Request, StationError,
 use static_cell::{ConstStaticCell, StaticCell};
 
 use crate::fatal::Failure;
+use crate::load::parts::{Part, Polled};
 use crate::requests::{Action, Answer, Phase, action};
 use crate::transport::CONSOLE;
 use future::{Boundary, Tracked};
@@ -57,7 +58,12 @@ pub(crate) type Actor = wifi::RadioActor<crate::phy_pilot::Client>;
 pub(crate) static ACTOR: StaticCell<Actor> = StaticCell::new();
 
 async fn radio_actor(actor: &'static mut Actor) {
-    match actor.run().await {}
+    let run = core::pin::pin!(actor.run());
+    match (Polled {
+        part: Part::RadioActor,
+        future: run,
+    })
+    .await {}
 }
 
 type Queue = WakingSpscQueue<(RequestIdentity, Request), 1>;
@@ -121,7 +127,11 @@ fn work_future(inputs: Inputs, load: crate::load::serve::Receiver) -> Work {
         let network = crate::load::serve::Network::new();
         let station = core::pin::pin!(work(inputs, &network));
         let load = core::pin::pin!(crate::load::serve::serve(load, &network));
-        match select(Boundary(station), Boundary(load)).await {
+        let load = Polled {
+            part: Part::Load,
+            future: Boundary(load),
+        };
+        match select(Boundary(station), load).await {
             Either::First(never) | Either::Second(never) => match never {},
         }
     }
@@ -129,7 +139,11 @@ fn work_future(inputs: Inputs, load: crate::load::serve::Receiver) -> Work {
 
 /// The station's task: its work lives in its own static place.
 pub(crate) async fn run(work: PlacedFuture<'static, Work>) {
-    work.await;
+    Polled {
+        part: Part::StationWork,
+        future: work,
+    }
+    .await;
 }
 
 /// The station's callbacks: the boot-seeded nonce stream.
@@ -298,18 +312,28 @@ async fn work(inputs: Inputs, network: &crate::load::serve::Network) -> Infallib
     let mut running = running;
     let mut station = core::pin::pin!(runners.station.run(profile));
     let exit = {
-        let serving = both(
+        // The requests and the join's connect answer are one part.
+        let serving = core::pin::pin!(both(
             serve_running(&mut requests, &mut control, &leaving, up),
             answer_connect(join, connect),
-        );
+        ));
         match select(
-            Boundary(station.as_mut()),
+            Polled {
+                part: Part::Station,
+                future: Boundary(station.as_mut()),
+            },
             both(
-                Tracked {
-                    future: core::pin::Pin::new(&mut running),
-                    done: &network_done,
+                Polled {
+                    part: Part::Ip,
+                    future: Tracked {
+                        future: core::pin::Pin::new(&mut running),
+                        done: &network_done,
+                    },
                 },
-                serving,
+                Polled {
+                    part: Part::Requests,
+                    future: serving,
+                },
             ),
         )
         .await

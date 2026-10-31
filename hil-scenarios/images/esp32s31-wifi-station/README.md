@@ -39,8 +39,9 @@ registration, which the join's station makes.
 
 The image declares the `trace` instrumentation class: `cargo fw` builds it
 with `oer_trace`, under which the executors report their activity
-boundaries, and the station configuration names no access point to observe.
-Every other observer of the station stays `Noop`.
+boundaries, the image's named parts their poll boundaries, and the station
+configuration names no access point to observe. The station's and its
+driver's observers stay `Noop`.
 
 `Start` binds one UDP socket on its port of the station's DHCP address and
 answers `Running` at once; without a lease it is refused (`NoAddress`), and
@@ -49,11 +50,12 @@ for a zero port or peer port, a delay, window or drain past the service's
 maximum, or a payload below the 28-byte load header or above 1472 bytes,
 the UDP payload of one 1514-byte Ethernet frame (the stack fragments
 nothing). The run's window opens `delay_ms` after the start and closes
-`duration_ms` later; the image reads its CPU at both ends, after opening
-and after closing, and keeps the times. It receives and echoes from the
-start until `drain_ms` after the window, then closes the socket and keeps
-the report until the next run starts. `Collect` of the running run answers
-`Running`, of the kept one its report, of any other `UnknownRun`.
+`duration_ms` later; the image reads its CPU and its parts at both ends,
+after opening and after closing, and keeps the times. It receives and
+echoes from the start until `drain_ms` after the window, then closes the
+socket and keeps the report and the parts' window until the next run
+starts. `Collect` and `CollectParts` of the running run answer `Running`,
+of the kept one what it kept, of any other `UnknownRun`.
 
 - **Receive.** A datagram whose header asks for an echo, of any run, goes
   back to its source at once with the reply flag instead (`echoed`, or
@@ -83,6 +85,15 @@ the report until the next run starts. `Collect` of the running run answers
   to busy time; only a hart's idle time gives its utilisation
   (`1 - idle / window` between two reports). A build without `oer_trace`
   reports no harts or executors.
+- **Parts** (`src/load/parts.rs`). The tasks (`console`, `station-work`,
+  `rtc-watchdog` on P1; `radio-actor`, `driver` on P2) and the station
+  work's futures (`station`, `ip`, `requests`, `load`) are each polled
+  through `Polled`, which observes the start and end of every poll through
+  `oer_trace::observe!`. Each part counts its polls, their time and its
+  longest poll; the window's start begins a new epoch for the longest. A
+  poll's time includes its preemption, so the station work's futures nest
+  inside `station-work` and P2's parts preempt P1's: shares do not add up.
+  A build without `oer_trace` keeps no part.
 
 The IP stack's pools are sized for about 65 Mbit/s of 1400-byte datagrams
 each way (`src/station/ip.rs`): 32 receive slots for the station's bursts,

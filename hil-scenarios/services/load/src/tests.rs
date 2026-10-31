@@ -68,12 +68,23 @@ fn the_largest_reports_fit_one_response() {
         },
     });
     assert!(postcard::to_slice(&report, &mut buffer).unwrap().len() <= 512);
+    let part = PartWindow {
+        name: heapless::String::try_from("x".repeat(MAX_PART_NAME).as_str()).unwrap(),
+        polls: u32::MAX,
+        poll_us: u32::MAX,
+        ended_poll_us: u32::MAX,
+        longest_poll_us: Some(u32::MAX),
+    };
+    let parts = PartsCollected::Report(Parts {
+        parts: core::iter::repeat_n(part, MAX_PARTS).collect(),
+    });
+    assert!(postcard::to_slice(&parts, &mut buffer).unwrap().len() <= 512);
 }
 
 #[test]
-fn the_service_names_three_endpoints_and_their_answers_by_distinct_keys() {
+fn the_service_names_four_endpoints_and_their_answers_by_distinct_keys() {
     let keys = <Request as oer_hil_agent::base::Service>::KEYS;
-    assert_eq!(keys.len(), 6);
+    assert_eq!(keys.len(), 8);
     let distinct: std::collections::BTreeSet<_> = keys.iter().collect();
     assert_eq!(distinct.len(), keys.len());
 }
