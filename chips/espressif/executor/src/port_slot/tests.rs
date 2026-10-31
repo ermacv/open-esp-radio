@@ -112,7 +112,23 @@ fn each_nominal_static_declaration_can_be_taken_exactly_once() {
         .reinstall(joined, |()| Owner)
         .ok()
         .expect("Joined permits reuse of the same backing");
-    drop(frontend);
-    drop(MockRegistration::new(registration));
+    let join = frontend.finish();
+    let mut registration = std::boxed::Box::pin(MockRegistration::new(registration).run());
+    let core::task::Poll::Ready(Ok(completion)) =
+        core::future::Future::poll(registration.as_mut(), &mut cx)
+    else {
+        panic!("ordinary P2 retirement completes");
+    };
+    drop(registration);
+    completion.unregistered();
+    let mut join = std::boxed::Box::pin(join.wait());
+    let core::task::Poll::Ready(Ok(joined)) = core::future::Future::poll(join.as_mut(), &mut cx)
+    else {
+        panic!("unregistered P2 publishes Joined");
+    };
+    drop(join);
+    let () = second
+        .retire(joined)
+        .expect("Joined returns the vacant owner instead of reinstalling");
     assert!(declarations::second::take_static().is_none());
 }

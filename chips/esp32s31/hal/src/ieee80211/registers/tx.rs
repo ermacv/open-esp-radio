@@ -302,6 +302,11 @@ impl MacLegacyTxProgram {
         self.parameters.contention_window
     }
 
+    /// Arbitration interframe space number the queue waits before counting.
+    pub const fn aifsn(self) -> u8 {
+        self.parameters.aifsn
+    }
+
     /// Response the MAC awaits after the PPDU.
     pub const fn response(self) -> MacLegacyTxResponse {
         self.parameters.response

@@ -53,15 +53,16 @@ impl Work for DuringPublication {
         } = resources;
         let air = phase.held.air.clone();
         let mut key = Some(
-            phase
-                .station()
-                .install_pairwise_key(
-                    &station_association,
-                    slot,
-                    IndividualAddress::new(PEER).unwrap(),
-                    Ccmp128Key::new(&[7; 16]),
-                )
-                .into_core_key(),
+            installed_station_pairwise(
+                phase,
+                &station_association,
+                slot,
+                IndividualAddress::new(PEER).unwrap(),
+                Ccmp128Key::new(&[7; 16]),
+            )
+            .await
+            .expect("the PTK installation terminal")
+            .into_core_key(),
         );
         air.hold_completion(WmmAccessCategory::BestEffort, true);
         air.answer(if matches!(self.0, Barrier::GateAck) {

@@ -57,8 +57,8 @@ pub use lifecycle::*;
 pub use slot::{
     DriverFuture, Joined, LifecycleError, ModelSlotOwner, PortSlot, SlotBody, SlotBodyOwner,
     SlotClaim, SlotCompletion, SlotFrontend, SlotInitError, SlotJoin, SlotObservation, SlotOwner,
-    SlotQuarantined, SlotRegisterError, SlotRegistration, SlotRetire, SlotStopped,
-    SlotStorageState, SlotWakes, VacantPortSlot, with_local_slot,
+    SlotQuarantined, SlotRegisterError, SlotRegistration, SlotRetire, SlotRetireRefused,
+    SlotStopped, SlotStorageState, SlotWakes, VacantPortSlot, with_local_slot,
 };
 pub use work::*;
 

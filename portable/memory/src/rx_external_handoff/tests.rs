@@ -63,8 +63,8 @@ impl Allocation {
             unsafe_code,
             reason = "test owns one leaked allocation and its return state"
         )]
-        // SAFETY: each allocation has its own leaked state and initialized
-        // bytes; only a successfully detached buffer accesses those bytes.
+        // SAFETY: each allocation has its own leaked state and all 64 bytes
+        // initialized; only a successfully detached buffer accesses them.
         unsafe {
             self.ret.detach(self.pointer, length, 64)
         }
@@ -273,7 +273,8 @@ fn return_state_has_the_atomic_layout_and_zero_is_attached() {
         unsafe_code,
         reason = "test owns leaked initialized storage and its state"
     )]
-    // SAFETY: the leaked storage has no DMA or other CPU owner.
+    // SAFETY: the leaked storage has all 64 bytes initialized and no DMA or
+    // other CPU owner.
     let buffer = unsafe { ret.detach(pointer, 64, 64) }.unwrap();
     assert_eq!(ret.0.load(Ordering::Acquire), 1);
     drop(buffer);

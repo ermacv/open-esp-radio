@@ -96,7 +96,7 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps24, ServiceContext
                 access_point_association,
                 oer_ieee80211_wire::security::Spp::NotNegotiated,
             );
-        let [ap_pairwise, _] = access_point_pairwise;
+        let [ap_pairwise, ap_installed] = access_point_pairwise;
         let [ap_group, _] = access_point_group;
         if let ContractCase::Disable { prior, overflow } = self.0 {
             let mut owner = owner.enable().await.ok().unwrap();
@@ -239,6 +239,41 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps24, ServiceContext
                 Err(owner) => Ended::uninstall(owner, (), ()),
             };
         }
+        // A real AP PTK installation terminal, which no station request
+        // reserved, is refused with its key retained.
+        let owner = {
+            let mut owner = owner.enable().await.ok().unwrap();
+            let installed = {
+                use oer_radio_port::PortPhase as _;
+                let mut phase = owner.phase();
+                phase.access_point().install_pairwise_key(
+                    &access_point_association,
+                    ap_installed,
+                    oer_ieee80211_wire::address::IndividualAddress::new([2, 0, 0, 0, 0, 7])
+                        .unwrap(),
+                    oer_ieee80211_contracts_security::Ccmp128Key::new(&[5; 16]),
+                );
+                let Ok(Ok(LowerMacEvent::Terminal(
+                    installed @ LowerMacTerminal::PairwiseKeyInstalled(_),
+                ))) = phase.next_event().await
+                else {
+                    panic!("the model returns the installed AP key")
+                };
+                installed
+            };
+            assert_eq!(
+                service
+                    .state
+                    .terminal(&mut service.arbiter, Instant::EPOCH, installed)
+                    .map_err(|fault| fault.reason),
+                Err(BackendContractViolation::UnexpectedAccessPointTerminal)
+            );
+            owner
+                .disable(&mut |_| core::ops::ControlFlow::Continue(()))
+                .await
+                .ok()
+                .unwrap()
+        };
         for (terminal, expected) in [
             (
                 LowerMacTerminal::TsfSampled {

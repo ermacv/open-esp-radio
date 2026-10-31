@@ -6,8 +6,8 @@ use core::{
 };
 
 mod bank;
-use bank::Phase;
-pub use bank::{CoreOwner, CoreView, VacantView};
+pub use bank::{CoreOwner, CoreRetained, CoreView, VacantView};
+use bank::{Phase, Prepared};
 
 /// New attempts publish immediately.
 pub enum OpenGate {}
@@ -85,25 +85,25 @@ macro_rules! view {
         $(#[$meta])*
         #[must_use]
         pub struct $name<'view, C, G = OpenGate> {
-            owner: &'view mut CoreOwner<C>,
+            owner: &'view mut Prepared<C>,
             gate: PhantomData<G>,
         }
         impl<'view, C, G> $name<'view, C, G> {
             #[inline]
-            fn new(owner: &'view mut CoreOwner<C>) -> Self { Self { owner, gate: PhantomData } }
+            fn new(owner: &'view mut Prepared<C>) -> Self { Self { owner, gate: PhantomData } }
         }
         impl<C, G> Deref for $name<'_, C, G> {
             type Target = C;
             #[inline]
-            fn deref(&self) -> &C { self.owner.stored() }
+            fn deref(&self) -> &C { &self.owner.core }
         }
         impl<C, G> DerefMut for $name<'_, C, G> {
             #[inline]
-            fn deref_mut(&mut self) -> &mut C { self.owner.stored_mut() }
+            fn deref_mut(&mut self) -> &mut C { &mut self.owner.core }
         }
     };
 }
-view!(/// A disabled bank; only this view can select a channel or dismantle.
+view!(/// A disabled bank; only this view can select a channel.
     DisabledView);
 view!(/// A pending enable, retained in its owner during the radio retune.
     RetuningView);
@@ -148,6 +148,18 @@ pub enum GateClosure<V, C> {
 #[must_use]
 pub struct ConfiguringView<V> {
     core: V,
+    config: CoreVif,
+    policy: ReceivePolicy,
+}
+impl<V> ConfiguringView<V> {
+    #[inline]
+    pub(super) fn new(core: V, config: CoreVif, policy: ReceivePolicy) -> Self {
+        Self {
+            core,
+            config,
+            policy,
+        }
+    }
 }
 /// Configuration returns its original lifecycle view exactly once.
 #[must_use]
@@ -164,7 +176,8 @@ pub struct ConfigureRefused<V> {
 /// Failed gate publication retains its prefix and admits only draining.
 #[must_use]
 pub struct FailedGateView<'view, C> {
-    pub(super) owner: &'view mut CoreOwner<C>,
+    pub(super) owner: &'view mut Prepared<C>,
+    pub(super) fault: LowerMacFault,
 }
 
 impl<
@@ -187,29 +200,6 @@ impl<
         self.deref_mut().reset_contention(role, category);
     }
 
-    /// Recover construction resources after the final terminal.
-    #[inline]
-    pub fn dismantle(
-        self,
-    ) -> LowerMacCoreParts<'core, 'slot, P, E, T, C, BUFFER_SIZE, Path, TICKETS> {
-        self.owner.phase = Phase::Vacant;
-        let core = self
-            .owner
-            .core
-            .take()
-            .expect("disabled view retains its core");
-        LowerMacCoreParts {
-            authority: core.authority,
-            tx: core
-                .tx
-                .into_idle()
-                .ok()
-                .expect("disabled core has retired every queued publication"),
-            config: core.config,
-            coex: core.coex,
-            keys: core.keys,
-        }
-    }
     /// Record the actual channel after a radio start.
     #[inline]
     pub fn radio_tuned_to(&mut self, channel: WifiChannel) {
@@ -247,7 +237,7 @@ impl<
             .owner
             .configure_in_place(config, false, GatePhase::<G>::MODE)
         {
-            Ok(()) => Ok(ConfiguringView { core: self }),
+            Ok(policy) => Ok(ConfiguringView::new(self, config, policy)),
             Err(reason) => Err(ConfigureRefused { core: self, reason }),
         }
     }
@@ -366,7 +356,7 @@ impl<
             .owner
             .configure_in_place(config, true, GatePhase::<G>::MODE)
         {
-            Ok(()) => Ok(ConfiguringView { core: self }),
+            Ok(policy) => Ok(ConfiguringView::new(self, config, policy)),
             Err(reason) => Err(ConfigureRefused { core: self, reason }),
         }
     }
@@ -515,7 +505,10 @@ impl<
             }
             Err(fault) => {
                 self.owner.phase = Phase::Failed { fault };
-                Err(FailedGateView { owner: self.owner })
+                Err(FailedGateView {
+                    owner: self.owner,
+                    fault,
+                })
             }
         }
     }
@@ -570,11 +563,14 @@ impl<
     ) -> ConfigurationProgress<
         DisabledView<'view, LowerMacCore<'core, 'slot, P, E, T, C, BUFFER_SIZE, Path, TICKETS>, G>,
     > {
-        if self
-            .core
-            .owner
-            .advance_configuration_in_place(hardware, sink)
-        {
+        let (config, policy) = (self.config, self.policy);
+        if self.core.owner.advance_configuration_in_place(
+            hardware,
+            sink,
+            config,
+            policy,
+            GatePhase::<G>::DISABLED,
+        ) {
             ConfigurationProgress::Configured(self.core)
         } else {
             ConfigurationProgress::Waiting(self)
@@ -631,11 +627,14 @@ impl<
     ) -> ConfigurationProgress<
         EnabledView<'view, LowerMacCore<'core, 'slot, P, E, T, C, BUFFER_SIZE, Path, TICKETS>, G>,
     > {
-        if self
-            .core
-            .owner
-            .advance_configuration_in_place(hardware, sink)
-        {
+        let (config, policy) = (self.config, self.policy);
+        if self.core.owner.advance_configuration_in_place(
+            hardware,
+            sink,
+            config,
+            policy,
+            GatePhase::<G>::ENABLED,
+        ) {
             ConfigurationProgress::Configured(self.core)
         } else {
             ConfigurationProgress::Waiting(self)
@@ -669,15 +668,12 @@ impl<
     /// The publication failure that retained this prefix.
     #[inline]
     pub fn fault(&self) -> LowerMacFault {
-        match self.owner.phase {
-            Phase::Failed { fault } => fault,
-            _ => panic!("failed view retains its publication fault"),
-        }
+        self.fault
     }
     /// The next deadline of the prefix published before failure.
     #[inline]
     pub fn next_deadline(&self) -> Option<oer_time::Instant> {
-        self.owner.stored().next_deadline()
+        self.owner.core.next_deadline()
     }
     /// Preserve each published predecessor's own terminal outcome.
     #[inline]
@@ -690,7 +686,7 @@ impl<
         wake: WifiTxWake,
         sink: &mut K,
     ) -> Result<(), LowerMacFault> {
-        self.owner.stored_mut().service(hardware, wake, sink)
+        self.owner.core.service(hardware, wake, sink)
     }
     /// Recover disabled ownership only after every predecessor ended.
     #[inline]

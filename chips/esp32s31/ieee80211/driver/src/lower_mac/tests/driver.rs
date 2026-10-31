@@ -9,12 +9,12 @@ pub(super) struct TestDriver<'id>(pub(super) CoreOwner<DeviceCore<'id>>);
 impl<'id> core::ops::Deref for TestDriver<'id> {
     type Target = DeviceCore<'id>;
     fn deref(&self) -> &Self::Target {
-        self.0.core.as_ref().unwrap()
+        &self.0.bank.as_ref().unwrap().core
     }
 }
 impl core::ops::DerefMut for TestDriver<'_> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        self.0.core.as_mut().unwrap()
+        &mut self.0.bank.as_mut().unwrap().core
     }
 }
 impl<'id> TestDriver<'id> {
@@ -284,11 +284,6 @@ impl<'id> TestDriver<'id> {
         mut self,
     ) -> Result<LowerMacCoreParts<'id, 'static, Power, fn() -> u32, Timer, RadioNine, 512>, Self>
     {
-        match self.0.view() {
-            CoreView::Disabled(view) => Ok(view.dismantle()),
-            CoreView::DisabledClosing(view) => Ok(view.dismantle()),
-            CoreView::DisabledClosed(view) => Ok(view.dismantle()),
-            _ => Err(self),
-        }
+        self.0.dismantle().map_err(|_| self)
     }
 }

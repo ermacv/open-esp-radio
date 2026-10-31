@@ -43,7 +43,10 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for ContinuousReceive {
         {
             let mut phase = owner.phase();
             phase.station().configure(
-                resources.station_commands.configure.with_context(Tag(7)),
+                resources
+                    .station_commands
+                    .configure
+                    .with_context(Tag(7, None)),
                 StationReceive::Bss {
                     bssid: IndividualAddress::new(BSSID).expect("BSSID"),
                     filter: SupportedFilter::new(ReceiveFilter::BSS_MEMBER).expect("filter"),

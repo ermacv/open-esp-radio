@@ -1,6 +1,7 @@
 use super::*;
 use oer_ieee80211_testing_conformance::{
-    self as conformance, Class, End, Harness, Operation, Resources, Scenario, Trace,
+    self as conformance, Class, End, Harness, Held, Operation, PublicationEvent, Resources,
+    Scenario, Trace,
 };
 
 // A fixture-local installation brand; this harness never creates a core epoch.
@@ -36,8 +37,29 @@ struct Operations {
     before_teardown: Rc<Cell<usize>>,
     seen: Rc<RefCell<Vec<conformance::Returned>>>,
     scenario: Scenario,
+    held: Held,
     evidence: Rc<RefCell<Vec<conformance::ReturnEvidence>>>,
-    gate_closed_at: Rc<Cell<Option<usize>>>,
+    /// Requests, returns and the gate confirmation, each with the number of
+    /// publications observed when it happened.
+    markers: Rc<RefCell<Vec<(usize, PublicationEvent)>>>,
+    tickets: Rc<Cell<[u8; 4]>>,
+}
+
+impl Operations {
+    fn mark(&self, event: PublicationEvent) {
+        self.markers
+            .borrow_mut()
+            .push((self.air.sent().len(), event));
+    }
+    /// Hold or release BestEffort as the fixture mode names.
+    fn hold(&self, held: bool) {
+        match self.held {
+            Held::Unpublished => self.air.hold(WmmAccessCategory::BestEffort, held),
+            Held::PublishedHead => self
+                .air
+                .hold_completion(WmmAccessCategory::BestEffort, held),
+        }
+    }
 }
 
 fn observe<'id, Id: SlotIdentity + 'id>(
@@ -87,7 +109,7 @@ fn returned<'id, Id: SlotIdentity + 'id>(
         ModelPool<Id, 1>,
     >,
     evidence: &RefCell<Vec<conformance::ReturnEvidence>>,
-    gate_closed_at: &Cell<Option<usize>>,
+    markers: &RefCell<Vec<(usize, PublicationEvent)>>,
     air: &ModelAir,
 ) {
     match event {
@@ -100,6 +122,9 @@ fn returned<'id, Id: SlotIdentity + 'id>(
                 ..
             } = terminal.into_parts(terminal_access);
             let (buffer, body) = payload.into_parts();
+            markers
+                .borrow_mut()
+                .push((air.sent().len(), PublicationEvent::Returned(ticket.index())));
             evidence
                 .borrow_mut()
                 .push(conformance::ReturnEvidence::terminal(true, &completion).unwrap());
@@ -119,7 +144,9 @@ fn returned<'id, Id: SlotIdentity + 'id>(
             observe(context, ticket, buffer, body, end, seen);
         }
         LowerMacEvent::Terminal(LowerMacTerminal::GateClosed(_)) => {
-            assert!(gate_closed_at.replace(Some(air.sent().len())).is_none());
+            markers
+                .borrow_mut()
+                .push((air.sent().len(), PublicationEvent::GateClosed));
         }
         LowerMacEvent::Terminal(LowerMacTerminal::TxCompleted(TxCompleted::Aggregate(_))) => {
             panic!("single submission must return Single")
@@ -153,9 +180,12 @@ impl<Id: SlotIdentity> PortBody<Id, Backend<Id>> for Operations {
         } = resources;
         {
             let mut phase = owner.phase();
-            self.air.hold(WmmAccessCategory::BestEffort, true);
-            for operation in conformance::OPERATIONS {
+            self.hold(true);
+            for operation in conformance::Classes::Two.operations() {
                 let ticket = tickets.remove(0);
+                let mut admitted = self.tickets.get();
+                admitted[usize::from(operation.id)] = ticket.index();
+                self.tickets.set(admitted);
                 let body = ModelBody(
                     alloc::vec![operation.id; if self.scenario == Scenario::Refuse { 17 } else { 4 }],
                 );
@@ -267,7 +297,7 @@ impl<Id: SlotIdentity> PortBody<Id, Backend<Id>> for Operations {
                         &self.seen,
                         &mut terminal_access,
                         &self.evidence,
-                        &self.gate_closed_at,
+                        &self.markers,
                         &self.air,
                     );
                 }
@@ -279,10 +309,22 @@ impl<Id: SlotIdentity> PortBody<Id, Backend<Id>> for Operations {
                             != WmmAccessCategory::BestEffort)
                 );
                 match self.scenario {
-                    Scenario::Complete => self.air.hold(WmmAccessCategory::BestEffort, false),
-                    Scenario::CloseGate => phase.close_gate(gate),
+                    Scenario::Complete => {
+                        self.mark(PublicationEvent::Requested);
+                        self.hold(false);
+                    }
+                    Scenario::CloseGate => {
+                        self.mark(PublicationEvent::Requested);
+                        phase.close_gate(gate);
+                        // A published head's result arrives after the request.
+                        self.hold(false);
+                    }
+                    // Disable issues its request below.
                     Scenario::Disable => {}
-                    Scenario::Poison => self.air.poison(),
+                    Scenario::Poison => {
+                        self.mark(PublicationEvent::Requested);
+                        self.air.poison();
+                    }
                     Scenario::Refuse => unreachable!(),
                 }
                 if matches!(self.scenario, Scenario::Complete | Scenario::CloseGate) {
@@ -295,7 +337,7 @@ impl<Id: SlotIdentity> PortBody<Id, Backend<Id>> for Operations {
                             &self.seen,
                             &mut terminal_access,
                             &self.evidence,
-                            &self.gate_closed_at,
+                            &self.markers,
                             &self.air,
                         );
                     }
@@ -308,12 +350,29 @@ impl<Id: SlotIdentity> PortBody<Id, Backend<Id>> for Operations {
                 &self.seen,
                 &mut terminal_access,
                 &self.evidence,
-                &self.gate_closed_at,
+                &self.markers,
                 &self.air,
             );
             core::ops::ControlFlow::Continue(())
         };
-        match owner.disable(&mut sink).await {
+        let disabling = self.scenario == Scenario::Disable;
+        if disabling {
+            self.mark(PublicationEvent::Requested);
+        }
+        let mut disable = core::pin::pin!(owner.disable(&mut sink));
+        let mut requested = false;
+        let ended = core::future::poll_fn(|cx| {
+            let poll = disable.as_mut().poll(cx);
+            if disabling && !requested {
+                // The first poll issued the request; a published head's
+                // result arrives after it.
+                requested = true;
+                self.hold(false);
+            }
+            poll
+        })
+        .await;
+        match ended {
             Ok(owner) => {
                 self.before_teardown.set(self.dropped.get());
                 Ended::uninstall(owner, (), ())
@@ -328,12 +387,14 @@ impl<Id: SlotIdentity> PortBody<Id, Backend<Id>> for Operations {
 
 struct ModelHarness;
 impl Harness for ModelHarness {
+    const CLASSES: conformance::Classes = conformance::Classes::Two;
     type Returns = Vec<conformance::Returned>;
     type Evidence = Vec<conformance::ReturnEvidence>;
     type Publications = Vec<conformance::PublicationEvent>;
     async fn exercise(
         &mut self,
         scenario: Scenario,
+        held: Held,
     ) -> Trace<Self::Returns, Self::Evidence, Self::Publications> {
         let (backend, air) = Fixture::<ModelCaps, Contexts>::new(
             Channel::ghz2_4(6, ChannelWidth::Mhz20).unwrap(),
@@ -347,7 +408,8 @@ impl Harness for ModelHarness {
         let before_teardown = Rc::new(Cell::new(usize::MAX));
         let seen = Rc::new(RefCell::new(Vec::new()));
         let evidence = Rc::new(RefCell::new(Vec::new()));
-        let gate_closed_at = Rc::new(Cell::new(None));
+        let markers = Rc::new(RefCell::new(Vec::new()));
+        let tickets = Rc::new(Cell::new([0; 4]));
         let after_receipt_dropped = Cell::new(usize::MAX);
         let _port_end = fixture::inspect_model(
             backend,
@@ -357,20 +419,19 @@ impl Harness for ModelHarness {
                 before_teardown: before_teardown.clone(),
                 seen: seen.clone(),
                 scenario,
+                held,
                 evidence: evidence.clone(),
-                gate_closed_at: gate_closed_at.clone(),
+                markers: markers.clone(),
+                tickets: tickets.clone(),
             },
             |_| after_receipt_dropped.set(dropped.get()),
         )
         .await;
-        let mut publication_events: Vec<_> = air
-            .sent()
-            .iter()
-            .map(|frame| conformance::PublicationEvent::Tx(frame.ticket))
-            .collect();
-        if let Some(index) = gate_closed_at.get() {
-            publication_events.insert(index, conformance::PublicationEvent::GateClosed);
-        }
+        let publication_events = conformance::observed_order(
+            air.sent().iter().map(|frame| frame.ticket),
+            markers.take(),
+        )
+        .collect();
         Trace {
             returned: core::mem::take(&mut *seen.borrow_mut()),
             contexts_dropped: after_receipt_dropped.get(),
@@ -378,17 +439,22 @@ impl Harness for ModelHarness {
             publications: air.sent().len(),
             terminal_evidence: core::mem::take(&mut *evidence.borrow_mut()),
             publication_events,
+            tickets: tickets.get(),
         }
     }
 }
 
 #[test]
 fn common_backend_tx_ownership_suite() {
-    block_on(async {
-        conformance::check(&mut ModelHarness, conformance::Environment::Model)
-            .await
-            .unwrap();
-    });
+    // The model holds BestEffort before publication, or publishes its head
+    // and withholds the result.
+    for held in Held::ALL {
+        block_on(async {
+            conformance::check(&mut ModelHarness, conformance::Environment::Model, held)
+                .await
+                .unwrap();
+        });
+    }
 }
 
 struct AggregateContext {
@@ -456,19 +522,21 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps, AggregateContext
             )
             .unwrap();
             let rate = phase.rate(PhyRate::Ht(ht)).unwrap();
-            let mut station = phase.station();
             let association = ModelKeys::<ModelBackend<Id, ModelCaps, AggregateContext>, Station>::begin_association(
                 resources.station_association,
                 oer_ieee80211_wire::security::Spp::NotNegotiated,
             );
-            let key = station
-                .install_pairwise_key(
-                    &association,
-                    slot,
-                    IndividualAddress::new(PEER).unwrap(),
-                    Ccmp128Key::new(&[7; 16]),
-                )
-                .into_core_key();
+            let key = installed_station_pairwise(
+                &mut phase,
+                &association,
+                slot,
+                IndividualAddress::new(PEER).unwrap(),
+                Ccmp128Key::new(&[7; 16]),
+            )
+            .await
+            .expect("the PTK installation terminal")
+            .into_core_key();
+            let mut station = phase.station();
             key.set_last(self.initial_pn);
             let rate = station.ampdu_rate(rate).ok().unwrap();
             let aggregate = station.aggregate(
@@ -683,15 +751,16 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps, FaultContext>>
         } = resources;
         {
             let mut phase = owner.phase();
-            let key = phase
-                .station()
-                .install_pairwise_key(
-                    &station_association,
-                    slot,
-                    IndividualAddress::new(PEER).unwrap(),
-                    Ccmp128Key::new(&[7; 16]),
-                )
-                .into_core_key();
+            let key = installed_station_pairwise(
+                &mut phase,
+                &station_association,
+                slot,
+                IndividualAddress::new(PEER).unwrap(),
+                Ccmp128Key::new(&[7; 16]),
+            )
+            .await
+            .expect("the PTK installation terminal")
+            .into_core_key();
             let last = oer_ieee80211_wire::ccmp::CCMP_PACKET_NUMBER_MAX - 10;
             key.set_last(last);
             let ticket = tickets.remove(0);

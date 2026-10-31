@@ -244,6 +244,8 @@ pub enum DataRefusal {
     /// Admission control closes the MSDU's access category and every lower
     /// one: the link leaves it no category to contend in.
     NoAdmittedAccessCategory,
+    /// The buffer's memory is not the station's; its tokens came back.
+    BufferUnavailable,
 }
 
 /// The original data operation. It travels by value with the attempt;
@@ -618,7 +620,8 @@ impl<
             while let Some(owed) = queue.pop() {
                 report(events, || StaEvent::DataLost(DataLoss::LeftBehind));
                 self.tickets.put(owed.ticket, events);
-                self.buffers.put(owed.buffer.into_fresh(D::renew), events);
+                self.buffers
+                    .put(crate::events::fresh(owed.buffer, D::renew, events), events);
             }
         }
         self.link = None;
@@ -632,8 +635,10 @@ impl<
     ) {
         report(events, || StaEvent::DataLost(DataLoss::Overflow));
         self.tickets.put(transmit.ticket, events);
-        self.buffers
-            .put(transmit.buffer.into_fresh(D::renew), events);
+        self.buffers.put(
+            crate::events::fresh(transmit.buffer, D::renew, events),
+            events,
+        );
     }
 
     /// Whether the machine takes one more MSDU now.
@@ -659,7 +664,8 @@ impl<
                 let (context, permit) = context.admission(());
                 self.admission.put(context.access_category, permit);
                 self.tickets.put(ticket, events);
-                self.buffers.put(buffer.into_fresh(D::renew), events);
+                self.buffers
+                    .put(crate::events::fresh(buffer, D::renew, events), events);
             }
             DataReturn::TxDone {
                 context,
@@ -674,7 +680,8 @@ impl<
                         report(events, || StaEvent::DataLost(DataLoss::LeftBehind));
                     }
                     self.tickets.put(ticket, events);
-                    self.buffers.put(buffer.into_fresh(D::renew), events);
+                    self.buffers
+                        .put(crate::events::fresh(buffer, D::renew, events), events);
                     return;
                 }
                 match completion {
@@ -715,7 +722,8 @@ impl<
                     return;
                 }
                 self.tickets.put(ticket, events);
-                self.buffers.put(buffer.into_fresh(D::renew), events);
+                self.buffers
+                    .put(crate::events::fresh(buffer, D::renew, events), events);
             }
         }
     }
@@ -763,11 +771,18 @@ impl<
             (WmmUserPriority::UP0, WmmAccessCategory::BestEffort)
         };
         let protection = DataProtection::from(&link.protection).without_key();
-        // A frame that does not fit its buffer takes no sequence
-        // number.
-        if mpdu_len(qos, protection, msdu.payload.len())
-            .is_none_or(|length| length > buffer.bytes_mut().len())
-        {
+        // A frame that does not fit its buffer, or a buffer whose memory
+        // is not the station's, takes no sequence number.
+        let bytes = match buffer.bytes_mut() {
+            Ok(bytes) => bytes,
+            Err(_) => {
+                report(events, || StaEvent::BufferMemoryUnavailable);
+                self.tickets.put(ticket, events);
+                self.buffers.put(buffer, events);
+                return Err(DataRefusal::BufferUnavailable);
+            }
+        };
+        if mpdu_len(qos, protection, msdu.payload.len()).is_none_or(|length| length > bytes.len()) {
             self.tickets.put(ticket, events);
             self.buffers.put(buffer, events);
             return Err(DataRefusal::TooLong);
@@ -776,14 +791,8 @@ impl<
             LinkMode::Qos(counters) => tid.select_mut(counters).take(),
             LinkMode::NonQos(counter) => counter.take(),
         };
-        let frame = encode_frame::<_, K, D::Class>(
-            link,
-            qos,
-            msdu,
-            sequence_number,
-            protection,
-            buffer.bytes_mut(),
-        );
+        let frame =
+            encode_frame::<_, K, D::Class>(link, qos, msdu, sequence_number, protection, bytes);
         match frame {
             Some(frame) => {
                 let order = self.next_order;

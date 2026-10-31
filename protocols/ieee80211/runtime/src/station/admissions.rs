@@ -14,6 +14,7 @@ pub enum PendingTerminal {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ControlTerminal {
     Configure,
+    PairwiseInstall,
     PairwiseRemoval,
     GroupChange,
     GateClosed,
@@ -26,6 +27,7 @@ impl ControlTerminal {
             Self::PairwiseRemoval => 2,
             Self::GroupChange => 4,
             Self::GateClosed => 8,
+            Self::PairwiseInstall => 16,
         }
     }
 }
@@ -85,6 +87,7 @@ impl Admissions {
         }
         [
             ControlTerminal::Configure,
+            ControlTerminal::PairwiseInstall,
             ControlTerminal::PairwiseRemoval,
             ControlTerminal::GroupChange,
             ControlTerminal::GateClosed,

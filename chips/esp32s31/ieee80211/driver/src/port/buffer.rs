@@ -7,55 +7,121 @@ impl<const B: usize> TxBufferClass for BufferClass<B> {
 }
 
 /// Affine memory owner. Only MPDU octets are lent to the portable core.
-pub struct Buffer<'id, Id: SlotIdentity, D: Device<B>, const B: usize> {
+pub struct Buffer<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> {
     pub(super) place: Slot<'id, Buffers, Part<Id, 3>>,
     pub(super) dma: ReturnableBuffer<B>,
     pub(super) admission: Option<Instant>,
-    pub(super) loan: Option<BodyLoan<'id, Id, Esp32s31Backend<Id, D, B>>>,
+    pub(super) loan: Option<BodyLoan<'id, Id, Esp32s31Backend<Id, D, B, O>>>,
 }
-pub(super) struct ReturnableBuffer<const B: usize> {
-    pub(super) memory: Option<TxSlotFree<'static, B>>,
-    pub(super) returned: Option<oer_memory::ReturnToken<'static, TxSlotFree<'static, B>>>,
+type ReturnRight<const B: usize> = oer_memory::ReturnToken<'static, TxSlotFree<'static, B>>;
+
+/// One buffer place's DMA memory and its sole right of return, held
+/// together: memory never exists here without its right.
+enum Dma<const B: usize> {
+    /// The CPU owns the memory; its right travels with it, and dropping the
+    /// buffer returns the memory.
+    Free {
+        memory: TxSlotFree<'static, B>,
+        returned: ReturnRight<B>,
+    },
+    /// The hardware owns the memory; the right waits for the completion
+    /// that hands it back. Dropped here, the place stays out of the bank.
+    Published { returned: ReturnRight<B> },
+    /// Neither: the place had no returned memory, or its pair moved on.
+    Released,
 }
-impl<const B: usize> Drop for ReturnableBuffer<B> {
-    fn drop(&mut self) {
-        if let Some(memory) = self.memory.take() {
-            self.returned
-                .take()
-                .expect("buffer retains its sole return right")
-                .return_value(memory);
+
+/// A buffer place's [`Dma`]; dropping it returns CPU-owned memory.
+pub(super) struct ReturnableBuffer<const B: usize>(Dma<B>);
+impl<const B: usize> ReturnableBuffer<B> {
+    /// The pair the bank's place hands out, or nothing to return.
+    pub(super) fn taken(pair: Option<(TxSlotFree<'static, B>, ReturnRight<B>)>) -> Self {
+        Self(match pair {
+            Some((memory, returned)) => Dma::Free { memory, returned },
+            None => Dma::Released,
+        })
+    }
+    /// The CPU's memory, while it owns it.
+    pub(super) fn memory_mut(&mut self) -> Option<&mut TxSlotFree<'static, B>> {
+        match &mut self.0 {
+            Dma::Free { memory, .. } => Some(memory),
+            _ => None,
+        }
+    }
+    /// Hand the memory to the hardware, keeping its right; `None`, and no
+    /// change, unless the CPU owns it.
+    pub(super) fn publish(&mut self) -> Option<TxSlotFree<'static, B>> {
+        match core::mem::replace(&mut self.0, Dma::Released) {
+            Dma::Free { memory, returned } => {
+                self.0 = Dma::Published { returned };
+                Some(memory)
+            }
+            other => {
+                self.0 = other;
+                None
+            }
+        }
+    }
+    /// The completion handed `memory` back: it rejoins its right. Refused,
+    /// with the memory and no change, unless the hardware owned it.
+    pub(super) fn complete(
+        &mut self,
+        memory: TxSlotFree<'static, B>,
+    ) -> Result<(), TxSlotFree<'static, B>> {
+        match core::mem::replace(&mut self.0, Dma::Released) {
+            Dma::Published { returned } => {
+                self.0 = Dma::Free { memory, returned };
+                Ok(())
+            }
+            other => {
+                self.0 = other;
+                Err(memory)
+            }
         }
     }
 }
-impl<Id: SlotIdentity, D: Device<B>, const B: usize> Buffer<'_, Id, D, B> {
+impl<const B: usize> Drop for ReturnableBuffer<B> {
+    fn drop(&mut self) {
+        if let Dma::Free { memory, returned } = core::mem::replace(&mut self.0, Dma::Released) {
+            returned.return_value(memory);
+        }
+    }
+}
+impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> Buffer<'_, Id, D, B, O> {
     pub fn index(&self) -> u8 {
         self.place.index()
     }
-}
-impl<Id: SlotIdentity, D: Device<B>, const B: usize> TxBufferMemory for Buffer<'_, Id, D, B> {
-    fn renew_msdu(&mut self) {
-        self.admission = None;
-        self.dma
-            .memory
-            .as_mut()
-            .expect("returned buffer owns free DMA")
-            .reset_work();
+    /// When P1 admitted the MPDU in this memory, until it is renewed.
+    #[cfg(test)]
+    pub(crate) fn admitted_at(&self) -> Option<Instant> {
+        self.admission
     }
-    fn bytes_mut(&mut self) -> &mut [u8] {
-        let bytes = self
-            .dma
-            .memory
-            .as_mut()
-            .expect("body owns free DMA")
-            .buffer_mut();
-        &mut bytes[crate::ordinary_tx::TX_METADATA_SIZE..][..BufferClass::<B>::CAPACITY]
+}
+impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> TxBufferMemory
+    for Buffer<'_, Id, D, B, O>
+{
+    fn renew_msdu(&mut self) -> Result<(), BufferMemoryUnavailable> {
+        let memory = self.dma.memory_mut().ok_or(BufferMemoryUnavailable)?;
+        memory.reset_work();
+        self.admission = None;
+        Ok(())
+    }
+    fn bytes_mut(&mut self) -> Result<&mut [u8], BufferMemoryUnavailable> {
+        self.dma
+            .memory_mut()
+            .ok_or(BufferMemoryUnavailable)?
+            .buffer_mut()
+            .map_err(|_| BufferMemoryUnavailable)?
+            .get_mut(crate::ordinary_tx::TX_METADATA_SIZE..)
+            .and_then(|bytes| bytes.get_mut(..BufferClass::<B>::CAPACITY))
+            .ok_or(BufferMemoryUnavailable)
     }
 }
 
-pub struct Sent<'id, Id: SlotIdentity, D: Device<B>, const B: usize> {
-    pub(super) mpdu: Mpdu<'id, Id, D, B>,
+pub struct Sent<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> {
+    pub(super) mpdu: Mpdu<'id, Id, D, B, O>,
 }
-impl<Id: SlotIdentity, D: Device<B>, const B: usize> Sent<'_, Id, D, B> {
+impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> Sent<'_, Id, D, B, O> {
     pub fn index(&self) -> u8 {
         self.mpdu.buffer.index()
     }
@@ -65,14 +131,30 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> Sent<'_, Id, D, B> {
     pub fn body(&self) -> Option<&D::Body> {
         self.mpdu.body.as_ref()
     }
+    /// When P1 admitted the MPDU; retransmission keeps it.
+    #[cfg(test)]
+    pub(crate) fn admitted_at(&self) -> Option<Instant> {
+        self.mpdu.buffer.admission
+    }
+    /// The encoded MPDU extent as its last publication left it in memory.
+    #[cfg(test)]
+    pub(crate) fn published(&mut self) -> &[u8] {
+        let len = self.mpdu.layout.mpdu_len();
+        let bytes = self
+            .mpdu
+            .buffer
+            .bytes_mut()
+            .expect("a returned Sent owns its memory");
+        &bytes[..len]
+    }
 }
-pub enum AnyBuffer<'id, Id: SlotIdentity, D: Device<B>, const B: usize> {
-    Fresh(Buffer<'id, Id, D, B>),
-    Sent(Sent<'id, Id, D, B>),
+pub enum AnyBuffer<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> {
+    Fresh(Buffer<'id, Id, D, B, O>),
+    Sent(Sent<'id, Id, D, B, O>),
 }
 
-pub struct Mpdu<'id, Id: SlotIdentity, D: Device<B>, const B: usize> {
-    pub(super) buffer: Buffer<'id, Id, D, B>,
+pub struct Mpdu<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> {
+    pub(super) buffer: Buffer<'id, Id, D, B, O>,
     pub(super) layout: MpduLayout,
     pub(super) body: Option<D::Body>,
     pub(super) key: Option<RawKeyIdentity>,
@@ -81,20 +163,24 @@ pub struct Mpdu<'id, Id: SlotIdentity, D: Device<B>, const B: usize> {
     pub(super) published: bool,
 }
 /// A view cannot move, replace or renew the admitted MPDU.
-pub struct MpduExecution<'a, 'id, Id: SlotIdentity, D: Device<B>, const B: usize> {
-    pub(super) mpdu: &'a mut Mpdu<'id, Id, D, B>,
+pub struct MpduExecution<'a, 'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> {
+    pub(super) mpdu: &'a mut Mpdu<'id, Id, D, B, O>,
 }
-impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> ExecutionPayload for Mpdu<'id, Id, D, B> {
+impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> ExecutionPayload
+    for Mpdu<'id, Id, D, B, O>
+{
     type Execution<'a>
-        = MpduExecution<'a, 'id, Id, D, B>
+        = MpduExecution<'a, 'id, Id, D, B, O>
     where
         Self: 'a;
     fn execution(&mut self) -> Self::Execution<'_> {
         MpduExecution { mpdu: self }
     }
 }
-impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> TxMpdu for Mpdu<'id, Id, D, B> {
-    type Buffer = AnyBuffer<'id, Id, D, B>;
+impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> TxMpdu
+    for Mpdu<'id, Id, D, B, O>
+{
+    type Buffer = AnyBuffer<'id, Id, D, B, O>;
     type Body = D::Body;
     fn into_parts(self) -> (Self::Buffer, Option<Self::Body>) {
         if self.published {
@@ -105,21 +191,33 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> TxMpdu for Mpdu<'id, I
     }
 }
 
-pub struct Prepared<'k, 'p, 'id, Id: SlotIdentity, D: Device<B>, const B: usize, R, K> {
-    mpdu: Mpdu<'id, Id, D, B>,
+pub struct Prepared<
+    'k,
+    'p,
+    'id,
+    Id: SlotIdentity,
+    D: Device<B>,
+    const B: usize,
+    O: Observations,
+    R,
+    K,
+> {
+    mpdu: Mpdu<'id, Id, D, B, O>,
     plan: RetryPlan<PhyRate>,
+    /// The body loan the prepared buffer was lent under.
+    loan: BodyLoan<'id, Id, Esp32s31Backend<Id, D, B, O>>,
     proof: PhantomData<(&'k (), fn(&'p ()) -> (&'p (), R, K))>,
 }
 pub struct Execution {
     pub(super) plan: RetryPlan<PhyRate>,
 }
-impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, R, K> PreparedTx<'id>
-    for Prepared<'_, '_, 'id, Id, D, B, R, K>
+impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations, R, K>
+    PreparedTx<'id> for Prepared<'_, '_, 'id, Id, D, B, O, R, K>
 {
-    type Types = Types<Id, D, B>;
-    type Backend = Esp32s31Backend<Id, D, B>;
+    type Types = Types<Id, D, B, O>;
+    type Backend = Esp32s31Backend<Id, D, B, O>;
     type OwnedContext = D::OwnedContext<Id>;
-    type OwnedPayload = Mpdu<'static, Id, D, B>;
+    type OwnedPayload = Mpdu<'static, Id, D, B, O>;
     type Execution = Execution;
     fn into_admission(
         self,
@@ -132,11 +230,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, R, K> PreparedTx
         Self::OwnedPayload,
         Execution,
     > {
-        let loan = self
-            .mpdu
-            .buffer
-            .loan
-            .expect("only lent buffers can enter frontend preparation");
+        let loan = self.loan;
         AdmissionOwners {
             context: context.enclose().into_owned(&loan),
             ticket: loan.reclaim_slot(ticket),
@@ -144,7 +238,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, R, K> PreparedTx
             execution: Execution { plan: self.plan },
         }
     }
-    fn into_parts(self) -> (AnyBuffer<'id, Id, D, B>, Option<D::Body>) {
+    fn into_parts(self) -> (AnyBuffer<'id, Id, D, B, O>, Option<D::Body>) {
         self.mpdu.into_parts()
     }
 }
@@ -165,18 +259,18 @@ fn stages<K>(frame: &TxFrame<'_, '_, K>) -> RetryPlan<PhyRate> {
     }
 }
 
-impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize> TxBufferPool<'id, BufferClass<B>>
-    for Types<Id, D, B>
+impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
+    TxBufferPool<'id, BufferClass<B>> for Types<Id, D, B, O>
 {
-    type Buffer = Buffer<'id, Id, D, B>;
-    type Sent = Sent<'id, Id, D, B>;
+    type Buffer = Buffer<'id, Id, D, B, O>;
+    type Sent = Sent<'id, Id, D, B, O>;
     fn prepare<'k, 'p, R: RoleKeys<'id, Self>, K: Ieee80211Capabilities>(
         source: CheckedPoolSource<'k, 'p, 'id, Self, BufferClass<B>, K, R>,
     ) -> PoolPreparation<'k, 'p, 'id, Self, BufferClass<B>, K, R>
     where
         'id: 'k,
     {
-        let (mpdu, plan) = match source {
+        let (mpdu, plan, loan) = match source {
             CheckedTxSource::Fresh(fresh) => {
                 let (
                     FreshSource {
@@ -187,6 +281,18 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize> TxBufferPool<'id
                     },
                     layout,
                 ) = fresh.into_parts();
+                // Only a buffer lent to the body enters its preparation.
+                let Some(loan) = buffer.loan else {
+                    return Err(PreparationRefused {
+                        reason: PreparationError::MissingBodyLoan,
+                        operation: TxSource::Fresh {
+                            buffer,
+                            frame,
+                            body,
+                            protection,
+                        },
+                    });
+                };
                 let (key, pn) = match protection {
                     TxProtection::Open => (None, None),
                     TxProtection::Ccmp(numbered) => (
@@ -206,9 +312,16 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize> TxBufferPool<'id
                         published: false,
                     },
                     plan,
+                    loan,
                 )
             }
             CheckedTxSource::Retransmission { mpdu, plan } => {
+                let Some(loan) = mpdu.mpdu.buffer.loan else {
+                    return Err(PreparationRefused {
+                        reason: PreparationError::MissingBodyLoan,
+                        operation: TxSource::Retransmission { mpdu, plan },
+                    });
+                };
                 if mpdu.mpdu.key.as_ref().is_some_and(|key| !key.active()) {
                     return Err(PreparationRefused {
                         reason: PreparationError::RetransmissionKey,
@@ -239,12 +352,13 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize> TxBufferPool<'id
                         operation: TxSource::Retransmission { mpdu, plan },
                     });
                 };
-                (mpdu.mpdu, stages)
+                (mpdu.mpdu, stages, loan)
             }
         };
         Ok(Prepared {
             mpdu,
             plan,
+            loan,
             proof: PhantomData,
         })
     }
@@ -259,52 +373,55 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize> TxBufferPool<'id
     {
         match operation.into_parts().0.impossible {}
     }
-    fn erase(buffer: Self::Buffer) -> AnyBuffer<'id, Id, D, B> {
+    fn erase(buffer: Self::Buffer) -> AnyBuffer<'id, Id, D, B, O> {
         AnyBuffer::Fresh(buffer)
     }
-    fn erase_sent(buffer: Self::Sent) -> AnyBuffer<'id, Id, D, B> {
+    fn erase_sent(buffer: Self::Sent) -> AnyBuffer<'id, Id, D, B, O> {
         AnyBuffer::Sent(buffer)
     }
-    fn class(buffer: AnyBuffer<'id, Id, D, B>) -> Result<Self::Buffer, AnyBuffer<'id, Id, D, B>> {
+    fn class(
+        buffer: AnyBuffer<'id, Id, D, B, O>,
+    ) -> Result<Self::Buffer, AnyBuffer<'id, Id, D, B, O>> {
         match buffer {
             AnyBuffer::Fresh(buffer) => Ok(buffer),
             other => Err(other),
         }
     }
-    fn sent(buffer: AnyBuffer<'id, Id, D, B>) -> Result<Self::Sent, AnyBuffer<'id, Id, D, B>> {
+    fn sent(
+        buffer: AnyBuffer<'id, Id, D, B, O>,
+    ) -> Result<Self::Sent, AnyBuffer<'id, Id, D, B, O>> {
         match buffer {
             AnyBuffer::Sent(buffer) => Ok(buffer),
             other => Err(other),
         }
     }
     fn renew(buffer: Self::Sent) -> (Self::Buffer, Option<D::Body>) {
-        let mut memory = buffer.mpdu.buffer;
-        memory.renew_msdu();
-        (memory, buffer.mpdu.body)
+        // The MPDU and its PN end here; `renew_msdu` releases its admission.
+        (buffer.mpdu.buffer, buffer.mpdu.body)
     }
 }
 
 /// This port exposes ordinary MPDUs. Aggregate ownership is uninhabited,
 /// and the optional `AmpduPhase` is not implemented.
-pub struct NoAggregate<'id, Id: SlotIdentity, D, const B: usize, S> {
+pub struct NoAggregate<'id, Id: SlotIdentity, D, const B: usize, O: Observations, S> {
     pub(super) impossible: Infallible,
-    marker: PhantomData<fn(&'id (), Id) -> (&'id (), Id, D, S)>,
+    marker: PhantomData<fn(&'id (), Id) -> (&'id (), Id, D, O, S)>,
 }
-pub struct NoAggregatePayload<'id, Id: SlotIdentity, D, const B: usize> {
+pub struct NoAggregatePayload<'id, Id: SlotIdentity, D, const B: usize, O: Observations> {
     pub(super) impossible: Infallible,
-    marker: PhantomData<fn(&'id (), Id) -> (&'id (), Id, D)>,
+    marker: PhantomData<fn(&'id (), Id) -> (&'id (), Id, D, O)>,
 }
-impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> IntoIterator
-    for NoAggregatePayload<'id, Id, D, B>
+impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> IntoIterator
+    for NoAggregatePayload<'id, Id, D, B, O>
 {
-    type Item = Mpdu<'id, Id, D, B>;
+    type Item = Mpdu<'id, Id, D, B, O>;
     type IntoIter = core::iter::Empty<Self::Item>;
     fn into_iter(self) -> Self::IntoIter {
         match self.impossible {}
     }
 }
-impl<Id: SlotIdentity, D: Device<B>, const B: usize> ExecutionPayload
-    for NoAggregatePayload<'_, Id, D, B>
+impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> ExecutionPayload
+    for NoAggregatePayload<'_, Id, D, B, O>
 {
     type Execution<'a>
         = Infallible
@@ -314,16 +431,16 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> ExecutionPayload
         match self.impossible {}
     }
 }
-impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, S: AggregateState>
-    PhaseAggregate<'id> for NoAggregate<'id, Id, D, B, S>
+impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations, S: AggregateState>
+    PhaseAggregate<'id> for NoAggregate<'id, Id, D, B, O, S>
 {
-    type Types = Types<Id, D, B>;
+    type Types = Types<Id, D, B, O>;
     type State = S;
-    type Backend = Esp32s31Backend<Id, D, B>;
+    type Backend = Esp32s31Backend<Id, D, B, O>;
     type OwnedContext = D::OwnedContext<Id>;
-    type OwnedPayload = NoAggregatePayload<'static, Id, D, B>;
+    type OwnedPayload = NoAggregatePayload<'static, Id, D, B, O>;
     type Execution = Infallible;
-    type Cancelled = NoAggregatePayload<'id, Id, D, B>;
+    type Cancelled = NoAggregatePayload<'id, Id, D, B, O>;
     fn into_admission(
         self,
         _: D::Context<'id, Id>,
@@ -357,8 +474,8 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, S: AggregateStat
     }
 }
 
-impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize> PhaseTypes<'id>
-    for Types<Id, D, B>
+impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations> PhaseTypes<'id>
+    for Types<Id, D, B, O>
 {
     const COMMAND_CAPACITY: usize = COMMANDS;
     const TERMINAL_CAPACITY: usize = TERMINAL_CAPACITY;
@@ -372,10 +489,10 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize> PhaseTypes<'id>
     type BlockAckPath = Part<Id, 7>;
     type Fault = Fault;
     type Context = D::Context<'id, Id>;
-    type Prepared<'k, 'p, R, K: Ieee80211Capabilities> = Prepared<'k, 'p, 'id, Id, D, B, R, K>;
+    type Prepared<'k, 'p, R, K: Ieee80211Capabilities> = Prepared<'k, 'p, 'id, Id, D, B, O, R, K>;
     type KeyIdentity = keys::KeyIdentity<'id, Id>;
     type Aggregate<'k, 'p, R, K, S>
-        = NoAggregate<'id, Id, D, B, S>
+        = NoAggregate<'id, Id, D, B, O, S>
     where
         R: RoleKeys<'id, Self>,
         K: Ieee80211Capabilities,
@@ -386,9 +503,9 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize> PhaseTypes<'id>
     type AckEvidence = Ack;
     type BlockAckEvidence = Ack;
     type AirDenied = Infallible;
-    type AnyTxBuffer = AnyBuffer<'id, Id, D, B>;
-    type TxMpdu = Mpdu<'id, Id, D, B>;
-    type TxAggregate = NoAggregatePayload<'id, Id, D, B>;
+    type AnyTxBuffer = AnyBuffer<'id, Id, D, B, O>;
+    type TxMpdu = Mpdu<'id, Id, D, B, O>;
+    type TxAggregate = NoAggregatePayload<'id, Id, D, B, O>;
     type RxBuffer = ReceiveBuffer<'id, Id, D::Receive>;
     type RxMeta = Esp32s31RxMeta;
     type StationKeys = PortKeys<Id, Station>;
@@ -400,4 +517,83 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize> PhaseTypes<'id>
 
 pub struct ReceiveAgreement<'id, Id: SlotIdentity> {
     pub(super) slot: association::BlockAckSlot<'id, BlockAcks, 8, Part<Id, 7>>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::boxed::Box;
+
+    type Bank = oer_memory::ReturnBank<TxSlotFree<'static, 512>, 1>;
+
+    /// A bank whose one place holds a free model slot.
+    fn bank() -> &'static Bank {
+        let slot = Pin::static_mut(Box::leak(Box::new(
+            crate::mac::tx::TxSlot::<512>::new_model().expect("model slot"),
+        )));
+        let TxSlotAccess::Free(memory) = slot.access() else {
+            panic!("a new slot is free")
+        };
+        let bank = Box::leak(Box::new(Bank::new()));
+        assert!(bank.seed(0, memory).is_ok());
+        bank
+    }
+
+    #[test]
+    fn dropping_a_free_buffer_returns_its_memory_to_the_place() {
+        let bank = bank();
+        drop(ReturnableBuffer::taken(bank.take(0)));
+        assert!(bank.take(0).is_some(), "the memory is back in its place");
+    }
+
+    #[test]
+    fn a_published_buffer_keeps_its_right_and_its_place_stays_out_when_dropped() {
+        let bank = bank();
+        let mut buffer = ReturnableBuffer::taken(bank.take(0));
+        let memory = buffer.publish().expect("the CPU owned it");
+        assert!(buffer.memory_mut().is_none(), "the hardware owns it now");
+        assert!(buffer.publish().is_none(), "published once");
+        drop(buffer);
+        // The hardware never handed it back: nothing reuses the place.
+        assert!(bank.take(0).is_none());
+        drop(memory);
+    }
+
+    #[test]
+    fn a_completion_rejoins_the_right_and_a_wrong_transition_changes_nothing() {
+        let bank = bank();
+        let mut buffer = ReturnableBuffer::taken(bank.take(0));
+        let memory = buffer.publish().expect("the CPU owned it");
+        let memory = match buffer.complete(memory) {
+            Ok(()) => buffer.publish().expect("free again"),
+            Err(_) => panic!("the hardware owned it"),
+        };
+        assert!(buffer.complete(memory).is_ok());
+        // A second completion is refused with its memory, unchanged.
+        let other = bank_memory();
+        assert!(buffer.complete(other).is_err());
+        assert!(buffer.memory_mut().is_some());
+        drop(buffer);
+        assert!(bank.take(0).is_some());
+    }
+
+    #[test]
+    fn a_place_without_returned_memory_holds_nothing_to_return() {
+        let bank = bank();
+        let _held = bank.take(0);
+        let mut buffer = ReturnableBuffer::taken(bank.take(0));
+        assert!(buffer.memory_mut().is_none());
+        assert!(buffer.publish().is_none());
+    }
+
+    /// Free memory of another model slot.
+    fn bank_memory() -> TxSlotFree<'static, 512> {
+        let slot = Pin::static_mut(Box::leak(Box::new(
+            crate::mac::tx::TxSlot::<512>::new_model().expect("model slot"),
+        )));
+        let TxSlotAccess::Free(memory) = slot.access() else {
+            panic!("a new slot is free")
+        };
+        memory
+    }
 }

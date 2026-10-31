@@ -3,6 +3,7 @@
 use core::{marker::PhantomData, ptr::NonNull};
 use oer_radio_port::{
     Joined, PortSlot, SlotFrontend, SlotIdentity, SlotOwner, SlotRegisterError, SlotRegistration,
+    SlotRetireRefused,
 };
 use oer_radio_port::{SlotClaim, StaticId};
 
@@ -69,6 +70,20 @@ impl<Id: SlotIdentity + 'static, S: SlotOwner<Id> + 'static> StaticPortSlot<Id, 
         ),
         SlotRegisterError<'static, Id, S, Resume>,
     > {
+        let (slot, joined) = self.joined(joined);
+        slot.reinstall(joined, resume)
+    }
+
+    /// Return the vacant owner after its ordinary join proof, ending the
+    /// backing's registrations.
+    pub fn retire(&mut self, joined: Joined<Id>) -> Result<S::Vacant, SlotRetireRefused<Id>> {
+        let (slot, joined) = self.joined(joined);
+        slot.retire(joined)
+    }
+
+    /// The backing, borrowed again under the join proof that the caller must
+    /// pass on to the slot operation consuming it.
+    fn joined(&mut self, joined: Joined<Id>) -> (&'static mut PortSlot<Id, S>, Joined<Id>) {
         #[allow(
             unsafe_code,
             reason = "the consumed Joined proof ends the previous endpoint epoch"
@@ -76,9 +91,10 @@ impl<Id: SlotIdentity + 'static, S: SlotOwner<Id> + 'static> StaticPortSlot<Id, 
         // SAFETY: this nominal Id has one allocation. Joined is issued only
         // after the frontend ended its endpoint loans and the P2 registration
         // finished, destroyed its owner and invocation, and unregistered.
-        // Quarantine issues no Joined, so it cannot permit this reborrow.
+        // Quarantine issues no Joined, so it cannot permit this reborrow. Both
+        // callers hand the returned Joined to the slot operation consuming it.
         let slot = unsafe { &mut *self.slot.as_ptr() };
-        slot.reinstall(joined, resume)
+        (slot, joined)
     }
 }
 

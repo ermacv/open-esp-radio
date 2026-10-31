@@ -93,15 +93,16 @@ impl Work for Boundaries {
             station_pairwise: [slot, _],
             ..
         } = resources;
-        let key = phase
-            .station()
-            .install_pairwise_key(
-                &station_association,
-                slot,
-                IndividualAddress::new(PEER).unwrap(),
-                Ccmp128Key::new(&[7; 16]),
-            )
-            .into_core_key();
+        let key = installed_station_pairwise(
+            phase,
+            &station_association,
+            slot,
+            IndividualAddress::new(PEER).unwrap(),
+            Ccmp128Key::new(&[7; 16]),
+        )
+        .await
+        .expect("the PTK installation terminal")
+        .into_core_key();
         let mut ticket = tickets.remove(0);
         let mut buffer = small.remove(0);
         for (len, body_len, protected_bit, keyed, refusal) in [
@@ -349,15 +350,16 @@ impl Work for RetryIdentity {
             station_pairwise: [slot, _],
             ..
         } = resources;
-        let key = phase
-            .station()
-            .install_pairwise_key(
-                &station_association,
-                slot,
-                IndividualAddress::new(PEER).unwrap(),
-                Ccmp128Key::new(&[7; 16]),
-            )
-            .into_core_key();
+        let key = installed_station_pairwise(
+            phase,
+            &station_association,
+            slot,
+            IndividualAddress::new(PEER).unwrap(),
+            Ccmp128Key::new(&[7; 16]),
+        )
+        .await
+        .expect("the PTK installation terminal")
+        .into_core_key();
         let body = ModelBody(alloc::vec![0x66; 8]);
         let body_pointer = body.0.as_ptr();
         let source = TxSource::Fresh {
@@ -407,15 +409,16 @@ impl Work for RetryIdentity {
                 break (slot, association);
             }
         };
-        let replacement = phase
-            .station()
-            .install_pairwise_key(
-                &station_association,
-                slot,
-                IndividualAddress::new(PEER).unwrap(),
-                Ccmp128Key::new(&[7; 16]),
-            )
-            .into_core_key();
+        let replacement = installed_station_pairwise(
+            phase,
+            &station_association,
+            slot,
+            IndividualAddress::new(PEER).unwrap(),
+            Ccmp128Key::new(&[7; 16]),
+        )
+        .await
+        .expect("the PTK installation terminal")
+        .into_core_key();
         assert_eq!(replacement.identity.0.index, index);
         let TxFrame::Individual { plan, .. } = data_frame(phase, true) else {
             unreachable!()
@@ -496,15 +499,16 @@ impl Work for AggregateBoundaries {
             station_pairwise: [slot, _],
             ..
         } = resources;
-        let key = phase
-            .station()
-            .install_pairwise_key(
-                &station_association,
-                slot,
-                IndividualAddress::new(PEER).unwrap(),
-                Ccmp128Key::new(&[7; 16]),
-            )
-            .into_core_key();
+        let key = installed_station_pairwise(
+            phase,
+            &station_association,
+            slot,
+            IndividualAddress::new(PEER).unwrap(),
+            Ccmp128Key::new(&[7; 16]),
+        )
+        .await
+        .expect("the PTK installation terminal")
+        .into_core_key();
         let rate = aggregate_rate(phase);
         let receiver = IndividualAddress::new(ACCESS_POINT).unwrap();
         let tid = Tid::new(5).unwrap();
@@ -652,15 +656,16 @@ impl Work for PreparedRemoval {
             station_pairwise: [slot, _],
             ..
         } = resources;
-        let key = phase
-            .station()
-            .install_pairwise_key(
-                &station_association,
-                slot,
-                IndividualAddress::new(PEER).unwrap(),
-                Ccmp128Key::new(&[7; 16]),
-            )
-            .into_core_key();
+        let key = installed_station_pairwise(
+            phase,
+            &station_association,
+            slot,
+            IndividualAddress::new(PEER).unwrap(),
+            Ccmp128Key::new(&[7; 16]),
+        )
+        .await
+        .expect("the PTK installation terminal")
+        .into_core_key();
         submit(phase, tickets.remove(0), small.remove(0), Some(&key));
         let (ticket, buffer) = completion(phase, &mut terminal_access).await;
         let ModelAnyBuffer::SmallSent(mpdu) = buffer else {

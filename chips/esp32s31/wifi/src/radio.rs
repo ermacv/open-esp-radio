@@ -62,9 +62,9 @@ type Inner<W> = RadioDevice<
     RadioExecutor,
 >;
 pub struct Device<W: Binding>(Inner<W>);
-pub type Backend<Id, W> = Esp32s31Backend<Id, Device<W>, TX>;
+pub type Backend<Id, W> = Esp32s31Backend<Id, Device<W>, TX, ()>;
 pub type Caps = Esp32s31Caps<TX>;
-pub type Family<Id, W> = Types<Id, Device<W>, TX>;
+pub type Family<Id, W> = Types<Id, Device<W>, TX, ()>;
 pub(crate) struct DriverStorage<W: Binding> {
     shared: StaticCell<PortSharedStorage<TX>>,
     storage: StaticCell<PortStorage<Device<W>, TX>>,
@@ -148,8 +148,19 @@ impl RadioCoexPriorities for Coex {
 pub(crate) type Front<W> =
     radio::SlotFrontend<'static, <W as Binding>::Id, Backend<<W as Binding>::Id, W>>;
 pub(crate) type ReadySlot<W> = oer_memory::RequestSlot<(), Result<Front<W>, InitializationError>>;
+type Stopped<W> =
+    oer_esp32s31_ieee80211_driver::port::StoppedPort<<W as Binding>::Id, Device<W>, TX, ()>;
+/// The ordinary join of a station that ended for uninstall.
+pub(crate) type Retire<W> = radio::Joined<<W as Binding>::Id>;
+pub(crate) type RetireSlot<W> =
+    oer_memory::RequestSlot<Retire<W>, Result<(), crate::failure::ReleaseCause>>;
 pub(crate) async fn drive<W: Binding>(driver: Driver<W>) {
-    let Driver { boot, ready, bell } = driver;
+    let Driver {
+        boot,
+        ready,
+        retire,
+        bell,
+    } = driver;
     let slot = W::take_slot().unwrap_or_else(|| W::fail(InitializationError::Storage));
     let mut slot = oer_espressif_executor::port_slot::StaticPortSlot::new(slot);
     poll_fn(|cx| bell.poll_rung(cx)).await;
@@ -179,14 +190,53 @@ pub(crate) async fn drive<W: Binding>(driver: Driver<W>) {
             }
         };
     response.answer(Ok(frontend));
-    if let Ok(completion) = registration.run().await {
-        completion.unregistered();
+    let Ok(completion) = registration.run().await else {
+        // A fail-stop issues no Joined; the station reports it.
+        return;
+    };
+    completion.unregistered();
+    // A ring that lands between the check and the wait stays pending.
+    let (joined, response) = loop {
+        if let Some(request) = retire.take_request() {
+            break request;
+        }
+        poll_fn(|cx| bell.poll_rung(cx)).await;
+    };
+    response.answer(release::<W>(slot.retire(joined)).await);
+}
+
+/// Release the retired installation's radio membership. Every owner a
+/// failed step does not return stays quarantined in its static backing.
+async fn release<W: Binding>(
+    vacant: Result<Stopped<W>, radio::SlotRetireRefused<W::Id>>,
+) -> Result<(), crate::failure::ReleaseCause> {
+    use crate::failure::{ReleaseCause, convert};
+    let mut vacant = vacant.map_err(|refused| {
+        let cause = convert::retirement_cause(refused.cause);
+        let _quarantined = core::mem::ManuallyDrop::new(refused.joined);
+        ReleaseCause::Retire(cause)
+    })?;
+    // A device another borrow holds is as unconfirmed as one still running.
+    let Ok(Some((stopped, cell))) = vacant.with_device(|device| device.0.take_stopped()) else {
+        let _quarantined = core::mem::ManuallyDrop::new(vacant);
+        return Err(ReleaseCause::NotStopped);
+    };
+    match stopped.release(cell).await {
+        Ok((_cell, Ok(released))) => convert::released(released.domain),
+        Ok((_cell, Err(failure))) => {
+            let cause = convert::still_active(failure.error);
+            let _quarantined = core::mem::ManuallyDrop::new(failure.stopped);
+            Err(cause)
+        }
+        Err(quarantine) => Err(ReleaseCause::LeaveUnanswered(
+            quarantine.reason.observations(),
+        )),
     }
 }
 async fn install<W: Binding>(
     boot: Boot<W>,
     config: Config,
-) -> Result<PortParts<Device<W>, TX>, InitializationError> {
+) -> Result<PortParts<Device<W>, TX, ()>, InitializationError> {
     let domain = RegulatoryDomain::of(
         Country::new(config.country).map_err(|_| InitializationError::Country)?,
     )
@@ -307,6 +357,7 @@ async fn install<W: Binding>(
         access_point_address: IndividualAddress::for_interface(boot.ap)
             .map_err(|_| InitializationError::Address)?,
         coex: &Coex,
+        observations: (),
     };
     Ok(parts)
 }
@@ -325,7 +376,7 @@ impl<W: Binding> port::Device<TX> for Device<W> {
         <Inner<W> as port::Device<TX>>::OwnedConfigureContext<Id>;
     type ConfigureContext<'p, Id: SlotIdentity + 'p> =
         <Inner<W> as port::Device<TX>>::ConfigureContext<'p, Id>;
-    fn hardware(&mut self) -> &mut Self::Hardware {
+    fn hardware(&mut self) -> Result<&mut Self::Hardware, Fault> {
         <Inner<W> as port::Device<TX>>::hardware(&mut self.0)
     }
     fn timer(&self) -> &EmbassyClock {
@@ -362,11 +413,13 @@ impl<W: Binding> port::Device<TX> for Device<W> {
         ))) = &result
         {
             for queue in oer_esp32s31_hal::types::MacTxQueueIndex::ALL {
-                if <Inner<W> as port::Device<TX>>::hardware(&mut self.0)
-                    .wifi_mac_hal()
-                    .ordinary_tx_queue_snapshot(queue)
-                    .collision_pending
-                {
+                // A trace observation only: registers held elsewhere show nothing.
+                if <Inner<W> as port::Device<TX>>::hardware(&mut self.0).is_ok_and(|hardware| {
+                    hardware
+                        .wifi_mac_hal()
+                        .ordinary_tx_queue_snapshot(queue)
+                        .collision_pending
+                }) {
                     {
                         let observer = W::DriverObserver::default();
                         oer_trace::observe!(observer, crate::observation::TxQueueCollision);

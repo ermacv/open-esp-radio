@@ -107,7 +107,7 @@ fn retained_bank_waits_for_the_published_prefix_and_preserves_its_closed_gate() 
         let disabling = phase!(bank, Open).disable_checked(&mut hardware, &mut events);
         assert!(disabling.finish(&mut events).is_ok());
         assert_eq!(events.disabled, 2);
-        drop(phase!(bank, Disabled).dismantle().into_transmitter());
+        drop(bank.dismantle().ok().unwrap().into_transmitter());
         assert!(matches!(bank.view(), CoreView::Vacant(_)));
     });
 }
@@ -179,7 +179,45 @@ fn direct_owner_prepares_and_runs_the_complete_lifecycle_in_place_without_a_port
         assert_eq!(events.disabled, 1);
         assert_eq!(hardware.publications(), 1);
         assert_eq!(events.returned.len(), 1);
-        drop(disabled.dismantle());
+        drop(owner.dismantle().ok().unwrap());
         assert!(matches!(owner.view(), CoreView::Vacant(_)));
+    });
+}
+
+#[test]
+fn the_owner_dismantles_only_a_disabled_bank_and_keeps_any_other_in_place() {
+    installed(|pools| {
+        let mut bank = core(pools).inner.0;
+        let mut hardware = Hardware::default();
+        let mut events = Events::default();
+        assert!(matches!(
+            phase!(bank, Disabled).enable_checked(),
+            LifecycleStart::Enabled(_)
+        ));
+        assert_eq!(bank.dismantle().err(), Some(CoreRetained::NotDisabled));
+        let disabling = phase!(bank, Open).disable_checked(&mut hardware, &mut events);
+        assert!(disabling.finish(&mut events).is_ok());
+        assert!(bank.dismantle().is_ok());
+        assert!(matches!(bank.view(), CoreView::Vacant(_)));
+        assert_eq!(bank.dismantle().err(), Some(CoreRetained::Vacant));
+    });
+}
+
+#[test]
+fn a_configuring_view_returns_to_its_own_gate_frontier() {
+    installed(|pools| {
+        let mut bank = core(pools).inner.0;
+        let mut hardware = Hardware::default();
+        let mut events = Events::default();
+        let command = phase!(bank, Disabled).configure(station()).ok().unwrap();
+        drop(command);
+        let CoreView::ConfigureDisabled(command) = bank.view() else {
+            panic!("the owner retains the pending configuration")
+        };
+        assert!(matches!(
+            command.advance(&mut hardware, &mut events),
+            ConfigurationProgress::Configured(_)
+        ));
+        assert!(matches!(bank.view(), CoreView::Disabled(_)));
     });
 }

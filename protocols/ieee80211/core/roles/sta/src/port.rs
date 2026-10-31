@@ -9,7 +9,8 @@ use oer_ieee80211_contracts_port::{
 };
 use oer_ieee80211_contracts_security::Ccmp128Key;
 use oer_ieee80211_core_upper_mac::ccmp::{
-    CcmpPacketNumberStep, InstalledCcmpTxKey, install_ccmp_pairwise_key,
+    CcmpPacketNumberStep, ForeignCcmpTxKey, InstalledCcmpTxKey, PendingCcmpTxKey,
+    request_ccmp_pairwise_key,
 };
 use oer_ieee80211_wire::address::IndividualAddress;
 use oer_radio_port::Slot;
@@ -30,25 +31,69 @@ pub struct StationPairwiseKey<'id, K: KeyTypes<'id>> {
     association: K::Association,
 }
 
+/// A station PTK installation the port accepted, retaining the association
+/// owner until the installation terminal returns the key.
+pub struct PendingStationPairwiseKey<'id, K: KeyTypes<'id>> {
+    key: PendingCcmpTxKey<K::Identity>,
+    association: K::Association,
+}
+
+/// A key the station's installation did not return: the pending
+/// installation and the key, both unchanged.
+pub struct ForeignStationPairwiseKey<'id, K: KeyTypes<'id>> {
+    pub pending: PendingStationPairwiseKey<'id, K>,
+    pub key: K::PairwiseKey,
+}
+
+impl<'id, K: KeyTypes<'id>> PendingStationPairwiseKey<'id, K> {
+    /// The installed PTK, from the key its installation terminal returned;
+    /// its MPDUs are numbered from the request's step. A key of another
+    /// installation is refused with both owners.
+    pub fn installed(
+        self,
+        key: K::PairwiseKey,
+    ) -> Result<StationPairwiseKey<'id, K>, ForeignStationPairwiseKey<'id, K>> {
+        let Self {
+            key: pending,
+            association,
+        } = self;
+        match pending.installed::<K>(key) {
+            Ok(key) => Ok(StationPairwiseKey { key, association }),
+            Err(ForeignCcmpTxKey { pending, key }) => Err(ForeignStationPairwiseKey {
+                pending: Self {
+                    key: pending,
+                    association,
+                },
+                key,
+            }),
+        }
+    }
+}
+
 impl<'id, K: KeyTypes<'id>> StationPairwiseKey<'id, K> {
-    /// Install the station's PTK for `peer` on the phase's station interface,
-    /// numbering its MPDUs by `step`.
-    pub fn install<'p, P>(
+    /// Request the station's PTK for `peer` on the phase's station
+    /// interface, numbering its MPDUs by `step`. The key exists only once
+    /// the port's installation terminal returns it.
+    pub fn request<'p, P>(
         phase: &mut P,
         association: K::Association,
         slot: <InterfaceKeys<'p, 'id, P> as KeyTypes<'id>>::PairwiseSlot,
         peer: IndividualAddress,
         key: Ccmp128Key,
         step: CcmpPacketNumberStep,
-    ) -> Self
+    ) -> PendingStationPairwiseKey<'id, K>
     where
         'id: 'p,
         P: InterfacePhase<'p, 'id>,
-        InterfaceKeys<'p, 'id, P>:
-            KeyTypes<'id, Association = K::Association, PairwiseKey = K::PairwiseKey>,
+        InterfaceKeys<'p, 'id, P>: KeyTypes<
+                'id,
+                Association = K::Association,
+                PairwiseKey = K::PairwiseKey,
+                Identity = K::Identity,
+            >,
     {
-        Self {
-            key: install_ccmp_pairwise_key(phase, &association, slot, peer, key, step),
+        PendingStationPairwiseKey {
+            key: request_ccmp_pairwise_key(phase, &association, slot, peer, key, step),
             association,
         }
     }

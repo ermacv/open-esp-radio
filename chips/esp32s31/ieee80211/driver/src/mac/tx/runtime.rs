@@ -1,6 +1,6 @@
 //! Hardware EDCA and negotiated HT/HE publication parameters.
 
-use oer_ieee80211_contracts_port::{EdcaParameterSet, VifRole};
+use oer_ieee80211_contracts_port::{EdcaAcParameters, EdcaParameterSet, VifRole};
 use oer_ieee80211_wire::qos::WmmAccessCategory;
 
 use crate::mac::{
@@ -90,6 +90,19 @@ impl WifiTxRuntimePolicy {
             VifRole::Station => station,
             VifRole::AccessPoint => access_point,
         }
+    }
+    /// The complete record `role` installed for `category`, and the current
+    /// contention window of that category's queue: what its next draw uses.
+    pub fn contention_record(
+        &self,
+        role: VifRole,
+        category: WmmAccessCategory,
+    ) -> (EdcaAcParameters, u16) {
+        let queue = LegacyTxQueue::from_access_category(category);
+        (
+            self.edca(role).access_category(category),
+            self.queues.queue(queue).current_window(),
+        )
     }
     /// The diagnostic composition observes the installed table without a copy.
     #[cfg(oer_debug_control)]

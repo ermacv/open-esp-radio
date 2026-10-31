@@ -1,16 +1,16 @@
 error[E0308]: mismatched types
-  --> tests/ui/port_execution_owner.rs:11:43
+  --> tests/ui/port_execution_owner.rs:11:46
    |
-11 |         let _: &mut Mpdu<'id, Id, D, B> = &mut view; // ui-error: E0308
-   |                ------------------------   ^^^^^^^^^ expected `&mut Mpdu<'_, Id, D, B>`, found `&mut MpduExecution<'_, '_, Id, D, B>`
+11 |         let _: &mut Mpdu<'id, Id, D, B, O> = &mut view; // ui-error: E0308
+   |                ---------------------------   ^^^^^^^^^ expected `&mut Mpdu<'_, Id, D, B, O>`, found `&mut MpduExecution<'_, '_, Id, D, B, O>`
    |                |
    |                expected due to this
    |
-   = note: expected mutable reference `&mut Mpdu<'id, Id, D, B>`
-              found mutable reference `&mut MpduExecution<'_, 'id, Id, D, B>`
+   = note: expected mutable reference `&mut Mpdu<'id, Id, D, B, O>`
+              found mutable reference `&mut MpduExecution<'_, 'id, Id, D, B, O>`
 
-error[E0599]: no method named `into_parts` found for struct `MpduExecution<'a, 'id, Id, D, B>` in the current scope
+error[E0599]: no method named `into_parts` found for struct `MpduExecution<'a, 'id, Id, D, B, O>` in the current scope
   --> tests/ui/port_execution_owner.rs:12:14
    |
 12 |         view.into_parts(); // ui-error: E0599
-   |              ^^^^^^^^^^ method not found in `MpduExecution<'_, 'id, Id, D, B>`
+   |              ^^^^^^^^^^ method not found in `MpduExecution<'_, 'id, Id, D, B, O>`

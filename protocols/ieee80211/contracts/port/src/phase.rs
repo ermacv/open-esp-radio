@@ -15,7 +15,7 @@
 //! | --- | --- | --- |
 //! | a transmit ticket ([`PhaseTypes::TicketKind`]) | [`InterfacePhase::submit`] | [`LowerMacTerminal::TxCompleted`] |
 //! | a transmit buffer of a class ([`TxBufferClass`]), its memory ([`TxBufferMemory`]) | [`InterfacePhase::submit`], together with its [`ClassFrame`] | [`LowerMacTerminal::TxCompleted`], every buffer of the attempt |
-//! | a key slot of a role's kind | [`InterfacePhase::install_pairwise_key`], [`InterfacePhase::install_group_key`] (the installed key holds it) | [`LowerMacTerminal::KeyRemoved`], after a removal |
+//! | a key slot of a role's kind | [`InterfacePhase::install_pairwise_key`], [`InterfacePhase::install_group_key`] (the installed key, returned by its installation terminal, holds it) | [`LowerMacTerminal::KeyRemoved`], after a removal |
 //! | one GTK mutation permission per interface ([`KeyTypes::GroupPermission`]) | install/replace/select/remove GTK | the corresponding FIFO success terminal; uncertainty keeps it for teardown |
 //! | one configure permission per interface ([`crate::ConfigurePermission`]) | `configure(permission, receive)` | [`LowerMacTerminal::Configured`], with the same permission and opaque context |
 //! | one TSF permission per interface ([`crate::TsfPermission`]) | `sample_tsf(permission)` | [`LowerMacTerminal::TsfSampled`], with the same permission |
@@ -431,6 +431,9 @@ pub enum LowerMacTerminal<'id, P: PhaseTypes<'id>> {
     /// A new installation is effective. This terminal is an RX boundary,
     /// including frames already captured by DMA/ISR/software queues.
     GroupKeyInstalled(InstalledGroup<'id, P>),
+    /// A pairwise installation is effective for TX and RX; the installed
+    /// owner is returned exactly once.
+    PairwiseKeyInstalled(InstalledPairwise<'id, P>),
     /// A retained installation is selected without writing material or
     /// resetting counters. It is the sole RX-active installation of its ID.
     GroupKeySelected {
@@ -538,7 +541,9 @@ pub trait KeyTypes<'id> {
     /// Every group operation holds it until its terminal; RX needs no loan.
     type GroupPermission: 'id;
     /// Backend identity of one installation, distinct from its reusable slot.
-    type Identity;
+    /// Equal identities name the same installation; no two installations of
+    /// one port installation share one.
+    type Identity: PartialEq;
     /// Stable identity of a group slot within this installation, retained
     /// across replacement. It correlates the consumed key with its terminal.
     type GroupSlotIdentity: Copy + Eq;
@@ -589,6 +594,15 @@ pub enum InstalledGroup<'id, P: PhaseTypes<'id>> {
     },
 }
 
+/// The pairwise installation, of its role. Only the driver creates it,
+/// after the hardware write took effect.
+pub enum InstalledPairwise<'id, P: PhaseTypes<'id>> {
+    /// The station's pairwise installation.
+    Station(<P::StationKeys as KeyTypes<'id>>::PairwiseKey),
+    /// The access point's pairwise installation.
+    AccessPoint(<P::AccessPointKeys as KeyTypes<'id>>::PairwiseKey),
+}
+
 /// A removed key's slot, of its role.
 pub enum Removed<'id, P: PhaseTypes<'id>> {
     /// The station's.
@@ -623,6 +637,10 @@ pub trait RoleKeys<'id, P: PhaseTypes<'id>>: InterfaceRole + Sized {
         key: <Self::Keys as KeyTypes<'id>>::GroupKey,
         permission: <Self::Keys as KeyTypes<'id>>::GroupPermission,
     ) -> InstalledGroup<'id, P>;
+    /// Preserve role when publishing an actual pairwise installation terminal.
+    fn installed_pairwise(
+        key: <Self::Keys as KeyTypes<'id>>::PairwiseKey,
+    ) -> InstalledPairwise<'id, P>;
 }
 
 impl<'id, P: PhaseTypes<'id>> RoleKeys<'id, P> for Station {
@@ -652,6 +670,11 @@ impl<'id, P: PhaseTypes<'id>> RoleKeys<'id, P> for Station {
         permission: <Self::Keys as KeyTypes<'id>>::GroupPermission,
     ) -> InstalledGroup<'id, P> {
         InstalledGroup::Station { key, permission }
+    }
+    fn installed_pairwise(
+        key: <Self::Keys as KeyTypes<'id>>::PairwiseKey,
+    ) -> InstalledPairwise<'id, P> {
+        InstalledPairwise::Station(key)
     }
 }
 
@@ -689,6 +712,11 @@ impl<'id, P: PhaseTypes<'id>> RoleKeys<'id, P> for AccessPoint {
         permission: <Self::Keys as KeyTypes<'id>>::GroupPermission,
     ) -> InstalledGroup<'id, P> {
         InstalledGroup::AccessPoint { key, permission }
+    }
+    fn installed_pairwise(
+        key: <Self::Keys as KeyTypes<'id>>::PairwiseKey,
+    ) -> InstalledPairwise<'id, P> {
+        InstalledPairwise::AccessPoint(key)
     }
 }
 
@@ -1271,14 +1299,27 @@ pub trait InterfacePhase<'p, 'id: 'p> {
     /// is known, the interface uses the standard non-AP EDCA defaults.
     fn set_edca(&mut self, parameters: SupportedEdca<Self::Caps>) -> SupportedEdca<Self::Caps>;
 
-    /// Install `key` for frames with `peer` in `slot`.
+    /// Enqueue a pairwise installation of `key` for frames with `peer`,
+    /// consuming its vacant `slot`. The call reserves a FIFO terminal. Only
+    /// [`LowerMacTerminal::PairwiseKeyInstalled`] returns the installed
+    /// owner, after the key is effective for TX and RX; before it, no
+    /// attempt can name the key.
+    ///
+    /// `LowerMacBackend::GROUP_COMMAND_BOUND` covers admission through
+    /// terminal or Poisoned, with a backend-owned wake. A failed write
+    /// poisons with the slot and its association retained for teardown;
+    /// disable completes the accepted installation within the same bound or
+    /// retains its resources, never fabricating an installed key.
+    ///
+    /// Returns the identity the installed key carries: the terminal's key
+    /// is this installation's when its `pairwise_identity` equals it.
     fn install_pairwise_key(
         &mut self,
         association: &<InterfaceKeys<'p, 'id, Self> as KeyTypes<'id>>::Association,
         slot: <InterfaceKeys<'p, 'id, Self> as KeyTypes<'id>>::PairwiseSlot,
         peer: IndividualAddress,
         key: Ccmp128Key,
-    ) -> <InterfaceKeys<'p, 'id, Self> as KeyTypes<'id>>::PairwiseKey;
+    ) -> <InterfaceKeys<'p, 'id, Self> as KeyTypes<'id>>::Identity;
 
     /// Enqueue a group installation, consuming its vacant slot and the
     /// interface's unique permission. The call reserves a FIFO terminal.
@@ -1507,16 +1548,25 @@ pub enum ReturnedMpdu<B, S> {
 impl<B: TxBufferMemory, S> ReturnedMpdu<B, S> {
     /// Release the old MPDU through its owner's renewal policy. A fresh
     /// allocation releases any previous admission age as well. The
-    /// operation consumes either owner once.
-    pub fn into_fresh(self, renew: impl FnOnce(S) -> B) -> B {
+    /// operation consumes either owner once and always returns the buffer;
+    /// the renewal's result says whether its memory was the caller's.
+    pub fn into_fresh(
+        self,
+        renew: impl FnOnce(S) -> B,
+    ) -> (B, Result<(), BufferMemoryUnavailable>) {
         let mut buffer = match self {
             Self::Fresh(buffer) => buffer,
             Self::Sent(mpdu) => renew(mpdu),
         };
-        buffer.renew_msdu();
-        buffer
+        let renewed = buffer.renew_msdu();
+        (buffer, renewed)
     }
 }
+
+/// A buffer token whose memory is not the body's: its backend's hardware
+/// owns it, or its place holds none. The token stays the body's.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct BufferMemoryUnavailable;
 
 /// The memory of a transmit buffer the body holds: the caller encodes a
 /// frame into it, from its header on, before it hands the buffer in.
@@ -1533,9 +1583,17 @@ impl<B: TxBufferMemory, S> ReturnedMpdu<B, S> {
 pub trait TxBufferMemory {
     /// Discard the previous MSDU's admission state before reusing its
     /// allocation for a new MSDU. Retry and re-formation never call this.
-    fn renew_msdu(&mut self);
+    ///
+    /// # Errors
+    ///
+    /// The memory is not the body's; nothing changes.
+    fn renew_msdu(&mut self) -> Result<(), BufferMemoryUnavailable>;
     /// The buffer's octets, as long as its class holds.
-    fn bytes_mut(&mut self) -> &mut [u8];
+    ///
+    /// # Errors
+    ///
+    /// The memory is not the body's.
+    fn bytes_mut(&mut self) -> Result<&mut [u8], BufferMemoryUnavailable>;
 }
 
 /// A frame that a buffer of the class `C` fits; only [`ClassFrame::new`]

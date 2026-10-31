@@ -3519,7 +3519,8 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
             } => {
                 // A transmission's tokens come back whatever the state.
                 self.tickets.put(ticket, events);
-                self.buffers.put(buffer.into_fresh(T::renew), events);
+                self.buffers
+                    .put(crate::events::fresh(buffer, T::renew, events), events);
                 if Some(context.epoch) != *self.epoch {
                     return;
                 }
@@ -3535,7 +3536,8 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                 buffer,
             } => {
                 self.tickets.put(ticket, events);
-                self.buffers.put(buffer.into_fresh(T::renew), events);
+                self.buffers
+                    .put(crate::events::fresh(buffer, T::renew, events), events);
                 if Some(context.epoch) != *self.epoch {
                     return;
                 }
@@ -6542,8 +6544,14 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
             ticket,
             mut buffer,
         } = credit;
-        let frame = encode(buffer.bytes_mut()).and_then(|len| {
-            let bytes = buffer.bytes_mut().split_at_checked(len)?.0;
+        let Ok(bytes) = buffer.bytes_mut() else {
+            report(events, || StaEvent::BufferMemoryUnavailable);
+            self.tickets.put(ticket, events);
+            self.buffers.put(buffer, events);
+            return Err(EncodeError);
+        };
+        let frame = encode(&mut *bytes).and_then(|len| {
+            let bytes = bytes.split_at_checked(len)?.0;
             let length = MpduLength::new(len)?;
             if matches!(plan, StaRatePlan::Group) {
                 let header = HeaderSpec::from_mac_header(

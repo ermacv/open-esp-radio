@@ -159,6 +159,7 @@ members = [
     "chips/esp32s31/layout",
     "firmware/apps/boot-smoke",
     "firmware/apps/radio-root",
+    "firmware/apps/wifi-station",
 ]
 # Host builds and tests: every member but the chip-only firmware packages.
 default-members = [

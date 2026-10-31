@@ -43,8 +43,6 @@ use future::{Boundary, Tracked};
 const COUNTRY: [u8; 2] = *b"DE";
 /// The owner's transmit power cap, below the domain's ceiling.
 const TX_CAP_DBM: i8 = 10;
-/// The correlation of the boot's one connect command.
-const JOIN: u64 = 1;
 
 oer_espressif_executor::tasks! {
     /// The radio executor's tasks (P2): the shared RF actor from the boot,
@@ -170,25 +168,26 @@ fn answer_join(identity: RequestIdentity, joined: &Joined) {
     }
 }
 
-/// The station's product events: the terminal of the join's connect.
-pub struct Events {
-    join: RequestIdentity,
-}
+/// The station's product events; the join's connect answers through its
+/// operation instead.
+pub struct Events;
 
 impl wifi::Events for Events {
-    fn event(&mut self, event: wifi::Event) {
-        match event {
-            wifi::Event::CommandCompleted(terminal) if terminal.request.correlation() == JOIN => {
-                answer_join(self.join, &answers::joined(&terminal.outcome));
-            }
-            wifi::Event::CommandRefused(refused) if refused.request.correlation() == JOIN => {
-                answer_join(
-                    self.join,
-                    &Joined::Refused(answers::refused(refused.reason)),
-                );
-            }
-            _ => {}
+    fn event(&mut self, _: wifi::Event) {}
+}
+
+/// Answer the join with its connect operation's terminal. A service end
+/// leaves the answer to the station's exit.
+async fn answer_connect(join: RequestIdentity, operation: Option<wifi::Operation<'static>>) {
+    let Some(operation) = operation else {
+        return;
+    };
+    match operation.await {
+        wifi::OperationEnd::Completed(outcome) => answer_join(join, &answers::joined(&outcome)),
+        wifi::OperationEnd::Refused(reason) => {
+            answer_join(join, &Joined::Refused(answers::refused(reason)))
         }
+        wifi::OperationEnd::ServiceEnded => {}
     }
 }
 
@@ -265,7 +264,7 @@ async fn work(inputs: Inputs, network: &crate::load::serve::Network) -> Infallib
     let (mut control, net, runners) = wifi::station(
         wifi::Resources {
             engine,
-            events: Events { join },
+            events: Events,
             storage: radio::binding::storage(),
             hardware,
             rng,
@@ -292,9 +291,13 @@ async fn work(inputs: Inputs, network: &crate::load::serve::Network) -> Infallib
         }
     };
     network.lend(interface);
-    if let Err(error) = control.try_connect(JOIN) {
-        answer_join(join, &Joined::Refused(answers::not_admitted(error)));
-    }
+    let connect = match control.connect().await {
+        Ok(operation) => Some(operation),
+        Err(error) => {
+            answer_join(join, &Joined::Refused(answers::not_admitted(error)));
+            None
+        }
+    };
 
     // Run the station and the IP stack beside the requests until the station
     // ends: by a leave, or by its own failure.
@@ -309,7 +312,11 @@ async fn work(inputs: Inputs, network: &crate::load::serve::Network) -> Infallib
     let mut running = running;
     let mut station = core::pin::pin!(runners.station.run(profile));
     let exit = {
-        let serving = core::pin::pin!(serve_running(&mut requests, &mut control, &leaving, up));
+        // The requests and the join's connect answer are one part.
+        let serving = core::pin::pin!(both(
+            serve_running(&mut requests, &mut control, &leaving, up),
+            answer_connect(join, connect),
+        ));
         match select(
             Polled {
                 part: Part::Station,
@@ -332,7 +339,7 @@ async fn work(inputs: Inputs, network: &crate::load::serve::Network) -> Infallib
         .await
         {
             Either::First(exit) => exit,
-            Either::Second((_, never)) => match never {},
+            Either::Second((_, (never, ()))) => match never {},
         }
     };
     answer_join(join, &Joined::Refused(ended(&exit)));
@@ -359,11 +366,8 @@ fn validate(join: &Join) -> Result<(wifi::StationSettings, wifi::Config), Statio
         wifi::StationSettings::wpa2_passphrase(join.ssid.as_bytes(), join.passphrase.as_bytes())
             .map_err(|_| StationError::InvalidSettings)?;
     // A trace build's configuration names no access point to observe.
-    #[cfg(oer_trace)]
-    let config = wifi::Config::new(join.channel, COUNTRY, TX_CAP_DBM, None, false);
-    #[cfg(not(oer_trace))]
-    let config = wifi::Config::new(join.channel, COUNTRY, TX_CAP_DBM, false);
-    let config = config.map_err(|_| StationError::InvalidSettings)?;
+    let config = wifi::Config::new(join.channel, COUNTRY, TX_CAP_DBM, false)
+        .map_err(|_| StationError::InvalidSettings)?;
     Ok((settings, config))
 }
 
@@ -474,6 +478,8 @@ fn ended(exit: &wifi::StationExit) -> StationError {
         StationExit::Unavailable(UnavailableCause::Initialization(error)) => {
             (5, initialization(error))
         }
+        StationExit::RetirementFailed(_) => (6, 0),
+        StationExit::ReleaseFailed(_) => (7, 0),
     };
     StationError::failed(class::STATION_ENDED, kind, detail)
 }

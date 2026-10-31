@@ -7,7 +7,11 @@ composition; its explicit layer role is `Facade`.
 
 Control and the affine neutral Ethernet end exist before installation. `Control::wait_started` gates image workload startup on
 the completed station construction; cancellation retains the waiter, and losing
-an uninstalled runner wakes it with a typed failure. Commands contain only a kind and correlation. The runtime receives the
+an uninstalled runner wakes it with a typed failure. `connect`, `disconnect`
+and `scan` return an `Operation` that resolves once to its request's terminal;
+the correlation stays internal. `wait_stopped` returns a copy of the exit
+the runner publishes after the radio release, or `RunnerLost` if the runner
+ended without one; owners stay with the runner. The runtime receives the
 station's installation-scoped permissions when the P1 runner constructs the
 station, retains them through each terminal, and delivers every completion
 or refusal directly to the image's concrete callback. No scoped application
@@ -37,8 +41,8 @@ personal policy that upgrades to SAE.
 The facade's `Callbacks` and boot-seeded `NonceSource` hide the STA callbacks
 and RSN nonce implementation. Stream exhaustion returns `NonceExhausted` for
 the image's terminal policy; the stream never restarts at reassociation.
-`StationExit` distinguishes stopped, failed, poisoned, quarantined and
-unavailable results. Its facade-owned `failure` vocabulary exhaustively
+`StationExit` distinguishes stopped, failed, poisoned, quarantined,
+retirement-failed, release-failed and unavailable results. Its facade-owned `failure` vocabulary exhaustively
 converts the backend's nested causes, preserving numeric observations,
 tracking classes and radio request identity. It contains no backend type.
 Runtime's existing nominal command and status values remain the Control
@@ -79,6 +83,14 @@ stays with Runner until refusal or completion, including policy attempts.
 `Control::stop` requests graceful shutdown independently of command queue
 capacity: disconnect once, wait for link-down, then retire Runner and its
 installation owners. Terminal errors do not reconnect or recreate resources.
+After an ordinary uninstall the station runner hands `Joined` to the driver
+task, which retires the slot, takes the stopped device's Wi-Fi frontier and
+membership cell and releases the radio. The station's exit is published only
+after that release: a lost handoff, a refused retirement, a still-active MAC,
+an unanswered leave or a poisoned domain is `ReleaseFailed`, and an
+installation that fail-stopped instead of retiring is `RetirementFailed`;
+neither reports `Stopped`. Owners a failed step does not return stay
+quarantined in their static backing.
 `StationExit` retains the facade's original typed failure. Its public failure
 values carry no transport encoding; no HIL dependency, observation counter or
 collector is part of the facade.

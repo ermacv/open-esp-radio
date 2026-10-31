@@ -15,6 +15,8 @@ pub enum LayoutError {
     CcmpHeaderTooShort,
     /// The external body overlaps the MAC/CCMP prefix.
     BodyOverlap,
+    /// The buffer's memory is not the caller's.
+    BufferUnavailable,
 }
 
 /// The response kind retained by a published MPDU, independent of a new plan.
@@ -316,7 +318,10 @@ impl<
                     protection.layout(),
                 )
                 .and_then(|layout| {
-                    layout.initialize(buffer.bytes_mut(), frame.frame(), body_bytes)
+                    let bytes = buffer
+                        .bytes_mut()
+                        .map_err(|_| LayoutError::BufferUnavailable)?;
+                    layout.initialize(bytes, frame.frame(), body_bytes)
                 });
                 match checked {
                     Ok(layout) => Ok(CheckedTxSource::Fresh(LaidOut {
@@ -520,8 +525,11 @@ impl<A, B: crate::TxBufferMemory, N, C: TxBufferClass, K: Ieee80211Capabilities,
                     aggregate.tid(),
                 )
                 .and_then(|layout| {
+                    let bytes = buffer
+                        .bytes_mut()
+                        .map_err(|_| LayoutError::BufferUnavailable)?;
                     layout.initialize_subframe(
-                        buffer.bytes_mut(),
+                        bytes,
                         &frame,
                         body_bytes,
                         aggregate.receiver(),

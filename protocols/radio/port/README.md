@@ -137,10 +137,13 @@ Reference fixtures select `conformance::registration::MockRegistration` under
 Normal retirement consumes the registration's `SlotStopped` proof, finishes
 and destroys the owner at its permanent address, and ends its invocation.
 The completed P2 future is destroyed and unregistered before `Joined` is
-published. Only that affine authority permits `PortSlot::reinstall`; stopped
-hardware stays in the slot until P2 consumes it for the next installation.
-An inconsistent reinstall returns its source observations, reconstruction
-operation and supplied join proof without moving an active owner.
+published. Only that affine authority permits `PortSlot::reinstall` or
+`PortSlot::retire`; stopped hardware stays in the slot until P2 consumes it,
+for the next installation or, through `retire`, as the vacant owner returned
+to its image. A retired slot accepts no later registration. An inconsistent
+reinstall or retire returns its source observations and supplied join proof
+without moving an active owner; reinstall also returns its reconstruction
+operation.
 
 `LifecycleError` distinguishes cancellation, fail-stop, construction, repeated
 body issuance, deadline and unconfirmed stopping. Invalid states retain the

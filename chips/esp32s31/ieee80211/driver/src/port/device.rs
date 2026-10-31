@@ -58,7 +58,10 @@ struct Received<const Q: usize, const RB: usize>(
 impl<const Q: usize, const RB: usize> Publisher<'static, RB, Q> for Received<Q, RB> {
     const DEPTH: usize = Q;
     fn free_capacity(&self) -> usize {
-        Q - self.0.borrow().len()
+        // A queue borrowed by a send in progress has no observable room.
+        self.0
+            .try_borrow()
+            .map_or(0, |queue| Q.saturating_sub(queue.len()))
     }
     fn preview(&self, unit: CompletedUnit, bytes: [u8; 24]) -> Preview {
         frame_control_preview(unit, bytes)
@@ -70,7 +73,11 @@ impl<const Q: usize, const RB: usize> Publisher<'static, RB, Q> for Received<Q, 
         &self,
         frame: NetworkRxFrame<'static, Q, RB>,
     ) -> Result<(), NetworkRxFrame<'static, Q, RB>> {
-        self.0.borrow_mut().push_back(frame)
+        match self.0.try_borrow_mut() {
+            Ok(mut queue) => queue.push_back(frame),
+            // The frame stays the caller's.
+            Err(_) => Err(frame),
+        }
     }
 }
 
@@ -203,17 +210,22 @@ impl<
         if !self.paused {
             return None;
         }
-        let Active {
-            registers,
-            platform,
-            context,
-        } = self.active.take()?;
-        Some((
-            context.into_stopped(platform, registers),
-            self.actor
-                .take()
-                .expect("stopped device retains actor cell"),
-        ))
+        // Both owners leave together, or neither does.
+        match (self.active.take(), self.actor.take()) {
+            (
+                Some(Active {
+                    registers,
+                    platform,
+                    context,
+                }),
+                Some(actor),
+            ) => Some((context.into_stopped(platform, registers), actor)),
+            (active, actor) => {
+                self.active = active;
+                self.actor = actor;
+                None
+            }
+        }
     }
 }
 
@@ -248,12 +260,11 @@ where
     type Context<'p, Id: SlotIdentity + 'p> = C::Context<'p, Id>;
     type OwnedConfigureContext<Id: SlotIdentity> = C::OwnedConfigureContext<Id>;
     type ConfigureContext<'p, Id: SlotIdentity + 'p> = C::ConfigureContext<'p, Id>;
-    fn hardware(&mut self) -> &mut RadioAccess {
-        &mut self
-            .active
+    fn hardware(&mut self) -> Result<&mut RadioAccess, Fault> {
+        self.active
             .as_mut()
-            .expect("hardware is lent only outside an actor transaction")
-            .registers
+            .map(|active| &mut active.registers)
+            .ok_or(Fault::HardwareUnavailable)
     }
     fn timer(&self) -> &T {
         &self.timer
@@ -345,17 +356,26 @@ where
                 ))
                 .map_err(|_| Fault::Capacity)?;
             let ceiling = permit.tx_ceiling(self.limits);
-            let Active {
-                registers,
-                platform,
-                context,
-            } = self.active.take().expect("paused radio retained");
+            // The paused radio and its actor cell leave together, or the
+            // device keeps both and reports the missing owner.
+            let (registers, platform, context, actor) =
+                match (self.active.take(), self.actor.take()) {
+                    (
+                        Some(Active {
+                            registers,
+                            platform,
+                            context,
+                        }),
+                        Some(actor),
+                    ) => (registers, platform, context, actor),
+                    (active, actor) => {
+                        self.active = active;
+                        self.actor = actor;
+                        return Poll::Ready(Err(Fault::HardwareUnavailable));
+                    }
+                };
             let wifi = context.into_stopped(platform, registers);
-            self.retune = Some(wifi.start_retune(
-                self.actor.take().expect("actor cell retained"),
-                permit,
-                ceiling,
-            ));
+            self.retune = Some(wifi.start_retune(actor, permit, ceiling));
             cx.waker().wake_by_ref();
             return Poll::Pending;
         }
@@ -373,7 +393,7 @@ where
         }
         let active = self.active.as_mut().ok_or(Fault::Abandoned)?;
         let session = self.session.as_mut().map_err(|e| *e)?;
-        while let Some(frame) = self.received.0.borrow_mut().pop_front() {
+        while let Some(frame) = self.received.0.get_mut().pop_front() {
             drop(frame);
         }
         core::task::ready!(session.port_pause(
@@ -397,7 +417,7 @@ where
         let active = self.active.as_mut().ok_or(Fault::Abandoned)?;
         let session = self.session.as_mut().map_err(|e| *e)?;
         if receive_room != 0 {
-            if let Some(frame) = self.received.0.borrow_mut().pop_front() {
+            if let Some(frame) = self.received.0.get_mut().pop_front() {
                 return Poll::Ready(Ok(DeviceEvent::Receive(StagedReceive(frame))));
             }
         }
@@ -455,7 +475,7 @@ where
                     }
                 }
             }
-            if let Some(frame) = self.received.0.borrow_mut().pop_front() {
+            if let Some(frame) = self.received.0.get_mut().pop_front() {
                 return Poll::Ready(Ok(DeviceEvent::Receive(StagedReceive(frame))));
             }
         }
@@ -477,7 +497,7 @@ where
     ) -> Poll<Result<Option<Self::Receive>, Fault>> {
         self.cut = true;
         if receive_room != 0 {
-            if let Some(frame) = self.received.0.borrow_mut().pop_front() {
+            if let Some(frame) = self.received.0.get_mut().pop_front() {
                 return Poll::Ready(Ok(Some(StagedReceive(frame))));
             }
         }
@@ -506,7 +526,7 @@ where
                 &self.received,
             )
             .map_err(Fault::Receive)?;
-        if let Some(frame) = self.received.0.borrow_mut().pop_front() {
+        if let Some(frame) = self.received.0.get_mut().pop_front() {
             return Poll::Ready(Ok(Some(StagedReceive(frame))));
         }
         if matches!(
