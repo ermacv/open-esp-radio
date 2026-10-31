@@ -39,22 +39,41 @@ impl Byte {
     }
 }
 
+/// Why a published setting cannot be stored or used.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SettingFault {
+    /// The channel is not a 2.4 GHz HT20 channel, the only kind S31 tunes.
+    UnsupportedChannel,
+    /// No channel was published yet, or its byte names none.
+    ChannelUnset,
+    /// An MSDU lifetime exceeds the microseconds of its word.
+    EdcaLifetime,
+    /// A published Block Ack record holds no sequence number.
+    BlockAckSequence,
+}
+
+/// One 2.4 GHz HT20 channel number; zero until the first publication.
 pub(super) struct ChannelSetting(Byte);
 impl ChannelSetting {
     const fn new() -> Self {
         Self(Byte::new())
     }
-    pub(super) fn set(&self, channel: Channel) {
-        assert!(
-            channel.band() == Band::Ghz2_4 && channel.width() == ChannelWidth::Mhz20,
-            "S31 accepts only supported 2.4 GHz HT20 channels"
-        );
+    /// Store a 2.4 GHz HT20 channel; any other is refused unchanged.
+    pub(super) fn set(&self, channel: Channel) -> Result<(), SettingFault> {
+        if channel.band() != Band::Ghz2_4 || channel.width() != ChannelWidth::Mhz20 {
+            return Err(SettingFault::UnsupportedChannel);
+        }
         self.0.set(channel.number());
+        Ok(())
     }
-    pub(super) fn get(&self) -> Channel {
-        Channel::ghz2_4(self.0.get(), ChannelWidth::Mhz20)
-            .ok()
-            .expect("prepared S31 channel")
+    /// The last stored channel.
+    pub(super) fn get(&self) -> Result<Channel, SettingFault> {
+        match self.0.get() {
+            0 => Err(SettingFault::ChannelUnset),
+            number => {
+                Channel::ghz2_4(number, ChannelWidth::Mhz20).map_err(|_| SettingFault::ChannelUnset)
+            }
+        }
     }
 }
 
@@ -65,7 +84,9 @@ impl EdcaSetting {
     const fn new() -> Self {
         Self([const { AtomicWords::new() }; 2])
     }
-    pub(super) fn set(&self, vif: usize, table: EdcaParameterSet) {
+    /// Publish one VIF's table; a lifetime beyond its word is refused and
+    /// the published table stays unchanged.
+    pub(super) fn set(&self, vif: usize, table: EdcaParameterSet) -> Result<(), SettingFault> {
         let wmm = table.wmm();
         let mut words = [0; 9];
         words[0] = u32::from(wmm.parameter_set_count) | (u32::from(wmm.uapsd) << 8);
@@ -79,13 +100,15 @@ impl EdcaSetting {
                 | (u32::from(parameters.admission_control_mandatory) << 12)
                 | (u32::from(parameters.txop_limit_units_32_us) << 16);
             words[at + 1] = u32::try_from(ac.msdu_lifetime.as_micros())
-                .ok()
-                .expect("validated MSDU lifetime fits one word");
+                .map_err(|_| SettingFault::EdcaLifetime)?;
         }
         self.0[vif].set(words);
+        Ok(())
     }
-    pub(super) fn get(&self, vif: usize) -> EdcaParameterSet {
-        let words = self.0[vif].get().expect("completed P1 EDCA publication");
+    /// One VIF's last complete publication; `None` while P1 is publishing
+    /// it, which P2 retries after P1's commit wake.
+    pub(super) fn get(&self, vif: usize) -> Option<EdcaParameterSet> {
+        let words = self.0[vif].get()?;
         let acs = core::array::from_fn(|index| {
             let bits = words[1 + index * 2];
             WmmAcParameters {
@@ -98,10 +121,10 @@ impl EdcaSetting {
         });
         let lifetimes =
             core::array::from_fn(|index| Duration::from_micros(u64::from(words[2 + index * 2])));
-        EdcaParameterSet::new(
+        Some(EdcaParameterSet::new(
             WmmParameterSet::new(words[0] as u8, words[0] & (1 << 8) != 0, acs),
             lifetimes,
-        )
+        ))
     }
     pub(super) fn lifetime(&self, vif: usize, category: WmmAccessCategory) -> Duration {
         Duration::from_micros(u64::from(self.0[vif].word(2 + category as usize * 2)))
@@ -134,24 +157,29 @@ impl BlockAckSetting {
     pub(super) fn clear(&self) {
         self.0.set([0; 24]);
     }
-    pub(super) fn get(&self, index: usize) -> Option<core_mac::RxBlockAckValues> {
-        decode_block_ack(
-            self.0
-                .get_at(index * 3)
-                .expect("completed P1 Block Ack publication"),
-        )
+    /// One agreement's last complete publication: `Ok(None)` without an
+    /// agreement, `Err(None)` while P1 is publishing it, which P2 retries
+    /// after P1's commit wake, and `Err(Some(fault))` for a record no
+    /// publication writes.
+    pub(super) fn get(
+        &self,
+        index: usize,
+    ) -> Result<Option<core_mac::RxBlockAckValues>, Option<SettingFault>> {
+        decode_block_ack(self.0.get_at(index * 3).ok_or(None)?).map_err(Some)
     }
 }
 
 #[inline(never)]
-fn decode_block_ack(words: [u32; 3]) -> Option<core_mac::RxBlockAckValues> {
+fn decode_block_ack(words: [u32; 3]) -> Result<Option<core_mac::RxBlockAckValues>, SettingFault> {
     let flags = words[1];
     if flags & (1 << 21) == 0 {
-        return None;
+        return Ok(None);
     }
     let [a, b, c, d] = words[0].to_le_bytes();
     let [e, f] = (flags as u16).to_le_bytes();
-    Some(core_mac::RxBlockAckValues {
+    let start_sequence =
+        SequenceNumber::new(words[2] as u16).ok_or(SettingFault::BlockAckSequence)?;
+    Ok(Some(core_mac::RxBlockAckValues {
         role: if flags & (1 << 20) != 0 {
             VifRole::AccessPoint
         } else {
@@ -160,8 +188,8 @@ fn decode_block_ack(words: [u32; 3]) -> Option<core_mac::RxBlockAckValues> {
         peer: [a, b, c, d, e, f],
         tid: ((flags >> 16) & 15) as u8,
         window: (flags >> 24) as u8,
-        start_sequence: SequenceNumber::new(words[2] as u16).expect("validated sequence"),
-    })
+        start_sequence,
+    }))
 }
 
 pub(super) struct ColorSetting(AtomicU8);
@@ -256,9 +284,9 @@ mod tests {
         assert!(SupportedEdca::<Esp32s31Caps<512>>::new(table).is_some());
         let setting = EdcaSetting::new();
         let expected = [EdcaParameterSet::STANDARD_DEFAULT, table];
-        setting.set(0, expected[0]);
-        setting.set(1, expected[1]);
-        assert_eq!([setting.get(0), setting.get(1)], expected);
+        assert_eq!(setting.set(0, expected[0]), Ok(()));
+        assert_eq!(setting.set(1, expected[1]), Ok(()));
+        assert_eq!([setting.get(0), setting.get(1)], expected.map(Some));
         for category in WmmAccessCategory::ALL {
             assert_eq!(
                 setting.lifetime(1, category),
@@ -285,12 +313,46 @@ mod tests {
         settings.set(0, Some(station));
         settings.set(7, Some(access_point));
         let actual: [_; 8] = core::array::from_fn(|index| settings.get(index));
-        assert_eq!(actual[0], Some(station));
-        assert_eq!(actual[7], Some(access_point));
-        assert!(actual[1..7].iter().all(Option::is_none));
+        assert_eq!(actual[0], Ok(Some(station)));
+        assert_eq!(actual[7], Ok(Some(access_point)));
+        assert!(actual[1..7].iter().all(|place| *place == Ok(None)));
         settings.set(0, None);
         let actual: [_; 8] = core::array::from_fn(|index| settings.get(index));
-        assert!(actual[..7].iter().all(Option::is_none));
-        assert_eq!(actual[7], Some(access_point));
+        assert!(actual[..7].iter().all(|place| *place == Ok(None)));
+        assert_eq!(actual[7], Ok(Some(access_point)));
+    }
+
+    #[test]
+    fn the_channel_setting_stores_only_s31_channels_and_reads_none_before_one() {
+        let setting = ChannelSetting::new();
+        assert_eq!(setting.get(), Err(SettingFault::ChannelUnset));
+        let six = Channel::ghz2_4(6, ChannelWidth::Mhz20).expect("channel 6");
+        assert_eq!(setting.set(six), Ok(()));
+        // A refused channel leaves the stored one unchanged.
+        let wide = Channel::ghz2_4(6, ChannelWidth::Mhz40Above).expect("HT40 channel 6");
+        assert_eq!(setting.set(wide), Err(SettingFault::UnsupportedChannel));
+        assert_eq!(setting.get(), Ok(six));
+    }
+
+    #[test]
+    fn an_edca_lifetime_beyond_its_word_is_refused_and_keeps_the_published_table() {
+        let setting = EdcaSetting::new();
+        assert_eq!(setting.set(0, EdcaParameterSet::STANDARD_DEFAULT), Ok(()));
+        let unbounded = EdcaParameterSet::new(
+            EdcaParameterSet::STANDARD_DEFAULT.wmm(),
+            [Duration::from_micros(u64::from(u32::MAX) + 1); 4],
+        );
+        assert_eq!(setting.set(0, unbounded), Err(SettingFault::EdcaLifetime));
+        assert_eq!(setting.get(0), Some(EdcaParameterSet::STANDARD_DEFAULT));
+    }
+
+    #[test]
+    fn a_block_ack_record_without_a_sequence_number_is_a_typed_fault() {
+        // Present, but its sequence word holds no 12-bit sequence number.
+        assert_eq!(
+            decode_block_ack([0, 1 << 21, 4096]),
+            Err(SettingFault::BlockAckSequence)
+        );
+        assert_eq!(decode_block_ack([0, 0, 0]), Ok(None));
     }
 }

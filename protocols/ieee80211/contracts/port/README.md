@@ -181,7 +181,10 @@ back; its operations are synchronous and never wait:
   returns all original owners; bit `i` identifies expired aggregate member
   `i` (bit zero for a single). Live members retain their admission samples
   for re-formation. Renewal for a new MSDU clears the old sample through
-  `TxBufferMemory::renew_msdu`. Expiry is counted separately and supplies no
+  `TxBufferMemory::renew_msdu`. Both buffer accessors return
+  `BufferMemoryUnavailable` when the memory is not the body's (its hardware
+  owns it, or its place holds none); `ReturnedMpdu::into_fresh` always
+  returns the token with that result. Expiry is counted separately and supplies no
   rate sample. The upper-MAC BA originator produces a BlockAckReq when an
   active window's head expires; the backend generates no BAR.
 - **Order.** Every operation reaches the hardware in the order the caller
@@ -201,7 +204,9 @@ back; its operations are synchronous and never wait:
   and `PhaseTypes::BlockAckPool` must be that pool (`RxBlockAckPool::LEN`).
   A declared capacity other than the minted one does not compile, the
   capabilities carry no copy of these counts, and running out is a missing
-  slot token, never a comparison. The command bound is tickets + twice the
+  slot token, never a comparison. A pairwise slot has one installation or
+  removal command and terminal outstanding, since removal needs the key only
+  the installation terminal returns. The command bound is tickets + the
   pairwise slots + one GTK permission per interface + configure permissions
   + TSF permissions + two gate commands. The terminal bound is tickets +
   pairwise slots + GTK permissions + gate closing + configure permissions
@@ -258,8 +263,11 @@ cannot choose independent SPP modes. The backend applies the association's
 mode before publishing its first key; its `SppScope` capability declares
 whether domains occupy whole interfaces or individual associations.
 
-Pairwise removal carries the association owner through its `KeyRemoved`
-terminal. The station first removes its group keys, then the PTK; spare
+A pairwise installation consumes its slot and reserves a FIFO terminal;
+only `PairwiseKeyInstalled`, after the write took effect, returns the
+installed key, so no attempt names it earlier. A failed write poisons with
+the slot and association retained. Pairwise removal carries the
+association owner through its `KeyRemoved` terminal. The station first removes its group keys, then the PTK; spare
 unused slots remain owned throughout. Only the exact complete `VacantKeyBank`
 can enter `end_association(owner, bank)`, which synchronously returns a
 `VacantAssociation` for the next exchange. No command or terminal is added.

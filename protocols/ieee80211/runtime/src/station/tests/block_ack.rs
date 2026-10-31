@@ -142,7 +142,7 @@ fn addba_programs_an_owned_bank_before_response_and_reorders_downlink() {
             );
             world.air.receive(&data(0, 0, 3), meta());
             assert_eq!(world.delivered().await[0].last(), Some(&3));
-            world.command(ServiceCommand::Stop).await;
+            world.command(ControlCommand::Stop).await;
         })
     });
     assert_eq!(counters.rx_frames_dropped(), 0);
@@ -165,7 +165,7 @@ fn a_full_receive_queue_reports_one_aggregate_per_refused_frame() {
                 }
             }
             assert_eq!(world.delivered().await.len(), 8);
-            world.command(ServiceCommand::Stop).await;
+            world.command(ControlCommand::Stop).await;
         })
     });
     assert_eq!(counters.rx_frames_dropped(), 0);
@@ -202,7 +202,7 @@ fn the_empty_sink_delivers_and_refuses_the_same_msdus_as_an_enabled_one() {
                     .all(|(frame, sequence)| frame.last() == Some(&sequence)),
                 "the first eight MSDUs reach the network in order"
             );
-            world.command(ServiceCommand::Stop).await;
+            world.command(ControlCommand::Stop).await;
         })
     }
     let enabled = run_with(ht_config(), overflow);
@@ -253,7 +253,7 @@ fn exhausted_shared_bank_pool_refuses_and_peer_delba_makes_the_slot_reusable() {
                     ..
                 }
             ));
-            world.command(ServiceCommand::Stop).await;
+            world.command(ControlCommand::Stop).await;
         })
     });
 }
@@ -278,7 +278,7 @@ fn a_legacy_association_and_an_unsupported_tid_receive_explicit_refusals() {
                 assert!(matches!(response(&world.sent(&mut seen, 0xd0).await),
                 BlockAckAction::AddbaResponse { dialog_token: 7, status: 37, tid: actual, .. } if actual == tid));
                 assert!(world.air.receive_agreements().is_empty());
-                world.command(ServiceCommand::Stop).await;
+                world.command(ControlCommand::Stop).await;
             })
         });
     }
@@ -322,7 +322,7 @@ fn inactivity_timer_releases_frames_and_bank_and_sends_a_recipient_delba() {
                 response(&world.sent(&mut seen, 0xd0).await),
                 BlockAckAction::AddbaResponse { status: 0, .. }
             ));
-            world.command(ServiceCommand::Stop).await;
+            world.command(ControlCommand::Stop).await;
         })
     });
 }
@@ -357,7 +357,7 @@ fn a_duplicate_dialog_resends_response_without_restarting_the_reorder_window() {
                     .collect::<Vec<_>>(),
                 [1, 2]
             );
-            world.command(ServiceCommand::Stop).await;
+            world.command(ControlCommand::Stop).await;
         })
     });
 }
@@ -397,7 +397,7 @@ fn changed_parameters_under_the_same_dialog_are_refused_without_losing_buffered_
                     .collect::<Vec<_>>(),
                 [1, 2]
             );
-            world.command(ServiceCommand::Stop).await;
+            world.command(ControlCommand::Stop).await;
         })
     });
 }
@@ -434,7 +434,7 @@ fn closing_a_gap_returns_every_held_receive_credit_and_the_gap_timer_is_bounded(
             world.clock.advance(Duration::from_millis(100)).unwrap();
             assert_eq!(world.delivered().await[0].last(), Some(&15));
             assert_eq!(world.air.receive_agreements().len(), 1);
-            world.command(ServiceCommand::Stop).await;
+            world.command(ControlCommand::Stop).await;
         })
     });
 }
@@ -470,7 +470,7 @@ fn a_busy_control_transmitter_retains_a_second_tids_response() {
                     ..
                 }
             ));
-            world.command(ServiceCommand::Stop).await;
+            world.command(ControlCommand::Stop).await;
         })
     });
 }
@@ -493,7 +493,7 @@ fn response_pressure_defers_management_without_overtaking_older_requests() {
                 assert!(matches!(response(&world.sent(&mut seen, 0xd0).await),
                 BlockAckAction::AddbaResponse { dialog_token, status: 37, .. } if dialog_token == expected));
             }
-            world.command(ServiceCommand::Stop).await;
+            world.command(ControlCommand::Stop).await;
         })
     });
     assert_eq!(counters.port_events_lost(), 0);
@@ -524,7 +524,7 @@ fn only_a_bar_from_the_associated_transmitter_moves_its_tid_window() {
             assert_eq!(world.delivered().await[0].last(), Some(&11));
             world.air.receive(&data(12, 0, 12), meta());
             assert_eq!(world.delivered().await[0].last(), Some(&12));
-            world.command(ServiceCommand::Stop).await;
+            world.command(ControlCommand::Stop).await;
         })
     });
 }

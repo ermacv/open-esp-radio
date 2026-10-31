@@ -4,10 +4,10 @@ use radio::{EnableResult, PortBackend, SlotRetire, SlotStopped, SlotWakes};
 pub(super) type PortCoreOwner<'id, Id, D, const B: usize> =
     crate::lower_mac::CoreOwner<Core<'id, Id, D, B>>;
 
-pub struct Resources<'p, Id: SlotIdentity, D: Device<B>, const B: usize> {
+pub struct Resources<'p, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> {
     pub tickets: [Slot<'p, Tickets, Part<Id, 2>>; TX_TICKETS],
     pub terminal_access: TerminalAccess<'p, Tickets, Part<Id, 2>>,
-    pub buffers: [Buffer<'p, Id, D, B>; TX_TICKETS],
+    pub buffers: [Buffer<'p, Id, D, B, O>; TX_TICKETS],
     pub connection_epoch: Slot<'p, ConnectionEpochKind, Part<Id, 4>>,
     pub station_association: core_mac::association::VacantStationAssociation<'p, CorePath<Id>>,
     pub access_point_association:
@@ -20,13 +20,13 @@ pub struct Resources<'p, Id: SlotIdentity, D: Device<B>, const B: usize> {
     pub gate: GateOpen<'p, Part<Id, 1>>,
     pub arbiter_authority: ArbiterAuthority<'p, Part<Id, 1>>,
 }
-pub struct Queues<Id: SlotIdentity, D: Device<B>, const B: usize> {
-    resources: Option<Resources<'static, Id, D, B>>,
-    held: HeldBacking<'static, Id, D, B>,
-    driver: driver::Driver<'static, Id, D, B>,
+pub struct Queues<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> {
+    resources: Option<Resources<'static, Id, D, B, O>>,
+    held: HeldBacking<'static, Id, D, B, O>,
+    driver: driver::Driver<'static, Id, D, B, O>,
     addresses: Option<[IndividualAddress; 2]>,
 }
-impl<Id: SlotIdentity, D: Device<B>, const B: usize> Queues<Id, D, B> {
+impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> Queues<Id, D, B, O> {
     const fn vacant() -> Self {
         Self {
             resources: None,
@@ -36,18 +36,18 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> Queues<Id, D, B> {
         }
     }
 }
-pub struct RawFrontend<'s, Id: SlotIdentity, D: Device<B>, const B: usize> {
-    resources: &'s mut Option<Resources<'static, Id, D, B>>,
+pub struct RawFrontend<'s, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> {
+    resources: &'s mut Option<Resources<'static, Id, D, B, O>>,
     storage: &'static PortSharedStorage<B>,
     commands: oer_memory::AffineSpscSender<
         's,
-        driver::Command<'static, Id, D, B>,
+        driver::Command<'static, Id, D, B, O>,
         COMMANDS,
         oer_memory::CompactSpscCursor,
     >,
     events: oer_memory::AffineSpscReceiver<
         's,
-        owned::OwnedEvent<'static, Id, D, B>,
+        owned::OwnedEvent<'static, Id, D, B, O>,
         { TERMINAL_CAPACITY + TX_TICKETS },
         oer_memory::CompactSpscCursor,
     >,
@@ -57,9 +57,10 @@ pub struct RawFrontend<'s, Id: SlotIdentity, D: Device<B>, const B: usize> {
         TX_TICKETS,
         oer_memory::CompactSpscCursor,
     >,
-    failed_command: &'s oer_memory::OnceValue<driver::Command<'static, Id, D, B>>,
-    failed_terminal: &'s oer_memory::OnceValue<owned::OwnedTerminal<'static, Id, D, B>>,
-    gate: &'s Prepared<GateIssuer<'static, Part<Id, 1>>>,
+    failed_command: &'s oer_memory::OnceValue<driver::Command<'static, Id, D, B, O>>,
+    failed_terminal: &'s oer_memory::OnceValue<owned::OwnedTerminal<'static, Id, D, B, O>>,
+    gate: &'s GateIssuer<'static, Part<Id, 1>>,
+    tuned: &'s mut Cell<Channel>,
     identity: &'s mut Cell<u64>,
     timer: D::Timer,
     clock_replies:
@@ -67,25 +68,29 @@ pub struct RawFrontend<'s, Id: SlotIdentity, D: Device<B>, const B: usize> {
     clock_use: &'s mut Cell<handoff::ClockUse>,
     addresses: [IndividualAddress; 2],
 }
-pub struct Invocation<'s, Id: SlotIdentity, D: Device<B>, const B: usize> {
-    held: Held<'s, 'static, Id, D, B>,
-    driver: &'s mut driver::Driver<'static, Id, D, B>,
+pub struct Invocation<'s, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> {
+    held: Held<'s, 'static, Id, D, B, O>,
+    driver: &'s mut driver::Driver<'static, Id, D, B, O>,
 }
-pub struct Frontend<'p, Id: SlotIdentity, D: Device<B>, const B: usize> {
-    held: FrontHeld<'p, Id, D, B>,
+pub struct Frontend<'p, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> {
+    held: FrontHeld<'p, Id, D, B, O>,
     addresses: [IndividualAddress; 2],
-    loan: BodyLoan<'p, Id, Esp32s31Backend<Id, D, B>>,
+    loan: BodyLoan<'p, Id, Esp32s31Backend<Id, D, B, O>>,
 }
-pub struct BodyViews<'p, Id: SlotIdentity, D: Device<B>, const B: usize> {
-    view: Frontend<'p, Id, D, B>,
-    resources: Resources<'p, Id, D, B>,
+pub struct BodyViews<'p, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> {
+    view: Frontend<'p, Id, D, B, O>,
+    resources: Resources<'p, Id, D, B, O>,
 }
 // Keep queue progress and terminal conversion shared across concrete sinks.
 // A terminal leaves this helper before its sink runs, so the two working
 // frames do not overlap on the call stack.
-impl<'p, Id: SlotIdentity + 'p, D: Device<B> + 'p, const B: usize> Frontend<'p, Id, D, B> {
+impl<'p, Id: SlotIdentity + 'p, D: Device<B> + 'p, const B: usize, O: Observations>
+    Frontend<'p, Id, D, B, O>
+{
     #[inline(never)]
-    fn poll_disable(&self) -> Poll<Result<Option<Terminal<'p, Id, D, B>>, radio::Poisoned<Fault>>> {
+    fn poll_disable(
+        &self,
+    ) -> Poll<Result<Option<Terminal<'p, Id, D, B, O>>, radio::Poisoned<Fault>>> {
         let held = &self.held;
         while let Some(event) = held.events.try_receive().ok() {
             match event {
@@ -116,7 +121,7 @@ impl<'p, Id: SlotIdentity + 'p, D: Device<B> + 'p, const B: usize> Frontend<'p, 
     #[inline(never)]
     fn reject_disable(
         &self,
-        terminal: Terminal<'p, Id, D, B>,
+        terminal: Terminal<'p, Id, D, B, O>,
     ) -> Result<(), radio::Poisoned<Fault>> {
         handoff::retain_terminal(
             self.held.failed_terminal,
@@ -127,8 +132,10 @@ impl<'p, Id: SlotIdentity + 'p, D: Device<B> + 'p, const B: usize> Frontend<'p, 
     }
 }
 
-impl<Id: SlotIdentity, D: Device<B>, const B: usize> SlotOwner<Id> for Esp32s31Backend<Id, D, B> {
-    type Vacant = StoppedPort<Id, D, B>;
+impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotOwner<Id>
+    for Esp32s31Backend<Id, D, B, O>
+{
+    type Vacant = StoppedPort<Id, D, B, O>;
     type Pools = (
         CorePools<TX_TICKETS>,
         ArbiterPool,
@@ -141,15 +148,15 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> SlotOwner<Id> for Esp32s31B
         InterfaceCommandPool<Station>,
         InterfaceCommandPool<AccessPoint>,
     );
-    type Queues = Queues<Id, D, B>;
+    type Queues = Queues<Id, D, B, O>;
     const VACANT_QUEUES: Self::Queues = Queues::vacant();
     type Frontend<'s>
-        = RawFrontend<'s, Id, D, B>
+        = RawFrontend<'s, Id, D, B, O>
     where
         Self: 's,
         Id: 's;
     type Invocation<'s>
-        = Invocation<'s, Id, D, B>
+        = Invocation<'s, Id, D, B, O>
     where
         Self: 's,
         Id: 's;
@@ -159,6 +166,24 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> SlotOwner<Id> for Esp32s31B
         backing: &mut Self::Queues,
         mint: radio::Mint<'static, Self::Pools, Id>,
     ) {
+        // Refuse before taking any resource: a second installation from this
+        // backend, outstanding DMA or a joined installation's leftovers. The
+        // mint drops unissued, and split reports the missing resources.
+        backing.resources = None;
+        backing.addresses = None;
+        if !matches!(self.state, BackendState::Initial(Some(_)))
+            || !self.storage.shared.returned.all_returned()
+            || !backing.driver.retired()
+            || !backing.held.drained()
+        {
+            return;
+        }
+        let BackendState::Initial(initial) = &mut self.state else {
+            return;
+        };
+        let Some(initial) = initial.take() else {
+            return;
+        };
         self.storage.expired.set(0);
         let (
             core,
@@ -179,34 +204,31 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> SlotOwner<Id> for Esp32s31B
             access_point_association,
             queues,
         } = core;
-        let BackendState::Initial(initial) = &mut self.state else {
-            panic!("installation consumes initial resources once");
-        };
-        let initial = initial
-            .take()
-            .expect("installation retains initial resources");
         let core = LowerMacCore::new(authority, initial.transmitter, initial.config, initial.coex);
+        // Every allocation was returned (checked above): each place takes its own.
         let buffers = buffers.map(|place| {
-            let (memory, returned) = self
+            let pair = self
                 .storage
                 .shared
                 .returned
-                .take(usize::from(place.index()))
-                .expect("one returned DMA allocation per buffer place");
+                .take(usize::from(place.index()));
             Buffer {
                 place,
-                dma: buffer::ReturnableBuffer {
-                    memory: Some(memory),
-                    returned: Some(returned),
-                },
+                dma: buffer::ReturnableBuffer::taken(pair),
                 loan: None,
                 admission: None,
             }
         });
+        backing.driver.prepare(
+            core,
+            core_tickets,
+            queues,
+            initial.observations,
+            self.timer.now(),
+        );
         backing
-            .driver
-            .prepare(core, core_tickets, queues, self.timer.now());
-        backing.held.prepare(self.storage, issuer, self.channel);
+            .held
+            .prepare(self.storage, issuer, self.channel, self.timer.clone());
         backing.resources = Some(Resources {
             tickets,
             terminal_access,
@@ -233,7 +255,23 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> SlotOwner<Id> for Esp32s31B
         Self: 's,
         Id: 's,
     {
-        let storage = *queues.held.storage;
+        // Preparation attached the storage and gate together with the
+        // resources; without them there are no views to split.
+        let (
+            true,
+            Some(Attached {
+                storage,
+                gate,
+                tuned,
+                timer,
+            }),
+        ) = (queues.resources.is_some(), queues.held.attached.as_mut())
+        else {
+            return Err(oer_radio_port::SlotInitError::MissingResource(
+                "Wi-Fi installation resources",
+            ));
+        };
+        let (storage, gate) = (*storage, &*gate);
         let (commands, driver_commands) = queues.held.commands.split();
         let (driver_events, events) = queues.held.events.split();
         let (recycled, driver_recycled) = queues.held.recycled.split();
@@ -247,9 +285,10 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> SlotOwner<Id> for Esp32s31B
                 recycled,
                 failed_command: &queues.held.failed_command,
                 failed_terminal: &queues.held.failed_terminal,
-                gate: &queues.held.gate,
+                gate,
+                tuned,
                 identity: &mut queues.held.frontend_identity,
-                timer: storage.device.borrow().timer().clone(),
+                timer: timer.clone(),
                 clock_replies,
                 clock_use: &mut queues.held.clock_use,
                 addresses: queues.addresses.ok_or(
@@ -263,7 +302,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> SlotOwner<Id> for Esp32s31B
                     events: Outgoing(driver_events),
                     recycled: Incoming(driver_recycled),
                     rx_out: &queues.held.rx_out,
-                    gate: &queues.held.gate,
+                    gate,
                     failed_terminal: &queues.held.failed_terminal,
                     clock_replies: Outgoing(driver_clock_replies),
                 },
@@ -282,10 +321,11 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> SlotOwner<Id> for Esp32s31B
     {
         let held = &invocation.held;
         let storage = self.storage;
-        assert!(
-            matches!(self.state, BackendState::Running),
-            "registered driver retains its state"
-        );
+        if !matches!(self.state, BackendState::Running) {
+            // Only a prepared installation registers; nothing to drive.
+            retire.request_failure(oer_radio_port::LifecycleError::StopUnconfirmed);
+            match core::future::pending::<core::convert::Infallible>().await {}
+        }
         let state = &mut *invocation.driver;
         loop {
             poll_fn(|cx| {
@@ -297,7 +337,14 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> SlotOwner<Id> for Esp32s31B
                 }
             })
             .await;
-            let deadline = state.deadline(held);
+            let deadline = match state.deadline(held) {
+                Ok(deadline) => deadline,
+                Err(cause) => {
+                    storage.poison(cause);
+                    retire.request_failure(oer_radio_port::LifecycleError::StopUnconfirmed);
+                    match core::future::pending::<core::convert::Infallible>().await {}
+                }
+            };
             let timer = self.timer.clone();
             let mut delay = core::pin::pin!(timer.wait_until(deadline));
             let done = poll_fn(|cx| {
@@ -311,15 +358,28 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> SlotOwner<Id> for Esp32s31B
                 }
                 if held.clock_replies.0.free_capacity() != 0 && held.clock_requested.replace(false)
                 {
-                    let answer = storage.device.borrow_mut().radio_now();
-                    assert!(
-                        held.clock_replies.push(answer).is_ok(),
-                        "one outstanding clock latch"
-                    );
+                    let answer = match storage.device() {
+                        Ok(mut device) => device.radio_now(),
+                        Err(fault) => {
+                            storage.poison(fault);
+                            retire.request_failure(oer_radio_port::LifecycleError::StopUnconfirmed);
+                            return Poll::Pending;
+                        }
+                    };
+                    // Room was checked above: one outstanding clock latch.
+                    if held.clock_replies.push(answer).is_err() {
+                        storage.poison(Fault::Capacity);
+                        retire.request_failure(oer_radio_port::LifecycleError::StopUnconfirmed);
+                        return Poll::Pending;
+                    }
                     storage.shared.wake_body();
                 }
                 if retire.is_requested() {
-                    match storage.device.borrow_mut().poll_stop(cx) {
+                    let stopped = match storage.device() {
+                        Ok(mut device) => device.poll_stop(cx),
+                        Err(fault) => Poll::Ready(Err(fault)),
+                    };
+                    match stopped {
                         Poll::Ready(Ok(())) => return Poll::Ready(true),
                         Poll::Ready(Err(cause)) => {
                             storage.poison(cause);
@@ -334,14 +394,19 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> SlotOwner<Id> for Esp32s31B
                         }
                     }
                 }
-                let mut device = storage.device.borrow_mut();
-                if let Err(cause) = state.poll(cx, held, &mut *device) {
-                    storage.poison(cause);
-                    retire.request_failure(oer_radio_port::LifecycleError::StopUnconfirmed);
-                    return Poll::Pending;
-                }
-                drop(device);
-                if state.deadline(held) < deadline {
+                let polled = match storage.device() {
+                    Ok(mut device) => state.poll(cx, held, &mut **device),
+                    Err(fault) => Err(fault),
+                };
+                let next = match polled.and_then(|()| state.deadline(held)) {
+                    Ok(next) => next,
+                    Err(cause) => {
+                        storage.poison(cause);
+                        retire.request_failure(oer_radio_port::LifecycleError::StopUnconfirmed);
+                        return Poll::Pending;
+                    }
+                };
+                if next < deadline {
                     return Poll::Ready(false);
                 }
                 let mut retiring = core::pin::pin!(retire.wait());
@@ -368,11 +433,23 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> SlotOwner<Id> for Esp32s31B
             retire.request_failure(oer_radio_port::LifecycleError::StopUnconfirmed);
             core::future::pending::<()>().await;
         }
-        self.channel = held.channel.get();
+        let Ok(channel) = held.channel.get() else {
+            storage.poison(Fault::Setting(settings::SettingFault::ChannelUnset));
+            retire.request_failure(oer_radio_port::LifecycleError::StopUnconfirmed);
+            match core::future::pending::<core::convert::Infallible>().await {}
+        };
+        self.channel = channel;
         for activity in &storage.shared.key_live {
             activity.set(0);
         }
-        storage.device.borrow_mut().detach();
+        match storage.device() {
+            Ok(mut device) => device.detach(),
+            Err(fault) => {
+                storage.poison(fault);
+                retire.request_failure(oer_radio_port::LifecycleError::StopUnconfirmed);
+                match core::future::pending::<core::convert::Infallible>().await {}
+            }
+        }
         retire.requested().await
     }
 
@@ -381,19 +458,21 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> SlotOwner<Id> for Esp32s31B
         Self: 's,
         Id: 's,
     {
-        assert!(
-            matches!(self.state, BackendState::Running),
-            "stopped slot retains its driver"
-        );
-        let transmitter = invocation.driver.retire();
+        // A stopped port without its transmitter, observation receiver or
+        // channel refuses reinstall; release still takes its device.
+        let mut reusable = match self.state {
+            BackendState::Running => invocation.driver.retire(),
+            _ => None,
+        };
         let mut config = self.config;
-        config.channel = self
-            .channel
-            .wifi_channel()
-            .expect("S31 channel retained through setup");
+        match self.channel.wifi_channel() {
+            Some(channel) => config.channel = channel,
+            None => reusable = None,
+        }
         StoppedPort {
             storage: self.storage,
-            transmitter: Some(transmitter),
+            timer: self.timer.clone(),
+            reusable,
             config,
             addresses: self.addresses,
             coex: self.coex,
@@ -401,11 +480,11 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> SlotOwner<Id> for Esp32s31B
         }
     }
 }
-impl<Id: SlotIdentity, D: Device<B>, const B: usize> SlotBodyOwner<Id>
-    for Esp32s31Backend<Id, D, B>
+impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotBodyOwner<Id>
+    for Esp32s31Backend<Id, D, B, O>
 {
     type Body<'p>
-        = BodyViews<'p, Id, D, B>
+        = BodyViews<'p, Id, D, B, O>
     where
         Self: 'p,
         Id: 'p;
@@ -435,6 +514,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> SlotBodyOwner<Id>
                     failed_command: frontend.failed_command,
                     failed_terminal: frontend.failed_terminal,
                     gate: frontend.gate,
+                    tuned: frontend.tuned,
                     identity: frontend.identity,
                     timer: frontend.timer.clone(),
                     clock_replies: frontend.clock_replies.borrow_local(),
@@ -462,39 +542,41 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> SlotBodyOwner<Id>
         })
     }
 }
-impl<Id: SlotIdentity, D: Device<B>, const B: usize> PortBackend<Id> for Esp32s31Backend<Id, D, B> {
+impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> PortBackend<Id>
+    for Esp32s31Backend<Id, D, B, O>
+{
     type Domain = Ieee80211Radio;
     type Fault = Fault;
     type Refusal = Fault;
     type Uninstall = ();
     type Event<'p>
-        = Event<'p, Id, D, B>
+        = Event<'p, Id, D, B, O>
     where
         Self: 'p,
         Id: 'p;
     type Terminal<'p>
-        = Terminal<'p, Id, D, B>
+        = Terminal<'p, Id, D, B, O>
     where
         Self: 'p,
         Id: 'p;
     type View<'p>
-        = Frontend<'p, Id, D, B>
+        = Frontend<'p, Id, D, B, O>
     where
         Self: 'p,
         Id: 'p;
     type Resources<'p>
-        = Resources<'p, Id, D, B>
+        = Resources<'p, Id, D, B, O>
     where
         Self: 'p,
         Id: 'p;
     type Setup<'a, 'p>
-        = Esp32s31Setup<'a, 'p, Id, D, B>
+        = Esp32s31Setup<'a, 'p, Id, D, B, O>
     where
         Self: 'p,
         Id: 'p,
         'p: 'a;
     type Phase<'a, 'p>
-        = Esp32s31Phase<'a, 'p, Id, D, B>
+        = Esp32s31Phase<'a, 'p, Id, D, B, O>
     where
         Self: 'p,
         Id: 'p,
@@ -565,7 +647,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> PortBackend<Id> for Esp32s3
         Self: 'p,
         Id: 'p,
         'p: 'a,
-        S: FnMut(Terminal<'p, Id, D, B>) -> core::ops::ControlFlow<Terminal<'p, Id, D, B>>,
+        S: FnMut(Terminal<'p, Id, D, B, O>) -> core::ops::ControlFlow<Terminal<'p, Id, D, B, O>>,
     {
         view.held.want_enabled.set(false);
         view.held.storage.driver.wake();
@@ -608,7 +690,9 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> PortBackend<Id> for Esp32s3
         frontend.storage.check()
     }
     #[allow(refining_impl_trait)]
-    fn shutdown_bound<'s>(frontend: &Self::Frontend<'s>) -> impl Future<Output = ()> + use<Id, D, B>
+    fn shutdown_bound<'s>(
+        frontend: &Self::Frontend<'s>,
+    ) -> impl Future<Output = ()> + use<Id, D, B, O>
     where
         Self: 's,
         Id: 's,

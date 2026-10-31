@@ -6,8 +6,14 @@ use oer_radio_port::{
 
 /// Owns mandatory P2 cleanup independently of the portable driver loan.
 #[must_use = "retain the hardware owner's P2 cleanup guard"]
-pub struct Registration<'s, Id: SlotIdentity + 's, D: Device<B> + 's, const B: usize> {
-    raw: SlotRegistration<'s, Id, Esp32s31Backend<Id, D, B>>,
+pub struct Registration<
+    's,
+    Id: SlotIdentity + 's,
+    D: Device<B> + 's,
+    const B: usize,
+    O: Observations,
+> {
+    raw: SlotRegistration<'s, Id, Esp32s31Backend<Id, D, B, O>>,
 }
 
 /// Rejected input or initialization failure with the hardware owner's guard.
@@ -16,7 +22,8 @@ pub enum RegistrationError<
     Id: SlotIdentity + 's,
     D: Device<B> + 's,
     const B: usize,
-    Rejected = Esp32s31Backend<Id, D, B>,
+    O: Observations,
+    Rejected = Esp32s31Backend<Id, D, B, O>,
 > {
     /// No registration was admitted; retain the rejected input.
     Occupied(Rejected),
@@ -34,11 +41,11 @@ pub enum RegistrationError<
         /// Typed construction cause.
         cause: oer_radio_port::SlotInitError,
         /// Hardware-owned cleanup guard.
-        registration: Registration<'s, Id, D, B>,
+        registration: Registration<'s, Id, D, B, O>,
     },
 }
-impl<'s, Id: SlotIdentity + 's, D: Device<B> + 's, const B: usize, R> core::fmt::Debug
-    for RegistrationError<'s, Id, D, B, R>
+impl<'s, Id: SlotIdentity + 's, D: Device<B> + 's, const B: usize, O: Observations, R>
+    core::fmt::Debug for RegistrationError<'s, Id, D, B, O, R>
 {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
@@ -50,9 +57,11 @@ impl<'s, Id: SlotIdentity + 's, D: Device<B> + 's, const B: usize, R> core::fmt:
         }
     }
 }
-impl<'s, Id: SlotIdentity + 's, D: Device<B> + 's, const B: usize> Registration<'s, Id, D, B> {
+impl<'s, Id: SlotIdentity + 's, D: Device<B> + 's, const B: usize, O: Observations>
+    Registration<'s, Id, D, B, O>
+{
     /// Retain cleanup before the frontend or its driver future is published.
-    pub fn new(raw: SlotRegistration<'s, Id, Esp32s31Backend<Id, D, B>>) -> Self {
+    pub fn new(raw: SlotRegistration<'s, Id, Esp32s31Backend<Id, D, B, O>>) -> Self {
         Self { raw }
     }
 
@@ -60,14 +69,14 @@ impl<'s, Id: SlotIdentity + 's, D: Device<B> + 's, const B: usize> Registration<
     pub fn guard_result<R>(
         result: Result<
             (
-                SlotFrontend<'s, Id, Esp32s31Backend<Id, D, B>>,
-                SlotRegistration<'s, Id, Esp32s31Backend<Id, D, B>>,
+                SlotFrontend<'s, Id, Esp32s31Backend<Id, D, B, O>>,
+                SlotRegistration<'s, Id, Esp32s31Backend<Id, D, B, O>>,
             ),
-            SlotRegisterError<'s, Id, Esp32s31Backend<Id, D, B>, R>,
+            SlotRegisterError<'s, Id, Esp32s31Backend<Id, D, B, O>, R>,
         >,
     ) -> Result<
-        (SlotFrontend<'s, Id, Esp32s31Backend<Id, D, B>>, Self),
-        RegistrationError<'s, Id, D, B, R>,
+        (SlotFrontend<'s, Id, Esp32s31Backend<Id, D, B, O>>, Self),
+        RegistrationError<'s, Id, D, B, O, R>,
     > {
         match result {
             Ok((frontend, raw)) => Ok((frontend, Self::new(raw))),
@@ -96,11 +105,11 @@ impl<'s, Id: SlotIdentity + 's, D: Device<B> + 's, const B: usize> Registration<
     /// Construct the owner's driver future beside a local frontend body.
     pub fn guarded(
         (frontend, raw): (
-            SlotFrontend<'s, Id, Esp32s31Backend<Id, D, B>>,
-            SlotRegistration<'s, Id, Esp32s31Backend<Id, D, B>>,
+            SlotFrontend<'s, Id, Esp32s31Backend<Id, D, B, O>>,
+            SlotRegistration<'s, Id, Esp32s31Backend<Id, D, B, O>>,
         ),
     ) -> (
-        SlotFrontend<'s, Id, Esp32s31Backend<Id, D, B>>,
+        SlotFrontend<'s, Id, Esp32s31Backend<Id, D, B, O>>,
         impl Future<Output = Result<SlotCompletion<'s, Id>, LifecycleError>>,
     ) {
         (frontend, Self::new(raw).run())
@@ -124,7 +133,11 @@ impl<'s, Id: SlotIdentity + 's, D: Device<B> + 's, const B: usize> Registration<
                     owner.storage.poison(Fault::Abandoned);
                     // The P2 runner ended its poll loan before invoking this guard. P1
                     // has no device reference, so cleanup has exclusive hardware access.
-                    if owner.storage.device.borrow_mut().abandon() {
+                    if owner
+                        .storage
+                        .device()
+                        .is_ok_and(|mut device| device.abandon())
+                    {
                         return radio::Abandon::Stopped(authority.stopped());
                     }
                     radio::Abandon::Unconfirmed(authority)
@@ -157,8 +170,8 @@ impl<'s, Id: SlotIdentity + 's, D: Device<B> + 's, const B: usize> Registration<
         })
     }
 }
-impl<'s, Id: SlotIdentity + 's, D: Device<B> + 's, const B: usize> Drop
-    for Registration<'s, Id, D, B>
+impl<'s, Id: SlotIdentity + 's, D: Device<B> + 's, const B: usize, O: Observations> Drop
+    for Registration<'s, Id, D, B, O>
 {
     fn drop(&mut self) {
         self.cleanup(None);

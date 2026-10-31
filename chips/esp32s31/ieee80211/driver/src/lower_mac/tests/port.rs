@@ -46,6 +46,10 @@ impl Timer for TestTimer {
 
 #[derive(Default)]
 struct Observed {
+    /// The device's registers are held elsewhere: `hardware` refuses.
+    hardware_unavailable: bool,
+    /// What the P2 driver reported at each publication's contention draw.
+    draws: Rc<RefCell<Vec<crate::lower_mac::ContentionDraw>>>,
     check_context: bool,
     context: u8,
     device_polls: usize,
@@ -63,11 +67,34 @@ struct Observed {
     /// The next start fails with this fault, as a refused retune does.
     fail_start: Option<Fault>,
     hold_completion: bool,
+    /// Hardware queues whose publications do not complete yet.
+    held_queues: [bool; 4],
+    /// The next device poll fails with this fault, poisoning the port.
+    fail_poll: Option<Fault>,
+    /// Key writes the hardware rejects from the next register access on.
+    reject_key_writes: usize,
+    /// The key table as abandonment found it, before erasing it.
+    material_at_abandon: Vec<(u8, [u8; 16])>,
+    /// Frames on air with the material byte they are protected under (0
+    /// for none). Capture decrypts each against the key table at once;
+    /// a frame whose material is not installed is dropped.
+    air: std::collections::VecDeque<(TestReceive, u8)>,
+    /// Air frames capture dropped for their material.
+    undecryptable: usize,
+    /// Frames captured in hardware and DMA, delivered through the RX cut.
+    captured: std::collections::VecDeque<TestReceive>,
+    /// Material writes the key table has seen.
+    key_writes: usize,
+    /// The next publication ends in the hardware's TX-timeout edge instead
+    /// of a completion.
+    timeout_edge: bool,
     hold_cut: bool,
     hold_stop: bool,
     cut_calls: usize,
     resumed_cuts: usize,
     backoffs: Vec<u16>,
+    /// Each legacy publication program's AIFSN, in publication order.
+    aifsns: Vec<u8>,
     received: std::collections::VecDeque<TestReceive>,
     continuous_rx: bool,
     rx_continuation: Option<Instant>,
@@ -76,8 +103,17 @@ struct Observed {
     rx_delivered: usize,
 }
 struct Payload(Rc<Cell<usize>>);
+/// An opaque context: its value, and the destructor count of a fixture
+/// that watches it. The backend returns the same object it was lent.
 #[derive(Debug)]
-struct Tag(usize);
+struct Tag(usize, Option<Rc<Cell<usize>>>);
+impl Drop for Tag {
+    fn drop(&mut self) {
+        if let Some(drops) = &self.1 {
+            drops.set(drops.get() + 1);
+        }
+    }
+}
 impl PartialEq<usize> for Tag {
     fn eq(&self, other: &usize) -> bool {
         self.0 == *other
@@ -90,7 +126,7 @@ impl<Id: radio::SlotIdentity> radio::ContextProjection<Id> for Tag {
         Id: 'p,
         'p: 'a;
     type Parts<'p>
-        = usize
+        = Self
     where
         Id: 'p;
     fn view<'a, 'p>(&'a self, _: radio::ContextLoan<'p, Id>) -> usize
@@ -100,11 +136,11 @@ impl<Id: radio::SlotIdentity> radio::ContextProjection<Id> for Tag {
     {
         self.0
     }
-    fn into_parts<'p>(self, _: radio::ContextLoan<'p, Id>) -> usize
+    fn into_parts<'p>(self, _: radio::ContextLoan<'p, Id>) -> Self
     where
         Id: 'p,
     {
-        self.0
+        self
     }
 }
 impl<'p, Id: radio::SlotIdentity + 'p> radio::LoanedContext<'p, Id> for Tag {
@@ -113,7 +149,7 @@ impl<'p, Id: radio::SlotIdentity + 'p> radio::LoanedContext<'p, Id> for Tag {
         radio::PortContext::new(self)
     }
     fn restore(context: radio::PortContext<'p, Id, Self>) -> Self {
-        Self(context.into_parts())
+        context.into_parts()
     }
 }
 impl TxBody for Payload {
@@ -131,7 +167,21 @@ struct TestDevice {
     timer: TestTimer,
     observed: Rc<RefCell<Observed>>,
     completed: usize,
+    /// Publications already completed, by publication order.
+    done: Vec<bool>,
     stopped: bool,
+}
+impl TestDevice {
+    /// The first publication not yet completed whose queue is not held.
+    fn next_completion(&self, publications: usize) -> Option<(usize, u8)> {
+        let observed = self.observed.borrow();
+        (0..publications).find_map(|index| {
+            let queue = self.hardware.legacy.get(index).map(|p| p.0).unwrap_or(2);
+            (!self.done.get(index).copied().unwrap_or(false)
+                && !observed.held_queues[usize::from(queue)])
+            .then_some((index, queue))
+        })
+    }
 }
 impl TestDevice {
     fn assert_driver_context(&self) {
@@ -170,9 +220,14 @@ impl Device<512> for TestDevice {
     type Context<'p, Id: radio::SlotIdentity + 'p> = Tag;
     type OwnedConfigureContext<Id: radio::SlotIdentity> = Tag;
     type ConfigureContext<'p, Id: radio::SlotIdentity + 'p> = Tag;
-    fn hardware(&mut self) -> &mut Hardware {
+    fn hardware(&mut self) -> Result<&mut Hardware, Fault> {
         self.assert_driver_context();
-        &mut self.hardware
+        if self.observed.borrow().hardware_unavailable {
+            return Err(Fault::HardwareUnavailable);
+        }
+        self.hardware.reject_key_writes +=
+            core::mem::take(&mut self.observed.borrow_mut().reject_key_writes);
+        Ok(&mut self.hardware)
     }
     fn timer(&self) -> &TestTimer {
         &self.timer
@@ -227,7 +282,29 @@ impl Device<512> for TestDevice {
         _: &mut Context<'_>,
     ) -> Poll<Result<DeviceEvent<TestReceive>, Fault>> {
         self.assert_driver_context();
+        if let Some(fault) = self.observed.borrow_mut().fail_poll.take() {
+            return Poll::Ready(Err(fault));
+        }
         let mut observed = self.observed.borrow_mut();
+        observed.key_writes = self
+            .hardware
+            .crypto_order
+            .iter()
+            .filter(|operation| matches!(operation, super::CryptoOperation::Install(_)))
+            .count();
+        while let Some((frame, material)) = observed.air.pop_front() {
+            if material == 0
+                || self
+                    .hardware
+                    .key_material
+                    .iter()
+                    .any(|(_, installed)| *installed == [material; 16])
+            {
+                observed.received.push_back(frame);
+            } else {
+                observed.undecryptable += 1;
+            }
+        }
         observed.device_polls += 1;
         suspend_rx_continuation(receive_room, &mut observed.rx_continuation);
         if observed.continuous_rx {
@@ -271,8 +348,28 @@ impl Device<512> for TestDevice {
             .iter()
             .map(|(_, program)| program.contention_window())
             .collect();
+        self.observed.borrow_mut().aifsns = self
+            .hardware
+            .legacy
+            .iter()
+            .map(|(_, program)| program.aifsn())
+            .collect();
         self.observed.borrow_mut().publications = publications;
-        if self.completed < publications && !self.observed.borrow().hold_completion {
+        self.done.resize(publications, false);
+        let next = self.next_completion(publications);
+        if let Some((index, queue)) = next
+            && self.observed.borrow().timeout_edge
+        {
+            self.hardware.timeout_pending[usize::from(queue)] = true;
+            self.done[index] = true;
+            self.completed += 1;
+            return Poll::Ready(Ok(DeviceEvent::Tx(crate::tx::WifiTxWake::Interrupt {
+                events: crate::mac::irq::EVENT_TX_TIMEOUT,
+            })));
+        }
+        if let Some((index, queue)) = next
+            && !self.observed.borrow().hold_completion
+        {
             let (status, detail) = self
                 .observed
                 .borrow()
@@ -280,15 +377,10 @@ impl Device<512> for TestDevice {
                 .get(self.completed)
                 .copied()
                 .unwrap_or((0, 0));
-            let queue = self
-                .hardware
-                .legacy
-                .get(self.completed)
-                .map(|p| p.0)
-                .unwrap_or(2);
             self.hardware.completion[usize::from(queue)] = Some(
                 oer_esp32s31_hal::types::MacTxCompletionObservation::new_model(status, detail),
             );
+            self.done[index] = true;
             self.completed += 1;
             Poll::Ready(Ok(DeviceEvent::Tx(crate::tx::WifiTxWake::Interrupt {
                 events: crate::mac::irq::EVENT_TX_COMPLETE,
@@ -307,7 +399,14 @@ impl Device<512> for TestDevice {
         if self.observed.borrow().hold_cut {
             return Poll::Pending;
         }
-        Poll::Ready(Ok(None))
+        // The cut drains what hardware, DMA and the pending interrupt
+        // already captured, under the material active at capture.
+        let mut observed = self.observed.borrow_mut();
+        let frame = match observed.captured.pop_front() {
+            Some(frame) => Some(frame),
+            None => observed.received.pop_front(),
+        };
+        Poll::Ready(Ok(frame))
     }
     fn finish_rx_cut(&mut self) -> Result<(), Fault> {
         self.assert_driver_context();
@@ -321,6 +420,7 @@ impl Device<512> for TestDevice {
     fn abandon(&mut self) -> bool {
         self.assert_driver_context();
         let keys = self.hardware.installed_keys.len();
+        self.observed.borrow_mut().material_at_abandon = self.hardware.key_material.clone();
         crate::mac::crypto::erase_lower_mac_keys(&mut self.hardware);
         assert!(self.hardware.installed_keys.is_empty());
         let mut observed = self.observed.borrow_mut();
@@ -336,26 +436,56 @@ impl Device<512> for TestDevice {
         self.observed.borrow_mut().detached = true;
     }
 }
-type Backend<Id> = Esp32s31Backend<Id, TestDevice, 512>;
+/// The driver's observation receiver in these tests: it keeps every
+/// contention draw in the fixture's `Observed::draws`.
+struct Draws(Rc<RefCell<Vec<crate::lower_mac::ContentionDraw>>>);
+impl oer_events::EventSink<crate::lower_mac::ContentionDraw> for Draws {
+    fn event(&mut self, draw: crate::lower_mac::ContentionDraw) {
+        self.0.borrow_mut().push(draw);
+    }
+}
+type Backend<Id> = Esp32s31Backend<Id, TestDevice, 512, Draws>;
 type Caps = Esp32s31Caps<512>;
-type Family<Id> = Types<Id, TestDevice, 512>;
+type Family<Id> = Types<Id, TestDevice, 512, Draws>;
 type Res<'id, Id> = <Backend<Id> as PortBackend<Id>>::Resources<'id>;
 
 mod abandon;
 mod barriers;
+mod conformance;
 mod retune;
 mod rx_capacity;
 
 fn installed(
     statuses: Vec<(u8, u8)>,
-) -> (PortParts<TestDevice, 512>, Rc<RefCell<Observed>>, TestTimer) {
+) -> (
+    PortParts<TestDevice, 512, Draws>,
+    Rc<RefCell<Observed>>,
+    TestTimer,
+) {
     installed_with_hardware(statuses, Hardware::default())
 }
 
 fn installed_with_hardware(
     statuses: Vec<(u8, u8)>,
     hardware: Hardware,
-) -> (PortParts<TestDevice, 512>, Rc<RefCell<Observed>>, TestTimer) {
+) -> (
+    PortParts<TestDevice, 512, Draws>,
+    Rc<RefCell<Observed>>,
+    TestTimer,
+) {
+    installed_with_entropy(statuses, hardware, entropy)
+}
+
+/// A fixture whose transmitter draws its backoff from `entropy`.
+fn installed_with_entropy(
+    statuses: Vec<(u8, u8)>,
+    hardware: Hardware,
+    entropy: fn() -> u32,
+) -> (
+    PortParts<TestDevice, 512, Draws>,
+    Rc<RefCell<Observed>>,
+    TestTimer,
+) {
     let timer = TestTimer(
         Rc::new(oer_time_virtual::VirtualClock::new()),
         Rc::new(Cell::new(false)),
@@ -364,11 +494,13 @@ fn installed_with_hardware(
         statuses,
         ..Observed::default()
     }));
+    let buffers: [_; TX_TICKETS] = core::array::from_fn(|_| slot());
     let device = TestDevice {
         hardware,
         timer: timer.clone(),
         observed: observed.clone(),
         completed: 0,
+        done: Vec::new(),
         stopped: false,
     };
     let device = Box::leak(Box::new(device));
@@ -380,7 +512,7 @@ fn installed_with_hardware(
         slot: slot(),
         policy: crate::mac::tx::runtime::WifiTxRuntimePolicy::vendor_defaults(),
         power: Power,
-        entropy: entropy as fn() -> u32,
+        entropy,
         timer: timer.clone(),
     })
     .into_idle()
@@ -389,7 +521,7 @@ fn installed_with_hardware(
     let parts = PortParts {
         storage,
         transmitter,
-        buffers: core::array::from_fn(|_| slot()),
+        buffers,
         config: crate::lower_mac::LowerMacConfig {
             station_address: STATION,
             channel: channel(6),
@@ -398,6 +530,7 @@ fn installed_with_hardware(
         },
         access_point_address: IndividualAddress::new(ACCESS_POINT).expect("AP address"),
         coex: &RadioNine,
+        observations: Draws(observed.borrow().draws.clone()),
     };
     (parts, observed, timer)
 }
@@ -425,7 +558,10 @@ enum Report<Out> {
     Abandoned,
 }
 
-fn run_body<B, Out>(parts: PortParts<TestDevice, 512>, body: B) -> impl Future<Output = Report<Out>>
+fn run_body<B, Out>(
+    parts: PortParts<TestDevice, 512, Draws>,
+    body: B,
+) -> impl Future<Output = Report<Out>>
 where
     for<'scope> B: PortBody<radio::LocalId<'scope>, Backend<radio::LocalId<'scope>>, Output = Out>,
 {
@@ -477,7 +613,10 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for Exchange {
         let mut outcomes = Vec::new();
         {
             let mut phase = owner.phase();
-            let permission = resources.station_commands.configure.with_context(Tag(42));
+            let permission = resources
+                .station_commands
+                .configure
+                .with_context(Tag(42, None));
             phase.station().configure(
                 permission,
                 StationReceive::Bss {
@@ -551,7 +690,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for Exchange {
                 .station()
                 .submit(
                     Attempt {
-                        context: Tag(71),
+                        context: Tag(71, None),
                         ticket,
                         source: prepared,
                         access_category: oer_ieee80211_wire::qos::WmmAccessCategory::BestEffort,
@@ -577,7 +716,10 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for Exchange {
                     let (mut buffer, body) =
                         <Family<Id> as TxBufferPool<'id, BufferClass<512>>>::renew(sent);
                     assert!(body.is_none());
-                    assert_eq!(&buffer.bytes_mut()[22..24], &0x1230_u16.to_le_bytes());
+                    assert_eq!(
+                        &buffer.bytes_mut().expect("returned memory")[22..24],
+                        &0x1230_u16.to_le_bytes()
+                    );
                     outcomes.push(returned.outcome);
                 }
                 _ => panic!("TX terminal"),
@@ -641,9 +783,37 @@ fn port_exhausts_supplied_retry_plan_with_one_terminal() {
     assert_eq!(observed.borrow().backoffs, [8, 24, 56]);
 }
 
+/// Install the station PTK for the BSS and take the key its installation
+/// terminal returns.
+async fn installed_pairwise<'p, 'id: 'p, Id: radio::SlotIdentity + 'id>(
+    phase: &mut Esp32s31Phase<'p, 'id, Id, TestDevice, 512, Draws>,
+    association: &<PortKeys<Id, Station> as KeyTypes<'id>>::Association,
+    slot: <PortKeys<Id, Station> as KeyTypes<'id>>::PairwiseSlot,
+    material: u8,
+) -> PairwiseKey<'id, Id, Station> {
+    let installation = phase.station().install_pairwise_key(
+        association,
+        slot,
+        IndividualAddress::new(BSSID).expect("peer"),
+        oer_ieee80211_contracts_security::Ccmp128Key::new(&[material; 16]),
+    );
+    match phase.next_event().await {
+        Ok(Ok(LowerMacEvent::Terminal(LowerMacTerminal::PairwiseKeyInstalled(
+            InstalledPairwise::Station(key),
+        )))) => {
+            // The terminal's key is this installation's.
+            assert!(
+                <PortKeys<Id, Station> as KeyTypes<'id>>::pairwise_identity(&key) == installation
+            );
+            key
+        }
+        _ => panic!("the installation terminal returns the key"),
+    }
+}
+
 fn submit_mpdu<'k, 'p, 'id: 'p + 'k, Id: radio::SlotIdentity + 'id>(
-    phase: &mut Esp32s31Phase<'p, 'id, Id, TestDevice, 512>,
-    buffer: Buffer<'id, Id, TestDevice, 512>,
+    phase: &mut Esp32s31Phase<'p, 'id, Id, TestDevice, 512, Draws>,
+    buffer: Buffer<'id, Id, TestDevice, 512, Draws>,
     ticket: radio::Slot<'id, Tickets, radio::Child<radio::Root<Id>, 2>>,
     body: Option<Payload>,
     key: Option<&'k PairwiseKey<'id, Id, Station>>,
@@ -651,8 +821,8 @@ fn submit_mpdu<'k, 'p, 'id: 'p + 'k, Id: radio::SlotIdentity + 'id>(
     submit_mpdu_budget(phase, buffer, ticket, body, key, 1);
 }
 fn submit_mpdu_budget<'k, 'p, 'id: 'p + 'k, Id: radio::SlotIdentity + 'id>(
-    phase: &mut Esp32s31Phase<'p, 'id, Id, TestDevice, 512>,
-    buffer: Buffer<'id, Id, TestDevice, 512>,
+    phase: &mut Esp32s31Phase<'p, 'id, Id, TestDevice, 512, Draws>,
+    buffer: Buffer<'id, Id, TestDevice, 512, Draws>,
     ticket: radio::Slot<'id, Tickets, radio::Child<radio::Root<Id>, 2>>,
     body: Option<Payload>,
     key: Option<&'k PairwiseKey<'id, Id, Station>>,
@@ -710,7 +880,7 @@ fn submit_mpdu_budget<'k, 'p, 'id: 'p + 'k, Id: radio::SlotIdentity + 'id>(
         .station()
         .submit(
             Attempt {
-                context: Tag(91),
+                context: Tag(91, None),
                 ticket,
                 source,
                 access_category: oer_ieee80211_wire::qos::WmmAccessCategory::BestEffort,
@@ -1009,7 +1179,10 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for ReceiveBody {
         {
             let mut phase = owner.phase();
             phase.station().configure(
-                resources.station_commands.configure.with_context(Tag(7)),
+                resources
+                    .station_commands
+                    .configure
+                    .with_context(Tag(7, None)),
                 StationReceive::Bss {
                     bssid: IndividualAddress::new(BSSID).expect("BSSID"),
                     filter: SupportedFilter::new(ReceiveFilter::BSS_MEMBER).expect("filter"),
@@ -1123,7 +1296,10 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for Protected {
             let ([slot], _) = bank.into_parts();
             let association = start.begin(oer_ieee80211_wire::security::Spp::NotNegotiated);
             phase.station().configure(
-                resources.station_commands.configure.with_context(Tag(19)),
+                resources
+                    .station_commands
+                    .configure
+                    .with_context(Tag(19, None)),
                 StationReceive::Bss {
                     bssid: IndividualAddress::new(BSSID).expect("BSSID"),
                     filter: SupportedFilter::new(ReceiveFilter::BSS_MEMBER).expect("filter"),
@@ -1133,12 +1309,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for Protected {
                 phase.next_event().await,
                 Ok(Ok(LowerMacEvent::Terminal(LowerMacTerminal::Configured(_))))
             ));
-            let key = phase.station().install_pairwise_key(
-                &association,
-                slot,
-                IndividualAddress::new(BSSID).expect("peer"),
-                oer_ieee80211_contracts_security::Ccmp128Key::new(&[9; 16]),
-            );
+            let key = installed_pairwise(&mut phase, &association, slot, 9).await;
             let [buffer, ..] = resources.buffers;
             let [ticket, ..] = resources.tickets;
             submit_mpdu(
@@ -1260,6 +1431,34 @@ fn emergency_erasure_reaches_the_last_ap_peer_as_well_as_station_and_group_keys(
 }
 
 #[test]
+fn an_outstanding_dma_allocation_refuses_installation_with_a_typed_error() {
+    let (parts, observed, _) = installed(Vec::new());
+    let refused = block_on(radio::with_local_slot(async |claim| {
+        let mut slot = claim.place();
+        let backend = Backend::new(parts).ok().expect("valid construction");
+        assert!(backend.withhold_dma(3));
+        match crate::port::Registration::guard_result(slot.register(backend)) {
+            Err(crate::port::RegistrationError::Initialization {
+                cause,
+                registration,
+            }) => {
+                drop(registration);
+                Some(cause)
+            }
+            _ => None,
+        }
+    }));
+    assert_eq!(
+        refused,
+        Some(radio::SlotInitError::MissingResource(
+            "Wi-Fi installation resources"
+        )),
+        "no endpoint is published without every buffer's DMA"
+    );
+    assert_eq!(observed.borrow().starts, 0, "no radio start");
+}
+
+#[test]
 fn clean_uninstall_returns_all_dma_and_core_owners_for_a_fresh_installation() {
     let (parts, observed, _) = installed(Vec::new());
     let _ = block_on(reinstalled(
@@ -1331,7 +1530,7 @@ fn frontend_channel_setting_survives_normal_stop_and_reinstall() {
 }
 
 async fn reinstalled<First, Second, A, B>(
-    parts: PortParts<TestDevice, 512>,
+    parts: PortParts<TestDevice, 512, Draws>,
     first: First,
     second: Second,
 ) -> (A, B)

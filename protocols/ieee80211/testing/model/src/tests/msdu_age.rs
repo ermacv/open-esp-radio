@@ -493,8 +493,10 @@ fn port_now_projects_the_supplied_clock_and_renewal_starts_a_new_msdu() {
             self.0.advance(Duration::from_micros(3)).unwrap();
             buffer.admit(self.0.now());
             assert_eq!(buffer.admission(), Some(first_admission));
-            let mut buffer = oer_ieee80211_contracts_port::ReturnedMpdu::<_, ()>::Fresh(buffer)
-                .into_fresh(|()| panic!("fresh renewal consumes no Sent owner"));
+            let (mut buffer, renewed) =
+                oer_ieee80211_contracts_port::ReturnedMpdu::<_, ()>::Fresh(buffer)
+                    .into_fresh(|()| panic!("fresh renewal consumes no Sent owner"));
+            assert_eq!(renewed, Ok(()));
             assert_eq!(buffer.admission(), None);
             let next = owner.now().await.unwrap().unwrap();
             buffer.admit(self.0.now());

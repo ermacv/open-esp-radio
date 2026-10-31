@@ -2,11 +2,11 @@
 use super::*;
 use keys::{GroupCommand, Installation, Removal};
 
-impl<'p, Id: SlotIdentity, D: Device<B>, const B: usize> Buffer<'p, Id, D, B> {
+impl<'p, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> Buffer<'p, Id, D, B, O> {
     pub(super) fn into_owned(
         self,
-        loan: &BodyLoan<'p, Id, Esp32s31Backend<Id, D, B>>,
-    ) -> Buffer<'static, Id, D, B> {
+        loan: &BodyLoan<'p, Id, Esp32s31Backend<Id, D, B, O>>,
+    ) -> Buffer<'static, Id, D, B, O> {
         Buffer {
             place: loan.reclaim_slot(self.place),
             dma: self.dma,
@@ -15,11 +15,11 @@ impl<'p, Id: SlotIdentity, D: Device<B>, const B: usize> Buffer<'p, Id, D, B> {
         }
     }
 }
-impl<Id: SlotIdentity, D: Device<B>, const B: usize> Buffer<'static, Id, D, B> {
+impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> Buffer<'static, Id, D, B, O> {
     pub(super) fn lend<'p>(
         self,
-        loan: &BodyLoan<'p, Id, Esp32s31Backend<Id, D, B>>,
-    ) -> Buffer<'p, Id, D, B> {
+        loan: &BodyLoan<'p, Id, Esp32s31Backend<Id, D, B, O>>,
+    ) -> Buffer<'p, Id, D, B, O> {
         Buffer {
             place: loan.lend_slot(self.place),
             dma: self.dma,
@@ -28,11 +28,11 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> Buffer<'static, Id, D, B> {
         }
     }
 }
-impl<'p, Id: SlotIdentity, D: Device<B>, const B: usize>
-    BodyPayload<'p, Id, Esp32s31Backend<Id, D, B>> for Mpdu<'p, Id, D, B>
+impl<'p, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
+    BodyPayload<'p, Id, Esp32s31Backend<Id, D, B, O>> for Mpdu<'p, Id, D, B, O>
 {
-    type Owned = Mpdu<'static, Id, D, B>;
-    fn into_owned(self, loan: &BodyLoan<'p, Id, Esp32s31Backend<Id, D, B>>) -> Self::Owned {
+    type Owned = Mpdu<'static, Id, D, B, O>;
+    fn into_owned(self, loan: &BodyLoan<'p, Id, Esp32s31Backend<Id, D, B, O>>) -> Self::Owned {
         Mpdu {
             buffer: self.buffer.into_owned(loan),
             layout: self.layout,
@@ -44,20 +44,20 @@ impl<'p, Id: SlotIdentity, D: Device<B>, const B: usize>
         }
     }
 }
-impl<Id: SlotIdentity, D: Device<B>, const B: usize> OwnedPayload<Id, Esp32s31Backend<Id, D, B>>
-    for Mpdu<'static, Id, D, B>
+impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
+    OwnedPayload<Id, Esp32s31Backend<Id, D, B, O>> for Mpdu<'static, Id, D, B, O>
 {
     type Lent<'p>
-        = Mpdu<'p, Id, D, B>
+        = Mpdu<'p, Id, D, B, O>
     where
         Self: 'p,
         Id: 'p,
-        Esp32s31Backend<Id, D, B>: 'p;
-    fn lend<'p>(self, loan: &BodyLoan<'p, Id, Esp32s31Backend<Id, D, B>>) -> Self::Lent<'p>
+        Esp32s31Backend<Id, D, B, O>: 'p;
+    fn lend<'p>(self, loan: &BodyLoan<'p, Id, Esp32s31Backend<Id, D, B, O>>) -> Self::Lent<'p>
     where
         Self: 'p,
         Id: 'p,
-        Esp32s31Backend<Id, D, B>: 'p,
+        Esp32s31Backend<Id, D, B, O>: 'p,
     {
         Mpdu {
             buffer: self.buffer.lend(loan),
@@ -70,30 +70,53 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> OwnedPayload<Id, Esp32s31Ba
         }
     }
 }
-impl<'p, Id: SlotIdentity, D: Device<B>, const B: usize>
-    BodyPayload<'p, Id, Esp32s31Backend<Id, D, B>> for NoAggregatePayload<'p, Id, D, B>
+impl<'p, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
+    BodyPayload<'p, Id, Esp32s31Backend<Id, D, B, O>> for NoAggregatePayload<'p, Id, D, B, O>
 {
-    type Owned = NoAggregatePayload<'static, Id, D, B>;
-    fn into_owned(self, _: &BodyLoan<'p, Id, Esp32s31Backend<Id, D, B>>) -> Self::Owned {
+    type Owned = NoAggregatePayload<'static, Id, D, B, O>;
+    fn into_owned(self, _: &BodyLoan<'p, Id, Esp32s31Backend<Id, D, B, O>>) -> Self::Owned {
         match self.impossible {}
     }
 }
-impl<Id: SlotIdentity, D: Device<B>, const B: usize> OwnedPayload<Id, Esp32s31Backend<Id, D, B>>
-    for NoAggregatePayload<'static, Id, D, B>
+impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
+    OwnedPayload<Id, Esp32s31Backend<Id, D, B, O>> for NoAggregatePayload<'static, Id, D, B, O>
 {
     type Lent<'p>
-        = NoAggregatePayload<'p, Id, D, B>
+        = NoAggregatePayload<'p, Id, D, B, O>
     where
         Self: 'p,
         Id: 'p,
-        Esp32s31Backend<Id, D, B>: 'p;
-    fn lend<'p>(self, _: &BodyLoan<'p, Id, Esp32s31Backend<Id, D, B>>) -> Self::Lent<'p>
+        Esp32s31Backend<Id, D, B, O>: 'p;
+    fn lend<'p>(self, _: &BodyLoan<'p, Id, Esp32s31Backend<Id, D, B, O>>) -> Self::Lent<'p>
     where
         Self: 'p,
         Id: 'p,
-        Esp32s31Backend<Id, D, B>: 'p,
+        Esp32s31Backend<Id, D, B, O>: 'p,
     {
         match self.impossible {}
+    }
+}
+impl<'p, Id: SlotIdentity, R> PairwiseKey<'p, Id, R> {
+    pub(super) fn into_owned(self) -> PairwiseKey<'static, Id, R> {
+        PairwiseKey {
+            identity: self.identity,
+            brand: PhantomData,
+        }
+    }
+}
+impl<Id: SlotIdentity, R> PairwiseKey<'static, Id, R> {
+    pub(super) fn lend<'p>(self) -> PairwiseKey<'p, Id, R> {
+        PairwiseKey {
+            identity: self.identity,
+            brand: PhantomData,
+        }
+    }
+}
+#[cfg(test)]
+impl<Id: SlotIdentity, R> GroupKey<'_, Id, R> {
+    /// The installation's serial, distinct for every installation.
+    pub(crate) fn serial(&self) -> u64 {
+        self.identity.serial
     }
 }
 impl<'p, Id: SlotIdentity, R> GroupKey<'p, Id, R> {
@@ -135,9 +158,9 @@ impl<Id: SlotIdentity, R> ReceiveBuffer<'static, Id, R> {
     }
 }
 impl<'p, Id: SlotIdentity> Installation<'p, Id> {
-    pub(super) fn into_owned<D: Device<B>, const B: usize>(
+    pub(super) fn into_owned<D: Device<B>, const B: usize, O: Observations>(
         self,
-        loan: &BodyLoan<'p, Id, Esp32s31Backend<Id, D, B>>,
+        loan: &BodyLoan<'p, Id, Esp32s31Backend<Id, D, B, O>>,
     ) -> Installation<'static, Id> {
         use core_mac::association::VacantKeySlot;
         match self {
@@ -168,9 +191,9 @@ impl<'p, Id: SlotIdentity> Installation<'p, Id> {
     }
 }
 impl<'p, Id: SlotIdentity> Removal<'p, Id> {
-    pub(super) fn into_owned<D: Device<B>, const B: usize>(
+    pub(super) fn into_owned<D: Device<B>, const B: usize, O: Observations>(
         self,
-        loan: &BodyLoan<'p, Id, Esp32s31Backend<Id, D, B>>,
+        loan: &BodyLoan<'p, Id, Esp32s31Backend<Id, D, B, O>>,
     ) -> Removal<'static, Id> {
         match self {
             Self::StationPairwise(a) => Removal::StationPairwise(a.into_owned(loan)),
@@ -181,9 +204,9 @@ impl<'p, Id: SlotIdentity> Removal<'p, Id> {
     }
 }
 impl<'p, Id: SlotIdentity> GroupCommand<'p, Id> {
-    pub(super) fn into_owned<D: Device<B>, const B: usize>(
+    pub(super) fn into_owned<D: Device<B>, const B: usize, O: Observations>(
         self,
-        loan: &BodyLoan<'p, Id, Esp32s31Backend<Id, D, B>>,
+        loan: &BodyLoan<'p, Id, Esp32s31Backend<Id, D, B, O>>,
     ) -> GroupCommand<'static, Id> {
         match self {
             Self::InstallStation {

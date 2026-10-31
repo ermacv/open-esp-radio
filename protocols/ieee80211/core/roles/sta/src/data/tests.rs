@@ -3,12 +3,12 @@
 use super::*;
 use crate::events::{DataLoss, StaEvent};
 use core::num::NonZeroU16;
-use oer_ieee80211_contracts_port::ResponseHeader;
 use oer_ieee80211_contracts_port::association::KEY_BANK_CAPACITY;
 use oer_ieee80211_contracts_port::{
     BandSet, Channel, ChannelWidth, HardwareServices, Ieee80211Capabilities, LowerMacCapabilities,
     PhyFormatSet, RateSupport, ReceiveFilter, RxEvidence, WidthSet,
 };
+use oer_ieee80211_contracts_port::{BufferMemoryUnavailable, ResponseHeader};
 use oer_ieee80211_contracts_port::{IndeterminateCause, WithdrawCause};
 use oer_ieee80211_core_upper_mac::qos::AcAdmission;
 use oer_ieee80211_core_upper_mac::sequence::SequenceCounter;
@@ -77,16 +77,32 @@ impl Ieee80211Capabilities for Caps {
     };
 }
 
-struct Buffer(Vec<u8>);
+/// Test memory; `false` models memory that is not the station's.
+struct Buffer(Vec<u8>, bool);
+impl Buffer {
+    fn new(bytes: Vec<u8>) -> Self {
+        Self(bytes, true)
+    }
+}
 
 impl oer_ieee80211_contracts_port::TxBufferClass for Buffer {
     const CAPACITY: usize = 1600;
 }
 
 impl TxBufferMemory for Buffer {
-    fn renew_msdu(&mut self) {}
-    fn bytes_mut(&mut self) -> &mut [u8] {
-        &mut self.0
+    fn renew_msdu(&mut self) -> Result<(), BufferMemoryUnavailable> {
+        if self.1 {
+            Ok(())
+        } else {
+            Err(BufferMemoryUnavailable)
+        }
+    }
+    fn bytes_mut(&mut self) -> Result<&mut [u8], BufferMemoryUnavailable> {
+        if self.1 {
+            Ok(&mut self.0)
+        } else {
+            Err(BufferMemoryUnavailable)
+        }
     }
 }
 
@@ -218,7 +234,10 @@ fn open_link(counter: &mut SequenceCounter) -> LinkView<'_, 'static, Station<'st
 fn machine() -> StaData<'static, Data<'static>, Caps, 8> {
     StaData::new(
         [1, 2],
-        [Buffer(std::vec![0; 1600]), Buffer(std::vec![0; 1600])],
+        [
+            Buffer::new(std::vec![0; 1600]),
+            Buffer::new(std::vec![0; 1600]),
+        ],
         core::num::NonZeroU8::new(8).unwrap(),
     )
 }
@@ -368,7 +387,7 @@ fn interleaved_returns_keep_the_original_tid_order_and_admission_count() {
     let mut events = Kept::default();
     let mut data = StaData::<Data, Caps, 8>::new(
         [1, 2, 3, 4],
-        core::array::from_fn::<_, 4, _>(|_| Buffer(std::vec![0; 1600])),
+        core::array::from_fn::<_, 4, _>(|_| Buffer::new(std::vec![0; 1600])),
         core::num::NonZeroU8::new(8).unwrap(),
     );
     let capacity = data.available(WmmAccessCategory::Voice);
@@ -703,7 +722,7 @@ fn an_msdu_too_long_for_its_buffer_takes_no_sequence_number() {
     let mut events = Kept::default();
     let mut data = StaData::<Data, Caps, 8>::new(
         [1],
-        [Buffer(std::vec![0; 200])],
+        [Buffer::new(std::vec![0; 200])],
         core::num::NonZeroU8::new(8).unwrap(),
     );
     let mut counter = SequenceCounter::new(SequenceNumber::new(42).unwrap());
@@ -739,11 +758,35 @@ fn an_msdu_too_long_for_its_buffer_takes_no_sequence_number() {
 }
 
 #[test]
+fn a_buffer_whose_memory_is_not_the_stations_is_refused_and_takes_no_sequence_number() {
+    let mut events = Kept::default();
+    let mut data = StaData::<Data, Caps, 8>::new(
+        [1],
+        [Buffer(std::vec![0; 1600], false)],
+        core::num::NonZeroU8::new(8).unwrap(),
+    );
+    let mut counter = SequenceCounter::new(SequenceNumber::new(42).unwrap());
+    assert_eq!(
+        data.input(
+            DataInput {
+                msdu: msdu(0),
+                link: &mut open_link(&mut counter)
+            },
+            &mut events
+        ),
+        Err(DataRefusal::BufferUnavailable)
+    );
+    assert_eq!(counter.peek(), SequenceNumber::new(42).unwrap());
+    assert!(data.accepts(), "the tokens came back");
+    assert!(events.0.contains(&StaEvent::BufferMemoryUnavailable));
+}
+
+#[test]
 fn open_mpdu_fits_exactly_without_a_temporary_ccmp_gap() {
     let mut events = Kept::default();
     let mut data = StaData::<Data, Caps, 8>::new(
         [1],
-        [Buffer(std::vec![0; 24 + 8 + 100])],
+        [Buffer::new(std::vec![0; 24 + 8 + 100])],
         core::num::NonZeroU8::new(8).unwrap(),
     );
     let mut counter = SequenceCounter::new(SequenceNumber::new(42).unwrap());
@@ -970,9 +1013,9 @@ fn an_attempt_aborted_before_the_air_goes_again_first_with_its_sequence_number()
     let mut data = StaData::<Data, Caps, 8>::new(
         [1, 2, 3],
         [
-            Buffer(std::vec![0; 1600]),
-            Buffer(std::vec![0; 1600]),
-            Buffer(std::vec![0; 1600]),
+            Buffer::new(std::vec![0; 1600]),
+            Buffer::new(std::vec![0; 1600]),
+            Buffer::new(std::vec![0; 1600]),
         ],
         core::num::NonZeroU8::new(8).unwrap(),
     );
@@ -1033,9 +1076,9 @@ fn a_link_that_ends_drains_its_queue_and_its_submitted_attempts_never_go_again()
     let mut data = StaData::<Data, Caps, 8>::new(
         [1, 2, 3],
         [
-            Buffer(std::vec![0; 1600]),
-            Buffer(std::vec![0; 1600]),
-            Buffer(std::vec![0; 1600]),
+            Buffer::new(std::vec![0; 1600]),
+            Buffer::new(std::vec![0; 1600]),
+            Buffer::new(std::vec![0; 1600]),
         ],
         core::num::NonZeroU8::new(8).unwrap(),
     );
@@ -1108,9 +1151,9 @@ fn a_category_the_service_does_not_admit_waits_and_the_others_go_in_their_order(
     let mut data = StaData::<Data, Caps, 8>::new(
         [1, 2, 3],
         [
-            Buffer(std::vec![0; 1600]),
-            Buffer(std::vec![0; 1600]),
-            Buffer(std::vec![0; 1600]),
+            Buffer::new(std::vec![0; 1600]),
+            Buffer::new(std::vec![0; 1600]),
+            Buffer::new(std::vec![0; 1600]),
         ],
         core::num::NonZeroU8::new(8).unwrap(),
     );
@@ -1168,7 +1211,7 @@ fn terminal_failures_retire_the_msdu_and_release_admission() {
         let mut events = Kept::default();
         let mut data = StaData::<Data, Caps, 8>::new(
             [1],
-            [Buffer(std::vec![0; 1600])],
+            [Buffer::new(std::vec![0; 1600])],
             core::num::NonZeroU8::new(8).unwrap(),
         );
         let capacity = data.available(WmmAccessCategory::Voice);

@@ -84,6 +84,15 @@ impl Policy {
         self.active = false;
         self.retry = false;
     }
+    /// The station request the policy issues next, whose permission it
+    /// must take first; `None` when its next command needs none.
+    pub fn wanted(&self, linked: bool) -> Option<Command> {
+        if self.stopping {
+            (!self.disconnect_sent).then_some(Command::Disconnect)
+        } else {
+            (self.active && !linked).then_some(Command::Connect)
+        }
+    }
     pub fn deadline(&self) -> Option<Instant> {
         if self.active { self.next } else { None }
     }

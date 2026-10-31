@@ -2,7 +2,6 @@
 use super::*;
 
 pub(in crate::lower_mac) enum Phase {
-    Vacant,
     Disabled,
     DisabledClosing,
     DisabledClosed,
@@ -43,53 +42,53 @@ pub(in crate::lower_mac) enum Phase {
         fault: LowerMacFault,
     },
 }
-impl Phase {
-    pub(super) fn configuration(&self) -> (CoreVif, ReceivePolicy) {
-        match self {
-            Self::ConfigureDisabled { config, policy }
-            | Self::ConfigureDisabledClosing { config, policy }
-            | Self::ConfigureDisabledClosed { config, policy }
-            | Self::ConfigureOpen { config, policy }
-            | Self::ConfigureClosing { config, policy }
-            | Self::ConfigureClosed { config, policy } => (*config, *policy),
-            _ => panic!("configuration view retains its command"),
-        }
-    }
-}
-
 /// One caller-owned bank. Views borrow this storage; transitions never move it.
 pub struct CoreOwner<C> {
-    pub(in crate::lower_mac) core: Option<C>,
+    pub(in crate::lower_mac) bank: Option<Prepared<C>>,
+}
+/// A prepared core and the phase its views follow.
+pub(in crate::lower_mac) struct Prepared<C> {
+    pub(in crate::lower_mac) core: C,
     pub(in crate::lower_mac) phase: Phase,
+}
+/// Why the owner kept its core instead of dismantling it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CoreRetained {
+    /// No core was prepared.
+    Vacant,
+    /// The bank is not disabled.
+    NotDisabled,
+    /// The transmitter still holds an attempt or a published slot.
+    Publications,
 }
 impl<C> CoreOwner<C> {
     /// Empty storage before initial preparation or after dismantling.
     #[inline]
     pub const fn vacant() -> Self {
-        Self {
-            core: None,
-            phase: Phase::Vacant,
-        }
+        Self { bank: None }
     }
     pub(in crate::lower_mac) fn prepared(core: C) -> Self {
         Self {
-            core: Some(core),
-            phase: Phase::Disabled,
+            bank: Some(Prepared {
+                core,
+                phase: Phase::Disabled,
+            }),
         }
-    }
-    #[inline]
-    pub(super) fn stored(&self) -> &C {
-        self.core.as_ref().expect("view retains its core")
-    }
-    #[inline]
-    pub(super) fn stored_mut(&mut self) -> &mut C {
-        self.core.as_mut().expect("view retains its core")
     }
     /// Borrow the only view corresponding to the retained phase.
     #[inline]
     pub fn view(&mut self) -> CoreView<'_, C> {
+        match self.bank {
+            None => CoreView::Vacant(VacantView {
+                bank: &mut self.bank,
+            }),
+            Some(ref mut prepared) => prepared.view(),
+        }
+    }
+}
+impl<C> Prepared<C> {
+    fn view(&mut self) -> CoreView<'_, C> {
         match self.phase {
-            Phase::Vacant => CoreView::Vacant(VacantView { owner: self }),
             Phase::Disabled => CoreView::Disabled(DisabledView::new(self)),
             Phase::DisabledClosing => CoreView::DisabledClosing(DisabledView::new(self)),
             Phase::DisabledClosed => CoreView::DisabledClosed(DisabledView::new(self)),
@@ -102,29 +101,29 @@ impl<C> CoreOwner<C> {
             Phase::Disabling => CoreView::Disabling(DisablingView::new(self)),
             Phase::DisablingClosing => CoreView::DisablingClosing(DisablingView::new(self)),
             Phase::DisablingClosed => CoreView::DisablingClosed(DisablingView::new(self)),
-            Phase::ConfigureDisabled { .. } => CoreView::ConfigureDisabled(ConfiguringView {
-                core: DisabledView::new(self),
-            }),
-            Phase::ConfigureDisabledClosing { .. } => {
-                CoreView::ConfigureDisabledClosing(ConfiguringView {
-                    core: DisabledView::new(self),
-                })
+            Phase::ConfigureDisabled { config, policy } => CoreView::ConfigureDisabled(
+                ConfiguringView::new(DisabledView::new(self), config, policy),
+            ),
+            Phase::ConfigureDisabledClosing { config, policy } => {
+                CoreView::ConfigureDisabledClosing(ConfiguringView::new(
+                    DisabledView::new(self),
+                    config,
+                    policy,
+                ))
             }
-            Phase::ConfigureDisabledClosed { .. } => {
-                CoreView::ConfigureDisabledClosed(ConfiguringView {
-                    core: DisabledView::new(self),
-                })
-            }
-            Phase::ConfigureOpen { .. } => CoreView::ConfigureOpen(ConfiguringView {
-                core: EnabledView::new(self),
-            }),
-            Phase::ConfigureClosing { .. } => CoreView::ConfigureClosing(ConfiguringView {
-                core: EnabledView::new(self),
-            }),
-            Phase::ConfigureClosed { .. } => CoreView::ConfigureClosed(ConfiguringView {
-                core: EnabledView::new(self),
-            }),
-            Phase::Failed { .. } => CoreView::Failed(FailedGateView { owner: self }),
+            Phase::ConfigureDisabledClosed { config, policy } => CoreView::ConfigureDisabledClosed(
+                ConfiguringView::new(DisabledView::new(self), config, policy),
+            ),
+            Phase::ConfigureOpen { config, policy } => CoreView::ConfigureOpen(
+                ConfiguringView::new(EnabledView::new(self), config, policy),
+            ),
+            Phase::ConfigureClosing { config, policy } => CoreView::ConfigureClosing(
+                ConfiguringView::new(EnabledView::new(self), config, policy),
+            ),
+            Phase::ConfigureClosed { config, policy } => CoreView::ConfigureClosed(
+                ConfiguringView::new(EnabledView::new(self), config, policy),
+            ),
+            Phase::Failed { fault } => CoreView::Failed(FailedGateView { owner: self, fault }),
         }
     }
 }
@@ -170,7 +169,7 @@ impl<'view, C> CoreView<'view, C> {
             _ => return None,
         };
         Some(CommandView {
-            core: owner.stored_mut(),
+            core: &mut owner.core,
         })
     }
 }
@@ -178,7 +177,7 @@ impl<'view, C> CoreView<'view, C> {
 /// A vacant slot can be prepared once before any lifecycle transition.
 #[must_use]
 pub struct VacantView<'view, C> {
-    owner: &'view mut CoreOwner<C>,
+    bank: &'view mut Option<Prepared<C>>,
 }
 
 impl<
@@ -203,9 +202,10 @@ impl<
         coex: &'slot C,
     ) -> DisabledView<'view, LowerMacCore<'core, 'slot, P, E, T, C, BUFFER_SIZE, Path, TICKETS>>
     {
-        self.owner.core = LowerMacCore::new(authority, tx, config, coex).core;
-        self.owner.phase = Phase::Disabled;
-        DisabledView::new(self.owner)
+        DisabledView::new(self.bank.insert(Prepared {
+            core: LowerMacCore::assemble(authority, tx, config, coex),
+            phase: Phase::Disabled,
+        }))
     }
 }
 
@@ -221,6 +221,56 @@ impl<
     const TICKETS: usize,
 > CoreOwner<LowerMacCore<'core, 'slot, P, E, T, C, BUFFER_SIZE, Path, TICKETS>>
 {
+    /// Recover a disabled bank's construction resources. Any other bank,
+    /// or one whose transmitter retains a publication, stays in place.
+    #[allow(
+        clippy::result_large_err,
+        reason = "the refusal is a small reason; the retained core stays in place"
+    )]
+    pub fn dismantle(
+        &mut self,
+    ) -> Result<LowerMacCoreParts<'core, 'slot, P, E, T, C, BUFFER_SIZE, Path, TICKETS>, CoreRetained>
+    {
+        let Some(prepared) = self.bank.take() else {
+            return Err(CoreRetained::Vacant);
+        };
+        if !matches!(
+            prepared.phase,
+            Phase::Disabled | Phase::DisabledClosing | Phase::DisabledClosed
+        ) {
+            self.bank = Some(prepared);
+            return Err(CoreRetained::NotDisabled);
+        }
+        let Prepared { mut core, phase } = prepared;
+        match core.tx.into_idle() {
+            Ok(tx) => Ok(LowerMacCoreParts {
+                authority: core.authority,
+                tx,
+                config: core.config,
+                coex: core.coex,
+                keys: core.keys,
+            }),
+            Err(tx) => {
+                core.tx = tx;
+                self.bank = Some(Prepared { core, phase });
+                Err(CoreRetained::Publications)
+            }
+        }
+    }
+}
+
+impl<
+    'core,
+    'slot,
+    P: WifiTxPowerProfile,
+    E: WifiTxEntropy,
+    T: oer_time::Timer,
+    C: RadioCoexPriorities,
+    const BUFFER_SIZE: usize,
+    Path: PoolPath,
+    const TICKETS: usize,
+> Prepared<LowerMacCore<'core, 'slot, P, E, T, C, BUFFER_SIZE, Path, TICKETS>>
+{
     // Each heavy step has one body regardless of the caller's gate marker.
     #[inline(never)]
     pub(super) fn configure_in_place(
@@ -228,8 +278,8 @@ impl<
         config: CoreVif,
         enabled: bool,
         gate: GateMode,
-    ) -> Result<(), UnsupportedVif> {
-        let policy = receive_policy(&self.stored().config, &config)?;
+    ) -> Result<ReceivePolicy, UnsupportedVif> {
+        let policy = receive_policy(&self.core.config, &config)?;
         self.phase = match (enabled, gate) {
             (false, GateMode::Open) => Phase::ConfigureDisabled { config, policy },
             (false, GateMode::Closing) => Phase::ConfigureDisabledClosing { config, policy },
@@ -238,7 +288,7 @@ impl<
             (true, GateMode::Closing) => Phase::ConfigureClosing { config, policy },
             (true, GateMode::Closed) => Phase::ConfigureClosed { config, policy },
         };
-        Ok(())
+        Ok(policy)
     }
     #[inline(never)]
     pub(super) fn disable_in_place<
@@ -250,7 +300,7 @@ impl<
         sink: &mut K,
         gate: GateMode,
     ) {
-        let core = self.stored_mut();
+        let core = &mut self.core;
         if core.fault.is_none() {
             core.withdraw_held_attempts(hardware, sink);
         }
@@ -268,23 +318,14 @@ impl<
         &mut self,
         hardware: &mut H,
         sink: &mut K,
+        config: CoreVif,
+        policy: ReceivePolicy,
+        frontier: Phase,
     ) -> bool {
-        let (config, policy) = self.phase.configuration();
-        if !self
-            .stored_mut()
-            .advance_vif(hardware, sink, config, policy)
-        {
+        if !self.core.advance_vif(hardware, sink, config, policy) {
             return false;
         }
-        self.phase = match self.phase {
-            Phase::ConfigureDisabled { .. } => Phase::Disabled,
-            Phase::ConfigureDisabledClosing { .. } => Phase::DisabledClosing,
-            Phase::ConfigureDisabledClosed { .. } => Phase::DisabledClosed,
-            Phase::ConfigureOpen { .. } => Phase::Open,
-            Phase::ConfigureClosing { .. } => Phase::Closing,
-            Phase::ConfigureClosed { .. } => Phase::Closed,
-            _ => panic!("configuration view retains its original frontier"),
-        };
+        self.phase = frontier;
         true
     }
     #[inline(never)]
@@ -293,7 +334,7 @@ impl<
         sink: &mut K,
         gate: GateMode,
     ) -> bool {
-        let core = self.stored();
+        let core = &self.core;
         if core.fault.is_some() || core.attempts().next().is_some() {
             return false;
         }

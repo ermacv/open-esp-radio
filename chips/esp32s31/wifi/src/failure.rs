@@ -1,9 +1,11 @@
 //! Facade-owned failures. Every source variant and observation is retained.
 //! No backend, HAL, STA or RSN type appears in this public vocabulary.
-use oer_ieee80211_runtime::station::{BackendContractViolation, PendingTerminal};
+use oer_ieee80211_runtime::station::{BackendContractViolation, PendingTerminal, Request};
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum StationFailure {
     PolicyDeadlineOverflow,
+    /// A station request arrived without its kind's admission.
+    CommandAdmission(Request),
     RxBlockAckCapacity,
     RxBlockAckEncode,
     EnableRefused(BackendFault),
@@ -24,6 +26,18 @@ pub enum BackendFault {
     Clock,
     Retune(RetuneError),
     Abandoned,
+    UnexpectedAggregate,
+    TuneNotRecorded,
+    Setting(SettingFault),
+    HardwareUnavailable,
+}
+/// Why a P1 setting of the port could not be published or read back.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SettingFault {
+    UnsupportedChannel,
+    ChannelUnset,
+    EdcaLifetime,
+    BlockAckSequence,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum LowerMacFault {
@@ -34,6 +48,7 @@ pub enum LowerMacFault {
     NoRxBlockAckBank,
     Abandoned,
     KeyUseMismatch,
+    KeyBank,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum OrdinaryTxError {
@@ -329,6 +344,65 @@ pub enum PlatformClock {
     Mpll,
     ModemCoexistence,
     ModemLowPowerTimer,
+}
+/// A station that ended for uninstall whose installation fail-stopped
+/// instead of retiring: the slot stays quarantined and the radio is not
+/// released.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct RetirementFailure {
+    /// The station's own failure, when it ended with one.
+    pub failure: Option<StationFailure>,
+    /// Why the ordinary retirement did not complete.
+    pub cause: RetirementCause,
+    /// The P2 owner confirmed the hardware stopped before quarantine.
+    pub hardware_stopped: bool,
+}
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RetirementCause {
+    Cancelled,
+    FailStopRequested,
+    Construction,
+    BodyAlreadyIssued,
+    Deadline,
+    StopUnconfirmed,
+    InvalidState(SlotObservation),
+}
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct SlotObservation {
+    pub phase: u8,
+    pub storage: SlotStorage,
+    pub invocation_present: bool,
+}
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SlotStorage {
+    Empty,
+    Registered,
+    Vacant,
+    Unavailable,
+}
+/// A retired installation whose Wi-Fi radio release did not complete:
+/// every owner the release did not return stays quarantined.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ReleaseFailure {
+    /// The station's own failure, when it ended with one.
+    pub failure: Option<StationFailure>,
+    pub cause: ReleaseCause,
+}
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ReleaseCause {
+    /// The radio driver task never answered the stop handoff; the
+    /// observations are its request kind, slot, epoch and sequence.
+    HandoffLost([u32; 4]),
+    /// The joined slot refused retirement.
+    Retire(RetirementCause),
+    /// The stopped device still held a live or failed radio frontier.
+    NotStopped,
+    /// The MAC or its RX walker was still active; nothing was posted.
+    StillActive(MaintenanceError),
+    /// The radio actor never answered the leave request.
+    LeaveUnanswered([u32; 4]),
+    /// The leave completed into a poisoned radio domain.
+    DomainPoisoned(RadioPoison),
 }
 #[cfg(any(test, target_arch = "riscv32"))]
 pub(crate) mod convert;

@@ -3032,16 +3032,18 @@ impl<'owner, const BUFFER_SIZE: usize> TxSlotFree<'owner, BUFFER_SIZE> {
         self.slot.as_ref()
     }
 
-    pub fn into_buffer(self) -> &'owner mut [u8; BUFFER_SIZE] {
+    /// The free buffer; a DMA owner that left its free phase is stale.
+    pub fn into_buffer(self) -> Result<&'owner mut [u8; BUFFER_SIZE], TxError> {
         match self.slot.get_mut().dma.access() {
-            TxDmaAccess::Free(free) => free.into_buffer(),
-            _ => panic!("free TX slot retains free DMA authority"),
+            TxDmaAccess::Free(free) => Ok(free.into_buffer()),
+            _ => Err(TxError::Stale),
         }
     }
-    pub fn buffer_mut(&mut self) -> &mut [u8; BUFFER_SIZE] {
+    /// The free buffer; a DMA owner that left its free phase is stale.
+    pub fn buffer_mut(&mut self) -> Result<&mut [u8; BUFFER_SIZE], TxError> {
         match self.slot.as_mut().get_mut().dma.access() {
-            TxDmaAccess::Free(free) => free.into_buffer(),
-            _ => panic!("free TX slot retains free DMA authority"),
+            TxDmaAccess::Free(free) => Ok(free.into_buffer()),
+            _ => Err(TxError::Stale),
         }
     }
 
@@ -3056,10 +3058,11 @@ impl<'owner, const BUFFER_SIZE: usize> TxSlotFree<'owner, BUFFER_SIZE> {
             .checked_add(1)
             .ok_or(TxError::ResetRequired)?;
         match slot.dma.access() {
-            TxDmaAccess::Free(free) => free.reserve(buffer_capacity, transfer_length),
-            _ => panic!("free TX slot retains free DMA authority"),
-        }
-        .map_err(map_dma_storage_error)?;
+            TxDmaAccess::Free(free) => free
+                .reserve(buffer_capacity, transfer_length)
+                .map_err(map_dma_storage_error)?,
+            _ => return Err(TxError::Stale),
+        };
         slot.generation_cursor = generation;
         slot.active = TxCookie(generation);
         slot.queue = LegacyTxQueue::Voice;

@@ -33,9 +33,14 @@ impl Kind {
     }
 }
 
-fn submit_ap<'k, 'p, 'id: 'p + 'k, Id: radio::SlotIdentity + 'id>(
-    phase: &mut Esp32s31Phase<'p, 'id, Id, TestDevice, 512>,
-    buffer: Buffer<'id, Id, TestDevice, 512>,
+pub(in crate::lower_mac::tests::port) fn submit_ap<
+    'k,
+    'p,
+    'id: 'p + 'k,
+    Id: radio::SlotIdentity + 'id,
+>(
+    phase: &mut Esp32s31Phase<'p, 'id, Id, TestDevice, 512, Draws>,
+    buffer: Buffer<'id, Id, TestDevice, 512, Draws>,
     ticket: radio::Slot<'id, Tickets, radio::Child<radio::Root<Id>, 2>>,
     key: Option<&'k GroupKey<'id, Id, AccessPoint>>,
 ) {
@@ -87,7 +92,7 @@ fn submit_ap<'k, 'p, 'id: 'p + 'k, Id: radio::SlotIdentity + 'id>(
         .access_point()
         .submit(
             Attempt {
-                context: Tag(92),
+                context: Tag(92, None),
                 ticket,
                 source,
                 access_category: WmmAccessCategory::BestEffort,
@@ -150,12 +155,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for Withdraw {
             let (start, bank) = resources.station_association.into_parts();
             let ([slot], _) = bank.into_parts();
             let station = start.begin(Spp::NotNegotiated);
-            let key = phase.station().install_pairwise_key(
-                &station,
-                slot,
-                IndividualAddress::new(BSSID).expect("peer"),
-                Ccmp128Key::new(&[7; 16]),
-            );
+            let key = installed_pairwise(&mut phase, &station, slot, 7).await;
             let (start, bank) = resources.access_point_association.into_parts();
             let (_, [slot, ..]) = bank.into_parts();
             let ap = start.begin(Spp::NotNegotiated);
@@ -214,7 +214,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for Withdraw {
                         resources
                             .access_point_commands
                             .configure
-                            .with_context(Tag(314)),
+                            .with_context(Tag(314, None)),
                         SupportedFilter::new(ReceiveFilter::NONE).expect("filter"),
                     )
                 }

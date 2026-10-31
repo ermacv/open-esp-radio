@@ -1,0 +1,119 @@
+// Without a build profile the image adopts the runtime, reports
+// NotConfigured and feeds the watchdog it armed. It enables no radio
+// interrupt and takes no RF owner, so no RF starts.
+use oer_embassy_time::EmbassyClock;
+use oer_esp32s31_compose::Esp32s31;
+use oer_esp32s31_hal::peripherals::usb_serial_jtag;
+use oer_esp32s31_hal::peripherals::watchdog::{
+    ArmedRtcWatchdog, RTC_WATCHDOG_FEED_PERIOD_MS, RwdtRegisters,
+};
+use oer_esp32s31_hal::peripherals::{
+    software_interrupt::FromCpu0Irq, system_timer::SystimerAlarm0,
+};
+use oer_esp32s31_hal::root::Root;
+use oer_espressif_executor::Executor;
+use oer_espressif_staged_runtime::{diagnostics, panic};
+
+oer_espressif_staged_runtime::interrupt_table! {
+    contexts { app_wake: 1; }
+    /// The executor's wake (thread mode).
+    wake: WakeToken = FromCpu0Irq => oer_espressif_executor::wake_handler::<Esp32s31, 0, FromCpu0Irq>, line 16, context app_wake, hart 0, Hardware;
+    /// The executor's timer alarm; it only acknowledges and pends.
+    alarm: AlarmToken = SystimerAlarm0 => oer_espressif_executor::alarm_interrupt::<Tasks, 0, SystimerAlarm0>, line 17, context app_wake, hart 0, Hardware;
+}
+
+oer_espressif_executor::tasks! {
+    /// The executor's one task.
+    Tasks: Executor<Esp32s31, 0> {
+        rtc_watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) = feed_rtc_watchdog;
+    }
+}
+
+oer_espressif_staged_runtime::entry!(main, oer_esp32s31_hal::platform::Port);
+
+fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platform::Port>) -> ! {
+    let previous = panic::peek_previous::<oer_esp32s31_hal::platform::Port>();
+    let Some(root) = Root::take() else {
+        fail(oer_diagnostics::name!("root-taken"; 32));
+    };
+    let ((runtime_system_timer, runtime_software_interrupts, runtime_watchdogs), _psram, mut adopted) =
+        match oer_espressif_staged_runtime::adoption::run::<oer_esp32s31_compose::Esp32s31, _, _>(
+            handoff,
+            root.into_runtime(),
+            INTERRUPT_TABLE,
+            oer_esp32s31_board::BootstrapPsram,
+            oer_esp32s31_compose::phy_fault::report_previous,
+            |hardware| {
+                let _reset_causes = oer_esp32s31_compose::reset_causes::read(hardware.reset_cause);
+                oer_esp32s31_compose::wifi_fault::report_previous();
+                let mut early = |bytes: &[u8]| {
+                    if usb_serial_jtag::early_text(bytes) {
+                        Ok(())
+                    } else {
+                        Err(())
+                    }
+                };
+                if let Some(record) = previous {
+                    let _ = diagnostics::emit_previous_panic(&mut early, &record);
+                }
+                let _ = early(b"OER-RESULT: not-configured wifi-station\r\n");
+                (hardware.system_timer, hardware.software_interrupts, hardware.watchdogs)
+            },
+        ) {
+            Ok(adopted) => adopted.into_parts(),
+            Err(error) => fail(error.name()),
+        };
+    let Some(interrupts) = Interrupts::take() else {
+        fail(oer_diagnostics::name!("interrupt-table"; 32));
+    };
+    let timer = runtime_system_timer;
+    let _timer_ready = oer_espressif_executor::init::<Esp32s31, 0, _, _>(
+        oer_espressif_executor::systimer::SystemTimer {
+            comparators: timer.comparators,
+            counter: timer.counter,
+        },
+        adopted.router(),
+        interrupts.alarm,
+        timer.alarm0,
+    )
+    .unwrap_or_else(|failure| failure.reset());
+    let software = runtime_software_interrupts;
+    let executor = Executor::<Esp32s31, 0>::new(software.line0);
+    let (mut router, hart) = match adopted.enable_interrupts() {
+        Ok(router) => router,
+        Err(error) => fail(error.name()),
+    };
+    let watchdog = runtime_watchdogs.rtc;
+    match executor
+        .run(
+            &hart,
+            &mut router,
+            interrupts.wake,
+            software.irq0,
+            (),
+            move |spawner| {
+                if Tasks::rtc_watchdog(spawner, watchdog).is_err() {
+                    fail(oer_diagnostics::name!("task-start"; 32));
+                }
+            },
+        )
+        .unwrap_or_else(|failure| failure.reset()) {}
+}
+
+/// Feed the RTC watchdog for good: the image resets when this executor stops.
+async fn feed_rtc_watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) {
+    let period = oer_time::Duration::from_millis(RTC_WATCHDOG_FEED_PERIOD_MS);
+    match watchdog.feed_every(&EmbassyClock, period).await {}
+}
+
+/// Retain and report a failed boot step before explicitly resetting the image.
+fn fail<const B: usize>(reason: oer_diagnostics::Name<B>) -> ! {
+    oer_espressif_staged_runtime::fatal::boot_failure::<oer_esp32s31_hal::platform::Port>(
+        reason.as_str(),
+        || {
+            let _note = usb_serial_jtag::fatal_note(&oer_diagnostics::Note::runtime_fail(reason));
+        },
+    )
+}
+
+oer_espressif_executor::time_driver!(Esp32s31);

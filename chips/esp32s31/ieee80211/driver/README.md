@@ -76,6 +76,32 @@ development dependencies on the upper MAC and `oer-embassy-net`.
   It exposes no `AmpduPhase`, Trigger-response or beamformee service. The
   chip MAC and HAL contain HE aggregate and Trigger queue primitives; their
   presence does not advertise those services through the port.
+- **Host conformance.** The shared suites run against this backend over the
+  host device model (`lower_mac/tests/port/conformance`): single-MPDU
+  outcomes, publication barriers, interface commands, single-MPDU admission
+  age, every ownership scenario with one buffer class in the
+  `PublishedHead` mode, the GTK progress, expiry, rollback and receive-cut
+  cases, and every EDCA case. The port publishes an idle queue's head at
+  once, so the model withholds that head's result; the `Unpublished`
+  arrangement needs an earlier held BestEffort transmission outside the
+  suite's operations and is checked by its own test. The model holds a
+  queue's completions, injects a TX-timeout edge and a collision, rejects
+  key writes, decrypts air frames at capture against its key table and
+  drains captured hardware, DMA and interrupt frames through the RX cut.
+  A publication is identified by its program's PSDU length: every host DMA
+  allocation has the same model descriptor address. Not run: air denial
+  (no device model), aggregate and BA-window cases (no `AmpduPhase`), and
+  InstallBeside and SelectRetained (one station GTK slot).
+- **Publication observations.** `Esp32s31Backend`'s last parameter `O` is
+  the P2 driver's observation receiver (`port::Observations`, an
+  `oer_events::EventSink<ContentionDraw>`). It arrives in `PortParts`, is
+  stored once in the driver from preparation to retirement, returns with the
+  stopped port and is lent to each contention draw, where the driver selects
+  the head's VIF record. `ContentionDraw` holds values only: role, access
+  category, the complete record, the current window and the drawn backoff.
+  The event is built only for an enabled receiver; images pass `()`. The
+  EDCA host suite checks each draw separately against the AIFSN and backoff
+  of the legacy program the driver handed the hardware.
 - **Conformance.** The hardware lower-MAC conformance image runs every case
   the backend's declared capabilities support; A-MPDU/Block Ack cases without
   `AmpduPhase` are reported as unsupported, never as model-only. The final

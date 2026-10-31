@@ -157,7 +157,10 @@ Module map:
 - `port`: the station's and data machine's tokens on a lower-MAC port
   (`PortStaTokens`, `PortDataTokens`) and the installed pairwise key
   (`StationPairwiseKey`), which numbers each fresh protected MPDU from its
-  CCMP packet-number allocator; a retransmission keeps its number;
+  CCMP packet-number allocator; a retransmission keeps its number. Its
+  request (`StationPairwiseKey::request`) enqueues the installation and
+  returns a `PendingStationPairwiseKey` holding the association; only the
+  key its installation terminal returns makes it installed;
 - the transmit decisions of a station frame travel with its action:
   `StaRatePlan` selects its rate record and transmissions, `StaFrameClass`
   its coexistence class, and `StaTransmit` its access category (Voice), its

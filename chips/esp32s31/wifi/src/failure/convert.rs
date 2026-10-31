@@ -15,6 +15,7 @@ where
 {
     match value {
         ServiceFault::PolicyDeadlineOverflow => StationFailure::PolicyDeadlineOverflow,
+        ServiceFault::CommandAdmission(request) => StationFailure::CommandAdmission(request),
         ServiceFault::RxBlockAckCapacity => StationFailure::RxBlockAckCapacity,
         ServiceFault::RxBlockAckEncode => StationFailure::RxBlockAckEncode,
         ServiceFault::EnableRefused(v) => StationFailure::EnableRefused(backend_fault(v)),
@@ -40,6 +41,22 @@ pub(super) fn backend_fault(value: oer_esp32s31_ieee80211_driver::port::Fault) -
         Source::Clock => BackendFault::Clock,
         Source::Retune(v0) => BackendFault::Retune(retune_error(v0)),
         Source::Abandoned => BackendFault::Abandoned,
+        Source::UnexpectedAggregate => BackendFault::UnexpectedAggregate,
+        Source::TuneNotRecorded => BackendFault::TuneNotRecorded,
+        Source::Setting(v0) => BackendFault::Setting(setting_fault(v0)),
+        Source::HardwareUnavailable => BackendFault::HardwareUnavailable,
+    }
+}
+
+pub(super) fn setting_fault(
+    value: oer_esp32s31_ieee80211_driver::port::SettingFault,
+) -> SettingFault {
+    use oer_esp32s31_ieee80211_driver::port::SettingFault as Source;
+    match value {
+        Source::UnsupportedChannel => SettingFault::UnsupportedChannel,
+        Source::ChannelUnset => SettingFault::ChannelUnset,
+        Source::EdcaLifetime => SettingFault::EdcaLifetime,
+        Source::BlockAckSequence => SettingFault::BlockAckSequence,
     }
 }
 
@@ -55,6 +72,7 @@ pub(super) fn lower_mac_fault(
         Source::NoRxBlockAckBank => LowerMacFault::NoRxBlockAckBank,
         Source::Abandoned => LowerMacFault::Abandoned,
         Source::KeyUseMismatch => LowerMacFault::KeyUseMismatch,
+        Source::KeyBank => LowerMacFault::KeyBank,
     }
 }
 
@@ -525,4 +543,54 @@ pub(super) fn rx_stage_transaction_error(
             queue_depth: queue_depth as u64,
         },
     }
+}
+
+pub(crate) fn retirement(
+    failure: Option<StationFailure>,
+    cause: oer_radio_port::LifecycleError,
+    hardware_stopped: bool,
+) -> RetirementFailure {
+    RetirementFailure {
+        failure,
+        cause: retirement_cause(cause),
+        hardware_stopped,
+    }
+}
+
+pub(crate) fn retirement_cause(cause: oer_radio_port::LifecycleError) -> RetirementCause {
+    use oer_radio_port::{LifecycleError as Source, SlotStorageState as Storage};
+    match cause {
+        Source::Cancelled => RetirementCause::Cancelled,
+        Source::FailStopRequested => RetirementCause::FailStopRequested,
+        Source::Construction => RetirementCause::Construction,
+        Source::BodyAlreadyIssued => RetirementCause::BodyAlreadyIssued,
+        Source::Deadline => RetirementCause::Deadline,
+        Source::StopUnconfirmed => RetirementCause::StopUnconfirmed,
+        Source::InvalidState(observed) => RetirementCause::InvalidState(SlotObservation {
+            phase: observed.phase,
+            storage: match observed.storage {
+                Storage::Empty => SlotStorage::Empty,
+                Storage::Registered => SlotStorage::Registered,
+                Storage::Vacant => SlotStorage::Vacant,
+                Storage::Unavailable => SlotStorage::Unavailable,
+            },
+            invocation_present: observed.invocation_present,
+        }),
+    }
+}
+
+/// The answer of a release that left the actor and its domain as named.
+pub(crate) fn released(
+    domain: oer_esp32s31_radio_client::DomainHealth,
+) -> Result<(), ReleaseCause> {
+    match domain {
+        oer_esp32s31_radio_client::DomainHealth::Healthy => Ok(()),
+        oer_esp32s31_radio_client::DomainHealth::Poisoned(poison) => {
+            Err(ReleaseCause::DomainPoisoned(radio_poison(poison)))
+        }
+    }
+}
+
+pub(crate) fn still_active(error: oer_esp32s31_hal::owner::maintenance::Error) -> ReleaseCause {
+    ReleaseCause::StillActive(maintenance_error(error))
 }

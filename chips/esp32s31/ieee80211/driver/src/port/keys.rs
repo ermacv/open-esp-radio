@@ -110,22 +110,14 @@ macro_rules! keys {
                 }
                 let (start, bank) = vacant.into_parts();
                 let (pairwise, group) = bank.into_parts();
-                let mut pairwise = pairwise.into_iter();
-                let first = pairwise.next().expect("association has a PTK slot");
-                let mut parts = KeyBankParts {
-                    pairwise: heapless::Vec::new(),
-                    group: heapless::Vec::new(),
+                // The pool's geometry is fixed at compile time: the station's
+                // PTK slot is the first, and `from_array` checks that the
+                // spare slots fit the bank's capacity during monomorphization.
+                let [first, spare @ ..] = pairwise;
+                let parts = KeyBankParts {
+                    pairwise: heapless::Vec::from_array(spare),
+                    group: heapless::Vec::from_array(group),
                 };
-                for slot in pairwise {
-                    if let Err(_slot) = parts.pairwise.push(slot) {
-                        panic!("consumer key bank fits the advertised association pool");
-                    }
-                }
-                for slot in group {
-                    if let Err(_slot) = parts.group.push(slot) {
-                        panic!("consumer key bank fits the advertised association pool");
-                    }
-                }
                 (start, first, parts)
             }
             fn pairwise_identity(key: &Self::PairwiseKey) -> Self::Identity {
@@ -205,6 +197,33 @@ pub(super) enum GroupCommand<'id, Id: SlotIdentity> {
     },
 }
 
+#[cfg(test)]
+impl<Id: SlotIdentity> GroupCommand<'_, Id> {
+    /// The slot and permission identities this command holds.
+    pub(super) fn owners(&self) -> (u8, u8) {
+        match self {
+            Self::InstallStation {
+                slot, permission, ..
+            } => (slot.index(), permission.index()),
+            Self::InstallAccessPoint {
+                slot, permission, ..
+            } => (slot.index(), permission.index()),
+            Self::Replace {
+                permission, key, ..
+            }
+            | Self::Select { permission, key } => (key.identity.slot, permission.index()),
+            Self::Remove { identity, removal } => (
+                identity.slot,
+                match removal {
+                    Removal::StationGroup(permission) => permission.index(),
+                    Removal::AccessPointGroup(permission) => permission.index(),
+                    Removal::StationPairwise(_) | Removal::AccessPointPairwise(_) => u8::MAX,
+                },
+            ),
+        }
+    }
+}
+
 pub(super) trait Role<'id, Id: SlotIdentity + 'id>: InterfaceRole + Sized
 where
     PortKeys<Id, Self>: KeyTypes<'id, Identity = KeyIdentity<'id, Id>>,
@@ -232,8 +251,6 @@ where
     fn remove_group(
         permission: <PortKeys<Id, Self> as KeyTypes<'id>>::GroupPermission,
     ) -> Removal<'id, Id>;
-    fn pairwise_key(identity: RawKeyIdentity)
-    -> <PortKeys<Id, Self> as KeyTypes<'id>>::PairwiseKey;
     fn group_identity(key: <PortKeys<Id, Self> as KeyTypes<'id>>::GroupKey) -> RawKeyIdentity;
 }
 
@@ -280,12 +297,6 @@ macro_rules! role {
                 permission: <PortKeys<Id, Self> as KeyTypes<'id>>::GroupPermission,
             ) -> Removal<'id, Id> {
                 Removal::$group_remove(permission)
-            }
-            fn pairwise_key(identity: RawKeyIdentity) -> PairwiseKey<'id, Id, Self> {
-                PairwiseKey {
-                    identity,
-                    brand: PhantomData,
-                }
             }
             fn group_identity(key: GroupKey<'id, Id, Self>) -> RawKeyIdentity {
                 key.identity

@@ -97,8 +97,9 @@ mod reconnect;
 use commands::CommandCredits;
 pub use commands::{CommandRefused, CommandTerminal, Request};
 pub use control::{
-    Control, ControlCreateRefused, ControlError, ControlRefused, Device, Events, RunnerControl,
-    State, Status, StatusReader,
+    Control, ControlCommand, ControlCreateError, ControlCreateRefused, ControlError,
+    ControlRefused, Device, Events, Operation, OperationEnd, RunnerControl, State, Status,
+    StatusReader, UnreadOperation,
 };
 pub use reconnect::{ReconnectPolicy, ZeroReconnectInterval};
 
@@ -111,10 +112,11 @@ use core::task::Poll;
 use embassy_futures::yield_now;
 use oer_crypto::KeyUnwrap;
 use oer_ieee80211_contracts_port::{
-    ClassFrame, Ieee80211Capabilities, InstalledGroup, InterfacePhase, KeyTypes, LowerMacBackend,
-    LowerMacEvent, LowerMacPhase, LowerMacTerminal, PhaseSingleOutcome, PhaseTypes, PoolMpdu,
-    PoolSource, Removed, RemovedKey, RetransmissionPlan, ReturnedMpdu, RxBuffer, StationPhase,
-    SupportedChannel, TxBufferClass, TxBufferPool, TxCompleted, TxMpdu, TxProtection, TxSource,
+    ClassFrame, Ieee80211Capabilities, InstalledGroup, InstalledPairwise, InterfacePhase, KeyTypes,
+    LowerMacBackend, LowerMacEvent, LowerMacPhase, LowerMacTerminal, PhaseSingleOutcome,
+    PhaseTypes, PoolMpdu, PoolSource, Removed, RemovedKey, RetransmissionPlan, ReturnedMpdu,
+    RxBuffer, StationPhase, SupportedChannel, TxBufferClass, TxBufferPool, TxCompleted, TxMpdu,
+    TxProtection, TxSource,
 };
 use oer_ieee80211_core_arbiter::{
     Arbiter, ArbiterAction, ArbiterEnd, ArbiterNotice, NoReservation, RetiredArbiter, RetuneRefused,
@@ -448,8 +450,6 @@ pub enum ServiceOutput<K> {
     Notice(contract::Notice),
     /// A request refused synchronously, with its original correlation.
     CommandRefused(CommandRefused),
-    /// A raw producer submitted a second request without the first terminal.
-    CommandInFlight(Request),
     /// The unique terminal of one admitted station request.
     CommandCompleted(CommandTerminal),
     /// The arbiter's command to the access point beside the station.
@@ -493,12 +493,18 @@ pub enum BackendContractViolation {
     /// The station asked for a second key-data unwrap while one was waiting
     /// to start; it owns one ticket.
     StationKeyUnwrap,
+    /// The pairwise installation terminal returned a key of another
+    /// installation; the outstanding request stays retained.
+    ForeignPairwiseKey,
 }
 
 /// The original failure that ended this service. A poisoned disabled owner
 /// additionally retains the backend's disable failure through `cause()`.
 pub enum ServiceFault<B: StationPort> {
     PolicyDeadlineOverflow,
+    /// A station request arrived while its kind's credit was out: the one
+    /// admission it shares with every request of that kind did not hold it.
+    CommandAdmission(Request),
     /// A checked management request exceeded its retained response domain.
     RxBlockAckCapacity,
     /// A validated receive BA reply could not fit the control frame encoder.
@@ -531,7 +537,9 @@ impl<K, F: FnMut(ServiceOutput<K>)> ServiceOutputSink<K> for F {
 ///
 /// ```compile_fail,E0308
 /// use embassy_sync::{blocking_mutex::raw::NoopRawMutex, channel::Channel};
-/// use oer_ieee80211_runtime::station::{Control, State, ServiceCommand, ServiceIo, ServiceOutput};
+/// use oer_ieee80211_runtime::station::{
+///     Control, ControlCommand, State, ServiceCommand, ServiceIo, ServiceOutput,
+/// };
 /// use oer_ieee80211_core_roles_sta::data::{EthernetFrame, TxMsdu};
 /// use oer_memory::WakingSpscQueue;
 /// let commands = Channel::<NoopRawMutex, ServiceCommand<()>, 1>::new();
@@ -552,7 +560,9 @@ impl<K, F: FnMut(ServiceOutput<K>)> ServiceOutputSink<K> for F {
 /// The composition moves one receiver into the service and retains its sole sender:
 ///
 /// ```
-/// use oer_ieee80211_runtime::station::{Control, State, ServiceCommand, ServiceIo, ServiceOutput};
+/// use oer_ieee80211_runtime::station::{
+///     Control, ControlCommand, State, ServiceCommand, ServiceIo, ServiceOutput,
+/// };
 /// use oer_ieee80211_core_roles_sta::data::{EthernetFrame, TxMsdu};
 /// use oer_memory::WakingSpscQueue;
 /// let mut commands = WakingSpscQueue::<ServiceCommand<()>, 1>::new();
@@ -565,7 +575,7 @@ impl<K, F: FnMut(ServiceOutput<K>)> ServiceOutputSink<K> for F {
 /// let state = State::new();
 /// let (mut application, control) = Control::new(application, &state).unwrap();
 /// let io = ServiceIo { commands, transmit, receive, output: &mut output, control };
-/// assert!(application.try_command(ServiceCommand::Stop).is_ok());
+/// assert!(application.try_command(ControlCommand::Stop).is_ok());
 /// assert!(matches!(io.commands.try_receive(), Some(ServiceCommand::Stop)));
 /// ```
 pub struct ServiceIo<
@@ -845,6 +855,7 @@ impl<
         if retired._pending.admissions.first().is_some()
             || retired._pending.retune.is_some()
             || retired._pending.group.is_some()
+            || retired._pending.pairwise.is_some()
         {
             return Err(RestartFailed {
                 reason: RestartFailure::PendingTerminal,
@@ -1017,8 +1028,21 @@ struct PendingActions<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id> {
         >,
     >,
     group: Option<PendingGroup<'id, B>>,
+    /// The station's PTK installation, until its terminal returns the key.
+    pairwise: Option<PendingPairwise<'id, B>>,
     /// The station's unwrap request, until the key-unwrap slot takes it.
     unwrap: Option<(KeyUnwrapId, StaKeyUnwrapRequest)>,
+}
+
+struct PendingPairwise<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id> {
+    pending: oer_ieee80211_core_roles_sta::machine::PendingPairwiseKey<
+        'id,
+        <B::Types<'id> as PhaseTypes<'id>>::EpochPath,
+    >,
+    key: oer_ieee80211_core_roles_sta::port::PendingStationPairwiseKey<
+        'id,
+        <B::Types<'id> as PhaseTypes<'id>>::StationKeys,
+    >,
 }
 
 struct PendingGroup<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id> {
@@ -1098,6 +1122,7 @@ impl<
                     admissions: Admissions::default(),
                     retune: None,
                     group: None,
+                    pairwise: None,
                     unwrap: None,
                 },
             },
@@ -1151,7 +1176,7 @@ impl<
                     rates: rates,
                     terminal_access: terminal_access,
                     events: events,
-                    pending: PendingActions { receive, commands: credits.into_inner(), admissions: Admissions::default(), retune: None, group: None, unwrap: None },
+                    pending: PendingActions { receive, commands: credits.into_inner(), admissions: Admissions::default(), retune: None, group: None, pairwise: None, unwrap: None },
                 }),
             })
         })
@@ -1804,7 +1829,13 @@ impl<
                                     io.output.emit(ServiceOutput::CommandRefused(refused));
                                 }
                             }
-                            None => io.output.emit(ServiceOutput::CommandInFlight(command)),
+                            // Each request held its kind's one admission,
+                            // which returns with the credit at its terminal.
+                            None => {
+                                return Served::Failed(
+                                    ServiceFault::CommandAdmission(command).into(),
+                                );
+                            }
                         }
                     }
                     ServiceCommand::AccessPoint(fact) => arbiter.access_point(now, fact.into()),
@@ -2438,6 +2469,9 @@ impl<
             LowerMacTerminal::KeyRemoved(Removed::Station(RemovedKey::Pairwise { .. })) => {
                 Some(ControlTerminal::PairwiseRemoval)
             }
+            LowerMacTerminal::PairwiseKeyInstalled(InstalledPairwise::Station(_)) => {
+                Some(ControlTerminal::PairwiseInstall)
+            }
             _ => None,
         };
         if let Some(control) = control {
@@ -2509,9 +2543,49 @@ impl<
             | LowerMacTerminal::GroupKeyInstalled(InstalledGroup::Station { .. })
             | LowerMacTerminal::GroupKeyReplaced { .. }
             | LowerMacTerminal::GroupKeySelected { .. }) => self.group_terminal(now, terminal)?,
+            LowerMacTerminal::PairwiseKeyInstalled(InstalledPairwise::Station(key)) => {
+                // The admission check above proved an outstanding request.
+                let Some(PendingPairwise {
+                    pending,
+                    key: request,
+                }) = self.pending.pairwise.take()
+                else {
+                    return Err(ContractFault::sealed(
+                        BackendContractViolation::UnexpectedTerminal(PendingTerminal::Control(
+                            ControlTerminal::PairwiseInstall,
+                        )),
+                        LowerMacTerminal::PairwiseKeyInstalled(InstalledPairwise::Station(key)),
+                    ));
+                };
+                let key = match request.installed(key) {
+                    Ok(key) => key,
+                    Err(foreign) => {
+                        // The request keeps its association and numbering
+                        // token; the foreign key is returned with the fault.
+                        self.pending.pairwise = Some(PendingPairwise {
+                            pending,
+                            key: foreign.pending,
+                        });
+                        return Err(ContractFault::sealed(
+                            BackendContractViolation::ForeignPairwiseKey,
+                            LowerMacTerminal::PairwiseKeyInstalled(InstalledPairwise::Station(
+                                foreign.key,
+                            )),
+                        ));
+                    }
+                };
+                self.station.input(
+                    now,
+                    StaInput::PairwiseKeyInstalled { pending, key },
+                    &mut self.events,
+                );
+            }
             terminal @ (LowerMacTerminal::Configured(
                 oer_ieee80211_contracts_port::Configured::AccessPoint(_),
             )
+            | LowerMacTerminal::PairwiseKeyInstalled(InstalledPairwise::AccessPoint(
+                _,
+            ))
             | LowerMacTerminal::KeyRemoved(Removed::AccessPoint(_))
             | LowerMacTerminal::GroupKeyInstalled(InstalledGroup::AccessPoint {
                 ..
@@ -2972,17 +3046,21 @@ where
             slot,
             peer,
             key,
-        } => StaInput::PairwiseKeyInstalled {
-            pending,
-            key: StationPairwiseKey::install(
+        } => {
+            let key = StationPairwiseKey::request(
                 &mut phase.station(),
                 association,
                 slot,
                 peer,
                 key,
                 rates.packet_number_step(),
-            ),
-        },
+            );
+            pending_actions.pairwise = Some(PendingPairwise { pending, key });
+            pending_actions
+                .admissions
+                .insert(PendingTerminal::Control(ControlTerminal::PairwiseInstall));
+            return Ok(Follow::Nothing);
+        }
         StaAction::InstallGroupKey {
             association,
             pending,

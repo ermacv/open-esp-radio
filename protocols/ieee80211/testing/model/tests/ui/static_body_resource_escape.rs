@@ -19,7 +19,7 @@ impl PortBody<Id, Backend> for Body {
         #[cfg(ui_reject)]
         let output: Box<dyn Any> = Box::new(buffer); // ui-error: lifetime may not live long enough
         #[cfg(not(ui_reject))]
-        let output: Box<dyn Any> = Box::new(buffer.bytes_mut().len());
+        let output: Box<dyn Any> = Box::new(buffer.bytes_mut().map(|bytes| bytes.len()));
         Ended::uninstall(owner, (), output)
     }
 }

@@ -464,6 +464,31 @@ fn ordinary_join_follows_p2_destruction_and_is_the_only_reinstall_authority() {
 }
 
 #[test]
+fn retire_consumes_joined_returns_the_vacant_owner_once_and_ends_registration() {
+    let model = model(true);
+    finish(with_local_slot(async |claim| {
+        let mut slot = claim.place();
+        let (frontend, p2) = slot
+            .register(Owner(model.clone()))
+            .ok()
+            .expect("fresh slot");
+        let join = frontend.finish();
+        run_p2(p2).await;
+        let joined = join.wait().await.ok().expect("ordinary join");
+        let () = slot
+            .retire(joined)
+            .expect("a joined slot returns its vacant owner");
+        assert_eq!(model.finishes.get(), 1);
+        assert_eq!(model.drops.get(), 1);
+        assert!(
+            slot.register(Owner(model.clone())).is_err(),
+            "a retired slot accepts no later registration"
+        );
+        assert_eq!(model.abandons.get(), 0);
+    }));
+}
+
+#[test]
 fn late_stopped_proof_never_turns_quarantine_into_joined() {
     let model = model(true);
     finish(with_local_slot(async |claim| {

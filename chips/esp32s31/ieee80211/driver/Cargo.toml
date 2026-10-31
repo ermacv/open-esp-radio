@@ -10,6 +10,7 @@ description = "Role-neutral ESP32-S31 Wi-Fi device composition"
 [dependencies]
 oer-wire = { path = "../../../../portable/wire" }
 oer-sync = { path = "../../../../portable/sync" }
+oer-events = { path = "../../../../portable/events" }
 atomic-waker = "1.1.2"
 heapless = "0.9.2"
 pin-project = "1.1.13"
@@ -43,6 +44,7 @@ oer-esp32s31-hal = { path = "../../hal", features = ["test-support"] }
 oer-ieee80211-wire = { path = "../../../../protocols/ieee80211/wire", features = ["test-support"] }
 oer-espressif-ieee80211-policy = { path = "../../../espressif/ieee80211-policy" }
 oer-ieee80211-core-upper-mac = { path = "../../../../protocols/ieee80211/core/upper-mac" }
+oer-ieee80211-testing-conformance = { path = "../../../../protocols/ieee80211/testing/conformance" }
 
 oer-espressif-interrupt-table = { path = "../../../espressif/interrupt-table", features = ["host-signal"] }
 oer-time-virtual = { path = "../../../../portable/time-virtual" }

@@ -1,4 +1,4 @@
-use crate::{Caps, Channels, Connection, Control, Network, radio, station as service};
+use crate::{Caps, Channels, Control, Network, ServiceConnection, radio, station as service};
 use oer_esp32s31_compose::Esp32s31;
 use oer_esp32s31_ieee80211_driver::irq::{
     DoorbellAcknowledge, RadioDoorbell, WifiIrqLine, WifiIrqPart, service_wifi_line,
@@ -126,11 +126,19 @@ impl Config {
         self.reconnect = policy;
         self
     }
+    /// Name the access point whose frames a trace build observes; without
+    /// it, none is selected.
+    #[cfg(oer_trace)]
+    pub fn with_trace_target(mut self, target: [u8; 6]) -> Self {
+        self.target = Some(target);
+        self
+    }
+    /// The same signature in every build; a trace build's target is chosen
+    /// with [`Self::with_trace_target`].
     pub fn new(
         channel: u8,
         country: [u8; 2],
         cap_dbm: i8,
-        #[cfg(oer_trace)] target: Option<[u8; 6]>,
         all_channels: bool,
     ) -> Result<Self, InitializationError> {
         let domain =
@@ -153,7 +161,7 @@ impl Config {
             country,
             cap_dbm,
             #[cfg(oer_trace)]
-            target,
+            target: None,
             all_channels,
             domain,
             supported,
@@ -258,7 +266,6 @@ pub enum Event {
     Disconnected(runtime::contract::DisconnectReason),
     CommandRefused(runtime::CommandRefused),
     CommandCompleted(runtime::CommandTerminal),
-    CommandInFlight(runtime::Request),
     TxRefused {
         operation: runtime::TxOperation,
         reason: runtime::contract::TransmitRefusal,
@@ -289,7 +296,6 @@ impl<E: Events> runtime::ServiceOutputSink<Caps> for Output<E> {
             }
             runtime::ServiceOutput::CommandRefused(r) => Event::CommandRefused(r),
             runtime::ServiceOutput::CommandCompleted(r) => Event::CommandCompleted(r),
-            runtime::ServiceOutput::CommandInFlight(r) => Event::CommandInFlight(r),
             runtime::ServiceOutput::TxRefused { operation, reason } => {
                 Event::TxRefused { operation, reason }
             }
@@ -311,6 +317,7 @@ pub struct Storage<W: Binding> {
     pub(crate) service: service::ServiceStorage<W>,
     pub(crate) bell: oer_memory::Doorbell,
     pub(crate) ready: static_cell::StaticCell<radio::ReadySlot<W>>,
+    pub(crate) retire: static_cell::StaticCell<radio::RetireSlot<W>>,
 }
 impl<W: Binding> Storage<W> {
     pub const fn new() -> Self {
@@ -320,6 +327,7 @@ impl<W: Binding> Storage<W> {
             service: service::ServiceStorage::new(),
             bell: oer_memory::Doorbell::new(),
             ready: static_cell::StaticCell::new(),
+            retire: static_cell::StaticCell::new(),
         }
     }
 }
@@ -351,13 +359,23 @@ pub struct Runners<W: Binding> {
 pub struct Driver<W: Binding> {
     pub(crate) boot: radio::Boot<W>,
     pub(crate) ready: &'static radio::ReadySlot<W>,
+    pub(crate) retire: &'static radio::RetireSlot<W>,
     pub(crate) bell: &'static oer_memory::Doorbell,
 }
 pub struct StationRunner<W: Binding> {
+    pub(crate) service: ServiceRunner<W>,
+    /// Hands the ordinary join to the driver task, which answers once its
+    /// radio release has ended.
+    pub(crate) retire:
+        oer_memory::Poster<radio::Retire<W>, Result<(), crate::failure::ReleaseCause>>,
+    /// Publishes the exit to Control once it is final.
+    pub(crate) stop: crate::StopGuard<'static, StationExit>,
+}
+pub(crate) struct ServiceRunner<W: Binding> {
     pub(crate) engine: W::Engine,
     pub(crate) frontend: oer_memory::Poster<(), Result<radio::Front<W>, InitializationError>>,
     pub(crate) config: Config,
-    pub(crate) connection: Connection<'static>,
+    pub(crate) connection: ServiceConnection<'static>,
     pub(crate) storage: &'static mut service::ServiceStorage<W>,
     pub(crate) output: runtime::Events<'static, Output<W::Events>>,
 }
@@ -368,6 +386,10 @@ pub enum StationExit {
     Failed(crate::failure::StationFailure),
     Poisoned(crate::failure::StationFailure),
     Quarantined(crate::failure::StationFailure),
+    /// Ended for uninstall, but the installation fail-stopped instead.
+    RetirementFailed(crate::failure::RetirementFailure),
+    /// Retired, but the Wi-Fi radio release did not complete.
+    ReleaseFailed(crate::failure::ReleaseFailure),
     Unavailable(UnavailableCause),
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -401,6 +423,10 @@ pub fn station<W: Binding>(
         .channels
         .split()
         .unwrap_or_else(|_| W::fail(InitializationError::Control));
+    let crate::Connection {
+        service: connection,
+        stop,
+    } = connection;
     #[cfg(oer_trace)]
     let _ = service::TARGET.set((address, config.target));
     control
@@ -415,6 +441,13 @@ pub fn station<W: Binding>(
         .try_init_with(|| radio::ReadySlot::<W>::new(&storage.bell, 1, 0x100))
         .unwrap_or_else(|| W::fail(InitializationError::Storage));
     let frontend = ready
+        .claim()
+        .unwrap_or_else(|| W::fail(InitializationError::Frontend));
+    let retire = storage
+        .retire
+        .try_init_with(|| radio::RetireSlot::<W>::new(&storage.bell, 2, 0x101))
+        .unwrap_or_else(|| W::fail(InitializationError::Storage));
+    let retire_poster = retire
         .claim()
         .unwrap_or_else(|| W::fail(InitializationError::Frontend));
     (
@@ -440,15 +473,20 @@ pub fn station<W: Binding>(
                     storage: &mut storage.driver,
                 },
                 ready,
+                retire,
                 bell: &storage.bell,
             },
             station: StationRunner {
-                engine,
-                frontend,
-                config,
-                connection,
-                storage: &mut storage.service,
-                output,
+                service: ServiceRunner {
+                    engine,
+                    frontend,
+                    config,
+                    connection,
+                    storage: &mut storage.service,
+                    output,
+                },
+                retire: retire_poster,
+                stop,
             },
         },
     )

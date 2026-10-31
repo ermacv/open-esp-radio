@@ -1,0 +1,7 @@
+# A neutral Open profile: it builds the configured image without any
+# credential. It checks the Open path only; WPA2 needs its own profile.
+ssid = "oer-ci-open"
+security = "open"
+country = "DE"
+channel = 1
+cap_dbm = 10

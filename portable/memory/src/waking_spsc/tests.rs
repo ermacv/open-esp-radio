@@ -194,3 +194,18 @@ fn a_producer_on_another_thread_sends_each_owner_once_through_its_permit() {
     assert!(receiver.try_receive().is_none());
     assert_eq!(drops.load(Ordering::Relaxed), COUNT);
 }
+
+#[test]
+fn try_reserve_keeps_the_value_with_its_caller_until_it_sends() {
+    let mut queue = WakingSpscQueue::<u8, 1>::new();
+    let (mut sender, receiver) = queue.split();
+    sender.try_reserve().expect("a vacant cell").send(7);
+    assert!(
+        sender.try_reserve().is_none(),
+        "the full queue reserves nothing"
+    );
+    // A dropped permit publishes nothing.
+    assert_eq!(receiver.try_receive(), Some(7));
+    drop(sender.try_reserve().expect("the cell is vacant again"));
+    assert_eq!(receiver.try_receive(), None);
+}

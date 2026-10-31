@@ -92,9 +92,13 @@ impl oer_ieee80211_contracts_port::TxBufferClass for Buffer {
 }
 
 impl TxBufferMemory for Buffer {
-    fn renew_msdu(&mut self) {}
-    fn bytes_mut(&mut self) -> &mut [u8] {
-        &mut self.0[..self.1]
+    fn renew_msdu(&mut self) -> Result<(), oer_ieee80211_contracts_port::BufferMemoryUnavailable> {
+        Ok(())
+    }
+    fn bytes_mut(
+        &mut self,
+    ) -> Result<&mut [u8], oer_ieee80211_contracts_port::BufferMemoryUnavailable> {
+        Ok(&mut self.0[..self.1])
     }
 }
 
@@ -339,7 +343,7 @@ impl EventSink<StaEvent> for Losses {
             StaEvent::TokenLost => self.tokens += 1,
             StaEvent::RsnInputDropped(_) => self.rsn += 1,
             StaEvent::ScanBssObserved(outcome) => self.scan = Some(outcome),
-            StaEvent::DataLost(_) => {}
+            StaEvent::DataLost(_) | StaEvent::BufferMemoryUnavailable => {}
         }
     }
 }
@@ -962,7 +966,7 @@ impl<'id, const G: usize> World<'id, G> {
     /// One frame the station sent: the world records it and holds its
     /// tokens.
     fn transmitted(&mut self, mut transmit: StaTransmit<'id, Tokens<'id, G>, Caps>, keyed: bool) {
-        let frame = transmit.buffer.bytes_mut();
+        let frame = transmit.buffer.bytes_mut().expect("test memory");
         // A Null's PM bit tells its power state apart.
         let subtype = u16::from_le_bytes([frame[0], frame[1]]) & 0x10fc;
         // Authentication, Association and EAPOL are the

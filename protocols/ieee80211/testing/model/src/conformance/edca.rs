@@ -36,7 +36,7 @@ fn submit<'p, 'id: 'p, Id: SlotIdentity + 'id>(
     mut buffer: ModelBuffer<'id, ModelBackend<Id>, ModelSmall>,
     legacy: LegacyRate,
 ) -> Result<(), &'static str> {
-    buffer.bytes_mut().fill(0);
+    buffer.bytes_mut().map_err(|_| "model memory")?.fill(0);
     let rate = phase.rate(PhyRate::Legacy(legacy)).ok_or("EDCA rate")?;
     let sender = match role {
         VifRole::Station => phase.station().address(),
