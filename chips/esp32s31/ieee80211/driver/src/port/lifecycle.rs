@@ -207,15 +207,14 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotOwner<
         let core = LowerMacCore::new(authority, initial.transmitter, initial.config, initial.coex);
         // Every allocation was returned (checked above): each place takes its own.
         let buffers = buffers.map(|place| {
-            let (memory, returned) = self
+            let pair = self
                 .storage
                 .shared
                 .returned
-                .take(usize::from(place.index()))
-                .unzip();
+                .take(usize::from(place.index()));
             Buffer {
                 place,
-                dma: buffer::ReturnableBuffer { memory, returned },
+                dma: buffer::ReturnableBuffer::taken(pair),
                 loan: None,
                 admission: None,
             }

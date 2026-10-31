@@ -13,17 +13,77 @@ pub struct Buffer<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observ
     pub(super) admission: Option<Instant>,
     pub(super) loan: Option<BodyLoan<'id, Id, Esp32s31Backend<Id, D, B, O>>>,
 }
-pub(super) struct ReturnableBuffer<const B: usize> {
-    pub(super) memory: Option<TxSlotFree<'static, B>>,
-    pub(super) returned: Option<oer_memory::ReturnToken<'static, TxSlotFree<'static, B>>>,
+type ReturnRight<const B: usize> = oer_memory::ReturnToken<'static, TxSlotFree<'static, B>>;
+
+/// One buffer place's DMA memory and its sole right of return, held
+/// together: memory never exists here without its right.
+enum Dma<const B: usize> {
+    /// The CPU owns the memory; its right travels with it, and dropping the
+    /// buffer returns the memory.
+    Free {
+        memory: TxSlotFree<'static, B>,
+        returned: ReturnRight<B>,
+    },
+    /// The hardware owns the memory; the right waits for the completion
+    /// that hands it back. Dropped here, the place stays out of the bank.
+    Published { returned: ReturnRight<B> },
+    /// Neither: the place had no returned memory, or its pair moved on.
+    Released,
+}
+
+/// A buffer place's [`Dma`]; dropping it returns CPU-owned memory.
+pub(super) struct ReturnableBuffer<const B: usize>(Dma<B>);
+impl<const B: usize> ReturnableBuffer<B> {
+    /// The pair the bank's place hands out, or nothing to return.
+    pub(super) fn taken(pair: Option<(TxSlotFree<'static, B>, ReturnRight<B>)>) -> Self {
+        Self(match pair {
+            Some((memory, returned)) => Dma::Free { memory, returned },
+            None => Dma::Released,
+        })
+    }
+    /// The CPU's memory, while it owns it.
+    pub(super) fn memory_mut(&mut self) -> Option<&mut TxSlotFree<'static, B>> {
+        match &mut self.0 {
+            Dma::Free { memory, .. } => Some(memory),
+            _ => None,
+        }
+    }
+    /// Hand the memory to the hardware, keeping its right; `None`, and no
+    /// change, unless the CPU owns it.
+    pub(super) fn publish(&mut self) -> Option<TxSlotFree<'static, B>> {
+        match core::mem::replace(&mut self.0, Dma::Released) {
+            Dma::Free { memory, returned } => {
+                self.0 = Dma::Published { returned };
+                Some(memory)
+            }
+            other => {
+                self.0 = other;
+                None
+            }
+        }
+    }
+    /// The completion handed `memory` back: it rejoins its right. Refused,
+    /// with the memory and no change, unless the hardware owned it.
+    pub(super) fn complete(
+        &mut self,
+        memory: TxSlotFree<'static, B>,
+    ) -> Result<(), TxSlotFree<'static, B>> {
+        match core::mem::replace(&mut self.0, Dma::Released) {
+            Dma::Published { returned } => {
+                self.0 = Dma::Free { memory, returned };
+                Ok(())
+            }
+            other => {
+                self.0 = other;
+                Err(memory)
+            }
+        }
+    }
 }
 impl<const B: usize> Drop for ReturnableBuffer<B> {
     fn drop(&mut self) {
-        if let Some(memory) = self.memory.take() {
-            self.returned
-                .take()
-                .expect("buffer retains its sole return right")
-                .return_value(memory);
+        if let Dma::Free { memory, returned } = core::mem::replace(&mut self.0, Dma::Released) {
+            returned.return_value(memory);
         }
     }
 }
@@ -43,16 +103,14 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> TxBufferMe
     fn renew_msdu(&mut self) {
         self.admission = None;
         self.dma
-            .memory
-            .as_mut()
+            .memory_mut()
             .expect("returned buffer owns free DMA")
             .reset_work();
     }
     fn bytes_mut(&mut self) -> &mut [u8] {
         let bytes = self
             .dma
-            .memory
-            .as_mut()
+            .memory_mut()
             .expect("body owns free DMA")
             .buffer_mut();
         &mut bytes[crate::ordinary_tx::TX_METADATA_SIZE..][..BufferClass::<B>::CAPACITY]
@@ -436,4 +494,83 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
 
 pub struct ReceiveAgreement<'id, Id: SlotIdentity> {
     pub(super) slot: association::BlockAckSlot<'id, BlockAcks, 8, Part<Id, 7>>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::boxed::Box;
+
+    type Bank = oer_memory::ReturnBank<TxSlotFree<'static, 512>, 1>;
+
+    /// A bank whose one place holds a free model slot.
+    fn bank() -> &'static Bank {
+        let slot = Pin::static_mut(Box::leak(Box::new(
+            crate::mac::tx::TxSlot::<512>::new_model().expect("model slot"),
+        )));
+        let TxSlotAccess::Free(memory) = slot.access() else {
+            panic!("a new slot is free")
+        };
+        let bank = Box::leak(Box::new(Bank::new()));
+        assert!(bank.seed(0, memory).is_ok());
+        bank
+    }
+
+    #[test]
+    fn dropping_a_free_buffer_returns_its_memory_to_the_place() {
+        let bank = bank();
+        drop(ReturnableBuffer::taken(bank.take(0)));
+        assert!(bank.take(0).is_some(), "the memory is back in its place");
+    }
+
+    #[test]
+    fn a_published_buffer_keeps_its_right_and_its_place_stays_out_when_dropped() {
+        let bank = bank();
+        let mut buffer = ReturnableBuffer::taken(bank.take(0));
+        let memory = buffer.publish().expect("the CPU owned it");
+        assert!(buffer.memory_mut().is_none(), "the hardware owns it now");
+        assert!(buffer.publish().is_none(), "published once");
+        drop(buffer);
+        // The hardware never handed it back: nothing reuses the place.
+        assert!(bank.take(0).is_none());
+        drop(memory);
+    }
+
+    #[test]
+    fn a_completion_rejoins_the_right_and_a_wrong_transition_changes_nothing() {
+        let bank = bank();
+        let mut buffer = ReturnableBuffer::taken(bank.take(0));
+        let memory = buffer.publish().expect("the CPU owned it");
+        let memory = match buffer.complete(memory) {
+            Ok(()) => buffer.publish().expect("free again"),
+            Err(_) => panic!("the hardware owned it"),
+        };
+        assert!(buffer.complete(memory).is_ok());
+        // A second completion is refused with its memory, unchanged.
+        let other = bank_memory();
+        assert!(buffer.complete(other).is_err());
+        assert!(buffer.memory_mut().is_some());
+        drop(buffer);
+        assert!(bank.take(0).is_some());
+    }
+
+    #[test]
+    fn a_place_without_returned_memory_holds_nothing_to_return() {
+        let bank = bank();
+        let _held = bank.take(0);
+        let mut buffer = ReturnableBuffer::taken(bank.take(0));
+        assert!(buffer.memory_mut().is_none());
+        assert!(buffer.publish().is_none());
+    }
+
+    /// Free memory of another model slot.
+    fn bank_memory() -> TxSlotFree<'static, 512> {
+        let slot = Pin::static_mut(Box::leak(Box::new(
+            crate::mac::tx::TxSlot::<512>::new_model().expect("model slot"),
+        )));
+        let TxSlotAccess::Free(memory) = slot.access() else {
+            panic!("a new slot is free")
+        };
+        memory
+    }
 }

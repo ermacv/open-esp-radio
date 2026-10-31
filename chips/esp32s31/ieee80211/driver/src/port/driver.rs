@@ -414,7 +414,18 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             let TxSlotAccess::Free(memory) = slot.access() else {
                 return Err(Fault::Capacity);
             };
-            pending.operation.execute().mpdu.buffer.dma.memory = Some(memory);
+            // The memory rejoins the right its publication kept.
+            if pending
+                .operation
+                .execute()
+                .mpdu
+                .buffer
+                .dma
+                .complete(memory)
+                .is_err()
+            {
+                return Err(Fault::Capacity);
+            }
             let sent = matches!(
                 completion.end,
                 PublicationEnd::Completed {
@@ -954,12 +965,8 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             None => TxAdmission::Open(core_ticket),
         };
         let mpdu = pending.operation.execute().mpdu;
-        let mut memory = mpdu
-            .buffer
-            .dma
-            .memory
-            .take()
-            .expect("queued MPDU owns free DMA");
+        // The hardware takes the memory; the buffer keeps its return right.
+        let mut memory = mpdu.buffer.dma.publish().ok_or(Fault::Capacity)?;
         if !mpdu.published {
             if let (Some(Installed::Transmit(key)), Some(pn)) = (key_handle, mpdu.pn) {
                 core.write_ccmp_header(key, &mut memory, mpdu.layout.header_len(), pn)
