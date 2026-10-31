@@ -3718,6 +3718,7 @@ impl<'id, C, B: ModelComposition + 'id> ModelPhase<'_, 'id, C, B> {
 
 /// Install a station PTK and take the key its installation terminal
 /// returns, recycling RX delivered before it.
+#[cfg(any(test, feature = "test-support"))]
 pub(crate) async fn installed_station_pairwise<'p, 'id: 'p, C, B: ModelComposition + 'id>(
     phase: &mut ModelPhase<'p, 'id, C, B>,
     association: &ModelAssociation<'id, B, Station>,
