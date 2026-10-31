@@ -29,6 +29,7 @@ pub enum BackendFault {
     UnexpectedAggregate,
     TuneNotRecorded,
     Setting(SettingFault),
+    HardwareUnavailable,
 }
 /// Why a P1 setting of the port could not be published or read back.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

@@ -529,7 +529,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         let accepted = {
             match unit.normalized() {
                 Ok(frame) => {
-                    core_views::received::<Id, D, B>(self.core.view(), device.hardware(), &frame)
+                    core_views::received::<Id, D, B>(self.core.view(), device.hardware()?, &frame)
                         .map(|(bytes, meta)| {
                             (
                                 bytes
@@ -641,7 +641,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             let mut sink = Sink::default();
             core_views::service::<Id, D, B>(
                 self.core.view(),
-                device.hardware(),
+                device.hardware()?,
                 WifiTxWake::Deadline,
                 &mut sink,
             )?;
@@ -653,7 +653,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                     let mut sink = Sink::default();
                     core_views::service::<Id, D, B>(
                         self.core.view(),
-                        device.hardware(),
+                        device.hardware()?,
                         wake,
                         &mut sink,
                     )?;
@@ -671,7 +671,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                             .view()
                             .commands()
                             .ok_or(Fault::Capacity)?
-                            .station_tbtt(device.hardware(), &mut sink);
+                            .station_tbtt(device.hardware()?, &mut sink);
                     }
                     self.collect(held, sink, stopping)?;
                 }
@@ -684,7 +684,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                 let mut sink = Sink::default();
                 let done = core_views::advance_configuration::<Id, D, B>(
                     self.core.view(),
-                    device.hardware(),
+                    device.hardware()?,
                     &mut sink,
                 );
                 self.collect(held, sink, stopping)?;
@@ -735,7 +735,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                 }
                 if let Some(old) = old.take() {
                     idle_command!(self.core, |view| view.end_checked_rx_block_ack(
-                        device.hardware(),
+                        device.hardware()?,
                         old.role,
                         old.peer,
                         old.tid,
@@ -743,7 +743,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                 }
                 if let Some(agreement) = wanted {
                     idle_command!(self.core, |view| view
-                        .start_checked_rx_block_ack(device.hardware(), agreement))?;
+                        .start_checked_rx_block_ack(device.hardware()?, agreement))?;
                 }
                 *old = wanted;
             }
@@ -778,7 +778,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                 }
                 Command::OpenGate => {
                     let mut sink = Sink::default();
-                    core_views::open::<Id, D, B>(self.core.view(), device.hardware(), &mut sink)?;
+                    core_views::open::<Id, D, B>(self.core.view(), device.hardware()?, &mut sink)?;
                     self.closed = false;
                     self.collect(held, sink, stopping)?;
                 }
@@ -847,7 +847,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         self.withdraw(held);
         if self.closing.is_some()
             && !core_views::configuring::<Id, D, B>(self.core.view())
-            && core_views::close::<Id, D, B>(self.core.view(), device.hardware())
+            && core_views::close::<Id, D, B>(self.core.view(), device.hardware()?)
         {
             // The core has returned every published head. Existing AC queues
             // retain their tails in order until those heads are terminal.
@@ -895,7 +895,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             && self.closing.is_none()
         {
             let mut sink = Sink::default();
-            core_views::disable::<Id, D, B>(self.core.view(), device.hardware(), &mut sink);
+            core_views::disable::<Id, D, B>(self.core.view(), device.hardware()?, &mut sink);
             self.collect(held, sink, true)?;
             let mut sink = Sink::default();
             let disabled = core_views::finish_disable::<Id, D, B>(self.core.view(), &mut sink);
@@ -1002,7 +1002,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         let queue = self.free[index].take().ok_or(Fault::Capacity)?;
         // Durable backing owns the indivisible operation before publication.
         self.running[index] = Some(pending);
-        if let Err(refused) = core.submit_checked(device.hardware(), queue, admission, values) {
+        if let Err(refused) = core.submit_checked(device.hardware()?, queue, admission, values) {
             core::mem::forget(refused);
             return Err(Fault::Capacity);
         }
@@ -1021,7 +1021,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         let installed = match installation {
             Installation::Transmit { spp, scope, slot } => Installed::Transmit(
                 idle_command!(self.core, |view| view.install_key_parts(
-                    device.hardware(),
+                    device.hardware()?,
                     spp,
                     scope,
                     slot,
@@ -1035,7 +1035,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             ),
             Installation::Receive { spp, slot, key_id } => Installed::Receive(
                 idle_command!(self.core, |view| view.install_station_group_parts(
-                    device.hardware(),
+                    device.hardware()?,
                     spp,
                     slot,
                     key_id,
@@ -1071,14 +1071,14 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         match installed {
             Installed::Transmit(key) => {
                 idle_command!(self.core, |view| view.remove_checked_key(
-                    device.hardware(),
+                    device.hardware()?,
                     key,
                     &mut sink
                 ))
             }
             Installed::Receive(key) => {
                 idle_command!(self.core, |view| view.remove_checked_key(
-                    device.hardware(),
+                    device.hardware()?,
                     key,
                     &mut sink
                 ))
@@ -1209,13 +1209,13 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                 };
                 #[cfg(oer_debug_control)]
                 let mut hardware = key_replacement::RejectOnce {
-                    hardware: device.hardware(),
+                    hardware: device.hardware()?,
                     reject: held.reject_group_replacement.replace(false),
                 };
                 #[cfg(oer_debug_control)]
                 let hardware = &mut hardware;
                 #[cfg(not(oer_debug_control))]
-                let hardware = device.hardware();
+                let hardware = device.hardware()?;
                 let result = idle_command!(self.core, |view| view.replace_station_group_key(
                     hardware,
                     installed,

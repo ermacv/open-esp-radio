@@ -375,7 +375,7 @@ impl<W: Binding> port::Device<TX> for Device<W> {
         <Inner<W> as port::Device<TX>>::OwnedConfigureContext<Id>;
     type ConfigureContext<'p, Id: SlotIdentity + 'p> =
         <Inner<W> as port::Device<TX>>::ConfigureContext<'p, Id>;
-    fn hardware(&mut self) -> &mut Self::Hardware {
+    fn hardware(&mut self) -> Result<&mut Self::Hardware, Fault> {
         <Inner<W> as port::Device<TX>>::hardware(&mut self.0)
     }
     fn timer(&self) -> &EmbassyClock {
@@ -412,11 +412,13 @@ impl<W: Binding> port::Device<TX> for Device<W> {
         ))) = &result
         {
             for queue in oer_esp32s31_hal::types::MacTxQueueIndex::ALL {
-                if <Inner<W> as port::Device<TX>>::hardware(&mut self.0)
-                    .wifi_mac_hal()
-                    .ordinary_tx_queue_snapshot(queue)
-                    .collision_pending
-                {
+                // A trace observation only: registers held elsewhere show nothing.
+                if <Inner<W> as port::Device<TX>>::hardware(&mut self.0).is_ok_and(|hardware| {
+                    hardware
+                        .wifi_mac_hal()
+                        .ordinary_tx_queue_snapshot(queue)
+                        .collision_pending
+                }) {
                     {
                         let observer = W::DriverObserver::default();
                         oer_trace::observe!(observer, crate::observation::TxQueueCollision);

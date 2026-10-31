@@ -123,7 +123,9 @@ pub trait Device<const B: usize>: Sized + 'static {
     type OwnedConfigureContext<Id: SlotIdentity>;
     type ConfigureContext<'p, Id: SlotIdentity + 'p>: LoanedContext<'p, Id, Owned = Self::OwnedConfigureContext<Id>>
         + 'p;
-    fn hardware(&mut self) -> &mut Self::Hardware;
+    /// The device's registers, while no actor transaction or retirement
+    /// holds them; otherwise `Fault::HardwareUnavailable`.
+    fn hardware(&mut self) -> Result<&mut Self::Hardware, Fault>;
     fn timer(&self) -> &Self::Timer;
     fn next_deadline(&self) -> Option<Instant>;
     fn take_power_profile(&mut self) -> Option<Self::Power>;
@@ -179,6 +181,8 @@ pub enum Fault {
     TuneNotRecorded,
     /// A P1 setting could not be published or read back.
     Setting(settings::SettingFault),
+    /// The device's registers were lent to an actor transaction or retired.
+    HardwareUnavailable,
 }
 
 /// Why the radio front end did not retune a stopped Wi-Fi client.

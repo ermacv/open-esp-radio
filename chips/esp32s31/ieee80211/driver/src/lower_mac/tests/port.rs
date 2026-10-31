@@ -46,6 +46,8 @@ impl Timer for TestTimer {
 
 #[derive(Default)]
 struct Observed {
+    /// The device's registers are held elsewhere: `hardware` refuses.
+    hardware_unavailable: bool,
     /// What the P2 driver reported at each publication's contention draw.
     draws: Rc<RefCell<Vec<crate::lower_mac::ContentionDraw>>>,
     check_context: bool,
@@ -218,11 +220,14 @@ impl Device<512> for TestDevice {
     type Context<'p, Id: radio::SlotIdentity + 'p> = Tag;
     type OwnedConfigureContext<Id: radio::SlotIdentity> = Tag;
     type ConfigureContext<'p, Id: radio::SlotIdentity + 'p> = Tag;
-    fn hardware(&mut self) -> &mut Hardware {
+    fn hardware(&mut self) -> Result<&mut Hardware, Fault> {
         self.assert_driver_context();
+        if self.observed.borrow().hardware_unavailable {
+            return Err(Fault::HardwareUnavailable);
+        }
         self.hardware.reject_key_writes +=
             core::mem::take(&mut self.observed.borrow_mut().reject_key_writes);
-        &mut self.hardware
+        Ok(&mut self.hardware)
     }
     fn timer(&self) -> &TestTimer {
         &self.timer

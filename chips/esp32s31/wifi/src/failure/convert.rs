@@ -44,6 +44,7 @@ pub(super) fn backend_fault(value: oer_esp32s31_ieee80211_driver::port::Fault) -
         Source::UnexpectedAggregate => BackendFault::UnexpectedAggregate,
         Source::TuneNotRecorded => BackendFault::TuneNotRecorded,
         Source::Setting(v0) => BackendFault::Setting(setting_fault(v0)),
+        Source::HardwareUnavailable => BackendFault::HardwareUnavailable,
     }
 }
 

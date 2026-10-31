@@ -200,3 +200,24 @@ fn an_executor_deadline_without_a_hardware_timeout_edge_keeps_the_dma_owner() {
     assert!(seen.borrow().is_none(), "no terminal returns the owners");
     assert_eq!(observed.borrow().publications, 1);
 }
+
+#[test]
+fn a_device_without_its_registers_fail_stops_without_publishing() {
+    // The registers are held by an actor transaction: the driver's first
+    // hardware access is the typed HardwareUnavailable fault, not a panic.
+    let (parts, observed, timer) = installed(std::vec![(0, 0)]);
+    observed.borrow_mut().hardware_unavailable = true;
+    let seen = Rc::new(RefCell::new(None));
+    let body = OutcomeBody {
+        hold: false,
+        timer,
+        observed: observed.clone(),
+        seen: seen.clone(),
+    };
+    assert!(matches!(
+        block_on(run_body(parts, body)),
+        Report::FailStopped { .. } | Report::Abandoned
+    ));
+    assert!(seen.borrow().is_none());
+    assert_eq!(observed.borrow().publications, 0);
+}
