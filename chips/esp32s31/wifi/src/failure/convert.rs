@@ -532,8 +532,16 @@ pub(crate) fn retirement(
     cause: oer_radio_port::LifecycleError,
     hardware_stopped: bool,
 ) -> RetirementFailure {
+    RetirementFailure {
+        failure,
+        cause: retirement_cause(cause),
+        hardware_stopped,
+    }
+}
+
+pub(crate) fn retirement_cause(cause: oer_radio_port::LifecycleError) -> RetirementCause {
     use oer_radio_port::{LifecycleError as Source, SlotStorageState as Storage};
-    let cause = match cause {
+    match cause {
         Source::Cancelled => RetirementCause::Cancelled,
         Source::FailStopRequested => RetirementCause::FailStopRequested,
         Source::Construction => RetirementCause::Construction,
@@ -550,10 +558,21 @@ pub(crate) fn retirement(
             },
             invocation_present: observed.invocation_present,
         }),
-    };
-    RetirementFailure {
-        failure,
-        cause,
-        hardware_stopped,
     }
+}
+
+/// The answer of a release that left the actor and its domain as named.
+pub(crate) fn released(
+    domain: oer_esp32s31_radio_client::DomainHealth,
+) -> Result<(), ReleaseCause> {
+    match domain {
+        oer_esp32s31_radio_client::DomainHealth::Healthy => Ok(()),
+        oer_esp32s31_radio_client::DomainHealth::Poisoned(poison) => {
+            Err(ReleaseCause::DomainPoisoned(radio_poison(poison)))
+        }
+    }
+}
+
+pub(crate) fn still_active(error: oer_esp32s31_hal::owner::maintenance::Error) -> ReleaseCause {
+    ReleaseCause::StillActive(maintenance_error(error))
 }

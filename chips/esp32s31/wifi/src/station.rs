@@ -1,7 +1,7 @@
 //! Image-owned mapping; the station service and IP workload run on P1.
 use crate::chip::{
-    Binding, Config, InitializationError, Output, Profile, Security, StationExit, StationRunner,
-    TX, UnavailableCause,
+    Binding, Config, InitializationError, Output, Profile, Security, ServiceRunner, StationExit,
+    StationRunner, TX, UnavailableCause,
 };
 use crate::radio::{self, Backend, Caps, Device, Family};
 use core::{convert::Infallible, future::Future, marker::PhantomData, mem::MaybeUninit};
@@ -267,7 +267,7 @@ pub(crate) static ASSOCIATION: AssociationCapabilities = AssociationCapabilities
     wmm: [221, 7, 0, 0x50, 0xf2, 2, 0, 1, 0],
 };
 pub struct Body<W: Binding> {
-    runner: StationRunner<W>,
+    runner: ServiceRunner<W>,
     profile: Profile<W>,
 }
 
@@ -414,7 +414,7 @@ impl<W: Binding> rp::PortBody<W::Id, Backend<W::Id, W>> for Body<W> {
         'id: 'p,
     {
         let Body { runner, profile } = self;
-        let StationRunner {
+        let ServiceRunner {
             engine,
             config,
             connection,
@@ -459,7 +459,11 @@ impl<W: Binding> rp::PortBody<W::Id, Backend<W::Id, W>> for Body<W> {
         })
     }
 }
-pub async fn serve<W: Binding>(mut runner: StationRunner<W>, profile: Profile<W>) -> StationExit {
+pub async fn serve<W: Binding>(runner: StationRunner<W>, profile: Profile<W>) -> StationExit {
+    let StationRunner {
+        service: mut runner,
+        retire,
+    } = runner;
     let mut pending = runner.frontend.post(());
     let (poster, front) = core::future::poll_fn(|cx| pending.poll_answer(cx))
         .await
@@ -467,7 +471,15 @@ pub async fn serve<W: Binding>(mut runner: StationRunner<W>, profile: Profile<W>
     runner.frontend = poster;
     match front {
         Ok(front) => match rp::run_port(front, Body { runner, profile }).await {
-            rp::PortEnd::Uninstalled { output, .. } => output,
+            rp::PortEnd::Uninstalled { joined, output } => {
+                // The exit is published only after the radio release ended.
+                let mut pending = retire.post(joined);
+                let released = core::future::poll_fn(|cx| pending.poll_answer(cx))
+                    .await
+                    .map_err(|lost| crate::failure::ReleaseCause::HandoffLost(lost.observations()))
+                    .and_then(|(_, released)| released);
+                released_exit(output, released)
+            }
             rp::PortEnd::FailStopped { outcome, output } => {
                 // A body that ended for uninstall reports the fail-stop; a
                 // body that requested one already reports its own cause.
@@ -484,6 +496,7 @@ pub async fn serve<W: Binding>(mut runner: StationRunner<W>, profile: Profile<W>
                     StationExit::Poisoned(_)
                     | StationExit::Quarantined(_)
                     | StationExit::RetirementFailed(_)
+                    | StationExit::ReleaseFailed(_)
                     | StationExit::Unavailable(_) => output,
                 }
             }
@@ -497,4 +510,25 @@ pub async fn serve<W: Binding>(mut runner: StationRunner<W>, profile: Profile<W>
             StationExit::Unavailable(UnavailableCause::Initialization(error))
         }
     }
+}
+
+/// An uninstalled station's exit once its radio release ended: a failed
+/// release never reports the ordinary Stopped.
+fn released_exit(
+    output: StationExit,
+    released: Result<(), crate::failure::ReleaseCause>,
+) -> StationExit {
+    let Err(cause) = released else {
+        return output;
+    };
+    let failure = match output {
+        StationExit::Stopped => None,
+        StationExit::Failed(failure) => Some(failure),
+        StationExit::Poisoned(_)
+        | StationExit::Quarantined(_)
+        | StationExit::RetirementFailed(_)
+        | StationExit::ReleaseFailed(_)
+        | StationExit::Unavailable(_) => return output,
+    };
+    StationExit::ReleaseFailed(crate::failure::ReleaseFailure { failure, cause })
 }

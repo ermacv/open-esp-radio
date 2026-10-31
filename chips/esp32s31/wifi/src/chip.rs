@@ -311,6 +311,7 @@ pub struct Storage<W: Binding> {
     pub(crate) service: service::ServiceStorage<W>,
     pub(crate) bell: oer_memory::Doorbell,
     pub(crate) ready: static_cell::StaticCell<radio::ReadySlot<W>>,
+    pub(crate) retire: static_cell::StaticCell<radio::RetireSlot<W>>,
 }
 impl<W: Binding> Storage<W> {
     pub const fn new() -> Self {
@@ -320,6 +321,7 @@ impl<W: Binding> Storage<W> {
             service: service::ServiceStorage::new(),
             bell: oer_memory::Doorbell::new(),
             ready: static_cell::StaticCell::new(),
+            retire: static_cell::StaticCell::new(),
         }
     }
 }
@@ -351,9 +353,17 @@ pub struct Runners<W: Binding> {
 pub struct Driver<W: Binding> {
     pub(crate) boot: radio::Boot<W>,
     pub(crate) ready: &'static radio::ReadySlot<W>,
+    pub(crate) retire: &'static radio::RetireSlot<W>,
     pub(crate) bell: &'static oer_memory::Doorbell,
 }
 pub struct StationRunner<W: Binding> {
+    pub(crate) service: ServiceRunner<W>,
+    /// Hands the ordinary join to the driver task, which answers once its
+    /// radio release has ended.
+    pub(crate) retire:
+        oer_memory::Poster<radio::Retire<W>, Result<(), crate::failure::ReleaseCause>>,
+}
+pub(crate) struct ServiceRunner<W: Binding> {
     pub(crate) engine: W::Engine,
     pub(crate) frontend: oer_memory::Poster<(), Result<radio::Front<W>, InitializationError>>,
     pub(crate) config: Config,
@@ -370,6 +380,8 @@ pub enum StationExit {
     Quarantined(crate::failure::StationFailure),
     /// Ended for uninstall, but the installation fail-stopped instead.
     RetirementFailed(crate::failure::RetirementFailure),
+    /// Retired, but the Wi-Fi radio release did not complete.
+    ReleaseFailed(crate::failure::ReleaseFailure),
     Unavailable(UnavailableCause),
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -419,6 +431,13 @@ pub fn station<W: Binding>(
     let frontend = ready
         .claim()
         .unwrap_or_else(|| W::fail(InitializationError::Frontend));
+    let retire = storage
+        .retire
+        .try_init_with(|| radio::RetireSlot::<W>::new(&storage.bell, 2, 0x101))
+        .unwrap_or_else(|| W::fail(InitializationError::Storage));
+    let retire_poster = retire
+        .claim()
+        .unwrap_or_else(|| W::fail(InitializationError::Frontend));
     (
         control,
         network,
@@ -442,15 +461,19 @@ pub fn station<W: Binding>(
                     storage: &mut storage.driver,
                 },
                 ready,
+                retire,
                 bell: &storage.bell,
             },
             station: StationRunner {
-                engine,
-                frontend,
-                config,
-                connection,
-                storage: &mut storage.service,
-                output,
+                service: ServiceRunner {
+                    engine,
+                    frontend,
+                    config,
+                    connection,
+                    storage: &mut storage.service,
+                    output,
+                },
+                retire: retire_poster,
             },
         },
     )

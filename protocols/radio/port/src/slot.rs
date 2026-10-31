@@ -270,6 +270,21 @@ impl LifecycleError {
     }
 }
 
+/// Retirement refused an inconsistent slot, returning its join authority.
+pub struct SlotRetireRefused<Id: SlotIdentity> {
+    /// Exact source observations.
+    pub cause: LifecycleError,
+    /// The supplied affine join authority.
+    pub joined: Joined<Id>,
+}
+impl<Id: SlotIdentity> core::fmt::Debug for SlotRetireRefused<Id> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("SlotRetireRefused")
+            .field("cause", &self.cause)
+            .finish_non_exhaustive()
+    }
+}
+
 /// Registration refusal, retaining rejected input or P2's cleanup authority.
 /// Like a successful registration, this value must be destroyed on P2.
 pub enum SlotRegisterError<'s, Id: SlotIdentity + 's, S: SlotOwner<Id> + 's, Rejected = S> {
@@ -599,6 +614,27 @@ impl<Id: SlotIdentity, S: SlotOwner<Id>> PortSlot<Id, S> {
         // that empty backing in place after all old endpoint loans ended.
         let owner = resume(vacant);
         self.install(owner)
+    }
+
+    /// End this slot's installations with its ordinary, consuming join
+    /// authority, returning the vacant owner instead of reinstalling it. The
+    /// backing stays in place and accepts no later registration; a refusal
+    /// keeps the vacant owner in the slot and returns the authority.
+    pub fn retire(&mut self, joined: Joined<Id>) -> Result<S::Vacant, SlotRetireRefused<Id>> {
+        let cause = self.signals.invalid(storage_state(&self.owner), false);
+        if self.signals.state.load(Ordering::Acquire) != JOINED {
+            return Err(SlotRetireRefused { cause, joined });
+        }
+        match self.owner.take() {
+            Some(Stored::Vacant(vacant)) => {
+                let Joined { identity: _ } = joined;
+                Ok(vacant)
+            }
+            retained => {
+                *self.owner = retained;
+                Err(SlotRetireRefused { cause, joined })
+            }
+        }
     }
 
     fn install<'s, Rejected>(

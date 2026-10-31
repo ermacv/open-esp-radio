@@ -365,6 +365,30 @@ pub enum SlotStorage {
     Vacant,
     Unavailable,
 }
+/// A retired installation whose Wi-Fi radio release did not complete:
+/// every owner the release did not return stays quarantined.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ReleaseFailure {
+    /// The station's own failure, when it ended with one.
+    pub failure: Option<StationFailure>,
+    pub cause: ReleaseCause,
+}
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ReleaseCause {
+    /// The radio driver task never answered the stop handoff; the
+    /// observations are its request kind, slot, epoch and sequence.
+    HandoffLost([u32; 4]),
+    /// The joined slot refused retirement.
+    Retire(RetirementCause),
+    /// The stopped device still held a live or failed radio frontier.
+    NotStopped,
+    /// The MAC or its RX walker was still active; nothing was posted.
+    StillActive(MaintenanceError),
+    /// The radio actor never answered the leave request.
+    LeaveUnanswered([u32; 4]),
+    /// The leave completed into a poisoned radio domain.
+    DomainPoisoned(RadioPoison),
+}
 #[cfg(any(test, target_arch = "riscv32"))]
 pub(crate) mod convert;
 #[cfg(test)]
