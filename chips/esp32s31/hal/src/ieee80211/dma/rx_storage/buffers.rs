@@ -86,6 +86,10 @@ impl<const BUFFER_SIZE: usize, const STORAGE_SIZE: usize> RxDmaBuffer<BUFFER_SIZ
         // SAFETY: the completed-unit owner proved that DMA released this
         // buffer. The buffer is part of stable arena storage and the state
         // transition prevents recycle until the affine buffer is returned.
+        // Its whole `[u8; STORAGE_SIZE]` cell is initialized for its life:
+        // `new` builds it from `[0; STORAGE_SIZE]`, zeroed placement
+        // (`Zeroable`) writes zeros, and DMA only stores bytes into it, so
+        // every byte of `BUFFER_SIZE <= STORAGE_SIZE` is initialized.
         unsafe { self.1.detach(pointer, length, BUFFER_SIZE) }
             .map_err(|_| RxRingError::BufferOwnershipConflict)
     }

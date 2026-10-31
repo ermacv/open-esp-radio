@@ -64,8 +64,9 @@ impl ExternalRxReturn {
     ///
     /// `pointer..pointer + capacity` is the stable allocation this state
     /// guards; DMA no longer accesses it while the state is not Attached.
-    /// The first `length` bytes are initialized, and the returned buffer has
-    /// exclusive CPU access until it is returned. The allocation must remain
+    /// All `capacity` bytes are initialized; the first `length` are the
+    /// received frame. The returned buffer has exclusive CPU access until it
+    /// is returned. The allocation must remain
     /// valid even if the buffer is forgotten.
     #[allow(
         unsafe_code,
@@ -594,8 +595,8 @@ pub struct ExternalRxAdoption {
     pub data: NonNull<u8>,
     /// Bytes of the published view.
     pub length: usize,
-    /// Bytes from `data` to the end of the stable allocation, which the
-    /// adopter owns in full until release.
+    /// Bytes from `data` to the end of the stable allocation, all
+    /// initialized, which the adopter owns in full until release.
     pub available: usize,
 }
 
