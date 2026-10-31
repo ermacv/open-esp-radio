@@ -80,7 +80,7 @@ GPL-2.0-only, built locally from verified source and installed only on this
 host; it is not committed, included in CI artifacts or redistributed.
 Its source archive is verified by SHA-256, with the build configuration in provenance.
 The [upstream-derived source hash](https://raw.githubusercontent.com/buildroot/buildroot/master/package/busybox/busybox.hash)
-is pinned in `oer_lab_router::udhcpc`. Build it without root or RF:
+is pinned in `oer_lab_fixture::udhcpc`. Build it without root or RF:
 
 ```console
 cargo stand fixture build-udhcpc

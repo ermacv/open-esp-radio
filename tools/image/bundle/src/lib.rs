@@ -434,6 +434,11 @@ impl ImageBundle {
     }
 
     /// The bundle's file `name`.
+    /// The bundle's directory, where its manifest lies.
+    pub fn directory(&self) -> &Path {
+        &self.directory
+    }
+
     pub fn path(&self, name: &str) -> PathBuf {
         self.directory.join(name)
     }

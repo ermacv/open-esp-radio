@@ -4,7 +4,7 @@
 # generates the SSID and passphrase it sets on both. Every checkout of the
 # host reads the same file. `cargo stand discover` prints the [[board]] of
 # each attached board; `cargo stand doctor` checks the host around it.
-schema = 1
+schema = 2
 
 [stand]
 id = "example-lab"
@@ -67,24 +67,27 @@ mode = "dhcp"
 # address = "192.168.1.182/24"
 # gateway = "192.168.1.1"
 
-# The board's own AP, which the stand's station joins.
+# The board's own AP, which the stand's station joins: the channels and
+# widths a run may choose for it.
 [access_point]
-channel = 13
-# `mhz20`, `mhz40-above` or `mhz40-below`; HT40 keeps the secondary channel
-# inside channels 1..=13.
-channel_width = "mhz40-below"
 client_limit = 4
 target_address = "10.43.0.1/24"
 client_address = "10.43.0.2/24"
 secondary_client_address = "10.43.0.3/24"
+channels = [13]
+# `mhz20`, `mhz40-above` or `mhz40-below`; HT40 keeps the secondary channel
+# inside channels 1..=13.
+widths = ["mhz40-below"]
 
-[station_fixture]
-# `open-wrt`, `local-linux` (interface, country, channel, address,
-# coexistence, phys) or `external` (phys).
+# The lab's OpenWrt router, equipment the LAB service owns and reaches over
+# SSH; a station on this host is `[local_station]` (interface, country,
+# address, coexistence) instead.
+[router]
 kind = "open-wrt"
 radio = "radio0"
 ap_section = "default_radio0"
-channel = 13
+# The channels a run may choose on it.
+channels = [13]
 ssh_target = "example-router"
 wireless_interface = "phy0-ap0"
 ingress_interface = "br-lan"

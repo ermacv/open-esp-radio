@@ -1,8 +1,11 @@
 # `oer-lab-router`
 
-The stand, for the host tools that use it (`cargo fw` and HIL): the owner's
-stand file, the OpenWrt lab router that serves the stand's access point,
-and the SSH that reaches it.
+The stand's OpenWrt lab router, which serves the stand's access point, and
+the SSH that reaches it; the stand file's description of the stand; the
+probe of the equipment reached over SSH. Only the LAB service
+(`oer-tool-lab-service`) and the board drivers build against this crate: the
+service owns the router's SSH, and its clients reach the router through
+the service's operations (`oer_lab_client::protocol::RouterOperation`).
 
 ## The stand
 
@@ -17,11 +20,12 @@ and the SSH that reaches it.
 
 `~/.config/open-esp-radio/stand.toml` (or `$OER_STAND_FILE`), one per host,
 shared by every checkout. It holds the stand's credentials, so its mode must
-be **0600**: any other mode is refused before the file is read. Schema 1,
-with made-up values:
+be **0600**: any other mode is refused before the file is read. Schema 2,
+with made-up values (`cargo stand stand-file convert` rewrites a schema 1
+file, keeping its comments):
 
 ```toml
-schema = 1
+schema = 2
 
 [[hub]]
 id = "top"
@@ -48,17 +52,18 @@ reset = ["usb-jtag-rts", "jtag", "power"]   # HIL: the reset ladder, in order
 [station]
 ipv4 = { mode = "dhcp" }     # HIL: how the stand's station takes its address
 
-[station_fixture]
+[router]                     # the lab router, equipment of the LAB service
 kind = "open-wrt"
 ssh_target = "lab-router"    # an ssh host or alias with a loaded key
 wireless_interface = "phy0-ap0"
 radio = "radio0"             # the UCI wifi-device section
 ap_section = "default_radio0" # the UCI wifi-iface section of the stand AP
-channel = 6                  # 1 to 13
+phys = ["legacy", "ht20"]    # the AP modes its radio supports
+channels = [6]               # the channels a run may choose, 1 to 13
 
 [access_point]               # HIL: the board's own AP the station joins
-channel = 6
-channel_width = "ht20"
+channels = [6]               # the channels and widths a run may choose
+widths = ["ht20"]
 target_address = "192.168.77.1/24"
 client_address = "192.168.77.2/24"
 
@@ -94,7 +99,7 @@ nothing else is read:
 | Consumer | Reads |
 | --- | --- |
 | boards, flashing, power | `schema`, `[[hub]]`, `[[board]]` |
-| HIL lower-MAC and station | `[station_fixture]` `kind`, `ssh_target`, `wireless_interface`, `radio`, `ap_section`, `channel`; the SSID is generated per run |
+| the LAB service's router | `[router]`; the run names its channel, one of `channels`, and the SSID is generated per run |
 | the stand services and HIL (`cargo stand`, `cargo hil`) | also `[stand]`, the boards' `radios`, `roles`, `reset`, `startup-artifact`, the hubs' `buttons`, `[station].ipv4`, `[access_point]` without credentials, `[air_observer]`, `[bluetooth]`, `[legacy_bss]` |
 
 **Secret** are the generated SSIDs and passphrases, `ssh_target` and the

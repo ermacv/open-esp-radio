@@ -48,6 +48,11 @@ impl Claim {
         Self::exclusive(format!("board:{identity}"))
     }
 
+    /// Port `port` of the hub at USB 2 location `location`, to switch it.
+    pub fn hub_port(location: &str, port: u8) -> Self {
+        Self::exclusive(format!("hub-port:{location}:{port}"))
+    }
+
     pub fn stand() -> Self {
         Self::exclusive(STAND)
     }

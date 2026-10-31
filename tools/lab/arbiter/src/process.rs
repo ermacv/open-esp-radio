@@ -6,24 +6,16 @@ use serde::{Deserialize, Serialize};
 /// start time, so a stale ticket is never mistaken for a live one.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct ProcessIdentity {
-    pub(crate) pid: u32,
-    pub(crate) start_ticks: u64,
+pub struct ProcessIdentity {
+    pub pid: u32,
+    pub start_ticks: u64,
 }
 
 impl ProcessIdentity {
-    pub(crate) fn current() -> crate::Result<Self> {
-        Self::of(std::process::id()).ok_or_else(|| "cannot read this process's start time".into())
-    }
-
-    pub(crate) fn of(pid: u32) -> Option<Self> {
+    pub fn of(pid: u32) -> Option<Self> {
         Some(Self {
             pid,
             start_ticks: oer_os_process::proc::start_ticks(pid)?,
         })
-    }
-
-    pub(crate) fn alive(&self) -> bool {
-        Self::of(self.pid).is_some_and(|current| current == *self)
     }
 }

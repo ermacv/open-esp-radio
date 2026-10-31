@@ -1,5 +1,5 @@
 use super::*;
-use oer_lab_board::power::PortStatus;
+use oer_lab_model::hubs::PortStatus;
 
 /// `uhubctl` on the stand, 2026-10-04: the peer on the middle hub's port 2,
 /// the DUT on its port 3, the bottom hub cascaded on its port 4.
@@ -25,7 +25,7 @@ Current status for hub 3-8 [0bda:5423 TerraMaster 4-Port USB 2.0 Hub, USB 2.10, 
 ";
 
 const STAND: &str = r#"
-schema = 1
+schema = 2
 [stand]
 id = "test"
 air = "exclusive"
@@ -80,7 +80,7 @@ fn place(hub: &str, port: u8, button: Option<u8>) -> Place {
 
 #[test]
 fn the_report_gives_each_port_its_power_and_device() {
-    let hubs = power::parse(REPORT);
+    let hubs = oer_lab_model::hubs::parse(REPORT);
     let mid = hubs.iter().find(|hub| hub.location == "3-8.3").unwrap();
     assert_eq!(
         mid.ports[1],
@@ -103,7 +103,7 @@ fn the_report_gives_each_port_its_power_and_device() {
 #[test]
 fn discovery_finds_both_boards_on_their_ports_and_buttons() {
     let stand = stand(STAND);
-    let findings = discover(&stand, &power::parse(REPORT));
+    let findings = discover(&stand, &oer_lab_model::hubs::parse(REPORT));
     assert_eq!(
         findings,
         [
@@ -142,7 +142,7 @@ fn discovery_names_moved_missing_and_new_boards() {
             "Current status for hub 3-8.3.4 [0bda:5411 Generic USB2.1 Hub, USB 2.10, 4 ports, ppps]\n  Port 1: 0103 power enable connect [303a:1001 Espressif USB JTAG/serial debug unit 02:00:00:00:F6:D0]",
         );
     let stand = stand(STAND);
-    let findings = discover(&stand, &power::parse(&report));
+    let findings = discover(&stand, &oer_lab_model::hubs::parse(&report));
     assert_eq!(
         findings,
         [
@@ -181,7 +181,10 @@ fn an_empty_powered_port_points_at_its_button() {
         "  Port 2: 0100 power",
     );
     let stand = stand(STAND);
-    let text = describe(&stand, &discover(&stand, &power::parse(&report)));
+    let text = describe(
+        &stand,
+        &discover(&stand, &oer_lab_model::hubs::parse(&report)),
+    );
     assert!(
         text.contains(
             "missing peer-a on rsh-mid:2 (button 5): button 5 is off or the board is not plugged in"

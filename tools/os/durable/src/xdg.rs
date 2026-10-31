@@ -25,6 +25,9 @@ pub enum Base {
     Data,
     /// The user's configuration files.
     Config,
+    /// State a program keeps across runs that is neither configuration nor
+    /// rebuildable: what it must not lose, such as the stand's restrictions.
+    State,
     /// Per-session runtime files: device locks. `$XDG_RUNTIME_DIR`, else
     /// the cache base.
     Runtime,
@@ -36,6 +39,7 @@ impl Base {
             Self::Cache => "XDG_CACHE_HOME",
             Self::Data => "XDG_DATA_HOME",
             Self::Config => "XDG_CONFIG_HOME",
+            Self::State => "XDG_STATE_HOME",
             Self::Runtime => "XDG_RUNTIME_DIR",
         }
     }
@@ -45,6 +49,7 @@ impl Base {
             Self::Cache => ".cache",
             Self::Data => ".local/share",
             Self::Config => ".config",
+            Self::State => ".local/state",
             Self::Runtime => ".cache",
         }
     }
@@ -119,6 +124,15 @@ mod tests {
                 .find(|(key, _)| key == name)
                 .map(|(_, value)| value.into())
         }
+    }
+
+    #[test]
+    fn the_state_base_lies_below_local_state_without_its_variable() {
+        let env = environment(&[("HOME", "/home/u")]);
+        assert_eq!(
+            path_in(Base::State, "arbiter", &env).unwrap(),
+            PathBuf::from("/home/u/.local/state/open-esp-radio/arbiter")
+        );
     }
 
     #[test]

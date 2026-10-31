@@ -13,7 +13,7 @@ use oer_os_process::owned::Child;
 use crate::{
     mac::Mac,
     router::quote,
-    ssh::{CommandObservation, Remote, Result, Ssh, Stderr, read_stderr},
+    ssh::{CommandObservation, Result, Ssh, Stderr, read_stderr},
 };
 
 pub struct Capture {

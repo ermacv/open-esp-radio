@@ -41,6 +41,10 @@ pub struct Scenario {
     pub(crate) name: &'static str,
     pub(crate) image: &'static str,
     pub(crate) services: &'static [&'static [Key]],
+    /// Whether its cases turn a radio on: its lease then holds the air,
+    /// shared. An image's radio works only on its command, so a scenario
+    /// that never commands one leases the board alone.
+    pub(crate) air: bool,
 }
 
 impl Scenario {
@@ -56,7 +60,13 @@ impl Scenario {
             name,
             image,
             services,
+            air: false,
         }
+    }
+
+    /// This scenario, whose cases turn a radio on.
+    pub const fn using_air(self) -> Self {
+        Self { air: true, ..self }
     }
 
     pub const fn name(&self) -> &'static str {
@@ -274,11 +284,12 @@ pub fn main(scenario: &Scenario, cases: &[Case]) -> ExitCode {
             let link = session.take_link();
             let (run, link) = {
                 let board = session.board();
-                let mut dut = dut::Dut::new(link, &board, session.image_crc32());
+                let mut dut = dut::Dut::new(link, board, session.image_crc32());
                 let run = run::cases(&mut dut, scenario, &selected, &mut out);
                 (run, dut.into_link())
             };
             let cleanup = session.finish(link, run.ending);
+            let cleanup = cleanup.released(session.release());
             (run.outcomes, Some(cleanup))
         }
         Err(error) => {

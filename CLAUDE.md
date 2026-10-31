@@ -257,9 +257,10 @@ system these rules serve.
   A physical IRQ guard is omitted when it does not fit beside that bound and
   margin. A limit the owner sets for an image is its own gate.
 - **Stand.** Runs only when they answer a real question. Hardware runs hold
-  the board's lock; never kill another holder, wait. The owner's limits on
-  secrets, eFuse writes, protected boards and hub ports apply. A claim about
-  what the hardware puts on air is used only after a stand run confirms it.
+  the board's lease from the LAB service; never preempt another holder,
+  wait. The owner's limits on secrets, eFuse writes, protected boards and hub
+  ports apply. A claim about what the hardware puts on air is used only after
+  a stand run confirms it.
 - **Branches and worktrees.** A branch per task; one worktree per session,
   reused (`git switch -c <branch> origin/main`). A new worktree copies a warm
   `target/` (`cp -a --reflink=auto`); never share `CARGO_TARGET_DIR`. Scratch

@@ -7,7 +7,7 @@
 
 use std::time::Duration;
 
-use oer_lab_board::power::{self as power, HubStatus};
+use oer_lab_model::hubs::HubStatus;
 use oer_lab_model::{Hub, Stand};
 
 pub(crate) type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
@@ -17,9 +17,17 @@ const ESPRESSIF_SERIAL_JTAG: &str = "303a:1001";
 /// How long `--blink` keeps a port off.
 pub const BLINK: Duration = Duration::from_secs(5);
 
-/// What `uhubctl` reports now, compared with `stand`.
+/// What `uhubctl` reports now, as the LAB service runs it, compared with
+/// `stand`.
 pub fn report(stand: &Stand) -> Result<Vec<Finding>> {
-    Ok(discover(stand, &power::report()?))
+    Ok(discover(stand, &hubs()?))
+}
+
+/// `uhubctl`'s report, from the LAB service.
+pub fn hubs() -> Result<Vec<HubStatus>> {
+    Ok(oer_lab_model::hubs::parse(
+        &crate::service::client()?.hubs()?,
+    ))
 }
 
 /// Where a stand-file hub port is, as discovery names it.

@@ -4,6 +4,7 @@
 use std::{ffi::OsString, path::Path};
 
 use crate::Result;
+use oer_lab_client::protocol::Request;
 use oer_os_process::Checkout;
 
 #[derive(clap::Args)]
@@ -21,7 +22,6 @@ enum OwnerCommand {
 
 /// `cargo stand owner [set NAME | merge OLD NEW | forget NAME]`.
 pub(crate) fn owner(ctx: &Checkout, cli: OwnerCli) -> Result<std::process::ExitCode> {
-    let arbiter = oer_lab_arbiter::Arbiter::open()?;
     let owners = oer_lab_arbiter::owner::Owners::open()?;
     let parse = |name: &str| oer_lab_arbiter::owner::Owner::new(name);
     match cli.command {
@@ -36,11 +36,15 @@ pub(crate) fn owner(ctx: &Checkout, cli: OwnerCli) -> Result<std::process::ExitC
         }
         Some(OwnerCommand::Merge { old, new }) => {
             let new = parse(&new)?;
-            arbiter.merge_owner(&old, &new)?;
+            crate::service::client()?.administer(Request::MergeOwner {
+                old: old.clone(),
+                new: new.to_string(),
+            })?;
             println!("{old}'s balance and history are {new}'s");
         }
         Some(OwnerCommand::Forget { name }) => {
-            let forgotten = arbiter.forget_owner(&name)?;
+            let forgotten = crate::service::client()?
+                .administer(Request::ForgetOwner { name: name.clone() })?;
             println!(
                 "{name}: {}",
                 if forgotten {
@@ -68,19 +72,11 @@ fn parse_lease_id(text: &str) -> std::result::Result<u64, String> {
         .map_err(|_| format!("{text} is not a lease number"))
 }
 
-/// `cargo stand preempt ID --reason TEXT`.
+/// `cargo stand preempt ID --reason TEXT`: the service stops the lease's
+/// operations, recovers its resources and tells its holder why.
 pub(crate) fn preempt(owner: &str, cli: PreemptCli) -> Result<std::process::ExitCode> {
-    let end =
-        oer_lab_arbiter::Arbiter::open()?.preempt(cli.id, owner, &cli.reason, PREEMPT_GRACE)?;
-    println!(
-        "lease #{} {}",
-        cli.id,
-        match end {
-            oer_lab_arbiter::preempt::PreemptEnd::Released => "released after SIGTERM",
-            oer_lab_arbiter::preempt::PreemptEnd::Killed =>
-                "did not release within the grace and was killed",
-        }
-    );
+    crate::service::client()?.preempt(cli.id, owner, &cli.reason)?;
+    println!("lease #{} is being stopped", cli.id);
     Ok(std::process::ExitCode::SUCCESS)
 }
 
@@ -93,8 +89,7 @@ pub(crate) struct QueueCli {
 
 /// Print the stand's holder, queue, board state and recent leases.
 pub(crate) fn queue(cli: QueueCli) -> Result<std::process::ExitCode> {
-    let arbiter = oer_lab_arbiter::Arbiter::open()?;
-    let status = arbiter.status()?;
+    let status = crate::service::client()?.report()?;
     if cli.json {
         println!("{}", serde_json::to_string_pretty(&status)?);
     } else {
@@ -110,36 +105,66 @@ pub(crate) struct WaitCli {
     boards: Vec<String>,
 }
 
-/// `cargo stand wait --service [BOARD...]`.
+/// `cargo stand wait --service [BOARD...]`: until no maintenance keeps the
+/// boards (every board when none is named) or the stand out of service and
+/// none of them is unavailable.
 pub(crate) fn wait_for_service(cli: WaitCli) -> Result<std::process::ExitCode> {
-    let arbiter = oer_lab_arbiter::Arbiter::open()?;
-    let stand = arbiter.stand()?;
+    let stand = oer_lab_model::Stand::load(&oer_lab_model::paths::stand_file()?)?;
     let macs = cli
         .boards
         .iter()
         .map(|board| Ok(stand.resolve(board)?.device_id()?.to_string()))
         .collect::<Result<Vec<_>>>()?;
-    arbiter.wait_for_service(&macs, |out| {
-        for entry in out {
-            eprintln!(
-                "stand: waiting: {} is {} by {}: {}",
-                if entry.mac == oer_lab_arbiter::STAND_SERVICE {
-                    "the stand"
-                } else {
-                    entry.mac.as_str()
-                },
-                match entry.kind {
-                    oer_lab_arbiter::ServiceKind::Maintenance => "under maintenance",
-                    oer_lab_arbiter::ServiceKind::Quarantine => "quarantined",
-                },
-                entry.owner,
-                entry.reason
-            );
+    let mut client = crate::service::client()?;
+    let mut reported = String::new();
+    loop {
+        let status = client.report()?;
+        let mut out = status
+            .maintenance
+            .iter()
+            .filter(|entry| {
+                macs.is_empty()
+                    || entry.mac == oer_lab_arbiter::STAND_SERVICE
+                    || macs.contains(&entry.mac)
+            })
+            .map(|entry| {
+                format!(
+                    "{} is under maintenance by {}: {}",
+                    if entry.mac == oer_lab_arbiter::STAND_SERVICE {
+                        "the stand"
+                    } else {
+                        entry.mac.as_str()
+                    },
+                    entry.owner,
+                    entry.reason
+                )
+            })
+            .collect::<Vec<_>>();
+        out.extend(status.resources.iter().filter_map(|(resource, readiness)| {
+            let mac = resource.strip_prefix("board:")?;
+            let oer_lab_arbiter::readiness::Readiness::Unavailable { reason, .. } = readiness
+            else {
+                return None;
+            };
+            (macs.is_empty() || macs.iter().any(|wanted| wanted == mac))
+                .then(|| format!("{mac} is unavailable: {reason}"))
+        }));
+        if out.is_empty() {
+            break;
         }
-    })?;
+        let report = out.join("; ");
+        if report != reported {
+            eprintln!("stand: waiting: {report}");
+            reported = report;
+        }
+        oer_os_process::sleep(SERVICE_POLL)?;
+    }
     println!("in service");
     Ok(std::process::ExitCode::SUCCESS)
 }
+
+/// How often `cargo stand wait` asks the service again.
+const SERVICE_POLL: std::time::Duration = std::time::Duration::from_secs(5);
 
 /// How a lease command uses the radio environment; `None` claims no air.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -270,12 +295,30 @@ struct FlashedArgs {
 impl FlashedArgs {
     fn record(
         &self,
-        arbiter: &oer_lab_arbiter::Arbiter,
+        client: &mut oer_lab_client::client::Client,
+        stand: &oer_lab_model::Stand,
         owner: String,
         origin: String,
     ) -> Result<()> {
-        let Some(image) = &self.image else {
+        let Some(request) = self.request(stand, owner, origin)? else {
             return Ok(());
+        };
+        client.administer(request)?;
+        if let Some(image) = &self.image {
+            eprintln!("stand: recorded {image}");
+        }
+        Ok(())
+    }
+
+    /// The service's journal request for the flash, when one is described.
+    fn request(
+        &self,
+        stand: &oer_lab_model::Stand,
+        owner: String,
+        origin: String,
+    ) -> Result<Option<Request>> {
+        let Some(image) = &self.image else {
+            return Ok(None);
         };
         let sha256 = match (&self.application, &self.sha256) {
             (Some(application), None) => oer_os_durable::sha256_file(application)?,
@@ -286,20 +329,18 @@ impl FlashedArgs {
             .device
             .as_deref()
             .ok_or("a recorded flash needs --device NAME|MAC")?;
-        let mac = arbiter.stand()?.resolve(device)?.device_id()?;
-        arbiter.journal().record_flash(
+        let mac = stand.resolve(device)?.device_id()?;
+        Ok(Some(Request::RecordFlash {
             owner,
-            &mac,
-            &oer_lab_arbiter::journal::ImageIdentity {
+            mac: mac.to_string(),
+            image: oer_lab_arbiter::journal::ImageIdentity {
                 name: image.clone(),
                 sha256,
                 commit: self.commit.clone(),
                 dirty: None,
                 origin,
             },
-        )?;
-        eprintln!("stand: recorded {image} on {mac}");
-        Ok(())
+        }))
     }
 }
 
@@ -347,9 +388,11 @@ fn switches_hub_power(command: &[OsString]) -> Option<String> {
     })
 }
 
-/// Run one command, typically a series of HIL commands, under one lease.
-/// Nested `cargo stand` and `cargo hil` commands join the lease instead of
-/// queueing.
+/// Run one command, typically a series of HIL commands, under one lease, as
+/// this command's child on its terminal. Nested `cargo stand`, `cargo fw` and
+/// `cargo hil` commands join the lease with its token instead of queueing.
+/// The command is stopped when the service ends the lease, at the hard limit
+/// every lease has or on a preemption.
 pub(crate) fn lease(
     ctx: &Checkout,
     outer: crate::Options,
@@ -373,72 +416,39 @@ pub(crate) fn lease(
         .map(|argument| argument.to_string_lossy())
         .collect::<Vec<_>>()
         .join(" ");
-    let arbiter = oer_lab_arbiter::Arbiter::open()?;
-    let request = oer_lab_arbiter::Request {
-        owner: options.owner(ctx)?,
-        work,
-        scenarios: Vec::new(),
-        run: None,
-        claims: lease_claims(&cli.boards, cli.air, cli.stand, &arbiter.stand()?)?,
-    };
-    let grant = arbiter.acquire(&request)?;
-    let mut command = ctx.command(program);
-    command
-        .args(arguments)
-        .env(oer_lab_arbiter::owner::OWNER_ENV, &request.owner);
-    grant.context()?.apply(&mut command)?;
-    let operations = grant.operations()?;
-    for operation in &operations {
-        operation.lifetime().pin(&mut command)?;
-    }
-    let mut child = oer_os_process::owned::Child::spawn_with_shutdown_grace(
-        &mut command,
-        std::time::Duration::from_secs(300),
+    let owner = options.owner(ctx)?;
+    let stand = oer_lab_model::Stand::load(&oer_lab_model::paths::stand_file()?)?;
+    let mut client = crate::service::lease(
+        owner.clone(),
+        work.clone(),
+        lease_claims(&cli.boards, cli.air, cli.stand, &stand)?,
     )?;
-    let (code, succeeded) = supervise(&grant, &mut child, oer_lab_arbiter::HARD_LIMIT)?;
+    let ended = crate::service::command(&client, ctx, &cli.command, &owner)?;
+    let (code, succeeded) = match ended {
+        crate::service::Ended::Exited(code, succeeded) => (code, succeeded),
+        crate::service::Ended::Revoked(reason) => {
+            eprintln!("stand: the lease ended: {reason}");
+            return Ok(std::process::ExitCode::from(HARD_LIMIT_EXIT));
+        }
+        crate::service::Ended::Cancelled => (std::process::ExitCode::from(130), false),
+    };
     if cli.flashed.image.is_some() {
         if succeeded {
-            cli.flashed.record(
-                &arbiter,
-                request.owner.clone(),
-                format!("lease `{}`", request.work),
-            )?;
+            cli.flashed
+                .record(&mut client, &stand, owner, format!("lease `{work}`"))?;
         } else {
             eprintln!("stand: the command failed; its flash is not recorded");
         }
     }
+    // The lease ends once the service confirmed the end state of what the
+    // command used.
+    if let Err(reason) = client.release() {
+        eprintln!("stand: {reason}");
+        if succeeded {
+            return Ok(std::process::ExitCode::FAILURE);
+        }
+    }
     Ok(code)
-}
-
-/// Supervise an indivisible command: it runs to its end, charged the time it
-/// holds, and is terminated only at the hard limit every lease has. Returns
-/// the exit code and whether the command succeeded.
-fn supervise(
-    grant: &oer_lab_arbiter::Grant,
-    child: &mut oer_os_process::owned::Child,
-    limit: std::time::Duration,
-) -> Result<(std::process::ExitCode, bool)> {
-    let finished =
-        |status: std::process::ExitStatus| (oer_os_process::exit_code(status), status.success());
-    if grant.is_nested() {
-        return Ok(finished(child.wait_forwarding_cancellation()?));
-    }
-    let started = std::time::Instant::now();
-    loop {
-        if let Some(status) = child.try_wait()? {
-            return Ok(finished(status));
-        }
-        if oer_os_process::cancellation_requested() {
-            child.kill()?;
-            return Ok((std::process::ExitCode::from(130), false));
-        }
-        if started.elapsed() >= limit {
-            grant.mark_hard_limit();
-            child.kill()?;
-            return Ok((std::process::ExitCode::from(HARD_LIMIT_EXIT), false));
-        }
-        std::thread::sleep(std::time::Duration::from_millis(200));
-    }
 }
 
 /// `cargo stand board reset|check|console|soak`.
@@ -466,34 +476,32 @@ pub(crate) fn devices(
     options: &crate::Options,
     cli: DevicesCli,
 ) -> Result<std::process::ExitCode> {
-    let arbiter = oer_lab_arbiter::Arbiter::open()?;
+    let stand = || -> Result<oer_lab_model::Stand> {
+        oer_lab_model::Stand::load(&oer_lab_model::paths::stand_file()?)
+    };
+    let mut client = crate::service::client()?;
     match cli.command {
         Some(DevicesCommand::Maintenance {
             board,
-            stand,
+            stand: whole,
             reason,
         }) => {
-            let (board, mac) = match (board, stand) {
+            let (board, mac) = match (board, whole) {
                 (_, true) => (
                     String::from("the stand"),
                     String::from(oer_lab_arbiter::STAND_SERVICE),
                 ),
                 (Some(board), false) => {
-                    let mac = arbiter.stand()?.resolve(&board)?.device_id()?.to_string();
+                    let mac = stand()?.resolve(&board)?.device_id()?.to_string();
                     (board, mac)
                 }
-                (None, false) => unreachable!("clap requires a board or --stand"),
+                (None, false) => return Err("name a board or pass --stand".into()),
             };
             let owner = options.owner(ctx)?;
-            arbiter.set_maintenance(oer_lab_arbiter::Maintenance {
+            client.administer(Request::Maintain {
                 mac: mac.clone(),
                 owner: owner.clone(),
                 reason,
-                since_unix: oer_os_durable::unix_seconds(),
-                kind: oer_lab_arbiter::ServiceKind::Maintenance,
-                trigger: None,
-                evidence: None,
-                unknown: Default::default(),
             })?;
             println!("{board} ({mac}) is under maintenance by {owner}");
             let claim = if mac == oer_lab_arbiter::STAND_SERVICE {
@@ -501,11 +509,14 @@ pub(crate) fn devices(
             } else {
                 oer_lab_arbiter::claims::Claim::board(&mac)
             };
-            for holder in arbiter.conflicting_holders(&[claim])? {
-                println!(
-                    "still held by #{} {} `{}` until it ends",
-                    holder.id, holder.owner, holder.work
-                );
+            let claims = oer_lab_arbiter::describe_claims(&[claim]);
+            for holder in client.report()?.holders {
+                if holder.claims == claims || claims == "the whole stand" {
+                    println!(
+                        "still held by #{} {} `{}` until it ends",
+                        holder.id, holder.owner, holder.work
+                    );
+                }
             }
             return Ok(std::process::ExitCode::SUCCESS);
         }
@@ -514,7 +525,9 @@ pub(crate) fn devices(
             stand: true,
             ..
         }) => {
-            if arbiter.clear_maintenance(oer_lab_arbiter::STAND_SERVICE)? {
+            if client.administer(Request::EndMaintenance {
+                mac: oer_lab_arbiter::STAND_SERVICE.to_owned(),
+            })? {
                 println!("the stand is back in service");
             } else {
                 println!("the stand was not under maintenance");
@@ -523,25 +536,67 @@ pub(crate) fn devices(
         }
         Some(DevicesCommand::Release { board, confirm, .. }) => {
             let board = board.ok_or("name a board or pass --stand")?;
-            let mac = arbiter.stand()?.resolve(&board)?.device_id()?.to_string();
-            if arbiter.is_quarantined(&mac)? {
+            let mac = stand()?.resolve(&board)?.device_id()?.to_string();
+            let resource = format!("board:{mac}");
+            let unavailable = client
+                .report()?
+                .resources
+                .into_iter()
+                .any(|(name, readiness)| {
+                    name == resource
+                        && matches!(
+                            readiness,
+                            oer_lab_arbiter::readiness::Readiness::Unavailable { .. }
+                        )
+                });
+            if unavailable {
                 let confirmation = match confirm.ok_or(
-                    "the board is quarantined: reset or power-cycle it, then pass \
-                     --confirm reset|power-cycle; --confirm rom-answers returns a board whose \
-                     ROM answers the stand's reset without a person",
+                    "the board is unavailable: reset or power-cycle it, then pass --confirm \
+                     reset|power-cycle; --confirm rom-answers tries the stand's own reset first",
                 )? {
                     ConfirmArg::Reset => oer_lab_arbiter::journal::Confirmation::Reset,
                     ConfirmArg::PowerCycle => oer_lab_arbiter::journal::Confirmation::PowerCycle,
                     ConfirmArg::RomAnswers => oer_lab_arbiter::journal::Confirmation::RomAnswers,
                 };
-                let answer =
-                    arbiter.release_quarantine(&mac, &options.owner(ctx)?, confirmation, || {
-                        crate::board::boots(ctx, &board)
-                    })?;
-                println!("{board} ({mac}) is back in service; it booted: {answer}");
+                client.return_resource(&resource)?;
+                let readiness = loop {
+                    let readiness = client
+                        .report()?
+                        .resources
+                        .into_iter()
+                        .find(|(name, _)| *name == resource)
+                        .map(|(_, readiness)| readiness);
+                    if !matches!(
+                        readiness,
+                        Some(oer_lab_arbiter::readiness::Readiness::Recovering { .. })
+                    ) {
+                        break readiness;
+                    }
+                    oer_os_process::sleep(std::time::Duration::from_secs(1))?;
+                };
+                let check = match &readiness {
+                    Some(oer_lab_arbiter::readiness::Readiness::Ready { .. }) => {
+                        String::from("the LAB service confirmed its end state")
+                    }
+                    Some(oer_lab_arbiter::readiness::Readiness::Unavailable { reason, .. }) => {
+                        return Err(
+                            format!("{board} ({mac}) is still unavailable: {reason}").into()
+                        );
+                    }
+                    other => format!("{other:?}"),
+                };
+                client.administer(Request::Record {
+                    owner: options.owner(ctx)?,
+                    device: Some(mac.clone()),
+                    event: oer_lab_arbiter::journal::BoardEventKind::QuarantineReleased {
+                        confirmation,
+                        check: check.clone(),
+                    },
+                })?;
+                println!("{board} ({mac}) is back in service: {check}");
                 return Ok(std::process::ExitCode::SUCCESS);
             }
-            if arbiter.clear_maintenance(&mac)? {
+            if client.administer(Request::EndMaintenance { mac: mac.clone() })? {
                 println!("{board} ({mac}) is back in service");
             } else {
                 println!("{board} ({mac}) was not under maintenance");
@@ -550,7 +605,7 @@ pub(crate) fn devices(
         }
         None => {}
     }
-    let status = arbiter.status()?;
+    let status = client.report()?;
     if cli.json {
         println!("{}", serde_json::to_string_pretty(&status.devices)?);
     } else {
@@ -630,10 +685,6 @@ every 2h and stay within 1h either way. A run of several scenarios that has
 held 10m yields after its current scenario to a waiter with a higher balance.
 Every lease ends at 1h. There is no budget to request.";
 
-/// Time a preempted holder gets for cancellation and cleanup, as at the hard
-/// limit.
-const PREEMPT_GRACE: std::time::Duration = std::time::Duration::from_secs(300);
-
 /// Exit status of a lease command terminated at the hard limit.
 const HARD_LIMIT_EXIT: u8 = 124;
 
@@ -641,7 +692,7 @@ const HARD_LIMIT_EXIT: u8 = 124;
 mod tests {
     use super::*;
 
-    const TEST_STAND: &str = "schema = 1\n[stand]\nid = \"t\"\nair = \"exclusive\"\n\
+    const TEST_STAND: &str = "schema = 2\n[stand]\nid = \"t\"\nair = \"exclusive\"\n\
              [[hub]]\nid = \"h\"\nusb2 = \"1-1\"\n\
              [[board]]\nid = \"peer-a\"\nusb-serial = \"02:00:00:00:25:64\"\nchip = \"chip-b\"\n\
              radios = [\"ble\"]\nroles = [\"peer\"]\nport = { hub = \"h\", port = 1 }\nreset = [\"jtag\"]\n";
@@ -700,26 +751,17 @@ mod tests {
             LeaseCli::try_parse_from(["--sha256", "ab", "--", "x"]).is_err(),
             "flash details need --flashed"
         );
-        let directory = tempfile::tempdir().unwrap();
-        let arbiter = oer_lab_arbiter::Arbiter::at(directory.path()).unwrap();
-        std::fs::write(arbiter.stand_file(), TEST_STAND).unwrap();
-        #[cfg(unix)]
-        std::fs::set_permissions(
-            arbiter.stand_file(),
-            std::os::unix::fs::PermissionsExt::from_mode(0o600),
-        )
-        .unwrap();
-        cli.flashed
-            .record(&arbiter, "802154".into(), "test".into())
-            .unwrap();
-        let events = arbiter.journal().events().unwrap();
-        assert_eq!(events[0].device.as_deref(), Some("02:00:00:00:25:64"));
-        assert_eq!(events[0].owner, "802154");
-        assert!(matches!(
-            &events[0].kind,
-            oer_lab_arbiter::journal::BoardEventKind::Flashed { application_sha256, .. }
-                if *application_sha256 == "ab".repeat(32)
-        ));
+        let stand = oer_lab_model::Stand::parse(TEST_STAND).unwrap();
+        let Some(Request::RecordFlash { owner, mac, image }) = cli
+            .flashed
+            .request(&stand, "802154".into(), "test".into())
+            .unwrap()
+        else {
+            panic!("no flash record");
+        };
+        assert_eq!(mac, "02:00:00:00:25:64");
+        assert_eq!(owner, "802154");
+        assert!(image.sha256.eq_ignore_ascii_case(&"ab".repeat(32)));
         let incomplete = FlashedArgs {
             image: Some("x".into()),
             sha256: Some("ab".repeat(32)),
@@ -727,7 +769,7 @@ mod tests {
         };
         assert!(
             incomplete
-                .record(&arbiter, "802154".into(), "test".into())
+                .request(&stand, "802154".into(), "test".into())
                 .is_err()
         );
     }

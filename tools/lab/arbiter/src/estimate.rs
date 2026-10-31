@@ -40,7 +40,7 @@ impl std::fmt::Display for EstimateSource {
 /// Estimate how long `work` holds the stand: earlier leases of the same
 /// work, then the sum over `scenarios` of earlier single-scenario leases of
 /// each, then the default.
-pub(crate) fn estimate(
+pub fn estimate(
     work: &str,
     scenarios: &[String],
     history: &[LeaseRecord],

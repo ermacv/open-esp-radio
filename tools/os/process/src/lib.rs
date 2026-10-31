@@ -10,6 +10,7 @@
 )]
 pub mod child_setup;
 pub mod context;
+pub mod foreground;
 pub mod git;
 #[allow(
     unsafe_code,
@@ -20,14 +21,6 @@ pub mod launch_handoff;
 pub mod linux_socket;
 pub use context::{Context, command};
 #[cfg(unix)]
-#[allow(unsafe_code, reason = "polls and closes raw descriptors")]
-mod io_lifetime;
-#[cfg(unix)]
-#[allow(unsafe_code, reason = "socketpair and descriptor flags through libc")]
-mod socket;
-#[cfg(unix)]
-pub use io_lifetime::IoLifetime;
-#[cfg(unix)]
 #[allow(unsafe_code, reason = "forks the guardian process over a pipe")]
 mod guardian;
 #[cfg(unix)]
@@ -35,7 +28,6 @@ pub mod lock;
 #[allow(unsafe_code, reason = "signals the owned process group")]
 pub mod owned;
 #[cfg(unix)]
-#[allow(unsafe_code, reason = "pidfd_open and poll through libc")]
 pub mod proc;
 mod repository;
 #[cfg(feature = "clap")]
@@ -96,7 +88,10 @@ pub fn install_signal_handlers() -> Result<SignalGuard> {
         ])?;
         let handle = signals.handle();
         let worker = std::thread::spawn(move || {
-            for _ in signals.forever() {
+            for signal in signals.forever() {
+                if !foreground::cancels_now(signal) {
+                    continue;
+                }
                 cancellation().store(true, Ordering::Relaxed);
                 notification::notify();
             }

@@ -1,45 +1,5 @@
-//! Linux process identities and exit fences. `/proc` start time distinguishes
-//! recycled PIDs; kernel pidfds observe complete thread-group exit.
-
-/// Open a kernel process identity before handing it to a forked broker.
-pub(crate) fn pidfd_open(pid: u32) -> std::io::Result<std::os::fd::OwnedFd> {
-    use std::os::fd::FromRawFd as _;
-    // SAFETY: pidfd_open takes only a PID and flags, with no memory pointers.
-    let fd = unsafe { libc::syscall(libc::SYS_pidfd_open, pid, 0) };
-    if fd < 0 {
-        return Err(std::io::Error::last_os_error());
-    }
-    // SAFETY: fd is a new descriptor owned by this call.
-    Ok(unsafe { std::os::fd::OwnedFd::from_raw_fd(fd as i32) })
-}
-
-/// Observe complete thread-group exit without allocation or locks. A lifetime
-/// socket can close earlier during exit_files, so killed holders retain their
-/// pidfd until this succeeds. Errors retain exclusion and retry later.
-pub(crate) fn process_exited(pidfd: i32) -> bool {
-    let mut descriptor = libc::pollfd {
-        fd: pidfd,
-        events: libc::POLLIN,
-        revents: 0,
-    };
-    let timeout = libc::timespec {
-        tv_sec: 0,
-        tv_nsec: 0,
-    };
-    // SAFETY: all pointers refer to valid stack storage. A zero timeout makes
-    // this async-signal-safe Linux syscall nonblocking. No signal mask is changed.
-    let ready = unsafe {
-        libc::syscall(
-            libc::SYS_ppoll,
-            &raw mut descriptor,
-            1 as libc::nfds_t,
-            &raw const timeout,
-            std::ptr::null::<libc::sigset_t>(),
-            0,
-        )
-    };
-    ready > 0 && descriptor.revents & (libc::POLLIN | libc::POLLHUP) != 0
-}
+//! Linux process identities: `/proc` start time distinguishes recycled
+//! PIDs.
 
 /// The fields of `/proc/<pid>/stat` after the command name (field 2), which
 /// is enclosed in parentheses and may itself contain spaces or parentheses.

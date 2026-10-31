@@ -1,13 +1,12 @@
 //! A board's console: the one serial line reader of the stand's commands,
-//! bounded captures, and the ROM's reset line.
+//! bounded reads, and the ROM's reset line.
 //!
 //! A console is a [`Port`] opened through `crate::reset`'s openers only,
 //! which never reset the chip on their own.
 
 use crate::port::Port;
 use std::{
-    io::{Read as _, Write as _},
-    path::Path,
+    io::Read as _,
     sync::mpsc,
     time::{Duration, Instant},
 };
@@ -74,34 +73,6 @@ pub fn lines(mut serial: Port) -> Lines {
     }
 }
 
-/// Copy `lines` to the terminal and `log` until `duration` passes or a line
-/// contains `until`; returns whether one did.
-pub fn capture(
-    lines: &mpsc::Receiver<Vec<u8>>,
-    duration: Duration,
-    until: Option<&str>,
-    log: &Path,
-) -> crate::Result<bool> {
-    let mut file = std::fs::File::create(log)?;
-    let deadline = Instant::now() + duration;
-    while let Some(remaining) = deadline.checked_duration_since(Instant::now()) {
-        match lines.recv_timeout(remaining) {
-            Ok(line) if line.is_empty() => {}
-            Ok(line) => {
-                file.write_all(&line)?;
-                file.write_all(b"\n")?;
-                let text = String::from_utf8_lossy(&line);
-                println!("{text}");
-                if until.is_some_and(|until| text.contains(until)) {
-                    return Ok(true);
-                }
-            }
-            Err(mpsc::RecvTimeoutError::Timeout | mpsc::RecvTimeoutError::Disconnected) => break,
-        }
-    }
-    Ok(false)
-}
-
 /// Everything `serial` receives within `watch`, as text.
 pub fn read_for(mut serial: Port, watch: Duration) -> String {
     let started = Instant::now();
@@ -124,7 +95,7 @@ pub fn rom_line(lines: &mpsc::Receiver<Vec<u8>>, within: Duration) -> Option<Str
         match lines.recv_timeout(remaining) {
             Ok(line) => {
                 let text = String::from_utf8_lossy(&line).trim().to_owned();
-                if is_reset_line(&text) {
+                if oer_lab_model::rom::is_reset_line(&text) {
                     return Some(text);
                 }
             }
@@ -132,18 +103,4 @@ pub fn rom_line(lines: &mpsc::Receiver<Vec<u8>>, within: Duration) -> Option<Str
         }
     }
     None
-}
-
-/// The ROM's last `rst:… boot:…` line in `banner`.
-pub fn reset_line(banner: &str) -> Option<&str> {
-    banner
-        .lines()
-        .map(str::trim)
-        .rfind(|line| is_reset_line(line))
-}
-
-/// Whether `line` is a ROM reset line: a ROM that answers, booting from
-/// flash or waiting for a download.
-pub fn is_reset_line(line: &str) -> bool {
-    line.starts_with("rst:") && line.contains("boot:")
 }

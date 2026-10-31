@@ -1,7 +1,8 @@
 //! `cargo stand init [--force]`: write the user's stand file from the boards
-//! attached to this host (`oer-lab-board`): one `[[board]]` per board with its
-//! chip and MAC, its radios from the chip profile, no hubs. The file is
-//! private (mode 0600); an existing one is kept unless `--force`.
+//! attached to this host, as the LAB service detects them under stand
+//! maintenance: one `[[board]]` per board with its chip and MAC, its radios
+//! from the chip profile, no hubs. The file is private (mode 0600); an
+//! existing one is kept unless `--force`.
 
 use std::fmt::Write as _;
 use std::path::Path;
@@ -31,27 +32,36 @@ pub(crate) fn init(root: &Path, cli: InitCli) -> Result<std::process::ExitCode> 
         .into());
     }
     let chips = Profile::all(root)?;
+    // The LAB service asks each board's ROM, under stand maintenance: it
+    // owns every board, also before the stand file names one.
+    let owner = oer_lab_arbiter::owner::from_environment()?.to_string();
+    let mut client = crate::service::client()?;
+    client.acquire(
+        oer_lab_client::protocol::LeaseRequest {
+            owner: owner.clone(),
+            work: String::from("stand init"),
+            scenarios: Vec::new(),
+            run: None,
+            claims: vec![oer_lab_arbiter::claims::Claim::stand()],
+            maintenance: Some(format!("stand init by {owner}")),
+            divisible: false,
+        },
+        &mut |message| eprintln!("stand: {message}"),
+    )?;
+    let detected = crate::service::run(&mut client, oer_lab_client::protocol::Operation::Detect)?;
     let mut boards = Vec::new();
-    for device in oer_lab_board::devices() {
-        let chip = match device.chip.clone() {
-            Some(chip) => chip,
-            // The ROM names the chip: probing takes the device lock and
-            // resets the board into its application.
-            None => device
-                .clone()
-                .open("cargo stand init", false)?
-                .probe(&chips)?,
-        };
+    for device in detected.as_array().ok_or("the service detected no list")? {
+        let mac = device["mac"]
+            .as_str()
+            .ok_or("a detected board has no MAC")?;
+        let chip = device["chip"]
+            .as_str()
+            .ok_or("a detected board has no chip")?;
         let profile = chips
             .iter()
             .find(|profile| profile.facts.id == chip)
-            .ok_or_else(|| {
-                format!(
-                    "board {} is a {chip}, which no chip profile names",
-                    device.mac
-                )
-            })?;
-        boards.push((device.mac.to_string(), profile));
+            .ok_or_else(|| format!("board {mac} is a {chip}, which no chip profile names"))?;
+        boards.push((mac.to_owned(), profile));
     }
     if boards.is_empty() {
         return Err("no board is attached; attach the stand's boards and run it again".into());
@@ -62,6 +72,9 @@ pub(crate) fn init(root: &Path, cli: InitCli) -> Result<std::process::ExitCode> 
     parsed.validate()?;
     parsed.validate_chips(&chips)?;
     write_private(&path, &text)?;
+    // The service recovers the boards it reads to their end states.
+    client.administer(oer_lab_client::protocol::Request::Reload)?;
+    client.release()?;
     println!("wrote {} with {} board(s)", path.display(), boards.len());
     println!(
         "next: name each board as written on it, add the hubs and the fixture sections \
@@ -76,7 +89,7 @@ fn stand_file(host: &str, boards: &[(String, &Profile)]) -> String {
         "# The HIL stand file `cargo stand init` wrote from the attached boards.\n\
          # Name each board as written on it; add the hubs, their ports and the\n\
          # fixture sections as tools/lab/model/stand.example.toml shows.\n\
-         schema = 1\n\n[stand]\n",
+         schema = 2\n\n[stand]\n",
     );
     let _ = writeln!(text, "id = {host:?}\nair = \"exclusive\"");
     let mut counts = std::collections::BTreeMap::<&str, u32>::new();
@@ -143,7 +156,7 @@ fn host_name() -> String {
 }
 
 /// Write `text` to `path`, readable by its owner only.
-fn write_private(path: &Path, text: &str) -> Result<()> {
+pub(crate) fn write_private(path: &Path, text: &str) -> Result<()> {
     use std::io::Write as _;
     use std::os::unix::fs::{OpenOptionsExt as _, PermissionsExt as _};
     if let Some(parent) = path.parent() {

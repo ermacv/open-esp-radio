@@ -77,7 +77,7 @@ pub fn same_file(source: &Path, installed: &Path) -> Result<()> {
 
 /// `uhubctl` reads every stand hub without sudo.
 fn uhubctl_reaches(stand: &Stand) -> Result<()> {
-    let hubs = oer_lab_board::power::report()?;
+    let hubs = super::discovery::hubs()?;
     let unreached = stand
         .hubs
         .iter()

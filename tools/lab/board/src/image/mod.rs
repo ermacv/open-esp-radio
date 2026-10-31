@@ -53,9 +53,9 @@ use std::path::{Path, PathBuf};
 use crate::Result;
 
 use crate::flash::After;
-pub use crate::lock::{DeviceAccess, DeviceId};
 pub use oer_espressif_facts::Start;
 use oer_image_bundle::{ImageBundle, Snapshot};
+pub use oer_lab_model::device_id::DeviceId;
 use serde::{Deserialize, Serialize};
 
 /// Format of a receipt file.
@@ -241,16 +241,16 @@ impl Store {
         })
     }
 
-    /// Begin a write of the board of `access`: publish [`State::Writing`]
+    /// Begin a write of the board `device`: publish [`State::Writing`]
     /// with the board's next generation, which the write commits with.
-    fn begin(&self, access: &DeviceAccess, by: &str) -> Result<u64> {
+    fn begin(&self, device: &DeviceId, by: &str) -> Result<u64> {
         let _commit = COMMIT
             .lock()
             .map_err(|_| "the receipt commit lock is poisoned")?;
         // A receipt this store cannot read (another schema, a damaged file)
         // was written by no write of this process, which writes only this
         // schema: the write that now invalidates it starts the generations.
-        let current = match self.file(access.id()) {
+        let current = match self.file(device) {
             Ok(file) => file.map_or(0, |file| file.generation),
             Err(error) => {
                 eprintln!("devices: replacing an unreadable image receipt: {error}");
@@ -261,7 +261,7 @@ impl Store {
             .checked_add(1)
             .ok_or("the board's write generation overflowed")?;
         self.replace(
-            access,
+            device,
             generation,
             State::Writing {
                 by: by.to_owned(),
@@ -271,12 +271,12 @@ impl Store {
         Ok(generation)
     }
 
-    /// Replace the state of the board of `access` by `state` of the write
+    /// Replace the state of the board `device` by `state` of the write
     /// `generation`, while it is still `current(state)` of that generation:
     /// a write that a later one overtook commits nothing.
     fn commit(
         &self,
-        access: &DeviceAccess,
+        device: &DeviceId,
         generation: u64,
         current: impl FnOnce(&State) -> bool,
         state: State,
@@ -284,25 +284,25 @@ impl Store {
         let _commit = COMMIT
             .lock()
             .map_err(|_| "the receipt commit lock is poisoned")?;
-        match self.file(access.id())? {
+        match self.file(device)? {
             Some(file) if file.generation == generation && current(&file.state) => {
-                self.replace(access, generation, state)
+                self.replace(device, generation, state)
             }
             _ => Err(format!(
                 "stale write of board {}: a later write replaced write {generation}",
-                access.id()
+                device
             )
             .into()),
         }
     }
 
-    fn replace(&self, access: &DeviceAccess, generation: u64, state: State) -> Result<()> {
+    fn replace(&self, device: &DeviceId, generation: u64, state: State) -> Result<()> {
         std::fs::create_dir_all(&self.directory)?;
         oer_os_durable::atomic_json(
-            &self.path(access.id()),
+            &self.path(device),
             &File {
                 schema: SCHEMA,
-                device: access.id().clone(),
+                device: device.clone(),
                 generation,
                 state,
             },
@@ -330,11 +330,10 @@ pub enum Transport<'a> {
 #[derive(Debug)]
 pub struct Written<'a> {
     store: &'a Store,
-    access: &'a DeviceAccess,
+    device: &'a DeviceId,
     receipt: Receipt,
     generation: u64,
     pending: Start,
-    _operation: crate::lock::DeviceOperation,
 }
 
 impl Written<'_> {
@@ -360,7 +359,7 @@ impl Written<'_> {
     pub fn started(self) -> Result<Receipt> {
         let receipt = &self.receipt;
         self.store.commit(
-            self.access,
+            self.device,
             self.generation,
             |state| matches!(state, State::Written { receipt: written } if written == receipt),
             State::Started {
@@ -371,24 +370,23 @@ impl Written<'_> {
     }
 }
 
-/// Write `bundle`, known as `image`, into the board of `access` through
+/// Write `bundle`, known as `image`, into the board `device` through
 /// `transport` for the command `by`: snapshot, invalidate, write the
 /// snapshot, publish the receipt. The one write of a board's flash.
 pub fn write<'a>(
     store: &'a Store,
-    access: &'a DeviceAccess,
+    device: &'a DeviceId,
     bundle: &ImageBundle,
     image: &str,
     transport: Transport<'_>,
     by: &str,
 ) -> Result<Written<'a>> {
-    let _operation = access.operation()?;
     // The bytes the receipt names are the bytes written: one read.
     let snapshot = bundle.snapshot()?;
     let receipt = Receipt::of(&snapshot, image, by);
     // Before the flash changes: from here until the receipt, the board
     // carries nothing anyone may rely on.
-    let generation = store.begin(access, by)?;
+    let generation = store.begin(device, by)?;
     let pending = match transport {
         Transport::Usb {
             port,
@@ -402,17 +400,12 @@ pub fn write<'a>(
             // this write uses.
             let staging = tempfile::tempdir()?;
             let files = snapshot.materialize(staging.path())?;
-            crate::openocd::Openocd::locate()?.program(
-                chip,
-                access.id(),
-                &files,
-                _operation.lifetime(),
-            )?;
+            crate::openocd::Openocd::locate()?.program(chip, device, &files)?;
             Start::Reset
         }
     };
     store.commit(
-        access,
+        device,
         generation,
         |state| matches!(state, State::Writing { .. }),
         State::Written {
@@ -421,31 +414,25 @@ pub fn write<'a>(
     )?;
     Ok(Written {
         store,
-        access,
+        device,
         receipt,
         generation,
         pending,
-        _operation,
     })
 }
 
-/// The receipt of the board of `access` when it runs `bundle`: its state is
+/// The receipt of the board `device` when it runs `bundle`: its state is
 /// `Started` with the digest of the whole bundle, read once. The only basis
 /// for skipping a flash.
-pub fn carries(
-    store: &Store,
-    access: &DeviceAccess,
-    bundle: &ImageBundle,
-) -> Result<Option<Receipt>> {
-    let _operation = access.operation()?;
+pub fn carries(store: &Store, device: &DeviceId, bundle: &ImageBundle) -> Result<Option<Receipt>> {
     let wanted = Receipt::of(&bundle.snapshot()?, "", "");
     // A receipt of another schema (an older tool's) claims nothing this
     // store can compare: the board carries no known image, and the next
     // write replaces it. A damaged receipt stays an error.
-    if store.of_another_schema(access.id())? {
+    if store.of_another_schema(device)? {
         return Ok(None);
     }
-    Ok(match store.state(access.id())? {
+    Ok(match store.state(device)? {
         Some(State::Started { receipt })
             if receipt.chip == wanted.chip && receipt.digest == wanted.digest =>
         {
