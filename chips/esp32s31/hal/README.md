@@ -99,7 +99,9 @@ Only the interrupt owner is bound permanently to the handler. They share no
 software state or lock; each transition takes its own owner's `&mut`.
 
 `Hardware::timg1_alarm` is the same pair for TIMG1 T0, with the same
-operations; no product timer uses it. Runtime startup also selects XTAL and
+operations, and `alarm_at`, which moves the alarm of the running counter to
+an absolute target and enables it without a stop, reload or divider reset;
+no product timer uses it. Runtime startup also selects XTAL and
 enables TIMG1 T0 in group one's clock word, after the group's reset pulse.
 
 `arm_after` requires the IRQ owner's router `Bound` or `Silent` proof and a

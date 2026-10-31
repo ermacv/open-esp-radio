@@ -243260,6 +243260,11 @@ pub mod timg {
     /// SOURCE: ESP_IDF_4D59230D_S31_TIMER0_LL.
     pub const CONFIGURE_TIMG1_TIMER0_ARMED_IMAGE: u32 = 0xc0051400;
 
+    /// The fixed policy image, before preservation of other lanes (`TIMG1.T0CONFIG`).
+    ///
+    /// SOURCE: ESP_IDF_4D59230D_S31_TIMER0_LL.
+    pub const CONFIGURE_TIMG1_TIMER0_ALARM_RUNNING_IMAGE: u32 = 0xc0050400;
+
     impl<P: oer_mmio::Placement> Timg1Timer0<P> {
         /// Read `T0CONFIG`.
         #[inline]
@@ -243384,6 +243389,16 @@ pub mod timg {
         pub fn configure_timg1_timer0_armed(&mut self) {
             self.0.write::<0x0>(
                 (self.0.read::<0x0>() & 0x00000bff) | CONFIGURE_TIMG1_TIMER0_ARMED_IMAGE,
+            );
+        }
+
+        /// Apply the fixed configuration `0xc0050400`, preserving undeclared and read-only bits (`TIMG1.T0CONFIG`).
+        ///
+        /// SOURCE: ESP_IDF_4D59230D_S31_TIMER0_LL.
+        #[inline]
+        pub fn configure_timg1_timer0_alarm_running(&mut self) {
+            self.0.write::<0x0>(
+                (self.0.read::<0x0>() & 0x00000bff) | CONFIGURE_TIMG1_TIMER0_ALARM_RUNNING_IMAGE,
             );
         }
     }

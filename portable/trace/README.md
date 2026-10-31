@@ -44,6 +44,17 @@ oer_trace::observe!(self.observer, Step { state: self.state, at: clock.now() });
 that declares the `trace` instrumentation class. Instrumentation is never a
 Cargo feature of a library; `oer-test-layers` checks feature names.
 
+## Profiles
+
+`profile::PcSample` is one tick of a program-counter sampler: its number
+from the window's first (below 2^24), the interrupted program counter and
+the interrupted raw level, encoded as the event's two words.
+`profile::Thinning<N>` keeps a window of any length in `N` samples: it keeps
+every `stride`-th tick, doubles the stride when full and overwrites, one
+per kept tick, the samples the new stride drops. `normalize` at the
+window's end keeps only one stride's ticks, so equal parts of the window
+keep equal samples.
+
 ## Checks
 
 - Const item: `Noop` size, alignment and drop glue.

@@ -120,7 +120,7 @@ static WORK: ConstStaticCell<StaticPlace<Work>> = ConstStaticCell::new(StaticPla
 pub(crate) fn place(
     inputs: Inputs,
     load: crate::load::serve::Receiver,
-    sampler: crate::load::sampler::Sampler,
+    sampler: crate::load::sampler::Profiler,
 ) -> PlacedFuture<'static, Work> {
     WORK.try_take()
         .unwrap_or_else(|| crate::fail(Failure::Storage))
@@ -131,7 +131,7 @@ pub(crate) fn place(
 fn work_future(
     inputs: Inputs,
     load: crate::load::serve::Receiver,
-    sampler: crate::load::sampler::Sampler,
+    sampler: crate::load::sampler::Profiler,
 ) -> Work {
     async move {
         let network = crate::load::serve::Network::new();

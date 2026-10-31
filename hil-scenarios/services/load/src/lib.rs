@@ -338,11 +338,12 @@ pub enum SamplesCollected {
     Refused(LoadError),
 }
 
-/// A page of one run's samples. The sampler takes one tick each period
-/// over the window and keeps every `stride`-th tick: when its buffer fills
-/// it doubles the stride and overwrites the samples the new stride drops,
-/// so the kept samples cover the whole window evenly, one each
-/// `stride * period_us`. Samples come in buffer order, not tick order.
+/// A page of one run's samples. The sampler's ticks are due every
+/// `period_us` on the timer's own schedule from the window's start; a tick
+/// due while the hart's interrupts were masked fires, and samples, where
+/// they open. The image keeps every `stride`-th tick, which cover the
+/// window evenly, one each `stride * period_us`. Samples come in buffer
+/// order, not tick order.
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub struct Samples {
     pub period_us: u32,
@@ -356,6 +357,8 @@ pub struct Samples {
     /// Ticks that found no sampling run: a stale timer event. Zero when
     /// the sampler works as intended.
     pub stray: u32,
+    /// The timer refused a tick's time: the samples end before the window.
+    pub cut: bool,
     pub samples: heapless::Vec<Sample, MAX_PAGE_SAMPLES>,
 }
 

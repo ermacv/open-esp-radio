@@ -2980,6 +2980,12 @@ value = 0xc0051400
 sources = ["ESP_IDF_4D59230D_S31_TIMER0_LL"]
 
 [[fixed-register-images]]
+name = "configure_timg1_timer0_alarm_running"
+register = "TIMG1.T0CONFIG"
+value = 0xc0050400
+sources = ["ESP_IDF_4D59230D_S31_TIMER0_LL"]
+
+[[fixed-register-images]]
 name = "capture_timg0_timer0"
 register = "TIMG0.T0UPDATE"
 value = 0x80000000

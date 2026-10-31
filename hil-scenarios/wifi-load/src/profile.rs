@@ -1,13 +1,11 @@
 //! The image's PC samples of a level's window (`OER_WIFI_LOAD_PROFILE_US`):
-//! collected page by page, named with the image's runtime ELF through
-//! `llvm-symbolizer`, and reported as function histograms beside the raw
-//! samples.
+//! collected page by page, named with the image's runtime ELF's DWARF
+//! (`oer_analysis_elf::dwarf::Symbolizer`), and reported as function
+//! histograms beside the raw samples.
 
 use std::{
     collections::{BTreeMap, HashMap},
-    io::Write as _,
     path::{Path, PathBuf},
-    process::{Command, Stdio},
 };
 
 use oer_hil_harness::{Cx, Failure};
@@ -87,70 +85,31 @@ pub(crate) struct Place {
     pub inlined: String,
 }
 
-/// Name every distinct address of `samples` with `elf`.
+/// Name every distinct address of `samples` with `elf`'s DWARF.
 pub(crate) fn symbolize(elf: &Path, samples: &[Sample]) -> Result<HashMap<u32, Place>, String> {
-    let mut addresses: Vec<u32> = samples.iter().map(|sample| sample.pc).collect();
-    addresses.sort_unstable();
-    addresses.dedup();
-    let mut child = Command::new("llvm-symbolizer")
-        .arg(format!("--obj={}", elf.display()))
-        .args(["--output-style=JSON", "--inlining", "--demangle"])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|error| format!("llvm-symbolizer: {error}"))?;
-    let input: String = addresses
-        .iter()
-        .map(|address| format!("{address:#x}\n"))
-        .collect();
-    child
-        .stdin
-        .take()
-        .ok_or("llvm-symbolizer has no input")?
-        .write_all(input.as_bytes())
-        .map_err(|error| format!("llvm-symbolizer input: {error}"))?;
-    let output = child
-        .wait_with_output()
-        .map_err(|error| format!("llvm-symbolizer: {error}"))?;
-    if !output.status.success() {
-        return Err(format!(
-            "llvm-symbolizer: {}: {}",
-            output.status,
-            String::from_utf8_lossy(&output.stderr).trim()
-        ));
+    let symbolizer =
+        oer_analysis_elf::dwarf::Symbolizer::read(elf).map_err(|error| error.to_string())?;
+    let mut places = HashMap::new();
+    for sample in samples {
+        if places.contains_key(&sample.pc) {
+            continue;
+        }
+        let frames = symbolizer
+            .frames(u64::from(sample.pc))
+            .map_err(|error| error.to_string())?;
+        places.insert(sample.pc, place(&frames));
     }
-    let text = String::from_utf8_lossy(&output.stdout);
-    let places = text.lines().map(place).collect::<Vec<_>>();
-    if places.len() != addresses.len() {
-        return Err(format!(
-            "llvm-symbolizer named {} of {} addresses",
-            places.len(),
-            addresses.len()
-        ));
-    }
-    Ok(addresses.into_iter().zip(places).collect())
+    Ok(places)
 }
 
-/// One `llvm-symbolizer` JSON line: its frames run from the innermost
-/// inlined function out to the function the code lies in.
-fn place(line: &str) -> Place {
-    let frames = serde_json::from_str::<serde_json::Value>(line)
-        .ok()
-        .and_then(|value| {
-            value
-                .get("Symbol")
-                .and_then(|symbol| symbol.as_array())
-                .cloned()
-        })
-        .unwrap_or_default();
-    let name = |frame: Option<&serde_json::Value>| {
+/// The frames at one address run from the innermost inlined function out
+/// to the function the code lies in.
+fn place(frames: &[oer_analysis_elf::dwarf::Frame]) -> Place {
+    let name = |frame: Option<&oer_analysis_elf::dwarf::Frame>| {
         frame
-            .and_then(|frame| frame.get("FunctionName"))
-            .and_then(|name| name.as_str())
+            .and_then(|frame| frame.function.clone())
             .filter(|name| !name.is_empty())
-            .unwrap_or("?")
-            .to_owned()
+            .unwrap_or_else(|| "?".to_owned())
     };
     Place {
         function: name(frames.last()),
@@ -180,6 +139,7 @@ pub(crate) fn report(
         "effective_period_us": u64::from(summary.period_us) * u64::from(summary.stride.max(1)),
         "kept": summary.kept,
         "stray": summary.stray,
+        "cut": summary.cut,
         "levels": levels
             .iter()
             .map(|(level, count)| (level.to_string(), serde_json::json!(count)))
@@ -257,18 +217,21 @@ mod tests {
     }
 
     #[test]
-    fn a_symbolizer_line_names_the_outer_function_and_the_innermost_inlined_one() {
-        let line = r#"{"Address":"0x40001000","Symbol":[{"FunctionName":"memcpy"},{"FunctionName":"copy_frame"},{"FunctionName":"receive"}]}"#;
+    fn a_place_names_the_outer_function_and_the_innermost_inlined_one() {
+        use oer_analysis_elf::dwarf::Frame;
+        let frame = |name: &str| Frame {
+            function: Some(name.to_owned()),
+            ..Frame::default()
+        };
         assert_eq!(
-            place(line),
+            place(&[frame("memcpy"), frame("copy_frame"), frame("receive")]),
             Place {
                 function: "receive".into(),
                 inlined: "memcpy".into()
             }
         );
-        let unknown = r#"{"Address":"0x0","Symbol":[{"FunctionName":""}]}"#;
-        assert_eq!(place(unknown).function, "?");
-        assert_eq!(place("not json").inlined, "?");
+        assert_eq!(place(&[]).function, "?");
+        assert_eq!(place(&[Frame::default()]).inlined, "?");
     }
 
     #[test]

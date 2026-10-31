@@ -14,7 +14,8 @@
 //! TIMG0 stand observations (HW7, HW23) were not repeated on TIMG1.
 
 use super::timg0_alarm::{
-    InterruptRegisters, InvalidDelay, Observation, ProgramRegisters, acknowledge, arm_after, disarm,
+    InterruptRegisters, InvalidDelay, MAX_DELAY_MICROS, Observation, ProgramRegisters, acknowledge,
+    arm_after, disarm,
 };
 use oer_esp32s31_pac::{instances, ownership::TimerGroup1Peripherals, timg};
 use oer_espressif_interrupt_table::EventAuthority;
@@ -72,6 +73,27 @@ impl<P: Placement> Timg1AlarmProgram<P> {
         arm_after(self, delay)
     }
 
+    /// Move the alarm of the counter [`arm_after`](Self::arm_after) started
+    /// to `target` microseconds from that zero and enable it again, without
+    /// stopping, reloading or resetting the divider: a periodic schedule
+    /// keeps its phase whatever the handler's latency. A target the counter
+    /// already passed fires at once.
+    ///
+    /// SOURCE: ESP_IDF_4D59230D_S31_TIMER0_LL (`timer_ll_set_alarm_value`,
+    /// `timer_ll_enable_alarm` on a counting timer); HW7_S31_TIMG0_20261026
+    /// observed a past target firing on TIMG0, not repeated on TIMG1.
+    ///
+    /// # Errors
+    /// [`InvalidDelay`] for a target past the counter's range, before any
+    /// write.
+    pub fn alarm_at(
+        &mut self,
+        target: Duration,
+        _authority: &impl EventAuthority<Timg1AlarmInterrupt<P>>,
+    ) -> Result<(), InvalidDelay> {
+        alarm_at(self, target)
+    }
+
     /// Stop and mask T0 without acknowledging RAW.
     pub fn disarm(&mut self) {
         disarm(self);
@@ -97,6 +119,35 @@ impl<P: Placement> Timg1AlarmInterrupt<P> {
     }
 }
 
+fn alarm_at<P: Placement>(
+    program: &mut Timg1AlarmProgram<P>,
+    target: Duration,
+) -> Result<(), InvalidDelay> {
+    let micros = target.as_micros();
+    if micros > MAX_DELAY_MICROS {
+        return Err(InvalidDelay { requested: target });
+    }
+    program.set_alarm(micros);
+    program.0.configure_timg1_timer0_alarm_running();
+    oer_riscv::fence();
+    Ok(())
+}
+
+impl<P: Placement> Timg1AlarmProgram<P> {
+    /// The alarm words; the caller proved `micros` fits them.
+    fn set_alarm(&mut self, micros: u64) {
+        // Both supported targets are little-endian; Bits::truncate keeps
+        // the high word's generated width, which the admission fits.
+        let [low, high]: [u32; 2] = bytemuck::cast(micros);
+        self.0.modify_t0alarmlo(|w| {
+            w.set_t_alarm_lo(low);
+        });
+        self.0.modify_t0alarmhi(|w| {
+            w.set_t_alarm_hi(Bits::truncate(high));
+        });
+    }
+}
+
 impl<P: Placement> ProgramRegisters for Timg1AlarmProgram<P> {
     fn stop(&mut self) {
         self.0.configure_timg1_timer0_stopped();
@@ -110,15 +161,8 @@ impl<P: Placement> ProgramRegisters for Timg1AlarmProgram<P> {
     }
 
     fn load_interval(&mut self, micros: u64) {
-        // Both supported targets are little-endian. Admission in `arm_after`
-        // proves the high word fits the generated field before Bits::truncate.
-        let [low, high]: [u32; 2] = bytemuck::cast(micros);
-        self.0.modify_t0alarmlo(|w| {
-            w.set_t_alarm_lo(low);
-        });
-        self.0.modify_t0alarmhi(|w| {
-            w.set_t_alarm_hi(Bits::truncate(high));
-        });
+        // Admission in `arm_after` proves the target fits the alarm words.
+        self.set_alarm(micros);
         self.0.modify_t0loadlo(|w| {
             w.set_t_load_lo(0);
         });
@@ -147,5 +191,50 @@ impl<P: Placement> InterruptRegisters for Timg1AlarmInterrupt<P> {
 
     fn clear_timer0(&mut self) {
         self.0.trigger_int_clr_timers_t0_int_clr();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn program(words: &mut [u32]) -> Timg1AlarmProgram<oer_mmio::Host<'_>> {
+        Timg1AlarmProgram(timg::Timg1Timer0::host(words).expect("host memory holds the block"))
+    }
+
+    #[test]
+    fn a_running_alarm_moves_its_target_and_reenables_it_without_a_reload() {
+        let mut words = [0; instances::timg1::SIZE / 4];
+        let mut timer = program(&mut words);
+        timer.0.configure_timg1_timer0_armed();
+        timer.0.modify_t0loadlo(|w| {
+            w.set_t_load_lo(7);
+        });
+        alarm_at(&mut timer, Duration::from_micros(0x1_2345_6789)).expect("the target fits");
+        assert_eq!(timer.0.read_t0alarmlo().t_alarm_lo(), 0x2345_6789);
+        assert_eq!(timer.0.read_t0alarmhi().t_alarm_hi().get(), 1);
+        let config = timer.0.read_t0config();
+        assert!(config.t_en() && config.t_increase() && config.t_alarm_en());
+        assert!(!config.t_autoreload());
+        assert_eq!(config.t_divider(), 40, "the divider stays");
+        assert_eq!(
+            timer.0.read_t0loadlo().t_load_lo(),
+            7,
+            "no reload value is written"
+        );
+    }
+
+    #[test]
+    fn a_target_past_the_counter_s_range_writes_nothing() {
+        let mut words = [0; instances::timg1::SIZE / 4];
+        let before = words;
+        let mut timer = program(&mut words);
+        let target = Duration::from_micros(MAX_DELAY_MICROS + 1);
+        assert_eq!(
+            alarm_at(&mut timer, target),
+            Err(InvalidDelay { requested: target })
+        );
+        drop(timer);
+        assert_eq!(words, before);
     }
 }

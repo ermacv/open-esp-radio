@@ -35,7 +35,7 @@ use static_cell::ConstStaticCell;
 use super::action::{Action, Answer, Kept, MAX_PAYLOAD, Phase, action};
 use super::pace::{GRANULARITY_US, MAX_BATCH, Next, Schedule};
 use super::receive::{Datagram, Receiving, classify, echo};
-use super::sampler::Sampler;
+use super::sampler::Profiler;
 use super::{counters, cpu, parts};
 use crate::fatal::Failure;
 use crate::station::emit;
@@ -105,7 +105,7 @@ type Socket = UdpSocket<'static, Device>;
 pub(crate) async fn serve(
     mut requests: Receiver,
     network: &Network,
-    mut sampler: Sampler,
+    mut sampler: Profiler,
 ) -> Infallible {
     let tally = TALLY
         .try_take()
@@ -162,7 +162,7 @@ pub(crate) async fn serve(
 
 /// Whether the image can sample `start`: a run that asks for samples
 /// needs the sampler disarmed.
-fn sampled(start: &Start, sampler: &Sampler) -> Result<(), LoadError> {
+fn sampled(start: &Start, sampler: &Profiler) -> Result<(), LoadError> {
     match start.profile {
         Some(_) if !sampler.available() => Err(LoadError::NoSampler),
         _ => Ok(()),
@@ -256,7 +256,7 @@ async fn run(
     start: Start,
     tally: &mut Tally<TALLY_WORDS>,
     network: &Network,
-    sampler: &mut Sampler,
+    sampler: &mut Profiler,
 ) -> Ended {
     tally.clear();
     let window = Window {
@@ -351,7 +351,7 @@ async fn measure(
     window: &Window,
     sent: &mut Sent,
     network: &Network,
-    sampler: &mut Sampler,
+    sampler: &mut Profiler,
 ) -> Ends {
     let planned_start = now_us().saturating_add(millis(start.delay_ms));
     let planned_end = planned_start.saturating_add(millis(start.duration_ms));
@@ -370,11 +370,12 @@ async fn measure(
     wait_until(planned_end).await;
     let end_us = now_us();
     window.end_us.set(Some(end_us));
+    sampler.request_stop();
     let cpu_end = cpu_load().await;
     let parts_end = parts_sample(false).await;
     let counters_end = counters::snapshot(stack_received(network));
     let sampled = match sampling {
-        Some(Ok(())) => Some(sampler.stop().await.map_err(|_| LoadError::NoSampler)),
+        Some(Ok(())) => Some(sampler.stop().await),
         other => other,
     };
     wait_until(end_us.saturating_add(millis(start.drain_ms))).await;

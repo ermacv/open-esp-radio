@@ -95,6 +95,7 @@ fn the_largest_reports_fit_one_response() {
         stride: u32::MAX,
         kept: u16::MAX,
         stray: u32::MAX,
+        cut: true,
         samples: core::iter::repeat_n(
             Sample {
                 tick: u32::MAX,

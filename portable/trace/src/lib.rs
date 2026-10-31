@@ -26,6 +26,7 @@
 mod decode;
 mod event;
 mod observe;
+pub mod profile;
 mod store;
 
 pub use decode::{Described, Describer, EventSet};

@@ -37,10 +37,12 @@ image's hart every period over the window and records a `profile`: ticks,
 stride and effective period, the samples by interrupted raw CLIC level
 (0 task code; with three level bits P1 `0x3f`, P2 `0x5f`, P3 `0x7f`), the 40
 functions and the 40 innermost inlined functions with the most samples, and
-every raw sample as `[tick, pc, level]`. The functions are named with
-`llvm-symbolizer` from the runtime ELF the harness built
-(`target/fw/esp32s31-wifi-station/runtime.elf`); without it the profile
-records why and keeps the raw samples. The scenario holds the air exclusively. Executors' work spans and
+every raw sample as `[tick, pc, level]`. Ticks are due every period on the
+timer's own schedule; one due while the hart's interrupts were masked
+samples where they open. The functions are named from the DWARF of the
+runtime ELF the harness built (`target/fw/esp32s31-wifi-station/runtime.elf`,
+`oer_analysis_elf::dwarf::Symbolizer`); without it the profile records why
+and keeps the raw samples. The scenario holds the air exclusively. Executors' work spans and
 parts' polls include preemption and overlap: only a hart's idle time gives
 its utilisation. The router forwards the load: its CPU can limit it.
 

@@ -110,18 +110,15 @@ without a profile answers `NotSampled`.
   their length or a down link. The bridge reports each frame through
   `oer_trace::observe!`; a build without `oer_trace` counts none of them.
 - **Samples** (`src/load/sampler.rs`). A run whose `Start` has a `profile`
-  arms TIMG1 T0 at the window's start and stops it at its end, after the
-  counters. Every period the P4 handler records the interrupted `mepc` and
-  `mcause.mpil` (0 for task code); code with the hart's interrupts masked is
-  seen where it unmasks them. Its 2048 samples (18 KiB of SRAM) cover the
-  whole window by stride doubling: once full, the stride doubles and each
-  new kept tick overwrites one the new stride drops. Arming hands the timer's
-  program part, binding and recording to the handler through a one-slot
-  queue with the hart's interrupts masked; stopping asks the handler to hand
-  them back at its next tick and waits at most four periods and 10 ms. A
-  handler that keeps them leaves the sampler gone for the image's run
-  (`NoSampler`). A disarmed sampler's timer is stopped and masked. Ticks
-  that find no session count as `stray`.
+  starts `oer_esp32s31_compose::sampler` on TIMG1 T0 at the window's start
+  and asks it to stop at the window's end, before the end's readings. Its
+  P4 handler reports each scheduled tick's interrupted `mepc` and
+  `mcause.mpil` (0 for task code) through the image's observer into one
+  `oer_trace::profile::Thinning` of 2048 samples (16 KiB of SRAM), which is
+  normalized to one stride once the session is back. The load server waits
+  at most four periods and 10 ms for it; a handler that keeps it leaves the
+  sampler gone for the image's run (`NoSampler`), as does a build without
+  `oer_trace`. A disarmed sampler's timer is stopped and masked.
 
 The IP stack's pools are sized for about 65 Mbit/s of 1400-byte datagrams
 each way (`src/station/ip.rs`): 32 receive slots for the station's bursts,
