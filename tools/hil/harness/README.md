@@ -25,7 +25,8 @@ of the services that image must serve, and lists its cases; `main` then:
 6. runs the cases (`--case` selects some, `--list` prints them), printing
    each outcome as soon as it is known, and each measurement a case records
    (`Cx::measure`) when it records it; a run with measurements writes them
-   with its outcomes to `target/hil/results/<scenario>-<unix time>.json`;
+   with its outcomes, cleanup and verdict to
+   `target/hil/results/<scenario>-<time in ns>.json` once the lease is released;
 7. checks the device at the end of the cases: one that runs the built image
    and left no request unconfirmed ends clean; one with a request whose
    outcome is unknown, or whose image does not answer, is reported. The

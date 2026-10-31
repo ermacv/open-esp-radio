@@ -27,4 +27,5 @@ Equipment a scenario needs besides the board belongs to the stand
 
 A case records measurements through `Cx::measure`: each is printed, and a
 run with measurements writes them with its outcomes to
-`target/hil/results/<scenario>-<unix time>.json`.
+`target/hil/results/<scenario>-<time in ns>.json` after the lease is released,
+with the cleanup and the verdict.
