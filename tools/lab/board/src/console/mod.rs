@@ -74,7 +74,7 @@ pub fn lines(mut serial: Port) -> Lines {
 }
 
 /// Everything `serial` receives within `watch`, as text.
-pub fn read_for(mut serial: Port, watch: Duration) -> String {
+pub fn read_for(serial: &mut Port, watch: Duration) -> String {
     let started = Instant::now();
     let mut console = Vec::new();
     let mut buffer = [0_u8; 1024];

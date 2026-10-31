@@ -169,9 +169,9 @@ fn wait(io: &OperationIo) {
 const AP_DOWN: Duration = Duration::from_secs(20);
 
 /// Park the router: its end state after a lease is the stand's AP section
-/// disabled, the rest of its configuration kept, and no access point on its
-/// radio, so it does not radiate between leases. A run's profile enables
-/// the section again.
+/// disabled, the rest of its configuration kept, and no wireless interface
+/// on its radio's PHY, so it does not radiate between leases. A run's
+/// profile enables the section again.
 pub(crate) fn park(stand: &Stand) -> Result<()> {
     let mut router = fixture(stand)?;
     let section =
@@ -179,23 +179,24 @@ pub(crate) fn park(stand: &Stand) -> Result<()> {
     router.ssh.run(&format!(
         "set -e\nuci set {section}\nuci commit wireless\nwifi reload\n"
     ))?;
+    let radio = oer_lab_router::router::quote(&router.radio)?;
+    // The radio's PHY index, then every interface: `iw dev` lists nothing
+    // for a PHY without interfaces, so only the script's exit, which `run`
+    // checks, tells that from a failure.
+    let interfaces = format!(
+        "set -e\nphy=$(iwinfo nl80211 phyname {radio})\n\
+         cat \"/sys/class/ieee80211/$phy/index\"\niw dev\n"
+    );
     let started = std::time::Instant::now();
     loop {
-        // Each view must answer: a failed one is an error, never an AP down.
         let status = router.ssh.run("ubus call network.wireless status")?;
-        // `iw dev` lists nothing for a radio without interfaces: only its
-        // exit, which `run` checks, tells that from a failure.
-        let interfaces = router.ssh.run("iw dev")?;
-        let running = match radiating(
-            &status,
-            &interfaces,
-            &router.radio,
-            &router.ap_section,
-            &router.interface,
-        )? {
+        let listing = router.ssh.run(&interfaces)?;
+        let running = match radiating(&status, &listing, &router.radio)? {
             Radio::Quiet => return Ok(()),
             Radio::Pending => "its radio's reload is still pending".to_owned(),
-            Radio::Ap(interface) => format!("interface {interface} still runs an access point"),
+            Radio::Interfaces(names) => {
+                format!("its radio still has the interfaces {}", names.join(", "))
+            }
         };
         if started.elapsed() >= AP_DOWN {
             return Err(format!(
@@ -210,120 +211,113 @@ pub(crate) fn park(stand: &Stand) -> Result<()> {
 /// What the router's radio does, as its views tell.
 #[derive(Debug, PartialEq)]
 enum Radio {
-    /// No interface of the radio, nor the stand's AP interface, is an
-    /// access point, and the AP section has no interface.
+    /// netifd applied its configuration and the radio's PHY has no
+    /// interface: nothing on it can transmit.
     Quiet,
     /// netifd has not finished applying its configuration.
     Pending,
-    /// This interface is an access point.
-    Ap(String),
+    /// The radio's PHY has these interfaces, whatever their type: a
+    /// station scans and associates, a monitor can inject.
+    Interfaces(Vec<String>),
 }
 
-/// Judge the router's radio `radio`, with the stand's AP section `section`
-/// on `interface`, from netifd's `status` (`ubus call network.wireless
-/// status`) and `iw dev`'s listing of every interface.
-fn radiating(
-    status: &str,
-    interfaces: &str,
-    radio: &str,
-    section: &str,
-    interface: &str,
-) -> Result<Radio> {
+/// Judge the router's radio `radio` from netifd's `status` (`ubus call
+/// network.wireless status`) and `listing`: the radio's PHY index on its
+/// first line, then `iw dev`'s listing of every interface.
+fn radiating(status: &str, listing: &str, radio: &str) -> Result<Radio> {
     let status: serde_json::Value = serde_json::from_str(status)
         .map_err(|error| format!("the router's wireless status is not JSON: {error}"))?;
-    let name = radio;
-    let radio = status
-        .get(name)
-        .ok_or_else(|| format!("the router's wireless status names no radio {name}"))?;
-    if radio.get("pending").and_then(serde_json::Value::as_bool) == Some(true) {
+    let state = status
+        .get(radio)
+        .ok_or_else(|| format!("the router's wireless status names no radio {radio}"))?;
+    if state.get("pending").and_then(serde_json::Value::as_bool) != Some(false) {
         return Ok(Radio::Pending);
     }
-    let listed = radio
-        .get("interfaces")
-        .and_then(serde_json::Value::as_array)
-        .ok_or_else(|| format!("the router's status of {name} lists no interfaces"))?;
-    let mut names = vec![interface.to_owned()];
-    for listed in listed {
-        let Some(ifname) = listed.get("ifname").and_then(serde_json::Value::as_str) else {
-            continue;
-        };
-        if listed.get("section").and_then(serde_json::Value::as_str) == Some(section) {
-            return Ok(Radio::Ap(ifname.to_owned()));
-        }
-        names.push(ifname.to_owned());
-    }
-    let kinds = interface_kinds(interfaces)?;
-    Ok(names
-        .into_iter()
-        .find(|name| kinds.get(name).is_some_and(|kind| kind == "AP"))
-        .map_or(Radio::Quiet, Radio::Ap))
+    let (index, interfaces) = listing.split_once('\n').unwrap_or((listing, ""));
+    let index: u32 = index
+        .trim()
+        .parse()
+        .map_err(|_| format!("the router named no PHY index for {radio}: `{index}`"))?;
+    let on_phy = phy_interfaces(interfaces, index)?;
+    Ok(if on_phy.is_empty() {
+        Radio::Quiet
+    } else {
+        Radio::Interfaces(on_phy)
+    })
 }
 
-/// Each interface `iw dev` lists, with its type. A radio without
-/// interfaces lists nothing, so only `iw`'s exit tells an answer from a
-/// failure; a listing it cannot read is an error.
-fn interface_kinds(listing: &str) -> Result<std::collections::BTreeMap<String, String>> {
-    let mut kinds = std::collections::BTreeMap::new();
-    let mut interface = None;
-    for line in listing.lines().map(str::trim) {
-        if line.starts_with("phy#") {
-            interface = None;
+/// The interfaces `iw dev` lists on PHY `index`; an error for a listing it
+/// cannot read.
+fn phy_interfaces(listing: &str, index: u32) -> Result<Vec<String>> {
+    let mut phy = None;
+    let mut found = Vec::new();
+    for line in listing
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+    {
+        if let Some(number) = line.strip_prefix("phy#") {
+            phy = Some(
+                number
+                    .parse::<u32>()
+                    .map_err(|_| format!("`iw dev` printed an unknown PHY `{line}`"))?,
+            );
         } else if let Some(name) = line.strip_prefix("Interface ") {
-            interface = Some(name.trim().to_owned());
-        } else if let (Some(kind), Some(name)) = (line.strip_prefix("type "), &interface) {
-            kinds.insert(name.clone(), kind.trim().to_owned());
+            match phy {
+                Some(phy) if phy == index => found.push(name.trim().to_owned()),
+                Some(_) => {}
+                None => return Err(format!("`iw dev` listed {name} under no PHY")),
+            }
+        } else if phy.is_none() {
+            return Err(format!("`iw dev` printed `{line}` before any PHY"));
         }
     }
-    if kinds.is_empty() && listing.lines().any(|line| !line.trim().is_empty()) {
-        return Err(format!(
-            "`iw dev` on the router printed no interface: {listing}"
-        ));
-    }
-    Ok(kinds)
+    Ok(found)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    const IW: &str = "phy#0\n\tInterface phy0-sta0\n\t\tifindex 9\n\t\ttype managed\n\
-                      phy#1\n\tInterface phy1-ap0\n\t\ttype AP\n";
-
-    fn judge(status: &str, iw: &str) -> Result<Radio> {
-        radiating(status, iw, "radio0", "stand_ap", "phy0-ap0")
-    }
+    const SETTLED: &str = r#"{"radio0":{"up":true,"pending":false,"interfaces":[]}}"#;
+    const IW: &str = "phy#1\n\tInterface phy1-ap0\n\t\ttype AP\n\
+                      phy#0\n\tInterface phy0-sta0\n\t\tifindex 9\n\t\ttype managed\n";
 
     #[test]
-    fn the_radio_is_quiet_only_when_both_views_answer_without_an_ap_on_it() {
-        let down = r#"{"radio0":{"pending":false,"interfaces":[
-            {"section":"stand_ap"},{"section":"sta","ifname":"phy0-sta0"}]}}"#;
-        // The other radio's AP is not the stand's radio.
-        assert_eq!(judge(down, IW), Ok(Radio::Quiet));
-        let listed = r#"{"radio0":{"pending":false,"interfaces":[
-            {"section":"stand_ap","ifname":"phy0-ap0"}]}}"#;
-        assert_eq!(judge(listed, IW), Ok(Radio::Ap("phy0-ap0".to_owned())));
-        let other_ap = r#"{"radio0":{"interfaces":[{"section":"guest","ifname":"phy1-ap0"}]}}"#;
-        assert_eq!(judge(other_ap, IW), Ok(Radio::Ap("phy1-ap0".to_owned())));
-        // The stand's interface as an AP, whatever netifd lists.
-        let iw_ap = "phy#0\n\tInterface phy0-ap0\n\t\ttype AP\n";
+    fn the_radio_is_quiet_only_without_any_interface_on_its_phy() {
+        // As on the parked router: no interface at all.
+        assert_eq!(radiating(SETTLED, "0\n", "radio0"), Ok(Radio::Quiet));
+        // A station on the radio's PHY scans and associates.
         assert_eq!(
-            judge(r#"{"radio0":{"interfaces":[]}}"#, iw_ap),
-            Ok(Radio::Ap("phy0-ap0".to_owned()))
+            radiating(SETTLED, &format!("0\n{IW}"), "radio0"),
+            Ok(Radio::Interfaces(vec!["phy0-sta0".to_owned()]))
+        );
+        // The other radio's AP is another PHY.
+        assert_eq!(
+            radiating(
+                SETTLED,
+                "0\nphy#1\n\tInterface phy1-ap0\n\t\ttype AP\n",
+                "radio0"
+            ),
+            Ok(Radio::Quiet)
         );
         assert_eq!(
-            judge(r#"{"radio0":{"pending":true,"interfaces":[]}}"#, IW),
+            radiating(r#"{"radio0":{"pending":true}}"#, "0\n", "radio0"),
+            Ok(Radio::Pending)
+        );
+        // Without a pending flag nothing tells the reload ended.
+        assert_eq!(
+            radiating(r#"{"radio0":{}}"#, "0\n", "radio0"),
             Ok(Radio::Pending)
         );
     }
 
     #[test]
-    fn a_view_that_does_not_answer_is_an_error_never_an_ap_down() {
-        let down = r#"{"radio0":{"interfaces":[]}}"#;
-        // Without interfaces `iw dev` prints nothing, as on the parked router.
-        assert_eq!(judge(down, ""), Ok(Radio::Quiet));
-        assert!(judge(down, "command failed: No such device").is_err());
-        assert!(judge("", IW).is_err(), "no status");
-        assert!(judge(r#"{"radio1":{"interfaces":[]}}"#, IW).is_err());
-        assert!(judge(r#"{"radio0":{}}"#, IW).is_err());
+    fn a_view_that_does_not_answer_is_an_error_never_a_quiet_radio() {
+        assert!(radiating("", "0\n", "radio0").is_err(), "no status");
+        assert!(radiating(r#"{"radio1":{"pending":false}}"#, "0\n", "radio0").is_err());
+        assert!(radiating(SETTLED, "", "radio0").is_err(), "no PHY index");
+        assert!(radiating(SETTLED, "0\ncommand failed: No such device", "radio0").is_err());
+        assert!(radiating(SETTLED, "0\nphy#x\n", "radio0").is_err());
     }
 }

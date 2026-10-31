@@ -91,12 +91,13 @@ held as abandoned and recovers its resources before granting them again.
 [`stand`](src/stand.rs) drives the real stand through `oer-lab-board` and
 `oer-lab-router`. Every end state is quiet: no parked resource radiates.
 A resource in use radiates only under its lease's air claims: an operation
-that starts an image (a flash, a reset other than into download, a
-console's reset), switches a board's power (a power cycle, a hub port) or
-drives the router needs a lease that holds the air, shared at least, and so
-does a board parked with its power off, since powering it starts its image.
-`cargo hil`, `cargo fw` and the board commands of `cargo stand` claim it;
-`cargo stand lease --air none` keeps to the rest.
+that starts an image (a flash, any reset, a console's reset), switches a
+board's power (a power cycle, a hub port) or drives the router needs a
+lease that holds the air, shared at least, and so does a board parked with
+its power off, since powering it starts its image. `cargo hil`, `cargo fw`
+and the board commands of `cargo stand` claim it; `cargo stand lease --air
+none` keeps to the rest, and its console reads stay on the board's open
+port.
 
 - **Boards.** Each board has one owner in the service: its operations take
   turns in the order they asked (two operations of one lease never drive one
@@ -106,9 +107,12 @@ does a board parked with its power off, since powering it starts its image.
     its ROM's download mode: a reset into it, then a reset line the ROM
     printed after the last reset, naming a download boot that serves the
     USB Serial/JTAG (`boot:0x.. (DOWNLOAD(USB/UART0))`). The service keeps
-    its port open: closing a USB Serial/JTAG port can move its reset lines.
-    A console that starts the image opens the port anew, since a reset from
-    download re-enumerates USB.
+    its port open: closing a USB Serial/JTAG port can move its reset lines
+    and start the image. A console that does not start the image reads that
+    port and hands it back open, and a lease's end resets into download
+    through it when nothing closed it; without the air, a console read
+    needs it. A console that starts the image opens the port anew, since a
+    reset from download re-enumerates USB.
   - A board that resets only by JTAG and power (an ESP32-C5: its USB reset
     enters a download that no longer serves USB, `docs/hardware-errata.md`)
     rests with its power off: its switchable hub port, found under it on the
@@ -130,11 +134,12 @@ does a board parked with its power off, since powering it starts its image.
   `hub-port:LOCATION:PORT`. The service runs `uhubctl` for every report.
 - **The router.** It is a resource when the stand file names a `[router]`.
   Its end state: the stand's AP section disabled with the rest of its
-  configuration kept, and no access point on its radio: netifd's status
-  (`ubus call network.wireless status`) lists no interface for the section
-  and `iw dev` no AP on the radio's interfaces or the AP's interface. Both
-  views must answer; one that fails leaves the router unavailable, never
-  parked. A run's profile enables the section again. Its operations are the logic of
+  configuration kept, and its radio quiet: netifd's status (`ubus call
+  network.wireless status`) shows the radio's configuration applied, not
+  pending, and `iw dev` lists no interface of any type on the radio's PHY
+  (`iwinfo nl80211 phyname`). Both views must answer; one that fails
+  leaves the router unavailable, never parked. A run's profile enables the
+  section again. Its operations are the logic of
   `oer-lab-router`: the AP profile on a channel the stand file allows, the
   station, DHCP and ping views, the WPA2 checks, a deauthentication, the
   routed network's check and the echo and departure observers. The service
@@ -157,4 +162,5 @@ input by credit and beyond the window, a release that waits for its
 recoveries, a drain that waits for them, a grant that cannot be prepared,
 the first operation after a grant and an unrecordable grant; the turns of
 operations on one board, the record of boards parked with their power off,
-the operations that need the air, and the router's two views judged.
+the operations that need the air, and the router's PHY judged by both
+views.

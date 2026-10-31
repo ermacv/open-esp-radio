@@ -113,6 +113,10 @@ fn what_may_radiate_needs_the_air() {
             board: board(),
             reset: true,
         },
+        Operation::Reset {
+            board: board(),
+            path: Some(ResetPath::Download),
+        },
         Operation::PowerCycle { board: board() },
         Operation::HubPort {
             hub: "top".to_owned(),
@@ -125,9 +129,9 @@ fn what_may_radiate_needs_the_air() {
         assert!(air_refusal(operation, &with_air).is_none(), "{operation:?}");
     }
     let quiet = [
-        Operation::Reset {
+        Operation::ReadConsole {
             board: board(),
-            path: Some(ResetPath::Download),
+            watch_ms: 1,
         },
         Operation::Console {
             board: board(),

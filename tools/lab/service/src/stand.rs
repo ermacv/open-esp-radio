@@ -11,7 +11,8 @@
 //!   ROM's download mode, reached by a reset into it and proven by a reset
 //!   line the ROM printed after that reset naming a download boot over USB;
 //!   its port stays open, since closing a USB Serial/JTAG port can move its
-//!   reset lines;
+//!   reset lines and start the image: passive console reads use it and hand
+//!   it back, and the next park resets into download through it;
 //! - one that resets only by JTAG and power rests with its power off: its
 //!   switchable hub port, found under it on the host and allowed by the
 //!   stand's hub policy, is recorded before it is switched off, then the
@@ -203,8 +204,10 @@ impl StandDrivers {
                 entry.id
             ));
         }
-        let port = oer_lab_board::discovery::port_of(&entry.device_id().map_err(text)?)
-            .unwrap_or_else(|_| PathBuf::from("/dev/null"));
+        // A board that is re-enumerating returns within this wait; one that
+        // does not is an error, never a stand-in path a reset would open.
+        let port = oer_lab_board::discovery::wait_for(&entry.device_id().map_err(text)?, REATTACH)
+            .ok_or_else(|| format!("board `{}` is not attached", entry.id))?;
         Ok((
             Board::new(&self.root, &stand, entry, port).map_err(text)?,
             entry.mac.clone(),
@@ -253,11 +256,13 @@ impl StandDrivers {
             Ok(turn) => turn,
             Err(error) => return unavailable(error),
         };
-        // A port it rested on is closed: the proof starts anew.
-        drop(turn.parked());
+        // The port it rested on, still open when nothing of the lease
+        // closed it: the reset into download goes through it, since closing
+        // it could start the image.
+        let held = turn.parked();
         if entry.reset.contains(&ResetStep::UsbJtagRts) {
             match self.described(mac, &[Claim::board(mac)]) {
-                Ok((board, _)) => self.park_in_download(mac, &board, &turn),
+                Ok((board, _)) => self.park_in_download(mac, &board, &turn, held),
                 Err(error) => unavailable(error),
             }
         } else if entry.reset.contains(&ResetStep::Power) {
@@ -275,12 +280,42 @@ impl StandDrivers {
     }
 
     /// Park the board in its ROM's download mode over USB, by a reset
-    /// into it and, when it has power, a power cycle into download.
-    fn park_in_download(&self, mac: &str, board: &Board, turn: &Turn) -> Confirmation {
+    /// into it (through its `held` port first, when it rested on one) and,
+    /// when it has power, a power cycle into download.
+    fn park_in_download(
+        &self,
+        mac: &str,
+        board: &Board,
+        turn: &Turn,
+        held: Option<Port>,
+    ) -> Confirmation {
         let mut tried = Vec::new();
         // A ROM seen waiting for any download does not radiate; only what
         // the last attempt saw counts, since every attempt moves the board.
         let mut quiet = false;
+        if let Some(mut serial) = held {
+            match reset::download_on(&mut serial)
+                .map_err(text)
+                .and_then(|()| banner(serial))
+            {
+                Ok((serial, line)) if serves_usb_download(&line) => {
+                    eprintln!("lab-service: board {mac} parked on its open port: {line}");
+                    turn.park(serial);
+                    return Confirmation::Ready;
+                }
+                Ok((_, line)) => {
+                    quiet = line.contains("DOWNLOAD(");
+                    tried.push(format!(
+                        "a reset into download on its open port read `{line}`"
+                    ));
+                }
+                Err(error) => {
+                    tried.push(format!(
+                        "a reset into download on its open port failed: {error}"
+                    ));
+                }
+            }
+        }
         let mut attempts = vec![("", board.current_port(REATTACH))];
         if attempts.first().is_some_and(|(_, port)| port.is_none()) {
             tried.push("its port is gone".to_owned());
@@ -509,17 +544,18 @@ impl StandDrivers {
         Ok(serde_json::json!({ "written": true, "receipt": receipt }))
     }
 
-    /// Stream `board`'s console both ways until `io.stop`.
     /// Stream `board`'s console both ways until `io.stop`: on its `parked`
-    /// port when it has one and is not started; when `start`, after a reset
-    /// into its image that discards what the port held before.
+    /// port when it has one and is not started, which it returns open; when
+    /// `start`, after a reset into its image that discards what the port
+    /// held before.
     fn console(
         &self,
         board: &Board,
         parked: Option<Port>,
         start: bool,
         io: &OperationIo,
-    ) -> Result<()> {
+    ) -> Result<Option<Port>> {
+        let resting = parked.is_some() && !start;
         let mut port = match parked {
             // A reset from the ROM's download mode re-enumerates the port:
             // the console opens anew, and the reset below discards what the
@@ -545,7 +581,7 @@ impl StandDrivers {
                 port.write_all(&bytes).map_err(text)?;
             }
         }
-        Ok(())
+        Ok(resting.then_some(port))
     }
 
     fn hub_port(&self, hub: &str, port: u8, off: Duration, claims: &[Claim]) -> Result<()> {
@@ -594,7 +630,11 @@ fn carried(board: &Board) -> Result<String> {
 /// ROM's reset line from the fresh console: the reset sequence discards
 /// what the port held before it.
 fn download(port: &Path) -> Result<(Port, String)> {
-    let mut serial = reset::reset_into_download(port).map_err(text)?;
+    banner(reset::reset_into_download(port).map_err(text)?)
+}
+
+/// The ROM's reset line, read from `serial` just after a reset.
+fn banner(mut serial: Port) -> Result<(Port, String)> {
     serial.set_timeout(POLL).map_err(text)?;
     let started = Instant::now();
     let mut banner = Vec::new();
@@ -746,15 +786,30 @@ impl Drivers for StandDrivers {
                 ))
             }
             Operation::Console { board, reset } => {
-                let (board, parked, _turn) = self.board_and_port(board, claims, &stop)?;
-                self.console(&board, parked, *reset, &io)?;
+                let (board, parked, turn) = self.board_and_port(board, claims, &stop)?;
+                if parked.is_none() && !covers(claims, &[Claim::shared(AIR)]) {
+                    return Err(NOT_PARKED.to_owned());
+                }
+                // A console that did not start the image hands the port it
+                // rests on back open.
+                if let Some(port) = self.console(&board, parked, *reset, &io)? {
+                    turn.park(port);
+                }
                 Ok(serde_json::Value::Null)
             }
             Operation::ReadConsole { board, watch_ms } => {
-                let (board, _turn) = self.board(board, claims, &stop)?;
-                Ok(serde_json::json!(
-                    board.console(Duration::from_millis(*watch_ms))
-                ))
+                let watch = Duration::from_millis(*watch_ms);
+                let (board, parked, turn) = self.board_and_port(board, claims, &stop)?;
+                Ok(serde_json::json!(match parked {
+                    // Read on the port it rests on, which stays open.
+                    Some(mut port) => {
+                        let text = oer_lab_board::console::read_for(&mut port, watch);
+                        turn.park(port);
+                        text
+                    }
+                    None if covers(claims, &[Claim::shared(AIR)]) => board.console(watch),
+                    None => return Err(NOT_PARKED.to_owned()),
+                }))
             }
             Operation::PowerCycle { board } => {
                 let (board, _turn) = self.board(board, claims, &stop)?;
@@ -803,19 +858,26 @@ impl Drivers for StandDrivers {
     }
 }
 
+/// Why a lease without the air may not read a board's console: the board
+/// no longer rests on its open port, and opening and closing one could
+/// start its image.
+const NOT_PARKED: &str = "the board does not rest on its open port; reading its console \
+                          then needs the air";
+
 /// Why a lease holding `claims` may not run `operation`: one that starts an
 /// image, powers a board or drives the router may put it on the air, so the
 /// lease must hold the air. A resource in use radiates only under its
 /// lease's air claims.
 fn air_refusal(operation: &Operation, claims: &[Claim]) -> Option<String> {
-    use oer_lab_model::rom::ResetPath;
     let radiates = match operation {
         Operation::Flash { .. }
         | Operation::PowerCycle { .. }
         | Operation::ProvePowerLoss { .. }
         | Operation::HubPort { .. }
-        | Operation::Router { .. } => true,
-        Operation::Reset { path, .. } => *path != Some(ResetPath::Download),
+        | Operation::Router { .. }
+        // Even into download: the way there may boot the image (a power
+        // cycle, or a closed port).
+        | Operation::Reset { .. } => true,
         Operation::Console { reset, .. } => *reset,
         Operation::ReadConsole { .. }
         | Operation::ProbeRouter
