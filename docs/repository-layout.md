@@ -39,8 +39,8 @@ portable/{cooperate, crypto, diagnostics, events, memory, mmio, riscv, sort, syn
     time, time-virtual, trace, wire}/
 portable/embassy/{net, time}/
 hil-scenarios/aes/
-hil-scenarios/images/esp32s31-rpc/
-hil-scenarios/services/aes/
+hil-scenarios/images/{esp32s31-rpc, esp32s31-wifi-station}/
+hil-scenarios/services/{aes, wifi-station}/
 protocols/bluetooth/hci/
 protocols/bluetooth/le/{cipher, controller, ll, model, port, runtime, wire}/
 protocols/bridges/ieee80211-ethernet/
@@ -138,8 +138,8 @@ network contract on the codec.
   `protocols/radio/coex`; `chips/esp32s31/ieee80211/driver` depends on
   `chips/espressif/staged-runtime` for its trace recorder;
   `chips/esp32s31/ieee802154/driver` depends on `portable/mmio` for
-  `Placement`; the HIL RPC image depends directly on the HAL instead of a
-  facade.
+  `Placement`; the HIL RPC and Wi-Fi station images depend directly on the
+  HAL instead of a facade.
 - HAL production files that wait or poll are listed with exact counts:
   modules of `bluetooth`, `boot`, `ieee80211` and `phy`, and
   `peripherals/entropy.rs`.

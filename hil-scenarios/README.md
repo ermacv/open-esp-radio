@@ -10,6 +10,11 @@ scenario knows lives here or beside the facade it uses.
 | `services/` | Test-only service vocabularies: requests, responses and, where it is generic, the handler over a product contract. A product facade's vocabulary lives beside the facade. |
 | `<scenario>/` | One host program per scenario: its cases, its independent reference and its verdict, over `oer-hil-harness`. |
 
+| Image | Services |
+| --- | --- |
+| [`esp32s31-rpc`](images/esp32s31-rpc/README.md) | AES |
+| [`esp32s31-wifi-station`](images/esp32s31-wifi-station/README.md) | Wi-Fi station: join, status and leave over the product station facade, IPv4 by DHCP |
+
 | Scenario | Image | Checks |
 | --- | --- | --- |
 | [`aes`](aes/README.md) | [`esp32s31-rpc`](images/esp32s31-rpc/README.md) | The product hardware RFC 3394 key unwrap against the RFC's known answer and an independent host wrap |

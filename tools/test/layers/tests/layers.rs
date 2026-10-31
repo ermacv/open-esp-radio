@@ -965,9 +965,10 @@ const ROLES: &[(&str, Role)] = &[
     ("protocols/hil/agent", Role::HilAgent),
     ("chips/esp32s31/instrumentation", Role::ObservationContract),
     ("hil-scenarios/images/esp32s31-rpc", Role::HilImage),
+    ("hil-scenarios/images/esp32s31-wifi-station", Role::HilImage),
     ("hil-scenarios/services/aes", Role::HilBinding),
-    ("hil-scenarios/aes", Role::Tool),
     ("hil-scenarios/services/wifi-station", Role::HilBinding),
+    ("hil-scenarios/aes", Role::Tool),
     ("hil-scenarios/wifi-station", Role::Tool),
 ];
 
@@ -3024,6 +3025,16 @@ const OUTSIDE_THE_ROLES: &[Deviation] = &[
     ),
     (
         "hil-scenarios/images/esp32s31-rpc",
+        "portable/riscv",
+        "the Wi-Fi station image on the facade and compose (#848)",
+    ),
+    (
+        "hil-scenarios/images/esp32s31-wifi-station",
+        "chips/esp32s31/hal",
+        "the Wi-Fi station image on the facade and compose (#848)",
+    ),
+    (
+        "hil-scenarios/images/esp32s31-wifi-station",
         "portable/riscv",
         "the Wi-Fi station image on the facade and compose (#848)",
     ),

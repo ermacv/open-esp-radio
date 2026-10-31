@@ -30,7 +30,8 @@
 //!
 //! The messages are shared by the image, which serves them through
 //! [`Request`] and its [`Handler`], and the host scenario, which sends them
-//! and checks the answers against what the lab router sees.
+//! and checks the answers against what the lab router sees. [`runtime`]
+//! builds the answers from the product station runtime's values.
 
 use postcard_schema::Schema;
 use serde::{Deserialize, Serialize};
@@ -134,6 +135,8 @@ oer_hil_agent::service! {
         Leave(Leave) => leave,
     }
 }
+
+pub mod runtime;
 
 #[cfg(test)]
 mod tests;
