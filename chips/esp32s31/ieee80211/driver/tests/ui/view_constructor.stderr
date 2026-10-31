@@ -6,5 +6,26 @@ error[E0624]: associated function `new` is private
   |
  ::: src/lower_mac/lifecycle.rs
   |
-  |             fn new(owner: &'view mut CoreOwner<C>) -> Self { Self { owner, gate: PhantomData } }
-  |             ---------------------------------------------- private associated function defined here
+  |             fn new(owner: &'view mut Prepared<C>) -> Self { Self { owner, gate: PhantomData } }
+  |             --------------------------------------------- private associated function defined here
+
+error[E0308]: mismatched types
+ --> tests/ui/view_constructor.rs:9:49
+  |
+9 |     let _view = EnabledView::<_, OpenGate>::new(owner); // ui-error: E0624
+  |                 ------------------------------- ^^^^^ expected `&mut Prepared<_>`, found `&mut CoreOwner<...>`
+  |                 |
+  |                 arguments to this function are incorrect
+  |
+  = note: expected mutable reference `&mut lower_mac::lifecycle::bank::Prepared<_>`
+             found mutable reference `&mut oer_esp32s31_ieee80211_driver::lower_mac::CoreOwner<oer_esp32s31_ieee80211_driver::lower_mac::LowerMacCore<'core, 'slot, P, E, T, C, 512>>`
+note: associated function defined here
+ --> src/lower_mac/lifecycle.rs
+  |
+  |               fn new(owner: &'view mut Prepared<C>) -> Self { Self { owner, gate: PhantomData } }
+  |                  ^^^
+...
+  | / view!(/// An enabled bank with a statically selected admission policy.
+  | |     EnabledView);
+  | |________________- in this macro invocation
+  = note: this error originates in the macro `view` (in Nightly builds, run with -Z macro-backtrace for more info)

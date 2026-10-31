@@ -3594,8 +3594,6 @@ fn a_failed_gate_open_returns_every_unpublished_owner_then_drains_the_prefix() {
                 failure
                     .owner
                     .core
-                    .as_ref()
-                    .unwrap()
                     .queues
                     .iter()
                     .flatten()

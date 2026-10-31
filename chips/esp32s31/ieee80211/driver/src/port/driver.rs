@@ -188,12 +188,10 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
     pub(super) fn take_transmitter(
         &mut self,
     ) -> Option<OrdinaryTxIdleOwner<'static, D::Power, D::Entropy, D::Timer, B>> {
-        match self.core.view() {
-            CoreView::Disabled(view) => Some(view.dismantle().into_transmitter()),
-            CoreView::DisabledClosing(view) => Some(view.dismantle().into_transmitter()),
-            CoreView::DisabledClosed(view) => Some(view.dismantle().into_transmitter()),
-            _ => None,
-        }
+        self.core
+            .dismantle()
+            .ok()
+            .map(LowerMacCoreParts::into_transmitter)
     }
     /// A retired driver holds no admitted work for a new installation.
     pub(super) fn retired(&self) -> bool {

@@ -38,7 +38,8 @@
 //! Disable consumes the enabled view; [`DisablingView::finish`] returns a
 //! disabled view and emits one terminal after all publications ended. A
 //! poisoned bank retains its owners. Only disabled views can select a
-//! channel or dismantle the bank. Gate types survive disable and retune.
+//! channel; [`CoreOwner::dismantle`] recovers only a disabled bank whose
+//! transmitter is idle. Gate types survive disable and retune.
 //!
 //! Closing consumes the enabled view and holds new attempts. A drained
 //! published prefix produces a [`ClosedGate`] view and blocks hardware
@@ -204,8 +205,8 @@ pub use resources::{CoreAuthority, CorePools, CoreResources, FreeQueue, TxTicket
 mod lifecycle;
 pub use lifecycle::{
     ClosedGate, ClosingGate, CommandView, ConfigurationProgress, ConfigureRefused, ConfiguringView,
-    CoreGate, CoreOwner, CoreView, DisabledView, DisablingView, EnabledView, FailedGateView,
-    GateClosure, LifecycleStart, OpenGate, RetuningView, VacantView,
+    CoreGate, CoreOwner, CoreRetained, CoreView, DisabledView, DisablingView, EnabledView,
+    FailedGateView, GateClosure, LifecycleStart, OpenGate, RetuningView, VacantView,
 };
 
 mod keys;
@@ -694,7 +695,7 @@ pub struct LowerMacConfig {
 }
 
 /// The owners a disabled, idle [`LowerMacCore`] is built from, which
-/// [`DisabledView::dismantle`] returns.
+/// [`CoreOwner::dismantle`] returns.
 pub struct LowerMacCoreParts<
     'core,
     'slot,
@@ -927,7 +928,15 @@ where
         config: LowerMacConfig,
         coex: &'slot C,
     ) -> CoreOwner<Self> {
-        CoreOwner::prepared(Self {
+        CoreOwner::prepared(Self::assemble(authority, tx, config, coex))
+    }
+    pub(in crate::lower_mac) fn assemble(
+        authority: CoreAuthority<'core, Path, TICKETS>,
+        tx: OrdinaryTxIdleOwner<'slot, P, E, T, BUFFER_SIZE>,
+        config: LowerMacConfig,
+        coex: &'slot C,
+    ) -> Self {
+        Self {
             authority,
             tx: tx.owner,
             config,
@@ -944,7 +953,7 @@ where
             queues: [const { None }; LOWER_MAC_TX_QUEUES],
             expired_msdus: 0,
             coex,
-        })
+        }
     }
 
     /// A disabled core over the owners a dismantled core returned: the
@@ -959,9 +968,9 @@ where
             coex,
             keys,
         } = parts;
-        let mut core = Self::new(authority, tx, config, coex);
-        core.core.as_mut().expect("new owner retains its core").keys = keys;
-        core
+        let mut core = Self::assemble(authority, tx, config, coex);
+        core.keys = keys;
+        CoreOwner::prepared(core)
     }
 
     /// The channel the radio is tuned to: the configured one unless an
