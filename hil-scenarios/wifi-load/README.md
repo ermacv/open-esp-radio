@@ -9,7 +9,7 @@ and counters cross the HIL link. RX and TX are named from the image's side.
 
 | Case | Does |
 | --- | --- |
-| `path` | Checks the host's route to the station network (through the router's `[router].lan_address`, over a wired interface, from one source address), has the router bring up a generated WPA2 network that forwards UDP between its stations and that address, joins, takes a DHCP address, and proves both directions with datagrams of the run: the host's probes come back echoed, the image's datagrams reach the host. Records the topology, addresses, MAC, BSSID, channel and route |
+| `path` | Checks the host's route to the station network (through the router's `[router].lan_address`, over a wired interface, from one source address), has the router bring up a generated WPA2 network that forwards UDP between its stations and that address, joins, takes a DHCP address, and proves both directions with datagrams of the run: the host's probes come back echoed, the image's datagrams reach the host. Records the topology, addresses, MAC, BSSID, channel and route, and the image's CPU over a 5 s window without load: the levels' baseline |
 | `rx` | The host sends to the image |
 | `tx` | The image sends to the host |
 | `rx-tx` | Both at once, half the total each way |

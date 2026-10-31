@@ -415,7 +415,29 @@ fn path(cx: &mut Cx<'_>) -> Result<(), Failure> {
             "device → host: the image sent {}, the host received {}",
             report.sent.datagrams, host.load.datagrams
         ),
-    )
+    )?;
+    // The image's CPU with the station linked and no load: the baseline of
+    // every level's CPU.
+    let idle = run_id();
+    let started = cx.call(
+        Start {
+            run: idle,
+            port: DEVICE_PORT,
+            delay_ms: 0,
+            duration_ms: DURATION_MS,
+            drain_ms: 0,
+            transmit: None,
+        },
+        CALL,
+    )?;
+    check(
+        started == Started::Running,
+        format!("the image's idle run: {started:?}"),
+    )?;
+    std::thread::sleep(Duration::from_millis(u64::from(DURATION_MS)));
+    let idle = collect(cx, idle)?;
+    cx.measure("idle cpu", utilisation(&idle.cpu_start, &idle.cpu_end));
+    Ok(())
 }
 
 fn mac(address: [u8; 6]) -> String {
