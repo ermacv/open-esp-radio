@@ -245,6 +245,9 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 # firmware/probes/esp32s31-facts/src/image/ble_inherited.rs
 "firmware/probes/esp32s31-facts/src/image/ble_inherited.rs:crate::image::ble_inherited::software_reset:reset-trigger:trigger_sys_ctrl_sys_sw_rst:1" = { owner = "firmware/probes/esp32s31-facts", classes = ["requested-reset"] }
 
+# firmware/probes/esp32s31-facts/src/image/hart1_entry.rs
+"firmware/probes/esp32s31-facts/src/image/hart1_entry.rs:crate::image::hart1_entry::facts_hart1_main:terminal-entry:facts_hart1_main:1" = { owner = "firmware/probes/esp32s31-facts", classes = ["configuration-boot"] }
+
 # firmware/probes/esp32s31-facts/src/image/lp_softreset.rs
 "firmware/probes/esp32s31-facts/src/image/lp_softreset.rs:crate::image::lp_softreset::run:reset-trigger:trigger_sys_ctrl_sys_sw_rst:1" = { owner = "firmware/probes/esp32s31-facts", classes = ["requested-reset"] }
 
