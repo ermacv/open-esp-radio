@@ -15,7 +15,7 @@ The boot composes the shared RF actor with its SAR/PWDET binding, the radio
 executor (P2), the Wi-Fi interrupt (P3) and its doorbell, and keeps every
 owner the station's construction takes; the application executor (P1) runs
 the console, the station's work with the load server beside it in one task,
-and the RTC watchdog's feed. Hart 0 lines:
+and the RTC watchdog's feed. Hart 0 lines: P4 PC sampler (TIMG1 T0) 22;
 P3 Wi-Fi handler 21 and radio alarm 19; P2 radio executor 17 and TIMG0
 SAR/PWDET steps 16; P1 executor wake 40, alarm 41 and console 42
 (`docs/architecture.md`, Execution).
@@ -57,8 +57,10 @@ both ends, after opening and after closing, and keeps the times. It receives
 and echoes from the start until `drain_ms` after the window, then closes the
 socket and keeps the report, the parts' and the counters' window until the
 next run starts. `Collect`, `CollectParts` (twelve parts an answer, from the
-asked number) and `CollectCounters` of the running run answer `Running`, of
-the kept one what it kept, of any other `UnknownRun`.
+asked number), `CollectCounters` and `CollectSamples` (forty samples an
+answer, from the asked number) of the running run answer `Running`, of the
+kept one what it kept, of any other `UnknownRun`; `CollectSamples` of a run
+without a profile answers `NotSampled`.
 
 - **Receive.** A datagram whose header asks for an echo, of any run, goes
   back to its source at once with the reply flag instead (`echoed`, or
@@ -107,6 +109,19 @@ the kept one what it kept, of any other `UnknownRun`.
   frames: taken, or refused for want of a pool packet, of queue room or for
   their length or a down link. The bridge reports each frame through
   `oer_trace::observe!`; a build without `oer_trace` counts none of them.
+- **Samples** (`src/load/sampler.rs`). A run whose `Start` has a `profile`
+  arms TIMG1 T0 at the window's start and stops it at its end, after the
+  counters. Every period the P4 handler records the interrupted `mepc` and
+  `mcause.mpil` (0 for task code); code with the hart's interrupts masked is
+  seen where it unmasks them. Its 2048 samples (18 KiB of SRAM) cover the
+  whole window by stride doubling: once full, the stride doubles and each
+  new kept tick overwrites one the new stride drops. Arming hands the timer's
+  program part, binding and recording to the handler through a one-slot
+  queue with the hart's interrupts masked; stopping asks the handler to hand
+  them back at its next tick and waits at most four periods and 10 ms. A
+  handler that keeps them leaves the sampler gone for the image's run
+  (`NoSampler`). A disarmed sampler's timer is stopped and masked. Ticks
+  that find no session count as `stray`.
 
 The IP stack's pools are sized for about 65 Mbit/s of 1400-byte datagrams
 each way (`src/station/ip.rs`): 32 receive slots for the station's bursts,

@@ -18,7 +18,7 @@ mod tests {
     use super::*;
     use oer_hil_agent::base::{Base, Service};
     use oer_hil_protocol::Key;
-    use oer_services_load::{Start, Transmit};
+    use oer_services_load::{Profile, Start, Transmit};
     use oer_services_wifi_station::{Join, MAX_PASSPHRASE, MAX_SSID};
 
     #[test]
@@ -61,6 +61,9 @@ mod tests {
                 peer_port: u16::MAX,
                 payload: u16::MAX,
                 rate_bps: u32::MAX,
+            }),
+            profile: Some(Profile {
+                period_us: u32::MAX,
             }),
         };
         let mut buffer = [0; 256];

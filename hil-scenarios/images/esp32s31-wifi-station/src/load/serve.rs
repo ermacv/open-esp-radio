@@ -3,8 +3,9 @@
 //!
 //! The server shares the station work's task (P1). A run receives and
 //! echoes from its start, sends within its window and reads the CPU, the
-//! named parts and the counters at the window's ends; after its drain it
-//! closes the socket and keeps what it read until the next run starts.
+//! named parts and the counters at the window's ends, sampling the hart
+//! between them when it asks; after its drain it closes the socket and
+//! keeps what it read until the next run starts.
 //! Every answer is published without waiting.
 
 use core::cell::Cell;
@@ -25,8 +26,8 @@ use oer_memory::{WakingSpscQueue, WakingSpscReceiver, WakingSpscSender};
 use oer_services_load::header::Header;
 use oer_services_load::tally::Tally;
 use oer_services_load::{
-    Collected, Counters, CountersCollected, Load, LoadError, PartsCollected, Report, Request, Sent,
-    Start, Started, Transmit,
+    Collected, Counters, CountersCollected, Load, LoadError, PartsCollected, Report, Request,
+    SamplesCollected, Sent, Start, Started, Transmit,
 };
 use oer_time::{CLOCK_EPOCH_OFFSET, Instant, Timer as _};
 use static_cell::ConstStaticCell;
@@ -34,6 +35,7 @@ use static_cell::ConstStaticCell;
 use super::action::{Action, Answer, Kept, MAX_PAYLOAD, Phase, action};
 use super::pace::{GRANULARITY_US, MAX_BATCH, Next, Schedule};
 use super::receive::{Datagram, Receiving, classify, echo};
+use super::sampler::Sampler;
 use super::{counters, cpu, parts};
 use crate::fatal::Failure;
 use crate::station::emit;
@@ -99,8 +101,12 @@ impl Network {
 
 type Socket = UdpSocket<'static, Device>;
 
-/// Serve the load requests until the chip resets.
-pub(crate) async fn serve(mut requests: Receiver, network: &Network) -> Infallible {
+/// Serve the load requests until the chip resets, sampling with `sampler`.
+pub(crate) async fn serve(
+    mut requests: Receiver,
+    network: &Network,
+    mut sampler: Sampler,
+) -> Infallible {
     let tally = TALLY
         .try_take()
         .unwrap_or_else(|| crate::fail(Failure::Storage));
@@ -111,14 +117,17 @@ pub(crate) async fn serve(mut requests: Receiver, network: &Network) -> Infallib
             kept: kept.as_ref().map(|(run, _)| *run),
         };
         match action(phase, request) {
-            Action::Start(start) => match open(network, &start) {
-                Ok(socket) => {
-                    emit(identity, &Started::Running);
-                    let ended = run(&mut requests, socket, start, tally, network).await;
-                    kept = Some((start.run, ended));
+            Action::Start(start) => {
+                match sampled(&start, &sampler).and_then(|()| open(network, &start)) {
+                    Ok(socket) => {
+                        emit(identity, &Started::Running);
+                        let ended =
+                            run(&mut requests, socket, start, tally, network, &mut sampler).await;
+                        kept = Some((start.run, ended));
+                    }
+                    Err(error) => emit(identity, &Started::Refused(error)),
                 }
-                Err(error) => emit(identity, &Started::Refused(error)),
-            },
+            }
             Action::Answer(answer) => publish(identity, answer),
             Action::Cpu => emit(identity, &cpu_load().await),
             Action::Kept(kind) => match (&kept, kind) {
@@ -134,9 +143,29 @@ pub(crate) async fn serve(mut requests: Receiver, network: &Network) -> Infallib
                 (Some((_, ended)), Kept::Counters) => {
                     emit(identity, &CountersCollected::Report(ended.counters));
                 }
+                (Some((_, ended)), Kept::Samples { from }) => {
+                    let answer = match ended.sampled {
+                        None => SamplesCollected::Refused(LoadError::NotSampled),
+                        Some(Err(error)) => SamplesCollected::Refused(error),
+                        Some(Ok(())) => sampler.page(from).map_or(
+                            SamplesCollected::Refused(LoadError::NoSampler),
+                            SamplesCollected::Page,
+                        ),
+                    };
+                    emit(identity, &answer);
+                }
                 (None, kind) => publish(identity, Answer::UnknownRun(kind)),
             },
         }
+    }
+}
+
+/// Whether the image can sample `start`: a run that asks for samples
+/// needs the sampler disarmed.
+fn sampled(start: &Start, sampler: &Sampler) -> Result<(), LoadError> {
+    match start.profile {
+        Some(_) if !sampler.available() => Err(LoadError::NoSampler),
+        _ => Ok(()),
     }
 }
 
@@ -156,6 +185,7 @@ fn publish(identity: RequestIdentity, answer: Answer) {
         Answer::Running(Kept::Report) => emit(identity, &Collected::Running),
         Answer::Running(Kept::Parts { .. }) => emit(identity, &PartsCollected::Running),
         Answer::Running(Kept::Counters) => emit(identity, &CountersCollected::Running),
+        Answer::Running(Kept::Samples { .. }) => emit(identity, &SamplesCollected::Running),
         Answer::UnknownRun(Kept::Report) => {
             emit(identity, &Collected::Refused(LoadError::UnknownRun));
         }
@@ -164,6 +194,9 @@ fn publish(identity: RequestIdentity, answer: Answer) {
         }
         Answer::UnknownRun(Kept::Counters) => {
             emit(identity, &CountersCollected::Refused(LoadError::UnknownRun));
+        }
+        Answer::UnknownRun(Kept::Samples { .. }) => {
+            emit(identity, &SamplesCollected::Refused(LoadError::UnknownRun));
         }
     }
 }
@@ -203,13 +236,16 @@ struct Ends {
     cpu_end: Load,
     parts: parts::Windows,
     counters: Counters,
+    sampled: Option<Result<(), LoadError>>,
 }
 
-/// What an ended run keeps until the next starts.
+/// What an ended run keeps until the next starts; its samples stay in the
+/// sampler. `sampled` is `None` for a run that asked for none.
 struct Ended {
     report: Report,
     parts: parts::Windows,
     counters: Counters,
+    sampled: Option<Result<(), LoadError>>,
 }
 
 /// Run `start` on `socket` beside the requests until its drain ended, with
@@ -220,6 +256,7 @@ async fn run(
     start: Start,
     tally: &mut Tally<TALLY_WORDS>,
     network: &Network,
+    sampler: &mut Sampler,
 ) -> Ended {
     tally.clear();
     let window = Window {
@@ -231,7 +268,7 @@ async fn run(
     let ends = {
         let mut activity = pin!(select(
             receive(&socket, start.run, tally, &mut receiving, &window),
-            measure(&socket, &start, &window, &mut sent, network),
+            measure(&socket, &start, &window, &mut sent, network, sampler),
         ));
         loop {
             let running = Phase::Running { run: start.run };
@@ -261,6 +298,7 @@ async fn run(
         report,
         parts: ends.parts,
         counters: ends.counters,
+        sampled: ends.sampled,
     }
 }
 
@@ -304,14 +342,16 @@ async fn receive(
 }
 
 /// The run's window and drain: open the window `delay_ms` after now, read
-/// the CPU, the parts and the counters, send within it, close it after
-/// `duration_ms`, read them again, then wait out the drain.
+/// the CPU, the parts and the counters, sample when asked, send within it,
+/// close it after `duration_ms`, read them again, stop sampling, then wait
+/// out the drain.
 async fn measure(
     socket: &Socket,
     start: &Start,
     window: &Window,
     sent: &mut Sent,
     network: &Network,
+    sampler: &mut Sampler,
 ) -> Ends {
     let planned_start = now_us().saturating_add(millis(start.delay_ms));
     let planned_end = planned_start.saturating_add(millis(start.duration_ms));
@@ -321,6 +361,9 @@ async fn measure(
     let counters_start = counters::snapshot(stack_received(network));
     let start_us = now_us();
     window.start_us.set(Some(start_us));
+    let sampling = start
+        .profile
+        .map(|profile| sampler.start(profile.period_us));
     if let Some(transmit) = start.transmit {
         send(socket, start.run, transmit, start_us, planned_end, sent).await;
     }
@@ -330,6 +373,10 @@ async fn measure(
     let cpu_end = cpu_load().await;
     let parts_end = parts_sample(false).await;
     let counters_end = counters::snapshot(stack_received(network));
+    let sampled = match sampling {
+        Some(Ok(())) => Some(sampler.stop().await.map_err(|_| LoadError::NoSampler)),
+        other => other,
+    };
     wait_until(end_us.saturating_add(millis(start.drain_ms))).await;
     Ends {
         start_us,
@@ -338,6 +385,7 @@ async fn measure(
         cpu_end,
         parts: parts::window(&parts_start, &parts_end),
         counters: counters::window(&counters_start, &counters_end),
+        sampled,
     }
 }
 

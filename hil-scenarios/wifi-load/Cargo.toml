@@ -11,6 +11,8 @@ description = "The HIL Wi-Fi station load scenario: UDP load between the host an
 [dependencies]
 oer-hil-agent = { path = "../../protocols/hil/agent" }
 oer-hil-harness = { path = "../../tools/hil/harness" }
+oer-image-build = { path = "../../tools/image/build" }
+oer-os-process = { path = "../../tools/os/process" }
 oer-lab-model = { path = "../../tools/lab/model" }
 oer-services-load = { path = "../services/load" }
 oer-services-wifi-station = { path = "../services/wifi-station" }

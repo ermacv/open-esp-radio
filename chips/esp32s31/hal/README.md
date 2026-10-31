@@ -12,9 +12,9 @@ bindings: the hart geometry, core control, the interrupt controller and the
 family platform contracts (`platform::Port`); `cores` holds the fatal path's
 stop and the software reset. Ordinary blocks are `peripherals::<block>`:
 `aes`, `efuse`, `entropy`, `reset_cause`, `software_interrupt`, `system_timer`,
-`timg0_alarm`, `usb_serial_jtag` and `watchdog`. `memory` is the DMA memory
-core (`dma_address`, `dma_static`); the `dma_static!` macro is exported at
-the crate root. `boot` holds the bootstrap's owners; the radio modules are
+`timg0_alarm`, `timg1_alarm`, `usb_serial_jtag` and `watchdog`. `memory` is
+the DMA memory core (`dma_address`, `dma_static`); the `dma_static!` macro is
+exported at the crate root. `boot` holds the bootstrap's owners; the radio modules are
 at the crate root.
 
 Production files that wait, poll or run on deadlines are a per-file list
@@ -97,6 +97,10 @@ bundle: the actor can arm before depositing it, and the handler can rearm
 while holding it.
 Only the interrupt owner is bound permanently to the handler. They share no
 software state or lock; each transition takes its own owner's `&mut`.
+
+`Hardware::timg1_alarm` is the same pair for TIMG1 T0, with the same
+operations; no product timer uses it. Runtime startup also selects XTAL and
+enables TIMG1 T0 in group one's clock word, after the group's reset pulse.
 
 `arm_after` requires the IRQ owner's router `Bound` or `Silent` proof and a
 positive relative microsecond interval within generated counter geometry.

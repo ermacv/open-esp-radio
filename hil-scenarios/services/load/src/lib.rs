@@ -29,6 +29,9 @@
 //! how busy its harts were. The load itself never crosses the HIL link:
 //! the link carries the parameters and the counters.
 //!
+//! A run can also sample where the serving hart spends its window
+//! ([`Profile`], [`CollectSamples`]).
+//!
 //! [`header`] is the datagram header both ends write and read. RX and TX
 //! are named from the image's side: [`Receive`] is load the image
 //! receives, [`Transmit`] load it sends.
@@ -47,6 +50,9 @@ pub const MAX_HARTS: usize = 2;
 /// An image with more parts answers them in pages ([`CollectParts::from`]).
 pub const MAX_PARTS: usize = 12;
 pub const MAX_PART_NAME: usize = 12;
+/// The most samples one [`Samples`] answer holds; an image answers its
+/// samples in pages ([`CollectSamples::from`]).
+pub const MAX_PAGE_SAMPLES: usize = 40;
 
 oer_hil_protocol::messages! {
     endpoint Start = "load/start" => Started;
@@ -59,12 +65,17 @@ oer_hil_protocol::messages! {
     topic PartsCollected = "load/parts-report";
     endpoint CollectCounters = "load/counters" => CountersCollected;
     topic CountersCollected = "load/counters-report";
+    endpoint CollectSamples = "load/samples" => SamplesCollected;
+    topic SamplesCollected = "load/samples-report";
 }
 
 /// The longest measuring window, start delay and drain a run may ask for.
 pub const MAX_DURATION_MS: u32 = 60_000;
 pub const MAX_DELAY_MS: u32 = 10_000;
 pub const MAX_DRAIN_MS: u32 = 5_000;
+/// The shortest and longest sampling period a run may ask for.
+pub const MIN_SAMPLE_PERIOD_US: u32 = 250;
+pub const MAX_SAMPLE_PERIOD_US: u32 = 10_000;
 
 /// Start a run. The image binds `port` on its IPv4 address and receives
 /// from the answer on. The run has one measuring window: it opens
@@ -72,7 +83,8 @@ pub const MAX_DRAIN_MS: u32 = 5_000;
 /// `transmit` within it and reads its CPU at its two ends. It receives and
 /// echoes until `drain_ms` after the window, then closes its socket and
 /// keeps the finished [`Report`]: a run ends by itself, and [`Collect`]
-/// only fetches its report.
+/// only fetches its report. With `profile` the image samples its serving
+/// hart over the window; an ordinary run samples nothing.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub struct Start {
     pub run: u32,
@@ -81,6 +93,15 @@ pub struct Start {
     pub duration_ms: u32,
     pub drain_ms: u32,
     pub transmit: Option<Transmit>,
+    pub profile: Option<Profile>,
+}
+
+/// Sample the serving hart's interrupted program counter every `period_us`
+/// over the window, from a timer no executor or product timer uses. The
+/// period lies within [`MIN_SAMPLE_PERIOD_US`] and [`MAX_SAMPLE_PERIOD_US`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct Profile {
+    pub period_us: u32,
 }
 
 /// Load the image sends within the window to `peer`:`peer_port` from its
@@ -296,6 +317,60 @@ pub struct Counters {
     pub stack_received: u32,
 }
 
+/// The samples of run `run`'s window, from the sample numbered `from`: at
+/// most [`MAX_PAGE_SAMPLES`] an answer, fewer at the end.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct CollectSamples {
+    pub run: u32,
+    pub from: u16,
+}
+
+/// The answer to [`CollectSamples`].
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+#[allow(
+    clippy::large_enum_variant,
+    reason = "a wire message of a no_std crate without allocation: the page goes by value"
+)]
+pub enum SamplesCollected {
+    Page(Samples),
+    /// The run's window or drain has not ended yet.
+    Running,
+    Refused(LoadError),
+}
+
+/// A page of one run's samples. The sampler takes one tick each period
+/// over the window and keeps every `stride`-th tick: when its buffer fills
+/// it doubles the stride and overwrites the samples the new stride drops,
+/// so the kept samples cover the whole window evenly, one each
+/// `stride * period_us`. Samples come in buffer order, not tick order.
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct Samples {
+    pub period_us: u32,
+    /// The ticks the window held.
+    pub ticks: u32,
+    /// The keep-stride at the window's end.
+    pub stride: u32,
+    /// The samples kept in all; this page holds those numbered from the
+    /// request's `from`.
+    pub kept: u16,
+    /// Ticks that found no sampling run: a stale timer event. Zero when
+    /// the sampler works as intended.
+    pub stray: u32,
+    pub samples: heapless::Vec<Sample, MAX_PAGE_SAMPLES>,
+}
+
+/// One kept tick: where the serving hart was when the timer interrupted it.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct Sample {
+    /// The tick's number from the window's first, 0.
+    pub tick: u32,
+    /// The interrupted program counter.
+    pub pc: u32,
+    /// The interrupted code's raw CLIC level: 0 for a task in thread mode,
+    /// otherwise the level of the interrupt handler or executor it ran in.
+    pub level: u8,
+}
+
 /// Why the image refused a request.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub enum LoadError {
@@ -311,6 +386,10 @@ pub enum LoadError {
     InvalidParameters,
     /// The image could not bind its port.
     Bind,
+    /// The image has no sampler: it cannot serve a run's [`Profile`].
+    NoSampler,
+    /// The run was not sampled: its [`Start`] had no [`Profile`].
+    NotSampled,
 }
 
 oer_hil_agent::service! {
@@ -321,6 +400,7 @@ oer_hil_agent::service! {
         GetCpu(GetCpu) => cpu,
         CollectParts(CollectParts) => parts,
         CollectCounters(CollectCounters) => counters,
+        CollectSamples(CollectSamples) => samples,
     }
 }
 

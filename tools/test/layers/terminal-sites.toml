@@ -395,6 +395,9 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 "hil-scenarios/images/esp32s31-wifi-station/src/fatal.rs:crate::fatal::Failure:retained-reason:Failure::NonceExhausted:1" = { owner = "hil-scenarios/images/esp32s31-wifi-station", classes = ["exhaustion"] }
 "hil-scenarios/images/esp32s31-wifi-station/src/fatal.rs:crate::fatal:retained-slot:retained_static:1" = { owner = "hil-scenarios/images/esp32s31-wifi-station", classes = ["configuration-boot", "unexpected-hardware", "software-invariant", "exhaustion", "cpu-exception", "rust-panic"] }
 
+# hil-scenarios/images/esp32s31-wifi-station/src/load/sampler.rs
+"hil-scenarios/images/esp32s31-wifi-station/src/load/sampler.rs:crate::load::sampler::hardware::init:terminal-reference:reset_binding:1" = { owner = "hil-scenarios/images/esp32s31-wifi-station", classes = ["configuration-boot", "unexpected-hardware", "software-invariant"] }
+
 # hil-scenarios/images/esp32s31-wifi-station/src/station/irq.rs
 "hil-scenarios/images/esp32s31-wifi-station/src/station/irq.rs:crate::station::irq::on_wifi:terminal-reference:reset:1" = { owner = "hil-scenarios/images/esp32s31-wifi-station", classes = ["unexpected-hardware"] }
 

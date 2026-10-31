@@ -8,6 +8,7 @@
 //! - [`software_interrupt`]: the FROM_CPU software interrupt lines;
 //! - [`system_timer`]: the SYSTIMER counter and comparators;
 //! - [`timg0_alarm`]: TIMG0 timer 0 as a one-shot alarm;
+//! - [`timg1_alarm`]: TIMG1 timer 0 as a one-shot alarm;
 //! - [`usb_serial_jtag`]: the USB Serial/JTAG console;
 //! - [`watchdog`]: the timer groups' and RTC watchdogs.
 
@@ -18,5 +19,6 @@ pub mod reset_cause;
 pub mod software_interrupt;
 pub mod system_timer;
 pub mod timg0_alarm;
+pub mod timg1_alarm;
 pub mod usb_serial_jtag;
 pub mod watchdog;
