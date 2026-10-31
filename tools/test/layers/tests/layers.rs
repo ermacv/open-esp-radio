@@ -2188,8 +2188,13 @@ fn external_crate_allowed(path: &str, role: Role, dependency: &str) -> bool {
             path == "portable/embassy/time" || path == "hil-scenarios/images/esp32s31-rpc"
         }
         "embassy-time-driver" => path == "chips/espressif/executor",
+        // The Wi-Fi station image opens the pinned stack's UDP sockets for
+        // the HIL load service.
         "embassy-net" | "xarxa" | "xarxa-driver" => {
-            path == "portable/embassy/net" || path.starts_with("firmware/")
+            path == "portable/embassy/net"
+                || path.starts_with("firmware/")
+                || (path == "hil-scenarios/images/esp32s31-wifi-station"
+                    && dependency != "xarxa-driver")
         }
         "trouble-host" => path == "portable/embassy/trouble" || path.starts_with("firmware/"),
         "bt-hci" => {

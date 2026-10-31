@@ -13,7 +13,7 @@ scenario knows lives here or beside the facade it uses.
 | Image | Services |
 | --- | --- |
 | [`esp32s31-rpc`](images/esp32s31-rpc/README.md) | AES |
-| [`esp32s31-wifi-station`](images/esp32s31-wifi-station/README.md) | Wi-Fi station: join, status and leave over the product station facade, IPv4 by DHCP |
+| [`esp32s31-wifi-station`](images/esp32s31-wifi-station/README.md) | Wi-Fi station: join, status and leave over the product station facade, IPv4 by DHCP; UDP load and executor CPU |
 
 | Scenario | Image | Checks |
 | --- | --- | --- |

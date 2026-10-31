@@ -1,0 +1,216 @@
+//! Which requests the load server answers by itself, idle or running.
+
+use oer_services_load::{
+    Collect, LoadError, MAX_DELAY_MS, MAX_DRAIN_MS, MAX_DURATION_MS, Request, Start, Started,
+    header,
+};
+
+/// The largest UDP payload the image sends or receives: one 1514-byte
+/// Ethernet frame of the stack's packet buffers less its 14-byte Ethernet,
+/// 20-byte IPv4 and 8-byte UDP headers. The stack fragments nothing.
+pub(crate) const MAX_PAYLOAD: u16 = 1472;
+
+/// Where the load server is.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum Phase {
+    /// No run runs; `kept` names the run whose report the server keeps.
+    Idle { kept: Option<u32> },
+    /// Run `run` runs: its window or drain has not ended.
+    Running { run: u32 },
+}
+
+/// What the load server does with one request.
+#[derive(Debug, Eq, PartialEq)]
+pub(crate) enum Action {
+    /// Answer it now.
+    Answer(Answer),
+    /// Answer with the CPU report.
+    Cpu,
+    /// Start this run, once the station has its address.
+    Start(Start),
+    /// Answer with the kept report.
+    Report,
+}
+
+#[derive(Debug, Eq, PartialEq)]
+pub(crate) enum Answer {
+    Started(Started),
+    /// `Collected::Running`: the collected run has not ended.
+    Running,
+    /// `Collected::Refused(UnknownRun)`.
+    UnknownRun,
+}
+
+/// What the server does with `request` in `phase`: one run at a time; a
+/// collect of the running run answers that it runs, of the kept one its
+/// report.
+pub(crate) fn action(phase: Phase, request: Request) -> Action {
+    let refuse_start = |error| Action::Answer(Answer::Started(Started::Refused(error)));
+    match (phase, request) {
+        (_, Request::GetCpu(_)) => Action::Cpu,
+        (Phase::Idle { .. }, Request::Start(start)) => match validate(&start) {
+            Ok(()) => Action::Start(start),
+            Err(error) => refuse_start(error),
+        },
+        (Phase::Running { .. }, Request::Start(_)) => refuse_start(LoadError::Busy),
+        (Phase::Running { run }, Request::Collect(Collect { run: asked })) if asked == run => {
+            Action::Answer(Answer::Running)
+        }
+        (Phase::Idle { kept: Some(run) }, Request::Collect(Collect { run: asked }))
+            if asked == run =>
+        {
+            Action::Report
+        }
+        (_, Request::Collect(_)) => Action::Answer(Answer::UnknownRun),
+    }
+}
+
+/// A run's parameters: nonzero ports, a window, delay and drain within
+/// their maxima, and a transmitted payload that holds the header and fits
+/// one datagram of the image.
+fn validate(start: &Start) -> Result<(), LoadError> {
+    if start.port == 0
+        || start.delay_ms > MAX_DELAY_MS
+        || start.duration_ms > MAX_DURATION_MS
+        || start.drain_ms > MAX_DRAIN_MS
+    {
+        return Err(LoadError::InvalidParameters);
+    }
+    match start.transmit {
+        Some(transmit)
+            if transmit.peer_port == 0
+                || usize::from(transmit.payload) < header::LENGTH
+                || transmit.payload > MAX_PAYLOAD =>
+        {
+            Err(LoadError::InvalidParameters)
+        }
+        _ => Ok(()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use oer_services_load::{GetCpu, Transmit};
+
+    const IDLE: Phase = Phase::Idle { kept: None };
+    const RUNNING: Phase = Phase::Running { run: 7 };
+
+    fn start(transmit: Option<Transmit>) -> Start {
+        Start {
+            run: 7,
+            port: 5001,
+            delay_ms: 500,
+            duration_ms: 10_000,
+            drain_ms: 1_000,
+            transmit,
+        }
+    }
+
+    fn transmit(payload: u16) -> Transmit {
+        Transmit {
+            peer: [192, 168, 1, 2],
+            peer_port: 5002,
+            payload,
+            rate_bps: 0,
+        }
+    }
+
+    fn refused(error: LoadError) -> Action {
+        Action::Answer(Answer::Started(Started::Refused(error)))
+    }
+
+    #[test]
+    fn an_idle_server_starts_a_valid_run_and_refuses_invalid_parameters() {
+        assert_eq!(
+            action(IDLE, Request::Start(start(None))),
+            Action::Start(start(None))
+        );
+        let longest = Start {
+            delay_ms: MAX_DELAY_MS,
+            duration_ms: MAX_DURATION_MS,
+            drain_ms: MAX_DRAIN_MS,
+            ..start(None)
+        };
+        assert_eq!(
+            action(IDLE, Request::Start(longest)),
+            Action::Start(longest)
+        );
+        for payload in [header::LENGTH as u16, MAX_PAYLOAD] {
+            let valid = start(Some(transmit(payload)));
+            assert_eq!(action(IDLE, Request::Start(valid)), Action::Start(valid));
+        }
+        let mut invalid = [0, header::LENGTH as u16 - 1, MAX_PAYLOAD + 1]
+            .map(|payload| start(Some(transmit(payload))))
+            .to_vec();
+        invalid.extend([
+            Start {
+                port: 0,
+                ..start(None)
+            },
+            start(Some(Transmit {
+                peer_port: 0,
+                ..transmit(1400)
+            })),
+            Start {
+                delay_ms: MAX_DELAY_MS + 1,
+                ..start(None)
+            },
+            Start {
+                duration_ms: MAX_DURATION_MS + 1,
+                ..start(None)
+            },
+            Start {
+                drain_ms: MAX_DRAIN_MS + 1,
+                ..start(None)
+            },
+        ]);
+        for start in invalid {
+            assert_eq!(
+                action(IDLE, Request::Start(start)),
+                refused(LoadError::InvalidParameters),
+                "{start:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_running_server_refuses_a_second_start_even_an_invalid_one() {
+        assert_eq!(
+            action(RUNNING, Request::Start(start(None))),
+            refused(LoadError::Busy)
+        );
+        let invalid = Start {
+            port: 0,
+            ..start(None)
+        };
+        assert_eq!(
+            action(RUNNING, Request::Start(invalid)),
+            refused(LoadError::Busy)
+        );
+    }
+
+    #[test]
+    fn a_collect_answers_running_then_the_kept_report_of_its_own_run_only() {
+        let unknown = Action::Answer(Answer::UnknownRun);
+        let collect = |run| Request::Collect(Collect { run });
+        assert_eq!(action(RUNNING, collect(7)), Action::Answer(Answer::Running));
+        assert_eq!(action(RUNNING, collect(6)), unknown);
+        let kept = Phase::Idle { kept: Some(7) };
+        assert_eq!(action(kept, collect(7)), Action::Report);
+        assert_eq!(action(kept, collect(8)), unknown);
+        assert_eq!(action(IDLE, collect(7)), unknown);
+        assert_eq!(
+            action(kept, Request::Start(start(None))),
+            Action::Start(start(None)),
+            "a kept report does not hold off the next run"
+        );
+    }
+
+    #[test]
+    fn the_cpu_report_is_answered_in_every_phase() {
+        for phase in [IDLE, Phase::Idle { kept: Some(7) }, RUNNING] {
+            assert_eq!(action(phase, Request::GetCpu(GetCpu)), Action::Cpu);
+        }
+    }
+}

@@ -98,3 +98,20 @@ fn a_tally_remembers_every_sequence_of_a_bounded_run() {
     assert_eq!((tally.datagrams, tally.untracked), (3, 2));
     assert_eq!(tally.highest, Some(128));
 }
+
+#[test]
+fn a_cleared_tally_counts_the_next_run_afresh() {
+    use tally::{Arrival, Tally};
+    let mut tally = Tally::<4>::new();
+    assert_eq!(tally, Tally::default());
+    tally.count(3, 10);
+    tally.count(3, 10);
+    tally.count(300, 10);
+    tally.clear();
+    assert_eq!(tally, Tally::new());
+    assert_eq!(
+        tally.count(3, 10),
+        Arrival::New,
+        "no sequence is remembered"
+    );
+}
