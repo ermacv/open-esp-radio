@@ -2350,6 +2350,36 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-hil-scenarios-images-esp32s31-wifi-station"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "critical-section",
+ "embassy-futures",
+ "heapless",
+ "oer-diagnostics",
+ "oer-embassy-net",
+ "oer-embassy-time",
+ "oer-esp32s31-board",
+ "oer-esp32s31-compose",
+ "oer-esp32s31-hal",
+ "oer-esp32s31-layout",
+ "oer-esp32s31-wifi",
+ "oer-espressif-executor",
+ "oer-espressif-interrupt-table",
+ "oer-espressif-staged-runtime",
+ "oer-hil-agent",
+ "oer-hil-protocol",
+ "oer-memory",
+ "oer-riscv",
+ "oer-services-wifi-station",
+ "oer-time",
+ "oer-trace",
+ "postcard",
+ "static_cell",
+]
+
+[[package]]
 name = "oer-ieee80211-contracts-port"
 version = "0.1.0"
 dependencies = [
@@ -3001,6 +3031,8 @@ dependencies = [
  "heapless",
  "oer-hil-agent",
  "oer-hil-protocol",
+ "oer-ieee80211-runtime",
+ "oer-network-port",
  "postcard",
  "postcard-schema",
  "serde",

@@ -1,0 +1,54 @@
+[package]
+name = "oer-hil-scenarios-images-esp32s31-wifi-station"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0"
+publish.workspace = true
+build = "build.rs"
+
+[target.'cfg(target_arch = "riscv32")'.dependencies]
+oer-time = { path = "../../../portable/time" }
+oer-embassy-time = { path = "../../../portable/embassy/time" }
+oer-embassy-net = { path = "../../../portable/embassy/net" }
+oer-espressif-interrupt-table = { path = "../../../chips/espressif/interrupt-table" }
+oer-esp32s31-hal = { path = "../../../chips/esp32s31/hal" }
+oer-esp32s31-wifi = { path = "../../../chips/esp32s31/wifi" }
+oer-memory = { path = "../../../portable/memory" }
+oer-riscv = { path = "../../../portable/riscv" }
+oer-trace = { path = "../../../portable/trace" }
+oer-diagnostics = { path = "../../../portable/diagnostics" }
+bytemuck = { version = "1.25.2", default-features = false, features = ["derive"] }
+critical-section = "1.2.0"
+embassy-futures = "0.1.2"
+oer-espressif-executor = { workspace = true, features = ["port-slots"] }
+oer-hil-protocol = { workspace = true, features = ["async-io"] }
+oer-hil-agent = { path = "../../../protocols/hil/agent", default-features = false }
+oer-services-wifi-station = { path = "../../services/wifi-station" }
+oer-espressif-staged-runtime = { path = "../../../chips/espressif/staged-runtime" }
+oer-esp32s31-compose = { path = "../../../chips/esp32s31/compose", features = ["wifi-fault"] }
+oer-esp32s31-board = { path = "../../../chips/esp32s31/board" }
+oer-esp32s31-layout = { path = "../../../chips/esp32s31/layout" }
+static_cell.workspace = true
+
+[dev-dependencies]
+oer-diagnostics = { path = "../../../portable/diagnostics", features = ["render"] }
+oer-hil-agent = { path = "../../../protocols/hil/agent", default-features = false }
+oer-hil-protocol = { workspace = true }
+oer-services-wifi-station = { path = "../../services/wifi-station" }
+heapless = "0.9.3"
+postcard = { version = "1.1.3", default-features = false }
+
+[lints]
+workspace = true
+
+[build-dependencies]
+oer-esp32s31-layout = { path = "../../../chips/esp32s31/layout", features = ["build"] }
+
+[package.metadata.open-radio.panic-budget]
+# Reachable panic sites by layer (the image check's `*-panics.txt`): each only shrinks, toward 0.
+runtime = { pac = 0, hal = 48, chips = 264, portable = 32, protocols = 114, firmware = 7, core = 16, embassy = 3, third-party = 56, unnamed = 0, hardware = 0 }
+bootstrap = { unnamed = 0 }
+
+[package.metadata.open-radio]
+critical-section-hart = "boot"
