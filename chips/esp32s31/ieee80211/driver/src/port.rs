@@ -223,6 +223,10 @@ pub struct PortSharedStorage<const B: usize> {
     /// Slot and permission of a GTK command the installation quarantined.
     #[cfg(test)]
     retained_group: oer_memory::OnceValue<(u8, u8)>,
+    /// Previous and attempted KeyID of a quarantined GTK replacement, and
+    /// whether its rollback restored the previous entry.
+    #[cfg(test)]
+    rolled_back: oer_memory::OnceValue<(u8, u8, bool)>,
 }
 #[cfg(test)]
 impl<Id: SlotIdentity, D: Device<B>, const B: usize> Esp32s31Backend<Id, D, B> {
@@ -246,6 +250,10 @@ impl<D: Device<B>, const B: usize> PortStorage<D, B> {
     /// Slot and permission of a GTK command the installation quarantined.
     pub(crate) fn retained_group(&self) -> Option<(u8, u8)> {
         self.shared.retained_group.get()
+    }
+    /// The quarantined GTK replacement's KeyIDs and rollback result.
+    pub(crate) fn rolled_back(&self) -> Option<(u8, u8, bool)> {
+        self.shared.rolled_back.get()
     }
 }
 impl<D: Device<B>, const B: usize> PortStorage<D, B> {
@@ -284,6 +292,8 @@ impl<const B: usize> PortSharedStorage<B> {
             settings: settings::Settings::new(),
             #[cfg(test)]
             retained_group: oer_memory::OnceValue::new(),
+            #[cfg(test)]
+            rolled_back: oer_memory::OnceValue::new(),
         }
     }
     fn poison(&self, cause: Fault) {

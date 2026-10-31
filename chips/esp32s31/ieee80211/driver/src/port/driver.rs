@@ -1195,6 +1195,33 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Driver<'id, Id, D, B> 
                     });
                     // Observe actual quarantined owners after moving them to
                     // permanent custody, never a synthetic success terminal.
+                    #[cfg(test)]
+                    if let Some(Command::Group {
+                        command:
+                            GroupCommand::Replace {
+                                permission,
+                                key,
+                                key_id,
+                                ..
+                            },
+                        ..
+                    }) = &self.pending_command
+                    {
+                        let shared = &held.storage.shared;
+                        let _first = shared
+                            .retained_group
+                            .set((key.identity.slot, permission.index()));
+                        let _first = shared.rolled_back.set((
+                            key.identity.key_id.get(),
+                            key_id.get(),
+                            matches!(
+                                _error,
+                                crate::mac::crypto::StaGroupCcmpReplaceError::ReplacementRolledBack(
+                                    _
+                                )
+                            ),
+                        ));
+                    }
                     #[cfg(all(oer_trace, oer_debug_control))]
                     if let Some(Command::Group {
                         command:

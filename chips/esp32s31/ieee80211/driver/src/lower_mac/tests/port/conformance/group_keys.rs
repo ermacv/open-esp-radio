@@ -538,3 +538,153 @@ fn an_expired_gtk_mutation_poisons_on_its_own_deadline_and_stays_quarantined() {
         );
     }
 }
+
+/// A rejected GTK replacement write restores the old entry, quarantines the
+/// replacement's owners, returns no success terminal and fails the port.
+struct RollbackBody {
+    timer: TestTimer,
+    observed: Rc<RefCell<Observed>>,
+    admitted: Rc<Cell<Option<(Owners, Instant)>>>,
+    events: Rc<RefCell<Vec<Completion>>>,
+}
+
+impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for RollbackBody {
+    type Output = ();
+    async fn run<'p, 'id>(
+        self,
+        owner: radio::Owner<'p, 'id, Id, Backend<Id>, radio::Disabled>,
+        resources: Res<'id, Id>,
+    ) -> radio::Ended<Id, Backend<Id>, Self::Output>
+    where
+        Backend<Id>: 'id,
+        Id: 'id,
+        'id: 'p,
+    {
+        let Ok(mut owner) = owner.enable().await else {
+            panic!("enable")
+        };
+        {
+            let mut phase = owner.phase();
+            let (start, bank) = resources.station_association.into_parts();
+            let (_, [slot]) = bank.into_parts();
+            let association = start.begin(Spp::NotNegotiated);
+            phase.station().install_group_key(
+                &association,
+                resources.station_group_permission,
+                slot,
+                key_id(1),
+                Ccmp128Key::new(&[1; 16]),
+            );
+            let Ok(Ok(LowerMacEvent::Terminal(LowerMacTerminal::GroupKeyInstalled(
+                InstalledGroup::Station { key, permission },
+            )))) = phase.next_event().await
+            else {
+                panic!("the setup installation")
+            };
+            let admitted = Owners {
+                slot: <PortKeys<Id, Station> as KeyTypes<'id>>::group_slot_identity(&key),
+                permission: permission.index(),
+            };
+            self.admitted.set(Some((admitted, self.timer.now())));
+            // The new write is rejected; the old entry's restoration is not.
+            self.observed.borrow_mut().reject_key_writes = 1;
+            phase.station().replace_group_key(
+                permission,
+                key,
+                key_id(2),
+                Ccmp128Key::new(&[2; 16]),
+            );
+            loop {
+                match phase.next_event().await {
+                    Err(_) => break,
+                    Ok(Ok(LowerMacEvent::Terminal(terminal))) => {
+                        if let Some(event) = completion::<Id>(terminal) {
+                            self.events.borrow_mut().push(event);
+                        }
+                    }
+                    Ok(Ok(LowerMacEvent::Received { frame, .. })) => phase.recycle(frame),
+                    Ok(_) => {}
+                }
+            }
+        }
+        match owner
+            .disable(&mut |_| core::ops::ControlFlow::Continue(()))
+            .await
+        {
+            Ok(owner) => radio::Ended::uninstall(owner, (), ()),
+            Err(failed) => radio::Ended::fail_stop(failed.fail_stop(), ()),
+        }
+    }
+}
+
+#[test]
+fn a_rejected_gtk_replacement_restores_the_old_entry_and_quarantines_its_owners() {
+    let (parts, observed, timer) = installed(Vec::new());
+    let admitted = Rc::new(Cell::new(None));
+    let events = Rc::new(RefCell::new(Vec::new()));
+    let body = RollbackBody {
+        timer: timer.clone(),
+        observed: observed.clone(),
+        admitted: admitted.clone(),
+        events: events.clone(),
+    };
+    let (poisoned, retained, rolled_back) = block_on(radio::with_local_slot(async |claim| {
+        let mut slot = claim.place();
+        let backend = Backend::new(parts).ok().expect("valid construction");
+        let storage = backend.storage_for_test();
+        let registered = slot.register(backend).ok().expect("fresh local slot");
+        let end = radio::LocalExecution
+            .scope(crate::port::Registration::guarded(registered), |frontend| {
+                radio::run_port(frontend, body)
+            })
+            .await;
+        (
+            !matches!(end, radio::PortEnd::Uninstalled { .. }),
+            storage.retained_group(),
+            storage.rolled_back(),
+        )
+    }));
+    // The model's own key table, read before teardown erased it.
+    assert_eq!(
+        observed
+            .borrow()
+            .material_at_abandon
+            .iter()
+            .map(|(_, material)| *material)
+            .collect::<Vec<_>>(),
+        [[1; 16]],
+        "only the old material is back in the table"
+    );
+    let (admitted, admitted_at) = admitted.get().expect("the replacement was admitted");
+    let trace = ProgressTrace {
+        rollback: rolled_back.map(|(previous_key_id, attempted_key_id, restored)| {
+            oer_ieee80211_testing_conformance::group_keys::Rollback {
+                previous_key_id,
+                attempted_key_id,
+                restored,
+            }
+        }),
+        admitted,
+        timing: Timing {
+            admitted_at,
+            completed_at: timer.now(),
+        },
+        events: events.take(),
+        retained: retained
+            .map(|(slot, permission)| Owners { slot, permission })
+            .into_iter()
+            .collect::<Vec<_>>(),
+        poisoned,
+        deadline_woke: false,
+        published: None,
+        blocked_while_published: false,
+    };
+    assert_eq!(
+        verify_progress(
+            ProgressCase::ReplacementRollback,
+            trace,
+            crate::port::COMMAND_BOUND
+        ),
+        Ok(())
+    );
+}

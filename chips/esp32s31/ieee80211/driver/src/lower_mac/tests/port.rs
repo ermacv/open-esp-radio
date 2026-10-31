@@ -67,6 +67,10 @@ struct Observed {
     held_queues: [bool; 4],
     /// The next device poll fails with this fault, poisoning the port.
     fail_poll: Option<Fault>,
+    /// Key writes the hardware rejects from the next register access on.
+    reject_key_writes: usize,
+    /// The key table as abandonment found it, before erasing it.
+    material_at_abandon: Vec<(u8, [u8; 16])>,
     /// The descriptor head of each port buffer, by buffer place.
     buffer_heads: Vec<u32>,
     /// The descriptor head of each publication, in order.
@@ -206,6 +210,8 @@ impl Device<512> for TestDevice {
     type ConfigureContext<'p, Id: radio::SlotIdentity + 'p> = Tag;
     fn hardware(&mut self) -> &mut Hardware {
         self.assert_driver_context();
+        self.hardware.reject_key_writes +=
+            core::mem::take(&mut self.observed.borrow_mut().reject_key_writes);
         &mut self.hardware
     }
     fn timer(&self) -> &TestTimer {
@@ -368,6 +374,7 @@ impl Device<512> for TestDevice {
     fn abandon(&mut self) -> bool {
         self.assert_driver_context();
         let keys = self.hardware.installed_keys.len();
+        self.observed.borrow_mut().material_at_abandon = self.hardware.key_material.clone();
         crate::mac::crypto::erase_lower_mac_keys(&mut self.hardware);
         assert!(self.hardware.installed_keys.is_empty());
         let mut observed = self.observed.borrow_mut();
