@@ -127,7 +127,8 @@ fn drain() -> Result<()> {
             format!(
                 "the running LAB service cannot be asked to drain: {refused}. Wait until \
                  `cargo stand queue` from a checkout of its version shows no lease, stop it \
-                 with `systemctl --user stop {UNIT}`, and install again"
+                 with its socket, `systemctl --user stop {SOCKET_UNIT} {UNIT}` (the socket \
+                 alone would start it again for this installer), and install again"
             )
         })?;
     println!("waiting for the running LAB service to finish its leases");
