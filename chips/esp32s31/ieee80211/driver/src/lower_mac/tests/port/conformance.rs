@@ -7,6 +7,7 @@ use oer_ieee80211_testing_conformance::{Environment, MpduState, outcomes};
 
 mod barrier;
 mod interface_commands;
+mod msdu_age;
 
 /// One single-MPDU outcome case per fresh installation.
 struct Outcomes;

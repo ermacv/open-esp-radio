@@ -31,6 +31,11 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> Buffer<'_, Id, D, B> {
     pub fn index(&self) -> u8 {
         self.place.index()
     }
+    /// When P1 admitted the MPDU in this memory, until it is renewed.
+    #[cfg(test)]
+    pub(crate) fn admitted_at(&self) -> Option<Instant> {
+        self.admission
+    }
 }
 impl<Id: SlotIdentity, D: Device<B>, const B: usize> TxBufferMemory for Buffer<'_, Id, D, B> {
     fn renew_msdu(&mut self) {
@@ -64,6 +69,11 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> Sent<'_, Id, D, B> {
     }
     pub fn body(&self) -> Option<&D::Body> {
         self.mpdu.body.as_ref()
+    }
+    /// When P1 admitted the MPDU; retransmission keeps it.
+    #[cfg(test)]
+    pub(crate) fn admitted_at(&self) -> Option<Instant> {
+        self.mpdu.buffer.admission
     }
     /// The encoded MPDU extent as its last publication left it in memory.
     #[cfg(test)]
