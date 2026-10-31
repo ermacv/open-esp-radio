@@ -19,7 +19,10 @@ impl TxBody for Body {
 struct Capture {
     rows: Vec<conformance::Returned>,
     pointers: Vec<conformance::ReturnEvidence>,
-    gate_closed_at: Option<usize>,
+    /// Requests, returns and the gate confirmation, each with the number of
+    /// publications observed when it happened.
+    markers: Vec<(usize, conformance::PublicationEvent)>,
+    tickets: [u8; 4],
 }
 impl Capture {
     fn len(&self) -> usize {
@@ -145,6 +148,10 @@ fn returned<'id, Id: SlotIdentity + 'id>(
                 _ => return Err("unexpected model ownership terminal"),
             };
             let (buffer, body) = parts.payload.into_parts();
+            seen.markers.push((
+                air.sent().len(),
+                conformance::PublicationEvent::Returned(parts.ticket.index()),
+            ));
             observe(
                 parts.context,
                 parts.ticket,
@@ -155,9 +162,8 @@ fn returned<'id, Id: SlotIdentity + 'id>(
             )
         }
         LowerMacTerminal::GateClosed(_) => {
-            if seen.gate_closed_at.replace(air.sent().len()).is_some() {
-                return Err("duplicate model gate confirmation");
-            }
+            seen.markers
+                .push((air.sent().len(), conformance::PublicationEvent::GateClosed));
             Ok(())
         }
         _ => Err("unexpected model ownership event"),
@@ -235,6 +241,10 @@ impl<Id: SlotIdentity> PortBody<Id, Backend<Id>> for Operations {
             self.air.hold(WmmAccessCategory::BestEffort, true);
             for operation in conformance::Classes::Two.operations() {
                 let ticket = tickets.next().ok_or("model ticket")?;
+                *seen
+                    .tickets
+                    .get_mut(usize::from(operation.id))
+                    .ok_or("model operation identity")? = ticket.index();
                 let body = Body {
                     memory: ModelBody(alloc::vec![operation.id; if self.scenario == Scenario::Refuse {17} else {4}]),
                     allocation: Allocation::new(ids.clone()).ok_or("model body allocation slots exhausted")?,
@@ -328,9 +338,14 @@ impl<Id: SlotIdentity> PortBody<Id, Backend<Id>> for Operations {
                         _ => {}
                     }
                 }
+                if self.scenario != Scenario::Disable {
+                    seen.markers
+                        .push((self.air.sent().len(), conformance::PublicationEvent::Requested));
+                }
                 match self.scenario {
                     Scenario::Complete => self.air.hold(WmmAccessCategory::BestEffort, false),
                     Scenario::CloseGate => phase.close_gate(resources.gate),
+                    // Disable issues its request below.
                     Scenario::Disable => {}
                     _ => return Err("physical ownership scenario required"),
                 }
@@ -355,6 +370,12 @@ impl<Id: SlotIdentity> PortBody<Id, Backend<Id>> for Operations {
         }
         .await;
         let mut error = result.err();
+        if self.scenario == Scenario::Disable {
+            seen.markers.push((
+                self.air.sent().len(),
+                conformance::PublicationEvent::Requested,
+            ));
+        }
         let owner = match owner
             .disable(&mut |terminal| {
                 if let Err(why) = returned(terminal, &mut access, &mut seen, &self.air) {
@@ -372,15 +393,11 @@ impl<Id: SlotIdentity> PortBody<Id, Backend<Id>> for Operations {
         let output = match error {
             Some(why) => Err(why),
             None => {
-                let mut publication_events: Vec<_> = self
-                    .air
-                    .sent()
-                    .iter()
-                    .map(|frame| conformance::PublicationEvent::Tx(frame.ticket))
-                    .collect();
-                if let Some(index) = seen.gate_closed_at {
-                    publication_events.insert(index, conformance::PublicationEvent::GateClosed);
-                }
+                let publication_events = conformance::observed_order(
+                    self.air.sent().iter().map(|frame| frame.ticket),
+                    seen.markers,
+                )
+                .collect();
                 Ok(OwnershipTrace {
                     returned: seen.rows,
                     contexts_dropped: drops.get(),
@@ -388,6 +405,7 @@ impl<Id: SlotIdentity> PortBody<Id, Backend<Id>> for Operations {
                     publications: self.air.sent().len(),
                     terminal_evidence: seen.pointers,
                     publication_events,
+                    tickets: seen.tickets,
                 })
             }
         };

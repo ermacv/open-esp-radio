@@ -79,15 +79,18 @@ development dependencies on the upper MAC and `oer-embassy-net`.
 - **Host conformance.** The shared suites run against this backend over the
   host device model (`lower_mac/tests/port/conformance`): single-MPDU
   outcomes, publication barriers, interface commands, single-MPDU admission
-  age, ownership Complete and Refuse with one buffer class, the GTK
-  progress, expiry, rollback and receive-cut cases, and every EDCA case.
-  The model holds a queue's completions, injects a TX-timeout edge and a
-  collision, rejects key writes, decrypts air frames at capture against its
-  key table and drains captured hardware, DMA and interrupt frames through
-  the RX cut. Not run: air denial (no device model), aggregate and
-  BA-window cases (no `AmpduPhase`), ownership CloseGate, Disable and Poison
-  (they expect a held access category unpublished, while this port
-  publishes an idle queue's head and waits for a published one), and
+  age, every ownership scenario with one buffer class in the
+  `PublishedHead` mode, the GTK progress, expiry, rollback and receive-cut
+  cases, and every EDCA case. The port publishes an idle queue's head at
+  once, so the model withholds that head's result; the `Unpublished`
+  arrangement needs an earlier held BestEffort transmission outside the
+  suite's operations and is checked by its own test. The model holds a
+  queue's completions, injects a TX-timeout edge and a collision, rejects
+  key writes, decrypts air frames at capture against its key table and
+  drains captured hardware, DMA and interrupt frames through the RX cut.
+  A publication is identified by its program's PSDU length: every host DMA
+  allocation has the same model descriptor address. Not run: air denial
+  (no device model), aggregate and BA-window cases (no `AmpduPhase`), and
   InstallBeside and SelectRetained (one station GTK slot).
 - **Publication observations.** `Esp32s31Backend`'s last parameter `O` is
   the P2 driver's observation receiver (`port::Observations`, an

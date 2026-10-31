@@ -18,6 +18,9 @@
 //! buffer class carries every operation of a one-class backend), retain the original
 //! identities in opaque contexts, and report identities of actual returned
 //! resources. No observation may be synthesized from the expected identity.
+//! A fixture holds BestEffort in a `Held` mode, unpublished or with its head
+//! published and the result withheld; the trace's ordered publications,
+//! request, returns and gate confirmation prove the mode's precondition.
 //! `check_barriers` uses the same captured publication/event trace for held
 //! ACK, retry, timeout and key-removal cases. A Sent repeat differs only in
 //! Retry, so the shared comparison covers the original SN, PN and payload.
@@ -531,13 +534,58 @@ impl ReturnEvidence {
     }
 }
 
-/// Publication/barrier order observed by a fixture.
+/// Publication, request, return and barrier order observed by a fixture.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PublicationEvent {
     /// A real publication of this operation ticket.
     Tx(u8),
+    /// The fixture issued the scenario's request: Complete releases the
+    /// held access category, CloseGate closes the gate, Disable begins
+    /// disabling and Poison injects the fault.
+    Requested,
+    /// The accepted operation of this ticket returned through the port.
+    Returned(u8),
     /// The gate-closing terminal was delivered.
     GateClosed,
+}
+
+/// The fixture's observation order: `markers`, each taken when the given
+/// number of publications had been observed and recorded in that order, merged
+/// into the publication tickets `published`. A marker precedes every
+/// publication observed after it.
+pub fn observed_order(
+    published: impl IntoIterator<Item = u8>,
+    markers: impl IntoIterator<Item = (usize, PublicationEvent)>,
+) -> impl Iterator<Item = PublicationEvent> {
+    let mut markers = markers.into_iter().peekable();
+    let mut published = published.into_iter().enumerate().peekable();
+    core::iter::from_fn(move || {
+        let next = published.peek().map(|(index, _)| *index);
+        if let Some((_, marker)) = markers.next_if(|(at, _)| next.is_none_or(|next| *at <= next)) {
+            return Some(marker);
+        }
+        published
+            .next()
+            .map(|(_, ticket)| PublicationEvent::Tx(ticket))
+    })
+}
+
+/// How a fixture holds BestEffort while Voice and Video complete. The
+/// trace's events prove the mode's precondition at the request.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Held {
+    /// Neither BestEffort operation is published at the request.
+    Unpublished,
+    /// The BestEffort head is published with its result withheld and its
+    /// tail is unpublished at the request. CloseGate and Disable return the
+    /// head through its own terminal once the result is released and
+    /// withdraw the tail; Poison keeps both quarantined.
+    PublishedHead,
+}
+
+impl Held {
+    /// Both fixture modes.
+    pub const ALL: [Self; 2] = [Self::Unpublished, Self::PublishedHead];
 }
 
 /// Compare the contract's per-AC publication sequences. Ticket identities and
@@ -552,6 +600,15 @@ where
     L: Iterator<Item = PublicationEvent> + Clone,
     R: Iterator<Item = PublicationEvent> + Clone,
 {
+    // Requests and returns are fixture-local positions; the comparison
+    // covers what reached the air and the gate confirmation.
+    let published = |event: &PublicationEvent| {
+        matches!(
+            event,
+            PublicationEvent::Tx(_) | PublicationEvent::GateClosed
+        )
+    };
+    let (left, right) = (left.filter(published), right.filter(published));
     if left
         .clone()
         .chain(right.clone())
@@ -571,7 +628,7 @@ where
     WmmAccessCategory::ALL.into_iter().all(|ac| {
         let belongs = |event: &PublicationEvent| match event {
             PublicationEvent::Tx(ticket) => category(*ticket) == Some(ac),
-            PublicationEvent::GateClosed => true,
+            _ => true,
         };
         left.clone()
             .filter(belongs)
@@ -594,8 +651,11 @@ pub struct Trace<R, E, P> {
     pub publications: usize,
     /// Actual terminal outcomes/counts, aligned with `returned`.
     pub terminal_evidence: E,
-    /// Actual publications and gate confirmation, in order.
+    /// Actual publications, the request, accepted returns and the gate
+    /// confirmation, in observation order.
     pub publication_events: P,
+    /// Ticket identities captured before submission, in operation order.
+    pub tickets: [u8; 4],
 }
 
 /// Backend-specific execution, shared scenarios and checks.
@@ -608,10 +668,12 @@ pub trait Harness {
     type Evidence: AsRef<[ReturnEvidence]>;
     /// Actual publication/barrier event storage.
     type Publications: AsRef<[PublicationEvent]>;
-    /// Exercise the prescribed operations through the real backend API.
+    /// Exercise the prescribed operations through the real backend API,
+    /// holding BestEffort as `held` names.
     fn exercise(
         &mut self,
         scenario: Scenario,
+        held: Held,
     ) -> impl core::future::Future<Output = Trace<Self::Returns, Self::Evidence, Self::Publications>>;
 }
 
@@ -636,28 +698,32 @@ pub enum Violation {
     Publication,
 }
 
-/// Run the same ownership suite for any backend fixture. Refusal creates
-/// no publication or terminal; fail-stop ends all owners with the install.
+/// Run the same ownership suite for any backend fixture in the fixture's
+/// `held` mode. Refusal creates no publication or terminal; fail-stop ends
+/// all owners with the install.
 pub async fn check<H: Harness>(
     harness: &mut H,
     environment: Environment,
+    held: Held,
 ) -> Result<Report, (Scenario, Violation)> {
     let mut report = Report::default();
     for scenario in Scenario::ALL {
         if !report.includes(environment, scenario.execution()) {
             continue;
         }
-        let trace = harness.exercise(scenario).await;
-        verify(scenario, H::CLASSES, &trace).map_err(|why| (scenario, why))?;
+        let trace = harness.exercise(scenario, held).await;
+        verify(scenario, H::CLASSES, held, &trace).map_err(|why| (scenario, why))?;
         report.passed();
     }
     Ok(report)
 }
 
-/// Check captured ownership, publication, lifetime and FIFO observations.
+/// Check captured ownership, publication, lifetime and FIFO observations
+/// of a fixture in the `held` mode.
 pub fn verify<R, E, P>(
     scenario: Scenario,
     classes: Classes,
+    held: Held,
     trace: &Trace<R, E, P>,
 ) -> Result<(), Violation>
 where
@@ -678,14 +744,15 @@ where
     if trace.before_teardown_dropped != returned_before_teardown {
         return Err(Violation::Lifetime);
     }
+    let head_published = held == Held::PublishedHead;
     let expected_publications = match scenario {
         Scenario::Complete => 4,
         Scenario::Refuse => 0,
-        _ => 2,
+        _ => 2 + usize::from(head_published),
     };
-    if scenario == Scenario::CloseGate {
-        verify_closed_publications(trace)?;
-    } else if trace.publications != expected_publications {
+    // A closed gate's fixture may retry until exhaustion; its count is the
+    // per-ticket publication events, each matching its return's air count.
+    if scenario != Scenario::CloseGate && trace.publications != expected_publications {
         return Err(Violation::Publication);
     }
     let mut remaining = operations.map(Some);
@@ -697,7 +764,10 @@ where
             return Err(Violation::Duplicate);
         };
         *slot = None;
-        if returned.expected != returned.actual || returned.actual.class != returned.operation.class
+        if returned.expected != returned.actual
+            || returned.actual.class != returned.operation.class
+            || trace.tickets.get(usize::from(returned.operation.id))
+                != Some(&returned.expected.ticket)
         {
             return Err(Violation::Owners);
         }
@@ -706,9 +776,12 @@ where
         }) {
             return Err(Violation::Order);
         }
+        let head = returned.operation.id == best_effort(operations)[0].id;
         let expected_end = match (scenario, returned.operation.category) {
             (Scenario::Refuse, _) => End::Refused,
-            (Scenario::CloseGate | Scenario::Disable, WmmAccessCategory::BestEffort) => {
+            (Scenario::CloseGate | Scenario::Disable, WmmAccessCategory::BestEffort)
+                if !(head && head_published) =>
+            {
                 End::Withdrawn
             }
             _ => End::Ended,
@@ -729,49 +802,125 @@ where
     } else if remaining.iter().any(Option::is_some) {
         return Err(Violation::Missing);
     }
-    Ok(())
+    verify_events(scenario, held, operations, trace)
 }
 
-fn verify_closed_publications<R, E, P>(trace: &Trace<R, E, P>) -> Result<(), Violation>
+/// The two BestEffort operations, head first: `Classes::operations`
+/// submits them before Voice and Video.
+const fn best_effort(operations: [Operation; 4]) -> [Operation; 2] {
+    let [head, tail, _, _] = operations;
+    [head, tail]
+}
+
+/// The observed order of publications, the request, returns and the gate
+/// confirmation: the mode's precondition at the request, no BestEffort
+/// publication after a withdrawing or poisoning request, FIFO returns and
+/// a gate confirmed after both BestEffort returns with nothing published
+/// after it. Each return's air count matches its ticket's publications.
+fn verify_events<R, E, P>(
+    scenario: Scenario,
+    held: Held,
+    operations: [Operation; 4],
+    trace: &Trace<R, E, P>,
+) -> Result<(), Violation>
 where
     R: AsRef<[Returned]>,
     E: AsRef<[ReturnEvidence]>,
     P: AsRef<[PublicationEvent]>,
 {
+    use PublicationEvent::{GateClosed, Requested, Returned as Back, Tx};
     let rows = trace.returned.as_ref();
     let evidence = trace.terminal_evidence.as_ref();
     let events = trace.publication_events.as_ref();
+    let tickets = trace.tickets;
     if rows.len() != evidence.len() {
         return Err(Violation::Missing);
     }
-    let mut closed = false;
-    let mut publications = 0_usize;
+    let ticket = |operation: Operation| tickets[usize::from(operation.id)];
+    let position = |wanted: PublicationEvent| events.iter().position(|event| *event == wanted);
+    let count = |wanted: PublicationEvent, within: &[PublicationEvent]| {
+        within.iter().filter(|event| **event == wanted).count()
+    };
     for event in events {
-        match event {
-            PublicationEvent::GateClosed if !closed => closed = true,
-            PublicationEvent::GateClosed => return Err(Violation::Order),
-            PublicationEvent::Tx(ticket) => {
-                if closed {
-                    return Err(Violation::Order);
-                }
-                if !rows.iter().any(|row| row.actual.ticket == *ticket) {
-                    return Err(Violation::Owners);
-                }
-                publications = publications.checked_add(1).ok_or(Violation::Publication)?;
+        if let Tx(t) | Back(t) = event
+            && !tickets.contains(t)
+        {
+            return Err(Violation::Owners);
+        }
+    }
+    if events.iter().filter(|event| matches!(event, Tx(_))).count() != trace.publications {
+        return Err(Violation::Publication);
+    }
+    // One return per accepted operation, and none for a refusal.
+    for operation in operations {
+        let returned = count(Back(ticket(operation)), events);
+        let accepted = rows
+            .iter()
+            .any(|row| row.operation == operation && row.end != End::Refused);
+        if returned > 1 {
+            return Err(Violation::Duplicate);
+        }
+        if (returned == 1) != accepted {
+            return Err(Violation::Missing);
+        }
+    }
+    let requests = count(Requested, events);
+    let gates = count(GateClosed, events);
+    if requests != usize::from(scenario != Scenario::Refuse)
+        || gates != usize::from(scenario == Scenario::CloseGate)
+    {
+        return Err(Violation::Order);
+    }
+    if let Some(at) = position(Requested) {
+        let (before, after) = events.split_at(at);
+        let [head, tail] = best_effort(operations);
+        // Voice and Video complete while BestEffort is held.
+        for other in operations
+            .into_iter()
+            .filter(|operation| operation.category != WmmAccessCategory::BestEffort)
+        {
+            if count(Back(ticket(other)), before) != 1 {
+                return Err(Violation::Order);
+            }
+        }
+        let head_before = count(Tx(ticket(head)), before);
+        let precondition = match held {
+            Held::Unpublished => head_before == 0,
+            Held::PublishedHead => head_before == 1,
+        };
+        if !precondition || count(Tx(ticket(tail)), before) != 0 {
+            return Err(Violation::Publication);
+        }
+        if count(Back(ticket(head)), before) + count(Back(ticket(tail)), before) != 0 {
+            return Err(Violation::Order);
+        }
+        if scenario != Scenario::Complete
+            && count(Tx(ticket(head)), after) + count(Tx(ticket(tail)), after) != 0
+        {
+            return Err(Violation::Publication);
+        }
+        if let (Some(first), Some(second)) =
+            (position(Back(ticket(head))), position(Back(ticket(tail))))
+            && first > second
+        {
+            return Err(Violation::Order);
+        }
+        if let Some(gate) = position(GateClosed) {
+            let returned = |operation| position(Back(ticket(operation)));
+            if events[gate..].iter().any(|event| matches!(event, Tx(_)))
+                || returned(head).is_none_or(|at| at > gate)
+                || returned(tail).is_none_or(|at| at > gate)
+            {
+                return Err(Violation::Order);
             }
         }
     }
-    if !closed || publications != trace.publications {
-        return Err(Violation::Publication);
-    }
     for (row, terminal) in rows.iter().zip(evidence) {
-        let count = events
-            .iter()
-            .filter(|event| **event == PublicationEvent::Tx(row.actual.ticket))
-            .count();
+        let published = count(Tx(row.actual.ticket), events);
         match row.end {
-            End::Ended if terminal.transmissions().map(usize::from) == Some(count) => {}
-            End::Withdrawn | End::Refused if count == 0 && terminal.transmissions().is_none() => {}
+            End::Ended if terminal.transmissions().map(usize::from) == Some(published) => {}
+            End::Withdrawn | End::Refused
+                if published == 0 && terminal.transmissions().is_none() => {}
             _ => return Err(Violation::Publication),
         }
     }

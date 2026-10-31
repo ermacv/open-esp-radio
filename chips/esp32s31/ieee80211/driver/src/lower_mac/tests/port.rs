@@ -83,10 +83,6 @@ struct Observed {
     captured: std::collections::VecDeque<TestReceive>,
     /// Material writes the key table has seen.
     key_writes: usize,
-    /// The descriptor head of each port buffer, by buffer place.
-    buffer_heads: Vec<u32>,
-    /// The descriptor head of each publication, in order.
-    published_heads: Vec<u32>,
     /// The next publication ends in the hardware's TX-timeout edge instead
     /// of a completion.
     timeout_edge: bool,
@@ -354,7 +350,6 @@ impl Device<512> for TestDevice {
             .map(|(_, program)| program.aifsn())
             .collect();
         self.observed.borrow_mut().publications = publications;
-        self.observed.borrow_mut().published_heads = self.hardware.heads.clone();
         self.done.resize(publications, false);
         let next = self.next_completion(publications);
         if let Some((index, queue)) = next
@@ -495,10 +490,6 @@ fn installed_with_entropy(
         ..Observed::default()
     }));
     let buffers: [_; TX_TICKETS] = core::array::from_fn(|_| slot());
-    observed.borrow_mut().buffer_heads = buffers
-        .iter()
-        .map(|slot| slot.as_ref().descriptor_address())
-        .collect();
     let device = TestDevice {
         hardware,
         timer: timer.clone(),

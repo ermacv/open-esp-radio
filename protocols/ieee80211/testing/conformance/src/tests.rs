@@ -68,115 +68,124 @@ fn changed_ticket_identity_is_an_owner_violation() {
     );
 }
 
+/// Evidence of one acknowledged publication.
+fn acknowledged(transmissions: u16) -> ReturnEvidence {
+    let terminal: oer_ieee80211_contracts_port::SingleOutcome<(), ()> =
+        TxOutcome::Ended(SingleEnd::AckTimeout(oer_ieee80211_contracts_port::Air {
+            transmissions: core::num::NonZeroU16::new(transmissions).expect("a transmission"),
+            rate: oer_ieee80211_contracts_port::PhyRate::Legacy(
+                oer_ieee80211_wire::phy::LegacyRate::Ofdm6M,
+            ),
+        }));
+    ReturnEvidence::terminal(true, &terminal).expect("terminal evidence")
+}
+
+fn withdrawn() -> ReturnEvidence {
+    ReturnEvidence::terminal(
+        true,
+        &oer_ieee80211_contracts_port::SingleOutcome::<(), ()>::Withdrawn(
+            WithdrawCause::GateClosed,
+        ),
+    )
+    .expect("withdrawal evidence")
+}
+
+/// Rows of operations `ids` in return order, each with its `end`.
+fn rows(ids: &[(usize, End)]) -> Vec<Returned> {
+    ids.iter()
+        .map(|&(id, end)| {
+            let operation = Classes::Two.operations()[id];
+            let resources = Resources {
+                ticket: operation.id,
+                buffer: operation.id,
+                class: operation.class,
+                body: id,
+            };
+            Returned {
+                operation,
+                expected: resources,
+                actual: resources,
+                end,
+            }
+        })
+        .collect()
+}
+
 fn poisoned_trace() -> Trace<Vec<Returned>, Vec<ReturnEvidence>, Vec<PublicationEvent>> {
+    use PublicationEvent::{Requested, Returned as Back, Tx};
     Trace {
-        returned: Classes::Two
-            .operations()
-            .into_iter()
-            .filter(|operation| operation.category != WmmAccessCategory::BestEffort)
-            .map(|operation| {
-                let resources = Resources {
-                    ticket: operation.id,
-                    buffer: operation.id,
-                    class: operation.class,
-                    body: usize::from(operation.id),
-                };
-                Returned {
-                    operation,
-                    expected: resources,
-                    actual: resources,
-                    end: End::Ended,
-                }
-            })
-            .collect(),
+        returned: rows(&[(2, End::Ended), (3, End::Ended)]),
         contexts_dropped: 2,
         before_teardown_dropped: 2,
         publications: 2,
-        terminal_evidence: vec![],
-        publication_events: vec![],
+        terminal_evidence: vec![acknowledged(1), acknowledged(1)],
+        publication_events: vec![Tx(2), Tx(3), Back(2), Back(3), Requested],
+        tickets: [0, 1, 2, 3],
     }
 }
 
 #[test]
 fn poison_verification_rejects_destruction_of_an_unreturned_owner() {
     assert_eq!(
-        verify(Scenario::Poison, Classes::Two, &poisoned_trace()),
+        verify(
+            Scenario::Poison,
+            Classes::Two,
+            Held::Unpublished,
+            &poisoned_trace()
+        ),
         Ok(())
     );
     for dropped in [0, 1, 3, 4] {
         let mut trace = poisoned_trace();
         trace.contexts_dropped = dropped;
         assert_eq!(
-            verify(Scenario::Poison, Classes::Two, &trace),
+            verify(Scenario::Poison, Classes::Two, Held::Unpublished, &trace),
             Err(Violation::Lifetime)
         );
     }
 }
 
+/// VO and VI end after two transmissions; then the gate closes over the
+/// unpublished BestEffort pair.
 fn closed_trace() -> Trace<Vec<Returned>, Vec<ReturnEvidence>, Vec<PublicationEvent>> {
-    let terminal: oer_ieee80211_contracts_port::SingleOutcome<(), ()> =
-        TxOutcome::Ended(SingleEnd::AckTimeout(oer_ieee80211_contracts_port::Air {
-            transmissions: core::num::NonZeroU16::new(2).expect("two transmissions"),
-            rate: oer_ieee80211_contracts_port::PhyRate::Legacy(
-                oer_ieee80211_wire::phy::LegacyRate::Ofdm6M,
-            ),
-        }));
-    let air = ReturnEvidence::terminal(true, &terminal).expect("terminal evidence");
-    let withdrawn = ReturnEvidence::terminal(
-        true,
-        &oer_ieee80211_contracts_port::SingleOutcome::<(), ()>::Withdrawn(
-            WithdrawCause::GateClosed,
-        ),
-    )
-    .expect("withdrawal evidence");
+    use PublicationEvent::{GateClosed, Requested, Returned as Back, Tx};
     Trace {
-        returned: [2, 3, 0, 1]
-            .into_iter()
-            .map(|id| {
-                let operation = Classes::Two.operations()[id];
-                let resources = Resources {
-                    ticket: operation.id,
-                    buffer: operation.id,
-                    class: operation.class,
-                    body: id,
-                };
-                Returned {
-                    operation,
-                    expected: resources,
-                    actual: resources,
-                    end: if id < 2 { End::Withdrawn } else { End::Ended },
-                }
-            })
-            .collect(),
+        returned: rows(&[
+            (2, End::Ended),
+            (3, End::Ended),
+            (0, End::Withdrawn),
+            (1, End::Withdrawn),
+        ]),
         contexts_dropped: 4,
         before_teardown_dropped: 4,
         publications: 4,
-        terminal_evidence: vec![air, air, withdrawn, withdrawn],
+        terminal_evidence: vec![acknowledged(2), acknowledged(2), withdrawn(), withdrawn()],
         publication_events: vec![
-            PublicationEvent::Tx(2),
-            PublicationEvent::Tx(2),
-            PublicationEvent::Tx(3),
-            PublicationEvent::Tx(3),
-            PublicationEvent::GateClosed,
+            Tx(2),
+            Tx(2),
+            Tx(3),
+            Tx(3),
+            Back(2),
+            Back(3),
+            Requested,
+            Back(0),
+            Back(1),
+            GateClosed,
         ],
+        tickets: [0, 1, 2, 3],
     }
 }
 
 #[test]
 fn close_gate_rejects_a_ticket_count_different_from_its_terminal() {
     let mut trace = closed_trace();
-    assert_eq!(verify(Scenario::CloseGate, Classes::Two, &trace), Ok(()));
-    let terminal: oer_ieee80211_contracts_port::SingleOutcome<(), ()> =
-        TxOutcome::Ended(SingleEnd::AckTimeout(oer_ieee80211_contracts_port::Air {
-            transmissions: core::num::NonZeroU16::MIN,
-            rate: oer_ieee80211_contracts_port::PhyRate::Legacy(
-                oer_ieee80211_wire::phy::LegacyRate::Ofdm6M,
-            ),
-        }));
-    trace.terminal_evidence[0] =
-        ReturnEvidence::terminal(true, &terminal).expect("terminal evidence");
     assert_eq!(
-        verify(Scenario::CloseGate, Classes::Two, &trace),
+        verify(Scenario::CloseGate, Classes::Two, Held::Unpublished, &trace),
+        Ok(())
+    );
+    trace.terminal_evidence[0] = acknowledged(1);
+    assert_eq!(
+        verify(Scenario::CloseGate, Classes::Two, Held::Unpublished, &trace),
         Err(Violation::Publication)
     );
 }
@@ -184,11 +193,10 @@ fn close_gate_rejects_a_ticket_count_different_from_its_terminal() {
 #[test]
 fn close_gate_rejects_publication_of_a_fresh_withdrawn_ticket() {
     let mut trace = closed_trace();
-    assert_eq!(verify(Scenario::CloseGate, Classes::Two, &trace), Ok(()));
-    trace.publication_events.insert(4, PublicationEvent::Tx(0));
+    trace.publication_events.insert(9, PublicationEvent::Tx(0));
     trace.publications += 1;
     assert_eq!(
-        verify(Scenario::CloseGate, Classes::Two, &trace),
+        verify(Scenario::CloseGate, Classes::Two, Held::Unpublished, &trace),
         Err(Violation::Publication)
     );
 }
@@ -196,11 +204,135 @@ fn close_gate_rejects_publication_of_a_fresh_withdrawn_ticket() {
 #[test]
 fn close_gate_rejects_publication_after_confirmation_with_all_counts_correct() {
     let mut trace = closed_trace();
-    assert_eq!(verify(Scenario::CloseGate, Classes::Two, &trace), Ok(()));
-    trace.publication_events.swap(3, 4);
+    let late = trace.publication_events.remove(3);
+    trace.publication_events.push(late);
     assert_eq!(
-        verify(Scenario::CloseGate, Classes::Two, &trace),
+        verify(Scenario::CloseGate, Classes::Two, Held::Unpublished, &trace),
         Err(Violation::Order)
+    );
+}
+
+/// The BestEffort head is published and held before the gate closes; it
+/// then ends with its own terminal and the tail is withdrawn.
+fn closed_head_trace() -> Trace<Vec<Returned>, Vec<ReturnEvidence>, Vec<PublicationEvent>> {
+    use PublicationEvent::{GateClosed, Requested, Returned as Back, Tx};
+    Trace {
+        returned: rows(&[
+            (2, End::Ended),
+            (3, End::Ended),
+            (0, End::Ended),
+            (1, End::Withdrawn),
+        ]),
+        contexts_dropped: 4,
+        before_teardown_dropped: 4,
+        publications: 3,
+        terminal_evidence: vec![
+            acknowledged(1),
+            acknowledged(1),
+            acknowledged(1),
+            withdrawn(),
+        ],
+        publication_events: vec![
+            Tx(0),
+            Tx(2),
+            Tx(3),
+            Back(2),
+            Back(3),
+            Requested,
+            Back(0),
+            Back(1),
+            GateClosed,
+        ],
+        tickets: [0, 1, 2, 3],
+    }
+}
+
+#[test]
+fn a_published_head_ends_with_its_terminal_and_the_tail_is_withdrawn() {
+    let trace = closed_head_trace();
+    assert_eq!(
+        verify(
+            Scenario::CloseGate,
+            Classes::Two,
+            Held::PublishedHead,
+            &trace
+        ),
+        Ok(())
+    );
+    // The same observations do not satisfy the other mode.
+    assert_ne!(
+        verify(Scenario::CloseGate, Classes::Two, Held::Unpublished, &trace),
+        Ok(())
+    );
+}
+
+#[test]
+fn the_published_head_mode_requires_its_precondition_at_the_request() {
+    use PublicationEvent::{Requested, Tx};
+    // The head published only after the request.
+    let mut late = closed_head_trace();
+    late.publication_events.remove(0);
+    let at = late
+        .publication_events
+        .iter()
+        .position(|event| *event == Requested)
+        .expect("request");
+    late.publication_events.insert(at + 1, Tx(0));
+    assert_eq!(
+        verify(
+            Scenario::CloseGate,
+            Classes::Two,
+            Held::PublishedHead,
+            &late
+        ),
+        Err(Violation::Publication)
+    );
+    // The tail also published before the request.
+    let mut tail = closed_head_trace();
+    tail.publication_events.insert(1, Tx(1));
+    tail.publications += 1;
+    assert_eq!(
+        verify(
+            Scenario::CloseGate,
+            Classes::Two,
+            Held::PublishedHead,
+            &tail
+        ),
+        Err(Violation::Publication)
+    );
+}
+
+#[test]
+fn the_gate_confirms_only_after_both_best_effort_returns() {
+    let mut trace = closed_head_trace();
+    let gate = trace.publication_events.pop().expect("gate");
+    trace.publication_events.insert(6, gate);
+    assert_eq!(
+        verify(
+            Scenario::CloseGate,
+            Classes::Two,
+            Held::PublishedHead,
+            &trace
+        ),
+        Err(Violation::Order)
+    );
+}
+
+#[test]
+fn poison_keeps_a_published_head_and_its_tail_quarantined() {
+    use PublicationEvent::{Requested, Returned as Back, Tx};
+    let mut trace = poisoned_trace();
+    trace.publication_events = vec![Tx(0), Tx(2), Tx(3), Back(2), Back(3), Requested];
+    trace.publications = 3;
+    assert_eq!(
+        verify(Scenario::Poison, Classes::Two, Held::PublishedHead, &trace),
+        Ok(())
+    );
+    // A return of the published head is not a quarantine.
+    trace.publication_events.push(Back(0));
+    assert_eq!(
+        verify(Scenario::Poison, Classes::Two, Held::PublishedHead, &trace),
+        Err(Violation::Missing)
     );
 }
 
@@ -302,4 +434,35 @@ fn a_one_class_backend_runs_the_same_order_and_categories_in_its_one_class() {
         assert_eq!(one.class, Class::Small);
     }
     assert!(two.iter().any(|operation| operation.class == Class::Large));
+}
+
+#[test]
+fn observed_order_places_each_marker_before_later_publications() {
+    use PublicationEvent::{GateClosed, Requested, Returned as Back, Tx};
+    let order: Vec<_> = observed_order(
+        [0, 2, 3],
+        [
+            (3, Back(2)),
+            (3, Back(3)),
+            (3, Requested),
+            (3, Back(0)),
+            (3, GateClosed),
+        ],
+    )
+    .collect();
+    assert_eq!(
+        order,
+        [
+            Tx(0),
+            Tx(2),
+            Tx(3),
+            Back(2),
+            Back(3),
+            Requested,
+            Back(0),
+            GateClosed
+        ]
+    );
+    let early: Vec<_> = observed_order([5], [(0, Requested)]).collect();
+    assert_eq!(early, [Requested, Tx(5)]);
 }
