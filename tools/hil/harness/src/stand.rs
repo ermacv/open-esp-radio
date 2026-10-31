@@ -21,6 +21,7 @@ use oer_image_bundle::ImageBundle;
 use oer_lab_arbiter::{
     claims::{AIR, Claim},
     journal::ImageIdentity,
+    readiness::ROUTER,
 };
 use oer_lab_client::{
     client::{Client, Running},
@@ -232,13 +233,24 @@ impl finish::Board for StandBoard {
     fn connect(&self) -> std::result::Result<Link, String> {
         self.link(false)
     }
+
+    fn router(
+        &self,
+        request: oer_lab_client::protocol::RouterOperation,
+    ) -> std::result::Result<serde_json::Value, String> {
+        self.run(Operation::Router { request })
+    }
 }
 
-/// What a run of `scenario` on the board with `mac` leases: the board, and
-/// the air shared when its cases turn a radio on.
+/// What a run of `scenario` on the board with `mac` leases: the board, the
+/// router exclusively when its cases use it (they change its network), and
+/// the air shared when its cases turn a radio on (the router's included).
 fn claims(mac: &str, scenario: &Scenario) -> Vec<Claim> {
     let mut claims = vec![Claim::board(mac)];
-    if scenario.air {
+    if scenario.router {
+        claims.push(Claim::exclusive(ROUTER));
+    }
+    if scenario.air || scenario.router {
         claims.push(Claim::shared(AIR));
     }
     claims
@@ -299,5 +311,27 @@ mod tests {
             claims(mac, &quiet.using_air()),
             [Claim::board(mac), Claim::shared(AIR)]
         );
+        assert_eq!(
+            claims(mac, &quiet.using_router()),
+            [
+                Claim::board(mac),
+                Claim::exclusive(ROUTER),
+                Claim::shared(AIR)
+            ]
+        );
+    }
+
+    #[test]
+    fn two_router_runs_on_different_boards_conflict_on_the_router() {
+        use oer_lab_arbiter::claims::{conflict, normalize};
+        let station = Scenario::new("wifi-station", "image", &[]).using_router();
+        let one = normalize(&claims("02:00:00:00:00:01", &station));
+        let other = normalize(&claims("02:00:00:00:00:02", &station));
+        assert!(conflict(&one, &other), "both change the router's network");
+        let quiet = Scenario::new("aes", "esp32s31-rpc", &[]);
+        assert!(!conflict(
+            &one,
+            &normalize(&claims("02:00:00:00:00:02", &quiet))
+        ));
     }
 }

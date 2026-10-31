@@ -75,6 +75,9 @@ pub(crate) struct FakeBoard {
     pub hellos_lost: Cell<usize>,
     /// How a device behaves on a link the board opens while its image runs.
     pub serve: fn(Device),
+    /// The router operations the cases ran, and how the router answers.
+    pub routed: std::cell::RefCell<Vec<oer_lab_client::protocol::RouterOperation>>,
+    pub router: fn(&oer_lab_client::protocol::RouterOperation) -> Result<serde_json::Value, String>,
 }
 
 impl FakeBoard {
@@ -86,6 +89,8 @@ impl FakeBoard {
             resets: Cell::new(0),
             boots: Cell::new(100),
             hellos_lost: Cell::new(0),
+            routed: std::cell::RefCell::new(Vec::new()),
+            router: |_| Err("no router".to_owned()),
         }
     }
 }
@@ -107,6 +112,15 @@ impl Rung for FakeRung<'_> {
 }
 
 impl Board for FakeBoard {
+    fn router(
+        &self,
+        request: oer_lab_client::protocol::RouterOperation,
+    ) -> Result<serde_json::Value, String> {
+        let answer = (self.router)(&request);
+        self.routed.borrow_mut().push(request);
+        answer
+    }
+
     fn reset(&self) -> Result<(), String> {
         let step = self.steps.first().ok_or("no rung")?;
         FakeRung(self, step)

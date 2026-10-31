@@ -6,6 +6,7 @@
 //! from the cases' verdicts: it keeps a pass from passing and never turns a
 //! failed case into a pass.
 
+use oer_lab_client::protocol::RouterOperation;
 use std::time::Duration;
 
 use oer_hil_link::{CallError, Link};
@@ -18,6 +19,8 @@ pub(crate) trait Board {
     fn reset(&self) -> Result<(), String>;
     /// A link on the board's console, opened without a reset.
     fn connect(&self) -> Result<Link, String>;
+    /// Run `request` on the lab router under the run's lease.
+    fn router(&self, request: RouterOperation) -> Result<serde_json::Value, String>;
 }
 
 /// How long finishing waits for the device.
