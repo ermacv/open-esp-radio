@@ -39,7 +39,7 @@ use core::{
     task::Poll,
 };
 
-use oer_espressif_interrupt_table::signal::{ForeignContext, IrqSignal, SignalExecutor};
+use oer_espressif_interrupt_table::signal::{self, ForeignContext, IrqSignal, SignalExecutor};
 use oer_memory::{InPlace, InPlaceClient, InPlaceServer, RequestSlot};
 use oer_time::{Instant, Timer};
 
@@ -74,6 +74,14 @@ pub enum PostError<Req> {
         request: Req,
         /// The expired request's deadline.
         deadline: Instant,
+    },
+    /// The caller runs outside the client executor's context: nothing was
+    /// published.
+    Foreign {
+        /// The refused request.
+        request: Req,
+        /// The failed context check.
+        error: ForeignContext,
     },
 }
 
@@ -156,8 +164,13 @@ impl<Req, S: SignalExecutor, C: SignalExecutor> PeerClient<Req, S, C> {
     /// # Errors
     ///
     /// [`PostError::Occupied`] while an earlier request waits for its
-    /// answer; [`PostError::Expired`] once a request expired.
+    /// answer; [`PostError::Expired`] once a request expired;
+    /// [`PostError::Foreign`] outside the client executor's context.
     pub fn post(&mut self, request: Req, deadline: Instant) -> Result<(), PostError<Req>> {
+        let context = match signal::enter::<C>() {
+            Ok(context) => context,
+            Err(error) => return Err(PostError::Foreign { request, error }),
+        };
         match self.obligation {
             Obligation::Idle => {}
             Obligation::Posted(_) => return Err(PostError::Occupied(request)),
@@ -167,11 +180,11 @@ impl<Req, S: SignalExecutor, C: SignalExecutor> PeerClient<Req, S, C> {
         }
         // The supervisor watches the obligation before the server sees it.
         if let Some(watch) = &self.watch {
-            watch.oblige(deadline);
+            watch.oblige(deadline, &context);
         }
         if let Err(request) = self.client.post(request) {
             if let Some(watch) = &self.watch {
-                watch.discharge();
+                watch.discharge(&context);
             }
             return Err(PostError::Occupied(request));
         }
@@ -200,6 +213,12 @@ impl<Req, S: SignalExecutor, C: SignalExecutor> PeerClient<Req, S, C> {
         };
         let mut expiry = pin!(timer.wait_until(deadline));
         poll_fn(|cx| {
+            // One of the client executor's tasks polls, or nothing is
+            // registered or changed.
+            let context = match signal::enter_task::<C>(cx) {
+                Ok(context) => context,
+                Err(error) => return Poll::Ready(Err(PeerError::Foreign(error))),
+            };
             // Register before looking at the slot, so an answer published
             // after the look pends this task again.
             if let Poll::Ready(Err(error)) = self.reply.poll_take(cx) {
@@ -224,7 +243,7 @@ impl<Req, S: SignalExecutor, C: SignalExecutor> PeerClient<Req, S, C> {
                     // Only an answer taken before its deadline discharges
                     // the obligation; an expiry keeps it for the supervisor.
                     if let Some(watch) = &self.watch {
-                        watch.discharge();
+                        watch.discharge(&context);
                     }
                     self.obligation = Obligation::Idle;
                     Poll::Ready(Ok(answer))

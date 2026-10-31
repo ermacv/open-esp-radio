@@ -18,7 +18,7 @@ use oer_esp32s31_hal::peripherals::{
 use oer_esp32s31_hal::platform::Port;
 use oer_esp32s31_hal::root::Root;
 use oer_espressif_executor::peer::liveness::{self, Beat, Period, Responder, Supervisor};
-use oer_espressif_executor::peer::{Obligations, PeerClient, PeerError, PeerServer};
+use oer_espressif_executor::peer::{Obligations, PeerClient, PeerError, PeerServer, PostError};
 use oer_espressif_executor::{AlarmGrant, Executor, InterruptExecutor};
 use oer_espressif_interrupt_table::signal::{FromPeerHart, IrqSignal};
 use oer_espressif_staged_runtime::diagnostics::{
@@ -171,7 +171,7 @@ const WATCHED: usize = 2;
 
 /// The seats of the boot hart's watched requests, which the liveness
 /// supervisor checks: written and read on the boot hart only.
-static OBLIGATIONS: Obligations<WATCHED> = Obligations::new();
+static OBLIGATIONS: Obligations<Hart0Executor, WATCHED> = Obligations::new();
 
 /// The liveness rounds the supervisor completed: written and read on the
 /// boot hart only.
@@ -483,8 +483,12 @@ async fn ask<Req, const B: usize>(
     let Ok(deadline) = EmbassyClock.deadline_after(EXCHANGE_DEADLINE) else {
         fail(oer_diagnostics::name!("exchange-deadline"; 32));
     };
-    if client.post(request, deadline).is_err() {
-        fail(busy);
+    match client.post(request, deadline) {
+        Ok(()) => {}
+        Err(PostError::Foreign { .. }) => {
+            panic::reset_fault::<Port>(panic::FaultReason::SignalContext, [0, kind, 0, 1])
+        }
+        Err(PostError::Occupied(_) | PostError::Expired { .. }) => fail(busy),
     }
     match client.answer(&EmbassyClock).await {
         Ok(reply) => reply,

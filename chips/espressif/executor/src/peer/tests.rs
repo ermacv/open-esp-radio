@@ -27,8 +27,8 @@ fn slot() -> &'static RequestSlot<Square, (), InPlace> {
 }
 
 /// A seat of a fresh obligation table, for a client of executor `C`.
-fn watch<C>() -> super::Watch<C> {
-    let table: &'static super::Obligations<1> = Box::leak(Box::new(super::Obligations::new()));
+fn watch<C: oer_espressif_interrupt_table::signal::SignalExecutor>() -> super::Watch<C> {
+    let table: &'static super::Obligations<C, 1> = Box::leak(Box::new(super::Obligations::new()));
     table.issue().expect("a fresh table has a seat")
 }
 
@@ -190,17 +190,20 @@ fn a_slot_pairs_once() {
 }
 
 #[test]
-fn a_client_polled_outside_its_executor_is_refused() {
+fn a_client_outside_its_executor_publishes_and_registers_nothing() {
     let (request, _) = host::deferred_signal();
     let reply = host::foreign_signal();
-    let (mut client, _server) = pair(slot(), request, reply, watch()).expect("a fresh slot");
+    let table: &'static super::Obligations<host::Foreign, 1> =
+        Box::leak(Box::new(super::Obligations::new()));
+    let seat = table.issue().expect("a fresh table has a seat");
+    let (mut client, _server) = pair(slot(), request, reply, seat).expect("a fresh slot");
     let clock = VirtualClock::<4>::new();
     let deadline = clock
         .deadline_after(Duration::from_millis(1))
         .expect("in range");
     let (_, waker) = task();
     let mut cx = Context::from_waker(&waker);
-    assert_eq!(
+    assert!(matches!(
         client.post(
             Square {
                 value: 1,
@@ -208,13 +211,56 @@ fn a_client_polled_outside_its_executor_is_refused() {
             },
             deadline
         ),
+        Err(PostError::Foreign {
+            request: Square { value: 1, .. },
+            ..
+        })
+    ));
+    assert_eq!(
+        table.scan(clock.now()),
+        super::obligation::Scan::Pending(None),
+        "nothing was published"
+    );
+    // Nothing was posted, so nothing waits and nothing registers.
+    let mut answering = pin!(client.answer(&clock));
+    assert_eq!(
+        answering.as_mut().poll(&mut cx),
+        Poll::Ready(Err(PeerError::NotPosted))
+    );
+}
+
+#[test]
+fn the_largest_deadline_is_watched_unchanged() {
+    let (request, _) = host::deferred_signal();
+    let (reply, _) = host::signal();
+    let table: &'static super::Obligations<host::Host, 1> =
+        Box::leak(Box::new(super::Obligations::new()));
+    let seat = table.issue().expect("a fresh table has a seat");
+    let (mut client, _server) = pair(slot(), request, reply, seat).expect("a fresh slot");
+    let last = oer_time::Instant::from_micros(u64::MAX);
+    assert_eq!(
+        client.post(
+            Square {
+                value: 2,
+                answer: None
+            },
+            last
+        ),
         Ok(())
     );
-    let mut answering = pin!(client.answer(&clock));
-    assert!(matches!(
-        answering.as_mut().poll(&mut cx),
-        Poll::Ready(Err(PeerError::Foreign(_)))
-    ));
+    let before = oer_time::Instant::from_micros(u64::MAX - 1);
+    assert_eq!(
+        table.scan(before),
+        super::obligation::Scan::Pending(Some(last)),
+        "not due a microsecond early"
+    );
+    assert_eq!(
+        table.scan(last),
+        super::obligation::Scan::Overdue {
+            channel: 0,
+            deadline: last
+        }
+    );
 }
 
 #[test]

@@ -87,6 +87,28 @@ fn context<E: SignalExecutor>() -> Result<ContextToken<E::Context>, ForeignConte
     Entered::enter().map(ContextToken).ok_or(ForeignContext)
 }
 
+/// Enter executor `E`'s context: the proof that the caller runs in it now,
+/// for state that only `E`'s tasks may change.
+///
+/// # Errors
+/// The caller runs outside `E`'s context, including another executor on
+/// the same hart.
+pub fn enter<E: SignalExecutor>() -> Result<ContextToken<E::Context>, ForeignContext> {
+    context::<E>()
+}
+
+/// Enter executor `E`'s context as the task `cx`'s waker names: the proof
+/// that one of `E`'s tasks polls now, before it registers that waker.
+///
+/// # Errors
+/// The caller runs outside `E`'s context, or `cx`'s waker names no task
+/// `E` polls now.
+pub fn enter_task<E: SignalExecutor>(
+    cx: &Context<'_>,
+) -> Result<ContextToken<E::Context>, ForeignContext> {
+    context_task::<E>(cx).map(|(token, _)| token)
+}
+
 /// The context proof and the polling task's handle.
 fn context_task<E: SignalExecutor>(
     cx: &Context<'_>,

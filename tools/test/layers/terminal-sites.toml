@@ -206,9 +206,10 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 "firmware/apps/boot-smoke/src/entry.rs:crate::hart1_main:terminal-entry:hart1_main:1" = { owner = "firmware/apps/boot-smoke", classes = ["configuration-boot"] }
 "firmware/apps/boot-smoke/src/entry.rs:crate::hart1_main:reset-method:reset:1" = { owner = "firmware/apps/boot-smoke", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
 "firmware/apps/boot-smoke/src/entry.rs:crate::hart1_main:reset-method:reset:2" = { owner = "firmware/apps/boot-smoke", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
-"firmware/apps/boot-smoke/src/entry.rs:crate::ask:terminal-reference:reset_fault:1" = { owner = "firmware/apps/boot-smoke", classes = ["cancellation"] }
-"firmware/apps/boot-smoke/src/entry.rs:crate::ask:terminal-reference:reset_fault:2" = { owner = "firmware/apps/boot-smoke", classes = ["software-invariant"] }
+"firmware/apps/boot-smoke/src/entry.rs:crate::ask:terminal-reference:reset_fault:1" = { owner = "firmware/apps/boot-smoke", classes = ["software-invariant"] }
+"firmware/apps/boot-smoke/src/entry.rs:crate::ask:terminal-reference:reset_fault:2" = { owner = "firmware/apps/boot-smoke", classes = ["cancellation"] }
 "firmware/apps/boot-smoke/src/entry.rs:crate::ask:terminal-reference:reset_fault:3" = { owner = "firmware/apps/boot-smoke", classes = ["software-invariant"] }
+"firmware/apps/boot-smoke/src/entry.rs:crate::ask:terminal-reference:reset_fault:4" = { owner = "firmware/apps/boot-smoke", classes = ["software-invariant"] }
 "firmware/apps/boot-smoke/src/entry.rs:crate::respond:terminal-reference:reset_fault:1" = { owner = "firmware/apps/boot-smoke", classes = ["software-invariant"] }
 "firmware/apps/boot-smoke/src/entry.rs:crate::serve_aes:terminal-reference:reset_fault:1" = { owner = "firmware/apps/boot-smoke", classes = ["software-invariant"] }
 "firmware/apps/boot-smoke/src/entry.rs:crate::answer_beats:terminal-reference:reset_fault:1" = { owner = "firmware/apps/boot-smoke", classes = ["software-invariant"] }

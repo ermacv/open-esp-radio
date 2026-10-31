@@ -27,7 +27,7 @@ fn slot() -> &'static RequestSlot<Beat, (), InPlace> {
     Box::leak(Box::new(RequestSlot::new_in_place()))
 }
 
-fn table() -> &'static Obligations<2> {
+fn table<C: oer_espressif_interrupt_table::signal::SignalExecutor>() -> &'static Obligations<C, 2> {
     Box::leak(Box::new(Obligations::new()))
 }
 
@@ -488,4 +488,21 @@ fn a_supervised_overdue_request_records_its_channel_and_deadline() {
         .diagnostic(),
         (FaultReason::PeerUnanswered, [1, 2, 1, 2])
     );
+}
+
+#[test]
+fn a_supervisor_outside_its_executor_registers_no_waker() {
+    let table = table::<host::Foreign>();
+    let (request, _) = host::deferred_signal();
+    let reply = host::foreign_signal();
+    let (supervisor, _responder) = pair(slot(), request, reply, PERIOD, table).expect("fresh");
+    let clock = VirtualClock::<4>::new();
+    let waker = waker();
+    let mut cx = Context::from_waker(&waker);
+    let mut supervising = pin!(supervisor.supervise(&clock, |_| ()));
+    assert!(matches!(
+        supervising.as_mut().poll(&mut cx),
+        Poll::Ready(LivenessError::Foreign(_))
+    ));
+    assert!(!table.registered(), "no waker is left behind");
 }

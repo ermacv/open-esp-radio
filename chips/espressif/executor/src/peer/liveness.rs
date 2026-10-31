@@ -30,7 +30,7 @@ use core::{
     task::Poll,
 };
 
-use oer_espressif_interrupt_table::signal::{ForeignContext, IrqSignal, SignalExecutor};
+use oer_espressif_interrupt_table::signal::{self, ForeignContext, IrqSignal, SignalExecutor};
 use oer_espressif_staged_runtime::panic::FaultReason;
 use oer_memory::{InPlace, RequestSlot};
 use oer_time::{Duration, Instant, TimeOverflow, Timer};
@@ -190,7 +190,7 @@ impl LivenessError {
 #[must_use = "dropping the supervisor ends supervision and retains the seat"]
 pub struct Supervisor<S: SignalExecutor, C: SignalExecutor, const N: usize> {
     client: PeerClient<Beat, S, C>,
-    obligations: &'static Obligations<N>,
+    obligations: &'static Obligations<C, N>,
     period: Period,
     sequence: u32,
     completed: u32,
@@ -211,7 +211,7 @@ pub fn pair<S: SignalExecutor, C: SignalExecutor, const N: usize>(
     request: &'static IrqSignal<S>,
     reply: &'static IrqSignal<C>,
     period: Period,
-    obligations: &'static Obligations<N>,
+    obligations: &'static Obligations<C, N>,
 ) -> Option<(Supervisor<S, C, N>, Responder<S, C>)> {
     if !obligations.claim() {
         return None;
@@ -251,6 +251,7 @@ impl<S: SignalExecutor, C: SignalExecutor, const N: usize> Supervisor<S, C, N> {
         match self.client.post(Beat { sequence, echo: 0 }, deadline) {
             Ok(()) => {}
             Err(PostError::Occupied(_)) => return Err(LivenessError::Occupied { sequence }),
+            Err(PostError::Foreign { error, .. }) => return Err(LivenessError::Foreign(error)),
             // The beat that expired earlier stays overdue.
             Err(PostError::Expired { deadline, .. }) => {
                 return Err(LivenessError::Overdue(Overdue {
@@ -316,19 +317,23 @@ impl<S: SignalExecutor, C: SignalExecutor, const N: usize> Supervisor<S, C, N> {
 /// [`LivenessError::RequestOverdue`]. The task wakes at the earliest
 /// watched deadline and at every write to a seat, so a newly posted request
 /// with an earlier deadline is watched from its post on.
-async fn watched<T: Timer, F: Future, const N: usize>(
-    obligations: &Obligations<N>,
+async fn watched<C: SignalExecutor, T: Timer, F: Future, const N: usize>(
+    obligations: &Obligations<C, N>,
     timer: &T,
     inner: F,
 ) -> Result<F::Output, LivenessError> {
     let mut inner = pin!(inner);
     loop {
-        // Registered before the scan, so a write after it wakes the task.
+        // Registered before the scan, so a write after it wakes the task;
+        // only once one of `C`'s tasks is proven to poll.
         poll_fn(|cx| {
-            obligations.register(cx);
-            Poll::Ready(())
+            Poll::Ready(
+                signal::enter_task::<C>(cx)
+                    .map(|context| obligations.register(cx, &context))
+                    .map_err(LivenessError::Foreign),
+            )
         })
-        .await;
+        .await?;
         let _changed = obligations.take_changed();
         let earliest = match obligations.scan(timer.now()) {
             Scan::Overdue { channel, deadline } => {
@@ -346,16 +351,19 @@ async fn watched<T: Timer, F: Future, const N: usize>(
             }
         });
         let finished = poll_fn(|cx| {
-            obligations.register(cx);
+            match signal::enter_task::<C>(cx) {
+                Ok(context) => obligations.register(cx, &context),
+                Err(error) => return Poll::Ready(Err(LivenessError::Foreign(error))),
+            }
             if let Poll::Ready(output) = inner.as_mut().poll(cx) {
-                return Poll::Ready(Some(output));
+                return Poll::Ready(Ok(Some(output)));
             }
             if obligations.take_changed() || due.as_mut().poll(cx).is_ready() {
-                return Poll::Ready(None);
+                return Poll::Ready(Ok(None));
             }
             Poll::Pending
         })
-        .await;
+        .await?;
         if let Some(output) = finished {
             return Ok(output);
         }

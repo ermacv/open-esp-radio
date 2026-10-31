@@ -136,8 +136,13 @@ answer, or a wait abandoned or never started leave it there. The supervisor
 wakes at the earliest watched deadline and at every seat write, during the
 beat's wait as between rounds, and ends with
 `LivenessError::RequestOverdue` (channel and deadline), which the image
-records (`PeerUnanswered`, last word 2) and resets on. Client and supervisor
-are tasks of one executor, so the wake never leaves its hart; a seat's
+records (`PeerUnanswered`, last word 2) and resets on. Executor locality is
+checked: `post` and the discharge take the proof that the caller runs in
+the client executor's context (`signal::enter`), and the supervisor
+registers its waker only after proving that one of that executor's tasks
+polls (`signal::enter_task`); outside it, `post` returns
+`PostError::Foreign` before publishing anything. A seat keeps its posted
+flag apart from the deadline, so every `Instant` is watched unchanged; the
 64-bit deadline is read whole or skipped and read again after the writer's
 wake.
 
