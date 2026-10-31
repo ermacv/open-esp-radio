@@ -12,18 +12,25 @@ pub(super) enum ClockUse {
     Cancelled,
 }
 
-type Cmd<'id, Id, D, const B: usize> = driver::Command<'id, Id, D, B>;
-type Msg<'id, Id, D, const B: usize> = owned::OwnedEvent<'id, Id, D, B>;
-type FailedCommand<'id, Id, D, const B: usize> = oer_memory::OnceValue<Cmd<'id, Id, D, B>>;
-type FailedTerminal<'id, Id, D, const B: usize> =
-    oer_memory::OnceValue<owned::OwnedTerminal<'id, Id, D, B>>;
+type Cmd<'id, Id, D, const B: usize, O: Observations> = driver::Command<'id, Id, D, B, O>;
+type Msg<'id, Id, D, const B: usize, O: Observations> = owned::OwnedEvent<'id, Id, D, B, O>;
+type FailedCommand<'id, Id, D, const B: usize, O: Observations> =
+    oer_memory::OnceValue<Cmd<'id, Id, D, B, O>>;
+type FailedTerminal<'id, Id, D, const B: usize, O: Observations> =
+    oer_memory::OnceValue<owned::OwnedTerminal<'id, Id, D, B, O>>;
 
 // Keep the ownership-preserving failure path shared by P1 and P2 callers.
 // It never extracts the retained owner through a shared reference.
 #[inline(never)]
-pub(super) fn retain_terminal<'id, Id: SlotIdentity, D: Device<B>, const B: usize>(
-    cell: &FailedTerminal<'id, Id, D, B>,
-    terminal: owned::OwnedTerminal<'id, Id, D, B>,
+pub(super) fn retain_terminal<
+    'id,
+    Id: SlotIdentity,
+    D: Device<B>,
+    const B: usize,
+    O: Observations,
+>(
+    cell: &FailedTerminal<'id, Id, D, B, O>,
+    terminal: owned::OwnedTerminal<'id, Id, D, B, O>,
 ) {
     // The first failed terminal already poisoned the installation; a later
     // one stays quarantined with it.
@@ -55,15 +62,16 @@ impl<T, const N: usize> Outgoing<'_, T, N> {
     }
 }
 
-pub(super) struct HeldBacking<'id, Id: SlotIdentity, D: Device<B>, const B: usize> {
+pub(super) struct HeldBacking<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
+{
     pub(super) storage: Prepared<&'static PortStorage<D, B>>,
     pub(super) commands: oer_memory::AffineSpscQueue<
-        driver::Command<'id, Id, D, B>,
+        driver::Command<'id, Id, D, B, O>,
         COMMANDS,
         oer_memory::CompactSpscCursor,
     >,
     pub(super) events: oer_memory::AffineSpscQueue<
-        owned::OwnedEvent<'id, Id, D, B>,
+        owned::OwnedEvent<'id, Id, D, B, O>,
         { TERMINAL_CAPACITY + TX_TICKETS },
         oer_memory::CompactSpscCursor,
     >,
@@ -73,22 +81,24 @@ pub(super) struct HeldBacking<'id, Id: SlotIdentity, D: Device<B>, const B: usiz
         TX_TICKETS,
         oer_memory::CompactSpscCursor,
     >,
-    pub(super) failed_command: oer_memory::OnceValue<driver::Command<'id, Id, D, B>>,
-    pub(super) failed_terminal: oer_memory::OnceValue<owned::OwnedTerminal<'id, Id, D, B>>,
+    pub(super) failed_command: oer_memory::OnceValue<driver::Command<'id, Id, D, B, O>>,
+    pub(super) failed_terminal: oer_memory::OnceValue<owned::OwnedTerminal<'id, Id, D, B, O>>,
     pub(super) gate: Prepared<GateIssuer<'id, Part<Id, 1>>>,
     pub(super) frontend_identity: Cell<u64>,
     pub(super) clock_replies: oer_memory::AffineSpscQueue<ClockAnswer, 1, CompactSpscCursor>,
     pub(super) clock_use: Cell<ClockUse>,
 }
-impl<Id: SlotIdentity, D: Device<B>, const B: usize> core::ops::Deref
-    for HeldBacking<'_, Id, D, B>
+impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> core::ops::Deref
+    for HeldBacking<'_, Id, D, B, O>
 {
     type Target = settings::Settings;
     fn deref(&self) -> &Self::Target {
         &self.storage.shared.settings
     }
 }
-impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> HeldBacking<'id, Id, D, B> {
+impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
+    HeldBacking<'id, Id, D, B, O>
+{
     pub(super) const fn vacant() -> Self {
         Self {
             storage: Prepared::vacant(),
@@ -148,23 +158,27 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> HeldBacking<'id, Id, D
     }
 }
 
-pub(super) struct Held<'s, 'id, Id: SlotIdentity, D: Device<B>, const B: usize> {
+pub(super) struct Held<'s, 'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> {
     pub(super) storage: &'static PortStorage<D, B>,
-    pub(super) commands: Incoming<'s, Cmd<'id, Id, D, B>, COMMANDS>,
-    pub(super) events: Outgoing<'s, Msg<'id, Id, D, B>, { TERMINAL_CAPACITY + TX_TICKETS }>,
+    pub(super) commands: Incoming<'s, Cmd<'id, Id, D, B, O>, COMMANDS>,
+    pub(super) events: Outgoing<'s, Msg<'id, Id, D, B, O>, { TERMINAL_CAPACITY + TX_TICKETS }>,
     pub(super) recycled: Incoming<'s, ReceiveBuffer<'id, Id, D::Receive>, TX_TICKETS>,
     pub(super) rx_out: &'s Cell<usize>,
     pub(super) gate: &'s Prepared<GateIssuer<'id, Part<Id, 1>>>,
-    pub(super) failed_terminal: &'s FailedTerminal<'id, Id, D, B>,
+    pub(super) failed_terminal: &'s FailedTerminal<'id, Id, D, B, O>,
     pub(super) clock_replies: Outgoing<'s, ClockAnswer, 1>,
 }
-impl<Id: SlotIdentity, D: Device<B>, const B: usize> core::ops::Deref for Held<'_, '_, Id, D, B> {
+impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> core::ops::Deref
+    for Held<'_, '_, Id, D, B, O>
+{
     type Target = settings::Settings;
     fn deref(&self) -> &Self::Target {
         &self.storage.shared.settings
     }
 }
-impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Held<'_, 'id, Id, D, B> {
+impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
+    Held<'_, 'id, Id, D, B, O>
+{
     pub(super) fn serial(&self) -> u64 {
         let serial = self.storage.identity.get();
         match serial.checked_add(1) {
@@ -173,7 +187,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Held<'_, 'id, Id, D, B
         }
         serial
     }
-    pub(super) fn terminal(&self, terminal: owned::OwnedTerminal<'id, Id, D, B>) {
+    pub(super) fn terminal(&self, terminal: owned::OwnedTerminal<'id, Id, D, B, O>) {
         if let Err(owned::OwnedEvent::Terminal(terminal)) =
             self.events.push(owned::OwnedEvent::Terminal(terminal))
         {
@@ -187,32 +201,35 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Held<'_, 'id, Id, D, B
     }
 }
 
-pub(super) struct FrontHeld<'p, Id: SlotIdentity, D: Device<B>, const B: usize> {
+pub(super) struct FrontHeld<'p, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> {
     pub(super) storage: &'static PortSharedStorage<B>,
-    pub(super) commands: LocalSpscSender<'p, Cmd<'static, Id, D, B>, COMMANDS, CompactSpscCursor>,
+    pub(super) commands:
+        LocalSpscSender<'p, Cmd<'static, Id, D, B, O>, COMMANDS, CompactSpscCursor>,
     pub(super) events: LocalSpscReceiver<
         'p,
-        Msg<'static, Id, D, B>,
+        Msg<'static, Id, D, B, O>,
         { TERMINAL_CAPACITY + TX_TICKETS },
         CompactSpscCursor,
     >,
     pub(super) recycled:
         LocalSpscSender<'p, ReceiveBuffer<'static, Id, D::Receive>, TX_TICKETS, CompactSpscCursor>,
-    pub(super) failed_command: &'p FailedCommand<'static, Id, D, B>,
-    pub(super) failed_terminal: &'p FailedTerminal<'static, Id, D, B>,
+    pub(super) failed_command: &'p FailedCommand<'static, Id, D, B, O>,
+    pub(super) failed_terminal: &'p FailedTerminal<'static, Id, D, B, O>,
     pub(super) gate: &'p Prepared<GateIssuer<'static, Part<Id, 1>>>,
     pub(super) identity: &'p Cell<u64>,
     pub(super) timer: D::Timer,
     pub(super) clock_replies: LocalSpscReceiver<'p, ClockAnswer, 1, CompactSpscCursor>,
     pub(super) clock_use: &'p Cell<ClockUse>,
 }
-impl<Id: SlotIdentity, D: Device<B>, const B: usize> core::ops::Deref for FrontHeld<'_, Id, D, B> {
+impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> core::ops::Deref
+    for FrontHeld<'_, Id, D, B, O>
+{
     type Target = settings::Settings;
     fn deref(&self) -> &Self::Target {
         &self.storage.settings
     }
 }
-impl<Id: SlotIdentity, D: Device<B>, const B: usize> FrontHeld<'_, Id, D, B> {
+impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> FrontHeld<'_, Id, D, B, O> {
     pub(super) fn serial(&self) -> u64 {
         let serial = self.identity.get();
         match serial.checked_add(1) {
@@ -221,7 +238,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> FrontHeld<'_, Id, D, B> {
         }
         serial
     }
-    pub(super) fn command(&self, command: Cmd<'static, Id, D, B>) {
+    pub(super) fn command(&self, command: Cmd<'static, Id, D, B, O>) {
         if let Err(error) = self.commands.try_send(command) {
             // The first failed command already poisoned the installation; a
             // later one stays quarantined with it.
@@ -242,7 +259,7 @@ impl Drop for ClockGuard<'_> {
         }
     }
 }
-impl<Id: SlotIdentity, D: Device<B>, const B: usize> FrontHeld<'_, Id, D, B> {
+impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> FrontHeld<'_, Id, D, B, O> {
     pub(super) async fn now(&self) -> radio::PortResult<Ieee80211Instant, ClockError, Fault> {
         self.storage.check()?;
         if self.clock_use.get() == ClockUse::Cancelled && self.clock_replies.try_receive().is_ok() {

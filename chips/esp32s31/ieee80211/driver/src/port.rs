@@ -55,6 +55,7 @@ pub use buffer::*;
 pub use keys::{GroupKey, KeyIdentity, PairwiseKey, PortKeys};
 mod loan;
 mod owned;
+pub use crate::lower_mac::{ContentionDraw, Observations};
 pub use phase::{Esp32s31Interface, Esp32s31Phase, Esp32s31Setup};
 
 /// Shared admission capacity across the four access categories.
@@ -206,6 +207,9 @@ pub struct PortStorage<D: 'static, const B: usize> {
     shared: &'static mut PortSharedStorage<B>,
     identity: Cell<u64>,
     expired: Cell<u32>,
+    /// The station and AP tables the driver last installed in its policy.
+    #[cfg(test)]
+    installed_edca: [Cell<Option<EdcaParameterSet>>; 2],
 }
 
 /// Caller-placed cross-context state, with no device, Cell, RefCell or shared
@@ -229,7 +233,7 @@ pub struct PortSharedStorage<const B: usize> {
     rolled_back: oer_memory::OnceValue<(u8, u8, bool)>,
 }
 #[cfg(test)]
-impl<Id: SlotIdentity, D: Device<B>, const B: usize> Esp32s31Backend<Id, D, B> {
+impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> Esp32s31Backend<Id, D, B, O> {
     /// The installation's storage, readable after the backend is registered.
     pub(crate) fn storage_for_test(&self) -> &'static PortStorage<D, B> {
         self.storage
@@ -255,6 +259,10 @@ impl<D: Device<B>, const B: usize> PortStorage<D, B> {
     pub(crate) fn rolled_back(&self) -> Option<(u8, u8, bool)> {
         self.shared.rolled_back.get()
     }
+    /// The station and AP tables the driver last installed.
+    pub(crate) fn installed_edca(&self) -> [Option<EdcaParameterSet>; 2] {
+        [self.installed_edca[0].get(), self.installed_edca[1].get()]
+    }
 }
 impl<D: Device<B>, const B: usize> PortStorage<D, B> {
     // Keep storage construction outside the install future's poll frame.
@@ -265,6 +273,8 @@ impl<D: Device<B>, const B: usize> PortStorage<D, B> {
             shared,
             identity: Cell::new(1),
             expired: Cell::new(0),
+            #[cfg(test)]
+            installed_edca: [const { Cell::new(None) }; 2],
         }
     }
     fn poison(&self, cause: Fault) {
@@ -327,41 +337,57 @@ impl<const B: usize> Default for PortSharedStorage<B> {
 }
 
 /// The complete construction resources; no DMA storage lives inline here.
-pub struct PortParts<D: Device<B>, const B: usize> {
+pub struct PortParts<D: Device<B>, const B: usize, O: Observations> {
     pub storage: &'static mut PortStorage<D, B>,
     pub transmitter: OrdinaryTxIdleOwner<'static, D::Power, D::Entropy, D::Timer, B>,
     pub buffers: [Pin<&'static mut TxSlot<B>>; TX_TICKETS],
     pub config: LowerMacConfig,
     pub access_point_address: IndividualAddress,
     pub coex: &'static D::Coex,
+    /// The P2 driver's receiver of its own publication observations; `()`
+    /// keeps nothing and builds nothing.
+    pub observations: O,
 }
 
-pub struct Esp32s31Backend<Id: SlotIdentity, D: Device<B>, const B: usize> {
+pub struct Esp32s31Backend<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> {
     storage: &'static PortStorage<D, B>,
-    state: BackendState<D, B>,
+    state: BackendState<D, B, O>,
     channel: Channel,
     addresses: [IndividualAddress; 2],
     timer: D::Timer,
     config: LowerMacConfig,
     coex: &'static D::Coex,
-    identity: PhantomData<fn(Id) -> Id>,
+    identity: PhantomData<fn(Id) -> (Id, O)>,
 }
-struct Initial<D: Device<B>, const B: usize> {
+struct Initial<D: Device<B>, const B: usize, O: Observations> {
     transmitter: OrdinaryTxIdleOwner<'static, D::Power, D::Entropy, D::Timer, B>,
+    observations: O,
     config: LowerMacConfig,
     coex: &'static D::Coex,
 }
-enum BackendState<D: Device<B>, const B: usize> {
-    Initial(Option<Initial<D, B>>),
+/// What a stopped port reinstalls with: the disabled core's transmitter and
+/// the driver's observation receiver.
+type Reusable<D, const B: usize, O: Observations> = (
+    OrdinaryTxIdleOwner<
+        'static,
+        <D as Device<B>>::Power,
+        <D as Device<B>>::Entropy,
+        <D as Device<B>>::Timer,
+        B,
+    >,
+    O,
+);
+enum BackendState<D: Device<B>, const B: usize, O: Observations> {
+    Initial(Option<Initial<D, B, O>>),
     Running,
 }
-impl<Id: SlotIdentity, D: Device<B>, const B: usize> Esp32s31Backend<Id, D, B> {
+impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> Esp32s31Backend<Id, D, B, O> {
     /// Optional aggregate admission of this port implementation. Its
     /// `NoAggregate` owner is uninhabited and it implements no `AmpduPhase`.
     pub const AMPDU: Option<AmpduCapabilities> = None;
 
     #[inline(never)]
-    pub fn new(parts: PortParts<D, B>) -> Result<Self, PortParts<D, B>> {
+    pub fn new(parts: PortParts<D, B, O>) -> Result<Self, PortParts<D, B, O>> {
         let Ok(station) = IndividualAddress::for_interface(parts.config.station_address) else {
             return Err(parts);
         };
@@ -390,6 +416,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> Esp32s31Backend<Id, D, B> {
             config,
             access_point_address,
             coex,
+            observations,
         } = parts;
         for (index, slot) in buffers.into_iter().enumerate() {
             let TxSlotAccess::Free(memory) = slot.access() else {
@@ -404,6 +431,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> Esp32s31Backend<Id, D, B> {
             storage,
             state: BackendState::Initial(Some(Initial {
                 transmitter,
+                observations,
                 config,
                 coex,
             })),
@@ -418,15 +446,15 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> Esp32s31Backend<Id, D, B> {
 }
 
 /// Hardware and reusable DMA owners returned after confirmed normal stopping.
-pub struct StoppedPort<Id: SlotIdentity, D: Device<B>, const B: usize> {
+pub struct StoppedPort<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> {
     storage: &'static PortStorage<D, B>,
-    transmitter: Option<OrdinaryTxIdleOwner<'static, D::Power, D::Entropy, D::Timer, B>>,
+    reusable: Option<Reusable<D, B, O>>,
     config: LowerMacConfig,
     addresses: [IndividualAddress; 2],
     coex: &'static D::Coex,
     identity: PhantomData<fn(Id) -> Id>,
 }
-impl<Id: SlotIdentity, D: Device<B>, const B: usize> StoppedPort<Id, D, B> {
+impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> StoppedPort<Id, D, B, O> {
     pub fn expired_msdus(&self) -> u32 {
         self.storage.expired.get()
     }
@@ -439,18 +467,16 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> StoppedPort<Id, D, B> {
     /// The image supplies a distinct TSF epoch. Forgotten TX owners retain
     /// their allocations, so the previous stopped owner returns on refusal.
     #[inline(never)]
-    pub fn reinstall(mut self, tsf_epoch: u32) -> Result<Esp32s31Backend<Id, D, B>, Self> {
+    pub fn reinstall(mut self, tsf_epoch: u32) -> Result<Esp32s31Backend<Id, D, B, O>, Self> {
         if self.storage.shared.poisoned.get().is_some()
             || !self.storage.shared.returned.all_returned()
-            || self.transmitter.is_none()
             || tsf_epoch == self.config.tsf_epoch
         {
             return Err(self);
         }
-        let transmitter = self
-            .transmitter
-            .take()
-            .expect("stopped core returned its transmitter");
+        let Some((transmitter, observations)) = self.reusable.take() else {
+            return Err(self);
+        };
         self.config.tsf_epoch = tsf_epoch;
         let channel = Channel::from_wifi_channel(self.config.channel);
         let timer = self.storage.device.borrow().timer().clone();
@@ -458,6 +484,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> StoppedPort<Id, D, B> {
             storage: self.storage,
             state: BackendState::Initial(Some(Initial {
                 transmitter,
+                observations,
                 config: self.config,
                 coex: self.coex,
             })),
@@ -475,15 +502,18 @@ pub struct Tickets;
 pub struct Buffers;
 pub struct BlockAcks;
 pub struct GroupPermission<R>(PhantomData<fn() -> R>);
-pub struct Types<Id: SlotIdentity, D, const B: usize>(PhantomData<fn(Id) -> (Id, D)>);
+pub struct Types<Id: SlotIdentity, D, const B: usize, O: Observations>(
+    PhantomData<fn(Id) -> (Id, D, O)>,
+);
 
-type Single<'id, Id: SlotIdentity, D, const B: usize> = InFlight<
+type Single<'id, Id: SlotIdentity, D, const B: usize, O: Observations> = InFlight<
     <D as Device<B>>::OwnedContext<Id>,
     Slot<'id, Tickets, Part<Id, 2>>,
-    Mpdu<'id, Id, D, B>,
+    Mpdu<'id, Id, D, B, O>,
 >;
-type Event<'id, Id, D, const B: usize> = LowerMacEvent<'id, Types<Id, D, B>>;
-type Terminal<'id, Id: SlotIdentity, D, const B: usize> = LowerMacTerminal<'id, Types<Id, D, B>>;
+type Event<'id, Id, D, const B: usize, O: Observations> = LowerMacEvent<'id, Types<Id, D, B, O>>;
+type Terminal<'id, Id: SlotIdentity, D, const B: usize, O: Observations> =
+    LowerMacTerminal<'id, Types<Id, D, B, O>>;
 
 mod handoff;
 use handoff::{FrontHeld, Held, HeldBacking, Incoming, Outgoing};
@@ -535,8 +565,8 @@ impl AckSnr for Ack {
     }
 }
 
-impl<Id: SlotIdentity, D: Device<B>, const B: usize> LowerMacBackend<Id>
-    for Esp32s31Backend<Id, D, B>
+impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> LowerMacBackend<Id>
+    for Esp32s31Backend<Id, D, B, O>
 {
     type Caps = Esp32s31Caps<B>;
     const TX_QUEUE_DEPTH: core::num::NonZeroU8 =

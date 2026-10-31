@@ -39,8 +39,8 @@ pub(in crate::lower_mac::tests::port) fn submit_ap<
     'id: 'p + 'k,
     Id: radio::SlotIdentity + 'id,
 >(
-    phase: &mut Esp32s31Phase<'p, 'id, Id, TestDevice, 512>,
-    buffer: Buffer<'id, Id, TestDevice, 512>,
+    phase: &mut Esp32s31Phase<'p, 'id, Id, TestDevice, 512, Draws>,
+    buffer: Buffer<'id, Id, TestDevice, 512, Draws>,
     ticket: radio::Slot<'id, Tickets, radio::Child<radio::Root<Id>, 2>>,
     key: Option<&'k GroupKey<'id, Id, AccessPoint>>,
 ) {

@@ -38,8 +38,8 @@ struct BarrierBody {
 const BUDGET: u8 = 2;
 
 fn retransmit<'p, 'id: 'p, Id: radio::SlotIdentity + 'id>(
-    phase: &mut Esp32s31Phase<'p, 'id, Id, TestDevice, 512>,
-    mpdu: Sent<'id, Id, TestDevice, 512>,
+    phase: &mut Esp32s31Phase<'p, 'id, Id, TestDevice, 512, Draws>,
+    mpdu: Sent<'id, Id, TestDevice, 512, Draws>,
     ticket: radio::Slot<'id, Tickets, radio::Child<radio::Root<Id>, 2>>,
 ) {
     let rate = phase
@@ -111,20 +111,26 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for BarrierBody {
             // Events the backend delivered before the fixture asked: each
             // probe that finds one keeps it for the verifier.
             let mut early = Vec::new();
-            let snapshot =
-                async |early: &mut Vec<_>,
-                       phase: &mut Esp32s31Phase<'_, 'id, Id, TestDevice, 512>| {
-                    let mut event = pin!(phase.next_event());
-                    if let Poll::Ready(event) =
-                        core::future::poll_fn(|cx| Poll::Ready(event.as_mut().poll(cx))).await
-                    {
-                        early.push(event);
-                    }
-                    HeldSnapshot {
-                        publications: self.observed.borrow().publications,
-                        events: early.len(),
-                    }
-                };
+            let snapshot = async |early: &mut Vec<_>,
+                                  phase: &mut Esp32s31Phase<
+                '_,
+                'id,
+                Id,
+                TestDevice,
+                512,
+                Draws,
+            >| {
+                let mut event = pin!(phase.next_event());
+                if let Poll::Ready(event) =
+                    core::future::poll_fn(|cx| Poll::Ready(event.as_mut().poll(cx))).await
+                {
+                    early.push(event);
+                }
+                HeldSnapshot {
+                    publications: self.observed.borrow().publications,
+                    events: early.len(),
+                }
+            };
             let before_request = snapshot(&mut early, &mut phase).await;
             let mut key = Some(key);
             let mut association = Some(association);

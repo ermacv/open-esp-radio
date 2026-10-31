@@ -46,6 +46,8 @@ impl Timer for TestTimer {
 
 #[derive(Default)]
 struct Observed {
+    /// What the P2 driver reported at each publication's contention draw.
+    draws: Rc<RefCell<Vec<crate::lower_mac::ContentionDraw>>>,
     check_context: bool,
     context: u8,
     device_polls: usize,
@@ -93,6 +95,8 @@ struct Observed {
     cut_calls: usize,
     resumed_cuts: usize,
     backoffs: Vec<u16>,
+    /// Each legacy publication program's AIFSN, in publication order.
+    aifsns: Vec<u8>,
     received: std::collections::VecDeque<TestReceive>,
     continuous_rx: bool,
     rx_continuation: Option<Instant>,
@@ -343,6 +347,12 @@ impl Device<512> for TestDevice {
             .iter()
             .map(|(_, program)| program.contention_window())
             .collect();
+        self.observed.borrow_mut().aifsns = self
+            .hardware
+            .legacy
+            .iter()
+            .map(|(_, program)| program.aifsn())
+            .collect();
         self.observed.borrow_mut().publications = publications;
         self.observed.borrow_mut().published_heads = self.hardware.heads.clone();
         self.done.resize(publications, false);
@@ -426,9 +436,17 @@ impl Device<512> for TestDevice {
         self.observed.borrow_mut().detached = true;
     }
 }
-type Backend<Id> = Esp32s31Backend<Id, TestDevice, 512>;
+/// The driver's observation receiver in these tests: it keeps every
+/// contention draw in the fixture's `Observed::draws`.
+struct Draws(Rc<RefCell<Vec<crate::lower_mac::ContentionDraw>>>);
+impl oer_events::EventSink<crate::lower_mac::ContentionDraw> for Draws {
+    fn event(&mut self, draw: crate::lower_mac::ContentionDraw) {
+        self.0.borrow_mut().push(draw);
+    }
+}
+type Backend<Id> = Esp32s31Backend<Id, TestDevice, 512, Draws>;
 type Caps = Esp32s31Caps<512>;
-type Family<Id> = Types<Id, TestDevice, 512>;
+type Family<Id> = Types<Id, TestDevice, 512, Draws>;
 type Res<'id, Id> = <Backend<Id> as PortBackend<Id>>::Resources<'id>;
 
 mod abandon;
@@ -439,14 +457,35 @@ mod rx_capacity;
 
 fn installed(
     statuses: Vec<(u8, u8)>,
-) -> (PortParts<TestDevice, 512>, Rc<RefCell<Observed>>, TestTimer) {
+) -> (
+    PortParts<TestDevice, 512, Draws>,
+    Rc<RefCell<Observed>>,
+    TestTimer,
+) {
     installed_with_hardware(statuses, Hardware::default())
 }
 
 fn installed_with_hardware(
     statuses: Vec<(u8, u8)>,
     hardware: Hardware,
-) -> (PortParts<TestDevice, 512>, Rc<RefCell<Observed>>, TestTimer) {
+) -> (
+    PortParts<TestDevice, 512, Draws>,
+    Rc<RefCell<Observed>>,
+    TestTimer,
+) {
+    installed_with_entropy(statuses, hardware, entropy)
+}
+
+/// A fixture whose transmitter draws its backoff from `entropy`.
+fn installed_with_entropy(
+    statuses: Vec<(u8, u8)>,
+    hardware: Hardware,
+    entropy: fn() -> u32,
+) -> (
+    PortParts<TestDevice, 512, Draws>,
+    Rc<RefCell<Observed>>,
+    TestTimer,
+) {
     let timer = TestTimer(
         Rc::new(oer_time_virtual::VirtualClock::new()),
         Rc::new(Cell::new(false)),
@@ -477,7 +516,7 @@ fn installed_with_hardware(
         slot: slot(),
         policy: crate::mac::tx::runtime::WifiTxRuntimePolicy::vendor_defaults(),
         power: Power,
-        entropy: entropy as fn() -> u32,
+        entropy,
         timer: timer.clone(),
     })
     .into_idle()
@@ -495,6 +534,7 @@ fn installed_with_hardware(
         },
         access_point_address: IndividualAddress::new(ACCESS_POINT).expect("AP address"),
         coex: &RadioNine,
+        observations: Draws(observed.borrow().draws.clone()),
     };
     (parts, observed, timer)
 }
@@ -522,7 +562,10 @@ enum Report<Out> {
     Abandoned,
 }
 
-fn run_body<B, Out>(parts: PortParts<TestDevice, 512>, body: B) -> impl Future<Output = Report<Out>>
+fn run_body<B, Out>(
+    parts: PortParts<TestDevice, 512, Draws>,
+    body: B,
+) -> impl Future<Output = Report<Out>>
 where
     for<'scope> B: PortBody<radio::LocalId<'scope>, Backend<radio::LocalId<'scope>>, Output = Out>,
 {
@@ -744,7 +787,7 @@ fn port_exhausts_supplied_retry_plan_with_one_terminal() {
 /// Install the station PTK for the BSS and take the key its installation
 /// terminal returns.
 async fn installed_pairwise<'p, 'id: 'p, Id: radio::SlotIdentity + 'id>(
-    phase: &mut Esp32s31Phase<'p, 'id, Id, TestDevice, 512>,
+    phase: &mut Esp32s31Phase<'p, 'id, Id, TestDevice, 512, Draws>,
     association: &<PortKeys<Id, Station> as KeyTypes<'id>>::Association,
     slot: <PortKeys<Id, Station> as KeyTypes<'id>>::PairwiseSlot,
     material: u8,
@@ -764,8 +807,8 @@ async fn installed_pairwise<'p, 'id: 'p, Id: radio::SlotIdentity + 'id>(
 }
 
 fn submit_mpdu<'k, 'p, 'id: 'p + 'k, Id: radio::SlotIdentity + 'id>(
-    phase: &mut Esp32s31Phase<'p, 'id, Id, TestDevice, 512>,
-    buffer: Buffer<'id, Id, TestDevice, 512>,
+    phase: &mut Esp32s31Phase<'p, 'id, Id, TestDevice, 512, Draws>,
+    buffer: Buffer<'id, Id, TestDevice, 512, Draws>,
     ticket: radio::Slot<'id, Tickets, radio::Child<radio::Root<Id>, 2>>,
     body: Option<Payload>,
     key: Option<&'k PairwiseKey<'id, Id, Station>>,
@@ -773,8 +816,8 @@ fn submit_mpdu<'k, 'p, 'id: 'p + 'k, Id: radio::SlotIdentity + 'id>(
     submit_mpdu_budget(phase, buffer, ticket, body, key, 1);
 }
 fn submit_mpdu_budget<'k, 'p, 'id: 'p + 'k, Id: radio::SlotIdentity + 'id>(
-    phase: &mut Esp32s31Phase<'p, 'id, Id, TestDevice, 512>,
-    buffer: Buffer<'id, Id, TestDevice, 512>,
+    phase: &mut Esp32s31Phase<'p, 'id, Id, TestDevice, 512, Draws>,
+    buffer: Buffer<'id, Id, TestDevice, 512, Draws>,
     ticket: radio::Slot<'id, Tickets, radio::Child<radio::Root<Id>, 2>>,
     body: Option<Payload>,
     key: Option<&'k PairwiseKey<'id, Id, Station>>,
@@ -1482,7 +1525,7 @@ fn frontend_channel_setting_survives_normal_stop_and_reinstall() {
 }
 
 async fn reinstalled<First, Second, A, B>(
-    parts: PortParts<TestDevice, 512>,
+    parts: PortParts<TestDevice, 512, Draws>,
     first: First,
     second: Second,
 ) -> (A, B)

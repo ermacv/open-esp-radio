@@ -6,6 +6,7 @@ use super::*;
 use oer_ieee80211_testing_conformance::{Environment, MpduState, outcomes};
 
 mod barrier;
+mod edca;
 mod group_keys;
 mod interface_commands;
 mod msdu_age;

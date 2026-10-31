@@ -129,7 +129,25 @@ use oer_ieee80211_wire::frame::{FrameControlFields, FrameType};
 use core::pin::Pin;
 use oer_radio_port::{PoolPath, Root};
 
+use oer_events::{EventSink, report};
 use oer_time::Clock;
+
+/// The contention a publication selected: the head's VIF and access
+/// category, the complete record it drew from, the current window including
+/// retry expansion, and the drawn backoff. Values only.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ContentionDraw {
+    pub role: VifRole,
+    pub category: WmmAccessCategory,
+    pub parameters: oer_ieee80211_contracts_port::EdcaAcParameters,
+    pub window_slots: u16,
+    pub backoff_slots: u16,
+}
+
+/// A receiver of the publication observations the S31 driver reports; it
+/// lives in the driver's static queues from preparation to retirement.
+pub trait Observations: EventSink<ContentionDraw> + 'static {}
+impl<O: EventSink<ContentionDraw> + 'static> Observations for O {}
 
 use crate::mac::tsf_relation::TsfTimingError;
 use oer_esp32s31_hal::types::{MacPti, StaTbttSchedule};
@@ -1018,12 +1036,29 @@ where
 
     /// Draw for the head frame of `access_category`, using its VIF's record
     /// and the AC queue's single contention state. The backend calls this
-    /// at publication and carries the draw into the single-attempt values.
-    pub fn draw_backoff(&mut self, role: VifRole, access_category: WmmAccessCategory) -> u16 {
+    /// at publication and carries the draw into the single-attempt values;
+    /// `observations` receives the selection, built only when it is enabled.
+    pub fn draw_backoff(
+        &mut self,
+        role: VifRole,
+        access_category: WmmAccessCategory,
+        observations: &mut impl EventSink<ContentionDraw>,
+    ) -> u16 {
         let queue = LegacyTxQueue::from_access_category(access_category);
         let backoff = self.tx.contention_publication(role, queue).1;
         #[cfg(all(oer_trace, oer_debug_control))]
         crate::port::trace::contention(self.tx.policy(), role, access_category, backoff);
+        report(observations, || {
+            let (parameters, window_slots) =
+                self.tx.policy().contention_record(role, access_category);
+            ContentionDraw {
+                role,
+                category: access_category,
+                parameters,
+                window_slots,
+                backoff_slots: backoff,
+            }
+        });
         backoff
     }
     #[inline(never)]

@@ -190,6 +190,11 @@ impl EdcaBackoffState {
         self.contention.cw_exponent()
     }
 
+    /// The current contention window in slots, including retry expansion.
+    pub const fn current_window(self) -> u16 {
+        self.contention.cw()
+    }
+
     /// Install a new parameter set while retaining a still-valid current CW.
     pub fn reconfigure(&mut self, parameters: EdcaContentionParameters) {
         // SOURCE: complete `libpp[lmac.o]::lmacSetAcParam`.

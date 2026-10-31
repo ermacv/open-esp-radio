@@ -3,12 +3,12 @@ use super::*;
 #[cfg(oer_debug_control)]
 use oer_ieee80211_wire::qos::WmmAccessCategory;
 
-pub struct Esp32s31Setup<'a, 'id, Id: SlotIdentity, D: Device<B>, const B: usize> {
-    pub(super) loan: BodyLoan<'id, Id, Esp32s31Backend<Id, D, B>>,
-    pub(super) held: &'a FrontHeld<'id, Id, D, B>,
+pub struct Esp32s31Setup<'a, 'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> {
+    pub(super) loan: BodyLoan<'id, Id, Esp32s31Backend<Id, D, B, O>>,
+    pub(super) held: &'a FrontHeld<'id, Id, D, B, O>,
 }
-impl<Id: SlotIdentity, D: Device<B>, const B: usize> LowerMacSetup
-    for Esp32s31Setup<'_, '_, Id, D, B>
+impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> LowerMacSetup
+    for Esp32s31Setup<'_, '_, Id, D, B, O>
 {
     type Caps = Esp32s31Caps<B>;
     fn set_channel(&mut self, channel: SupportedChannel<Self::Caps>) {
@@ -19,13 +19,15 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> LowerMacSetup
     }
 }
 
-pub struct Esp32s31Phase<'p, 'id, Id: SlotIdentity, D: Device<B>, const B: usize> {
-    pub(super) loan: BodyLoan<'id, Id, Esp32s31Backend<Id, D, B>>,
-    pub(super) held: &'p FrontHeld<'id, Id, D, B>,
+pub struct Esp32s31Phase<'p, 'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> {
+    pub(super) loan: BodyLoan<'id, Id, Esp32s31Backend<Id, D, B, O>>,
+    pub(super) held: &'p FrontHeld<'id, Id, D, B, O>,
     pub(super) addresses: [IndividualAddress; 2],
 }
 #[cfg(oer_debug_control)]
-impl<Id: SlotIdentity, D: Device<B>, const B: usize> Esp32s31Phase<'_, '_, Id, D, B> {
+impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
+    Esp32s31Phase<'_, '_, Id, D, B, O>
+{
     /// Reject the next GTK replacement's first publication. Rollback writes
     /// still reach the actual hardware. Only diagnostic images expose this.
     pub fn debug_reject_group_replacement(&mut self) {
@@ -52,10 +54,10 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> Esp32s31Phase<'_, '_, Id, D
         self.held.storage.driver.wake();
     }
 }
-impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize> radio::PortPhase
-    for Esp32s31Phase<'_, 'id, Id, D, B>
+impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations> radio::PortPhase
+    for Esp32s31Phase<'_, 'id, Id, D, B, O>
 {
-    type Event = Event<'id, Id, D, B>;
+    type Event = Event<'id, Id, D, B, O>;
     type Fault = Fault;
     fn next_event(
         &mut self,
@@ -76,17 +78,17 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize> radio::PortPhase
         })
     }
 }
-impl<'p, 'id: 'p, Id: SlotIdentity + 'id, D: Device<B>, const B: usize> LowerMacPhase<'p, 'id>
-    for Esp32s31Phase<'p, 'id, Id, D, B>
+impl<'p, 'id: 'p, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
+    LowerMacPhase<'p, 'id> for Esp32s31Phase<'p, 'id, Id, D, B, O>
 {
     type Caps = Esp32s31Caps<B>;
-    type Types = Types<Id, D, B>;
+    type Types = Types<Id, D, B, O>;
     type Station<'v>
-        = Esp32s31Interface<'p, 'v, 'id, Id, D, B, Station>
+        = Esp32s31Interface<'p, 'v, 'id, Id, D, B, O, Station>
     where
         Self: 'v;
     type AccessPoint<'v>
-        = Esp32s31Interface<'p, 'v, 'id, Id, D, B, AccessPoint>
+        = Esp32s31Interface<'p, 'v, 'id, Id, D, B, O, AccessPoint>
     where
         Self: 'v;
     fn channel(&self) -> Channel {
@@ -131,21 +133,30 @@ impl<'p, 'id: 'p, Id: SlotIdentity + 'id, D: Device<B>, const B: usize> LowerMac
     }
 }
 
-pub struct Esp32s31Interface<'p, 'v, 'id, Id: SlotIdentity, D: Device<B>, const B: usize, R> {
-    loan: BodyLoan<'id, Id, Esp32s31Backend<Id, D, B>>,
-    held: &'v FrontHeld<'id, Id, D, B>,
+pub struct Esp32s31Interface<
+    'p,
+    'v,
+    'id,
+    Id: SlotIdentity,
+    D: Device<B>,
+    const B: usize,
+    O: Observations,
+    R,
+> {
+    loan: BodyLoan<'id, Id, Esp32s31Backend<Id, D, B, O>>,
+    held: &'v FrontHeld<'id, Id, D, B, O>,
     address: IndividualAddress,
     proof: PhantomData<fn(&'p ()) -> (&'p (), R)>,
 }
 
-impl<'p, 'v, 'id: 'p, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, R>
-    InterfacePhase<'p, 'id> for Esp32s31Interface<'p, 'v, 'id, Id, D, B, R>
+impl<'p, 'v, 'id: 'p, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations, R>
+    InterfacePhase<'p, 'id> for Esp32s31Interface<'p, 'v, 'id, Id, D, B, O, R>
 where
-    R: Role<'id, Id> + RoleKeys<'id, Types<Id, D, B>, Keys = PortKeys<Id, R>>,
+    R: Role<'id, Id> + RoleKeys<'id, Types<Id, D, B, O>, Keys = PortKeys<Id, R>>,
     PortKeys<Id, R>: KeyTypes<'id, Identity = keys::KeyIdentity<'id, Id>>,
 {
     type Caps = Esp32s31Caps<B>;
-    type Types = Types<Id, D, B>;
+    type Types = Types<Id, D, B, O>;
     type Role = R;
     fn address(&self) -> IndividualAddress {
         self.address
@@ -272,8 +283,8 @@ where
         agreement.slot
     }
 }
-impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, R: InterfaceRole>
-    Esp32s31Interface<'_, '_, 'id, Id, D, B, R>
+impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations, R: InterfaceRole>
+    Esp32s31Interface<'_, '_, 'id, Id, D, B, O, R>
 {
     fn set_block_ack(&self, index: u8, agreement: Option<SupportedBlockAck<Esp32s31Caps<B>>>) {
         self.held.publishing.set(true);
@@ -295,8 +306,8 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, R: InterfaceRole
         self.held.storage.driver.wake();
     }
 }
-impl<'p, 'v, 'id: 'p, Id: SlotIdentity + 'id, D: Device<B>, const B: usize> StationPhase<'p, 'id>
-    for Esp32s31Interface<'p, 'v, 'id, Id, D, B, Station>
+impl<'p, 'v, 'id: 'p, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
+    StationPhase<'p, 'id> for Esp32s31Interface<'p, 'v, 'id, Id, D, B, O, Station>
 {
     fn replace_group_key(
         &mut self,
@@ -353,8 +364,8 @@ impl<'p, 'v, 'id: 'p, Id: SlotIdentity + 'id, D: Device<B>, const B: usize> Stat
         self.held.storage.driver.wake();
     }
 }
-impl<'p, 'v, 'id: 'p, Id: SlotIdentity + 'id, D: Device<B>, const B: usize>
-    AccessPointPhase<'p, 'id> for Esp32s31Interface<'p, 'v, 'id, Id, D, B, AccessPoint>
+impl<'p, 'v, 'id: 'p, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
+    AccessPointPhase<'p, 'id> for Esp32s31Interface<'p, 'v, 'id, Id, D, B, O, AccessPoint>
 {
     fn configure(
         &mut self,

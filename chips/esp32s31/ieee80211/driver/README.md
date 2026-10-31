@@ -79,16 +79,26 @@ development dependencies on the upper MAC and `oer-embassy-net`.
 - **Host conformance.** The shared suites run against this backend over the
   host device model (`lower_mac/tests/port/conformance`): single-MPDU
   outcomes, publication barriers, interface commands, single-MPDU admission
-  age, ownership Complete and Refuse with one buffer class, and the GTK
-  progress, expiry, rollback and receive-cut cases. The model holds a
-  queue's completions, injects a TX-timeout edge, rejects key writes,
-  decrypts air frames at capture against its key table and drains captured
-  hardware, DMA and interrupt frames through the RX cut. Not run: air
-  denial (no device model), aggregate and BA-window cases (no
-  `AmpduPhase`), ownership CloseGate, Disable and Poison (they expect a
-  held access category unpublished, while this port publishes an idle
-  queue's head and waits for a published one), InstallBeside and
-  SelectRetained (one station GTK slot), and EDCA draws.
+  age, ownership Complete and Refuse with one buffer class, the GTK
+  progress, expiry, rollback and receive-cut cases, and every EDCA case.
+  The model holds a queue's completions, injects a TX-timeout edge and a
+  collision, rejects key writes, decrypts air frames at capture against its
+  key table and drains captured hardware, DMA and interrupt frames through
+  the RX cut. Not run: air denial (no device model), aggregate and
+  BA-window cases (no `AmpduPhase`), ownership CloseGate, Disable and Poison
+  (they expect a held access category unpublished, while this port
+  publishes an idle queue's head and waits for a published one), and
+  InstallBeside and SelectRetained (one station GTK slot).
+- **Publication observations.** `Esp32s31Backend`'s last parameter `O` is
+  the P2 driver's observation receiver (`port::Observations`, an
+  `oer_events::EventSink<ContentionDraw>`). It arrives in `PortParts`, is
+  stored once in the driver from preparation to retirement, returns with the
+  stopped port and is lent to each contention draw, where the driver selects
+  the head's VIF record. `ContentionDraw` holds values only: role, access
+  category, the complete record, the current window and the drawn backoff.
+  The event is built only for an enabled receiver; images pass `()`. The
+  EDCA host suite checks each draw separately against the AIFSN and backoff
+  of the legacy program the driver handed the hardware.
 - **Conformance.** The hardware lower-MAC conformance image runs every case
   the backend's declared capabilities support; A-MPDU/Block Ack cases without
   `AmpduPhase` are reported as unsupported, never as model-only. The final

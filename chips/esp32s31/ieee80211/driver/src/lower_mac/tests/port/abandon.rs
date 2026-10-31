@@ -11,7 +11,11 @@ fn poll_p2<F: Future>(future: Pin<&mut F>, observed: &RefCell<Observed>) -> Poll
     observed.borrow_mut().context = 2;
     future.poll(&mut Context::from_waker(Waker::noop()))
 }
-fn fixture() -> (PortParts<TestDevice, 512>, Rc<RefCell<Observed>>, TestTimer) {
+fn fixture() -> (
+    PortParts<TestDevice, 512, Draws>,
+    Rc<RefCell<Observed>>,
+    TestTimer,
+) {
     let mut hardware = Hardware::default();
     crate::mac::crypto::install_sta_pairwise_ccmp(&mut hardware, super::super::PEER, &[7; 16])
         .expect("seed one key before the driver's first poll");

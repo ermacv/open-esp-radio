@@ -36,7 +36,7 @@ struct OwnershipBody {
 
 /// An individual data frame; a refused layout leaves no room for the body.
 fn frame<'p, 'id: 'p, Id: radio::SlotIdentity + 'id>(
-    phase: &Esp32s31Phase<'p, 'id, Id, TestDevice, 512>,
+    phase: &Esp32s31Phase<'p, 'id, Id, TestDevice, 512, Draws>,
     refuse: bool,
 ) -> ClassFrame<'p, 'id, BufferClass<512>, Caps> {
     let rate = phase
@@ -179,42 +179,45 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for OwnershipBody {
                 }
             }
             if self.scenario == Scenario::Complete {
-                let mut take = async |phase: &mut Esp32s31Phase<'_, 'id, Id, TestDevice, 512>| {
-                    let Ok(Ok(LowerMacEvent::Terminal(LowerMacTerminal::TxCompleted(
-                        TxCompleted::Single(completed),
-                    )))) = phase.next_event().await
-                    else {
-                        panic!("a transmit terminal")
+                let mut take =
+                    async |phase: &mut Esp32s31Phase<'_, 'id, Id, TestDevice, 512, Draws>| {
+                        let Ok(Ok(LowerMacEvent::Terminal(LowerMacTerminal::TxCompleted(
+                            TxCompleted::Single(completed),
+                        )))) = phase.next_event().await
+                        else {
+                            panic!("a transmit terminal")
+                        };
+                        let returned = completed.into_parts(&mut resources.terminal_access);
+                        self.evidence.borrow_mut().push(
+                            ReturnEvidence::terminal(true, &returned.outcome).expect("evidence"),
+                        );
+                        let end = match returned.outcome {
+                            TxOutcome::Ended(SingleEnd::Delivered { .. }) => End::Ended,
+                            TxOutcome::Withdrawn(_) => End::Withdrawn,
+                            other => panic!("unexpected outcome {other:?}"),
+                        };
+                        let (buffer, body) = returned.payload.into_parts();
+                        let (index, body) = match buffer {
+                            AnyBuffer::Fresh(fresh) => (fresh.index(), body),
+                            AnyBuffer::Sent(sent) => {
+                                let index = sent.index();
+                                let (_renewed, body) =
+                                    <Family<Id> as TxBufferPool<'id, BufferClass<512>>>::renew(
+                                        sent,
+                                    );
+                                (index, body)
+                            }
+                        };
+                        record(
+                            returned.context,
+                            returned.ticket.index(),
+                            index,
+                            body,
+                            end,
+                            &self.expected,
+                            &self.rows,
+                        );
                     };
-                    let returned = completed.into_parts(&mut resources.terminal_access);
-                    self.evidence
-                        .borrow_mut()
-                        .push(ReturnEvidence::terminal(true, &returned.outcome).expect("evidence"));
-                    let end = match returned.outcome {
-                        TxOutcome::Ended(SingleEnd::Delivered { .. }) => End::Ended,
-                        TxOutcome::Withdrawn(_) => End::Withdrawn,
-                        other => panic!("unexpected outcome {other:?}"),
-                    };
-                    let (buffer, body) = returned.payload.into_parts();
-                    let (index, body) = match buffer {
-                        AnyBuffer::Fresh(fresh) => (fresh.index(), body),
-                        AnyBuffer::Sent(sent) => {
-                            let index = sent.index();
-                            let (_renewed, body) =
-                                <Family<Id> as TxBufferPool<'id, BufferClass<512>>>::renew(sent);
-                            (index, body)
-                        }
-                    };
-                    record(
-                        returned.context,
-                        returned.ticket.index(),
-                        index,
-                        body,
-                        end,
-                        &self.expected,
-                        &self.rows,
-                    );
-                };
                 // Voice and Video complete while BestEffort is held.
                 for _ in 0..2 {
                     take(&mut phase).await;

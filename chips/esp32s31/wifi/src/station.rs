@@ -155,7 +155,9 @@ impl<W: Binding, Id: SlotIdentity> StationPort for StationComposition<W, Id> {
         }
         event
     }
-    fn tx_buffer<'id>(buffer: port::AnyBuffer<'id, Id, Device<W>, TX>) -> StationTxBuffer<'id, Self>
+    fn tx_buffer<'id>(
+        buffer: port::AnyBuffer<'id, Id, Device<W>, TX, ()>,
+    ) -> StationTxBuffer<'id, Self>
     where
         Self: 'id,
         Id: 'id,

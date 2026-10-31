@@ -60,12 +60,18 @@ pub(super) enum OwnedTsfPermission<'o, Id: SlotIdentity> {
     Station(TsfPermission<'o, Station, Part<Id, 8>>),
     AccessPoint(TsfPermission<'o, AccessPoint, Part<Id, 9>>),
 }
-pub(super) enum OwnedTxCompleted<'o, Id: SlotIdentity, D: Device<B>, const B: usize> {
+pub(super) enum OwnedTxCompleted<
+    'o,
+    Id: SlotIdentity,
+    D: Device<B>,
+    const B: usize,
+    O: Observations,
+> {
     Single(
         Completed<
             D::OwnedContext<Id>,
             Slot<'o, Tickets, Part<Id, 2>>,
-            Mpdu<'o, Id, D, B>,
+            Mpdu<'o, Id, D, B, O>,
             SingleOutcome<Ack, Infallible>,
         >,
     ),
@@ -73,13 +79,13 @@ pub(super) enum OwnedTxCompleted<'o, Id: SlotIdentity, D: Device<B>, const B: us
         Completed<
             D::OwnedContext<Id>,
             Slot<'o, Tickets, Part<Id, 2>>,
-            NoAggregatePayload<'o, Id, D, B>,
+            NoAggregatePayload<'o, Id, D, B, O>,
             AggregateOutcome<Ack, Infallible>,
         >,
     ),
 }
-pub(super) enum OwnedTerminal<'o, Id: SlotIdentity, D: Device<B>, const B: usize> {
-    TxCompleted(OwnedTxCompleted<'o, Id, D, B>),
+pub(super) enum OwnedTerminal<'o, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> {
+    TxCompleted(OwnedTxCompleted<'o, Id, D, B, O>),
     TsfSampled {
         sample: TsfSample,
         permission: OwnedTsfPermission<'o, Id>,
@@ -98,8 +104,8 @@ pub(super) enum OwnedTerminal<'o, Id: SlotIdentity, D: Device<B>, const B: usize
     GroupKeyInstalled(OwnedInstalledGroup<'o, Id>),
     PairwiseKeyInstalled(OwnedInstalledPairwise<'o, Id>),
 }
-pub(super) enum OwnedEvent<'o, Id: SlotIdentity, D: Device<B>, const B: usize> {
-    Terminal(OwnedTerminal<'o, Id, D, B>),
+pub(super) enum OwnedEvent<'o, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> {
+    Terminal(OwnedTerminal<'o, Id, D, B, O>),
     Received {
         frame: ReceiveBuffer<'o, Id, D::Receive>,
         meta: Esp32s31RxMeta,
@@ -107,10 +113,10 @@ pub(super) enum OwnedEvent<'o, Id: SlotIdentity, D: Device<B>, const B: usize> {
     Tbtt(TbttEvent),
 }
 impl<Id: SlotIdentity, D: Device<B>, const B: usize> OwnedConfigured<'static, Id, D, B> {
-    pub(super) fn lend<'p>(
+    pub(super) fn lend<'p, O: Observations>(
         self,
-        loan: &BodyLoan<'p, Id, Esp32s31Backend<Id, D, B>>,
-    ) -> Configured<'p, Types<Id, D, B>>
+        loan: &BodyLoan<'p, Id, Esp32s31Backend<Id, D, B, O>>,
+    ) -> Configured<'p, Types<Id, D, B, O>>
     where
         Id: 'p,
     {
@@ -119,9 +125,9 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> OwnedConfigured<'static, Id
             Self::AccessPoint(p) => Configured::AccessPoint(p.lend(loan)),
         }
     }
-    pub(super) fn retain<'p>(
-        p: Configured<'p, Types<Id, D, B>>,
-        loan: &BodyLoan<'p, Id, Esp32s31Backend<Id, D, B>>,
+    pub(super) fn retain<'p, O: Observations>(
+        p: Configured<'p, Types<Id, D, B, O>>,
+        loan: &BodyLoan<'p, Id, Esp32s31Backend<Id, D, B, O>>,
     ) -> Self
     where
         Id: 'p,
@@ -133,10 +139,10 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> OwnedConfigured<'static, Id
     }
 }
 impl<Id: SlotIdentity> OwnedRemoved<'static, Id> {
-    fn lend<'p, D: Device<B>, const B: usize>(
+    fn lend<'p, D: Device<B>, const B: usize, O: Observations>(
         self,
-        loan: &BodyLoan<'p, Id, Esp32s31Backend<Id, D, B>>,
-    ) -> Removed<'p, Types<Id, D, B>>
+        loan: &BodyLoan<'p, Id, Esp32s31Backend<Id, D, B, O>>,
+    ) -> Removed<'p, Types<Id, D, B, O>>
     where
         Id: 'p,
     {
@@ -163,9 +169,9 @@ impl<Id: SlotIdentity> OwnedRemoved<'static, Id> {
             }),
         }
     }
-    fn retain<'p, D: Device<B>, const B: usize>(
-        r: Removed<'p, Types<Id, D, B>>,
-        loan: &BodyLoan<'p, Id, Esp32s31Backend<Id, D, B>>,
+    fn retain<'p, D: Device<B>, const B: usize, O: Observations>(
+        r: Removed<'p, Types<Id, D, B, O>>,
+        loan: &BodyLoan<'p, Id, Esp32s31Backend<Id, D, B, O>>,
     ) -> Self
     where
         Id: 'p,
@@ -195,10 +201,10 @@ impl<Id: SlotIdentity> OwnedRemoved<'static, Id> {
     }
 }
 impl<Id: SlotIdentity> OwnedInstalledGroup<'static, Id> {
-    fn lend<'p, D: Device<B>, const B: usize>(
+    fn lend<'p, D: Device<B>, const B: usize, O: Observations>(
         self,
-        loan: &BodyLoan<'p, Id, Esp32s31Backend<Id, D, B>>,
-    ) -> InstalledGroup<'p, Types<Id, D, B>>
+        loan: &BodyLoan<'p, Id, Esp32s31Backend<Id, D, B, O>>,
+    ) -> InstalledGroup<'p, Types<Id, D, B, O>>
     where
         Id: 'p,
     {
@@ -213,9 +219,9 @@ impl<Id: SlotIdentity> OwnedInstalledGroup<'static, Id> {
             },
         }
     }
-    fn retain<'p, D: Device<B>, const B: usize>(
-        g: InstalledGroup<'p, Types<Id, D, B>>,
-        loan: &BodyLoan<'p, Id, Esp32s31Backend<Id, D, B>>,
+    fn retain<'p, D: Device<B>, const B: usize, O: Observations>(
+        g: InstalledGroup<'p, Types<Id, D, B, O>>,
+        loan: &BodyLoan<'p, Id, Esp32s31Backend<Id, D, B, O>>,
     ) -> Self
     where
         Id: 'p,
@@ -232,11 +238,13 @@ impl<Id: SlotIdentity> OwnedInstalledGroup<'static, Id> {
         }
     }
 }
-impl<Id: SlotIdentity, D: Device<B>, const B: usize> OwnedTerminal<'static, Id, D, B> {
+impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
+    OwnedTerminal<'static, Id, D, B, O>
+{
     pub(super) fn lend<'p>(
         self,
-        loan: &BodyLoan<'p, Id, Esp32s31Backend<Id, D, B>>,
-    ) -> Terminal<'p, Id, D, B>
+        loan: &BodyLoan<'p, Id, Esp32s31Backend<Id, D, B, O>>,
+    ) -> Terminal<'p, Id, D, B, O>
     where
         Id: 'p,
     {
@@ -277,8 +285,8 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> OwnedTerminal<'static, Id, 
         }
     }
     pub(super) fn retain<'p>(
-        t: Terminal<'p, Id, D, B>,
-        loan: &BodyLoan<'p, Id, Esp32s31Backend<Id, D, B>>,
+        t: Terminal<'p, Id, D, B, O>,
+        loan: &BodyLoan<'p, Id, Esp32s31Backend<Id, D, B, O>>,
     ) -> Self
     where
         Id: 'p,
@@ -324,11 +332,13 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> OwnedTerminal<'static, Id, 
         }
     }
 }
-impl<Id: SlotIdentity, D: Device<B>, const B: usize> OwnedEvent<'static, Id, D, B> {
+impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
+    OwnedEvent<'static, Id, D, B, O>
+{
     pub(super) fn lend<'p>(
         self,
-        loan: &BodyLoan<'p, Id, Esp32s31Backend<Id, D, B>>,
-    ) -> Event<'p, Id, D, B>
+        loan: &BodyLoan<'p, Id, Esp32s31Backend<Id, D, B, O>>,
+    ) -> Event<'p, Id, D, B, O>
     where
         Id: 'p,
     {

@@ -62,9 +62,9 @@ type Inner<W> = RadioDevice<
     RadioExecutor,
 >;
 pub struct Device<W: Binding>(Inner<W>);
-pub type Backend<Id, W> = Esp32s31Backend<Id, Device<W>, TX>;
+pub type Backend<Id, W> = Esp32s31Backend<Id, Device<W>, TX, ()>;
 pub type Caps = Esp32s31Caps<TX>;
-pub type Family<Id, W> = Types<Id, Device<W>, TX>;
+pub type Family<Id, W> = Types<Id, Device<W>, TX, ()>;
 pub(crate) struct DriverStorage<W: Binding> {
     shared: StaticCell<PortSharedStorage<TX>>,
     storage: StaticCell<PortStorage<Device<W>, TX>>,
@@ -149,7 +149,7 @@ pub(crate) type Front<W> =
     radio::SlotFrontend<'static, <W as Binding>::Id, Backend<<W as Binding>::Id, W>>;
 pub(crate) type ReadySlot<W> = oer_memory::RequestSlot<(), Result<Front<W>, InitializationError>>;
 type Stopped<W> =
-    oer_esp32s31_ieee80211_driver::port::StoppedPort<<W as Binding>::Id, Device<W>, TX>;
+    oer_esp32s31_ieee80211_driver::port::StoppedPort<<W as Binding>::Id, Device<W>, TX, ()>;
 /// The ordinary join of a station that ended for uninstall.
 pub(crate) type Retire<W> = radio::Joined<<W as Binding>::Id>;
 pub(crate) type RetireSlot<W> =
@@ -235,7 +235,7 @@ async fn release<W: Binding>(
 async fn install<W: Binding>(
     boot: Boot<W>,
     config: Config,
-) -> Result<PortParts<Device<W>, TX>, InitializationError> {
+) -> Result<PortParts<Device<W>, TX, ()>, InitializationError> {
     let domain = RegulatoryDomain::of(
         Country::new(config.country).map_err(|_| InitializationError::Country)?,
     )
@@ -356,6 +356,7 @@ async fn install<W: Binding>(
         access_point_address: IndividualAddress::for_interface(boot.ap)
             .map_err(|_| InitializationError::Address)?,
         coex: &Coex,
+        observations: (),
     };
     Ok(parts)
 }
