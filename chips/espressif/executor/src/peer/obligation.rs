@@ -18,20 +18,21 @@
 //! the supervisor registers its waker only after proving that one of `C`'s
 //! tasks polls ([`signal::enter_task`]). So writer and reader never run at
 //! once (the executor polls one task at a time, and a context is one
-//! executor even beside another on the same hart), and the wake stays on
-//! that executor's hart. The deadline's two words still go through a
+//! executor even beside another on the same hart). The supervisor's task
+//! handle lives in a [`ContextCell`] of that context and the client wakes it
+//! through the executor's own `wake`, so the wake stays on that executor's
+//! hart and needs no waker cell. The deadline's two words still go through a
 //! [`DeadlineCell`]: a torn read is skipped, never waited for.
 //!
 //! [`signal::enter_task`]: oer_espressif_interrupt_table::signal::enter_task
 
 use core::{
-    marker::PhantomData,
     sync::atomic::{AtomicBool, AtomicU32, Ordering},
     task::Context,
 };
 
-use atomic_waker::AtomicWaker;
 use oer_espressif_interrupt_table::signal::{ContextToken, SignalExecutor};
+use oer_memory::{ContextCell, Entered};
 use oer_time::Instant;
 
 use crate::deadline_cell::DeadlineCell;
@@ -52,8 +53,8 @@ pub struct Obligations<C: SignalExecutor, const N: usize> {
     claimed: AtomicBool,
     /// Set by every write, taken by the supervisor's scan.
     changed: AtomicBool,
-    supervisor: AtomicWaker,
-    _executor: PhantomData<fn() -> C>,
+    /// The supervisor's task, which every write wakes.
+    supervisor: ContextCell<Option<C::Task>, Entered<C::Context>>,
 }
 
 impl<C: SignalExecutor, const N: usize> Obligations<C, N> {
@@ -73,8 +74,7 @@ impl<C: SignalExecutor, const N: usize> Obligations<C, N> {
             issued: AtomicU32::new(0),
             claimed: AtomicBool::new(false),
             changed: AtomicBool::new(false),
-            supervisor: AtomicWaker::new(),
-            _executor: PhantomData,
+            supervisor: ContextCell::new(None),
         }
     }
 
@@ -98,14 +98,19 @@ impl<C: SignalExecutor, const N: usize> Obligations<C, N> {
             changed: &self.changed,
             supervisor: &self.supervisor,
             channel: index,
-            _executor: PhantomData,
         })
     }
 
-    /// Register the polling task of `C`, proven by `_in`, to be woken by
-    /// the next write.
-    pub(super) fn register(&self, cx: &Context<'_>, _in: &ContextToken<C::Context>) {
-        self.supervisor.register(cx.waker());
+    /// Register the task of `C` that `cx` names, in `C`'s context proven by
+    /// `context`, to be woken by the next write; a task `C` does not poll
+    /// now is not registered.
+    pub(super) fn register(&self, cx: &Context<'_>, context: &ContextToken<C::Context>) {
+        let Ok(task) = C::current(cx, context) else {
+            return;
+        };
+        if let Some(entered) = Entered::<C::Context>::enter() {
+            let _held = self.supervisor.with(&entered, |slot| *slot = Some(task));
+        }
     }
 
     /// Whether a seat was written since the last call.
@@ -135,16 +140,12 @@ impl<C: SignalExecutor, const N: usize> Obligations<C, N> {
         Scan::Pending(earliest)
     }
 
-    /// Whether a supervisor's waker is registered now.
+    /// Whether a supervisor's task is registered now; read in `C`'s context.
     #[cfg(test)]
     pub(super) fn registered(&self) -> bool {
-        match self.supervisor.take() {
-            Some(waker) => {
-                self.supervisor.register(&waker);
-                true
-            }
-            None => false,
-        }
+        Entered::<C::Context>::enter()
+            .and_then(|entered| self.supervisor.with(&entered, |slot| slot.is_some()))
+            .unwrap_or(false)
     }
 }
 
@@ -168,9 +169,8 @@ pub(super) enum Scan {
 pub struct Watch<C: SignalExecutor> {
     seat: &'static Seat,
     changed: &'static AtomicBool,
-    supervisor: &'static AtomicWaker,
+    supervisor: &'static ContextCell<Option<C::Task>, Entered<C::Context>>,
     channel: u32,
-    _executor: PhantomData<fn() -> C>,
 }
 
 impl<C: SignalExecutor> Watch<C> {
@@ -181,21 +181,28 @@ impl<C: SignalExecutor> Watch<C> {
 
     /// Publish the posted request's `deadline`, unchanged, then wake the
     /// supervisor; only in executor `C`'s context, proven by `_in`.
-    pub(super) fn oblige(&self, deadline: Instant, _in: &ContextToken<C::Context>) {
+    pub(super) fn oblige(&self, deadline: Instant, context: &ContextToken<C::Context>) {
         self.seat.deadline.publish(deadline.as_micros());
         self.seat.posted.store(true, Ordering::Release);
-        self.notify();
+        self.notify(context);
     }
 
     /// Withdraw the obligation of an answer taken before its deadline; only
     /// in executor `C`'s context, proven by `_in`.
-    pub(super) fn discharge(&self, _in: &ContextToken<C::Context>) {
+    pub(super) fn discharge(&self, context: &ContextToken<C::Context>) {
         self.seat.posted.store(false, Ordering::Release);
-        self.notify();
+        self.notify(context);
     }
 
-    fn notify(&self) {
+    /// Mark the table changed and wake the supervisor's task, in `C`'s
+    /// context: through the executor's own `wake`, never across harts.
+    fn notify(&self, context: &ContextToken<C::Context>) {
         self.changed.store(true, Ordering::Release);
-        self.supervisor.wake();
+        let task = Entered::<C::Context>::enter()
+            .and_then(|entered| self.supervisor.with(&entered, |slot| *slot))
+            .flatten();
+        if let Some(task) = task {
+            C::wake(task, context);
+        }
     }
 }

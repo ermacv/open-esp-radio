@@ -31,7 +31,6 @@ oer-cooperate = { path = "../../../portable/cooperate" }
 oer-time = { path = "../../../portable/time" }
 bytemuck = { version = "1.25.2", default-features = false }
 oer-memory = { path = "../../../portable/memory" }
-atomic-waker = "=1.1.2"
 oer-espressif-platform-port = { path = "../platform-port" }
 oer-radio-port = { path = "../../../protocols/radio/port", optional = true }
 embassy-time-driver = { version = "0.2", features = ["tick-hz-1_000_000"], optional = true }

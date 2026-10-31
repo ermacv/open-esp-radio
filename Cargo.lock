@@ -1946,7 +1946,6 @@ version = "0.1.0"
 name = "oer-espressif-executor"
 version = "0.1.0"
 dependencies = [
- "atomic-waker",
  "bytemuck",
  "embassy-time-driver",
  "oer-cooperate",
