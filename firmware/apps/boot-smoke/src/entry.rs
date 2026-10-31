@@ -52,7 +52,7 @@ oer_espressif_executor::tasks! {
     Tasks: Executor<Esp32s31, 0> {
         rtc_watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) = feed_rtc_watchdog;
         supervise(supervisor: LivenessSupervisor) = supervise_hart1;
-        check(peers: Peers, sequence: u32) = check_hart1;
+        check(peers: Peers) = check_hart1;
     }
 }
 
@@ -215,7 +215,9 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<Port>) -> ! {
             let reset_causes = oer_esp32s31_compose::reset_causes::read(hardware.reset_cause);
             // The executor is not running yet: the early writer waits for room
             // within its budget and counts what it drops.
-            let mut diagnostics = Console::new(|bytes| {
+            // Every frame of this boot, the runtime's report of a previous
+            // fault included, takes the next number of one shared sequence.
+            let mut diagnostics = Console::shared(|bytes| {
                 if usb_serial_jtag::early_text(bytes).is_whole() {
                     Ok(())
                 } else {
@@ -303,8 +305,6 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<Port>) -> ! {
         hart: u32::from(hart1.hart()),
         sp: hart1.ready_sp(),
     });
-    // The check task's records continue this boot's frame sequence.
-    let sequence = diagnostics.next_sequence();
     let executor = Executor::<Esp32s31, 0>::new(software.line0);
     let (mut router, hart) = match adopted.enable_interrupts() {
         Ok(router) => router,
@@ -325,7 +325,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<Port>) -> ! {
             move |spawner| {
                 if Tasks::rtc_watchdog(spawner, watchdog).is_err()
                     || Tasks::supervise(spawner, supervisor).is_err()
-                    || Tasks::check(spawner, peers, sequence).is_err()
+                    || Tasks::check(spawner, peers).is_err()
                 {
                     fail(oer_diagnostics::name!("task-start"; 32));
                 }
@@ -495,7 +495,7 @@ async fn ask<Req, const B: usize>(
 /// The boot hart's check of hart 1: one request, one key unwrap on hart 1's
 /// AES and the liveness supervisor's first round, each reported, then the
 /// verdict.
-async fn check_hart1(peers: Peers, sequence: u32) {
+async fn check_hart1(peers: Peers) {
     let Peers {
         mut exchange,
         aes: mut unwrap,
@@ -552,14 +552,14 @@ async fn check_hart1(peers: Peers, sequence: u32) {
     }
     // boot-smoke runs no console driver: its last records go through the
     // early writer, within its bounded budget per record, and continue the
-    // boot console's sequence, which the host checks for loss and order.
-    let mut console = Console::starting_at(|bytes| {
+    // boot's shared sequence, which the host checks for loss and order.
+    let mut console = Console::shared(|bytes| {
         if usb_serial_jtag::early_text(bytes).is_whole() {
             Ok(())
         } else {
             Err(())
         }
-    }, sequence);
+    });
     let _ = console.event(&HartExchange {
         hart: reply.hart,
         request: reply.value,

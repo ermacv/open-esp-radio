@@ -41,7 +41,16 @@ fn next_sequence() -> u32 {
 /// the next intact record exposes the loss. There is no IRQ/task logger.
 pub struct Console<F> {
     write: F,
-    sequence: u32,
+    sequence: Sequence,
+}
+
+/// Where a console's frames take their numbers.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Sequence {
+    /// Its own count, the next number.
+    Own(u32),
+    /// This boot's shared sequence, which [`emit_note`] numbers from too.
+    Shared,
 }
 
 impl<F, E> Console<F>
@@ -49,19 +58,30 @@ where
     F: FnMut(&[u8]) -> Result<(), E>,
 {
     pub const fn new(write: F) -> Self {
-        Self { write, sequence: 0 }
+        Self {
+            write,
+            sequence: Sequence::Own(0),
+        }
     }
 
     /// A console whose first frame carries `sequence`: for a producer that
     /// keeps the sequence of its boot elsewhere.
     pub const fn starting_at(write: F, sequence: u32) -> Self {
-        Self { write, sequence }
+        Self {
+            write,
+            sequence: Sequence::Own(sequence),
+        }
     }
 
-    /// The sequence the next frame carries: a producer that continues this
-    /// boot's frames elsewhere starts there with [`Console::starting_at`].
-    pub const fn next_sequence(&self) -> u32 {
-        self.sequence
+    /// A console whose every frame takes the next number of this boot's
+    /// shared sequence: for an image whose frames also come from
+    /// [`emit_note`] (the runtime's report of a previous fault) or from
+    /// several consoles, so that the host sees one gapless sequence.
+    pub const fn shared(write: F) -> Self {
+        Self {
+            write,
+            sequence: Sequence::Shared,
+        }
     }
 
     pub fn note(&mut self, note: &Note<'_>) -> Result<(), E> {
@@ -85,8 +105,14 @@ where
     }
 
     fn begin(&mut self) -> Result<u16, E> {
-        let sequence = self.sequence;
-        self.sequence = self.sequence.wrapping_add(1);
+        let sequence = match &mut self.sequence {
+            Sequence::Own(next) => {
+                let sequence = *next;
+                *next = sequence.wrapping_add(1);
+                sequence
+            }
+            Sequence::Shared => next_sequence(),
+        };
         // Recover line framing after a partial failed write. Its consumed
         // sequence still exposes the loss to the host.
         (self.write)(b"\r\nOER-DIAG:01")?;

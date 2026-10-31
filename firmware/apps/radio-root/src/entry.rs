@@ -59,7 +59,9 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
             let _reset_causes = oer_esp32s31_compose::reset_causes::read(hardware.reset_cause);
             // The executor is not running yet: the early writer waits for room
             // within its budget and counts what it drops.
-            let mut diagnostics = Console::new(|bytes| {
+            // Every frame of this boot, the runtime's report of a previous
+            // fault included, takes the next number of one shared sequence.
+            let mut diagnostics = Console::shared(|bytes| {
                 if usb_serial_jtag::early_text(bytes).is_whole() {
                     Ok(())
                 } else {
