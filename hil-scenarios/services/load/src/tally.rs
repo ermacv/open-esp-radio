@@ -33,6 +33,16 @@ pub struct Tally<const WORDS: usize> {
 
 impl<const WORDS: usize> Default for Tally<WORDS> {
     fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<const WORDS: usize> Tally<WORDS> {
+    /// Sequence numbers the tally remembers: `0..CAPACITY`.
+    pub const CAPACITY: u64 = 64 * WORDS as u64;
+
+    /// An empty tally; constant, so a large one can start in a static.
+    pub const fn new() -> Self {
         Self {
             seen: [0; WORDS],
             datagrams: 0,
@@ -43,11 +53,17 @@ impl<const WORDS: usize> Default for Tally<WORDS> {
             highest: None,
         }
     }
-}
 
-impl<const WORDS: usize> Tally<WORDS> {
-    /// Sequence numbers the tally remembers: `0..CAPACITY`.
-    pub const CAPACITY: u64 = 64 * WORDS as u64;
+    /// Empty the tally in place, for the next run, without moving it.
+    pub fn clear(&mut self) {
+        self.seen.fill(0);
+        self.datagrams = 0;
+        self.bytes = 0;
+        self.reordered = 0;
+        self.duplicates = 0;
+        self.untracked = 0;
+        self.highest = None;
+    }
 
     /// Count the arrival of `sequence` with `bytes` of payload.
     pub fn count(&mut self, sequence: u64, bytes: u64) -> Arrival {
