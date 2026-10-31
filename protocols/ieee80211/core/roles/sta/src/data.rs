@@ -969,7 +969,10 @@ fn sized<
 }
 
 mod ethernet;
-pub use ethernet::{EthernetFrame, FrameTooLong, MAX_ETHERNET_PAYLOAD_LEN, TxMsdu};
+pub use ethernet::{
+    EthernetFrame, FrameTooLong, MAX_ETHERNET_PAYLOAD_LEN, MsduDelivery, MsduPlan,
+    PlannedCopyError, TxMsdu,
+};
 
 #[cfg(test)]
 mod tests;

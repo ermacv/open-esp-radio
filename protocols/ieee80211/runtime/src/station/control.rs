@@ -5,6 +5,7 @@ use super::contract::{Command, Notice};
 pub use operation::{Operation, OperationEnd, UnreadOperation};
 
 mod operation;
+use super::Received;
 use super::{ServiceCommand, ServiceOutput, ServiceOutputSink};
 use core::{
     cell::Cell,
@@ -14,7 +15,7 @@ use core::{
 };
 use embassy_futures::select::{Either, select};
 use oer_bridges_ieee80211_ethernet::qos::classify_wmm;
-use oer_ieee80211_core_roles_sta::data::{EthernetFrame, TxMsdu};
+use oer_ieee80211_core_roles_sta::data::TxMsdu;
 use oer_memory::{WakingSpscReceiver, WakingSpscSender};
 use oer_network_port::{LinkSnapshot, LinkState, NetDevice, TransmitError, TransmitRefused};
 use oer_sync::PriorityWaker;
@@ -452,17 +453,18 @@ impl<K, O: ServiceOutputSink<K>> ServiceOutputSink<K> for Events<'_, O> {
     }
 }
 
-/// The Wi-Fi implementation of the neutral Ethernet contract.
-pub struct Device<'c, const TX: usize, const RX: usize> {
+/// The Wi-Fi implementation of the neutral Ethernet contract. `L` is the
+/// backend's lent receive buffer ([`StationPort::LentRx`](super::StationPort::LentRx)).
+pub struct Device<'c, L, const TX: usize, const RX: usize> {
     transmit: WakingSpscSender<'c, TxMsdu, TX>,
-    receive: WakingSpscReceiver<'c, EthernetFrame, RX>,
+    receive: WakingSpscReceiver<'c, Received<L>, RX>,
     state: &'c State,
     observed: LinkSnapshot,
 }
-impl<'c, const TX: usize, const RX: usize> Device<'c, TX, RX> {
+impl<'c, L, const TX: usize, const RX: usize> Device<'c, L, TX, RX> {
     pub fn new(
         transmit: WakingSpscSender<'c, TxMsdu, TX>,
-        receive: WakingSpscReceiver<'c, EthernetFrame, RX>,
+        receive: WakingSpscReceiver<'c, Received<L>, RX>,
         state: &'c State,
     ) -> Self {
         Self {
@@ -473,8 +475,10 @@ impl<'c, const TX: usize, const RX: usize> Device<'c, TX, RX> {
         }
     }
 }
-impl<const TX: usize, const RX: usize> NetDevice for Device<'_, TX, RX> {
-    type RxFrame = EthernetFrame;
+impl<L: oer_ieee80211_contracts_port::LentRxBuffer, const TX: usize, const RX: usize> NetDevice
+    for Device<'_, L, TX, RX>
+{
+    type RxFrame = Received<L>;
     fn link(&self) -> LinkSnapshot {
         self.state.status.get().link
     }

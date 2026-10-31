@@ -20,7 +20,8 @@
 
 mod device;
 pub use device::{
-    EthernetFrame, EthernetFrameView, LinkSnapshot, NetDevice, TransmitError, TransmitRefused,
+    EthernetFrame, EthernetFrameView, FrameStorage, LentFrame, LentParts, LinkSnapshot, NetDevice,
+    ReceivedFrame, TransmitError, TransmitRefused,
 };
 
 mod flow;

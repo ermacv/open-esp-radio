@@ -231,6 +231,7 @@ impl<X: ExecutionContext + 'static, const RX: usize, const TX: usize, const GENE
     pub fn start<D: NetDevice>(
         &'static mut self,
         device: D,
+        lent: Option<&'static dyn crate::ethernet::AdoptLent<crate::ethernet::Lent<D>>>,
         interface: NetworkInterfaceId,
         address: [u8; 6],
         seed: u64,
@@ -247,7 +248,7 @@ impl<X: ExecutionContext + 'static, const RX: usize, const TX: usize, const GENE
                 Service {
                     iface,
                     runner,
-                    bridge: EthernetBridge::new(radio, device),
+                    bridge: EthernetBridge::new(radio, device, lent),
                     configuration,
                     state,
                 },
@@ -354,6 +355,7 @@ impl<X: ExecutionContext + 'static, const RX: usize, const TX: usize, D: NetDevi
         mut events: impl FnMut(StatusChanged),
         mut received: impl FnMut(EthernetFrameView<'_>),
         mut refused: impl FnMut(crate::RxEnqueueError),
+        mut copied: impl FnMut(crate::ethernet::LentCopy),
         mut transmitted: impl FnMut(EthernetFrameView<'_>),
     ) -> Result<(), Error> {
         let mut running = core::pin::pin!(self.runner.run());
@@ -368,6 +370,7 @@ impl<X: ExecutionContext + 'static, const RX: usize, const TX: usize, D: NetDevi
             &mut events,
             &mut received,
             &mut refused,
+            &mut copied,
             &mut transmitted,
         )
         .await
@@ -413,6 +416,7 @@ async fn drive<X: ExecutionContext, const RX: usize, const TX: usize, D: NetDevi
     mut events: impl FnMut(StatusChanged),
     mut received: impl FnMut(EthernetFrameView<'_>),
     mut refused: impl FnMut(crate::RxEnqueueError),
+    mut copied: impl FnMut(crate::ethernet::LentCopy),
     mut transmitted: impl FnMut(EthernetFrameView<'_>),
 ) -> Result<(), Error> {
     core::future::poll_fn(|cx| {
@@ -425,8 +429,13 @@ async fn drive<X: ExecutionContext, const RX: usize, const TX: usize, D: NetDevi
         if state.stop.get() {
             return finish(state, bridge, iface, Ok(()), &mut events);
         }
-        if let Poll::Ready(Err(_)) = bridge.poll(cx, &mut received, &mut refused, &mut transmitted)
-        {
+        if let Poll::Ready(Err(_)) = bridge.poll(
+            cx,
+            &mut received,
+            &mut refused,
+            &mut copied,
+            &mut transmitted,
+        ) {
             return finish(
                 state,
                 bridge,

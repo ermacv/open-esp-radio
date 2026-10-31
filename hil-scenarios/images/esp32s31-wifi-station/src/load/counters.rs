@@ -27,6 +27,8 @@ pub(crate) enum Bridged {
     RefusedQueue,
     /// Its length or a down link refused it.
     RefusedOther,
+    /// The station lent it in place and the bridge copied it after all.
+    Copied,
 }
 
 #[cfg_attr(
@@ -34,11 +36,12 @@ pub(crate) enum Bridged {
     allow(dead_code, reason = "only a trace build reports the bridge's frames")
 )]
 impl Bridged {
-    const ALL: [Bridged; 4] = [
+    const ALL: [Bridged; 5] = [
         Bridged::Received,
         Bridged::RefusedPool,
         Bridged::RefusedQueue,
         Bridged::RefusedOther,
+        Bridged::Copied,
     ];
 
     #[cfg(any(oer_trace, test))]
@@ -79,8 +82,8 @@ impl oer_trace::Event for BridgeFrame {
 
 /// The bridge's counts by outcome.
 #[cfg(target_arch = "riscv32")]
-static BRIDGE: [core::sync::atomic::AtomicU32; 4] =
-    [const { core::sync::atomic::AtomicU32::new(0) }; 4];
+static BRIDGE: [core::sync::atomic::AtomicU32; Bridged::ALL.len()] =
+    [const { core::sync::atomic::AtomicU32::new(0) }; Bridged::ALL.len()];
 
 /// Count `frame`; only the station work's task calls it.
 #[cfg(all(target_arch = "riscv32", oer_trace))]
@@ -99,7 +102,7 @@ pub(crate) fn observe(frame: BridgeFrame) {
 pub(crate) struct Snapshot {
     pub cycles: u64,
     pub instructions: u64,
-    pub bridge: [u32; 4],
+    pub bridge: [u32; Bridged::ALL.len()],
     pub stack_received: u32,
 }
 
@@ -134,6 +137,7 @@ pub(crate) fn window(start: &Snapshot, end: &Snapshot) -> Counters {
         bridge_refused_pool: bridge(Bridged::RefusedPool),
         bridge_refused_queue: bridge(Bridged::RefusedQueue),
         bridge_refused_other: bridge(Bridged::RefusedOther),
+        bridge_copied: bridge(Bridged::Copied),
         stack_received: end.stack_received.saturating_sub(start.stack_received),
     }
 }
@@ -148,13 +152,13 @@ mod tests {
         let start = Snapshot {
             cycles: u64::MAX - 1,
             instructions: 10,
-            bridge: [u32::MAX, 1, 2, 3],
+            bridge: [u32::MAX, 1, 2, 3, 6],
             stack_received: 5,
         };
         let end = Snapshot {
             cycles: 3,
             instructions: 25,
-            bridge: [4, 1, 7, 3],
+            bridge: [4, 1, 7, 3, 8],
             stack_received: 9,
         };
         assert_eq!(
@@ -166,6 +170,7 @@ mod tests {
                 bridge_refused_pool: 0,
                 bridge_refused_queue: 5,
                 bridge_refused_other: 0,
+                bridge_copied: 2,
                 stack_received: 4,
             }
         );
@@ -177,7 +182,7 @@ mod tests {
             let frame = BridgeFrame { outcome };
             assert_eq!(BridgeFrame::decode(frame.encode()), Some(frame));
         }
-        assert_eq!(BridgeFrame::decode([4, 0]), None);
+        assert_eq!(BridgeFrame::decode([5, 0]), None);
         assert_eq!(BridgeFrame::decode([0, 1]), None);
     }
 }

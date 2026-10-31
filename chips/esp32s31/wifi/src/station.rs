@@ -68,6 +68,7 @@ impl<W: Binding, Id: SlotIdentity> StationPort for StationComposition<W, Id> {
     where
         Self: 'id,
         Id: 'id;
+    type LentRx = crate::LentRx;
     type TerminalStorage<T> = heapless::Deque<T, { port::TERMINAL_CAPACITY }>;
     type Small = port::BufferClass<TX>;
     type Large = port::BufferClass<TX>;
@@ -298,7 +299,8 @@ type Completed<'p, 'id, W> = ServiceCompleted<
     1,
     <W as Binding>::Sink,
 >;
-type Io<'c, W> = ServiceIo<'c, Caps, Events<'static, Output<<W as Binding>::Events>>, 2, 8, 2>;
+type Io<'c, W> =
+    ServiceIo<'c, Caps, Events<'static, Output<<W as Binding>::Events>>, crate::LentRx, 2, 8, 2>;
 type Running<'s, 'c: 's, 'p: 's, 'id: 'p, W: Binding> =
     impl Future<Output = Placed<'s, Completed<'p, 'id, W>>>;
 const RX_BA_BANKS: usize = 8;

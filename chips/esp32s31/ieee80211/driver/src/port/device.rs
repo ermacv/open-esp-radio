@@ -41,6 +41,13 @@ pub trait Composition: 'static {
 
 pub type Power = crate::tx::CappedTxPowerProfile<oer_esp32s31_phy::PhyTxTargetPowerProfile>;
 
+/// The receive units of a pool of `units` the network may hold: it leaves
+/// the radio one unit per ticket, for its receive events and their
+/// reordering.
+pub const fn lent_rx(units: usize) -> usize {
+    units.saturating_sub(super::TX_TICKETS)
+}
+
 /// One retained original DMA allocation; normalization borrows it in place.
 pub struct StagedReceive<const Q: usize, const RB: usize>(NetworkRxFrame<'static, Q, RB>);
 impl<const Q: usize, const RB: usize> ReceiveUnit for StagedReceive<Q, RB> {
@@ -261,9 +268,7 @@ where
     type Timer = T;
     type Hardware = RadioAccess;
     type Receive = StagedReceive<Q, RB>;
-    // The network leaves the radio one receive event's worth of units per
-    // ticket, for its events and their reordering.
-    const LENT_RX: usize = Q.saturating_sub(super::TX_TICKETS);
+    const LENT_RX: usize = lent_rx(Q);
     type Body = C::Body;
     type OwnedContext<Id: SlotIdentity> = C::OwnedContext<Id>;
     type Context<'p, Id: SlotIdentity + 'p> = C::Context<'p, Id>;

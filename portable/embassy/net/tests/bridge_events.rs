@@ -49,6 +49,12 @@ fn allocator<const N: usize>() -> PacketBufAllocator {
     Box::leak(Box::new(PacketPool::new(storage))).allocator()
 }
 struct Frame(u8);
+impl oer_network_port::ReceivedFrame for Frame {
+    type Storage = core::convert::Infallible;
+    fn into_lent(self) -> Result<oer_network_port::LentFrame<Self::Storage>, Self> {
+        Err(self)
+    }
+}
 impl EthernetFrame for Frame {
     fn view(&self) -> Result<EthernetFrameView<'_>, FrameLengthError> {
         Ok(EthernetFrameView {
@@ -166,11 +172,12 @@ fn hil_bridge_parks_retains_credit_and_services_rx_until_tx_credit_event() {
         ready: true,
         refuse_once: true,
     }));
-    let mut bridge = EthernetBridge::new(radio, Port(state.clone(), LinkSnapshot::DOWN));
+    let mut bridge = EthernetBridge::new(radio, Port(state.clone(), LinkSnapshot::DOWN), None);
     let mut task = core::pin::pin!(core::future::poll_fn(|cx| bridge.poll(
         cx,
         |_| {},
         |_| panic!("RX refused"),
+        |_| {},
         |_| {}
     )));
     let scheduled = Arc::new(Scheduled(AtomicBool::new(true)));

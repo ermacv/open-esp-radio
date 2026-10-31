@@ -365,6 +365,7 @@ fn counters(counters: &Counters, window_us: u64) -> serde_json::Value {
             "refused_pool": counters.bridge_refused_pool,
             "refused_queue": counters.bridge_refused_queue,
             "refused_other": counters.bridge_refused_other,
+            "copied": counters.bridge_copied,
         },
         "stack_received": counters.stack_received,
         "instructions_per_stack_frame": (counters.stack_received != 0)

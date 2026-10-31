@@ -53,6 +53,12 @@ fn settle<F: Future>(
 }
 
 struct Frame;
+impl oer_network_port::ReceivedFrame for Frame {
+    type Storage = core::convert::Infallible;
+    fn into_lent(self) -> Result<oer_network_port::LentFrame<Self::Storage>, Self> {
+        Err(self)
+    }
+}
 impl EthernetFrame for Frame {
     fn view(&self) -> Result<EthernetFrameView<'_>, FrameLengthError> {
         Ok(EthernetFrameView {
@@ -161,7 +167,14 @@ fn start<X: ExecutionContext>(
     let (port, state) = port();
     let resources = Box::leak(Box::new(Resources::<X, 2, 1, 8>::new()));
     let (control, service) = resources
-        .start(port, NetworkInterfaceId::new(0), [2; 6], 1, configuration)
+        .start(
+            port,
+            None,
+            NetworkInterfaceId::new(0),
+            [2; 6],
+            1,
+            configuration,
+        )
         .unwrap_or_else(|refused| panic!("start refused: {:?}", refused.reason));
     (control, service, state)
 }
@@ -253,6 +266,7 @@ fn lease_events_expiry_and_coalesced_reconnect_keep_the_stack_and_socket() {
             Configuration::Dhcpv4,
             |cx| stack_events.poll(cx),
             |event| events.borrow_mut().push(event),
+            |_| {},
             |_| {},
             |_| {},
             |_| {},
@@ -360,6 +374,7 @@ fn tx_refusal_keeps_the_exact_owner_until_credit_and_rx_still_progresses() {
         |_| received.set(received.get().saturating_add(1)),
         |_| {},
         |_| {},
+        |_| {},
     ));
     settle(&mut task, &scheduled, &mut cx);
     port.borrow_mut().refuse_once = true;
@@ -403,7 +418,7 @@ fn public_stop_reclaims_retained_and_queued_tx_and_clears_static_configuration()
         assert!(
             service
                 .bridge
-                .poll(&mut cx, |_| {}, |_| {}, |_| {})
+                .poll(&mut cx, |_| {}, |_| {}, |_| {}, |_| {})
                 .is_pending()
         );
         assert!(iface.has_ip_addr(Ipv4Addr::from(CONFIG.address)));
@@ -416,7 +431,7 @@ fn public_stop_reclaims_retained_and_queued_tx_and_clears_static_configuration()
             assert!(
                 service
                     .bridge
-                    .poll(&mut cx, |_| {}, |_| {}, |_| {})
+                    .poll(&mut cx, |_| {}, |_| {}, |_| {}, |_| {})
                     .is_pending()
             );
         }
@@ -424,7 +439,7 @@ fn public_stop_reclaims_retained_and_queued_tx_and_clears_static_configuration()
         control.stop();
         control.stop();
         {
-            let mut task = core::pin::pin!(service.run(|_| {}, |_| {}, |_| {}, |_| {}));
+            let mut task = core::pin::pin!(service.run(|_| {}, |_| {}, |_| {}, |_| {}, |_| {}));
             assert_eq!(task.as_mut().poll(&mut cx), Poll::Ready(Ok(())));
         }
         assert!(pool.try_alloc().is_some());
@@ -433,7 +448,7 @@ fn public_stop_reclaims_retained_and_queued_tx_and_clears_static_configuration()
         assert!(service.stack().routes().is_empty());
         assert_eq!(control.status().lifecycle, Lifecycle::Stopped);
         // A terminal service can be polled again without touching the stack ABI.
-        let mut task = core::pin::pin!(service.run(|_| {}, |_| {}, |_| {}, |_| {}));
+        let mut task = core::pin::pin!(service.run(|_| {}, |_| {}, |_| {}, |_| {}, |_| {}));
         assert_eq!(task.as_mut().poll(&mut cx), Poll::Ready(Ok(())));
     }
 }
@@ -441,7 +456,7 @@ fn public_stop_reclaims_retained_and_queued_tx_and_clears_static_configuration()
 #[test]
 fn context_refusal_is_a_typed_terminal_and_does_not_poll_the_stack() {
     let (control, mut service, _) = start::<oer_memory::Never>(Configuration::Dhcpv4);
-    let mut task = core::pin::pin!(service.run(|_| {}, |_| {}, |_| {}, |_| {}));
+    let mut task = core::pin::pin!(service.run(|_| {}, |_| {}, |_| {}, |_| {}, |_| {}));
     assert_eq!(
         task.as_mut()
             .poll(&mut core::task::Context::from_waker(Waker::noop())),
@@ -466,6 +481,7 @@ fn static_status_tracks_link_events_and_stop_clears_the_real_interface() {
         &mut service.bridge,
         &iface,
         Configuration::Static(CONFIG),
+        |_| {},
         |_| {},
         |_| {},
         |_| {},
@@ -521,6 +537,7 @@ fn invalid_static_configuration_returns_the_original_device() {
         let refused = resources
             .start(
                 port,
+                None,
                 NetworkInterfaceId::new(0),
                 [2; 6],
                 1,

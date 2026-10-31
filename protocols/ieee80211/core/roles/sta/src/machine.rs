@@ -3210,7 +3210,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
         now: Instant,
         frame: &'frame [u8],
         meta: T::RxMeta,
-        mut deliver: impl FnMut(oer_ieee80211_wire::data::MsduParts<'frame>),
+        mut deliver: impl FnMut(crate::data::MsduDelivery<'frame>),
         events: &mut impl EventSink<StaEvent>,
     ) -> Result<(), StaRxError> {
         let (mut context, state) = self.transition();
@@ -4684,7 +4684,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
         now: Instant,
         frame: &'frame [u8],
         meta: T::RxMeta,
-        mut deliver: impl FnMut(oer_ieee80211_wire::data::MsduParts<'frame>),
+        mut deliver: impl FnMut(crate::data::MsduDelivery<'frame>),
         events: &mut impl EventSink<StaEvent>,
     ) -> Result<(), StaRxError> {
         use oer_ieee80211_core_upper_mac::receive::{AdmittedData, RxDropReason};
@@ -4753,7 +4753,9 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                 if !self.has_link(state) {
                     return Err(RxDropReason::NotConnected.into());
                 }
-                deliver(parts);
+                let delivery =
+                    crate::data::MsduDelivery::locate(frame, parts).ok_or(RxDropReason::Payload)?;
+                deliver(delivery);
             }
         }
         Ok(())

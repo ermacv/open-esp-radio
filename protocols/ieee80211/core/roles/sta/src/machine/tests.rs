@@ -5157,7 +5157,12 @@ fn data_receive_requires_the_live_connection_epoch() {
                 at(40),
                 &frame,
                 meta(),
-                |_| delivered += 1,
+                |delivery| {
+                    // The payload range indexes the MPDU it came in.
+                    assert_eq!(&frame[delivery.payload.clone()], b"data");
+                    assert_eq!(delivery.parts.payload, b"data");
+                    delivered += 1
+                },
                 &mut world.losses,
             )
             .unwrap();

@@ -48,8 +48,8 @@ mod block_ack;
 mod contracts;
 use oer_ieee80211_testing_model::{
     AirFrame, MODEL_RX_EVENTS, MODEL_TX_QUEUE_DEPTH, ModelAck, ModelAir, ModelAnyBuffer,
-    ModelBackend, ModelCaps24, ModelLarge, ModelPhase, ModelResources, ModelRxMeta, ModelSetup,
-    ModelSmall, ModelTypes,
+    ModelBackend, ModelCaps24, ModelLarge, ModelLentRx, ModelPhase, ModelResources, ModelRxMeta,
+    ModelSetup, ModelSmall, ModelTypes,
 };
 
 const LOCAL: [u8; 6] = [0x02, 0, 0, 0x12, 0x34, 0x56];
@@ -92,6 +92,7 @@ struct ServicePort<Id: SlotIdentity>(PhantomData<Id>);
 
 impl<Id: SlotIdentity> StationPort for ServicePort<Id> {
     type Backend = ModelBackend<Id, ModelCaps24, ServiceContexts>;
+    type LentRx = ModelLentRx;
     type Caps = ModelCaps24;
     type SlotId = Id;
     type Types<'p>
@@ -530,7 +531,9 @@ struct World<'b> {
     /// The network stack's end of the transmit queue.
     stack: RefCell<WakingSpscSender<'b, TxMsdu, 2>>,
     /// The network stack's end of the receive queue.
-    delivered: RefCell<WakingSpscReceiver<'b, EthernetFrame, 8>>,
+    delivered: RefCell<WakingSpscReceiver<'b, Received<ModelLentRx>, 8>>,
+    /// How many delivered frames the backend lent in place.
+    lent: Cell<usize>,
     /// How long the key-unwrap engine takes; zero is ready on the first poll.
     unwrap_delay: Cell<Duration>,
     /// What the key-unwrap engine did, in order.
@@ -855,7 +858,10 @@ impl Application<'_, '_, '_> {
         let delivered = self.delivered.borrow();
         let mut frames = Vec::new();
         while let Some(msdu) = delivered.try_receive() {
-            let parts = msdu.parts();
+            if matches!(msdu, Received::Lent(_)) {
+                self.lent.set(self.lent.get() + 1);
+            }
+            let parts = oer_network_port::EthernetFrame::view(&msdu).unwrap();
             let mut bytes = Vec::from(parts.destination);
             bytes.extend_from_slice(&parts.source);
             bytes.extend_from_slice(&parts.ether_type.to_be_bytes());
@@ -967,7 +973,7 @@ struct Body<'w, 'b, S, O, const GROUPS: usize> {
     world: &'w World<'b>,
     sink: PhantomData<O>,
     transmit: WakingSpscReceiver<'b, TxMsdu, 2>,
-    receive: WakingSpscSender<'b, EthernetFrame, 8>,
+    receive: WakingSpscSender<'b, Received<ModelLentRx>, 8>,
     config: TestConfig,
     script: S,
     refuse_initial_enable: bool,
@@ -1470,7 +1476,7 @@ where
             clock.clone(),
         );
         let mut transmit = WakingSpscQueue::<TxMsdu, 2>::new();
-        let mut receive = WakingSpscQueue::<EthernetFrame, 8>::new();
+        let mut receive = WakingSpscQueue::<Received<ModelLentRx>, 8>::new();
         let (stack, transmit) = transmit.split();
         let (receive, delivered) = receive.split();
         let world = World {
@@ -1488,6 +1494,7 @@ where
             restart_stopped_service: Cell::new(None),
             stack: RefCell::new(stack),
             delivered: RefCell::new(delivered),
+            lent: Cell::new(0),
             unwrap_delay: Cell::new(Duration::ZERO),
             unwraps: RefCell::new(Vec::new()),
         };
@@ -2133,6 +2140,8 @@ fn a_station_scans_joins_handshakes_carries_data_both_ways_and_disconnects() {
                 expected.extend_from_slice(&[0x08, 0x00]);
                 expected.extend_from_slice(&[0xcd; 40]);
                 assert_eq!(world.delivered().await, [expected]);
+                // Its one MSDU stays in the backend's buffer, lent in place.
+                assert_eq!(world.lent.get(), 1);
                 world
                     .air
                     .receive(&protected_data(1, source, &[0xcd; 40]), decrypted());

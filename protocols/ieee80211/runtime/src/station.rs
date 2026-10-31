@@ -93,6 +93,8 @@ pub mod contract;
 mod events;
 pub use events::{RxDrop, RxMsdusRefused, ServiceEvent, StationEvents};
 mod control;
+mod network;
+pub use network::{NetworkRx, Received, RxMsdusCopied};
 mod reconnect;
 use commands::CommandCredits;
 pub use commands::{CommandRefused, CommandTerminal, Request};
@@ -125,8 +127,8 @@ use oer_ieee80211_core_roles_sta::port::{PortDataTokens, PortStaTokens, StationP
 use oer_ieee80211_core_roles_sta::{
     data,
     data::{
-        DataInput, DataProtection, DataReturn, DataTxContext, EthernetFrame, FrameTooLong, Msdu,
-        StaData, TxMsdu,
+        DataInput, DataProtection, DataReturn, DataTxContext, EthernetFrame,
+        MAX_ETHERNET_PAYLOAD_LEN, Msdu, MsduPlan, PlannedCopyError, StaData, TxMsdu,
     },
     machine::{
         KEY_DATA_CAPACITY, KeyUnwrapId, Peer, RxBlockAckReply, StaAction, StaCallbacks, StaInput,
@@ -136,6 +138,7 @@ use oer_ieee80211_core_roles_sta::{
 use oer_ieee80211_core_upper_mac::block_ack::RxDisposition;
 use oer_ieee80211_core_upper_mac::rate_selection::{FrameRates, RateSelection};
 use oer_memory::{WakingSpscReceiver, WakingSpscSender};
+use oer_network_port::LentFrame;
 use oer_radio_port::Slot;
 use oer_radio_port::{
     Disabled, Enabled, Ended, EventEnd, FailStopRequested, Failed, Owner, PoisonedOwner,
@@ -162,6 +165,7 @@ pub trait StationPort: Sized {
             >,
             Fault = <Self::Backend as PortBackend<Self::SlotId>>::Fault,
             TxBody = core::convert::Infallible,
+            LentRx = Self::LentRx,
             Context = TxContext<
                 'id,
                 Self::Caps,
@@ -176,6 +180,9 @@ pub trait StationPort: Sized {
         Self: 'id,
         Self::Backend: 'id,
         Self::SlotId: 'id;
+    /// A received buffer the backend lends to the network, the same in
+    /// every install.
+    type LentRx: oer_ieee80211_contracts_port::LentRxBuffer;
     /// Fixed terminal custody from the backend's capacity layout.
     type TerminalStorage<T>: TerminalStorage<T>;
     /// Buffer class for station management traffic.
@@ -588,11 +595,12 @@ impl<K, F: FnMut(ServiceOutput<K>)> ServiceOutputSink<K> for F {
 /// use oer_ieee80211_runtime::station::{
 ///     Control, ControlCommand, State, ServiceCommand, ServiceIo, ServiceOutput,
 /// };
-/// use oer_ieee80211_core_roles_sta::data::{EthernetFrame, TxMsdu};
+/// use oer_ieee80211_runtime::station::Received;
+/// use oer_ieee80211_core_roles_sta::data::TxMsdu;
 /// use oer_memory::WakingSpscQueue;
 /// let commands = Channel::<NoopRawMutex, ServiceCommand<()>, 1>::new();
 /// let mut tx = WakingSpscQueue::<TxMsdu, 1>::new();
-/// let mut rx = WakingSpscQueue::<EthernetFrame, 1>::new();
+/// let mut rx = WakingSpscQueue::<Received<()>, 1>::new();
 /// let (_, transmit) = tx.split();
 /// let (receive, _) = rx.split();
 /// let mut output = |_: ServiceOutput<()>| {};
@@ -609,13 +617,13 @@ impl<K, F: FnMut(ServiceOutput<K>)> ServiceOutputSink<K> for F {
 ///
 /// ```
 /// use oer_ieee80211_runtime::station::{
-///     Control, ControlCommand, State, ServiceCommand, ServiceIo, ServiceOutput,
+///     Control, ControlCommand, Received, State, ServiceCommand, ServiceIo, ServiceOutput,
 /// };
-/// use oer_ieee80211_core_roles_sta::data::{EthernetFrame, TxMsdu};
+/// use oer_ieee80211_core_roles_sta::data::TxMsdu;
 /// use oer_memory::WakingSpscQueue;
 /// let mut commands = WakingSpscQueue::<ServiceCommand<()>, 1>::new();
 /// let mut tx = WakingSpscQueue::<TxMsdu, 1>::new();
-/// let mut rx = WakingSpscQueue::<EthernetFrame, 1>::new();
+/// let mut rx = WakingSpscQueue::<Received<()>, 1>::new();
 /// let (application, commands) = commands.split();
 /// let (_, transmit) = tx.split();
 /// let (receive, _) = rx.split();
@@ -630,6 +638,7 @@ pub struct ServiceIo<
     'c,
     K,
     O: ServiceOutputSink<K>,
+    L,
     const TX_DEPTH: usize,
     const RX_DEPTH: usize,
     const COMMAND_DEPTH: usize,
@@ -640,7 +649,7 @@ pub struct ServiceIo<
     /// The MSDUs the network stack sends.
     pub transmit: WakingSpscReceiver<'c, TxMsdu, TX_DEPTH>,
     /// The MSDUs the station received for the network stack.
-    pub receive: WakingSpscSender<'c, EthernetFrame, RX_DEPTH>,
+    pub receive: WakingSpscSender<'c, Received<L>, RX_DEPTH>,
     /// What the service tells the application.
     pub output: &'c mut O,
     /// Affine cooperative stop and completion connection to Control.
@@ -1248,6 +1257,7 @@ impl<
             '_,
             B::Caps,
             impl ServiceOutputSink<B::Caps>,
+            B::LentRx,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -1337,6 +1347,7 @@ impl<
             '_,
             B::Caps,
             impl ServiceOutputSink<B::Caps>,
+            B::LentRx,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -1433,6 +1444,7 @@ impl<
             '_,
             B::Caps,
             impl ServiceOutputSink<B::Caps>,
+            B::LentRx,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -1558,6 +1570,7 @@ impl<
             '_,
             B::Caps,
             impl ServiceOutputSink<B::Caps>,
+            B::LentRx,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -1698,6 +1711,7 @@ impl<
             '_,
             B::Caps,
             impl ServiceOutputSink<B::Caps>,
+            B::LentRx,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -1998,6 +2012,7 @@ impl<
             '_,
             B::Caps,
             impl ServiceOutputSink<B::Caps>,
+            B::LentRx,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -2051,6 +2066,7 @@ impl<
             '_,
             B::Caps,
             impl ServiceOutputSink<B::Caps>,
+            B::LentRx,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -2278,6 +2294,7 @@ impl<
             '_,
             B::Caps,
             impl ServiceOutputSink<B::Caps>,
+            B::LentRx,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -2335,6 +2352,7 @@ impl<
             '_,
             B::Caps,
             impl ServiceOutputSink<B::Caps>,
+            B::LentRx,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -2369,6 +2387,7 @@ impl<
             '_,
             B::Caps,
             impl ServiceOutputSink<B::Caps>,
+            B::LentRx,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -2379,10 +2398,11 @@ impl<
         P: LowerMacPhase<'p, 'id, Caps = B::Caps, Types = B::Types<'id>>,
     {
         if let Some((frame, meta)) = self.pending.receive.pop_ready() {
-            self.deliver_received(now, &frame, meta, io);
-            B::span(ServiceSpan::Recycle, false);
-            phase.recycle(frame);
-            B::span(ServiceSpan::Recycle, true);
+            if let Some(frame) = self.deliver_received(now, frame, meta, phase, io) {
+                B::span(ServiceSpan::Recycle, false);
+                phase.recycle(frame);
+                B::span(ServiceSpan::Recycle, true);
+            }
             return Ok(true);
         }
         if let Some((frame, meta)) = self.pending.receive.pop_deferred() {
@@ -2416,6 +2436,7 @@ impl<
             '_,
             B::Caps,
             impl ServiceOutputSink<B::Caps>,
+            B::LentRx,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -2456,6 +2477,7 @@ impl<
             '_,
             B::Caps,
             impl ServiceOutputSink<B::Caps>,
+            B::LentRx,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -2480,80 +2502,174 @@ impl<
                     return Err(ServiceFault::RxBlockAckCapacity.into());
                 }
             };
-        self.deliver_received(now, &frame, meta, io);
-        Ok(Some(frame))
+        Ok(self.deliver_received(now, frame, meta, phase, io))
     }
 
+    /// Deliver one received frame's MSDUs to the network queue. A frame
+    /// that delivered exactly one MSDU is lent in place; the others are
+    /// copied. The buffer comes back for its recycle unless it was lent.
     #[inline(never)]
     fn deliver_received<
+        'p,
+        P,
         const TX_DEPTH: usize,
         const RX_DEPTH: usize,
         const COMMAND_DEPTH: usize,
     >(
         &mut self,
         now: Instant,
-        frame: &<B::Types<'id> as PhaseTypes<'id>>::RxBuffer,
+        frame: <B::Types<'id> as PhaseTypes<'id>>::RxBuffer,
         meta: <B::Types<'id> as PhaseTypes<'id>>::RxMeta,
+        phase: &mut P,
         io: &mut ServiceIo<
             '_,
             B::Caps,
             impl ServiceOutputSink<B::Caps>,
+            B::LentRx,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
         >,
-    ) {
+    ) -> Option<<B::Types<'id> as PhaseTypes<'id>>::RxBuffer>
+    where
+        'id: 'p,
+        P: LowerMacPhase<'p, 'id, Caps = B::Caps, Types = B::Types<'id>>,
+    {
         B::span(ServiceSpan::Deliver, false);
+        // Delivery runs for every sink; only an enabled one counts.
+        let counted = <O as EventSink<ServiceEvent>>::ENABLED;
         let mut refused = RxMsdusRefused::default();
+        let mut copied = RxMsdusCopied::default();
+        // The first MSDU waits: it is lent if it stays the frame's only one.
+        let mut first: Option<MsduPlan> = None;
+        let mut several = false;
+        let bytes = frame.bytes();
         let result = self.station.receive(
             now,
-            frame.bytes(),
+            bytes,
             meta,
-            |parts| {
+            |delivery| {
                 B::span(ServiceSpan::Queue, false);
-                let refusal = Self::queue_received(io, EthernetFrame::from_parts(parts));
-                B::span(ServiceSpan::Queue, true);
-                // Delivery runs for every sink; only an enabled one counts.
-                if <O as EventSink<ServiceEvent>>::ENABLED {
-                    count_refusal(&mut refused, refusal);
+                if first.is_none() && !several {
+                    first = Some(delivery.plan());
+                } else {
+                    several = true;
+                    let earlier = first
+                        .take()
+                        .map(|plan| Self::copy_received(io, bytes, &plan));
+                    let refusal = Self::copy_received(io, bytes, &delivery.plan());
+                    if counted {
+                        for refusal in earlier.into_iter().chain([refusal]) {
+                            count_refusal(&mut refused, refusal);
+                            copied.aggregated = copied.aggregated.saturating_add(1);
+                        }
+                    }
                 }
+                B::span(ServiceSpan::Queue, true);
             },
             &mut self.events,
         );
+        let kept = match first {
+            None => Some(frame),
+            Some(plan) => {
+                B::span(ServiceSpan::Queue, false);
+                let (refusal, kept) = match phase.lend(frame) {
+                    Ok(lent) => (Self::queue_lent(io, lent, plan), None),
+                    Err(refusal) => {
+                        let buffer = refusal.buffer;
+                        let refusal = Self::copy_received(io, buffer.bytes(), &plan);
+                        if counted {
+                            copied.kept = copied.kept.saturating_add(1);
+                        }
+                        (refusal, Some(buffer))
+                    }
+                };
+                if counted {
+                    count_refusal(&mut refused, refusal);
+                }
+                B::span(ServiceSpan::Queue, true);
+                kept
+            }
+        };
         B::span(ServiceSpan::Deliver, true);
         // The sink is the station's during delivery: the frame's refusals
-        // follow its events as one aggregate.
+        // and copies follow its events as one aggregate each.
         if refused != RxMsdusRefused::default() {
             report(&mut self.events, || ServiceEvent::RxMsdusRefused(refused));
+        }
+        if copied != RxMsdusCopied::default() {
+            report(&mut self.events, || ServiceEvent::RxMsdusCopied(copied));
         }
         if let Err(reason) = result {
             report(&mut self.events, || {
                 ServiceEvent::RxFrameDropped(RxDrop::Station(reason))
             });
         }
+        kept
     }
 
-    /// Hand one received MSDU to the network queue; a refusal returns its
-    /// reason.
+    /// Copy one received MSDU, `payload` of `frame`, to the network queue;
+    /// a refusal returns its reason.
     #[inline(never)]
-    fn queue_received<const TX_DEPTH: usize, const RX_DEPTH: usize, const COMMAND_DEPTH: usize>(
+    fn copy_received<const TX_DEPTH: usize, const RX_DEPTH: usize, const COMMAND_DEPTH: usize>(
         io: &mut ServiceIo<
             '_,
             B::Caps,
             impl ServiceOutputSink<B::Caps>,
+            B::LentRx,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
         >,
-        frame: Result<EthernetFrame, FrameTooLong>,
+        frame: &[u8],
+        plan: &MsduPlan,
     ) -> Option<MsduRefusal> {
-        match frame {
+        match EthernetFrame::copy_planned(frame, plan) {
             Ok(frame) => io
                 .receive
-                .try_send(frame)
+                .try_send(Received::Copied(frame))
                 .is_err()
                 .then_some(MsduRefusal::QueueFull),
-            Err(_) => Some(MsduRefusal::TooLong),
+            // The station located the payload in this frame.
+            Err(PlannedCopyError::TooLong(_) | PlannedCopyError::OutsideFrame) => {
+                Some(MsduRefusal::TooLong)
+            }
+        }
+    }
+
+    /// Hand one lent MSDU to the network queue; a refusal drops the lent
+    /// buffer, which returns it to the backend, and returns its reason.
+    #[inline(never)]
+    fn queue_lent<const TX_DEPTH: usize, const RX_DEPTH: usize, const COMMAND_DEPTH: usize>(
+        io: &mut ServiceIo<
+            '_,
+            B::Caps,
+            impl ServiceOutputSink<B::Caps>,
+            B::LentRx,
+            TX_DEPTH,
+            RX_DEPTH,
+            COMMAND_DEPTH,
+        >,
+        lent: B::LentRx,
+        plan: MsduPlan,
+    ) -> Option<MsduRefusal> {
+        let MsduPlan {
+            destination,
+            source,
+            ether_type,
+            payload,
+        } = plan;
+        if payload.len() > MAX_ETHERNET_PAYLOAD_LEN {
+            return Some(MsduRefusal::TooLong);
+        }
+        match LentFrame::new(NetworkRx(lent), destination, source, ether_type, payload) {
+            Ok(frame) => io
+                .receive
+                .try_send(Received::Lent(frame))
+                .is_err()
+                .then_some(MsduRefusal::QueueFull),
+            // The payload lies in the MPDU, which starts the lent storage.
+            Err(_storage) => Some(MsduRefusal::TooLong),
         }
     }
 
@@ -3077,6 +3193,7 @@ fn station_action<
         '_,
         B::Caps,
         impl ServiceOutputSink<B::Caps>,
+        B::LentRx,
         TX_DEPTH,
         RX_DEPTH,
         COMMAND_DEPTH,

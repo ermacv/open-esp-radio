@@ -19,7 +19,7 @@ pub use credentials::{
     Callbacks, CredentialsError, NonceExhausted, NonceSource, OpenCallbacks, PreparedCredentials,
     StationSettings,
 };
-use oer_ieee80211_core_roles_sta::data::{EthernetFrame as Frame, TxMsdu};
+use oer_ieee80211_core_roles_sta::data::TxMsdu;
 use oer_ieee80211_runtime::station as runtime;
 use oer_memory::WakingSpscQueue;
 use oer_network_port::{EthernetFrame, LinkSnapshot, NetDevice, TransmitRefused};
@@ -146,18 +146,68 @@ impl StatusReader<'_> {
         self.inner.status()
     }
 }
+/// A received buffer the station lends to the network: the S31 port's
+/// receive unit on the chip.
+#[cfg(target_arch = "riscv32")]
+type LentRx = oer_esp32s31_ieee80211_driver::port::LentReceive<
+    oer_esp32s31_ieee80211_driver::port::device::StagedReceive<{ chip::Q }, { chip::B }>,
+>;
+/// The received buffers the station may lend the network at once: the
+/// bound for the network's packet slots of lent frames.
+#[cfg(target_arch = "riscv32")]
+pub const LENT_RX: usize = oer_esp32s31_ieee80211_driver::port::device::lent_rx(chip::Q);
+/// The host build has no receive buffer to lend.
+#[cfg(not(target_arch = "riscv32"))]
+type LentRx = Unlent;
+#[cfg(not(target_arch = "riscv32"))]
+pub enum Unlent {}
+#[cfg(not(target_arch = "riscv32"))]
+impl oer_ieee80211_contracts_port::LentRxBuffer for Unlent {
+    fn storage(&self) -> &[u8] {
+        match *self {}
+    }
+    fn storage_mut(&mut self) -> &mut [u8] {
+        match *self {}
+    }
+    fn mpdu_len(&self) -> usize {
+        match *self {}
+    }
+}
+type Frame = runtime::Received<LentRx>;
+
 /// Affine neutral Ethernet end. The concrete station frame is private.
 pub struct Network<'a> {
-    inner: runtime::Device<'a, 2, RX_DEPTH>,
+    inner: runtime::Device<'a, LentRx, 2, RX_DEPTH>,
 }
+/// One received MSDU: in the station's receive buffer, or copied.
 pub struct Received {
     inner: Frame,
+}
+/// The receive buffer a lent [`Received`] keeps its frame in. Dropping it
+/// returns the buffer to the radio.
+pub struct ReceivedStorage(runtime::NetworkRx<LentRx>);
+impl oer_network_port::FrameStorage for ReceivedStorage {
+    fn bytes(&self) -> &[u8] {
+        self.0.bytes()
+    }
+    fn bytes_mut(&mut self) -> &mut [u8] {
+        self.0.bytes_mut()
+    }
 }
 impl EthernetFrame for Received {
     fn view(
         &self,
     ) -> Result<oer_network_port::EthernetFrameView<'_>, oer_network_port::FrameLengthError> {
         self.inner.view()
+    }
+}
+impl oer_network_port::ReceivedFrame for Received {
+    type Storage = ReceivedStorage;
+    fn into_lent(self) -> Result<oer_network_port::LentFrame<ReceivedStorage>, Self> {
+        match self.inner {
+            runtime::Received::Lent(frame) => Ok(frame.map_storage(ReceivedStorage)),
+            copied => Err(Self { inner: copied }),
+        }
     }
 }
 impl NetDevice for Network<'_> {

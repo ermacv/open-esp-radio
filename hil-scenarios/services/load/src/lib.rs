@@ -313,6 +313,8 @@ pub struct Counters {
     pub bridge_refused_queue: u32,
     /// Bridge frames refused for their length or a down link.
     pub bridge_refused_other: u32,
+    /// Bridge frames the station lent in place that the bridge copied.
+    pub bridge_copied: u32,
     /// Frames the IP stack took from its device.
     pub stack_received: u32,
 }
