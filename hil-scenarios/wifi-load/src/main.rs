@@ -206,16 +206,35 @@ fn collect(cx: &mut Cx<'_>, run: u32) -> Result<Report, Failure> {
     }
 }
 
-/// The levels to offer: [`LEVELS_MBPS`], or `OER_WIFI_LOAD_MBPS`.
+/// The highest total a level may offer: far above any 2.4 GHz link, and
+/// each direction's rate stays a `u32` of bit/s.
+const MAX_LEVEL_MBPS: u64 = 1000;
+
+/// The levels to offer: [`LEVELS_MBPS`], or `OER_WIFI_LOAD_MBPS`, each 1 to
+/// [`MAX_LEVEL_MBPS`].
 fn levels_mbps() -> Result<Vec<u64>, Failure> {
-    let Ok(text) = std::env::var(LEVELS_ENV) else {
-        return Ok(LEVELS_MBPS.to_vec());
-    };
+    match std::env::var(LEVELS_ENV) {
+        Ok(text) => parse_levels(&text),
+        Err(_) => Ok(LEVELS_MBPS.to_vec()),
+    }
+}
+
+fn parse_levels(text: &str) -> Result<Vec<u64>, Failure> {
     text.split(',')
-        .map(|level| level.trim().parse::<u64>().ok().filter(|level| *level > 0))
+        .map(|level| {
+            level
+                .trim()
+                .parse::<u64>()
+                .ok()
+                .filter(|level| (1..=MAX_LEVEL_MBPS).contains(level))
+        })
         .collect::<Option<Vec<_>>>()
         .filter(|levels| !levels.is_empty())
-        .ok_or_else(|| Failure::Incomplete(format!("{LEVELS_ENV}=`{text}` is no list of Mbit/s")))
+        .ok_or_else(|| {
+            Failure::Incomplete(format!(
+                "{LEVELS_ENV}=`{text}` is no list of 1 to {MAX_LEVEL_MBPS} Mbit/s"
+            ))
+        })
 }
 
 /// Each hart's busy share and each executor's work share between two CPU
@@ -497,7 +516,11 @@ fn level(
     total_mbps: u64,
 ) -> Result<(), Failure> {
     let directions = if mode == Mode::RxTx { 2 } else { 1 };
-    let each_bps = total_mbps * 1_000_000 / directions;
+    let each_bps = total_mbps
+        .checked_mul(1_000_000)
+        .map(|bps| bps / directions)
+        .filter(|bps| u32::try_from(*bps).is_ok())
+        .ok_or_else(|| Failure::Incomplete(format!("{total_mbps} Mbit/s is out of range")))?;
     let run = run_id();
     let endpoint = traffic::Endpoint::open(SocketAddrV4::new(host, 0), run)
         .map_err(|error| Failure::Incomplete(format!("the host socket: {error}")))?;
@@ -510,7 +533,7 @@ fn level(
         peer: host.octets(),
         peer_port: host_port,
         payload: PAYLOAD as u16,
-        rate_bps: u32::try_from(each_bps).unwrap_or(u32::MAX),
+        rate_bps: u32::try_from(each_bps).unwrap_or(0),
     });
     let started = cx.call(
         Start {
@@ -531,19 +554,22 @@ fn level(
     let stop = AtomicBool::new(false);
     let window = Duration::from_millis(u64::from(DURATION_MS));
     let (sent, probes) = std::thread::scope(|scope| {
-        let probes = scope.spawn(|| traffic::probe(&endpoint, peer, run, PROBE_PERIOD, &stop));
         // The host's window starts with the image's, as near as the HIL
         // answer's latency allows; the image counts only its own window.
+        // The probes go within the window only; their late replies are
+        // still read during the drain.
         std::thread::sleep(Duration::from_millis(u64::from(DELAY_MS)));
+        let probes = scope.spawn(|| traffic::probe(&endpoint, peer, run, PROBE_PERIOD, &stop));
         let sent = if mode == Mode::Tx {
             std::thread::sleep(window);
             traffic::Sent::default()
         } else {
             traffic::send(&endpoint, peer, run, PAYLOAD, each_bps, window)
         };
-        std::thread::sleep(Duration::from_millis(u64::from(DRAIN_MS)));
         stop.store(true, Ordering::Relaxed);
-        (sent, probes.join().unwrap_or(0))
+        let probes = probes.join().unwrap_or(0);
+        std::thread::sleep(Duration::from_millis(u64::from(DRAIN_MS)));
+        (sent, probes)
     });
     let report = collect(cx, run)?;
     let mut received = endpoint.close();
@@ -610,6 +636,7 @@ fn measurement(
                 "device_sent_mbps": mbps(device.bytes, window),
                 "device_sent_datagrams": device.datagrams,
                 "device_send_refused": device.refused,
+                "device_send_missed": device.missed,
                 "device_send_failed": device.failed,
                 "host_received_mbps": mbps(host.bytes, window),
                 "host_received_datagrams": host.datagrams,
@@ -688,7 +715,12 @@ mod tests {
     }
 
     #[test]
-    fn levels_come_from_the_environment_list_or_stay_at_65_mbps_at_most() {
+    fn a_level_list_holds_only_representable_totals() {
         assert_eq!(LEVELS_MBPS.iter().max(), Some(&65));
+        assert_eq!(parse_levels("10, 65,100").ok(), Some(vec![10, 65, 100]));
+        for refused in ["", "0", "1001", "18446744073709551615", "10,x"] {
+            assert!(parse_levels(refused).is_err(), "{refused}");
+        }
+        assert!(u32::try_from(MAX_LEVEL_MBPS * 1_000_000).is_ok());
     }
 }

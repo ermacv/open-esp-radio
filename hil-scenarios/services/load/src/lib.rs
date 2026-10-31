@@ -165,6 +165,9 @@ pub struct Sent {
     pub refused: u64,
     /// Sends that failed otherwise.
     pub failed: u64,
+    /// Paced datagrams the window held that were never sent: the image
+    /// reached their time only after the window ended.
+    pub missed: u64,
     pub first_us: Option<u64>,
     pub last_us: Option<u64>,
 }

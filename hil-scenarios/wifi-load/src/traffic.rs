@@ -57,6 +57,8 @@ impl Endpoint {
     pub fn open(local: SocketAddrV4, run: u32) -> std::io::Result<Self> {
         let socket = Arc::new(UdpSocket::bind(local)?);
         socket.set_read_timeout(Some(Duration::from_millis(50)))?;
+        // A send never holds the sender past its deadline for long.
+        socket.set_write_timeout(Some(Duration::from_millis(10)))?;
         let stop = Arc::new(AtomicBool::new(false));
         let received = Arc::new(Mutex::new(Received::default()));
         let started = Instant::now();
@@ -143,7 +145,8 @@ pub struct Sent {
 }
 
 /// Send run `run`'s load to `peer` from `endpoint`: datagrams of `payload`
-/// bytes at `rate_bps` of UDP payload for `duration`, in batches.
+/// bytes at `rate_bps` of UDP payload for `duration`, in batches. Nothing
+/// is sent once `duration` passed, also within a batch that catches up.
 pub fn send(
     endpoint: &Endpoint,
     peer: SocketAddrV4,
@@ -160,7 +163,7 @@ pub fn send(
     while started.elapsed() < duration {
         // Every datagram due by now goes in this batch.
         let due = (started.elapsed().as_secs_f64() / interval.as_secs_f64()) as u64 + 1;
-        while sequence < due {
+        while sequence < due && started.elapsed() < duration {
             let header = Header {
                 run,
                 sequence,

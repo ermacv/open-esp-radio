@@ -1,7 +1,8 @@
 //! The schedule of paced transmission: datagram `n` is due `n` payload
 //! times after the start, the payload time being its UDP payload bits over
 //! the rate. The sender wakes on the Embassy timer, sends what is due in
-//! batches and sleeps at least [`GRANULARITY_US`] between them.
+//! batches and sleeps at least [`GRANULARITY_US`] between them. Nothing is
+//! sent once the window ended: what was due and not sent by then is missed.
 
 /// The shortest sleep between two batches: at 65 Mbit/s of 1400-byte
 /// datagrams a batch holds some six of them.
@@ -56,10 +57,27 @@ impl Schedule {
             .filter(|due| *due < self.end_us)
     }
 
+    /// Datagrams the window holds that were never handed to the sender:
+    /// the executor reached their time only after the window ended.
+    pub(crate) fn missed(&self) -> u64 {
+        let span = u128::from(self.end_us.saturating_sub(self.begin_us));
+        let per_datagram = u128::from(self.payload).saturating_mul(8_000_000);
+        let held = span
+            .saturating_mul(u128::from(self.rate_bps))
+            .div_ceil(per_datagram.max(1));
+        u64::try_from(held)
+            .unwrap_or(u64::MAX)
+            .saturating_sub(self.attempts)
+    }
+
     /// Send, through `send`, every datagram due at `now_us`, at most
-    /// [`MAX_BATCH`] of them; a datagram the socket refuses is dropped, its
-    /// time passes all the same.
+    /// [`MAX_BATCH`] of them, and none once the window ended at `now_us`;
+    /// a datagram the socket refuses is dropped, its time passes all the
+    /// same.
     pub(crate) fn batch(&mut self, now_us: u64, mut send: impl FnMut()) -> Next {
+        if now_us >= self.end_us {
+            return Next::Done;
+        }
         let mut sent = 0;
         loop {
             let Some(due) = self.due() else {
@@ -103,9 +121,10 @@ mod tests {
         assert_eq!(batch(&mut schedule, 14_000), (1, Next::Wait(15_000)));
         assert_eq!(
             batch(&mut schedule, 30_000),
-            (5, Next::Done),
-            "until the end"
+            (0, Next::Done),
+            "nothing after the window"
         );
+        assert_eq!(schedule.missed(), 5, "15 000 to 19 000 were due");
     }
 
     #[test]
@@ -127,6 +146,7 @@ mod tests {
         let mut schedule = Schedule::new(0, 1_000_000, 100, 8_000).unwrap();
         assert_eq!(batch(&mut schedule, 0), (1, Next::Wait(100_000)));
         assert_eq!(batch(&mut schedule, 950_000), (9, Next::Done));
+        assert_eq!(schedule.missed(), 0);
     }
 
     #[test]
@@ -134,6 +154,7 @@ mod tests {
         let mut empty = Schedule::new(5, 5, 1400, 1).unwrap();
         assert_eq!(batch(&mut empty, 5), (0, Next::Done));
         let mut late = Schedule::new(u64::MAX - 1, u64::MAX, 1400, 1).unwrap();
-        assert_eq!(batch(&mut late, u64::MAX), (1, Next::Done));
+        assert_eq!(batch(&mut late, u64::MAX - 1), (1, Next::Done));
+        assert_eq!(batch(&mut late, u64::MAX), (0, Next::Done));
     }
 }

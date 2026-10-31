@@ -22,7 +22,8 @@ ends the run by itself. Throughput and CPU are over the window (the image's
 clock); per level it records offered, sent and received throughput, lost
 (sent less received), loss below the highest sequence, reordered, duplicate
 and untracked datagrams (an exact tally, shared by both ends), the sender's
-refused sends, RTT of 20 probes per second echoed by the image (min, median,
+refused and missed sends, RTT of 20 probes per second within the window
+(replies read through the drain) echoed by the image (min, median,
 p95, max, replies), and each hart's busy share (1 − idle/window) with each
 executor's work share. The scenario holds the air exclusively.
 Executors' work spans overlap (preemption): only a hart's idle time gives its

@@ -328,7 +328,10 @@ async fn send(
             match next {
                 Next::Yield => yield_now().await,
                 Next::Wait(at) => wait_until(at).await,
-                Next::Done => return,
+                Next::Done => {
+                    sent.missed = schedule.missed();
+                    return;
+                }
             }
         },
         None => unpaced(socket, run, datagram, peer, end, sent).await,

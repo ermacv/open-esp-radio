@@ -70,7 +70,9 @@ the report until the next run starts. `Collect` of the running run answers
   rate datagram `n` is due `n` payload times after the window opened: the
   sender wakes on the Embassy timer, sends what is due, at most 16 a batch,
   and sleeps at least 1 ms between batches. A datagram the socket has no
-  room for is dropped (`refused`) and its time passes; other errors count
+  room for is dropped (`refused`) and its time passes; nothing is sent
+  after the window ends, and what was due but not yet sent then is
+  `missed`; other errors count
   as `failed`. At rate 0 it sends as fast as the socket takes datagrams,
   yielding every 16.
 - **CPU.** Each executor's task set selects the observer of its own slot,
