@@ -33,6 +33,9 @@
 //!   applied there; its handler starts with `DoorbellAcknowledger::acknowledge`. Its line
 //!   is a source of the radio handler's part: the ringing half takes the
 //!   router's `Bound` proof of that part (`Doorbell::new`).
+//! - [`peer`]: a request from a task on one hart to a task on another over
+//!   one in-place request slot, both directions notified by raising the
+//!   other executor's signal (`FromPeerHart`); wakers never cross harts.
 //! - The time driver (`init`, `bind`) gives each executor its own timer
 //!   queue and SYSTIMER comparator, whose alarm (`alarm_interrupt::<B, N, _>`) only
 //!   acknowledges and pends; one executor writes the SYSTIMER registers. No
@@ -64,6 +67,8 @@ mod fault;
 pub use fault::{Failure, Fault};
 #[cfg(feature = "chip")]
 mod hart_binding;
+#[cfg(any(feature = "chip", test))]
+pub mod peer;
 #[cfg(any(feature = "chip", test))]
 mod poll_stamp;
 #[cfg(feature = "port-slots")]

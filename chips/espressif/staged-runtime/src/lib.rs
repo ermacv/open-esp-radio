@@ -23,8 +23,10 @@
 //! the boot hart PSRAM task stack, installs the runtime's vectors and enters the
 //! image's `runtime_main` that [`entry!`] defines. During boot, before any
 //! executor, an image that declares a secondary hart starts it with
-//! [`secondary::launch`] into the hart's generated entry, which idles it on its
-//! own stacks. The image's `main` adopts
+//! [`secondary::launch`] into the hart's generated entry, which calls the
+//! hart's root that [`secondary_entry!`] declares on its own stacks; the
+//! hart then makes its own interrupt context and executor
+//! ([`SecondaryHandoff::adopt`]). The image's `main` adopts
 //! the bootstrap's PSRAM mapping through its board and takes its hart's
 //! routes and lines ([`adoption::run`]), binds its interrupts through the
 //! [`Router`](oer_espressif_interrupt_table::Router) it gets back and enables
@@ -92,7 +94,7 @@ pub mod placement;
 pub mod secondary;
 #[cfg(all(target_arch = "riscv32", chip_vectors))]
 pub use secondary::launch;
-pub use secondary::{EarlyFault, LaunchFailure, LaunchWaits};
+pub use secondary::{EarlyFault, LaunchFailure, LaunchWaits, Mailbox};
 #[cfg(chip_vectors)]
 pub use secondary::{Running, SecondaryHandoff};
 #[allow(
@@ -164,6 +166,15 @@ impl From<oer_espressif_interrupt_table::Error> for BootError {
     }
 }
 
+impl From<oer_espressif_platform_port::ForeignHart> for BootError {
+    fn from(error: oer_espressif_platform_port::ForeignHart) -> Self {
+        Self::WrongHart {
+            actual: error.actual,
+            expected: error.expected,
+        }
+    }
+}
+
 /// The image's control at the runtime's entry: stage two runs on the boot hart right
 /// after `_runtime_start`, with interrupts disabled and the bootstrap's
 /// mapping intact. [`entry!`] gives it once, to the image's `main`, with the
@@ -199,13 +210,14 @@ impl<P: oer_espressif_platform_port::EarlyText> Handoff<P> {
     /// Adopt the bootstrap's PSRAM mapping through `board` and install the
     /// stage-two interrupt context of the boot hart: its SRAM interrupt stack and
     /// vectors, the task-stack watchpoint, and the hart's routes and lines,
-    /// which `controller` writes. Interrupts stay disabled until
+    /// which the controller `controller` makes from the boot hart's grant
+    /// `interrupts` writes. Interrupts stay disabled until
     /// [`Adopted::enable_interrupts`].
     ///
     /// `interrupt_table` is the image's `INTERRUPT_TABLE`
-    /// ([`interrupt_table!`]). Installing it silences every source and
-    /// disables every line of the hart, so from here a source is routed only
-    /// by binding its entry.
+    /// ([`interrupt_table!`]). Installing it silences every source of the
+    /// boot hart's bank and disables every line of its CLIC, so from here a
+    /// source is routed only by binding its entry.
     ///
     /// Before the mapping is adopted, the previous boot's named fault and
     /// invalid-hart records are reported through `P`'s early writer, then
@@ -217,16 +229,22 @@ impl<P: oer_espressif_platform_port::EarlyText> Handoff<P> {
     /// A wrong hart, missing interrupt stack, invalid stack guard, or controller
     /// disagreement with its chip facts or the image's table returns [`BootError`].
     #[cfg(target_arch = "riscv32")]
-    pub(crate) fn adopt<B: AdoptsBootstrapMapping, C: oer_espressif_interrupt_table::Controller>(
+    pub(crate) fn adopt<
+        B: AdoptsBootstrapMapping,
+        I,
+        C: oer_espressif_interrupt_table::Controller,
+    >(
         mut self,
         interrupt_table: &'static InterruptTable,
-        controller: C,
+        interrupts: I,
+        controller: impl FnOnce(I) -> Result<C, oer_espressif_platform_port::ForeignHart>,
         board: B,
         previous_records: impl FnOnce(),
     ) -> Result<(B::Mapping, Adopted<C>), BootError> {
         panic::report_previous_fault::<P>();
         previous_records();
         let mapping = oer_espressif_boot::adoption::adopt_mapping(board, &self.proof);
+        let controller = controller(interrupts).map_err(BootError::from)?;
         let actual = usize::from(controller.hart());
         let expected = oer_espressif_platform_port::BOOT_HART.get();
         if actual != expected {
@@ -248,24 +266,27 @@ impl<P: oer_espressif_platform_port::EarlyText> Handoff<P> {
     }
 }
 
-/// The adopted stage-two interrupt context of the boot hart, before interrupts are
-/// enabled: the hart's router, through which the image binds its entries.
+/// A hart's adopted interrupt context, before interrupts are enabled: the
+/// hart's router, through which the image binds its entries. Hart `H` is the
+/// boot hart's (from [`Handoff`]) or a secondary hart's (from its
+/// [`SecondaryHandoff`]); each hart has one, over its own controller.
 #[must_use = "interrupts stay disabled until `enable_interrupts`"]
-pub struct Adopted<C: oer_espressif_interrupt_table::Controller> {
+pub struct Adopted<C: oer_espressif_interrupt_table::Controller, const H: u8 = DEFAULT_HART> {
     router: oer_espressif_interrupt_table::Router<C>,
     #[cfg(chip_vectors)]
-    admission: PreAdmission<BOOT_HART>,
+    admission: PreAdmission<H>,
 }
 
-impl<C: oer_espressif_interrupt_table::Controller> Adopted<C> {
+/// The hart of an [`Adopted`] context that names none: the boot hart.
+#[cfg(chip_vectors)]
+const DEFAULT_HART: u8 = BOOT_HART;
+#[cfg(not(chip_vectors))]
+const DEFAULT_HART: u8 = 0;
+
+impl<C: oer_espressif_interrupt_table::Controller, const H: u8> Adopted<C, H> {
     /// Borrow the local execution identity and router together before admission.
     #[cfg(chip_vectors)]
-    pub fn parts(
-        &mut self,
-    ) -> (
-        &Hart<BOOT_HART>,
-        &mut oer_espressif_interrupt_table::Router<C>,
-    ) {
+    pub fn parts(&mut self) -> (&Hart<H>, &mut oer_espressif_interrupt_table::Router<C>) {
         (self.admission.hart(), &mut self.router)
     }
 
@@ -289,7 +310,7 @@ impl<C: oer_espressif_interrupt_table::Controller> Adopted<C> {
     #[cfg(target_arch = "riscv32")]
     pub fn enable_interrupts(
         self,
-    ) -> Result<(oer_espressif_interrupt_table::Router<C>, Hart<BOOT_HART>), BootError> {
+    ) -> Result<(oer_espressif_interrupt_table::Router<C>, Hart<H>), BootError> {
         stacks::verify_current_hart_vectors()?;
         self.router.verify()?;
         oer_riscv::enable_interrupts();
@@ -388,6 +409,41 @@ macro_rules! entry {
                 oer_platform_panic_hook(claim, details, stop)
             })
         }
+    };
+}
+
+/// Secondary hart `$hart`'s root and launch mailbox, for an image that
+/// declares the hart (`[package.metadata.open-radio] harts`): the static
+/// `$mailbox` (a [`Mailbox`] of platform `$platform`'s interrupt grant and
+/// the image's parts `$parts`, in internal SRAM) that the boot hart passes to
+/// [`launch`](crate::secondary::launch), and the hart's root
+/// `runtime_secondary_main_h<hart>`, which its generated entry tail-calls on
+/// the hart's task stack. The root takes the mailbox, installs the hart's
+/// interrupt stack and exception path, reports ready and calls `$main` with
+/// the hart's one [`SecondaryHandoff`] and the parts; `$main` never returns.
+///
+/// ```ignore
+/// oer_espressif_staged_runtime::secondary_entry!(1, HART1: Port, Hart1Parts => hart1);
+/// fn hart1(handoff: SecondaryHandoff<Port, 1>, parts: Hart1Parts) -> ! { … }
+/// ```
+#[macro_export]
+macro_rules! secondary_entry {
+    ($hart:literal, $mailbox:ident: $platform:ty, $parts:ty => $main:path) => {
+        /// The launch mailbox of the hart's owners, in internal SRAM.
+        #[unsafe(link_section = concat!(".critical.data.secondary_mailbox_h", $hart))]
+        static $mailbox: $crate::secondary::Mailbox<
+            <$platform as $crate::__port::SecondaryStart>::Interrupts,
+            $parts,
+        > = $crate::secondary::Mailbox::new();
+        const _: () = {
+            // SAFETY: the hart's generated entry tail-calls this one root
+            // with the C ABI on the hart's own task stack; a second
+            // definition fails the link.
+            #[unsafe(export_name = concat!("runtime_secondary_main_h", $hart))]
+            extern "C" fn root() -> ! {
+                $crate::secondary::__root::<$platform, $hart, $parts, _>(&$mailbox, $main)
+            }
+        };
     };
 }
 

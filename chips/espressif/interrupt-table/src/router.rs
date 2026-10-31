@@ -8,6 +8,14 @@
 //! routes and lines against the table before interrupts are enabled;
 //! [`Router::silent`] proves a source no entry binds is routed nowhere, for
 //! a driver that polls its events.
+//!
+//! Each hart has its own router over its own controller (its matrix bank
+//! and its own CLIC), which the hart's handoff makes; `install` takes the
+//! controller by value, so there is one router per hart. A source no entry
+//! binds is routed on no bank: every bank is silenced before its hart first
+//! unmasks (the secondary launch disconnects a released hart's bank, and
+//! every router silences its own bank at `install`), and each router routes
+//! only its own hart's entries of the one table.
 
 use oer_mmio::{InterruptSource, InterruptSources};
 
@@ -134,7 +142,10 @@ where
 /// Neither `Copy` nor `Clone`; only [`Router::silent`] makes one.
 ///
 /// On a chip of several harts each hart's router silences its own bank at
-/// its install; the table binds the source on none of them.
+/// its install, before that hart first unmasks, and routes only entries of
+/// the table; the proof checks the table's entries of every hart and this
+/// router's own bank, so the table binds the source on no hart and no router
+/// ever routes it.
 #[must_use = "the polled part's events are enabled only with this proof"]
 pub struct Silent<P: InterruptSources> {
     _part: core::marker::PhantomData<fn() -> P>,

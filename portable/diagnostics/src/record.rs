@@ -59,6 +59,41 @@ impl Event for SecondaryReady {
     }
 }
 
+/// A request one hart's task sent a task on another hart, and its answer:
+/// the answering hart, the request and the answer. The boot console
+/// renders it as `OER-HART exchange hart=<n> request=<r> answer=<a>`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct HartExchange {
+    pub hart: u16,
+    pub request: u16,
+    pub answer: u32,
+}
+
+impl Event for HartExchange {
+    const KIND: Kind = Kind::new(Domain::Platform, 4);
+    const CHANNEL: Channel = const {
+        match Channel::new(Domain::Platform, 0) {
+            Ok(channel) => channel,
+            Err(_) => panic!("invalid trace channel"),
+        }
+    };
+
+    fn encode(&self) -> [u32; 2] {
+        [
+            (u32::from(self.hart) << 16) | u32::from(self.request),
+            self.answer,
+        ]
+    }
+
+    fn decode([pair, answer]: [u32; 2]) -> Option<Self> {
+        Some(Self {
+            hart: (pair >> 16) as u16,
+            request: (pair & 0xffff) as u16,
+            answer,
+        })
+    }
+}
+
 /// A borrowed view of the previous panic. The retained record stays its
 /// platform owner's; the same view can be sent by any staged image.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

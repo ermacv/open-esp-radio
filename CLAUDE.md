@@ -134,7 +134,13 @@ system these rules serve.
   A signal names its raisers at compile time. A raising handler sits strictly
   above the receiving executor; the one exception is an
   `Exempt(ExecutorLevel)` handler on that executor's hart and level
-  (`FromExecutorLevel`), whose signal the next round serves. The SAR/PWDET
+  (`FromExecutorLevel`), whose signal the next round serves. A task on
+  another hart raises through `FromPeerHart` (its hart differs, checked at
+  compile time); a cross-hart wake raises the peer executor's signal, every
+  software-interrupt raise fences `w, o` after its facts and every handler
+  lowers, then fences `o, rw` before taking them. Each hart's CLIC grant
+  becomes its controller only in that hart's handoff, on that hart; one
+  router per hart. The SAR/PWDET
   pilot uses TIMG0 T0 at P2 on line 16, below the radio executor's line 17;
   it advances one explicit conversion step per event with owned PHY custody.
   Driver code never blocks or spins; it yields to its executor. The one exception is a

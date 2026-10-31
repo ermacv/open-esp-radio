@@ -84,9 +84,15 @@ safe associated C ABI function of its token, so the table uses its address
 directly without a separate foreign declaration.
 
 `Router` is the one writer of a hart's routes and lines, over the chip's
-`Controller` (the hart's interrupt-matrix bank and CLIC; each chip HAL's
-`platform::interrupt_controller` implements it on the typed blocks and
-gives the CLIC three level bits):
+`Controller` (the hart's interrupt-matrix bank and its own CLIC; each chip
+HAL's `platform::interrupt_controller` implements it on the typed blocks and
+gives the CLIC three level bits). `install` takes the controller by value
+and a hart's controller is made only on that hart from its one grant (the
+staged runtime's handoffs), so each hart has one router, which stays on it.
+Every bank is silenced before its hart first unmasks (the secondary launch
+disconnects the released hart's bank; each router silences its own at
+`install`) and each router routes only its hart's entries, so a source no
+entry binds is routed on no bank:
 
 - `Router::install` checks the controller's implemented geometry and level
   bits against its chip facts (`Controller::verify_configuration`), refuses
@@ -126,7 +132,12 @@ IrqSignal::<RadioExecutor>::new::<
 ```
 
 `FromHandler<Entry>` must run above the receiving executor; `FromTask<X, Entry>`
-must be a lower executor's task. `FromExecutorLevel<Entry>` admits only a
+must be a lower executor's task on its hart. `FromPeerHart<X, Entry>` is a
+task of executor `X` on another hart than the receiving executor (checked at
+compile time); no level relation holds across harts. A cross-hart wake is a
+raise of the peer executor's signal, never a waker call: the raiser
+publishes facts and pends the receiver through its software line, whose own
+handler alone lowers the line and services them. `FromExecutorLevel<Entry>` admits only a
 handler of class `Exempt(ExecutorLevel)` on the receiving executor's hart and
 level. This handler cannot preempt the executor's round; it publishes atomic
 facts and pends the executor, whose next round services those facts and wakes
@@ -135,12 +146,16 @@ lock or task-owned signal state. Ordinary `FromHandler` still requires a
 strictly higher level, including for exempt handlers.
 
 Each executor entry must name its actual software interrupt source, all
-participating contexts share a hart, and an
+participating contexts but a `FromPeerHart` raiser share a hart, and an
 interrupt-mode executor's entry has class `Executor`. A thread-mode executor's
 wake entry represents its tasks at level zero. Nested pairs declare several
 raisers of one signal; the signal's layout and atomic publication are unchanged.
 The composition must keep `raise` calls within those declared contexts;
-`raise` itself does not check the caller.
+`raise` itself does not check the caller. A raise publishes its facts
+(fetch-or, Release) before the executor's pend, whose software-line raise
+fences `w, o`; the receiving handler lowers its line and fences `o, rw`
+before it swaps the facts (`oer-espressif-executor`'s software line, which
+states the hardware preconditions of the cross-hart order).
 
 `Doorbell::new`, Wi-Fi request activation and BLE gate exchange assert the
 same request-direction predicate: the handler must be above the requesting

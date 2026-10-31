@@ -27,7 +27,7 @@ pub(super) fn inherited(s: &Session<'_>) {
 }
 pub(super) fn clear(s: &mut Session<'_>) {
     for i in INPUTS {
-        s.interrupt_matrix.clic.modify_ctrl(i, |w| {
+        s.interrupt_matrix.clic[0].modify_ctrl(i, |w| {
             w.set_ip(false);
         });
     }
@@ -35,7 +35,7 @@ pub(super) fn clear(s: &mut Session<'_>) {
 }
 pub(super) fn pending(s: &Session<'_>) -> u32 {
     INPUTS.into_iter().enumerate().fold(0, |v, (n, i)| {
-        v | (u32::from(s.interrupt_matrix.clic.read_ctrl(i).ip()) << n)
+        v | (u32::from(s.interrupt_matrix.clic[0].read_ctrl(i).ip()) << n)
     })
 }
 pub(super) fn control(s: &mut Session<'_>) -> bool {
@@ -53,7 +53,7 @@ pub(super) fn control(s: &mut Session<'_>) -> bool {
     for (n, i) in INPUTS.into_iter().enumerate() {
         s.source.store_hp_cpu_int_from_cpu_2(false);
         route(s, pac::Interrupt::CPU_INTR_FROM_CPU_2, (LINE + n) as u32);
-        s.interrupt_matrix.clic.modify_ctrl(i, |w| {
+        s.interrupt_matrix.clic[0].modify_ctrl(i, |w| {
             w.set_ie(false)
                 .set_attr_shv(true)
                 .set_attr_trig(pac::clic::ctrl::AttrTrig::PositiveEdge)
@@ -61,10 +61,10 @@ pub(super) fn control(s: &mut Session<'_>) -> bool {
                 .set_ip(false);
         });
         super::wait_window();
-        let before = s.interrupt_matrix.clic.read_ctrl(i).ip();
+        let before = s.interrupt_matrix.clic[0].read_ctrl(i).ip();
         s.source.store_hp_cpu_int_from_cpu_2(true);
         super::wait_window();
-        let after = s.interrupt_matrix.clic.read_ctrl(i);
+        let after = s.interrupt_matrix.clic[0].read_ctrl(i);
         emit(
             0x3001,
             n as u32,

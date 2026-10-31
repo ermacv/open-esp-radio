@@ -1,0 +1,80 @@
+error[E0624]: associated function `new` is private
+  --> tests/ui/interrupt_grant_is_one_per_hart.rs:25:21
+   |
+25 |     InterruptGrant::new(bank, clic, None) // ui-error: E0624
+   |                     ^^^ private associated function
+   |
+  ::: src/platform/interrupt_controller.rs
+   |
+   |     pub(crate) const fn new(bank: B, lines: Clic<C>, config: Option<ClicObserver<C>>) -> Self {
+   |     ----------------------------------------------------------------------------------------- private associated function defined here
+
+error[E0277]: `*mut ()` cannot be sent between threads safely
+  --> tests/ui/interrupt_grant_is_one_per_hart.rs:32:12
+   |
+32 |     send::<Hart1Controller>(); // ui-error: E0277
+   |            ^^^^^^^^^^^^^^^ `*mut ()` cannot be sent between threads safely
+   |
+   = help: within `InterruptController<InterruptCore1, oer_mmio::Fixed<276824064>>`, the trait `Send` is not implemented for `*mut ()`
+note: required because it appears within the type `PhantomData<*mut ()>`
+  --> $RUST/core/src/marker.rs
+   |
+   | pub struct PhantomData<T: PointeeSized>;
+   |            ^^^^^^^^^^^
+note: required because it appears within the type `InterruptController<InterruptCore1, oer_mmio::Fixed<276824064>>`
+  --> src/platform/interrupt_controller.rs
+   |
+   | pub struct InterruptController<
+   |            ^^^^^^^^^^^^^^^^^^^
+note: required by a bound in `send`
+  --> tests/ui/interrupt_grant_is_one_per_hart.rs:7:12
+   |
+ 7 | fn send<T: Send>() {}
+   |            ^^^^ required by this bound in `send`
+
+error[E0277]: `*mut ()` cannot be sent between threads safely
+  --> tests/ui/interrupt_grant_is_one_per_hart.rs:34:12
+   |
+34 |     send::<Router<InterruptController>>(); // ui-error: E0277
+   |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^ `*mut ()` cannot be sent between threads safely
+   |
+   = help: within `Router<InterruptController<InterruptCore0, oer_mmio::Fixed<276824064>>>`, the trait `Send` is not implemented for `*mut ()`
+note: required because it appears within the type `PhantomData<*mut ()>`
+  --> $RUST/core/src/marker.rs
+   |
+   | pub struct PhantomData<T: PointeeSized>;
+   |            ^^^^^^^^^^^
+note: required because it appears within the type `InterruptController<InterruptCore0, oer_mmio::Fixed<276824064>>`
+  --> src/platform/interrupt_controller.rs
+   |
+   | pub struct InterruptController<
+   |            ^^^^^^^^^^^^^^^^^^^
+note: required because it appears within the type `Router<InterruptController<InterruptCore0, oer_mmio::Fixed<276824064>>>`
+  --> $WORKSPACE/chips/espressif/interrupt-table/src/router.rs
+   |
+   | pub struct Router<C: Controller> {
+   |            ^^^^^^
+note: required by a bound in `send`
+  --> tests/ui/interrupt_grant_is_one_per_hart.rs:7:12
+   |
+ 7 | fn send<T: Send>() {}
+   |            ^^^^ required by this bound in `send`
+
+error[E0382]: use of moved value: `grant`
+  --> tests/ui/interrupt_grant_is_one_per_hart.rs:15:14
+   |
+12 |     if let Some(grant) = released.take_interrupts() {
+   |                 ----- move occurs because `grant` has type `InterruptGrant<InterruptCore1, oer_mmio::Fixed<276824064>>`, which does not implement the `Copy` trait
+13 |         keep(grant);
+   |              ----- value moved here
+14 |         #[cfg(all())]
+15 |         keep(grant); // ui-error: E0382
+   |              ^^^^^ value used here after move
+   |
+note: consider changing this parameter type in function `keep` to borrow instead if owning the value isn't necessary
+  --> tests/ui/interrupt_grant_is_one_per_hart.rs:8:12
+   |
+ 8 | fn keep(_: Hart1Grant) {}
+   |    ----    ^^^^^^^^^^ this parameter takes ownership of the value
+   |    |
+   |    in this function

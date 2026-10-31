@@ -83,7 +83,32 @@ Constructing an executor or the doorbell consumes its line's typed block (`FROM_
 shared block: every context raises it through `&self`). Wakers raise the
 published line; only the line's handler lowers it, and it lowers it before it
 takes the work, so a raise during the work runs another round. A raise
-reads the line back. The time driver consumes `SystemTimer`, containing
+reads the line back. Every raise (`raise_interrupt`, `Doorbell::ring`)
+fences `w, o` after the raiser's published facts and before the device
+write, and every handler round (`serve`, the acknowledgers) lowers, fences
+`o, rw` and only then takes the facts: a memory fence alone orders no MMIO
+access. Across harts this order is conditional on two hardware
+preconditions the repository does not establish: the core honors the I/O
+bits of FENCE and the two harts' writes of one `HP_CPU_INT_FROM_CPU_n` word
+are serialized (H1), and a level last written 1 eventually pends on the
+receiving hart (H2).
+
+## Harts
+
+Each executor starts with its hart's `Hart<H>` (from that hart's interrupt
+enable) and const-checks that its table entry names hart `H`; an executor
+runs on any hart that has its own router, including a secondary hart's
+interrupt-mode executor on its own `FROM_CPU` line routed to that hart's
+bank. Each executor's running context, ready mask and task slots are its
+own, and its task wakers stay on its hart. A task on one hart reaches a
+task on another only by raising the other executor's `IrqSignal`, declared
+with a `FromPeerHart` raiser. [`peer`](src/peer.rs) carries one request and
+its answer between two such tasks over an `oer-memory` in-place request
+slot: a successful `post` creates the obligation of one answer; the slot is
+`WORKING` only inside the server's call; the client gets the answer or, at
+its deadline on its own executor's timer, the terminal `PeerError::Expired`.
+Completion supervision beyond that deadline (timers on the server's hart, a
+durable supervisor) does not exist yet. The time driver consumes `SystemTimer`, containing
 the running timer's disjoint owners from the reset root: our comparator writer, three alarm
 acknowledgers that each strobe their own bit of the shared
 acknowledgement block, and the shared counter latch, which every context

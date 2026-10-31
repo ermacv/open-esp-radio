@@ -104,6 +104,8 @@ impl port::SecondaryStart for Port {
     type Preconditions = crate::peripherals::reset_cause::ResetCauses;
     type Released = cores::Released;
     type StartError = cores::StartError;
+    type Interrupts = crate::platform::Hart1Grant;
+    type Controller = crate::platform::Hart1Controller;
 
     #[inline(always)]
     fn release(
@@ -126,6 +128,21 @@ impl port::SecondaryStart for Port {
     #[inline(always)]
     fn observations(error: cores::StartError) -> [u32; 3] {
         error.observations()
+    }
+
+    fn interrupts(released: &mut cores::Released) -> Option<Self::Interrupts> {
+        released.take_interrupts()
+    }
+
+    #[cfg(target_arch = "riscv32")]
+    fn controller(interrupts: Self::Interrupts) -> Result<Self::Controller, port::ForeignHart> {
+        interrupts.into_controller()
+    }
+
+    /// The host has no hart identity: no controller is made off the chip.
+    #[cfg(not(target_arch = "riscv32"))]
+    fn controller(interrupts: Self::Interrupts) -> Result<Self::Controller, port::ForeignHart> {
+        interrupts.into_controller_on(usize::MAX)
     }
 }
 

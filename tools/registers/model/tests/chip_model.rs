@@ -1739,6 +1739,68 @@ fn included_types_share_the_materialization_budget() -> TestResult {
     assert!(error.entity.starts_with("BLE_COPY."));
     Ok(())
 }
+/// The fixture with the BLE instance hart-local (`hart_local`, inserted
+/// after its name), the root naming hart facts when `harts` is set.
+fn hart_local(hart_local: &str, harts: bool) -> TestResult<Fixture> {
+    let fixture = Fixture::new()?;
+    fixture.edit(
+        "root.toml",
+        "name = \"BLE\"\ntype = \"BLE\"",
+        &format!("name = \"BLE\"\n{hart_local}\ntype = \"BLE\""),
+    )?;
+    if harts {
+        fixture.write(
+            "platform.toml",
+            "[interrupts]\nharts = [0, 1]\nboot-hart = 0\n",
+        )?;
+        fixture.edit(
+            "root.toml",
+            "chip = \"testchip\"",
+            "chip = \"testchip\"\nhart-facts = \"platform.toml\"",
+        )?;
+    }
+    Ok(fixture)
+}
+
+#[test]
+fn a_hart_local_instance_keeps_one_address_range() -> TestResult {
+    let model = hart_local("hart-local = { sources = [\"SRC_BLOB\"] }", true)?.load()?;
+    let ble = model
+        .instances()
+        .iter()
+        .find(|instance| instance.name == "BLE")
+        .ok_or("no BLE")?;
+    assert_eq!(
+        ble.hart_local.as_ref().map(|local| local.sources.clone()),
+        Some(vec!["SRC_BLOB".to_owned()])
+    );
+    let timg0 = model
+        .instances()
+        .iter()
+        .find(|instance| instance.name == "TIMG0")
+        .ok_or("no TIMG0")?;
+    assert!(timg0.hart_local.is_none());
+    Ok(())
+}
+
+#[test]
+fn a_hart_local_instance_needs_hart_facts_sources_and_no_dim() -> TestResult {
+    let error = hart_local("hart-local = { sources = [\"SRC_BLOB\"] }", false)?.rejection()?;
+    assert!(matches!(error.kind, ErrorKind::HartLocal(_)), "{error}");
+    assert_eq!(error.entity, "BLE");
+    let error = hart_local("hart-local = { sources = [] }", true)?.rejection()?;
+    assert!(matches!(error.kind, ErrorKind::InvalidSources), "{error}");
+    let error = hart_local("hart-local = { sources = [\"SRC_NONE\"] }", true)?.rejection()?;
+    assert!(matches!(error.kind, ErrorKind::UnknownSource(_)), "{error}");
+    let error = hart_local(
+        "hart-local = { sources = [\"SRC_BLOB\"] }\ndim = { count = 2, stride = 0x20 }",
+        true,
+    )?
+    .rejection()?;
+    assert!(matches!(error.kind, ErrorKind::HartLocal(_)), "{error}");
+    Ok(())
+}
+
 #[path = "chip_model/controls.rs"]
 mod controls;
 #[path = "chip_model/facts.rs"]

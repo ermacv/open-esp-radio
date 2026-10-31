@@ -133,6 +133,7 @@ type = "CLIC"
 base = 0x10800000
 extent = { size = 0x10c0, partial = true, sources = ["ESP_IDF_4D59230D_S31_CLIC"] }
 sources = ["ESP_IDF_4D59230D_S31_CLIC"]
+hart-local = { sources = ["ESP_IDF_4D59230D_S31_CLIC", "HW1_S31_CLIC_20261026"] }
 clocks = [
   { role = "core0", field = "HP_SYS_CLKRST.HPCORE0_CTRL0.REG_CORE_CLIC_CLK_EN", sources = ["ESP_IDF_4D59230D_S31_HP_SYS_CLKRST_STRUCT_H_L161"] },
   { role = "core1", field = "HP_SYS_CLKRST.HPCORE1_CTRL0.REG_CORE_CLIC_CLK_EN", sources = ["ESP_IDF_4D59230D_S31_HP_SYS_CLKRST_STRUCT_H_L189"] },

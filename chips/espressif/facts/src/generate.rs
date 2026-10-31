@@ -269,11 +269,6 @@ impl Vectors {
         format!("_runtime_start_h{hart}")
     }
 
-    /// The Rust root a secondary hart's entry tail-calls on its task stack.
-    pub fn secondary_main(hart: u32) -> String {
-        format!("runtime_secondary_main_h{hart}")
-    }
-
     /// The secondary entries' assembly: the PMA program `pma` and one
     /// `SECONDARY_ENTRY <hart>` instantiation of the runtime's entry macro
     /// per secondary hart, expanded after that macro's definition.
@@ -287,8 +282,8 @@ impl Vectors {
 
     /// The runtime's Rust for each secondary entry: the entry's address
     /// marker and minted `SecondaryEntry` (inside the runtime's entry module,
-    /// which owns the mint), and the `runtime_secondary_main_h<N>` root its
-    /// entry tail-calls.
+    /// which owns the mint). The `runtime_secondary_main_h<N>` root the entry
+    /// tail-calls is the image's (`secondary_entry!`).
     pub fn secondary_rust(&self) -> String {
         let mut text =
             String::from("// Generated from the chip hart geometry.\nunsafe extern \"C\" {\n");
@@ -310,14 +305,6 @@ impl Vectors {
             );
         }
         text.push_str("        _ => None,\n    }\n}\n");
-        for hart in self.secondaries() {
-            let _ = writeln!(
-                text,
-                "\n/// Secondary hart {hart}'s root on its PSRAM task stack, which its\n/// generated entry tail-calls once after the launch handshake.\n// SAFETY: one exported root per secondary hart; its generated entry calls it\n// with the C ABI, and a second definition fails the link.\n#[unsafe(no_mangle)]\nextern \"C\" fn {main}() -> ! {{\n    // Only `{entry}` reaches this root, once per boot on hart {hart}: it runs\n    // after the ACK the boot hart publishes once, after it read back a zero\n    // boot word, so the ROM cannot enter the entry again.\n    crate::secondary::SecondaryHandoff::<{hart}>::new().idle()\n}}",
-                main = Self::secondary_main(hart),
-                entry = Self::secondary_entry(hart),
-            );
-        }
         text
     }
 
@@ -701,14 +688,10 @@ mod tests {
             assert!(!secondary.contains(&format!("SECONDARY_ENTRY {}\n", vectors.boot_hart)));
             let rust = vectors.secondary_rust();
             syn::parse_file(&rust).expect("secondary Rust");
-            assert_eq!(
-                rust.matches("#[unsafe(no_mangle)]").count(),
-                (harts - 1) as usize
-            );
-            assert!(!rust.contains(&format!("runtime_secondary_main_h{}(", vectors.boot_hart)));
+            // The roots are the images' (`secondary_entry!`), not generated.
+            assert!(!rust.contains("runtime_secondary_main_h"));
             for hart in vectors.secondaries() {
                 assert!(secondary.contains(&format!("SECONDARY_ENTRY {hart}\n")));
-                assert!(rust.contains(&format!("fn runtime_secondary_main_h{hart}() -> !")));
                 assert!(rust.contains(&format!("safe static _runtime_start_h{hart}: [u8; 0];")));
                 assert!(linker.contains(&format!(
                     "hart {hart}'s entry in .isr.text takes the ROM main path"

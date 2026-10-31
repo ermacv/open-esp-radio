@@ -2132,7 +2132,9 @@ dependencies = [
  "oer-esp32s31-hal",
  "oer-esp32s31-layout",
  "oer-espressif-executor",
+ "oer-espressif-interrupt-table",
  "oer-espressif-staged-runtime",
+ "oer-memory",
  "oer-time",
 ]
 

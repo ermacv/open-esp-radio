@@ -164,6 +164,11 @@ volatile DMA-memory cells live in `oer-memory`):
 - `oer_mmio::assume_owned` promises exclusive ownership of the declared
   words, rather than every word of an overlapping address range. The chip's
   PAC takes those words once; the HAL root splits them into domain owners.
+  A hart-local instance (the S31 CLIC: each hart reaches its own at one
+  address) is claimed once per hart; the generated disjoint checks run per
+  hart context, and the HAL's per-hart `InterruptGrant` lets element `h` be
+  used only on hart `h` (a runtime hart check when it becomes a controller,
+  which is `!Send`).
   Only the root's owned partitions authorize register access.
   A probe may reclaim a block only after dropping its previous owner.
   Generated const assertions exclude overlapping claims. The HAL's safe
@@ -218,8 +223,12 @@ constant entry in one block.
 Every instruction site has one narrow `// SAFETY:` proof. Moving instructions
 into this crate may increase its unsafe count only while the branch total
 decreases and no caller's count increases; runtime panic counts never increase.
-Device ordering is `oer_riscv::fence`, including the host compiler fence;
-`oer-mmio` contains no architectural instruction or barrier API.
+Device ordering is `oer_riscv::fence` (`fence iorw, iorw`), `fence_w_o`
+(memory writes before device outputs: a producer's facts before its
+software-interrupt raise) and `fence_o_rw` (device outputs before memory
+accesses: a handler's lowering before it takes the facts), each with the
+host compiler fence; `oer-mmio` contains no architectural instruction or
+barrier API.
 
 The instruction module and its exports exist only on RISC-V. Staged firmware
 binaries gate their entry composition and hardware dependencies on the same target;
@@ -230,7 +239,8 @@ providing synthetic CSR reads. Their host entry is empty.
 Interrupt stack install takes a local `&mut PreAdmission<H>` and is safe.
 The boot handoff wraps its unique entry proof with that token, retains it
 through adoption, and consumes it when enabling interrupts, returning the
-router and its existing `Hart<H>` together. `Adopted::parts` lends the hart
+router and its existing `Hart<H>` together; a secondary hart's
+`SecondaryHandoff` does the same with its own token. `Adopted::parts` lends the hart
 and mutable router together before enable. Executor startup const-checks the
 entry's hart against this token; task wakers stay local to that hart. `Hart<H>` and
 `PreAdmission<H>` are neither Send nor Sync and have no public constructor.
@@ -358,11 +368,13 @@ installs its fault stub, stores to the SRAM handshake (a `sym` operand) and
 programs the PMA chain from the facts, then installs its own `gp` and task
 stack. The same module mints the hart's `SecondaryEntry` once
 (`SecondaryEntry::new::<H>`, which refuses the boot hart at monomorphization;
-its contract is that address and that entry behaviour) and defines its
-generated `runtime_secondary_main_h<N>`, whose `SecondaryHandoff::new` mints
-the hart's `PreAdmission<H>`: only that entry reaches it, once per boot, after
-the boot hart's acknowledgement, which follows the boot word's read-back of
-zero. The handshake is a `placed_static!` in SRAM critical data. A mixed-word trigger preserves ordinary fields and unassigned bits,
+its contract is that address and that entry behaviour). The entry tail-calls
+`runtime_secondary_main_h<N>`, which the image's `secondary_entry!` exports
+(`export_name`, a second definition fails the link) beside its SRAM
+`Mailbox` (`link_section`). That root's `__root` checks the running hart
+against `H` and takes the mailbox, which only the launch of the root's one
+permit fills, once; only then does it mint the hart's `PreAdmission<H>`, so
+each hart's authority exists once per boot. The handshake is a `placed_static!` in SRAM critical data. A mixed-word trigger preserves ordinary fields and unassigned bits,
 writes zero to every WTC lane and every other WT lane, and asserts only its
 selected WT field; it grants no generic modify of a WTC word. The reset
 path keeps the existing ClaimCell election through the trigger, then waits

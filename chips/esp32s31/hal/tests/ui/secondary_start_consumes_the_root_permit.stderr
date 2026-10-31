@@ -1,18 +1,22 @@
 error[E0624]: associated function `new` is private
-  --> tests/ui/secondary_start_consumes_the_root_permit.rs:15:19
+  --> tests/ui/secondary_start_consumes_the_root_permit.rs:19:19
    |
-15 |     LaunchPermit::new(peripherals) // ui-error: E0624
-   |                   ^^^ private associated function
+19 |       LaunchPermit::new(peripherals, clic, observer) // ui-error: E0624
+   |                     ^^^ private associated function
    |
   ::: src/cores/launch.rs
    |
-   |     pub(crate) fn new(peripherals: SecondaryLaunchPeripherals) -> Self {
-   |     ------------------------------------------------------------------ private associated function defined here
+   | /     pub(crate) fn new(
+   | |         peripherals: SecondaryLaunchPeripherals,
+   | |         clic: Clic,
+   | |         clic_observer: ClicObserver,
+   | |     ) -> Self {
+   | |_____________- private associated function defined here
 
 error[E0599]: no method named `release` found for mutable reference `&mut CoreControlRegisters<oer_mmio::Fixed<544227328>, oer_mmio::Fixed<542662656>, oer_mmio::Fixed<542666752>, oer_mmio::Fixed<544215040>, oer_mmio::Fixed<544210944>>` in the current scope
-  --> tests/ui/secondary_start_consumes_the_root_permit.rs:20:15
+  --> tests/ui/secondary_start_consumes_the_root_permit.rs:24:15
    |
-20 |     registers.release(hart); // ui-error: E0599
+24 |     registers.release(hart); // ui-error: E0599
    |               ^^^^^^^
    |
 help: there is a method `release_reset` with a similar name, but with different arguments
@@ -25,7 +29,7 @@ error[E0382]: use of moved value: `permit`
   --> tests/ui/secondary_start_consumes_the_root_permit.rs:10:35
    |
  7 | pub fn start(cores: &mut Cores, permit: LaunchPermit, causes: ResetCauses, entry: SecondaryEntry) {
-   |                                 ------ move occurs because `permit` has type `LaunchPermit<oer_mmio::Fixed<542660608>, oer_mmio::Fixed<544210944>, oer_mmio::Fixed<738197504>>`, which does not implement the `Copy` trait
+   |                                 ------ move occurs because `permit` has type `LaunchPermit<oer_mmio::Fixed<542660608>, oer_mmio::Fixed<544210944>, oer_mmio::Fixed<738197504>, oer_mmio::Fixed<276824064>>`, which does not implement the `Copy` trait
  8 |     let _ = cores.start_secondary(permit, causes, entry);
    |                                   ------ value moved here
  9 |     #[cfg(all())]

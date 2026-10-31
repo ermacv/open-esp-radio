@@ -35,8 +35,8 @@ impl<const H: u8> Hart<H> {
 /// use oer_espressif_staged_runtime::{PreAdmission, BOOT_HART};
 /// let admission = PreAdmission::<BOOT_HART>::new();
 /// ```
-/// A secondary hart's authority comes only from its generated root's
-/// `SecondaryHandoff`:
+/// A secondary hart's authority comes only from its root's
+/// `SecondaryHandoff` (`secondary_entry!`):
 /// ```compile_fail
 /// use oer_espressif_staged_runtime::PreAdmission;
 /// let admission = PreAdmission::<1>::new();

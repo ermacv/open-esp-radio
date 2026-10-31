@@ -8,7 +8,7 @@ use crate::{Failure, Fault, SoftwareInterrupt};
 use oer_espressif_boot::drivers::system_timer;
 use oer_espressif_platform_port::{ExecutorPlatform, Hart};
 
-use crate::software_line::{SoftwareLine, serve};
+use crate::software_line::{SoftwareLine, raise, serve};
 
 /// The port of binding `B`.
 pub(crate) type PortOf<B> = <B as Binding>::Port;
@@ -250,17 +250,20 @@ fn line<B: Binding>(swi: SoftwareInterrupt) -> Option<Line<PortOf<B>>> {
     swi.at(&B::storage().lines).get()
 }
 
-/// Raise software interrupt `swi`; a line no executor took yet has no
-/// handler to run, so nothing is raised. Never panics.
+/// Raise software interrupt `swi` after the caller's published facts
+/// (`fence w, o`, then the raise: [`raise`]); a line no executor took yet
+/// has no handler to run, so nothing is raised. The raiser may run on
+/// another hart than the line's handler. Never panics.
 #[inline(always)]
 pub(crate) fn raise_interrupt<B: Binding>(swi: SoftwareInterrupt) {
     if let Some(line) = line::<B>(swi) {
-        line.raise();
+        raise(&line);
     }
 }
 
-/// One handler round of software interrupt `swi`: lower its line, then take
-/// the work (`drain`), so a raise during the work runs another round. Only
+/// One handler round of software interrupt `swi`: lower its line, fence
+/// (`fence o, rw`), then take the work (`drain`), so a raise during the work
+/// runs another round and the work a raise announced is visible. Only
 /// an installed line's handler runs, since only an installed line is raised
 /// and routed. Never panics.
 #[inline(always)]

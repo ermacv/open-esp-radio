@@ -238,3 +238,25 @@ fn a_secondary_ready_event_renders_its_hart_and_stack_pointer() {
     );
     assert!(text.contains("OER-RESULT: pass boot-smoke"), "{text}");
 }
+
+#[test]
+fn a_hart_exchange_event_renders_its_hart_request_and_answer() {
+    let mut bytes = Vec::new();
+    {
+        let mut console = Console::new(write(&mut bytes));
+        console
+            .event(&oer_diagnostics::HartExchange {
+                hart: 1,
+                request: 7,
+                answer: 49,
+            })
+            .unwrap();
+        console.event(&BootSmokePassed).unwrap();
+    }
+    let text = rendered(&bytes).unwrap();
+    assert!(
+        text.contains("OER-HART exchange hart=1 request=7 answer=49"),
+        "{text}"
+    );
+    assert!(text.contains("OER-RESULT: pass boot-smoke"), "{text}");
+}

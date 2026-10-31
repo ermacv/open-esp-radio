@@ -1,9 +1,7 @@
 //! Owned adapters of the family adoption driver. Startup order is not HAL policy.
 use super::*;
 use crate::{cores, power::PsramMpll};
-use oer_esp32s31_pac::ownership::{
-    ChipClockPeripherals, DebugPeripherals, InterruptMatrixPeripherals,
-};
+use oer_esp32s31_pac::ownership::{ChipClockPeripherals, DebugPeripherals};
 use oer_espressif_boot::adoption::{self, InitError, Port};
 
 /// The HAL's adoption port over the root's unique parts.
@@ -26,7 +24,7 @@ pub struct RuntimeResources {
     pub(super) timg0_alarm: Timg0AlarmParts,
     pub(super) timg1_alarm: Timg1AlarmParts,
     pub(super) software_interrupts: SoftwareInterrupts,
-    pub(super) interrupt_matrix: InterruptMatrixPeripherals,
+    pub(super) interrupt_matrix: crate::platform::interrupt_controller::MatrixParts,
     pub(super) efuse: EfuseRegisters,
     pub(super) entropy: EntropyRegisters,
     pub(super) reset_cause: ResetCauseRegisters,
@@ -61,7 +59,8 @@ pub struct Hardware {
     pub entropy: EntropyRegisters,
     pub reset_cause: ResetCauseRegisters,
     /// The one-shot authority to start hart 1 (`Cores::start_secondary`):
-    /// its route bank, the ROM wake-stub word and the cache bus observer.
+    /// hart 1's interrupt grant (its route bank and CLIC parts), the ROM
+    /// wake-stub word and the cache bus observer.
     pub hart1: crate::cores::LaunchPermit,
     pub wifi_interrupts: WifiInterruptBanks,
     pub clocks: ChipClocks,

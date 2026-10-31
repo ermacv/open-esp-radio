@@ -34,7 +34,9 @@
 //!   parts ([`AlarmPart`]);
 //! - [`SecondaryStart`]: the release of a secondary hart into the staged
 //!   runtime's generated entry ([`SecondaryEntry`]), consuming the root's
-//!   one-shot launch permit, and the retirement of its ROM boot word.
+//!   one-shot launch permit, the retirement of its ROM boot word and the
+//!   hand-over of its interrupt grant, which only the hart itself makes into
+//!   its controller.
 
 use oer_mmio::InterruptSource;
 
@@ -168,10 +170,18 @@ pub trait SecondaryStart: Platform {
     type Permit;
     /// What the preconditions read besides the owned words (the reset causes).
     type Preconditions: Copy;
-    /// A released hart's retained owners (its route bank).
+    /// A released hart's retained owners (its interrupt grant until the
+    /// runtime hands it to the hart).
     type Released;
     /// A refused or unconfirmed step, with its observations.
     type StartError: Copy;
+    /// A released hart's interrupt grant: its route bank and its own local
+    /// interrupt controller's parts, inert until the hart makes its
+    /// controller from them.
+    type Interrupts: Send;
+    /// A secondary hart's interrupt controller, which only that hart makes
+    /// and which never leaves it.
+    type Controller;
 
     /// Check the preconditions and release `entry`'s hart into it; the boot
     /// word is written last.
@@ -200,6 +210,27 @@ pub trait SecondaryStart: Platform {
 
     /// A refused step's code and observations, for the retained record.
     fn observations(error: Self::StartError) -> [u32; 3];
+
+    /// Move the released hart's interrupt grant out, once; `None` after.
+    fn interrupts(released: &mut Self::Released) -> Option<Self::Interrupts>;
+
+    /// Make the hart's interrupt controller from its grant, on the hart
+    /// itself: its local controller is reachable only from its own hart.
+    ///
+    /// # Errors
+    ///
+    /// [`ForeignHart`] on another hart than the grant's; nothing is written.
+    fn controller(interrupts: Self::Interrupts) -> Result<Self::Controller, ForeignHart>;
+}
+
+/// An interrupt grant made into a controller on another hart than its own:
+/// its local controller's words would reach the running hart's controller.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ForeignHart {
+    /// The hart that ran the call.
+    pub actual: usize,
+    /// The grant's hart.
+    pub expected: usize,
 }
 
 /// The executor's platform: the source identities of the software

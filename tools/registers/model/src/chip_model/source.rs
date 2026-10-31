@@ -489,6 +489,10 @@ pub struct Instance {
     pub resets: Vec<Control>,
     #[serde(default)]
     pub muxes: Vec<Mux>,
+    /// Each hart reaches its own copy of the instance's words at the same
+    /// address.
+    #[serde(default)]
+    pub hart_local: Option<Sourced>,
 }
 
 /// A fixed gate or reset link to an expanded MMIO field identity.

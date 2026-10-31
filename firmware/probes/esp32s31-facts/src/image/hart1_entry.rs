@@ -251,11 +251,11 @@ fn run(s: &mut Session<'_>, direct: bool) {
         word.store(0, Ordering::Relaxed);
     }
     CLIC.store(
-        ptr::from_ref(&s.interrupt_matrix.clic).cast_mut(),
+        ptr::from_ref(&s.interrupt_matrix.clic[1]).cast_mut(),
         Ordering::Relaxed,
     );
     OBSERVER.store(
-        ptr::from_ref(&s.interrupt_matrix.clic_observer).cast_mut(),
+        ptr::from_ref(&s.interrupt_matrix.clic_observer[1]).cast_mut(),
         Ordering::Relaxed,
     );
     oer_riscv::fence();

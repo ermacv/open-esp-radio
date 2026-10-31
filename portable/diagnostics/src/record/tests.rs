@@ -212,3 +212,21 @@ fn a_secondary_ready_event_keeps_its_hart_and_stack_pointer() {
     };
     assert_eq!(decode(&encoded(&record)), Ok(record));
 }
+
+#[test]
+fn a_hart_exchange_event_keeps_its_hart_request_and_answer() {
+    let exchange = crate::HartExchange {
+        hart: 1,
+        request: 0xbeef,
+        answer: 0xdead_0001,
+    };
+    let words = exchange.encode();
+    assert_eq!(crate::HartExchange::decode(words), Some(exchange));
+    assert_ne!(crate::HartExchange::KIND, SecondaryReady::KIND);
+    assert_ne!(crate::HartExchange::KIND, BootSmokePassed::KIND);
+    let record = Record::Event {
+        kind: crate::HartExchange::KIND,
+        words,
+    };
+    assert_eq!(decode(&encoded(&record)), Ok(record));
+}

@@ -166,8 +166,7 @@ fn begin(s: &mut Session<'_>) -> bool {
             .reg_timergrp0_t0_src_sel()
             .get(),
         u32::from(c.t_divider()),
-        s.interrupt_matrix
-            .clic_observer
+        s.interrupt_matrix.clic_observer[0]
             .read_int_config()
             .mnlbits()
             .get(),
@@ -180,7 +179,7 @@ fn finish(s: &mut Session<'_>) {
     clear(s);
     s.source.store_hp_cpu_int_from_cpu_2(false);
     for i in [LOW, HIGH] {
-        s.interrupt_matrix.clic.modify_ctrl(i, |w| {
+        s.interrupt_matrix.clic[0].modify_ctrl(i, |w| {
             w.set_ie(false);
         });
     }
@@ -374,7 +373,7 @@ fn arbitration(s: &mut Session<'_>, timer_high: bool) {
     route(s, pac::Interrupt::TIMERGRP0_T0, timer.get());
     route(s, pac::Interrupt::CPU_INTR_FROM_CPU_2, software.get());
     for i in [LOW, HIGH] {
-        s.interrupt_matrix.clic.modify_ctrl(i, |w| {
+        s.interrupt_matrix.clic[0].modify_ctrl(i, |w| {
             w.set_attr_shv(true)
                 .set_attr_trig(pac::clic::ctrl::AttrTrig::PositiveLevel)
                 .set_ctl(CONTROLS[1])
@@ -409,7 +408,7 @@ fn arbitration(s: &mut Session<'_>, timer_high: bool) {
         ),
     );
     for i in [LOW, HIGH] {
-        let c = s.interrupt_matrix.clic.read_ctrl(i);
+        let c = s.interrupt_matrix.clic[0].read_ctrl(i);
         emit(
             0x1964,
             i.get() as u32,
@@ -422,7 +421,7 @@ fn arbitration(s: &mut Session<'_>, timer_high: bool) {
         a.store(0, Ordering::Relaxed);
     }
     ACTIVE.store(true, Ordering::Release);
-    let [start, end] = generic::admit_window(&mut s.interrupt_matrix.clic);
+    let [start, end] = generic::admit_window(&mut s.interrupt_matrix.clic[0]);
     ACTIVE.store(false, Ordering::Release);
     emit(0x1965, COUNT.load(Ordering::Acquire), start, end);
     for ((c, t), l) in CAUSES.iter().zip(&CYCLES).zip(&LEVELS) {

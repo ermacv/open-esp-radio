@@ -333,7 +333,7 @@ name = "Clic"
 instance = "CLIC"
 registers = ["CTRL%s", "INT_INFO"]
 observes = ["INT_CONFIG"]
-description = "The router owns line writes and reads implemented geometry and the configuration whose sole writer is ClicObserver during partition split."
+description = "Each hart's element is that hart's own CLIC: the router owns its line writes and reads its implemented geometry and the configuration whose sole writer is that hart's ClicObserver."
 sources = ["ESP_IDF_4D59230D_S31_CLIC"]
 
 [[partitions.parts]]
@@ -341,7 +341,7 @@ name = "ClicObserver"
 instance = "CLIC"
 registers = ["INT_CONFIG", "INT_THRESH"]
 observes = ["CTRL%s"]
-description = "The CLIC's level bits, set once when the root splits the partition, and hart 0's lines as a fatal path reads them after the other hart stopped; it writes no line."
+description = "Each hart's element is that hart's own CLIC: its level bits, set by that hart when its controller is built, and its lines as that hart's fatal path reads them; it writes no line."
 sources = ["ESP_IDF_4D59230D_S31_CLIC"]
 
 [[partitions.parts]]

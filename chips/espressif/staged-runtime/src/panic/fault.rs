@@ -44,11 +44,16 @@ pub enum FaultReason {
     /// A secondary hart's launch did not complete; the hart is not confirmed
     /// held again. Observations: the stage (1 unprovisioned, 2 no entry, 3
     /// handshake used, 4 start refused, 5 not entered, 6 boot word kept, 7
-    /// not ready, 8 stack outside) and its words.
+    /// not ready, 8 stack outside, 9 hand-over refused) and its words.
     SecondaryLaunch = 35,
     /// A starting secondary hart stopped in its fault stub. Observations:
-    /// kind (1 exception, 2 PMP, 3 PMA, 4 interrupt stack), cause, PC and value.
+    /// kind (1 exception, 2 PMP, 3 PMA, 4 interrupt stack, 5 hand-over),
+    /// cause, PC and value.
     SecondaryEarlyFault = 36,
+    /// A request to a task on another hart got no answer by its deadline;
+    /// the request stays posted. Observations: the request kind/site, the
+    /// deadline in microseconds (low, high word) and zero.
+    PeerUnanswered = 37,
     BindingRefused = 256,
     BindingStorageClaimed = 257,
     BindingHandlerOccupied = 258,
@@ -90,6 +95,7 @@ impl FaultReason {
             Self::RequestUnanswered => oer_diagnostics::fault::Class::Cancellation,
             Self::SecondaryLaunch => oer_diagnostics::fault::Class::ConfigurationBoot,
             Self::SecondaryEarlyFault => oer_diagnostics::fault::Class::UnexpectedHardware,
+            Self::PeerUnanswered => oer_diagnostics::fault::Class::Cancellation,
             Self::BindingRefused => oer_diagnostics::fault::Class::ConfigurationBoot,
             Self::BindingStorageClaimed => oer_diagnostics::fault::Class::SoftwareInvariant,
             Self::BindingHandlerOccupied => oer_diagnostics::fault::Class::SoftwareInvariant,
@@ -135,6 +141,7 @@ impl FaultReason {
             34 => Some(Self::RequestUnanswered),
             35 => Some(Self::SecondaryLaunch),
             36 => Some(Self::SecondaryEarlyFault),
+            37 => Some(Self::PeerUnanswered),
             256 => Some(Self::BindingRefused),
             257 => Some(Self::BindingStorageClaimed),
             258 => Some(Self::BindingHandlerOccupied),
@@ -180,6 +187,7 @@ impl FaultReason {
             Self::RequestUnanswered => "RequestUnanswered",
             Self::SecondaryLaunch => "SecondaryLaunch",
             Self::SecondaryEarlyFault => "SecondaryEarlyFault",
+            Self::PeerUnanswered => "PeerUnanswered",
             Self::BindingRefused => "BindingRefused",
             Self::BindingStorageClaimed => "BindingStorageClaimed",
             Self::BindingHandlerOccupied => "BindingHandlerOccupied",

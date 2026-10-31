@@ -957,7 +957,7 @@ extern "C" fn facts_main() -> ! {
 }
 
 fn geometry(s: &mut Session<'_>) {
-    let clic = &s.interrupt_matrix.clic;
+    let clic = &s.interrupt_matrix.clic[0];
     let info = clic.read_int_info();
     emit(
         0x20,
@@ -980,7 +980,7 @@ fn geometry(s: &mut Session<'_>) {
     }
 }
 fn config(s: &mut Session<'_>) {
-    let w = s.interrupt_matrix.clic_observer.read_int_config();
+    let w = s.interrupt_matrix.clic_observer[0].read_int_config();
     emit(
         0x30,
         w.mnlbits().get(),
@@ -1062,12 +1062,12 @@ fn setup(s: &mut Session<'_>) {
     }
     for n in 0..pac::clic::ctrl::COUNT {
         if let Ok(i) = Index::new(n) {
-            matrix.clic.modify_ctrl(i, |w| {
+            matrix.clic[0].modify_ctrl(i, |w| {
                 w.set_ie(false);
             });
         }
     }
-    matrix.clic_observer.modify_int_config(|w| {
+    matrix.clic_observer[0].modify_int_config(|w| {
         w.set_mnlbits(Bits::constant::<LEVEL_BITS>());
     });
     // SAFETY: the probe-owned trap ABI; generated table and both exclusive
@@ -1084,10 +1084,10 @@ fn setup(s: &mut Session<'_>) {
 }
 fn line(s: &mut Session<'_>, control: u8, edge: bool) {
     let i = CPU_LINE;
-    s.interrupt_matrix.clic.modify_ctrl(i, |w| {
+    s.interrupt_matrix.clic[0].modify_ctrl(i, |w| {
         w.set_ie(false);
     });
-    s.interrupt_matrix.clic.modify_ctrl(i, |w| {
+    s.interrupt_matrix.clic[0].modify_ctrl(i, |w| {
         w.set_attr_shv(true)
             .set_attr_trig(if edge {
                 pac::clic::ctrl::AttrTrig::PositiveEdge
@@ -1096,7 +1096,7 @@ fn line(s: &mut Session<'_>, control: u8, edge: bool) {
             })
             .set_ctl(control);
     });
-    s.interrupt_matrix.clic.modify_ctrl(i, |w| {
+    s.interrupt_matrix.clic[0].modify_ctrl(i, |w| {
         w.set_ie(true);
     });
 }
@@ -1109,10 +1109,10 @@ fn edge(s: &mut Session<'_>) {
     setup(s);
     line(s, CONTROLS[1], true);
     let i = CPU_LINE;
-    s.interrupt_matrix.clic.modify_ctrl(i, |w| {
+    s.interrupt_matrix.clic[0].modify_ctrl(i, |w| {
         w.set_ip(true);
     });
-    let pending = s.interrupt_matrix.clic.read_ctrl(i).ip();
+    let pending = s.interrupt_matrix.clic[0].read_ctrl(i).ip();
     oer_riscv::enable_interrupts();
     wait_window();
     oer_riscv::disable_interrupts();
@@ -1120,7 +1120,7 @@ fn edge(s: &mut Session<'_>) {
         0x10,
         u32::from(pending),
         IRQ_COUNT.load(Ordering::Relaxed),
-        u32::from(s.interrupt_matrix.clic.read_ctrl(i).ip()),
+        u32::from(s.interrupt_matrix.clic[0].read_ctrl(i).ip()),
     );
     wait_window();
 }
@@ -1209,7 +1209,7 @@ fn threshold_raising(s: &mut Session<'_>) {
             IRQ_COUNT.store(0, Ordering::Relaxed);
             IRQ_CYCLE.store(0, Ordering::Relaxed);
             IRQ_PC.store(0, Ordering::Relaxed);
-            let pending = s.interrupt_matrix.clic.read_ctrl(CPU_LINE).ip();
+            let pending = s.interrupt_matrix.clic[0].read_ctrl(CPU_LINE).ip();
             let mut marks = [0; 6];
             // SAFETY: setup installed the exclusive IRQ stack; MIE is masked,
             // source is main's live shared PAC owner, marks is exclusive. The
@@ -1228,7 +1228,7 @@ fn threshold_raising(s: &mut Session<'_>) {
             // Let the source propagate with MIE off and the ceiling still high.
             // This pending sample is outside the timed instruction window.
             wait_window();
-            let still_pending = s.interrupt_matrix.clic.read_ctrl(CPU_LINE).ip();
+            let still_pending = s.interrupt_matrix.clic[0].read_ctrl(CPU_LINE).ip();
             oer_riscv::restore_interrupt_threshold(0);
             oer_riscv::enable_interrupts();
             wait_window();

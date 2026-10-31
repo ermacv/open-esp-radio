@@ -1662,6 +1662,131 @@ fn instance_families_follow_one_and_three_harts_and_invalid_lists_are_refused() 
     }
 }
 
+/// The fixture with `harts` harts and the instances `local` hart-local,
+/// loaded and rendered.
+fn hart_local(harts: u32, local: &[&str]) -> Result<String, super::Error> {
+    let tags = local
+        .iter()
+        .map(|instance| {
+            (
+                format!("name = \"{instance}\"\n"),
+                format!("name = \"{instance}\"\nhart-local = {{ sources = [\"SRC_HEADER\"] }}\n"),
+            )
+        })
+        .collect::<Vec<_>>();
+    let mut edits = vec![(
+        "chip.toml",
+        "chip = \"testchip\"",
+        "chip = \"testchip\"\nhart-facts = \"platform.toml\"",
+    )];
+    edits.extend(
+        tags.iter()
+            .map(|(from, to)| ("chip.toml", from.as_str(), to.as_str())),
+    );
+    let directory = edited(&edits);
+    std::fs::write(
+        directory.path().join("platform.toml"),
+        format!(
+            "[interrupts]\nboot-hart = 0\nharts = {:?}\n",
+            (0..harts).collect::<Vec<_>>()
+        ),
+    )
+    .expect("the platform facts are written");
+    let (model, policy) = load(directory.path());
+    render(&model, &policy)
+}
+
+#[test]
+fn a_hart_local_instance_is_claimed_once_per_hart() {
+    for harts in [2, 3] {
+        let rust = hart_local(harts, &["RADIO1", "ETM"])
+            .unwrap_or_else(|error| panic!("the hart-local fixture renders: {error}"));
+        // Standalone parts and the division of a hart-local instance are
+        // arrays of HARTS owners; every other part keeps its one owner.
+        for member in [
+            "pub second: [super::radio::Second; super::HARTS],",
+            "pub second_events: [super::radio::SecondEvents; super::HARTS],",
+            "pub etm_low: [super::etm::EtmLow; super::HARTS],",
+            "pub etm_high: [super::etm::EtmHigh; super::HARTS],",
+            "pub task: super::radio::Task,",
+            "pub counter: super::counter::Counter,",
+        ] {
+            assert!(rust.contains(member), "{member}\n{rust}");
+        }
+        let claims = rust
+            .lines()
+            .find(|line| line.starts_with("pub type Claims"))
+            .expect("the claims are listed");
+        for (claim, count) in [
+            ("super::radio::SecondClaim", harts),
+            ("super::radio::SecondEventsClaim", harts),
+            ("super::etm::EtmDivisionClaim", harts),
+            ("super::radio::Radio0DivisionClaim", 1),
+            ("super::counter::CounterClaim", 1),
+        ] {
+            assert_eq!(
+                claims.matches(&format!("{claim},")).count()
+                    + claims.matches(&format!("{claim})")).count(),
+                count as usize,
+                "{claim} in {claims}"
+            );
+        }
+        // One disjointness check per hart context, each over every block.
+        let checks = rust
+            .split("const _: () = assert!(")
+            .skip(1)
+            .filter(|check| check.contains("disjoint_blocks"))
+            .collect::<Vec<_>>();
+        assert_eq!(checks.len(), harts as usize, "{rust}");
+        for check in &checks {
+            for block in [
+                "<super::radio::SecondWords as",
+                "<super::etm::EtmDivision as",
+                "<super::radio::Radio0Division as",
+                "<super::counter::CounterWords as",
+            ] {
+                assert_eq!(check.matches(block).count(), 1, "{block} in {check}");
+            }
+        }
+        // The program builds, so every per-hart check holds and the
+        // partition fills each array with the hart count's owners.
+        run(
+            &rust,
+            &format!(
+                r#"fn main() {{
+                assert_eq!(HARTS, {harts});
+                let _: fn(ownership::Claims) -> ownership::Partitions = ownership::partition;
+                let _ = |p: ownership::Partitions| -> ([radio::Second; HARTS], [etm::EtmHigh; HARTS], radio::Task) {{
+                    (p.second.second, p.etm.etm_high, p.radio.task)
+                }};
+            }}"#
+            ),
+        );
+    }
+}
+
+#[test]
+fn an_instance_without_hart_local_keeps_one_claim_and_one_check() {
+    let rust = rendered();
+    assert!(!rust.contains("super::HARTS]"), "{rust}");
+    assert_eq!(rust.matches("oer_mmio::check::disjoint_blocks(").count(), 1);
+    // With hart facts but no hart-local instance, the ownership is the same.
+    let with_facts = hart_local(2, &[]).expect("the fixture with hart facts renders");
+    let ownership = |text: &str| {
+        text.split("pub mod ownership {")
+            .nth(1)
+            .expect("the ownership module")
+            .to_owned()
+    };
+    assert_eq!(ownership(&rust), ownership(&with_facts));
+}
+
+#[test]
+fn a_shared_part_on_a_hart_local_instance_is_refused() {
+    let error = hart_local(2, &["COUNTER"]).expect_err("a shared hart-local part is refused");
+    assert!(error.to_string().contains("hart-local"), "{error}");
+}
+
 #[test]
 fn indexed_fields_follow_the_block_prefix_rule() {
     let rust = rendered_with(&[(

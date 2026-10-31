@@ -105,6 +105,8 @@ pub enum ErrorKind {
     },
     #[error("extent: {0}")]
     Extent(String),
+    #[error("hart-local: {0}")]
+    HartLocal(String),
     #[error("{0} lies outside the instance's extent")]
     OutsideExtent(String),
     #[error("address range overlaps {0}")]

@@ -20,10 +20,7 @@
 //! after that raises the interrupt again and is not lost.
 
 use crate::SoftwareInterrupt;
-use core::{
-    marker::PhantomData,
-    sync::atomic::{Ordering, fence},
-};
+use core::marker::PhantomData;
 
 use oer_espressif_interrupt_table::{
     Bound, Class, Context, Entry, InterruptSource, InterruptSources, request_direction,
@@ -133,12 +130,12 @@ impl<B: Binding, const SWI: u8, E: Entry, X: Entry> Doorbell<B, SWI, E, X> {
         )
     }
 
-    /// Raise the doorbell. The fence orders the caller's request writes
-    /// before the raise; on ESP32-S31 the raise reads the line back, so it
-    /// has reached the interrupt matrix when this returns. Never waits.
+    /// Raise the doorbell. Its `fence w, o` orders the caller's request
+    /// writes before the raise (a memory fence alone orders no device
+    /// write); on ESP32-S31 the raise reads the line back, so it has reached
+    /// the interrupt matrix when this returns. Never waits.
     pub fn ring(&self) {
-        fence(Ordering::SeqCst);
-        self.line.raise();
+        crate::software_line::raise(&self.line);
     }
 }
 
@@ -148,11 +145,12 @@ pub struct LineAcknowledger<B: Binding, const SWI: u8> {
 }
 
 impl<B: Binding, const SWI: u8> LineAcknowledger<B, SWI> {
-    /// Lower the line before taking the requests its raises announced: a
-    /// ring after this raises the line again and is not lost.
+    /// Lower the line, then `fence o, rw`, before taking the requests its
+    /// raises announced: a ring after this raises the line again and is not
+    /// lost, and the requests a ring announced are visible.
     #[inline(always)]
     pub fn acknowledge(&mut self) {
-        self.line.lower();
+        crate::software_line::serve(&self.line, || ());
     }
 }
 

@@ -416,11 +416,13 @@ mod launch {
         }
     }
 
-    /// Hart 1's route bank, LP_SYS and the cache over host memory.
+    /// Hart 1's route bank, LP_SYS, the cache and hart 1's CLIC over host
+    /// memory.
     struct Permit {
         routes: Vec<u32>,
         lp_sys: Vec<u32>,
         cache: Vec<u32>,
+        clic: Vec<u32>,
     }
 
     impl Permit {
@@ -430,6 +432,7 @@ mod launch {
                 routes: vec![0; instances::interrupt_core1::SIZE / 4],
                 lp_sys: vec![0; instances::lp_sys::SIZE / 4],
                 cache: vec![0; instances::cache::SIZE / 4],
+                clic: vec![0; instances::clic::SIZE / 4],
             };
             let mut bank = InterruptCore1::host(&mut permit.routes).expect("host bank");
             for &source in connected {
@@ -440,9 +443,14 @@ mod launch {
             permit
         }
 
-        fn permit(&mut self) -> LaunchPermit<Host<'_>, Host<'_>, Host<'_>> {
-            LaunchPermit::host(&mut self.routes, &mut self.lp_sys, &mut self.cache)
-                .expect("host memory holds the permit")
+        fn permit(&mut self) -> LaunchPermit<Host<'_>, Host<'_>, Host<'_>, Host<'_>> {
+            LaunchPermit::host(
+                &mut self.routes,
+                &mut self.lp_sys,
+                &mut self.cache,
+                &mut self.clic,
+            )
+            .expect("host memory holds the permit")
         }
 
         fn routed(&mut self) -> usize {
@@ -508,6 +516,52 @@ mod launch {
         assert_eq!(boot_word(&cell), 0, "the retired word reads back zero");
         drop(released);
         assert_eq!(permit.routed(), 0, "every route was disconnected");
+    }
+
+    #[test]
+    fn the_released_harts_grant_moves_out_once_and_builds_only_on_hart_1() {
+        let mut memory = held();
+        let cell = memory.cell();
+        let mut permit = Permit::new(&[]);
+        let mut released = start_with(&cell, permit.permit(), causes(0x17), entry(), || ())
+            .expect("a held hart starts");
+        let grant = released.take_interrupts().expect("the grant is there once");
+        assert!(
+            released.take_interrupts().is_none(),
+            "the grant moves out once"
+        );
+        assert_eq!(grant.hart(), 1);
+        assert_eq!(
+            grant.into_controller_on(0).err(),
+            Some(crate::platform::ForeignHart {
+                actual: 0,
+                expected: 1
+            }),
+            "hart 0 would reach its own CLIC through hart 1's parts"
+        );
+    }
+
+    #[test]
+    fn hart_1_sets_its_own_level_bits_when_it_builds_its_controller() {
+        use oer_espressif_interrupt_table::Controller as _;
+        let mut memory = held();
+        let cell = memory.cell();
+        let mut permit = Permit::new(&[]);
+        let mut released = start_with(&cell, permit.permit(), causes(0x17), entry(), || ())
+            .expect("a held hart starts");
+        let controller = released
+            .take_interrupts()
+            .expect("the grant")
+            .into_controller_on(1)
+            .expect("hart 1 builds its own controller");
+        assert_eq!(controller.hart(), 1);
+        drop(controller);
+        drop(released);
+        let (_, config) = oer_esp32s31_pac::clic::clic_host(&mut permit.clic).expect("host CLIC");
+        assert_eq!(
+            u32::from(crate::platform::interrupt_controller::facts::LEVEL_BITS),
+            config.read_int_config().mnlbits().get()
+        );
     }
 
     fn refused(

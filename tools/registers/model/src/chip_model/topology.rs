@@ -133,6 +133,15 @@ pub(super) fn instances(root: &mut RootFile, path: &Path) -> Result<(), Error> {
             expanded.push(instance);
             continue;
         };
+        if instance.hart_local.is_some() {
+            return Err(Error::new(
+                path,
+                &instance.name,
+                ErrorKind::HartLocal(
+                    "an instance family has one address per element, not one per hart".into(),
+                ),
+            ));
+        }
         super::block_type::check_name(&instance.name, true)
             .map_err(|e| Error::new(path, &instance.name, e))?;
         if dim.count == 0

@@ -144,7 +144,7 @@ impl ChipModel {
         let mut layouts = load_layouts(context, base, &root.layouts)?;
         let regions = check_ram_regions(context, &root.ram_regions)?;
         let mut names = BTreeSet::new();
-        check_instances(context, &root, &types, &mut names)?;
+        check_instances(context, &root, &types, harts, &mut names)?;
         check_interrupts(context, &root, &types)?;
         check_analog(context, &root, &types, &mut names)?;
         place_layouts(context, &root, &regions, &mut layouts)?;
@@ -362,11 +362,13 @@ fn check_ram_regions(
 
 /// Each MMIO instance names an MMIO type, has a word-aligned nonempty
 /// extent holding every word of its type and overlaps no other instance
-/// or RAM region.
+/// or RAM region. A hart-local instance needs the root's hart facts and
+/// cites its sources.
 fn check_instances(
     context: Context<'_>,
     root: &RootFile,
     types: &BTreeMap<String, BlockType>,
+    harts: Option<topology::Geometry>,
     names: &mut BTreeSet<String>,
 ) -> Result<(), Error> {
     let mut ranges = Vec::new();
@@ -406,6 +408,14 @@ fn check_instances(
             context.sources(&instance.name, &extent.sources)?;
         }
         context.sources(&instance.name, &instance.sources)?;
+        if let Some(hart_local) = &instance.hart_local {
+            if harts.is_none() {
+                return Err(fail(ErrorKind::HartLocal(
+                    "needs the root's hart-facts".to_owned(),
+                )));
+            }
+            context.sources(&instance.name, &hart_local.sources)?;
+        }
         if let Some(element) = block_type
             .elements
             .iter()

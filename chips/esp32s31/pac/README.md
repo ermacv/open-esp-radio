@@ -28,7 +28,9 @@ over it is the HAL's, each vendor step with its `SOURCE:`.
   read-only and `Copy` views and shared blocks. A part that serves an
   interrupt names its source (`oer_mmio::InterruptSource`). `take()` is the
   one place the claimed words are assumed exclusive; the generated
-  `disjoint_blocks` check proves no two claimed blocks list one word.
+  `disjoint_blocks` checks prove no two claimed blocks of one hart's context
+  list one word. The CLIC is hart-local: its `Clic` and `ClicObserver`
+  members are arrays whose element `h` is hart `h`'s own controller.
 
 Radio words have separate parts for modem clocks/resets, PHY Wi-Fi baseband,
 modem power mapping, Bluetooth LP timer clocks, coexistence LP clocks, RTC

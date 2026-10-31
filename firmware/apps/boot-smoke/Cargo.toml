@@ -18,6 +18,8 @@ oer-diagnostics = { path = "../../../portable/diagnostics" }
 oer-espressif-executor = { path = "../../../chips/espressif/executor" }
 oer-embassy-time = { path = "../../../portable/embassy/time" }
 oer-time = { path = "../../../portable/time" }
+oer-espressif-interrupt-table = { path = "../../../chips/espressif/interrupt-table" }
+oer-memory = { path = "../../../portable/memory" }
 
 [build-dependencies]
 oer-esp32s31-layout = { workspace = true, features = ["build"] }
@@ -27,12 +29,13 @@ workspace = true
 
 [package.metadata.open-radio]
 critical-section-hart = "boot"
-# The harts this image runs: hart 1 starts during boot and idles on its own stacks.
+# The harts this image runs: hart 1 starts during boot, runs its own
+# interrupt-mode executor and answers the boot hart's request.
 harts = ["boot", 1]
 # Every task stack of this image is fully analysed: an unresolved path fails `cargo fw build`.
 task-stack = "proven"
 
 [package.metadata.open-radio.panic-budget]
 # Reachable panic sites by layer (the image check's `*-panics.txt`): each only shrinks, toward 0.
-runtime = { chips = 1, firmware = 21, unnamed = 2 }
+runtime = { firmware = 4 }
 bootstrap = { unnamed = 2 }

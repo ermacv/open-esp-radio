@@ -144,15 +144,69 @@ fn launch(hart: &Hart, stacks: Stacks) -> Result<(u8, u32), LaunchFailure<u8>> {
             hart.events.borrow_mut().push("retire");
             Ok(())
         },
+        |released| {
+            assert_eq!(*released, 7);
+            hart.events.borrow_mut().push("hand-over");
+            Ok(())
+        },
         || hart.events.borrow_mut().push("fence"),
     )
 }
 
 #[test]
-fn a_launch_releases_waits_for_the_entry_retires_fences_acknowledges_and_waits_ready() {
+fn a_launch_releases_waits_for_the_entry_retires_hands_over_fences_acknowledges_and_waits_ready() {
     let hart = Hart::new();
     assert_eq!(launch(&hart, stacks()), Ok((7, 0x5010_0ff0)));
-    assert_eq!(*hart.events.borrow(), ["release", "retire", "fence", "ack"]);
+    assert_eq!(
+        *hart.events.borrow(),
+        ["release", "retire", "hand-over", "fence", "ack"]
+    );
+}
+
+#[test]
+fn a_refused_hand_over_never_acknowledges_the_hart() {
+    let hart = Hart::new();
+    let clock = Ticking(VirtualClock::starting_at(Instant::EPOCH));
+    let budget = BootBudget::below(Duration::from_millis(1), Duration::from_secs(9))
+        .expect("below the watchdog");
+    let deadline = BootDeadline::start(&clock, budget);
+    let refused = run(
+        &hart,
+        &deadline,
+        WAITS,
+        stacks(),
+        &mut (),
+        |()| {
+            hart.events.borrow_mut().push("release");
+            Ok::<u8, u8>(1)
+        },
+        |(), _| Ok(()),
+        |_| Err(2),
+        || panic!("no fence after a refused hand-over"),
+    );
+    assert_eq!(refused, Err(LaunchFailure::Handover { code: 2 }));
+    assert!(!hart.acked.get(), "the hart never reads an empty mailbox");
+}
+
+#[test]
+fn the_mailbox_takes_the_grant_and_the_parts_once() {
+    // A grant is a number here; the released hart gives it once.
+    let mailbox: &'static Mailbox<u32, &'static str> =
+        std::boxed::Box::leak(std::boxed::Box::new(Mailbox::new()));
+    let mut released = Some(1_u32);
+    assert_eq!(hand_over(mailbox, released.take(), "parts"), Ok(()));
+    assert_eq!(
+        hand_over(mailbox, Some(2), "again"),
+        Err(2),
+        "a used mailbox refuses a second hand-over"
+    );
+    assert_eq!(
+        hand_over(mailbox, released.take(), "none"),
+        Err(1),
+        "a released hart without a grant hands over nothing"
+    );
+    assert_eq!(mailbox.cell.take(), Ok((1, "parts")));
+    assert!(mailbox.cell.take().is_err(), "the root takes it once");
 }
 
 #[test]
@@ -244,7 +298,10 @@ fn a_hart_that_never_reports_ready_or_faults_after_the_acknowledgement_fails() {
         launch(&hart, stacks()),
         Err(LaunchFailure::EarlyFault(fault))
     );
-    assert_eq!(*hart.events.borrow(), ["release", "retire", "fence", "ack"]);
+    assert_eq!(
+        *hart.events.borrow(),
+        ["release", "retire", "hand-over", "fence", "ack"]
+    );
 }
 
 #[test]
@@ -274,6 +331,7 @@ fn refused_releases_and_retirements_keep_their_platform_errors() {
         &mut (),
         |()| Err::<u8, u8>(3),
         |(), _| Ok(()),
+        |_| Ok(()),
         || (),
     );
     assert_eq!(refused, Err(LaunchFailure::Start(3)));
@@ -288,6 +346,7 @@ fn refused_releases_and_retirements_keep_their_platform_errors() {
             Ok::<u8, u8>(1)
         },
         |(), _| Err(9),
+        |_| panic!("no hand-over after a kept boot word"),
         || panic!("no fence after a kept boot word"),
     );
     assert_eq!(kept, Err(LaunchFailure::BootWord(9)));

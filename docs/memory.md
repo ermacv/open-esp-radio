@@ -56,7 +56,11 @@ facts at build time; the host checks read the same facts.
   SRAM through `zeroed_static!`; `OnceValue` derives its unpublished zero
   representation independently of its payload. The runtime's
   zero-sized hart token survives interrupt enable while stack-install authority
-  is consumed. Current images retain every task and waker on the boot hart.
+  is consumed. Each executor's tasks and wakers stay on its own hart;
+  boot-smoke runs an interrupt-mode executor on hart 1. Statics that two
+  harts share (a cross-hart signal's facts word, the in-place request slot,
+  a secondary hart's launch mailbox) sit in critical SRAM
+  (`placed_static!`, `secondary_entry!`).
 
 Memory shared with hardware has its own layout, placement and ownership
 contracts: [Hardware memory](hardware-memory.md).
@@ -76,8 +80,11 @@ contracts: [Hardware memory](hardware-memory.md).
   ([secondary boot](../chips/esp32s31/platform/README.md#secondary-hart-launch-and-containment)),
   and opens a declared hart's instruction bus after it published the
   runtime's code. A declared hart starts during boot, before any executor,
-  through its generated entry, which installs its own PSRAM task stack; the
-  boot hart's staged entries admit only the boot hart. The runtime's critical section masks only its
+  through its generated entry, which installs its own PSRAM task stack and
+  calls the image's root for the hart (`secondary_entry!`); the boot hart's
+  staged entries admit only the boot hart. A secondary hart's task root,
+  interrupt handlers and exception root have complete stack bounds, and its
+  interrupt stack is sized by the image linker like the boot hart's. The runtime's critical section masks only its
   executing hart and takes no cross-hart lock
   ([critical-section rustdoc](../chips/espressif/staged-runtime/src/critical.rs)).
   The staged build/run check confines linked critical-section entry points to

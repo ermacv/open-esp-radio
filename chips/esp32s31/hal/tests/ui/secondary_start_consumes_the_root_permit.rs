@@ -11,8 +11,12 @@ pub fn start(cores: &mut Cores, permit: LaunchPermit, causes: ResetCauses, entry
 }
 
 #[cfg(ui_reject)]
-pub fn forge(peripherals: oer_esp32s31_pac::ownership::SecondaryLaunchPeripherals) -> LaunchPermit {
-    LaunchPermit::new(peripherals) // ui-error: E0624
+pub fn forge(
+    peripherals: oer_esp32s31_pac::ownership::SecondaryLaunchPeripherals,
+    clic: oer_esp32s31_pac::clic::Clic,
+    observer: oer_esp32s31_pac::clic::ClicObserver,
+) -> LaunchPermit {
+    LaunchPermit::new(peripherals, clic, observer) // ui-error: E0624
 }
 
 pub fn containment(registers: &mut CoreControlRegisters, hart: SecondaryHart) {

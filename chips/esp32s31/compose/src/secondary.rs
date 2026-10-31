@@ -1,7 +1,9 @@
 //! Hart 1's launch during boot, before the executor starts: a boot deadline
 //! of its own over the system timer's counter, the launch waits below and the
-//! staged runtime's launch ([`oer_espressif_staged_runtime::launch`]). The
-//! counter returns unchanged for the executor's time driver.
+//! staged runtime's launch ([`oer_espressif_staged_runtime::launch`]), which
+//! hands hart 1 its interrupt grant and the image's parts through the
+//! image's mailbox (`secondary_entry!`). The counter returns unchanged for
+//! the executor's time driver.
 
 #[cfg(target_arch = "riscv32")]
 use oer_esp32s31_hal::{
@@ -13,7 +15,7 @@ use oer_esp32s31_hal::{
     platform::Port,
 };
 #[cfg(target_arch = "riscv32")]
-use oer_espressif_staged_runtime::{LaunchFailure, LaunchWaits, Running};
+use oer_espressif_staged_runtime::{LaunchFailure, LaunchWaits, Mailbox, Running};
 
 /// The boot deadline of a secondary hart's launch, from the release to its
 /// ready report: well below the RTC watchdog the runtime armed.
@@ -95,17 +97,20 @@ impl Hart1Failure {
 }
 
 /// Launch hart 1 with the root's one-shot `permit`, under a deadline of its
-/// own on `counter`, and return the running hart and the counter.
+/// own on `counter`, handing it its interrupt grant and `parts` through
+/// `mailbox`, and return the running hart and the counter.
 ///
 /// # Errors
 ///
 /// [`Hart1Failure`]; the image resets ([`Hart1Failure::reset`]).
 #[cfg(target_arch = "riscv32")]
-pub fn launch_hart1(
+pub fn launch_hart1<T: Send>(
     cores: &mut Cores,
     permit: LaunchPermit,
     causes: ResetCauses,
     counter: SystimerCounter,
+    mailbox: &'static Mailbox<oer_esp32s31_hal::platform::Hart1Grant, T>,
+    parts: T,
 ) -> Result<(Running<Port, 1>, SystimerCounter), Hart1Failure> {
     let clock = oer_espressif_boot::drivers::system_timer::Monotonic::<
         SystimerCounter,
@@ -113,7 +118,7 @@ pub fn launch_hart1(
     >::start_initial_latch_check(counter)
     .map_err(|_| Hart1Failure::Clock)?;
     let deadline = oer_espressif_boot::wait::BootDeadline::start(&clock, LAUNCH_BUDGET);
-    let running = oer_espressif_staged_runtime::launch::<Port, _, 1>(
+    let running = oer_espressif_staged_runtime::launch::<Port, _, 1, T>(
         cores,
         permit,
         causes,
@@ -122,6 +127,8 @@ pub fn launch_hart1(
             entered: LAUNCH_ENTERED_WAIT,
             ready: LAUNCH_READY_WAIT,
         },
+        mailbox,
+        parts,
     )
     .map_err(Hart1Failure::Launch)?;
     Ok((running, clock.into_counter()))
