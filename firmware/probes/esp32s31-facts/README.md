@@ -2,12 +2,13 @@
 
 This PAC-only image owns the chip once and executes short, bounded register
 experiments on hart 0. Hart 1 is held in global reset with its CPU clock gated
-before a nonzero boot address is written. There is no HAL dependency and no
+before a nonzero boot address is written; only selections 232/233 release it
+for one bounded entry observation and park it again. There is no HAL dependency and no
 production probe API. `src/image.rs::PROBES` is the single registration point.
 
 Selection 230 observes one natural BTLC period without PHY or timer-value
 seeding and holds the board for about 38 minutes. Selection 231 is its bounded
-120 ms readiness observation; 232–239 remain unassigned. Neither runs in
+120 ms readiness observation; 234–239 remain unassigned. Neither runs in
 request-zero batches. Project policy requires a separate decision for other
 long runs or repetitions. See [the observation contract](BTLC.md).
 
@@ -1124,3 +1125,53 @@ The wider read-safety, bank0/NRT and PMU/ETM-event questions remain unqualified.
 SOURCE: `HW32_S31_*_20261027` in
 `chips/esp32s31/registers/evidence/hw32-ble-masked-pending.toml` and
 `oer-notes/research/hw32-ble-masked-pending.md`.
+
+## Hart 1 ROM entry state
+
+Selections 232/233 release hart 1 once and record the state the rev0 ROM
+hands to the boot address. Hart 0 first parks hart 1 (boot word zero, stall
+requested, clocks gated, global reset held), records HP core 0/1 reset
+causes, `LP_CORE_DISABLE`, `LP_STORE8`, the boot word, hart 1's control and
+stall status, `L1_ICACHE_SHUT_IBUS0/1` and the ROM `_putc1`/`_putc2` slots,
+and disconnects every nonzero `INTERRUPT_CORE1` route. It then releases hart 1
+in ESP-IDF's `start_other_core` order: stall code 0xFF and a bounded stall
+status wait, CPU clock, CLIC clock, global reset release. 232 writes the boot
+address after that release, so the ROM takes its `main` path; 233 writes it
+with bit 31 set before release, which `normal_boot` takes as a direct jump
+that skips `main`.
+
+The entry (`src/hart1-entry.s`, internal SRAM) clears MIE with its first
+instruction (`csrrci`, keeping the old `mstatus`), installs a recording trap
+stub with the inherited `mtvec` mode and stores the CSRs before any other
+access: `mstatus`, `mtvec`, `mtvt`, `mscratch`, `MHCR`, `mcounteren`,
+`mintthresh`, `mintstatus`, `mhartid`, `mie`, `mip`, the inherited `sp`/`ra`/`gp`,
+`mcause`, `pmpcfg0-3`, `pmpaddr0-15`, `pmacfg0-15` and `pmaaddr0-15`. It then
+sets `gp` and a 2 KiB SRAM stack and calls Rust, which reads hart 1's own CLIC
+view through the session's typed CLIC owners while hart 0 only polls:
+`INT_INFO`, `INT_CONFIG`, `INT_THRESH` and every `CTRL` word. Hart 0 waits at
+most 40,000,000 cycles for the final stage marker or the trap marker, parks
+hart 1 again and repeats its boot-input records.
+
+| Tags (232 / 233) | Observation |
+| --- | --- |
+| `2320` / `2330` | HP core 0 and 1 reset cause (bits 5:0) and flag (bit 8), `LP_CORE_DISABLE` |
+| `2321` / `2331` | `LP_STORE8`, boot word, hart 1 CPU clock/CLIC clock/global reset/force-no-reset/stalled bits 0–4 and stall code in bits 15:8 |
+| `2322` / `2332` | `SHUT_IBUS0`/`SHUT_IBUS1` bits 0/1, `_putc1`, `_putc2` |
+| `2323` / `2333` | Disconnected nonzero hart-1 routes, first such source, stall-status polls |
+| `2324` / `2334` | Hart 1 stage marker, cycles to it, entry address |
+| `2325`–`2327` / `2335`–`2337` | The `2320`–`2322` records after hart 1 is parked again |
+| `tag + 0x100 + i` | `FACTS_HART1` words `i`, `i+1`, `i+2` |
+
+`FACTS_HART1` word 0 is `0xfac71001` after the CSR snapshot and `0xfac71002`
+after the CLIC view. Words 1–15 hold the CSRs and registers above in that
+order, 16–19 `pmpcfg`, 20–35 `pmpaddr`, 36–51 `pmacfg`, 52–67 `pmaaddr`, 68
+the `mtvec` written by the entry, 70 `INT_INFO` (lines, control bits << 16,
+version << 24), 71 `INT_CONFIG` (MNLBITS, NVBITS << 4, NMBITS << 8), 72
+`INT_THRESH`, 73 onward one `CTRL` word per line (CTL, mode << 8, IP << 16,
+IE << 17, SHV << 18, trigger << 19) and 124–127 the trap marker
+`0xfac7100f`, `mcause`, `mepc` and `mtval`.
+
+These leaves observe the ROM download state the loader leaves: no bootloader
+ran, so cache buses, printf slots and reset causes differ from a flash boot.
+They make no PSRAM or flash access from hart 1 and observe the CLIC only after
+the CSR snapshot.

@@ -738,6 +738,14 @@ read-only = true
 description = "Side-effect-free modem wake-route enable and vector observation. No wake enable writer or PMU sleep request authority."
 sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_LPCON_REG_H"]
 
+[[partitions.parts]]
+name = "LpWakeStub"
+instance = "LP_SYS"
+registers = ["LP_SYSTEM_REG_LP_STORE8"]
+read-only = true
+description = "Side-effect-free observation of the retained light-sleep wake stub word that the rev0 ROM consults on a secondary-hart reset entry. No writer is claimed."
+sources = ["ESP_IDF_4D80C1B2_S31_ROM_RTC_SLEEP_WAKE_STUB", "ROM_REV0_SECONDARY_WAKE_STUB"]
+
 [[partitions]]
 name = "RadioPhyPeripherals"
 member = "radio_phy"

@@ -3,7 +3,15 @@ schema = 1
 
 [[sources]]
 id = "ESP_IDF_4D59230D_S31_LP_SYSTEM_REG"
-description = "SOURCE: ESP-IDF 4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d components/soc/esp32s31/register/soc/lp_system_reg.h:47-120,754-764 (Apache-2.0 OR MIT): SYS_CTRL offset 0x8, every field's access and reset; BOOT_ADDR_HP_CORE1 offset 0x164, full-width R/W, reset zero. SYS_CTRL bits 13:12 have no declared field."
+description = "SOURCE: ESP-IDF 4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d components/soc/esp32s31/register/soc/lp_system_reg.h:47-120,309-319,754-764 (Apache-2.0 OR MIT): SYS_CTRL offset 0x8, every field's access and reset; LP_STORE8 offset 0x4c, full-width R/W, reset zero; BOOT_ADDR_HP_CORE1 offset 0x164, full-width R/W, reset zero. SYS_CTRL bits 13:12 have no declared field."
+
+[[sources]]
+id = "ESP_IDF_4D80C1B2_S31_ROM_RTC_SLEEP_WAKE_STUB"
+description = "SOURCE: ESP-IDF 4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d components/esp_rom/esp32s31/include/esp32s31/rom/rtc.h:64-75 (Apache-2.0 OR MIT): LP_STORE8 holds the light-sleep wake restore function address in bits 31:2 and the sleep mode in bit 0 (0 light, 1 deep sleep); :92-93 name reset causes 5 and 6 as PMU HP system and CPU power-down resets."
+
+[[sources]]
+id = "ROM_REV0_SECONDARY_WAKE_STUB"
+description = "SOURCE: pinned ESP32-S31 rev0 ROM (esp32s31_rev0_rom.elf, vendor/artifacts.toml), disassembly of .init.text with the pinned llvm-objdump: _init 0x2f801710 branches a nonzero mhartid to do_core1_wake 0x2f80173e, which reads LP_AON_CLKRST HPCORE0 reset cause 0x20701030 bits 6:1; causes 5 and 6 read LP_STORE8 0x2070004c, and with bit 0 clear jump to its bits 31:2 when nonzero (0x2f801778-0x2f80178c). Every other case continues to normal_boot. This is the code path, not a measured run."
 
 [[sources]]
 id = "ESP_IDF_4D59230D_S31_LP_SYSTEM_BASE"
