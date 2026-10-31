@@ -1720,7 +1720,11 @@ impl<
                 self.pending.unwrap = Some(waiting);
             }
             let sending = self.data.accepts() && self.station.link().is_some();
-            let (event, command_ready, tick, transmit, unwrapped) = {
+            // The large inputs land in these places; the poll returns only
+            // the small flags, so no wake copies them through its result.
+            let mut event_ready = None;
+            let mut unwrapped_ready = None;
+            let (command_ready, tick, transmit) = {
                 let event = phase.next_event();
                 let command = async {
                     match embassy_futures::select::select(
@@ -1746,10 +1750,9 @@ impl<
                 let mut alarm = core::pin::pin!(alarm);
                 poll_fn(|cx| {
                     B::span(ServiceSpan::Sources, false);
-                    let event = match event.as_mut().poll(cx) {
-                        Poll::Ready(event) => Some(event),
-                        Poll::Pending => None,
-                    };
+                    if let Poll::Ready(ready) = event.as_mut().poll(cx) {
+                        event_ready = Some(ready);
+                    }
                     let command_ready = if accepting_commands {
                         match command.as_mut().poll(cx) {
                             Poll::Ready(stop) => Some(stop),
@@ -1764,19 +1767,18 @@ impl<
                     let tick = alarm_ready
                         && machine_deadline.is_some_and(|deadline| timer.now() >= deadline);
                     let transmit = sending && transmit_ready.as_mut().poll(cx).is_ready();
-                    let unwrapped = match unwrap.poll_done(cx) {
-                        Poll::Ready(done) => Some(done),
-                        Poll::Pending => None,
-                    };
-                    if event.is_some()
+                    if let Poll::Ready(done) = unwrap.poll_done(cx) {
+                        unwrapped_ready = Some(done);
+                    }
+                    if event_ready.is_some()
                         || command_ready.is_some()
                         || alarm_ready
                         || policy_ready
                         || transmit
-                        || unwrapped.is_some()
+                        || unwrapped_ready.is_some()
                     {
                         B::span(ServiceSpan::Sources, true);
-                        Poll::Ready((event, command_ready, tick, transmit, unwrapped))
+                        Poll::Ready((command_ready, tick, transmit))
                     } else {
                         B::span(ServiceSpan::Sources, true);
                         Poll::Pending
@@ -1787,14 +1789,14 @@ impl<
             let now = timer.now();
             // The response returns the station's ticket before any other
             // input can end the phase.
-            if let Some((id, result)) = unwrapped {
+            if let Some((id, result)) = unwrapped_ready {
                 self.station.input(
                     now,
                     StaInput::KeyDataUnwrapped { id, result },
                     &mut self.events,
                 );
             }
-            match event {
+            match event_ready {
                 Some(Ok(Ok(event))) => match self.event(arbiter, now, B::event(event), phase, io) {
                     Ok(Some(buffer)) => {
                         B::span(ServiceSpan::Recycle, false);
@@ -1955,28 +1957,35 @@ impl<
         let Some(mut link) = self.station.link() else {
             return;
         };
-        let Some(packet) = io.transmit.try_receive() else {
+        let data = &mut self.data;
+        let events = &mut self.events;
+        let mut refusal = None;
+        let Some(taken) = io.transmit.try_receive_or_take(|packet| {
+            let parts = packet.frame.parts();
+            let msdu = Msdu {
+                destination: parts.destination,
+                ether_type: parts.ether_type,
+                priority: packet.priority,
+                payload: parts.payload,
+                admitted: now,
+            };
+            // Admission was polled immediately above under this same exclusive
+            // service borrow. A too-long MSDU is refused without changing bytes.
+            data.input(
+                DataInput {
+                    msdu,
+                    link: &mut link,
+                },
+                events,
+            )
+            .map_err(|reason| refusal = Some(reason))
+        }) else {
             return;
         };
-        let parts = packet.frame.parts();
-        let msdu = Msdu {
-            destination: parts.destination,
-            ether_type: parts.ether_type,
-            priority: packet.priority,
-            payload: parts.payload,
-            admitted: now,
-        };
-        // Admission was polled immediately above under this same exclusive
-        // service borrow. A too-long MSDU is refused without changing bytes.
-        match self.data.input(
-            DataInput {
-                msdu,
-                link: &mut link,
-            },
-            &mut self.events,
-        ) {
+        match taken.map_err(|packet| (packet, refusal)) {
             Ok(()) => {}
-            Err(reason) => {
+            Err((_, None)) => {}
+            Err((packet, Some(reason))) => {
                 // The available-pool observation is dynamic and the public
                 // data input can refuse it. Return the original owned packet,
                 // rather than manufacturing a terminal or losing its bytes.

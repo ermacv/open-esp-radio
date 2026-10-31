@@ -396,6 +396,39 @@ impl<T, const DEPTH: usize, C: SpscCursor> AffineSpscReceiver<'_, T, DEPTH, C> {
         self.queue.try_receive()
     }
 
+    /// EXPERIMENT: lend the oldest value in place; `Err` moves it out to the
+    /// caller, `Ok` drops it in place.
+    #[inline]
+    pub fn try_receive_or_take<R>(
+        &self,
+        use_value: impl FnOnce(&mut T) -> Result<R, ()>,
+    ) -> Option<Result<R, T>> {
+        let queue = self.queue;
+        let consumer = queue.consumer.counter().load(Ordering::Relaxed);
+        let producer = queue.producer.counter().load(Ordering::Acquire);
+        if consumer == producer {
+            return None;
+        }
+        #[allow(unsafe_code, reason = "EXPERIMENT")]
+        // SAFETY: EXPERIMENT ONLY: as try_receive_with; the refused value is
+        // read out exactly once instead of dropped.
+        let result = unsafe {
+            let cell = &mut *queue.slot(consumer).get();
+            match use_value(cell.assume_init_mut()) {
+                Ok(result) => {
+                    cell.assume_init_drop();
+                    Ok(result)
+                }
+                Err(()) => Err(cell.assume_init_read()),
+            }
+        };
+        queue.consumer.counter().store(
+            AffineSpscQueue::<T, DEPTH, C>::advance(consumer),
+            Ordering::Release,
+        );
+        Some(result)
+    }
+
     /// EXPERIMENT: lend the oldest value in place, then drop it there.
     #[inline]
     pub fn try_receive_with<R>(&self, use_value: impl FnOnce(&mut T) -> R) -> Option<R> {

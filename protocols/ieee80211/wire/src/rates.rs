@@ -35,6 +35,10 @@ pub const LEGACY_RATES: [(u8, LegacyRate); 12] = [
     (108, LegacyRate::Ofdm54M),
 ];
 
+/// [`LEGACY_RATES`] in one place: iterating the constant would build the
+/// whole table on every call.
+static LEGACY_TABLE: [(u8, LegacyRate); 12] = LEGACY_RATES;
+
 /// The bits of a [`LegacyRateSet`] that name an entry of [`LEGACY_RATES`].
 const RATE_BITS: u16 = const {
     match 1_u16.checked_shl(LEGACY_RATES.len() as u32) {
@@ -101,7 +105,7 @@ impl LegacyRateSet {
     /// The rates of the set in table order, each with its long preamble.
     pub fn rates(self) -> impl Iterator<Item = LegacyRate> {
         (0_u16..)
-            .zip(LEGACY_RATES)
+            .zip(LEGACY_TABLE.iter().copied())
             .filter(move |(bit, _)| {
                 self.0
                     .checked_shr(u32::from(*bit))

@@ -144,6 +144,36 @@ pub struct TxMsdu {
     pub frame: EthernetFrame,
 }
 
+impl TxMsdu {
+    /// EXPERIMENT: own the network's frame in `place`, copying it once.
+    pub fn init_from_network<'p>(
+        place: &'p mut core::mem::MaybeUninit<Self>,
+        frame: oer_network_port::EthernetFrameView<'_>,
+        priority: WmmUserPriority,
+    ) -> Result<&'p mut Self, FrameTooLong> {
+        if frame.payload.len() > MAX_ETHERNET_PAYLOAD_LEN {
+            return Err(FrameTooLong {
+                payload_length: frame.payload.len(),
+            });
+        }
+        let msdu = place.write(Self {
+            priority,
+            frame: EthernetFrame {
+                header: MsduParts {
+                    destination: frame.destination,
+                    source: frame.source,
+                    ether_type: frame.ether_type,
+                    payload: &[],
+                }
+                .header(),
+                payload: heapless::Vec::new(),
+            },
+        });
+        let _fits = msdu.frame.payload.extend_from_slice(frame.payload);
+        Ok(msdu)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

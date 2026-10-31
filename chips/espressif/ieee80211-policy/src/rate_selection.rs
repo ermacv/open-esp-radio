@@ -379,12 +379,21 @@ impl<K: Ieee80211Capabilities> EspressifRateSelection<K> {
             })),
             (FrameRates::Data, Some(control)) => {
                 let initial = control.mpdu_rate();
+                // A schedule repeats each rate for a run of failures: the
+                // last constrained rate serves the whole run.
+                let last = core::cell::Cell::new(None::<(PhyRate, PhyRate)>);
                 walk(
                     initial,
                     schedule_publication_limit(control.association().current_schedule()),
                     |failures| {
-                        ordinary_retry_rate(initial, failures)
-                            .map(|rate| control.constrain_rate(rate))
+                        ordinary_retry_rate(initial, failures).map(|rate| match last.get() {
+                            Some((from, to)) if from == rate => to,
+                            _ => {
+                                let to = control.constrain_rate(rate);
+                                last.set(Some((rate, to)));
+                                to
+                            }
+                        })
                     },
                 )
             }

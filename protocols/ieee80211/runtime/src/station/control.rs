@@ -413,17 +413,15 @@ impl<const TX: usize, const RX: usize> NetDevice for Device<'_, TX, RX> {
                     // The frame requests a priority from its VLAN or IP
                     // marking; the station decides the final one.
                     let requested = classify_wmm(view.ether_type, view.payload);
-                    TxMsdu::from_network(view, requested.user_priority)
-                        .map_err(|_| {
-                            TransmitError::InvalidLength(
-                                oer_network_port::FrameLengthError::TooLong,
-                            )
-                        })
-                        .and_then(|packet| {
-                            self.transmit
-                                .try_send(packet)
-                                .map_err(|_| TransmitError::QueueFull)
-                        })
+                    match self.transmit.try_send_with(|place| {
+                        TxMsdu::init_from_network(place, view, requested.user_priority).is_ok()
+                    }) {
+                        Some(true) => Ok(()),
+                        Some(false) => Err(TransmitError::InvalidLength(
+                            oer_network_port::FrameLengthError::TooLong,
+                        )),
+                        None => Err(TransmitError::QueueFull),
+                    }
                 })
         };
         result.map_err(|reason| TransmitRefused { frame, reason })

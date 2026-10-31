@@ -46,15 +46,23 @@ impl NegotiatedLegacyRates {
     /// admitted rate if all exceed it. An already admitted rate keeps its
     /// selected preamble; another DSSS/CCK rate uses the long preamble.
     pub fn constrain(self, proposed: LegacyRate) -> LegacyRate {
-        if self.contains(proposed) {
-            return proposed;
+        // One pass: membership, the slowest, and the fastest not above.
+        let wanted = proposed.kbps();
+        let mut slowest = self.first;
+        let mut below: Option<LegacyRate> = None;
+        for rate in self.rates() {
+            let kbps = rate.kbps();
+            if kbps == wanted {
+                return proposed;
+            }
+            if kbps < slowest.kbps() {
+                slowest = rate;
+            }
+            if kbps <= wanted && below.is_none_or(|best| kbps > best.kbps()) {
+                below = Some(rate);
+            }
         }
-        let slowest = self
-            .rates()
-            .fold(self.first, |a, b| if b.kbps() < a.kbps() { b } else { a });
-        self.rates()
-            .filter(|rate| rate.kbps() <= proposed.kbps())
-            .fold(slowest, |a, b| if b.kbps() > a.kbps() { b } else { a })
+        below.unwrap_or(slowest)
     }
 }
 

@@ -203,6 +203,16 @@ impl<T, const DEPTH: usize> WakingSpscReceiver<'_, T, DEPTH> {
         Some(value)
     }
 
+    /// EXPERIMENT: see [`AffineSpscReceiver::try_receive_or_take`].
+    pub fn try_receive_or_take<R>(
+        &self,
+        use_value: impl FnOnce(&mut T) -> Result<R, ()>,
+    ) -> Option<Result<R, T>> {
+        let result = self.receiver.try_receive_or_take(use_value)?;
+        self.producer.wake();
+        Some(result)
+    }
+
     /// EXPERIMENT: see [`AffineSpscReceiver::try_receive_with`].
     pub fn try_receive_with<R>(&self, use_value: impl FnOnce(&mut T) -> R) -> Option<R> {
         let result = self.receiver.try_receive_with(use_value)?;
