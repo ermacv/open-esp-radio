@@ -6,7 +6,7 @@ use core::{
     task::{Context, Poll},
 };
 use oer_crypto::KeyUnwrap;
-use oer_ieee80211_sta::machine::{
+use oer_ieee80211_core_roles_sta::machine::{
     KEY_DATA_CAPACITY, KeyUnwrapId, StaKeyUnwrapRequest, StaKeyUnwrapResponse,
 };
 
@@ -119,7 +119,7 @@ mod tests {
     use core::pin::pin;
     use core::task::Waker;
     use oer_crypto::{Aes128Key, KeyData, KeyUnwrapDone};
-    use oer_ieee80211_cipher::aes::{SoftwareAes128, SoftwareKeyUnwrap};
+    use oer_ieee80211_core_security_cipher::aes::{SoftwareAes128, SoftwareKeyUnwrap};
 
     /// An engine whose operation finishes once `release` is set, recording
     /// whether it was dropped while it still held the request.

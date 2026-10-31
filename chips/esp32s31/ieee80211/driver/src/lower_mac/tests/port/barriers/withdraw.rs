@@ -1,6 +1,7 @@
 use super::*;
+use oer_ieee80211_contracts_security::Ccmp128Key;
 use oer_ieee80211_wire::{
-    ccmp::{Ccmp128Key, CcmpPacketNumber, GroupKeyId},
+    ccmp::{CcmpPacketNumber, GroupKeyId},
     qos::WmmAccessCategory,
     security::Spp,
 };

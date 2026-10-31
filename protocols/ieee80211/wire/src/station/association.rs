@@ -138,6 +138,7 @@ pub trait AssociationPhy {
     fn elements<'a>(
         &self,
         access_point: &ScanRecord,
+        channel: u8,
         capabilities: &'a AssociationCapabilities,
         power_capability: Option<StaPowerCapability>,
         he_ul_mu_power: Option<HeUlMuPowerCapability>,
@@ -148,6 +149,8 @@ pub trait AssociationPhy {
 pub struct AssociationRequest<'a, P> {
     pub source: OwnAddress,
     pub access_point: &'a ScanRecord,
+    /// The primary channel the station joins the access point on.
+    pub channel: u8,
     pub sequence_number: SequenceNumber,
     pub listen_interval: u16,
     pub phy: P,
@@ -212,6 +215,7 @@ impl<P: AssociationPhy> AssociationRequest<'_, P> {
             he_ul_mu_power,
         } = self.phy.elements(
             self.access_point,
+            self.channel,
             capabilities,
             self.power_capability,
             self.he_ul_mu_power,

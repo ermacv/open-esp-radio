@@ -34,15 +34,15 @@ use core::{future::Future, num::NonZeroU8, task::Poll};
 use oer_ieee80211_wire::frame::FrameControl;
 use std::{rc::Rc, task::Waker};
 
-use oer_ieee80211_model::{
-    MODEL_RX_EVENTS, ModelAir, ModelAnyBuffer, ModelBackend, ModelLarge, ModelResources,
-    ModelRxMeta, ModelSmall, ModelTypes,
-};
-use oer_ieee80211_port::{
+use oer_ieee80211_contracts_port::{
     AckHeader, Attempt, Channel, ChannelWidth, ClassFrame, HeaderSpec, InterfacePhase,
     LowerMacEvent, LowerMacPhase, LowerMacTerminal, MpduLength, Protection, RetryPlan, RetryStage,
     RxBuffer, SizedFrame, Station, SupportedPower, TxBufferPool, TxCompleted, TxFrame, TxOperation,
     TxPower, TxProtection, TxSource,
+};
+use oer_ieee80211_testing_model::{
+    MODEL_RX_EVENTS, ModelAir, ModelAnyBuffer, ModelBackend, ModelLarge, ModelResources,
+    ModelRxMeta, ModelSmall, ModelTypes,
 };
 use oer_ieee80211_wire::{
     address::IndividualAddress,
@@ -188,8 +188,8 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id>> for ReceiveLoss {
         'id: 'p,
     {
         use embassy_futures::yield_now;
-        use oer_ieee80211_model::MODEL_EVENTS;
-        use oer_ieee80211_port::{StationPhase, StationReceive};
+        use oer_ieee80211_contracts_port::{StationPhase, StationReceive};
+        use oer_ieee80211_testing_model::MODEL_EVENTS;
         use oer_radio_port::EventsLost;
 
         let mut owner = owner.enable().await.ok().unwrap();
@@ -220,7 +220,7 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id>> for ReceiveLoss {
                         phase.recycle(frame);
                     }
                     Ok(LowerMacEvent::Terminal(LowerMacTerminal::Configured(
-                        oer_ieee80211_port::Configured::Station(_),
+                        oer_ieee80211_contracts_port::Configured::Station(_),
                     ))) => terminals.push(1),
                     Ok(LowerMacEvent::Terminal(LowerMacTerminal::GateClosed(_))) => {
                         terminals.push(2)
@@ -343,10 +343,10 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id>> for Owners {
                 else {
                     panic!("one Single terminal per submission");
                 };
-                let oer_ieee80211_port::TerminalParts {
+                let oer_ieee80211_contracts_port::TerminalParts {
                     ticket, payload, ..
                 } = terminal.into_parts(&mut resources.terminal_access);
-                let (buffer, _) = oer_ieee80211_port::TxMpdu::into_parts(payload);
+                let (buffer, _) = oer_ieee80211_contracts_port::TxMpdu::into_parts(payload);
                 assert_eq!(ticket.index(), ticket_index);
                 assert_eq!(matches!(buffer, ModelAnyBuffer::LargeSent(_)), large);
                 if !large {

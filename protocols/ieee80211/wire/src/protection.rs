@@ -1,8 +1,13 @@
 //! BSS protection fields of the ERP and HT Operation elements.
 //!
 //! These are the values a BSS advertises; the transmitter's per-PPDU choice
-//! of RTS/CTS or CTS-to-self is `oer-ieee80211-upper-mac`'s protection
+//! of RTS/CTS or CTS-to-self is `oer-ieee80211-core-upper-mac`'s protection
 //! policy.
+
+/// ERP element identifier.
+///
+/// SOURCE: IEEE Std 802.11-2020, 9.4.2.1 (Element IDs).
+pub const ERP_ELEMENT_ID: u8 = 42;
 
 /// ERP Information element requirements on transmitters.
 ///
@@ -141,6 +146,58 @@ oer_wire::bitfield! {
     pub struct HtProtectionInformation[1] (little) {
         pub mode, with_mode: u8 = 0..2;
         pub non_greenfield, with_non_greenfield: bool = 2..3;
+    }
+}
+
+/// The ERP elements of a run of information elements, checked once: every
+/// element's Length stays within the run and every ERP element carries one
+/// octet of ERP Information. Elements of other identifiers stay opaque.
+///
+/// SOURCE: IEEE Std 802.11-2020, 9.4.2.1 (element format: Element ID,
+/// Length, body) and 9.4.2 (the ERP element: one octet of ERP Information).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ErpElements<'a> {
+    elements: &'a [u8],
+}
+
+/// Information elements whose ERP elements cannot be read.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ErpElementsError {
+    /// An element's Length runs past the elements, or a lone octet trails
+    /// them.
+    MalformedElements,
+    /// An ERP element whose body is not one octet.
+    ErpLength,
+}
+
+impl<'a> ErpElements<'a> {
+    /// Check `elements`, a frame's information elements.
+    pub fn parse(elements: &'a [u8]) -> Result<Self, ErpElementsError> {
+        let mut remaining = elements;
+        while !remaining.is_empty() {
+            let (element, rest) = crate::element::Element::split(remaining)
+                .ok_or(ErpElementsError::MalformedElements)?;
+            if element.id == ERP_ELEMENT_ID && element.body.len() != 1 {
+                return Err(ErpElementsError::ErpLength);
+            }
+            remaining = rest;
+        }
+        Ok(Self { elements })
+    }
+
+    /// Every ERP element's ERP Information field, in frame order. A BSS
+    /// sends one; what repeats mean is the receiver's decision.
+    pub fn information(&self) -> impl Iterator<Item = u8> + 'a {
+        let mut remaining = self.elements;
+        core::iter::from_fn(move || {
+            let (element, rest) = crate::element::Element::split(remaining)?;
+            remaining = rest;
+            Some(element)
+        })
+        .filter_map(|element| match (element.id, element.body) {
+            (ERP_ELEMENT_ID, &[information]) => Some(information),
+            _ => None,
+        })
     }
 }
 

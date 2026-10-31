@@ -2,9 +2,9 @@
 //! upper MAC decides every agreement edge, and this binding carries out each
 //! bank and frame transition on the running phase.
 use super::*;
-use oer_ieee80211_port::{PhaseBlockAckSlot, SupportedBlockAck};
-use oer_ieee80211_sta::epoch::LinkEpoch;
-use oer_ieee80211_upper_mac::block_ack::{RxBlockAckPort, RxBlockAckTypes};
+use oer_ieee80211_contracts_port::{PhaseBlockAckSlot, SupportedBlockAck};
+use oer_ieee80211_core_roles_sta::epoch::LinkEpoch;
+use oer_ieee80211_core_upper_mac::block_ack::{RxBlockAckPort, RxBlockAckTypes};
 
 /// The port's owners lent to the receive agreements of phase types `Ty`.
 pub struct PortRxBlockAck<'id, Ty>(PhantomData<fn(&'id ()) -> Ty>);
@@ -20,7 +20,7 @@ impl<'id, Ty: PhaseTypes<'id>> RxBlockAckTypes for PortRxBlockAck<'id, Ty> {
 /// come from the port's existing shared pool; retained frames are its RX
 /// owners. `BANKS` and `FRAMES` are the image's choice.
 pub type RxBlockAckStorage<'id, Ty, const BANKS: usize, const FRAMES: usize> =
-    oer_ieee80211_upper_mac::block_ack::RxBlockAckStorage<
+    oer_ieee80211_core_upper_mac::block_ack::RxBlockAckStorage<
         PortRxBlockAck<'id, Ty>,
         LinkEpoch<'id, <Ty as PhaseTypes<'id>>::EpochPath>,
         BANKS,
@@ -28,7 +28,7 @@ pub type RxBlockAckStorage<'id, Ty, const BANKS: usize, const FRAMES: usize> =
     >;
 
 /// The loans of [`RxBlockAckStorage`] the service carries.
-pub type RxBlockAckView<'id, Ty> = oer_ieee80211_upper_mac::block_ack::RxBlockAckView<
+pub type RxBlockAckView<'id, Ty> = oer_ieee80211_core_upper_mac::block_ack::RxBlockAckView<
     'id,
     PortRxBlockAck<'id, Ty>,
     LinkEpoch<'id, <Ty as PhaseTypes<'id>>::EpochPath>,

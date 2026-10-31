@@ -1,7 +1,8 @@
 use super::*;
+use oer_ieee80211_wire::qos::WmmUserPriority;
 use oer_memory::WakingSpscQueue;
-use oer_network::{EthernetFrameView, FrameLengthError};
-use std::{cell::Cell, rc::Rc};
+use oer_network_port::{EthernetFrameView, FrameLengthError};
+use std::{cell::Cell, rc::Rc, vec::Vec};
 
 struct Frame {
     owner: Rc<Cell<usize>>,
@@ -12,7 +13,7 @@ impl Drop for Frame {
         self.owner.set(self.owner.get() + 1);
     }
 }
-impl oer_network::EthernetFrame for Frame {
+impl oer_network_port::EthernetFrame for Frame {
     fn view(&self) -> Result<EthernetFrameView<'_>, FrameLengthError> {
         Ok(EthernetFrameView {
             destination: [2; 6],
@@ -158,7 +159,7 @@ fn network_link_wakes_on_events_and_keeps_the_cores_epoch() {
             })
         );
     }
-    let frame = EthernetFrame::from_parts(oer_ieee80211_wire::data::EthernetFrameParts {
+    let frame = EthernetFrame::from_parts(oer_ieee80211_wire::data::MsduParts {
         destination: [2; 6],
         source: [4; 6],
         ether_type: 0x0800,
@@ -173,4 +174,62 @@ fn network_link_wakes_on_events_and_keeps_the_cores_epoch() {
     assert!(control.try_command(ServiceCommand::Stop).is_ok());
     control.stop();
     assert_eq!(delivered.len(), 4);
+}
+
+/// A network frame of `ether_type` around `payload`.
+struct Marked {
+    ether_type: u16,
+    payload: Vec<u8>,
+}
+impl oer_network_port::EthernetFrame for Marked {
+    fn view(&self) -> Result<EthernetFrameView<'_>, FrameLengthError> {
+        Ok(EthernetFrameView {
+            destination: [2; 6],
+            source: [4; 6],
+            ether_type: self.ether_type,
+            payload: &self.payload,
+        })
+    }
+}
+
+#[test]
+fn a_network_frame_requests_the_priority_of_its_marking() {
+    let mut commands = WakingSpscQueue::<ServiceCommand<()>, 1>::new();
+    let mut tx = WakingSpscQueue::<TxMsdu, 1>::new();
+    let mut rx = WakingSpscQueue::<EthernetFrame, 1>::new();
+    let state = State::new();
+    let (sender, _) = commands.split();
+    let (_control, _runner) = Control::new(sender, &state).unwrap();
+    let (sender, receiver) = tx.split();
+    let (_, receive) = rx.split();
+    let mut device = Device::new(sender, receive, &state);
+    let mut status = state.status.get();
+    status.link = LinkSnapshot {
+        state: LinkState::Up,
+        epoch: 1,
+    };
+    state.status.set(status);
+    // An IPv4 header of DSCP 46 (EF) and total length 20.
+    let mut ef = std::vec![0_u8; 20];
+    ef[0] = 0x45;
+    ef[1] = 46 << 2;
+    ef[3] = 20;
+    for (ether_type, payload, priority) in [
+        (0x0800, ef, WmmUserPriority::UP6),
+        // A truncated IPv4 header requests best effort.
+        (0x0800, std::vec![0x45, 46 << 2], WmmUserPriority::UP0),
+        // VLAN PCP 5.
+        (0x8100, std::vec![0xa0, 0, 0x08, 0x00], WmmUserPriority::UP5),
+        (0x0806, std::vec![0; 28], WmmUserPriority::UP0),
+    ] {
+        assert!(
+            device
+                .try_transmit(Marked {
+                    ether_type,
+                    payload,
+                })
+                .is_ok()
+        );
+        assert_eq!(receiver.try_receive().unwrap().priority, priority);
+    }
 }

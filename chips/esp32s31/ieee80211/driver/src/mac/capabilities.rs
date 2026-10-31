@@ -6,7 +6,7 @@
 //! their real hardware/software boundary instead of being advertised by one
 //! ambiguous offload boolean.
 
-use oer_ieee80211_port::{
+use oer_ieee80211_contracts_port::{
     MacInterfaceCapabilities, MacOperationOwner, MacOperationOwnership, MacResourceLimits,
     MacServiceCapabilities,
 };

@@ -7,7 +7,7 @@
 
 use core::{cell::Cell, future::Future, task::Poll};
 use oer_memory::ExecutionContext;
-use oer_network::{EthernetFrameView, LinkSnapshot, LinkState, NetDevice, NetworkInterfaceId};
+use oer_network_port::{EthernetFrameView, LinkSnapshot, LinkState, NetDevice, NetworkInterfaceId};
 use oer_sync::PriorityWaker;
 use owned_embassy_net::{
     Stack, StackStorage,
@@ -173,7 +173,7 @@ impl Control<'_> {
 /// ```compile_fail,E0499
 /// use oer_embassy_net::{NetworkInterfaceId, ip::{Configuration, Resources}};
 /// use oer_memory::ExecutionContext;
-/// use oer_network::NetDevice;
+/// use oer_network_port::NetDevice;
 /// fn twice<X: ExecutionContext, D: NetDevice>(
 ///     resources: &'static mut Resources<X, 1, 1, 1>, first: D, second: D,
 /// ) {

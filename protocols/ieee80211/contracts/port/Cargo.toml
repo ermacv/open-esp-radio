@@ -1,0 +1,29 @@
+[package]
+name = "oer-ieee80211-contracts-port"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Portable IEEE 802.11 lower-MAC radio port: one hardware transmission attempt, receive events and controls"
+readme = "README.md"
+
+[dependencies]
+oer-wire = { path = "../../../../portable/wire" }
+heapless = "0.9.3"
+oer-ieee80211-wire = { path = "../../wire" }
+oer-ieee80211-contracts-security = { path = "../security" }
+oer-radio-coex = { path = "../../../radio/coex" }
+oer-radio-port = { path = "../../../radio/port" }
+oer-radio-regulatory = { path = "../../../radio/regulatory" }
+oer-time = { path = "../../../../portable/time" }
+
+[dev-dependencies]
+oer-time-virtual = { path = "../../../../portable/time-virtual" }
+oer-radio-regulatory = { path = "../../../radio/regulatory", features = ["test-support"] }
+# The crate's own tests exercise the generic radio-port conformance rules.
+oer-radio-port = { path = "../../../radio/port", features = ["test-support"] }
+oer-test-ui-cases = { path = "../../../../tools/test/ui-cases" }
+
+[lints]
+workspace = true

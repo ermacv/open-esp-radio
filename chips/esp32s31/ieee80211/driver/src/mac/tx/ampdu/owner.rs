@@ -282,7 +282,7 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
     #[cfg(any(test, feature = "test-support"))]
     pub fn observe_retry_completion<
         H: HtAmpduHardware,
-        R: oer_ieee80211_port::backend_aggregate::BackendAmpduRetry,
+        R: oer_ieee80211_contracts_port::backend_aggregate::BackendAmpduRetry,
     >(
         &mut self,
         hardware: &mut H,

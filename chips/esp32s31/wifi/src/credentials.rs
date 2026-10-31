@@ -1,6 +1,6 @@
 //! Station provisioning owns secrets before, during and after derivation.
 use heapless::Vec;
-use oer_ieee80211_rsn::{Pmk, PmkDerivation};
+use oer_ieee80211_core_security_rsn::{Pmk, PmkDerivation};
 use zeroize::{Zeroize, Zeroizing};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -64,10 +64,10 @@ impl StationSettings {
             Security::Pmk(pmk) => Some(pmk),
             Security::Passphrase(password) => {
                 let result = PmkDerivation::new(&password, &ssid).map_err(|error| match error {
-                    oer_ieee80211_rsn::PskDerivationError::InvalidPassphraseLength => {
+                    oer_ieee80211_core_security_rsn::PskDerivationError::InvalidPassphraseLength => {
                         CredentialsError::PassphraseLength
                     }
-                    oer_ieee80211_rsn::PskDerivationError::InvalidSsidLength => {
+                    oer_ieee80211_core_security_rsn::PskDerivationError::InvalidSsidLength => {
                         CredentialsError::SsidLength
                     }
                 });
@@ -114,12 +114,12 @@ impl Callbacks for OpenCallbacks {
 
 /// A boot-seeded stream retained across associations; its private cipher
 /// state is erased on drop. Entropy is obtained once before transfer to P2.
-pub struct NonceSource(oer_ieee80211_rsn::nonce::SNonceSource);
+pub struct NonceSource(oer_ieee80211_core_security_rsn::nonce::SNonceSource);
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct NonceExhausted;
 impl NonceSource {
     pub fn from_entropy(fill: impl FnOnce(&mut [u8; 32])) -> Self {
-        Self(oer_ieee80211_rsn::nonce::SNonceSource::from_entropy(fill))
+        Self(oer_ieee80211_core_security_rsn::nonce::SNonceSource::from_entropy(fill))
     }
     pub fn next_nonce(&mut self) -> Result<[u8; 32], NonceExhausted> {
         self.0.next_nonce().map_err(|_| NonceExhausted)
@@ -183,7 +183,7 @@ mod tests {
             0x5f, 0x90, 0x2e, 0x83, 0xfe, 0x1b, 0x13, 0x5a, 0x70, 0xe2, 0x3a, 0xed, 0x76, 0x2e,
             0x97, 0x10, 0xa1, 0x2e,
         ]);
-        let context = oer_ieee80211_rsn::PtkContext {
+        let context = oer_ieee80211_core_security_rsn::PtkContext {
             authenticator_address: [2; 6],
             supplicant_address: [4; 6],
             authenticator_nonce: [6; 32],

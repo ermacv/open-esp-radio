@@ -1,6 +1,6 @@
 //! Installation-independent requests; affine permissions never leave Runner.
 use super::contract::{Command, CommandOutcome, CommandRefusal};
-use oer_ieee80211_sta::machine::{
+use oer_ieee80211_core_roles_sta::machine::{
     self, StaCommandCredit, StaCommandCredits, StaCommandPermission, StaRequest,
 };
 use oer_radio_port::PoolPath;

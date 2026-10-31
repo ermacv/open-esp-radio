@@ -1,6 +1,6 @@
 //! A frame's immutable parts are its sizing and writing authority.
 
-use oer_network::ETHERNET_HEADER_LEN;
+use crate::data::{AMSDU_SUBFRAME_HEADER_LEN, MsduParts};
 mod fixed;
 pub(crate) use fixed::write_array;
 
@@ -85,14 +85,15 @@ impl<'a, const N: usize> FrameParts<'a, N> {
 #[derive(Clone)]
 enum Fragment<'a> {
     Borrowed(&'a [u8]),
-    Length([u8; 2]),
+    /// A big-endian 16-bit field: a subframe's MSDU length or EtherType.
+    Word([u8; 2]),
 }
 
 impl Fragment<'_> {
     fn bytes(&self) -> &[u8] {
         match self {
             Self::Borrowed(bytes) => bytes,
-            Self::Length(bytes) => bytes,
+            Self::Word(bytes) => bytes,
         }
     }
 }
@@ -117,31 +118,30 @@ impl<'a, I: Clone + Iterator<Item = Fragment<'a>>> FragmentPlan<I> {
     }
 }
 
-/// An immutable aggregate whose Ethernet boundaries and wire limit were
-/// checked before borrowing output. Its fragments define both size and bytes.
+/// An immutable aggregate whose MSDU lengths and wire limit were checked
+/// before borrowing output. Its fragments define both size and bytes.
+///
+/// SOURCE: IEEE Std 802.11-2020, 9.3.2.2 (A-MSDU format): each subframe is
+/// DA, SA, the big-endian MSDU length, the RFC 1042 LLC/SNAP MSDU and, but
+/// for the last, padding to four octets.
 pub(crate) struct AmsduBody<'a> {
-    frames: &'a [&'a [u8]],
+    frames: &'a [MsduParts<'a>],
 }
 
 pub(crate) enum AmsduError {
     Empty,
-    ShortEthernet,
     TooLong(usize),
 }
 
 impl<'a> AmsduBody<'a> {
-    pub(crate) fn checked(frames: &'a [&'a [u8]], maximum: usize) -> Result<Self, AmsduError> {
+    pub(crate) fn checked(frames: &'a [MsduParts<'a>], maximum: usize) -> Result<Self, AmsduError> {
         use crate::data::LLC_SNAP_HEADER_LEN;
         if frames.is_empty() {
             return Err(AmsduError::Empty);
         }
         for frame in frames {
-            let mut reader = oer_wire::Reader::new(frame);
-            let _ = reader
-                .array::<ETHERNET_HEADER_LEN>()
-                .map_err(|_| AmsduError::ShortEthernet)?;
-            let payload = reader.remaining();
-            let length = payload
+            let length = frame
+                .payload
                 .len()
                 .checked_add(LLC_SNAP_HEADER_LEN)
                 .ok_or(AmsduError::TooLong(usize::MAX))?;
@@ -166,26 +166,20 @@ impl<'a> AmsduBody<'a> {
         let count = self.frames.len();
         self.frames
             .iter()
-            .copied()
             .enumerate()
             .flat_map(move |(index, frame)| {
-                // AmsduBody's only constructor admitted every immutable
-                // Ethernet header and the u16 MSDU limit. Total iterator
-                // splits retain that admission without an error-only fragment.
-                let (addresses, after_addresses) = admitted_prefix::<12>(frame);
-                let (ether_type, payload) = admitted_prefix::<2>(after_addresses);
                 // Admission proves payload + LLC <= u16::MAX. Neither this
                 // sum nor the subframe sum below can saturate.
                 const {
-                    if !(usize::MAX - ETHERNET_HEADER_LEN >= u16::MAX as usize) {
+                    if !(usize::MAX - AMSDU_SUBFRAME_HEADER_LEN >= u16::MAX as usize) {
                         panic!("invalid fixed wire geometry");
                     };
                 }
-                let msdu_length = payload.len().saturating_add(LLC_SNAP_HEADER_LEN);
+                let msdu_length = frame.payload.len().saturating_add(LLC_SNAP_HEADER_LEN);
                 let padding: &[u8] = if Some(index) == count.checked_sub(1) {
                     &[]
                 } else {
-                    match ETHERNET_HEADER_LEN.saturating_add(msdu_length) % 4 {
+                    match AMSDU_SUBFRAME_HEADER_LEN.saturating_add(msdu_length) % 4 {
                         0 => &[],
                         1 => &[0; 3],
                         2 => &[0; 2],
@@ -193,35 +187,16 @@ impl<'a> AmsduBody<'a> {
                     }
                 };
                 [
-                    Fragment::Borrowed(addresses),
-                    Fragment::Length((msdu_length as u16).to_be_bytes()),
+                    Fragment::Borrowed(&frame.destination),
+                    Fragment::Borrowed(&frame.source),
+                    Fragment::Word((msdu_length as u16).to_be_bytes()),
                     Fragment::Borrowed(&RFC1042_LLC_SNAP_PREFIX),
-                    Fragment::Borrowed(ether_type),
-                    Fragment::Borrowed(payload),
+                    Fragment::Word(frame.ether_type.to_be_bytes()),
+                    Fragment::Borrowed(frame.payload),
                     Fragment::Borrowed(padding),
                 ]
             })
     }
-}
-
-/// Split an already admitted prefix through total slice-iterator operations.
-/// The AmsduBody proof guarantees at least N bytes at each call. There is no
-/// panicking split or second admission; the immutable source cannot shrink.
-fn admitted_prefix<const N: usize>(bytes: &[u8]) -> (&[u8], &[u8]) {
-    const {
-        if !(N > 0) {
-            panic!("invalid fixed wire geometry");
-        };
-    }
-    let mut rest = bytes.iter();
-    rest.nth(const { N - 1 });
-    let rest = rest.as_slice();
-    let mut prefix = bytes.iter();
-    let mut tail = rest.iter();
-    if tail.next().is_some() {
-        prefix.nth_back(tail.len());
-    }
-    (prefix.as_slice(), rest)
 }
 
 #[cfg(test)]
@@ -292,46 +267,62 @@ mod tests {
         assert_eq!(&output[10..], &[0xa5; 2]);
     }
 
+    fn msdu(destination: [u8; 6], source: [u8; 6], payload: &[u8]) -> super::MsduParts<'_> {
+        super::MsduParts {
+            destination,
+            source,
+            ether_type: 0x0800,
+            payload,
+        }
+    }
+
     #[test]
-    fn malformed_ethernet_fragments_are_refused_before_writing() {
+    fn oversized_and_empty_aggregates_are_refused_before_writing() {
         use super::{AmsduBody, AmsduError};
-        let short = [0; 13];
+        let too_long = std::vec![0; 65528];
         assert!(matches!(
-            AmsduBody::checked(&[&short], 3839),
-            Err(AmsduError::ShortEthernet)
+            AmsduBody::checked(&[msdu([0; 6], [0; 6], &too_long)], usize::MAX),
+            Err(AmsduError::TooLong(65536))
         ));
-        let too_long = std::vec![0; 65536];
+        let fits = std::vec![0; 3839 - 14 - 8 + 1];
         assert!(matches!(
-            AmsduBody::checked(&[&too_long], 3839),
-            Err(AmsduError::TooLong(_))
+            AmsduBody::checked(&[msdu([0; 6], [0; 6], &fits)], 3839),
+            Err(AmsduError::TooLong(3840))
         ));
         assert!(matches!(
             AmsduBody::checked(&[], 3839),
             Err(AmsduError::Empty)
         ));
     }
+
     #[test]
-    fn admitted_ethernet_parts_preserve_every_length_and_padding_class() {
+    fn admitted_msdus_preserve_every_length_and_padding_class() {
         use super::AmsduBody;
         // Exercise all alignments and the largest u16 MSDU admitted by the
         // body proof, independently of the station/AP's smaller wire limit.
         for length in [0, 1, 2, 3, 4, 15, 1_500, 3_800, 65_527] {
-            let mut first = std::vec![0x5a; 14 + length];
-            first[..14].copy_from_slice(&[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 8, 0]);
-            let last = [0xa5; 14];
-            let frames = [first.as_slice(), last.as_slice()];
+            let payload = std::vec![0x5a; length];
+            let frames = [
+                msdu([0, 1, 2, 3, 4, 5], [6, 7, 8, 9, 10, 11], &payload),
+                super::MsduParts {
+                    destination: [0xa5; 6],
+                    source: [0xa5; 6],
+                    ether_type: 0xa5a5,
+                    payload: &[],
+                },
+            ];
             let Ok(body) = AmsduBody::checked(&frames, usize::MAX) else {
-                panic!("valid Ethernet frames within the u16 MSDU limit");
+                panic!("valid MSDUs within the u16 MSDU limit");
             };
-            let mut expected = first[..12].to_vec();
+            // DA, SA, length, RFC 1042 LLC/SNAP and EtherType, payload, pad.
+            let mut expected = std::vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
             expected.extend_from_slice(&((length + 8) as u16).to_be_bytes());
-            expected.extend_from_slice(&crate::data::RFC1042_LLC_SNAP_PREFIX);
-            expected.extend_from_slice(&first[12..]);
+            expected.extend_from_slice(&[0xaa, 0xaa, 0x03, 0, 0, 0, 0x08, 0x00]);
+            expected.extend_from_slice(&payload);
             expected.resize(expected.len().next_multiple_of(4), 0);
-            expected.extend_from_slice(&last[..12]);
-            expected.extend_from_slice(&8_u16.to_be_bytes());
-            expected.extend_from_slice(&crate::data::RFC1042_LLC_SNAP_PREFIX);
-            expected.extend_from_slice(&last[12..]);
+            expected.extend_from_slice(&[0xa5; 12]);
+            expected.extend_from_slice(&[0, 8]);
+            expected.extend_from_slice(&[0xaa, 0xaa, 0x03, 0, 0, 0, 0xa5, 0xa5]);
             let mut output = std::vec![0xcc; expected.len()];
             assert_eq!(
                 FrameParts([]).write_amsdu(body, &mut output),

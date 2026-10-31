@@ -1,0 +1,16 @@
+[package]
+name = "oer-bridges-ieee80211-ethernet"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Ethernet II to IEEE 802.11 MSDU bridging and WMM classification over both codecs"
+readme = "README.md"
+
+[dependencies]
+oer-ieee80211-wire = { path = "../../ieee80211/wire" }
+oer-network-wire = { path = "../../network/wire" }
+
+[lints]
+workspace = true

@@ -274,10 +274,14 @@ fn track_request(wifi: WifiClocked) -> WifiTrack {
     WifiTrack {
         wifi,
         channel: oer_radio_regulatory::TEST_DOMAIN
-            .permit(WifiChannel::new_2_4_ghz(6, WifiChannelWidth::Mhz20).unwrap())
+            .permit(oer_ieee80211_contracts_port::RegulatedChannel::from(
+                WifiChannel::new_2_4_ghz(6, WifiChannelWidth::Mhz20).unwrap(),
+            ))
             .unwrap(),
         tx_ceiling: oer_radio_regulatory::TEST_DOMAIN
-            .permit(WifiChannel::new_2_4_ghz(6, WifiChannelWidth::Mhz20).unwrap())
+            .permit(oer_ieee80211_contracts_port::RegulatedChannel::from(
+                WifiChannel::new_2_4_ghz(6, WifiChannelWidth::Mhz20).unwrap(),
+            ))
             .unwrap()
             .tx_ceiling(oer_radio_regulatory::PowerLimits {
                 antenna_gain_mbm: 0,

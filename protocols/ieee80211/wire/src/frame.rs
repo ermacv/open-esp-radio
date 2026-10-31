@@ -67,6 +67,10 @@ impl FrameControl {
     pub const fn is_data(self) -> bool {
         self.fields().kind().encoding() as u16 == Self::DATA
     }
+    /// A management frame.
+    pub const fn is_management_frame(self) -> bool {
+        self.fields().kind().encoding() as u16 == Self::MANAGEMENT
+    }
     /// Payload has CCMP protection.
     pub const fn protected(self) -> bool {
         self.fields().protected()
@@ -102,6 +106,192 @@ impl FrameControl {
     pub const fn has_ht_control(self) -> bool {
         self.fields().order()
             && (self.is_qos_data() || self.fields().kind().encoding() as u16 == Self::MANAGEMENT)
+    }
+}
+
+/// The address fields of a protocol-version-0 MPDU, present as its type,
+/// subtype and DS bits define them:
+///
+/// - management: Addresses 1 to 3 and Sequence Control;
+/// - data: the same, and Address 4 when both To DS and From DS are set;
+/// - control: Address 1, and Address 2 for the subtypes that carry a TA
+///   ([`ControlLayout`]).
+///
+/// Every field the frame's type holds must be complete; a captured prefix
+/// that ends inside one is refused, not read as a shorter frame. A frame
+/// whose address layout this view does not know (a TACK, a Control Frame
+/// Extension, a reserved control subtype or an extension frame) is refused
+/// as such, never read as Address 1 alone.
+///
+/// SOURCE: IEEE Std 802.11-2020, 9.2.3 (General frame format, Figure 9-1),
+/// 9.3.2.1 (Data frame format: Address 4 with To DS and From DS set), 9.3.3.2
+/// (Management frame format) and 9.3.1 (Control frames).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct AddressFields {
+    control: FrameControlFields,
+    receiver: [u8; 6],
+    transmitter: Option<[u8; 6]>,
+    address3: Option<[u8; 6]>,
+    sequence_control: Option<u16>,
+    address4: Option<[u8; 6]>,
+}
+
+/// Why a frame's address fields cannot be read.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AddressFieldsError {
+    /// The frame ends inside a field its type holds.
+    Truncated,
+    /// A protocol version other than 0, whose layout is not defined here.
+    UnknownVersion,
+    /// A frame type or control subtype whose address layout this view does
+    /// not know.
+    UnknownLayout,
+}
+
+impl AddressFields {
+    /// The address fields of `frame`.
+    pub fn parse(frame: &[u8]) -> Result<Self, AddressFieldsError> {
+        let mut reader = oer_wire::Reader::new(frame);
+        let truncated = |_| AddressFieldsError::Truncated;
+        let control = FrameControlFields::from_bytes(reader.read().map_err(truncated)?);
+        if control.version() != 0 {
+            return Err(AddressFieldsError::UnknownVersion);
+        }
+        // Frame Control alone decides the layout, before any field it
+        // governs is read: an unknown layout is refused as such, however
+        // short the frame.
+        let layout = match control.kind() {
+            FrameType::Management => AddressLayout::ThreeAddress { address4: false },
+            FrameType::Data => AddressLayout::ThreeAddress {
+                address4: control.to_ds() && control.from_ds(),
+            },
+            FrameType::Control => match control_layout(control.control_subtype()) {
+                ControlLayout::ReceiverAndTransmitter => {
+                    AddressLayout::Control { transmitter: true }
+                }
+                ControlLayout::Receiver => AddressLayout::Control { transmitter: false },
+                ControlLayout::Unknown => return Err(AddressFieldsError::UnknownLayout),
+            },
+            FrameType::Extension | FrameType::Reserved(_) => {
+                return Err(AddressFieldsError::UnknownLayout);
+            }
+        };
+        let _duration: [u8; 2] = reader.read().map_err(truncated)?;
+        let receiver = reader.read().map_err(truncated)?;
+        let mut fields = Self {
+            control,
+            receiver,
+            transmitter: None,
+            address3: None,
+            sequence_control: None,
+            address4: None,
+        };
+        match layout {
+            AddressLayout::ThreeAddress { address4 } => {
+                fields.transmitter = Some(reader.read().map_err(truncated)?);
+                fields.address3 = Some(reader.read().map_err(truncated)?);
+                fields.sequence_control =
+                    Some(u16::from_le_bytes(reader.read().map_err(truncated)?));
+                if address4 {
+                    fields.address4 = Some(reader.read().map_err(truncated)?);
+                }
+            }
+            AddressLayout::Control { transmitter: true } => {
+                fields.transmitter = Some(reader.read().map_err(truncated)?);
+            }
+            AddressLayout::Control { transmitter: false } => {}
+        }
+        Ok(fields)
+    }
+
+    pub const fn control(&self) -> FrameControlFields {
+        self.control
+    }
+
+    /// Address 1.
+    pub const fn receiver(&self) -> [u8; 6] {
+        self.receiver
+    }
+
+    /// Address 2, in management and data frames and in a control frame
+    /// carrying a TA.
+    pub const fn transmitter(&self) -> Option<[u8; 6]> {
+        self.transmitter
+    }
+
+    /// Address 3, in management and data frames.
+    pub const fn address3(&self) -> Option<[u8; 6]> {
+        self.address3
+    }
+
+    /// Sequence Control, in management and data frames.
+    pub const fn sequence_control(&self) -> Option<u16> {
+        self.sequence_control
+    }
+
+    /// Address 4, in a data frame with both To DS and From DS set.
+    pub const fn address4(&self) -> Option<[u8; 6]> {
+        self.address4
+    }
+
+    /// Every address the frame holds, in field order.
+    pub fn addresses(&self) -> impl Iterator<Item = [u8; 6]> {
+        [
+            Some(self.receiver),
+            self.transmitter,
+            self.address3,
+            self.address4,
+        ]
+        .into_iter()
+        .flatten()
+    }
+}
+
+/// The address fields a known frame layout holds after Address 1.
+#[derive(Clone, Copy)]
+enum AddressLayout {
+    /// Addresses 2 and 3 and Sequence Control, then Address 4 when set.
+    ThreeAddress { address4: bool },
+    /// Address 2 when set.
+    Control { transmitter: bool },
+}
+
+/// The addresses a control frame of one subtype carries.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ControlLayout {
+    /// The RA alone.
+    Receiver,
+    /// The RA, then the TA.
+    ReceiverAndTransmitter,
+    /// A layout this codec does not interpret.
+    Unknown,
+}
+
+/// The addresses a control frame of `subtype` carries.
+///
+/// SOURCE: IEEE Std 802.11-2020, 9.3.1 (Control frames): RTS, PS-Poll,
+/// CF-End, BlockAckReq, BlockAck, VHT NDP Announcement and Beamforming
+/// Report Poll carry RA and TA; CTS and Ack carry RA alone; Control Wrapper
+/// carries Address 1, then the carried frame's fields. IEEE Std
+/// 802.11ax-2021, 9.3.1 (Trigger frame format): RA and TA. TACK and the
+/// Control Frame Extension subtypes are not interpreted here.
+pub const fn control_layout(subtype: ControlSubtype) -> ControlLayout {
+    match subtype {
+        ControlSubtype::Trigger
+        | ControlSubtype::BeamformingReportPoll
+        | ControlSubtype::VhtNdpAnnouncement
+        | ControlSubtype::BlockAckRequest
+        | ControlSubtype::BlockAck
+        | ControlSubtype::PsPoll
+        | ControlSubtype::Rts
+        | ControlSubtype::CfEnd
+        | ControlSubtype::CfEndCfAck => ControlLayout::ReceiverAndTransmitter,
+        ControlSubtype::Cts | ControlSubtype::Ack | ControlSubtype::ControlWrapper => {
+            ControlLayout::Receiver
+        }
+        ControlSubtype::Tack
+        | ControlSubtype::ControlFrameExtension
+        | ControlSubtype::Reserved(_) => ControlLayout::Unknown,
     }
 }
 
@@ -437,6 +627,11 @@ oer_wire::bitfield! {
         /// SOURCE: IEEE Std 802.11-2020, 9.2.4.1.3 (Type and Subtype
         /// subfields).
         pub no_data, with_no_data: bool = 6..7, view;
+        /// Data subtype bits B4 and B5: CF-Ack and CF-Poll.
+        /// SOURCE: IEEE Std 802.11-2020, 9.2.4.1.3 (Type and Subtype
+        /// subfields).
+        pub cf_ack, with_cf_ack: bool = 4..5, view;
+        pub cf_poll, with_cf_poll: bool = 5..6, view;
         pub qos, with_qos: bool = 7..8, view;
         pub ds, with_ds: u16 = 8..10;
         pub more_fragments, with_more_fragments: bool = 10..11;

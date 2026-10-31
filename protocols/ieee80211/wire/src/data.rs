@@ -22,11 +22,14 @@ use crate::frame::QosControl;
 
 use crate::qos::{WmmAccessCategory, WmmUserPriority};
 
-use oer_network::ETHERNET_HEADER_LEN;
 pub const IEEE80211_LEGACY_DATA_HEADER_LEN: usize = 24;
 pub const IEEE80211_QOS_DATA_HEADER_LEN: usize = 26;
 pub const IEEE80211_HE_CONTROL_LEN: usize = 4;
 pub const LLC_SNAP_HEADER_LEN: usize = 8;
+/// An A-MSDU subframe header: DA, SA and the big-endian MSDU length.
+///
+/// SOURCE: IEEE Std 802.11-2020, 9.3.2.2.2 (A-MSDU subframe header).
+pub const AMSDU_SUBFRAME_HEADER_LEN: usize = 14;
 
 const IEEE80211_DATA: u8 = 0x08;
 const IEEE80211_QOS_DATA: u8 = 0x88;
@@ -114,12 +117,10 @@ impl DataEncapPlan {
     }
 }
 
-/// Bounded 802.11-to-Ethernet transform for one ordinary STA/AP MSDU.
+/// The located MSDU of one ordinary STA/AP data MPDU.
 ///
-/// The plan borrows no DMA storage. After [`decapsulate_data`] succeeds, the
-/// caller owns a complete Ethernet frame in its output buffer and may return
-/// the source RX descriptor to the radio. This is the copy-owned counterpart
-/// of the slot/token boundary retained by the production RX owner.
+/// The plan borrows no DMA storage: the MSDU's addresses and LLC/SNAP
+/// EtherType, and where its payload lies in the MPDU.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct DataDecapPlan {
     pub destination: [u8; 6],
@@ -127,70 +128,42 @@ pub struct DataDecapPlan {
     pub ether_type: u16,
     pub payload_offset: usize,
     pub payload_length: usize,
-    pub ethernet_length: usize,
 }
 
-/// Borrowed Ethernet-II frame represented without an intermediate contiguous
-/// scratch allocation.
+/// The addressing of one MSDU: its destination and source addresses and the
+/// EtherType its RFC 1042 LLC/SNAP header names.
 ///
-/// Receive integrations can copy these four parts directly into their final
-/// owned network-queue slot. The view never outlives the validated MPDU or
-/// A-MSDU subframe from which its payload was borrowed.
+/// SOURCE: IEEE Std 802.11-2020, 5.1.4 (MSDU format: RFC 1042 LLC/SNAP
+/// encapsulation) and 9.3.2.1 (address fields of a data frame).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct EthernetFrameParts<'payload> {
+pub struct MsduHeader {
+    pub destination: [u8; 6],
+    pub source: [u8; 6],
+    pub ether_type: u16,
+}
+
+/// One MSDU borrowed from a validated data MPDU or A-MSDU subframe, or lent
+/// to an encoder: its addressing and the payload after its LLC/SNAP header.
+///
+/// Receive integrations copy these parts directly into their final owned
+/// network-queue slot. The view never outlives the bytes it borrows.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct MsduParts<'payload> {
     pub destination: [u8; 6],
     pub source: [u8; 6],
     pub ether_type: u16,
     pub payload: &'payload [u8],
 }
 
-impl EthernetFrameParts<'_> {
-    pub const fn length(self) -> usize {
-        // A byte slice holds at most isize::MAX bytes, so adding the 14-byte
-        // header cannot reach usize::MAX.
-        ETHERNET_HEADER_LEN.saturating_add(self.payload.len())
+impl MsduParts<'_> {
+    /// The MSDU's addressing without its payload.
+    pub const fn header(self) -> MsduHeader {
+        MsduHeader {
+            destination: self.destination,
+            source: self.source,
+            ether_type: self.ether_type,
+        }
     }
-
-    pub fn copy_to(self, output: &mut [u8]) -> Result<usize, DataDecapError> {
-        write_ethernet(
-            output,
-            self.length(),
-            ethernet_header(self.destination, self.source, self.ether_type),
-            self.payload,
-        )
-    }
-}
-
-/// The Ethernet-II header of `destination`, `source` and `ether_type`.
-const fn ethernet_header(
-    destination: [u8; 6],
-    source: [u8; 6],
-    ether_type: u16,
-) -> [u8; ETHERNET_HEADER_LEN] {
-    let [d0, d1, d2, d3, d4, d5] = destination;
-    let [s0, s1, s2, s3, s4, s5] = source;
-    let [e0, e1] = ether_type.to_be_bytes();
-    [d0, d1, d2, d3, d4, d5, s0, s1, s2, s3, s4, s5, e0, e1]
-}
-
-/// Write `header` and `payload` to the start of `output`, `required` bytes in
-/// all, or refuse an output shorter than that before writing anything.
-fn write_ethernet(
-    output: &mut [u8],
-    required: usize,
-    header: [u8; ETHERNET_HEADER_LEN],
-    payload: &[u8],
-) -> Result<usize, DataDecapError> {
-    let too_small = DataDecapError::OutputTooSmall { required };
-    let (output_header, rest) = output
-        .split_first_chunk_mut::<ETHERNET_HEADER_LEN>()
-        .ok_or(too_small)?;
-    let (output_payload, _) = rest.split_at_mut_checked(payload.len()).ok_or(too_small)?;
-    *output_header = header;
-    oer_wire::Writer::new(output_payload)
-        .write(payload)
-        .map_err(|_| too_small)?;
-    Ok(required)
 }
 
 /// The EtherType after an RFC 1042 LLC/SNAP header, or `None` for another
@@ -203,15 +176,6 @@ pub const fn rfc1042_ether_type(llc: [u8; LLC_SNAP_HEADER_LEN]) -> Option<u16> {
     } else {
         None
     }
-}
-
-/// One Ethernet MSDU borrowed from a validated 802.11 A-MSDU payload.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct AmsduSubframe<'a> {
-    pub destination: [u8; 6],
-    pub source: [u8; 6],
-    pub ether_type: u16,
-    pub payload: &'a [u8],
 }
 
 /// Allocation-free iterator over the subframes of one received A-MSDU.
@@ -237,7 +201,7 @@ pub struct AmsduSubframes<'a> {
     failed: bool,
 }
 
-/// Role-neutral Ethernet views recovered from one validated data MPDU.
+/// Role-neutral MSDUs recovered from one validated data MPDU.
 ///
 /// This iterator is the common STA/AP boundary for ordinary MSDU and A-MSDU
 /// decapsulation. Address admission, peer authorization and duplicate
@@ -251,7 +215,7 @@ pub struct DataDecapsulation<'a> {
 
 #[derive(Clone, Debug)]
 enum DataDecapsulationFrames<'a> {
-    Single(Option<EthernetFrameParts<'a>>),
+    Single(Option<MsduParts<'a>>),
     Aggregate(AmsduSubframes<'a>),
 }
 
@@ -262,20 +226,13 @@ impl DataDecapsulation<'_> {
 }
 
 impl<'a> Iterator for DataDecapsulation<'a> {
-    type Item = Result<EthernetFrameParts<'a>, DataDecapError>;
+    type Item = Result<MsduParts<'a>, DataDecapError>;
 
     #[inline(always)]
     fn next(&mut self) -> Option<Self::Item> {
         match &mut self.frames {
             DataDecapsulationFrames::Single(frame) => frame.take().map(Ok),
-            DataDecapsulationFrames::Aggregate(frames) => frames.next().map(|frame| {
-                frame.map(|frame| EthernetFrameParts {
-                    destination: frame.destination,
-                    source: frame.source,
-                    ether_type: frame.ether_type,
-                    payload: frame.payload,
-                })
-            }),
+            DataDecapsulationFrames::Aggregate(frames) => frames.next(),
         }
     }
 }
@@ -290,13 +247,10 @@ pub enum DataDecapError {
     /// The first A-MSDU destination aliases an ordinary LLC/SNAP header.
     InvalidAmsduDestination,
     InvalidLlcSnap,
-    OutputTooSmall {
-        required: usize,
-    },
 }
 
 impl<'a> Iterator for AmsduSubframes<'a> {
-    type Item = Result<AmsduSubframe<'a>, DataDecapError>;
+    type Item = Result<MsduParts<'a>, DataDecapError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.failed || self.remaining.is_empty() {
@@ -311,10 +265,10 @@ impl<'a> Iterator for AmsduSubframes<'a> {
 impl<'a> AmsduSubframes<'a> {
     /// Split the next subframe and its padding off `remaining`; on an error
     /// `remaining` is unchanged.
-    fn split_subframe(&mut self) -> Result<AmsduSubframe<'a>, DataDecapError> {
+    fn split_subframe(&mut self) -> Result<MsduParts<'a>, DataDecapError> {
         let mut reader = oer_wire::Reader::new(self.remaining);
         let header = reader
-            .array::<ETHERNET_HEADER_LEN>()
+            .array::<AMSDU_SUBFRAME_HEADER_LEN>()
             .map_err(|_| DataDecapError::Truncated)?;
         let body = reader.remaining();
         let [
@@ -345,7 +299,7 @@ impl<'a> AmsduSubframes<'a> {
             .map_err(|_| DataDecapError::Truncated)?;
         let payload = reader.remaining();
         let ether_type = rfc1042_ether_type(*llc).ok_or(DataDecapError::InvalidLlcSnap)?;
-        let subframe = AmsduSubframe {
+        let subframe = MsduParts {
             destination: [d0, d1, d2, d3, d4, d5],
             source: [s0, s1, s2, s3, s4, s5],
             ether_type,
@@ -357,7 +311,7 @@ impl<'a> AmsduSubframes<'a> {
             // SOURCE: IEEE Std 802.11-2020, 9.3.2.2 (A-MSDU subframe
             // padding): the complete non-final subframe rounds to four octets.
             let complete = usize::from(msdu_length)
-                .checked_add(ETHERNET_HEADER_LEN)
+                .checked_add(AMSDU_SUBFRAME_HEADER_LEN)
                 .ok_or(DataDecapError::Truncated)?;
             let padding = 4_usize
                 .checked_sub(complete % 4)
@@ -378,19 +332,21 @@ impl<'a> AmsduSubframes<'a> {
 /// A raw priority cannot enter the encoder:
 ///
 /// ```compile_fail,E0308
-/// use oer_ieee80211_wire::data::{DataInterfaceRole, plan_data_encapsulation};
+/// use oer_ieee80211_wire::data::{DataInterfaceRole, MsduHeader, plan_data_encapsulation};
+/// let msdu = MsduHeader { destination: [6; 6], source: [4; 6], ether_type: 0x0800 };
 /// let _plan = plan_data_encapsulation(
-///     DataInterfaceRole::Station, [2; 6], [4; 6], [0; 14], 8, true, false,
+///     DataInterfaceRole::Station, [2; 6], [4; 6], msdu, 8, true, false,
 /// );
 /// ```
 ///
 /// Fixed protocol priorities need no runtime validation:
 ///
 /// ```
-/// use oer_ieee80211_wire::data::{DataInterfaceRole, plan_data_encapsulation};
+/// use oer_ieee80211_wire::data::{DataInterfaceRole, MsduHeader, plan_data_encapsulation};
 /// use oer_ieee80211_wire::qos::{WmmAccessCategory, WmmUserPriority};
+/// let msdu = MsduHeader { destination: [6; 6], source: [4; 6], ether_type: 0x0800 };
 /// let plan = plan_data_encapsulation(
-///     DataInterfaceRole::Station, [2; 6], [4; 6], [0; 14],
+///     DataInterfaceRole::Station, [2; 6], [4; 6], msdu,
 ///     WmmUserPriority::UP7, true, false,
 /// );
 /// assert_eq!(plan.access_category, WmmAccessCategory::Voice);
@@ -399,14 +355,18 @@ pub const fn plan_data_encapsulation(
     role: DataInterfaceRole,
     bssid: [u8; 6],
     interface_mac: [u8; 6],
-    ethernet: [u8; ETHERNET_HEADER_LEN],
+    msdu: MsduHeader,
     priority: WmmUserPriority,
     peer_qos: bool,
     no_ack_policy: bool,
 ) -> DataEncapPlan {
-    let [d0, d1, d2, d3, d4, d5, s0, s1, s2, s3, s4, s5, e0, e1] = ethernet;
-    let destination = [d0, d1, d2, d3, d4, d5];
-    let source = [s0, s1, s2, s3, s4, s5];
+    let MsduHeader {
+        destination,
+        source,
+        ether_type,
+    } = msdu;
+    let [d0, ..] = destination;
+    let [e0, e1] = ether_type.to_be_bytes();
     // An access point's group-addressed data stays non-QoS.
     let group_from_access_point = matches!(role, DataInterfaceRole::AccessPoint)
         && crate::address::AddressFlags::from_bytes([d0]).group();
@@ -443,7 +403,10 @@ pub const fn plan_data_encapsulation(
         } else {
             IEEE80211_LEGACY_DATA_HEADER_LEN as u8
         },
-        llc_snap: [0xaa, 0xaa, 0x03, 0, 0, 0, e0, e1],
+        llc_snap: {
+            let [p0, p1, p2, p3, p4, p5] = RFC1042_LLC_SNAP_PREFIX;
+            [p0, p1, p2, p3, p4, p5, e0, e1]
+        },
         access_category: priority.access_category(),
         he_control: DataHeControl::Disabled,
     }
@@ -489,7 +452,7 @@ pub const fn plan_data_encapsulation_with_he_control(
     role: DataInterfaceRole,
     bssid: [u8; 6],
     interface_mac: [u8; 6],
-    ethernet: [u8; ETHERNET_HEADER_LEN],
+    msdu: MsduHeader,
     priority: WmmUserPriority,
     peer_qos: bool,
     no_ack_policy: bool,
@@ -499,7 +462,7 @@ pub const fn plan_data_encapsulation_with_he_control(
         role,
         bssid,
         interface_mac,
-        ethernet,
+        msdu,
         priority,
         peer_qos,
         no_ack_policy,
@@ -519,7 +482,7 @@ pub const fn plan_data_encapsulation_with_he_control(
     Ok(plan)
 }
 
-/// Validate one ordinary STA/AP data MPDU and locate its Ethernet payload.
+/// Validate one ordinary STA/AP data MPDU and locate its MSDU.
 ///
 /// `payload_offset` and `payload_length` describe the decrypted LLC/SNAP view
 /// produced by the MAC crate. For protected frames the offset is after the
@@ -532,17 +495,6 @@ pub fn plan_data_decapsulation(
     payload_offset: usize,
     payload_length: usize,
 ) -> Result<DataDecapPlan, DataDecapError> {
-    single_decapsulation(role, mpdu, payload_offset, payload_length).map(|(plan, _)| plan)
-}
-
-/// [`plan_data_decapsulation`] with the Ethernet view it locates.
-#[inline(always)]
-fn single_decapsulation(
-    role: DataInterfaceRole,
-    mpdu: &[u8],
-    payload_offset: usize,
-    payload_length: usize,
-) -> Result<(DataDecapPlan, EthernetFrameParts<'_>), DataDecapError> {
     let header = data_header(role, mpdu)?;
     if header
         .qos()
@@ -552,18 +504,16 @@ fn single_decapsulation(
     }
     let payload = data_payload(header, payload_offset, payload_length)?;
     let parts = single_payload(header, payload)?;
-    let ethernet_payload_offset = payload_offset
+    let msdu_payload_offset = payload_offset
         .checked_add(LLC_SNAP_HEADER_LEN)
         .ok_or(DataDecapError::Truncated)?;
-    let plan = DataDecapPlan {
+    Ok(DataDecapPlan {
         destination: parts.destination,
         source: parts.source,
         ether_type: parts.ether_type,
-        payload_offset: ethernet_payload_offset,
+        payload_offset: msdu_payload_offset,
         payload_length: parts.payload.len(),
-        ethernet_length: parts.length(),
-    };
-    Ok((plan, parts))
+    })
 }
 
 fn data_header(
@@ -616,7 +566,7 @@ fn data_payload(
 fn single_payload<'a>(
     header: crate::frame::DecodedHeader<'_>,
     payload: &'a [u8],
-) -> Result<EthernetFrameParts<'a>, DataDecapError> {
+) -> Result<MsduParts<'a>, DataDecapError> {
     let mut reader = oer_wire::Reader::new(payload);
     let llc = reader
         .array::<LLC_SNAP_HEADER_LEN>()
@@ -628,7 +578,7 @@ fn single_payload<'a>(
         1 => (header.address3(), header.transmitter()),
         _ => return Err(DataDecapError::RoleMismatch),
     };
-    Ok(EthernetFrameParts {
+    Ok(MsduParts {
         destination,
         source,
         ether_type,
@@ -657,7 +607,7 @@ pub fn amsdu_subframes<'a>(
 fn aggregate_payload(payload: &[u8]) -> Result<AmsduSubframes<'_>, DataDecapError> {
     let mut reader = oer_wire::Reader::new(payload);
     let first = reader
-        .array::<{ ETHERNET_HEADER_LEN + LLC_SNAP_HEADER_LEN }>()
+        .array::<{ AMSDU_SUBFRAME_HEADER_LEN + LLC_SNAP_HEADER_LEN }>()
         .map_err(|_| DataDecapError::Truncated)?;
     if first.first_chunk::<6>() == Some(&RFC1042_LLC_SNAP_PREFIX) {
         return Err(DataDecapError::InvalidAmsduDestination);
@@ -674,8 +624,8 @@ fn aggregate_payload(payload: &[u8]) -> Result<AmsduSubframes<'_>, DataDecapErro
     Ok(frames)
 }
 
-/// Validate one role-addressed data MPDU and expose all contained Ethernet
-/// frames without allocation or chip/runtime policy. All A-MSDU subframes
+/// Validate one role-addressed data MPDU and expose all contained MSDUs
+/// without allocation or chip/runtime policy. All A-MSDU subframes
 /// are validated before this function exposes any of them.
 pub fn decapsulate_data_frames<'a>(
     role: DataInterfaceRole,
@@ -705,42 +655,6 @@ pub fn decapsulate_payload<'a>(
         DataDecapsulationFrames::Single(Some(single_payload(header, payload)?))
     };
     Ok(DataDecapsulation { frames, amsdu })
-}
-
-/// Copy one validated A-MSDU subframe into ordinary Ethernet-II storage.
-pub fn decapsulate_amsdu_subframe(
-    subframe: AmsduSubframe<'_>,
-    ethernet: &mut [u8],
-) -> Result<usize, DataDecapError> {
-    let required = ETHERNET_HEADER_LEN
-        .checked_add(subframe.payload.len())
-        .ok_or(DataDecapError::Truncated)?;
-    write_ethernet(
-        ethernet,
-        required,
-        ethernet_header(subframe.destination, subframe.source, subframe.ether_type),
-        subframe.payload,
-    )
-}
-
-/// Copy one validated MSDU into caller-owned Ethernet storage.
-///
-/// SOURCE\[HIL_OPEN_HE20_RX_RING_STARVATION_2026_07_29]: the complete post-CCMP
-/// receive path executed from PSRAM plateaued at 63.1..65.3 Mbit/s while the
-/// MAC reported an additional raw interrupt bit under load. Code placement is
-/// deliberately left to the final image/linker policy rather than embedded in
-/// this hardware-independent protocol crate.
-#[inline(never)]
-pub fn decapsulate_data(
-    role: DataInterfaceRole,
-    mpdu: &[u8],
-    payload_offset: usize,
-    payload_length: usize,
-    ethernet: &mut [u8],
-) -> Result<DataDecapPlan, DataDecapError> {
-    let (plan, parts) = single_decapsulation(role, mpdu, payload_offset, payload_length)?;
-    parts.copy_to(ethernet)?;
-    Ok(plan)
 }
 
 #[cfg(test)]

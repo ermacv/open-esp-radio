@@ -7,7 +7,7 @@
 //! entries, the publication deadlines, the software queue of each access
 //! category ahead of the core and the asynchronous PHY retune an `Enable`
 //! needs, and serves the phase contract
-//! (`oer_ieee80211_port::phase`) over this core.
+//! (`oer_ieee80211_contracts_port::phase`) over this core.
 //!
 //! # Checked operations
 //!
@@ -133,8 +133,8 @@ use oer_time::Clock;
 
 use crate::mac::tsf_relation::TsfTimingError;
 use oer_esp32s31_hal::types::{MacPti, StaTbttSchedule};
-use oer_ieee80211_port::TsfGeneration;
-use oer_ieee80211_port::tsf::TsfInstant;
+use oer_ieee80211_contracts_port::TsfGeneration;
+use oer_ieee80211_contracts_port::tsf::TsfInstant;
 
 use crate::mac::{
     ap_policy::ApRxPolicyHardware,
@@ -164,7 +164,7 @@ use crate::mac::{
 use crate::ordinary_tx::MacTxPlan;
 use crate::station_tsf::{StationTsf, StationTsfHardware};
 use oer_esp32s31_hal::types::MacInterface;
-use oer_ieee80211_port::{
+use oer_ieee80211_contracts_port::{
     BandSet, BeaconTimingCapabilities, BlockAckReport, Channel, ConnectionFrame, LinkMetric,
     LowerMacCapabilities, PhyFormatSet, PhyRate, Protection, RateSupport, ReceiveFilter,
     RxEvidence, RxMeta, RxMetadata, SignalMetadata, TbttEvent, TxOperation, TxStatus, VifRole,
@@ -223,7 +223,7 @@ pub const LOWER_MAC_TX_QUEUES: usize = 4;
 /// interface zero) and the access-point context (interface one).
 pub const LOWER_MAC_VIFS: u8 = 2;
 
-const RESOURCES: oer_ieee80211_port::MacResourceLimits =
+const RESOURCES: oer_ieee80211_contracts_port::MacResourceLimits =
     ESP32S31_MAC_SERVICE_CAPABILITIES.resources;
 
 /// Keys installed at once: the station's pairwise and group slots and the
@@ -247,7 +247,7 @@ const RX_BLOCK_ACK_BANKS: usize = RESOURCES.rx_block_ack_entries as usize;
 const MAX_PROGRAM_PSDU: usize = 0x0fff;
 /// Light-sleep wake lead the vendor power manager publishes beside the
 /// station TBTT lead (`g_pm_cfg[16]`, as
-/// `protocols/ieee80211/sta/src/modem_sleep.rs` records it in
+/// `protocols/ieee80211/core/roles/sta/src/modem_sleep.rs` records it in
 /// `TBTT_WAKE_WINDOW_MICROS`). The port
 /// reports TBTTs only; it keeps the vendor relation between the two leads.
 const STATION_TBTT_WAKE_WINDOW_MICROS: u16 = 1_500;
@@ -275,7 +275,7 @@ impl Esp32s31RxMeta {
     /// converts from the MAC local time.
     pub const fn with_timestamp(
         mut self,
-        timestamp: RxEvidence<oer_ieee80211_port::Ieee80211Stamp>,
+        timestamp: RxEvidence<oer_ieee80211_contracts_port::Ieee80211Stamp>,
     ) -> Self {
         self.common.timestamp = timestamp;
         self
@@ -1804,7 +1804,7 @@ where
     }
 
     /// Retain the phase's six-bit color proof through the core boundary.
-    pub fn set_checked_he_bss_color(&mut self, color: oer_ieee80211_port::BssColor) {
+    pub fn set_checked_he_bss_color(&mut self, color: oer_ieee80211_contracts_port::BssColor) {
         self.tx.policy_mut().install_he_bss_color(color.get());
     }
 
@@ -1836,11 +1836,12 @@ where
     /// # Errors
     ///
     /// The record the policy refused.
-    pub fn set_checked_edca<K: oer_ieee80211_port::Ieee80211Capabilities>(
+    pub fn set_checked_edca<K: oer_ieee80211_contracts_port::Ieee80211Capabilities>(
         &mut self,
         role: VifRole,
-        parameters: oer_ieee80211_port::SupportedEdca<K>,
-    ) -> Result<oer_ieee80211_port::SupportedEdca<K>, crate::mac::edca::EdcaParametersError> {
+        parameters: oer_ieee80211_contracts_port::SupportedEdca<K>,
+    ) -> Result<oer_ieee80211_contracts_port::SupportedEdca<K>, crate::mac::edca::EdcaParametersError>
+    {
         self.tx.policy_mut().install_edca(role, parameters.get())?;
         Ok(parameters)
     }
@@ -2219,7 +2220,7 @@ where
     }
 
     /// The station's TSF and the generation of its relation, for a
-    /// [`TsfSample`](oer_ieee80211_port::TsfSample) the backend pairs
+    /// [`TsfSample`](oer_ieee80211_contracts_port::TsfSample) the backend pairs
     /// with its radio clock: the access-point timer has no read seam.
     pub fn station_tsf_reading<H: StationTsfHardware>(
         &self,

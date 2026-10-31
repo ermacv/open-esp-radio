@@ -8,15 +8,15 @@ use core::{convert::Infallible, future::Future, marker::PhantomData, mem::MaybeU
 use oer_embassy_time::EmbassyClock;
 use oer_esp32s31_ieee80211_driver::port::{self, device::Composition};
 use oer_espressif_ieee80211_policy::rate_selection::EspressifRateSelection;
-use oer_ieee80211_port::*;
+use oer_ieee80211_contracts_port::*;
 use oer_ieee80211_runtime::station::*;
 
-use oer_ieee80211_sta::{
+use oer_ieee80211_core_roles_sta::{
     data::StaData,
     epoch::{EpochContext, LinkEpochSource},
     machine::{self, Station, StationResources},
 };
-use oer_ieee80211_upper_mac::{
+use oer_ieee80211_core_upper_mac::{
     rate_control::RatePeer,
     rate_selection::{FrameRates, RateSelection},
 };
@@ -46,7 +46,7 @@ impl<W: Binding> Composition for ImageComposition<W> {
 pub struct StationComposition<W: Binding, Id: SlotIdentity>(PhantomData<(W, Id)>);
 const MANAGEMENT: u8 = 4;
 #[cfg(oer_trace)]
-pub(crate) static TARGET: oer_memory::OnceValue<([u8; 6], Option<[u8; 6]>, u8)> =
+pub(crate) static TARGET: oer_memory::OnceValue<([u8; 6], Option<[u8; 6]>)> =
     oer_memory::OnceValue::new();
 #[cfg(oer_trace)]
 fn observe_terminal<'id, W: Binding, Id: SlotIdentity + 'id>(
@@ -123,7 +123,7 @@ impl<W: Binding, Id: SlotIdentity> StationPort for StationComposition<W, Id> {
         #[cfg(oer_trace)]
         if let LowerMacEvent::Received { frame, .. } = &event {
             let bytes = frame.bytes();
-            if let Some((local, Some(target), channel)) = TARGET.get() {
+            if let Some((local, Some(target))) = TARGET.get() {
                 if oer_ieee80211_wire::station::parse_open_authentication_response(
                     bytes, local, target,
                 )
@@ -137,7 +137,7 @@ impl<W: Binding, Id: SlotIdentity> StationPort for StationComposition<W, Id> {
                 }
                 if oer_ieee80211_wire::frame::DecodedHeader::decode(bytes)
                     .is_some_and(|h| h.control().subtype() == 8)
-                    && oer_ieee80211_wire::scan::parse_management(bytes, channel, 0)
+                    && oer_ieee80211_wire::scan::parse_management(bytes)
                         .is_some_and(|r| r.bssid.get() == target)
                 {
                     #[cfg(oer_trace)]
@@ -180,7 +180,7 @@ impl<W: Binding, Id: SlotIdentity> StationPort for StationComposition<W, Id> {
 
 pub struct Rates<W: Binding>(EspressifRateSelection<Caps>, W::Observer);
 impl<W: Binding, M: SignalMetadata> RateSelection<M, port::Ack> for Rates<W> {
-    fn packet_number_step(&self) -> oer_ieee80211_upper_mac::ccmp::CcmpPacketNumberStep {
+    fn packet_number_step(&self) -> oer_ieee80211_core_upper_mac::ccmp::CcmpPacketNumberStep {
         <EspressifRateSelection<Caps> as RateSelection<M, port::Ack>>::packet_number_step(&self.0)
     }
     fn plan<R>(

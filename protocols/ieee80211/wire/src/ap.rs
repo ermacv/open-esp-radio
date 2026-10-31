@@ -6,8 +6,8 @@
 //! Management decoding splits the fixed header and each fixed body as arrays
 //! before accessing fields; variable information elements remain borrowed slices.
 
+use crate::data::{MsduHeader, MsduParts};
 use crate::frame::{FrameControlFields, FrameType};
-use oer_network::ETHERNET_HEADER_LEN;
 
 use crate::{
     block_ack::{BlockAckAction, parse_block_ack_action},
@@ -56,11 +56,9 @@ pub enum ApPeerDisconnectKind {
 /// Invalid AP data-frame construction.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ApDataFrameError {
-    LengthOverflow,
     InvalidAccessPoint,
     InvalidPeer,
     InvalidUserPriority,
-    EthernetFrameTooShort,
     NoAmsduFrames,
     AmsduTooLong { length: usize, maximum: usize },
     OutputTooSmall { required: usize },
@@ -91,15 +89,15 @@ impl ApDataFrame<'_> {
         {
             return Err(ApDataFrameError::InvalidAccessPoint);
         }
-        let mut ethernet = [0; ETHERNET_HEADER_LEN];
-        crate::encoding::write_array::<0, _, _>(&mut ethernet, &self.destination);
-        crate::encoding::write_array::<6, _, _>(&mut ethernet, &self.access_point);
-        crate::encoding::write_array::<12, _, _>(&mut ethernet, &self.ether_type.to_be_bytes());
         let plan = plan_data_encapsulation(
             DataInterfaceRole::AccessPoint,
             self.access_point,
             self.access_point,
-            ethernet,
+            MsduHeader {
+                destination: self.destination,
+                source: self.access_point,
+                ether_type: self.ether_type,
+            },
             WmmUserPriority::UP7,
             false,
             false,
@@ -121,18 +119,18 @@ impl ApDataFrame<'_> {
     }
 }
 
-/// One plaintext Ethernet-II MPDU for an explicitly Open AP epoch.
+/// One plaintext MSDU for an explicitly Open AP epoch.
 ///
 /// Unlike [`ApDataFrame`], which models an AP-originated EAPOL payload, this
-/// codec preserves the complete caller-owned Ethernet header and validates
-/// the destination against the selected unicast/group peer.
+/// codec carries the MSDU's own source and validates its destination against
+/// the selected unicast/group peer.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ApUnprotectedDataFrame<'frame> {
     pub access_point: [u8; 6],
     pub peer: [u8; 6],
     pub sequence_number: SequenceNumber,
     pub more_data: bool,
-    pub ethernet: &'frame [u8],
+    pub msdu: MsduParts<'frame>,
 }
 
 impl ApUnprotectedDataFrame<'_> {
@@ -142,19 +140,12 @@ impl ApUnprotectedDataFrame<'_> {
         {
             return Err(ApDataFrameError::InvalidAccessPoint);
         }
-        if self.ethernet.len() < ETHERNET_HEADER_LEN {
-            return Err(ApDataFrameError::EthernetFrameTooShort);
-        }
-        let mut reader = oer_wire::Reader::new(self.ethernet);
-        let ethernet_header = reader
-            .read::<ETHERNET_HEADER_LEN>()
-            .map_err(|_| ApDataFrameError::EthernetFrameTooShort)?;
-        let payload = reader.remaining();
+        let payload = self.msdu.payload;
         let mut plan = plan_data_encapsulation(
             DataInterfaceRole::AccessPoint,
             self.access_point,
             self.access_point,
-            ethernet_header,
+            self.msdu.header(),
             WmmUserPriority::UP0,
             false,
             false,
@@ -182,7 +173,7 @@ impl ApUnprotectedDataFrame<'_> {
     }
 }
 
-/// One protected Ethernet-II frame sent from an AP to its authorized peer.
+/// One protected MSDU sent from an AP to its authorized peer.
 ///
 /// The caller owns the pairwise packet number. This codec merely places the
 /// supplied CCMP header in the DMA image; the backend encrypts the
@@ -198,16 +189,7 @@ pub struct ApProtectedDataFrame<'frame> {
     /// power-save queue while further traffic remains buffered.
     pub more_data: bool,
     pub ccmp_header: [u8; CCMP_HEADER_LEN],
-    pub ethernet: &'frame [u8],
-}
-
-pub const AP_PROTECTED_QOS_ETHERNET_OVERHEAD: usize =
-    26 + CCMP_HEADER_LEN + 8 - ETHERNET_HEADER_LEN;
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct EncodedApFrame {
-    pub offset: usize,
-    pub length: usize,
+    pub msdu: MsduParts<'frame>,
 }
 
 impl ApProtectedDataFrame<'_> {
@@ -219,22 +201,15 @@ impl ApProtectedDataFrame<'_> {
         }
         let priority = WmmUserPriority::new(self.user_priority)
             .ok_or(ApDataFrameError::InvalidUserPriority)?;
-        if self.ethernet.len() < ETHERNET_HEADER_LEN {
-            return Err(ApDataFrameError::EthernetFrameTooShort);
-        }
-        // The initial AP owns one pairwise slot. Group-addressed Ethernet
+        // The initial AP owns one pairwise slot. A group-addressed MSDU
         // needs the distinct GTK packet-number owner and is rejected by the
         // chip engine before this codec is called.
-        let mut reader = oer_wire::Reader::new(self.ethernet);
-        let ethernet_header = reader
-            .read::<ETHERNET_HEADER_LEN>()
-            .map_err(|_| ApDataFrameError::EthernetFrameTooShort)?;
-        let payload = reader.remaining();
+        let payload = self.msdu.payload;
         let mut plan = plan_data_encapsulation(
             DataInterfaceRole::AccessPoint,
             self.access_point,
             self.access_point,
-            ethernet_header,
+            self.msdu.header(),
             priority,
             self.peer_qos,
             false,
@@ -263,7 +238,7 @@ impl ApProtectedDataFrame<'_> {
     }
 }
 
-/// One AP-originated QoS A-MSDU backed by a finite slice of Ethernet frames.
+/// One AP-originated QoS A-MSDU backed by a finite slice of MSDUs.
 ///
 /// `ccmp_header = None` selects an Open MPDU. `Some` selects the plaintext
 /// CCMP DMA image; hardware encrypts the A-MSDU body and appends its MIC. All
@@ -278,7 +253,7 @@ pub struct ApAmsduFrame<'a> {
     pub user_priority: u8,
     pub more_data: bool,
     pub ccmp_header: Option<[u8; CCMP_HEADER_LEN]>,
-    pub ethernet_frames: &'a [&'a [u8]],
+    pub msdus: &'a [MsduParts<'a>],
 }
 
 /// Return the complete DMA-resident MPDU length for a bounded AP A-MSDU.
@@ -287,10 +262,10 @@ pub struct ApAmsduFrame<'a> {
 /// controls only the retained eight-byte CCMP header; the A-MSDU body has the
 /// same IEEE 802.11 representation for Open and CCMP epochs.
 pub fn ap_amsdu_frame_length(
-    ethernet_frames: &[&[u8]],
+    msdus: &[MsduParts<'_>],
     protected: bool,
 ) -> Result<usize, ApDataFrameError> {
-    let body = crate::encoding::AmsduBody::checked(ethernet_frames, AP_AMSDU_BASELINE_MAX_LEN)
+    let body = crate::encoding::AmsduBody::checked(msdus, AP_AMSDU_BASELINE_MAX_LEN)
         .map_err(amsdu_error)?;
     let length = body
         .length()
@@ -307,7 +282,6 @@ pub fn ap_amsdu_frame_length(
 fn amsdu_error(error: crate::encoding::AmsduError) -> ApDataFrameError {
     match error {
         crate::encoding::AmsduError::Empty => ApDataFrameError::NoAmsduFrames,
-        crate::encoding::AmsduError::ShortEthernet => ApDataFrameError::EthernetFrameTooShort,
         crate::encoding::AmsduError::TooLong(length) => ApDataFrameError::AmsduTooLong {
             length,
             maximum: AP_AMSDU_BASELINE_MAX_LEN,
@@ -316,7 +290,7 @@ fn amsdu_error(error: crate::encoding::AmsduError) -> ApDataFrameError {
 }
 
 impl ApAmsduFrame<'_> {
-    /// Encode every Ethernet input into one From-DS QoS A-MSDU.
+    /// Encode every MSDU into one From-DS QoS A-MSDU.
     ///
     /// Validation and capacity checks complete before the output is mutated.
     /// This lets a packet-number owner first encode with a placeholder CCMP
@@ -332,33 +306,20 @@ impl ApAmsduFrame<'_> {
         }
         let priority = WmmUserPriority::new(self.user_priority)
             .ok_or(ApDataFrameError::InvalidUserPriority)?;
-        let Some(first) = self.ethernet_frames.first().copied() else {
+        let Some(first) = self.msdus.first().copied() else {
             return Err(ApDataFrameError::NoAmsduFrames);
         };
-        for ethernet in self.ethernet_frames.iter().copied() {
-            if ethernet.len() < ETHERNET_HEADER_LEN {
-                return Err(ApDataFrameError::EthernetFrameTooShort);
-            }
-            if oer_wire::Reader::new(ethernet)
-                .read::<6>()
-                .map_err(|_| ApDataFrameError::EthernetFrameTooShort)?
-                != self.peer
-            {
-                return Err(ApDataFrameError::InvalidPeer);
-            }
+        if self.msdus.iter().any(|msdu| msdu.destination != self.peer) {
+            return Err(ApDataFrameError::InvalidPeer);
         }
-        let body =
-            crate::encoding::AmsduBody::checked(self.ethernet_frames, AP_AMSDU_BASELINE_MAX_LEN)
-                .map_err(amsdu_error)?;
+        let body = crate::encoding::AmsduBody::checked(self.msdus, AP_AMSDU_BASELINE_MAX_LEN)
+            .map_err(amsdu_error)?;
 
-        let Some(&first_header) = first.first_chunk::<ETHERNET_HEADER_LEN>() else {
-            return Err(ApDataFrameError::EthernetFrameTooShort);
-        };
         let mut plan = plan_data_encapsulation(
             DataInterfaceRole::AccessPoint,
             self.access_point,
             self.access_point,
-            first_header,
+            first.header(),
             priority,
             true,
             false,
@@ -387,93 +348,6 @@ impl ApAmsduFrame<'_> {
         ])
         .write_amsdu(body, output)
         .map_err(|required| ApDataFrameError::OutputTooSmall { required })
-    }
-}
-
-impl ApProtectedDataFrame<'_> {
-    /// Convert an Ethernet-II frame in its owned allocation to an AP-originated
-    /// protected QoS MPDU without moving the payload.
-    pub fn encode_in_place(
-        self,
-        storage: &mut [u8],
-        ethernet_offset: usize,
-        ethernet_length: usize,
-    ) -> Result<EncodedApFrame, ApDataFrameError> {
-        if !self.peer_qos {
-            return Err(ApDataFrameError::InvalidUserPriority);
-        }
-        let priority = WmmUserPriority::new(self.user_priority)
-            .ok_or(ApDataFrameError::InvalidUserPriority)?;
-        if ethernet_length < ETHERNET_HEADER_LEN {
-            return Err(ApDataFrameError::EthernetFrameTooShort);
-        }
-        let ethernet_end = ethernet_offset
-            .checked_add(ethernet_length)
-            .ok_or(ApDataFrameError::LengthOverflow)?;
-        if storage.len() < ethernet_end {
-            return Err(ApDataFrameError::OutputTooSmall {
-                required: ethernet_end,
-            });
-        }
-        let Some(&ethernet_header) = storage
-            .get(ethernet_offset..ethernet_end)
-            .ok_or(ApDataFrameError::OutputTooSmall {
-                required: ethernet_end,
-            })?
-            .first_chunk::<ETHERNET_HEADER_LEN>()
-        else {
-            return Err(ApDataFrameError::EthernetFrameTooShort);
-        };
-        let [destination @ .., _, _, _, _, _, _, _, _] = ethernet_header;
-        if destination != self.peer {
-            return Err(ApDataFrameError::InvalidPeer);
-        }
-        let mut plan = plan_data_encapsulation(
-            DataInterfaceRole::AccessPoint,
-            self.access_point,
-            self.access_point,
-            ethernet_header,
-            priority,
-            true,
-            false,
-        );
-        plan.set_protected(true);
-        if self.more_data {
-            plan.set_more_data(true);
-        }
-        const PREFIX_LEN: usize = crate::data::IEEE80211_QOS_DATA_HEADER_LEN
-            + CCMP_HEADER_LEN
-            + crate::data::LLC_SNAP_HEADER_LEN;
-        const HEADROOM: usize = PREFIX_LEN - ETHERNET_HEADER_LEN;
-        let prefix_len = PREFIX_LEN;
-        let headroom = HEADROOM;
-        let frame_offset = ethernet_offset
-            .checked_sub(headroom)
-            .ok_or(ApDataFrameError::OutputTooSmall { required: headroom })?;
-        let frame_length = ethernet_length
-            .checked_add(headroom)
-            .ok_or(ApDataFrameError::LengthOverflow)?;
-        let prefix_end = frame_offset
-            .checked_add(prefix_len)
-            .ok_or(ApDataFrameError::LengthOverflow)?;
-        let frame =
-            storage
-                .get_mut(frame_offset..prefix_end)
-                .ok_or(ApDataFrameError::OutputTooSmall {
-                    required: prefix_end,
-                })?;
-        let mut header = plan.header;
-        crate::encoding::write_array::<22, _, _>(
-            &mut header,
-            &self.sequence_number.sequence_control().to_le_bytes(),
-        );
-        crate::encoding::FrameParts([header.as_slice(), &self.ccmp_header, &plan.llc_snap])
-            .write(frame)
-            .map_err(|required| ApDataFrameError::OutputTooSmall { required })?;
-        Ok(EncodedApFrame {
-            offset: frame_offset,
-            length: frame_length,
-        })
     }
 }
 

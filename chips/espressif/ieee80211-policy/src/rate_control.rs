@@ -15,14 +15,14 @@ use core::num::{NonZeroU16, NonZeroU32};
 
 use crate::rate_record::RateScheduleRef;
 use crate::rate_schedule::schedule_state;
-use oer_ieee80211_port::backend::RateScheduleKind;
-use oer_ieee80211_port::{BlockAckSnr, LinkMetric, SnrSample};
-use oer_ieee80211_upper_mac::rate_control::{
+use oer_ieee80211_contracts_port::backend::RateScheduleKind;
+use oer_ieee80211_contracts_port::{BlockAckSnr, LinkMetric, SnrSample};
+use oer_ieee80211_core_upper_mac::rate_control::{
     AmpduUnavailable, BlockAckTally, MpduOutcome, NegotiatedLegacyRates, RateControl, RatePeer,
 };
 use oer_time::Instant;
 use {
-    oer_ieee80211_upper_mac::phy_mode::PhyMode,
+    oer_ieee80211_core_upper_mac::phy_mode::PhyMode,
     oer_ieee80211_wire::{
         channel::WifiChannelWidth,
         he::{He20Capabilities, He20PeerState, HeDcmConstellation, HeMcsNssSupport},

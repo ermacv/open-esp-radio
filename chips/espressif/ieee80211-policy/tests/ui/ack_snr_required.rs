@@ -1,7 +1,7 @@
 #![no_std]
 use oer_espressif_ieee80211_policy::rate_selection::EspressifRateSelection;
-use oer_ieee80211_port::{AckSnr, Ieee80211Capabilities, SignalMetadata};
-use oer_ieee80211_upper_mac::rate_selection::RateSelection;
+use oer_ieee80211_contracts_port::{AckSnr, Ieee80211Capabilities, SignalMetadata};
+use oer_ieee80211_core_upper_mac::rate_selection::RateSelection;
 
 fn for_port<M: SignalMetadata, A>(_: impl RateSelection<M, A>) {}
 

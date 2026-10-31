@@ -21,7 +21,7 @@ use oer_esp32s31_hal::ieee80211::dma::{
     rx_ring::{RxRingError, RxSegment},
     rx_storage::{RxDmaCompletedUnit, RxDmaDetachedUnit},
 };
-use oer_ieee80211_port::MacRxMetadata;
+use oer_ieee80211_contracts_port::MacRxMetadata;
 use oer_memory::{ExternalRxHandoffPool, ExternalRxRadioLease};
 
 pub const VENDOR_LARGE_RX_SLOT_COUNT: usize = 32;
@@ -45,12 +45,6 @@ pub enum RxStageTransactionError {
         pool_slots: usize,
         queue_depth: usize,
     },
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum RxInPlaceEthernetError {
-    PayloadOutsideFrame,
-    InsufficientHeadroom,
 }
 
 /// Result after a completed DMA unit has either transferred its original
@@ -281,58 +275,5 @@ impl<const SLOTS: usize, const CAPACITY: usize> NetworkRxFrame<'_, SLOTS, CAPACI
 
     pub const fn length(&self) -> usize {
         self.metadata.length
-    }
-
-    /// Replace the dead 802.11/CCMP/LLC prefix with an Ethernet header and
-    /// publish a view of the same DMA buffer to the network-device consumer.
-    #[inline(always)]
-    pub fn publish_ethernet_in_place(
-        self,
-        destination: [u8; 6],
-        source: [u8; 6],
-        ether_type: u16,
-        payload_offset: usize,
-        payload_length: usize,
-    ) -> Result<u8, (Self, RxInPlaceEthernetError)> {
-        let Some(payload_end) = payload_offset.checked_add(payload_length) else {
-            return Err((self, RxInPlaceEthernetError::PayloadOutsideFrame));
-        };
-        if payload_end > self.metadata.length {
-            return Err((self, RxInPlaceEthernetError::PayloadOutsideFrame));
-        }
-        let Some(frame_offset) = payload_offset.checked_sub(14) else {
-            return Err((self, RxInPlaceEthernetError::InsufficientHeadroom));
-        };
-        let Some(ethernet_length) = 14_usize.checked_add(payload_length) else {
-            return Err((self, RxInPlaceEthernetError::PayloadOutsideFrame));
-        };
-        let ethernet_length = match oer_memory::FrameLen::new(ethernet_length) {
-            Ok(length) => length,
-            Err(_) => return Err((self, RxInPlaceEthernetError::PayloadOutsideFrame)),
-        };
-        let NetworkRxFrame {
-            mut lease,
-            _slots,
-            metadata,
-            times,
-        } = self;
-        lease.with_frame(|raw| {
-            raw[frame_offset..frame_offset + 6].copy_from_slice(&destination);
-            raw[frame_offset + 6..frame_offset + 12].copy_from_slice(&source);
-            raw[frame_offset + 12..frame_offset + 14].copy_from_slice(&ether_type.to_be_bytes());
-        });
-        lease
-            .republish(frame_offset, ethernet_length)
-            .map_err(|(lease, _error)| {
-                (
-                    NetworkRxFrame {
-                        lease,
-                        _slots,
-                        metadata,
-                        times,
-                    },
-                    RxInPlaceEthernetError::PayloadOutsideFrame,
-                )
-            })
     }
 }

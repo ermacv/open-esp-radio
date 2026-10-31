@@ -1,5 +1,5 @@
 //! The single-channel image still validates the arbiter's complete move budget.
-use oer_ieee80211_arbiter::{
+use oer_ieee80211_core_arbiter::{
     ArbiterPolicy, ArbiterPolicyError, CheckedArbiterPolicy, NoReservation,
 };
 use oer_time::Duration;

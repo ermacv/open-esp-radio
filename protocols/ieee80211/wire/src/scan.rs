@@ -18,6 +18,7 @@ use crate::address::{Bssid, IndividualAddress};
 use crate::ht::{
     HT_CAPABILITY_IE_LEN, HT_OPERATION_IE_LEN, HtPeerCapabilities, ht_peer_capabilities,
 };
+use crate::protection::{ErpElements, ErpElementsError};
 
 pub const RSN_IE_CAPACITY: usize = 64;
 pub const RSNXE_CAPACITY: usize = 16;
@@ -85,8 +86,10 @@ pub struct ScanRecord {
     ssid_len: oer_wire::PrefixLength<32>,
     /// Individual infrastructure BSS address, validated while parsing.
     pub bssid: Bssid,
-    pub channel: u8,
-    pub rssi: i8,
+    /// The DS Parameter Set's Current Channel; `None` when the frame carries
+    /// no such element. Which channel the BSS is on is the receiver's
+    /// decision.
+    pub ds_channel: Option<u8>,
     pub privacy: bool,
     pub rsn: bool,
     /// Number of complete RSN elements observed in this bounded record.
@@ -101,9 +104,6 @@ pub struct ScanRecord {
     supported_rates_len: oer_wire::PrefixLength<8>,
     extended_supported_rates: [u8; EXTENDED_RATES_CAPACITY],
     extended_supported_rates_len: oer_wire::PrefixLength<EXTENDED_RATES_CAPACITY>,
-    /// One-byte ERP Information payload.  In particular, bit one is the
-    /// infrastructure BSS Use Protection policy.
-    pub erp_information: Option<u8>,
     ht_capability_ie: Option<[u8; HT_CAPABILITY_IE_LEN]>,
     ht_operation_ie: Option<[u8; HT_OPERATION_IE_LEN]>,
     he_capability_ie: [u8; HE_CAPABILITY_IE_CAPACITY],
@@ -119,15 +119,14 @@ pub struct ScanRecord {
 }
 
 impl ScanRecord {
-    /// An observation's identity and signal sample, before its information
-    /// elements are decoded. Empty table slots use `None`, never this record.
-    pub const fn new(bssid: Bssid, channel: u8, rssi: i8) -> Self {
+    /// A record's identity, before its information elements are decoded.
+    /// Empty table slots use `None`, never this record.
+    pub const fn new(bssid: Bssid) -> Self {
         Self {
             ssid: [0; 32],
             ssid_len: oer_wire::PrefixLength::ZERO,
             bssid,
-            channel,
-            rssi,
+            ds_channel: None,
             privacy: false,
             rsn: false,
             rsn_ie_count: 0,
@@ -140,7 +139,6 @@ impl ScanRecord {
             supported_rates_len: oer_wire::PrefixLength::ZERO,
             extended_supported_rates: [0; EXTENDED_RATES_CAPACITY],
             extended_supported_rates_len: oer_wire::PrefixLength::ZERO,
-            erp_information: None,
             ht_capability_ie: None,
             ht_operation_ie: None,
             he_capability_ie: [0; HE_CAPABILITY_IE_CAPACITY],
@@ -175,10 +173,6 @@ impl ScanRecord {
             &self.extended_supported_rates,
             self.extended_supported_rates_len,
         )
-    }
-
-    pub const fn erp_information(&self) -> Option<u8> {
-        self.erp_information
     }
 
     pub fn ht_capability_ie_bytes(&self) -> Option<&[u8; HT_CAPABILITY_IE_LEN]> {
@@ -219,7 +213,8 @@ impl ScanRecord {
     /// Return the AP's usable 40-MHz secondary-channel geometry.
     ///
     /// The HT Capabilities Supported Channel Width bit must be present, the
-    /// HT Operation primary channel must match this record, and the operation
+    /// HT Operation primary channel must be `primary_channel`, the channel the
+    /// receiver decided the BSS is on, and the operation
     /// must permit any channel width. The secondary offset uses IEEE 802.11
     /// values one (above) and three (below).
     ///
@@ -228,19 +223,19 @@ impl ScanRecord {
     /// independently recovered in
     /// `oer-esp32s31-pac/src/phy/frequency.rs::bss_tx_offset` from the
     /// complete rev0 ROM `phy_bb_bss_cbw40`.
-    pub fn ht40_secondary_channel(&self) -> Option<HtSecondaryChannel> {
+    pub fn ht40_secondary_channel(&self, primary_channel: u8) -> Option<HtSecondaryChannel> {
         let capability = self.ht_capability_ie_bytes()?;
         let operation = self.ht_operation_ie_bytes()?;
         let capability_info = u16::from_le_bytes([capability[2], capability[3]]);
         if !crate::ht::HtCapabilityInfo::from_bytes(capability_info.to_le_bytes()).width40()
-            || operation[2] != self.channel
+            || operation[2] != primary_channel
             || !crate::ht::HtOperationInfo::from_bytes([operation[3]]).width40()
         {
             return None;
         }
         match crate::ht::HtOperationInfo::from_bytes([operation[3]]).secondary() {
-            1 if self.channel <= 9 => Some(HtSecondaryChannel::Above),
-            3 if self.channel >= 5 => Some(HtSecondaryChannel::Below),
+            1 if primary_channel <= 9 => Some(HtSecondaryChannel::Above),
+            3 if primary_channel >= 5 => Some(HtSecondaryChannel::Below),
             _ => None,
         }
     }
@@ -337,12 +332,52 @@ impl ScanRecord {
 }
 
 /// Decode one beacon or probe response into an owned bounded record.
+pub fn parse_management(frame: &[u8]) -> Option<ScanRecord> {
+    ScanFrame::parse(frame).map(ScanFrame::into_record)
+}
+
+/// A decoded beacon or probe response: its bounded record, and its ERP
+/// elements checked when the view is made. A damaged ERP element is reported
+/// here and leaves the record valid: the receiver decides what it requires
+/// without one.
+#[derive(Clone, Copy, Debug)]
+pub struct ScanFrame<'a> {
+    record: ScanRecord,
+    erp: Result<ErpElements<'a>, ErpElementsError>,
+}
+
+impl<'a> ScanFrame<'a> {
+    /// Decode `frame`; `None` for another frame or a malformed header.
+    pub fn parse(frame: &'a [u8]) -> Option<Self> {
+        let (record, elements) = decode_management(frame)?;
+        Some(Self {
+            record,
+            erp: ErpElements::parse(elements),
+        })
+    }
+
+    pub const fn record(&self) -> &ScanRecord {
+        &self.record
+    }
+
+    pub const fn into_record(self) -> ScanRecord {
+        self.record
+    }
+
+    /// The frame's ERP elements as checked by [`Self::parse`]: a damaged
+    /// element or an ERP element of another length is its typed error.
+    pub const fn erp_elements(&self) -> Result<ErpElements<'a>, ErpElementsError> {
+        self.erp
+    }
+}
+
+/// The record of a beacon or probe response and its information elements.
 ///
 /// The fixed fields start where the decoded MAC header ends, so a frame
 /// with the Order bit set carries its HT Control field before them. They
 /// are checked as one array before interpreting the variable information
 /// elements.
-pub fn parse_management(frame: &[u8], fallback_channel: u8, rssi: i8) -> Option<ScanRecord> {
+fn decode_management(frame: &[u8]) -> Option<(ScanRecord, &[u8])> {
     let header = crate::frame::DecodedHeader::decode(frame)?;
     let control = header.control();
     if control.is_data() || !matches!(control.subtype(), 5 | 8) {
@@ -350,12 +385,13 @@ pub fn parse_management(frame: &[u8], fallback_channel: u8, rssi: i8) -> Option<
     }
     let mut reader = oer_wire::Reader::new(header.body());
     let fixed = reader.array::<12>().ok()?;
-    let mut elements = oer_wire::Reader::new(reader.remaining());
+    let element_bytes = reader.remaining();
+    let mut elements = oer_wire::Reader::new(element_bytes);
     let [t0, t1, t2, t3, t4, t5, t6, t7, i0, i1, c0, c1] = *fixed;
     let [b0, b1, b2, b3, b4, b5] = header.address3();
 
     let bssid = Bssid::new(IndividualAddress::new([b0, b1, b2, b3, b4, b5])?)?;
-    let mut record = ScanRecord::new(bssid, fallback_channel, rssi);
+    let mut record = ScanRecord::new(bssid);
     record.timestamp = crate::tsf::TsfTimestamp::from_bytes([t0, t1, t2, t3, t4, t5, t6, t7]);
     record.beacon_interval_tu = u16::from_le_bytes([i0, i1]);
     record.capability_info = u16::from_le_bytes([c0, c1]);
@@ -380,13 +416,7 @@ pub fn parse_management(frame: &[u8], fallback_channel: u8, rssi: i8) -> Option<
                     record.supported_rates_len = length;
                 }
             }
-            (3, &[channel]) => record.channel = channel,
-            (42, &[information]) => {
-                // Multiple ERP elements are malformed, but protection must
-                // fail closed while the broader scan record remains usable:
-                // retain every observed Use Protection assertion.
-                record.erp_information = Some(record.erp_information.unwrap_or(0) | information);
-            }
+            (3, &[channel]) => record.ds_channel = Some(channel),
             (45, _) => {
                 if let Some(element) = exact_element(element_header, value) {
                     record.ht_capability_ie = Some(element);
@@ -444,7 +474,7 @@ pub fn parse_management(frame: &[u8], fallback_channel: u8, rssi: i8) -> Option<
     // One trailing byte cannot form an IE header. Treat it as malformed,
     // rather than silently accepting it as absence of a later RSN/WPA IE.
     record.information_elements_truncated |= !elements.is_empty();
-    Some(record)
+    Some((record, element_bytes))
 }
 
 /// The first `length` bytes of a record buffer: the bytes it holds.

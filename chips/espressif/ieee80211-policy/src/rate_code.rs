@@ -15,7 +15,7 @@ use oer_ieee80211_wire::phy::{
     PpduBandwidth, SpatialStreams,
 };
 
-use oer_ieee80211_port::backend::RateScheduleKind;
+use oer_ieee80211_contracts_port::backend::RateScheduleKind;
 
 /// The non-HT rate of a code.
 pub const fn legacy_rate(code: u8) -> Option<LegacyRate> {

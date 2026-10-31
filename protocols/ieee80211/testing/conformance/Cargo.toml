@@ -1,0 +1,22 @@
+[package]
+name = "oer-ieee80211-testing-conformance"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Allocator-free conformance cases and observation checks for IEEE 802.11 lower-MAC port backends"
+readme = "README.md"
+
+[dependencies]
+oer-wire = { path = "../../../../portable/wire" }
+oer-ieee80211-contracts-port = { path = "../../contracts/port" }
+oer-ieee80211-wire = { path = "../../wire" }
+oer-time = { path = "../../../../portable/time" }
+
+[dev-dependencies]
+heapless = "0.9.3"
+oer-time-virtual = { path = "../../../../portable/time-virtual" }
+
+[lints]
+workspace = true

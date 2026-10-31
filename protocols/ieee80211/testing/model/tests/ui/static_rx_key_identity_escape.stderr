@@ -1,0 +1,35 @@
+warning: unused import: `oer_ieee80211_contracts_port::RxBuffer`
+ --> tests/ui/static_rx_key_identity_escape.rs:6:5
+  |
+6 | use oer_ieee80211_contracts_port::RxBuffer;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+error: lifetime may not live long enough
+  --> tests/ui/static_rx_key_identity_escape.rs:13:12
+   |
+11 | pub fn rx<'p>(frame: ModelRxBuffer<'p, Id>) -> Box<dyn Any> {
+   |           -- lifetime `'p` defined here
+12 |     #[cfg(all())]
+13 |     return Box::new(frame); // ui-error: lifetime may not live long enough
+   |            ^^^^^^^^^^^^^^^ coercion requires that `'p` must outlive `'static`
+   |
+help: to declare that the trait object captures data from argument `frame`, you can add an explicit `'p` lifetime bound
+   |
+11 | pub fn rx<'p>(frame: ModelRxBuffer<'p, Id>) -> Box<dyn Any + 'p> {
+   |                                                            ++++
+
+error: lifetime may not live long enough
+  --> tests/ui/static_rx_key_identity_escape.rs:19:12
+   |
+17 | pub fn key<'p>(identity: KeyIdentity<'p, Id>) -> Box<dyn Any> {
+   |            -- lifetime `'p` defined here
+18 |     #[cfg(all())]
+19 |     return Box::new(identity.clone()); // ui-error: lifetime may not live long enough
+   |            ^^^^^^^^^^^^^^^^^^^^^^^^^^ coercion requires that `'p` must outlive `'static`
+   |
+help: to declare that the trait object captures data from argument `identity`, you can add an explicit `'p` lifetime bound
+   |
+17 | pub fn key<'p>(identity: KeyIdentity<'p, Id>) -> Box<dyn Any + 'p> {
+   |                                                              ++++

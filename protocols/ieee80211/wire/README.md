@@ -18,9 +18,10 @@ Action and Compressed BlockAckReq codecs, the Timestamp field and the time
 unit (`tsf`), status and reason codes (`status`), EtherType values
 (`ethertype`), the EAPOL-Key Key Information field and KDEs (`eapol`), the SAE
 Commit and Confirm body codecs, whose scalar, element and confirm are byte
-values for `oer-ieee80211-rsn` to interpret, and extension element IDs
-(`sae`), RSN element and RSNXE
-encoders, beacon template element edits and the HE-SIG-B user field codecs.
+values for `oer-ieee80211-core-security-rsn` to interpret, and extension element IDs
+(`sae`), the AAD and nonce of a CCMP-protected MPDU (`ccmp::protected`),
+the BIP Management MIC element (`bip`), single information elements
+(`element`), RSN element and RSNXE encoders, beacon template element edits and the HE-SIG-B user field codecs.
 The chip's RX-report SIG-B streams live in the S31 MAC.
 
 Production code forbids unsafe and denies every sans-IO panic lint, including

@@ -3,7 +3,7 @@ extern crate std;
 use super::*;
 use core::{cell::RefCell, pin::Pin, task::Waker};
 use oer_memory::HostContext;
-use oer_network::{EthernetFrame, FrameLengthError, TransmitError, TransmitRefused};
+use oer_network_port::{EthernetFrame, FrameLengthError, TransmitError, TransmitRefused};
 use oer_time::{Clock, Duration, Instant, Timer};
 use oer_time_virtual::VirtualClock;
 use std::{

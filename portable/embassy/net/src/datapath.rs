@@ -5,13 +5,13 @@
 //! policy additionally uses affine Ethernet owners and batch materialization.
 //! Selection precedes scarce SRAM admission without exposing a network stack,
 //! executor or adapter queue to STA/AP policy. The portable upper MAC owns the radio's airtime ledger
-//! (`oer-ieee80211-upper-mac::airtime`).
+//! (`oer-ieee80211-core-upper-mac::airtime`).
 
 use oer_memory::{
     DmaIndexReturn, PinnedDmaTxRadioLease, ReturningStableDmaBacking, StableDmaBacking,
     TaggedStableDmaBacking,
 };
-use oer_network::NetworkInterfaceId;
+use oer_network_port::NetworkInterfaceId;
 
 #[cfg(any(test, feature = "model"))]
 pub mod memory;

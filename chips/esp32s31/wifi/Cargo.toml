@@ -16,15 +16,15 @@ heapless = { version = "0.9.3", features = ["zeroize"] }
 static_cell.workspace = true
 bytemuck = { version = "1.25.2", features = ["derive"] }
 oer-crypto = { path = "../../../portable/crypto" }
-oer-ieee80211-rsn = { path = "../../../protocols/ieee80211/rsn" }
-oer-network = { path = "../../../protocols/network" }
+oer-ieee80211-core-security-rsn = { path = "../../../protocols/ieee80211/core/security/rsn" }
+oer-network-port = { path = "../../../protocols/network/port" }
 oer-ieee80211-runtime = { path = "../../../protocols/ieee80211/runtime", features = ["placement"] }
-oer-ieee80211-sta = { path = "../../../protocols/ieee80211/sta" }
+oer-ieee80211-core-roles-sta = { path = "../../../protocols/ieee80211/core/roles/sta" }
 oer-ieee80211-wire = { path = "../../../protocols/ieee80211/wire" }
-oer-ieee80211-upper-mac = { path = "../../../protocols/ieee80211/upper-mac" }
-oer-ieee80211-port = { path = "../../../protocols/ieee80211/port" }
+oer-ieee80211-core-upper-mac = { path = "../../../protocols/ieee80211/core/upper-mac" }
+oer-ieee80211-contracts-port = { path = "../../../protocols/ieee80211/contracts/port" }
 oer-radio-port = { path = "../../../protocols/radio/port" }
-oer-ieee80211-arbiter = { path = "../../../protocols/ieee80211/arbiter" }
+oer-ieee80211-core-arbiter = { path = "../../../protocols/ieee80211/core/arbiter" }
 oer-espressif-ieee80211-policy = { path = "../../../chips/espressif/ieee80211-policy" }
 oer-espressif-coex = { path = "../../../chips/espressif/coex" }
 oer-radio-regulatory = { path = "../../../protocols/radio/regulatory" }

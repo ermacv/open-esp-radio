@@ -1,0 +1,528 @@
+//! Bounded deficit scheduling of radio peers, independent of packet storage.
+//!
+//! Reserve before preparing hardware work, settle after terminal completion,
+//! and cancel only unpublished work. Active and standby batches share this
+//! account. Keys must include the radio association generation, but not a
+//! transport flow identity. All methods are synchronous and allocation-free.
+
+use core::num::NonZeroU32;
+use oer_events::EventSink;
+
+mod observation;
+pub use observation::{AirtimeAction, AirtimeObservation};
+
+/// One currently eligible outer queue and the minimum useful exchange grant.
+/// Repeated keys do not earn extra rounds; their largest minimum is retained.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct AirtimeCandidate<K> {
+    pub key: K,
+    pub minimum_micros: NonZeroU32,
+}
+
+#[derive(Clone, Copy)]
+struct Account<K> {
+    key: K,
+    balance: i64,
+    minimum: u32,
+    retired: bool,
+}
+
+#[derive(Clone, Copy)]
+struct Pending<K> {
+    id: u64,
+    key: K,
+    budget: u32,
+}
+
+// A shared borrow pins this nonzero-sized identity in its storage. Comparing
+// addresses distinguishes independent ledgers even when every value matches.
+#[derive(Clone, Copy, Debug)]
+struct Origin<'owner>(&'owner u8);
+
+impl PartialEq for Origin<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        core::ptr::eq(self.0, other.0)
+    }
+}
+impl Eq for Origin<'_> {}
+
+/// An affine reservation from one scheduler. Return it to that same owner.
+/// Dropping it does not refund credits: outstanding preparation/publication
+/// must first be explicitly cancelled or settled. No payload or DMA is owned.
+#[must_use = "settle a published reservation or cancel unpublished work"]
+#[derive(Debug, Eq, PartialEq)]
+pub struct AirtimeReservation<'owner, K> {
+    origin: Origin<'owner>,
+    key: K,
+    id: u64,
+    budget: NonZeroU32,
+}
+
+impl<'owner, K: Copy> AirtimeReservation<'owner, K> {
+    pub const fn key(&self) -> K {
+        self.key
+    }
+
+    pub const fn budget_micros(&self) -> NonZeroU32 {
+        self.budget
+    }
+
+    /// Cross the successful hardware-publication edge. Subsequent retries
+    /// retain this one charge owner; cancellation can no longer refund it.
+    pub fn published(self) -> AirtimeInFlight<'owner, K> {
+        AirtimeInFlight { reservation: self }
+    }
+}
+
+/// Published work must be settled, including terminal abort or timeout.
+/// It cannot use the unpublished-reservation cancellation API.
+/// ```compile_fail,E0308
+/// use core::num::NonZeroU32;
+/// use oer_ieee80211_core_upper_mac::airtime::{AirtimeStorage, AirtimeCandidate};
+/// let us = NonZeroU32::new(100).unwrap();
+/// let mut storage = AirtimeStorage::<_, 1>::new(us);
+/// let mut scheduler = storage.scheduler();
+/// let reservation = scheduler.reserve([AirtimeCandidate { key: 1, minimum_micros: us }], &mut ())
+///     .unwrap().unwrap();
+/// scheduler.cancel(reservation.published(), &mut ());
+/// ```
+#[must_use = "settle committed transmission work after terminal release"]
+#[derive(Debug, Eq, PartialEq)]
+pub struct AirtimeInFlight<'owner, K> {
+    reservation: AirtimeReservation<'owner, K>,
+}
+
+impl<'owner, K: Copy> AirtimeInFlight<'owner, K> {
+    pub const fn key(&self) -> K {
+        self.reservation.key()
+    }
+
+    pub const fn reserved_micros(&self) -> NonZeroU32 {
+        self.reservation.budget_micros()
+    }
+
+    /// Retain the final receipt after all publications and terminal hardware
+    /// detach. Retrying does not call this: keep the same in-flight owner.
+    /// Physical storage can then be released independently of cost calculation.
+    /// The caller supplies terminal evidence; this method does not touch DMA.
+    pub fn completed<W>(self, work: W) -> AirtimeCompletion<'owner, K, W> {
+        AirtimeCompletion {
+            publication: self,
+            work,
+        }
+    }
+}
+
+/// One terminal exchange and its still-unsettled budget, including failures.
+/// Unknown cost must retain this owner, not silently refund or charge zero.
+/// This value owns no packet or DMA buffer unless the caller puts one in `W`.
+#[must_use = "settle terminal work or retain its unresolved charge"]
+#[derive(Debug, Eq, PartialEq)]
+pub struct AirtimeCompletion<'owner, K, W> {
+    publication: AirtimeInFlight<'owner, K>,
+    work: W,
+}
+
+impl<K: Copy, W> AirtimeCompletion<'_, K, W> {
+    pub const fn key(&self) -> K {
+        self.publication.key()
+    }
+
+    pub const fn reserved_micros(&self) -> NonZeroU32 {
+        self.publication.reserved_micros()
+    }
+
+    pub const fn work(&self) -> &W {
+        &self.work
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AirtimeError {
+    AccountCapacity,
+    ReservationCapacity,
+    RetiredKey,
+    UnknownReservation,
+    WrongScheduler,
+    ArithmeticOverflow,
+    /// Eligible demand remained unfunded after checked round advancement.
+    UnfundedDemand {
+        cursor: usize,
+    },
+}
+
+fn funded_account<K>(
+    accounts: &mut [Option<Account<K>>],
+    cursor: usize,
+) -> Result<(usize, &mut Account<K>), AirtimeError> {
+    accounts
+        .iter_mut()
+        .enumerate()
+        .filter_map(|(index, slot)| slot.as_mut().map(|account| (index, account)))
+        .filter(|(_, account)| {
+            account.minimum != 0 && account.balance >= i64::from(account.minimum)
+        })
+        .min_by_key(|(index, _)| (*index < cursor, *index))
+        .ok_or(AirtimeError::UnfundedDemand { cursor })
+}
+
+/// Stable CPU metadata for one airtime ledger. No packet or DMA storage.
+/// Borrow `scheduler()` for selection and completion. Reservations borrow the
+/// same identity, so storage cannot move, be replaced or be borrowed for another
+/// scheduler while a reservation remains usable. Dropping a reservation does
+/// not refund it; borrowing the storage again preserves outstanding accounts.
+///
+/// A live reservation prevents replacement of its storage:
+/// ```compile_fail,E0505
+/// use core::num::NonZeroU32;
+/// use oer_ieee80211_core_upper_mac::airtime::{AirtimeStorage, AirtimeCandidate};
+/// let us = NonZeroU32::new(100).unwrap();
+/// let mut storage = AirtimeStorage::<_, 1>::new(us);
+/// let mut scheduler = storage.scheduler();
+/// let reservation = scheduler.reserve([AirtimeCandidate { key: 1, minimum_micros: us }], &mut ())
+///     .unwrap().unwrap();
+/// drop(scheduler);
+/// drop(storage);
+/// let _ = reservation.key();
+/// ```
+pub struct AirtimeStorage<K, const PEERS: usize, const RESERVATIONS: usize = 2> {
+    identity: u8,
+    state: State<K, PEERS, RESERVATIONS>,
+}
+
+struct State<K, const PEERS: usize, const RESERVATIONS: usize> {
+    accounts: [Option<Account<K>>; PEERS],
+    pending: [Option<Pending<K>>; RESERVATIONS],
+    quantum: NonZeroU32,
+    cursor: usize,
+    next_id: u64,
+}
+
+impl<K: Copy + Eq, const PEERS: usize, const RESERVATIONS: usize>
+    AirtimeStorage<K, PEERS, RESERVATIONS>
+{
+    /// Empty metadata with nonzero peer and reservation capacities.
+    ///
+    /// ```compile_fail,E0080
+    /// use core::num::NonZeroU32;
+    /// use oer_ieee80211_core_upper_mac::airtime::AirtimeStorage;
+    /// let _ = AirtimeStorage::<u8, 0>::new(NonZeroU32::MIN);
+    /// ```
+    ///
+    /// ```compile_fail,E0080
+    /// use core::num::NonZeroU32;
+    /// use oer_ieee80211_core_upper_mac::airtime::AirtimeStorage;
+    /// let _ = AirtimeStorage::<u8, 1, 0>::new(NonZeroU32::MIN);
+    /// ```
+    pub const fn new(quantum_micros: NonZeroU32) -> Self {
+        const {
+            if PEERS == 0 || RESERVATIONS == 0 {
+                panic!("airtime storage needs peers and reservations");
+            }
+            // Each observation counts at most this many u32 budgets, so its
+            // u32 count and u64 sum are representable on every target.
+            if RESERVATIONS > u32::MAX as usize {
+                panic!("airtime observation reservation count must fit u32");
+            }
+        }
+        Self {
+            identity: 0,
+            state: State {
+                accounts: [None; PEERS],
+                pending: [None; RESERVATIONS],
+                quantum: quantum_micros,
+                cursor: 0,
+                next_id: 0,
+            },
+        }
+    }
+
+    pub fn scheduler(&mut self) -> AirtimeScheduler<'_, K, PEERS, RESERVATIONS> {
+        AirtimeScheduler {
+            origin: Origin(&self.identity),
+            state: &mut self.state,
+        }
+    }
+}
+
+/// Equal-quantum deficit scheduler. A grant is deducted immediately, so a
+/// prepared successor cannot reuse the active exchange's outstanding budget.
+/// Settlement replaces the reservation with the supplied modelled charge,
+/// including retries. Deficits represent service, never measured CPU residence.
+///
+/// A caller supplies durable eligible demand on each selection. Empty/asleep
+/// peers accrue no new credit and lose positive surplus; existing debt stays
+/// until repaid or the radio explicitly retires that association. Metadata is
+/// never evicted merely because a queue is empty. Exhausted rounds advance
+/// arithmetically in one step, without a retry loop, timer or synthetic wake.
+pub struct AirtimeScheduler<'owner, K, const PEERS: usize, const RESERVATIONS: usize = 2> {
+    origin: Origin<'owner>,
+    state: &'owner mut State<K, PEERS, RESERVATIONS>,
+}
+
+impl<'owner, K: Copy + Eq, const PEERS: usize, const RESERVATIONS: usize>
+    AirtimeScheduler<'owner, K, PEERS, RESERVATIONS>
+{
+    /// Select once per outer key; packet queues are inspected but untouched.
+    /// Errors are transactional, including capacity/overflow failures. A full
+    /// reservation horizon requires a completion/cancellation edge, not polling.
+    /// Each successful transition is reported to `events` as an
+    /// [`AirtimeObservation`].
+    pub fn reserve(
+        &mut self,
+        candidates: impl IntoIterator<Item = AirtimeCandidate<K>>,
+        events: &mut impl EventSink<AirtimeObservation<K>>,
+    ) -> Result<Option<AirtimeReservation<'owner, K>>, AirtimeError> {
+        let pending = self
+            .state
+            .pending
+            .iter_mut()
+            .find(|slot| slot.is_none())
+            .ok_or(AirtimeError::ReservationCapacity)?;
+        // Admission is transactional: this bounded copy owns no packets.
+        let mut accounts = self.state.accounts;
+        for account in accounts.iter_mut().flatten() {
+            account.minimum = 0;
+        }
+        for candidate in candidates {
+            if let Some(account) = accounts
+                .iter_mut()
+                .flatten()
+                .find(|a| a.key == candidate.key)
+            {
+                if account.retired {
+                    return Err(AirtimeError::RetiredKey);
+                }
+                account.minimum = account.minimum.max(candidate.minimum_micros.get());
+            } else {
+                let slot = accounts
+                    .iter_mut()
+                    .find(|slot| slot.is_none())
+                    .ok_or(AirtimeError::AccountCapacity)?;
+                *slot = Some(Account {
+                    key: candidate.key,
+                    balance: 0,
+                    minimum: candidate.minimum_micros.get(),
+                    retired: false,
+                });
+            }
+        }
+        for account in accounts.iter_mut().flatten() {
+            if account.minimum == 0 {
+                account.balance = account.balance.min(0);
+            }
+        }
+        if !accounts
+            .iter()
+            .flatten()
+            .any(|a| a.minimum != 0 && a.balance >= i64::from(a.minimum))
+        {
+            let quantum = i64::from(self.state.quantum.get());
+            let mut rounds: Option<i64> = None;
+            for account in accounts.iter().flatten().filter(|a| a.minimum != 0) {
+                let required = i64::from(account.minimum)
+                    .checked_sub(account.balance)
+                    .and_then(|needed| needed.checked_sub(1))
+                    .and_then(|needed| needed.checked_div(quantum))
+                    .and_then(|rounds| rounds.checked_add(1))
+                    .ok_or(AirtimeError::ArithmeticOverflow)?;
+                rounds = Some(rounds.map_or(required, |old| old.min(required)));
+            }
+            let Some(rounds) = rounds else {
+                self.state.accounts = accounts;
+                return Ok(None);
+            };
+            let credit = quantum
+                .checked_mul(rounds)
+                .ok_or(AirtimeError::ArithmeticOverflow)?;
+            for account in accounts.iter_mut().flatten().filter(|a| a.minimum != 0) {
+                account.balance = account
+                    .balance
+                    .checked_add(credit)
+                    .ok_or(AirtimeError::ArithmeticOverflow)?;
+            }
+        }
+        let (selected, account) = funded_account(&mut accounts, self.state.cursor)?;
+        let budget = u32::try_from(account.balance.min(i64::from(u32::MAX)))
+            .ok()
+            .and_then(NonZeroU32::new)
+            .ok_or(AirtimeError::ArithmeticOverflow)?;
+        let id = self
+            .state
+            .next_id
+            .checked_add(1)
+            .ok_or(AirtimeError::ArithmeticOverflow)?;
+        let reservation = AirtimeReservation {
+            origin: self.origin,
+            key: account.key,
+            id,
+            budget,
+        };
+        account.balance = account
+            .balance
+            .checked_sub(i64::from(budget.get()))
+            .ok_or(AirtimeError::ArithmeticOverflow)?;
+        let observed = *account;
+        // The cursor wraps at the bounded peer arena, rather than at usize::MAX.
+        let cursor = selected
+            .wrapping_add(1)
+            .checked_rem(PEERS)
+            .ok_or(AirtimeError::ArithmeticOverflow)?;
+        self.state.accounts = accounts;
+        *pending = Some(Pending {
+            id,
+            key: observed.key,
+            budget: budget.get(),
+        });
+        self.state.next_id = id;
+        self.state.cursor = cursor;
+        self.observe(observed, AirtimeAction::Granted, budget.get(), 0, events);
+        Ok(Some(reservation))
+    }
+
+    /// Complete all publications of this reservation at their modelled cost.
+    /// Unknown/saturated work needs an explicit caller policy; it must not be
+    /// converted to zero here. Errors return the receipt and still-outstanding reservation together.
+    /// Successful settlement returns the receipt for reporting; it cannot be
+    /// charged again without its consumed reservation.
+    pub fn settle<W>(
+        &mut self,
+        completion: AirtimeCompletion<'owner, K, W>,
+        charged_micros: NonZeroU32,
+        events: &mut impl EventSink<AirtimeObservation<K>>,
+    ) -> Result<W, (AirtimeError, AirtimeCompletion<'owner, K, W>)> {
+        let AirtimeCompletion { publication, work } = completion;
+        match self.finish(publication.reservation, charged_micros.get(), events) {
+            Ok(()) => Ok(work),
+            Err((error, reservation)) => Err((
+                error,
+                AirtimeCompletion {
+                    publication: AirtimeInFlight { reservation },
+                    work,
+                },
+            )),
+        }
+    }
+
+    /// Refund work that was never published. A published timeout/abort belongs
+    /// to settlement, because it still committed transmission work.
+    pub fn cancel(
+        &mut self,
+        reservation: AirtimeReservation<'owner, K>,
+        events: &mut impl EventSink<AirtimeObservation<K>>,
+    ) -> Result<(), (AirtimeError, AirtimeReservation<'owner, K>)> {
+        self.finish(reservation, 0, events)
+    }
+
+    fn finish(
+        &mut self,
+        reservation: AirtimeReservation<'owner, K>,
+        charged: u32,
+        events: &mut impl EventSink<AirtimeObservation<K>>,
+    ) -> Result<(), (AirtimeError, AirtimeReservation<'owner, K>)> {
+        if reservation.origin != self.origin {
+            return Err((AirtimeError::WrongScheduler, reservation));
+        }
+        let Some(slot) = self.state.pending.iter_mut().find(|slot| {
+            slot.as_ref().is_some_and(|p| {
+                p.id == reservation.id
+                    && p.budget == reservation.budget.get()
+                    && p.key == reservation.key
+            })
+        }) else {
+            return Err((AirtimeError::UnknownReservation, reservation));
+        };
+        let Some(account_slot) = self
+            .state
+            .accounts
+            .iter_mut()
+            .find(|a| a.as_ref().is_some_and(|a| a.key == reservation.key))
+        else {
+            return Err((AirtimeError::UnknownReservation, reservation));
+        };
+        let Some(account) = account_slot.as_mut() else {
+            return Err((AirtimeError::UnknownReservation, reservation));
+        };
+        let Some(balance) = i64::from(reservation.budget.get())
+            .checked_sub(i64::from(charged))
+            .and_then(|refund| account.balance.checked_add(refund))
+        else {
+            return Err((AirtimeError::ArithmeticOverflow, reservation));
+        };
+        account.balance = if account.minimum == 0 {
+            balance.min(0)
+        } else {
+            balance
+        };
+        let observed = *account;
+        *slot = None;
+        if account.retired
+            && !self
+                .state
+                .pending
+                .iter()
+                .flatten()
+                .any(|p| p.key == account.key)
+        {
+            *account_slot = None;
+        }
+        self.observe(
+            observed,
+            if charged == 0 {
+                AirtimeAction::Cancelled
+            } else {
+                AirtimeAction::Settled
+            },
+            reservation.budget.get(),
+            charged,
+            events,
+        );
+        Ok(())
+    }
+
+    /// End one radio association. Outstanding completions keep their old
+    /// account pinned and cannot debit a newly associated generation's key.
+    pub fn retire(&mut self, key: K) {
+        self.retire_where(|candidate| candidate == key);
+    }
+
+    /// Retire matching generations; pending tokens pin their old accounts.
+    pub fn retire_where(&mut self, mut retired: impl FnMut(K) -> bool) {
+        for slot in &mut self.state.accounts {
+            if let Some(account) = slot.as_mut()
+                && retired(account.key)
+            {
+                if self
+                    .state
+                    .pending
+                    .iter()
+                    .flatten()
+                    .any(|p| p.key == account.key)
+                {
+                    account.retired = true;
+                    account.minimum = 0;
+                } else {
+                    *slot = None;
+                }
+            }
+        }
+    }
+
+    /// Modelled remaining credit (negative is debt), including reservations.
+    pub fn balance_micros(&self, key: K) -> Option<i64> {
+        self.state
+            .accounts
+            .iter()
+            .flatten()
+            .find(|a| a.key == key)
+            .map(|a| a.balance)
+    }
+}
+
+#[cfg(test)]
+#[allow(
+    clippy::disallowed_methods,
+    clippy::disallowed_macros,
+    clippy::arithmetic_side_effects
+)]
+mod tests;

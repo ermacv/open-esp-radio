@@ -22,6 +22,7 @@ oer-esp32s31-hal = { path = "../../hal" }
 oer-esp32s31-phy = { path = "../../phy" }
 oer-esp32s31-radio-client = { path = "../client" }
 oer-ieee80211-wire = { path = "../../../../protocols/ieee80211/wire" }
+oer-ieee80211-contracts-port = { path = "../../../../protocols/ieee80211/contracts/port" }
 
 [dev-dependencies]
 oer-bluetooth-le-port = { path = "../../../../protocols/bluetooth/le/port" }

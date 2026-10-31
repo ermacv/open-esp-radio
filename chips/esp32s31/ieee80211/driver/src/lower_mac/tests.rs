@@ -19,9 +19,9 @@ use oer_esp32s31_hal::types::{
     MacTxCompletionObservation, MacTxDetachOutcome, MacTxDetachReason, MacTxProtection,
     MacTxQueueDetached,
 };
-use oer_ieee80211_port::MacRxMetadata;
-use oer_ieee80211_port::tsf::TsfInstant;
-use oer_ieee80211_port::{HardwareServices, PhyRate, RxEvidence};
+use oer_ieee80211_contracts_port::MacRxMetadata;
+use oer_ieee80211_contracts_port::tsf::TsfInstant;
+use oer_ieee80211_contracts_port::{HardwareServices, PhyRate, RxEvidence};
 use oer_ieee80211_wire::{
     channel::ChannelWidth,
     phy,
@@ -39,7 +39,7 @@ use super::*;
 use crate::ordinary_tx::{WifiTxPowerPair, WifiTxResources};
 use crate::station_tsf::StationTsfWrite;
 use crate::tx::WifiTxProgress;
-use oer_ieee80211_port::TSF_DRIFT_PPM;
+use oer_ieee80211_contracts_port::TSF_DRIFT_PPM;
 
 mod msdu_age;
 mod port;
@@ -1045,13 +1045,13 @@ enum ManagementObservation {
 /// inspecting semantic HAL publications rather than register images.
 fn check_management_transmissions(
     receiver: [u8; 6],
-    management: oer_ieee80211_port::ManagementTxPlan,
+    management: oer_ieee80211_contracts_port::ManagementTxPlan,
     completions: &[ManagementObservation],
 ) {
     use crate::ordinary_tx::{OrdinaryTxAccess, OrdinaryTxInterface, OrdinaryTxRetryReport};
     use ManagementObservation::*;
     use oer_esp32s31_hal::types::MacLegacyRate as ChipLegacyRate;
-    use oer_ieee80211_port::backend::RetryCounters;
+    use oer_ieee80211_contracts_port::backend::RetryCounters;
     use oer_ieee80211_wire::frame::FrameControl;
 
     let mut owner = OrdinaryTxOwner::new(WifiTxResources {
@@ -1235,13 +1235,13 @@ fn management_unicast_keeps_its_rate_for_seven_attempts() {
         ] {
             check_management_transmissions(
                 PEER,
-                oer_ieee80211_upper_mac::management::unicast(rate),
+                oer_ieee80211_core_upper_mac::management::unicast(rate),
                 &failures,
             );
         }
         check_management_transmissions(
             PEER,
-            oer_ieee80211_upper_mac::management::unicast(rate),
+            oer_ieee80211_core_upper_mac::management::unicast(rate),
             &[Delivered],
         );
     }
@@ -1262,7 +1262,7 @@ fn management_retries_preserve_retry_bit_counters_and_reset_edca_at_success_or_t
     ] {
         check_management_transmissions(
             PEER,
-            oer_ieee80211_upper_mac::management::unicast(LegacyRate::Ofdm12M),
+            oer_ieee80211_core_upper_mac::management::unicast(LegacyRate::Ofdm12M),
             observations,
         );
     }
@@ -1282,7 +1282,7 @@ fn management_broadcast_never_retries() {
         ] {
             check_management_transmissions(
                 [0xff; 6],
-                oer_ieee80211_upper_mac::management::broadcast(rate),
+                oer_ieee80211_core_upper_mac::management::broadcast(rate),
                 &[completion],
             );
         }
@@ -2618,7 +2618,7 @@ fn a_closed_gate_blocks_the_queues_and_holds_the_attempt_until_it_opens() {
         assert_eq!(
             core.next_deadline(),
             Some(at(
-                oer_ieee80211_port::EdcaParameterSet::DEFAULT_MSDU_LIFETIME.as_micros()
+                oer_ieee80211_contracts_port::EdcaParameterSet::DEFAULT_MSDU_LIFETIME.as_micros()
             ))
         );
         let mut core = core.open_gate(&mut hardware).unwrap();
@@ -2775,7 +2775,7 @@ fn a_closed_gate_holds_every_queue_and_opening_it_publishes_them() {
         assert_eq!(
             core.next_deadline(),
             Some(at(
-                oer_ieee80211_port::EdcaParameterSet::DEFAULT_MSDU_LIFETIME.as_micros()
+                oer_ieee80211_contracts_port::EdcaParameterSet::DEFAULT_MSDU_LIFETIME.as_micros()
             ))
         );
 
@@ -2791,9 +2791,9 @@ fn a_closed_gate_holds_every_queue_and_opening_it_publishes_them() {
 /// carry: what the core's own policy then refuses.
 enum WideEdca {}
 
-impl oer_ieee80211_port::Ieee80211Capabilities for WideEdca {
+impl oer_ieee80211_contracts_port::Ieee80211Capabilities for WideEdca {
     type SppScope = oer_ieee80211_wire::security::spp::Association;
-    const CAPS: oer_ieee80211_port::LowerMacCapabilities = {
+    const CAPS: oer_ieee80211_contracts_port::LowerMacCapabilities = {
         let mut caps = esp32s31_lower_mac_capabilities(BACKING);
         caps.edca_max_cw_exponent = 15;
         caps
@@ -2802,14 +2802,16 @@ impl oer_ieee80211_port::Ieee80211Capabilities for WideEdca {
 
 fn edca(
     parameters: oer_ieee80211_wire::extensions::wmm::WmmParameterSet,
-) -> oer_ieee80211_port::SupportedEdca<WideEdca> {
-    oer_ieee80211_port::SupportedEdca::new(oer_ieee80211_port::EdcaParameterSet::from_wmm(
-        parameters,
-    ))
+) -> oer_ieee80211_contracts_port::SupportedEdca<WideEdca> {
+    oer_ieee80211_contracts_port::SupportedEdca::new(
+        oer_ieee80211_contracts_port::EdcaParameterSet::from_wmm(parameters),
+    )
     .unwrap()
 }
 
-fn wmm_with_best_effort_txop(txop_units_32_us: u16) -> oer_ieee80211_port::SupportedEdca<WideEdca> {
+fn wmm_with_best_effort_txop(
+    txop_units_32_us: u16,
+) -> oer_ieee80211_contracts_port::SupportedEdca<WideEdca> {
     edca(wmm_set_with_best_effort_txop(txop_units_32_us))
 }
 
@@ -2876,7 +2878,7 @@ fn the_station_s_he_bss_color_is_installed() {
     installed(|pools| {
         let mut hardware = Hardware::default();
         let mut core = enabled(&mut hardware, pools);
-        core.set_checked_he_bss_color(oer_ieee80211_port::BssColor::new(63).unwrap());
+        core.set_checked_he_bss_color(oer_ieee80211_contracts_port::BssColor::new(63).unwrap());
         assert_eq!(core.tx.policy().he_bss_color(), 63);
     });
 }
@@ -3386,7 +3388,7 @@ fn he_aggregates_publish_an_he_program_with_the_station_bss_color() {
                 .formats
                 .contains_rate(he_rate())
         );
-        core.set_checked_he_bss_color(oer_ieee80211_port::BssColor::new(0x2a).unwrap());
+        core.set_checked_he_bss_color(oer_ieee80211_contracts_port::BssColor::new(0x2a).unwrap());
 
         let mut buffer = aggregate_of(source, 3, 26);
         let plan = core
@@ -4310,7 +4312,7 @@ fn closed_gate_survives_disable_retune_and_enable_without_publishing() {
 fn spp_changes_only_after_the_complete_bank_and_end_has_no_hardware_effect() {
     use association::{TransmitKeyInstallation, VacantKeySlot};
     use oer_esp32s31_hal::types::{MacInterface, MacSppMode};
-    use oer_ieee80211_port::association::{VacantKeyBank, end_association};
+    use oer_ieee80211_contracts_port::association::{VacantKeyBank, end_association};
     use oer_ieee80211_wire::security::Spp;
     installed(|resources| {
         let Core {
@@ -4466,7 +4468,7 @@ fn an_irq_legacy_transmitter_refuses_ht_before_reserving_or_publishing_dma() {
 
 #[test]
 fn the_core_draws_from_the_publishing_vif_and_keeps_each_complete_record() {
-    use oer_ieee80211_port::EdcaParameterSet;
+    use oer_ieee80211_contracts_port::EdcaParameterSet;
     use oer_ieee80211_wire::extensions::wmm::{WmmAcParameters, WmmParameterSet};
     installed(|pools| {
         let mut hardware = Hardware::default();
@@ -4490,9 +4492,11 @@ fn the_core_draws_from_the_publishing_vif_and_keeps_each_complete_record() {
             )
         };
         let station =
-            oer_ieee80211_port::SupportedEdca::<WideEdca>::new(table(3, 4, 6, 94, 500)).unwrap();
+            oer_ieee80211_contracts_port::SupportedEdca::<WideEdca>::new(table(3, 4, 6, 94, 500))
+                .unwrap();
         let ap =
-            oer_ieee80211_port::SupportedEdca::<WideEdca>::new(table(7, 2, 3, 350, 100)).unwrap();
+            oer_ieee80211_contracts_port::SupportedEdca::<WideEdca>::new(table(7, 2, 3, 350, 100))
+                .unwrap();
         core.set_checked_edca(VifRole::Station, station).unwrap();
         core.set_checked_edca(VifRole::AccessPoint, ap).unwrap();
         for role in [VifRole::Station, VifRole::AccessPoint, VifRole::Station] {

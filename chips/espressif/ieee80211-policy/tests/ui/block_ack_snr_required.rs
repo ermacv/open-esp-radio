@@ -1,6 +1,6 @@
 #![no_std]
-use oer_ieee80211_port::{BlockAckSnr, SnrSample};
-use oer_ieee80211_upper_mac::rate_control::{AmpduUnavailable, BlockAckTally, RateControl};
+use oer_ieee80211_contracts_port::{BlockAckSnr, SnrSample};
+use oer_ieee80211_core_upper_mac::rate_control::{AmpduUnavailable, BlockAckTally, RateControl};
 
 /// BlockAck evidence that splits into an SNR sample or none.
 pub struct Measured(i8);

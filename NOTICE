@@ -43,7 +43,7 @@ modification notice:
   components/openthread/src/port/esp_openthread_radio.c
 - chips/espressif/modem-clock (Apache-2.0):
   components/esp_hw_support/modem/modem_clock.c
-- protocols/ieee80211/rsn/src/authenticator/sae.rs (crate Apache-2.0):
+- protocols/ieee80211/core/security/rsn/src/authenticator/sae.rs (crate Apache-2.0):
   components/wpa_supplicant/esp_supplicant/src/esp_wpa3.c
 
 Additional IEEE 802.15.4 parsing/security/ACK-break changes in
@@ -115,7 +115,7 @@ vendor function it follows:
 - chips/esp32s31/phy and the PHY modules of chips/esp32s31/hal and
   chips/esp32s31/pac: libphy.a calibration, tracking and analog-bus
   algorithms
-- protocols/ieee80211/sta/src/modem_sleep.rs: libpp.a [pm.o] and
+- protocols/ieee80211/core/roles/sta/src/modem_sleep.rs: libpp.a [pm.o] and
   [pm_coex.o], the station power manager
 - chips/espressif/ieee80211-policy: libpp.a and libnet80211.a rate
   schedules, rate control, retry ladder and LMAC limits
@@ -192,21 +192,21 @@ License:   BSD-3-Clause (text below)
 
 Partly ported and modified:
 
-- protocols/ieee80211/rsn/src/sae.rs: src/common/sae.c and
+- protocols/ieee80211/core/security/rsn/src/sae.rs: src/common/sae.c and
   dragonfly.c
-- protocols/ieee80211/ap/src/sae.rs: src/ap/ieee802_11.c
+- protocols/ieee80211/core/roles/ap/src/sae.rs: src/ap/ieee802_11.c
   (handle_auth_sae, sae_sm_step), src/ap/ap_config.h, src/common/sae.c
-- protocols/ieee80211/ap/src/pmksa.rs: src/ap/pmksa_cache_auth.c and
+- protocols/ieee80211/core/roles/ap/src/pmksa.rs: src/ap/pmksa_cache_auth.c and
   src/ap/wpa_auth.c
-- protocols/ieee80211/sta/src/pmksa.rs: src/rsn_supp/pmksa_cache.c and
+- protocols/ieee80211/core/roles/sta/src/pmksa.rs: src/rsn_supp/pmksa_cache.c and
   src/rsn_supp/wpa.c
-- protocols/ieee80211/sta/src/machine/deferred_eapol.rs: behaviour of
+- protocols/ieee80211/core/roles/sta/src/machine/deferred_eapol.rs: behaviour of
   src/rsn_supp/wpa.c
 
 
 Reference test data (vector facts only; no implementation code ported):
 
-- protocols/ieee80211/cipher/tests/ccmp_vectors.rs: IEEE 802.11-2020
+- protocols/ieee80211/core/security/cipher/tests/ccmp_vectors.rs: IEEE 802.11-2020
   Annex J.6.4/J.9.2, also carried in wlantest/test_vectors.c; QoS and
   4-address ciphertext measured with wlantest/ccmp.c and src/crypto/aes-ccm.c
   at the hostap_2_11 revision above.
@@ -248,7 +248,7 @@ Not derived
 Test vectors from IEEE Std 802.11 Annex J, RFC 3394 and the Bluetooth Core
 sample data are facts and keep their citations. Bluetooth encryption samples
 in protocols/bluetooth/le/cipher/src/tests.rs are from Core Vol 6 Part C.
-Linux mac80211 (GPL-2.0) is cited for behaviour only: protocols/ieee80211/rsn/src/ccmp_mpdu.rs and
+Linux mac80211 (GPL-2.0) is cited for behaviour only: protocols/ieee80211/core/security/rsn/src/ccmp_mpdu.rs and
 protocols/ieee80211/wire/src/data.rs implement the IEEE 802.11 rules
 independently.
 

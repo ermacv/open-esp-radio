@@ -304,7 +304,12 @@ where
                         registers,
                         context,
                     } = wifi.into_runtime_parts();
-                    let permit = self.domain.permit(channel).map_err(|_| Fault::Capacity)?;
+                    let permit = self
+                        .domain
+                        .permit(oer_ieee80211_contracts_port::RegulatedChannel::from(
+                            channel,
+                        ))
+                        .map_err(|_| Fault::Capacity)?;
                     self.power = Some(Power::new(report.tx_power, permit.tx_ceiling(self.limits)));
                     self.active = Some(Active {
                         registers,
@@ -333,7 +338,12 @@ where
                 .map_err(Fault::Receive)?;
                 self.paused = true;
             }
-            let permit = self.domain.permit(channel).map_err(|_| Fault::Capacity)?;
+            let permit = self
+                .domain
+                .permit(oer_ieee80211_contracts_port::RegulatedChannel::from(
+                    channel,
+                ))
+                .map_err(|_| Fault::Capacity)?;
             let ceiling = permit.tx_ceiling(self.limits);
             let Active {
                 registers,

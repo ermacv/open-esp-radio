@@ -1,12 +1,12 @@
 #![no_std]
 extern crate alloc;
-use oer_ieee80211_port::{
+use oer_ieee80211_contracts_port::{
     Channel, ChannelWidth, ConfigurePermission, LowerMacPhase, Station, StationPhase,
     StationReceive,
 };
 use oer_ieee80211_wire::address::IndividualAddress;
 use oer_radio_port::{SlotIdentity, LocalId, with_local_slot, Disabled, Ended, Owner, PortBody, run_port};
-use oer_ieee80211_model::{ModelBackend, ModelPool, ModelResources};
+use oer_ieee80211_testing_model::{ModelBackend, ModelPool, ModelResources};
 use oer_radio_port::Child;
 
 async fn run_model<P>(channel: Channel, body: P)

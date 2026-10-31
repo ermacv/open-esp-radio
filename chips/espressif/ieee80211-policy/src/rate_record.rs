@@ -1,7 +1,7 @@
 //! Opaque rate-schedule records and the hardware inputs the family's
 //! association rate control selects.
 
-use oer_ieee80211_port::backend::RateScheduleKind;
+use oer_ieee80211_contracts_port::backend::RateScheduleKind;
 
 /// Octets in an opaque rate record supplied by the family policy.
 pub const RATE_SCHEDULE_RECORD_SIZE: usize = 12;

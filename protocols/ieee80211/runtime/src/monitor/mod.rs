@@ -4,7 +4,7 @@
 //! retain their payload and completion capacity for one exact monitor dwell.
 //! Both hand frames over lock-free SPSC queues; nothing waits for a lock.
 //! The frames a monitor keeps and the channels it visits are
-//! `oer-ieee80211-upper-mac`'s `monitor` policy.
+//! `oer-ieee80211-core-upper-mac`'s `monitor` policy.
 
 mod capture;
 pub mod injection;

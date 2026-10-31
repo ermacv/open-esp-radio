@@ -1,4 +1,4 @@
-use oer_ieee80211_port::RxEvidence;
+use oer_ieee80211_contracts_port::RxEvidence;
 use oer_ieee80211_wire::channel::ChannelWidth;
 
 use super::*;
@@ -245,7 +245,7 @@ fn receive_metadata_keeps_provenance_and_takes_the_configured_channel() {
 
 #[test]
 fn the_s31_hardware_services_are_the_six_below_the_port() {
-    use oer_ieee80211_port::HardwareServices;
+    use oer_ieee80211_contracts_port::HardwareServices;
 
     assert_eq!(
         crate::mac::capabilities::ESP32S31_MAC_SERVICE_CAPABILITIES

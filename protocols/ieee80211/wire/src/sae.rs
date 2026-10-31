@@ -1,7 +1,7 @@
 //! SAE Authentication frame bodies: the Commit and Confirm fields as byte
 //! values and the extension elements an SAE exchange carries. What a scalar,
 //! an element or a confirm value means is the cryptography of
-//! `oer-ieee80211-rsn`.
+//! `oer-ieee80211-core-security-rsn`.
 //!
 //! SOURCE: IEEE Std 802.11-2020, 9.3.3.12, Table 9-41 (Authentication frame
 //! body), 12.4.7.4 (Encoding and decoding of SAE Commit messages) and 12.4.7.5
@@ -52,6 +52,29 @@ pub const SAE_GROUP_P256: u16 = 19;
 pub const SAE_PRIME_LEN: usize = 32;
 /// Octets of a group-19 Element field: the x and y coordinates.
 pub const SAE_ELEMENT_LEN: usize = 2 * SAE_PRIME_LEN;
+
+/// The x and y coordinates of an ECC group element.
+///
+/// SOURCE: IEEE Std 802.11-2020, 12.4.7.2.4 (ECC element to octet string:
+/// x then y, each the length of the prime).
+pub const fn element_coordinates(
+    element: &[u8; SAE_ELEMENT_LEN],
+) -> Option<(&[u8; SAE_PRIME_LEN], &[u8; SAE_PRIME_LEN])> {
+    match (
+        element.first_chunk::<SAE_PRIME_LEN>(),
+        element.last_chunk::<SAE_PRIME_LEN>(),
+    ) {
+        (Some(x), Some(y)) => Some((x, y)),
+        _ => None,
+    }
+}
+
+/// The Finite Cyclic Group field of `group`, little-endian.
+///
+/// SOURCE: IEEE Std 802.11-2020, 9.4.1.38 (Finite Cyclic Group field).
+pub const fn finite_cyclic_group_field(group: u16) -> [u8; SAE_FIELD_LEN] {
+    group.to_le_bytes()
+}
 /// An SAE Commit body of group 19 without an anti-clogging token or
 /// optional elements: group, scalar and element.
 pub const SAE_COMMIT_LEN: usize = SAE_FIELD_LEN + SAE_COMMIT_VALUES_LEN;

@@ -28,7 +28,8 @@
 //! ROM ABI dependency.
 //!
 //! [`address::Bssid`] proves a nonzero individual address.
-//! [`scan::ScanRecord::new`] requires the actual BSSID, channel and RSSI.
+//! [`scan::ScanRecord::new`] requires the actual BSSID; the channel a BSS is
+//! on is the station's decision, from its DS Parameter Set or the receiver.
 //! The station core owns the BSS observation table.
 //!
 //! Management and A-MSDU construction retain immutable frame parts through
@@ -54,12 +55,14 @@ pub mod address;
 pub mod ampdu;
 pub mod ap;
 pub mod beacon;
+pub mod bip;
 pub mod block_ack;
 pub mod ccmp;
 pub mod channel;
 pub mod channel_switch;
 pub mod data;
 pub mod eapol;
+pub mod element;
 mod encoding;
 pub mod ethertype;
 pub mod extensions;

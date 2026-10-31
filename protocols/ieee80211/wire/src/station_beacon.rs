@@ -19,13 +19,12 @@ use crate::frame::FrameControlFields;
 const BEACON_FRAME_CONTROL: u16 = 0x0080;
 const FIXED_BEACON_LENGTH: usize = 36;
 const TIM_ELEMENT_ID: u8 = 5;
-const ERP_ELEMENT_ID: u8 = 42;
 const HT_OPERATION_ELEMENT_ID: u8 = 61;
 const EXTENSION_ELEMENT_ID: u8 = 255;
 const VENDOR_ELEMENT_ID: u8 = 221;
 const HE_OPERATION_EXTENSION_ID: u8 = 36;
 
-use crate::protection::{ErpProtection, HtProtectionMode};
+use crate::protection::{ErpElements, ErpElementsError, HtProtectionMode};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum StaBeaconError {
@@ -66,25 +65,33 @@ pub struct StaBeaconObservation {
     >,
 }
 
-/// BSS protection fields advertised by one beacon.
+/// HT and HE protection fields advertised by one beacon; its ERP elements
+/// are [`StaBeaconFrame::erp`]'s, for the station to fold.
 ///
-/// An absent ERP or HT Operation element carries no requirement. The HE
-/// TXOP Duration RTS Threshold is `None` when the HE Operation element is
-/// absent or encodes the disabled values zero or 1023.
+/// An absent HT Operation element carries no requirement. The HE TXOP
+/// Duration RTS Threshold is `None` when the HE Operation element is absent
+/// or encodes the disabled values zero or 1023.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct StaBeaconProtection {
-    pub erp: ErpProtection,
     pub ht: HtProtectionMode,
     pub he_txop_rts_threshold: Option<u16>,
 }
 
 impl StaBeaconProtection {
-    /// A beacon without any protection requirement.
+    /// A beacon without any HT or HE protection requirement.
     pub const UNPROTECTED: Self = Self {
-        erp: ErpProtection::NONE,
         ht: HtProtectionMode::None,
         he_txop_rts_threshold: None,
     };
+}
+
+/// One parsed beacon: its fixed observation, and its ERP elements over the
+/// borrowed MPDU. A damaged ERP element is reported here and leaves the rest
+/// of the beacon valid: the station decides what it requires without one.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct StaBeaconFrame<'a> {
+    pub observation: StaBeaconObservation,
+    pub erp: Result<ErpElements<'a>, ErpElementsError>,
 }
 
 /// Parse one beacon from the associated BSS and locate the station's TIM bit.
@@ -92,7 +99,7 @@ pub fn parse_sta_beacon(
     mpdu: &[u8],
     expected_bssid: [u8; 6],
     association_id: u16,
-) -> Result<StaBeaconObservation, StaBeaconError> {
+) -> Result<StaBeaconFrame<'_>, StaBeaconError> {
     let mut reader = oer_wire::Reader::new(mpdu);
     let header = reader
         .array::<FIXED_BEACON_LENGTH>()
@@ -204,9 +211,6 @@ pub fn parse_sta_beacon(
             });
         }
         match (id, body) {
-            (ERP_ELEMENT_ID, [information]) => {
-                protection.erp = ErpProtection::from_information(Some(*information));
-            }
             (HT_OPERATION_ELEMENT_ID, [_, _, information, ..]) if body.len() == 22 => {
                 protection.ht = HtProtectionMode::from_field(*information);
             }
@@ -223,14 +227,17 @@ pub fn parse_sta_beacon(
     }
 
     let channel_switch = crate::channel_switch::parse_channel_switch(elements).transpose();
-    Ok(StaBeaconObservation {
-        timestamp_tsf: crate::tsf::TsfTimestamp::from_bytes([t0, t1, t2, t3, t4, t5, t6, t7]),
-        interval_tu,
-        capability_information: u16::from_le_bytes([c0, c1]),
-        tim,
-        protection,
-        edca,
-        channel_switch,
+    Ok(StaBeaconFrame {
+        observation: StaBeaconObservation {
+            timestamp_tsf: crate::tsf::TsfTimestamp::from_bytes([t0, t1, t2, t3, t4, t5, t6, t7]),
+            interval_tu,
+            capability_information: u16::from_le_bytes([c0, c1]),
+            tim,
+            protection,
+            edca,
+            channel_switch,
+        },
+        erp: ErpElements::parse(elements),
     })
 }
 

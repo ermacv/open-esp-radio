@@ -114,12 +114,45 @@ facades, observation collectors, bindings and the agent. HAL files whose product
 layer tests that only shrinks; the HAL also still holds driver code without
 a waiting marker ([HAL](../chips/esp32s31/hal/README.md)).
 
-Wi-Fi is split into `wire` (over-the-air formats), `port` (the backend
-contract), sans-IO cores and a `runtime`. Bluetooth LE has wire formats, a
+Wi-Fi is split into `wire` (over-the-air formats), `contracts/` (the
+backend port and the installed-protection contract), the sans-IO cores under
+`core/` (`upper-mac` and `arbiter`, the security transforms and handshakes in
+`security/`, the `roles/` station and access point, and `extensions/`), a
+`runtime`, and `testing/` (the backend conformance suite and the reference
+model), which no product package depends on. Bluetooth LE has wire formats, a
 backend port, synchronous LL/controller cores, an executor-independent
 runtime and a reference model. IEEE 802.15.4 has `wire`, `port`, the `mac`
 core and a separate host reference `model`. A backend depends on its
-protocol's port, wire formats and implemented `cipher` only.
+protocol's port, wire formats, protocol contracts and implemented `cipher`
+only. A protocol contract (`protocols/<protocol>/contracts/*`) owns what a
+protocol installs and a backend programs, apart from the codecs and the
+cores; it depends on portable support alone. The IEEE 802.11 security
+contract owns the CCMP-128 temporal key: no `Clone` or owned extraction,
+redacted `Debug`, zeroized on an ordinary drop and retained by a
+quarantined owner until the chip resets.
+
+Each format belongs to its codec. IEEE 802.11 codecs carry an MSDU as its
+fields: destination, source, the EtherType of its RFC 1042 LLC/SNAP header
+and its payload; they never read or write an Ethernet II header. Ethernet,
+VLAN, IP and transport fields are `protocols/network/wire`'s. IEEE 802.11
+packages reach them only through `protocols/bridges/ieee80211-ethernet`,
+which joins the two codecs and depends on nothing else; `oer-test-layers`
+checks both rules. The network side's adapter reads and writes its Ethernet
+header through the network codec. IEEE 802.11 security transforms and MAC
+consumers take what they authenticate or route from the IEEE 802.11 codec:
+the AAD and nonce of a protected MPDU, the Management MIC element, the
+EAPOL-Key MIC input and the address fields; they hold no header offsets.
+
+An outgoing frame requests a user priority from its VLAN PCP or IP DSCP
+through the bridge; the mapping is a policy, not an authorization. The
+station decides the final priority before it takes an owner or a sequence
+number: a link without QoS sends best effort, and an access category whose
+admission control is mandatory is closed to the station, which holds no
+admission, so the frame takes the canonical priority of the next lower open
+category. That priority names the frame's TID, its sequence space and its
+access category together; the station's own EAPOL follows the same rule,
+management frames keep the Voice queue. A changed ACM applies to the next
+MSDU; a numbered one keeps its TID.
 
 Cryptographic operations shared by protocols have one contract each in
 `portable/crypto` (`oer-crypto`). One operation is one request: the request
@@ -179,7 +212,7 @@ Policy requests use the Runner's existing affine command credits and normal
 Control events. A facade Stop disconnects once, waits for link-down and then
 retires Runner. HIL retains command correlation and socket workload lifetime,
 without its own station policy loop or product counters.
-The neutral `oer-network::NetDevice` transfers Ethernet owners and publishes
+The neutral `oer-network-port::NetDevice` transfers Ethernet owners and publishes
 the link epoch. `oer_embassy_net::ip` builds its pools, one pinned IP stack
 and `EthernetBridge` once. The service selects DHCPv4 or static IPv4 and
 reports link epoch, IPv4 configuration and stop/error through typed product

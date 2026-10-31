@@ -1,0 +1,20 @@
+error[E0308]: mismatched types
+ --> tests/ui/bip_packet_number_domain.rs:8:38
+  |
+8 |     let candidate = frontier.prepare(ccmp).unwrap(); // ui-error: E0308
+  |                              ------- ^^^^ expected `BipPacketNumber`, found `CcmpPacketNumber`
+  |                              |
+  |                              arguments to this method are incorrect
+  |
+help: the return type of this call is `CcmpPacketNumber` due to the type of the argument passed
+ --> tests/ui/bip_packet_number_domain.rs:8:21
+  |
+8 |     let candidate = frontier.prepare(ccmp).unwrap(); // ui-error: E0308
+  |                     ^^^^^^^^^^^^^^^^^----^
+  |                                      |
+  |                                      this argument influences the return type of `prepare`
+note: method defined here
+ --> $WORKSPACE/protocols/ieee80211/core/upper-mac/src/packet_number.rs
+  |
+  |     pub fn prepare(
+  |            ^^^^^^^

@@ -33,3 +33,53 @@ fn ht_operation_protection_encodes_mode_and_non_greenfield_bits() {
         HtProtectionMode::TwentyMhz
     );
 }
+
+fn erp_information(elements: &[u8]) -> Result<std::vec::Vec<u8>, ErpElementsError> {
+    ErpElements::parse(elements).map(|erp| erp.information().collect())
+}
+
+#[test]
+fn erp_elements_keep_every_value_in_frame_order() {
+    assert_eq!(erp_information(&[]), Ok(std::vec![]));
+    assert_eq!(
+        erp_information(&[42, 1, 0x02, 42, 1, 0x00]),
+        Ok(std::vec![0x02, 0x00])
+    );
+    assert_eq!(
+        erp_information(&[42, 1, 0x00, 42, 1, 0x02]),
+        Ok(std::vec![0x00, 0x02])
+    );
+    // Other elements stay opaque, even when their bodies look like ERP.
+    assert_eq!(
+        erp_information(&[0, 3, 42, 1, 0x02, 42, 1, 0x04, 221, 0]),
+        Ok(std::vec![0x04])
+    );
+    // Many repeats: every one is kept.
+    let many: std::vec::Vec<u8> = (0..100).flat_map(|i| [42, 1, i]).collect();
+    assert_eq!(
+        erp_information(&many).unwrap(),
+        (0..100).collect::<std::vec::Vec<u8>>()
+    );
+}
+
+#[test]
+fn damaged_elements_are_refused_when_the_view_is_made() {
+    // An ERP element of another length is no ERP Information.
+    assert_eq!(
+        erp_information(&[42, 2, 0x02, 0x02]),
+        Err(ErpElementsError::ErpLength)
+    );
+    assert_eq!(
+        erp_information(&[42, 0, 42, 1, 0x02]),
+        Err(ErpElementsError::ErpLength)
+    );
+    // A Length beyond the elements, or a lone trailing octet.
+    assert_eq!(
+        erp_information(&[42, 1, 0x02, 0, 9, 1]),
+        Err(ErpElementsError::MalformedElements)
+    );
+    assert_eq!(
+        erp_information(&[42, 1, 0x02, 0]),
+        Err(ErpElementsError::MalformedElements)
+    );
+}

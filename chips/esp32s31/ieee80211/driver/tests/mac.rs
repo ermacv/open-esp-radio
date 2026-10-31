@@ -1,6 +1,6 @@
 use oer_esp32s31_hal::ieee80211::init::MacInterfaceAddressHardware;
 use oer_esp32s31_hal::types::{MacDelaySlot, MacLegacyRate};
-use oer_ieee80211_port::backend::RateScheduleKind;
+use oer_ieee80211_contracts_port::backend::RateScheduleKind;
 use std::{cell::RefCell, rc::Rc};
 
 use oer_esp32s31_hal::ieee80211::dma::descriptor::{
@@ -11,7 +11,7 @@ use oer_esp32s31_hal::types::{
     MacCcmpKeyIdentity, MacHtTxProgram, MacInterface, MacKeyInstallOutcome, MacLegacyTxProgram,
     MacTxCompletionObservation, MacTxDetachOutcome, MacTxDetachReason, MacTxQueueDetached,
 };
-use oer_ieee80211_port::{MacRxMetadata, RxEvidence};
+use oer_ieee80211_contracts_port::{MacRxMetadata, RxEvidence};
 use oer_ieee80211_wire::he::{HeMuSigBMimoUser, HeMuSigBNonMimoUser, HeMuSigBUser};
 use oer_memory::{HardwareOwnedTxDma, PreparedTxDma};
 use {

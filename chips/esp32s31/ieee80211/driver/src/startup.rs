@@ -43,14 +43,17 @@ pub trait WifiMacPlatform: MacDelayEntropy + MacSlowClockCalibrationSource {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct WifiColdStartConfig {
     /// The channel the regulatory domain permits.
-    pub initial_channel: Permitted<WifiChannel>,
+    pub initial_channel: Permitted<oer_ieee80211_contracts_port::RegulatedChannel<WifiChannel>>,
     /// The most any transmission radiates: the domain's, the board's and the
     /// chip's limits together.
     pub tx_ceiling: TxCeiling,
 }
 
 impl WifiColdStartConfig {
-    pub const fn new(initial_channel: Permitted<WifiChannel>, tx_ceiling: TxCeiling) -> Self {
+    pub const fn new(
+        initial_channel: Permitted<oer_ieee80211_contracts_port::RegulatedChannel<WifiChannel>>,
+        tx_ceiling: TxCeiling,
+    ) -> Self {
         Self {
             initial_channel,
             tx_ceiling,
@@ -217,7 +220,7 @@ pub async fn start_esp32s31_radio<W: WifiMacPlatform>(
     };
     platform.install_phy_tx_power_profile(report.tx_power);
     let report = WifiStartReport {
-        initial_channel: config.wifi.initial_channel.channel(),
+        initial_channel: config.wifi.initial_channel.channel().channel(),
         epoch,
         phy,
         track: report,

@@ -29,7 +29,7 @@ impl RxBufferFullCounter for oer_esp32s31_hal::ieee80211::mac::WifiMacHal<'_> {
     }
 }
 
-use oer_ieee80211_port::MacRxMetadata;
+use oer_ieee80211_contracts_port::MacRxMetadata;
 use oer_ieee80211_wire::ccmp::CcmpHeader;
 use oer_ieee80211_wire::frame::{FrameControlFields, FrameType};
 use oer_ieee80211_wire::he::HeMuSigBUser;
@@ -1237,7 +1237,7 @@ impl NormalizedRxFrame<'_> {
     /// The PHY fields actually decoded from this frame's hardware prefix.
     pub fn observed_phy(&self) -> Option<RxPhyInfo> {
         match self.metadata.rate {
-            oer_ieee80211_port::RxEvidence::HardwareObserved(rate) => Some(rate),
+            oer_ieee80211_contracts_port::RxEvidence::HardwareObserved(rate) => Some(rate),
             _ => None,
         }
     }

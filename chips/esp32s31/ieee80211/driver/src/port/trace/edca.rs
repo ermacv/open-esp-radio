@@ -1,7 +1,7 @@
 //! Read-only records from the policy that selected the actual publication.
 use super::*;
 use crate::mac::tx::{LegacyTxQueue, runtime::WifiTxRuntimePolicy};
-use oer_ieee80211_port::{EdcaAcParameters, VifRole};
+use oer_ieee80211_contracts_port::{EdcaAcParameters, VifRole};
 use oer_ieee80211_wire::{extensions::wmm::WmmAcParameters, qos::WmmAccessCategory};
 fn role(value: u32) -> VifRole {
     if value == 0 {
@@ -151,8 +151,9 @@ mod tests {
         for role in [VifRole::Station, VifRole::AccessPoint] {
             for category in WmmAccessCategory::ALL {
                 for updated in [false, true] {
-                    let mut parameters = oer_ieee80211_port::EdcaParameterSet::STANDARD_DEFAULT
-                        .access_category(category);
+                    let mut parameters =
+                        oer_ieee80211_contracts_port::EdcaParameterSet::STANDARD_DEFAULT
+                            .access_category(category);
                     if updated {
                         parameters.wmm.admission_control_mandatory = true;
                         parameters.wmm.aifsn = oer_wire::U8::constant::<15>();

@@ -1,6 +1,6 @@
 #![no_std]
 extern crate alloc;
-use oer_ieee80211_port::{
+use oer_ieee80211_contracts_port::{
     Attempt, Channel, ChannelWidth, ClassFrame, TxOperation, HeaderSpec, InterfacePhase,
     LowerMacPhase, MpduLength, NoAckHeader, PhyRate, Protection, SizedFrame, Station,
     SupportedPower, TxBufferPool, TxFrame, TxPower, TxProtection, TxSource,
@@ -9,7 +9,7 @@ use oer_ieee80211_wire::{
     address::IndividualAddress, frame::FrameControl, phy::LegacyRate, qos::WmmAccessCategory,
 };
 use oer_radio_port::{SlotIdentity, LocalId, with_local_slot, Disabled, Enabled, Ended, Owner, PortBody, run_port};
-use oer_ieee80211_model::{
+use oer_ieee80211_testing_model::{
     ModelBackend, ModelCaps, ModelResources, ModelSmall, ModelTypes,
 };
 
@@ -77,8 +77,8 @@ impl<Id: SlotIdentity, OuterId: SlotIdentity> PortBody<Id, ModelBackend<Id>> for
                 [2, 0, 0, 0, 0, 9],
                 0,
                 None,
-                Some(oer_ieee80211_port::QosControl {
-                    tid: oer_ieee80211_port::Tid::new(0).unwrap(),
+                Some(oer_ieee80211_contracts_port::QosControl {
+                    tid: oer_ieee80211_contracts_port::Tid::new(0).unwrap(),
                     end_of_service_period: false,
                     amsdu_present: false,
                     high: 0,

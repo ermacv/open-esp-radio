@@ -1,8 +1,8 @@
 warning: unused import: `InterfacePhase`
- --> tests/ui/participating_group_owner.rs:2:26
+ --> tests/ui/participating_group_owner.rs:2:36
   |
-2 | use oer_ieee80211_port::{InterfacePhase, KeyTypes, LowerMacPhase, StationPhase, Station};
-  |                          ^^^^^^^^^^^^^^
+2 | use oer_ieee80211_contracts_port::{InterfacePhase, KeyTypes, LowerMacPhase, StationPhase, Station};
+  |                                    ^^^^^^^^^^^^^^
   |
   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
 
@@ -10,7 +10,7 @@ error[E0382]: use of moved value: `selected`
   --> tests/ui/participating_group_owner.rs:12:35
    |
  8 |     selected: <ModelKeys<'id, Composition, Station> as KeyTypes<'id>>::GroupKey,
-   |     -------- move occurs because `selected` has type `ModelGroupKey<'_, ModelBackend<StaticId<UiSlot>>, oer_ieee80211_port::Station>`, which does not implement the `Copy` trait
+   |     -------- move occurs because `selected` has type `ModelGroupKey<'_, ModelBackend<StaticId<UiSlot>>, oer_ieee80211_contracts_port::Station>`, which does not implement the `Copy` trait
  9 | ) {
 10 |     phase.station().select_group_key(permission, selected);
    |                                                  -------- value moved here

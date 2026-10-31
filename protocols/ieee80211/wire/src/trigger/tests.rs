@@ -62,6 +62,14 @@ fn admits_trigger_mac_header_and_borrows_user_tail() {
         TriggerType::BeamformingReportPoll
     );
     assert_eq!(trigger.user_info_and_padding, [13, 14, 15, 16, 17]);
+    // The general address view reads the same RA and TA, and requires both.
+    let fields = crate::frame::AddressFields::parse(&frame).unwrap();
+    assert_eq!(fields.receiver(), trigger.receiver_address);
+    assert_eq!(fields.transmitter(), Some(trigger.transmitter_address));
+    assert_eq!(
+        crate::frame::AddressFields::parse(&frame[..10]),
+        Err(crate::frame::AddressFieldsError::Truncated)
+    );
 }
 
 #[test]

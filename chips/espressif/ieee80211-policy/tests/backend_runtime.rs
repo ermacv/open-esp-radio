@@ -4,8 +4,8 @@ use oer_esp32s31_ieee80211_driver::mac::{
     tx::{runtime::*, *},
 };
 use oer_espressif_ieee80211_policy::{backend::EspressifAmpduRetryState, lmac};
-use oer_ieee80211_port::backend::*;
-use oer_ieee80211_port::backend_aggregate::*;
+use oer_ieee80211_contracts_port::backend::*;
+use oer_ieee80211_contracts_port::backend_aggregate::*;
 use oer_ieee80211_wire::{phy::LegacyRate, sequence::SequenceNumber};
 type AmpduRetryState<const C: usize> = EspressifAmpduRetryState<C>;
 const VENDOR_SHORT_RETRY_LIMIT: u8 = lmac::SHORT_RETRY_LIMIT;
@@ -16,7 +16,7 @@ use oer_esp32s31_ieee80211_driver::mac::tx::{
     TxCompletion, TxCookie,
     ampdu::{HtAmpduTxCompletion, HtBlockAckObservation},
 };
-use oer_ieee80211_port::VifRole;
+use oer_ieee80211_contracts_port::VifRole;
 use oer_ieee80211_wire::extensions::wmm::parse_wmm_parameter_element;
 
 const STANDARD_WMM: [u8; 26] = [
@@ -53,7 +53,7 @@ fn vif_tables_are_separate_and_contention_belongs_to_the_ac_queue() {
     policy
         .install_edca(
             VifRole::AccessPoint,
-            oer_ieee80211_port::EdcaParameterSet::from_wmm(
+            oer_ieee80211_contracts_port::EdcaParameterSet::from_wmm(
                 parse_wmm_parameter_element(&STANDARD_WMM).unwrap(),
             ),
         )
@@ -124,7 +124,7 @@ fn ordinary_he_retries_walk_the_dot11ax_record() {
         HeGuardIntervalAndLtf::TwoLtf1600Ns,
     ));
     assert_eq!(
-        oer_ieee80211_upper_mac::retry::select_ordinary_retry_rate(
+        oer_ieee80211_core_upper_mac::retry::select_ordinary_retry_rate(
             mcs9.phy_rate(),
             counters(0),
             &oer_espressif_ieee80211_policy::retry_ladder::EspressifRetryLadder
@@ -133,7 +133,7 @@ fn ordinary_he_retries_walk_the_dot11ax_record() {
         Some(mcs9)
     );
     assert_eq!(
-        oer_ieee80211_upper_mac::retry::select_ordinary_retry_rate(
+        oer_ieee80211_core_upper_mac::retry::select_ordinary_retry_rate(
             mcs9.phy_rate(),
             counters(2),
             &oer_espressif_ieee80211_policy::retry_ladder::EspressifRetryLadder
@@ -145,7 +145,7 @@ fn ordinary_he_retries_walk_the_dot11ax_record() {
         )))
     );
     assert_eq!(
-        oer_ieee80211_upper_mac::retry::select_ordinary_retry_rate(
+        oer_ieee80211_core_upper_mac::retry::select_ordinary_retry_rate(
             mcs9.phy_rate(),
             counters(4),
             &oer_espressif_ieee80211_policy::retry_ladder::EspressifRetryLadder
@@ -156,7 +156,7 @@ fn ordinary_he_retries_walk_the_dot11ax_record() {
     // An 800-ns rate below MCS9 has no record and keeps its rate.
     let mcs8 = TxPhyRate::He(HeRate::new(HeMcs::Mcs8, HeGuardIntervalAndLtf::OneLtf800Ns));
     assert_eq!(
-        oer_ieee80211_upper_mac::retry::select_ordinary_retry_rate(
+        oer_ieee80211_core_upper_mac::retry::select_ordinary_retry_rate(
             mcs8.phy_rate(),
             counters(4),
             &oer_espressif_ieee80211_policy::retry_ladder::EspressifRetryLadder
@@ -255,8 +255,11 @@ fn cts_timeout_republishes_the_unchanged_aggregate_then_requests_its_block_ack()
     assert_eq!(state.current_subframes(), 3);
 }
 
-fn block_ack(starting_sequence: u16, bitmap: u64) -> oer_ieee80211_port::BlockAckReport {
-    oer_ieee80211_port::BlockAckReport::new(SequenceNumber::new(starting_sequence).unwrap(), bitmap)
+fn block_ack(starting_sequence: u16, bitmap: u64) -> oer_ieee80211_contracts_port::BlockAckReport {
+    oer_ieee80211_contracts_port::BlockAckReport::new(
+        SequenceNumber::new(starting_sequence).unwrap(),
+        bitmap,
+    )
 }
 
 fn exhaust_protection(state: &mut AmpduRetryState<32>, first: u16, subframes: u8) {
@@ -687,7 +690,7 @@ fn admitted_at_zero(_: u8) -> Option<oer_time::Instant> {
 
 #[test]
 fn each_queue_draw_uses_its_head_vif_and_retains_the_complete_record() {
-    use oer_ieee80211_port::EdcaParameterSet;
+    use oer_ieee80211_contracts_port::EdcaParameterSet;
     use oer_ieee80211_wire::extensions::wmm::{WmmAcParameters, WmmParameterSet};
     let table = |aifsn, min, max, txop, lifetime| {
         EdcaParameterSet::from_tu(

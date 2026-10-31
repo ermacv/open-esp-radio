@@ -40,11 +40,13 @@ aliases and include optional and target-specific dependencies.
 
 | Crate | Owns | Does not own |
 | --- | --- | --- |
-| `oer-network` (`protocols/network`) | logical interfaces, link state, frame and admission errors, `TransportFlow` | queues, allocator, executor, hardware |
+| `oer-network-port` (`protocols/network/port`) | logical interfaces, link state, frame and admission errors, `TransportFlow` | queues, allocator, executor, hardware |
+| `oer-network-wire` (`protocols/network/wire`) | Ethernet II, VLAN, IPv4, IPv6, TCP and UDP header fields; its one dependency is `oer-wire` | decisions about a packet, IEEE 802.11 formats |
+| `oer-bridges-ieee80211-ethernet` (`protocols/bridges/ieee80211-ethernet`) | the requested WMM user priority of an outgoing frame from its VLAN PCP or IP DSCP | the final priority, which the station decides from its link |
 | `oer-embassy-net` (`portable/embassy/net`) | the Xarxa `PacketBuf` handoff, destination/flow TX queues, stack wake registration, RX copying into packet pools; in `datapath`, the software/physical TX ownership traits and `TxQueues` | radio scheduling, DMA descriptors, a concrete physical allocator |
 | `oer-embassy-net::ip` | final pool/stack storage, one `EthernetBridge` over `NetDevice`, DHCP/static IPv4, link epoch and typed configuration/stop/error status | radio installation, a second stack, a common TCP/UDP API |
 | `oer-esp32s31-ieee80211-driver::mac` | the TX cost model (`mac::tx_cost`) and work receipts (`mac::tx_work`) of its publications | packet storage |
-| `oer-ieee80211-upper-mac` | the airtime ledger (`airtime`) and affine scheduling reservations | hardware, packet storage |
+| `oer-ieee80211-core-upper-mac` | the airtime ledger (`airtime`) and affine scheduling reservations | hardware, packet storage |
 | the radio runner (P2) | VIF/peer generations, power-save eligibility, rate and retry state, BA sessions, DMA descriptors, physical credits, terminal TX receipts | sockets, a second stack |
 
 ## TX path
@@ -92,7 +94,7 @@ radio runner (P2)
   Order holds within a FIFO, not across a fragmented and an unfragmented class.
   Packet round-robin is not byte or airtime fairness.
 
-## Airtime ledger (`oer-ieee80211-upper-mac::airtime`)
+## Airtime ledger (`oer-ieee80211-core-upper-mac::airtime`)
 
 - `AirtimeStorage` holds bounded per-peer deficit accounts apart from packet
   storage; `scheduler()` borrows it exclusively. Tokens of one ledger cannot

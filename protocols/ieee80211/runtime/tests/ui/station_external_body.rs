@@ -1,5 +1,5 @@
 #![no_std]
-use oer_ieee80211_port::PhaseTypes;
+use oer_ieee80211_contracts_port::PhaseTypes;
 use oer_ieee80211_runtime::station::StationPort;
 
 pub fn body_is_impossible<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id>(

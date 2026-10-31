@@ -179,7 +179,7 @@ impl<F: SoftwareTxFrame, const N: usize> DestinationTxQueues for MemoryTxQueues<
 mod tests {
     use core::task::Waker;
 
-    use oer_network::NetworkInterfaceId;
+    use oer_network_port::NetworkInterfaceId;
 
     use super::*;
 
@@ -313,8 +313,8 @@ mod regressions {
     fn malformed_destination_and_capacity_refusals_preserve_frames() {
         struct Short;
         impl SoftwareTxFrame for Short {
-            fn interface(&self) -> oer_network::NetworkInterfaceId {
-                oer_network::NetworkInterfaceId::new(0)
+            fn interface(&self) -> oer_network_port::NetworkInterfaceId {
+                oer_network_port::NetworkInterfaceId::new(0)
             }
             fn ethernet(&self) -> &[u8] {
                 &[1; 5]
@@ -341,8 +341,8 @@ mod regressions {
             inspect: Option<Rc<dyn Fn()>>,
         }
         impl SoftwareTxFrame for Frame {
-            fn interface(&self) -> oer_network::NetworkInterfaceId {
-                oer_network::NetworkInterfaceId::new(0)
+            fn interface(&self) -> oer_network_port::NetworkInterfaceId {
+                oer_network_port::NetworkInterfaceId::new(0)
             }
             fn ethernet(&self) -> &[u8] {
                 if let Some(inspect) = &self.inspect {

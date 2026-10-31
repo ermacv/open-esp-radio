@@ -1,0 +1,15 @@
+[package]
+name = "oer-network-wire"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Allocation-free Ethernet, VLAN, IP and transport header fields"
+readme = "README.md"
+
+[dependencies]
+oer-wire = { path = "../../../portable/wire" }
+
+[lints]
+workspace = true

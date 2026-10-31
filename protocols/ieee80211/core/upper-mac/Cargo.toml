@@ -1,0 +1,25 @@
+[package]
+name = "oer-ieee80211-core-upper-mac"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Portable IEEE 802.11 frame-exchange state, replay, reassembly and transmit policy"
+readme = "README.md"
+
+[dependencies]
+oer-events = { path = "../../../../portable/events" }
+heapless = "0.9.3"
+oer-ieee80211-contracts-port = { path = "../../contracts/port" }
+oer-ieee80211-wire = { path = "../../wire" }
+oer-ieee80211-contracts-security = { path = "../../contracts/security" }
+oer-time = { path = "../../../../portable/time" }
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+oer-ieee80211-wire = { path = "../../wire", features = ["test-support"] }
+oer-time-virtual = { path = "../../../../portable/time-virtual" }
+oer-test-ui-cases = { path = "../../../../tools/test/ui-cases" }

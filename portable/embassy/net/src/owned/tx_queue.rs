@@ -4,7 +4,7 @@ use core::task::{Context, Poll, Waker};
 
 use crate::datapath::{DestinationTxHead, TxQueues};
 use oer_memory::{ContextCell, Entered, ExecutionContext};
-use oer_network::TransportFlow;
+use oer_network_port::TransportFlow;
 
 use super::{
     AccessRefused, QueuedPacket,

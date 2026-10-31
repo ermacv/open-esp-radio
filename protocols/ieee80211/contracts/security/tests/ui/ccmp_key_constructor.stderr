@@ -1,0 +1,18 @@
+error[E0308]: mismatched types
+ --> tests/ui/ccmp_key_constructor.rs:5:31
+  |
+5 |     let key = Ccmp128Key::new(*material); // ui-error: E0308
+  |               --------------- ^^^^^^^^^ expected `&[u8; 16]`, found `[u8; 16]`
+  |               |
+  |               arguments to this function are incorrect
+  |
+note: associated function defined here
+ --> src/lib.rs
+  |
+  |     pub fn new(bytes: &[u8; 16]) -> Self {
+  |            ^^^
+help: consider removing deref here
+  |
+5 -     let key = Ccmp128Key::new(*material); // ui-error: E0308
+5 +     let key = Ccmp128Key::new(material); // ui-error: E0308
+  |

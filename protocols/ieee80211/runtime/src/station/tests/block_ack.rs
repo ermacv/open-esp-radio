@@ -179,6 +179,39 @@ fn a_full_receive_queue_reports_one_aggregate_per_refused_frame() {
 }
 
 #[test]
+fn the_empty_sink_delivers_and_refuses_the_same_msdus_as_an_enabled_one() {
+    fn overflow<'w>(world: &'w Application<'w, '_, '_>) -> Script<'w> {
+        Box::pin(async move {
+            let mut seen = 0;
+            connected(world, &mut seen).await;
+            // Eight MSDUs fill the test's network queue; nothing drains it.
+            for sequence in 1..=10 {
+                world
+                    .air
+                    .receive(&data(sequence, 0, sequence as u8), meta());
+                for _ in 0..20 {
+                    yield_now().await;
+                }
+            }
+            let delivered = world.delivered().await;
+            assert_eq!(delivered.len(), 8);
+            assert!(
+                delivered
+                    .iter()
+                    .zip(1..=8u8)
+                    .all(|(frame, sequence)| frame.last() == Some(&sequence)),
+                "the first eight MSDUs reach the network in order"
+            );
+            world.command(ServiceCommand::Stop).await;
+        })
+    }
+    let enabled = run_with(ht_config(), overflow);
+    assert_eq!(enabled.rx_msdus_refused().len(), 2);
+    let empty = run_with_empty_sink(ht_config(), overflow);
+    assert!(empty.events.lock().unwrap().is_empty());
+}
+
+#[test]
 fn exhausted_shared_bank_pool_refuses_and_peer_delba_makes_the_slot_reusable() {
     run_with(ht_config(), |world| {
         Box::pin(async move {

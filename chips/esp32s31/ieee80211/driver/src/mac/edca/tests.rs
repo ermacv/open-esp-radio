@@ -63,13 +63,15 @@ fn wmm_update_is_validated_before_any_queue_changes() {
     invalid[11] = (11 << 4) | 4;
     let parameters = parse_wmm_parameter_element(&invalid).unwrap();
     assert_eq!(
-        queues.configure_from_edca(oer_ieee80211_port::EdcaParameterSet::from_wmm(parameters)),
+        queues.configure_from_edca(oer_ieee80211_contracts_port::EdcaParameterSet::from_wmm(
+            parameters
+        )),
         Err(EdcaParametersError::MaximumExponentOutOfRange(11))
     );
     assert_eq!(queues, before);
 
     queues
-        .configure_from_edca(oer_ieee80211_port::EdcaParameterSet::from_wmm(
+        .configure_from_edca(oer_ieee80211_contracts_port::EdcaParameterSet::from_wmm(
             parse_wmm_parameter_element(&STANDARD_WMM).unwrap(),
         ))
         .unwrap();
@@ -98,7 +100,7 @@ fn standard_defaults_retain_txop_policy_without_granting_admission() {
         assert!(!policy.admission_control_mandatory());
         assert_eq!(
             policy.txop_limit_units_32_us(),
-            oer_ieee80211_port::EdcaParameterSet::STANDARD_DEFAULT
+            oer_ieee80211_contracts_port::EdcaParameterSet::STANDARD_DEFAULT
                 .access_category(queue.access_category())
                 .wmm
                 .txop_limit_units_32_us

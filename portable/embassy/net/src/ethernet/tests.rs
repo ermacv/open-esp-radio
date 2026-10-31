@@ -3,7 +3,7 @@ use super::*;
 use crate::{NetworkInterfaceId, OwnedEndpointResources};
 use core::task::{Context, Poll};
 use oer_memory::HostContext;
-use oer_network::{LinkSnapshot, LinkState, TransmitError};
+use oer_network_port::{LinkSnapshot, LinkState, TransmitError};
 use std::boxed::Box;
 use xarxa_driver::{PacketPool, PacketPoolStorage};
 

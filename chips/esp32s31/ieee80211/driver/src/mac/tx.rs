@@ -37,7 +37,7 @@ use oer_esp32s31_hal::ieee80211::dma::tx_storage::{
     PinnedTxDmaStorage, TxDmaAccess, TxDmaStorageError,
 };
 
-use oer_ieee80211_port::TxStatus;
+use oer_ieee80211_contracts_port::TxStatus;
 use oer_ieee80211_wire::qos::WmmAccessCategory;
 
 pub use oer_ieee80211_wire::trigger::HeResourceUnit;
@@ -45,7 +45,7 @@ pub use oer_ieee80211_wire::trigger::HeResourceUnit;
 use crate::mac::rate::low::{
     MacLowRateGateProbe, MacLowRateTransitionError, probe_phy_low_rate_gate,
 };
-use oer_ieee80211_port::backend::RateScheduleKind;
+use oer_ieee80211_contracts_port::backend::RateScheduleKind;
 
 use oer_esp32s31_hal::{ieee80211::mac::WifiMacHal, owner::RadioAccess};
 
@@ -458,7 +458,7 @@ pub struct TxCookie(pub u32);
 /// # }
 /// # use oer_esp32s31_ieee80211_driver::mac::tx::{TxCompletion, TxCookie};
 /// # use oer_esp32s31_hal::types::MacTxCompletionObservation;
-/// # use oer_ieee80211_port::TxStatus;
+/// # use oer_ieee80211_contracts_port::TxStatus;
 /// fn forge(raw: MacTxCompletionObservation) -> TxCompletion {
 ///     TxCompletion { cookie: TxCookie(1), observation: raw, tx_status: TxStatus::Success }
 /// }

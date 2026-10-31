@@ -138,7 +138,6 @@ struct ChannelEntry {
     band: Band,
     number: u8,
     width: ChannelWidth,
-    span: oer_radio_regulatory::FrequencySpan,
     primary_mhz: u16,
     center_mhz: u16,
 }
@@ -172,19 +171,25 @@ macro_rules! channel_table {
                 ChannelWidth::Mhz40Above => primary_mhz + 10,
                 ChannelWidth::Mhz40Below => primary_mhz - 10,
             };
-            let half_khz = width.bandwidth_mhz() as u32 * 500;
-            let center_khz = center_mhz as u32 * 1_000;
-            let span = match oer_radio_regulatory::FrequencySpan::new(
-                center_khz - half_khz, center_khz + half_khz,
-            ) {
-                Some(span) => span,
-                None => panic!("channel table contains an invalid span"),
-            };
             ChannelEntry {
                 index: ChannelIndex::$index, band, number, width,
-                span, primary_mhz, center_mhz,
+                primary_mhz, center_mhz,
             }
         },)+];
+
+        impl Channel {
+            /// The number of channel geometries.
+            pub const COUNT: usize = channel_table!(@count $($slot),+);
+            /// Every channel geometry, in [`Self::select`] order.
+            pub const ALL: [Self; Self::COUNT] = [$(Self(ChannelIndex::$index)),+];
+
+            /// Select this channel's cell of an exact table, without a
+            /// numeric index.
+            pub const fn select<T>(self, table: &[T; Self::COUNT]) -> &T {
+                // Every array subscript is a constant, checked at compilation.
+                match self.0 { $(ChannelIndex::$index => &table[$slot],)+ }
+            }
+        }
 
         const _: () = {
             let mut entries = CHANNELS.as_slice();
@@ -232,10 +237,7 @@ macro_rules! channel_table {
                     ChannelWidth::Mhz40Above => primary + 10,
                     ChannelWidth::Mhz40Below => primary - 10,
                 };
-                let half_khz = entry.width.bandwidth_mhz() as u32 * 500;
                 if !(entry.primary_mhz == primary && entry.center_mhz == center) { panic!("channel frequencies disagree with its geometry"); };
-                if !(entry.span.low_khz() == center as u32 * 1_000 - half_khz) { panic!("channel lower edge disagrees with its center"); };
-                if !(entry.span.high_khz() == center as u32 * 1_000 + half_khz) { panic!("channel upper edge disagrees with its center"); };
                 let mut others = remaining;
                 while let Some((other, tail)) = others.split_first() {
                     if !(entry.band as u8 != other.band as u8
@@ -344,18 +346,6 @@ channel_table! {
     C5Ch169Mhz40Below = 85: Ghz5, 169, Mhz40Below;
     C5Ch173Mhz40Above = 86: Ghz5, 173, Mhz40Above;
     C5Ch177Mhz40Below = 87: Ghz5, 177, Mhz40Below;
-}
-
-impl oer_radio_regulatory::RadioChannel for Channel {
-    fn span(&self) -> oer_radio_regulatory::FrequencySpan {
-        self.0.entry().span
-    }
-}
-
-impl oer_radio_regulatory::RadioChannel for WifiChannel {
-    fn span(&self) -> oer_radio_regulatory::FrequencySpan {
-        self.0.entry().span
-    }
 }
 
 impl From<WifiChannel> for Channel {

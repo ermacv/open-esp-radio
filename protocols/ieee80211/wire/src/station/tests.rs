@@ -1,10 +1,20 @@
 use super::*;
-use crate::security::{AssociationAkm, AssociationSecurity, Pmkid, SaePwe, Spp};
+use crate::data::MsduParts;
+use crate::security::{AssociationAkm, AssociationSecurity, Pmkid, RsnAssociation, SaePwe, Spp};
 use crate::sequence::seq;
-use oer_network::ETHERNET_HEADER_LEN;
 
 const LOCAL: [u8; 6] = [0x02, 0, 0, 0x12, 0x34, 0x56];
 const BSSID: [u8; 6] = [0x30, 0x05, 0x5c, 0x11, 0x22, 0x33];
+
+/// The MSDU fields of a fixture written as DA, SA, EtherType and payload.
+fn msdu(frame: &[u8]) -> MsduParts<'_> {
+    MsduParts {
+        destination: frame[..6].try_into().unwrap(),
+        source: frame[6..12].try_into().unwrap(),
+        ether_type: u16::from_be_bytes([frame[12], frame[13]]),
+        payload: &frame[14..],
+    }
+}
 
 fn authentication_response(status_code: u16) -> [u8; 30] {
     let mut frame = [0_u8; 30];
@@ -350,90 +360,6 @@ fn protected_data_frame_fully_overwrites_a_reused_dma_slot() {
 }
 
 #[test]
-fn protected_ethernet_frame_reuses_payload_at_its_final_dma_offset() {
-    let ethernet = [
-        0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 2, 3, 4, 5, 6, 7, 0x88, 0x8e, 1, 2, 3,
-    ];
-    let metadata = StaProtectedEthernetFrame {
-        bssid: [0x10, 0x11, 0x12, 0x13, 0x14, 0x15],
-        sequence_number: seq(0x123),
-        user_priority: 7,
-        peer_qos: true,
-        ccmp_header: [3, 0, 0, 0x20, 0, 0, 0, 0],
-    };
-    let mut expected = [0_u8; 64];
-    let expected_len = StaProtectedDataFrame {
-        source: crate::address::OwnAddress::new(
-            crate::address::IndividualAddress::new(ethernet[6..12].try_into().unwrap()).unwrap(),
-        ),
-        bssid: crate::address::Bssid::new(
-            crate::address::IndividualAddress::new(metadata.bssid).unwrap(),
-        )
-        .unwrap(),
-        destination: ethernet[..6].try_into().unwrap(),
-        sequence_number: metadata.sequence_number,
-        user_priority: metadata.user_priority,
-        peer_qos: metadata.peer_qos,
-        ccmp_header: metadata.ccmp_header,
-        ether_type: u16::from_be_bytes([ethernet[12], ethernet[13]]),
-        payload: &ethernet[14..],
-    }
-    .encode(&mut expected)
-    .unwrap();
-
-    let mut storage = [0xa5_u8; 64];
-    storage
-        [STA_PROTECTED_QOS_ETHERNET_HEADROOM..STA_PROTECTED_QOS_ETHERNET_HEADROOM + ethernet.len()]
-        .copy_from_slice(&ethernet);
-    let encoded = metadata
-        .encode_in_place(
-            &mut storage,
-            STA_PROTECTED_QOS_ETHERNET_HEADROOM,
-            ethernet.len(),
-            DataHeControl::Disabled,
-        )
-        .unwrap();
-
-    assert_eq!(
-        encoded,
-        EncodedStaFrame {
-            offset: 0,
-            length: 45
-        }
-    );
-    assert_eq!(encoded.length, expected_len);
-    assert_eq!(&storage[..encoded.length], &expected[..expected_len]);
-    // The three payload bytes began at offset 28 + 14 and remain at that
-    // exact address after the prefix conversion.
-    assert_eq!(&storage[42..45], &[1, 2, 3]);
-}
-
-#[test]
-fn protected_ethernet_frame_reports_missing_headroom_before_mutation() {
-    let ethernet = [
-        0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 2, 3, 4, 5, 6, 7, 0x08, 0x00,
-    ];
-    let mut storage = [0xa5_u8; 64];
-    storage[27..27 + ethernet.len()].copy_from_slice(&ethernet);
-
-    assert_eq!(
-        StaProtectedEthernetFrame {
-            bssid: [0x10, 0x11, 0x12, 0x13, 0x14, 0x15],
-            sequence_number: seq(0x123),
-            user_priority: 0,
-            peer_qos: true,
-            ccmp_header: [3, 0, 0, 0x20, 0, 0, 0, 0],
-        }
-        .encode_in_place(&mut storage, 27, ethernet.len(), DataHeControl::Disabled),
-        Err(StationFrameError::EthernetHeadroomTooSmall {
-            required: STA_PROTECTED_QOS_ETHERNET_HEADROOM,
-            available: 27,
-        })
-    );
-    assert_eq!(&storage[27..27 + ethernet.len()], &ethernet);
-}
-
-#[test]
 fn protected_he_control_keeps_ccmp_immediately_after_qos() {
     let mut output = [0xa5; 64];
     let len = StaProtectedDataFrame {
@@ -466,23 +392,23 @@ fn protected_he_control_keeps_ccmp_immediately_after_qos() {
 }
 
 #[test]
-fn protected_amsdu_encodes_two_ethernet_frames_and_round_trips() {
+fn protected_amsdu_encodes_two_msdus_and_round_trips() {
     let first = [
         0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 2, 3, 4, 5, 6, 7, 0x08, 0x00, 1, 2, 3,
     ];
     let second = [
         0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 8, 9, 10, 11, 12, 13, 0x88, 0xb5, 4, 5, 6,
     ];
-    let ethernet_frames: [&[u8]; 2] = [&first, &second];
+    let msdus = [msdu(&first), msdu(&second)];
     let mut output = [0_u8; 96];
-    assert_eq!(sta_protected_amsdu_frame_length(&ethernet_frames), Ok(87));
+    assert_eq!(sta_protected_amsdu_frame_length(&msdus), Ok(87));
     let length = StaProtectedAmsduFrame {
         source: [2, 3, 4, 5, 6, 7],
         bssid: [0x10, 0x11, 0x12, 0x13, 0x14, 0x15],
         sequence_number: seq(0x123),
         user_priority: 7,
         ccmp_header: [3, 0, 0, 0x20, 0, 0, 0, 0],
-        ethernet_frames: &ethernet_frames,
+        msdus: &msdus,
     }
     .encode(&mut output)
     .unwrap();
@@ -519,60 +445,6 @@ fn protected_amsdu_encodes_two_ethernet_frames_and_round_trips() {
 }
 
 #[test]
-fn protected_amsdu_pair_encodes_in_first_ethernet_allocation() {
-    let first = [
-        0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 2, 3, 4, 5, 6, 7, 0x08, 0x00, 1, 2, 3,
-    ];
-    let second = [
-        0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 8, 9, 10, 11, 12, 13, 0x88, 0xb5, 4, 5, 6,
-    ];
-    for first_length in ETHERNET_HEADER_LEN..=first.len() {
-        for second_length in ETHERNET_HEADER_LEN..=second.len() {
-            let first = &first[..first_length];
-            let second = &second[..second_length];
-            let ethernet_frames: [&[u8]; 2] = [first, second];
-            let metadata = StaProtectedEthernetFrame {
-                bssid: [0x10, 0x11, 0x12, 0x13, 0x14, 0x15],
-                sequence_number: seq(0x123),
-                user_priority: 7,
-                peer_qos: true,
-                ccmp_header: [3, 0, 0, 0x20, 0, 0, 0, 0],
-            };
-            let mut expected = [0_u8; 96];
-            let expected_length = StaProtectedAmsduFrame {
-                source: [2, 3, 4, 5, 6, 7],
-                bssid: metadata.bssid,
-                sequence_number: metadata.sequence_number,
-                user_priority: metadata.user_priority,
-                ccmp_header: metadata.ccmp_header,
-                ethernet_frames: &ethernet_frames,
-            }
-            .encode(&mut expected)
-            .unwrap();
-
-            const ETHERNET_OFFSET: usize = STA_PROTECTED_QOS_ETHERNET_HEADROOM;
-            let mut storage = [0xa5_u8; 128];
-            storage[ETHERNET_OFFSET..ETHERNET_OFFSET + first.len()].copy_from_slice(first);
-            let encoded = metadata
-                .encode_amsdu_pair_in_place(&mut storage, ETHERNET_OFFSET, first.len(), second)
-                .unwrap();
-
-            assert_eq!(encoded.offset, 0);
-            assert_eq!(encoded.length, expected_length);
-            assert_eq!(
-                &storage[..encoded.length],
-                &expected[..expected_length],
-                "in-place and owned encoders must emit identical MPDUs"
-            );
-            assert!(
-                storage[encoded.length..].iter().all(|byte| *byte == 0xa5),
-                "capacity beyond the encoded MPDU remains untouched"
-            );
-        }
-    }
-}
-
-#[test]
 fn protected_amsdu_fully_overwrites_a_reused_output_slot() {
     let first = [
         0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 2, 3, 4, 5, 6, 7, 0x08, 0x00, 1, 2, 3,
@@ -580,14 +452,14 @@ fn protected_amsdu_fully_overwrites_a_reused_output_slot() {
     let second = [
         0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 8, 9, 10, 11, 12, 13, 0x88, 0xb5, 4, 5, 6,
     ];
-    let ethernet_frames: [&[u8]; 2] = [&first, &second];
+    let msdus = [msdu(&first), msdu(&second)];
     let encoded = StaProtectedAmsduFrame {
         source: [2, 3, 4, 5, 6, 7],
         bssid: [0x10, 0x11, 0x12, 0x13, 0x14, 0x15],
         sequence_number: seq(0x123),
         user_priority: 7,
         ccmp_header: [3, 0, 0, 0x20, 0, 0, 0, 0],
-        ethernet_frames: &ethernet_frames,
+        msdus: &msdus,
     };
     let mut zeroed = [0_u8; 96];
     let mut reused = [0xa5_u8; 96];
@@ -626,8 +498,14 @@ fn protected_amsdu_fully_overwrites_a_reused_output_slot() {
 
 #[test]
 fn protected_amsdu_rejects_the_unadvertised_large_class() {
-    let ethernet = [0_u8; 2_000];
-    let frames: [&[u8]; 2] = [&ethernet, &ethernet];
+    let payload = [0_u8; 1_986];
+    let large = MsduParts {
+        destination: [0; 6],
+        source: [0; 6],
+        ether_type: 0,
+        payload: &payload,
+    };
+    let frames = [large, large];
     assert_eq!(
         sta_protected_amsdu_frame_length(&frames),
         Err(StationFrameError::AmsduTooLong {
@@ -642,7 +520,7 @@ fn protected_amsdu_rejects_the_unadvertised_large_class() {
             sequence_number: seq(1),
             user_priority: 0,
             ccmp_header: [0; CCMP_HEADER_LEN],
-            ethernet_frames: &frames,
+            msdus: &frames,
         }
         .encode(&mut [0_u8; 4_096]),
         Err(StationFrameError::AmsduTooLong {
@@ -699,57 +577,6 @@ fn association_response_retains_complete_wmm_parameters() {
             .txop_limit_units_32_us,
         47
     );
-}
-
-#[test]
-fn in_place_station_encoders_reject_hostile_ranges_before_writing() {
-    let frame = StaProtectedEthernetFrame {
-        bssid: [2, 0, 0, 0, 0, 1],
-        sequence_number: seq(0),
-        user_priority: 0,
-        peer_qos: true,
-        ccmp_header: [0; CCMP_HEADER_LEN],
-    };
-    for (offset, length) in [
-        (usize::MAX, 14),
-        (1, usize::MAX),
-        (64, 14),
-        (0, 13),
-        (0, 14),
-    ] {
-        let mut storage = [0xa5; 64];
-        assert!(
-            frame
-                .encode_in_place(&mut storage, offset, length, DataHeControl::Disabled)
-                .is_err()
-        );
-        assert_eq!(storage, [0xa5; 64]);
-        assert!(
-            frame
-                .encode_amsdu_pair_in_place(&mut storage, offset, length, &[0; 14])
-                .is_err()
-        );
-        assert_eq!(storage, [0xa5; 64]);
-    }
-    for (offset, length) in [(usize::MAX, 14), (1, usize::MAX)] {
-        let mut storage = [0xa5; 64];
-        assert_eq!(
-            frame.encode_in_place(&mut storage, offset, length, DataHeControl::Disabled),
-            Err(StationFrameError::LengthOverflow)
-        );
-        assert_eq!(
-            frame.encode_amsdu_pair_in_place(&mut storage, offset, length, &[0; 14]),
-            Err(StationFrameError::LengthOverflow)
-        );
-        assert_eq!(storage, [0xa5; 64]);
-    }
-    let mut storage = [0xa5; 64];
-    assert!(
-        frame
-            .encode_amsdu_pair_in_place(&mut storage, 28, 14, &[0; 13])
-            .is_err()
-    );
-    assert_eq!(storage, [0xa5; 64]);
 }
 
 #[test]
@@ -829,9 +656,33 @@ fn station_encoders_admit_complete_capacity_before_writing() {
     }
 }
 
+/// The RSN association of `akm`, without management protection unless
+/// `management` holds.
+fn rsn_association(akm: AssociationAkm, spp: Spp, management: bool) -> RsnAssociation {
+    RsnAssociation {
+        akm,
+        spp,
+        management: management.then_some(crate::security::GroupManagementCipher::BipCmac128),
+        pmkid: None,
+    }
+}
+
+/// SPP A-MSDU capable, then MFPC and MFPR when `protected`.
+const fn capabilities(protected: bool) -> u16 {
+    0x0400 | if protected { 0x00c0 } else { 0 }
+}
+
+fn h2e() -> crate::security::rsn::RsnExtendedCapabilities {
+    crate::security::rsn::RsnExtendedCapabilities::from_bytes([0]).with_sae_h2e(true)
+}
+
 #[test]
-fn a_personal_selection_encodes_one_suite_and_its_capabilities() {
-    let selected = SelectedRsn::personal(AssociationAkm::Psk, Spp::NotNegotiated, false);
+fn a_selection_encodes_one_suite_and_the_chosen_capabilities() {
+    let selected = SelectedRsn::rsn(
+        rsn_association(AssociationAkm::Psk, Spp::NotNegotiated, false),
+        capabilities(false),
+        None,
+    );
     let bytes = selected.as_bytes();
     assert_eq!(bytes.len(), SELECTED_RSN_IE_LEN);
     let element = crate::security::rsn::RsnElement::parse(bytes).unwrap();
@@ -844,16 +695,20 @@ fn a_personal_selection_encodes_one_suite_and_its_capabilities() {
     assert_eq!(&bytes[20..22], &[0, 4]);
     assert!(!selected.security().protects_management());
 
-    let sae = SelectedRsn::personal(
-        AssociationAkm::Sae(SaePwe::HashToElement),
-        Spp::Negotiated,
-        true,
+    let sae = SelectedRsn::rsn(
+        rsn_association(
+            AssociationAkm::Sae(SaePwe::HashToElement),
+            Spp::Negotiated,
+            true,
+        ),
+        capabilities(true),
+        Some(h2e()),
     );
     // MFPC, MFPR and SPP A-MSDU capable, then the RSNXE announcing H2E.
     assert_eq!(&sae.as_bytes()[20..22], &[0xc0, 4]);
     assert_eq!(&sae.as_bytes()[22..], &[244, 1, 0x20]);
     let AssociationSecurity::Rsn(association) = sae.security() else {
-        panic!("personal association");
+        panic!("an RSN association");
     };
     assert_eq!(association.spp, Spp::Negotiated);
     assert!(sae.security().protects_management());
@@ -862,10 +717,14 @@ fn a_personal_selection_encodes_one_suite_and_its_capabilities() {
 
 #[test]
 fn a_resumed_sae_selection_lists_its_pmkid_before_the_rsnxe_once() {
-    let selected = SelectedRsn::personal(
-        AssociationAkm::Sae(SaePwe::HuntingAndPecking),
-        Spp::Negotiated,
-        true,
+    let selected = SelectedRsn::rsn(
+        rsn_association(
+            AssociationAkm::Sae(SaePwe::HuntingAndPecking),
+            Spp::Negotiated,
+            true,
+        ),
+        capabilities(true),
+        Some(h2e()),
     );
     let resumed = selected.with_pmkid(Pmkid([0x5a; 16])).unwrap();
     let bytes = resumed.as_bytes();
@@ -878,8 +737,12 @@ fn a_resumed_sae_selection_lists_its_pmkid_before_the_rsnxe_once() {
     // A second PMKID and a non-SAE selection are refused.
     assert_eq!(resumed.with_pmkid(Pmkid([0xa5; 16])), None);
     assert_eq!(
-        SelectedRsn::personal(AssociationAkm::Psk, Spp::Negotiated, false)
-            .with_pmkid(Pmkid([0x5a; 16])),
+        SelectedRsn::rsn(
+            rsn_association(AssociationAkm::Psk, Spp::Negotiated, false),
+            capabilities(false),
+            None,
+        )
+        .with_pmkid(Pmkid([0x5a; 16])),
         None
     );
 }

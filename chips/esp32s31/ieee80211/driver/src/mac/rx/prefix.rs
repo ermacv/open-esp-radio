@@ -14,7 +14,7 @@
 )]
 
 use oer_esp32s31_hal::layouts::{WifiRxControlPrefix, WifiRxControlTail};
-use oer_ieee80211_port::{MacRxMetadata, RxEvidence};
+use oer_ieee80211_contracts_port::{MacRxMetadata, RxEvidence};
 
 use super::{
     DYNAMIC_TAIL_SIZE, FCS_SIZE, FIXED_PREFIX_SIZE, INGRESS_STRICT_DUMP, INGRESS_STRICT_RXEND,

@@ -1,0 +1,20 @@
+[package]
+name = "oer-ieee80211-core-extensions-esp-now"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Portable ESP-NOW and Espressif long-range protocol owners"
+readme = "README.md"
+
+[dependencies]
+oer-events = { path = "../../../../../portable/events" }
+oer-ieee80211-core-arbiter = { path = "../../arbiter" }
+oer-ieee80211-contracts-port = { path = "../../../contracts/port" }
+oer-ieee80211-core-upper-mac = { path = "../../upper-mac" }
+oer-ieee80211-wire = { path = "../../../wire" }
+zeroize = { version = "1.9.0", default-features = false, features = ["derive"] }
+
+[lints]
+workspace = true

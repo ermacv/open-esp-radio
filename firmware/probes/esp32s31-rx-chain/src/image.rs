@@ -335,7 +335,9 @@ fn direct_future(
             .and_then(RegulatoryDomain::of)
             .ok_or(oer_diagnostics::name!("direct-domain"; 32))?;
         let channel = domain
-            .permit(channel)
+            .permit(oer_ieee80211_contracts_port::RegulatedChannel::from(
+                channel,
+            ))
             .map_err(|_| oer_diagnostics::name!("direct-permit"; 32))?;
         let tx_ceiling = channel.tx_ceiling(board::wifi_power_limits(
             i32::from(PhyConfig::production().highest_target_power_quarter_dbm()) * 25,

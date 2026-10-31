@@ -6,7 +6,7 @@ use core::{
     pin::pin,
     task::{Context, Poll, Waker},
 };
-use oer_ieee80211_port::*;
+use oer_ieee80211_contracts_port::*;
 use oer_ieee80211_wire::{
     address::IndividualAddress,
     frame::FrameControl,
@@ -774,7 +774,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for SuspendBody {
                     resources.station_group_permission,
                     slot,
                     oer_ieee80211_wire::ccmp::GroupKeyId::new(1).expect("KeyID"),
-                    oer_ieee80211_wire::ccmp::Ccmp128Key::new(&[3; 16]),
+                    oer_ieee80211_contracts_security::Ccmp128Key::new(&[3; 16]),
                 );
                 let _ = phase.next_event().await;
             }
@@ -862,7 +862,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for GroupCycle {
                 resources.station_group_permission,
                 slot,
                 id(1),
-                oer_ieee80211_wire::ccmp::Ccmp128Key::new(&[1; 16]),
+                oer_ieee80211_contracts_security::Ccmp128Key::new(&[1; 16]),
             );
             let (key, permission) = match phase.next_event().await {
                 Ok(Ok(LowerMacEvent::Terminal(LowerMacTerminal::GroupKeyInstalled(
@@ -874,7 +874,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for GroupCycle {
                 permission,
                 key,
                 id(2),
-                oer_ieee80211_wire::ccmp::Ccmp128Key::new(&[2; 16]),
+                oer_ieee80211_contracts_security::Ccmp128Key::new(&[2; 16]),
             );
             let (key, permission) = match phase.next_event().await {
                 Ok(Ok(LowerMacEvent::Terminal(LowerMacTerminal::GroupKeyReplaced {
@@ -1137,7 +1137,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for Protected {
                 &association,
                 slot,
                 IndividualAddress::new(BSSID).expect("peer"),
-                oer_ieee80211_wire::ccmp::Ccmp128Key::new(&[9; 16]),
+                oer_ieee80211_contracts_security::Ccmp128Key::new(&[9; 16]),
             );
             let [buffer, ..] = resources.buffers;
             let [ticket, ..] = resources.tickets;
@@ -1299,7 +1299,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for Tune {
                     oer_radio_regulatory::Country::new(*b"DE").expect("test country"),
                 )
                 .expect("domain fixture")
-                .permit(self.0)
+                .permit(oer_ieee80211_contracts_port::RegulatedChannel::from(self.0))
                 .expect("permitted test channel"),
             )
             .expect("supported test channel"),

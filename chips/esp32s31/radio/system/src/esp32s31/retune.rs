@@ -17,7 +17,7 @@ pub(crate) fn select_wifi_channel<B: PlatformClockBackend, O: PhyTargetObserver>
     timer: &impl oer_cooperate::CooperativeTimer,
     domain: RadioDomain<B, ConcurrentPhy>,
     wifi: &mut WifiClocked,
-    channel: Permitted<WifiChannel>,
+    channel: Permitted<oer_ieee80211_contracts_port::RegulatedChannel<WifiChannel>>,
     observer: &mut O,
 ) -> impl core::future::Future<
     Output = (
@@ -27,7 +27,7 @@ pub(crate) fn select_wifi_channel<B: PlatformClockBackend, O: PhyTargetObserver>
 > {
     let transaction = domain.detach(oer_esp32s31_hal::domain::transaction::Operation::Retune);
     async move {
-        let channel = crate::channel::lower_wifi_channel(channel.channel());
+        let channel = crate::channel::lower_wifi_channel(channel.channel().channel());
         let mut platform = ();
         let hardware = wifi.channel_transaction(&mut platform, transaction);
         core::pin::pin!(select_concurrent_wifi_channel::<RomShortDelay, _, _, _>(

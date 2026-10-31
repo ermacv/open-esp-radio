@@ -2,14 +2,11 @@
 
 use super::*;
 
-use crate::security::{
-    AssociationAkm, AssociationSecurity, GroupManagementCipher, Pmkid, RsnAssociation, Spp,
-    SppCapability,
-};
+use crate::security::{AssociationAkm, AssociationSecurity, Pmkid, RsnAssociation};
 
 use crate::security::rsn::{
-    RSN_CAPABILITY_MFPC, RSN_CAPABILITY_MFPR, RSN_CIPHER_CCMP, RSNXE_ONE_OCTET_LEN,
-    RsnExtendedCapabilities, rsn_single_suite_element, rsnx_element,
+    RSN_CIPHER_CCMP, RSNXE_ONE_OCTET_LEN, RsnExtendedCapabilities, rsn_single_suite_element,
+    rsnx_element,
 };
 
 /// The association request's RSN element and RSNXE, and the security they
@@ -78,44 +75,38 @@ impl SelectedRsn {
 }
 
 impl SelectedRsn {
-    /// The RSN element of a personal association negotiating `akm`, and
-    /// under SAE an RSNXE announcing hash to element.
+    /// The RSN element of `association` with `capabilities`, and the RSNXE
+    /// of `extended` when there is one; the caller chose every field.
     ///
-    /// The element names CCMP as group data and pairwise cipher and the
-    /// single AKM. Its RSN Capabilities advertise SPP A-MSDU capability,
-    /// MFPC when `management_protection` holds and MFPR under SAE. It omits
+    /// The element names CCMP, the one cipher this codec encodes, as group
+    /// data and pairwise cipher, and the association's single AKM. It omits
     /// the Group Management Cipher Suite: BIP-CMAC-128 is the default
-    /// (IEEE 802.11-2020 9.4.2.24.1).
-    pub fn personal(akm: AssociationAkm, spp: Spp, management_protection: bool) -> Self {
-        let mut station_capabilities = SppCapability::Capable.rsn_bits();
-        if management_protection {
-            station_capabilities |= RSN_CAPABILITY_MFPC;
-        }
-        let sae = matches!(akm, AssociationAkm::Sae(_));
-        if sae {
-            station_capabilities |= RSN_CAPABILITY_MFPR;
-        }
+    /// (IEEE 802.11-2020 9.4.2.24.1). A PMKID follows through
+    /// [`Self::with_pmkid`]; `association.pmkid` is recorded as `None`.
+    pub fn rsn(
+        association: RsnAssociation,
+        capabilities: u16,
+        extended: Option<RsnExtendedCapabilities>,
+    ) -> Self {
         let mut selected = Self::OPEN;
         selected.security = AssociationSecurity::Rsn(RsnAssociation {
-            akm,
-            spp,
-            management: management_protection.then_some(GroupManagementCipher::BipCmac128),
             pmkid: None,
+            ..association
         });
         crate::encoding::write_array::<0, _, _>(
             &mut selected.bytes,
             &rsn_single_suite_element(
                 RSN_CIPHER_CCMP,
                 RSN_CIPHER_CCMP,
-                akm.akm().suite_selector()[3],
-                station_capabilities,
+                association.akm.akm().suite_selector()[3],
+                capabilities,
             ),
         );
         selected.length = oer_wire::PrefixLength::constant::<SELECTED_RSN_IE_LEN>();
-        if sae {
+        if let Some(extended) = extended {
             crate::encoding::write_array::<SELECTED_RSN_IE_LEN, _, _>(
                 &mut selected.bytes,
-                &rsnx_element(RsnExtendedCapabilities::from_bytes([0]).with_sae_h2e(true)),
+                &rsnx_element(extended),
             );
             selected.length =
                 oer_wire::PrefixLength::constant::<{ SELECTED_RSN_IE_LEN + RSNXE_ONE_OCTET_LEN }>();

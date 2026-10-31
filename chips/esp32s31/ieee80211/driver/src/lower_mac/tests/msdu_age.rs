@@ -1,5 +1,5 @@
 use super::*;
-use oer_ieee80211_port::{EdcaParameterSet, SupportedEdca};
+use oer_ieee80211_contracts_port::{EdcaParameterSet, SupportedEdca};
 use oer_time::Duration;
 
 fn lifetime(core: &mut Core<'_>, role: VifRole, micros: u64) {

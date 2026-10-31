@@ -1,9 +1,9 @@
-//! Portable IEEE 802.11 priority values and the network header fields that
-//! carry traffic intent.
+//! Portable IEEE 802.11 priority values.
 //!
 //! The UP-to-AC mapping is the standard's (IEEE 802.11-2020 Table 10-1). The
 //! WMM vendor element parser lives in `extensions::wmm`; the upper MAC owns
-//! classification, admission and queue selection using these values.
+//! admission and queue selection using these values, and the Ethernet bridge
+//! classifies network frames into them.
 //! Checked priorities and categories select cells of exact eight- and
 //! four-cell arrays. The selector retains the bounded value and needs no
 //! numeric indexing or repeat validation in a caller.
@@ -144,77 +144,6 @@ impl WmmUserPriority {
             UserPriority::Up4 | UserPriority::Up5 => WmmAccessCategory::Video,
             UserPriority::Up6 | UserPriority::Up7 => WmmAccessCategory::Voice,
         }
-    }
-}
-
-/// Valid six-bit IPv4/IPv6 Differentiated Services Code Point.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct Dscp(oer_wire::U8<6>);
-
-impl Dscp {
-    pub const fn new(value: u8) -> Option<Self> {
-        match oer_wire::U8::new(value) {
-            Some(value) => Some(Self(value)),
-            None => None,
-        }
-    }
-
-    pub const fn value(self) -> u8 {
-        self.0.get()
-    }
-
-    /// The codepoint a Differentiated Services field carries.
-    pub const fn from_field(value: oer_wire::U8<6>) -> Self {
-        Self(value)
-    }
-
-    /// The three most significant bits: the Class Selector codepoint.
-    ///
-    /// SOURCE: RFC 2474, 4.2.2 (Class Selector Codepoints).
-    pub const fn class_selector(self) -> u8 {
-        DsField::from_bytes([0]).with_dscp(self.0).class_selector()
-    }
-}
-
-oer_wire::bitfield! {
-    /// IPv4's first octet: version and Internet Header Length.
-    /// SOURCE: RFC 791, 3.1 (Internet Header Format).
-    pub struct Ipv4VersionIhl[1] (little) {
-        pub ihl, with_ihl: u8 = 0..4;
-        pub version, with_version: u8 = 4..8;
-    }
-}
-
-oer_wire::bitfield! {
-    /// Differentiated Services field, also carried by IPv6 Traffic Class.
-    /// SOURCE: RFC 2474, 3 (Differentiated Services Field).
-    pub struct DsField[1] (little) {
-        /// SOURCE: RFC 3168, 5 (Explicit Congestion Notification in IP).
-        pub ecn, with_ecn: u8 = 0..2;
-        pub dscp, with_dscp: (u8) = 2..8;
-        /// Three DSCP MSBs used by the default priority mapping.
-        /// SOURCE: RFC 2474, 4.2.2 (Class Selector Codepoints).
-        pub class_selector, with_class_selector: u8 = 5..8, view;
-    }
-}
-
-oer_wire::bitfield! {
-    /// First two IPv6 header octets, including the complete Traffic Class.
-    /// SOURCE: RFC 8200, 3 (IPv6 Header Format).
-    pub struct Ipv6HeaderPrefix[2] (big) {
-        pub flow_label_high, with_flow_label_high: u8 = 0..4;
-        pub traffic_class, with_traffic_class: u8 = 4..12;
-        pub version, with_version: u8 = 12..16;
-    }
-}
-
-oer_wire::bitfield! {
-    /// VLAN tag control information, including Priority Code Point.
-    /// SOURCE: IEEE Std 802.1Q-2022, 9.6 (Tag Control Information).
-    pub struct VlanTci[2] (big) {
-        pub vid, with_vid: u16 = 0..12;
-        pub dei, with_dei: bool = 12..13;
-        pub pcp, with_pcp: u8 = 13..16;
     }
 }
 

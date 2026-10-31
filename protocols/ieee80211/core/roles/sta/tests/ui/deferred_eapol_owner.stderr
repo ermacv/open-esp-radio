@@ -1,0 +1,33 @@
+error[E0382]: use of moved value: `pending`
+ --> tests/ui/deferred_eapol_owner.rs:7:18
+  |
+4 | pub fn pairwise(pending: PendingM3) {
+  |                 ------- move occurs because `pending` has type `PendingM3`, which does not implement the `Copy` trait
+5 |     let _frame = pending.into_frame();
+  |                          ------------ `pending` moved due to this method call
+6 |     #[cfg(all())]
+7 |     let _again = pending.into_frame(); // ui-error: E0382
+  |                  ^^^^^^^ value used here after move
+  |
+note: `PendingM3::into_frame` takes ownership of the receiver `self`, which moves `pending`
+ --> src/machine/deferred_eapol.rs
+  |
+  |     pub fn into_frame(self) -> oer_ieee80211_core_security_rsn::OwnedEapolFrame {
+  |                       ^^^^
+
+error[E0382]: use of moved value: `pending`
+  --> tests/ui/deferred_eapol_owner.rs:13:18
+   |
+10 | pub fn group(pending: PendingGroupM1) {
+   |              ------- move occurs because `pending` has type `PendingGroupM1`, which does not implement the `Copy` trait
+11 |     let _frame = pending.into_frame();
+   |                          ------------ `pending` moved due to this method call
+12 |     #[cfg(all())]
+13 |     let _again = pending.into_frame(); // ui-error: E0382
+   |                  ^^^^^^^ value used here after move
+   |
+note: `PendingGroupM1::into_frame` takes ownership of the receiver `self`, which moves `pending`
+  --> src/machine/deferred_eapol.rs
+   |
+   |     pub fn into_frame(self) -> oer_ieee80211_core_security_rsn::OwnedEapolFrame {
+   |                       ^^^^

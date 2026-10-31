@@ -17,7 +17,7 @@
 //!   current schedule record; its terminal adapts the control.
 //!
 //! A record is four `(rate, count)` pairs, so each plan holds at most
-//! four stages ([`oer_ieee80211_port::RETRY_STAGES`]); once the ladder has no further rate,
+//! four stages ([`oer_ieee80211_contracts_port::RETRY_STAGES`]); once the ladder has no further rate,
 //! the remaining transmissions keep the last one, as the vendor's retry
 //! state does.
 //!
@@ -30,11 +30,11 @@ use crate::rate_record::RateScheduleRef;
 use core::marker::PhantomData;
 use core::num::NonZeroU8;
 
-use oer_ieee80211_port::{
+use oer_ieee80211_contracts_port::{
     AckSnr, Band, Ieee80211Capabilities, Protection, RateSample, RetryPlan, RetryStage,
     SignalMetadata, SingleOutcome,
 };
-use oer_ieee80211_upper_mac::{
+use oer_ieee80211_core_upper_mac::{
     rate_control::{MpduOutcome, RateControl, RatePeer},
     rate_selection::{FrameRates, RateSelection},
 };
@@ -57,7 +57,7 @@ use crate::{
 ///
 /// ```compile_fail,E0080
 /// # use oer_espressif_ieee80211_policy::rate_selection::EspressifRateSelection;
-/// # use oer_ieee80211_port::*;
+/// # use oer_ieee80211_contracts_port::*;
 /// # use oer_ieee80211_wire::phy::{HeMcs, HtMcs};
 /// # const fn caps(bands: BandSet) -> LowerMacCapabilities {
 /// #     LowerMacCapabilities {
@@ -88,7 +88,7 @@ use crate::{
 ///
 /// ```
 /// # use oer_espressif_ieee80211_policy::rate_selection::EspressifRateSelection;
-/// # use oer_ieee80211_port::*;
+/// # use oer_ieee80211_contracts_port::*;
 /// # use oer_ieee80211_wire::phy::{HeMcs, HtMcs};
 /// # const fn caps(bands: BandSet) -> LowerMacCapabilities {
 /// #     LowerMacCapabilities {
@@ -238,8 +238,8 @@ fn control_plan(
 ///
 /// ```compile_fail,E0277
 /// # use oer_espressif_ieee80211_policy::rate_selection::EspressifRateSelection;
-/// # use oer_ieee80211_port::*;
-/// # use oer_ieee80211_upper_mac::rate_selection::RateSelection;
+/// # use oer_ieee80211_contracts_port::*;
+/// # use oer_ieee80211_core_upper_mac::rate_selection::RateSelection;
 /// # struct Caps;
 /// # impl Ieee80211Capabilities for Caps { type SppScope = oer_ieee80211_wire::security::spp::Association; const CAPS: LowerMacCapabilities = PORT; }
 /// # const PORT: LowerMacCapabilities = LowerMacCapabilities {
@@ -269,8 +269,8 @@ fn control_plan(
 ///
 /// ```
 /// # use oer_espressif_ieee80211_policy::rate_selection::EspressifRateSelection;
-/// # use oer_ieee80211_port::*;
-/// # use oer_ieee80211_upper_mac::rate_selection::RateSelection;
+/// # use oer_ieee80211_contracts_port::*;
+/// # use oer_ieee80211_core_upper_mac::rate_selection::RateSelection;
 /// # struct Caps;
 /// # impl Ieee80211Capabilities for Caps { type SppScope = oer_ieee80211_wire::security::spp::Association; const CAPS: LowerMacCapabilities = PORT; }
 /// # const PORT: LowerMacCapabilities = LowerMacCapabilities {
@@ -317,7 +317,7 @@ fn control_plan(
 impl<K: Ieee80211Capabilities, M: SignalMetadata, A: AckSnr> RateSelection<M, A>
     for EspressifRateSelection<K>
 {
-    fn packet_number_step(&self) -> oer_ieee80211_upper_mac::ccmp::CcmpPacketNumberStep {
+    fn packet_number_step(&self) -> oer_ieee80211_core_upper_mac::ccmp::CcmpPacketNumberStep {
         crate::ccmp::TX_PACKET_NUMBER_STEP
     }
 

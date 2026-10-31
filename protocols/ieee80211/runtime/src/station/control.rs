@@ -9,9 +9,10 @@ use core::{
     task::{Context, Poll},
 };
 use embassy_futures::select::{Either, select};
-use oer_ieee80211_sta::data::{EthernetFrame, TxMsdu};
+use oer_bridges_ieee80211_ethernet::qos::classify_wmm;
+use oer_ieee80211_core_roles_sta::data::{EthernetFrame, TxMsdu};
 use oer_memory::{WakingSpscReceiver, WakingSpscSender};
-use oer_network::{LinkSnapshot, LinkState, NetDevice, TransmitError, TransmitRefused};
+use oer_network_port::{LinkSnapshot, LinkState, NetDevice, TransmitError, TransmitRefused};
 use oer_sync::PriorityWaker;
 use oer_time::connected_tasks::{
     ConnectedTaskControlError, ConnectedTaskControlResources, ConnectedTaskController,
@@ -395,7 +396,7 @@ impl<const TX: usize, const RX: usize> NetDevice for Device<'_, TX, RX> {
         }
         core::pin::pin!(self.transmit.ready()).poll(cx).map(|_| ())
     }
-    fn try_transmit<F: oer_network::EthernetFrame>(
+    fn try_transmit<F: oer_network_port::EthernetFrame>(
         &mut self,
         frame: F,
     ) -> Result<(), TransmitRefused<F>> {
@@ -406,9 +407,14 @@ impl<const TX: usize, const RX: usize> NetDevice for Device<'_, TX, RX> {
                 .view()
                 .map_err(TransmitError::InvalidLength)
                 .and_then(|view| {
-                    TxMsdu::from_network(view)
+                    // The frame requests a priority from its VLAN or IP
+                    // marking; the station decides the final one.
+                    let requested = classify_wmm(view.ether_type, view.payload);
+                    TxMsdu::from_network(view, requested.user_priority)
                         .map_err(|_| {
-                            TransmitError::InvalidLength(oer_network::FrameLengthError::TooLong)
+                            TransmitError::InvalidLength(
+                                oer_network_port::FrameLengthError::TooLong,
+                            )
                         })
                         .and_then(|packet| {
                             self.transmit
