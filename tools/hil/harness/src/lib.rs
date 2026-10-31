@@ -33,6 +33,7 @@ mod run;
 mod stand;
 
 pub use finish::Cleanup;
+pub use oer_lab_client::protocol::RouterOperation;
 pub use run::{Outcome, Verdict};
 
 /// What a scenario needs from the stand and the device.
@@ -45,6 +46,9 @@ pub struct Scenario {
     /// shared. An image's radio works only on its command, so a scenario
     /// that never commands one leases the board alone.
     pub(crate) air: bool,
+    /// Whether its cases use the lab router ([`Cx::router`]): its lease
+    /// then holds the router and the air, shared.
+    pub(crate) router: bool,
 }
 
 impl Scenario {
@@ -61,12 +65,21 @@ impl Scenario {
             image,
             services,
             air: false,
+            router: false,
         }
     }
 
     /// This scenario, whose cases turn a radio on.
     pub const fn using_air(self) -> Self {
         Self { air: true, ..self }
+    }
+
+    /// This scenario, whose cases use the lab router.
+    pub const fn using_router(self) -> Self {
+        Self {
+            router: true,
+            ..self
+        }
     }
 
     pub const fn name(&self) -> &'static str {
@@ -216,6 +229,15 @@ impl<'a> Cx<'a> {
     /// What the link observed of the wire.
     pub fn health(&self) -> Result<Health, Failure> {
         Ok(self.link()?.health())
+    }
+
+    /// Run `request` on the lab router under the run's lease (a scenario
+    /// [`Scenario::using_router`]): its result as the operation returns it.
+    /// A router that does not answer leaves the case incomplete.
+    pub fn router(&self, request: RouterOperation) -> Result<serde_json::Value, Failure> {
+        self.dut
+            .router(request)
+            .map_err(|error| Failure::Incomplete(format!("the lab router: {error}")))
     }
 
     /// Reset the device under test through its board and continue on the
