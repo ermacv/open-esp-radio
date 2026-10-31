@@ -9,7 +9,7 @@ use oer_ieee80211_contracts_port::{
 };
 use oer_ieee80211_contracts_security::Ccmp128Key;
 use oer_ieee80211_core_upper_mac::ccmp::{
-    CcmpPacketNumberStep, InstalledCcmpTxKey, install_ccmp_pairwise_key,
+    CcmpPacketNumberStep, InstalledCcmpTxKey, PendingCcmpTxKey, request_ccmp_pairwise_key,
 };
 use oer_ieee80211_wire::address::IndividualAddress;
 use oer_radio_port::Slot;
@@ -30,25 +30,44 @@ pub struct StationPairwiseKey<'id, K: KeyTypes<'id>> {
     association: K::Association,
 }
 
+/// A station PTK installation the port accepted, retaining the association
+/// owner until the installation terminal returns the key.
+pub struct PendingStationPairwiseKey<'id, K: KeyTypes<'id>> {
+    key: PendingCcmpTxKey,
+    association: K::Association,
+}
+
+impl<'id, K: KeyTypes<'id>> PendingStationPairwiseKey<'id, K> {
+    /// The installed PTK, from the key its installation terminal returned;
+    /// its MPDUs are numbered from the request's step.
+    pub fn installed(self, key: K::PairwiseKey) -> StationPairwiseKey<'id, K> {
+        StationPairwiseKey {
+            key: self.key.installed(key),
+            association: self.association,
+        }
+    }
+}
+
 impl<'id, K: KeyTypes<'id>> StationPairwiseKey<'id, K> {
-    /// Install the station's PTK for `peer` on the phase's station interface,
-    /// numbering its MPDUs by `step`.
-    pub fn install<'p, P>(
+    /// Request the station's PTK for `peer` on the phase's station
+    /// interface, numbering its MPDUs by `step`. The key exists only once
+    /// the port's installation terminal returns it.
+    pub fn request<'p, P>(
         phase: &mut P,
         association: K::Association,
         slot: <InterfaceKeys<'p, 'id, P> as KeyTypes<'id>>::PairwiseSlot,
         peer: IndividualAddress,
         key: Ccmp128Key,
         step: CcmpPacketNumberStep,
-    ) -> Self
+    ) -> PendingStationPairwiseKey<'id, K>
     where
         'id: 'p,
         P: InterfacePhase<'p, 'id>,
         InterfaceKeys<'p, 'id, P>:
             KeyTypes<'id, Association = K::Association, PairwiseKey = K::PairwiseKey>,
     {
-        Self {
-            key: install_ccmp_pairwise_key(phase, &association, slot, peer, key, step),
+        PendingStationPairwiseKey {
+            key: request_ccmp_pairwise_key(phase, &association, slot, peer, key, step),
             association,
         }
     }

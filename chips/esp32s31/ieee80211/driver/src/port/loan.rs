@@ -96,6 +96,22 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> OwnedPayload<Id, Esp32s31Ba
         match self.impossible {}
     }
 }
+impl<'p, Id: SlotIdentity, R> PairwiseKey<'p, Id, R> {
+    pub(super) fn into_owned(self) -> PairwiseKey<'static, Id, R> {
+        PairwiseKey {
+            identity: self.identity,
+            brand: PhantomData,
+        }
+    }
+}
+impl<Id: SlotIdentity, R> PairwiseKey<'static, Id, R> {
+    pub(super) fn lend<'p>(self) -> PairwiseKey<'p, Id, R> {
+        PairwiseKey {
+            identity: self.identity,
+            brand: PhantomData,
+        }
+    }
+}
 impl<'p, Id: SlotIdentity, R> GroupKey<'p, Id, R> {
     pub(super) fn into_owned(self) -> GroupKey<'static, Id, R> {
         GroupKey {

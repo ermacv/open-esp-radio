@@ -232,8 +232,6 @@ where
     fn remove_group(
         permission: <PortKeys<Id, Self> as KeyTypes<'id>>::GroupPermission,
     ) -> Removal<'id, Id>;
-    fn pairwise_key(identity: RawKeyIdentity)
-    -> <PortKeys<Id, Self> as KeyTypes<'id>>::PairwiseKey;
     fn group_identity(key: <PortKeys<Id, Self> as KeyTypes<'id>>::GroupKey) -> RawKeyIdentity;
 }
 
@@ -280,12 +278,6 @@ macro_rules! role {
                 permission: <PortKeys<Id, Self> as KeyTypes<'id>>::GroupPermission,
             ) -> Removal<'id, Id> {
                 Removal::$group_remove(permission)
-            }
-            fn pairwise_key(identity: RawKeyIdentity) -> PairwiseKey<'id, Id, Self> {
-                PairwiseKey {
-                    identity,
-                    brand: PhantomData,
-                }
             }
             fn group_identity(key: GroupKey<'id, Id, Self>) -> RawKeyIdentity {
                 key.identity

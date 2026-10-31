@@ -401,15 +401,16 @@ impl Work for Numbering {
             gate,
             ..
         } = resources;
-        let key = phase
-            .station()
-            .install_pairwise_key(
-                &station_association,
-                slot,
-                IndividualAddress::new(PEER).unwrap(),
-                Ccmp128Key::new(&[7; 16]),
-            )
-            .into_core_key();
+        let key = installed_station_pairwise(
+            phase,
+            &station_association,
+            slot,
+            IndividualAddress::new(PEER).unwrap(),
+            Ccmp128Key::new(&[7; 16]),
+        )
+        .await
+        .expect("the PTK installation terminal")
+        .into_core_key();
         let key = self.protected.then_some(&key);
         submit(phase, tickets.remove(0), small.remove(0), key);
         let (ticket, buffer) = completion(phase, &mut terminal_access).await;
@@ -617,15 +618,16 @@ impl Work for KeyThenAttempt {
             station_pairwise: [slot, _],
             ..
         } = resources;
-        let key = phase
-            .station()
-            .install_pairwise_key(
-                &station_association,
-                slot,
-                IndividualAddress::new(PEER).unwrap(),
-                Ccmp128Key::new(&[7; 16]),
-            )
-            .into_core_key();
+        let key = installed_station_pairwise(
+            phase,
+            &station_association,
+            slot,
+            IndividualAddress::new(PEER).unwrap(),
+            Ccmp128Key::new(&[7; 16]),
+        )
+        .await
+        .expect("the PTK installation terminal")
+        .into_core_key();
         submit(phase, tickets.remove(0), small.remove(0), Some(&key));
         let mut stream = Stream::default();
         while stream.completions == 0 {
@@ -638,12 +640,62 @@ impl Work for KeyThenAttempt {
 }
 
 #[test]
-fn an_attempt_naming_a_key_goes_after_the_keys_install() {
+fn an_attempt_names_a_key_only_after_its_installation_terminal() {
     let (backend, air) = backend();
     let _port_end = block_on(run_model(backend, Body(KeyThenAttempt)));
     let sent = air.sent();
     assert_eq!(sent.len(), 1);
     assert_eq!(sent[0].key, Some((0, true)));
+}
+
+/// A PTK installation reserves its FIFO terminal behind earlier commands.
+struct ConfigureThenKey(Rc<Cell<bool>>);
+
+impl Work for ConfigureThenKey {
+    async fn work<'p, 'id: 'p, Id: SlotIdentity + 'id>(
+        self,
+        phase: &mut ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
+        resources: ModelResources<'id, ModelBackend<Id>>,
+    ) {
+        let station_association = ModelKeys::<ModelBackend<Id>, Station>::begin_association(
+            resources.station_association,
+            oer_ieee80211_wire::security::Spp::NotNegotiated,
+        );
+        let [slot, _] = resources.station_pairwise;
+        phase
+            .station()
+            .configure(resources.station_commands.configure, StationReceive::Off);
+        phase.station().install_pairwise_key(
+            &station_association,
+            slot,
+            IndividualAddress::new(PEER).unwrap(),
+            Ccmp128Key::new(&[7; 16]),
+        );
+        let Ok(Ok(LowerMacEvent::Terminal(LowerMacTerminal::Configured(_)))) =
+            phase.next_event().await
+        else {
+            panic!("the earlier configuration terminal comes first")
+        };
+        let Ok(Ok(LowerMacEvent::Terminal(LowerMacTerminal::PairwiseKeyInstalled(
+            oer_ieee80211_contracts_port::InstalledPairwise::Station(key),
+        )))) = phase.next_event().await
+        else {
+            panic!("the installation terminal returns the key")
+        };
+        assert_eq!(key.slot.index(), 0);
+        self.0.set(true);
+    }
+}
+
+#[test]
+fn a_pairwise_installation_terminal_follows_earlier_fifo_terminals() {
+    let (backend, _) = backend();
+    let installed = Rc::new(Cell::new(false));
+    let _port_end = block_on(run_model(
+        backend,
+        Body(ConfigureThenKey(installed.clone())),
+    ));
+    assert!(installed.get());
 }
 
 struct GroupReplacement<'a> {
@@ -771,15 +823,16 @@ impl Work for KeyAttemptRemoval {
             station_pairwise: [slot, _],
             ..
         } = resources;
-        let key = phase
-            .station()
-            .install_pairwise_key(
-                &station_association,
-                slot,
-                IndividualAddress::new(PEER).unwrap(),
-                Ccmp128Key::new(&[7; 16]),
-            )
-            .into_core_key();
+        let key = installed_station_pairwise(
+            phase,
+            &station_association,
+            slot,
+            IndividualAddress::new(PEER).unwrap(),
+            Ccmp128Key::new(&[7; 16]),
+        )
+        .await
+        .expect("the PTK installation terminal")
+        .into_core_key();
         submit(phase, tickets.remove(0), small.remove(0), Some(&key));
         phase
             .station()
@@ -951,15 +1004,13 @@ impl Work for MaxWork<'_> {
             let group = GroupKeyId::new(1).unwrap();
             let mut keys = 0;
             for slot in station_pairwise {
-                let _installed = phase
-                    .station()
-                    .install_pairwise_key(
-                        &station_association,
-                        slot,
-                        peer,
-                        Ccmp128Key::new(&[1; 16]),
-                    )
-                    .into_core_key();
+                // Queued, not awaited: each terminal is drained below.
+                phase.station().install_pairwise_key(
+                    &station_association,
+                    slot,
+                    peer,
+                    Ccmp128Key::new(&[1; 16]),
+                );
                 keys += 1;
             }
             let [slot, _] = station_group;
@@ -972,15 +1023,13 @@ impl Work for MaxWork<'_> {
             );
             keys += 1;
             for slot in access_point_pairwise {
-                let _installed = phase
-                    .access_point()
-                    .install_pairwise_key(
-                        &access_point_association,
-                        slot,
-                        peer,
-                        Ccmp128Key::new(&[3; 16]),
-                    )
-                    .into_core_key();
+                // Queued, not awaited: each terminal is drained below.
+                phase.access_point().install_pairwise_key(
+                    &access_point_association,
+                    slot,
+                    peer,
+                    Ccmp128Key::new(&[3; 16]),
+                );
                 keys += 1;
             }
             let [slot, _] = access_point_group;
@@ -1075,15 +1124,16 @@ impl Work for AbortHeld<'_> {
             gate,
             ..
         } = resources;
-        let key = phase
-            .station()
-            .install_pairwise_key(
-                &station_association,
-                slot,
-                IndividualAddress::new(PEER).unwrap(),
-                Ccmp128Key::new(&[7; 16]),
-            )
-            .into_core_key();
+        let key = installed_station_pairwise(
+            phase,
+            &station_association,
+            slot,
+            IndividualAddress::new(PEER).unwrap(),
+            Ccmp128Key::new(&[7; 16]),
+        )
+        .await
+        .expect("the PTK installation terminal")
+        .into_core_key();
         self.air.hold(WmmAccessCategory::BestEffort, true);
         submit(phase, tickets.remove(0), large.remove(0), Some(&key));
         for _ in 0..10 {
@@ -1327,15 +1377,16 @@ impl Work for AggregateRetransmission<'_> {
             station_pairwise: [slot, _],
             ..
         } = resources;
-        let key = phase
-            .station()
-            .install_pairwise_key(
-                &station_association,
-                slot,
-                IndividualAddress::new(PEER).unwrap(),
-                Ccmp128Key::new(&[7; 16]),
-            )
-            .into_core_key();
+        let key = installed_station_pairwise(
+            phase,
+            &station_association,
+            slot,
+            IndividualAddress::new(PEER).unwrap(),
+            Ccmp128Key::new(&[7; 16]),
+        )
+        .await
+        .expect("the PTK installation terminal")
+        .into_core_key();
         let ht = oer_ieee80211_wire::phy::HtRate::new(
             HtMcs::new(7).unwrap(),
             oer_ieee80211_wire::phy::PpduBandwidth::Mhz20,
@@ -1482,15 +1533,16 @@ impl Work for TerminalOutcomes<'_> {
             station_pairwise: [slot, _],
             ..
         } = resources;
-        let key = phase
-            .station()
-            .install_pairwise_key(
-                &station_association,
-                slot,
-                IndividualAddress::new(PEER).unwrap(),
-                Ccmp128Key::new(&[7; 16]),
-            )
-            .into_core_key();
+        let key = installed_station_pairwise(
+            phase,
+            &station_association,
+            slot,
+            IndividualAddress::new(PEER).unwrap(),
+            Ccmp128Key::new(&[7; 16]),
+        )
+        .await
+        .expect("the PTK installation terminal")
+        .into_core_key();
         if self.collision {
             self.air.answer(AirAnswer::Collision);
             self.air.answer(AirAnswer::Collision);

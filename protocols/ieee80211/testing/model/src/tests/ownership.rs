@@ -456,19 +456,21 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps, AggregateContext
             )
             .unwrap();
             let rate = phase.rate(PhyRate::Ht(ht)).unwrap();
-            let mut station = phase.station();
             let association = ModelKeys::<ModelBackend<Id, ModelCaps, AggregateContext>, Station>::begin_association(
                 resources.station_association,
                 oer_ieee80211_wire::security::Spp::NotNegotiated,
             );
-            let key = station
-                .install_pairwise_key(
-                    &association,
-                    slot,
-                    IndividualAddress::new(PEER).unwrap(),
-                    Ccmp128Key::new(&[7; 16]),
-                )
-                .into_core_key();
+            let key = installed_station_pairwise(
+                &mut phase,
+                &association,
+                slot,
+                IndividualAddress::new(PEER).unwrap(),
+                Ccmp128Key::new(&[7; 16]),
+            )
+            .await
+            .expect("the PTK installation terminal")
+            .into_core_key();
+            let mut station = phase.station();
             key.set_last(self.initial_pn);
             let rate = station.ampdu_rate(rate).ok().unwrap();
             let aggregate = station.aggregate(
@@ -683,15 +685,16 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps, FaultContext>>
         } = resources;
         {
             let mut phase = owner.phase();
-            let key = phase
-                .station()
-                .install_pairwise_key(
-                    &station_association,
-                    slot,
-                    IndividualAddress::new(PEER).unwrap(),
-                    Ccmp128Key::new(&[7; 16]),
-                )
-                .into_core_key();
+            let key = installed_station_pairwise(
+                &mut phase,
+                &station_association,
+                slot,
+                IndividualAddress::new(PEER).unwrap(),
+                Ccmp128Key::new(&[7; 16]),
+            )
+            .await
+            .expect("the PTK installation terminal")
+            .into_core_key();
             let last = oer_ieee80211_wire::ccmp::CCMP_PACKET_NUMBER_MAX - 10;
             key.set_last(last);
             let ticket = tickets.remove(0);

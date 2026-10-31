@@ -37,6 +37,25 @@ pub(super) enum OwnedInstalledGroup<'o, Id: SlotIdentity> {
         permission: ApPermission<'o, Id>,
     },
 }
+pub(super) enum OwnedInstalledPairwise<'o, Id: SlotIdentity> {
+    Station(PairwiseKey<'o, Id, Station>),
+    AccessPoint(PairwiseKey<'o, Id, AccessPoint>),
+}
+impl<'o, Id: SlotIdentity> OwnedInstalledPairwise<'o, Id> {
+    /// The installed owner of the identity P2 just activated, of its role.
+    pub(super) fn new(role: VifRole, identity: super::keys::RawKeyIdentity) -> Self {
+        match role {
+            VifRole::Station => Self::Station(PairwiseKey {
+                identity,
+                brand: PhantomData,
+            }),
+            VifRole::AccessPoint => Self::AccessPoint(PairwiseKey {
+                identity,
+                brand: PhantomData,
+            }),
+        }
+    }
+}
 pub(super) enum OwnedTsfPermission<'o, Id: SlotIdentity> {
     Station(TsfPermission<'o, Station, Part<Id, 8>>),
     AccessPoint(TsfPermission<'o, AccessPoint, Part<Id, 9>>),
@@ -77,6 +96,7 @@ pub(super) enum OwnedTerminal<'o, Id: SlotIdentity, D: Device<B>, const B: usize
         permission: StaPermission<'o, Id>,
     },
     GroupKeyInstalled(OwnedInstalledGroup<'o, Id>),
+    PairwiseKeyInstalled(OwnedInstalledPairwise<'o, Id>),
 }
 pub(super) enum OwnedEvent<'o, Id: SlotIdentity, D: Device<B>, const B: usize> {
     Terminal(OwnedTerminal<'o, Id, D, B>),
@@ -248,6 +268,12 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> OwnedTerminal<'static, Id, 
                 permission: loan.lend_slot(permission),
             },
             Self::GroupKeyInstalled(g) => LowerMacTerminal::GroupKeyInstalled(g.lend(loan)),
+            Self::PairwiseKeyInstalled(OwnedInstalledPairwise::Station(key)) => {
+                LowerMacTerminal::PairwiseKeyInstalled(InstalledPairwise::Station(key.lend()))
+            }
+            Self::PairwiseKeyInstalled(OwnedInstalledPairwise::AccessPoint(key)) => {
+                LowerMacTerminal::PairwiseKeyInstalled(InstalledPairwise::AccessPoint(key.lend()))
+            }
         }
     }
     pub(super) fn retain<'p>(
@@ -288,6 +314,12 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> OwnedTerminal<'static, Id, 
             },
             LowerMacTerminal::GroupKeyInstalled(g) => {
                 Self::GroupKeyInstalled(OwnedInstalledGroup::retain(g, loan))
+            }
+            LowerMacTerminal::PairwiseKeyInstalled(InstalledPairwise::Station(key)) => {
+                Self::PairwiseKeyInstalled(OwnedInstalledPairwise::Station(key.into_owned()))
+            }
+            LowerMacTerminal::PairwiseKeyInstalled(InstalledPairwise::AccessPoint(key)) => {
+                Self::PairwiseKeyInstalled(OwnedInstalledPairwise::AccessPoint(key.into_owned()))
             }
         }
     }

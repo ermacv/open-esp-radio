@@ -2,7 +2,8 @@
 
 use super::*;
 use oer_ieee80211_contracts_port::{
-    Configured, InstalledGroup, LowerMacEvent, LowerMacTerminal, Removed, RemovedKey, TxCompleted,
+    Configured, InstalledGroup, InstalledPairwise, LowerMacEvent, LowerMacTerminal, Removed,
+    RemovedKey, TxCompleted,
 };
 
 pub(super) enum OwnedConfigured<'o, B: ModelComposition> {
@@ -45,6 +46,35 @@ pub(super) enum OwnedRemovedKey<'o, B: ModelComposition, R: ModelRole> {
 pub(super) enum OwnedRemoved<'o, B: ModelComposition> {
     Station(OwnedRemovedKey<'o, B, Station>),
     AccessPoint(OwnedRemovedKey<'o, B, AccessPoint>),
+}
+
+pub(super) enum OwnedInstalledPairwise<'o, B: ModelComposition> {
+    Station(ModelPairwiseKey<'o, B, Station>),
+    AccessPoint(ModelPairwiseKey<'o, B, AccessPoint>),
+}
+
+impl<B: ModelComposition> OwnedInstalledPairwise<'static, B> {
+    fn lend<'p>(self, loan: &BodyLoan<'p, B::Identity, B>) -> InstalledPairwise<'p, ModelTypes<B>>
+    where
+        B: 'p,
+    {
+        match self {
+            Self::Station(key) => InstalledPairwise::Station(key.lend(loan)),
+            Self::AccessPoint(key) => InstalledPairwise::AccessPoint(key.lend(loan)),
+        }
+    }
+    fn retain<'p>(
+        key: InstalledPairwise<'p, ModelTypes<B>>,
+        loan: &BodyLoan<'p, B::Identity, B>,
+    ) -> Self
+    where
+        B: 'p,
+    {
+        match key {
+            InstalledPairwise::Station(key) => Self::Station(key.into_owned(loan)),
+            InstalledPairwise::AccessPoint(key) => Self::AccessPoint(key.into_owned(loan)),
+        }
+    }
 }
 
 pub(super) enum OwnedInstalledGroup<'o, B: ModelComposition> {
@@ -110,6 +140,7 @@ pub(super) enum OwnedLowerMacTerminal<'o, B: ModelComposition> {
         permission: StationGroupPermission<'o, B>,
     },
     GroupKeyInstalled(OwnedInstalledGroup<'o, B>),
+    PairwiseKeyInstalled(OwnedInstalledPairwise<'o, B>),
     GroupKeySelected {
         key: ModelGroupKey<'o, B, Station>,
         permission: StationGroupPermission<'o, B>,
@@ -304,6 +335,9 @@ impl<B: ModelComposition> OwnedLowerMacTerminal<'static, B> {
                 permission: loan.lend_slot(permission),
             },
             Self::GroupKeyInstalled(key) => LowerMacTerminal::GroupKeyInstalled(key.lend(loan)),
+            Self::PairwiseKeyInstalled(key) => {
+                LowerMacTerminal::PairwiseKeyInstalled(key.lend(loan))
+            }
         }
     }
     pub(super) fn retain<'p>(
@@ -335,6 +369,9 @@ impl<B: ModelComposition> OwnedLowerMacTerminal<'static, B> {
             },
             LowerMacTerminal::GroupKeyInstalled(key) => {
                 Self::GroupKeyInstalled(OwnedInstalledGroup::retain(key, loan))
+            }
+            LowerMacTerminal::PairwiseKeyInstalled(key) => {
+                Self::PairwiseKeyInstalled(OwnedInstalledPairwise::retain(key, loan))
             }
             LowerMacTerminal::TsfSampled { sample, permission } => Self::TsfSampled {
                 sample,

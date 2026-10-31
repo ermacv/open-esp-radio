@@ -670,6 +670,28 @@ fn port_exhausts_supplied_retry_plan_with_one_terminal() {
     assert_eq!(observed.borrow().backoffs, [8, 24, 56]);
 }
 
+/// Install the station PTK for the BSS and take the key its installation
+/// terminal returns.
+async fn installed_pairwise<'p, 'id: 'p, Id: radio::SlotIdentity + 'id>(
+    phase: &mut Esp32s31Phase<'p, 'id, Id, TestDevice, 512>,
+    association: &<PortKeys<Id, Station> as KeyTypes<'id>>::Association,
+    slot: <PortKeys<Id, Station> as KeyTypes<'id>>::PairwiseSlot,
+    material: u8,
+) -> PairwiseKey<'id, Id, Station> {
+    phase.station().install_pairwise_key(
+        association,
+        slot,
+        IndividualAddress::new(BSSID).expect("peer"),
+        oer_ieee80211_contracts_security::Ccmp128Key::new(&[material; 16]),
+    );
+    match phase.next_event().await {
+        Ok(Ok(LowerMacEvent::Terminal(LowerMacTerminal::PairwiseKeyInstalled(
+            InstalledPairwise::Station(key),
+        )))) => key,
+        _ => panic!("the installation terminal returns the key"),
+    }
+}
+
 fn submit_mpdu<'k, 'p, 'id: 'p + 'k, Id: radio::SlotIdentity + 'id>(
     phase: &mut Esp32s31Phase<'p, 'id, Id, TestDevice, 512>,
     buffer: Buffer<'id, Id, TestDevice, 512>,
@@ -1168,12 +1190,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for Protected {
                 phase.next_event().await,
                 Ok(Ok(LowerMacEvent::Terminal(LowerMacTerminal::Configured(_))))
             ));
-            let key = phase.station().install_pairwise_key(
-                &association,
-                slot,
-                IndividualAddress::new(BSSID).expect("peer"),
-                oer_ieee80211_contracts_security::Ccmp128Key::new(&[9; 16]),
-            );
+            let key = installed_pairwise(&mut phase, &association, slot, 9).await;
             let [buffer, ..] = resources.buffers;
             let [ticket, ..] = resources.tickets;
             submit_mpdu(

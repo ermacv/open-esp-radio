@@ -147,12 +147,16 @@ async fn exercise<'p, 'id: 'p, Id: SlotIdentity + 'id>(
         oer_ieee80211_wire::security::Spp::NotNegotiated,
     );
     let mut slots = resources.station_pairwise.into_iter();
-    let mut key = Some(phase.station().install_pairwise_key(
-        &association,
-        slots.next().ok_or("model key slot")?,
-        IndividualAddress::new([2, 0, 0, 0, 0, 9]).ok_or("model peer")?,
-        Ccmp128Key::new(&[7; 16]),
-    ));
+    let mut key = Some(
+        installed_station_pairwise(
+            phase,
+            &association,
+            slots.next().ok_or("model key slot")?,
+            IndividualAddress::new([2, 0, 0, 0, 0, 9]).ok_or("model peer")?,
+            Ccmp128Key::new(&[7; 16]),
+        )
+        .await?,
+    );
     if body.case == BarrierCase::GateRetry {
         // This is an environment input, independent of either retry budget.
         // The absent receiver never turns into an ACK after a finite script.

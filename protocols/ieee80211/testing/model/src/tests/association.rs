@@ -36,15 +36,16 @@ impl Work for WirePeer {
         let [ptk_slot, unused_pairwise] = resources.station_pairwise;
         let [gtk_slot, unused_group] = resources.station_group;
         let material = core::array::from_fn(|i| i as u8);
-        let key = phase
-            .station()
-            .install_pairwise_key(
-                &association,
-                ptk_slot,
-                IndividualAddress::new(ACCESS_POINT).unwrap(),
-                Ccmp128Key::new(&material),
-            )
-            .into_core_key();
+        let key = installed_station_pairwise(
+            phase,
+            &association,
+            ptk_slot,
+            IndividualAddress::new(ACCESS_POINT).unwrap(),
+            Ccmp128Key::new(&material),
+        )
+        .await
+        .expect("the PTK installation terminal")
+        .into_core_key();
         phase.station().install_group_key(
             &association,
             resources.station_group_permission,
@@ -104,15 +105,16 @@ impl Work for WirePeer {
             ap_spp,
         );
         let [ap_slot, _unused_ap_slot] = resources.access_point_pairwise;
-        let _ap_key = phase
-            .access_point()
-            .install_pairwise_key(
-                &ap_association,
-                ap_slot,
-                IndividualAddress::new(STATION).unwrap(),
-                Ccmp128Key::new(&[0x48; 16]),
-            )
-            .into_core_key();
+        let _ap_key = installed_access_point_pairwise(
+            phase,
+            &ap_association,
+            ap_slot,
+            IndividualAddress::new(STATION).unwrap(),
+            Ccmp128Key::new(&[0x48; 16]),
+        )
+        .await
+        .expect("the PTK installation terminal")
+        .into_core_key();
         key.set_last(0x0102_0304_0505);
         let mut body = alloc::vec![2, 0, 0, 0, 0, 3, 2, 0, 0, 0, 0, 1, 0, 12];
         body.extend_from_slice(b"\xaa\xaa\x03\0\0\0\x08\0test");
@@ -260,15 +262,16 @@ impl Work for WirePeer {
             ModelKeys::<ModelBackend<Id>, Station>::split_vacant::<2>(vacant);
         let next =
             ModelKeys::<ModelBackend<Id>, Station>::begin_association(start, Spp::NotNegotiated);
-        let _next_ptk = phase
-            .station()
-            .install_pairwise_key(
-                &next,
-                pairwise,
-                IndividualAddress::new(ACCESS_POINT).unwrap(),
-                Ccmp128Key::new(&[3; 16]),
-            )
-            .into_core_key();
+        let _next_ptk = installed_station_pairwise(
+            phase,
+            &next,
+            pairwise,
+            IndividualAddress::new(ACCESS_POINT).unwrap(),
+            Ccmp128Key::new(&[3; 16]),
+        )
+        .await
+        .expect("the PTK installation terminal")
+        .into_core_key();
     }
 }
 

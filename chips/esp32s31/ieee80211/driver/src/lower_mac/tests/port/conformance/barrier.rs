@@ -98,12 +98,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for BarrierBody {
             let (start, bank) = resources.station_association.into_parts();
             let ([slot], _) = bank.into_parts();
             let association = start.begin(oer_ieee80211_wire::security::Spp::NotNegotiated);
-            let key = phase.station().install_pairwise_key(
-                &association,
-                slot,
-                IndividualAddress::new(BSSID).expect("peer"),
-                oer_ieee80211_contracts_security::Ccmp128Key::new(&[7; 16]),
-            );
+            let key = installed_pairwise(&mut phase, &association, slot, 7).await;
             let [head, tail, ..] = resources.buffers;
             let [head_ticket, tail_ticket, ..] = resources.tickets;
             let tickets = [head_ticket.index(), tail_ticket.index()];

@@ -708,7 +708,13 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Driver<'id, Id, D, B> 
                     installation,
                     material,
                 } => {
+                    // FIFO behind a bounded group command, this command
+                    // completes within that bound: it waits for nothing.
                     self.install(device, identity, installation, &material)?;
+                    identity.activity.set(identity.serial);
+                    held.terminal(owned::OwnedTerminal::PairwiseKeyInstalled(
+                        owned::OwnedInstalledPairwise::new(identity.role, identity),
+                    ));
                 }
                 Command::Remove { identity, removal } => {
                     if !drained {

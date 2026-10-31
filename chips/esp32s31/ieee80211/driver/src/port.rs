@@ -72,9 +72,11 @@ const INTERFACE_COMMANDS: usize = InterfaceCommandPool::<Station>::COMMAND_CAPAC
     + InterfaceCommandPool::<AccessPoint>::COMMAND_CAPACITY;
 const INTERFACE_TERMINALS: usize = InterfaceCommandPool::<Station>::TERMINAL_CAPACITY
     + InterfaceCommandPool::<AccessPoint>::TERMINAL_CAPACITY;
+// A PTK slot has one installation or removal terminal outstanding: its
+// removal needs the key that only its installation terminal returns.
 pub const TERMINAL_CAPACITY: usize = TX_TICKETS + 16 + 2 + 1 + INTERFACE_TERMINALS;
-// Each PTK may be removed before P2 runs its installation command.
-const COMMANDS: usize = TX_TICKETS + 2 * 16 + 2 + 2 + INTERFACE_COMMANDS;
+// For the same reason, one installation or removal command per PTK slot.
+const COMMANDS: usize = TX_TICKETS + 16 + 2 + 2 + INTERFACE_COMMANDS;
 pub const PUBLICATION_BOUND: Duration = Duration::from_millis(250);
 pub const COMMAND_BOUND: Duration = Duration::from_millis(400);
 /// Response/retirement containment budget. It covers one P2 cleanup step and

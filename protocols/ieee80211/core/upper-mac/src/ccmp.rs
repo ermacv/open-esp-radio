@@ -87,7 +87,7 @@ impl<K> InstalledCcmpTxKey<K> {
 /// Key material whose only owner is software: installing it means moving it
 /// into that owner, as the ESP-NOW peer table owns its peers' local master
 /// keys. A lower-MAC port key is not one; it pairs with its packet numbers
-/// only through [`install_ccmp_pairwise_key`].
+/// only through the [`PendingCcmpTxKey`] of [`request_ccmp_pairwise_key`].
 pub trait SoftwareCcmpKey {}
 
 impl<K: SoftwareCcmpKey> InstalledCcmpTxKey<K> {
@@ -107,22 +107,41 @@ impl<K: SoftwareCcmpKey> InstalledCcmpTxKey<K> {
     }
 }
 
-/// Install new key material and create its PN allocator in the same operation.
+/// Request the installation of new key material. The returned token is the
+/// only way the port key that the installation terminal returns gains its
+/// PN allocator, so each real installation starts exactly one numbering.
 /// This does not accept an already installed backend key or an initial PN.
-pub fn install_ccmp_pairwise_key<'p, 'id: 'p, P>(
+pub fn request_ccmp_pairwise_key<'p, 'id: 'p, P>(
     phase: &mut P,
     association: &<oer_ieee80211_contracts_port::InterfaceKeys<'p, 'id, P> as oer_ieee80211_contracts_port::KeyTypes<'id>>::Association,
     slot: <oer_ieee80211_contracts_port::InterfaceKeys<'p, 'id, P> as oer_ieee80211_contracts_port::KeyTypes<'id>>::PairwiseSlot,
     peer: oer_ieee80211_wire::address::IndividualAddress,
     key: oer_ieee80211_contracts_security::Ccmp128Key,
     step: CcmpPacketNumberStep,
-) -> InstalledCcmpTxKey<<oer_ieee80211_contracts_port::InterfaceKeys<'p, 'id, P> as oer_ieee80211_contracts_port::KeyTypes<'id>>::PairwiseKey>
+) -> PendingCcmpTxKey
 where
     P: oer_ieee80211_contracts_port::InterfacePhase<'p, 'id>,
 {
-    InstalledCcmpTxKey {
-        key: phase.install_pairwise_key(association, slot, peer, key),
-        packet_numbers: CcmpTxPacketNumber::new(step),
+    phase.install_pairwise_key(association, slot, peer, key);
+    PendingCcmpTxKey { step }
+}
+
+/// A pairwise installation the port accepted, until its terminal returns
+/// the installed key.
+#[derive(Debug, Eq, PartialEq)]
+#[must_use = "only the accepted installation's token numbers its key"]
+pub struct PendingCcmpTxKey {
+    step: CcmpPacketNumberStep,
+}
+
+impl PendingCcmpTxKey {
+    /// Pair the key the installation terminal returned with its new PN
+    /// allocator; the token is spent.
+    pub fn installed<K>(self, key: K) -> InstalledCcmpTxKey<K> {
+        InstalledCcmpTxKey {
+            key,
+            packet_numbers: CcmpTxPacketNumber::new(self.step),
+        }
     }
 }
 

@@ -150,12 +150,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for Withdraw {
             let (start, bank) = resources.station_association.into_parts();
             let ([slot], _) = bank.into_parts();
             let station = start.begin(Spp::NotNegotiated);
-            let key = phase.station().install_pairwise_key(
-                &station,
-                slot,
-                IndividualAddress::new(BSSID).expect("peer"),
-                Ccmp128Key::new(&[7; 16]),
-            );
+            let key = installed_pairwise(&mut phase, &station, slot, 7).await;
             let (start, bank) = resources.access_point_association.into_parts();
             let (_, [slot, ..]) = bank.into_parts();
             let ap = start.begin(Spp::NotNegotiated);

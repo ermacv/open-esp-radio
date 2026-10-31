@@ -305,17 +305,19 @@ pub type ModelBlockAckSlot<'id, B> = BlockAckSlot<
 /// The key pool of one role's association domain.
 pub type ModelAssociationPool<R> = AssociationPool<R, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS>;
 
-/// FIFO commands: each ticket, install/remove for every pairwise slot,
+/// FIFO commands: each ticket, an install or remove for every pairwise
+/// slot (a removal needs the key only the installation terminal returns),
 /// one GTK mutation per interface permission, and close/open of the gate.
 /// Configure and TSF each reserve their own FIFO cell and terminal.
 /// Receive agreements remain coalesced settings.
 pub const MODEL_COMMANDS: usize = MODEL_TICKETS
-    + 2 * (2 * MODEL_KEY_SLOTS)
+    + 2 * MODEL_KEY_SLOTS
     + 2
     + 2
     + InterfaceCommandPool::<Station>::COMMAND_CAPACITY
     + InterfaceCommandPool::<AccessPoint>::COMMAND_CAPACITY;
-/// Reserved terminals: tickets, pairwise removals, the two GTK permissions,
+/// Reserved terminals: tickets, a pairwise installation or removal per
+/// slot, the two GTK permissions,
 /// gate closing, two configuration confirmations and the bounded RX owners.
 pub const MODEL_TERMINALS: usize = MODEL_TICKETS
     + 2 * MODEL_KEY_SLOTS
@@ -2336,6 +2338,8 @@ enum Command<'id, B: ModelComposition> {
         spp: oer_ieee80211_wire::security::Spp,
         key: RawKeyIdentity,
         material: Ccmp128Key,
+        /// The installed owner its terminal returns.
+        installed: OwnedInstalledPairwise<'id, B>,
     },
     Group {
         admitted_at: u64,
@@ -2373,6 +2377,9 @@ trait GroupInstallationRole: ModelRole + Sized {
         key: ModelGroupKey<'o, B, Self>,
         permission: Slot<'o, ModelGroupPermission<Self>, Self::GroupPermissionPath<B::Identity>>,
     ) -> OwnedInstalledGroup<'o, B>;
+    fn pairwise_installed<'o, B: ModelComposition>(
+        key: ModelPairwiseKey<'o, B, Self>,
+    ) -> OwnedInstalledPairwise<'o, B>;
 }
 impl GroupInstallationRole for Station {
     fn installation<B: ModelComposition>(
@@ -2385,6 +2392,11 @@ impl GroupInstallationRole for Station {
         permission: StationGroupPermission<'o, B>,
     ) -> OwnedInstalledGroup<'o, B> {
         OwnedInstalledGroup::Station { key, permission }
+    }
+    fn pairwise_installed<'o, B: ModelComposition>(
+        key: ModelPairwiseKey<'o, B, Self>,
+    ) -> OwnedInstalledPairwise<'o, B> {
+        OwnedInstalledPairwise::Station(key)
     }
 }
 impl GroupInstallationRole for AccessPoint {
@@ -2402,6 +2414,11 @@ impl GroupInstallationRole for AccessPoint {
         >,
     ) -> OwnedInstalledGroup<'o, B> {
         OwnedInstalledGroup::AccessPoint { key, permission }
+    }
+    fn pairwise_installed<'o, B: ModelComposition>(
+        key: ModelPairwiseKey<'o, B, Self>,
+    ) -> OwnedInstalledPairwise<'o, B> {
+        OwnedInstalledPairwise::AccessPoint(key)
     }
 }
 
@@ -2819,10 +2836,18 @@ impl<'id, B: ModelComposition> Driver<'id, B> {
                         .waiting
                         .push_back(Work::Aggregate(aggregate));
                 }
-                Command::InstallKey { spp, key, material } => {
+                Command::InstallKey {
+                    spp,
+                    key,
+                    material,
+                    installed,
+                } => {
                     held.air.apply_association(key.0.role, spp);
                     held.air.install_material(&key, material);
                     self.keys.push(key);
+                    held.post(OwnedLowerMacEvent::Terminal(
+                        OwnedLowerMacTerminal::PairwiseKeyInstalled(installed),
+                    ));
                 }
                 Command::Group {
                     admitted_at,
@@ -3691,6 +3716,79 @@ impl<'id, C, B: ModelComposition + 'id> ModelPhase<'_, 'id, C, B> {
     }
 }
 
+/// Install a station PTK and take the key its installation terminal
+/// returns, recycling RX delivered before it.
+pub(crate) async fn installed_station_pairwise<'p, 'id: 'p, C, B: ModelComposition + 'id>(
+    phase: &mut ModelPhase<'p, 'id, C, B>,
+    association: &ModelAssociation<'id, B, Station>,
+    slot: PairwiseKeySlot<
+        'id,
+        Station,
+        MODEL_KEY_SLOTS,
+        MODEL_KEY_SLOTS,
+        <Station as ModelRole>::AssociationPath<B::Identity>,
+    >,
+    peer: IndividualAddress,
+    key: Ccmp128Key,
+) -> Result<ModelPairwiseKey<'id, B, Station>, &'static str>
+where
+    C: Ieee80211Capabilities,
+{
+    phase
+        .station()
+        .install_pairwise_key(association, slot, peer, key);
+    loop {
+        match phase.next_event().await {
+            Ok(Ok(oer_ieee80211_contracts_port::LowerMacEvent::Terminal(
+                oer_ieee80211_contracts_port::LowerMacTerminal::PairwiseKeyInstalled(
+                    oer_ieee80211_contracts_port::InstalledPairwise::Station(key),
+                ),
+            ))) => return Ok(key),
+            Ok(Ok(oer_ieee80211_contracts_port::LowerMacEvent::Received { frame, .. })) => {
+                phase.recycle(frame)
+            }
+            _ => return Err("the station PTK installation terminal"),
+        }
+    }
+}
+
+/// Install an access point PTK and take the key its installation terminal
+/// returns, recycling RX delivered before it.
+#[cfg(test)]
+pub(crate) async fn installed_access_point_pairwise<'p, 'id: 'p, C, B: ModelComposition + 'id>(
+    phase: &mut ModelPhase<'p, 'id, C, B>,
+    association: &ModelAssociation<'id, B, AccessPoint>,
+    slot: PairwiseKeySlot<
+        'id,
+        AccessPoint,
+        MODEL_KEY_SLOTS,
+        MODEL_KEY_SLOTS,
+        <AccessPoint as ModelRole>::AssociationPath<B::Identity>,
+    >,
+    peer: IndividualAddress,
+    key: Ccmp128Key,
+) -> Result<ModelPairwiseKey<'id, B, AccessPoint>, &'static str>
+where
+    C: Ieee80211Capabilities,
+{
+    phase
+        .access_point()
+        .install_pairwise_key(association, slot, peer, key);
+    loop {
+        match phase.next_event().await {
+            Ok(Ok(oer_ieee80211_contracts_port::LowerMacEvent::Terminal(
+                oer_ieee80211_contracts_port::LowerMacTerminal::PairwiseKeyInstalled(
+                    oer_ieee80211_contracts_port::InstalledPairwise::AccessPoint(key),
+                ),
+            ))) => return Ok(key),
+            Ok(Ok(oer_ieee80211_contracts_port::LowerMacEvent::Received { frame, .. })) => {
+                phase.recycle(frame)
+            }
+            _ => return Err("the access point PTK installation terminal"),
+        }
+    }
+}
+
 impl<'id, C, B: ModelComposition + 'id> PortPhase for ModelPhase<'_, 'id, C, B> {
     type Event = oer_ieee80211_contracts_port::LowerMacEvent<'id, ModelTypes<B>>;
     type Fault = ModelFault;
@@ -4212,14 +4310,17 @@ where
         >,
         peer: IndividualAddress,
         key: Ccmp128Key,
-    ) -> ModelPairwiseKey<'id, B, R> {
+    ) {
         let identity = RawKeyIdentity::new(slot.index(), 0, R::ROLE, peer, &self.held.air);
         self.held.command(Command::InstallKey {
             spp: association.owner.spp(),
             material: key,
             key: identity.clone(),
+            installed: R::pairwise_installed(ModelPairwiseKey {
+                identity,
+                slot: slot.into_owned(&self.loan),
+            }),
         });
-        ModelPairwiseKey { identity, slot }
     }
 
     fn install_group_key(

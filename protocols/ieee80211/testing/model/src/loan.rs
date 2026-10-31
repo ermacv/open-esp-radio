@@ -145,6 +145,28 @@ impl<B: ModelComposition> OwnedPayload<B::Identity, B> for ModelSubframes<'stati
         )
     }
 }
+impl<'p, B: ModelComposition, R: ModelRole> ModelPairwiseKey<'p, B, R> {
+    pub(super) fn into_owned(
+        self,
+        loan: &BodyLoan<'p, B::Identity, B>,
+    ) -> ModelPairwiseKey<'static, B, R> {
+        ModelPairwiseKey {
+            identity: self.identity,
+            slot: self.slot.into_owned(loan),
+        }
+    }
+}
+impl<B: ModelComposition, R: ModelRole> ModelPairwiseKey<'static, B, R> {
+    pub(super) fn lend<'p>(
+        self,
+        loan: &BodyLoan<'p, B::Identity, B>,
+    ) -> ModelPairwiseKey<'p, B, R> {
+        ModelPairwiseKey {
+            identity: self.identity,
+            slot: self.slot.lend(loan),
+        }
+    }
+}
 impl<'p, B: ModelComposition, R: ModelRole> ModelGroupKey<'p, B, R> {
     pub(super) fn into_owned(
         self,

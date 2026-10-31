@@ -192,21 +192,21 @@ where
         slot: <PortKeys<Id, R> as KeyTypes<'id>>::PairwiseSlot,
         peer: IndividualAddress,
         key: Ccmp128Key,
-    ) -> <PortKeys<Id, R> as KeyTypes<'id>>::PairwiseKey {
+    ) {
+        // P2 activates the identity after the write and returns the key in
+        // the installation terminal; until then no attempt can name it.
         let identity = R::identity(
             association,
             &slot,
             self.held.serial(),
             &self.held.storage.key_live,
         );
-        identity.activity.set(identity.serial);
         let installation = R::pairwise(association, slot, peer).into_owned(&self.loan);
         self.held.command(driver::Command::Install {
             identity,
             installation,
             material: key,
         });
-        R::pairwise_key(identity)
     }
     fn install_group_key(
         &mut self,

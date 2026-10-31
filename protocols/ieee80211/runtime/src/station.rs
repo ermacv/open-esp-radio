@@ -111,10 +111,11 @@ use core::task::Poll;
 use embassy_futures::yield_now;
 use oer_crypto::KeyUnwrap;
 use oer_ieee80211_contracts_port::{
-    ClassFrame, Ieee80211Capabilities, InstalledGroup, InterfacePhase, KeyTypes, LowerMacBackend,
-    LowerMacEvent, LowerMacPhase, LowerMacTerminal, PhaseSingleOutcome, PhaseTypes, PoolMpdu,
-    PoolSource, Removed, RemovedKey, RetransmissionPlan, ReturnedMpdu, RxBuffer, StationPhase,
-    SupportedChannel, TxBufferClass, TxBufferPool, TxCompleted, TxMpdu, TxProtection, TxSource,
+    ClassFrame, Ieee80211Capabilities, InstalledGroup, InstalledPairwise, InterfacePhase, KeyTypes,
+    LowerMacBackend, LowerMacEvent, LowerMacPhase, LowerMacTerminal, PhaseSingleOutcome,
+    PhaseTypes, PoolMpdu, PoolSource, Removed, RemovedKey, RetransmissionPlan, ReturnedMpdu,
+    RxBuffer, StationPhase, SupportedChannel, TxBufferClass, TxBufferPool, TxCompleted, TxMpdu,
+    TxProtection, TxSource,
 };
 use oer_ieee80211_core_arbiter::{
     Arbiter, ArbiterAction, ArbiterEnd, ArbiterNotice, NoReservation, RetiredArbiter, RetuneRefused,
@@ -845,6 +846,7 @@ impl<
         if retired._pending.admissions.first().is_some()
             || retired._pending.retune.is_some()
             || retired._pending.group.is_some()
+            || retired._pending.pairwise.is_some()
         {
             return Err(RestartFailed {
                 reason: RestartFailure::PendingTerminal,
@@ -1017,8 +1019,21 @@ struct PendingActions<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id> {
         >,
     >,
     group: Option<PendingGroup<'id, B>>,
+    /// The station's PTK installation, until its terminal returns the key.
+    pairwise: Option<PendingPairwise<'id, B>>,
     /// The station's unwrap request, until the key-unwrap slot takes it.
     unwrap: Option<(KeyUnwrapId, StaKeyUnwrapRequest)>,
+}
+
+struct PendingPairwise<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id> {
+    pending: oer_ieee80211_core_roles_sta::machine::PendingPairwiseKey<
+        'id,
+        <B::Types<'id> as PhaseTypes<'id>>::EpochPath,
+    >,
+    key: oer_ieee80211_core_roles_sta::port::PendingStationPairwiseKey<
+        'id,
+        <B::Types<'id> as PhaseTypes<'id>>::StationKeys,
+    >,
 }
 
 struct PendingGroup<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id> {
@@ -1098,6 +1113,7 @@ impl<
                     admissions: Admissions::default(),
                     retune: None,
                     group: None,
+                    pairwise: None,
                     unwrap: None,
                 },
             },
@@ -1151,7 +1167,7 @@ impl<
                     rates: rates,
                     terminal_access: terminal_access,
                     events: events,
-                    pending: PendingActions { receive, commands: credits.into_inner(), admissions: Admissions::default(), retune: None, group: None, unwrap: None },
+                    pending: PendingActions { receive, commands: credits.into_inner(), admissions: Admissions::default(), retune: None, group: None, pairwise: None, unwrap: None },
                 }),
             })
         })
@@ -2438,6 +2454,9 @@ impl<
             LowerMacTerminal::KeyRemoved(Removed::Station(RemovedKey::Pairwise { .. })) => {
                 Some(ControlTerminal::PairwiseRemoval)
             }
+            LowerMacTerminal::PairwiseKeyInstalled(InstalledPairwise::Station(_)) => {
+                Some(ControlTerminal::PairwiseInstall)
+            }
             _ => None,
         };
         if let Some(control) = control {
@@ -2509,9 +2528,35 @@ impl<
             | LowerMacTerminal::GroupKeyInstalled(InstalledGroup::Station { .. })
             | LowerMacTerminal::GroupKeyReplaced { .. }
             | LowerMacTerminal::GroupKeySelected { .. }) => self.group_terminal(now, terminal)?,
+            LowerMacTerminal::PairwiseKeyInstalled(InstalledPairwise::Station(key)) => {
+                // The admission check above proved an outstanding request.
+                let Some(PendingPairwise {
+                    pending,
+                    key: request,
+                }) = self.pending.pairwise.take()
+                else {
+                    return Err(ContractFault::sealed(
+                        BackendContractViolation::UnexpectedTerminal(PendingTerminal::Control(
+                            ControlTerminal::PairwiseInstall,
+                        )),
+                        LowerMacTerminal::PairwiseKeyInstalled(InstalledPairwise::Station(key)),
+                    ));
+                };
+                self.station.input(
+                    now,
+                    StaInput::PairwiseKeyInstalled {
+                        pending,
+                        key: request.installed(key),
+                    },
+                    &mut self.events,
+                );
+            }
             terminal @ (LowerMacTerminal::Configured(
                 oer_ieee80211_contracts_port::Configured::AccessPoint(_),
             )
+            | LowerMacTerminal::PairwiseKeyInstalled(InstalledPairwise::AccessPoint(
+                _,
+            ))
             | LowerMacTerminal::KeyRemoved(Removed::AccessPoint(_))
             | LowerMacTerminal::GroupKeyInstalled(InstalledGroup::AccessPoint {
                 ..
@@ -2972,17 +3017,21 @@ where
             slot,
             peer,
             key,
-        } => StaInput::PairwiseKeyInstalled {
-            pending,
-            key: StationPairwiseKey::install(
+        } => {
+            let key = StationPairwiseKey::request(
                 &mut phase.station(),
                 association,
                 slot,
                 peer,
                 key,
                 rates.packet_number_step(),
-            ),
-        },
+            );
+            pending_actions.pairwise = Some(PendingPairwise { pending, key });
+            pending_actions
+                .admissions
+                .insert(PendingTerminal::Control(ControlTerminal::PairwiseInstall));
+            return Ok(Follow::Nothing);
+        }
         StaAction::InstallGroupKey {
             association,
             pending,
