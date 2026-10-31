@@ -8,6 +8,12 @@ Install signal handlers once at the application boundary. SIGINT, SIGTERM and
 SIGHUP set cancellation; new work is rejected and existing waits terminate their
 owned process group. `check_cancelled` and `sleep` integrate non-process loops.
 
+A child that needs the terminal (`foreground::Child`) stays in its parent's
+process group, the terminal's foreground job: it reads the terminal, and
+while it runs Ctrl-C is its own, so SIGINT cancels nothing in the parent;
+SIGTERM and SIGHUP still do. `terminate` stops the child alone (SIGTERM,
+then SIGKILL after a grace); what it started is its own to end.
+
 An owner that dies without that cleanup (SIGKILL, an abort) does not leave its
 children running: the first owned spawn forks a small guardian process that
 tracks every owned process group through a close-on-exec pipe, and when the

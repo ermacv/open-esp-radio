@@ -50,13 +50,17 @@ pub(crate) enum Ended {
 /// Run `argv` as this command's child under `client`'s lease: it gets the
 /// lease's token and `owner`, so the stand tools it runs join the lease
 /// instead of queueing. It is stopped when the service ends the lease or
-/// this command is cancelled.
+/// this command is cancelled. On a terminal it is the terminal's foreground
+/// job with this command: it reads the terminal and Ctrl-C is its own
+/// (`oer_os_process::foreground`). Otherwise it owns a process group, and
+/// stopping it stops what it started.
 pub(crate) fn command(
     client: &Client,
     ctx: &oer_os_process::Checkout,
     argv: &[std::ffi::OsString],
     owner: &str,
 ) -> Result<Ended> {
+    use std::io::IsTerminal as _;
     let (program, arguments) = argv.split_first().ok_or("the command is empty")?;
     let mut command = ctx.command(program);
     command
@@ -66,10 +70,14 @@ pub(crate) fn command(
             oer_lab_client::protocol::LEASE_ENV,
             client.token().ok_or("the lease has no token")?,
         );
-    let mut child = oer_os_process::owned::Child::spawn_with_shutdown_grace(
-        &mut command,
-        std::time::Duration::from_secs(5),
-    )?;
+    let mut child = if std::io::stdin().is_terminal() {
+        Child::Foreground(oer_os_process::foreground::Child::spawn(&mut command)?)
+    } else {
+        Child::Owned(oer_os_process::owned::Child::spawn_with_shutdown_grace(
+            &mut command,
+            GRACE,
+        )?)
+    };
     loop {
         if let Some(status) = child.try_wait()? {
             return Ok(Ended::Exited(
@@ -77,15 +85,44 @@ pub(crate) fn command(
                 status.success(),
             ));
         }
-        if let Some(reason) = client.revoked() {
-            child.kill()?;
-            return Ok(Ended::Revoked(reason));
+        let ended = match client.revoked() {
+            Some(reason) => Ended::Revoked(reason),
+            None if oer_os_process::cancellation_requested() => Ended::Cancelled,
+            None => {
+                std::thread::sleep(std::time::Duration::from_millis(200));
+                continue;
+            }
+        };
+        child.stop()?;
+        return Ok(ended);
+    }
+}
+
+/// How long a stopped command has to end before it is killed.
+const GRACE: std::time::Duration = std::time::Duration::from_secs(5);
+
+/// A command run under a lease.
+enum Child {
+    Foreground(oer_os_process::foreground::Child),
+    Owned(oer_os_process::owned::Child),
+}
+
+impl Child {
+    fn try_wait(&mut self) -> std::io::Result<Option<std::process::ExitStatus>> {
+        match self {
+            Self::Foreground(child) => child.try_wait(),
+            Self::Owned(child) => child.try_wait(),
         }
-        if oer_os_process::cancellation_requested() {
-            child.kill()?;
-            return Ok(Ended::Cancelled);
+    }
+
+    fn stop(&mut self) -> Result<()> {
+        match self {
+            Self::Foreground(child) => {
+                child.terminate(GRACE)?;
+            }
+            Self::Owned(child) => child.kill()?,
         }
-        std::thread::sleep(std::time::Duration::from_millis(200));
+        Ok(())
     }
 }
 

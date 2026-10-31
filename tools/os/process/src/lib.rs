@@ -10,6 +10,7 @@
 )]
 pub mod child_setup;
 pub mod context;
+pub mod foreground;
 pub mod git;
 #[allow(
     unsafe_code,
@@ -87,7 +88,10 @@ pub fn install_signal_handlers() -> Result<SignalGuard> {
         ])?;
         let handle = signals.handle();
         let worker = std::thread::spawn(move || {
-            for _ in signals.forever() {
+            for signal in signals.forever() {
+                if !foreground::cancels_now(signal) {
+                    continue;
+                }
                 cancellation().store(true, Ordering::Relaxed);
                 notification::notify();
             }
