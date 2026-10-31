@@ -65,6 +65,12 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> Sent<'_, Id, D, B> {
     pub fn body(&self) -> Option<&D::Body> {
         self.mpdu.body.as_ref()
     }
+    /// The encoded MPDU extent as its last publication left it in memory.
+    #[cfg(test)]
+    pub(crate) fn published(&mut self) -> &[u8] {
+        let len = self.mpdu.layout.mpdu_len();
+        self.mpdu.buffer.bytes_mut().get(..len).unwrap_or_default()
+    }
 }
 pub enum AnyBuffer<'id, Id: SlotIdentity, D: Device<B>, const B: usize> {
     Fresh(Buffer<'id, Id, D, B>),

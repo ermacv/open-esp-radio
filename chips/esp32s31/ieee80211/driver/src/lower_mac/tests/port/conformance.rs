@@ -5,6 +5,8 @@
 use super::*;
 use oer_ieee80211_testing_conformance::{Environment, MpduState, outcomes};
 
+mod barrier;
+
 /// One single-MPDU outcome case per fresh installation.
 struct Outcomes;
 
@@ -49,7 +51,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for OutcomeBody {
             panic!("enable")
         };
         let mut resources = resources;
-        let trace = {
+        {
             let mut phase = owner.phase();
             let permission = resources.station_commands.configure.with_context(Tag(42));
             phase.station().configure(
@@ -110,14 +112,13 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for OutcomeBody {
                 publications: 0,
                 outcome: outcomes::Outcome::Single(returned.outcome),
             });
-        };
+        }
         let Ok(owner) = owner
             .disable(&mut |_| core::ops::ControlFlow::Continue(()))
             .await
         else {
             panic!("disable")
         };
-        let () = trace;
         radio::Ended::uninstall(owner, (), ())
     }
 }
@@ -166,7 +167,6 @@ fn the_s31_backend_passes_the_shared_single_mpdu_outcome_suite() {
         passed += 1;
     }
     assert_eq!(passed, 4);
-    let _ = Environment::Model;
 }
 
 #[test]
