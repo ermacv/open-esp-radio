@@ -131,6 +131,7 @@ fn join(cx: &mut Cx<'_>) -> Result<(), Failure> {
         ssid: ssid.clone(),
         passphrase: passphrase.clone(),
         channel,
+        forward_host: None,
     })?;
     let request = Join {
         ssid: heapless::String::try_from(ssid.as_str())

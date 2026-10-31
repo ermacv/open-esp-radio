@@ -94,6 +94,9 @@ ingress_interface = "br-lan"
 monitor_interface = "example-mon"
 phys = ["legacy", "ht20", "ht40", "he20"]
 independent_laptop_monitor = true
+# Its address on the wired network this host reaches it by: a load run
+# checks that the host's route to the station network goes through it.
+lan_address = "192.0.2.2"
 
 [legacy_bss]
 country = "DE"

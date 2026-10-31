@@ -79,6 +79,7 @@ pub(crate) fn run(
             ssid,
             passphrase,
             channel,
+            forward_host,
         } => {
             if !router.channels.contains(channel) {
                 return Err(format!(
@@ -94,6 +95,10 @@ pub(crate) fn run(
                 ssid,
                 passphrase,
             )?;
+            let profile = match forward_host {
+                Some(host) => profile.forwarding_host(*host),
+                None => profile,
+            };
             let applied = oer_lab_router::router::apply(&mut router.ssh, &profile)?;
             json(applied.describe())
         }
@@ -127,7 +132,7 @@ pub(crate) fn run(
         }
         RouterOperation::PrepareNetwork => json(station::network::prepare(&mut router.ssh)?),
         RouterOperation::VerifyNetwork { before } => {
-            station::network::verify(&mut router.ssh, &router.interface, before)?;
+            station::network::verify(&mut router.ssh, &router.interface, before, None)?;
             Ok(serde_json::Value::Null)
         }
         RouterOperation::CaptureEchoes { address, count } => {

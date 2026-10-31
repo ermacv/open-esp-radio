@@ -4,6 +4,8 @@
 #![recursion_limit = "256"]
 #![cfg_attr(target_arch = "riscv32", feature(type_alias_impl_trait))]
 #[cfg(any(target_arch = "riscv32", test))]
+mod load;
+#[cfg(any(target_arch = "riscv32", test))]
 mod requests;
 #[cfg(any(target_arch = "riscv32", test))]
 mod startup;

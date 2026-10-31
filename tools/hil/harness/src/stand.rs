@@ -11,6 +11,7 @@ use std::{
     io::{Read, Write},
     os::unix::net::UnixStream,
     path::Path,
+    path::PathBuf,
     sync::{Mutex, PoisonError},
     time::Duration,
 };
@@ -45,6 +46,9 @@ pub(crate) struct Session {
     link: Option<Link>,
     image_crc32: u32,
     board: StandBoard,
+    /// The checkout the scenario runs in, and the board's stand-file id.
+    root: PathBuf,
+    board_id: String,
 }
 
 impl Session {
@@ -87,7 +91,19 @@ impl Session {
             link: Some(link),
             image_crc32,
             board: stand_board,
+            root,
+            board_id: board.id.clone(),
         })
+    }
+
+    /// The checkout the scenario runs in.
+    pub(crate) fn root(&self) -> &Path {
+        &self.root
+    }
+
+    /// The device under test's stand-file id.
+    pub(crate) fn board_id(&self) -> &str {
+        &self.board_id
     }
 
     /// The link the session opened, for the cases.
@@ -244,14 +260,19 @@ impl finish::Board for StandBoard {
 
 /// What a run of `scenario` on the board with `mac` leases: the board, the
 /// router exclusively when its cases use it (they change its network), and
-/// the air shared when its cases turn a radio on (the router's included).
+/// the air as the scenario uses it, at least shared with the router.
 fn claims(mac: &str, scenario: &Scenario) -> Vec<Claim> {
     let mut claims = vec![Claim::board(mac)];
     if scenario.router {
         claims.push(Claim::exclusive(ROUTER));
     }
-    if scenario.air || scenario.router {
-        claims.push(Claim::shared(AIR));
+    match scenario.air {
+        Some(mode) => claims.push(Claim {
+            resource: AIR.to_owned(),
+            mode,
+        }),
+        None if scenario.router => claims.push(Claim::shared(AIR)),
+        None => {}
     }
     claims
 }
@@ -317,6 +338,14 @@ mod tests {
                 Claim::board(mac),
                 Claim::exclusive(ROUTER),
                 Claim::shared(AIR)
+            ]
+        );
+        assert_eq!(
+            claims(mac, &quiet.using_router().using_air_exclusively()),
+            [
+                Claim::board(mac),
+                Claim::exclusive(ROUTER),
+                Claim::exclusive(AIR)
             ]
         );
     }

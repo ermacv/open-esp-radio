@@ -125,6 +125,9 @@ phys = ["legacy", "ht20", "ht40", "he20"]
 # Uses the laptop's Intel adapter as an independent passive observer while
 # OpenWrt remains the AP. Requires the schema-10 open-radio-net helper.
 independent_laptop_monitor = true
+# Its address on the wired network this host reaches it by: a load run
+# checks that the host's route to the station network goes through it.
+lan_address = "192.0.2.2"
 
 # Optional: the laptop radio may host a non-ERP 802.11b BSS on the router's
 # channel, a real overlapping legacy BSS for protection scenarios.
