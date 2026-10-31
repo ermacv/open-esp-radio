@@ -688,3 +688,235 @@ fn a_rejected_gtk_replacement_restores_the_old_entry_and_quarantines_its_owners(
         Ok(())
     );
 }
+
+/// A station data frame labelled with the material byte it travels under.
+fn labelled(material: u8, released: &Rc<Cell<usize>>) -> TestReceive {
+    let mut bytes = super::super::super::data_frame(STATION);
+    bytes[25] = material;
+    TestReceive {
+        bytes,
+        released: released.clone(),
+    }
+}
+
+/// The receive cut of one GTK mutation: old-key frames captured in each
+/// stage, software queue, interrupt, DMA and hardware, all precede the
+/// terminal; frames captured after it decrypt only under the new material.
+/// The S31 station keeps one physical GTK slot, so InstallBeside and
+/// SelectRetained, which need a second installation, do not apply.
+struct CutBody {
+    case: oer_ieee80211_testing_conformance::group_keys::Case,
+    timer: TestTimer,
+    observed: Rc<RefCell<Observed>>,
+    released: Rc<Cell<usize>>,
+    seen: Rc<RefCell<Option<oer_ieee80211_testing_conformance::group_keys::Trace<Vec<Event>>>>>,
+}
+use oer_ieee80211_testing_conformance::group_keys::{Event, Installation};
+
+/// The protocol-owned replay frontier the harness keeps per installation.
+const FRONTIER: u64 = 7;
+
+impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for CutBody {
+    type Output = ();
+    async fn run<'p, 'id>(
+        self,
+        owner: radio::Owner<'p, 'id, Id, Backend<Id>, radio::Disabled>,
+        resources: Res<'id, Id>,
+    ) -> radio::Ended<Id, Backend<Id>, Self::Output>
+    where
+        Backend<Id>: 'id,
+        Id: 'id,
+        'id: 'p,
+    {
+        use oer_ieee80211_testing_conformance::group_keys::Case;
+        let Ok(mut owner) = owner.enable().await else {
+            panic!("enable")
+        };
+        {
+            let mut phase = owner.phase();
+            phase.station().configure(
+                resources
+                    .station_commands
+                    .configure
+                    .with_context(Tag(9, None)),
+                StationReceive::Bss {
+                    bssid: IndividualAddress::new(BSSID).expect("BSSID"),
+                    filter: SupportedFilter::new(ReceiveFilter::BSS_MEMBER).expect("filter"),
+                },
+            );
+            let Ok(Ok(LowerMacEvent::Terminal(LowerMacTerminal::Configured(_)))) =
+                phase.next_event().await
+            else {
+                panic!("configuration terminal")
+            };
+            let (start, bank) = resources.station_association.into_parts();
+            let (_, [slot]) = bank.into_parts();
+            let association = start.begin(Spp::NotNegotiated);
+            phase.station().install_group_key(
+                &association,
+                resources.station_group_permission,
+                slot,
+                key_id(1),
+                Ccmp128Key::new(&[1; 16]),
+            );
+            let Ok(Ok(LowerMacEvent::Terminal(LowerMacTerminal::GroupKeyInstalled(
+                InstalledGroup::Station { key, permission },
+            )))) = phase.next_event().await
+            else {
+                panic!("the setup installation")
+            };
+            let original = Installation {
+                identity: key.serial() as usize,
+                slot: <PortKeys<Id, Station> as KeyTypes<'id>>::group_slot_identity(&key),
+                counter: FRONTIER,
+            };
+            // Software stage: already in the port's event queue.
+            self.observed
+                .borrow_mut()
+                .received
+                .push_back(labelled(1, &self.released));
+            for _ in 0..4 {
+                barriers::yield_once().await;
+            }
+            assert!(
+                self.observed.borrow().received.is_empty(),
+                "delivered to software"
+            );
+            {
+                let mut observed = self.observed.borrow_mut();
+                // Interrupt stage: captured, its interrupt not yet served.
+                observed.received.push_back(labelled(1, &self.released));
+                // DMA and hardware stages: captured, delivered by the cut.
+                observed.captured.push_back(labelled(1, &self.released));
+                observed.captured.push_back(labelled(1, &self.released));
+            }
+            let writes = self.observed.borrow().key_writes;
+            let admitted_at = self.timer.now();
+            let (current, inactive) = match self.case {
+                Case::Replace => {
+                    phase.station().replace_group_key(
+                        permission,
+                        key,
+                        key_id(2),
+                        Ccmp128Key::new(&[2; 16]),
+                    );
+                    (2, 1)
+                }
+                Case::SelectCurrent => {
+                    phase.station().select_group_key(permission, key);
+                    // No installation is inactive; an unknown material stands in.
+                    (1, 3)
+                }
+                _ => panic!("the S31 station has one GTK slot"),
+            };
+            let mut events = Vec::new();
+            let mut completed_at = admitted_at;
+            let mut continuous = false;
+            let mut inactive_accepted = false;
+            let mut terminal_seen = false;
+            loop {
+                match phase.next_event().await {
+                    Ok(Ok(LowerMacEvent::Received { frame, .. })) => {
+                        let material = frame.bytes()[25];
+                        phase.recycle(frame);
+                        if !terminal_seen {
+                            events.push(if material == 1 {
+                                Event::OldRx
+                            } else {
+                                Event::NewRx
+                            });
+                        } else if material == current {
+                            events.push(Event::NewRx);
+                            break;
+                        } else {
+                            inactive_accepted = true;
+                            events.push(Event::OldRx);
+                        }
+                    }
+                    Ok(Ok(LowerMacEvent::Terminal(terminal))) => {
+                        let (key, _permission) = match terminal {
+                            LowerMacTerminal::GroupKeyReplaced { key, permission }
+                            | LowerMacTerminal::GroupKeySelected { key, permission } => {
+                                (key, permission)
+                            }
+                            _ => panic!("the mutation's terminal"),
+                        };
+                        let identity = key.serial() as usize;
+                        events.push(Event::Terminal(Installation {
+                            identity,
+                            slot: <PortKeys<Id, Station> as KeyTypes<'id>>::group_slot_identity(
+                                &key,
+                            ),
+                            // The harness keeps a retained installation's frontier.
+                            counter: if identity == original.identity {
+                                FRONTIER
+                            } else {
+                                0
+                            },
+                        }));
+                        completed_at = self.timer.now();
+                        continuous = self.observed.borrow().stops == 0;
+                        terminal_seen = true;
+                        let mut observed = self.observed.borrow_mut();
+                        observed
+                            .air
+                            .push_back((labelled(inactive, &self.released), inactive));
+                        observed
+                            .air
+                            .push_back((labelled(current, &self.released), current));
+                    }
+                    _ => panic!("an unexpected cut event"),
+                }
+            }
+            *self.seen.borrow_mut() = Some(oer_ieee80211_testing_conformance::group_keys::Trace {
+                original,
+                submitted_slot: original.slot,
+                timing: Timing {
+                    admitted_at,
+                    completed_at,
+                },
+                events,
+                writes: self.observed.borrow().key_writes - writes,
+                inactive_material_accepted: inactive_accepted,
+                continuous_rx_at_terminal: continuous,
+            });
+        }
+        let Ok(owner) = owner
+            .disable(&mut |_| core::ops::ControlFlow::Continue(()))
+            .await
+        else {
+            panic!("disable")
+        };
+        radio::Ended::uninstall(owner, (), ())
+    }
+}
+
+#[test]
+fn the_s31_receive_cut_brackets_every_captured_stage_around_the_gtk_terminal() {
+    use oer_ieee80211_testing_conformance::group_keys::{Case, verify};
+    for case in [Case::Replace, Case::SelectCurrent] {
+        let (parts, observed, timer) = installed(Vec::new());
+        let seen = Rc::new(RefCell::new(None));
+        let body = CutBody {
+            case,
+            timer,
+            observed: observed.clone(),
+            released: Rc::new(Cell::new(0)),
+            seen: seen.clone(),
+        };
+        assert!(matches!(
+            block_on(run_body(parts, body)),
+            Report::Uninstalled { .. }
+        ));
+        assert_eq!(
+            observed.borrow().undecryptable,
+            1,
+            "the inactive frame was dropped"
+        );
+        let trace = seen.borrow_mut().take().expect("the cut was observed");
+        assert_eq!(
+            verify(case, trace, crate::port::COMMAND_BOUND).map_err(|why| (case, why)),
+            Ok(())
+        );
+    }
+}

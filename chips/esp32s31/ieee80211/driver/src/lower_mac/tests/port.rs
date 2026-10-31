@@ -71,6 +71,16 @@ struct Observed {
     reject_key_writes: usize,
     /// The key table as abandonment found it, before erasing it.
     material_at_abandon: Vec<(u8, [u8; 16])>,
+    /// Frames on air with the material byte they are protected under (0
+    /// for none). Capture decrypts each against the key table at once;
+    /// a frame whose material is not installed is dropped.
+    air: std::collections::VecDeque<(TestReceive, u8)>,
+    /// Air frames capture dropped for their material.
+    undecryptable: usize,
+    /// Frames captured in hardware and DMA, delivered through the RX cut.
+    captured: std::collections::VecDeque<TestReceive>,
+    /// Material writes the key table has seen.
+    key_writes: usize,
     /// The descriptor head of each port buffer, by buffer place.
     buffer_heads: Vec<u32>,
     /// The descriptor head of each publication, in order.
@@ -271,6 +281,25 @@ impl Device<512> for TestDevice {
             return Poll::Ready(Err(fault));
         }
         let mut observed = self.observed.borrow_mut();
+        observed.key_writes = self
+            .hardware
+            .crypto_order
+            .iter()
+            .filter(|operation| matches!(operation, super::CryptoOperation::Install(_)))
+            .count();
+        while let Some((frame, material)) = observed.air.pop_front() {
+            if material == 0
+                || self
+                    .hardware
+                    .key_material
+                    .iter()
+                    .any(|(_, installed)| *installed == [material; 16])
+            {
+                observed.received.push_back(frame);
+            } else {
+                observed.undecryptable += 1;
+            }
+        }
         observed.device_polls += 1;
         suspend_rx_continuation(receive_room, &mut observed.rx_continuation);
         if observed.continuous_rx {
@@ -360,7 +389,14 @@ impl Device<512> for TestDevice {
         if self.observed.borrow().hold_cut {
             return Poll::Pending;
         }
-        Poll::Ready(Ok(None))
+        // The cut drains what hardware, DMA and the pending interrupt
+        // already captured, under the material active at capture.
+        let mut observed = self.observed.borrow_mut();
+        let frame = match observed.captured.pop_front() {
+            Some(frame) => Some(frame),
+            None => observed.received.pop_front(),
+        };
+        Poll::Ready(Ok(frame))
     }
     fn finish_rx_cut(&mut self) -> Result<(), Fault> {
         self.assert_driver_context();

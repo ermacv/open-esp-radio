@@ -112,6 +112,13 @@ impl<Id: SlotIdentity, R> PairwiseKey<'static, Id, R> {
         }
     }
 }
+#[cfg(test)]
+impl<Id: SlotIdentity, R> GroupKey<'_, Id, R> {
+    /// The installation's serial, distinct for every installation.
+    pub(crate) fn serial(&self) -> u64 {
+        self.identity.serial
+    }
+}
 impl<'p, Id: SlotIdentity, R> GroupKey<'p, Id, R> {
     pub(super) fn into_owned(self) -> GroupKey<'static, Id, R> {
         GroupKey {
