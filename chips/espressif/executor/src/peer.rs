@@ -3,17 +3,23 @@
 //! ([`oer_memory::RequestSlot`] in [`InPlace`] mode, which stores no waker)
 //! and the two executors' signals, which carry only readiness.
 //!
-//! The client posts a request into the idle slot ([`PeerClient::post`]): a
-//! successful post creates the obligation of one answer. It then raises the
-//! server executor's signal, which pends that executor through its software
-//! line (`fence w, o`, then the raise). The server's task, woken in its own
-//! executor's context, processes the request in place
+//! The client posts a request with its deadline into the idle slot
+//! ([`PeerClient::post`]): a successful post creates the obligation of one
+//! answer by that deadline, which the client keeps, not the waiting future.
+//! It then raises the server executor's signal, which pends that executor
+//! through its software line (`fence w, o`, then the raise). The server's
+//! task, woken in its own executor's context, processes the request in place
 //! ([`PeerServer::serve`]): the slot is `WORKING` only inside that call,
 //! never visible to the client. It publishes `ANSWERED`, then raises the
 //! client executor's signal. The client takes the answer
-//! ([`PeerClient::answer`]) or, when its `deadline` passes first, a terminal
-//! [`PeerError::Expired`]; the request then stays in the slot, which the
-//! image's record and reset end. No waker crosses harts: each side wakes only
+//! ([`PeerClient::answer`]) only when its clock, read after the take, is
+//! still before the deadline: an answer it returns was published before the
+//! deadline. Otherwise the client ends in the terminal [`PeerError::Expired`]
+//! and stays quarantined: every later post and wait returns it, and an
+//! answer taken at or after the deadline stays in the client, never
+//! returned. A cancelled wait leaves the obligation with the client; the next
+//! wait resumes it with the same deadline. The image's record and reset end
+//! a quarantined client. No waker crosses harts: each side wakes only
 //! through the other executor's signal, which only that executor's handler
 //! services.
 //!
@@ -39,21 +45,51 @@ pub const ANSWERED: u32 = 1;
 /// Why a client got no answer.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PeerError {
-    /// The deadline passed before the answer; the request stays posted.
-    Expired,
+    /// The deadline of the client's posted request passed before its answer
+    /// was taken; the client is quarantined for good.
+    Expired {
+        /// The request's deadline.
+        deadline: Instant,
+    },
+    /// The client waited with no request posted.
+    NotPosted,
     /// The client's signal was polled outside its executor's context.
     Foreign(ForeignContext),
 }
 
-/// The slot still holds an earlier exchange; the new request comes back
-/// untouched.
+/// Why a post was refused; the new request comes back untouched.
 #[derive(Debug, Eq, PartialEq)]
-pub struct Occupied<Req>(pub Req);
+pub enum PostError<Req> {
+    /// The client still waits for the answer of an earlier request.
+    Occupied(Req),
+    /// The client is quarantined after an expired request.
+    Expired {
+        /// The refused request.
+        request: Req,
+        /// The expired request's deadline.
+        deadline: Instant,
+    },
+}
+
+/// The client's obligation.
+enum Obligation<Req> {
+    /// No request is posted.
+    Idle,
+    /// A request is posted, due by this deadline.
+    Posted(Instant),
+    /// A request was not answered by its deadline: terminal. An answer
+    /// taken at or after the deadline stays here.
+    Expired {
+        deadline: Instant,
+        _late: Option<Req>,
+    },
+}
 
 /// The requesting side, on the client executor `C`'s hart.
 #[must_use = "dropping the client retains the slot's seat"]
 pub struct PeerClient<Req: 'static, S: SignalExecutor, C: SignalExecutor> {
     client: InPlaceClient<Req>,
+    obligation: Obligation<Req>,
     request: &'static IrqSignal<S>,
     reply: &'static IrqSignal<C>,
 }
@@ -78,6 +114,7 @@ pub fn pair<Req, S: SignalExecutor, C: SignalExecutor>(
     Some((
         PeerClient {
             client,
+            obligation: Obligation::Idle,
             request,
             reply,
         },
@@ -90,31 +127,46 @@ pub fn pair<Req, S: SignalExecutor, C: SignalExecutor>(
 }
 
 impl<Req, S: SignalExecutor, C: SignalExecutor> PeerClient<Req, S, C> {
-    /// Post `request` into the idle slot and pend the server: the obligation
-    /// of one answer starts here.
+    /// Post `request` into the idle slot, due by `deadline`, and pend the
+    /// server: the obligation of one answer by that deadline starts here
+    /// and stays with the client until the answer or the expiry.
     ///
     /// # Errors
     ///
-    /// [`Occupied`] when an earlier exchange is still in the slot.
-    pub fn post(&mut self, request: Req) -> Result<(), Occupied<Req>> {
-        self.client.post(request).map_err(Occupied)?;
+    /// [`PostError::Occupied`] while an earlier request waits for its
+    /// answer; [`PostError::Expired`] once a request expired.
+    pub fn post(&mut self, request: Req, deadline: Instant) -> Result<(), PostError<Req>> {
+        match self.obligation {
+            Obligation::Idle => {}
+            Obligation::Posted(_) => return Err(PostError::Occupied(request)),
+            Obligation::Expired { deadline, .. } => {
+                return Err(PostError::Expired { request, deadline });
+            }
+        }
+        self.client.post(request).map_err(PostError::Occupied)?;
+        self.obligation = Obligation::Posted(deadline);
         let _pended = self.request.raise(POSTED);
         Ok(())
     }
 
-    /// Wait for the answer of the posted request until `deadline` on
-    /// `timer`; the slot is idle again when it returns the answer.
+    /// Wait on `timer` for the answer of the posted request; the slot is
+    /// idle again when it returns the answer. A cancelled wait keeps the
+    /// request and its deadline; the next wait resumes them.
     ///
     /// # Errors
     ///
-    /// [`PeerError::Expired`] when the deadline passes first: the request
-    /// stays in the slot and no later answer is taken. [`PeerError::Foreign`]
-    /// when polled outside the client executor's context.
-    pub async fn answer<T: Timer>(
-        &mut self,
-        timer: &T,
-        deadline: Instant,
-    ) -> Result<Req, PeerError> {
+    /// [`PeerError::Expired`] when `timer` reads the deadline or later
+    /// before an answer is returned, including right after taking it: the
+    /// client keeps that answer and refuses every later post and wait.
+    /// [`PeerError::NotPosted`] with no request posted.
+    /// [`PeerError::Foreign`] when polled outside the client executor's
+    /// context.
+    pub async fn answer<T: Timer>(&mut self, timer: &T) -> Result<Req, PeerError> {
+        let deadline = match self.obligation {
+            Obligation::Idle => return Err(PeerError::NotPosted),
+            Obligation::Posted(deadline) => deadline,
+            Obligation::Expired { deadline, .. } => return Err(PeerError::Expired { deadline }),
+        };
         let mut expiry = pin!(timer.wait_until(deadline));
         poll_fn(|cx| {
             // Register before looking at the slot, so an answer published
@@ -122,13 +174,27 @@ impl<Req, S: SignalExecutor, C: SignalExecutor> PeerClient<Req, S, C> {
             if let Poll::Ready(Err(error)) = self.reply.poll_take(cx) {
                 return Poll::Ready(Err(PeerError::Foreign(error)));
             }
-            if let Some(Ok(answer)) = self.client.try_take_if(|_| Ok::<(), Infallible>(())) {
-                return Poll::Ready(Ok(answer));
+            let taken = match self.client.try_take_if(|_| Ok::<(), Infallible>(())) {
+                Some(Ok(answer)) => Some(answer),
+                Some(Err(never)) => match never {},
+                None => None,
+            };
+            // Read the clock after the take: an answer returned below was
+            // published before the deadline.
+            if timer.now() >= deadline || (taken.is_none() && expiry.as_mut().poll(cx).is_ready()) {
+                self.obligation = Obligation::Expired {
+                    deadline,
+                    _late: taken,
+                };
+                return Poll::Ready(Err(PeerError::Expired { deadline }));
             }
-            if expiry.as_mut().poll(cx).is_ready() {
-                return Poll::Ready(Err(PeerError::Expired));
+            match taken {
+                Some(answer) => {
+                    self.obligation = Obligation::Idle;
+                    Poll::Ready(Ok(answer))
+                }
+                None => Poll::Pending,
             }
-            Poll::Pending
         })
         .await
     }

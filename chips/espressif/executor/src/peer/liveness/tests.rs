@@ -198,4 +198,38 @@ fn every_end_of_supervision_keeps_its_own_reason_and_words() {
         LivenessError::Time(oer_time::TimeOverflow).diagnostic(),
         (FaultReason::LivenessBroken, [3, 0, 0, 0])
     );
+    assert_eq!(
+        LivenessError::NotPosted { sequence: 5 }.diagnostic(),
+        (FaultReason::LivenessBroken, [4, 5, 0, 0])
+    );
+}
+
+#[test]
+fn an_echo_taken_after_the_deadline_is_overdue_and_stays_overdue() {
+    let (request, _) = host::deferred_signal();
+    let (reply, _) = host::signal();
+    let (mut supervisor, mut responder) =
+        pair(slot(), request, reply, PERIOD).expect("a fresh slot");
+    let clock = VirtualClock::<4>::new();
+    let waker = waker();
+    let mut cx = Context::from_waker(&waker);
+    let deadline = clock.deadline_after(PERIOD.deadline()).expect("in range");
+    let overdue = LivenessError::Overdue(Overdue {
+        sequence: 1,
+        deadline,
+        completed: 0,
+    });
+    {
+        let mut round = pin!(supervisor.round(&clock));
+        assert!(round.as_mut().poll(&mut cx).is_pending());
+        // The responder echoes one microsecond past the deadline, before
+        // the supervisor runs again.
+        let _ = clock.advance(Duration::from_micros(PERIOD.deadline().as_micros() + 1));
+        let mut serving = pin!(responder.serve());
+        assert!(serving.as_mut().poll(&mut cx).is_pending());
+        assert_eq!(round.as_mut().poll(&mut cx), Poll::Ready(Err(overdue)));
+    }
+    // Every later round reports the same overdue beat and posts nothing.
+    let mut round = pin!(supervisor.round(&clock));
+    assert_eq!(round.as_mut().poll(&mut cx), Poll::Ready(Err(overdue)));
 }

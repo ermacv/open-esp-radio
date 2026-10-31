@@ -104,9 +104,12 @@ own, and its task wakers stay on its hart. A task on one hart reaches a
 task on another only by raising the other executor's `IrqSignal`, declared
 with a `FromPeerHart` raiser. [`peer`](src/peer.rs) carries one request and
 its answer between two such tasks over an `oer-memory` in-place request
-slot: a successful `post` creates the obligation of one answer; the slot is
-`WORKING` only inside the server's call; the client gets the answer or, at
-its deadline on its own executor's timer, the terminal `PeerError::Expired`.
+slot: a successful `post` creates the obligation of one answer by the
+deadline it names, which the client keeps across cancelled waits; the slot
+is `WORKING` only inside the server's call. The client returns an answer
+only when its own executor's timer, read after taking it, is still before
+the deadline; otherwise it ends in the terminal `PeerError::Expired` and
+stays quarantined: a late answer is never returned and nothing more posts.
 `PeerServer::serve_one` answers one request; work that waits (an AES
 operation on the server's timers) runs between two answers, on what the
 first one handed over, never inside the in-place call.
@@ -115,8 +118,8 @@ first one handed over, never inside the in-place call.
 peer hart: the image declares a static seat, which `liveness::pair` claims
 once, and a never-ending supervisor task that owns it and its executor's
 timer. Every stated `Period` it posts a `Beat`, which the `Responder` task
-echoes within the stated deadline; an unechoed beat ends supervision with
-`LivenessError::Overdue` (its sequence, deadline and completed rounds), which
+echoes within the stated deadline; an echo not taken before the deadline
+ends supervision with `LivenessError::Overdue` (its sequence, deadline and completed rounds), which
 the image records (`LivenessOverdue`) and resets on. A completed round
 proves that the responder's hart runs its executor and polls the responder
 and that both signals cross; it proves nothing about other drivers there.

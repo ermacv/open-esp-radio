@@ -13,7 +13,7 @@ use oer_memory::{InPlace, RequestSlot};
 use oer_time::{Clock as _, Duration};
 use oer_time_virtual::VirtualClock;
 
-use super::{Occupied, PeerError, pair};
+use super::{PeerError, PostError, pair};
 
 /// One request and its answer, exchanged in place.
 #[derive(Debug, Eq, PartialEq)]
@@ -66,14 +66,17 @@ fn a_posted_request_is_answered_in_place_and_wakes_the_client_through_its_signal
     assert_eq!(serving.as_mut().poll(&mut server_cx), Poll::Pending);
 
     assert_eq!(
-        client.post(Square {
-            value: 7,
-            answer: None
-        }),
+        client.post(
+            Square {
+                value: 7,
+                answer: None
+            },
+            deadline
+        ),
         Ok(())
     );
     {
-        let mut answering = pin!(client.answer(&clock, deadline));
+        let mut answering = pin!(client.answer(&clock));
         assert_eq!(answering.as_mut().poll(&mut client_cx), Poll::Pending);
         // The server's executor runs its task: the request is answered and
         // the client's executor is pended, which wakes the client's task.
@@ -89,10 +92,13 @@ fn a_posted_request_is_answered_in_place_and_wakes_the_client_through_its_signal
     }
     // The slot is idle again: the next request posts.
     assert_eq!(
-        client.post(Square {
-            value: 3,
-            answer: None
-        }),
+        client.post(
+            Square {
+                value: 3,
+                answer: None
+            },
+            deadline
+        ),
         Ok(())
     );
 }
@@ -102,19 +108,29 @@ fn a_second_post_before_the_answer_returns_its_request() {
     let (request, _) = host::deferred_signal();
     let (reply, _) = host::deferred_signal();
     let (mut client, _server) = pair(slot(), request, reply).expect("a fresh slot");
+    let clock = VirtualClock::<4>::new();
+    let deadline = clock
+        .deadline_after(Duration::from_millis(10))
+        .expect("in range");
     assert_eq!(
-        client.post(Square {
-            value: 1,
-            answer: None
-        }),
+        client.post(
+            Square {
+                value: 1,
+                answer: None
+            },
+            deadline
+        ),
         Ok(())
     );
     assert_eq!(
-        client.post(Square {
-            value: 2,
-            answer: None
-        }),
-        Err(Occupied(Square {
+        client.post(
+            Square {
+                value: 2,
+                answer: None
+            },
+            deadline
+        ),
+        Err(PostError::Occupied(Square {
             value: 2,
             answer: None
         }))
@@ -133,13 +149,16 @@ fn an_unanswered_request_ends_in_a_terminal_expiry_at_its_deadline() {
     let (wakes, waker) = task();
     let mut cx = Context::from_waker(&waker);
     assert_eq!(
-        client.post(Square {
-            value: 5,
-            answer: None
-        }),
+        client.post(
+            Square {
+                value: 5,
+                answer: None
+            },
+            deadline
+        ),
         Ok(())
     );
-    let mut answering = pin!(client.answer(&clock, deadline));
+    let mut answering = pin!(client.answer(&clock));
     assert_eq!(answering.as_mut().poll(&mut cx), Poll::Pending);
     let _ = clock.advance(Duration::from_millis(9));
     assert_eq!(answering.as_mut().poll(&mut cx), Poll::Pending);
@@ -150,7 +169,7 @@ fn an_unanswered_request_ends_in_a_terminal_expiry_at_its_deadline() {
     );
     assert_eq!(
         answering.as_mut().poll(&mut cx),
-        Poll::Ready(Err(PeerError::Expired))
+        Poll::Ready(Err(PeerError::Expired { deadline }))
     );
 }
 
@@ -175,7 +194,17 @@ fn a_client_polled_outside_its_executor_is_refused() {
         .expect("in range");
     let (_, waker) = task();
     let mut cx = Context::from_waker(&waker);
-    let mut answering = pin!(client.answer(&clock, deadline));
+    assert_eq!(
+        client.post(
+            Square {
+                value: 1,
+                answer: None
+            },
+            deadline
+        ),
+        Ok(())
+    );
+    let mut answering = pin!(client.answer(&clock));
     assert!(matches!(
         answering.as_mut().poll(&mut cx),
         Poll::Ready(Err(PeerError::Foreign(_)))
@@ -199,11 +228,18 @@ fn serving_one_request_keeps_its_callback_across_a_raise_without_a_post() {
         // A raise that announces no post answers nothing.
         assert!(raiser.raise(super::POSTED));
         assert_eq!(serving.as_mut().poll(&mut cx), Poll::Pending);
+        let clock = VirtualClock::<4>::new();
+        let deadline = clock
+            .deadline_after(Duration::from_millis(10))
+            .expect("in range");
         assert_eq!(
-            client.post(Square {
-                value: 6,
-                answer: None
-            }),
+            client.post(
+                Square {
+                    value: 6,
+                    answer: None
+                },
+                deadline
+            ),
             Ok(())
         );
         assert_eq!(serving.as_mut().poll(&mut cx), Poll::Ready(Ok(())));
@@ -215,5 +251,162 @@ fn serving_one_request_keeps_its_callback_across_a_raise_without_a_post() {
             value: 6,
             answer: Some(36)
         }))
+    );
+}
+
+/// A client with one posted request, its server and the request's deadline
+/// 10 ms from the clock's start.
+fn posted(
+    clock: &VirtualClock<4>,
+) -> (
+    super::PeerClient<Square, host::Deferred, host::Host>,
+    super::PeerServer<Square, host::Deferred, host::Host>,
+    oer_time::Instant,
+) {
+    let (request, _) = host::deferred_signal();
+    let (reply, _) = host::signal();
+    let (mut client, server) = pair(slot(), request, reply).expect("a fresh slot");
+    let deadline = clock
+        .deadline_after(Duration::from_millis(10))
+        .expect("in range");
+    assert_eq!(
+        client.post(
+            Square {
+                value: 4,
+                answer: None
+            },
+            deadline
+        ),
+        Ok(())
+    );
+    (client, server, deadline)
+}
+
+#[test]
+fn an_answer_published_after_the_deadline_is_refused() {
+    let clock = VirtualClock::<4>::new();
+    let (mut client, mut server, deadline) = posted(&clock);
+    let (_, waker) = task();
+    let mut cx = Context::from_waker(&waker);
+    // The server answers at 11 ms, before the client's task runs again.
+    let _ = clock.advance(Duration::from_millis(11));
+    {
+        let mut serving = pin!(server.serve_one(square));
+        assert_eq!(serving.as_mut().poll(&mut cx), Poll::Ready(Ok(())));
+    }
+    let mut answering = pin!(client.answer(&clock));
+    assert_eq!(
+        answering.as_mut().poll(&mut cx),
+        Poll::Ready(Err(PeerError::Expired { deadline }))
+    );
+}
+
+#[test]
+fn an_answer_taken_at_the_deadline_is_refused() {
+    let clock = VirtualClock::<4>::new();
+    let (mut client, mut server, deadline) = posted(&clock);
+    let (_, waker) = task();
+    let mut cx = Context::from_waker(&waker);
+    let _ = clock.advance(Duration::from_millis(10));
+    {
+        let mut serving = pin!(server.serve_one(square));
+        assert_eq!(serving.as_mut().poll(&mut cx), Poll::Ready(Ok(())));
+    }
+    let mut answering = pin!(client.answer(&clock));
+    assert_eq!(
+        answering.as_mut().poll(&mut cx),
+        Poll::Ready(Err(PeerError::Expired { deadline }))
+    );
+}
+
+#[test]
+fn an_expired_client_never_returns_the_late_answer_and_posts_nothing() {
+    let clock = VirtualClock::<4>::new();
+    let (mut client, mut server, deadline) = posted(&clock);
+    let (_, waker) = task();
+    let mut cx = Context::from_waker(&waker);
+    let _ = clock.advance(Duration::from_millis(10));
+    {
+        let mut answering = pin!(client.answer(&clock));
+        assert_eq!(
+            answering.as_mut().poll(&mut cx),
+            Poll::Ready(Err(PeerError::Expired { deadline }))
+        );
+    }
+    // The answer arrives late; the quarantined client never returns it.
+    {
+        let mut serving = pin!(server.serve_one(square));
+        assert_eq!(serving.as_mut().poll(&mut cx), Poll::Ready(Ok(())));
+    }
+    for _ in 0..2 {
+        let mut answering = pin!(client.answer(&clock));
+        assert_eq!(
+            answering.as_mut().poll(&mut cx),
+            Poll::Ready(Err(PeerError::Expired { deadline }))
+        );
+    }
+    let later = clock
+        .deadline_after(Duration::from_millis(10))
+        .expect("in range");
+    assert_eq!(
+        client.post(
+            Square {
+                value: 2,
+                answer: None
+            },
+            later
+        ),
+        Err(PostError::Expired {
+            request: Square {
+                value: 2,
+                answer: None
+            },
+            deadline
+        })
+    );
+}
+
+#[test]
+fn a_cancelled_wait_keeps_the_request_and_its_deadline() {
+    let clock = VirtualClock::<4>::new();
+    let (mut client, _server, deadline) = posted(&clock);
+    let (_, waker) = task();
+    let mut cx = Context::from_waker(&waker);
+    {
+        let mut answering = pin!(client.answer(&clock));
+        assert_eq!(answering.as_mut().poll(&mut cx), Poll::Pending);
+    }
+    // The wait was dropped: the request still occupies the client, and the
+    // next wait resumes its deadline.
+    assert!(matches!(
+        client.post(
+            Square {
+                value: 3,
+                answer: None
+            },
+            deadline
+        ),
+        Err(PostError::Occupied(_))
+    ));
+    let _ = clock.advance(Duration::from_millis(10));
+    let mut answering = pin!(client.answer(&clock));
+    assert_eq!(
+        answering.as_mut().poll(&mut cx),
+        Poll::Ready(Err(PeerError::Expired { deadline }))
+    );
+}
+
+#[test]
+fn a_wait_without_a_posted_request_is_refused() {
+    let (request, _) = host::deferred_signal();
+    let (reply, _) = host::signal();
+    let (mut client, _server) = pair(slot(), request, reply).expect("a fresh slot");
+    let clock = VirtualClock::<4>::new();
+    let (_, waker) = task();
+    let mut cx = Context::from_waker(&waker);
+    let mut answering = pin!(client.answer(&clock));
+    assert_eq!(
+        answering.as_mut().poll(&mut cx),
+        Poll::Ready(Err(PeerError::NotPosted))
     );
 }

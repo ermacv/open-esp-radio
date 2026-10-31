@@ -458,23 +458,33 @@ async fn supervise_hart1(supervisor: LivenessSupervisor) {
     panic::reset_fault::<Port>(reason, words)
 }
 
-/// Wait for the answer to the posted request until `deadline` after now;
-/// an expiry records `PeerUnanswered` with the request's `kind` and resets.
-async fn answer<Req>(
+/// Post `request` to hart 1, due [`EXCHANGE_DEADLINE`] from now, and wait
+/// for its answer; a refused post fails the boot as `busy`, and an expiry
+/// records `PeerUnanswered` with the request's `kind` and deadline and
+/// resets.
+async fn ask<Req, const B: usize>(
     client: &mut PeerClient<Req, Hart1Executor, Hart0Executor>,
+    request: Req,
     kind: u32,
+    busy: oer_diagnostics::Name<B>,
 ) -> Req {
     let Ok(deadline) = EmbassyClock.deadline_after(EXCHANGE_DEADLINE) else {
         fail(oer_diagnostics::name!("exchange-deadline"; 32));
     };
-    match client.answer(&EmbassyClock, deadline).await {
+    if client.post(request, deadline).is_err() {
+        fail(busy);
+    }
+    match client.answer(&EmbassyClock).await {
         Ok(reply) => reply,
-        Err(PeerError::Expired) => {
+        Err(PeerError::Expired { deadline }) => {
             let micros = deadline.as_micros();
             panic::reset_fault::<Port>(
                 panic::FaultReason::PeerUnanswered,
                 [kind, micros as u32, (micros >> 32) as u32, 0],
             )
+        }
+        Err(PeerError::NotPosted) => {
+            panic::reset_fault::<Port>(panic::FaultReason::PeerUnanswered, [kind, 0, 0, 1])
         }
         Err(PeerError::Foreign(_)) => {
             panic::reset_fault::<Port>(panic::FaultReason::SignalContext, [0, kind, 0, 0])
@@ -490,42 +500,42 @@ async fn check_hart1(peers: Peers, sequence: u32) {
         mut exchange,
         aes: mut unwrap,
     } = peers;
-    if exchange
-        .post(Exchange {
+    let reply = ask(
+        &mut exchange,
+        Exchange {
             value: REQUEST,
             answer: 0,
             hart: 0,
-        })
-        .is_err()
-    {
-        fail(oer_diagnostics::name!("exchange-busy"; 32));
-    }
-    let reply = answer(&mut exchange, u32::from(REQUEST)).await;
+        },
+        u32::from(REQUEST),
+        oer_diagnostics::name!("exchange-busy"; 32),
+    )
+    .await;
     // The known answer of RFC 3394 §4.1, unwrapped on hart 1.
     let Ok(wrapped) = KeyData::try_copy(&RFC3394_4_1_CIPHERTEXT) else {
         fail(oer_diagnostics::name!("aes-capacity"; 32));
     };
     let request = KeyUnwrapRequest::new(Aes128Key::copy_from(&RFC3394_4_1_KEK), wrapped);
-    if unwrap
-        .post(AesExchange {
+    let _taken = ask(
+        &mut unwrap,
+        AesExchange {
             request: Some(request),
             response: None,
-        })
-        .is_err()
-    {
-        fail(oer_diagnostics::name!("aes-busy"; 32));
-    }
-    let _taken = answer(&mut unwrap, AES_KIND).await;
-    if unwrap
-        .post(AesExchange {
+        },
+        AES_KIND,
+        oer_diagnostics::name!("aes-busy"; 32),
+    )
+    .await;
+    let collected = ask(
+        &mut unwrap,
+        AesExchange {
             request: None,
             response: None,
-        })
-        .is_err()
-    {
-        fail(oer_diagnostics::name!("aes-busy"; 32));
-    }
-    let collected = answer(&mut unwrap, AES_KIND).await;
+        },
+        AES_KIND,
+        oer_diagnostics::name!("aes-busy"; 32),
+    )
+    .await;
     let matched = collected
         .response
         .as_ref()

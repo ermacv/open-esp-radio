@@ -10,12 +10,15 @@
 //! waits for its echo until the round's deadline on the supervisor
 //! executor's timer, and starts the next round one period after this one
 //! started (at once when that has passed). A beat not echoed by its deadline
-//! ends supervision with [`LivenessError::Overdue`]; the beat stays posted,
-//! and the image records it ([`LivenessError::diagnostic`]) and resets.
+//! ends supervision with [`LivenessError::Overdue`]; the supervisor's client
+//! stays quarantined (an echo taken at or after the deadline is never
+//! counted, and every later round reports the same overdue beat), and the
+//! image records it ([`LivenessError::diagnostic`]) and resets.
 //!
 //! What a completed round proves: the responder's hart ran its executor,
 //! the responder's task was polled, and both signals crossed the harts,
-//! within the deadline. It proves nothing about the health of other drivers
+//! before the deadline as the supervisor's clock read it after taking the
+//! echo. It proves nothing about the health of other drivers
 //! or tasks on that hart. When the supervisor's own executor stops, nothing
 //! supervises; the RTC watchdog its executor feeds is then the only bound.
 //! The period and the deadline are the image's stated configuration
@@ -26,7 +29,7 @@ use oer_espressif_staged_runtime::panic::FaultReason;
 use oer_memory::{InPlace, RequestSlot};
 use oer_time::{Duration, Instant, TimeOverflow, Timer};
 
-use super::{PeerClient, PeerError, PeerServer};
+use super::{PeerClient, PeerError, PeerServer, PostError};
 
 /// One round's request: its sequence, which the responder echoes.
 #[derive(Debug, Eq, PartialEq)]
@@ -105,6 +108,11 @@ pub enum LivenessError {
         /// The beat that could not be posted.
         sequence: u32,
     },
+    /// The supervisor waited with no beat posted.
+    NotPosted {
+        /// The beat it waited for.
+        sequence: u32,
+    },
     /// The responder answered with another sequence than the beat's.
     WrongEcho {
         /// The beat's sequence.
@@ -121,7 +129,7 @@ impl LivenessError {
     /// with the beat's sequence, its deadline in microseconds (low, high
     /// word) and the rounds completed before it; `SignalContext` for a
     /// foreign poll; `LivenessBroken` with a kind (1 seat occupied, 2 wrong
-    /// echo, 3 time range), the sequence and the echo.
+    /// echo, 3 time range, 4 no beat posted), the sequence and the echo.
     pub const fn diagnostic(self) -> (FaultReason, [u32; 4]) {
         match self {
             Self::Overdue(Overdue {
@@ -141,6 +149,7 @@ impl LivenessError {
                 (FaultReason::LivenessBroken, [2, sequence, echo, 0])
             }
             Self::Time(TimeOverflow) => (FaultReason::LivenessBroken, [3, 0, 0, 0]),
+            Self::NotPosted { sequence } => (FaultReason::LivenessBroken, [4, sequence, 0, 0]),
         }
     }
 }
@@ -195,19 +204,29 @@ impl<S: SignalExecutor, C: SignalExecutor> Supervisor<S, C> {
         let deadline = posted
             .checked_add(self.period.deadline)
             .ok_or(LivenessError::Time(TimeOverflow))?;
-        self.client
-            .post(Beat { sequence, echo: 0 })
-            .map_err(|_| LivenessError::Occupied { sequence })?;
+        match self.client.post(Beat { sequence, echo: 0 }, deadline) {
+            Ok(()) => {}
+            Err(PostError::Occupied(_)) => return Err(LivenessError::Occupied { sequence }),
+            // The beat that expired earlier stays overdue.
+            Err(PostError::Expired { deadline, .. }) => {
+                return Err(LivenessError::Overdue(Overdue {
+                    sequence: self.sequence,
+                    deadline,
+                    completed: self.completed,
+                }));
+            }
+        }
         self.sequence = sequence;
-        let beat = match self.client.answer(timer, deadline).await {
+        let beat = match self.client.answer(timer).await {
             Ok(beat) => beat,
-            Err(PeerError::Expired) => {
+            Err(PeerError::Expired { deadline }) => {
                 return Err(LivenessError::Overdue(Overdue {
                     sequence,
                     deadline,
                     completed: self.completed,
                 }));
             }
+            Err(PeerError::NotPosted) => return Err(LivenessError::NotPosted { sequence }),
             Err(PeerError::Foreign(error)) => return Err(LivenessError::Foreign(error)),
         };
         if beat.echo != sequence {
