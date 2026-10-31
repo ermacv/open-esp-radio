@@ -46,9 +46,13 @@ fn the_largest_reports_fit_one_response() {
             })
             .collect(),
     };
-    let mut buffer = [0; 512];
+    let mut buffer = [0; 1024];
     assert!(postcard::to_slice(&load, &mut buffer).unwrap().len() <= 256);
     let report = Collected::Report(Report {
+        window_start_us: u64::MAX,
+        window_end_us: u64::MAX,
+        cpu_start: load.clone(),
+        cpu_end: load.clone(),
         received: Received {
             datagrams: u64::MAX,
             highest: Some(u64::MAX),
@@ -63,7 +67,7 @@ fn the_largest_reports_fit_one_response() {
             ..Sent::default()
         },
     });
-    assert!(postcard::to_slice(&report, &mut buffer).unwrap().len() <= 256);
+    assert!(postcard::to_slice(&report, &mut buffer).unwrap().len() <= 512);
 }
 
 #[test]
@@ -72,4 +76,25 @@ fn the_service_names_three_endpoints_and_their_answers_by_distinct_keys() {
     assert_eq!(keys.len(), 6);
     let distinct: std::collections::BTreeSet<_> = keys.iter().collect();
     assert_eq!(distinct.len(), keys.len());
+}
+
+#[test]
+fn a_tally_remembers_every_sequence_of_a_bounded_run() {
+    use tally::{Arrival, Tally};
+    let mut tally = Tally::<4>::default();
+    // The review's counterexample: an old duplicate far behind the highest.
+    assert_eq!(tally.count(0, 10), Arrival::New);
+    assert_eq!(tally.count(128, 10), Arrival::New);
+    assert_eq!(tally.count(0, 10), Arrival::Duplicate);
+    assert_eq!((tally.datagrams, tally.bytes, tally.duplicates), (2, 20, 1));
+    assert_eq!(tally.lost(), 127);
+    assert_eq!(tally.count(5, 10), Arrival::Late);
+    assert_eq!(tally.reordered, 1);
+    assert_eq!(tally.lost(), 126);
+    // Past the capacity: neither distinct nor a duplicate.
+    assert_eq!(Tally::<4>::CAPACITY, 256);
+    assert_eq!(tally.count(256, 10), Arrival::Untracked);
+    assert_eq!(tally.count(256, 10), Arrival::Untracked);
+    assert_eq!((tally.datagrams, tally.untracked), (3, 2));
+    assert_eq!(tally.highest, Some(128));
 }
