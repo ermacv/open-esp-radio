@@ -123,9 +123,21 @@ refused Ethernet owners stay opaque and affine. `Device::new` is the separate
 network wiring constructor. The HIL binding translates only the public contract.
 
 The station runtime owns its optional reconnect policy through the existing
-`oer-time` timer and command-credit admission. Policy requests use correlations
-1 (connect) and 65535 (graceful disconnect); operations draw theirs from
-2^32 upward, and raw producers retain their correlations. `CommandStarted` precedes the core call after credit admission.
+`oer-time` timer. Station requests have one admission: each command kind's
+permission in `State`, which an `Operation`'s request and the policy's
+request both take and which returns at that request's terminal. While
+another request holds it, `connect`/`disconnect`/`scan` wait and the policy
+neither issues nor arms its deadline; no request is posted to be refused
+for a held credit. `ControlCommand` carries only access-point facts and
+Stop, so a control producer cannot post an unadmitted station request; a
+station request without its credit is the `CommandAdmission` service
+fault. Policy requests use correlations 1 (connect) and 65535 (graceful
+disconnect); operations draw theirs from 2^32 upward. A new control epoch
+frees every permission; an operation of the ended epoch reads its retired
+terminal or `ServiceEnded`, and the epoch is refused with
+`ControlCreateError::Unread` while an earlier epoch's retired result of the
+same kind is still unread. `CommandStarted` precedes the core call after
+credit admission.
 Explicit Disconnect pauses the policy and Connect resumes it. Graceful Stop
 has its own wake, admits one disconnect and retires after link-down. The raw
 runtime `Control::stop` still requests immediate cooperative retirement.

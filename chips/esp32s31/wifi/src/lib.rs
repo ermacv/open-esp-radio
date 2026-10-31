@@ -239,10 +239,7 @@ impl Channels {
     }
     pub fn split(
         &mut self,
-    ) -> Result<
-        (Control<'_>, Network<'_>, Connection<'_>),
-        oer_time::connected_tasks::ConnectedTaskControlError,
-    > {
+    ) -> Result<(Control<'_>, Network<'_>, Connection<'_>), runtime::ControlCreateError> {
         let (send, commands) = self.commands.split();
         let (tx, transmit) = self.tx.split();
         let (receive, rx) = self.rx.split();

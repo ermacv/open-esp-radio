@@ -97,8 +97,9 @@ mod reconnect;
 use commands::CommandCredits;
 pub use commands::{CommandRefused, CommandTerminal, Request};
 pub use control::{
-    Control, ControlCreateRefused, ControlError, ControlRefused, Device, Events, Operation,
-    OperationEnd, RunnerControl, State, Status, StatusReader,
+    Control, ControlCommand, ControlCreateError, ControlCreateRefused, ControlError,
+    ControlRefused, Device, Events, Operation, OperationEnd, RunnerControl, State, Status,
+    StatusReader, UnreadOperation,
 };
 pub use reconnect::{ReconnectPolicy, ZeroReconnectInterval};
 
@@ -449,8 +450,6 @@ pub enum ServiceOutput<K> {
     Notice(contract::Notice),
     /// A request refused synchronously, with its original correlation.
     CommandRefused(CommandRefused),
-    /// A raw producer submitted a second request without the first terminal.
-    CommandInFlight(Request),
     /// The unique terminal of one admitted station request.
     CommandCompleted(CommandTerminal),
     /// The arbiter's command to the access point beside the station.
@@ -503,6 +502,9 @@ pub enum BackendContractViolation {
 /// additionally retains the backend's disable failure through `cause()`.
 pub enum ServiceFault<B: StationPort> {
     PolicyDeadlineOverflow,
+    /// A station request arrived while its kind's credit was out: the one
+    /// admission it shares with every request of that kind did not hold it.
+    CommandAdmission(Request),
     /// A checked management request exceeded its retained response domain.
     RxBlockAckCapacity,
     /// A validated receive BA reply could not fit the control frame encoder.
@@ -535,7 +537,9 @@ impl<K, F: FnMut(ServiceOutput<K>)> ServiceOutputSink<K> for F {
 ///
 /// ```compile_fail,E0308
 /// use embassy_sync::{blocking_mutex::raw::NoopRawMutex, channel::Channel};
-/// use oer_ieee80211_runtime::station::{Control, State, ServiceCommand, ServiceIo, ServiceOutput};
+/// use oer_ieee80211_runtime::station::{
+///     Control, ControlCommand, State, ServiceCommand, ServiceIo, ServiceOutput,
+/// };
 /// use oer_ieee80211_core_roles_sta::data::{EthernetFrame, TxMsdu};
 /// use oer_memory::WakingSpscQueue;
 /// let commands = Channel::<NoopRawMutex, ServiceCommand<()>, 1>::new();
@@ -556,7 +560,9 @@ impl<K, F: FnMut(ServiceOutput<K>)> ServiceOutputSink<K> for F {
 /// The composition moves one receiver into the service and retains its sole sender:
 ///
 /// ```
-/// use oer_ieee80211_runtime::station::{Control, State, ServiceCommand, ServiceIo, ServiceOutput};
+/// use oer_ieee80211_runtime::station::{
+///     Control, ControlCommand, State, ServiceCommand, ServiceIo, ServiceOutput,
+/// };
 /// use oer_ieee80211_core_roles_sta::data::{EthernetFrame, TxMsdu};
 /// use oer_memory::WakingSpscQueue;
 /// let mut commands = WakingSpscQueue::<ServiceCommand<()>, 1>::new();
@@ -569,7 +575,7 @@ impl<K, F: FnMut(ServiceOutput<K>)> ServiceOutputSink<K> for F {
 /// let state = State::new();
 /// let (mut application, control) = Control::new(application, &state).unwrap();
 /// let io = ServiceIo { commands, transmit, receive, output: &mut output, control };
-/// assert!(application.try_command(ServiceCommand::Stop).is_ok());
+/// assert!(application.try_command(ControlCommand::Stop).is_ok());
 /// assert!(matches!(io.commands.try_receive(), Some(ServiceCommand::Stop)));
 /// ```
 pub struct ServiceIo<
@@ -1823,7 +1829,13 @@ impl<
                                     io.output.emit(ServiceOutput::CommandRefused(refused));
                                 }
                             }
-                            None => io.output.emit(ServiceOutput::CommandInFlight(command)),
+                            // Each request held its kind's one admission,
+                            // which returns with the credit at its terminal.
+                            None => {
+                                return Served::Failed(
+                                    ServiceFault::CommandAdmission(command).into(),
+                                );
+                            }
                         }
                     }
                     ServiceCommand::AccessPoint(fact) => arbiter.access_point(now, fact.into()),

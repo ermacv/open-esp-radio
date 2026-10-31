@@ -15,6 +15,7 @@ where
 {
     match value {
         ServiceFault::PolicyDeadlineOverflow => StationFailure::PolicyDeadlineOverflow,
+        ServiceFault::CommandAdmission(request) => StationFailure::CommandAdmission(request),
         ServiceFault::RxBlockAckCapacity => StationFailure::RxBlockAckCapacity,
         ServiceFault::RxBlockAckEncode => StationFailure::RxBlockAckEncode,
         ServiceFault::EnableRefused(v) => StationFailure::EnableRefused(backend_fault(v)),

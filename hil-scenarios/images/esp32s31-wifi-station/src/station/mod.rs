@@ -173,11 +173,6 @@ async fn answer_connect(join: RequestIdentity, operation: Option<wifi::Operation
         wifi::OperationEnd::Refused(reason) => {
             answer_join(join, &Joined::Refused(answers::refused(reason)))
         }
-        // Another connect held the station's credit: this one never started.
-        wifi::OperationEnd::CreditHeld => answer_join(
-            join,
-            &Joined::Refused(answers::not_admitted(wifi::ControlError::QueueFull)),
-        ),
         wifi::OperationEnd::ServiceEnded => {}
     }
 }

@@ -1,9 +1,11 @@
 //! Facade-owned failures. Every source variant and observation is retained.
 //! No backend, HAL, STA or RSN type appears in this public vocabulary.
-use oer_ieee80211_runtime::station::{BackendContractViolation, PendingTerminal};
+use oer_ieee80211_runtime::station::{BackendContractViolation, PendingTerminal, Request};
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum StationFailure {
     PolicyDeadlineOverflow,
+    /// A station request arrived without its kind's admission.
+    CommandAdmission(Request),
     RxBlockAckCapacity,
     RxBlockAckEncode,
     EnableRefused(BackendFault),

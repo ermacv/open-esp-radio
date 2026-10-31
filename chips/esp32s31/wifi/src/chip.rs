@@ -258,7 +258,6 @@ pub enum Event {
     Disconnected(runtime::contract::DisconnectReason),
     CommandRefused(runtime::CommandRefused),
     CommandCompleted(runtime::CommandTerminal),
-    CommandInFlight(runtime::Request),
     TxRefused {
         operation: runtime::TxOperation,
         reason: runtime::contract::TransmitRefusal,
@@ -289,7 +288,6 @@ impl<E: Events> runtime::ServiceOutputSink<Caps> for Output<E> {
             }
             runtime::ServiceOutput::CommandRefused(r) => Event::CommandRefused(r),
             runtime::ServiceOutput::CommandCompleted(r) => Event::CommandCompleted(r),
-            runtime::ServiceOutput::CommandInFlight(r) => Event::CommandInFlight(r),
             runtime::ServiceOutput::TxRefused { operation, reason } => {
                 Event::TxRefused { operation, reason }
             }

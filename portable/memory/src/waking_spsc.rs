@@ -77,6 +77,17 @@ impl<T, const DEPTH: usize> WakingSpscSender<'_, T, DEPTH> {
         Ok(())
     }
 
+    /// Reserve one vacant cell now, without waiting or registering a wake;
+    /// `None` while the queue is full. The caller keeps its value until it
+    /// sends through the permit.
+    pub fn try_reserve(&mut self) -> Option<WakingSpscSendPermit<'_, T, DEPTH>> {
+        let permit = self.sender.try_reserve().ok()?;
+        Some(WakingSpscSendPermit {
+            permit,
+            consumer: self.consumer,
+        })
+    }
+
     /// Wait for capacity while retaining the sole producer wake registration.
     /// The returned permit keeps the exclusive sender borrow and publishes
     /// without another capacity check. The caller owns its value until send;

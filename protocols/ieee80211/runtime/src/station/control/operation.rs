@@ -1,12 +1,18 @@
 //! One-shot results of the station's control requests.
 //!
-//! Each command kind has one permission. An admitted request holds it until
-//! the service delivers that request's terminal; the [`Operation`] returned
-//! to the caller only observes the terminal. Dropping the observer detaches
-//! it: the request continues and its terminal still returns the permission,
-//! so the next request of that kind waits for it instead of posting a
-//! duplicate. Requests carry an internal correlation, so a late terminal
-//! belongs only to its own request.
+//! Each command kind has one permission, the only admission of station
+//! requests: an [`Operation`]'s request and the reconnect policy's request
+//! both take it, and a request holds it until the service delivers that
+//! request's terminal. The [`Operation`] returned to the caller only
+//! observes the terminal. Dropping the observer detaches it: the request
+//! continues and its terminal still returns the permission, so the next
+//! request of that kind waits for it instead of posting a duplicate.
+//! Requests carry an internal correlation, so a late terminal belongs only
+//! to its own request.
+//!
+//! A new control epoch frees every permission. The previous epoch's result
+//! that an operation still observes, its terminal or the service's end,
+//! moves to the kind's retired record, where that operation reads it.
 
 use super::super::ServiceOutput;
 use super::super::contract::{Command, CommandOutcome, CommandRefusal};
@@ -25,9 +31,6 @@ pub enum OperationEnd {
     Completed(CommandOutcome),
     /// The station refused the request in its current state.
     Refused(CommandRefusal),
-    /// Another request of this kind, such as a reconnect attempt, held the
-    /// station's credit; this request was not started.
-    CreditHeld,
     /// The service ended without this request's terminal.
     ServiceEnded,
 }
@@ -47,9 +50,11 @@ enum Permission {
 }
 
 /// One command kind's permission and its two waiters: the observer of the
-/// admitted request, and the control waiting to admit the next one.
+/// admitted request, and the control waiting to admit the next one; and the
+/// previous epoch's result its operation has not read.
 pub(super) struct Kind {
     permission: Cell<Permission>,
+    retired: Cell<Option<(u64, OperationEnd)>>,
     observer: PriorityWaker,
     admission: PriorityWaker,
 }
@@ -58,15 +63,30 @@ impl Kind {
     const fn new() -> Self {
         Self {
             permission: Cell::new(Permission::Free),
+            retired: Cell::new(None),
             observer: PriorityWaker::new(),
             admission: PriorityWaker::new(),
         }
     }
-    fn release(&self) {
-        self.permission.set(Permission::Free);
-        self.admission.wake();
+    /// The result an observing operation still has to read when its epoch
+    /// ends: its terminal, or the end of the service that never delivered it.
+    fn unread(&self) -> Option<(u64, OperationEnd)> {
+        match self.permission.get() {
+            Permission::Held {
+                correlation,
+                observed: true,
+            } => Some((correlation, OperationEnd::ServiceEnded)),
+            Permission::Ended { correlation, end } => Some((correlation, end)),
+            _ => None,
+        }
     }
 }
+
+/// A new control epoch was refused: an operation of `0`'s kind from an
+/// earlier epoch still holds the kind's retired result unread, and this
+/// epoch's operation of that kind also ends unread.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct UnreadOperation(pub Command);
 
 /// The permissions of the three command kinds.
 pub(super) struct Operations {
@@ -74,6 +94,8 @@ pub(super) struct Operations {
     disconnect: Kind,
     scan: Kind,
     next: Cell<u64>,
+    /// The runner's reconnect policy waits here for a permission.
+    released: PriorityWaker,
 }
 
 impl Operations {
@@ -83,12 +105,63 @@ impl Operations {
             disconnect: Kind::new(),
             scan: Kind::new(),
             next: Cell::new(FIRST_CORRELATION),
+            released: PriorityWaker::new(),
         }
     }
-    pub(super) fn reset(&self) {
-        for kind in [&self.connect, &self.disconnect, &self.scan] {
-            kind.release();
+    fn kinds(&self) -> [(Command, &Kind); 3] {
+        [
+            (Command::Connect, &self.connect),
+            (Command::Disconnect, &self.disconnect),
+            (Command::BackgroundScan, &self.scan),
+        ]
+    }
+    fn release(&self, kind: &Kind) {
+        kind.permission.set(Permission::Free);
+        kind.admission.wake();
+        self.released.wake();
+    }
+    /// Whether a new epoch can begin without overwriting a retired result
+    /// an earlier epoch's operation has not read.
+    pub(super) fn check_epoch(&self) -> Result<(), UnreadOperation> {
+        for (command, kind) in self.kinds() {
+            if kind.unread().is_some() && kind.retired.get().is_some() {
+                return Err(UnreadOperation(command));
+            }
         }
+        Ok(())
+    }
+    /// Begin a new epoch, after [`Self::check_epoch`]: every permission is
+    /// free, and an unread result of the ended epoch is retired for its
+    /// operation.
+    pub(super) fn begin_epoch(&self) {
+        for (_, kind) in self.kinds() {
+            if let Some(unread) = kind.unread() {
+                kind.retired.set(Some(unread));
+            }
+            self.release(kind);
+            kind.observer.wake();
+        }
+    }
+    /// Whether a request of `command` can be admitted now.
+    pub(super) fn is_free(&self, command: Command) -> bool {
+        self.kind(command).permission.get() == Permission::Free
+    }
+    /// The reconnect policy's request takes the kind's permission, with no
+    /// observer; `false` while another request holds it.
+    pub(super) fn admit_unobserved(&self, command: Command, correlation: u64) -> bool {
+        let kind = self.kind(command);
+        if kind.permission.get() != Permission::Free {
+            return false;
+        }
+        kind.permission.set(Permission::Held {
+            correlation,
+            observed: false,
+        });
+        true
+    }
+    /// Wake `cx` when any permission returns.
+    pub(super) fn register_released(&self, cx: &Context<'_>) {
+        self.released.register(cx.waker());
     }
     pub(super) fn kind(&self, command: Command) -> &Kind {
         match command {
@@ -128,7 +201,6 @@ impl Operations {
             ServiceOutput::CommandRefused(refused) => {
                 (refused.request, OperationEnd::Refused(refused.reason))
             }
-            ServiceOutput::CommandInFlight(request) => (*request, OperationEnd::CreditHeld),
             _ => return,
         };
         let kind = self.kind(request.command());
@@ -143,13 +215,13 @@ impl Operations {
             Permission::Held {
                 correlation,
                 observed: false,
-            } if correlation == request.correlation() => kind.release(),
+            } if correlation == request.correlation() => self.release(kind),
             _ => {}
         }
     }
     /// Wake every waiter after the service ended; each reads its own cause.
     pub(super) fn service_ended(&self) {
-        for kind in [&self.connect, &self.disconnect, &self.scan] {
+        for (_, kind) in self.kinds() {
             kind.observer.wake();
             kind.admission.wake();
         }
@@ -180,6 +252,11 @@ impl<'c> Operation<'c> {
     pub const fn command(&self) -> Command {
         self.command
     }
+    /// The internal correlation of the observed request.
+    #[cfg(test)]
+    pub(crate) const fn correlation(&self) -> u64 {
+        self.correlation
+    }
 }
 
 impl Future for Operation<'_> {
@@ -189,8 +266,17 @@ impl Future for Operation<'_> {
             // A resolved operation never takes a later request's terminal.
             return Poll::Pending;
         }
-        let kind = self.state.operations.kind(self.command);
+        let operations = &self.state.operations;
+        let kind = operations.kind(self.command);
         kind.observer.register(cx.waker());
+        if let Some((correlation, end)) = kind.retired.get()
+            && correlation == self.correlation
+        {
+            // The epoch of this operation ended; its result was retired.
+            kind.retired.set(None);
+            self.resolved = true;
+            return Poll::Ready(end);
+        }
         let end = match kind.permission.get() {
             Permission::Ended { correlation, end } if correlation == self.correlation => end,
             Permission::Held { correlation, .. }
@@ -200,7 +286,7 @@ impl Future for Operation<'_> {
             }
             _ => return Poll::Pending,
         };
-        kind.release();
+        operations.release(kind);
         self.resolved = true;
         Poll::Ready(end)
     }
@@ -211,7 +297,16 @@ impl Drop for Operation<'_> {
         if self.resolved {
             return;
         }
-        let kind = self.state.operations.kind(self.command);
+        let operations = &self.state.operations;
+        let kind = operations.kind(self.command);
+        if kind
+            .retired
+            .get()
+            .is_some_and(|(correlation, _)| correlation == self.correlation)
+        {
+            kind.retired.set(None);
+            return;
+        }
         match kind.permission.get() {
             Permission::Held {
                 correlation,
@@ -223,11 +318,11 @@ impl Drop for Operation<'_> {
                 });
                 // An ended service delivers no later terminal.
                 if self.state.ended() {
-                    kind.release();
+                    operations.release(kind);
                 }
             }
             Permission::Ended { correlation, .. } if correlation == self.correlation => {
-                kind.release()
+                operations.release(kind)
             }
             _ => {}
         }
