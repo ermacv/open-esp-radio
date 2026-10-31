@@ -3,6 +3,7 @@
 use oer_esp32s31_wifi as wifi;
 
 use crate::fatal::Failure;
+use crate::load::parts::{Part, Polled};
 
 /// The image's terminal policy for a station construction error the facade
 /// cannot return.
@@ -37,5 +38,9 @@ wifi::bind_station! {
 }
 
 pub(crate) async fn drive(driver: wifi::Driver<binding::Binding>) {
-    driver.run().await;
+    Polled {
+        part: Part::Driver,
+        future: core::pin::pin!(driver.run()),
+    }
+    .await;
 }

@@ -2,14 +2,16 @@
 //! socket bound to the station's DHCP address.
 //!
 //! The server shares the station work's task (P1). A run receives and
-//! echoes from its start, sends within its window and reads the CPU at the
-//! window's ends; after its drain it closes the socket and keeps its report
-//! until the next run starts. Every answer is published without waiting.
+//! echoes from its start, sends within its window and reads the CPU and the
+//! named parts at the window's ends; after its drain it closes the socket
+//! and keeps its report and parts until the next run starts. Every answer
+//! is published without waiting.
 
 use core::cell::Cell;
 use core::convert::Infallible;
 use core::net::Ipv4Addr;
 use core::pin::pin;
+use core::sync::atomic::Ordering;
 
 use embassy_futures::{
     select::{Either, select},
@@ -23,15 +25,16 @@ use oer_memory::{WakingSpscQueue, WakingSpscReceiver, WakingSpscSender};
 use oer_services_load::header::Header;
 use oer_services_load::tally::Tally;
 use oer_services_load::{
-    Collected, Load, LoadError, Report, Request, Sent, Start, Started, Transmit,
+    Collected, Load, LoadError, Parts, PartsCollected, Report, Request, Sent, Start, Started,
+    Transmit,
 };
 use oer_time::{CLOCK_EPOCH_OFFSET, Instant, Timer as _};
 use static_cell::ConstStaticCell;
 
-use super::action::{Action, Answer, MAX_PAYLOAD, Phase, action};
-use super::cpu;
+use super::action::{Action, Answer, Kept, MAX_PAYLOAD, Phase, action};
 use super::pace::{GRANULARITY_US, MAX_BATCH, Next, Schedule};
 use super::receive::{Datagram, Receiving, classify, echo};
+use super::{cpu, parts};
 use crate::fatal::Failure;
 use crate::station::emit;
 use crate::station::ip::{Device, Interface};
@@ -101,26 +104,31 @@ pub(crate) async fn serve(mut requests: Receiver, network: &Network) -> Infallib
     let tally = TALLY
         .try_take()
         .unwrap_or_else(|| crate::fail(Failure::Storage));
-    let mut kept: Option<(u32, Report)> = None;
+    let mut kept: Option<(u32, Report, Parts)> = None;
     loop {
         let (identity, request) = next(&mut requests).await;
         let phase = Phase::Idle {
-            kept: kept.as_ref().map(|(run, _)| *run),
+            kept: kept.as_ref().map(|(run, _, _)| *run),
         };
         match action(phase, request) {
             Action::Start(start) => match open(network, &start) {
                 Ok(socket) => {
                     emit(identity, &Started::Running);
-                    let report = run(&mut requests, socket, start, tally).await;
-                    kept = Some((start.run, report));
+                    let (report, parts) = run(&mut requests, socket, start, tally).await;
+                    kept = Some((start.run, report, parts));
                 }
                 Err(error) => emit(identity, &Started::Refused(error)),
             },
             Action::Answer(answer) => publish(identity, answer),
             Action::Cpu => emit(identity, &cpu_load().await),
-            Action::Report => match &kept {
-                Some((_, report)) => emit(identity, &Collected::Report(report.clone())),
-                None => emit(identity, &Collected::Refused(LoadError::UnknownRun)),
+            Action::Kept(kind) => match (&kept, kind) {
+                (Some((_, report, _)), Kept::Report) => {
+                    emit(identity, &Collected::Report(report.clone()));
+                }
+                (Some((_, _, parts)), Kept::Parts) => {
+                    emit(identity, &PartsCollected::Report(parts.clone()));
+                }
+                (None, kind) => publish(identity, Answer::UnknownRun(kind)),
             },
         }
     }
@@ -139,8 +147,14 @@ async fn next(requests: &mut Receiver) -> (RequestIdentity, Request) {
 fn publish(identity: RequestIdentity, answer: Answer) {
     match answer {
         Answer::Started(started) => emit(identity, &started),
-        Answer::Running => emit(identity, &Collected::Running),
-        Answer::UnknownRun => emit(identity, &Collected::Refused(LoadError::UnknownRun)),
+        Answer::Running(Kept::Report) => emit(identity, &Collected::Running),
+        Answer::Running(Kept::Parts) => emit(identity, &PartsCollected::Running),
+        Answer::UnknownRun(Kept::Report) => {
+            emit(identity, &Collected::Refused(LoadError::UnknownRun));
+        }
+        Answer::UnknownRun(Kept::Parts) => {
+            emit(identity, &PartsCollected::Refused(LoadError::UnknownRun));
+        }
     }
 }
 
@@ -177,16 +191,17 @@ struct Ends {
     end_us: u64,
     cpu_start: Load,
     cpu_end: Load,
+    parts: Parts,
 }
 
 /// Run `start` on `socket` beside the requests until its drain ended, with
-/// `tally` cleared for it; its report.
+/// `tally` cleared for it; its report and its parts' window.
 async fn run(
     requests: &mut Receiver,
     mut socket: Socket,
     start: Start,
     tally: &mut Tally<TALLY_WORDS>,
-) -> Report {
+) -> (Report, Parts) {
     tally.clear();
     let window = Window {
         start_us: Cell::new(None),
@@ -207,7 +222,7 @@ async fn run(
                     Action::Cpu => emit(identity, &cpu_load().await),
                     // A running server starts nothing and keeps no report.
                     Action::Start(_) => emit(identity, &Started::Refused(LoadError::Busy)),
-                    Action::Report => emit(identity, &Collected::Running),
+                    Action::Kept(kind) => publish(identity, Answer::Running(kind)),
                 },
                 Either::Second(Either::First(never)) => match never {},
                 Either::Second(Either::Second(ends)) => break ends,
@@ -215,14 +230,15 @@ async fn run(
         }
     };
     socket.close();
-    Report {
+    let report = Report {
         window_start_us: ends.start_us,
         window_end_us: ends.end_us,
         cpu_start: ends.cpu_start,
         cpu_end: ends.cpu_end,
         received: receiving.received(tally),
         sent,
-    }
+    };
+    (report, ends.parts)
 }
 
 /// Count every datagram on the port and echo those that ask for it, at once.
@@ -265,13 +281,14 @@ async fn receive(
 }
 
 /// The run's window and drain: open the window `delay_ms` after now, read
-/// the CPU, send within it, close it after `duration_ms`, read the CPU
-/// again, then wait out the drain.
+/// the CPU and the parts, send within it, close it after `duration_ms`,
+/// read them again, then wait out the drain.
 async fn measure(socket: &Socket, start: &Start, window: &Window, sent: &mut Sent) -> Ends {
     let planned_start = now_us().saturating_add(millis(start.delay_ms));
     let planned_end = planned_start.saturating_add(millis(start.duration_ms));
     wait_until(planned_start).await;
     let cpu_start = cpu_load().await;
+    let parts_start = parts_sample(true).await;
     let start_us = now_us();
     window.start_us.set(Some(start_us));
     if let Some(transmit) = start.transmit {
@@ -281,12 +298,14 @@ async fn measure(socket: &Socket, start: &Start, window: &Window, sent: &mut Sen
     let end_us = now_us();
     window.end_us.set(Some(end_us));
     let cpu_end = cpu_load().await;
+    let parts_end = parts_sample(false).await;
     wait_until(end_us.saturating_add(millis(start.drain_ms))).await;
     Ends {
         start_us,
         end_us,
         cpu_start,
         cpu_end,
+        parts: parts::window(&parts_start, &parts_end),
     }
 }
 
@@ -413,6 +432,26 @@ async fn cpu_load() -> Load {
     cpu::load(now_us(), &samples)
 }
 
+/// Every part's sample now, in the current epoch of the longest polls;
+/// with `begin`, a new epoch starts after it. A part its executor is
+/// writing is sampled again after yielding.
+async fn parts_sample(begin: bool) -> [parts::Sample; parts::COUNT] {
+    let epoch = parts::EPOCH.load(Ordering::Relaxed);
+    let mut samples = [parts::Sample::default(); parts::COUNT];
+    for (sample, counter) in samples.iter_mut().zip(&parts::COUNTERS) {
+        *sample = loop {
+            match counter.sample(activity_now(), epoch) {
+                Ok(sample) => break sample,
+                Err(parts::Concurrent) => yield_now().await,
+            }
+        };
+    }
+    if begin {
+        parts::EPOCH.store(epoch.wrapping_add(1), Ordering::Relaxed);
+    }
+    samples
+}
+
 /// The image's monotonic microseconds.
 fn now_us() -> u64 {
     oer_embassy_time::now_micros()
@@ -420,7 +459,7 @@ fn now_us() -> u64 {
 
 /// The executors' activity clock: the time driver's microseconds, which
 /// the image's clock leads by [`CLOCK_EPOCH_OFFSET`], wrapping at 2^32.
-fn activity_now() -> u32 {
+pub(crate) fn activity_now() -> u32 {
     now_us().wrapping_sub(CLOCK_EPOCH_OFFSET.as_micros()) as u32
 }
 
