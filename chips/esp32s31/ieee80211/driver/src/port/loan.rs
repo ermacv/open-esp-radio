@@ -136,25 +136,13 @@ impl<Id: SlotIdentity, R> GroupKey<'static, Id, R> {
     }
 }
 impl<'p, Id: SlotIdentity, R> ReceiveBuffer<'p, Id, R> {
-    pub(super) fn into_owned(mut self) -> ReceiveBuffer<'static, Id, R> {
-        ReceiveBuffer {
-            unit: self.unit.take(),
-            range: self.range.clone(),
-            poison: self.poison,
-            driver: self.driver,
-            brand: PhantomData,
-        }
+    pub(super) fn into_owned(self) -> ReceiveBuffer<'static, Id, R> {
+        self.rebrand()
     }
 }
 impl<Id: SlotIdentity, R> ReceiveBuffer<'static, Id, R> {
-    pub(super) fn lend<'p>(mut self) -> ReceiveBuffer<'p, Id, R> {
-        ReceiveBuffer {
-            unit: self.unit.take(),
-            range: self.range.clone(),
-            poison: self.poison,
-            driver: self.driver,
-            brand: PhantomData,
-        }
+    pub(super) fn lend<'p>(self) -> ReceiveBuffer<'p, Id, R> {
+        self.rebrand()
     }
 }
 impl<'p, Id: SlotIdentity> Installation<'p, Id> {

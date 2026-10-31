@@ -94,7 +94,10 @@ mod events;
 pub use events::{RxDrop, RxMsdusRefused, ServiceEvent, StationEvents};
 mod control;
 mod network;
-pub use network::{NetworkRx, NetworkStop, Received, RxMsdusCopied, StopPolicy};
+pub use network::{
+    NetworkDrainCause, NetworkDrainFailure, NetworkRx, NetworkStop, NetworkStopLost, NoNetwork,
+    Received, RxMsdusCopied, StopPolicy,
+};
 mod reconnect;
 use commands::CommandCredits;
 pub use commands::{CommandRefused, CommandTerminal, Request};
@@ -573,12 +576,10 @@ pub enum ServiceFault<B: StationPort> {
         cause: <B::Backend as PortBackend<B::SlotId>>::Fault,
         missing: PendingTerminal,
     },
-    /// The stop's deadline passed while the network still held `held` lent
-    /// receive buffers: the port cannot retire, and its owners stay
+    /// A requested stop's network drain failed: the network still held lent
+    /// receive buffers, so the port cannot retire and its owners stay
     /// quarantined.
-    NetworkDrainDeadline {
-        held: usize,
-    },
+    NetworkDrain(NetworkDrainFailure),
 }
 
 /// A concrete output recipient. Events carry their original owners by value.
@@ -616,7 +617,7 @@ impl<K, F: FnMut(ServiceOutput<K>)> ServiceOutputSink<K> for F {
 /// let (_control, control) = Control::new(application, &state).unwrap();
 /// let io = ServiceIo {
 ///     commands: commands.dyn_receiver(), transmit, receive, output: &mut output, control,
-///     network: &(), stop: oer_ieee80211_runtime::station::StopPolicy::DEFAULT,
+///     network: &oer_ieee80211_runtime::station::NoNetwork, stop: oer_ieee80211_runtime::station::StopPolicy { drain: oer_time::Duration::from_secs(1) },
 /// };
 /// ```
 ///
@@ -639,7 +640,7 @@ impl<K, F: FnMut(ServiceOutput<K>)> ServiceOutputSink<K> for F {
 /// let (mut application, control) = Control::new(application, &state).unwrap();
 /// let io = ServiceIo {
 ///     commands, transmit, receive, output: &mut output, control,
-///     network: &(), stop: oer_ieee80211_runtime::station::StopPolicy::DEFAULT,
+///     network: &oer_ieee80211_runtime::station::NoNetwork, stop: oer_ieee80211_runtime::station::StopPolicy { drain: oer_time::Duration::from_secs(1) },
 /// };
 /// assert!(application.try_command(ControlCommand::Stop).is_ok());
 /// assert!(matches!(io.commands.try_receive(), Some(ServiceCommand::Stop)));
@@ -813,6 +814,10 @@ pub struct ServiceCompleted<
 > {
     pub end: ServiceEnd<'p, 'id, B>,
     pub retired: RetiredService<'id, B, C, S, GROUPS, O>,
+    /// The network drain before the port retired, when it failed. A
+    /// requested stop also ends `Failed` with it; after another failure it
+    /// is reported beside that failure.
+    pub network: Option<NetworkDrainFailure>,
 }
 
 /// Only a normal Stop grants this continuation on the existing installation.
@@ -894,6 +899,7 @@ impl<
             end => Err(Self {
                 end,
                 retired: self.retired,
+                network: self.network,
             }),
         }
     }
@@ -1091,6 +1097,8 @@ struct PendingActions<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id> {
     receive: RxBlockAckView<'id, B::Types<'id>>,
     commands: CommandCredits<'id, <B::Types<'id> as PhaseTypes<'id>>::StationCommandPath>,
     admissions: Admissions,
+    /// The network drain before the port retired, when it failed.
+    network: Option<NetworkDrainFailure>,
     /// A retune whose disable/enable failed remains owned until retirement.
     retune: Option<
         oer_ieee80211_core_arbiter::PendingRetune<
@@ -1192,6 +1200,7 @@ impl<
                     receive,
                     commands: CommandCredits::new(credits),
                     admissions: Admissions::default(),
+                    network: None,
                     retune: None,
                     group: None,
                     pairwise: None,
@@ -1248,7 +1257,7 @@ impl<
                     rates: rates,
                     terminal_access: terminal_access,
                     events: events,
-                    pending: PendingActions { receive, commands: credits.into_inner(), admissions: Admissions::default(), retune: None, group: None, pairwise: None, unwrap: None },
+                    pending: PendingActions { receive, commands: credits.into_inner(), admissions: Admissions::default(), network: None, retune: None, group: None, pairwise: None, unwrap: None },
                 }),
             })
         })
@@ -1308,9 +1317,12 @@ impl<
                 pending
             }
         );
+        let pending = pending.read();
+        let network = pending.network;
         let completed = oer_memory::Placed::init(output, |place| {
             oer_memory::init_in_place!(place, ServiceCompleted {
                 end => |place| end.init_end(place, custody),
+                network: network,
                 retired => |place: &mut core::mem::MaybeUninit<RetiredService<'id, B, C, S, GROUPS, O>>| {
                     // Destructure the complete finish result before constructing
                     // the retired bank with its station and returned places.
@@ -1323,7 +1335,7 @@ impl<
                         events: events.read(),
                         _places: places,
                         _arbiter: arbiter,
-                        _pending: pending.read(),
+                        _pending: pending,
                         _terminal_access: terminal_access.read(),
                     }));
                     while let Some(notice) = retired._arbiter.poll_notice() {
@@ -1397,6 +1409,7 @@ impl<
             mut pending,
             terminal_access,
         } = state;
+        let network = pending.network;
         let (mut station, mut places) = station.finish(reason);
         let data = data.finish(&mut events);
         rates.disconnected();
@@ -1423,6 +1436,7 @@ impl<
         io.control.complete();
         ServiceCompleted {
             end,
+            network,
             retired: RetiredService {
                 station,
                 data,
@@ -1498,9 +1512,11 @@ impl<
                         let phase = B::lend_phase(&mut lent);
                         network::drain(phase, io.network, timer, deadline).await
                     };
+                    // Kept beside any failure; a requested stop fails with it.
+                    self.pending.network = drained.err();
                     match (next, drained) {
-                        (Served::Stop, Err(held)) => {
-                            Served::Failed(ServiceFault::NetworkDrainDeadline { held }.into())
+                        (Served::Stop, Err(failure)) => {
+                            Served::Failed(ServiceFault::NetworkDrain(failure).into())
                         }
                         (next, _) => next,
                     }

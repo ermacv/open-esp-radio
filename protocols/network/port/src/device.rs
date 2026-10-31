@@ -40,6 +40,18 @@ pub trait FrameStorage: Send + 'static {
     /// [`Self::bytes`], mutably, for an adapter that rewrites a header in
     /// place.
     fn bytes_mut(&mut self) -> &mut [u8];
+    /// Start the bytes `by` later, for an adapter whose packet begins
+    /// inside them. A step past the bytes is refused and changes nothing.
+    fn advance(&mut self, by: usize) -> Result<(), StorageAdvanceRefused>;
+}
+
+/// A refused [`FrameStorage::advance`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct StorageAdvanceRefused {
+    /// The requested step.
+    pub by: usize,
+    /// The bytes' length then.
+    pub length: usize,
 }
 
 /// The storage of a frame that never lends: its bytes are its own copy.
@@ -48,6 +60,9 @@ impl FrameStorage for core::convert::Infallible {
         match *self {}
     }
     fn bytes_mut(&mut self) -> &mut [u8] {
+        match *self {}
+    }
+    fn advance(&mut self, _: usize) -> Result<(), StorageAdvanceRefused> {
         match *self {}
     }
 }
@@ -95,19 +110,21 @@ impl<S: FrameStorage> LentFrame<S> {
         })
     }
 
-    /// The frame's fields and payload.
-    pub fn view(&self) -> EthernetFrameView<'_> {
-        EthernetFrameView {
+    /// The frame's fields and payload. The range was checked at
+    /// construction; a storage whose bytes then shrank breaks its own
+    /// contract and is refused here.
+    pub fn view(&self) -> Result<EthernetFrameView<'_>, FrameLengthError> {
+        let payload = self
+            .storage
+            .bytes()
+            .get(self.payload.clone())
+            .ok_or(FrameLengthError::OutsideStorage)?;
+        Ok(EthernetFrameView {
             destination: self.destination,
             source: self.source,
             ether_type: self.ether_type,
-            // Checked at construction; the storage's bytes are stable.
-            payload: self
-                .storage
-                .bytes()
-                .get(self.payload.clone())
-                .unwrap_or_default(),
-        }
+            payload,
+        })
     }
 
     /// The same frame in a wrapper of its storage. `wrap` keeps the bytes:
@@ -135,7 +152,7 @@ impl<S: FrameStorage> LentFrame<S> {
 
 impl<S: FrameStorage> EthernetFrame for LentFrame<S> {
     fn view(&self) -> Result<EthernetFrameView<'_>, FrameLengthError> {
-        Ok(LentFrame::view(self))
+        LentFrame::view(self)
     }
 }
 
@@ -197,6 +214,9 @@ mod tests {
         fn bytes_mut(&mut self) -> &mut [u8] {
             &mut self.0
         }
+        fn advance(&mut self, by: usize) -> Result<(), StorageAdvanceRefused> {
+            Err(StorageAdvanceRefused { by, length: 32 })
+        }
     }
 
     #[test]
@@ -206,7 +226,7 @@ mod tests {
         let Ok(frame) = LentFrame::new(Owned(bytes), [1; 6], [2; 6], 0x0800, 20..24) else {
             panic!("the payload lies inside the storage");
         };
-        let view = LentFrame::view(&frame);
+        let view = LentFrame::view(&frame).unwrap();
         assert_eq!(view.payload, &[1, 2, 3, 4]);
         assert_eq!(view.ether_type, 0x0800);
         let parts = frame.into_parts();

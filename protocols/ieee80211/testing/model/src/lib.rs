@@ -1370,6 +1370,18 @@ impl oer_ieee80211_contracts_port::LentRxBuffer for ModelLentRx {
     fn mpdu_len(&self) -> usize {
         self.mpdu_len
     }
+    fn advance(&mut self, by: usize) -> Result<(), oer_ieee80211_contracts_port::AdvanceRefused> {
+        let refused = oer_ieee80211_contracts_port::AdvanceRefused {
+            by,
+            mpdu_len: self.mpdu_len,
+        };
+        self.mpdu_len = self.mpdu_len.checked_sub(by).ok_or(refused)?;
+        self.bytes = core::mem::take(&mut self.bytes)
+            .into_iter()
+            .skip(by)
+            .collect();
+        Ok(())
+    }
 }
 
 impl Drop for ModelLentRx {

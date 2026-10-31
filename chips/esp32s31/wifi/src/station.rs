@@ -448,6 +448,7 @@ impl<W: Binding> rp::PortBody<W::Id, Backend<W::Id, W>> for Body<W> {
             completed,
             running,
         } = storage;
+        let stop = config.stop;
         let service = initialize_service::<W>(profile, config, resources, service, receive_storage);
         start.complete(Ok(()));
         let mut io = ServiceIo {
@@ -457,7 +458,7 @@ impl<W: Binding> rp::PortBody<W::Id, Backend<W::Id, W>> for Body<W> {
             control,
             output: &mut output,
             network: network_stop,
-            stop: oer_ieee80211_runtime::station::StopPolicy::DEFAULT,
+            stop,
         };
         let mut unwrap = KeyUnwrapSlot::new(engine);
         let done = running
@@ -465,12 +466,24 @@ impl<W: Binding> rp::PortBody<W::Id, Backend<W::Id, W>> for Body<W> {
                 running_future::<W>(service, completed.uninit(), owner, &mut io, &mut unwrap)
             })
             .await;
-        let (end, _retired) = oer_memory::unpack_placed!(done, ServiceCompleted { end, retired });
+        let (end, _retired, network) = oer_memory::unpack_placed!(
+            done,
+            ServiceCompleted {
+                end,
+                retired,
+                network
+            }
+        );
+        let network = network.read().map(crate::failure::convert::network_drain);
+        let failed = |fault| crate::failure::FailedStation {
+            failure: crate::failure::convert::service::<StationComposition<W, W::Id>>(fault),
+            network,
+        };
         oer_memory::match_placed!(end,ServiceEnd{
         Stopped(owner)=>rp::Ended::uninstall(owner.read(),(),StationExit::Stopped),
-        Failed{owner,fault,custody}=>{drop(custody);owner.read().uninstall((),StationExit::Failed(crate::failure::convert::service::<StationComposition<W, W::Id>>(fault.read())))},
-        Poisoned{owner,fault,custody}=>{drop(custody);rp::Ended::fail_stop(owner.read().fail_stop(),StationExit::Poisoned(crate::failure::convert::service::<StationComposition<W, W::Id>>(fault.read())))},
-        Quarantined{request,fault,custody}=>{drop(custody);rp::Ended::fail_stop(request.read(),StationExit::Quarantined(crate::failure::convert::service::<StationComposition<W, W::Id>>(fault.read())))}
+        Failed{owner,fault,custody}=>{drop(custody);owner.read().uninstall((),StationExit::Failed(failed(fault.read())))},
+        Poisoned{owner,fault,custody}=>{drop(custody);rp::Ended::fail_stop(owner.read().fail_stop(),StationExit::Poisoned(failed(fault.read())))},
+        Quarantined{request,fault,custody}=>{drop(custody);rp::Ended::fail_stop(request.read(),StationExit::Quarantined(failed(fault.read())))}
         })
     }
 }
@@ -508,7 +521,7 @@ pub async fn serve<W: Binding>(runner: StationRunner<W>, profile: Profile<W>) ->
                 };
                 match output {
                     StationExit::Stopped => retirement(None),
-                    StationExit::Failed(failure) => retirement(Some(failure)),
+                    StationExit::Failed(failed) => retirement(Some(failed)),
                     StationExit::Poisoned(_)
                     | StationExit::Quarantined(_)
                     | StationExit::RetirementFailed(_)
@@ -540,14 +553,18 @@ fn released_exit(
     let Err(cause) = released else {
         return output;
     };
-    let failure = match output {
+    let failed = match output {
         StationExit::Stopped => None,
-        StationExit::Failed(failure) => Some(failure),
+        StationExit::Failed(failed) => Some(failed),
         StationExit::Poisoned(_)
         | StationExit::Quarantined(_)
         | StationExit::RetirementFailed(_)
         | StationExit::ReleaseFailed(_)
         | StationExit::Unavailable(_) => return output,
     };
-    StationExit::ReleaseFailed(crate::failure::ReleaseFailure { failure, cause })
+    StationExit::ReleaseFailed(crate::failure::ReleaseFailure {
+        failure: failed.map(|failed| failed.failure),
+        network: failed.and_then(|failed| failed.network),
+        cause,
+    })
 }

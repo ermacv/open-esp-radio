@@ -25,6 +25,14 @@ impl<L: LentRxBuffer> FrameStorage for NetworkRx<L> {
     fn bytes_mut(&mut self) -> &mut [u8] {
         self.0.storage_mut()
     }
+    fn advance(&mut self, by: usize) -> Result<(), oer_network_port::StorageAdvanceRefused> {
+        self.0
+            .advance(by)
+            .map_err(|refused| oer_network_port::StorageAdvanceRefused {
+                by: refused.by,
+                length: refused.mpdu_len,
+            })
+    }
 }
 
 /// One received MSDU for the network stack.
@@ -42,7 +50,7 @@ pub enum Received<L> {
 impl<L: LentRxBuffer> oer_network_port::EthernetFrame for Received<L> {
     fn view(&self) -> Result<EthernetFrameView<'_>, FrameLengthError> {
         match self {
-            Self::Lent(frame) => Ok(frame.view()),
+            Self::Lent(frame) => frame.view(),
             Self::Copied(frame) => frame.view(),
         }
     }
@@ -76,50 +84,85 @@ pub struct RxMsdusCopied {
 pub trait NetworkStop {
     /// Begin stopping: take no new frame and drop every frame it holds.
     fn request_stop(&self);
-    /// Ready once stopped.
-    fn poll_stopped(&self, cx: &mut core::task::Context<'_>) -> core::task::Poll<()>;
+    /// Ready once stopped, or once the participant was lost before it
+    /// reported: a lost participant proves no stop.
+    fn poll_stopped(
+        &self,
+        cx: &mut core::task::Context<'_>,
+    ) -> core::task::Poll<Result<(), NetworkStopLost>>;
 }
 
-/// No network side: nothing to stop.
-impl NetworkStop for () {
+/// The participant was lost before it reported its stop.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct NetworkStopLost;
+
+/// A composition with no network side: nothing holds lent buffers.
+pub struct NoNetwork;
+
+impl NetworkStop for NoNetwork {
     fn request_stop(&self) {}
-    fn poll_stopped(&self, _: &mut core::task::Context<'_>) -> core::task::Poll<()> {
-        core::task::Poll::Ready(())
+    fn poll_stopped(
+        &self,
+        _: &mut core::task::Context<'_>,
+    ) -> core::task::Poll<Result<(), NetworkStopLost>> {
+        core::task::Poll::Ready(Ok(()))
     }
 }
 
-/// How long a stop waits for the network's buffers when no request named
-/// its deadline: a stop after a failure, or a request without a deadline.
+/// The deadline of a stop no request timed: a stop after a failure, or a
+/// request that named none. The composition chooses it.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct StopPolicy {
     pub drain: oer_time::Duration,
 }
 
-impl StopPolicy {
-    /// Two seconds: an IP stack drops its frames well within it.
-    pub const DEFAULT: Self = Self {
-        drain: oer_time::Duration::from_secs(2),
-    };
+/// Why the network did not return the station's lent buffers before the
+/// port retires.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum NetworkDrainCause {
+    /// The stop's deadline passed.
+    Deadline,
+    /// The stop participant was lost before it reported.
+    ParticipantLost,
+}
+
+/// A failed network drain: why, and the buffers the network still held.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct NetworkDrainFailure {
+    pub cause: NetworkDrainCause,
+    pub held: usize,
 }
 
 /// Stop the network and wait, until `deadline`, for it to stop and return
-/// every lent buffer; `Err` holds the buffers it still holds then.
+/// every lent buffer.
 pub(super) async fn drain<'p, 'id: 'p, P: oer_ieee80211_contracts_port::LowerMacPhase<'p, 'id>>(
     phase: &mut P,
     network: &dyn NetworkStop,
     timer: &impl oer_time::Timer,
     deadline: oer_time::Instant,
-) -> Result<(), usize> {
+) -> Result<(), NetworkDrainFailure> {
     use core::{future::Future, task::Poll};
     network.request_stop();
     let mut alarm = core::pin::pin!(timer.wait_until(deadline));
     core::future::poll_fn(|cx| {
-        let stopped = network.poll_stopped(cx).is_ready();
+        let stopped = match network.poll_stopped(cx) {
+            Poll::Ready(Ok(())) => true,
+            Poll::Ready(Err(NetworkStopLost)) => {
+                return Poll::Ready(Err(NetworkDrainFailure {
+                    cause: NetworkDrainCause::ParticipantLost,
+                    held: phase.lent(),
+                }));
+            }
+            Poll::Pending => false,
+        };
         let returned = phase.poll_lent_returned(cx).is_ready();
         if stopped && returned {
             Poll::Ready(Ok(()))
         } else if alarm.as_mut().poll(cx).is_ready() {
-            Poll::Ready(Err(phase.lent()))
+            Poll::Ready(Err(NetworkDrainFailure {
+                cause: NetworkDrainCause::Deadline,
+                held: phase.lent(),
+            }))
         } else {
             Poll::Pending
         }

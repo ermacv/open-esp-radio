@@ -23,6 +23,7 @@ use oer_ieee80211_core_roles_sta::data::TxMsdu;
 use oer_ieee80211_runtime::station as runtime;
 use oer_memory::WakingSpscQueue;
 use oer_network_port::{EthernetFrame, LinkSnapshot, NetDevice, TransmitRefused};
+pub use runtime::StopPolicy;
 pub use runtime::{ControlError, Operation, OperationEnd};
 
 pub const RX_DEPTH: usize = 8;
@@ -86,7 +87,7 @@ impl<'a> Control<'a> {
     /// Disconnect and stop. The network asked through its
     /// [`NetworkStopper`] must return the station's lent receive buffers by
     /// `deadline`, or the radio does not retire
-    /// ([`RetirementCause::NetworkDrainDeadline`](crate::RetirementCause::NetworkDrainDeadline)).
+    /// ([`RetirementCause::NetworkDrain`](crate::RetirementCause::NetworkDrain)).
     pub fn stop(&mut self, deadline: oer_time::Instant) {
         self.inner.stop_gracefully(deadline);
     }
@@ -176,6 +177,9 @@ impl oer_ieee80211_contracts_port::LentRxBuffer for Unlent {
     fn mpdu_len(&self) -> usize {
         match *self {}
     }
+    fn advance(&mut self, _: usize) -> Result<(), oer_ieee80211_contracts_port::AdvanceRefused> {
+        match *self {}
+    }
 }
 type Frame = runtime::Received<LentRx>;
 
@@ -196,6 +200,9 @@ impl oer_network_port::FrameStorage for ReceivedStorage {
     }
     fn bytes_mut(&mut self) -> &mut [u8] {
         self.0.bytes_mut()
+    }
+    fn advance(&mut self, by: usize) -> Result<(), oer_network_port::StorageAdvanceRefused> {
+        self.0.advance(by)
     }
 }
 impl EthernetFrame for Received {
@@ -277,6 +284,7 @@ impl Drop for StartGuard<'_> {
 struct NetworkStopState {
     requested: core::cell::Cell<bool>,
     stopped: core::cell::Cell<bool>,
+    lost: core::cell::Cell<bool>,
     network: oer_sync::PriorityWaker,
     station: oer_sync::PriorityWaker,
 }
@@ -285,9 +293,15 @@ impl NetworkStopState {
         Self {
             requested: core::cell::Cell::new(false),
             stopped: core::cell::Cell::new(false),
+            lost: core::cell::Cell::new(false),
             network: oer_sync::PriorityWaker::new(),
             station: oer_sync::PriorityWaker::new(),
         }
+    }
+    fn reset(&self) {
+        self.requested.set(false);
+        self.stopped.set(false);
+        self.lost.set(false);
     }
 }
 impl runtime::NetworkStop for NetworkStopState {
@@ -295,10 +309,12 @@ impl runtime::NetworkStop for NetworkStopState {
         self.requested.set(true);
         self.network.wake();
     }
-    fn poll_stopped(&self, cx: &mut Context<'_>) -> Poll<()> {
+    fn poll_stopped(&self, cx: &mut Context<'_>) -> Poll<Result<(), runtime::NetworkStopLost>> {
         self.station.register(cx.waker());
         if self.stopped.get() {
-            Poll::Ready(())
+            Poll::Ready(Ok(()))
+        } else if self.lost.get() {
+            Poll::Ready(Err(runtime::NetworkStopLost))
         } else {
             Poll::Pending
         }
@@ -306,6 +322,7 @@ impl runtime::NetworkStop for NetworkStopState {
 }
 /// The network side's end of the station's stop: it stops the application
 /// and the IP service, which drop every frame they hold, then reports it.
+/// Dropping it unreported fails the station's stop as a lost participant.
 pub struct NetworkStopper<'a> {
     state: &'a NetworkStopState,
 }
@@ -322,17 +339,27 @@ impl NetworkStopper<'_> {
         })
         .await
     }
-    /// The network stopped and holds no frame of the station. Dropping the
-    /// stopper says the same: a composition without a network side drops
-    /// it. The station still waits for every lent buffer's return.
-    pub fn stopped(&self) {
-        self.state.stopped.set(true);
-        self.state.station.wake();
+    /// The application and the IP service stopped and hold no frame of the
+    /// station. The station still waits for every lent buffer's return.
+    pub fn stopped(self) {
+        self.report(|state| &state.stopped);
+    }
+    /// The composition has no network side: nothing takes the station's
+    /// frames, and its stop needs no answer.
+    pub fn no_network(self) {
+        self.report(|state| &state.stopped);
+    }
+    fn report(self, flag: impl FnOnce(&NetworkStopState) -> &core::cell::Cell<bool>) {
+        let state = self.state;
+        core::mem::forget(self);
+        flag(state).set(true);
+        state.station.wake();
     }
 }
 impl Drop for NetworkStopper<'_> {
     fn drop(&mut self) {
-        self.stopped();
+        self.state.lost.set(true);
+        self.state.station.wake();
     }
 }
 pub struct Channels {
@@ -362,8 +389,7 @@ impl Channels {
         (Control<'_>, Network<'_>, NetworkStopper<'_>, Connection<'_>),
         runtime::ControlCreateError,
     > {
-        self.network_stop.requested.set(false);
-        self.network_stop.stopped.set(false);
+        self.network_stop.reset();
         let (send, commands) = self.commands.split();
         let (tx, transmit) = self.tx.split();
         let (receive, rx) = self.rx.split();
@@ -497,6 +523,27 @@ mod tests {
                 payload: &[7, 8],
             })
         }
+    }
+    #[test]
+    fn a_stopper_reports_its_stop_and_a_dropped_one_is_a_lost_participant() {
+        use runtime::NetworkStop as _;
+        let mut cx = Context::from_waker(core::task::Waker::noop());
+        let state = NetworkStopState::new();
+        state.request_stop();
+        let stopper = NetworkStopper { state: &state };
+        assert!(state.poll_stopped(&mut cx).is_pending());
+        stopper.stopped();
+        assert_eq!(state.poll_stopped(&mut cx), Poll::Ready(Ok(())));
+        state.reset();
+        NetworkStopper { state: &state }.no_network();
+        assert_eq!(state.poll_stopped(&mut cx), Poll::Ready(Ok(())));
+        state.reset();
+        // Losing the stopper proves no stop of the application.
+        drop(NetworkStopper { state: &state });
+        assert_eq!(
+            state.poll_stopped(&mut cx),
+            Poll::Ready(Err(runtime::NetworkStopLost))
+        );
     }
     #[test]
     fn control_and_neutral_device_exist_before_installation_without_minting_a_link_or_consuming_refused_owners()

@@ -13,7 +13,7 @@ use core::{
     sync::atomic::{AtomicBool, AtomicUsize, Ordering},
     task::{Context, Poll},
 };
-use oer_ieee80211_contracts_port::{LendRefusal, LendRefused, LentRxBuffer};
+use oer_ieee80211_contracts_port::{AdvanceRefused, LendRefusal, LendRefused, LentRxBuffer};
 use oer_radio_port::SlotIdentity;
 use oer_sync::PriorityWaker;
 
@@ -75,37 +75,21 @@ impl NetworkCredit {
 
 /// One received unit the network owns ([`LentRxBuffer`]).
 pub struct LentReceive<R: 'static> {
-    unit: Option<R>,
-    start: usize,
-    len: usize,
+    /// The unit, its view the MPDU. It drops before `returned`, so its
+    /// memory is back in its pool before the count falls.
+    unit: R,
+    returned: ReturnOnDrop,
+}
+
+/// Lowers the network's count and wakes both waiters when its lent unit
+/// was dropped.
+struct ReturnOnDrop {
     credit: &'static NetworkCredit,
     driver: &'static PriorityWaker,
 }
 
-impl<R: ReceiveUnit + Send> LentRxBuffer for LentReceive<R> {
-    fn storage(&self) -> &[u8] {
-        self.unit
-            .as_ref()
-            .and_then(|unit| unit.storage().get(self.start..))
-            .unwrap_or_default()
-    }
-    fn storage_mut(&mut self) -> &mut [u8] {
-        let start = self.start;
-        self.unit
-            .as_mut()
-            .and_then(|unit| unit.storage_mut().get_mut(start..))
-            .unwrap_or_default()
-    }
-    fn mpdu_len(&self) -> usize {
-        self.len
-    }
-}
-
-impl<R: 'static> Drop for LentReceive<R> {
+impl Drop for ReturnOnDrop {
     fn drop(&mut self) {
-        // The unit's own drop returns its memory to the pool before the
-        // count falls, so a zero count means every unit came back.
-        drop(self.unit.take());
         self.credit.held.fetch_sub(1, Ordering::AcqRel);
         self.credit.returned.store(true, Ordering::Release);
         self.credit.network.wake();
@@ -113,10 +97,28 @@ impl<R: 'static> Drop for LentReceive<R> {
     }
 }
 
+impl<R: ReceiveUnit + Send> LentRxBuffer for LentReceive<R> {
+    fn storage(&self) -> &[u8] {
+        self.unit.storage()
+    }
+    fn storage_mut(&mut self) -> &mut [u8] {
+        self.unit.storage_mut()
+    }
+    fn mpdu_len(&self) -> usize {
+        self.unit.bytes().len()
+    }
+    fn advance(&mut self, by: usize) -> Result<(), AdvanceRefused> {
+        let mpdu_len = self.mpdu_len();
+        let refused = AdvanceRefused { by, mpdu_len };
+        let rest = mpdu_len.checked_sub(by).ok_or(refused)?;
+        self.unit.narrow(by, rest).map_err(|_| refused)
+    }
+}
+
 impl<Id: SlotIdentity, R: ReceiveUnit + Send> ReceiveBuffer<'_, Id, R> {
     /// Move this unit to the network, at most `limit` units at once.
     pub(super) fn lend_to(
-        mut self,
+        self,
         credit: &'static NetworkCredit,
         limit: usize,
         stopping: bool,
@@ -125,13 +127,6 @@ impl<Id: SlotIdentity, R: ReceiveUnit + Send> ReceiveBuffer<'_, Id, R> {
             Some(LendRefusal::Stopping)
         } else if credit.held() >= limit {
             Some(LendRefusal::Capacity)
-        } else if self
-            .unit
-            .as_ref()
-            .is_none_or(|unit| self.range.end > unit.storage().len())
-        {
-            // The MPDU this buffer lends lies outside the unit's storage.
-            Some(LendRefusal::Unsupported)
         } else {
             None
         };
@@ -144,14 +139,11 @@ impl<Id: SlotIdentity, R: ReceiveUnit + Send> ReceiveBuffer<'_, Id, R> {
         // Credit first: the network counts the unit before the driver stops.
         credit.held.fetch_add(1, Ordering::AcqRel);
         credit.transferred.fetch_add(1, Ordering::AcqRel);
-        let lent = LentReceive {
-            unit: self.unit.take(),
-            start: self.range.start,
-            len: self.range.len(),
-            credit,
-            driver: self.driver,
-        };
-        self.driver.wake();
-        Ok(lent)
+        let (unit, driver) = self.into_unit();
+        driver.wake();
+        Ok(LentReceive {
+            unit,
+            returned: ReturnOnDrop { credit, driver },
+        })
     }
 }

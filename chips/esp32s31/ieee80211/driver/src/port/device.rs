@@ -57,6 +57,9 @@ impl<const Q: usize, const RB: usize> ReceiveUnit for StagedReceive<Q, RB> {
     fn bytes(&self) -> &[u8] {
         self.0.segment().buffer
     }
+    fn narrow(&mut self, offset: usize, length: usize) -> Result<(), oer_memory::FrameRangeError> {
+        self.0.narrow(offset, length)
+    }
     fn storage(&self) -> &[u8] {
         self.0.storage()
     }

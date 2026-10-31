@@ -61,6 +61,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for ContinuousReceive {
                 observed.continuous_rx = true;
                 observed.received.extend((0..FRAMES).map(|_| TestReceive {
                     bytes: super::super::data_frame(STATION),
+                    view: 0..26,
                     released: self.released.clone(),
                 }));
             }

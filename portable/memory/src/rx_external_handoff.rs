@@ -265,6 +265,14 @@ impl ExternalRxHandoffSlot {
     }
 
     fn publish(&self, offset: usize, length: usize) -> Result<(), FrameRangeError> {
+        self.set_view(offset, length)?;
+        self.state.store(SLOT_READY, Ordering::Release);
+        Ok(())
+    }
+
+    /// Change the view of the current affine owner, within the initialized
+    /// allocation; the slot's state is unchanged.
+    fn set_view(&self, offset: usize, length: usize) -> Result<(), FrameRangeError> {
         FrameRangeError::check(offset, length, 0, self.initialized_length())?;
         // SAFETY: the current affine owner alone mutates this view; the
         // checked range remains inside the retained initialized allocation.
@@ -273,7 +281,6 @@ impl ExternalRxHandoffSlot {
             *self.offset.get() = offset;
             *self.length.get() = length;
         }
-        self.state.store(SLOT_READY, Ordering::Release);
         Ok(())
     }
 
@@ -420,12 +427,14 @@ impl<const FRAME_CAPACITY: usize, const SLOT_COUNT: usize>
             let Some(slot) = self.slots.get(index) else {
                 continue;
             };
+            let length = buffer.length();
             match slot.try_claim_radio(buffer) {
                 Ok(()) => {
                     return Ok(ExternalRxRadioLease {
                         slot,
                         index: index as u8,
                         live: true,
+                        view: (0, length),
                     });
                 }
                 Err(returned) => buffer = returned,
@@ -511,6 +520,8 @@ pub struct ExternalRxRadioLease<'pool, const FRAME_CAPACITY: usize> {
     slot: &'pool ExternalRxHandoffSlot,
     index: u8,
     live: bool,
+    /// The current view, as offset and length in the allocation.
+    view: (usize, usize),
 }
 
 impl<'pool, const FRAME_CAPACITY: usize> ExternalRxRadioLease<'pool, FRAME_CAPACITY> {
@@ -524,6 +535,23 @@ impl<'pool, const FRAME_CAPACITY: usize> ExternalRxRadioLease<'pool, FRAME_CAPAC
 
     pub fn with_frame<R>(&mut self, f: impl FnOnce(&mut [u8]) -> R) -> R {
         f(self.slot.frame_mut(&mut self.live, Span::View))
+    }
+
+    /// Narrow the view to `length` bytes from `offset` in the current view,
+    /// for example to the frame without its receive prefix. A range outside
+    /// the current view is refused and changes nothing.
+    pub fn narrow(&mut self, offset: usize, length: usize) -> Result<(), FrameRangeError> {
+        let (start, current) = self.view;
+        let absolute = start.checked_add(offset).ok_or(FrameRangeError {
+            offset,
+            length,
+            initialized_offset: start,
+            initialized_length: current,
+        })?;
+        FrameRangeError::check(absolute, length, start, current)?;
+        self.slot.set_view(absolute, length)?;
+        self.view = (absolute, length);
+        Ok(())
     }
 
     /// The bytes from the view's start to the end of the stable allocation:

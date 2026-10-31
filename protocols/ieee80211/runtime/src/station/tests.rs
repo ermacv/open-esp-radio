@@ -494,6 +494,26 @@ async fn yield_now() {
     .await;
 }
 
+/// A scenario's network side: it reports its stop at once, unless the
+/// scenario lost it.
+#[derive(Default)]
+struct TestNetwork {
+    lost: Cell<bool>,
+    requested: Cell<bool>,
+}
+impl NetworkStop for TestNetwork {
+    fn request_stop(&self) {
+        self.requested.set(true);
+    }
+    fn poll_stopped(&self, _: &mut core::task::Context<'_>) -> Poll<Result<(), NetworkStopLost>> {
+        if self.lost.get() {
+            Poll::Ready(Err(NetworkStopLost))
+        } else {
+            Poll::Ready(Ok(()))
+        }
+    }
+}
+
 /// Poll with a test-owned watchdog clock. Each pending poll advances it by
 /// one millisecond; the model's clock remains under the scenario's control.
 fn block_on<F: Future>(future: F) -> F::Output {
@@ -539,9 +559,10 @@ struct World<'b> {
     expect_queued_command_on_poison: Cell<bool>,
     expected_stream_end: Cell<Option<ExpectedStreamEnd>>,
     drop_stopped_service: Cell<bool>,
-    /// The lent buffers the network still holds when a stop's deadline
-    /// passes: the service must end failed with them.
-    expected_drain_deadline: Cell<Option<usize>>,
+    /// The network drain failure a stop must end with, and report.
+    expected_drain: Cell<Option<NetworkDrainFailure>>,
+    /// The scenario's network side: it stops at once, or is lost.
+    network: TestNetwork,
     restart_stopped_service: Cell<Option<bool>>,
     /// The network stack's end of the transmit queue.
     stack: RefCell<WakingSpscSender<'b, TxMsdu, 2>>,
@@ -1162,8 +1183,10 @@ where
                 transmit: self.transmit,
                 receive: self.receive,
                 output: &mut output,
-                network: &(),
-                stop: StopPolicy::DEFAULT,
+                network: &world.network,
+                stop: StopPolicy {
+                    drain: Duration::from_secs(1),
+                },
             };
             let script = self.script;
             let script = async move {
@@ -1260,7 +1283,9 @@ where
             let ServiceCompleted {
                 end,
                 retired: mut service,
+                network,
             } = completed;
+            assert_eq!(network, world.expected_drain.get());
             match world.expected_stream_end.get() {
                 Some(
                     expected @ (ExpectedStreamEnd::Drained | ExpectedStreamEnd::SubmissionFailed),
@@ -1335,16 +1360,16 @@ where
                 .disables_at_body_end
                 .set(Some(world.air.disable_calls()));
             assert_eq!(world.observed.tokens_lost(), 0);
-            if let Some(expected) = world.expected_drain_deadline.get() {
+            if let Some(expected) = world.expected_drain.get() {
                 assert!(
                     matches!(
                         &end,
                         ServiceEnd::Failed {
-                            fault: ServiceFault::NetworkDrainDeadline { held },
+                            fault: ServiceFault::NetworkDrain(failure),
                             ..
-                        } if *held == expected
+                        } if *failure == expected
                     ),
-                    "the stop's deadline passed with {expected} lent buffers held"
+                    "the stop ends failed with its drain: {expected:?}"
                 );
             }
             if matches!(&end, ServiceEnd::Stopped(_) | ServiceEnd::Failed { .. }) {
@@ -1531,7 +1556,8 @@ where
             expect_queued_command_on_poison: Cell::new(false),
             expected_stream_end: Cell::new(None),
             drop_stopped_service: Cell::new(false),
-            expected_drain_deadline: Cell::new(None),
+            expected_drain: Cell::new(None),
+            network: TestNetwork::default(),
             restart_stopped_service: Cell::new(None),
             stack: RefCell::new(stack),
             delivered: RefCell::new(delivered),
@@ -3339,7 +3365,10 @@ fn a_stop_waits_for_the_network_lent_buffers_until_its_deadline() {
             // The network keeps the frame's buffer past the stop's deadline.
             let held = world.take_delivered().await;
             assert!(matches!(held, Received::Lent(_)));
-            world.expected_drain_deadline.set(Some(1));
+            world.expected_drain.set(Some(NetworkDrainFailure {
+                cause: NetworkDrainCause::Deadline,
+                held: 1,
+            }));
             let mut control = world.commands.take().unwrap();
             let deadline = world.clock.now().saturating_add(Duration::from_millis(100));
             control.stop(deadline);
@@ -3359,6 +3388,30 @@ fn a_stop_waits_for_the_network_lent_buffers_until_its_deadline() {
                 .await;
             assert!(world.clock.now() >= deadline);
             drop(held);
+        })
+    });
+}
+
+#[test]
+fn a_lost_stop_participant_fails_the_stop_before_its_deadline() {
+    run(StaSecurity::Open, |world| {
+        Box::pin(async move {
+            let mut seen = 0;
+            world.associate(&mut seen, false).await;
+            world.network.lost.set(true);
+            world.expected_drain.set(Some(NetworkDrainFailure {
+                cause: NetworkDrainCause::ParticipantLost,
+                held: 0,
+            }));
+            let mut control = world.commands.take().unwrap();
+            control.stop(Instant::from_micros(u64::MAX));
+            world.commands.set(Some(control));
+            world
+                .notice(StaNotice::Disconnected(StaDisconnectReason::Arbiter(
+                    super::contract::LeaveReason::PortFailed,
+                )))
+                .await;
+            assert!(world.network.requested.get());
         })
     });
 }

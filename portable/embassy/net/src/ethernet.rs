@@ -57,22 +57,14 @@ impl OwnedNetworkTxFrame<'_> {
     }
 }
 
-/// A lent frame's storage from its Ethernet header on: the bytes one packet
-/// adopts. Dropping it drops the storage, which returns it to its lender.
-pub struct InPlace<S> {
-    storage: S,
-    start: usize,
-}
+/// A lent frame's storage, started at its Ethernet header: the bytes one
+/// packet adopts. Dropping it drops the storage, which returns it to its
+/// lender.
+pub struct InPlace<S>(S);
 
 impl<S: FrameStorage> xarxa_driver::ExternalPacketStorage for InPlace<S> {
     fn storage_mut(&mut self) -> &mut [u8] {
-        let start = self.start;
-        // `start` lies in the storage (`publish_lent`); an empty view would
-        // only be refused as too short.
-        self.storage
-            .bytes_mut()
-            .get_mut(start..)
-            .unwrap_or_default()
+        self.0.bytes_mut()
     }
 }
 
@@ -114,13 +106,16 @@ pub enum LentCopy {
 /// Publish a lent frame in place: write its Ethernet header before its
 /// payload and adopt its storage as the packet, without copying the
 /// payload. When that is impossible the frame is copied, as a copied
-/// device frame is, after `copied` reports why.
+/// device frame is, after `copied` reports why. A storage that broke its
+/// stable-bytes contract is refused as `OutsideStorage`.
 pub fn publish_lent<const RX: usize, S: FrameStorage>(
     publisher: &mut crate::OwnedRxPublisher<'_, RX>,
     slots: Option<&'static dyn AdoptLent<S>>,
     frame: LentFrame<S>,
     copied: &mut impl FnMut(LentCopy),
 ) -> Result<(), crate::RxEnqueueError> {
+    use crate::RxEnqueueError::InvalidLength;
+    let outside = InvalidLength(FrameLengthError::OutsideStorage);
     let LentParts {
         mut storage,
         destination,
@@ -138,31 +133,35 @@ pub fn publish_lent<const RX: usize, S: FrameStorage>(
         .start
         .checked_sub(header.len())
         .zip(payload.len().checked_add(header.len()));
-    let reason = match (slots, placed) {
-        (None, _) => LentCopy::NoSlots,
-        (Some(_), None) => LentCopy::NoHeadroom,
-        (Some(slots), Some((start, len))) => {
-            match storage.bytes_mut().get_mut(start..payload.start) {
-                Some(place) => {
-                    for (byte, value) in place.iter_mut().zip(header) {
-                        *byte = value;
-                    }
-                    match slots.adopt_lent(InPlace { storage, start }, len) {
-                        Ok(packet) => return publisher.try_publish(packet),
-                        Err(refused) => {
-                            storage = refused.owner.storage;
-                            LentCopy::Refused(refused.reason)
-                        }
-                    }
-                }
-                None => LentCopy::NoHeadroom,
-            }
-        }
+    let (Some(slots), Some((start, len))) = (slots, placed) else {
+        copied(if slots.is_none() {
+            LentCopy::NoSlots
+        } else {
+            LentCopy::NoHeadroom
+        });
+        let payload = storage.bytes().get(payload).ok_or(outside)?;
+        return publisher.try_send_parts(destination, source, ether_type, payload);
     };
-    copied(reason);
-    // The header write left the payload as it was.
-    let payload = storage.bytes().get(payload).unwrap_or_default();
-    publisher.try_send_parts(destination, source, ether_type, payload)
+    // The packet begins at the header: the storage starts there, and the
+    // payload follows the header in it.
+    storage.advance(start).map_err(|_| outside)?;
+    let bytes = storage.bytes_mut();
+    if bytes.len() < len {
+        return Err(outside);
+    }
+    for (byte, value) in bytes.iter_mut().zip(header) {
+        *byte = value;
+    }
+    match slots.adopt_lent(InPlace(storage), len) {
+        Ok(packet) => publisher.try_publish(packet),
+        Err(refused) => {
+            copied(LentCopy::Refused(refused.reason));
+            // The header write left the payload as it was.
+            let storage = refused.owner.0;
+            let payload = storage.bytes().get(header.len()..len).ok_or(outside)?;
+            publisher.try_send_parts(destination, source, ether_type, payload)
+        }
+    }
 }
 
 /// Copy a neutral received owner into the stack's final RX pool allocation.
@@ -205,7 +204,12 @@ impl crate::OwnedLinkController<'_> {
 }
 
 #[cfg(test)]
-#[allow(clippy::disallowed_macros, clippy::disallowed_methods)]
+#[allow(
+    clippy::disallowed_macros,
+    clippy::disallowed_methods,
+    clippy::arithmetic_side_effects,
+    reason = "tests build fixed frame fixtures"
+)]
 mod tests;
 
 /// Ethernet translation for an image whose existing bridge drains RX, serves

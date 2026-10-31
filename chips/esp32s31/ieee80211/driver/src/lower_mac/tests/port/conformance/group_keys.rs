@@ -695,6 +695,7 @@ fn labelled(material: u8, released: &super::super::Released) -> TestReceive {
     bytes[25] = material;
     TestReceive {
         bytes,
+        view: 0..26,
         released: released.clone(),
     }
 }

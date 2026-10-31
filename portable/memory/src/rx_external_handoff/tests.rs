@@ -364,3 +364,32 @@ fn a_radio_lease_lends_its_whole_allocation_and_keeps_its_view() {
     drop(radio);
     assert_eq!(allocation.ret.state(), ExternalRxReturnState::Returned);
 }
+
+#[test]
+fn a_narrowed_view_and_its_storage_start_inside_the_current_view() {
+    let allocation = Allocation::new();
+    let pool = ExternalRxHandoffPool::<64, 1>::new();
+    let mut radio = pool
+        .try_claim_radio(allocation.detach(40).unwrap(), 0)
+        .ok()
+        .unwrap();
+    radio.storage_mut()[10] = 0xa5;
+    radio.narrow(10, 20).unwrap();
+    assert_eq!(radio.frame().len(), 20);
+    assert_eq!(radio.frame()[0], 0xa5);
+    assert_eq!(radio.storage().len(), 54);
+    // Relative to the narrowed view: 21 bytes from its start do not fit.
+    assert_eq!(
+        radio.narrow(0, 21),
+        Err(FrameRangeError {
+            offset: 10,
+            length: 21,
+            initialized_offset: 10,
+            initialized_length: 20,
+        })
+    );
+    assert_eq!(radio.frame().len(), 20, "a refusal changes nothing");
+    radio.narrow(5, 15).unwrap();
+    assert_eq!(radio.storage().len(), 49);
+    assert!(radio.narrow(usize::MAX, 0).is_err());
+}

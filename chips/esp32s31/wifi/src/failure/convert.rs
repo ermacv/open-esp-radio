@@ -28,9 +28,7 @@ where
                 missing,
             }
         }
-        ServiceFault::NetworkDrainDeadline { held } => {
-            StationFailure::NetworkDrainDeadline { held }
-        }
+        ServiceFault::NetworkDrain(failure) => StationFailure::NetworkDrain(network_drain(failure)),
     }
 }
 
@@ -548,21 +546,36 @@ pub(super) fn rx_stage_transaction_error(
     }
 }
 
+pub(crate) fn network_drain(
+    value: oer_ieee80211_runtime::station::NetworkDrainFailure,
+) -> crate::failure::NetworkDrain {
+    use crate::failure::{NetworkDrain, NetworkDrainCause};
+    use oer_ieee80211_runtime::station::NetworkDrainCause as Source;
+    NetworkDrain {
+        cause: match value.cause {
+            Source::Deadline => NetworkDrainCause::Deadline,
+            Source::ParticipantLost => NetworkDrainCause::ParticipantLost,
+        },
+        held: value.held,
+    }
+}
+
 pub(crate) fn retirement(
-    failure: Option<StationFailure>,
+    failed: Option<crate::failure::FailedStation>,
     cause: oer_radio_port::LifecycleError,
     hardware_stopped: bool,
 ) -> RetirementFailure {
-    // The network kept lent receive buffers past the stop's deadline: the
-    // port's refusal to retire is that drain's, not an unconfirmed stop.
-    let cause = match failure {
-        Some(StationFailure::NetworkDrainDeadline { held }) => {
-            RetirementCause::NetworkDrainDeadline { held }
-        }
-        _ => retirement_cause(cause),
+    let failure = failed.map(|failed| failed.failure);
+    let network = failed.and_then(|failed| failed.network);
+    // The network kept lent receive buffers: the port's refusal to retire
+    // is that drain's, not an unconfirmed stop.
+    let cause = match network {
+        Some(drain) => RetirementCause::NetworkDrain(drain),
+        None => retirement_cause(cause),
     };
     RetirementFailure {
         failure,
+        network,
         cause,
         hardware_stopped,
     }

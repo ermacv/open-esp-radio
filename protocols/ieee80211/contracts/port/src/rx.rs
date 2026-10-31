@@ -91,6 +91,18 @@ pub trait LentRxBuffer: Send + 'static {
     fn storage_mut(&mut self) -> &mut [u8];
     /// The MPDU's length at the start of the storage.
     fn mpdu_len(&self) -> usize;
+    /// Start the storage `by` bytes later, inside the MPDU, which shortens
+    /// by as much. A step past the MPDU is refused and changes nothing.
+    fn advance(&mut self, by: usize) -> Result<(), AdvanceRefused>;
+}
+
+/// A refused [`LentRxBuffer::advance`]: the step does not fit the MPDU.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct AdvanceRefused {
+    /// The requested step.
+    pub by: usize,
+    /// The MPDU's length then.
+    pub mpdu_len: usize,
 }
 
 /// Why a backend kept a receive buffer instead of lending it.

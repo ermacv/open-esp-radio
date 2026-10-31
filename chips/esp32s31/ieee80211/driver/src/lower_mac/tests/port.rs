@@ -195,6 +195,8 @@ impl TestDevice {
 }
 struct TestReceive {
     bytes: [u8; 26],
+    /// The view in `bytes`, narrowed by the driver to the MPDU.
+    view: core::ops::Range<usize>,
     released: std::sync::Arc<core::sync::atomic::AtomicUsize>,
 }
 impl ReceiveUnit for TestReceive {
@@ -202,13 +204,26 @@ impl ReceiveUnit for TestReceive {
         Ok(super::normalized(&self.bytes))
     }
     fn bytes(&self) -> &[u8] {
-        &self.bytes
+        &self.bytes[self.view.clone()]
+    }
+    fn narrow(&mut self, offset: usize, length: usize) -> Result<(), oer_memory::FrameRangeError> {
+        let start = self.view.start + offset;
+        if start + length > self.view.end {
+            return Err(oer_memory::FrameRangeError {
+                offset,
+                length,
+                initialized_offset: self.view.start,
+                initialized_length: self.view.len(),
+            });
+        }
+        self.view = start..start + length;
+        Ok(())
     }
     fn storage(&self) -> &[u8] {
-        &self.bytes
+        &self.bytes[self.view.start..]
     }
     fn storage_mut(&mut self) -> &mut [u8] {
-        &mut self.bytes
+        &mut self.bytes[self.view.start..]
     }
 }
 impl Drop for TestReceive {
@@ -1227,6 +1242,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for ReceiveBody {
             ));
             self.observed.borrow_mut().received.push_back(TestReceive {
                 bytes: super::data_frame(STATION),
+                view: 0..26,
                 released: self.released.clone(),
             });
             let frame = match phase.next_event().await {

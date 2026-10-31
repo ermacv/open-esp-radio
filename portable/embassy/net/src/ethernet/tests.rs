@@ -181,14 +181,24 @@ fn successful_tx_is_observed_once_after_admission_and_before_packet_and_credit_r
 /// A lent DMA-like buffer: its bytes and a count of its drops.
 struct Lent {
     bytes: Box<[u8; 1664]>,
+    /// Where the storage starts in `bytes`.
+    start: usize,
     dropped: std::sync::Arc<core::sync::atomic::AtomicUsize>,
 }
 impl oer_network_port::FrameStorage for Lent {
     fn bytes(&self) -> &[u8] {
-        &self.bytes[..]
+        &self.bytes[self.start..]
     }
     fn bytes_mut(&mut self) -> &mut [u8] {
-        &mut self.bytes[..]
+        &mut self.bytes[self.start..]
+    }
+    fn advance(&mut self, by: usize) -> Result<(), oer_network_port::StorageAdvanceRefused> {
+        let length = self.bytes.len() - self.start;
+        if by > length {
+            return Err(oer_network_port::StorageAdvanceRefused { by, length });
+        }
+        self.start += by;
+        Ok(())
     }
 }
 impl Drop for Lent {
@@ -212,6 +222,7 @@ fn lent(
     bytes[range.clone()].copy_from_slice(payload);
     let storage = Lent {
         bytes,
+        start: 0,
         dropped: dropped.clone(),
     };
     let Ok(frame) = oer_network_port::LentFrame::new(storage, [2; 6], [4; 6], 0x0800, range) else {

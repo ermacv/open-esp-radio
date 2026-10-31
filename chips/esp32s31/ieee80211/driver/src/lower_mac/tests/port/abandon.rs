@@ -106,6 +106,7 @@ fn abandon_preempts_queued_publication_and_rx_and_erases_keys_only_on_p2() {
         let polls = observed.borrow().device_polls;
         observed.borrow_mut().received.push_back(TestReceive {
             bytes: [0; 26],
+            view: 0..26,
             released: released.clone(),
         });
         assert!(matches!(

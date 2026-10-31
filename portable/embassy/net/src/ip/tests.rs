@@ -52,22 +52,115 @@ fn settle<F: Future>(
     );
 }
 
-struct Frame;
+/// A device frame: the bridge copies a plain one; a lent one stays in its
+/// DMA-like storage.
+enum Frame {
+    Plain,
+    Lent(oer_network_port::LentFrame<Lent>),
+}
 impl oer_network_port::ReceivedFrame for Frame {
-    type Storage = core::convert::Infallible;
-    fn into_lent(self) -> Result<oer_network_port::LentFrame<Self::Storage>, Self> {
-        Err(self)
+    type Storage = Lent;
+    fn into_lent(self) -> Result<oer_network_port::LentFrame<Lent>, Self> {
+        match self {
+            Self::Lent(frame) => Ok(frame),
+            plain @ Self::Plain => Err(plain),
+        }
     }
 }
 impl EthernetFrame for Frame {
     fn view(&self) -> Result<EthernetFrameView<'_>, FrameLengthError> {
-        Ok(EthernetFrameView {
-            destination: [2; 6],
-            source: [4; 6],
-            ether_type: 0x88b5,
-            payload: &[9],
-        })
+        match self {
+            Self::Plain => Ok(EthernetFrameView {
+                destination: [2; 6],
+                source: [4; 6],
+                ether_type: 0x88b5,
+                payload: &[9],
+            }),
+            Self::Lent(frame) => frame.view(),
+        }
     }
+}
+/// A lent receive buffer and the count of its returns.
+struct Lent {
+    bytes: Box<[u8; 1664]>,
+    start: usize,
+    returned: Arc<std::sync::atomic::AtomicUsize>,
+}
+impl oer_network_port::FrameStorage for Lent {
+    fn bytes(&self) -> &[u8] {
+        &self.bytes[self.start..]
+    }
+    fn bytes_mut(&mut self) -> &mut [u8] {
+        &mut self.bytes[self.start..]
+    }
+    fn advance(&mut self, by: usize) -> Result<(), oer_network_port::StorageAdvanceRefused> {
+        let length = self.bytes.len() - self.start;
+        if by > length {
+            return Err(oer_network_port::StorageAdvanceRefused { by, length });
+        }
+        self.start += by;
+        Ok(())
+    }
+}
+impl Drop for Lent {
+    fn drop(&mut self) {
+        self.returned.fetch_add(1, Ordering::Relaxed);
+    }
+}
+/// A lent frame from `[4; 6]` to the device, its payload 60 bytes into its
+/// buffer as after a Wi-Fi header.
+fn lent(ether_type: u16, payload: &[u8], returned: &Arc<std::sync::atomic::AtomicUsize>) -> Frame {
+    let mut bytes = Box::new([0xee; 1664]);
+    bytes[60..60 + payload.len()].copy_from_slice(payload);
+    let storage = Lent {
+        bytes,
+        start: 0,
+        returned: returned.clone(),
+    };
+    let Ok(frame) = oer_network_port::LentFrame::new(
+        storage,
+        [2; 6],
+        [4; 6],
+        ether_type,
+        60..60 + payload.len(),
+    ) else {
+        panic!("the payload lies in the buffer");
+    };
+    Frame::Lent(frame)
+}
+/// The ones' complement sum of `bytes`, as IPv4 and ICMP checksums.
+fn checksum(bytes: &[u8]) -> [u8; 2] {
+    let mut sum = 0_u32;
+    for pair in bytes.chunks(2) {
+        sum += u32::from(u16::from_be_bytes([pair[0], *pair.get(1).unwrap_or(&0)]));
+    }
+    while sum > 0xffff {
+        sum = (sum & 0xffff) + (sum >> 16);
+    }
+    (!(sum as u16)).to_be_bytes()
+}
+const PEER: [u8; 4] = [192, 0, 2, 9];
+/// An ARP request from the peer for the device's address.
+fn arp_request() -> Vec<u8> {
+    let mut arp = std::vec![0, 1, 8, 0, 6, 4, 0, 1];
+    arp.extend_from_slice(&[4; 6]);
+    arp.extend_from_slice(&PEER);
+    arp.extend_from_slice(&[0; 6]);
+    arp.extend_from_slice(&CONFIG.address);
+    arp
+}
+/// An IPv4 ICMP echo request from the peer to the device.
+fn echo_request() -> Vec<u8> {
+    let mut icmp = std::vec![8, 0, 0, 0, 0, 1, 0, 1, 1, 2, 3, 4];
+    let sum = checksum(&icmp);
+    icmp[2..4].copy_from_slice(&sum);
+    let mut ip = std::vec![0x45, 0, 0, (20 + icmp.len()) as u8, 0, 1, 0, 0, 64, 1, 0, 0];
+    ip.extend_from_slice(&PEER);
+    ip.extend_from_slice(&CONFIG.address);
+    let sum = checksum(&ip);
+    ip[10..12].copy_from_slice(&sum);
+    ip.extend_from_slice(&icmp);
+    ip
 }
 struct PortState {
     link: LinkSnapshot,
@@ -164,12 +257,23 @@ fn start<X: ExecutionContext>(
     Service<X, 2, 1, Port>,
     Rc<RefCell<PortState>>,
 ) {
+    start_lent(configuration, None)
+}
+
+fn start_lent<X: ExecutionContext>(
+    configuration: Configuration,
+    lent: Option<&'static dyn crate::ethernet::AdoptLent<Lent>>,
+) -> (
+    Control<'static>,
+    Service<X, 2, 1, Port>,
+    Rc<RefCell<PortState>>,
+) {
     let (port, state) = port();
     let resources = Box::leak(Box::new(Resources::<X, 2, 1, 8>::new()));
     let (control, service) = resources
         .start(
             port,
-            None,
+            lent,
             NetworkInterfaceId::new(0),
             [2; 6],
             1,
@@ -385,7 +489,7 @@ fn tx_refusal_keeps_the_exact_owner_until_credit_and_rx_still_progresses() {
         !iface.with_driver(|driver| driver.can_transmit()),
         "retained packet keeps the single TX credit"
     );
-    port.borrow_mut().rx.push_back(Frame);
+    port.borrow_mut().rx.push_back(Frame::Plain);
     PortState::wake(&port.borrow().rx_waker);
     settle(&mut task, &scheduled, &mut cx);
     assert_eq!(received.get(), 1);
@@ -404,7 +508,7 @@ fn tx_refusal_keeps_the_exact_owner_until_credit_and_rx_still_progresses() {
     assert!(iface.with_driver(|driver| driver.can_transmit()));
     // A frame the device still queues at the stop may be lent: the stop
     // drops it, which returns it to the device.
-    port.borrow_mut().rx.push_back(Frame);
+    port.borrow_mut().rx.push_back(Frame::Plain);
     control.stop();
     assert_eq!(task.as_mut().poll(&mut cx), Poll::Ready(Ok(())));
     assert!(port.borrow().rx.is_empty());
@@ -552,4 +656,55 @@ fn invalid_static_configuration_returns_the_original_device() {
         assert_eq!(refused.reason, expected);
         assert!(Rc::ptr_eq(&refused.device.0, &original));
     }
+}
+
+#[test]
+fn a_stop_returns_every_lent_buffer_including_the_replies_the_stack_retains() {
+    let slots: &'static crate::ethernet::LentSlots<Lent, 4> =
+        Box::leak(Box::new(crate::ethernet::LentSlots::new()));
+    let (control, mut service, port) =
+        start_lent::<HostContext>(Configuration::Static(CONFIG), Some(slots));
+    let iface = service.interface();
+    let pool = allocator();
+    let scheduled = Arc::new(Scheduled(AtomicBool::new(true)));
+    let waker = Waker::from(scheduled.clone());
+    let mut cx = core::task::Context::from_waker(&waker);
+    let mut task = core::pin::pin!(service.run(|_| {}, |_| {}, |_| {}, |_| {}, |_| {}));
+    settle(&mut task, &scheduled, &mut cx);
+    // The device takes no frame and the stack's one TX credit is out: its
+    // replies wait inside it, each in its request's packet.
+    port.borrow_mut().ready = false;
+    iface
+        .with_driver(|driver| driver.transmit(packet(pool)))
+        .unwrap();
+    settle(&mut task, &scheduled, &mut cx);
+    let returned = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    // The peer's ARP request teaches the stack its MAC; its buffer returns
+    // once the stack has read it.
+    port.borrow_mut()
+        .rx
+        .push_back(lent(0x0806, &arp_request(), &returned));
+    PortState::wake(&port.borrow().rx_waker);
+    settle(&mut task, &scheduled, &mut cx);
+    assert_eq!(returned.load(Ordering::Relaxed), 1);
+    // The echo reply reuses its request's lent buffer and waits for TX
+    // credit inside the stack.
+    port.borrow_mut()
+        .rx
+        .push_back(lent(0x0800, &echo_request(), &returned));
+    PortState::wake(&port.borrow().rx_waker);
+    settle(&mut task, &scheduled, &mut cx);
+    assert!(port.borrow().rx.is_empty(), "the bridge took both frames");
+    assert_eq!(
+        returned.load(Ordering::Relaxed),
+        1,
+        "the retained echo reply holds its lent buffer"
+    );
+    control.stop();
+    assert_eq!(task.as_mut().poll(&mut cx), Poll::Ready(Ok(())));
+    assert_eq!(
+        returned.load(Ordering::Relaxed),
+        2,
+        "the stop returns the retained reply's lent buffer"
+    );
 }

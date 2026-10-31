@@ -162,8 +162,8 @@ pub use phase::{
     TxBufferPool, TxCompleted, TxProtection, TxSource,
 };
 pub use rx::{
-    LendRefusal, LendRefused, LentRxBuffer, LinkMetric, RxBuffer, RxCryptoStatus, RxEvidence,
-    RxMeta, RxMetadata, SignalMetadata,
+    AdvanceRefused, LendRefusal, LendRefused, LentRxBuffer, LinkMetric, RxBuffer, RxCryptoStatus,
+    RxEvidence, RxMeta, RxMetadata, SignalMetadata,
 };
 pub use tx::{
     AckSnr, AggregateEnd, AggregateOutcome, Air, BlockAckReport, BlockAckSnr, IndeterminateCause,

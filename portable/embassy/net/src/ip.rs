@@ -384,8 +384,8 @@ trait Interface {
     fn restart_dhcp(&self);
     fn lease(&self) -> Option<Ipv4Configuration>;
     fn clear(&self) -> Result<(), Error>;
-    /// Drop every received packet the stack has not taken yet: a lent one
-    /// returns to its device.
+    /// Drop every received packet the stack has not taken yet and every
+    /// reply it retains: a lent one returns to its device.
     fn drop_received(&self) {}
 }
 impl<X: ExecutionContext, const RX: usize, const TX: usize> Interface
@@ -396,6 +396,8 @@ impl<X: ExecutionContext, const RX: usize, const TX: usize> Interface
     }
     fn drop_received(&self) {
         self.with_driver(|driver| while driver.receive().is_some() {});
+        // A reply reuses its request's packet: a lent one goes back too.
+        self.release_retained();
     }
     fn lease(&self) -> Option<Ipv4Configuration> {
         self.dhcpv4_lease().map(|lease| Ipv4Configuration {
@@ -520,5 +522,10 @@ fn finish<X: ExecutionContext, const RX: usize, const TX: usize, D: NetDevice>(
 }
 
 #[cfg(test)]
-#[allow(clippy::disallowed_macros, clippy::disallowed_methods)]
+#[allow(
+    clippy::disallowed_macros,
+    clippy::disallowed_methods,
+    clippy::arithmetic_side_effects,
+    reason = "tests build fixed frame fixtures"
+)]
 mod tests;

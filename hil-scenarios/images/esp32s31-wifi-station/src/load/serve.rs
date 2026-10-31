@@ -13,9 +13,10 @@ use core::convert::Infallible;
 use core::net::Ipv4Addr;
 use core::pin::pin;
 use core::sync::atomic::Ordering;
+use core::task::{Poll, Waker};
 
 use embassy_futures::{
-    select::{Either, select},
+    select::{Either, Either3, select, select3},
     yield_now,
 };
 use embassy_net::TryError;
@@ -82,20 +83,76 @@ pub(crate) fn queue(requests: &Sender, identity: RequestIdentity, request: Reque
 }
 
 /// The station's IP interface while its stack runs: the station work lends
-/// it once the stack started and withdraws it when the stack stopped.
-pub(crate) struct Network(Cell<Option<Interface>>);
+/// it once the stack started and withdraws it when the stack stopped. A
+/// stop of the station first closes the load's socket through it: the
+/// socket's queued datagrams hold the station's lent receive buffers.
+pub(crate) struct Network {
+    interface: Cell<Option<Interface>>,
+    /// The station stops: no run opens a socket, a running one closes it.
+    stopping: Cell<bool>,
+    /// A run's socket is open.
+    open: Cell<bool>,
+    /// The run waiting for the stop, and the stop waiting for the run; both
+    /// in the station work's task.
+    run_waker: Cell<Option<Waker>>,
+    stop_waker: Cell<Option<Waker>>,
+}
 
 impl Network {
     pub(crate) const fn new() -> Self {
-        Self(Cell::new(None))
+        Self {
+            interface: Cell::new(None),
+            stopping: Cell::new(false),
+            open: Cell::new(false),
+            run_waker: Cell::new(None),
+            stop_waker: Cell::new(None),
+        }
     }
 
     pub(crate) fn lend(&self, interface: Interface) {
-        self.0.set(Some(interface));
+        self.interface.set(Some(interface));
     }
 
     pub(crate) fn withdraw(&self) {
-        self.0.set(None);
+        self.interface.set(None);
+    }
+
+    /// Close the load's socket and open no other: ready once none is open.
+    pub(crate) async fn stop_load(&self) {
+        self.stopping.set(true);
+        if let Some(waker) = self.run_waker.take() {
+            waker.wake();
+        }
+        core::future::poll_fn(|cx| {
+            if self.open.get() {
+                self.stop_waker.set(Some(cx.waker().clone()));
+                Poll::Pending
+            } else {
+                Poll::Ready(())
+            }
+        })
+        .await
+    }
+
+    /// Ready once the station stops.
+    async fn stopping(&self) {
+        core::future::poll_fn(|cx| {
+            if self.stopping.get() {
+                Poll::Ready(())
+            } else {
+                self.run_waker.set(Some(cx.waker().clone()));
+                Poll::Pending
+            }
+        })
+        .await
+    }
+
+    /// The run's socket was closed.
+    fn closed(&self) {
+        self.open.set(false);
+        if let Some(waker) = self.stop_waker.take() {
+            waker.wake();
+        }
     }
 }
 
@@ -123,7 +180,9 @@ pub(crate) async fn serve(
                         emit(identity, &Started::Running);
                         let ended =
                             run(&mut requests, socket, start, tally, network, &mut sampler).await;
-                        kept = Some((start.run, ended));
+                        network.closed();
+                        // A run the station's stop ended keeps no report.
+                        kept = ended.map(|ended| (start.run, ended));
                     }
                     Err(error) => emit(identity, &Started::Refused(error)),
                 }
@@ -203,13 +262,17 @@ fn publish(identity: RequestIdentity, answer: Answer) {
 
 /// The run's socket, bound to `start.port` of the station's DHCP address.
 fn open(network: &Network, start: &Start) -> Result<Socket, LoadError> {
-    let interface = network.0.get().ok_or(LoadError::NoAddress)?;
+    if network.stopping.get() {
+        return Err(LoadError::NoAddress);
+    }
+    let interface = network.interface.get().ok_or(LoadError::NoAddress)?;
     let lease = interface.dhcpv4_lease().ok_or(LoadError::NoAddress)?;
     let mut socket = UdpSocket::new(interface.stack()).map_err(|_| LoadError::Bind)?;
     let local = SocketAddr::from((lease.address.address(), start.port));
     socket
         .bind(local, ListenSocketAddr::UNSPECIFIED)
         .map_err(|_| LoadError::Bind)?;
+    network.open.set(true);
     Ok(socket)
 }
 
@@ -257,7 +320,7 @@ async fn run(
     tally: &mut Tally<TALLY_WORDS>,
     network: &Network,
     sampler: &mut Profiler,
-) -> Ended {
+) -> Option<Ended> {
     tally.clear();
     let window = Window {
         start_us: Cell::new(None),
@@ -272,20 +335,29 @@ async fn run(
         ));
         loop {
             let running = Phase::Running { run: start.run };
-            match select(next(requests), activity.as_mut()).await {
-                Either::First((identity, request)) => match action(running, request) {
+            match select3(next(requests), activity.as_mut(), network.stopping()).await {
+                Either3::First((identity, request)) => match action(running, request) {
                     Action::Answer(answer) => publish(identity, answer),
                     Action::Cpu => emit(identity, &cpu_load().await),
                     // A running server starts nothing and keeps no report.
                     Action::Start(_) => emit(identity, &Started::Refused(LoadError::Busy)),
                     Action::Kept(kind) => publish(identity, Answer::Running(kind)),
                 },
-                Either::Second(Either::First(never)) => match never {},
-                Either::Second(Either::Second(ends)) => break ends,
+                Either3::Second(Either::First(never)) => match never {},
+                Either3::Second(Either::Second(ends)) => break Some(ends),
+                Either3::Third(()) => break None,
             }
         }
     };
     socket.close();
+    let Some(ends) = ends else {
+        // The station stops: its received datagrams go with the socket. A
+        // session the run started stops too; one the handler kept makes
+        // the next sampled run refuse.
+        sampler.request_stop();
+        let _ = sampler.stop().await;
+        return None;
+    };
     let report = Report {
         window_start_us: ends.start_us,
         window_end_us: ends.end_us,
@@ -294,12 +366,12 @@ async fn run(
         received: receiving.received(tally),
         sent,
     };
-    Ended {
+    Some(Ended {
         report,
         parts: ends.parts,
         counters: ends.counters,
         sampled: ends.sampled,
-    }
+    })
 }
 
 /// Count every datagram on the port and echo those that ask for it, at once.
@@ -394,7 +466,7 @@ async fn measure(
 /// has an interface.
 fn stack_received(network: &Network) -> u32 {
     network
-        .0
+        .interface
         .get()
         .map_or(0, |interface| interface.stack().statistics().rx_frames)
 }
