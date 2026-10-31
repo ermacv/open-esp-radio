@@ -63,6 +63,14 @@ struct Observed {
     /// The next start fails with this fault, as a refused retune does.
     fail_start: Option<Fault>,
     hold_completion: bool,
+    /// Hardware queues whose publications do not complete yet.
+    held_queues: [bool; 4],
+    /// The next device poll fails with this fault, poisoning the port.
+    fail_poll: Option<Fault>,
+    /// The descriptor head of each port buffer, by buffer place.
+    buffer_heads: Vec<u32>,
+    /// The descriptor head of each publication, in order.
+    published_heads: Vec<u32>,
     /// The next publication ends in the hardware's TX-timeout edge instead
     /// of a completion.
     timeout_edge: bool,
@@ -143,7 +151,21 @@ struct TestDevice {
     timer: TestTimer,
     observed: Rc<RefCell<Observed>>,
     completed: usize,
+    /// Publications already completed, by publication order.
+    done: Vec<bool>,
     stopped: bool,
+}
+impl TestDevice {
+    /// The first publication not yet completed whose queue is not held.
+    fn next_completion(&self, publications: usize) -> Option<(usize, u8)> {
+        let observed = self.observed.borrow();
+        (0..publications).find_map(|index| {
+            let queue = self.hardware.legacy.get(index).map(|p| p.0).unwrap_or(2);
+            (!self.done.get(index).copied().unwrap_or(false)
+                && !observed.held_queues[usize::from(queue)])
+            .then_some((index, queue))
+        })
+    }
 }
 impl TestDevice {
     fn assert_driver_context(&self) {
@@ -239,6 +261,9 @@ impl Device<512> for TestDevice {
         _: &mut Context<'_>,
     ) -> Poll<Result<DeviceEvent<TestReceive>, Fault>> {
         self.assert_driver_context();
+        if let Some(fault) = self.observed.borrow_mut().fail_poll.take() {
+            return Poll::Ready(Err(fault));
+        }
         let mut observed = self.observed.borrow_mut();
         observed.device_polls += 1;
         suspend_rx_continuation(receive_room, &mut observed.rx_continuation);
@@ -284,20 +309,22 @@ impl Device<512> for TestDevice {
             .map(|(_, program)| program.contention_window())
             .collect();
         self.observed.borrow_mut().publications = publications;
-        if self.completed < publications && self.observed.borrow().timeout_edge {
-            let queue = self
-                .hardware
-                .legacy
-                .get(self.completed)
-                .map(|p| p.0)
-                .unwrap_or(2);
+        self.observed.borrow_mut().published_heads = self.hardware.heads.clone();
+        self.done.resize(publications, false);
+        let next = self.next_completion(publications);
+        if let Some((index, queue)) = next
+            && self.observed.borrow().timeout_edge
+        {
             self.hardware.timeout_pending[usize::from(queue)] = true;
+            self.done[index] = true;
             self.completed += 1;
             return Poll::Ready(Ok(DeviceEvent::Tx(crate::tx::WifiTxWake::Interrupt {
                 events: crate::mac::irq::EVENT_TX_TIMEOUT,
             })));
         }
-        if self.completed < publications && !self.observed.borrow().hold_completion {
+        if let Some((index, queue)) = next
+            && !self.observed.borrow().hold_completion
+        {
             let (status, detail) = self
                 .observed
                 .borrow()
@@ -305,15 +332,10 @@ impl Device<512> for TestDevice {
                 .get(self.completed)
                 .copied()
                 .unwrap_or((0, 0));
-            let queue = self
-                .hardware
-                .legacy
-                .get(self.completed)
-                .map(|p| p.0)
-                .unwrap_or(2);
             self.hardware.completion[usize::from(queue)] = Some(
                 oer_esp32s31_hal::types::MacTxCompletionObservation::new_model(status, detail),
             );
+            self.done[index] = true;
             self.completed += 1;
             Poll::Ready(Ok(DeviceEvent::Tx(crate::tx::WifiTxWake::Interrupt {
                 events: crate::mac::irq::EVENT_TX_COMPLETE,
@@ -390,11 +412,17 @@ fn installed_with_hardware(
         statuses,
         ..Observed::default()
     }));
+    let buffers: [_; TX_TICKETS] = core::array::from_fn(|_| slot());
+    observed.borrow_mut().buffer_heads = buffers
+        .iter()
+        .map(|slot| slot.as_ref().descriptor_address())
+        .collect();
     let device = TestDevice {
         hardware,
         timer: timer.clone(),
         observed: observed.clone(),
         completed: 0,
+        done: Vec::new(),
         stopped: false,
     };
     let device = Box::leak(Box::new(device));
@@ -415,7 +443,7 @@ fn installed_with_hardware(
     let parts = PortParts {
         storage,
         transmitter,
-        buffers: core::array::from_fn(|_| slot()),
+        buffers,
         config: crate::lower_mac::LowerMacConfig {
             station_address: STATION,
             channel: channel(6),

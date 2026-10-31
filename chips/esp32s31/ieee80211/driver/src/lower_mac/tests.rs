@@ -75,6 +75,8 @@ enum CryptoOperation {
 #[derive(Default)]
 struct Hardware {
     legacy: Vec<(u8, MacLegacyTxProgram)>,
+    /// The descriptor head of each legacy publication, in order.
+    heads: Vec<u32>,
     ht: Vec<(u8, MacHtTxProgram)>,
     he: Vec<(u8, MacHeTxProgram)>,
     completion: [Option<MacTxCompletionObservation>; 4],
@@ -119,6 +121,7 @@ impl TxHardware for Hardware {
     ) -> bool {
         let queue = queue.get() as u8;
         self.legacy.push((queue, program));
+        self.heads.push(_dma.descriptor_head().bits());
         true
     }
 
