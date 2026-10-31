@@ -2356,6 +2356,7 @@ dependencies = [
  "bytemuck",
  "critical-section",
  "embassy-futures",
+ "embassy-net",
  "heapless",
  "oer-diagnostics",
  "oer-embassy-net",
@@ -2372,11 +2373,13 @@ dependencies = [
  "oer-hil-protocol",
  "oer-memory",
  "oer-riscv",
+ "oer-services-load",
  "oer-services-wifi-station",
  "oer-time",
  "oer-trace",
  "postcard",
  "static_cell",
+ "xarxa",
 ]
 
 [[package]]
