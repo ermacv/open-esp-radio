@@ -158,7 +158,9 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
     );
     let phy_pilot = crate::phy_pilot::init(runtime_timg0_alarm, adopted.router(), interrupts.phy);
     let (actor, hardware) = radio_resources.start(phy_pilot);
-    let actor = ACTOR.init(actor);
+    let Some(actor) = ACTOR.try_init(actor) else {
+        fail(oer_diagnostics::name!("actor-storage"; 32));
+    };
     // The radio executor writes the system timer; the application executor
     // publishes its deadlines to it.
     oer_esp32s31_compose::platform::timers(
@@ -193,7 +195,10 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
     if !rng.is_healthy() {
         fail(oer_diagnostics::name!("entropy"; 32));
     }
-    let nonces = NONCES.init(wifi::NonceSource::from_entropy(|seed| rng.fill(seed)));
+    let Some(nonces) = NONCES.try_init(wifi::NonceSource::from_entropy(|seed| rng.fill(seed)))
+    else {
+        fail(oer_diagnostics::name!("nonce-storage"; 32));
+    };
     let mut tx_bytes = [0; 4];
     rng.fill(&mut tx_bytes);
     let entropy = u32::from_le_bytes(tx_bytes);
