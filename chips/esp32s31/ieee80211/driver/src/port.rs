@@ -220,9 +220,16 @@ pub struct PortSharedStorage<const B: usize> {
     key_live: [KeyActivity; 20],
     returned: oer_memory::ReturnBank<TxSlotFree<'static, B>, TX_TICKETS>,
     settings: settings::Settings,
+    /// Slot and permission of a GTK command the installation quarantined.
+    #[cfg(test)]
+    retained_group: oer_memory::OnceValue<(u8, u8)>,
 }
 #[cfg(test)]
 impl<Id: SlotIdentity, D: Device<B>, const B: usize> Esp32s31Backend<Id, D, B> {
+    /// The installation's storage, readable after the backend is registered.
+    pub(crate) fn storage_for_test(&self) -> &'static PortStorage<D, B> {
+        self.storage
+    }
     /// Keep one DMA allocation outside the bank, as a lost return would.
     pub(crate) fn withhold_dma(&self, index: usize) -> bool {
         match self.storage.shared.returned.take(index) {
@@ -232,6 +239,13 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> Esp32s31Backend<Id, D, B> {
             }
             None => false,
         }
+    }
+}
+#[cfg(test)]
+impl<D: Device<B>, const B: usize> PortStorage<D, B> {
+    /// Slot and permission of a GTK command the installation quarantined.
+    pub(crate) fn retained_group(&self) -> Option<(u8, u8)> {
+        self.shared.retained_group.get()
     }
 }
 impl<D: Device<B>, const B: usize> PortStorage<D, B> {
@@ -268,6 +282,8 @@ impl<const B: usize> PortSharedStorage<B> {
             key_live: [const { KeyActivity::new() }; 20],
             returned: oer_memory::ReturnBank::new(),
             settings: settings::Settings::new(),
+            #[cfg(test)]
+            retained_group: oer_memory::OnceValue::new(),
         }
     }
     fn poison(&self, cause: Fault) {

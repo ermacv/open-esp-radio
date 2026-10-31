@@ -765,6 +765,9 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Driver<'id, Id, D, B> 
                 }
                 Command::Group { at, command } => {
                     if now.saturating_duration_since(at) >= COMMAND_BOUND {
+                        // The expired command stays in quarantine here.
+                        #[cfg(test)]
+                        let _first = held.storage.shared.retained_group.set(command.owners());
                         self.pending_command = Some(Command::Group { at, command });
                         return Err(Fault::Deadline);
                     }

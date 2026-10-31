@@ -366,3 +366,175 @@ fn the_s31_backend_holds_a_gtk_removal_behind_its_published_use() {
         Ok(())
     );
 }
+
+/// A GTK mutation held behind the receive cut through its bound poisons the
+/// installation on the driver's own deadline wake and stays quarantined.
+/// The fail-stop cancels the body, so it records each observation as it
+/// makes it.
+struct ExpireBody {
+    mutation: Mutation,
+    timer: TestTimer,
+    observed: Rc<RefCell<Observed>>,
+    /// Admitted owners and instant, and whether the next due deadline was the
+    /// command's own.
+    admitted: Rc<Cell<Option<(Owners, Instant, bool)>>>,
+    events: Rc<RefCell<Vec<Completion>>>,
+}
+
+impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for ExpireBody {
+    type Output = ();
+    async fn run<'p, 'id>(
+        self,
+        owner: radio::Owner<'p, 'id, Id, Backend<Id>, radio::Disabled>,
+        resources: Res<'id, Id>,
+    ) -> radio::Ended<Id, Backend<Id>, Self::Output>
+    where
+        Backend<Id>: 'id,
+        Id: 'id,
+        'id: 'p,
+    {
+        let Ok(mut owner) = owner.enable().await else {
+            panic!("enable")
+        };
+        {
+            let mut phase = owner.phase();
+            let (start, bank) = resources.station_association.into_parts();
+            let (_, [slot]) = bank.into_parts();
+            let association = start.begin(Spp::NotNegotiated);
+            let permission = resources.station_group_permission;
+            let (key, permission, vacant) = if self.mutation == Mutation::Install {
+                (None, permission, Some(slot))
+            } else {
+                phase.station().install_group_key(
+                    &association,
+                    permission,
+                    slot,
+                    key_id(1),
+                    Ccmp128Key::new(&[1; 16]),
+                );
+                let Ok(Ok(LowerMacEvent::Terminal(LowerMacTerminal::GroupKeyInstalled(
+                    InstalledGroup::Station { key, permission },
+                )))) = phase.next_event().await
+                else {
+                    panic!("the setup installation")
+                };
+                (Some(key), permission, None)
+            };
+            let admitted = Owners {
+                slot: match (&key, &vacant) {
+                    (Some(key), _) => {
+                        <PortKeys<Id, Station> as KeyTypes<'id>>::group_slot_identity(key)
+                    }
+                    (None, Some(vacant)) => vacant.index(),
+                    (None, None) => panic!("a target slot"),
+                },
+                permission: permission.index(),
+            };
+            self.observed.borrow_mut().hold_cut = true;
+            let admitted_at = self.timer.now();
+            match self.mutation {
+                Mutation::Install => phase.station().install_group_key(
+                    &association,
+                    permission,
+                    vacant.expect("install slot"),
+                    key_id(2),
+                    Ccmp128Key::new(&[2; 16]),
+                ),
+                Mutation::Replace => phase.station().replace_group_key(
+                    permission,
+                    key.expect("replaced key"),
+                    key_id(2),
+                    Ccmp128Key::new(&[2; 16]),
+                ),
+                Mutation::Select => phase
+                    .station()
+                    .select_group_key(permission, key.expect("selected key")),
+                Mutation::Remove => phase
+                    .station()
+                    .remove_group_key(permission, key.expect("removed key")),
+            }
+            for _ in 0..4 {
+                barriers::yield_once().await;
+            }
+            // Only the driver's own deadline is due: the harness advances to
+            // it and to nothing else.
+            let deadline_woke =
+                self.timer.0.next_deadline() == admitted_at.checked_add(crate::port::COMMAND_BOUND);
+            self.admitted
+                .set(Some((admitted, admitted_at, deadline_woke)));
+            let _ = self.timer.0.advance_to_next_deadline();
+            loop {
+                match phase.next_event().await {
+                    Err(_) => break,
+                    Ok(Ok(LowerMacEvent::Terminal(terminal))) => {
+                        if let Some(event) = completion::<Id>(terminal) {
+                            self.events.borrow_mut().push(event);
+                        }
+                    }
+                    Ok(Ok(LowerMacEvent::Received { frame, .. })) => phase.recycle(frame),
+                    Ok(_) => {}
+                }
+            }
+        }
+        match owner
+            .disable(&mut |_| core::ops::ControlFlow::Continue(()))
+            .await
+        {
+            Ok(owner) => radio::Ended::uninstall(owner, (), ()),
+            Err(failed) => radio::Ended::fail_stop(failed.fail_stop(), ()),
+        }
+    }
+}
+
+#[test]
+fn an_expired_gtk_mutation_poisons_on_its_own_deadline_and_stays_quarantined() {
+    for mutation in Mutation::ALL {
+        let (parts, observed, timer) = installed(Vec::new());
+        let admitted = Rc::new(Cell::new(None));
+        let events = Rc::new(RefCell::new(Vec::new()));
+        let body = ExpireBody {
+            mutation,
+            timer: timer.clone(),
+            observed,
+            admitted: admitted.clone(),
+            events: events.clone(),
+        };
+        let (poisoned, retained) = block_on(radio::with_local_slot(async |claim| {
+            let mut slot = claim.place();
+            let backend = Backend::new(parts).ok().expect("valid construction");
+            let storage = backend.storage_for_test();
+            let registered = slot.register(backend).ok().expect("fresh local slot");
+            let end = radio::LocalExecution
+                .scope(crate::port::Registration::guarded(registered), |frontend| {
+                    radio::run_port(frontend, body)
+                })
+                .await;
+            let poisoned = !matches!(end, radio::PortEnd::Uninstalled { .. });
+            (poisoned, storage.retained_group())
+        }));
+        let (admitted, admitted_at, deadline_woke) =
+            admitted.get().expect("the command was admitted");
+        let trace = ProgressTrace {
+            rollback: None,
+            admitted,
+            timing: Timing {
+                admitted_at,
+                completed_at: timer.now(),
+            },
+            events: events.take(),
+            retained: retained
+                .map(|(slot, permission)| Owners { slot, permission })
+                .into_iter()
+                .collect::<Vec<_>>(),
+            poisoned,
+            deadline_woke,
+            published: None,
+            blocked_while_published: false,
+        };
+        let case = ProgressCase::Expire(mutation);
+        assert_eq!(
+            verify_progress(case, trace, crate::port::COMMAND_BOUND).map_err(|why| (case, why)),
+            Ok(())
+        );
+    }
+}

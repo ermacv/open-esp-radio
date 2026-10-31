@@ -205,6 +205,33 @@ pub(super) enum GroupCommand<'id, Id: SlotIdentity> {
     },
 }
 
+#[cfg(test)]
+impl<Id: SlotIdentity> GroupCommand<'_, Id> {
+    /// The slot and permission identities this command holds.
+    pub(super) fn owners(&self) -> (u8, u8) {
+        match self {
+            Self::InstallStation {
+                slot, permission, ..
+            } => (slot.index(), permission.index()),
+            Self::InstallAccessPoint {
+                slot, permission, ..
+            } => (slot.index(), permission.index()),
+            Self::Replace {
+                permission, key, ..
+            }
+            | Self::Select { permission, key } => (key.identity.slot, permission.index()),
+            Self::Remove { identity, removal } => (
+                identity.slot,
+                match removal {
+                    Removal::StationGroup(permission) => permission.index(),
+                    Removal::AccessPointGroup(permission) => permission.index(),
+                    Removal::StationPairwise(_) | Removal::AccessPointPairwise(_) => u8::MAX,
+                },
+            ),
+        }
+    }
+}
+
 pub(super) trait Role<'id, Id: SlotIdentity + 'id>: InterfaceRole + Sized
 where
     PortKeys<Id, Self>: KeyTypes<'id, Identity = KeyIdentity<'id, Id>>,
