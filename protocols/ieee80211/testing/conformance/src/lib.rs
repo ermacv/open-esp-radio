@@ -14,7 +14,8 @@
 //!
 //! Backend-independent TX ownership scenarios. The model runs these;
 //! each backend supplies a fixture for this shared contract suite.
-//! Harnesses submit the operations in `OPERATIONS`, retain the original
+//! Harnesses submit `Classes::operations` of their `Harness::CLASSES` (one
+//! buffer class carries every operation of a one-class backend), retain the original
 //! identities in opaque contexts, and report identities of actual returned
 //! resources. No observation may be synthesized from the expected identity.
 //! `check_barriers` uses the same captured publication/event trace for held
@@ -368,29 +369,46 @@ pub struct Operation {
     pub category: WmmAccessCategory,
 }
 
-/// Alternating classes, same-AC order, and other ACs completing first.
-pub const OPERATIONS: [Operation; 4] = [
-    Operation {
-        id: 0,
-        class: Class::Small,
-        category: WmmAccessCategory::BestEffort,
-    },
-    Operation {
-        id: 1,
-        class: Class::Large,
-        category: WmmAccessCategory::BestEffort,
-    },
-    Operation {
-        id: 2,
-        class: Class::Small,
-        category: WmmAccessCategory::Voice,
-    },
-    Operation {
-        id: 3,
-        class: Class::Large,
-        category: WmmAccessCategory::Video,
-    },
-];
+/// The transmit buffer classes a backend offers to the ownership suite.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Classes {
+    /// Separate small and large pools.
+    Two,
+    /// One pool carries every operation.
+    One,
+}
+impl Classes {
+    /// Alternating classes, same-AC order, and other ACs completing first.
+    /// With one class every operation takes it; order and AC are unchanged.
+    pub const fn operations(self) -> [Operation; 4] {
+        let large = match self {
+            Self::Two => Class::Large,
+            Self::One => Class::Small,
+        };
+        [
+            Operation {
+                id: 0,
+                class: Class::Small,
+                category: WmmAccessCategory::BestEffort,
+            },
+            Operation {
+                id: 1,
+                class: large,
+                category: WmmAccessCategory::BestEffort,
+            },
+            Operation {
+                id: 2,
+                class: Class::Small,
+                category: WmmAccessCategory::Voice,
+            },
+            Operation {
+                id: 3,
+                class: large,
+                category: WmmAccessCategory::Video,
+            },
+        ]
+    }
+}
 
 /// How the harness terminates its operations. BestEffort is held while
 /// other ACs complete; then it is released, withdrawn, or ended by teardown.
@@ -582,6 +600,8 @@ pub struct Trace<R, E, P> {
 
 /// Backend-specific execution, shared scenarios and checks.
 pub trait Harness {
+    /// The buffer classes the backend's operations use.
+    const CLASSES: Classes;
     /// Storage for actual resource-return observations.
     type Returns: AsRef<[Returned]>;
     /// Actual terminal evidence storage.
@@ -618,8 +638,8 @@ pub enum Violation {
 
 /// Run the same ownership suite for any backend fixture. Refusal creates
 /// no publication or terminal; fail-stop ends all owners with the install.
-pub async fn check(
-    harness: &mut impl Harness,
+pub async fn check<H: Harness>(
+    harness: &mut H,
     environment: Environment,
 ) -> Result<Report, (Scenario, Violation)> {
     let mut report = Report::default();
@@ -627,23 +647,29 @@ pub async fn check(
         if !report.includes(environment, scenario.execution()) {
             continue;
         }
-        verify(scenario, &harness.exercise(scenario).await).map_err(|why| (scenario, why))?;
+        let trace = harness.exercise(scenario).await;
+        verify(scenario, H::CLASSES, &trace).map_err(|why| (scenario, why))?;
         report.passed();
     }
     Ok(report)
 }
 
 /// Check captured ownership, publication, lifetime and FIFO observations.
-pub fn verify<R, E, P>(scenario: Scenario, trace: &Trace<R, E, P>) -> Result<(), Violation>
+pub fn verify<R, E, P>(
+    scenario: Scenario,
+    classes: Classes,
+    trace: &Trace<R, E, P>,
+) -> Result<(), Violation>
 where
     R: AsRef<[Returned]>,
     E: AsRef<[ReturnEvidence]>,
     P: AsRef<[PublicationEvent]>,
 {
+    let operations = classes.operations();
     let expected_drops = if scenario == Scenario::Poison {
         2
     } else {
-        OPERATIONS.len()
+        operations.len()
     };
     if trace.contexts_dropped != expected_drops {
         return Err(Violation::Lifetime);
@@ -662,7 +688,7 @@ where
     } else if trace.publications != expected_publications {
         return Err(Violation::Publication);
     }
-    let mut remaining = OPERATIONS.map(Some);
+    let mut remaining = operations.map(Some);
     for returned in trace.returned.as_ref() {
         let Some(slot) = remaining
             .iter_mut()

@@ -154,7 +154,7 @@ impl<Id: SlotIdentity> PortBody<Id, Backend<Id>> for Operations {
         {
             let mut phase = owner.phase();
             self.air.hold(WmmAccessCategory::BestEffort, true);
-            for operation in conformance::OPERATIONS {
+            for operation in conformance::Classes::Two.operations() {
                 let ticket = tickets.remove(0);
                 let body = ModelBody(
                     alloc::vec![operation.id; if self.scenario == Scenario::Refuse { 17 } else { 4 }],
@@ -328,6 +328,7 @@ impl<Id: SlotIdentity> PortBody<Id, Backend<Id>> for Operations {
 
 struct ModelHarness;
 impl Harness for ModelHarness {
+    const CLASSES: conformance::Classes = conformance::Classes::Two;
     type Returns = Vec<conformance::Returned>;
     type Evidence = Vec<conformance::ReturnEvidence>;
     type Publications = Vec<conformance::PublicationEvent>;

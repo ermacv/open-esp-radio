@@ -233,7 +233,7 @@ impl<Id: SlotIdentity> PortBody<Id, Backend<Id>> for Operations {
             let mut large = resources.large.into_iter();
             let mut phase = owner.phase();
             self.air.hold(WmmAccessCategory::BestEffort, true);
-            for operation in conformance::OPERATIONS {
+            for operation in conformance::Classes::Two.operations() {
                 let ticket = tickets.next().ok_or("model ticket")?;
                 let body = Body {
                     memory: ModelBody(alloc::vec![operation.id; if self.scenario == Scenario::Refuse {17} else {4}]),

@@ -70,7 +70,8 @@ fn changed_ticket_identity_is_an_owner_violation() {
 
 fn poisoned_trace() -> Trace<Vec<Returned>, Vec<ReturnEvidence>, Vec<PublicationEvent>> {
     Trace {
-        returned: OPERATIONS
+        returned: Classes::Two
+            .operations()
             .into_iter()
             .filter(|operation| operation.category != WmmAccessCategory::BestEffort)
             .map(|operation| {
@@ -98,11 +99,17 @@ fn poisoned_trace() -> Trace<Vec<Returned>, Vec<ReturnEvidence>, Vec<Publication
 
 #[test]
 fn poison_verification_rejects_destruction_of_an_unreturned_owner() {
-    assert_eq!(verify(Scenario::Poison, &poisoned_trace()), Ok(()));
+    assert_eq!(
+        verify(Scenario::Poison, Classes::Two, &poisoned_trace()),
+        Ok(())
+    );
     for dropped in [0, 1, 3, 4] {
         let mut trace = poisoned_trace();
         trace.contexts_dropped = dropped;
-        assert_eq!(verify(Scenario::Poison, &trace), Err(Violation::Lifetime));
+        assert_eq!(
+            verify(Scenario::Poison, Classes::Two, &trace),
+            Err(Violation::Lifetime)
+        );
     }
 }
 
@@ -126,7 +133,7 @@ fn closed_trace() -> Trace<Vec<Returned>, Vec<ReturnEvidence>, Vec<PublicationEv
         returned: [2, 3, 0, 1]
             .into_iter()
             .map(|id| {
-                let operation = OPERATIONS[id];
+                let operation = Classes::Two.operations()[id];
                 let resources = Resources {
                     ticket: operation.id,
                     buffer: operation.id,
@@ -158,7 +165,7 @@ fn closed_trace() -> Trace<Vec<Returned>, Vec<ReturnEvidence>, Vec<PublicationEv
 #[test]
 fn close_gate_rejects_a_ticket_count_different_from_its_terminal() {
     let mut trace = closed_trace();
-    assert_eq!(verify(Scenario::CloseGate, &trace), Ok(()));
+    assert_eq!(verify(Scenario::CloseGate, Classes::Two, &trace), Ok(()));
     let terminal: oer_ieee80211_contracts_port::SingleOutcome<(), ()> =
         TxOutcome::Ended(SingleEnd::AckTimeout(oer_ieee80211_contracts_port::Air {
             transmissions: core::num::NonZeroU16::MIN,
@@ -169,7 +176,7 @@ fn close_gate_rejects_a_ticket_count_different_from_its_terminal() {
     trace.terminal_evidence[0] =
         ReturnEvidence::terminal(true, &terminal).expect("terminal evidence");
     assert_eq!(
-        verify(Scenario::CloseGate, &trace),
+        verify(Scenario::CloseGate, Classes::Two, &trace),
         Err(Violation::Publication)
     );
 }
@@ -177,11 +184,11 @@ fn close_gate_rejects_a_ticket_count_different_from_its_terminal() {
 #[test]
 fn close_gate_rejects_publication_of_a_fresh_withdrawn_ticket() {
     let mut trace = closed_trace();
-    assert_eq!(verify(Scenario::CloseGate, &trace), Ok(()));
+    assert_eq!(verify(Scenario::CloseGate, Classes::Two, &trace), Ok(()));
     trace.publication_events.insert(4, PublicationEvent::Tx(0));
     trace.publications += 1;
     assert_eq!(
-        verify(Scenario::CloseGate, &trace),
+        verify(Scenario::CloseGate, Classes::Two, &trace),
         Err(Violation::Publication)
     );
 }
@@ -189,9 +196,12 @@ fn close_gate_rejects_publication_of_a_fresh_withdrawn_ticket() {
 #[test]
 fn close_gate_rejects_publication_after_confirmation_with_all_counts_correct() {
     let mut trace = closed_trace();
-    assert_eq!(verify(Scenario::CloseGate, &trace), Ok(()));
+    assert_eq!(verify(Scenario::CloseGate, Classes::Two, &trace), Ok(()));
     trace.publication_events.swap(3, 4);
-    assert_eq!(verify(Scenario::CloseGate, &trace), Err(Violation::Order));
+    assert_eq!(
+        verify(Scenario::CloseGate, Classes::Two, &trace),
+        Err(Violation::Order)
+    );
 }
 
 #[test]
@@ -203,7 +213,8 @@ fn publication_comparison_accepts_different_interleaving_between_access_categori
         left.into_iter(),
         right.into_iter(),
         |ticket| {
-            OPERATIONS
+            Classes::Two
+                .operations()
                 .get(usize::from(ticket))
                 .map(|operation| operation.category)
         }
@@ -220,7 +231,8 @@ fn publication_comparison_rejects_reordering_within_one_access_category() {
         left.into_iter(),
         right.into_iter(),
         |ticket| {
-            OPERATIONS
+            Classes::Two
+                .operations()
                 .get(usize::from(ticket))
                 .map(|operation| operation.category)
         }
@@ -279,4 +291,15 @@ fn edca_verifier_rejects_tail_parameters_wrong_draws_and_queue_reordering() {
         edca::verify(case, wrong),
         Err(edca::Violation::VifParameters)
     );
+}
+
+#[test]
+fn a_one_class_backend_runs_the_same_order_and_categories_in_its_one_class() {
+    let two = Classes::Two.operations();
+    let one = Classes::One.operations();
+    for (two, one) in two.iter().zip(one) {
+        assert_eq!((two.id, two.category), (one.id, one.category));
+        assert_eq!(one.class, Class::Small);
+    }
+    assert!(two.iter().any(|operation| operation.class == Class::Large));
 }
