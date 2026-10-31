@@ -5855,6 +5855,11 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
         // the next of the two deferred frames.
         loop {
             let rsn = connected.rsn.as_mut()?;
+            // Nothing owed: leave the state in place rather than moving it
+            // out and back.
+            if matches!(rsn.rekey, Rekey::None) {
+                return None;
+            }
             let (rekey, owed) = match core::mem::replace(&mut rsn.rekey, Rekey::None) {
                 Rekey::Unwrap(request, protection) if !self.key_unwrap.in_flight() => {
                     match request.key_unwrap() {

@@ -228,6 +228,20 @@ fn guard_interrupt_stack(bottom: usize, bytes: usize) -> Result<(), crate::BootE
     })
 }
 
+/// EXPERIMENT: the outermost trap frame's interrupted `ra` and `mepc` on
+/// this hart, read from inside a handler.
+#[cfg(target_arch = "riscv32")]
+#[inline(always)]
+pub fn outermost_frame_ra() -> Option<(u32, u32)> {
+    let stack = interrupt_stack(current_hart())?;
+    let frame =
+        stack.end.checked_sub(crate::trap::TRAP_FRAME_BYTES)? as *const crate::trap::TrapFrame;
+    // SAFETY: EXPERIMENT ONLY: this hart's own interrupt stack, read from a
+    // handler that runs on it; the outermost frame lies at its top.
+    let frame = unsafe { core::ptr::read_volatile(frame) };
+    (frame.outermost != 0).then_some((frame.ra, frame.mepc))
+}
+
 /// Whether `sp` lies in `hart`'s dedicated interrupt stack. Reads no memory,
 /// so a panic in any context can ask.
 #[cfg(target_arch = "riscv32")]

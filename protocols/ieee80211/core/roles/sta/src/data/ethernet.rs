@@ -69,6 +69,24 @@ impl EthernetFrame {
         })
     }
 
+    /// EXPERIMENT: own the frame in `place`, copying the payload once.
+    pub fn init_from_parts<'p>(
+        place: &'p mut core::mem::MaybeUninit<Self>,
+        parts: MsduParts<'_>,
+    ) -> Result<&'p mut Self, FrameTooLong> {
+        if parts.payload.len() > MAX_ETHERNET_PAYLOAD_LEN {
+            return Err(FrameTooLong {
+                payload_length: parts.payload.len(),
+            });
+        }
+        let frame = place.write(Self {
+            header: parts.header(),
+            payload: heapless::Vec::new(),
+        });
+        let _fits = frame.payload.extend_from_slice(parts.payload);
+        Ok(frame)
+    }
+
     /// Borrow the header fields and payload for the MAC or adapter.
     pub fn parts(&self) -> MsduParts<'_> {
         let MsduHeader {

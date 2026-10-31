@@ -83,6 +83,11 @@ impl<E: KeyUnwrap<KEY_DATA_CAPACITY, Operation: Unpin>> KeyUnwrapSlot<E> {
         &mut self,
         context: &mut Context<'_>,
     ) -> Poll<(KeyUnwrapId, StaKeyUnwrapResponse)> {
+        // An idle slot stays in place: moving the engine out and back on
+        // every poll copies it twice.
+        if !self.is_running() {
+            return Poll::Pending;
+        }
         match core::mem::replace(&mut self.state, SlotState::Moving) {
             SlotState::Running { id, mut operation } => {
                 match Pin::new(&mut operation).poll(context) {

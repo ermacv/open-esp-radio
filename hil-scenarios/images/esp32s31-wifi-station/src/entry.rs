@@ -25,7 +25,7 @@ oer_espressif_staged_runtime::interrupt_table! {
     /// The radio executor (P2), polled in its handler.
     radio: RadioToken = FromCpu2Irq => oer_espressif_executor::interrupt_handler::<station::RadioTasks, FromCpu2Irq>, line 17, context radio_executor, hart 0, Executor;
     /// The radio executor's alarm (system timer comparator 0).
-    radio_alarm: RadioAlarmToken = SystimerAlarm0 => oer_espressif_executor::alarm_interrupt::<station::RadioTasks, 0, SystimerAlarm0>, line 19, context radio, hart 0, Hardware;
+    radio_alarm: RadioAlarmToken = SystimerAlarm0 => crate::station::irq::on_radio_alarm, line 19, context radio, hart 0, Hardware;
     /// The radio handler (P3): both Wi-Fi MAC banks and the doorbell.
     wifi: WifiToken = station::irq::WifiPart => crate::station::irq::on_wifi, line 21, context radio, hart 0, Hardware;
     /// Wakes the application executor.
@@ -97,7 +97,13 @@ oer_espressif_staged_runtime::entry!(
     exception = exception::capture
 );
 
+/// EXPERIMENT: `MHCR` before and after enabling branch prediction.
+pub(crate) static MHCR: [AtomicU32; 2] = [AtomicU32::new(0), AtomicU32::new(0)];
+
 fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platform::Port>) -> ! {
+    MHCR[0].store(oer_riscv::read_mhcr(), core::sync::atomic::Ordering::Relaxed);
+    oer_riscv::set_mhcr(0x1030);
+    MHCR[1].store(oer_riscv::read_mhcr(), core::sync::atomic::Ordering::Relaxed);
     let prepared = initialize_runtime();
     let (
         (

@@ -288,6 +288,26 @@ impl<'queue, T, const DEPTH: usize, C: SpscCursor> AffineSpscSender<'queue, T, D
         self.queue.try_send(value)
     }
 
+    /// EXPERIMENT: initialize the next vacant cell in place. `init` returns
+    /// `true` only after it initialized the cell; `false` publishes nothing.
+    /// `None` when the queue is full.
+    #[inline]
+    pub fn try_send_with(&self, init: impl FnOnce(&mut MaybeUninit<T>) -> bool) -> Option<bool> {
+        let permit = self.queue.vacant_slot()?;
+        #[allow(unsafe_code, reason = "EXPERIMENT")]
+        // SAFETY: EXPERIMENT ONLY: the permit proves the cell vacant and
+        // owned by the sole producer; `init` reports whether it initialized it.
+        let cell = unsafe { &mut *permit.queue.slot(permit.producer).get() };
+        if !init(cell) {
+            return Some(false);
+        }
+        permit.queue.producer.counter().store(
+            AffineSpscQueue::<T, DEPTH, C>::advance(permit.producer),
+            Ordering::Release,
+        );
+        Some(true)
+    }
+
     /// Reserve one vacant cell, exclusively borrowing the producer until
     /// the permit is sent or dropped. A full queue returns that same borrow,
     /// allowing a readiness future to keep its sole producer registration.
@@ -374,6 +394,31 @@ impl<T, const DEPTH: usize, C: SpscCursor> AffineSpscReceiver<'_, T, DEPTH, C> {
     #[inline]
     pub fn try_receive(&self) -> Result<T, AffineSpscTryReceiveError> {
         self.queue.try_receive()
+    }
+
+    /// EXPERIMENT: lend the oldest value in place, then drop it there.
+    #[inline]
+    pub fn try_receive_with<R>(&self, use_value: impl FnOnce(&mut T) -> R) -> Option<R> {
+        let queue = self.queue;
+        let consumer = queue.consumer.counter().load(Ordering::Relaxed);
+        let producer = queue.producer.counter().load(Ordering::Acquire);
+        if consumer == producer {
+            return None;
+        }
+        #[allow(unsafe_code, reason = "EXPERIMENT")]
+        // SAFETY: EXPERIMENT ONLY: the producer's Release cursor initialized
+        // this cell; the sole consumer uses and drops it before advancing.
+        let result = unsafe {
+            let cell = &mut *queue.slot(consumer).get();
+            let result = use_value(cell.assume_init_mut());
+            cell.assume_init_drop();
+            result
+        };
+        queue.consumer.counter().store(
+            AffineSpscQueue::<T, DEPTH, C>::advance(consumer),
+            Ordering::Release,
+        );
+        Some(result)
     }
 
     pub fn len(&self) -> usize {

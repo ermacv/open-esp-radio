@@ -484,9 +484,14 @@ impl<const RX_QUEUE_DEPTH: usize> OwnedRxPublisher<'_, RX_QUEUE_DEPTH> {
             ether_type: EtherType::new(ether_type),
         }
         .to_bytes();
-        let bytes = header.into_iter().chain(payload.iter().copied());
-        for (byte, source) in packet.iter_mut().zip(bytes) {
-            *byte = source;
+        // Two plain copies: a chained iterator copies byte by byte.
+        if let Some((head, body)) = packet.split_at_mut_checked(header.len()) {
+            for (byte, source) in head.iter_mut().zip(header) {
+                *byte = source;
+            }
+            for (byte, source) in body.iter_mut().zip(payload) {
+                *byte = *source;
+            }
         }
         self.try_publish(packet)
     }

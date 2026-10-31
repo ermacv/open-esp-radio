@@ -45,7 +45,7 @@ impl BootProfile for S31 {
     const ENTROPY: oer_espressif_boot::drivers::entropy::Profile<boot::Bits<5>, boot::Bits<9>> =
         crate::ENTROPY;
     const CPU: boot::CpuClockProfile<boot::CpuRoot, boot::BusDividers, boot::CpllDividers> =
-        boot::CpuProfile::Mhz160.clock();
+        boot::CpuProfile::Mhz320.clock();
     const CLOCK_WAITS: boot::ClockWaits = boot::CLOCK_WAITS;
     const PSRAM_WAITS: boot::PsramWaits = boot::PSRAM_WAITS;
     const CACHE: boot::CacheGeometry<boot::CacheMap> = boot::CACHE_GEOMETRY;

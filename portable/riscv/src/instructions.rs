@@ -21,6 +21,30 @@ pub fn cycle32() -> u32 {
     value
 }
 
+/// EXPERIMENT: the vendor hardware-control CSR (`MHCR`, 0x7C1).
+#[inline(always)]
+pub fn read_mhcr() -> u32 {
+    let value;
+    // SAFETY: reading a CSR changes no state.
+    unsafe { asm!("csrr {value}, 0x7c1", value = out(reg) value, options(nomem, nostack)) };
+    value
+}
+
+/// EXPERIMENT: set `bits` in `MHCR` (0x7C1).
+#[inline(always)]
+pub fn set_mhcr(bits: u32) {
+    // SAFETY: EXPERIMENT ONLY: enables the core's branch prediction bits.
+    unsafe { asm!("csrs 0x7c1, {bits}", bits = in(reg) bits, options(nomem, nostack)) };
+}
+
+#[inline(always)]
+pub fn instret32() -> u32 {
+    let value;
+    // SAFETY: reading the machine retired-instruction counter changes no state.
+    unsafe { asm!("csrr {value}, minstret", value = out(reg) value, options(nomem, nostack)) };
+    value
+}
+
 pub fn cycle64() -> u64 {
     loop {
         let before: u32;

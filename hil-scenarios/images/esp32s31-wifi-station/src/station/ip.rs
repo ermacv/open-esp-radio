@@ -64,7 +64,20 @@ pub(crate) fn start(
 fn running_future(mut service: Service<Context, RX, TX, Network<'static>>) -> Running {
     async move {
         // Only an access from another context than its executor's fails it.
-        if service.run(|_| {}, |_| {}, |_| {}, |_| {}).await.is_err() {
+        if service.run(
+            |_| {},
+            |_| crate::load::parts::mark(crate::load::parts::Part::NetRx),
+            |reason| {
+                use crate::load::parts::{Part, mark};
+                mark(Part::NetRefused);
+                match reason {
+                    oer_embassy_net::RxEnqueueError::PoolExhausted => mark(Part::NetPool),
+                    oer_embassy_net::RxEnqueueError::QueueFull => mark(Part::NetQueue),
+                    _ => {}
+                }
+            },
+            |_| {},
+        ).await.is_err() {
             crate::fail(Failure::Network);
         }
     }

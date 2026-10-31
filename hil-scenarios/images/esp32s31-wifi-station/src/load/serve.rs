@@ -25,8 +25,7 @@ use oer_memory::{WakingSpscQueue, WakingSpscReceiver, WakingSpscSender};
 use oer_services_load::header::Header;
 use oer_services_load::tally::Tally;
 use oer_services_load::{
-    Collected, Load, LoadError, Parts, PartsCollected, Report, Request, Sent, Start, Started,
-    Transmit,
+    Collected, Load, LoadError, PartsCollected, Report, Request, Sent, Start, Started, Transmit,
 };
 use oer_time::{CLOCK_EPOCH_OFFSET, Instant, Timer as _};
 use static_cell::ConstStaticCell;
@@ -104,7 +103,7 @@ pub(crate) async fn serve(mut requests: Receiver, network: &Network) -> Infallib
     let tally = TALLY
         .try_take()
         .unwrap_or_else(|| crate::fail(Failure::Storage));
-    let mut kept: Option<(u32, Report, Parts)> = None;
+    let mut kept: Option<(u32, Report, parts::Windows)> = None;
     loop {
         let (identity, request) = next(&mut requests).await;
         let phase = Phase::Idle {
@@ -114,19 +113,20 @@ pub(crate) async fn serve(mut requests: Receiver, network: &Network) -> Infallib
             Action::Start(start) => match open(network, &start) {
                 Ok(socket) => {
                     emit(identity, &Started::Running);
-                    let (report, parts) = run(&mut requests, socket, start, tally).await;
+                    let (report, parts) = run(&mut requests, socket, start, tally, network).await;
                     kept = Some((start.run, report, parts));
                 }
                 Err(error) => emit(identity, &Started::Refused(error)),
             },
             Action::Answer(answer) => publish(identity, answer),
             Action::Cpu => emit(identity, &cpu_load().await),
+            Action::Samples(from) => emit(identity, &crate::station::irq::samples(from)),
             Action::Kept(kind) => match (&kept, kind) {
                 (Some((_, report, _)), Kept::Report) => {
                     emit(identity, &Collected::Report(report.clone()));
                 }
-                (Some((_, _, parts)), Kept::Parts) => {
-                    emit(identity, &PartsCollected::Report(parts.clone()));
+                (Some((_, _, parts)), Kept::Parts { from }) => {
+                    emit(identity, &PartsCollected::Report(parts::page(parts, from)));
                 }
                 (None, kind) => publish(identity, Answer::UnknownRun(kind)),
             },
@@ -148,11 +148,11 @@ fn publish(identity: RequestIdentity, answer: Answer) {
     match answer {
         Answer::Started(started) => emit(identity, &started),
         Answer::Running(Kept::Report) => emit(identity, &Collected::Running),
-        Answer::Running(Kept::Parts) => emit(identity, &PartsCollected::Running),
+        Answer::Running(Kept::Parts { .. }) => emit(identity, &PartsCollected::Running),
         Answer::UnknownRun(Kept::Report) => {
             emit(identity, &Collected::Refused(LoadError::UnknownRun));
         }
-        Answer::UnknownRun(Kept::Parts) => {
+        Answer::UnknownRun(Kept::Parts { .. }) => {
             emit(identity, &PartsCollected::Refused(LoadError::UnknownRun));
         }
     }
@@ -191,7 +191,7 @@ struct Ends {
     end_us: u64,
     cpu_start: Load,
     cpu_end: Load,
-    parts: Parts,
+    parts: parts::Windows,
 }
 
 /// Run `start` on `socket` beside the requests until its drain ended, with
@@ -201,7 +201,8 @@ async fn run(
     mut socket: Socket,
     start: Start,
     tally: &mut Tally<TALLY_WORDS>,
-) -> (Report, Parts) {
+    network: &Network,
+) -> (Report, parts::Windows) {
     tally.clear();
     let window = Window {
         start_us: Cell::new(None),
@@ -212,7 +213,7 @@ async fn run(
     let ends = {
         let mut activity = pin!(select(
             receive(&socket, start.run, tally, &mut receiving, &window),
-            measure(&socket, &start, &window, &mut sent),
+            measure(&socket, &start, &window, &mut sent, network),
         ));
         loop {
             let running = Phase::Running { run: start.run };
@@ -220,6 +221,10 @@ async fn run(
                 Either::First((identity, request)) => match action(running, request) {
                     Action::Answer(answer) => publish(identity, answer),
                     Action::Cpu => emit(identity, &cpu_load().await),
+                    Action::Samples(from) => {
+                        emit(identity, &crate::station::irq::samples(from));
+                    }
+                    Action::Samples(from) => emit(identity, &crate::station::irq::samples(from)),
                     // A running server starts nothing and keeps no report.
                     Action::Start(_) => emit(identity, &Started::Refused(LoadError::Busy)),
                     Action::Kept(kind) => publish(identity, Answer::Running(kind)),
@@ -283,12 +288,27 @@ async fn receive(
 /// The run's window and drain: open the window `delay_ms` after now, read
 /// the CPU and the parts, send within it, close it after `duration_ms`,
 /// read them again, then wait out the drain.
-async fn measure(socket: &Socket, start: &Start, window: &Window, sent: &mut Sent) -> Ends {
+async fn measure(
+    socket: &Socket,
+    start: &Start,
+    window: &Window,
+    sent: &mut Sent,
+    network: &Network,
+) -> Ends {
+    let rx_frames = || {
+        network
+            .0
+            .get()
+            .map_or(0, |interface| interface.stack().statistics().rx_frames)
+    };
     let planned_start = now_us().saturating_add(millis(start.delay_ms));
     let planned_end = planned_start.saturating_add(millis(start.duration_ms));
     wait_until(planned_start).await;
     let cpu_start = cpu_load().await;
     let parts_start = parts_sample(true).await;
+    let counters_start = (oer_riscv::cycle32(), oer_riscv::instret32());
+    let stack_start = rx_frames();
+    crate::station::irq::arm(true);
     let start_us = now_us();
     window.start_us.set(Some(start_us));
     if let Some(transmit) = start.transmit {
@@ -299,13 +319,49 @@ async fn measure(socket: &Socket, start: &Start, window: &Window, sent: &mut Sen
     window.end_us.set(Some(end_us));
     let cpu_end = cpu_load().await;
     let parts_end = parts_sample(false).await;
+    let counters_end = (oer_riscv::cycle32(), oer_riscv::instret32());
+    let stack_end = rx_frames();
+    crate::station::irq::arm(false);
     wait_until(end_us.saturating_add(millis(start.drain_ms))).await;
     Ends {
         start_us,
         end_us,
         cpu_start,
         cpu_end,
-        parts: parts::window(&parts_start, &parts_end),
+        parts: {
+            let mut windows = parts::window(&parts_start, &parts_end);
+            let _room = windows.push(oer_services_load::PartWindow {
+                name: heapless::String::try_from("mhcr").unwrap_or_default(),
+                polls: crate::MHCR[0].load(Ordering::Relaxed),
+                poll_us: crate::MHCR[1].load(Ordering::Relaxed),
+                ended_poll_us: crate::MHCR[1].load(Ordering::Relaxed),
+                longest_poll_us: None,
+            });
+            let _room = windows.push(oer_services_load::PartWindow {
+                name: heapless::String::try_from("stack-rx").unwrap_or_default(),
+                polls: stack_end.wrapping_sub(stack_start),
+                poll_us: 0,
+                ended_poll_us: 0,
+                longest_poll_us: None,
+            });
+            for (name, cycles) in bench() {
+                let _room = windows.push(oer_services_load::PartWindow {
+                    name: heapless::String::try_from(name).unwrap_or_default(),
+                    polls: 0,
+                    poll_us: cycles,
+                    ended_poll_us: cycles,
+                    longest_poll_us: None,
+                });
+            }
+            let _room = windows.push(oer_services_load::PartWindow {
+                name: heapless::String::try_from("kcyc-kinstr").unwrap_or_default(),
+                polls: 0,
+                poll_us: counters_end.0.wrapping_sub(counters_start.0) / 1000,
+                ended_poll_us: counters_end.1.wrapping_sub(counters_start.1) / 1000,
+                longest_poll_us: None,
+            });
+            windows
+        },
     }
 }
 
@@ -467,4 +523,93 @@ async fn wait_until(at_us: u64) {
     oer_embassy_time::EmbassyClock
         .wait_until(Instant::from_micros(at_us))
         .await;
+}
+
+static BENCH_PSRAM: [core::sync::atomic::AtomicU32; 64] =
+    [const { core::sync::atomic::AtomicU32::new(0) }; 64];
+oer_espressif_staged_runtime::placed_static! {
+    static BENCH_SRAM: [core::sync::atomic::AtomicU32; 64] = [const { core::sync::atomic::AtomicU32::new(0) }; 64], in critical_data "bench";
+}
+
+/// Cycles per 1000 operations of each kind, interrupts masked.
+fn bench() -> [(&'static str, u32); 8] {
+    const N: u32 = 1000;
+    fn run(op: impl Fn(u32)) -> u32 {
+        oer_riscv::interrupt_free(|| {
+            let start = oer_riscv::cycle32();
+            for i in 0..N {
+                op(i);
+            }
+            oer_riscv::cycle32().wrapping_sub(start)
+        })
+    }
+    let at =
+        |cells: &'static [core::sync::atomic::AtomicU32; 64], i: u32| cells.get((i % 64) as usize);
+    use core::sync::atomic::Ordering::{Acquire, Relaxed, SeqCst};
+    [
+        (
+            "b-ps-load",
+            run(|i| {
+                if let Some(c) = at(&BENCH_PSRAM, i) {
+                    core::hint::black_box(c.load(Relaxed));
+                }
+            }),
+        ),
+        (
+            "b-ps-acq",
+            run(|i| {
+                if let Some(c) = at(&BENCH_PSRAM, i) {
+                    core::hint::black_box(c.load(Acquire));
+                }
+            }),
+        ),
+        (
+            "b-ps-store",
+            run(|i| {
+                if let Some(c) = at(&BENCH_PSRAM, i) {
+                    c.store(i, Relaxed);
+                }
+            }),
+        ),
+        (
+            "b-ps-amo",
+            run(|i| {
+                if let Some(c) = at(&BENCH_PSRAM, i) {
+                    c.fetch_add(1, SeqCst);
+                }
+            }),
+        ),
+        (
+            "b-ps-cas",
+            run(|i| {
+                if let Some(c) = at(&BENCH_PSRAM, i) {
+                    let _ = c.compare_exchange(i, i, SeqCst, Relaxed);
+                }
+            }),
+        ),
+        (
+            "b-sr-load",
+            run(|i| {
+                if let Some(c) = at(&BENCH_SRAM, i) {
+                    core::hint::black_box(c.load(Relaxed));
+                }
+            }),
+        ),
+        (
+            "b-sr-amo",
+            run(|i| {
+                if let Some(c) = at(&BENCH_SRAM, i) {
+                    c.fetch_add(1, SeqCst);
+                }
+            }),
+        ),
+        (
+            "b-sr-cas",
+            run(|i| {
+                if let Some(c) = at(&BENCH_SRAM, i) {
+                    let _ = c.compare_exchange(i, i, SeqCst, Relaxed);
+                }
+            }),
+        ),
+    ]
 }

@@ -161,3 +161,37 @@ mod tests {
         assert_eq!(TxRateSelected::decode([1, 0]), None);
     }
 }
+
+/// The start or end of a stretch of the station service's work.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ServiceSpan {
+    /// [`oer_ieee80211_runtime::station::ServiceSpan`] as its number.
+    pub span: u8,
+    pub end: bool,
+}
+
+impl Event for ServiceSpan {
+    const KIND: Kind = Kind::new(Domain::Ieee80211, 29);
+    const CHANNEL: Channel = SERVICE;
+
+    fn encode(&self) -> [u32; 2] {
+        [u32::from(self.span), u32::from(self.end)]
+    }
+
+    fn decode([span, end]: [u32; 2]) -> Option<Self> {
+        Some(Self {
+            span: u8::try_from(span).ok()?,
+            end: match end {
+                0 => false,
+                1 => true,
+                _ => return None,
+            },
+        })
+    }
+}
+
+impl core::fmt::Display for ServiceSpan {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "station.span {} end={}", self.span, self.end)
+    }
+}

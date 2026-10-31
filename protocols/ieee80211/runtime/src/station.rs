@@ -224,6 +224,8 @@ pub trait StationPort: Sized {
         Self: 'id,
         Self::Backend: 'id,
         Self::SlotId: 'id;
+    /// Observe the start or end of a stretch of the service's work.
+    fn span(_span: ServiceSpan, _end: bool) {}
     /// Recover either complete resource class, without an unknown-class branch.
     fn tx_buffer<'id>(
         buffer: <Self::Types<'id> as PhaseTypes<'id>>::AnyTxBuffer,
@@ -297,6 +299,32 @@ where
             }
         }
     }
+}
+
+/// A stretch of the service's own work, reported to its port at both ends.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(u8)]
+pub enum ServiceSpan {
+    /// The machines' owed actions.
+    Step,
+    /// Released and deferred received frames.
+    Pending,
+    /// One poll of every input source.
+    Sources,
+    /// A received frame's event.
+    Received,
+    /// A frame's delivery to the station machine.
+    Deliver,
+    /// One MSDU's hand-off to the network queue.
+    Queue,
+    /// A transmission's terminal.
+    Terminal,
+    /// The network stack's MSDU to the data machine.
+    Send,
+    /// A received buffer's return.
+    Recycle,
+    /// EXPERIMENT: an MSDU the network queue refused.
+    Refused,
 }
 
 /// Each step polls every source and consumes at most one input from each.
@@ -1641,7 +1669,10 @@ impl<
         // cooperative yield lets the driver and application progress.
         let mut batch = 0_u8;
         loop {
-            match self.step(arbiter, timer.now(), phase, io) {
+            B::span(ServiceSpan::Step, false);
+            let stepped = self.step(arbiter, timer.now(), phase, io);
+            B::span(ServiceSpan::Step, true);
+            match stepped {
                 Next::Wait => {}
                 Next::Retune(pending) => return Served::Retune(pending),
                 Next::Failed(StepFailure::Port(
@@ -1653,7 +1684,10 @@ impl<
             }
             // Releasing RX owners is a separate input source. Its receive
             // transition must not nest inside the control-action step frame.
-            match self.receive_pending(arbiter, timer.now(), phase, io) {
+            B::span(ServiceSpan::Pending, false);
+            let pending = self.receive_pending(arbiter, timer.now(), phase, io);
+            B::span(ServiceSpan::Pending, true);
+            match pending {
                 Ok(true) => continue,
                 Ok(false) => {}
                 Err(fault) => return Served::Failed(fault),
@@ -1711,6 +1745,7 @@ impl<
                 let mut command = core::pin::pin!(command);
                 let mut alarm = core::pin::pin!(alarm);
                 poll_fn(|cx| {
+                    B::span(ServiceSpan::Sources, false);
                     let event = match event.as_mut().poll(cx) {
                         Poll::Ready(event) => Some(event),
                         Poll::Pending => None,
@@ -1740,8 +1775,10 @@ impl<
                         || transmit
                         || unwrapped.is_some()
                     {
+                        B::span(ServiceSpan::Sources, true);
                         Poll::Ready((event, command_ready, tick, transmit, unwrapped))
                     } else {
+                        B::span(ServiceSpan::Sources, true);
                         Poll::Pending
                     }
                 })
@@ -1759,7 +1796,11 @@ impl<
             }
             match event {
                 Some(Ok(Ok(event))) => match self.event(arbiter, now, B::event(event), phase, io) {
-                    Ok(Some(buffer)) => phase.recycle(buffer),
+                    Ok(Some(buffer)) => {
+                        B::span(ServiceSpan::Recycle, false);
+                        phase.recycle(buffer);
+                        B::span(ServiceSpan::Recycle, true);
+                    }
                     Ok(None) => {}
                     Err(fault) => return Served::Failed(fault.into()),
                 },
@@ -1818,7 +1859,9 @@ impl<
                 }
             }
             if transmit && self.data.accepts() && self.station.link().is_some() {
+                B::span(ServiceSpan::Send, false);
                 self.send(now, io);
+                B::span(ServiceSpan::Send, true);
             }
             batch = batch.saturating_add(1);
             if batch == MAX_INPUT_STEPS_PER_BATCH {
@@ -2329,6 +2372,44 @@ impl<
     {
         match event {
             LowerMacEvent::Received { frame, meta } => {
+                B::span(ServiceSpan::Received, false);
+                let received = self.received(now, frame, meta, phase, io);
+                B::span(ServiceSpan::Received, true);
+                received
+            }
+            LowerMacEvent::Tbtt(_) => Ok(None),
+            LowerMacEvent::Terminal(terminal) => {
+                B::span(ServiceSpan::Terminal, false);
+                let terminal = self.terminal(arbiter, now, terminal);
+                B::span(ServiceSpan::Terminal, true);
+                terminal?;
+                Ok(None)
+            }
+        }
+    }
+
+    #[inline(never)]
+    fn received<'p, P, const TX_DEPTH: usize, const RX_DEPTH: usize, const COMMAND_DEPTH: usize>(
+        &mut self,
+        now: Instant,
+        frame: <B::Types<'id> as PhaseTypes<'id>>::RxBuffer,
+        meta: <B::Types<'id> as PhaseTypes<'id>>::RxMeta,
+        phase: &mut P,
+        io: &mut ServiceIo<
+            '_,
+            B::Caps,
+            impl ServiceOutputSink<B::Caps>,
+            TX_DEPTH,
+            RX_DEPTH,
+            COMMAND_DEPTH,
+        >,
+    ) -> Result<Option<<B::Types<'id> as PhaseTypes<'id>>::RxBuffer>, StepFailure<'id, B>>
+    where
+        'id: 'p,
+        P: LowerMacPhase<'p, 'id, Caps = B::Caps, Types = B::Types<'id>>,
+    {
+        {
+            {
                 let local = self.station.link().map(|link| link.address.get());
                 let (frame, meta) =
                     match self
@@ -2346,11 +2427,6 @@ impl<
                     };
                 self.deliver_received(now, &frame, meta, io);
                 Ok(Some(frame))
-            }
-            LowerMacEvent::Tbtt(_) => Ok(None),
-            LowerMacEvent::Terminal(terminal) => {
-                self.terminal(arbiter, now, terminal)?;
-                Ok(None)
             }
         }
     }
@@ -2374,13 +2450,27 @@ impl<
             COMMAND_DEPTH,
         >,
     ) {
+        B::span(ServiceSpan::Deliver, false);
         let mut refused = RxMsdusRefused::default();
         let result = self.station.receive(
             now,
             frame.bytes(),
             meta,
             |parts| {
-                let refusal = Self::queue_received(io, EthernetFrame::from_parts(parts));
+                B::span(ServiceSpan::Queue, false);
+                let refusal = match io
+                    .receive
+                    .try_send_with(|place| EthernetFrame::init_from_parts(place, parts).is_ok())
+                {
+                    Some(true) => None,
+                    Some(false) => Some(MsduRefusal::TooLong),
+                    None => Some(MsduRefusal::QueueFull),
+                };
+                B::span(ServiceSpan::Queue, true);
+                if refusal.is_some() {
+                    B::span(ServiceSpan::Refused, false);
+                    B::span(ServiceSpan::Refused, true);
+                }
                 // Delivery runs for every sink; only an enabled one counts.
                 if <O as EventSink<ServiceEvent>>::ENABLED {
                     count_refusal(&mut refused, refusal);
@@ -2388,6 +2478,7 @@ impl<
             },
             &mut self.events,
         );
+        B::span(ServiceSpan::Deliver, true);
         // The sink is the station's during delivery: the frame's refusals
         // follow its events as one aggregate.
         if refused != RxMsdusRefused::default() {

@@ -26,6 +26,8 @@ pub(crate) enum Action {
     Answer(Answer),
     /// Answer with the CPU report.
     Cpu,
+    /// Answer with the interrupted program counters from this one.
+    Samples(u16),
     /// Start this run, once the station has its address.
     Start(Start),
     /// Answer with the kept report or parts.
@@ -36,7 +38,10 @@ pub(crate) enum Action {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum Kept {
     Report,
-    Parts,
+    /// The parts from the one numbered `from`.
+    Parts {
+        from: u8,
+    },
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -55,13 +60,16 @@ pub(crate) fn action(phase: Phase, request: Request) -> Action {
     let refuse_start = |error| Action::Answer(Answer::Started(Started::Refused(error)));
     match (phase, request) {
         (_, Request::GetCpu(_)) => Action::Cpu,
+        (_, Request::CollectSamples(collect)) => Action::Samples(collect.from),
         (Phase::Idle { .. }, Request::Start(start)) => match validate(&start) {
             Ok(()) => Action::Start(start),
             Err(error) => refuse_start(error),
         },
         (Phase::Running { .. }, Request::Start(_)) => refuse_start(LoadError::Busy),
         (phase, Request::Collect(Collect { run })) => collect(phase, run, Kept::Report),
-        (phase, Request::CollectParts(CollectParts { run })) => collect(phase, run, Kept::Parts),
+        (phase, Request::CollectParts(CollectParts { run, from })) => {
+            collect(phase, run, Kept::Parts { from })
+        }
     }
 }
 
@@ -203,8 +211,8 @@ mod tests {
         type Asks = fn(u32) -> Request;
         let requests: [(Kept, Asks); 2] = [
             (Kept::Report, |run| Request::Collect(Collect { run })),
-            (Kept::Parts, |run| {
-                Request::CollectParts(CollectParts { run })
+            (Kept::Parts { from: 3 }, |run| {
+                Request::CollectParts(CollectParts { run, from: 3 })
             }),
         ];
         for (kind, collect) in requests {

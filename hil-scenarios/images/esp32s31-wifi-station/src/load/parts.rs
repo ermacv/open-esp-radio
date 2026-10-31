@@ -36,6 +36,23 @@ pub(crate) enum Part {
     Ip,
     Requests,
     Load,
+    /// Inside the station: the service's spans, in the order of
+    /// `oer_ieee80211_runtime::station::ServiceSpan`.
+    Step,
+    Pending,
+    Sources,
+    Received,
+    Deliver,
+    Queue,
+    Terminal,
+    Send,
+    Recycle,
+    Refused,
+    /// EXPERIMENT: frames the network bridge took and refused.
+    NetRx,
+    NetRefused,
+    NetPool,
+    NetQueue,
 }
 
 impl Part {
@@ -49,6 +66,20 @@ impl Part {
         Part::Ip,
         Part::Requests,
         Part::Load,
+        Part::Step,
+        Part::Pending,
+        Part::Sources,
+        Part::Received,
+        Part::Deliver,
+        Part::Queue,
+        Part::Terminal,
+        Part::Send,
+        Part::Recycle,
+        Part::Refused,
+        Part::NetRx,
+        Part::NetRefused,
+        Part::NetPool,
+        Part::NetQueue,
     ];
 
     pub(crate) const fn name(self) -> &'static str {
@@ -62,6 +93,20 @@ impl Part {
             Part::Ip => "ip",
             Part::Requests => "requests",
             Part::Load => "load",
+            Part::Step => "step",
+            Part::Pending => "pending",
+            Part::Sources => "sources",
+            Part::Received => "received",
+            Part::Deliver => "deliver",
+            Part::Queue => "queue",
+            Part::Terminal => "terminal",
+            Part::Send => "send",
+            Part::Recycle => "recycle",
+            Part::Refused => "refused",
+            Part::NetRx => "net-rx",
+            Part::NetRefused => "net-refused",
+            Part::NetPool => "net-pool",
+            Part::NetQueue => "net-queue",
         }
     }
 
@@ -71,10 +116,13 @@ impl Part {
     }
 }
 
-pub(crate) const COUNT: usize = 9;
+pub(crate) const COUNT: usize = 23;
+/// The first part of the station service's spans.
+#[cfg(all(target_arch = "riscv32", oer_trace))]
+const FIRST_SPAN: u8 = Part::Step as u8;
 const _: () = {
-    if COUNT > MAX_PARTS {
-        panic!("every part fits one parts report");
+    if COUNT > u8::MAX as usize {
+        panic!("every part has a number");
     }
     let mut index = 0;
     let mut rest: &[Part] = &Part::ALL;
@@ -238,14 +286,29 @@ fn bump(total: &AtomicU32, by: u32) {
     );
 }
 
+/// Every part's window.
+pub(crate) type Windows = heapless::Vec<PartWindow, { COUNT + 11 }>;
+
+/// The windows from the part numbered `from`, as many as one answer holds.
+pub(crate) fn page(windows: &Windows, from: u8) -> Parts {
+    Parts {
+        parts: windows
+            .iter()
+            .skip(usize::from(from))
+            .take(MAX_PARTS)
+            .cloned()
+            .collect(),
+    }
+}
+
 /// Every part between the samples `start` and `end` of one window, the
 /// longest polls from `end`.
-pub(crate) fn window(start: &[Sample; COUNT], end: &[Sample; COUNT]) -> Parts {
-    let mut parts = Parts::default();
+pub(crate) fn window(start: &[Sample; COUNT], end: &[Sample; COUNT]) -> Windows {
+    let mut parts = Windows::new();
     for ((part, start), end) in Part::ALL.iter().zip(start).zip(end) {
-        // COUNT <= MAX_PARTS and every name fits: neither push nor name
-        // is refused.
-        let _room = parts.parts.push(PartWindow {
+        // There is room for every part and every name fits: neither push
+        // nor name is refused.
+        let _room = parts.push(PartWindow {
             name: heapless::String::try_from(part.name()).unwrap_or_default(),
             polls: end.polls.wrapping_sub(start.polls),
             poll_us: end.poll_us.wrapping_sub(start.poll_us),
@@ -262,10 +325,15 @@ pub(crate) static COUNTERS: [PartCounter; COUNT] = [const { PartCounter::new() }
 #[cfg(target_arch = "riscv32")]
 pub(crate) static EPOCH: AtomicU32 = AtomicU32::new(0);
 
-/// The observer of the parts' boundaries.
+/// The observer of the parts' boundaries and the station service's spans.
 #[cfg(all(target_arch = "riscv32", oer_trace))]
-#[derive(Clone, Copy)]
-struct Observer;
+#[derive(Clone, Copy, Default)]
+pub struct Observer;
+/// The image's observer of the station's driver.
+#[cfg(all(target_arch = "riscv32", oer_trace))]
+pub type DriverObserver = Observer;
+#[cfg(all(target_arch = "riscv32", not(oer_trace)))]
+pub type DriverObserver = oer_trace::Noop;
 
 #[cfg(all(target_arch = "riscv32", oer_trace))]
 impl oer_trace::Observer for Observer {
@@ -282,6 +350,19 @@ impl oer_trace::Observer for Observer {
                 EPOCH.load(Ordering::Relaxed),
             );
         }
+        type Span = oer_esp32s31_wifi::observation::ServiceSpan;
+        let span = (E::KIND == <Span as oer_trace::Event>::KIND)
+            .then(|| <Span as oer_trace::Event>::decode(event.encode()))
+            .flatten();
+        if let Some(span) = span
+            && let Some(counter) = COUNTERS.get(usize::from(FIRST_SPAN.saturating_add(span.span)))
+        {
+            counter.observe(
+                super::serve::activity_now(),
+                span.end,
+                EPOCH.load(Ordering::Relaxed),
+            );
+        }
     }
 }
 
@@ -289,6 +370,28 @@ impl oer_trace::Observer for Observer {
 const OBSERVER: Observer = Observer;
 #[cfg(all(target_arch = "riscv32", not(oer_trace)))]
 const OBSERVER: oer_trace::Noop = oer_trace::Noop;
+
+/// EXPERIMENT: count one occurrence of `part`.
+#[cfg(target_arch = "riscv32")]
+pub(crate) fn mark(part: Part) {
+    let observer = OBSERVER;
+    oer_trace::observe!(
+        observer,
+        Boundary {
+            at_micros: 0,
+            part,
+            end: false
+        }
+    );
+    oer_trace::observe!(
+        observer,
+        Boundary {
+            at_micros: 0,
+            part,
+            end: true
+        }
+    );
+}
 
 /// `future`, observed as part `part`: each poll's start and end.
 #[cfg(target_arch = "riscv32")]
@@ -402,8 +505,8 @@ mod tests {
             longest_us: Some(3),
         };
         let parts = window(&start, &end);
-        assert_eq!(parts.parts.len(), COUNT);
-        let station_work = &parts.parts[1];
+        assert_eq!(parts.len(), COUNT);
+        let station_work = &parts[1];
         assert_eq!(station_work.name.as_str(), "station-work");
         assert_eq!(
             (
@@ -415,7 +518,7 @@ mod tests {
             "differences across the wrap"
         );
         assert_eq!(station_work.longest_poll_us, Some(3), "from the end");
-        assert_eq!(parts.parts[0].longest_poll_us, None);
+        assert_eq!(parts[0].longest_poll_us, None);
     }
 
     #[test]

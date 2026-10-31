@@ -77,6 +77,18 @@ impl<T, const DEPTH: usize> WakingSpscSender<'_, T, DEPTH> {
         Ok(())
     }
 
+    /// EXPERIMENT: see [`AffineSpscSender::try_send_with`].
+    pub fn try_send_with(
+        &self,
+        init: impl FnOnce(&mut core::mem::MaybeUninit<T>) -> bool,
+    ) -> Option<bool> {
+        let sent = self.sender.try_send_with(init)?;
+        if sent {
+            self.consumer.wake();
+        }
+        Some(sent)
+    }
+
     /// Wait for capacity while retaining the sole producer wake registration.
     /// The returned permit keeps the exclusive sender borrow and publishes
     /// without another capacity check. The caller owns its value until send;
@@ -189,6 +201,13 @@ impl<T, const DEPTH: usize> WakingSpscReceiver<'_, T, DEPTH> {
         let value = self.receiver.try_receive().ok()?;
         self.producer.wake();
         Some(value)
+    }
+
+    /// EXPERIMENT: see [`AffineSpscReceiver::try_receive_with`].
+    pub fn try_receive_with<R>(&self, use_value: impl FnOnce(&mut T) -> R) -> Option<R> {
+        let result = self.receiver.try_receive_with(use_value)?;
+        self.producer.wake();
+        Some(result)
     }
 
     /// Wait for a value without consuming it. The exclusive borrow lasts for

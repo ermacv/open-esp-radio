@@ -164,13 +164,24 @@ impl<'r, X: oer_memory::ExecutionContext, const RX: usize, const TX: usize, D: N
         // Preserve this bridge's existing drain-and-report-refusal RX policy.
         // Register even when no frame is available.
         while self.device.poll_receive_ready(cx).is_ready() {
-            let Some(frame) = self.device.try_receive() else {
+            let publisher = self.radio.rx_publisher();
+            let Some(result) = self.device.receive_with(|frame| {
+                let view = frame.view().map_err(crate::RxEnqueueError::InvalidLength);
+                if let Ok(view) = &view {
+                    received(*view);
+                }
+                view.and_then(|view| {
+                    publisher.try_send_parts(
+                        view.destination,
+                        view.source,
+                        view.ether_type,
+                        view.payload,
+                    )
+                })
+            }) else {
                 break;
             };
-            if let Ok(view) = frame.view() {
-                received(view);
-            }
-            if let Err((_owner, reason)) = publish(self.radio.rx_publisher(), frame) {
+            if let Err(reason) = result {
                 refused(reason);
             }
         }

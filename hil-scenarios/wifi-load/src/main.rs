@@ -19,7 +19,8 @@ use std::{
 use oer_hil_agent::base::Service as _;
 use oer_hil_harness::{Case, Cx, Failure, RouterOperation, Scenario, check};
 use oer_services_load::{
-    Collect, CollectParts, Collected, Load, Parts, PartsCollected, Report, Start, Started, Transmit,
+    Collect, CollectParts, Collected, Load, PartWindow, PartsCollected, Report, Start, Started,
+    Transmit,
 };
 use oer_services_wifi_station::{GetStatus, Join, Joined, Status};
 
@@ -193,7 +194,7 @@ fn device_address(cx: &mut Cx<'_>) -> Result<Ipv4Addr, Failure> {
 }
 
 /// The report of `run` and its parts' window, once the image ended it.
-fn collect(cx: &mut Cx<'_>, run: u32) -> Result<(Report, Parts), Failure> {
+fn collect(cx: &mut Cx<'_>, run: u32) -> Result<(Report, Vec<PartWindow>), Failure> {
     let started = Instant::now();
     let report = loop {
         match cx.call(Collect { run }, CALL)? {
@@ -206,9 +207,20 @@ fn collect(cx: &mut Cx<'_>, run: u32) -> Result<(Report, Parts), Failure> {
             }
         }
     };
-    match cx.call(CollectParts { run }, CALL)? {
-        PartsCollected::Report(parts) => Ok((report, parts)),
-        other => Err(Failure::Fail(format!("the image's parts: {other:?}"))),
+    let mut parts = Vec::new();
+    loop {
+        let from = u8::try_from(parts.len())
+            .map_err(|_| Failure::Fail("the image names too many parts".to_owned()))?;
+        match cx.call(CollectParts { run, from }, CALL)? {
+            PartsCollected::Report(page) => {
+                let full = page.parts.len() == oer_services_load::MAX_PARTS;
+                parts.extend(page.parts);
+                if !full {
+                    return Ok((report, parts));
+                }
+            }
+            other => return Err(Failure::Fail(format!("the image's parts: {other:?}"))),
+        }
     }
 }
 
@@ -296,10 +308,9 @@ fn window_us(report: &Report) -> u64 {
 /// executors overlap and their shares do not add up. The share counts the
 /// window's time inside polls, an open one's included; the mean counts only
 /// the polls that ended, whole.
-fn polls(parts: &Parts, window_us: u64) -> serde_json::Value {
+fn polls(parts: &[PartWindow], window_us: u64) -> serde_json::Value {
     let window = window_us.max(1) as f64;
     parts
-        .parts
         .iter()
         .map(|part| {
             serde_json::json!({
@@ -610,12 +621,28 @@ fn level(
         (sent, probes)
     });
     let (report, parts) = collect(cx, run)?;
+    let mut pcs = Vec::new();
+    let mut interrupts = 0;
+    loop {
+        let from = u16::try_from(pcs.len()).unwrap_or(u16::MAX);
+        let page = cx.call(oer_services_load::CollectSamples { from }, CALL)?;
+        interrupts = page.interrupts;
+        let full = page.pcs.len() == oer_services_load::MAX_SAMPLES;
+        pcs.extend(page.pcs);
+        if !full {
+            break;
+        }
+    }
     let mut received = endpoint.close();
     received.echoes.sent = probes;
-    cx.measure(
-        format!("{} {total_mbps} Mbit/s", mode.name()),
-        measurement(mode, total_mbps, &sent, &received, &report, &parts),
-    );
+    let mut value = measurement(mode, total_mbps, &sent, &received, &report, &parts);
+    if let Some(object) = value.as_object_mut() {
+        object.insert(
+            "samples".to_owned(),
+            serde_json::json!({ "interrupts": interrupts, "pcs": pcs }),
+        );
+    }
+    cx.measure(format!("{} {total_mbps} Mbit/s", mode.name()), value);
     Ok(())
 }
 
@@ -630,7 +657,7 @@ fn measurement(
     sent: &traffic::Sent,
     received: &traffic::Received,
     report: &Report,
-    parts: &Parts,
+    parts: &[PartWindow],
 ) -> serde_json::Value {
     let directions = if mode == Mode::RxTx { 2 } else { 1 };
     let offered_each = round(total_mbps as f64 / directions as f64);
@@ -730,7 +757,7 @@ mod tests {
             &sent,
             &traffic::Received::default(),
             &report,
-            &Parts::default(),
+            &[],
         );
         assert_eq!(value["window_s"], 5.0);
         assert_eq!(value["rx"]["device_received_mbps"], 13.0);
@@ -774,10 +801,7 @@ mod tests {
             name: "console".try_into().unwrap(),
             ..Default::default()
         };
-        let parts = Parts {
-            parts: [part, idle].into_iter().collect(),
-        };
-        let value = polls(&parts, 5_000_000);
+        let value = polls(&[part, idle], 5_000_000);
         assert_eq!(value[0]["part"], "ip");
         assert_eq!(value[0]["polls_per_s"], 400.0);
         assert_eq!(value[0]["poll_time_percent"], 30.0);
@@ -796,10 +820,7 @@ mod tests {
             ended_poll_us: 10,
             longest_poll_us: Some(10),
         };
-        let parts = Parts {
-            parts: [part].into_iter().collect(),
-        };
-        let value = polls(&parts, 1_000);
+        let value = polls(&[part], 1_000);
         assert_eq!(value[0]["poll_time_percent"], 98.9);
         assert_eq!(value[0]["mean_poll_us"], 10.0);
         assert_eq!(value[0]["longest_poll_us"], 10);

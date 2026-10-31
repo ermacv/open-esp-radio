@@ -57,6 +57,10 @@ pub trait NetDevice {
     fn receive_queue_len(&self) -> usize;
     fn poll_receive_ready(&mut self, cx: &mut Context<'_>) -> Poll<()>;
     fn try_receive(&mut self) -> Option<Self::RxFrame>;
+    /// EXPERIMENT: lend the next received frame in place.
+    fn receive_with<R>(&mut self, use_frame: impl FnOnce(&Self::RxFrame) -> R) -> Option<R> {
+        self.try_receive().map(|frame| use_frame(&frame))
+    }
     fn poll_transmit_ready(&mut self, cx: &mut Context<'_>) -> Poll<()>;
     fn try_transmit<F: EthernetFrame>(&mut self, frame: F) -> Result<(), TransmitRefused<F>>;
 }

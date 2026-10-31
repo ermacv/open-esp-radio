@@ -283,7 +283,7 @@ impl<X: ExecutionContext + 'static, const RX: usize, const TX: usize, const GENE
         // Only this constructor can reach the fresh general pool: no other
         // async stack can claim its waiter before Stack::new.
         let (stack, mut runner) = Stack::new(&mut self.stack, seed, general);
-        runner.set_poll_budget(owned_embassy_net::PollBudget::new(4, 8));
+        runner.set_poll_budget(owned_embassy_net::PollBudget::new(16, 8));
         let iface = stack
             .add_iface_borrowed(self.device.insert(device))
             .map_err(Error::from)?;

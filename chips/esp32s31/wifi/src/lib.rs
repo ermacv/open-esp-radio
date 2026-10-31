@@ -121,7 +121,7 @@ impl EthernetFrame for Received {
     }
 }
 impl NetDevice for Network<'_> {
-    type RxFrame = Received;
+    type RxFrame = Frame;
     fn link(&self) -> LinkSnapshot {
         self.inner.link()
     }
@@ -134,8 +134,11 @@ impl NetDevice for Network<'_> {
     fn poll_receive_ready(&mut self, cx: &mut Context<'_>) -> Poll<()> {
         self.inner.poll_receive_ready(cx)
     }
-    fn try_receive(&mut self) -> Option<Received> {
-        self.inner.try_receive().map(|inner| Received { inner })
+    fn try_receive(&mut self) -> Option<Frame> {
+        self.inner.try_receive()
+    }
+    fn receive_with<R>(&mut self, use_frame: impl FnOnce(&Frame) -> R) -> Option<R> {
+        self.inner.receive_with(use_frame)
     }
     fn poll_transmit_ready(&mut self, cx: &mut Context<'_>) -> Poll<()> {
         self.inner.poll_transmit_ready(cx)

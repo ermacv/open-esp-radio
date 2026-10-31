@@ -46,6 +46,8 @@ pub const MAX_HARTS: usize = 2;
 /// The most named parts a [`Parts`] report holds, and the longest name.
 pub const MAX_PARTS: usize = 12;
 pub const MAX_PART_NAME: usize = 12;
+/// The most interrupted program counters one [`Samples`] answer holds.
+pub const MAX_SAMPLES: usize = 96;
 
 oer_hil_protocol::messages! {
     endpoint Start = "load/start" => Started;
@@ -56,6 +58,24 @@ oer_hil_protocol::messages! {
     topic Load = "load/cpu-report";
     endpoint CollectParts = "load/parts" => PartsCollected;
     topic PartsCollected = "load/parts-report";
+    endpoint CollectSamples = "load/samples" => Samples;
+    topic Samples = "load/samples-report";
+}
+
+/// The program counters the last window's Wi-Fi interrupts interrupted,
+/// from the sample numbered `from`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct CollectSamples {
+    pub from: u16,
+}
+
+/// The answer to [`CollectSamples`]: the samples kept, the interrupts seen
+/// in the window, and up to [`MAX_SAMPLES`] program counters.
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct Samples {
+    pub kept: u16,
+    pub interrupts: u32,
+    pub pcs: heapless::Vec<u32, MAX_SAMPLES>,
 }
 
 /// The longest measuring window, start delay and drain a run may ask for.
@@ -210,10 +230,13 @@ pub struct ExecutorLoad {
     pub work_us: u64,
 }
 
-/// The polls of the image's named parts within run `run`'s window.
+/// The polls of the image's named parts within run `run`'s window, from
+/// the part numbered `from`: at most [`MAX_PARTS`] per answer, fewer at the
+/// end.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub struct CollectParts {
     pub run: u32,
+    pub from: u8,
 }
 
 /// The answer to [`CollectParts`].
@@ -279,6 +302,7 @@ oer_hil_agent::service! {
         Collect(Collect) => collect,
         GetCpu(GetCpu) => cpu,
         CollectParts(CollectParts) => parts,
+        CollectSamples(CollectSamples) => samples,
     }
 }
 

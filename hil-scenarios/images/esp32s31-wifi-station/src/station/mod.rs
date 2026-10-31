@@ -53,6 +53,19 @@ oer_espressif_executor::tasks! {
         @observer: crate::load::cpu::Observer::<{ crate::load::cpu::RADIO }>;
         radio_actor(actor: &'static mut Actor) = radio_actor;
         driver(driver: wifi::Driver<radio::binding::Binding>) = radio::drive;
+        ticker() = ticker;
+    }
+}
+
+/// EXPERIMENT: wakes the radio executor every 997 us so its alarm samples
+/// the interrupted program counter.
+async fn ticker() {
+    use oer_time::{Clock as _, Timer as _};
+    loop {
+        let at = oer_embassy_time::EmbassyClock
+            .now()
+            .saturating_add(oer_time::Duration::from_micros(997));
+        oer_embassy_time::EmbassyClock.wait_until(at).await;
     }
 }
 
@@ -281,6 +294,9 @@ async fn work(inputs: Inputs, network: &crate::load::serve::Network) -> Infallib
         },
         config,
     );
+    if RadioTasks::ticker(&radio).is_err() {
+        crate::fail(Failure::TaskAllocation);
+    }
     if RadioTasks::driver(&radio, runners.driver).is_err() {
         crate::fail(Failure::TaskAllocation);
     }

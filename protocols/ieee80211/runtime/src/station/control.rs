@@ -389,6 +389,9 @@ impl<const TX: usize, const RX: usize> NetDevice for Device<'_, TX, RX> {
     fn try_receive(&mut self) -> Option<Self::RxFrame> {
         self.receive.try_receive()
     }
+    fn receive_with<R>(&mut self, use_frame: impl FnOnce(&Self::RxFrame) -> R) -> Option<R> {
+        self.receive.try_receive_with(|frame| use_frame(frame))
+    }
     fn poll_transmit_ready(&mut self, cx: &mut Context<'_>) -> Poll<()> {
         self.state.link_waker.register(cx.waker());
         if self.link().state == LinkState::Down {
