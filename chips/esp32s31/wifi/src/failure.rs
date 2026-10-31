@@ -24,6 +24,7 @@ pub enum BackendFault {
     Clock,
     Retune(RetuneError),
     Abandoned,
+    UnexpectedAggregate,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum LowerMacFault {

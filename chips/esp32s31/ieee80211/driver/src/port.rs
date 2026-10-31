@@ -171,6 +171,9 @@ pub enum Fault {
     Retune(WifiRetuneError),
     /// The device lost its registers to an earlier failure.
     Abandoned,
+    /// The lower MAC completed an aggregate the ordinary port never
+    /// publishes; its queue and ticket stay quarantined.
+    UnexpectedAggregate,
 }
 
 /// Why the radio front end did not retune a stopped Wi-Fi client.

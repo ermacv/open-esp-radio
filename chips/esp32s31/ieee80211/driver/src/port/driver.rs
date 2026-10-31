@@ -77,6 +77,34 @@ pub(super) struct Sink<'id, Id: SlotIdentity, const B: usize> {
     completed: heapless::Vec<Completion<'id, Id, B>, 4>,
     removed: heapless::Vec<KeyRemoved<'id, CorePath<Id>>, 20>,
     tbtt: Option<TbttEvent>,
+    /// The first callback the port's core contract forbids: a second
+    /// completion of a queue in one service, an aggregate completion of the
+    /// ordinary port, or more removals than installed keys. Its owners are
+    /// retained here, never returned to a pool, and the service poisons.
+    refused: Option<(Fault, Refused<'id, Id, B>)>,
+}
+/// Owners of a refused callback, kept until the port's quarantine ends.
+#[allow(dead_code, reason = "retained owners are never read, only kept")]
+enum Refused<'id, Id: SlotIdentity, const B: usize> {
+    Completion(Completion<'id, Id, B>),
+    Aggregate(FreeQueue<'id, CorePath<Id>>, TxTicket<'id, CorePath<Id>>),
+    Removal(KeyRemoved<'id, CorePath<Id>>),
+}
+impl<'id, Id: SlotIdentity, const B: usize> Sink<'id, Id, B> {
+    fn refuse(&mut self, fault: Fault, owners: Refused<'id, Id, B>) {
+        if self.refused.is_none() {
+            self.refused = Some((fault, owners));
+        } else {
+            // A later refusal adds no cause; its tokens stay unusable.
+            let _quarantined = core::mem::ManuallyDrop::new(owners);
+        }
+    }
+    /// The recorded contract fault, retaining its owners in quarantine.
+    fn fault(&mut self) -> Option<Fault> {
+        let (fault, owners) = self.refused.take()?;
+        let _quarantined = core::mem::ManuallyDrop::new(owners);
+        Some(fault)
+    }
 }
 impl<Id: SlotIdentity, const B: usize> Default for Sink<'_, Id, B> {
     fn default() -> Self {
@@ -84,6 +112,7 @@ impl<Id: SlotIdentity, const B: usize> Default for Sink<'_, Id, B> {
             completed: heapless::Vec::new(),
             removed: heapless::Vec::new(),
             tbtt: None,
+            refused: None,
         }
     }
 }
@@ -98,31 +127,33 @@ impl<'id, Id: SlotIdentity, const B: usize> LowerMacSink<'id, 'static, B, CorePa
         end: PublicationEnd,
         rate: PhyRate,
     ) {
-        if self
-            .completed
-            .push(Completion {
-                queue,
-                ticket,
-                slot,
-                end,
-                rate,
-            })
-            .is_err()
-        {
-            panic!("one completion per hardware queue per service")
+        // One completion per hardware queue per service.
+        if let Err(completion) = self.completed.push(Completion {
+            queue,
+            ticket,
+            slot,
+            end,
+            rate,
+        }) {
+            self.refuse(Fault::Capacity, Refused::Completion(completion));
         }
     }
     fn ampdu_completed(
         &mut self,
-        _: FreeQueue<'id, CorePath<Id>>,
-        _: TxTicket<'id, CorePath<Id>>,
+        queue: FreeQueue<'id, CorePath<Id>>,
+        ticket: TxTicket<'id, CorePath<Id>>,
         _: PublicationEnd,
     ) {
-        unreachable!("ordinary port never publishes an aggregate")
+        // The ordinary port never publishes an aggregate.
+        self.refuse(
+            Fault::UnexpectedAggregate,
+            Refused::Aggregate(queue, ticket),
+        );
     }
     fn key_removed(&mut self, removed: KeyRemoved<'id, CorePath<Id>>) {
-        if self.removed.push(removed).is_err() {
-            panic!("one removal per installed hardware key")
+        // One removal per installed hardware key.
+        if let Err(removed) = self.removed.push(removed) {
+            self.refuse(Fault::Capacity, Refused::Removal(removed));
         }
     }
     fn disabled(&mut self) {}
@@ -358,6 +389,9 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Driver<'id, Id, D, B> 
         mut sink: Sink<'id, Id, B>,
         stopping: bool,
     ) -> Result<(), Fault> {
+        if let Some(fault) = sink.fault() {
+            return Err(fault);
+        }
         for completion in sink.completed.drain(..) {
             let index = queue(completion.queue.category());
             let Some(mut pending) = self.running[index].take() else {
@@ -1004,6 +1038,9 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Driver<'id, Id, D, B> 
                     &mut sink
                 ))
             }
+        }
+        if let Some(fault) = sink.fault() {
+            return Err(fault);
         }
         sink.removed.pop().ok_or(Fault::Capacity)
     }

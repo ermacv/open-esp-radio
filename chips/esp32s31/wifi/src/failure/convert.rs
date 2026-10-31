@@ -40,6 +40,7 @@ pub(super) fn backend_fault(value: oer_esp32s31_ieee80211_driver::port::Fault) -
         Source::Clock => BackendFault::Clock,
         Source::Retune(v0) => BackendFault::Retune(retune_error(v0)),
         Source::Abandoned => BackendFault::Abandoned,
+        Source::UnexpectedAggregate => BackendFault::UnexpectedAggregate,
     }
 }
 
