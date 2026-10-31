@@ -8,12 +8,12 @@
 //! so a confirmation of an older one changes nothing.
 //!
 //! Whether a resource may be granted is apart from what it may put on the
-//! air ([`Emission`]): a ready resource is in an end state its driver
-//! confirmed, which for a board is one that cannot radiate and for the
-//! router an access point in a profile the stand knows; a resource in use
-//! radiates under its lease's air claims; one recovering, or unavailable
-//! without a confirmation that it cannot radiate, may radiate unknown to
-//! the stand and closes the air to everyone else.
+//! air ([`Emission`]): a ready resource rests in a quiet end state its
+//! driver confirmed (a board in its ROM or with its power off, the router
+//! with its access point down); a resource in use radiates under its
+//! lease's air claims; one recovering, or unavailable without a
+//! confirmation that it cannot radiate, may radiate unknown to the stand and
+//! closes the air to everyone else.
 
 use serde::{Deserialize, Serialize};
 
@@ -27,15 +27,8 @@ pub const ROUTER: &str = "router";
 pub enum Readiness {
     /// Confirmed in an end state of its kind; for a board a quiet one.
     Ready { generation: u64 },
-    /// Granted to lease `lease`. `marked` says why an operation of the
-    /// lease may have left it in a state its recovery cannot confirm: the
-    /// end of the lease then leaves it unavailable.
-    InUse {
-        lease: u64,
-        generation: u64,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        marked: Option<String>,
-    },
+    /// Granted to lease `lease`.
+    InUse { lease: u64, generation: u64 },
     /// Its driver brings it to an end state; `lease` is the lease that left
     /// it, none after a restart or a person's release.
     Recovering { lease: Option<u64>, generation: u64 },

@@ -1,9 +1,11 @@
 //! The scenario's session on the stand: its image built, its board leased
 //! from the LAB service and written, and the link on the board's console.
-//! [`Session::finish`] leaves the board running the image or recovers it
-//! under the same lease; dropping the session then releases the link and
-//! the lease, also when a stage of opening failed. The service owns the
-//! board throughout: every write, reset and console goes through it.
+//! [`Session::finish`] checks the device under test at the end of the
+//! cases and [`Session::release`] ends the lease with the LAB service's
+//! report of the board's end state; dropping the session releases the link
+//! and the lease without that report, also when a stage of opening failed.
+//! The service owns the board throughout: every write, reset and console
+//! goes through it, and it alone brings the board to its end state.
 
 use std::{
     io::{Read, Write},
@@ -16,15 +18,11 @@ use std::{
 use oer_hil_link::Link;
 use oer_image_build::images;
 use oer_image_bundle::ImageBundle;
-use oer_lab_arbiter::{
-    claims::Claim,
-    journal::{BoardEventKind, ImageIdentity},
-};
+use oer_lab_arbiter::{claims::Claim, journal::ImageIdentity};
 use oer_lab_client::{
     client::{Client, Running},
-    protocol::{FlashVia, LeaseRequest, Operation, Request},
+    protocol::{FlashVia, LeaseRequest, Operation},
 };
-use oer_lab_model::rom::{Ladder, RecoveryStep, Rung};
 use oer_lab_model::{BoardRole, Stand};
 
 use crate::Scenario;
@@ -35,7 +33,6 @@ pub(crate) type Result<T> = std::result::Result<T, Box<dyn std::error::Error + S
 /// How finishing waits for the device under test.
 const WAITS: Waits = Waits {
     probe: Duration::from_secs(2),
-    hello: Duration::from_secs(10),
 };
 
 /// Declared in drop order: the link closes its console before the lease
@@ -99,10 +96,10 @@ impl Session {
         &self.board
     }
 
-    /// Leave the board running the built image on `link` after the cases
-    /// `ending` describes, recovering it when needed; what that took.
+    /// How the device under test on `link` ended the cases `ending`
+    /// describes; the link stays with the session until its lease ends.
     pub(crate) fn finish(&mut self, link: Option<Link>, ending: Ending) -> Cleanup {
-        let (link, cleanup) = finish::finish(&self.board, link, self.image_crc32, ending, WAITS);
+        let cleanup = finish::finish(link.as_ref(), self.image_crc32, ending, WAITS);
         self.link = link;
         cleanup
     }
@@ -172,21 +169,6 @@ impl StandBoard {
         let line = bridge(console).map_err(|error| error.to_string())?;
         Link::start(Box::new(line)).map_err(|error| error.to_string())
     }
-
-    fn steps(&self) -> std::result::Result<Vec<RecoveryStep>, String> {
-        serde_json::from_value(self.run(Operation::Ladder {
-            board: self.board.clone(),
-        })?)
-        .map_err(|error| error.to_string())
-    }
-
-    fn rung(&self, step: RecoveryStep) -> std::result::Result<Option<String>, String> {
-        serde_json::from_value(self.run(Operation::Rung {
-            board: self.board.clone(),
-            step,
-        })?)
-        .map_err(|error| error.to_string())
-    }
 }
 
 /// A local socket the link reads and writes as its serial line, joined to
@@ -235,86 +217,17 @@ fn bridge(console: Running) -> std::io::Result<UnixStream> {
     Ok(line)
 }
 
-/// One step of the ladder, taken by the service.
-struct ServiceRung<'a> {
-    board: &'a StandBoard,
-    step: RecoveryStep,
-}
-
-impl Rung for ServiceRung<'_> {
-    fn step(&self) -> RecoveryStep {
-        self.step
-    }
-
-    fn reset(&self) -> oer_lab_model::Result<Option<String>> {
-        Ok(self.board.rung(self.step)?)
-    }
-}
-
 impl finish::Board for StandBoard {
-    fn climb(&self, answers: &mut dyn FnMut() -> bool) -> Ladder {
-        let steps = match self.steps() {
-            Ok(steps) => steps,
-            Err(error) => {
-                eprintln!("hil: the service gave no reset ladder: {error}");
-                Vec::new()
-            }
-        };
-        let rungs = steps
-            .iter()
-            .filter(|step| **step != RecoveryStep::DownloadEntry)
-            .map(|step| ServiceRung {
-                board: self,
-                step: *step,
-            })
-            .collect::<Vec<_>>();
-        let download = steps.contains(&RecoveryStep::DownloadEntry).then_some(
-            || -> oer_lab_model::Result<String> {
-                Ok(self.rung(RecoveryStep::DownloadEntry)?.unwrap_or_default())
-            },
-        );
-        oer_lab_model::rom::climb(
-            &rungs
-                .iter()
-                .map(|rung| rung as &dyn Rung)
-                .collect::<Vec<_>>(),
-            download
-                .as_ref()
-                .map(|entry| entry as &dyn Fn() -> oer_lab_model::Result<String>),
-            &String::new,
-            answers,
-        )
-    }
-
     fn reset(&self) -> std::result::Result<(), String> {
-        let first = self
-            .steps()?
-            .into_iter()
-            .find(|step| *step != RecoveryStep::DownloadEntry)
-            .ok_or("the board's stand file lists no reset")?;
-        self.rung(first).map(drop)
+        self.run(Operation::Reset {
+            board: self.board.clone(),
+            path: None,
+        })
+        .map(drop)
     }
 
     fn connect(&self) -> std::result::Result<Link, String> {
         self.link(false)
-    }
-
-    fn recovered(&self, step: RecoveryStep, reset_line: Option<String>) {
-        let recorded = self.client().administer(Request::Record {
-            owner: String::from("stand"),
-            device: Some(self.board.clone()),
-            event: BoardEventKind::Recovered {
-                step,
-                hardware: reset_line
-                    .as_deref()
-                    .is_some_and(|line| line.contains("DOWNLOAD")),
-                reset_line,
-                origin: std::env::args().collect::<Vec<_>>().join(" "),
-            },
-        });
-        if let Err(error) = recorded {
-            eprintln!("hil: cannot journal the recovery: {error}");
-        }
     }
 }
 

@@ -1,12 +1,16 @@
 //! Install `cargo stand` as a prebuilt tool from `main`, and the LAB
 //! service (`oer-tool-lab-service`) as two systemd user units: `oer-lab.socket`
 //! holds the service's socket and hands it over, `oer-lab.service` runs the
-//! service with its control group delegated to it.
+//! service.
 //!
-//! An update first asks a running service to drain: it grants nothing more
-//! and answers once no lease is held. A service of another protocol cannot
-//! be asked: the update stops there and says how to replace it by hand.
-//! Then the unit restarts on the new binary. Before the service first
+//! An update builds the new version in a worktree of its own (`stage`) and
+//! stages its binaries beside the installed ones; nothing installed changes
+//! yet. Then it asks a running service to drain: it grants nothing more and
+//! answers once no lease is held. A service of another protocol cannot be
+//! asked: the update stops there, the installation as it was, and says how
+//! to replace the service by hand. Only then does the clone the service
+//! reads move to the new commit, the staged binaries replace the installed
+//! ones and the unit restart. Before the service first
 //! starts, the restrictions and balances the file-locked arbiter kept are
 //! imported (`oer_lab_arbiter::import`) and a schema 1 stand file is
 //! rewritten to schema 2, the schema 1 file kept beside it. A checkout never
@@ -16,8 +20,8 @@
 //! first: a rebuild after every edit of a stand package, unavailable while
 //! that code does not compile, and six checkouts on six commits writing the
 //! one shared arbiter state with six different binaries. `cargo stand
-//! install` builds the `oer-tool-lab-cli` of `origin/main` once, in its own
-//! clone, and installs `oer-tool-lab-cli` on the user's PATH: a wrapper that runs
+//! install` builds the `oer-tool-lab-cli` of `origin/main` once, beside its
+//! own clone, and installs `oer-tool-lab-cli` on the user's PATH: a wrapper that runs
 //! that binary against the caller's checkout (`--root` is the caller's Git
 //! top level, so owners and local paths stay the caller's).
 use std::{
@@ -70,9 +74,8 @@ pub fn socket_unit() -> String {
 
 /// The service unit running `binary` with the chip profiles of the clone
 /// at `root` and the tools on `path`. It starts at login too, so every
-/// board is parked before anyone asks. Its control group is delegated to
-/// it: every command it runs gets a group of its own there. A stop or a
-/// crash empties the unit's group before the service starts again.
+/// board is parked before anyone asks. A stop or a crash ends every program
+/// a driver started before the service starts again.
 pub fn unit(binary: &Path, root: &Path, path: &str) -> String {
     format!(
         "[Unit]\n\
@@ -83,7 +86,6 @@ pub fn unit(binary: &Path, root: &Path, path: &str) -> String {
          [Service]\n\
          ExecStart='{}' --root '{}'\n\
          Environment=\"PATH={path}\"\n\
-         Delegate=yes\n\
          KillMode=control-group\n\
          Restart=on-failure\n\
          \n\
@@ -133,11 +135,10 @@ fn drain() -> Result<()> {
     Ok(())
 }
 
-/// Install the service's units for `binary` and restart it, after a
-/// running service drained its leases and the stand's earlier records were
-/// imported.
+/// Install the service's units for `binary` and restart it, once a running
+/// service drained its leases: the stand's earlier records are imported and
+/// a schema 1 stand file rewritten first.
 fn install_service(binary: &Path, root: &Path) -> Result<()> {
-    drain()?;
     if std::env::var_os(oer_lab_model::paths::ARBITER_ENV).is_none() {
         let previous = oer_os_durable::xdg::path(oer_os_durable::xdg::Base::Cache, "arbiter")?;
         if let Some(imported) =
@@ -187,7 +188,11 @@ pub fn wrapper(binary: &Path, fallback_root: &Path) -> String {
 
 pub fn run(ctx: &Checkout) -> Result<()> {
     let tool = tool_directory()?;
+    // The clone the running service reads its chip profiles from stays as
+    // it is until the service drained: the new version is built in a
+    // worktree of its own and staged beside the installed binaries.
     let source = tool.join("src");
+    let stage = tool.join("stage");
     let remote = String::from_utf8(
         process::capture(
             oer_os_process::git::command(&ctx.root).args(["remote", "get-url", "origin"]),
@@ -195,61 +200,67 @@ pub fn run(ctx: &Checkout) -> Result<()> {
         .stdout,
     )?;
     let remote = remote.trim();
-    if !source.join(".git").is_dir() {
+    if !source.join(".git").exists() {
         fs::create_dir_all(&tool)?;
         process::run(
             oer_os_process::git::command(&ctx.root)
-                .args(["clone", "--quiet", remote])
+                .args(["clone", "--quiet", "--no-checkout", remote])
                 .arg(&source),
         )?;
     }
     process::run(
         oer_os_process::git::command(&source).args(["fetch", "--quiet", "origin", "main"]),
     )?;
-    process::run(oer_os_process::git::command(&source).args([
-        "checkout",
-        "--quiet",
-        "--detach",
-        "FETCH_HEAD",
-    ]))?;
-    let git_text = |args: &[&str]| -> Result<String> {
-        Ok(String::from_utf8(
-            process::capture(oer_os_process::git::command(&source).args(args))?.stdout,
-        )?
-        .trim()
-        .to_owned())
-    };
-    let commit = git_text(&["rev-parse", "HEAD"])?;
-    let short = &commit[..12.min(commit.len())];
-    let bin = tool.join("bin");
-    let installed = bin.join(PACKAGE);
-    let service = bin.join(SERVICE_BINARY);
-    let previous = fs::read_to_string(tool.join("installed-commit")).ok();
-    if installed.is_file()
-        && let Some(previous) = previous.as_deref().map(str::trim)
-    {
-        // Rebuild only when a package the tool is built from changed.
-        let mut diff = vec!["diff", "--name-only", previous, "HEAD", "--"];
-        let inputs = build_inputs(ctx, &source)?;
-        diff.extend(inputs.iter().map(String::as_str));
-        if git_text(&diff).is_ok_and(|changed| changed.is_empty()) {
-            fs::write(tool.join("installed-commit"), &commit)?;
-            println!("oer-tool-lab-cli is up to date at {short}");
-            return install_service(&service, &source);
-        }
+    let commit = String::from_utf8(
+        process::capture(oer_os_process::git::command(&source).args(["rev-parse", "FETCH_HEAD"]))?
+            .stdout,
+    )?
+    .trim()
+    .to_owned();
+    if stage.join(".git").exists() {
+        process::run(
+            oer_os_process::git::command(&stage).args(["checkout", "--quiet", "--detach", &commit]),
+        )?;
+    } else {
+        process::run(
+            oer_os_process::git::command(&source)
+                .args(["worktree", "add", "--quiet", "--detach"])
+                .arg(&stage)
+                .arg(&commit),
+        )?;
     }
+    let short = &commit[..12.min(commit.len())];
     // The tool's work is file and device I/O: the incremental dev profile
     // rebuilds in seconds where the release profile took minutes.
+    let target = tool.join("target");
     process::run(
         oer_os_toolchain::cargo_in(&ctx.root)
-            .current_dir(&source)
+            .current_dir(&stage)
+            .env("CARGO_TARGET_DIR", &target)
             .args(["build", "--locked", "-p", PACKAGE, "-p", SERVICE_PACKAGE]),
     )?;
+    let bin = tool.join("bin");
     fs::create_dir_all(&bin)?;
-    for (built, target) in [(BINARY, &installed), (SERVICE_BINARY, &service)] {
-        let staged = bin.join(format!(".{built}.new"));
-        fs::copy(source.join("target/debug").join(built), &staged)?;
-        fs::rename(&staged, target)?;
+    let installed = bin.join(PACKAGE);
+    let service = bin.join(SERVICE_BINARY);
+    let staged = [(BINARY, &installed), (SERVICE_BINARY, &service)].map(|(built, live)| {
+        (
+            target.join("debug").join(built),
+            bin.join(format!(".{built}.new")),
+            live,
+        )
+    });
+    for (built, staged, _) in &staged {
+        fs::copy(built, staged)?;
+    }
+    // Nothing installed has changed yet: a service that cannot drain stops
+    // the update here.
+    drain()?;
+    process::run(
+        oer_os_process::git::command(&source).args(["checkout", "--quiet", "--detach", &commit]),
+    )?;
+    for (_, staged, live) in &staged {
+        fs::rename(staged, live)?;
     }
     let script_directory = home()?.join(".local/bin");
     fs::create_dir_all(&script_directory)?;
@@ -266,75 +277,6 @@ pub fn run(ctx: &Checkout) -> Result<()> {
         script.display()
     );
     install_service(&service, &source)
-}
-
-/// The files the tool is built from, relative to its clone: the workspace
-/// manifest, lock file and toolchain, and the directory of every path
-/// package the tool's package depends on.
-fn build_inputs(ctx: &Checkout, source: &Path) -> Result<Vec<String>> {
-    let output = process::capture(
-        oer_os_toolchain::cargo_in(&ctx.root)
-            .current_dir(source)
-            .args(["metadata", "--format-version", "1", "--locked"]),
-    )?;
-    let metadata: serde_json::Value = serde_json::from_slice(&output.stdout)?;
-    let mut inputs = path_package_closure(&metadata, PACKAGE, source)?;
-    inputs.extend(path_package_closure(&metadata, SERVICE_PACKAGE, source)?);
-    inputs.extend(["Cargo.toml", "Cargo.lock", "rust-toolchain.toml", ".cargo"].map(String::from));
-    Ok(inputs)
-}
-
-/// The directories, relative to `root`, of the path packages `package`
-/// reaches through `metadata`'s resolved graph, itself included.
-fn path_package_closure(
-    metadata: &serde_json::Value,
-    package: &str,
-    root: &Path,
-) -> Result<Vec<String>> {
-    let packages = metadata["packages"]
-        .as_array()
-        .ok_or("cargo metadata lists no packages")?;
-    let start = packages
-        .iter()
-        .find(|candidate| candidate["name"] == package && candidate["source"].is_null())
-        .and_then(|candidate| candidate["id"].as_str())
-        .ok_or_else(|| format!("no path package {package}"))?;
-    let nodes = metadata["resolve"]["nodes"]
-        .as_array()
-        .ok_or("cargo metadata has no resolved graph")?;
-    let mut seen = std::collections::BTreeSet::from([start.to_owned()]);
-    let mut pending = vec![start.to_owned()];
-    while let Some(id) = pending.pop() {
-        let Some(node) = nodes.iter().find(|node| node["id"] == id.as_str()) else {
-            continue;
-        };
-        for dependency in node["deps"].as_array().into_iter().flatten() {
-            if let Some(next) = dependency["pkg"].as_str()
-                && seen.insert(next.to_owned())
-            {
-                pending.push(next.to_owned());
-            }
-        }
-    }
-    let root = root.canonicalize()?;
-    Ok(packages
-        .iter()
-        .filter(|candidate| {
-            candidate["source"].is_null()
-                && candidate["id"].as_str().is_some_and(|id| seen.contains(id))
-        })
-        .filter_map(|candidate| {
-            let manifest = Path::new(candidate["manifest_path"].as_str()?);
-            let directory = manifest.parent()?.canonicalize().ok()?;
-            Some(
-                directory
-                    .strip_prefix(&root)
-                    .ok()?
-                    .to_string_lossy()
-                    .into_owned(),
-            )
-        })
-        .collect())
 }
 
 #[cfg(test)]
@@ -360,7 +302,6 @@ mod tests {
         );
         assert!(text.contains("ExecStart='/tool/bin/oer-tool-lab-service' --root '/tool/src'"));
         assert!(text.contains("Requires=oer-lab.socket"));
-        assert!(text.contains("Delegate=yes"));
         assert!(text.contains("KillMode=control-group"));
         assert!(text.contains("Environment=\"PATH=/usr/bin:/bin\""));
         assert!(text.contains("WantedBy=default.target"));

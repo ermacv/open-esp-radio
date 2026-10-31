@@ -29,7 +29,6 @@ use std::{
     sync::{
         Arc, Condvar, Mutex, MutexGuard, PoisonError,
         atomic::{AtomicBool, Ordering},
-        mpsc,
     },
     time::{Duration, Instant},
 };
@@ -45,8 +44,8 @@ use oer_lab_board::{
     reset,
     stand::{Board, Via},
 };
-use oer_lab_client::protocol::{FlashVia, Operation, TerminalSize};
-use oer_lab_model::{ResetStep, Stand, rom::RecoveryStep};
+use oer_lab_client::protocol::{FlashVia, Operation};
+use oer_lab_model::{ResetStep, Stand};
 
 use crate::service::{Drivers, OperationIo};
 
@@ -58,10 +57,6 @@ const REATTACH: Duration = Duration::from_secs(10);
 const POWER_LEAVE: Duration = Duration::from_secs(5);
 /// How often a running operation looks at its stop flag.
 const POLL: Duration = Duration::from_millis(50);
-/// How long a stopped command has to exit before it is killed.
-const COMMAND_GRACE: Duration = Duration::from_secs(5);
-/// How long a killed command's control group may take to empty.
-const GROUP_EMPTY: Duration = Duration::from_secs(10);
 /// The record of the boards parked with their power off, in the stand's
 /// directory: the hub port each was switched off at.
 const POWERED_OFF: &str = "powered-off.json";
@@ -76,10 +71,8 @@ pub struct StandDrivers {
     journal: Journal,
     /// Each board's owner, by MAC.
     boards: Mutex<BTreeMap<String, Arc<BoardOwner>>>,
-    /// The control groups commands run in; none when the service owns no
-    /// group, and runs no command.
-    commands: Option<oer_os_process::cgroup::Delegated>,
-    next_group: std::sync::atomic::AtomicU64,
+    /// Held while the record of boards parked with their power off changes.
+    powered_off: Mutex<()>,
 }
 
 /// The one owner of a board in the service: its operations take turns in
@@ -161,21 +154,14 @@ fn text(error: impl std::fmt::Display) -> String {
 }
 
 impl StandDrivers {
-    pub fn new(
-        root: PathBuf,
-        stand_file: PathBuf,
-        directory: PathBuf,
-        journal: Journal,
-        commands: Option<oer_os_process::cgroup::Delegated>,
-    ) -> Self {
+    pub fn new(root: PathBuf, stand_file: PathBuf, directory: PathBuf, journal: Journal) -> Self {
         Self {
             root,
             stand_file,
             directory,
             journal,
             boards: Mutex::new(BTreeMap::new()),
-            commands,
-            next_group: std::sync::atomic::AtomicU64::new(1),
+            powered_off: Mutex::new(()),
         }
     }
 
@@ -292,7 +278,8 @@ impl StandDrivers {
     /// into it and, when it has power, a power cycle into download.
     fn park_in_download(&self, mac: &str, board: &Board, turn: &Turn) -> Confirmation {
         let mut tried = Vec::new();
-        // A ROM seen waiting for any download does not radiate.
+        // A ROM seen waiting for any download does not radiate; only what
+        // the last attempt saw counts, since every attempt moves the board.
         let mut quiet = false;
         let mut attempts = vec![("", board.current_port(REATTACH))];
         if attempts.first().is_some_and(|(_, port)| port.is_none()) {
@@ -303,6 +290,7 @@ impl StandDrivers {
         loop {
             for (after, port) in attempts.drain(..) {
                 let Some(port) = port else {
+                    quiet = false;
                     tried.push(format!("its port did not return{after}"));
                     continue;
                 };
@@ -313,10 +301,11 @@ impl StandDrivers {
                         return Confirmation::Ready;
                     }
                     Ok((_, line)) => {
-                        quiet |= line.contains("DOWNLOAD(");
+                        quiet = line.contains("DOWNLOAD(");
                         tried.push(format!("a reset into download{after} read `{line}`"));
                     }
                     Err(error) => {
+                        quiet = false;
                         tried.push(format!("a reset into download{after} failed: {error}"));
                     }
                 }
@@ -329,7 +318,10 @@ impl StandDrivers {
             // mode is proven with a fresh reset.
             match board.download_entry() {
                 Ok(_) => attempts.push((" after a power cycle", board.current_port(REATTACH))),
-                Err(error) => tried.push(format!("the power cycle into download failed: {error}")),
+                Err(error) => {
+                    quiet = false;
+                    tried.push(format!("the power cycle into download failed: {error}"));
+                }
             }
         }
         Confirmation::Unavailable {
@@ -354,18 +346,18 @@ impl StandDrivers {
         stand: &Stand,
         board: &oer_lab_model::Board,
     ) -> Result<()> {
-        let mut records = self.powered_off()?;
-        let power = match records.get(mac) {
-            Some(port) => HubPower::new(port.clone()),
-            None => {
-                let port = oer_lab_board::power::hub_port(stand, board).ok_or(
-                    "no switchable hub port the stand's hub policy allows is found under it",
-                )?;
-                records.insert(mac.to_owned(), port.clone());
-                self.record_powered_off(&records)?;
-                HubPower::new(port)
+        // The port is recorded before it is switched: a restart then still
+        // knows where the board's power is.
+        let port = self.powered_off(|records| {
+            if let Some(port) = records.get(mac) {
+                return Ok(port.clone());
             }
-        };
+            let port = oer_lab_board::power::hub_port(stand, board)
+                .ok_or("no switchable hub port the stand's hub policy allows is found under it")?;
+            records.insert(mac.to_owned(), port.clone());
+            Ok(port)
+        })?;
+        let power = HubPower::new(port);
         if power.is_on().map_err(text)? {
             power.off().map_err(text)?;
         }
@@ -388,17 +380,27 @@ impl StandDrivers {
         Ok(())
     }
 
-    /// The boards parked with their power off, with their hub ports.
-    fn powered_off(&self) -> Result<BTreeMap<String, HubPort>> {
-        match std::fs::read(self.directory.join(POWERED_OFF)) {
-            Ok(bytes) => serde_json::from_slice(&bytes).map_err(text),
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(BTreeMap::new()),
-            Err(error) => Err(text(error)),
+    /// Read the record of the boards parked with their power off, with
+    /// their hub ports, let `change` change it and keep what it left: one
+    /// change at a time, so two boards' parkings never lose each other's
+    /// record.
+    fn powered_off<T>(
+        &self,
+        change: impl FnOnce(&mut BTreeMap<String, HubPort>) -> Result<T>,
+    ) -> Result<T> {
+        let _one = lock(&self.powered_off);
+        let path = self.directory.join(POWERED_OFF);
+        let mut records = match std::fs::read(&path) {
+            Ok(bytes) => serde_json::from_slice(&bytes).map_err(text)?,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => BTreeMap::new(),
+            Err(error) => return Err(text(error)),
+        };
+        let before = records.clone();
+        let result = change(&mut records)?;
+        if records != before {
+            oer_os_durable::atomic_json(&path, &records).map_err(text)?;
         }
-    }
-
-    fn record_powered_off(&self, records: &BTreeMap<String, HubPort>) -> Result<()> {
-        oer_os_durable::atomic_json(&self.directory.join(POWERED_OFF), records).map_err(text)
+        Ok(result)
     }
 
     /// The chip of every attached board, its ROM asked when no earlier
@@ -434,8 +436,7 @@ impl StandDrivers {
     /// Power on `mac`'s board parked with its power off, and wait until it
     /// is back on USB.
     fn power_on(&self, mac: &str) -> Result<()> {
-        let mut records = self.powered_off()?;
-        let Some(port) = records.get(mac).cloned() else {
+        let Some(port) = self.powered_off(|records| Ok(records.get(mac).cloned()))? else {
             return Ok(());
         };
         let owner = self.owner(mac);
@@ -465,8 +466,10 @@ impl StandDrivers {
             "lab-service: board {mac} powered on at port {} of hub {}",
             power.port.port, power.port.location
         );
-        records.remove(mac);
-        self.record_powered_off(&records)
+        self.powered_off(|records| {
+            records.remove(mac);
+            Ok(())
+        })
     }
 
     fn flash(
@@ -506,24 +509,6 @@ impl StandDrivers {
         Ok(serde_json::json!({ "written": true, "receipt": receipt }))
     }
 
-    /// Take `step` of `board`'s ladder; the console the ROM printed.
-    fn rung(&self, board: &Board, step: RecoveryStep) -> Result<String> {
-        let banner = match step {
-            RecoveryStep::DownloadEntry => Some(board.download_entry().map_err(text)?),
-            step => {
-                let rungs = board.rungs();
-                let rung = rungs
-                    .iter()
-                    .find(|rung| rung.step() == step)
-                    .ok_or_else(|| format!("the board's ladder has no {step:?}"))?;
-                rung.reset().map_err(text)?
-            }
-        };
-        // A chip whose port re-enumerates prints its banner before the port
-        // returns: read the console again once it is back.
-        Ok(banner.unwrap_or_else(|| board.console(BANNER)))
-    }
-
     /// Stream `board`'s console both ways until `io.stop`.
     /// Stream `board`'s console both ways until `io.stop`: on its `parked`
     /// port when it has one and is not started; when `start`, after a reset
@@ -561,167 +546,6 @@ impl StandDrivers {
             }
         }
         Ok(())
-    }
-
-    /// Run `argv` as a child of the service, in a control group of its own,
-    /// until it exits or `io.stop`; `run_to_end` keeps it running after
-    /// `io.stop` until it ends by itself. The operation ends once the group
-    /// is empty and its output read: a group that does not empty leaves the
-    /// lease's resources unavailable.
-    fn command(
-        &self,
-        argv: &[String],
-        directory: &str,
-        environment: &[(String, String)],
-        terminal: Option<TerminalSize>,
-        run_to_end: bool,
-        io: &OperationIo,
-    ) -> Result<serde_json::Value> {
-        let (program, arguments) = argv.split_first().ok_or("the command is empty")?;
-        let groups = self
-            .commands
-            .as_ref()
-            .ok_or("this service owns no control group to run commands in")?;
-        let group = groups
-            .group(&format!(
-                "command-{}",
-                self.next_group.fetch_add(1, Ordering::SeqCst)
-            ))
-            .map_err(text)?;
-        let mut command = oer_os_process::command(program);
-        command
-            .args(arguments)
-            .current_dir(directory)
-            .env_clear()
-            .envs(environment.iter().map(|(key, value)| (key, value)));
-        // On a terminal the command leads a session with the pseudo-terminal
-        // as its controlling terminal; its streams are the terminal.
-        let pty = terminal.map(pseudo_terminal).transpose()?;
-        let (controlling, master) = match pty {
-            Some((master, slave)) => {
-                let stdio = |fd: &std::os::fd::OwnedFd| -> Result<std::process::Stdio> {
-                    Ok(std::process::Stdio::from(fd.try_clone().map_err(text)?))
-                };
-                command
-                    .stdin(stdio(&slave)?)
-                    .stdout(stdio(&slave)?)
-                    .stderr(stdio(&slave)?);
-                (Some(slave), Some(std::fs::File::from(master)))
-            }
-            None => {
-                command
-                    .stdin(std::process::Stdio::piped())
-                    .stdout(std::process::Stdio::piped())
-                    .stderr(std::process::Stdio::piped());
-                (None, None)
-            }
-        };
-        let mut child = group.spawn(&mut command, controlling).map_err(text)?;
-        // The child holds the terminal's slave side now.
-        drop(command);
-        let mut streams = Vec::new();
-        if let Some(out) = child.stdout.take() {
-            streams.push(std::fs::File::from(std::os::fd::OwnedFd::from(out)));
-        }
-        if let Some(err) = child.stderr.take() {
-            streams.push(std::fs::File::from(std::os::fd::OwnedFd::from(err)));
-        }
-        let mut stdin: Option<Box<dyn Write + Send>> = child
-            .stdin
-            .take()
-            .map(|input| Box::new(input) as Box<dyn Write + Send>);
-        if let Some(master) = &master {
-            streams.push(master.try_clone().map_err(text)?);
-            stdin = Some(Box::new(master.try_clone().map_err(text)?));
-        }
-        // The readers end at the end of their stream, or once the group is
-        // empty and the stream stayed quiet: a descriptor passed outside the
-        // group may still hold it open.
-        let ended = std::sync::Arc::new(AtomicBool::new(false));
-        let (chunks, received) = mpsc::sync_channel::<Vec<u8>>(64);
-        let readers = streams
-            .into_iter()
-            .map(|stream| {
-                let chunks = chunks.clone();
-                let ended = ended.clone();
-                std::thread::spawn(move || read_until_quiet(stream, &chunks, &ended))
-            })
-            .collect::<Vec<_>>();
-        drop(chunks);
-        let mut stopping = false;
-        let status = loop {
-            while let Ok(chunk) = received.try_recv() {
-                io.output.write(&chunk);
-            }
-            if let Some(input) = &mut stdin {
-                loop {
-                    match io.input.try_recv() {
-                        Ok(bytes) => {
-                            if input.write_all(&bytes).is_err() {
-                                break;
-                            }
-                        }
-                        Err(mpsc::TryRecvError::Empty) => break,
-                        Err(mpsc::TryRecvError::Disconnected) => {
-                            // A terminal's input ends with its master: a
-                            // command on one keeps it until it ends.
-                            if master.is_none() {
-                                stdin = None;
-                            }
-                            break;
-                        }
-                    }
-                }
-            }
-            if io.stop.load(Ordering::SeqCst) && !run_to_end && !stopping {
-                // Admit nothing more, ask the command's session to end,
-                // and kill the group if it has not after the grace.
-                stopping = true;
-                group.close();
-                drop(stdin.take());
-                if let Some(leader) =
-                    rustix::process::Pid::from_raw(i32::try_from(child.id()).unwrap_or(i32::MAX))
-                {
-                    let _ =
-                        rustix::process::kill_process_group(leader, rustix::process::Signal::TERM);
-                }
-                if !group.wait_empty(COMMAND_GRACE).map_err(text)? {
-                    group.kill().map_err(text)?;
-                }
-            }
-            if let Some(status) = child.try_wait().map_err(text)? {
-                break status;
-            }
-            if let Ok(chunk) = received.recv_timeout(POLL) {
-                io.output.write(&chunk);
-            }
-        };
-        // What the command left in its group ends with it.
-        if group.populated().map_err(text)? {
-            group.kill().map_err(text)?;
-        }
-        group.close();
-        let emptied = group.wait_empty(GROUP_EMPTY).map_err(text)?;
-        ended.store(true, Ordering::SeqCst);
-        drop(stdin);
-        while readers.iter().any(|reader| !reader.is_finished()) {
-            if let Ok(chunk) = received.recv_timeout(POLL) {
-                io.output.write(&chunk);
-            }
-        }
-        drop(master);
-        while let Ok(chunk) = received.try_recv() {
-            io.output.write(&chunk);
-        }
-        if !emptied {
-            let reason = format!(
-                "the command's control group {} kept a process after it was killed",
-                group.name()
-            );
-            io.unconfirmed(reason.clone());
-            return Err(reason);
-        }
-        Ok(serde_json::json!(status.code()))
     }
 
     fn hub_port(&self, hub: &str, port: u8, off: Duration, claims: &[Claim]) -> Result<()> {
@@ -766,82 +590,6 @@ fn carried(board: &Board) -> Result<String> {
     )
 }
 
-/// Send what `stream` yields to `chunks` until its end, or until `ended` is
-/// set and the stream stays quiet for one poll: a process that left the
-/// command may still hold it open, and the operation ends anyway.
-fn read_until_quiet(
-    mut stream: std::fs::File,
-    chunks: &mpsc::SyncSender<Vec<u8>>,
-    ended: &std::sync::atomic::AtomicBool,
-) {
-    use rustix::event::{PollFd, PollFlags, Timespec, poll};
-    let timeout = Timespec {
-        tv_sec: 0,
-        tv_nsec: i64::try_from(POLL.as_nanos()).unwrap_or(50_000_000),
-    };
-    let mut buffer = vec![0u8; 4096];
-    let mut quiet_by = None;
-    loop {
-        if ended.load(Ordering::SeqCst) {
-            let by = *quiet_by.get_or_insert_with(|| Instant::now() + COMMAND_GRACE);
-            if Instant::now() >= by {
-                return;
-            }
-        }
-        let ready = {
-            let mut fds = [PollFd::new(&stream, PollFlags::IN)];
-            match poll(&mut fds, Some(&timeout)) {
-                Ok(ready) => ready > 0,
-                Err(rustix::io::Errno::INTR) => false,
-                Err(_) => return,
-            }
-        };
-        if !ready {
-            if ended.load(Ordering::SeqCst) {
-                return;
-            }
-            continue;
-        }
-        // A terminal whose every slave closed reads as an error, a pipe as
-        // its end.
-        let Ok(read) = stream.read(&mut buffer) else {
-            return;
-        };
-        let Some(chunk) = buffer.get(..read).filter(|chunk| !chunk.is_empty()) else {
-            return;
-        };
-        if chunks.send(chunk.to_vec()).is_err() {
-            return;
-        }
-    }
-}
-
-/// A pseudo-terminal of `size`: its master and its slave side.
-fn pseudo_terminal(size: TerminalSize) -> Result<(std::os::fd::OwnedFd, std::os::fd::OwnedFd)> {
-    use rustix::{fs::OFlags, pty};
-    let master = pty::openpt(pty::OpenptFlags::RDWR | pty::OpenptFlags::NOCTTY).map_err(text)?;
-    pty::grantpt(&master).map_err(text)?;
-    pty::unlockpt(&master).map_err(text)?;
-    let name = pty::ptsname(&master, Vec::new()).map_err(text)?;
-    rustix::termios::tcsetwinsize(
-        &master,
-        rustix::termios::Winsize {
-            ws_row: size.rows,
-            ws_col: size.columns,
-            ws_xpixel: 0,
-            ws_ypixel: 0,
-        },
-    )
-    .map_err(text)?;
-    let slave = rustix::fs::open(
-        name.as_c_str(),
-        OFlags::RDWR | OFlags::NOCTTY | OFlags::CLOEXEC,
-        rustix::fs::Mode::empty(),
-    )
-    .map_err(text)?;
-    Ok((master, slave))
-}
-
 /// Reset the board at `port` into its ROM's download mode and read the
 /// ROM's reset line from the fresh console: the reset sequence discards
 /// what the port held before it.
@@ -883,12 +631,9 @@ impl Drivers for StandDrivers {
             return self.park(mac);
         }
         if recovery.resource == ROUTER {
-            // Its end state: it answers over SSH and runs its access point.
-            // A command that could change it more was marked before it ran.
-            return match self
-                .stand()
-                .and_then(|stand| crate::router::end_state(&stand))
-            {
+            // Its end state: its AP section disabled and no access point
+            // running, its configuration kept.
+            return match self.stand().and_then(|stand| crate::router::park(&stand)) {
                 Ok(()) => Confirmation::Ready,
                 Err(error) => Confirmation::Unavailable {
                     reason: format!("the router's end state is not confirmed: {error}"),
@@ -955,20 +700,6 @@ impl Drivers for StandDrivers {
         }
     }
 
-    fn marks(&self, operation: &Operation, claims: &[Claim]) -> Vec<(String, String)> {
-        // A command of a lease that holds the router may change it over its
-        // SSH beyond what an answer confirms.
-        match operation {
-            Operation::Command { .. } if covers(claims, &[Claim::shared(ROUTER)]) => vec![(
-                ROUTER.to_owned(),
-                "a command under the lease could change the router; a person checks it and \
-                 returns it"
-                    .to_owned(),
-            )],
-            _ => Vec::new(),
-        }
-    }
-
     fn attached(&self) -> Vec<(String, String)> {
         oer_lab_board::discovery::attached()
             .into_iter()
@@ -984,13 +715,6 @@ impl Drivers for StandDrivers {
     ) -> std::result::Result<serde_json::Value, String> {
         let stop = io.stop.clone();
         match operation {
-            Operation::Command {
-                argv,
-                directory,
-                environment,
-                terminal,
-                run_to_end,
-            } => self.command(argv, directory, environment, *terminal, *run_to_end, &io),
             Operation::Flash {
                 board,
                 bundle,
@@ -1004,23 +728,13 @@ impl Drivers for StandDrivers {
             }
             Operation::Reset { board, path } => {
                 let (board, _turn) = self.board(board, claims, &stop)?;
-                Ok(serde_json::json!(board.reset(*path).map_err(text)?))
-            }
-            Operation::Ladder { board } => {
-                let (board, _) = self.described(board, claims)?;
-                let mut steps = board
-                    .rungs()
-                    .iter()
-                    .map(|rung| rung.step())
-                    .collect::<Vec<_>>();
-                if board.has_power() {
-                    steps.push(RecoveryStep::DownloadEntry);
-                }
-                Ok(serde_json::json!(steps))
-            }
-            Operation::Rung { board, step } => {
-                let (board, _turn) = self.board(board, claims, &stop)?;
-                Ok(serde_json::json!(self.rung(&board, *step)?))
+                Ok(serde_json::json!(
+                    match path {
+                        Some(path) => board.reset(*path),
+                        None => board.restart(),
+                    }
+                    .map_err(text)?
+                ))
             }
             Operation::Console { board, reset } => {
                 let (board, parked, _turn) = self.board_and_port(board, claims, &stop)?;

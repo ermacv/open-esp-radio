@@ -55,13 +55,11 @@ pub struct Granted {
     pub resources: Vec<(String, u64)>,
 }
 
-/// A lease that ended: its history record, the recoveries it leaves, and
-/// each marked resource it left unavailable, with why.
+/// A lease that ended: its history record and the recoveries it leaves.
 #[derive(Clone, Debug)]
 pub struct Ended {
     pub record: LeaseRecord,
     pub recoveries: Vec<Recovery>,
-    pub unavailable: Vec<(String, String)>,
 }
 
 /// What a restart found: the leases it ended and the recoveries to run.
@@ -331,7 +329,6 @@ impl Scheduler {
                     Readiness::InUse {
                         lease: id,
                         generation,
-                        marked: None,
                     },
                 );
                 resources.push((resource.to_owned(), generation));
@@ -400,36 +397,22 @@ impl Scheduler {
             .position(|holder| holder.ticket.id == lease)?;
         let holder = self.state.holders.remove(index);
         let mut recoveries = Vec::new();
-        let mut unavailable = Vec::new();
         for (resource, readiness) in &mut self.state.readiness {
             if let Readiness::InUse {
                 lease: holding,
                 generation,
-                marked,
             } = readiness
                 && *holding == lease
             {
                 let generation = *generation + 1;
-                match marked.take() {
-                    Some(reason) => {
-                        unavailable.push((resource.clone(), reason.clone()));
-                        *readiness = Readiness::Unavailable {
-                            reason,
-                            emission: crate::readiness::Emission::Unknown,
-                            generation,
-                        };
-                    }
-                    None => {
-                        *readiness = Readiness::Recovering {
-                            lease: Some(lease),
-                            generation,
-                        };
-                        recoveries.push(Recovery {
-                            resource: resource.clone(),
-                            generation,
-                        });
-                    }
-                }
+                *readiness = Readiness::Recovering {
+                    lease: Some(lease),
+                    generation,
+                };
+                recoveries.push(Recovery {
+                    resource: resource.clone(),
+                    generation,
+                });
             }
         }
         let held_ms = now_ms.saturating_sub(holder.granted_unix.saturating_mul(1000));
@@ -452,45 +435,7 @@ impl Scheduler {
             run: holder.ticket.run,
             unknown: Default::default(),
         };
-        Some(Ended {
-            record,
-            recoveries,
-            unavailable,
-        })
-    }
-
-    /// Mark every stateful resource lease `lease` holds, for `reason`
-    /// (see [`Self::mark`]).
-    pub fn mark_held(&mut self, lease: u64, reason: &str) {
-        let held = self
-            .state
-            .readiness
-            .iter()
-            .filter(|(_, readiness)| {
-                matches!(readiness, Readiness::InUse { lease: holding, .. } if *holding == lease)
-            })
-            .map(|(resource, _)| resource.clone())
-            .collect::<Vec<_>>();
-        for resource in held {
-            self.mark(lease, &resource, reason);
-        }
-    }
-
-    /// Mark `resource`, which lease `lease` holds, as possibly left in a
-    /// state its recovery cannot confirm, for `reason`: the end of the lease
-    /// leaves it unavailable. False when the lease does not hold it.
-    pub fn mark(&mut self, lease: u64, resource: &str, reason: &str) -> bool {
-        match self.state.readiness.get_mut(resource) {
-            Some(Readiness::InUse {
-                lease: holding,
-                marked,
-                ..
-            }) if *holding == lease => {
-                marked.get_or_insert_with(|| reason.to_owned());
-                true
-            }
-            _ => false,
-        }
+        Some(Ended { record, recoveries })
     }
 
     /// What held leases are due at `now_ms`: a lease held for `limit` ends,

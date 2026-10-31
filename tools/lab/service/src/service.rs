@@ -58,11 +58,6 @@ pub trait Drivers: Send + Sync + 'static {
     /// its client only after this; an error leaves the resource unavailable
     /// and refuses the lease.
     fn prepare(&self, resource: &str) -> Result<(), String>;
-    /// The stateful resources `operation` under a lease holding `claims`
-    /// may leave in a state their recovery cannot confirm, each with why.
-    /// The service records them before the operation starts; they become
-    /// unavailable when the lease ends, also after a restart.
-    fn marks(&self, operation: &Operation, claims: &[Claim]) -> Vec<(String, String)>;
     /// The boards attached to the host now, each by its port and MAC.
     fn attached(&self) -> Vec<(String, String)>;
     /// The boards attached to the host, with their hub ports.
@@ -88,17 +83,6 @@ pub struct OperationIo {
     /// Input chunks; they end when the client closes the input.
     pub input: Input,
     pub stop: Arc<AtomicBool>,
-    /// Why the operation could not confirm that it ended, when it could not.
-    unconfirmed: Arc<Mutex<Option<String>>>,
-}
-
-impl OperationIo {
-    /// The operation could not confirm that what it started ended, for
-    /// `reason`: every resource of its lease stays unavailable when the
-    /// lease ends, until a person returns it.
-    pub fn unconfirmed(&self, reason: String) {
-        lock(&self.unconfirmed).get_or_insert(reason);
-    }
 }
 
 /// An operation's input from its client. Each chunk taken returns the
@@ -324,6 +308,8 @@ struct Lease {
     /// The connections of commands that joined it, each with the claims
     /// it joined for: its operations hold no more.
     joined: BTreeMap<u64, Vec<Claim>>,
+    /// The tokens joined clients got, each with the claims it allows.
+    delegated: BTreeMap<String, Vec<Claim>>,
     /// Running operations by connection and identity.
     operations: BTreeMap<(u64, u64), Running>,
 }
@@ -794,29 +780,41 @@ impl Service {
         self.pump(&mut inner);
     }
 
+    /// Join the lease `token` belongs to for `claims`, which the token
+    /// must allow; the joined client gets a token of its own allowing
+    /// `claims` only, so each level of delegation narrows.
     fn join(&self, connection: u64, token: &str, claims: &[Claim], outbox: &Outbox) {
         let mut inner = lock(&self.shared.inner);
-        let Some((id, lease)) = inner
-            .leases
-            .iter_mut()
-            .find(|(_, lease)| lease.token == token && lease.ending.is_none())
-        else {
+        let found = inner.leases.iter_mut().find_map(|(id, lease)| {
+            if lease.ending.is_some() {
+                return None;
+            }
+            let allowed = if lease.token == token {
+                lease.claims.clone()
+            } else {
+                lease.delegated.get(token)?.clone()
+            };
+            Some((*id, lease, allowed))
+        });
+        let Some((id, lease, allowed)) = found else {
             outbox.push(&Reply::Refused {
                 reason: "the token names no lease that is still held".to_owned(),
             });
             return;
         };
         let claims = normalize(claims);
-        if !covers(&lease.claims, &claims) {
+        if !covers(&allowed, &claims) {
             outbox.push(&Reply::Refused {
-                reason: "the enclosing lease does not hold what this command claims".to_owned(),
+                reason: "the token does not allow what this command claims".to_owned(),
             });
             return;
         }
+        let child = format!("{}-{}", lease.token, lease.delegated.len() + 1);
+        lease.delegated.insert(child.clone(), claims.clone());
         lease.joined.insert(connection, claims);
         outbox.push(&Reply::Granted {
-            lease: *id,
-            token: lease.token.clone(),
+            lease: id,
+            token: child,
         });
     }
 
@@ -829,21 +827,6 @@ impl Service {
             });
             return;
         };
-        // What the operation may leave unconfirmed is recorded before it
-        // starts: a restart then still knows it.
-        let marks = self.shared.drivers.marks(&operation, &claims);
-        if !marks.is_empty() {
-            for (resource, reason) in &marks {
-                inner.scheduler.mark(lease_id, resource, reason);
-            }
-            if !self.persist(&inner) {
-                outbox.push(&Reply::Finished {
-                    id,
-                    result: Err("the LAB service cannot record its state".to_owned()),
-                });
-                return;
-            }
-        }
         let Some(outbox) = inner.connections.get(&connection).cloned() else {
             return;
         };
@@ -865,7 +848,6 @@ impl Service {
         }
         let stop = Arc::new(AtomicBool::new(false));
         let overrun = Arc::new(AtomicBool::new(false));
-        let unconfirmed = Arc::new(Mutex::new(None));
         let (input, receiver) = mpsc::sync_channel(INPUT_DEPTH);
         lease.operations.insert(
             (connection, id),
@@ -875,15 +857,6 @@ impl Service {
                 overrun: overrun.clone(),
             },
         );
-        // A command inside the lease joins it, for the stand tools it runs.
-        let mut operation = operation;
-        if let Operation::Command { environment, .. } = &mut operation {
-            environment.retain(|(key, _)| key != oer_lab_client::protocol::LEASE_ENV);
-            environment.push((
-                oer_lab_client::protocol::LEASE_ENV.to_owned(),
-                lease.token.clone(),
-            ));
-        }
         drop(inner);
         self.shared.changed.notify_all();
         let service = self.clone();
@@ -900,15 +873,9 @@ impl Service {
                 operation: id,
             },
             stop,
-            unconfirmed: unconfirmed.clone(),
         };
         std::thread::spawn(move || {
             let mut result = service.shared.drivers.run(&operation, &claims, io);
-            if let Some(reason) = lock(&unconfirmed).take() {
-                let mut inner = lock(&service.shared.inner);
-                inner.scheduler.mark_held(lease_id, &reason);
-                service.persist(&inner);
-            }
             if overrun.load(Ordering::SeqCst) {
                 result = Err(format!(
                     "the client sent input beyond its window of {INPUT_DEPTH} frames; the \
@@ -930,14 +897,20 @@ impl Service {
     /// Operation `id` of `connection` under `lease` returned.
     fn finished(&self, lease: u64, connection: u64, id: u64) {
         let mut inner = lock(&self.shared.inner);
-        let Some(held) = inner.leases.get_mut(&lease) else {
-            return;
-        };
-        held.operations.remove(&(connection, id));
-        if let Some(outcome) = held.ending
+        if let Some(held) = inner.leases.get_mut(&lease) {
+            held.operations.remove(&(connection, id));
+        }
+        self.settle(&mut inner, lease);
+    }
+
+    /// An operation of lease `lease` left it: an ending lease without
+    /// operations is released.
+    fn settle(&self, inner: &mut Inner, lease: u64) {
+        if let Some(held) = inner.leases.get(&lease)
+            && let Some(outcome) = held.ending
             && held.operations.is_empty()
         {
-            self.release(&mut inner, lease, outcome);
+            self.release(inner, lease, outcome);
         }
         self.shared.changed.notify_all();
     }
@@ -1027,7 +1000,7 @@ impl Service {
                     .iter()
                     .map(|recovery| recovery.resource.clone())
                     .collect(),
-                unavailable: ended.unavailable,
+                unavailable: Vec::new(),
             },
         );
         for recovery in ended.recoveries {
@@ -1179,6 +1152,7 @@ impl Service {
                     yield_asked: false,
                     ending: None,
                     joined: Default::default(),
+                    delegated: BTreeMap::new(),
                     operations: BTreeMap::new(),
                 },
             );
@@ -1245,6 +1219,12 @@ impl Service {
             });
             let mut inner = lock(&service.shared.inner);
             let outbox = inner.connections.get(&connection).cloned();
+            // The preparation leaves the lease's operations before the
+            // client hears anything: its first operation is never refused
+            // as early.
+            if let Some(held) = inner.leases.get_mut(&lease) {
+                held.operations.remove(&(connection, PREPARATION));
+            }
             match failed {
                 None => {
                     if let Some(outbox) = outbox
@@ -1256,9 +1236,9 @@ impl Service {
                         outbox.push(&Reply::Granted { lease, token });
                     }
                 }
+                // The lease's end parks the resource again; the client
+                // hears why its lease was refused.
                 Some((resource, reason)) => {
-                    inner.scheduler.mark(lease, &resource, &reason);
-                    service.persist(&inner);
                     if let Some(outbox) = outbox {
                         outbox.push(&Reply::Refused {
                             reason: format!("{resource} could not be made ready: {reason}"),
@@ -1267,8 +1247,7 @@ impl Service {
                     service.end(&mut inner, lease, LeaseOutcome::Abandoned, None);
                 }
             }
-            drop(inner);
-            service.finished(lease, connection, PREPARATION);
+            service.settle(&mut inner, lease);
         });
     }
 

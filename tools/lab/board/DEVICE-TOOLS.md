@@ -7,7 +7,7 @@ owns every board, so no operation here takes a lock.
 | Package | Boundary |
 | --- | --- |
 | `devices/` (`oer-lab-board`) | Board operations as modules: `discovery`, `port`, `console`, `reset`, `openocd`, `flash`, receipted `image` writes and the stand file's board with every operation on it (`stand`) |
-| `oer-lab-model` | `DeviceId` and its canonical MAC form; what is known of a board apart from its hardware: reset paths, recovery steps and the ladder over a board's rungs (`rom`), the ROM's reset lines, the reference peers' line grammar (`peer_line`) and `uhubctl`'s report (`hubs`); the clients of the LAB service use them without the board operations |
+| `oer-lab-model` | `DeviceId` and its canonical MAC form; what is known of a board apart from its hardware: reset paths, recovery steps and a board's rungs, the ROM's reset lines (`rom`), the reference peers' line grammar (`peer_line`) and `uhubctl`'s report (`hubs`); the clients of the LAB service use them without the board operations |
 
 The LAB service uses the modules directly, for example
 `oer_lab_board::console` or `oer_lab_board::reset`; its clients do not

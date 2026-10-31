@@ -19,7 +19,7 @@
 //!
 //! What is known of a board and the stand's equipment apart from the
 //! hardware lives here too, for the LAB service's clients: reset paths and
-//! the ladder ([`rom`]), the reference peers' lines ([`peer_line`]),
+//! the ROM's reset lines ([`rom`]), the reference peers' lines ([`peer_line`]),
 //! `uhubctl`'s report ([`hubs`]) and the equipment reports ([`equipment`]).
 
 #![forbid(unsafe_code)]

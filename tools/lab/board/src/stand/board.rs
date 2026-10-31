@@ -314,6 +314,20 @@ impl Board {
             .or_else(|| oer_lab_model::rom::reset_line(&self.console(BANNER))))
     }
 
+    /// Reset the board through the first reset its stand file lists, into
+    /// its image, and return the ROM's reset line it printed.
+    pub fn restart(&self) -> crate::stand::Result<Option<String>> {
+        let rungs = self.rungs();
+        let rung = rungs
+            .first()
+            .ok_or("the board's stand file lists no reset")?;
+        let banner = rung.reset()?;
+        Ok(banner
+            .as_deref()
+            .and_then(oer_lab_model::rom::reset_line)
+            .or_else(|| oer_lab_model::rom::reset_line(&self.console(BANNER))))
+    }
+
     /// The board's console read for `watch` without resetting it, once its
     /// port is back.
     pub fn console(&self, watch: Duration) -> String {

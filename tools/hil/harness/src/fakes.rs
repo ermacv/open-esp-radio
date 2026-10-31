@@ -1,15 +1,11 @@
 //! Stand doubles for the harness's tests: devices behind real links and a
-//! board whose reset ladder runs through `oer_lab_model::rom::climb`.
+//! board whose first reset restarts its device.
 
-use std::{
-    cell::{Cell, RefCell},
-    thread,
-    time::Duration,
-};
+use std::{cell::Cell, thread, time::Duration};
 
 use oer_hil_link::{Link, test_support::Device};
 use oer_hil_protocol::base::{GetHello, Hello, RejectReason, Rejected};
-use oer_lab_model::rom::{Ladder, RecoveryStep, Rung};
+use oer_lab_model::rom::{RecoveryStep, Rung};
 
 use crate::finish::{Board, Waits};
 
@@ -17,8 +13,9 @@ pub(crate) const IMAGE: u32 = 0x5eed_0002;
 pub(crate) const ROM_LINE: &str = "rst:0x17 (CHIP_USB_UART_RESET),boot:0x5f (SPI_FAST_FLASH_BOOT)";
 pub(crate) const WAITS: Waits = Waits {
     probe: Duration::from_millis(200),
-    hello: Duration::from_millis(400),
 };
+/// How long a test waits for a boot's Hello.
+pub(crate) const HELLO: Duration = Duration::from_millis(400);
 
 pub(crate) fn hello() -> Hello {
     Hello {
@@ -76,7 +73,6 @@ pub(crate) struct FakeBoard {
     /// Links the board opens next on which the running image's Hello is
     /// lost: the device shows its boot by another frame and answers nothing.
     pub hellos_lost: Cell<usize>,
-    pub recovered: RefCell<Vec<RecoveryStep>>,
     /// How a device behaves on a link the board opens while its image runs.
     pub serve: fn(Device),
 }
@@ -90,7 +86,6 @@ impl FakeBoard {
             resets: Cell::new(0),
             boots: Cell::new(100),
             hellos_lost: Cell::new(0),
-            recovered: RefCell::new(Vec::new()),
         }
     }
 }
@@ -112,22 +107,6 @@ impl Rung for FakeRung<'_> {
 }
 
 impl Board for FakeBoard {
-    fn climb(&self, answers: &mut dyn FnMut() -> bool) -> Ladder {
-        let rungs = self
-            .steps
-            .iter()
-            .map(|step| FakeRung(self, step))
-            .collect::<Vec<_>>();
-        oer_lab_model::rom::climb(
-            &rungs
-                .iter()
-                .map(|rung| rung as &dyn Rung)
-                .collect::<Vec<_>>(),
-            None,
-            &String::new,
-            answers,
-        )
-    }
     fn reset(&self) -> Result<(), String> {
         let step = self.steps.first().ok_or("no rung")?;
         FakeRung(self, step)
@@ -151,23 +130,11 @@ impl Board for FakeBoard {
         thread::spawn(move || serve(device));
         Ok(link)
     }
-    fn recovered(&self, step: RecoveryStep, _reset_line: Option<String>) {
-        self.recovered.borrow_mut().push(step);
-    }
 }
 
 pub(crate) fn rts(rom: bool, image: bool) -> Step {
     Step {
         step: RecoveryStep::RtsReset,
-        restarts: true,
-        rom,
-        image,
-    }
-}
-
-pub(crate) fn power(rom: bool, image: bool) -> Step {
-    Step {
-        step: RecoveryStep::PowerCycle,
         restarts: true,
         rom,
         image,

@@ -20,9 +20,10 @@ use crate::protocol::{
 
 pub type Result<T> = std::result::Result<T, String>;
 
-/// Events an operation may have pending before its output slows the
-/// connection.
-const ROUTE_DEPTH: usize = 256;
+/// Output an operation may have waiting for its reader in this client; more
+/// is dropped and counted, never waited for, so a slow reader never holds
+/// the replies behind it.
+const ROUTE_BUDGET: usize = 1 << 20;
 /// How often a client waiting for its lease looks whether it was cancelled.
 const WAIT_POLL: std::time::Duration = std::time::Duration::from_millis(200);
 
@@ -37,6 +38,9 @@ pub struct Client {
     joined: bool,
     /// The lease was released and its end heard.
     released: bool,
+    /// The token of the lease this client holds or joined, for the
+    /// commands it runs.
+    token: Option<String>,
 }
 
 /// What the service said about the lease outside the replies.
@@ -71,8 +75,79 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 
 /// Where the reader sends an operation's frames.
 struct Route {
-    events: mpsc::SyncSender<Event>,
+    events: Arc<RouteQueue>,
     credits: Arc<Credits>,
+}
+
+/// What waits for an operation's reader: its output within the budget, the
+/// output lost beyond it, and its end, which is never lost.
+#[derive(Default)]
+struct RouteQueue {
+    state: Mutex<RouteState>,
+    changed: Condvar,
+}
+
+#[derive(Default)]
+struct RouteState {
+    output: std::collections::VecDeque<Vec<u8>>,
+    bytes: usize,
+    lost: u64,
+    finished: Option<Result<serde_json::Value>>,
+    /// The service went away before the operation finished.
+    closed: bool,
+}
+
+impl RouteQueue {
+    fn output(&self, bytes: Vec<u8>) {
+        let mut state = lock(&self.state);
+        if state.bytes.saturating_add(bytes.len()) > ROUTE_BUDGET {
+            state.lost = state.lost.saturating_add(bytes.len() as u64);
+        } else {
+            state.bytes += bytes.len();
+            state.output.push_back(bytes);
+        }
+        self.changed.notify_all();
+    }
+
+    fn lost(&self, bytes: u64) {
+        let mut state = lock(&self.state);
+        state.lost = state.lost.saturating_add(bytes);
+        self.changed.notify_all();
+    }
+
+    fn finish(&self, result: Result<serde_json::Value>) {
+        lock(&self.state).finished = Some(result);
+        self.changed.notify_all();
+    }
+
+    fn close(&self) {
+        lock(&self.state).closed = true;
+        self.changed.notify_all();
+    }
+
+    /// The next event: output first, then a loss, then the end.
+    fn next(&self) -> Event {
+        let mut state = lock(&self.state);
+        loop {
+            if let Some(bytes) = state.output.pop_front() {
+                state.bytes = state.bytes.saturating_sub(bytes.len());
+                return Event::Output(bytes);
+            }
+            if state.lost > 0 {
+                return Event::Lost(std::mem::take(&mut state.lost));
+            }
+            if let Some(result) = state.finished.take() {
+                return Event::Finished(result);
+            }
+            if state.closed {
+                return Event::Finished(Err("the LAB service closed the connection".to_owned()));
+            }
+            state = self
+                .changed
+                .wait(state)
+                .unwrap_or_else(PoisonError::into_inner);
+        }
+    }
 }
 
 /// The input frames an operation may still be sent, until it finished.
@@ -149,14 +224,12 @@ impl Client {
             while let Ok(Some(frame)) = Frame::read(&mut reader) {
                 let reply = match frame {
                     Frame::Data { operation, bytes } => {
-                        // A full route stops this reader, so a slow reader
-                        // slows the socket and the service drops and counts
-                        // the output it cannot send.
+                        // Never waited for: the replies behind it go on.
                         let route = lock(&thread_routes)
                             .get(&operation)
                             .map(|route| route.events.clone());
                         if let Some(route) = route {
-                            let _ = route.send(Event::Output(bytes));
+                            route.output(bytes);
                         }
                         continue;
                     }
@@ -171,7 +244,7 @@ impl Client {
                             .get(&id)
                             .map(|route| route.events.clone());
                         if let Some(route) = route {
-                            let _ = route.send(Event::Lost(bytes));
+                            route.lost(bytes);
                         }
                     }
                     Reply::Credit { id } => {
@@ -183,7 +256,7 @@ impl Client {
                         let route = lock(&thread_routes).remove(&id);
                         if let Some(route) = route {
                             route.credits.finish();
-                            let _ = route.events.send(Event::Finished(result));
+                            route.events.finish(result);
                         }
                     }
                     Reply::Revoked { reason } => lock(&thread_notices).revoked = Some(reason),
@@ -198,6 +271,7 @@ impl Client {
             // The service is gone: every operation and request hears it.
             for (_, route) in std::mem::take(&mut *lock(&thread_routes)) {
                 route.credits.finish();
+                route.events.close();
             }
         });
         let mut this = Self {
@@ -209,6 +283,7 @@ impl Client {
             next_operation: 1,
             joined: false,
             released: false,
+            token: None,
         };
         this.send(&Request::Hello {
             protocol: PROTOCOL,
@@ -219,6 +294,13 @@ impl Client {
             Reply::Refused { reason } => Err(reason),
             other => Err(format!("unexpected reply to hello: {other:?}")),
         }
+    }
+
+    /// The token of the lease this client holds or joined: a command it
+    /// runs gets it in [`crate::protocol::LEASE_ENV`] to join the lease for
+    /// no more than this client holds.
+    pub fn token(&self) -> Option<&str> {
+        self.token.as_deref()
     }
 
     /// Why the service ended the lease, if it did.
@@ -280,7 +362,10 @@ impl Client {
             };
             match reply {
                 Reply::Waiting { message, .. } => waiting(&message),
-                Reply::Granted { lease, token } => return Ok(Granted { lease, token }),
+                Reply::Granted { lease, token } => {
+                    self.token = Some(token.clone());
+                    return Ok(Granted { lease, token });
+                }
                 Reply::Refused { reason } => return Err(reason),
                 other => return Err(format!("unexpected reply to acquire: {other:?}")),
             }
@@ -294,7 +379,10 @@ impl Client {
             claims,
         })?;
         match self.reply()? {
-            Reply::Granted { lease, token } => Ok(Granted { lease, token }),
+            Reply::Granted { lease, token } => {
+                self.token = Some(token.clone());
+                Ok(Granted { lease, token })
+            }
             Reply::Refused { reason } => Err(reason),
             other => Err(format!("unexpected reply to join: {other:?}")),
         }
@@ -402,12 +490,12 @@ impl Client {
     pub fn start(&mut self, operation: Operation) -> Result<Running> {
         let id = self.next_operation;
         self.next_operation += 1;
-        let (route, events) = mpsc::sync_channel(ROUTE_DEPTH);
+        let events = Arc::new(RouteQueue::default());
         let credits = Credits::new();
         lock(&self.routes).insert(
             id,
             Route {
-                events: route,
+                events: events.clone(),
                 credits: credits.clone(),
             },
         );
@@ -507,7 +595,7 @@ impl Drop for Client {
 /// output and input until it finishes.
 pub struct Running {
     id: u64,
-    events: mpsc::Receiver<Event>,
+    events: Arc<RouteQueue>,
     writer: Arc<Mutex<UnixStream>>,
     credits: Arc<Credits>,
     /// Output received but not read yet.
@@ -566,9 +654,7 @@ impl Running {
     /// The next event; an operation whose service went away finished with
     /// that error.
     pub fn event(&mut self) -> Event {
-        self.events.recv().unwrap_or_else(|_| {
-            Event::Finished(Err("the LAB service closed the connection".to_owned()))
-        })
+        self.events.next()
     }
 
     /// Copy the output to `output` until the operation finishes.

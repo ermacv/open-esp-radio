@@ -48,8 +48,8 @@ impl Gate {
 
 /// Recoveries pass `recovery` and confirm `confirmation`; a `hold`
 /// operation keeps its hardware busy until `hardware` opens, whether or not
-/// it was asked to stop; `mark` does so too and marks board A first;
-/// `flood` writes `flood` bytes at once. `claims` lists the claims each
+/// it was asked to stop; `wait` runs until it is asked to stop; `echo`
+/// returns its input; `flood` writes `flood` bytes at once. `claims` lists the claims each
 /// operation ran with.
 struct Fake {
     recovery: Gate,
@@ -83,15 +83,6 @@ impl Drivers for Fake {
         lock(&self.confirmation).clone()
     }
 
-    fn marks(&self, operation: &Operation, _: &[Claim]) -> Vec<(String, String)> {
-        match operation {
-            Operation::Command { argv, .. } if argv.first().map(String::as_str) == Some("mark") => {
-                vec![(board(A), "a marking command ran".to_owned())]
-            }
-            _ => Vec::new(),
-        }
-    }
-
     fn attached(&self) -> Vec<(String, String)> {
         Vec::new()
     }
@@ -119,27 +110,28 @@ impl Drivers for Fake {
         io: OperationIo,
     ) -> Result<serde_json::Value, String> {
         lock(&self.claims).push(claims.to_vec());
-        let Operation::Command { argv, .. } = operation else {
-            return Err("the fake runs commands only".to_owned());
+        // The fake's operations are consoles whose board names what they do.
+        let Operation::Console { board, .. } = operation else {
+            return Err("the fake runs consoles only".to_owned());
         };
-        match argv.first().map(String::as_str) {
-            Some("hold" | "mark") => {
+        match board.as_str() {
+            "hold" => {
                 self.hardware.pass();
                 Ok(serde_json::json!("released"))
             }
-            Some("wait") => {
+            "wait" => {
                 while !io.stop.load(Ordering::SeqCst) {
                     std::thread::park_timeout(std::time::Duration::from_millis(1));
                 }
                 Ok(serde_json::json!("stopped"))
             }
-            Some("flood") => {
+            "flood" => {
                 for _ in 0..FLOOD / 1024 {
                     io.output.write(&[b'x'; 1024]);
                 }
                 Ok(serde_json::json!("flooded"))
             }
-            Some("echo") => {
+            "echo" => {
                 while let Ok(chunk) = io.input.recv() {
                     io.output.write(&chunk);
                 }
@@ -150,13 +142,11 @@ impl Drivers for Fake {
     }
 }
 
+/// The fake's operation `name` (see [`Fake`]).
 fn command(name: &str) -> Operation {
-    Operation::Command {
-        argv: vec![name.to_owned()],
-        directory: "/".to_owned(),
-        environment: Vec::new(),
-        terminal: None,
-        run_to_end: false,
+    Operation::Console {
+        board: name.to_owned(),
+        reset: false,
     }
 }
 
@@ -407,8 +397,11 @@ fn a_command_inside_the_lease_joins_it_and_its_loss_stops_only_its_work() {
 
     let mut inside = client(&service);
     assert_eq!(
-        inside.join(&granted.token, vec![Claim::board(A)]).unwrap(),
-        granted
+        inside
+            .join(&granted.token, vec![Claim::board(A)])
+            .unwrap()
+            .lease,
+        granted.lease
     );
     let mut output = Vec::new();
     let echoed = inside
@@ -663,7 +656,8 @@ fn a_joined_command_works_only_with_the_claims_it_joined_for() {
         .push(Claim::shared(oer_lab_arbiter::claims::AIR));
     let granted = holder.acquire(lease, &mut |_| {}).unwrap();
     let mut joined = client(&service);
-    joined.join(&granted.token, vec![Claim::board(A)]).unwrap();
+    let narrowed = joined.join(&granted.token, vec![Claim::board(A)]).unwrap();
+    assert_ne!(narrowed.token, granted.token);
     joined
         .run(command("hold"), &mut std::io::sink(), None)
         .unwrap();
@@ -671,49 +665,20 @@ fn a_joined_command_works_only_with_the_claims_it_joined_for() {
         lock(&fake.claims).last().cloned(),
         Some(vec![Claim::board(A)])
     );
+    // What the joined client hands on allows no more than it holds.
+    let air = Claim::shared(oer_lab_arbiter::claims::AIR);
+    let refused = client(&service)
+        .join(&narrowed.token, vec![air.clone()])
+        .unwrap_err();
+    assert!(refused.contains("does not allow"), "{refused}");
+    client(&service)
+        .join(&narrowed.token, vec![Claim::board(A)])
+        .unwrap();
+    client(&service).join(&granted.token, vec![air]).unwrap();
     holder
         .run(command("hold"), &mut std::io::sink(), None)
         .unwrap();
     assert_eq!(lock(&fake.claims).last().map(Vec::len), Some(2));
-}
-
-#[test]
-fn a_marked_resource_ends_its_lease_unavailable_also_after_a_restart() {
-    let directory = tempfile::tempdir().unwrap();
-    let fake = Fake::new();
-    let service = open(directory.path(), &fake);
-    service.wait_until(ready);
-    let recovered = fake.recoveries.load(Ordering::SeqCst);
-    let mut holder = client(&service);
-    holder.acquire(request("ann"), &mut |_| {}).unwrap();
-    holder
-        .run(command("mark"), &mut std::io::sink(), None)
-        .unwrap();
-    let ended = holder.release().unwrap_err();
-    assert!(ended.contains("a marking command ran"), "{ended}");
-    assert_eq!(fake.recoveries.load(Ordering::SeqCst), recovered);
-    assert!(matches!(
-        readiness(&service),
-        oer_lab_arbiter::readiness::Readiness::Unavailable { .. }
-    ));
-
-    // A mark recorded before a lost service still leaves the board
-    // unavailable when the next service opens.
-    let directory = tempfile::tempdir().unwrap();
-    let before = open(directory.path(), &fake);
-    before.wait_until(ready);
-    let mut holder = client(&before);
-    holder.acquire(request("ann"), &mut |_| {}).unwrap();
-    holder
-        .run(command("mark"), &mut std::io::sink(), None)
-        .unwrap();
-    let after = open(directory.path(), &fake);
-    assert!(matches!(
-        readiness(&after),
-        oer_lab_arbiter::readiness::Readiness::Unavailable { reason, .. }
-            if reason == "a marking command ran"
-    ));
-    holder.sever();
 }
 
 #[test]
@@ -832,18 +797,47 @@ fn a_release_answers_once_its_resources_recovered() {
 }
 
 #[test]
-fn a_resource_that_cannot_be_prepared_refuses_the_lease_and_stays_unavailable() {
+fn a_resource_that_cannot_be_prepared_refuses_the_lease_and_is_recovered_again() {
     let directory = tempfile::tempdir().unwrap();
     let fake = Fake::new();
     let service = open(directory.path(), &fake);
     service.wait_until(ready);
+    let recovered = fake.recoveries.load(Ordering::SeqCst);
     *lock(&fake.prepared) = Err("its power did not come back".to_owned());
     let mut holder = client(&service);
     let refused = holder.acquire(request("ann"), &mut |_| {}).unwrap_err();
     assert!(refused.contains("its power did not come back"), "{refused}");
-    service.wait_until(|status| status.holders.is_empty());
-    assert!(matches!(
-        readiness(&service),
-        oer_lab_arbiter::readiness::Readiness::Unavailable { .. }
-    ));
+    service.wait_until(|status| status.holders.is_empty() && ready(status));
+    assert_eq!(fake.recoveries.load(Ordering::SeqCst), recovered + 1);
+}
+
+#[test]
+fn the_first_operation_after_a_grant_is_never_refused_as_early() {
+    let directory = tempfile::tempdir().unwrap();
+    let fake = Fake::new();
+    let service = open(directory.path(), &fake);
+    service.wait_until(ready);
+    for _ in 0..50 {
+        let mut holder = client(&service);
+        holder.acquire(request("ann"), &mut |_| {}).unwrap();
+        holder
+            .run(command("hold"), &mut std::io::sink(), None)
+            .unwrap();
+        holder.release().unwrap();
+    }
+}
+
+#[test]
+fn an_unread_operation_never_holds_the_replies_behind_it() {
+    let directory = tempfile::tempdir().unwrap();
+    let fake = Fake::new();
+    let service = open(directory.path(), &fake);
+    service.wait_until(ready);
+    let mut holder = client(&service);
+    holder.acquire(request("ann"), &mut |_| {}).unwrap();
+    // Its output is never read: the release still hears the lease's end.
+    let flood = holder.start(command("flood")).unwrap();
+    service.wait_until(|status| status.holders.iter().all(|holder| holder.operations == 0));
+    holder.release().unwrap();
+    drop(flood);
 }

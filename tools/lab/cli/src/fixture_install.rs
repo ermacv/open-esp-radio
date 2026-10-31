@@ -1,7 +1,7 @@
 //! `cargo stand fixture install`: offline planning and unprivileged
-//! preparation of a Linux fixture software bundle, then the privileged
-//! installer under sudo, run by the LAB service on this terminal under a
-//! maintenance lease of the fixture.
+//! preparation of a Linux fixture software bundle, then the foreground sudo
+//! handoff to the privileged installer under a maintenance lease of the
+//! fixture.
 
 use std::path::Path;
 
@@ -79,38 +79,19 @@ pub(crate) fn run(
             oer_lab_fixture::resource(provider)
         );
         let mut lease = install_lease(provider)?;
-        // The LAB service runs the installer under sudo on this terminal,
-        // in a control group of its own, and never stops it: a lease that
-        // ends waits until it ended, since a partial installation is worse
-        // than a late one. sudo ends a password prompt nobody answers by its
-        // own timeout.
-        let environment = std::env::vars_os()
-            .filter_map(|(key, value)| Some((key.into_string().ok()?, value.into_string().ok()?)))
-            .collect();
-        let code = crate::service::command(
-            &mut lease,
-            [
-                String::from("sudo"),
-                root.join("target/debug")
-                    .join(INSTALLER_BINARY)
-                    .display()
-                    .to_string(),
-                String::from("--provider"),
-                provider.as_str().to_owned(),
-                String::from("--bundle"),
-                bundle.display().to_string(),
-            ]
-            .into(),
-            environment,
-            true,
-        )?;
+        // sudo runs in this foreground process group with the terminal's
+        // standard streams, so it owns password echo, input and job control,
+        // and its exit status is the command's. Nothing stops it: a partial
+        // installation is worse than a late one.
+        let status = oer_os_process::command("sudo")
+            .arg(root.join("target/debug").join(INSTALLER_BINARY))
+            .args(["--provider", provider.as_str(), "--bundle"])
+            .arg(bundle)
+            .status()
+            .map_err(|error| format!("cannot start the Linux fixture installer: {error}"))?;
         lease.release()?;
-        if code != serde_json::json!(0) {
-            std::process::exit(
-                code.as_u64()
-                    .and_then(|code| i32::try_from(code).ok())
-                    .unwrap_or(1),
-            );
+        if !status.success() {
+            std::process::exit(status.code().unwrap_or(1));
         }
         Ok(())
     }

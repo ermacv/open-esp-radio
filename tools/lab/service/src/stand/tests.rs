@@ -56,3 +56,40 @@ fn a_stopped_operation_leaves_the_queue_without_its_turn() {
     assert!(refused.contains("stopped"), "{refused}");
     assert_eq!(lock(&owner.queue).1.len(), 1);
 }
+
+#[test]
+fn parkings_of_two_boards_keep_both_records_of_their_power() {
+    let directory = tempfile::tempdir().unwrap();
+    let journal = oer_lab_arbiter::Arbiter::at(directory.path())
+        .unwrap()
+        .journal();
+    let drivers = std::sync::Arc::new(StandDrivers::new(
+        directory.path().to_owned(),
+        directory.path().join("stand.toml"),
+        directory.path().to_owned(),
+        journal,
+    ));
+    let parkings = (0..8u8)
+        .map(|board| {
+            let drivers = drivers.clone();
+            std::thread::spawn(move || {
+                drivers
+                    .powered_off(|records| {
+                        records.insert(
+                            format!("02:00:00:00:00:{board:02X}"),
+                            HubPort {
+                                location: "3-8".to_owned(),
+                                port: board,
+                            },
+                        );
+                        Ok(())
+                    })
+                    .unwrap();
+            })
+        })
+        .collect::<Vec<_>>();
+    for parking in parkings {
+        parking.join().unwrap();
+    }
+    assert_eq!(drivers.powered_off(|records| Ok(records.len())).unwrap(), 8);
+}

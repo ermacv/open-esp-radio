@@ -1,6 +1,5 @@
-//! A board's resets: the USB Serial/JTAG openers and reset sequences. The
-//! ladder they form, [`oer_lab_model::rom::climb`], is the one way back every
-//! recovery and `cargo stand board reset` take.
+//! A board's resets: the USB Serial/JTAG openers and reset sequences, the
+//! rungs of the board's reset ladder.
 //!
 //! The rungs are the board's stand-file `reset` steps in their order: an RTS
 //! pulse on its USB Serial/JTAG port, a system reset through its builtin

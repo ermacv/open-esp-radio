@@ -1,8 +1,8 @@
 //! The service process: one per host. Its systemd user units (`cargo stand
 //! install`) run it: `oer-lab.socket` holds the stand model's socket
 //! (`paths::socket`) and hands it over, so a client that connects while the
-//! service restarts waits for it, and `oer-lab.service` delegates its
-//! control group to it for the commands it runs. A lock in the stand's
+//! service restarts waits for it, and `oer-lab.service` runs it. A lock in
+//! the stand's
 //! directory keeps a second instance out. Started by hand, without a socket
 //! handed over, it binds the socket itself.
 
@@ -67,15 +67,11 @@ pub fn serve(root: PathBuf) -> Result<()> {
             UnixListener::bind(&socket)?
         }
     };
-    // Every command runs in a control group of the service's own, which
-    // its unit delegates to it.
-    let commands = oer_os_process::cgroup::Delegated::take()?;
     let drivers = Arc::new(StandDrivers::new(
         root,
         arbiter.stand_file().to_owned(),
         arbiter.directory().to_owned(),
         arbiter.journal(),
-        Some(commands),
     ));
     // Before `cargo stand init` wrote the stand file the stand has no
     // resource; `Request::Reload` reads it once it exists.

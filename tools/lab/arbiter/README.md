@@ -46,16 +46,14 @@ kind declares makes it ready again. Every grant and recovery starts a new
 generation: a confirmation of an older generation changes nothing.
 
 Whether a resource may be granted is apart from what it may put on the air
-(`Emission`): a ready resource rests in an end state its driver confirmed
-(a board that cannot radiate, the router's known access point); one in use
-radiates under its lease's air claims; one recovering, or unavailable
-without a confirmation that it cannot radiate, may radiate unknown to the
-stand and closes the air to every other request that uses it.
+(`Emission`): a ready resource rests in a quiet end state its driver
+confirmed (a board in its ROM or with its power off, the router with its AP
+down); one in use radiates under its lease's air claims; one recovering, or
+unavailable without a confirmation that it cannot radiate, may radiate
+unknown to the stand and closes the air to every other request that uses
+it.
 
-An in-use resource may carry a mark: an operation of its lease may have
-left it in a state its recovery cannot confirm. The end of the lease then
-leaves it unavailable without a recovery, also when a restart ends the
-lease. On a restart the service ends every lease still held as abandoned
+On a restart the service ends every lease still held as abandoned
 and recovers its resources, the ready ones and any unfinished recovery too,
 before it grants them again. A person returns an unavailable resource with
 `cargo stand devices release`.
@@ -79,7 +77,7 @@ cannot read, or a lease still held there, refuses the import.
 
 | File | Content |
 | --- | --- |
-| `service.json` | Schema 4: holders, balances, readiness (with marks) and maintenance. Another schema is refused, never converted |
+| `service.json` | Schema 4: holders, balances, readiness and maintenance. Another schema is refused, never converted |
 | `powered-off.json` | The service's driver: each board parked with its power off and the hub port it was switched off at |
 | `service.lock` | Held by the running service: a second instance is refused |
 | `history.jsonl` | Completed leases: owner, work, scenarios, duration, the time charged, the owner's balance at release, the grant's reason and `released`, `yielded-to-balance`, `hard-limit`, `preempted-on-request` or `abandoned` |

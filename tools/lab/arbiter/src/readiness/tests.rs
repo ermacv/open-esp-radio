@@ -23,7 +23,6 @@ fn only_a_resource_in_recovery_or_unconfirmed_may_radiate() {
     assert!(Readiness::Ready { generation: 1 }.emission_known());
     assert!(
         Readiness::InUse {
-            marked: None,
             lease: 1,
             generation: 1
         }

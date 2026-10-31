@@ -128,7 +128,7 @@ fn reset(client: &mut Client, target: &Target, path: ResetPath) -> Result<Option
         client,
         Operation::Reset {
             board: target.board.mac.clone(),
-            path,
+            path: Some(path),
         },
     )?)?)
 }

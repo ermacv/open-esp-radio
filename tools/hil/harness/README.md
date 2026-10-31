@@ -19,15 +19,11 @@ of the services that image must serve, and lists its cases; `main` then:
    pages hold every required key;
 6. runs the cases (`--case` selects some, `--list` prints them), printing
    each outcome as soon as it is known;
-7. finishes the device under the same lease: one that runs the built image
-   and left no request unconfirmed is clean; otherwise the board's reset ladder from
-   the stand file runs (`oer_lab_board::reset::climb`), and after each rung
-   the console is opened again and the image's Hello is awaited. The first
-   rung after which another boot of the image answers recovers the board
-   (the new console answers also a device the rung did not restart); a ROM that answers
-   while the image does not leaves the board in service, since the stand
-   can write it again; a ROM that stays silent after the whole ladder is
-   reported as needing a person. A cancelled program judges nothing;
+7. checks the device at the end of the cases: one that runs the built image
+   and left no request unconfirmed ends clean; one with a request whose
+   outcome is unknown, or whose image does not answer, is reported. The
+   harness climbs no reset ladder: the board's hardware end is the LAB
+   service's. A cancelled program judges nothing;
 8. releases the link, then finishes the lease: the service brings the board
    to its end state (its ROM's download mode, or its power off) and answers
    with what it left unavailable, which keeps a passing scenario from

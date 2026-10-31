@@ -165,23 +165,34 @@ fn wait(io: &OperationIo) {
     }
 }
 
-/// The router's end state after a lease: it answers over SSH and its
-/// access point's interface runs as an access point, as the stand file
-/// names it. Its observers end by the timeouts they run under, and the next
-/// run applies its own profile; what else a command could have changed is
-/// marked before it runs, never guessed from here.
-pub(crate) fn end_state(stand: &Stand) -> Result<()> {
+/// How long the router's AP may take to go down after `wifi reload`.
+const AP_DOWN: Duration = Duration::from_secs(20);
+
+/// Park the router: its end state after a lease is the stand's AP section
+/// disabled, the rest of its configuration kept, and no access point
+/// running on the AP's interface, so it does not radiate between leases.
+/// A run's profile enables the section again.
+pub(crate) fn park(stand: &Stand) -> Result<()> {
     let mut router = fixture(stand)?;
-    let script = format!(
-        "iw dev {} info | sed -n 's/^[[:space:]]*type //p'",
-        oer_lab_router::router::quote(&router.interface)?
-    );
-    let kind = router.ssh.run(&script)?;
-    if kind.trim() != "AP" {
-        return Err(format!(
-            "its access point's interface runs as `{}`, not as an access point",
-            kind.trim()
-        ));
+    let section =
+        oer_lab_router::router::quote(&format!("wireless.{}.disabled=1", router.ap_section))?;
+    router.ssh.run(&format!(
+        "set -e\nuci set {section}\nuci commit wireless\nwifi reload\n"
+    ))?;
+    let interface = oer_lab_router::router::quote(&router.interface)?;
+    let check = format!("iw dev {interface} info 2>/dev/null | sed -n 's/^[[:space:]]*type //p'");
+    let started = std::time::Instant::now();
+    loop {
+        let kind = router.ssh.run(&check)?;
+        if kind.trim() != "AP" {
+            return Ok(());
+        }
+        if started.elapsed() >= AP_DOWN {
+            return Err(format!(
+                "its access point still runs {} s after its section was disabled",
+                AP_DOWN.as_secs()
+            ));
+        }
+        std::thread::sleep(Duration::from_secs(1));
     }
-    Ok(())
 }

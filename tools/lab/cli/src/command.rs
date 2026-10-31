@@ -388,11 +388,11 @@ fn switches_hub_power(command: &[OsString]) -> Option<String> {
     })
 }
 
-/// Run one command, typically a series of HIL commands, under one lease.
-/// The LAB service runs it as its own child, with this command's arguments,
-/// directory and environment; its output and input pass through. Nested
-/// `cargo stand`, `cargo fw` and `cargo hil` commands join the lease instead
-/// of queueing. The service ends it at the hard limit every lease has.
+/// Run one command, typically a series of HIL commands, under one lease, as
+/// this command's child on its terminal. Nested `cargo stand`, `cargo fw` and
+/// `cargo hil` commands join the lease with its token instead of queueing.
+/// The command is stopped when the service ends the lease, at the hard limit
+/// every lease has or on a preemption.
 pub(crate) fn lease(
     ctx: &Checkout,
     outer: crate::Options,
@@ -423,26 +423,15 @@ pub(crate) fn lease(
         work.clone(),
         lease_claims(&cli.boards, cli.air, cli.stand, &stand)?,
     )?;
-    let mut environment = std::env::vars_os()
-        .filter_map(|(key, value)| Some((key.into_string().ok()?, value.into_string().ok()?)))
-        .collect::<Vec<_>>();
-    environment.retain(|(key, _)| key != oer_lab_arbiter::owner::OWNER_ENV);
-    environment.push((oer_lab_arbiter::owner::OWNER_ENV.to_owned(), owner.clone()));
-    let result = crate::service::command(
-        &mut client,
-        cli.command
-            .iter()
-            .map(|argument| argument.to_string_lossy().into_owned())
-            .collect(),
-        environment,
-        false,
-    );
-    if let Some(reason) = client.revoked() {
-        eprintln!("stand: the lease ended: {reason}");
-        return Ok(std::process::ExitCode::from(HARD_LIMIT_EXIT));
-    }
-    let code = result?;
-    let succeeded = code == serde_json::json!(0);
+    let ended = crate::service::command(&client, ctx, &cli.command, &owner)?;
+    let (code, succeeded) = match ended {
+        crate::service::Ended::Exited(code, succeeded) => (code, succeeded),
+        crate::service::Ended::Revoked(reason) => {
+            eprintln!("stand: the lease ended: {reason}");
+            return Ok(std::process::ExitCode::from(HARD_LIMIT_EXIT));
+        }
+        crate::service::Ended::Cancelled => (std::process::ExitCode::from(130), false),
+    };
     if cli.flashed.image.is_some() {
         if succeeded {
             cli.flashed
@@ -451,20 +440,15 @@ pub(crate) fn lease(
             eprintln!("stand: the command failed; its flash is not recorded");
         }
     }
-    // The lease ends once the service confirmed what the command used.
-    let released = client.release();
-    if oer_os_process::cancellation_requested() {
-        return Ok(std::process::ExitCode::from(130));
-    }
-    let code = code
-        .as_u64()
-        .and_then(|code| u8::try_from(code).ok())
-        .unwrap_or(1);
-    if let Err(reason) = released {
+    // The lease ends once the service confirmed the end state of what the
+    // command used.
+    if let Err(reason) = client.release() {
         eprintln!("stand: {reason}");
-        return Ok(std::process::ExitCode::from(code.max(1)));
+        if succeeded {
+            return Ok(std::process::ExitCode::FAILURE);
+        }
     }
-    Ok(std::process::ExitCode::from(code))
+    Ok(code)
 }
 
 /// `cargo stand board reset|check|console|soak`.

@@ -25,8 +25,8 @@ use serde::{Deserialize, Serialize};
 
 /// The protocol version; another one is refused.
 pub const PROTOCOL: u32 = 1;
-/// The token of the lease a command runs inside: its client joins that
-/// lease instead of queueing.
+/// The token a command runs under: its client joins the lease the token
+/// belongs to, for no more than the token allows, instead of queueing.
 pub const LEASE_ENV: &str = "OER_LAB_LEASE";
 /// The longest frame either side sends or accepts.
 pub const MAX_FRAME: usize = 1 << 20;
@@ -144,8 +144,10 @@ pub enum Request {
     Hello { protocol: u32, client: String },
     /// Queue for a lease; [`Reply::Granted`] follows.
     Acquire { lease: LeaseRequest },
-    /// Join the lease `token` names, for `claims` it covers: a command
-    /// inside a lease uses its resources without queueing.
+    /// Join the lease `token` belongs to, for `claims` the token allows: a
+    /// command inside a lease uses its resources without queueing.
+    /// [`Reply::Granted`] carries a token of its own that allows `claims`
+    /// only, for the commands it runs in turn.
     Join { token: String, claims: Vec<Claim> },
     /// End this connection's lease; [`Reply::Ended`] follows once its
     /// operations stopped and its resources' recoveries ended.
@@ -214,25 +216,6 @@ pub enum Request {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(tag = "operation", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum Operation {
-    /// A command the service runs as its child under the lease, with the
-    /// client's arguments, directory and environment; its output and input
-    /// are the operation's stream. Result: its exit code.
-    Command {
-        argv: Vec<String>,
-        directory: String,
-        environment: Vec<(String, String)>,
-        /// The client's terminal size, when it runs the command on its
-        /// terminal: the command then gets a pseudo-terminal of that size as
-        /// its controlling terminal.
-        #[serde(default)]
-        terminal: Option<TerminalSize>,
-        /// Never stop the command: a lease that ends, also by a lost client,
-        /// waits until it ended by itself, for work a stop would leave half
-        /// done (an installation under sudo, which ends a password prompt
-        /// nobody answers by its own timeout).
-        #[serde(default)]
-        run_to_end: bool,
-    },
     /// Write the image bundle in directory `bundle` into `board` and start
     /// it, unless `skip_carried` and the board already runs it; the flash
     /// is journaled as `image` by `owner`. Result: `{written, receipt}`.
@@ -244,19 +227,11 @@ pub enum Operation {
         via: FlashVia,
         skip_carried: bool,
     },
-    /// Reset `board` through `path`. Result: the ROM's reset line.
+    /// Reset `board` through `path`, or through the first reset its stand
+    /// file lists when none. Result: the ROM's reset line.
     Reset {
         board: String,
-        path: oer_lab_model::rom::ResetPath,
-    },
-    /// The steps of `board`'s reset ladder, in order, its download entry
-    /// last when it has one. Result: a list of steps.
-    Ladder { board: String },
-    /// Take one step of `board`'s reset ladder. Result: the console the
-    /// ROM printed.
-    Rung {
-        board: String,
-        step: oer_lab_model::rom::RecoveryStep,
+        path: Option<oer_lab_model::rom::ResetPath>,
     },
     /// `board`'s console as the operation's stream, opened without a reset,
     /// or with a reset into its application when `reset`, until the client
@@ -294,13 +269,6 @@ pub enum Operation {
     },
 }
 
-/// A terminal's size in character cells.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct TerminalSize {
-    pub rows: u16,
-    pub columns: u16,
-}
-
 /// How a flash reaches the board.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "kebab-case")]
@@ -325,7 +293,8 @@ pub enum Reply {
         ticket: u64,
         message: String,
     },
-    /// The lease is granted. `token` lets commands inside it join it.
+    /// The lease is granted, or joined. `token` lets the commands this
+    /// client runs join it, for what this client holds.
     Granted {
         lease: u64,
         token: String,

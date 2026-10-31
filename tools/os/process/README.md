@@ -60,17 +60,8 @@ Four more jobs have their one owner here:
 
 The implementation supports Unix process groups. Processes that create
 another group or session, and processes on a remote SSH host, need their own
-lifecycle owner. `cgroup` is that owner on Linux for a service whose unit
-delegates its control group (`Delegate=yes`), the LAB service: it moves the
-service into the leaf `service` and starts each command in a group of its
-own under `commands`, entered before `exec` with the command leading a new
-session (and a controlling terminal when given, `child_setup::new_session`).
-Stopping a group closes its admission (a spawn under way finishes inside
-it), kills the whole subtree (`cgroup.kill`) and reports when no process is
-left (`populated 0`); taking the group kills what a previous owner left.
-Integration tests use real processes to exercise signals, pipe capacity,
-deadlines and daemon cleanup; the cgroup bookkeeping is tested against a
-directory standing for the hierarchy, its kernel side on the stand's host.
+lifecycle owner. Integration tests use real processes to exercise signals,
+pipe capacity, deadlines and daemon cleanup.
 
 ```console
 cargo test -p oer-os-process
