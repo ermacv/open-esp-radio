@@ -154,8 +154,10 @@ The chip profile supplies TRNG noise selectors and health-test settings.
 `drivers::cores` also owns runtime status, park/run/stall confirmation and
 fatal peer-stop/reset preparation. HAL `cores` retains the affine owner,
 CAS election, `ClaimCell` quarantine, masked fatal proof and final system-reset
-trigger. Its core-control port clears ROM entries but cannot publish a
-secondary-hart launcher. Confirmation counts at most 10,000 completed status reads, with a fence
+trigger. Its containment port only clears ROM entries; the launch port
+(`drivers::cores::release`, boot word last, and `retire_boot_address`) is
+reached only through `Cores::start_secondary`, which consumes the runtime
+root's one-shot `LaunchPermit`. Confirmation counts at most 10,000 completed status reads, with a fence
 before sampling and after success, and no peripheral takeover authority.
 
 `drivers::system_timer` owns latch settling and LO/HI/LO verification: 64

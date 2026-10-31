@@ -30,6 +30,7 @@ pub(crate) struct CompileInput<'a> {
     policy: &'a StackPolicy,
     task_stack_proven: bool,
     critical_section_hart: u32,
+    harts: &'a [u32],
     panics: &'a oer_image_checks::panics::Contract,
     output: &'a Path,
     log: &'a BuildLog,
@@ -55,6 +56,7 @@ pub(crate) fn build(
     instrumentation: &Instrumentation,
     task_stack_proven: bool,
     critical_section_hart: u32,
+    harts: &[u32],
     panics: &oer_image_checks::panics::Contract,
     compile: impl FnOnce(&CompileInput<'_>, &mut ImageBundle) -> Result<Compiled>,
 ) -> Result<ImageBundle> {
@@ -69,7 +71,8 @@ pub(crate) fn build(
     bundle.purpose = spec.purpose;
     bundle.layout_seed = spec.layout_seed;
     let log = BuildLog::create(&output.join(files::BUILD_LOG))?;
-    let policy = StackPolicy::load(&root.join(&spec.stack_policy))?;
+    // The image's declared harts resolve the policy's launch templates.
+    let policy = StackPolicy::load(&root.join(&spec.stack_policy))?.for_image(harts)?;
     if task_stack_proven {
         // One source of the size: the bound, not also the policy.
         policy.proven_task_stacks()?;
@@ -88,6 +91,7 @@ pub(crate) fn build(
             policy: &policy,
             task_stack_proven,
             critical_section_hart,
+            harts,
             panics,
             output: &output,
             log: &log,

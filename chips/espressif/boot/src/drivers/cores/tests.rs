@@ -21,12 +21,18 @@ enum Event {
     Held(usize),
     Status(usize),
     Fence,
+    CpuClock(usize),
+    ClicClock(usize),
+    Release(usize),
+    BootWord(usize, u32),
 }
 struct Fake {
     events: RefCell<Vec<Event>>,
     held: [bool; 3],
     samples: RefCell<std::collections::VecDeque<bool>>,
     clock: VirtualClock,
+    boot_words: [u32; 3],
+    stuck_boot_word: Option<u32>,
 }
 impl Fake {
     fn new(samples: impl IntoIterator<Item = bool>) -> Self {
@@ -35,6 +41,8 @@ impl Fake {
             held: [false; 3],
             samples: RefCell::new(samples.into_iter().collect()),
             clock: VirtualClock::starting_at(Instant::EPOCH),
+            boot_words: [0; 3],
+            stuck_boot_word: None,
         }
     }
     fn event(&self, event: Event) {
@@ -91,6 +99,77 @@ impl RuntimeRegisters for Fake {
         self.event(Event::Reset(hart));
     }
 }
+impl LaunchRegisters for Fake {
+    fn enable_cpu_clock(&mut self, _: Access<'_>, hart: usize) {
+        self.event(Event::CpuClock(hart));
+    }
+    fn enable_clic_clock(&mut self, _: Access<'_>, hart: usize) {
+        self.event(Event::ClicClock(hart));
+    }
+    fn release_reset(&mut self, _: Access<'_>, hart: usize) {
+        self.event(Event::Release(hart));
+    }
+    fn set_boot_address(&mut self, _: Access<'_>, hart: usize, entry: u32) {
+        self.event(Event::BootWord(hart, entry));
+        *self.boot_words.get_mut(hart).expect("fake hart exists") =
+            self.stuck_boot_word.unwrap_or(entry);
+    }
+    fn boot_address(&self, _: Access<'_>, hart: usize) -> u32 {
+        *self.boot_words.get(hart).expect("fake hart exists")
+    }
+}
+
+#[test]
+fn release_confirms_the_run_and_writes_the_boot_word_last() {
+    let mut fake = Fake::new([true, false]);
+    assert_eq!(release(&mut fake, 1, 0x2f00_1000, 3), Ok(()));
+    assert_eq!(
+        *fake.events.borrow(),
+        [
+            Event::Run(1),
+            Event::Fence,
+            Event::Status(1),
+            Event::Status(1),
+            Event::Fence,
+            Event::CpuClock(1),
+            Event::ClicClock(1),
+            Event::Release(1),
+            Event::Fence,
+            Event::BootWord(1, 0x2f00_1000),
+            Event::Fence,
+        ]
+    );
+}
+
+#[test]
+fn an_unconfirmed_run_writes_no_clock_reset_or_boot_word() {
+    let mut fake = Fake::new([true, true, true]);
+    assert_eq!(release(&mut fake, 1, 0x2f00_1000, 3), Err(Unconfirmed));
+    assert!(
+        fake.events
+            .borrow()
+            .iter()
+            .all(|event| matches!(event, Event::Run(_) | Event::Fence | Event::Status(_)))
+    );
+    assert_eq!(fake.boot_words, [0; 3]);
+}
+
+#[test]
+fn retirement_clears_fences_and_refuses_a_nonzero_read_back() {
+    let mut fake = Fake::new([]);
+    fake.boot_words[1] = 0x2f00_1000;
+    assert_eq!(retire_boot_address(&mut fake, 1), Ok(()));
+    assert_eq!(*fake.events.borrow(), [Event::BootWord(1, 0), Event::Fence]);
+    let mut fake = Fake::new([]);
+    fake.stuck_boot_word = Some(0x2f00_1000);
+    assert_eq!(
+        retire_boot_address(&mut fake, 1),
+        Err(BootWordKept {
+            readback: 0x2f00_1000
+        })
+    );
+}
+
 #[test]
 fn confirmation_checks_the_last_allowed_read_and_fences_only_success() {
     let mut fake = Fake::new([false, false, true]);

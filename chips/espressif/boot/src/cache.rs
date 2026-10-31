@@ -392,3 +392,34 @@ fn resume<R: FetchSuspendRegisters>(registers: &mut R, autoload: bool, frozen: b
         registers.set_autoload(Access::new(), true);
     }
 }
+
+/// The instruction-bus gate of each secondary hart. A used secondary hart
+/// fetches its code from cached PSRAM through its own instruction bus; its
+/// data goes through the data bus every hart shares.
+///
+/// SOURCE: ESP-IDF fff9895c `components/hal/esp32s31/include/hal/cache_ll.h:951-990`
+/// (`cache_ll_l1_enable_bus`: core 1's instruction bus is
+/// `L1_ICACHE_SHUT_IBUS1`; every core's data bus is `L1_DCACHE_SHUT_DBUS0`).
+pub trait SecondaryFetchRegisters {
+    type Secondary: Copy + 'static;
+    /// Every secondary hart of the chip.
+    const SECONDARIES: &'static [Self::Secondary];
+    /// The architectural index of `hart`, its bit in a used-hart mask.
+    fn index(hart: Self::Secondary) -> u32;
+    /// Open `hart`'s instruction bus to the cache, keeping every other gate.
+    fn open_fetch(&mut self, access: Access<'_>, hart: Self::Secondary);
+}
+
+/// Open the instruction bus of every secondary hart `harts` (one bit per
+/// hart, the stage-two header's used-hart mask) names; a hart outside the
+/// chip's secondaries opens nothing.
+pub fn open_secondary_fetch<R: SecondaryFetchRegisters>(registers: &mut R, harts: u32) {
+    for &hart in R::SECONDARIES {
+        let used = 1_u32
+            .checked_shl(R::index(hart))
+            .is_some_and(|bit| harts & bit != 0);
+        if used {
+            registers.open_fetch(Access::new(), hart);
+        }
+    }
+}

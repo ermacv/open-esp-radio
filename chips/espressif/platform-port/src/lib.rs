@@ -31,9 +31,14 @@
 //!   debugger reads and its owned blocks: the software interrupt lines
 //!   ([`SoftwareLine`]), the counter owner (the binding requires its family
 //!   driver's latch atoms), the comparators ([`Comparators`]) and their alarm
-//!   parts ([`AlarmPart`]).
+//!   parts ([`AlarmPart`]);
+//! - [`SecondaryStart`]: the release of a secondary hart into the staged
+//!   runtime's generated entry ([`SecondaryEntry`]), consuming the root's
+//!   one-shot launch permit, and the retirement of its ROM boot word.
 
 use oer_mmio::InterruptSource;
+
+pub use oer_espressif_staged_layout::handoff::SecondaryEntry;
 
 #[cfg(chip_geometry)]
 mod geometry {
@@ -148,6 +153,53 @@ pub trait Platform: EarlyText + 'static {
     /// Reset the chip from `fatal`'s path. It returns only when the reset
     /// could not be prepared and is left to the armed watchdog.
     fn software_reset(fatal: Self::Fatal<'_>) -> AwaitWatchdog<Self::StopError>;
+}
+
+/// A secondary hart's release, which the staged runtime's launch orders
+/// around its handshake. The chip HAL checks the hart's preconditions,
+/// disconnects its interrupt routes and releases it into `entry`, consuming
+/// the root's one-shot `Permit`; the runtime then waits for the entry, retires
+/// the boot word and acknowledges. No other path starts a hart.
+#[cfg(chip_geometry)]
+pub trait SecondaryStart: Platform {
+    /// The cores' owner, on the boot hart.
+    type Cores;
+    /// The root's one-shot authority to launch a secondary hart.
+    type Permit;
+    /// What the preconditions read besides the owned words (the reset causes).
+    type Preconditions: Copy;
+    /// A released hart's retained owners (its route bank).
+    type Released;
+    /// A refused or unconfirmed step, with its observations.
+    type StartError: Copy;
+
+    /// Check the preconditions and release `entry`'s hart into it; the boot
+    /// word is written last.
+    ///
+    /// # Errors
+    ///
+    /// A refused precondition leaves the hart held and its boot word zero; an
+    /// unconfirmed release step returns its observation.
+    fn release(
+        cores: &mut Self::Cores,
+        permit: Self::Permit,
+        preconditions: Self::Preconditions,
+        entry: SecondaryEntry,
+    ) -> Result<Self::Released, Self::StartError>;
+
+    /// Clear the released hart's boot word and read it back as zero, so the
+    /// ROM cannot enter the hart's entry again.
+    ///
+    /// # Errors
+    ///
+    /// The word read back nonzero, or the words are unavailable.
+    fn retire_boot_word(
+        cores: &mut Self::Cores,
+        released: &mut Self::Released,
+    ) -> Result<(), Self::StartError>;
+
+    /// A refused step's code and observations, for the retained record.
+    fn observations(error: Self::StartError) -> [u32; 3];
 }
 
 /// The executor's platform: the source identities of the software

@@ -17,7 +17,7 @@
 use oer_esp32s31_pac::{
     clic::{self, Clic, ClicObserver},
     instances,
-    interrupt_core::{self, InterruptCore0, InterruptCore0Observer, InterruptCore1},
+    interrupt_core::{self, InterruptCore0, InterruptCore0Observer},
     ownership::InterruptMatrixPeripherals,
 };
 use oer_espressif_interrupt_table::{Controller, Error};
@@ -33,15 +33,14 @@ pub mod facts {
     include!(concat!(env!("OUT_DIR"), "/interrupts.rs"));
 }
 
-/// The interrupt matrix's blocks, split from the root: hart 0's controller
-/// and hart 1's bank. Every hart's pending sources are published for every
-/// context ([`is_pending`]).
+/// The interrupt matrix's blocks, split from the root: hart 0's controller.
+/// Hart 1's route bank belongs to the root's secondary launch permit
+/// ([`LaunchPermit`](crate::cores::LaunchPermit)). Every hart's pending
+/// sources are published for every context ([`is_pending`]).
 #[must_use = "dropping the interrupt controller permanently loses the routes and lines"]
 pub struct InterruptBlocks {
     /// The controller of hart 0, the hart stage two runs on.
     pub controller: InterruptController,
-    /// Hart 1's bank, which nothing writes while hart 1 runs no code.
-    pub hart1: Hart1Interrupts,
 }
 
 /// Every hart's read-only pending sources, published once at partition split.
@@ -112,7 +111,6 @@ impl InterruptBlocks {
             mut clic_observer,
             interrupt_core0,
             interrupt_core0_observer,
-            interrupt_core1,
             ..
         } = peripherals;
         assert!(
@@ -129,9 +127,6 @@ impl InterruptBlocks {
         });
         Self {
             controller: InterruptController::new(interrupt_core0, clic),
-            hart1: Hart1Interrupts {
-                _routes: interrupt_core1,
-            },
         }
     }
 }
@@ -228,15 +223,6 @@ pub fn fatal_view<R>(
         })
         .ok()
         .map(|held| held.value)
-}
-
-/// Hart 1's interrupt-matrix route bank. Its read-only pending sources are
-/// published with every hart's status. Hart 1 runs no
-/// code (the image declares hart 1's stacks unused): nothing writes the bank,
-/// and holding it keeps every other owner from it.
-#[must_use = "dropping hart 1's bank permanently loses its routes"]
-pub struct Hart1Interrupts {
-    _routes: InterruptCore1,
 }
 
 /// Hart 0's interrupt-matrix bank and the CLIC hart 0 reaches, the router's

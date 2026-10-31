@@ -11,7 +11,7 @@ use core::mem::{offset_of, size_of};
 pub const MAGIC: u32 = 0x3247_5453;
 
 /// Bootstrap/runtime handoff ABI version.
-pub const ABI_VERSION: u32 = 1;
+pub const ABI_VERSION: u32 = 2;
 
 /// Little-endian image header at the stage-two load address.
 #[repr(C)]
@@ -32,6 +32,9 @@ pub struct Header {
     /// Executable range.
     pub text_start: u32,
     pub text_end: u32,
+    /// The harts the image uses, one bit per hart (bit `n` for hart `n`):
+    /// the bootstrap opens a used secondary hart's instruction bus.
+    pub harts: u32,
     pub payload_crc32: u32,
 }
 
@@ -47,6 +50,21 @@ const CRC_END: usize = CRC_OFFSET + size_of::<u32>();
 /// the bootstrap enters. `None` for an image too short to hold it.
 pub const fn entry_of(image: &[u8]) -> Option<u32> {
     const START: usize = offset_of!(Header, entry);
+    if image.len() < START + size_of::<u32>() {
+        return None;
+    }
+    Some(u32::from_le_bytes([
+        image[START],
+        image[START + 1],
+        image[START + 2],
+        image[START + 3],
+    ]))
+}
+
+/// The used-hart mask of an image's header, readable in a constant. `None`
+/// for an image too short to hold it.
+pub const fn harts_of(image: &[u8]) -> Option<u32> {
+    const START: usize = offset_of!(Header, harts);
     if image.len() < START + size_of::<u32>() {
         return None;
     }
@@ -76,7 +94,8 @@ impl Header {
             header_size: word(7)?,
             text_start: word(8)?,
             text_end: word(9)?,
-            payload_crc32: word(10)?,
+            harts: word(10)?,
+            payload_crc32: word(11)?,
         })
     }
 
@@ -93,6 +112,7 @@ impl Header {
             self.header_size,
             self.text_start,
             self.text_end,
+            self.harts,
             self.payload_crc32,
         ];
         let mut bytes = [0; HEADER_BYTES];
@@ -176,6 +196,7 @@ mod tests {
             header_size: HEADER_BYTES as u32,
             text_start: 0x1030,
             text_end: 0x1800,
+            harts: 0b11,
             payload_crc32,
         }
     }
@@ -198,6 +219,19 @@ mod tests {
     fn checksum_is_standard_crc32_for_bytes_outside_the_field() {
         // CRC-32/ISO-HDLC check value of "123456789".
         assert_eq!(payload_crc32(b"123456789"), 0xcbf4_3926);
+    }
+
+    #[test]
+    fn the_used_harts_word_is_readable_in_a_constant() {
+        const IMAGE: [u8; HEADER_BYTES] = {
+            let mut bytes = [0; HEADER_BYTES];
+            bytes[offset_of!(Header, harts)] = 0b11;
+            bytes
+        };
+        const HARTS: Option<u32> = harts_of(&IMAGE);
+        assert_eq!(HARTS, Some(0b11));
+        assert_eq!(harts_of(&image(0)), Some(0b11));
+        assert_eq!(harts_of(&IMAGE[..offset_of!(Header, harts) + 3]), None);
     }
 
     #[test]

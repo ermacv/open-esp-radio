@@ -27,6 +27,8 @@ workspace = true
 
 [package.metadata.open-radio]
 critical-section-hart = "boot"
+# The harts this image runs: hart 1 starts during boot and idles on its own stacks.
+harts = ["boot", 1]
 # Every task stack of this image is fully analysed: an unresolved path fails `cargo fw build`.
 task-stack = "proven"
 

@@ -207,7 +207,7 @@ struct Session<'a> {
     uart0_clock: pac::ownership::Uart0ClockPeripherals,
     reset_cause: pac::ownership::ResetCausePeripherals,
     wake_status: pac::pmu::PmuWakeStatus,
-    wake_stub: pac::lp_system_reg::LpWakeStub,
+    secondary_launch: pac::ownership::SecondaryLaunchPeripherals,
     modem_wake_status: pac::modem_lpcon::ModemWakeStatus,
     ble: ble::Ble,
     radio: radio_local::Radio,
@@ -863,7 +863,7 @@ extern "C" fn facts_main() -> ! {
         uart0_clock: p.uart0_clock,
         reset_cause: p.reset_cause,
         wake_status: p.pmu_wake.pmu_wake_status,
-        wake_stub: p.pmu_wake.lp_wake_stub,
+        secondary_launch: p.secondary_launch,
         modem_wake_status: p.pmu_wake.modem_wake_status,
         radio: radio_local::Radio {
             local_time: p.mac_local_time.wifi_mac_local_time,

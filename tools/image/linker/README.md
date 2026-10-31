@@ -44,8 +44,10 @@ must fit the contract maximum without guard bytes. When the full NAPOT guard
 does not fit beside it, the allocation keeps the contract maximum and omits the
 guard. Guard coverage and unknown reachable frames are reported, never gates.
 A hart whose interrupt stack the image policy declares
-unused (`[core.N.interrupt_stack] unused = true`)
-gets 0 bytes in both links and takes no part in the sizing. Partial bounds,
+unused (`[core.N.interrupt_stack] unused = true`), or a launch template the
+image does not declare in its `harts`, gets 0 bytes in both links and takes
+no part in the sizing; a declared template's interrupt stack starts at the
+contract maximum like the boot hart's. Partial bounds,
 diagnostic and probe images retain the maximum for each used hart. Existing
 image-policy maximum overrides remain effective, including
 diagnostic-lower-mac's 65536 bytes.
@@ -73,8 +75,10 @@ admitted assumptions. After the second link the bound must differ by at most
 fails with figures and attempts nothing further. A policy that also sets
 `allocation_bytes` names the size twice and is an error. The image's
 placement range for the stack is then exactly the linked size.
-Images without the key keep `allocation_bytes`, else the chip stack policy's
-`default_task_stack_bytes` entry for that hart.
+A declared launch template links its `launch_bytes` in the first link. A
+proven frameless root links exactly its reserve. Images without the key keep
+`allocation_bytes`, else the chip stack policy's `default_task_stack_bytes`
+entry for that hart, else a declared template's `launch_bytes`.
 
 `strict-placement.toml` retains first-pass bounds, selected sizes and their
 sources, together with the final ELF/input fingerprint. `interrupt-stack.txt`

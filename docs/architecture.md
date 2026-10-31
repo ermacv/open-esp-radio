@@ -53,8 +53,8 @@ image                interrupt table, tasks, chosen facades and engines
 ```
 
 The family's `oer-espressif-boot::drivers` holds LP-fast, brownout,
-secondary containment, access-filter and TRNG startup operations over register
-ports implemented by the HAL's owned boot parts. `oer-esp32s31-boot` supplies
+secondary containment and release, access-filter and TRNG startup operations
+over register ports implemented by the HAL's owned boot parts. `oer-esp32s31-boot` supplies
 S31 profiles, including the generated LP-fast source. This chip binding sits
 above HAL and family drivers so neither HAL nor chip knowledge chooses or
 executes those policies. The family staged-bootstrap cold-start runner owns
@@ -286,8 +286,9 @@ contract;
 staged-bootstrap, staged-runtime and executor depend on the platform.
 `oer-espressif-platform-port` holds the family's platform contracts (the
 early console writer, the fatal path's mask, stop of the other harts and
-software reset, and the executor's sources, reads and owned blocks) and the
-hart geometry of the chip its HAL selects. The family sits above the port
+software reset, a secondary hart's release and boot-word retirement, and the
+executor's sources, reads and owned blocks) and the hart geometry of the chip
+its HAL selects. The family sits above the port
 and the chip implements it: the chip's HAL implements the contracts on its
 own types, and the staged bootstrap, staged runtime and executor reach the
 chip only through them; no family crate depends on a chip crate. The staged
@@ -330,8 +331,9 @@ moves; ownership, orchestration and wiring are rebuilt.
 ## Execution
 
 The critical section is hart-local; staged build/run checks confine linked section
-entry points to the image's declared hart roots. The public HAL cannot start or
-release a secondary hart.
+entry points to the image's declared hart roots. A secondary hart starts only
+through the image's declared hart set and the root's one-shot launch permit,
+during boot, before executors; any failure after release records and resets.
 
 | Context | Runs | Rule |
 | --- | --- | --- |
@@ -339,6 +341,7 @@ release a secondary hart.
 | P2, boot hart, TIMG0 T0 CPU line 16 | SAR/PWDET conversion steps in `Exempt(ExecutorLevel)` | one bounded step per event; below FROM_CPU2 CPU line 17 |
 | P2, boot hart | one radio executor on `FROM_CPU2`, CPU line 17: Wi-Fi driver, BLE lower link layer, the radio-system actor, including PHY calibration and tracking | cooperative admission between hardware atoms; long waits use timers |
 | P1 / thread, boot hart | role bodies, network stack, application | — |
+| hart 1, images that declare it | its Rust root on its own PSRAM task stack, with its SRAM interrupt stack and the common exception path installed | interrupts masked; it idles in a wait, with no routed source or executor |
 
 - `oer-memory::ExecutionContext` owns the unsafe memory-exclusion contract.
   `Entered<X>` is non-transferable, checks entry and rechecks each
@@ -733,10 +736,14 @@ defines the scan's scope and limits.
   their counts from that list. Secondary boot-word labels also derive from
   its explicit boot role. Typed indices connect their geometry to HAL reads
   and writes. Fixed indices
-  and list/count mismatches fail during the build. Every current image keeps
-  secondary harts contained. The HAL holds secondary harts, and the image gate rejects
-  starters, routes or storage for harts declared unused
-  ([secondary boot](../chips/esp32s31/platform/README.md#secondary-hart-containment)).
+  and list/count mismatches fail during the build. An image declares the harts
+  it runs (`[package.metadata.open-radio] harts`); the bootstrap holds every
+  secondary hart, and one an image does not declare stays contained: the image
+  gate rejects starters, routes or storage for it. The runtime root mints one
+  launch permit (hart 1's route bank, the ROM wake-stub word and the cache-bus
+  observer); `Cores::start_secondary` consumes it to release a declared hart
+  into its generated entry during boot, before any executor
+  ([secondary launch](../chips/esp32s31/platform/README.md#secondary-hart-launch-and-containment)).
   An architectural ID outside this list is `InvalidHart { raw }`, never a
   different hart. The fatal path records the full raw ID, quarantines free
   control owners and requests reset; it never takes a lent or held owner.
@@ -749,8 +756,13 @@ defines the scan's scope and limits.
   `Adopted::parts` lends the hart and mutable router together for executor
   setup. Facts generate one typed, aligned Rust vector-table row per
   hart, with assembly entry/exit and compiler-derived frame offsets.
-  Generated secondary entry stubs admit no Rust code or interrupts and have
-  no linked launcher.
+  Generated secondary entries admit only the launch handshake and their
+  hart's generated Rust root: an entry masks interrupts first, reports itself,
+  waits for the boot hart's acknowledgement after the boot word's retirement,
+  programs its PMA chain from the facts and installs its own stack; the root
+  mints that hart's `PreAdmission<H>`, installs its interrupt stack and the
+  common exception path, reports ready and idles masked. Only an image that
+  launches the hart links its entry.
 - **Register model.** The chip is block types (one hardware block each,
   offsets from its base) placed by a root at their addresses, with its
   interrupt sources, analog-I2C bytes (a separate space addressed by block

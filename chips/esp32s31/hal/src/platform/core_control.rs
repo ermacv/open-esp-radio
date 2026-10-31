@@ -165,6 +165,47 @@ impl<P: Placement, Q: Placement, R: Placement, S: Placement, T: Placement>
             });
     }
 
+    /// Open the selected secondary's CPU clock, keeping every other bit.
+    ///
+    /// SOURCE: ESP-IDF fff9895c
+    /// `components/hal/esp32s31/include/hal/cpu_utility_ll.h:63-67`
+    /// (`cpu_utility_ll_enable_clock_and_reset_app_cpu`).
+    pub(crate) fn enable_cpu_clock(&mut self, core: SecondaryHart) {
+        self.clocks
+            .modify_hpcore_ctrl0(core.hart().index(), |control| {
+                control.set_reg_core_cpu_clk_en(true);
+            });
+    }
+
+    /// Open the selected secondary's CLIC clock, keeping every other bit.
+    ///
+    /// SOURCE: ESP-IDF fff9895c
+    /// `components/hal/esp32s31/include/hal/cpu_utility_ll.h:69-71`.
+    pub(crate) fn enable_clic_clock(&mut self, core: SecondaryHart) {
+        self.clocks
+            .modify_hpcore_ctrl0(core.hart().index(), |control| {
+                control.set_reg_core_clic_clk_en(true);
+            });
+    }
+
+    /// Release the selected secondary's global reset, keeping every other bit.
+    ///
+    /// SOURCE: ESP-IDF fff9895c
+    /// `components/hal/esp32s31/include/hal/cpu_utility_ll.h:73-75`.
+    pub(crate) fn release_reset(&mut self, core: SecondaryHart) {
+        self.clocks
+            .modify_hpcore_ctrl0(core.hart().index(), |control| {
+                control.set_reg_core_global_rst_en(false);
+            });
+    }
+
+    /// The selected secondary's ROM boot word.
+    pub(crate) fn boot_address(&self, hart: SecondaryHart) -> u32 {
+        self.system
+            .read_boot_addr_hp_core(hart.index())
+            .boot_addr_hp_core()
+    }
+
     /// Reset `core`'s CPU once: a pulse, not a hold.
     pub fn reset_core(&mut self, core: Hart) {
         self.reset
@@ -246,8 +287,9 @@ impl<'a> Uart0ClockRegisters<oer_mmio::Host<'a>> {
 #[cfg(any(test, feature = "test-support"))]
 pub const UART0_HOST_SIZE: usize = instances::hp_sys_clkrst::SIZE;
 
-// These implementations expose only the existing typed atoms to family policy;
-// the boot-address port can clear an entry and cannot install a launcher.
+// These implementations expose only the existing typed atoms to family policy.
+// The containment port can only clear an entry; the launch port, whose release
+// writes a nonzero entry, is reached only through `Cores::start_secondary`.
 impl<P: Placement, Q: Placement, R: Placement, S: Placement, T: Placement>
     oer_espressif_boot::drivers::cores::Registers for CoreControlRegisters<P, Q, R, S, T>
 {
@@ -297,5 +339,30 @@ impl<P: Placement, Q: Placement, R: Placement, S: Placement, T: Placement>
     }
     fn reset_core(&mut self, _: oer_espressif_boot::Access<'_>, hart: Hart) {
         self.reset_core(hart);
+    }
+}
+
+impl<P: Placement, Q: Placement, R: Placement, S: Placement, T: Placement>
+    oer_espressif_boot::drivers::cores::LaunchRegisters for CoreControlRegisters<P, Q, R, S, T>
+{
+    fn enable_cpu_clock(&mut self, _: oer_espressif_boot::Access<'_>, hart: SecondaryHart) {
+        self.enable_cpu_clock(hart);
+    }
+    fn enable_clic_clock(&mut self, _: oer_espressif_boot::Access<'_>, hart: SecondaryHart) {
+        self.enable_clic_clock(hart);
+    }
+    fn release_reset(&mut self, _: oer_espressif_boot::Access<'_>, hart: SecondaryHart) {
+        self.release_reset(hart);
+    }
+    fn set_boot_address(
+        &mut self,
+        _: oer_espressif_boot::Access<'_>,
+        hart: SecondaryHart,
+        entry: u32,
+    ) {
+        self.set_boot_address(hart, entry);
+    }
+    fn boot_address(&self, _: oer_espressif_boot::Access<'_>, hart: SecondaryHart) -> u32 {
+        self.boot_address(hart)
     }
 }

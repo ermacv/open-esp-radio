@@ -217,3 +217,24 @@ fn arbitrary_read_boundaries_preserve_the_rendered_records() {
         );
     }
 }
+
+#[test]
+fn a_secondary_ready_event_renders_its_hart_and_stack_pointer() {
+    let mut bytes = Vec::new();
+    {
+        let mut console = Console::new(write(&mut bytes));
+        console
+            .event(&oer_diagnostics::SecondaryReady {
+                hart: 1,
+                sp: 0x5012_3450,
+            })
+            .unwrap();
+        console.event(&BootSmokePassed).unwrap();
+    }
+    let text = rendered(&bytes).unwrap();
+    assert!(
+        text.contains("OER-HART ready hart=1 sp=0x50123450"),
+        "{text}"
+    );
+    assert!(text.contains("OER-RESULT: pass boot-smoke"), "{text}");
+}

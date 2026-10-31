@@ -196,3 +196,19 @@ fn oversize_retained_text_is_refused_before_the_sink_is_called() {
         assert_eq!(writes, 0);
     }
 }
+
+#[test]
+fn a_secondary_ready_event_keeps_its_hart_and_stack_pointer() {
+    let ready = SecondaryReady {
+        hart: 1,
+        sp: 0x5012_3450,
+    };
+    let words = ready.encode();
+    assert_eq!(SecondaryReady::decode(words), Some(ready));
+    assert_ne!(SecondaryReady::KIND, BootSmokePassed::KIND);
+    let record = Record::Event {
+        kind: SecondaryReady::KIND,
+        words,
+    };
+    assert_eq!(decode(&encoded(&record)), Ok(record));
+}

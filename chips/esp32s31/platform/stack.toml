@@ -39,13 +39,24 @@ minimum_free_bytes = 16384
 # two frames above the first. Link-time sizing retains the existing margin.
 [core.0.interrupt_stack]
 
-# Secondary harts remain contained by the HAL. The image gate proves no
-# linked starter, route or stack allocation admits them.
+# Hart 1 runs only in an image that declares it (`[package.metadata.open-radio]
+# harts`): its generated entry `_runtime_start_h1` switches to the top of this
+# stack and tail-calls `runtime_secondary_main_h1`, which installs its
+# interrupt stack and the common exception path, reports ready and idles
+# masked. Its bound must be proven. The default allocation above stays zero:
+# every image that does not declare hart 1 keeps both stacks unused, and the
+# image gate proves no starter, route or storage admits it. `launch_bytes` is
+# what a declaring image links before a proven bound sizes the stack.
 [core.1.task_stack]
-unused = true
+launch = "declared"
+root = "runtime_secondary_main_h1"
+bottom_symbol = "__runtime_cpu1_task_stack_bottom"
+top_symbol = "__runtime_cpu1_task_stack_top"
+minimum_free_bytes = 2048
+launch_bytes = 0x4000
 
 [core.1.interrupt_stack]
-unused = true
+launch = "declared"
 
 # The bootstrap reset entry installs `_stack_end`..`_stack_start` and enters
 # `bootstrap_main` after clearing BSS. The stack analysis starts at that Rust root.

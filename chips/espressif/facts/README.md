@@ -93,7 +93,11 @@ it writes is in git:
 - `Vectors`: the staged runtime's typed Rust vector-table rows and opaque
   entry-address declarations, every hart's assembly line entries
   (`RUNTIME_IRQ_ENTRIES` around the hand-written entry and exit of `vectors.s`),
-  secondary containment entries, every line's default handler (the linker
+  every secondary hart's entry instantiation (`SECONDARY_ENTRY`, after the
+  `[hart-entry] pma` program `Pma` renders over the family's `[pma]` CSRs:
+  every entry disabled, then the ascending top-of-range chain, each write read
+  back) and Rust root, the used-hart word `__runtime_used_harts` of the
+  stack fragment, every line's default handler (the linker
   fragment `oer-staged-runtime-vectors.x`) and the interrupt table's
   `LINES`, from the chip's harts and CLIC lines. The same geometry generates
   `oer-staged-runtime-stacks.x`, runtime marker tables and exact vector coverage;

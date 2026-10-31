@@ -345,8 +345,24 @@ caller `const fn` does not turn that admission into a compile-time proof.
 The HAL's core-control partition owns `LP_SYS.SYS_CTRL` and
 `BOOT_ADDR_HP_CORE%s` for the sourced secondary harts alongside indexed
 stall, clock and reset words. Bootstrap
-containment and fatal reset use those owned typed accessors, with no ROM
-FFI. A mixed-word trigger preserves ordinary fields and unassigned bits,
+containment, secondary launch and fatal reset use those owned typed
+accessors. The HAL's one ROM FFI is `rom.rs`: the secondary launch calls the
+rev0 ROM's `ets_install_putc1` and `ets_install_putc2` with a null pointer,
+each of which stores its argument to its own ROM `.bss` slot and returns
+(SOURCE: the ROM facts' `[rom] functions` and the pinned ROM's function
+records); the facts' export test holds the declarations to those facts.
+
+A secondary hart's entry is the staged runtime's generated assembly
+(`entry.rs`, `SECONDARY_ENTRY`): before any stack exists it masks interrupts,
+installs its fault stub, stores to the SRAM handshake (a `sym` operand) and
+programs the PMA chain from the facts, then installs its own `gp` and task
+stack. The same module mints the hart's `SecondaryEntry` once
+(`SecondaryEntry::new::<H>`, which refuses the boot hart at monomorphization;
+its contract is that address and that entry behaviour) and defines its
+generated `runtime_secondary_main_h<N>`, whose `SecondaryHandoff::new` mints
+the hart's `PreAdmission<H>`: only that entry reaches it, once per boot, after
+the boot hart's acknowledgement, which follows the boot word's read-back of
+zero. The handshake is a `placed_static!` in SRAM critical data. A mixed-word trigger preserves ordinary fields and unassigned bits,
 writes zero to every WTC lane and every other WT lane, and asserts only its
 selected WT field; it grants no generic modify of a WTC word. The reset
 path keeps the existing ClaimCell election through the trigger, then waits
@@ -893,7 +909,8 @@ needs:
   image's declared per-hart task roots, interrupt-table handlers and exception
   roots, using existing call resolutions. Foreign roots must have complete
   resolved paths excluding those entries; the declared hart may retain partial
-  bounds. The public HAL cannot start or release a secondary hart. `cargo fw probe`
+  bounds. A secondary hart starts only through the image's declared hart set
+  and the root's one-shot launch permit. `cargo fw probe`
   emits reachability reports only, including for binaries linking the staged
   runtime; it does not run this critical-section gate. No cross-hart lock is involved.
   The image linker places strict code in SRAM from interrupt, exception and

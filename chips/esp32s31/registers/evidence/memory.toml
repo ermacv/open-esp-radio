@@ -4,3 +4,7 @@ schema = 1
 [[sources]]
 id = "ESP_IDF_4D59230D_S31_SOC_DMA_WINDOW"
 description = "ESP-IDF 4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d pinned in artifacts.toml, esp-idf:components/soc/esp32s31/include/soc/soc.h:177-178 (file sha256 b19cf9e6916f1416b8385160c6de277ff64f8cd80e9cb22d44833d9f9654e92b), Apache-2.0: SOC_DMA_LOW 0x2F000000 and SOC_DMA_HIGH 0x2F080000, the region of memory DMA reaches."
+
+[[sources]]
+id = "ESP_IDF_FFF9895C_S31_CACHE_LL_BUSES"
+description = "SOURCE: ESP-IDF fff9895c82d744c7237be8847347bdd1b07c6643 components/hal/esp32s31/include/hal/cache_ll.h:951-1013 (Apache-2.0): `cache_ll_l1_enable_bus` and `cache_ll_l1_disable_bus` gate core 0's instruction bus with L1_ICACHE_SHUT_IBUS0 and core 1's with L1_ICACHE_SHUT_IBUS1, assert DBUS1 and DBUS2 unused, and gate every core's data cache with L1_DCACHE_SHUT_DBUS0."

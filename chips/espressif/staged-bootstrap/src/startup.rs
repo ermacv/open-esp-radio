@@ -36,7 +36,9 @@ pub trait BootProfile: Sized {
         + flash::FlashClockRegisters;
     type Active: clock::ActivePllPower;
     type Psram: psram::PsramMemory;
-    type Cache: cache::CacheSyncRegisters + cache::FetchSuspendRegisters;
+    type Cache: cache::CacheSyncRegisters
+        + cache::FetchSuspendRegisters
+        + cache::SecondaryFetchRegisters;
     type Flash: flash::FlashCommandRegisters + flash::FlashTimingRegisters + mmu::MmuRegisters;
     type WatchdogParts;
     type Watchdogs;
@@ -103,8 +105,11 @@ pub struct Resources<'a, S> {
 }
 
 /// Run the unchanged cold start through publication and the final RTC disable.
+/// `HARTS` is the runtime payload's used-hart mask
+/// ([`runtime_harts`](crate::runtime_harts)): after the code is published the
+/// bootstrap opens each used secondary hart's instruction bus.
 #[cfg(target_arch = "riscv32")]
-pub fn run<B: BootProfile, const ENTRY: usize>(
+pub fn run<B: BootProfile, const ENTRY: usize, const HARTS: u32>(
     resources: Resources<'_, impl FnOnce() -> Option<&'static mut [u32]>>,
 ) -> !
 where
@@ -241,6 +246,7 @@ where
         B::CACHE_SYNC,
         &deadline,
     ));
+    cache::open_secondary_fetch(&mut cache, HARTS);
     crate::hand_off::<B::Port, ENTRY>(image, published, || B::hand_off_watchdogs(watchdogs))
 }
 

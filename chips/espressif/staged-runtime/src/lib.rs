@@ -21,7 +21,10 @@
 //! The bootstrap copies stage two into PSRAM and jumps to `_runtime_start`
 //! ([`entry`](crate::entry)), which initializes the SRAM sections, switches to
 //! the boot hart PSRAM task stack, installs the runtime's vectors and enters the
-//! image's `runtime_main` that [`entry!`] defines. The image's `main` adopts
+//! image's `runtime_main` that [`entry!`] defines. During boot, before any
+//! executor, an image that declares a secondary hart starts it with
+//! [`secondary::launch`] into the hart's generated entry, which idles it on its
+//! own stacks. The image's `main` adopts
 //! the bootstrap's PSRAM mapping through its board and takes its hart's
 //! routes and lines ([`adoption::run`]), binds its interrupts through the
 //! [`Router`](oer_espressif_interrupt_table::Router) it gets back and enables
@@ -86,6 +89,12 @@ pub mod layout;
 )]
 pub mod panic;
 pub mod placement;
+pub mod secondary;
+#[cfg(all(target_arch = "riscv32", chip_vectors))]
+pub use secondary::launch;
+pub use secondary::{EarlyFault, LaunchFailure, LaunchWaits};
+#[cfg(chip_vectors)]
+pub use secondary::{Running, SecondaryHandoff};
 #[allow(
     unsafe_code,
     reason = "per-hart interrupt stacks and the trap entries switching onto them"

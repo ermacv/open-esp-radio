@@ -480,7 +480,7 @@ mod tests {
         for retired in [5, 10, 30] {
             assert_eq!(FaultReason::from_code(retired), None);
         }
-        for code in (1..=34)
+        for code in (1..=36)
             .filter(|code| ![5, 10, 30].contains(code))
             .chain(256..=260)
         {

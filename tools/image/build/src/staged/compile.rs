@@ -14,6 +14,7 @@ pub(crate) fn cargo(input: &CompileInput<'_>, bundle: &mut ImageBundle) -> Resul
         policy,
         task_stack_proven,
         critical_section_hart,
+        harts,
         panics,
         output,
         log,
@@ -45,6 +46,7 @@ pub(crate) fn cargo(input: &CompileInput<'_>, bundle: &mut ImageBundle) -> Resul
             diagnostic: spec.checks.as_ref().and_then(|checks| checks.interrupts)
                 != Some(oer_image_checks::interrupts::Required::Product),
             task_stack_proven,
+            harts: harts.to_vec(),
         };
         let specification = strict::configure(&mut runtime, &analysis, output, strict)?;
         crate::cargo::ensure_fetched(root)?;

@@ -31,6 +31,9 @@
 //!
 //! [`sampler`] is the program-counter sampler on TIMG1 T0 an image may
 //! select, reporting through its observer.
+//!
+//! [`secondary`] launches hart 1 during boot, under its own deadline over the
+//! system timer, before the image starts its executor.
 
 pub mod crypto;
 pub mod phy_fault;
@@ -62,6 +65,7 @@ pub mod wifi_fault;
 
 pub mod reset_causes;
 pub mod sampler;
+pub mod secondary;
 
 #[cfg(target_arch = "riscv32")]
 pub mod pilot;

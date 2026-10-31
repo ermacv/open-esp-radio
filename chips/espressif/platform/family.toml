@@ -166,9 +166,33 @@ handoff-sram-margin-bytes = 0x2000
 # field read as zero) at these byte offsets.
 [staged.stage-two]
 magic = 0x32475453
-abi-version = 1
-header-bytes = 44
+abi-version = 2
+header-bytes = 48
 magic-offset = 0
 abi-version-offset = 4
 header-size-offset = 28
-crc-offset = 40
+crc-offset = 44
+
+# The Espressif physical memory attribute (PMA) CSRs a secondary hart's
+# generated entry programs from the chip's `[hart-entry] pma` chain: entry n's
+# configuration at `cfg-csr + n`, its address (the byte address >> 2) at
+# `addr-csr + n`, and the configuration encodings.
+# SOURCE: ESP-IDF fff9895c `components/riscv/include/riscv/csr.h:52-72`
+# (`CSR_PMACFG0 0xBC0`, `CSR_PMAADDR0 0xBD0`, `PMA_EN` BIT(0), `PMA_X` BIT(2),
+# `PMA_W` BIT(3), `PMA_R` BIT(4), `PMA_SHIFT` 2, `PMA_TOR 0x40000000`,
+# `PMA_NAPOT 0xC0000000`, `PMA_NONCACHEABLE` BIT(27), `PMA_L` BIT(29)); the
+# entry count is the sixteen `pmacfg0..15`/`pmaaddr0..15` the S31 rev0 hart 1
+# reads (HW E1 of 2026-10-31, oer-notes research/hw-hart1-entry-e1.md), whose
+# disabled entries read `0x08000000` (NONCACHEABLE alone).
+[pma]
+cfg-csr = 0xbc0
+addr-csr = 0xbd0
+entries = 16
+address-shift = 2
+enable = 0x00000001
+execute = 0x00000004
+write = 0x00000008
+read = 0x00000010
+top-of-range = 0x40000000
+noncacheable = 0x08000000
+disabled = 0x08000000

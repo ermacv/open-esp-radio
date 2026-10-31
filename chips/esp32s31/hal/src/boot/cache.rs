@@ -2,7 +2,9 @@
 
 use oer_espressif_boot::{
     Access, Busy,
-    cache::{CacheSyncRegisters, FetchSuspendRegisters, LineRange, SyncCommand},
+    cache::{
+        CacheSyncRegisters, FetchSuspendRegisters, LineRange, SecondaryFetchRegisters, SyncCommand,
+    },
 };
 use oer_mmio::{Bits, Fixed, Placement};
 
@@ -107,6 +109,30 @@ impl<P: Placement> FetchSuspendRegisters for CacheRegisters<P> {
     }
 }
 
+/// Each secondary hart's instruction bus to the cache: hart 1's is
+/// `L1_ICACHE_SHUT_IBUS1`. The bootstrap opens it for a hart the image
+/// declares, after it published the runtime's code.
+///
+/// SOURCE: ESP_IDF_FFF9895C_S31_CACHE_LL_BUSES in
+/// `chips/esp32s31/registers/evidence/memory.toml` (`cache_ll_l1_enable_bus`).
+impl<P: Placement> SecondaryFetchRegisters for CacheRegisters<P> {
+    type Secondary = crate::platform::SecondaryHart;
+    const SECONDARIES: &'static [crate::platform::SecondaryHart] =
+        &crate::platform::Hart::SECONDARIES;
+
+    fn index(hart: crate::platform::SecondaryHart) -> u32 {
+        hart.hart().get() as u32
+    }
+
+    fn open_fetch(&mut self, _: Access<'_>, hart: crate::platform::SecondaryHart) {
+        match hart {
+            crate::platform::SecondaryHart::H1 => self.0.modify_l1_icache_ctrl(|w| {
+                w.set_l1_icache_shut_ibus1(false);
+            }),
+        }
+    }
+}
+
 /// The sync engine: the map, the line-aligned range, one command alone and
 /// its completion.
 ///
@@ -146,6 +172,6 @@ impl<P: Placement> CacheSyncRegisters for CacheRegisters<P> {
 impl<'a> CacheRegisters<oer_mmio::Host<'a>> {
     /// The cache owner over host memory from the instance's base.
     pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
-        CacheBoot::host(words).map(Self)
+        oer_esp32s31_pac::cache::cache_host(words).map(|(_buses, cache)| Self(cache))
     }
 }

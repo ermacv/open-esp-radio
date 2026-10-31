@@ -169,7 +169,10 @@ fn boot_inputs(s: &Session<'_>, tag: u32) {
     );
     emit(
         tag + 1,
-        s.wake_stub.read_lp_store8().lp_scratch8(),
+        s.secondary_launch
+            .lp_wake_stub
+            .read_lp_store8()
+            .lp_scratch8(),
         c.lp_sys_core_control
             .read_boot_addr_hp_core(SECONDARY.index())
             .boot_addr_hp_core(),
@@ -194,7 +197,7 @@ fn boot_inputs(s: &Session<'_>, tag: u32) {
 
 /// Disconnect every hart-1 matrix route; returns (nonzero routes, first).
 fn park_routes(s: &mut Session<'_>) -> (u32, u32) {
-    let bank = &mut s.interrupt_matrix.interrupt_core1;
+    let bank = &mut s.secondary_launch.interrupt_core1;
     let mut routed = 0u32;
     let mut first = u32::MAX;
     for n in 0..pac::interrupt_core::route::COUNT {

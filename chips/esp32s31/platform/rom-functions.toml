@@ -75,3 +75,18 @@ name = "esp_rom_spi_set_op_mode"
 address = 0x2f811334
 frame = 16
 calls = ["__riscv_save_3", "__riscv_restore_3", "esp_rom_spi_reset_rw_mode"]
+
+# SOURCE(esp32s31): Blobray on the same ROM: `ets_install_putc1` is `lui a5`,
+# one `sw a0` to `_putc1` (0x2f07fa28) and `ret`; `ets_install_putc2` the same
+# store to `_putc2` (0x2f07fa24). Neither adjusts `sp` or calls anything.
+[[function]]
+name = "ets_install_putc1"
+address = 0x2f8055a6
+frame = 0
+calls = []
+
+[[function]]
+name = "ets_install_putc2"
+address = 0x2f8055b0
+frame = 0
+calls = []

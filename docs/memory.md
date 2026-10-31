@@ -66,18 +66,23 @@ contracts: [Hardware memory](hardware-memory.md).
 - **Every image accounts for every hart** in the chip facts' `[interrupts] harts`.
   Each hart has a task stack and an interrupt stack. The policy
   (`[core.N.task_stack]`, `[core.N.interrupt_stack]`) declares both used
-  or both `unused = true`. Unused ranges link zero
-  bytes; the image gate rejects linked starters, routes or storage that
-  would use them. Every current S31 image runs on the boot hart and keeps
-  all secondary harts contained: the HAL stalls them, gates their clocks,
-  holds their resets and clears their ROM boot addresses
-  ([secondary boot](../chips/esp32s31/platform/README.md#secondary-hart-containment)). Staged entries
-  admit only the boot hart. The runtime's critical section masks only its
+  or both `unused = true`, or, for a secondary hart, both a launch template
+  (`launch = "declared"`): the hart runs only in an image that declares it
+  in `[package.metadata.open-radio] harts`, and is unused in every other.
+  Unused ranges link zero bytes; the image gate rejects linked starters,
+  routes or storage that would use them. The bootstrap contains every
+  secondary hart: it stalls them, gates their clocks, holds their resets and
+  clears their ROM boot addresses
+  ([secondary boot](../chips/esp32s31/platform/README.md#secondary-hart-launch-and-containment)),
+  and opens a declared hart's instruction bus after it published the
+  runtime's code. A declared hart starts during boot, before any executor,
+  through its generated entry, which installs its own PSRAM task stack; the
+  boot hart's staged entries admit only the boot hart. The runtime's critical section masks only its
   executing hart and takes no cross-hart lock
   ([critical-section rustdoc](../chips/espressif/staged-runtime/src/critical.rs)).
   The staged build/run check confines linked critical-section entry points to
-  the hart roots declared through `[package.metadata.open-radio] critical-section-hart`.
-  The public HAL cannot start or release a secondary hart.
+  the hart roots declared through `[package.metadata.open-radio] critical-section-hart`;
+  a secondary hart's roots must not reach it.
 - `oer-staged-runtime-stacks.x` is generated from the same hart geometry as
   the vectors. It places each task stack in PSRAM and each interrupt stack
   in SRAM, with exact-size, memory-range, alignment and guard assertions.
@@ -91,7 +96,10 @@ contracts: [Hardware memory](hardware-memory.md).
   must fit and unresolved sites are reported. Secondary task roots require
   complete bounds.
   Defaults cover the entire geometry, including explicit zeroes for contained
-  harts. See the [image linker](../tools/image/linker/README.md).
+  harts; a declared launch template takes its `launch_bytes` before a proven
+  bound sizes it, and its interrupt stack the contract maximum. The
+  stage-two header's used-hart word names every hart with a task stack, and
+  the image gate holds it to the policy. See the [image linker](../tools/image/linker/README.md).
 - The staged runtime exports `_runtime_exception_frames` from its trap policy.
   The IRQ bound adds that many complete exception entry/handler bounds above
   the per-level interrupt sum. Its reset gate permits one platform reset attempt;

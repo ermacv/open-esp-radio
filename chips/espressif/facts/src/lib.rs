@@ -185,6 +185,11 @@ pub struct Facts {
     /// How code reaches a core other than core 0; a chip with more than one
     /// core names it.
     pub core_start: Option<CoreStart>,
+    /// The family's PMA CSRs a secondary hart's entry programs.
+    pub pma: Option<PmaCsrs>,
+    /// What a secondary hart's generated entry sets up; a chip with more
+    /// than one core names it.
+    pub hart_entry: Option<HartEntry>,
     /// The staged boot's host contract; a chip with images names it.
     pub staged: Option<StagedBoot>,
     /// What the pinned second-stage bootloader keeps for itself.
@@ -227,6 +232,10 @@ struct Stated {
     placement: Option<Placement>,
     #[serde(default)]
     core_start: Option<CoreStart>,
+    #[serde(default)]
+    pma: Option<PmaCsrs>,
+    #[serde(default)]
+    hart_entry: Option<HartEntry>,
     #[serde(default)]
     staged: Option<StagedBoot>,
     #[serde(default)]
@@ -436,6 +445,8 @@ impl Facts {
             rom: stated.rom,
             placement: stated.placement,
             core_start: stated.core_start,
+            pma: stated.pma,
+            hart_entry: stated.hart_entry,
             staged: stated.staged,
             boot_chain: stated.boot_chain,
             reset_cause: stated.reset_cause,
@@ -493,6 +504,14 @@ impl Facts {
             return Err(
                 "`[core-start]` is named by exactly the chips with more than one core".into(),
             );
+        }
+        if (self.properties.cores > 1) != self.hart_entry.is_some() {
+            return Err(
+                "`[hart-entry]` is named by exactly the chips with more than one core".into(),
+            );
+        }
+        if self.hart_entry.is_some() {
+            generate::Pma::of(&self)?;
         }
         let mut observed = alloc::collections::BTreeSet::new();
         for pattern in &self.observed_functions {

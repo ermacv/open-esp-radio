@@ -448,3 +448,33 @@ fn a_freeze_that_never_takes_effect_is_undone_and_the_operation_never_runs() {
         ]
     );
 }
+
+struct Buses {
+    opened: Vec<u8>,
+}
+
+impl crate::cache::SecondaryFetchRegisters for Buses {
+    type Secondary = u8;
+    const SECONDARIES: &'static [u8] = &[1, 2, 40];
+    fn index(hart: u8) -> u32 {
+        u32::from(hart)
+    }
+    fn open_fetch(&mut self, _: Access<'_>, hart: u8) {
+        self.opened.push(hart);
+    }
+}
+
+#[test]
+fn only_declared_secondaries_have_their_fetch_opened() {
+    for (harts, opened) in [
+        (0b001, &[][..]),
+        (0b011, &[1][..]),
+        (0b111, &[1, 2][..]),
+        (0b100, &[2][..]),
+        (u32::MAX, &[1, 2][..]),
+    ] {
+        let mut buses = Buses { opened: Vec::new() };
+        crate::cache::open_secondary_fetch(&mut buses, harts);
+        assert_eq!(buses.opened, opened, "{harts:#b}");
+    }
+}

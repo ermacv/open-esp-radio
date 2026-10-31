@@ -1,7 +1,15 @@
 # boot-smoke
 
 The smallest ESP32-S31 staged application adopts the bootstrap's PSRAM
-mapping, reports a valid panic left by the previous boot, then idles.
+mapping, reports a valid panic left by the previous boot, starts hart 1 and
+then idles. It declares `harts = ["boot", 1]`: during boot, before its
+executor, it launches hart 1 with the root's one-shot permit
+(`oer_esp32s31_compose::secondary::launch_hart1`). Hart 1 runs its generated
+entry and Rust root on its own stacks, installs its interrupt stack and the
+common exception path, reports ready and idles masked; the boot hart reports
+the stack pointer it reported ready on. Any launch failure after the release
+records its stage and resets; the next boot prints it as
+`previous fault SecondaryLaunch` or `SecondaryEarlyFault`.
 
 ```console
 cargo fw build boot-smoke
@@ -13,6 +21,7 @@ The USB console carries [typed diagnostic records](../../../portable/diagnostics
 
 ```text
 OER-PANIC previous src/main.rs:42:7 on hart 0: example panic
+OER-HART ready hart=1 sp=0x5002a680
 OER-RESULT: pass boot-smoke
 ```
 

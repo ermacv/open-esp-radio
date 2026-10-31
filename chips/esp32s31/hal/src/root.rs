@@ -191,6 +191,7 @@ impl Root {
             timer_group1,
             aes,
             crypto_clock,
+            secondary_launch,
         } = self.partitions;
         let WatchdogRegisters {
             main0,
@@ -233,6 +234,7 @@ impl Root {
                 efuse: EfuseRegisters::new(efuse),
                 entropy: EntropyRegisters::new(entropy, soc.lp_periclkrst_rng_init),
                 reset_cause: ResetCauseRegisters::new(reset_cause),
+                hart1: crate::cores::LaunchPermit::new(secondary_launch),
                 wifi_interrupts: WifiInterruptBanks::new(wifi_interrupts),
                 radio: RadioHardware::new(RadioPartitions::compose(RadioParts {
                     wifi_mac,

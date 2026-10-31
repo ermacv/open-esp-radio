@@ -1672,6 +1672,7 @@ dependencies = [
  "oer-esp32s31-crypto",
  "oer-esp32s31-hal",
  "oer-esp32s31-phy",
+ "oer-espressif-boot",
  "oer-espressif-executor",
  "oer-espressif-interrupt-table",
  "oer-espressif-platform-port",
@@ -2045,6 +2046,7 @@ name = "oer-espressif-platform-port"
 version = "0.1.0"
 dependencies = [
  "oer-espressif-facts",
+ "oer-espressif-staged-layout",
  "oer-mmio",
 ]
 

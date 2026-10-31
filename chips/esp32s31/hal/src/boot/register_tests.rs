@@ -25,7 +25,7 @@ use super::{
     FlashRegisters, MemDivider, PsramRegisters, PsramSupplyLevel,
 };
 use oer_esp32s31_pac::{
-    cache::CacheBoot as Cache, hp_alive_sys::HpAliveSysPllClock as HpAliveSys,
+    cache::CacheBoot as Cache, cache::cache_host, hp_alive_sys::HpAliveSysPllClock as HpAliveSys,
     hp_sys_clkrst::HpSysClkrstBootClock as HpSysClkrst, instances,
     iomux_mspi_pin::IomuxMspiPsramPins as IomuxMspiPin,
     lp_aonclkrst::LpAonClkrstCpll as LpAonClkrst, pmu::PmuBootClock as Pmu,
@@ -243,7 +243,7 @@ fn a_publication_starts_one_writeback_of_the_data_caches_whole_lines() {
         Err(BootFailure::Wait(WaitFailure::TimedOut("cache-sync")))
     );
     drop(owner);
-    let view = Cache::host(&mut words).expect("host memory holds it");
+    let (_buses, view) = cache_host(&mut words).expect("host memory holds it");
     assert_eq!(
         view.read_sync_map().sync_map().get(),
         0x10,
@@ -770,7 +770,7 @@ fn a_cache_that_never_reports_idle_has_fetch_opened_again() {
         Err(BootFailure::Wait(WaitFailure::TimedOut("icache-autoload")))
     );
     drop(owner);
-    let view = Cache::host(&mut words).expect("host memory holds it");
+    let (_buses, view) = cache_host(&mut words).expect("host memory holds it");
     assert!(!view.read_l1_icache_ctrl().l1_icache_shut_ibus0());
     assert!(
         !view
@@ -794,7 +794,7 @@ fn a_thaw_that_never_reports_restores_fetch_autoload_and_freeze() {
         Err(BootFailure::Wait(WaitFailure::TimedOut("icache-thaw")))
     );
     drop(owner);
-    let view = Cache::host(&mut words).expect("host memory holds it");
+    let (_buses, view) = cache_host(&mut words).expect("host memory holds it");
     assert!(
         !view.read_l1_icache_ctrl().l1_icache_shut_ibus0(),
         "fetch open"
@@ -814,6 +814,31 @@ fn a_thaw_that_never_reports_restores_fetch_autoload_and_freeze() {
     assert!(
         freeze.l1_dcache_freeze_en(),
         "the data cache's freeze is kept"
+    );
+}
+
+#[test]
+fn opening_hart_1_s_fetch_clears_only_its_instruction_bus_gate() {
+    use oer_espressif_boot::cache::open_secondary_fetch;
+    let mut words = memory(instances::cache::SIZE, u32::MAX);
+    let mut owner = CacheRegisters::host(&mut words).expect("host memory holds it");
+    // A mask without hart 1 opens nothing.
+    open_secondary_fetch(&mut owner, 0b01);
+    drop(owner);
+    let (_buses, view) = cache_host(&mut words).expect("host memory holds it");
+    assert!(view.read_l1_icache_ctrl().l1_icache_shut_ibus1());
+    drop(view);
+    let mut owner = CacheRegisters::host(&mut words).expect("host memory holds it");
+    open_secondary_fetch(&mut owner, 0b11);
+    drop(owner);
+    let (buses, _cache) = cache_host(&mut words).expect("host memory holds it");
+    let control = buses.read_l1_icache_ctrl();
+    assert!(!control.l1_icache_shut_ibus1(), "hart 1's bus open");
+    assert!(control.l1_icache_shut_ibus0(), "hart 0's bus kept");
+    assert!(control.l1_icache_shut_ibus2() && control.l1_icache_shut_ibus3());
+    assert!(
+        buses.read_l1_dcache_ctrl().l1_dcache_shut_dbus0(),
+        "the data bus is not the instruction gate's"
     );
 }
 

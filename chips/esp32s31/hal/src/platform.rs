@@ -4,7 +4,7 @@
 //! table's router drives, and the family platform contracts ([`Port`]).
 
 pub use core_control::{CoreControlRegisters, Uart0ClockRegisters};
-pub use interrupt_controller::{Hart1Interrupts, InterruptBlocks, InterruptController};
+pub use interrupt_controller::{InterruptBlocks, InterruptController};
 pub use port::Port;
 
 pub mod core_control;

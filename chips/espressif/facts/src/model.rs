@@ -48,6 +48,86 @@ pub struct CoreStart {
     pub ipc: Vec<String>,
 }
 
+/// The `[pma]` table of the family: the vendor physical memory attribute
+/// CSRs a secondary hart's generated entry programs and their encodings.
+/// Vendor CSRs stay in the facts; `oer-riscv` holds only architectural ones.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
+pub struct PmaCsrs {
+    /// Entry n's configuration CSR is `cfg_csr + n`.
+    pub cfg_csr: u16,
+    /// Entry n's address CSR is `addr_csr + n`.
+    pub addr_csr: u16,
+    /// The number of entries.
+    pub entries: u16,
+    /// An address CSR holds the byte address shifted right by this.
+    pub address_shift: u8,
+    /// Configuration bits.
+    pub enable: u32,
+    pub execute: u32,
+    pub write: u32,
+    pub read: u32,
+    /// The top-of-range address mode.
+    pub top_of_range: u32,
+    /// The region is not cached.
+    pub noncacheable: u32,
+    /// What a disabled entry reads: the value the entry writes before it
+    /// programs the chain, and reads back.
+    pub disabled: u32,
+}
+
+/// The access a PMA range grants.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum PmaAccess {
+    None,
+    R,
+    Rw,
+    Rx,
+    Rwx,
+}
+
+impl PmaAccess {
+    /// Read, write and execute.
+    pub const fn bits(self) -> (bool, bool, bool) {
+        match self {
+            Self::None => (false, false, false),
+            Self::R => (true, false, false),
+            Self::Rw => (true, true, false),
+            Self::Rx => (true, false, true),
+            Self::Rwx => (true, true, true),
+        }
+    }
+}
+
+/// One range of a secondary hart's PMA chain: a `[memory]` region by name,
+/// with its bounds and attributes, or explicit bounds, access and
+/// cacheability.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
+pub struct PmaRange {
+    pub name: String,
+    #[serde(default)]
+    pub region: Option<String>,
+    #[serde(default)]
+    pub start: Option<u32>,
+    #[serde(default)]
+    pub end: Option<u32>,
+    #[serde(default)]
+    pub access: Option<PmaAccess>,
+    #[serde(default)]
+    pub cached: Option<bool>,
+}
+
+/// The `[hart-entry]` table: what a secondary hart's generated entry sets up
+/// before it leaves internal SRAM.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
+pub struct HartEntry {
+    /// The PMA chain, in ascending, disjoint ranges.
+    pub pma: Vec<PmaRange>,
+}
+
 /// The `[reset-cause]` table: the field of the chip's register model
 /// (`chips/<id>/registers/chip.toml`) that holds why the core last left
 /// reset, which the stand reads through JTAG after a power cycle, and the

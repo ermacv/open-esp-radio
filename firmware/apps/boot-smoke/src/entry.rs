@@ -8,9 +8,12 @@ use oer_esp32s31_hal::peripherals::watchdog::{
 use oer_esp32s31_hal::peripherals::{
     software_interrupt::FromCpu0Irq, system_timer::SystimerAlarm0,
 };
+use oer_esp32s31_hal::cores::Cores;
 use oer_esp32s31_hal::root::Root;
 use oer_espressif_executor::Executor;
-use oer_espressif_staged_runtime::diagnostics::{self, BootSmokePassed, Console};
+use oer_espressif_staged_runtime::diagnostics::{
+    self, BootSmokePassed, Console, SecondaryReady,
+};
 use oer_espressif_staged_runtime::panic;
 
 oer_espressif_staged_runtime::interrupt_table! {
@@ -37,7 +40,14 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
         fail(oer_diagnostics::name!("root-taken"; 32));
     };
     let (
-        (runtime_system_timer, runtime_software_interrupts, runtime_watchdogs, mut diagnostics),
+        (
+            runtime_system_timer,
+            runtime_software_interrupts,
+            runtime_watchdogs,
+            mut diagnostics,
+            reset_causes,
+            hart1,
+        ),
         _psram,
         mut adopted,
     ) = match oer_espressif_staged_runtime::adoption::run::<oer_esp32s31_compose::Esp32s31, _, _>(
@@ -47,7 +57,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
         board::BootstrapPsram,
         oer_esp32s31_compose::phy_fault::report_previous,
         |hardware| {
-            let _reset_causes = oer_esp32s31_compose::reset_causes::read(hardware.reset_cause);
+            let reset_causes = oer_esp32s31_compose::reset_causes::read(hardware.reset_cause);
             // The executor is not running yet: the early writer waits for room
             // within its budget and counts what it drops.
             let mut diagnostics = Console::new(|bytes| {
@@ -65,17 +75,36 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
                 hardware.software_interrupts,
                 hardware.watchdogs,
                 diagnostics,
+                reset_causes,
+                hardware.hart1,
             )
         },
     ) {
         Ok(adopted) => adopted.into_parts(),
         Err(error) => fail(error.name()),
     };
+    // Hart 1 starts before any executor: it installs its own stacks and
+    // exception path and idles masked; a failure after its release resets.
+    let Ok(Some(mut cores)) = Cores::take() else {
+        fail(oer_diagnostics::name!("cores-taken"; 32));
+    };
+    let mut timer = runtime_system_timer;
+    let (hart1, counter) = oer_esp32s31_compose::secondary::launch_hart1(
+        &mut cores,
+        hart1,
+        reset_causes,
+        timer.counter,
+    )
+    .unwrap_or_else(|failure| failure.reset());
+    timer.counter = counter;
+    let _ = diagnostics.event(&SecondaryReady {
+        hart: u32::from(hart1.hart()),
+        sp: hart1.ready_sp(),
+    });
     let _ = diagnostics.event(&BootSmokePassed);
     let Some(interrupts) = Interrupts::take() else {
         fail(oer_diagnostics::name!("interrupt-table"; 32));
     };
-    let timer = runtime_system_timer;
     let _timer_ready = oer_espressif_executor::init::<Esp32s31, 0, _, _>(
         oer_espressif_executor::systimer::SystemTimer {
             comparators: timer.comparators,

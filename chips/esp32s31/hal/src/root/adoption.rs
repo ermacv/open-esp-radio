@@ -30,6 +30,7 @@ pub struct RuntimeResources {
     pub(super) efuse: EfuseRegisters,
     pub(super) entropy: EntropyRegisters,
     pub(super) reset_cause: ResetCauseRegisters,
+    pub(super) hart1: crate::cores::LaunchPermit,
     pub(super) wifi_interrupts: WifiInterruptBanks,
     pub(super) radio: RadioHardware,
 }
@@ -59,6 +60,9 @@ pub struct Hardware {
     pub efuse: EfuseRegisters,
     pub entropy: EntropyRegisters,
     pub reset_cause: ResetCauseRegisters,
+    /// The one-shot authority to start hart 1 (`Cores::start_secondary`):
+    /// its route bank, the ROM wake-stub word and the cache bus observer.
+    pub hart1: crate::cores::LaunchPermit,
     pub wifi_interrupts: WifiInterruptBanks,
     pub clocks: ChipClocks,
     pub radio: RadioHardware,
@@ -111,6 +115,7 @@ impl Port for RuntimePort {
             efuse,
             entropy,
             reset_cause,
+            hart1,
             wifi_interrupts,
             radio,
         } = resources;
@@ -126,6 +131,7 @@ impl Port for RuntimePort {
                 efuse,
                 entropy,
                 reset_cause,
+                hart1,
                 wifi_interrupts,
                 clocks,
                 radio,

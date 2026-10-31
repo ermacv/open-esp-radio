@@ -32,6 +32,33 @@ impl Event for BootSmokePassed {
     }
 }
 
+/// A secondary hart reported ready on its own stacks: its hart and the stack
+/// pointer it reported. The boot console renders it as
+/// `OER-HART ready hart=<n> sp=0x<sp>`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct SecondaryReady {
+    pub hart: u32,
+    pub sp: u32,
+}
+
+impl Event for SecondaryReady {
+    const KIND: Kind = Kind::new(Domain::Platform, 3);
+    const CHANNEL: Channel = const {
+        match Channel::new(Domain::Platform, 0) {
+            Ok(channel) => channel,
+            Err(_) => panic!("invalid trace channel"),
+        }
+    };
+
+    fn encode(&self) -> [u32; 2] {
+        [self.hart, self.sp]
+    }
+
+    fn decode([hart, sp]: [u32; 2]) -> Option<Self> {
+        Some(Self { hart, sp })
+    }
+}
+
 /// A borrowed view of the previous panic. The retained record stays its
 /// platform owner's; the same view can be sent by any staged image.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

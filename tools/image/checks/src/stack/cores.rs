@@ -7,6 +7,9 @@
 //!   the boot hart runs a task of its own, with the root the policy names;
 //! - no function of the cross-core call (IPC) is linked, whichever cores run;
 //! - an unused stack has no storage: its linked range is empty, or absent;
+//! - the stage-two header's used-hart word (`__runtime_used_harts`) names
+//!   exactly the cores whose task stack the policy uses, so the bootstrap
+//!   opens no other core's bus;
 //! - an interrupt-table entry routes to a core with an interrupt stack only
 //!   (checked where the table is read, [`crate::interrupts`]).
 
@@ -83,6 +86,7 @@ pub fn audit_runtime(image: &Image, policy: &StackPolicy, profile: &Profile) -> 
     let unused_interrupts = policy.unused_interrupt_cores();
     linked_ipc(image, profile)?;
     let starters = linked_starters(image, profile);
+    used_harts(image, policy)?;
     let mut report = String::from("core\ttask stack\tinterrupt stack\n");
     let started: Vec<_> = unused_tasks
         .iter()
@@ -146,6 +150,22 @@ pub fn audit_runtime(image: &Image, policy: &StackPolicy, profile: &Profile) -> 
         writeln!(report, "linked starters:\n  {}", starters.join("\n  "))?;
     }
     Ok(report)
+}
+
+/// The header's used-hart word names exactly the policy's used task stacks.
+fn used_harts(image: &Image, policy: &StackPolicy) -> Result<()> {
+    let file = oer_analysis_elf::Elf::parse(&image.elf)?;
+    let Some(linked) = file.address("__runtime_used_harts") else {
+        return Err("the runtime links no `__runtime_used_harts` header word".into());
+    };
+    let expected = policy.used_harts();
+    if linked != u64::from(expected) {
+        return Err(format!(
+            "the stage-two header's used harts {linked:#b} differ from the stack policy's {expected:#b}"
+        )
+        .into());
+    }
+    Ok(())
 }
 
 /// The bootstrap runs on the boot hart alone: it links no starter.

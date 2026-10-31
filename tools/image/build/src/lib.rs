@@ -25,6 +25,7 @@ mod critical_section;
 pub mod encode;
 pub mod esp_idf;
 pub mod exclusion;
+mod harts;
 pub mod images;
 pub mod instrumentation;
 mod large_values;
@@ -115,6 +116,7 @@ pub fn build(spec: &ImageSpec) -> Result<oer_image_bundle::ImageBundle> {
     let task_stack_proven = task_stack::declared_proven(&spec.root, &spec.application.package)?;
     let critical_section_hart =
         critical_section::declared(&spec.root, &spec.application.package, &profile)?;
+    let harts = harts::declared(&spec.root, &spec.application.package, &profile)?;
     let panics = panic_budget::declared(&spec.root, &spec.application.package)?;
     staged::build(
         spec,
@@ -122,6 +124,7 @@ pub fn build(spec: &ImageSpec) -> Result<oer_image_bundle::ImageBundle> {
         &instrumentation,
         task_stack_proven,
         critical_section_hart,
+        &harts,
         &panics,
         staged::cargo,
     )
@@ -153,7 +156,8 @@ pub fn check(spec: &ImageSpec, check: RuntimeCheck) -> Result<()> {
         return Err("a runtime check builds no image; its gates need a build".into());
     }
     let profile = profile(&spec.root, &spec.chip)?;
-    let policy = StackPolicy::load(&spec.root.join(&spec.stack_policy))?;
+    let harts = harts::declared(&spec.root, &spec.application.package, &profile)?;
+    let policy = StackPolicy::load(&spec.root.join(&spec.stack_policy))?.for_image(&harts)?;
     let instrumentation =
         instrumentation::Instrumentation::declared(&spec.root, &spec.application.package)?;
     let cache = compile_cache(&spec.root, &instrumentation);

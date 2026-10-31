@@ -13,6 +13,10 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 "chips/esp32s31/compose/src/phy_fault.rs:crate::phy_fault::reset:terminal-reference:reset_recording:1" = { owner = "chips/esp32s31/compose", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
 "chips/esp32s31/compose/src/phy_fault.rs:crate::phy_fault:retained-slot:retained_static:1" = { owner = "chips/esp32s31/compose", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
 
+# chips/esp32s31/compose/src/secondary.rs
+"chips/esp32s31/compose/src/secondary.rs:crate::secondary::impl Hart1Failure::reset:terminal-entry:reset:1" = { owner = "chips/esp32s31/compose", classes = ["configuration-boot", "unexpected-hardware"] }
+"chips/esp32s31/compose/src/secondary.rs:crate::secondary::impl Hart1Failure::reset:terminal-reference:reset_fault:1" = { owner = "chips/esp32s31/compose", classes = ["unexpected-hardware"] }
+
 # chips/esp32s31/compose/src/wifi_fault.rs
 "chips/esp32s31/compose/src/wifi_fault.rs:crate::wifi_fault:retained-slot:retained_static:1" = { owner = "chips/esp32s31/compose", classes = ["unexpected-hardware"] }
 "chips/esp32s31/compose/src/wifi_fault.rs:crate::wifi_fault::reset:terminal-entry:reset:1" = { owner = "chips/esp32s31/compose", classes = ["unexpected-hardware"] }
@@ -167,6 +171,8 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 "chips/espressif/staged-runtime/src/panic/fault.rs:crate::panic::fault::FaultReason:retained-reason:FaultReason::RouteHandlerCellMismatch:1" = { owner = "chips/espressif/staged-runtime", classes = ["configuration-boot"] }
 "chips/espressif/staged-runtime/src/panic/fault.rs:crate::panic::fault::FaultReason:retained-reason:FaultReason::HilRequested:1" = { owner = "chips/espressif/staged-runtime", classes = ["requested-reset"] }
 "chips/espressif/staged-runtime/src/panic/fault.rs:crate::panic::fault::FaultReason:retained-reason:FaultReason::RequestUnanswered:1" = { owner = "chips/espressif/staged-runtime", classes = ["cancellation"] }
+"chips/espressif/staged-runtime/src/panic/fault.rs:crate::panic::fault::FaultReason:retained-reason:FaultReason::SecondaryLaunch:1" = { owner = "chips/espressif/staged-runtime", classes = ["configuration-boot"] }
+"chips/espressif/staged-runtime/src/panic/fault.rs:crate::panic::fault::FaultReason:retained-reason:FaultReason::SecondaryEarlyFault:1" = { owner = "chips/espressif/staged-runtime", classes = ["unexpected-hardware"] }
 "chips/espressif/staged-runtime/src/panic/fault.rs:crate::panic::fault::FaultReason:retained-reason:FaultReason::BindingRefused:1" = { owner = "chips/espressif/staged-runtime", classes = ["configuration-boot"] }
 "chips/espressif/staged-runtime/src/panic/fault.rs:crate::panic::fault::FaultReason:retained-reason:FaultReason::BindingStorageClaimed:1" = { owner = "chips/espressif/staged-runtime", classes = ["software-invariant"] }
 "chips/espressif/staged-runtime/src/panic/fault.rs:crate::panic::fault::FaultReason:retained-reason:FaultReason::BindingHandlerOccupied:1" = { owner = "chips/espressif/staged-runtime", classes = ["software-invariant"] }
@@ -174,6 +180,11 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 "chips/espressif/staged-runtime/src/panic/fault.rs:crate::panic::fault::FaultReason:retained-reason:FaultReason::BindingRouteRefused:1" = { owner = "chips/espressif/staged-runtime", classes = ["configuration-boot", "unexpected-hardware"] }
 "chips/espressif/staged-runtime/src/panic/fault.rs:crate::panic::fault::FaultReason:retained-reason:FaultReason::OutsideExecutor:1" = { owner = "chips/espressif/staged-runtime", classes = ["software-invariant"] }
 "chips/espressif/staged-runtime/src/panic/fault.rs:crate::panic::fault::FaultReason:retained-reason:FaultReason::SignalContext:1" = { owner = "chips/espressif/staged-runtime", classes = ["software-invariant"] }
+
+# chips/espressif/staged-runtime/src/secondary.rs
+"chips/espressif/staged-runtime/src/secondary.rs:crate::secondary::impl LaunchFailure < E >::reset:terminal-entry:reset:1" = { owner = "chips/espressif/staged-runtime", classes = ["configuration-boot", "unexpected-hardware"] }
+"chips/espressif/staged-runtime/src/secondary.rs:crate::secondary::impl LaunchFailure < E >::reset:terminal-reference:reset_fault:1" = { owner = "chips/espressif/staged-runtime", classes = ["configuration-boot", "unexpected-hardware"] }
+"chips/espressif/staged-runtime/src/secondary.rs:crate::secondary::impl SecondaryHandoff < H >::idle:terminal-entry:idle:1" = { owner = "chips/espressif/staged-runtime", classes = ["configuration-boot"] }
 
 # chips/espressif/staged-runtime/src/stacks.rs
 "chips/espressif/staged-runtime/src/stacks.rs:crate::stacks::invalid_hart:terminal-entry:invalid_hart:1" = { owner = "chips/espressif/staged-runtime", classes = ["rust-panic"] }
@@ -187,6 +198,7 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 "firmware/apps/boot-smoke/src/entry.rs:crate::main:terminal-entry:main:1" = { owner = "firmware/apps/boot-smoke", classes = ["configuration-boot"] }
 "firmware/apps/boot-smoke/src/entry.rs:crate::main:reset-method:reset:1" = { owner = "firmware/apps/boot-smoke", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
 "firmware/apps/boot-smoke/src/entry.rs:crate::main:reset-method:reset:2" = { owner = "firmware/apps/boot-smoke", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
+"firmware/apps/boot-smoke/src/entry.rs:crate::main:reset-method:reset:3" = { owner = "firmware/apps/boot-smoke", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
 "firmware/apps/boot-smoke/src/entry.rs:crate::fail:terminal-reference:boot_failure:1" = { owner = "firmware/apps/boot-smoke", classes = ["configuration-boot"] }
 
 # firmware/apps/radio-root/src/entry.rs

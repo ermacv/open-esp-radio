@@ -18,6 +18,7 @@ esp32s31 = []
 
 [dependencies]
 oer-mmio = { path = "../../../portable/mmio" }
+oer-espressif-staged-layout.workspace = true
 
 [build-dependencies]
 oer-espressif-facts = { path = "../facts" }

@@ -39,5 +39,12 @@ sram = [
     { name = "data", start = 0x2f07e600, end = 0x2f080000, kept = "running" },
 ]
 
-# No ROM entry points are called by our code. libc and vendor radio ROM
-# scripts are not link inputs; compiler_builtins supplies memory routines.
+# The ROM entry points our code calls. libc and vendor radio ROM scripts are
+# not link inputs; compiler_builtins supplies memory routines. The HAL clears
+# the ROM's two `ets_printf` output slots before it releases hart 1, so the
+# ROM's secondary path prints through neither UART0 nor the runtime's USB
+# Serial/JTAG console.
+functions = [
+    { name = "ets_install_putc1", address = 0x2f8055a6, source = "SOURCE: pinned rev0 ROM esp32s31_rev0_rom.elf symbol `ets_install_putc1` (Blobray function-records): one whole-word store of its argument to `_putc1` 0x2f07fa28, then return" },
+    { name = "ets_install_putc2", address = 0x2f8055b0, source = "SOURCE: pinned rev0 ROM esp32s31_rev0_rom.elf symbol `ets_install_putc2` (Blobray function-records): one whole-word store of its argument to `_putc2` 0x2f07fa24, then return" },
+]

@@ -8,6 +8,22 @@ vectors, stack symbols and default handlers.
 
 `_runtime_start` initializes application data and SRAM interrupt/DMA sections,
 selects the boot hart's PSRAM task stack and calls the image's `runtime_main`.
+
+An image that declares a secondary hart starts it during boot, before any
+executor, with `secondary::launch` over the platform's `SecondaryStart`: the
+hart's linked stacks and a fresh SRAM handshake are checked, the platform
+releases the hart into its generated `_runtime_start_h<N>`, the boot hart
+waits for ENTERED (`secondary-entered`), retires the boot word, fences,
+publishes ACK and waits for READY (`secondary-ready`) under the image's
+deadline. The entry (`entry.rs`, generated per secondary from the facts)
+masks interrupts first, installs a stack-free fault stub, checks PMP,
+programs the facts' PMA chain with read-back, installs `gp`, its PSRAM task
+stack and the FPU and tail-calls `runtime_secondary_main_h<N>`, which mints
+its `SecondaryHandoff`: `idle` installs the hart's interrupt stack and the
+common exception path, reports READY and idles masked. A fault before READY
+stores its kind and observations; `LaunchFailure::reset` records any failure
+(`SecondaryLaunch` or `SecondaryEarlyFault`) and resets. Only an image that
+launches a hart links its entry.
 `entry!` supplies that entry, the image's single panic handler and the common
 CPU-exception handler. The image
 passes the HAL reset root's unstarted runtime partition to `adoption::run`,

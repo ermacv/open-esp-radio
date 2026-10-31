@@ -1,10 +1,12 @@
 //! Which hart runs the staged boot. ROM releases a core other than hart 0 only
 //! through an explicit boot address. SOURCE: pinned S31 rev0 ROM
 //! normal_boot @0x2f801790 and main @0x2f804652. A stale address can hand it to the
-//! bootstrap or the runtime, so both stop any hart but this one before it
-//! touches memory.
+//! bootstrap or the runtime, so both entries admit only the boot hart and stop
+//! any other before it touches memory. A secondary hart enters only through
+//! its own generated entry (`handoff::SecondaryEntry`), which the runtime's
+//! launch writes to its boot word.
 //!
-//! SOURCE: chips/esp32s31/platform/README.md#secondary-hart-containment.
+//! SOURCE: chips/esp32s31/platform/README.md#secondary-hart-launch-and-containment.
 
 /// The bootstrap's admitted boot hart. Every facts-generated layout const-checks
 /// this value against its boot-hart fact; a disagreement fails compilation.

@@ -5,7 +5,7 @@ use std::borrow::Cow;
 
 use oer_diagnostics::radio_root::RadioRoot;
 use oer_diagnostics::render::{Gap, Next};
-use oer_diagnostics::{BootSmokePassed, MAX_PAYLOAD, Record};
+use oer_diagnostics::{BootSmokePassed, MAX_PAYLOAD, Record, SecondaryReady};
 use oer_trace::Event;
 
 #[derive(Default)]
@@ -76,6 +76,13 @@ impl Decoder {
             Record::Event { kind, words } => {
                 if kind == BootSmokePassed::KIND && BootSmokePassed::decode(words).is_some() {
                     return Ok(Cow::Borrowed("OER-RESULT: pass boot-smoke"));
+                }
+                if kind == SecondaryReady::KIND
+                    && let Some(SecondaryReady { hart, sp }) = SecondaryReady::decode(words)
+                {
+                    return Ok(Cow::Owned(format!(
+                        "OER-HART ready hart={hart} sp={sp:#010x}"
+                    )));
                 }
                 let event = (kind == RadioRoot::KIND)
                     .then(|| RadioRoot::decode(words))

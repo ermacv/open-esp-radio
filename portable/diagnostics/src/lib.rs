@@ -42,7 +42,7 @@ pub use console::{
 pub use fifo::{Fifo, FifoWriter, Lost, Patience};
 pub use note::{Note, Topic};
 pub use path::{DiagPath, DiagnosticPath};
-pub use record::{BootSmokePassed, MAX_PAYLOAD, PreviousPanic, Record};
+pub use record::{BootSmokePassed, MAX_PAYLOAD, PreviousPanic, Record, SecondaryReady};
 pub use text::Name;
 
 #[cfg(test)]

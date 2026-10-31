@@ -3,7 +3,8 @@
 //! chip the HAL selects through the platform port, whose build publishes its
 //! id as the port's `chip` metadata (`DEP_OER_ESPRESSIF_PLATFORM_PORT_CHIP`)
 //! (`oer_espressif_facts::generate::Vectors`):
-//! `vectors.rs`, `vector-tables.rs`, `vector-markers.rs`, `vectors.s` and the linker script fragment
+//! `vectors.rs`, `vector-tables.rs`, `vector-markers.rs`, `vectors.s`, the
+//! secondary harts' entries and roots (`secondary.s`, `secondary.rs`) and the linker script fragment
 //! `oer-staged-runtime-vectors.x`, which the runtime linker script includes
 //! from this build directory, a library search path of every image that
 //! links the runtime, and sets `chip_vectors`. Without a chip (host tests of
@@ -29,7 +30,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("cargo:rerun-if-changed={}", root.join(file).display());
     }
     let out = PathBuf::from(std::env::var_os("OUT_DIR").ok_or("cargo sets OUT_DIR")?);
+    // A chip with secondary harts has their generated entries: the PMA
+    // program and one `SECONDARY_ENTRY` per hart, and their Rust roots.
+    let (secondary_assembly, secondary_rust) = if vectors.secondaries().next().is_some() {
+        let pma = oer_espressif_facts::generate::Pma::of(&facts)?;
+        (vectors.secondary_assembly(&pma), vectors.secondary_rust())
+    } else {
+        (String::new(), String::new())
+    };
     for (name, text) in [
+        ("secondary.s", secondary_assembly),
+        ("secondary.rs", secondary_rust),
         ("vectors.rs", vectors.rust()?),
         ("vector-markers.rs", vectors.vector_markers()),
         ("vector-tables.rs", vectors.vector_tables()?),

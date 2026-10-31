@@ -12,6 +12,12 @@
 //! `unused = true`, and a bootstrap image's stack where the image has one.
 //! The gate proves an unused stack: nothing in the image starts the core,
 //! routes an interrupt to it or allocates it a byte.
+//!
+//! A secondary core may instead be a launch template (`launch = "declared"`
+//! on both its stacks): it runs only in an image that declares it
+//! (`[package.metadata.open-radio] harts`), which resolves the policy with
+//! [`StackPolicy::for_image`]; in every other image it is unused. Until then a
+//! template slot reads as unused.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -136,12 +142,63 @@ fn only_true<'de, D: serde::Deserializer<'de>>(
     }
 }
 
-impl<T> Slot<T> {
+/// A launch template's marker: the core runs only in an image that declares
+/// it.
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum Launch {
+    Declared,
+}
+
+/// A stack that may be a launch template.
+pub trait Launched {
+    fn launch(&self) -> Option<Launch>;
+    fn clear_launch(&mut self);
+}
+
+impl<T: Launched> Slot<T> {
+    /// The stack, if the image uses it; a launch template the image did not
+    /// declare reads as unused.
     pub fn used(&self) -> Option<&T> {
         match self {
-            Self::Used(stack) => Some(stack),
-            Self::Unused(_) => None,
+            Self::Used(stack) if stack.launch().is_none() => Some(stack),
+            Self::Used(_) | Self::Unused(_) => None,
         }
+    }
+
+    /// The launch template, before the image resolved it.
+    pub fn template(&self) -> Option<&T> {
+        match self {
+            Self::Used(stack) if stack.launch().is_some() => Some(stack),
+            Self::Used(_) | Self::Unused(_) => None,
+        }
+    }
+
+    /// What the slot is: 0 unused, 1 a launch template, 2 used.
+    fn kind(&self) -> u8 {
+        match self {
+            Self::Unused(_) => 0,
+            Self::Used(stack) if stack.launch().is_some() => 1,
+            Self::Used(_) => 2,
+        }
+    }
+}
+
+impl Launched for TaskStack {
+    fn launch(&self) -> Option<Launch> {
+        self.launch
+    }
+    fn clear_launch(&mut self) {
+        self.launch = None;
+    }
+}
+
+impl Launched for InterruptStack {
+    fn launch(&self) -> Option<Launch> {
+        self.launch
+    }
+    fn clear_launch(&mut self) {
+        self.launch = None;
     }
 }
 
@@ -173,6 +230,15 @@ pub struct TaskStack {
     /// the entry installs its own stack pointer before any stack access.
     #[serde(default)]
     pub handoff: Option<String>,
+    /// A secondary core's launch template: it runs only in an image that
+    /// declares it.
+    #[serde(default)]
+    pub launch: Option<Launch>,
+    /// A launch template's task allocation in an image that declares the
+    /// core: what an image without a proven bound links, and a proven image
+    /// links once before it sizes the stack from its bound.
+    #[serde(default)]
+    pub launch_bytes: Option<u32>,
 }
 
 /// Where a stack's capacity comes from.
@@ -230,14 +296,18 @@ impl TaskStack {
         if self.minimum_free_bytes == 0 {
             return Err(format!("`{name}` needs positive `minimum_free_bytes`").into());
         }
-        if self
-            .allocation_bytes
-            .is_some_and(|bytes| bytes % 16 != 0 || bytes <= self.minimum_free_bytes)
+        if [self.allocation_bytes, self.launch_bytes]
+            .into_iter()
+            .flatten()
+            .any(|bytes| bytes % 16 != 0 || bytes <= self.minimum_free_bytes)
         {
             return Err(format!(
                 "`{name}` allocation must be aligned to 16 bytes and exceed its reserve"
             )
             .into());
+        }
+        if self.launch.is_some() && self.launch_bytes.is_none() {
+            return Err(format!("`{name}`: a launch template names its `launch_bytes`").into());
         }
         Ok(())
     }
@@ -251,6 +321,9 @@ pub struct InterruptStack {
     /// This hart's maximum interrupt allocation; absent uses the chip contract.
     #[serde(default)]
     pub allocation_bytes: Option<u32>,
+    /// A secondary core's launch template, as its task stack's.
+    #[serde(default)]
+    pub launch: Option<Launch>,
 }
 
 /// A policy that reuses a base policy (`extends`, relative to this file)
@@ -410,20 +483,34 @@ impl StackPolicy {
                     "bootstrap stack allocation cannot be overridden by a runtime policy".into(),
                 );
             }
+            if bootstrap.launch.is_some() {
+                return Err("the bootstrap stack is no launch template".into());
+            }
         }
         Ok(())
     }
 
-    /// Every hart has both stacks used or both explicitly unused.
+    /// Every hart has both stacks used, both launch templates or both
+    /// explicitly unused; core 0 is never a template.
     fn validate_cores(&self) -> Result<()> {
         for (expected, (&hart, stacks)) in self.core.iter().enumerate() {
             if hart as usize != expected {
                 return Err(format!("`core.{expected}` is missing from the stack policy").into());
             }
-            if stacks.task_stack.used().is_some() != stacks.interrupt_stack.used().is_some() {
-                return Err(format!("hart {hart} needs both stacks used or unused").into());
+            if stacks.task_stack.kind() != stacks.interrupt_stack.kind() {
+                return Err(format!(
+                    "hart {hart} needs both stacks used, both launch templates or both unused"
+                )
+                .into());
             }
-            if let Some(task) = stacks.task_stack.used() {
+            if hart == 0 && stacks.task_stack.template().is_some() {
+                return Err("core 0 runs every image; it is no launch template".into());
+            }
+            if let Some(task) = stacks
+                .task_stack
+                .used()
+                .or_else(|| stacks.task_stack.template())
+            {
                 task.validate(&format!("core.{hart}.task_stack"))?;
                 if task.handoff.is_some() {
                     return Err("`handoff` belongs to the bootstrap stack".into());
@@ -441,6 +528,81 @@ impl StackPolicy {
             }
         }
         Ok(())
+    }
+
+    /// This policy for an image that runs the harts `declared`: each launch
+    /// template a declared hart names becomes used, its task default the
+    /// template's `launch_bytes`, and every other template unused. A declared
+    /// hart without a stack policy of its own, or without a template, is
+    /// refused.
+    ///
+    /// # Errors
+    ///
+    /// A declared hart the policy does not name, one whose stacks are no
+    /// launch template and not used, or a resolved policy that does not
+    /// validate.
+    pub fn for_image(&self, declared: &[u32]) -> Result<Self> {
+        let mut policy = self.clone();
+        for &hart in declared {
+            let stacks = policy.core.get(&hart).ok_or_else(|| {
+                format!("the image declares hart {hart}, which the stack policy does not name")
+            })?;
+            if stacks.task_stack.used().is_none() && stacks.task_stack.template().is_none() {
+                return Err(format!(
+                    "the image declares hart {hart}, whose stacks are unused and no launch template"
+                )
+                .into());
+            }
+        }
+        for (&hart, stacks) in &mut policy.core {
+            let Some(bytes) = stacks
+                .task_stack
+                .template()
+                .and_then(|task| task.launch_bytes)
+            else {
+                continue;
+            };
+            if declared.contains(&hart) {
+                if let Slot::Used(stack) = &mut stacks.task_stack {
+                    stack.clear_launch();
+                }
+                if let Slot::Used(stack) = &mut stacks.interrupt_stack {
+                    stack.clear_launch();
+                }
+                if let Some(default) = policy.default_task_stack_bytes.get_mut(&hart) {
+                    *default = bytes;
+                }
+            } else {
+                stacks.task_stack = Slot::Unused(Unused { unused: true });
+                stacks.interrupt_stack = Slot::Unused(Unused { unused: true });
+            }
+        }
+        policy.validate()?;
+        Ok(policy)
+    }
+
+    /// The harts whose task stack the image uses, one bit per hart: the
+    /// stage-two header's used-hart word.
+    pub fn used_harts(&self) -> u32 {
+        self.core
+            .iter()
+            .filter(|(_, stacks)| stacks.task_stack.used().is_some())
+            .filter_map(|(&hart, _)| 1_u32.checked_shl(hart))
+            .fold(0, |mask, bit| mask | bit)
+    }
+
+    /// A used task stack's allocation: its own, else its hart's default, else
+    /// a resolved template's `launch_bytes`.
+    fn task_bytes(&self, hart: u32, stack: &TaskStack) -> Option<u32> {
+        stack
+            .allocation_bytes
+            .or_else(|| {
+                self.default_task_stack_bytes
+                    .get(&hart)
+                    .copied()
+                    .filter(|bytes| *bytes != 0)
+            })
+            .or(stack.launch_bytes)
     }
 
     /// Match the complete fact geometry and require its boot hart's stacks.
@@ -519,11 +681,10 @@ impl StackPolicy {
             for (kind, allocation) in [
                 (
                     "TASK",
-                    stacks.task_stack.used().map_or(Some(0), |stack| {
-                        stack
-                            .allocation_bytes
-                            .or_else(|| self.default_task_stack_bytes.get(&hart).copied())
-                    }),
+                    stacks
+                        .task_stack
+                        .used()
+                        .map_or(Some(0), |stack| self.task_bytes(hart, stack)),
                 ),
                 (
                     "IRQ",
@@ -600,11 +761,11 @@ impl StackPolicy {
         self.check_cores(base.facts.properties.cores, contract.boot_hart)?;
         let mut profile = base.clone();
         for (&hart, stacks) in &self.core {
-            if let Some(bytes) = stacks.task_stack.used().and_then(|stack| {
-                stack
-                    .allocation_bytes
-                    .or_else(|| self.default_task_stack_bytes.get(&hart).copied())
-            }) {
+            if let Some(bytes) = stacks
+                .task_stack
+                .used()
+                .and_then(|stack| self.task_bytes(hart, stack))
+            {
                 Self::set_task_stack_bytes(&mut profile, hart, bytes)?;
             }
         }
@@ -839,6 +1000,8 @@ mod tests {
             minimum_free_bytes: 4096,
             allocation_bytes: None,
             handoff: handoff.map(str::to_owned),
+            launch: None,
+            launch_bytes: None,
         };
         let mut policy = policy(None);
         policy.bootstrap_stack = Some(bootstrap(Some("_runtime_start")));
@@ -909,9 +1072,12 @@ mod tests {
                             minimum_free_bytes: 4096,
                             allocation_bytes: None,
                             handoff: None,
+                            launch: None,
+                            launch_bytes: None,
                         }),
                         interrupt_stack: Slot::Used(InterruptStack {
                             allocation_bytes: bytes,
+                            launch: None,
                         }),
                     },
                 ),
@@ -1214,5 +1380,114 @@ mod default_tests {
                 );
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod launch_tests {
+    use super::*;
+
+    const TEMPLATE: &str = "schema = 6\nmax_move_bytes = 4096\ncoverage_policy = 'c.toml'\n\
+        default_task_stack_bytes = { 0 = 65536, 1 = 0 }\n\
+        [core.0.task_stack]\nroot = 'runtime_main'\nstorage_symbol = 's'\n\
+        minimum_free_bytes = 4096\n[core.0.interrupt_stack]\n\
+        [core.1.task_stack]\nlaunch = 'declared'\nroot = 'runtime_secondary_main_h1'\n\
+        storage_symbol = 's1'\nminimum_free_bytes = 1024\nlaunch_bytes = 8192\n\
+        [core.1.interrupt_stack]\nlaunch = 'declared'\n";
+
+    fn parse(source: &str) -> Result<StackPolicy> {
+        let policy: StackPolicy = toml::from_str(source)?;
+        policy.validate()?;
+        Ok(policy)
+    }
+
+    #[test]
+    fn an_undeclared_template_is_unused_and_emits_zero_bytes() {
+        let raw = parse(TEMPLATE).unwrap();
+        // Unresolved, the template reads as unused.
+        assert_eq!(raw.unused_task_cores(), [1]);
+        let policy = raw.for_image(&[0]).unwrap();
+        assert_eq!(policy.unused_task_cores(), [1]);
+        assert_eq!(policy.unused_interrupt_cores(), [1]);
+        assert_eq!(policy.used_harts(), 0b01);
+        let environment = policy.runtime_environment();
+        for kind in ["TASK", "IRQ"] {
+            assert!(
+                environment.contains(&(format!("OPEN_RADIO_{kind}_STACK_HART1_BYTES"), "0".into()))
+            );
+        }
+        assert_eq!(policy.runtime_task_stacks().len(), 1);
+    }
+
+    #[test]
+    fn a_declared_template_is_used_with_its_launch_bytes_and_root() {
+        let policy = parse(TEMPLATE).unwrap().for_image(&[0, 1]).unwrap();
+        assert!(policy.unused_task_cores().is_empty());
+        assert!(policy.unused_interrupt_cores().is_empty());
+        assert_eq!(policy.used_harts(), 0b11);
+        let roots = policy.runtime_task_stacks();
+        assert_eq!(roots.len(), 2);
+        assert_eq!(roots[1].stack.root, "runtime_secondary_main_h1");
+        let environment = policy.runtime_environment();
+        assert!(environment.contains(&("OPEN_RADIO_TASK_STACK_HART1_BYTES".into(), "8192".into())));
+        // The interrupt stack takes the layout's contract maximum.
+        assert!(
+            !environment
+                .iter()
+                .any(|(key, _)| key == "OPEN_RADIO_IRQ_STACK_HART1_BYTES")
+        );
+        // A proven image sizes it from its bound: the template's bytes are no
+        // second source.
+        assert_eq!(policy.proven_task_stacks().unwrap().len(), 2);
+        let profile = policy
+            .runtime_profile(&crate::Profile::tracked("esp32s31").unwrap())
+            .unwrap();
+        assert_eq!(profile.facts.interrupts.as_ref().unwrap().harts, [0, 1]);
+    }
+
+    #[test]
+    fn a_declared_hart_without_a_template_or_policy_is_refused() {
+        let unused = TEMPLATE
+            .replace(
+                "launch = 'declared'\nroot = 'runtime_secondary_main_h1'\n\
+                 storage_symbol = 's1'\nminimum_free_bytes = 1024\nlaunch_bytes = 8192\n",
+                "unused = true\n",
+            )
+            .replace(
+                "[core.1.interrupt_stack]\nlaunch = 'declared'\n",
+                "[core.1.interrupt_stack]\nunused = true\n",
+            );
+        let policy = parse(&unused).unwrap();
+        assert!(policy.for_image(&[0, 1]).is_err());
+        assert!(policy.for_image(&[0]).is_ok());
+        assert!(parse(TEMPLATE).unwrap().for_image(&[0, 2]).is_err());
+    }
+
+    #[test]
+    fn a_template_needs_both_stacks_and_its_launch_bytes() {
+        for refused in [
+            TEMPLATE.replace("[core.1.interrupt_stack]\nlaunch = 'declared'\n", "[core.1.interrupt_stack]\n"),
+            TEMPLATE.replace("launch_bytes = 8192\n", ""),
+            TEMPLATE.replace("launch_bytes = 8192\n", "launch_bytes = 8200\n"),
+            TEMPLATE.replace("minimum_free_bytes = 4096\n[core.0.interrupt_stack]\n", "minimum_free_bytes = 4096\nlaunch = 'declared'\nlaunch_bytes = 8192\n[core.0.interrupt_stack]\nlaunch = 'declared'\n"),
+            TEMPLATE.replace("launch = 'declared'\nroot", "launch = 'eager'\nroot"),
+        ] {
+            assert!(parse(&refused).is_err(), "{refused}");
+        }
+    }
+
+    #[test]
+    fn the_chip_policy_holds_hart_1_as_a_template() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+        let policy = StackPolicy::load(&root.join("chips/esp32s31/platform/stack.toml")).unwrap();
+        assert_eq!(policy.used_harts(), 0b01);
+        let template = policy.core[&1].task_stack.template().unwrap();
+        assert_eq!(template.root, "runtime_secondary_main_h1");
+        let declared = policy.for_image(&[0, 1]).unwrap();
+        assert_eq!(declared.used_harts(), 0b11);
+        assert_eq!(
+            declared.default_task_stack_bytes[&1],
+            template.launch_bytes.unwrap()
+        );
     }
 }

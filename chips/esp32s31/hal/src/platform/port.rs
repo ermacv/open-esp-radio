@@ -98,6 +98,37 @@ impl port::Platform for Port {
     }
 }
 
+impl port::SecondaryStart for Port {
+    type Cores = cores::Cores;
+    type Permit = cores::LaunchPermit;
+    type Preconditions = crate::peripherals::reset_cause::ResetCauses;
+    type Released = cores::Released;
+    type StartError = cores::StartError;
+
+    #[inline(always)]
+    fn release(
+        cores: &mut cores::Cores,
+        permit: cores::LaunchPermit,
+        preconditions: Self::Preconditions,
+        entry: port::SecondaryEntry,
+    ) -> Result<cores::Released, cores::StartError> {
+        cores.start_secondary(permit, preconditions, entry)
+    }
+
+    #[inline(always)]
+    fn retire_boot_word(
+        cores: &mut cores::Cores,
+        released: &mut cores::Released,
+    ) -> Result<(), cores::StartError> {
+        cores.retire_boot_word(released)
+    }
+
+    #[inline(always)]
+    fn observations(error: cores::StartError) -> [u32; 3] {
+        error.observations()
+    }
+}
+
 impl port::ExecutorPlatform for Port {
     /// Sources of `FROM_CPU_INTR0..3`, in line order.
     const SOFTWARE_SOURCES: [u16; 4] = [

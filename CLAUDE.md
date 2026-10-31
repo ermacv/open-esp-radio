@@ -121,8 +121,10 @@ system these rules serve.
   Arithmetic on peer values names its overflow behavior with `checked_`,
   `wrapping_` or `saturating_` operations.
 - **Execution.** The critical section is hart-local; staged build/run checks
-  confine linked section entry points to the image's declared hart roots. The
-  public HAL cannot start or release a secondary hart. An interrupt handler
+  confine linked section entry points to the image's declared hart roots. A
+  secondary hart starts only through the image's declared hart set and the
+  root's one-shot launch permit, during boot, before executors; any failure
+  after release records and resets. An interrupt handler
   never shares a lock with a task. A task waker stays on its executor's hart;
   no waker crosses harts. Executor startup borrows the runtime's affine `Hart<H>` and const-checks its route's
   hart. Interrupt enable consumes pre-admission authority and returns the
