@@ -265,7 +265,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for BarrierBody {
             });
         }
         let Ok(owner) = owner
-            .disable(&mut |_| core::ops::ControlFlow::Continue(()))
+            .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
             .await
         else {
             panic!("disable")

@@ -546,14 +546,14 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id>> for Interrupted<'_> {
         }
         let mut terminals = Vec::new();
         let disabled = owner
-            .disable(&mut |event| {
+            .disable(None, &mut |event| {
                 terminals.push(LowerMacEvent::Terminal(event));
                 core::ops::ControlFlow::Continue(())
             })
             .await;
         if self.fault.is_some() {
             assert!(terminals.is_empty());
-            let Err(poisoned) = disabled else {
+            let Err(oer_radio_port::DisableFailed::Poisoned(poisoned)) = disabled else {
                 panic!("hardware uncertainty cannot return an ordinary owner")
             };
             Ended::fail_stop(poisoned.fail_stop(), ())
@@ -808,7 +808,7 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id>> for Teardown<'_> {
         match self.end {
             EndInstallation::Uninstall => Ended::uninstall(
                 owner
-                    .disable(&mut |_| core::ops::ControlFlow::Continue(()))
+                    .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
                     .await
                     .ok()
                     .unwrap(),
@@ -816,8 +816,8 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id>> for Teardown<'_> {
                 (),
             ),
             EndInstallation::PoisonedUninstall => {
-                let Err(poisoned) = owner
-                    .disable(&mut |_| core::ops::ControlFlow::Continue(()))
+                let Err(oer_radio_port::DisableFailed::Poisoned(poisoned)) = owner
+                    .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
                     .await
                 else {
                     panic!("expected poison")
@@ -909,7 +909,7 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id>> for ReenableGroup<'_> {
         numbers.set_last(&key, 41);
         let before = numbers.snapshot(&key);
         let disabled = owner
-            .disable(&mut |_| core::ops::ControlFlow::Continue(()))
+            .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
             .await
             .ok()
             .unwrap();
@@ -937,7 +937,7 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id>> for ReenableGroup<'_> {
         }
         Ended::uninstall(
             owner
-                .disable(&mut |_| core::ops::ControlFlow::Continue(()))
+                .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
                 .await
                 .ok()
                 .unwrap(),

@@ -82,6 +82,10 @@ pub struct RxMsdusCopied {
 /// the port retires, and the port retires only once the network returned
 /// every buffer.
 pub trait NetworkStop {
+    /// Whether a network takes the station's frames at all. A composition
+    /// without one makes the service refuse every MSDU at once, returning
+    /// its buffer, so nothing waits for a consumer that does not exist.
+    fn takes_frames(&self) -> bool;
     /// Begin stopping: take no new frame and drop every frame it holds.
     fn request_stop(&self);
     /// Ready once stopped, or once the participant was lost before it
@@ -100,6 +104,9 @@ pub struct NetworkStopLost;
 pub struct NoNetwork;
 
 impl NetworkStop for NoNetwork {
+    fn takes_frames(&self) -> bool {
+        false
+    }
     fn request_stop(&self) {}
     fn poll_stopped(
         &self,

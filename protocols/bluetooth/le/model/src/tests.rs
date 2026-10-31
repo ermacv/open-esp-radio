@@ -251,7 +251,7 @@ impl<Id: oer_radio_port::SlotIdentity> oer_radio_port::PortBody<Id, Backend<Id>>
             Err(f) => return oer_radio_port::Ended::fail_stop(f.fail_stop(), ()),
         };
         match owner
-            .disable(&mut |_| core::ops::ControlFlow::Continue(()))
+            .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
             .await
         {
             Ok(o) => oer_radio_port::Ended::uninstall(o, (), ()),

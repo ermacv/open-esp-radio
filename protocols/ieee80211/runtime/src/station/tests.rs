@@ -500,8 +500,13 @@ async fn yield_now() {
 struct TestNetwork {
     lost: Cell<bool>,
     requested: Cell<bool>,
+    /// The composition has no network.
+    absent: Cell<bool>,
 }
 impl NetworkStop for TestNetwork {
+    fn takes_frames(&self) -> bool {
+        !self.absent.get()
+    }
     fn request_stop(&self) {
         self.requested.set(true);
     }
@@ -1361,15 +1366,24 @@ where
                 .set(Some(world.air.disable_calls()));
             assert_eq!(world.observed.tokens_lost(), 0);
             if let Some(expected) = world.expected_drain.get() {
+                // A drain that ran out of the stop's deadline leaves no time
+                // for the disable: it expires at once, without a new bound,
+                // and the port stays quarantined. A lost participant fails
+                // before the deadline, and the disable still runs.
+                let quarantined = expected.cause == NetworkDrainCause::Deadline;
                 assert!(
-                    matches!(
-                        &end,
+                    match &end {
+                        ServiceEnd::Quarantined {
+                            fault: ServiceFault::NetworkDrain(failure),
+                            ..
+                        } => quarantined && *failure == expected,
                         ServiceEnd::Failed {
                             fault: ServiceFault::NetworkDrain(failure),
                             ..
-                        } if *failure == expected
-                    ),
-                    "the stop ends failed with its drain: {expected:?}"
+                        } => !quarantined && *failure == expected,
+                        _ => false,
+                    },
+                    "the stop ends with its drain: {expected:?}"
                 );
             }
             if matches!(&end, ServiceEnd::Stopped(_) | ServiceEnd::Failed { .. }) {
@@ -1421,7 +1435,7 @@ where
                         panic!("dropping a stopped service must leave its disabled owner usable");
                     };
                     let Ok(owner) = owner
-                        .disable(&mut |_| core::ops::ControlFlow::Continue(()))
+                        .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
                         .await
                     else {
                         panic!("the next epoch must also disable");
@@ -3393,6 +3407,39 @@ fn a_stop_waits_for_the_network_lent_buffers_until_its_deadline() {
 }
 
 #[test]
+fn without_a_network_a_received_msdu_returns_its_buffer_and_the_stop_ends_normally() {
+    run(StaSecurity::Open, |world| {
+        Box::pin(async move {
+            world.network.absent.set(true);
+            let mut seen = 0;
+            world.associate(&mut seen, false).await;
+            let source = [0x02, 0, 0, 0, 0, 0x08];
+            let mut open = protected_data(1, source, &[0xcd; 40]);
+            open[1] &= !0x40;
+            open.drain(24..32);
+            world.air.receive(&open, meta());
+            assert!(world.delivered().await.is_empty(), "nothing is queued");
+            assert_eq!(world.air.pending_rx(), 0, "the buffer went back at once");
+            assert_eq!(
+                world.observed.rx_msdus_refused(),
+                [RxMsdusRefused {
+                    too_long: 0,
+                    queue_full: 0,
+                    no_network: 1,
+                }]
+            );
+            let mut control = world.commands.take().unwrap();
+            control.stop(Instant::from_micros(u64::MAX));
+            world.commands.set(Some(control));
+            world
+                .notice(StaNotice::Disconnected(StaDisconnectReason::LocalRequest))
+                .await;
+            assert!(world.status().stopped || world.network.requested.get());
+        })
+    });
+}
+
+#[test]
 fn a_lost_stop_participant_fails_the_stop_before_its_deadline() {
     run(StaSecurity::Open, |world| {
         Box::pin(async move {
@@ -3522,6 +3569,7 @@ fn msdu_refusals_of_one_frame_aggregate_by_reason_whatever_their_order() {
         None,
         Some(MsduRefusal::TooLong),
         Some(MsduRefusal::QueueFull),
+        Some(MsduRefusal::NoNetwork),
     ] {
         count_refusal(&mut refused, refusal);
     }
@@ -3529,12 +3577,14 @@ fn msdu_refusals_of_one_frame_aggregate_by_reason_whatever_their_order() {
         refused,
         RxMsdusRefused {
             too_long: 1,
-            queue_full: 2
+            queue_full: 2,
+            no_network: 1,
         }
     );
     let mut saturated = RxMsdusRefused {
         too_long: u16::MAX,
         queue_full: 0,
+        no_network: 0,
     };
     count_refusal(&mut saturated, Some(MsduRefusal::TooLong));
     assert_eq!(saturated.too_long, u16::MAX);

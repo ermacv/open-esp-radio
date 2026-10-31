@@ -144,8 +144,8 @@ use oer_memory::{WakingSpscReceiver, WakingSpscSender};
 use oer_network_port::LentFrame;
 use oer_radio_port::Slot;
 use oer_radio_port::{
-    Disabled, Enabled, Ended, EventEnd, FailStopRequested, Failed, Owner, PoisonedOwner,
-    PortBackend,
+    DisableFailed, Disabled, Enabled, Ended, EventEnd, FailStopRequested, Failed, Owner,
+    PoisonedOwner, PortBackend,
 };
 use oer_time::{Instant, Timer};
 
@@ -580,6 +580,9 @@ pub enum ServiceFault<B: StationPort> {
     /// receive buffers, so the port cannot retire and its owners stay
     /// quarantined.
     NetworkDrain(NetworkDrainFailure),
+    /// The stop's deadline passed while the port disabled: it proved no
+    /// stop, and its owners stay quarantined.
+    StopDeadline,
 }
 
 /// A concrete output recipient. Events carry their original owners by value.
@@ -1498,6 +1501,9 @@ impl<
                 let phase = B::lend_phase(&mut lent);
                 self.serve(&mut arbiter, phase, io, timer, unwrap).await
             };
+            // One deadline for the whole stop: the network drain, the
+            // disable, the port's retirement and what follows it.
+            let mut stop_deadline = None;
             let next = match next {
                 Served::Stop | Served::Failed(_) => {
                     // The network returns its buffers before the port
@@ -1507,6 +1513,7 @@ impl<
                         (Served::Stop, Some(deadline)) => deadline,
                         _ => timer.now().saturating_add(io.stop.drain),
                     };
+                    stop_deadline = Some(deadline);
                     let drained = {
                         let mut lent = owner.phase();
                         let phase = B::lend_phase(&mut lent);
@@ -1525,8 +1532,10 @@ impl<
             };
             match next {
                 Served::Stop => {
-                    let owner = self.disable(&mut arbiter, owner, timer, custody).await;
-                    let end = stop_disabled(owner, custody);
+                    let owner = self
+                        .disable(&mut arbiter, owner, timer, custody, stop_deadline)
+                        .await;
+                    let end = stop_disabled(owner, custody, ServiceFault::StopDeadline);
                     let arbiter_end = match &end {
                         ServiceStop::Stopped(_) => ArbiterEnd::Stopped,
                         ServiceStop::Failed { .. }
@@ -1537,13 +1546,22 @@ impl<
                 }
                 Served::Failed(failure) => {
                     let fault = failure.retain_in(custody);
-                    let owner = self.disable(&mut arbiter, owner, timer, custody).await;
+                    let owner = self
+                        .disable(&mut arbiter, owner, timer, custody, stop_deadline)
+                        .await;
+                    // An expired disable keeps the original failure; its
+                    // `Deadline` cause is the lifecycle's.
                     let end = match owner {
                         Ok(owner) => ServiceStop::Failed {
                             owner: FailedInstallation { owner },
                             fault,
                         },
-                        Err(owner) => ServiceStop::Poisoned { owner, fault },
+                        Err(DisableFailed::Poisoned(owner)) => {
+                            ServiceStop::Poisoned { owner, fault }
+                        }
+                        Err(DisableFailed::Expired(request)) => {
+                            ServiceStop::Quarantined { request, fault }
+                        }
                     };
                     return (end, arbiter.finish(ArbiterEnd::PortFailed));
                 }
@@ -1572,24 +1590,33 @@ impl<
                     // Drained promises there can be no further terminal.
                     // A violating disable return stays sealed, never reaching a machine.
                     let mut sink = |terminal| retain_after_event_end::<B>(custody, terminal);
-                    let end = match owner.disable(&mut sink).await {
+                    // No stop deadline: the port's own bound ends this drain.
+                    let end = match owner.disable(None, &mut sink).await {
                         Ok(owner) => ServiceStop::Failed {
                             owner: FailedInstallation { owner },
                             fault,
                         },
-                        Err(owner) => ServiceStop::Poisoned { owner, fault },
+                        Err(DisableFailed::Poisoned(owner)) => {
+                            ServiceStop::Poisoned { owner, fault }
+                        }
+                        Err(DisableFailed::Expired(request)) => {
+                            ServiceStop::Quarantined { request, fault }
+                        }
                     };
                     return (end, arbiter.finish(ArbiterEnd::PortFailed));
                 }
                 Served::Retune(pending) => {
-                    let disabled = self.disable(&mut arbiter, owner, timer, custody).await;
-                    let disabled = match stop_disabled(disabled, custody) {
-                        ServiceStop::Stopped(owner) => owner,
-                        end => {
-                            self.pending.retune = Some(pending);
-                            return (end, arbiter.finish(ArbiterEnd::PortFailed));
-                        }
-                    };
+                    let disabled = self
+                        .disable(&mut arbiter, owner, timer, custody, None)
+                        .await;
+                    let disabled =
+                        match stop_disabled(disabled, custody, ServiceFault::StopDeadline) {
+                            ServiceStop::Stopped(owner) => owner,
+                            end => {
+                                self.pending.retune = Some(pending);
+                                return (end, arbiter.finish(ArbiterEnd::PortFailed));
+                            }
+                        };
                     (arbiter, owner) = match self
                         .enable(arbiter, disabled, Some(pending), io, timer)
                         .await
@@ -1742,12 +1769,13 @@ impl<
         owner: Owner<'p, 'id, B::SlotId, B::Backend, Enabled>,
         timer: &impl Timer,
         custody: &mut TerminalCustody<'id, B>,
+        deadline: oer_radio_port::StopDeadline,
     ) -> Result<
         Owner<'p, 'id, B::SlotId, B::Backend, Disabled>,
-        PoisonedOwner<'p, 'id, B::SlotId, B::Backend>,
+        DisableFailed<'p, 'id, B::SlotId, B::Backend>,
     > {
         let mut sink = |terminal| self.disable_terminal(arbiter, timer, custody, terminal);
-        owner.disable(&mut sink).await
+        owner.disable(deadline, &mut sink).await
     }
 
     /// Serve the running phase until the port must move, stop or failed.
@@ -2598,11 +2626,19 @@ impl<
         let mut first: Option<MsduPlan> = None;
         let mut several = false;
         let bytes = frame.bytes();
+        let takes = io.network.takes_frames();
         let result = self.station.receive(
             now,
             bytes,
             meta,
             |delivery| {
+                if !takes {
+                    // No network: the frame's buffer goes back at once.
+                    if counted {
+                        count_refusal(&mut refused, Some(MsduRefusal::NoNetwork));
+                    }
+                    return;
+                }
                 B::span(ServiceSpan::Queue, false);
                 if first.is_none() && !several {
                     first = Some(delivery.plan());
@@ -3493,10 +3529,24 @@ mod tests;
 fn stop_disabled<'p, 'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id>(
     owner: Result<
         Owner<'p, 'id, B::SlotId, B::Backend, Disabled>,
-        PoisonedOwner<'p, 'id, B::SlotId, B::Backend>,
+        DisableFailed<'p, 'id, B::SlotId, B::Backend>,
     >,
     custody: &TerminalCustody<'id, B>,
+    expired: ServiceFault<B>,
 ) -> ServiceStop<'p, 'id, B> {
+    let owner = match owner {
+        Ok(owner) => Ok(owner),
+        Err(DisableFailed::Poisoned(owner)) => Err(owner),
+        Err(DisableFailed::Expired(request)) => {
+            return ServiceStop::Quarantined {
+                request,
+                fault: match custody {
+                    TerminalCustody::Clear => expired,
+                    TerminalCustody::Quarantined(bank) => ServiceFault::Contract(bank.violation()),
+                },
+            };
+        }
+    };
     match (owner, custody) {
         (Ok(owner), TerminalCustody::Clear) => ServiceStop::Stopped(owner),
         (Ok(owner), TerminalCustody::Quarantined(bank)) => ServiceStop::Failed {
@@ -3519,12 +3569,14 @@ fn stop_disabled<'p, 'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id>(
 enum MsduRefusal {
     TooLong,
     QueueFull,
+    NoNetwork,
 }
 
 fn count_refusal(refused: &mut RxMsdusRefused, refusal: Option<MsduRefusal>) {
     match refusal {
         Some(MsduRefusal::TooLong) => refused.too_long = refused.too_long.saturating_add(1),
         Some(MsduRefusal::QueueFull) => refused.queue_full = refused.queue_full.saturating_add(1),
+        Some(MsduRefusal::NoNetwork) => refused.no_network = refused.no_network.saturating_add(1),
         None => {}
     }
 }

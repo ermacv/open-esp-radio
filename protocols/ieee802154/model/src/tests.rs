@@ -207,9 +207,10 @@ fn an_undelivered_admitted_permit_cannot_become_joined_hardware() {
                 });
             }
             let poisoned = owner
-                .disable(&mut |_| core::ops::ControlFlow::Continue(()))
+                .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
                 .await
                 .err()
+                .and_then(|failed| failed.into_poisoned().ok())
                 .expect("a foreign terminal preserves the real admitted owner");
             Ended::uninstall(poisoned, (), ())
         }
@@ -401,7 +402,7 @@ fn the_operation_permit_comes_back_before_its_terminal_is_handed_out() {
             };
             let _ = handle;
             let owner = owner
-                .disable(&mut |_| panic!("nothing is left"))
+                .disable(None, &mut |_| panic!("nothing is left"))
                 .await
                 .unwrap_or_else(|_| panic!("not poisoned"));
             oer_radio_port::Ended::uninstall(owner, (), ())
@@ -470,7 +471,7 @@ fn takers_of_the_operation_are_served_in_arrival_order_across_interfaces() {
                 assert!(poll_once(zero_second.as_mut()).is_ready());
             }
             let owner = owner
-                .disable(&mut |_| panic!("nothing is left"))
+                .disable(None, &mut |_| panic!("nothing is left"))
                 .await
                 .unwrap_or_else(|_| panic!("not poisoned"));
             oer_radio_port::Ended::uninstall(owner, (), ())
@@ -512,7 +513,7 @@ fn disable_hands_leftover_terminals_to_the_sink_and_takes_their_permits_back() {
             };
             let mut left = Vec::new();
             let owner = owner
-                .disable(&mut |event| {
+                .disable(None, &mut |event| {
                     left.push(event);
                     core::ops::ControlFlow::Continue(())
                 })
@@ -532,7 +533,7 @@ fn disable_hands_leftover_terminals_to_the_sink_and_takes_their_permits_back() {
                 assert!(poll_once(pin!(client.operation(&mut seat0))).is_ready());
             }
             let owner = owner
-                .disable(&mut |_| core::ops::ControlFlow::Continue(()))
+                .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
                 .await
                 .unwrap_or_else(|_| panic!("not poisoned"));
             oer_radio_port::Ended::uninstall(owner, (), ())
@@ -576,12 +577,13 @@ fn rejected_disable_terminal_and_later_events_remain_in_the_uninstalled_model() 
             }
             let mut offered = 0;
             let poisoned = owner
-                .disable(&mut |terminal| {
+                .disable(None, &mut |terminal| {
                     offered += 1;
                     core::ops::ControlFlow::Break(terminal)
                 })
                 .await
                 .err()
+                .and_then(|failed| failed.into_poisoned().ok())
                 .expect("the sink rejected its terminal");
             assert_eq!(offered, 1);
             assert!(
@@ -648,7 +650,7 @@ fn the_radio_receives_while_any_interface_asks_on_one_shared_channel() {
                 assert_eq!(handle.receiving(), None);
             }
             let owner = owner
-                .disable(&mut |_| core::ops::ControlFlow::Continue(()))
+                .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
                 .await
                 .unwrap_or_else(|_| panic!("not poisoned"));
             oer_radio_port::Ended::uninstall(owner, (), ())
@@ -720,7 +722,7 @@ fn a_window_is_a_wish_that_owes_no_event() {
                 assert!(poll_once(pin!(events.next_event())).is_pending());
             }
             let owner = owner
-                .disable(&mut |_| panic!("no window owes a terminal"))
+                .disable(None, &mut |_| panic!("no window owes a terminal"))
                 .await
                 .unwrap_or_else(|_| panic!("not poisoned"));
             oer_radio_port::Ended::uninstall(owner, (), ())
@@ -776,7 +778,7 @@ fn a_cancel_ends_the_operation_once() {
                 assert!(poll_once(pin!(client.operation(&mut seat1))).is_ready());
             }
             let owner = owner
-                .disable(&mut |_| core::ops::ControlFlow::Continue(()))
+                .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
                 .await
                 .unwrap_or_else(|_| panic!("not poisoned"));
             oer_radio_port::Ended::uninstall(owner, (), ())
@@ -848,11 +850,14 @@ fn a_radio_fault_ends_admitted_work_first_then_poisons() {
                 assert!(poll_once(pin!(client.operation(&mut seat0))).is_ready());
             }
             match owner
-                .disable(&mut |_| core::ops::ControlFlow::Continue(()))
+                .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
                 .await
             {
                 Ok(_) => panic!("a poisoned backend does not disable"),
-                Err(poisoned) => oer_radio_port::Ended::uninstall(poisoned, (), ()),
+                Err(oer_radio_port::DisableFailed::Expired(_)) => panic!("no stop deadline"),
+                Err(oer_radio_port::DisableFailed::Poisoned(poisoned)) => {
+                    oer_radio_port::Ended::uninstall(poisoned, (), ())
+                }
             }
         }
     }
@@ -954,7 +959,7 @@ fn a_reception_overflow_is_reported_once_and_loses_no_terminal() {
             // The sink gets the terminal alone, which the portable view reads.
             let mut ended = Vec::new();
             let owner = owner
-                .disable(&mut |event| {
+                .disable(None, &mut |event| {
                     ended.push(ModelEvents::<Id>::view(&event).ends());
                     core::ops::ControlFlow::Continue(())
                 })
@@ -1026,7 +1031,7 @@ fn pending_entries_hold_their_interface_slots_across_phases() {
                 Some([1, 2, 3, 4, 5, 6, 7, 8])
             );
             let mut owner = owner
-                .disable(&mut |_| core::ops::ControlFlow::Continue(()))
+                .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
                 .await
                 .unwrap_or_else(|_| panic!("not poisoned"))
                 .enable()
@@ -1060,7 +1065,7 @@ fn pending_entries_hold_their_interface_slots_across_phases() {
                 None
             );
             let owner = owner
-                .disable(&mut |_| core::ops::ControlFlow::Continue(()))
+                .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
                 .await
                 .unwrap_or_else(|_| panic!("not poisoned"));
             oer_radio_port::Ended::uninstall(owner, (), ())
@@ -1138,7 +1143,7 @@ fn settings_reach_the_radio_while_disabled_and_while_enabled() {
                 Some(0xabcd)
             );
             let mut owner = owner
-                .disable(&mut |_| core::ops::ControlFlow::Continue(()))
+                .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
                 .await
                 .unwrap_or_else(|_| panic!("not poisoned"));
             // The backend retains the interface's settings while disabled.
@@ -1236,7 +1241,7 @@ fn interface_settings_replace_latest_values_during_work_without_changing_its_sec
                 assert!(handle.complete_transmit(work.id(), TxStatus::Success));
             }
             let owner = owner
-                .disable(&mut |_| core::ops::ControlFlow::Continue(()))
+                .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
                 .await
                 .unwrap_or_else(|_| panic!("disabled"));
             oer_radio_port::Ended::uninstall(owner, (), ())
@@ -1430,7 +1435,7 @@ fn a_change_of_wish_wakes_waiting_receives_and_a_window_preempts() {
                 assert_eq!(handle.receiving(), Some(channel(20)));
             }
             let owner = owner
-                .disable(&mut |_| core::ops::ControlFlow::Continue(()))
+                .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
                 .await
                 .unwrap_or_else(|_| panic!("not poisoned"));
             oer_radio_port::Ended::uninstall(owner, (), ())
@@ -1475,7 +1480,7 @@ fn interfaces_moving_to_one_channel_admit_each_other() {
                 assert_eq!(parts_handle().receiving(), Some(channel(15)));
             }
             let owner = owner
-                .disable(&mut |_| core::ops::ControlFlow::Continue(()))
+                .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
                 .await
                 .unwrap_or_else(|_| panic!("not poisoned"));
             oer_radio_port::Ended::uninstall(owner, (), ())
@@ -1512,7 +1517,7 @@ fn removing_an_interface_keeps_its_pending_entries() {
                     .add_pending_short(slot, [7, 7])
             };
             let mut owner = owner
-                .disable(&mut |_| core::ops::ControlFlow::Continue(()))
+                .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
                 .await
                 .unwrap_or_else(|_| panic!("not poisoned"));
             let interface = owner.setup().remove(zero);
@@ -1550,7 +1555,7 @@ fn removing_an_interface_keeps_its_pending_entries() {
                 None
             );
             let owner = owner
-                .disable(&mut |_| core::ops::ControlFlow::Continue(()))
+                .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
                 .await
                 .unwrap_or_else(|_| panic!("not poisoned"));
             oer_radio_port::Ended::uninstall(owner, (), ())
@@ -1681,7 +1686,7 @@ fn a_running_phase_configures_sets_and_removes_an_interface() {
                 Some(0xbeef)
             );
             let mut owner = owner
-                .disable(&mut |_| core::ops::ControlFlow::Continue(()))
+                .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
                 .await
                 .unwrap_or_else(|_| panic!("not poisoned"));
             let _slot = owner.setup().remove(one);

@@ -377,7 +377,7 @@ impl<Id: SlotIdentity> PortBody<Id, Backend<Id>> for Operations {
             ));
         }
         let owner = match owner
-            .disable(&mut |terminal| {
+            .disable(None, &mut |terminal| {
                 if let Err(why) = returned(terminal, &mut access, &mut seen, &self.air) {
                     error = Some(why);
                 }

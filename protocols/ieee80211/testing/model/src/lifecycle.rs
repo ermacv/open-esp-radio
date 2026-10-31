@@ -2,6 +2,7 @@
 
 use super::*;
 use oer_ieee80211_contracts_port::{LowerMacEvent, LowerMacTerminal};
+use oer_radio_port::{DisableEnd, StopDeadline};
 
 type CompositionIdentity<Id, C, X> = PhantomData<fn(Id, C, X) -> (Id, C, X)>;
 
@@ -451,17 +452,26 @@ impl<Id: SlotIdentity, C: Ieee80211Capabilities, X: ModelContext> PortBackend<Id
         }
     }
 
+    /// The model reads the image clock, which only its owner advances: a
+    /// deadline is checked before the drain starts and at every poll of it.
     async fn disable<'a, 'p, S>(
         _call: Call,
         frontend: &'a mut Self::View<'p>,
+        deadline: StopDeadline,
         sink: &'a mut S,
-    ) -> Result<(), Poisoned<ModelFault>>
+    ) -> Result<(), DisableEnd<ModelFault>>
     where
         Self: 'p,
         Id: 'p,
         'p: 'a,
         S: FnMut(Self::Terminal<'p>) -> core::ops::ControlFlow<Self::Terminal<'p>>,
     {
+        let air = frontend.air.clone();
+        let expired = move || deadline.is_some_and(|deadline| air.monotonic_now() >= deadline);
+        // A deadline that passed already starts no drain.
+        if expired() {
+            return Err(DisableEnd::Expired);
+        }
         frontend
             .air
             .disables
@@ -472,9 +482,19 @@ impl<Id: SlotIdentity, C: Ieee80211Capabilities, X: ModelContext> PortBackend<Id
         held.air.wake_driver();
         poll_fn(move |cx| {
             if held.air.failed() {
-                return Poll::Ready(Err(Poisoned { cause: ModelFault }));
+                return Poll::Ready(Err(DisableEnd::Poisoned(Poisoned { cause: ModelFault })));
+            }
+            // Checked before the drain: a drain that completes only after
+            // the deadline issues no disabled owner.
+            if expired() {
+                return Poll::Ready(Err(DisableEnd::Expired));
             }
             if held.draining.get() || !held.commands.is_empty() || !held.recycled.is_empty() {
+                // The drain stays with the driver: at the deadline only the
+                // wait ends.
+                if expired() {
+                    return Poll::Ready(Err(DisableEnd::Expired));
+                }
                 held.body.set(Some(cx.waker().clone()));
                 held.air.wake_driver();
                 return Poll::Pending;
@@ -488,7 +508,9 @@ impl<Id: SlotIdentity, C: Ieee80211Capabilities, X: ModelContext> PortBackend<Id
                                 OwnedLowerMacTerminal::retain(terminal, &loan),
                             ));
                             held.poison();
-                            return Poll::Ready(Err(Poisoned { cause: ModelFault }));
+                            return Poll::Ready(Err(DisableEnd::Poisoned(Poisoned {
+                                cause: ModelFault,
+                            })));
                         }
                     }
                     OwnedLowerMacEvent::Received { mut frame, .. } => {
@@ -552,7 +574,12 @@ impl<Id: SlotIdentity, C: Ieee80211Capabilities, X: ModelContext> PortBackend<Id
     {
         Ok(())
     }
-    fn shutdown_bound<'s>(_: &Self::Frontend<'s>) -> impl Future<Output = ()> + use<'s, Id, C, X>
+    // The model's P2 owner answers in the same poll and the model has no
+    // timer to wait on; a test's own bound ends a model stop.
+    fn shutdown_bound<'s>(
+        _: &Self::Frontend<'s>,
+        _: StopDeadline,
+    ) -> impl Future<Output = ()> + use<'s, Id, C, X>
     where
         Self: 's,
         Id: 's,

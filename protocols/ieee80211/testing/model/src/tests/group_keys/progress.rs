@@ -287,7 +287,7 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id>> for Exercise<'_> {
         }
         let mut events = Vec::new();
         match owner
-            .disable(&mut |event| {
+            .disable(None, &mut |event| {
                 events.push(terminal(
                     LowerMacEvent::Terminal(event),
                     &mut resources.terminal_access,
@@ -300,7 +300,8 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id>> for Exercise<'_> {
                 self.record(owned, events, Vec::new(), None);
                 Ended::uninstall(disabled, (), ())
             }
-            Err(poisoned) => {
+            Err(oer_radio_port::DisableFailed::Expired(_)) => panic!("no stop deadline"),
+            Err(oer_radio_port::DisableFailed::Poisoned(poisoned)) => {
                 assert!(events.is_empty());
                 Ended::uninstall(poisoned, (), ())
             }
@@ -430,7 +431,7 @@ impl Exercise<'_> {
         }
         Ended::uninstall(
             owner
-                .disable(&mut |_| panic!("all terminals already returned"))
+                .disable(None, &mut |_| panic!("all terminals already returned"))
                 .await
                 .ok()
                 .unwrap(),

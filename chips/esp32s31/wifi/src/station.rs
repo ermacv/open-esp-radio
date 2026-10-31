@@ -500,13 +500,15 @@ pub async fn serve<W: Binding>(runner: StationRunner<W>, profile: Profile<W>) ->
     runner.frontend = poster;
     let exit = match front {
         Ok(front) => match rp::run_port(front, Body { runner, profile }).await {
-            rp::PortEnd::Uninstalled { joined, output } => {
-                // The exit is published only after the radio release ended.
+            rp::PortEnd::Uninstalled {
+                joined,
+                output,
+                deadline,
+            } => {
+                // The exit is published only after the radio release ended,
+                // or once the stop's deadline passed first.
                 let mut pending = retire.post(joined);
-                let released = core::future::poll_fn(|cx| pending.poll_answer(cx))
-                    .await
-                    .map_err(|lost| crate::failure::ReleaseCause::HandoffLost(lost.observations()))
-                    .and_then(|(_, released)| released);
+                let released = release_answer::<W>(&mut pending, deadline).await;
                 released_exit(output, released)
             }
             rp::PortEnd::FailStopped { outcome, output } => {
@@ -542,6 +544,22 @@ pub async fn serve<W: Binding>(runner: StationRunner<W>, profile: Profile<W>) ->
     // Every release and retirement step ended: Control reads this copy.
     stop.publish(exit);
     exit
+}
+
+/// The radio driver task's release answer, waited for until `deadline`
+/// ([`crate::release::within`]): an answer after it is never read, the
+/// release reports `Deadline`, and the spent poster is never reused.
+async fn release_answer<W: Binding>(
+    pending: &mut oer_memory::Awaiting<radio::Retire<W>, Result<(), crate::failure::ReleaseCause>>,
+    deadline: rp::StopDeadline,
+) -> Result<(), crate::failure::ReleaseCause> {
+    use crate::failure::ReleaseCause;
+    match crate::release::within(&EmbassyClock, deadline, |cx| pending.poll_answer(cx)).await {
+        Some(answer) => answer
+            .map_err(|lost| ReleaseCause::HandoffLost(lost.observations()))
+            .and_then(|(_, released)| released),
+        None => Err(ReleaseCause::Deadline),
+    }
 }
 
 /// An uninstalled station's exit once its radio release ended: a failed

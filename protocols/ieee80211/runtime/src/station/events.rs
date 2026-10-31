@@ -49,6 +49,8 @@ pub struct RxMsdusRefused {
     pub too_long: u16,
     /// MSDUs the full receive queue to the application did not take.
     pub queue_full: u16,
+    /// MSDUs of a composition without a network.
+    pub no_network: u16,
 }
 
 /// The sink a composition lends a station service: it takes the events of

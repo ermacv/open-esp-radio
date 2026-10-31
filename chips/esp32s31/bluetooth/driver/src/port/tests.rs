@@ -266,13 +266,16 @@ impl<Id: SlotIdentity> PortBody<Id, Backend<Id, TestDevice, Tracked>> for Body {
             }
         }
         if matches!(self.mode, Mode::SinkReject) {
-            let result = owner.disable(&mut ControlFlow::Break).await;
-            let Err(owner) = result else {
+            let result = owner.disable(None, &mut ControlFlow::Break).await;
+            let Err(oer_radio_port::DisableFailed::Poisoned(owner)) = result else {
                 panic!("rejecting terminal cannot disable normally")
             };
             Ended::fail_stop(owner.fail_stop(), ())
         } else {
-            match owner.disable(&mut |_| ControlFlow::Continue(())).await {
+            match owner
+                .disable(None, &mut |_| ControlFlow::Continue(()))
+                .await
+            {
                 Ok(owner) => Ended::uninstall(owner, (), ()),
                 Err(owner) => Ended::fail_stop(owner.fail_stop(), ()),
             }

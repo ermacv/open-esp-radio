@@ -136,7 +136,7 @@ impl<Id: SlotIdentity> PortBody<Id, Backend<Id>> for Exercise {
                         yield_once().await;
                     }
                 }
-                let disabled = match owner.disable(&mut consume).await {
+                let disabled = match owner.disable(None, &mut consume).await {
                     Ok(owner) => owner,
                     Err(failed) => {
                         return Ended::fail_stop(failed.fail_stop(), Err("configuration disable"));
@@ -201,7 +201,7 @@ async fn stop<'p, 'id, Id: SlotIdentity + 'id>(
     result: Result<Captured, &'static str>,
 ) -> Ended<Id, Backend<Id>, Result<Captured, &'static str>> {
     match owner
-        .disable(&mut |_| core::ops::ControlFlow::Continue(()))
+        .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
         .await
     {
         Ok(owner) => Ended::uninstall(owner, (), result),

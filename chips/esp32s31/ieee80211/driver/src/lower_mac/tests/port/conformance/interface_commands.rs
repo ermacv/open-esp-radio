@@ -106,7 +106,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for CommandBody {
                         barriers::yield_once().await;
                     }
                 }
-                let Ok(disabled) = owner.disable(&mut consume).await else {
+                let Ok(disabled) = owner.disable(None, &mut consume).await else {
                     panic!("disable drains the commands")
                 };
                 let Ok(enabled) = disabled.enable().await else {
@@ -143,7 +143,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for CommandBody {
             extra_terminal,
         });
         let Ok(owner) = owner
-            .disable(&mut |_| core::ops::ControlFlow::Continue(()))
+            .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
             .await
         else {
             panic!("disable")

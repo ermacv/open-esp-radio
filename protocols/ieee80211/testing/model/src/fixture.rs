@@ -86,7 +86,7 @@ where
             )
             .await;
         let report = match end {
-            PortEnd::Uninstalled { joined, output } => {
+            PortEnd::Uninstalled { joined, output, .. } => {
                 drop(joined);
                 Report::Joined(output)
             }

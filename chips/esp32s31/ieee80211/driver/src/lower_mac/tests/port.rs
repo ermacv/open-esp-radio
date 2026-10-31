@@ -604,7 +604,7 @@ where
             })
             .await
         {
-            radio::PortEnd::Uninstalled { joined, output } => {
+            radio::PortEnd::Uninstalled { joined, output, .. } => {
                 drop(joined);
                 Report::Uninstalled { output }
             }
@@ -756,7 +756,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for Exchange {
         }
         assert_eq!(outcomes.len(), self.expected);
         let owner = match owner
-            .disable(&mut |_| core::ops::ControlFlow::Continue(()))
+            .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
             .await
         {
             Ok(owner) => owner,
@@ -980,7 +980,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for SuspendBody {
             _ => {}
         }
         let owner = match owner
-            .disable(&mut |_| core::ops::ControlFlow::Continue(()))
+            .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
             .await
         {
             Ok(owner) => owner,
@@ -1099,7 +1099,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for GroupCycle {
             ));
         }
         let owner = match owner
-            .disable(&mut |_| core::ops::ControlFlow::Continue(()))
+            .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
             .await
         {
             Ok(owner) => owner,
@@ -1117,6 +1117,91 @@ fn every_group_mutation_has_a_finite_rx_cut_and_returns_its_permission_once() {
         Report::Uninstalled { .. }
     ));
     assert_eq!(observed.borrow().resumed_cuts, 4);
+}
+
+/// Enable, then disable by a stop deadline: one that passed already, or
+/// one that passes while a held publication keeps the drain open.
+struct DisableBy {
+    clock: TestTimer,
+    observed: Rc<RefCell<Observed>>,
+    during: bool,
+}
+impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for DisableBy {
+    type Output = bool;
+    async fn run<'p, 'id>(
+        self,
+        owner: radio::Owner<'p, 'id, Id, Backend<Id>, radio::Disabled>,
+        resources: Res<'id, Id>,
+    ) -> radio::Ended<Id, Backend<Id>, bool>
+    where
+        Backend<Id>: 'id,
+        Id: 'id,
+        'id: 'p,
+    {
+        let mut owner = match owner.enable().await {
+            Ok(owner) => owner,
+            Err(_) => panic!("enable"),
+        };
+        let deadline = if self.during {
+            self.observed.borrow_mut().held_queues = [true; 4];
+            let mut phase = owner.phase();
+            let [buffer, ..] = resources.buffers;
+            let [ticket, ..] = resources.tickets;
+            submit_mpdu(&mut phase, buffer, ticket, None, None);
+            self.clock
+                .now()
+                .saturating_add(oer_time::Duration::from_millis(1))
+        } else {
+            self.clock.now()
+        };
+        let stops = self.observed.borrow().stops;
+        let mut sink = |_| core::ops::ControlFlow::Continue(());
+        let mut disable = pin!(owner.disable(Some(deadline), &mut sink));
+        let mut advanced = false;
+        let disabled = core::future::poll_fn(|cx| {
+            let polled = disable.as_mut().poll(cx);
+            if polled.is_pending() && !advanced {
+                // The drain is open: the deadline passes during it.
+                assert!(self.during, "a passed deadline ends at once");
+                advanced = true;
+                self.clock
+                    .0
+                    .advance(oer_time::Duration::from_millis(1))
+                    .expect("advance clock");
+                cx.waker().wake_by_ref();
+            }
+            polled
+        })
+        .await;
+        let request = match disabled {
+            Err(radio::DisableFailed::Expired(request)) => request,
+            Ok(_) => panic!("drained (during={})", self.during),
+            Err(radio::DisableFailed::Poisoned(owner)) => {
+                panic!("poisoned {:?} (during={})", owner.cause(), self.during)
+            }
+        };
+        assert_eq!(request.deadline(), Some(deadline));
+        if !self.during {
+            assert_eq!(self.observed.borrow().stops, stops, "no drain started");
+        }
+        radio::Ended::fail_stop(request, true)
+    }
+}
+#[test]
+fn a_disable_past_its_stop_deadline_starts_nothing_and_fail_stops() {
+    for during in [false, true] {
+        let (backend, observed, clock) = installed(Vec::new());
+        let report = block_on(run_body(
+            backend,
+            DisableBy {
+                clock,
+                observed,
+                during,
+            },
+        ));
+        // Expired disables prove no stop and issue no disabled owner.
+        assert!(matches!(report, Report::FailStopped { output: true, .. }));
+    }
 }
 
 struct Expire {
@@ -1165,7 +1250,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for Expire {
             resources.gate = phase.open_gate(gate);
         }
         let owner = match owner
-            .disable(&mut |_| core::ops::ControlFlow::Continue(()))
+            .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
             .await
         {
             Ok(owner) => owner,
@@ -1286,7 +1371,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for ReceiveBody {
             return radio::Ended::fail_stop(owner.fail_stop(), ());
         }
         let owner = match owner
-            .disable(&mut |_| core::ops::ControlFlow::Continue(()))
+            .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
             .await
         {
             Ok(owner) => owner,
@@ -1480,7 +1565,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for Protected {
             assert_eq!(self.dropped.get(), 1);
         }
         let owner = match owner
-            .disable(&mut |_| core::ops::ControlFlow::Continue(()))
+            .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
             .await
         {
             Ok(owner) => owner,
@@ -1618,7 +1703,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for Tune {
         );
         let owner = owner.enable().await.ok().expect("enable");
         let owner = owner
-            .disable(&mut |_| core::ops::ControlFlow::Continue(()))
+            .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
             .await
             .ok()
             .expect("disable");
@@ -1665,6 +1750,7 @@ where
         let radio::PortEnd::Uninstalled {
             joined,
             output: first,
+            ..
         } = first
         else {
             panic!("first installation joins");
@@ -1686,6 +1772,7 @@ where
         let radio::PortEnd::Uninstalled {
             joined,
             output: second,
+            ..
         } = second
         else {
             panic!("second installation joins");

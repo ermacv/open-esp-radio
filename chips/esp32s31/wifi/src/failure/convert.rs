@@ -29,6 +29,7 @@ where
             }
         }
         ServiceFault::NetworkDrain(failure) => StationFailure::NetworkDrain(network_drain(failure)),
+        ServiceFault::StopDeadline => StationFailure::StopDeadline,
     }
 }
 

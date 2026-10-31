@@ -13,7 +13,32 @@ use core::{
     marker::PhantomData,
     ops::{Deref, DerefMut},
 };
-use oer_time::RadioInstant;
+use oer_time::{Instant, RadioInstant};
+
+/// The latest monotonic time, on the backend's clock, by which a stop must
+/// have ended; `None` leaves only the backend's own bounds. Each later stage
+/// of the same stop waits at most until it: no stage starts a new full
+/// bound after an earlier one.
+pub type StopDeadline = Option<Instant>;
+
+/// The earlier of two stop deadlines.
+pub fn earliest(first: StopDeadline, second: StopDeadline) -> StopDeadline {
+    match (first, second) {
+        (Some(first), Some(second)) => Some(first.min(second)),
+        (deadline, None) | (None, deadline) => deadline,
+    }
+}
+
+/// Why a backend's disable ended without confirming its drain.
+#[derive(Debug)]
+pub enum DisableEnd<F> {
+    /// The installation is poisoned with this cause.
+    Poisoned(Poisoned<F>),
+    /// The stop's deadline passed first, before or during the drain. The
+    /// backend keeps every owner it did not return; nothing is proved
+    /// stopped.
+    Expired,
+}
 /// Authority to synchronously quarantine an installation.
 #[must_use = "quarantine the installation and return its outcome"]
 pub struct Quarantine {
@@ -144,11 +169,18 @@ pub trait PortBackend<Id: SlotIdentity>: SlotBodyOwner<Id> {
     /// End admitted work within the bound and return its terminals.
     /// A rejecting sink returns its terminal by value; retain it and poison.
     /// The concrete sink remains exclusively borrowed until the future ends.
+    /// A drain that waits ends at `deadline` with [`DisableEnd::Expired`]
+    /// by itself, the deadline checked before each poll of the drain so that
+    /// one completing only after it issues no disabled owner, and a backend with a clock refuses a deadline that passed
+    /// before the call the same way without starting; its owners stay in
+    /// the backend, which never relies on the future being dropped. A
+    /// backend whose drain never waits completes it in its first poll.
     fn disable<'a, 'p, S>(
         call: Call,
         view: &'a mut Self::View<'p>,
+        deadline: StopDeadline,
         sink: &'a mut S,
-    ) -> impl Future<Output = Result<(), Poisoned<Self::Fault>>> + 'a
+    ) -> impl Future<Output = Result<(), DisableEnd<Self::Fault>>> + 'a
     where
         Self: 'p,
         Id: 'p,
@@ -184,9 +216,13 @@ pub trait PortBackend<Id: SlotIdentity>: SlotBodyOwner<Id> {
     where
         Self: 's,
         Id: 's;
-    /// Create the named stop/join deadline, armed on its first poll.
+    /// Create the named stop/join deadline, armed on its first poll, ending
+    /// at the earlier of the backend's bound and `deadline`.
     /// The future cannot borrow the frontend value; backing `'s` outlives it.
-    fn shutdown_bound<'s>(raw: &Self::Frontend<'s>) -> impl Future<Output = ()> + use<'s, Id, Self>
+    fn shutdown_bound<'s>(
+        raw: &Self::Frontend<'s>,
+        deadline: StopDeadline,
+    ) -> impl Future<Output = ()> + use<'s, Id, Self>
     where
         Self: 's,
         Id: 's;
@@ -225,6 +261,8 @@ pub enum PortEnd<Id: SlotIdentity, Out> {
         joined: Joined<Id>,
         /// Body's result after all of its loans ended.
         output: Out,
+        /// The stop's deadline, for the steps after the join.
+        deadline: StopDeadline,
     },
     /// Body requested cleanup or ordinary retirement missed its deadline.
     FailStopped {
@@ -271,21 +309,27 @@ pub fn run_port<'s, Id: SlotIdentity + 's, B: PortBackend<Id> + 's, P: PortBody<
                 .await
         }
     }
-    // Construct the bound without borrowing raw frontend state across a body
-    // loan. Only this lifecycle supervisor waits for a stop or join answer.
-    let bound = B::shutdown_bound(frontend.ports());
+    // Only this lifecycle supervisor waits for a stop or join answer. Its
+    // bound is constructed after the body, without borrowing raw frontend
+    // state across a body loan, so that it keeps the body's stop deadline.
     let signals = frontend.lifecycle_signal();
     async move {
         // End the body's future and its temporary Ended before retaining
         // the one output across the supervisor's single bounded wait.
-        let Ended { end, output, .. } = match frontend.run_body(BodyAdapter { signals, body }).await
-        {
+        let Ended {
+            end,
+            output,
+            deadline,
+            ..
+        } = match frontend.run_body(BodyAdapter { signals, body }).await {
             Ok(ended) => ended,
             Err(cause) => {
+                let bound = B::shutdown_bound(frontend.ports(), None);
                 let outcome = frontend.abandon().wait_failure_within(bound).await;
                 return PortEnd::Abandoned { outcome, cause };
             }
         };
+        let bound = B::shutdown_bound(frontend.ports(), deadline);
         let result = match end {
             BodyEnd::Uninstall(control) => {
                 if B::request_uninstall(frontend.ports(), control).is_ok() {
@@ -297,7 +341,11 @@ pub fn run_port<'s, Id: SlotIdentity + 's, B: PortBackend<Id> + 's, P: PortBody<
             BodyEnd::FailStopRequested => Err(frontend.abandon().wait_failure_within(bound).await),
         };
         match result {
-            Ok(joined) => PortEnd::Uninstalled { joined, output },
+            Ok(joined) => PortEnd::Uninstalled {
+                joined,
+                output,
+                deadline,
+            },
             Err(outcome) => PortEnd::FailStopped { outcome, output },
         }
     }
@@ -312,40 +360,52 @@ enum BodyEnd<C> {
 pub struct Ended<Id: SlotIdentity, B: PortBackend<Id>, Out> {
     end: BodyEnd<B::Uninstall>,
     output: Out,
+    deadline: StopDeadline,
     identity: PhantomData<fn(Id) -> Id>,
 }
 /// Affine notification that cleanup was requested; contains no stop outcome.
 #[must_use = "forward the request through Ended::fail_stop"]
 pub struct FailStopRequested<Id: SlotIdentity, B: PortBackend<Id>> {
+    deadline: StopDeadline,
     identity: PhantomData<fn(Id, B) -> (Id, B)>,
+}
+impl<Id: SlotIdentity, B: PortBackend<Id>> FailStopRequested<Id, B> {
+    /// The stop's deadline the request keeps.
+    pub fn deadline(&self) -> StopDeadline {
+        self.deadline
+    }
 }
 impl<Id: SlotIdentity, B: PortBackend<Id>, Out> Ended<Id, B, Out> {
     /// Consume disabled or poisoned authority and publish normal uninstall on return.
+    /// The supervisor's join waits at most until the owner's stop deadline.
     pub fn uninstall(
         owner: impl UninstallOwner<Id, B>,
         control: B::Uninstall,
         output: Out,
     ) -> Self {
-        owner.disarm();
+        let deadline = owner.disarm();
         Self {
             end: BodyEnd::Uninstall(control),
             output,
+            deadline,
             identity: PhantomData,
         }
     }
     /// Forward a synchronous request; the supervisor obtains the actual outcome.
     pub fn fail_stop(request: FailStopRequested<Id, B>, output: Out) -> Self {
-        let FailStopRequested { .. } = request;
+        let FailStopRequested { deadline, .. } = request;
         Self {
             end: BodyEnd::FailStopRequested,
             output,
+            deadline,
             identity: PhantomData,
         }
     }
 }
 mod sealed {
     pub trait Uninstall {
-        fn disarm(self);
+        /// End the authority without a cancellation; its stop deadline.
+        fn disarm(self) -> super::StopDeadline;
     }
 }
 /// Closed disabled/poisoned authority; enabled owners must first disable.
@@ -355,14 +415,16 @@ impl<Id: SlotIdentity, B: PortBackend<Id>> UninstallOwner<Id, B>
 {
 }
 impl<Id: SlotIdentity, B: PortBackend<Id>> sealed::Uninstall for Owner<'_, '_, Id, B, Disabled> {
-    fn disarm(self) {
+    fn disarm(self) -> StopDeadline {
         self.sentry.disarm();
+        self.deadline
     }
 }
 impl<Id: SlotIdentity, B: PortBackend<Id>> UninstallOwner<Id, B> for PoisonedOwner<'_, '_, Id, B> {}
 impl<Id: SlotIdentity, B: PortBackend<Id>> sealed::Uninstall for PoisonedOwner<'_, '_, Id, B> {
-    fn disarm(self) {
+    fn disarm(self) -> StopDeadline {
         self.sentry.disarm();
+        self.deadline
     }
 }
 struct Sentry<'a> {
@@ -392,6 +454,8 @@ impl Drop for Sentry<'_> {
 pub struct Owner<'a, 'p, Id: SlotIdentity + 'p, B: PortBackend<Id> + 'p, State> {
     view: &'a mut B::View<'p>,
     sentry: Sentry<'a>,
+    /// The stop deadline a disable set; every later stage keeps it.
+    deadline: StopDeadline,
     state: PhantomData<State>,
 }
 impl<'a, 'p, Id: SlotIdentity + 'p, B: PortBackend<Id> + 'p, State> Owner<'a, 'p, Id, B, State> {
@@ -402,8 +466,13 @@ impl<'a, 'p, Id: SlotIdentity + 'p, B: PortBackend<Id> + 'p, State> Owner<'a, 'p
                 signals,
                 armed: true,
             },
+            deadline: None,
             state: PhantomData,
         }
+    }
+    /// The stop deadline this owner keeps.
+    pub fn deadline(&self) -> StopDeadline {
+        self.deadline
     }
     /// Read the backend's radio coordinate without changing admission.
     pub fn now(
@@ -413,11 +482,13 @@ impl<'a, 'p, Id: SlotIdentity + 'p, B: PortBackend<Id> + 'p, State> Owner<'a, 'p
     }
     /// Publish quarantine and wake P2 immediately, without waiting or hardware access.
     pub fn fail_stop(self) -> FailStopRequested<Id, B> {
+        let deadline = self.deadline;
         self.sentry
             .signals
             .request_failure(crate::LifecycleError::FailStopRequested);
         self.sentry.disarm();
         FailStopRequested {
+            deadline,
             identity: PhantomData,
         }
     }
@@ -429,17 +500,24 @@ impl<'a, 'p, Id: SlotIdentity + 'p, B: PortBackend<Id> + 'p> Owner<'a, 'p, Id, B
     }
     /// Consume disabled authority, preserving it on refusal and ending it on poison.
     pub async fn enable(self) -> Result<Owner<'a, 'p, Id, B, Enabled>, Failed<'a, 'p, Id, B>> {
-        let Self { view, sentry, .. } = self;
+        let Self {
+            view,
+            sentry,
+            deadline,
+            ..
+        } = self;
         match B::enable(Call::new(), view).await {
             Ok(Ok(())) => Ok(Owner {
                 view,
                 sentry,
+                deadline,
                 state: PhantomData,
             }),
             Ok(Err(refusal)) => Err(Failed::Refused(
                 Owner {
                     view,
                     sentry,
+                    deadline,
                     state: PhantomData,
                 },
                 refusal,
@@ -448,6 +526,7 @@ impl<'a, 'p, Id: SlotIdentity + 'p, B: PortBackend<Id> + 'p> Owner<'a, 'p, Id, B
                 _view: view,
                 sentry,
                 cause: poisoned.cause,
+                deadline,
             })),
         }
     }
@@ -457,26 +536,77 @@ impl<'a, 'p, Id: SlotIdentity + 'p, B: PortBackend<Id> + 'p> Owner<'a, 'p, Id, B
     pub fn phase(&mut self) -> Lent<'_, B::Phase<'_, 'p>> {
         Lent::new(B::phase(Call::new(), self.view))
     }
-    /// Drain admitted owners to the sink within the backend transition bound.
+    /// Drain admitted owners to the sink within the backend transition
+    /// bound and by `deadline`, which the owner keeps for every later stage
+    /// of this stop (the earlier of it and one set before).
+    ///
+    /// At the deadline the installation's failure is published as
+    /// [`LifecycleError::Deadline`](crate::LifecycleError::Deadline) before
+    /// anything else can publish a cause, and only a fail-stop request
+    /// remains: no disabled owner is issued without the backend's drain.
     pub async fn disable<S>(
         self,
+        deadline: StopDeadline,
         sink: &mut S,
-    ) -> Result<Owner<'a, 'p, Id, B, Disabled>, PoisonedOwner<'a, 'p, Id, B>>
+    ) -> Result<Owner<'a, 'p, Id, B, Disabled>, DisableFailed<'a, 'p, Id, B>>
     where
         S: FnMut(B::Terminal<'p>) -> core::ops::ControlFlow<B::Terminal<'p>>,
     {
-        let Self { view, sentry, .. } = self;
-        match B::disable(Call::new(), view, sink).await {
+        let Self {
+            view,
+            sentry,
+            deadline: kept,
+            ..
+        } = self;
+        let deadline = earliest(kept, deadline);
+        match B::disable(Call::new(), view, deadline, sink).await {
             Ok(()) => Ok(Owner {
                 view,
                 sentry,
+                deadline,
                 state: PhantomData,
             }),
-            Err(poisoned) => Err(PoisonedOwner {
+            Err(DisableEnd::Poisoned(poisoned)) => Err(DisableFailed::Poisoned(PoisonedOwner {
                 _view: view,
                 sentry,
                 cause: poisoned.cause,
-            }),
+                deadline,
+            })),
+            Err(DisableEnd::Expired) => {
+                sentry
+                    .signals
+                    .request_failure(crate::LifecycleError::Deadline);
+                sentry.disarm();
+                Err(DisableFailed::Expired(FailStopRequested {
+                    deadline,
+                    identity: PhantomData,
+                }))
+            }
+        }
+    }
+}
+/// A disable that did not drain.
+pub enum DisableFailed<'a, 'p, Id: SlotIdentity + 'p, B: PortBackend<Id> + 'p> {
+    /// Poisoned frontend authority, with its published cause.
+    Poisoned(PoisonedOwner<'a, 'p, Id, B>),
+    /// The stop's deadline passed; `Deadline` is published and the backend
+    /// keeps its owners in quarantine.
+    Expired(FailStopRequested<Id, B>),
+}
+impl<'a, 'p, Id: SlotIdentity, B: PortBackend<Id>> DisableFailed<'a, 'p, Id, B> {
+    /// The poisoned owner, or the expired disable's fail-stop request.
+    pub fn into_poisoned(self) -> Result<PoisonedOwner<'a, 'p, Id, B>, FailStopRequested<Id, B>> {
+        match self {
+            Self::Poisoned(owner) => Ok(owner),
+            Self::Expired(request) => Err(request),
+        }
+    }
+    /// Request fail-stop from either outcome; an expired disable keeps its
+    /// `Deadline` cause.
+    pub fn fail_stop(self) -> FailStopRequested<Id, B> {
+        match self {
+            Self::Poisoned(owner) => owner.fail_stop(),
+            Self::Expired(request) => request,
         }
     }
 }
@@ -502,6 +632,7 @@ pub struct PoisonedOwner<'a, 'p, Id: SlotIdentity + 'p, B: PortBackend<Id> + 'p>
     _view: &'a mut B::View<'p>,
     sentry: Sentry<'a>,
     cause: B::Fault,
+    deadline: StopDeadline,
 }
 impl<Id: SlotIdentity, B: PortBackend<Id>> PoisonedOwner<'_, '_, Id, B> {
     /// The published fault cause.
@@ -510,11 +641,13 @@ impl<Id: SlotIdentity, B: PortBackend<Id>> PoisonedOwner<'_, '_, Id, B> {
     }
     /// Publish cleanup without waiting for the supervisor's actual answer.
     pub fn fail_stop(self) -> FailStopRequested<Id, B> {
+        let deadline = self.deadline;
         self.sentry
             .signals
             .request_failure(crate::LifecycleError::FailStopRequested);
         self.sentry.disarm();
         FailStopRequested {
+            deadline,
             identity: PhantomData,
         }
     }

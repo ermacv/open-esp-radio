@@ -285,6 +285,8 @@ struct NetworkStopState {
     requested: core::cell::Cell<bool>,
     stopped: core::cell::Cell<bool>,
     lost: core::cell::Cell<bool>,
+    /// The composition has no network: the station delivers no frame.
+    absent: core::cell::Cell<bool>,
     network: oer_sync::PriorityWaker,
     station: oer_sync::PriorityWaker,
 }
@@ -294,6 +296,7 @@ impl NetworkStopState {
             requested: core::cell::Cell::new(false),
             stopped: core::cell::Cell::new(false),
             lost: core::cell::Cell::new(false),
+            absent: core::cell::Cell::new(false),
             network: oer_sync::PriorityWaker::new(),
             station: oer_sync::PriorityWaker::new(),
         }
@@ -302,9 +305,13 @@ impl NetworkStopState {
         self.requested.set(false);
         self.stopped.set(false);
         self.lost.set(false);
+        self.absent.set(false);
     }
 }
 impl runtime::NetworkStop for NetworkStopState {
+    fn takes_frames(&self) -> bool {
+        !self.absent.get()
+    }
     fn request_stop(&self) {
         self.requested.set(true);
         self.network.wake();
@@ -344,9 +351,12 @@ impl NetworkStopper<'_> {
     pub fn stopped(self) {
         self.report(|state| &state.stopped);
     }
-    /// The composition has no network side: nothing takes the station's
-    /// frames, and its stop needs no answer.
-    pub fn no_network(self) {
+    /// The composition has no network side: it gives up the station's
+    /// network end, the station delivers no frame (each received MSDU's
+    /// buffer goes back at once), and its stop needs no answer.
+    pub fn no_network(self, network: Network<'_>) {
+        drop(network);
+        self.state.absent.set(true);
         self.report(|state| &state.stopped);
     }
     fn report(self, flag: impl FnOnce(&NetworkStopState) -> &core::cell::Cell<bool>) {
@@ -446,6 +456,8 @@ mod chip;
 mod dma;
 pub mod policy;
 mod reconnect;
+#[cfg(any(test, target_arch = "riscv32"))]
+mod release;
 pub use reconnect::{ReconnectPolicy, ZeroReconnectInterval};
 #[cfg(target_arch = "riscv32")]
 #[doc(hidden)]
@@ -535,8 +547,12 @@ mod tests {
         stopper.stopped();
         assert_eq!(state.poll_stopped(&mut cx), Poll::Ready(Ok(())));
         state.reset();
-        NetworkStopper { state: &state }.no_network();
+        let mut channels = Channels::new();
+        let (_, network, _, _) = channels.split().unwrap();
+        assert!(state.takes_frames());
+        NetworkStopper { state: &state }.no_network(network);
         assert_eq!(state.poll_stopped(&mut cx), Poll::Ready(Ok(())));
+        assert!(!state.takes_frames(), "no network takes no frame");
         state.reset();
         // Losing the stopper proves no stop of the application.
         drop(NetworkStopper { state: &state });

@@ -118,7 +118,7 @@ fn each_installation_and_retuned_phase_checks_its_own_channel() {
                 Report::Stopped(_)
             ));
             let mut source = source
-                .disable(&mut |_| core::ops::ControlFlow::Continue(()))
+                .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
                 .await
                 .ok()
                 .unwrap();
@@ -589,7 +589,7 @@ impl<Id: SlotIdentity, W: Work> PortBody<Id, ModelBackend<Id>> for Body<W> {
             self.0.work(&mut phase, resources).await;
         }
         match enabled
-            .disable(&mut |_| core::ops::ControlFlow::Continue(()))
+            .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
             .await
         {
             Ok(disabled) => Ended::uninstall(disabled, (), ()),

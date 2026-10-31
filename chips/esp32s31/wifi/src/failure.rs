@@ -18,6 +18,8 @@ pub enum StationFailure {
     },
     /// A requested stop's network drain failed.
     NetworkDrain(NetworkDrain),
+    /// The stop's deadline passed while the port disabled.
+    StopDeadline,
 }
 /// The station's ended service: its failure, and the network drain before
 /// the port retired when that failed too.
@@ -434,6 +436,10 @@ pub enum ReleaseCause {
     LeaveUnanswered([u32; 4]),
     /// The leave completed into a poisoned radio domain.
     DomainPoisoned(RadioPoison),
+    /// The stop's deadline passed before the radio driver task answered the
+    /// release. The task keeps what it was handed; a later answer is never
+    /// read, and nothing is reused.
+    Deadline,
 }
 #[cfg(any(test, target_arch = "riscv32"))]
 pub(crate) mod convert;

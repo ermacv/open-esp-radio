@@ -643,31 +643,67 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> PortBacken
     fn disable<'a, 'p, S>(
         _: radio::Call,
         view: &'a mut Self::View<'p>,
+        deadline: radio::StopDeadline,
         sink: &'a mut S,
-    ) -> impl Future<Output = Result<(), radio::Poisoned<Fault>>> + 'a
+    ) -> impl Future<Output = Result<(), radio::DisableEnd<Fault>>> + 'a
     where
         Self: 'p,
         Id: 'p,
         'p: 'a,
         S: FnMut(Terminal<'p, Id, D, B, O>) -> core::ops::ControlFlow<Terminal<'p, Id, D, B, O>>,
     {
-        view.held.want_enabled.set(false);
-        view.held.storage.driver.wake();
-        poll_fn(move |cx| {
-            view.held.storage.body.register(cx.waker());
-            loop {
-                match view.poll_disable() {
-                    Poll::Ready(Ok(Some(terminal))) => {
-                        if let core::ops::ControlFlow::Break(terminal) = sink(terminal) {
-                            return Poll::Ready(view.reject_disable(terminal));
+        let timer = view.held.timer.clone();
+        // A deadline that passed already starts no drain.
+        let passed = deadline.is_some_and(|deadline| timer.now() >= deadline);
+        if !passed {
+            view.held.want_enabled.set(false);
+            view.held.storage.driver.wake();
+        }
+        // The drain's progress stays in the held queues and the P2 driver:
+        // at the deadline only this wait ends, and every owner it did not
+        // return stays there for the fail-stop's quarantine.
+        async move {
+            if passed {
+                return Err(radio::DisableEnd::Expired);
+            }
+            let mut alarm = core::pin::pin!(async move {
+                match deadline {
+                    Some(deadline) => timer.wait_until(deadline).await,
+                    None => core::future::pending().await,
+                }
+            });
+            poll_fn(move |cx| {
+                view.held.storage.body.register(cx.waker());
+                // Checked before the drain: a drain that completes only
+                // after the deadline issues no disabled owner.
+                if alarm.as_mut().poll(cx).is_ready() {
+                    return Poll::Ready(Err(radio::DisableEnd::Expired));
+                }
+                loop {
+                    match view.poll_disable() {
+                        Poll::Ready(Ok(Some(terminal))) => {
+                            if let core::ops::ControlFlow::Break(terminal) = sink(terminal) {
+                                return Poll::Ready(
+                                    view.reject_disable(terminal)
+                                        .map_err(radio::DisableEnd::Poisoned),
+                                );
+                            }
+                        }
+                        Poll::Ready(Ok(None)) => return Poll::Ready(Ok(())),
+                        Poll::Ready(Err(error)) => {
+                            return Poll::Ready(Err(radio::DisableEnd::Poisoned(error)));
+                        }
+                        Poll::Pending => {
+                            return match alarm.as_mut().poll(cx) {
+                                Poll::Ready(()) => Poll::Ready(Err(radio::DisableEnd::Expired)),
+                                Poll::Pending => Poll::Pending,
+                            };
                         }
                     }
-                    Poll::Ready(Ok(None)) => return Poll::Ready(Ok(())),
-                    Poll::Ready(Err(error)) => return Poll::Ready(Err(error)),
-                    Poll::Pending => return Poll::Pending,
                 }
-            }
-        })
+            })
+            .await
+        }
     }
     async fn now<'a, 'p>(
         _: radio::Call,
@@ -694,6 +730,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> PortBacken
     #[allow(refining_impl_trait)]
     fn shutdown_bound<'s>(
         frontend: &Self::Frontend<'s>,
+        stop: radio::StopDeadline,
     ) -> impl Future<Output = ()> + use<Id, D, B, O>
     where
         Self: 's,
@@ -701,9 +738,9 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> PortBacken
     {
         let timer = frontend.timer.clone();
         async move {
-            timer
-                .wait_until(timer.now().saturating_add(SHUTDOWN_BOUND))
-                .await
+            let own = timer.now().saturating_add(SHUTDOWN_BOUND);
+            let deadline = radio::earliest(Some(own), stop).unwrap_or(own);
+            timer.wait_until(deadline).await
         }
     }
 }

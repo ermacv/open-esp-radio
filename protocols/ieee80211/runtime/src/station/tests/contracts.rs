@@ -165,11 +165,12 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps24, ServiceContext
                     owner,
                     &VirtualClock::<1>::new(),
                     &mut custody,
+                    None,
                 )
                 .await;
             CUSTODY_LIMIT.set(None);
             assert!(service.state.station.is_reclaiming());
-            let end = stop_disabled(ended, &custody).into_end(custody);
+            let end = stop_disabled(ended, &custody, ServiceFault::StopDeadline).into_end(custody);
             let (owner, custody) = match end {
                 ServiceEnd::Failed {
                     owner,
@@ -269,7 +270,7 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps24, ServiceContext
                 Err(BackendContractViolation::UnexpectedAccessPointTerminal)
             );
             owner
-                .disable(&mut |_| core::ops::ControlFlow::Continue(()))
+                .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
                 .await
                 .ok()
                 .unwrap()

@@ -70,7 +70,7 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id>> for OutcomeBody {
         };
         let result = exchange(&mut owner.phase(), resources, self.rate).await;
         let owner = match owner
-            .disable(&mut |_| core::ops::ControlFlow::Continue(()))
+            .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
             .await
         {
             Ok(owner) => owner,

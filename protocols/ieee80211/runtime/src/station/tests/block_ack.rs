@@ -173,7 +173,8 @@ fn a_full_receive_queue_reports_one_aggregate_per_refused_frame() {
         counters.rx_msdus_refused(),
         [RxMsdusRefused {
             too_long: 0,
-            queue_full: 1
+            queue_full: 1,
+            no_network: 0,
         }; 2]
     );
 }

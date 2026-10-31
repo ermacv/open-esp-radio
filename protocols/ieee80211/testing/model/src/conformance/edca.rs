@@ -196,7 +196,7 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id>> for Exercise {
         };
         let mut result = exchange(&mut owner.phase(), resources, &self).await;
         let disabled = owner
-            .disable(&mut |_| {
+            .disable(None, &mut |_| {
                 result = Err("extra EDCA terminal");
                 core::ops::ControlFlow::Continue(())
             })

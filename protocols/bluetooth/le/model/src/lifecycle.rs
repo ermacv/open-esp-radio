@@ -10,7 +10,7 @@ use core::{
 };
 use oer_bluetooth_le_port::{backend::OwnedSession, *};
 use oer_radio_port::*;
-use oer_time::{Duration, RadioInstant, Timer};
+use oer_time::{Clock as _, Duration, RadioInstant, Timer};
 
 type Composition<Id, X> = PhantomData<fn(Id, X) -> (Id, X)>;
 
@@ -298,8 +298,9 @@ impl<Id: SlotIdentity, X> PortBackend<Id> for Backend<Id, X> {
     async fn disable<'a, 'p, S>(
         _: Call,
         f: &'a mut Self::View<'p>,
+        deadline: StopDeadline,
         sink: &'a mut S,
-    ) -> Result<(), Poisoned<Fault>>
+    ) -> Result<(), DisableEnd<Fault>>
     where
         Self: 'p,
         Id: 'p,
@@ -308,16 +309,41 @@ impl<Id: SlotIdentity, X> PortBackend<Id> for Backend<Id, X> {
     {
         let q = f.shared;
         if let Some(cause) = q.fault.get() {
-            return Err(Poisoned { cause });
+            return Err(DisableEnd::Poisoned(Poisoned { cause }));
+        }
+        let clock = q
+            .attachment
+            .as_ref()
+            .map(|attachment| attachment.env.clone());
+        // A deadline that passed already starts no drain.
+        if let (Some(clock), Some(deadline)) = (&clock, deadline)
+            && clock.now() >= deadline
+        {
+            return Err(DisableEnd::Expired);
         }
         q.draining.set(true);
         q.wake_driver();
         let _wait = BodyWait(q);
+        let mut alarm = core::pin::pin!(async {
+            match (clock, deadline) {
+                (Some(clock), Some(deadline)) => clock.wait_until(deadline).await,
+                _ => core::future::pending().await,
+            }
+        });
         poll_fn(|cx| {
             q.body.register(cx.waker());
+            // Checked before the drain: a drain that completes only after
+            // the deadline issues no disabled owner.
+            if alarm.as_mut().poll(cx).is_ready() {
+                return Poll::Ready(Err(DisableEnd::Expired));
+            }
             // Only P2 settles admitted requests; this wait never serves them.
             if q.draining.get() {
-                return Poll::Pending;
+                // The drain stays with P2: at the deadline only the wait ends.
+                return match alarm.as_mut().poll(cx) {
+                    Poll::Ready(()) => Poll::Ready(Err(DisableEnd::Expired)),
+                    Poll::Pending => Poll::Pending,
+                };
             }
             loop {
                 let event = q.events.with(alloc::collections::VecDeque::pop_front);
@@ -331,9 +357,9 @@ impl<Id: SlotIdentity, X> PortBackend<Id> for Backend<Id, X> {
                     retained.capacity = capacity;
                     q.events.with(|events| events.push_front(retained));
                     q.poison(Fault::RejectedTerminal);
-                    return Poll::Ready(Err(Poisoned {
+                    return Poll::Ready(Err(DisableEnd::Poisoned(Poisoned {
                         cause: Fault::RejectedTerminal,
-                    }));
+                    })));
                 }
                 q.delivered(f.pool, id, capacity);
             }
@@ -381,7 +407,10 @@ impl<Id: SlotIdentity, X> PortBackend<Id> for Backend<Id, X> {
     {
         Ok(())
     }
-    fn shutdown_bound<'s>(f: &Self::Frontend<'s>) -> impl Future<Output = ()> + use<'s, Id, X>
+    fn shutdown_bound<'s>(
+        f: &Self::Frontend<'s>,
+        stop: StopDeadline,
+    ) -> impl Future<Output = ()> + use<'s, Id, X>
     where
         Self: 's,
         Id: 's,
@@ -397,6 +426,9 @@ impl<Id: SlotIdentity, X> PortBackend<Id> for Backend<Id, X> {
             };
             // Model profile input, not a promise about S31 hardware latency.
             let Some(deadline) = clock.now().checked_add(Duration::from_micros(1_000)) else {
+                return;
+            };
+            let Some(deadline) = oer_radio_port::earliest(Some(deadline), stop) else {
                 return;
             };
             clock.wait_until(deadline).await;

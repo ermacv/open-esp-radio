@@ -66,7 +66,7 @@ impl Fixture for ModelFixture {
                 )
                 .await;
             let (mut trace, joined) = match end {
-                PortEnd::Uninstalled { joined, output } => (output?, Some(joined)),
+                PortEnd::Uninstalled { joined, output, .. } => (output?, Some(joined)),
                 PortEnd::FailStopped { output, .. } => (output?, None),
                 PortEnd::Abandoned { .. } => return Err(Violation::Lifecycle),
             };
@@ -203,7 +203,7 @@ impl<Id: SlotIdentity> PortBody<Id, Backend<Id, Tag>> for Body {
         }
         let rejected = self.case == Case::RejectSink;
         let owner = owner
-            .disable(&mut |terminal| {
+            .disable(None, &mut |terminal| {
                 trace.events[0] = Some(Observation::capture(&terminal));
                 if rejected {
                     ControlFlow::Break(terminal)
@@ -464,7 +464,10 @@ impl<Id: SlotIdentity> PortBody<Id, Backend<Id, Tag>> for AirBody {
         if result.is_err() {
             return Ended::fail_stop(owner.fail_stop(), result);
         }
-        match owner.disable(&mut |_| ControlFlow::Continue(())).await {
+        match owner
+            .disable(None, &mut |_| ControlFlow::Continue(()))
+            .await
+        {
             Ok(owner) => Ended::uninstall(owner, (), result),
             Err(owner) => Ended::fail_stop(owner.fail_stop(), Err(Violation::Lifecycle)),
         }

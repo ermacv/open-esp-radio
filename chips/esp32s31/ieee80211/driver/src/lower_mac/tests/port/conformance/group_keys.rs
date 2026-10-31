@@ -149,7 +149,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for DisableBody {
             completed_at.set(self.timer.now());
             core::ops::ControlFlow::Continue(())
         };
-        let mut disable = pin!(owner.disable(&mut sink));
+        let mut disable = pin!(owner.disable(None, &mut sink));
         // Disable has begun while the change is still held, then the cut opens.
         let early = core::future::poll_fn(|cx| Poll::Ready(disable.as_mut().poll(cx))).await;
         assert!(early.is_pending() || self.applied);
@@ -334,7 +334,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for PublishedBody {
             });
         }
         let Ok(owner) = owner
-            .disable(&mut |_| core::ops::ControlFlow::Continue(()))
+            .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
             .await
         else {
             panic!("disable")
@@ -477,7 +477,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for ExpireBody {
             }
         }
         match owner
-            .disable(&mut |_| core::ops::ControlFlow::Continue(()))
+            .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
             .await
         {
             Ok(owner) => radio::Ended::uninstall(owner, (), ()),
@@ -608,7 +608,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for RollbackBody {
             }
         }
         match owner
-            .disable(&mut |_| core::ops::ControlFlow::Continue(()))
+            .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
             .await
         {
             Ok(owner) => radio::Ended::uninstall(owner, (), ()),
@@ -883,7 +883,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for CutBody {
             });
         }
         let Ok(owner) = owner
-            .disable(&mut |_| core::ops::ControlFlow::Continue(()))
+            .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
             .await
         else {
             panic!("disable")

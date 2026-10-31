@@ -243,7 +243,7 @@ impl<Id: SlotIdentity> PortBody<Id, Backend<Id>> for Body {
         assert!(io.input.is_empty());
         let output = trace.borrow().clone();
         let owner = owner
-            .disable(&mut |_| ControlFlow::Continue(()))
+            .disable(None, &mut |_| ControlFlow::Continue(()))
             .await
             .ok()
             .expect("model disable");

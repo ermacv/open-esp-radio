@@ -87,7 +87,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for ContinuousReceive {
             observed.continuous_rx = false;
         }
         let owner = owner
-            .disable(&mut |_| core::ops::ControlFlow::Continue(()))
+            .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
             .await
             .ok()
             .expect("model disable");
@@ -148,7 +148,7 @@ fn continuous_rx_yields_p2_and_returns_p1_buffers_within_a_virtual_time_bound() 
                 observed.borrow_mut().context = 1;
                 if let Poll::Ready(end) = p1.as_mut().poll(&mut Context::from_waker(&p1_waker)) {
                     let (joined, output) = match end {
-                        radio::PortEnd::Uninstalled { joined, output } => (joined, output),
+                        radio::PortEnd::Uninstalled { joined, output, .. } => (joined, output),
                         _ => panic!(
                             "clean RX uninstall: delivered={}, released={}, time={:?}",
                             observed.borrow().rx_delivered,

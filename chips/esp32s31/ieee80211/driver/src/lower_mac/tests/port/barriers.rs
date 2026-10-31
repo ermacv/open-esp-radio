@@ -115,7 +115,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for Barrier {
             assert_eq!(self.observed.borrow().publications, 1);
         }
         let owner = match owner
-            .disable(&mut |_| core::ops::ControlFlow::Continue(()))
+            .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
             .await
         {
             Ok(owner) => owner,
