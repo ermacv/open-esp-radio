@@ -32,7 +32,7 @@ chips/espressif/{analog, boot, coex, efuse, executor, facts, ieee80211-policy,
     ieee802154-engine, ieee802154-mac-values, interrupt-table, modem-clock,
     platform-port, staged-bootstrap, staged-layout, staged-runtime, usb-serial-jtag,
     watchdog}/
-firmware/apps/{boot-smoke, radio-root}/
+firmware/apps/{boot-smoke, radio-root, wifi-station}/
 firmware/bootstrap/esp32s31/
 firmware/probes/{esp32s31-facts, esp32s31-radio, esp32s31-register, esp32s31-rx-chain}/
 portable/{cooperate, crypto, diagnostics, events, memory, mmio, riscv, sort, sync,
