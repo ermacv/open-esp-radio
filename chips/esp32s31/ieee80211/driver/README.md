@@ -76,6 +76,19 @@ development dependencies on the upper MAC and `oer-embassy-net`.
   It exposes no `AmpduPhase`, Trigger-response or beamformee service. The
   chip MAC and HAL contain HE aggregate and Trigger queue primitives; their
   presence does not advertise those services through the port.
+- **Host conformance.** The shared suites run against this backend over the
+  host device model (`lower_mac/tests/port/conformance`): single-MPDU
+  outcomes, publication barriers, interface commands, single-MPDU admission
+  age, ownership Complete and Refuse with one buffer class, and the GTK
+  progress, expiry, rollback and receive-cut cases. The model holds a
+  queue's completions, injects a TX-timeout edge, rejects key writes,
+  decrypts air frames at capture against its key table and drains captured
+  hardware, DMA and interrupt frames through the RX cut. Not run: air
+  denial (no device model), aggregate and BA-window cases (no
+  `AmpduPhase`), ownership CloseGate, Disable and Poison (they expect a
+  held access category unpublished, while this port publishes an idle
+  queue's head and waits for a published one), InstallBeside and
+  SelectRetained (one station GTK slot), and EDCA draws.
 - **Conformance.** The hardware lower-MAC conformance image runs every case
   the backend's declared capabilities support; A-MPDU/Block Ack cases without
   `AmpduPhase` are reported as unsupported, never as model-only. The final
