@@ -46,6 +46,7 @@ fn the_name_follows_the_path() {
         ),
         ("hil-scenarios/aes", true, "oer-hil-scenarios-aes"),
         ("hil-scenarios/services/aes", false, "oer-services-aes"),
+        ("hil-scenarios/services/load", false, "oer-services-load"),
         (
             "hil-scenarios/wifi-station",
             true,
@@ -967,6 +968,7 @@ const ROLES: &[(&str, Role)] = &[
     ("hil-scenarios/images/esp32s31-rpc", Role::HilImage),
     ("hil-scenarios/images/esp32s31-wifi-station", Role::HilImage),
     ("hil-scenarios/services/aes", Role::HilBinding),
+    ("hil-scenarios/services/load", Role::HilBinding),
     ("hil-scenarios/services/wifi-station", Role::HilBinding),
     ("hil-scenarios/aes", Role::Tool),
     ("hil-scenarios/wifi-station", Role::Tool),
