@@ -289,6 +289,18 @@ impl Observations {
             .collect()
     }
 
+    fn rx_msdus_copied(&self) -> Vec<RxMsdusCopied> {
+        self.events
+            .lock()
+            .unwrap()
+            .iter()
+            .filter_map(|event| match event {
+                Observation::Service(ServiceEvent::RxMsdusCopied(copied)) => Some(*copied),
+                _ => None,
+            })
+            .collect()
+    }
+
     fn tokens_lost(&self) -> u32 {
         self.count(|event| {
             *event
@@ -3255,6 +3267,60 @@ fn control_cooperative_stop_retires_the_model_runner_and_publishes_the_last_noti
                 .notice(StaNotice::Disconnected(StaDisconnectReason::LocalRequest))
                 .await;
             assert_eq!(world.status().link.state, oer_network_port::LinkState::Down);
+        })
+    });
+}
+
+/// An unprotected QoS Data A-MSDU from `source` to the station, one
+/// subframe per payload.
+fn open_amsdu(source: [u8; 6], payloads: &[&[u8]]) -> Vec<u8> {
+    let mut frame = protected_data(1, source, &[]);
+    frame.truncate(24);
+    frame[0] = 0x88;
+    frame[1] &= !0x40;
+    // QoS Control: TID 0, A-MSDU present.
+    frame.extend_from_slice(&[0x80, 0]);
+    for (index, payload) in payloads.iter().enumerate() {
+        if index != 0 {
+            while (frame.len() - 26) % 4 != 0 {
+                frame.push(0);
+            }
+        }
+        frame.extend_from_slice(&LOCAL);
+        frame.extend_from_slice(&source);
+        frame.extend_from_slice(&u16::try_from(8 + payload.len()).unwrap().to_be_bytes());
+        frame.extend_from_slice(&[0xaa, 0xaa, 3, 0, 0, 0, 0x08, 0x00]);
+        frame.extend_from_slice(payload);
+    }
+    frame
+}
+
+#[test]
+fn an_amsdu_is_copied_and_a_single_msdu_lent() {
+    run(StaSecurity::Open, |world| {
+        Box::pin(async move {
+            let mut seen = 0;
+            world.associate(&mut seen, false).await;
+            let source = [0x02, 0, 0, 0, 0, 0x08];
+            world
+                .air
+                .receive(&open_amsdu(source, &[&[1; 20], &[2; 30]]), meta());
+            let delivered = world.delivered().await;
+            assert_eq!(delivered.len(), 2);
+            assert_eq!(delivered[0][14..], [1; 20]);
+            assert_eq!(delivered[1][14..], [2; 30]);
+            assert_eq!(world.lent.get(), 0, "an A-MSDU's MSDUs are copies");
+            assert_eq!(
+                world.observed.rx_msdus_copied(),
+                [RxMsdusCopied {
+                    aggregated: 2,
+                    kept: 0
+                }]
+            );
+            world.air.receive(&open_amsdu(source, &[&[3; 20]]), meta());
+            assert_eq!(world.delivered().await.len(), 1);
+            assert_eq!(world.lent.get(), 1, "one MSDU stays in its buffer");
+            assert_eq!(world.air.pending_rx(), 0, "every buffer came back");
         })
     });
 }

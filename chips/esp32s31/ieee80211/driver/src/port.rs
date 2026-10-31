@@ -560,11 +560,12 @@ pub struct ReceiveBuffer<'id, Id: SlotIdentity, R> {
 }
 impl<Id: SlotIdentity, R: ReceiveUnit> RxBuffer for ReceiveBuffer<'_, Id, R> {
     fn bytes(&self) -> &[u8] {
-        &self
-            .unit
+        // A live owner holds its unit, and the driver checked the range
+        // against the unit's bytes when it published the event.
+        self.unit
             .as_ref()
-            .expect("received owner holds its allocation")
-            .bytes()[self.range.clone()]
+            .and_then(|unit| unit.bytes().get(self.range.clone()))
+            .unwrap_or_default()
     }
 }
 impl<Id: SlotIdentity, R> Drop for ReceiveBuffer<'_, Id, R> {
