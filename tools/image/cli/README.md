@@ -107,19 +107,17 @@ Every board command leases the board and the air (shared) from the LAB
 service ([tools/lab/service/README.md](../../lab/service/README.md)), which
 runs each operation on the board: the board is used by one lease at a time,
 for every checkout. When the command ends it finishes the lease: the service
-parks the board in its ROM's download mode, so an image runs only while its
-command does, and a board the service could not park fails the command.
+resets the board into its image, which stops what the command left running.
 
 - `flash` writes the segments through one espflash connection, skipping each
   one whose flash contents already match (MD5), the OTA selection last, and
-  starts the image; once the command ends the board waits in its ROM again.
+  starts the image.
 - `run` builds and writes the image, leaves the chip in the flasher stub,
   opens the console and resets the chip into the image with an RTS pulse, then
   reads until `OER-RESULT: pass …` (exit 0), `OER-RESULT: fail …` (1) or the
   timeout (2): `--timeout`, or 30 s by default. The console goes to `target/fw/runs/<time>-<image>/log.txt`.
 - `monitor` opens the console without a reset: RTS is released before DTR.
-  Between leases a board waits in its ROM's download mode; `--start` resets
-  it into its flashed image first.
+  `--start` resets it into its flashed image first.
 - `boards` lists each attached board, as the LAB service finds it, with the
   hub port found on the host and whether that port may be power-cycled (or
   why not).

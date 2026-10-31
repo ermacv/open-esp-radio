@@ -333,7 +333,7 @@ impl Board {
     pub fn console(&self, watch: Duration) -> String {
         self.current_port(REATTACH)
             .and_then(|port| reset::open_without_reset(&port).ok())
-            .map(|mut serial| console::read_for(&mut serial, watch))
+            .map(|serial| console::read_for(serial, watch))
             .unwrap_or_default()
     }
 
@@ -425,8 +425,8 @@ impl Board {
             .ok_or("the board's port did not return after its power")?;
         // udev hands the returned port to the stand's group a moment after
         // it appears: retry the open briefly, then reset at once.
-        let mut serial = retrying(PORT_ACCESS, || reset::reset_into_download(&port))?;
-        Ok(console::read_for(&mut serial, BANNER))
+        let serial = retrying(PORT_ACCESS, || reset::reset_into_download(&port))?;
+        Ok(console::read_for(serial, BANNER))
     }
 
     /// [`Self::download_entry`] when the board resets by power.
@@ -449,8 +449,8 @@ impl Rung for Rts<'_> {
             .0
             .current_port(Duration::from_secs(5))
             .ok_or("the board's port is gone")?;
-        let mut serial = retrying(PORT_ACCESS, || reset::reset_into_application(&port))?;
-        Ok(Some(console::read_for(&mut serial, BANNER)))
+        let serial = retrying(PORT_ACCESS, || reset::reset_into_application(&port))?;
+        Ok(Some(console::read_for(serial, BANNER)))
     }
 }
 
@@ -470,7 +470,7 @@ impl Rung for Jtag<'_> {
             .current_port(Duration::ZERO)
             .and_then(|port| reset::open_without_reset(&port).ok());
         openocd.reset(self.0.chip(), self.0.mac())?;
-        Ok(serial.map(|mut serial| console::read_for(&mut serial, BANNER)))
+        Ok(serial.map(|serial| console::read_for(serial, BANNER)))
     }
 }
 

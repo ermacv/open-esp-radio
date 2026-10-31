@@ -1,17 +1,16 @@
 //! A board's hub port power through `uhubctl`, and `uhubctl`'s report, read
 //! by one parser.
 //!
-//! Only the LAB service switches a hub port: a board parked with its power
-//! off and powered on for its next lease, a reset ladder's `power` rung,
-//! the power-on start of a written image and `cargo stand discover
-//! --blink`. A lease runs no `uhubctl` itself.
+//! Only the LAB service switches a hub port: a reset through power, the
+//! power-on start of a written image and `cargo stand discover --blink`. A
+//! lease runs no `uhubctl` itself.
 #![forbid(unsafe_code)]
 
 use std::time::{Duration, Instant};
 
 /// The switchable hub port that powers a board whose reset ladder includes
 /// `power`: the hub's USB 2 location (`uhubctl --location`) and the port.
-#[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize)]
 pub struct HubPort {
     pub location: String,
     pub port: u8,
@@ -81,11 +80,6 @@ impl HubPower {
     /// Power the port on.
     pub fn on(&self) -> crate::power::Result<()> {
         self.action("on", 2)
-    }
-
-    /// Power the port off.
-    pub fn off(&self) -> crate::power::Result<()> {
-        self.action("off", 2)
     }
 
     /// Power the port off and on again.

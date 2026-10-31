@@ -1091,11 +1091,11 @@ the existing HAL owner.
   hardware: `cargo hil`, `cargo fw` and `cargo stand` build against its
   client (`tools/lab/client`) only, lease from it and ask it for every
   operation; the tools are trusted, and their own commands stay their
-  processes. A resource is granted again only after its driver brought it
-  to a quiet end state (a board in its ROM's download mode or with its power
-  off, the router with its AP down), a resource whose emission is unknown
-  closes the air, and a client's release answers with what was left
-  unavailable. The board's hardware end is the service's alone. The HIL
+  processes. A board's radio works only on its image's command: after a
+  lease a board is reset into its image and is ready again, nothing proven.
+  The router is granted again only with its AP down, a resource whose
+  emission is unknown closes the air, and a client's release answers with
+  what was left unavailable. The board's hardware end is the service's alone. The HIL
   core takes a leased board and carries data and commands over the console
   the service streams.
 - **Analysis.** Binary analysis is a set of building blocks (ELF view, RV32

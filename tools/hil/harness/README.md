@@ -24,9 +24,8 @@ of the services that image must serve, and lists its cases; `main` then:
    outcome is unknown, or whose image does not answer, is reported. The
    harness climbs no reset ladder: the board's hardware end is the LAB
    service's. A cancelled program judges nothing;
-8. releases the link, then finishes the lease: the service brings the board
-   to its end state (its ROM's download mode, or its power off) and answers
-   with what it left unavailable, which keeps a passing scenario from
+8. releases the link, then finishes the lease: the service resets the board
+   into its image and answers with what it left unavailable, which keeps a passing scenario from
    passing (`cleanup:` names it). On an error, a cancellation or a stage of
    opening that failed the lease is released without that answer.
 

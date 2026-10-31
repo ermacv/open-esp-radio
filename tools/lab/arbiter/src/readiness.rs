@@ -8,8 +8,8 @@
 //! so a confirmation of an older one changes nothing.
 //!
 //! Whether a resource may be granted is apart from what it may put on the
-//! air ([`Emission`]): a ready resource rests in a quiet end state its
-//! driver confirmed (a board in its ROM or with its power off, the router
+//! air ([`Emission`]): a ready resource rests in the end state its driver
+//! confirmed (a board's radio works only on its image's command; the router
 //! with its access point down); a resource in use radiates under its
 //! lease's air claims; one recovering, or unavailable without a
 //! confirmation that it cannot radiate, may radiate unknown to the stand and
@@ -25,7 +25,7 @@ pub const ROUTER: &str = "router";
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(tag = "state", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum Readiness {
-    /// Confirmed in an end state of its kind; for a board a quiet one.
+    /// Confirmed in an end state of its kind.
     Ready { generation: u64 },
     /// Granted to lease `lease`.
     InUse { lease: u64, generation: u64 },
@@ -46,8 +46,7 @@ pub enum Readiness {
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Emission {
-    /// Its driver confirmed it cannot radiate, such as a board whose power
-    /// is confirmed off.
+    /// Its driver confirmed it cannot radiate.
     Quiet,
     /// Nothing is confirmed: it may radiate.
     Unknown,

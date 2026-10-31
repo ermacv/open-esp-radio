@@ -46,8 +46,8 @@ kind declares makes it ready again. Every grant and recovery starts a new
 generation: a confirmation of an older generation changes nothing.
 
 Whether a resource may be granted is apart from what it may put on the air
-(`Emission`): a ready resource rests in a quiet end state its driver
-confirmed (a board in its ROM or with its power off, the router with its AP
+(`Emission`): a ready resource rests in the end state its driver confirmed
+(a board's radio works only on its image's command; the router with its AP
 down); one in use radiates under its lease's air claims; one recovering, or
 unavailable without a confirmation that it cannot radiate, may radiate
 unknown to the stand and closes the air to every other request that uses
@@ -78,7 +78,6 @@ cannot read, or a lease still held there, refuses the import.
 | File | Content |
 | --- | --- |
 | `service.json` | Schema 4: holders, balances, readiness and maintenance. Another schema is refused, never converted |
-| `powered-off.json` | The service's driver: each board parked with its power off and the hub port it was switched off at |
 | `service.lock` | Held by the running service: a second instance is refused |
 | `history.jsonl` | Completed leases: owner, work, scenarios, duration, the time charged, the owner's balance at release, the grant's reason and `released`, `yielded-to-balance`, `hard-limit`, `preempted-on-request` or `abandoned` |
 | `board.jsonl` | Flashes, startup-artifact uploads and writes, automatic recoveries, returns of unavailable boards and soaks, with owner, checkout and board MAC |

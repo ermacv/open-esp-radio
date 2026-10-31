@@ -70,7 +70,6 @@ pub fn serve(root: PathBuf) -> Result<()> {
     let drivers = Arc::new(StandDrivers::new(
         root,
         arbiter.stand_file().to_owned(),
-        arbiter.directory().to_owned(),
         arbiter.journal(),
     ));
     // Before `cargo stand init` wrote the stand file the stand has no

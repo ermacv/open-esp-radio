@@ -54,15 +54,6 @@ pub fn reset_into_download(port: &Path) -> std::io::Result<Port> {
     Ok(serial)
 }
 
-/// [`reset_into_download`] on a console already open: the port is never
-/// closed, so its lines never pass through a reset into the application.
-pub fn download_on(serial: &mut Port) -> std::io::Result<()> {
-    download_sequence(
-        |step| apply(serial, step),
-        || thread::sleep(Duration::from_millis(100)),
-    )
-}
-
 fn apply(serial: &mut Port, step: Step) -> std::io::Result<()> {
     match step {
         Step::Dtr(level) => serial.set_dtr(level),

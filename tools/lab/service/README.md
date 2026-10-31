@@ -20,7 +20,7 @@ two systemd user units:
   `$XDG_RUNTIME_DIR/open-esp-radio/lab.sock`, and hands it to the service: a
   client that connects while the service restarts waits for it.
 - `oer-lab.service` runs `oer-tool-lab-service --root CLONE` from the time
-  the user logs in, so every board is parked before anyone asks.
+  the user logs in.
 
 Started by hand without a socket handed over, the service binds the socket
 itself (`$OER_LAB_SOCKET` moves it). A lock in the stand's directory
@@ -66,10 +66,10 @@ the connection ends.
 ## Life cycle
 
 A lease is granted once the scheduler serves it; then the drivers prepare
-its resources from their end states (a board parked with its power off is
-powered on and its port must return), and only once the preparation left
-the lease does its client hear the grant. A resource that cannot be
-prepared ends the lease, which parks it again, and the client hears why.
+its resources (the real stand's drivers have nothing to prepare), and only
+once the preparation left the lease does its client hear the grant. A
+resource that cannot be prepared ends the lease, which recovers it, and
+the client hears why.
 
 A lease ends when its client releases it, when its connection is lost, at
 the hard limit, on a person's preemption, or for waiting stand maintenance;
@@ -89,41 +89,20 @@ held as abandoned and recovers its resources before granting them again.
 ## Drivers
 
 [`stand`](src/stand.rs) drives the real stand through `oer-lab-board` and
-`oer-lab-router`. Every end state is quiet: no parked resource radiates.
-A resource in use radiates only under its lease's air claims: an operation
-that starts an image (a flash, any reset, a console's reset), switches a
-board's power (a power cycle, a hub port) or drives the router needs a
-lease that holds the air, shared at least, and so does a board parked with
-its power off, since powering it starts its image. `cargo hil`, `cargo fw`
-and the board commands of `cargo stand` claim it; `cargo stand lease --air
-none` keeps to the rest, and its console reads stay on the board's open
-port.
+`oer-lab-router`. A board's radio works only on its image's command, so a
+board has no end state to prove. A resource in use radiates only under its
+lease's air claims: an operation that starts an image (a flash, any reset,
+a console's reset), switches a board's power (a power cycle, a hub port)
+or drives the router needs a lease that holds the air, shared at least.
+`cargo hil`, `cargo fw` and the board commands of `cargo stand` claim it;
+`cargo stand lease --air none` keeps to the rest.
 
 - **Boards.** Each board has one owner in the service: its operations take
   turns in the order they asked (two operations of one lease never drive one
-  board at once), and it keeps the board's port while the board is parked.
-  A board's end state follows the resets its stand file allows:
-  - A board that resets over its USB Serial/JTAG (`usb-jtag-rts`) rests in
-    its ROM's download mode: a reset into it, then a reset line the ROM
-    printed after the last reset, naming a download boot that serves the
-    USB Serial/JTAG (`boot:0x.. (DOWNLOAD(USB/UART0))`). The service keeps
-    its port open: closing a USB Serial/JTAG port can move its reset lines
-    and start the image. A console that does not start the image reads that
-    port and hands it back open, and a lease's end resets into download
-    through it when nothing closed it; without the air, a console read
-    needs it. A console that starts the image opens the port anew, since a
-    reset from download re-enumerates USB.
-  - A board that resets only by JTAG and power (an ESP32-C5: its USB reset
-    enters a download that no longer serves USB, `docs/hardware-errata.md`)
-    rests with its power off: its switchable hub port, found under it on the
-    host and allowed by the stand's hub policy, is recorded in the stand's
-    directory (`powered-off.json`, changed one board at a time), switched
-    off, must report off and the board leave USB. Its next lease powers it
-    on: the port must report power and the board's port return, named by
-    udev, before the client hears the grant.
-  - A board without either, or one whose end state is not confirmed, is
-    unavailable until a person returns it, with unknown emission unless its
-    ROM was seen in a download mode after the last attempt.
+  board at once). After a lease, a board that resets over its USB
+  Serial/JTAG (`usb-jtag-rts`) is reset into its image, which stops what
+  the lease left running; it is ready again whatever the reset did, and a
+  failed reset is only logged. Any other board is ready at once.
 
   Operations: write and start an image (journaled), reset (through a path,
   or the first reset the stand file lists), the console as a duplex stream,
@@ -161,6 +140,5 @@ operation, revocations, joined clients and the narrowing of their tokens,
 input by credit and beyond the window, a release that waits for its
 recoveries, a drain that waits for them, a grant that cannot be prepared,
 the first operation after a grant and an unrecordable grant; the turns of
-operations on one board, the record of boards parked with their power off,
-the operations that need the air, and the router's PHY judged by both
-views.
+operations on one board, the operations that need the air, and the
+router's PHY judged by both views.
