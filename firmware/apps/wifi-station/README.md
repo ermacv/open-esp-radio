@@ -20,7 +20,9 @@ cap_dbm = 10               # transmit power limit, 0 to 20 dBm
 
 Every field is required and nothing has a default: a missing or invalid field
 fails the build with the field's name, never its value, and no profile falls
-back to Open. The SSID and passphrase reach only the build's generated
+back to Open. The build makes the image's own configuration checks: the
+country needs a regulatory domain in `oer-radio-regulatory`, and that domain
+must permit the channel. The SSID and passphrase reach only the build's generated
 constant. `profiles/open-ci.toml` is a neutral Open profile without
 credentials; it checks the Open path only, and WPA2 needs a profile that
 selects it.

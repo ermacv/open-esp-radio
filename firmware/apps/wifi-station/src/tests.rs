@@ -45,3 +45,15 @@ fn an_invalid_profile_is_refused_without_naming_its_values() {
     // A missing security never falls back to Open.
     assert!(parse(&OPEN.replace("security = \"open\"\n", "")).is_err());
 }
+
+#[test]
+fn a_country_without_a_supported_domain_fails_the_build() {
+    // Well-formed, but the regulatory table has no domain for it: the image
+    // would refuse it at start, so the profile is refused at build.
+    let reason = parse(&OPEN.replace("\"DE\"", "\"US\"")).unwrap_err();
+    assert!(reason.contains("country") && reason.contains("regulatory domain"));
+    assert!(
+        !reason.contains("US"),
+        "the reason names the field, not its value"
+    );
+}

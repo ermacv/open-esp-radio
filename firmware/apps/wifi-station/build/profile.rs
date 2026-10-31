@@ -67,6 +67,23 @@ pub fn parse(text: &str) -> Result<String, String> {
         .ok()
         .filter(|channel| (1..=13).contains(channel))
         .ok_or("`channel` is a 2.4 GHz channel from 1 to 13")?;
+    // The checks `wifi::Config::new` makes before any radio owner starts:
+    // a regulatory domain for the country, which permits the channel.
+    let domain = oer_radio_regulatory::Country::new(country)
+        .ok()
+        .and_then(oer_radio_regulatory::RegulatoryDomain::of)
+        .ok_or("`country` has no supported regulatory domain")?;
+    let width = oer_ieee80211_contracts_port::ChannelWidth::Mhz20;
+    oer_ieee80211_contracts_port::Channel::ghz2_4(channel, width)
+        .ok()
+        .and_then(|channel| {
+            domain
+                .permit(oer_ieee80211_contracts_port::RegulatedChannel::from(
+                    channel,
+                ))
+                .ok()
+        })
+        .ok_or("`channel` is not permitted in the country's regulatory domain")?;
     let cap_dbm = i8::try_from(integer("cap_dbm")?)
         .ok()
         .filter(|cap| (0..=20).contains(cap))
