@@ -181,7 +181,10 @@ back; its operations are synchronous and never wait:
   returns all original owners; bit `i` identifies expired aggregate member
   `i` (bit zero for a single). Live members retain their admission samples
   for re-formation. Renewal for a new MSDU clears the old sample through
-  `TxBufferMemory::renew_msdu`. Expiry is counted separately and supplies no
+  `TxBufferMemory::renew_msdu`. Both buffer accessors return
+  `BufferMemoryUnavailable` when the memory is not the body's (its hardware
+  owns it, or its place holds none); `ReturnedMpdu::into_fresh` always
+  returns the token with that result. Expiry is counted separately and supplies no
   rate sample. The upper-MAC BA originator produces a BlockAckReq when an
   active window's head expires; the backend generates no BAR.
 - **Order.** Every operation reaches the hardware in the order the caller

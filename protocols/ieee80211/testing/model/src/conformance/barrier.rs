@@ -177,7 +177,7 @@ async fn exercise<'p, 'id: 'p, Id: SlotIdentity + 'id>(
         let ticket = tickets.next().ok_or("model ticket")?;
         *identity = ticket.index();
         let mut buffer = buffers.next().ok_or("model buffer")?;
-        buffer.bytes_mut().fill(0);
+        buffer.bytes_mut().map_err(|_| "model memory")?.fill(0);
         let source = TxSource::Fresh {
             buffer,
             frame: ClassFrame::new(frame(

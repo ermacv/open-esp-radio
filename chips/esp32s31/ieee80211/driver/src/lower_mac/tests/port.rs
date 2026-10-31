@@ -711,7 +711,10 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for Exchange {
                     let (mut buffer, body) =
                         <Family<Id> as TxBufferPool<'id, BufferClass<512>>>::renew(sent);
                     assert!(body.is_none());
-                    assert_eq!(&buffer.bytes_mut()[22..24], &0x1230_u16.to_le_bytes());
+                    assert_eq!(
+                        &buffer.bytes_mut().expect("returned memory")[22..24],
+                        &0x1230_u16.to_le_bytes()
+                    );
                     outcomes.push(returned.outcome);
                 }
                 _ => panic!("TX terminal"),

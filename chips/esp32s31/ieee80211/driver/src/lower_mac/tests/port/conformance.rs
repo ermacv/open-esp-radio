@@ -105,9 +105,10 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for OutcomeBody {
             };
             let returned_buffer = sent.index();
             let (mut renewed, _) = <Family<Id> as TxBufferPool<'id, BufferClass<512>>>::renew(sent);
-            let sequence = oer_ieee80211_wire::sequence::SequenceNumber::from_sequence_control(
-                u16::from_le_bytes([renewed.bytes_mut()[22], renewed.bytes_mut()[23]]),
-            );
+            let sequence = oer_ieee80211_wire::sequence::SequenceNumber::from_sequence_control({
+                let bytes = renewed.bytes_mut().expect("returned memory");
+                u16::from_le_bytes([bytes[22], bytes[23]])
+            });
             *self.seen.borrow_mut() = Some(outcomes::Trace {
                 admitted,
                 returned: outcomes::Identity {

@@ -100,20 +100,20 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> Buffer<'_,
 impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> TxBufferMemory
     for Buffer<'_, Id, D, B, O>
 {
-    fn renew_msdu(&mut self) {
+    fn renew_msdu(&mut self) -> Result<(), BufferMemoryUnavailable> {
+        let memory = self.dma.memory_mut().ok_or(BufferMemoryUnavailable)?;
+        memory.reset_work();
         self.admission = None;
+        Ok(())
+    }
+    fn bytes_mut(&mut self) -> Result<&mut [u8], BufferMemoryUnavailable> {
         self.dma
             .memory_mut()
-            .expect("returned buffer owns free DMA")
-            .reset_work();
-    }
-    fn bytes_mut(&mut self) -> &mut [u8] {
-        let bytes = self
-            .dma
-            .memory_mut()
-            .expect("body owns free DMA")
-            .buffer_mut();
-        &mut bytes[crate::ordinary_tx::TX_METADATA_SIZE..][..BufferClass::<B>::CAPACITY]
+            .ok_or(BufferMemoryUnavailable)?
+            .buffer_mut()
+            .get_mut(crate::ordinary_tx::TX_METADATA_SIZE..)
+            .and_then(|bytes| bytes.get_mut(..BufferClass::<B>::CAPACITY))
+            .ok_or(BufferMemoryUnavailable)
     }
 }
 
@@ -139,7 +139,12 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> Sent<'_, I
     #[cfg(test)]
     pub(crate) fn published(&mut self) -> &[u8] {
         let len = self.mpdu.layout.mpdu_len();
-        self.mpdu.buffer.bytes_mut().get(..len).unwrap_or_default()
+        let bytes = self
+            .mpdu
+            .buffer
+            .bytes_mut()
+            .expect("a returned Sent owns its memory");
+        &bytes[..len]
     }
 }
 pub enum AnyBuffer<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> {
@@ -198,6 +203,8 @@ pub struct Prepared<
 > {
     mpdu: Mpdu<'id, Id, D, B, O>,
     plan: RetryPlan<PhyRate>,
+    /// The body loan the prepared buffer was lent under.
+    loan: BodyLoan<'id, Id, Esp32s31Backend<Id, D, B, O>>,
     proof: PhantomData<(&'k (), fn(&'p ()) -> (&'p (), R, K))>,
 }
 pub struct Execution {
@@ -222,11 +229,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations,
         Self::OwnedPayload,
         Execution,
     > {
-        let loan = self
-            .mpdu
-            .buffer
-            .loan
-            .expect("only lent buffers can enter frontend preparation");
+        let loan = self.loan;
         AdmissionOwners {
             context: context.enclose().into_owned(&loan),
             ticket: loan.reclaim_slot(ticket),
@@ -266,7 +269,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     where
         'id: 'k,
     {
-        let (mpdu, plan) = match source {
+        let (mpdu, plan, loan) = match source {
             CheckedTxSource::Fresh(fresh) => {
                 let (
                     FreshSource {
@@ -277,6 +280,18 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                     },
                     layout,
                 ) = fresh.into_parts();
+                // Only a buffer lent to the body enters its preparation.
+                let Some(loan) = buffer.loan else {
+                    return Err(PreparationRefused {
+                        reason: PreparationError::MissingBodyLoan,
+                        operation: TxSource::Fresh {
+                            buffer,
+                            frame,
+                            body,
+                            protection,
+                        },
+                    });
+                };
                 let (key, pn) = match protection {
                     TxProtection::Open => (None, None),
                     TxProtection::Ccmp(numbered) => (
@@ -296,9 +311,16 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                         published: false,
                     },
                     plan,
+                    loan,
                 )
             }
             CheckedTxSource::Retransmission { mpdu, plan } => {
+                let Some(loan) = mpdu.mpdu.buffer.loan else {
+                    return Err(PreparationRefused {
+                        reason: PreparationError::MissingBodyLoan,
+                        operation: TxSource::Retransmission { mpdu, plan },
+                    });
+                };
                 if mpdu.mpdu.key.as_ref().is_some_and(|key| !key.active()) {
                     return Err(PreparationRefused {
                         reason: PreparationError::RetransmissionKey,
@@ -329,12 +351,13 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                         operation: TxSource::Retransmission { mpdu, plan },
                     });
                 };
-                (mpdu.mpdu, stages)
+                (mpdu.mpdu, stages, loan)
             }
         };
         Ok(Prepared {
             mpdu,
             plan,
+            loan,
             proof: PhantomData,
         })
     }
@@ -372,9 +395,8 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         }
     }
     fn renew(buffer: Self::Sent) -> (Self::Buffer, Option<D::Body>) {
-        let mut memory = buffer.mpdu.buffer;
-        memory.renew_msdu();
-        (memory, buffer.mpdu.body)
+        // The MPDU and its PN end here; `renew_msdu` releases its admission.
+        (buffer.mpdu.buffer, buffer.mpdu.body)
     }
 }
 

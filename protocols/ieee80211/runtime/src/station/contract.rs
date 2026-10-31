@@ -131,6 +131,8 @@ pub enum LayoutError {
     StorageTooShort,
     CcmpHeaderTooShort,
     BodyOverlap,
+    /// The buffer's memory is not the caller's.
+    BufferUnavailable,
 }
 
 /// Why the channel arbiter refused the station a channel.
@@ -248,6 +250,8 @@ pub enum MsduRefusal {
     TooLong,
     /// Admission control leaves the MSDU no access category.
     NoAdmittedAccessCategory,
+    /// The station's buffer memory was not its own; the MSDU is refused.
+    BufferUnavailable,
 }
 /// Original refused Ethernet owner. Its private implementation is not a station-core API.
 #[derive(Debug)]
@@ -306,6 +310,7 @@ fn transmit(refusal: TxRefusal) -> TransmitRefusal {
             CoreLayoutError::StorageTooShort => LayoutError::StorageTooShort,
             CoreLayoutError::CcmpHeaderTooShort => LayoutError::CcmpHeaderTooShort,
             CoreLayoutError::BodyOverlap => LayoutError::BodyOverlap,
+            CoreLayoutError::BufferUnavailable => LayoutError::BufferUnavailable,
         }),
     }
 }
@@ -489,6 +494,9 @@ impl From<oer_ieee80211_core_roles_sta::data::DataRefusal> for MsduRefusal {
             oer_ieee80211_core_roles_sta::data::DataRefusal::TooLong => Self::TooLong,
             oer_ieee80211_core_roles_sta::data::DataRefusal::NoAdmittedAccessCategory => {
                 Self::NoAdmittedAccessCategory
+            }
+            oer_ieee80211_core_roles_sta::data::DataRefusal::BufferUnavailable => {
+                Self::BufferUnavailable
             }
         }
     }

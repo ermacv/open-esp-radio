@@ -254,7 +254,7 @@ impl<Id: SlotIdentity> PortBody<Id, Backend<Id>> for Operations {
                 macro_rules! source {
                     ($buffer:expr, $class:ty, $variant:ident) => {{
                         let mut buffer = $buffer;
-                        buffer.bytes_mut().fill(0);
+                        buffer.bytes_mut().map_err(|_| "model memory")?.fill(0);
                         let index = buffer.slot.index();
                         let source = TxSource::Fresh {
                             buffer,

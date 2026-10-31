@@ -1548,16 +1548,25 @@ pub enum ReturnedMpdu<B, S> {
 impl<B: TxBufferMemory, S> ReturnedMpdu<B, S> {
     /// Release the old MPDU through its owner's renewal policy. A fresh
     /// allocation releases any previous admission age as well. The
-    /// operation consumes either owner once.
-    pub fn into_fresh(self, renew: impl FnOnce(S) -> B) -> B {
+    /// operation consumes either owner once and always returns the buffer;
+    /// the renewal's result says whether its memory was the caller's.
+    pub fn into_fresh(
+        self,
+        renew: impl FnOnce(S) -> B,
+    ) -> (B, Result<(), BufferMemoryUnavailable>) {
         let mut buffer = match self {
             Self::Fresh(buffer) => buffer,
             Self::Sent(mpdu) => renew(mpdu),
         };
-        buffer.renew_msdu();
-        buffer
+        let renewed = buffer.renew_msdu();
+        (buffer, renewed)
     }
 }
+
+/// A buffer token whose memory is not the body's: its backend's hardware
+/// owns it, or its place holds none. The token stays the body's.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct BufferMemoryUnavailable;
 
 /// The memory of a transmit buffer the body holds: the caller encodes a
 /// frame into it, from its header on, before it hands the buffer in.
@@ -1574,9 +1583,17 @@ impl<B: TxBufferMemory, S> ReturnedMpdu<B, S> {
 pub trait TxBufferMemory {
     /// Discard the previous MSDU's admission state before reusing its
     /// allocation for a new MSDU. Retry and re-formation never call this.
-    fn renew_msdu(&mut self);
+    ///
+    /// # Errors
+    ///
+    /// The memory is not the body's; nothing changes.
+    fn renew_msdu(&mut self) -> Result<(), BufferMemoryUnavailable>;
     /// The buffer's octets, as long as its class holds.
-    fn bytes_mut(&mut self) -> &mut [u8];
+    ///
+    /// # Errors
+    ///
+    /// The memory is not the body's.
+    fn bytes_mut(&mut self) -> Result<&mut [u8], BufferMemoryUnavailable>;
 }
 
 /// A frame that a buffer of the class `C` fits; only [`ClassFrame::new`]

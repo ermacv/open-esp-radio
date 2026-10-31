@@ -200,18 +200,18 @@ use oer_radio_port::{EventsLost, Mint, Poisoned, PortResult, Slot};
 use oer_time::RadioInstant;
 
 use oer_ieee80211_contracts_port::{
-    AccessPoint, AccessPointPhase, BandSet, BodyPayload, BssColor, Channel, CheckedAggregate,
-    CheckedPoolSource, CheckedSubframe, CheckedTxSource, ConfigurePermission, ConnectionEpochKind,
-    ExecutionPayload, FreshSource, FreshSubframe, GateClosed, GateIssuer, GateOpen,
-    HardwareServices, Ieee80211Capabilities, Ieee80211Radio, InFlight, IndeterminateCause,
-    InterfaceCommandPool, InterfacePermissions, InterfacePhase, KeyTypes, LinkMetric,
-    LowerMacBackend, LowerMacCapabilities, LowerMacPhase, LowerMacSetup, MpduKind, MpduLayout,
-    PhaseTypes, PhyFormatSet, PreparationError, PreparationRefused, PreparedTx, RateSupport,
-    ReceiveFilter, RemovedKey, RetransmissionPlan, RoleKeys, RxBuffer, RxEvidence, RxMeta,
-    RxMetadata, SignalMetadata, Station, StationPhase, StationReceive, SupportedBlockAck,
-    SupportedChannel, SupportedEdca, SupportedFilter, TxBody, TxBufferClass, TxBufferMemory,
-    TxBufferPool, TxFrame, TxMpdu, TxOutcome, TxProtection, TxSource, VifRole, WidthSet,
-    WithdrawCause,
+    AccessPoint, AccessPointPhase, BandSet, BodyPayload, BssColor, BufferMemoryUnavailable,
+    Channel, CheckedAggregate, CheckedPoolSource, CheckedSubframe, CheckedTxSource,
+    ConfigurePermission, ConnectionEpochKind, ExecutionPayload, FreshSource, FreshSubframe,
+    GateClosed, GateIssuer, GateOpen, HardwareServices, Ieee80211Capabilities, Ieee80211Radio,
+    InFlight, IndeterminateCause, InterfaceCommandPool, InterfacePermissions, InterfacePhase,
+    KeyTypes, LinkMetric, LowerMacBackend, LowerMacCapabilities, LowerMacPhase, LowerMacSetup,
+    MpduKind, MpduLayout, PhaseTypes, PhyFormatSet, PreparationError, PreparationRefused,
+    PreparedTx, RateSupport, ReceiveFilter, RemovedKey, RetransmissionPlan, RoleKeys, RxBuffer,
+    RxEvidence, RxMeta, RxMetadata, SignalMetadata, Station, StationPhase, StationReceive,
+    SupportedBlockAck, SupportedChannel, SupportedEdca, SupportedFilter, TxBody, TxBufferClass,
+    TxBufferMemory, TxBufferPool, TxFrame, TxMpdu, TxOutcome, TxProtection, TxSource, VifRole,
+    WidthSet, WithdrawCause,
 };
 use oer_ieee80211_contracts_port::{
     AckSnr, AggregateEnd, AggregateOutcome, Air, BlockAckSnr, SingleEnd, SingleOutcome,
@@ -498,12 +498,13 @@ impl<B: ModelComposition, C: ModelClass> ModelBuffer<'_, B, C> {
 }
 
 impl<B: ModelComposition, C: ModelClass> TxBufferMemory for ModelBuffer<'_, B, C> {
-    fn renew_msdu(&mut self) {
+    fn renew_msdu(&mut self) -> Result<(), BufferMemoryUnavailable> {
         self.admitted = None;
         self.admitted_at = None;
+        Ok(())
     }
-    fn bytes_mut(&mut self) -> &mut [u8] {
-        &mut self.memory
+    fn bytes_mut(&mut self) -> Result<&mut [u8], BufferMemoryUnavailable> {
+        Ok(&mut self.memory)
     }
 }
 
@@ -781,7 +782,8 @@ impl<B: ModelComposition> ModelMpduExecution<'_, '_, B> {
             ModelAnyBuffer::Small(buffer) => buffer.bytes_mut(),
             ModelAnyBuffer::Large(buffer) => buffer.bytes_mut(),
             ModelAnyBuffer::SmallSent(_) | ModelAnyBuffer::LargeSent(_) => return Ok(()),
-        };
+        }
+        .map_err(|_| ModelFault)?;
         let packet_number = match key {
             Some(key) => {
                 let tail = memory
@@ -1236,8 +1238,8 @@ impl<'id, B: ModelComposition + 'id, C: ModelClass> TxBufferPool<'id, C> for Mod
         C::sent(buffer)
     }
 
-    fn renew(mut mpdu: Self::Sent) -> (Self::Buffer, Option<ModelBodyOf<B>>) {
-        mpdu.buffer.renew_msdu();
+    fn renew(mpdu: Self::Sent) -> (Self::Buffer, Option<ModelBodyOf<B>>) {
+        // The MPDU and its PN end here; `renew_msdu` releases its admission.
         (mpdu.buffer, mpdu.body)
     }
 }

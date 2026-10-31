@@ -261,7 +261,7 @@ fn submit<'p, 'id: 'p, Id: SlotIdentity + 'id, C: ModelClass>(
     mut buffer: ModelBuffer<'id, ModelBackend<Id>, C>,
     key: Option<&CoreKey<ModelPairwiseKey<'id, ModelBackend<Id>, Station>>>,
 ) {
-    buffer.bytes_mut()[..40].fill(0x5a);
+    buffer.bytes_mut().unwrap()[..40].fill(0x5a);
     let frame = ClassFrame::new(data_frame(phase, key.is_some()))
         .ok()
         .unwrap();
@@ -1250,7 +1250,7 @@ impl Work for AbortHeld<'_> {
                     seen.fresh = true;
                     // The MPDU as it was written: its body, no CCMP header
                     // filled in.
-                    let bytes = fresh.bytes_mut();
+                    let bytes = fresh.bytes_mut().unwrap();
                     seen.untouched = bytes[24..32] == [0x5a; 8];
                 }
                 break;
@@ -1360,7 +1360,7 @@ fn subframe<'id, Id: SlotIdentity + 'id, C: ModelClass>(
     ModelBuffer<'id, ModelBackend<Id>, C>,
     SizedFrame<AckHeader, ModelCaps>,
 ) {
-    let bytes = buffer.bytes_mut();
+    let bytes = buffer.bytes_mut().unwrap();
     bytes[..40].fill(0x5a);
     bytes[0..2].copy_from_slice(&0x4108_u16.to_le_bytes());
     bytes[22..24].copy_from_slice(&(sequence << 4).to_le_bytes());

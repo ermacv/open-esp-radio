@@ -17,6 +17,23 @@ pub enum StaEvent {
     /// The station heard one well-formed beacon or probe response while
     /// scanning.
     ScanBssObserved(ScanOutcome),
+    /// A returned buffer's memory was not the station's: its renewal or
+    /// encoding was refused, and the token stays in its pool.
+    BufferMemoryUnavailable,
+}
+
+/// The returned buffer, renewed for a new MSDU. A buffer whose memory is
+/// not the station's still returns to its pool, reported.
+pub(crate) fn fresh<B: oer_ieee80211_contracts_port::TxBufferMemory, S>(
+    returned: oer_ieee80211_contracts_port::ReturnedMpdu<B, S>,
+    renew: impl FnOnce(S) -> B,
+    events: &mut impl oer_events::EventSink<StaEvent>,
+) -> B {
+    let (buffer, renewed) = returned.into_fresh(renew);
+    if renewed.is_err() {
+        oer_events::report(events, || StaEvent::BufferMemoryUnavailable);
+    }
+    buffer
 }
 
 /// Why the data machine retired an MSDU of the current link, or dropped an

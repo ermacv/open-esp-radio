@@ -38,9 +38,13 @@ impl Ieee80211Capabilities for Caps {
 }
 struct Buffer;
 impl TxBufferMemory for Buffer {
-    fn renew_msdu(&mut self) {}
-    fn bytes_mut(&mut self) -> &mut [u8] {
-        &mut []
+    fn renew_msdu(&mut self) -> Result<(), oer_ieee80211_contracts_port::BufferMemoryUnavailable> {
+        Ok(())
+    }
+    fn bytes_mut(
+        &mut self,
+    ) -> Result<&mut [u8], oer_ieee80211_contracts_port::BufferMemoryUnavailable> {
+        Ok(&mut [])
     }
 }
 struct Tokens<'id, const GROUPS: usize>(core::marker::PhantomData<fn(&'id ()) -> &'id ()>);
