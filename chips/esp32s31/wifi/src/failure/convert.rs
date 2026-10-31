@@ -28,6 +28,9 @@ where
                 missing,
             }
         }
+        ServiceFault::NetworkDrainDeadline { held } => {
+            StationFailure::NetworkDrainDeadline { held }
+        }
     }
 }
 
@@ -550,9 +553,17 @@ pub(crate) fn retirement(
     cause: oer_radio_port::LifecycleError,
     hardware_stopped: bool,
 ) -> RetirementFailure {
+    // The network kept lent receive buffers past the stop's deadline: the
+    // port's refusal to retire is that drain's, not an unconfirmed stop.
+    let cause = match failure {
+        Some(StationFailure::NetworkDrainDeadline { held }) => {
+            RetirementCause::NetworkDrainDeadline { held }
+        }
+        _ => retirement_cause(cause),
+    };
     RetirementFailure {
         failure,
-        cause: retirement_cause(cause),
+        cause,
         hardware_stopped,
     }
 }

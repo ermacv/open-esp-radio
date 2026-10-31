@@ -94,7 +94,7 @@ mod events;
 pub use events::{RxDrop, RxMsdusRefused, ServiceEvent, StationEvents};
 mod control;
 mod network;
-pub use network::{NetworkRx, Received, RxMsdusCopied};
+pub use network::{NetworkRx, NetworkStop, Received, RxMsdusCopied, StopPolicy};
 mod reconnect;
 use commands::CommandCredits;
 pub use commands::{CommandRefused, CommandTerminal, Request};
@@ -573,6 +573,12 @@ pub enum ServiceFault<B: StationPort> {
         cause: <B::Backend as PortBackend<B::SlotId>>::Fault,
         missing: PendingTerminal,
     },
+    /// The stop's deadline passed while the network still held `held` lent
+    /// receive buffers: the port cannot retire, and its owners stay
+    /// quarantined.
+    NetworkDrainDeadline {
+        held: usize,
+    },
 }
 
 /// A concrete output recipient. Events carry their original owners by value.
@@ -610,6 +616,7 @@ impl<K, F: FnMut(ServiceOutput<K>)> ServiceOutputSink<K> for F {
 /// let (_control, control) = Control::new(application, &state).unwrap();
 /// let io = ServiceIo {
 ///     commands: commands.dyn_receiver(), transmit, receive, output: &mut output, control,
+///     network: &(), stop: oer_ieee80211_runtime::station::StopPolicy::DEFAULT,
 /// };
 /// ```
 ///
@@ -630,7 +637,10 @@ impl<K, F: FnMut(ServiceOutput<K>)> ServiceOutputSink<K> for F {
 /// let mut output = |_: ServiceOutput<()>| {};
 /// let state = State::new();
 /// let (mut application, control) = Control::new(application, &state).unwrap();
-/// let io = ServiceIo { commands, transmit, receive, output: &mut output, control };
+/// let io = ServiceIo {
+///     commands, transmit, receive, output: &mut output, control,
+///     network: &(), stop: oer_ieee80211_runtime::station::StopPolicy::DEFAULT,
+/// };
 /// assert!(application.try_command(ControlCommand::Stop).is_ok());
 /// assert!(matches!(io.commands.try_receive(), Some(ServiceCommand::Stop)));
 /// ```
@@ -654,6 +664,11 @@ pub struct ServiceIo<
     pub output: &'c mut O,
     /// Affine cooperative stop and completion connection to Control.
     pub control: RunnerControl<'c>,
+    /// The network side holding lent buffers, stopped before the port
+    /// retires.
+    pub network: &'c dyn NetworkStop,
+    /// The drain deadline of a stop no request timed.
+    pub stop: StopPolicy,
 }
 
 /// How the service ended.
@@ -1468,6 +1483,29 @@ impl<
                 let mut lent = owner.phase();
                 let phase = B::lend_phase(&mut lent);
                 self.serve(&mut arbiter, phase, io, timer, unwrap).await
+            };
+            let next = match next {
+                Served::Stop | Served::Failed(_) => {
+                    // The network returns its buffers before the port
+                    // retires; a stop's request names the deadline, a
+                    // failure takes it from the policy.
+                    let deadline = match (&next, io.control.stop_deadline()) {
+                        (Served::Stop, Some(deadline)) => deadline,
+                        _ => timer.now().saturating_add(io.stop.drain),
+                    };
+                    let drained = {
+                        let mut lent = owner.phase();
+                        let phase = B::lend_phase(&mut lent);
+                        network::drain(phase, io.network, timer, deadline).await
+                    };
+                    match (next, drained) {
+                        (Served::Stop, Err(held)) => {
+                            Served::Failed(ServiceFault::NetworkDrainDeadline { held }.into())
+                        }
+                        (next, _) => next,
+                    }
+                }
+                next => next,
             };
             match next {
                 Served::Stop => {

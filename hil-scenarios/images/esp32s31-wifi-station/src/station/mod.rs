@@ -269,7 +269,7 @@ async fn work(inputs: Inputs, network: &crate::load::serve::Network) -> Infallib
         entropy,
         dma,
     } = deferred;
-    let (mut control, net, runners) = wifi::station(
+    let (mut control, net, stopper, runners) = wifi::station(
         wifi::Resources {
             engine,
             events: Events,
@@ -331,13 +331,20 @@ async fn work(inputs: Inputs, network: &crate::load::serve::Network) -> Infallib
                 future: Boundary(station.as_mut()),
             },
             both(
-                Polled {
-                    part: Part::Ip,
-                    future: Tracked {
-                        future: core::pin::Pin::new(&mut running),
-                        done: &network_done,
+                both(
+                    Polled {
+                        part: Part::Ip,
+                        future: Tracked {
+                            future: core::pin::Pin::new(&mut running),
+                            done: &network_done,
+                        },
                     },
-                },
+                    // The station's stop asks the network first: the IP
+                    // service stops and drops every frame it holds, then
+                    // the station retires the radio. Polled after the IP
+                    // part, it sees that part's end in the same round.
+                    stop_network(&stopper, &ip, &network_done),
+                ),
                 Polled {
                     part: Part::Requests,
                     future: serving,
@@ -347,7 +354,7 @@ async fn work(inputs: Inputs, network: &crate::load::serve::Network) -> Infallib
         .await
         {
             Either::First(exit) => exit,
-            Either::Second((_, (never, ()))) => match never {},
+            Either::Second(((_, ()), (never, ()))) => match never {},
         }
     };
     answer_join(join, &Joined::Refused(ended(&exit)));
@@ -448,8 +455,38 @@ async fn serve_running(
     loop {
         let leave = take_leave(requests, leaving, &status).await;
         leaving.set(Some(leave));
-        control.stop();
+        // The IP stack returns the station's lent frames well within this.
+        let deadline = {
+            use oer_time::Clock as _;
+            oer_embassy_time::EmbassyClock
+                .now()
+                .saturating_add(oer_time::Duration::from_secs(2))
+        };
+        control.stop(deadline);
     }
+}
+
+/// Stop the IP service once the station asks, then report the network
+/// stopped. Without the request it never ends.
+async fn stop_network(
+    stopper: &wifi::NetworkStopper<'static>,
+    ip: &oer_embassy_net::ip::Control<'static>,
+    done: &Cell<bool>,
+) {
+    stopper.requested().await;
+    ip.stop();
+    core::future::poll_fn(|_| {
+        if done.get() {
+            core::task::Poll::Ready(())
+        } else {
+            // The IP part's end comes in a later round of the same join,
+            // which its own wake starts.
+            core::task::Poll::Pending
+        }
+    })
+    .await;
+    stopper.stopped();
+    core::future::pending::<()>().await;
 }
 
 /// Serve the stopped station until the chip resets.

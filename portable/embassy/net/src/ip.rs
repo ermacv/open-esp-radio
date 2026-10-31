@@ -384,12 +384,18 @@ trait Interface {
     fn restart_dhcp(&self);
     fn lease(&self) -> Option<Ipv4Configuration>;
     fn clear(&self) -> Result<(), Error>;
+    /// Drop every received packet the stack has not taken yet: a lent one
+    /// returns to its device.
+    fn drop_received(&self) {}
 }
 impl<X: ExecutionContext, const RX: usize, const TX: usize> Interface
     for Iface<'_, OwnedNetworkDevice<'_, X, RX, TX>>
 {
     fn restart_dhcp(&self) {
         self.restart_dhcpv4();
+    }
+    fn drop_received(&self) {
+        self.with_driver(|driver| while driver.receive().is_some() {});
     }
     fn lease(&self) -> Option<Ipv4Configuration> {
         self.dhcpv4_lease().map(|lease| Ipv4Configuration {
@@ -494,6 +500,7 @@ fn finish<X: ExecutionContext, const RX: usize, const TX: usize, D: NetDevice>(
     events: &mut impl FnMut(StatusChanged),
 ) -> Poll<Result<(), Error>> {
     let result = result.and(bridge.stop().map_err(|_| Error::ContextAccessRefused));
+    iface.drop_received();
     let result = result.and(iface.clear());
     state.publish(
         Status {

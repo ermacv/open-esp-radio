@@ -3982,6 +3982,10 @@ impl<'p, 'id: 'p, C: Ieee80211Capabilities, B: ModelComposition + 'id> LowerMacP
         }
     }
 
+    fn lent(&self) -> usize {
+        self.held.network.held()
+    }
+
     fn close_gate(&mut self, gate: GateOpen<'id, ModelPool<<B as ModelComposition>::Identity, 0>>) {
         self.held
             .command(Command::CloseGate(gate.into_owned(&self.frontend.loan)));

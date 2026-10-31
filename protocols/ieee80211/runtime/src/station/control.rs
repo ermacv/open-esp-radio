@@ -40,6 +40,8 @@ pub struct State {
     policy: Cell<super::reconnect::Policy>,
     policy_waker: PriorityWaker,
     operations: operation::Operations,
+    /// The deadline the last stop request named.
+    stop_deadline: Cell<Option<oer_time::Instant>>,
 }
 
 impl State {
@@ -57,6 +59,7 @@ impl State {
             )),
             policy_waker: PriorityWaker::new(),
             operations: operation::Operations::new(),
+            stop_deadline: Cell::new(None),
         }
     }
     /// The service retired or its runner was lost.
@@ -187,6 +190,10 @@ pub struct RunnerControl<'c> {
 }
 
 impl<'c> RunnerControl<'c> {
+    /// The deadline the stop request named, once one did.
+    pub(super) fn stop_deadline(&self) -> Option<oer_time::Instant> {
+        self.state.stop_deadline.get()
+    }
     pub(super) async fn wait_for_stop(&self) {
         match &self.endpoint {
             Some(endpoint) => endpoint.wait_for_stop().await,
@@ -299,7 +306,10 @@ impl<'c, K, const DEPTH: usize> Control<'c, K, DEPTH> {
     }
     /// Disconnect once, then retire Runner after the link is down. Stop is
     /// independent of command queue capacity and never schedules a reconnect.
-    pub fn stop_gracefully(&mut self) {
+    /// Disconnect, then stop; the network must return the station's lent
+    /// receive buffers by `deadline` ([`Self::stop`]).
+    pub fn stop_gracefully(&mut self, deadline: oer_time::Instant) {
+        self.state.stop_deadline.set(Some(deadline));
         let mut policy = self.state.policy.get();
         policy.stop();
         self.state.policy.set(policy);
@@ -420,7 +430,10 @@ impl<'c, K, const DEPTH: usize> Control<'c, K, DEPTH> {
         self.state.operations.admitted(command, correlation);
         Ok(Operation::new(self.state, command, correlation))
     }
-    pub fn stop(&mut self) {
+    /// Stop the service: the network must return the station's lent
+    /// receive buffers by `deadline`, or the port fails to retire.
+    pub fn stop(&mut self, deadline: oer_time::Instant) {
+        self.state.stop_deadline.set(Some(deadline));
         self.task.request_stop();
     }
     pub async fn wait_stopped(&mut self) {

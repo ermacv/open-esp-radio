@@ -25,7 +25,7 @@ use oer_ieee80211_core_security_rsn::{Pmk, PtkContext, frames::RsnTxFrame};
 use oer_ieee80211_core_upper_mac::rate_control::RateControl;
 use oer_ieee80211_wire::address::IndividualAddress;
 use oer_radio_port::{Ended, LocalId, PortBody, SlotIdentity, run_port, with_local_slot};
-use oer_time::Duration;
+use oer_time::{Clock as _, Duration};
 use oer_time_virtual::VirtualClock;
 use std::boxed::Box;
 use std::rc::Rc;
@@ -527,6 +527,9 @@ struct World<'b> {
     expect_queued_command_on_poison: Cell<bool>,
     expected_stream_end: Cell<Option<ExpectedStreamEnd>>,
     drop_stopped_service: Cell<bool>,
+    /// The lent buffers the network still holds when a stop's deadline
+    /// passes: the service must end failed with them.
+    expected_drain_deadline: Cell<Option<usize>>,
     restart_stopped_service: Cell<Option<bool>>,
     /// The network stack's end of the transmit queue.
     stack: RefCell<WakingSpscSender<'b, TxMsdu, 2>>,
@@ -871,6 +874,17 @@ impl Application<'_, '_, '_> {
         frames
     }
 
+    /// The next frame the network stack received, kept by the caller.
+    async fn take_delivered(&self) -> Received<ModelLentRx> {
+        for _ in 0..50 {
+            yield_now().await;
+        }
+        self.delivered
+            .borrow()
+            .try_receive()
+            .expect("a delivered frame")
+    }
+
     /// Begin the 4-way handshake after association and return the derived
     /// key once the station has answered Message 1 with Message 2.
     async fn start_handshake(&self, seen: &mut usize) -> oer_ieee80211_core_security_rsn::Ptk {
@@ -1136,6 +1150,8 @@ where
                 transmit: self.transmit,
                 receive: self.receive,
                 output: &mut output,
+                network: &(),
+                stop: StopPolicy::DEFAULT,
             };
             let script = self.script;
             let script = async move {
@@ -1307,6 +1323,18 @@ where
                 .disables_at_body_end
                 .set(Some(world.air.disable_calls()));
             assert_eq!(world.observed.tokens_lost(), 0);
+            if let Some(expected) = world.expected_drain_deadline.get() {
+                assert!(
+                    matches!(
+                        &end,
+                        ServiceEnd::Failed {
+                            fault: ServiceFault::NetworkDrainDeadline { held },
+                            ..
+                        } if *held == expected
+                    ),
+                    "the stop's deadline passed with {expected} lent buffers held"
+                );
+            }
             if matches!(&end, ServiceEnd::Stopped(_) | ServiceEnd::Failed { .. }) {
                 assert_eq!(
                     service.station.frame_credits(),
@@ -1491,6 +1519,7 @@ where
             expect_queued_command_on_poison: Cell::new(false),
             expected_stream_end: Cell::new(None),
             drop_stopped_service: Cell::new(false),
+            expected_drain_deadline: Cell::new(None),
             restart_stopped_service: Cell::new(None),
             stack: RefCell::new(stack),
             delivered: RefCell::new(delivered),
@@ -3220,12 +3249,50 @@ fn control_cooperative_stop_retires_the_model_runner_and_publishes_the_last_noti
             let mut seen = 0;
             world.associate(&mut seen, false).await;
             let mut control = world.commands.take().unwrap();
-            control.stop();
+            control.stop(Instant::from_micros(u64::MAX));
             world.commands.set(Some(control));
             world
                 .notice(StaNotice::Disconnected(StaDisconnectReason::LocalRequest))
                 .await;
             assert_eq!(world.status().link.state, oer_network_port::LinkState::Down);
+        })
+    });
+}
+
+#[test]
+fn a_stop_waits_for_the_network_lent_buffers_until_its_deadline() {
+    run(StaSecurity::Open, |world| {
+        Box::pin(async move {
+            let mut seen = 0;
+            world.associate(&mut seen, false).await;
+            let source = [0x02, 0, 0, 0, 0, 0x08];
+            let mut open = protected_data(1, source, &[0xcd; 40]);
+            open[1] &= !0x40;
+            open.drain(24..32);
+            world.air.receive(&open, meta());
+            // The network keeps the frame's buffer past the stop's deadline.
+            let held = world.take_delivered().await;
+            assert!(matches!(held, Received::Lent(_)));
+            world.expected_drain_deadline.set(Some(1));
+            let mut control = world.commands.take().unwrap();
+            let deadline = world.clock.now().saturating_add(Duration::from_millis(100));
+            control.stop(deadline);
+            world.commands.set(Some(control));
+            for _ in 0..50 {
+                yield_now().await;
+            }
+            assert!(
+                !world.status().stopped,
+                "the stop waits for the held buffer"
+            );
+            world.clock.advance(Duration::from_millis(100)).unwrap();
+            world
+                .notice(StaNotice::Disconnected(StaDisconnectReason::Arbiter(
+                    super::contract::LeaveReason::PortFailed,
+                )))
+                .await;
+            assert!(world.clock.now() >= deadline);
+            drop(held);
         })
     });
 }
@@ -3318,7 +3385,7 @@ fn product_policy_connects_reconnects_after_peer_departure_and_gracefully_stops(
                 }
             }
             let mut control = world.commands.take().unwrap();
-            control.stop_gracefully();
+            control.stop_gracefully(oer_time::Instant::from_micros(u64::MAX));
             world.commands.set(Some(control));
             let _deauth = world.sent(&mut seen, DEAUTHENTICATION).await;
             world

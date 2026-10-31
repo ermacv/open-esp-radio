@@ -402,8 +402,12 @@ fn tx_refusal_keeps_the_exact_owner_until_credit_and_rx_still_progresses() {
     assert_eq!(port.borrow().accepted, [original_payload]);
     assert!(pool.try_alloc().is_some());
     assert!(iface.with_driver(|driver| driver.can_transmit()));
+    // A frame the device still queues at the stop may be lent: the stop
+    // drops it, which returns it to the device.
+    port.borrow_mut().rx.push_back(Frame);
     control.stop();
     assert_eq!(task.as_mut().poll(&mut cx), Poll::Ready(Ok(())));
+    assert!(port.borrow().rx.is_empty());
 }
 
 #[test]

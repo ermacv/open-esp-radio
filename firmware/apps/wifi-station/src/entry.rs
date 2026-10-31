@@ -202,7 +202,8 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
     let mut tx_bytes = [0; 4];
     rng.fill(&mut tx_bytes);
     let entropy = u32::from_le_bytes(tx_bytes);
-    let (control, network, runners) = wifi::station(
+    // No IP stack holds the station's frames: its stopper goes at once.
+    let (control, network, _, runners) = wifi::station(
         wifi::Resources {
             engine,
             events: station::ProductEvents,

@@ -254,6 +254,11 @@ impl<'r, X: oer_memory::ExecutionContext, const RX: usize, const TX: usize, D: N
     pub(crate) fn stop(&mut self) -> Result<(), crate::AccessRefused> {
         self.radio.link_controller().set_link_up(false);
         self.pending = None;
+        // A received frame the device still queues may be lent: dropping it
+        // returns it to the device before the device's own stop.
+        while let Some(frame) = self.device.try_receive() {
+            drop(frame);
+        }
         while let Some(packet) = self.radio.try_receive_tx()? {
             drop(packet);
         }

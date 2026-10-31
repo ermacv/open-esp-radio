@@ -400,7 +400,12 @@ pub enum UnavailableCause {
 pub fn station<W: Binding>(
     resources: Resources<W>,
     config: Config,
-) -> (Control<'static>, Network<'static>, Runners<W>) {
+) -> (
+    Control<'static>,
+    Network<'static>,
+    crate::NetworkStopper<'static>,
+    Runners<W>,
+) {
     let Resources {
         engine,
         events,
@@ -419,7 +424,7 @@ pub fn station<W: Binding>(
     } = resources;
     let crate::WifiHardware { cell, wifi } = hardware;
     let crate::DmaResources { rx, tx } = dma;
-    let (mut control, network, connection) = storage
+    let (mut control, network, stopper, connection) = storage
         .channels
         .split()
         .unwrap_or_else(|_| W::fail(InitializationError::Control));
@@ -453,6 +458,7 @@ pub fn station<W: Binding>(
     (
         control,
         network,
+        stopper,
         Runners {
             driver: Driver {
                 boot: radio::Boot {

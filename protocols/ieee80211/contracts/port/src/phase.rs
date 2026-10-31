@@ -892,6 +892,9 @@ pub trait LowerMacPhase<'p, 'id: 'p>:
     /// otherwise registers `cx` for the drop of the last one.
     fn poll_lent_returned(&mut self, cx: &mut core::task::Context<'_>) -> core::task::Poll<()>;
 
+    /// The buffers [`Self::lend`] moved to the network that it still holds.
+    fn lent(&self) -> usize;
+
     /// Close publication in every queue. A current publication is waited for,
     /// at most the backend's PUBLICATION_BOUND, before GateClosed is emitted.
     /// ACK returns `Delivered`; unknown timeout returns Indeterminate.

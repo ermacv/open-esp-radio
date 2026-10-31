@@ -83,8 +83,12 @@ impl<'a> Control<'a> {
     pub async fn scan(&mut self) -> Result<Operation<'a>, ControlError> {
         self.inner.scan().await
     }
-    pub fn stop(&mut self) {
-        self.inner.stop_gracefully();
+    /// Disconnect and stop. The network asked through its
+    /// [`NetworkStopper`] must return the station's lent receive buffers by
+    /// `deadline`, or the radio does not retire
+    /// ([`RetirementCause::NetworkDrainDeadline`](crate::RetirementCause::NetworkDrainDeadline)).
+    pub fn stop(&mut self, deadline: oer_time::Instant) {
+        self.inner.stop_gracefully(deadline);
     }
     /// The station's exit, published by its runner after the radio release
     /// ended. The copy reports the result; the runner keeps every owner.
@@ -268,7 +272,71 @@ impl Drop for StartGuard<'_> {
         }
     }
 }
+/// The station's stop request to the network side and its answer, both on
+/// the station's executor.
+struct NetworkStopState {
+    requested: core::cell::Cell<bool>,
+    stopped: core::cell::Cell<bool>,
+    network: oer_sync::PriorityWaker,
+    station: oer_sync::PriorityWaker,
+}
+impl NetworkStopState {
+    const fn new() -> Self {
+        Self {
+            requested: core::cell::Cell::new(false),
+            stopped: core::cell::Cell::new(false),
+            network: oer_sync::PriorityWaker::new(),
+            station: oer_sync::PriorityWaker::new(),
+        }
+    }
+}
+impl runtime::NetworkStop for NetworkStopState {
+    fn request_stop(&self) {
+        self.requested.set(true);
+        self.network.wake();
+    }
+    fn poll_stopped(&self, cx: &mut Context<'_>) -> Poll<()> {
+        self.station.register(cx.waker());
+        if self.stopped.get() {
+            Poll::Ready(())
+        } else {
+            Poll::Pending
+        }
+    }
+}
+/// The network side's end of the station's stop: it stops the application
+/// and the IP service, which drop every frame they hold, then reports it.
+pub struct NetworkStopper<'a> {
+    state: &'a NetworkStopState,
+}
+impl NetworkStopper<'_> {
+    /// Ready once the station asked the network to stop.
+    pub async fn requested(&self) {
+        core::future::poll_fn(|cx| {
+            self.state.network.register(cx.waker());
+            if self.state.requested.get() {
+                Poll::Ready(())
+            } else {
+                Poll::Pending
+            }
+        })
+        .await
+    }
+    /// The network stopped and holds no frame of the station. Dropping the
+    /// stopper says the same: a composition without a network side drops
+    /// it. The station still waits for every lent buffer's return.
+    pub fn stopped(&self) {
+        self.state.stopped.set(true);
+        self.state.station.wake();
+    }
+}
+impl Drop for NetworkStopper<'_> {
+    fn drop(&mut self) {
+        self.stopped();
+    }
+}
 pub struct Channels {
+    network_stop: NetworkStopState,
     start: StartState,
     stop: StopState<Exit>,
     commands: WakingSpscQueue<runtime::ServiceCommand<Caps>, 2>,
@@ -279,6 +347,7 @@ pub struct Channels {
 impl Channels {
     pub const fn new() -> Self {
         Self {
+            network_stop: NetworkStopState::new(),
             start: StartState::new(),
             stop: StopState::new(),
             commands: WakingSpscQueue::new(),
@@ -289,7 +358,12 @@ impl Channels {
     }
     pub fn split(
         &mut self,
-    ) -> Result<(Control<'_>, Network<'_>, Connection<'_>), runtime::ControlCreateError> {
+    ) -> Result<
+        (Control<'_>, Network<'_>, NetworkStopper<'_>, Connection<'_>),
+        runtime::ControlCreateError,
+    > {
+        self.network_stop.requested.set(false);
+        self.network_stop.stopped.set(false);
         let (send, commands) = self.commands.split();
         let (tx, transmit) = self.tx.split();
         let (receive, rx) = self.rx.split();
@@ -302,8 +376,12 @@ impl Channels {
                 stop: &self.stop,
             },
             Network { inner: network },
+            NetworkStopper {
+                state: &self.network_stop,
+            },
             Connection {
                 service: ServiceConnection {
+                    network_stop: &self.network_stop,
                     start: StartGuard(&self.start),
                     commands,
                     transmit,
@@ -328,6 +406,7 @@ pub struct Connection<'a> {
 }
 #[cfg_attr(not(target_arch = "riscv32"), allow(dead_code))]
 struct ServiceConnection<'a> {
+    network_stop: &'a NetworkStopState,
     start: StartGuard<'a>,
     commands: oer_memory::WakingSpscReceiver<'a, runtime::ServiceCommand<Caps>, 2>,
     transmit: oer_memory::WakingSpscReceiver<'a, TxMsdu, 2>,
@@ -423,7 +502,7 @@ mod tests {
     fn control_and_neutral_device_exist_before_installation_without_minting_a_link_or_consuming_refused_owners()
      {
         let mut channels = Channels::new();
-        let (mut control, mut net, connection) = channels.split().unwrap();
+        let (mut control, mut net, _stopper, connection) = channels.split().unwrap();
         assert_eq!(control.link(), LinkSnapshot::DOWN);
         assert_eq!(net.link(), LinkSnapshot::DOWN);
         let dropped = Rc::new(Cell::new(0));
@@ -447,6 +526,7 @@ mod tests {
         let crate::Connection {
             service:
                 crate::ServiceConnection {
+                    network_stop: _,
                     start,
                     commands,
                     transmit: _,
@@ -515,7 +595,7 @@ mod tests {
         let wakes = Arc::new(Wakes(AtomicUsize::new(0)));
         let waker = core::task::Waker::from(wakes.clone());
         let mut channels = Channels::new();
-        let (mut control, _network, connection) = channels.split().unwrap();
+        let (mut control, _network, _stopper, connection) = channels.split().unwrap();
         let mut cx = Context::from_waker(&waker);
         {
             let mut waiting = core::pin::pin!(control.wait_started());

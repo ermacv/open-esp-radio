@@ -16,6 +16,11 @@ pub enum StationFailure {
         cause: BackendFault,
         missing: PendingTerminal,
     },
+    /// A stop's deadline passed while the network held `held` lent receive
+    /// buffers.
+    NetworkDrainDeadline {
+        held: usize,
+    },
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum BackendFault {
@@ -365,6 +370,12 @@ pub enum RetirementCause {
     BodyAlreadyIssued,
     Deadline,
     StopUnconfirmed,
+    /// The network still held `held` lent receive buffers at the stop's
+    /// deadline; their memory stays quarantined with the port, and a later
+    /// return does not publish it to DMA.
+    NetworkDrainDeadline {
+        held: usize,
+    },
     InvalidState(SlotObservation),
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

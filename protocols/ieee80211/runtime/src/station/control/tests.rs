@@ -82,7 +82,7 @@ fn cancellation_poisons_control_reuse_and_stop_wait_retains_completion() {
     let state = State::new();
     let (sender, _) = commands.split();
     let (mut control, mut runner) = Control::new(sender, &state).unwrap();
-    control.stop();
+    control.stop(oer_time::Instant::from_micros(u64::MAX));
     embassy_futures::block_on(runner.wait_for_stop());
     let mut cx = Context::from_waker(core::task::Waker::noop());
     assert!(
@@ -179,7 +179,7 @@ fn network_link_wakes_on_events_and_keeps_the_cores_epoch() {
     assert!(device.try_receive().is_none());
     // Cooperative stop is independent of a full command queue.
     assert!(control.try_command(ControlCommand::Stop).is_ok());
-    control.stop();
+    control.stop(oer_time::Instant::from_micros(u64::MAX));
     assert_eq!(delivered.len(), 4);
 }
 
@@ -468,7 +468,7 @@ fn the_reconnect_policy_and_an_operation_share_one_admission() {
     let Some(ServiceCommand::Station(explicit)) = receiver.try_receive() else {
         panic!("the disconnect is admitted")
     };
-    control.stop_gracefully();
+    control.stop_gracefully(oer_time::Instant::from_micros(u64::MAX));
     assert!(matches!(runner.policy_command::<()>(now), Ok(None)));
     assert!(!runner.policy_ready(now));
     assert_eq!(runner.policy_deadline(), None);

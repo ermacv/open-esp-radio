@@ -435,6 +435,7 @@ impl<W: Binding> rp::PortBody<W::Id, Backend<W::Id, W>> for Body<W> {
             ..
         } = runner;
         let crate::ServiceConnection {
+            network_stop,
             start,
             commands,
             transmit,
@@ -455,6 +456,8 @@ impl<W: Binding> rp::PortBody<W::Id, Backend<W::Id, W>> for Body<W> {
             receive,
             control,
             output: &mut output,
+            network: network_stop,
+            stop: oer_ieee80211_runtime::station::StopPolicy::DEFAULT,
         };
         let mut unwrap = KeyUnwrapSlot::new(engine);
         let done = running

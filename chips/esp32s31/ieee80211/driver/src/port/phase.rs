@@ -124,6 +124,9 @@ impl<'p, 'id: 'p, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Obser
     fn poll_lent_returned(&mut self, cx: &mut core::task::Context<'_>) -> core::task::Poll<()> {
         self.held.storage.network.poll_returned(cx)
     }
+    fn lent(&self) -> usize {
+        self.held.storage.network.held()
+    }
     fn close_gate(&mut self, gate: GateOpen<'id, Part<Id, 1>>) {
         self.held
             .command(driver::Command::CloseGate(gate.into_owned(&self.loan)));
