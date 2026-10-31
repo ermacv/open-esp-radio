@@ -25,7 +25,7 @@ use oer_services_load::{
     Collect, CollectCounters, CollectParts, Collected, Counters, CountersCollected, Load,
     MAX_PARTS, PartWindow, PartsCollected, Report, Start, Started, Transmit,
 };
-use oer_services_wifi_station::{GetStatus, Join, Joined, Status};
+use oer_services_wifi_station::{GetStatus, Join, Joined, Leave, Left, Status};
 
 /// The image the scenario runs.
 const IMAGE: &str = "esp32s31-wifi-station";
@@ -41,7 +41,7 @@ const SCENARIO: Scenario = Scenario::new(
 .using_router()
 .using_air_exclusively();
 
-const CASES: [Case; 4] = [
+const CASES: [Case; 5] = [
     Case {
         name: "path",
         run: path,
@@ -57,6 +57,11 @@ const CASES: [Case; 4] = [
     Case {
         name: "rx-tx",
         run: rx_tx,
+    },
+    // Last: the image serves no station after a leave.
+    Case {
+        name: "stop",
+        run: stop_under_load,
     },
 ];
 
@@ -596,6 +601,66 @@ fn tx(cx: &mut Cx<'_>) -> Result<(), Failure> {
 
 fn rx_tx(cx: &mut Cx<'_>) -> Result<(), Failure> {
     levels(cx, Mode::RxTx)
+}
+
+/// How long into an RX run the stop comes, and how long the leave may take:
+/// the image's stop deadline is 2 s, its release and the answer follow it.
+const STOP_AFTER: Duration = Duration::from_secs(2);
+const LEAVE_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// Leave while the host offers RX load the image receives and its socket
+/// holds: the stop closes the socket and stops the IP service, every lent
+/// buffer returns and the radio retires, so the station reports `Down`.
+fn stop_under_load(cx: &mut Cx<'_>) -> Result<(), Failure> {
+    let device = device_address(cx)?;
+    let host = host_route(device)?.source;
+    let run = run_id();
+    let endpoint = traffic::Endpoint::open(SocketAddrV4::new(host, 0), run)
+        .map_err(|error| Failure::Incomplete(format!("the host socket: {error}")))?;
+    let started = cx.call(
+        Start {
+            run,
+            port: DEVICE_PORT,
+            delay_ms: DELAY_MS,
+            duration_ms: 10_000,
+            drain_ms: DRAIN_MS,
+            transmit: None,
+            profile: None,
+        },
+        CALL,
+    )?;
+    check(
+        started == Started::Running,
+        format!("the image's load: {started:?}"),
+    )?;
+    let peer = SocketAddrV4::new(device, DEVICE_PORT);
+    let offered_bps = 65_000_000;
+    let (sent, left, took) = std::thread::scope(|scope| {
+        let sender = scope.spawn(|| {
+            traffic::send(&endpoint, peer, run, PAYLOAD, offered_bps, STOP_AFTER + LEAVE_TIMEOUT)
+        });
+        std::thread::sleep(Duration::from_millis(u64::from(DELAY_MS)) + STOP_AFTER);
+        let leaving = Instant::now();
+        let left = cx.call(Leave, LEAVE_TIMEOUT);
+        let took = leaving.elapsed();
+        (sender.join(), left, took)
+    });
+    let left = left?;
+    let status = status(cx)?;
+    cx.measure(
+        "stop under load",
+        serde_json::json!({
+            "offered_mbps": offered_bps / 1_000_000,
+            "host_sent_datagrams": sent.as_ref().map_or(0, |sent| sent.datagrams),
+            "leave_ms": took.as_millis() as u64,
+            "left": format!("{left:?}"),
+            "link": format!("{:?}", status.link),
+        }),
+    );
+    check(
+        left == Left::Down,
+        format!("a leave under load ends the station normally: {left:?}"),
+    )
 }
 
 fn levels(cx: &mut Cx<'_>, mode: Mode) -> Result<(), Failure> {
