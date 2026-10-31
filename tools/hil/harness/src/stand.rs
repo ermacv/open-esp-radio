@@ -11,6 +11,7 @@ use std::{
     io::{Read, Write},
     os::unix::net::UnixStream,
     path::Path,
+    path::PathBuf,
     sync::{Mutex, PoisonError},
     time::Duration,
 };
@@ -45,6 +46,9 @@ pub(crate) struct Session {
     link: Option<Link>,
     image_crc32: u32,
     board: StandBoard,
+    /// The checkout the scenario runs in, and the board's stand-file id.
+    root: PathBuf,
+    board_id: String,
 }
 
 impl Session {
@@ -87,7 +91,19 @@ impl Session {
             link: Some(link),
             image_crc32,
             board: stand_board,
+            root,
+            board_id: board.id.clone(),
         })
+    }
+
+    /// The checkout the scenario runs in.
+    pub(crate) fn root(&self) -> &Path {
+        &self.root
+    }
+
+    /// The device under test's stand-file id.
+    pub(crate) fn board_id(&self) -> &str {
+        &self.board_id
     }
 
     /// The link the session opened, for the cases.

@@ -62,9 +62,18 @@ pub(crate) fn select<'a>(cases: &'a [Case], names: &[String]) -> Result<Vec<&'a 
         .collect())
 }
 
+/// One measurement a case recorded.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct Measurement {
+    pub case: &'static str,
+    pub name: String,
+    pub value: serde_json::Value,
+}
+
 /// What running the cases came to.
 pub(crate) struct Run {
     pub outcomes: Vec<Outcome>,
+    pub measurements: Vec<Measurement>,
     /// How the cases left the device, for finishing.
     pub ending: Ending,
 }
@@ -82,6 +91,7 @@ pub(crate) fn cases(
 ) -> Run {
     let image_crc32 = dut.image_crc32();
     let mut outcomes = Vec::new();
+    let mut measurements = Vec::new();
     let mut record = |outcome: Outcome, out: &mut dyn Write| {
         print(&outcome, out);
         outcomes.push(outcome);
@@ -96,6 +106,7 @@ pub(crate) fn cases(
             record(Outcome::stand(reason), out);
             return Run {
                 outcomes,
+                measurements,
                 ending: Ending { unconfirmed: false },
             };
         }
@@ -117,6 +128,15 @@ pub(crate) fn cases(
             // A reset during the case moved it to a later boot.
             boot = cx.boot;
             unconfirmed = cx.unconfirmed;
+            measurements.extend(
+                cx.measurements
+                    .into_iter()
+                    .map(|(name, value)| Measurement {
+                        case: case.name,
+                        name,
+                        value,
+                    }),
+            );
             verdict
         };
         let Some(link) = dut.link() else {
@@ -169,10 +189,45 @@ pub(crate) fn cases(
     }
     Run {
         outcomes,
+        measurements,
         ending: Ending {
             unconfirmed: unconfirmed.is_some(),
         },
     }
+}
+
+/// The results file of a run: the scenario, the board, every outcome and
+/// every measurement.
+pub(crate) fn results(
+    scenario: &Scenario,
+    board: &str,
+    unix: u64,
+    outcomes: &[Outcome],
+    measurements: &[Measurement],
+) -> serde_json::Value {
+    serde_json::json!({
+        "scenario": scenario.name,
+        "image": scenario.image,
+        "board": board,
+        "unix": unix,
+        "outcomes": outcomes.iter().map(|outcome| {
+            let (verdict, reason) = match &outcome.verdict {
+                Verdict::Pass => ("pass", None),
+                Verdict::Fail(reason) => ("fail", Some(reason)),
+                Verdict::Incomplete(reason) => ("incomplete", Some(reason)),
+            };
+            serde_json::json!({
+                "case": outcome.case.unwrap_or("stand"),
+                "verdict": verdict,
+                "reason": reason,
+            })
+        }).collect::<Vec<_>>(),
+        "measurements": measurements.iter().map(|measurement| serde_json::json!({
+            "case": measurement.case,
+            "name": measurement.name,
+            "value": measurement.value,
+        })).collect::<Vec<_>>(),
+    })
 }
 
 /// Print the device's diagnostic lines and how many were lost.

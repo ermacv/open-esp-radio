@@ -48,6 +48,11 @@ fn the_name_follows_the_path() {
         ("hil-scenarios/services/aes", false, "oer-services-aes"),
         ("hil-scenarios/services/load", false, "oer-services-load"),
         (
+            "hil-scenarios/wifi-load",
+            true,
+            "oer-hil-scenarios-wifi-load",
+        ),
+        (
             "hil-scenarios/wifi-station",
             true,
             "oer-hil-scenarios-wifi-station",
@@ -972,6 +977,7 @@ const ROLES: &[(&str, Role)] = &[
     ("hil-scenarios/services/wifi-station", Role::HilBinding),
     ("hil-scenarios/aes", Role::Tool),
     ("hil-scenarios/wifi-station", Role::Tool),
+    ("hil-scenarios/wifi-load", Role::Tool),
 ];
 
 /// Roles fixed before their package exists, with what creates it. When the

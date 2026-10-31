@@ -380,3 +380,33 @@ fn a_case_runs_router_operations_and_an_unanswered_router_leaves_it_incomplete()
         ]
     );
 }
+
+#[test]
+fn a_case_s_measurements_reach_the_results_with_its_name_and_never_decide_it() {
+    fn measured(cx: &mut Cx<'_>) -> Result<(), Failure> {
+        cx.measure("throughput", serde_json::json!({ "mbps": 42.5 }));
+        Err(Failure::Fail("after measuring".into()))
+    }
+    let (device, link) = Device::new(7);
+    thread::spawn(move || serve(device));
+    let board = crate::fakes::FakeBoard::new(Vec::new());
+    let mut dut = crate::dut::Dut::new(Some(link), &board, IMAGE);
+    let case = Case {
+        name: "load",
+        run: measured,
+    };
+    let ran = run::cases(&mut dut, &SCENARIO, &[&case], &mut Vec::new());
+    assert_eq!(
+        ran.measurements,
+        [run::Measurement {
+            case: "load",
+            name: "throughput".to_owned(),
+            value: serde_json::json!({ "mbps": 42.5 }),
+        }]
+    );
+    let results = run::results(&SCENARIO, "s31-a", 1, &ran.outcomes, &ran.measurements);
+    assert_eq!(results["board"], "s31-a");
+    assert_eq!(results["outcomes"][0]["verdict"], "fail");
+    assert_eq!(results["measurements"][0]["case"], "load");
+    assert_eq!(results["measurements"][0]["value"]["mbps"], 42.5);
+}

@@ -2380,6 +2380,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-hil-scenarios-wifi-load"
+version = "0.1.0"
+dependencies = [
+ "heapless",
+ "oer-hil-agent",
+ "oer-hil-harness",
+ "oer-lab-model",
+ "oer-services-load",
+ "oer-services-wifi-station",
+ "serde_json",
+]
+
+[[package]]
 name = "oer-hil-scenarios-wifi-station"
 version = "0.1.0"
 dependencies = [

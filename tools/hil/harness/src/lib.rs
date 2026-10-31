@@ -120,6 +120,8 @@ pub struct Cx<'a> {
     /// A request whose outcome is unknown: the device may still run it, so
     /// the boot takes no further request.
     unconfirmed: Option<u32>,
+    /// What the case measured, in the order it measured it.
+    measurements: Vec<(String, serde_json::Value)>,
 }
 
 impl<'a> Cx<'a> {
@@ -128,6 +130,7 @@ impl<'a> Cx<'a> {
             dut,
             boot,
             unconfirmed: None,
+            measurements: Vec::new(),
         }
     }
 
@@ -231,6 +234,15 @@ impl<'a> Cx<'a> {
         Ok(self.link()?.health())
     }
 
+    /// Record a measurement `name` of the case: printed at once, and kept in
+    /// the run's results file (`target/hil/results/`) with the case's name.
+    /// A measurement reports; it never decides the case.
+    pub fn measure(&mut self, name: impl Into<String>, value: serde_json::Value) {
+        let name = name.into();
+        println!("  measure {name}: {value}");
+        self.measurements.push((name, value));
+    }
+
     /// Run `request` on the lab router under the run's lease (a scenario
     /// [`Scenario::using_router`]): its result as the operation returns it.
     /// A router that does not answer leaves the case incomplete.
@@ -310,6 +322,9 @@ pub fn main(scenario: &Scenario, cases: &[Case]) -> ExitCode {
                 let run = run::cases(&mut dut, scenario, &selected, &mut out);
                 (run, dut.into_link())
             };
+            if !run.measurements.is_empty() {
+                write_results(&session, scenario, &run);
+            }
             let cleanup = session.finish(link, run.ending);
             let cleanup = cleanup.released(session.release());
             (run.outcomes, Some(cleanup))
@@ -322,6 +337,33 @@ pub fn main(scenario: &Scenario, cases: &[Case]) -> ExitCode {
     };
     let verdict = run::summary(scenario, &outcomes, cleanup.as_ref(), &mut out);
     ExitCode::from(verdict.exit_code())
+}
+
+/// Write the run's results to `target/hil/results/<scenario>-<unix>.json`
+/// of the checkout and print where; a file that cannot be written is
+/// reported, never the run's verdict.
+fn write_results(session: &stand::Session, scenario: &Scenario, run: &run::Run) {
+    let unix = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |elapsed| elapsed.as_secs());
+    let results = run::results(
+        scenario,
+        session.board_id(),
+        unix,
+        &run.outcomes,
+        &run.measurements,
+    );
+    let directory = session.root().join("target/hil/results");
+    let path = directory.join(format!("{}-{unix}.json", scenario.name));
+    let written = std::fs::create_dir_all(&directory)
+        .and_then(|()| std::fs::write(&path, format!("{results:#}\n")));
+    match written {
+        Ok(()) => println!("results: {}", path.display()),
+        Err(error) => eprintln!(
+            "hil: the results file {} was not written: {error}",
+            path.display()
+        ),
+    }
 }
 
 #[cfg(test)]
