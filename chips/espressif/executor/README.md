@@ -139,7 +139,7 @@ beat's wait as between rounds, and ends with
 records (`PeerUnanswered`, last word 2) and resets on. Executor locality is
 checked: `post` and the discharge take the proof that the caller runs in
 the client executor's context (`signal::enter`), and the supervisor
-registers its waker only after proving that one of that executor's tasks
+registers its task only after proving that one of that executor's tasks
 polls (`signal::enter_task`); outside it, `post` returns
 `PostError::Foreign` before publishing anything. A seat keeps its posted
 flag apart from the deadline, so every `Instant` is watched unchanged; the

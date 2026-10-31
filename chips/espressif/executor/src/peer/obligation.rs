@@ -15,7 +15,7 @@
 //! Executor locality is checked, not assumed: every write takes the proof
 //! that the caller runs in executor `C`'s context
 //! ([`signal::enter`](oer_espressif_interrupt_table::signal::enter)), and
-//! the supervisor registers its waker only after proving that one of `C`'s
+//! the supervisor registers its task only after proving that one of `C`'s
 //! tasks polls ([`signal::enter_task`]). So writer and reader never run at
 //! once (the executor polls one task at a time, and a context is one
 //! executor even beside another on the same hart). The supervisor's task
@@ -180,7 +180,7 @@ impl<C: SignalExecutor> Watch<C> {
     }
 
     /// Publish the posted request's `deadline`, unchanged, then wake the
-    /// supervisor; only in executor `C`'s context, proven by `_in`.
+    /// supervisor; only in executor `C`'s context, proven by `context`.
     pub(super) fn oblige(&self, deadline: Instant, context: &ContextToken<C::Context>) {
         self.seat.deadline.publish(deadline.as_micros());
         self.seat.posted.store(true, Ordering::Release);
@@ -188,7 +188,7 @@ impl<C: SignalExecutor> Watch<C> {
     }
 
     /// Withdraw the obligation of an answer taken before its deadline; only
-    /// in executor `C`'s context, proven by `_in`.
+    /// in executor `C`'s context, proven by `context`.
     pub(super) fn discharge(&self, context: &ContextToken<C::Context>) {
         self.seat.posted.store(false, Ordering::Release);
         self.notify(context);
