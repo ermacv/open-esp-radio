@@ -1,0 +1,7 @@
+# Firmware catalog entry: `cargo fw idf build wifi-injector-peer`.
+# The vendor Wi-Fi driver sends unicast data frames at one fixed PHY rate and
+# reports whether each was acknowledged: a frame source for receive tests.
+image = "wifi-injector-peer"
+chip = "esp32c5"
+# The ESP32-C5 pins: the same ESP-IDF revision with the ESP32-C5 archives.
+pins = "esp32c5"
