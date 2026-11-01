@@ -8,8 +8,6 @@ mod handoff;
 #[cfg(any(target_arch = "riscv32", test))]
 mod load;
 #[cfg(any(target_arch = "riscv32", test))]
-mod requests;
-#[cfg(any(target_arch = "riscv32", test))]
 mod startup;
 #[cfg(target_arch = "riscv32")]
 include!("entry.rs");

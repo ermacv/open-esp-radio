@@ -58,7 +58,7 @@ a HIL image of one function build it:
 | Setting | Default | Override |
 | --- | --- | --- |
 | Reconnect after a lost association | every 1 s (`wifi::RECONNECT`) | `wifi::Config::with_reconnect(interval)`, `without_reconnect()` |
-| Drain at a stop after a failure | 2 s (`wifi::DRAIN`) | `wifi::Config::with_drain(deadline)` |
+| Drain at a stop | 2 s (`wifi::DRAIN`) | `wifi::Config::with_drain(deadline)` |
 | AES client seats | 4 (`AES_CLIENTS`) | `static SEATS: AesSeats<C>`, `Aes::start_with(p.aes, &SEATS, &mut boot)` |
 | IP pools (receive, transmit, general frames) | 8, 8, 8 (`wifi::RX`, `TX`, `GENERAL`) | `static POOLS: wifi::Pools<RX, TX, GENERAL>`, `Net::start_with(device, &POOLS, config, boot)` |
 
@@ -110,15 +110,21 @@ ends with the result of that connection attempt: `Connected`, or a
 and the others; none is reported as a wrong password). Once a connect
 linked, the station keeps the network and rejoins it after a lost
 association; a connect that ended without a link leaves the station idle
-for the application's next connect, with the same or another profile. `wifi::Net::start`
+for the application's next connect, with the same or another profile.
+`linked()` names the access point and channel while the link is up.
+`stop()` leaves the network and stops the station for good: the future ends
+once the radio retired, with `StopError::Failed` when the station ended by
+a failure instead, and a later connect answers `ConnectError::Stopped`.
+`wifi::Net::start`
 runs the existing IP service (`oer-embassy-net`) over the station's device;
 `wait_ipv4` ends with the configuration over an up link and keeps waiting
 across a link loss, `wait_link_down` ends on a loss or a new link epoch,
 and both end with `NetError::Stopped` or `Failed` when the service ends.
 Sockets open on `net.stack()` (`embassy_net`, re-exported). The
 station lends received frames to the IP service in place; when the station
-stops (after a failure, within the drain deadline) the IP service stops first and returns
-every buffer it holds. A station whose device no `Net::start` took tells
+stops (by `stop()` or after a failure, within the drain deadline) the IP
+service stops first and returns every buffer it holds, and its waits end
+with `NetError::Stopped`. A station whose device no `Net::start` took tells
 the station that no network takes its frames.
 
 `Console::open` takes the USB Serial/JTAG block from the early writer and

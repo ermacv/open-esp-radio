@@ -1,11 +1,12 @@
-//! Which requests the image answers by itself in each phase of its one
-//! station, and which its station work takes over.
+//! Which requests an image answers by itself in each phase of its one
+//! station, and which its station work takes over: one join per boot, a
+//! leave only of a joined station and only once.
 
-use oer_services_wifi_station::{Join, Joined, Left, Request, StationError};
+use crate::{Join, Joined, Left, Request, StationError};
 
 /// Where the boot's station is.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum Phase {
+pub enum Phase {
     /// No join was made.
     Idle,
     /// The join was taken: its credentials are prepared, then the station
@@ -19,7 +20,7 @@ pub(crate) enum Phase {
 
 /// What the image does with one request.
 #[derive(Debug, Eq, PartialEq)]
-pub(crate) enum Action {
+pub enum Action {
     /// Answer it now.
     Answer(Answer),
     /// Answer with the station's status.
@@ -30,15 +31,16 @@ pub(crate) enum Action {
     Leave,
 }
 
+/// An answer the image gives by itself.
 #[derive(Debug, Eq, PartialEq)]
-pub(crate) enum Answer {
+pub enum Answer {
     Joined(Joined),
     Left(Left),
 }
 
 /// What the image does with `request` in `phase`: one join per boot, a
 /// leave only of a joined station and only once.
-pub(crate) fn action(phase: Phase, request: Request) -> Action {
+pub fn action(phase: Phase, request: Request) -> Action {
     match (phase, request) {
         (_, Request::GetStatus(_)) => Action::Status,
         (Phase::Idle, Request::Join(join)) => Action::Join(join),
@@ -58,7 +60,7 @@ pub(crate) fn action(phase: Phase, request: Request) -> Action {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oer_services_wifi_station::{GetStatus, Leave};
+    use crate::{GetStatus, Leave};
 
     fn join() -> Join {
         Join {

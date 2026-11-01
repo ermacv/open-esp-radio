@@ -31,7 +31,8 @@
 //! The messages are shared by the image, which serves them through
 //! [`Request`] and its [`Handler`], and the host scenario, which sends them
 //! and checks the answers against what the lab router sees. [`runtime`]
-//! builds the answers from the product station runtime's values.
+//! builds the answers from the product station runtime's values, and
+//! [`phase`] says which requests an image answers by itself.
 
 use postcard_schema::Schema;
 use serde::{Deserialize, Serialize};
@@ -136,6 +137,7 @@ oer_hil_agent::service! {
     }
 }
 
+pub mod phase;
 pub mod runtime;
 
 #[cfg(test)]

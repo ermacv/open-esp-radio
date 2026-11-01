@@ -1,8 +1,9 @@
 # Wi-Fi station scenario
 
-`cargo hil run wifi-station` checks the product Wi-Fi station
-(`oer-esp32s31-wifi` with IPv4 over DHCP) on the `esp32s31-wifi-station`
-image through the [Wi-Fi station service](../services/wifi-station). Every
+`cargo hil run wifi-station` checks the Wi-Fi station of the application
+entry `oer-espressif` (its station and IP service, IPv4 over DHCP) on the
+`esp32s31-sdk-station` image through the
+[Wi-Fi station service](../services/wifi-station). Every
 claim of the device is checked against the lab router, which the run leases
 with the board and the air (`Scenario::using_router`).
 
