@@ -171,8 +171,6 @@ pub use commands::{
 };
 pub use deferred_eapol::{DeferredEapol, PendingGroupM1, PendingM3};
 use group_keys::{GroupKeys, GroupPlace, Installed as InstalledGroup, Replay as GroupReplay};
-use key_unwrap::KeyUnwrapLane;
-pub use key_unwrap::{KEY_DATA_CAPACITY, KeyUnwrapId, StaKeyUnwrapRequest, StaKeyUnwrapResponse};
 use management::{ManagementEvent, ManagementProtection};
 use tx_block_ack::TxBlockAckOwed;
 pub use tx_block_ack::{StaTxBlockAck, StaTxBlockAckPolicy, StaTxBlockAckPolicyError};
@@ -462,14 +460,6 @@ pub enum StaInput<'id, T: StaTokens, K> {
         slot: T::GroupSlot,
         permission: T::GroupPermission,
     },
-    /// The unwrap of [`StaAction::UnwrapKeyData`] finished: its ticket and the
-    /// response with the request's buffer come back.
-    KeyDataUnwrapped {
-        /// The ticket the action carried.
-        id: KeyUnwrapId,
-        /// The plaintext key data, or why the engine refused it.
-        result: StaKeyUnwrapResponse,
-    },
 }
 
 /// One action of the station, which the service carries out at once.
@@ -617,15 +607,6 @@ pub enum StaAction<'a, 'id, T: StaTokens, K> {
     Notify(StaNotice),
     /// Return one accepted application's request and its final outcome.
     CommandCompleted(StaCommandTerminal<'id, T::ConfigurationPath>),
-    /// Unwrap EAPOL-Key data in the composition's engine
-    /// ([`StaInput::KeyDataUnwrapped`] follows, with `id`). At most one is out;
-    /// the station's timers keep running while it is.
-    UnwrapKeyData {
-        /// The station's sole ticket.
-        id: KeyUnwrapId,
-        /// The owned request: the KEK and the wrapped key data.
-        request: StaKeyUnwrapRequest,
-    },
 }
 
 /// One MPDU to transmit: its ticket, the buffer the station encoded it in,
@@ -1035,8 +1016,14 @@ const QOS_SEQUENCES: [SequenceCounter; 8] = [SequenceCounter::new(SequenceNumber
 /// The provider owns its entropy state; each nonce request must be fresh for
 /// protected handshakes and PMF. Open-only compositions never request one.
 pub trait StaCallbacks {
+    /// The synchronous AES-128 block primitive the station unwraps EAPOL-Key
+    /// data with (RFC 3394), in its step: the composition chooses it, a
+    /// software block or the chip's accelerator.
+    type KeyUnwrapBlocks: oer_crypto::block::Aes128Blocks;
     /// Fresh randomness for each handshake and PMF SA Query procedure.
     fn nonce(&mut self) -> [u8; 32];
+    /// The block primitive for the next key-data unwrap.
+    fn key_unwrap_blocks(&mut self) -> &mut Self::KeyUnwrapBlocks;
     /// Composition policy for the peer's complete HE Capabilities element.
     fn he_packet_padding(&self, capability: &[u8]) -> HePacketPadding;
 }
@@ -1150,8 +1137,6 @@ pub struct Station<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
     /// The connection attempt that owns new TX operations.
     epoch: Option<LinkEpoch<'id, T::EpochPath>>,
     epochs: LinkEpochSource<'id, T::EpochPath>,
-    /// The key-unwrap ticket, home or out with one request.
-    key_unwrap: KeyUnwrapLane,
 }
 
 /// Resource bank of a terminal station. It cannot accept commands, receive
@@ -1171,7 +1156,6 @@ pub struct RetiredStation<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCal
     sequence: SequenceCounter,
     pmksa: StaPmksaCache,
     notice: Option<StaNotice>,
-    key_unwrap: KeyUnwrapLane,
 }
 
 /// A placed station's terminal bank and the places it returns to the arbiter.
@@ -1222,7 +1206,6 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> RetiredStatio
             pmksa,
             notice,
             deferred_eapol,
-            key_unwrap,
         } = self;
         StationRestart {
             station: Station {
@@ -1243,7 +1226,6 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> RetiredStatio
                 scan: ScanTable::new(),
                 epoch: None,
                 state: State::Reclaiming(Reclaim::Keys),
-                key_unwrap,
             },
             notice,
             deferred_eapol,
@@ -2081,17 +2063,6 @@ enum HandshakeStep {
     Send(RsnTxFrame),
     /// Message 2's terminal.
     AwaitSent,
-    /// Message 3's key data to unwrap, once the ticket is home.
-    Unwrap(
-        RsnStaKeyDataRequest<DEFAULT_EAPOL_FRAME_CAPACITY>,
-        EapolProtection,
-    ),
-    /// The unwrap issued with `sequence` is out; the deadline keeps running.
-    AwaitUnwrap {
-        sequence: u32,
-        request: RsnStaKeyDataRequest<DEFAULT_EAPOL_FRAME_CAPACITY>,
-        protection: EapolProtection,
-    },
     /// The keys of Message 3 to install: the pairwise key, then the group
     /// key.
     Install(RsnStaKeyInstallRequest, EapolProtection),
@@ -2315,10 +2286,7 @@ impl ConnectedRsn {
                     Rekey::Install(current, _) | Rekey::AwaitInstalled(current, _) => {
                         current.replay_counter()
                     }
-                    Rekey::Unwrap(current, _)
-                    | Rekey::AwaitUnwrap {
-                        request: current, ..
-                    } => current.replay_counter(),
+                    Rekey::Unwrap(current, _) => current.replay_counter(),
                     _ => self.supplicant.replay_counter(),
                 };
                 if request.replay_counter() <= current {
@@ -2396,37 +2364,6 @@ impl ConnectedRsn {
             };
         self.deferred = rest;
         self.rekey = Rekey::Unwrap(request, protection);
-    }
-
-    /// The response to the unwrap issued with `sequence`. Any other response
-    /// is stale and returns nothing but its ticket.
-    fn key_data_unwrapped(
-        &mut self,
-        sequence: u32,
-        response: StaKeyUnwrapResponse,
-        events: &mut impl EventSink<StaEvent>,
-    ) {
-        match core::mem::replace(&mut self.rekey, Rekey::None) {
-            Rekey::AwaitUnwrap {
-                sequence: issued,
-                request,
-                protection,
-            } if issued == sequence => {
-                if let Err(reason) =
-                    self.complete_unwrap(request, protection, response.into_plaintext(), events)
-                {
-                    self.fault = Some(reason);
-                }
-            }
-            // The ticket came home with another request's response: issue
-            // this one again.
-            Rekey::AwaitUnwrap {
-                request,
-                protection,
-                ..
-            } => self.rekey = Rekey::Unwrap(request, protection),
-            rekey => self.rekey = rekey,
-        }
     }
 
     /// Prepare the installation of unwrapped key data. Invalid key data is a
@@ -2519,18 +2456,12 @@ struct EapolResponse {
 /// pool replaces the oldest non-current installation in one operation.
 enum Rekey {
     None,
-    /// An authenticated M3 or GM1 whose key data to unwrap, once the ticket
-    /// is home.
+    /// An authenticated M3 or GM1 whose key data the station unwraps in its
+    /// next action turn.
     Unwrap(
         RsnGroupKeyDataRequest<DEFAULT_EAPOL_FRAME_CAPACITY>,
         EapolProtection,
     ),
-    /// The unwrap issued with `sequence` is out.
-    AwaitUnwrap {
-        sequence: u32,
-        request: RsnGroupKeyDataRequest<DEFAULT_EAPOL_FRAME_CAPACITY>,
-        protection: EapolProtection,
-    },
     /// The new key to install in a free slot or replace in an occupied slot.
     Install(
         RsnGroupKeyInstallRequest<DEFAULT_EAPOL_FRAME_CAPACITY>,
@@ -2731,7 +2662,6 @@ enum Owed<'id, T: StaTokens, K> {
     TransmitProtected(StaTransmit<'id, T, K>),
     Associated(Peer<T::RxMeta>),
     Notify(StaNotice),
-    UnwrapKeyData(KeyUnwrapId, StaKeyUnwrapRequest),
 }
 
 /// An action, an internal transition to drain, or an actual wait for input.
@@ -2851,7 +2781,6 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
             mut state,
             scan: _,
             epoch: _,
-            key_unwrap,
         } = self;
         (
             RetiredStation {
@@ -2867,7 +2796,6 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
                 sequence,
                 pmksa,
                 notice,
-                key_unwrap,
             },
             StationPlaceReturns::new(place, absence_place),
         )
@@ -2925,7 +2853,6 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
             pmksa,
             epoch,
             epochs,
-            key_unwrap,
         ) = oer_memory::unpack_placed!(
             machine,
             Self {
@@ -2945,8 +2872,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
                 scan,
                 pmksa,
                 epoch,
-                epochs,
-                key_unwrap
+                epochs
             }
         );
         drop((lease, absence, scan, epoch));
@@ -2968,7 +2894,6 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
                     sequence: sequence.read(),
                     pmksa: pmksa.read(),
                     notice: notice,
-                    key_unwrap: key_unwrap.read(),
                 }
             )
         });
@@ -3048,7 +2973,6 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
                 pmksa: StaPmksaCache::new(),
                 epoch: None,
                 epochs,
-                key_unwrap: KeyUnwrapLane::new(),
             },
             credits,
         )
@@ -3103,7 +3027,6 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
                 pmksa: StaPmksaCache::new(),
                 epoch: None,
                 epochs: epochs,
-                key_unwrap: KeyUnwrapLane::new(),
             }),
             credits,
         )
@@ -3499,7 +3422,6 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
             },
             Owed::Notify(notice) => StaAction::Notify(notice),
             Owed::Associated(peer) => StaAction::Associated(peer),
-            Owed::UnwrapKeyData(id, request) => StaAction::UnwrapKeyData { id, request },
         })
     }
 
@@ -3691,7 +3613,6 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
                 pmksa: &mut self.pmksa,
                 epoch: &mut self.epoch,
                 epochs: &mut self.epochs,
-                key_unwrap: &mut self.key_unwrap,
             },
             &mut self.state,
         )
@@ -3722,8 +3643,6 @@ struct TransitionContext<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: Sta
     /// The connection attempt that owns new TX operations.
     epoch: &'s mut Option<LinkEpoch<'id, T::EpochPath>>,
     epochs: &'s mut LinkEpochSource<'id, T::EpochPath>,
-    /// The key-unwrap ticket.
-    key_unwrap: &'s mut KeyUnwrapLane,
 }
 
 impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
@@ -3833,12 +3752,6 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                         }
                     }
                 }
-                return;
-            }
-            StaInput::KeyDataUnwrapped { id, result } => {
-                // The ticket comes back whatever the state.
-                let sequence = self.key_unwrap.complete(id);
-                self.key_data_unwrapped(state, now, sequence, result, events);
                 return;
             }
             StaInput::PairwiseKeyInstalled { pending, key } => {
@@ -5541,11 +5454,9 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
             None => Err(RsnStaSupplicantError::UnexpectedAction),
         };
         let action = match received {
-            // Message 3's key data: the engine unwraps it while the handshake
-            // waits, its deadline running.
+            // Message 3's key data, unwrapped here in the step.
             Ok(RsnStaSupplicantAction::UnwrapKeyData(request)) => {
-                handshake.step = HandshakeStep::Unwrap(request, protection);
-                return Change::Keep;
+                return self.handshake_unwrap(handshake, now, request, protection);
             }
             Ok(RsnStaSupplicantAction::Ready(action)) => action,
             Err(RsnStaSupplicantError::RetainedSecurityIes(error)) => {
@@ -5561,43 +5472,31 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
         handshake_ready(handshake, now, action, protection)
     }
 
-    /// The response to the unwrap issued with `sequence`; any other is stale.
+    /// Unwrap Message 3's key data in the step and continue the handshake
+    /// with its plaintext. Key data beyond the station's bound fails as an
+    /// unusable Message 3.
     #[inline(never)]
-    fn handshake_unwrapped(
+    fn handshake_unwrap(
         &mut self,
         handshake: &mut Handshake<T, K>,
         now: Instant,
-        sequence: u32,
-        response: StaKeyUnwrapResponse,
+        request: RsnStaKeyDataRequest<DEFAULT_EAPOL_FRAME_CAPACITY>,
+        protection: EapolProtection,
     ) -> Change<T, K> {
-        let (request, protection) =
-            match core::mem::replace(&mut handshake.step, HandshakeStep::Await) {
-                HandshakeStep::AwaitUnwrap {
-                    sequence: issued,
-                    request,
-                    protection,
-                } if issued == sequence => (request, protection),
-                // The ticket came home with another request's response: issue
-                // this one again.
-                HandshakeStep::AwaitUnwrap {
-                    request,
-                    protection,
-                    ..
-                } => {
-                    handshake.step = HandshakeStep::Unwrap(request, protection);
-                    return Change::Keep;
-                }
-                step => {
-                    handshake.step = step;
-                    return Change::Keep;
-                }
-            };
+        let unwrapped = match request.key_unwrap() {
+            Ok(unwrap) => key_unwrap::unwrap_now(self.config.callbacks.key_unwrap_blocks(), unwrap).into_plaintext(),
+            Err(RsnKeyUnwrapRequestError::InvalidFrame(error)) => {
+                return leave_keyed(StaDisconnectReason::InvalidEapol(error), None);
+            }
+            Err(RsnKeyUnwrapRequestError::CapacityExceeded) => {
+                return leave_handshake(handshake, reason_code::UNSPECIFIED);
+            }
+        };
         let action = match handshake
             .supplicant()
             .map_err(oer_ieee80211_core_security_rsn::supplicant::RsnStaProcessError::from)
-            .and_then(|supplicant| {
-                supplicant.complete_key_data_unwrap(request, response.into_plaintext())
-            }) {
+            .and_then(|supplicant| supplicant.complete_key_data_unwrap(request, unwrapped))
+        {
             Ok(action) => action,
             Err(oer_ieee80211_core_security_rsn::supplicant::RsnStaProcessError::Supplicant(
                 RsnStaSupplicantError::RetainedSecurityIes(error),
@@ -5610,30 +5509,6 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
             Err(_) => return leave_handshake(handshake, reason_code::UNSPECIFIED),
         };
         handshake_ready(handshake, now, action, protection)
-    }
-
-    /// The response to a key-data unwrap, routed to the state that issued it.
-    fn key_data_unwrapped(
-        &mut self,
-        state: &mut State<T, K>,
-        now: Instant,
-        sequence: u32,
-        response: StaKeyUnwrapResponse,
-        events: &mut impl EventSink<StaEvent>,
-    ) {
-        match state {
-            State::Handshake(handshake) => {
-                let change = self.handshake_unwrapped(handshake, now, sequence, response);
-                state.apply(change);
-            }
-            State::Connected(connected) => {
-                if let Some(rsn) = connected.rsn.as_mut() {
-                    rsn.key_data_unwrapped(sequence, response, events);
-                }
-            }
-            // No state awaits it: an earlier association's response.
-            _ => {}
-        }
     }
 
     /// The action the handshake owes.
@@ -5671,39 +5546,6 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                             leave_handshake(handshake, reason_code::UNSPECIFIED),
                             ActionProgress::Transition,
                         );
-                    }
-                }
-            }
-            HandshakeStep::Unwrap(request, protection) => {
-                if self.key_unwrap.in_flight() {
-                    (HandshakeStep::Unwrap(request, protection), None)
-                } else {
-                    match request.key_unwrap() {
-                        Ok(unwrap) => match self.key_unwrap.issue() {
-                            Some((id, sequence)) => (
-                                HandshakeStep::AwaitUnwrap {
-                                    sequence,
-                                    request,
-                                    protection,
-                                },
-                                Some(Owed::UnwrapKeyData(id, unwrap)),
-                            ),
-                            None => (HandshakeStep::Unwrap(request, protection), None),
-                        },
-                        Err(RsnKeyUnwrapRequestError::InvalidFrame(error)) => {
-                            return (
-                                leave_keyed(StaDisconnectReason::InvalidEapol(error), None),
-                                ActionProgress::Transition,
-                            );
-                        }
-                        // Key data beyond the station's bound fails as an
-                        // unusable Message 3.
-                        Err(RsnKeyUnwrapRequestError::CapacityExceeded) => {
-                            return (
-                                leave_handshake(handshake, reason_code::UNSPECIFIED),
-                                ActionProgress::Transition,
-                            );
-                        }
                     }
                 }
             }
@@ -6315,19 +6157,19 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                 return None;
             }
             let (rekey, owed) = match core::mem::replace(&mut rsn.rekey, Rekey::None) {
-                Rekey::Unwrap(request, protection) if !self.key_unwrap.in_flight() => {
+                // The key data is unwrapped here, in the step; its install
+                // follows in the next turn of this loop.
+                Rekey::Unwrap(request, protection) => {
                     match request.key_unwrap() {
-                        Ok(unwrap) => match self.key_unwrap.issue() {
-                            Some((id, sequence)) => (
-                                Rekey::AwaitUnwrap {
-                                    sequence,
-                                    request,
-                                    protection,
-                                },
-                                Some(Owed::UnwrapKeyData(id, unwrap)),
-                            ),
-                            None => (Rekey::Unwrap(request, protection), None),
-                        },
+                        Ok(unwrap) => {
+                            let unwrapped = key_unwrap::unwrap_now(self.config.callbacks.key_unwrap_blocks(), unwrap).into_plaintext();
+                            if let Err(reason) =
+                                rsn.complete_unwrap(request, protection, unwrapped, events)
+                            {
+                                return Some(Err(reason));
+                            }
+                            continue;
+                        }
                         Err(RsnKeyUnwrapRequestError::InvalidFrame(error)) => {
                             return Some(Err(StaDisconnectReason::InvalidEapol(error)));
                         }
