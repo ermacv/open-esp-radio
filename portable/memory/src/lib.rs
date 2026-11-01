@@ -62,6 +62,7 @@ mod return_bank;
 mod rx_external_handoff;
 mod rx_handoff;
 pub mod signal;
+mod slot_queue;
 mod static_place;
 mod static_ref;
 mod volatile;
@@ -105,6 +106,7 @@ pub use rx_external_handoff::{
     ExternalRxNetworkLease, ExternalRxRadioLease, ExternalRxReturn, ExternalRxReturnState,
 };
 pub use rx_handoff::{RxHandoffPool, RxNetworkLease, RxRadioLease};
+pub use slot_queue::{SlotReceiveError, SlotReceiver, SlotSendError, SlotSender, WakingSlotQueue};
 pub use static_place::{PlacedFuture, StaticPlace};
 pub use static_ref::StaticRef;
 pub use volatile::{read_volatile, write_volatile};

@@ -382,7 +382,7 @@ pub struct Channels {
     start: StartState,
     stop: StopState<Exit>,
     commands: WakingSpscQueue<runtime::ServiceCommand<Caps>, 2>,
-    tx: WakingSpscQueue<TxMsdu, 2>,
+    tx: oer_memory::WakingSlotQueue<TxMsdu, 2>,
     rx: WakingSpscQueue<Frame, RX_DEPTH>,
     rx_copied: WakingSpscQueue<EthernetCopy, { runtime::RX_COPIED_DEPTH }>,
     state: runtime::State,
@@ -394,7 +394,7 @@ impl Channels {
             start: StartState::new(),
             stop: StopState::new(),
             commands: WakingSpscQueue::new(),
-            tx: WakingSpscQueue::new(),
+            tx: oer_memory::WakingSlotQueue::new(),
             rx: WakingSpscQueue::new(),
             rx_copied: WakingSpscQueue::new(),
             state: runtime::State::new(),
@@ -408,7 +408,7 @@ impl Channels {
     > {
         self.network_stop.reset();
         let (send, commands) = self.commands.split();
-        let (tx, transmit) = self.tx.split();
+        let (tx, transmit) = self.tx.split(TxMsdu::empty);
         let (receive, rx) = self.rx.split();
         let (receive_copied, rx_copied) = self.rx_copied.split();
         let (control, runner) = runtime::Control::new(send, &self.state).map_err(|r| r.reason)?;
@@ -454,7 +454,7 @@ struct ServiceConnection<'a> {
     network_stop: &'a NetworkStopState,
     start: StartGuard<'a>,
     commands: oer_memory::WakingSpscReceiver<'a, runtime::ServiceCommand<Caps>, 2>,
-    transmit: oer_memory::WakingSpscReceiver<'a, TxMsdu, 2>,
+    transmit: oer_memory::SlotReceiver<'a, TxMsdu, 2>,
     receive: oer_memory::WakingSpscSender<'a, Frame, RX_DEPTH>,
     receive_copied: oer_memory::WakingSpscSender<'a, EthernetCopy, { runtime::RX_COPIED_DEPTH }>,
     runner: runtime::RunnerControl<'a>,

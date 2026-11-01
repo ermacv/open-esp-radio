@@ -46,15 +46,24 @@ impl NegotiatedLegacyRates {
     /// admitted rate if all exceed it. An already admitted rate keeps its
     /// selected preamble; another DSSS/CCK rate uses the long preamble.
     pub fn constrain(self, proposed: LegacyRate) -> LegacyRate {
-        if self.contains(proposed) {
-            return proposed;
+        // One pass: the rate itself, the slowest rate, and the fastest
+        // rate no faster than it, each the first of equals.
+        let wanted = proposed.kbps();
+        let mut slowest = self.first;
+        let mut fastest_below: Option<LegacyRate> = None;
+        for rate in self.rates() {
+            let kbps = rate.kbps();
+            if kbps == wanted {
+                return proposed;
+            }
+            if kbps < slowest.kbps() {
+                slowest = rate;
+            }
+            if kbps < wanted && fastest_below.is_none_or(|best| kbps > best.kbps()) {
+                fastest_below = Some(rate);
+            }
         }
-        let slowest = self
-            .rates()
-            .fold(self.first, |a, b| if b.kbps() < a.kbps() { b } else { a });
-        self.rates()
-            .filter(|rate| rate.kbps() <= proposed.kbps())
-            .fold(slowest, |a, b| if b.kbps() > a.kbps() { b } else { a })
+        fastest_below.unwrap_or(slowest)
     }
 }
 
@@ -80,5 +89,44 @@ mod tests {
         assert_eq!(single.constrain(LegacyRate::Dsss1M), LegacyRate::Ofdm12M);
         assert!(NegotiatedLegacyRates::from_rate_elements(&[], &[]).is_none());
         assert!(NegotiatedLegacyRates::from_rate_elements(&[0xff, 0], &[0xfe]).is_none());
+    }
+
+    /// The former three-pass definition, which the single pass keeps.
+    fn constrained(rates: NegotiatedLegacyRates, proposed: LegacyRate) -> LegacyRate {
+        if rates.contains(proposed) {
+            return proposed;
+        }
+        let slowest = rates
+            .rates()
+            .fold(rates.first, |a, b| if b.kbps() < a.kbps() { b } else { a });
+        rates
+            .rates()
+            .filter(|rate| rate.kbps() <= proposed.kbps())
+            .fold(slowest, |a, b| if b.kbps() > a.kbps() { b } else { a })
+    }
+
+    #[test]
+    fn the_single_pass_selects_as_the_definition_for_every_set_and_rate() {
+        use oer_ieee80211_wire::rates::{LEGACY_RATES, LegacyRateSet};
+        let proposals = LEGACY_RATES.iter().map(|(_, rate)| *rate).chain([
+            LegacyRate::Dsss2M(DsssPreamble::Short),
+            LegacyRate::Cck5M5(DsssPreamble::Short),
+            LegacyRate::Cck11M(DsssPreamble::Short),
+        ]);
+        let proposals: std::vec::Vec<LegacyRate> = proposals.collect();
+        for bits in 1_u16..(1 << LEGACY_RATES.len()) {
+            let set = LegacyRateSet::from_bits(bits);
+            let rates = NegotiatedLegacyRates {
+                set,
+                first: set.rates().next().unwrap(),
+            };
+            for &proposed in &proposals {
+                assert_eq!(
+                    rates.constrain(proposed),
+                    constrained(rates, proposed),
+                    "{bits:#x} {proposed:?}"
+                );
+            }
+        }
     }
 }

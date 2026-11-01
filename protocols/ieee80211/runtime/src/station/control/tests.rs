@@ -29,12 +29,12 @@ impl oer_network_port::EthernetFrame for Frame {
 #[test]
 fn neutral_tx_refusal_returns_the_original_owner_and_consumes_no_queue_credit() {
     let mut commands = WakingSpscQueue::<ServiceCommand<()>, 1>::new();
-    let mut tx = WakingSpscQueue::<TxMsdu, 1>::new();
+    let mut tx = oer_memory::WakingSlotQueue::<TxMsdu, 1>::new();
     let mut rx = WakingSpscQueue::<Received<ModelLentRx>, 1>::new();
     let state = State::new();
     let (sender, _) = commands.split();
     let (_control, _runner) = Control::new(sender, &state).unwrap();
-    let (sender, receiver) = tx.split();
+    let (sender, mut receiver) = tx.split(TxMsdu::empty);
     let (_, receive) = rx.split();
     let mut copies = WakingSpscQueue::<EthernetFrame, RX_COPIED_DEPTH>::new();
     let (_, copied) = copies.split();
@@ -67,13 +67,13 @@ fn neutral_tx_refusal_returns_the_original_owner_and_consumes_no_queue_credit() 
     assert!(Rc::ptr_eq(&refused.frame.owner, &dropped));
     assert_eq!(dropped.get(), 1);
     assert_eq!(
-        receiver.try_receive().unwrap().frame.parts().payload,
-        &[7; 4]
+        receiver.try_receive_with(|packet| packet.frame.parts().payload.to_vec()),
+        Ok(std::vec![7; 4])
     );
     assert!(device.try_transmit(refused.frame).is_ok());
     assert_eq!(
-        receiver.try_receive().unwrap().frame.parts().payload,
-        &[9; 4]
+        receiver.try_receive_with(|packet| packet.frame.parts().payload.to_vec()),
+        Ok(std::vec![9; 4])
     );
     assert_eq!(dropped.get(), 2);
 }
@@ -119,12 +119,12 @@ fn network_link_wakes_on_events_and_keeps_the_cores_epoch() {
         }
     }
     let mut commands = WakingSpscQueue::<ServiceCommand<()>, 1>::new();
-    let mut tx = WakingSpscQueue::<TxMsdu, 1>::new();
+    let mut tx = oer_memory::WakingSlotQueue::<TxMsdu, 1>::new();
     let mut rx = WakingSpscQueue::<Received<ModelLentRx>, 1>::new();
     let state = State::new();
     let (sender, _) = commands.split();
     let (mut control, _runner) = Control::new(sender, &state).unwrap();
-    let (sender, _) = tx.split();
+    let (sender, _) = tx.split(TxMsdu::empty);
     let (received, receive) = rx.split();
     let mut copies = WakingSpscQueue::<EthernetFrame, RX_COPIED_DEPTH>::new();
     let (copy, copied) = copies.split();
@@ -219,12 +219,12 @@ impl oer_network_port::EthernetFrame for Marked {
 #[test]
 fn a_network_frame_requests_the_priority_of_its_marking() {
     let mut commands = WakingSpscQueue::<ServiceCommand<()>, 1>::new();
-    let mut tx = WakingSpscQueue::<TxMsdu, 1>::new();
+    let mut tx = oer_memory::WakingSlotQueue::<TxMsdu, 1>::new();
     let mut rx = WakingSpscQueue::<Received<ModelLentRx>, 1>::new();
     let state = State::new();
     let (sender, _) = commands.split();
     let (_control, _runner) = Control::new(sender, &state).unwrap();
-    let (sender, receiver) = tx.split();
+    let (sender, mut receiver) = tx.split(TxMsdu::empty);
     let (_, receive) = rx.split();
     let mut copies = WakingSpscQueue::<EthernetFrame, RX_COPIED_DEPTH>::new();
     let (_, copied) = copies.split();
@@ -256,7 +256,10 @@ fn a_network_frame_requests_the_priority_of_its_marking() {
                 })
                 .is_ok()
         );
-        assert_eq!(receiver.try_receive().unwrap().priority, priority);
+        assert_eq!(
+            receiver.try_receive_with(|packet| packet.priority),
+            Ok(priority)
+        );
     }
 }
 

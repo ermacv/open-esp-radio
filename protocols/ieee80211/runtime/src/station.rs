@@ -140,7 +140,7 @@ use oer_ieee80211_core_roles_sta::{
 };
 use oer_ieee80211_core_upper_mac::block_ack::RxDisposition;
 use oer_ieee80211_core_upper_mac::rate_selection::{FrameRates, RateSelection};
-use oer_memory::{WakingSpscReceiver, WakingSpscSender};
+use oer_memory::{SlotReceiver, WakingSpscReceiver, WakingSpscSender};
 use oer_network_port::LentFrame;
 use oer_radio_port::Slot;
 use oer_radio_port::{
@@ -609,9 +609,9 @@ impl<K, F: FnMut(ServiceOutput<K>)> ServiceOutputSink<K> for F {
 /// use oer_ieee80211_core_roles_sta::data::TxMsdu;
 /// use oer_memory::WakingSpscQueue;
 /// let commands = Channel::<NoopRawMutex, ServiceCommand<()>, 1>::new();
-/// let mut tx = WakingSpscQueue::<TxMsdu, 1>::new();
+/// let mut tx = oer_memory::WakingSlotQueue::<TxMsdu, 1>::new();
 /// let mut rx = WakingSpscQueue::<Received<()>, 1>::new();
-/// let (_, transmit) = tx.split();
+/// let (_, transmit) = tx.split(TxMsdu::empty);
 /// let (receive, _) = rx.split();
 /// let mut copies = WakingSpscQueue::<oer_ieee80211_core_roles_sta::data::EthernetFrame, { oer_ieee80211_runtime::station::RX_COPIED_DEPTH }>::new();
 /// let (receive_copied, _) = copies.split();
@@ -635,10 +635,10 @@ impl<K, F: FnMut(ServiceOutput<K>)> ServiceOutputSink<K> for F {
 /// use oer_ieee80211_core_roles_sta::data::TxMsdu;
 /// use oer_memory::WakingSpscQueue;
 /// let mut commands = WakingSpscQueue::<ServiceCommand<()>, 1>::new();
-/// let mut tx = WakingSpscQueue::<TxMsdu, 1>::new();
+/// let mut tx = oer_memory::WakingSlotQueue::<TxMsdu, 1>::new();
 /// let mut rx = WakingSpscQueue::<Received<()>, 1>::new();
 /// let (application, commands) = commands.split();
-/// let (_, transmit) = tx.split();
+/// let (_, transmit) = tx.split(TxMsdu::empty);
 /// let (receive, _) = rx.split();
 /// let mut copies = WakingSpscQueue::<oer_ieee80211_core_roles_sta::data::EthernetFrame, { oer_ieee80211_runtime::station::RX_COPIED_DEPTH }>::new();
 /// let (receive_copied, _) = copies.split();
@@ -665,7 +665,7 @@ pub struct ServiceIo<
     /// remove a command; a simultaneous port fault leaves it in this queue.
     pub commands: WakingSpscReceiver<'c, ServiceCommand<K>, COMMAND_DEPTH>,
     /// The MSDUs the network stack sends.
-    pub transmit: WakingSpscReceiver<'c, TxMsdu, TX_DEPTH>,
+    pub transmit: SlotReceiver<'c, TxMsdu, TX_DEPTH>,
     /// The MSDUs the station received for the network stack.
     pub receive: WakingSpscSender<'c, Received<L>, RX_DEPTH>,
     /// The copies `receive`'s [`Received::Copied`] marks stand for, in order.
@@ -2109,37 +2109,42 @@ impl<
         let Some(mut link) = self.station.link() else {
             return;
         };
-        let Some(packet) = io.transmit.try_receive() else {
-            return;
-        };
-        let parts = packet.frame.parts();
-        let msdu = Msdu {
-            destination: parts.destination,
-            ether_type: parts.ether_type,
-            priority: packet.priority,
-            payload: parts.payload,
-            admitted: now,
-        };
-        // Admission was polled immediately above under this same exclusive
-        // service borrow. A too-long MSDU is refused without changing bytes.
-        match self.data.input(
-            DataInput {
-                msdu,
-                link: &mut link,
-            },
-            &mut self.events,
-        ) {
-            Ok(()) => {}
-            Err(reason) => {
+        let ServiceIo {
+            transmit, output, ..
+        } = io;
+        let data = &mut self.data;
+        let events = &mut self.events;
+        // The MSDU is read where the network wrote it: the data path
+        // encodes it into its MPDU buffer, its one copy here.
+        let _read = transmit.try_receive_with(|packet| {
+            let parts = packet.frame.parts();
+            let msdu = Msdu {
+                destination: parts.destination,
+                ether_type: parts.ether_type,
+                priority: packet.priority,
+                payload: parts.payload,
+                admitted: now,
+            };
+            // Admission was polled immediately above under this same
+            // exclusive service borrow. A too-long MSDU is refused without
+            // changing bytes.
+            if let Err(reason) = data.input(
+                DataInput {
+                    msdu,
+                    link: &mut link,
+                },
+                events,
+            ) {
                 // The available-pool observation is dynamic and the public
-                // data input can refuse it. Return the original owned packet,
-                // rather than manufacturing a terminal or losing its bytes.
-                io.output.emit(ServiceOutput::MsduRefused {
-                    packet: contract::TransmitPacket(packet),
+                // data input can refuse it. The application gets the
+                // packet's copy back, rather than a manufactured terminal
+                // or lost bytes.
+                output.emit(ServiceOutput::MsduRefused {
+                    packet: contract::TransmitPacket(packet.clone()),
                     reason: reason.into(),
                 });
             }
-        }
+        });
     }
 
     /// Carry out every action the machines owe at `now`.

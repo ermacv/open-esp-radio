@@ -16,7 +16,7 @@ use core::{
 use embassy_futures::select::{Either, select};
 use oer_bridges_ieee80211_ethernet::qos::classify_wmm;
 use oer_ieee80211_core_roles_sta::data::{EthernetFrame, TxMsdu};
-use oer_memory::{WakingSpscReceiver, WakingSpscSender};
+use oer_memory::{SlotSendError, SlotSender, WakingSpscReceiver, WakingSpscSender};
 use oer_network_port::{LinkSnapshot, LinkState, NetDevice, TransmitError, TransmitRefused};
 use oer_sync::PriorityWaker;
 use oer_time::connected_tasks::{
@@ -469,7 +469,7 @@ impl<K, O: ServiceOutputSink<K>> ServiceOutputSink<K> for Events<'_, O> {
 /// The Wi-Fi implementation of the neutral Ethernet contract. `L` is the
 /// backend's lent receive buffer ([`StationPort::LentRx`](super::StationPort::LentRx)).
 pub struct Device<'c, L, const TX: usize, const RX: usize> {
-    transmit: WakingSpscSender<'c, TxMsdu, TX>,
+    transmit: SlotSender<'c, TxMsdu, TX>,
     receive: WakingSpscReceiver<'c, Received<L>, RX>,
     copied: WakingSpscReceiver<'c, EthernetFrame, RX_COPIED_DEPTH>,
     state: &'c State,
@@ -477,7 +477,7 @@ pub struct Device<'c, L, const TX: usize, const RX: usize> {
 }
 impl<'c, L, const TX: usize, const RX: usize> Device<'c, L, TX, RX> {
     pub fn new(
-        transmit: WakingSpscSender<'c, TxMsdu, TX>,
+        transmit: SlotSender<'c, TxMsdu, TX>,
         receive: WakingSpscReceiver<'c, Received<L>, RX>,
         copied: WakingSpscReceiver<'c, EthernetFrame, RX_COPIED_DEPTH>,
         state: &'c State,
@@ -535,7 +535,7 @@ impl<L: oer_ieee80211_contracts_port::LentRxBuffer, const TX: usize, const RX: u
         if self.link().state == LinkState::Down {
             return Poll::Pending;
         }
-        core::pin::pin!(self.transmit.ready()).poll(cx).map(|_| ())
+        core::pin::pin!(self.transmit.ready()).poll(cx)
     }
     fn try_transmit<F: oer_network_port::EthernetFrame>(
         &mut self,
@@ -551,16 +551,17 @@ impl<L: oer_ieee80211_contracts_port::LentRxBuffer, const TX: usize, const RX: u
                     // The frame requests a priority from its VLAN or IP
                     // marking; the station decides the final one.
                     let requested = classify_wmm(view.ether_type, view.payload);
-                    TxMsdu::from_network(view, requested.user_priority)
-                        .map_err(|_| {
-                            TransmitError::InvalidLength(
-                                oer_network_port::FrameLengthError::TooLong,
-                            )
+                    // Copied once, into the queue's slot, where the station
+                    // reads it.
+                    self.transmit
+                        .try_send_with(|slot| {
+                            slot.refill_from_network(view, requested.user_priority)
                         })
-                        .and_then(|packet| {
-                            self.transmit
-                                .try_send(packet)
-                                .map_err(|_| TransmitError::QueueFull)
+                        .map_err(|error| match error {
+                            SlotSendError::Refused(_) => TransmitError::InvalidLength(
+                                oer_network_port::FrameLengthError::TooLong,
+                            ),
+                            SlotSendError::Full | SlotSendError::Lost => TransmitError::QueueFull,
                         })
                 })
         };

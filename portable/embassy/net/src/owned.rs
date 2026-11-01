@@ -484,9 +484,16 @@ impl<const RX_QUEUE_DEPTH: usize> OwnedRxPublisher<'_, RX_QUEUE_DEPTH> {
             ether_type: EtherType::new(ether_type),
         }
         .to_bytes();
-        let bytes = header.into_iter().chain(payload.iter().copied());
-        for (byte, source) in packet.iter_mut().zip(bytes) {
-            *byte = source;
+        // Two plain element loops, which the compiler lowers to block
+        // copies: the header, then the payload after it.
+        let (head, body) = packet
+            .split_at_mut_checked(ETHERNET_HEADER_LEN)
+            .ok_or(RxEnqueueError::InvalidLength(FrameLengthError::TooShort))?;
+        for (byte, value) in head.iter_mut().zip(header) {
+            *byte = value;
+        }
+        for (byte, value) in body.iter_mut().zip(payload) {
+            *byte = *value;
         }
         self.try_publish(packet)
     }

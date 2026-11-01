@@ -570,7 +570,7 @@ struct World<'b> {
     network: TestNetwork,
     restart_stopped_service: Cell<Option<bool>>,
     /// The network stack's end of the transmit queue.
-    stack: RefCell<WakingSpscSender<'b, TxMsdu, 2>>,
+    stack: RefCell<oer_memory::SlotSender<'b, TxMsdu, 2>>,
     /// The network stack's end of the receive queue.
     delivered: RefCell<WakingSpscReceiver<'b, Received<ModelLentRx>, 8>>,
     delivered_copies: RefCell<WakingSpscReceiver<'b, EthernetFrame, RX_COPIED_DEPTH>>,
@@ -999,7 +999,13 @@ impl Application<'_, '_, '_> {
             })
             .unwrap(),
         };
-        self.stack.borrow().try_send(packet).is_ok()
+        self.stack
+            .borrow_mut()
+            .try_send_with(|slot| {
+                *slot = packet;
+                Ok::<_, ()>(())
+            })
+            .is_ok()
     }
 
     /// Scan, authenticate and associate: the probe, the Authentication and
@@ -1033,7 +1039,7 @@ impl Application<'_, '_, '_> {
 struct Body<'w, 'b, S, O, const GROUPS: usize> {
     world: &'w World<'b>,
     sink: PhantomData<O>,
-    transmit: WakingSpscReceiver<'b, TxMsdu, 2>,
+    transmit: oer_memory::SlotReceiver<'b, TxMsdu, 2>,
     receive: WakingSpscSender<'b, Received<ModelLentRx>, 8>,
     receive_copied: WakingSpscSender<'b, EthernetFrame, RX_COPIED_DEPTH>,
     config: TestConfig,
@@ -1565,9 +1571,9 @@ where
             ],
             clock.clone(),
         );
-        let mut transmit = WakingSpscQueue::<TxMsdu, 2>::new();
+        let mut transmit = oer_memory::WakingSlotQueue::<TxMsdu, 2>::new();
         let mut receive = WakingSpscQueue::<Received<ModelLentRx>, 8>::new();
-        let (stack, transmit) = transmit.split();
+        let (stack, transmit) = transmit.split(TxMsdu::empty);
         let (receive, delivered) = receive.split();
         let mut copies = WakingSpscQueue::<EthernetFrame, RX_COPIED_DEPTH>::new();
         let (receive_copied, delivered_copies) = copies.split();
@@ -2607,8 +2613,15 @@ fn a_frame_marked_for_voice_under_a_closed_voice_category_goes_as_video_in_tid_f
                     view.payload,
                 );
                 assert_eq!(requested.user_priority, WmmUserPriority::UP6);
-                let packet = TxMsdu::from_network(view, requested.user_priority).unwrap();
-                assert!(world.stack.borrow().try_send(packet).is_ok());
+                assert!(
+                    world
+                        .stack
+                        .borrow_mut()
+                        .try_send_with(
+                            |slot| slot.refill_from_network(view, requested.user_priority)
+                        )
+                        .is_ok()
+                );
                 let data = world.sent(&mut seen, QOS_DATA).await;
                 assert!(!carries_eapol(&data));
                 assert_eq!(data.plaintext[21], 9);
