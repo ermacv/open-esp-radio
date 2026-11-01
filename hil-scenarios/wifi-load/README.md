@@ -9,7 +9,7 @@ and counters cross the HIL link. RX and TX are named from the image's side.
 
 | Case | Does |
 | --- | --- |
-| `path` | Checks the host's route to the station network (through the router's `[router].lan_address`, over a wired interface, from one source address), has the router bring up a generated WPA2 network that forwards UDP between its stations and that address, joins, takes a DHCP address, and proves both directions with datagrams of the run: the host's probes come back echoed, the image's datagrams reach the host. Records the topology, addresses, MAC, BSSID, channel and route, and the image's CPU over a 5 s window without load: the levels' baseline |
+| `path` | Checks the host's route to the station network (through the router's `[router].lan_address`, over a wired interface, from one source address), has the router bring up a generated WPA2 network that forwards UDP between its stations and that address, joins, takes a DHCP address, and proves both directions with datagrams of the run: the host's probes come back echoed, the image's datagrams reach the host. Records the topology, addresses, MAC, BSSID, channel and route, and the image's CPU and link over a 5 s window without load: the levels' baseline |
 | `rx` | The host sends to the image |
 | `tx` | The image sends to the host |
 | `rx-tx` | Both at once, half the total each way |
@@ -34,7 +34,7 @@ the window's counters (the boot hart's cycles and retired instructions, their
 rate per microsecond and per cycle, the network bridge's taken and refused
 frames, the IP stack's received frames with the hart's instructions over
 them, the L1 cache's `cache` counts and the receive path's `rx` counts).
-The idle baseline records the parts and counters too.
+The idle baseline records the parts, counters and link too.
 
 `rx` holds the window's differences of the receive path, counted only by
 a trace build (zeros otherwise). `driver` is the S31 receive driver's
@@ -68,6 +68,42 @@ subframes `subframes_1`, `subframes_2`, `subframes_3_4`, `subframes_5_8`,
 `subframes_9_16` and `subframes_17_32` (these wrap at 2^16), the members
 the BlockAck `acknowledged`, those `retried` in a later aggregate and those
 `dropped`, and the `block_ack_requests` the station sent.
+Each level's `link`, and the `path` case's `idle link` over the idle
+window, record what the link ran, and print one line (`link <level>:`):
+the access point's last rate each way and width, the image's commonest
+rate each way with its share, its received A-MPDU share and its
+transmissions per MPDU. RX and TX stay the image's.
+
+- `router` is the access point's view of the station (the LAB router's
+  `station-link` operation, `tools/lab/router`), read before the run's
+  start and after its drain (`span_ms` apart): `channel` and `width_mhz` of
+  the AP; `to_device` (the image's RX) with the AP's `last_bitrate` to it
+  as `iw` printed it and parsed (`text`, `kbit_per_s`, `format`, `mcs`,
+  `streams`, `width_mhz`, `short_gi`) and the span's `packets`, `bytes`,
+  `retries`, `failed`, `airtime_us` and `tid0_aqm_drops`; `from_device`
+  (the image's TX) with its `last_bitrate`, `packets`, `bytes`,
+  `airtime_us`, `dropped` and the end's `signal_avg_dbm`; and the in-use
+  channel's `survey`: `active_ms`, `busy_ms`, `receive_ms`,
+  `bss_receive_ms`, `transmit_ms`, `busy_percent` and the end's
+  `noise_dbm`. A count the driver does not report, or one that went back,
+  is null; when the router gives no view, `router` is `{"unavailable":
+  why}`. A `last_bitrate` is one frame's, at the span's end.
+- `device` is the image's count over its window, from its trace build
+  (zeros otherwise). `rx`: the data MPDUs addressed to the station that
+  reached its port, by their PPDU's rate as the receive metadata decodes
+  it (`mpdus`: `total`, every nonzero `rates` entry, e.g. `HT40 SGI MCS7`,
+  with its `count` and `percent`, and `ht40_percent`, `short_gi_percent`,
+  `mcs7_percent`), and by A-MPDU containment (`in_ampdu`, `single`,
+  `containment_unknown`, `in_ampdu_percent`). The metadata marks no
+  A-MPDU boundary: `ampdus` and `mpdus_per_ampdu` stay null. `tx`: the
+  station's single data MPDUs whose transmission ended, by the rate of
+  their last transmission (`mpdus`, as above; one without a transmission
+  counts as `unknown`), their `transmissions`, `retries` (transmissions
+  beyond one per MPDU that went on air), `transmissions_per_mpdu`, and
+  their ends `delivered`, `ack_timeouts`, `other_ends` (protection
+  timeout, contention limit, coexistence denial) and `unsent` (expired,
+  withdrawn or of unknown outcome). Transmitted aggregates count in the
+  level's `tx.ampdu`, not here: `ampdu` is null.
 
 `cache` holds one entry per cache bus the image counts, cleared at the
 window's start: `ibus0` (hart 0's instruction fetches through L1-ICache0)

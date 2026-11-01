@@ -129,6 +129,73 @@ fn the_largest_reports_fit_one_response() {
         .collect(),
     });
     assert!(postcard::to_slice(&samples, &mut buffer).unwrap().len() <= 512);
+    let link = LinkCollected::Report(full_link());
+    let encoded = postcard::to_slice(&link, &mut buffer).unwrap();
+    assert!(encoded.len() <= 512, "{}", encoded.len());
+    assert_eq!(
+        postcard::from_bytes::<LinkCollected>(encoded).unwrap(),
+        link
+    );
+}
+
+/// Every link count at its largest.
+fn full_link() -> Link {
+    let all = u32::MAX;
+    let rates = Rates {
+        ht20_long_gi: [all; 8],
+        ht20_short_gi: [all; 8],
+        ht40_long_gi: [all; 8],
+        ht40_short_gi: [all; 8],
+        ht_other: all,
+        non_ht: all,
+        he: all,
+        unknown: all,
+    };
+    Link {
+        rx: RxLink {
+            mpdus: rates,
+            in_ampdu: all,
+            single: all,
+            containment_unknown: all,
+        },
+        tx: TxLink {
+            mpdus: rates,
+            transmissions: all,
+            delivered: all,
+            ack_timeouts: all,
+            other_ends: all,
+            unsent: all,
+        },
+    }
+}
+
+#[test]
+fn a_link_window_takes_wrapping_differences_of_every_count() {
+    let mut start = Link::default();
+    start.rx.mpdus.ht40_short_gi[7] = u32::MAX;
+    start.rx.in_ampdu = 10;
+    start.tx.transmissions = 100;
+    start.tx.mpdus.non_ht = 1;
+    let mut end = start;
+    end.rx.mpdus.ht40_short_gi[7] = 9;
+    end.rx.mpdus.ht20_long_gi[0] = 2;
+    end.rx.in_ampdu = 25;
+    end.tx.transmissions = 130;
+    end.tx.delivered = 20;
+    end.tx.mpdus.non_ht = 4;
+    let window = Link::window(&start, &end);
+    assert_eq!(window.rx.mpdus.ht40_short_gi, [0, 0, 0, 0, 0, 0, 0, 10]);
+    assert_eq!(window.rx.mpdus.ht20_long_gi[0], 2);
+    assert_eq!(window.rx.in_ampdu, 15);
+    assert_eq!(
+        (
+            window.tx.transmissions,
+            window.tx.delivered,
+            window.tx.mpdus.non_ht
+        ),
+        (30, 20, 3)
+    );
+    assert_eq!(Link::window(&end, &end), Link::default());
 }
 
 fn full_cache() -> CacheCounts {
@@ -353,9 +420,9 @@ fn a_transmit_window_takes_wrapping_differences() {
 }
 
 #[test]
-fn the_service_names_six_endpoints_and_their_answers_by_distinct_keys() {
+fn the_service_names_seven_endpoints_and_their_answers_by_distinct_keys() {
     let keys = <Request as oer_hil_agent::base::Service>::KEYS;
-    assert_eq!(keys.len(), 12);
+    assert_eq!(keys.len(), 14);
     let distinct: std::collections::BTreeSet<_> = keys.iter().collect();
     assert_eq!(distinct.len(), keys.len());
 }

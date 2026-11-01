@@ -335,8 +335,8 @@ pub(crate) static COUNTERS: [PartCounter; COUNT] = [const { PartCounter::new() }
 pub(crate) static EPOCH: AtomicU32 = AtomicU32::new(0);
 
 /// The image's observer: the parts' boundaries, the station service's
-/// spans, the network bridge's frames and the PC sampler's samples and
-/// their return addresses.
+/// spans, receive decisions and link rates, the network bridge's frames
+/// and the PC sampler's samples and their return addresses.
 #[cfg(all(target_arch = "riscv32", oer_trace))]
 #[derive(Clone, Copy, Default)]
 pub struct Observer;
@@ -375,6 +375,14 @@ impl oer_trace::Observer for Observer {
         type StationTx = oer_esp32s31_wifi::observation::StationTxAmpdu;
         if let Some(settled) = Self::decoded::<E, StationTx>(event) {
             super::counters::observe_station_tx(settled);
+        }
+        type RxData = oer_esp32s31_wifi::observation::RxData;
+        if let Some(data) = Self::decoded::<E, RxData>(event) {
+            super::counters::observe_rx_data(data);
+        }
+        type TxData = oer_esp32s31_wifi::observation::TxData;
+        if let Some(data) = Self::decoded::<E, TxData>(event) {
+            super::counters::observe_tx_data(data);
         }
         if let Some(sample) = Self::decoded::<E, oer_trace::profile::PcSample>(event) {
             super::sampler::record(sample);

@@ -399,6 +399,17 @@ interface without a channel.
 
 
 `station::station` reads only the selected target's association flags.
+`station::link::link` (the service's `station-link` operation) reads the
+selected target's link as the AP's driver reports it: `iw dev <ap> station
+get` without the line that names the station (byte, packet, retry, failure
+and drop counters, air time each way, the average signal and the rates of
+the last frames each way, parsed into format, MCS, streams, width and
+guard interval), `iw dev <ap> info`'s channel line (channel, frequency and
+width), the in-use block of `iw dev <ap> survey dump` (active, busy,
+receive, BSS receive and transmit time, noise) and the station's TID 0 drops
+from mac80211's `aqm` debugfs file when it is readable. Directions are the
+AP's. A known line the host cannot read refuses the observation; a value the
+driver does not report stays absent.
 `station::lease` reads its DHCP address and lifetime from the isolated lease
 file. `station::stream::Capture::start_peer` observes peer-originated ICMP
 requests and DUT replies; a complete capture requires every pair and clean

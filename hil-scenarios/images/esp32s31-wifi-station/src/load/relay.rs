@@ -20,7 +20,8 @@ use oer_memory::{
     AffineSpscTrySendError, QueueNotify as _, WakingSpscQueue, WakingSpscReceiver, WakingSpscSender,
 };
 use oer_services_load::{
-    Collected, CountersCollected, Load, LoadError, PartsCollected, SamplesCollected, Started,
+    Collected, CountersCollected, LinkCollected, Load, LoadError, PartsCollected, SamplesCollected,
+    Started,
 };
 use static_cell::ConstStaticCell;
 
@@ -37,6 +38,7 @@ pub(crate) enum Answer {
     Collected(Collected),
     Parts(PartsCollected),
     Counters(CountersCollected),
+    Link(LinkCollected),
     Samples(SamplesCollected),
     Cpu(Load),
 }
@@ -48,6 +50,7 @@ impl Answer {
             Self::Collected(collected) => emit(identity, &collected),
             Self::Parts(parts) => emit(identity, &parts),
             Self::Counters(counters) => emit(identity, &counters),
+            Self::Link(link) => emit(identity, &link),
             Self::Samples(samples) => emit(identity, &samples),
             Self::Cpu(load) => emit(identity, &load),
         }

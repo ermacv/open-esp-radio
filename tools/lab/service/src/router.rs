@@ -1,6 +1,6 @@
 //! The lab router's operations, run by the service over the router's SSH
 //! with the logic of `oer-lab-router`: the AP profile a run applies, the
-//! station, DHCP and ping views, the WPA2 checks, a deauthentication, the
+//! station, station link, DHCP and ping views, the WPA2 checks, a deauthentication, the
 //! routed network's check, and the echo and departure observers. Every one
 //! needs a lease that holds the router. The stand file names the router and
 //! its AP; its secrets never leave the service.
@@ -121,6 +121,11 @@ pub(crate) fn run(
             &router.interface,
         )?),
         RouterOperation::Station { mac: station } => json(station::station(
+            &mut router.ssh,
+            &router.interface,
+            mac(station)?,
+        )?),
+        RouterOperation::StationLink { mac: station } => json(station::link::link(
             &mut router.ssh,
             &router.interface,
             mac(station)?,
