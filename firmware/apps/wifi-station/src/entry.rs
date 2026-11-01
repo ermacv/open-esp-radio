@@ -28,11 +28,11 @@ async fn app(mut station: Station, net: Net) -> AppResult {
     loop {
         match station.connect(network()?).await {
             Ok(joined) => {
-                println!("OER-WIFI connected channel=", joined.channel);
+                println!("OER-WIFI connected channel={}", joined.channel);
                 break;
             }
             Err(error) => {
-                println!("OER-WIFI connect-failed ", error);
+                println!("OER-WIFI connect-failed {}", error);
                 Timer::after(Duration::from_secs(2)).await;
             }
         }
@@ -46,11 +46,11 @@ async fn app(mut station: Station, net: Net) -> AppResult {
                 continue;
             }
         };
-        println!("OER-WIFI ipv4 ", Ipv4(ipv4.address), "/", ipv4.prefix_length);
+        println!("OER-WIFI ipv4 {}/{}", Ipv4(ipv4.address), ipv4.prefix_length);
         if let Some(gateway) = ipv4.gateway {
             let _ = match exchange(&net, gateway).await {
                 Ok(()) => println!("OER-RESULT: pass wifi-station"),
-                Err(error) => println!("OER-WIFI tcp-failed ", error),
+                Err(error) => println!("OER-WIFI tcp-failed {}", error),
             };
         }
         net.wait_link_down().await?;

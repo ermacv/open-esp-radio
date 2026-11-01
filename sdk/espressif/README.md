@@ -65,7 +65,7 @@ radio executor runs the radio actor and the MAC driver.
 | IP packet pools | 8 receive, 8 transmit credits, 8 general, 1514 bytes each |
 | IP waiters | 4 tasks waiting at once |
 | Station reconnect | every second after a lost association |
-| `println!` line | 8 pieces and values, 6 text pieces of 96 bytes together (checked when it compiles); an error's path past the line's room is marked `line-truncated` |
+| `println!` line | `{}` holes only; 8 segments (holes and non-empty pieces), 7 value words, 6 pieces of 96 bytes together, all checked when it compiles; an error's path, the last value, past the line's room is marked `line-truncated` |
 
 ## Services
 
@@ -132,8 +132,11 @@ returns `false`; a fatal note still reaches the host.
 
 The application runs on hart 0. The AES service computes RFC 3394 key
 unwrap only, on the CPU without DMA. One station and one IP service per
-image. `println!` writes a typed line (`oer_diagnostics::Line`): its static
-text pieces and values, which the host prints; the target formats nothing.
+image. `println!("ipv4 {}/{}", Ipv4(address), prefix)` writes a typed line
+(`oer_diagnostics::typed_line!`): the format's static pieces and the
+values, which the host prints; the target formats nothing. A hole is a bare
+`{}`; `Hex` and `Ipv4` choose a value's text, and an error that describes
+itself as a diagnostic path is the last value.
 It uses the early writer, which waits for room within its budget per line.
 
 ```console
