@@ -6,7 +6,6 @@ use oer_network_port::{
     NetDevice, ReceivedFrame, TransmitRefused,
 };
 use oer_network_wire::ethernet::{EtherType, EthernetHeader};
-use xarxa_driver::PacketBuf;
 
 impl EthernetFrame for OwnedNetworkTxFrame<'_> {
     fn view(&self) -> Result<EthernetFrameView<'_>, FrameLengthError> {
@@ -72,26 +71,6 @@ impl<S: FrameStorage> xarxa_driver::ExternalPacketStorage for InPlace<S> {
 /// image; their count bounds the lent frames the stack holds at once.
 pub type LentSlots<S, const N: usize> = xarxa_driver::ExternalPacketSlots<InPlace<S>, N>;
 
-/// Adoption of a lent frame's storage as a packet, for slots of any count.
-pub trait AdoptLent<S> {
-    /// The packet holding `owner`'s first `len` bytes, or the owner back.
-    fn adopt_lent(
-        &'static self,
-        owner: InPlace<S>,
-        len: usize,
-    ) -> Result<PacketBuf, xarxa_driver::ExternalPacketRefused<InPlace<S>>>;
-}
-
-impl<S: FrameStorage, const N: usize> AdoptLent<S> for LentSlots<S, N> {
-    fn adopt_lent(
-        &'static self,
-        owner: InPlace<S>,
-        len: usize,
-    ) -> Result<PacketBuf, xarxa_driver::ExternalPacketRefused<InPlace<S>>> {
-        self.adopt(owner, 0, len)
-    }
-}
-
 /// Why the bridge copied a frame its device lent.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum LentCopy {
@@ -107,10 +86,12 @@ pub enum LentCopy {
 /// payload and adopt its storage as the packet, without copying the
 /// payload. When that is impossible the frame is copied, as a copied
 /// device frame is, after `copied` reports why. A storage that broke its
-/// stable-bytes contract is refused as `OutsideStorage`.
-pub fn publish_lent<const RX: usize, S: FrameStorage>(
+/// stable-bytes contract is refused as `OutsideStorage`. `slots` are the
+/// image's `LENT` packet slots, named by type so that their adoption is a
+/// direct call.
+pub fn publish_lent<const RX: usize, S: FrameStorage, const LENT: usize>(
     publisher: &mut crate::OwnedRxPublisher<'_, RX>,
-    slots: Option<&'static dyn AdoptLent<S>>,
+    slots: Option<&'static LentSlots<S, LENT>>,
     frame: LentFrame<S>,
     copied: &mut impl FnMut(LentCopy),
 ) -> Result<(), crate::RxEnqueueError> {
@@ -152,7 +133,7 @@ pub fn publish_lent<const RX: usize, S: FrameStorage>(
     for (byte, value) in bytes.iter_mut().zip(header) {
         *byte = value;
     }
-    match slots.adopt_lent(InPlace(storage), len) {
+    match slots.adopt(InPlace(storage), 0, len) {
         Ok(packet) => publisher.try_publish(packet),
         Err(refused) => {
             copied(LentCopy::Refused(refused.reason));
@@ -222,10 +203,11 @@ pub struct EthernetBridge<
     const RX: usize,
     const TX: usize,
     D: NetDevice,
+    const LENT: usize,
 > {
     radio: crate::OwnedNetworkRunner<'r, X, RX, TX>,
     device: D,
-    lent: Option<&'static dyn AdoptLent<Lent<D>>>,
+    lent: Option<&'static LentSlots<Lent<D>, LENT>>,
     link: oer_network_port::LinkSnapshot,
     pending: Option<(u64, OwnedNetworkTxFrame<'r>)>,
 }
@@ -233,15 +215,21 @@ pub struct EthernetBridge<
 /// The storage of a device's lent frames.
 pub type Lent<D> = <<D as NetDevice>::RxFrame as ReceivedFrame>::Storage;
 
-impl<'r, X: oer_memory::ExecutionContext, const RX: usize, const TX: usize, D: NetDevice>
-    EthernetBridge<'r, X, RX, TX, D>
+impl<
+    'r,
+    X: oer_memory::ExecutionContext,
+    const RX: usize,
+    const TX: usize,
+    D: NetDevice,
+    const LENT: usize,
+> EthernetBridge<'r, X, RX, TX, D, LENT>
 {
-    /// `lent` adopts the frames the device lends; without it the bridge
-    /// copies them.
+    /// `lent`, the image's `LENT` packet slots, adopts the frames the device
+    /// lends; without it the bridge copies them.
     pub fn new(
         radio: crate::OwnedNetworkRunner<'r, X, RX, TX>,
         device: D,
-        lent: Option<&'static dyn AdoptLent<Lent<D>>>,
+        lent: Option<&'static LentSlots<Lent<D>, LENT>>,
     ) -> Self {
         Self {
             radio,

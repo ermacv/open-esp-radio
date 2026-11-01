@@ -520,7 +520,7 @@ const GENERAL: usize = 8;
 
 type Context = ThreadContext<0>;
 type IpResources = Resources<Context, RX, TX, GENERAL>;
-pub(crate) type IpService = Service<Context, RX, TX, wifi::Network<'static>>;
+pub(crate) type IpService = Service<Context, RX, TX, wifi::Network<'static>, { wifi::LENT_RX }>;
 
 /// What the IP service's task runs: the service, the station's stop
 /// request, and the service's control to stop it with.

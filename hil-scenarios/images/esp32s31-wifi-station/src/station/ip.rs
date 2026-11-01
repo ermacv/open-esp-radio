@@ -87,7 +87,9 @@ fn copied(_: LentCopy) {
 }
 
 #[define_opaque(Running)]
-fn running_future(mut service: Service<Context, RX, TX, Network<'static>>) -> Running {
+fn running_future(
+    mut service: Service<Context, RX, TX, Network<'static>, { oer_esp32s31_wifi::LENT_RX }>,
+) -> Running {
     async move {
         // Only an access from another context than its executor's fails it.
         if service.run(|_| {}, received, refused, copied, |_| {}).await.is_err() {
