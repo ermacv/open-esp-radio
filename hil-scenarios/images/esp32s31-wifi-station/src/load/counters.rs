@@ -21,7 +21,7 @@
 
 use oer_services_load::{
     CacheCounts, CacheGeometry, Counters, DataBus, DriverRx, InstructionBus, Link, RxCounts,
-    StationRx,
+    StationRx, TxAmpdu, TxCounts,
 };
 
 /// What the network bridge did with one frame from the station.
@@ -185,6 +185,84 @@ fn station_rx() -> StationRx {
         agreements_stopped: at(Kind::AgreementStopped),
         agreement_window: u16::try_from(WINDOW.load(Ordering::Relaxed)).unwrap_or(u16::MAX),
         rsn_inputs_dropped: at(Kind::RsnInputDropped),
+    }
+}
+
+/// The station's transmit agreements' settlements, as the wire names
+/// them; only the station service, on the boot hart, writes them.
+#[cfg(target_arch = "riscv32")]
+static TX_AMPDU: [core::sync::atomic::AtomicU32; TX_AMPDU_COUNTS] =
+    [const { core::sync::atomic::AtomicU32::new(0) }; TX_AMPDU_COUNTS];
+/// Aggregates, refused, subframes, the six size bins, acknowledged,
+/// retried, dropped and BlockAckReqs.
+#[cfg(target_arch = "riscv32")]
+const TX_AMPDU_COUNTS: usize = 13;
+
+/// The histogram bin of an aggregate of `members`: 1, 2, 3 to 4, 5 to 8,
+/// 9 to 16, 17 to 32 (and more).
+#[cfg(any(all(target_arch = "riscv32", oer_trace), test))]
+const fn size_bin(members: u8) -> usize {
+    match members {
+        0 | 1 => 0,
+        2 => 1,
+        3..=4 => 2,
+        5..=8 => 3,
+        9..=16 => 4,
+        _ => 5,
+    }
+}
+
+/// Count one settlement or BlockAckReq; only the station service, on the
+/// boot hart, calls it, and only the boot hart's relay reads the counts.
+#[cfg(all(target_arch = "riscv32", oer_trace))]
+pub(crate) fn observe_station_tx(settled: oer_esp32s31_wifi::observation::StationTxAmpdu) {
+    use core::sync::atomic::Ordering;
+    let bump = |index: usize, by: u32| {
+        if let Some(count) = TX_AMPDU.get(index) {
+            count.store(
+                count.load(Ordering::Relaxed).wrapping_add(by),
+                Ordering::Relaxed,
+            );
+        }
+    };
+    if settled.block_ack_request {
+        bump(12, 1);
+        return;
+    }
+    bump(0, 1);
+    bump(1, u32::from(settled.refused));
+    bump(2, u32::from(settled.members));
+    bump(3_usize.saturating_add(size_bin(settled.members)), 1);
+    bump(9, u32::from(settled.acknowledged));
+    bump(10, u32::from(settled.retried));
+    bump(11, u32::from(settled.dropped));
+}
+
+/// The transmit agreements' counts now, as the wire names them.
+#[cfg(target_arch = "riscv32")]
+fn tx_ampdu() -> TxAmpdu {
+    use core::sync::atomic::Ordering;
+    let at = |index: usize| {
+        TX_AMPDU
+            .get(index)
+            .map_or(0, |count| count.load(Ordering::Relaxed))
+    };
+    // The histogram wraps at 2^16 on the wire.
+    let bin = |index: usize| at(index) as u16;
+    TxAmpdu {
+        aggregates: at(0),
+        refused: at(1),
+        subframes: at(2),
+        subframes_1: bin(3),
+        subframes_2: bin(4),
+        subframes_3_4: bin(5),
+        subframes_5_8: bin(6),
+        subframes_9_16: bin(7),
+        subframes_17_32: bin(8),
+        acknowledged: at(9),
+        retried: at(10),
+        dropped: at(11),
+        block_ack_requests: at(12),
     }
 }
 
@@ -386,6 +464,7 @@ pub(crate) struct Snapshot {
     pub cache: CacheCounts,
     pub cache_geometry: CacheGeometry,
     pub rx: RxCounts,
+    pub tx: TxCounts,
     pub link: Link,
 }
 
@@ -405,6 +484,7 @@ pub(crate) struct Hart {
     pub cache: CacheCounts,
     pub cache_geometry: CacheGeometry,
     pub rx: RxCounts,
+    pub tx: TxCounts,
     pub link: Link,
 }
 
@@ -433,6 +513,7 @@ impl Hart {
                 driver: driver_rx(),
                 station: station_rx(),
             },
+            tx: TxCounts { ampdu: tx_ampdu() },
             link: link(),
         }
     }
@@ -452,6 +533,7 @@ pub(crate) fn snapshot(hart: Hart, stack_received: u32) -> Snapshot {
         cache: hart.cache,
         cache_geometry: hart.cache_geometry,
         rx: hart.rx,
+        tx: hart.tx,
         link: hart.link,
     }
 }
@@ -557,6 +639,9 @@ pub(crate) fn window(start: &Snapshot, end: &Snapshot) -> Counters {
         rx: RxCounts {
             driver: DriverRx::window(&start.rx.driver, &end.rx.driver),
             station: StationRx::window(&start.rx.station, &end.rx.station),
+        },
+        tx: TxCounts {
+            ampdu: TxAmpdu::window(&start.tx.ampdu, &end.tx.ampdu),
         },
     }
 }
@@ -713,6 +798,31 @@ mod tests {
         assert_eq!(rx.driver.units, 15);
         assert_eq!(rx.station.released_by_timeout, 3);
         assert_eq!(rx.station.agreement_window, 16);
+    }
+
+    #[test]
+    fn an_aggregate_counts_in_the_bin_of_its_subframes() {
+        let bins: std::vec::Vec<_> = [1, 2, 3, 4, 5, 8, 9, 16, 17, 32]
+            .into_iter()
+            .map(size_bin)
+            .collect();
+        assert_eq!(bins, [0, 1, 2, 2, 3, 3, 4, 4, 5, 5]);
+    }
+
+    #[test]
+    fn a_window_takes_the_transmit_path_s_differences() {
+        let reading = |aggregates, bin| Snapshot {
+            tx: TxCounts {
+                ampdu: TxAmpdu {
+                    aggregates,
+                    subframes_17_32: bin,
+                    ..TxAmpdu::default()
+                },
+            },
+            ..Snapshot::default()
+        };
+        let tx = window(&reading(10, u16::MAX), &reading(14, 3)).tx;
+        assert_eq!((tx.ampdu.aggregates, tx.ampdu.subframes_17_32), (4, 4));
     }
 
     #[test]

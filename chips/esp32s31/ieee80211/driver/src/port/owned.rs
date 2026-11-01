@@ -79,8 +79,8 @@ pub(super) enum OwnedTxCompleted<
         Completed<
             D::OwnedContext<Id>,
             Slot<'o, Tickets, Part<Id, 2>>,
-            NoAggregatePayload<'o, Id, D, B, O>,
-            AggregateOutcome<Ack, Infallible>,
+            Subframes<'o, Id, D, B, O>,
+            AggregateOutcome<BlockAckAnswer, Infallible>,
         >,
     ),
 }

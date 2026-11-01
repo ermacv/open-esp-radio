@@ -514,9 +514,73 @@ impl core::fmt::Display for StationRx {
     }
 }
 
+/// What the station's transmit agreements settled: one data aggregate's
+/// members by outcome, or one BlockAckReq the station sent
+/// (`members` zero and `block_ack_request` set).
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct StationTxAmpdu {
+    /// The aggregate's members: the subframes it went with.
+    pub members: u8,
+    /// Members the BlockAck acknowledged.
+    pub acknowledged: u8,
+    /// Members back in their queue for a later aggregate.
+    pub retried: u8,
+    /// Members dropped.
+    pub dropped: u8,
+    /// Whether the aggregate was refused before the port.
+    pub refused: bool,
+    /// One BlockAckReq the station sent, instead of an aggregate.
+    pub block_ack_request: bool,
+}
+
+impl Event for StationTxAmpdu {
+    const KIND: Kind = Kind::new(Domain::Ieee80211, 33);
+    const CHANNEL: Channel = SERVICE;
+
+    fn encode(&self) -> [u32; 2] {
+        [
+            u32::from_le_bytes([self.members, self.acknowledged, self.retried, self.dropped]),
+            u32::from(self.refused) | (u32::from(self.block_ack_request) << 1),
+        ]
+    }
+
+    fn decode([counts, flags]: [u32; 2]) -> Option<Self> {
+        if flags > 0b11 {
+            return None;
+        }
+        let [members, acknowledged, retried, dropped] = counts.to_le_bytes();
+        Some(Self {
+            members,
+            acknowledged,
+            retried,
+            dropped,
+            refused: flags & 1 != 0,
+            block_ack_request: flags & 0b10 != 0,
+        })
+    }
+}
+
+impl core::fmt::Display for StationTxAmpdu {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        if self.block_ack_request {
+            return write!(f, "station.tx bar");
+        }
+        write!(
+            f,
+            "station.tx ampdu {} acked {} retried {} dropped {}{}",
+            self.members,
+            self.acknowledged,
+            self.retried,
+            self.dropped,
+            if self.refused { " refused" } else { "" }
+        )
+    }
+}
+
 /// The station's event sink of a trace build: it reports each receive
 /// decision of the service, the station and its receive agreements as
-/// [`StationRx`] to the image's observer `O` and keeps nothing. Without
+/// [`StationRx`], and each data aggregate's settlement and BlockAckReq as
+/// [`StationTxAmpdu`], to the image's observer `O` and keeps nothing. Without
 /// `oer_trace` it is disabled, so the service builds no event.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct TracedStationEvents<O>(pub O);
@@ -530,6 +594,14 @@ impl<O: oer_trace::Observer> TracedStationEvents<O> {
         if count != 0 {
             oer_trace::observe!(self.0, StationRx { kind, count });
         }
+    }
+
+    #[cfg_attr(
+        not(oer_trace),
+        allow(unused_variables, reason = "only a trace build reports")
+    )]
+    fn report_tx(&self, settled: StationTxAmpdu) {
+        oer_trace::observe!(self.0, settled);
     }
 }
 
@@ -667,8 +739,21 @@ impl<O: oer_trace::Observer> oer_events::EventSink<oer_ieee80211_core_roles_sta:
 
     fn event(&mut self, event: oer_ieee80211_core_roles_sta::events::StaEvent) {
         use oer_ieee80211_core_roles_sta::events::StaEvent;
-        if let StaEvent::RsnInputDropped(_) = event {
-            self.report(StationRxKind::RsnInputDropped, 1);
+        match event {
+            StaEvent::RsnInputDropped(_) => self.report(StationRxKind::RsnInputDropped, 1),
+            StaEvent::AggregateSettled(settled) => self.report_tx(StationTxAmpdu {
+                members: settled.members,
+                acknowledged: settled.acknowledged,
+                retried: settled.retried,
+                dropped: settled.dropped,
+                refused: settled.refused,
+                block_ack_request: false,
+            }),
+            StaEvent::BlockAckRequestSent => self.report_tx(StationTxAmpdu {
+                block_ack_request: true,
+                ..StationTxAmpdu::default()
+            }),
+            _ => {}
         }
     }
 }
@@ -676,6 +761,48 @@ impl<O: oer_trace::Observer> oer_events::EventSink<oer_ieee80211_core_roles_sta:
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_transmit_settlement_round_trips_and_refuses_unknown_flags() {
+        let settled = StationTxAmpdu {
+            members: 32,
+            acknowledged: 29,
+            retried: 2,
+            dropped: 1,
+            refused: false,
+            block_ack_request: false,
+        };
+        assert_eq!(StationTxAmpdu::decode(settled.encode()), Some(settled));
+        let bar = StationTxAmpdu {
+            block_ack_request: true,
+            ..StationTxAmpdu::default()
+        };
+        assert_eq!(StationTxAmpdu::decode(bar.encode()), Some(bar));
+        assert_eq!(StationTxAmpdu::decode([0, 4]), None);
+    }
+
+    #[test]
+    fn every_facade_event_has_its_own_kind() {
+        let kinds = [
+            StationAuthenticated::KIND,
+            StationBeacon::KIND,
+            StationAssociated::KIND,
+            TxIndeterminate::KIND,
+            TxHardwareTimeout::KIND,
+            TxQueueCollision::KIND,
+            ControlDelivered::KIND,
+            ServiceSpan::KIND,
+            StationRx::KIND,
+            RxData::KIND,
+            TxData::KIND,
+            StationTxAmpdu::KIND,
+            TxRateSelected::KIND,
+        ]
+        .map(Kind::raw);
+        for (at, kind) in kinds.iter().enumerate() {
+            assert!(!kinds[at + 1..].contains(kind), "kind {kind} repeats");
+        }
+    }
 
     #[test]
     fn receive_events_map_to_their_decisions_and_counts() {

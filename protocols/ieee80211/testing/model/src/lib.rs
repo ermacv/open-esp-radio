@@ -218,9 +218,9 @@ use oer_ieee80211_contracts_port::{
     SingleResponse, SnrSample,
 };
 use oer_ieee80211_contracts_port::{
-    AggregateRefused, AggregateState, AmpduCapabilities, AmpduPhase, AmpduRate, BlockAckReport,
-    ClassSubframe, EmptyAggregate, InterfaceProtection, NonEmptyAggregate, PhaseAggregate,
-    SubframeSource, Tid,
+    AggregateRefused, AggregateState, AmpduCapabilities, AmpduLengthTable, AmpduPhase, AmpduRate,
+    BlockAckReport, ClassSubframe, EmptyAggregate, InterfaceProtection, NonEmptyAggregate,
+    PhaseAggregate, SubframeSource, Tid,
 };
 use oer_ieee80211_wire::address::IndividualAddress;
 use oer_ieee80211_wire::qos::WmmAccessCategory;
@@ -4591,6 +4591,10 @@ where
 /// The subframes one model A-MPDU holds.
 pub const MODEL_AMPDU_SUBFRAMES: usize = 8;
 
+/// The longest model A-MPDU at every HT and HE rate: the 65 535 octets of
+/// the HT-SIG HT Length field.
+pub static MODEL_AMPDU_LENGTHS: AmpduLengthTable = AmpduLengthTable::uniform(65_535);
+
 /// Builder retaining receiver, TID, role and one installed protection.
 /// Only `push_aggregate` can create the nonempty state accepted by submission.
 ///
@@ -4866,7 +4870,7 @@ where
         AmpduCapabilities {
             max_subframes: MODEL_AMPDU_SUBFRAMES as u16,
             formats: PhyFormatSet::HT.union(PhyFormatSet::HE),
-            max_length: 65_535,
+            max_length: &MODEL_AMPDU_LENGTHS,
         }
     }
     fn aggregate<'k>(

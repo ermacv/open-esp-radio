@@ -7,7 +7,7 @@
 
 use core::{
     cell::UnsafeCell,
-    marker::PhantomPinned,
+    marker::{PhantomData, PhantomPinned},
     ops::{Deref, DerefMut},
     pin::Pin,
     ptr,
@@ -116,40 +116,44 @@ unsafe impl<const FRAME_CAPACITY: usize, const HEADROOM: usize, const TRAILER: u
 {
 }
 
+/// The cache maintenance a pool's bytes need before a DMA reader receives
+/// them, chosen as the pool's type: [`Coherent`] memory needs none.
+///
+/// A target whose pool lies in cached memory (a PSRAM TX buffer) names its
+/// write-back here; the lease calls it at the final descriptor-publication
+/// edge ([`StableDmaBacking::prepare_for_dma_read`]), never through a
+/// function pointer.
+pub trait DmaReadPrepare: 'static {
+    /// Make CPU writes to `bytes` visible to a DMA reader.
+    fn prepare_for_dma_read(bytes: &mut [u8]);
+}
+
+/// Memory the DMA reader sees coherently (internal SRAM): nothing to do.
+pub enum Coherent {}
+
+impl DmaReadPrepare for Coherent {
+    fn prepare_for_dma_read(_: &mut [u8]) {}
+}
+
 /// Permanently located TX allocations exposed to radio DMA.
 ///
-/// Its zero bytes are the free pool `new` builds: every slot free and empty,
-/// with no prepare hook (coherent memory). Use a pool only through
-/// [`Self::pin_static`], which consumes the permanent allocation into a
-/// [`PinnedDmaTxPoolHandle`]. An unpinned pool has no claim operations.
+/// Its zero bytes are the free pool `new` builds: every slot free and empty.
+/// `P` is the cache maintenance before a DMA reader receives a buffer. Use a
+/// pool only through [`Self::pin_static`], which consumes the permanent
+/// allocation into a [`PinnedDmaTxPoolHandle`]. An unpinned pool has no claim
+/// operations.
+#[derive(bytemuck::Zeroable)]
+#[zeroable(bound = "")]
 pub struct PinnedDmaTxPool<
     const FRAME_CAPACITY: usize,
     const HEADROOM: usize,
     const TRAILER: usize,
     const QUEUE_DEPTH: usize,
+    P: DmaReadPrepare = Coherent,
 > {
     slots: [PinnedTxSlot<FRAME_CAPACITY, HEADROOM, TRAILER>; QUEUE_DEPTH],
-    /// The cache maintenance before a DMA reader receives a buffer; `None`
-    /// is coherent memory (`coherent_dma_read`), the zero value.
-    prepare_for_dma_read: Option<fn(&mut [u8])>,
+    _prepare: PhantomData<fn() -> P>,
     _pin: PhantomPinned,
-}
-
-fn coherent_dma_read(_: &mut [u8]) {}
-
-#[allow(
-    unsafe_code,
-    reason = "Zeroable derive cannot express the higher-ranked optional prepare hook"
-)]
-// SAFETY: free slots, a `None` prepare hook (the null niche of
-// `Option<fn>`, coherent memory) and a zero-sized pin marker.
-unsafe impl<
-    const FRAME_CAPACITY: usize,
-    const HEADROOM: usize,
-    const TRAILER: usize,
-    const QUEUE_DEPTH: usize,
-> bytemuck::Zeroable for PinnedDmaTxPool<FRAME_CAPACITY, HEADROOM, TRAILER, QUEUE_DEPTH>
-{
 }
 
 impl<
@@ -157,12 +161,13 @@ impl<
     const HEADROOM: usize,
     const TRAILER: usize,
     const QUEUE_DEPTH: usize,
-> PinnedDmaTxPool<FRAME_CAPACITY, HEADROOM, TRAILER, QUEUE_DEPTH>
+    P: DmaReadPrepare,
+> PinnedDmaTxPool<FRAME_CAPACITY, HEADROOM, TRAILER, QUEUE_DEPTH, P>
 {
     pub const fn new() -> Self {
         Self {
             slots: [const { PinnedTxSlot::new() }; QUEUE_DEPTH],
-            prepare_for_dma_read: None,
+            _prepare: PhantomData,
             _pin: PhantomPinned,
         }
     }
@@ -182,17 +187,7 @@ impl<
     /// Dropping or forgetting the handle never frees or unpins the storage.
     pub fn pin_static(
         storage: &'static mut Self,
-    ) -> PinnedDmaTxPoolHandle<FRAME_CAPACITY, HEADROOM, TRAILER, QUEUE_DEPTH> {
-        Self::pin_static_with_dma_read_prepare(storage, coherent_dma_read)
-    }
-
-    /// Pin a pool which needs target-specific cache maintenance before a DMA
-    /// reader receives ownership.
-    pub fn pin_static_with_dma_read_prepare(
-        storage: &'static mut Self,
-        prepare_for_dma_read: fn(&mut [u8]),
-    ) -> PinnedDmaTxPoolHandle<FRAME_CAPACITY, HEADROOM, TRAILER, QUEUE_DEPTH> {
-        storage.prepare_for_dma_read = Some(prepare_for_dma_read);
+    ) -> PinnedDmaTxPoolHandle<FRAME_CAPACITY, HEADROOM, TRAILER, QUEUE_DEPTH, P> {
         PinnedDmaTxPoolHandle {
             pool: Pin::static_mut(storage).into_ref(),
         }
@@ -201,8 +196,7 @@ impl<
 
 /// Affine authority to claim slots in one permanently pinned TX pool.
 ///
-/// Only [`PinnedDmaTxPool::pin_static`] and its cache-maintenance variant
-/// construct this handle, consuming exclusive static storage. It exposes
+/// Only [`PinnedDmaTxPool::pin_static`] constructs this handle, consuming exclusive static storage. It exposes
 /// neither that storage nor another handle. Individual leases retain the
 /// static allocation and the existing atomic slot protocol; a slot index is
 /// not a lease. Their lifetime does not depend on the handle's location.
@@ -214,8 +208,9 @@ pub struct PinnedDmaTxPoolHandle<
     const HEADROOM: usize,
     const TRAILER: usize,
     const QUEUE_DEPTH: usize,
+    P: DmaReadPrepare = Coherent,
 > {
-    pool: Pin<&'static PinnedDmaTxPool<FRAME_CAPACITY, HEADROOM, TRAILER, QUEUE_DEPTH>>,
+    pool: Pin<&'static PinnedDmaTxPool<FRAME_CAPACITY, HEADROOM, TRAILER, QUEUE_DEPTH, P>>,
 }
 
 impl<
@@ -223,7 +218,8 @@ impl<
     const HEADROOM: usize,
     const TRAILER: usize,
     const QUEUE_DEPTH: usize,
-> PinnedDmaTxPoolHandle<FRAME_CAPACITY, HEADROOM, TRAILER, QUEUE_DEPTH>
+    P: DmaReadPrepare,
+> PinnedDmaTxPoolHandle<FRAME_CAPACITY, HEADROOM, TRAILER, QUEUE_DEPTH, P>
 {
     fn slot_of(
         &self,
@@ -258,14 +254,15 @@ impl<
     pub fn claim_radio(
         &self,
         index: u8,
-    ) -> Result<PinnedDmaTxRadioLease<'static, FRAME_CAPACITY, HEADROOM, TRAILER>, PoolError> {
+    ) -> Result<PinnedDmaTxRadioLease<'static, FRAME_CAPACITY, HEADROOM, TRAILER, P>, PoolError>
+    {
         let slot = self.slot_of(index)?;
         slot.claim(index, SLOT_READY, SLOT_RADIO)?;
         Ok(PinnedDmaTxRadioLease {
             slot,
             index,
             live: true,
-            prepare_for_dma_read: self.pool.prepare_for_dma_read.unwrap_or(coherent_dma_read),
+            _prepare: PhantomData,
         })
     }
 
@@ -288,7 +285,8 @@ impl<
     const HEADROOM: usize,
     const TRAILER: usize,
     const QUEUE_DEPTH: usize,
-> Default for PinnedDmaTxPool<FRAME_CAPACITY, HEADROOM, TRAILER, QUEUE_DEPTH>
+    P: DmaReadPrepare,
+> Default for PinnedDmaTxPool<FRAME_CAPACITY, HEADROOM, TRAILER, QUEUE_DEPTH, P>
 {
     fn default() -> Self {
         Self::new()
@@ -387,15 +385,16 @@ pub struct PinnedDmaTxRadioLease<
     const FRAME_CAPACITY: usize,
     const HEADROOM: usize,
     const TRAILER: usize,
+    P: DmaReadPrepare = Coherent,
 > {
     slot: &'pool PinnedTxSlot<FRAME_CAPACITY, HEADROOM, TRAILER>,
     index: u8,
     live: bool,
-    prepare_for_dma_read: fn(&mut [u8]),
+    _prepare: PhantomData<fn() -> P>,
 }
 
-impl<const FRAME_CAPACITY: usize, const HEADROOM: usize, const TRAILER: usize>
-    PinnedDmaTxRadioLease<'_, FRAME_CAPACITY, HEADROOM, TRAILER>
+impl<const FRAME_CAPACITY: usize, const HEADROOM: usize, const TRAILER: usize, P: DmaReadPrepare>
+    PinnedDmaTxRadioLease<'_, FRAME_CAPACITY, HEADROOM, TRAILER, P>
 {
     pub const fn ethernet_offset(&self) -> usize {
         HEADROOM
@@ -463,8 +462,12 @@ impl<const FRAME_CAPACITY: usize, const HEADROOM: usize, const TRAILER: usize>
 // A successfully claimed allocation therefore outlives even a shortened 'pool
 // borrow. Forgetting this non-Clone lease leaves the slot in SLOT_RADIO: neither
 // the pool nor another lease can reclaim it, and its backing remains allocated.
-unsafe impl<const FRAME_CAPACITY: usize, const HEADROOM: usize, const TRAILER: usize>
-    StableDmaBacking for PinnedDmaTxRadioLease<'_, FRAME_CAPACITY, HEADROOM, TRAILER>
+unsafe impl<
+    const FRAME_CAPACITY: usize,
+    const HEADROOM: usize,
+    const TRAILER: usize,
+    P: DmaReadPrepare,
+> StableDmaBacking for PinnedDmaTxRadioLease<'_, FRAME_CAPACITY, HEADROOM, TRAILER, P>
 {
     fn stable_dma_region(&mut self) -> StableDmaRegion<'_> {
         // SAFETY: the Radio lease exclusively retains this pinned allocation.
@@ -475,8 +478,7 @@ unsafe impl<const FRAME_CAPACITY: usize, const HEADROOM: usize, const TRAILER: u
     }
 
     fn prepare_for_dma_read(&mut self) {
-        let prepare = self.prepare_for_dma_read;
-        prepare(self.storage_mut());
+        P::prepare_for_dma_read(self.storage_mut());
     }
 }
 
@@ -486,8 +488,8 @@ pub trait IndexedStableDmaLease: StableDmaBacking {
     fn index(&self) -> u8;
 }
 
-impl<const FRAME_CAPACITY: usize, const HEADROOM: usize, const TRAILER: usize> IndexedStableDmaLease
-    for PinnedDmaTxRadioLease<'_, FRAME_CAPACITY, HEADROOM, TRAILER>
+impl<const FRAME_CAPACITY: usize, const HEADROOM: usize, const TRAILER: usize, P: DmaReadPrepare>
+    IndexedStableDmaLease for PinnedDmaTxRadioLease<'_, FRAME_CAPACITY, HEADROOM, TRAILER, P>
 {
     fn index(&self) -> u8 {
         self.index
@@ -613,8 +615,8 @@ impl<R: DmaIndexReturn> Drop for ReturnIndex<R> {
     }
 }
 
-impl<const FRAME_CAPACITY: usize, const HEADROOM: usize, const TRAILER: usize> Drop
-    for PinnedDmaTxRadioLease<'_, FRAME_CAPACITY, HEADROOM, TRAILER>
+impl<const FRAME_CAPACITY: usize, const HEADROOM: usize, const TRAILER: usize, P: DmaReadPrepare>
+    Drop for PinnedDmaTxRadioLease<'_, FRAME_CAPACITY, HEADROOM, TRAILER, P>
 {
     fn drop(&mut self) {
         if self.live {

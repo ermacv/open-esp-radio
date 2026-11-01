@@ -38,6 +38,14 @@ impl RateSelection<RxMeta, ()> for TwoStages {
     fn disconnected(&mut self) {}
 
     fn completed<D>(&mut self, _: Instant, _: FrameRates, _: &SingleOutcome<(), D>) {}
+
+    fn completed_aggregate<D>(
+        &mut self,
+        _: Instant,
+        _: oer_ieee80211_core_upper_mac::rate_control::BlockAckTally,
+        _: &oer_ieee80211_contracts_port::AggregateOutcome<(), D>,
+    ) {
+    }
 }
 
 #[test]

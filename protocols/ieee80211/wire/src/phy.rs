@@ -466,6 +466,16 @@ impl HeRate {
     }
 }
 
+/// The longest TXTIME of an HT-mixed PPDU less its signal extension, in
+/// microseconds: the L-SIG's 12-bit LENGTH at 6 Mb/s (IEEE Std
+/// 802.11-2020, 19.3.9.3.5). See [`PhyRate::max_txtime_micros`].
+pub const HT_MIXED_MAX_TXTIME_MICROS: u32 = const {
+    // L-STF, L-LTF and L-SIG, then 4 us symbols of 24 data bits carrying
+    // SERVICE, LENGTH octets and the tail (17.4.3).
+    let symbols = (16_u32 + 8 * 4_095 + 6 + 23) / 24;
+    20 + 4 * symbols
+};
+
 /// The PHY rate of one PPDU.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum PhyRate {
@@ -541,6 +551,23 @@ impl PhyRate {
             None
         } else {
             Some(bytes as u32)
+        }
+    }
+
+    /// The longest PPDU at this rate, in microseconds, that a transmitter
+    /// may send; `None` where this module states no limit (non-HT and HE
+    /// rates).
+    ///
+    /// An HT-mixed PPDU carries its duration in the L-SIG: RATE 6 Mb/s and
+    /// a 12-bit LENGTH (IEEE Std 802.11-2020, 19.3.9.3.5, Equation (19-1)),
+    /// so its TXTIME less any signal extension is at most
+    /// 20 + 4 * ceil((16 + 8 * 4095 + 6) / 24) = 5484 us. Compared with
+    /// [`Self::max_ppdu_duration_micros`], which includes the 6 us signal
+    /// extension, the limit errs short by that extension.
+    pub const fn max_txtime_micros(self) -> Option<u32> {
+        match self {
+            Self::Ht(_) => Some(HT_MIXED_MAX_TXTIME_MICROS),
+            Self::Legacy(_) | Self::He(_) => None,
         }
     }
 

@@ -8,8 +8,13 @@ use super::*;
 type TestPool = PinnedDmaTxPool<32, 8, 4, 1>;
 type TestHandle = PinnedDmaTxPoolHandle<32, 8, 4, 1>;
 
-fn mark_dma_read_prepared(storage: &mut [u8]) {
-    storage[0] = 0x5a;
+/// A target's cache maintenance, observable: it marks the first byte.
+enum MarkDmaReadPrepared {}
+
+impl DmaReadPrepare for MarkDmaReadPrepared {
+    fn prepare_for_dma_read(storage: &mut [u8]) {
+        storage[0] = 0x5a;
+    }
 }
 
 struct ReturnProbe<'pool> {
@@ -84,9 +89,13 @@ fn claimed_slots_tracks_publication_and_returns_across_slots() {
 
 #[test]
 fn radio_backing_runs_target_prepare_only_at_dma_publication_edge() {
-    let pool = Box::leak(Box::new(TestPool::new()));
-    let pool = TestPool::pin_static_with_dma_read_prepare(pool, mark_dma_read_prepared);
-    let mut radio = prepared_radio(&pool);
+    type MarkedPool = PinnedDmaTxPool<32, 8, 4, 1, MarkDmaReadPrepared>;
+    let pool = MarkedPool::pin_static(Box::leak(Box::new(MarkedPool::new())));
+    let network = pool.claim_network(0).unwrap();
+    let (index, ()) = network.publish(crate::FrameLen::constant::<4>(), |frame| {
+        frame.copy_from_slice(&[1, 2, 3, 4])
+    });
+    let mut radio = pool.claim_radio(index).unwrap();
 
     assert_eq!(radio.storage_mut()[0], 0);
     StableDmaBacking::prepare_for_dma_read(&mut radio);
@@ -223,7 +232,7 @@ fn a_zeroed_pool_is_the_free_coherent_pool_new_builds() {
         assert_eq!(slot.state.load(Ordering::Acquire), SLOT_FREE);
         assert_eq!(slot.length.load(Ordering::Acquire), 0);
     }
-    // No prepare hook is coherent memory: the bytes stay as written.
+    // The default `Coherent` pool leaves the bytes as written.
     let mut radio = prepared_radio(&pool);
     StableDmaBacking::prepare_for_dma_read(&mut radio);
     assert_eq!(radio.ethernet(), &[1, 2, 3, 4]);

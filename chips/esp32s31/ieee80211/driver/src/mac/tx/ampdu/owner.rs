@@ -239,7 +239,8 @@ impl<'storage, B: 'storage, const SLOTS: usize> RetainedDmaAmpduTx<'storage, B, 
         match self.metadata_mut().begin() {
             Ok(cookie) => Ok(cookie),
             Err(error) => {
-                self.dma_mut().cancel()?;
+                // `begin` reserved an empty chain: no lease is retained.
+                self.dma_mut().cancel(drop)?;
                 Err(error)
             }
         }
@@ -253,9 +254,15 @@ impl<'storage, B: 'storage, const SLOTS: usize> RetainedDmaAmpduTx<'storage, B, 
             .configure_max_aggregate_bytes(max_aggregate_bytes)
     }
 
-    pub fn cancel(&mut self, cookie: TxCookie) -> Result<(), HtAmpduTxError> {
+    /// Cancel the reserved aggregate, handing every committed lease to
+    /// `returned` in commit order.
+    pub fn cancel(
+        &mut self,
+        cookie: TxCookie,
+        returned: impl FnMut(B),
+    ) -> Result<(), HtAmpduTxError> {
         self.metadata_mut().cancel(cookie)?;
-        if let Err(error) = self.dma_mut().cancel() {
+        if let Err(error) = self.dma_mut().cancel(returned) {
             self.quarantine();
             return Err(error.into());
         }
@@ -665,10 +672,13 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
         self.metadata_mut().begin_timeout_abort(hardware, cookie)
     }
 
+    /// Detach a collision-owned aggregate, handing every lease to
+    /// `returned` in commit order once the queue confirmed its detach.
     pub fn abort_collision<H: HtAmpduHardware>(
         &mut self,
         hardware: &mut H,
         cookie: TxCookie,
+        returned: impl FnMut(B),
     ) -> Result<bool, HtAmpduTxError> {
         let queue = {
             let storage = self.as_ref().get_ref();
@@ -677,14 +687,14 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
             }
             storage.queue.hardware_index()
         };
-        let descriptor_head = self.dma_mut().descriptor_head();
+        let descriptor_head = self.dma_mut().descriptor_head()?;
         let outcome = {
             let dma = self.dma_mut();
             hardware.with_tx_queue_detached(
                 queue,
                 descriptor_head,
                 MacTxDetachReason::Collision,
-                |detached| dma.release_aborted(detached),
+                |detached| dma.release_aborted(detached, returned),
             )
         };
         match outcome {
@@ -702,10 +712,13 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
         Ok(true)
     }
 
+    /// Finish a settled timeout abort, handing every lease to `returned` in
+    /// commit order once the queue confirmed its detach.
     pub fn finish_timeout_abort<H: HtAmpduHardware>(
         &mut self,
         hardware: &mut H,
         cookie: TxCookie,
+        returned: impl FnMut(B),
     ) -> Result<(), HtAmpduTxError> {
         let queue = {
             let storage = self.as_ref().get_ref();
@@ -714,14 +727,14 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
             }
             storage.queue.hardware_index()
         };
-        let descriptor_head = self.dma_mut().descriptor_head();
+        let descriptor_head = self.dma_mut().descriptor_head()?;
         let outcome = {
             let dma = self.dma_mut();
             hardware.with_tx_queue_detached(
                 queue,
                 descriptor_head,
                 MacTxDetachReason::Timeout,
-                |detached| dma.release_aborted(detached),
+                |detached| dma.release_aborted(detached, returned),
             )
         };
         match outcome {
@@ -751,7 +764,7 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
             }
             storage.queue.hardware_index()
         };
-        let descriptor_head = self.dma_mut().descriptor_head();
+        let descriptor_head = self.dma_mut().descriptor_head()?;
         let outcome = {
             let dma = self.dma_mut();
             hardware.with_tx_queue_detached(
@@ -775,7 +788,13 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
         }
     }
 
-    pub fn release_completed(&mut self, cookie: TxCookie) -> Result<(), HtAmpduTxError> {
+    /// Release a detached completed aggregate, handing every lease to
+    /// `returned` in commit order.
+    pub fn release_completed(
+        &mut self,
+        cookie: TxCookie,
+        returned: impl FnMut(B),
+    ) -> Result<(), HtAmpduTxError> {
         {
             let storage = self.as_ref().get_ref();
             if storage.state != TxDmaState::Completed
@@ -785,7 +804,7 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
                 return Err(HtAmpduTxError::Stale);
             }
         }
-        if let Err(error) = self.dma_mut().release_detached() {
+        if let Err(error) = self.dma_mut().release_detached(returned) {
             self.quarantine();
             return Err(error.into());
         }
@@ -819,11 +838,11 @@ impl<B, const SLOTS: usize> Drop for RetainedDmaAmpduTx<'_, B, SLOTS> {
             (TxDmaState::Free, AmpduDmaState::Free) => true,
             (TxDmaState::Reserved, AmpduDmaState::Reserved) => {
                 let cookie = self.active;
-                self.metadata_mut().cancel(cookie).is_ok() && self.dma_mut().cancel().is_ok()
+                self.metadata_mut().cancel(cookie).is_ok() && self.dma_mut().cancel(drop).is_ok()
             }
             (TxDmaState::Completed, AmpduDmaState::Detached) if self.detached => {
                 let cookie = self.active;
-                self.dma_mut().release_detached().is_ok()
+                self.dma_mut().release_detached(drop).is_ok()
                     && self.metadata_mut().release_completed(cookie).is_ok()
             }
             _ => false,

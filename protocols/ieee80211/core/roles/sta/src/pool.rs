@@ -3,25 +3,25 @@
 use crate::events::StaEvent;
 use oer_events::{EventSink, report};
 
-/// The tokens of one kind a machine holds at most.
+/// The tokens of one kind a station machine holds at most.
 pub(crate) const POOL_CAPACITY: usize = 8;
 
-/// A bounded pool of tokens of one kind.
-pub(crate) struct Pool<X> {
-    items: [Option<X>; POOL_CAPACITY],
+/// A bounded pool of at most `N` tokens of one kind.
+pub(crate) struct Pool<X, const N: usize = POOL_CAPACITY> {
+    items: [Option<X>; N],
 }
 
-impl<X> Pool<X> {
-    /// A pool of `items`, at most [`POOL_CAPACITY`]: checked at compile
-    /// time, so no granted token is ever lost.
-    pub(crate) fn new<const N: usize>(items: [X; N]) -> Self {
+impl<X, const N: usize> Pool<X, N> {
+    /// A pool of `items`, at most `N`: checked at compile time, so no
+    /// granted token is ever lost.
+    pub(crate) fn new<const M: usize>(items: [X; M]) -> Self {
         const {
-            if N > POOL_CAPACITY {
-                panic!("a station holds at most 8 tokens of a kind");
+            if M > N {
+                panic!("a pool holds no more tokens than its capacity");
             }
         };
         let mut pool = Self {
-            items: [const { None }; POOL_CAPACITY],
+            items: [const { None }; N],
         };
         for (slot, item) in pool.items.iter_mut().zip(items) {
             *slot = Some(item);
@@ -29,7 +29,7 @@ impl<X> Pool<X> {
         pool
     }
 
-    pub(crate) fn from_collection(items: heapless::Vec<X, POOL_CAPACITY>) -> Self {
+    pub(crate) fn from_collection(items: heapless::Vec<X, N>) -> Self {
         let mut items = items.into_iter();
         Self {
             items: core::array::from_fn(|_| items.next()),
@@ -37,7 +37,7 @@ impl<X> Pool<X> {
     }
 
     /// Partition a bounded bank without collecting through a panicking Vec iterator.
-    pub(crate) fn partition(items: heapless::Vec<X, POOL_CAPACITY>, active: usize) -> (Self, Self) {
+    pub(crate) fn partition(items: heapless::Vec<X, N>, active: usize) -> (Self, Self) {
         let mut items = items.into_iter();
         let free = Self {
             items: core::array::from_fn(|index| if index < active { items.next() } else { None }),
@@ -49,7 +49,7 @@ impl<X> Pool<X> {
     }
 
     /// Drain into the same fixed capacity, retaining vacant cells as values.
-    pub(crate) fn take_all(&mut self) -> [Option<X>; POOL_CAPACITY] {
+    pub(crate) fn take_all(&mut self) -> [Option<X>; N] {
         self.items.each_mut().map(Option::take)
     }
 
@@ -85,76 +85,146 @@ impl<X> Pool<X> {
 /// A first-in, first-out queue of at most `N` items. A machine sizes it by
 /// a const parameter checked at build against the tokens its items hold;
 /// an item beyond `N` comes back to the caller.
+///
+/// The items lie in a ring from `head`: taking the first item, or the first
+/// one a predicate takes when it is at the head, moves no other item, so a
+/// queue of large items costs no copies on its usual path. An item taken
+/// from inside the ring, or inserted inside it, moves the items before it
+/// (or after it) by one cell.
 pub(crate) struct Fifo<X, const N: usize> {
-    // Occupied cells form a prefix. Construction and the methods below are
-    // the only writers; a checked free cell reserves capacity before insert.
+    // The `len` items lie in cells `head`, `head + 1`, ... modulo `N`; every
+    // other cell is empty. Construction and the methods below are the only
+    // writers.
     items: [Option<X>; N],
+    head: usize,
+    len: usize,
 }
 
 impl<X, const N: usize> Fifo<X, N> {
     pub(crate) const fn new() -> Self {
         Self {
             items: [const { None }; N],
+            head: 0,
+            len: 0,
+        }
+    }
+
+    /// The cell of the item `offset` places after the head; `None` only
+    /// for a queue of no cells.
+    fn cell(&self, offset: usize) -> Option<usize> {
+        self.head.checked_add(offset)?.checked_rem(N)
+    }
+
+    /// Exchange the contents of the cells `offset` and `offset + 1` places
+    /// after the head.
+    fn swap_next(&mut self, offset: usize) {
+        let (Some(this), Some(next)) = (self.cell(offset), self.cell(offset.saturating_add(1)))
+        else {
+            return;
+        };
+        if let Ok([this, next]) = self.items.get_disjoint_mut([this, next]) {
+            core::mem::swap(this, next);
         }
     }
 
     pub(crate) fn push(&mut self, item: X) -> Result<(), X> {
-        match self.items.iter_mut().find(|slot| slot.is_none()) {
-            Some(slot) => {
+        if self.len >= N {
+            return Err(item);
+        }
+        match self
+            .cell(self.len)
+            .and_then(|cell| self.items.get_mut(cell))
+        {
+            Some(slot @ None) => {
                 *slot = Some(item);
+                self.len = self.len.saturating_add(1);
                 Ok(())
             }
-            None => Err(item),
+            _ => Err(item),
         }
     }
 
-    /// Insert by the original operation order, preserving older returns.
+    /// Insert by the original operation order, preserving older returns:
+    /// before the first item `before` puts it ahead of.
     pub(crate) fn insert_by(&mut self, item: X, before: impl Fn(&X, &X) -> bool) -> Result<(), X> {
-        // The last free cell is reserved before any ownership moves. With
-        // the occupied-prefix invariant it is the final destination of carry.
-        let Some((free, occupied)) = self.items.split_last_mut() else {
-            return Err(item);
-        };
-        if free.is_some() {
+        if self.len >= N {
             return Err(item);
         }
-        let mut carry = item;
-        let mut inserting = false;
-        for slot in occupied {
-            match slot {
-                Some(other) => {
-                    if inserting || before(&carry, other) {
-                        core::mem::swap(&mut carry, other);
-                        inserting = true;
-                    }
-                }
-                None => {
-                    *slot = Some(carry);
-                    return Ok(());
-                }
+        let at = self
+            .iter()
+            .position(|other| before(&item, other))
+            .unwrap_or(self.len);
+        // The free cell after the last item moves back to `at`.
+        let mut offset = self.len;
+        while offset > at {
+            offset = offset.saturating_sub(1);
+            self.swap_next(offset);
+        }
+        match self.cell(at).and_then(|cell| self.items.get_mut(cell)) {
+            Some(slot @ None) => {
+                *slot = Some(item);
+                self.len = self.len.saturating_add(1);
+                Ok(())
             }
+            _ => Err(item),
         }
-        *free = Some(carry);
-        Ok(())
     }
 
-    #[cfg(test)]
     pub(crate) fn iter(&self) -> impl Iterator<Item = &X> {
-        self.items.iter().flatten()
+        (0..self.len).filter_map(move |offset| {
+            self.cell(offset)
+                .and_then(|cell| self.items.get(cell))
+                .and_then(Option::as_ref)
+        })
     }
 
-    pub(crate) fn front(&self) -> Option<&X> {
-        self.items.first().and_then(Option::as_ref)
+    /// The first item `matches` takes.
+    pub(crate) fn first(&self, matches: impl Fn(&X) -> bool) -> Option<&X> {
+        self.iter().find(|item| matches(item))
+    }
+
+    /// Remove the first item `matches` takes, keeping the others' order.
+    pub(crate) fn remove_first(&mut self, matches: impl Fn(&X) -> bool) -> Option<X> {
+        let at = self.iter().position(matches)?;
+        let item = self
+            .cell(at)
+            .and_then(|cell| self.items.get_mut(cell))
+            .and_then(Option::take)?;
+        // The emptied cell moves forward to the head.
+        let mut offset = at;
+        while offset > 0 {
+            offset = offset.saturating_sub(1);
+            self.swap_next(offset);
+        }
+        self.advance();
+        Some(item)
+    }
+
+    /// Drop the emptied head cell from the ring.
+    fn advance(&mut self) {
+        self.head = self.cell(1).unwrap_or(0);
+        self.len = self.len.saturating_sub(1);
+    }
+
+    /// Initialize an empty queue in place.
+    #[cfg(feature = "placement")]
+    pub(crate) fn init_in_place(place: &mut core::mem::MaybeUninit<Self>) -> &mut Self {
+        oer_memory::init_in_place!(place, Self {
+            items => |items| oer_memory::init_array(items, |_| None),
+            head: 0,
+            len: 0,
+        })
     }
 
     pub(crate) fn pop(&mut self) -> Option<X> {
-        let (front, tail) = self.items.split_first_mut()?;
-        let item = front.take()?;
-        let mut vacant = front;
-        for next in tail {
-            *vacant = next.take();
-            vacant = next;
+        if self.len == 0 {
+            return None;
         }
+        let item = self
+            .cell(0)
+            .and_then(|cell| self.items.get_mut(cell))
+            .and_then(Option::take)?;
+        self.advance();
         Some(item)
     }
 }
@@ -190,6 +260,39 @@ mod tests {
                 .is_err()
         );
     }
+
+    #[test]
+    fn a_queue_wrapping_its_ring_keeps_order_through_every_operation() {
+        let values = |queue: &Fifo<u8, 4>| queue.iter().copied().collect::<std::vec::Vec<_>>();
+        let mut queue = Fifo::<u8, 4>::new();
+        for value in [1, 2, 3] {
+            assert!(queue.push(value).is_ok());
+        }
+        // The head moves on: the next pushes wrap around the ring.
+        assert_eq!(queue.pop(), Some(1));
+        assert_eq!(queue.pop(), Some(2));
+        for value in [4, 5, 6] {
+            assert!(queue.push(value).is_ok());
+        }
+        assert_eq!(queue.push(7), Err(7));
+        assert_eq!(values(&queue), [3, 4, 5, 6]);
+        // From inside the ring, across its wrap: the others keep their order.
+        assert_eq!(queue.remove_first(|value| *value == 5), Some(5));
+        assert_eq!(values(&queue), [3, 4, 6]);
+        assert_eq!(queue.remove_first(|value| *value == 9), None);
+        // Ordered insertion across the wrap.
+        assert!(queue.insert_by(5, |a, b| a < b).is_ok());
+        assert_eq!(values(&queue), [3, 4, 5, 6]);
+        assert_eq!(queue.insert_by(1, |a, b| a < b), Err(1));
+        assert_eq!(queue.remove_first(|value| *value == 3), Some(3));
+        assert!(queue.insert_by(0, |a, b| a < b).is_ok());
+        assert_eq!(values(&queue), [0, 4, 5, 6]);
+        assert_eq!(queue.first(|value| *value > 4), Some(&5));
+        while queue.pop().is_some() {}
+        assert!(queue.iter().next().is_none());
+        assert!(Fifo::<u8, 0>::new().push(1).is_err());
+        assert_eq!(Fifo::<u8, 0>::new().pop(), None);
+    }
 }
 
 #[cfg(test)]
@@ -204,7 +307,7 @@ mod partition_tests {
                 heapless::Vec::from_array(core::array::from_fn::<_, POOL_CAPACITY, _>(|i| {
                     Owner(i as u8)
                 }));
-            let (mut free, mut spare) = Pool::partition(values, active);
+            let (mut free, mut spare): (Pool<Owner>, _) = Pool::partition(values, active);
             assert_eq!(free.len(), active.min(POOL_CAPACITY));
             let values: std::vec::Vec<_> = free
                 .take_all()

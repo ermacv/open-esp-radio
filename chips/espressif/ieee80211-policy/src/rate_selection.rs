@@ -31,11 +31,11 @@ use core::marker::PhantomData;
 use core::num::NonZeroU8;
 
 use oer_ieee80211_contracts_port::{
-    AckSnr, Band, Ieee80211Capabilities, Protection, RateSample, RetryPlan, RetryStage,
-    SignalMetadata, SingleOutcome,
+    AckSnr, AggregateEnd, AggregateOutcome, Band, BlockAckSnr, Ieee80211Capabilities, Protection,
+    RateSample, RetryPlan, RetryStage, SignalMetadata, SingleOutcome, SnrSample, TxOutcome,
 };
 use oer_ieee80211_core_upper_mac::{
-    rate_control::{MpduOutcome, RateControl, RatePeer},
+    rate_control::{BlockAckTally, MpduOutcome, RateControl, RatePeer},
     rate_selection::{FrameRates, RateSelection},
 };
 use oer_ieee80211_wire::phy::{LegacyRate, PhyRate};
@@ -263,6 +263,11 @@ fn control_plan(
 /// # #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 /// # struct Snr(i8);
 /// # impl AckSnr for Snr { fn snr_db(&self) -> i8 { self.0 } }
+/// impl BlockAckSnr for Snr {
+///     fn snr_sample(&self) -> SnrSample {
+///         SnrSample::Measured(self.0)
+///     }
+/// }
 /// fn for_port<M: RxMetadata>(selection: impl RateSelection<M, Snr>) {}
 /// // The portable metadata measures nothing.
 /// for_port::<RxMeta>(EspressifRateSelection::<Caps>::new());
@@ -315,11 +320,16 @@ fn control_plan(
 ///         self.0
 ///     }
 /// }
+/// impl BlockAckSnr for Snr {
+///     fn snr_sample(&self) -> SnrSample {
+///         SnrSample::Measured(self.0)
+///     }
+/// }
 /// fn for_port<M: RxMetadata>(selection: impl RateSelection<M, Snr>) {}
 /// for_port::<Measured>(EspressifRateSelection::<Caps>::new());
 /// ```
-impl<K: Ieee80211Capabilities, M: SignalMetadata, A: AckSnr> RateSelection<M, A>
-    for EspressifRateSelection<K>
+impl<K: Ieee80211Capabilities, M: SignalMetadata, A: AckSnr, BA: BlockAckSnr>
+    RateSelection<M, A, BA> for EspressifRateSelection<K>
 {
     fn packet_number_step(&self) -> oer_ieee80211_core_upper_mac::ccmp::CcmpPacketNumberStep {
         crate::ccmp::TX_PACKET_NUMBER_STEP
@@ -369,6 +379,37 @@ impl<K: Ieee80211Capabilities, M: SignalMetadata, A: AckSnr> RateSelection<M, A>
             control.observe_mpdu(transmissions, outcome, ack_snr_db);
         }
     }
+
+    fn completed_aggregate<D>(
+        &mut self,
+        now: Instant,
+        tally: BlockAckTally,
+        completion: &AggregateOutcome<BA, D>,
+    ) {
+        let Some(control) = &mut self.control else {
+            return;
+        };
+        // A failed aggregate reaches the rate decision through its window
+        // too, with no SNR measurement.
+        let observed = match completion {
+            TxOutcome::Ended(AggregateEnd::Delivered { ack, .. }) => {
+                control.observe_ampdu(now, tally, ack)
+            }
+            _ => control.observe_ampdu(now, tally, &NoBlockAck),
+        };
+        // A controller without A-MPDU state keeps its rate; that is its
+        // whole answer to the observation.
+        let _unavailable: Result<(), _> = observed;
+    }
+}
+
+/// The evidence of an aggregate that no BlockAck answered: no SNR.
+struct NoBlockAck;
+
+impl BlockAckSnr for NoBlockAck {
+    fn snr_sample(&self) -> SnrSample {
+        SnrSample::Unmeasured
+    }
 }
 
 impl<K: Ieee80211Capabilities> EspressifRateSelection<K> {
@@ -381,6 +422,13 @@ impl<K: Ieee80211Capabilities> EspressifRateSelection<K> {
                 transmissions: NonZeroU8::MIN,
                 protection: Protection::None,
             })),
+            // An aggregate goes once, at the A-MPDU schedule's rate.
+            (FrameRates::Aggregate, Some(control)) => Some(RetryPlan::new(RetryStage {
+                rate: control.constrain_rate(control.ampdu_rate()),
+                transmissions: NonZeroU8::MIN,
+                protection: Protection::None,
+            })),
+            (FrameRates::Aggregate, None) => None,
             (FrameRates::Data, Some(control)) => {
                 let initial = control.mpdu_rate();
                 walk(

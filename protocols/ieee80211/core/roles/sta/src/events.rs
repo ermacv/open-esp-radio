@@ -20,6 +20,28 @@ pub enum StaEvent {
     /// A returned buffer's memory was not the station's: its renewal or
     /// encoding was refused, and the token stays in its pool.
     BufferMemoryUnavailable,
+    /// A data aggregate's terminal, or its refusal before the port, settled
+    /// its members.
+    AggregateSettled(AggregateSettled),
+    /// The station sent a BlockAckReq to move a recipient's window past a
+    /// dropped MPDU.
+    BlockAckRequestSent,
+}
+
+/// How one data aggregate's members settled.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct AggregateSettled {
+    /// Its members: the subframes it went with.
+    pub members: u8,
+    /// Members the BlockAck acknowledged.
+    pub acknowledged: u8,
+    /// Members back in their queue for a later aggregate.
+    pub retried: u8,
+    /// Members dropped: their lifetime or the policy's attempts ran out, a
+    /// refusal or an outcome ended them, or their memory was lost.
+    pub dropped: u8,
+    /// Whether the aggregate was refused before the port.
+    pub refused: bool,
 }
 
 /// The returned buffer, renewed for a new MSDU. A buffer whose memory is
@@ -44,6 +66,8 @@ pub enum DataLoss {
     Indeterminate,
     /// Its lifetime expired.
     Expired,
+    /// Its aggregates on the air missed it as often as the policy allows.
+    RetryLimit,
     /// Its contention budget ran out.
     ContentionLimited,
     /// A full queue could not hold it; its tokens came back.

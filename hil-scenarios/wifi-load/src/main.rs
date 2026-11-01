@@ -464,7 +464,20 @@ fn counters(counters: &Counters, window_us: u64) -> serde_json::Value {
             .then(|| round(instructions / f64::from(counters.stack_received))),
         "cache": cache(counters),
         "rx": counters.rx,
+        "tx": tx_counts(counters),
     })
+}
+
+/// The transmit path's counts: the station's settled aggregates with their
+/// mean subframes (null without one) beside the image's counts.
+fn tx_counts(counters: &Counters) -> serde_json::Value {
+    let ampdu = &counters.tx.ampdu;
+    let mut value = serde_json::json!(counters.tx);
+    value["ampdu"]["average_subframes"] = serde_json::json!(
+        (ampdu.aggregates != 0)
+            .then(|| round(f64::from(ampdu.subframes) / f64::from(ampdu.aggregates)))
+    );
+    value
 }
 
 /// What the window's instructions and stack frames rate a cache count by.
@@ -1183,6 +1196,24 @@ mod tests {
         let none = counters(&Counters::default(), 5_000_000);
         assert_eq!(none["rx"]["driver"]["available"], false);
         assert_eq!(none["rx"]["station"]["agreement_window"], 0);
+        assert_eq!(none["tx"]["ampdu"]["aggregates"], 0);
+        assert!(none["tx"]["ampdu"]["average_subframes"].is_null());
+        let sent = counters(
+            &Counters {
+                tx: oer_services_load::TxCounts {
+                    ampdu: oer_services_load::TxAmpdu {
+                        aggregates: 4,
+                        subframes: 90,
+                        subframes_17_32: 3,
+                        ..oer_services_load::TxAmpdu::default()
+                    },
+                },
+                ..Counters::default()
+            },
+            5_000_000,
+        );
+        assert_eq!(sent["tx"]["ampdu"]["average_subframes"], 22.5);
+        assert_eq!(sent["tx"]["ampdu"]["subframes_17_32"], 3);
         assert!(none["instructions_per_cycle"].is_null());
         assert!(none["instructions_per_stack_frame"].is_null());
     }

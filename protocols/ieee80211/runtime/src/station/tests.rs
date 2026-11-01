@@ -48,8 +48,8 @@ mod block_ack;
 mod contracts;
 use oer_ieee80211_testing_model::{
     AirFrame, MODEL_RX_EVENTS, MODEL_TX_QUEUE_DEPTH, ModelAck, ModelAir, ModelAnyBuffer,
-    ModelBackend, ModelCaps24, ModelLarge, ModelLentRx, ModelPhase, ModelResources, ModelRxMeta,
-    ModelSetup, ModelSmall, ModelTypes,
+    ModelBackend, ModelBlockAckEvidence, ModelCaps24, ModelLarge, ModelLentRx, ModelPhase,
+    ModelResources, ModelRxMeta, ModelSetup, ModelSmall, ModelTypes,
 };
 
 const LOCAL: [u8; 6] = [0x02, 0, 0, 0x12, 0x34, 0x56];
@@ -357,6 +357,7 @@ fn config(security: StaSecurity) -> TestConfig {
             listen_interval: oer_ieee80211_core_roles_sta::request::StationListenInterval::new(10)
                 .unwrap(),
             phy: PhyMode::Legacy,
+            tx_block_ack: None,
             callbacks: Callbacks,
         },
         security,
@@ -680,7 +681,7 @@ struct RecordingRates<'a> {
     air: &'a ModelAir,
 }
 
-impl RateSelection<ModelRxMeta, ModelAck> for RecordingRates<'_> {
+impl RateSelection<ModelRxMeta, ModelAck, ModelBlockAckEvidence> for RecordingRates<'_> {
     fn packet_number_step(&self) -> oer_ieee80211_core_upper_mac::ccmp::CcmpPacketNumberStep {
         oer_ieee80211_core_upper_mac::ccmp::CcmpPacketNumberStep::ONE
     }
@@ -698,11 +699,11 @@ impl RateSelection<ModelRxMeta, ModelAck> for RecordingRates<'_> {
         if self.fail_submission.replace(false) {
             self.air.fail_after_terminals();
         }
-        <EspressifRateSelection<ModelCaps24> as RateSelection<ModelRxMeta, ModelAck>>::plan(
-            &self.inner,
-            frame,
-            carried,
-        )
+        <EspressifRateSelection<ModelCaps24> as RateSelection<
+            ModelRxMeta,
+            ModelAck,
+            ModelBlockAckEvidence,
+        >>::plan(&self.inner, frame, carried)
     }
 
     fn associated(
@@ -710,17 +711,19 @@ impl RateSelection<ModelRxMeta, ModelAck> for RecordingRates<'_> {
         peer: &oer_ieee80211_core_upper_mac::rate_control::RatePeer,
         response: &ModelRxMeta,
     ) {
-        <EspressifRateSelection<ModelCaps24> as RateSelection<ModelRxMeta, ModelAck>>::associated(
-            &mut self.inner,
-            peer,
-            response,
-        );
+        <EspressifRateSelection<ModelCaps24> as RateSelection<
+            ModelRxMeta,
+            ModelAck,
+            ModelBlockAckEvidence,
+        >>::associated(&mut self.inner, peer, response);
     }
 
     fn disconnected(&mut self) {
-        <EspressifRateSelection<ModelCaps24> as RateSelection<ModelRxMeta, ModelAck>>::disconnected(
-            &mut self.inner,
-        );
+        <EspressifRateSelection<ModelCaps24> as RateSelection<
+            ModelRxMeta,
+            ModelAck,
+            ModelBlockAckEvidence,
+        >>::disconnected(&mut self.inner);
     }
 
     fn completed<D>(
@@ -730,12 +733,25 @@ impl RateSelection<ModelRxMeta, ModelAck> for RecordingRates<'_> {
         completion: &oer_ieee80211_contracts_port::SingleOutcome<ModelAck, D>,
     ) {
         self.completions.borrow_mut().push(frame);
-        <EspressifRateSelection<ModelCaps24> as RateSelection<ModelRxMeta, ModelAck>>::completed(
-            &mut self.inner,
-            now,
-            frame,
-            completion,
-        );
+        <EspressifRateSelection<ModelCaps24> as RateSelection<
+            ModelRxMeta,
+            ModelAck,
+            ModelBlockAckEvidence,
+        >>::completed(&mut self.inner, now, frame, completion);
+    }
+
+    fn completed_aggregate<D>(
+        &mut self,
+        now: Instant,
+        tally: oer_ieee80211_core_upper_mac::rate_control::BlockAckTally,
+        completion: &oer_ieee80211_contracts_port::AggregateOutcome<ModelBlockAckEvidence, D>,
+    ) {
+        self.completions.borrow_mut().push(FrameRates::Aggregate);
+        <EspressifRateSelection<ModelCaps24> as RateSelection<
+            ModelRxMeta,
+            ModelAck,
+            ModelBlockAckEvidence,
+        >>::completed_aggregate(&mut self.inner, now, tally, completion);
     }
 }
 

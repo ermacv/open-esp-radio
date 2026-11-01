@@ -43,10 +43,137 @@ pub(super) fn backend_fault(value: oer_esp32s31_ieee80211_driver::port::Fault) -
         Source::Clock => BackendFault::Clock,
         Source::Retune(v0) => BackendFault::Retune(retune_error(v0)),
         Source::Abandoned => BackendFault::Abandoned,
-        Source::UnexpectedAggregate => BackendFault::UnexpectedAggregate,
+        Source::Aggregate(v0) => BackendFault::Aggregate(aggregate_tx_error(v0)),
+        Source::AggregatePlan(v0) => BackendFault::AggregatePlan(aggregate_refusal(v0)),
         Source::TuneNotRecorded => BackendFault::TuneNotRecorded,
         Source::Setting(v0) => BackendFault::Setting(setting_fault(v0)),
         Source::HardwareUnavailable => BackendFault::HardwareUnavailable,
+    }
+}
+
+pub(super) fn aggregate_tx_error(
+    value: oer_esp32s31_ieee80211_driver::mac::tx::ampdu::HtAmpduTxError,
+) -> AggregateTxError {
+    use oer_esp32s31_ieee80211_driver::mac::tx::ampdu::HtAmpduTxError as Source;
+    match value {
+        Source::NotFree(v0) => AggregateTxError::NotFree(tx_dma_state(v0)),
+        Source::SlotCapacity => AggregateTxError::SlotCapacity,
+        Source::Stale => AggregateTxError::Stale,
+        Source::Completion(v0) => AggregateTxError::Completion(completion_fault(v0)),
+        Source::FrameIndexOutOfRange { index, count } => {
+            AggregateTxError::FrameIndexOutOfRange { index, count }
+        }
+        Source::InvalidRetryMask { mask, count } => {
+            AggregateTxError::InvalidRetryMask { mask, count }
+        }
+        Source::RetainedFrameTooShort { index, length } => {
+            AggregateTxError::RetainedFrameTooShort { index, length }
+        }
+        Source::BackingUnavailable { index } => AggregateTxError::BackingUnavailable { index },
+        Source::SlotCountOverflow { count } => AggregateTxError::SlotCountOverflow { count },
+        Source::InvalidStorageGeometry { slots } => {
+            AggregateTxError::InvalidStorageGeometry { slots }
+        }
+        Source::TxProgramUnavailable { format } => AggregateTxError::TxProgramUnavailable {
+            format: aggregate_format(format),
+        },
+        Source::InvalidTriggerReservation { queue, subframes } => {
+            AggregateTxError::InvalidTriggerReservation {
+                queue: usize::from(queue),
+                subframes,
+            }
+        }
+        Source::FrameTooLong => AggregateTxError::FrameTooLong,
+        Source::TooFewFrames => AggregateTxError::TooFewFrames,
+        Source::AggregateFull => AggregateTxError::AggregateFull,
+        Source::Length(v0) => AggregateTxError::Length(aggregate_length_error(v0)),
+        Source::AggregateConfigurationMismatch => AggregateTxError::AggregateConfigurationMismatch,
+        Source::QueueActive => AggregateTxError::QueueActive,
+        Source::TriggerMsduLengthUnavailable => AggregateTxError::TriggerMsduLengthUnavailable,
+        Source::TriggerBased(v0) => AggregateTxError::TriggerBased(trigger_program_error(v0)),
+        Source::DetachFailed => AggregateTxError::DetachFailed,
+        Source::TimeoutNotPending => AggregateTxError::TimeoutNotPending,
+        Source::ResetRequired => AggregateTxError::ResetRequired,
+        Source::DmaStorage(v0) => AggregateTxError::DmaStorage(chain_storage_error(v0)),
+    }
+}
+
+pub(super) fn tx_dma_state(
+    value: oer_esp32s31_ieee80211_driver::mac::tx::TxDmaState,
+) -> TxDmaState {
+    use oer_esp32s31_ieee80211_driver::mac::tx::TxDmaState as Source;
+    match value {
+        Source::Free => TxDmaState::Free,
+        Source::Reserved => TxDmaState::Reserved,
+        Source::HardwareOwned => TxDmaState::HardwareOwned,
+        Source::Completed => TxDmaState::Completed,
+        Source::ResetRequired => TxDmaState::ResetRequired,
+    }
+}
+
+pub(super) fn aggregate_format(
+    value: oer_esp32s31_ieee80211_driver::mac::tx::ampdu::HtAmpduTxFormat,
+) -> AggregateFormat {
+    use oer_esp32s31_ieee80211_driver::mac::tx::ampdu::HtAmpduTxFormat as Source;
+    match value {
+        Source::HtAmpdu => AggregateFormat::Ht,
+        Source::HeAmpdu => AggregateFormat::He,
+    }
+}
+
+pub(super) fn aggregate_length_error(
+    value: oer_esp32s31_ieee80211_driver::mac::tx::ampdu::HtAmpduLengthError,
+) -> AggregateLengthError {
+    use oer_esp32s31_ieee80211_driver::mac::tx::ampdu::HtAmpduLengthError as Source;
+    match value {
+        Source::InvalidLimits => AggregateLengthError::InvalidLimits,
+        Source::Empty => AggregateLengthError::Empty,
+        Source::ZeroMpduLength => AggregateLengthError::ZeroMpduLength,
+        Source::WindowFull => AggregateLengthError::WindowFull,
+        Source::AggregateTooLong(v0) => AggregateLengthError::AggregateTooLong(v0),
+    }
+}
+
+pub(super) fn trigger_program_error(
+    value: oer_esp32s31_hal::types::MacHeTbProgramError,
+) -> TriggerProgramError {
+    use oer_esp32s31_hal::types::MacHeTbProgramError as Source;
+    match value {
+        Source::TidNotEligible => TriggerProgramError::TidNotEligible,
+        Source::LengthCountMismatch => TriggerProgramError::LengthCountMismatch,
+        Source::InvalidMpduLength => TriggerProgramError::InvalidMpduLength,
+        Source::QueuedBytesTooLarge => TriggerProgramError::QueuedBytesTooLarge,
+    }
+}
+
+pub(super) fn chain_storage_error(
+    value: oer_esp32s31_hal::ieee80211::dma::tx_ampdu_storage::AmpduDmaStorageError,
+) -> ChainStorageError {
+    use oer_esp32s31_hal::ieee80211::dma::tx_ampdu_storage::AmpduDmaStorageError as Source;
+    match value {
+        Source::Address => ChainStorageError::Address,
+        Source::Count => ChainStorageError::Count,
+        Source::GenerationExhausted => ChainStorageError::GenerationExhausted,
+        Source::InvalidLength => ChainStorageError::InvalidLength,
+        Source::StaleBacking => ChainStorageError::StaleBacking,
+        Source::State => ChainStorageError::State,
+        Source::Retired => ChainStorageError::Retired,
+    }
+}
+
+pub(super) fn aggregate_refusal(
+    value: oer_esp32s31_ieee80211_driver::lower_mac::AmpduRefusal,
+) -> AggregateRefusal {
+    use oer_esp32s31_ieee80211_driver::lower_mac::AmpduRefusal as Source;
+    match value {
+        Source::Empty => AggregateRefusal::Empty,
+        Source::TooManySubframes => AggregateRefusal::TooManySubframes,
+        Source::StartSpacing => AggregateRefusal::StartSpacing,
+        Source::ShortSubframe => AggregateRefusal::ShortSubframe,
+        Source::GroupRecipient => AggregateRefusal::GroupRecipient,
+        Source::Length => AggregateRefusal::Length,
+        Source::LegacyRate => AggregateRefusal::LegacyRate,
+        Source::KeyUseMismatch => AggregateRefusal::KeyUseMismatch,
     }
 }
 

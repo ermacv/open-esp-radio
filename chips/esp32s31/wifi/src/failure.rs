@@ -51,10 +51,97 @@ pub enum BackendFault {
     Clock,
     Retune(RetuneError),
     Abandoned,
-    UnexpectedAggregate,
+    /// An aggregate's descriptor chain refused or quarantined it.
+    Aggregate(AggregateTxError),
+    /// Planning refused an aggregate its builder accepted.
+    AggregatePlan(AggregateRefusal),
     TuneNotRecorded,
     Setting(SettingFault),
     HardwareUnavailable,
+}
+/// Why an aggregate's descriptor chain refused or quarantined it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AggregateTxError {
+    NotFree(TxDmaState),
+    SlotCapacity,
+    Stale,
+    Completion(CompletionFault),
+    FrameIndexOutOfRange { index: u8, count: u8 },
+    InvalidRetryMask { mask: u32, count: u8 },
+    RetainedFrameTooShort { index: u8, length: u16 },
+    BackingUnavailable { index: u8 },
+    SlotCountOverflow { count: usize },
+    InvalidStorageGeometry { slots: usize },
+    TxProgramUnavailable { format: AggregateFormat },
+    InvalidTriggerReservation { queue: usize, subframes: u8 },
+    FrameTooLong,
+    TooFewFrames,
+    AggregateFull,
+    Length(AggregateLengthError),
+    AggregateConfigurationMismatch,
+    QueueActive,
+    TriggerMsduLengthUnavailable,
+    TriggerBased(TriggerProgramError),
+    DetachFailed,
+    TimeoutNotPending,
+    ResetRequired,
+    DmaStorage(ChainStorageError),
+}
+/// The DMA state of a TX descriptor.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum TxDmaState {
+    Free,
+    Reserved,
+    HardwareOwned,
+    Completed,
+    ResetRequired,
+}
+/// The PPDU format of an aggregate.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AggregateFormat {
+    Ht,
+    He,
+}
+/// Why an aggregate's length rule refused it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AggregateLengthError {
+    InvalidLimits,
+    Empty,
+    ZeroMpduLength,
+    WindowFull,
+    AggregateTooLong(u32),
+}
+/// Why a Trigger-based queue program was refused.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum TriggerProgramError {
+    TidNotEligible,
+    LengthCountMismatch,
+    InvalidMpduLength,
+    QueuedBytesTooLarge,
+}
+/// Why an aggregate's descriptor chain refused an edge.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ChainStorageError {
+    Address,
+    Count,
+    GenerationExhausted,
+    InvalidLength,
+    StaleBacking,
+    State,
+    /// The chain's owner no longer held its arenas.
+    Retired,
+}
+/// Why an aggregate cannot go as one publication.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AggregateRefusal {
+    Empty,
+    TooManySubframes,
+    StartSpacing,
+    ShortSubframe,
+    GroupRecipient,
+    Length,
+    LegacyRate,
+    KeyUseMismatch,
 }
 /// Why a P1 setting of the port could not be published or read back.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

@@ -84,7 +84,37 @@ pub enum InitializationError {
     Rx,
     Tx,
     Dma(crate::DmaError),
+    /// The station's transmit Block Ack policy builds no originator.
+    TxBlockAck,
 }
+
+/// The station's transmit Block Ack agreements: a window of the port's 32
+/// aggregate subframes, three requests a second apart, each answered within
+/// a second, ended after five idle seconds. A missing aggregate member goes
+/// again until its MSDU's aggregate lifetime or the LMAC's long retry limit
+/// of aggregates on the air.
+///
+/// SOURCE(esp32s31): member lifetime `oer_espressif_ieee80211_policy::lmac::
+/// AMPDU_MSDU_LIFETIME_MICROS` and attempts `lmac::LONG_RETRY_LIMIT`
+/// (`libpp[lmac.o]::lmacInit`). The window is the driver's
+/// `TX_BLOCK_ACK_MAX_WINDOW`; negotiation timing and inactivity are this
+/// composition's policy.
+const TX_BLOCK_ACK: oer_ieee80211_core_roles_sta::machine::StaTxBlockAckPolicy =
+    oer_ieee80211_core_roles_sta::machine::StaTxBlockAckPolicy {
+        window: oer_esp32s31_ieee80211_driver::mac::tx::ampdu::TX_BLOCK_ACK_MAX_WINDOW,
+        negotiation_timeout: Duration::from_secs(1),
+        retry: oer_ieee80211_core_upper_mac::block_ack::TxBlockAckRetry {
+            attempts: 3,
+            interval: Duration::from_secs(1),
+        },
+        inactivity: Duration::from_secs(5),
+        retry_members: oer_ieee80211_core_roles_sta::data::AggregateRetry {
+            lifetime: Duration::from_micros(
+                oer_espressif_ieee80211_policy::lmac::AMPDU_MSDU_LIFETIME_MICROS as u64,
+            ),
+            attempts: oer_espressif_ieee80211_policy::lmac::LONG_RETRY_LIMIT,
+        },
+    };
 pub struct Lower(pub DoorbellAcknowledger<Esp32s31, 3>);
 impl DoorbellAcknowledge for Lower {
     fn acknowledge(&mut self) {
@@ -301,6 +331,10 @@ impl<W: Binding> Profile<W> {
                 } else {
                     oer_ieee80211_core_upper_mac::phy_mode::PhyMode::Ht20
                 },
+                tx_block_ack: Some(
+                    oer_ieee80211_core_roles_sta::machine::StaTxBlockAck::new(TX_BLOCK_ACK)
+                        .map_err(|_| InitializationError::TxBlockAck)?,
+                ),
                 callbacks: CoreCallbacks(callbacks),
             },
             observer,

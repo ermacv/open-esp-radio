@@ -56,7 +56,7 @@ fn prefix_budget_matches_commit_with_final_padding_and_delimiters() {
         budget.finish().unwrap(),
         owner.prepared_aggregate(cookie).unwrap()
     );
-    owner.cancel(cookie).unwrap();
+    owner.cancel(cookie, drop).unwrap();
 }
 
 #[test]

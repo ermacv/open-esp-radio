@@ -533,6 +533,7 @@ fn initialization(error: &wifi::InitializationError) -> u16 {
         E::Rx => 15,
         E::Tx => 16,
         E::Dma(_) => 17,
+        E::TxBlockAck => 18,
     }
 }
 

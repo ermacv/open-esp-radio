@@ -1,5 +1,5 @@
 #![no_std]
-use oer_ieee80211_runtime::station::{PortAck, PortRxMeta, Runner, ServiceIo, StationPort};
+use oer_ieee80211_runtime::station::{PortAck, PortBlockAck, PortRxMeta, Runner, ServiceIo, StationPort};
 use oer_ieee80211_core_upper_mac::rate_selection::RateSelection;
 use oer_radio_port::{Disabled, Owner};
 use oer_time::Timer;
@@ -9,7 +9,7 @@ pub fn run_once<
     'id,
     B: StationPort<SlotId: 'id, Backend: 'id> + 'id,
     C: oer_ieee80211_core_roles_sta::machine::StaCallbacks,
-    S: RateSelection<PortRxMeta<'id, B>, PortAck<'id, B>>,
+    S: RateSelection<PortRxMeta<'id, B>, PortAck<'id, B>, PortBlockAck<'id, B>>,
 >(
     service: Runner<'id, B, C, S>,
     owner: Owner<'p, 'id, B::SlotId, B::Backend, Disabled>,

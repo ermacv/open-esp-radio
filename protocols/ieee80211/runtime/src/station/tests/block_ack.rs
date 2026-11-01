@@ -492,6 +492,254 @@ fn response_pressure_defers_management_without_overtaking_older_requests() {
     assert_eq!(counters.rx_frames_dropped(), 0);
 }
 
+/// An HT station with a transmit originator whose agreements end after one
+/// idle second.
+fn tx_block_ack_config((mut configuration, security): TestConfig) -> TestConfig {
+    configuration.tx_block_ack = Some(
+        oer_ieee80211_core_roles_sta::machine::StaTxBlockAck::new(
+            oer_ieee80211_core_roles_sta::machine::StaTxBlockAckPolicy {
+                window: 32,
+                negotiation_timeout: Duration::from_millis(100),
+                retry: oer_ieee80211_core_upper_mac::block_ack::TxBlockAckRetry {
+                    attempts: 2,
+                    interval: Duration::from_millis(50),
+                },
+                inactivity: Duration::from_secs(1),
+                retry_members: oer_ieee80211_core_roles_sta::data::AggregateRetry {
+                    lifetime: Duration::from_millis(1_500),
+                    attempts: 4,
+                },
+            },
+        )
+        .unwrap(),
+    );
+    (configuration, security)
+}
+
+fn addba_response(dialog_token: u8, tid: u8, window: u16) -> Vec<u8> {
+    management(
+        &oer_ieee80211_core_upper_mac::block_ack::AddbaResponse {
+            dialog_token,
+            status: oer_ieee80211_core_upper_mac::block_ack::AddbaStatus::Success,
+            tid,
+            window,
+            timeout_tu: 0,
+            amsdu: false,
+        }
+        .encode()
+        .unwrap(),
+    )
+}
+
+#[test]
+fn data_negotiates_a_transmit_agreement_that_ends_idle_with_a_delba() {
+    run_with(tx_block_ack_config(ht_config()), |world| {
+        Box::pin(async move {
+            let mut seen = 0;
+            connected(world, &mut seen).await;
+            world.send_msdu(BSSID);
+            let request = world.sent(&mut seen, 0xd0).await;
+            let BlockAckAction::AddbaRequest {
+                dialog_token,
+                tid: 0,
+                immediate: true,
+                window: 32,
+                timeout_tu: 0,
+                starting_sequence,
+                ..
+            } = response(&request)
+            else {
+                panic!("an ADDBA Request of TID 0: {:?}", response(&request));
+            };
+            // The MSDU that started it took sequence number 0 before.
+            assert_eq!(starting_sequence.get(), 1);
+            world
+                .air
+                .receive(&addba_response(dialog_token, 0, 32), meta());
+            // No more data: one idle second later the agreement ends.
+            let delba = world.sent(&mut seen, 0xd0).await;
+            assert_eq!(
+                response(&delba),
+                BlockAckAction::Delba {
+                    tid: 0,
+                    initiator: true,
+                    reason: 39,
+                }
+            );
+            // New data negotiates again.
+            world.send_msdu(BSSID);
+            assert!(matches!(
+                response(&world.sent(&mut seen, 0xd0).await),
+                BlockAckAction::AddbaRequest { tid: 0, .. }
+            ));
+            world.command(ControlCommand::Stop).await;
+        })
+    });
+}
+
+/// The Sequence Number and Retry bit of a sent QoS Data frame.
+fn sequence_and_retry(frame: &AirFrame) -> (u16, bool) {
+    let control = u16::from_le_bytes([frame.plaintext[22], frame.plaintext[23]]);
+    (control >> 4, frame.plaintext[1] & 0x08 != 0)
+}
+
+#[test]
+fn an_agreement_aggregates_waiting_msdus_and_retries_a_missing_member() {
+    run_with(tx_block_ack_config(ht_config()), |world| {
+        Box::pin(async move {
+            let mut seen = 0;
+            connected(world, &mut seen).await;
+            world.send_msdu(BSSID);
+            let BlockAckAction::AddbaRequest { dialog_token, .. } =
+                response(&world.sent(&mut seen, 0xd0).await)
+            else {
+                panic!("an ADDBA Request");
+            };
+            world
+                .air
+                .receive(&addba_response(dialog_token, 0, 32), meta());
+            assert!(world.delivered().await.is_empty());
+            // Sequence number 1 goes at once; 2, 3 and 4 wait while it is
+            // out, to go together.
+            world.air.hold(WmmAccessCategory::BestEffort, true);
+            for _ in 0..4 {
+                assert!(world.try_send_msdu(BSSID));
+                assert!(world.delivered().await.is_empty());
+            }
+            world
+                .air
+                .answer(oer_ieee80211_testing_model::AirAnswer::BlockAck(0b1));
+            // The aggregate of 2, 3 and 4 misses 3.
+            world
+                .air
+                .answer(oer_ieee80211_testing_model::AirAnswer::BlockAck(0b101));
+            world.air.hold(WmmAccessCategory::BestEffort, false);
+            let retried = loop {
+                let frame = world.sent(&mut seen, 0x88).await;
+                if sequence_and_retry(&frame).1 {
+                    break frame;
+                }
+            };
+            // Bit 1 of the second answer is the second subframe of the
+            // second publication: 2, 3 and 4 went as one aggregate, and only
+            // 3 again.
+            assert_eq!(sequence_and_retry(&retried), (3, true));
+            assert!(
+                world
+                    .air
+                    .sent()
+                    .iter()
+                    .filter(|frame| kind(frame) == 0x88)
+                    .all(|frame| ![(2, true), (4, true)].contains(&sequence_and_retry(frame)))
+            );
+            world.command(ControlCommand::Stop).await;
+        })
+    });
+}
+
+#[test]
+fn a_member_missed_by_every_attempt_is_dropped_and_a_bar_moves_the_window() {
+    run_with(tx_block_ack_config(ht_config()), |world| {
+        Box::pin(async move {
+            let mut seen = 0;
+            connected(world, &mut seen).await;
+            world.send_msdu(BSSID);
+            let BlockAckAction::AddbaRequest { dialog_token, .. } =
+                response(&world.sent(&mut seen, 0xd0).await)
+            else {
+                panic!("an ADDBA Request");
+            };
+            world
+                .air
+                .receive(&addba_response(dialog_token, 0, 32), meta());
+            assert!(world.delivered().await.is_empty());
+            // The policy allows four aggregates on the air.
+            for _ in 0..4 {
+                world
+                    .air
+                    .answer(oer_ieee80211_testing_model::AirAnswer::BlockAck(0));
+            }
+            world.send_msdu(BSSID);
+            let bar = world.sent(&mut seen, 0x84).await;
+            // Compressed BlockAckReq: its starting sequence after the dropped 1.
+            let control = u16::from_le_bytes([bar.plaintext[18], bar.plaintext[19]]);
+            assert_eq!(control >> 4, 2);
+            let tries = world
+                .air
+                .sent()
+                .iter()
+                .filter(|frame| kind(frame) == 0x88 && sequence_and_retry(frame).0 == 1)
+                .count();
+            assert_eq!(tries, 4);
+            world.command(ControlCommand::Stop).await;
+        })
+    });
+}
+
+#[test]
+fn a_refused_negotiation_is_not_repeated_and_receive_agreements_still_answer() {
+    run_with(tx_block_ack_config(ht_config()), |world| {
+        Box::pin(async move {
+            let mut seen = 0;
+            connected(world, &mut seen).await;
+            world.send_msdu(BSSID);
+            let BlockAckAction::AddbaRequest { dialog_token, .. } =
+                response(&world.sent(&mut seen, 0xd0).await)
+            else {
+                panic!("an ADDBA Request");
+            };
+            let refusal = oer_ieee80211_core_upper_mac::block_ack::AddbaResponse {
+                dialog_token,
+                status: oer_ieee80211_core_upper_mac::block_ack::AddbaStatus::RequestDeclined,
+                tid: 0,
+                window: 0,
+                timeout_tu: 0,
+                amsdu: false,
+            };
+            world
+                .air
+                .receive(&management(&refusal.encode().unwrap()), meta());
+            world.send_msdu(BSSID);
+            // The AP's own negotiation still gets its answer, and it is the
+            // next action frame: the refused TID asks nothing again.
+            world.air.receive(&addba(9, 0, 4, 0), meta());
+            assert!(matches!(
+                response(&world.sent(&mut seen, 0xd0).await),
+                BlockAckAction::AddbaResponse {
+                    dialog_token: 9,
+                    status: 0,
+                    ..
+                }
+            ));
+            world.command(ControlCommand::Stop).await;
+        })
+    });
+}
+
+#[test]
+fn a_station_without_an_originator_or_on_a_legacy_link_negotiates_nothing() {
+    for (config, ht) in [
+        (ht_config(), true),
+        (tx_block_ack_config(config(StaSecurity::Open)), false),
+    ] {
+        run_with(config, move |world| {
+            Box::pin(async move {
+                let mut seen = 0;
+                if ht {
+                    connected(world, &mut seen).await;
+                } else {
+                    world.associate(&mut seen, false).await;
+                }
+                world.send_msdu(BSSID);
+                let _ = world.sent(&mut seen, if ht { 0x88 } else { DATA }).await;
+                assert!(world.delivered().await.is_empty());
+                assert!(world.air.sent().iter().all(|frame| kind(frame) != 0xd0));
+                world.command(ControlCommand::Stop).await;
+            })
+        });
+    }
+}
+
 #[test]
 fn only_a_bar_from_the_associated_transmitter_moves_its_tid_window() {
     run_with(ht_config(), |world| {

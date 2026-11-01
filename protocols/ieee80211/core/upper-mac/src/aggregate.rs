@@ -2,9 +2,10 @@
 //!
 //! An originator aggregates the frames at the head of its queue that share
 //! a TID and a recipient. [`AmpduLimits`] bounds that run by the Block Ack
-//! agreement's window, the port's A-MPDU capabilities, the recipient's HT
-//! A-MPDU Parameters and the access category's TXOP limit, at the rate the
-//! aggregate goes out. The bound counts each subframe as its largest
+//! agreement's window, the port's A-MPDU capabilities (its length at the
+//! aggregate's rate), the recipient's HT A-MPDU Parameters and the access
+//! category's TXOP limit, at the rate the aggregate goes out, within the
+//! rate's PPDU time limit (`PhyRate::max_txtime_micros`). The bound counts each subframe as its largest
 //! protected encoding ([`subframe_bound`]) and includes the empty delimiters
 //! required by Minimum MPDU Start Spacing between successive subframes.
 //! The final subframe needs no empty delimiters. PHY-specific hardware limits
@@ -88,6 +89,7 @@ impl AmpduLimits {
         let minimum_subframe_bytes = self
             .rate
             .minimum_mpdu_spacing_bytes(self.min_mpdu_start_spacing())?;
+        let port_length = self.port.max_length.at(self.rate).ok()?.get();
         self.port
             .formats
             .contains_rate(self.rate)
@@ -96,7 +98,7 @@ impl AmpduLimits {
                 limit: usize::from(self.window)
                     .min(usize::from(self.port.max_subframes))
                     .min(usize::from(MAX_AMPDU_SUBFRAMES)),
-                maximum: self.peer_max_length().min(self.port.max_length),
+                maximum: self.peer_max_length().min(port_length),
                 length: 0,
                 previous: None,
                 minimum_subframe_bytes,
@@ -136,6 +138,12 @@ impl AmpduRun {
             return false;
         };
         if length > self.maximum
+            || self.limits.rate.max_txtime_micros().is_some_and(|limit| {
+                self.limits
+                    .rate
+                    .max_ppdu_duration_micros(length)
+                    .is_none_or(|duration| duration > limit)
+            })
             || self.limits.txop_limit_micros.is_some_and(|txop| {
                 self.limits
                     .rate
@@ -163,12 +171,22 @@ impl AmpduRun {
 
 #[cfg(test)]
 mod tests {
-    use oer_ieee80211_contracts_port::PhyFormatSet;
+    extern crate std;
+
+    use oer_ieee80211_contracts_port::{AmpduLengthTable, PhyFormatSet};
     use oer_ieee80211_wire::phy::{
         FecCoding, HeGiLtf, HeMcs, HeRate, HtMcs, HtRate, PpduBandwidth, SpatialStreams,
     };
 
     use super::*;
+
+    /// 65 535 octets at every rate.
+    const LONGEST: AmpduLengthTable = AmpduLengthTable::uniform(65_535);
+
+    /// `length` octets at every rate.
+    fn lengths(length: u32) -> &'static AmpduLengthTable {
+        std::boxed::Box::leak(std::boxed::Box::new(AmpduLengthTable::uniform(length)))
+    }
 
     fn ht_mcs7() -> PhyRate {
         PhyRate::Ht(HtRate::new(HtMcs::new(7).unwrap(), PpduBandwidth::Mhz20, false).unwrap())
@@ -180,7 +198,7 @@ mod tests {
             port: AmpduCapabilities {
                 max_subframes: 16,
                 formats: PhyFormatSet::HT,
-                max_length: 65_535,
+                max_length: &LONGEST,
             },
             // A Maximum A-MPDU Length of 65 535 octets, 8 µs spacing.
             peer_ampdu_parameters: 0x03 | (6 << 2),
@@ -255,13 +273,41 @@ mod tests {
     }
 
     #[test]
+    fn the_ports_length_and_the_ppdu_time_at_the_rate_end_a_run() {
+        // The port sends 6 490 octets at MCS 3 and 65 535 at MCS 7, and no
+        // aggregate at the other rates.
+        let mut table = AmpduLengthTable::uniform(0);
+        table.ht[0][0][3] = 6_490;
+        table.ht[0][0][7] = 65_535;
+        table.ht[1][1][7] = 65_535;
+        let port = AmpduCapabilities {
+            max_subframes: 32,
+            formats: PhyFormatSet::HT,
+            max_length: std::boxed::Box::leak(std::boxed::Box::new(table)),
+        };
+        let at = |mcs, bandwidth, short_gi| AmpduLimits {
+            window: 64,
+            port,
+            rate: PhyRate::Ht(HtRate::new(HtMcs::new(mcs).unwrap(), bandwidth, short_gi).unwrap()),
+            ..limits()
+        };
+        // The port's length: four 1 514-octet frames at MCS 3.
+        assert_eq!(at(3, PpduBandwidth::Mhz20, false).run([1_514; 40]), 4);
+        // The HT-mixed PPDU time (5 484 us): 28 at MCS 7, 20 MHz, long GI.
+        assert_eq!(at(7, PpduBandwidth::Mhz20, false).run([1_514; 40]), 28);
+        // At 150 Mb/s the port's 32 subframes end it.
+        assert_eq!(at(7, PpduBandwidth::Mhz40, true).run([1_514; 40]), 32);
+        assert!(at(1, PpduBandwidth::Mhz20, false).begin().is_none());
+    }
+
+    #[test]
     fn aggregate_admission_must_include_minimum_start_spacing() {
         let limits = AmpduLimits {
             window: 64,
             port: AmpduCapabilities {
                 max_subframes: 64,
                 formats: PhyFormatSet::HT,
-                max_length: 8_191,
+                max_length: lengths(8_191),
             },
             peer_ampdu_parameters: 7 << 2,
             txop_limit_micros: None,
@@ -340,15 +386,15 @@ mod tests {
                     port: AmpduCapabilities {
                         max_subframes: 64,
                         formats: PhyFormatSet::HT.union(PhyFormatSet::HE),
-                        max_length: encoded_two,
+                        max_length: lengths(encoded_two),
                     },
                     rate,
                     ..limits()
                 };
                 assert_eq!(limits.run([60; 3]), 2, "{rate:?} {encoding}");
-                limits.port.max_length -= 1;
+                limits.port.max_length = lengths(encoded_two - 1);
                 assert_eq!(limits.run([60; 3]), 1, "{rate:?} {encoding}");
-                limits.port.max_length = 65_535;
+                limits.port.max_length = &LONGEST;
                 let txop =
                     rate.max_ppdu_duration_micros(encoded_two).unwrap() + BLOCK_ACK_RESPONSE_MICROS;
                 limits.txop_limit_micros = Some(txop);

@@ -831,8 +831,10 @@ pub trait LowerMacPhase<'p, 'id: 'p>:
     type Caps: Ieee80211Capabilities;
     /// The types the phase's events carry.
     type Types: PhaseTypes<'id>;
-    /// The station interface of the phase.
+    /// The station interface of the phase. Every station interface sends
+    /// A-MPDUs.
     type Station<'v>: StationPhase<'p, 'id, Caps = Self::Caps, Types = Self::Types>
+        + crate::AmpduPhase<'p, 'id, Caps = Self::Caps, Types = Self::Types>
     where
         Self: 'v;
     /// The access-point interface of the phase.

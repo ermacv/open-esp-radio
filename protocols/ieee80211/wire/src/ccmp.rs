@@ -20,6 +20,10 @@
 pub mod protected;
 
 pub const CCMP_HEADER_LEN: usize = 8;
+/// The MIC a CCMP-128 MPDU carries after its payload.
+///
+/// SOURCE: IEEE Std 802.11-2020, 12.5.3.2 (CCMP MPDU format: an 8-octet MIC).
+pub const CCMP_MIC_LEN: usize = 8;
 pub const CCMP_PACKET_NUMBER_MAX: u64 = (1_u64 << 48) - 1;
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]

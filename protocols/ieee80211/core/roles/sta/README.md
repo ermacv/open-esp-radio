@@ -152,10 +152,53 @@ Module map:
   before handing over Block Ack management (`PendingRxBlockAck`), and uses
   its control TX credits for replies (`RxBlockAckReply`); the recipient
   agreements themselves are `oer-ieee80211-core-upper-mac`'s `block_ack::banks`;
+- `machine::tx_block_ack`: the station's transmit agreements
+  (`StaTxBlockAck`), one `TxBlockAckOriginator` of the eight TIDs that the
+  composition builds from its `StaTxBlockAckPolicy` and hands over in
+  `StaConfig::tx_block_ack` (`None` negotiates nothing). Each association
+  starts it afresh and admits agreements only with an HT access point of a
+  QoS BSS. Data of a TID (`Station::tx_block_ack_traffic`) queues that TID's
+  negotiation; the station sends the ADDBA Request with its control TX
+  credit, from the TID's next sequence number, and retries an unanswered or
+  unsent request after the policy's interval while attempts remain. A
+  refusal, spent attempts or a response outside the request (which owes a
+  DELBA) close the TID for the association. The access point's DELBA as the
+  recipient ends an agreement without an answer; an agreement idle for the
+  policy's inactivity ends with the station's DELBA (reason 39), and new
+  data negotiates again. `Station::tx_block_ack` reads an operational
+  agreement; other Block Ack actions stay with the receive agreements;
 - `data`: the connected station's data machine beside it: MSDUs into QoS or
-  non-QoS Data MPDUs in its own tickets and buffers, under the pairwise key
-  the station's `LinkView` lends, and the BSS's data MPDUs into MSDUs; no
-  A-MPDU, Block Ack, reorder, replay check or power save yet. It owns the
+  non-QoS Data MPDUs in its own buffers, under the pairwise key the
+  station's `LinkView` lends, and the BSS's data MPDUs into MSDUs. An owed
+  MPDU holds only its buffer; a ticket, at most eight, belongs to an attempt
+  and is taken when the MPDU goes to the port, so the buffers (up to the
+  machine's `CAP`, one queue for every TID in their order) may outnumber
+  the tickets. `data::aggregate`: under an operational transmit agreement
+  (`Station::tx_aggregate_window`, asked only for the TID of the next
+  attempt) a TID's owed MPDUs whose sequence numbers follow one another
+  inside the window go as one A-MPDU (`StaData::poll_attempt`), at most the
+  port's subframes, the lower of the access point's Maximum A-MPDU Length
+  and the port's length at the aggregate's rate
+  (`AmpduCapabilities::max_length`), and the rate's PPDU time limit
+  (`PhyRate::max_txtime_micros`, 5484 us for HT-mixed), counted before any
+  MSDU leaves its queue; one ticket and
+  one admission permission serve the aggregate. Each member's description
+  waits in the machine's member bank (one place per buffer, `CAP`) while
+  the aggregate is out; its context carries only the places, in subframe
+  order, so it is no larger than a single MPDU's. Each member's memory
+  waits at its place too until the port's builder takes it
+  (`StaData::aggregate_mpdu`), and a terminal gives it back there
+  (`StaData::aggregate_mpdu_returned`): neither the attempt nor its return
+  carries the members' memory by value. Its terminal (`StaData::aggregate_returned`) retires
+  acknowledged members and returns missing ones, published, to their queue
+  until their MSDU lifetime or the policy's attempts on the air run out
+  (`StaTxBlockAckPolicy::retry_members`). Each data terminal reports what it
+  settled as `BlockAckMarks`; `Station::tx_block_ack_settled` moves the
+  agreement's window and owes a BlockAckReq (`StaFrame::BlockAckRequest`,
+  encoded by the port) when the window passed a dropped member. The
+  per-aggregate vendor retry machine (`oer-ieee80211-core-upper-mac`
+  `ampdu`) is not used. No reorder, replay check or power save yet. It owns
+  the
   network boundary's checked `EthernetFrame` and `TxMsdu`, and a data
   attempt's protection exchange, power and coexistence class;
 - `port`: the station's and data machine's tokens on a lower-MAC port
@@ -366,7 +409,8 @@ borrows the matching link's key at submission. A changed epoch or protection
 returns `TxRefusal::LinkChanged` with every resource, before preparation;
 a protected encoding cannot fall through to an open transmission. A submitted
 context owns an `AcPermit` from the pool sized by backend queue depth
-(and bounded by the tickets granted to Data). Returning the context returns
+(and bounded by the tickets granted to Data), and a ticket from Data's
+ticket pool. Returning the context returns
 that permission; there is no `at_port` counter, in-flight metadata FIFO or
 TID decoding at completion. Voice keeps the same data depth bound, so a
 station operation waits for at most that depth plus one on-air attempt. An unpublished return is inserted by its original order,
@@ -466,10 +510,11 @@ and returning fresh memory to its pool.
 
 `StaData::returned` consumes a complete terminal or preparation refusal and
 has no `Result`. The service exhaustively pairs `TxContext` with the closed
-Small/Large fresh-or-sent buffer enum. A mismatched pair or an aggregate
-terminal for this singles-only service is a backend contract violation:
-it takes the Poisoned fail-stop path without a stray-terminal counter or
-resource reuse. `Indeterminate` retires and counts the MSDU; Station treats
+Small/Large fresh-or-sent buffer enum. A mismatched pair, or an aggregate
+terminal without its aggregate context, with a station buffer or with
+another number of subframes than its members, is a backend contract
+violation: it takes the Poisoned fail-stop path without a stray-terminal
+counter or resource reuse. `Indeterminate` retires and counts the MSDU; Station treats
 it as unconfirmed. Neither it nor `ContentionLimit` trains rate selection.
 
 A gate withdrawal retains the MPDU at its original TID/order. Fresh memory

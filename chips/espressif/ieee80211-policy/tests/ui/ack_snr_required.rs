@@ -25,3 +25,16 @@ pub fn select<K: Ieee80211Capabilities, M: SignalMetadata>() {
     #[cfg(not(ui_reject))]
     for_port::<M, Snr>(EspressifRateSelection::<K>::new());
 }
+
+// Both evidences also serve as BlockAck evidence: only the ACK SNR differs.
+impl oer_ieee80211_contracts_port::BlockAckSnr for Snr {
+    fn snr_sample(&self) -> oer_ieee80211_contracts_port::SnrSample {
+        oer_ieee80211_contracts_port::SnrSample::Measured(self.0)
+    }
+}
+
+impl oer_ieee80211_contracts_port::BlockAckSnr for Unmeasured {
+    fn snr_sample(&self) -> oer_ieee80211_contracts_port::SnrSample {
+        oer_ieee80211_contracts_port::SnrSample::Unmeasured
+    }
+}

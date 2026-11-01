@@ -345,7 +345,10 @@ impl EventSink<StaEvent> for Losses {
             StaEvent::TokenLost => self.tokens += 1,
             StaEvent::RsnInputDropped(_) => self.rsn += 1,
             StaEvent::ScanBssObserved(outcome) => self.scan = Some(outcome),
-            StaEvent::DataLost(_) | StaEvent::BufferMemoryUnavailable => {}
+            StaEvent::DataLost(_)
+            | StaEvent::BufferMemoryUnavailable
+            | StaEvent::AggregateSettled(_)
+            | StaEvent::BlockAckRequestSent => {}
         }
     }
 }
@@ -508,6 +511,7 @@ impl<'id> World<'id> {
             association: &CAPABILITIES,
             listen_interval: StationListenInterval::new(10).unwrap(),
             phy: PhyMode::Legacy,
+            tx_block_ack: None,
             callbacks: Callbacks { nonce_calls: 0 },
         };
         let resources = StationResources {
@@ -969,6 +973,8 @@ impl<'id, const G: usize> World<'id, G> {
         let length = match &transmit.frame {
             StaFrame::Individual(frame) => frame.frame().len().get(),
             StaFrame::Group(frame) => frame.frame().len().get(),
+            // The port encodes a BlockAckReq; the buffer holds no bytes of it.
+            StaFrame::BlockAckRequest { .. } => 0,
         };
         self.frames.push(frame[..length].to_vec());
         assert_eq!(

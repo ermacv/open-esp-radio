@@ -552,7 +552,7 @@ impl<'registers> WifiMacHal<'registers> {
 
     pub fn prepare_bound_legacy_tx(
         &mut self,
-        dma: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        dma: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         queue: MacTxQueueIndex,
         program: MacLegacyTxProgram,
     ) -> bool {
@@ -562,7 +562,7 @@ impl<'registers> WifiMacHal<'registers> {
 
     pub fn start_bound_tx(
         &mut self,
-        dma: &dyn HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        dma: &impl HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         queue: MacTxQueueIndex,
     ) {
         self.pac_mut().start_bound_mac_tx(dma, queue);
@@ -570,7 +570,7 @@ impl<'registers> WifiMacHal<'registers> {
 
     pub fn prepare_bound_ht_tx(
         &mut self,
-        dma: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        dma: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         queue: MacTxQueueIndex,
         program: MacHtTxProgram,
     ) -> bool {
@@ -579,7 +579,7 @@ impl<'registers> WifiMacHal<'registers> {
 
     pub fn prepare_bound_he_tx(
         &mut self,
-        dma: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        dma: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         queue: MacTxQueueIndex,
         program: MacHeTxProgram,
     ) -> bool {

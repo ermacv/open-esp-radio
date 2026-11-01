@@ -98,8 +98,8 @@ pub use init_in_place::__InitField;
 pub use link::{LinkSlot, NamePart, SlotKind, SlotName, TraceClockSlot};
 pub use once_value::OnceValue;
 pub use pinned_tx::{
-    DmaIndexReturn, IndexedStableDmaLease, PinnedDmaTxNetworkLease, PinnedDmaTxPool,
-    PinnedDmaTxPoolHandle, PinnedDmaTxRadioLease, ReturningStableDmaBacking,
+    Coherent, DmaIndexReturn, DmaReadPrepare, IndexedStableDmaLease, PinnedDmaTxNetworkLease,
+    PinnedDmaTxPool, PinnedDmaTxPoolHandle, PinnedDmaTxRadioLease, ReturningStableDmaBacking,
     TaggedStableDmaBacking,
 };
 pub use return_bank::{ReturnBank, ReturnToken};

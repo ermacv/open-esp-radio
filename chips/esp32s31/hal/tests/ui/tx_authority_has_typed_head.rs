@@ -3,7 +3,7 @@ use oer_esp32s31_hal::layouts::{DmaRef, WifiTxDmaDescriptor};
 use oer_memory::{HardwareOwnedTxDma, PreparedTxDma};
 
 pub fn prepared(
-    dma: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+    dma: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
 ) -> DmaRef<WifiTxDmaDescriptor> {
     let head = dma.descriptor_head();
     #[cfg(ui_reject)]
@@ -12,7 +12,7 @@ pub fn prepared(
 }
 
 pub fn hardware_owned(
-    dma: &dyn HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+    dma: &impl HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
 ) -> DmaRef<WifiTxDmaDescriptor> {
     let head = dma.descriptor_head();
     #[cfg(ui_reject)]

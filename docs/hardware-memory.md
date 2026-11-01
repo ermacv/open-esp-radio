@@ -294,7 +294,11 @@ A transmit pool is placed the same way: `PlacedTxPool::pin` takes a
 `Placed<PinnedDmaTxPool>`, and its radio leases are `PlacedTxLease`s. The
 sealed `PlacedBacking` marks them, and the pool's wrappers around them, as
 buffers in the DMA window; the A-MPDU retention takes only `PlacedBacking`s and
-publishes their addresses without a window check. A buffer lent from outside
+publishes their addresses without a window check. The ordinary descriptor
+(`TxDmaStorage`) holds no buffer of its own: it attaches one `PlacedBacking`
+while free and publishes that lease's address. The S31 Wi-Fi port writes
+every MPDU and aggregate subframe into one placed pool and publishes it
+through its queue's descriptor or an aggregate chain. A buffer lent from outside
 placed storage has no source yet; it returns as a loan type, checked once where
 the loan is made, with the first such buffer.
 

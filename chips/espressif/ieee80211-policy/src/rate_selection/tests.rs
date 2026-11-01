@@ -160,6 +160,12 @@ impl AckSnr for Snr {
     }
 }
 
+impl BlockAckSnr for Snr {
+    fn snr_sample(&self) -> SnrSample {
+        SnrSample::Measured(self.0)
+    }
+}
+
 type Outcome = SingleOutcome<Snr, ()>;
 
 fn air(transmissions: u16) -> Air {
@@ -229,6 +235,49 @@ fn associated_control_frames_walk_the_association_record_and_leaving_restores_th
         plan_walk(&plan_of(&selection, FrameRates::Control)),
         record_walk(DEFAULT_CONTROL_SCHEDULE)
     );
+}
+
+#[test]
+fn an_aggregate_goes_once_at_the_controls_ampdu_rate_and_only_when_associated() {
+    let mut selection = EspressifRateSelection::<Caps>::new();
+    assert!(
+        RateSelection::<Measured, Snr>::plan(&selection, FrameRates::Aggregate, Some).is_none()
+    );
+    RateSelection::<Measured, Snr>::associated(&mut selection, &ht20_peer(), &metric(60));
+    let rate = selection.control().unwrap().ampdu_rate();
+    assert_eq!(
+        stages(&plan_of(&selection, FrameRates::Aggregate)),
+        [(rate, 1)]
+    );
+    // An aggregate's BlockAck reaches the rate control without a panic or
+    // a refusal of its own, answered or not.
+    let tally = oer_ieee80211_core_upper_mac::rate_control::BlockAckTally::new(
+        NonZeroU16::new(4).unwrap(),
+        3,
+    )
+    .unwrap();
+    let delivered: AggregateOutcome<Snr, ()> = TxOutcome::Ended(AggregateEnd::Delivered {
+        air: air(1),
+        report: oer_ieee80211_contracts_port::BlockAckReport::new(
+            oer_ieee80211_wire::sequence::SequenceNumber::ZERO,
+            0b111,
+        ),
+        ack: Snr(30),
+    });
+    let unanswered: AggregateOutcome<Snr, ()> = TxOutcome::Ended(AggregateEnd::AckTimeout(air(1)));
+    RateSelection::<Measured, Snr>::completed_aggregate(
+        &mut selection,
+        Instant::EPOCH,
+        tally,
+        &delivered,
+    );
+    RateSelection::<Measured, Snr>::completed_aggregate(
+        &mut selection,
+        Instant::EPOCH,
+        tally,
+        &unanswered,
+    );
+    assert!(selection.control().is_some());
 }
 
 #[test]

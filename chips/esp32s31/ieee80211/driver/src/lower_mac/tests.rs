@@ -116,7 +116,7 @@ impl Hardware {
 impl TxHardware for Hardware {
     fn prepare_bound_legacy_tx(
         &mut self,
-        _dma: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        _dma: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         queue: oer_esp32s31_hal::types::MacTxQueueIndex,
         program: MacLegacyTxProgram,
     ) -> bool {
@@ -128,14 +128,14 @@ impl TxHardware for Hardware {
 
     fn start_bound_legacy_tx(
         &mut self,
-        _dma: &dyn HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        _dma: &impl HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         _queue: oer_esp32s31_hal::types::MacTxQueueIndex,
     ) {
     }
 
     fn prepare_bound_ht_tx(
         &mut self,
-        _dma: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        _dma: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         queue: oer_esp32s31_hal::types::MacTxQueueIndex,
         program: MacHtTxProgram,
     ) -> bool {
@@ -146,14 +146,14 @@ impl TxHardware for Hardware {
 
     fn start_bound_ht_tx(
         &mut self,
-        _dma: &dyn HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        _dma: &impl HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         _queue: oer_esp32s31_hal::types::MacTxQueueIndex,
     ) {
     }
 
     fn prepare_bound_he_tx(
         &mut self,
-        _dma: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        _dma: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         queue: oer_esp32s31_hal::types::MacTxQueueIndex,
         program: MacHeTxProgram,
     ) -> bool {
@@ -164,7 +164,7 @@ impl TxHardware for Hardware {
 
     fn start_bound_he_tx(
         &mut self,
-        _dma: &dyn HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        _dma: &impl HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         _queue: oer_esp32s31_hal::types::MacTxQueueIndex,
     ) {
     }
@@ -1419,11 +1419,11 @@ fn an_attempt_is_published_from_the_slot_it_was_written_in() {
         let frame = data_frame(BSSID);
 
         let request = values(&frame, false);
-        let written = request.slot.slot().buffer_address();
+        let written = request.slot.slot().descriptor_address();
         assert_eq!(submit(&mut core, &mut hardware, request), Ok(()));
         // The queue publishes the slot the MPDU was written in, which comes
         // back with its completion.
-        assert_eq!(queued(&core, BE).slot().buffer_address(), written);
+        assert_eq!(queued(&core, BE).slot().descriptor_address(), written);
         assert!(core.queue_busy(WmmAccessCategory::BestEffort));
         assert_eq!(hardware.legacy.len(), 1);
         assert_eq!(hardware.legacy[0].1.interface(), MacInterface::Station);
@@ -1438,7 +1438,7 @@ fn an_attempt_is_published_from_the_slot_it_was_written_in() {
             [completed(TxStatus::Success, Some(0x60))]
         );
         assert_eq!(events.queues, [WmmAccessCategory::BestEffort]);
-        assert_eq!(events.slots[0].as_ref().buffer_address(), written);
+        assert_eq!(events.slots[0].as_ref().descriptor_address(), written);
         assert_eq!(core.next_deadline(), None);
         assert!(!core.queue_busy(WmmAccessCategory::BestEffort));
         let next = values(&frame, false);
@@ -1539,7 +1539,7 @@ fn a_no_effect_rts_event_retains_its_published_owner_until_the_real_result() {
         let mut hardware = Hardware::default();
         let mut core = enabled(&mut hardware, pools);
         let request = values(&data_frame(BSSID), false);
-        let address = request.slot.slot().buffer_address();
+        let address = request.slot.slot().descriptor_address();
         submit(&mut core, &mut hardware, request).unwrap();
         let deadline = core.next_deadline();
         let mut events = Events::default();
@@ -1549,7 +1549,7 @@ fn a_no_effect_rts_event_retains_its_published_owner_until_the_real_result() {
         assert!(events.completions.is_empty());
         assert!(events.slots.is_empty());
         assert_eq!(hardware.publications(), 1);
-        assert_eq!(queued(&core, BE).slot().buffer_address(), address);
+        assert_eq!(queued(&core, BE).slot().descriptor_address(), address);
         assert_eq!(
             queued(&core, BE).slot().state(),
             crate::mac::tx::TxDmaState::HardwareOwned
@@ -1563,7 +1563,7 @@ fn a_no_effect_rts_event_retains_its_published_owner_until_the_real_result() {
             [completed(TxStatus::Success, Some(0x60))]
         );
         assert_eq!(events.slots.len(), 1);
-        assert_eq!(events.slots[0].as_ref().buffer_address(), address);
+        assert_eq!(events.slots[0].as_ref().descriptor_address(), address);
         assert_eq!(hardware.publications(), 1);
     });
 }
@@ -1895,12 +1895,13 @@ fn review_aggregate_no_effect_cannot_postpone_expired_watchdog() {
         .unwrap();
         let deadline = published.deadline();
         hardware.block_ack_completion[BE] = Some(block_ack_completion(1, 0, 0, false));
-        let result = ampdu::service(
+        let result = serve_ampdu(
             &mut hardware,
             published,
             WifiTxWake::Deadline,
             true,
             deadline,
+            drop,
         );
         assert!(result.is_err(), "NoEffect hid an expired A-MPDU watchdog");
     });
@@ -2345,7 +2346,7 @@ fn a_fresh_protected_mpdu_is_numbered_and_receive_only_group_removal_has_its_fif
             assert_eq!(
                 core.write_ccmp_header(
                     &pairwise,
-                    &mut queued_free_slot(slot.as_mut()),
+                    queued_free_slot(slot.as_mut()).into_buffer().unwrap(),
                     26,
                     oer_ieee80211_wire::ccmp::CcmpPacketNumber::new(expected).unwrap()
                 ),
@@ -2404,7 +2405,7 @@ fn reserved_slot_carries_no_numbering_authority_and_retains_the_packet_number() 
         assert_eq!(
             core.write_ccmp_header(
                 &key,
-                &mut queued_free_slot(slot.as_mut()),
+                queued_free_slot(slot.as_mut()).into_buffer().unwrap(),
                 26,
                 oer_ieee80211_wire::ccmp::CcmpPacketNumber::new(3).unwrap()
             ),
@@ -2446,7 +2447,7 @@ fn supplied_packet_number_is_written_only_when_the_complete_header_fits() {
             assert_eq!(
                 core.write_ccmp_header(
                     &key,
-                    &mut queued_free_slot(slot.as_mut()),
+                    queued_free_slot(slot.as_mut()).into_buffer().unwrap(),
                     header_len,
                     oer_ieee80211_wire::ccmp::CcmpPacketNumber::new(3).unwrap()
                 ),
@@ -2460,7 +2461,7 @@ fn supplied_packet_number_is_written_only_when_the_complete_header_fits() {
         assert_eq!(
             core.write_ccmp_header(
                 &key,
-                &mut queued_free_slot(slot.as_mut()),
+                queued_free_slot(slot.as_mut()).into_buffer().unwrap(),
                 last_header_len,
                 oer_ieee80211_wire::ccmp::CcmpPacketNumber::new(3).unwrap(),
             ),
@@ -3142,11 +3143,8 @@ impl Backings {
     }
 }
 
-impl AmpduBacking for Backings {
-    type Backing = Backing;
-}
-
-impl AmpduBackingSource for Backings {
+impl Backings {
+    /// A free backing, or `None` when every one is in use.
     fn backing(&self) -> Option<Backing> {
         let index = self.free.0.borrow_mut().pop()?;
         self.pool.claim_network(index).unwrap().publish(
@@ -3176,7 +3174,32 @@ fn ampdu_owner() -> Esp32s31AmpduOwner<'static, Backing, SUBFRAMES> {
     .unwrap()
 }
 
-type Aggregate = Esp32s31AmpduBuffer<'static, Backings, SUBFRAMES>;
+type Aggregate = Esp32s31AmpduBuffer<'static, Backing, SUBFRAMES>;
+
+/// Appending a fresh backing of a source, as a port appends the buffer it
+/// wrote each MPDU into.
+trait PushFrom {
+    /// The MPDU memory of a subframe of `len` octets, or `None` when the
+    /// source has no backing or the aggregate refuses it.
+    fn push_from(
+        &mut self,
+        source: &Backings,
+        len: usize,
+        admitted_at: oer_time::Instant,
+    ) -> Option<&mut [u8]>;
+}
+
+impl PushFrom for Aggregate {
+    fn push_from(
+        &mut self,
+        source: &Backings,
+        len: usize,
+        admitted_at: oer_time::Instant,
+    ) -> Option<&mut [u8]> {
+        // A refused backing drops and returns to its source.
+        self.push_backing(source.backing()?, len, admitted_at).ok()
+    }
+}
 
 fn ht_rate(mcs: u8) -> PhyRate {
     PhyRate::Ht(
@@ -3201,11 +3224,11 @@ fn he_rate() -> PhyRate {
 /// An aggregate of `count` QoS Data MPDUs of `len` bytes to the BSS, with
 /// sequence numbers from 100.
 fn aggregate_of(source: &'static Backings, count: usize, len: usize) -> Aggregate {
-    let mut buffer = Esp32s31AmpduBuffer::new(ampdu_owner(), source)
+    let mut buffer = Esp32s31AmpduBuffer::new(ampdu_owner())
         .ok()
         .expect("an idle aggregate owner");
     for index in 0..count {
-        let mpdu = buffer.push_mpdu(len, at(0)).expect("a backing");
+        let mpdu = buffer.push_from(source, len, at(0)).expect("a backing");
         mpdu[..26].copy_from_slice(&data_frame(BSSID));
         mpdu[22..24].copy_from_slice(&((100 + index as u16) << 4).to_le_bytes());
     }
@@ -3222,6 +3245,15 @@ fn ampdu_values(rate: PhyRate) -> AmpduValues {
         power_ceiling_dbm: None,
         backoff_slots: 9,
         min_mpdu_start_spacing: 5,
+        txop_limit_units_32_us: 0,
+    }
+}
+
+/// [`ampdu_values`] under the advertised TXOP limit `txop_units_32_us`.
+fn txop_values(txop_units_32_us: u16, rate: PhyRate) -> AmpduValues {
+    AmpduValues {
+        txop_limit_units_32_us: txop_units_32_us,
+        ..ampdu_values(rate)
     }
 }
 
@@ -3244,18 +3276,136 @@ fn publish_ampdu<'core>(
     .unwrap())
 }
 
+/// Serve one edge of `published` in place ([`ampdu::service`]), then take
+/// what its caller holds: the publication, its detached end, or its fault.
+#[allow(
+    clippy::result_large_err,
+    reason = "a fault retains the complete publication in quarantine"
+)]
+fn serve_ampdu<'core, 'slot, B: PlacedBacking, const SLOTS: usize>(
+    hardware: &mut Hardware,
+    mut published: PublishedAmpdu<'core, 'slot, B, SLOTS>,
+    wake: WifiTxWake,
+    may_begin_timeout_abort: bool,
+    now: oer_time::Instant,
+    returned: impl FnMut(B),
+) -> Result<AmpduProgress<'core, 'slot, B, SLOTS>, ampdu::AmpduFault<'core, 'slot, B, SLOTS>> {
+    let served = ampdu::service(
+        hardware,
+        &mut published,
+        wake,
+        may_begin_timeout_abort,
+        now,
+        returned,
+    );
+    let progress = published.into_progress();
+    match (&served, &progress) {
+        (Ok(AmpduServed::Pending), Ok(AmpduProgress::Pending(_)))
+        | (Ok(AmpduServed::Ended), Ok(AmpduProgress::Complete(_)))
+        | (Err(_), Err(_)) => {}
+        _ => panic!("the publication's end is the step's answer"),
+    }
+    progress
+}
+
+#[test]
+fn an_ended_or_failed_publication_touches_no_hardware_again() {
+    installed(|pools| {
+        let mut hardware = Hardware::default();
+        let mut core = enabled(&mut hardware, pools);
+        let source = backings();
+        let mut published = publish_ampdu(
+            &mut core,
+            &mut hardware,
+            aggregate_of(source, 2, 26),
+            ampdu_values(ht_rate(7)),
+        )
+        .unwrap();
+        hardware.block_ack_completion[BE] = Some(block_ack_completion(0, 100, 3, true));
+        let complete = interrupt(EVENT_TX_COMPLETE);
+        let now = core.now();
+        let mut returned = 0;
+        assert_eq!(
+            ampdu::service(&mut hardware, &mut published, complete, true, now, |_| {
+                returned += 1
+            }),
+            Ok(AmpduServed::Ended)
+        );
+        assert_eq!(returned, 2);
+        let deadline = published.deadline();
+        assert_eq!(
+            ampdu::service(
+                &mut hardware,
+                &mut published,
+                complete,
+                true,
+                deadline,
+                |_| { returned += 1 }
+            ),
+            Ok(AmpduServed::Ended),
+            "an ended publication answers its end again"
+        );
+        assert_eq!(returned, 2);
+        let Ok(AmpduProgress::Complete(completed)) = published.into_progress() else {
+            panic!("an ended publication detaches");
+        };
+        let mut events = Events::default();
+        let _owner = core
+            .complete_ampdu(&mut hardware, completed, &mut events)
+            .unwrap();
+        core.reclaim(&mut events);
+
+        let mut published = publish_ampdu(
+            &mut core,
+            &mut hardware,
+            aggregate_of(source, 2, 26),
+            ampdu_values(ht_rate(7)),
+        )
+        .unwrap();
+        let deadline = published.deadline();
+        hardware.block_ack_completion[BE] = Some(block_ack_completion(1, 0, 0, false));
+        let error = ampdu::service(
+            &mut hardware,
+            &mut published,
+            WifiTxWake::Deadline,
+            true,
+            deadline,
+            drop,
+        )
+        .unwrap_err();
+        hardware.block_ack_completion[BE] = Some(block_ack_completion(0, 100, 3, true));
+        assert_eq!(
+            ampdu::service(
+                &mut hardware,
+                &mut published,
+                complete,
+                true,
+                deadline,
+                drop
+            ),
+            Err(error),
+            "a failed publication keeps its fault"
+        );
+        let fault = published.into_progress().err().unwrap();
+        assert_eq!(fault.error, error);
+        drop(fault);
+        assert!(source.free() < BACKINGS, "the fault retains its subframes");
+    });
+}
+
 /// Serve a completion edge of the published aggregate: how it ended.
 fn end_ampdu<'core>(
     core: &mut Core<'core>,
     hardware: &mut Hardware,
     published: PublishedAmpdu<'core, 'static, Backing, SUBFRAMES>,
 ) -> PublicationEnd {
-    match ampdu::service(
+    match serve_ampdu(
         hardware,
         published,
         interrupt(EVENT_TX_COMPLETE),
         true,
         core.now(),
+        drop,
     )
     .unwrap()
     {
@@ -3293,7 +3443,13 @@ fn an_aggregate_is_planned_published_once_and_reports_its_block_ack() {
         let mut core = enabled(&mut hardware, pools);
         let source = backings();
         let capabilities = esp32s31_ampdu_capabilities(SUBFRAMES);
-        assert_eq!(capabilities.max_length, 6_490);
+        assert_eq!(
+            capabilities
+                .max_length
+                .at(ht_rate(0))
+                .map(|length| length.get()),
+            Ok(6_490)
+        );
         assert!(
             !capabilities
                 .formats
@@ -3371,16 +3527,31 @@ fn aggregate_collision_comes_from_its_queue_and_never_from_bss_color() {
         let color = crate::mac::irq::event_mask(
             oer_esp32s31_hal::types::MacInterruptEvents::BSS_COLOR_COLLISION,
         );
-        let published =
-            match ampdu::service(&mut hardware, published, interrupt(color), true, core.now())
-                .unwrap()
-            {
-                AmpduProgress::Pending(published) => published,
-                AmpduProgress::Complete(_) => panic!("BSS color never detaches the aggregate"),
-            };
+        let published = match serve_ampdu(
+            &mut hardware,
+            published,
+            interrupt(color),
+            true,
+            core.now(),
+            drop,
+        )
+        .unwrap()
+        {
+            AmpduProgress::Pending(published) => published,
+            AmpduProgress::Complete(_) => panic!("BSS color never detaches the aggregate"),
+        };
         assert_eq!(source.free(), BACKINGS - 3);
         hardware.collision_pending[BE] = true;
-        match ampdu::service(&mut hardware, published, interrupt(0), true, core.now()).unwrap() {
+        match serve_ampdu(
+            &mut hardware,
+            published,
+            interrupt(0),
+            true,
+            core.now(),
+            drop,
+        )
+        .unwrap()
+        {
             AmpduProgress::Complete(completed) => {
                 let mut events = Events::default();
                 let _owner = core
@@ -3456,7 +3627,7 @@ fn an_access_category_with_a_txop_limit_takes_ht_and_he_aggregates() {
             &mut core,
             &mut hardware,
             aggregate_of(source, 2, 26),
-            ampdu_values(ht_rate(7)),
+            txop_values(94, ht_rate(7)),
         )
         .unwrap();
         assert_eq!(hardware.ht.len(), 1);
@@ -3466,7 +3637,7 @@ fn an_access_category_with_a_txop_limit_takes_ht_and_he_aggregates() {
             &mut core,
             &mut hardware,
             aggregate_of(source, 2, 26),
-            ampdu_values(he_rate()),
+            txop_values(94, he_rate()),
         )
         .unwrap();
         assert_eq!(hardware.he.len(), 1);
@@ -3497,8 +3668,8 @@ fn aggregates_outside_the_limits_are_refused_with_their_subframes() {
             Some(AmpduRefusal::StartSpacing)
         );
 
-        // An empty aggregate, a group receiver and one longer than the declared
-        // maximum length.
+        // An empty aggregate, a group receiver and one longer than the rate's
+        // length (6 490 octets at MCS 0).
         assert_eq!(
             refused(
                 ampdu_values(ht_rate(7)),
@@ -3509,7 +3680,7 @@ fn aggregates_outside_the_limits_are_refused_with_their_subframes() {
         );
         let mut group = aggregate_of(source, 0, 26);
         group
-            .push_mpdu(26, at(0))
+            .push_from(source, 26, at(0))
             .unwrap()
             .copy_from_slice(&data_frame([0xff; 6]));
         assert_eq!(
@@ -3518,7 +3689,7 @@ fn aggregates_outside_the_limits_are_refused_with_their_subframes() {
         );
         assert_eq!(
             refused(
-                ampdu_values(ht_rate(7)),
+                ampdu_values(ht_rate(0)),
                 aggregate_of(source, 4, 2_000),
                 &mut hardware
             ),
@@ -3528,7 +3699,7 @@ fn aggregates_outside_the_limits_are_refused_with_their_subframes() {
             &mut core,
             &mut hardware,
             aggregate_of(source, 3, 2_000),
-            ampdu_values(ht_rate(7)),
+            ampdu_values(ht_rate(0)),
         )
         .unwrap();
         hardware.block_ack_completion[BE] = Some(block_ack_completion(0, 100, 0b111, true));
@@ -3538,14 +3709,14 @@ fn aggregates_outside_the_limits_are_refused_with_their_subframes() {
         // cannot hold with their metadata, MIC and FCS.
         let mut buffer = aggregate_of(source, 0, 26);
         for _ in 0..SUBFRAMES {
-            assert!(buffer.push_mpdu(26, at(0)).is_some());
+            assert!(buffer.push_from(source, 26, at(0)).is_some());
         }
-        assert!(buffer.push_mpdu(26, at(0)).is_none());
+        assert!(buffer.push_from(source, 26, at(0)).is_none());
         assert_eq!(buffer.subframes(), SUBFRAMES);
-        drop(buffer.into_owner());
+        drop(buffer.into_owner(drop));
         let mut buffer = aggregate_of(source, 0, 26);
-        assert!(buffer.push_mpdu(BACKING - 20, at(0)).is_some());
-        assert!(buffer.push_mpdu(BACKING - 19, at(0)).is_none());
+        assert!(buffer.push_from(source, BACKING - 20, at(0)).is_some());
+        assert!(buffer.push_from(source, BACKING - 19, at(0)).is_none());
         drop(buffer);
 
         // Refused and dropped aggregates published nothing and kept no
@@ -3907,7 +4078,7 @@ fn key_right_is_retained_by_an_aggregate_through_completion_or_quarantine() {
             let source = backings();
             let mut buffer = aggregate_of(source, 0, 26);
             for _ in 0..2 {
-                let frame = buffer.push_mpdu(26, at(0)).unwrap();
+                let frame = buffer.push_from(source, 26, at(0)).unwrap();
                 frame.copy_from_slice(&data_frame(BSSID));
                 let fc = oer_ieee80211_wire::frame::FrameControl::new(u16::from_le_bytes([
                     frame[0], frame[1],
@@ -3932,12 +4103,13 @@ fn key_right_is_retained_by_an_aggregate_through_completion_or_quarantine() {
             assert!(hardware.cleared_keys.is_empty());
             if poison {
                 let deadline = published.deadline();
-                let fault = ampdu::service(
+                let fault = serve_ampdu(
                     &mut hardware,
                     published,
                     WifiTxWake::Deadline,
                     true,
                     deadline,
+                    drop,
                 )
                 .err()
                 .unwrap();
@@ -3953,12 +4125,13 @@ fn key_right_is_retained_by_an_aggregate_through_completion_or_quarantine() {
                 assert!(source.free() < BACKINGS);
             } else {
                 hardware.block_ack_completion[BE] = Some(block_ack_completion(0, 100, 0b11, true));
-                let AmpduProgress::Complete(completed) = ampdu::service(
+                let AmpduProgress::Complete(completed) = serve_ampdu(
                     &mut hardware,
                     published,
                     interrupt(EVENT_TX_COMPLETE),
                     true,
                     core.now(),
+                    drop,
                 )
                 .unwrap() else {
                     panic!("terminal")
@@ -4651,4 +4824,85 @@ fn a_key_handle_naming_no_bank_position_poisons_instead_of_admitting() {
         assert_eq!(refused.reason, KeyAdmissionError::Poisoned);
         assert_eq!(core.fault, Some(LowerMacFault::KeyBank));
     });
+}
+
+/// The PSDU of a full Ethernet frame's protected QoS Data MPDU: header,
+/// CCMP header, LLC/SNAP, 1500 octets, MIC and FCS.
+const FULL_PSDU: usize = 26 + 8 + 8 + 1_500 + 8 + 4;
+
+/// How many full subframes one aggregate at `rate` holds.
+fn full_subframes(rate: crate::mac::tx::TxPhyRate) -> usize {
+    let mut budget = ampdu::AmpduBudget::new(rate, 0, ampdu::AmpduBudget::WIDEST_DENSITY, 32)
+        .unwrap_or_else(|_| panic!("an aggregate rate"));
+    (0..40)
+        .take_while(|_| budget.push(FULL_PSDU).is_ok())
+        .count()
+}
+
+#[test]
+fn each_ht_rate_sizes_its_aggregate_by_the_vendor_ceiling() {
+    use crate::mac::tx::{HtChannelWidth, HtGuardInterval, HtMcs, HtRate, TxPhyRate};
+    let ht = |mcs, guard| TxPhyRate::Ht(HtRate::new(mcs, guard, HtChannelWidth::Mhz20));
+    // MCS 0: 6 490 octets hold four full subframes.
+    assert_eq!(
+        full_subframes(ht(HtMcs::Mcs0, HtGuardInterval::Long800Ns)),
+        4
+    );
+    // MCS 7: 65 535 octets; the 32 subframes of the owner end it first.
+    assert_eq!(
+        full_subframes(ht(HtMcs::Mcs7, HtGuardInterval::Long800Ns)),
+        32
+    );
+    // The vendor sets no ceiling at short-GI MCS 7: the HT Length field's.
+    assert_eq!(
+        ampdu::esp32s31_ampdu_length(ht(HtMcs::Mcs7, HtGuardInterval::Short400Ns)),
+        Some(ESP32S31_AMPDU_MAX_LENGTH)
+    );
+}
+
+#[test]
+fn the_port_table_holds_the_lengths_the_core_plans_by() {
+    let lengths = &ampdu::ESP32S31_AMPDU_LENGTHS;
+    let at = |rate| lengths.at(rate).map(|length| length.get());
+    assert_eq!(at(ht_rate(0)), Ok(6_490));
+    assert_eq!(at(ht_rate(7)), Ok(65_535));
+    let ht40 = PhyRate::Ht(
+        phy::HtRate::new(phy::HtMcs::new(3).unwrap(), PpduBandwidth::Mhz40, true).unwrap(),
+    );
+    // The vendor's table is indexed by the rate code, whose short-GI codes
+    // start at 26: short-GI MCS 3 takes the entry after long-GI MCS 9's.
+    assert_eq!(at(ht40), Ok(43_200));
+    assert_eq!(at(he_rate()), Ok(6_490));
+    // One spatial stream only, HE at 20 MHz only.
+    assert!(at(ht_rate(8)).is_err());
+    let he40 = PhyRate::He(
+        phy::HeRate::new(
+            phy::HeMcs::new(7).unwrap(),
+            SpatialStreams::new(1).unwrap(),
+            PpduBandwidth::Mhz40,
+            HeGiLtf::Ltf2xGi800Ns,
+            FecCoding::Ldpc,
+            false,
+        )
+        .unwrap(),
+    );
+    assert!(at(he40).is_err());
+    // Every portable HT rate with a length is one the formatter sends, at
+    // the length the core plans by.
+    for mcs in 0..8 {
+        for (width, guard) in [
+            (PpduBandwidth::Mhz20, false),
+            (PpduBandwidth::Mhz20, true),
+            (PpduBandwidth::Mhz40, false),
+            (PpduBandwidth::Mhz40, true),
+        ] {
+            let rate =
+                PhyRate::Ht(phy::HtRate::new(phy::HtMcs::new(mcs).unwrap(), width, guard).unwrap());
+            let planned = crate::mac::tx::TxPhyRate::try_from(rate)
+                .ok()
+                .and_then(ampdu::esp32s31_ampdu_length)
+                .map(u32::from);
+            assert_eq!(at(rate).ok(), planned, "{rate:?}");
+        }
+    }
 }

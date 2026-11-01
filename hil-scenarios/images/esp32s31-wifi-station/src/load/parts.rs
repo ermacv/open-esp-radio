@@ -373,6 +373,10 @@ impl oer_trace::Observer for Observer {
         if let Some(decision) = Self::decoded::<E, StationRx>(event) {
             super::counters::observe_station(decision);
         }
+        type StationTx = oer_esp32s31_wifi::observation::StationTxAmpdu;
+        if let Some(settled) = Self::decoded::<E, StationTx>(event) {
+            super::counters::observe_station_tx(settled);
+        }
         type RxData = oer_esp32s31_wifi::observation::RxData;
         if let Some(data) = Self::decoded::<E, RxData>(event) {
             super::counters::observe_rx_data(data);

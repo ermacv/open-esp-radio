@@ -89,8 +89,10 @@ development dependencies on the upper MAC and `oer-embassy-net`.
   key writes, decrypts air frames at capture against its key table and
   drains captured hardware, DMA and interrupt frames through the RX cut.
   A publication is identified by its program's PSDU length: every host DMA
-  allocation has the same model descriptor address. Not run: air denial
-  (no device model), aggregate and BA-window cases (no `AmpduPhase`), and
+  allocation has the same model descriptor address. The aggregate outcome
+  cases run with the model answering each aggregate's BlockAck. Not run: air
+  denial (no device model), the age suite's re-formation and BA-window
+  cases (they need the Block Ack originator above the port), and
   InstallBeside and SelectRetained (one station GTK slot).
 - **Publication observations.** `Esp32s31Backend`'s last parameter `O` is
   the P2 driver's observation receiver (`port::Observations`, an
@@ -103,8 +105,8 @@ development dependencies on the upper MAC and `oer-embassy-net`.
   EDCA host suite checks each draw separately against the AIFSN and backoff
   of the legacy program the driver handed the hardware.
 - **Conformance.** The hardware lower-MAC conformance image runs every case
-  the backend's declared capabilities support; A-MPDU/Block Ack cases without
-  `AmpduPhase` are reported as unsupported, never as model-only. The final
+  the backend's declared capabilities support; a case outside them is
+  reported as unsupported, never as model-only. The final
   GTK rollback case injects rejection of the new write, lets restoration
   program the real hardware, and compares its retained owners and fail-stop
   with the model. It returns diagnostic evidence without a reusable radio
@@ -254,16 +256,33 @@ port; the P3 handlers own only their interrupt epoch and static typed signals.
 The task-side `RadioDevice` retains the cooperative registers, PHY actor
 transaction and RX ring. No ISR accesses its task-only `RefCell` state.
 
-Eight shared TX tickets and pinned MPDU buffers feed four hardware queues.
-Each queue executes its supplied retry plan. Gate, configuration, key and
-disable barriers return the original operation owners through terminals.
+Eight shared TX tickets feed four hardware queues; an MPDU and an aggregate
+each take one. Every MPDU and subframe is written into one buffer of the
+transmit pool (`TX_BUFFERS`, 67: two complete 32-subframe aggregates and
+three more) placed in the DMA window. Descriptors are separate publication
+metadata: an MPDU's buffer is attached to its queue's ordinary descriptor
+for the publication, and an aggregate's buffers are retained by one of two
+descriptor chains (`AMPDU_CHAINS`), one in the air while the next is
+published; an aggregate whose head finds no free chain waits in its access
+category's FIFO. Each queue executes an MPDU's supplied retry plan; an
+aggregate is one attempt, and the planner above the port resends what its
+BlockAck report misses. While an aggregate is built, queued or published,
+its subframes' records wait in the installation's subframe table at their
+buffers' places; only the places travel through the port's queues. The
+builder refuses, at push, every subframe the window, the subframe count or
+the length (at the widest MPDU start spacing, under the TXOP limit P1 last
+published) cannot hold, so P2 planning never refuses a submitted aggregate.
+Timeout aborts of MPDUs and aggregates force CCA one at a time. Gate,
+configuration, key and disable barriers wait for published aggregates as
+for MPDUs and return the original operation owners through terminals.
 Uninstall returns stopped owners for a fresh installation; uncertainty keeps
 the DMA allocations quarantined. RX buffers require explicit recycling.
 GTK changes freeze ingress and drain preceding RX before returning their
 permission. An erased key cannot authorize a returned MPDU's retransmission.
 
-The port exposes ordinary MPDUs and RX BlockAck agreements. It does not expose
-the optional aggregate, beacon-timing, monitor or air-reservation phases.
+The port exposes ordinary MPDUs, aggregates (`AmpduPhase` of both
+interfaces) and RX BlockAck agreements. It does not expose the optional
+beacon-timing, monitor or air-reservation phases.
 Its publication watchdog is 250 ms; command and retirement bounds
 are 400 ms, including the publication and the finite RX stop.
 The operation mapping and portable limits are in

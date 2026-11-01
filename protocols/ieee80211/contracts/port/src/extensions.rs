@@ -3,6 +3,10 @@
 //! and monitor reception, with their parametric limits. Why a backend
 //! lacks a feature is recorded in its documentation, not in code.
 
+use core::num::NonZeroU32;
+
+use oer_ieee80211_wire::phy::{HeGiLtf, PhyRate, PpduBandwidth};
+
 use crate::tsf::{TsfDuration, TsfInstant};
 
 use crate::{
@@ -19,12 +23,85 @@ pub struct AmpduCapabilities {
     /// of another format has no checked aggregate rate.
     pub formats: PhyFormatSet,
     /// The longest A-MPDU in octets, delimiters and padding included, that
-    /// the backend sends at every rate of `formats`. The recipient's own
-    /// Maximum A-MPDU Length stays the caller's to respect, as does the
-    /// TXOP limit of the attempt's access category: the caller keeps the
-    /// aggregate and its BlockAck within it, and a backend refuses no
-    /// aggregate by it.
-    pub max_length: u32,
+    /// the backend sends at each rate of `formats`. The caller sizes an
+    /// aggregate within it at the aggregate's rate, and within the
+    /// recipient's own Maximum A-MPDU Length and the TXOP limit of the
+    /// attempt's access category, before it takes the aggregate's frames;
+    /// a backend refuses no aggregate by the recipient's length or the
+    /// TXOP limit.
+    pub max_length: &'static AmpduLengthTable,
+}
+
+/// The longest A-MPDU, in octets with delimiters and padding, a backend
+/// sends at each rate: compile-time tables keyed by format, width, guard
+/// interval and MCS. A zero entry is a rate the backend sends no A-MPDU at.
+#[derive(Debug, Eq, Hash, PartialEq)]
+pub struct AmpduLengthTable {
+    /// HT, `ht[width][guard][mcs]`: 20 and 40 MHz; the long (800 ns) and
+    /// the short (400 ns) guard interval; MCS 0 to 31.
+    pub ht: [[[u32; 32]; 2]; 2],
+    /// HE SU, `he[width][guard][mcs]`: 20, 40, 80 and 160 MHz; the 0.8,
+    /// 1.6 and 3.2 µs guard intervals; MCS 0 to 11. One length holds for
+    /// every stream count, HE-LTF size, coding and DCM of its entry.
+    pub he: [[[u32; 12]; 3]; 4],
+}
+
+/// A rate the backend sends no A-MPDU at: a non-HT rate, or one whose
+/// [`AmpduLengthTable`] entry is zero.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct AmpduRateRefused(pub PhyRate);
+
+impl AmpduLengthTable {
+    /// Every HT and HE rate at `length` octets.
+    pub const fn uniform(length: u32) -> Self {
+        Self {
+            ht: [[[length; 32]; 2]; 2],
+            he: [[[length; 12]; 3]; 4],
+        }
+    }
+
+    /// The longest A-MPDU at `rate`.
+    ///
+    /// # Errors
+    ///
+    /// The backend sends no A-MPDU at `rate`.
+    pub fn at(&self, rate: PhyRate) -> Result<NonZeroU32, AmpduRateRefused> {
+        let length = match rate {
+            PhyRate::Legacy(_) => None,
+            PhyRate::Ht(ht) => {
+                let width = match ht.bandwidth() {
+                    PpduBandwidth::Mhz20 => Some(0),
+                    PpduBandwidth::Mhz40 => Some(1),
+                    PpduBandwidth::Mhz80 | PpduBandwidth::Mhz160 => None,
+                };
+                width
+                    .and_then(|width| self.ht.get(width))
+                    .and_then(|width| width.get(usize::from(ht.short_gi())))
+                    .and_then(|guard| guard.get(usize::from(ht.mcs().index())))
+            }
+            PhyRate::He(he) => {
+                let width = match he.bandwidth() {
+                    PpduBandwidth::Mhz20 => 0,
+                    PpduBandwidth::Mhz40 => 1,
+                    PpduBandwidth::Mhz80 => 2,
+                    PpduBandwidth::Mhz160 => 3,
+                };
+                let guard = match he.gi_ltf() {
+                    HeGiLtf::Ltf1xGi800Ns | HeGiLtf::Ltf2xGi800Ns => 0,
+                    HeGiLtf::Ltf2xGi1600Ns => 1,
+                    HeGiLtf::Ltf4xGi3200Ns => 2,
+                };
+                self.he
+                    .get(width)
+                    .and_then(|width| width.get(guard))
+                    .and_then(|guard| guard.get(usize::from(he.mcs().index())))
+            }
+        };
+        length
+            .copied()
+            .and_then(NonZeroU32::new)
+            .ok_or(AmpduRateRefused(rate))
+    }
 }
 
 /// A value of one interface's TSF. Two interfaces count different TSFs (a
@@ -255,4 +332,70 @@ pub struct MonitorCapabilities {
     /// Whether monitor reception runs while an interface has a receive
     /// filter other than `ReceiveFilter::NONE`.
     pub with_receiving_interfaces: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    use oer_ieee80211_wire::phy::{
+        FecCoding, HeMcs, HeRate, HtMcs, HtRate, LegacyRate, SpatialStreams,
+    };
+
+    use super::*;
+
+    fn ht(mcs: u8, bandwidth: PpduBandwidth, short_gi: bool) -> PhyRate {
+        PhyRate::Ht(HtRate::new(HtMcs::new(mcs).unwrap(), bandwidth, short_gi).unwrap())
+    }
+
+    fn he(mcs: u8, bandwidth: PpduBandwidth, gi_ltf: HeGiLtf) -> PhyRate {
+        PhyRate::He(
+            HeRate::new(
+                HeMcs::new(mcs).unwrap(),
+                SpatialStreams::new(2).unwrap(),
+                bandwidth,
+                gi_ltf,
+                FecCoding::Ldpc,
+                false,
+            )
+            .unwrap(),
+        )
+    }
+
+    #[test]
+    fn a_rate_finds_its_own_entry() {
+        let mut table = AmpduLengthTable::uniform(0);
+        table.ht[1][1][7] = 65_535;
+        table.ht[0][0][0] = 6_490;
+        table.he[2][1][11] = 1_000;
+        assert_eq!(
+            table
+                .at(ht(7, PpduBandwidth::Mhz40, true))
+                .map(NonZeroU32::get),
+            Ok(65_535)
+        );
+        assert_eq!(
+            table
+                .at(ht(0, PpduBandwidth::Mhz20, false))
+                .map(NonZeroU32::get),
+            Ok(6_490)
+        );
+        // One length for every stream count, LTF size, coding and DCM.
+        assert_eq!(
+            table
+                .at(he(11, PpduBandwidth::Mhz80, HeGiLtf::Ltf2xGi1600Ns))
+                .map(NonZeroU32::get),
+            Ok(1_000)
+        );
+    }
+
+    #[test]
+    fn a_zero_entry_and_a_non_ht_rate_are_refused() {
+        let table = AmpduLengthTable::uniform(0);
+        let rate = ht(7, PpduBandwidth::Mhz20, false);
+        assert_eq!(table.at(rate), Err(AmpduRateRefused(rate)));
+        let legacy = PhyRate::Legacy(LegacyRate::Ofdm54M);
+        assert_eq!(
+            AmpduLengthTable::uniform(65_535).at(legacy),
+            Err(AmpduRateRefused(legacy))
+        );
+    }
 }

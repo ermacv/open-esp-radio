@@ -9,9 +9,9 @@
 //! before it publishes its own addresses to DMA hardware.
 
 use oer_memory::{
-    DmaIndexReturn, IndexedStableDmaLease, PinnedDmaTxNetworkLease, PinnedDmaTxPool,
-    PinnedDmaTxPoolHandle, PinnedDmaTxRadioLease, ReturningStableDmaBacking, StableDmaBacking,
-    StableDmaRegion, TaggedStableDmaBacking,
+    Coherent, DmaIndexReturn, DmaReadPrepare, IndexedStableDmaLease, PinnedDmaTxNetworkLease,
+    PinnedDmaTxPool, PinnedDmaTxPoolHandle, PinnedDmaTxRadioLease, ReturningStableDmaBacking,
+    StableDmaBacking, StableDmaRegion, TaggedStableDmaBacking,
     zeroed::{Zeroable, ZeroedStatic},
 };
 
@@ -128,14 +128,16 @@ impl<A: 'static, B: 'static> Placed<(A, B)> {
 
 /// A transmit pool placed in the DMA window ([`dma_static!`](crate::dma_static!)):
 /// the radio leases it issues are [`PlacedTxLease`]s, buffers the DMA
-/// hardware may read without a further address check.
+/// hardware may read without a further address check. `P` is the pool's
+/// cache maintenance before a DMA reader receives a buffer.
 pub struct PlacedTxPool<
     const FRAME_CAPACITY: usize,
     const HEADROOM: usize,
     const TRAILER: usize,
     const QUEUE_DEPTH: usize,
+    P: DmaReadPrepare = Coherent,
 > {
-    handle: PinnedDmaTxPoolHandle<FRAME_CAPACITY, HEADROOM, TRAILER, QUEUE_DEPTH>,
+    handle: PinnedDmaTxPoolHandle<FRAME_CAPACITY, HEADROOM, TRAILER, QUEUE_DEPTH, P>,
     regions: [crate::memory::dma_address::PlacedRegion; QUEUE_DEPTH],
 }
 
@@ -144,51 +146,26 @@ impl<
     const HEADROOM: usize,
     const TRAILER: usize,
     const QUEUE_DEPTH: usize,
-> PlacedTxPool<FRAME_CAPACITY, HEADROOM, TRAILER, QUEUE_DEPTH>
+    P: DmaReadPrepare,
+> PlacedTxPool<FRAME_CAPACITY, HEADROOM, TRAILER, QUEUE_DEPTH, P>
 {
-    /// Pin the `placed` pool (coherent memory).
+    /// Pin the `placed` pool.
     ///
     /// # Errors
     /// Returns the unchanged placement if a slot region cannot be represented.
     pub fn pin(
-        placed: Placed<PinnedDmaTxPool<FRAME_CAPACITY, HEADROOM, TRAILER, QUEUE_DEPTH>>,
+        placed: Placed<PinnedDmaTxPool<FRAME_CAPACITY, HEADROOM, TRAILER, QUEUE_DEPTH, P>>,
     ) -> Result<
         Self,
         (
             crate::memory::dma_address::ProjectionError,
-            Placed<PinnedDmaTxPool<FRAME_CAPACITY, HEADROOM, TRAILER, QUEUE_DEPTH>>,
+            Placed<PinnedDmaTxPool<FRAME_CAPACITY, HEADROOM, TRAILER, QUEUE_DEPTH, P>>,
         ),
     > {
         let (storage, regions) =
             crate::memory::dma_address::PlacementProjection::pool_regions(placed)?;
         Ok(Self {
             handle: PinnedDmaTxPool::pin_static(storage),
-            regions,
-        })
-    }
-
-    /// Pin the `placed` pool, which needs `prepare_for_dma_read` before a
-    /// DMA reader receives a buffer.
-    ///
-    /// # Errors
-    /// Returns the unchanged placement if a slot region cannot be represented.
-    pub fn pin_with_dma_read_prepare(
-        placed: Placed<PinnedDmaTxPool<FRAME_CAPACITY, HEADROOM, TRAILER, QUEUE_DEPTH>>,
-        prepare_for_dma_read: fn(&mut [u8]),
-    ) -> Result<
-        Self,
-        (
-            crate::memory::dma_address::ProjectionError,
-            Placed<PinnedDmaTxPool<FRAME_CAPACITY, HEADROOM, TRAILER, QUEUE_DEPTH>>,
-        ),
-    > {
-        let (storage, regions) =
-            crate::memory::dma_address::PlacementProjection::pool_regions(placed)?;
-        Ok(Self {
-            handle: PinnedDmaTxPool::pin_static_with_dma_read_prepare(
-                storage,
-                prepare_for_dma_read,
-            ),
             regions,
         })
     }
@@ -214,7 +191,7 @@ impl<
         &self,
         index: u8,
     ) -> Result<
-        PlacedTxLease<PinnedDmaTxRadioLease<'static, FRAME_CAPACITY, HEADROOM, TRAILER>>,
+        PlacedTxLease<PinnedDmaTxRadioLease<'static, FRAME_CAPACITY, HEADROOM, TRAILER, P>>,
         TxClaimError,
     > {
         let region = *self
