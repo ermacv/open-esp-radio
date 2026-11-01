@@ -119,6 +119,29 @@ fn the_largest_post_mortem_fits_a_frame() {
             line: u32::MAX,
             message: text(96).as_str().try_into().unwrap(),
         }),
+        Fault::Exception(ExceptionFault {
+            trap: TrapState {
+                hart: u8::MAX,
+                mcause: u32::MAX,
+                mepc: u32::MAX,
+                mtval: u32::MAX,
+                ra: u32::MAX,
+                sp: u32::MAX,
+                mscratch: u32::MAX,
+            },
+            observed: Some(TrapObservation {
+                stopped: true,
+                mtvec: u32::MAX,
+                mtvt: u32::MAX,
+                pending: [u32::MAX; TRAP_SOURCE_WORDS],
+                line: Some(TrapLine {
+                    vector: u16::MAX,
+                    slot: u32::MAX,
+                    state: u32::MAX,
+                    routed: [u32::MAX; TRAP_SOURCE_WORDS],
+                }),
+            }),
+        }),
     ];
     for fault in faults {
         let boot = BootEvidence {

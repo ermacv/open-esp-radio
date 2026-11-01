@@ -228,6 +228,20 @@ pub fn arm_store_trigger(select: usize, data2: usize) {
     };
 }
 
+/// Trap on this hart with an illegal-instruction exception: the fault a test
+/// image raises on request to check its exception path end to end. The
+/// trap entry records and resets; control never returns here.
+///
+/// SOURCE: RISC-V Unprivileged ISA, "C" Standard Extension: the 16-bit
+/// all-zero encoding (`unimp`, `c.unimp` under C) is permanently illegal.
+#[inline(never)]
+pub fn illegal_instruction() -> ! {
+    // SAFETY: the reserved encoding traps before it executes anything; the
+    // trap entry saves this hart's registers as they are and never returns
+    // here, so no memory or register Rust relies on changes.
+    unsafe { asm!("unimp", options(noreturn, nomem, nostack)) }
+}
+
 /// Read the selected trigger's control and address without changing selection.
 #[inline(always)]
 pub fn selected_trigger_data() -> (usize, usize) {

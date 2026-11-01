@@ -20,6 +20,7 @@ oer-esp32s31-compose = { path = "../../../chips/esp32s31/compose" }
 oer-espressif-staged-runtime = { path = "../../../chips/espressif/staged-runtime" }
 oer-hil-agent = { path = "../../../protocols/hil/agent", default-features = false }
 oer-hil-protocol = { workspace = true, features = ["async-io"] }
+oer-riscv = { path = "../../../portable/riscv" }
 embassy-futures = "0.1.2"
 
 [lints]

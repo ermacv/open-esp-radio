@@ -778,12 +778,19 @@ The current mechanisms have narrower guarantees than the policy:
   platform panic and postmortem remain until the complete boot-evidence frame
   and CRLF reach the transport. A refused output retains the record.
 - Payloads preserve panic text, Wi-Fi RAW, IEEE 802.15.4 entry observations and completed service prefix, HIL
-  machine-state observations and postmortem data, and RX-chain observations.
+  failure records and postmortem data, the S31 exception observations, and RX-chain observations.
   PHY retains operation/epoch, SAR RAW/ST, queue lengths, invalid delay and
   numeric foreign-reunion identities. None of these values grants ownership.
-  HIL and RX-chain exception supplements use the entry-time cause/PC/trap value;
-  HIL samples pending/routes after stop as additional observations. Neither
-  the frame nor those sequential samples are an atomic snapshot of all hardware.
+  Every S31 image on the staged runtime, the SDK's included, binds one
+  exception hook (`oer-esp32s31-compose::exception`). It repeats none of the
+  frame's registers: after the stop it samples the trapping hart's pending
+  sources and, for an interrupt of a line without a handler, the routes to
+  that line and its state, recording whether the stop held. The next boot
+  prints the frame and those observations as separate records, and an SDK
+  boot serves both to HIL (`Fault::Exception`, the trap's registers apart
+  from the observations). The RX-chain supplement uses the entry-time
+  cause/PC/trap value. Neither the frame nor the sequential samples are an
+  atomic snapshot of all hardware.
   The route and line view (`fatal_view`) exists only in the boot hart's
   fatal path: hart 1's routes have no claimed observer and its CLIC lines
   are reachable only from hart 1, so a fault on hart 1 records the common

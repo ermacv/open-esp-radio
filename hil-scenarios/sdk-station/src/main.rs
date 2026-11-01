@@ -4,7 +4,9 @@
 //! station joins, takes its DHCP address, exchanges a line over TCP with
 //! this host, rejoins by itself after the router deauthenticates it, and a
 //! wait for an address times out while the router serves no DHCP. Every
-//! claim of the device is checked against the router or this host.
+//! claim of the device is checked against the router or this host. Last,
+//! the device raises an exception on request, records it and resets, and
+//! its next boot serves the record once.
 #![forbid(unsafe_code)]
 
 use std::{
@@ -17,6 +19,10 @@ use std::{
 
 use oer_hil_agent::base::Service as _;
 use oer_hil_harness::{Case, Cx, Failure, RouterOperation, Scenario, check};
+use oer_hil_protocol::base::{
+    BootEvidence, ExceptionFault, Fault, GetBootStatus, PostMortemSummary,
+};
+use oer_services_fault::{RaiseException, Raising};
 use oer_services_sdk_station::{
     Address, Connect, Connection, Exchange, Exchanged, GetStatus, Ipv4, LinkLoss, MAX_LINE, Status,
     WaitIpv4, WaitLinkDown,
@@ -25,11 +31,14 @@ use oer_services_sdk_station::{
 const SCENARIO: Scenario = Scenario::new(
     "sdk-station",
     "esp32s31-sdk-station",
-    &[oer_services_sdk_station::Request::KEYS],
+    &[
+        oer_services_sdk_station::Request::KEYS,
+        oer_services_fault::Request::KEYS,
+    ],
 )
 .using_router();
 
-const CASES: [Case; 6] = [
+const CASES: [Case; 7] = [
     Case {
         name: "wrong-passphrase",
         run: wrong_passphrase,
@@ -54,7 +63,78 @@ const CASES: [Case; 6] = [
         name: "no-dhcp",
         run: no_dhcp,
     },
+    Case {
+        name: "exception",
+        run: exception,
+    },
 ];
+
+/// The exception code of an illegal instruction (RISC-V Privileged ISA,
+/// `mcause`).
+const ILLEGAL_INSTRUCTION: u32 = 2;
+/// `mcause`'s interrupt bit and its exception code field; in CLIC mode the
+/// bits between them hold the previous privilege and level.
+const MCAUSE_INTERRUPT: u32 = 1 << 31;
+const MCAUSE_CODE: u32 = 0x0fff;
+
+/// The device raises an illegal-instruction exception on request: it
+/// answers, traps, records and resets by itself. Its next boot serves the
+/// exception as its post-mortem, the trap's registers apart from what the
+/// exception hook read after the stop, and a board reset after that boot
+/// finds the record cleared: the boot printed it whole.
+fn exception(cx: &mut Cx<'_>) -> Result<(), Failure> {
+    let before = cx.boot().boot_id;
+    let Raising = cx.call(RaiseException, STATUS_TIMEOUT)?;
+    let after = cx.follow_restart()?.boot_id;
+    let evidence = cx.call(GetBootStatus, STATUS_TIMEOUT)?;
+    let fault = trapped(&evidence).map_err(Failure::Fail)?;
+    println!(
+        "boot {before:016x} trapped, boot {after:016x} after {:?}: {:?}",
+        evidence.reset_reason, fault
+    );
+    cx.reset()?;
+    let cleared = cx.call(GetBootStatus, STATUS_TIMEOUT)?;
+    check(
+        cleared.post_mortem.is_none(),
+        format!(
+            "the boot after the next still serves {:?}",
+            cleared.post_mortem
+        ),
+    )
+}
+
+/// The illegal-instruction exception `evidence` holds as its post-mortem, or
+/// why it holds none.
+fn trapped(evidence: &BootEvidence) -> Result<&ExceptionFault, String> {
+    let Some(PostMortemSummary {
+        fault: Some(Fault::Exception(fault)),
+        ..
+    }) = &evidence.post_mortem
+    else {
+        return Err(format!(
+            "the boot after the trap serves {:?}, no exception",
+            evidence.post_mortem
+        ));
+    };
+    let trap = &fault.trap;
+    if trap.mcause & MCAUSE_INTERRUPT != 0 || trap.mcause & MCAUSE_CODE != ILLEGAL_INSTRUCTION {
+        return Err(format!(
+            "mcause {:#010x} is no illegal instruction",
+            trap.mcause
+        ));
+    }
+    if trap.hart != 0 || trap.mepc == 0 {
+        return Err(format!(
+            "the trap is on hart {} at {:#010x}",
+            trap.hart, trap.mepc
+        ));
+    }
+    match &fault.observed {
+        // An exception names no line.
+        Some(observed) if observed.line.is_none() => Ok(fault),
+        observed => Err(format!("the hook's observations are {observed:?}")),
+    }
+}
 
 /// A scan of every channel the image's domain permits, authentication,
 /// association and the 4-way handshake, or their failure.
@@ -529,6 +609,60 @@ mod tests {
         ] {
             assert!(!handshake_refused(code), "{code:#010x}");
         }
+    }
+
+    fn evidence(fault: Option<Fault>) -> BootEvidence {
+        BootEvidence {
+            reset_reason: oer_hil_protocol::base::ResetReason::Software,
+            raw_reset_reason: 3,
+            post_mortem: Some(PostMortemSummary {
+                boot_count: 1,
+                checkpoints: 0,
+                fault,
+            }),
+            platform_panic: None,
+        }
+    }
+
+    fn illegal(mcause: u32, line: Option<oer_hil_protocol::base::TrapLine>) -> Fault {
+        use oer_hil_protocol::base::{TrapObservation, TrapState};
+        Fault::Exception(ExceptionFault {
+            trap: TrapState {
+                hart: 0,
+                mcause,
+                mepc: 0x4200_1234,
+                mtval: 0,
+                ra: 0x4200_1000,
+                sp: 0x4ff0_0000,
+                mscratch: 0,
+            },
+            observed: Some(TrapObservation {
+                stopped: false,
+                mtvec: 0x4000_0003,
+                mtvt: 0x4000_0400,
+                pending: [0; 6],
+                line,
+            }),
+        })
+    }
+
+    #[test]
+    fn only_an_illegal_instruction_on_hart_zero_without_a_line_is_the_raised_trap() {
+        // CLIC mode keeps the previous privilege and level above the code.
+        assert!(trapped(&evidence(Some(illegal(0x3800_0002, None)))).is_ok());
+        assert!(trapped(&evidence(Some(illegal(0x0000_0005, None)))).is_err());
+        assert!(trapped(&evidence(Some(illegal(0x8000_0002, None)))).is_err());
+        let line = oer_hil_protocol::base::TrapLine {
+            vector: 2,
+            slot: 0,
+            state: 0,
+            routed: [0; 6],
+        };
+        assert!(trapped(&evidence(Some(illegal(2, Some(line))))).is_err());
+        assert!(trapped(&evidence(None)).is_err());
+        let mut none = evidence(None);
+        none.post_mortem = None;
+        assert!(trapped(&none).is_err());
     }
 
     #[test]

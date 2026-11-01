@@ -23,7 +23,6 @@ oer_espressif_staged_runtime::interrupt_table! {
 }
 
 mod aes;
-mod exception;
 mod fatal;
 mod services;
 mod system;
@@ -78,7 +77,7 @@ oer_esp32s31_hal::phy_fault_reporter!(oer_esp32s31_compose::phy_fault::reset);
 oer_espressif_staged_runtime::entry!(
     main,
     oer_esp32s31_hal::platform::Port,
-    exception = exception::capture
+    exception = oer_esp32s31_compose::exception::capture
 );
 
 fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platform::Port>) -> ! {
@@ -95,6 +94,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
                     // acknowledges the previous boot's platform panic.
                     let evidence = system::Evidence::read(runtime.reset_cause);
                     fatal::report_previous();
+                    oer_esp32s31_compose::exception::report_previous();
                     (
                         runtime.system_timer,
                         runtime.software_interrupts,
@@ -107,7 +107,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
             )
         })
         .into_parts();
-    exception::report_stack_guard();
+    oer_esp32s31_compose::exception::report_stack_guard();
 
     let Some(interrupts) = Interrupts::take() else {
         fail(fatal::Failure::InterruptTable);

@@ -114,6 +114,7 @@ pub const CHECKPOINT_NAME_BYTES: usize = 16;
 pub enum Fault {
     Hang(HangFault),
     Panic(PanicFault),
+    Exception(ExceptionFault),
 }
 
 /// A watchdog found an executor making no progress and reset the chip.
@@ -152,6 +153,62 @@ pub struct PanicFault {
     /// The panic's message when it is a static string; empty for a message
     /// with arguments, which the panic path does not format.
     pub message: heapless::String<96>,
+}
+
+/// The previous boot took a CPU exception.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Schema)]
+pub struct ExceptionFault {
+    /// The registers as the trap left them, retained before the fatal path
+    /// stopped the other hart.
+    pub trap: TrapState,
+    /// What the image's exception hook read after that stop; `None` when
+    /// the image keeps no such record. A source may have become pending, or
+    /// a route changed, between the trap and these reads.
+    pub observed: Option<TrapObservation>,
+}
+
+/// A hart's trap registers at the trap.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Schema)]
+pub struct TrapState {
+    pub hart: u8,
+    pub mcause: u32,
+    pub mepc: u32,
+    pub mtval: u32,
+    pub ra: u32,
+    pub sp: u32,
+    pub mscratch: u32,
+}
+
+/// The interrupt controller as an exception hook read it after the trap.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Schema)]
+pub struct TrapObservation {
+    /// Whether the other hart was stopped for the reads; without the stop
+    /// no route or line is read.
+    pub stopped: bool,
+    pub mtvec: u32,
+    pub mtvt: u32,
+    /// The sources pending on the trapping hart, one bit each.
+    pub pending: [u32; TRAP_SOURCE_WORDS],
+    /// For an interrupt of a line without a handler, that line; `None` for
+    /// an exception, which names no line.
+    pub line: Option<TrapLine>,
+}
+
+/// Words of a source bit set: 32 sources each.
+pub const TRAP_SOURCE_WORDS: usize = 6;
+
+/// An interrupt line as an exception hook read it after the trap.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Schema)]
+pub struct TrapLine {
+    /// The line's number.
+    pub vector: u16,
+    /// The handler address the vector table holds for it.
+    pub slot: u32,
+    /// Bit 0 pending, 1 enabled, 2 edge-triggered, bits 8.. its level
+    /// byte; zero when nothing is routed to it or the stop failed.
+    pub state: u32,
+    /// The sources routed to it on the trapping hart.
+    pub routed: [u32; TRAP_SOURCE_WORDS],
 }
 
 /// A named point the previous boot passed.

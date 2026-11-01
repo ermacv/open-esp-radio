@@ -15,10 +15,12 @@ this host's own TCP peer.
 | `tcp` | The device opens a TCP connection through the router to an echo peer on this host's address toward the station network, sends a line and reads it back; the peer received that line from the device's address |
 | `reconnect` | The router deauthenticates the station: the device's link-loss wait ends, the station rejoins by itself, takes a lease again (checked as in `dhcp`) and exchanges a line again (as in `tcp`) |
 | `no-dhcp` | The router stops serving DHCP and deauthenticates the station: the station rejoins, its address wait times out after 20 s with the link up and the boot unchanged; the router serves again and the station takes a lease |
+| `exception` | The device raises an illegal-instruction exception on request ([fault service](../services/fault/src/lib.rs)): it answers, traps, records and resets by itself. Its next boot serves the exception as its post-mortem (`Fault::Exception`): `mcause` an illegal instruction on hart 0 with its `mepc`, as the trap left them, and the exception hook's observations after the stop, which name no line for an exception. A board reset follows; that boot serves no post-mortem, because the boot before printed the record whole |
 
 The cases run in order on one boot: each needs what the one before did; the
 first that needs the network applies it, so `--case join` runs alone. A
-reset of the device fails the case it happens in. The host must reach the
+reset of the device fails the case it happens in, except in `exception`,
+which runs last and ends with its own two boots. The host must reach the
 station network through the lab router (`ip route add 10.231.0.0/24 via
 <router LAN address>`, once), and its firewall must accept the TCP
 connection from the station network to the echo peer's ephemeral port.

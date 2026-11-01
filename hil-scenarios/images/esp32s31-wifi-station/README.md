@@ -153,9 +153,11 @@ to 3, the image classes 4 to 6).
 
 The boot reads the reset causes and peeks the previous boot's platform panic
 before serving boot evidence; complete output clears the record. It prints
-the previous boot's PHY and Wi-Fi MAC fault records. A failed boot check, an
-exception, a construction error the facade cannot return, an exhausted nonce
-stream or an IP stack failure is retained and resets (`src/fatal.rs`); the
+the previous boot's PHY and Wi-Fi MAC fault records. A failed boot check, a
+construction error the facade cannot return, an exhausted nonce stream or an
+IP stack failure is retained and resets (`src/fatal.rs`). An exception keeps
+the runtime's trap-time frame and the platform's observations after the trap
+(`oer_esp32s31_compose::exception`), both printed by the next boot; the
 console's transport faults reset through the platform's retained path.
 
 `cargo fw build esp32s31-wifi-station` builds it; a scenario's harness builds

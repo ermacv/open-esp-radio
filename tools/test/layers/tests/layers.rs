@@ -982,6 +982,7 @@ const ROLES: &[(&str, Role)] = &[
     ("hil-scenarios/images/esp32s31-sdk-station", Role::HilImage),
     ("hil-scenarios/images/esp32s31-wifi-station", Role::HilImage),
     ("hil-scenarios/services/aes", Role::HilBinding),
+    ("hil-scenarios/services/fault", Role::HilBinding),
     ("hil-scenarios/services/load", Role::HilBinding),
     ("hil-scenarios/services/sdk-station", Role::HilBinding),
     ("hil-scenarios/services/wifi-station", Role::HilBinding),
@@ -1129,17 +1130,20 @@ fn role_allows(from: Role, to: Role, to_path: &str) -> bool {
         Role::HilProtocol => to == Role::Portable,
         Role::HilAgent => matches!(to, Role::HilProtocol | Role::Portable),
         // It serves the HIL console over the SDK's console and evidence; the
-        // composition writes notes before the console opens and the platform
-        // places the console and names the image.
-        Role::HilSdkAgent => matches!(
-            to,
-            Role::Sdk
-                | Role::HilAgent
-                | Role::HilProtocol
-                | Role::Platform
-                | Role::Composition
-                | Role::Portable
-        ),
+        // composition writes notes before the console opens, the platform
+        // places the console and names the image, and `oer-riscv` raises the
+        // fault a test requests.
+        Role::HilSdkAgent => {
+            matches!(
+                to,
+                Role::Sdk
+                    | Role::HilAgent
+                    | Role::HilProtocol
+                    | Role::Platform
+                    | Role::Composition
+                    | Role::Portable
+            ) || (to == Role::HardwareAccess && to_path == "portable/riscv")
+        }
         // A bridge stands only on the codecs it joins.
         Role::Bridge => matches!(
             to,
@@ -3378,6 +3382,8 @@ fn hil_roles_keep_radio_out_of_the_framework_and_images_behind_the_facade() {
             (Role::HilAgent, "protocols/hil/agent", true),
             (Role::Composition, "chips/esp32s31/compose", true),
             (Role::Platform, "chips/espressif/staged-runtime", true),
+            (Role::HardwareAccess, "portable/riscv", true),
+            (Role::HardwareAccess, "portable/mmio", false),
             (Role::Facade, "chips/esp32s31/wifi", false),
             (
                 Role::HilBinding,

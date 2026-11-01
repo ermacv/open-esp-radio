@@ -199,6 +199,46 @@ pub fn handle<P: oer_espressif_platform_port::Platform>(
     })
 }
 
+/// The previous boot's CPU exception as the trap left it: the registers the
+/// runtime retained before it stopped the other hart.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PreviousException {
+    /// The hart that trapped.
+    pub hart: u32,
+    pub mcause: u32,
+    pub mepc: u32,
+    pub mtval: u32,
+    pub ra: u32,
+    pub sp: u32,
+    pub mscratch: u32,
+}
+
+/// The previous boot's CPU exception, without printing or clearing its
+/// record: read before adoption reports it, so that the boot can serve it.
+#[cfg(target_arch = "riscv32")]
+pub fn peek_previous_exception() -> Option<PreviousException> {
+    let slot = crate::retained_fault::peek(&crate::panic::SLOT)?;
+    previous_exception(&slot.peek().ok()?)
+}
+
+/// The exception a retained record holds; `None` for any other record.
+fn previous_exception(view: &View<'_>) -> Option<PreviousException> {
+    if view.reason != CPU_EXCEPTION || view.class != Class::CpuException {
+        return None;
+    }
+    let [ra, .., sp, mepc, mcause, _, _, mtval, mscratch] =
+        view.decode::<[u32; 25]>(Domain::CpuException).ok()?;
+    Some(PreviousException {
+        hart: view.hart,
+        mcause,
+        mepc,
+        mtval,
+        ra,
+        sp,
+        mscratch,
+    })
+}
+
 pub(crate) fn report_exception(
     view: View<'_>,
     emit: impl FnMut(&[u8]) -> Result<(), ()>,
@@ -277,6 +317,27 @@ mod tests {
             .unwrap();
         assert!(!bytes.is_empty());
         assert!(record.peek().is_err());
+    }
+    #[test]
+    fn the_previous_exception_is_read_without_clearing_and_only_from_its_record() {
+        let frame = frame();
+        let record = encode_exception(&frame, 1, 0x4ff12340).unwrap();
+        assert_eq!(
+            previous_exception(&record.peek().unwrap()),
+            Some(PreviousException {
+                hart: 1,
+                mcause: frame.mcause,
+                mepc: frame.mepc,
+                mtval: frame.mtval,
+                ra: frame.ra,
+                sp: frame.sp,
+                mscratch: 0x4ff12340,
+            })
+        );
+        // Reading it leaves the record for the boot's report.
+        assert!(record.peek().is_ok());
+        let panic = Record::new(Class::RustPanic, Domain::Panic, 1, 0, 0, &[7]).unwrap();
+        assert_eq!(previous_exception(&panic.peek().unwrap()), None);
     }
     #[test]
     fn repeated_exception_skips_capture_and_keeps_the_first_minimum() {

@@ -13,7 +13,8 @@ use oer_espressif::{
         embassy_net,
     },
 };
-use oer_hil_agent_espressif::{Inbox, Mailbox, answer};
+use oer_hil_agent::base::Either;
+use oer_hil_agent_espressif::{Inbox, Mailbox, answer, answer_then_trap};
 use oer_services_sdk_station::{
     Address, Connect, Connection, Exchange, Exchanged, Ipv4, LinkLoss, Request, Status, WaitIpv4,
     WaitLinkDown,
@@ -27,7 +28,10 @@ const COUNTRY: [u8; 2] = *b"DE";
 /// The owner's transmit power cap, below the domain's ceiling.
 const TX_CAP_DBM: i8 = 10;
 
-static MAILBOX: ConstStaticCell<Mailbox<Request>> = ConstStaticCell::new(Mailbox::new());
+/// A request of the SDK station service or of the fault service.
+type Requests = Either<Request, oer_services_fault::Request>;
+
+static MAILBOX: ConstStaticCell<Mailbox<Requests>> = ConstStaticCell::new(Mailbox::new());
 
 oer_espressif::main!(boot);
 
@@ -57,7 +61,7 @@ fn boot(p: Peripherals, mut boot: Boot) -> Result<Started<impl Future<Output = A
 struct Worker {
     station: Station,
     net: Net,
-    requests: Inbox<'static, Request>,
+    requests: Inbox<'static, Requests>,
 }
 
 impl Worker {
@@ -65,15 +69,25 @@ impl Worker {
         loop {
             let (identity, request) = self.requests.next().await;
             match request {
-                Request::Connect(connect) => answer(identity, &self.connect(connect).await),
-                Request::WaitIpv4(WaitIpv4 { timeout_ms }) => {
+                Either::First(Request::Connect(connect)) => {
+                    answer(identity, &self.connect(connect).await);
+                }
+                Either::First(Request::WaitIpv4(WaitIpv4 { timeout_ms })) => {
                     answer(identity, &self.wait_ipv4(timeout_ms).await);
                 }
-                Request::Exchange(exchange) => answer(identity, &self.exchange(exchange).await),
-                Request::WaitLinkDown(WaitLinkDown { timeout_ms }) => {
+                Either::First(Request::Exchange(exchange)) => {
+                    answer(identity, &self.exchange(exchange).await);
+                }
+                Either::First(Request::WaitLinkDown(WaitLinkDown { timeout_ms })) => {
                     answer(identity, &self.wait_link_down(timeout_ms).await);
                 }
-                Request::GetStatus(_) => answer(identity, &self.status()),
+                Either::First(Request::GetStatus(_)) => answer(identity, &self.status()),
+                // Traps once the answer is written; without a confirmed
+                // write the boot goes on and the request stays unanswered.
+                Either::Second(oer_services_fault::Request::RaiseException(_)) => {
+                    let _unconfirmed =
+                        answer_then_trap(identity, &oer_services_fault::Raising).await;
+                }
             }
         }
     }
