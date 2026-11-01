@@ -270,3 +270,107 @@ fn a_dropped_idle_client_frees_its_seat_at_once() {
     drop(first);
     assert!(service.client().is_ok());
 }
+
+/// A ciphertext whose unwrap fails its integrity check.
+fn corrupted() -> [u8; 24] {
+    let mut changed = RFC3394_4_1_CIPHERTEXT;
+    changed[0] ^= 0x80;
+    changed
+}
+
+// A wait that ended without its response, outside its context (`Foreign`)
+// or leaked, leaves its seat as `forget` does here.
+#[test]
+fn a_later_request_never_takes_the_response_of_a_wait_that_ended_without_it() {
+    let service = service();
+    let (engine, _, ran) = engine();
+    let mut client = service.client().expect("a seat");
+    let mut serve = pin!(service.serve(engine));
+    let mut first = Box::pin(client.execute(request(&RFC3394_4_1_CIPHERTEXT)));
+    assert!(poll(first.as_mut()).is_pending());
+    core::mem::forget(first);
+    assert!(poll(serve.as_mut()).is_pending());
+    assert_eq!(ran.get(), 1, "the first request ran and left its response");
+    // The corrupted request gets its own integrity failure, not the
+    // first one's plaintext.
+    let mut second = pin!(client.execute(request(&corrupted())));
+    assert!(poll(second.as_mut()).is_pending());
+    assert!(poll(serve.as_mut()).is_pending());
+    assert_eq!(ran.get(), 2);
+    let Poll::Ready(Ok(response)) = poll(second.as_mut()) else {
+        panic!("the second response is ready");
+    };
+    assert_eq!(
+        plaintext(response),
+        Err(oer_crypto::KeyUnwrapError::IntegrityCheckFailed)
+    );
+}
+
+#[test]
+fn a_later_request_withdraws_a_pending_one_and_waits_for_a_running_one() {
+    let service = service();
+    let (engine, gate, ran) = engine();
+    let mut client = service.client().expect("a seat");
+    let mut serve = pin!(service.serve(engine));
+    // Pending: withdrawn and never run.
+    let mut pending = Box::pin(client.execute(request(&RFC3394_4_1_CIPHERTEXT)));
+    assert!(poll(pending.as_mut()).is_pending());
+    core::mem::forget(pending);
+    {
+        let mut second = pin!(client.execute(request(&corrupted())));
+        assert!(poll(second.as_mut()).is_pending());
+        assert!(poll(serve.as_mut()).is_pending());
+        assert_eq!(ran.get(), 1, "only the second request ran");
+        let Poll::Ready(Ok(response)) = poll(second.as_mut()) else {
+            panic!("the second response is ready");
+        };
+        assert!(plaintext(response).is_err());
+    }
+    // Running: discarded, then the next one runs.
+    gate.set(false);
+    let mut running = Box::pin(client.execute(request(&RFC3394_4_1_CIPHERTEXT)));
+    assert!(poll(running.as_mut()).is_pending());
+    assert!(poll(serve.as_mut()).is_pending(), "the request runs");
+    core::mem::forget(running);
+    let mut third = pin!(client.execute(request(&corrupted())));
+    assert!(poll(third.as_mut()).is_pending());
+    gate.set(true);
+    assert!(poll(serve.as_mut()).is_pending());
+    assert!(
+        poll(third.as_mut()).is_pending(),
+        "the discarded response was erased"
+    );
+    assert!(poll(serve.as_mut()).is_pending());
+    let Poll::Ready(Ok(response)) = poll(third.as_mut()) else {
+        panic!("the third response is ready");
+    };
+    assert_eq!(
+        plaintext(response),
+        Err(oer_crypto::KeyUnwrapError::IntegrityCheckFailed)
+    );
+}
+
+#[test]
+fn an_unwrap_never_takes_the_response_a_wait_left_in_its_seat() {
+    let service = service();
+    let (engine, _, _) = engine();
+    let mut client = service.client().expect("a seat");
+    let mut serve = pin!(service.serve(engine));
+    let mut first = Box::pin(client.execute(request(&RFC3394_4_1_CIPHERTEXT)));
+    assert!(poll(first.as_mut()).is_pending());
+    core::mem::forget(first);
+    assert!(poll(serve.as_mut()).is_pending());
+    let mut operation = pin!(client.unwrap_key(KeyUnwrapRequest::new(
+        Aes128Key::copy_from(&RFC3394_4_1_KEK),
+        KeyData::try_copy(&corrupted()).expect("fits"),
+    )));
+    assert!(poll(operation.as_mut()).is_pending());
+    assert!(poll(serve.as_mut()).is_pending());
+    let Poll::Ready(done) = poll(operation.as_mut()) else {
+        panic!("the unwrap is done");
+    };
+    assert_eq!(
+        done.response.plaintext(),
+        Err(oer_crypto::KeyUnwrapError::IntegrityCheckFailed)
+    );
+}

@@ -104,6 +104,7 @@ the station that no network takes its frames.
 | `Station::connect` after admission | the attempt continues; the next connect waits for its end; `disconnect` leaves the network |
 | `AesClient::execute` before the service took the request | the request is withdrawn and erased |
 | `AesClient::execute` while the service runs it | the service finishes, erases the response; the client's next request waits for that |
+| An `AesClient::execute` or key unwrap that ended without its response (polled outside the service's context, or leaked) | its request or response stays in the seat under its request number; the client's next request withdraws or erases it, or waits for it while it runs, and never takes its response |
 | An `AesClient` with a running request | its seat is freed once the service finished it; in the boot, before the executor runs, a dropped client keeps its seat |
 | `Net::wait_ipv4` or `wait_link_down` | its registered waker stays until the next change wakes it harmlessly |
 

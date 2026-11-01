@@ -16,7 +16,12 @@
 //!   discarding: the service finishes, erases the response, and the client's
 //!   next request waits for that;
 //! - a client dropped while its request runs releases its seat once the
-//!   service finished it.
+//!   service finished it;
+//! - a wait that ended without its response (it ran outside `X`, or it was
+//!   leaked) leaves its request or response in the seat, under its request
+//!   number: the client's next request, of another number, withdraws or
+//!   erases it first, and waits for one that runs. A response reaches only
+//!   the request of its own number.
 //!
 //! Seats are claimed atomically, so a client can be issued before `X`'s
 //! executor runs (an image's boot hands one to the Wi-Fi station). Requests
@@ -65,21 +70,25 @@ pub struct Exhausted;
 enum Seat<const N: usize> {
     /// No request.
     Idle,
-    /// The request waits for the service.
+    /// The request numbered `ticket` waits for the service.
     Pending {
         request: AesRequest<N>,
         waker: Option<Waker>,
+        ticket: u32,
     },
-    /// The service runs the request.
-    Running { waker: Option<Waker> },
+    /// The service runs the request numbered `ticket`.
+    Running { waker: Option<Waker>, ticket: u32 },
     /// The service runs a request whose wait was dropped: its response is
     /// erased, then the seat is idle again.
     Discarding { waker: Option<Waker> },
     /// The service runs a request whose client was dropped: the seat's
     /// claim ends once it finished.
     Released,
-    /// The response waits for its client.
-    Done { response: AesResponse<N> },
+    /// The response of the request numbered `ticket` waits for it.
+    Done {
+        response: AesResponse<N>,
+        ticket: u32,
+    },
 }
 
 struct State<const N: usize, const C: usize> {
@@ -137,6 +146,7 @@ impl<X: ExecutionContext, const N: usize, const C: usize> AesService<X, N, C> {
         Ok(AesClient {
             service: self,
             seat: free.trailing_zeros() as usize,
+            ticket: 0,
         })
     }
 
@@ -179,12 +189,15 @@ impl<X: ExecutionContext, const N: usize, const C: usize> AesService<X, N, C> {
                 if !matches!(seat, Seat::Pending { .. }) {
                     continue;
                 }
-                let Seat::Pending { request, waker } =
-                    core::mem::replace(seat, Seat::Running { waker: None })
+                let Seat::Pending {
+                    request,
+                    waker,
+                    ticket,
+                } = core::mem::replace(seat, Seat::Idle)
                 else {
                     continue;
                 };
-                *seat = Seat::Running { waker };
+                *seat = Seat::Running { waker, ticket };
                 state.next = index.wrapping_add(1) % C;
                 return Some((index, request));
             }
@@ -205,8 +218,8 @@ impl<X: ExecutionContext, const N: usize, const C: usize> AesService<X, N, C> {
                 return (None, Some(response), false);
             };
             match core::mem::replace(seat, Seat::Idle) {
-                Seat::Running { waker } => {
-                    *seat = Seat::Done { response };
+                Seat::Running { waker, ticket } => {
+                    *seat = Seat::Done { response, ticket };
                     (waker, None, false)
                 }
                 Seat::Discarding { waker } => (waker, Some(response), false),
@@ -229,45 +242,71 @@ impl<X: ExecutionContext, const N: usize, const C: usize> AesService<X, N, C> {
         Ok(())
     }
 
-    /// Move `request` into `seat` or take its response.
+    /// Move `request`, numbered `ticket`, into `seat`, or take its
+    /// response. What the seat holds for another number, a wait that ended
+    /// without its response left: a pending request is withdrawn, a
+    /// response erased, a running request discarded and waited for.
     fn poll_seat(
         &self,
         seat: usize,
+        ticket: u32,
         request: &mut Option<AesRequest<N>>,
         cx: &Context<'_>,
     ) -> Poll<Result<AesResponse<N>, AesError>> {
         let polled = self.with(|state| {
             let Some(slot) = state.seats.get_mut(seat) else {
-                return (Poll::Ready(Err(AesError::Foreign)), None);
+                return (Poll::Ready(Err(AesError::Foreign)), None, None);
             };
             let waker = Some(cx.waker().clone());
-            match slot {
+            let stale = match slot {
+                Seat::Pending { ticket: held, .. } | Seat::Done { ticket: held, .. }
+                    if *held != ticket =>
+                {
+                    match core::mem::replace(slot, Seat::Idle) {
+                        Seat::Pending { request, .. } => Some(Dropped::Request(request)),
+                        Seat::Done { response, .. } => Some(Dropped::Response(response)),
+                        _ => None,
+                    }
+                }
+                Seat::Running { ticket: held, .. } if *held != ticket => {
+                    *slot = Seat::Discarding { waker: None };
+                    None
+                }
+                _ => None,
+            };
+            let (poll, server) = match slot {
                 Seat::Idle => match request.take() {
                     Some(request) => {
-                        *slot = Seat::Pending { request, waker };
+                        *slot = Seat::Pending {
+                            request,
+                            waker,
+                            ticket,
+                        };
                         (Poll::Pending, state.server.take())
                     }
                     // The request moved in and its response was taken.
                     None => (Poll::Ready(Err(AesError::Foreign)), None),
                 },
                 Seat::Pending { waker: stored, .. }
-                | Seat::Running { waker: stored }
+                | Seat::Running { waker: stored, .. }
                 | Seat::Discarding { waker: stored } => {
                     *stored = waker;
                     (Poll::Pending, None)
                 }
                 Seat::Done { .. } => match core::mem::replace(slot, Seat::Idle) {
-                    Seat::Done { response } => (Poll::Ready(Ok(response)), None),
+                    Seat::Done { response, .. } => (Poll::Ready(Ok(response)), None),
                     other => {
                         *slot = other;
                         (Poll::Pending, None)
                     }
                 },
                 Seat::Released => (Poll::Ready(Err(AesError::Foreign)), None),
-            }
+            };
+            (poll, server, stale)
         });
         match polled {
-            Ok((poll, server)) => {
+            Ok((poll, server, stale)) => {
+                drop(stale);
                 if let Some(server) = server {
                     server.wake();
                 }
@@ -277,18 +316,26 @@ impl<X: ExecutionContext, const N: usize, const C: usize> AesService<X, N, C> {
         }
     }
 
-    /// A wait on `seat` ended before its response: withdraw a pending
-    /// request, let a running one be erased, erase an untaken response.
-    fn withdraw(&self, seat: usize) {
+    /// The wait for request `ticket` on `seat` ended before its response:
+    /// withdraw it pending, let it be erased running, erase its untaken
+    /// response. A seat that holds another request is left as it is.
+    fn withdraw(&self, seat: usize, ticket: u32) {
         let dropped = self.with(|state| {
             let slot = state.seats.get_mut(seat)?;
+            match slot {
+                Seat::Pending { ticket: held, .. }
+                | Seat::Running { ticket: held, .. }
+                | Seat::Done { ticket: held, .. }
+                    if *held == ticket => {}
+                _ => return None,
+            }
             match core::mem::replace(slot, Seat::Idle) {
                 Seat::Pending { request, .. } => Some(Dropped::Request(request)),
-                Seat::Running { .. } | Seat::Discarding { .. } => {
+                Seat::Running { .. } => {
                     *slot = Seat::Discarding { waker: None };
                     None
                 }
-                Seat::Done { response } => Some(Dropped::Response(response)),
+                Seat::Done { response, .. } => Some(Dropped::Response(response)),
                 other => {
                     *slot = other;
                     None
@@ -312,7 +359,7 @@ impl<X: ExecutionContext, const N: usize, const C: usize> AesService<X, N, C> {
                     (false, None)
                 }
                 Seat::Pending { request, .. } => (true, Some(Dropped::Request(request))),
-                Seat::Done { response } => (true, Some(Dropped::Response(response))),
+                Seat::Done { response, .. } => (true, Some(Dropped::Response(response))),
                 Seat::Idle => (true, None),
             }
         });
@@ -341,16 +388,27 @@ enum Dropped<const N: usize> {
 pub struct AesClient<'s, X: ExecutionContext, const N: usize, const C: usize> {
     service: &'s AesService<X, N, C>,
     seat: usize,
+    /// The number of the client's last request.
+    ticket: u32,
 }
 
 impl<'s, X: ExecutionContext, const N: usize, const C: usize> AesClient<'s, X, N, C> {
     /// Compute `request`; the future ends with its response.
     pub fn execute(&mut self, request: AesRequest<N>) -> Execute<'_, 's, X, N, C> {
+        let ticket = self.next_ticket();
         Execute {
             client: self,
             request: Some(request),
+            ticket,
             ended: false,
         }
+    }
+
+    /// A number no other live request of this client holds: a seat holds
+    /// one request at a time, and the counter wraps only after 2^32 more.
+    fn next_ticket(&mut self) -> u32 {
+        self.ticket = self.ticket.wrapping_add(1);
+        self.ticket
     }
 }
 
@@ -365,6 +423,7 @@ impl<X: ExecutionContext, const N: usize, const C: usize> Drop for AesClient<'_,
 pub struct Execute<'c, 's, X: ExecutionContext, const N: usize, const C: usize> {
     client: &'c mut AesClient<'s, X, N, C>,
     request: Option<AesRequest<N>>,
+    ticket: u32,
     ended: bool,
 }
 
@@ -373,10 +432,10 @@ impl<X: ExecutionContext, const N: usize, const C: usize> Future for Execute<'_,
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.get_mut();
-        let poll = this
-            .client
-            .service
-            .poll_seat(this.client.seat, &mut this.request, cx);
+        let poll =
+            this.client
+                .service
+                .poll_seat(this.client.seat, this.ticket, &mut this.request, cx);
         this.ended = poll.is_ready();
         poll
     }
@@ -385,7 +444,7 @@ impl<X: ExecutionContext, const N: usize, const C: usize> Future for Execute<'_,
 impl<X: ExecutionContext, const N: usize, const C: usize> Drop for Execute<'_, '_, X, N, C> {
     fn drop(&mut self) {
         if !self.ended && self.request.is_none() {
-            self.client.service.withdraw(self.client.seat);
+            self.client.service.withdraw(self.client.seat, self.ticket);
         }
     }
 }
@@ -397,10 +456,12 @@ impl<X: ExecutionContext, const N: usize, const C: usize> KeyUnwrap<N>
 {
     type Operation = Unwrap<X, N, C>;
 
-    fn unwrap_key(self, request: KeyUnwrapRequest<N>) -> Self::Operation {
+    fn unwrap_key(mut self, request: KeyUnwrapRequest<N>) -> Self::Operation {
+        let ticket = self.next_ticket();
         Unwrap {
             client: Some(self),
             request: Some(AesRequest::KeyUnwrap(request)),
+            ticket,
         }
     }
 }
@@ -409,6 +470,7 @@ impl<X: ExecutionContext, const N: usize, const C: usize> KeyUnwrap<N>
 pub struct Unwrap<X: ExecutionContext + 'static, const N: usize, const C: usize> {
     client: Option<AesClient<'static, X, N, C>>,
     request: Option<AesRequest<N>>,
+    ticket: u32,
 }
 
 impl<X: ExecutionContext, const N: usize, const C: usize> Future for Unwrap<X, N, C> {
@@ -419,15 +481,19 @@ impl<X: ExecutionContext, const N: usize, const C: usize> Future for Unwrap<X, N
         let Some(client) = this.client.as_ref() else {
             return Poll::Pending;
         };
-        let response = match client.service.poll_seat(client.seat, &mut this.request, cx) {
-            Poll::Pending => return Poll::Pending,
-            Poll::Ready(Ok(AesResponse::KeyUnwrap(response))) => response,
-            // Outside the service's context nothing ran: the engine is
-            // unavailable to this operation.
-            Poll::Ready(Err(AesError::Foreign)) => {
-                KeyUnwrapResponse::engine_failed(BlockError::Unavailable)
-            }
-        };
+        let response =
+            match client
+                .service
+                .poll_seat(client.seat, this.ticket, &mut this.request, cx)
+            {
+                Poll::Pending => return Poll::Pending,
+                Poll::Ready(Ok(AesResponse::KeyUnwrap(response))) => response,
+                // Outside the service's context nothing ran: the engine is
+                // unavailable to this operation.
+                Poll::Ready(Err(AesError::Foreign)) => {
+                    KeyUnwrapResponse::engine_failed(BlockError::Unavailable)
+                }
+            };
         match this.client.take() {
             Some(engine) => Poll::Ready(KeyUnwrapDone { engine, response }),
             None => Poll::Pending,
@@ -440,7 +506,7 @@ impl<X: ExecutionContext, const N: usize, const C: usize> Drop for Unwrap<X, N, 
         if let Some(client) = &self.client
             && self.request.is_none()
         {
-            client.service.withdraw(client.seat);
+            client.service.withdraw(client.seat, self.ticket);
         }
     }
 }
