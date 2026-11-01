@@ -57,6 +57,10 @@ impl LentNotifies for SameHart {
     fn register_returned(&self, cx: &mut Context<'_>) {
         self.network.register(cx.waker());
     }
+    // A network that drops lent units on several paths (a refusal, a full
+    // queue) can otherwise merge their inlined returns into one block whose
+    // indirect wake keeps no Waker operation scope.
+    #[inline(never)]
     fn returned(&self) {
         self.network.wake();
     }
