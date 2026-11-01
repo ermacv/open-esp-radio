@@ -34,6 +34,8 @@ workspace = true
 
 [package.metadata.open-radio]
 critical-section-hart = "boot"
+# Every task stack of this image is fully analysed: an unresolved path fails `cargo fw build`.
+task-stack = "proven"
 
 [package.metadata.open-radio.panic-budget]
 # Reachable panic sites by layer (the image check's `*-panics.txt`): each a

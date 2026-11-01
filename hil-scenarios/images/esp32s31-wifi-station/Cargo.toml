@@ -60,6 +60,8 @@ bootstrap = { unnamed = 0 }
 
 [package.metadata.open-radio]
 critical-section-hart = "boot"
+# Every task stack of this image is fully analysed: an unresolved path fails `cargo fw build`.
+task-stack = "proven"
 # The harts this image runs: hart 1 starts during boot and runs the
 # station's network end, its IP stack and the load server on its own
 # interrupt-mode executor with its own timer.
