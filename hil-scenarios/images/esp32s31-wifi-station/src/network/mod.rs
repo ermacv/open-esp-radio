@@ -226,6 +226,10 @@ async fn network_end(
         // Neither part ends before the exit.
         let _exit = select(serving, EXIT.requested()).await;
     }
+    // The load socket's queued datagrams hold lent receive buffers: they
+    // must drop before the IP service's final reclaim. A no-op after the
+    // station's own stop, which closed it already.
+    network.stop_load().await;
     ip.stop();
     Tracked {
         future: Pin::new(&mut running),
