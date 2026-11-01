@@ -407,7 +407,7 @@ impl StaTxBlockAck {
         } else {
             self.pending
         };
-        [self.timing, due].into_iter().flatten().min()
+        crate::time::earliest(self.timing, due)
     }
 
     /// When `tid`'s operational agreement ends for inactivity.
