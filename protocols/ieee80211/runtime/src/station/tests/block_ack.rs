@@ -599,7 +599,8 @@ fn an_agreement_aggregates_waiting_msdus_and_retries_a_missing_member() {
                 .air
                 .receive(&addba_response(dialog_token, 0, 32), meta());
             assert!(world.delivered().await.is_empty());
-            // Sequence numbers 1 and 2 go at once; 3 and 4 wait for them.
+            // Sequence number 1 goes at once; 2, 3 and 4 wait while it is
+            // out, to go together.
             world.air.hold(WmmAccessCategory::BestEffort, true);
             for _ in 0..4 {
                 assert!(world.try_send_msdu(BSSID));
@@ -608,13 +609,10 @@ fn an_agreement_aggregates_waiting_msdus_and_retries_a_missing_member() {
             world
                 .air
                 .answer(oer_ieee80211_testing_model::AirAnswer::BlockAck(0b1));
+            // The aggregate of 2, 3 and 4 misses 3.
             world
                 .air
-                .answer(oer_ieee80211_testing_model::AirAnswer::BlockAck(0b1));
-            // The aggregate of 3 and 4 misses 4.
-            world
-                .air
-                .answer(oer_ieee80211_testing_model::AirAnswer::BlockAck(0b01));
+                .answer(oer_ieee80211_testing_model::AirAnswer::BlockAck(0b101));
             world.air.hold(WmmAccessCategory::BestEffort, false);
             let retried = loop {
                 let frame = world.sent(&mut seen, 0x88).await;
@@ -622,16 +620,17 @@ fn an_agreement_aggregates_waiting_msdus_and_retries_a_missing_member() {
                     break frame;
                 }
             };
-            // Bit 1 of the third answer is the second subframe of the third
-            // publication: 3 and 4 went as one aggregate, and only 4 again.
-            assert_eq!(sequence_and_retry(&retried), (4, true));
+            // Bit 1 of the second answer is the second subframe of the
+            // second publication: 2, 3 and 4 went as one aggregate, and only
+            // 3 again.
+            assert_eq!(sequence_and_retry(&retried), (3, true));
             assert!(
                 world
                     .air
                     .sent()
                     .iter()
                     .filter(|frame| kind(frame) == 0x88)
-                    .all(|frame| sequence_and_retry(frame) != (3, true))
+                    .all(|frame| ![(2, true), (4, true)].contains(&sequence_and_retry(frame)))
             );
             world.command(ControlCommand::Stop).await;
         })

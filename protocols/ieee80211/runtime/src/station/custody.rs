@@ -44,18 +44,15 @@ pub struct UnroutedTx<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id> {
 }
 
 /// An aggregate terminal that cannot belong to the submitted aggregate. It
-/// still owns the ticket, the context and every subframe the port returned.
+/// still owns the ticket, the context and every subframe the port returned
+/// that Data did not take back: subframes of a data aggregate already given
+/// back to their members' places wait in Data's bank.
 pub struct UnroutedAggregate<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id> {
     pub context: TxContext<'id, B::Caps, B::Large, <B::Types<'id> as PhaseTypes<'id>>::EpochPath>,
     pub ticket: Slot<
         'id,
         <B::Types<'id> as PhaseTypes<'id>>::TicketKind,
         <B::Types<'id> as PhaseTypes<'id>>::TicketPath,
-    >,
-    /// The data subframes taken, in order.
-    pub mpdus: heapless::Vec<
-        PoolMpdu<'id, B::Types<'id>, B::Large>,
-        { oer_ieee80211_core_roles_sta::data::MAX_AGGREGATE },
     >,
     /// A subframe of the station's class, or one beyond the aggregate's bound.
     pub stray: Option<StationTxBuffer<'id, B>>,

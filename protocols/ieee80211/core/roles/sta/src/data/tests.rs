@@ -1571,6 +1571,7 @@ fn window(start: u16, subframes: usize, max_length: u32) -> Option<AggregateWind
         size: 32,
         subframes,
         max_length,
+        rate: None,
     })
 }
 
@@ -1629,7 +1630,11 @@ fn an_agreement_aggregates_consecutive_owed_mpdus_within_its_limits() {
     };
     // Three subframes at most: 1, 2 and 3; 4 waits.
     let first = aggregate(data.poll_attempt(|_| window(1, 3, u32::MAX), &mut events));
-    assert_eq!((first.context.len(), first.mpdus.len()), (3, 3));
+    assert_eq!(first.context.len(), 3);
+    // Each member's memory waits in the bank for the port's builder.
+    let memory = data.aggregate_mpdu(&first.context, 2).unwrap();
+    assert!(data.aggregate_mpdu(&first.context, 2).is_none());
+    data.aggregate_mpdu_returned(&first.context, 2, memory, &mut events);
     assert_eq!(first.context.tid().value(), 0);
     assert!(
         data.poll_attempt(|_| window(1, 3, u32::MAX), &mut events)
@@ -1641,7 +1646,6 @@ fn an_agreement_aggregates_consecutive_owed_mpdus_within_its_limits() {
         DataAggregateReturn::TxDone {
             context: first.context,
             ticket: first.ticket,
-            mpdus: first.mpdus,
             completion: block_ack(1, 0b101),
         },
         oer_time::Instant::from_micros(2_000),
@@ -1660,13 +1664,14 @@ fn an_agreement_aggregates_consecutive_owed_mpdus_within_its_limits() {
     // One subframe's octets: only 2 fits a length below two of them.
     let short = aggregate(data.poll_attempt(|_| window(2, 8, 200), &mut events));
     assert_eq!(short.context.len(), 1);
-    assert!(matches!(short.mpdus[0], ReturnedMpdu::Fresh(_)));
+    let memory = data.aggregate_mpdu(&short.context, 0).unwrap();
+    assert!(matches!(memory, ReturnedMpdu::Fresh(_)));
+    data.aggregate_mpdu_returned(&short.context, 0, memory, &mut events);
     // 2 misses its second aggregate on the air: the policy drops it.
     let marks = data.aggregate_returned(
         DataAggregateReturn::TxDone {
             context: short.context,
             ticket: short.ticket,
-            mpdus: short.mpdus,
             completion: block_ack(2, 0),
         },
         oer_time::Instant::from_micros(3_000),
@@ -1711,12 +1716,11 @@ fn every_return_gives_the_members_places_back() {
     for round in 0..10_u16 {
         input(&mut data, &mut events, 4);
         let sent = aggregate(data.poll_attempt(|_| window(round * 4, 4, u32::MAX), &mut events));
-        assert_eq!((sent.context.len(), sent.mpdus.len()), (4, 4));
+        assert_eq!(sent.context.len(), 4);
         let marks = data.aggregate_returned(
             DataAggregateReturn::TxDone {
                 context: sent.context,
                 ticket: sent.ticket,
-                mpdus: sent.mpdus,
                 completion: block_ack(round * 4, 0b1111),
             },
             oer_time::Instant::from_micros(1_000),
@@ -1729,18 +1733,12 @@ fn every_return_gives_the_members_places_back() {
     // next aggregate holds them again.
     input(&mut data, &mut events, 4);
     let mut sent = aggregate(data.poll_attempt(|_| window(40, 4, u32::MAX), &mut events));
-    let mut tail = heapless::Vec::new();
-    for _ in 0..2 {
-        let mpdu = sent.mpdus.pop().unwrap();
-        assert!(tail.insert(0, mpdu).is_ok());
-    }
-    data.unbuilt(&mut sent.context, tail, &mut events);
+    data.unbuilt(&mut sent.context, 2, &mut events);
     assert_eq!(sent.context.len(), 2);
     let marks = data.aggregate_returned(
         DataAggregateReturn::TxDone {
             context: sent.context,
             ticket: sent.ticket,
-            mpdus: sent.mpdus,
             completion: block_ack(40, 0b11),
         },
         oer_time::Instant::from_micros(1_000),
@@ -1754,4 +1752,102 @@ fn every_return_gives_the_members_places_back() {
     assert!((0..2).all(|index| data.aggregate_frame(&again.context, index).is_some()));
     assert!(data.aggregate_frame(&again.context, 2).is_none());
     assert_eq!(tokens_lost(&events), 0);
+}
+
+#[test]
+fn an_ht_aggregate_keeps_within_the_ppdu_time_limit_of_its_rate() {
+    static PAYLOAD: [u8; 1_500] = [0xab; 1_500];
+    let mut events = Kept::default();
+    let mut data = StaData::<Data, Caps, 40>::new(
+        [1, 2],
+        core::array::from_fn::<_, 40, _>(|_| Buffer::new(std::vec![0; 1_600])),
+        core::num::NonZeroU8::new(2).unwrap(),
+    );
+    let mut replay = epoch();
+    let mut link = qos_link(&(), &mut replay);
+    for _ in 0..40 {
+        data.input(
+            DataInput {
+                msdu: Msdu {
+                    payload: &PAYLOAD,
+                    ..msdu(0)
+                },
+                link: &mut link,
+            },
+            &mut events,
+        )
+        .unwrap();
+    }
+    let at = |mcs, bandwidth| {
+        Some(AggregateWindow {
+            rate: Some(PhyRate::Ht(
+                oer_ieee80211_wire::phy::HtRate::new(
+                    oer_ieee80211_wire::phy::HtMcs::new(mcs).unwrap(),
+                    bandwidth,
+                    false,
+                )
+                .unwrap(),
+            )),
+            ..window(0, 32, 65_535).unwrap()
+        })
+    };
+    // MCS 7 at 20 MHz: 32 full subframes would last over 5.484 ms.
+    let narrow = aggregate(data.poll_attempt(
+        |_| at(7, oer_ieee80211_wire::phy::PpduBandwidth::Mhz20),
+        &mut events,
+    ));
+    assert!(
+        (20..32).contains(&narrow.context.len()),
+        "{}",
+        narrow.context.len()
+    );
+    // MCS 0: the time limit, not the length, ends it at three.
+    data.unbuilt(&mut { narrow }.context, 0, &mut events);
+    let slow = aggregate(data.poll_attempt(
+        |_| at(0, oer_ieee80211_wire::phy::PpduBandwidth::Mhz20),
+        &mut events,
+    ));
+    assert_eq!(slow.context.len(), 2);
+    drop(slow);
+    assert_eq!(tokens_lost(&events), 0);
+}
+
+#[test]
+fn a_growing_aggregate_waits_while_its_category_has_an_attempt_out() {
+    let mut inputs = Kept::default();
+    let mut data = StaData::<Data, Caps, 8>::new(
+        [1, 2],
+        core::array::from_fn::<_, 8, _>(|_| Buffer::new(std::vec![0; 1600])),
+        core::num::NonZeroU8::new(2).unwrap(),
+    );
+    let mut replay = epoch();
+    let mut link = qos_link(&(), &mut replay);
+    let mut input = |data: &mut StaData<'static, Data<'static>, Caps, 8>, count: usize| {
+        for _ in 0..count {
+            data.input(
+                DataInput {
+                    msdu: msdu(0),
+                    link: &mut link,
+                },
+                &mut inputs,
+            )
+            .unwrap();
+        }
+    };
+    let mut events = Kept::default();
+    input(&mut data, 1);
+    // Nothing is out: the one owed MPDU goes at once.
+    let first = aggregate(data.poll_attempt(|_| window(0, 4, u32::MAX), &mut events));
+    assert_eq!(first.context.len(), 1);
+    // Another arrives while it is out: it waits to grow.
+    input(&mut data, 1);
+    assert!(
+        data.poll_attempt(|_| window(0, 4, u32::MAX), &mut events)
+            .is_none()
+    );
+    // A full aggregate goes even with one out.
+    input(&mut data, 3);
+    let full = aggregate(data.poll_attempt(|_| window(0, 4, u32::MAX), &mut events));
+    assert_eq!(full.context.len(), 4);
+    drop((first, full));
 }

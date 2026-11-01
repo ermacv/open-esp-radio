@@ -3602,27 +3602,25 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
             .map(StaTxBlockAck::retry_members)
     }
 
-    /// Where each TID may aggregate now: its operational transmit
-    /// agreement's window, at most `subframes` and the lower of the access
-    /// point's Maximum A-MPDU Length and `max_length`.
-    pub fn tx_aggregate_windows(
+    /// Where `tid` may aggregate now at `rate`: its operational transmit
+    /// agreement's window, at most `subframes`, the lower of the access
+    /// point's Maximum A-MPDU Length and `max_length`, and the rate's PPDU
+    /// time limit.
+    pub fn tx_aggregate_window(
         &self,
+        tid: WmmUserPriority,
         subframes: usize,
         max_length: u32,
-    ) -> [Option<crate::data::AggregateWindow>; 8] {
-        let Some((_, recipient_length)) = self.tx_aggregate_limits() else {
-            return [None; 8];
-        };
-        let subframes = subframes.min(crate::data::MAX_AGGREGATE);
-        let max_length = max_length.min(recipient_length);
-        WmmUserPriority::ALL.map(|tid| {
-            self.tx_block_ack(tid)
-                .map(|agreement| crate::data::AggregateWindow {
-                    start: agreement.starting_sequence,
-                    size: agreement.window,
-                    subframes,
-                    max_length,
-                })
+        rate: oer_ieee80211_contracts_port::PhyRate,
+    ) -> Option<crate::data::AggregateWindow> {
+        let (_, recipient_length) = self.tx_aggregate_limits()?;
+        let agreement = self.tx_block_ack(tid)?;
+        Some(crate::data::AggregateWindow {
+            start: agreement.starting_sequence,
+            size: agreement.window,
+            subframes: subframes.min(crate::data::MAX_AGGREGATE),
+            max_length: max_length.min(recipient_length),
+            rate: Some(rate),
         })
     }
 
@@ -6027,6 +6025,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
         if let Some(tx) = self.config.tx_block_ack.as_mut() {
             tx.request_sent(tid);
         }
+        report(events, || StaEvent::BlockAckRequestSent);
         connected.sending = true;
         let TxCredit {
             epoch,

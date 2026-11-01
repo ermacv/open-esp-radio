@@ -2333,8 +2333,12 @@ impl<
             // depth and the one on the air; the limit is the service's, for
             // every data source it runs.
             'data: loop {
-                let windows =
-                    aggregate_windows::<B, P, S, C, GROUPS>(&self.station, &self.rates, phase);
+                // The window of the TID the next attempt takes, asked only
+                // when Data owes an MPDU.
+                let window_tid = self.data.attempt_tid();
+                let window = window_tid.and_then(|tid| {
+                    aggregate_window::<B, P, S, C, GROUPS>(&self.station, &self.rates, phase, tid)
+                });
                 let spacing = self
                     .station
                     .tx_aggregate_limits()
@@ -2345,10 +2349,10 @@ impl<
                     let Some(link) = self.station.link() else {
                         break 'data;
                     };
-                    let Some(attempt) = self
-                        .data
-                        .poll_attempt(|tid| *tid.select(&windows), &mut self.events)
-                    else {
+                    let Some(attempt) = self.data.poll_attempt(
+                        |tid| window.filter(|_| Some(tid) == window_tid),
+                        &mut self.events,
+                    ) else {
                         break 'data;
                     };
                     progress = true;
@@ -3207,32 +3211,45 @@ impl<
             .admissions
             .remove(PendingTerminal::Transmit(ticket.index()));
         let mut rest = payload.into_iter();
-        let mut mpdus = heapless::Vec::new();
         let mut stray = None;
-        while stray.is_none() {
-            let Some(mpdu) = rest.next() else {
-                break;
-            };
-            let (buffer, body) = oer_ieee80211_contracts_port::TxMpdu::into_parts(mpdu);
-            if let Some(body) = body {
-                match body {}
-            }
-            match B::tx_buffer(buffer) {
-                StationTxBuffer::Large(mpdu) => {
-                    if let Err(mpdu) = mpdus.push(mpdu) {
-                        stray = Some(StationTxBuffer::Large(mpdu));
+        let context = match context {
+            TxContext::DataAggregate(context) if admitted => {
+                // Each member's memory goes straight back to its place in
+                // Data's bank, in subframe order: no copy of the aggregate.
+                let mut returned = 0_usize;
+                while stray.is_none() {
+                    let Some(mpdu) = rest.next() else {
+                        break;
+                    };
+                    let (buffer, body) = oer_ieee80211_contracts_port::TxMpdu::into_parts(mpdu);
+                    if let Some(body) = body {
+                        match body {}
+                    }
+                    match B::tx_buffer(buffer) {
+                        StationTxBuffer::Large(mpdu) if returned < context.len() => {
+                            self.data.aggregate_mpdu_returned(
+                                &context,
+                                returned,
+                                mpdu,
+                                &mut self.events,
+                            );
+                            returned = returned.saturating_add(1);
+                        }
+                        other => stray = Some(other),
                     }
                 }
-                small @ StationTxBuffer::Small(_) => stray = Some(small),
+                if stray.is_none() && returned == context.len() {
+                    Ok(context)
+                } else {
+                    Err(TxContext::DataAggregate(context))
+                }
             }
-        }
+            // Every subframe stays in the payload it came in.
+            context => Err(context),
+        };
         let context = match context {
-            TxContext::DataAggregate(context)
-                if admitted && stray.is_none() && context.len() == mpdus.len() =>
-            {
-                context
-            }
-            context => {
+            Ok(context) => context,
+            Err(context) => {
                 let reason = if admitted {
                     BackendContractViolation::AggregateMembers
                 } else {
@@ -3245,7 +3262,6 @@ impl<
                     terminal: RejectedTerminal::Aggregate(UnroutedAggregate {
                         context,
                         ticket,
-                        mpdus,
                         stray,
                         rest,
                         outcome,
@@ -3261,7 +3277,6 @@ impl<
             oer_ieee80211_core_roles_sta::data::DataAggregateReturn::TxDone {
                 context,
                 ticket,
-                mpdus,
                 completion: outcome,
             },
             now,
@@ -3394,14 +3409,17 @@ struct AggregateBanks<'s, 'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id, 
     events: &'s mut O,
 }
 
-/// Where each TID may aggregate now: its operational agreement's window,
-/// within the access point's and the port's limits, while the aggregate
-/// rate selection has a rate the port aggregates at.
-fn aggregate_windows<'p, 'id: 'p, B, P, S, C, const GROUPS: usize>(
+/// Where `tid` may aggregate now: its operational agreement's window,
+/// within the access point's and the port's limits and the PPDU time limit
+/// at the aggregate rate, while the aggregate rate selection has a rate the
+/// port aggregates at. The data machine asks only when an MPDU of `tid` is
+/// owed.
+fn aggregate_window<'p, 'id: 'p, B, P, S, C, const GROUPS: usize>(
     station: &PortStation<'id, B, C, GROUPS>,
     rates: &S,
     phase: &mut P,
-) -> [Option<data::AggregateWindow>; 8]
+    tid: data::WmmUserPriority,
+) -> Option<data::AggregateWindow>
 where
     B: StationPort<SlotId: 'id, Backend: 'id> + 'id,
     P: LowerMacPhase<'p, 'id, Caps = B::Caps, Types = B::Types<'id>>,
@@ -3409,31 +3427,23 @@ where
     C: StaCallbacks,
 {
     use oer_ieee80211_contracts_port::AmpduPhase;
-    let none = [None; 8];
     // Only an operational agreement asks for the aggregate rate.
-    if station
-        .tx_aggregate_windows(data::MAX_AGGREGATE, u32::MAX)
-        .iter()
-        .all(Option::is_none)
-    {
-        return none;
-    }
-    let Some(rate) = rates
+    station.tx_block_ack(tid)?;
+    let rate = rates
         .plan(FrameRates::Aggregate, |rate| phase.rate(rate))
-        .map(|plan| plan.into_first().rate)
-    else {
-        return none;
-    };
-    let Ok(rate) = phase.station().ampdu_rate(rate) else {
-        return none;
-    };
+        .map(|plan| plan.into_first().rate)?;
+    let rate = phase.station().ampdu_rate(rate).ok()?;
     // The port's length at the aggregate's rate: the assembler takes no
     // more frames than it holds.
     let capabilities = phase.station().ampdu_capabilities();
-    let Ok(max_length) = capabilities.max_length.at(rate.rate().get()) else {
-        return none;
-    };
-    station.tx_aggregate_windows(usize::from(capabilities.max_subframes), max_length.get())
+    let rate = rate.rate().get();
+    let max_length = capabilities.max_length.at(rate).ok()?;
+    station.tx_aggregate_window(
+        tid,
+        usize::from(capabilities.max_subframes),
+        max_length.get(),
+        rate,
+    )
 }
 
 /// Build one data aggregate through the station interface's builder and
@@ -3475,16 +3485,15 @@ where
     let data::DataAggregate {
         mut context,
         ticket,
-        mpdus,
     } = aggregate;
-    // Every member back to Data, the ticket and permission with them.
+    // Every member back to Data, the ticket and permission with them; each
+    // member's memory waits in Data's bank.
     macro_rules! refuse {
-        ($context:expr, $mpdus:expr, $reason:expr) => {{
+        ($context:expr, $reason:expr) => {{
             let marks = data.aggregate_returned(
                 data::DataAggregateReturn::<'id, _, _, (), ()>::Refused {
                     context: $context,
                     ticket,
-                    mpdus: $mpdus,
                 },
                 now,
                 None,
@@ -3495,23 +3504,23 @@ where
     }
     let protection = match context.protection(link) {
         Ok(protection) => protection,
-        Err(reason) => refuse!(context, mpdus, reason),
+        Err(reason) => refuse!(context, reason),
     };
     let Some(rate) = rates
         .plan(FrameRates::Aggregate, |rate| phase.rate(rate))
         .map(|plan| plan.into_first().rate)
     else {
-        refuse!(context, mpdus, TxRefusal::NoRate);
+        refuse!(context, TxRefusal::NoRate);
     };
     let Ok(rate) = phase.station().ampdu_rate(rate) else {
-        refuse!(context, mpdus, TxRefusal::NoRate);
+        refuse!(context, TxRefusal::NoRate);
     };
     let (Some(receiver), Some(tid), Some(spacing)) = (
         link.recipient(),
         Tid::new(context.tid().value()),
         MpduStartSpacing::new(spacing),
     ) else {
-        refuse!(context, mpdus, TxRefusal::LinkChanged);
+        refuse!(context, TxRefusal::LinkChanged);
     };
     let builder_protection = match protection {
         DataProtection::Open => Some(TxProtection::Open),
@@ -3520,7 +3529,7 @@ where
             .map(|numbered| TxProtection::Ccmp(numbered.key)),
     };
     let Some(builder_protection) = builder_protection else {
-        refuse!(context, mpdus, TxRefusal::PacketNumberExhausted);
+        refuse!(context, TxRefusal::PacketNumberExhausted);
     };
     // A fresh member's source: its class-checked description and the next
     // packet number of the link's key. `Err` returns it unchanged.
@@ -3576,18 +3585,20 @@ where
         SubframeSource::Fresh { buffer, .. } => ReturnedMpdu::Fresh(buffer),
         SubframeSource::Sent(sent) => ReturnedMpdu::Sent(sent),
     };
-    let mut mpdus = mpdus.into_iter();
-    let mut tail = heapless::Vec::<_, { data::MAX_AGGREGATE }>::new();
     let empty = phase
         .station()
         .aggregate(receiver, tid, rate, builder_protection);
-    let first = mpdus.next().ok_or(TxRefusal::LinkChanged).and_then(|mpdu| {
-        source(mpdu, data.aggregate_frame(&context, 0)).map_err(|(mpdu, reason)| {
-            // Capacity is the aggregate's: every member fits.
-            let _kept = tail.push(mpdu).is_ok();
-            reason
-        })
-    });
+    // The first member: its refusal, or the builder's, refuses them all.
+    let first = match data.aggregate_mpdu(&context, 0) {
+        None => Err(TxRefusal::LinkChanged),
+        Some(mpdu) => match source(mpdu, data.aggregate_frame(&context, 0)) {
+            Ok(source) => Ok(source),
+            Err((mpdu, reason)) => {
+                data.aggregate_mpdu_returned(&context, 0, mpdu, &mut *events);
+                Err(reason)
+            }
+        },
+    };
     let pushed = match first {
         Ok(source) => match CheckedAggregate::new(empty, source) {
             Ok(checked) => <B::Types<'id> as TxBufferPool<'id, B::Large>>::push_aggregate(checked)
@@ -3608,27 +3619,24 @@ where
         Err(reason) => {
             // The empty builder holds no subframe: cancelling it releases none.
             let _cancelled = oer_ieee80211_contracts_port::PhaseAggregate::into_parts(empty);
-            let mut all = tail;
-            for mpdu in mpdus {
-                let _kept = all.push(mpdu).is_ok();
-            }
-            refuse!(context, all, reason);
+            refuse!(context, reason);
         }
     };
     let mut builder = match pushed {
         Ok(builder) => builder,
         Err((empty, mpdu, reason)) => {
             let _cancelled = oer_ieee80211_contracts_port::PhaseAggregate::into_parts(empty);
-            let mut all = heapless::Vec::new();
-            let _kept = all.push(mpdu).is_ok();
-            for mpdu in mpdus {
-                let _kept = all.push(mpdu).is_ok();
-            }
-            refuse!(context, all, reason);
+            data.aggregate_mpdu_returned(&context, 0, mpdu, &mut *events);
+            refuse!(context, reason);
         }
     };
     let mut index = 1_usize;
-    while let Some(mpdu) = mpdus.next() {
+    while index < context.len() {
+        let Some(mpdu) = data.aggregate_mpdu(&context, index) else {
+            // The rest goes back to Data, in order, for a later attempt.
+            data.unbuilt(&mut context, index, &mut *events);
+            break;
+        };
         let refused = match source(mpdu, data.aggregate_frame(&context, index)) {
             Err((mpdu, _)) => Some(mpdu),
             Ok(source) => match CheckedAggregate::new(builder, source) {
@@ -3659,11 +3667,8 @@ where
         };
         if let Some(mpdu) = refused {
             // The rest goes back to Data, in order, for a later attempt.
-            let _kept = tail.push(mpdu).is_ok();
-            for mpdu in mpdus.by_ref() {
-                let _kept = tail.push(mpdu).is_ok();
-            }
-            data.unbuilt(&mut context, tail, &mut *events);
+            data.aggregate_mpdu_returned(&context, index, mpdu, &mut *events);
+            data.unbuilt(&mut context, index, &mut *events);
             break;
         }
         index = index.saturating_add(1);

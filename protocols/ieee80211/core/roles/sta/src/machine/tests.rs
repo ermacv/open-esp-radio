@@ -344,7 +344,10 @@ impl EventSink<StaEvent> for Losses {
             StaEvent::TokenLost => self.tokens += 1,
             StaEvent::RsnInputDropped(_) => self.rsn += 1,
             StaEvent::ScanBssObserved(outcome) => self.scan = Some(outcome),
-            StaEvent::DataLost(_) | StaEvent::BufferMemoryUnavailable => {}
+            StaEvent::DataLost(_)
+            | StaEvent::BufferMemoryUnavailable
+            | StaEvent::AggregateSettled(_)
+            | StaEvent::BlockAckRequestSent => {}
         }
     }
 }

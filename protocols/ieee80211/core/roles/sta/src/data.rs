@@ -26,10 +26,10 @@ use oer_ieee80211_contracts_port::{
     SingleOutcome, SizedFrame, TxBufferMemory, TxOutcome,
 };
 use oer_ieee80211_wire::address::IndividualAddress;
+/// The TID of a data attempt ([`StaData::attempt_tid`]).
+pub use oer_ieee80211_wire::qos::WmmUserPriority;
 use oer_ieee80211_wire::{
-    qos::{WmmAccessCategory, WmmUserPriority},
-    sequence::SequenceNumber,
-    station::StaProtectedDataFrame,
+    qos::WmmAccessCategory, sequence::SequenceNumber, station::StaProtectedDataFrame,
 };
 
 use crate::epoch::LinkEpoch;
@@ -340,6 +340,8 @@ pub struct AcPermit {
 /// it. No increment/decrement or metadata lookup reconstructs admission.
 struct Admissions {
     by_category: [u8; 4],
+    /// Every category's permits, none out.
+    full: u8,
 }
 
 impl Admissions {
@@ -348,11 +350,17 @@ impl Admissions {
         let mask = (0..count).fold(0u8, |mask, _| (mask << 1) | 1);
         Self {
             by_category: [mask; 4],
+            full: mask,
         }
     }
 
     fn available(&self, category: WmmAccessCategory) -> u8 {
         *category.select(&self.by_category)
+    }
+
+    /// Whether an attempt of `category` is out at the port.
+    fn outstanding(&self, category: WmmAccessCategory) -> bool {
+        self.available(category) != self.full
     }
 
     fn take(&mut self, category: WmmAccessCategory) -> Option<AcPermit> {
@@ -481,7 +489,7 @@ pub struct StaData<'id, D: StaDataTokens, K, const CAP: usize = 8> {
     /// link's take the first).
     owed: Fifo<OwedMpdu<'id, D, K>, CAP>,
     /// The members of the aggregates out at the port.
-    members: aggregate::MemberBank<K, D::Class, CAP>,
+    members: aggregate::MemberBank<K, D::Class, ReturnedMpdu<D::Buffer, D::Sent>, CAP>,
     admission: Admissions,
     /// The order of the next MSDU.
     next_order: u32,
@@ -496,7 +504,7 @@ pub struct RetiredData<'id, D: StaDataTokens, K, const CAP: usize = 8> {
     buffers: Pool<D::Buffer, CAP>,
     owed: Fifo<OwedMpdu<'id, D, K>, CAP>,
     /// Members of aggregates still out keep their places across a restart.
-    members: aggregate::MemberBank<K, D::Class, CAP>,
+    members: aggregate::MemberBank<K, D::Class, ReturnedMpdu<D::Buffer, D::Sent>, CAP>,
     admission: Admissions,
     next_order: u32,
 }
@@ -861,6 +869,13 @@ impl<
         context: &DataTxContext<'id, K, D::Class, A, D::EpochPath>,
     ) -> bool {
         Some(context.link) == self.link
+    }
+
+    /// The TID of the next attempt [`Self::poll_attempt`] or
+    /// [`Self::poll_action`] makes, until the machine changes: a service
+    /// asks for that TID's aggregate window only then.
+    pub fn attempt_tid(&self) -> Option<WmmUserPriority> {
+        self.next_tid()
     }
 
     /// The TID of the earliest owed MSDU of an admitted category, whatever

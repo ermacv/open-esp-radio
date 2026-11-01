@@ -170,16 +170,22 @@ Module map:
   and is taken when the MPDU goes to the port, so the buffers (up to the
   machine's `CAP`, one queue for every TID in their order) may outnumber
   the tickets. `data::aggregate`: under an operational transmit agreement
-  (`Station::tx_aggregate_windows`) a TID's owed MPDUs whose sequence
-  numbers follow one another inside the window go as one A-MPDU
-  (`StaData::poll_attempt`), at most the port's subframes and the lower of
-  the access point's Maximum A-MPDU Length and the port's length at the
-  aggregate's rate (`AmpduCapabilities::max_length`), counted before any
+  (`Station::tx_aggregate_window`, asked only for the TID of the next
+  attempt) a TID's owed MPDUs whose sequence numbers follow one another
+  inside the window go as one A-MPDU (`StaData::poll_attempt`), at most the
+  port's subframes, the lower of the access point's Maximum A-MPDU Length
+  and the port's length at the aggregate's rate
+  (`AmpduCapabilities::max_length`), and the rate's PPDU time limit
+  (`PhyRate::max_txtime_micros`, 5484 us for HT-mixed), counted before any
   MSDU leaves its queue; one ticket and
   one admission permission serve the aggregate. Each member's description
   waits in the machine's member bank (one place per buffer, `CAP`) while
   the aggregate is out; its context carries only the places, in subframe
-  order, so it is no larger than a single MPDU's. Its terminal (`StaData::aggregate_returned`) retires
+  order, so it is no larger than a single MPDU's. Each member's memory
+  waits at its place too until the port's builder takes it
+  (`StaData::aggregate_mpdu`), and a terminal gives it back there
+  (`StaData::aggregate_mpdu_returned`): neither the attempt nor its return
+  carries the members' memory by value. Its terminal (`StaData::aggregate_returned`) retires
   acknowledged members and returns missing ones, published, to their queue
   until their MSDU lifetime or the policy's attempts on the air run out
   (`StaTxBlockAckPolicy::retry_members`). Each data terminal reports what it
