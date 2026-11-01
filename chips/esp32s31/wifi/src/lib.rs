@@ -534,6 +534,23 @@ pub mod station;
 pub use dma::{DmaError, DmaResources};
 #[cfg(target_arch = "riscv32")]
 pub use oer_esp32s31_ieee80211_driver::port::NetworkPeers;
+/// One reading of the S31 receive driver's counters.
+#[cfg(target_arch = "riscv32")]
+pub use oer_esp32s31_ieee80211_driver::rx::counters::WifiRxReport;
+
+/// The receive driver's counters, once the station's receive path is bound:
+/// a trace build's diagnostic reading, never a product value.
+#[cfg(all(target_arch = "riscv32", oer_trace))]
+pub(crate) static RX_COUNTERS: oer_memory::OnceValue<
+    &'static oer_esp32s31_ieee80211_driver::rx::counters::WifiRxCounters,
+> = oer_memory::OnceValue::new();
+
+/// The receive driver's counters now; `None` before the station's receive
+/// path was first bound. Only a trace build reads them.
+#[cfg(all(target_arch = "riscv32", oer_trace))]
+pub fn rx_counters() -> Option<WifiRxReport> {
+    RX_COUNTERS.get().map(|counters| counters.report())
+}
 // The facade's own API, not aliases of backend or runtime modules.
 #[cfg(target_arch = "riscv32")]
 pub use chip::{

@@ -30,7 +30,7 @@ wifi::bind_station! {
         callbacks: crate::station::Callbacks,
         observer: oer_trace::Noop,
         driver_observer: crate::load::parts::DriverObserver,
-        sink: (),
+        sink: crate::load::parts::StationSink,
         engine: oer_esp32s31_compose::crypto::KeyUnwrapEngine,
         events: crate::station::Events,
         fail: crate::station::radio::failure,

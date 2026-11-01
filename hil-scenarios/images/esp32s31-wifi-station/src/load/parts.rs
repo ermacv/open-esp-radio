@@ -361,6 +361,10 @@ impl oer_trace::Observer for Observer {
         if let Some(frame) = Self::decoded::<E, super::counters::BridgeFrame>(event) {
             super::counters::observe(frame);
         }
+        type StationRx = oer_esp32s31_wifi::observation::StationRx;
+        if let Some(decision) = Self::decoded::<E, StationRx>(event) {
+            super::counters::observe_station(decision);
+        }
         if let Some(sample) = Self::decoded::<E, oer_trace::profile::PcSample>(event) {
             super::sampler::record(sample);
         }
@@ -380,6 +384,17 @@ pub type DriverObserver = oer_trace::Noop;
 const OBSERVER: Observer = Observer;
 #[cfg(all(target_arch = "riscv32", not(oer_trace)))]
 const OBSERVER: oer_trace::Noop = oer_trace::Noop;
+
+/// The station service's event sink: in a trace build its receive
+/// decisions go to the image's observer; otherwise the sink is disabled
+/// and the service builds no event.
+#[cfg(target_arch = "riscv32")]
+pub type StationSink = oer_esp32s31_wifi::observation::TracedStationEvents<DriverObserver>;
+
+/// The station service's event sink.
+#[cfg(target_arch = "riscv32")]
+pub(crate) const STATION_SINK: StationSink =
+    oer_esp32s31_wifi::observation::TracedStationEvents(OBSERVER);
 
 /// Report what the network bridge did with one frame.
 #[cfg(target_arch = "riscv32")]

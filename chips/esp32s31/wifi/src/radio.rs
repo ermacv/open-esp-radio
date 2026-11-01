@@ -286,6 +286,9 @@ async fn install<W: Binding>(
             },
         )
         .map_err(|_| InitializationError::Rx)?;
+    // Every bind lends the same static arena's counters: the first stays.
+    #[cfg(oer_trace)]
+    let _bound = crate::RX_COUNTERS.set(rx.counters());
     let storage = boot.storage;
     let device = storage
         .device

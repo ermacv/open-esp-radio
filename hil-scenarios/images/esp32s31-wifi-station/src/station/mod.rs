@@ -250,7 +250,7 @@ async fn work(inputs: Inputs, network: &crate::load::serve::Network) -> Infallib
         credentials,
         Callbacks(nonces),
         oer_trace::Noop,
-        (),
+        crate::load::parts::STATION_SINK,
     ) {
         Ok(profile) => profile,
         Err(error) => {

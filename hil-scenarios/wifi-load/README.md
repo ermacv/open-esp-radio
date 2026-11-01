@@ -32,8 +32,32 @@ with an open poll's part, and the mean and longest of the ended polls), and
 the window's counters (the hart's cycles and retired instructions, their
 rate per microsecond and per cycle, the network bridge's taken and refused
 frames, the IP stack's received frames with the hart's instructions over
-them, and the L1 cache's `cache` counts). The idle baseline records the
-parts and counters too.
+them, the L1 cache's `cache` counts and the receive path's `rx` counts).
+The idle baseline records the parts and counters too.
+
+`rx` holds the window's differences of the receive path, counted only by
+a trace build (zeros otherwise). `driver` is the S31 receive driver's
+`WifiRxCounters` (`available` false when they were not readable at both
+ends): `mac_irqs`, staged `units` and `bytes`, `overload_drops` (bulk
+units dropped, after the hardware acknowledged them, with only the
+admission's critical reserve of staging left), `admission_blocks` (units
+left at the ring head without a credit), `stage_capacity_blocks`, the
+chained, oversized, empty and too-long drops, `service_passes`,
+`service_errors`, `capacity_drains`, continuations taken at once or after
+a wait, and the RX-control prefix's refusals: `rx_failures` (a failed RX
+state, the FCS among them), `mic_failures`, `quarantined` and
+`prefix_other`. The driver keeps no count of the MAC's hardware
+buffer-full events. `station` is the station service's receive decisions:
+`port_events_lost`, frames `dropped_…` by reason (`replay`, `integrity`,
+`security`, …), MSDUs `refused_…` (`too_long`, `queue_full`,
+`no_network`) and `copied_…` (`aggregated`, `kept`), the MPDUs the
+receive agreements admitted `mpdus_in_ampdu`, `mpdus_single` or
+`mpdus_unknown`, the reorder's released MPDUs `released_in_order`,
+`released_by_timeout`, `released_by_bar`, `released_by_stop` and skipped
+sequences `missing_by_timeout`, `missing_other`, its `duplicates` and
+`rejected` input, `agreements_started`, `agreements_stopped`, the latest
+agreement's negotiated `agreement_window` at the window's end, and
+`rsn_inputs_dropped`.
 
 `cache` holds one entry per cache bus the image counts, cleared at the
 window's start: `ibus0` (hart 0's instruction fetches through L1-ICache0)

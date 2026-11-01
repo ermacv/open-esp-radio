@@ -116,6 +116,12 @@ without a profile answers `NotSampled`.
   and reads each bus's hits, misses, conflicts, next-level reads (a data
   bus also its next-level writes) and overflow bit at both ends, with the
   configured cache geometry at the end. Hart 1 does not run in this image.
+  The receive path's counts come from the same readings: the S31 driver's
+  receive counters, which a trace build of the Wi-Fi facade lends
+  (`oer_esp32s31_wifi::rx_counters`), and the station service's receive
+  decisions, which the facade's `TracedStationEvents` sink reports as
+  `StationRx` events to the image's observer, in the station work's task.
+  Without `oer_trace` that sink is disabled and the service builds no event.
 - **Samples** (`src/load/sampler.rs`). A run whose `Start` has a `profile`
   starts `oer_esp32s31_compose::sampler` on TIMG1 T0 at the window's start
   and asks it to stop at the window's end, before the end's readings. Its

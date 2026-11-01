@@ -90,6 +90,7 @@ fn the_largest_reports_fit_one_response() {
         stack_received: u32::MAX,
         cache: full_cache(),
         cache_geometry: full_geometry(),
+        rx: full_rx(),
     });
     assert!(postcard::to_slice(&counters, &mut buffer).unwrap().len() <= 512);
     let samples = SamplesCollected::Page(Samples {
@@ -194,6 +195,7 @@ fn the_window_s_cache_counts_and_geometry_round_trip() {
         CountersCollected::Report(Counters {
             cache: full_cache(),
             cache_geometry: full_geometry(),
+            rx: full_rx(),
             ..counters
         }),
     ] {
@@ -203,6 +205,109 @@ fn the_window_s_cache_counts_and_geometry_round_trip() {
             message
         );
     }
+}
+
+/// Every receive count at its largest.
+fn full_rx() -> RxCounts {
+    let all = u32::MAX;
+    RxCounts {
+        driver: DriverRx {
+            available: true,
+            mac_irqs: all,
+            units: all,
+            bytes: all,
+            overload_drops: all,
+            admission_blocks: all,
+            stage_capacity_blocks: all,
+            chained_drops: all,
+            oversized_drops: all,
+            empty_drops: all,
+            too_long_drops: all,
+            service_passes: all,
+            service_errors: all,
+            capacity_drains: all,
+            continued_immediately: all,
+            continued_after_wait: all,
+            rx_failures: all,
+            mic_failures: all,
+            quarantined: all,
+            prefix_other: all,
+        },
+        station: StationRx {
+            port_events_lost: all,
+            dropped_header: all,
+            dropped_frame_kind: all,
+            dropped_address: all,
+            dropped_fragmented: all,
+            dropped_protection: all,
+            dropped_integrity: all,
+            dropped_replay: all,
+            dropped_payload: all,
+            dropped_not_connected: all,
+            dropped_security: all,
+            dropped_draining: all,
+            refused_too_long: all,
+            refused_queue_full: all,
+            refused_no_network: all,
+            copied_aggregated: all,
+            copied_kept: all,
+            mpdus_in_ampdu: all,
+            mpdus_single: all,
+            mpdus_unknown: all,
+            released_in_order: all,
+            released_by_timeout: all,
+            released_by_bar: all,
+            released_by_stop: all,
+            missing_by_timeout: all,
+            missing_other: all,
+            duplicates: all,
+            rejected: all,
+            agreements_started: all,
+            agreements_stopped: all,
+            agreement_window: u16::MAX,
+            rsn_inputs_dropped: all,
+        },
+    }
+}
+
+#[test]
+fn a_receive_window_takes_wrapping_differences_and_the_end_s_agreement_window() {
+    let start = RxCounts {
+        driver: DriverRx {
+            available: true,
+            units: u32::MAX,
+            overload_drops: 3,
+            ..DriverRx::default()
+        },
+        station: StationRx {
+            released_by_timeout: 10,
+            agreement_window: 32,
+            ..StationRx::default()
+        },
+    };
+    let end = RxCounts {
+        driver: DriverRx {
+            available: true,
+            units: 4,
+            overload_drops: 9,
+            ..DriverRx::default()
+        },
+        station: StationRx {
+            released_by_timeout: 12,
+            agreement_window: 16,
+            ..StationRx::default()
+        },
+    };
+    let driver = DriverRx::window(&start.driver, &end.driver);
+    assert_eq!((driver.units, driver.overload_drops), (5, 6));
+    assert!(driver.available);
+    let station = StationRx::window(&start.station, &end.station);
+    assert_eq!(
+        (station.released_by_timeout, station.agreement_window),
+        (2, 16)
+    );
+    // A reading the image could not take makes the window's unavailable.
+    assert!(!DriverRx::window(&DriverRx::default(), &end.driver).available);
 }
 
 #[test]
