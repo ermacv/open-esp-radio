@@ -82,11 +82,12 @@ const MCAUSE_CODE: u32 = 0x0fff;
 /// exception as its post-mortem, the trap's registers apart from what the
 /// exception hook read after the stop.
 ///
-/// A boot reads the record before it prints it and clears it only once the
-/// print reached the console whole; until then every boot serves it, the
-/// printing one included. After the device's own restart the console
-/// reconnects while the boot prints, so the boot after a board reset may
-/// serve the same record again; it must not differ, and the boot after one
+/// A boot reads the records before it prints them and clears each only once
+/// its print reached the console whole; until then every boot serves it,
+/// the printing one included. The trap and the observations are two records,
+/// printed and cleared independently. After the device's own restart the
+/// console reconnects while the boot prints, so the boot after a board reset
+/// may serve what is left ([`left_after_a_reset`]), and the boot after one
 /// more board reset, whose predecessor printed with the console open, serves
 /// none.
 fn exception(cx: &mut Cx<'_>) -> Result<(), Failure> {
@@ -101,14 +102,8 @@ fn exception(cx: &mut Cx<'_>) -> Result<(), Failure> {
     );
     cx.reset()?;
     let again = cx.call(GetBootStatus, STATUS_TIMEOUT)?.post_mortem;
-    let served_again = again.is_some();
-    cx.measure("exception-served-after-one-reset", served_again.into());
-    if let Some(summary) = &again {
-        check(
-            summary.fault.as_ref() == Some(&Fault::Exception(fault)),
-            format!("the next boot serves another record: {summary:?}"),
-        )?;
-    }
+    let left = left_after_a_reset(&fault, again.as_ref()).map_err(Failure::Fail)?;
+    cx.measure("exception-left-after-one-reset", left.into());
     cx.reset()?;
     let cleared = cx.call(GetBootStatus, STATUS_TIMEOUT)?;
     check(
@@ -118,6 +113,33 @@ fn exception(cx: &mut Cx<'_>) -> Result<(), Failure> {
             cleared.post_mortem
         ),
     )
+}
+
+/// What a later boot may serve of `fault`'s two records, each cleared on its
+/// own once printed whole: nothing; the trap alone (its observations were
+/// cleared, or never pair with it again); or both, unchanged. The trap
+/// alone cannot change, and observations without their trap are never
+/// served. The answer names which one it was.
+fn left_after_a_reset(
+    fault: &ExceptionFault,
+    again: Option<&PostMortemSummary>,
+) -> Result<&'static str, String> {
+    let Some(summary) = again else {
+        return Ok("none");
+    };
+    match &summary.fault {
+        Some(Fault::Exception(later)) if later.trap == fault.trap => match &later.observed {
+            None => Ok("trap"),
+            Some(observed) if Some(observed) == fault.observed.as_ref() => {
+                Ok("trap and observations")
+            }
+            Some(observed) => Err(format!(
+                "the trap's observations changed: {observed:?}, first {:?}",
+                fault.observed
+            )),
+        },
+        _ => Err(format!("a later boot serves another record: {summary:?}")),
+    }
 }
 
 /// The illegal-instruction exception `evidence` holds as its post-mortem, or
@@ -642,8 +664,15 @@ mod tests {
     }
 
     fn illegal(mcause: u32, line: Option<oer_hil_protocol::base::TrapLine>) -> Fault {
+        Fault::Exception(illegal_fault(mcause, line))
+    }
+
+    fn illegal_fault(
+        mcause: u32,
+        line: Option<oer_hil_protocol::base::TrapLine>,
+    ) -> ExceptionFault {
         use oer_hil_protocol::base::{TrapObservation, TrapState};
-        Fault::Exception(ExceptionFault {
+        ExceptionFault {
             trap: TrapState {
                 hart: 0,
                 mcause,
@@ -660,7 +689,7 @@ mod tests {
                 pending: [0; 6],
                 line,
             }),
-        })
+        }
     }
 
     #[test]
@@ -680,6 +709,36 @@ mod tests {
         let mut none = evidence(None);
         none.post_mortem = None;
         assert!(trapped(&none).is_err());
+    }
+
+    #[test]
+    fn a_later_boot_may_serve_what_is_left_of_the_trap_but_nothing_else() {
+        let fault = illegal_fault(0x3800_0002, None);
+        let summary = |fault: Option<Fault>| PostMortemSummary {
+            boot_count: 1,
+            checkpoints: 0,
+            fault,
+        };
+        let served = |later: ExceptionFault| summary(Some(Fault::Exception(later)));
+        assert_eq!(left_after_a_reset(&fault, None), Ok("none"));
+        assert_eq!(
+            left_after_a_reset(&fault, Some(&served(fault.clone()))),
+            Ok("trap and observations")
+        );
+        let mut trap_alone = fault.clone();
+        trap_alone.observed = None;
+        assert_eq!(
+            left_after_a_reset(&fault, Some(&served(trap_alone))),
+            Ok("trap")
+        );
+        let mut changed = fault.clone();
+        if let Some(observed) = changed.observed.as_mut() {
+            observed.pending[0] = 1;
+        }
+        assert!(left_after_a_reset(&fault, Some(&served(changed))).is_err());
+        let other = illegal_fault(0x3800_0005, None);
+        assert!(left_after_a_reset(&fault, Some(&served(other))).is_err());
+        assert!(left_after_a_reset(&fault, Some(&summary(None))).is_err());
     }
 
     #[test]

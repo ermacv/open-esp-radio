@@ -1117,6 +1117,11 @@ topics! {
     PilotWindow = 79, pilot_window, "OPEN_RADIO_HIL pilot-window"
         ("tick" tick: dec, "events" events: dec, "lost" lost: dec, "cpu-hz" hz: dec,
          "capacity" capacity: dec);
+    /// The trap vector registers an exception hook read after the trap
+    /// whose `mepc` it names, so that its other observations pair with that
+    /// trap's `fatal_exception`.
+    FatalTrapVectors = 80, fatal_trap_vectors, "fatal trap_vectors"
+        ("mepc" mepc: hex8, "mtvec" mtvec: hex8, "mtvt" mtvt: hex8);
 }
 
 impl Topic {

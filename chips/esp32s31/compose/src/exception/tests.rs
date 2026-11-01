@@ -4,9 +4,21 @@ use oer_diagnostics::note::Topic;
 
 use super::*;
 
+const TRAP: TrapIdentity = TrapIdentity {
+    mcause: 0x3800_0002,
+    mepc: 0x5013_1378,
+    mtval: 0,
+    ra: 0x5003_0aa4,
+    sp: 0x5019_f080,
+};
+
 fn interrupt(stopped: bool) -> Observed {
     Observed {
         hart: 0,
+        trap: TrapIdentity {
+            mcause: 0x8000_0017,
+            ..TRAP
+        },
         stopped,
         mtvec: 0x4000_0003,
         mtvt: 0x4000_0400,
@@ -23,6 +35,7 @@ fn interrupt(stopped: bool) -> Observed {
 fn exception() -> Observed {
     Observed {
         hart: 1,
+        trap: TRAP,
         stopped: true,
         mtvec: 0x4000_0003,
         mtvt: 0x4000_0400,
@@ -36,6 +49,7 @@ fn reported(record: &mut Record) -> Result<Vec<&'static str>, ()> {
     let mut notes = Vec::new();
     report(record, |note| {
         notes.push(match note.topic {
+            Topic::FatalTrapVectors => "vectors",
             Topic::FatalIrqVector => "vector",
             Topic::FatalIrqPending => "pending",
             Topic::FatalIrqRouted => "routed",
@@ -62,7 +76,7 @@ fn an_interrupt_under_the_stop_reports_its_line_pending_and_routes_then_clears()
     let mut record = interrupt(true).record().unwrap();
     assert_eq!(
         reported(&mut record),
-        Ok(vec!["vector", "pending", "routed"])
+        Ok(vec!["vectors", "vector", "pending", "routed"])
     );
     assert!(record.peek().is_err());
 }
@@ -70,13 +84,57 @@ fn an_interrupt_under_the_stop_reports_its_line_pending_and_routes_then_clears()
 #[test]
 fn routes_read_without_the_stop_are_not_reported() {
     let mut record = interrupt(false).record().unwrap();
-    assert_eq!(reported(&mut record), Ok(vec!["vector", "pending"]));
+    assert_eq!(
+        reported(&mut record),
+        Ok(vec!["vectors", "vector", "pending"])
+    );
 }
 
 #[test]
-fn an_exception_names_no_line_and_reports_only_what_was_pending() {
+fn an_exception_names_no_line_and_reports_its_vector_registers_and_pending_sources() {
     let mut record = exception().record().unwrap();
-    assert_eq!(reported(&mut record), Ok(vec!["pending"]));
+    assert_eq!(reported(&mut record), Ok(vec!["vectors", "pending"]));
+}
+
+fn previous(
+    hart: u32,
+    trap: TrapIdentity,
+) -> oer_espressif_staged_runtime::trap::PreviousException {
+    oer_espressif_staged_runtime::trap::PreviousException {
+        hart,
+        mcause: trap.mcause,
+        mepc: trap.mepc,
+        mtval: trap.mtval,
+        ra: trap.ra,
+        sp: trap.sp,
+        mscratch: 0x5019_f080,
+    }
+}
+
+#[test]
+fn observations_follow_only_the_trap_whose_registers_they_copied() {
+    let observed = exception();
+    assert!(observed.follows(&previous(1, TRAP)));
+    // Another hart, or another trap that left an older record behind.
+    assert!(!observed.follows(&previous(0, TRAP)));
+    for other in [
+        TrapIdentity {
+            mepc: 0x5013_0000,
+            ..TRAP
+        },
+        TrapIdentity {
+            sp: 0x5019_f000,
+            ..TRAP
+        },
+        TrapIdentity {
+            mcause: 0x3800_0005,
+            ..TRAP
+        },
+        TrapIdentity { mtval: 4, ..TRAP },
+        TrapIdentity { ra: 0, ..TRAP },
+    ] {
+        assert!(!observed.follows(&previous(1, other)), "{other:?}");
+    }
 }
 
 #[test]
@@ -98,7 +156,7 @@ fn a_refused_note_keeps_the_record_until_a_whole_report() {
         );
         assert_eq!(
             reported(&mut record),
-            Ok(vec!["vector", "pending", "routed"])
+            Ok(vec!["vectors", "vector", "pending", "routed"])
         );
         assert!(record.peek().is_err());
     }

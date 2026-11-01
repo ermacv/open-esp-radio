@@ -52,7 +52,7 @@ pub use console::{Console, ConsolePeripheral, UsbConsole};
 
 /// What the interrupt controller showed after the previous boot's
 /// exception trapped.
-pub use oer_esp32s31_compose::exception::{LineView, Observed};
+pub use oer_esp32s31_compose::exception::{LineView, Observed, TrapIdentity};
 /// Why a hart left reset.
 pub use oer_esp32s31_hal::peripherals::reset_cause::ResetCause;
 /// The record of the previous boot's panic.
@@ -170,7 +170,10 @@ pub struct Evidence {
 /// The previous boot's CPU exception: the registers the runtime retained at
 /// the trap, before it stopped the other hart, and what the library's
 /// exception hook read after that stop. The second is no snapshot of the
-/// trap's instant: a source may have become pending in between.
+/// trap's instant: a source may have become pending in between. It is
+/// `None` when no record of the hook follows this trap: the hook did not
+/// commit one, the boot printed and cleared it, or the record left is of an
+/// earlier trap (`Observed::follows`).
 #[derive(Clone, Copy, Debug)]
 pub struct ExceptionEvidence {
     pub trap: PreviousException,
@@ -316,7 +319,10 @@ where
         oer_espressif_staged_runtime::trap::peek_previous_exception().map(|trap| {
             ExceptionEvidence {
                 trap,
-                observed: oer_esp32s31_compose::exception::peek_previous(),
+                // Only the observations of this trap: an earlier trap's
+                // record may outlive it.
+                observed: oer_esp32s31_compose::exception::peek_previous()
+                    .filter(|observed| observed.follows(&trap)),
             }
         });
     let Some(root) = Root::take() else {

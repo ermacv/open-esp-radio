@@ -12,6 +12,14 @@
 //! a route changed, in between. The record states whether the stop held;
 //! without it, routes and the line are not read.
 //!
+//! The two records are committed and cleared independently: a hook that
+//! faults before its commit leaves an earlier trap's observations behind,
+//! and a print may clear one record and keep the other. The record therefore
+//! copies the frame's identifying registers ([`TrapIdentity`]); an image
+//! pairs it with a retained trap only when they match
+//! ([`Observed::follows`]), and its printed notes start with the `mepc` of
+//! their trap (`fatal_trap_vectors`).
+//!
 //! Every step is a register read through a typed accessor or a bounded
 //! copy, without allocation, waiting or a panic path, so the hook stays a
 //! short leaf of the fatal path. The next boot's [`report_previous`] prints
@@ -50,6 +58,10 @@ oer_espressif_staged_runtime::retained_static! {
 pub struct Observed {
     /// The hart that trapped.
     pub hart: u32,
+    /// The trap these observations follow, copied from the frame the
+    /// runtime retained first: the observations belong to a retained trap
+    /// only when it holds the same values ([`Observed::follows`]).
+    pub trap: TrapIdentity,
     /// Whether the fatal path stopped the other hart before the reads.
     pub stopped: bool,
     /// `mtvec` and `mtvt` as read.
@@ -60,6 +72,17 @@ pub struct Observed {
     /// For an interrupt of a line without a handler: the line and what was
     /// routed to it.
     pub line: Option<LineView>,
+}
+
+/// The registers that name one trap: the frame's `mcause`, `mepc`, `mtval`,
+/// `ra` and `sp`.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct TrapIdentity {
+    pub mcause: u32,
+    pub mepc: u32,
+    pub mtval: u32,
+    pub ra: u32,
+    pub sp: u32,
 }
 
 /// An interrupt line as read after the trap.
@@ -82,6 +105,11 @@ pub struct LineView {
 #[repr(C)]
 struct Payload {
     flags: u32,
+    mcause: u32,
+    mepc: u32,
+    mtval: u32,
+    ra: u32,
+    sp: u32,
     mtvec: u32,
     mtvt: u32,
     vector: u32,
@@ -91,6 +119,24 @@ struct Payload {
     routed: [u32; SOURCE_WORDS],
 }
 
+impl Observed {
+    /// Whether these observations follow `trap`, the runtime's retained
+    /// frame: the same hart and the same identifying registers. Records of
+    /// two traps are cleared independently, so a record of an earlier trap
+    /// can outlive it; it then follows no later trap.
+    pub fn follows(&self, trap: &oer_espressif_staged_runtime::trap::PreviousException) -> bool {
+        self.hart == trap.hart
+            && self.trap
+                == TrapIdentity {
+                    mcause: trap.mcause,
+                    mepc: trap.mepc,
+                    mtval: trap.mtval,
+                    ra: trap.ra,
+                    sp: trap.sp,
+                }
+    }
+}
+
 #[cfg(any(test, target_arch = "riscv32"))]
 impl Observed {
     fn payload(&self) -> Payload {
@@ -98,6 +144,11 @@ impl Observed {
         Payload {
             flags: (if self.stopped { STOPPED } else { 0 })
                 | (if self.line.is_some() { INTERRUPT } else { 0 }),
+            mcause: self.trap.mcause,
+            mepc: self.trap.mepc,
+            mtval: self.trap.mtval,
+            ra: self.trap.ra,
+            sp: self.trap.sp,
             mtvec: self.mtvec,
             mtvt: self.mtvt,
             vector: u32::from(line.vector),
@@ -130,6 +181,13 @@ impl Observed {
         };
         Some(Self {
             hart: view.hart,
+            trap: TrapIdentity {
+                mcause: payload.mcause,
+                mepc: payload.mepc,
+                mtval: payload.mtval,
+                ra: payload.ra,
+                sp: payload.sp,
+            },
             stopped: payload.flags & STOPPED != 0,
             mtvec: payload.mtvec,
             mtvt: payload.mtvt,
@@ -213,6 +271,13 @@ fn observe(
     });
     Observed {
         hart: registers.hart as u32,
+        trap: TrapIdentity {
+            mcause: frame.mcause,
+            mepc: frame.mepc,
+            mtval: frame.mtval,
+            ra: frame.ra,
+            sp: frame.sp,
+        },
         stopped: stop.is_ok(),
         mtvec: registers.mtvec as u32,
         mtvt: registers.mtvt as u32,
@@ -293,6 +358,12 @@ fn report(
     record
         .report(|view| {
             let observed = Observed::from_record(&view).ok_or(())?;
+            // Names the trap, by its `mepc`, that the other notes follow.
+            emit(&Note::fatal_trap_vectors(
+                observed.trap.mepc,
+                observed.mtvec,
+                observed.mtvt,
+            ))?;
             // An exception names no line: only an interrupt has one.
             if let Some(line) = observed.line {
                 emit(&Note::fatal_irq_vector(

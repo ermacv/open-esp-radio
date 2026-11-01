@@ -785,10 +785,14 @@ The current mechanisms have narrower guarantees than the policy:
   exception hook (`oer-esp32s31-compose::exception`). It repeats none of the
   frame's registers: after the stop it samples the trapping hart's pending
   sources and, for an interrupt of a line without a handler, the routes to
-  that line and its state, recording whether the stop held. The next boot
-  prints the frame and those observations as separate records, and an SDK
-  boot serves both to HIL (`Fault::Exception`, the trap's registers apart
-  from the observations). The RX-chain supplement uses the entry-time
+  that line and its state, recording whether the stop held, and copies the
+  frame's identifying registers. The next boot prints the frame and those
+  observations as separate records, each cleared on its own once printed
+  whole; the observation notes name their trap's `mepc`. An SDK boot serves
+  both to HIL (`Fault::Exception`, the trap's registers apart from the
+  observations), attaching the observations only to the trap whose
+  registers they copied: a hook that faulted before its commit leaves an
+  earlier trap's record behind. The RX-chain supplement uses the entry-time
   cause/PC/trap value. Neither the frame nor the sequential samples are an
   atomic snapshot of all hardware.
   The route and line view (`fatal_view`) exists only in the boot hart's
