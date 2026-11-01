@@ -142,7 +142,7 @@ use oer_ieee80211_core_roles_sta::{
         StaKeyUnwrapRequest, StaNotice, StaTokens, StaTransmit, StaTxContext, Station,
     },
 };
-use oer_ieee80211_core_upper_mac::block_ack::RxDisposition;
+use oer_ieee80211_core_upper_mac::block_ack::{Parked, RxDisposition};
 use oer_ieee80211_core_upper_mac::rate_selection::{FrameRates, RateSelection};
 use oer_memory::{SlotReceiver, WakingSpscReceiver, WakingSpscSender};
 use oer_network_port::LentFrame;
@@ -1880,8 +1880,9 @@ impl<
                 self.pending.unwrap = Some(waiting);
             }
             let sending = self.data.accepts() && self.station.link().is_some();
+            // Frames wait in delivery order for the network's next return.
+            let parked = self.pending.receive.has_ready();
             let (event, command_ready, tick, transmit, unwrapped) = {
-                let event = phase.next_event();
                 let command = async {
                     match embassy_futures::select::select(
                         io.control.wait_for_stop(),
@@ -1901,15 +1902,17 @@ impl<
                 };
                 let transmit_ready = io.transmit.ready();
                 let mut transmit_ready = core::pin::pin!(transmit_ready);
-                let mut event = core::pin::pin!(event);
                 let mut command = core::pin::pin!(command);
                 let mut alarm = core::pin::pin!(alarm);
                 poll_fn(|cx| {
                     B::span(ServiceSpan::Sources, false);
-                    let event = match event.as_mut().poll(cx) {
+                    // A cancelled wait loses no event, so each poll makes
+                    // its own and the phase stays free for the lend room.
+                    let event = match core::pin::pin!(phase.next_event()).poll(cx) {
                         Poll::Ready(event) => Some(event),
                         Poll::Pending => None,
                     };
+                    let room = parked && phase.poll_lend_room(cx).is_ready();
                     let command_ready = if accepting_commands {
                         match command.as_mut().poll(cx) {
                             Poll::Ready(stop) => Some(stop),
@@ -1932,6 +1935,7 @@ impl<
                         Poll::Pending => None,
                     };
                     if event.is_some()
+                        || room
                         || command_ready.is_some()
                         || alarm_ready
                         || policy_ready
@@ -2511,7 +2515,11 @@ impl<
         'id: 'p,
         P: LowerMacPhase<'p, 'id, Caps = B::Caps, Types = B::Types<'id>>,
     {
-        if let Some((frame, meta)) = self.pending.receive.pop_ready() {
+        // Frames in delivery order wait while the network is at its lend
+        // limit; its next return wakes the sources ([`Self::serve`]).
+        if !Self::network_full(phase, io)
+            && let Some((frame, meta)) = self.pending.receive.pop_ready()
+        {
             if let Some(frame) = self.deliver_received(now, frame, meta, phase, io) {
                 B::span(ServiceSpan::Recycle, false);
                 phase.recycle(frame);
@@ -2618,7 +2626,50 @@ impl<
                     return Err(ServiceFault::RxBlockAckCapacity.into());
                 }
             };
+        // A data frame waits behind the frames already waiting, or while the
+        // network is at its lend limit: the frame is neither copied nor
+        // dropped, and the driver keeps further units in its ring.
+        if Self::network_full(phase, io) || self.pending.receive.has_ready() {
+            return match self.pending.receive.park(frame, meta) {
+                Parked::Waiting => Ok(None),
+                Parked::Deliver((frame, meta)) => {
+                    Ok(self.deliver_received(now, frame, meta, phase, io))
+                }
+                Parked::Capacity(frame) => {
+                    phase.recycle(frame);
+                    Err(ServiceFault::RxBlockAckCapacity.into())
+                }
+            };
+        }
         Ok(self.deliver_received(now, frame, meta, phase, io))
+    }
+
+    /// Whether the network takes frames and holds all it may: a lend would
+    /// be refused for capacity.
+    fn network_full<
+        'p,
+        P,
+        const TX_DEPTH: usize,
+        const RX_DEPTH: usize,
+        const COMMAND_DEPTH: usize,
+    >(
+        phase: &P,
+        io: &ServiceIo<
+            '_,
+            B::Caps,
+            impl ServiceOutputSink<B::Caps>,
+            B::LentRx,
+            TX_DEPTH,
+            RX_DEPTH,
+            COMMAND_DEPTH,
+            impl Notifies,
+        >,
+    ) -> bool
+    where
+        'id: 'p,
+        P: LowerMacPhase<'p, 'id, Caps = B::Caps, Types = B::Types<'id>>,
+    {
+        io.network.takes_frames() && !phase.lend_room()
     }
 
     /// Deliver one received frame's MSDUs to the network queue. A frame

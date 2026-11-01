@@ -149,66 +149,57 @@ fn addba_programs_an_owned_bank_before_response_and_reorders_downlink() {
     assert!(counters.rx_msdus_refused().is_empty());
 }
 
-#[test]
-fn a_full_receive_queue_reports_one_aggregate_per_refused_frame() {
-    let counters = run_with(ht_config(), |world| {
-        Box::pin(async move {
-            let mut seen = 0;
-            connected(world, &mut seen).await;
-            // The test's network queue holds eight MSDUs; nothing drains it.
-            for sequence in 1..=10 {
-                world
-                    .air
-                    .receive(&data(sequence, 0, sequence as u8), meta());
-                for _ in 0..20 {
-                    yield_now().await;
-                }
+/// Ten MSDUs reach a network that takes four lent frames at once and
+/// returns them only when the test drains it. The station holds four more
+/// back in order; the model's ring keeps nothing beyond the station's four
+/// units, so the last two are lost there, before the station, as on air.
+fn held_back<'w>(world: &'w Application<'w, '_, '_>) -> Script<'w> {
+    Box::pin(async move {
+        let mut seen = 0;
+        connected(world, &mut seen).await;
+        for sequence in 1..=10 {
+            world
+                .air
+                .receive(&data(sequence, 0, sequence as u8), meta());
+            for _ in 0..20 {
+                yield_now().await;
             }
-            assert_eq!(world.delivered().await.len(), 8);
-            world.command(ControlCommand::Stop).await;
-        })
-    });
-    assert_eq!(counters.rx_frames_dropped(), 0);
-    assert_eq!(
-        counters.rx_msdus_refused(),
-        [RxMsdusRefused {
-            too_long: 0,
-            queue_full: 1,
-            no_network: 0,
-        }; 2]
-    );
+        }
+        let first = world.delivered().await;
+        assert_eq!(first.len(), MODEL_RX_EVENTS, "the network's lend limit");
+        let mut delivered = first;
+        // Each drain returns the lent frames; the waiting ones follow.
+        for _ in 0..10 {
+            if delivered.len() >= 2 * MODEL_RX_EVENTS {
+                break;
+            }
+            delivered.extend(world.delivered().await);
+        }
+        assert_eq!(
+            delivered
+                .iter()
+                .map(|frame| frame.last().copied())
+                .collect::<Vec<_>>(),
+            (1..=8u8).map(Some).collect::<Vec<_>>(),
+            "every MSDU the station took reaches the network once, in order"
+        );
+        world.command(ControlCommand::Stop).await;
+    })
 }
 
 #[test]
-fn the_empty_sink_delivers_and_refuses_the_same_msdus_as_an_enabled_one() {
-    fn overflow<'w>(world: &'w Application<'w, '_, '_>) -> Script<'w> {
-        Box::pin(async move {
-            let mut seen = 0;
-            connected(world, &mut seen).await;
-            // Eight MSDUs fill the test's network queue; nothing drains it.
-            for sequence in 1..=10 {
-                world
-                    .air
-                    .receive(&data(sequence, 0, sequence as u8), meta());
-                for _ in 0..20 {
-                    yield_now().await;
-                }
-            }
-            let delivered = world.delivered().await;
-            assert_eq!(delivered.len(), 8);
-            assert!(
-                delivered
-                    .iter()
-                    .zip(1..=8u8)
-                    .all(|(frame, sequence)| frame.last() == Some(&sequence)),
-                "the first eight MSDUs reach the network in order"
-            );
-            world.command(ControlCommand::Stop).await;
-        })
-    }
-    let enabled = run_with(ht_config(), overflow);
-    assert_eq!(enabled.rx_msdus_refused().len(), 2);
-    let empty = run_with_empty_sink(ht_config(), overflow);
+fn a_full_network_holds_frames_back_without_copy_or_refusal() {
+    let counters = run_with(ht_config(), held_back);
+    assert_eq!(counters.rx_frames_dropped(), 0);
+    assert!(counters.rx_msdus_refused().is_empty());
+    assert!(counters.rx_msdus_copied().is_empty());
+}
+
+#[test]
+fn the_empty_sink_holds_frames_back_as_an_enabled_one() {
+    let enabled = run_with(ht_config(), held_back);
+    assert!(enabled.rx_msdus_refused().is_empty());
+    let empty = run_with_empty_sink(ht_config(), held_back);
     assert!(empty.events.lock().unwrap().is_empty());
 }
 

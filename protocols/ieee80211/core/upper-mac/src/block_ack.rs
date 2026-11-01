@@ -31,7 +31,7 @@ pub mod reorder;
 pub mod session;
 
 pub use banks::{
-    AgreementStop, RX_BLOCK_ACK_WINDOW, ReorderCause, ReplyPlace, RxBlockAckCapacity,
+    AgreementStop, Parked, RX_BLOCK_ACK_WINDOW, ReorderCause, ReplyPlace, RxBlockAckCapacity,
     RxBlockAckEvent, RxBlockAckPort, RxBlockAckReplyBody, RxBlockAckStorage, RxBlockAckTypes,
     RxBlockAckView, RxDisposition,
 };

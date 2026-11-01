@@ -522,3 +522,62 @@ fn containment_is_built_only_for_an_enabled_sink_and_the_view_holds_no_sink() {
         )>()
     );
 }
+
+#[test]
+fn a_parked_data_frame_waits_behind_released_frames_and_management_passes() {
+    let mut storage = RxBlockAckStorage::<Types, u32, 2, 4>::new([10, 11], GAP);
+    let mut view = storage.view();
+    let mut port = Recording::default();
+    view.offer(now(1), 7, bssid(), addba(0, 0), true, &mut port, &mut ())
+        .unwrap();
+    let reply = view.next_reply().unwrap();
+    view.sent(reply.place);
+    // Two released in order wait for their consumer.
+    for sequence in 100..102 {
+        assert!(matches!(
+            view.receive(now(2), Some(LOCAL), qos_data(0, sequence), meta(), &mut ()),
+            RxDisposition::Retained
+        ));
+    }
+    assert!(view.has_ready());
+    // A data frame outside the agreement waits behind them.
+    assert!(matches!(view.park(qos_data(5, 9), meta()), Parked::Waiting));
+    // A management frame is not held.
+    let mut action = qos_data(5, 9);
+    action.0[0] = 0xd0;
+    assert!(matches!(view.park(action, meta()), Parked::Deliver(_)));
+    let order: Vec<_> = core::iter::from_fn(|| view.pop_ready())
+        .map(|(frame, _)| frame.0)
+        .collect();
+    assert_eq!(
+        order,
+        [qos_data(0, 100).0, qos_data(0, 101).0, qos_data(5, 9).0]
+    );
+    assert!(!view.has_ready());
+}
+
+#[test]
+fn parking_beyond_the_retained_frames_is_a_capacity_fault() {
+    let mut storage = RxBlockAckStorage::<Types, u32, 1, 2>::new([10], GAP);
+    let mut view = storage.view();
+    for sequence in 0..2 {
+        assert!(matches!(
+            view.park(qos_data(0, sequence), meta()),
+            Parked::Waiting
+        ));
+    }
+    assert!(matches!(
+        view.park(qos_data(0, 2), meta()),
+        Parked::Capacity(_)
+    ));
+    // Clearing returns every parked frame through the port.
+    let mut port = Recording::default();
+    view.clear(&mut port, &mut ());
+    assert_eq!(
+        port.0
+            .iter()
+            .filter(|call| matches!(call, Call::Recycle(_)))
+            .count(),
+        2
+    );
+}

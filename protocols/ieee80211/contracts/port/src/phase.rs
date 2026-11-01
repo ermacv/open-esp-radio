@@ -895,6 +895,14 @@ pub trait LowerMacPhase<'p, 'id: 'p>:
     /// The buffers [`Self::lend`] moved to the network that it still holds.
     fn lent(&self) -> usize;
 
+    /// Whether the network is under its limit: [`Self::lend`] refuses no
+    /// buffer for capacity now.
+    fn lend_room(&self) -> bool;
+
+    /// Ready while [`Self::lend_room`] holds; otherwise registers `cx` for
+    /// the drop of the next lent buffer.
+    fn poll_lend_room(&mut self, cx: &mut core::task::Context<'_>) -> core::task::Poll<()>;
+
     /// Close publication in every queue. A current publication is waited for,
     /// at most the backend's PUBLICATION_BOUND, before GateClosed is emitted.
     /// ACK returns `Delivered`; unknown timeout returns Indeterminate.

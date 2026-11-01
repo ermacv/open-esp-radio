@@ -130,6 +130,12 @@ impl<'p, 'id: 'p, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Obser
     fn lent(&self) -> usize {
         self.held.storage.network.held()
     }
+    fn lend_room(&self) -> bool {
+        self.held.storage.network.held() < D::LENT_RX
+    }
+    fn poll_lend_room(&mut self, cx: &mut core::task::Context<'_>) -> core::task::Poll<()> {
+        self.held.storage.network.poll_room(cx, D::LENT_RX)
+    }
     fn close_gate(&mut self, gate: GateOpen<'id, Part<Id, 1>>) {
         self.held
             .command(driver::Command::CloseGate(gate.into_owned(&self.loan)));

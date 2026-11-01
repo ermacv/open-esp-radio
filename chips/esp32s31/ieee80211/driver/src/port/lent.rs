@@ -148,6 +148,18 @@ impl<P: LentNotifies> NetworkCredit<P> {
         }
     }
 
+    /// Ready while the network holds fewer than `limit` units; otherwise
+    /// the next return tells the polling task ([`LentNotifies::returned`]
+    /// runs on every return).
+    pub(super) fn poll_room(&self, cx: &mut Context<'_>, limit: usize) -> Poll<()> {
+        self.notifies.register_returned(cx);
+        if self.held() < limit {
+            Poll::Ready(())
+        } else {
+            Poll::Pending
+        }
+    }
+
     /// Ask the next lend to wake the driver, which has no receive room.
     /// Whether a lend came first: the driver then polls again itself.
     pub(super) fn want_room(&self) -> bool {

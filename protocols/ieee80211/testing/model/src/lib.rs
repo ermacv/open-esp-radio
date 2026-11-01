@@ -4028,6 +4028,20 @@ impl<'p, 'id: 'p, C: Ieee80211Capabilities, B: ModelComposition + 'id> LowerMacP
         self.held.network.held()
     }
 
+    fn lend_room(&self) -> bool {
+        self.held.network.held() < MODEL_RX_EVENTS
+    }
+
+    fn poll_lend_room(&mut self, cx: &mut core::task::Context<'_>) -> core::task::Poll<()> {
+        // Every lent buffer's drop wakes the registered task.
+        self.held.network.waker.register(cx.waker());
+        if self.lend_room() {
+            core::task::Poll::Ready(())
+        } else {
+            core::task::Poll::Pending
+        }
+    }
+
     fn close_gate(&mut self, gate: GateOpen<'id, ModelPool<<B as ModelComposition>::Identity, 0>>) {
         self.held
             .command(Command::CloseGate(gate.into_owned(&self.frontend.loan)));
