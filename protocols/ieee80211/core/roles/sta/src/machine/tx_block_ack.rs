@@ -231,24 +231,29 @@ impl StaTxBlockAck {
     }
 
     /// Data of `tid` came at `now`: an idle TID negotiates, a live one stays
-    /// active.
-    pub(crate) fn traffic(&mut self, tid: u8, now: Instant) {
+    /// active. Whether that changed what [`Self::poll`] owes or when.
+    pub(crate) fn traffic(&mut self, tid: u8, now: Instant) -> bool {
         if !self.admitted {
-            return;
+            return false;
         }
         let Some(last) = self.traffic.get_mut(usize::from(tid)) else {
-            return;
+            return false;
         };
         *last = Some(now);
+        let mut changed = false;
         // An operational agreement's inactivity ends no earlier than this.
         if self.originator.operational(tid).is_some() {
             let idle = now.saturating_add(self.inactivity);
-            self.timing = Some(self.timing.map_or(idle, |at| at.min(idle)));
+            let timing = Some(self.timing.map_or(idle, |at| at.min(idle)));
+            changed |= timing != self.timing;
+            self.timing = timing;
         }
         // A live, queued or closed TID refuses; that is its normal state.
         if self.originator.queue(tid, self.retry) {
             self.pending = self.originator.next_pending_deadline();
+            changed = true;
         }
+        changed
     }
 
     /// How long an aggregate's missing member is retried.

@@ -884,6 +884,18 @@ pub enum StaReceived {
     Input,
 }
 
+/// What data taken for transmission was to the station.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum StaTraffic {
+    /// It was recorded and nothing else: the station owes nothing it did
+    /// not owe before, and no deadline came earlier.
+    Recorded,
+    /// It changed the station's transmit agreements, a negotiation queued
+    /// or an inactivity deadline set: the next [`Station::poll_action`] may
+    /// owe an action.
+    Input,
+}
+
 /// A frame refused by admission or by the authenticated RSN protocol.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum StaRxError {
@@ -3567,15 +3579,19 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
 
     /// Data of `tid` was taken for the connected link at `now`: an idle TID
     /// negotiates its transmit agreement, a live one stays active.
-    pub fn tx_block_ack_traffic(&mut self, tid: WmmUserPriority, now: Instant) {
+    pub fn tx_block_ack_traffic(&mut self, tid: WmmUserPriority, now: Instant) -> StaTraffic {
         let State::Connected(connected) = &mut self.state else {
-            return;
+            return StaTraffic::Recorded;
         };
         let Some(connected) = connected.as_mut() else {
-            return;
+            return StaTraffic::Recorded;
         };
-        if let Some(tx) = tx_agreements(&mut self.config.tx_block_ack, connected) {
-            tx.traffic(tid.value(), now);
+        if tx_agreements(&mut self.config.tx_block_ack, connected)
+            .is_some_and(|tx| tx.traffic(tid.value(), now))
+        {
+            StaTraffic::Input
+        } else {
+            StaTraffic::Recorded
         }
     }
 

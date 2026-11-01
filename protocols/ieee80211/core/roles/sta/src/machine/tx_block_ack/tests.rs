@@ -320,3 +320,21 @@ fn a_dropped_member_owes_a_block_ack_request_at_the_new_head() {
         Some(TxBlockAckOwed::Request { tid: 0, start })
     );
 }
+
+#[test]
+fn traffic_changes_the_agreements_only_when_it_queues_a_negotiation() {
+    let mut tx = StaTxBlockAck::new(POLICY).unwrap();
+    assert!(!tx.traffic(0, at(0)), "before admission it changes nothing");
+    tx.associate(true);
+    assert!(tx.traffic(0, at(0)), "an idle TID queues its negotiation");
+    assert!(!tx.traffic(0, at(1)), "a queued one is only recorded");
+    let mut tx = operational();
+    let deadline = tx.deadline(true);
+    assert!(deadline.is_some());
+    assert!(
+        !tx.traffic(0, at(1_000)),
+        "an operational one keeps its earlier inactivity end"
+    );
+    assert_eq!(tx.deadline(true), deadline);
+    assert!(!tx.may_owe(at(1_000)));
+}
