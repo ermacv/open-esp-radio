@@ -3,6 +3,10 @@
 use super::Discard;
 use crate::mac::rx::pool::RxStageTransactionError;
 
+/// The staging credits the default admission keeps for control, management
+/// and EAPOL input: a bulk unit is staged only while more remain.
+pub const DEFAULT_CRITICAL_RESERVE: usize = 1;
+
 /// Explicit bulk/critical capacity policy, independent of vendor pool sizes.
 ///
 /// Validation never reduces a requested reserve. Both domains must retain an
@@ -169,9 +173,10 @@ pub trait Admission {
     fn observe(&self, _observation: Observation) {}
 
     /// Explicit staging/queue reserve, validated before any transaction work.
-    /// The default reserves one credit for all pool/queue sizes of at least two.
+    /// The default reserves [`DEFAULT_CRITICAL_RESERVE`] credits for all
+    /// pool/queue sizes of at least two.
     fn credit_policy(&self) -> CreditPolicy {
-        CreditPolicy::new(1)
+        CreditPolicy::new(DEFAULT_CRITICAL_RESERVE)
     }
 
     /// Decide whether a unit may be discarded when only the critical reserve

@@ -16,6 +16,11 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 "chips/esp32s31/compose/src/phy_fault.rs:crate::phy_fault::reset:terminal-reference:reset_recording:1" = { owner = "chips/esp32s31/compose", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
 "chips/esp32s31/compose/src/phy_fault.rs:crate::phy_fault:retained-slot:retained_static:1" = { owner = "chips/esp32s31/compose", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
 
+# chips/esp32s31/compose/src/radio_fault.rs
+"chips/esp32s31/compose/src/radio_fault.rs:crate::radio_fault::impl Failure::reset:terminal-entry:reset:1" = { owner = "chips/esp32s31/compose", classes = ["unexpected-hardware", "software-invariant", "exhaustion"] }
+"chips/esp32s31/compose/src/radio_fault.rs:crate::radio_fault::impl Failure::reset:terminal-reference:reset_recording:1" = { owner = "chips/esp32s31/compose", classes = ["unexpected-hardware", "software-invariant", "exhaustion"] }
+"chips/esp32s31/compose/src/radio_fault.rs:crate::radio_fault:retained-slot:retained_static:1" = { owner = "chips/esp32s31/compose", classes = ["unexpected-hardware", "software-invariant", "exhaustion"] }
+
 # chips/esp32s31/compose/src/secondary.rs
 "chips/esp32s31/compose/src/secondary.rs:crate::secondary::impl Hart1Failure::reset:terminal-entry:reset:1" = { owner = "chips/esp32s31/compose", classes = ["configuration-boot", "unexpected-hardware"] }
 
@@ -420,6 +425,12 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 "hil-scenarios/images/esp32s31-wifi-station/src/entry.rs:crate::fail:terminal-reference:software_reset:1" = { owner = "hil-scenarios/images/esp32s31-wifi-station", classes = ["configuration-boot", "unexpected-hardware", "software-invariant", "exhaustion"] }
 "hil-scenarios/images/esp32s31-wifi-station/src/entry.rs:crate::main:reset-method:reset:1" = { owner = "hil-scenarios/images/esp32s31-wifi-station", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
 "hil-scenarios/images/esp32s31-wifi-station/src/entry.rs:crate::main:reset-method:reset:2" = { owner = "hil-scenarios/images/esp32s31-wifi-station", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
+"hil-scenarios/images/esp32s31-wifi-station/src/entry.rs:crate::main:reset-method:reset:3" = { owner = "hil-scenarios/images/esp32s31-wifi-station", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
+"hil-scenarios/images/esp32s31-wifi-station/src/entry.rs:crate::main:reset-method:reset:4" = { owner = "hil-scenarios/images/esp32s31-wifi-station", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
+"hil-scenarios/images/esp32s31-wifi-station/src/entry.rs:crate::main:reset-method:reset:5" = { owner = "hil-scenarios/images/esp32s31-wifi-station", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
+"hil-scenarios/images/esp32s31-wifi-station/src/entry.rs:crate::hart1_main:terminal-entry:hart1_main:1" = { owner = "hil-scenarios/images/esp32s31-wifi-station", classes = ["configuration-boot"] }
+"hil-scenarios/images/esp32s31-wifi-station/src/entry.rs:crate::hart1_main:reset-method:reset:1" = { owner = "hil-scenarios/images/esp32s31-wifi-station", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
+"hil-scenarios/images/esp32s31-wifi-station/src/entry.rs:crate::hart1_main:reset-method:reset:2" = { owner = "hil-scenarios/images/esp32s31-wifi-station", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
 "hil-scenarios/images/esp32s31-wifi-station/src/entry.rs:crate::main:terminal-entry:main:1" = { owner = "hil-scenarios/images/esp32s31-wifi-station", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
 "hil-scenarios/images/esp32s31-wifi-station/src/entry.rs:crate::main:terminal-reference:reset_binding:1" = { owner = "hil-scenarios/images/esp32s31-wifi-station", classes = ["configuration-boot", "unexpected-hardware", "software-invariant"] }
 "hil-scenarios/images/esp32s31-wifi-station/src/entry.rs:crate:terminal-binding:entry:1" = { owner = "hil-scenarios/images/esp32s31-wifi-station", classes = ["rust-panic"] }
@@ -445,11 +456,15 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 "hil-scenarios/images/esp32s31-wifi-station/src/fatal.rs:crate::fatal::Failure:retained-reason:Failure::TaskAllocation:1" = { owner = "hil-scenarios/images/esp32s31-wifi-station", classes = ["configuration-boot"] }
 "hil-scenarios/images/esp32s31-wifi-station/src/fatal.rs:crate::fatal::Failure:retained-reason:Failure::EntropySource:1" = { owner = "hil-scenarios/images/esp32s31-wifi-station", classes = ["unexpected-hardware"] }
 "hil-scenarios/images/esp32s31-wifi-station/src/fatal.rs:crate::fatal::Failure:retained-reason:Failure::Network:1" = { owner = "hil-scenarios/images/esp32s31-wifi-station", classes = ["software-invariant"] }
+"hil-scenarios/images/esp32s31-wifi-station/src/fatal.rs:crate::fatal::Failure:retained-reason:Failure::Cores:1" = { owner = "hil-scenarios/images/esp32s31-wifi-station", classes = ["configuration-boot"] }
 "hil-scenarios/images/esp32s31-wifi-station/src/fatal.rs:crate::fatal::Failure:retained-reason:Failure::NonceExhausted:1" = { owner = "hil-scenarios/images/esp32s31-wifi-station", classes = ["exhaustion"] }
 "hil-scenarios/images/esp32s31-wifi-station/src/fatal.rs:crate::fatal:retained-slot:retained_static:1" = { owner = "hil-scenarios/images/esp32s31-wifi-station", classes = ["configuration-boot", "unexpected-hardware", "software-invariant", "exhaustion", "cpu-exception", "rust-panic"] }
 
 # hil-scenarios/images/esp32s31-wifi-station/src/station/irq.rs
 "hil-scenarios/images/esp32s31-wifi-station/src/station/irq.rs:crate::station::irq::on_wifi:terminal-reference:reset:1" = { owner = "hil-scenarios/images/esp32s31-wifi-station", classes = ["unexpected-hardware"] }
+
+# hil-scenarios/images/esp32s31-wifi-station/src/station/mod.rs
+"hil-scenarios/images/esp32s31-wifi-station/src/station/mod.rs:crate::station::radio_actor:reset-method:reset:1" = { owner = "hil-scenarios/images/esp32s31-wifi-station", classes = ["unexpected-hardware", "software-invariant", "exhaustion"] }
 
 # hil-scenarios/images/esp32s31-wifi-station/src/station/radio.rs
 "hil-scenarios/images/esp32s31-wifi-station/src/station/radio.rs:crate::station::radio::failure:terminal-entry:failure:1" = { owner = "hil-scenarios/images/esp32s31-wifi-station", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }

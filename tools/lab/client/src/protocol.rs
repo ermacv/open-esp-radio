@@ -386,20 +386,35 @@ pub struct HolderStatus {
     pub operations: usize,
 }
 
+/// The width of the station profile's channel.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum RouterChannelWidth {
+    /// HT 20 MHz.
+    #[default]
+    Ht20,
+    /// HT 40 MHz, the secondary channel below the primary on channels 5 to
+    /// 13 and above it on 1 to 4.
+    Ht40,
+}
+
 /// One operation on the lab router.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(tag = "router", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum RouterOperation {
     /// Apply the WPA2 station profile with `ssid` and `passphrase` on
-    /// `channel`, one the stand file's `[router]` allows, to the stand's AP;
-    /// its isolated network forwards UDP and TCP between its stations and
-    /// `forward_host` when given (a run's load generator or TCP peer on the
-    /// host), and its DHCP server serves. Result: the applied profile's
-    /// description.
+    /// `channel`, one the stand file's `[router]` allows, `width` wide, to
+    /// the stand's AP; its isolated network forwards UDP and TCP between its
+    /// stations and `forward_host` when given (a run's load generator or TCP
+    /// peer on the host), and its DHCP server serves. Result: the applied
+    /// profile's description.
     ApplyStationProfile {
         ssid: String,
         passphrase: String,
         channel: u8,
+        /// Absent from a client older than the width: HT20.
+        #[serde(default)]
+        width: RouterChannelWidth,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         forward_host: Option<Ipv4Addr>,
     },
@@ -411,6 +426,11 @@ pub enum RouterOperation {
     GroupRekeySeconds,
     /// What the AP knows of station `mac`.
     Station { mac: String },
+    /// What the AP's driver reports of station `mac`'s link: its counters,
+    /// the rates of its last frames each way, the AP's channel width and
+    /// the survey of the channel in use. Result: the router's
+    /// `station::link::StationLink`.
+    StationLink { mac: String },
     /// Station `mac`'s DHCP lease, if it has one.
     Lease { mac: String },
     /// `count` pings from the router to `address`.

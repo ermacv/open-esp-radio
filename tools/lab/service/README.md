@@ -109,7 +109,12 @@ the air, shared at least.
   or the first reset the stand file lists), the console as a duplex stream,
   a watched power cycle and its proof of power loss, where a board is
   attached and what it carries, and the detection of every attached board's
-  chip under a lease of the whole stand (`cargo stand init`).
+  chip under a lease of the whole stand (`cargo stand init`). A board whose
+  chip has no profile (an ESP32-C5 peer) has only the operations that need
+  none: a reset and a watched cycle through its hub port's power, its console
+  without a reset and its description, which names why the others are
+  refused. A write, an RTS, JTAG or download reset, the first listed reset,
+  a console opened by a reset and the proof of power loss need the profile.
 - **Hub ports.** A port is switched off and on only under a lease of
   `hub-port:LOCATION:PORT`. The service runs `uhubctl` for every report.
 - **The router.** It is a resource when the stand file names a `[router]`.

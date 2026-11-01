@@ -150,8 +150,9 @@ and the host refuses any line outside the allowlist. In order:
    phy=$(ubus call iwinfo phyname '{"section":"<radio>"}' | jsonfilter -e '@.phyname') && test -n "$phy" && info=$(iw phy "$phy" info) && printf '%s\n' "$info" | grep -E '^[[:space:]]*\* [0-9]+(\.[0-9]+)? MHz \['
    ```
 
-4. The profile: the stand's channel, HT 20 MHz, a 100 TU beacon interval,
-   the radio enabled; the stand's SSID on the AP section, enabled, not
+4. The profile: the stand's channel at the profile's width (`HT20`, or for
+   40 MHz `HT40-`, the secondary channel below, on channels 5 to 13 and
+   `HT40+` on 1 to 4), a 100 TU beacon interval, the radio enabled; the stand's SSID on the AP section, enabled, not
    hidden. The lower-MAC profile leaves encryption unchanged. Keys are write-only: WPA2 station sets its generated
    passphrase through the script on stdin; no configuration read returns it.
 
@@ -168,7 +169,8 @@ and the host refuses any line outside the allowlist. In order:
    ```
 
 6. The AP interface, up to 16 times 2 s apart (30 s), until it is an AP on
-   the profile's channel, `width: 20 MHz`, with the stand's SSID; else the
+   the profile's channel, `width: 20 MHz` (or `width: 40 MHz` with
+   `center1` 10 MHz on the secondary's side), with the stand's SSID; else the
    run is refused with the last reason. Its `addr` is the stand's BSSID.
 
    ```sh
@@ -206,7 +208,7 @@ wireless radio/BSS. These are the complete settings it owns:
 | `firewall.oer_station_ping` | Accept IPv4 echo requests from station only to `10.231.0.1` |
 | `firewall.oer_station_out`, `firewall.oer_station_in` | Reject all forwarding out of and into station, placed first among configured rules |
 | `firewall.oer_station_host_out`, `firewall.oer_station_host_in` | Only when the run names a host (`forward_host`): accept IPv4 UDP and TCP from station to that host and back, placed before the rejections |
-| Selected radio | Stand channel, HT20, beacon interval 100 TU, enabled, HE disabled |
+| Selected radio | Stand channel at the run's width (HT20 or HT40), beacon interval 100 TU, enabled, HE disabled |
 | Selected BSS | Generated SSID, enabled, visible, WPA2-CCMP encryption, station network, client isolation enabled |
 
 There are no forwarding sections, NAT, LAN/WAN bridge ports or external DNS
@@ -237,7 +239,10 @@ configuration](https://openwrt.org/docs/guide-user/base-system/dhcp_configuratio
 `router::Profile::station_wpa2` uses the isolated station network above and sets
 only the selected BSS to `encryption=psk2+ccmp`, `ieee80211r=0` and
 `ieee80211w=0`: WPA2-Personal with CCMP, no SAE/transition, FT or PMF. The
-radio stays at HT20 with HE disabled. It sets `wpa_group_rekey=30` seconds
+radio runs the width the run asks for (`RouterOperation::ApplyStationProfile`'s
+`width`: HT20, or HT40 for the load scenario) with HE disabled. A radio whose
+20/40 MHz coexistence scan finds an overlapping BSS may stay at 20 MHz; the
+interface check of step 6 refuses the run. It sets `wpa_group_rekey=30` seconds
 for the run's GTK-change gate. These lab settings are committed without
 restoration. The [OpenWrt wireless options](https://openwrt.org/docs/guide-user/network/wifi/basic)
 define the encryption and PMF values.
@@ -405,6 +410,17 @@ interface without a channel.
 
 
 `station::station` reads only the selected target's association flags.
+`station::link::link` (the service's `station-link` operation) reads the
+selected target's link as the AP's driver reports it: `iw dev <ap> station
+get` without the line that names the station (byte, packet, retry, failure
+and drop counters, air time each way, the average signal and the rates of
+the last frames each way, parsed into format, MCS, streams, width and
+guard interval), `iw dev <ap> info`'s channel line (channel, frequency and
+width), the in-use block of `iw dev <ap> survey dump` (active, busy,
+receive, BSS receive and transmit time, noise) and the station's TID 0 drops
+from mac80211's `aqm` debugfs file when it is readable. Directions are the
+AP's. A known line the host cannot read refuses the observation; a value the
+driver does not report stays absent.
 `station::lease` reads its DHCP address and lifetime from the isolated lease
 file. `station::stream::Capture::start_peer` observes peer-originated ICMP
 requests and DUT replies; a complete capture requires every pair and clean

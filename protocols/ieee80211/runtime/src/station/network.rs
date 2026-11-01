@@ -9,10 +9,7 @@
 //! [`LowerMacPhase::lend`]: oer_ieee80211_contracts_port::LowerMacPhase::lend
 
 use oer_ieee80211_contracts_port::LentRxBuffer;
-use oer_ieee80211_core_roles_sta::data::EthernetFrame;
-use oer_network_port::{
-    EthernetFrameView, FrameLengthError, FrameStorage, LentFrame, ReceivedFrame,
-};
+use oer_network_port::{FrameStorage, LentFrame, ReceivedFrame};
 
 /// A lent receive buffer as network storage: the MPDU, then the rest of its
 /// allocation.
@@ -35,33 +32,39 @@ impl<L: LentRxBuffer> FrameStorage for NetworkRx<L> {
     }
 }
 
-/// One received MSDU for the network stack.
-#[allow(
-    clippy::large_enum_variant,
-    reason = "a queue slot holds a copied MSDU's bytes; a lent one's stay in its buffer"
-)]
+/// The service's copies the network queue's [`Received::Copied`] marks stand
+/// for, in their order.
+pub const RX_COPIED_DEPTH: usize = 4;
+
+/// One received MSDU for the network stack: small, since every queue and
+/// bridge hop moves it by value.
 pub enum Received<L> {
     /// In the backend's receive buffer, lent to the network.
     Lent(LentFrame<NetworkRx<L>>),
-    /// The service's own copy.
-    Copied(EthernetFrame),
+    /// The service's own copy, the oldest one in the copies' queue.
+    Copied(CopiedMark),
 }
 
-impl<L: LentRxBuffer> oer_network_port::EthernetFrame for Received<L> {
-    fn view(&self) -> Result<EthernetFrameView<'_>, FrameLengthError> {
-        match self {
-            Self::Lent(frame) => frame.view(),
-            Self::Copied(frame) => frame.view(),
-        }
+/// What stands for one of the service's copies in the network queue; the
+/// device reads the copy in place ([`NetDevice::read_copied`]).
+///
+/// [`NetDevice::read_copied`]: oer_network_port::NetDevice::read_copied
+#[derive(Debug)]
+pub struct CopiedMark(());
+
+impl CopiedMark {
+    pub(super) const fn new() -> Self {
+        Self(())
     }
 }
 
 impl<L: LentRxBuffer> ReceivedFrame for Received<L> {
     type Storage = NetworkRx<L>;
-    fn into_lent(self) -> Result<LentFrame<NetworkRx<L>>, Self> {
+    type Copied = CopiedMark;
+    fn into_lent(self) -> Result<LentFrame<NetworkRx<L>>, CopiedMark> {
         match self {
             Self::Lent(frame) => Ok(frame),
-            copied @ Self::Copied(_) => Err(copied),
+            Self::Copied(mark) => Err(mark),
         }
     }
 }

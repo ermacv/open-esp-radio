@@ -2,6 +2,7 @@
 //! words, split from the reset root's partitions, and exposes its atoms and
 //! the family drivers' register ports on them.
 //!
+//! - [`cache_counters`]: the L1 cache's access counters and geometry;
 //! - [`efuse`]: the factory identity from eFuse;
 //! - [`entropy`]: the true random number generator;
 //! - [`reset_cause`]: why each HP core last left reset;
@@ -13,6 +14,7 @@
 //! - [`watchdog`]: the timer groups' and RTC watchdogs.
 
 pub mod aes;
+pub mod cache_counters;
 pub mod efuse;
 pub mod entropy;
 pub mod reset_cause;

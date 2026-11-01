@@ -23,6 +23,12 @@ fn s31() -> Vectors {
 /// A program that assembles `chip`'s generated vectors and `vectors`, with
 /// every line's handler and the exception handler defined.
 fn runtime(vectors: &str, chip: &Vectors) -> Vec<u8> {
+    runtime_built(vectors, chip, false)
+}
+
+/// [`runtime`] as a `cfg(oer_trace)` build assembles it when `trace`: each
+/// entry also records the interrupted `ra` in the hart's word.
+fn runtime_built(vectors: &str, chip: &Vectors, trace: bool) -> Vec<u8> {
     let build = tempfile::Builder::new()
         .prefix("vectors")
         .tempdir()
@@ -61,6 +67,20 @@ fn runtime(vectors: &str, chip: &Vectors) -> Vec<u8> {
             "include_str!(\"vectors.s\")",
             &format!("include_str!({path:?})"),
         );
+    // The fixture builds without the image's cfg: a trace build selects the
+    // traced operands and template by hand, and gives them their word.
+    let (assembly, record) = if trace {
+        (
+            assembly
+                .replace("#[cfg(oer_trace)]", "#[cfg(all())]")
+                .replace("#[cfg(not(oer_trace))]", "#[cfg(any())]"),
+            "static INTERRUPTED_RA: [core::sync::atomic::AtomicU32; HARTS] = \
+             [const { core::sync::atomic::AtomicU32::new(0) }; HARTS];\n\
+             use core::sync::atomic::AtomicU32;",
+        )
+    } else {
+        (assembly, "")
+    };
     let layout = layout.replace("env!(\"OUT_DIR\")", &format!("{:?}", build.path()));
     let tables = chip.vector_tables().expect("vector tables");
     let harts = chip.harts;
@@ -93,6 +113,7 @@ mod stacks {{
     use crate::{{clic, machine::status, tcontrol, trigger}};
     const HARTS: usize = {harts};
     const VECTOR_TABLE_WORDS: usize = {slots};
+    {record}
     {tables}
     {assembly}
 }}
@@ -198,6 +219,53 @@ fn every_runtime_entry_returns_through_the_checked_exit() {
             3
         );
         assert_eq!(exception.handler, address(&elf, "oer_exception_handler"));
+    }
+}
+
+#[test]
+fn every_traced_entry_records_ra_and_returns_through_the_checked_exit() {
+    let chip = s31();
+    let elf = runtime_built(VECTORS, &chip, true);
+    let (vectors, _) = checked(&elf).unwrap();
+    let handler = address(&elf, "handler");
+    let entries = vectors.iter().flatten().collect::<Vec<_>>();
+    assert_eq!(
+        entries.len(),
+        (chip.harts * (chip.lines - 1)) as usize,
+        "every line but 0 of every hart"
+    );
+    for vector in entries {
+        assert_eq!((vector.frame, vector.handler), (96, handler));
+    }
+    // The traced entries reference the hart words; the plain ones do not.
+    let words = |elf: &[u8]| {
+        oer_analysis_elf::Elf::parse(elf)
+            .unwrap()
+            .symbols()
+            .any(|symbol| symbol.demangled().contains("INTERRUPTED_RA"))
+    };
+    assert!(words(&elf));
+    assert!(!words(&runtime(VECTORS, &chip)));
+}
+
+#[test]
+fn a_traced_entry_that_stores_past_its_record_or_reads_it_fails() {
+    for (to, message) in [
+        // `t1` holds the record's address after `RECORD_RA`.
+        (
+            "    RECORD_RA \\hart\n    sw ra, 64(t1)\n",
+            "outside its frame",
+        ),
+        (
+            "    RECORD_RA \\hart\n    lw t1, 0(t1)\n",
+            "outside its frame",
+        ),
+    ] {
+        let vectors = broken("    RECORD_RA \\hart\n", to);
+        match checked(&runtime_built(&vectors, &s31(), true)) {
+            Ok(_) => panic!("the broken entry passes: {to}"),
+            Err(error) => assert!(error.message.contains(message), "{}", error.message),
+        }
     }
 }
 

@@ -29,6 +29,8 @@
 //! interrupt stack from its bound or contract maximum; this module finds them by
 //! their bounding symbols.
 
+#[cfg(all(target_arch = "riscv32", oer_trace))]
+use core::sync::atomic::AtomicU32;
 #[cfg(target_arch = "riscv32")]
 use core::{
     ptr,
@@ -263,6 +265,32 @@ pub fn current_hart_interrupt_stack_free_bytes() -> usize {
     })
 }
 
+#[cfg(all(target_arch = "riscv32", oer_trace))]
+oer_memory::zeroed_static! {
+    /// Each hart's interrupted `ra` at its most recent interrupt entry,
+    /// which every entry stores right after it saved the interrupted
+    /// registers (`RECORD_RA` in the trap assembly). In SRAM, which the
+    /// entries reach without a cache.
+    static INTERRUPTED_RA: [AtomicU32; HARTS] = zeroed in ".critical.bss.interrupted_ra";
+}
+
+/// The return address register of the code this hart's most recent
+/// interrupt entry interrupted, as the entry saved it; `None` on a hart
+/// outside the chip facts' harts. Only a trace build records it.
+///
+/// A handler at the hart's highest bound level (the PC sampler's) reads
+/// the `ra` of the code it interrupted: no other entry runs on this hart
+/// between its own entry and its read. Below that level a higher entry
+/// may have overwritten the word in between. In a leaf function (a memory
+/// copy) the value names its caller's return address; elsewhere it may be
+/// stale, the return address of the function's last call.
+#[cfg(all(target_arch = "riscv32", oer_trace))]
+pub fn interrupted_ra() -> Option<u32> {
+    INTERRUPTED_RA
+        .get(oer_riscv::hart_id())
+        .map(|word| word.load(Ordering::Relaxed))
+}
+
 // The static and its assembly export share this module/codegen unit: an ELF
 // assembler cannot export a .set alias of a symbol defined in another unit.
 #[cfg(target_arch = "riscv32")]
@@ -270,9 +298,33 @@ include!(concat!(env!("OUT_DIR"), "/vector-tables.rs"));
 
 #[cfg(target_arch = "riscv32")]
 core::arch::global_asm!(
+    // `RECORD_RA hart`, which every interrupt entry runs right after
+    // `TRAP_ENTER` (`vectors.s`): in a trace build it stores the
+    // interrupted `ra` into the hart's word of `INTERRUPTED_RA`, through
+    // `t1`, which `TRAP_ENTER` saved; otherwise it assembles to nothing.
+    // The words carry a stable name, which the stack analysis' entry check
+    // allows the entries' stores into (`ENTRY_RECORD`).
+    #[cfg(oer_trace)]
+    ".global _runtime_interrupted_ra
+    .type _runtime_interrupted_ra, @object
+    .set _runtime_interrupted_ra, {interrupted_ra}
+    .size _runtime_interrupted_ra, {ra_bytes}
+    .macro RECORD_RA hart
+    la t1, _runtime_interrupted_ra
+    sw ra, \\hart*{ra_word}(t1)
+    .endm",
+    #[cfg(not(oer_trace))]
+    ".macro RECORD_RA hart
+    .endm",
     include_str!(concat!(env!("OUT_DIR"), "/vectors.s")),
     include_str!("vectors.s"),
     mtvt = sym MTVT,
+    #[cfg(oer_trace)]
+    interrupted_ra = sym INTERRUPTED_RA,
+    #[cfg(oer_trace)]
+    ra_word = const core::mem::size_of::<AtomicU32>(),
+    #[cfg(oer_trace)]
+    ra_bytes = const core::mem::size_of::<[AtomicU32; HARTS]>(),
     frame_bytes = const crate::trap::TRAP_FRAME_BYTES,
     exception_frames = const crate::trap::MAX_EXCEPTION_FRAMES,
     frame_ra = const core::mem::offset_of!(crate::trap::TrapFrame, ra),

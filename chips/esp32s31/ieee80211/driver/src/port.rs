@@ -40,7 +40,7 @@ pub mod device;
 mod driver;
 mod keys;
 mod lent;
-pub use lent::LentReceive;
+pub use lent::{LentNotifies, LentReceive, NetworkPeers, SameHart};
 mod lifecycle;
 mod registration;
 pub use registration::{Registration, RegistrationError};
@@ -61,6 +61,32 @@ pub use settings::SettingFault;
 
 /// Shared admission capacity across the four access categories.
 pub const TX_TICKETS: usize = 8;
+
+/// The receive units P1 holds at once besides those it lent the network:
+/// its receive events and the MPDUs its receive Block Ack agreements keep,
+/// one 16-MPDU reorder window, the archive's choice: a 32-MPDU window
+/// left too few descriptors armed under sustained HT40 traffic. The network leaves them in the receive pool
+/// ([`lent_rx`]).
+pub const RX_HELD: usize = 16;
+
+/// The receive units of a pool of `units` (the units that may be outside
+/// the ring at once) the network may hold. It leaves the radio
+/// [`RX_HELD`] units and the admission's critical reserve: when P1 holds a
+/// full reorder window and the network all it may, the pool still stages
+/// the MPDU that closes the window's hole, which the hardware already
+/// acknowledged, as ordinary bulk input.
+pub const fn lent_rx(units: usize) -> usize {
+    units.saturating_sub(RX_HELD + crate::rx::transaction::DEFAULT_CRITICAL_RESERVE)
+}
+
+/// The received units P2 queues for P1 that P1 has not taken yet. P2
+/// queues no more until P1 takes one, so a burst never keeps P1 from
+/// running for more than this many units, whatever P1 retains.
+const RX_IN_FLIGHT: usize = TX_TICKETS;
+
+/// The device events one driver turn serves before it polls again: a ring's
+/// worth of received units, so a burst costs one turn, not one per unit.
+const EVENTS_PER_POLL: usize = 32;
 
 // A blocked RX handoff needs P1 to return a lease. Its retry timer must not
 // keep P2 polling an already reached deadline while that consumer cannot run.
@@ -128,6 +154,10 @@ pub trait Device<const B: usize>: Sized + 'static {
     type Timer: Timer + Clone + 'static;
     type Hardware: LowerMacHardware;
     type Receive: ReceiveUnit + Send;
+    /// How a lent receive unit's return tells the driver and the task
+    /// waiting for every return: [`SameHart`], or the peers' signals of a
+    /// network on another hart ([`NetworkPeers`]).
+    type Lent: LentNotifies;
     type Body: TxBody + 'static;
     /// The receive units the network may hold at once. The device's other
     /// units stay with the radio, for its receive events and their
@@ -225,9 +255,9 @@ impl<const B: usize> Ieee80211Capabilities for Esp32s31Caps<B> {
 
 /// P2-only backing borrowing the retained device and cross-context storage.
 /// Only the P2 registration can reach its device `RefCell`.
-pub struct PortStorage<D: 'static, const B: usize> {
+pub struct PortStorage<D: Device<B>, const B: usize> {
     device: RefCell<&'static mut D>,
-    shared: &'static mut PortSharedStorage<B>,
+    shared: &'static mut PortSharedStorage<B, D::Lent>,
     identity: Cell<u64>,
     expired: Cell<u32>,
     /// The station and AP tables the driver last installed in its policy.
@@ -238,7 +268,7 @@ pub struct PortStorage<D: 'static, const B: usize> {
 /// Caller-placed cross-context state, with no device, Cell, RefCell or shared
 /// producer. Place once before constructing `PortStorage`; quarantine keeps
 /// its DMA return places and key activity unavailable for reuse.
-pub struct PortSharedStorage<const B: usize> {
+pub struct PortSharedStorage<const B: usize, P: LentNotifies = SameHart> {
     poisoned: oer_memory::OnceValue<Fault>,
     // P2 can preempt a P1 notification. The P1 body consumer cannot
     // preempt its P2 producer, so its AtomicWaker needs no second slot.
@@ -247,7 +277,9 @@ pub struct PortSharedStorage<const B: usize> {
     key_live: [KeyActivity; 20],
     returned: oer_memory::ReturnBank<TxSlotFree<'static, B>, TX_TICKETS>,
     /// The receive units lent to the network.
-    network: lent::NetworkCredit,
+    network: lent::NetworkCredit<P>,
+    /// The received units queued for P1 and not yet taken.
+    received: settings::ReceivedInFlight,
     settings: settings::Settings,
     /// Slot and permission of a GTK command the installation quarantined.
     #[cfg(test)]
@@ -292,7 +324,10 @@ impl<D: Device<B>, const B: usize> PortStorage<D, B> {
 impl<D: Device<B>, const B: usize> PortStorage<D, B> {
     // Keep storage construction outside the install future's poll frame.
     #[inline(never)]
-    pub const fn new(device: &'static mut D, shared: &'static mut PortSharedStorage<B>) -> Self {
+    pub const fn new(
+        device: &'static mut D,
+        shared: &'static mut PortSharedStorage<B, D::Lent>,
+    ) -> Self {
         Self {
             device: RefCell::new(device),
             shared,
@@ -316,21 +351,30 @@ impl<D: Device<B>, const B: usize> PortStorage<D, B> {
     }
 }
 impl<const B: usize> PortSharedStorage<B> {
+    /// Vacant cross-context backing, placed separately from the P2-only device.
+    pub const fn new() -> Self {
+        Self::with_network(lent::SameHart::new())
+    }
+}
+impl<const B: usize, P: LentNotifies> PortSharedStorage<B, P> {
     // Keep the waker's typed scope at the indirect call, independently of
     // the large terminal dispatchers that notify the P1 body.
     #[inline(never)]
     fn wake_body(&self) {
         self.body.wake();
     }
-    /// Vacant cross-context backing, placed separately from the P2-only device.
-    pub const fn new() -> Self {
+    /// The backing of a port whose lent units' returns tell through
+    /// `notifies`: for a network on another hart, its peers' signals.
+    pub const fn with_network(notifies: P) -> Self {
+        let network = lent::NetworkCredit::with(notifies);
         Self {
             poisoned: oer_memory::OnceValue::new(),
             driver: PriorityWaker::new(),
             body: AtomicWaker::new(),
             key_live: [const { KeyActivity::new() }; 20],
             returned: oer_memory::ReturnBank::new(),
-            network: lent::NetworkCredit::new(),
+            network,
+            received: settings::ReceivedInFlight::new(),
             settings: settings::Settings::new(),
             #[cfg(test)]
             retained_group: oer_memory::OnceValue::new(),
@@ -351,6 +395,15 @@ impl<const B: usize> PortSharedStorage<B> {
         self.poisoned
             .get()
             .map_or(Ok(()), |cause| Err(radio::Poisoned { cause }))
+    }
+    /// P1 took one received unit P2 queued: wake a driver that waits for
+    /// it. A unit never queued poisons the installation.
+    fn took_received(&self) {
+        match self.received.take() {
+            Ok(true) => self.driver.wake(),
+            Ok(false) => {}
+            Err(fault) => self.poison(Fault::Setting(fault)),
+        }
     }
 }
 

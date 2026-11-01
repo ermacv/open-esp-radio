@@ -365,6 +365,43 @@ pub const fn esp32s31_lower_mac_capabilities(buffer_size: usize) -> LowerMacCapa
             .union(ReceiveFilter::PROBE_REQUESTS),
         rx_block_ack_max_tid: RESOURCES.rx_block_ack_max_tid,
         rx_block_ack_max_window: RESOURCES.rx_block_ack_max_window,
+        // The receive MAC acknowledges an MPDU carrying an A-MSDU inside an
+        // agreement's A-MPDU but never completes it in the receive DMA: it
+        // writes the whole MPDU, decrypted, into a ring buffer, then sets no
+        // end of frame on its descriptor, so no unit is ever completed.
+        // SOURCE: stand HIL `wifi-load` on s31-a, OpenWrt mt76 AP, HT40
+        // channel 13, WPA2-CCMP, A-MSDUs granted, RX 10 Mbit/s with RTT
+        // probes, 2026-11-01 (diagnostic builds, uncommitted). Each 5 s window
+        // lost 99 to 100 probes; a scan of the ring's not-completed buffers
+        // found 34 to 54 distinct QoS Data MPDUs with A-MSDU Present, none
+        // completed: their 802.11 header, CCMP header, decrypted subframes
+        // (both subframe headers, LLC/SNAP, IP), MIC and FCS were in place
+        // and their RX-control tail was zero. The station's SPP decision was
+        // NotNegotiated; programming the interface SPP A-MSDU bit to either
+        // value lost the same probes with the payload decrypted the same.
+        // No `dbg_read_rx_count` counter (abort, FCS-pass abort, TKIP error,
+        // buffer full and the rest) separated these MPDUs, and no RX-control
+        // refusal (MIC failure, RX failure) or chained unit was counted.
+        // That does not exclude a failed MIC: with every installed key's
+        // first word flipped for 200 ms under the same load, the MAC staged
+        // no protected unit (12 units, all unprotected), about 200 more
+        // datagrams were lost, and neither a MIC nor an RX failure was
+        // counted either.
+        // SOURCE: stand HIL `wifi-load`, ESP32-S31 station, HT20 channel 13,
+        // OpenWrt mt76 AP, WPA2-CCMP, 2026-11-01. An air capture showed
+        // every RTT probe aggregated with a load datagram into one A-MSDU
+        // MPDU that the station's BlockAck acknowledged; the driver staged
+        // no unit for it, no RX statistics or RX-control error counted it,
+        // and the reorder skipped its sequence (99 of 99 probes at RX 10).
+        // Without probes nothing was lost. 200-byte datagrams aggregated
+        // into 2843 short A-MSDU MPDUs lost 12471 of 12500, so length is not
+        // the cause; the interface SPP A-MSDU bit set either way changed
+        // nothing. With A-MSDU refused in the ADDBA response the AP sent
+        // none and nothing was lost. The vendor station's production ADDBA
+        // response (`libnet80211[ieee80211_ht.o]::
+        // ht_recv_action_ba_addba_request`) grants A-MSDU only under a
+        // test-only switch that is zero by default, so it refuses them too.
+        rx_amsdu_in_ampdu: false,
         // The bounds `EdcaContentionParameters::new` checks.
         edca_max_aifsn: 0x0f,
         edca_max_cw_exponent: crate::mac::edca::MAX_HARDWARE_ECW_EXPONENT,
@@ -1631,6 +1668,10 @@ where
         loop {
             let mut abort_ended = false;
             for index in 0..LOWER_MAC_TX_QUEUES {
+                // An idle queue is skipped without moving its slot.
+                if self.queues[index].is_none() {
+                    continue;
+                }
                 let Some(attempt) = self.queues[index].take() else {
                     continue;
                 };

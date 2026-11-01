@@ -27,15 +27,18 @@ use oer_services_load::{MAX_PART_NAME, MAX_PARTS, PartWindow, Parts};
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u8)]
 pub(crate) enum Part {
-    /// The application executor's tasks.
+    /// The boot hart's application executor's tasks.
     Console,
     StationWork,
     RtcWatchdog,
-    /// The radio executor's tasks.
+    Relay,
+    /// The boot hart's radio executor's tasks.
     RadioActor,
     Driver,
-    /// Inside the station work: the station's state machine, the IP stack,
-    /// the station's requests and the load server.
+    /// Hart 1's executor's task.
+    Network,
+    /// Inside the station work: the station's state machine and its
+    /// requests; inside the network: the IP stack and the load server.
     Station,
     Ip,
     Requests,
@@ -58,8 +61,10 @@ impl Part {
         Part::Console,
         Part::StationWork,
         Part::RtcWatchdog,
+        Part::Relay,
         Part::RadioActor,
         Part::Driver,
+        Part::Network,
         Part::Station,
         Part::Ip,
         Part::Requests,
@@ -80,8 +85,10 @@ impl Part {
             Part::Console => "console",
             Part::StationWork => "station-work",
             Part::RtcWatchdog => "rtc-watchdog",
+            Part::Relay => "relay",
             Part::RadioActor => "radio-actor",
             Part::Driver => "driver",
+            Part::Network => "network",
             Part::Station => "station",
             Part::Ip => "ip",
             Part::Requests => "requests",
@@ -121,7 +128,7 @@ impl Part {
     }
 }
 
-pub(crate) const COUNT: usize = 18;
+pub(crate) const COUNT: usize = 20;
 const _: () = {
     if COUNT > u8::MAX as usize {
         panic!("every part has a number for a page's start");
@@ -328,7 +335,9 @@ pub(crate) static COUNTERS: [PartCounter; COUNT] = [const { PartCounter::new() }
 pub(crate) static EPOCH: AtomicU32 = AtomicU32::new(0);
 
 /// The image's observer: the parts' boundaries, the station service's
-/// spans, the network bridge's frames and the PC sampler's samples.
+/// spans, receive decisions and link rates, the network bridge's frames,
+/// the shared RF actor's tracking ticks and the PC sampler's samples and
+/// their return addresses.
 #[cfg(all(target_arch = "riscv32", oer_trace))]
 #[derive(Clone, Copy, Default)]
 pub struct Observer;
@@ -360,8 +369,27 @@ impl oer_trace::Observer for Observer {
         if let Some(frame) = Self::decoded::<E, super::counters::BridgeFrame>(event) {
             super::counters::observe(frame);
         }
+        type StationRx = oer_esp32s31_wifi::observation::StationRx;
+        if let Some(decision) = Self::decoded::<E, StationRx>(event) {
+            super::counters::observe_station(decision);
+        }
+        type RxData = oer_esp32s31_wifi::observation::RxData;
+        if let Some(data) = Self::decoded::<E, RxData>(event) {
+            super::counters::observe_rx_data(data);
+        }
+        type TxData = oer_esp32s31_wifi::observation::TxData;
+        if let Some(data) = Self::decoded::<E, TxData>(event) {
+            super::counters::observe_tx_data(data);
+        }
+        type TrackingTick = oer_esp32s31_wifi::observation::TrackingTick;
+        if let Some(tick) = Self::decoded::<E, TrackingTick>(event) {
+            super::tracking::COUNTER.observe(super::tracking::tick(tick), epoch);
+        }
         if let Some(sample) = Self::decoded::<E, oer_trace::profile::PcSample>(event) {
             super::sampler::record(sample);
+        }
+        if let Some(ret) = Self::decoded::<E, oer_trace::profile::ReturnSample>(event) {
+            super::sampler::record_return(ret);
         }
     }
 }
@@ -376,6 +404,17 @@ pub type DriverObserver = oer_trace::Noop;
 const OBSERVER: Observer = Observer;
 #[cfg(all(target_arch = "riscv32", not(oer_trace)))]
 const OBSERVER: oer_trace::Noop = oer_trace::Noop;
+
+/// The station service's event sink: in a trace build its receive
+/// decisions go to the image's observer; otherwise the sink is disabled
+/// and the service builds no event.
+#[cfg(target_arch = "riscv32")]
+pub type StationSink = oer_esp32s31_wifi::observation::TracedStationEvents<DriverObserver>;
+
+/// The station service's event sink.
+#[cfg(target_arch = "riscv32")]
+pub(crate) const STATION_SINK: StationSink =
+    oer_esp32s31_wifi::observation::TracedStationEvents(OBSERVER);
 
 /// Report what the network bridge did with one frame.
 #[cfg(target_arch = "riscv32")]

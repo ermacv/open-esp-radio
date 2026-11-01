@@ -48,6 +48,7 @@ impl Ieee80211Capabilities for Caps {
         access_point_receive_filters: ReceiveFilter::BSS_MEMBER,
         rx_block_ack_max_tid: 7,
         rx_block_ack_max_window: 64,
+        rx_amsdu_in_ampdu: true,
         edca_max_aifsn: 15,
         edca_max_cw_exponent: 10,
         edca_max_txop_limit_units_32_us: u16::MAX,
@@ -181,6 +182,51 @@ fn an_admitted_request_installs_one_agreement_and_owes_its_success_response() {
     }
     view.sent(reply.place);
     assert!(view.next_reply().is_none());
+}
+
+#[test]
+fn a_64_mpdu_request_gets_the_16_mpdu_window_its_frames_hold_and_reorders_across_it() {
+    let mut storage = RxBlockAckStorage::<Types, u32, 2, 16>::new([10, 11], GAP);
+    let mut view = storage.view();
+    let mut port = Recording::default();
+    let body = encode_addba_request(5, 0, 64, 0, false, SequenceNumber::new(100).unwrap()).unwrap();
+    let request = parse_block_ack_action(&body).unwrap();
+    view.offer(now(1), 7, bssid(), request, true, &mut port, &mut ())
+        .unwrap();
+    assert_eq!(
+        port.0,
+        [Call::Add {
+            slot: 10,
+            tid: 0,
+            window: 16
+        }]
+    );
+    let reply = view.next_reply().unwrap();
+    match parse_block_ack_action(&reply.body).unwrap() {
+        BlockAckAction::AddbaResponse { status, window, .. } => {
+            assert_eq!((status, window), (status_code::SUCCESS, 16));
+        }
+        other => panic!("expected an ADDBA Response, got {other:?}"),
+    }
+    view.sent(reply.place);
+    // The first MPDU of a 16-MPDU aggregate is missing: the other 15 wait,
+    // then all 16 leave in sequence order when it arrives.
+    for sequence in 101..116 {
+        assert!(matches!(
+            view.receive(now(2), Some(LOCAL), qos_data(0, sequence), meta(), &mut ()),
+            RxDisposition::Retained
+        ));
+    }
+    assert!(view.pop_ready().is_none());
+    assert!(matches!(
+        view.receive(now(3), Some(LOCAL), qos_data(0, 100), meta(), &mut ()),
+        RxDisposition::Retained
+    ));
+    let order: Vec<_> = core::iter::from_fn(|| view.pop_ready())
+        .map(|(frame, _)| frame.0)
+        .collect();
+    let expected: Vec<_> = (100..116).map(|sequence| qos_data(0, sequence).0).collect();
+    assert_eq!(order, expected);
 }
 
 #[test]
@@ -475,5 +521,64 @@ fn containment_is_built_only_for_an_enabled_sink_and_the_view_holds_no_sink() {
             &mut [Bank<Types>],
             &mut [Option<Retained<Types>>]
         )>()
+    );
+}
+
+#[test]
+fn a_parked_data_frame_waits_behind_released_frames_and_management_passes() {
+    let mut storage = RxBlockAckStorage::<Types, u32, 2, 4>::new([10, 11], GAP);
+    let mut view = storage.view();
+    let mut port = Recording::default();
+    view.offer(now(1), 7, bssid(), addba(0, 0), true, &mut port, &mut ())
+        .unwrap();
+    let reply = view.next_reply().unwrap();
+    view.sent(reply.place);
+    // Two released in order wait for their consumer.
+    for sequence in 100..102 {
+        assert!(matches!(
+            view.receive(now(2), Some(LOCAL), qos_data(0, sequence), meta(), &mut ()),
+            RxDisposition::Retained
+        ));
+    }
+    assert!(view.has_ready());
+    // A data frame outside the agreement waits behind them.
+    assert!(matches!(view.park(qos_data(5, 9), meta()), Parked::Waiting));
+    // A management frame is not held.
+    let mut action = qos_data(5, 9);
+    action.0[0] = 0xd0;
+    assert!(matches!(view.park(action, meta()), Parked::Deliver(_)));
+    let order: Vec<_> = core::iter::from_fn(|| view.pop_ready())
+        .map(|(frame, _)| frame.0)
+        .collect();
+    assert_eq!(
+        order,
+        [qos_data(0, 100).0, qos_data(0, 101).0, qos_data(5, 9).0]
+    );
+    assert!(!view.has_ready());
+}
+
+#[test]
+fn parking_beyond_the_retained_frames_is_a_capacity_fault() {
+    let mut storage = RxBlockAckStorage::<Types, u32, 1, 2>::new([10], GAP);
+    let mut view = storage.view();
+    for sequence in 0..2 {
+        assert!(matches!(
+            view.park(qos_data(0, sequence), meta()),
+            Parked::Waiting
+        ));
+    }
+    assert!(matches!(
+        view.park(qos_data(0, 2), meta()),
+        Parked::Capacity(_)
+    ));
+    // Clearing returns every parked frame through the port.
+    let mut port = Recording::default();
+    view.clear(&mut port, &mut ());
+    assert_eq!(
+        port.0
+            .iter()
+            .filter(|call| matches!(call, Call::Recycle(_)))
+            .count(),
+        2
     );
 }

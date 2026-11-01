@@ -239,6 +239,7 @@ impl Device<512> for TestDevice {
     type Timer = TestTimer;
     type Hardware = Hardware;
     type Receive = TestReceive;
+    type Lent = crate::port::SameHart;
     type Body = Payload;
     const LENT_RX: usize = 2;
     type OwnedContext<Id: radio::SlotIdentity> = Tag;

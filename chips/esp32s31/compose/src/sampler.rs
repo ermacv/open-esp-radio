@@ -11,7 +11,12 @@
 //! latency never shifts later ticks, and a tick whose time passed while
 //! the hart's interrupts were masked fires as soon as they open, at the
 //! code that opened them. Every scheduled tick reports one
-//! [`oer_trace::profile::PcSample`]; ticks requested to stop report none.
+//! [`oer_trace::profile::PcSample`] and, in a trace build, right after it a
+//! [`oer_trace::profile::ReturnSample`] of the interrupted `ra`, which the
+//! staged runtime's interrupt entry recorded
+//! (`oer_espressif_staged_runtime::stacks::interrupted_ra`): in a leaf
+//! function such as a memory copy it names the caller. Ticks requested to
+//! stop report none.
 //!
 //! Starting hands the timer's program part and binding to the handler as
 //! one session through a one-slot queue, with the hart's interrupts masked
@@ -22,7 +27,7 @@
 use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 use oer_memory::{AffineSpscReceiver, AffineSpscSender, CompactSpscCursor};
-use oer_trace::profile::PcSample;
+use oer_trace::profile::{PcSample, ReturnSample};
 
 /// The schedule's program: the timer's operations a session needs.
 pub trait Alarm {
@@ -85,6 +90,14 @@ impl Default for Shared {
     }
 }
 
+/// One reported tick: its sample and, when the interrupted `ra` is known,
+/// its return sample.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Tick {
+    pub sample: PcSample,
+    pub ret: Option<ReturnSample>,
+}
+
 /// The handler's state: the running session and its ends of the queues.
 pub struct Handler<A: 'static> {
     active: Option<Session<A>>,
@@ -102,10 +115,17 @@ impl<A: Alarm + 'static> Handler<A> {
     }
 
     /// One timer event, `pending` as acknowledged, which interrupted `pc`
-    /// at raw level `level`: the due tick's sample to report, with the
-    /// alarm moved on; or, when asked, no sample, the timer stopped and the
-    /// session handed back.
-    pub fn tick(&mut self, shared: &Shared, pending: bool, pc: u32, level: u8) -> Option<PcSample> {
+    /// at raw level `level` with return address `ra`, when known: the due
+    /// tick's sample to report, with the alarm moved on; or, when asked, no
+    /// sample, the timer stopped and the session handed back.
+    pub fn tick(
+        &mut self,
+        shared: &Shared,
+        pending: bool,
+        pc: u32,
+        level: u8,
+        ra: Option<u32>,
+    ) -> Option<Tick> {
         if !pending {
             return None;
         }
@@ -120,7 +140,10 @@ impl<A: Alarm + 'static> Handler<A> {
         };
         let mut sample = None;
         if !shared.stop.load(Ordering::Acquire) {
-            sample = PcSample::new(session.tick, pc, level);
+            sample = PcSample::new(session.tick, pc, level).map(|sample| Tick {
+                sample,
+                ret: ra.and_then(|ra| ReturnSample::new(sample.tick(), ra)),
+            });
             session.tick = session.tick.saturating_add(1);
             session.next_us = session.next_us.saturating_add(session.period_us);
             if session.alarm.alarm_at(session.next_us) {
@@ -373,13 +396,22 @@ mod chip {
             // above this one bound, nothing traps in between.
             let pc = oer_riscv::read_mepc() as u32;
             let level = (oer_riscv::read_mcause() >> 16) as u8;
+            // The entry of this handler, at the hart's highest bound level,
+            // recorded the interrupted `ra` last.
+            #[cfg(oer_trace)]
+            let ra = oer_espressif_staged_runtime::stacks::interrupted_ra();
+            #[cfg(not(oer_trace))]
+            let ra = None;
             let pending = part.acknowledge().pending;
             let observer = O::default();
-            if let Some(Some(sample)) = self
+            if let Some(Some(tick)) = self
                 .handler
-                .with(|handler| handler.tick(&self.shared, pending, pc, level))
+                .with(|handler| handler.tick(&self.shared, pending, pc, level, ra))
             {
-                oer_trace::observe!(observer, sample);
+                oer_trace::observe!(observer, tick.sample);
+                if let Some(ret) = tick.ret {
+                    oer_trace::observe!(observer, ret);
+                }
             }
         }
     }

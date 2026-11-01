@@ -51,7 +51,7 @@ pub struct FrameTooLong {
 ///     let _copied = frame.copy_to(output);
 /// }
 /// ```
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct EthernetFrame {
     header: MsduHeader,
     payload: heapless::Vec<u8, MAX_ETHERNET_PAYLOAD_LEN>,
@@ -67,6 +67,41 @@ impl EthernetFrame {
             header: parts.header(),
             payload,
         })
+    }
+
+    /// The frame of no payload, between zero addresses: a slot's value
+    /// before its first fill.
+    pub const fn empty() -> Self {
+        Self {
+            header: MsduHeader {
+                destination: [0; 6],
+                source: [0; 6],
+                ether_type: 0,
+            },
+            payload: heapless::Vec::new(),
+        }
+    }
+
+    /// Replace this frame with `parts`, in place: the payload is copied
+    /// once, and an oversized one leaves the frame as it was.
+    ///
+    /// # Errors
+    ///
+    /// [`FrameTooLong`] when the payload does not fit.
+    pub fn refill(&mut self, parts: MsduParts<'_>) -> Result<(), FrameTooLong> {
+        if parts.payload.len() > MAX_ETHERNET_PAYLOAD_LEN {
+            return Err(FrameTooLong {
+                payload_length: parts.payload.len(),
+            });
+        }
+        self.payload.clear();
+        self.payload
+            .extend_from_slice(parts.payload)
+            .map_err(|_| FrameTooLong {
+                payload_length: parts.payload.len(),
+            })?;
+        self.header = parts.header();
+        Ok(())
     }
 
     /// Borrow the header fields and payload for the MAC or adapter.
@@ -100,21 +135,34 @@ impl oer_network_port::EthernetFrame for EthernetFrame {
 }
 
 impl TxMsdu {
-    /// Copy a neutral network frame into this station's checked queue owner,
-    /// with the user priority its classification requests.
-    pub fn from_network(
+    /// The empty frame at best effort: a slot's value before its first fill.
+    pub const fn empty() -> Self {
+        Self {
+            priority: WmmUserPriority::UP0,
+            frame: EthernetFrame::empty(),
+        }
+    }
+
+    /// Copy a neutral network frame into this owner in place, with the user
+    /// priority its classification requests; an oversized frame leaves it
+    /// as it was.
+    ///
+    /// # Errors
+    ///
+    /// [`FrameTooLong`] when the payload does not fit.
+    pub fn refill_from_network(
+        &mut self,
         frame: oer_network_port::EthernetFrameView<'_>,
         priority: WmmUserPriority,
-    ) -> Result<Self, FrameTooLong> {
-        Ok(Self {
-            priority,
-            frame: EthernetFrame::from_parts(MsduParts {
-                destination: frame.destination,
-                source: frame.source,
-                ether_type: frame.ether_type,
-                payload: frame.payload,
-            })?,
-        })
+    ) -> Result<(), FrameTooLong> {
+        self.frame.refill(MsduParts {
+            destination: frame.destination,
+            source: frame.source,
+            ether_type: frame.ether_type,
+            payload: frame.payload,
+        })?;
+        self.priority = priority;
+        Ok(())
     }
 }
 
@@ -198,7 +246,7 @@ impl<'frame> MsduDelivery<'frame> {
 
 /// One checked, owned Ethernet frame with its user priority, as the network
 /// stack hands it to the station's data path.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct TxMsdu {
     pub priority: WmmUserPriority,
     pub frame: EthernetFrame,
@@ -207,6 +255,34 @@ pub struct TxMsdu {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_refill_replaces_the_frame_in_place_and_an_oversized_one_changes_nothing() {
+        let mut packet = TxMsdu::empty();
+        let view = |payload| oer_network_port::EthernetFrameView {
+            destination: [2; 6],
+            source: [4; 6],
+            ether_type: 0x0800,
+            payload,
+        };
+        assert!(
+            packet
+                .refill_from_network(view(&[1, 2, 3]), WmmUserPriority::UP6)
+                .is_ok()
+        );
+        assert_eq!(packet.frame.parts().payload, &[1, 2, 3]);
+        assert_eq!(packet.frame.parts().destination, [2; 6]);
+        assert_eq!(packet.priority, WmmUserPriority::UP6);
+        let oversized = [0; MAX_ETHERNET_PAYLOAD_LEN + 1];
+        assert_eq!(
+            packet.refill_from_network(view(&oversized), WmmUserPriority::UP0),
+            Err(FrameTooLong {
+                payload_length: MAX_ETHERNET_PAYLOAD_LEN + 1
+            })
+        );
+        assert_eq!(packet.frame.parts().payload, &[1, 2, 3]);
+        assert_eq!(packet.priority, WmmUserPriority::UP6);
+    }
 
     #[test]
     fn a_delivery_locates_its_payload_in_the_mpdu_only() {

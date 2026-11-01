@@ -1,17 +1,17 @@
 //! The lab router's operations, run by the service over the router's SSH
 //! with the logic of `oer-lab-router`: the AP profile a run applies, the
-//! station, DHCP and ping views, the WPA2 checks, a deauthentication, the
+//! station, station link, DHCP and ping views, the WPA2 checks, a deauthentication, the
 //! routed network's check, and the echo and departure observers. Every one
 //! needs a lease that holds the router. The stand file names the router and
 //! its AP; its secrets never leave the service.
 
 use std::{sync::atomic::Ordering, time::Duration};
 
-use oer_lab_client::protocol::RouterOperation;
+use oer_lab_client::protocol::{RouterChannelWidth, RouterOperation};
 use oer_lab_model::Stand;
 use oer_lab_router::{
     mac::Mac,
-    router::Profile,
+    router::{ChannelWidth, Profile},
     ssh::{Remote, Ssh},
     station::{self, stream},
     station_wpa2,
@@ -79,6 +79,7 @@ pub(crate) fn run(
             ssid,
             passphrase,
             channel,
+            width,
             forward_host,
         } => {
             if !router.channels.contains(channel) {
@@ -94,7 +95,11 @@ pub(crate) fn run(
                 *channel,
                 ssid,
                 passphrase,
-            )?;
+            )?
+            .width(match width {
+                RouterChannelWidth::Ht20 => ChannelWidth::Ht20,
+                RouterChannelWidth::Ht40 => ChannelWidth::Ht40,
+            });
             let profile = match forward_host {
                 Some(host) => profile.forwarding_host(*host),
                 None => profile,
@@ -116,6 +121,11 @@ pub(crate) fn run(
             &router.interface,
         )?),
         RouterOperation::Station { mac: station } => json(station::station(
+            &mut router.ssh,
+            &router.interface,
+            mac(station)?,
+        )?),
+        RouterOperation::StationLink { mac: station } => json(station::link::link(
             &mut router.ssh,
             &router.interface,
             mac(station)?,

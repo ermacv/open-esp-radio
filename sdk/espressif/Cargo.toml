@@ -28,7 +28,7 @@ oer-network-port = { path = "../../protocols/network/port" }
 oer-embassy-time = { path = "../../portable/embassy/time" }
 oer-time = { path = "../../portable/time" }
 oer-esp32s31-board = { path = "../../chips/esp32s31/board" }
-oer-esp32s31-compose = { path = "../../chips/esp32s31/compose", features = ["wifi-fault"] }
+oer-esp32s31-compose = { path = "../../chips/esp32s31/compose", features = ["wifi-fault", "radio-fault"] }
 oer-esp32s31-hal = { path = "../../chips/esp32s31/hal" }
 oer-espressif-executor = { path = "../../chips/espressif/executor", features = ["port-slots"] }
 oer-espressif-interrupt-table = { path = "../../chips/espressif/interrupt-table" }

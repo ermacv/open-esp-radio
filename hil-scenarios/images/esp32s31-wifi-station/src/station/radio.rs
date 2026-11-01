@@ -28,14 +28,23 @@ wifi::bind_station! {
         wifi: crate::WifiToken,
         radio: crate::RadioToken,
         callbacks: crate::station::Callbacks,
-        observer: oer_trace::Noop,
+        observer: crate::load::parts::DriverObserver,
         driver_observer: crate::load::parts::DriverObserver,
-        sink: (),
+        sink: crate::load::parts::StationSink,
         engine: oer_esp32s31_compose::crypto::KeyUnwrapEngine,
         events: crate::station::Events,
         fail: crate::station::radio::failure,
+        // The network end runs on hart 1 (`crate::network`).
+        across_harts: {
+            network: crate::peers::NetworkNotify = &crate::peers::NETWORK,
+            station: crate::peers::StationNotify = &crate::peers::STATION,
+            driver: crate::peers::DriverNotify = &crate::peers::DRIVER,
+        },
     }
 }
+
+/// Where the station's network end runs: hart 1, through the peers' signals.
+pub(crate) type Notifies = <binding::Binding as wifi::Binding>::Notifies;
 
 pub(crate) async fn drive(driver: wifi::Driver<binding::Binding>) {
     Polled {

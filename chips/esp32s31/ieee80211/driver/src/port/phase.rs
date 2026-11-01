@@ -71,6 +71,9 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         poll_fn(|cx| {
             self.held.storage.body.register(cx.waker());
             if let Some(event) = self.held.events.try_receive().ok() {
+                if matches!(event, owned::OwnedEvent::Received { .. }) {
+                    self.held.storage.took_received();
+                }
                 return Poll::Ready(Ok(Ok(event.lend(&self.loan))));
             }
             if let Some(cause) = self.held.storage.poisoned.get() {
@@ -115,7 +118,7 @@ impl<'p, 'id: 'p, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Obser
         &mut self,
         buffer: ReceiveBuffer<'id, Id, D::Receive>,
     ) -> Result<
-        super::LentReceive<D::Receive>,
+        super::LentReceive<D::Receive, D::Lent>,
         oer_ieee80211_contracts_port::LendRefused<ReceiveBuffer<'id, Id, D::Receive>>,
     > {
         let shared = self.held.storage;
@@ -126,6 +129,12 @@ impl<'p, 'id: 'p, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Obser
     }
     fn lent(&self) -> usize {
         self.held.storage.network.held()
+    }
+    fn lend_room(&self) -> bool {
+        self.held.storage.network.held() < D::LENT_RX
+    }
+    fn poll_lend_room(&mut self, cx: &mut core::task::Context<'_>) -> core::task::Poll<()> {
+        self.held.storage.network.poll_room(cx, D::LENT_RX)
     }
     fn close_gate(&mut self, gate: GateOpen<'id, Part<Id, 1>>) {
         self.held

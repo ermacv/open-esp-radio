@@ -282,7 +282,9 @@ child outcomes remain the algorithm's completion authority.
 `PhyParamTrackingOutcome::calibration` reports only committed common and
 RX and requested TX calibration branches. Invoking a calibration child below its thermal
 threshold leaves the corresponding flag false. Wrong-class or incomplete child
-completions cannot publish this progress. These flags do not measure RF quality.
+completions cannot publish this progress. `wifi_i2c_changed` reports a
+Wi-Fi PHY-I2C band change whose two masked writes completed. These flags do
+not measure RF quality.
 
 Runtime Dcode passes an explicit delay factory through both its direct PHY-I2C
 bindings and its nested RFPLL frequency transitions. The report keeps three

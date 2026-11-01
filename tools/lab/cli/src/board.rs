@@ -1,4 +1,4 @@
-//! `cargo stand board reset|check|console|soak`: the stand's own ways to
+//! `cargo stand board reset|check|console|send|soak`: the stand's own ways to
 //! reach a board's port.
 //!
 //! Opening a USB serial port with the default modem lines resets an
@@ -34,7 +34,7 @@ pub(crate) enum Via {
     Power,
 }
 
-/// `cargo stand board reset|check|console`.
+/// `cargo stand board reset|check|console|send`.
 #[derive(Debug, clap::Subcommand)]
 pub(crate) enum BoardCommand {
     /// Reset a board and print the reset reason its ROM reports.
@@ -60,6 +60,21 @@ pub(crate) enum BoardCommand {
         /// End at the first line containing this text; fail when none does.
         #[arg(long)]
         until: Option<String>,
+    },
+    /// Send commands of the peers' text protocol to a board's console without
+    /// resetting it, one after another, printing what the board says up to
+    /// each `@OK`/`@ERR` answer; stops at the first `@ERR` or a missing answer.
+    /// A command that makes a peer transmit runs under a lease holding the
+    /// air (`cargo stand lease --air exclusive -- …`).
+    Send {
+        #[arg(value_name = "NAME|MAC")]
+        board: String,
+        /// How long each command may take to answer, e.g. 10s or 2m.
+        #[arg(long, default_value = "10s", value_parser = parse_duration)]
+        timeout: Duration,
+        /// The commands, each one line, e.g. `SYNC`.
+        #[arg(value_name = "COMMAND", required = true)]
+        commands: Vec<String>,
     },
     /// Reset a board again and again through each path, stopping at the
     /// first reset after which it does not boot; the result is journaled.
@@ -186,6 +201,18 @@ pub(crate) fn board(
             if until.is_some() && !seen {
                 return Ok(std::process::ExitCode::FAILURE);
             }
+        }
+        BoardCommand::Send {
+            board,
+            timeout,
+            commands,
+        } => {
+            let target = target(&board)?;
+            let mut lease = lease(&target, owner, format!("board send {board}"))?;
+            let (lines, input) = console_lines(&mut lease, &target)?;
+            let ended = send(&lines, &mut |bytes| input.send(bytes), &commands, timeout);
+            let _ = input.cancel();
+            return ended;
         }
         BoardCommand::Soak {
             board,
@@ -326,6 +353,35 @@ fn answer(
     None
 }
 
+/// Send each of `commands` through `write` once the previous one was
+/// answered `@OK`, printing what the board says; a failure on the first
+/// `@ERR` or on a command unanswered within `timeout`.
+fn send(
+    lines: &mpsc::Receiver<Vec<u8>>,
+    write: &mut dyn FnMut(&[u8]) -> oer_lab_client::client::Result<()>,
+    commands: &[String],
+    timeout: Duration,
+) -> Result<std::process::ExitCode> {
+    for command in commands {
+        let Some(name) = command.split_whitespace().next() else {
+            return Err("an empty command".into());
+        };
+        if command.contains('\n') {
+            return Err(format!("the command `{command}` spans lines").into());
+        }
+        write(format!("{command}\n").as_bytes())?;
+        match answer(lines, name, timeout, &mut |text| println!("{text}")) {
+            Some(true) => {}
+            Some(false) => return Ok(std::process::ExitCode::FAILURE),
+            None => {
+                eprintln!("stand: no answer to `{name}` within {}s", timeout.as_secs());
+                return Ok(std::process::ExitCode::from(2));
+            }
+        }
+    }
+    Ok(std::process::ExitCode::SUCCESS)
+}
+
 /// Copy `lines` to the terminal and `log` until `duration` passes or a line
 /// contains `until`; returns whether one did.
 fn capture(
@@ -393,18 +449,16 @@ fn check(target: &Target, lease: &mut Client, board: &str) -> Result<()> {
             maintenance.owner, maintenance.reason
         );
     }
+    let without_profile = described
+        .get("without_profile")
+        .and_then(serde_json::Value::as_str);
     println!(
-        "  reset paths: rts, jtag{}",
-        if target
-            .board
-            .reset
-            .contains(&oer_lab_model::ResetStep::Power)
-        {
-            ", power (hub port)"
-        } else {
-            ""
-        }
+        "  reset paths: {}",
+        reset_paths(&target.board, without_profile.is_none())
     );
+    if let Some(why) = without_profile {
+        println!("  chip profile: none: {why}");
+    }
     // A text-protocol peer answers SYNC; a HIL runtime answers only its binary
     // protocol, which the runner speaks; a board between leases waits in its
     // ROM's download mode and answers nothing.
@@ -430,9 +484,53 @@ fn check(target: &Target, lease: &mut Client, board: &str) -> Result<()> {
     Ok(())
 }
 
+/// The reset paths the service takes for `board`: RTS and JTAG need its
+/// chip's profile, a power cycle only its hub port.
+fn reset_paths(board: &oer_lab_model::Board, profiled: bool) -> String {
+    let power = board.reset.contains(&oer_lab_model::ResetStep::Power);
+    let paths = [
+        (profiled, "rts"),
+        (profiled, "jtag"),
+        (profiled && power, "download"),
+        (power, "power (hub port)"),
+    ];
+    let paths = paths
+        .iter()
+        .filter(|(reached, _)| *reached)
+        .map(|(_, path)| *path)
+        .collect::<Vec<_>>();
+    if paths.is_empty() {
+        "none".to_owned()
+    } else {
+        paths.join(", ")
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_board_without_a_chip_profile_reaches_only_its_hub_power() {
+        let stand = |chip: &str, reset: &str| {
+            oer_lab_model::Stand::parse(&format!(
+                "schema = 2\n[[board]]\nid = \"b\"\nusb-serial = \"02:00:00:00:00:01\"\n\
+                 chip = \"{chip}\"\nreset = {reset}\n"
+            ))
+            .unwrap()
+            .boards
+            .remove(0)
+        };
+        let powered = stand("esp32c5", r#"["jtag", "power"]"#);
+        assert_eq!(reset_paths(&powered, false), "power (hub port)");
+        assert_eq!(
+            reset_paths(&powered, true),
+            "rts, jtag, download, power (hub port)"
+        );
+        let unpowered = stand("esp32c5", r#"["jtag"]"#);
+        assert_eq!(reset_paths(&unpowered, false), "none");
+        assert_eq!(reset_paths(&unpowered, true), "rts, jtag");
+    }
 
     #[test]
     fn a_soak_counts_only_resets_that_boot_from_flash() {
@@ -484,6 +582,58 @@ mod tests {
             &mut |_| {},
         );
         assert_eq!(silent, None);
+    }
+
+    #[test]
+    fn send_writes_each_command_after_the_previous_answer() {
+        let mut written = Vec::new();
+        let ended = send(
+            &lines(&["@READY", "@OK SYNC", "@MODE channel=13", "@OK MODE"]),
+            &mut |bytes| {
+                written.extend_from_slice(bytes);
+                Ok(())
+            },
+            &["SYNC".to_owned(), "MODE 13 40- mcs7l".to_owned()],
+            Duration::from_secs(1),
+        )
+        .unwrap();
+        assert_eq!(ended, std::process::ExitCode::SUCCESS);
+        assert_eq!(written, b"SYNC\nMODE 13 40- mcs7l\n");
+    }
+
+    #[test]
+    fn send_stops_at_the_first_refusal_or_silence() {
+        let mut written = Vec::new();
+        let refused = send(
+            &lines(&["@ERR TX invalid"]),
+            &mut |bytes| {
+                written.extend_from_slice(bytes);
+                Ok(())
+            },
+            &["TX 1".to_owned(), "SYNC".to_owned()],
+            Duration::from_secs(1),
+        )
+        .unwrap();
+        assert_eq!(refused, std::process::ExitCode::FAILURE);
+        assert_eq!(written, b"TX 1\n", "nothing after the refusal");
+        let silent = send(
+            &lines(&["boot"]),
+            &mut |_| Ok(()),
+            &["SYNC".to_owned()],
+            Duration::from_millis(100),
+        )
+        .unwrap();
+        assert_eq!(silent, std::process::ExitCode::from(2));
+        assert!(
+            send(
+                &lines(&[]),
+                &mut |_| Ok(()),
+                &["A\nB".to_owned()],
+                Duration::ZERO
+            )
+            .is_err(),
+            "one command is one line"
+        );
     }
 
     #[test]

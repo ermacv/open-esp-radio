@@ -17,10 +17,25 @@ use oer_radio_regulatory::{Country, RegulatoryDomain};
 use oer_time::Duration;
 use oer_trace::Observer;
 
-pub const N: usize = 32;
+pub const N: usize = 96;
 pub const B: usize = crate::FRAME_CAPACITY;
 pub const S: usize = B;
+/// The receive units outside the ring at once: the station's 16 (its
+/// events and reorder window), the admission's critical reserve and the
+/// network's lent units. The other 64 of the 96 stay armed with the
+/// hardware, two Block Ack windows of margin, as in the archive.
 pub const Q: usize = 32;
+const _: () = {
+    if crate::RX_DEPTH < 2 * oer_esp32s31_ieee80211_driver::port::RX_HELD {
+        panic!("the network queue holds two receive windows");
+    }
+    if Q >= N {
+        panic!("the receive ring keeps descriptors armed beside the staged units");
+    }
+    if oer_esp32s31_ieee80211_driver::port::lent_rx(Q) == 0 {
+        panic!("the staged units leave the network none beside the station's");
+    }
+};
 pub const TX: usize = crate::FRAME_CAPACITY;
 pub type RadioExecutor = InterruptExecutor<Esp32s31, 2>;
 pub(crate) type Rng = oer_esp32s31_compose::platform::Entropy;
@@ -41,6 +56,10 @@ pub trait Binding: Sized + 'static {
             Operation: Unpin,
         > + 'static;
     type Events: Events + 'static;
+    /// Where the station's network end runs: [`crate::SameHart`], or
+    /// [`crate::AcrossHarts`] with the executor signals the two harts raise
+    /// for each other's tasks and the driver.
+    type Notifies: crate::Notifies;
     fn take_slot() -> Option<&'static mut radio::Slot<Self>>;
     /// Image-owned terminal policy, called with a handled construction error.
     fn fail(error: InitializationError) -> !;
@@ -119,12 +138,21 @@ pub struct Config {
     #[cfg(oer_trace)]
     pub(crate) target: Option<[u8; 6]>,
     pub(crate) all_channels: bool,
+    /// Whether a join may tune HT 40 MHz where the access point offers it.
+    pub(crate) ht40: bool,
     pub(crate) domain: RegulatoryDomain,
     pub(crate) supported: oer_ieee80211_contracts_port::SupportedChannel<Caps>,
 }
 impl Config {
     pub fn with_reconnect(mut self, policy: crate::ReconnectPolicy) -> Self {
         self.reconnect = policy;
+        self
+    }
+    /// Join at HT 40 MHz where the access point's HT elements name a
+    /// secondary channel the regulatory domain permits beside the scanned
+    /// one; otherwise, and without it, the join stays at 20 MHz.
+    pub fn with_ht40(mut self) -> Self {
+        self.ht40 = true;
         self
     }
     /// Replace the deadline of a stop no request timed, which
@@ -174,6 +202,7 @@ impl Config {
             #[cfg(oer_trace)]
             target: None,
             all_channels,
+            ht40: false,
             domain,
             supported,
         })
@@ -228,6 +257,30 @@ impl<W: Binding> Profile<W> {
                 .push(config.supported)
                 .map_err(|_| InitializationError::Channel)?;
         }
+        let mut wide_channels = heapless::Vec::new();
+        if config.ht40 {
+            for scanned in &channels {
+                let number = scanned.channel().number();
+                for width in [WifiChannelWidth::Mhz40Above, WifiChannelWidth::Mhz40Below] {
+                    // A secondary outside the band or the domain is no
+                    // 40 MHz channel of this primary.
+                    let Ok(wide) = oer_ieee80211_contracts_port::Channel::ghz2_4(number, width)
+                    else {
+                        continue;
+                    };
+                    if let Ok(permitted) = config
+                        .domain
+                        .permit(oer_ieee80211_contracts_port::RegulatedChannel::from(wide))
+                        && let Some(wide) =
+                            oer_ieee80211_contracts_port::SupportedChannel::<Caps>::new(permitted)
+                    {
+                        wide_channels
+                            .push(wide)
+                            .map_err(|_| InitializationError::Channel)?;
+                    }
+                }
+            }
+        }
         Ok(Self {
             station: StaConfig {
                 address: OwnAddress::new(
@@ -235,6 +288,7 @@ impl<W: Binding> Profile<W> {
                         .map_err(|_| InitializationError::Address)?,
                 ),
                 channels,
+                wide_channels,
                 dwell: Duration::from_millis(250),
                 skipped_absences: 3,
                 access_point_margin_db: 6,
@@ -242,7 +296,11 @@ impl<W: Binding> Profile<W> {
                 association: &service::ASSOCIATION,
                 listen_interval:
                     oer_ieee80211_core_roles_sta::request::StationListenInterval::DEFAULT,
-                phy: oer_ieee80211_core_upper_mac::phy_mode::PhyMode::Ht20,
+                phy: if config.ht40 {
+                    oer_ieee80211_core_upper_mac::phy_mode::PhyMode::Ht40
+                } else {
+                    oer_ieee80211_core_upper_mac::phy_mode::PhyMode::Ht20
+                },
                 callbacks: CoreCallbacks(callbacks),
             },
             observer,
@@ -283,11 +341,11 @@ pub enum Event {
     },
     AccessPoint(runtime::contract::AccessPointCommand<Caps>),
 }
-pub(crate) struct Output<E: Events> {
+pub(crate) struct Output<E: Events, N: crate::Notifies> {
     pub events: E,
-    pub status: crate::StatusReader<'static>,
+    pub status: crate::StatusReader<'static, N>,
 }
-impl<E: Events> runtime::ServiceOutputSink<Caps> for Output<E> {
+impl<E: Events, N: crate::Notifies> runtime::ServiceOutputSink<Caps> for Output<E, N> {
     fn emit(&mut self, event: runtime::ServiceOutput<Caps>) {
         let event = match event {
             runtime::ServiceOutput::Notice(runtime::contract::Notice::Connected {
@@ -315,18 +373,30 @@ impl<E: Events> runtime::ServiceOutputSink<Caps> for Output<E> {
     }
 }
 pub struct Storage<W: Binding> {
-    pub(crate) channels: Channels,
+    pub(crate) channels: Channels<W::Notifies>,
     pub(crate) driver: radio::DriverStorage<W>,
     pub(crate) service: service::ServiceStorage<W>,
     pub(crate) bell: oer_memory::Doorbell,
     pub(crate) ready: static_cell::StaticCell<radio::ReadySlot<W>>,
     pub(crate) retire: static_cell::StaticCell<radio::RetireSlot<W>>,
 }
-impl<W: Binding> Storage<W> {
-    pub const fn new() -> Self {
+impl<W, N, S, D> Storage<W>
+where
+    W: Binding<Notifies = crate::AcrossHarts<N, S, D>>,
+    N: oer_memory::QueueNotify + Copy + 'static,
+    S: oer_memory::QueueNotify + Copy + 'static,
+    D: oer_memory::QueueNotify + Copy + 'static,
+{
+    /// The storage of a station whose network end runs on another hart
+    /// ([`Channels::across_harts`]): `network` raises the network task's
+    /// signal, `station` the station task's, `driver` the radio driver's.
+    pub const fn across_harts(network: N, station: S, driver: D) -> Self {
         Self {
-            channels: Channels::new(),
-            driver: radio::DriverStorage::new(),
+            channels: Channels::across_harts(network, station),
+            driver: radio::DriverStorage::new(oer_esp32s31_ieee80211_driver::port::NetworkPeers {
+                driver,
+                returned: station,
+            }),
             service: service::ServiceStorage::new(),
             bell: oer_memory::Doorbell::new(),
             ready: static_cell::StaticCell::new(),
@@ -334,7 +404,19 @@ impl<W: Binding> Storage<W> {
         }
     }
 }
-impl<W: Binding> Default for Storage<W> {
+impl<W: Binding<Notifies = crate::SameHart>> Storage<W> {
+    pub const fn new() -> Self {
+        Self {
+            channels: Channels::new(),
+            driver: radio::DriverStorage::new(oer_esp32s31_ieee80211_driver::port::SameHart::new()),
+            service: service::ServiceStorage::new(),
+            bell: oer_memory::Doorbell::new(),
+            ready: static_cell::StaticCell::new(),
+            retire: static_cell::StaticCell::new(),
+        }
+    }
+}
+impl<W: Binding<Notifies = crate::SameHart>> Default for Storage<W> {
     fn default() -> Self {
         Self::new()
     }
@@ -378,9 +460,13 @@ pub(crate) struct ServiceRunner<W: Binding> {
     pub(crate) engine: W::Engine,
     pub(crate) frontend: oer_memory::Poster<(), Result<radio::Front<W>, InitializationError>>,
     pub(crate) config: Config,
-    pub(crate) connection: ServiceConnection<'static>,
+    pub(crate) connection: ServiceConnection<'static, W::Notifies>,
     pub(crate) storage: &'static mut service::ServiceStorage<W>,
-    pub(crate) output: runtime::Events<'static, Output<W::Events>>,
+    pub(crate) output: runtime::Events<
+        'static,
+        Output<W::Events, W::Notifies>,
+        <W::Notifies as crate::Notifies>::Channels,
+    >,
 }
 /// Terminal result owns every typed cause, with no backend identity.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -404,9 +490,9 @@ pub fn station<W: Binding>(
     resources: Resources<W>,
     config: Config,
 ) -> (
-    Control<'static>,
-    Network<'static>,
-    crate::NetworkStopper<'static>,
+    Control<'static, W::Notifies>,
+    Network<'static, W::Notifies>,
+    crate::NetworkStopper<'static, W::Notifies>,
     Runners<W>,
 ) {
     let Resources {

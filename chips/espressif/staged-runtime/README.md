@@ -80,6 +80,16 @@ checks enforce placement. Each interrupt stack is painted on first install.
 thread-mode calls, masks local interrupts for the bounded scan and restores
 their state. Observed writes do not establish maximum possible depth.
 
+In a `cfg(oer_trace)` build each interrupt entry, right after it saved the
+interrupted registers, stores the interrupted `ra` into its hart's word of
+an SRAM record (`.critical.bss.interrupted_ra`, exported as
+`_runtime_interrupted_ra`, whose aligned word stores the stack analysis'
+entry check allows). `stacks::interrupted_ra` reads the current hart's
+word: the `ra` of the code the most recent entry on this hart interrupted,
+meaningful in a handler at the hart's highest bound level, such as a PC
+sampler. Without the cfg the entries assemble unchanged and the record
+does not exist.
+
 The panic handler records bounded binary details in retained memory without
 formatting. Interrupt-context records omit text and location metadata that
 may be cached; task-context records can retain them. An optional hook receives

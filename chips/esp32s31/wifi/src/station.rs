@@ -21,7 +21,7 @@ use oer_ieee80211_core_upper_mac::{
     rate_selection::{FrameRates, RateSelection},
 };
 use oer_ieee80211_wire::{
-    ht::{HtLocalCapabilities, ht_capability_ie},
+    ht::{HtAmpduParameters, HtCapabilityInfo, HtLocalCapabilities, ht_capability_ie},
     station::AssociationCapabilities,
 };
 use oer_memory::{Placed, StaticPlace};
@@ -59,6 +59,28 @@ fn observe_terminal<'id, W: Binding, Id: SlotIdentity + 'id>(
         oer_trace::observe!(observer, crate::observation::TxIndeterminate);
     }
 }
+/// Report a data MPDU addressed to `local`: its PPDU's rate and whether it
+/// came in an A-MPDU, as `meta` tells.
+#[cfg(oer_trace)]
+fn observe_received_data<W: Binding>(bytes: &[u8], meta: &RxMeta, local: [u8; 6]) {
+    if oer_ieee80211_wire::frame::DecodedHeader::decode(bytes)
+        .is_some_and(|header| header.control().is_data() && header.receiver() == local)
+    {
+        let observer = W::DriverObserver::default();
+        oer_trace::observe!(
+            observer,
+            crate::observation::RxData {
+                rate: crate::observation::RateClass::of(match meta.rate {
+                    RxEvidence::HardwareObserved(rate) | RxEvidence::ProtocolValidated(rate) => {
+                        Some(rate)
+                    }
+                    RxEvidence::Unavailable => None,
+                }),
+                containment: crate::observation::Containment::of(meta.ampdu),
+            }
+        );
+    }
+}
 impl<W: Binding, Id: SlotIdentity> StationPort for StationComposition<W, Id> {
     type Backend = Backend<Id, W>;
     type SlotId = Id;
@@ -68,7 +90,7 @@ impl<W: Binding, Id: SlotIdentity> StationPort for StationComposition<W, Id> {
     where
         Self: 'id,
         Id: 'id;
-    type LentRx = crate::LentRx;
+    type LentRx = crate::LentRx<W::Notifies>;
     type TerminalStorage<T> = heapless::Deque<T, { port::TERMINAL_CAPACITY }>;
     type Small = port::BufferClass<TX>;
     type Large = port::BufferClass<TX>;
@@ -122,8 +144,11 @@ impl<W: Binding, Id: SlotIdentity> StationPort for StationComposition<W, Id> {
             observe_terminal::<W, Id>(terminal);
         }
         #[cfg(oer_trace)]
-        if let LowerMacEvent::Received { frame, .. } = &event {
+        if let LowerMacEvent::Received { frame, meta } = &event {
             let bytes = frame.bytes();
+            if let Some((local, _)) = TARGET.get() {
+                observe_received_data::<W>(bytes, meta.common(), local);
+            }
             if let Some((local, Some(target))) = TARGET.get() {
                 if oer_ieee80211_wire::station::parse_open_authentication_response(
                     bytes, local, target,
@@ -232,6 +257,10 @@ impl<W: Binding, M: SignalMetadata> RateSelection<M, port::Ack> for Rates<W> {
         ) {
             oer_trace::observe!(self.1, crate::observation::TxHardwareTimeout);
         }
+        #[cfg(oer_trace)]
+        if frame == FrameRates::Data {
+            oer_trace::observe!(self.1, crate::observation::TxData::of(completion));
+        }
         <EspressifRateSelection<Caps> as RateSelection<M, port::Ack>>::completed(
             &mut self.0,
             now,
@@ -269,9 +298,47 @@ const HT20: [u8; 28] = ht_capability_ie(
         Err(_) => panic!("HT20 advertisement geometry"),
     },
 );
+// IEEE 802.11 HT40, one spatial stream, MCS 0..7 with both short guard
+// intervals; the encoder sets the width and guard-interval bits from the
+// 40 MHz geometry. SM power save is disabled and the station receives
+// A-MPDUs of up to 65 535 octets with MPDUs at least 4 us apart: an AP's
+// 32-MPDU aggregate of 1 500-octet MSDUs needs the 65 535-octet limit.
+//
+// SOURCE: the vendor station's HT Capabilities beside its HE elements,
+// `libnet80211.a[ieee80211_ht.o]::ieee80211_add_htcap_body`: SM power save
+// disabled (bits 2..3 = 0b11), A-MPDU Parameters 0x17 (exponent 3, spacing
+// code 5). Recovered in open-esp-radio-rs da26f64c3
+// `crates/roles/esp32s31/ieee80211/sta/src/profile.rs` (SOURCE
+// HIL_VENDOR_HE20_NDPA_CBF_2026_07_24, frame 7624), where a static SM power
+// save HT40 request was observed to be dropped by a Linux HT40 AP.
+const HT40: [u8; 28] = ht_capability_ie(
+    HtLocalCapabilities::new(
+        u16::from_le_bytes(
+            HtCapabilityInfo::from_bytes([0; 2])
+                .with_sm_power_save(HtCapabilityInfo::SM_POWER_SAVE_DISABLED)
+                .to_bytes(),
+        ),
+        {
+            let [parameters] = HtAmpduParameters::from_bytes([0])
+                .with_exponent(HtAmpduParameters::EXPONENT_65535_OCTETS)
+                .with_spacing(HtAmpduParameters::SPACING_4_US)
+                .to_bytes();
+            parameters
+        },
+        0xff,
+        1,
+    ),
+    match Channel::ghz2_4(
+        13,
+        oer_ieee80211_wire::channel::WifiChannelWidth::Mhz40Below,
+    ) {
+        Ok(channel) => channel,
+        Err(_) => panic!("HT40 advertisement geometry"),
+    },
+);
 pub(crate) static ASSOCIATION: AssociationCapabilities = AssociationCapabilities {
     ht20: HT20,
-    ht40: [0; 28],
+    ht40: HT40,
     he20_ht: [0; 28],
     he20: [0; 24],
     he20_extended: [0; 14],
@@ -302,17 +369,20 @@ type Completed<'p, 'id, W> = ServiceCompleted<
 type Io<'c, W> = ServiceIo<
     'c,
     Caps,
-    Events<'static, Output<<W as Binding>::Events>>,
-    crate::LentRx,
-    crate::NetworkStopState,
+    Events<'static, Output<<W as Binding>::Events, <W as Binding>::Notifies>, Ch<W>>,
+    crate::LentRx<<W as Binding>::Notifies>,
+    crate::NetworkStopState<<W as Binding>::Notifies>,
     2,
-    8,
+    { crate::RX_DEPTH },
     2,
+    Ch<W>,
 >;
+/// The channels' notify types of `W`'s station.
+type Ch<W> = <<W as Binding>::Notifies as crate::Notifies>::Channels;
 type Running<'s, 'c: 's, 'p: 's, 'id: 'p, W: Binding> =
     impl Future<Output = Placed<'s, Completed<'p, 'id, W>>>;
 const RX_BA_BANKS: usize = 8;
-const RX_BA_FRAMES: usize = port::TX_TICKETS;
+const RX_BA_FRAMES: usize = port::RX_HELD;
 pub(crate) struct ServiceStorage<W: Binding> {
     service: StaticPlace<Service<'static, W>>,
     receive: StaticPlace<RxBlockAckStorage<'static, Family<W::Id, W>, RX_BA_BANKS, RX_BA_FRAMES>>,
@@ -356,9 +426,11 @@ fn initialize_service<'id, W: Binding>(
     const {
         if core::mem::size_of::<
             RxBlockAckStorage<'static, Family<W::Id, W>, RX_BA_BANKS, RX_BA_FRAMES>,
-        >() > 2048
+        >() > 8192
         {
-            panic!("RX block-ack owner exceeds 2 KiB");
+            // A 32-MPDU window's reorder slots: placed static storage,
+            // never a stack value.
+            panic!("RX block-ack owner exceeds 8 KiB");
         }
     }
     let (arbiter, place, absence_place) = PortArbiter::<StationComposition<W, W::Id>>::new(
@@ -443,6 +515,7 @@ impl<W: Binding> rp::PortBody<W::Id, Backend<W::Id, W>> for Body<W> {
             commands,
             transmit,
             receive,
+            receive_copied,
             runner: control,
         } = connection;
         let ServiceStorage {
@@ -458,6 +531,7 @@ impl<W: Binding> rp::PortBody<W::Id, Backend<W::Id, W>> for Body<W> {
             commands,
             transmit,
             receive,
+            receive_copied,
             control,
             output: &mut output,
             network: network_stop,

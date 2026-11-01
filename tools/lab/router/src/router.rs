@@ -14,15 +14,16 @@
 //!    carries the stand's SSID;
 //! 3. the radio's channels as its PHY lists them: the profile's channel is
 //!    offered and neither disabled nor no-IR in the regulatory domain;
-//! 4. the profile: on the radio `channel`, `htmode` [`HTMODE`],
+//! 4. the profile: on the radio `channel`, `htmode` (its [`ChannelWidth`]),
 //!    `beacon_int` [`BEACON_INTERVAL_TU`] and `disabled=0`, on the AP
 //!    section `ssid`, `disabled=0` and `hidden=0`; `uci commit wireless`;
 //!    `wifi reload`;
 //! 5. the configuration again: the committed profile, and exactly one
 //!    enabled `wifi-iface` of the radio with the stand's SSID;
 //! 6. the AP interface, up to [`SETTLE_ATTEMPTS`] times [`SETTLE_PAUSE`]
-//!    apart: an AP on the profile's channel, 20 MHz wide, with the stand's
-//!    SSID; its `addr` is the stand's BSSID.
+//!    apart: an AP on the profile's channel at its width (40 MHz centred on
+//!    its secondary's side), with the stand's SSID; its `addr` is the
+//!    stand's BSSID.
 //!
 //! The lower-MAC HIL profile leaves encryption unchanged. WPA2 station sets WPA2-PSK/CCMP without PMF and a short GTK rekey interval.
 //! Keys are write-only: the generated passphrase reaches `uci batch` on
@@ -41,9 +42,41 @@ use zeroize::Zeroizing;
 pub use crate::ssh::{Remote, Result};
 use crate::{mac::Mac, ssh::token};
 
-/// The radio's `htmode`: HT 20 MHz, which every 802.11n radio (mt76
-/// included, HE capable or not) accepts.
-pub const HTMODE: &str = "HT20";
+/// The width of a profile's channel, the radio's `htmode`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ChannelWidth {
+    /// `HT20`: HT 20 MHz, which every 802.11n radio (mt76 included, HE
+    /// capable or not) accepts.
+    Ht20,
+    /// HT 40 MHz: `HT40-`, the secondary channel below the primary, on
+    /// channels 5 to 13, and `HT40+`, above it, on channels 1 to 4. IEEE Std
+    /// 802.11-2020 Annex E.1 (Table E-4, operating classes 83 and 84) allows
+    /// the secondary below on primaries 5 to 13 and above on 1 to 9; the
+    /// profile takes it below wherever it may.
+    Ht40,
+}
+
+impl ChannelWidth {
+    /// The radio's `htmode` on `channel`.
+    pub const fn htmode(self, channel: u8) -> &'static str {
+        match self {
+            Self::Ht20 => "HT20",
+            Self::Ht40 if channel >= 5 => "HT40-",
+            Self::Ht40 => "HT40+",
+        }
+    }
+
+    /// The centre frequency of the AP's channel on `channel`, in MHz, as
+    /// `iw` prints it in `center1`.
+    const fn centre_mhz(self, channel: u8) -> u32 {
+        let primary = 2407 + 5 * channel as u32;
+        match self {
+            Self::Ht20 => primary,
+            Self::Ht40 if channel >= 5 => primary - 10,
+            Self::Ht40 => primary + 10,
+        }
+    }
+}
 /// The radio's `beacon_int`, in TU.
 pub const BEACON_INTERVAL_TU: u16 = 100;
 /// How many times the AP interface is read after the reload.
@@ -115,6 +148,7 @@ pub struct Profile {
     ap_section: String,
     interface: String,
     channel: u8,
+    width: ChannelWidth,
     ssid: Zeroizing<String>,
     security: Security,
     group_rekey_seconds: u32,
@@ -129,6 +163,7 @@ impl fmt::Debug for Profile {
             .field("radio", &self.radio)
             .field("ap_section", &self.ap_section)
             .field("channel", &self.channel)
+            .field("width", &self.width)
             .finish_non_exhaustive()
     }
 }
@@ -136,7 +171,7 @@ impl fmt::Debug for Profile {
 impl Profile {
     /// The profile of `radio` (the `wifi-device` section) and `ap_section`
     /// (the `wifi-iface`), whose network device is `interface`, on
-    /// `channel` with `ssid`.
+    /// `channel` with `ssid`, 20 MHz wide.
     pub fn new(
         radio: &str,
         ap_section: &str,
@@ -177,6 +212,7 @@ impl Profile {
             ap_section: ap_section.to_owned(),
             interface: interface.to_owned(),
             channel,
+            width: ChannelWidth::Ht20,
             ssid: Zeroizing::new(ssid.to_owned()),
             security: Security::Unchanged,
             group_rekey_seconds: crate::station_wpa2::GROUP_REKEY_SECONDS,
@@ -184,7 +220,8 @@ impl Profile {
         })
     }
 
-    /// WPA2 station's WPA2-Personal/CCMP HT20 profile, with PMF and HE disabled.
+    /// WPA2 station's WPA2-Personal/CCMP profile, with PMF and HE disabled,
+    /// 20 MHz wide unless [`Self::width`] widens it.
     /// Callers generate the SSID and passphrase with [`crate::credentials`]
     /// for each run. The passphrase is write-only and zeroized on drop.
     pub fn station_wpa2(
@@ -212,6 +249,16 @@ impl Profile {
         self
     }
 
+    /// This profile on a channel `width` wide.
+    pub fn width(mut self, width: ChannelWidth) -> Self {
+        self.width = width;
+        self
+    }
+
+    fn htmode(&self) -> &'static str {
+        self.width.htmode(self.channel)
+    }
+
     fn station_network(&self) -> bool {
         !matches!(self.security, Security::Unchanged)
     }
@@ -219,9 +266,12 @@ impl Profile {
     /// The one line that may be shown of the profile.
     pub fn describe(&self) -> String {
         format!(
-            "radio {} and AP section {}: channel {}, {HTMODE}, beacon interval \
+            "radio {} and AP section {}: channel {}, {}, beacon interval \
              {BEACON_INTERVAL_TU} TU",
-            self.radio, self.ap_section, self.channel
+            self.radio,
+            self.ap_section,
+            self.channel,
+            self.htmode()
         )
     }
 
@@ -246,7 +296,7 @@ impl Profile {
         };
         let mut steps = Zeroizing::new(vec![
             set(&self.radio, "channel", &self.channel.to_string())?,
-            set(&self.radio, "htmode", HTMODE)?,
+            set(&self.radio, "htmode", self.htmode())?,
             set(&self.radio, "beacon_int", &BEACON_INTERVAL_TU.to_string())?,
             set(&self.radio, "disabled", "0")?,
             set(&self.ap_section, "ssid", &self.ssid)?,
@@ -324,6 +374,7 @@ pub fn plan() -> Result<Vec<String>> {
         ap_section: "<ap_section>".to_owned(),
         interface: "<wireless_interface>".to_owned(),
         channel: 0,
+        width: ChannelWidth::Ht20,
         ssid: Zeroizing::new("<ssid>".to_owned()),
         security: Security::Unchanged,
         group_rekey_seconds: crate::station_wpa2::GROUP_REKEY_SECONDS,
@@ -458,7 +509,7 @@ fn settle(remote: &mut dyn Remote, profile: &Profile, country: [u8; 2]) -> Resul
             Err(error) => Err(error),
         };
         match info {
-            Ok(info) => match info.mismatch(profile.channel) {
+            Ok(info) => match info.mismatch(profile.channel, profile.width) {
                 None => {
                     return Ok(Applied {
                         bssid: info.bssid,
@@ -741,7 +792,7 @@ impl Wireless {
         let beacon_int = BEACON_INTERVAL_TU.to_string();
         for (section, option, wanted) in [
             (radio, "channel", channel.as_str()),
-            (radio, "htmode", HTMODE),
+            (radio, "htmode", profile.htmode()),
             (radio, "beacon_int", beacon_int.as_str()),
             (radio, "disabled", "0"),
             (ap, "disabled", "0"),
@@ -850,13 +901,21 @@ pub enum Width {
     Ht20,
     /// `20 MHz (no HT)`.
     NoHt,
+    /// `40 MHz` around `center1`, in MHz.
+    Ht40 { centre_mhz: u32 },
     /// Any other width.
     Other,
 }
 
 impl IwInfo {
-    /// Why it is not yet the profile on `channel`.
-    fn mismatch(&self, channel: u8) -> Option<String> {
+    /// Why it is not yet the profile on `channel`, `width` wide.
+    fn mismatch(&self, channel: u8, width: ChannelWidth) -> Option<String> {
+        let wanted = match width {
+            ChannelWidth::Ht20 => Width::Ht20,
+            ChannelWidth::Ht40 => Width::Ht40 {
+                centre_mhz: width.centre_mhz(channel),
+            },
+        };
         if !self.ap {
             Some("the interface is not of type AP".to_owned())
         } else if self.channel != channel {
@@ -864,8 +923,12 @@ impl IwInfo {
                 "the AP is on channel {}, the profile's is {channel}",
                 self.channel
             ))
-        } else if self.width != Width::Ht20 {
-            Some(format!("the AP's width is {:?}, not HT 20 MHz", self.width))
+        } else if self.width != wanted {
+            Some(format!(
+                "the AP's width is {:?}, not the profile's {wanted:?} ({})",
+                self.width,
+                width.htmode(channel)
+            ))
         } else if !self.stand_ssid {
             Some("the AP does not carry the stand's SSID".to_owned())
         } else {
@@ -909,13 +972,18 @@ fn iw_channel(rest: &str) -> Option<(u8, Width)> {
     if !(1..=13).contains(&channel) || frequency != 2407 + 5 * u32::from(channel) {
         return None;
     }
-    let width = rest.split_once("width: ")?.1;
-    let width = width.split(',').next()?.trim();
+    let mut fields = rest.split_once("width: ")?.1.split(',');
+    let width = fields.next()?.trim();
     Some((
         channel,
         match width {
             "20 MHz" => Width::Ht20,
             "20 MHz (no HT)" => Width::NoHt,
+            "40 MHz" => fields
+                .find_map(|field| field.trim().strip_prefix("center1: "))
+                .and_then(|centre| centre.strip_suffix(" MHz"))
+                .and_then(|centre| centre.parse().ok())
+                .map_or(Width::Other, |centre_mhz| Width::Ht40 { centre_mhz }),
             _ => Width::Other,
         },
     ))

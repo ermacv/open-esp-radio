@@ -348,6 +348,7 @@ fn config(security: StaSecurity) -> TestConfig {
                 oer_ieee80211_wire::address::IndividualAddress::new(LOCAL).unwrap(),
             ),
             channels,
+            wide_channels: heapless::Vec::new(),
             dwell: Duration::from_millis(10),
             skipped_absences: 3,
             access_point_margin_db: 6,
@@ -569,9 +570,10 @@ struct World<'b> {
     network: TestNetwork,
     restart_stopped_service: Cell<Option<bool>>,
     /// The network stack's end of the transmit queue.
-    stack: RefCell<WakingSpscSender<'b, TxMsdu, 2>>,
+    stack: RefCell<oer_memory::SlotSender<'b, TxMsdu, 2>>,
     /// The network stack's end of the receive queue.
     delivered: RefCell<WakingSpscReceiver<'b, Received<ModelLentRx>, 8>>,
+    delivered_copies: RefCell<WakingSpscReceiver<'b, EthernetFrame, RX_COPIED_DEPTH>>,
     /// How many delivered frames the backend lent in place.
     lent: Cell<usize>,
     /// How long the key-unwrap engine takes; zero is ready on the first poll.
@@ -924,15 +926,23 @@ impl Application<'_, '_, '_> {
         let delivered = self.delivered.borrow();
         let mut frames = Vec::new();
         while let Some(msdu) = delivered.try_receive() {
-            if matches!(msdu, Received::Lent(_)) {
-                self.lent.set(self.lent.get() + 1);
-            }
-            let parts = oer_network_port::EthernetFrame::view(&msdu).unwrap();
-            let mut bytes = Vec::from(parts.destination);
-            bytes.extend_from_slice(&parts.source);
-            bytes.extend_from_slice(&parts.ether_type.to_be_bytes());
-            bytes.extend_from_slice(parts.payload);
-            frames.push(bytes);
+            let bytes = |parts: oer_network_port::EthernetFrameView<'_>| {
+                let mut bytes = Vec::from(parts.destination);
+                bytes.extend_from_slice(&parts.source);
+                bytes.extend_from_slice(&parts.ether_type.to_be_bytes());
+                bytes.extend_from_slice(parts.payload);
+                bytes
+            };
+            frames.push(match msdu {
+                Received::Lent(frame) => {
+                    self.lent.set(self.lent.get() + 1);
+                    bytes(frame.view().unwrap())
+                }
+                Received::Copied(_) => {
+                    let copy = self.delivered_copies.borrow().try_receive().unwrap();
+                    bytes(oer_network_port::EthernetFrame::view(&copy).unwrap())
+                }
+            });
         }
         frames
     }
@@ -1015,7 +1025,13 @@ impl Application<'_, '_, '_> {
             })
             .unwrap(),
         };
-        self.stack.borrow().try_send(packet).is_ok()
+        self.stack
+            .borrow_mut()
+            .try_send_with(|slot| {
+                *slot = packet;
+                Ok::<_, ()>(())
+            })
+            .is_ok()
     }
 
     /// Scan, authenticate and associate: the probe, the Authentication and
@@ -1049,8 +1065,9 @@ impl Application<'_, '_, '_> {
 struct Body<'w, 'b, S, O, const GROUPS: usize> {
     world: &'w World<'b>,
     sink: PhantomData<O>,
-    transmit: WakingSpscReceiver<'b, TxMsdu, 2>,
+    transmit: oer_memory::SlotReceiver<'b, TxMsdu, 2>,
     receive: WakingSpscSender<'b, Received<ModelLentRx>, 8>,
+    receive_copied: WakingSpscSender<'b, EthernetFrame, RX_COPIED_DEPTH>,
     config: TestConfig,
     script: S,
     refuse_initial_enable: bool,
@@ -1210,6 +1227,7 @@ where
                 control,
                 transmit: self.transmit,
                 receive: self.receive,
+                receive_copied: self.receive_copied,
                 output: &mut output,
                 network: &world.network,
                 stop: StopPolicy {
@@ -1577,10 +1595,12 @@ where
             ],
             clock.clone(),
         );
-        let mut transmit = WakingSpscQueue::<TxMsdu, 2>::new();
+        let mut transmit = oer_memory::WakingSlotQueue::<TxMsdu, 2>::new();
         let mut receive = WakingSpscQueue::<Received<ModelLentRx>, 8>::new();
-        let (stack, transmit) = transmit.split();
+        let (stack, transmit) = transmit.split(TxMsdu::empty);
         let (receive, delivered) = receive.split();
+        let mut copies = WakingSpscQueue::<EthernetFrame, RX_COPIED_DEPTH>::new();
+        let (receive_copied, delivered_copies) = copies.split();
         let world = World {
             air,
             clock,
@@ -1598,6 +1618,7 @@ where
             restart_stopped_service: Cell::new(None),
             stack: RefCell::new(stack),
             delivered: RefCell::new(delivered),
+            delivered_copies: RefCell::new(delivered_copies),
             lent: Cell::new(0),
             unwrap_delay: Cell::new(Duration::ZERO),
             unwraps: RefCell::new(Vec::new()),
@@ -1618,6 +1639,7 @@ where
                             sink: PhantomData,
                             transmit,
                             receive,
+                            receive_copied,
                             config,
                             script,
                             refuse_initial_enable,
@@ -2615,8 +2637,15 @@ fn a_frame_marked_for_voice_under_a_closed_voice_category_goes_as_video_in_tid_f
                     view.payload,
                 );
                 assert_eq!(requested.user_priority, WmmUserPriority::UP6);
-                let packet = TxMsdu::from_network(view, requested.user_priority).unwrap();
-                assert!(world.stack.borrow().try_send(packet).is_ok());
+                assert!(
+                    world
+                        .stack
+                        .borrow_mut()
+                        .try_send_with(
+                            |slot| slot.refill_from_network(view, requested.user_priority)
+                        )
+                        .is_ok()
+                );
                 let data = world.sent(&mut seen, QOS_DATA).await;
                 assert!(!carries_eapol(&data));
                 assert_eq!(data.plaintext[21], 9);

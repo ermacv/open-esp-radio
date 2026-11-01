@@ -23,6 +23,7 @@ pub struct RuntimeResources {
     pub(super) system_timer: SystemTimer,
     pub(super) timg0_alarm: Timg0AlarmParts,
     pub(super) timg1_alarm: Timg1AlarmParts,
+    pub(super) cache_counters: CacheCounters,
     pub(super) software_interrupts: SoftwareInterrupts,
     pub(super) interrupt_matrix: crate::platform::interrupt_controller::MatrixParts,
     pub(super) efuse: EfuseRegisters,
@@ -54,6 +55,9 @@ pub struct Hardware {
     pub system_timer: SystemTimer,
     pub timg0_alarm: Timg0AlarmParts,
     pub timg1_alarm: Timg1AlarmParts,
+    /// The L1 cache's access counters and geometry; no product owner
+    /// uses them.
+    pub cache_counters: CacheCounters,
     pub software_interrupts: SoftwareInterrupts,
     pub efuse: EfuseRegisters,
     pub entropy: EntropyRegisters,
@@ -109,6 +113,7 @@ impl Port for RuntimePort {
             system_timer,
             timg0_alarm,
             timg1_alarm,
+            cache_counters,
             software_interrupts,
             interrupt_matrix,
             efuse,
@@ -126,6 +131,7 @@ impl Port for RuntimePort {
                 system_timer,
                 timg0_alarm,
                 timg1_alarm,
+                cache_counters,
                 software_interrupts,
                 efuse,
                 entropy,

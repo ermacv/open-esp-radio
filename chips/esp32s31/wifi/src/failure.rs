@@ -63,6 +63,7 @@ pub enum SettingFault {
     ChannelUnset,
     EdcaLifetime,
     BlockAckSequence,
+    ReceivedUnqueued,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum LowerMacFault {

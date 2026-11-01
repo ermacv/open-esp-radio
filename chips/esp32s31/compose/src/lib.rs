@@ -28,6 +28,8 @@
 //!   which the image passes to `adoption::run`;
 //! - `wifi_fault` (feature `wifi-fault`): the Wi-Fi MAC's fatal assertion
 //!   record, its reset and the next boot's report;
+//! - `radio_fault` (feature `radio-fault`): the shared RF actor's failed
+//!   periodic PHY tracking, its record, reset and the next boot's report.
 //! - [`exception`]: the exception hook every image passes to `entry!`,
 //!   which retains what the interrupt controller showed after the trap
 //!   beside the runtime's trap-time frame, and the next boot's report.
@@ -74,6 +76,11 @@ impl oer_espressif_staged_runtime::adoption::Binding for Esp32s31 {
 /// Shared retained/reset path selected only by staged Wi-Fi images.
 #[cfg(feature = "wifi-fault")]
 pub mod wifi_fault;
+
+/// The shared RF actor's retained tracking fault, selected by images that
+/// run the actor.
+#[cfg(feature = "radio-fault")]
+pub mod radio_fault;
 
 pub mod reset_causes;
 pub mod sampler;

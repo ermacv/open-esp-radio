@@ -417,6 +417,17 @@ impl<const RX_QUEUE_DEPTH: usize> OwnedRxPublisher<'_, RX_QUEUE_DEPTH> {
         RX_QUEUE_DEPTH.saturating_sub(self.rx.free_capacity())
     }
 
+    /// Ready while one more packet fits the stack's RX queue; otherwise the
+    /// stack's next take wakes `context`. A lent frame needs no more: its
+    /// packet is its own buffer.
+    pub fn poll_queue_room(&mut self, context: &mut Context<'_>) -> Poll<()> {
+        // Register only on a full queue: a take wakes nobody otherwise.
+        if self.rx.free_capacity() != 0 {
+            return Poll::Ready(());
+        }
+        core::pin::pin!(self.rx.ready()).poll(context).map(drop)
+    }
+
     /// Poll until one bounded RX queue entry can be published.
     pub fn poll_ready(&mut self, context: &mut Context<'_>) -> Poll<()> {
         self.link.register_radio_waker(context.waker());
@@ -484,9 +495,16 @@ impl<const RX_QUEUE_DEPTH: usize> OwnedRxPublisher<'_, RX_QUEUE_DEPTH> {
             ether_type: EtherType::new(ether_type),
         }
         .to_bytes();
-        let bytes = header.into_iter().chain(payload.iter().copied());
-        for (byte, source) in packet.iter_mut().zip(bytes) {
-            *byte = source;
+        // Two plain element loops, which the compiler lowers to block
+        // copies: the header, then the payload after it.
+        let (head, body) = packet
+            .split_at_mut_checked(ETHERNET_HEADER_LEN)
+            .ok_or(RxEnqueueError::InvalidLength(FrameLengthError::TooShort))?;
+        for (byte, value) in head.iter_mut().zip(header) {
+            *byte = value;
+        }
+        for (byte, value) in body.iter_mut().zip(payload) {
+            *byte = *value;
         }
         self.try_publish(packet)
     }

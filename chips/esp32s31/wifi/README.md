@@ -19,6 +19,13 @@ callback, port identity or installation loan is required by the image.
 
 The image declares `bind_station!` with its interrupt entries, station
 callbacks, collectors, the composed engine type and handled-error terminal policy.
+The binding names where the station's network end runs (`Binding::Notifies`):
+`SameHart`, local wakers throughout, or, with the macro's `across_harts`
+arm, `AcrossHarts<N, S, D>`, whose three notify types raise the network
+task's, the station task's and the radio driver's executor signals. Every
+queue end, the link, the network stop and the lent receive buffers' returns
+name their notify types, so a wake across harts is a direct call and no
+waker crosses harts.
 `Resources` consumes the unique hardware partition, binding proof, doorbell,
 the facade's affine `DmaResources` claim, signals, declared storage and the
 value-owned key-unwrap engine supplied by `compose::crypto::key_unwrap`.
@@ -55,12 +62,19 @@ moving an installation credit into its command handler.
 
 `RadioResources` constructs the same shared RF actor, calibration identity,
 RC-slow membership and cooperative timer. The image retains its SAR/PWDET
-interrupt binding and spawns `RadioActor`. The facade has no diagnostic
+interrupt binding, gives the actor the observer of its periodic tracking
+ticks (`observation::TrackingTick`) and spawns `RadioActor`. The actor's
+run ends only when its periodic PHY tracking fails: it then keeps every
+owner it holds and returns the failure's class and variant path
+(`oer_esp32s31_compose::radio_fault::Failure`) for the image to record and
+reset with. The facade has no diagnostic
 counters: its copied trace observations reach image-owned collectors, and its
 product events are immediate callbacks. Bridge timers, polling, protocol
 parameters, DMA geometry and rate-selection policy retain their values.
 The facade's own trace events (station activity, the station service's
-spans and the selected data rate) are its `observation` module, reported to
+spans, the selected data rate, each received data MPDU's rate and A-MPDU
+containment and each single data transmission's last rate, transmissions
+and end) are its `observation` module, reported to
 `Binding::Observer` and `Binding::DriverObserver`. The protocol's events go to `Binding::Sink`, which
 the station service lends its cores; `()` keeps none. The target used to
 correlate raw authentication/beacon observations and all diagnostic TX

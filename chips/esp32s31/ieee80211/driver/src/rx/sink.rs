@@ -39,7 +39,8 @@ pub fn unclassified_preview(unit: CompletedUnit) -> Preview {
     }
 }
 
-/// Admit everything; count every drop and every blocked admission.
+/// Admit everything; count every staged unit, every drop and every blocked
+/// admission.
 pub struct CountingAdmission<'a> {
     counters: &'a WifiRxCounters,
 }
@@ -60,7 +61,9 @@ impl Admission for CountingAdmission<'_> {
             Observation::BulkAdmissionBlocked(_) | Observation::CriticalAdmissionBlocked(_) => {
                 self.counters.admission_blocked();
             }
-            Observation::Staged(_) | Observation::CriticalReserveAdmitted(_) => {}
+            // Every staged unit, whichever sink takes it, counts here once.
+            Observation::Staged(unit) => self.counters.received(unit.payload_length),
+            Observation::CriticalReserveAdmitted(_) => {}
         }
     }
 }

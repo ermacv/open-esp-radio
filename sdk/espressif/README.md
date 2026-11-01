@@ -137,6 +137,7 @@ returns `false`; a fatal note still reaches the host.
 | The entropy source fails its health check when the library draws the boot's identity | all owners stay where they are | record and reset |
 | The station runner exits other than an ordinary stop (failed, poisoned, quarantined, retirement or release failure, abandoned, initialization) | the runner keeps every owner | record and reset |
 | A fatal MAC assertion, a PHY transaction fault, nonce exhaustion | owners quarantined by their fault owner | record and reset |
+| The radio actor's periodic PHY tracking fails, or its deadline is one the clock cannot hold | the actor keeps every owner | the fault's class and variant path (`oer-esp32s31-compose::radio_fault`) recorded, reset; the next boot prints it |
 | A CPU exception | all owners stay where they are | the runtime records the trap frame before it stops the other hart, the library's hook (`oer-esp32s31-compose::exception`) what the interrupt controller showed after the stop; reset. The next boot prints both and serves them in `Boot::evidence` (`previous_exception`) |
 | The IP service is refused its context | the service keeps its owners | record and reset |
 | `connect` refused or failed, `wait_ipv4` timed out by the caller, a TCP error | unchanged | handled `Result` |

@@ -256,6 +256,7 @@ pub const MODEL_CAPABILITIES: LowerMacCapabilities = LowerMacCapabilities {
     access_point_receive_filters: ReceiveFilter::BSS_MEMBER.union(ReceiveFilter::PROBE_REQUESTS),
     rx_block_ack_max_tid: 7,
     rx_block_ack_max_window: 64,
+    rx_amsdu_in_ampdu: true,
     edca_max_aifsn: 15,
     edca_max_cw_exponent: 10,
     edca_max_txop_limit_units_32_us: u16::MAX,
@@ -4026,6 +4027,20 @@ impl<'p, 'id: 'p, C: Ieee80211Capabilities, B: ModelComposition + 'id> LowerMacP
 
     fn lent(&self) -> usize {
         self.held.network.held()
+    }
+
+    fn lend_room(&self) -> bool {
+        self.held.network.held() < MODEL_RX_EVENTS
+    }
+
+    fn poll_lend_room(&mut self, cx: &mut core::task::Context<'_>) -> core::task::Poll<()> {
+        // Every lent buffer's drop wakes the registered task.
+        self.held.network.waker.register(cx.waker());
+        if self.lend_room() {
+            core::task::Poll::Ready(())
+        } else {
+            core::task::Poll::Pending
+        }
     }
 
     fn close_gate(&mut self, gate: GateOpen<'id, ModelPool<<B as ModelComposition>::Identity, 0>>) {

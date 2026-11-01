@@ -234,6 +234,11 @@ pub struct LowerMacCapabilities {
     pub rx_block_ack_max_tid: u8,
     /// Largest receive Block Ack window.
     pub rx_block_ack_max_window: u16,
+    /// Whether the backend delivers a received MPDU carrying an A-MSDU
+    /// inside an A-MPDU of a receive Block Ack agreement. Only then does
+    /// the recipient grant an originator's request for A-MSDUs in the
+    /// agreement (IEEE Std 802.11-2020 9.4.1.14, A-MSDU Supported).
+    pub rx_amsdu_in_ampdu: bool,
     /// Largest AIFSN an EDCA record may carry.
     pub edca_max_aifsn: u8,
     /// Largest contention-window exponent (`ECWmin`, `ECWmax`) an EDCA

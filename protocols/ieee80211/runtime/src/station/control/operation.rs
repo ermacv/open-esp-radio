@@ -232,15 +232,19 @@ impl Operations {
 /// to that request's terminal. Dropping it detaches the observer without
 /// returning the permission, which the terminal returns.
 #[must_use = "dropping the operation detaches its observer; the request continues"]
-pub struct Operation<'c> {
-    state: &'c super::State,
+pub struct Operation<'c, N: super::Notifies = super::SameHart> {
+    state: &'c super::State<N>,
     command: Command,
     correlation: u64,
     resolved: bool,
 }
 
-impl<'c> Operation<'c> {
-    pub(super) const fn new(state: &'c super::State, command: Command, correlation: u64) -> Self {
+impl<'c, N: super::Notifies> Operation<'c, N> {
+    pub(super) const fn new(
+        state: &'c super::State<N>,
+        command: Command,
+        correlation: u64,
+    ) -> Self {
         Self {
             state,
             command,
@@ -259,7 +263,7 @@ impl<'c> Operation<'c> {
     }
 }
 
-impl Future for Operation<'_> {
+impl<N: super::Notifies> Future for Operation<'_, N> {
     type Output = OperationEnd;
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<OperationEnd> {
         if self.resolved {
@@ -292,7 +296,7 @@ impl Future for Operation<'_> {
     }
 }
 
-impl Drop for Operation<'_> {
+impl<N: super::Notifies> Drop for Operation<'_, N> {
     fn drop(&mut self) {
         if self.resolved {
             return;

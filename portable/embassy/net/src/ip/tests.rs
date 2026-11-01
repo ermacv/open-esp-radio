@@ -60,6 +60,7 @@ enum Frame {
 }
 impl oer_network_port::ReceivedFrame for Frame {
     type Storage = Lent;
+    type Copied = Self;
     fn into_lent(self) -> Result<oer_network_port::LentFrame<Lent>, Self> {
         match self {
             Self::Lent(frame) => Ok(frame),
@@ -208,6 +209,13 @@ impl NetDevice for Port {
     }
     fn try_receive(&mut self) -> Option<Frame> {
         self.0.borrow_mut().rx.pop_front()
+    }
+    fn read_copied<R>(
+        &mut self,
+        copied: Frame,
+        read: impl FnOnce(EthernetFrameView<'_>) -> R,
+    ) -> Result<R, FrameLengthError> {
+        copied.view().map(read)
     }
     fn poll_transmit_ready(&mut self, cx: &mut core::task::Context<'_>) -> Poll<()> {
         let mut state = self.0.borrow_mut();

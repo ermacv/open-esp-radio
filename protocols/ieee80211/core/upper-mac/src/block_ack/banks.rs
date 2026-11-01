@@ -85,9 +85,9 @@ pub enum AgreementStop {
 }
 
 /// The most frames one agreement retains, and the most in-order releases
-/// waiting for delivery. The station's frame/token bank admits at most eight
-/// in flight; the image chooses the number of banks independently.
-pub const RX_BLOCK_ACK_WINDOW: usize = 8;
+/// waiting for delivery: a 16-MPDU window. The image chooses the number of
+/// banks and the retained frames independently, at most this many.
+pub const RX_BLOCK_ACK_WINDOW: usize = 16;
 const WINDOW: usize = RX_BLOCK_ACK_WINDOW;
 /// Encoded replies waiting for a control transmit credit.
 const PENDING: usize = 8;
@@ -154,7 +154,7 @@ impl<T: RxBlockAckTypes, E: Copy + Eq, const BANKS: usize, const FRAMES: usize>
     pub fn new(slots: [T::Slot; BANKS], gap_timeout: Duration) -> Self {
         const {
             if FRAMES == 0 || FRAMES > WINDOW {
-                panic!("RX storage must reserve one to eight existing frame credits");
+                panic!("RX storage must reserve one to RX_BLOCK_ACK_WINDOW existing frame credits");
             }
         }
         Self {
@@ -232,6 +232,18 @@ pub enum RxDisposition<T: RxBlockAckTypes> {
     Capacity(T::Frame),
 }
 
+/// What [`RxBlockAckView::park`] did with a frame its consumer had no room
+/// for.
+pub enum Parked<T: RxBlockAckTypes> {
+    /// Held: it leaves through [`RxBlockAckView::pop_ready`] after every
+    /// frame queued before it.
+    Waiting,
+    /// Not a data frame: deliver it now.
+    Deliver(Retained<T>),
+    /// No retained-frame credit remains: a capacity fault.
+    Capacity(T::Frame),
+}
+
 /// No reply place or bank remains for an admitted request.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct RxBlockAckCapacity;
@@ -301,6 +313,38 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
         }
         self.header.ready_len = self.header.ready_len.saturating_sub(1);
         self.frames.get_mut(slot)?.take()
+    }
+
+    /// Whether a frame waits in delivery order ([`Self::pop_ready`]).
+    pub fn has_ready(&self) -> bool {
+        self.header.ready_len != 0
+    }
+
+    /// Hold one data MPDU released for delivery while its consumer has no
+    /// room: it waits behind the frames already in delivery order. A
+    /// management or control frame is not held; the caller delivers it.
+    pub fn park(&mut self, frame: T::Frame, meta: T::Meta) -> Parked<T> {
+        let data =
+            DecodedHeader::decode(frame.bytes()).is_some_and(|header| header.control().is_data());
+        if !data {
+            return Parked::Deliver((frame, meta));
+        }
+        let next = usize::from(self.header.ready_len);
+        let Some(slot) = self.frames.iter().position(Option::is_none) else {
+            return Parked::Capacity(frame);
+        };
+        let (Ok(id), true) = (u8::try_from(slot), next < self.header.ready.len()) else {
+            return Parked::Capacity(frame);
+        };
+        let (Some(place), Some(stored)) =
+            (self.header.ready.get_mut(next), self.frames.get_mut(slot))
+        else {
+            return Parked::Capacity(frame);
+        };
+        *place = id;
+        *stored = Some((frame, meta));
+        self.header.ready_len = self.header.ready_len.saturating_add(1);
+        Parked::Waiting
     }
 
     fn defer(&mut self, frame: T::Frame, meta: T::Meta) -> Result<(), Retained<T>> {
@@ -458,6 +502,7 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
         let negotiation = match RxBlockAckNegotiation::request(
             parsed,
             P::Caps::CAPS.rx_block_ack_max_tid,
+            P::Caps::CAPS.rx_amsdu_in_ampdu,
             capacity,
             available.is_some() && supported,
             now,

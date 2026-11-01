@@ -267,6 +267,45 @@ impl<E: SignalExecutor> IrqSignal<E> {
     }
 }
 
+/// A queue end's notify across harts: the waiting end's task polls the
+/// signal of its executor, and the other hart's end raises it. No waker
+/// crosses harts. One signal wakes one task: every queue end that notifies
+/// through it must be polled by that task. It is a copyable handle: every
+/// queue end of that task holds one, and its calls are direct.
+pub struct PeerNotify<E: SignalExecutor>(&'static IrqSignal<E>);
+
+impl<E: SignalExecutor> Clone for PeerNotify<E> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<E: SignalExecutor> Copy for PeerNotify<E> {}
+
+impl<E: SignalExecutor> PeerNotify<E> {
+    /// The notify of `signal`, which the composition constructed with the
+    /// other hart's raising task (`FromPeerHart`).
+    pub const fn new(signal: &'static IrqSignal<E>) -> Self {
+        Self(signal)
+    }
+}
+
+impl<E: SignalExecutor> oer_memory::QueueNotify for PeerNotify<E>
+where
+    IrqSignal<E>: Sync,
+{
+    fn register(&self, cx: &mut Context<'_>) {
+        // Registering takes the facts raised so far: the caller checks its
+        // queue next, so a fact taken here is not lost. A poll outside the
+        // signal's executor registers nothing; the composition places every
+        // end that notifies through a signal on that signal's executor.
+        let _facts = self.0.poll_take(cx);
+    }
+    fn notify(&self) {
+        let _pended = self.0.raise(1);
+    }
+}
+
 /// One raise: the previous facts and the pend a new fact owes.
 #[must_use = "pend the executor after ending the register transaction"]
 pub struct Raised<E: SignalExecutor> {

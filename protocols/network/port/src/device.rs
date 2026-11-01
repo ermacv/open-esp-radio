@@ -157,13 +157,16 @@ impl<S: FrameStorage> EthernetFrame for LentFrame<S> {
 }
 
 /// A received frame a [`NetDevice`] hands over: lent in its owner's
-/// storage, or holding its own copy.
-pub trait ReceivedFrame: EthernetFrame + Sized {
+/// storage, or a copy the device keeps, which [`NetDevice::read_copied`]
+/// reads where it lies. The frame a device hands over stays small either
+/// way: queues and the bridge move it by value.
+pub trait ReceivedFrame: Sized {
     /// The storage a lent frame keeps its bytes in.
     type Storage: FrameStorage;
-    /// The frame in its owner's storage, or the frame itself when its bytes
-    /// are its own copy.
-    fn into_lent(self) -> Result<LentFrame<Self::Storage>, Self>;
+    /// What stands for a copy the device keeps.
+    type Copied;
+    /// The frame in its owner's storage, or what stands for its copy.
+    fn into_lent(self) -> Result<LentFrame<Self::Storage>, Self::Copied>;
 }
 
 /// A refusal before TX admission. The caller receives its unchanged frame.
@@ -192,6 +195,18 @@ pub trait NetDevice {
     fn receive_queue_len(&self) -> usize;
     fn poll_receive_ready(&mut self, cx: &mut Context<'_>) -> Poll<()>;
     fn try_receive(&mut self) -> Option<Self::RxFrame>;
+    /// Read the copy `copied` stands for, in place, and release it. A copy
+    /// is read in the order the device handed its frames over.
+    ///
+    /// # Errors
+    ///
+    /// [`FrameLengthError`] when the copy is not a frame the device can
+    /// view; the copy is released all the same.
+    fn read_copied<R>(
+        &mut self,
+        copied: <Self::RxFrame as ReceivedFrame>::Copied,
+        read: impl FnOnce(EthernetFrameView<'_>) -> R,
+    ) -> Result<R, FrameLengthError>;
     fn poll_transmit_ready(&mut self, cx: &mut Context<'_>) -> Poll<()>;
     fn try_transmit<F: EthernetFrame>(&mut self, frame: F) -> Result<(), TransmitRefused<F>>;
 }

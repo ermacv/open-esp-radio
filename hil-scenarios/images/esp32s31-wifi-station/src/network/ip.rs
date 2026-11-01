@@ -1,5 +1,7 @@
-//! IPv4 by DHCP over the station's neutral Ethernet end. The stack answers
-//! ICMP echo once it holds a lease.
+//! IPv4 by DHCP over the station's neutral Ethernet end, on hart 1's
+//! network executor. The stack answers ICMP echo once it holds a lease,
+//! which it publishes for the station's status on the boot hart
+//! ([`crate::network::LEASE`]).
 //!
 //! The pools are sized for the load service's UDP load of about 65 Mbit/s
 //! in 1400-byte datagrams, some 5 800 datagrams a second (one each 172 µs)
@@ -11,8 +13,13 @@
 //! Ethernet frame.
 use oer_embassy_net::{NetworkInterfaceId, RxEnqueueError};
 use oer_embassy_net::ethernet::{LentCopy, LentSlots};
-use oer_embassy_net::ip::{Configuration, Control, Error, Resources, Service};
-use oer_esp32s31_wifi::{Network, ReceivedStorage};
+use oer_embassy_net::ip::{
+    Configuration, Control, Error, Ipv4Status, Resources, Service, StatusChanged,
+};
+use crate::station::radio::Notifies;
+type Network = oer_esp32s31_wifi::Network<'static, Notifies>;
+type ReceivedStorage = oer_esp32s31_wifi::ReceivedStorage<Notifies>;
+use oer_services_wifi_station::Ipv4;
 use oer_memory::{PlacedFuture, StaticPlace};
 use static_cell::{ConstStaticCell, StaticCell};
 
@@ -22,7 +29,8 @@ use crate::load::counters::Bridged;
 const RX: usize = 32;
 const TX: usize = 16;
 const GENERAL: usize = 32;
-type Context = oer_espressif_executor::ThreadContext<0>;
+/// Hart 1's network executor runs the stack.
+type Context = oer_espressif_executor::InterruptContext<1>;
 type IpResources = Resources<Context, RX, TX, GENERAL>;
 /// The stack's device.
 pub(crate) type Device = oer_embassy_net::OwnedNetworkDevice<'static, Context, RX, TX>;
@@ -43,7 +51,7 @@ static RUNNING: ConstStaticCell<StaticPlace<Running>> = ConstStaticCell::new(Sta
 pub(crate) fn start(
     address: [u8; 6],
     seed: u64,
-    net: Network<'static>,
+    net: Network,
 ) -> Result<(Control<'static>, Interface, PlacedFuture<'static, Running>), Error> {
     // Written from a constant, so the pools are never a value on the stack.
     let resources = IP
@@ -86,13 +94,36 @@ fn copied(_: LentCopy) {
     crate::load::parts::bridged(Bridged::Copied);
 }
 
+/// The service's status changed: the station's hart reads the lease.
+fn changed(changed: StatusChanged) {
+    if changed.current.ipv4 != changed.previous.ipv4 {
+        crate::network::LEASE.publish(ipv4(changed.current.ipv4));
+    }
+}
+
+/// The IPv4 configuration DHCP leased.
+fn ipv4(status: Ipv4Status) -> Option<Ipv4> {
+    match status {
+        Ipv4Status::Lease(config) | Ipv4Status::Static(config) => Some(Ipv4 {
+            address: config.address,
+            prefix: config.prefix_length,
+            gateway: config.gateway,
+        }),
+        Ipv4Status::Unconfigured => None,
+    }
+}
+
 #[define_opaque(Running)]
 fn running_future(
-    mut service: Service<Context, RX, TX, Network<'static>, { oer_esp32s31_wifi::LENT_RX }>,
+    mut service: Service<Context, RX, TX, Network, { oer_esp32s31_wifi::LENT_RX }>,
 ) -> Running {
     async move {
         // Only an access from another context than its executor's fails it.
-        if service.run(|_| {}, received, refused, copied, |_| {}).await.is_err() {
+        if service
+            .run(changed, received, refused, copied, |_| {})
+            .await
+            .is_err()
+        {
             crate::fail(Failure::Network);
         }
     }

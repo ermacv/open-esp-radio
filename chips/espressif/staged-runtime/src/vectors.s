@@ -4,7 +4,11 @@
     // and harts, the macros `RUNTIME_IRQ_ENTRIES` (an `IRQ_ENTRY hart, line`
     // for every line but 0 of every hart), plus typed Rust vector tables.
     // This text holds what every assembly entry shares and invokes the macro.
-    // `stacks.rs` assembles the generated text and this one with the operands:
+    // `stacks.rs` assembles, before the generated text and this one, the
+    // macro `RECORD_RA hart`: in a trace build it stores the interrupted `ra`
+    // into the hart's word of the SRAM static `INTERRUPTED_RA` through `t1`;
+    // otherwise its body is empty and the entries are unchanged. It assembles
+    // them with the operands:
     //   {mtvt}             sym of the immutable Rust MTVT static
     //   {frame_bytes}      size_of!(TrapFrame)
     //   frame_* operands   offset_of!(TrapFrame, field), named for its field
@@ -168,7 +172,8 @@ _start_trap:
     j 3b
     .size _start_trap, . - _start_trap
 
-    // One hardware-vector entry: enter, turn the triggers on when they were
+    // One hardware-vector entry: enter, record the interrupted `ra` (a
+    // trace build only; `t1` is saved), turn the triggers on when they were
     // on in what the trap interrupted (MTE = MPTE), admit nesting (the CLIC
     // lets only a higher level in), call the line's handler, exit. The
     // exception entry leaves them off: a store into the interrupt stack's
@@ -179,6 +184,7 @@ _start_trap:
     .type _runtime_irq_h\hart\()_l\line, @function
 _runtime_irq_h\hart\()_l\line:
     TRAP_ENTER
+    RECORD_RA \hart
     csrr t1, {tcontrol}
     srli t1, t1, {mpte_shift}
     andi t1, t1, {mte}

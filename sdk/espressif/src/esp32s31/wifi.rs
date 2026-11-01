@@ -80,7 +80,7 @@ pub(crate) fn on_pilot(
     PILOT.interrupt(part);
 }
 
-type Actor = wifi::RadioActor<pilot::Client<PhyToken>>;
+type Actor = wifi::RadioActor<pilot::Client<PhyToken>, Unobserved>;
 static ACTOR: StaticCell<Actor> = StaticCell::new();
 static NONCES: StaticCell<wifi::NonceSource> = StaticCell::new();
 
@@ -140,8 +140,10 @@ fn failure(error: wifi::InitializationError) -> ! {
 
 wifi::bind_station! {pub(crate) mod binding{wifi:WifiToken,radio:RadioToken,callbacks:Callbacks,observer:Unobserved,driver_observer:Unobserved,sink:(),engine:AesClient,events:ProductEvents,fail:failure}}
 
+/// Run the shared RF actor until its periodic PHY tracking fails; the PHY
+/// may then be half changed, so the library records the failure and resets.
 async fn radio_actor(actor: &'static mut Actor) {
-    match actor.run().await {}
+    actor.run().await.reset()
 }
 
 async fn drive(driver: wifi::Driver<binding::Binding>) {
@@ -434,7 +436,7 @@ impl Station {
         let resources =
             wifi::RadioResources::new::<binding::Binding>(wifi.radio, wifi.clocks, &identity);
         let pilot = PILOT.init(wifi.timg0_alarm, boot.router(), radio.phy);
-        let (actor, hardware) = resources.start(pilot);
+        let (actor, hardware) = resources.start(pilot, Unobserved);
         let actor = ACTOR.try_init(actor).ok_or(Error::Storage)?;
         // The radio executor writes the system timer; the application
         // executor publishes its deadlines to it.

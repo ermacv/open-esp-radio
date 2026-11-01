@@ -145,19 +145,12 @@ pub fn publish_lent<const RX: usize, S: FrameStorage, const LENT: usize>(
     }
 }
 
-/// Copy a neutral received owner into the stack's final RX pool allocation.
-/// Rejection returns the complete owner to the bridge's policy.
-pub fn publish<const RX: usize, F: EthernetFrame>(
+/// Copy a received frame's view into the stack's final RX pool allocation.
+pub fn publish_view<const RX: usize>(
     publisher: &mut crate::OwnedRxPublisher<'_, RX>,
-    frame: F,
-) -> Result<(), (F, crate::RxEnqueueError)> {
-    let result = frame
-        .view()
-        .map_err(crate::RxEnqueueError::InvalidLength)
-        .and_then(|view| {
-            publisher.try_send_parts(view.destination, view.source, view.ether_type, view.payload)
-        });
-    result.map_err(|reason| (frame, reason))
+    view: EthernetFrameView<'_>,
+) -> Result<(), crate::RxEnqueueError> {
+    publisher.try_send_parts(view.destination, view.source, view.ether_type, view.payload)
 }
 
 impl crate::OwnedLinkController<'_> {
@@ -296,19 +289,32 @@ impl<
         {
             self.pending = None;
         }
-        // Preserve this bridge's existing drain-and-report-refusal RX policy.
-        // Register even when no frame is available.
-        while self.device.poll_receive_ready(cx).is_ready() {
+        // A frame stays with the device while the stack's queue is full:
+        // the stack's next take wakes this bridge, and the device's owner
+        // holds its frames back meanwhile. Register even when no frame is
+        // available.
+        while self.radio.rx_publisher().poll_queue_room(cx).is_ready()
+            && self.device.poll_receive_ready(cx).is_ready()
+        {
             let Some(frame) = self.device.try_receive() else {
                 break;
             };
-            if let Ok(view) = frame.view() {
-                received(view);
-            }
             let published = match frame.into_lent() {
-                Ok(lent) => publish_lent(self.radio.rx_publisher(), self.lent, lent, &mut copied),
-                Err(frame) => {
-                    publish(self.radio.rx_publisher(), frame).map_err(|(_, reason)| reason)
+                Ok(lent) => {
+                    if let Ok(view) = lent.view() {
+                        received(view);
+                    }
+                    publish_lent(self.radio.rx_publisher(), self.lent, lent, &mut copied)
+                }
+                Err(copy) => {
+                    let publisher = self.radio.rx_publisher();
+                    self.device
+                        .read_copied(copy, |view| {
+                            received(view);
+                            publish_view(publisher, view)
+                        })
+                        .map_err(crate::RxEnqueueError::InvalidLength)
+                        .and_then(|published| published)
                 }
             };
             if let Err(reason) = published {

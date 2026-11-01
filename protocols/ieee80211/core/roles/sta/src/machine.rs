@@ -133,8 +133,10 @@ use {
     oer_ieee80211_core_upper_mac::ccmp::CcmpRxReplayEpoch,
 };
 
-use crate::association::StaAssociatedPeer;
+use crate::association::{Preference, StaAssociatedPeer, select_phy};
 use crate::receive::{Management, Received, observe_scan};
+use oer_ieee80211_contracts_port::ChannelWidth;
+use oer_ieee80211_wire::scan::HtSecondaryChannel;
 // The machine's tests build receive metadata through `use super::*`.
 #[cfg(test)]
 use oer_ieee80211_contracts_port::RxEvidence;
@@ -961,6 +963,9 @@ pub enum StaDisconnectReason {
 
 /// The scan list's channels at most.
 const CHANNEL_CAPACITY: usize = 16;
+/// The 40 MHz channels a join may tune at most: a secondary above and one
+/// below for every scanned channel.
+pub const WIDE_CHANNEL_CAPACITY: usize = 2 * CHANNEL_CAPACITY;
 /// The BSSs a scan keeps at most.
 const SCAN_CAPACITY: usize = 16;
 
@@ -1003,6 +1008,10 @@ pub struct StaConfig<K, C: StaCallbacks> {
     pub address: OwnAddress,
     /// The channels the scan visits, in order.
     pub channels: heapless::Vec<SupportedChannel<K>, CHANNEL_CAPACITY>,
+    /// The 40 MHz channels an HT40 join may tune: the one whose primary is
+    /// the access point's scanned channel and whose secondary its HT
+    /// Operation names. Without one, the join stays on the scanned channel.
+    pub wide_channels: heapless::Vec<SupportedChannel<K>, WIDE_CHANNEL_CAPACITY>,
     /// How long the scan listens on each channel.
     pub dwell: Duration,
     /// The consecutive cancelled leases after which a scan ends with a
@@ -1019,7 +1028,11 @@ pub struct StaConfig<K, C: StaCallbacks> {
     /// The nonzero number of beacon intervals advertised in Association.
     /// The composition also uses this value for its power-save policy.
     pub listen_interval: StationListenInterval,
-    /// The PHY the station associates with.
+    /// The PHY the station associates with. HT40 is the widest it asks
+    /// for: a join takes HT40 on one of [`Self::wide_channels`] where the
+    /// access point's HT elements admit it, else HT20 with an access point
+    /// that advertises HT, else legacy ([`select_phy`]). Every other mode
+    /// is the one the request carries.
     pub phy: PhyMode,
     /// Entropy and HE padding policy supplied by this composition.
     pub callbacks: C,
@@ -1880,6 +1893,8 @@ struct Join<T: StaTokens, K> {
     erp: oer_ieee80211_wire::protection::ErpProtection,
     rsn: SelectedRsn,
     channel: SupportedChannel<K>,
+    /// The PHY the join associates with, on `channel`.
+    phy: PhyMode,
     step: JoinStep<T::RxMeta>,
 }
 
@@ -3255,9 +3270,14 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
                 return Some(StaAction::CommandCompleted(terminal));
             }
             let (mut context, state) = self.transition();
-            let (change, progress) = context.owe(state, now, events);
-            state.apply(change);
-            match progress {
+            // The step is the call's own return place, read in place: an
+            // unchanged state's wait, the connected link's every turn,
+            // moves neither change nor action.
+            let mut step = context.owe(state, now, events);
+            if !matches!(step.0, Change::Keep) {
+                state.apply(core::mem::replace(&mut step.0, Change::Keep));
+            }
+            match step.1 {
                 ActionProgress::Action(owed) => break owed,
                 ActionProgress::Transition => continue,
                 ActionProgress::Wait => return None,
@@ -4462,7 +4482,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
         let Ok(rsn) = select_association_rsn(&access_point, policy) else {
             return leave_unkeyed(StaDisconnectReason::NotFound { partial });
         };
-        let Some(channel) = self
+        let Some(scanned) = self
             .config
             .channels
             .iter()
@@ -4471,11 +4491,18 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
         else {
             return leave_unkeyed(StaDisconnectReason::NotFound { partial });
         };
+        let (channel, phy) = join_phy(
+            self.config.phy,
+            &self.config.wide_channels,
+            &access_point,
+            scanned,
+        );
         Change::Join(Join {
             access_point,
             erp: selected.erp,
             rsn,
             channel,
+            phy,
             step: JoinStep::NeedLease,
         })
     }
@@ -4864,7 +4891,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                                     &join.access_point,
                                     join.erp,
                                     &response,
-                                    self.config.phy,
+                                    join.phy,
                                     |capability| {
                                         self.config.callbacks.he_packet_padding(capability)
                                     },
@@ -5881,6 +5908,14 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
         // the next of the two deferred frames.
         loop {
             let rsn = connected.rsn.as_mut()?;
+            // Only these states owe anything; the others, the connected
+            // link's every turn, stay where they are.
+            if !matches!(
+                rsn.rekey,
+                Rekey::Unwrap(..) | Rekey::Install(..) | Rekey::Send(..)
+            ) {
+                return None;
+            }
             let (rekey, owed) = match core::mem::replace(&mut rsn.rekey, Rekey::None) {
                 Rekey::Unwrap(request, protection) if !self.key_unwrap.in_flight() => {
                     match request.key_unwrap() {
@@ -6339,7 +6374,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                 match runtime.poll(now, &mut (*self.sequence)) {
                     StaAssociationPoll::Transmit { runtime, attempt } => {
                         let capabilities = self.config.association;
-                        let phy = self.config.phy;
+                        let phy = join.phy;
                         let address = self.config.address;
                         let listen_interval = self.config.listen_interval.get();
                         let access_point = &join.access_point;
@@ -6769,6 +6804,44 @@ fn association_failure(failure: StaAssociationFailure) -> StaDisconnectReason {
         StaAssociationFailure::DeadlineOverflow => StaDisconnectReason::DeadlineOverflow,
         _ => StaDisconnectReason::AssociationFailed,
     }
+}
+
+/// The channel and PHY of a join of `access_point`, scanned on `scanned`:
+/// with `phy` HT40, the one of `wide` whose primary is `scanned`'s and
+/// whose secondary the access point's HT Capabilities and HT Operation name,
+/// in the mode [`select_phy`] chooses between both stations' modes; any
+/// other `phy` stays on `scanned`.
+fn join_phy<K: Ieee80211Capabilities>(
+    phy: PhyMode,
+    wide: &[SupportedChannel<K>],
+    access_point: &ScanRecord,
+    scanned: SupportedChannel<K>,
+) -> (SupportedChannel<K>, PhyMode) {
+    if phy != PhyMode::Ht40 {
+        return (scanned, phy);
+    }
+    let primary = scanned.channel();
+    let wide = access_point
+        .ht40_secondary_channel(primary.number())
+        .and_then(|secondary| {
+            let width = match secondary {
+                HtSecondaryChannel::Above => ChannelWidth::Mhz40Above,
+                HtSecondaryChannel::Below => ChannelWidth::Mhz40Below,
+            };
+            wide.iter().copied().find(|channel| {
+                let channel = channel.channel();
+                channel.band() == primary.band()
+                    && channel.number() == primary.number()
+                    && channel.width() == width
+            })
+        });
+    let phy = select_phy(
+        Preference::Automatic,
+        access_point.ht_capability_ie_bytes().is_some(),
+        wide.is_some(),
+        false,
+    );
+    (wide.unwrap_or(scanned), phy)
 }
 
 fn leave_unkeyed<T: StaTokens, K>(reason: StaDisconnectReason) -> Change<T, K> {

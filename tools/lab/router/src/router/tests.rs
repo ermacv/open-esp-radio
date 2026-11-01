@@ -734,7 +734,7 @@ fn iw_info_parses_and_refuses_garbage() {
     assert_eq!(info.bssid.octets(), [0x02, 0x5e, 0xc0, 0xde, 0xf6, 0xd0]);
     assert_eq!((info.channel, info.width, info.ap), (6, Width::Ht20, true));
     assert!(info.stand_ssid);
-    assert_eq!(info.mismatch(6), None);
+    assert_eq!(info.mismatch(6, ChannelWidth::Ht20), None);
     assert_eq!(
         parse_iw_info(&iw(6, "20 MHz (no HT)", SSID), SSID)
             .unwrap()
@@ -746,7 +746,12 @@ fn iw_info_parses_and_refuses_garbage() {
     assert!(escaped.stand_ssid);
     let other = parse_iw_info(&iw(11, "20 MHz", "Other"), SSID).unwrap();
     assert!(!other.stand_ssid);
-    assert!(other.mismatch(6).unwrap().contains("channel 11"));
+    assert!(
+        other
+            .mismatch(6, ChannelWidth::Ht20)
+            .unwrap()
+            .contains("channel 11")
+    );
     let good = iw(6, "20 MHz", SSID);
     for (text, reason) in [
         (
@@ -894,4 +899,50 @@ fn shell_quote_rejects_nul_and_preserves_other_words() {
         let words = shlex::split(&quoted).unwrap();
         assert_eq!(words, [value]);
     }
+}
+
+#[test]
+fn a_40_mhz_profile_takes_its_secondary_below_where_it_may() {
+    assert_eq!(ChannelWidth::Ht20.htmode(13), "HT20");
+    assert_eq!(ChannelWidth::Ht40.htmode(13), "HT40-");
+    assert_eq!(ChannelWidth::Ht40.htmode(5), "HT40-");
+    assert_eq!(ChannelWidth::Ht40.htmode(4), "HT40+");
+    let wide = profile().width(ChannelWidth::Ht40);
+    let set = wide.apply_script().unwrap();
+    assert!(
+        set.contains("'wireless.radio9.htmode=HT40-'"),
+        "{}",
+        set.as_str()
+    );
+    assert!(wide.describe().contains("HT40-"), "{}", wide.describe());
+}
+
+/// `iw dev <interface> info`'s filtered lines of a 40 MHz AP on `channel`
+/// centred at `centre` MHz.
+fn iw40(channel: u8, centre: u32) -> String {
+    let frequency = 2407 + 5 * u32::from(channel);
+    format!(
+        "\taddr {BSSID}\n\tssid {SSID}\n\ttype AP\n\
+         \tchannel {channel} ({frequency} MHz), width: 40 MHz, center1: {centre} MHz\n"
+    )
+}
+
+#[test]
+fn iw_names_a_40_mhz_channel_by_its_centre() {
+    let info = parse_iw_info(&iw40(13, 2462), SSID).unwrap();
+    assert_eq!(info.width, Width::Ht40 { centre_mhz: 2462 });
+    assert_eq!(info.mismatch(13, ChannelWidth::Ht40), None);
+    // The secondary above, or 20 MHz, is not the profile's HT40-.
+    let above = parse_iw_info(&iw40(9, 2462), SSID).unwrap();
+    assert!(above.mismatch(9, ChannelWidth::Ht40).is_some());
+    let narrow = parse_iw_info(&iw(13, "20 MHz", SSID), SSID).unwrap();
+    assert!(
+        narrow
+            .mismatch(13, ChannelWidth::Ht40)
+            .is_some_and(|reason| reason.contains("HT40-"))
+    );
+    assert_eq!(narrow.mismatch(13, ChannelWidth::Ht20), None);
+    // A 40 MHz line without its centre is no width the profile names.
+    let unnamed = parse_iw_info(&iw40(13, 2462).replace(", center1: 2462 MHz", ""), SSID).unwrap();
+    assert_eq!(unnamed.width, Width::Other);
 }

@@ -89,7 +89,7 @@ fn the_preview_classifies_by_frame_control() {
 }
 
 #[test]
-fn admission_counts_every_drop_by_its_reason() {
+fn admission_counts_every_drop_by_its_reason_and_every_staged_unit() {
     let counters = WifiRxCounters::new();
     let admission = CountingAdmission::new(&counters);
     let unit = CompletedUnit {
@@ -128,6 +128,7 @@ fn admission_counts_every_drop_by_its_reason() {
             report.admission_blocks,
             report.units,
         ),
-        (1, 1, 1, 1, 2, 2, 0)
+        (1, 1, 1, 1, 2, 2, 1),
+        "the staged unit counts once; a critical admission is no unit"
     );
 }

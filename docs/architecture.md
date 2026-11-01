@@ -390,7 +390,7 @@ run its own executor.
 | P2, boot hart, TIMG0 T0 CPU line 16 | SAR/PWDET conversion steps in `Exempt(ExecutorLevel)` | one bounded step per event; below FROM_CPU2 CPU line 17 |
 | P2, boot hart | one radio executor on `FROM_CPU2`, CPU line 17: Wi-Fi driver, BLE lower link layer, the radio-system actor, including PHY calibration and tracking | cooperative admission between hardware atoms; long waits use timers |
 | P1 / thread, boot hart | role bodies, network stack, application | — |
-| hart 1, images that declare it | the image's hart-1 main on its own PSRAM task stack, with its SRAM interrupt stack and the common exception path installed; its own router and, in boot-smoke, an interrupt-mode executor on `FROM_CPU1` (hart 1's line 16, P2) with its tasks (the exchange's server, the AES engine and the liveness responder), and that executor's SYSTIMER alarm 1 on hart 1's line 17 (P3) | its sources route only to hart 1's bank; it reaches the boot hart's tasks only by raising their executor's signal (`FromPeerHart`); its timers come through an alarm grant, and the boot hart's writer executor programs its comparator; no `critical-section` and no SYSTIMER register write on hart 1 but its own alarm's acknowledgement |
+| hart 1, images that declare it | the image's hart-1 main on its own PSRAM task stack, with its SRAM interrupt stack and the common exception path installed; its own router and an interrupt-mode executor on `FROM_CPU1` (hart 1's line 16, P2) with its tasks, and that executor's SYSTIMER alarm on hart 1's line 17 (P3): in boot-smoke the exchange's server, the AES engine and the liveness responder, on alarm 1; in the HIL Wi-Fi station image one task with the station's network end, the IP stack and the load server, on alarm 2, beside the boot hart's radio and station | its sources route only to hart 1's bank; it reaches the boot hart's tasks only by raising their executor's signal (`FromPeerHart`); its timers come through an alarm grant, and the boot hart's writer executor programs its comparator; no `critical-section` and no SYSTIMER register write on hart 1 but its own alarm's acknowledgement |
 
 - `oer-memory::ExecutionContext` owns the unsafe memory-exclusion contract.
   `Entered<X>` is non-transferable, checks entry and rechecks each
@@ -985,7 +985,11 @@ lifecycle operations the actor invokes; the Bluetooth driver implements it.
   calls `track_concurrent_phy`, which evaluates demand and runs due work.
   The default period is 1 s, with eligibility at `previous + period + 1 µs`.
   SYSTIMER Alarm0 at P3 acknowledges and pends P2; the P2 executor dispatches
-  timers and polls the actor. The direct maintenance TXDC/PWDET path submits
+  timers and polls the actor. A failed tick, or a tracking deadline the
+  clock cannot hold, ends the actor's run with a `TrackingFault`: the actor
+  keeps every owner, and the image records the fault's class and variant
+  path (`oer-esp32s31-compose::radio_fault`) and resets. The direct
+  maintenance TXDC/PWDET path submits
   each SAR/PWDET conversion to TIMG0 T0's P2 handler. Its explicit machine
   performs tone arm, the vendor's minimum 1 µs wait, SAR trigger, the minimum
   2 µs wait and timer-driven readiness samples. Edge steps return fixed relative

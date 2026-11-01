@@ -61,6 +61,9 @@ pub enum FrameLengthError {
     /// A lent frame's payload is no longer inside its owner's storage: the
     /// storage broke its stable-bytes contract.
     OutsideStorage,
+    /// The device holds no copy for the frame that stood for one: the
+    /// device broke its in-order contract.
+    MissingCopy,
 }
 
 /// Why a received frame was not admitted to a network integration.

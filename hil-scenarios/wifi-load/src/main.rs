@@ -1,15 +1,20 @@
 //! The HIL Wi-Fi station load scenario. The image's station joins the lab
-//! router's isolated network, which forwards UDP between it and this host
-//! (wired to the router: one hop over the air). The host sends and receives
+//! router's isolated network, HT 40 MHz wide, which forwards UDP between it
+//! and this host (wired to the router: one hop over the air). The host sends and receives
 //! the load; the image counts its end and reports its CPU over the HIL link.
 //! RX and TX are named from the image's side. Every level of every mode is
 //! measured and reported (`target/hil/results/`): the measurements never
 //! decide a case, only a path or an exchange that does not work does.
+//! Each window also records what the link ran ([`link`]): the access
+//! point's view of the station and the image's rates each way, and what
+//! the image's periodic PHY tracking did ([`tracking`]).
 //! With `OER_WIFI_LOAD_PROFILE_US` each level also samples where the
 //! image's hart spends its window ([`profile`]).
 #![forbid(unsafe_code)]
 
+mod link;
 mod profile;
+mod tracking;
 mod traffic;
 
 use std::{
@@ -20,10 +25,12 @@ use std::{
 };
 
 use oer_hil_agent::base::Service as _;
-use oer_hil_harness::{Case, Cx, Failure, RouterOperation, Scenario, check};
+use oer_hil_harness::{Case, Cx, Failure, RouterChannelWidth, RouterOperation, Scenario, check};
 use oer_services_load::{
-    Collect, CollectCounters, CollectParts, Collected, Counters, CountersCollected, Load,
-    MAX_PARTS, PartWindow, PartsCollected, Report, Start, Started, Transmit,
+    CacheGeometry, CacheLevel, Collect, CollectCounters, CollectLink, CollectParts,
+    CollectTracking, Collected, Counters, CountersCollected, DataBus, InstructionBus, Link,
+    LinkCollected, Load, MAX_PARTS, PartWindow, PartsCollected, Report, Start, Started, Tracking,
+    TrackingCollected, Transmit,
 };
 use oer_services_wifi_station::{GetStatus, Join, Joined, Leave, Left, Status};
 
@@ -74,7 +81,7 @@ const DEVICE_PORT: u16 = 5001;
 const PAYLOAD: usize = 1400;
 /// Total offered load of each level, Mbit/s; a mode with two directions
 /// offers half each way. `OER_WIFI_LOAD_MBPS` (comma-separated) replaces
-/// them, e.g. to offer more than HT20 carries.
+/// them, e.g. to offer more than these levels.
 const LEVELS_MBPS: [u64; 4] = [10, 30, 50, 65];
 const LEVELS_ENV: &str = "OER_WIFI_LOAD_MBPS";
 /// Each level's measuring window, the time before it opens and the drain
@@ -82,8 +89,10 @@ const LEVELS_ENV: &str = "OER_WIFI_LOAD_MBPS";
 const DURATION_MS: u32 = 5000;
 const DELAY_MS: u32 = 300;
 const DRAIN_MS: u32 = 500;
-/// RTT probes during a level.
+/// RTT probes during a level. `OER_WIFI_LOAD_PROBES=off` sends none (`on`
+/// is the default), to measure a level without the probes' datagrams.
 const PROBE_PERIOD: Duration = Duration::from_millis(50);
+const PROBES_ENV: &str = "OER_WIFI_LOAD_PROBES";
 const JOIN_TIMEOUT: Duration = Duration::from_secs(30);
 const DHCP_TIMEOUT: Duration = Duration::from_secs(30);
 const CALL: Duration = Duration::from_secs(2);
@@ -210,6 +219,8 @@ struct Ended {
     report: Report,
     parts: Vec<PartWindow>,
     counters: Counters,
+    link: Link,
+    tracking: Tracking,
 }
 
 fn collect(cx: &mut Cx<'_>, run: u32) -> Result<Ended, Failure> {
@@ -240,19 +251,92 @@ fn collect(cx: &mut Cx<'_>, run: u32) -> Result<Ended, Failure> {
             other => return Err(Failure::Fail(format!("the image's parts: {other:?}"))),
         }
     }
-    match cx.call(CollectCounters { run }, CALL)? {
-        CountersCollected::Report(counters) => Ok(Ended {
+    let counters = match cx.call(CollectCounters { run }, CALL)? {
+        CountersCollected::Report(counters) => counters,
+        other => return Err(Failure::Fail(format!("the image's counters: {other:?}"))),
+    };
+    let link = match cx.call(CollectLink { run }, CALL)? {
+        LinkCollected::Report(link) => link,
+        other => return Err(Failure::Fail(format!("the image's link: {other:?}"))),
+    };
+    match cx.call(CollectTracking { run }, CALL)? {
+        TrackingCollected::Report(tracking) => Ok(Ended {
             report,
             parts,
             counters,
+            link,
+            tracking,
         }),
-        other => Err(Failure::Fail(format!("the image's counters: {other:?}"))),
+        other => Err(Failure::Fail(format!("the image's tracking: {other:?}"))),
     }
+}
+
+/// What the image's periodic PHY tracking did over a window; its one-line
+/// summary is printed as `name`'s.
+fn tracking_measurement(name: &str, ended: &Ended) -> serde_json::Value {
+    println!("  tracking {name}: {}", tracking::summary(&ended.tracking));
+    tracking::window(&ended.tracking)
+}
+
+/// What the link ran over a window: the access point's view between
+/// `before` and `after`, `span` apart, and the image's counts in `ended`;
+/// its one-line summary is printed as `name`'s.
+fn link_measurement(
+    name: &str,
+    before: &link::Reading,
+    after: &link::Reading,
+    span: Duration,
+    ended: &Ended,
+) -> serde_json::Value {
+    let router = link::router_window(before, after, span);
+    let device = link::device(&ended.link);
+    println!("  link {name}: {}", link::summary(&router, &device));
+    serde_json::json!({ "router": router, "device": device })
 }
 
 /// The highest total a level may offer: far above any 2.4 GHz link, and
 /// each direction's rate stays a `u32` of bit/s.
 const MAX_LEVEL_MBPS: u64 = 1000;
+
+/// The channel width the router's profile asks for: HT40, or the
+/// `OER_WIFI_LOAD_WIDTH` it names (`ht20` or `ht40`).
+const WIDTH_ENV: &str = "OER_WIFI_LOAD_WIDTH";
+
+fn width() -> Result<RouterChannelWidth, Failure> {
+    match std::env::var(WIDTH_ENV) {
+        Err(_) => Ok(RouterChannelWidth::Ht40),
+        Ok(text) => parse_width(&text),
+    }
+}
+
+fn parse_width(text: &str) -> Result<RouterChannelWidth, Failure> {
+    match text.trim() {
+        "ht20" => Ok(RouterChannelWidth::Ht20),
+        "ht40" => Ok(RouterChannelWidth::Ht40),
+        other => Err(Failure::Incomplete(format!(
+            "{WIDTH_ENV}=`{other}` is neither `ht20` nor `ht40`"
+        ))),
+    }
+}
+
+/// Whether the levels send RTT probes: yes, unless `OER_WIFI_LOAD_PROBES`
+/// says `off`.
+fn probes() -> Result<bool, Failure> {
+    match std::env::var(PROBES_ENV) {
+        Err(_) => Ok(true),
+        Ok(text) => parse_probes(&text),
+    }
+}
+
+fn parse_probes(text: &str) -> Result<bool, Failure> {
+    match text.trim() {
+        "on" => Ok(true),
+        "off" => Ok(false),
+        other => Err(Failure::Incomplete(format!(
+            "{PROBES_ENV}=`{other}` is neither `on` nor `off`"
+        ))),
+    }
+}
 
 /// The levels to offer: [`LEVELS_MBPS`], or `OER_WIFI_LOAD_MBPS`, each 1 to
 /// [`MAX_LEVEL_MBPS`].
@@ -351,11 +435,14 @@ fn polls(parts: &[PartWindow], window_us: u64) -> serde_json::Value {
         .collect()
 }
 
-/// The window's counters: the serving hart's cycles and retired
+/// The window's counters: the image's measured hart's cycles and retired
 /// instructions with their rate per microsecond (MHz) and per cycle, what
-/// the network bridge did with the station's frames, and the frames the IP
-/// stack took with the hart's instructions over them. The hart's counts
-/// include all its work, interrupts and the load service's own included.
+/// the network bridge did with the station's frames, the frames the IP
+/// stack took with the hart's instructions over them, and the L1 cache's
+/// accesses by bus ([`cache`]), and the receive path's counts as the image
+/// took them: the S31 driver's and the station service's receive
+/// decisions, each the window's difference. The hart's counts include all
+/// its work, interrupts and the load service's own included.
 fn counters(counters: &Counters, window_us: u64) -> serde_json::Value {
     let window = window_us.max(1) as f64;
     let cycles = counters.cycles as f64;
@@ -375,11 +462,125 @@ fn counters(counters: &Counters, window_us: u64) -> serde_json::Value {
         "stack_received": counters.stack_received,
         "instructions_per_stack_frame": (counters.stack_received != 0)
             .then(|| round(instructions / f64::from(counters.stack_received))),
+        "cache": cache(counters),
+        "rx": counters.rx,
+    })
+}
+
+/// What the window's instructions and stack frames rate a cache count by.
+struct Per {
+    instructions: u64,
+    stack_frames: u32,
+}
+
+impl Per {
+    /// `count` per 1000 of the window's instructions and per stack frame,
+    /// to four decimals; null without a denominator or with an overflowed
+    /// bus.
+    fn rates(&self, name: &str, count: u32, overflowed: bool) -> [(String, serde_json::Value); 2] {
+        let exact = !overflowed;
+        let count = f64::from(count);
+        [
+            (
+                format!("{name}_per_1000_instructions"),
+                (exact && self.instructions != 0)
+                    .then(|| fine(1000.0 * count / self.instructions as f64))
+                    .into(),
+            ),
+            (
+                format!("{name}_per_stack_frame"),
+                (exact && self.stack_frames != 0)
+                    .then(|| fine(count / f64::from(self.stack_frames)))
+                    .into(),
+            ),
+        ]
+    }
+}
+
+/// The L1 cache's counts of each bus within the window, with each bus's
+/// misses as a share of its hits and misses, and its misses and next-level
+/// reads (and a data bus's next-level writes) per 1000 of the serving
+/// hart's instructions and per frame the IP stack took. An overflowed
+/// bus's counts are not exact: its derived values are null.
+fn cache(counters: &Counters) -> serde_json::Value {
+    let per = Per {
+        instructions: counters.instructions,
+        stack_frames: counters.stack_received,
+    };
+    let cache = &counters.cache;
+    serde_json::json!({
+        "ibus0": instruction_bus(&cache.ibus0, &per),
+        "ibus1": instruction_bus(&cache.ibus1, &per),
+        "dbus0": data_bus(&cache.dbus0, &per),
+        "dbus1": data_bus(&cache.dbus1, &per),
+    })
+}
+
+fn instruction_bus(bus: &InstructionBus, per: &Per) -> serde_json::Value {
+    let mut value = serde_json::json!({
+        "hits": bus.hits,
+        "misses": bus.misses,
+        "conflicts": bus.conflicts,
+        "next_level_reads": bus.next_level_reads,
+        "overflowed": bus.overflowed,
+        "miss_percent": miss_percent(bus.hits, bus.misses, bus.overflowed),
+    });
+    if let Some(object) = value.as_object_mut() {
+        object.extend(per.rates("misses", bus.misses, bus.overflowed));
+        object.extend(per.rates("next_level_reads", bus.next_level_reads, bus.overflowed));
+    }
+    value
+}
+
+fn data_bus(bus: &DataBus, per: &Per) -> serde_json::Value {
+    let mut value = serde_json::json!({
+        "hits": bus.hits,
+        "misses": bus.misses,
+        "conflicts": bus.conflicts,
+        "next_level_reads": bus.next_level_reads,
+        "next_level_writes": bus.next_level_writes,
+        "overflowed": bus.overflowed,
+        "miss_percent": miss_percent(bus.hits, bus.misses, bus.overflowed),
+    });
+    if let Some(object) = value.as_object_mut() {
+        object.extend(per.rates("misses", bus.misses, bus.overflowed));
+        object.extend(per.rates("next_level_reads", bus.next_level_reads, bus.overflowed));
+        object.extend(per.rates("next_level_writes", bus.next_level_writes, bus.overflowed));
+    }
+    value
+}
+
+/// Misses as a share of hits and misses; null without either or when the
+/// bus overflowed.
+fn miss_percent(hits: u32, misses: u32, overflowed: bool) -> Option<f64> {
+    let accesses = u64::from(hits) + u64::from(misses);
+    (!overflowed && accesses != 0).then(|| percent(u64::from(misses), accesses))
+}
+
+/// The caches as the image configured them.
+fn cache_geometry(geometry: &CacheGeometry) -> serde_json::Value {
+    let level = |level: &CacheLevel| {
+        serde_json::json!({
+            "size_bytes": level.size_bytes,
+            "line_bytes": level.line_bytes,
+            "ways": level.ways,
+        })
+    };
+    serde_json::json!({
+        "l1_icache": level(&geometry.l1_icache),
+        "l1_dcache": level(&geometry.l1_dcache),
+        "l2": level(&geometry.l2),
+        "l2_bypassed": geometry.l2_bypassed,
     })
 }
 
 fn round(value: f64) -> f64 {
     (value * 100.0).round() / 100.0
+}
+
+/// `value` to four decimals: rates far below one stay distinct.
+fn fine(value: f64) -> f64 {
+    (value * 10_000.0).round() / 10_000.0
 }
 
 fn mbps(bytes: u64, seconds: f64) -> f64 {
@@ -418,6 +619,7 @@ fn path(cx: &mut Cx<'_>) -> Result<(), Failure> {
         ssid: ssid.clone(),
         passphrase: passphrase.clone(),
         channel,
+        width: width()?,
         forward_host: Some(host),
     })?;
     let join = Join {
@@ -536,6 +738,9 @@ fn path(cx: &mut Cx<'_>) -> Result<(), Failure> {
     )?;
     // The image's CPU with the station linked and no load: the baseline of
     // every level's CPU.
+    let station = mac(address);
+    let before = link::read(cx, &station);
+    let since = Instant::now();
     let idle = run_id();
     let started = cx.call(
         Start {
@@ -554,6 +759,8 @@ fn path(cx: &mut Cx<'_>) -> Result<(), Failure> {
         format!("the image's idle run: {started:?}"),
     )?;
     std::thread::sleep(Duration::from_millis(u64::from(DURATION_MS)));
+    let after = link::read(cx, &station);
+    let span = since.elapsed();
     let idle = collect(cx, idle)?;
     let window = window_us(&idle.report);
     let mut cpu = utilisation(&idle.report.cpu_start, &idle.report.cpu_end);
@@ -562,6 +769,14 @@ fn path(cx: &mut Cx<'_>) -> Result<(), Failure> {
         object.insert("counters".to_owned(), counters(&idle.counters, window));
     }
     cx.measure("idle cpu", cpu);
+    cx.measure(
+        "cache geometry",
+        cache_geometry(&idle.counters.cache_geometry),
+    );
+    let link = link_measurement("idle", &before, &after, span, &idle);
+    cx.measure("idle link", link);
+    let tracking = tracking_measurement("idle", &idle);
+    cx.measure("idle tracking", tracking);
     Ok(())
 }
 
@@ -672,19 +887,23 @@ fn stop_under_load(cx: &mut Cx<'_>) -> Result<(), Failure> {
 
 fn levels(cx: &mut Cx<'_>, mode: Mode) -> Result<(), Failure> {
     let device = device_address(cx)?;
+    let station = mac(status(cx)?.address);
     let host = host_route(device)?.source;
     for total in levels_mbps()? {
-        level(cx, mode, device, host, total)?;
+        level(cx, mode, device, &station, host, total)?;
     }
     Ok(())
 }
 
 /// One level: `total_mbps` offered, split over the mode's directions, for
-/// the window, with RTT probes from the start to the end of the drain.
+/// the window, with RTT probes from the start to the end of the drain. The
+/// access point's view of `station` is read before the run and after its
+/// drain.
 fn level(
     cx: &mut Cx<'_>,
     mode: Mode,
     device: Ipv4Addr,
+    station: &str,
     host: Ipv4Addr,
     total_mbps: u64,
 ) -> Result<(), Failure> {
@@ -695,6 +914,7 @@ fn level(
         .filter(|bps| u32::try_from(*bps).is_ok())
         .ok_or_else(|| Failure::Incomplete(format!("{total_mbps} Mbit/s is out of range")))?;
     let profile = profile::requested()?;
+    let probing = probes()?;
     let run = run_id();
     let endpoint = traffic::Endpoint::open(SocketAddrV4::new(host, 0), run)
         .map_err(|error| Failure::Incomplete(format!("the host socket: {error}")))?;
@@ -703,6 +923,8 @@ fn level(
         .local_addr()
         .map(|local| local.port())
         .unwrap_or(0);
+    let before = link::read(cx, station);
+    let since = Instant::now();
     let transmit = (mode != Mode::Rx).then(|| Transmit {
         peer: host.octets(),
         peer_port: host_port,
@@ -734,7 +956,8 @@ fn level(
         // The probes go within the window only; their late replies are
         // still read during the drain.
         std::thread::sleep(Duration::from_millis(u64::from(DELAY_MS)));
-        let probes = scope.spawn(|| traffic::probe(&endpoint, peer, run, PROBE_PERIOD, &stop));
+        let probes = probing
+            .then(|| scope.spawn(|| traffic::probe(&endpoint, peer, run, PROBE_PERIOD, &stop)));
         let sent = if mode == Mode::Tx {
             std::thread::sleep(window);
             traffic::Sent::default()
@@ -742,10 +965,12 @@ fn level(
             traffic::send(&endpoint, peer, run, PAYLOAD, each_bps, window)
         };
         stop.store(true, Ordering::Relaxed);
-        let probes = probes.join().unwrap_or(0);
+        let probes = probes.map_or(0, |probes| probes.join().unwrap_or(0));
         std::thread::sleep(Duration::from_millis(u64::from(DRAIN_MS)));
         (sent, probes)
     });
+    let after = link::read(cx, station);
+    let span = since.elapsed();
     let ended = collect(cx, run)?;
     let samples = match profile {
         Some(_) => Some(profile::collect(cx, run, CALL)?),
@@ -753,20 +978,31 @@ fn level(
     };
     let mut received = endpoint.close();
     received.echoes.sent = probes;
+    let name = format!("{} {total_mbps} Mbit/s", mode.name());
     let mut value = measurement(mode, total_mbps, &sent, &received, &ended);
+    if let Some(object) = value.as_object_mut() {
+        let link = link_measurement(&name, &before, &after, span, &ended);
+        object.insert("link".to_owned(), link);
+        let tracking = tracking_measurement(&name, &ended);
+        object.insert("tracking".to_owned(), tracking);
+    }
     if let (Some(samples), Some(object)) = (samples, value.as_object_mut()) {
         let elf = profile::elf(IMAGE);
         let symbols = elf
             .as_ref()
             .map_err(Clone::clone)
             .and_then(|elf| profile::symbolize(elf, &samples.samples));
+        let sites = elf
+            .as_ref()
+            .map_err(Clone::clone)
+            .and_then(|elf| profile::copy_sites(elf));
         let elf = elf.unwrap_or_default();
         object.insert(
             "profile".to_owned(),
-            profile::report(&samples, &elf, &symbols),
+            profile::report(&samples, &elf, &symbols, &sites),
         );
     }
-    cx.measure(format!("{} {total_mbps} Mbit/s", mode.name()), value);
+    cx.measure(name, value);
     Ok(())
 }
 
@@ -856,6 +1092,20 @@ mod tests {
     use super::*;
 
     #[test]
+    fn the_width_is_ht20_or_ht40_and_nothing_else() {
+        assert_eq!(parse_width("ht20").unwrap(), RouterChannelWidth::Ht20);
+        assert_eq!(parse_width(" ht40 ").unwrap(), RouterChannelWidth::Ht40);
+        assert!(parse_width("40").is_err());
+    }
+
+    #[test]
+    fn probes_are_on_or_off_and_nothing_else() {
+        assert!(parse_probes("on").unwrap());
+        assert!(!parse_probes(" off ").unwrap());
+        assert!(parse_probes("0").is_err());
+    }
+
+    #[test]
     fn throughput_is_over_the_window_not_between_the_first_and_last_datagram() {
         let report = Report {
             window_start_us: 1_000_000,
@@ -880,6 +1130,8 @@ mod tests {
             report,
             parts: Vec::new(),
             counters: Counters::default(),
+            link: Link::default(),
+            tracking: Tracking::default(),
         };
         let value = measurement(Mode::Rx, 65, &sent, &traffic::Received::default(), &ended);
         assert_eq!(value["window_s"], 5.0);
@@ -929,8 +1181,101 @@ mod tests {
         assert_eq!(value["instructions_per_stack_frame"], 960_000.0);
         assert_eq!(value["bridge"]["refused_pool"], 400);
         let none = counters(&Counters::default(), 5_000_000);
+        assert_eq!(none["rx"]["driver"]["available"], false);
+        assert_eq!(none["rx"]["station"]["agreement_window"], 0);
         assert!(none["instructions_per_cycle"].is_null());
         assert!(none["instructions_per_stack_frame"].is_null());
+    }
+
+    #[test]
+    fn a_bus_s_misses_are_rated_per_thousand_instructions_and_per_stack_frame() {
+        let value = counters(
+            &Counters {
+                instructions: 4_000_000,
+                stack_received: 4000,
+                cache: oer_services_load::CacheCounts {
+                    ibus0: InstructionBus {
+                        hits: 98_000,
+                        misses: 2_000,
+                        conflicts: 5,
+                        next_level_reads: 2_400,
+                        overflowed: false,
+                    },
+                    dbus0: DataBus {
+                        hits: 750,
+                        misses: 250,
+                        next_level_reads: 300,
+                        next_level_writes: 100,
+                        ..DataBus::default()
+                    },
+                    ..oer_services_load::CacheCounts::default()
+                },
+                ..Counters::default()
+            },
+            5_000_000,
+        );
+        let ibus0 = &value["cache"]["ibus0"];
+        assert_eq!(ibus0["misses"], 2_000);
+        assert_eq!(ibus0["conflicts"], 5);
+        assert_eq!(ibus0["miss_percent"], 2.0);
+        assert_eq!(ibus0["misses_per_1000_instructions"], 0.5);
+        assert_eq!(ibus0["misses_per_stack_frame"], 0.5);
+        assert_eq!(ibus0["next_level_reads_per_stack_frame"], 0.6);
+        let dbus0 = &value["cache"]["dbus0"];
+        assert_eq!(dbus0["miss_percent"], 25.0);
+        assert_eq!(dbus0["next_level_writes_per_stack_frame"], 0.025);
+        assert_eq!(dbus0["next_level_writes_per_1000_instructions"], 0.025);
+        assert!(
+            value["cache"]["ibus1"]["miss_percent"].is_null(),
+            "no access"
+        );
+        assert_eq!(value["cache"]["ibus1"]["misses_per_stack_frame"], 0.0);
+    }
+
+    #[test]
+    fn an_overflowed_bus_or_a_missing_denominator_gives_no_rate() {
+        let value = counters(
+            &Counters {
+                instructions: 1000,
+                cache: oer_services_load::CacheCounts {
+                    dbus1: DataBus {
+                        hits: 10,
+                        misses: 10,
+                        overflowed: true,
+                        ..DataBus::default()
+                    },
+                    ..oer_services_load::CacheCounts::default()
+                },
+                ..Counters::default()
+            },
+            5_000_000,
+        );
+        let dbus1 = &value["cache"]["dbus1"];
+        assert_eq!(dbus1["overflowed"], true);
+        assert_eq!(dbus1["misses"], 10, "the raw count stays");
+        assert!(dbus1["miss_percent"].is_null());
+        assert!(dbus1["misses_per_1000_instructions"].is_null());
+        let ibus0 = &value["cache"]["ibus0"];
+        assert_eq!(ibus0["misses_per_1000_instructions"], 0.0);
+        assert!(ibus0["misses_per_stack_frame"].is_null(), "no stack frame");
+    }
+
+    #[test]
+    fn the_geometry_names_each_cache_s_size_line_and_ways() {
+        let geometry = CacheGeometry {
+            l1_icache: CacheLevel {
+                size_bytes: Some(32 * 1024),
+                line_bytes: Some(64),
+                ways: Some(2),
+            },
+            l2_bypassed: true,
+            ..CacheGeometry::default()
+        };
+        let value = cache_geometry(&geometry);
+        assert_eq!(value["l1_icache"]["size_bytes"], 32 * 1024);
+        assert_eq!(value["l1_icache"]["ways"], 2);
+        assert!(value["l2"]["size_bytes"].is_null());
+        assert_eq!(value["l2_bypassed"], true);
     }
 
     #[test]

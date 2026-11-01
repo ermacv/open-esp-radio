@@ -410,6 +410,7 @@ pub fn start<S: Started>(
             |hardware| {
                 let causes = oer_esp32s31_compose::reset_causes::read(hardware.reset_cause);
                 oer_esp32s31_compose::wifi_fault::report_previous();
+                oer_esp32s31_compose::radio_fault::report_previous();
                 oer_esp32s31_compose::exception::report_previous();
                 if let Some(record) = previous {
                     let mut console = oer_espressif_staged_runtime::diagnostics::Console::shared(

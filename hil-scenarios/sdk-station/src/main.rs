@@ -18,7 +18,7 @@ use std::{
 };
 
 use oer_hil_agent::base::Service as _;
-use oer_hil_harness::{Case, Cx, Failure, RouterOperation, Scenario, check};
+use oer_hil_harness::{Case, Cx, Failure, RouterChannelWidth, RouterOperation, Scenario, check};
 use oer_hil_protocol::base::{
     BootEvidence, ExceptionFault, Fault, GetBootStatus, PostMortemSummary,
 };
@@ -333,6 +333,8 @@ fn the_network(cx: &mut Cx<'_>) -> Result<(String, String), Failure> {
         ssid: ssid.clone(),
         passphrase: passphrase.clone(),
         channel,
+        // The SDK's station joins at HT 20 MHz.
+        width: RouterChannelWidth::Ht20,
         forward_host: Some(host),
     })?;
     if let Ok(mut network) = NETWORK.lock() {

@@ -94,10 +94,14 @@ mod events;
 pub use events::{RxDrop, RxMsdusRefused, ServiceEvent, StationEvents};
 mod control;
 mod network;
+mod network_link;
+mod notifies;
 pub use network::{
-    NetworkDrainCause, NetworkDrainFailure, NetworkRx, NetworkStop, NetworkStopLost, NoNetwork,
-    Received, RxMsdusCopied, StopPolicy,
+    CopiedMark, NetworkDrainCause, NetworkDrainFailure, NetworkRx, NetworkStop, NetworkStopLost,
+    NoNetwork, RX_COPIED_DEPTH, Received, RxMsdusCopied, StopPolicy,
 };
+pub use network_link::NetworkLink;
+pub use notifies::{AcrossHarts, Notifies, SameHart};
 mod reconnect;
 use commands::CommandCredits;
 pub use commands::{CommandRefused, CommandTerminal, Request};
@@ -138,9 +142,9 @@ use oer_ieee80211_core_roles_sta::{
         StaKeyUnwrapRequest, StaNotice, StaTokens, StaTransmit, StaTxContext, Station,
     },
 };
-use oer_ieee80211_core_upper_mac::block_ack::RxDisposition;
+use oer_ieee80211_core_upper_mac::block_ack::{Parked, RxDisposition};
 use oer_ieee80211_core_upper_mac::rate_selection::{FrameRates, RateSelection};
-use oer_memory::{WakingSpscReceiver, WakingSpscSender};
+use oer_memory::{SlotReceiver, WakingSpscReceiver, WakingSpscSender};
 use oer_network_port::LentFrame;
 use oer_radio_port::Slot;
 use oer_radio_port::{
@@ -609,17 +613,19 @@ impl<K, F: FnMut(ServiceOutput<K>)> ServiceOutputSink<K> for F {
 /// use oer_ieee80211_core_roles_sta::data::TxMsdu;
 /// use oer_memory::WakingSpscQueue;
 /// let commands = Channel::<NoopRawMutex, ServiceCommand<()>, 1>::new();
-/// let mut tx = WakingSpscQueue::<TxMsdu, 1>::new();
+/// let mut tx = oer_memory::WakingSlotQueue::<TxMsdu, 1>::new();
 /// let mut rx = WakingSpscQueue::<Received<()>, 1>::new();
-/// let (_, transmit) = tx.split();
+/// let (_, transmit) = tx.split(TxMsdu::empty);
 /// let (receive, _) = rx.split();
+/// let mut copies = WakingSpscQueue::<oer_ieee80211_core_roles_sta::data::EthernetFrame, { oer_ieee80211_runtime::station::RX_COPIED_DEPTH }>::new();
+/// let (receive_copied, _) = copies.split();
 /// let mut output = |_: ServiceOutput<()>| {};
 /// let mut control_queue = WakingSpscQueue::<ServiceCommand<()>, 1>::new();
 /// let (application, _) = control_queue.split();
 /// let state = State::new();
 /// let (_control, control) = Control::new(application, &state).unwrap();
 /// let io = ServiceIo {
-///     commands: commands.dyn_receiver(), transmit, receive, output: &mut output, control,
+///     commands: commands.dyn_receiver(), transmit, receive, receive_copied, output: &mut output, control,
 ///     network: &oer_ieee80211_runtime::station::NoNetwork, stop: oer_ieee80211_runtime::station::StopPolicy { drain: oer_time::Duration::from_secs(1) },
 /// };
 /// ```
@@ -633,16 +639,18 @@ impl<K, F: FnMut(ServiceOutput<K>)> ServiceOutputSink<K> for F {
 /// use oer_ieee80211_core_roles_sta::data::TxMsdu;
 /// use oer_memory::WakingSpscQueue;
 /// let mut commands = WakingSpscQueue::<ServiceCommand<()>, 1>::new();
-/// let mut tx = WakingSpscQueue::<TxMsdu, 1>::new();
+/// let mut tx = oer_memory::WakingSlotQueue::<TxMsdu, 1>::new();
 /// let mut rx = WakingSpscQueue::<Received<()>, 1>::new();
 /// let (application, commands) = commands.split();
-/// let (_, transmit) = tx.split();
+/// let (_, transmit) = tx.split(TxMsdu::empty);
 /// let (receive, _) = rx.split();
+/// let mut copies = WakingSpscQueue::<oer_ieee80211_core_roles_sta::data::EthernetFrame, { oer_ieee80211_runtime::station::RX_COPIED_DEPTH }>::new();
+/// let (receive_copied, _) = copies.split();
 /// let mut output = |_: ServiceOutput<()>| {};
 /// let state = State::new();
 /// let (mut application, control) = Control::new(application, &state).unwrap();
 /// let io = ServiceIo {
-///     commands, transmit, receive, output: &mut output, control,
+///     commands, transmit, receive, receive_copied, output: &mut output, control,
 ///     network: &oer_ieee80211_runtime::station::NoNetwork, stop: oer_ieee80211_runtime::station::StopPolicy { drain: oer_time::Duration::from_secs(1) },
 /// };
 /// assert!(application.try_command(ControlCommand::Stop).is_ok());
@@ -653,25 +661,29 @@ pub struct ServiceIo<
     K,
     O: ServiceOutputSink<K>,
     L,
-    N: NetworkStop,
+    S: NetworkStop,
     const TX_DEPTH: usize,
     const RX_DEPTH: usize,
     const COMMAND_DEPTH: usize,
+    N: Notifies = SameHart,
 > {
     /// The application's exclusive command receiver. Readiness does not
     /// remove a command; a simultaneous port fault leaves it in this queue.
     pub commands: WakingSpscReceiver<'c, ServiceCommand<K>, COMMAND_DEPTH>,
     /// The MSDUs the network stack sends.
-    pub transmit: WakingSpscReceiver<'c, TxMsdu, TX_DEPTH>,
+    pub transmit: SlotReceiver<'c, TxMsdu, TX_DEPTH, N::Station, N::Network>,
     /// The MSDUs the station received for the network stack.
-    pub receive: WakingSpscSender<'c, Received<L>, RX_DEPTH>,
+    pub receive: WakingSpscSender<'c, Received<L>, RX_DEPTH, N::Network, N::Station>,
+    /// The copies `receive`'s [`Received::Copied`] marks stand for, in order.
+    pub receive_copied:
+        WakingSpscSender<'c, EthernetFrame, RX_COPIED_DEPTH, N::Network, N::Station>,
     /// What the service tells the application.
     pub output: &'c mut O,
     /// Affine cooperative stop and completion connection to Control.
-    pub control: RunnerControl<'c>,
+    pub control: RunnerControl<'c, N>,
     /// The network side holding lent buffers, stopped before the port
     /// retires.
-    pub network: &'c N,
+    pub network: &'c S,
     /// The drain deadline of a stop no request timed.
     pub stop: StopPolicy,
 }
@@ -1290,6 +1302,7 @@ impl<
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
+            impl Notifies,
         >,
         timer: &impl Timer,
         unwrap: &mut KeyUnwrapSlot<impl KeyUnwrap<KEY_DATA_CAPACITY, Operation: Unpin>>,
@@ -1384,6 +1397,7 @@ impl<
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
+            impl Notifies,
         >,
         timer: &impl Timer,
         unwrap: &mut KeyUnwrapSlot<impl KeyUnwrap<KEY_DATA_CAPACITY, Operation: Unpin>>,
@@ -1484,6 +1498,7 @@ impl<
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
+            impl Notifies,
         >,
         timer: &impl Timer,
         unwrap: &mut KeyUnwrapSlot<impl KeyUnwrap<KEY_DATA_CAPACITY, Operation: Unpin>>,
@@ -1660,6 +1675,7 @@ impl<
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
+            impl Notifies,
         >,
         timer: &impl Timer,
     ) -> Result<
@@ -1803,6 +1819,7 @@ impl<
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
+            impl Notifies,
         >,
         timer: &impl Timer,
         unwrap: &mut KeyUnwrapSlot<impl KeyUnwrap<KEY_DATA_CAPACITY, Operation: Unpin>>,
@@ -1816,8 +1833,10 @@ impl<
         // cooperative yield lets the driver and application progress.
         let mut batch = 0_u8;
         loop {
+            // One clock read serves the turn's step and pending receives.
+            let turn = timer.now();
             B::span(ServiceSpan::Step, false);
-            let stepped = self.step(arbiter, timer.now(), phase, io);
+            let stepped = self.step(arbiter, turn, phase, io);
             B::span(ServiceSpan::Step, true);
             match stepped {
                 Next::Wait => {}
@@ -1832,7 +1851,7 @@ impl<
             // Releasing RX owners is a separate input source. Its receive
             // transition must not nest inside the control-action step frame.
             B::span(ServiceSpan::Pending, false);
-            let pending = self.receive_pending(arbiter, timer.now(), phase, io);
+            let pending = self.receive_pending(arbiter, turn, phase, io);
             B::span(ServiceSpan::Pending, true);
             match pending {
                 Ok(true) => continue,
@@ -1867,8 +1886,9 @@ impl<
                 self.pending.unwrap = Some(waiting);
             }
             let sending = self.data.accepts() && self.station.link().is_some();
+            // Frames wait in delivery order for the network's next return.
+            let parked = self.pending.receive.has_ready();
             let (event, command_ready, tick, transmit, unwrapped) = {
-                let event = phase.next_event();
                 let command = async {
                     match embassy_futures::select::select(
                         io.control.wait_for_stop(),
@@ -1888,15 +1908,17 @@ impl<
                 };
                 let transmit_ready = io.transmit.ready();
                 let mut transmit_ready = core::pin::pin!(transmit_ready);
-                let mut event = core::pin::pin!(event);
                 let mut command = core::pin::pin!(command);
                 let mut alarm = core::pin::pin!(alarm);
                 poll_fn(|cx| {
                     B::span(ServiceSpan::Sources, false);
-                    let event = match event.as_mut().poll(cx) {
+                    // A cancelled wait loses no event, so each poll makes
+                    // its own and the phase stays free for the lend room.
+                    let event = match core::pin::pin!(phase.next_event()).poll(cx) {
                         Poll::Ready(event) => Some(event),
                         Poll::Pending => None,
                     };
+                    let room = parked && phase.poll_lend_room(cx).is_ready();
                     let command_ready = if accepting_commands {
                         match command.as_mut().poll(cx) {
                             Poll::Ready(stop) => Some(stop),
@@ -1907,15 +1929,19 @@ impl<
                     };
                     io.control.policy_register(cx);
                     let alarm_ready = alarm.as_mut().poll(cx).is_ready();
-                    let policy_ready = accepting_commands && io.control.policy_ready(timer.now());
-                    let tick = alarm_ready
-                        && machine_deadline.is_some_and(|deadline| timer.now() >= deadline);
+                    // At most one clock read per poll of the sources.
+                    let mut read = None;
+                    let mut now = || *read.get_or_insert_with(|| timer.now());
+                    let policy_ready = accepting_commands && io.control.policy_ready(now());
+                    let tick =
+                        alarm_ready && machine_deadline.is_some_and(|deadline| now() >= deadline);
                     let transmit = sending && transmit_ready.as_mut().poll(cx).is_ready();
                     let unwrapped = match unwrap.poll_done(cx) {
                         Poll::Ready(done) => Some(done),
                         Poll::Pending => None,
                     };
                     if event.is_some()
+                        || room
                         || command_ready.is_some()
                         || alarm_ready
                         || policy_ready
@@ -2114,42 +2140,48 @@ impl<
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
+            impl Notifies,
         >,
     ) {
         let Some(mut link) = self.station.link() else {
             return;
         };
-        let Some(packet) = io.transmit.try_receive() else {
-            return;
-        };
-        let parts = packet.frame.parts();
-        let msdu = Msdu {
-            destination: parts.destination,
-            ether_type: parts.ether_type,
-            priority: packet.priority,
-            payload: parts.payload,
-            admitted: now,
-        };
-        // Admission was polled immediately above under this same exclusive
-        // service borrow. A too-long MSDU is refused without changing bytes.
-        match self.data.input(
-            DataInput {
-                msdu,
-                link: &mut link,
-            },
-            &mut self.events,
-        ) {
-            Ok(()) => {}
-            Err(reason) => {
+        let ServiceIo {
+            transmit, output, ..
+        } = io;
+        let data = &mut self.data;
+        let events = &mut self.events;
+        // The MSDU is read where the network wrote it: the data path
+        // encodes it into its MPDU buffer, its one copy here.
+        let _read = transmit.try_receive_with(|packet| {
+            let parts = packet.frame.parts();
+            let msdu = Msdu {
+                destination: parts.destination,
+                ether_type: parts.ether_type,
+                priority: packet.priority,
+                payload: parts.payload,
+                admitted: now,
+            };
+            // Admission was polled immediately above under this same
+            // exclusive service borrow. A too-long MSDU is refused without
+            // changing bytes.
+            if let Err(reason) = data.input(
+                DataInput {
+                    msdu,
+                    link: &mut link,
+                },
+                events,
+            ) {
                 // The available-pool observation is dynamic and the public
-                // data input can refuse it. Return the original owned packet,
-                // rather than manufacturing a terminal or losing its bytes.
-                io.output.emit(ServiceOutput::MsduRefused {
-                    packet: contract::TransmitPacket(packet),
+                // data input can refuse it. The application gets the
+                // packet's copy back, rather than a manufactured terminal
+                // or lost bytes.
+                output.emit(ServiceOutput::MsduRefused {
+                    packet: contract::TransmitPacket(packet.clone()),
                     reason: reason.into(),
                 });
             }
-        }
+        });
     }
 
     /// Carry out every action the machines owe at `now`.
@@ -2169,6 +2201,7 @@ impl<
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
+            impl Notifies,
         >,
     ) -> Next<'id, B>
     where
@@ -2398,6 +2431,7 @@ impl<
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
+            impl Notifies,
         >,
     ) -> Result<(), ContractFault<'id, B>> {
         match follow {
@@ -2457,6 +2491,7 @@ impl<
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
+            impl Notifies,
         >,
     ) {
         while let Some(notice) = arbiter.poll_notice(now) {
@@ -2493,13 +2528,18 @@ impl<
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
+            impl Notifies,
         >,
     ) -> Result<bool, StepFailure<'id, B>>
     where
         'id: 'p,
         P: LowerMacPhase<'p, 'id, Caps = B::Caps, Types = B::Types<'id>>,
     {
-        if let Some((frame, meta)) = self.pending.receive.pop_ready() {
+        // Frames in delivery order wait while the network is at its lend
+        // limit; its next return wakes the sources ([`Self::serve`]).
+        if !Self::network_full(phase, io)
+            && let Some((frame, meta)) = self.pending.receive.pop_ready()
+        {
             if let Some(frame) = self.deliver_received(now, frame, meta, phase, io) {
                 B::span(ServiceSpan::Recycle, false);
                 phase.recycle(frame);
@@ -2543,6 +2583,7 @@ impl<
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
+            impl Notifies,
         >,
     ) -> Result<Option<<B::Types<'id> as PhaseTypes<'id>>::RxBuffer>, StepFailure<'id, B>>
     where
@@ -2585,6 +2626,7 @@ impl<
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
+            impl Notifies,
         >,
     ) -> Result<Option<<B::Types<'id> as PhaseTypes<'id>>::RxBuffer>, StepFailure<'id, B>>
     where
@@ -2606,7 +2648,51 @@ impl<
                     return Err(ServiceFault::RxBlockAckCapacity.into());
                 }
             };
+        // A data frame waits behind the frames already waiting, or while the
+        // network is at its lend limit: the frame is neither copied nor
+        // dropped, and the driver keeps further units in its ring.
+        if Self::network_full(phase, io) || self.pending.receive.has_ready() {
+            return match self.pending.receive.park(frame, meta) {
+                Parked::Waiting => Ok(None),
+                Parked::Deliver((frame, meta)) => {
+                    Ok(self.deliver_received(now, frame, meta, phase, io))
+                }
+                Parked::Capacity(frame) => {
+                    phase.recycle(frame);
+                    Err(ServiceFault::RxBlockAckCapacity.into())
+                }
+            };
+        }
         Ok(self.deliver_received(now, frame, meta, phase, io))
+    }
+
+    /// Whether the network takes frames and holds all it may: a lend would
+    /// be refused for capacity.
+    fn network_full<
+        'p,
+        P,
+        const TX_DEPTH: usize,
+        const RX_DEPTH: usize,
+        const COMMAND_DEPTH: usize,
+    >(
+        phase: &P,
+        io: &ServiceIo<
+            '_,
+            B::Caps,
+            impl ServiceOutputSink<B::Caps>,
+            B::LentRx,
+            impl NetworkStop,
+            TX_DEPTH,
+            RX_DEPTH,
+            COMMAND_DEPTH,
+            impl Notifies,
+        >,
+    ) -> bool
+    where
+        'id: 'p,
+        P: LowerMacPhase<'p, 'id, Caps = B::Caps, Types = B::Types<'id>>,
+    {
+        io.network.takes_frames() && !phase.lend_room()
     }
 
     /// Deliver one received frame's MSDUs to the network queue. A frame
@@ -2634,6 +2720,7 @@ impl<
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
+            impl Notifies,
         >,
     ) -> Option<<B::Types<'id> as PhaseTypes<'id>>::RxBuffer>
     where
@@ -2734,16 +2821,22 @@ impl<
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
+            impl Notifies,
         >,
         frame: &[u8],
         plan: &MsduPlan,
     ) -> Option<MsduRefusal> {
+        // The mark follows its copy: room for both, or neither is sent.
+        if io.receive.free_capacity() == 0 || io.receive_copied.free_capacity() == 0 {
+            return Some(MsduRefusal::QueueFull);
+        }
         match EthernetFrame::copy_planned(frame, plan) {
-            Ok(frame) => io
-                .receive
-                .try_send(Received::Copied(frame))
-                .is_err()
-                .then_some(MsduRefusal::QueueFull),
+            Ok(frame) => (io.receive_copied.try_send(frame).is_err()
+                || io
+                    .receive
+                    .try_send(Received::Copied(CopiedMark::new()))
+                    .is_err())
+            .then_some(MsduRefusal::QueueFull),
             // The station located the payload in this frame.
             Err(PlannedCopyError::TooLong(_) | PlannedCopyError::OutsideFrame) => {
                 Some(MsduRefusal::TooLong)
@@ -2764,6 +2857,7 @@ impl<
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
+            impl Notifies,
         >,
         lent: B::LentRx,
         plan: MsduPlan,
@@ -3313,6 +3407,7 @@ fn station_action<
         TX_DEPTH,
         RX_DEPTH,
         COMMAND_DEPTH,
+        impl Notifies,
     >,
     arbiter: &mut PortArbiter<'id, B>,
     rates: &S,

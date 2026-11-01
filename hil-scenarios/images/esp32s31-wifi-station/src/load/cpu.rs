@@ -5,23 +5,40 @@
 //! Each task set of the image selects the observer of its own slot, so a
 //! slot has one writer: its executor's context. The writer publishes under a
 //! sequence number, odd while it writes; a reader that sees it change
-//! samples again after yielding, and never waits. Work spans include the
-//! executor's preemption, so the spans of two executors overlap and do not
-//! add up; a hart's idle spans (its thread executor's masked WFI) give its
-//! utilisation. Activity times wrap at 2^32 µs; a slot keeps its totals in
-//! 64 bits.
+//! samples again after yielding, and never waits; it may run on either
+//! hart. Work spans include the executor's preemption, so the spans of two
+//! executors overlap and do not add up. The boot hart's idle spans (its
+//! thread executor's masked WFI) give its utilisation; hart 1 runs one
+//! interrupt-mode executor and otherwise waits for interrupts, so its idle
+//! time is all its time but that executor's work. Activity times wrap at
+//! 2^32 µs; a slot keeps its totals in 64 bits.
 
 use core::sync::atomic::{AtomicU32, Ordering, fence};
 
 use oer_services_load::{ExecutorLoad, HartLoad, Load, MAX_EXECUTORS, MAX_HARTS};
 
-/// One slot per task set: the application executor's (P1, the hart's
-/// thread executor) and the radio executor's (P2).
-pub(crate) const SLOTS: usize = 2;
+/// One slot per task set: the boot hart's application executor (P1, its
+/// thread executor) and radio executor (P2), and hart 1's network executor
+/// (P2, the only executor of that hart).
+pub(crate) const SLOTS: usize = 3;
 pub(crate) const APPLICATION: usize = 0;
 pub(crate) const RADIO: usize = 1;
+pub(crate) const NETWORK: usize = 2;
+/// The harts the slots' executors run on: the boot hart and hart 1.
+const HARTS: usize = 2;
+/// Whether a slot's executor is its hart's only one, polled in its
+/// interrupt while the hart's main waits for interrupts: that hart's idle
+/// time is the rest of its time.
+const SOLE: [bool; SLOTS] = [false, false, true];
 const _: () = {
-    if SLOTS > MAX_EXECUTORS || SLOTS > MAX_HARTS || APPLICATION == RADIO || RADIO >= SLOTS {
+    if SLOTS > MAX_EXECUTORS
+        || HARTS > MAX_HARTS
+        || APPLICATION == RADIO
+        || RADIO == NETWORK
+        || APPLICATION == NETWORK
+        || NETWORK >= SLOTS
+        || RADIO >= SLOTS
+    {
         panic!("every slot's executor and hart fit one CPU report");
     }
 };
@@ -185,17 +202,25 @@ fn total(total: &[AtomicU32; 2]) -> u64 {
 }
 
 /// The CPU report at image microsecond `now_us` of every slot's sample: a
-/// hart for each slot that saw idle, an executor for each that saw work.
+/// hart for each slot that saw idle or is its hart's sole executor, an
+/// executor for each that saw work. A sole executor's hart idles for all of
+/// `now_us` but that executor's work: between two reports only the
+/// difference counts.
 pub(crate) fn load(now_us: u64, samples: &[Sample; SLOTS]) -> Load {
     let mut load = Load {
         now_us,
         ..Load::default()
     };
-    for sample in samples {
-        if let Some(idle_us) = sample.idle_us {
+    for (sample, sole) in samples.iter().zip(SOLE) {
+        let idle = match (sample.idle_us, sole, sample.work_us) {
+            (Some(idle_us), _, _) => Some(idle_us),
+            (None, true, Some(work_us)) => Some(now_us.saturating_sub(work_us)),
+            (None, _, _) => None,
+        };
+        if let Some(idle_us) = idle {
             match load.harts.iter_mut().find(|hart| hart.hart == sample.hart) {
                 Some(hart) => hart.idle_us = hart.idle_us.saturating_add(idle_us),
-                // SLOTS <= MAX_HARTS: a slot's hart always has room.
+                // HARTS <= MAX_HARTS: a slot's hart always has room.
                 None => {
                     let _room = load.harts.push(HartLoad {
                         hart: sample.hart,
@@ -329,7 +354,7 @@ mod tests {
             work_us: Some(50),
             idle_us: None,
         };
-        let load = load(1000, &[application, radio]);
+        let load = load(1000, &[application, radio, Sample::default()]);
         assert_eq!(load.now_us, 1000);
         assert_eq!(
             load.harts.as_slice(),
@@ -361,5 +386,67 @@ mod tests {
 
     fn load_of_nothing() -> Load {
         load(5, &[Sample::default(); SLOTS])
+    }
+
+    #[test]
+    fn hart_1_idles_for_all_its_time_but_its_sole_executor_s_work() {
+        let network = |work_us| Sample {
+            executor: 1,
+            hart: 1,
+            level: 2,
+            work_us: Some(work_us),
+            idle_us: None,
+        };
+        let idle = |load: &Load| {
+            load.harts
+                .iter()
+                .find(|hart| hart.hart == 1)
+                .map(|hart| hart.idle_us)
+        };
+        let before = load(1_000, &[Sample::default(), Sample::default(), network(100)]);
+        let after = load(
+            3_000,
+            &[Sample::default(), Sample::default(), network(1_600)],
+        );
+        assert_eq!((idle(&before), idle(&after)), (Some(900), Some(1_400)));
+        // Between the two reports: 2000 µs, of which 1500 µs work, 500 idle.
+        assert_eq!(idle(&after).unwrap() - idle(&before).unwrap(), 500);
+        assert_eq!(
+            after.executors.as_slice(),
+            &[ExecutorLoad {
+                executor: 1,
+                hart: 1,
+                level: 2,
+                work_us: 1_600
+            }]
+        );
+        // Before its executor's first work, hart 1 reports nothing.
+        let unstarted = Sample {
+            work_us: None,
+            ..network(0)
+        };
+        assert_eq!(
+            idle(&load(
+                10,
+                &[Sample::default(), Sample::default(), unstarted]
+            )),
+            None
+        );
+    }
+
+    #[test]
+    fn the_boot_hart_s_idle_does_not_come_from_its_executors_work() {
+        let radio = Sample {
+            executor: 2,
+            hart: 0,
+            level: 2,
+            work_us: Some(50),
+            idle_us: None,
+        };
+        let load = load(1000, &[Sample::default(), radio, Sample::default()]);
+        assert!(
+            load.harts.is_empty(),
+            "the radio executor is not hart 0's only one"
+        );
     }
 }

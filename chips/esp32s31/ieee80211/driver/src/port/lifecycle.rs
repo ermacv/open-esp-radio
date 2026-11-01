@@ -38,7 +38,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> Queues<Id,
 }
 pub struct RawFrontend<'s, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> {
     resources: &'s mut Option<Resources<'static, Id, D, B, O>>,
-    storage: &'static PortSharedStorage<B>,
+    storage: &'static PortSharedStorage<B, D::Lent>,
     commands: oer_memory::AffineSpscSender<
         's,
         driver::Command<'static, Id, D, B, O>,
@@ -48,13 +48,13 @@ pub struct RawFrontend<'s, Id: SlotIdentity, D: Device<B>, const B: usize, O: Ob
     events: oer_memory::AffineSpscReceiver<
         's,
         owned::OwnedEvent<'static, Id, D, B, O>,
-        { TERMINAL_CAPACITY + TX_TICKETS },
+        { TERMINAL_CAPACITY + RX_HELD },
         oer_memory::CompactSpscCursor,
     >,
     recycled: oer_memory::AffineSpscSender<
         's,
         ReceiveBuffer<'static, Id, D::Receive>,
-        TX_TICKETS,
+        RX_HELD,
         oer_memory::CompactSpscCursor,
     >,
     failed_command: &'s oer_memory::OnceValue<driver::Command<'static, Id, D, B, O>>,
@@ -98,6 +98,7 @@ impl<'p, Id: SlotIdentity + 'p, D: Device<B> + 'p, const B: usize, O: Observatio
                     return Poll::Ready(Ok(Some(terminal.lend(&self.loan))));
                 }
                 owned::OwnedEvent::Received { frame, .. } => {
+                    held.storage.took_received();
                     if let Err(frame) = held.recycled.try_send(frame).map_err(|error| error.0) {
                         core::mem::forget(frame);
                         held.storage.poison(Fault::Capacity);

@@ -11,6 +11,7 @@ struct Port(LinkSnapshot, bool);
 struct Frame;
 impl oer_network_port::ReceivedFrame for Frame {
     type Storage = core::convert::Infallible;
+    type Copied = Self;
     fn into_lent(self) -> Result<oer_network_port::LentFrame<Self::Storage>, Self> {
         Err(self)
     }
@@ -36,6 +37,13 @@ impl NetDevice for Port {
     }
     fn try_receive(&mut self) -> Option<Frame> {
         None
+    }
+    fn read_copied<R>(
+        &mut self,
+        copied: Frame,
+        read: impl FnOnce(EthernetFrameView<'_>) -> R,
+    ) -> Result<R, FrameLengthError> {
+        copied.view().map(read)
     }
     fn poll_transmit_ready(&mut self, _: &mut Context<'_>) -> Poll<()> {
         Poll::Ready(())
@@ -320,4 +328,40 @@ fn a_lent_frame_without_headroom_or_slots_is_copied() {
     assert_eq!(early_dropped.load(core::sync::atomic::Ordering::Relaxed), 1);
     assert_eq!(&stack.receive().unwrap()[14..], &[3; 4]);
     assert_eq!(&stack.receive().unwrap()[14..], &[5; 4]);
+}
+
+#[test]
+fn a_full_stack_queue_has_no_room_until_the_stack_takes_a_packet() {
+    let (mut stack, mut radio) = lent_endpoint();
+    let slots: &'static LentSlots<Lent, 2> = Box::leak(Box::new(LentSlots::new()));
+    let woken = std::sync::Arc::new(Woken::default());
+    let waker = std::task::Waker::from(woken.clone());
+    let mut cx = Context::from_waker(&waker);
+    for byte in 1..=2 {
+        assert!(radio.rx_publisher().poll_queue_room(&mut cx).is_ready());
+        let (frame, _) = lent(60, &[byte; 4]);
+        publish_lent(radio.rx_publisher(), Some(slots), frame, &mut |_| {}).unwrap();
+    }
+    assert!(radio.rx_publisher().poll_queue_room(&mut cx).is_pending());
+    assert!(!woken.get());
+    let packet = stack.receive().unwrap();
+    assert!(woken.get(), "the stack's take wakes the waiting bridge");
+    assert!(radio.rx_publisher().poll_queue_room(&mut cx).is_ready());
+    drop(packet);
+}
+
+/// Records whether its waker was woken.
+#[derive(Default)]
+struct Woken(core::sync::atomic::AtomicBool);
+
+impl Woken {
+    fn get(&self) -> bool {
+        self.0.load(core::sync::atomic::Ordering::Acquire)
+    }
+}
+
+impl std::task::Wake for Woken {
+    fn wake(self: std::sync::Arc<Self>) {
+        self.0.store(true, core::sync::atomic::Ordering::Release);
+    }
 }

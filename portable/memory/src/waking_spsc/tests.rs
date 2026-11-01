@@ -2,6 +2,7 @@ extern crate std;
 
 use super::*;
 use core::future::Future;
+use core::pin::pin;
 use core::sync::atomic::{AtomicUsize, Ordering};
 use core::task::Context;
 use std::sync::Arc;
@@ -209,3 +210,70 @@ fn try_reserve_keeps_the_value_with_its_caller_until_it_sends() {
     drop(sender.try_reserve().expect("the cell is vacant again"));
     assert_eq!(receiver.try_receive(), None);
 }
+
+/// A notify that counts its registrations and notifications.
+#[derive(Default)]
+struct Counted {
+    registered: AtomicUsize,
+    notified: AtomicUsize,
+}
+
+impl Counted {
+    fn counts(&self) -> (usize, usize) {
+        (
+            self.registered.load(Ordering::Relaxed),
+            self.notified.load(Ordering::Relaxed),
+        )
+    }
+}
+
+impl QueueNotify for Counted {
+    fn register(&self, _: &mut Context<'_>) {
+        self.registered.fetch_add(1, Ordering::Relaxed);
+    }
+    fn notify(&self) {
+        self.notified.fetch_add(1, Ordering::Relaxed);
+    }
+}
+
+#[test]
+fn a_queue_across_harts_registers_and_tells_each_end_through_its_own_notify() {
+    let (consumer, producer) = (Counted::default(), Counted::default());
+    let mut queue = WakingSpscQueue::<u8, 1, _, _>::across_harts(&consumer, &producer);
+    let (mut sender, mut receiver) = queue.split();
+    let mut cx = Context::from_waker(Waker::noop());
+
+    assert!(pin!(receiver.ready()).poll(&mut cx).is_pending());
+    assert_eq!(consumer.counts(), (1, 0), "the waiting consumer registers");
+    sender.try_send(1).expect("room");
+    assert_eq!(
+        consumer.counts(),
+        (1, 1),
+        "a publication tells the consumer"
+    );
+
+    assert!(pin!(sender.ready()).poll(&mut cx).is_pending());
+    assert_eq!(producer.counts(), (1, 0), "the waiting producer registers");
+    assert_eq!(receiver.try_receive(), Some(1));
+    assert_eq!(producer.counts(), (1, 1), "a freed cell tells the producer");
+
+    sender.ready().now_or_never().expect("a free cell").send(2);
+    assert_eq!(
+        consumer.counts(),
+        (1, 2),
+        "a permit's send tells the consumer"
+    );
+}
+
+/// Poll a future once with a no-op waker.
+trait NowOrNever: Future + Sized {
+    fn now_or_never(self) -> Option<Self::Output> {
+        let mut cx = Context::from_waker(Waker::noop());
+        match pin!(self).poll(&mut cx) {
+            Poll::Ready(value) => Some(value),
+            Poll::Pending => None,
+        }
+    }
+}
+
+impl<F: Future> NowOrNever for F {}

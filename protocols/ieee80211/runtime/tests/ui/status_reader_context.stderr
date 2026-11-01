@@ -11,13 +11,13 @@ error[E0277]: `Cell<Status>` cannot be shared between threads safely
 note: required because it appears within the type `State`
  --> src/station/control.rs
   |
-  | pub struct State {
+  | pub struct State<N: Notifies = SameHart> {
   |            ^^^^^
   = note: required for `&State` to implement `Send`
 note: required because it appears within the type `StatusReader<'_>`
  --> src/station/control.rs
   |
-  | pub struct StatusReader<'c> {
+  | pub struct StatusReader<'c, N: Notifies = SameHart> {
   |            ^^^^^^^^^^^^
 note: required by a bound in `require_send`
  --> tests/ui/status_reader_context.rs:4:20
@@ -38,13 +38,13 @@ error[E0277]: `Cell<station::reconnect::Policy>` cannot be shared between thread
 note: required because it appears within the type `State`
  --> src/station/control.rs
   |
-  | pub struct State {
+  | pub struct State<N: Notifies = SameHart> {
   |            ^^^^^
   = note: required for `&State` to implement `Send`
 note: required because it appears within the type `StatusReader<'_>`
  --> src/station/control.rs
   |
-  | pub struct StatusReader<'c> {
+  | pub struct StatusReader<'c, N: Notifies = SameHart> {
   |            ^^^^^^^^^^^^
 note: required by a bound in `require_send`
  --> tests/ui/status_reader_context.rs:4:20
@@ -65,13 +65,13 @@ error[E0277]: `Cell<Option<oer_time::Instant>>` cannot be shared between threads
 note: required because it appears within the type `State`
  --> src/station/control.rs
   |
-  | pub struct State {
+  | pub struct State<N: Notifies = SameHart> {
   |            ^^^^^
   = note: required for `&State` to implement `Send`
 note: required because it appears within the type `StatusReader<'_>`
  --> src/station/control.rs
   |
-  | pub struct StatusReader<'c> {
+  | pub struct StatusReader<'c, N: Notifies = SameHart> {
   |            ^^^^^^^^^^^^
 note: required by a bound in `require_send`
  --> tests/ui/status_reader_context.rs:4:20
@@ -92,13 +92,13 @@ error[E0277]: `Cell<Option<oer_ieee80211_core_roles_sta::machine::StaProfile>>` 
 note: required because it appears within the type `State`
  --> src/station/control.rs
   |
-  | pub struct State {
+  | pub struct State<N: Notifies = SameHart> {
   |            ^^^^^
   = note: required for `&State` to implement `Send`
 note: required because it appears within the type `StatusReader<'_>`
  --> src/station/control.rs
   |
-  | pub struct StatusReader<'c> {
+  | pub struct StatusReader<'c, N: Notifies = SameHart> {
   |            ^^^^^^^^^^^^
 note: required by a bound in `require_send`
  --> tests/ui/status_reader_context.rs:4:20
@@ -124,13 +124,13 @@ note: required because it appears within the type `station::control::operation::
 note: required because it appears within the type `State`
  --> src/station/control.rs
   |
-  | pub struct State {
+  | pub struct State<N: Notifies = SameHart> {
   |            ^^^^^
   = note: required for `&State` to implement `Send`
 note: required because it appears within the type `StatusReader<'_>`
  --> src/station/control.rs
   |
-  | pub struct StatusReader<'c> {
+  | pub struct StatusReader<'c, N: Notifies = SameHart> {
   |            ^^^^^^^^^^^^
 note: required by a bound in `require_send`
  --> tests/ui/status_reader_context.rs:4:20
@@ -161,13 +161,13 @@ note: required because it appears within the type `station::control::operation::
 note: required because it appears within the type `State`
  --> src/station/control.rs
   |
-  | pub struct State {
+  | pub struct State<N: Notifies = SameHart> {
   |            ^^^^^
   = note: required for `&State` to implement `Send`
 note: required because it appears within the type `StatusReader<'_>`
  --> src/station/control.rs
   |
-  | pub struct StatusReader<'c> {
+  | pub struct StatusReader<'c, N: Notifies = SameHart> {
   |            ^^^^^^^^^^^^
 note: required by a bound in `require_send`
  --> tests/ui/status_reader_context.rs:4:20
@@ -198,13 +198,13 @@ note: required because it appears within the type `station::control::operation::
 note: required because it appears within the type `State`
  --> src/station/control.rs
   |
-  | pub struct State {
+  | pub struct State<N: Notifies = SameHart> {
   |            ^^^^^
   = note: required for `&State` to implement `Send`
 note: required because it appears within the type `StatusReader<'_>`
  --> src/station/control.rs
   |
-  | pub struct StatusReader<'c> {
+  | pub struct StatusReader<'c, N: Notifies = SameHart> {
   |            ^^^^^^^^^^^^
 note: required by a bound in `require_send`
  --> tests/ui/status_reader_context.rs:4:20

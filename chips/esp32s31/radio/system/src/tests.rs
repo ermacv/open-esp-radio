@@ -97,6 +97,8 @@ struct Script {
     not_last: bool,
     close_recoverable: bool,
     deadline: Option<Instant>,
+    /// The tracking deadline does not fit the clock.
+    deadline_fault: Option<PoisonCause>,
     log: Vec<Event>,
 }
 
@@ -142,8 +144,12 @@ impl PhyDomain for Model {
         Ok(())
     }
 
-    fn tracking_deadline(&self) -> Option<Instant> {
-        self.0.borrow().deadline
+    fn tracking_deadline(&self) -> Result<Option<Instant>, Fault> {
+        let script = self.0.borrow();
+        match script.deadline_fault {
+            Some(cause) => Err(Fault(cause)),
+            None => Ok(script.deadline),
+        }
     }
 
     async fn track_tick(&mut self) -> Result<(), Fault> {
@@ -308,7 +314,7 @@ fn run<F: Future<Output = ()>>(
     let lp = LpClock::<RcSlow>::for_host_test();
     let mut actor = RadioSystem::new(end, model.clone(), clock, lp);
     match block_on(select(actor.run(), client(cells))) {
-        Either::First(never) => match never {},
+        Either::First(fault) => panic!("the periodic tracking failed: {fault:?}"),
         Either::Second(()) => {}
     }
 }
@@ -602,8 +608,46 @@ fn a_tracked_member_gets_periodic_ticks_when_they_fall_due() {
     );
 }
 
+/// Join and track one Wi-Fi member through `actor`, then let the tracking
+/// clock reach `seconds`, a tick due each second, until the run ends with
+/// its tracking fault; the member and its client cell stay with the caller.
+fn track_until_the_run_ends(
+    actor: &mut RadioSystem<Wifi, RcSlow, Model, &'static VirtualClock>,
+    cells: ClientCells,
+    clock: &'static VirtualClock,
+    seconds: u64,
+) -> (
+    TrackingFault,
+    oer_esp32s31_radio_client::MembershipCell<Wifi>,
+    TrackedMember<Wifi>,
+) {
+    let mut client = core::pin::pin!(async move {
+        let (cell, joined) = cells.wifi.join(WifiJoin { wifi: cold() }).await.unwrap();
+        let joined = joined.ok().expect("join");
+        let (cell, tracked) = cell
+            .track(joined.member, track_request(joined.payload.wifi))
+            .await
+            .unwrap();
+        let tracked = tracked.ok().expect("track");
+        for second in 1..=seconds {
+            clock.advance_to(at(second * 1_000_000));
+            for _ in 0..4 {
+                yield_now().await;
+            }
+        }
+        (cell, tracked)
+    });
+    let fault = match block_on(select(actor.run(), client.as_mut())) {
+        Either::First(fault) => fault,
+        Either::Second(_) => panic!("the run ends at the failed tracking"),
+    };
+    // The client finishes its waits once the actor stopped ticking.
+    let (cell, tracked) = block_on(client);
+    (fault, cell, tracked)
+}
+
 #[test]
-fn a_failed_tracking_tick_names_itself_in_the_next_retune_and_stops_tracking() {
+fn a_failed_tracking_tick_ends_the_run_and_a_later_request_names_it() {
     let clock = clock();
     let model = model(Script {
         deadline: Some(at(1_000_000)),
@@ -614,56 +658,144 @@ fn a_failed_tracking_tick_names_itself_in_the_next_retune_and_stops_tracking() {
         origin: PoisonOrigin::TrackingTick,
         cause: TICK_CAUSE,
     };
-    run(&model, clock, |cells| async move {
-        let (cell, joined) = cells.wifi.join(WifiJoin { wifi: cold() }).await.unwrap();
-        let joined = joined.ok().expect("join");
-        let (cell, tracked) = cell
-            .track(joined.member, track_request(joined.payload.wifi))
-            .await
-            .unwrap();
-        let tracked = tracked.ok().expect("track");
-        // A long association: the tick falls due once a second.
-        for second in 1..=120 {
-            clock.advance_to(at(second * 1_000_000));
-            for _ in 0..4 {
-                yield_now().await;
-            }
-        }
-        let config = track_request(tracked.payload.wifi);
-        let (cell, answer) = cell
-            .retune(
-                tracked.member,
-                WifiRetune {
-                    wifi: config.wifi,
-                    channel: config.channel,
-                    tx_ceiling: config.tx_ceiling,
-                },
-            )
-            .await
-            .unwrap();
-        let Err(Failed {
-            returned: (member, wifi),
-            cause,
-        }) = answer
-        else {
-            panic!("the first request after the failed tick is refused");
-        };
-        assert_eq!(cause, Failure::Poisoned(tick));
-        let (_, left) = cell
-            .leave(Leaving::Tracked(member), WifiLeave { wifi })
-            .await
-            .unwrap();
-        assert_eq!(left.domain, DomainHealth::Poisoned(tick));
-    });
-    let log = model.log();
-    // Tracking stops at the failed tick, and the refused retune reaches no
-    // hardware.
+    let (end, cells) = claim_for_host_test().expect("fresh radio client cells");
+    let mut actor = RadioSystem::new(
+        end,
+        model.clone(),
+        clock,
+        LpClock::<RcSlow>::for_host_test(),
+    );
+    // A long association: the tick falls due once a second.
+    let (fault, cell, tracked) = track_until_the_run_ends(&mut actor, cells, clock, 120);
     assert_eq!(
-        log.iter().filter(|event| **event == Event::Tick).count(),
+        fault,
+        TrackingFault {
+            stage: TrackingStage::Tick,
+            cause: TICK_CAUSE,
+        }
+    );
+    // Tracking stops at the failed tick: the image owner decides.
+    assert_eq!(
+        model
+            .log()
+            .iter()
+            .filter(|event| **event == Event::Tick)
+            .count(),
         110
     );
+    // A run polled again after the fault keeps the poisoned domain: the
+    // request names the tick and reaches no hardware.
+    let config = track_request(tracked.payload.wifi);
+    let Either::Second(Ok((_, answer))) = block_on(select(
+        actor.run(),
+        cell.retune(
+            tracked.member,
+            WifiRetune {
+                wifi: config.wifi,
+                channel: config.channel,
+                tx_ceiling: config.tx_ceiling,
+            },
+        ),
+    )) else {
+        panic!("the poisoned actor answers without tracking")
+    };
+    let Err(Failed { cause, .. }) = answer else {
+        panic!("the first request after the failed tick is refused");
+    };
+    assert_eq!(cause, Failure::Poisoned(tick));
+    let log = model.log();
     assert!(!log.contains(&Event::Retune));
     assert!(!log.contains(&Event::CloseRf));
+}
+
+#[test]
+fn a_tracking_deadline_the_clock_cannot_hold_ends_the_run_before_any_tick() {
+    let clock = clock();
+    let overflow =
+        PoisonCause::TrackingRefused(oer_esp32s31_phy::concurrent::ConcurrentPhyError::Time(
+            oer_esp32s31_phy::state::client::PhyTrackTimeError::DeadlineOverflow {
+                class: oer_esp32s31_phy::state::client::PhyPllTrackClass::Wifi,
+            },
+        ));
+    let model = model(Script {
+        deadline_fault: Some(overflow),
+        ..Script::default()
+    });
+    let (end, cells) = claim_for_host_test().expect("fresh radio client cells");
+    let mut actor = RadioSystem::new(
+        end,
+        model.clone(),
+        clock,
+        LpClock::<RcSlow>::for_host_test(),
+    );
+    let (fault, cell, tracked) = track_until_the_run_ends(&mut actor, cells, clock, 1);
+    assert_eq!(
+        fault,
+        TrackingFault {
+            stage: TrackingStage::Deadline,
+            cause: overflow,
+        }
+    );
+    assert!(!model.log().contains(&Event::Tick));
+    // The overflow is no silent end of tracking: the domain names it.
+    let Either::Second(Ok((_, left))) = block_on(select(
+        actor.run(),
+        cell.leave(
+            Leaving::Tracked(tracked.member),
+            WifiLeave {
+                wifi: tracked.payload.wifi,
+            },
+        ),
+    )) else {
+        panic!("the poisoned actor answers the leave")
+    };
+    assert_eq!(
+        left.domain,
+        DomainHealth::Poisoned(Poison {
+            origin: PoisonOrigin::TrackingTick,
+            cause: overflow,
+        })
+    );
+}
+
+#[test]
+fn a_tracking_fault_names_its_stage_and_cause_and_classifies_it() {
+    use oer_diagnostics::{DiagPath, fault::Class};
+    let tick = TrackingFault {
+        stage: TrackingStage::Tick,
+        cause: TICK_CAUSE,
+    };
+    assert_eq!(
+        DiagPath::of(&tick).names(),
+        ["Tick", "Tracking", "EdgeTimedOut"]
+    );
+    assert_eq!(tick.class(), Class::UnexpectedHardware);
+    let overflow = TrackingFault {
+        stage: TrackingStage::Deadline,
+        cause: PoisonCause::TrackingRefused(
+            oer_esp32s31_phy::concurrent::ConcurrentPhyError::Time(
+                oer_esp32s31_phy::state::client::PhyTrackTimeError::DeadlineOverflow {
+                    class: oer_esp32s31_phy::state::client::PhyPllTrackClass::Wifi,
+                },
+            ),
+        ),
+    };
+    assert_eq!(
+        DiagPath::of(&overflow).names(),
+        [
+            "Deadline",
+            "TrackingRefused",
+            "Time",
+            "DeadlineOverflow",
+            "Wifi"
+        ]
+    );
+    assert_eq!(overflow.class(), Class::Exhaustion);
+    let custody = TrackingFault {
+        stage: TrackingStage::Tick,
+        cause: PoisonCause::Custody,
+    };
+    assert_eq!(custody.class(), Class::SoftwareInvariant);
 }
 
 #[test]
