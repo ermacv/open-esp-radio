@@ -20,10 +20,11 @@ use oer_trace::Observer;
 pub const N: usize = 96;
 pub const B: usize = crate::FRAME_CAPACITY;
 pub const S: usize = B;
-/// The receive units outside the ring at once: the station's 32 (its
+/// The receive units outside the ring at once: the station's 16 (its
 /// events and reorder window), the admission's critical reserve and the
-/// network's lent units; the rest of the ring stays armed.
-pub const Q: usize = 64;
+/// network's lent units. The other 64 of the 96 stay armed with the
+/// hardware, two Block Ack windows of margin, as in the archive.
+pub const Q: usize = 32;
 const _: () = {
     if Q >= N {
         panic!("the receive ring keeps descriptors armed beside the staged units");

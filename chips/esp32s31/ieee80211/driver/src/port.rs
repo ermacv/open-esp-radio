@@ -64,9 +64,10 @@ pub const TX_TICKETS: usize = 8;
 
 /// The receive units P1 holds at once besides those it lent the network:
 /// its receive events and the MPDUs its receive Block Ack agreements keep,
-/// one 32-MPDU reorder window. The network leaves them in the receive pool
+/// one 16-MPDU reorder window, the archive's choice: a 32-MPDU window
+/// left too few descriptors armed under sustained HT40 traffic. The network leaves them in the receive pool
 /// ([`lent_rx`]).
-pub const RX_HELD: usize = 32;
+pub const RX_HELD: usize = 16;
 
 /// The receive units of a pool of `units` (the units that may be outside
 /// the ring at once) the network may hold. It leaves the radio

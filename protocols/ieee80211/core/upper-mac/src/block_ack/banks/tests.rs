@@ -184,8 +184,8 @@ fn an_admitted_request_installs_one_agreement_and_owes_its_success_response() {
 }
 
 #[test]
-fn a_64_mpdu_request_gets_the_32_mpdu_window_its_frames_hold_and_reorders_across_it() {
-    let mut storage = RxBlockAckStorage::<Types, u32, 2, 32>::new([10, 11], GAP);
+fn a_64_mpdu_request_gets_the_16_mpdu_window_its_frames_hold_and_reorders_across_it() {
+    let mut storage = RxBlockAckStorage::<Types, u32, 2, 16>::new([10, 11], GAP);
     let mut view = storage.view();
     let mut port = Recording::default();
     let body = encode_addba_request(5, 0, 64, 0, false, SequenceNumber::new(100).unwrap()).unwrap();
@@ -197,20 +197,20 @@ fn a_64_mpdu_request_gets_the_32_mpdu_window_its_frames_hold_and_reorders_across
         [Call::Add {
             slot: 10,
             tid: 0,
-            window: 32
+            window: 16
         }]
     );
     let reply = view.next_reply().unwrap();
     match parse_block_ack_action(&reply.body).unwrap() {
         BlockAckAction::AddbaResponse { status, window, .. } => {
-            assert_eq!((status, window), (status_code::SUCCESS, 32));
+            assert_eq!((status, window), (status_code::SUCCESS, 16));
         }
         other => panic!("expected an ADDBA Response, got {other:?}"),
     }
     view.sent(reply.place);
-    // The first MPDU of a 32-MPDU aggregate is missing: the other 31 wait,
-    // then all 32 leave in sequence order when it arrives.
-    for sequence in 101..132 {
+    // The first MPDU of a 16-MPDU aggregate is missing: the other 15 wait,
+    // then all 16 leave in sequence order when it arrives.
+    for sequence in 101..116 {
         assert!(matches!(
             view.receive(now(2), Some(LOCAL), qos_data(0, sequence), meta(), &mut ()),
             RxDisposition::Retained
@@ -224,7 +224,7 @@ fn a_64_mpdu_request_gets_the_32_mpdu_window_its_frames_hold_and_reorders_across
     let order: Vec<_> = core::iter::from_fn(|| view.pop_ready())
         .map(|(frame, _)| frame.0)
         .collect();
-    let expected: Vec<_> = (100..132).map(|sequence| qos_data(0, sequence).0).collect();
+    let expected: Vec<_> = (100..116).map(|sequence| qos_data(0, sequence).0).collect();
     assert_eq!(order, expected);
 }
 
