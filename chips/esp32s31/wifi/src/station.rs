@@ -47,10 +47,9 @@ pub struct StationComposition<W: Binding, Id: SlotIdentity>(PhantomData<(W, Id)>
 /// The pool places the station's management frames take; the data machine
 /// takes the next [`DATA_BUFFERS`].
 const MANAGEMENT: u8 = 4;
-/// The buffers the data machine holds: as many as its queues take
-/// (`PortData`'s capacity). The pool's other buffers stay unused by this
-/// image until the data machine takes more.
-const DATA_BUFFERS: usize = 8;
+/// The buffers the data machine holds: every pool buffer the station's
+/// management frames do not take, within its queue (`PortData`'s capacity).
+const DATA_BUFFERS: usize = port::TX_BUFFERS - MANAGEMENT as usize;
 #[cfg(oer_trace)]
 pub(crate) static TARGET: oer_memory::OnceValue<([u8; 6], Option<[u8; 6]>)> =
     oer_memory::OnceValue::new();
@@ -196,20 +195,22 @@ impl<W: Binding, Id: SlotIdentity> StationPort for StationComposition<W, Id> {
 }
 
 pub struct Rates<W: Binding>(EspressifRateSelection<Caps>, W::Observer);
-impl<W: Binding, M: SignalMetadata> RateSelection<M, port::Ack> for Rates<W> {
+impl<W: Binding, M: SignalMetadata> RateSelection<M, port::Ack, port::BlockAckAnswer> for Rates<W> {
     fn packet_number_step(&self) -> oer_ieee80211_core_upper_mac::ccmp::CcmpPacketNumberStep {
-        <EspressifRateSelection<Caps> as RateSelection<M, port::Ack>>::packet_number_step(&self.0)
+        <EspressifRateSelection<Caps> as RateSelection<M, port::Ack, port::BlockAckAnswer>>::packet_number_step(&self.0)
     }
     fn plan<R>(
         &self,
         frame: FrameRates,
         carried: impl Fn(oer_ieee80211_wire::phy::PhyRate) -> Option<R>,
     ) -> Option<RetryPlan<R>> {
-        <EspressifRateSelection<Caps> as RateSelection<M, port::Ack>>::plan(&self.0, frame, carried)
+        <EspressifRateSelection<Caps> as RateSelection<M, port::Ack, port::BlockAckAnswer>>::plan(
+            &self.0, frame, carried,
+        )
     }
     fn associated(&mut self, peer: &RatePeer, response: &M) {
         oer_trace::observe!(self.1, crate::observation::StationAssociated);
-        <EspressifRateSelection<Caps> as RateSelection<M, port::Ack>>::associated(
+        <EspressifRateSelection<Caps> as RateSelection<M, port::Ack, port::BlockAckAnswer>>::associated(
             &mut self.0,
             peer,
             response,
@@ -217,7 +218,7 @@ impl<W: Binding, M: SignalMetadata> RateSelection<M, port::Ack> for Rates<W> {
         oer_trace::observe!(self.1, selected_rate::<M>(&self.0));
     }
     fn disconnected(&mut self) {
-        <EspressifRateSelection<Caps> as RateSelection<M, port::Ack>>::disconnected(&mut self.0);
+        <EspressifRateSelection<Caps> as RateSelection<M, port::Ack, port::BlockAckAnswer>>::disconnected(&mut self.0);
     }
     fn completed<D>(
         &mut self,
@@ -238,7 +239,7 @@ impl<W: Binding, M: SignalMetadata> RateSelection<M, port::Ack> for Rates<W> {
         ) {
             oer_trace::observe!(self.1, crate::observation::TxHardwareTimeout);
         }
-        <EspressifRateSelection<Caps> as RateSelection<M, port::Ack>>::completed(
+        <EspressifRateSelection<Caps> as RateSelection<M, port::Ack, port::BlockAckAnswer>>::completed(
             &mut self.0,
             now,
             frame,
@@ -253,9 +254,9 @@ impl<W: Binding, M: SignalMetadata> RateSelection<M, port::Ack> for Rates<W> {
         &mut self,
         now: Instant,
         tally: oer_ieee80211_core_upper_mac::rate_control::BlockAckTally,
-        completion: &oer_ieee80211_contracts_port::AggregateOutcome<port::Ack, D>,
+        completion: &oer_ieee80211_contracts_port::AggregateOutcome<port::BlockAckAnswer, D>,
     ) {
-        <EspressifRateSelection<Caps> as RateSelection<M, port::Ack>>::completed_aggregate(
+        <EspressifRateSelection<Caps> as RateSelection<M, port::Ack, port::BlockAckAnswer>>::completed_aggregate(
             &mut self.0,
             now,
             tally,
@@ -272,7 +273,7 @@ fn selected_rate<M: SignalMetadata>(
 ) -> crate::observation::TxRateSelected {
     use oer_ieee80211_wire::phy::PhyRate;
     crate::observation::TxRateSelected {
-        kbps: <EspressifRateSelection<Caps> as RateSelection<M, port::Ack>>::plan(
+        kbps: <EspressifRateSelection<Caps> as RateSelection<M, port::Ack, port::BlockAckAnswer>>::plan(
             selection,
             FrameRates::Data,
             Some::<PhyRate>,
@@ -432,12 +433,13 @@ fn initialize_service<'id, W: Binding>(
         resources.gate,
     );
     let [t0, t1, t2, t3, t4, t5, t6, t7] = resources.tickets;
-    let [b0, b1, b2, b3, b4, b5, b6, b7, b8, b9, b10, b11, ..] = resources.buffers;
+    let [b0, b1, b2, b3, data @ ..] = resources.buffers;
     const {
-        if MANAGEMENT != 4 || DATA_BUFFERS != 8 || port::TX_BUFFERS < 12 {
-            panic!("the split names four management and eight data buffers of the pool");
+        if MANAGEMENT != 4 || DATA_BUFFERS > oer_ieee80211_runtime::station::DATA_BUFFERS {
+            panic!("four management buffers, and the data machine's queue holds the rest");
         }
     }
+    let data: [_; DATA_BUFFERS] = data;
     let Profile {
         station,
         security,
@@ -478,7 +480,7 @@ fn initialize_service<'id, W: Binding>(
             StaData::init_in_place(
                 place,
                 [t4, t5, t6, t7],
-                [b4, b5, b6, b7, b8, b9, b10, b11],
+                data,
                 Backend::<W::Id, W>::TX_QUEUE_DEPTH,
             )
         },
