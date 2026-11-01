@@ -121,7 +121,6 @@ use oer_ieee80211_core_roles_sta::machine::TxRefusal;
 use core::future::{Future, poll_fn};
 use core::task::Poll;
 use embassy_futures::yield_now;
-use oer_crypto::KeyUnwrap;
 use oer_ieee80211_contracts_port::{
     ClassFrame, Ieee80211Capabilities, InstalledGroup, InstalledPairwise, InterfacePhase, KeyTypes,
     LowerMacBackend, LowerMacEvent, LowerMacPhase, LowerMacTerminal, PhaseSingleOutcome,
@@ -140,9 +139,8 @@ use oer_ieee80211_core_roles_sta::{
         MAX_ETHERNET_PAYLOAD_LEN, Msdu, MsduPlan, PlannedCopyError, StaData, TxMsdu,
     },
     machine::{
-        KEY_DATA_CAPACITY, KeyUnwrapId, Peer, RxBlockAckReply, StaAction, StaCallbacks, StaInput,
-        StaKeyUnwrapRequest, StaNotice, StaReceived, StaTokens, StaTraffic, StaTransmit,
-        StaTxContext, Station,
+        Peer, RxBlockAckReply, StaAction, StaCallbacks, StaInput, StaNotice, StaReceived,
+        StaTokens, StaTraffic, StaTransmit, StaTxContext, Station,
     },
 };
 use oer_ieee80211_core_upper_mac::block_ack::{Parked, RxDisposition};
@@ -507,14 +505,12 @@ use rx_block_ack::PhaseBlockAcks;
 pub use rx_block_ack::{PortRxBlockAck, RxBlockAckStorage, RxBlockAckView};
 
 mod custody;
-mod key_unwrap;
 mod tx_contexts;
 use custody::{ContractFault, StepFailure};
 pub use custody::{
     QuarantinedTerminals, RejectedTerminal, TerminalCustody, TerminalStorage, UnroutedAggregate,
     UnroutedTx,
 };
-pub use key_unwrap::KeyUnwrapSlot;
 pub use tx_contexts::TxContextStorage;
 
 /// What the application asks of the service.
@@ -597,9 +593,6 @@ pub enum BackendContractViolation {
     GroupTerminalKindMismatch,
     TxContextBufferMismatch,
     StationKeyBank(contract::KeyContractViolation),
-    /// The station asked for a second key-data unwrap while one was waiting
-    /// to start; it owns one ticket.
-    StationKeyUnwrap,
     /// The pairwise installation terminal returned a key of another
     /// installation; the outstanding request stays retained.
     ForeignPairwiseKey,
@@ -1178,8 +1171,6 @@ struct PendingActions<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id> {
     group: Option<PendingGroup<'id, B>>,
     /// The station's PTK installation, until its terminal returns the key.
     pairwise: Option<PendingPairwise<'id, B>>,
-    /// The station's unwrap request, until the key-unwrap slot takes it.
-    unwrap: Option<(KeyUnwrapId, StaKeyUnwrapRequest)>,
 }
 
 struct PendingPairwise<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id> {
@@ -1273,7 +1264,6 @@ impl<
                     retune: None,
                     group: None,
                     pairwise: None,
-                    unwrap: None,
                 },
             },
         }
@@ -1326,7 +1316,7 @@ impl<
                     rates: rates,
                     terminal_access: terminal_access,
                     events: events,
-                    pending: PendingActions { receive, commands: credits.into_inner(), admissions: Admissions::default(), tx_contexts: TxContextStorage::empty(), network: None, retune: None, group: None, pairwise: None, unwrap: None },
+                    pending: PendingActions { receive, commands: credits.into_inner(), admissions: Admissions::default(), tx_contexts: TxContextStorage::empty(), network: None, retune: None, group: None, pairwise: None },
                 }),
             })
         })
@@ -1358,7 +1348,6 @@ impl<
             impl Notifies,
         >,
         timer: &impl Timer,
-        unwrap: &mut KeyUnwrapSlot<impl KeyUnwrap<KEY_DATA_CAPACITY, Operation: Unpin>>,
     ) -> oer_memory::Placed<'out, ServiceCompleted<'p, 'id, B, C, S, GROUPS, O>> {
         let (arbiter, mut state) = oer_memory::unpack_placed!(service, Self { arbiter, state });
         let mut custody_storage = core::mem::MaybeUninit::uninit();
@@ -1366,9 +1355,8 @@ impl<
             place.write(TerminalCustody::Clear)
         });
         let (end, arbiter) = state
-            .run_loop(arbiter.read(), owner, io, timer, unwrap, &mut custody)
+            .run_loop(arbiter.read(), owner, io, timer, &mut custody)
             .await;
-        state.drain_key_unwrap(timer, unwrap).await;
         let reason = match &end {
             ServiceStop::Stopped(_) => {
                 oer_ieee80211_core_roles_sta::machine::StaDisconnectReason::Requested
@@ -1453,14 +1441,12 @@ impl<
             impl Notifies,
         >,
         timer: &impl Timer,
-        unwrap: &mut KeyUnwrapSlot<impl KeyUnwrap<KEY_DATA_CAPACITY, Operation: Unpin>>,
     ) -> ServiceCompleted<'p, 'id, B, C, S, GROUPS, O> {
         let Self { arbiter, mut state } = self;
         let mut custody = TerminalCustody::Clear;
         let (end, mut arbiter) = state
-            .run_loop(arbiter, owner, io, timer, unwrap, &mut custody)
+            .run_loop(arbiter, owner, io, timer, &mut custody)
             .await;
-        state.drain_key_unwrap(timer, unwrap).await;
         let end = end.into_end(custody);
         let reason = match &end {
             ServiceEnd::Stopped(_) => {
@@ -1554,15 +1540,11 @@ impl<
             impl Notifies,
         >,
         timer: &impl Timer,
-        unwrap: &mut KeyUnwrapSlot<impl KeyUnwrap<KEY_DATA_CAPACITY, Operation: Unpin>>,
         custody: &mut TerminalCustody<'id, B>,
     ) -> (
         ServiceStop<'p, 'id, B>,
         RetiredArbiter<'id, B::Caps, NoReservation, <B::Types<'id> as PhaseTypes<'id>>::GatePath>,
     ) {
-        // An operation left by a dropped run belongs to a station that no
-        // longer exists: its engine finishes it before this station's first.
-        let _abandoned = unwrap.finish().await;
         let (mut arbiter, mut owner) = match self.enable(arbiter, owner, None, io, timer).await {
             Ok(running) => running,
             Err(ended) => return ended,
@@ -1571,7 +1553,7 @@ impl<
             let next = {
                 let mut lent = owner.phase();
                 let phase = B::lend_phase(&mut lent);
-                self.serve(&mut arbiter, phase, io, timer, unwrap).await
+                self.serve(&mut arbiter, phase, io, timer).await
             };
             // One deadline for the whole stop: the network drain, the
             // disable, the port's retirement and what follows it.
@@ -1875,7 +1857,6 @@ impl<
             impl Notifies,
         >,
         timer: &impl Timer,
-        unwrap: &mut KeyUnwrapSlot<impl KeyUnwrap<KEY_DATA_CAPACITY, Operation: Unpin>>,
     ) -> Served<'id, B>
     where
         'id: 'p,
@@ -1984,7 +1965,7 @@ impl<
                 }
                 continue;
             }
-            let (event, room, command_ready, tick, transmit, unwrapped, now) = {
+            let (event, room, command_ready, tick, transmit, now) = {
                 let machine_deadline = self.step_deadline(arbiter);
                 let deadline = [
                     machine_deadline,
@@ -1997,17 +1978,10 @@ impl<
                 .into_iter()
                 .flatten()
                 .min();
-                // The station's unwrap request goes to the engine; its response
-                // is one more input source.
-                if let Some((id, request)) = self.pending.unwrap.take()
-                    && let Err(waiting) = unwrap.start(id, request)
-                {
-                    self.pending.unwrap = Some(waiting);
-                }
                 let sending = self.data.accepts() && self.station.link().is_some();
                 // Frames wait in delivery order for the network's next return.
                 let parked = self.pending.receive.has_ready();
-                let (event, room, command_ready, tick, transmit, unwrapped) = {
+                let (event, room, command_ready, tick, transmit) = {
                     let command = async {
                         match embassy_futures::select::select(
                             io.control.wait_for_stop(),
@@ -2055,20 +2029,15 @@ impl<
                         let tick = alarm_ready
                             && machine_deadline.is_some_and(|deadline| now() >= deadline);
                         let transmit = sending && transmit_ready.as_mut().poll(cx).is_ready();
-                        let unwrapped = match unwrap.poll_done(cx) {
-                            Poll::Ready(done) => Some(done),
-                            Poll::Pending => None,
-                        };
                         if event.is_some()
                             || room
                             || command_ready.is_some()
                             || alarm_ready
                             || policy_ready
                             || transmit
-                            || unwrapped.is_some()
                         {
                             B::span(ServiceSpan::Sources, true);
-                            Poll::Ready((event, room, command_ready, tick, transmit, unwrapped))
+                            Poll::Ready((event, room, command_ready, tick, transmit))
                         } else {
                             B::span(ServiceSpan::Sources, true);
                             Poll::Pending
@@ -2076,28 +2045,11 @@ impl<
                     })
                     .await
                 };
-                (
-                    event,
-                    room,
-                    command_ready,
-                    tick,
-                    transmit,
-                    unwrapped,
-                    timer.now(),
-                )
+                (event, room, command_ready, tick, transmit, timer.now())
             };
             // Only direct inputs taken alone skip the next step: lend room
             // is an input to the pending receives.
-            let mut quiet = unwrapped.is_none() && !tick && !room;
-            // The response returns the station's ticket before any other
-            // input can end the phase.
-            if let Some((id, result)) = unwrapped {
-                self.station.input(
-                    now,
-                    StaInput::KeyDataUnwrapped { id, result },
-                    &mut self.events,
-                );
-            }
+            let mut quiet = !tick && !room;
             let took_event = matches!(event, Some(Ok(Ok(_))));
             let event = match event {
                 Some(event) => match self.serve_event(arbiter, now, event, phase, io) {
@@ -2187,32 +2139,6 @@ impl<
             if batch == MAX_INPUT_STEPS_PER_BATCH {
                 batch = 0;
                 yield_now().await;
-            }
-        }
-    }
-
-    /// Finish the station's unwrap before it retires, so its ticket comes
-    /// back: a request not yet started still runs in the engine. The station
-    /// takes the response without an action being served.
-    async fn drain_key_unwrap(
-        &mut self,
-        timer: &impl Timer,
-        unwrap: &mut KeyUnwrapSlot<impl KeyUnwrap<KEY_DATA_CAPACITY, Operation: Unpin>>,
-    ) {
-        loop {
-            if let Some((id, request)) = self.pending.unwrap.take()
-                && let Err(waiting) = unwrap.start(id, request)
-            {
-                self.pending.unwrap = Some(waiting);
-            }
-            match unwrap.finish().await {
-                Some((id, result)) => self.station.input(
-                    timer.now(),
-                    StaInput::KeyDataUnwrapped { id, result },
-                    &mut self.events,
-                ),
-                None if self.pending.unwrap.is_none() => return,
-                None => {}
             }
         }
     }
@@ -4381,15 +4307,6 @@ where
         }
         StaAction::Associated(peer) => {
             return Ok(Follow::Associated(peer));
-        }
-        StaAction::UnwrapKeyData { id, request } => {
-            if pending_actions.unwrap.is_some() {
-                return Err(ServiceFault::Contract(
-                    BackendContractViolation::StationKeyUnwrap,
-                ));
-            }
-            pending_actions.unwrap = Some((id, request));
-            return Ok(Follow::Nothing);
         }
     };
     Ok(Follow::Input(input))
