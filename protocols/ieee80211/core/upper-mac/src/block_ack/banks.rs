@@ -774,6 +774,28 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
             Ok(slot) => slot,
             Err(_) => return RxDisposition::Deliver((frame, meta)),
         };
+        // The common in-order MPDU, with no frame released ahead of it,
+        // goes out at once: it takes no slot and no place in delivery
+        // order. Any other MPDU, or a refusal, takes the full ingest.
+        if self.header.ready_len == 0
+            && let Ok(true) = active.try_ingest_immediate(
+                now,
+                RxReorderMpdu {
+                    sequence,
+                    slot: slot_id,
+                },
+            )
+        {
+            let tid = active.tid();
+            report(events, || RxBlockAckEvent::Reordered {
+                tid,
+                cause: ReorderCause::Receive,
+                held: 0,
+                released: 1,
+                missing: 0,
+            });
+            return RxDisposition::Deliver((frame, meta));
+        }
         let release = active.ingest(
             now,
             RxReorderMpdu {
