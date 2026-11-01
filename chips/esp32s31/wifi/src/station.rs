@@ -386,9 +386,11 @@ fn initialize_service<'id, W: Binding>(
     const {
         if core::mem::size_of::<
             RxBlockAckStorage<'static, Family<W::Id, W>, RX_BA_BANKS, RX_BA_FRAMES>,
-        >() > 2048
+        >() > 8192
         {
-            panic!("RX block-ack owner exceeds 2 KiB");
+            // A 32-MPDU window's reorder slots: placed static storage,
+            // never a stack value.
+            panic!("RX block-ack owner exceeds 8 KiB");
         }
     }
     let (arbiter, place, absence_place) = PortArbiter::<StationComposition<W, W::Id>>::new(
