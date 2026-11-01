@@ -16,7 +16,16 @@ cargo fw run <image> --board <id|MAC> [--timeout <duration>]
 cargo fw monitor --board <id|MAC> [--start]
 cargo fw boards
 cargo fw power-cycle --board <id|MAC>
+cargo fw hot-code --results <results.json> --measurement <name> --elf <runtime.elf> --budget <bytes> --output <hot-code.toml>
 ```
+
+`hot-code` writes an image's hot-code list from the PC profile of one
+measurement in a scenario's results (`value.profile.samples`, each
+`[tick, pc, level, ra]`, such as `wifi-load`'s with
+`OER_WIFI_LOAD_PROFILE_US`): the functions of the profiled ELF's cached
+`.text` with at least two samples, by samples per byte, while they fit the
+budget. The image linker moves them into SRAM
+([image linker](../linker/README.md#hot-code)).
 
 ## Build
 

@@ -31,7 +31,9 @@ facts at build time; the host checks read the same facts.
   sections in SRAM through `strict-text.x`: [execution in the
   architecture](architecture.md#execution) and [image checks](../tools/image/checks/README.md).
 - `.hot.text` places code in SRAM for performance:
-  [`place_rx_hot_path!`](../chips/esp32s31/hal/src/ieee80211/dma.rs).
+  [`place_rx_hot_path!`](../chips/esp32s31/hal/src/ieee80211/dma.rs), and
+  the functions of an image's profile-generated hot-code list through
+  `hot-text.x` ([image linker](../tools/image/linker/README.md#hot-code)).
 - The staged platform uses `.trap`, `.rwtext` and
   `.flash.critical.text` conventions collected by the
   [runtime linker script](../chips/espressif/staged-layout/linker/runtime/sections.x).

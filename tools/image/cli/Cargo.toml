@@ -19,6 +19,7 @@ jiff = { version = "=0.2.37", default-features = false, features = ["std"] }
 oer-image-build = { path = "../build" }
 oer-image-bundle = { path = "../bundle" }
 oer-image-checks = { path = "../checks" }
+oer-analysis-elf = { path = "../../analysis/elf" }
 oer-image-esp-idf = { path = "../esp-idf" }
 oer-chip-profile = { path = "../../chip/profile" }
 oer-lab-arbiter = { path = "../../lab/arbiter" }

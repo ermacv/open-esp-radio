@@ -10,6 +10,7 @@ use std::{process::ExitCode, time::Duration};
 use clap::{CommandFactory as _, Parser, Subcommand};
 mod command;
 mod diagnostics;
+mod hot_code;
 mod idf;
 mod image;
 
@@ -105,6 +106,26 @@ enum Command {
         #[arg(long)]
         board: String,
     },
+    /// Write an image's hot-code list from a PC profile in a scenario's
+    /// results: the image's cached functions with the most samples of one
+    /// measurement, within a byte budget. Builds and flashes nothing.
+    HotCode {
+        /// The results file holding the profile (`target/hil/results/…`).
+        #[arg(long)]
+        results: std::path::PathBuf,
+        /// The measurement whose profile ranks the functions.
+        #[arg(long)]
+        measurement: String,
+        /// The runtime ELF the profile sampled.
+        #[arg(long)]
+        elf: std::path::PathBuf,
+        /// Bytes of input sections the list may move into SRAM.
+        #[arg(long)]
+        budget: u64,
+        /// The list file to write.
+        #[arg(long)]
+        output: std::path::PathBuf,
+    },
     /// The catalog of tracked ESP-IDF firmware: the stand's peers and the
     /// vendor references, built against the pinned ESP-IDF.
     Idf {
@@ -196,6 +217,13 @@ fn main() -> ExitCode {
             Command::Monitor { board, start } => command::monitor(&board, start)?,
             Command::Boards => command::list_boards()?,
             Command::PowerCycle { board } => command::power_cycle(&board)?,
+            Command::HotCode {
+                results,
+                measurement,
+                elf,
+                budget,
+                output,
+            } => hot_code::write(&results, &measurement, &elf, budget, &output)?,
             Command::Idf {
                 command: IdfCommand::List,
             } => idf::list(&root)?,
@@ -267,6 +295,12 @@ mod tests {
         assert!(matches!(
             parse("fw sizes base head").unwrap().command,
             Command::Sizes { .. }
+        ));
+        assert!(matches!(
+            parse("fw hot-code --results r.json --measurement rx --elf runtime.elf --budget 32768 --output hot-code.toml")
+                .unwrap()
+                .command,
+            Command::HotCode { budget: 32768, .. }
         ));
     }
 
