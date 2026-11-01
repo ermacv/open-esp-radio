@@ -327,7 +327,17 @@ impl<Id: SlotIdentity, D: Device, X> View<'_, Id, D, X> {
 impl<'p, Id: SlotIdentity, D: Device, X> PortPhase for Phase<'_, 'p, Id, D, X> {
     type Event = Event<'p, Path<Id>, X>;
     type Fault = Fault;
-    async fn next_event(&mut self) -> Result<Result<Self::Event, EventsLost>, EventEnd<Fault>> {
+    type Ready<'a>
+        = Event<'p, Path<Id>, X>
+    where
+        Self: 'a;
+    fn take_ready<'a>(ready: Self::Ready<'a>) -> Result<Self::Event, EventEnd<Self::Fault>>
+    where
+        Self: 'a,
+    {
+        Ok(ready)
+    }
+    async fn next_ready(&mut self) -> Result<Result<Self::Event, EventsLost>, EventEnd<Fault>> {
         poll_fn(|cx| {
             let v = &self.view;
             v.wakes.register_frontend(cx);

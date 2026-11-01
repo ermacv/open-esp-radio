@@ -59,35 +59,82 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         self.held.storage.driver.wake();
     }
 }
-impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations> radio::PortPhase
-    for Esp32s31Phase<'_, 'id, Id, D, B, O>
+/// The event at the head of the phase's queue, found by
+/// [`radio::PortPhase::next_ready`] and not yet taken.
+///
+/// It borrows the phase exclusively, so no other wait or take runs while it
+/// lives. Dropping or forgetting it takes nothing: the event stays queued,
+/// the received-unit count and the driver's wake are untouched, and the next
+/// wait finds the same event. Only [`radio::PortPhase::take_ready`] pops it,
+/// once, since taking consumes it.
+pub struct ReadyEvent<'a, 'p, 'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
+{
+    phase: &'a mut Esp32s31Phase<'p, 'id, Id, D, B, O>,
+}
+
+impl<'p, 'id: 'p, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
+    radio::PortPhase for Esp32s31Phase<'p, 'id, Id, D, B, O>
 {
     type Event = Event<'id, Id, D, B, O>;
+    type Ready<'a>
+        = ReadyEvent<'a, 'p, 'id, Id, D, B, O>
+    where
+        Self: 'a;
     type Fault = Fault;
-    fn next_event(
+    fn next_ready(
         &mut self,
-    ) -> impl Future<Output = Result<Result<Self::Event, radio::EventsLost>, radio::EventEnd<Fault>>> + '_
+    ) -> impl Future<
+        Output = Result<Result<Self::Ready<'_>, radio::EventsLost>, radio::EventEnd<Fault>>,
+    > + '_ {
+        async move {
+            // Queued events go first, then the poison, then a loss; the
+            // wait only looks at the head.
+            let found = poll_fn(|cx| {
+                self.held.storage.body.register(cx.waker());
+                if !self.held.events.is_empty() {
+                    return Poll::Ready(Ok(Ok(())));
+                }
+                if let Some(cause) = self.held.storage.poisoned.get() {
+                    return Poll::Ready(Err(radio::EventEnd::Quarantined { cause }));
+                }
+                if self.held.loss.replace(false) {
+                    return Poll::Ready(Ok(Err(radio::EventsLost)));
+                }
+                Poll::Pending
+            })
+            .await;
+            found.map(|found| found.map(|()| ReadyEvent { phase: self }))
+        }
+    }
+    /// Pop the head the wait found and lend its owners. A received unit's
+    /// take counts it off the driver's queue, which wakes a driver that
+    /// waits at [`RX_WAKE_AT`]. A head that is gone, or a parked terminal
+    /// whose place holds none, poisons the installation and ends the stream.
+    fn take_ready<'a>(ready: Self::Ready<'a>) -> Result<Self::Event, radio::EventEnd<Fault>>
+    where
+        Self: 'a,
     {
-        poll_fn(|cx| {
-            self.held.storage.body.register(cx.waker());
-            if let Some(event) = self.held.events.try_receive().ok() {
-                if matches!(event, owned::OwnedEvent::Received { .. }) {
-                    self.held.storage.took_received();
-                }
-                match event.lend(&self.loan, self.held.completions) {
-                    Some(event) => return Poll::Ready(Ok(Ok(event))),
-                    // A parked terminal's place held none.
-                    None => self.held.storage.poison(Fault::Capacity),
-                }
+        let phase = ready.phase;
+        let quarantined = |phase: &Self| radio::EventEnd::Quarantined {
+            cause: phase.held.storage.poisoned.get().unwrap_or(Fault::Capacity),
+        };
+        // The wait saw the head and this phase is the queue's only consumer,
+        // borrowed until here: a missing head breaks the queue's account.
+        let Ok(event) = phase.held.events.try_receive() else {
+            phase.held.storage.poison(Fault::Capacity);
+            return Err(quarantined(phase));
+        };
+        if matches!(event, owned::OwnedEvent::Received { .. }) {
+            phase.held.storage.took_received();
+        }
+        match event.lend(&phase.loan, phase.held.completions) {
+            Some(event) => Ok(event),
+            // A parked terminal's place held none.
+            None => {
+                phase.held.storage.poison(Fault::Capacity);
+                Err(quarantined(phase))
             }
-            if let Some(cause) = self.held.storage.poisoned.get() {
-                return Poll::Ready(Err(radio::EventEnd::Quarantined { cause }));
-            }
-            if self.held.loss.replace(false) {
-                return Poll::Ready(Ok(Err(radio::EventsLost)));
-            }
-            Poll::Pending
-        })
+        }
     }
 }
 impl<'p, 'id: 'p, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>

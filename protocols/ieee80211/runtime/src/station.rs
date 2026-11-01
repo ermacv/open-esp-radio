@@ -149,7 +149,7 @@ use oer_network_port::LentFrame;
 use oer_radio_port::Slot;
 use oer_radio_port::{
     DisableFailed, Disabled, Enabled, Ended, EventEnd, EventsLost, FailStopRequested, Failed,
-    Owner, PoisonedOwner, PortBackend,
+    Owner, PoisonedOwner, PortBackend, PortPhase,
 };
 use oer_time::{Instant, Timer};
 
@@ -399,6 +399,44 @@ const MAX_INPUT_STEPS_PER_BATCH: u8 = 8;
 /// deadlines, waits and clock read once per this many frames, and a command,
 /// an alarm or a transmission waits at most this many port events.
 const MAX_WAITING_EVENT_STEPS: u8 = 8;
+
+/// One poll of `wait` with the task's own waker: its output if it is ready
+/// now. A wait left pending registered the task, which the next sources
+/// poll registers again.
+async fn ready_now<F: Future>(wait: F) -> Option<F::Output> {
+    let mut wait = core::pin::pin!(wait);
+    poll_fn(|cx| {
+        Poll::Ready(match wait.as_mut().poll(cx) {
+            Poll::Ready(output) => Some(output),
+            Poll::Pending => None,
+        })
+    })
+    .await
+}
+
+/// Take the event a wait found; a loss or the stream's end passes through.
+fn taken<P: PortPhase>(
+    found: Result<Result<P::Ready<'_>, EventsLost>, EventEnd<P::Fault>>,
+) -> Result<Result<P::Event, EventsLost>, EventEnd<P::Fault>> {
+    match found {
+        Ok(Ok(ready)) => P::take_ready(ready).map(Ok),
+        Ok(Err(lost)) => Ok(Err(lost)),
+        Err(end) => Err(end),
+    }
+}
+
+/// The serve's end at the port's event-stream end.
+fn stream_end<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id>(
+    end: EventEnd<<B::Types<'id> as PhaseTypes<'id>>::Fault>,
+) -> Served<'id, B> {
+    let cause = match end {
+        EventEnd::Drained { cause } | EventEnd::Quarantined { cause } => cause,
+    };
+    Served::StreamEnd {
+        end,
+        fault: ServiceFault::Backend(cause),
+    }
+}
 
 /// A station frame's transmission on the port `B`.
 type StationTransmit<'id, B, const GROUPS: usize> = StaTransmit<
@@ -1906,18 +1944,14 @@ impl<
             // After a port event, one already waiting goes to this step at
             // once: the step above applied what the last one changed, and the
             // other sources wait at most `MAX_WAITING_EVENT_STEPS` events.
-            let waiting = if event_steps == 0 {
-                None
-            } else {
-                poll_fn(|cx| {
-                    Poll::Ready(match core::pin::pin!(phase.next_event()).poll(cx) {
-                        Poll::Ready(waiting) => Some(waiting),
-                        Poll::Pending => None,
-                    })
-                })
-                .await
-            };
-            if let Some(waiting) = waiting {
+            // The port names the event in its queue without moving it; the
+            // step takes it here, where it serves it.
+            // The port names the waiting event without moving it; only the
+            // wait's small result crosses the await, and the event is taken
+            // here, where the step serves it.
+            if event_steps != 0
+                && let Some(waiting) = ready_now(phase.next_ready()).await.map(taken::<P>)
+            {
                 let took_event = matches!(waiting, Ok(Ok(_)));
                 if let Err(served) = self.serve_event(arbiter, turn, waiting, phase, io) {
                     return served;
@@ -2660,29 +2694,55 @@ impl<
         P: LowerMacPhase<'p, 'id, Caps = B::Caps, Types = B::Types<'id>>,
     {
         match event {
-            Ok(Ok(event)) => match self.event(arbiter, now, B::event(event), phase, io) {
-                Ok(Some(buffer)) => {
-                    B::span(ServiceSpan::Recycle, false);
-                    phase.recycle(buffer);
-                    B::span(ServiceSpan::Recycle, true);
-                    Ok(())
-                }
-                Ok(None) => Ok(()),
-                Err(fault) => Err(Served::Failed(fault.into())),
-            },
+            Ok(Ok(event)) => self.serve_taken(arbiter, now, event, phase, io),
             Ok(Err(EventsLost)) => {
                 report(&mut self.events, || ServiceEvent::PortEventsLost);
                 Ok(())
             }
-            Err(end) => {
-                let cause = match end {
-                    EventEnd::Drained { cause } | EventEnd::Quarantined { cause } => cause,
-                };
-                Err(Served::StreamEnd {
-                    end,
-                    fault: ServiceFault::Backend(cause),
-                })
+            Err(end) => Err(stream_end(end)),
+        }
+    }
+
+    /// Serve one event taken from the port; its received buffer, if it comes
+    /// back, returns to the port.
+    #[inline(never)]
+    fn serve_taken<
+        'p,
+        P,
+        const TX_DEPTH: usize,
+        const RX_DEPTH: usize,
+        const COMMAND_DEPTH: usize,
+    >(
+        &mut self,
+        arbiter: &mut PortArbiter<'id, B>,
+        now: Instant,
+        event: LowerMacEvent<'id, B::Types<'id>>,
+        phase: &mut P,
+        io: &mut ServiceIo<
+            '_,
+            B::Caps,
+            impl ServiceOutputSink<B::Caps>,
+            B::LentRx,
+            impl NetworkStop,
+            TX_DEPTH,
+            RX_DEPTH,
+            COMMAND_DEPTH,
+            impl Notifies,
+        >,
+    ) -> Result<(), Served<'id, B>>
+    where
+        'id: 'p,
+        P: LowerMacPhase<'p, 'id, Caps = B::Caps, Types = B::Types<'id>>,
+    {
+        match self.event(arbiter, now, B::event(event), phase, io) {
+            Ok(Some(buffer)) => {
+                B::span(ServiceSpan::Recycle, false);
+                phase.recycle(buffer);
+                B::span(ServiceSpan::Recycle, true);
+                Ok(())
             }
+            Ok(None) => Ok(()),
+            Err(fault) => Err(Served::Failed(fault.into())),
         }
     }
 

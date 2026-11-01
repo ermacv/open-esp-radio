@@ -60,6 +60,13 @@ impl<T, const DEPTH: usize, C: SpscCursor> LocalSpscReceiver<'_, T, DEPTH, C> {
     pub fn try_receive(&self) -> Result<T, AffineSpscTryReceiveError> {
         self.queue.try_receive()
     }
+
+    /// Whether no owner waits: the unique consumer's next
+    /// [`Self::try_receive`] then finds one only if a later publication
+    /// came first.
+    pub fn is_empty(&self) -> bool {
+        self.queue.len() == 0
+    }
 }
 
 impl<T, const DEPTH: usize, C: SpscCursor> AffineSpscReceiver<'_, T, DEPTH, C> {

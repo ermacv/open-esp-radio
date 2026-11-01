@@ -45,9 +45,19 @@ struct View<'p, Id: SlotIdentity> {
 struct Phase;
 impl PortPhase for Phase {
     type Event = ();
+    type Ready<'a>
+        = ()
+    where
+        Self: 'a;
     type Fault = u8;
-    async fn next_event(&mut self) -> Result<Result<(), EventsLost>, EventEnd<u8>> {
+    async fn next_ready(&mut self) -> Result<Result<(), EventsLost>, EventEnd<u8>> {
         pending().await
+    }
+    fn take_ready<'a>(ready: ()) -> Result<(), EventEnd<u8>>
+    where
+        Self: 'a,
+    {
+        Ok(ready)
     }
 }
 impl<Id: SlotIdentity> SlotOwner<Id> for Backend<Id> {

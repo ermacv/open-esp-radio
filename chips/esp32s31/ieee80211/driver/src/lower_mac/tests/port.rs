@@ -1338,6 +1338,25 @@ enum ReceiveMode {
     Lend,
     /// Lend the unit and keep it held across the disable.
     LendHeld,
+    /// Find the unit's event, drop and forget the found view, then take it
+    /// and recycle the unit.
+    FoundThenTaken,
+}
+
+/// Find the next event three times: the first found view is dropped and the
+/// second forgotten, neither taking it; the third is taken. A wait that does
+/// not find an event fails.
+async fn found_then_taken<P: PortPhase>(phase: &mut P) -> Option<P::Event> {
+    let found = phase.next_ready().await;
+    assert!(matches!(found, Ok(Ok(_))), "found");
+    drop(found);
+    let found = phase.next_ready().await;
+    assert!(matches!(found, Ok(Ok(_))), "found again");
+    core::mem::forget(found);
+    let Ok(Ok(ready)) = phase.next_ready().await else {
+        return None;
+    };
+    P::take_ready(ready).ok()
 }
 /// How many receive units were released, shared with the units.
 pub(super) type Released = std::sync::Arc<core::sync::atomic::AtomicUsize>;
@@ -1391,8 +1410,13 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for ReceiveBody {
                 view: 0..26,
                 released: self.released.clone(),
             });
-            let frame = match phase.next_event().await {
-                Ok(Ok(LowerMacEvent::Received { frame, meta })) => {
+            let event = if self.mode == ReceiveMode::FoundThenTaken {
+                found_then_taken(&mut *phase).await.map(Ok).map(Ok)
+            } else {
+                Some(phase.next_event().await)
+            };
+            let frame = match event {
+                Some(Ok(Ok(LowerMacEvent::Received { frame, meta }))) => {
                     assert_eq!(meta.common().rate, RxEvidence::Unavailable);
                     assert_eq!(meta.common().rssi_dbm, RxEvidence::HardwareObserved(-42));
                     frame
@@ -1409,7 +1433,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for ReceiveBody {
                         Err(radio::EventEnd::Quarantined { .. })
                     ));
                 }
-                ReceiveMode::Recycle => phase.recycle(frame),
+                ReceiveMode::Recycle | ReceiveMode::FoundThenTaken => phase.recycle(frame),
                 ReceiveMode::Lend | ReceiveMode::LendHeld => {
                     let Ok(mut lent) = phase.lend(frame) else {
                         panic!("lent");
@@ -1458,6 +1482,27 @@ fn received_bss_mpdu_keeps_its_original_owner_until_explicit_recycling() {
                 observed,
                 released: released.clone(),
                 mode: ReceiveMode::Recycle,
+                stash: Stash::default(),
+            }
+        )),
+        Report::Uninstalled { .. }
+    ));
+    assert_eq!(count(&released), 1);
+}
+#[test]
+fn a_found_event_stays_queued_until_it_is_taken_once() {
+    // Dropping or forgetting the found view takes nothing and counts no
+    // received unit off the driver's queue; the take pops the frame once,
+    // and the installation still stops with every owner back.
+    let (backend, observed, _) = installed(Vec::new());
+    let released = Released::default();
+    assert!(matches!(
+        block_on(run_body(
+            backend,
+            ReceiveBody {
+                observed,
+                released: released.clone(),
+                mode: ReceiveMode::FoundThenTaken,
                 stash: Stash::default(),
             }
         )),

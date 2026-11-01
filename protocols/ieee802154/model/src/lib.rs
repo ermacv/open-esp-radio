@@ -820,8 +820,20 @@ pub struct ModelEvents<'a, 'id, Id: SlotIdentity> {
 impl<Id: SlotIdentity> PortPhase for ModelEvents<'_, '_, Id> {
     type Event = ModelEvent;
     type Fault = ModelFault;
+    type Ready<'a>
+        = ModelEvent
+    where
+        Self: 'a;
+    fn take_ready<'a>(
+        ready: Self::Ready<'a>,
+    ) -> Result<Self::Event, oer_radio_port::EventEnd<Self::Fault>>
+    where
+        Self: 'a,
+    {
+        Ok(ready)
+    }
 
-    fn next_event(
+    fn next_ready(
         &mut self,
     ) -> impl Future<
         Output = Result<Result<ModelEvent, EventsLost>, oer_radio_port::EventEnd<ModelFault>>,

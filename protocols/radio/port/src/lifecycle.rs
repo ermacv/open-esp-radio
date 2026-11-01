@@ -97,16 +97,48 @@ impl Call {
 pub type EnableResult<R, F> = PortResult<(), R, F>;
 
 /// The phase's unique, cancellation-safe event consumer.
+///
+/// A wait ([`Self::next_ready`]) finds the next event and [`Self::take_ready`]
+/// takes it. A phase whose events wait in a queue may name the head without
+/// moving it ([`Self::Ready`] borrows the phase), so the consumer takes the
+/// event once, where it uses it; a phase that holds events by value hands
+/// the event itself. [`Self::next_event`] does both.
 pub trait PortPhase {
     /// Owned event of the body loan, including admitted terminals.
     type Event;
+    /// The next event, found and not yet taken. Dropping it, or forgetting
+    /// it, takes nothing: the next wait finds the same event.
+    type Ready<'a>
+    where
+        Self: 'a;
     /// Published cause of the final event-stream end.
     type Fault: Copy + Debug;
-    /// Receive in occurrence order. Cancelling this wait loses no event.
-    /// Every call after the final end returns the same end and cause.
+    /// Wait for the next event in occurrence order. Cancelling this wait
+    /// loses no event. Every call after the final end returns the same end
+    /// and cause.
+    fn next_ready(
+        &mut self,
+    ) -> impl Future<Output = Result<Result<Self::Ready<'_>, EventsLost>, EventEnd<Self::Fault>>> + '_;
+    /// Take the event `ready` found. A phase that cannot take it ends its
+    /// stream, as the next wait would report.
+    fn take_ready<'a>(ready: Self::Ready<'a>) -> Result<Self::Event, EventEnd<Self::Fault>>
+    where
+        Self: 'a;
+    /// Receive in occurrence order: the next event, found and taken.
+    /// Cancelling this wait loses no event. Every call after the final end
+    /// returns the same end and cause.
     fn next_event(
         &mut self,
-    ) -> impl Future<Output = Result<Result<Self::Event, EventsLost>, EventEnd<Self::Fault>>> + '_;
+    ) -> impl Future<Output = Result<Result<Self::Event, EventsLost>, EventEnd<Self::Fault>>> + '_
+    {
+        async move {
+            match self.next_ready().await {
+                Ok(Ok(ready)) => Self::take_ready(ready).map(Ok),
+                Ok(Err(lost)) => Ok(Err(lost)),
+                Err(end) => Err(end),
+            }
+        }
+    }
 }
 
 /// Body operations over queue views of a caller-slot P2 owner.
@@ -689,12 +721,22 @@ pub struct PhaseParts<E, C, K> {
 
 impl<E: PortPhase, C, K> PortPhase for PhaseParts<E, C, K> {
     type Event = E::Event;
+    type Ready<'a>
+        = E::Ready<'a>
+    where
+        Self: 'a;
     type Fault = E::Fault;
-    fn next_event(
+    fn next_ready(
         &mut self,
-    ) -> impl Future<Output = Result<Result<Self::Event, EventsLost>, EventEnd<Self::Fault>>> + '_
+    ) -> impl Future<Output = Result<Result<Self::Ready<'_>, EventsLost>, EventEnd<Self::Fault>>> + '_
     {
-        self.events.next_event()
+        self.events.next_ready()
+    }
+    fn take_ready<'a>(ready: Self::Ready<'a>) -> Result<Self::Event, EventEnd<Self::Fault>>
+    where
+        Self: 'a,
+    {
+        E::take_ready(ready)
     }
 }
 

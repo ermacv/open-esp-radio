@@ -3887,8 +3887,18 @@ where
 impl<'id, C, B: ModelComposition + 'id> PortPhase for ModelPhase<'_, 'id, C, B> {
     type Event = oer_ieee80211_contracts_port::LowerMacEvent<'id, ModelTypes<B>>;
     type Fault = ModelFault;
+    type Ready<'a>
+        = oer_ieee80211_contracts_port::LowerMacEvent<'id, ModelTypes<B>>
+    where
+        Self: 'a;
+    fn take_ready<'a>(ready: Self::Ready<'a>) -> Result<Self::Event, EventEnd<Self::Fault>>
+    where
+        Self: 'a,
+    {
+        Ok(ready)
+    }
 
-    fn next_event(
+    fn next_ready(
         &mut self,
     ) -> impl Future<Output = Result<Result<Self::Event, EventsLost>, EventEnd<ModelFault>>> + '_
     {

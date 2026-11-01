@@ -92,11 +92,21 @@ struct Alter<'a, F> {
 }
 impl<F: PortPhase> PortPhase for Alter<'_, F> {
     type Event = F::Event;
+    type Ready<'a>
+        = F::Ready<'a>
+    where
+        Self: 'a;
     type Fault = F::Fault;
-    async fn next_event(
+    async fn next_ready(
         &mut self,
-    ) -> Result<Result<Self::Event, EventsLost>, EventEnd<Self::Fault>> {
-        self.inner.next_event().await
+    ) -> Result<Result<Self::Ready<'_>, EventsLost>, EventEnd<Self::Fault>> {
+        self.inner.next_ready().await
+    }
+    fn take_ready<'a>(ready: Self::Ready<'a>) -> Result<Self::Event, EventEnd<Self::Fault>>
+    where
+        Self: 'a,
+    {
+        F::take_ready(ready)
     }
 }
 // Corruption of terminal owners is deliberately applied only in a host fixture.
@@ -140,15 +150,30 @@ where
     F::Event: AlterTerminal,
 {
     type Event = F::Event;
+    // The scenario rides with the found event: taking it applies the change.
+    type Ready<'a>
+        = (F::Ready<'a>, Scenario)
+    where
+        Self: 'a;
     type Fault = F::Fault;
-    async fn next_event(
+    async fn next_ready(
         &mut self,
-    ) -> Result<Result<Self::Event, EventsLost>, EventEnd<Self::Fault>> {
-        let mut result = self.inner.next_event().await;
-        if let Ok(Ok(event)) = &mut result {
-            event.alter(self.scenario);
-        }
-        result
+    ) -> Result<Result<Self::Ready<'_>, EventsLost>, EventEnd<Self::Fault>> {
+        let scenario = self.scenario;
+        self.inner
+            .next_ready()
+            .await
+            .map(|found| found.map(|ready| (ready, scenario)))
+    }
+    fn take_ready<'a>(
+        (ready, scenario): Self::Ready<'a>,
+    ) -> Result<Self::Event, EventEnd<Self::Fault>>
+    where
+        Self: 'a,
+    {
+        let mut event = F::take_ready(ready)?;
+        event.alter(scenario);
+        Ok(event)
     }
 }
 macro_rules! phase {

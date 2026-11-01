@@ -70,9 +70,19 @@ macro_rules! port {
             struct Events;
             impl PortPhase for Events {
                 type Event = u32;
+                type Ready<'a>
+                    = u32
+                where
+                    Self: 'a;
                 type Fault = u32;
-                async fn next_event(&mut self) -> Result<Result<u32, EventsLost>, EventEnd<u32>> {
+                async fn next_ready(&mut self) -> Result<Result<u32, EventsLost>, EventEnd<u32>> {
                     core::future::pending().await
+                }
+                fn take_ready<'a>(ready: u32) -> Result<u32, EventEnd<u32>>
+                where
+                    Self: 'a,
+                {
+                    Ok(ready)
                 }
             }
             impl<'r, Id: SlotIdentity> SlotOwner<Id> for Backend<'r> {
