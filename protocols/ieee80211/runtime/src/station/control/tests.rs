@@ -6,6 +6,18 @@ use oer_memory::WakingSpscQueue;
 use oer_network_port::{EthernetFrameView, FrameLengthError};
 use std::{cell::Cell, rc::Rc, vec::Vec};
 
+/// An open network's profile.
+fn open_profile() -> StaProfile {
+    profile(b"open-net")
+}
+
+fn profile(ssid: &[u8]) -> StaProfile {
+    StaProfile {
+        ssid: heapless::Vec::from_slice(ssid).unwrap(),
+        security: oer_ieee80211_core_roles_sta::machine::StaSecurity::Open,
+    }
+}
+
 struct Frame {
     owner: Rc<Cell<usize>>,
     payload: [u8; 4],
@@ -262,14 +274,14 @@ fn an_operation_resolves_once_to_its_own_terminal_and_returns_the_permission() {
     let (sender, mut receiver) = commands.split();
     let (mut control, _runner) = Control::new(sender, &state).unwrap();
     let mut events = state.events(|_: ServiceOutput<()>| {});
-    let mut first = embassy_futures::block_on(control.connect()).unwrap();
+    let mut first = embassy_futures::block_on(control.connect(open_profile())).unwrap();
     let Some(ServiceCommand::Station(request)) = receiver.try_receive() else {
         panic!("the request is admitted")
     };
     assert_eq!(request.command(), Command::Connect);
     {
         // The permission stays held: the next connect waits for it.
-        let mut second = core::pin::pin!(control.connect());
+        let mut second = core::pin::pin!(control.connect(open_profile()));
         assert!(poll_now(second.as_mut()).is_pending());
     }
     assert!(receiver.try_receive().is_none(), "no duplicate is posted");
@@ -290,7 +302,7 @@ fn an_operation_resolves_once_to_its_own_terminal_and_returns_the_permission() {
         poll_now(core::pin::Pin::new(&mut first)).is_pending(),
         "a resolved operation never takes a later terminal"
     );
-    let _next = embassy_futures::block_on(control.connect()).unwrap();
+    let _next = embassy_futures::block_on(control.connect(open_profile())).unwrap();
     let Some(ServiceCommand::Station(next)) = receiver.try_receive() else {
         panic!("the returned permission admits the next request")
     };
@@ -342,7 +354,7 @@ fn a_service_end_wakes_its_operations_with_the_cause() {
         Poll::Ready(OperationEnd::ServiceEnded)
     );
     assert_eq!(
-        embassy_futures::block_on(control.connect()).err(),
+        embassy_futures::block_on(control.connect(open_profile())).err(),
         Some(ControlError::Stopped)
     );
 }
@@ -367,7 +379,7 @@ fn an_operation_of_an_ended_epoch_reads_its_own_result_after_a_restart() {
     let (sender, receiver) = commands.split();
     let (mut control, mut runner) = Control::new(sender, &state).unwrap();
     let mut events = state.events(|_: ServiceOutput<()>| {});
-    let mut connected = embassy_futures::block_on(control.connect()).unwrap();
+    let mut connected = embassy_futures::block_on(control.connect(open_profile())).unwrap();
     let mut scanning = embassy_futures::block_on(control.scan()).unwrap();
     let Some(ServiceCommand::Station(connect)) = receiver.try_receive() else {
         panic!("the connect is admitted")
@@ -377,7 +389,7 @@ fn an_operation_of_an_ended_epoch_reads_its_own_result_after_a_restart() {
     events.emit(terminal(connect));
     let (mut control, _runner) = restart(control, &mut runner, &state).ok().unwrap();
     // The new epoch admits at once: it waits for no ended terminal.
-    let next = embassy_futures::block_on(control.connect()).unwrap();
+    let next = embassy_futures::block_on(control.connect(open_profile())).unwrap();
     assert!(matches!(
         receiver.try_receive(),
         Some(ServiceCommand::Station(request)) if request.correlation() != connect.correlation()
@@ -438,13 +450,37 @@ fn the_reconnect_policy_and_an_operation_share_one_admission() {
         super::super::ReconnectPolicy::every(oer_time::Duration::from_secs(1)).unwrap(),
     );
     let now = oer_time::Instant::from_micros(0);
-    let Ok(Some(ServiceCommand::Station(reconnect))) = runner.policy_command::<()>(now) else {
-        panic!("the policy connects")
+    // Without a profile the policy never connects first.
+    assert!(matches!(runner.policy_command::<()>(now), Ok(None)));
+    // The application's connect fails: the policy retries it, with the
+    // profile the station kept.
+    let first = embassy_futures::block_on(control.connect(open_profile())).unwrap();
+    let Some(ServiceCommand::Station(first_request)) = receiver.try_receive() else {
+        panic!("the application's connect is admitted")
     };
+    assert!(runner.take_profile().is_some(), "the runner takes it");
+    let failure = super::super::contract::DisconnectReason::AuthenticationFailed;
+    events.emit(ServiceOutput::Notice(
+        super::super::contract::Notice::Disconnected(failure),
+    ));
+    events.emit(ServiceOutput::CommandCompleted(
+        super::super::CommandTerminal {
+            request: first_request,
+            outcome: super::super::contract::CommandOutcome::ConnectFailed(failure),
+        },
+    ));
+    drop(first);
+    let Ok(Some(ServiceCommand::Station(reconnect))) = runner.policy_command::<()>(now) else {
+        panic!("the policy reconnects")
+    };
+    assert!(
+        runner.take_profile().is_none(),
+        "a reconnect publishes no profile"
+    );
     // The policy's request holds the connect permission: an operation's
     // request is not posted, and is never refused for a held credit.
     let _operation = {
-        let mut connect = core::pin::pin!(control.connect());
+        let mut connect = core::pin::pin!(control.connect(open_profile()));
         assert!(poll_now(connect.as_mut()).is_pending());
         assert!(receiver.try_receive().is_none());
         events.emit(ServiceOutput::CommandRefused(
@@ -478,4 +514,58 @@ fn the_reconnect_policy_and_an_operation_share_one_admission() {
         runner.policy_command::<()>(now),
         Ok(Some(ServiceCommand::Station(request))) if request.command() == Command::Disconnect
     ));
+}
+
+#[test]
+fn a_connect_publishes_its_profile_with_its_request_for_the_runner_alone() {
+    let mut commands = WakingSpscQueue::<ServiceCommand<()>, 2>::new();
+    let state = State::new();
+    let (sender, receiver) = commands.split();
+    let (mut control, runner) = Control::new(sender, &state).unwrap();
+    assert!(runner.take_profile().is_none());
+    let _operation = embassy_futures::block_on(control.connect(profile(b"lab"))).unwrap();
+    let Some(ServiceCommand::Station(request)) = receiver.try_receive() else {
+        panic!("the request is admitted")
+    };
+    assert_eq!(request.command(), Command::Connect);
+    let taken = runner.take_profile().expect("the connect's profile");
+    assert_eq!(taken.ssid.as_slice(), b"lab");
+    assert!(runner.take_profile().is_none(), "one profile per connect");
+}
+
+#[test]
+fn a_connect_that_waits_for_queue_room_publishes_no_profile_until_sent() {
+    let mut commands = WakingSpscQueue::<ServiceCommand<()>, 1>::new();
+    let state = State::new();
+    let (sender, receiver) = commands.split();
+    let (mut control, runner) = Control::new(sender, &state).unwrap();
+    control
+        .try_command(ControlCommand::WantAccessPoint)
+        .unwrap();
+    {
+        let mut connect = core::pin::pin!(control.connect(profile(b"lab")));
+        assert!(poll_now(connect.as_mut()).is_pending());
+        assert!(runner.take_profile().is_none());
+        // Cancelled while waiting: the profile drops with the future.
+    }
+    assert!(matches!(
+        receiver.try_receive(),
+        Some(ServiceCommand::WantAccessPoint)
+    ));
+    assert!(receiver.try_receive().is_none());
+    assert!(runner.take_profile().is_none());
+}
+
+#[test]
+fn a_stopped_control_refuses_a_connect_and_keeps_no_profile() {
+    let mut commands = WakingSpscQueue::<ServiceCommand<()>, 2>::new();
+    let state = State::new();
+    let (sender, _receiver) = commands.split();
+    let (mut control, mut runner) = Control::new(sender, &state).unwrap();
+    runner.complete();
+    assert_eq!(
+        embassy_futures::block_on(control.connect(profile(b"lab"))).err(),
+        Some(ControlError::Stopped)
+    );
+    assert!(runner.take_profile().is_none());
 }

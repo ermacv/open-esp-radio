@@ -13,10 +13,14 @@ fn connect<K>(command: Option<ServiceCommand<K>>) -> u64 {
     }
 }
 #[test]
-fn initial_connect_and_retries_follow_the_policy_tick_and_terminal_credit() {
+fn retries_follow_the_applications_first_connect_the_policy_tick_and_terminal_credit() {
     let time = clock();
     let mut policy = Policy::new(ReconnectPolicy::every(Duration::from_secs(1)).unwrap());
-    assert_eq!(connect::<()>(policy.command(time.now(), false).unwrap()), 1);
+    // Before the application's connect named a network, nothing connects.
+    assert!(policy.command::<()>(time.now(), false).unwrap().is_none());
+    time.advance(Duration::from_secs(10)).unwrap();
+    assert!(policy.command::<()>(time.now(), false).unwrap().is_none());
+    policy.admitted(Command::Connect);
     time.advance(Duration::from_secs(1)).unwrap();
     assert!(policy.command::<()>(time.now(), false).unwrap().is_none());
     policy.observe(
@@ -84,6 +88,7 @@ fn disabled_policy_has_no_timer_or_initial_connect_and_deadline_exhaustion_is_ty
         Err(ZeroReconnectInterval)
     );
     let mut policy = Policy::new(ReconnectPolicy::every(Duration::from_secs(1)).unwrap());
+    policy.admitted(Command::Connect);
     assert!(matches!(
         policy.command::<()>(Instant::from_micros(u64::MAX), false),
         Err(DeadlineOverflow)

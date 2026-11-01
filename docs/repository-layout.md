@@ -10,6 +10,7 @@ cover their APIs.
 | --- | --- |
 | `protocols/` | Radio and network formats, ports, cores, runtimes, host models and the HIL protocol and agent |
 | `portable/` | Generic support, architectural RISC-V operations and Embassy adapters |
+| `sdk/` | Application entries: one crate per chip family, the chip selected by feature |
 | `chips/` | Espressif family support, the S31 implementation and chip data |
 | `firmware/` | Applications, bootstrap, probes and ESP-IDF projects |
 | `hil-scenarios/` | HIL scenarios: the RPC images they share (`images/`), test-only service vocabularies (`services/`) and one host program per scenario |
@@ -38,6 +39,7 @@ firmware/probes/{esp32s31-facts, esp32s31-radio, esp32s31-register, esp32s31-rx-
 portable/{cooperate, crypto, diagnostics, events, memory, mmio, riscv, sort, sync,
     time, time-virtual, trace, wire}/
 portable/embassy/{net, time}/
+sdk/espressif/
 hil-scenarios/aes/
 hil-scenarios/images/{esp32s31-rpc, esp32s31-wifi-station}/
 hil-scenarios/services/{aes, wifi-station}/
@@ -101,7 +103,8 @@ tools/vendor/{cli, ieee802154-esp32s31, ieee802154-esp32s31-cli, lineage,
 
 A library's package name is `oer-` and its path below its root:
 `protocols/ieee80211/wire` is `oer-ieee80211-wire`,
-`chips/esp32s31/hal` is `oer-esp32s31-hal`, `tools/hil/link` is
+`chips/esp32s31/hal` is `oer-esp32s31-hal`, `sdk/espressif` is
+`oer-espressif`, `tools/hil/link` is
 `oer-hil-link`, and `hil-scenarios/services/aes` is `oer-services-aes`. An
 executable keeps its root: `firmware/apps/boot-smoke` is
 `oer-firmware-apps-boot-smoke`, `tools/image/cli` is `oer-tool-image-cli`, and

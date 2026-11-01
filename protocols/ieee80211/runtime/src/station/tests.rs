@@ -347,7 +347,6 @@ fn config(security: StaSecurity) -> TestConfig {
             address: oer_ieee80211_wire::address::OwnAddress::new(
                 oer_ieee80211_wire::address::IndividualAddress::new(LOCAL).unwrap(),
             ),
-            ssid: heapless::Vec::from_slice(SSID).unwrap(),
             channels,
             dwell: Duration::from_millis(10),
             skipped_absences: 3,
@@ -789,6 +788,9 @@ struct Application<'a, 'b, 'q> {
     commands: Cell<Option<Control<'q, ModelCaps24, 4>>>,
     /// The correlation of the last admitted connect request.
     connect: Cell<u64>,
+    /// How the test's network protects its link; each connect names it in
+    /// a fresh profile.
+    security: StaSecurity,
 }
 impl<'b> core::ops::Deref for Application<'_, 'b, '_> {
     type Target = World<'b>;
@@ -797,14 +799,37 @@ impl<'b> core::ops::Deref for Application<'_, 'b, '_> {
     }
 }
 
+/// A copy of `security`, for one more profile of the same network.
+fn duplicate(security: &StaSecurity) -> StaSecurity {
+    match security {
+        StaSecurity::Open => StaSecurity::Open,
+        StaSecurity::Wpa2Personal { pmk } => StaSecurity::Wpa2Personal {
+            pmk: pmk.duplicate(),
+        },
+        StaSecurity::Personal { password, pmk } => StaSecurity::Personal {
+            password: oer_ieee80211_core_security_rsn::sae::SaePassword::new(password.as_bytes())
+                .unwrap(),
+            pmk: pmk.duplicate(),
+        },
+    }
+}
+
 impl Application<'_, '_, '_> {
+    /// The test's network, in a fresh profile.
+    fn profile(&self) -> oer_ieee80211_core_roles_sta::machine::StaProfile {
+        oer_ieee80211_core_roles_sta::machine::StaProfile {
+            ssid: heapless::Vec::from_slice(SSID).unwrap(),
+            security: duplicate(&self.security),
+        }
+    }
+
     /// Admit a station request through its operation and detach the
     /// observer; the request continues and its correlation names its
     /// terminal.
     async fn station_command(&self, command: StaCommand) -> u64 {
         let mut control = self.commands.take().unwrap();
         let operation = match command {
-            StaCommand::Connect => control.connect().await,
+            StaCommand::Connect => control.connect(self.profile()).await,
             StaCommand::Disconnect => control.disconnect().await,
             StaCommand::BackgroundScan => control.scan().await,
         }
@@ -1115,18 +1140,7 @@ where
                 ),
                 group_permission: station_group_permission,
             };
-            let (station, credits) = match security {
-                StaSecurity::Open => Station::new_open(config, resources),
-                StaSecurity::Wpa2Personal { pmk } => {
-                    Station::new_wpa2_personal(config, pmk, resources, GroupCapacity::new())
-                }
-                StaSecurity::Personal { password, pmk } => {
-                    Station::new_personal(config, password, pmk, resources, GroupCapacity::new())
-                }
-                StaSecurity::Wpa2Personal { pmk } => {
-                    Station::new_wpa2_personal(config, pmk, resources, GroupCapacity::new())
-                }
-            };
+            let (station, credits) = Station::new(config, resources, GroupCapacity::new());
             let mut service = Runner::<ServicePort<LocalId<'scope>>, _, _, GROUPS, O>::new(
                 (station, credits),
                 StaData::new(data_tickets, large, MODEL_TX_QUEUE_DEPTH),
@@ -1150,6 +1164,14 @@ where
                 O::of(self.world.observed),
             );
             if self.refuse_initial_enable {
+                service
+                    .state
+                    .station
+                    .set_profile(oer_ieee80211_core_roles_sta::machine::StaProfile {
+                        ssid: heapless::Vec::from_slice(SSID).unwrap(),
+                        security: duplicate(&security),
+                    })
+                    .unwrap();
                 let request = service
                     .state
                     .pending
@@ -1171,6 +1193,7 @@ where
                 world: self.world,
                 commands: Cell::new(Some(application)),
                 connect: Cell::new(0),
+                security,
             };
             let world = &application;
             let mut output = world
@@ -3478,12 +3501,15 @@ fn a_second_connect_waits_for_the_first_terminal_and_is_then_refused() {
         Box::pin(async move {
             let mut seen = 0;
             let mut control = world.commands.take().unwrap();
-            let first = control.connect().await.expect("the first connect");
+            let first = control
+                .connect(world.profile())
+                .await
+                .expect("the first connect");
             let _probe = world.sent(&mut seen, PROBE_REQUEST).await;
             // One admission per kind: the second request is not posted
             // while the first holds the permission.
             let second = {
-                let mut second = core::pin::pin!(control.connect());
+                let mut second = core::pin::pin!(control.connect(world.profile()));
                 for _ in 0..16 {
                     assert!(
                         second
@@ -3524,6 +3550,9 @@ fn product_policy_connects_reconnects_after_peer_departure_and_gracefully_stops(
             let mut control = world.commands.take().unwrap();
             control.configure_reconnect(ReconnectPolicy::every(Duration::from_secs(1)).unwrap());
             world.commands.set(Some(control));
+            // The application's connect names the network; the policy
+            // reconnects to it with the kept profile.
+            world.station_command(StaCommand::Connect).await;
             let mut seen = 0;
             let mut last_epoch = 0;
             for attempt in 0..2 {

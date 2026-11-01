@@ -35,7 +35,11 @@ application          credentials, network stack (embassy-net), sockets
   protocols          sans-IO state machines: frames, MAC, RSN, station, AP,
                      BLE link layer and HCI, IEEE 802.15.4 MAC
   radio port         lifecycle and capacity vocabulary shared by the ports
-image                interrupt table, tasks, chosen facades and engines
+image                boot (chosen peripherals and services), application tasks
+  application entry  the family SDK (`oer-espressif`): peripherals taken once,
+                     drivers and services with defaults, their interrupts,
+                     executors and service tasks, record and reset on the
+                     image's behalf
   service / facade   radio system (one owner of the shared RF front-end),
                      protocol facades, the chip's composition (`compose`)
   chip adapters      ESP32-S31 Wi-Fi, BLE and IEEE 802.15.4 backends
@@ -94,6 +98,7 @@ dependencies ([layer tests](../tools/test/layers/README.md)).
 | Driver | `HardwareDriver`, `ChipAdapter` | sequences over register ports or HAL atoms, waits that yield to the executor (named boot waits before it), typed errors, stop and recovery, calibration and scheduling algorithms | the PAC, raw pointers, protocol cores and runtimes, the platform runtime |
 | Platform | `PlatformContract`, `Platform` | startup order, the boot deadline, staging, handoff and adoption, entry and trap ABI, interrupt table, executor, fatal policy | register access past the HAL; chip knowledge past the platform port |
 | Service / facade | `ServiceClient`, `Service`, `Composition`, `Facade` | one owner of a resource for its clients; a composition or facade assembles a protocol runtime with its backend | the PAC, a second claim, diagnostic counters in a product API |
+| Application entry | `Sdk` | the default interrupt layout, executors and service tasks of the drivers and services an image selects; their terminal policy on the image's behalf | the PAC, register access, policy the image did not delegate to it |
 | Image | firmware | profile, board, interrupt table, tasks, chosen facades, instrumentation cfgs | copies of driver or platform logic |
 
 A HAL atom is one field or word access through a PAC accessor, one sampled
@@ -212,7 +217,10 @@ resources. Images declare its composed static type, select the interrupt entries
 callbacks and observers, and spawn the returned runners.
 Automatic reconnect and graceful station shutdown belong to the product
 runtime. The facade configures reconnect with its own policy values; disabled
-is the default, which the HIL station image keeps: it joins once per boot. Explicit
+is the default, which the HIL station image keeps: it joins once per boot.
+Each `Control::connect` carries its network's profile (SSID and security);
+only an idle station takes it, and it stays for later connections, so the
+policy never connects first and reconnects with the kept profile. Explicit
 Disconnect pauses reconnect and Connect resumes the configured policy.
 Policy requests use the Runner's existing affine command credits and normal
 Control events. A facade Stop disconnects once, waits for link-down and then
@@ -320,9 +328,22 @@ executor's binding `Esp32s31`, which images name in every executor type
 which need both the HAL's types and the runtime's retained memory and fatal
 path. Its `platform` boundary supplies typed interrupt parts, runtime preparation,
 factory identity, entropy and timer installation. The reusable console and
-SAR/PWDET bindings keep the existing driver/handler ownership, while images
-select their entries, priorities and task spawning. Trace clocks and unanswered
-request resets bind through that same platform.
+SAR/PWDET bindings keep the existing driver/handler ownership. Trace clocks
+and unanswered request resets bind through that same platform.
+
+`oer-espressif` (`sdk/espressif`) is the family's application entry above
+the compositions and facades; the `esp32s31` feature selects the chip, and a
+second chip would add its implementation beside it without changing the API.
+An image built on it writes `main!(boot)`: the synchronous `boot` runs once
+before any executor, takes the peripherals it needs and builds drivers and
+services with defaults through the boot context, and returns the
+application's future. The SDK owns the default interrupt table, the
+executors and its service tasks (`SdkTasks`, which the image's task set
+extends on the same executor), and applies record and reset on the image's
+behalf to every boot error, application error and unrecoverable service
+exit; handled errors stay values. Probes, HIL images and images that need
+another layout keep selecting their entries, priorities and task spawning
+through the compositions directly. The SDK runs the application on hart 0.
 These crates are outside the sans-IO layer. `oer-espressif-watchdog` is
 also a platform owner: it owns hardware reset arming and the affine
 system-deadline lease. `oer-time::deadline` contains only the deadline policy,

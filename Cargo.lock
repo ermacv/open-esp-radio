@@ -1908,6 +1908,35 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-espressif"
+version = "0.1.0"
+dependencies = [
+ "aes",
+ "embassy-futures",
+ "embassy-net",
+ "embassy-time",
+ "heapless",
+ "oer-crypto",
+ "oer-diagnostics",
+ "oer-embassy-net",
+ "oer-embassy-time",
+ "oer-esp32s31-board",
+ "oer-esp32s31-compose",
+ "oer-esp32s31-hal",
+ "oer-esp32s31-wifi",
+ "oer-espressif-executor",
+ "oer-espressif-interrupt-table",
+ "oer-espressif-staged-runtime",
+ "oer-ieee80211-core-roles-sta",
+ "oer-ieee80211-runtime",
+ "oer-memory",
+ "oer-network-port",
+ "oer-time",
+ "oer-trace",
+ "static_cell",
+]
+
+[[package]]
 name = "oer-espressif-analog"
 version = "0.1.0"
 
@@ -2158,22 +2187,10 @@ dependencies = [
 name = "oer-firmware-apps-wifi-station"
 version = "0.1.0"
 dependencies = [
- "oer-diagnostics",
- "oer-embassy-time",
- "oer-esp32s31-board",
- "oer-esp32s31-compose",
- "oer-esp32s31-hal",
  "oer-esp32s31-layout",
- "oer-esp32s31-wifi",
- "oer-espressif-executor",
- "oer-espressif-interrupt-table",
- "oer-espressif-staged-runtime",
+ "oer-espressif",
  "oer-ieee80211-contracts-port",
- "oer-memory",
  "oer-radio-regulatory",
- "oer-time",
- "oer-trace",
- "static_cell",
  "toml",
 ]
 

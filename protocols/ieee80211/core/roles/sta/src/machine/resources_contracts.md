@@ -1,8 +1,7 @@
 A station needs at least one ticket and small buffer, checked at compile
-time; eight remains the maximum per pool. Open mode accepts zero group-key
-slots. The resources must match `StaTokens::GROUP_SLOTS`. The personal constructor
-takes a `GroupCapacity` proof, made in a `const` item, that this capacity is
-nonzero.
+time; eight remains the maximum per pool. The resources must match
+`StaTokens::GROUP_SLOTS`. Every constructor takes a `GroupCapacity` proof that
+this capacity is nonzero, since any later profile may protect its link.
 
 No ticket:
 
@@ -44,9 +43,9 @@ core::hint::black_box(constructor);
 }
 ```
 
-Open-mode composition may supply no group slots:
+No group slot:
 
-```
+```compile_fail,E0080
 # include!(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/resources.rs"));
 fn main() {
 let constructor: fn(_, _, _, _, _) -> _ = construct::<1, 1, 0>;

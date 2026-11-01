@@ -1,4 +1,4 @@
-error[E0080]: evaluation panicked: a protected station needs at least one group slot
+error[E0080]: evaluation panicked: a station needs a group slot for any protected profile
  --> $RUST/core/src/panic.rs
   |
   |         $crate::panicking::panic_fmt($crate::const_format_args!($($t)+));
@@ -6,15 +6,15 @@ error[E0080]: evaluation panicked: a protected station needs at least one group 
   |
  ::: src/machine.rs
   |
-  |                 panic!("a protected station needs at least one group slot");
-  |                 ----------------------------------------------------------- in this macro invocation
+  |                 panic!("a station needs a group slot for any protected profile");
+  |                 ---------------------------------------------------------------- in this macro invocation
 
 note: erroneous constant encountered
  --> src/machine.rs
   |
   | /         const {
   | |             if GROUPS == 0 {
-  | |                 panic!("a protected station needs at least one group slot");
+  | |                 panic!("a station needs a group slot for any protected profile");
   | |             }
   | |         }
   | |_________^

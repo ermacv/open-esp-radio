@@ -245,7 +245,6 @@ async fn work(inputs: Inputs, network: &crate::load::serve::Network) -> Infallib
     let profile = match wifi::Profile::<radio::binding::Binding>::new(
         &config,
         address,
-        credentials,
         Callbacks(nonces),
         oer_trace::Noop,
         (),
@@ -299,7 +298,8 @@ async fn work(inputs: Inputs, network: &crate::load::serve::Network) -> Infallib
         }
     };
     network.lend(interface);
-    let connect = match control.connect().await {
+    // The connect names the join's network; the station keeps it.
+    let connect = match control.connect(credentials).await {
         Ok(operation) => Some(operation),
         Err(error) => {
             answer_join(join, &Joined::Refused(answers::not_admitted(error)));

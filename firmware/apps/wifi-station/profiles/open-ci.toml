@@ -5,3 +5,4 @@ security = "open"
 country = "DE"
 channel = 1
 cap_dbm = 10
+echo_port = 7

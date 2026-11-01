@@ -155,8 +155,9 @@ impl<const N: usize> KeyUnwrapRequest<N> {
 }
 
 /// The completion of one unwrap: the request's buffer, holding the plaintext
-/// key data on success and cleared on refusal. Only [`rfc3394`] builds it, so
-/// every engine's response passed the same integrity check.
+/// key data on success and cleared on refusal. Only [`rfc3394`] builds a
+/// success, so every plaintext passed the same integrity check; an engine
+/// that ran nothing returns [`Self::engine_failed`].
 pub struct KeyUnwrapResponse<const N: usize> {
     data: KeyData<N>,
     outcome: Result<(), KeyUnwrapError>,
@@ -173,6 +174,12 @@ impl<const N: usize> KeyUnwrapResponse<N> {
     pub fn into_plaintext(self) -> Result<KeyData<N>, KeyUnwrapError> {
         let Self { data, outcome } = self;
         outcome.map(|()| data)
+    }
+
+    /// The refusal of an engine that could not run the unwrap at all: no
+    /// key data was processed, and the buffer is empty.
+    pub fn engine_failed(error: block::BlockError) -> Self {
+        Self::refused(KeyUnwrapError::Engine(error))
     }
 
     fn refused(error: KeyUnwrapError) -> Self {

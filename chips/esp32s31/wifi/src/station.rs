@@ -1,6 +1,6 @@
 //! Image-owned mapping; the station service and IP workload run on P1.
 use crate::chip::{
-    Binding, Config, InitializationError, Output, Profile, Security, ServiceRunner, StationExit,
+    Binding, Config, InitializationError, Output, Profile, ServiceRunner, StationExit,
     StationRunner, TX, UnavailableCause,
 };
 use crate::radio::{self, Backend, Caps, Device, Family};
@@ -364,7 +364,6 @@ fn initialize_service<'id, W: Binding>(
     let [b0, b1, b2, b3, b4, b5, b6, b7] = resources.buffers;
     let Profile {
         station,
-        security,
         observer,
         sink,
     } = profile;
@@ -387,16 +386,12 @@ fn initialize_service<'id, W: Binding>(
                 keys: resources.station_association,
                 group_permission: resources.station_group_permission,
             };
-            match security {
-                Security::Open => Station::init_open(station_storage, station, station_resources),
-                Security::Wpa2Personal(pmk) => Station::init_wpa2_personal(
-                    station_storage,
-                    station,
-                    pmk,
-                    station_resources,
-                    machine::GroupCapacity::new(),
-                ),
-            }
+            Station::init(
+                station_storage,
+                station,
+                station_resources,
+                machine::GroupCapacity::new(),
+            )
         },
         |place| {
             StaData::init_in_place(

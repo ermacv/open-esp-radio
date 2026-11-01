@@ -6,9 +6,16 @@ runtimes expose futures; images choose which executor polls them.
 
 ## Tasks
 
-Each executor's tasks are declared once in the image, by `tasks!`, as a set
-bound to that executor by type (`InterruptExecutor<B, N>` or `Executor<B, N>`
-of the chip binding `B`).
+Each executor's tasks are declared by `tasks!`, as a set bound to that
+executor by type (`InterruptExecutor<B, N>` or `Executor<B, N>` of the chip
+binding `B`). A set may extend one other set of the same executor and mode
+(`App: Executor<B, 0> extends Library { … }`): the base's tasks keep their
+indices, the extending set's follow them, and running the executor with the
+extending set polls both through direct calls. `Spawner::base` gives the
+base's start right from the extending set's spawner, so a library declares
+its service tasks once and an image adds its own after them. A base on
+another executor fails const evaluation and one of another binding or mode
+fails the `Extends` bound.
 Each task lives in a static slot of its own type; a start writes the task's
 start (its arguments and how to make its future) in place, once: a second
 start is refused (`AlreadyStarted`). The executor makes the future in place

@@ -1,7 +1,6 @@
 use super::profile_rules::parse;
 
-const OPEN: &str =
-    "ssid = \"lab\"\nsecurity = \"open\"\ncountry = \"DE\"\nchannel = 1\ncap_dbm = 10\n";
+const OPEN: &str = "ssid = \"lab\"\nsecurity = \"open\"\ncountry = \"DE\"\nchannel = 1\ncap_dbm = 10\necho_port = 7\n";
 
 #[test]
 fn the_committed_ci_profile_is_an_open_station_without_credentials() {
@@ -10,11 +9,12 @@ fn the_committed_ci_profile_is_an_open_station_without_credentials() {
     assert!(!generated.contains("passphrase"));
     assert!(generated.contains("channel: 1"));
     assert!(generated.contains("cap_dbm: 10"));
+    assert!(generated.contains("echo_port: 7"));
 }
 
 #[test]
 fn a_wpa2_profile_keeps_its_passphrase_only_in_the_generated_constant() {
-    let wpa2 = "ssid = \"lab\"\nsecurity = \"wpa2-personal\"\npassphrase = \"correct horse\"\ncountry = \"DE\"\nchannel = 6\ncap_dbm = 10\n";
+    let wpa2 = "ssid = \"lab\"\nsecurity = \"wpa2-personal\"\npassphrase = \"correct horse\"\ncountry = \"DE\"\nchannel = 6\ncap_dbm = 10\necho_port = 7\n";
     let generated = parse(wpa2).unwrap();
     assert!(generated.contains("Security::Wpa2Personal"));
     assert!(
@@ -31,6 +31,8 @@ fn an_invalid_profile_is_refused_without_naming_its_values() {
         (OPEN.replace("channel = 1", "channel = 14"), "channel"),
         (OPEN.replace("\"DE\"", "\"de\""), "country"),
         (OPEN.replace("cap_dbm = 10", "cap_dbm = 30"), "cap_dbm"),
+        (OPEN.replace("echo_port = 7", "echo_port = 0"), "echo_port"),
+        (OPEN.replace("echo_port = 7\n", ""), "echo_port"),
         (
             format!("{OPEN}passphrase = \"secret-pass\"\n"),
             "passphrase",

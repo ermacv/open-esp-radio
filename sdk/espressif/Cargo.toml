@@ -1,0 +1,51 @@
+[package]
+name = "oer-espressif"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0"
+repository.workspace = true
+publish = false
+description = "The Espressif family's application entry: peripherals, drivers and services with their tasks, interrupts and defaults, for one chip selected by feature"
+
+[features]
+## The ESP32-S31 implementation. Exactly one chip feature is selected.
+esp32s31 = []
+## The Wi-Fi station and its IP service.
+wifi = []
+
+[dependencies]
+heapless = "0.9.3"
+oer-crypto = { path = "../../portable/crypto" }
+oer-embassy-net = { path = "../../portable/embassy/net" }
+oer-memory = { path = "../../portable/memory" }
+oer-network-port = { path = "../../protocols/network/port" }
+
+# The chip implementation runs on the chip target only.
+[target.'cfg(target_arch = "riscv32")'.dependencies]
+oer-diagnostics = { path = "../../portable/diagnostics" }
+oer-embassy-time = { path = "../../portable/embassy/time" }
+oer-time = { path = "../../portable/time" }
+oer-esp32s31-board = { path = "../../chips/esp32s31/board" }
+oer-esp32s31-compose = { path = "../../chips/esp32s31/compose", features = ["wifi-fault"] }
+oer-esp32s31-hal = { path = "../../chips/esp32s31/hal" }
+oer-espressif-executor = { path = "../../chips/espressif/executor", features = ["port-slots"] }
+oer-espressif-interrupt-table = { path = "../../chips/espressif/interrupt-table" }
+oer-espressif-staged-runtime = { path = "../../chips/espressif/staged-runtime" }
+oer-ieee80211-core-roles-sta = { path = "../../protocols/ieee80211/core/roles/sta" }
+oer-ieee80211-runtime = { path = "../../protocols/ieee80211/runtime" }
+oer-esp32s31-wifi = { path = "../../chips/esp32s31/wifi" }
+oer-trace = { path = "../../portable/trace" }
+static_cell.workspace = true
+embassy-futures = "0.1.2"
+embassy-time = { workspace = true }
+# The stack the IP service pins (`oer-embassy-net`), with TCP sockets.
+embassy-net = { git = "https://github.com/ermacv/embassy.git", rev = "935de4d28f1178ff9731b41e94fb1cab54f5fd2d", default-features = false, features = ["tcp"] }
+
+[dev-dependencies]
+aes = { version = "0.8.4", default-features = false, features = ["zeroize"] }
+oer-crypto = { path = "../../portable/crypto", features = ["test-support"] }
+oer-memory = { path = "../../portable/memory", features = ["host-context"] }
+
+[lints]
+workspace = true

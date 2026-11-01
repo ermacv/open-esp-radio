@@ -1,13 +1,14 @@
 //! The station profile's validation and its generated constant; shared by
 //! the build script and the crate's host tests.
 
-const FIELDS: [&str; 6] = [
+const FIELDS: [&str; 7] = [
     "ssid",
     "security",
     "passphrase",
     "country",
     "channel",
     "cap_dbm",
+    "echo_port",
 ];
 
 /// The profile's Rust constant; each reason names a field, never its value.
@@ -88,11 +89,15 @@ pub fn parse(text: &str) -> Result<String, String> {
         .ok()
         .filter(|cap| (0..=20).contains(cap))
         .ok_or("`cap_dbm` is a transmit power limit from 0 to 20 dBm")?;
+    let echo_port = u16::try_from(integer("echo_port")?)
+        .ok()
+        .filter(|port| *port != 0)
+        .ok_or("`echo_port` is a TCP port from 1 to 65535")?;
     Ok(format!(
         "/// The station this image is built for.\n\
          pub const PROFILE: crate::profile::StationProfile = crate::profile::StationProfile {{ \
          ssid: &[{}], security: {security}, country: [{:#04x}, {:#04x}], channel: {channel}, \
-         cap_dbm: {cap_dbm} }};\n",
+         cap_dbm: {cap_dbm}, echo_port: {echo_port} }};\n",
         octets(ssid),
         country[0],
         country[1],

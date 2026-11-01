@@ -900,6 +900,9 @@ enum Role {
     Composition,
     /// A product facade over a protocol runtime and its chip backend.
     Facade,
+    /// A family's application entry: for the chip its feature selects, it
+    /// places drivers, services, facades and their tasks for an image.
+    Sdk,
     /// An instrumentation event vocabulary: values, no owner.
     ObservationContract,
     /// The HIL framing, envelope and message skeleton.
@@ -967,6 +970,7 @@ const ROLES: &[(&str, Role)] = &[
     ("chips/esp32s31/layout", Role::Platform),
     ("chips/esp32s31/compose", Role::Composition),
     ("chips/esp32s31/wifi", Role::Facade),
+    ("sdk/espressif", Role::Sdk),
     ("protocols/hil/protocol", Role::HilProtocol),
     ("protocols/hil/agent", Role::HilAgent),
     ("chips/esp32s31/instrumentation", Role::ObservationContract),
@@ -1114,6 +1118,7 @@ fn role_allows(from: Role, to: Role, to_path: &str) -> bool {
         }
         Role::Composition => assembled,
         Role::Facade => assembled || to == Role::Composition,
+        Role::Sdk => assembled || matches!(to, Role::Composition | Role::Facade),
         Role::HilProtocol => to == Role::Portable,
         Role::HilAgent => matches!(to, Role::HilProtocol | Role::Portable),
         // A bridge stands only on the codecs it joins.
@@ -2185,13 +2190,19 @@ fn external_crate_allowed(path: &str, role: Role, dependency: &str) -> bool {
         ),
         "embassy-sync" => false,
         "embassy-time" => {
-            path == "portable/embassy/time" || path == "hil-scenarios/images/esp32s31-rpc"
+            path == "portable/embassy/time"
+                || path == "hil-scenarios/images/esp32s31-rpc"
+                // The application entry re-exports the executors' clock.
+                || path == "sdk/espressif"
         }
         "embassy-time-driver" => path == "chips/espressif/executor",
         // The Wi-Fi station image opens the pinned stack's UDP sockets for
         // the HIL load service.
+        // The application entry names the stack its IP service pins, for
+        // its applications' sockets.
         "embassy-net" | "xarxa" | "xarxa-driver" => {
             path == "portable/embassy/net"
+                || (path == "sdk/espressif" && dependency == "embassy-net")
                 || path.starts_with("firmware/")
                 || (path == "hil-scenarios/images/esp32s31-wifi-station"
                     && dependency != "xarxa-driver")

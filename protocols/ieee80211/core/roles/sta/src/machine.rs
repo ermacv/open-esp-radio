@@ -297,6 +297,33 @@ pub enum StaKeyContractViolation {
     MissingAssociation,
 }
 
+/// The network one connection joins: its SSID and how it protects its link.
+/// The station keeps the profile across reconnections until the next one
+/// replaces it ([`Station::set_profile`]); secrets erase themselves on drop.
+pub struct StaProfile {
+    /// The network's SSID.
+    pub ssid: heapless::Vec<u8, MAX_SSID_LEN>,
+    /// How the network protects its link.
+    pub security: StaSecurity,
+}
+
+impl core::fmt::Debug for StaProfile {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("StaProfile")
+            .field("ssid", &self.ssid)
+            .field("policy", &self.security.policy())
+            .finish_non_exhaustive()
+    }
+}
+
+/// A profile the station did not take: the same profile, which erases its
+/// secrets when dropped, and why.
+#[derive(Debug)]
+pub struct StaProfileRefused {
+    pub profile: StaProfile,
+    pub reason: CommandRefusal,
+}
+
 /// How the station protects its link.
 pub enum StaSecurity {
     /// An open network.
@@ -306,6 +333,17 @@ pub enum StaSecurity {
     Personal { password: SaePassword, pmk: Pmk },
     /// A WPA2 PSK without a retained password or SAE upgrade.
     Wpa2Personal { pmk: Pmk },
+}
+
+impl StaSecurity {
+    /// The security policy the scan selects and the join associates with.
+    pub const fn policy(&self) -> StaSecurityPolicy {
+        match self {
+            Self::Open => StaSecurityPolicy::Open,
+            Self::Personal { .. } => StaSecurityPolicy::Wpa2Personal,
+            Self::Wpa2Personal { .. } => StaSecurityPolicy::Wpa2Psk,
+        }
+    }
 }
 
 /// What the application asks of the station.
@@ -963,8 +1001,6 @@ pub trait StaCallbacks {
 pub struct StaConfig<K, C: StaCallbacks> {
     /// The interface's own address.
     pub address: OwnAddress,
-    /// The network's SSID.
-    pub ssid: heapless::Vec<u8, MAX_SSID_LEN>,
     /// The channels the scan visits, in order.
     pub channels: heapless::Vec<SupportedChannel<K>, CHANNEL_CAPACITY>,
     /// How long the scan listens on each channel.
@@ -1017,7 +1053,7 @@ impl<K: Ieee80211Capabilities> Rules<K> {
 /// The station: its state and its tokens.
 pub struct Station<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> {
     config: StaConfig<K, C>,
-    security: StaSecurity,
+    profile: Option<StaProfile>,
     state: State<T, K>,
     keys: Keys<T>,
     configuration: Option<ConfigurePermission<'id, StationRole, T::ConfigurationPath>>,
@@ -1050,7 +1086,7 @@ pub struct RetiredStation<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCal
     /// Authenticated successors returned by disable without protocol effects.
     deferred_eapol: DeferredEapol,
     config: StaConfig<K, C>,
-    security: StaSecurity,
+    profile: Option<StaProfile>,
     epochs: LinkEpochSource<'id, T::EpochPath>,
     keys: Keys<T>,
     configuration: Option<ConfigurePermission<'id, StationRole, T::ConfigurationPath>>,
@@ -1100,7 +1136,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> RetiredStatio
         let (place, absence_place) = places.into_parts();
         let Self {
             config,
-            security,
+            profile,
             epochs,
             keys,
             configuration,
@@ -1116,7 +1152,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> RetiredStatio
         StationRestart {
             station: Station {
                 config,
-                security,
+                profile,
                 epochs,
                 keys,
                 configuration,
@@ -2650,7 +2686,7 @@ impl<const GROUPS: usize> GroupCapacity<GROUPS> {
     pub const fn new() -> Self {
         const {
             if GROUPS == 0 {
-                panic!("a protected station needs at least one group slot");
+                panic!("a station needs a group slot for any protected profile");
             }
         }
         Self { _proof: () }
@@ -2673,7 +2709,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
         let notice = self.finish_commands(reason);
         let Self {
             config,
-            security,
+            profile,
             epochs,
             keys,
             configuration,
@@ -2695,7 +2731,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
             RetiredStation {
                 deferred_eapol: state.take_deferred(),
                 config,
-                security,
+                profile,
                 epochs,
                 keys,
                 configuration,
@@ -2747,7 +2783,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
         let notice = machine.finish_commands(reason);
         let (
             config,
-            security,
+            profile,
             mut state,
             keys,
             configuration,
@@ -2768,7 +2804,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
             machine,
             Self {
                 config,
-                security,
+                profile,
                 state,
                 keys,
                 configuration,
@@ -2796,7 +2832,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
                 RetiredStation {
                     deferred_eapol: deferred,
                     config: config.read(),
-                    security: security.read(),
+                    profile: profile.read(),
                     epochs: epochs.read(),
                     keys: keys.read(),
                     configuration: configuration.read(),
@@ -2816,87 +2852,32 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
         )
     }
 
-    /// Construct the open machine directly in caller-provided storage.
+    /// Construct the station directly in caller-provided storage. It has no
+    /// profile until [`Self::set_profile`]; `capacity` proves the group-key
+    /// slots every protected profile needs.
     #[cfg(feature = "placement")]
-    pub fn init_open<'a, const TICKETS: usize, const BUFFERS: usize, const GROUPS: usize>(
+    pub fn init<'a, const TICKETS: usize, const BUFFERS: usize, const GROUPS: usize>(
         storage: &'a mut core::mem::MaybeUninit<Self>,
         config: StaConfig<K, C>,
         resources: StationResources<'id, T, TICKETS, BUFFERS, GROUPS>,
+        _capacity: GroupCapacity<GROUPS>,
     ) -> (&'a mut Self, StaCommandCredits<'id, T::ConfigurationPath>) {
-        Self::from_config_in_place(storage, config, StaSecurity::Open, resources)
+        Self::from_config_in_place(storage, config, resources)
     }
 
-    /// Build an open station; its backend may grant zero group slots.
+    /// Build the station. It has no profile until [`Self::set_profile`];
+    /// `capacity` proves the group-key slots every protected profile needs.
     #[doc = include_str!("machine/resources_contracts.md")]
-    pub fn new_open<const TICKETS: usize, const BUFFERS: usize, const GROUPS: usize>(
+    pub fn new<const TICKETS: usize, const BUFFERS: usize, const GROUPS: usize>(
         config: StaConfig<K, C>,
-        resources: StationResources<'id, T, TICKETS, BUFFERS, GROUPS>,
-    ) -> (Self, StaCommandCredits<'id, T::ConfigurationPath>) {
-        Self::from_config(config, StaSecurity::Open, resources)
-    }
-
-    /// Construct a personal station directly in caller-provided storage.
-    #[cfg(feature = "placement")]
-    pub fn init_personal<'a, const TICKETS: usize, const BUFFERS: usize, const GROUPS: usize>(
-        storage: &'a mut core::mem::MaybeUninit<Self>,
-        config: StaConfig<K, C>,
-        password: SaePassword,
-        pmk: Pmk,
-        resources: StationResources<'id, T, TICKETS, BUFFERS, GROUPS>,
-        _capacity: GroupCapacity<GROUPS>,
-    ) -> (&'a mut Self, StaCommandCredits<'id, T::ConfigurationPath>) {
-        Self::from_config_in_place(
-            storage,
-            config,
-            StaSecurity::Personal { password, pmk },
-            resources,
-        )
-    }
-
-    /// Build a WPA2-only station with a prederived, zeroizing PMK.
-    #[cfg(feature = "placement")]
-    pub fn init_wpa2_personal<
-        'a,
-        const TICKETS: usize,
-        const BUFFERS: usize,
-        const GROUPS: usize,
-    >(
-        storage: &'a mut core::mem::MaybeUninit<Self>,
-        config: StaConfig<K, C>,
-        pmk: Pmk,
-        resources: StationResources<'id, T, TICKETS, BUFFERS, GROUPS>,
-        _capacity: GroupCapacity<GROUPS>,
-    ) -> (&'a mut Self, StaCommandCredits<'id, T::ConfigurationPath>) {
-        Self::from_config_in_place(
-            storage,
-            config,
-            StaSecurity::Wpa2Personal { pmk },
-            resources,
-        )
-    }
-    pub fn new_wpa2_personal<const TICKETS: usize, const BUFFERS: usize, const GROUPS: usize>(
-        config: StaConfig<K, C>,
-        pmk: Pmk,
         resources: StationResources<'id, T, TICKETS, BUFFERS, GROUPS>,
         _capacity: GroupCapacity<GROUPS>,
     ) -> (Self, StaCommandCredits<'id, T::ConfigurationPath>) {
-        Self::from_config(config, StaSecurity::Wpa2Personal { pmk }, resources)
-    }
-
-    /// Build a personal station. `capacity` proves its group capacity nonzero.
-    pub fn new_personal<const TICKETS: usize, const BUFFERS: usize, const GROUPS: usize>(
-        config: StaConfig<K, C>,
-        password: SaePassword,
-        pmk: Pmk,
-        resources: StationResources<'id, T, TICKETS, BUFFERS, GROUPS>,
-        _capacity: GroupCapacity<GROUPS>,
-    ) -> (Self, StaCommandCredits<'id, T::ConfigurationPath>) {
-        Self::from_config(config, StaSecurity::Personal { password, pmk }, resources)
+        Self::from_config(config, resources)
     }
 
     fn from_config<const TICKETS: usize, const BUFFERS: usize, const GROUPS: usize>(
         config: StaConfig<K, C>,
-        security: StaSecurity,
         resources: StationResources<'id, T, TICKETS, BUFFERS, GROUPS>,
     ) -> (Self, StaCommandCredits<'id, T::ConfigurationPath>) {
         const {
@@ -2925,7 +2906,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
         (
             Self {
                 config,
-                security,
+                profile: None,
                 state: State::Idle,
                 keys: Keys::new::<GROUPS>(keys, group_permission),
                 configuration: Some(configure),
@@ -2952,7 +2933,6 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
     fn from_config_in_place<'a, const TICKETS: usize, const BUFFERS: usize, const GROUPS: usize>(
         storage: &'a mut core::mem::MaybeUninit<Self>,
         config: StaConfig<K, C>,
-        security: StaSecurity,
         resources: StationResources<'id, T, TICKETS, BUFFERS, GROUPS>,
     ) -> (&'a mut Self, StaCommandCredits<'id, T::ConfigurationPath>) {
         const {
@@ -2981,7 +2961,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
         (
             oer_memory::init_in_place!(storage, Self {
                 config: config,
-                security: security,
+                profile: None,
                 state: State::Idle,
                 keys: Keys::new::<GROUPS>(keys, group_permission),
                 configuration: Some(configure),
@@ -3084,13 +3064,11 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
         })
     }
     #[cfg(test)]
-    /// The security policy the scan selects and the join associates with.
-    const fn policy(&self) -> StaSecurityPolicy {
-        match self.security {
-            StaSecurity::Open => StaSecurityPolicy::Open,
-            StaSecurity::Personal { .. } => StaSecurityPolicy::Wpa2Personal,
-            StaSecurity::Wpa2Personal { .. } => StaSecurityPolicy::Wpa2Psk,
-        }
+    /// The security policy of the current profile, if any.
+    fn policy(&self) -> Option<StaSecurityPolicy> {
+        self.profile
+            .as_ref()
+            .map(|profile| profile.security.policy())
     }
 
     /// Admit a request and reserve its terminal before changing protocol state.
@@ -3104,6 +3082,9 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
         self.complete_commands();
         let command = request.command();
         let reason = match (command, &self.state) {
+            (StaCommand::Connect, State::Idle) if self.profile.is_none() => {
+                Some(CommandRefusal::NoProfile)
+            }
             (StaCommand::Connect, State::Idle) => None,
             (StaCommand::Connect, State::Connected(connected))
                 if connected.confirmation.is_none() =>
@@ -3132,6 +3113,32 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
         let change = context.step(state, now, Done::Command(command));
         state.apply(change);
         self.complete_commands();
+        Ok(())
+    }
+
+    /// Name the network the next Connect joins. Only an idle station takes
+    /// a profile; otherwise it returns the same profile with the refusal a
+    /// Connect would get now. The previous profile's secrets erase on drop,
+    /// and the PMKSA cache forgets the previous network's associations.
+    #[expect(
+        clippy::result_large_err,
+        reason = "a refused profile returns by value so its secrets stay with their owner"
+    )]
+    pub fn set_profile(&mut self, profile: StaProfile) -> Result<(), StaProfileRefused> {
+        self.complete_commands();
+        let reason = match &self.state {
+            State::Idle => None,
+            State::Connected(connected) if connected.confirmation.is_none() => {
+                Some(CommandRefusal::AlreadyConnected)
+            }
+            _ => Some(CommandRefusal::Transitioning),
+        };
+        if let Some(reason) = reason {
+            return Err(StaProfileRefused { profile, reason });
+        }
+        if let Some(previous) = self.profile.replace(profile) {
+            self.pmksa.forget_context(&previous.ssid);
+        }
         Ok(())
     }
 
@@ -3432,7 +3439,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
         (
             TransitionContext {
                 config: &mut self.config,
-                security: &mut self.security,
+                profile: &mut self.profile,
                 keys: &mut self.keys,
                 configuration: &mut self.configuration,
                 tickets: &mut self.tickets,
@@ -3457,7 +3464,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
 /// Disjoint resource loans used while the resident phase is mutably borrowed.
 struct TransitionContext<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> {
     config: &'s mut StaConfig<K, C>,
-    security: &'s mut StaSecurity,
+    profile: &'s mut Option<StaProfile>,
     keys: &'s mut Keys<T>,
     configuration: &'s mut Option<ConfigurePermission<'id, StationRole, T::ConfigurationPath>>,
     tickets: &'s mut Pool<T::Ticket>,
@@ -3485,17 +3492,26 @@ struct TransitionContext<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: Sta
 impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
     TransitionContext<'s, 'id, T, K, C>
 {
+    // Connect is admitted only with a profile (`CommandRefusal::NoProfile`),
+    // and only Idle replaces it: every connection phase below reads the
+    // profile its Connect was admitted with.
+
     /// The security policy the scan selects and the join associates with.
-    const fn policy(&self) -> StaSecurityPolicy {
-        match *self.security {
-            StaSecurity::Open => StaSecurityPolicy::Open,
-            StaSecurity::Personal { .. } => StaSecurityPolicy::Wpa2Personal,
-            StaSecurity::Wpa2Personal { .. } => StaSecurityPolicy::Wpa2Psk,
-        }
+    fn policy(&self) -> StaSecurityPolicy {
+        self.profile
+            .as_ref()
+            .map_or(StaSecurityPolicy::Open, |profile| profile.security.policy())
+    }
+
+    /// Whether the profile protects its link.
+    fn protected(&self) -> bool {
+        self.policy() != StaSecurityPolicy::Open
     }
 
     fn ssid(&self) -> &[u8] {
-        &self.config.ssid
+        self.profile
+            .as_ref()
+            .map_or(&[], |profile| profile.ssid.as_slice())
     }
 
     fn channel(&self, visit: usize) -> Option<SupportedChannel<K>> {
@@ -4470,7 +4486,10 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
         now: Instant,
     ) -> Result<JoinStep<T::RxMeta>, StaDisconnectReason> {
         let bssid = join.access_point.bssid;
-        let key = match &(*self.security) {
+        let Some(profile) = self.profile.as_ref() else {
+            return Err(StaDisconnectReason::AuthenticationFailed);
+        };
+        let key = match &profile.security {
             StaSecurity::Open => AssociationKey::Open,
             StaSecurity::Wpa2Personal { pmk } => AssociationKey::Protected(pmk.duplicate()),
             StaSecurity::Personal { password, pmk } => {
@@ -4479,7 +4498,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                     ..
                 }) = join.rsn.security()
                 {
-                    if let Some(cached) = self.pmksa.resume(bssid, &self.config.ssid) {
+                    if let Some(cached) = self.pmksa.resume(bssid, &profile.ssid) {
                         join.rsn = join
                             .rsn
                             .with_pmkid(oer_ieee80211_wire::security::Pmkid(cached.pmkid()))
@@ -4496,13 +4515,11 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                                 .map_err(|error| sae_derivation_failure(error, bssid.get(), pwe))?
                             }
                             oer_ieee80211_wire::security::SaePwe::HashToElement => {
-                                SaePasswordToken::derive(
-                                    &self.config.ssid,
-                                    password.as_bytes(),
-                                    None,
-                                )
-                                .map_err(|error| sae_derivation_failure(error, bssid.get(), pwe))?
-                                .password_element(self.config.address.get(), bssid.get())
+                                SaePasswordToken::derive(&profile.ssid, password.as_bytes(), None)
+                                    .map_err(|error| {
+                                        sae_derivation_failure(error, bssid.get(), pwe)
+                                    })?
+                                    .password_element(self.config.address.get(), bssid.get())
                             }
                         };
                         let commit = SaeCommit::new(
@@ -4547,9 +4564,12 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
             },
             StaSaeEvent::Authenticated(keys) => {
                 let bssid = join.access_point.bssid;
+                let Some(profile) = self.profile.as_ref() else {
+                    return leave_unkeyed(StaDisconnectReason::AuthenticationFailed);
+                };
                 self.pmksa.insert(Pmksa::new(
                     bssid,
-                    self.config.ssid.clone(),
+                    profile.ssid.clone(),
                     keys.pmk.duplicate(),
                     keys.pmkid,
                 ));
@@ -4720,7 +4740,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
         for parts in admitted.msdus()? {
             let parts = parts?;
             if parts.ether_type == ETHER_TYPE_EAPOL {
-                if !matches!(*self.security, StaSecurity::Open)
+                if self.protected()
                     && !admitted.protected()
                     && parts.destination != self.config.address.get()
                     && parts.destination != PAE_GROUP_ADDRESS
@@ -4747,7 +4767,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                 };
                 state.apply(change);
             } else {
-                if !matches!(*self.security, StaSecurity::Open) && !admitted.protected() {
+                if self.protected() && !admitted.protected() {
                     return Err(RxDropReason::Protection.into());
                 }
                 if !self.has_link(state) {
@@ -4800,14 +4820,10 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                             match StaAssociationRuntime::new(
                                 self.config.address,
                                 join.access_point.bssid,
-                                match *self.security {
-                                    StaSecurity::Open => {
-                                        oer_ieee80211_wire::security::LinkProtection::Open
-                                    }
-                                    StaSecurity::Personal { .. }
-                                    | StaSecurity::Wpa2Personal { .. } => {
-                                        oer_ieee80211_wire::security::LinkProtection::Ccmp
-                                    }
+                                if self.protected() {
+                                    oer_ieee80211_wire::security::LinkProtection::Ccmp
+                                } else {
+                                    oer_ieee80211_wire::security::LinkProtection::Open
                                 },
                                 now,
                             ) {
@@ -6660,7 +6676,11 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
         let sequence_number = self.sequence.take();
         let rates = self.config.supported_rates;
         let address = self.config.address.get();
-        let ssid = self.config.ssid.clone();
+        let ssid = self
+            .profile
+            .as_ref()
+            .map(|profile| profile.ssid.clone())
+            .unwrap_or_default();
         Ok(self.encode_reserved(
             credit,
             |output| {
