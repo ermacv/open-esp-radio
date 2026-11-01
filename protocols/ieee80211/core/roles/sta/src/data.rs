@@ -480,6 +480,8 @@ pub struct StaData<'id, D: StaDataTokens, K, const CAP: usize = 8> {
     /// The MPDUs owed, in their order, whatever their TID (a non-QoS
     /// link's take the first).
     owed: Fifo<OwedMpdu<'id, D, K>, CAP>,
+    /// The members of the aggregates out at the port.
+    members: aggregate::MemberBank<K, D::Class, CAP>,
     admission: Admissions,
     /// The order of the next MSDU.
     next_order: u32,
@@ -493,6 +495,8 @@ pub struct RetiredData<'id, D: StaDataTokens, K, const CAP: usize = 8> {
     tickets: Pool<D::Ticket>,
     buffers: Pool<D::Buffer, CAP>,
     owed: Fifo<OwedMpdu<'id, D, K>, CAP>,
+    /// Members of aggregates still out keep their places across a restart.
+    members: aggregate::MemberBank<K, D::Class, CAP>,
     admission: Admissions,
     next_order: u32,
 }
@@ -515,6 +519,7 @@ impl<
             tickets,
             buffers,
             owed,
+            members,
             admission,
             next_order,
         } = self;
@@ -522,6 +527,7 @@ impl<
             tickets,
             buffers,
             owed,
+            members,
             admission,
             next_order,
             link: None,
@@ -545,12 +551,13 @@ impl<
         events: &mut impl EventSink<StaEvent>,
     ) -> oer_memory::Placed<'b, RetiredData<'id, D, K, CAP>> {
         machine.leave(events);
-        let (tickets, buffers, owed, admission, next_order, link) = oer_memory::unpack_placed!(
+        let (tickets, buffers, owed, members, admission, next_order, link) = oer_memory::unpack_placed!(
             machine,
             Self {
                 tickets,
                 buffers,
                 owed,
+                members,
                 admission,
                 next_order,
                 link
@@ -562,6 +569,7 @@ impl<
                 tickets: tickets.read(),
                 buffers: buffers.read(),
                 owed => |place| owed.move_to(place).into_mut(),
+                members => |place| members.move_to(place).into_mut(),
                 admission: admission.read(),
                 next_order: next_order.read(),
             })
@@ -576,6 +584,7 @@ impl<
             tickets,
             buffers,
             owed,
+            members,
             admission,
             next_order,
             link: _,
@@ -584,6 +593,7 @@ impl<
             tickets,
             buffers,
             owed,
+            members,
             admission,
             next_order,
         }
@@ -606,6 +616,7 @@ impl<
             tickets: Pool::new(tickets),
             buffers: Pool::new(buffers),
             owed: Fifo::new(),
+            members: aggregate::MemberBank::new(),
             admission: Admissions::new(depth, TICKETS),
             next_order: 0,
             link: None,
@@ -629,6 +640,7 @@ impl<
             tickets: Pool::new(tickets),
             buffers: Pool::new(buffers),
             owed => |place| Fifo::init_in_place(place),
+            members => |place| aggregate::MemberBank::init_in_place(place),
             admission: Admissions::new(depth, TICKETS),
             next_order: 0,
             link: None,

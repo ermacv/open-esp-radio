@@ -3580,7 +3580,7 @@ where
         .station()
         .aggregate(receiver, tid, rate, builder_protection);
     let first = mpdus.next().ok_or(TxRefusal::LinkChanged).and_then(|mpdu| {
-        source(mpdu, context.frame_at(0)).map_err(|(mpdu, reason)| {
+        source(mpdu, data.aggregate_frame(&context, 0)).map_err(|(mpdu, reason)| {
             // Capacity is the aggregate's: every member fits.
             let _kept = tail.push(mpdu).is_ok();
             reason
@@ -3627,7 +3627,7 @@ where
     };
     let mut index = 1_usize;
     while let Some(mpdu) = mpdus.next() {
-        let refused = match source(mpdu, context.frame_at(index)) {
+        let refused = match source(mpdu, data.aggregate_frame(&context, index)) {
             Err((mpdu, _)) => Some(mpdu),
             Ok(source) => match CheckedAggregate::new(builder, source) {
                 Ok(checked) => {

@@ -1683,3 +1683,75 @@ fn an_agreement_aggregates_consecutive_owed_mpdus_within_its_limits() {
     drop(alone);
     assert_eq!(tokens_lost(&events), 0);
 }
+
+#[test]
+fn every_return_gives_the_members_places_back() {
+    let mut events = Kept::default();
+    let mut data = StaData::<Data, Caps, 8>::new(
+        [1, 2],
+        core::array::from_fn::<_, 8, _>(|_| Buffer::new(std::vec![0; 1600])),
+        core::num::NonZeroU8::new(2).unwrap(),
+    );
+    let mut replay = epoch();
+    let mut link = qos_link(&(), &mut replay);
+    let mut input =
+        |data: &mut StaData<'static, Data<'static>, Caps, 8>, events: &mut Kept, count: usize| {
+            for _ in 0..count {
+                data.input(
+                    DataInput {
+                        msdu: msdu(0),
+                        link: &mut link,
+                    },
+                    events,
+                )
+                .unwrap();
+            }
+        };
+    // Ten aggregates of four members pass through eight member places.
+    for round in 0..10_u16 {
+        input(&mut data, &mut events, 4);
+        let sent = aggregate(data.poll_attempt(|_| window(round * 4, 4, u32::MAX), &mut events));
+        assert_eq!((sent.context.len(), sent.mpdus.len()), (4, 4));
+        let marks = data.aggregate_returned(
+            DataAggregateReturn::TxDone {
+                context: sent.context,
+                ticket: sent.ticket,
+                mpdus: sent.mpdus,
+                completion: block_ack(round * 4, 0b1111),
+            },
+            oer_time::Instant::from_micros(1_000),
+            Some(RETRY),
+            &mut events,
+        );
+        assert_eq!(marks.map(|marks| marks.delivered), Some(0b1111));
+    }
+    // Two members the builder did not take go back with their places; the
+    // next aggregate holds them again.
+    input(&mut data, &mut events, 4);
+    let mut sent = aggregate(data.poll_attempt(|_| window(40, 4, u32::MAX), &mut events));
+    let mut tail = heapless::Vec::new();
+    for _ in 0..2 {
+        let mpdu = sent.mpdus.pop().unwrap();
+        assert!(tail.insert(0, mpdu).is_ok());
+    }
+    data.unbuilt(&mut sent.context, tail, &mut events);
+    assert_eq!(sent.context.len(), 2);
+    let marks = data.aggregate_returned(
+        DataAggregateReturn::TxDone {
+            context: sent.context,
+            ticket: sent.ticket,
+            mpdus: sent.mpdus,
+            completion: block_ack(40, 0b11),
+        },
+        oer_time::Instant::from_micros(1_000),
+        Some(RETRY),
+        &mut events,
+    );
+    assert_eq!(marks.map(|marks| marks.delivered), Some(0b11));
+    let again = aggregate(data.poll_attempt(|_| window(42, 4, u32::MAX), &mut events));
+    assert_eq!(again.context.len(), 2);
+    // The bank describes exactly the members the context names.
+    assert!((0..2).all(|index| data.aggregate_frame(&again.context, index).is_some()));
+    assert!(data.aggregate_frame(&again.context, 2).is_none());
+    assert_eq!(tokens_lost(&events), 0);
+}

@@ -3,9 +3,10 @@
 //! When a TID's agreement is operational, its owed MPDUs whose sequence
 //! numbers follow one another inside the agreement's window go as one
 //! aggregate: one ticket and one admission permission, up to the port's
-//! subframe limit ([`AggregateWindow`]). The aggregate's context carries
-//! every member's closed description; the members' memory travels in the
-//! port's aggregate and comes back with its terminal.
+//! subframe limit ([`AggregateWindow`]). Every member's closed description
+//! waits in the machine's [`MemberBank`] and the aggregate's context names
+//! its places in order; the members' memory travels in the port's
+//! aggregate and comes back with its terminal.
 //!
 //! A member the BlockAck acknowledges retires. A missing one goes back to
 //! the head of its TID's queue, in its original order and with its
@@ -18,6 +19,7 @@
 //! MPDU that went alone.
 
 use super::*;
+use core::marker::PhantomData;
 use oer_ieee80211_contracts_port::{AggregateEnd, AggregateOutcome};
 
 /// The most subframes one data aggregate holds: the width of the port's
@@ -124,9 +126,10 @@ impl BlockAckMarks {
     }
 }
 
-/// One member's closed description inside its aggregate's context.
+/// One member's closed description, which the data machine keeps in its
+/// [`MemberBank`] while its aggregate is out.
 #[derive(Debug)]
-struct Member<K, C> {
+pub(crate) struct Member<K, C> {
     frame: oer_ieee80211_contracts_port::ClassSizedFrame<C, AckHeader, K>,
     order: u32,
     admitted: oer_time::Instant,
@@ -134,8 +137,78 @@ struct Member<K, C> {
     attempts: u8,
 }
 
+/// The members of every aggregate out at the port, each at the place its
+/// aggregate's context names. Only the places travel with the attempt, so an
+/// aggregate's context is no larger than a single MPDU's. A place is taken
+/// when its member is stored and vacated when the context comes back; no
+/// two contexts name one place. `N` is the machine's buffer capacity: every
+/// member holds a buffer, so the bank has a place for each.
+pub(crate) struct MemberBank<K, C, const N: usize> {
+    members: [Option<Member<K, C>>; N],
+}
+
+impl<K, C, const N: usize> MemberBank<K, C, N> {
+    /// Every place a `u8` names.
+    const PLACES: () = {
+        if N > u8::MAX as usize + 1 {
+            panic!("a member place is a u8: the bank holds at most 256 members");
+        }
+    };
+
+    pub(crate) const fn new() -> Self {
+        let () = Self::PLACES;
+        Self {
+            members: [const { None }; N],
+        }
+    }
+
+    /// Initialize an empty bank in place.
+    #[cfg(feature = "placement")]
+    pub(crate) fn init_in_place(place: &mut core::mem::MaybeUninit<Self>) -> &mut Self {
+        let () = Self::PLACES;
+        oer_memory::init_in_place!(place, Self {
+            members => |members| oer_memory::init_array(members, |_| None),
+        })
+    }
+
+    /// The places no member holds.
+    fn vacancies(&self) -> usize {
+        self.members
+            .iter()
+            .filter(|member| member.is_none())
+            .count()
+    }
+
+    /// Store `member` at a vacant place, or give it back without one.
+    fn store(&mut self, member: Member<K, C>) -> Result<u8, Member<K, C>> {
+        let Some((place, vacant)) = self
+            .members
+            .iter_mut()
+            .enumerate()
+            .find(|(_, member)| member.is_none())
+        else {
+            return Err(member);
+        };
+        let Ok(place) = u8::try_from(place) else {
+            return Err(member);
+        };
+        *vacant = Some(member);
+        Ok(place)
+    }
+
+    /// The member at `place`, vacating it.
+    fn take(&mut self, place: u8) -> Option<Member<K, C>> {
+        self.members.get_mut(usize::from(place))?.take()
+    }
+
+    /// The member at `place`.
+    fn get(&self, place: u8) -> Option<&Member<K, C>> {
+        self.members.get(usize::from(place))?.as_ref()
+    }
+}
+
 /// The original aggregate operation. It travels by value with the attempt;
-/// its members keep their order, the same as the port's subframes.
+/// its places keep the members' order, the same as the port's subframes.
 #[derive(Debug)]
 pub struct DataAggregateContext<
     'id,
@@ -149,7 +222,9 @@ pub struct DataAggregateContext<
     tid: WmmUserPriority,
     access_category: WmmAccessCategory,
     protection: DataProtection<()>,
-    members: heapless::Vec<Member<K, C>, MAX_AGGREGATE>,
+    /// Each member's place in the data machine's [`MemberBank`], in order.
+    places: heapless::Vec<u8, MAX_AGGREGATE>,
+    members: PhantomData<fn() -> Member<K, C>>,
 }
 
 /// Aggregate operation data retained with an owned data epoch.
@@ -158,7 +233,8 @@ pub struct DataAggregateInfo<K, C, A> {
     tid: WmmUserPriority,
     access_category: WmmAccessCategory,
     protection: DataProtection<()>,
-    members: heapless::Vec<Member<K, C>, MAX_AGGREGATE>,
+    places: heapless::Vec<u8, MAX_AGGREGATE>,
+    members: PhantomData<fn() -> Member<K, C>>,
 }
 
 impl<'p, K: 'p, C: 'p, A: 'p, Path: PoolPath + 'p> oer_radio_port::LoanedContext<'p, Path::Identity>
@@ -174,7 +250,8 @@ where
             tid: self.tid,
             access_category: self.access_category,
             protection: self.protection,
-            members: self.members,
+            places: self.places,
+            members: PhantomData,
         })
     }
 
@@ -186,7 +263,8 @@ where
             tid: data.tid,
             access_category: data.access_category,
             protection: data.protection,
-            members: data.members,
+            places: data.places,
+            members: PhantomData,
         }
     }
 }
@@ -204,30 +282,12 @@ impl<'id, K, C, A, Path: PoolPath> DataAggregateContext<'id, K, C, A, Path> {
 
     /// The members, in the order of the port's subframes.
     pub fn len(&self) -> usize {
-        self.members.len()
+        self.places.len()
     }
 
     /// Whether no member is left.
     pub fn is_empty(&self) -> bool {
-        self.members.is_empty()
-    }
-
-    /// The checked description of the member at `index`.
-    pub fn frame_at(
-        &self,
-        index: usize,
-    ) -> Option<oer_ieee80211_contracts_port::ClassSizedFrame<C, AckHeader, K>>
-    where
-        oer_ieee80211_contracts_port::ClassSizedFrame<C, AckHeader, K>: Copy,
-    {
-        self.members.get(index).map(|member| member.frame)
-    }
-
-    /// Each member's checked description, in order.
-    pub fn frames(
-        &self,
-    ) -> impl Iterator<Item = &oer_ieee80211_contracts_port::ClassSizedFrame<C, AckHeader, K>> {
-        self.members.iter().map(|member| &member.frame)
+        self.places.is_empty()
     }
 
     /// Borrow the matching link's protection, as a single operation does.
@@ -334,7 +394,12 @@ impl<
         };
         // The members: the queue's first MPDUs whose sequence numbers follow
         // one another inside the window, at most the limit.
-        let limit = window.subframes.min(MAX_AGGREGATE);
+        // Every owed MPDU holds a buffer and the bank has a place for each,
+        // so its vacancies never limit an aggregate the window allows.
+        let limit = window
+            .subframes
+            .min(MAX_AGGREGATE)
+            .min(self.members.vacancies());
         let mut previous: Option<SequenceNumber> = None;
         let mut length = 0_u32;
         let count = self
@@ -366,7 +431,7 @@ impl<
             self.tickets.put(ticket, &mut ());
             return self.poll_action().map(DataAttempt::Single);
         }
-        let mut members = heapless::Vec::new();
+        let mut places = heapless::Vec::new();
         let mut mpdus = heapless::Vec::new();
         let mut shared = None;
         for _ in 0..count {
@@ -383,15 +448,26 @@ impl<
                 sequence: context.sequence,
                 attempts: context.attempts,
             };
-            // `count` is at most both vectors' capacity: neither refuses.
-            let lost = match (members.push(member), mpdus.push(buffer)) {
-                (Ok(()), Ok(())) => None,
-                (Ok(()), Err(buffer)) => {
-                    let _member = members.pop();
-                    Some(buffer)
-                }
-                (Err(_), Ok(())) => mpdus.pop(),
-                (Err(_), Err(buffer)) => Some(buffer),
+            // `count` is at most the bank's vacancies and both vectors'
+            // capacity: none refuses.
+            let lost = match self.members.store(member) {
+                Err(_member) => Some(buffer),
+                Ok(place) => match (places.push(place), mpdus.push(buffer)) {
+                    (Ok(()), Ok(())) => None,
+                    (Ok(()), Err(buffer)) => {
+                        let _place = places.pop();
+                        let _member = self.members.take(place);
+                        Some(buffer)
+                    }
+                    (Err(_), Ok(())) => {
+                        let _member = self.members.take(place);
+                        mpdus.pop()
+                    }
+                    (Err(_), Err(buffer)) => {
+                        let _member = self.members.take(place);
+                        Some(buffer)
+                    }
+                },
             };
             if let Some(buffer) = lost {
                 report(events, || StaEvent::DataLost(DataLoss::Overflow));
@@ -411,7 +487,8 @@ impl<
                 tid,
                 access_category: category,
                 protection,
-                members,
+                places,
+                members: PhantomData,
             },
             ticket,
             mpdus,
@@ -428,10 +505,17 @@ impl<
         events: &mut impl EventSink<StaEvent>,
     ) {
         while let Some(buffer) = tail.pop() {
-            match context.members.pop() {
-                Some(member) => {
+            let member = context.places.pop().map(|place| self.members.take(place));
+            match member {
+                Some(Some(member)) => {
                     let single = context.single(member);
                     self.requeue(single, buffer, events);
+                }
+                Some(None) => {
+                    // The bank lost the member its place named.
+                    report(events, || StaEvent::TokenLost);
+                    self.buffers
+                        .put(crate::events::fresh(buffer, D::renew, events), events);
                 }
                 None => self
                     .buffers
@@ -479,7 +563,8 @@ impl<
             tid,
             access_category,
             protection,
-            mut members,
+            mut places,
+            members: _,
         } = context;
         self.admission.put(access_category, admission);
         let shell = DataAggregateContext {
@@ -488,21 +573,30 @@ impl<
             tid,
             access_category,
             protection,
-            members: heapless::Vec::new(),
+            places: heapless::Vec::new(),
+            members: PhantomData,
         };
         let current = Some(link) == self.link;
-        let mut marks = members
+        let mut marks = places
             .first()
+            .and_then(|place| self.members.get(*place))
             .map(|member| BlockAckMarks::new(tid, member.sequence));
         // Members and memory pair from the back; the port returns them in order.
-        let mut index = members.len();
+        let mut index = places.len();
         while let Some(buffer) = mpdus.pop() {
-            let Some(mut member) = members.pop() else {
+            let Some(place) = places.pop() else {
                 self.buffers
                     .put(crate::events::fresh(buffer, D::renew, events), events);
                 continue;
             };
             index = index.saturating_sub(1);
+            let Some(mut member) = self.members.take(place) else {
+                // The bank lost the member its place named.
+                report(events, || StaEvent::TokenLost);
+                self.buffers
+                    .put(crate::events::fresh(buffer, D::renew, events), events);
+                continue;
+            };
             if !current {
                 self.buffers
                     .put(crate::events::fresh(buffer, D::renew, events), events);
@@ -586,10 +680,24 @@ impl<
             }
         }
         // Members whose memory did not come back cannot be retried.
-        while members.pop().is_some() {
+        while let Some(place) = places.pop() {
+            let _member = self.members.take(place);
             report(events, || StaEvent::TokenLost);
         }
         marks.filter(|marks| current && !marks.is_empty())
+    }
+
+    /// The checked description of the member at `index` of `context`.
+    pub fn aggregate_frame<A>(
+        &self,
+        context: &DataAggregateContext<'id, K, D::Class, A, D::EpochPath>,
+        index: usize,
+    ) -> Option<oer_ieee80211_contracts_port::ClassSizedFrame<D::Class, AckHeader, K>>
+    where
+        oer_ieee80211_contracts_port::ClassSizedFrame<D::Class, AckHeader, K>: Copy,
+    {
+        let place = *context.places.get(index)?;
+        self.members.get(place).map(|member| member.frame)
     }
 
     /// Whether this aggregate belongs to the current link; the service uses

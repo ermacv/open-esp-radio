@@ -174,8 +174,10 @@ Module map:
   numbers follow one another inside the window go as one A-MPDU
   (`StaData::poll_attempt`), at most the port's subframes and the lower of
   the access point's and the port's Maximum A-MPDU Length; one ticket and
-  one admission permission serve the aggregate, whose context carries every
-  member's description. Its terminal (`StaData::aggregate_returned`) retires
+  one admission permission serve the aggregate. Each member's description
+  waits in the machine's member bank (one place per buffer, `CAP`) while
+  the aggregate is out; its context carries only the places, in subframe
+  order, so it is no larger than a single MPDU's. Its terminal (`StaData::aggregate_returned`) retires
   acknowledged members and returns missing ones, published, to their queue
   until their MSDU lifetime or the policy's attempts on the air run out
   (`StaTxBlockAckPolicy::retry_members`). Each data terminal reports what it
