@@ -103,6 +103,20 @@ must remain explicit in a report even when the other leaves complete.
 | 41 | Post-ROM USB ENA0..15/RAW/ST, IN_EMPTY clear while enabled/disabled, retained pending, redelivery and all-enable masking |
 | 42 / 43 | SYSTIMER target0 / target1 one-shot, WORK_EN and INT_ENA masking, clear, repeat admission, past target and a phased masked-clear/reprogram |
 | 44 | TIMG0 T0 XTAL/divider-40 one-shot, counter capture, alarm self-clear, mask/clear/rearm/past target, stop and watchdog non-interference readback |
+| 45 | `time`/`timeh` (0xC01/0xC81) read back to back with `mcycle`, before and after a 3,200,000-cycle window, against SYSTIMER unit 0 |
+| 46 | Selection 45 with the CPU divider number one higher (applied by `SOC_CLK_UPDATE`), then the inherited divider restored |
+
+Selections 45/46 emit 0x4501/0x4502 `(mcycle, time, timeh)` at the window's
+ends, 0x4503 SYSTIMER `(first, second, delta)` and 0x4504 the three deltas;
+46 adds 0x4600 (inherited root, CPU divider, numerator), 0x4601 (divider
+applied, update cleared) and 0x46ff (divider restored, update cleared).
+Observed on s31-a under the ROM loader (XTAL root, divider 0, 40 MHz): both
+CSRs read without a trap; over the window `time` advanced exactly as
+`mcycle` (3,200,133 and 3,200,135), with SYSTIMER at 1,280,036 ticks (80 ms)
+and, with the divider doubled, 2,560,072 ticks (160 ms). `time` therefore
+counts CPU cycles and changes rate with the CPU clock; it is not a
+fixed-rate timebase. Behaviour across WFI, on hart 1 and under the PLL root
+is not observed.
 
 These explicit selections contain hart1 and use no radio or DMA. Each stimulus
 or latch poll ends after 2,000,000 cycles. A missing positive cause is emitted

@@ -31,6 +31,7 @@ mod pb1;
 mod radio_local;
 #[path = "sar.rs"]
 mod sar;
+mod time_csr;
 mod timg_arbitration;
 
 include!(concat!(env!("OUT_DIR"), "/geometry.rs"));
@@ -621,6 +622,14 @@ const PROBES: &[Probe] = &[
     Probe {
         id: 44,
         run: Action::Thread(generic::timer0),
+    },
+    Probe {
+        id: 45,
+        run: Action::Thread(time_csr::rate),
+    },
+    Probe {
+        id: 46,
+        run: Action::Thread(time_csr::rate_halved),
     },
     Probe {
         id: 32,
