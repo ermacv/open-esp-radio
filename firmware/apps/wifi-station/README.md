@@ -33,7 +33,8 @@ radio interrupt; it only feeds the RTC watchdog.
 
 A configured image checks the profile's domain, channel and power limit
 before any radio owner starts, then runs the radio actor and the Wi-Fi driver
-on the P2 radio executor and the station on P1. The station connects and
-retries a lost association every second. An ordinary `Stopped` exit ends the
+on the P2 radio executor and the station on P1. The station task connects
+once with the profile's network; the station keeps it and its reconnect
+policy retries a failed or lost association every second. An ordinary `Stopped` exit ends the
 station task. Every other exit and every handled construction error records
 its named cause and resets the chip; the next boot reports it.

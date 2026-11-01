@@ -1981,6 +1981,15 @@ impl<
                         match self.pending.commands.request(command) {
                             Some(request) => {
                                 io.output.emit(ServiceOutput::CommandStarted(command));
+                                // A profile published with this Connect names its
+                                // network. A station that is not idle refuses it;
+                                // the Connect below then gets the same refusal,
+                                // and the dropped profile erases its secrets.
+                                if command.command() == contract::Command::Connect
+                                    && let Some(profile) = io.control.take_profile()
+                                {
+                                    drop(self.station.set_profile(profile));
+                                }
                                 if let Err(refused) = self.station.command(now, request) {
                                     let refused = self.pending.commands.refused(refused);
                                     io.output.emit(ServiceOutput::CommandRefused(refused));

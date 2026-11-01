@@ -35,11 +35,13 @@ pub(super) struct Policy {
     disconnect_sent: bool,
 }
 impl Policy {
+    /// The policy reconnects only after an application connect named the
+    /// station's network: before that the station has no profile.
     pub const fn new(config: ReconnectPolicy) -> Self {
         Self {
             config,
-            active: config.enabled,
-            retry: config.enabled,
+            active: false,
+            retry: false,
             ready: true,
             next: None,
             stopping: false,

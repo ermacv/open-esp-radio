@@ -95,6 +95,20 @@ pub struct PreparedCredentials {
     pub(crate) ssid: Vec<u8, 32>,
     pub(crate) pmk: Option<Pmk>,
 }
+impl PreparedCredentials {
+    /// The station's profile of this network; the PMK moves, never copied.
+    pub(crate) fn into_profile(self) -> oer_ieee80211_core_roles_sta::machine::StaProfile {
+        use oer_ieee80211_core_roles_sta::machine::StaSecurity;
+        let Self { ssid, pmk } = self;
+        oer_ieee80211_core_roles_sta::machine::StaProfile {
+            ssid,
+            security: match pmk {
+                None => StaSecurity::Open,
+                Some(pmk) => StaSecurity::Wpa2Personal { pmk },
+            },
+        }
+    }
+}
 impl core::fmt::Debug for PreparedCredentials {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.write_str("PreparedCredentials(<redacted>)")
@@ -169,6 +183,27 @@ mod tests {
         zeroizing::<Pmk>();
         zeroizing::<PmkDerivation>();
         zeroizing::<Zeroizing<Vec<u8, 63>>>();
+    }
+    #[test]
+    fn prepared_credentials_become_the_profile_of_their_network() {
+        use oer_ieee80211_core_roles_sta::machine::StaSecurity;
+        let open = embassy_futures::block_on(StationSettings::open(b"lab").unwrap().prepare())
+            .unwrap()
+            .into_profile();
+        assert_eq!(open.ssid.as_slice(), b"lab");
+        assert!(matches!(open.security, StaSecurity::Open));
+        let protected = embassy_futures::block_on(
+            StationSettings::wpa2_pmk(b"lab", [0x5a; 32])
+                .unwrap()
+                .prepare(),
+        )
+        .unwrap()
+        .into_profile();
+        assert_eq!(protected.ssid.as_slice(), b"lab");
+        assert!(matches!(
+            protected.security,
+            StaSecurity::Wpa2Personal { .. }
+        ));
     }
     #[test]
     fn passphrase_and_provisioned_pmk_have_the_same_ieee_key_material() {

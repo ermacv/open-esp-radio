@@ -189,3 +189,26 @@ fn a_changed_ssid_compacts_the_cache_without_changing_other_entries_ages() {
 fn bssid(bytes: [u8; 6]) -> Bssid {
     Bssid::new(oer_ieee80211_wire::address::IndividualAddress::new(bytes).unwrap()).unwrap()
 }
+
+#[test]
+fn forgetting_a_network_drops_only_its_associations_and_keeps_the_order() {
+    let mut cache = StaCache::new();
+    cache.insert(sta_entry(1, b"old"));
+    cache.insert(sta_entry(2, b"kept"));
+    cache.insert(sta_entry(3, b"old"));
+    cache.insert(sta_entry(4, b"kept"));
+    cache.forget_context(b"old".as_slice());
+    let peer = |last| bssid([2, 0, 0, 0, 0, last]);
+    assert!(cache.find(peer(1), [1; RSN_PMKID_LEN]).is_none());
+    assert!(cache.find(peer(3), [3; RSN_PMKID_LEN]).is_none());
+    assert!(cache.find(peer(2), [2; RSN_PMKID_LEN]).is_some());
+    assert!(cache.find(peer(4), [4; RSN_PMKID_LEN]).is_some());
+    // The kept entries moved to the front: the cache fills again behind them.
+    for last in 10..10 + PMKSA_CAPACITY as u8 - 2 {
+        cache.insert(sta_entry(last, b"new"));
+    }
+    assert!(cache.find(peer(2), [2; RSN_PMKID_LEN]).is_some());
+    cache.insert(sta_entry(0x30, b"new"));
+    assert!(cache.find(peer(2), [2; RSN_PMKID_LEN]).is_none());
+    assert!(cache.find(peer(4), [4; RSN_PMKID_LEN]).is_some());
+}

@@ -28,12 +28,16 @@ modules hold only their line and signals. `Resources` consumes the opaque
 `WifiHardware` and DMA owners without exposing their backend field types. `Runners::driver` runs
 on the existing P2 executor; `Runners::station` runs on P1 beside networking.
 The station runner retains that engine from construction; the image supplies
-its validated `Profile`. `StationSettings::open`, `wpa2_passphrase` and `wpa2_pmk` validate the
+its start-time `Profile`: the station's address, scan channels and callbacks.
+The network comes with each connect: `Control::connect(credentials)` takes
+the `PreparedCredentials` of one network, which only an idle station takes
+and keeps for its reconnections; a refused, stopped or cancelled connect
+drops them, erasing the PMK. `StationSettings::open`, `wpa2_passphrase` and `wpa2_pmk` validate the
 SSID and credentials without exposing STA or RSN types. `prepare` consumes
 that affine owner: open and prederived PMK provisioning complete immediately;
 passphrase provisioning yields after each bounded PBKDF2 step. The password
 is erased before the first yield, partial derivation is erased on cancellation,
-and the prepared PMK is erased on drop. `Profile::new` consumes the prepared
+and the prepared PMK is erased on drop. `connect` consumes the prepared
 owner. WPA2 uses PSK/PSK-SHA256 only, including on transition access points;
 no password is retained for SAE. Existing core users can still select their
 personal policy that upgrades to SAE.
@@ -75,7 +79,8 @@ requests, credit reuse, reconnect epochs, cooperative stop and retirement.
 ## Reconnect and lifecycle
 
 `Config::with_reconnect(ReconnectPolicy::every(interval)?)` enables automatic
-initial connection and retries on the existing station runtime timer. A zero
+retries on the existing station runtime timer, after the image's first
+connect named the network; the policy never connects first. A zero
 interval is refused. The default is `ReconnectPolicy::DISABLED`. Explicit
 Disconnect pauses the policy; explicit Connect resumes it. A connect credit
 stays with Runner until refusal or completion, including policy attempts.

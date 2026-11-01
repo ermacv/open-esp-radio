@@ -23,6 +23,7 @@ oer-memory = { path = "../../../portable/memory" }
 oer-time = { path = "../../../portable/time" }
 oer-trace = { path = "../../../portable/trace" }
 static_cell = { workspace = true }
+embassy-futures = "0.1.2"
 
 [dev-dependencies]
 toml = "=1.1.4"

@@ -2179,6 +2179,7 @@ dependencies = [
 name = "oer-firmware-apps-wifi-station"
 version = "0.1.0"
 dependencies = [
+ "embassy-futures",
  "oer-diagnostics",
  "oer-embassy-time",
  "oer-esp32s31-board",

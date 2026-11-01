@@ -46,12 +46,12 @@ pub async fn drive(driver: wifi::Driver<binding::Binding>) {
     driver.run().await;
 }
 
-/// Prepare the profile's credentials, run the station and apply the exit
-/// policy: an ordinary stop ends the task; every other exit records its
-/// cause and resets.
+/// Prepare the profile's credentials, run the station, connect it to the
+/// profile's network and apply the exit policy: an ordinary stop ends the
+/// task; every other exit records its cause and resets.
 pub async fn serve(
     runner: wifi::StationRunner<binding::Binding>,
-    _control: wifi::Control<'static>,
+    mut control: wifi::Control<'static>,
     config: wifi::Config,
     address: [u8; 6],
     nonces: &'static mut wifi::NonceSource,
@@ -67,16 +67,11 @@ pub async fn serve(
         .prepare()
         .await
         .unwrap_or_else(|_| failure(wifi::InitializationError::Ssid));
-    let profile = wifi::Profile::new(
-        &config,
-        address,
-        credentials,
-        Callbacks(nonces),
-        Unobserved,
-        (),
-    )
-    .unwrap_or_else(|error| failure(error));
-    match runner.run(profile).await {
+    let profile = wifi::Profile::new(&config, address, Callbacks(nonces), Unobserved, ())
+        .unwrap_or_else(|error| failure(error));
+    let (exit, ()) =
+        embassy_futures::join::join(runner.run(profile), join(&mut control, credentials)).await;
+    match exit {
         wifi::StationExit::Stopped => {}
         wifi::StationExit::Unavailable(wifi::UnavailableCause::Initialization(error)) => {
             failure(error)
@@ -97,5 +92,14 @@ pub async fn serve(
         wifi::StationExit::ReleaseFailed(_) => {
             crate::fail(oer_diagnostics::name!("station-release"; 32))
         }
+    }
+}
+
+/// Connect once to the profile's network; the reconnect policy keeps the
+/// station there. A refused or failed first connect is retried by that
+/// policy too; a stopped control leaves the outcome to the runner's exit.
+async fn join(control: &mut wifi::Control<'static>, credentials: wifi::PreparedCredentials) {
+    if let Ok(operation) = control.connect(credentials).await {
+        let _end = operation.await;
     }
 }
