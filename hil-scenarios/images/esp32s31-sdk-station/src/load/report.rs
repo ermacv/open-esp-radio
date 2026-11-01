@@ -78,14 +78,12 @@ pub(crate) fn parts(start: &[PartReading; PARTS], end: &[PartReading; PARTS]) ->
 
 /// The windows from the part numbered `from`, as many as one answer holds.
 pub(crate) fn page(windows: &Windows, from: u8) -> Parts {
-    Parts {
-        parts: windows
-            .iter()
-            .skip(usize::from(from))
-            .take(MAX_PARTS)
-            .cloned()
-            .collect(),
+    let mut parts = Parts::default();
+    for window in windows.iter().skip(usize::from(from)).take(MAX_PARTS) {
+        // `take` keeps the page within its room: no push is refused.
+        let _room = parts.parts.push(window.clone());
     }
+    parts
 }
 
 /// The tracking ticks between the window's ends `start` and `end`; the
@@ -252,6 +250,18 @@ pub(crate) fn samples<const N: usize>(
     let kept = buffer.len();
     let from = usize::from(from).min(kept);
     let to = from.saturating_add(MAX_PAGE_SAMPLES).min(kept);
+    let mut samples = heapless::Vec::new();
+    for slot in from..to {
+        if let Some(sample) = buffer.get(slot) {
+            // The range holds at most a page: no push is refused.
+            let _room = samples.push(Sample {
+                tick: sample.tick(),
+                pc: sample.pc(),
+                level: sample.level(),
+                ra: buffer.return_address(slot),
+            });
+        }
+    }
     Samples {
         period_us: buffer.period_us(),
         ticks,
@@ -259,15 +269,7 @@ pub(crate) fn samples<const N: usize>(
         kept: u16::try_from(kept).unwrap_or(u16::MAX),
         stray,
         cut,
-        samples: (from..to)
-            .filter_map(|slot| Some((buffer.get(slot)?, buffer.return_address(slot))))
-            .map(|(sample, ra)| Sample {
-                tick: sample.tick(),
-                pc: sample.pc(),
-                level: sample.level(),
-                ra,
-            })
-            .collect(),
+        samples,
     }
 }
 
