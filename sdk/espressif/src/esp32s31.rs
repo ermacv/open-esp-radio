@@ -58,7 +58,7 @@ pub use oer_espressif_staged_runtime::panic::PanicRecord;
 pub use oer_espressif_staged_runtime::trap::PreviousException;
 
 oer_espressif_staged_runtime::interrupt_table! {
-    contexts { app_wake: 1; radio_executor: 2; radio: 3; }
+    contexts { app_wake: 1; radio_executor: 2; radio: 3; hart1_app: 1; }
     /// The application executor's wake (thread mode).
     wake: WakeToken = FromCpu0Irq => oer_espressif_executor::wake_handler::<Esp32s31, 0, FromCpu0Irq>, line 40, context app_wake, hart 0, Hardware;
     /// The application executor's alarm (system timer comparator 1).
@@ -80,7 +80,19 @@ oer_espressif_staged_runtime::interrupt_table! {
     #[cfg(feature = "console")]
     /// The USB Serial/JTAG console: it raises the console endpoint's signal.
     console_usb: ConsoleToken = oer_esp32s31_hal::peripherals::usb_serial_jtag::ConsoleInterrupt => console::on_usb, line 42, context app_wake, hart 0, Hardware;
+    #[cfg(feature = "hart1")]
+    /// Hart 1's executor's wake (thread mode).
+    hart1_wake: Hart1WakeToken = oer_esp32s31_hal::peripherals::software_interrupt::FromCpu1Irq => oer_espressif_executor::wake_handler::<Esp32s31, 1, oer_esp32s31_hal::peripherals::software_interrupt::FromCpu1Irq>, line 40, context hart1_app, hart 1, Hardware;
+    #[cfg(feature = "hart1")]
+    /// Hart 1's executor's alarm (system timer comparator 2).
+    hart1_alarm: Hart1AlarmToken = oer_esp32s31_hal::peripherals::system_timer::SystimerAlarm2 => oer_espressif_executor::alarm_interrupt::<hart1::Hart1Tasks, 2, oer_esp32s31_hal::peripherals::system_timer::SystimerAlarm2>, line 41, context hart1_app, hart 1, Hardware;
 }
+
+#[cfg(feature = "hart1")]
+mod hart1;
+#[cfg(feature = "hart1")]
+#[doc(hidden)]
+pub use hart1::{Hart1Parts, hart1_main};
 
 oer_espressif_executor::tasks! {
     /// The library's service tasks on the application executor; an image's
@@ -137,6 +149,13 @@ pub struct Boot {
     /// The station's network device, for the second boot.
     #[cfg(feature = "wifi")]
     pub(crate) device: Option<wifi::Device>,
+    /// The time driver's authority and the comparator for hart 1's
+    /// executor, once a station installed the time driver.
+    #[cfg(feature = "hart1")]
+    pub(crate) timers: Option<(
+        oer_espressif_executor::TimeDriverReady<Esp32s31>,
+        oer_esp32s31_hal::peripherals::system_timer::SystimerAlarm2,
+    )>,
 }
 
 /// No IP service: the second boot started none.
@@ -251,7 +270,8 @@ pub struct Hart1Peripherals {
 /// The second boot's context: `entry!(boot, hart1 = boot1)` calls `boot1`
 /// with it once the boot ended, before any executor, and runs the future it
 /// ends with beside the IP service it started. Both run where the second
-/// boot runs: on hart 0, the application's executor.
+/// boot runs: on hart 0, the application's executor, or with the `hart1`
+/// feature on hart 1's own executor, which hart 1 runs alone.
 ///
 /// `N` is the IP service the second boot started, whose pool sizes are the
 /// image's: [`NoNet`] until `wifi::Net::start` consumes the context and
@@ -305,15 +325,46 @@ impl<F: core::future::Future<Output = AppResult>, N: NetTask> Hart1Started for H
     }
 }
 
-pub use crate::channel::{Channel, ChannelError};
+pub use crate::channel::ChannelError;
 
+/// A channel between the application's future and the second boot's
+/// ([`crate::channel`]), its ends waking through [`AppNotify`] and
+/// [`SecondNotify`].
+pub type Channel<A, B, const N: usize> = crate::channel::Channel<A, B, N, AppNotify, SecondNotify>;
 /// The application's end of a [`Channel`]: it sends `A` and receives `B`.
-pub type ApplicationEnd<A, B, const N: usize> = crate::channel::End<A, B, N, Notify, Notify>;
+pub type ApplicationEnd<A, B, const N: usize> =
+    crate::channel::End<A, B, N, AppNotify, SecondNotify>;
 /// The second boot's end of a [`Channel`]: it sends `B` and receives `A`.
-pub type SecondEnd<A, B, const N: usize> = crate::channel::End<B, A, N, Notify, Notify>;
-/// How a channel's end and the IP status wake the future that waits: on
-/// one hart, its waker.
-pub(crate) type Notify = atomic_waker::AtomicWaker;
+pub type SecondEnd<A, B, const N: usize> = crate::channel::End<B, A, N, SecondNotify, AppNotify>;
+
+/// How a wait of the application's future is told: on one hart its waker,
+/// with the second boot on hart 1 the application's executor signal, which
+/// hart 1 raises.
+#[cfg(not(feature = "hart1"))]
+pub type AppNotify = atomic_waker::AtomicWaker;
+/// How a wait of the second boot's future is told, likewise.
+#[cfg(not(feature = "hart1"))]
+pub type SecondNotify = atomic_waker::AtomicWaker;
+#[cfg(feature = "hart1")]
+pub type AppNotify =
+    &'static oer_espressif_interrupt_table::signal::PeerNotify<Executor<Esp32s31, 0>>;
+#[cfg(feature = "hart1")]
+pub type SecondNotify =
+    &'static oer_espressif_interrupt_table::signal::PeerNotify<Executor<Esp32s31, 1>>;
+
+/// The application's notify, which the IP status publication tells.
+#[cfg(all(feature = "wifi", not(feature = "hart1")))]
+pub(crate) static APPLICATION: AppNotify = atomic_waker::AtomicWaker::new();
+#[cfg(all(feature = "wifi", feature = "hart1"))]
+pub(crate) static APPLICATION: AppNotify = &hart1::APPLICATION;
+
+#[cfg(feature = "hart1")]
+impl<A, B, const N: usize> crate::channel::Channel<A, B, N, AppNotify, SecondNotify> {
+    /// A channel between hart 0's application and hart 1's second boot.
+    pub const fn new() -> Self {
+        Self::across_harts(&hart1::APPLICATION, &hart1::SECOND)
+    }
+}
 
 impl<A: Send, B: Send, const N: usize> Channel<A, B, N> {
     /// The application's end, taken once in the boot.
@@ -341,10 +392,7 @@ impl<A: Send, B: Send, const N: usize> Channel<A, B, N> {
 /// handed it (a station's device tells the station that no network takes
 /// its frames) and runs nothing.
 #[doc(hidden)]
-pub fn no_hart1(
-    _handed: Hart1Peripherals,
-    boot: Hart1Boot,
-) -> Result<impl Hart1Started, Error> {
+pub fn no_hart1(_handed: Hart1Peripherals, boot: Hart1Boot) -> Result<impl Hart1Started, Error> {
     Ok(boot.run(core::future::pending()))
 }
 
@@ -467,6 +515,7 @@ pub fn start<S: Started, H: Hart1Started>(
     handoff: Handoff<Port>,
     boot: fn(Peripherals, Boot) -> Result<S, Error>,
     hart1: fn(Hart1Peripherals, Hart1Boot) -> Result<H, Error>,
+    #[cfg_attr(not(feature = "hart1"), allow(unused_variables))] mailbox: Hart1Mailbox,
 ) -> ! {
     let previous = oer_espressif_staged_runtime::panic::peek_previous();
     // Read before adoption prints and clears them.
@@ -511,6 +560,10 @@ pub fn start<S: Started, H: Hart1Started>(
                     system_timer: hardware.system_timer,
                     software: hardware.software_interrupts,
                     watchdog: hardware.watchdogs.rtc,
+                    #[cfg(feature = "hart1")]
+                    hart1: hardware.hart1,
+                    #[cfg(feature = "hart1")]
+                    causes,
                     #[cfg(feature = "wifi")]
                     wifi: wifi::WifiPeripheral {
                         radio: hardware.radio,
@@ -557,6 +610,8 @@ pub fn start<S: Started, H: Hart1Started>(
         },
         #[cfg(feature = "wifi")]
         device: None,
+        #[cfg(feature = "hart1")]
+        timers: None,
     };
     let peripherals = Peripherals {
         aes: AesPeripheral(hardware.aes),
@@ -572,12 +627,16 @@ pub fn start<S: Started, H: Hart1Started>(
         #[cfg(feature = "wifi")]
         device: setup.device.take(),
     };
+    // On hart 0 the second boot runs here; with `hart1` on hart 1, below.
+    #[cfg(not(feature = "hart1"))]
     let (net, second) = hart1(handed, Hart1Boot { net: NoNet })
         .unwrap_or_else(|error| fail(error.name()))
         .into_parts();
+    #[cfg(feature = "hart1")]
+    let _ = hart1;
     // Without a radio executor the application executor writes the timer.
     if let (Some(timer), Some(alarm)) = (setup.timer.take(), setup.app_alarm.take()) {
-        let _ready = oer_espressif_executor::init::<Esp32s31, 0, _, _, _>(
+        let ready = oer_espressif_executor::init::<Esp32s31, 0, _, _, _>(
             oer_espressif_executor::systimer::SystemTimer {
                 comparators: timer.comparators,
                 counter: timer.counter,
@@ -587,6 +646,12 @@ pub fn start<S: Started, H: Hart1Started>(
             timer.alarm1,
         )
         .unwrap_or_else(|failure| failure.reset());
+        #[cfg(feature = "hart1")]
+        {
+            setup.timers = Some((ready, timer.alarm2));
+        }
+        #[cfg(not(feature = "hart1"))]
+        let _ = ready;
     }
     // A station drew the identity with the entropy source it took; otherwise
     // the timer is installed now, and the read gap has a clock.
@@ -602,6 +667,26 @@ pub fn start<S: Started, H: Hart1Started>(
         (None, None) => fail(Error::Entropy.name()),
     };
     BOOT_ID.publish(id);
+    // Hart 1 runs the second boot; this hart waits until it ended.
+    #[cfg(feature = "hart1")]
+    let _hart1 = {
+        let Some(timers) = setup.timers.take() else {
+            fail(oer_diagnostics::name!("hart1-timer"; 32));
+        };
+        hart1::launch(
+            mailbox,
+            timers,
+            hart1::Launch {
+                permit: hardware.hart1,
+                causes: hardware.causes,
+                line: software.line1,
+                irq: software.irq1,
+                wake: interrupts.hart1_wake,
+                alarm: interrupts.hart1_alarm,
+            },
+            handed,
+        )
+    };
     #[cfg(feature = "wifi")]
     let urgent = setup.urgent.take();
     let Boot {
@@ -618,9 +703,12 @@ pub fn start<S: Started, H: Hart1Started>(
     };
     // The image's futures stay in this frame, which never returns: the
     // executor polls them as its tasks after the library's.
+    #[cfg(not(feature = "hart1"))]
     let mut net = core::pin::pin!(run_net(net));
+    #[cfg(not(feature = "hart1"))]
     let mut second = core::pin::pin!(run_app(second));
     let mut app = core::pin::pin!(run_app(app));
+    #[cfg(not(feature = "hart1"))]
     let roots = (
         (
             oer_espressif_executor::Root::new(net.as_mut()),
@@ -628,6 +716,8 @@ pub fn start<S: Started, H: Hart1Started>(
         ),
         oer_espressif_executor::Root::new(app.as_mut()),
     );
+    #[cfg(feature = "hart1")]
+    let roots = oer_espressif_executor::Root::new(app.as_mut());
     #[cfg(feature = "wifi")]
     if let Some(urgent) = urgent {
         match executor
@@ -693,9 +783,25 @@ struct Owned {
     system_timer: SystemTimer,
     software: SoftwareInterrupts,
     watchdog: ArmedRtcWatchdog<RwdtRegisters>,
+    #[cfg(feature = "hart1")]
+    hart1: oer_esp32s31_hal::cores::LaunchPermit,
+    #[cfg(feature = "hart1")]
+    causes: oer_esp32s31_hal::peripherals::reset_cause::ResetCauses,
     #[cfg(feature = "wifi")]
     wifi: wifi::WifiPeripheral,
 }
+
+/// Where hart 1 takes its parts: the mailbox `entry!` declares with the
+/// `hart1` feature, nothing without it. Not an API.
+#[doc(hidden)]
+#[cfg(feature = "hart1")]
+pub type Hart1Mailbox = &'static oer_espressif_staged_runtime::Mailbox<
+    oer_esp32s31_hal::platform::Hart1Grant,
+    Hart1Parts,
+>;
+#[doc(hidden)]
+#[cfg(not(feature = "hart1"))]
+pub type Hart1Mailbox = ();
 
 /// Run the application's future; an error ends the image.
 async fn run_app(app: impl core::future::Future<Output = AppResult>) {
@@ -729,4 +835,5 @@ pub mod __private {
     pub use oer_esp32s31_compose::exception::capture as exception;
     pub use oer_esp32s31_hal::platform::Port;
     pub use oer_espressif_staged_runtime::{Handoff, entry};
+    pub use oer_espressif_staged_runtime::{SecondaryHandoff, secondary_entry};
 }

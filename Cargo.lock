@@ -1929,6 +1929,7 @@ dependencies = [
  "oer-esp32s31-compose",
  "oer-esp32s31-hal",
  "oer-esp32s31-wifi",
+ "oer-espressif-boot",
  "oer-espressif-executor",
  "oer-espressif-interrupt-table",
  "oer-espressif-staged-runtime",

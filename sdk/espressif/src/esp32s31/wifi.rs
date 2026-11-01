@@ -140,7 +140,39 @@ fn failure(error: wifi::InitializationError) -> ! {
     }
 }
 
+#[cfg(not(feature = "hart1"))]
 wifi::bind_station! {pub(crate) mod binding{wifi:WifiToken,radio:RadioToken,callbacks:Callbacks,observer:Unobserved,driver_observer:Unobserved,sink:(),engine:AesClient,events:ProductEvents,fail:failure}}
+// The station's network end runs on hart 1, with the second boot's IP
+// service.
+#[cfg(feature = "hart1")]
+wifi::bind_station! {pub(crate) mod binding{wifi:WifiToken,radio:RadioToken,callbacks:Callbacks,observer:Unobserved,driver_observer:Unobserved,sink:(),engine:AesClient,events:ProductEvents,fail:failure,across_harts:{network:NetworkNotify=&NETWORK,station:StationNotify=&STATION,driver:DriverNotify=&DRIVER}}}
+
+/// Where the station's network end runs: on the station's hart, or on hart
+/// 1 through the peers' signals.
+type Notifies = <binding::Binding as wifi::Binding>::Notifies;
+
+#[cfg(feature = "hart1")]
+type NetworkNotify =
+    &'static oer_espressif_interrupt_table::signal::PeerNotify<super::hart1::Hart1Executor>;
+#[cfg(feature = "hart1")]
+type StationNotify =
+    &'static oer_espressif_interrupt_table::signal::PeerNotify<super::hart1::AppExecutor>;
+#[cfg(feature = "hart1")]
+type DriverNotify = &'static oer_espressif_interrupt_table::signal::PeerNotify<RadioExecutor>;
+
+// One signal wakes one task: the IP service's on hart 1 (every network end
+// and the network's stop), the station runner's on hart 0 (every station
+// end, the stop's answer and the lent buffers' return) and the radio
+// driver's (its request for its lent buffers).
+#[cfg(feature = "hart1")]
+oer_espressif_staged_runtime::placed_static! {
+    static NETWORK_SIGNAL: IrqSignal<super::hart1::Hart1Executor> = IrqSignal::new::<oer_espressif_interrupt_table::signal::FromPeerHart<super::hart1::AppExecutor, WakeToken>, super::Hart1WakeToken>(), in critical_data "hart_peers";
+    static STATION_SIGNAL: IrqSignal<super::hart1::AppExecutor> = IrqSignal::new::<oer_espressif_interrupt_table::signal::FromPeerHart<super::hart1::Hart1Executor, super::Hart1WakeToken>, WakeToken>(), in critical_data "hart_peers";
+    static DRIVER_SIGNAL: IrqSignal<RadioExecutor> = IrqSignal::new::<(oer_espressif_interrupt_table::signal::FromPeerHart<super::hart1::Hart1Executor, super::Hart1WakeToken>, FromTask<Executor<Esp32s31, 0>, WakeToken>), RadioToken>(), in critical_data "hart_peers";
+    static NETWORK: oer_espressif_interrupt_table::signal::PeerNotify<super::hart1::Hart1Executor> = oer_espressif_interrupt_table::signal::PeerNotify::new(&NETWORK_SIGNAL), in critical_data "hart_peers";
+    static STATION: oer_espressif_interrupt_table::signal::PeerNotify<super::hart1::AppExecutor> = oer_espressif_interrupt_table::signal::PeerNotify::new(&STATION_SIGNAL), in critical_data "hart_peers";
+    static DRIVER: oer_espressif_interrupt_table::signal::PeerNotify<RadioExecutor> = oer_espressif_interrupt_table::signal::PeerNotify::new(&DRIVER_SIGNAL), in critical_data "hart_peers";
+}
 
 /// Run the shared RF actor until its periodic PHY tracking fails; the PHY
 /// may then be half changed, so the library records the failure and resets.
@@ -413,7 +445,7 @@ impl oer_diagnostics::DiagnosticPath for ConnectError {
 
 /// A started Wi-Fi station: its control.
 pub struct Station {
-    control: wifi::Control<'static>,
+    control: wifi::Control<'static, Notifies>,
     started: bool,
     address: [u8; 6],
     /// How long a stop gives the network to return its receive buffers.
@@ -432,7 +464,10 @@ pub enum StopError {
 /// ([`super::Hart1Peripherals`]), where [`Net::start`] takes it. Dropped
 /// without it, it tells the station that no network takes its frames.
 pub struct Device {
-    network: Option<(wifi::Network<'static>, wifi::NetworkStopper<'static>)>,
+    network: Option<(
+        wifi::Network<'static, Notifies>,
+        wifi::NetworkStopper<'static, Notifies>,
+    )>,
     address: [u8; 6],
     seed: u64,
 }
@@ -474,7 +509,18 @@ impl Station {
         let actor = ACTOR.try_init(actor).ok_or(Error::Storage)?;
         // The radio executor writes the system timer; the application
         // executor publishes its deadlines to it.
-        oer_esp32s31_compose::platform::timers(timer, boot.router(), app_alarm, radio.radio_alarm);
+        let timers = oer_esp32s31_compose::platform::timers(
+            timer,
+            boot.router(),
+            app_alarm,
+            radio.radio_alarm,
+        );
+        #[cfg(feature = "hart1")]
+        {
+            boot.timers = Some(timers);
+        }
+        #[cfg(not(feature = "hart1"))]
+        let _ = timers;
         let (line, lower) = DoorbellLine::<Esp32s31, 3>::split(radio.line3);
         let bound = boot
             .router()
@@ -655,11 +701,15 @@ pub const RX: usize = 8;
 pub const TX: usize = 8;
 pub const GENERAL: usize = 8;
 
+#[cfg(not(feature = "hart1"))]
 type Context = ThreadContext<0>;
+/// The IP service's executor: hart 1's with the second boot there.
+#[cfg(feature = "hart1")]
+type Context = ThreadContext<1>;
 type IpResources<const RX: usize, const TX: usize, const GENERAL: usize> =
     Resources<Context, RX, TX, GENERAL>;
 type IpService<const RX: usize, const TX: usize> =
-    Service<Context, RX, TX, wifi::Network<'static>, { wifi::LENT_RX }>;
+    Service<Context, RX, TX, wifi::Network<'static, Notifies>, { wifi::LENT_RX }>;
 
 /// The IP service's packet pools: `RX` receive slots, `TX` transmit
 /// credits and `GENERAL` general slots, each one 1514-byte frame. A static
@@ -692,7 +742,7 @@ static POOLS: Pools<RX, TX, GENERAL> = Pools::new();
 #[doc(hidden)]
 pub struct IpStart<const RX: usize, const TX: usize> {
     service: IpService<RX, TX>,
-    stopper: wifi::NetworkStopper<'static>,
+    stopper: wifi::NetworkStopper<'static, Notifies>,
     control: &'static ip::Control<'static>,
 }
 
@@ -704,7 +754,7 @@ impl<const RX: usize, const TX: usize> super::NetTask for IpStart<RX, TX> {
 
 /// The packets of the frames the station lends in place: as many as its
 /// receive buffers the network may hold.
-static LENT: LentSlots<wifi::ReceivedStorage, { wifi::LENT_RX }> = LentSlots::new();
+static LENT: LentSlots<wifi::ReceivedStorage<Notifies>, { wifi::LENT_RX }> = LentSlots::new();
 
 /// The IP stack's device, which sockets name, over pools of `RX` and `TX`.
 pub type IpDevice<const RX: usize = { self::RX }, const TX: usize = { self::TX }> =
@@ -719,7 +769,6 @@ static WATCHERS: Watchers<Context, 4> = Watchers::new();
 /// The IP service's status for the application, and the application's
 /// notify, which the service tells after each publication.
 static STATUS: Published = Published::new();
-static APPLICATION: super::Notify = super::Notify::new();
 
 /// The IP service's status as the application sees it: the boot's
 /// [`Station::start`] returns it, before the second boot starts the
@@ -733,7 +782,7 @@ pub struct NetStatus {
 impl NetStatus {
     /// The service's link, IPv4 and lifecycle now.
     pub async fn status(&self) -> Status {
-        crate::net::published_status(&STATUS, &APPLICATION).await
+        crate::net::published_status(&STATUS, &super::APPLICATION).await
     }
 
     /// Wait for an IPv4 configuration over an up link; across a link loss
@@ -742,7 +791,7 @@ impl NetStatus {
     /// # Errors
     /// The service stopped or failed.
     pub async fn wait_ipv4(&self) -> Result<Ipv4Configuration, NetError> {
-        crate::net::published_ipv4(&STATUS, &APPLICATION).await
+        crate::net::published_ipv4(&STATUS, &super::APPLICATION).await
     }
 
     /// Wait until the link that is up now goes down or is replaced.
@@ -750,14 +799,14 @@ impl NetStatus {
     /// # Errors
     /// As [`Self::wait_ipv4`].
     pub async fn wait_link_down(&self) -> Result<(), NetError> {
-        crate::net::published_link_down(&STATUS, &APPLICATION).await
+        crate::net::published_link_down(&STATUS, &super::APPLICATION).await
     }
 }
 
 /// Publish the service's status to the application and wake every wait.
 fn publish(status: Status) {
     STATUS.publish(status);
-    oer_memory::QueueNotify::notify(&APPLICATION);
+    oer_memory::QueueNotify::notify(&super::APPLICATION);
     WATCHERS.wake_all();
 }
 

@@ -56,6 +56,21 @@ impl<A, B, const N: usize> Channel<A, B, N> {
     }
 }
 
+impl<A, B, const N: usize, C: QueueNotify + Copy, S: QueueNotify + Copy> Channel<A, B, N, C, S> {
+    /// A channel whose ends run on two harts: `application` tells the
+    /// application's end, `second` the second boot's, each the waiting
+    /// task's executor signal.
+    pub const fn across_harts(application: C, second: S) -> Self {
+        Self {
+            queues: ConstStaticCell::new((
+                WakingSpscQueue::across_harts(second, application),
+                WakingSpscQueue::across_harts(application, second),
+            )),
+            second: ClaimCell::new(),
+        }
+    }
+}
+
 impl<A, B, const N: usize> Default for Channel<A, B, N> {
     fn default() -> Self {
         Self::new()

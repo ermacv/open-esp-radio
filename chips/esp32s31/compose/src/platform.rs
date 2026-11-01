@@ -83,13 +83,19 @@ impl Entropy {
     }
 }
 
-/// Install the existing P2 writer and P1 comparator without changing routes.
+/// Install the existing P2 writer and P1 comparator without changing routes,
+/// and return the time driver's authority with the comparator left for an
+/// executor of another hart (`oer_espressif_executor::grant`).
 pub fn timers<const H: u8, A, R>(
     timer: hw::system_timer::SystemTimer,
     router: &mut Router<impl Controller, H>,
     app: A,
     radio: R,
-) where
+) -> (
+    oer_espressif_executor::TimeDriverReady<Esp32s31>,
+    hw::system_timer::SystimerAlarm2,
+)
+where
     A: Entry<Part = hw::system_timer::SystimerAlarm1>,
     R: Entry<Part = hw::system_timer::SystimerAlarm0>,
 {
@@ -110,6 +116,7 @@ pub fn timers<const H: u8, A, R>(
         timer.alarm1,
     )
     .unwrap_or_else(|failure| failure.reset());
+    (timer_ready, timer.alarm2)
 }
 
 /// Bind a trace clock with `trace_clock!(platform::trace_now)` in an image
