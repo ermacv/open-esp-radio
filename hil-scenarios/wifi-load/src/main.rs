@@ -22,8 +22,9 @@ use std::{
 use oer_hil_agent::base::Service as _;
 use oer_hil_harness::{Case, Cx, Failure, RouterOperation, Scenario, check};
 use oer_services_load::{
-    Collect, CollectCounters, CollectParts, Collected, Counters, CountersCollected, Load,
-    MAX_PARTS, PartWindow, PartsCollected, Report, Start, Started, Transmit,
+    CacheGeometry, CacheLevel, Collect, CollectCounters, CollectParts, Collected, Counters,
+    CountersCollected, DataBus, InstructionBus, Load, MAX_PARTS, PartWindow, PartsCollected,
+    Report, Start, Started, Transmit,
 };
 use oer_services_wifi_station::{GetStatus, Join, Joined, Leave, Left, Status};
 
@@ -353,9 +354,10 @@ fn polls(parts: &[PartWindow], window_us: u64) -> serde_json::Value {
 
 /// The window's counters: the serving hart's cycles and retired
 /// instructions with their rate per microsecond (MHz) and per cycle, what
-/// the network bridge did with the station's frames, and the frames the IP
-/// stack took with the hart's instructions over them. The hart's counts
-/// include all its work, interrupts and the load service's own included.
+/// the network bridge did with the station's frames, the frames the IP
+/// stack took with the hart's instructions over them, and the L1 cache's
+/// accesses by bus ([`cache`]). The hart's counts include all its work,
+/// interrupts and the load service's own included.
 fn counters(counters: &Counters, window_us: u64) -> serde_json::Value {
     let window = window_us.max(1) as f64;
     let cycles = counters.cycles as f64;
@@ -375,11 +377,124 @@ fn counters(counters: &Counters, window_us: u64) -> serde_json::Value {
         "stack_received": counters.stack_received,
         "instructions_per_stack_frame": (counters.stack_received != 0)
             .then(|| round(instructions / f64::from(counters.stack_received))),
+        "cache": cache(counters),
+    })
+}
+
+/// What the window's instructions and stack frames rate a cache count by.
+struct Per {
+    instructions: u64,
+    stack_frames: u32,
+}
+
+impl Per {
+    /// `count` per 1000 of the window's instructions and per stack frame,
+    /// to four decimals; null without a denominator or with an overflowed
+    /// bus.
+    fn rates(&self, name: &str, count: u32, overflowed: bool) -> [(String, serde_json::Value); 2] {
+        let exact = !overflowed;
+        let count = f64::from(count);
+        [
+            (
+                format!("{name}_per_1000_instructions"),
+                (exact && self.instructions != 0)
+                    .then(|| fine(1000.0 * count / self.instructions as f64))
+                    .into(),
+            ),
+            (
+                format!("{name}_per_stack_frame"),
+                (exact && self.stack_frames != 0)
+                    .then(|| fine(count / f64::from(self.stack_frames)))
+                    .into(),
+            ),
+        ]
+    }
+}
+
+/// The L1 cache's counts of each bus within the window, with each bus's
+/// misses as a share of its hits and misses, and its misses and next-level
+/// reads (and a data bus's next-level writes) per 1000 of the serving
+/// hart's instructions and per frame the IP stack took. An overflowed
+/// bus's counts are not exact: its derived values are null.
+fn cache(counters: &Counters) -> serde_json::Value {
+    let per = Per {
+        instructions: counters.instructions,
+        stack_frames: counters.stack_received,
+    };
+    let cache = &counters.cache;
+    serde_json::json!({
+        "ibus0": instruction_bus(&cache.ibus0, &per),
+        "ibus1": instruction_bus(&cache.ibus1, &per),
+        "dbus0": data_bus(&cache.dbus0, &per),
+        "dbus1": data_bus(&cache.dbus1, &per),
+    })
+}
+
+fn instruction_bus(bus: &InstructionBus, per: &Per) -> serde_json::Value {
+    let mut value = serde_json::json!({
+        "hits": bus.hits,
+        "misses": bus.misses,
+        "conflicts": bus.conflicts,
+        "next_level_reads": bus.next_level_reads,
+        "overflowed": bus.overflowed,
+        "miss_percent": miss_percent(bus.hits, bus.misses, bus.overflowed),
+    });
+    if let Some(object) = value.as_object_mut() {
+        object.extend(per.rates("misses", bus.misses, bus.overflowed));
+        object.extend(per.rates("next_level_reads", bus.next_level_reads, bus.overflowed));
+    }
+    value
+}
+
+fn data_bus(bus: &DataBus, per: &Per) -> serde_json::Value {
+    let mut value = serde_json::json!({
+        "hits": bus.hits,
+        "misses": bus.misses,
+        "conflicts": bus.conflicts,
+        "next_level_reads": bus.next_level_reads,
+        "next_level_writes": bus.next_level_writes,
+        "overflowed": bus.overflowed,
+        "miss_percent": miss_percent(bus.hits, bus.misses, bus.overflowed),
+    });
+    if let Some(object) = value.as_object_mut() {
+        object.extend(per.rates("misses", bus.misses, bus.overflowed));
+        object.extend(per.rates("next_level_reads", bus.next_level_reads, bus.overflowed));
+        object.extend(per.rates("next_level_writes", bus.next_level_writes, bus.overflowed));
+    }
+    value
+}
+
+/// Misses as a share of hits and misses; null without either or when the
+/// bus overflowed.
+fn miss_percent(hits: u32, misses: u32, overflowed: bool) -> Option<f64> {
+    let accesses = u64::from(hits) + u64::from(misses);
+    (!overflowed && accesses != 0).then(|| percent(u64::from(misses), accesses))
+}
+
+/// The caches as the image configured them.
+fn cache_geometry(geometry: &CacheGeometry) -> serde_json::Value {
+    let level = |level: &CacheLevel| {
+        serde_json::json!({
+            "size_bytes": level.size_bytes,
+            "line_bytes": level.line_bytes,
+            "ways": level.ways,
+        })
+    };
+    serde_json::json!({
+        "l1_icache": level(&geometry.l1_icache),
+        "l1_dcache": level(&geometry.l1_dcache),
+        "l2": level(&geometry.l2),
+        "l2_bypassed": geometry.l2_bypassed,
     })
 }
 
 fn round(value: f64) -> f64 {
     (value * 100.0).round() / 100.0
+}
+
+/// `value` to four decimals: rates far below one stay distinct.
+fn fine(value: f64) -> f64 {
+    (value * 10_000.0).round() / 10_000.0
 }
 
 fn mbps(bytes: u64, seconds: f64) -> f64 {
@@ -562,6 +677,10 @@ fn path(cx: &mut Cx<'_>) -> Result<(), Failure> {
         object.insert("counters".to_owned(), counters(&idle.counters, window));
     }
     cx.measure("idle cpu", cpu);
+    cx.measure(
+        "cache geometry",
+        cache_geometry(&idle.counters.cache_geometry),
+    );
     Ok(())
 }
 
@@ -935,6 +1054,97 @@ mod tests {
         let none = counters(&Counters::default(), 5_000_000);
         assert!(none["instructions_per_cycle"].is_null());
         assert!(none["instructions_per_stack_frame"].is_null());
+    }
+
+    #[test]
+    fn a_bus_s_misses_are_rated_per_thousand_instructions_and_per_stack_frame() {
+        let value = counters(
+            &Counters {
+                instructions: 4_000_000,
+                stack_received: 4000,
+                cache: oer_services_load::CacheCounts {
+                    ibus0: InstructionBus {
+                        hits: 98_000,
+                        misses: 2_000,
+                        conflicts: 5,
+                        next_level_reads: 2_400,
+                        overflowed: false,
+                    },
+                    dbus0: DataBus {
+                        hits: 750,
+                        misses: 250,
+                        next_level_reads: 300,
+                        next_level_writes: 100,
+                        ..DataBus::default()
+                    },
+                    ..oer_services_load::CacheCounts::default()
+                },
+                ..Counters::default()
+            },
+            5_000_000,
+        );
+        let ibus0 = &value["cache"]["ibus0"];
+        assert_eq!(ibus0["misses"], 2_000);
+        assert_eq!(ibus0["conflicts"], 5);
+        assert_eq!(ibus0["miss_percent"], 2.0);
+        assert_eq!(ibus0["misses_per_1000_instructions"], 0.5);
+        assert_eq!(ibus0["misses_per_stack_frame"], 0.5);
+        assert_eq!(ibus0["next_level_reads_per_stack_frame"], 0.6);
+        let dbus0 = &value["cache"]["dbus0"];
+        assert_eq!(dbus0["miss_percent"], 25.0);
+        assert_eq!(dbus0["next_level_writes_per_stack_frame"], 0.025);
+        assert_eq!(dbus0["next_level_writes_per_1000_instructions"], 0.025);
+        assert!(
+            value["cache"]["ibus1"]["miss_percent"].is_null(),
+            "no access"
+        );
+        assert_eq!(value["cache"]["ibus1"]["misses_per_stack_frame"], 0.0);
+    }
+
+    #[test]
+    fn an_overflowed_bus_or_a_missing_denominator_gives_no_rate() {
+        let value = counters(
+            &Counters {
+                instructions: 1000,
+                cache: oer_services_load::CacheCounts {
+                    dbus1: DataBus {
+                        hits: 10,
+                        misses: 10,
+                        overflowed: true,
+                        ..DataBus::default()
+                    },
+                    ..oer_services_load::CacheCounts::default()
+                },
+                ..Counters::default()
+            },
+            5_000_000,
+        );
+        let dbus1 = &value["cache"]["dbus1"];
+        assert_eq!(dbus1["overflowed"], true);
+        assert_eq!(dbus1["misses"], 10, "the raw count stays");
+        assert!(dbus1["miss_percent"].is_null());
+        assert!(dbus1["misses_per_1000_instructions"].is_null());
+        let ibus0 = &value["cache"]["ibus0"];
+        assert_eq!(ibus0["misses_per_1000_instructions"], 0.0);
+        assert!(ibus0["misses_per_stack_frame"].is_null(), "no stack frame");
+    }
+
+    #[test]
+    fn the_geometry_names_each_cache_s_size_line_and_ways() {
+        let geometry = CacheGeometry {
+            l1_icache: CacheLevel {
+                size_bytes: Some(32 * 1024),
+                line_bytes: Some(64),
+                ways: Some(2),
+            },
+            l2_bypassed: true,
+            ..CacheGeometry::default()
+        };
+        let value = cache_geometry(&geometry);
+        assert_eq!(value["l1_icache"]["size_bytes"], 32 * 1024);
+        assert_eq!(value["l1_icache"]["ways"], 2);
+        assert!(value["l2"]["size_bytes"].is_null());
+        assert_eq!(value["l2_bypassed"], true);
     }
 
     #[test]

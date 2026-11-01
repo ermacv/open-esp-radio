@@ -3,8 +3,9 @@
 //!
 //! The server shares the station work's task (P1). A run receives and
 //! echoes from its start, sends within its window and reads the CPU, the
-//! named parts and the counters at the window's ends, sampling the hart
-//! between them when it asks; after its drain it closes the socket and
+//! named parts and the counters at the window's ends (clearing the cache's
+//! counters just before its start), sampling the hart between them when it
+//! asks; after its drain it closes the socket and
 //! keeps what it read until the next run starts.
 //! Every answer is published without waiting.
 
@@ -158,11 +159,13 @@ impl Network {
 
 type Socket = UdpSocket<'static, Device>;
 
-/// Serve the load requests until the chip resets, sampling with `sampler`.
+/// Serve the load requests until the chip resets, sampling with `sampler`
+/// and counting the cache's accesses with `cache`.
 pub(crate) async fn serve(
     mut requests: Receiver,
     network: &Network,
     mut sampler: Profiler,
+    mut cache: counters::Cache,
 ) -> Infallible {
     let tally = TALLY
         .try_take()
@@ -178,8 +181,12 @@ pub(crate) async fn serve(
                 match sampled(&start, &sampler).and_then(|()| open(network, &start)) {
                     Ok(socket) => {
                         emit(identity, &Started::Running);
+                        let instruments = Instruments {
+                            sampler: &mut sampler,
+                            cache: &mut cache,
+                        };
                         let ended =
-                            run(&mut requests, socket, start, tally, network, &mut sampler).await;
+                            run(&mut requests, socket, start, tally, network, instruments).await;
                         network.closed();
                         // A run the station's stop ended keeps no report.
                         kept = ended.map(|ended| (start.run, ended));
@@ -311,6 +318,12 @@ struct Ended {
     sampled: Option<Result<(), LoadError>>,
 }
 
+/// What a run measures its window with besides the CPU and the parts.
+struct Instruments<'a> {
+    sampler: &'a mut Profiler,
+    cache: &'a mut counters::Cache,
+}
+
 /// Run `start` on `socket` beside the requests until its drain ended, with
 /// `tally` cleared for it; what it keeps.
 async fn run(
@@ -319,8 +332,9 @@ async fn run(
     start: Start,
     tally: &mut Tally<TALLY_WORDS>,
     network: &Network,
-    sampler: &mut Profiler,
+    instruments: Instruments<'_>,
 ) -> Option<Ended> {
+    let Instruments { sampler, cache } = instruments;
     tally.clear();
     let window = Window {
         start_us: Cell::new(None),
@@ -331,7 +345,17 @@ async fn run(
     let ends = {
         let mut activity = pin!(select(
             receive(&socket, start.run, tally, &mut receiving, &window),
-            measure(&socket, &start, &window, &mut sent, network, sampler),
+            measure(
+                &socket,
+                &start,
+                &window,
+                &mut sent,
+                network,
+                Instruments {
+                    sampler: &mut *sampler,
+                    cache,
+                },
+            ),
         ));
         loop {
             let running = Phase::Running { run: start.run };
@@ -414,23 +438,25 @@ async fn receive(
 }
 
 /// The run's window and drain: open the window `delay_ms` after now, read
-/// the CPU, the parts and the counters, sample when asked, send within it,
-/// close it after `duration_ms`, read them again, stop sampling, then wait
-/// out the drain.
+/// the CPU and the parts, clear the cache's counters, read the counters,
+/// sample when asked, send within it, close it after `duration_ms`, read
+/// them again, stop sampling, then wait out the drain.
 async fn measure(
     socket: &Socket,
     start: &Start,
     window: &Window,
     sent: &mut Sent,
     network: &Network,
-    sampler: &mut Profiler,
+    instruments: Instruments<'_>,
 ) -> Ends {
+    let Instruments { sampler, cache } = instruments;
     let planned_start = now_us().saturating_add(millis(start.delay_ms));
     let planned_end = planned_start.saturating_add(millis(start.duration_ms));
     wait_until(planned_start).await;
     let cpu_start = cpu_load().await;
     let parts_start = parts_sample(true).await;
-    let counters_start = counters::snapshot(stack_received(network));
+    counters::start_cache(cache);
+    let counters_start = counters::snapshot(stack_received(network), cache);
     let start_us = now_us();
     window.start_us.set(Some(start_us));
     let sampling = start
@@ -445,7 +471,7 @@ async fn measure(
     sampler.request_stop();
     let cpu_end = cpu_load().await;
     let parts_end = parts_sample(false).await;
-    let counters_end = counters::snapshot(stack_received(network));
+    let counters_end = counters::snapshot(stack_received(network), cache);
     let sampled = match sampling {
         Some(Ok(())) => Some(sampler.stop().await),
         other => other,

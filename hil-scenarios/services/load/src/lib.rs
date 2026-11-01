@@ -289,6 +289,10 @@ pub struct CollectCounters {
 
 /// The answer to [`CollectCounters`].
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+#[allow(
+    clippy::large_enum_variant,
+    reason = "a wire message of a no_std crate without allocation: the counters go by value"
+)]
 pub enum CountersCollected {
     Report(Counters),
     /// The run's window or drain has not ended yet.
@@ -317,6 +321,74 @@ pub struct Counters {
     pub bridge_copied: u32,
     /// Frames the IP stack took from its device.
     pub stack_received: u32,
+    /// The L1 cache's access counts within the window.
+    pub cache: CacheCounts,
+    /// The cache geometry at the window's end.
+    pub cache_geometry: CacheGeometry,
+}
+
+/// The L1 cache's access counts within one window, by bus: the image
+/// clears each bus's counts at the window's start and reads them at its
+/// end. Instruction bus 0 carries hart 0's fetches and instruction bus 1
+/// hart 1's. ESP-IDF requests data bus 0 for every hart's data and never
+/// data bus 1; which hart's data accesses each data bus carries is not
+/// established. Only accesses that reach the L1 cache count.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct CacheCounts {
+    pub ibus0: InstructionBus,
+    pub ibus1: InstructionBus,
+    pub dbus0: DataBus,
+    pub dbus1: DataBus,
+}
+
+/// One instruction bus's accesses to its L1 instruction cache.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct InstructionBus {
+    pub hits: u32,
+    pub misses: u32,
+    /// The accesses' conflicts, as the cache counts them.
+    pub conflicts: u32,
+    /// The L1 cache's reads of the L2 cache these accesses caused.
+    pub next_level_reads: u32,
+    /// A count of the bus passed its 32 bits within the window: the bus's
+    /// counts are not exact.
+    pub overflowed: bool,
+}
+
+/// One data bus's accesses to the L1 data cache.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct DataBus {
+    pub hits: u32,
+    pub misses: u32,
+    /// The accesses' conflicts, as the cache counts them.
+    pub conflicts: u32,
+    /// The L1 cache's reads of the L2 cache these accesses caused.
+    pub next_level_reads: u32,
+    /// The write-backs to the L2 cache these accesses caused.
+    pub next_level_writes: u32,
+    /// A count of the bus passed its 32 bits within the window: the bus's
+    /// counts are not exact.
+    pub overflowed: bool,
+}
+
+/// The caches as configured: sizes and line sizes from their one-hot
+/// configuration words (`None` when a word selects no single size), the
+/// fixed L1 associativity and whether the L2 cache is bypassed.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct CacheGeometry {
+    pub l1_icache: CacheLevel,
+    pub l1_dcache: CacheLevel,
+    pub l2: CacheLevel,
+    pub l2_bypassed: bool,
+}
+
+/// One cache's configured geometry; `ways` is `None` where no source
+/// states it.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct CacheLevel {
+    pub size_bytes: Option<u32>,
+    pub line_bytes: Option<u32>,
+    pub ways: Option<u32>,
 }
 
 /// The samples of run `run`'s window, from the sample numbered `from`: at

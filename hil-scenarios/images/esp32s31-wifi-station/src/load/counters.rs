@@ -1,14 +1,16 @@
 //! The window's counters: the serving hart's cycles and retired
-//! instructions, what the network bridge did with the station's frames and
-//! what the IP stack took.
+//! instructions, the L1 cache's access counts by bus, what the network
+//! bridge did with the station's frames and what the IP stack took.
 //!
 //! The bridge reports each frame through `oer_trace::observe!`, so only an
 //! `oer_trace` build counts them; the station work's task is their one
 //! writer and the load server, in the same task, their reader. The hart's
-//! counters and the stack's are read at the window's ends. Bridge counts
-//! wrap at 2^32; the stack's saturate there.
+//! counters, the cache's and the stack's are read at the window's ends;
+//! the cache's are cleared just before its start. Bridge and cache counts
+//! wrap at 2^32 (a cache bus reports its overflow); the stack's saturate
+//! there.
 
-use oer_services_load::Counters;
+use oer_services_load::{CacheCounts, CacheGeometry, Counters, DataBus, InstructionBus};
 
 /// What the network bridge did with one frame from the station.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -104,17 +106,105 @@ pub(crate) struct Snapshot {
     pub instructions: u64,
     pub bridge: [u32; Bridged::ALL.len()],
     pub stack_received: u32,
+    pub cache: CacheCounts,
+    pub cache_geometry: CacheGeometry,
 }
 
-/// The counters now, with the stack's received frames `stack_received`.
+/// The cache's counters of every bus.
 #[cfg(target_arch = "riscv32")]
-pub(crate) fn snapshot(stack_received: u32) -> Snapshot {
+pub(crate) type Cache = oer_esp32s31_hal::peripherals::cache_counters::CacheCounters;
+
+/// Clear and run every bus's cache counters: the window's start.
+#[cfg(target_arch = "riscv32")]
+pub(crate) fn start_cache(cache: &mut Cache) {
+    cache.start(oer_esp32s31_hal::peripherals::cache_counters::Buses::ALL);
+}
+
+/// The counters now, with the stack's received frames `stack_received`
+/// and the cache's counts and geometry.
+#[cfg(target_arch = "riscv32")]
+pub(crate) fn snapshot(stack_received: u32, cache: &Cache) -> Snapshot {
     use core::sync::atomic::Ordering;
+    let cycles = oer_riscv::cycle64();
+    let instructions = oer_riscv::instret64();
+    let counts = cache.snapshot();
     Snapshot {
-        cycles: oer_riscv::cycle64(),
-        instructions: oer_riscv::instret64(),
+        cycles,
+        instructions,
         bridge: BRIDGE.each_ref().map(|count| count.load(Ordering::Relaxed)),
         stack_received,
+        cache: CacheCounts {
+            ibus0: instruction(counts.ibus0),
+            ibus1: instruction(counts.ibus1),
+            dbus0: data(counts.dbus0),
+            dbus1: data(counts.dbus1),
+        },
+        cache_geometry: geometry(cache.geometry()),
+    }
+}
+
+#[cfg(target_arch = "riscv32")]
+fn instruction(
+    bus: oer_esp32s31_hal::peripherals::cache_counters::InstructionBus,
+) -> InstructionBus {
+    InstructionBus {
+        hits: bus.hits,
+        misses: bus.misses,
+        conflicts: bus.conflicts,
+        next_level_reads: bus.next_level_reads,
+        overflowed: bus.overflowed,
+    }
+}
+
+#[cfg(target_arch = "riscv32")]
+fn data(bus: oer_esp32s31_hal::peripherals::cache_counters::DataBus) -> DataBus {
+    DataBus {
+        hits: bus.hits,
+        misses: bus.misses,
+        conflicts: bus.conflicts,
+        next_level_reads: bus.next_level_reads,
+        next_level_writes: bus.next_level_writes,
+        overflowed: bus.overflowed,
+    }
+}
+
+#[cfg(target_arch = "riscv32")]
+fn geometry(geometry: oer_esp32s31_hal::peripherals::cache_counters::Geometry) -> CacheGeometry {
+    use oer_esp32s31_hal::peripherals::cache_counters::Level;
+    use oer_services_load::CacheLevel;
+    let level = |level: Level, ways: Option<u32>| CacheLevel {
+        size_bytes: level.size_bytes,
+        line_bytes: level.line_bytes,
+        ways,
+    };
+    CacheGeometry {
+        l1_icache: level(geometry.l1_icache, Some(geometry.l1_icache_ways)),
+        l1_dcache: level(geometry.l1_dcache, Some(geometry.l1_dcache_ways)),
+        l2: level(geometry.l2, None),
+        l2_bypassed: geometry.l2_bypassed,
+    }
+}
+
+/// The counts of one instruction bus between `start` and `end`.
+fn instruction_window(start: &InstructionBus, end: &InstructionBus) -> InstructionBus {
+    InstructionBus {
+        hits: end.hits.wrapping_sub(start.hits),
+        misses: end.misses.wrapping_sub(start.misses),
+        conflicts: end.conflicts.wrapping_sub(start.conflicts),
+        next_level_reads: end.next_level_reads.wrapping_sub(start.next_level_reads),
+        overflowed: start.overflowed || end.overflowed,
+    }
+}
+
+/// The counts of one data bus between `start` and `end`.
+fn data_window(start: &DataBus, end: &DataBus) -> DataBus {
+    DataBus {
+        hits: end.hits.wrapping_sub(start.hits),
+        misses: end.misses.wrapping_sub(start.misses),
+        conflicts: end.conflicts.wrapping_sub(start.conflicts),
+        next_level_reads: end.next_level_reads.wrapping_sub(start.next_level_reads),
+        next_level_writes: end.next_level_writes.wrapping_sub(start.next_level_writes),
+        overflowed: start.overflowed || end.overflowed,
     }
 }
 
@@ -139,6 +229,13 @@ pub(crate) fn window(start: &Snapshot, end: &Snapshot) -> Counters {
         bridge_refused_other: bridge(Bridged::RefusedOther),
         bridge_copied: bridge(Bridged::Copied),
         stack_received: end.stack_received.saturating_sub(start.stack_received),
+        cache: CacheCounts {
+            ibus0: instruction_window(&start.cache.ibus0, &end.cache.ibus0),
+            ibus1: instruction_window(&start.cache.ibus1, &end.cache.ibus1),
+            dbus0: data_window(&start.cache.dbus0, &end.cache.dbus0),
+            dbus1: data_window(&start.cache.dbus1, &end.cache.dbus1),
+        },
+        cache_geometry: end.cache_geometry,
     }
 }
 
@@ -154,12 +251,14 @@ mod tests {
             instructions: 10,
             bridge: [u32::MAX, 1, 2, 3, 6],
             stack_received: 5,
+            ..Snapshot::default()
         };
         let end = Snapshot {
             cycles: 3,
             instructions: 25,
             bridge: [4, 1, 7, 3, 8],
             stack_received: 9,
+            ..Snapshot::default()
         };
         assert_eq!(
             window(&start, &end),
@@ -172,7 +271,101 @@ mod tests {
                 bridge_refused_other: 0,
                 bridge_copied: 2,
                 stack_received: 4,
+                ..Counters::default()
             }
+        );
+    }
+
+    #[test]
+    fn a_window_takes_wrapping_cache_differences_keeps_overflow_and_the_end_s_geometry() {
+        let start = Snapshot {
+            cache: CacheCounts {
+                ibus0: InstructionBus {
+                    hits: u32::MAX - 2,
+                    misses: 10,
+                    conflicts: 1,
+                    next_level_reads: 10,
+                    overflowed: false,
+                },
+                dbus0: DataBus {
+                    hits: 100,
+                    next_level_writes: 4,
+                    ..DataBus::default()
+                },
+                ..CacheCounts::default()
+            },
+            ..Snapshot::default()
+        };
+        let geometry = CacheGeometry {
+            l1_icache: oer_services_load::CacheLevel {
+                size_bytes: Some(32 * 1024),
+                line_bytes: Some(64),
+                ways: Some(2),
+            },
+            ..CacheGeometry::default()
+        };
+        let end = Snapshot {
+            cache: CacheCounts {
+                ibus0: InstructionBus {
+                    hits: 7,
+                    misses: 25,
+                    conflicts: 1,
+                    next_level_reads: 30,
+                    overflowed: false,
+                },
+                dbus0: DataBus {
+                    hits: 160,
+                    misses: 9,
+                    next_level_writes: 6,
+                    ..DataBus::default()
+                },
+                dbus1: DataBus {
+                    overflowed: true,
+                    ..DataBus::default()
+                },
+                ..CacheCounts::default()
+            },
+            cache_geometry: geometry,
+            ..Snapshot::default()
+        };
+        let counters = window(&start, &end);
+        assert_eq!(
+            counters.cache.ibus0,
+            InstructionBus {
+                hits: 10,
+                misses: 15,
+                conflicts: 0,
+                next_level_reads: 20,
+                overflowed: false,
+            }
+        );
+        assert_eq!(
+            counters.cache.dbus0,
+            DataBus {
+                hits: 60,
+                misses: 9,
+                next_level_writes: 2,
+                ..DataBus::default()
+            }
+        );
+        assert!(counters.cache.dbus1.overflowed);
+        assert_eq!(counters.cache.ibus1, InstructionBus::default());
+        assert_eq!(counters.cache_geometry, geometry);
+        let overflowed_at_start = Snapshot {
+            cache: CacheCounts {
+                ibus1: InstructionBus {
+                    overflowed: true,
+                    ..InstructionBus::default()
+                },
+                ..CacheCounts::default()
+            },
+            ..Snapshot::default()
+        };
+        assert!(
+            window(&overflowed_at_start, &Snapshot::default())
+                .cache
+                .ibus1
+                .overflowed
         );
     }
 
