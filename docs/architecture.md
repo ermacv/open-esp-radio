@@ -114,8 +114,8 @@ is an `ObservationContract` and depends on no owner. No other chip role
 except `Composition` and `Facade` reaches a protocol core or runtime by any
 normal path. HIL has `HilProtocol` (framing and message skeleton), `HilAgent` (the
 device library), `HilBinding` (the dictionary beside one facade or one
-test-only service) and `HilImage`, which composes the chip's composition,
-facades, observation collectors, bindings and the agent. HAL files whose production code waits are a per-file list in the
+test-only service) and `HilImage`, an application of the entry (`Sdk`) with
+the HIL agent on the entry (`HilSdkAgent`), the bindings and the agent. HAL files whose production code waits are a per-file list in the
 layer tests that only shrinks; the HAL also still holds driver code without
 a waiting marker ([HAL](../chips/esp32s31/hal/README.md)).
 
@@ -358,7 +358,8 @@ entry (`hil-scenarios/hil-agent/espressif`). An image on the SDK depends on
 nothing the SDK places (compositions, facades, platform, interrupt table)
 besides it; `oer-test-layers` checks these direct dependencies, not that two
 `boot` functions take the same steps in the same order, which review keeps.
-Probes and images whose function
+Every HIL image is an image on the SDK; `oer-test-layers` checks that each
+depends on it. Probes and images whose function
 or layout the SDK does not offer select their entries, priorities and task
 spawning through the compositions directly.
 These crates are outside the sans-IO layer. `oer-espressif-watchdog` is

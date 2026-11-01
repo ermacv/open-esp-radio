@@ -1161,21 +1161,16 @@ fn role_allows(from: Role, to: Role, to_path: &str) -> bool {
             ) || (to == Role::Portable
                 && !["portable/time", "portable/time-virtual"].contains(&to_path))
         }
-        // An image composes: it declares its interrupt table, entry, tasks
-        // and observation collectors and never bypasses the facade, or it
-        // runs on the application entry.
+        // A HIL image is an application of the entry: besides it, only the
+        // HIL agent on the entry, the HIL protocol and agent and its
+        // services' dictionaries.
         Role::HilImage => matches!(
             to,
             Role::Sdk
                 | Role::HilSdkAgent
-                | Role::Composition
-                | Role::Facade
-                | Role::ObservationContract
                 | Role::HilBinding
                 | Role::HilAgent
                 | Role::HilProtocol
-                | Role::Platform
-                | Role::PlatformContract
                 | Role::Portable
                 | Role::EmbassyAdapter
         ),
@@ -3375,16 +3370,17 @@ fn hil_roles_keep_radio_out_of_the_framework_and_images_behind_the_facade() {
     assert_role_cases(
         Role::HilImage,
         &[
-            (Role::Composition, "chips/esp32s31/compose", true),
-            (Role::Facade, "chips/esp32s31/wifi", true),
+            (Role::Sdk, "sdk/espressif", true),
             (Role::HilBinding, "protocols/ieee80211/hil", true),
             (Role::HilSdkAgent, "hil-scenarios/hil-agent/espressif", true),
-            (Role::Platform, "chips/espressif/executor", true),
             (Role::EmbassyAdapter, "portable/embassy/net", true),
+            (Role::Composition, "chips/esp32s31/compose", false),
+            (Role::Facade, "chips/esp32s31/wifi", false),
+            (Role::Platform, "chips/espressif/executor", false),
             (
                 Role::ObservationContract,
                 "chips/esp32s31/instrumentation",
-                true,
+                false,
             ),
             (Role::Hal, "chips/esp32s31/hal", false),
             (Role::Pac, "chips/esp32s31/pac", false),
@@ -3482,6 +3478,60 @@ fn an_image_beside_the_application_entry_is_judged_and_one_without_it_is_not() {
     );
 }
 
+/// The HIL images that do not depend on the application entry.
+fn hil_images_off_the_entry(members: &[Member]) -> BTreeSet<String> {
+    let sdk = members
+        .iter()
+        .filter(|member| role(&member.path) == Some(Role::Sdk))
+        .map(|member| member.name.clone())
+        .collect::<BTreeSet<_>>();
+    members
+        .iter()
+        .filter(|member| {
+            role(&member.path) == Some(Role::HilImage) && member.dependencies.is_disjoint(&sdk)
+        })
+        .map(|member| member.path.clone())
+        .collect()
+}
+
+#[test]
+fn every_hil_image_is_an_application_of_the_entry() {
+    assert_eq!(
+        hil_images_off_the_entry(&workspace_members()),
+        BTreeSet::new()
+    );
+}
+
+#[test]
+fn a_hil_image_without_the_entry_is_named_and_another_image_is_not() {
+    let members = [
+        member(
+            "hil-scenarios/images/esp32s31-sdk-station",
+            "station",
+            true,
+            &["oer-espressif"],
+        ),
+        member(
+            "hil-scenarios/images/esp32s31-sdk-rpc",
+            "hand-built",
+            true,
+            &["oer-esp32s31-compose"],
+        ),
+        member(
+            "firmware/apps/radio-root",
+            "radio-root",
+            true,
+            &["oer-esp32s31-compose"],
+        ),
+        member("sdk/espressif", "oer-espressif", false, &[]),
+        member("chips/esp32s31/compose", "oer-esp32s31-compose", false, &[]),
+    ];
+    assert_eq!(
+        hil_images_off_the_entry(&members),
+        BTreeSet::from(["hil-scenarios/images/esp32s31-sdk-rpc".to_owned()])
+    );
+}
+
 #[test]
 fn the_role_rule_judges_listed_packages_by_their_optional_target_and_aliased_edges() {
     let manifest = |dependencies: &str| -> BTreeSet<String> {
@@ -3550,6 +3600,10 @@ adapter = { package = "oer-esp32s31-ieee80211-driver", version = "1" }
             edge(
                 "hil-scenarios/images/esp32s31-sdk-rpc",
                 "chips/esp32s31/hal"
+            ),
+            edge(
+                "hil-scenarios/images/esp32s31-sdk-rpc",
+                "chips/esp32s31/wifi"
             ),
         ])
     );

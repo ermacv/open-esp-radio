@@ -39,7 +39,7 @@ other `portable/` support, firmware images and tools.
 | `HilProtocol` | `protocols/hil/protocol` | portable |
 | `HilAgent` | `protocols/hil/agent` | HIL protocol, portable |
 | `HilBinding` | Wi-Fi, network, Bluetooth, conformance, PHY probe and radio-health dictionaries | HIL protocol and agent, facades, observation contracts, shared vocabulary, wire, port, runtime, portable without `portable/time{,-virtual}` |
-| `HilImage` | `hil-scenarios/images/*` | composition, facades, observation contracts, HIL bindings, agent and protocol, platform, platform contracts, portable, Embassy adapters |
+| `HilImage` | `hil-scenarios/images/*` | the application entry (each depends on it), the HIL agent on the entry, HIL bindings, agent and protocol, portable, Embassy adapters |
 
 Roles outside this table keep their own rules. The backend rule holds for
 facts, PAC, HAL, drivers, adapters, service and client, platform, platform
@@ -62,8 +62,8 @@ is gone both fail, so every list only shrinks:
   from any other root;
 - `HAL_SEQUENCES`: HAL files that wait.
 
-- `EXTERNAL_ASYNC_CRATES`: direct normal `embassy-sync` edges in cooperate,
-  the network adapter, the HIL agent and the three HIL images.
+- `EXTERNAL_ASYNC_CRATES`: the direct normal `embassy-sync` edge of the
+  HIL agent.
 
 ## IEEE 802.11 foreign dependencies
 
