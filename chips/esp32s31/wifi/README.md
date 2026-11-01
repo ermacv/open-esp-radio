@@ -58,7 +58,12 @@ moving an installation credit into its command handler.
 
 `RadioResources` constructs the same shared RF actor, calibration identity,
 RC-slow membership and cooperative timer. The image retains its SAR/PWDET
-interrupt binding and spawns `RadioActor`. The facade has no diagnostic
+interrupt binding, gives the actor the observer of its periodic tracking
+ticks (`observation::TrackingTick`) and spawns `RadioActor`. The actor's
+run ends only when its periodic PHY tracking fails: it then keeps every
+owner it holds and returns the failure's class and variant path
+(`oer_esp32s31_compose::radio_fault::Failure`) for the image to record and
+reset with. The facade has no diagnostic
 counters: its copied trace observations reach image-owned collectors, and its
 product events are immediate callbacks. Bridge timers, polling, protocol
 parameters, DMA geometry and rate-selection policy retain their values.

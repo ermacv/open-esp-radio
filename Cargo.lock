@@ -1838,6 +1838,7 @@ name = "oer-esp32s31-radio-client"
 version = "0.1.0"
 dependencies = [
  "oer-bluetooth-le-port",
+ "oer-diagnostics",
  "oer-esp32s31-hal",
  "oer-esp32s31-phy",
  "oer-ieee80211-contracts-port",
@@ -1854,6 +1855,7 @@ dependencies = [
  "embassy-futures",
  "oer-bluetooth-le-port",
  "oer-cooperate",
+ "oer-diagnostics",
  "oer-esp32s31-hal",
  "oer-esp32s31-phy",
  "oer-esp32s31-radio-client",
@@ -1864,6 +1866,7 @@ dependencies = [
  "oer-radio-regulatory",
  "oer-time",
  "oer-time-virtual",
+ "oer-trace",
  "pin-project-lite",
 ]
 
@@ -2286,6 +2289,7 @@ dependencies = [
  "oer-radio-regulatory",
  "oer-riscv",
  "oer-time",
+ "oer-trace",
  "static_cell",
 ]
 

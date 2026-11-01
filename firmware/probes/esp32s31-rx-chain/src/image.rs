@@ -51,6 +51,7 @@ type Backend = Esp32s31Radio<
     oer_espressif_executor::Cooperative<Esp32s31, EmbassyClock>,
     NoopPhyTargetObserver,
     crate::phy_pilot::Client,
+    oer_trace::Noop,
 >;
 static DIRECT_BACKEND: StaticCell<Backend> = StaticCell::new();
 struct DirectOutput {
@@ -180,6 +181,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
         runtime_clocks,
         oer_espressif_executor::Cooperative::<Esp32s31, _>::new(EmbassyClock),
         NoopPhyTargetObserver,
+        oer_trace::Noop,
         PhyRegisterConfig::new(identity),
         phy_pilot,
     );

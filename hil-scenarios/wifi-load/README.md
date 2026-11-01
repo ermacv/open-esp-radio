@@ -34,7 +34,7 @@ the window's counters (the boot hart's cycles and retired instructions, their
 rate per microsecond and per cycle, the network bridge's taken and refused
 frames, the IP stack's received frames with the hart's instructions over
 them, the L1 cache's `cache` counts and the receive path's `rx` counts).
-The idle baseline records the parts, counters and link too.
+The idle baseline records the parts, counters, link and PHY tracking too.
 
 `rx` holds the window's differences of the receive path, counted only by
 a trace build (zeros otherwise). `driver` is the S31 receive driver's
@@ -59,6 +59,24 @@ sequences `missing_by_timeout`, `missing_other`, its `duplicates` and
 `rejected` input, `agreements_started`, `agreements_stopped`, the latest
 agreement's negotiated `agreement_window` at the window's end, and
 `rsn_inputs_dropped`.
+
+Each level's `tracking`, and the `path` case's `idle tracking`, record
+what the image's periodic PHY tracking did over the window, and print one
+line (`tracking <level>:`); only a trace image counts it (`available`
+false otherwise). The shared RF actor's tracking deadline falls 1 s after
+the previous tracking, so a 5 s window holds about five ticks. `ticks`
+ran the tracking graph, `not_due` found no client's tracking due and
+`unavailable` found the domain unable to track. `branches` counts the
+tracked ticks that committed each branch: `inhibited` (the registered
+policy skipped every child), `rfpll_corrected` (the RFPLL capacitance
+correction), `wifi_i2c_changed` (a Wi-Fi PHY-I2C temperature band
+change), `wifi_tx_power` and `bluetooth_ieee802154_tx_power` (a TX power
+gain change), `calibration_common` (the RX recalibration) and
+`calibration_transmit` (the TX recalibration). `temperature_sensor_units`
+holds the PHY's temperature after the window's last tracked tick and its
+`min` and `max` over the window, in PHY sensor units: no Celsius
+conversion is established. `tick_us` is the ticks' whole time and
+`longest_tick_us` the longest.
 
 Each level's `link`, and the `path` case's `idle link` over the idle
 window, record what the link ran, and print one line (`link <level>:`):

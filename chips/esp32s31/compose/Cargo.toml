@@ -12,6 +12,9 @@ description = "The ESP32-S31 side of an image's platform over the Espressif stag
 ## Shared retained Wi-Fi fatal assertion record, reset and next-boot
 ## reporting; images without Wi-Fi leave it out.
 wifi-fault = []
+## The shared RF actor's retained tracking fault, reset and next-boot
+## reporting; images without the actor leave it out.
+radio-fault = []
 
 [dependencies]
 oer-diagnostics = { path = "../../../portable/diagnostics" }

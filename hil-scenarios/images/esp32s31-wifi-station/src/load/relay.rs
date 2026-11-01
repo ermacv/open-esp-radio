@@ -21,7 +21,7 @@ use oer_memory::{
 };
 use oer_services_load::{
     Collected, CountersCollected, LinkCollected, Load, LoadError, PartsCollected, SamplesCollected,
-    Started,
+    Started, TrackingCollected,
 };
 use static_cell::ConstStaticCell;
 
@@ -39,6 +39,7 @@ pub(crate) enum Answer {
     Parts(PartsCollected),
     Counters(CountersCollected),
     Link(LinkCollected),
+    Tracking(TrackingCollected),
     Samples(SamplesCollected),
     Cpu(Load),
 }
@@ -51,6 +52,7 @@ impl Answer {
             Self::Parts(parts) => emit(identity, &parts),
             Self::Counters(counters) => emit(identity, &counters),
             Self::Link(link) => emit(identity, &link),
+            Self::Tracking(tracking) => emit(identity, &tracking),
             Self::Samples(samples) => emit(identity, &samples),
             Self::Cpu(load) => emit(identity, &load),
         }

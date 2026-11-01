@@ -887,3 +887,8 @@ mod tests {
         );
     }
 }
+
+/// The shared RF actor's periodic tracking ticks: the observer the image
+/// gives [`crate::RadioResources::start`] receives them.
+#[cfg(target_arch = "riscv32")]
+pub use oer_esp32s31_radio_system::observation::{TickRan, TrackingBranches, TrackingTick};
