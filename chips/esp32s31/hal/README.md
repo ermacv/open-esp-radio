@@ -405,7 +405,10 @@ remain in `knowledge::modem_clock`.
 `Hardware::aes`, transferred through the root's adoption resources, owns
 the AES program and DMA IRQ parts and the complete
 `HP_SYS_CLKRST.CRYPTO_CTRL0` word. `into_polled` consumes the router's
-`Silent<AesInterrupt>` proof. The new peripheral exposes register atoms only;
+`Silent<AesInterrupt>` proof; `into_interrupting` instead hands the
+`AesInterrupt` part to the image's router for a handler, which acknowledges
+it (`AesInterrupt::clear`), and returns an `InterruptingAes` owner that may
+enable the interrupt. Both owners expose the same register atoms;
 `oer-esp32s31-crypto` owns the sequence and waits. Clock/reset writes preserve
 sibling and reserved bits; no fixed whole-word clock image is granted.
 SOURCE: ESP_IDF_4D80C1B2_S31_AES and TRM_S31_V01_AES in the register model.

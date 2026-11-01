@@ -206,6 +206,15 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 "chips/espressif/staged-runtime/src/stacks.rs:crate::stacks::current_hart_interrupt_stack_free_bytes:panic-macro:assert:1" = { owner = "chips/espressif/staged-runtime", classes = ["rust-panic"] }
 "chips/espressif/staged-runtime/src/stacks.rs:crate::stacks::current_hart_interrupt_stack_free_bytes:panic-macro:assert:2" = { owner = "chips/espressif/staged-runtime", classes = ["rust-panic"] }
 
+# firmware/probes/esp32s31-aes-timing/src/entry.rs
+"firmware/probes/esp32s31-aes-timing/src/entry.rs:crate::fail:terminal-entry:fail:1" = { owner = "firmware/probes/esp32s31-aes-timing", classes = ["configuration-boot"] }
+"firmware/probes/esp32s31-aes-timing/src/entry.rs:crate:terminal-binding:entry:1" = { owner = "firmware/probes/esp32s31-aes-timing", classes = ["rust-panic"] }
+"firmware/probes/esp32s31-aes-timing/src/entry.rs:crate::main:terminal-entry:main:1" = { owner = "firmware/probes/esp32s31-aes-timing", classes = ["configuration-boot"] }
+"firmware/probes/esp32s31-aes-timing/src/entry.rs:crate::main:reset-method:reset:1" = { owner = "firmware/probes/esp32s31-aes-timing", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
+"firmware/probes/esp32s31-aes-timing/src/entry.rs:crate::main:reset-method:reset:2" = { owner = "firmware/probes/esp32s31-aes-timing", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
+"firmware/probes/esp32s31-aes-timing/src/entry.rs:crate::main:terminal-reference:reset_binding:1" = { owner = "firmware/probes/esp32s31-aes-timing", classes = ["configuration-boot", "unexpected-hardware", "software-invariant"] }
+"firmware/probes/esp32s31-aes-timing/src/entry.rs:crate::fail:terminal-reference:boot_failure:1" = { owner = "firmware/probes/esp32s31-aes-timing", classes = ["configuration-boot"] }
+
 # firmware/probes/esp32s31-peer-overdue/src/entry.rs
 "firmware/probes/esp32s31-peer-overdue/src/entry.rs:crate::fail:terminal-entry:fail:1" = { owner = "firmware/probes/esp32s31-peer-overdue", classes = ["configuration-boot"] }
 "firmware/probes/esp32s31-peer-overdue/src/entry.rs:crate:terminal-binding:entry:1" = { owner = "firmware/probes/esp32s31-peer-overdue", classes = ["rust-panic"] }
