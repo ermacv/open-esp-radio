@@ -46,6 +46,8 @@ critical-section-hart = "boot"
 harts = ["boot", 1]
 # Every task stack of this image is fully analysed: an unresolved path fails `cargo fw build`.
 task-stack = "proven"
+# Profiled hot task code the image linker moves into SRAM (`cargo fw hot-code`).
+hot-code = "hot-code.toml"
 # The SDK's observations (`observe`) report through the executors', the
 # station's and the RF actor's observers, which only `oer_trace` builds call.
 instrumentation = ["trace"]
