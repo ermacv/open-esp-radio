@@ -92,7 +92,7 @@ mod tests {
     fn only_flagged_packages_are_scenarios_by_their_short_name() {
         let metadata = serde_json::json!({"packages": [
             package("oer-hil-scenarios-zeta", Some(true)),
-            package("oer-hil-scenarios-images-esp32s31-rpc", None),
+            package("oer-hil-scenarios-images-esp32s31-sdk-rpc", None),
             package("oer-hil-harness", Some(false)),
             package("oer-hil-scenarios-aes", Some(true)),
         ]});

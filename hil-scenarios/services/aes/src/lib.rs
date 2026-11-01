@@ -102,24 +102,30 @@ oer_hil_agent::service! {
     }
 }
 
-/// The handler of the service over a product engine `E`, which moves into
-/// each operation and comes back with its response.
-pub struct Engine<E> {
+/// The handler of the service over a product engine `E` of key data
+/// capacity `N`, at least [`MAX_WRAPPED`], which moves into each operation
+/// and comes back with its response.
+pub struct Engine<E, const N: usize = MAX_WRAPPED> {
     engine: Option<E>,
 }
 
-impl<E> Engine<E> {
+impl<E, const N: usize> Engine<E, N> {
     pub const fn new(engine: E) -> Self {
+        const {
+            if N < MAX_WRAPPED {
+                panic!("the engine's key data capacity is below the service's largest request");
+            }
+        }
         Self {
             engine: Some(engine),
         }
     }
 }
 
-impl<E: KeyUnwrap<MAX_WRAPPED>> Handler for Engine<E> {
+impl<E: KeyUnwrap<N>, const N: usize> Handler for Engine<E, N> {
     async fn unwrap_key(&mut self, request: UnwrapKey) -> Unwrapped {
-        // A request never exceeds the engine's buffer: both are MAX_WRAPPED.
-        let Ok(wrapped) = KeyData::<MAX_WRAPPED>::try_copy(&request.wrapped) else {
+        // A request never exceeds the engine's buffer: MAX_WRAPPED <= N.
+        let Ok(wrapped) = KeyData::<N>::try_copy(&request.wrapped) else {
             return Unwrapped::Refused(UnwrapError::InvalidLength);
         };
         // An engine lost with an unfinished operation stays lost.

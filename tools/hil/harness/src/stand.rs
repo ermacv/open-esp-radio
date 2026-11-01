@@ -326,7 +326,7 @@ mod tests {
     #[test]
     fn a_run_leases_the_air_only_for_a_scenario_that_turns_a_radio_on() {
         let mac = "02:00:00:00:00:01";
-        let quiet = Scenario::new("aes", "esp32s31-rpc", &[]);
+        let quiet = Scenario::new("aes", "esp32s31-sdk-rpc", &[]);
         assert_eq!(claims(mac, &quiet), [Claim::board(mac)]);
         assert_eq!(
             claims(mac, &quiet.using_air()),
@@ -357,7 +357,7 @@ mod tests {
         let one = normalize(&claims("02:00:00:00:00:01", &station));
         let other = normalize(&claims("02:00:00:00:00:02", &station));
         assert!(conflict(&one, &other), "both change the router's network");
-        let quiet = Scenario::new("aes", "esp32s31-rpc", &[]);
+        let quiet = Scenario::new("aes", "esp32s31-sdk-rpc", &[]);
         assert!(!conflict(
             &one,
             &normalize(&claims("02:00:00:00:00:02", &quiet))

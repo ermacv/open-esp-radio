@@ -1,8 +1,9 @@
 # AES scenario
 
 `cargo hil run aes` checks the product hardware RFC 3394 key unwrap
-(`oer-crypto` over the S31 AES engine) on the `esp32s31-rpc` image through
-the [AES service](../services/aes/README.md).
+(`oer-crypto` over the S31 AES engine, through the library's shared AES
+service) on the `esp32s31-sdk-rpc` image through the
+[AES service](../services/aes/README.md).
 
 | Case | Checks |
 | --- | --- |

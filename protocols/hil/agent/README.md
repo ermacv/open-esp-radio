@@ -3,8 +3,8 @@
 `oer-hil-agent` holds the HIL target logic that does not
 depend on the chip: the request intake (`base`), console serialization and
 the lifecycle acknowledgement barrier and the reset-retained post-mortem codec. The
-[ESP32-S31 RPC image](../../../hil-scenarios/images/esp32s31-rpc/README.md) composes these modules with
-its executor and console. Host tests exercise the same compiled code the
+[HIL agent on the application entry](../../../hil-scenarios/hil-agent/espressif/README.md)
+composes these modules with the library's executor and console. Host tests exercise the same compiled code the
 firmware links.
 
 | Feature | Modules |

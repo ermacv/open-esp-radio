@@ -2410,30 +2410,16 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-hil-scenarios-images-esp32s31-rpc"
+name = "oer-hil-scenarios-images-esp32s31-sdk-rpc"
 version = "0.1.0"
 dependencies = [
- "critical-section",
- "embassy-sync",
- "embassy-time",
- "embedded-io-async",
  "heapless",
- "oer-diagnostics",
- "oer-embassy-time",
- "oer-esp32s31-board",
- "oer-esp32s31-compose",
- "oer-esp32s31-hal",
  "oer-esp32s31-layout",
- "oer-espressif-executor",
- "oer-espressif-interrupt-table",
- "oer-espressif-staged-runtime",
- "oer-espressif-usb-serial-jtag",
+ "oer-espressif",
  "oer-hil-agent",
+ "oer-hil-agent-espressif",
  "oer-hil-protocol",
- "oer-memory",
- "oer-riscv",
  "oer-services-aes",
- "oer-time",
  "postcard",
  "static_cell",
 ]

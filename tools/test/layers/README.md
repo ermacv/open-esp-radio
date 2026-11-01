@@ -85,7 +85,7 @@ are outside this rule; it does not inspect third-party dependency closures.
 | --- | --- |
 | `embassy-futures` | All except wire, cipher, core, core-side policy, facts, PAC and HAL |
 | `embassy-sync` | Development only, with the exact normal-edge deviations above |
-| `embassy-time` | `portable/embassy/time`, `hil-scenarios/images/esp32s31-rpc` (time ABI check) |
+| `embassy-time` | `portable/embassy/time`, `sdk/espressif` (the executors' clock) |
 | `embassy-time-driver` | `chips/espressif/executor` |
 | `embassy-net`, `xarxa`, `xarxa-driver` | `portable/embassy/net`, `firmware/*` |
 | `trouble-host` | `portable/embassy/trouble`, `firmware/*` |

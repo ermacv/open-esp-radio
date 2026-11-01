@@ -1,13 +1,20 @@
 //! The HIL services the image mounts and the key set it reports: the union
-//! of the keys of those services and of the base module.
+//! of the keys of the AES service and of the base module.
 
 oer_hil_agent::image_keys! {
-    /// The AES image: the base module and the AES service.
+    /// The SDK RPC image: the base module and the AES service.
     pub(crate) KEYS = [oer_services_aes::Request]
 }
 
 /// The largest request payload the image takes: an AES unwrap request.
 pub(crate) const MAXIMUM_PAYLOAD_BYTES: u16 = 64;
+
+/// What the image announces in its Hello.
+#[cfg(target_arch = "riscv32")]
+pub(crate) const IMAGE: oer_hil_agent_espressif::Image = oer_hil_agent_espressif::Image {
+    keys: KEYS,
+    maximum_payload_bytes: MAXIMUM_PAYLOAD_BYTES,
+};
 
 #[cfg(test)]
 mod tests {

@@ -1,0 +1,41 @@
+[package]
+name = "oer-hil-scenarios-images-esp32s31-sdk-rpc"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0"
+publish.workspace = true
+description = "The HIL image of the radio-free scenarios: the oer-espressif AES service served over the HIL console, without Wi-Fi"
+build = "build.rs"
+
+[target.'cfg(target_arch = "riscv32")'.dependencies]
+oer-espressif = { path = "../../../sdk/espressif", features = ["esp32s31", "console"] }
+oer-hil-agent = { path = "../../../protocols/hil/agent", default-features = false }
+oer-hil-agent-espressif = { path = "../../hil-agent/espressif" }
+oer-hil-protocol = { workspace = true }
+oer-services-aes = { path = "../../services/aes" }
+static_cell.workspace = true
+
+[dev-dependencies]
+oer-hil-agent = { path = "../../../protocols/hil/agent", default-features = false }
+oer-hil-protocol = { workspace = true }
+oer-services-aes = { path = "../../services/aes" }
+heapless = "0.9.3"
+postcard = { version = "1.1.3", default-features = false }
+
+[build-dependencies]
+oer-esp32s31-layout = { workspace = true, features = ["build"] }
+
+[lints]
+workspace = true
+
+[package.metadata.open-radio]
+critical-section-hart = "boot"
+# Every task stack of this image is fully analysed: an unresolved path fails `cargo fw build`.
+task-stack = "proven"
+
+[package.metadata.open-radio.panic-budget]
+# Reachable panic sites by layer (the image check's `*-panics.txt`): each a
+# report with a target of 0, never a build gate.
+runtime = {}
+bootstrap = {}
