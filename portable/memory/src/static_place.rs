@@ -74,6 +74,12 @@ impl<Layout: 'static> StaticPlace<Layout> {
 
     /// Construct a future at its final address and pin it once. The handle
     /// owns destruction, including cancellation before the first poll.
+    ///
+    /// Never inlined: a future the initializer returns by value may be
+    /// assembled in this call's frame before it is written, and that frame
+    /// ends before the future's first poll. Inlined into an async caller's
+    /// poll, it stayed on the stack under every poll of the future.
+    #[inline(never)]
     pub fn future<'a, F: Future + 'a>(
         &'static mut self,
         initialize: impl FnOnce() -> F,
