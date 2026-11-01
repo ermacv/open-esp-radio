@@ -259,6 +259,10 @@ union Stage<M: MakeFuture> {
 pub struct Task<M: MakeFuture, T> {
     state: AtomicU8,
     index: u8,
+    /// The task's exported poll record: the slot refers to it, so an image
+    /// holds the record exactly when it holds the slot, which every start
+    /// and every poll of the task reaches.
+    record: &'static PollBoundary,
     stage: UnsafeCell<MaybeUninit<Stage<M>>>,
     _tasks: PhantomData<fn() -> T>,
 }
@@ -276,15 +280,23 @@ pub struct Task<M: MakeFuture, T> {
 unsafe impl<M: MakeFuture, T> Sync for Task<M, T> {}
 
 impl<M: MakeFuture, T: Tasks> Task<M, T> {
-    /// The empty slot of the task at `index` of `T`.
-    pub const fn new(index: u8) -> Self {
+    /// The empty slot of the task at `index` of `T`, which keeps `record`,
+    /// the task's exported poll record ([`Self::BOUNDARY`]), in every image
+    /// that can start or poll the task.
+    pub const fn new(index: u8, record: &'static PollBoundary) -> Self {
         assert!(index < T::COUNT, "the task's index lies in its set");
         Self {
             state: AtomicU8::new(EMPTY),
             index,
+            record,
             stage: UnsafeCell::new(MaybeUninit::uninit()),
             _tasks: PhantomData,
         }
+    }
+
+    /// The poll record the slot keeps.
+    pub fn record(&self) -> &'static PollBoundary {
+        self.record
     }
 
     /// The task's poll boundary, which its declaration exports for the
@@ -354,10 +366,11 @@ impl<M: MakeFuture, T> Claim<M, T> {
 /// task's future, [`poll_task`], for that task's future type.
 ///
 /// Each task declared by [`tasks!`](crate::tasks) exports its boundary as
-/// `__OER_TASK_POLL.<module path of the task's slot>`. The task's start
-/// function refers to the record, so an image holds it exactly when it can
-/// start the task: a task it never starts is never polled and leaves no
-/// record. The image checks read these records, not a function name: every
+/// `__OER_TASK_POLL.<module path of the task's slot>`. The task's slot
+/// ([`Task`]) refers to the record, and every start of the task, through its
+/// generated function or [`Spawner::start`], and every poll reach the slot:
+/// an image holds the record exactly when it can start or poll the task, and
+/// a task it never starts or polls leaves no record. The image checks read these records, not a function name: every
 /// direct call of a recorded boundary is a task poll and the boundary is the
 /// task's root; a recorded boundary without a direct call (an inlined poll),
 /// or an image with the executor's waker and no record, fails the analysis.
@@ -729,10 +742,6 @@ macro_rules! tasks {
                     fn start($($argument: $type),*) -> $name::Start {
                         $crate::task::once(move || $body($($argument),*))
                     }
-                    // The task's poll record stays in the image exactly
-                    // when the image can start the task: a task it never
-                    // starts is never polled and leaves no record.
-                    ::core::hint::black_box(&$name::POLL_BOUNDARY);
                     spawner.start(&$name::TASK, start($($argument),*))
                 }
             )*
@@ -753,13 +762,13 @@ macro_rules! tasks {
             pub(super) type Start = impl $crate::task::MakeFuture;
             pub(super) const TASK_INDEX: u8 = $index;
             pub(super) static TASK: $crate::task::Task<Start, super::$set> =
-                $crate::task::Task::new(TASK_INDEX);
+                $crate::task::Task::new(TASK_INDEX, &POLL_BOUNDARY);
             /// The task's poll boundary, for the image checks. The task's
-            /// start function refers to it, which keeps it in an image that
-            /// can start the task, and the exported name lets the tools
-            /// find it.
+            /// slot refers to it, which keeps it in an image that can start
+            /// or poll the task, and the exported name lets the tools find
+            /// it.
             #[unsafe(export_name = concat!("__OER_TASK_POLL.", module_path!()))]
-            pub(super) static POLL_BOUNDARY: $crate::task::PollBoundary =
+            static POLL_BOUNDARY: $crate::task::PollBoundary =
                 $crate::task::Task::<Start, super::$set>::BOUNDARY;
         }
         $crate::tasks!(@slots $set [$index + 1] $($rest)*);

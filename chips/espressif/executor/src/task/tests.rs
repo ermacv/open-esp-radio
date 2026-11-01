@@ -115,9 +115,9 @@ macro_rules! probe_set {
         struct $set;
         std::thread_local! {
             static SLOTS: [&'static Task<Box<dyn FnOnce() -> $future $(+ $send)?>, $set>; 3] = [
-                Box::leak(Box::new(Task::new(0))),
-                Box::leak(Box::new(Task::new(1))),
-                Box::leak(Box::new(Task::new(2))),
+                Box::leak(Box::new(Task::new(0, &Task::<Box<dyn FnOnce() -> $future $(+ $send)?>, $set>::BOUNDARY))),
+                Box::leak(Box::new(Task::new(1, &Task::<Box<dyn FnOnce() -> $future $(+ $send)?>, $set>::BOUNDARY))),
+                Box::leak(Box::new(Task::new(2, &Task::<Box<dyn FnOnce() -> $future $(+ $send)?>, $set>::BOUNDARY))),
             ];
         }
         impl $set {
@@ -425,7 +425,8 @@ impl Future for Local {
 }
 
 struct LocalSet;
-static LOCAL_TASK: Task<fn() -> Local, LocalSet> = Task::new(0);
+static LOCAL_RECORD: PollBoundary = Task::<fn() -> Local, LocalSet>::BOUNDARY;
+static LOCAL_TASK: Task<fn() -> Local, LocalSet> = Task::new(0, &LOCAL_RECORD);
 impl Tasks for LocalSet {
     type Binding = TestBinding;
     type Mode = Interrupt;
@@ -761,4 +762,11 @@ fn a_hardware_interrupt_that_preempts_a_thread_executor_task_is_refused_its_sign
     let seized = seized.borrow();
     assert_eq!(seized.own, Some(Poll::Ready(Ok(0b1))));
     assert_eq!(seized.take, Some(Err(ForeignContext)));
+}
+
+#[test]
+fn a_task_slot_keeps_the_poll_record_it_was_made_with() {
+    // An image holds the slot whenever it can start or poll the task, and
+    // with it this record: a task it never reaches leaves none.
+    assert!(core::ptr::eq(LOCAL_TASK.record(), &LOCAL_RECORD));
 }
