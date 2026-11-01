@@ -4,8 +4,8 @@
 //! never moved through the queue. Built from [`ClaimCell`] slots and two
 //! affine queues of slot indices, it needs no unsafe code of its own.
 
-use crate::{AffineSpscQueue, AffineSpscReceiver, AffineSpscSender, ClaimCell};
-use atomic_waker::AtomicWaker;
+use crate::waking_spsc::Notifies;
+use crate::{AffineSpscQueue, AffineSpscReceiver, AffineSpscSender, ClaimCell, QueueNotify};
 use core::future::poll_fn;
 use core::task::Poll;
 
@@ -18,8 +18,7 @@ pub struct WakingSlotQueue<T, const DEPTH: usize> {
     slots: [ClaimCell<T>; DEPTH],
     filled: AffineSpscQueue<u8, DEPTH>,
     free: AffineSpscQueue<u8, DEPTH>,
-    consumer: AtomicWaker,
-    producer: AtomicWaker,
+    notifies: Notifies,
     installed: bool,
 }
 
@@ -47,8 +46,24 @@ impl<T, const DEPTH: usize> WakingSlotQueue<T, DEPTH> {
             slots: [const { ClaimCell::new() }; DEPTH],
             filled: const { AffineSpscQueue::new() },
             free: const { AffineSpscQueue::new() },
-            consumer: AtomicWaker::new(),
-            producer: AtomicWaker::new(),
+            notifies: Notifies::local(),
+            installed: false,
+        }
+    }
+
+    /// A queue whose ends run on different harts: `consumer` wakes the
+    /// consumer when a slot is filled, `producer` the producer when one is
+    /// freed.
+    pub const fn across_harts(
+        consumer: &'static dyn QueueNotify,
+        producer: &'static dyn QueueNotify,
+    ) -> Self {
+        let () = Self::FITS;
+        Self {
+            slots: [const { ClaimCell::new() }; DEPTH],
+            filled: const { AffineSpscQueue::new() },
+            free: const { AffineSpscQueue::new() },
+            notifies: Notifies::peers(consumer, producer),
             installed: false,
         }
     }
@@ -95,21 +110,22 @@ impl<T, const DEPTH: usize> WakingSlotQueue<T, DEPTH> {
                 let _queued = free_send.try_send(index);
             }
         }
+        let (consumer, producer) = self.notifies.ends();
         (
             SlotSender {
                 slots: &self.slots,
                 filled: filled_send,
                 free: free_receive,
                 spare: None,
-                consumer: &self.consumer,
-                producer: &self.producer,
+                consumer,
+                producer,
             },
             SlotReceiver {
                 slots: &self.slots,
                 filled: filled_receive,
                 free: free_send,
-                consumer: &self.consumer,
-                producer: &self.producer,
+                consumer,
+                producer,
             },
         )
     }
@@ -128,8 +144,8 @@ pub struct SlotSender<'a, T, const DEPTH: usize> {
     free: AffineSpscReceiver<'a, u8, DEPTH>,
     /// A free slot a refused fill left: the next fill takes it first.
     spare: Option<u8>,
-    consumer: &'a AtomicWaker,
-    producer: &'a AtomicWaker,
+    consumer: &'a dyn QueueNotify,
+    producer: &'a dyn QueueNotify,
 }
 
 impl<T, const DEPTH: usize> SlotSender<'_, T, DEPTH> {
@@ -171,14 +187,14 @@ impl<T, const DEPTH: usize> SlotSender<'_, T, DEPTH> {
         self.filled
             .try_send(index)
             .map_err(|_| SlotSendError::Lost)?;
-        self.consumer.wake();
+        self.consumer.notify();
         Ok(value)
     }
 
     /// Wait until a slot is free. Cancellation consumes nothing.
     pub async fn ready(&mut self) {
         poll_fn(|cx| {
-            self.producer.register(cx.waker());
+            self.producer.register(cx);
             if self.spare.is_none() && self.free.is_empty() {
                 Poll::Pending
             } else {
@@ -194,8 +210,8 @@ pub struct SlotReceiver<'a, T, const DEPTH: usize> {
     slots: &'a [ClaimCell<T>; DEPTH],
     filled: AffineSpscReceiver<'a, u8, DEPTH>,
     free: AffineSpscSender<'a, u8, DEPTH>,
-    consumer: &'a AtomicWaker,
-    producer: &'a AtomicWaker,
+    consumer: &'a dyn QueueNotify,
+    producer: &'a dyn QueueNotify,
 }
 
 /// Why a receive read no slot.
@@ -240,14 +256,14 @@ impl<T, const DEPTH: usize> SlotReceiver<'_, T, DEPTH> {
         self.free
             .try_send(index)
             .map_err(|_| SlotReceiveError::Lost)?;
-        self.producer.wake();
+        self.producer.notify();
         Ok(value)
     }
 
     /// Wait for a filled slot without reading it. Cancellation leaves it.
     pub async fn ready(&mut self) {
         poll_fn(|cx| {
-            self.consumer.register(cx.waker());
+            self.consumer.register(cx);
             if self.filled.is_empty() {
                 Poll::Pending
             } else {

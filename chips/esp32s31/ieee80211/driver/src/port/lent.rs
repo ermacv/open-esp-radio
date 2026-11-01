@@ -32,6 +32,19 @@ pub(super) struct NetworkCredit {
     /// The task that waits for the network's units. Their owners drop in
     /// tasks of the network's executor, never in an interrupt handler.
     network: AtomicWaker,
+    /// When the network runs on another hart: the driver's and the waiting
+    /// task's executor signals, which a return raises instead of a waker
+    /// (no waker crosses harts).
+    peers: Option<NetworkPeers>,
+}
+
+/// The executor signals a return on another hart raises.
+#[derive(Clone, Copy)]
+pub struct NetworkPeers {
+    /// The driver's task.
+    pub driver: &'static dyn oer_memory::QueueNotify,
+    /// The task that waits for every unit's return (the station's stop).
+    pub returned: &'static dyn oer_memory::QueueNotify,
 }
 
 impl NetworkCredit {
@@ -43,7 +56,15 @@ impl NetworkCredit {
             wants_room: AtomicBool::new(false),
             wants_units: AtomicBool::new(false),
             network: AtomicWaker::new(),
+            peers: None,
         }
+    }
+
+    /// The count of a network on another hart, whose returns raise `peers`.
+    pub(super) const fn across_harts(peers: NetworkPeers) -> Self {
+        let mut credit = Self::new();
+        credit.peers = Some(peers);
+        credit
     }
 
     /// Units the network holds.
@@ -63,7 +84,10 @@ impl NetworkCredit {
 
     /// Ready once the network holds no unit.
     pub(super) fn poll_returned(&self, cx: &mut Context<'_>) -> Poll<()> {
-        self.network.register(cx.waker());
+        match self.peers {
+            Some(peers) => peers.returned.register(cx),
+            None => self.network.register(cx.waker()),
+        }
         if self.held() == 0 {
             Poll::Ready(())
         } else {
@@ -116,9 +140,20 @@ impl Drop for ReturnOnDrop {
         // The driver takes the flag on its next poll, which an interrupt
         // brings: a return wakes it only when it asked, holding few units.
         self.credit.returned.store(true, Ordering::Release);
-        self.credit.network.wake();
-        if self.credit.wants_units.swap(false, Ordering::AcqRel) {
-            self.driver.wake();
+        let wants = self.credit.wants_units.swap(false, Ordering::AcqRel);
+        match self.credit.peers {
+            Some(peers) => {
+                peers.returned.notify();
+                if wants {
+                    peers.driver.notify();
+                }
+            }
+            None => {
+                self.credit.network.wake();
+                if wants {
+                    self.driver.wake();
+                }
+            }
         }
     }
 }

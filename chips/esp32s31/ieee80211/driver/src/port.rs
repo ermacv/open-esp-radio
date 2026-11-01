@@ -40,7 +40,7 @@ pub mod device;
 mod driver;
 mod keys;
 mod lent;
-pub use lent::LentReceive;
+pub use lent::{LentReceive, NetworkPeers};
 mod lifecycle;
 mod registration;
 pub use registration::{Registration, RegistrationError};
@@ -328,13 +328,21 @@ impl<const B: usize> PortSharedStorage<B> {
     }
     /// Vacant cross-context backing, placed separately from the P2-only device.
     pub const fn new() -> Self {
+        Self::with_network(lent::NetworkCredit::new())
+    }
+    /// The backing of a port whose network runs on another hart: the lent
+    /// units' returns raise `peers`.
+    pub const fn network_across_harts(peers: lent::NetworkPeers) -> Self {
+        Self::with_network(lent::NetworkCredit::across_harts(peers))
+    }
+    const fn with_network(network: lent::NetworkCredit) -> Self {
         Self {
             poisoned: oer_memory::OnceValue::new(),
             driver: PriorityWaker::new(),
             body: AtomicWaker::new(),
             key_live: [const { KeyActivity::new() }; 20],
             returned: oer_memory::ReturnBank::new(),
-            network: lent::NetworkCredit::new(),
+            network,
             settings: settings::Settings::new(),
             #[cfg(test)]
             retained_group: oer_memory::OnceValue::new(),

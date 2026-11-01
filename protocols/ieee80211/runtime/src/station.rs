@@ -94,10 +94,12 @@ mod events;
 pub use events::{RxDrop, RxMsdusRefused, ServiceEvent, StationEvents};
 mod control;
 mod network;
+mod network_link;
 pub use network::{
     CopiedMark, NetworkDrainCause, NetworkDrainFailure, NetworkRx, NetworkStop, NetworkStopLost,
     NoNetwork, RX_COPIED_DEPTH, Received, RxMsdusCopied, StopPolicy,
 };
+pub use network_link::NetworkLink;
 mod reconnect;
 use commands::CommandCredits;
 pub use commands::{CommandRefused, CommandTerminal, Request};

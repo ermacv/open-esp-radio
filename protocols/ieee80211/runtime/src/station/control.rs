@@ -36,7 +36,8 @@ pub struct Status {
 pub struct State {
     status: Cell<Status>,
     tasks: ConnectedTaskControlResources<()>,
-    link_waker: PriorityWaker,
+    /// The link the network device reads, possibly on another hart.
+    network: super::NetworkLink,
     policy: Cell<super::reconnect::Policy>,
     policy_waker: PriorityWaker,
     operations: operation::Operations,
@@ -46,6 +47,10 @@ pub struct State {
 
 impl State {
     pub const fn new() -> Self {
+        Self::with_network(super::NetworkLink::new())
+    }
+
+    const fn with_network(network: super::NetworkLink) -> Self {
         Self {
             status: Cell::new(Status {
                 link: LinkSnapshot::DOWN,
@@ -53,7 +58,7 @@ impl State {
                 stopped: false,
             }),
             tasks: ConnectedTaskControlResources::new(),
-            link_waker: PriorityWaker::new(),
+            network,
             policy: Cell::new(super::reconnect::Policy::new(
                 super::ReconnectPolicy::DISABLED,
             )),
@@ -61,6 +66,23 @@ impl State {
             operations: operation::Operations::new(),
             stop_deadline: Cell::new(None),
         }
+    }
+
+    /// A state whose network device runs on another hart: `link` raises
+    /// that device's executor signal when the link changes.
+    pub const fn across_harts(link: &'static dyn oer_memory::QueueNotify) -> Self {
+        Self::with_network(super::NetworkLink::across_harts(link))
+    }
+
+    /// The link the network device reads.
+    pub fn network_link(&self) -> &super::NetworkLink {
+        &self.network
+    }
+
+    /// Set the status, publishing its link to the network device.
+    fn set_status(&self, status: Status) {
+        self.status.set(status);
+        self.network.publish(status.link);
     }
     /// The service retired or its runner was lost.
     fn ended(&self) -> bool {
@@ -76,7 +98,7 @@ impl State {
         // A new epoch's requests never wait for an ended epoch's terminals;
         // an operation of the ended epoch reads its retired result.
         self.operations.begin_epoch();
-        self.status.set(Status {
+        self.set_status(Status {
             link: LinkSnapshot::DOWN,
             notice: None,
             stopped: false,
@@ -98,7 +120,7 @@ impl State {
     pub(super) fn epoch(&self, epoch: u64) {
         let mut status = self.status.get();
         status.link.epoch = epoch;
-        self.status.set(status);
+        self.set_status(status);
     }
 }
 impl Default for State {
@@ -253,8 +275,7 @@ impl<'c> RunnerControl<'c> {
         let mut status = self.state.status.get();
         status.stopped = true;
         status.link.state = LinkState::Down;
-        self.state.status.set(status);
-        self.state.link_waker.wake();
+        self.state.set_status(status);
         self.state.operations.service_ended();
         if let Some(endpoint) = self.endpoint.take() {
             // A duplicate completion refuses its unit owner and poisons reuse;
@@ -454,8 +475,7 @@ impl<K, O: ServiceOutputSink<K>> ServiceOutputSink<K> for Events<'_, O> {
                 Notice::Connected { .. } => LinkState::Up,
                 Notice::Disconnected(_) => LinkState::Down,
             };
-            self.state.status.set(status);
-            self.state.link_waker.wake();
+            self.state.set_status(status);
         }
         let mut policy = self.state.policy.get();
         policy.observe(&output, self.state.status.get().link.state == LinkState::Up);
@@ -472,7 +492,7 @@ pub struct Device<'c, L, const TX: usize, const RX: usize> {
     transmit: SlotSender<'c, TxMsdu, TX>,
     receive: WakingSpscReceiver<'c, Received<L>, RX>,
     copied: WakingSpscReceiver<'c, EthernetFrame, RX_COPIED_DEPTH>,
-    state: &'c State,
+    link: &'c super::NetworkLink,
     observed: LinkSnapshot,
 }
 impl<'c, L, const TX: usize, const RX: usize> Device<'c, L, TX, RX> {
@@ -480,13 +500,13 @@ impl<'c, L, const TX: usize, const RX: usize> Device<'c, L, TX, RX> {
         transmit: SlotSender<'c, TxMsdu, TX>,
         receive: WakingSpscReceiver<'c, Received<L>, RX>,
         copied: WakingSpscReceiver<'c, EthernetFrame, RX_COPIED_DEPTH>,
-        state: &'c State,
+        link: &'c super::NetworkLink,
     ) -> Self {
         Self {
             transmit,
             receive,
             copied,
-            state,
+            link,
             observed: LinkSnapshot::DOWN,
         }
     }
@@ -496,10 +516,10 @@ impl<L: oer_ieee80211_contracts_port::LentRxBuffer, const TX: usize, const RX: u
 {
     type RxFrame = Received<L>;
     fn link(&self) -> LinkSnapshot {
-        self.state.status.get().link
+        self.link.snapshot()
     }
     fn poll_link(&mut self, cx: &mut Context<'_>) -> Poll<LinkSnapshot> {
-        self.state.link_waker.register(cx.waker());
+        self.link.register(cx);
         let link = self.link();
         if link == self.observed {
             Poll::Pending
@@ -531,7 +551,7 @@ impl<L: oer_ieee80211_contracts_port::LentRxBuffer, const TX: usize, const RX: u
         oer_network_port::EthernetFrame::view(&copy).map(read)
     }
     fn poll_transmit_ready(&mut self, cx: &mut Context<'_>) -> Poll<()> {
-        self.state.link_waker.register(cx.waker());
+        self.link.register(cx);
         if self.link().state == LinkState::Down {
             return Poll::Pending;
         }

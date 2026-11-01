@@ -38,7 +38,7 @@ fn neutral_tx_refusal_returns_the_original_owner_and_consumes_no_queue_credit() 
     let (_, receive) = rx.split();
     let mut copies = WakingSpscQueue::<EthernetFrame, RX_COPIED_DEPTH>::new();
     let (_, copied) = copies.split();
-    let mut device = Device::new(sender, receive, copied, &state);
+    let mut device = Device::new(sender, receive, copied, state.network_link());
     let dropped = Rc::new(Cell::new(0));
     let first = Frame {
         owner: dropped.clone(),
@@ -54,7 +54,7 @@ fn neutral_tx_refusal_returns_the_original_owner_and_consumes_no_queue_credit() 
         state: LinkState::Up,
         epoch: 31,
     };
-    state.status.set(status);
+    state.set_status(status);
     assert!(device.try_transmit(first.frame).is_ok());
     assert_eq!(dropped.get(), 1);
     let second = Frame {
@@ -128,7 +128,7 @@ fn network_link_wakes_on_events_and_keeps_the_cores_epoch() {
     let (received, receive) = rx.split();
     let mut copies = WakingSpscQueue::<EthernetFrame, RX_COPIED_DEPTH>::new();
     let (copy, copied) = copies.split();
-    let mut device = Device::new(sender, receive, copied, &state);
+    let mut device = Device::new(sender, receive, copied, state.network_link());
     let wake = Arc::new(WakeCount(AtomicUsize::new(0)));
     let waker = core::task::Waker::from(wake.clone());
     let mut cx = Context::from_waker(&waker);
@@ -228,13 +228,13 @@ fn a_network_frame_requests_the_priority_of_its_marking() {
     let (_, receive) = rx.split();
     let mut copies = WakingSpscQueue::<EthernetFrame, RX_COPIED_DEPTH>::new();
     let (_, copied) = copies.split();
-    let mut device = Device::new(sender, receive, copied, &state);
+    let mut device = Device::new(sender, receive, copied, state.network_link());
     let mut status = state.status.get();
     status.link = LinkSnapshot {
         state: LinkState::Up,
         epoch: 1,
     };
-    state.status.set(status);
+    state.set_status(status);
     // An IPv4 header of DSCP 46 (EF) and total length 20.
     let mut ef = std::vec![0_u8; 20];
     ef[0] = 0x45;

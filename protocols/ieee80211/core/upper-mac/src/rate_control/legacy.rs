@@ -67,9 +67,10 @@ impl NegotiatedLegacyRates {
             .iter()
             .position(|(_, rate)| rate.kbps() == kbps)
             .and_then(|index| self.constrained.get(index).copied())
-            .map_or_else(|| constrain_in(self.set, self.first, proposed), |chosen| {
-                chosen.unwrap_or(proposed)
-            })
+            .map_or_else(
+                || constrain_in(self.set, self.first, proposed),
+                |chosen| chosen.unwrap_or(proposed),
+            )
     }
 }
 

@@ -14,6 +14,7 @@
 mod credentials;
 pub mod failure;
 pub mod observation;
+use core::sync::atomic::{AtomicBool, Ordering};
 use core::task::{Context, Poll};
 pub use credentials::{
     Callbacks, CredentialsError, NonceExhausted, NonceSource, OpenCallbacks, PreparedCredentials,
@@ -284,48 +285,82 @@ impl Drop for StartGuard<'_> {
         }
     }
 }
-/// The station's stop request to the network side and its answer, both on
-/// the station's executor.
+/// One side's wait: a local waker, or the composition's signal of that
+/// side's executor when it runs on another hart (no waker crosses harts).
+struct Notify {
+    local: oer_sync::PriorityWaker,
+    peer: Option<&'static dyn oer_memory::QueueNotify>,
+}
+impl Notify {
+    const fn local() -> Self {
+        Self {
+            local: oer_sync::PriorityWaker::new(),
+            peer: None,
+        }
+    }
+    const fn peer(peer: &'static dyn oer_memory::QueueNotify) -> Self {
+        Self {
+            local: oer_sync::PriorityWaker::new(),
+            peer: Some(peer),
+        }
+    }
+    fn register(&self, cx: &mut Context<'_>) {
+        match self.peer {
+            Some(peer) => peer.register(cx),
+            None => self.local.register(cx.waker()),
+        }
+    }
+    fn wake(&self) {
+        match self.peer {
+            Some(peer) => peer.notify(),
+            None => self.local.wake(),
+        }
+    }
+}
+/// The station's stop request to the network side and its answer. The two
+/// sides may run on different harts: the flags are atomic.
 struct NetworkStopState {
-    requested: core::cell::Cell<bool>,
-    stopped: core::cell::Cell<bool>,
-    lost: core::cell::Cell<bool>,
+    requested: AtomicBool,
+    stopped: AtomicBool,
+    lost: AtomicBool,
     /// The composition has no network: the station delivers no frame.
-    absent: core::cell::Cell<bool>,
-    network: oer_sync::PriorityWaker,
-    station: oer_sync::PriorityWaker,
+    absent: AtomicBool,
+    network: Notify,
+    station: Notify,
 }
 impl NetworkStopState {
     const fn new() -> Self {
+        Self::with(Notify::local(), Notify::local())
+    }
+    const fn with(network: Notify, station: Notify) -> Self {
         Self {
-            requested: core::cell::Cell::new(false),
-            stopped: core::cell::Cell::new(false),
-            lost: core::cell::Cell::new(false),
-            absent: core::cell::Cell::new(false),
-            network: oer_sync::PriorityWaker::new(),
-            station: oer_sync::PriorityWaker::new(),
+            requested: AtomicBool::new(false),
+            stopped: AtomicBool::new(false),
+            lost: AtomicBool::new(false),
+            absent: AtomicBool::new(false),
+            network,
+            station,
         }
     }
     fn reset(&self) {
-        self.requested.set(false);
-        self.stopped.set(false);
-        self.lost.set(false);
-        self.absent.set(false);
+        for flag in [&self.requested, &self.stopped, &self.lost, &self.absent] {
+            flag.store(false, Ordering::Release);
+        }
     }
 }
 impl runtime::NetworkStop for NetworkStopState {
     fn takes_frames(&self) -> bool {
-        !self.absent.get()
+        !self.absent.load(Ordering::Acquire)
     }
     fn request_stop(&self) {
-        self.requested.set(true);
+        self.requested.store(true, Ordering::Release);
         self.network.wake();
     }
     fn poll_stopped(&self, cx: &mut Context<'_>) -> Poll<Result<(), runtime::NetworkStopLost>> {
-        self.station.register(cx.waker());
-        if self.stopped.get() {
+        self.station.register(cx);
+        if self.stopped.load(Ordering::Acquire) {
             Poll::Ready(Ok(()))
-        } else if self.lost.get() {
+        } else if self.lost.load(Ordering::Acquire) {
             Poll::Ready(Err(runtime::NetworkStopLost))
         } else {
             Poll::Pending
@@ -342,8 +377,8 @@ impl NetworkStopper<'_> {
     /// Ready once the station asked the network to stop.
     pub async fn requested(&self) {
         core::future::poll_fn(|cx| {
-            self.state.network.register(cx.waker());
-            if self.state.requested.get() {
+            self.state.network.register(cx);
+            if self.state.requested.load(Ordering::Acquire) {
                 Poll::Ready(())
             } else {
                 Poll::Pending
@@ -361,19 +396,19 @@ impl NetworkStopper<'_> {
     /// buffer goes back at once), and its stop needs no answer.
     pub fn no_network(self, network: Network<'_>) {
         drop(network);
-        self.state.absent.set(true);
+        self.state.absent.store(true, Ordering::Release);
         self.report(|state| &state.stopped);
     }
-    fn report(self, flag: impl FnOnce(&NetworkStopState) -> &core::cell::Cell<bool>) {
+    fn report(self, flag: impl FnOnce(&NetworkStopState) -> &AtomicBool) {
         let state = self.state;
         core::mem::forget(self);
-        flag(state).set(true);
+        flag(state).store(true, Ordering::Release);
         state.station.wake();
     }
 }
 impl Drop for NetworkStopper<'_> {
     fn drop(&mut self) {
-        self.state.lost.set(true);
+        self.state.lost.store(true, Ordering::Release);
         self.state.station.wake();
     }
 }
@@ -400,6 +435,26 @@ impl Channels {
             state: runtime::State::new(),
         }
     }
+
+    /// Channels whose network end ([`Network`], [`NetworkStopper`]) runs
+    /// on another hart than the station: `network` raises the network
+    /// task's executor signal, `station` the station task's. Each wakes
+    /// the one task that polls that end.
+    pub const fn across_harts(
+        network: &'static dyn oer_memory::QueueNotify,
+        station: &'static dyn oer_memory::QueueNotify,
+    ) -> Self {
+        Self {
+            network_stop: NetworkStopState::with(Notify::peer(network), Notify::peer(station)),
+            start: StartState::new(),
+            stop: StopState::new(),
+            commands: WakingSpscQueue::new(),
+            tx: oer_memory::WakingSlotQueue::across_harts(station, network),
+            rx: WakingSpscQueue::across_harts(network, station),
+            rx_copied: WakingSpscQueue::across_harts(network, station),
+            state: runtime::State::across_harts(network),
+        }
+    }
     pub fn split(
         &mut self,
     ) -> Result<
@@ -412,7 +467,7 @@ impl Channels {
         let (receive, rx) = self.rx.split();
         let (receive_copied, rx_copied) = self.rx_copied.split();
         let (control, runner) = runtime::Control::new(send, &self.state).map_err(|r| r.reason)?;
-        let network = runtime::Device::new(tx, rx, rx_copied, &self.state);
+        let network = runtime::Device::new(tx, rx, rx_copied, self.state.network_link());
         Ok((
             Control {
                 inner: control,

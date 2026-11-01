@@ -332,7 +332,10 @@ async fn install<W: Binding>(
                     device,
                     storage
                         .shared
-                        .try_init_with(PortSharedStorage::new)
+                        .try_init_with(|| match W::NETWORK_PEERS {
+                            Some(peers) => PortSharedStorage::network_across_harts(peers),
+                            None => PortSharedStorage::new(),
+                        })
                         .unwrap_or_else(|| W::fail(InitializationError::Storage)),
                 )
             })

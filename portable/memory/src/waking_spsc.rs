@@ -10,12 +10,69 @@ use core::future::{Future, poll_fn};
 use core::pin::Pin;
 use core::task::{Context, Poll};
 
+/// How one end of a queue waits for its peer and how the peer tells it.
+///
+/// An end on the same hart as its peer uses an [`AtomicWaker`], the
+/// default. An end whose peer runs on another hart must not be woken by a
+/// waker (no waker crosses harts): the composition gives the queue a notify
+/// that raises the waiting end's executor signal instead.
+pub trait QueueNotify: Sync {
+    /// Make the polling task the one [`Self::notify`] wakes. The caller then
+    /// checks the queue, so a notify before this registration is found.
+    fn register(&self, cx: &mut Context<'_>);
+    /// Tell the registered end that the queue changed, after publishing.
+    fn notify(&self);
+}
+
+impl QueueNotify for AtomicWaker {
+    fn register(&self, cx: &mut Context<'_>) {
+        AtomicWaker::register(self, cx.waker());
+    }
+    fn notify(&self) {
+        self.wake();
+    }
+}
+
+/// The local wakers, or the composition's notifies for an end whose peer
+/// runs on another hart.
+pub(crate) struct Notifies {
+    consumer: AtomicWaker,
+    producer: AtomicWaker,
+    peers: Option<(&'static dyn QueueNotify, &'static dyn QueueNotify)>,
+}
+
+impl Notifies {
+    pub(crate) const fn local() -> Self {
+        Self {
+            consumer: AtomicWaker::new(),
+            producer: AtomicWaker::new(),
+            peers: None,
+        }
+    }
+    pub(crate) const fn peers(
+        consumer: &'static dyn QueueNotify,
+        producer: &'static dyn QueueNotify,
+    ) -> Self {
+        Self {
+            consumer: AtomicWaker::new(),
+            producer: AtomicWaker::new(),
+            peers: Some((consumer, producer)),
+        }
+    }
+    /// The consumer's and the producer's notify.
+    pub(crate) fn ends(&self) -> (&dyn QueueNotify, &dyn QueueNotify) {
+        match self.peers {
+            Some((consumer, producer)) => (consumer, producer),
+            None => (&self.consumer, &self.producer),
+        }
+    }
+}
+
 /// Queue storage and atomic wake state. The composition splits it once and
 /// moves the two non-cloneable endpoints to their tasks.
 pub struct WakingSpscQueue<T, const DEPTH: usize> {
     queue: AffineSpscQueue<T, DEPTH>,
-    consumer: AtomicWaker,
-    producer: AtomicWaker,
+    notifies: Notifies,
 }
 
 type Endpoints<'a, T, const DEPTH: usize> = (
@@ -27,8 +84,20 @@ impl<T, const DEPTH: usize> WakingSpscQueue<T, DEPTH> {
     pub const fn new() -> Self {
         Self {
             queue: const { AffineSpscQueue::new() },
-            consumer: AtomicWaker::new(),
-            producer: AtomicWaker::new(),
+            notifies: Notifies::local(),
+        }
+    }
+
+    /// A queue whose ends run on different harts: `consumer` wakes the
+    /// consumer when a value is published, `producer` the producer when a
+    /// cell is freed.
+    pub const fn across_harts(
+        consumer: &'static dyn QueueNotify,
+        producer: &'static dyn QueueNotify,
+    ) -> Self {
+        Self {
+            queue: const { AffineSpscQueue::new() },
+            notifies: Notifies::peers(consumer, producer),
         }
     }
 
@@ -36,16 +105,17 @@ impl<T, const DEPTH: usize> WakingSpscQueue<T, DEPTH> {
     /// A later pair receives any values left in the queue by its predecessor.
     pub fn split(&mut self) -> Endpoints<'_, T, DEPTH> {
         let (sender, receiver) = self.queue.split();
+        let (consumer, producer) = self.notifies.ends();
         (
             WakingSpscSender {
                 sender,
-                consumer: &self.consumer,
-                producer: &self.producer,
+                consumer,
+                producer,
             },
             WakingSpscReceiver {
                 receiver,
-                consumer: &self.consumer,
-                producer: &self.producer,
+                consumer,
+                producer,
             },
         )
     }
@@ -59,8 +129,8 @@ impl<T, const DEPTH: usize> Default for WakingSpscQueue<T, DEPTH> {
 
 pub struct WakingSpscSender<'a, T, const DEPTH: usize> {
     sender: AffineSpscSender<'a, T, DEPTH>,
-    consumer: &'a AtomicWaker,
-    producer: &'a AtomicWaker,
+    consumer: &'a dyn QueueNotify,
+    producer: &'a dyn QueueNotify,
 }
 
 impl<T, const DEPTH: usize> WakingSpscSender<'_, T, DEPTH> {
@@ -73,7 +143,7 @@ impl<T, const DEPTH: usize> WakingSpscSender<'_, T, DEPTH> {
     /// A full queue returns the original value and all its ownership.
     pub fn try_send(&self, value: T) -> Result<(), AffineSpscTrySendError<T>> {
         self.sender.try_send(value)?;
-        self.consumer.wake();
+        self.consumer.notify();
         Ok(())
     }
 
@@ -137,22 +207,22 @@ impl<T, const DEPTH: usize> WakingSpscSender<'_, T, DEPTH> {
 #[must_use = "send a value or drop the permit to release the sender borrow"]
 pub struct WakingSpscSendPermit<'sender, T, const DEPTH: usize> {
     permit: AffineSpscSendPermit<'sender, T, DEPTH>,
-    consumer: &'sender AtomicWaker,
+    consumer: &'sender dyn QueueNotify,
 }
 
 impl<T, const DEPTH: usize> WakingSpscSendPermit<'_, T, DEPTH> {
     /// Publish once and wake the consumer. The reserved cell cannot be full.
     pub fn send(self, value: T) {
         self.permit.send(value);
-        self.consumer.wake();
+        self.consumer.notify();
     }
 }
 
 struct SendReady<'sender, 'queue, T, const DEPTH: usize> {
     // None only after returning the permit; repolling a completed wait parks.
     sender: Option<&'sender mut AffineSpscSender<'queue, T, DEPTH>>,
-    consumer: &'sender AtomicWaker,
-    producer: &'sender AtomicWaker,
+    consumer: &'sender dyn QueueNotify,
+    producer: &'sender dyn QueueNotify,
 }
 
 impl<'sender, T, const DEPTH: usize> Future for SendReady<'sender, '_, T, DEPTH> {
@@ -165,7 +235,7 @@ impl<'sender, T, const DEPTH: usize> Future for SendReady<'sender, '_, T, DEPTH>
         };
         // Reclamation before registration is seen by the Acquire load in
         // try_reserve; reclamation after it wakes this sole registration.
-        this.producer.register(cx.waker());
+        this.producer.register(cx);
         match sender.try_reserve() {
             Ok(permit) => Poll::Ready(WakingSpscSendPermit {
                 permit,
@@ -181,8 +251,8 @@ impl<'sender, T, const DEPTH: usize> Future for SendReady<'sender, '_, T, DEPTH>
 
 pub struct WakingSpscReceiver<'a, T, const DEPTH: usize> {
     receiver: AffineSpscReceiver<'a, T, DEPTH>,
-    consumer: &'a AtomicWaker,
-    producer: &'a AtomicWaker,
+    consumer: &'a dyn QueueNotify,
+    producer: &'a dyn QueueNotify,
 }
 
 impl<T, const DEPTH: usize> WakingSpscReceiver<'_, T, DEPTH> {
@@ -198,7 +268,7 @@ impl<T, const DEPTH: usize> WakingSpscReceiver<'_, T, DEPTH> {
     #[must_use]
     pub fn try_receive(&self) -> Option<T> {
         let value = self.receiver.try_receive().ok()?;
-        self.producer.wake();
+        self.producer.notify();
         Some(value)
     }
 
@@ -229,7 +299,7 @@ impl<T, const DEPTH: usize> WakingSpscReceiver<'_, T, DEPTH> {
         // Register before testing the queue: a publication before registration
         // is found by the load; a later one wakes this registration.
         poll_fn(|cx| {
-            self.consumer.register(cx.waker());
+            self.consumer.register(cx);
             if self.receiver.is_empty() {
                 Poll::Pending
             } else {

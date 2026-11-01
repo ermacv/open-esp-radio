@@ -41,6 +41,10 @@ pub trait Binding: Sized + 'static {
             Operation: Unpin,
         > + 'static;
     type Events: Events + 'static;
+    /// The executor signals a network on another hart raises when it
+    /// returns a lent receive buffer; `None` while the network runs on the
+    /// station's hart.
+    const NETWORK_PEERS: Option<oer_esp32s31_ieee80211_driver::port::NetworkPeers> = None;
     fn take_slot() -> Option<&'static mut radio::Slot<Self>>;
     /// Image-owned terminal policy, called with a handled construction error.
     fn fail(error: InitializationError) -> !;
