@@ -38,7 +38,7 @@ fn neutral_tx_refusal_returns_the_original_owner_and_consumes_no_queue_credit() 
     let (_, receive) = rx.split();
     let mut copies = WakingSpscQueue::<EthernetFrame, RX_COPIED_DEPTH>::new();
     let (_, copied) = copies.split();
-    let mut device = Device::new(sender, receive, copied, state.network_link());
+    let mut device = Device::new(sender, receive, copied, &state);
     let dropped = Rc::new(Cell::new(0));
     let first = Frame {
         owner: dropped.clone(),
@@ -128,7 +128,7 @@ fn network_link_wakes_on_events_and_keeps_the_cores_epoch() {
     let (received, receive) = rx.split();
     let mut copies = WakingSpscQueue::<EthernetFrame, RX_COPIED_DEPTH>::new();
     let (copy, copied) = copies.split();
-    let mut device = Device::new(sender, receive, copied, state.network_link());
+    let mut device = Device::new(sender, receive, copied, &state);
     let wake = Arc::new(WakeCount(AtomicUsize::new(0)));
     let waker = core::task::Waker::from(wake.clone());
     let mut cx = Context::from_waker(&waker);
@@ -228,7 +228,7 @@ fn a_network_frame_requests_the_priority_of_its_marking() {
     let (_, receive) = rx.split();
     let mut copies = WakingSpscQueue::<EthernetFrame, RX_COPIED_DEPTH>::new();
     let (_, copied) = copies.split();
-    let mut device = Device::new(sender, receive, copied, state.network_link());
+    let mut device = Device::new(sender, receive, copied, &state);
     let mut status = state.status.get();
     status.link = LinkSnapshot {
         state: LinkState::Up,
@@ -500,4 +500,80 @@ fn the_reconnect_policy_and_an_operation_share_one_admission() {
         runner.policy_command::<()>(now),
         Ok(Some(ServiceCommand::Station(request))) if request.command() == Command::Disconnect
     ));
+}
+
+/// A notify of one side's task, counting its registrations and raises.
+#[derive(Clone, Copy)]
+struct Side(
+    &'static (
+        std::sync::atomic::AtomicUsize,
+        std::sync::atomic::AtomicUsize,
+    ),
+);
+impl Side {
+    fn new() -> Self {
+        Self(std::boxed::Box::leak(std::boxed::Box::default()))
+    }
+    fn counts(self) -> (usize, usize) {
+        use std::sync::atomic::Ordering::Relaxed;
+        (self.0.0.load(Relaxed), self.0.1.load(Relaxed))
+    }
+}
+impl QueueNotify for Side {
+    fn register(&self, _: &mut Context<'_>) {
+        self.0.0.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    }
+    fn notify(&self) {
+        self.0.1.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
+#[test]
+fn a_network_end_across_harts_waits_on_its_side_and_tells_the_station_s() {
+    type Two = AcrossHarts<Side, Side>;
+    let (network, station) = (Side::new(), Side::new());
+    let mut commands = WakingSpscQueue::<ServiceCommand<()>, 1>::new();
+    let mut tx =
+        oer_memory::WakingSlotQueue::<TxMsdu, 1, Side, Side>::across_harts(station, network);
+    let mut rx =
+        WakingSpscQueue::<Received<ModelLentRx>, 1, Side, Side>::across_harts(network, station);
+    let mut copies = WakingSpscQueue::<EthernetFrame, RX_COPIED_DEPTH, Side, Side>::across_harts(
+        network, station,
+    );
+    let state = State::<Two>::across_harts(network);
+    let (sender, _) = commands.split();
+    let (_control, _runner) = Control::new(sender, &state).unwrap();
+    assert_eq!(
+        network.counts(),
+        (0, 1),
+        "the new epoch's link tells the network"
+    );
+    let (sender, mut transmitted) = tx.split(TxMsdu::empty);
+    let (_, receive) = rx.split();
+    let (_, copied) = copies.split();
+    let mut device: Device<'_, ModelLentRx, 1, 1, Two> =
+        Device::new(sender, receive, copied, &state);
+    let mut cx = Context::from_waker(core::task::Waker::noop());
+
+    // The network waits on its own side for the link and for frames.
+    assert!(device.poll_link(&mut cx).is_pending());
+    assert!(device.poll_receive_ready(&mut cx).is_pending());
+    assert_eq!(network.counts(), (2, 1));
+    let mut status = state.status.get();
+    status.link = LinkSnapshot {
+        state: LinkState::Up,
+        epoch: 3,
+    };
+    state.set_status(status);
+    assert_eq!(network.counts(), (2, 2), "a link change tells the network");
+
+    // A transmitted frame tells the station; its read tells the network.
+    let frame = Frame {
+        owner: Rc::new(Cell::new(0)),
+        payload: [1; 4],
+    };
+    assert!(device.try_transmit(frame).is_ok());
+    assert_eq!(station.counts(), (0, 1));
+    assert!(transmitted.try_receive_with(|_| ()).is_ok());
+    assert_eq!(network.counts(), (2, 3));
 }

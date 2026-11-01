@@ -8,35 +8,32 @@ use oer_memory::QueueNotify;
 use oer_network_port::{LinkSnapshot, LinkState};
 use oer_sync::PriorityWaker;
 
-/// One word: the link's epoch in bits 1 to 31 and its level in bit 0.
+/// One word: the link's epoch in bits 1 to 31 and its level in bit 0, and
+/// `N`, how a publication tells the network device: a local waker, or the
+/// device's executor signal when it runs on another hart.
 ///
 /// The network side compares epochs for equality and change only, so the
 /// word keeps the epoch's low 31 bits: an epoch repeats after 2^31
 /// associations.
-pub struct NetworkLink {
+pub struct NetworkLink<N = PriorityWaker> {
     word: AtomicU32,
-    local: PriorityWaker,
-    /// The network device's executor signal, when it runs on another hart.
-    peer: Option<&'static dyn QueueNotify>,
+    notify: N,
 }
 
 impl NetworkLink {
     /// A link whose network device runs on the station's hart.
     pub const fn new() -> Self {
-        Self {
-            word: AtomicU32::new(0),
-            local: PriorityWaker::new(),
-            peer: None,
-        }
+        Self::across_harts(PriorityWaker::new())
     }
+}
 
-    /// A link whose network device runs on another hart: `notify` raises
-    /// that device's executor signal.
-    pub const fn across_harts(notify: &'static dyn QueueNotify) -> Self {
+impl<N: QueueNotify> NetworkLink<N> {
+    /// A link whose publications tell the network device through `notify`:
+    /// for a device on another hart, its executor signal.
+    pub const fn across_harts(notify: N) -> Self {
         Self {
             word: AtomicU32::new(0),
-            local: PriorityWaker::new(),
-            peer: Some(notify),
+            notify,
         }
     }
 
@@ -49,10 +46,7 @@ impl NetworkLink {
     /// Publish `link` and tell the network device.
     pub(super) fn publish(&self, link: LinkSnapshot) {
         self.word.store(Self::encode(link), Ordering::Release);
-        match self.peer {
-            Some(peer) => peer.notify(),
-            None => self.local.wake(),
-        }
+        self.notify.notify();
     }
 
     /// The published link, in the network side's epoch domain.
@@ -71,10 +65,7 @@ impl NetworkLink {
     /// Make the polling task the one a publication wakes; the caller then
     /// reads the snapshot.
     pub fn register(&self, cx: &mut Context<'_>) {
-        match self.peer {
-            Some(peer) => peer.register(cx),
-            None => self.local.register(cx.waker()),
-        }
+        self.notify.register(cx);
     }
 }
 

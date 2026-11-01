@@ -19,6 +19,13 @@ callback, port identity or installation loan is required by the image.
 
 The image declares `bind_station!` with its interrupt entries, station
 callbacks, collectors, the composed engine type and handled-error terminal policy.
+The binding names where the station's network end runs (`Binding::Notifies`):
+`SameHart`, local wakers throughout, or, with the macro's `across_harts`
+arm, `AcrossHarts<N, S, D>`, whose three notify types raise the network
+task's, the station task's and the radio driver's executor signals. Every
+queue end, the link, the network stop and the lent receive buffers' returns
+name their notify types, so a wake across harts is a direct call and no
+waker crosses harts.
 `Resources` consumes the unique hardware partition, binding proof, doorbell,
 the facade's affine `DmaResources` claim, signals, declared storage and the
 value-owned key-unwrap engine supplied by `compose::crypto::key_unwrap`.

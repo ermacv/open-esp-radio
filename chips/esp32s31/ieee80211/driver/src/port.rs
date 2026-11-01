@@ -40,7 +40,7 @@ pub mod device;
 mod driver;
 mod keys;
 mod lent;
-pub use lent::{LentReceive, NetworkPeers};
+pub use lent::{LentNotifies, LentReceive, NetworkPeers, SameHart};
 mod lifecycle;
 mod registration;
 pub use registration::{Registration, RegistrationError};
@@ -144,6 +144,10 @@ pub trait Device<const B: usize>: Sized + 'static {
     type Timer: Timer + Clone + 'static;
     type Hardware: LowerMacHardware;
     type Receive: ReceiveUnit + Send;
+    /// How a lent receive unit's return tells the driver and the task
+    /// waiting for every return: [`SameHart`], or the peers' signals of a
+    /// network on another hart ([`NetworkPeers`]).
+    type Lent: LentNotifies;
     type Body: TxBody + 'static;
     /// The receive units the network may hold at once. The device's other
     /// units stay with the radio, for its receive events and their
@@ -241,9 +245,9 @@ impl<const B: usize> Ieee80211Capabilities for Esp32s31Caps<B> {
 
 /// P2-only backing borrowing the retained device and cross-context storage.
 /// Only the P2 registration can reach its device `RefCell`.
-pub struct PortStorage<D: 'static, const B: usize> {
+pub struct PortStorage<D: Device<B>, const B: usize> {
     device: RefCell<&'static mut D>,
-    shared: &'static mut PortSharedStorage<B>,
+    shared: &'static mut PortSharedStorage<B, D::Lent>,
     identity: Cell<u64>,
     expired: Cell<u32>,
     /// The station and AP tables the driver last installed in its policy.
@@ -254,7 +258,7 @@ pub struct PortStorage<D: 'static, const B: usize> {
 /// Caller-placed cross-context state, with no device, Cell, RefCell or shared
 /// producer. Place once before constructing `PortStorage`; quarantine keeps
 /// its DMA return places and key activity unavailable for reuse.
-pub struct PortSharedStorage<const B: usize> {
+pub struct PortSharedStorage<const B: usize, P: LentNotifies = SameHart> {
     poisoned: oer_memory::OnceValue<Fault>,
     // P2 can preempt a P1 notification. The P1 body consumer cannot
     // preempt its P2 producer, so its AtomicWaker needs no second slot.
@@ -263,7 +267,7 @@ pub struct PortSharedStorage<const B: usize> {
     key_live: [KeyActivity; 20],
     returned: oer_memory::ReturnBank<TxSlotFree<'static, B>, TX_TICKETS>,
     /// The receive units lent to the network.
-    network: lent::NetworkCredit,
+    network: lent::NetworkCredit<P>,
     /// The received units queued for P1 and not yet taken.
     received: settings::ReceivedInFlight,
     settings: settings::Settings,
@@ -310,7 +314,10 @@ impl<D: Device<B>, const B: usize> PortStorage<D, B> {
 impl<D: Device<B>, const B: usize> PortStorage<D, B> {
     // Keep storage construction outside the install future's poll frame.
     #[inline(never)]
-    pub const fn new(device: &'static mut D, shared: &'static mut PortSharedStorage<B>) -> Self {
+    pub const fn new(
+        device: &'static mut D,
+        shared: &'static mut PortSharedStorage<B, D::Lent>,
+    ) -> Self {
         Self {
             device: RefCell::new(device),
             shared,
@@ -334,22 +341,22 @@ impl<D: Device<B>, const B: usize> PortStorage<D, B> {
     }
 }
 impl<const B: usize> PortSharedStorage<B> {
+    /// Vacant cross-context backing, placed separately from the P2-only device.
+    pub const fn new() -> Self {
+        Self::with_network(lent::SameHart::new())
+    }
+}
+impl<const B: usize, P: LentNotifies> PortSharedStorage<B, P> {
     // Keep the waker's typed scope at the indirect call, independently of
     // the large terminal dispatchers that notify the P1 body.
     #[inline(never)]
     fn wake_body(&self) {
         self.body.wake();
     }
-    /// Vacant cross-context backing, placed separately from the P2-only device.
-    pub const fn new() -> Self {
-        Self::with_network(lent::NetworkCredit::new())
-    }
-    /// The backing of a port whose network runs on another hart: the lent
-    /// units' returns raise `peers`.
-    pub const fn network_across_harts(peers: lent::NetworkPeers) -> Self {
-        Self::with_network(lent::NetworkCredit::across_harts(peers))
-    }
-    const fn with_network(network: lent::NetworkCredit) -> Self {
+    /// The backing of a port whose lent units' returns tell through
+    /// `notifies`: for a network on another hart, its peers' signals.
+    pub const fn with_network(notifies: P) -> Self {
+        let network = lent::NetworkCredit::with(notifies);
         Self {
             poisoned: oer_memory::OnceValue::new(),
             driver: PriorityWaker::new(),

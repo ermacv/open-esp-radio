@@ -41,10 +41,10 @@ pub trait Binding: Sized + 'static {
             Operation: Unpin,
         > + 'static;
     type Events: Events + 'static;
-    /// The executor signals a network on another hart raises when it
-    /// returns a lent receive buffer; `None` while the network runs on the
-    /// station's hart.
-    const NETWORK_PEERS: Option<crate::NetworkPeers> = None;
+    /// Where the station's network end runs: [`crate::SameHart`], or
+    /// [`crate::AcrossHarts`] with the executor signals the two harts raise
+    /// for each other's tasks and the driver.
+    type Notifies: crate::Notifies;
     fn take_slot() -> Option<&'static mut radio::Slot<Self>>;
     /// Image-owned terminal policy, called with a handled construction error.
     fn fail(error: InitializationError) -> !;
@@ -328,11 +328,11 @@ pub enum Event {
     },
     AccessPoint(runtime::contract::AccessPointCommand<Caps>),
 }
-pub(crate) struct Output<E: Events> {
+pub(crate) struct Output<E: Events, N: crate::Notifies> {
     pub events: E,
-    pub status: crate::StatusReader<'static>,
+    pub status: crate::StatusReader<'static, N>,
 }
-impl<E: Events> runtime::ServiceOutputSink<Caps> for Output<E> {
+impl<E: Events, N: crate::Notifies> runtime::ServiceOutputSink<Caps> for Output<E, N> {
     fn emit(&mut self, event: runtime::ServiceOutput<Caps>) {
         let event = match event {
             runtime::ServiceOutput::Notice(runtime::contract::Notice::Connected {
@@ -360,33 +360,30 @@ impl<E: Events> runtime::ServiceOutputSink<Caps> for Output<E> {
     }
 }
 pub struct Storage<W: Binding> {
-    pub(crate) channels: Channels,
+    pub(crate) channels: Channels<W::Notifies>,
     pub(crate) driver: radio::DriverStorage<W>,
     pub(crate) service: service::ServiceStorage<W>,
     pub(crate) bell: oer_memory::Doorbell,
     pub(crate) ready: static_cell::StaticCell<radio::ReadySlot<W>>,
     pub(crate) retire: static_cell::StaticCell<radio::RetireSlot<W>>,
 }
-impl<W: Binding> Storage<W> {
+impl<W, N, S, D> Storage<W>
+where
+    W: Binding<Notifies = crate::AcrossHarts<N, S, D>>,
+    N: oer_memory::QueueNotify + Copy + 'static,
+    S: oer_memory::QueueNotify + Copy + 'static,
+    D: oer_memory::QueueNotify + Copy + 'static,
+{
     /// The storage of a station whose network end runs on another hart
-    /// ([`Channels::across_harts`]).
-    pub const fn across_harts(
-        network: &'static dyn oer_memory::QueueNotify,
-        station: &'static dyn oer_memory::QueueNotify,
-    ) -> Self {
+    /// ([`Channels::across_harts`]): `network` raises the network task's
+    /// signal, `station` the station task's, `driver` the radio driver's.
+    pub const fn across_harts(network: N, station: S, driver: D) -> Self {
         Self {
             channels: Channels::across_harts(network, station),
-            driver: radio::DriverStorage::new(),
-            service: service::ServiceStorage::new(),
-            bell: oer_memory::Doorbell::new(),
-            ready: static_cell::StaticCell::new(),
-            retire: static_cell::StaticCell::new(),
-        }
-    }
-    pub const fn new() -> Self {
-        Self {
-            channels: Channels::new(),
-            driver: radio::DriverStorage::new(),
+            driver: radio::DriverStorage::new(oer_esp32s31_ieee80211_driver::port::NetworkPeers {
+                driver,
+                returned: station,
+            }),
             service: service::ServiceStorage::new(),
             bell: oer_memory::Doorbell::new(),
             ready: static_cell::StaticCell::new(),
@@ -394,7 +391,19 @@ impl<W: Binding> Storage<W> {
         }
     }
 }
-impl<W: Binding> Default for Storage<W> {
+impl<W: Binding<Notifies = crate::SameHart>> Storage<W> {
+    pub const fn new() -> Self {
+        Self {
+            channels: Channels::new(),
+            driver: radio::DriverStorage::new(oer_esp32s31_ieee80211_driver::port::SameHart::new()),
+            service: service::ServiceStorage::new(),
+            bell: oer_memory::Doorbell::new(),
+            ready: static_cell::StaticCell::new(),
+            retire: static_cell::StaticCell::new(),
+        }
+    }
+}
+impl<W: Binding<Notifies = crate::SameHart>> Default for Storage<W> {
     fn default() -> Self {
         Self::new()
     }
@@ -438,9 +447,13 @@ pub(crate) struct ServiceRunner<W: Binding> {
     pub(crate) engine: W::Engine,
     pub(crate) frontend: oer_memory::Poster<(), Result<radio::Front<W>, InitializationError>>,
     pub(crate) config: Config,
-    pub(crate) connection: ServiceConnection<'static>,
+    pub(crate) connection: ServiceConnection<'static, W::Notifies>,
     pub(crate) storage: &'static mut service::ServiceStorage<W>,
-    pub(crate) output: runtime::Events<'static, Output<W::Events>>,
+    pub(crate) output: runtime::Events<
+        'static,
+        Output<W::Events, W::Notifies>,
+        <W::Notifies as crate::Notifies>::Channels,
+    >,
 }
 /// Terminal result owns every typed cause, with no backend identity.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -464,9 +477,9 @@ pub fn station<W: Binding>(
     resources: Resources<W>,
     config: Config,
 ) -> (
-    Control<'static>,
-    Network<'static>,
-    crate::NetworkStopper<'static>,
+    Control<'static, W::Notifies>,
+    Network<'static, W::Notifies>,
+    crate::NetworkStopper<'static, W::Notifies>,
     Runners<W>,
 ) {
     let Resources {

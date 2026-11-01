@@ -81,6 +81,8 @@ pub use affine_spsc::{
     AffineSpscTrySendError, CachedSpscCursor, CompactSpscCursor, LocalSpscReceiver,
     LocalSpscSender, SpscCursor, UniqueQueueIndex,
 };
+/// The local notify of a queue end: the default of every queue's notifies.
+pub use atomic_waker::AtomicWaker;
 pub use claim_cell::{Claim, ClaimCell, Held, KEYS};
 pub use context_cell::{ContextCell, ContextProof};
 pub use dma_address::{DmaLayout, DmaRef, DmaWindow, DmaWindowAddress};

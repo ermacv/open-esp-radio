@@ -22,10 +22,62 @@ pub use credentials::{
 };
 use oer_ieee80211_core_roles_sta::data::TxMsdu;
 use oer_ieee80211_runtime::station as runtime;
-use oer_memory::WakingSpscQueue;
+use oer_memory::{QueueNotify as _, WakingSpscQueue};
 use oer_network_port::{EthernetFrame, LinkSnapshot, NetDevice, TransmitRefused};
 pub use runtime::StopPolicy;
-pub use runtime::{ControlError, Operation, OperationEnd};
+pub use runtime::{ControlError, OperationEnd};
+
+/// A station request's terminal ([`Control::connect`]).
+pub type Operation<'a, N = SameHart> = runtime::Operation<'a, <N as Notifies>::Channels>;
+
+/// Where the station's network end runs and how its ends tell each other,
+/// in one type the image's binding names: [`SameHart`], or
+/// [`AcrossHarts`] for a network on another hart than the station's. Every
+/// notify is a type, so every call across harts is direct.
+pub trait Notifies: 'static {
+    /// The station's network channels.
+    type Channels: runtime::Notifies;
+    /// The host build's receive buffer, which it never lends.
+    #[cfg(not(target_arch = "riscv32"))]
+    type LentRx: oer_ieee80211_contracts_port::LentRxBuffer + Send + 'static;
+    /// How a lent buffer's return tells the driver and the station's stop.
+    #[cfg(target_arch = "riscv32")]
+    type Lent: oer_esp32s31_ieee80211_driver::port::LentNotifies;
+}
+
+/// The station and its network end on one hart: local wakers throughout.
+pub struct SameHart;
+
+impl Notifies for SameHart {
+    type Channels = runtime::SameHart;
+    #[cfg(not(target_arch = "riscv32"))]
+    type LentRx = Unlent;
+    #[cfg(target_arch = "riscv32")]
+    type Lent = oer_esp32s31_ieee80211_driver::port::SameHart;
+}
+
+/// The network end on another hart: `N` raises the network task's executor
+/// signal, `S` the station task's and `D` the radio driver's. No waker
+/// crosses harts; each signal wakes the one task that polls its ends.
+pub struct AcrossHarts<N, S, D>(core::marker::PhantomData<Three<N, S, D>>);
+/// The three notify types, named without owning a value of any.
+type Three<N, S, D> = fn() -> (N, S, D);
+
+impl<N, S, D> Notifies for AcrossHarts<N, S, D>
+where
+    N: oer_memory::QueueNotify + Copy + 'static,
+    S: oer_memory::QueueNotify + Copy + 'static,
+    D: oer_memory::QueueNotify + Copy + 'static,
+{
+    type Channels = runtime::AcrossHarts<N, S>;
+    #[cfg(not(target_arch = "riscv32"))]
+    type LentRx = Unlent;
+    #[cfg(target_arch = "riscv32")]
+    type Lent = oer_esp32s31_ieee80211_driver::port::NetworkPeers<D, S>;
+}
+
+/// The channels' notify types of `N`.
+type Ch<N> = <N as Notifies>::Channels;
 
 pub const RX_DEPTH: usize = 8;
 pub const FRAME_CAPACITY: usize = 1664;
@@ -40,12 +92,12 @@ pub type Exit = chip::StationExit;
 pub type Exit = core::convert::Infallible;
 
 /// The sole product command end. Its type carries no port identity or loan.
-pub struct Control<'a> {
+pub struct Control<'a, N: Notifies = SameHart> {
     start: &'a StartState,
     stop: &'a StopState<Exit>,
-    inner: runtime::Control<'a, Caps, 2>,
+    inner: runtime::Control<'a, Caps, 2, Ch<N>>,
 }
-impl<'a> Control<'a> {
+impl<'a, N: Notifies> Control<'a, N> {
     /// Wait for station construction before starting an image's workload.
     pub async fn wait_started(&mut self) -> Result<(), StartError> {
         core::future::poll_fn(|cx| {
@@ -57,7 +109,7 @@ impl<'a> Control<'a> {
         })
         .await
     }
-    pub fn status_reader(&self) -> StatusReader<'a> {
+    pub fn status_reader(&self) -> StatusReader<'a, N> {
         StatusReader {
             inner: self.inner.status_reader(),
         }
@@ -74,15 +126,15 @@ impl<'a> Control<'a> {
     /// Admit a connect once the previous connect's terminal returned its
     /// permission; the operation resolves exactly once to this request's
     /// terminal. Dropping it detaches the observer: the request continues.
-    pub async fn connect(&mut self) -> Result<Operation<'a>, ControlError> {
+    pub async fn connect(&mut self) -> Result<Operation<'a, N>, ControlError> {
         self.inner.connect().await
     }
     /// Admit a disconnect, as [`Self::connect`].
-    pub async fn disconnect(&mut self) -> Result<Operation<'a>, ControlError> {
+    pub async fn disconnect(&mut self) -> Result<Operation<'a, N>, ControlError> {
         self.inner.disconnect().await
     }
     /// Admit a background scan, as [`Self::connect`].
-    pub async fn scan(&mut self) -> Result<Operation<'a>, ControlError> {
+    pub async fn scan(&mut self) -> Result<Operation<'a, N>, ControlError> {
         self.inner.scan().await
     }
     /// Disconnect and stop. The network asked through its
@@ -143,28 +195,37 @@ impl<E: Copy> Drop for StopGuard<'_, E> {
     }
 }
 /// Read-only product state in the Control/Runner context.
-#[derive(Clone, Copy)]
-pub struct StatusReader<'a> {
-    inner: runtime::StatusReader<'a>,
+pub struct StatusReader<'a, N: Notifies = SameHart> {
+    inner: runtime::StatusReader<'a, Ch<N>>,
 }
-impl StatusReader<'_> {
+impl<N: Notifies> Clone for StatusReader<'_, N> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+impl<N: Notifies> Copy for StatusReader<'_, N> {}
+impl<N: Notifies> StatusReader<'_, N> {
     pub fn status(&self) -> runtime::Status {
         self.inner.status()
     }
 }
 /// A received buffer the station lends to the network: the S31 port's
-/// receive unit on the chip.
+/// receive unit on the chip, whose return tells through `P`.
 #[cfg(target_arch = "riscv32")]
-type LentRx = oer_esp32s31_ieee80211_driver::port::LentReceive<
+type LentReceive<P> = oer_esp32s31_ieee80211_driver::port::LentReceive<
     oer_esp32s31_ieee80211_driver::port::device::StagedReceive<{ chip::Q }, { chip::B }>,
+    P,
 >;
+/// The lent buffer of `N`'s station.
+#[cfg(target_arch = "riscv32")]
+type LentRx<N> = LentReceive<<N as Notifies>::Lent>;
+#[cfg(not(target_arch = "riscv32"))]
+type LentRx<N> = <N as Notifies>::LentRx;
 /// The received buffers the station may lend the network at once: the
 /// bound for the network's packet slots of lent frames.
 #[cfg(target_arch = "riscv32")]
 pub const LENT_RX: usize = oer_esp32s31_ieee80211_driver::port::device::lent_rx(chip::Q);
 /// The host build has no receive buffer to lend.
-#[cfg(not(target_arch = "riscv32"))]
-type LentRx = Unlent;
 #[cfg(not(target_arch = "riscv32"))]
 pub enum Unlent {}
 #[cfg(not(target_arch = "riscv32"))]
@@ -182,24 +243,24 @@ impl oer_ieee80211_contracts_port::LentRxBuffer for Unlent {
         match *self {}
     }
 }
-type Frame = runtime::Received<LentRx>;
+type Frame<N> = runtime::Received<LentRx<N>>;
 type EthernetCopy = oer_ieee80211_core_roles_sta::data::EthernetFrame;
 
 /// Affine neutral Ethernet end. The concrete station frame is private.
-pub struct Network<'a> {
-    inner: runtime::Device<'a, LentRx, 2, RX_DEPTH>,
+pub struct Network<'a, N: Notifies = SameHart> {
+    inner: runtime::Device<'a, LentRx<N>, 2, RX_DEPTH, Ch<N>>,
 }
 /// One received MSDU: in the station's receive buffer, or the mark of a
 /// copy [`Network`] keeps.
-pub struct Received {
-    inner: Frame,
+pub struct Received<N: Notifies = SameHart> {
+    inner: Frame<N>,
 }
 /// What stands for a copied [`Received`] that [`Network`] keeps.
 pub struct Copied(runtime::CopiedMark);
 /// The receive buffer a lent [`Received`] keeps its frame in. Dropping it
 /// returns the buffer to the radio.
-pub struct ReceivedStorage(runtime::NetworkRx<LentRx>);
-impl oer_network_port::FrameStorage for ReceivedStorage {
+pub struct ReceivedStorage<N: Notifies = SameHart>(runtime::NetworkRx<LentRx<N>>);
+impl<N: Notifies> oer_network_port::FrameStorage for ReceivedStorage<N> {
     fn bytes(&self) -> &[u8] {
         self.0.bytes()
     }
@@ -210,18 +271,18 @@ impl oer_network_port::FrameStorage for ReceivedStorage {
         self.0.advance(by)
     }
 }
-impl oer_network_port::ReceivedFrame for Received {
-    type Storage = ReceivedStorage;
+impl<N: Notifies> oer_network_port::ReceivedFrame for Received<N> {
+    type Storage = ReceivedStorage<N>;
     type Copied = Copied;
-    fn into_lent(self) -> Result<oer_network_port::LentFrame<ReceivedStorage>, Copied> {
+    fn into_lent(self) -> Result<oer_network_port::LentFrame<ReceivedStorage<N>>, Copied> {
         match self.inner {
             runtime::Received::Lent(frame) => Ok(frame.map_storage(ReceivedStorage)),
             runtime::Received::Copied(mark) => Err(Copied(mark)),
         }
     }
 }
-impl NetDevice for Network<'_> {
-    type RxFrame = Received;
+impl<N: Notifies> NetDevice for Network<'_, N> {
+    type RxFrame = Received<N>;
     fn link(&self) -> LinkSnapshot {
         self.inner.link()
     }
@@ -234,7 +295,7 @@ impl NetDevice for Network<'_> {
     fn poll_receive_ready(&mut self, cx: &mut Context<'_>) -> Poll<()> {
         self.inner.poll_receive_ready(cx)
     }
-    fn try_receive(&mut self) -> Option<Received> {
+    fn try_receive(&mut self) -> Option<Received<N>> {
         self.inner.try_receive().map(|inner| Received { inner })
     }
     fn read_copied<R>(
@@ -285,54 +346,31 @@ impl Drop for StartGuard<'_> {
         }
     }
 }
-/// One side's wait: a local waker, or the composition's signal of that
-/// side's executor when it runs on another hart (no waker crosses harts).
-struct Notify {
-    local: oer_sync::PriorityWaker,
-    peer: Option<&'static dyn oer_memory::QueueNotify>,
-}
-impl Notify {
-    const fn local() -> Self {
-        Self {
-            local: oer_sync::PriorityWaker::new(),
-            peer: None,
-        }
-    }
-    const fn peer(peer: &'static dyn oer_memory::QueueNotify) -> Self {
-        Self {
-            local: oer_sync::PriorityWaker::new(),
-            peer: Some(peer),
-        }
-    }
-    fn register(&self, cx: &mut Context<'_>) {
-        match self.peer {
-            Some(peer) => peer.register(cx),
-            None => self.local.register(cx.waker()),
-        }
-    }
-    fn wake(&self) {
-        match self.peer {
-            Some(peer) => peer.notify(),
-            None => self.local.wake(),
-        }
-    }
-}
 /// The station's stop request to the network side and its answer. The two
-/// sides may run on different harts: the flags are atomic.
-struct NetworkStopState {
+/// sides may run on different harts: the flags are atomic, and each side
+/// waits on its own notify (`N`'s wakers).
+struct NetworkStopState<N: Notifies> {
     requested: AtomicBool,
     stopped: AtomicBool,
     lost: AtomicBool,
     /// The composition has no network: the station delivers no frame.
     absent: AtomicBool,
-    network: Notify,
-    station: Notify,
+    network: <Ch<N> as runtime::Notifies>::NetworkWaker,
+    station: <Ch<N> as runtime::Notifies>::StationWaker,
 }
-impl NetworkStopState {
+impl NetworkStopState<SameHart> {
     const fn new() -> Self {
-        Self::with(Notify::local(), Notify::local())
+        Self::with(
+            oer_sync::PriorityWaker::new(),
+            oer_sync::PriorityWaker::new(),
+        )
     }
-    const fn with(network: Notify, station: Notify) -> Self {
+}
+impl<N: Notifies> NetworkStopState<N> {
+    const fn with(
+        network: <Ch<N> as runtime::Notifies>::NetworkWaker,
+        station: <Ch<N> as runtime::Notifies>::StationWaker,
+    ) -> Self {
         Self {
             requested: AtomicBool::new(false),
             stopped: AtomicBool::new(false),
@@ -348,13 +386,13 @@ impl NetworkStopState {
         }
     }
 }
-impl runtime::NetworkStop for NetworkStopState {
+impl<N: Notifies> runtime::NetworkStop for NetworkStopState<N> {
     fn takes_frames(&self) -> bool {
         !self.absent.load(Ordering::Acquire)
     }
     fn request_stop(&self) {
         self.requested.store(true, Ordering::Release);
-        self.network.wake();
+        self.network.notify();
     }
     fn poll_stopped(&self, cx: &mut Context<'_>) -> Poll<Result<(), runtime::NetworkStopLost>> {
         self.station.register(cx);
@@ -370,10 +408,10 @@ impl runtime::NetworkStop for NetworkStopState {
 /// The network side's end of the station's stop: it stops the application
 /// and the IP service, which drop every frame they hold, then reports it.
 /// Dropping it unreported fails the station's stop as a lost participant.
-pub struct NetworkStopper<'a> {
-    state: &'a NetworkStopState,
+pub struct NetworkStopper<'a, N: Notifies = SameHart> {
+    state: &'a NetworkStopState<N>,
 }
-impl NetworkStopper<'_> {
+impl<N: Notifies> NetworkStopper<'_, N> {
     /// Ready once the station asked the network to stop.
     pub async fn requested(&self) {
         core::future::poll_fn(|cx| {
@@ -394,34 +432,40 @@ impl NetworkStopper<'_> {
     /// The composition has no network side: it gives up the station's
     /// network end, the station delivers no frame (each received MSDU's
     /// buffer goes back at once), and its stop needs no answer.
-    pub fn no_network(self, network: Network<'_>) {
+    pub fn no_network(self, network: Network<'_, N>) {
         drop(network);
         self.state.absent.store(true, Ordering::Release);
         self.report(|state| &state.stopped);
     }
-    fn report(self, flag: impl FnOnce(&NetworkStopState) -> &AtomicBool) {
+    fn report(self, flag: impl FnOnce(&NetworkStopState<N>) -> &AtomicBool) {
         let state = self.state;
         core::mem::forget(self);
         flag(state).store(true, Ordering::Release);
-        state.station.wake();
+        state.station.notify();
     }
 }
-impl Drop for NetworkStopper<'_> {
+impl<N: Notifies> Drop for NetworkStopper<'_, N> {
     fn drop(&mut self) {
         self.state.lost.store(true, Ordering::Release);
-        self.state.station.wake();
+        self.state.station.notify();
     }
 }
-pub struct Channels {
-    network_stop: NetworkStopState,
+/// The station's channels: its commands, its network's transmit, receive
+/// and copies, the network's stop and the link, with `N`'s notifies.
+pub struct Channels<N: Notifies = SameHart> {
+    network_stop: NetworkStopState<N>,
     start: StartState,
     stop: StopState<Exit>,
     commands: WakingSpscQueue<runtime::ServiceCommand<Caps>, 2>,
-    tx: oer_memory::WakingSlotQueue<TxMsdu, 2>,
-    rx: WakingSpscQueue<Frame, RX_DEPTH>,
-    rx_copied: WakingSpscQueue<EthernetCopy, { runtime::RX_COPIED_DEPTH }>,
-    state: runtime::State,
+    tx: oer_memory::WakingSlotQueue<TxMsdu, 2, Station<N>, Net<N>>,
+    rx: WakingSpscQueue<Frame<N>, RX_DEPTH, Net<N>, Station<N>>,
+    rx_copied: WakingSpscQueue<EthernetCopy, { runtime::RX_COPIED_DEPTH }, Net<N>, Station<N>>,
+    state: runtime::State<Ch<N>>,
 }
+/// A network-side queue end's notify of `N`.
+type Net<N> = <Ch<N> as runtime::Notifies>::Network;
+/// A station-side queue end's notify of `N`.
+type Station<N> = <Ch<N> as runtime::Notifies>::Station;
 impl Channels {
     pub const fn new() -> Self {
         Self {
@@ -435,17 +479,20 @@ impl Channels {
             state: runtime::State::new(),
         }
     }
-
+}
+impl<NW, SW, D> Channels<AcrossHarts<NW, SW, D>>
+where
+    NW: oer_memory::QueueNotify + Copy + 'static,
+    SW: oer_memory::QueueNotify + Copy + 'static,
+    D: oer_memory::QueueNotify + Copy + 'static,
+{
     /// Channels whose network end ([`Network`], [`NetworkStopper`]) runs
     /// on another hart than the station: `network` raises the network
     /// task's executor signal, `station` the station task's. Each wakes
     /// the one task that polls that end.
-    pub const fn across_harts(
-        network: &'static dyn oer_memory::QueueNotify,
-        station: &'static dyn oer_memory::QueueNotify,
-    ) -> Self {
+    pub const fn across_harts(network: NW, station: SW) -> Self {
         Self {
-            network_stop: NetworkStopState::with(Notify::peer(network), Notify::peer(station)),
+            network_stop: NetworkStopState::with(network, station),
             start: StartState::new(),
             stop: StopState::new(),
             commands: WakingSpscQueue::new(),
@@ -455,10 +502,18 @@ impl Channels {
             state: runtime::State::across_harts(network),
         }
     }
+}
+impl<N: Notifies> Channels<N> {
+    #[allow(clippy::type_complexity, reason = "the four ends of one split")]
     pub fn split(
         &mut self,
     ) -> Result<
-        (Control<'_>, Network<'_>, NetworkStopper<'_>, Connection<'_>),
+        (
+            Control<'_, N>,
+            Network<'_, N>,
+            NetworkStopper<'_, N>,
+            Connection<'_, N>,
+        ),
         runtime::ControlCreateError,
     > {
         self.network_stop.reset();
@@ -467,7 +522,7 @@ impl Channels {
         let (receive, rx) = self.rx.split();
         let (receive_copied, rx_copied) = self.rx_copied.split();
         let (control, runner) = runtime::Control::new(send, &self.state).map_err(|r| r.reason)?;
-        let network = runtime::Device::new(tx, rx, rx_copied, self.state.network_link());
+        let network = runtime::Device::new(tx, rx, rx_copied, &self.state);
         Ok((
             Control {
                 inner: control,
@@ -500,19 +555,25 @@ impl Default for Channels {
 }
 /// The runner's ends of the channels and its duty to publish the exit.
 #[cfg_attr(not(target_arch = "riscv32"), allow(dead_code))]
-pub struct Connection<'a> {
-    service: ServiceConnection<'a>,
+pub struct Connection<'a, N: Notifies = SameHart> {
+    service: ServiceConnection<'a, N>,
     stop: StopGuard<'a, Exit>,
 }
 #[cfg_attr(not(target_arch = "riscv32"), allow(dead_code))]
-struct ServiceConnection<'a> {
-    network_stop: &'a NetworkStopState,
+struct ServiceConnection<'a, N: Notifies> {
+    network_stop: &'a NetworkStopState<N>,
     start: StartGuard<'a>,
     commands: oer_memory::WakingSpscReceiver<'a, runtime::ServiceCommand<Caps>, 2>,
-    transmit: oer_memory::SlotReceiver<'a, TxMsdu, 2>,
-    receive: oer_memory::WakingSpscSender<'a, Frame, RX_DEPTH>,
-    receive_copied: oer_memory::WakingSpscSender<'a, EthernetCopy, { runtime::RX_COPIED_DEPTH }>,
-    runner: runtime::RunnerControl<'a>,
+    transmit: oer_memory::SlotReceiver<'a, TxMsdu, 2, Station<N>, Net<N>>,
+    receive: oer_memory::WakingSpscSender<'a, Frame<N>, RX_DEPTH, Net<N>, Station<N>>,
+    receive_copied: oer_memory::WakingSpscSender<
+        'a,
+        EthernetCopy,
+        { runtime::RX_COPIED_DEPTH },
+        Net<N>,
+        Station<N>,
+    >,
+    runner: runtime::RunnerControl<'a, Ch<N>>,
 }
 
 #[cfg(target_arch = "riscv32")]
@@ -532,8 +593,6 @@ pub mod radio;
 pub mod station;
 #[cfg(target_arch = "riscv32")]
 pub use dma::{DmaError, DmaResources};
-#[cfg(target_arch = "riscv32")]
-pub use oer_esp32s31_ieee80211_driver::port::NetworkPeers;
 // The facade's own API, not aliases of backend or runtime modules.
 #[cfg(target_arch = "riscv32")]
 pub use chip::{
@@ -549,22 +608,23 @@ pub use chip::{
 macro_rules! bind_station {
  ($vis:vis mod $name:ident {wifi:$wifi:ty,radio:$radio:ty,callbacks:$callbacks:ty,observer:$observer:ty,driver_observer:$driver_observer:ty,sink:$sink:ty,engine:$engine:ty,events:$events:ty,fail:$fail:path $(,)?})=>{
   $crate::bind_station!(@bind $vis mod $name {wifi:$wifi,radio:$radio,callbacks:$callbacks,observer:$observer,driver_observer:$driver_observer,sink:$sink,engine:$engine,events:$events,fail:$fail}
-   peers: None, storage: $crate::Storage::new());
+   notifies: $crate::SameHart, storage: $crate::Storage::new());
  };
  // The network end runs on another hart: `network` raises the network
- // task's signal, `station` the station task's, `driver` the driver's.
- ($vis:vis mod $name:ident {wifi:$wifi:ty,radio:$radio:ty,callbacks:$callbacks:ty,observer:$observer:ty,driver_observer:$driver_observer:ty,sink:$sink:ty,engine:$engine:ty,events:$events:ty,fail:$fail:path,across_harts:{network:$network:expr,station:$station:expr,driver:$driver:expr $(,)?} $(,)?})=>{
+ // task's signal, `station` the station task's, `driver` the driver's, each
+ // a notify of the type it names.
+ ($vis:vis mod $name:ident {wifi:$wifi:ty,radio:$radio:ty,callbacks:$callbacks:ty,observer:$observer:ty,driver_observer:$driver_observer:ty,sink:$sink:ty,engine:$engine:ty,events:$events:ty,fail:$fail:path,across_harts:{network:$nt:ty=$network:expr,station:$st:ty=$station:expr,driver:$dt:ty=$driver:expr $(,)?} $(,)?})=>{
   $crate::bind_station!(@bind $vis mod $name {wifi:$wifi,radio:$radio,callbacks:$callbacks,observer:$observer,driver_observer:$driver_observer,sink:$sink,engine:$engine,events:$events,fail:$fail}
-   peers: Some($crate::NetworkPeers{driver:$driver,returned:$station}), storage: $crate::Storage::across_harts($network,$station));
+   notifies: $crate::AcrossHarts<$nt,$st,$dt>, storage: $crate::Storage::across_harts($network,$station,$driver));
  };
- (@bind $vis:vis mod $name:ident {wifi:$wifi:ty,radio:$radio:ty,callbacks:$callbacks:ty,observer:$observer:ty,driver_observer:$driver_observer:ty,sink:$sink:ty,engine:$engine:ty,events:$events:ty,fail:$fail:path} peers: $peers:expr, storage: $storage:expr)=>{
+ (@bind $vis:vis mod $name:ident {wifi:$wifi:ty,radio:$radio:ty,callbacks:$callbacks:ty,observer:$observer:ty,driver_observer:$driver_observer:ty,sink:$sink:ty,engine:$engine:ty,events:$events:ty,fail:$fail:path} notifies: $notifies:ty, storage: $storage:expr)=>{
   $vis mod $name {
    use super::*;
    pub struct Binding;
    oer_espressif_executor::declare_port_slot!(pub slot:$crate::radio::Backend<Id,super::Binding>);
    impl $crate::Binding for Binding {
     type Id=slot::Id;type Wifi=$wifi;type Radio=$radio;type Callbacks=$callbacks;type Observer=$observer;type DriverObserver=$driver_observer;type Sink=$sink;type Engine=$engine;type Events=$events;
-    const NETWORK_PEERS:Option<$crate::NetworkPeers>=$peers;
+    type Notifies=$notifies;
     fn take_slot()->Option<&'static mut $crate::radio::Slot<Self>>{slot::take_static()}
     fn fail(error:$crate::InitializationError)->!{$fail(error)}
    }

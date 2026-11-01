@@ -5,8 +5,8 @@ use super::contract::{Command, Notice};
 pub use operation::{Operation, OperationEnd, UnreadOperation};
 
 mod operation;
+use super::{AcrossHarts, Notifies, SameHart, ServiceCommand, ServiceOutput, ServiceOutputSink};
 use super::{CopiedMark, RX_COPIED_DEPTH, Received};
-use super::{ServiceCommand, ServiceOutput, ServiceOutputSink};
 use core::{
     cell::Cell,
     fmt,
@@ -16,7 +16,7 @@ use core::{
 use embassy_futures::select::{Either, select};
 use oer_bridges_ieee80211_ethernet::qos::classify_wmm;
 use oer_ieee80211_core_roles_sta::data::{EthernetFrame, TxMsdu};
-use oer_memory::{SlotSendError, SlotSender, WakingSpscReceiver, WakingSpscSender};
+use oer_memory::{QueueNotify, SlotSendError, SlotSender, WakingSpscReceiver, WakingSpscSender};
 use oer_network_port::{LinkSnapshot, LinkState, NetDevice, TransmitError, TransmitRefused};
 use oer_sync::PriorityWaker;
 use oer_time::connected_tasks::{
@@ -32,12 +32,13 @@ pub struct Status {
     pub stopped: bool,
 }
 
-/// One station's shared state. Keep it for the complete Runner/Control lifetime.
-pub struct State {
+/// One station's shared state. Keep it for the complete Runner/Control
+/// lifetime. `N` names how its link tells the network device.
+pub struct State<N: Notifies = SameHart> {
     status: Cell<Status>,
     tasks: ConnectedTaskControlResources<()>,
     /// The link the network device reads, possibly on another hart.
-    network: super::NetworkLink,
+    network: super::NetworkLink<N::NetworkWaker>,
     policy: Cell<super::reconnect::Policy>,
     policy_waker: PriorityWaker,
     operations: operation::Operations,
@@ -49,8 +50,18 @@ impl State {
     pub const fn new() -> Self {
         Self::with_network(super::NetworkLink::new())
     }
+}
 
-    const fn with_network(network: super::NetworkLink) -> Self {
+impl<N: QueueNotify + Copy + 'static, S: QueueNotify + Copy + 'static> State<AcrossHarts<N, S>> {
+    /// A state whose network device runs on another hart: `link` raises
+    /// that device's executor signal when the link changes.
+    pub const fn across_harts(link: N) -> Self {
+        Self::with_network(super::NetworkLink::across_harts(link))
+    }
+}
+
+impl<N: Notifies> State<N> {
+    const fn with_network(network: super::NetworkLink<N::NetworkWaker>) -> Self {
         Self {
             status: Cell::new(Status {
                 link: LinkSnapshot::DOWN,
@@ -68,14 +79,8 @@ impl State {
         }
     }
 
-    /// A state whose network device runs on another hart: `link` raises
-    /// that device's executor signal when the link changes.
-    pub const fn across_harts(link: &'static dyn oer_memory::QueueNotify) -> Self {
-        Self::with_network(super::NetworkLink::across_harts(link))
-    }
-
     /// The link the network device reads.
-    pub fn network_link(&self) -> &super::NetworkLink {
+    pub fn network_link(&self) -> &super::NetworkLink<N::NetworkWaker> {
         &self.network
     }
 
@@ -90,7 +95,7 @@ impl State {
     }
     pub(super) fn split(
         &self,
-    ) -> Result<(ConnectedTaskController<'_, ()>, RunnerControl<'_>), ControlCreateError> {
+    ) -> Result<(ConnectedTaskController<'_, ()>, RunnerControl<'_, N>), ControlCreateError> {
         self.operations
             .check_epoch()
             .map_err(ControlCreateError::Unread)?;
@@ -111,7 +116,7 @@ impl State {
             },
         ))
     }
-    pub(super) fn events<O>(&self, output: O) -> Events<'_, O> {
+    pub(super) fn events<O>(&self, output: O) -> Events<'_, O, N> {
         Events {
             state: self,
             output,
@@ -130,11 +135,16 @@ impl Default for State {
 }
 
 /// A context-local read-only projection of Control's existing product state.
-#[derive(Clone, Copy)]
-pub struct StatusReader<'c> {
-    state: &'c State,
+pub struct StatusReader<'c, N: Notifies = SameHart> {
+    state: &'c State<N>,
 }
-impl StatusReader<'_> {
+impl<N: Notifies> Clone for StatusReader<'_, N> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+impl<N: Notifies> Copy for StatusReader<'_, N> {}
+impl<N: Notifies> StatusReader<'_, N> {
     pub fn status(&self) -> Status {
         let mut status = self.state.status.get();
         status.stopped |= self.state.tasks.is_poisoned();
@@ -199,19 +209,19 @@ impl<K, const DEPTH: usize> fmt::Debug for ControlCreateRefused<'_, K, DEPTH> {
 }
 
 /// Sole command producer and cooperative stop capability.
-pub struct Control<'c, K, const DEPTH: usize> {
+pub struct Control<'c, K, const DEPTH: usize, N: Notifies = SameHart> {
     commands: WakingSpscSender<'c, ServiceCommand<K>, DEPTH>,
-    state: &'c State,
+    state: &'c State<N>,
     task: ConnectedTaskController<'c, ()>,
 }
 
 /// The Runner's affine side of the control connection.
-pub struct RunnerControl<'c> {
-    pub(super) state: &'c State,
+pub struct RunnerControl<'c, N: Notifies = SameHart> {
+    pub(super) state: &'c State<N>,
     endpoint: Option<ConnectedTaskEndpoint<'c, ()>>,
 }
 
-impl<'c> RunnerControl<'c> {
+impl<'c, N: Notifies> RunnerControl<'c, N> {
     /// The deadline the stop request named, once one did.
     pub(super) fn stop_deadline(&self) -> Option<oer_time::Instant> {
         self.state.stop_deadline.get()
@@ -285,18 +295,18 @@ impl<'c> RunnerControl<'c> {
     }
 }
 
-impl Drop for RunnerControl<'_> {
+impl<N: Notifies> Drop for RunnerControl<'_, N> {
     fn drop(&mut self) {
         // A lost runner poisons the epoch; its waiting operations read that.
         self.state.operations.service_ended();
     }
 }
 
-impl<'c, K, const DEPTH: usize> Control<'c, K, DEPTH> {
+impl<'c, K, const DEPTH: usize, N: Notifies> Control<'c, K, DEPTH, N> {
     pub fn new(
         commands: WakingSpscSender<'c, ServiceCommand<K>, DEPTH>,
-        state: &'c State,
-    ) -> Result<(Self, RunnerControl<'c>), ControlCreateRefused<'c, K, DEPTH>> {
+        state: &'c State<N>,
+    ) -> Result<(Self, RunnerControl<'c, N>), ControlCreateRefused<'c, K, DEPTH>> {
         match state.split() {
             Ok((task, runner)) => Ok((
                 Self {
@@ -309,7 +319,7 @@ impl<'c, K, const DEPTH: usize> Control<'c, K, DEPTH> {
             Err(reason) => Err(ControlCreateRefused { commands, reason }),
         }
     }
-    pub fn status_reader(&self) -> StatusReader<'c> {
+    pub fn status_reader(&self) -> StatusReader<'c, N> {
         StatusReader { state: self.state }
     }
     pub fn status(&self) -> Status {
@@ -318,7 +328,7 @@ impl<'c, K, const DEPTH: usize> Control<'c, K, DEPTH> {
     /// All events, including affine refusals and command terminals, are
     /// delivered directly to this concrete recipient. There is no event queue
     /// whose overflow could discard an owner or coalesce a lifecycle notice.
-    pub fn events<O>(&self, output: O) -> Events<'c, O> {
+    pub fn events<O>(&self, output: O) -> Events<'c, O, N> {
         self.state.events(output)
     }
     pub fn configure_reconnect(&mut self, policy: super::ReconnectPolicy) {
@@ -419,18 +429,18 @@ impl<'c, K, const DEPTH: usize> Control<'c, K, DEPTH> {
     }
     /// Admit a connect request once the previous one's terminal returned
     /// its permission; the operation resolves to this request's terminal.
-    pub async fn connect(&mut self) -> Result<Operation<'c>, ControlError> {
+    pub async fn connect(&mut self) -> Result<Operation<'c, N>, ControlError> {
         self.operation(Command::Connect).await
     }
     /// Admit a disconnect request, as [`Self::connect`].
-    pub async fn disconnect(&mut self) -> Result<Operation<'c>, ControlError> {
+    pub async fn disconnect(&mut self) -> Result<Operation<'c, N>, ControlError> {
         self.operation(Command::Disconnect).await
     }
     /// Admit a background scan request, as [`Self::connect`].
-    pub async fn scan(&mut self) -> Result<Operation<'c>, ControlError> {
+    pub async fn scan(&mut self) -> Result<Operation<'c, N>, ControlError> {
         self.operation(Command::BackgroundScan).await
     }
-    async fn operation(&mut self, command: Command) -> Result<Operation<'c>, ControlError> {
+    async fn operation(&mut self, command: Command) -> Result<Operation<'c, N>, ControlError> {
         if self.state.ended() {
             return Err(ControlError::Stopped);
         }
@@ -462,11 +472,11 @@ impl<'c, K, const DEPTH: usize> Control<'c, K, DEPTH> {
     }
 }
 
-pub struct Events<'c, O> {
-    state: &'c State,
+pub struct Events<'c, O, N: Notifies = SameHart> {
+    state: &'c State<N>,
     output: O,
 }
-impl<K, O: ServiceOutputSink<K>> ServiceOutputSink<K> for Events<'_, O> {
+impl<K, O: ServiceOutputSink<K>, N: Notifies> ServiceOutputSink<K> for Events<'_, O, N> {
     fn emit(&mut self, output: ServiceOutput<K>) {
         if let ServiceOutput::Notice(notice) = &output {
             let mut status = self.state.status.get();
@@ -488,31 +498,32 @@ impl<K, O: ServiceOutputSink<K>> ServiceOutputSink<K> for Events<'_, O> {
 
 /// The Wi-Fi implementation of the neutral Ethernet contract. `L` is the
 /// backend's lent receive buffer ([`StationPort::LentRx`](super::StationPort::LentRx)).
-pub struct Device<'c, L, const TX: usize, const RX: usize> {
-    transmit: SlotSender<'c, TxMsdu, TX>,
-    receive: WakingSpscReceiver<'c, Received<L>, RX>,
-    copied: WakingSpscReceiver<'c, EthernetFrame, RX_COPIED_DEPTH>,
-    link: &'c super::NetworkLink,
+pub struct Device<'c, L, const TX: usize, const RX: usize, N: Notifies = SameHart> {
+    transmit: SlotSender<'c, TxMsdu, TX, N::Station, N::Network>,
+    receive: WakingSpscReceiver<'c, Received<L>, RX, N::Network, N::Station>,
+    copied: WakingSpscReceiver<'c, EthernetFrame, RX_COPIED_DEPTH, N::Network, N::Station>,
+    link: &'c super::NetworkLink<N::NetworkWaker>,
     observed: LinkSnapshot,
 }
-impl<'c, L, const TX: usize, const RX: usize> Device<'c, L, TX, RX> {
+/// The network end over the station's channels and `state`'s link.
+impl<'c, L, const TX: usize, const RX: usize, N: Notifies> Device<'c, L, TX, RX, N> {
     pub fn new(
-        transmit: SlotSender<'c, TxMsdu, TX>,
-        receive: WakingSpscReceiver<'c, Received<L>, RX>,
-        copied: WakingSpscReceiver<'c, EthernetFrame, RX_COPIED_DEPTH>,
-        link: &'c super::NetworkLink,
+        transmit: SlotSender<'c, TxMsdu, TX, N::Station, N::Network>,
+        receive: WakingSpscReceiver<'c, Received<L>, RX, N::Network, N::Station>,
+        copied: WakingSpscReceiver<'c, EthernetFrame, RX_COPIED_DEPTH, N::Network, N::Station>,
+        state: &'c State<N>,
     ) -> Self {
         Self {
             transmit,
             receive,
             copied,
-            link,
+            link: state.network_link(),
             observed: LinkSnapshot::DOWN,
         }
     }
 }
-impl<L: oer_ieee80211_contracts_port::LentRxBuffer, const TX: usize, const RX: usize> NetDevice
-    for Device<'_, L, TX, RX>
+impl<L: oer_ieee80211_contracts_port::LentRxBuffer, const TX: usize, const RX: usize, N: Notifies>
+    NetDevice for Device<'_, L, TX, RX, N>
 {
     type RxFrame = Received<L>;
     fn link(&self) -> LinkSnapshot {

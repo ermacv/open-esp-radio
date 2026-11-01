@@ -218,7 +218,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
 }
 
 pub(super) struct FrontHeld<'p, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> {
-    pub(super) storage: &'static PortSharedStorage<B>,
+    pub(super) storage: &'static PortSharedStorage<B, D::Lent>,
     pub(super) commands:
         LocalSpscSender<'p, Cmd<'static, Id, D, B, O>, COMMANDS, CompactSpscCursor>,
     pub(super) events: LocalSpscReceiver<

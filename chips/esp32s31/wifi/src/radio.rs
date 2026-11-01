@@ -65,15 +65,20 @@ pub struct Device<W: Binding>(Inner<W>);
 pub type Backend<Id, W> = Esp32s31Backend<Id, Device<W>, TX, ()>;
 pub type Caps = Esp32s31Caps<TX>;
 pub type Family<Id, W> = Types<Id, Device<W>, TX, ()>;
+/// How `W`'s lent receive units tell their returns.
+pub(crate) type Lent<W> = <<W as Binding>::Notifies as crate::Notifies>::Lent;
 pub(crate) struct DriverStorage<W: Binding> {
-    shared: StaticCell<PortSharedStorage<TX>>,
+    /// The lent units' notifies, until the installation places them.
+    lent: Option<Lent<W>>,
+    shared: StaticCell<PortSharedStorage<TX, Lent<W>>>,
     storage: StaticCell<PortStorage<Device<W>, TX>>,
     device: StaticCell<Device<W>>,
     slots: [StaticCell<TxSlot<TX>>; 9],
 }
 impl<W: Binding> DriverStorage<W> {
-    pub(crate) const fn new() -> Self {
+    pub(crate) const fn new(lent: Lent<W>) -> Self {
         Self {
+            lent: Some(lent),
             shared: StaticCell::new(),
             storage: StaticCell::new(),
             device: StaticCell::new(),
@@ -332,9 +337,12 @@ async fn install<W: Binding>(
                     device,
                     storage
                         .shared
-                        .try_init_with(|| match W::NETWORK_PEERS {
-                            Some(peers) => PortSharedStorage::network_across_harts(peers),
-                            None => PortSharedStorage::new(),
+                        .try_init_with(|| {
+                            let lent = storage
+                                .lent
+                                .take()
+                                .unwrap_or_else(|| W::fail(InitializationError::Storage));
+                            PortSharedStorage::with_network(lent)
                         })
                         .unwrap_or_else(|| W::fail(InitializationError::Storage)),
                 )
@@ -372,6 +380,7 @@ impl<W: Binding> port::Device<TX> for Device<W> {
     type Timer = EmbassyClock;
     type Hardware = <Inner<W> as port::Device<TX>>::Hardware;
     type Receive = <Inner<W> as port::Device<TX>>::Receive;
+    type Lent = Lent<W>;
     type Body = core::convert::Infallible;
     const LENT_RX: usize = <Inner<W> as port::Device<TX>>::LENT_RX;
     type OwnedContext<Id: SlotIdentity> = <Inner<W> as port::Device<TX>>::OwnedContext<Id>;

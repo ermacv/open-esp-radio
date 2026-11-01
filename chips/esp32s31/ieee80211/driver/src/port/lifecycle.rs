@@ -38,7 +38,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> Queues<Id,
 }
 pub struct RawFrontend<'s, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> {
     resources: &'s mut Option<Resources<'static, Id, D, B, O>>,
-    storage: &'static PortSharedStorage<B>,
+    storage: &'static PortSharedStorage<B, D::Lent>,
     commands: oer_memory::AffineSpscSender<
         's,
         driver::Command<'static, Id, D, B, O>,

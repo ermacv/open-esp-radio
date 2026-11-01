@@ -272,6 +272,8 @@ where
     type Timer = T;
     type Hardware = RadioAccess;
     type Receive = StagedReceive<Q, RB>;
+    /// The composition wrapping this device names where its network runs.
+    type Lent = super::SameHart;
     const LENT_RX: usize = lent_rx(Q);
     type Body = C::Body;
     type OwnedContext<Id: SlotIdentity> = C::OwnedContext<Id>;

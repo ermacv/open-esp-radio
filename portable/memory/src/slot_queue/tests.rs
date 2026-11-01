@@ -91,3 +91,49 @@ fn readiness_waits_for_a_slot_and_for_a_value() {
     assert_eq!(pin!(sender.ready()).poll(&mut cx), Poll::Pending);
     assert_eq!(pin!(receiver.ready()).poll(&mut cx), Poll::Ready(()));
 }
+
+#[test]
+fn a_slot_queue_across_harts_tells_each_end_through_its_own_notify() {
+    use core::pin::pin;
+    use core::sync::atomic::{AtomicUsize, Ordering};
+    use core::task::{Context, Poll, Waker};
+
+    /// Counts its registrations and notifications.
+    #[derive(Default)]
+    struct Counted(AtomicUsize, AtomicUsize);
+    impl QueueNotify for Counted {
+        fn register(&self, _: &mut Context<'_>) {
+            self.0.fetch_add(1, Ordering::Relaxed);
+        }
+        fn notify(&self) {
+            self.1.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+    let counts = |notify: &Counted| {
+        (
+            notify.0.load(Ordering::Relaxed),
+            notify.1.load(Ordering::Relaxed),
+        )
+    };
+
+    let (consumer, producer) = (Counted::default(), Counted::default());
+    let mut queue = WakingSlotQueue::<u8, 1, _, _>::across_harts(&consumer, &producer);
+    let (mut sender, mut receiver) = queue.split(|| 0);
+    let mut cx = Context::from_waker(Waker::noop());
+    assert_eq!(pin!(receiver.ready()).poll(&mut cx), Poll::Pending);
+    assert_eq!(counts(&consumer), (1, 0));
+    let filled = sender.try_send_with(|slot| {
+        *slot = 4;
+        Ok::<_, ()>(())
+    });
+    assert_eq!(filled, Ok(()));
+    assert_eq!(
+        counts(&consumer),
+        (1, 1),
+        "a filled slot tells the consumer"
+    );
+    assert_eq!(pin!(sender.ready()).poll(&mut cx), Poll::Pending);
+    assert_eq!(counts(&producer), (1, 0));
+    assert_eq!(receiver.try_receive_with(|slot| *slot), Ok(4));
+    assert_eq!(counts(&producer), (1, 1), "a freed slot tells the producer");
+}

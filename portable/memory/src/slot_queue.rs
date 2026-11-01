@@ -4,21 +4,24 @@
 //! never moved through the queue. Built from [`ClaimCell`] slots and two
 //! affine queues of slot indices, it needs no unsafe code of its own.
 
-use crate::waking_spsc::Notifies;
 use crate::{AffineSpscQueue, AffineSpscReceiver, AffineSpscSender, ClaimCell, QueueNotify};
+use atomic_waker::AtomicWaker;
 use core::future::poll_fn;
 use core::task::Poll;
 
 #[cfg(test)]
 mod tests;
 
-/// Slots, the indices of filled and free ones, and the wake state. The
-/// composition splits it once and moves the two endpoints to their tasks.
-pub struct WakingSlotQueue<T, const DEPTH: usize> {
+/// Slots, the indices of filled and free ones, and the two notifies: `C`
+/// tells the consumer that a slot was filled, `P` the producer that one was
+/// freed. The composition splits it once and moves the two endpoints to
+/// their tasks.
+pub struct WakingSlotQueue<T, const DEPTH: usize, C = AtomicWaker, P = AtomicWaker> {
     slots: [ClaimCell<T>; DEPTH],
     filled: AffineSpscQueue<u8, DEPTH>,
     free: AffineSpscQueue<u8, DEPTH>,
-    notifies: Notifies,
+    consumer: C,
+    producer: P,
     installed: bool,
 }
 
@@ -34,36 +37,29 @@ pub enum SlotSendError<E> {
 }
 
 impl<T, const DEPTH: usize> WakingSlotQueue<T, DEPTH> {
+    pub const fn new() -> Self {
+        Self::across_harts(AtomicWaker::new(), AtomicWaker::new())
+    }
+}
+
+impl<T, const DEPTH: usize, C: QueueNotify, P: QueueNotify> WakingSlotQueue<T, DEPTH, C, P> {
     const FITS: () = {
         if DEPTH == 0 || DEPTH > u8::MAX as usize + 1 {
             panic!("a slot queue names its slots in u8 and has at least one");
         }
     };
 
-    pub const fn new() -> Self {
+    /// A queue whose ends wake through `consumer` when a slot is filled and
+    /// through `producer` when one is freed: for ends on different harts,
+    /// each the waiting end's executor signal.
+    pub const fn across_harts(consumer: C, producer: P) -> Self {
         let () = Self::FITS;
         Self {
             slots: [const { ClaimCell::new() }; DEPTH],
             filled: const { AffineSpscQueue::new() },
             free: const { AffineSpscQueue::new() },
-            notifies: Notifies::local(),
-            installed: false,
-        }
-    }
-
-    /// A queue whose ends run on different harts: `consumer` wakes the
-    /// consumer when a slot is filled, `producer` the producer when one is
-    /// freed.
-    pub const fn across_harts(
-        consumer: &'static dyn QueueNotify,
-        producer: &'static dyn QueueNotify,
-    ) -> Self {
-        let () = Self::FITS;
-        Self {
-            slots: [const { ClaimCell::new() }; DEPTH],
-            filled: const { AffineSpscQueue::new() },
-            free: const { AffineSpscQueue::new() },
-            notifies: Notifies::peers(consumer, producer),
+            consumer,
+            producer,
             installed: false,
         }
     }
@@ -76,7 +72,10 @@ impl<T, const DEPTH: usize> WakingSlotQueue<T, DEPTH> {
     pub fn split(
         &mut self,
         mut init: impl FnMut() -> T,
-    ) -> (SlotSender<'_, T, DEPTH>, SlotReceiver<'_, T, DEPTH>) {
+    ) -> (
+        SlotSender<'_, T, DEPTH, C, P>,
+        SlotReceiver<'_, T, DEPTH, C, P>,
+    ) {
         let (filled_send, filled_receive) = self.filled.split();
         let (free_send, free_receive) = self.free.split();
         if !self.installed {
@@ -110,7 +109,7 @@ impl<T, const DEPTH: usize> WakingSlotQueue<T, DEPTH> {
                 let _queued = free_send.try_send(index);
             }
         }
-        let (consumer, producer) = self.notifies.ends();
+        let (consumer, producer) = (&self.consumer, &self.producer);
         (
             SlotSender {
                 slots: &self.slots,
@@ -138,17 +137,17 @@ impl<T, const DEPTH: usize> Default for WakingSlotQueue<T, DEPTH> {
 }
 
 /// The producer: fills free slots in place.
-pub struct SlotSender<'a, T, const DEPTH: usize> {
+pub struct SlotSender<'a, T, const DEPTH: usize, C = AtomicWaker, P = AtomicWaker> {
     slots: &'a [ClaimCell<T>; DEPTH],
     filled: AffineSpscSender<'a, u8, DEPTH>,
     free: AffineSpscReceiver<'a, u8, DEPTH>,
     /// A free slot a refused fill left: the next fill takes it first.
     spare: Option<u8>,
-    consumer: &'a dyn QueueNotify,
-    producer: &'a dyn QueueNotify,
+    consumer: &'a C,
+    producer: &'a P,
 }
 
-impl<T, const DEPTH: usize> SlotSender<'_, T, DEPTH> {
+impl<T, const DEPTH: usize, C: QueueNotify, P: QueueNotify> SlotSender<'_, T, DEPTH, C, P> {
     /// Slots free now; a concurrent receive may free another.
     pub fn free_capacity(&self) -> usize {
         self.free
@@ -206,12 +205,12 @@ impl<T, const DEPTH: usize> SlotSender<'_, T, DEPTH> {
 }
 
 /// The consumer: reads the oldest filled slot in place.
-pub struct SlotReceiver<'a, T, const DEPTH: usize> {
+pub struct SlotReceiver<'a, T, const DEPTH: usize, C = AtomicWaker, P = AtomicWaker> {
     slots: &'a [ClaimCell<T>; DEPTH],
     filled: AffineSpscReceiver<'a, u8, DEPTH>,
     free: AffineSpscSender<'a, u8, DEPTH>,
-    consumer: &'a dyn QueueNotify,
-    producer: &'a dyn QueueNotify,
+    consumer: &'a C,
+    producer: &'a P,
 }
 
 /// Why a receive read no slot.
@@ -223,7 +222,7 @@ pub enum SlotReceiveError {
     Lost,
 }
 
-impl<T, const DEPTH: usize> SlotReceiver<'_, T, DEPTH> {
+impl<T, const DEPTH: usize, C: QueueNotify, P: QueueNotify> SlotReceiver<'_, T, DEPTH, C, P> {
     /// Filled slots now.
     pub fn len(&self) -> usize {
         self.filled.len()

@@ -95,11 +95,13 @@ pub use events::{RxDrop, RxMsdusRefused, ServiceEvent, StationEvents};
 mod control;
 mod network;
 mod network_link;
+mod notifies;
 pub use network::{
     CopiedMark, NetworkDrainCause, NetworkDrainFailure, NetworkRx, NetworkStop, NetworkStopLost,
     NoNetwork, RX_COPIED_DEPTH, Received, RxMsdusCopied, StopPolicy,
 };
 pub use network_link::NetworkLink;
+pub use notifies::{AcrossHarts, Notifies, SameHart};
 mod reconnect;
 use commands::CommandCredits;
 pub use commands::{CommandRefused, CommandTerminal, Request};
@@ -662,20 +664,22 @@ pub struct ServiceIo<
     const TX_DEPTH: usize,
     const RX_DEPTH: usize,
     const COMMAND_DEPTH: usize,
+    N: Notifies = SameHart,
 > {
     /// The application's exclusive command receiver. Readiness does not
     /// remove a command; a simultaneous port fault leaves it in this queue.
     pub commands: WakingSpscReceiver<'c, ServiceCommand<K>, COMMAND_DEPTH>,
     /// The MSDUs the network stack sends.
-    pub transmit: SlotReceiver<'c, TxMsdu, TX_DEPTH>,
+    pub transmit: SlotReceiver<'c, TxMsdu, TX_DEPTH, N::Station, N::Network>,
     /// The MSDUs the station received for the network stack.
-    pub receive: WakingSpscSender<'c, Received<L>, RX_DEPTH>,
+    pub receive: WakingSpscSender<'c, Received<L>, RX_DEPTH, N::Network, N::Station>,
     /// The copies `receive`'s [`Received::Copied`] marks stand for, in order.
-    pub receive_copied: WakingSpscSender<'c, EthernetFrame, RX_COPIED_DEPTH>,
+    pub receive_copied:
+        WakingSpscSender<'c, EthernetFrame, RX_COPIED_DEPTH, N::Network, N::Station>,
     /// What the service tells the application.
     pub output: &'c mut O,
     /// Affine cooperative stop and completion connection to Control.
-    pub control: RunnerControl<'c>,
+    pub control: RunnerControl<'c, N>,
     /// The network side holding lent buffers, stopped before the port
     /// retires.
     pub network: &'c dyn NetworkStop,
@@ -1296,6 +1300,7 @@ impl<
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
+            impl Notifies,
         >,
         timer: &impl Timer,
         unwrap: &mut KeyUnwrapSlot<impl KeyUnwrap<KEY_DATA_CAPACITY, Operation: Unpin>>,
@@ -1389,6 +1394,7 @@ impl<
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
+            impl Notifies,
         >,
         timer: &impl Timer,
         unwrap: &mut KeyUnwrapSlot<impl KeyUnwrap<KEY_DATA_CAPACITY, Operation: Unpin>>,
@@ -1488,6 +1494,7 @@ impl<
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
+            impl Notifies,
         >,
         timer: &impl Timer,
         unwrap: &mut KeyUnwrapSlot<impl KeyUnwrap<KEY_DATA_CAPACITY, Operation: Unpin>>,
@@ -1663,6 +1670,7 @@ impl<
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
+            impl Notifies,
         >,
         timer: &impl Timer,
     ) -> Result<
@@ -1805,6 +1813,7 @@ impl<
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
+            impl Notifies,
         >,
         timer: &impl Timer,
         unwrap: &mut KeyUnwrapSlot<impl KeyUnwrap<KEY_DATA_CAPACITY, Operation: Unpin>>,
@@ -2111,6 +2120,7 @@ impl<
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
+            impl Notifies,
         >,
     ) {
         let Some(mut link) = self.station.link() else {
@@ -2170,6 +2180,7 @@ impl<
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
+            impl Notifies,
         >,
     ) -> Next<'id, B>
     where
@@ -2398,6 +2409,7 @@ impl<
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
+            impl Notifies,
         >,
     ) -> Result<(), ContractFault<'id, B>> {
         match follow {
@@ -2456,6 +2468,7 @@ impl<
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
+            impl Notifies,
         >,
     ) {
         while let Some(notice) = arbiter.poll_notice(now) {
@@ -2491,6 +2504,7 @@ impl<
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
+            impl Notifies,
         >,
     ) -> Result<bool, StepFailure<'id, B>>
     where
@@ -2540,6 +2554,7 @@ impl<
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
+            impl Notifies,
         >,
     ) -> Result<Option<<B::Types<'id> as PhaseTypes<'id>>::RxBuffer>, StepFailure<'id, B>>
     where
@@ -2581,6 +2596,7 @@ impl<
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
+            impl Notifies,
         >,
     ) -> Result<Option<<B::Types<'id> as PhaseTypes<'id>>::RxBuffer>, StepFailure<'id, B>>
     where
@@ -2629,6 +2645,7 @@ impl<
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
+            impl Notifies,
         >,
     ) -> Option<<B::Types<'id> as PhaseTypes<'id>>::RxBuffer>
     where
@@ -2728,6 +2745,7 @@ impl<
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
+            impl Notifies,
         >,
         frame: &[u8],
         plan: &MsduPlan,
@@ -2762,6 +2780,7 @@ impl<
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
+            impl Notifies,
         >,
         lent: B::LentRx,
         plan: MsduPlan,
@@ -3310,6 +3329,7 @@ fn station_action<
         TX_DEPTH,
         RX_DEPTH,
         COMMAND_DEPTH,
+        impl Notifies,
     >,
     arbiter: &mut PortArbiter<'id, B>,
     rates: &S,

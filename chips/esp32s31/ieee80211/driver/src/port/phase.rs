@@ -118,7 +118,7 @@ impl<'p, 'id: 'p, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Obser
         &mut self,
         buffer: ReceiveBuffer<'id, Id, D::Receive>,
     ) -> Result<
-        super::LentReceive<D::Receive>,
+        super::LentReceive<D::Receive, D::Lent>,
         oer_ieee80211_contracts_port::LendRefused<ReceiveBuffer<'id, Id, D::Receive>>,
     > {
         let shared = self.held.storage;

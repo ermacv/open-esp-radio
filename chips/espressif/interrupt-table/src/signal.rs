@@ -270,8 +270,17 @@ impl<E: SignalExecutor> IrqSignal<E> {
 /// A queue end's notify across harts: the waiting end's task polls the
 /// signal of its executor, and the other hart's end raises it. No waker
 /// crosses harts. One signal wakes one task: every queue end that notifies
-/// through it must be polled by that task.
+/// through it must be polled by that task. It is a copyable handle: every
+/// queue end of that task holds one, and its calls are direct.
 pub struct PeerNotify<E: SignalExecutor>(&'static IrqSignal<E>);
+
+impl<E: SignalExecutor> Clone for PeerNotify<E> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<E: SignalExecutor> Copy for PeerNotify<E> {}
 
 impl<E: SignalExecutor> PeerNotify<E> {
     /// The notify of `signal`, which the composition constructed with the
