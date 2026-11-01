@@ -29,6 +29,17 @@ contain no Bluetooth state.
 - A failure that touched shared state poisons the domain; every later answer
   hands back what was lent. The client contract's `Failure` table defines the
   classification.
+- The periodic tracking has no client to answer: a failed tick, or a
+  tracking deadline the clock cannot hold, poisons the domain and ends the
+  run with a `TrackingFault` (its stage and cause, a fault class and a
+  variant path). The actor keeps every owner it holds; the clients keep
+  running on a PHY the tick may have half changed, so only the image owner
+  decides what follows.
+- With `cfg(oer_trace)` the backend reports each completed tick to its
+  observer (`observation::TrackingTick`: tracked, not due or unavailable,
+  the committed branches, the PHY's temperature in sensor units after a
+  tracked tick, and the tick's duration); without it the tick reads no
+  clock for it.
 
 The hardware steps are a backend (`PhyDomain`, `ClientBackend<K, S>`); host
 tests drive the actor over a model backend. The backend owns coexistence and

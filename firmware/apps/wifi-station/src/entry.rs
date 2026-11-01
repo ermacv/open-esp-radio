@@ -59,7 +59,7 @@ oer_espressif_executor::tasks! {
 
 static ACTOR: StaticCell<Actor> = StaticCell::new();
 static NONCES: StaticCell<wifi::NonceSource> = StaticCell::new();
-type Actor = wifi::RadioActor<crate::phy_pilot::Client>;
+type Actor = wifi::RadioActor<crate::phy_pilot::Client, oer_trace::Noop>;
 
 /// Retry a lost association every second, from the first connection on.
 const RECONNECT: wifi::ReconnectPolicy =
@@ -101,6 +101,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
         |hardware| {
             let _reset_causes = oer_esp32s31_compose::reset_causes::read(hardware.reset_cause);
             oer_esp32s31_compose::wifi_fault::report_previous();
+            oer_esp32s31_compose::radio_fault::report_previous();
             if let Some(record) = previous {
                 let _ = oer_espressif_staged_runtime::diagnostics::emit_previous_panic(
                     |bytes| {
@@ -165,7 +166,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
         &factory,
     );
     let phy_pilot = crate::phy_pilot::init(runtime_timg0_alarm, adopted.router(), interrupts.phy);
-    let (actor, hardware) = radio_resources.start(phy_pilot);
+    let (actor, hardware) = radio_resources.start(phy_pilot, oer_trace::Noop);
     let Some(actor) = ACTOR.try_init(actor) else {
         fail(oer_diagnostics::name!("actor-storage"; 32));
     };
@@ -269,8 +270,10 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
         .unwrap_or_else(|failure| failure.reset()) {}
 }
 
+/// Run the shared RF actor until its periodic PHY tracking fails; the PHY
+/// may then be half changed, so the image records the failure and resets.
 async fn radio_actor(actor: &'static mut Actor) {
-    match actor.run().await {}
+    actor.run().await.reset()
 }
 
 /// Feed the RTC watchdog for good: the image resets when this executor stops.

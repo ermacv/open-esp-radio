@@ -161,6 +161,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
                 let evidence = system::Evidence::read(runtime.reset_cause);
                 fatal::report_previous();
                 oer_esp32s31_compose::wifi_fault::report_previous();
+                oer_esp32s31_compose::radio_fault::report_previous();
                 (
                     runtime.aes,
                     runtime.efuse,
@@ -200,7 +201,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
     let resources =
         wifi::RadioResources::new::<station::radio::binding::Binding>(radio, clocks, &factory);
     let pilot = phy_pilot::init(timg0_alarm, adopted.router(), interrupts.phy);
-    let (actor, hardware) = resources.start(pilot);
+    let (actor, hardware) = resources.start(pilot, load::parts::DriverObserver::default());
     let actor = station::ACTOR
         .try_init(actor)
         .unwrap_or_else(|| fail(fatal::Failure::Storage));

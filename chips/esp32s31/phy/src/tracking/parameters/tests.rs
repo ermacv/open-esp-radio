@@ -34,7 +34,9 @@ fn completion(action: PhyParamTrackingAction) -> PhyParamTrackingCompletion {
                 transmit_updated: false,
             })
         }
-        PhyParamTrackingAction::WifiI2cTrack => PhyParamTrackingCompletion::WifiI2cTracked,
+        PhyParamTrackingAction::WifiI2cTrack => PhyParamTrackingCompletion::WifiI2cTracked {
+            band_changed: false,
+        },
         PhyParamTrackingAction::WifiTxPowerTrack { enabled, .. } => {
             PhyParamTrackingCompletion::WifiTxPowerTracked {
                 enabled,
@@ -87,6 +89,7 @@ fn ieee802154_only_preserves_exact_child_order() {
                 clients: PhyParamTrackRequest::new(false, true),
                 tracking_inhibited: false,
                 rfpll_corrected: false,
+                wifi_i2c_changed: false,
                 tx_power: TxPowerProgress::default(),
                 calibration: CalibrationProgress::default(),
             }),
@@ -122,6 +125,7 @@ fn both_classes_run_bluetooth_before_wifi_and_temperature_last() {
                 clients: PhyParamTrackRequest::new(true, true),
                 tracking_inhibited: false,
                 rfpll_corrected: false,
+                wifi_i2c_changed: false,
                 tx_power: TxPowerProgress::default(),
                 calibration: CalibrationProgress::default(),
             }),
@@ -142,6 +146,7 @@ fn guard_exits_critical_section_without_running_children() {
                 clients: PhyParamTrackRequest::new(true, true),
                 tracking_inhibited: true,
                 rfpll_corrected: false,
+                wifi_i2c_changed: false,
                 tx_power: TxPowerProgress::default(),
                 calibration: CalibrationProgress::default(),
             }),
@@ -170,6 +175,7 @@ fn disabled_optional_branches_are_absent() {
                 clients: PhyParamTrackRequest::new(false, true),
                 tracking_inhibited: false,
                 rfpll_corrected: false,
+                wifi_i2c_changed: false,
                 tx_power: TxPowerProgress::default(),
                 calibration: CalibrationProgress::default(),
             }),
@@ -596,6 +602,9 @@ fn outcome_reports_the_children_that_committed_an_update() {
                     corrected: true,
                 })
             }
+            PhyParamTrackingAction::WifiI2cTrack => {
+                PhyParamTrackingCompletion::WifiI2cTracked { band_changed: true }
+            }
             // Only the Wi-Fi gain base changes.
             PhyParamTrackingAction::WifiTxPowerTrack { enabled, .. } => {
                 PhyParamTrackingCompletion::WifiTxPowerTracked {
@@ -608,6 +617,7 @@ fn outcome_reports_the_children_that_committed_an_update() {
         transition.advance(completion).unwrap();
     };
     assert!(outcome.rfpll_corrected);
+    assert!(outcome.wifi_i2c_changed);
     assert_eq!(
         outcome.tx_power,
         TxPowerProgress {

@@ -86,7 +86,9 @@ fn child(
     parent.advance(Done::EnteredCritical).expect("enter owner");
     if class == Class::Wifi {
         parent
-            .advance(Done::WifiI2cTracked)
+            .advance(Done::WifiI2cTracked {
+                band_changed: false,
+            })
             .expect("complete preceding T3");
     }
     parent

@@ -65,7 +65,10 @@ fn both_masked_writes_keep_order_and_unrelated_bits_across_real_pending_edges() 
                 .expect("virtual time fits");
         }
     };
-    assert_eq!(result, Ok(PhyParamTrackingCompletion::WifiI2cTracked));
+    assert_eq!(
+        result,
+        Ok(PhyParamTrackingCompletion::WifiI2cTracked { band_changed: true })
+    );
     assert_eq!(
         state.wifi_i2c_tracking_parameters().previous_band,
         Band::Hot
@@ -118,8 +121,12 @@ fn unchanged_band_finishes_without_hardware_or_a_yield() {
             _,
             _,
         >(&clock, child(&mut state), &mut io, false));
-        let Poll::Ready((Ok(PhyParamTrackingCompletion::WifiI2cTracked), timing)) =
-            future.as_mut().poll(&mut cx)
+        let Poll::Ready((
+            Ok(PhyParamTrackingCompletion::WifiI2cTracked {
+                band_changed: false,
+            }),
+            timing,
+        )) = future.as_mut().poll(&mut cx)
         else {
             panic!("unchanged band is immediately complete")
         };

@@ -930,7 +930,11 @@ lifecycle operations the actor invokes; the Bluetooth driver implements it.
   calls `track_concurrent_phy`, which evaluates demand and runs due work.
   The default period is 1 s, with eligibility at `previous + period + 1 µs`.
   SYSTIMER Alarm0 at P3 acknowledges and pends P2; the P2 executor dispatches
-  timers and polls the actor. The direct maintenance TXDC/PWDET path submits
+  timers and polls the actor. A failed tick, or a tracking deadline the
+  clock cannot hold, ends the actor's run with a `TrackingFault`: the actor
+  keeps every owner, and the image records the fault's class and variant
+  path (`oer-esp32s31-compose::radio_fault`) and resets. The direct
+  maintenance TXDC/PWDET path submits
   each SAR/PWDET conversion to TIMG0 T0's P2 handler. Its explicit machine
   performs tone arm, the vendor's minimum 1 µs wait, SAR trigger, the minimum
   2 µs wait and timer-driven readiness samples. Edge steps return fixed relative

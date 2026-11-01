@@ -20,7 +20,9 @@ pub mod fail_stop;
 
 // Value results of the tracking graph that protocol owners report. The
 // graph's transitions and bindings stay crate-private.
-pub use parameters::{CalibrationProgress, PhyParamTrackRequest, PhyParamTrackingOutcome};
+pub use parameters::{
+    CalibrationProgress, PhyParamTrackRequest, PhyParamTrackingOutcome, TxPowerProgress,
+};
 pub use rfpll::Observation as RfpllObservation;
 pub use temperature::{
     Acquisition as TemperatureAcquisition, Observation as TemperatureObservation,

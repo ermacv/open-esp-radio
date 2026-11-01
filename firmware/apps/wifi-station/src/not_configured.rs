@@ -46,6 +46,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
             |hardware| {
                 let _reset_causes = oer_esp32s31_compose::reset_causes::read(hardware.reset_cause);
                 oer_esp32s31_compose::wifi_fault::report_previous();
+                oer_esp32s31_compose::radio_fault::report_previous();
                 let mut early = |bytes: &[u8]| {
                     if usb_serial_jtag::early_text(bytes).is_whole() {
                         Ok(())

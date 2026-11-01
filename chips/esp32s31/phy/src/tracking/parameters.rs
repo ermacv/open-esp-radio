@@ -192,7 +192,11 @@ pub enum PhyParamTrackingCompletion {
         gain_updated: bool,
     },
     CalibrationTracked(PhyParamTrackingCalibrationCompletion),
-    WifiI2cTracked,
+    /// `band_changed`: the Wi-Fi PHY-I2C temperature band changed and both
+    /// masked writes completed.
+    WifiI2cTracked {
+        band_changed: bool,
+    },
     WifiTxPowerTracked {
         enabled: bool,
         gain_updated: bool,
@@ -289,6 +293,8 @@ pub struct PhyParamTrackingOutcome {
     pub tracking_inhibited: bool,
     /// The RFPLL capacitance correction ran and committed its reference.
     pub rfpll_corrected: bool,
+    /// The Wi-Fi PHY-I2C temperature band changed and was rewritten.
+    pub wifi_i2c_changed: bool,
     pub tx_power: TxPowerProgress,
     pub calibration: CalibrationProgress,
 }
@@ -319,6 +325,7 @@ pub struct PhyParamTrackingTransition {
     policy: PhyParamTrackingPolicy,
     step: PhyParamTrackingStep,
     rfpll_corrected: bool,
+    wifi_i2c_changed: bool,
     tx_power: TxPowerProgress,
     calibration: CalibrationProgress,
 }
@@ -330,6 +337,7 @@ impl PhyParamTrackingTransition {
             policy,
             step: PhyParamTrackingStep::EnterCritical,
             rfpll_corrected: false,
+            wifi_i2c_changed: false,
             tx_power: TxPowerProgress {
                 wifi: false,
                 bluetooth_ieee802154: false,
@@ -371,6 +379,7 @@ impl PhyParamTrackingTransition {
                     clients: self.request,
                     tracking_inhibited: self.policy.tracking_inhibited,
                     rfpll_corrected: self.rfpll_corrected,
+                    wifi_i2c_changed: self.wifi_i2c_changed,
                     tx_power: self.tx_power,
                     calibration: self.calibration,
                 })
@@ -409,7 +418,11 @@ impl PhyParamTrackingTransition {
                 self.tx_power.bluetooth_ieee802154 = gain_updated;
                 self.first_wifi_step()
             }
-            (PhyParamTrackingStep::WifiI2cTrack, PhyParamTrackingCompletion::WifiI2cTracked) => {
+            (
+                PhyParamTrackingStep::WifiI2cTrack,
+                PhyParamTrackingCompletion::WifiI2cTracked { band_changed },
+            ) => {
+                self.wifi_i2c_changed = band_changed;
                 PhyParamTrackingStep::WifiTxPowerTrack
             }
             (
@@ -989,7 +1002,9 @@ impl<'state> PhyParamTrackingWifiI2cTransition<'state> {
             return Err(self);
         };
         self.state.apply_wifi_i2c_tracking_outcome(outcome);
-        Ok(PhyParamTrackingCompletion::WifiI2cTracked)
+        Ok(PhyParamTrackingCompletion::WifiI2cTracked {
+            band_changed: outcome.changed,
+        })
     }
 }
 

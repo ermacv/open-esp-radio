@@ -57,16 +57,23 @@ oer_espressif_executor::tasks! {
     }
 }
 
-pub(crate) type Actor = wifi::RadioActor<crate::phy_pilot::Client>;
+/// The shared RF actor; the image's observer counts its tracking ticks.
+pub(crate) type Actor =
+    wifi::RadioActor<crate::phy_pilot::Client, crate::load::parts::DriverObserver>;
 pub(crate) static ACTOR: StaticCell<Actor> = StaticCell::new();
 
+/// Run the shared RF actor until its periodic PHY tracking fails. The PHY
+/// may then be half changed while the station keeps transmitting on it:
+/// the actor keeps every owner it holds, and the image records the failure
+/// and resets.
 async fn radio_actor(actor: &'static mut Actor) {
     let run = core::pin::pin!(actor.run());
-    match (Polled {
+    let failure = Polled {
         part: Part::RadioActor,
         future: run,
-    })
-    .await {}
+    }
+    .await;
+    failure.reset()
 }
 
 type Queue = WakingSpscQueue<(RequestIdentity, Request), 1>;

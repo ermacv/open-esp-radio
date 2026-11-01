@@ -3,8 +3,8 @@
 //!
 //! The server shares hart 1's network task with the IP stack. A run
 //! receives and echoes from its start, sends within its window and reads
-//! the CPU, the named parts, the counters and the link's rates at the
-//! window's ends (the
+//! the CPU, the named parts, the counters, the link's rates and the PHY
+//! tracking ticks at the window's ends (the
 //! cache's cleared just before its start),
 //! sampling the boot hart between them when it asks; after its drain it
 //! closes the socket and keeps what it read until the next run starts.
@@ -31,7 +31,7 @@ use oer_services_load::header::Header;
 use oer_services_load::tally::Tally;
 use oer_services_load::{
     Collected, Counters, CountersCollected, Link, LinkCollected, Load, LoadError, PartsCollected,
-    Report, Request, SamplesCollected, Sent, Start, Started, Transmit,
+    Report, Request, SamplesCollected, Sent, Start, Started, Tracking, TrackingCollected, Transmit,
 };
 use oer_time::{CLOCK_EPOCH_OFFSET, Instant, Timer as _};
 use static_cell::ConstStaticCell;
@@ -40,7 +40,7 @@ use super::action::{Action, Answer, Kept, MAX_PAYLOAD, Phase, action};
 use super::pace::{GRANULARITY_US, MAX_BATCH, Next, Schedule};
 use super::receive::{Datagram, Receiving, classify, echo};
 use super::relay::{self, Client};
-use super::{counters, cpu, parts};
+use super::{counters, cpu, parts, tracking};
 use crate::fatal::Failure;
 use crate::network::ip::{Device, Interface};
 use crate::peers::{NetworkNotify, RelayNotify};
@@ -228,6 +228,12 @@ pub(crate) async fn serve(mut requests: Receiver, network: &Network, hart0: &Cli
                     let link = LinkCollected::Report(ended.link);
                     hart0.publish(identity, relay::Answer::Link(link)).await;
                 }
+                (Some((_, ended)), Kept::Tracking) => {
+                    let tracking = TrackingCollected::Report(ended.tracking);
+                    hart0
+                        .publish(identity, relay::Answer::Tracking(tracking))
+                        .await;
+                }
                 (Some((_, ended)), Kept::Samples { from }) => match ended.sampled {
                     // The samples are in the boot hart's buffer: its relay
                     // publishes the page.
@@ -280,6 +286,7 @@ async fn publish(hart0: &Client, identity: RequestIdentity, answer: Answer) {
         Answer::Running(Kept::Parts { .. }) => Published::Parts(PartsCollected::Running),
         Answer::Running(Kept::Counters) => Published::Counters(CountersCollected::Running),
         Answer::Running(Kept::Link) => Published::Link(LinkCollected::Running),
+        Answer::Running(Kept::Tracking) => Published::Tracking(TrackingCollected::Running),
         Answer::Running(Kept::Samples { .. }) => Published::Samples(SamplesCollected::Running),
         Answer::UnknownRun(Kept::Report) => Published::Collected(Collected::Refused(unknown)),
         Answer::UnknownRun(Kept::Parts { .. }) => {
@@ -289,6 +296,9 @@ async fn publish(hart0: &Client, identity: RequestIdentity, answer: Answer) {
             Published::Counters(CountersCollected::Refused(unknown))
         }
         Answer::UnknownRun(Kept::Link) => Published::Link(LinkCollected::Refused(unknown)),
+        Answer::UnknownRun(Kept::Tracking) => {
+            Published::Tracking(TrackingCollected::Refused(unknown))
+        }
         Answer::UnknownRun(Kept::Samples { .. }) => {
             Published::Samples(SamplesCollected::Refused(unknown))
         }
@@ -336,6 +346,7 @@ struct Ends {
     parts: parts::Windows,
     counters: Counters,
     link: Link,
+    tracking: Tracking,
     sampled: Option<Result<(), LoadError>>,
 }
 
@@ -346,6 +357,7 @@ struct Ended {
     parts: parts::Windows,
     counters: Counters,
     link: Link,
+    tracking: Tracking,
     sampled: Option<Result<(), LoadError>>,
 }
 
@@ -418,6 +430,7 @@ async fn run(
         parts: ends.parts,
         counters: ends.counters,
         link: ends.link,
+        tracking: ends.tracking,
         sampled: ends.sampled,
     })
 }
@@ -478,7 +491,7 @@ async fn measure(
     let planned_end = planned_start.saturating_add(millis(start.duration_ms));
     wait_until(planned_start).await;
     let cpu_start = cpu_load().await;
-    let parts_start = parts_sample(true).await;
+    let (parts_start, tracking_start) = parts_sample(true).await;
     let counters_start = counters::snapshot(hart0.counters(true).await, stack_received(network));
     let start_us = now_us();
     window.start_us.set(Some(start_us));
@@ -494,7 +507,7 @@ async fn measure(
     window.end_us.set(Some(end_us));
     hart0.request_stop().await;
     let cpu_end = cpu_load().await;
-    let parts_end = parts_sample(false).await;
+    let (parts_end, tracking_end) = parts_sample(false).await;
     let counters_end = counters::snapshot(hart0.counters(false).await, stack_received(network));
     let sampled = match sampling {
         Some(Ok(())) => Some(hart0.stop().await),
@@ -509,6 +522,7 @@ async fn measure(
         parts: parts::window(&parts_start, &parts_end),
         counters: counters::window(&counters_start, &counters_end),
         link: counters::link_window(&counters_start, &counters_end),
+        tracking: tracking::window(&tracking_start, &tracking_end, tracking::AVAILABLE),
         sampled,
     }
 }
@@ -645,10 +659,10 @@ async fn cpu_load() -> Load {
     cpu::load(now_us(), &samples)
 }
 
-/// Every part's sample now, in the current epoch of the longest polls;
-/// with `begin`, a new epoch starts after it. A part its executor is
-/// writing is sampled again after yielding.
-async fn parts_sample(begin: bool) -> [parts::Sample; parts::COUNT] {
+/// Every part's sample and the tracking ticks' now, in the current epoch
+/// of the longest polls and ticks; with `begin`, a new epoch starts after
+/// it. A counter its writer is writing is sampled again after yielding.
+async fn parts_sample(begin: bool) -> ([parts::Sample; parts::COUNT], tracking::Sample) {
     let epoch = parts::EPOCH.load(Ordering::Relaxed);
     let mut samples = [parts::Sample::default(); parts::COUNT];
     for (sample, counter) in samples.iter_mut().zip(&parts::COUNTERS) {
@@ -659,10 +673,16 @@ async fn parts_sample(begin: bool) -> [parts::Sample; parts::COUNT] {
             }
         };
     }
+    let ticks = loop {
+        match tracking::COUNTER.sample(epoch) {
+            Ok(sample) => break sample,
+            Err(tracking::Concurrent) => yield_now().await,
+        }
+    };
     if begin {
         parts::EPOCH.store(epoch.wrapping_add(1), Ordering::Relaxed);
     }
-    samples
+    (samples, ticks)
 }
 
 /// The image's monotonic microseconds.

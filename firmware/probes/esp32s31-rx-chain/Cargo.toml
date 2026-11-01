@@ -23,6 +23,7 @@ oer-espressif-usb-serial-jtag.workspace = true
 embedded-io-async = "0.7.0"
 oer-embassy-time = { path = "../../../portable/embassy/time" }
 oer-time = { path = "../../../portable/time" }
+oer-trace = { path = "../../../portable/trace" }
 oer-espressif-interrupt-table = { path = "../../../chips/espressif/interrupt-table" }
 oer-memory = { path = "../../../portable/memory" }
 oer-esp32s31-hal = { path = "../../../chips/esp32s31/hal" }
