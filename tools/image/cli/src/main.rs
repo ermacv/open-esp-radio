@@ -106,16 +106,18 @@ enum Command {
         #[arg(long)]
         board: String,
     },
-    /// Write an image's hot-code list from a PC profile in a scenario's
+    /// Write an image's hot-code list from PC profiles in a scenario's
     /// results: the image's cached or already moved functions with the most
-    /// samples of one measurement, within a byte budget. Builds and flashes nothing.
+    /// samples of the named measurements, within a byte budget. Builds and
+    /// flashes nothing.
     HotCode {
         /// The results file holding the profile (`target/hil/results/…`).
         #[arg(long)]
         results: std::path::PathBuf,
-        /// The measurement whose profile ranks the functions.
-        #[arg(long)]
-        measurement: String,
+        /// A measurement whose profile ranks the functions; repeated, the
+        /// profiles' samples rank them together.
+        #[arg(long, required = true)]
+        measurement: Vec<String>,
         /// The runtime ELF the profile sampled.
         #[arg(long)]
         elf: std::path::PathBuf,
@@ -302,6 +304,20 @@ mod tests {
                 .command,
             Command::HotCode { budget: 32768, .. }
         ));
+        match parse(
+            "fw hot-code --results r.json --measurement rx --measurement tx --elf runtime.elf --budget 1 --output h.toml",
+        )
+        .unwrap()
+        .command
+        {
+            Command::HotCode { measurement, .. } => assert_eq!(measurement, ["rx", "tx"]),
+            _ => panic!("a hot-code list"),
+        }
+        assert!(
+            parse("fw hot-code --results r.json --elf runtime.elf --budget 1 --output h.toml")
+                .is_err(),
+            "a list needs a measurement"
+        );
     }
 
     #[test]
