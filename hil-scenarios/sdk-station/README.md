@@ -9,7 +9,7 @@ this host's own TCP peer.
 
 | Case | Checks |
 | --- | --- |
-| `wrong-passphrase` | The router brings up its isolated station network with a generated SSID and passphrase (WPA2-Personal, CCMP) on the first channel the stand file's `[router]` allows, forwarding TCP and UDP to this host; a connect with another passphrase answers a failure code (printed as class, kind and detail), the same boot keeps answering, and the station holds no link |
+| `wrong-passphrase` | The router brings up its isolated station network with a generated SSID and passphrase (WPA2-Personal, CCMP) on the first channel the stand file's `[router]` allows, forwarding TCP and UDP to this host; a connect with another passphrase fails in the 4-way handshake: the station's `HandshakeFailed`, or the access point's deauthentication with reason 15 (4-way handshake timeout); any other code fails the case with it. The same boot keeps answering, and the station holds no link |
 | `join` | A connect with the network's passphrase links on the router's channel; the router's station table shows the station authenticated, associated and authorized |
 | `dhcp` | The device's address wait ends with a lease; the router's lease for its MAC holds that address, and the router (`10.231.0.1`) is its gateway |
 | `tcp` | The device opens a TCP connection through the router to an echo peer on this host's address toward the station network, sends a line and reads it back; the peer received that line from the device's address |

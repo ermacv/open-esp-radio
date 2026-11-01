@@ -232,6 +232,15 @@ fn describe(code: u32) -> String {
     )
 }
 
+/// Whether failure `code` is the 4-way handshake's refusal of a wrong
+/// passphrase on this stand's access point (`oer_services_wifi_station::
+/// runtime` numbering): the station's `HandshakeFailed` (class 1, kind 6),
+/// or the access point's deauthentication with reason 15, 4-way handshake
+/// timeout (class 1, kind 1, detail 15; IEEE 802.11-2020 Table 9-49).
+fn handshake_refused(code: u32) -> bool {
+    matches!(code.to_be_bytes(), [1, 6, _, _] | [1, 1, 0, 15])
+}
+
 /// The router brings up a generated WPA2 network forwarding TCP and UDP to
 /// this host; a connect with another passphrase ends with a handled
 /// failure, the same boot answers on, and the station holds no link.
@@ -245,6 +254,13 @@ fn wrong_passphrase(cx: &mut Cx<'_>) -> Result<(), Failure> {
         )));
     };
     println!("wrong passphrase: {}", describe(code));
+    check(
+        handshake_refused(code),
+        format!(
+            "a wrong passphrase failed with code {code:#010x} ({}), not the 4-way handshake",
+            describe(code)
+        ),
+    )?;
     let after = status(cx)?;
     check(!after.link_up, format!("after the failure: {after:?}"))
 }
@@ -492,6 +508,27 @@ mod tests {
     fn an_exchange_line_fits_the_service() {
         let line = format!("OER-SDK {}\n", tag());
         assert!(line.len() <= MAX_LINE, "{line}");
+    }
+
+    #[test]
+    fn only_the_handshakes_refusal_passes_for_a_wrong_passphrase() {
+        // The station's handshake failure, and the AP's reason 15.
+        assert!(handshake_refused(0x0106_0000));
+        assert!(handshake_refused(0x0101_000f));
+        // Not found (full and partial scan), authentication and association
+        // failures, another peer reason, a refusal or a queue that did not
+        // admit the connect.
+        for code in [
+            0x0105_0000,
+            0x0105_0001,
+            0x0102_0000,
+            0x0104_0000,
+            0x0101_0002,
+            0x0200_0000,
+            0x0300_0000,
+        ] {
+            assert!(!handshake_refused(code), "{code:#010x}");
+        }
     }
 
     #[test]
