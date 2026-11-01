@@ -16,7 +16,8 @@ this host's own TCP peer.
 | `reconnect` | The router deauthenticates the station: the device's link-loss wait ends, the station rejoins by itself, takes a lease again (checked as in `dhcp`) and exchanges a line again (as in `tcp`) |
 | `no-dhcp` | The router stops serving DHCP and deauthenticates the station: the station rejoins, its address wait times out after 20 s with the link up and the boot unchanged; the router serves again and the station takes a lease |
 
-The cases run in order on one boot: each needs what the one before did. A
+The cases run in order on one boot: each needs what the one before did; the
+first that needs the network applies it, so `--case join` runs alone. A
 reset of the device fails the case it happens in. The host must reach the
 station network through the lab router (`ip route add 10.231.0.0/24 via
 <router LAN address>`, once), and its firewall must accept the TCP
