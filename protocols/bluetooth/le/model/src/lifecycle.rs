@@ -363,6 +363,10 @@ impl<Id: SlotIdentity, X> PortBackend<Id> for Backend<Id, X> {
                 }
                 q.delivered(f.pool, id, capacity);
             }
+            // A sink may run past the deadline: then no disabled owner.
+            if alarm.as_mut().poll(cx).is_ready() {
+                return Poll::Ready(Err(DisableEnd::Expired));
+            }
             Poll::Ready(Ok(()))
         })
         .await

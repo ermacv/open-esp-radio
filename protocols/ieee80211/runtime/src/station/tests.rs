@@ -1608,10 +1608,19 @@ where
         match uninstalled {
             oer_radio_port::PortEnd::Uninstalled { .. } => {}
             oer_radio_port::PortEnd::FailStopped { outcome, .. } => {
-                assert!(matches!(
-                    outcome.outcome(),
-                    oer_radio_port::Abandon::Stopped(_)
-                ));
+                // Past a stop's deadline the supervisor waits no longer:
+                // nothing confirms the stop then.
+                let past_deadline = matches!(
+                    world.expected_drain.get(),
+                    Some(NetworkDrainFailure {
+                        cause: NetworkDrainCause::Deadline,
+                        ..
+                    })
+                );
+                assert_eq!(
+                    matches!(outcome.outcome(), oer_radio_port::Abandon::Unconfirmed(_)),
+                    past_deadline
+                );
                 assert_eq!(
                     world.air.disable_calls(),
                     world

@@ -269,6 +269,10 @@ impl<Id: SlotIdentity, C: Ieee80211Capabilities, X: ModelContext> SlotOwner<Id>
         poll_fn(|cx| {
             held.air.passes.set(held.air.passes.get().saturating_add(1));
             if retire.is_requested() {
+                if held.air.retirement_held.get() {
+                    held.air.driver.set(Some(cx.waker().clone()));
+                    return Poll::Pending;
+                }
                 return Poll::Ready(());
             }
             if !held.air.failed() {
@@ -453,7 +457,8 @@ impl<Id: SlotIdentity, C: Ieee80211Capabilities, X: ModelContext> PortBackend<Id
     }
 
     /// The model reads the image clock, which only its owner advances: a
-    /// deadline is checked before the drain starts and at every poll of it.
+    /// deadline is checked before the drain starts, at every poll of it and
+    /// before it succeeds, and `clock_advanced` wakes the wait.
     async fn disable<'a, 'p, S>(
         _call: Call,
         frontend: &'a mut Self::View<'p>,
@@ -467,6 +472,7 @@ impl<Id: SlotIdentity, C: Ieee80211Capabilities, X: ModelContext> PortBackend<Id
         S: FnMut(Self::Terminal<'p>) -> core::ops::ControlFlow<Self::Terminal<'p>>,
     {
         let air = frontend.air.clone();
+        let mut alarm = core::pin::pin!(frontend.air.until(deadline));
         let expired = move || deadline.is_some_and(|deadline| air.monotonic_now() >= deadline);
         // A deadline that passed already starts no drain.
         if expired() {
@@ -492,7 +498,7 @@ impl<Id: SlotIdentity, C: Ieee80211Capabilities, X: ModelContext> PortBackend<Id
             if held.draining.get() || !held.commands.is_empty() || !held.recycled.is_empty() {
                 // The drain stays with the driver: at the deadline only the
                 // wait ends.
-                if expired() {
+                if alarm.as_mut().poll(cx).is_ready() {
                     return Poll::Ready(Err(DisableEnd::Expired));
                 }
                 held.body.set(Some(cx.waker().clone()));
@@ -523,6 +529,10 @@ impl<Id: SlotIdentity, C: Ieee80211Capabilities, X: ModelContext> PortBackend<Id
             if !held.air.group_rx.is_empty() {
                 held.air.group_rx.clear();
                 held.lost.set(true);
+            }
+            // A sink may run past the deadline: then no disabled owner.
+            if expired() {
+                return Poll::Ready(Err(DisableEnd::Expired));
             }
             Poll::Ready(Ok(()))
         })
@@ -574,17 +584,18 @@ impl<Id: SlotIdentity, C: Ieee80211Capabilities, X: ModelContext> PortBackend<Id
     {
         Ok(())
     }
-    // The model's P2 owner answers in the same poll and the model has no
-    // timer to wait on; a test's own bound ends a model stop.
+    // The model's P2 owner answers in the first driver pass unless a test
+    // holds it; the model has no bound of its own, so a stop's deadline is
+    // the only one.
     fn shutdown_bound<'s>(
-        _: &Self::Frontend<'s>,
-        _: StopDeadline,
+        frontend: &Self::Frontend<'s>,
+        stop: StopDeadline,
     ) -> impl Future<Output = ()> + use<'s, Id, C, X>
     where
         Self: 's,
         Id: 's,
     {
-        core::future::pending()
+        frontend.held.air.until(stop)
     }
 }
 

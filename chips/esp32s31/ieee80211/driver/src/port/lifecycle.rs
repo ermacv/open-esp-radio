@@ -653,8 +653,10 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> PortBacken
         S: FnMut(Terminal<'p, Id, D, B, O>) -> core::ops::ControlFlow<Terminal<'p, Id, D, B, O>>,
     {
         let timer = view.held.timer.clone();
+        let clock = timer.clone();
+        let expired = move || deadline.is_some_and(|deadline| clock.now() >= deadline);
         // A deadline that passed already starts no drain.
-        let passed = deadline.is_some_and(|deadline| timer.now() >= deadline);
+        let passed = expired();
         if !passed {
             view.held.want_enabled.set(false);
             view.held.storage.driver.wake();
@@ -688,6 +690,11 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> PortBacken
                                         .map_err(radio::DisableEnd::Poisoned),
                                 );
                             }
+                        }
+                        // A sink, or a preemption, may run past the
+                        // deadline: then no disabled owner.
+                        Poll::Ready(Ok(None)) if expired() => {
+                            return Poll::Ready(Err(radio::DisableEnd::Expired));
                         }
                         Poll::Ready(Ok(None)) => return Poll::Ready(Ok(())),
                         Poll::Ready(Err(error)) => {

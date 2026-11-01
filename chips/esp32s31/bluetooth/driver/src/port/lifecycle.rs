@@ -418,6 +418,11 @@ impl<Id: SlotIdentity, D: Device, X> PortBackend<Id> for Backend<Id, D, X> {
         })
         .await;
         match retired {
+            // A retirement that ran past the deadline issues no disabled
+            // owner.
+            Some(Ok(())) if deadline.is_some_and(|deadline| timer.now() >= deadline) => {
+                Err(DisableEnd::Expired)
+            }
             Some(Ok(())) => Ok(()),
             Some(Err(cause)) => {
                 v.shared.poison(cause);

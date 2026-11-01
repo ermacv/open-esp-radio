@@ -1121,10 +1121,21 @@ fn every_group_mutation_has_a_finite_rx_cut_and_returns_its_permission_once() {
 
 /// Enable, then disable by a stop deadline: one that passed already, or
 /// one that passes while a held publication keeps the drain open.
+/// When a disable's stop deadline passes.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Passes {
+    /// Before the disable starts.
+    Before,
+    /// While its drain waits for a held queue.
+    During,
+    /// In its sink, while the drain returns a withdrawn MPDU and then ends
+    /// in the same poll.
+    InSink,
+}
 struct DisableBy {
     clock: TestTimer,
     observed: Rc<RefCell<Observed>>,
-    during: bool,
+    passes: Passes,
 }
 impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for DisableBy {
     type Output = bool;
@@ -1142,32 +1153,38 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for DisableBy {
             Ok(owner) => owner,
             Err(_) => panic!("enable"),
         };
-        let deadline = if self.during {
-            self.observed.borrow_mut().held_queues = [true; 4];
+        let step = oer_time::Duration::from_millis(1);
+        let deadline = if self.passes == Passes::Before {
+            self.clock.now()
+        } else {
+            self.observed.borrow_mut().held_queues = [self.passes == Passes::During; 4];
             let mut phase = owner.phase();
             let [buffer, ..] = resources.buffers;
             let [ticket, ..] = resources.tickets;
             submit_mpdu(&mut phase, buffer, ticket, None, None);
-            self.clock
-                .now()
-                .saturating_add(oer_time::Duration::from_millis(1))
-        } else {
-            self.clock.now()
+            self.clock.now().saturating_add(step)
         };
         let stops = self.observed.borrow().stops;
-        let mut sink = |_| core::ops::ControlFlow::Continue(());
+        let offered = core::cell::Cell::new(0);
+        let mut sink = |_| {
+            offered.set(offered.get() + 1);
+            if self.passes == Passes::InSink {
+                self.clock.0.advance(step).expect("advance clock");
+            }
+            core::ops::ControlFlow::Continue(())
+        };
         let mut disable = pin!(owner.disable(Some(deadline), &mut sink));
         let mut advanced = false;
         let disabled = core::future::poll_fn(|cx| {
             let polled = disable.as_mut().poll(cx);
-            if polled.is_pending() && !advanced {
+            assert!(
+                polled.is_ready() || self.passes != Passes::Before,
+                "a passed deadline ends at once"
+            );
+            if polled.is_pending() && self.passes == Passes::During && !advanced {
                 // The drain is open: the deadline passes during it.
-                assert!(self.during, "a passed deadline ends at once");
                 advanced = true;
-                self.clock
-                    .0
-                    .advance(oer_time::Duration::from_millis(1))
-                    .expect("advance clock");
+                self.clock.0.advance(step).expect("advance clock");
                 cx.waker().wake_by_ref();
             }
             polled
@@ -1175,28 +1192,32 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for DisableBy {
         .await;
         let request = match disabled {
             Err(radio::DisableFailed::Expired(request)) => request,
-            Ok(_) => panic!("drained (during={})", self.during),
+            Ok(_) => panic!("drained ({:?})", self.passes),
             Err(radio::DisableFailed::Poisoned(owner)) => {
-                panic!("poisoned {:?} (during={})", owner.cause(), self.during)
+                panic!("poisoned {:?} ({:?})", owner.cause(), self.passes)
             }
         };
         assert_eq!(request.deadline(), Some(deadline));
-        if !self.during {
-            assert_eq!(self.observed.borrow().stops, stops, "no drain started");
+        match self.passes {
+            Passes::Before => {
+                assert_eq!(self.observed.borrow().stops, stops, "no drain started")
+            }
+            Passes::During => {}
+            Passes::InSink => assert_eq!(offered.get(), 1, "the withdrawn MPDU reached the sink"),
         }
         radio::Ended::fail_stop(request, true)
     }
 }
 #[test]
-fn a_disable_past_its_stop_deadline_starts_nothing_and_fail_stops() {
-    for during in [false, true] {
+fn a_disable_past_its_stop_deadline_issues_no_disabled_owner_and_fail_stops() {
+    for passes in [Passes::Before, Passes::During, Passes::InSink] {
         let (backend, observed, clock) = installed(Vec::new());
         let report = block_on(run_body(
             backend,
             DisableBy {
                 clock,
                 observed,
-                during,
+                passes,
             },
         ));
         // Expired disables prove no stop and issue no disabled owner.

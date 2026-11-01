@@ -2011,6 +2011,7 @@ mod group_keys;
 
 mod association;
 mod event_end;
+mod stop_deadline;
 
 /// The protocol test owns numbering independently of the backend key token.
 struct CoreKey<K> {

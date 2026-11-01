@@ -1803,6 +1803,10 @@ pub struct ModelAir {
     time: ModelTime,
     receive_agreements: Cell<BTreeMap<u8, ModelReceiveAgreement>>,
     expired_msdus: Cell<u32>,
+    /// The task waiting for a stop deadline, woken by `clock_advanced`.
+    deadline: Cell<Option<Waker>>,
+    /// P2 does not answer a requested retirement while this is set.
+    retirement_held: Cell<bool>,
 }
 impl ModelAir {
     /// Inspect P2's last published snapshot without borrowing its driver.
@@ -1840,6 +1844,8 @@ impl ModelAir {
             time: ModelTime::new(clock),
             receive_agreements: Default::default(),
             expired_msdus: Default::default(),
+            deadline: Default::default(),
+            retirement_held: Default::default(),
         }
     }
 
@@ -1847,10 +1853,34 @@ impl ModelAir {
         self.time.clock.now()
     }
 
-    /// Wake the driver after the clock owner advances virtual time.
-    /// This notification never changes the clock.
+    /// Wake the driver and a stop-deadline wait after the clock owner
+    /// advances virtual time. This notification never changes the clock.
     pub fn clock_advanced(&self) {
         self.wake_driver();
+        if let Some(waker) = self.deadline.take() {
+            waker.wake();
+        }
+    }
+
+    /// Keep P2 from answering a requested retirement while `held`, as a
+    /// slow stop does: the answer comes on the first driver pass after it
+    /// is released.
+    pub fn hold_retirement(&self, held: bool) {
+        self.retirement_held.set(held);
+        self.wake_driver();
+    }
+
+    /// Ends once the image clock reaches `deadline`, never for `None`. The
+    /// model has no timer: the clock owner's `clock_advanced` wakes it.
+    fn until(self: &Rc<Self>, deadline: Option<Instant>) -> impl Future<Output = ()> + 'static {
+        let air = self.clone();
+        core::future::poll_fn(move |cx| match deadline {
+            Some(deadline) if air.monotonic_now() >= deadline => Poll::Ready(()),
+            _ => {
+                air.deadline.set(Some(cx.waker().clone()));
+                Poll::Pending
+            }
+        })
     }
 
     /// Project the image clock into the model radio domain.
