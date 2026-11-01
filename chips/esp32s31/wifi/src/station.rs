@@ -36,8 +36,10 @@ impl<W: Binding> Composition for ImageComposition<W> {
     type Coex = radio::Coex;
     type Entropy = radio::Entropy;
     type Body = Infallible;
-    type OwnedContext<Id: SlotIdentity> = TxOwnedContext<Caps, port::BufferClass<TX>, Epoch<Id>>;
-    type Context<'p, Id: SlotIdentity + 'p> = TxContext<'p, Caps, port::BufferClass<TX>, Epoch<Id>>;
+    // The station keeps each transmission's context at its ticket's place:
+    // the port carries none.
+    type OwnedContext<Id: SlotIdentity> = ();
+    type Context<'p, Id: SlotIdentity + 'p> = ();
     type OwnedConfigureContext<Id: SlotIdentity> =
         rp::ContextChoice<(), EpochContext<Epoch<Id>, ()>>;
     type ConfigureContext<'p, Id: SlotIdentity + 'p> =
@@ -97,6 +99,7 @@ impl<W: Binding, Id: SlotIdentity> StationPort for StationComposition<W, Id> {
         Id: 'id;
     type LentRx = crate::LentRx<W::Notifies>;
     type TerminalStorage<T> = heapless::Deque<T, { port::TERMINAL_CAPACITY }>;
+    type TxContextStorage<T> = [Option<T>; port::TX_TICKETS];
     type Small = port::BufferClass<TX>;
     type Large = port::BufferClass<TX>;
     fn lend_phase<'a, 'id, 'r>(
