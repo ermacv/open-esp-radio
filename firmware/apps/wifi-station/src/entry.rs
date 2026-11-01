@@ -4,7 +4,7 @@
 mod profile;
 
 use oer_espressif::{
-    AppResult, Aes, ApplicationEnd, Boot, Channel, Error, Hart1Boot, Hart1Peripherals,
+    AppResult, ApplicationEnd, Boot, Channel, Error, Hart1Boot, Hart1Peripherals,
     Hart1Started, Peripherals, SecondEnd, Started,
     print::{DiagPath, DiagnosticPath, Ipv4},
     println,
@@ -20,9 +20,8 @@ static EXCHANGES: Channel<[u8; 4], Result<(), Exchange>, 1> = Channel::new();
 oer_espressif::entry!(boot, hart1 = network);
 
 fn boot(p: Peripherals, mut boot: Boot) -> Result<impl Started, Error> {
-    let aes = Aes::start(p.aes, &mut boot)?;
     let config = wifi::Config::new(PROFILE.country, PROFILE.channel, PROFILE.cap_dbm)?;
-    let (station, status) = Station::start(p.wifi, &aes, config, &mut boot)?;
+    let (station, status) = Station::start(p.wifi, config, &mut boot)?;
     let exchanges = EXCHANGES.application(&mut boot)?;
     Ok(boot.run(app(station, status, exchanges)))
 }

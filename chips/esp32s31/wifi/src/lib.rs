@@ -628,28 +628,28 @@ pub use chip::{
 };
 
 /// Bind the facade's backing to this image's concrete interrupt entries.
-/// The image declares callbacks, collectors, the composed engine type and terminal policy.
+/// The image declares callbacks, collectors and terminal policy.
 #[cfg(target_arch = "riscv32")]
 #[macro_export]
 macro_rules! bind_station {
- ($vis:vis mod $name:ident {wifi:$wifi:ty,radio:$radio:ty,callbacks:$callbacks:ty,observer:$observer:ty,driver_observer:$driver_observer:ty,sink:$sink:ty,engine:$engine:ty,events:$events:ty,fail:$fail:path $(,)?})=>{
-  $crate::bind_station!(@bind $vis mod $name {wifi:$wifi,radio:$radio,callbacks:$callbacks,observer:$observer,driver_observer:$driver_observer,sink:$sink,engine:$engine,events:$events,fail:$fail}
+ ($vis:vis mod $name:ident {wifi:$wifi:ty,radio:$radio:ty,callbacks:$callbacks:ty,observer:$observer:ty,driver_observer:$driver_observer:ty,sink:$sink:ty,events:$events:ty,fail:$fail:path $(,)?})=>{
+  $crate::bind_station!(@bind $vis mod $name {wifi:$wifi,radio:$radio,callbacks:$callbacks,observer:$observer,driver_observer:$driver_observer,sink:$sink,events:$events,fail:$fail}
    notifies: $crate::SameHart, storage: $crate::Storage::new());
  };
  // The network end runs on another hart: `network` raises the network
  // task's signal, `station` the station task's, `driver` the driver's, each
  // a notify of the type it names.
- ($vis:vis mod $name:ident {wifi:$wifi:ty,radio:$radio:ty,callbacks:$callbacks:ty,observer:$observer:ty,driver_observer:$driver_observer:ty,sink:$sink:ty,engine:$engine:ty,events:$events:ty,fail:$fail:path,across_harts:{network:$nt:ty=$network:expr,station:$st:ty=$station:expr,driver:$dt:ty=$driver:expr $(,)?} $(,)?})=>{
-  $crate::bind_station!(@bind $vis mod $name {wifi:$wifi,radio:$radio,callbacks:$callbacks,observer:$observer,driver_observer:$driver_observer,sink:$sink,engine:$engine,events:$events,fail:$fail}
+ ($vis:vis mod $name:ident {wifi:$wifi:ty,radio:$radio:ty,callbacks:$callbacks:ty,observer:$observer:ty,driver_observer:$driver_observer:ty,sink:$sink:ty,events:$events:ty,fail:$fail:path,across_harts:{network:$nt:ty=$network:expr,station:$st:ty=$station:expr,driver:$dt:ty=$driver:expr $(,)?} $(,)?})=>{
+  $crate::bind_station!(@bind $vis mod $name {wifi:$wifi,radio:$radio,callbacks:$callbacks,observer:$observer,driver_observer:$driver_observer,sink:$sink,events:$events,fail:$fail}
    notifies: $crate::AcrossHarts<$nt,$st,$dt>, storage: $crate::Storage::across_harts($network,$station,$driver));
  };
- (@bind $vis:vis mod $name:ident {wifi:$wifi:ty,radio:$radio:ty,callbacks:$callbacks:ty,observer:$observer:ty,driver_observer:$driver_observer:ty,sink:$sink:ty,engine:$engine:ty,events:$events:ty,fail:$fail:path} notifies: $notifies:ty, storage: $storage:expr)=>{
+ (@bind $vis:vis mod $name:ident {wifi:$wifi:ty,radio:$radio:ty,callbacks:$callbacks:ty,observer:$observer:ty,driver_observer:$driver_observer:ty,sink:$sink:ty,events:$events:ty,fail:$fail:path} notifies: $notifies:ty, storage: $storage:expr)=>{
   $vis mod $name {
    use super::*;
    pub struct Binding;
    oer_espressif_executor::declare_port_slot!(pub slot:$crate::radio::Backend<Id,super::Binding>);
    impl $crate::Binding for Binding {
-    type Id=slot::Id;type Wifi=$wifi;type Radio=$radio;type Callbacks=$callbacks;type Observer=$observer;type DriverObserver=$driver_observer;type Sink=$sink;type Engine=$engine;type Events=$events;
+    type Id=slot::Id;type Wifi=$wifi;type Radio=$radio;type Callbacks=$callbacks;type Observer=$observer;type DriverObserver=$driver_observer;type Sink=$sink;type Events=$events;
     type Notifies=$notifies;
     fn take_slot()->Option<&'static mut $crate::radio::Slot<Self>>{slot::take_static()}
     fn fail(error:$crate::InitializationError)->!{$fail(error)}

@@ -682,30 +682,10 @@ fn retained_security_ies_are_terminal_without_counting_a_peer_drop() {
                 &mut world.losses,
             )
             .unwrap();
-        let Some(StaAction::UnwrapKeyData { id, request }) =
-            world.station.poll_action(at(50), &mut world.losses)
-        else {
-            panic!("the authenticated M3 asks for its key data")
-        };
-        world.station.input(
-            at(50),
-            StaInput::KeyDataUnwrapped {
-                id,
-                result: super::unwrap(request),
-            },
-            &mut world.losses,
-        );
-        assert_eq!(security_drops(&world), before);
-        let State::Connected(connected) = &world.station.state else {
-            panic!()
-        };
-        assert_eq!(
-            connected.rsn.as_ref().unwrap().fault,
-            Some(StaDisconnectReason::RetainedSecurityIes(
-                oer_ieee80211_core_security_rsn::frames::RsnFrameError::InvalidRsnIe
-            ))
-        );
+        // Its key data is unwrapped in the step that takes it, which leaves
+        // without counting a peer drop.
         world.run(at(50));
+        assert_eq!(world.losses.rsn, before);
         assert!(!world.station.is_connected());
         assert!(world.take().contains(&Seen::Notify(StaNotice::Disconnected(
             StaDisconnectReason::RetainedSecurityIes(

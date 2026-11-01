@@ -1,5 +1,5 @@
 //! The product key-unwrap engine: the one hardware AES client, which the
-//! Wi-Fi facade and the HIL AES image take by value.
+//! library's AES service and boot-smoke's hart-1 task take by value.
 use oer_embassy_time::{EmbassyClock, WaitUntil};
 use oer_esp32s31_hal::peripherals::aes::{AesInterrupt, AesParts, AesRegisters};
 use oer_espressif_interrupt_table::Silent;

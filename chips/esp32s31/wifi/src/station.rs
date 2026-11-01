@@ -430,14 +430,13 @@ fn running_future<'s, 'c, 'p, 'id, W: Binding>(
     output: &'s mut MaybeUninit<Completed<'p, 'id, W>>,
     owner: rp::Owner<'p, 'id, W::Id, Backend<W::Id, W>, rp::Disabled>,
     io: &'s mut Io<'c, W>,
-    unwrap: &'s mut KeyUnwrapSlot<W::Engine>,
 ) -> Running<'s, 'c, 'p, 'id, W>
 where
     'id: 'p,
     'p: 's,
     'c: 's,
 {
-    Runner::run_placed(service, output, owner, io, &EmbassyClock, unwrap)
+    Runner::run_placed(service, output, owner, io, &EmbassyClock)
 }
 fn initialize_service<'id, W: Binding>(
     profile: Profile<W>,
@@ -533,7 +532,6 @@ impl<W: Binding> rp::PortBody<W::Id, Backend<W::Id, W>> for Body<W> {
     {
         let Body { runner, profile } = self;
         let ServiceRunner {
-            engine,
             config,
             connection,
             storage,
@@ -568,11 +566,8 @@ impl<W: Binding> rp::PortBody<W::Id, Backend<W::Id, W>> for Body<W> {
             network: network_stop,
             stop,
         };
-        let mut unwrap = KeyUnwrapSlot::new(engine);
         let done = running
-            .future(|| {
-                running_future::<W>(service, completed.uninit(), owner, &mut io, &mut unwrap)
-            })
+            .future(|| running_future::<W>(service, completed.uninit(), owner, &mut io))
             .await;
         let (end, _retired, network) = oer_memory::unpack_placed!(
             done,

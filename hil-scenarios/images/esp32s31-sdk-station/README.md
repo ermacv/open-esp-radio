@@ -4,7 +4,7 @@ The image of the [SDK station](../../sdk-station/README.md),
 [Wi-Fi station](../../wifi-station/README.md) and
 [Wi-Fi load](../../wifi-load/README.md) scenarios: an
 application of the entry `oer-espressif` (`sdk/espressif`, features
-`esp32s31`, `wifi`, `console`, `hart1`, `observe` and `udp`). Its boot takes the AES service, the Wi-Fi
+`esp32s31`, `wifi`, `console`, `hart1`, `observe` and `udp`). Its boot takes the Wi-Fi
 station and its IP service with the library's defaults and the USB
 Serial/JTAG console; the library places their interrupts, executors and
 service tasks and records and resets on the image's behalf. The image

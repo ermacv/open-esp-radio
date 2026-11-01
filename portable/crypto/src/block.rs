@@ -55,6 +55,19 @@ pub trait Aes128Blocks {
     fn load_key(&mut self, key: &Aes128Key) -> Self::Keyed<'_>;
 }
 
+/// A borrowed primitive is one: an engine over `&mut P` leaves `P` with its
+/// owner, which runs it again for the next request.
+impl<P: Aes128Blocks> Aes128Blocks for &mut P {
+    type Keyed<'a>
+        = P::Keyed<'a>
+    where
+        Self: 'a;
+
+    fn load_key(&mut self, key: &Aes128Key) -> Self::Keyed<'_> {
+        (**self).load_key(key)
+    }
+}
+
 /// The [`KeyUnwrap`] engine of a synchronous primitive: the operation is
 /// ready on its first poll.
 pub struct BlockKeyUnwrap<P> {

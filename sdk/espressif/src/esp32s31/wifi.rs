@@ -46,9 +46,7 @@ pub use oer_embassy_net::ip::{Ipv4Configuration, Ipv4Status, Lifecycle, Status};
 pub use oer_ieee80211_runtime::station::contract::{CommandRefusal, DisconnectReason};
 pub use oer_network_port::{LinkSnapshot, LinkState};
 
-use super::{
-    AesClient, Boot, Error, Hart1Boot, PhyToken, RadioAlarmToken, RadioToken, WakeToken, WifiToken,
-};
+use super::{Boot, Error, Hart1Boot, PhyToken, RadioAlarmToken, RadioToken, WakeToken, WifiToken};
 use crate::net::{NetError, Published, Watchers};
 
 type RadioExecutor = InterruptExecutor<Esp32s31, 2>;
@@ -159,11 +157,11 @@ fn failure(error: wifi::InitializationError) -> ! {
 }
 
 #[cfg(not(feature = "hart1"))]
-wifi::bind_station! {pub(crate) mod binding{wifi:WifiToken,radio:RadioToken,callbacks:Callbacks,observer:StationObserver,driver_observer:StationObserver,sink:StationSink,engine:AesClient,events:ProductEvents,fail:failure}}
+wifi::bind_station! {pub(crate) mod binding{wifi:WifiToken,radio:RadioToken,callbacks:Callbacks,observer:StationObserver,driver_observer:StationObserver,sink:StationSink,events:ProductEvents,fail:failure}}
 // The station's network end runs on hart 1, with the second boot's IP
 // service.
 #[cfg(feature = "hart1")]
-wifi::bind_station! {pub(crate) mod binding{wifi:WifiToken,radio:RadioToken,callbacks:Callbacks,observer:StationObserver,driver_observer:StationObserver,sink:StationSink,engine:AesClient,events:ProductEvents,fail:failure,across_harts:{network:NetworkNotify=&NETWORK,station:StationNotify=&STATION,driver:DriverNotify=&DRIVER}}}
+wifi::bind_station! {pub(crate) mod binding{wifi:WifiToken,radio:RadioToken,callbacks:Callbacks,observer:StationObserver,driver_observer:StationObserver,sink:StationSink,events:ProductEvents,fail:failure,across_harts:{network:NetworkNotify=&NETWORK,station:StationNotify=&STATION,driver:DriverNotify=&DRIVER}}}
 
 /// Where the station's network end runs: on the station's hart, or on hart
 /// 1 through the peers' signals.
@@ -505,20 +503,17 @@ impl Drop for Device {
 }
 
 impl Station {
-    /// Start the station on `wifi`, with a client of `aes` for its key
-    /// unwraps: the radio executor, the actor, the MAC driver and the
-    /// station runner. Its tasks run once the executor does.
+    /// Start the station on `wifi`: the radio executor, the actor, the MAC
+    /// driver and the station runner. Its tasks run once the executor does.
+    /// It unwraps its EAPOL-Key data in its own step.
     ///
     /// # Errors
-    /// The AES service has no free client, the station started already, or
-    /// a binding or storage was refused.
+    /// The station started already, or a binding or storage was refused.
     pub fn start(
         wifi: WifiPeripheral,
-        aes: &super::Aes,
         config: Config,
         boot: &mut Boot,
     ) -> Result<(Self, NetStatus), Error> {
-        let engine = aes.client()?;
         let radio = boot.radio.take().ok_or(Error::AlreadyStarted)?;
         let timer = boot.timer.take().ok_or(Error::AlreadyStarted)?;
         let app_alarm = boot.app_alarm.take().ok_or(Error::AlreadyStarted)?;
@@ -577,7 +572,6 @@ impl Station {
         let [t0, t1, t2, t3, s0, s1, s2, s3, s4, s5, s6, s7] = words;
         let (control, network, stopper, runners) = wifi::station(
             wifi::Resources {
-                engine,
                 events: ProductEvents,
                 storage: binding::storage(),
                 hardware,

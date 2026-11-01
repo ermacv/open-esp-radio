@@ -132,10 +132,14 @@ fn construct<'id, const T: usize, const B: usize, const G: usize>(
     )
 }
 
-struct Callbacks;
+struct Callbacks(oer_ieee80211_core_security_cipher::aes::SoftwareAes128);
 impl oer_ieee80211_core_roles_sta::machine::StaCallbacks for Callbacks {
+    type KeyUnwrapBlocks = oer_ieee80211_core_security_cipher::aes::SoftwareAes128;
     fn nonce(&mut self) -> [u8; 32] {
         [0; 32]
+    }
+    fn key_unwrap_blocks(&mut self) -> &mut Self::KeyUnwrapBlocks {
+        &mut self.0
     }
     fn he_packet_padding(
         &self,
