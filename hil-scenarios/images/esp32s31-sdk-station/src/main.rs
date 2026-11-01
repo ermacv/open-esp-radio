@@ -13,3 +13,6 @@ fn main() {}
 
 #[cfg(any(target_arch = "riscv32", test))]
 mod services;
+
+#[cfg(any(target_arch = "riscv32", test))]
+mod load;

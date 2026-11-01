@@ -23,6 +23,9 @@ hart1 = []
 ## tracking's counts, and on the boot hart its counters and a PC sampler on
 ## TIMG1. The image declares `instrumentation = ["trace"]`.
 observe = []
+## UDP sockets on the IP stack (`wifi::embassy_net::udp`), each queueing
+## up to 16 received datagrams.
+udp = ["embassy-net/udp", "dep:xarxa"]
 
 [dependencies]
 oer-crypto = { path = "../../portable/crypto" }
@@ -53,6 +56,9 @@ embassy-futures = "0.1.2"
 embassy-time = { workspace = true }
 # The stack the IP service pins (`oer-embassy-net`), with TCP sockets.
 embassy-net = { git = "https://github.com/ermacv/embassy.git", rev = "073d3fc49234db76005cb0ea1a86097d5f633c2d", default-features = false, features = ["tcp"] }
+# The stack's socket receive queue at its largest, with `udp`: some 2.7 ms
+# of 1400-byte datagrams at 65 Mbit/s (the revision the stack pins).
+xarxa = { git = "https://github.com/ermacv/xarxa.git", rev = "5b6f11a793c3b07e5ef5be39f3ad5e9b6e0fa711", default-features = false, features = ["udp-rx-queue-count-16"], optional = true }
 
 [dev-dependencies]
 aes = { version = "0.8.4", default-features = false, features = ["zeroize"] }

@@ -30,7 +30,7 @@ mod boot;
 #[cfg_attr(not(target_arch = "riscv32"), allow(dead_code))]
 pub mod channel;
 pub mod net;
-#[cfg(any(test, all(feature = "observe", target_arch = "riscv32")))]
+#[cfg(any(test, feature = "observe"))]
 pub mod observe;
 pub mod print;
 

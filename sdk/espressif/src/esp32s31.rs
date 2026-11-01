@@ -2,7 +2,7 @@
 //! service tasks and boot sequence behind [`main!`](crate::main).
 //!
 //! Layout, fixed for every image (lines and levels from the chip's
-//! measured arbitration, as the Wi-Fi station image had them):
+//! measured arbitration):
 //!
 //! | Context | Level | Entries |
 //! |---|---|---|

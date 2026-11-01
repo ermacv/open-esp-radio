@@ -1,7 +1,7 @@
 # Wi-Fi station load scenario
 
 `cargo hil run wifi-load` measures UDP load between this host and the
-product Wi-Fi station of the `esp32s31-wifi-station` image, through the lab
+product Wi-Fi station of the `esp32s31-sdk-station` image, through the lab
 router: host → Ethernet → OpenWrt AP → Wi-Fi → station, one hop over the
 air. The host sends and receives the load; the image counts its end through
 the [load service](../services/load) and reports its CPU. Only parameters
@@ -13,7 +13,7 @@ and counters cross the HIL link. RX and TX are named from the image's side.
 | `rx` | The host sends to the image |
 | `tx` | The image sends to the host |
 | `rx-tx` | Both at once, half the total each way |
-| `stop` | Leaves 2 s into an RX run of 65 Mbit/s and records how long the leave took. Fails unless the station answers `Down`: the image closes its load socket and stops its IP service, every lent receive buffer returns by the stop's 2 s deadline, and the radio retires. Runs last, because the image serves no station after a leave |
+| `stop` | Leaves 2 s into an RX run of 65 Mbit/s and records how long the leave took. Fails unless the station answers `Down`: the IP service stops and closes the load socket, every lent receive buffer returns by the stop's 2 s deadline, and the radio retires; the run itself ends at its time without the socket. Runs last, because the image serves no station after a leave |
 
 Each load case offers 10, 30, 50 and 65 Mbit/s in total (1400-byte
 datagrams); `OER_WIFI_LOAD_MBPS=10,65,100` replaces the levels (and `OER_WIFI_LOAD_WIDTH=ht20` the 40 MHz channel the path case asks the router for), e.g. to
@@ -126,7 +126,7 @@ transmissions per MPDU. RX and TX stay the image's.
 
 `cache` holds one entry per cache bus the image counts, cleared at the
 window's start: `ibus0` (hart 0's instruction fetches through L1-ICache0)
-and `ibus1` (hart 1's, which this image does not run), `dbus0` and `dbus1`
+and `ibus1` (hart 1's), `dbus0` and `dbus1`
 (the two data buses of the one L1-DCache; ESP-IDF requests `dbus0` for
 every hart's data and never `dbus1`, and which hart's data each carries is
 not established). Each has `hits`, `misses`, `conflicts` and
@@ -158,7 +158,7 @@ in the tables as `memcpy ← caller`, the function (and innermost inlined
 function) of the call `ra` returns from. Ticks are due every period on the
 timer's own schedule; one due while the hart's interrupts were masked
 samples where they open. The functions are named from the DWARF of the
-runtime ELF the harness built (`target/fw/esp32s31-wifi-station/runtime.elf`,
+runtime ELF the harness built (`target/fw/esp32s31-sdk-station/runtime.elf`,
 `oer_analysis_elf::dwarf::Symbolizer`); without it the profile records why
 and keeps the raw samples. The profile's `copies` weights the memory copy
 call sites the image build found in that ELF (`runtime-copies.json` beside

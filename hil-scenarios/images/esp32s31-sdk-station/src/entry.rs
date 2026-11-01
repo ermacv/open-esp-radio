@@ -1,12 +1,16 @@
 // The SDK station image: the boot of the library's station example with
 // the console added and every channel scanned, the HIL agent serving the
-// base module, the SDK station and Wi-Fi station services, and one worker
-// that answers their requests in order. The second boot runs the IP
-// service and the line exchanges on its sockets.
+// base module, the SDK station, Wi-Fi station, fault and load services, and
+// one worker that answers their requests in order beside the load server's
+// relay. The second boot runs the IP service, the line exchanges and the
+// load server on its sockets.
 
+use core::pin::pin;
+
+use embassy_futures::select::{Either as Raced, select};
 use oer_espressif::{
     Aes, AppResult, ApplicationEnd, Boot, Channel, Console, Error, Hart1Boot, Hart1Peripherals,
-    Hart1Started, Peripherals, SecondEnd, Started,
+    Hart1Started, Peripherals, SecondEnd, Started, observe,
     time::{Duration, with_timeout},
     wifi::{
         self, ConnectError, Ipv4Configuration, Ipv4Status, LinkState, Net, NetConfig, NetStatus,
@@ -33,9 +37,12 @@ const COUNTRY: [u8; 2] = *b"DE";
 /// The owner's transmit power cap, below the domain's ceiling.
 const TX_CAP_DBM: i8 = 10;
 
-/// A request of the SDK station service, of the Wi-Fi station service or of
-/// the fault service.
-type Requests = Either<Either<Request, wifi_station::Request>, oer_services_fault::Request>;
+/// A request of the SDK station service, of the Wi-Fi station service, of
+/// the fault service or of the load service.
+type Requests = Either<
+    Either<Either<Request, wifi_station::Request>, oer_services_fault::Request>,
+    oer_services_load::Request,
+>;
 
 static MAILBOX: ConstStaticCell<Mailbox<Requests>> = ConstStaticCell::new(Mailbox::new());
 
@@ -57,12 +64,17 @@ fn boot(p: Peripherals, mut boot: Boot) -> Result<impl Started, Error> {
     let (station, net) = Station::start(p.wifi, &aes, config, &mut boot)?;
     let console = Console::open(p.console, &mut boot)?;
     let exchanges = EXCHANGES.application(&mut boot)?;
+    let load = load::serve::LOAD.application(&mut boot)?;
+    let relay = load::relay::RELAY.application(&mut boot)?;
+    let hart0 = boot.observe()?;
+    let relay_part = observe::Part::claim("relay")?;
     let evidence = boot.evidence();
     let (outbox, inbox) = MAILBOX.try_take().ok_or(Error::Storage)?.split();
     let worker = Worker {
         station,
         net,
         exchanges,
+        load,
         phase: Phase::Idle,
         requests: inbox,
     };
@@ -71,27 +83,64 @@ fn boot(p: Peripherals, mut boot: Boot) -> Result<impl Started, Error> {
         evidence,
         services::IMAGE,
         outbox,
-        move || worker.run(),
+        move || application(worker, relay, hart0, relay_part),
     )))
 }
 
+/// The worker beside the load server's relay, which never ends.
+async fn application(
+    worker: Worker,
+    relay: load::relay::Relay,
+    hart0: observe::Hart0,
+    part: observe::Part,
+) -> AppResult {
+    let mut relay = pin!(load::relay::serve(relay, hart0));
+    match select(worker.run(), part.polled(relay.as_mut())).await {
+        Raced::First(result) => result,
+        Raced::Second(never) => match never {},
+    }
+}
+
 /// The second boot: the IP service with the image's pools over the
-/// station's device, and the line exchanges on its sockets.
+/// station's device, the line exchanges and the load server on its sockets.
 fn network(p: Hart1Peripherals, boot: Hart1Boot) -> Result<impl Hart1Started, Error> {
     let device = p.device.ok_or(Error::NoDevice)?;
     let (net, mut boot) = Net::start_with(device, &POOLS, NetConfig::Dhcpv4, boot)?;
-    let requests = EXCHANGES.second(&mut boot)?;
-    Ok(boot.run(exchanges(net, requests)))
+    let exchanges = EXCHANGES.second(&mut boot)?;
+    let load = load::serve::LOAD.second(&mut boot)?;
+    let relay = load::relay::RELAY.second(&mut boot)?;
+    let tally = load::serve::TALLY.try_take().ok_or(Error::Storage)?;
+    let part = observe::Part::claim("load")?;
+    Ok(boot.run(sockets(net, exchanges, load, relay, tally, part)))
+}
+
+/// The line exchanges beside the load server, which never ends.
+async fn sockets(
+    net: Net<RX, TX>,
+    exchanges: SecondEnd<Exchange, Exchanged, 1>,
+    load: load::serve::Requests,
+    relay: load::relay::Client,
+    tally: load::serve::RunTally,
+    part: observe::Part,
+) -> AppResult {
+    let mut server = pin!(load::serve::serve(&net, load, relay, tally));
+    match select(exchange_lines(&net, exchanges), part.polled(server.as_mut())).await {
+        Raced::First(result) => result,
+        Raced::Second(never) => match never {},
+    }
 }
 
 /// Answer each line exchange the worker asks for.
-async fn exchanges(net: Net<RX, TX>, mut requests: SecondEnd<Exchange, Exchanged, 1>) -> AppResult {
+async fn exchange_lines(
+    net: &Net<RX, TX>,
+    mut requests: SecondEnd<Exchange, Exchanged, 1>,
+) -> AppResult {
     loop {
         let exchange = requests.receive().await;
         let exchanged = if leased(net.status().ipv4).is_none() {
             Exchanged::NoAddress
         } else {
-            with_timeout(milliseconds(exchange.timeout_ms), echo(&net, &exchange))
+            with_timeout(milliseconds(exchange.timeout_ms), echo(net, &exchange))
                 .await
                 .unwrap_or(Exchanged::TimedOut)
         };
@@ -104,6 +153,8 @@ struct Worker {
     station: Station,
     net: NetStatus,
     exchanges: ApplicationEnd<Exchange, Exchanged, 1>,
+    /// The load server's requests and answers.
+    load: ApplicationEnd<(RequestIdentity, oer_services_load::Request), load::serve::Answer, 1>,
     /// Where the Wi-Fi station service's one join per boot is.
     phase: Phase,
     requests: Inbox<'static, Requests>,
@@ -114,26 +165,33 @@ impl Worker {
         loop {
             let (identity, request) = self.requests.next().await;
             match request {
-                Either::First(Either::First(Request::Connect(connect))) => {
+                Either::First(Either::First(Either::First(Request::Connect(connect)))) => {
                     answer(identity, &self.connect(connect).await);
                 }
-                Either::First(Either::First(Request::WaitIpv4(WaitIpv4 { timeout_ms }))) => {
+                Either::First(Either::First(Either::First(Request::WaitIpv4(WaitIpv4 { timeout_ms })))) => {
                     answer(identity, &self.wait_ipv4(timeout_ms).await);
                 }
-                Either::First(Either::First(Request::Exchange(exchange))) => {
+                Either::First(Either::First(Either::First(Request::Exchange(exchange)))) => {
                     answer(identity, &self.exchange(exchange).await);
                 }
-                Either::First(Either::First(Request::WaitLinkDown(WaitLinkDown { timeout_ms }))) => {
+                Either::First(Either::First(Either::First(Request::WaitLinkDown(WaitLinkDown { timeout_ms })))) => {
                     answer(identity, &self.wait_link_down(timeout_ms).await);
                 }
-                Either::First(Either::First(Request::GetStatus(_))) => {
+                Either::First(Either::First(Either::First(Request::GetStatus(_)))) => {
                     answer(identity, &self.status().await);
                 }
-                Either::First(Either::Second(request)) => self.station_request(identity, request).await,
+                Either::First(Either::First(Either::Second(request))) => {
+                    self.station_request(identity, request).await;
+                }
                 // Traps once the answer is written; a write the console
                 // cannot confirm ends the application, which records it.
-                Either::Second(oer_services_fault::Request::RaiseException(_)) => {
+                Either::First(Either::Second(oer_services_fault::Request::RaiseException(_))) => {
                     match answer_then_trap(identity, &oer_services_fault::Raising).await? {}
+                }
+                // The load server in the second boot answers it.
+                Either::Second(request) => {
+                    self.load.send((identity, request)).await;
+                    self.load.receive().await.publish(identity);
                 }
             }
         }
