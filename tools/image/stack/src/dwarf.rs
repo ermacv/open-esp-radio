@@ -1,7 +1,8 @@
 //! Facts an image's DWARF states: the chain of functions inlined at an
 //! address, what a function returns ([`Returned`]), where every
-//! copy of a function lies, inlined or not, and the types, globals and
-//! signatures of [`TypeFacts`].
+//! copy of a function lies, inlined or not, which copies a parameter of
+//! the executor's task-poll mark type marks ([`Marked`]), and the types,
+//! globals and signatures of [`TypeFacts`].
 //!
 //! [`read`] reads the return types, the copies and the type facts in one
 //! pass over the debug sections borrowed from the ELF's bytes (a compressed
@@ -16,7 +17,7 @@ use oer_analysis_elf::dwarf::{DebugSections, SliceReader, Symbolizer, gimli};
 use oer_analysis_riscv_model::{
     CallBehavior, Callee, Error, ErrorCode, Ledger, Result, RunControl,
 };
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
 
 pub(crate) mod locations;
@@ -49,6 +50,20 @@ pub struct Dwarf {
     paths: BTreeMap<usize, String>,
     /// Each copy's start and the offset of the subprogram it copies.
     copies: Vec<(u32, usize)>,
+    /// The copies of the subprograms a [`crate::TASK_POLL_MARK`] parameter
+    /// marks.
+    marked: Marked,
+}
+
+/// Where the copies of the subprograms that take a parameter of one type
+/// lie: the entry of each out-of-line copy, and the first address of each
+/// inlined one. A subprogram is marked when one of its own formal
+/// parameters names the type, or when the subprogram its origin or
+/// specification names is.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct Marked {
+    pub out_of_line: BTreeSet<u32>,
+    pub inlined: BTreeSet<u32>,
 }
 
 /// What the DWARF states a function returns.
@@ -213,6 +228,7 @@ pub fn read(
         }
     }
     copies.resolve_origins(control)?;
+    let marked = returns.marked(crate::TASK_POLL_MARK, keep, control)?;
     let mut types = types.finish();
     for &id in &returns.types {
         control.checkpoint(1)?;
@@ -227,6 +243,7 @@ pub fn read(
         noreturn: BTreeMap::new(),
         paths: copies.paths,
         copies: copies.copies,
+        marked,
     };
     returns.finish(&mut out, keep, control)?;
     drop(scratch);
@@ -249,6 +266,8 @@ struct Subprogram {
     noreturn: Option<bool>,
     origin: Link,
     unit: usize,
+    /// Whether one of its own formal parameters has the mark type.
+    marked: bool,
 }
 
 /// Every concrete subprogram's entry and what it returns, its own return
@@ -265,6 +284,14 @@ struct Returns<'d> {
     types: Vec<usize>,
     /// Every subprogram entry, by its offset in `.debug_info`.
     subprograms: BTreeMap<usize, Subprogram>,
+    /// The innermost subprogram entry the current entry lies in: its depth
+    /// and offset.
+    enclosing: Vec<(isize, usize)>,
+    /// Each formal parameter's subprogram and the offset of its type, for
+    /// the mark resolved once every type's name is known.
+    parameters: Vec<(usize, usize)>,
+    /// Each inlined copy's first address and the subprogram it names.
+    inlined: Vec<(u32, usize)>,
     /// Each concrete subprogram's entry address and offset.
     concrete: Vec<(u32, usize)>,
     /// Whether each unit read so far describes any type.
@@ -274,6 +301,7 @@ struct Returns<'d> {
 impl<'d> Returns<'d> {
     fn begin_unit(&mut self, scratch: &mut Ledger<'_>, control: &mut dyn RunControl) -> Result<()> {
         self.scope.clear();
+        self.enclosing.clear();
         scratch.push(&mut self.typed_units, false, control)
     }
 
@@ -289,6 +317,7 @@ impl<'d> Returns<'d> {
         control: &mut dyn RunControl,
     ) -> Result<()> {
         self.scope.retain(|(at, _)| *at < depth);
+        self.enclosing.retain(|(at, _)| *at < depth);
         let tag = entry.tag();
         let unit_index = self.typed_units.len().saturating_sub(1);
         if matches!(
@@ -347,8 +376,10 @@ impl<'d> Returns<'d> {
                     .map(|value| value == gimli::AttributeValue::Flag(true)),
                 origin,
                 unit: unit_index,
+                marked: false,
             };
             scratch.insert(&mut self.subprograms, offset, subprogram, control)?;
+            scratch.push(&mut self.enclosing, (depth, offset), control)?;
             let Some(gimli::AttributeValue::Addr(low)) = entry.attr_value(gimli::DW_AT_low_pc)
             else {
                 return Ok(());
@@ -357,8 +388,87 @@ impl<'d> Returns<'d> {
                 return Ok(());
             };
             scratch.push(&mut self.concrete, (low, offset), control)?;
+        } else if tag == gimli::DW_TAG_formal_parameter {
+            // Only a subprogram's own parameter: one of an inlined copy
+            // names its origin's and is no new fact.
+            if let Some(&(at, subprogram)) = self.enclosing.last()
+                && at == depth - 1
+                && let Some(parameter) = entry
+                    .attr_value(gimli::DW_AT_type)
+                    .and_then(|value| reference(unit, value))
+            {
+                scratch.push(&mut self.parameters, (subprogram, parameter), control)?;
+            }
+        } else if tag == gimli::DW_TAG_inlined_subroutine
+            && let Some(origin) = origin_reference(unit, entry)
+        {
+            let start = match entry.attr_value(gimli::DW_AT_low_pc) {
+                Some(gimli::AttributeValue::Addr(low)) => Some(low),
+                _ => {
+                    let mut ranges = dwarf.die_ranges(unit, entry).map_err(dwarf_error)?;
+                    ranges.next().map_err(dwarf_error)?.map(|range| range.begin)
+                }
+            };
+            if let Some(start) = start
+                && let Ok(start) = u32::try_from(start)
+            {
+                scratch.push(&mut self.inlined, (start, origin), control)?;
+            }
         }
         Ok(())
+    }
+
+    /// The copies of the subprograms a parameter of the type named `mark`
+    /// marks, directly or along their origin chains.
+    fn marked(
+        &mut self,
+        mark: &str,
+        keep: &mut Ledger<'_>,
+        control: &mut dyn RunControl,
+    ) -> Result<Marked> {
+        for &(subprogram, parameter) in &self.parameters {
+            control.checkpoint(1)?;
+            if self.types.binary_search(&parameter).is_ok()
+                && self.qualified(parameter) == mark
+                && let Some(entry) = self.subprograms.get_mut(&subprogram)
+            {
+                entry.marked = true;
+            }
+        }
+        let mut marked = Marked::default();
+        for &(low, offset) in &self.concrete {
+            if self.chain_marked(offset, control)? && !marked.out_of_line.contains(&low) {
+                keep.admit(size_of::<u32>(), control)?;
+                marked.out_of_line.insert(low);
+            }
+        }
+        for &(start, origin) in &self.inlined {
+            if self.chain_marked(origin, control)? && !marked.inlined.contains(&start) {
+                keep.admit(size_of::<u32>(), control)?;
+                marked.inlined.insert(start);
+            }
+        }
+        Ok(marked)
+    }
+
+    /// Whether the subprogram at `offset` or one along its origin chain is
+    /// marked; a broken link or a cycle ends the chain unmarked.
+    fn chain_marked(&self, offset: usize, control: &mut dyn RunControl) -> Result<bool> {
+        let mut at = offset;
+        for _ in 0..=self.subprograms.len() {
+            control.checkpoint(1)?;
+            let Some(subprogram) = self.subprograms.get(&at) else {
+                return Ok(false);
+            };
+            if subprogram.marked {
+                return Ok(true);
+            }
+            match subprogram.origin {
+                Link::To(next) => at = next,
+                Link::None | Link::Invalid => return Ok(false),
+            }
+        }
+        Ok(false)
     }
 
     /// The qualified name of the type at `offset`: its scope's names and
@@ -548,6 +658,12 @@ impl Dwarf {
             .filter_map(|frame| frame.function)
             .map(|name| plain(&name))
             .collect())
+    }
+
+    /// The copies of the executor's task poll boundaries: the subprograms
+    /// a parameter of type [`crate::TASK_POLL_MARK`] marks.
+    pub fn poll_boundaries(&self) -> &Marked {
+        &self.marked
     }
 
     /// What the function entered at `function` returns.
