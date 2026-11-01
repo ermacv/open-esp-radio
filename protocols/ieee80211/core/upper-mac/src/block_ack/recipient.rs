@@ -89,6 +89,7 @@ pub struct RxBlockAckNegotiation {
     response: AddbaResponse,
     starting_sequence: SequenceNumber,
     requested_window: u16,
+    requested_amsdu: bool,
     inactivity: Option<NonZeroU64>,
 }
 
@@ -96,9 +97,13 @@ impl RxBlockAckNegotiation {
     /// `capacity` is the integration's retained-frame budget, with a credit
     /// reserved for the MPDU that closes a gap. No bank means an explicit
     /// refusal, even when every peer parameter is otherwise supported.
+    /// `amsdu_in_ampdu` is whether the backend delivers an MPDU carrying an
+    /// A-MSDU inside an A-MPDU; the response grants A-MSDUs in the
+    /// agreement only when the request asks and the backend delivers them.
     pub fn request(
         request: RxAddbaRequest,
         maximum_tid: u8,
+        amsdu_in_ampdu: bool,
         capacity: u16,
         bank_available: bool,
         now: Instant,
@@ -144,11 +149,12 @@ impl RxBlockAckNegotiation {
         // __ieee80211_start_rx_ba_session applies the same default before
         // bounding it by the receiver's actual storage capacity.
         response.window = if window == 0 { 64 } else { window }.min(capacity).min(64);
-        response.amsdu = amsdu;
+        response.amsdu = amsdu && amsdu_in_ampdu;
         Ok(Self {
             response,
             starting_sequence,
             requested_window: window,
+            requested_amsdu: amsdu,
             inactivity,
         })
     }
@@ -177,6 +183,7 @@ pub struct RxBlockAckSession<A, const WINDOW: usize, const SLOTS: usize> {
     gap: Option<NonZeroU64>,
     starting_sequence: SequenceNumber,
     requested_window: u16,
+    requested_amsdu: bool,
     timeout_tu: u16,
     tid: u8,
     dialog_token: u8,
@@ -197,6 +204,7 @@ impl<A, const WINDOW: usize, const SLOTS: usize> RxBlockAckSession<A, WINDOW, SL
                 gap: None,
                 starting_sequence: negotiation.starting_sequence,
                 requested_window: negotiation.requested_window,
+                requested_amsdu: negotiation.requested_amsdu,
                 timeout_tu: negotiation.response.timeout_tu,
                 tid: negotiation.response.tid,
                 dialog_token: negotiation.response.dialog_token,
@@ -225,7 +233,7 @@ impl<A, const WINDOW: usize, const SLOTS: usize> RxBlockAckSession<A, WINDOW, SL
             return None;
         }
         let identical = request.immediate
-            && request.amsdu == self.amsdu
+            && request.amsdu == self.requested_amsdu
             && request.window == self.requested_window
             && request.timeout_tu == self.timeout_tu
             && request.starting_sequence == self.starting_sequence;

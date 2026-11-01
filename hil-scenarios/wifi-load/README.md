@@ -25,7 +25,7 @@ clock); per level it records offered, sent and received throughput, lost
 and untracked datagrams (an exact tally, shared by both ends), the sender's
 refused and missed sends, RTT of 20 probes per second within the window
 (replies read through the drain) echoed by the image (min, median,
-p95, max, replies), each hart's busy share (1 − idle/window: the boot hart's
+p95, max, replies; `OER_WIFI_LOAD_PROBES=off` sends no probes), each hart's busy share (1 − idle/window: the boot hart's
 radio and station, hart 1's network and load) with each executor's work
 share, each named part's polls (tasks, the station work's and the network's
 futures and the station service's spans: count, rate, share of the window
