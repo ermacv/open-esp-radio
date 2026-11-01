@@ -141,7 +141,7 @@ use oer_ieee80211_core_roles_sta::{
     },
     machine::{
         KEY_DATA_CAPACITY, KeyUnwrapId, Peer, RxBlockAckReply, StaAction, StaCallbacks, StaInput,
-        StaKeyUnwrapRequest, StaNotice, StaTokens, StaTransmit, StaTxContext, Station,
+        StaKeyUnwrapRequest, StaNotice, StaReceived, StaTokens, StaTransmit, StaTxContext, Station,
     },
 };
 use oer_ieee80211_core_upper_mac::block_ack::{Parked, RxDisposition};
@@ -352,11 +352,43 @@ const MAX_INPUT_STEPS_PER_BATCH: u8 = 8;
 /// an alarm or a transmission waits at most this many port events.
 const MAX_WAITING_EVENT_STEPS: u8 = 8;
 
+/// What a served port event leaves for the station's next step.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Taken {
+    /// A data frame delivered at once and nothing else: neither the station
+    /// nor its receive reordering owes anything it did not owe before, and
+    /// no deadline came earlier.
+    Direct,
+    /// Anything else: the next step may owe an action.
+    Input,
+}
+
+/// Whether the station's next step is skipped at `now`. `settled` holds,
+/// after a direct frame, the earliest deadline of the station, its arbiter
+/// and its receive reordering; `event_steps` counts the port events taken in
+/// a row. Between direct frames a step owes nothing before that deadline,
+/// so it runs only at the deadline and once per [`MAX_WAITING_EVENT_STEPS`]
+/// events.
+fn skips_step(settled: Option<Option<Instant>>, event_steps: u8, now: Instant) -> bool {
+    matches!(settled, Some(deadline)
+        if event_steps != 0 && deadline.is_none_or(|deadline| now < deadline))
+}
+
 /// A station frame's transmission on the port `B`.
 type StationTransmit<'id, B, const GROUPS: usize> = StaTransmit<
     'id,
     PortStaTokens<'id, <B as StationPort>::Types<'id>, <B as StationPort>::Small, GROUPS>,
     <B as StationPort>::Caps,
+>;
+
+/// A served port event's result: the received buffer to recycle, if any,
+/// and what the event leaves for the next step.
+type EventServed<'id, B> = Result<
+    (
+        Option<<<B as StationPort>::Types<'id> as PhaseTypes<'id>>::RxBuffer>,
+        Taken,
+    ),
+    StepFailure<'id, B>,
 >;
 
 /// A data MPDU's operation on the port `B`.
@@ -1838,31 +1870,39 @@ impl<
         let mut batch = 0_u8;
         // The steps in a row that took a port event.
         let mut event_steps = 0_u8;
+        // After direct frames, the deadline the skipped steps wait for.
+        let mut settled: Option<Option<Instant>> = None;
         loop {
             // One clock read serves the turn's step and pending receives.
             let turn = timer.now();
-            B::span(ServiceSpan::Step, false);
-            let stepped = self.step(arbiter, turn, phase, io);
-            B::span(ServiceSpan::Step, true);
-            match stepped {
-                Next::Wait => {}
-                Next::Retune(pending) => return Served::Retune(pending),
-                Next::Failed(StepFailure::Port(
-                    fault @ (ServiceFault::Backend(_) | ServiceFault::Submission(_)),
-                )) => {
-                    return self.drain_port_error(arbiter, phase, timer, fault).await;
+            // A direct frame changed nothing a step or a pending receive
+            // takes: both run again at the deadline, after any other input,
+            // or after `MAX_WAITING_EVENT_STEPS` events.
+            if !skips_step(settled, event_steps, turn) {
+                settled = None;
+                B::span(ServiceSpan::Step, false);
+                let stepped = self.step(arbiter, turn, phase, io);
+                B::span(ServiceSpan::Step, true);
+                match stepped {
+                    Next::Wait => {}
+                    Next::Retune(pending) => return Served::Retune(pending),
+                    Next::Failed(StepFailure::Port(
+                        fault @ (ServiceFault::Backend(_) | ServiceFault::Submission(_)),
+                    )) => {
+                        return self.drain_port_error(arbiter, phase, timer, fault).await;
+                    }
+                    Next::Failed(fault) => return Served::Failed(fault),
                 }
-                Next::Failed(fault) => return Served::Failed(fault),
-            }
-            // Releasing RX owners is a separate input source. Its receive
-            // transition must not nest inside the control-action step frame.
-            B::span(ServiceSpan::Pending, false);
-            let pending = self.receive_pending(arbiter, turn, phase, io);
-            B::span(ServiceSpan::Pending, true);
-            match pending {
-                Ok(true) => continue,
-                Ok(false) => {}
-                Err(fault) => return Served::Failed(fault),
+                // Releasing RX owners is a separate input source. Its receive
+                // transition must not nest inside the control-action step frame.
+                B::span(ServiceSpan::Pending, false);
+                let pending = self.receive_pending(arbiter, turn, phase, io);
+                B::span(ServiceSpan::Pending, true);
+                match pending {
+                    Ok(true) => continue,
+                    Ok(false) => {}
+                    Err(fault) => return Served::Failed(fault),
+                }
             }
             let accepting_commands = !self.station.is_reclaiming();
             // After a port event, one already waiting goes to this step at
@@ -1881,8 +1921,9 @@ impl<
             };
             if let Some(waiting) = waiting {
                 let took_event = matches!(waiting, Ok(Ok(_)));
-                if let Err(served) = self.serve_event(arbiter, turn, waiting, phase, io) {
-                    return served;
+                match self.serve_event(arbiter, turn, waiting, phase, io) {
+                    Ok(taken) => settled = self.settled(arbiter, settled, taken),
+                    Err(served) => return served,
                 }
                 event_steps = if took_event {
                     event_steps.saturating_add(1) % MAX_WAITING_EVENT_STEPS
@@ -1897,14 +1938,7 @@ impl<
                 continue;
             }
             let (event, command_ready, tick, transmit, unwrapped, now) = {
-                let machine_deadline = [
-                    arbiter.poll_deadline(),
-                    self.station.poll_deadline(),
-                    self.pending.receive.deadline(),
-                ]
-                .into_iter()
-                .flatten()
-                .min();
+                let machine_deadline = self.step_deadline(arbiter);
                 let deadline = [
                     machine_deadline,
                     if accepting_commands {
@@ -1997,6 +2031,8 @@ impl<
                 };
                 (event, command_ready, tick, transmit, unwrapped, timer.now())
             };
+            // Only a direct frame taken alone skips the next step.
+            let mut quiet = unwrapped.is_none() && !tick && !transmit;
             // The response returns the station's ticket before any other
             // input can end the phase.
             if let Some((id, result)) = unwrapped {
@@ -2007,11 +2043,13 @@ impl<
                 );
             }
             let took_event = matches!(event, Some(Ok(Ok(_))));
-            if let Some(event) = event
-                && let Err(served) = self.serve_event(arbiter, now, event, phase, io)
-            {
-                return served;
-            }
+            let taken = match event {
+                Some(event) => match self.serve_event(arbiter, now, event, phase, io) {
+                    Ok(taken) => taken,
+                    Err(served) => return served,
+                },
+                None => Taken::Input,
+            };
             if tick {
                 self.station.input(now, StaInput::Tick, &mut self.events);
             }
@@ -2029,6 +2067,12 @@ impl<
                     Err(_) => return Served::Failed(ServiceFault::PolicyDeadlineOverflow.into()),
                 },
                 None => None,
+            };
+            quiet &= command.is_none();
+            settled = if quiet {
+                self.settled(arbiter, settled, taken)
+            } else {
+                None
             };
             if let Some(command) = command {
                 match command {
@@ -2604,6 +2648,35 @@ impl<
     #[inline(never)]
     /// Take one result of the port's event stream: an event, a loss, or
     /// the stream's end, which ends the serve.
+    /// The earliest deadline of the station, its arbiter and its receive
+    /// reordering: before it, a step after no other input owes nothing.
+    fn step_deadline(&self, arbiter: &PortArbiter<'id, B>) -> Option<Instant> {
+        [
+            arbiter.poll_deadline(),
+            self.station.poll_deadline(),
+            self.pending.receive.deadline(),
+        ]
+        .into_iter()
+        .flatten()
+        .min()
+    }
+
+    /// The deadline the steps skipped after `taken` wait for: a direct
+    /// frame keeps the one read after the last step, whose deadlines it
+    /// only moves later, and reads it after a step; any other input runs
+    /// the next step.
+    fn settled(
+        &self,
+        arbiter: &PortArbiter<'id, B>,
+        settled: Option<Option<Instant>>,
+        taken: Taken,
+    ) -> Option<Option<Instant>> {
+        match taken {
+            Taken::Direct => Some(settled.unwrap_or_else(|| self.step_deadline(arbiter))),
+            Taken::Input => None,
+        }
+    }
+
     fn serve_event<
         'p,
         P,
@@ -2630,25 +2703,25 @@ impl<
             COMMAND_DEPTH,
             impl Notifies,
         >,
-    ) -> Result<(), Served<'id, B>>
+    ) -> Result<Taken, Served<'id, B>>
     where
         'id: 'p,
         P: LowerMacPhase<'p, 'id, Caps = B::Caps, Types = B::Types<'id>>,
     {
         match event {
             Ok(Ok(event)) => match self.event(arbiter, now, B::event(event), phase, io) {
-                Ok(Some(buffer)) => {
+                Ok((Some(buffer), taken)) => {
                     B::span(ServiceSpan::Recycle, false);
                     phase.recycle(buffer);
                     B::span(ServiceSpan::Recycle, true);
-                    Ok(())
+                    Ok(taken)
                 }
-                Ok(None) => Ok(()),
+                Ok((None, taken)) => Ok(taken),
                 Err(fault) => Err(Served::Failed(fault.into())),
             },
             Ok(Err(EventsLost)) => {
                 report(&mut self.events, || ServiceEvent::PortEventsLost);
-                Ok(())
+                Ok(Taken::Input)
             }
             Err(end) => {
                 let cause = match end {
@@ -2694,7 +2767,7 @@ impl<
         if !Self::network_full(phase, io)
             && let Some((frame, meta)) = self.pending.receive.pop_ready()
         {
-            if let Some(frame) = self.deliver_received(now, frame, meta, phase, io) {
+            if let (Some(frame), _) = self.deliver_received(now, frame, meta, phase, io) {
                 B::span(ServiceSpan::Recycle, false);
                 phase.recycle(frame);
                 B::span(ServiceSpan::Recycle, true);
@@ -2702,7 +2775,7 @@ impl<
             return Ok(true);
         }
         if let Some((frame, meta)) = self.pending.receive.pop_deferred() {
-            if let Some(frame) = self.event(
+            if let (Some(frame), _) = self.event(
                 arbiter,
                 now,
                 LowerMacEvent::Received { frame, meta },
@@ -2719,7 +2792,7 @@ impl<
     }
 
     /// Take one event of the port; a received frame's buffer comes back
-    /// for its recycle.
+    /// for its recycle, with what the event leaves for the next step.
     // Keep source-specific temporaries out of the service poll frame.
     #[inline(never)]
     fn event<'p, P, const TX_DEPTH: usize, const RX_DEPTH: usize, const COMMAND_DEPTH: usize>(
@@ -2739,7 +2812,7 @@ impl<
             COMMAND_DEPTH,
             impl Notifies,
         >,
-    ) -> Result<Option<<B::Types<'id> as PhaseTypes<'id>>::RxBuffer>, StepFailure<'id, B>>
+    ) -> EventServed<'id, B>
     where
         'id: 'p,
         P: LowerMacPhase<'p, 'id, Caps = B::Caps, Types = B::Types<'id>>,
@@ -2751,19 +2824,20 @@ impl<
                 B::span(ServiceSpan::Received, true);
                 received
             }
-            LowerMacEvent::Tbtt(_) => Ok(None),
+            LowerMacEvent::Tbtt(_) => Ok((None, Taken::Input)),
             LowerMacEvent::Terminal(terminal) => {
                 B::span(ServiceSpan::Terminal, false);
                 let accepted = self.terminal(arbiter, now, terminal);
                 B::span(ServiceSpan::Terminal, true);
                 accepted?;
-                Ok(None)
+                Ok((None, Taken::Input))
             }
         }
     }
 
     /// Take one received frame: hold it for reordering or deliver it; its
-    /// buffer comes back for its recycle.
+    /// buffer comes back for its recycle. Only a frame delivered at once
+    /// whose MSDUs were all data is [`Taken::Direct`].
     #[inline(never)]
     fn received<'p, P, const TX_DEPTH: usize, const RX_DEPTH: usize, const COMMAND_DEPTH: usize>(
         &mut self,
@@ -2782,7 +2856,7 @@ impl<
             COMMAND_DEPTH,
             impl Notifies,
         >,
-    ) -> Result<Option<<B::Types<'id> as PhaseTypes<'id>>::RxBuffer>, StepFailure<'id, B>>
+    ) -> EventServed<'id, B>
     where
         'id: 'p,
         P: LowerMacPhase<'p, 'id, Caps = B::Caps, Types = B::Types<'id>>,
@@ -2795,8 +2869,8 @@ impl<
                 .receive(now, local, frame, meta, &mut self.events)
             {
                 RxDisposition::Deliver(received) => received,
-                RxDisposition::Retained => return Ok(None),
-                RxDisposition::Recycle(frame) => return Ok(Some(frame)),
+                RxDisposition::Retained => return Ok((None, Taken::Input)),
+                RxDisposition::Recycle(frame) => return Ok((Some(frame), Taken::Input)),
                 RxDisposition::Capacity(frame) => {
                     phase.recycle(frame);
                     return Err(ServiceFault::RxBlockAckCapacity.into());
@@ -2807,9 +2881,10 @@ impl<
         // dropped, and the driver keeps further units in its ring.
         if Self::network_full(phase, io) || self.pending.receive.has_ready() {
             return match self.pending.receive.park(frame, meta) {
-                Parked::Waiting => Ok(None),
+                Parked::Waiting => Ok((None, Taken::Input)),
                 Parked::Deliver((frame, meta)) => {
-                    Ok(self.deliver_received(now, frame, meta, phase, io))
+                    let (kept, _) = self.deliver_received(now, frame, meta, phase, io);
+                    Ok((kept, Taken::Input))
                 }
                 Parked::Capacity(frame) => {
                     phase.recycle(frame);
@@ -2851,7 +2926,8 @@ impl<
 
     /// Deliver one received frame's MSDUs to the network queue. A frame
     /// that delivered exactly one MSDU is lent in place; the others are
-    /// copied. The buffer comes back for its recycle unless it was lent.
+    /// copied. The buffer comes back for its recycle unless it was lent;
+    /// a frame whose MSDUs were all data is [`Taken::Direct`].
     #[inline(never)]
     fn deliver_received<
         'p,
@@ -2876,7 +2952,7 @@ impl<
             COMMAND_DEPTH,
             impl Notifies,
         >,
-    ) -> Option<<B::Types<'id> as PhaseTypes<'id>>::RxBuffer>
+    ) -> (Option<<B::Types<'id> as PhaseTypes<'id>>::RxBuffer>, Taken)
     where
         'id: 'p,
         P: LowerMacPhase<'p, 'id, Caps = B::Caps, Types = B::Types<'id>>,
@@ -2954,12 +3030,17 @@ impl<
         if copied != RxMsdusCopied::default() {
             report(&mut self.events, || ServiceEvent::RxMsdusCopied(copied));
         }
-        if let Err(reason) = result {
-            report(&mut self.events, || {
-                ServiceEvent::RxFrameDropped(RxDrop::Station(reason))
-            });
-        }
-        kept
+        let taken = match result {
+            Ok(StaReceived::Data) => Taken::Direct,
+            Ok(StaReceived::Input) => Taken::Input,
+            Err(reason) => {
+                report(&mut self.events, || {
+                    ServiceEvent::RxFrameDropped(RxDrop::Station(reason))
+                });
+                Taken::Input
+            }
+        };
+        (kept, taken)
     }
 
     /// Copy one received MSDU, `payload` of `frame`, to the network queue;

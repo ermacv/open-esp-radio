@@ -873,6 +873,17 @@ pub const fn calibrated_power<K: Ieee80211Capabilities>()
     }
 }
 
+/// What a received frame was to the station.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum StaReceived {
+    /// It delivered data MSDUs and nothing else: the station owes nothing
+    /// it did not owe before, and no deadline came earlier.
+    Data,
+    /// It was an input to the station's state, a management frame or a key
+    /// exchange message: the next [`Station::poll_action`] may owe an action.
+    Input,
+}
+
 /// A frame refused by admission or by the authenticated RSN protocol.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum StaRxError {
@@ -3322,7 +3333,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
         meta: T::RxMeta,
         mut deliver: impl FnMut(crate::data::MsduDelivery<'frame>),
         events: &mut impl EventSink<StaEvent>,
-    ) -> Result<(), StaRxError> {
+    ) -> Result<StaReceived, StaRxError> {
         let (mut context, state) = self.transition();
         let result = context.receive_frame(state, now, frame, meta, &mut deliver, events);
         self.complete_commands();
@@ -4937,12 +4948,12 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
         meta: T::RxMeta,
         mut deliver: impl FnMut(crate::data::MsduDelivery<'frame>),
         events: &mut impl EventSink<StaEvent>,
-    ) -> Result<(), StaRxError> {
+    ) -> Result<StaReceived, StaRxError> {
         use oer_ieee80211_core_upper_mac::receive::{AdmittedData, RxDropReason};
         let header = match crate::receive::classify(frame)? {
             Received::Management(management) => {
                 self.received_management(state, now, management, meta, events);
-                return Ok(());
+                return Ok(StaReceived::Input);
             }
             Received::Data(header) => header,
         };
@@ -4968,6 +4979,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
             crate::data::integrity(meta.common()),
             replay,
         )?;
+        let mut received = StaReceived::Data;
         for parts in admitted.msdus()? {
             let parts = parts?;
             if parts.ether_type == ETHER_TYPE_EAPOL {
@@ -4997,6 +5009,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                     _ => Change::Keep,
                 };
                 state.apply(change);
+                received = StaReceived::Input;
             } else {
                 if self.protected() && !admitted.protected() {
                     return Err(RxDropReason::Protection.into());
@@ -5009,7 +5022,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                 deliver(delivery);
             }
         }
-        Ok(())
+        Ok(received)
     }
 
     /// Take a received frame.
