@@ -80,24 +80,41 @@ const MCAUSE_CODE: u32 = 0x0fff;
 /// The device raises an illegal-instruction exception on request: it
 /// answers, traps, records and resets by itself. Its next boot serves the
 /// exception as its post-mortem, the trap's registers apart from what the
-/// exception hook read after the stop, and a board reset after that boot
-/// finds the record cleared: the boot printed it whole.
+/// exception hook read after the stop.
+///
+/// A boot reads the record before it prints it and clears it only once the
+/// print reached the console whole; until then every boot serves it, the
+/// printing one included. After the device's own restart the console
+/// reconnects while the boot prints, so the boot after a board reset may
+/// serve the same record again; it must not differ, and the boot after one
+/// more board reset, whose predecessor printed with the console open, serves
+/// none.
 fn exception(cx: &mut Cx<'_>) -> Result<(), Failure> {
     let before = cx.boot().boot_id;
     let Raising = cx.call(RaiseException, STATUS_TIMEOUT)?;
     let after = cx.follow_restart()?.boot_id;
     let evidence = cx.call(GetBootStatus, STATUS_TIMEOUT)?;
-    let fault = trapped(&evidence).map_err(Failure::Fail)?;
+    let fault = trapped(&evidence).map_err(Failure::Fail)?.clone();
     println!(
-        "boot {before:016x} trapped, boot {after:016x} after {:?}: {:?}",
-        evidence.reset_reason, fault
+        "boot {before:016x} trapped, boot {after:016x} after {:?}: {fault:?}",
+        evidence.reset_reason
     );
+    cx.reset()?;
+    let again = cx.call(GetBootStatus, STATUS_TIMEOUT)?.post_mortem;
+    let served_again = again.is_some();
+    cx.measure("exception-served-after-one-reset", served_again.into());
+    if let Some(summary) = &again {
+        check(
+            summary.fault.as_ref() == Some(&Fault::Exception(fault)),
+            format!("the next boot serves another record: {summary:?}"),
+        )?;
+    }
     cx.reset()?;
     let cleared = cx.call(GetBootStatus, STATUS_TIMEOUT)?;
     check(
         cleared.post_mortem.is_none(),
         format!(
-            "the boot after the next still serves {:?}",
+            "two board resets later the boot still serves {:?}",
             cleared.post_mortem
         ),
     )
