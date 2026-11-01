@@ -29,16 +29,9 @@ writes the start and only then sets its bit; only the start crosses
 contexts, so it is `Send`, and the future need not be. Every waker has one vtable, the binding's, whose data is the executor and the task's
 index, never a pointer; the timer queue keeps one deadline per task by that
 index. Each task's poll is one direct call of its never-inlined instance of
-`task::poll_task`, which the declaration exports as a record,
-`__OER_TASK_POLL.<module path>`, for the image checks. `Spawner::start` takes
-the record with the task and keeps it, so an image holds the record exactly
-when it can start the task; a task is polled only once started, and a task
-the image never starts, such as a radio task of an image that starts no
-station, leaves no record. The record (`PollBoundary<M>`) is typed by the
-task's start `M`, which selects its poll instance: a start with the record
-of a task with another start does not compile, and a declared task's start
-is its own opaque type. A record written by hand without the exported name
-is outside this check. Both executors
+`task::poll_task`, whose zero-sized first parameter, `task::PollBoundary`,
+marks it in the DWARF for the image checks; a task set whose executor the
+image never runs links no boundary and none of its tasks' code. Both executors
 implement `SignalExecutor`, so an `IrqSignal` wakes a task of either by its
 `TaskId`. An executor's context is the executor that runs on the core and
 the interrupt level it entered at (`mintstatus.mil`): a hardware interrupt
@@ -111,7 +104,10 @@ receiving hart (H2).
 ## Harts
 
 Each executor starts with its hart's `Hart<H>` (from that hart's interrupt
-enable) and const-checks that its table entry names hart `H`; an executor
+enable) and const-checks that its table entry names hart `H`. An
+interrupt-mode executor's entry names the type `Round<Tasks>` as its handler,
+and `InterruptExecutor::start` binds only an entry whose round is that of the
+tasks it starts, a type check (`tests/chip-ui/executor_round.rs`); an executor
 runs on any hart that has its own router, including a secondary hart's
 interrupt-mode executor on its own `FROM_CPU` line routed to that hart's
 bank. Each executor's running context, ready mask and task slots are its

@@ -88,7 +88,8 @@ pub enum Class {
     Hardware = 0,
     /// An executor's interrupt: serves its signals and timers, then polls its
     /// tasks. Strict up to the poll, its tasks by the task rules; one per
-    /// level and hart.
+    /// level and hart. Its entry names a handler type ([`ExecutorHandler`]),
+    /// not a function, which its token states ([`ExecutorEntry`]).
     Executor = 1,
     /// A [`Class::Hardware`] handler on the level of its hart's
     /// [`Class::Executor`], the one rule it breaks; declared
@@ -168,6 +169,46 @@ pub trait Entry: Sized {
     fn cell() -> &'static oer_memory::HandlerCell<Self::Part>;
 }
 
+/// The handler of a [`Class::Executor`] entry, named by type: one round of
+/// the executor the entry runs. The entry's token states it
+/// ([`ExecutorEntry::Handler`]), so an executor's start can check at compile
+/// time that the entry it binds polls the task set it starts.
+pub trait ExecutorHandler<P> {
+    /// The round, with the entry's part.
+    fn handle(part: &mut P);
+}
+
+/// The token of a [`Class::Executor`] entry: [`interrupt_table!`]
+/// implements it with the handler type the entry names.
+///
+/// ```
+/// # oer_espressif_interrupt_table::__fake_table!();
+/// fn polls<W: oer_espressif_interrupt_table::ExecutorEntry<Handler = OnExecutor>>() {}
+/// polls::<RadioToken>();
+/// ```
+///
+/// ```compile_fail,E0277
+/// # oer_espressif_interrupt_table::__fake_table!();
+/// fn polls<W: oer_espressif_interrupt_table::ExecutorEntry>() {}
+/// // A hardware entry runs no executor.
+/// polls::<TimerToken>();
+/// ```
+///
+/// ```compile_fail,E0573
+/// # oer_espressif_interrupt_table::__fake_parts!();
+/// # pub fn on_radio(_: &mut RadioIrq) {}
+/// oer_espressif_interrupt_table::interrupt_table! {
+///     lines: FAKE_LINES,
+///     handler_attributes: [];
+///     contexts { radio_executor: 2; }
+///     // An executor entry names its round's type, not a function.
+///     radio: RadioToken = RadioIrq => on_radio, line 17, context radio_executor, hart 0, Executor;
+/// }
+/// ```
+pub trait ExecutorEntry: Entry {
+    type Handler: ExecutorHandler<Self::Part>;
+}
+
 /// Scheduling metadata; register ownership is carried by the interrupt part.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Context {
@@ -216,7 +257,9 @@ pub struct Lines {
 /// The levels are declared once; same-level entries on a hart are written
 /// from lowest to highest arbitration priority and checked against `Lines::tie_break`. `Part` implements [`InterruptSources`] (each
 /// [`InterruptSource`] does), `handler`
-/// is a `fn(&mut Part)`, and the macro defines the token type `Token`, while
+/// is a `fn(&mut Part)` or, for an `Executor` entry, a type implementing
+/// [`ExecutorHandler<Part>`](ExecutorHandler) that the token states
+/// ([`ExecutorEntry`]), and the macro defines the token type `Token`, while
 /// `Interrupts::take` hands out every token once. `CLASS` is a [`Class`]:
 /// `Hardware`, `Executor` or `Exempt(VIOLATION, "reason")`, where
 /// `VIOLATION` names the one hardware rule the entry breaks
@@ -241,7 +284,7 @@ pub struct Lines {
 ///     lines: FAKE_LINES,
 ///     handler_attributes: [];
 ///     contexts { radio_executor: 2; }
-///     radio: RadioToken = RadioIrq => on_radio, line 17, context radio_executor, hart 0, Executor;
+///     radio: RadioToken = RadioIrq => OnExecutor, line 17, context radio_executor, hart 0, Executor;
 ///     // A hardware handler would wait for the executor's whole poll.
 ///     timer: TimerToken = TimerIrq => on_timer, line 16, context radio_executor, hart 0, Hardware;
 /// }
@@ -256,8 +299,8 @@ pub struct Lines {
 ///     handler_attributes: [];
 ///     contexts { radio_executor: 2; }
 ///     // One executor per level and hart.
-///     radio: RadioToken = RadioIrq => on_radio, line 17, context radio_executor, hart 0, Executor;
-///     timer: TimerToken = TimerIrq => on_timer, line 16, context radio_executor, hart 0, Executor;
+///     radio: RadioToken = RadioIrq => OnExecutor, line 17, context radio_executor, hart 0, Executor;
+///     timer: TimerToken = TimerIrq => OnExecutor, line 16, context radio_executor, hart 0, Executor;
 /// }
 /// ```
 ///
@@ -281,7 +324,7 @@ pub struct Lines {
 ///     lines: FAKE_LINES,
 ///     handler_attributes: [];
 ///     contexts { radio_executor: 2; }
-///     radio: RadioToken = RadioIrq => on_radio, line 17, context radio_executor, hart 0, Executor;
+///     radio: RadioToken = RadioIrq => OnExecutor, line 17, context radio_executor, hart 0, Executor;
 ///     // A waker exemption does not exempt the executor's level too.
 ///     timer: TimerToken = TimerIrq => on_timer, line 16, context radio_executor, hart 0, Exempt(WakerCall, "its driver");
 /// }
@@ -414,7 +457,7 @@ pub struct Lines {
 ///     lines: FAKE_LINES,
 ///     handler_attributes: [];
 ///     contexts { radio_executor: 2; radio: 3; }
-///     radio: RadioToken = RadioIrq => on_radio, line 16, context radio_executor, hart 0, Executor;
+///     radio: RadioToken = RadioIrq => OnExecutor, line 16, context radio_executor, hart 0, Executor;
 ///     timer: TimerToken = TimerIrq => on_timer, line 16, context radio_executor, hart 1, Hardware;
 ///     pair: PairToken = PairIrq => on_pair, line 17, context radio, hart 1, Hardware;
 ///     absent: AbsentToken = AbsentIrq => on_absent, line 47, context radio_executor, hart 0, Exempt(ExecutorLevel, "until its port");
@@ -469,13 +512,16 @@ macro_rules! interrupt_table {
             }
 
             $(#[cfg($cfg)])*
+            $crate::__executor_entry!($class, $token, $handler);
+
+            $(#[cfg($cfg)])*
             const _: () = {
                 $crate::__exemption!($hart, $line $(, $reason)?);
             };
 
             $(#[cfg($cfg)])*
             impl $token {
-                $crate::__interrupt_handler!($handler_attributes, $token, $handler, $hart, $line);
+                $crate::__interrupt_handler!($handler_attributes, $token, $class, $handler, $hart, $line);
             }
         )*
 
@@ -602,7 +648,18 @@ macro_rules! interrupt_sources {
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __interrupt_handler {
-    ([$(#[$attribute:meta])*], $token:ident, $handler:path, $hart:literal, $line:literal) => {
+    ([$(#[$attribute:meta])*], $token:ident, Executor, $handler:path, $hart:literal, $line:literal) => {
+        $crate::__private::link_fn! {
+            interrupt $crate::__private::InterruptHandlerSlot<$hart, $line>, hart $hart, line $line =>
+            $(#[$attribute])*
+            extern "C" fn __handler() {
+                let handler: fn(&mut <$token as $crate::Entry>::Part) =
+                    <$handler as $crate::ExecutorHandler<<$token as $crate::Entry>::Part>>::handle;
+                let _ = <$token as $crate::Entry>::PROOF.cell().with(handler);
+            }
+        }
+    };
+    ([$(#[$attribute:meta])*], $token:ident, $class:ident, $handler:path, $hart:literal, $line:literal) => {
         $crate::__private::link_fn! {
             interrupt $crate::__private::InterruptHandlerSlot<$hart, $line>, hart $hart, line $line =>
             $(#[$attribute])*
@@ -612,6 +669,19 @@ macro_rules! __interrupt_handler {
             }
         }
     };
+}
+
+/// An [`Class::Executor`] entry's token states its handler type
+/// ([`ExecutorEntry`]); no other class has one.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __executor_entry {
+    (Executor, $token:ident, $handler:path) => {
+        impl $crate::ExecutorEntry for $token {
+            type Handler = $handler;
+        }
+    };
+    ($class:ident, $token:ident, $handler:path) => {};
 }
 
 /// The exempt entry's reason, exported for the image gate's report: the
@@ -999,6 +1069,12 @@ macro_rules! __fake_parts {
         impl $crate::InterruptSource for AbsentIrq {
             const SOURCE: u16 = 6;
         }
+        /// The handler type of a fake executor's entry: a round that does
+        /// nothing, for any part.
+        pub struct OnExecutor;
+        impl<P> $crate::ExecutorHandler<P> for OnExecutor {
+            fn handle(_: &mut P) {}
+        }
         pub const FAKE_LINES: $crate::Lines = $crate::Lines {
             first: 16,
             count: 48,
@@ -1133,7 +1209,7 @@ macro_rules! __fake_table {
             handler_attributes: [];
             contexts { app_wake: 1; radio_executor: 2; }
             timer: TimerToken = TimerIrq => on_timer, line 16, context app_wake, hart 0, Hardware;
-            radio: RadioToken = RadioIrq => on_radio, line 17, context radio_executor, hart 1, Executor;
+            radio: RadioToken = RadioIrq => OnExecutor, line 17, context radio_executor, hart 1, Executor;
             pair: PairToken = PairIrq => on_pair, line 18, context app_wake, hart 0, Hardware;
             #[cfg(any())]
             /// Left out of every build; on its own it would break the line

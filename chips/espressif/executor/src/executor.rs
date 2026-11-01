@@ -396,8 +396,8 @@ unsafe impl<const SWI: u8> ExecutionContext for ThreadContext<SWI> {
 
 impl<B: Binding, const SWI: u8> InterruptExecutor<B, SWI> {
     /// Start polling the tasks `T` in the handler of `wake`'s source, whose
-    /// table entry names [`interrupt_handler::<T, _>`](interrupt_handler) on
-    /// this core. Signal declarations and request bindings check their
+    /// table entry names [`Round<T>`](Round) on this core: an entry with
+    /// another handler, or another set's round, fails to compile. Signal declarations and request bindings check their
     /// direction from the table entries. The spawner starts `T`'s tasks.
     /// `urgent` comes from the composition's doorbell constructor, or `()`
     /// when it has no urgent sources.
@@ -415,7 +415,7 @@ impl<B: Binding, const SWI: u8> InterruptExecutor<B, SWI> {
     ) -> Result<Spawner<T>, Failure<PortOf<B>, oer_espressif_interrupt_table::BindError<W>>>
     where
         T: Tasks<Binding = B, Mode = InterruptMode>,
-        W: Entry,
+        W: oer_espressif_interrupt_table::ExecutorEntry<Handler = Round<T>>,
         W::Part: oer_espressif_interrupt_table::InterruptSource,
         C: oer_espressif_interrupt_table::Controller,
     {
@@ -546,11 +546,29 @@ pub fn wake_handler<
     serve_interrupt::<B, _>(const { SoftwareInterrupt::constant::<SWI>() }, || ());
 }
 
-/// The interrupt-table handler of the interrupt-mode executor of the tasks
-/// `T` (its software interrupt, `FROM_CPU_INTR<N>`), which holds the line's
-/// interrupt part: it serves the executor's timers and signals and polls one
-/// round of its ready tasks.
-pub fn interrupt_handler<
+/// The handler type the interrupt-table entry of the interrupt-mode executor
+/// of the tasks `T` names (its software interrupt, `FROM_CPU_INTR<N>`, whose
+/// line's interrupt part the entry holds): each run serves the executor's
+/// timers and signals and polls one round of its ready tasks. The entry's
+/// token states it ([`oer_espressif_interrupt_table::ExecutorEntry`]), and
+/// [`InterruptExecutor::start`] binds only the entry whose handler is
+/// `Round<T>` for the tasks `T` it starts, checked at compile time. It is a
+/// type, never constructed.
+pub struct Round<T>(PhantomData<fn() -> T>);
+
+impl<T, P> oer_espressif_interrupt_table::ExecutorHandler<P> for Round<T>
+where
+    T: Tasks<Mode = InterruptMode>,
+    T::Binding: Binding,
+    P: oer_espressif_interrupt_table::InterruptSource,
+{
+    fn handle(part: &mut P) {
+        interrupt_handler::<T, P>(part);
+    }
+}
+
+/// One run of the handler of the interrupt-mode executor of the tasks `T`.
+fn interrupt_handler<
     T: Tasks<Mode = InterruptMode>,
     P: oer_espressif_interrupt_table::InterruptSource,
 >(

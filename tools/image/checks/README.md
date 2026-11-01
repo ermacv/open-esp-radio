@@ -125,7 +125,7 @@ level number or a handler's name, decides the rules:
   (`interrupt_table!` refuses them at compile time).
 - **Hardware** levels, and the handler of each `Exempt` entry, run strict
   code throughout: from SRAM/ROM, with no task poll (the executor's direct
-  calls of its recorded task poll boundaries) and no call through a waker's vtable (`WakerVtables` sites).
+  calls of its marked task poll boundaries) and no call through a waker's vtable (`WakerVtables` sites).
   `Required::Product` fails a breach, `Required::Diagnostic` warns per
   context. The cached data their strict code references is reported per
   context, writable (`.data`/`.bss`) and read-only objects by name, and not
@@ -133,7 +133,7 @@ level number or a handler's name, decides the rules:
 - **Executor** levels separate their task polls. For each hart and priority
   the gate follows the bound's root with exactly that context's resolutions.
   `Analysis::reached_cut` stops at the executor's direct calls of its
-  recorded task poll boundaries (`task_poll_sites`), retaining their owning
+  marked task poll boundaries (`task_poll_sites`), retaining their owning
   functions.
   Functions beyond the cut are tasks; any function also reached on a strict
   path remains strict. Only an executor's level grants this task-side
@@ -358,8 +358,8 @@ The chip policies select `core::fmt::write`, `Formatter` methods, the runtime
 implementations of Debug, Display, Binary, Octal, LowerHex, UpperHex, Pointer,
 LowerExp and UpperExp. Selectors are general and may watch other functions.
 
-`runtime-reachability.txt` reports each hart's task entry and each task root (a recorded task
-poll boundary, `__OER_TASK_POLL.*`) as T0, T1, ... in address order.
+`runtime-reachability.txt` reports each hart's task entry and each task root (a task poll
+boundary, marked by its `PollBoundary` parameter) as T0, T1, ... in address order.
 `interrupt-reachability.txt` reports each hart/priority and its exception
 context with the same context-specific resolutions as the interrupt bound.
 `bootstrap-reachability.txt` reports the bootstrap root.

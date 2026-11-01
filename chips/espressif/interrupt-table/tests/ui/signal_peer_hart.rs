@@ -4,7 +4,6 @@ use oer_espressif_interrupt_table::signal::{
 };
 oer_espressif_interrupt_table::__fake_parts!();
 
-pub fn on_radio(_: &mut RadioIrq) {}
 pub fn on_wake(_: &mut AbsentIrq) {}
 macro_rules! table {
     ($hart:literal) => {
@@ -12,7 +11,7 @@ macro_rules! table {
             lines: FAKE_LINES,
             handler_attributes: [];
             contexts { app_wake: 1; receiver: 2; }
-            executor: ExecutorToken = RadioIrq => on_radio, line 17, context receiver, hart 0, Executor;
+            executor: ExecutorToken = RadioIrq => OnExecutor, line 17, context receiver, hart 0, Executor;
             peer: PeerWakeToken = AbsentIrq => on_wake, line 16, context app_wake, hart $hart, Hardware;
         }
     };

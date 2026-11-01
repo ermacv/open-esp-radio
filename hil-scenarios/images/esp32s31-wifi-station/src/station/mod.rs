@@ -47,7 +47,7 @@ const TX_CAP_DBM: i8 = 10;
 oer_espressif_executor::tasks! {
     /// The radio executor's tasks (P2): the shared RF actor from the boot,
     /// the station's driver from its join.
-    pub(crate) RadioTasks: InterruptExecutor<Esp32s31, 2> {
+    pub RadioTasks: InterruptExecutor<Esp32s31, 2> {
         @observer: crate::load::cpu::Observer::<{ crate::load::cpu::RADIO }>;
         radio_actor(actor: &'static mut Actor) = radio_actor;
         driver(driver: wifi::Driver<radio::binding::Binding>) = radio::drive;
