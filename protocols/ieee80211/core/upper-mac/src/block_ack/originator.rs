@@ -34,16 +34,47 @@ pub const fn next_nonzero_dialog_token(current: u8) -> u8 {
     if next == 0 { 1 } else { next }
 }
 
+/// A Dialog Token sequence: it starts at `first`, and each next token is
+/// one more, back to `lowest` after `highest`. A sequence is data, so the
+/// originator advances it without an indirect call.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct DialogTokenSequence {
+    /// The Dialog Token of the first request, from `lowest` to `highest`.
+    pub first: u8,
+    pub lowest: u8,
+    pub highest: u8,
+}
+
+impl DialogTokenSequence {
+    /// From 1 through 255, skipping zero ([`next_nonzero_dialog_token`]).
+    pub const NONZERO: Self = Self {
+        first: 1,
+        lowest: 1,
+        highest: u8::MAX,
+    };
+
+    /// The Dialog Token after `current`.
+    pub const fn next(self, current: u8) -> u8 {
+        if current >= self.highest || current < self.lowest {
+            self.lowest
+        } else {
+            current.saturating_add(1)
+        }
+    }
+
+    const fn holds_first(self) -> bool {
+        self.lowest <= self.first && self.first <= self.highest
+    }
+}
+
 /// Which agreements an originator owns and how its Dialog Tokens advance.
 #[derive(Clone, Copy, Debug)]
 pub struct TxBlockAckOriginatorPolicy {
     /// The TIDs in the order their negotiations go out; at most the
     /// originator's `TIDS`, each below [`TX_BLOCK_ACK_MAX_TIDS`].
     pub tids: &'static [u8],
-    /// The Dialog Token of the first request.
-    pub first_dialog_token: u8,
-    /// The Dialog Token after one.
-    pub next_dialog_token: fn(u8) -> u8,
+    /// The Dialog Tokens the agreements share.
+    pub dialog_tokens: DialogTokenSequence,
 }
 
 /// The agreement parameters every TID of an originator requests.
@@ -70,6 +101,8 @@ pub enum TxBlockAckOriginatorError {
     TooManyTids,
     /// The policy names this TID twice, or the TID is outside the originator.
     UnsupportedTid(u8),
+    /// The policy's first Dialog Token lies outside its sequence.
+    DialogTokens(DialogTokenSequence),
     MalformedResponse,
     Session {
         tid: u8,
@@ -112,7 +145,7 @@ pub struct TxBlockAckOriginator<const TIDS: usize> {
     /// How long a failed negotiation waits before the next is due.
     retry_interval: Duration,
     next_dialog_token: u8,
-    advance_dialog_token: fn(u8) -> u8,
+    dialog_tokens: DialogTokenSequence,
 }
 
 impl<const TIDS: usize> TxBlockAckOriginator<TIDS> {
@@ -123,6 +156,11 @@ impl<const TIDS: usize> TxBlockAckOriginator<TIDS> {
     ) -> Result<Self, TxBlockAckOriginatorError> {
         if policy.tids.len() > TIDS {
             return Err(TxBlockAckOriginatorError::TooManyTids);
+        }
+        if !policy.dialog_tokens.holds_first() {
+            return Err(TxBlockAckOriginatorError::DialogTokens(
+                policy.dialog_tokens,
+            ));
         }
         let mut agreements = [const { None }; TIDS];
         let mut seen = 0_u8;
@@ -151,8 +189,8 @@ impl<const TIDS: usize> TxBlockAckOriginator<TIDS> {
         Ok(Self {
             agreements,
             retry_interval: Duration::ZERO,
-            next_dialog_token: policy.first_dialog_token,
-            advance_dialog_token: policy.next_dialog_token,
+            next_dialog_token: policy.dialog_tokens.first,
+            dialog_tokens: policy.dialog_tokens,
         })
     }
 
@@ -287,7 +325,7 @@ impl<const TIDS: usize> TxBlockAckOriginator<TIDS> {
             )
             .map_err(|error| TxBlockAckOriginatorError::Session { tid, error })?;
         agreement.alarm = Some(request.alarm);
-        self.next_dialog_token = (self.advance_dialog_token)(token);
+        self.next_dialog_token = self.dialog_tokens.next(token);
         Ok(request)
     }
 

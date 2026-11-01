@@ -36,7 +36,7 @@ pub use banks::{
     RxBlockAckView, RxDisposition,
 };
 pub use originator::{
-    TX_BLOCK_ACK_MAX_TIDS, TxBlockAckOriginator, TxBlockAckOriginatorConfig,
+    DialogTokenSequence, TX_BLOCK_ACK_MAX_TIDS, TxBlockAckOriginator, TxBlockAckOriginatorConfig,
     TxBlockAckOriginatorError, TxBlockAckOriginatorPolicy, TxBlockAckOriginatorResponse,
     TxBlockAckResponseDisposition, TxBlockAckRetry, next_nonzero_dialog_token,
 };

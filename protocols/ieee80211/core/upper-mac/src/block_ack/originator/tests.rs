@@ -10,13 +10,12 @@ use {
 /// Three TIDs and a modulo-63 token sequence, as the Espressif station's.
 const POLICY: TxBlockAckOriginatorPolicy = TxBlockAckOriginatorPolicy {
     tids: &[0, 7, 5],
-    first_dialog_token: 1,
-    next_dialog_token,
+    dialog_tokens: DialogTokenSequence {
+        first: 1,
+        lowest: 0,
+        highest: 62,
+    },
 };
-
-const fn next_dialog_token(current: u8) -> u8 {
-    if current >= 62 { 0 } else { current + 1 }
-}
 
 fn originator(window: u16, amsdu_tids: u8) -> TxBlockAckOriginator<TX_BLOCK_ACK_MAX_TIDS> {
     TxBlockAckOriginator::new(
@@ -496,4 +495,70 @@ fn a_refusal_or_spent_attempts_close_the_tid_until_stop_all() {
     originator.stop_all();
     assert!(originator.queue(0, RETRY) && originator.queue(5, RETRY));
     assert!(originator.queue(7, RETRY));
+}
+
+#[test]
+fn a_dialog_token_sequence_wraps_to_its_lowest_token() {
+    let modulo_63 = POLICY.dialog_tokens;
+    assert_eq!(modulo_63.next(1), 2);
+    assert_eq!(modulo_63.next(61), 62);
+    assert_eq!(modulo_63.next(62), 0);
+    assert_eq!(modulo_63.next(0), 1);
+    for current in 0..=u8::MAX {
+        assert_eq!(
+            DialogTokenSequence::NONZERO.next(current),
+            next_nonzero_dialog_token(current)
+        );
+    }
+}
+
+#[test]
+fn the_requests_carry_the_sequence_in_turn() {
+    let mut originator = TxBlockAckOriginator::<TX_BLOCK_ACK_MAX_TIDS>::new(
+        TxBlockAckOriginatorPolicy {
+            dialog_tokens: DialogTokenSequence {
+                first: 62,
+                lowest: 0,
+                highest: 62,
+            },
+            ..POLICY
+        },
+        TxBlockAckOriginatorConfig {
+            window: 8,
+            negotiation_timeout: Duration::from_micros(100_000),
+            amsdu_tids: 0,
+        },
+    )
+    .unwrap();
+    let tokens = [0_u8, 7, 5].map(|tid| {
+        originator
+            .begin(tid, sequence(0), Instant::from_micros(0))
+            .unwrap()
+            .dialog_token
+    });
+    assert_eq!(tokens, [62, 0, 1]);
+}
+
+#[test]
+fn a_first_dialog_token_outside_its_sequence_is_refused() {
+    let tokens = DialogTokenSequence {
+        first: 63,
+        lowest: 0,
+        highest: 62,
+    };
+    assert_eq!(
+        TxBlockAckOriginator::<TX_BLOCK_ACK_MAX_TIDS>::new(
+            TxBlockAckOriginatorPolicy {
+                dialog_tokens: tokens,
+                ..POLICY
+            },
+            TxBlockAckOriginatorConfig {
+                window: 8,
+                negotiation_timeout: Duration::from_micros(1),
+                amsdu_tids: 0,
+            },
+        )
+        .err(),
+        Some(TxBlockAckOriginatorError::DialogTokens(tokens))
+    );
 }
