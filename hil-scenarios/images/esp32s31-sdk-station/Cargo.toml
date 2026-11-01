@@ -10,16 +10,10 @@ build = "build.rs"
 
 [target.'cfg(target_arch = "riscv32")'.dependencies]
 oer-espressif = { path = "../../../sdk/espressif", features = ["esp32s31", "wifi", "console"] }
-oer-diagnostics = { path = "../../../portable/diagnostics" }
-oer-memory = { path = "../../../portable/memory" }
-oer-esp32s31-compose = { path = "../../../chips/esp32s31/compose" }
-oer-espressif-staged-runtime = { path = "../../../chips/espressif/staged-runtime" }
 oer-hil-agent = { path = "../../../protocols/hil/agent", default-features = false }
-oer-hil-protocol = { workspace = true, features = ["async-io"] }
+oer-hil-agent-espressif = { path = "../../hil-agent/espressif" }
 oer-services-sdk-station = { path = "../../services/sdk-station" }
 oer-services-wifi-station = { path = "../../services/wifi-station" }
-embassy-futures = "0.1.2"
-heapless = "0.9.3"
 static_cell.workspace = true
 
 [dev-dependencies]

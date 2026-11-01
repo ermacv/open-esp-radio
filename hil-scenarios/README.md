@@ -6,8 +6,9 @@ scenario knows lives here or beside the facade it uses.
 
 | Directory | Contents |
 | --- | --- |
-| `images/` | RPC images: a product facade or engine, the HIL agent and the handlers of the services the image mounts. Several scenarios share one image. |
+| `images/` | RPC images: a product facade or engine, the HIL agent and the handlers of the services the image mounts. Several scenarios share one image. An image on the SDK builds the same `boot` as the example of its function and differs only by features, explicit settings and its handlers. |
 | `services/` | Test-only service vocabularies: requests, responses and, where it is generic, the handler over a product contract. A product facade's vocabulary lives beside the facade. |
+| [`hil-agent/espressif`](hil-agent/espressif/README.md) | The HIL agent on the `oer-espressif` application entry: what an image built on the SDK serves besides its handlers. |
 | `<scenario>/` | One host program per scenario: its cases, its independent reference and its verdict, over `oer-hil-harness`. |
 
 | Image | Services |

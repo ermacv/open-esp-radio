@@ -11,6 +11,13 @@ oer_hil_agent::image_keys! {
 /// SSID and passphrase, or an exchange with the longest line.
 pub(crate) const MAXIMUM_PAYLOAD_BYTES: u16 = 128;
 
+/// What the image announces in its Hello.
+#[cfg(target_arch = "riscv32")]
+pub(crate) const IMAGE: oer_hil_agent_espressif::Image = oer_hil_agent_espressif::Image {
+    keys: KEYS,
+    maximum_payload_bytes: MAXIMUM_PAYLOAD_BYTES,
+};
+
 #[cfg(test)]
 mod tests {
     use super::*;

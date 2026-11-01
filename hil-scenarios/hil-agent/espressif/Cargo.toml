@@ -1,0 +1,26 @@
+[package]
+name = "oer-hil-agent-espressif"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0"
+repository.workspace = true
+publish = false
+description = "The HIL agent on the oer-espressif application entry: the console, the boot evidence and the request mailbox through which an SDK test image serves its services"
+
+[dependencies]
+oer-hil-protocol = { workspace = true }
+oer-memory = { path = "../../../portable/memory" }
+
+# The console and the boot evidence run on the chip target only.
+[target.'cfg(target_arch = "riscv32")'.dependencies]
+oer-espressif = { path = "../../../sdk/espressif", features = ["esp32s31", "console"] }
+oer-diagnostics = { path = "../../../portable/diagnostics" }
+oer-esp32s31-compose = { path = "../../../chips/esp32s31/compose" }
+oer-espressif-staged-runtime = { path = "../../../chips/espressif/staged-runtime" }
+oer-hil-agent = { path = "../../../protocols/hil/agent", default-features = false }
+oer-hil-protocol = { workspace = true, features = ["async-io"] }
+embassy-futures = "0.1.2"
+
+[lints]
+workspace = true

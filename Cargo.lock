@@ -2326,6 +2326,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-hil-agent-espressif"
+version = "0.1.0"
+dependencies = [
+ "embassy-futures",
+ "oer-diagnostics",
+ "oer-esp32s31-compose",
+ "oer-espressif",
+ "oer-espressif-staged-runtime",
+ "oer-hil-agent",
+ "oer-hil-protocol",
+ "oer-memory",
+]
+
+[[package]]
 name = "oer-hil-harness"
 version = "0.1.0"
 dependencies = [
@@ -2419,16 +2433,12 @@ dependencies = [
 name = "oer-hil-scenarios-images-esp32s31-sdk-station"
 version = "0.1.0"
 dependencies = [
- "embassy-futures",
  "heapless",
- "oer-diagnostics",
- "oer-esp32s31-compose",
  "oer-esp32s31-layout",
  "oer-espressif",
- "oer-espressif-staged-runtime",
  "oer-hil-agent",
+ "oer-hil-agent-espressif",
  "oer-hil-protocol",
- "oer-memory",
  "oer-services-sdk-station",
  "oer-services-wifi-station",
  "postcard",

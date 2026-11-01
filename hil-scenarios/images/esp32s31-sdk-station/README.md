@@ -6,15 +6,19 @@ application of the entry `oer-espressif` (`sdk/espressif`, features
 station and its IP service with the library's defaults and the USB
 Serial/JTAG console; the library places their interrupts, executors and
 service tasks and records and resets on the image's behalf. The image
-declares no interrupt, DMA or service task of its own.
+declares no interrupt, DMA or service task of its own. Its boot is the
+[station example's](../../../firmware/apps/wifi-station/README.md) with
+two differences: the `console` feature and `Console::open`, and every
+channel scanned (`wifi::Config::all_channels`) in place of the profile's
+one.
 
 | Service | Handler |
 | --- | --- |
-| HIL base module | The console's agent; the boot evidence is the library's (`Boot::evidence`): hart 0's reset cause and the previous boot's panic, which the library already printed and cleared |
+| HIL base module | The [agent on the entry](../../hil-agent/espressif/README.md); the boot evidence is the library's (`Boot::evidence`): hart 0's reset cause and the previous boot's panic, which the library already printed and cleared |
 | [SDK station](../../services/sdk-station/src/lib.rs) | One worker on the application executor answers the requests in order; a request while one waits is refused as `Busy` |
 
-The application runs the console and the worker side by side. The boot
-identity is the library's (`oer_espressif::boot_id`).
+The application is the agent's `serve`: the console and the worker side by
+side. The boot identity is the library's (`oer_espressif::boot_id`).
 
 - **Connect** builds a WPA2-Personal profile and awaits the station's
   `connect`: `Linked`, or `Failed` with the code the

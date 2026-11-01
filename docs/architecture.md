@@ -343,9 +343,18 @@ application's future. The SDK owns the default interrupt table, the
 executors and its service tasks (`SdkTasks`, which the image's task set
 extends on the same executor), and applies record and reset on the image's
 behalf to every boot error, application error and unrecoverable service
-exit; handled errors stay values. Probes, HIL images and images that need
-another layout keep selecting their entries, priorities and task spawning
-through the compositions directly. The SDK runs the application on hart 0.
+exit; handled errors stay values. The SDK runs the application on hart 0.
+
+An example and a HIL test image of one function build it the same way: the
+same `boot` through the SDK, so that what the test checks is what an
+application runs. A test image differs only by the SDK features it adds
+(`console`), by explicit settings in place of the library's defaults and by
+the handlers of its services; it serves them through the HIL agent on the
+entry (`hil-scenarios/hil-agent/espressif`). An image on the SDK depends on
+nothing the SDK places (compositions, facades, platform, interrupt table)
+besides it; `oer-test-layers` checks this. Probes and images whose function
+or layout the SDK does not offer select their entries, priorities and task
+spawning through the compositions directly.
 These crates are outside the sans-IO layer. `oer-espressif-watchdog` is
 also a platform owner: it owns hardware reset arming and the affine
 system-deadline lease. `oer-time::deadline` contains only the deadline policy,
@@ -1271,7 +1280,8 @@ under test; it stores nothing and knows no scenario, service or equipment.
 | Link | `tools/hil/link` | One board's serial line: frames, their boot (`boot_id`), request/response correlation, missing-message counts and the device's diagnostic lines |
 | Harness | `tools/hil/harness` | A scenario program's life cycle: build its image through the image pipeline, lease and write the board, connect, check the image's services, run the cases, release |
 | CLI | `tools/hil/cli` | `cargo hil list` and `run`: scenarios are packages marked `hil-scenario` in their metadata |
-| Scenarios | `hil-scenarios/` | `images/` the RPC images several scenarios share, `services/` test-only service vocabularies, one host program per scenario with its cases and verdict |
+| SDK agent | `hil-scenarios/hil-agent/espressif` | The agent on the application entry: the HIL console over the SDK's console, the base module from the SDK's boot identity and evidence, and the one-deep hand-over of a request to the image's worker |
+| Scenarios | `hil-scenarios/` | `images/` the RPC images several scenarios share, `services/` test-only service vocabularies, `hil-agent/` the agent on the application entry, one host program per scenario with its cases and verdict |
 
 A boot is named by the `boot_id` every frame carries. Its first frame is its
 Hello, which also names the image (`image_crc32`, the stage-two payload
