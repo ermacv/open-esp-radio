@@ -41,6 +41,7 @@ use crate::{
     modem::SharedRadioRegisters,
     owner::WifiInterruptBanks,
     peripherals::{
+        cache_counters::CacheCounters,
         efuse::EfuseRegisters,
         entropy::EntropyRegisters,
         reset_cause::ResetCauseRegisters,
@@ -193,6 +194,7 @@ impl Root {
             aes,
             crypto_clock,
             secondary_launch,
+            cache_counters,
         } = self.partitions;
         let WatchdogRegisters {
             main0,
@@ -243,6 +245,7 @@ impl Root {
                 system_timer: SystemTimer::new(system_timer),
                 timg0_alarm: Timg0AlarmParts::new(timer_group0),
                 timg1_alarm: Timg1AlarmParts::new(timer_group1),
+                cache_counters: CacheCounters::new(cache_counters),
                 software_interrupts: SoftwareInterrupts::new(
                     software_interrupt_0,
                     software_interrupt_1,

@@ -5038,3 +5038,15 @@ name = "LINE_BYTES"
 value = 64
 sources = ["S31_CACHE_LINE_GEOMETRY"]
 description = "Bytes per instruction or data cache line."
+
+[[geometry]]
+name = "L1_ICACHE_WAYS"
+value = 2
+sources = ["S31_CACHE_WAY_GEOMETRY"]
+description = "Ways of the L1 instruction cache; no ESP32-S31 register selects another associativity."
+
+[[geometry]]
+name = "L1_DCACHE_WAYS"
+value = 2
+sources = ["S31_CACHE_WAY_GEOMETRY"]
+description = "Ways of the L1 data cache; no ESP32-S31 register selects another associativity."
