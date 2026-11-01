@@ -4,7 +4,8 @@
 //! a TID and a recipient. [`AmpduLimits`] bounds that run by the Block Ack
 //! agreement's window, the port's A-MPDU capabilities (its length at the
 //! aggregate's rate), the recipient's HT A-MPDU Parameters and the access
-//! category's TXOP limit, at the rate the aggregate goes out. The bound counts each subframe as its largest
+//! category's TXOP limit, at the rate the aggregate goes out, within the
+//! rate's PPDU time limit (`PhyRate::max_txtime_micros`). The bound counts each subframe as its largest
 //! protected encoding ([`subframe_bound`]) and includes the empty delimiters
 //! required by Minimum MPDU Start Spacing between successive subframes.
 //! The final subframe needs no empty delimiters. PHY-specific hardware limits
@@ -137,6 +138,12 @@ impl AmpduRun {
             return false;
         };
         if length > self.maximum
+            || self.limits.rate.max_txtime_micros().is_some_and(|limit| {
+                self.limits
+                    .rate
+                    .max_ppdu_duration_micros(length)
+                    .is_none_or(|duration| duration > limit)
+            })
             || self.limits.txop_limit_micros.is_some_and(|txop| {
                 self.limits
                     .rate
@@ -266,29 +273,31 @@ mod tests {
     }
 
     #[test]
-    fn the_ports_length_at_the_rate_ends_a_run() {
-        // The port sends 6 490 octets at MCS 0 and 65 535 at MCS 7, and no
+    fn the_ports_length_and_the_ppdu_time_at_the_rate_end_a_run() {
+        // The port sends 6 490 octets at MCS 3 and 65 535 at MCS 7, and no
         // aggregate at the other rates.
         let mut table = AmpduLengthTable::uniform(0);
-        table.ht[0][0][0] = 6_490;
+        table.ht[0][0][3] = 6_490;
         table.ht[0][0][7] = 65_535;
+        table.ht[1][1][7] = 65_535;
         let port = AmpduCapabilities {
             max_subframes: 32,
             formats: PhyFormatSet::HT,
             max_length: std::boxed::Box::leak(std::boxed::Box::new(table)),
         };
-        let at = |mcs| AmpduLimits {
+        let at = |mcs, bandwidth, short_gi| AmpduLimits {
             window: 64,
             port,
-            rate: PhyRate::Ht(
-                HtRate::new(HtMcs::new(mcs).unwrap(), PpduBandwidth::Mhz20, false).unwrap(),
-            ),
+            rate: PhyRate::Ht(HtRate::new(HtMcs::new(mcs).unwrap(), bandwidth, short_gi).unwrap()),
             ..limits()
         };
-        // Four 1 514-octet frames at MCS 0; at MCS 7 the port's 32.
-        assert_eq!(at(0).run([1_514; 40]), 4);
-        assert_eq!(at(7).run([1_514; 40]), 32);
-        assert!(at(1).begin().is_none());
+        // The port's length: four 1 514-octet frames at MCS 3.
+        assert_eq!(at(3, PpduBandwidth::Mhz20, false).run([1_514; 40]), 4);
+        // The HT-mixed PPDU time (5 484 us): 28 at MCS 7, 20 MHz, long GI.
+        assert_eq!(at(7, PpduBandwidth::Mhz20, false).run([1_514; 40]), 28);
+        // At 150 Mb/s the port's 32 subframes end it.
+        assert_eq!(at(7, PpduBandwidth::Mhz40, true).run([1_514; 40]), 32);
+        assert!(at(1, PpduBandwidth::Mhz20, false).begin().is_none());
     }
 
     #[test]

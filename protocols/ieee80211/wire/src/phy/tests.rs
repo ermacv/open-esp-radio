@@ -284,3 +284,20 @@ fn every_const_rate_and_symbol_fraction_matches_the_standard_formula() {
         }
     }
 }
+
+#[test]
+fn an_ht_mixed_ppdu_lasts_at_most_what_the_l_sig_length_carries() {
+    assert_eq!(HT_MIXED_MAX_TXTIME_MICROS, 5_484);
+    let mcs7 =
+        PhyRate::Ht(HtRate::new(HtMcs::new(7).unwrap(), PpduBandwidth::Mhz20, false).unwrap());
+    assert_eq!(mcs7.max_txtime_micros(), Some(5_484));
+    assert_eq!(
+        PhyRate::Legacy(LegacyRate::Ofdm54M).max_txtime_micros(),
+        None
+    );
+    // 32 subframes of a full frame at MCS 7, 20 MHz, long GI pass it; 28 fit.
+    let subframe = 1_552_u32;
+    assert!(mcs7.max_ppdu_duration_micros(32 * subframe).unwrap() > 5_484);
+    assert!(mcs7.max_ppdu_duration_micros(28 * subframe).unwrap() <= 5_484);
+    assert!(mcs7.max_ppdu_duration_micros(29 * subframe).unwrap() > 5_484);
+}
