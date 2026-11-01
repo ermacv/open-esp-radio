@@ -58,9 +58,14 @@ never set or advance its global clock or run the pinned DHCP engine. Existing
 bridge cases exercise real packet pools, TX credit and RX delivery during
 TX backpressure.
 
-RX frames are copied into the endpoint's packet pool before publication.
-The adapter accepts packet-pool owners and forbids unsafe code; it does not
-adopt detached DMA storage.
+A copied RX frame goes into the endpoint's packet pool before publication.
+A lent frame becomes a packet in its own storage when the image gives the
+bridge its `LentSlots`. The packet's drop only releases its slot; the bridge
+drops the owner, which returns the storage to its device, at its next poll
+(xarxa's `reclaim`, a direct call), after each stack poll and once more when
+the service ends. A lent packet still held after the service ended, such as
+one in an application's socket queue, is never returned: close such sockets
+before stopping the service. The adapter forbids unsafe code.
 
 ## Initialization and TX state
 
