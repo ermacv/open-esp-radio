@@ -28,7 +28,8 @@ pub(crate) fn declared(root: &Path, package: &str, profile: &Profile) -> Result<
     )
 }
 
-fn of_metadata(metadata: &Value, package: &str, profile: &Profile) -> Result<Vec<u32>> {
+/// The harts `package` declares in the workspace `metadata`, as [`declared`].
+pub(crate) fn of_metadata(metadata: &Value, package: &str, profile: &Profile) -> Result<Vec<u32>> {
     let interrupts = profile
         .facts
         .interrupts

@@ -13,6 +13,7 @@ serde = { version = "=1.0.229", default-features = false, features = ["alloc", "
 toml = { version = "=1.1.4", default-features = false, features = ["parse", "serde"] }
 
 [dev-dependencies]
+proc-macro2 = "=1.0.107"
 syn = { version = "=2.0.119", features = ["full", "visit"] }
 tempfile = "=3.27.0"
 

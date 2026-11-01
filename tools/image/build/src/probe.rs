@@ -138,15 +138,12 @@ pub fn build(root: &Path, package: &str, jobs: Option<usize>) -> Result<PathBuf>
         },
     )?;
     cargo.env(crate::compiler::ZEROED_INPUTS_ENV, profile.zeroed_inputs());
-    let analysis = oer_image_checks::linker::strict::Spec {
-        root: root.to_owned(),
-        chip: chip.to_owned(),
-        stack_policy: profile.stack_policy(),
-        diagnostic: true,
-        task_stack_proven: false,
-        hot_code: None,
-        harts: Vec::new(),
-    };
+    let analysis = analysis(
+        root,
+        package,
+        &profile,
+        &crate::manifest::workspace_metadata(root)?,
+    )?;
     let specification = strict::configure(&mut cargo, &analysis, &output, true)?;
     let mut cargo = command(cargo, root, package, target, jobs)?;
     let images = RefCell::new(Vec::new());
@@ -214,6 +211,28 @@ pub fn build(root: &Path, package: &str, jobs: Option<usize>) -> Result<PathBuf>
 }
 
 /// Cargo reports executables for both newly linked and Fresh binaries.
+/// The image linker's analysis specification of the probe `package` of
+/// `profile`'s chip, from the workspace `metadata`: a diagnostic image, whose
+/// used harts keep the contract maximum, running the harts it declares like
+/// an image does, so a secondary it launches links its launch template's
+/// stacks.
+fn analysis(
+    root: &Path,
+    package: &str,
+    profile: &oer_chip_profile::Profile,
+    metadata: &serde_json::Value,
+) -> Result<oer_image_checks::linker::strict::Spec> {
+    Ok(oer_image_checks::linker::strict::Spec {
+        root: root.to_owned(),
+        chip: profile.facts.id.clone(),
+        stack_policy: profile.stack_policy(),
+        diagnostic: true,
+        task_stack_proven: false,
+        hot_code: None,
+        harts: crate::harts::of_metadata(metadata, package, profile)?,
+    })
+}
+
 fn linked_images(messages: &[u8]) -> Result<Vec<PathBuf>> {
     let mut images = Vec::new();
     for line in messages
@@ -277,6 +296,34 @@ mod tests {
         assert!(chip_of("oer-firmware-apps-boot-smoke", &chips).is_err());
         assert!(chip_of("oer-firmware-probes-esp32s3-probe", &chips).is_err());
         assert!(chip_of("oer-firmware-probes-esp32s31", &chips).is_err());
+    }
+
+    #[test]
+    fn a_probe_that_launches_hart_1_links_hart_1s_stacks() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+        let profile = oer_chip_profile::Profile::tracked("esp32s31").unwrap();
+        let metadata = serde_json::json!({"packages": [
+            {"name": "two-harts", "metadata": {"open-radio": {"harts": ["boot", 1]}}},
+            {"name": "boot-hart", "metadata": null},
+        ]});
+        let policy = |package: &str| {
+            let spec = analysis(&root, package, &profile, &metadata).unwrap();
+            assert!(spec.diagnostic);
+            oer_chip_profile::policy::StackPolicy::load(&root.join(&spec.stack_policy))
+                .unwrap()
+                .for_image(&spec.harts)
+                .unwrap()
+        };
+        let hart1 = |package: &str| {
+            let policy = policy(package);
+            let stacks = &policy.core[&1];
+            (
+                stacks.task_stack.used().is_some(),
+                stacks.interrupt_stack.used().is_some(),
+            )
+        };
+        assert_eq!(hart1("two-harts"), (true, true));
+        assert_eq!(hart1("boot-hart"), (false, false));
     }
 
     #[test]

@@ -161,8 +161,8 @@ dependencies remain cached. A second mismatch fails the build. The bootstrap
 has no such invalidation or interrupt analysis; its cache-off placement audit
 always runs before encoding. The existing interrupt check remains final.
 
-`cargo fw probe <package>` supplies the same specification and uses the same
-fingerprint check and single rebuild. It keeps `image-linker.toml`,
+`cargo fw probe <package>` supplies the same specification, with the harts
+the probe declares, and uses the same fingerprint check and single rebuild. It keeps `image-linker.toml`,
 `strict-text.x` and `strict-placement.toml` in
 `target/fw/probes/<package>/`; compilation stays in the separate
 `target/fw-probe/` cache with `cfg(oer_probe)`. Cargo's executable artifacts,
