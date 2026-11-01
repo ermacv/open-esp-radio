@@ -128,6 +128,14 @@ pub trait Tasks: Sized + 'static {
 /// tasks first, at their own indices, and its own after them. Running the
 /// executor with the extending set polls both; `Base`'s tasks start through
 /// [`Spawner::base`].
+///
+/// The trait alone grants nothing: every conversion of a right to `Base`'s
+/// ([`PollToken::base`], [`Spawner::base`]) checks at compile time that
+/// both sets name one executor and that `Base`'s indices lie in the
+/// extending set's, so an implementation for a set of another executor
+/// fails the build where a right would cross.
+/// (`tests/extends.rs` builds a set that implements it for another
+/// executor's set and sees the build fail.)
 pub trait Extends<Base: Tasks>: Tasks<Binding = Base::Binding, Mode = Base::Mode> {}
 
 /// The right to poll the tasks of `T`, which only `T`'s executor holds, for
@@ -151,6 +159,15 @@ impl<T: Tasks> PollToken<T> {
     where
         T: Extends<B>,
     {
+        // One executor, and `B`'s indices inside `T`'s.
+        const {
+            if T::EXECUTOR != B::EXECUTOR {
+                panic!("a set extends only a set of its own executor");
+            }
+            if B::COUNT > T::COUNT {
+                panic!("an extending set holds its base's indices");
+            }
+        };
         PollToken::new()
     }
 }
@@ -178,6 +195,15 @@ impl<T: Tasks> Spawner<T> {
     where
         T: Extends<B>,
     {
+        // One executor, and `B`'s indices inside `T`'s.
+        const {
+            if T::EXECUTOR != B::EXECUTOR {
+                panic!("a set extends only a set of its own executor");
+            }
+            if B::COUNT > T::COUNT {
+                panic!("an extending set holds its base's indices");
+            }
+        };
         Spawner::new()
     }
 
@@ -242,7 +268,8 @@ pub struct Task<M: MakeFuture, T> {
 // only by the poll that takes it (`STARTED` or `LIVE` to `POLLING`,
 // acquire) until it returns it. A poll needs `T`'s token, which only `T`'s
 // executor holds (directly, or as the base token of a set extending `T`,
-// whose executor is `T`'s, `Extends`), in its one context, which makes the future from the start
+// which `PollToken::base` gives only where both sets name one executor, a
+// check at monomorphization), in its one context, which makes the future from the start
 // and polls it there. A start comes from another context than that only
 // through a `Send` spawner, of an interrupt-mode executor, which takes only a
 // `Send` start (`Admits`); the future never leaves the executor's context.
